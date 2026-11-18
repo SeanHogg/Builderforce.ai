@@ -44,11 +44,16 @@ export async function listAgentPool(secrets: vscode.SecretStorage): Promise<BfAg
     const [mine, purchased, registered] = await Promise.all([
       authed<Array<{ id: string | number; name: string }>>(secrets, '/api/workforce/agents/mine').catch(() => undefined),
       authed<Array<{ id: string | number; name: string }>>(secrets, '/api/workforce/agents/purchased').catch(() => undefined),
-      authed<Array<{ id: string | number; name: string; isActive?: boolean }>>(secrets, '/api/agents').catch(() => undefined),
+      // PRD 39 §3 push 1: `/api/agent-registrations` returns `{agents}` with
+      // `status`/`framework` (not the legacy bare array with `isActive`).
+      authed<{ agents: Array<{ id: string | number; name: string; status?: string }> }>(secrets, '/api/agent-registrations')
+        // Signed out, `authed` answers undefined — no registrations, like the two reads above.
+        .then((r) => r?.agents)
+        .catch(() => undefined),
     ]);
     const byRef = new Map<string, string>();
     for (const a of [...(mine ?? []), ...(purchased ?? [])]) byRef.set(String(a.id), a.name);
-    for (const a of registered ?? []) if (a.isActive !== false) byRef.set(String(a.id), a.name);
+    for (const a of registered ?? []) if (a.status !== 'inactive') byRef.set(String(a.id), a.name);
     return [...byRef.entries()].map(([ref, name]) => ({ ref, name }));
   } catch {
     return [];

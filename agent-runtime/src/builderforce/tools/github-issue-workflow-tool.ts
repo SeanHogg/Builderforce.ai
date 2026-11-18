@@ -15,6 +15,8 @@ import type { AgentTool, AgentToolResult } from "../model/agent-types.js";
 import { Type } from "@sinclair/typebox";
 import { jsonResult } from "../../agents/tools/common.js";
 import { runExec } from "../../process/exec.js";
+import { parsePorcelainPaths } from "@builderforce/agent-tools";
+import { dirtyCheckoutRefusal } from "./git-checkout-guard.js";
 import {
   globalOrchestrator,
   createFeatureWorkflow,
@@ -309,10 +311,27 @@ export async function runGithubIssueWorkflow(
       const branchSlug = toBranchSlug(issue.title);
       const branchName = `${branchPrefix}${ref.number}-${branchSlug}`;
 
+      // Never switch the branch of a dirty checkout: git would carry the
+      // person's uncommitted edits onto the new branch and `commitAll` would
+      // sweep them into the issue's commit and push them. The workflow agents
+      // edit their configured agent workspace (resolveAgentWorkspaceDir), not a
+      // per-call root, so they cannot be redirected into a worktree — refuse
+      // before any git mutation or workflow run instead.
+      try {
+        const pending = parsePorcelainPaths(await git(projectRoot, ["status", "--porcelain"]));
+        if (pending.length > 0) {
+          return jsonResult({
+            error: dirtyCheckoutRefusal(projectRoot, pending),
+          }) as AgentToolResult<string>;
+        }
+      } catch (err) {
+        return jsonResult({
+          error: `Failed to read git status in ${projectRoot}: ${String(err)}. Ensure projectRoot is a git checkout.`,
+        }) as AgentToolResult<string>;
+      }
+
       // Create the working branch BEFORE the agents edit files so their changes
-      // land on it. (Previously the branch name was computed but never created,
-      // so the working tree stayed on the base branch and PR creation pointed at
-      // a head branch that did not exist.)
+      // land on it. The tree is clean (checked above), so nothing is carried over.
       try {
         await createAndCheckoutBranch(projectRoot, branchName);
       } catch (err) {

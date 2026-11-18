@@ -1,6 +1,6 @@
 # PRD 35 §7 — Retention ledger (nothing is lost)
 
-Full copy of the §7 retention ledger from `docs/specs/35-prd-one-agent-one-kernel.md` (whose rows summarize the
+Full copy of the §7 retention ledger from PRD 35 (now archived in `DONE.md`) (whose rows summarize the
 design reference `docs/design/one-agent-one-kernel.html` "Every capability, and where it lives at the end"), brought up
 to date at the end of WS7 (2026-11-01): **Lives in now** names where the behaviour is, and **Proven by** names test files that exist.
 

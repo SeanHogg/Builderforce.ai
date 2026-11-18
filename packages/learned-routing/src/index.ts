@@ -78,6 +78,7 @@ export {
   ROLE_MODEL_DEFAULT_ENV,
   parseRoleModelConfig,
   resolveModelForRole,
+  resolveReviewModel,
   type RoleModelConfig,
 } from './roleModels.js';
 

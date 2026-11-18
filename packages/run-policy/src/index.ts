@@ -28,6 +28,7 @@ export {
   type TransportFailureKind,
   type TurnRequest,
 } from './policy.js';
+export { reviewPhaseModel, type PhaseModels } from './phaseModels.js';
 export {
   LATENCY_SAMPLE_WINDOW,
   MAX_FAILOVER_LATENCY_RATIO,

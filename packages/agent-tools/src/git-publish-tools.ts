@@ -18,6 +18,13 @@ import {
   type GitShellCtx,
 } from "./git-repo-scope.js";
 import { REPO_PARAM, RESOLVE_BASE } from "./git-script-parts.js";
+import {
+  checkConventionWorktreeShell,
+  DIRTY_WORKTREE_EXIT,
+  removeFoundWorktreeShell,
+  WORKTREE_KEPT_EXIT,
+  worktreePathFor,
+} from "./worktree-path.js";
 
 // ── Publishing: commit → push → pull request ─────────────────────────────────────
 //
@@ -99,7 +106,8 @@ function buildCommitCommand(opts: { message: string; paths: string[]; branch?: s
     ...(branch
       ? [
           'ORIG="$(git rev-parse --show-toplevel)"',
-          `WT="$ORIG/../$(echo "${branch}" | tr '/' '-')-wt"`,
+          // THE worktree convention (`worktree-path.ts`) — the run_command refusal names the same path.
+          `WT="$ORIG/${worktreePathFor(branch)}"`,
           // This checkout's git-common-dir, physical and absolute: the identity of the
           // repository. A worktree of THIS repo shares it; a foreign checkout does not.
           'COMMON="$(cd "$(git rev-parse --git-common-dir)" && pwd -P)"',
@@ -213,6 +221,10 @@ function buildCleanupCommand(opts: { branch?: string; baseBranch?: string; force
     '[ "$TARGET" != "$BASE" ] || { echo NOTHING_TO_CLEAN; exit 9; }',
     '[ -z "$(git status --porcelain)" ] || { echo DIRTY; exit 4; }',
     'git rev-parse --verify --quiet "$TARGET" >/dev/null || { echo NO_SUCH_BRANCH; exit 11; }',
+    // THE convention's worktree (`worktree-path.ts`) — the one git_commit and the run_command
+    // refusal both create — found and checked for uncommitted work NOW, before the fetch and the
+    // checkout below, so a refused cleanup changes nothing.
+    ...checkConventionWorktreeShell("TARGET"),
     // Was this branch ever pushed? Read BEFORE the prune, which is what removes the
     // evidence — a branch that had an upstream and no longer exists on the remote was
     // merged and deleted by the host, however it was merged.
@@ -231,10 +243,9 @@ function buildCleanupCommand(opts: { branch?: string; baseBranch?: string; force
     '[ "$MERGED" = 1 ] || { echo NOT_MERGED; exit 10; }',
     // The ticket branch may live in a worktree (the commit flow never switches the
     // checkout), and git refuses to delete a branch that is checked out anywhere — so
-    // remove the worktree first. Best-effort: if it is gone the branch delete below is
-    // what matters.
-    'WT="$(git rev-parse --show-toplevel)/../$(echo "$TARGET" | tr / -)-wt"',
-    'if git worktree list --porcelain 2>/dev/null | grep -q "^worktree $WT$"; then git worktree remove --force "$WT" 2>/dev/null || true; fi',
+    // remove the (clean, checked above) worktree first; one git will not remove (locked,
+    // submodules) stops here with WORKTREE_KEPT rather than failing the branch delete.
+    removeFoundWorktreeShell(),
     // `-D`, not `-d`: the merged-ness check above is STRICTER than git's own (it also
     // accepts the squash-merge case git cannot see), so `-d` would refuse exactly the
     // branches this tool exists to remove. Nothing reaches this line unmerged.
@@ -297,6 +308,22 @@ function publishToolResult(action: string, r: { ok: boolean; stdout?: string; ex
   }
   if (r.exitCode === 12 || /\bWORKTREE_FAILED\b/.test(out)) {
     return fail("the ticket branch's worktree could not be created or reused — nothing was committed and the checkout was not switched. Run git_status, then re-try git_commit with the same branch (a stale worktree can be cleared with `git worktree prune`).");
+  }
+  const dirtyWorktree = /DIRTY_WORKTREE ([^\n]*)/.exec(out);
+  if (r.exitCode === DIRTY_WORKTREE_EXIT || dirtyWorktree) {
+    const at = (dirtyWorktree?.[1] ?? "").trim();
+    return fail(
+      `the branch's worktree${at ? ` (${at})` : ""} has uncommitted changes, so it was kept and the branch was NOT deleted — removing it would destroy that work. `
+      + "Commit those changes (git_commit / run_command in that worktree) or discard them there (`git restore` / `git clean`), then re-run git_cleanup_merged.",
+    );
+  }
+  const kept = /WORKTREE_KEPT ([^\n]*)/.exec(out);
+  if (r.exitCode === WORKTREE_KEPT_EXIT || kept) {
+    const at = (kept?.[1] ?? "").trim();
+    return fail(
+      `the branch's worktree${at ? ` (${at})` : ""} could not be removed — it is locked or has submodules — so the branch was NOT deleted. `
+      + `Only if its contents are not needed, unlock/remove it with \`git worktree remove --force ${at || "<path>"}\`, then re-run git_cleanup_merged.`,
+    );
   }
   if (r.exitCode === 4 || /\bDIRTY\b/.test(out)) {
     return fail("you have uncommitted changes — commit or discard them before cleaning up (this refuses to discard uncommitted work).");

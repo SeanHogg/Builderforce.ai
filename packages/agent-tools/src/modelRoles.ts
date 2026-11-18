@@ -12,16 +12,17 @@
  * api adds the objective each role implies on top (`api/src/application/llm/modelRoles.ts`).
  */
 
-export type ModelRole = "plan" | "code" | "verify" | "explore" | "chat" | "utility";
+export type ModelRole = "plan" | "code" | "review" | "verify" | "explore" | "chat" | "utility";
 
-export const MODEL_ROLES: readonly ModelRole[] = ["plan", "code", "verify", "explore", "chat", "utility"];
+export const MODEL_ROLES: readonly ModelRole[] = ["plan", "code", "review", "verify", "explore", "chat", "utility"];
 
 /** One line per role, shown to the delegating MODEL in the `spawn_agent` schema so it
  *  picks deliberately rather than defaulting to whatever it is running as. */
 export const MODEL_ROLE_DESCRIPTIONS: Readonly<Record<ModelRole, string>> = {
   plan: "Deciding an approach or breaking work down — no code written yet.",
   code: "Writing or editing code. The default when no role is named.",
-  verify: "Checking work already done — reading test/build output, reviewing a diff.",
+  review: "Judging work — reviewing a diff or a plan for correctness and design.",
+  verify: "Mechanical checks — building, compiling, running tests and reading their output.",
   explore: "Investigation — locating, searching, summarising.",
   chat: "A conversational answer with no task-shaped work behind it.",
   utility: "Small, mechanical, low-stakes work — formatting, extraction, a lookup.",
@@ -29,24 +30,29 @@ export const MODEL_ROLE_DESCRIPTIONS: Readonly<Record<ModelRole, string>> = {
 
 /**
  * What each role is FOR, as a number routing can use: +1 pulls toward the strongest model,
- * -1 toward the cheapest, 0 leaves the tenant's own order alone. CODE is written by the
- * strongest model on offer; ANALYSIS runs on the tenant's order; checking and reading lead
- * with the cheapest capable model. Here, beside the vocabulary, so the gateway's ordering
- * (`@builderforce/model-router`) and a host choosing a child's model read ONE table.
+ * -1 toward the cheapest, 0 leaves the tenant's own order alone. PLANNING and REVIEW are
+ * judged by the strongest models on offer; CODE is quality-first too, but WHICH model leads
+ * a quality-first role is the role's model ladder (`@builderforce/model-catalog`
+ * `roleLadders.ts` — the best coder per cost, Sonnet before Opus), not the price tier;
+ * building, compiling and running tests (verify) and reading (explore, utility) lead with
+ * the cheapest capable model; chat keeps the tenant's order. Here, beside the vocabulary,
+ * so the gateway's ordering (`@builderforce/model-router`) and a host choosing a child's
+ * model read ONE table.
  */
 export const MODEL_ROLE_OBJECTIVE: Readonly<Record<ModelRole, number>> = {
+  plan: 1,
+  review: 1,
   code: 1,
-  plan: 0,
   chat: 0,
-  verify: -0.5,
+  verify: -1,
   explore: -1,
   utility: -1,
 };
 
 /**
  * Does this role lead with the cheaper models? A delegation of that role must not inherit
- * its owner's model as a hint: a verify child handed the coder's model checks on the most
- * expensive tier, which is the cost the role exists to avoid.
+ * its owner's model as a hint: a verify child handed the coder's model builds and runs
+ * tests on the most expensive tier, which is the cost the role exists to avoid.
  */
 export function roleLeansCheap(role: unknown): boolean {
   return isModelRole(role) && MODEL_ROLE_OBJECTIVE[role] < 0;
@@ -69,7 +75,7 @@ export function delegationRole(raw: unknown): ModelRole {
 
 /**
  * The DELIVERY role (the board's role key) a named agent must hold to take a delegated
- * slice of this kind. A code slice runs as a Developer and a verify slice as QA. The other
+ * slice of this kind. A code slice runs as a Developer; a review or verify slice as QA. The other
  * call purposes (planning, reading, chat) are open to any teammate.
  *
  * WHY: `as_agent` used to accept any agent for any slice, so a run could hand a code
@@ -79,6 +85,7 @@ export function delegationRole(raw: unknown): ModelRole {
  */
 export const DELEGATION_DELIVERY_ROLES: Readonly<Partial<Record<ModelRole, string>>> = {
   code: "developer",
+  review: "qa-tester",
   verify: "qa-tester",
 };
 
@@ -91,7 +98,7 @@ export interface DelegationPersonaRoles {
 
 /**
  * The on-demand teammate a slice runs as when no named agent holds its delivery role. A
- * Developer for a code slice, a QA Tester for a verify slice — the role, not a person, so
+ * Developer for a code slice, a QA Tester for a review or verify slice — the role, not a person, so
  * the work is never attributed to an agent who did not do it.
  */
 export const DELEGATION_ROLE_PERSONAS: Readonly<Record<string, { name: string; brief: string }>> = {

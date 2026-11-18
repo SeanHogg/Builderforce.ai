@@ -2166,7 +2166,7 @@ export const llmUsageLog = pgTable('llm_usage_log', {
    *  'on_prem' | 'cloud' | 'sdk'. Drives the BYO metering exemption above so
    *  own-machine (on-prem/VSIX) BYO usage is free while cloud BYO is charged. */
   surface:          varchar('surface', { length: 16 }).notNull().default('web'),
-  /** What kind of call this row was (plan/code/verify/explore/chat/utility) —
+  /** What kind of call this row was (plan/code/review/verify/explore/chat/utility) —
    *  migration 1167. Stamped by every producer that knows it (the gateway from the
    *  request's `role`, a cloud run per turn); null for callers that send none. */
   role:             varchar('role', { length: 16 }),
@@ -2478,6 +2478,9 @@ export const promptLibraryEntries = pgTable('prompt_library_entries', {
   usageCount:     integer('usage_count').notNull().default(0),
   starCount:      integer('star_count').notNull().default(0),
   isFeatured:     boolean('is_featured').notNull().default(false),
+  /** Archive (PRD 47 §3.3). NULL = active; archived prompts disappear from the
+   *  default list but keep their version/star rows. */
+  archivedAt:     timestamp('archived_at'),
   createdAt:      timestamp('created_at').notNull().defaultNow(),
   updatedAt:      timestamp('updated_at').notNull().defaultNow(),
 });
@@ -2629,6 +2632,9 @@ export const marketplacePersonas = pgTable('marketplace_personas', {
   authorName:   varchar('author_name', { length: 255 }),
   installCount: integer('install_count').notNull().default(0),
   likeCount:    integer('like_count').notNull().default(0),
+  /** Archive (PRD 47 §3.3). NULL = active; a persona the owner shelved keeps
+   *  its published row but drops out of the default list. */
+  archivedAt:   timestamp('archived_at'),
   createdAt:    timestamp('created_at').notNull().defaultNow(),
   updatedAt:    timestamp('updated_at').notNull().defaultNow(),
 }, (t) => ({
@@ -3056,6 +3062,8 @@ export const chatSessions = pgTable('chat_sessions', {
   endedAt:    timestamp('ended_at'),
   msgCount:   integer('msg_count').notNull().default(0),
   lastMsgAt:  timestamp('last_msg_at'),
+  /** Archive (PRD 47 §3.3). NULL = active. */
+  archivedAt: timestamp('archived_at'),
 });
 
 

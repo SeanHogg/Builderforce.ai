@@ -1,6 +1,6 @@
 /**
  * PRD 41 §A6 — Packaged offline acceptance for the VSIX
- * (Builderforce.ai/docs/specs/41-prd-offline-understanding-and-run-delta.md,
+ * (Builderforce.ai/docs/specs/make.md (PRD 41),
  * workstream WS13).
  *
  * This is the GATE for claiming "offline" in release notes (§A6): the shipped

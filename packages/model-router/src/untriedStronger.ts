@@ -16,6 +16,12 @@
  * that delivered still beats an ULTRA one that did not. A chronically rate-limited model
  * counts as measured, so a stronger account the provider keeps refusing is not lifted.
  *
+ * "Stronger" is the ROLE's own measure: for a role with a model ladder (plan, review,
+ * code — {@link ladderKey}) it is the ladder rung, then the tier within a rung; otherwise
+ * the tier alone. So on a code turn an untried Opus is NOT lifted over a measured Sonnet —
+ * the code ladder ranks Sonnet the better coder per cost — while an untried Sonnet is lifted
+ * over a measured MiniMax.
+ *
  * Cost-first and balanced roles are returned untouched. Pure; never adds or drops a model.
  */
 
@@ -27,6 +33,7 @@ import {
 } from '@builderforce/learned-routing';
 import { tierRank, type CatalogView } from '@builderforce/model-catalog';
 import { BALANCED_OBJECTIVE_THRESHOLD } from './objective.js';
+import { ladderKey } from './orderForRole.js';
 
 export function liftUntriedStronger(
   learned: readonly string[],
@@ -34,6 +41,7 @@ export function liftUntriedStronger(
   objective: number,
   view: CatalogView,
   minSamples: number = DEFAULT_MIN_SAMPLES,
+  role?: string,
 ): string[] {
   if (objective < BALANCED_OBJECTIVE_THRESHOLD || !stats?.length) return [...learned];
   const statOf = new Map(stats.map((s) => [s.model, s]));
@@ -41,10 +49,15 @@ export function liftUntriedStronger(
     const s = statOf.get(m);
     return !!s && (qualityEvidence(s) >= minSamples || isChronicallyRateLimited(s));
   };
-  const measuredRanks = learned.filter(measured).map((m) => tierRank(view.tierOf(m)));
-  if (measuredRanks.length === 0) return [...learned];
-  const strongestMeasured = Math.min(...measuredRanks);
-  const lifted = learned.filter((m) => !measured(m) && tierRank(view.tierOf(m)) < strongestMeasured);
+  const rung = ladderKey(view, role);
+  // Lower is stronger: [ladder rung (0 when the role has none), tier rank].
+  const strength = (m: string): [number, number] => [rung ? rung(m) : 0, tierRank(view.tierOf(m))];
+  const stronger = (a: [number, number], b: [number, number]): boolean =>
+    a[0] < b[0] || (a[0] === b[0] && a[1] < b[1]);
+  const measuredStrengths = learned.filter(measured).map(strength);
+  if (measuredStrengths.length === 0) return [...learned];
+  const strongestMeasured = measuredStrengths.reduce((best, s) => (stronger(s, best) ? s : best));
+  const lifted = learned.filter((m) => !measured(m) && stronger(strength(m), strongestMeasured));
   if (lifted.length === 0) return [...learned];
   return [...lifted, ...learned.filter((m) => !lifted.includes(m))];
 }

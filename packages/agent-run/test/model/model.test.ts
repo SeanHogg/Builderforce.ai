@@ -38,8 +38,10 @@ describe("the phase rule", () => {
   it("a ticket run codes; a plan or verify child starts in that phase; a non-phase child keeps its role", () => {
     expect(policyRole(undefined)).toEqual({ startPhase: "code" });
     expect(policyRole("plan")).toEqual({ startPhase: "plan" });
-    expect(policyRole("verify")).toEqual({ startPhase: "verify" });
+    // A verify child runs the checks: it keeps the cheap role, never the review a coding run's verify phase is.
+    expect(policyRole("verify")).toEqual({ startPhase: "verify", fixedRole: "verify" });
     expect(policyRole("explore")).toEqual({ startPhase: "code", fixedRole: "explore" });
+    expect(policyRole("review")).toEqual({ startPhase: "code", fixedRole: "review" });
     // A board delivery role is not a model role: the run still codes.
     expect(policyRole("reviewer")).toEqual({ startPhase: "code" });
   });
@@ -48,6 +50,8 @@ describe("the phase rule", () => {
     expect(turnRole(undefined)).toBe("code");
     expect(turnRole("plan")).toBe("plan");
     expect(turnRole("explore")).toBe("explore");
+    expect(turnRole("verify")).toBe("verify");
+    expect(turnRole("review")).toBe("review");
     expect(turnRole("reviewer")).toBe("code");
   });
 });
@@ -110,6 +114,15 @@ describe("resumeModelRunState", () => {
   it("keeps a persisted policy as it is", () => {
     const saved = initialModelRunState({ pick: { model: "x", strict: true }, delegatedRole: "verify" });
     expect(resumeModelRunState(saved, "other", { model: "seed", strict: false }, undefined)).toBe(saved);
+  });
+
+  it("reads the review model from phaseModels.review before the legacy verify entry", () => {
+    const fresh = initialModelRunState({ pick: { model: "x", strict: false }, delegatedRole: undefined, phaseModels: { review: "opus", verify: "haiku" } });
+    expect(fresh.policy.options.reviewModel).toBe("opus");
+    const legacy = initialModelRunState({ pick: { model: "x", strict: false }, delegatedRole: undefined, phaseModels: { verify: "haiku" } });
+    expect(legacy.policy.options.reviewModel).toBe("haiku");
+    const resumed = resumeModelRunState(legacy, undefined, { model: "x", strict: false }, undefined, { review: "opus" });
+    expect(resumed.policy.options.reviewModel).toBe("opus");
   });
 });
 

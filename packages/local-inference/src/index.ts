@@ -105,7 +105,9 @@ export {
 export {
   localFirstPlan,
   localModelUnfitReason,
+  type ByoOrderQuery,
   type LocalFirstAccount,
+  type LocalFirstAccounts,
   type LocalFirstAttempt,
   type LocalFirstInput,
   type LocalFirstWorkload,

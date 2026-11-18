@@ -28,6 +28,7 @@ export const ROLE_REASONING_EFFORT: Readonly<Record<ModelRole, AgentThinkLevel>>
   chat: 'low',
   code: 'medium',
   plan: 'high',
+  review: 'high',
 });
 
 /** The think-level ladder, lowest first — what `escalate` climbs. */

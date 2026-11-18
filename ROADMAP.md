@@ -41,8 +41,8 @@ Public copy states today's evidence. **Available** = shipped and repeatably veri
 
 ## Programs
 
-- **hired.video absorption** ([PRD 18](./docs/specs/18-prd-hired-video-port.md)): deprecate to a redirect shell. Every table maps to a primitive (`docs/specs/data-model/source-to-target.tsv`); the rest is application code.
-- **burnrateos.com shutdown** ([PRD 19](./docs/specs/19-prd-burnrateos-consolidation.md)): an unbuilt, unretired capability is lost at shutdown. Held by `check:burnrate-parity`, `check:no-burnrate-runtime`, `check:burnrate-policy`. *Blocker: operator provider actions, identity-cutover comms, redirect verification.*
+- **hired.video absorption** ([PRD 18](./docs/specs/run.md)): deprecate to a redirect shell. Every table maps to a primitive (`docs/specs/data-model/source-to-target.tsv`); the rest is application code.
+- **burnrateos.com shutdown** ([PRD 19](./docs/specs/run.md)): an unbuilt, unretired capability is lost at shutdown. Held by `check:burnrate-parity`, `check:no-burnrate-runtime`, `check:burnrate-policy`. *Blocker: operator provider actions, identity-cutover comms, redirect verification.*
 
 
 ---
@@ -82,7 +82,7 @@ Public copy states today's evidence. **Available** = shipped and repeatably veri
   - The model still comes from the run when one is held. Only the role's token cap differs, and the report is still written.
   - Fix: mark the Brain's forced finish turn as `final` so role resolution keeps the prior role, the way `packages/agent-run/src/policy/model/index.ts` already does for the cloud. This makes both hosts behave the same.
 
-- **VS Code runs pay a full prompt per tool call ([PRD 45](./docs/specs/45-prd-deterministic-run-gates.md) §4.7 loop economics).** The deterministic gates shipped 2026-11-10 (see DONE.md), and the §4.7 loop-economics items are now shipped too — outline-first reads (lever c10), edit-file batching, the readiness steer, batching nudge, folded stale reads, the host progress line, the tools-advertised counter, and the ticket re-title pass are all wired and tested (B1–B9). Chat #216's 2.08M prompt tokens motivated them; what remains is only the measurement: G4 (halve prompt tokens per unit of work) has no post-gate outcome scoring — a replay re-derives the pre-gate baseline only, so the §8 targets need a fresh run of the same task (PRD §W9, tracked open there).
+- **VS Code runs pay a full prompt per tool call ([PRD 45](./docs/specs/make.md) §4.7 loop economics).** The deterministic gates shipped 2026-11-10 (see DONE.md), and the §4.7 loop-economics items are now shipped too — outline-first reads (lever c10), edit-file batching, the readiness steer, batching nudge, folded stale reads, the host progress line, the tools-advertised counter, and the ticket re-title pass are all wired and tested (B1–B9). Chat #216's 2.08M prompt tokens motivated them; what remains is only the measurement: G4 (halve prompt tokens per unit of work) has no post-gate outcome scoring — a replay re-derives the pre-gate baseline only, so the §8 targets need a fresh run of the same task (PRD §W9, tracked open there).
 - **A2A extension (`agent-runtime/extensions/a2a`) — concrete defects fixed; direction still open.** The shippability blockers are now closed: `inbound.ts` passes `runEmbeddedAgent`'s required `runId`/`timeoutMs`, the wire format is the shared A2A transport (`packages/agent-tools/src/a2a.ts`), `spawn("claude")` resolves on Windows (locates `claude.cmd` explicitly and spawns it shell-free with cmd-verbatim quoting), the dead `spawnSync` import and the phantom stdio bridge are gone, and `inbound.test.ts` covers the handler. What remains is a product decision, not a defect: the current wire contract is the simple `message.parts[]` envelope, not full A2A **JSON-RPC + Agent Card**, and the Claude Code spawn passes no **permission mode**. A security finding is tracked out of source control in SECURITY-FINDINGS.local.md. *Blocker: operator decision — rebuild on real A2A (JSON-RPC + Agent Card, Agent SDK for Claude Code, MCP for the inbound direction) or keep the current lightweight bridge.*
 
 - **No source of recorded runtime values for the knowledge view (PRD 38).** Several features are wired and tested but have nothing to show yet:
@@ -96,24 +96,10 @@ Public copy states today's evidence. **Available** = shipped and repeatably veri
   - a `payloadBytes` badge.
 
   *Blocker: no runtime trace recorder exists. It is a new subsystem, a candidate for PRD 41's run delta.*
-- **Predicted measures over the knowledge graph: the view half of P1/P4/P7 is built but uncommitted; P2 is blocked.** The memory maths, git history and cache keys are done (DONE.md, 2026-11-10). Still open ([PRD 38 › Predicted measures](./docs/specs/38-prd-knowledge-graph.md)):
-  - **Ship the uncommitted knowledge-graph-view work.** These are built and pass their targeted tests, but they are not reviewed or committed. They sit in the working tree next to other sessions' edits:
-    - P1 placement perf fixes: `placement.ts` planeTable, `communityGroups.ts`, `stations.ts`, and `compute/codecs/graph.ts`, which drops the default `communityFallback` from the wire.
-    - P4 partner surfaces: `surface/{rateFormat,coChange,PartnerList}`, `labels/surface.predict.ts`, `ActPanel`, `ActFooter`, `useSurface`, `fix/{FixFlowView,FixChecksList,useFixFlow}` and `fixPorts.ts`.
-    - The Hidden coupling overlay: `surface/{coupling,HiddenPartners}`, `labels/surface.coupling.ts`, `overlays.ts`, `dataCoverage.ts` and `NodePanel`.
-    - P7 hop probability and the Simulate / Run to end walk: `surface/{transitionTable,path,PathStrip,StepControls}`, `simulate/simulateModel.ts`, `drawers/SimulatePanel.tsx` and `labels/surface.transition.ts`.
-    - The catalog hunks `knowledgeGraph.surface.{predict,coupling,transition}` in all five locales.
-  - **Before committing that work:**
-    1. One Opus review of the diff above.
-    2. Wire `FixStepRequest.partnerTests` into the host's Run checks step. `useFixFlow` sends it, but no host reads it. If no host implements the fix ports yet, drop the field.
-    3. Find the +12 DOM nodes per view in the perf gate. Check whether `PartnerList` or `LikelyWalk` renders when it has no data.
-    4. Re-baseline `src/perf/deterministic/deterministic.test.ts` with `KG_PERF_UPDATE=1` (the user approved this). The intended feature costs are: surface reads +598 from the community fold past `MAX_STATIONS`, insights reads +88, and list mount reads +456.
-    5. Commit and push.
-  - **`EXTRACTOR_VERSION` 7 is not released.** The bump to 7 sits uncommitted in `builderforce-memory/packages/memory/src/knowledge/sources.ts`. PRD 43 asked for it because deploy units and the `concurrency` badge change the code-pack extract. Remaining steps:
-    - update the `regression:` test in `regression.assets.test.ts` to expect 7;
-    - add a CHANGELOG line;
-    - release it as the next memory version (main is at 2026.10.80);
-    - tell the PRD 43 session the tag, so it can bump consumers.
+- **Predicted measures over the knowledge graph: the P1/P4/P7 view work is committed; P2 is blocked.** The memory maths, git history and cache keys are done (DONE.md, 2026-11-10). The view work (P1 placement fixes, P4 partner surfaces, Hidden coupling, P7 Simulate) landed in `7674bbd64` (2026-11-10, "Improvements") with the perf baseline redone in `0196e5683`; `EXTRACTOR_VERSION` 7 shipped in memory v2026.10.81/82 and consumers are on ^2026.10.82. Still open ([PRD 38 › Predicted measures](./docs/specs/make.md#prd-38--the-knowledge-graph-any-directory-code-and-docs-first)):
+  - **`7674bbd64` has no recorded review.** Run one Opus review over the knowledge-graph-view part of that commit.
+  - **`FixStepRequest.partnerTests` is read by no host.** `useFixFlow` sends it. Wire it into the host's Run checks step, or drop the field if no host implements the fix ports.
+  - **The builderforce-memory CHANGELOG still lists `EXTRACTOR_VERSION` 7 under "Unreleased".** Move it under v2026.10.81.
   - **P7 has no trace rows.** `transitionTableOf(graph, model, sequences?)` accepts run traces, but no caller passes any, so every hop reads from reference weights. *Blocker: there is no station-level source of recorded run traces. `RecordedRun` is fetched for one path, along that path, so feeding it in would turn each hop into an invented 1-of-1 trace.*
   - **P4 acceptance (recall@8 ≥ 0.5) has not been measured.** Run memory's `coChangeRecallAtK` on the `agentic` repo history.
   - **`runDeltaPorts.churnAt` drops history warnings.** It builds its git port without an `onWarn`, so the commit-cap and timeout warnings are never shown on that path (`clients/vscode/src/runDelta/runDeltaPorts.ts`).
@@ -128,22 +114,13 @@ Public copy states today's evidence. **Available** = shipped and repeatably veri
     - Bind, which this change did not touch, also slowed by 4–6×, so this is probably machine load. A regression from pruning inside drain-triggered compactions is not ruled out.
   - **Blocker:** an idle machine to re-run `scratchpad/drain-probe` on the 263 MB store copy.
   - **Fix:** if the drain is still slow when idle, prune only at heartbeat compactions, not at drain-triggered ones.
-- **Knowledge view: one stage, cameras are placements, semantic zoom ([PRD 43](./docs/specs/43-prd-knowledge-3d-stage.md) B1a, operator 2026-11-10).** Today every camera re-renders the same data on its own stack: SVG transit/tower/mind map, canvas Graph2D and R3F 3D. The result is flicker, inconsistent shapes, slow switches and no zoom path from system to code.
+- **Knowledge view: one stage, cameras are placements, semantic zoom ([PRD 43](./docs/specs/make.md) B1a, operator 2026-11-10).** Today every camera re-renders the same data on its own stack: SVG transit/tower/mind map, canvas Graph2D and R3F 3D. The result is flicker, inconsistent shapes, slow switches and no zoom path from system to code.
   - **Done and committed:** P0b, P0c, P1a, the P1 stage, the P2–P5 placements and the 4+1 Physical view (see DONE.md 2026-11-10).
-  - **Paused mid-edit (operator stop, 2026-11-10).** The working tree in `packages/knowledge-graph-view` is uncommitted and does not pass its tests. Nothing below is reviewed or committed. Known red: `scene3d.parity.test.ts` (`verdict` of undefined), `shapeGeometry.test.ts` (capsule size), `callSite.test.tsx` and `routeLine.test.tsx` (missing names in `useStageWiring.tsx`), `Graph2D.test.tsx` (`useSvgScale` exports removed), and a `mapParity.test.ts` type error. Resuming means: finish each item, run one targeted typecheck and test pass over the package, one Opus review, then commit.
-  - **P3 Graph parity — built, not committed.** Edge bundling (`compute/tasks/bundle.ts`), LOD bands, `graphEdges.ts`, `graphCaptions.ts` (band titles follow their boxes) and caption pixel offsets; `graphParity.test.ts` and `graphPlacement.perf.test.ts` pass (13/13). Left: review and commit.
-  - **Make the stage the default (P1/B8) — partly done.**
-    - Done in the tree: `GraphScene`, `Towers`, `shapeMeshes`, the 4+1 `PhysicalView`/`ScenariosView`, `surface.4plus1` labels and the DOM System/Style bodies (`SystemCard`, `TierRowView`, `StoreRow`, `StyleCard`) are deleted.
-    - Left: drop the `kg.stage=spike` flag and mount the stage for every camera in `cameras.tsx`; delete the SVG transit/tower marks, `Graph2D`, `MindMap`/`MindBranches`, `usePanZoom` and the remaining `useSvgScale` uses (keep `captionPlacement.ts` and `layout2d.ts`); delete the DOM Heat/Features bodies; migrate their tests per B8 (same fact as a spec-builder assertion); fix the view tests and the +DOM-node perf baseline the retirement changes.
-  - **P1b semantic zoom on real data — partly built.**
-    - In the tree: `stage/drill/useSemanticZoom.ts`, `nest.ts`, `CodeLayer.tsx`, `codeText.ts`, `rig/zoomBand.ts`, `rig/rigOfBus.ts`, `stage/host/`.
-    - Left: wire `useSemanticZoom` and `CodeLayer` into `useStageWiring` and `StageCard`; the continuous zoom-driven member tween across system → class → method bands; the code layer anchored at the method slot through host `readSource`; "Go inside" as the zoom shortcut; tests.
+  - **Every camera except List runs on the stage and the `kg.stage` flag is gone** (verified 2026-11-17). Left (PRD 43 B8): delete `Graph2D`, `MindMap`/`MindBranches`, the TransitMap SVG and transit marks, `useCardAnchor`, `usePanZoom`, `useSvgScale` and the `PathStrip` SVG sequence, migrating their tests per B8; `compileAsync` and the three.js prefetch; the `labelPlacement` grid; worker task priority; `failIfMajorPerformanceCaveat` plus a telemetry event; the Playwright perf done-checks. Full list: [make.md › PRD 43](./docs/specs/make.md#prd-43--one-3d-stage-for-every-knowledge-camera).
   - **Re-extraction after a config change — unblocked, not started.** Memory 2026.10.72 carries the caller `extractorKey` (commit 45db29c). Wire `moduleAliasesDigest()` (`packages/agent-tools/src/knowledge/moduleAliases.ts`) as the key on every run, including Continue (empty string = no key). The extract pool must echo the key it extracted under through `extractJob(job, packs, workerKey)` (`clients/vscode/src/knowledge/review/extractJobHandler.ts`); a mismatch is rejected and the file stays owed. Bump consumers to ^2026.10.72 and refresh every lockfile.
-  - **Deploy units and concurrency in cached extracts (`EXTRACTOR_VERSION` 7).** Not released; the memory side is logged under "Predicted measures" (the bump sits uncommitted in `builderforce-memory/packages/memory/src/knowledge/sources.ts`). Once a memory version after 2026.10.80 carries it, bump the consumers here.
   - **Descriptor redaction (decision).** Deploy-descriptor section text uses an allow-list blank-out, not `@builderforce/secret-redaction`. Layer the package's patterns on top once agent-tools resolves it as a source package.
   - **Ship.** After the above: rebuild the brain-embedded dist, package VSIX 2026.10.155 (bumped in `clients/vscode/package.json`, never packaged), install it by absolute path, and verify with `--list-extensions`.
-- **Run delta: follow-ups from the 2026-11-10 pass ([PRD 41](./docs/specs/41-prd-offline-understanding-and-run-delta.md) §7, WS7).** The VS Code run delta, the §12.5 hold/release and C9 shipped (see DONE.md, 2026-11-10). Open:
-  - **Change-set records never sync.** `runChangeSetId` (clients/vscode/src/runChangeSets.ts) produces `changeset:<runId>:<repo>`, but the push envelope only accepts UUID ids (api `syncEnvelope.ts` `isJournalEventId`), so every change set is refused with `event_id_invalid`. Fix: `stableEntityId('changeset:<runId>:<repoKey>')`, the same fix agentic-3d's WS11 made for `run-delta` records. Every local reader moves to the new id, and old-id records stay readable. Check whether the lifecycle record ids have the same defect. Fixing this lets change sets reach the server and the cloud-side delta.
+- **Run delta: follow-ups from the 2026-11-10 pass ([PRD 41](./docs/specs/make.md) §7, WS7).** The VS Code run delta, the §12.5 hold/release and C9 shipped (see DONE.md, 2026-11-10). Open:
   - **The server does not normalise repository identity on write.** The client strips credentials and hashes local paths before sync (590728fb1), but an older VSIX still sends raw remotes. Fix: move `clients/vscode/src/repoIdentity.ts` into one shared source-only package, and normalise `repository`, lifecycle `root` and `repos[]` in the API sync-apply path for the run-delta, change-set and lifecycle kinds. The user decided on 2026-11-10 that this covers the write path only, with no rewrite of stored rows.
   - **The VSIX with the run delta is not packaged or installed yet.**
     - Bump clients/vscode, package it and install it by absolute path.
@@ -157,7 +134,7 @@ Public copy states today's evidence. **Available** = shipped and repeatably veri
   - **Release authority treats every board as managed.** The device has no lifecycle-managed flag, so `runDelta/releaseAuthority.ts` asks for approver authority on any board. Fix: sync the board's managed flag to the device and use it.
   - **Nothing lists local audit runs.** `listLocalAuditRuns` has no consumers, so a held audit shows only through the `auditExecution` warning. Fix: wire an audit-runs view, or delete the function if nothing should list them.
   - **Binary sniffing still disagrees in four places.** `changedExcerpt.ts`, `contextPack/buildContextPack.ts` and two agent-runtime files scan the whole buffer with `includes(0)`, and `webview/src/attachmentUpload.ts` sniffs 8,000 bytes. Moving them to memory's `isBinaryBytes` changes their behaviour, so decide per caller.
-- **Run delta: the rest of PRD 41 ([PRD 41](./docs/specs/41-prd-offline-understanding-and-run-delta.md) §7); paused 2026-11-10 by the operator, mid-pass.**
+- **Run delta: the rest of PRD 41 ([PRD 41](./docs/specs/make.md) §7); paused 2026-11-10 by the operator, mid-pass.**
   - **Shipped:** WS3, WS15, the memory 2026.10.77–.80 primitives and the pin bump; see DONE.md 2026-11-10.
   - **Everything below went to main in the operator's sweep commit 7674bbd64 ("Improvements", 2026-11-10).** It skipped the planned review gate and the full typecheck of the staged set, so main carries the WS4, WS8, WS9 and L3 code exactly as each agent was stopped. The next step is a Haiku typecheck and targeted tests over the run-delta family on main, then the review rounds below. The code spans:
     - `packages/run-delta`, `packages/agent-tools/src/{delta,knowledge/facts}`;
@@ -188,16 +165,11 @@ Public copy states today's evidence. **Available** = shipped and repeatably veri
     - split `packages/run-delta/src/contract.ts` (~490 lines);
     - apply the RunDeltaPanel `PANEL_WIDTH` one-liner (agentic-2c pushed 209c2b835 and 590728fb1, so this is unblocked);
     - ship: a `release_notes` row (`new`), the Idea-to-Real post (Measure act), and DONE.md moves.
-  - **Not started:**
-    - WS5: consolidation; `kind: 'consolidation'` has no producer.
-    - WS13: packaged offline acceptance, and the cloud and on-prem delta.
-    - WS17: rule precision, calibration and process control.
-    - WS21: ranking, similar runs and the card's Predicted block.
-    - WS22: people scores (Opus review for RBAC and privacy).
+  - **Not started:** WS5 consolidation (`kind: 'consolidation'` has no producer; `scan.json` and `versionToken` still live in `codebaseScan.ts`).
+  - **Built but unwired (wire or retire):** `persistCloudRunDelta.ts` has no caller (cloud/on-prem delta, C14); the WS17 calibration, SPC and reliability-growth models and the rule-precision demotion have no consumer; no host produces the WS21 similar-runs prediction. WS13 has the packaged egress test but no CI job runs it (A6). WS22 audits score views in `admin_audit_log`, not the planned `person_score_views` table.
   - **WS18 (run risk model):** *Blocker: needs at least 500 final WS16 labels, which accrue as runs finish.*
-- **Cloud run isolation (G1/G2, [PRD 09](./docs/specs/09-prd-cloud-agent-validation.md)): egress allowlist built but off; secret containment under rework (in progress 2026-11-08).**
+- **Cloud run isolation (G1/G2, [PRD 09](./docs/specs/make.md)): egress allowlist built but off; secret containment under rework (in progress 2026-11-08).**
   - G1 egress: the outbound allowlist and its lifecycle shipped (`sandboxEgressLifecycle.ts`, b55198fc0 / adc99aa42 / e867b3bd1) behind `SANDBOX_EGRESS_ENFORCE`, which stays off. *Blocker: a live probe in a deployed container (raw TCP/DNS blocked, HTTPS through the proxy to an allowed registry, interception installed before start, `ctx.exports.ContainerProxy` resolves) before the flag is turned on.*
-  - G2 secret containment: the env scrub, `persist-credentials: false`, the one redaction package and the audit-write guard are on main (3a2c752db, e707549cf). An Opus review found the model shell could still read the runner's environ (same uid) and credentials in `.git/config`. The redesign (a separate `bfagent` user with its own group, all workspace fs/git through a helper running as that user, authenticated git only in a server-owned mirror with bundle handoff) and the redaction-quality fixes are in progress, partly swept unreviewed into local ee2222212. Next: verify, Opus re-review, commit, push.
   - Re-audit of the remaining PRD 09 items (S5, S6, W2, B2 closed) is not started.
 - **Cloud dispatch admission: review fixes in progress (2026-11-08).** Admission and the early draft PR are on main (3a2c752db). An Opus review found the deferred-dispatch sweep reads the wrong database (parked dispatches are never retried), the audit table cannot serve as a queue, and the orphan-draft sweep judges the wrong run and can close a draft a new run just adopted. The rework (a `deferred_dispatches` table with claims, backoff and per-kind hooks; a sweep decided by `platform_draft_execution_id` with a compare-and-set retire) is in progress, partly swept into local ee2222212. Next: verify, review, commit, push.
 - **`main` is red in CI (Release run 42483919152 on 970d6b6af, 16 jobs).** The old causes in this entry (deleted `src/tui/tui.ts`, oracle drift) no longer apply. The current red came from the 3a2c752db / ee2222212 sweeps of in-progress work from many sessions. Fixed and committed locally, not yet pushed: the builderforce-memory 2026.10.59 pin and lockfile refresh (4397dbab4: agent-tools tests and the `AnalyzerProgress` type errors), and in ee2222212 the publishable-deps scan (quality, replay), `externalUrl.test.ts` and the webview canvas tsconfig. Still red and owned by the sessions working in those areas: API vitest shards and guards (hiring, voice, SOC 2, classifier), API and frontend type-check, frontend build, lint and guards, and the VS Code extension test (`knowledgeLinkedDenied` acceptance, node:sqlite in the extension host). Next: push once the in-progress reviews above land and no CI run is in flight, then re-triage what is still red.
@@ -212,6 +184,8 @@ Public copy states today's evidence. **Available** = shipped and repeatably veri
 ### Local-first `[agents]` `[platform]`
 
 Source: [offline-first review](./docs/design/vsix-offline-first-architecture-review.md).
+
+- **Kimi K3 leads a Kimi Code subscription only when the tenant selects it (found 2026-11-18).** The server cannot read Kimi Code's `/models`, because Kimi's edge refuses the Worker's egress (`providerModelCatalog.ts` `loadAccountModels` returns null). Its only entitlement signal is the tenant's model selection (`tenant_llm_provider_models`), so plan-gated coders (`k3`, `k3-256k`) never seed on their own. The editor does hold the account's live model list (`connectedAccounts` credential `models`). Fix: the editor reports that list to the server as the account's entitlement, and `byoAutoSeedModels` seeds a gated coder the list contains. **Blocker:** an operator decision on whether the editor should report the account's model list to the server.
 
 - **Local model context windows are still unknown on three paths (found 2026-11-17 while fixing chat #149169). VSIX 2026.10.189 fixed the Kimi Code CLI install.**
   - `clients/vscode/src/modelRouting.ts` `localWindowProbes()` returns `[]` unless `localModels.localFirst` is on, so a pinned Ollama, Synapse or FreeToken model gets only the shipped catalog window.
@@ -243,6 +217,8 @@ Source: [offline-first review](./docs/design/vsix-offline-first-architecture-rev
 
 ### Autonomous delivery `[delivery]`
 
+- **The editor ship directive still tells the agent to review its own change (found by the 2026-11-17 PRD verification).** `brain-embedded/src/selfReviewShip.ts` step 2 "SELF-REVIEW" contradicts PRD 45 OD-1 (a fresh reviewer, never the author). Route the review through the independent reviewer. [make.md › PRD 45](./docs/specs/make.md#prd-45--deterministic-run-gates-and-loop-economics).
+- **PRD 23: a PRD- or docs-only run still opens a PR, and shared-infrastructure and credential failures are journal entries, not incidents (found by the 2026-11-17 PRD verification).** The circuit breaker does not show `blocked_reason` / `next_retry_at`. [make.md › PRD 23](./docs/specs/make.md#prd-23--manager-pr-review-acceptance-evidence-and-ticket-recovery).
 Last measured 2026-07-26: 6 of 767 tickets fully autonomous; 69% of 6,195 runs failed. The manager's census tracks this.
 
 - **Release health: main is still red after the 3a2c752db sweep.** Part 1 is in DONE.md, but the fixes are not committed yet. A Haiku re-run on 2026-11-08 found these still failing.
@@ -267,7 +243,7 @@ Last measured 2026-07-26: 6 of 767 tickets fully autonomous; 69% of 6,195 runs f
     - the silent-catch ratchets.
   - **Canvas webview has no CI typecheck.** `VoiceMarketplaceScreen.tsx` is now only in `webview/tsconfig.canvas.json`, and that project is not in `clients/vscode` `type-check`. Adding it is a one-line change, but today it fails with 14 errors in `packages/knowledge-graph-view/src/surface/useSurface.ts`, `packages/interaction-contract/src/improvementPrompt.ts` and agent-tools knowledge.
   - *Blocker: the user stopped this pass on 2026-11-08 before the remaining fixes and the commit, and the shared packages above are mid-change in other sessions.*
-- **PRD 23 dispositions and canary are built but not live** ([PRD 23](./docs/specs/23-prd-manager-pr-ticket-recovery.md)). Turn on the Manager canary for a project and apply a reviewed disposition batch; done when the census shows the backlog shrinking. *Blocker: operator decision to go live (the operator chose build + dry-run for this pass).*
+- **PRD 23 dispositions and canary are built but not live** ([PRD 23](./docs/specs/make.md)). Turn on the Manager canary for a project and apply a reviewed disposition batch; done when the census shows the backlog shrinking. *Blocker: operator decision to go live (the operator chose build + dry-run for this pass).*
 
 ### Ceremonies and meetings `[delivery]`
 
@@ -299,8 +275,10 @@ Last measured 2026-07-26: 6 of 767 tickets fully autonomous; 69% of 6,195 runs f
 
 ### Previews, repos and hosting `[canvas]` `[integrations]`
 
+- **The wrangler detector cannot read real configs (found by the 2026-11-17 PRD verification).** `api/src/application/blueprint/detectors/wranglerDetector.ts` regex-matches inline `kv_namespaces = [...]` / `r2_buckets = [...]`, so `[[kv_namespaces]]`, `[[r2_buckets]]` and `[[durable_objects.bindings]]` table arrays are missed and the hired.video blueprint acceptance fails; `content.includes('ai')` (line 84) flags any file containing the letters. Parse TOML properly. [make.md › PRD 31](./docs/specs/make.md#prd-31--build-run-and-ship-a-real-app-on-builderforce).
+- **`POST /api/projects` stores `companyId` without checking the company belongs to the tenant (found by the 2026-11-17 PRD verification)** (PRD 31 W8). Validate tenancy before the write.
 - **Live container preview off.** Host and deploy are in place; `preview.builderforce.ai` answers "not enabled". *Blocker: the `PREVIEW_INGRESS_ENABLED` secret.* Unblocks the QR live path and the native simulator.
-- **Customer app platform ([PRD 31](./docs/specs/31-prd-customer-app-platform.md)).** W1 `preview_*` tools and multi-port; W3 customer cloud connections; W4 `InfraProvider`; W5 hosted compute; W6 PR previews; W7 repo-connected listings. *Blocker: W5 decisions D1/D3/D4.*
+- **Customer app platform ([PRD 31](./docs/specs/make.md)).** W1 `preview_*` tools and multi-port; W3 customer cloud connections; W4 `InfraProvider`; W5 hosted compute; W6 PR previews; W7 repo-connected listings. *Blocker: W5 decisions D1/D3/D4.*
 - **Repo-backed Designer:** `last_synced_sha` is never written, so no merge guard; no auto two-way sync; worker and api R2 prefixes diverge; `createRemoteRepo` refuses GitLab.
 - **GitHub App not registered;** the code is wired and calls use the tenant PAT. *Blocker: `GITHUB_APP_ID` / `GITHUB_APP_PRIVATE_KEY`.*
 - **Multi-provider PR loop:** Bitbucket Server can't revert; `getPullRequestDiffSummary.ts:163` is GitHub-only. *Blocker: live GitLab/Bitbucket creds.*
@@ -318,6 +296,8 @@ Last measured 2026-07-26: 6 of 767 tickets fully autonomous; 69% of 6,195 runs f
 
 ## ⚙️ Run — operate the company
 
+- **[advisors] Advisory minutes never reach a board (found by the 2026-11-17 PRD verification).** `syncMinutesForMeeting` (`api/src/application/ceremony/ceremonyMinutesToCanvas.ts:185`) returns null for a meeting with no ceremony session, and advisory meetings never have one, so DONE.md's #2538 minutes-to-tasks claim does not hold for advisors. `ScheduleMeetingPanel` also lacks the `advisory` kind. [run.md › PRD 26](./docs/specs/run.md#prd-26--advisor-platform-epic-2522).
+- **[governance] Policy packs cannot be authored (found by the 2026-11-17 PRD verification).** The migration-1336 tables are read-only, so the governance auditor resolves an empty ruleset; the new authoring routes would collide with the 0348 wire-gate packs already served at `/api/governance/policy-packs`; there is no API or UI to list audits or triage findings; the registered tool runs pre-filters only (no LLM step); audits don't run on agent PRs or feed the merge gate; passing runs write no CC8.1/CC7.1 evidence. [run.md › PRD 08](./docs/specs/run.md#prd-08--agentic-security--governance-policy-packs--governance-auditor-agent).
 - **[governance] SOC 2 Type I,** the enterprise gate (epic #3062). The automation side is built: control baseline, automated evidence and the governance-auditor sweep. *Blocker: a CPA firm must be engaged to issue the Type I report.*
 - **[governance] Rule-audit gaps (PRD 08).** The `governance_audit` endpoints (767cd3e2b, `governanceRuleAudits.ts`) record runs and findings, but (1) a critical governance finding does not open a security incident (§4.4) — `openIncidentsForCriticalFindings` only accepts vulnerability findings, so it needs a finding-kind seam; (2) in-repo `.builderforce/policies` overrides are not merged into the resolved ruleset (DB packs only). Fixing both makes the auditor's gate match the PRD.
 - **[governance] DSR erasure skips non-segment stores.** `dsrExecution.ts` erases segment-scoped rows, but `marketing_audience_members` and `candidate_records` hold the same person outside the segment tier. *Blocker: operator decision on whether erasure reaches marketing audiences and hiring records, which carry their own retention duties.*
@@ -333,9 +313,10 @@ Last measured 2026-07-26: 6 of 767 tickets fully autonomous; 69% of 6,195 runs f
 
 ## 📊 Measure — grade the proof
 
+- **Cost per creation outcome is permanently "Not measured" (found by the 2026-11-17 PRD verification).** Nothing sends `costUsdMillicents`; there is also no sales-brief presentation export. [measure.md › Creation outcome metrics](./docs/specs/measure.md#design--creation-outcome-metrics).
 - **[growth] `experiment` cards are never measured.** `builtin_canvas_bind_ab_test` doesn't exist and `experiment` isn't in `CONNECTED_CANVAS_ACTIONS`. Bind to `ab_tests` (the Insights traffic split exists), enforce `ab_test_segments` at serve time, cover external sites.
 - **[platform] Three metric families have no writer:** `channel_performance`, `arr_projections`, `quota_attainment`. All 17 seats have rollups.
-- **[finance] Vertical KPIs ([PRD 25](./docs/specs/25-prd-vertical-kpi-dashboards.md)).** Slice B `growth.*`, LTV tranches, benchmark seeds; C exit waterfall; D remaining eight verticals' KPIs.
+- **[finance] Vertical KPIs ([PRD 25](./docs/specs/measure.md)).** Slice B `growth.*`, LTV tranches, benchmark seeds; C exit waterfall; D remaining eight verticals' KPIs.
 - **[finance] `companies.sector` is written free-form** (`investorRoutes.ts:167` → `companyWorkspace.ts:368`). Route through `validateListingPatch`.
 - **[growth] Insights (PRD 33) not provisioned.** *Blocker: Stripe, published disclosure, `NEXT_PUBLIC_REPLAY_SITE_KEY`, QA image-size check.*
 - **[growth] Insights event lake (D18)** for exact funnels. *Blocker: operator provisions the pipeline.*
@@ -357,13 +338,13 @@ Last measured 2026-07-26: 6 of 767 tickets fully autonomous; 69% of 6,195 runs f
 - **Gigs:** proposal eval scores aren't on an insights lens.
 - **Upwork parity:** no payment-verified badge, bid economy or packages.
 - **Freelance:** avatars are served full-size.
-- **Advisors ([PRD 26 §12](./docs/specs/26-prd-advisor-platform.md)).** Notetaker default-on, action items on the visitor's board, follow-up slot, guest claim link, token isolation test, P2 filters, location and stage filters.
+- **Advisors ([PRD 26 §12](./docs/specs/run.md)).** Notetaker default-on, action items on the visitor's board, follow-up slot, guest claim link, token isolation test, P2 filters, location and stage filters.
 - **[integrations] Canvas packs and prompts can't be listed.** *Blocker: decide what a purchased pack becomes.*
 - **[integrations] Developer Portal:** hyperscaler listings need seller accounts.
 
 ### Marketing and campaigns `[growth]`
 
-- **Prompt-driven campaign ([PRD 30](./docs/specs/30-prd-guided-marketing-campaign.md)).** C1 `canvas_connect_mailbox`, C2 catalog use-case, C3 ICP on canvas, C4 ROI writer.
+- **Prompt-driven campaign ([PRD 30](./docs/specs/reach.md)).** C1 `canvas_connect_mailbox`, C2 catalog use-case, C3 ICP on canvas, C4 ROI writer.
 - **Sales deck has zero customer proof.** *Blocker: one design partner, one measured result.*
 - **Ad and social accounts connect by pasted token,** except YouTube. *Blocker: a developer app and review per network.*
 - **LinkedIn rows retired by 1102** need a reconciler or a drop.
@@ -377,7 +358,7 @@ Last measured 2026-07-26: 6 of 767 tickets fully autonomous; 69% of 6,195 runs f
 
 ### Distribution `[growth]`
 
-- **VS Code release job goes green without publishing.** `VSCE_PAT` / `OVSX_PAT` unset, and `|| echo` swallows failures. Fail on a missing secret; only "already exists" is a no-op. *Blocker: the two tokens.*
+- **VS Code release job goes green without publishing.** A missing `VSCE_PAT` / `OVSX_PAT` now logs a warning and skips the publish, but the job still passes, and `|| echo` (`release.yml` ~394–416) swallows every publish failure, not only "already exists". Fail on a missing secret; treat only "already exists" as a no-op. *Blocker: the two tokens.*
 - **Rovr isn't in the Chrome Web Store.** *Blocker: developer account + listing.*
 - **Hugging Face push, reviewer test tenant, cloud marketplaces.** *Blocker: accounts, legal entity, partner programs, `ACTION_MIRROR_*`.*
 - **[integrations] Miro uses a personal token.** *Blocker: a registered app.*
@@ -398,7 +379,6 @@ Last measured 2026-07-26: 6 of 767 tickets fully autonomous; 69% of 6,195 runs f
 - **CI safety:** no ephemeral-DB migrate dry-run; `production` reviewer rule unset; `qa-e2e` in no workflow; no CodeQL workflow.
 - **`packages/repo-map` doesn't declare `agent-tools`.**
 - **builderforce-inference console builds only when nested.** *Blocker: operator decision on checkout layout.*
-- **esbuild < 0.28.1 in `clients/chrome` (0.24.2) and `feedback-sdk` (0.27.7).** Add overrides; dev-time only.
 
 ### LLM gateway and routing `[agents]`
 
@@ -406,7 +386,6 @@ Last measured 2026-07-26: 6 of 767 tickets fully autonomous; 69% of 6,195 runs f
 - **Who may replace workspace subscriptions.** `/llm/provider-keys` and subscription OAuth routes check membership, not role, including PUT and DELETE. *Blocker: operator role policy.*
 - **Code turns resolved to MiniMax Flash with Grok and Kimi connected (chat #6).** Read the recorded `failovers` + `gateway.byo_seed`, then fix the account or the seed rule.
 - **The context-fold summary is capped, not cheap.** Since VSIX 2026.10.153, `brain-embedded/src/run/brainFold.ts` stops the history summary after 15s and the turn continues on the most recent messages. Without that cap, a very large chat (#56654: 1,311 steps after a 323-step run) hung in startup on every message. But `summarizeTranscript` (builderforce-memory `working/summary.ts`) still runs in sequential 48k-token chunks, each sent to the on-device model first (`onDevice/utilitySummary.ts`, which has no time limit of its own). So a huge chat loses its oldest context on each timed-out run instead of getting a summary note. Next: summarize incrementally (fold only what has arrived since the saved summary), keep a partial summary when time runs out, and give the device step its own time limit.
-- **Shipped VSIX runs no longer auto-close their ticket.** Since VSIX 2026.10.152, `brainCloseOut.ts` records the host review and moves the ticket to done only when the run's evidence ledger has a passing check covering every changed file. But nothing in a live run writes to the ledger yet: its only writer is `shipGates.ts` `verifyPaths`, which only the parity scenario calls. And the VSIX binds no verifier, git or reviewer port outside `clients/vscode/src/verify/**`. So a shipped ticket stays `in_review` with `run.close_out_held` (reason `unverified`). This fails safe: nothing is rubber-stamped. *Blocker: the PRD 45 verifier port (`clients/vscode/src/verify/**`) is another session's work in progress; wire `shipGateRefusal`/`verifyPaths` into `callPreflight`/`callRunner` once it is bound.*
 - **Latency failover has no history from earlier runs.** `run-policy/latencyGuard.ts` only measures turn times within the current run, and `RunPolicyOptions.latencySeed` has no caller. So a run's first failover can still pick a slow model that hasn't been measured, as MiniMax Flash took 97s per turn in chat #60338. Next: record a p50 latency per model in learned routing (`ActionModelRankStat`, added in two steps: the new column first, removals later), and seed `latencySeed` from it when the run starts.
 - **Cloud runs have no C8 compression.** *Blocker: an ONNX image build.*
 - **Drift guard reads only OpenRouter, NIM, Cerebras;** pools are hardcoded. *Blocker: credentialed refresh inside the Worker.*
@@ -488,6 +467,7 @@ RESOLVED 2026-11-01 (commit 67f461953): the pending-turn wiring and `servedBy` a
 
 ### Data model — PRD 20 `[platform]`
 
+- **The coverage map and the schema disagree (found by the 2026-11-17 PRD verification).** `brain_chat_trace` is still `keep` though migration 1212 dropped it; `site_traffic_daily`, `rd_financials_quarterly`, `agent_host_projects`, `team_projects` and `sales_campaigns` are mapped as gone but still declared; the schema-presence check is not a hard gate (`api/scripts/check-model-coverage.mjs:98`); `drive_connections`/`mailbox_connections` were never folded into kernel `connections`. Ratchets: 109 adoption, 22 boundary, 3 polymorphic, 1 duplicate pair (`initiatives`/`portfolios`).
 - **Primitive adoption:** `runs` and `work_items` have no feature writer.
 - **135 ratchet violations:** 109 table adoption, 22 domain boundary, 3 polymorphic, 1 duplicate cluster (`initiatives`/`portfolios`).
 - **Legacy shape tables hold live rows.** Backfill, cut over, drop per family.
@@ -501,6 +481,9 @@ RESOLVED 2026-11-01 (commit 67f461953): the pending-turn wiring and `servedBy` a
 
 ### Code health `[platform]`
 
+- **`clearCommentPins` has no caller (found by the 2026-11-17 PRD verification).** `api/src/application/canvas/canvasComments.ts:274` carries the SET NULL obligation its header says is "called" when a canvas object is deleted; nothing calls it, so pins can point at deleted objects. Wire it into the object-delete path.
+- **Typed ids: the §7 api UUID sweep (26 allowlisted files) has no entry (found by the 2026-11-17 PRD verification).** Design: `docs/design/typed-entity-ids.md` §7.
+- **No guard enforces the read-through cache rule (found by the 2026-11-17 PRD verification)** (`getOrSetCached` for read-heavy paths, PRD 20). [platform.md › PRD 20](./docs/specs/platform.md#prd-20--the-consolidated-data-model-the-api-on-it-and-the-experience-on-that).
 - **Layering ratchet at 96;** 81 presentation modules import the schema. Worst: `creationSessionRoutes`, `adminRoutes`, `qaRoutes`.
 - **202 unscoped tenant queries in 89 files.**
 - **14 of 37 permissions advisory.**
@@ -511,17 +494,16 @@ RESOLVED 2026-11-01 (commit 67f461953): the pending-turn wiring and `servedBy` a
   - The API "OpenAPI" is `api/src/openapi/schema.ts`: TypeScript interfaces documenting 9 endpoints, against 2,554 route registrations in 280 modules under `presentation/routes`; only 12 modules have zod request schemas (`*.schemas.ts`). There is no machine-readable spec, so there is no contract testing and no Postman export.
   
   Fixing this unblocks the visualizer's Coverage lens and API view. *The visualizer's Coverage and API panels shipped on 2026-11-05 (VS Code 2026.10.130). They show coverage as "Not set up" and every route as undocumented until this is fixed in the repo: v8 coverage with `all: true` per package, and an OpenAPI 3.1 document generated from the routes.*
-- **[PRD 47](./docs/specs/47-prd-collection-view.md) One Collection view:**
-  - ~120 collection surfaces render every row with private grids and tables. `DataTable` has no consumers.
-  - Bulk actions fan out one request per id, which causes the 429s (`useCreationLibraryActions.ts:82-96`, `TaskMgmtContent.tsx:978-1002`).
-  - The api has no page, sort or bulk contract.
-  - Next: W0 (contracts, `components/collection/*`, `POST /api/collections/:entity/bulk`, `archived_at` expand migration), then W1 (projects, tasks gains Card, workforce roles, creation library).
+- **[PRD 47](./docs/specs/platform.md#prd-47--one-collection-view-card--list-selection-bulk-deletearchivemerge-server-paging-and-sort) One Collection view: W0 landed, nothing consumes it yet.**
+  - Landed: contract types, `parsePageQuery`, `POST /api/collections/:entity/bulk` + `runBulkAction` (`api/src/index.ts:716`), the 16 `components/collection/*` modules, the `archived_at` expand migration 1352.
+  - W0 remainder: register bulk ports (every entity 404s today); call `parsePageQuery` from list routes; the admin bulk route and the three guards; `PAGE_SIZE_OPTIONS` is still 50/100/200; `archivedAt` on the Drizzle `workflows`/`workflowDefinitions` tables; `collectionTypes.ts` duplicates the interaction-contract types; frontend component tests.
+  - Then W1 (projects, tasks gains Card, workforce roles, creation library). Bulk actions still fan out one request per id (`useCreationLibraryActions.ts`, `TaskMgmtContent.tsx`), causing the 429s.
   - Done when the `check:collection-surfaces` and `check:bulk-fanout` allowlists are empty.
 - **`builderforceApi.ts` 9,965 lines.** Split to `lib/api/<domain>.ts`. Board rosters (`boardRostersApi.ts`) and Discovery (`discoveryApi.ts`) are out; their changes are uncommitted.
 - **Unused primitives:** ~21 `fetchProjects()` callers, 128 raw storage sites, 76 `canEdit` guards, 55 `smoothstep` literals; `stage.connect` has no production caller.
 - **Canvas real-browser pass** misses the `+` command bar, bottom nav and Brain-not-covering.
 - **PRD 21 nav:** M3 seat workbench, M5 dimmed-row preview.
-- **[PRD 22](./docs/specs/22-prd-browser-performance-domain-execution-analysis.md):** LoRA off the main thread, off-thread file and diff work, cache eviction, cyclomatic ratchet, Phase-0 baseline.
+- **[PRD 22](./docs/specs/platform.md):** LoRA off the main thread, off-thread file and diff work, cache eviction, cyclomatic ratchet, Phase-0 baseline.
 - **i18n:** no CJK fallback; re-partition 349 namespaces by domain; measure the hardcoded remainder.
 - **Decide:** `BUILDERFORCE_MODELS` fallback.
 - **Code review 2026-11-09, god files still over size:** `builtinMcpService.ts` (4,665 lines), `importSyncedTicket.ts` (466), `brain-embedded/src/streamChatCompletion.ts` (867). Everything else from that review is fixed (DONE.md 2026-11-10). *Blocker: other sessions are editing these files right now, so a split would collide with their uncommitted hunks.*
@@ -533,7 +515,7 @@ RESOLVED 2026-11-01 (commit 67f461953): the pending-turn wiring and `servedBy` a
 - **OAuth over `/gateway/*` builds the wrong callback.** *Blocker: register in all four consoles.*
 - **A canvas turn once sent no tenant token.** *Blocker: a repro.*
 - **Segmented mode unusable:** inserts on `segment_id` tables lack `segmentId` (trigger 0056 raises); no RLS, segment roles or no-bleed test.
-- **[PRD 05](./docs/specs/05-integration-embed-and-identity.md):** inbound host OIDC. Nothing mints the `acct`/`co` claims `resolveSegment` reads.
+- **[PRD 05](./docs/specs/platform.md#prd-05--integration-embed-back--identity-federation) identity federation:** the inbound host OIDC verifier exists (`hostOidc.ts`) but reads only `acct`/`co`; `role`, `persona` and `plan` are ignored, a segment's stored plan is never read (no per-segment gating, credit tier or ledger), repo access is not confined to a segment, and there is no cross-segment no-bleed test. Host-side work is obsolete under PRD 19's burnrateos.com deprecation.
 - **`tenant_modules` never created** (`platform_modules` and `tenant_member_modules` exist). *Blocker: operator confirms intent.*
 
 ### Infrastructure and cost `[platform]`
@@ -541,10 +523,9 @@ RESOLVED 2026-11-01 (commit 67f461953): the pending-turn wiring and `servedBy` a
 - **🔴 $0 platform (plan 2026-10-03).** Observability is on and cron is gated. Re-default cloud surface, move QA and CPU routes, take L2 off KV, then downgrade. *Blocker: consoles, CPU measurements, acceptance of 2–4 concurrent agents.*
 - **🟠 `builderforce-core` on Neon Launch.** Enable autosuspend + 0.25 CU, then downgrade. *Blocker: Neon console.*
 - **Core's stale site tables** (`project_sites`, `site_*`) still sit on core since the apps split. Dropping them is irreversible. *Blocker: a live row comparison of core against apps, which needs database access this session was refused.*
-- **Production hardening:** no SIEM export or fleet failover. Design: `docs/specs/39-prd-platform-closeout.md` §4a, §4b. *Blocker: operator decisions in PRD 39.*
+- **Fleet failover (PRD 39 §4b) never re-dispatches a run.** The server side is built (`tool_intents`, the reaper), but `recordWriteAheadAck` and `recordIntentAck` have no caller and no host sends intents. Wire a host to send intents and acks. Design: [platform.md › PRD 39](./docs/specs/platform.md#prd-39--platform-close-out).
 - **No row retention on canvas history** (`creation_session_events`, `brain_chat_messages`). Snapshots are plan-capped and command bodies are redacted at 14 days; rows are kept indefinitely. *Blocker: decision on history kept.*
-- **🟡 Legacy leftover:** `agents` table still declared at `schema/agents.ts:327`. Design: PRD 39 §3. *Blocker: operator decisions in PRD 39.*
-- **🟡 Two stores:** canvas comments vs kernel annotations. Design: PRD 39 §2. *Blocker: operator decisions in PRD 39.*
+- **🟡 Legacy `agents` table (PRD 39 §3): push 1 shipped.** Push 2: drop the table and remove the declaration (`schema/agents.ts`); remove the alias routes after their 31 Dec Sunset.
 - **A revoked mailbox fails its campaigns for good.** `failCampaign` writes off every queued row and a failed email campaign cannot restart, so one unknown 403 loses the audience. *Blocker: operator decision to hold rows queued until the mailbox is reconnected instead.*
 - **Monitors and board-sync run on the 30-minute floor on an idle platform,** so a 5-minute heartbeat can page up to about 30 minutes late. Prompt checks keep Neon awake permanently. *Blocker: operator decision, paging latency against the Neon cost ceiling.*
 - **Neon's quota text over WebSocket is unobserved.** `neonAvailability.ts` matches the published wording. *Blocker: a capture from a quota-exhausted branch.*
@@ -552,5 +533,5 @@ RESOLVED 2026-11-01 (commit 67f461953): the pending-turn wiring and `servedBy` a
 - **Strategy content in public git history.** Purge built. *Blocker: a quiet 30-minute window, then GitHub Support for `refs/pull/*`.*
 - **Provider credit:** disconnect Moonshot on tenant 1; Together, FluxAPI, HF out. *Blocker: operator.*
 - **`http://www` redirect** targets `http://`. *Blocker: a zone-edit credential.*
-- **API Worker ~21 MB.** Split `/llm` + `/v1`. Design: PRD 39 §1. *Blocker: operator decisions in PRD 39.*
+- **API Worker ~21 MB (PRD 39 §1): push 1 shipped.** Before push 2, `measure-gateway-bundle.mjs` puts the gateway at ~59% of the bundle, mostly pdfjs; per the PRD, cut that import first, then push 2 and the live proof.
 - **Brand residuals:** rotate `clk_` keys.

@@ -89,7 +89,7 @@ re-asked the LLM). The cold-start threshold is conservative, at 0.9 for ANSWER.
 | codemod.pattern | answer(write) | ast-grep | vscode, onprem |
 | format.apply | answer(write) | Prettier/Biome/Black | vscode, onprem |
 | memory.answer | answer | answerFromMemory (exists) | all |
-| knowledge.review-dir | answer(write) | memory `/knowledge` `planReview` → confirm chip → `reviewDirectory` ([PRD 38](../specs/38-prd-knowledge-graph.md) §4.3) | all |
+| knowledge.review-dir | answer(write) | memory `/knowledge` `planReview` → confirm chip → `reviewDirectory` (PRD 38 §4.3, [archived in DONE.md](../../DONE.md)) | all |
 | knowledge.ask | answer | knowledge index + graph expansion ([deterministic-knowledge-index.md](deterministic-knowledge-index.md)); otherwise PREFETCH | all |
 | knowledge.graph | answer | open the knowledge-graph view, focused on the named files | all |
 

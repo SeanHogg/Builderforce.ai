@@ -34,6 +34,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  */
 
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { bumpRoutingInputsVersion } from './routingInputsVersion';
 import { and, desc, eq, gte } from 'drizzle-orm';
 import { buildTransactionalDatabase } from '../../infrastructure/database/connection';
 import { llmFailoverLog } from '../../infrastructure/database/schema';
@@ -361,17 +362,23 @@ async function recordAuthAlert(
 ): Promise<void> {
   const key = alertKey(tenantId, subject);
   memoryAlerts.set(key, { alert, until: alert.at + ALERT_TTL_SECONDS * 1000 });
-  // Drop the read-through entry so the settings page reflects a fresh rejection
-  // on its next poll instead of serving a cached "healthy" for up to a minute.
-  await invalidateCached(env as unknown as Env, key).catch((error) => { /* advisory */ 
+  // WRITE first, then drop the read-through entry and bump the routing token: a reader
+  // that misses in between reloads the stored alert, never a "healthy" it would then
+  // cache under the fresh token. The invalidation makes the settings page reflect a fresh
+  // rejection on its next poll instead of serving a cached "healthy" for up to a minute;
+  // the bump moves every routing cache — the editor's per-role order (`GET
+  // /llm/byo-order`) marks this account unhealthy.
+  if (env.AUTH_CACHE_KV) {
+    try {
+      await env.AUTH_CACHE_KV.put(key, JSON.stringify(alert), { expirationTtl: ALERT_TTL_SECONDS });
+    } catch (error) { /* alerting is advisory — never surface a storage failure */
+      reportCaughtError(error, { source: "application/llm/providerAuthAlerts.ts", operation: "recordProviderAuthAlert" });
+    }
+  }
+  await invalidateCached(env as unknown as Env, key).catch((error) => { /* advisory */
     reportCaughtError(error, { source: "application/llm/providerAuthAlerts.ts", operation: "recordProviderAuthAlert" });
   });
-  if (!env.AUTH_CACHE_KV) return;
-  try {
-    await env.AUTH_CACHE_KV.put(key, JSON.stringify(alert), { expirationTtl: ALERT_TTL_SECONDS });
-  } catch (error) { /* alerting is advisory — never surface a storage failure */ 
-    reportCaughtError(error, { source: "application/llm/providerAuthAlerts.ts", operation: "recordProviderAuthAlert" });
-  }
+  await bumpRoutingInputsVersion(env as unknown as Env, tenantId);
 }
 
 /**
@@ -534,7 +541,12 @@ async function clearAuthAlert(
 ): Promise<void> {
   const key = alertKey(tenantId, subject);
   memoryAlerts.delete(key);
-  await invalidateCached(env as unknown as Env, key).catch((error) => { /* advisory */ 
+  // Deliberately NOT bumping the routing token (`bumpRoutingInputsVersion`) here: this
+  // runs after EVERY successful BYO completion (`clearProviderAuthAlertAfterByoSuccess`),
+  // and a version bump per completion would make every cache keyed on it useless. A
+  // cleared alert reaches the editor's order within its short TTL; a reconnect or removal
+  // moves the token through the provider-row write.
+  await invalidateCached(env as unknown as Env, key).catch((error) => { /* advisory */
     reportCaughtError(error, { source: "application/llm/providerAuthAlerts.ts", operation: "clearProviderAuthAlert" });
   });
   if (!env.AUTH_CACHE_KV) return;

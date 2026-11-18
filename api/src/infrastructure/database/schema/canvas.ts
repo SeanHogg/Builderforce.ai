@@ -425,6 +425,9 @@ export const knowledgeDocuments = pgTable('knowledge_documents', {
   publishedAt:   timestamp('published_at'),
   createdAt:     timestamp('created_at').notNull().defaultNow(),
   updatedAt:     timestamp('updated_at').notNull().defaultNow(),
+  /** Archive (PRD 47 §3.3). NULL = active. The legacy `status='archived'` stays
+   *  for the document lifecycle; this column is the Collection's filter. */
+  archivedAt:    timestamp('archived_at'),
 });
 
 

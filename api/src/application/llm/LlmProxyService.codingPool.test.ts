@@ -20,7 +20,7 @@ import {
 import { rankModelsForAction, type ActionModelRankStat } from '@builderforce/learned-routing';
 import { CODING_BACKSTOP_MODELS } from './modelPool';
 import { parseModel, withDefaultModel } from '../runtime/cloudDispatch';
-import { catalogEntry, vendorForModel, vendorFlagship, autoRoutableModelsByTier, tierForModel } from './vendors';
+import { catalogEntry, vendorForModel, vendorFlagship, autoRoutableModelsByTier } from './vendors';
 
 /** The CURRENT flagships, read from the vendor catalogs — never a version literal, so a
  *  model release is a catalog edit and these assertions follow it. */
@@ -348,10 +348,12 @@ describe('byoAutoSeedModels (connected-account auto seed)', () => {
     expect(byoAutoSeedModels(new Set(), { agentic: false })).toEqual([]);
   });
 
-  it('Anthropic connected → Opus for agentic tool-loops, Sonnet for plain chat', () => {
+  it('Anthropic connected → both flagships, Opus first for agentic tool-loops, Sonnet first for plain chat', () => {
+    // Both, because the ROLE decides which leads (code → Sonnet, review → Opus); a seed
+    // offering only the turn shape's flagship could never give a coding turn Sonnet.
     const s = new Set(['anthropic']);
-    expect(byoAutoSeedModels(s, { agentic: true })).toEqual([OPUS_FLAGSHIP]);
-    expect(byoAutoSeedModels(s, { agentic: false })).toEqual([SONNET_FLAGSHIP]);
+    expect(byoAutoSeedModels(s, { agentic: true })).toEqual([OPUS_FLAGSHIP, SONNET_FLAGSHIP]);
+    expect(byoAutoSeedModels(s, { agentic: false })).toEqual([SONNET_FLAGSHIP, OPUS_FLAGSHIP]);
   });
 
   it('OpenAI-only → the DIRECT (tenant-keyed) flagship, never the bare OpenRouter slug', () => {
@@ -369,19 +371,16 @@ describe('byoAutoSeedModels (connected-account auto seed)', () => {
     expect(vendorForModel(seeds[0]!)).toBe('googleai');
   });
 
-  it('all three connected → every provider flagship leads, ordered by frontier tier (no hardcoded vendor)', () => {
+  it('all three connected → every provider flagship leads, ordered by the code ladder (no hardcoded vendor)', () => {
     const seeds = byoAutoSeedModels(new Set(['googleai', 'openai', 'anthropic']), { agentic: true });
-    // One flagship per connected provider — the owner's OWN premium frontier models.
+    // Each connected provider's flagships — the owner's OWN premium frontier models.
     expect([...seeds].sort()).toEqual(
-      [OPUS_FLAGSHIP, 'direct/openai/gpt-4.1', 'googleai/gemini-2.5-pro'].sort(),
+      [OPUS_FLAGSHIP, SONNET_FLAGSHIP, 'direct/openai/gpt-4.1', 'googleai/gemini-2.5-pro'].sort(),
     );
-    // Ordered strongest-tier-first from catalog data: Opus (ULTRA) leads; every id
-    // sorts by its catalog tier, so the ordering is monotonic and vendor-agnostic.
-    const tiers = seeds.map((m) => tierForModel(m));
-    const rank: Record<string, number> = { ULTRA: 0, PREMIUM: 1, STANDARD: 2, FREE: 3 };
-    const ranks = tiers.map((t) => rank[t] ?? 4);
-    expect(ranks).toEqual([...ranks].sort((a, b) => a - b));
-    expect(seeds[0]).toBe(OPUS_FLAGSHIP); // ULTRA leads
+    // Un-ranked vendors order by the catalog's CODE ladder (`roleLadders.ts`), tier only
+    // after it: Anthropic (Sonnet) codes best, then Gemini Pro, then GPT-4.1. A vendor's
+    // group stays together, its turn-shape flagship first.
+    expect(seeds).toEqual([OPUS_FLAGSHIP, SONNET_FLAGSHIP, 'googleai/gemini-2.5-pro', 'direct/openai/gpt-4.1']);
   });
 
   it('every seed output is dispatchable (prefix-stripped id is a real catalog entry)', () => {
@@ -479,16 +478,16 @@ describe('BYO precedence — tenant-set provider priority (byoAutoSeedModels)', 
       vendorPriority: ['meta', 'anthropic'],
     });
     expect(seeds[0]).toBe('direct/meta/muse-spark-1.1'); // Meta leads despite lower tier
-    expect(seeds[1]).toBe(OPUS_FLAGSHIP);            // then Anthropic (next in precedence)
-    expect(seeds[2]).toBe('direct/openai/gpt-4.1');      // un-ranked → after ranked, by tier
+    expect(seeds.slice(1, 3)).toEqual([OPUS_FLAGSHIP, SONNET_FLAGSHIP]); // then Anthropic (next in precedence)
+    expect(seeds[3]).toBe('direct/openai/gpt-4.1');      // un-ranked → after ranked
   });
 
-  it('a vendor absent from vendorPriority falls to the tier tiebreak, after every ranked one', () => {
+  it('a vendor absent from vendorPriority falls to the ladder/tier tiebreak, after every ranked one', () => {
     const seeds = byoAutoSeedModels(new Set(['anthropic', 'meta']), {
       agentic: true,
       vendorPriority: ['meta'], // only Meta ranked; Anthropic un-ranked
     });
-    expect(seeds).toEqual(['direct/meta/muse-spark-1.1', OPUS_FLAGSHIP]);
+    expect(seeds).toEqual(['direct/meta/muse-spark-1.1', OPUS_FLAGSHIP, SONNET_FLAGSHIP]);
   });
 
   it('pickCloudModel threads byoVendorPriority so the cloud pin leads with Meta', () => {

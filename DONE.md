@@ -1,3 +1,9956 @@
+## ✅ RESOLVED 2026-11-18: The BYO pool follows the tenant's order, and models are picked by role (chat #153027)
+
+- **Bug:** VS Code's "use my connected accounts" always ran `local/kimi-code/kimi-for-coding`. `brain-embedded/src/hostModelStream.ts` tried the accounts the editor calls itself (Kimi Code) before the gateway on every `byo_pool` and Hybrid Auto turn, and `hybridAccounts()` never read the tenant's order. Unranked providers fell back to alphabetical order or catalog tier.
+- **Role policy (operator, 2026-11-17):** plan and the new `review` role lead with the strongest models; `code` leads with the best coder per cost (Sonnet before Opus); `verify` (build, compile, run tests) leads with the cheapest; `chat` and calls with no role keep the tenant's order. The vocabulary is in `packages/agent-tools/src/modelRoles.ts`, and the per-role model-family ladders are in `packages/model-catalog/src/roleLadders.ts`. `packages/model-router` sorts by health, then ladder rung, then tier and price, and gates the ladder on a strength objective.
+- **Server owns the order:** each connected vendor seeds both flagships (`vendorFlagshipSeeds`), and `orderByoSeeds` (`byoSeedOrder.ts`) is shared by the gateway and the new `GET /llm/byo-order?role=&projectId=&arcStage=&agentic=`. The endpoint (`byoRoleOrder.ts`) returns `{ role, freeFirst, models: [{ ref, vendor, provider | null, healthy }] }`, is cached behind the single `routingInputsVersion` token, and checks project ownership. Unranked providers sort by their code-ladder rung (`byoProviderLadder.ts`).
+- **Client follows it:** `packages/provider-connect/src/byoOrder.ts` reads the order per call (60s cache, 5s for an unreadable answer). A host-called account leads only when it heads the healthy order and the person is not free-first, and then runs the model the order names (e.g. `k3`). Otherwise it trails the gateway. In Hybrid Auto with account-first funding the plan is device, leading account, cloud `byo_pool`, trailing account, then cloud Auto (`packages/local-inference/src/plan.ts`).
+- **Review role through the run engine:** `run-policy` emits `review` for the verify phase's review turns (`phaseModels.ts` `reviewPhaseModel`). A delegated `verify` child keeps `fixedRole: 'verify'` and a read-only tool set. VS Code's ship reviewer and stage models use `review`, and `resolveReviewModel` (`@builderforce/learned-routing`) falls back to a legacy `ROLE_MODELS.verify` pin.
+- **Cascade:** after an account-level failure (401, 402, a subscription's 429, or a 2× timeout/5xx streak) the gateway skips that tenant vendor's remaining models for the turn (`vendors/accountFailure.ts`). A 403 or an API-key 429 drops only the refused model.
+- Parity snapshots `ship-gate`, `child-report-ship-gate` and `handed-off-commands` changed 21 `role` values from `verify` to `review`, all on verify-phase turns. Also fixed: `packages/provider-connect` declares its own vitest setup so its suite loads, and `clients/vscode/src/bfApi/brainChats.ts` guards an undefined `authed` result (it broke the typecheck after `e7d15cd6f`).
+- Open follow-up: Kimi K3 leads Kimi Code only when the tenant selects it (ROADMAP, Local-first).
+
+## ✅ RESOLVED 2026-11-18: SIEM audit export — a tenant's security trail now ships to its own collector (PRD 39 §4a, ticket #6652)
+
+- **`otel_exporters` gained `signals` (`traces` | `audit` | `both`, default `traces`) and `audit_cursor`** (migration `1346`). Existing exporters are unchanged; opting into audit is a settings-panel toggle.
+- **`logsUrl` in `otelSpans.ts`** swaps any `/v1/traces` or `/v1/metrics` suffix on the endpoint for `/v1/logs` — never appends, so a per-signal base never becomes `/v1/traces/v1/logs`.
+- **The sweep (`otelAuditSweep.ts`) runs on the `frequent` cron tick** (`cronSweeps.ts`, key `otel-audit-export`) — never on a request path, so a collector outage cannot slow a request. Outages surface on the exporter row's existing health columns (`last_error`, `consecutive_failures`, `last_export_at`).
+- **Seven sources, one reader each**, read through the handle that owns the table: `auth.sessions`, `memberships`, `api_keys`, `exports`, `integrations`, `approvals` on core; `tool_calls` (`tool_audit_events`) on the operational endpoint via `runTelemetryDatabase`. `admin_audit_log` — the cross-tenant operator trail — is deliberately not a source.
+- **At-least-once with no loss:** the cursor is one JSONB column on the exporter row (`{source: lastSeenId, sent}`) — chosen over a cursor table because exporter and cursor share one lifecycle (deleting the exporter deletes the cursor) and one row write replaces one per source. The cursor advances only after a batch is accepted, so a failed batch retries whole from the last confirmed position; each event id (`<source>:<row id>`, sent as `builderforce.audit.event_id`) is the collector's dedup key. Encrypted headers are reused via the exporter's existing `headersEnc`/`headersIv` columns.
+- **Verified:** `npx tsc --noEmit` clean in `api`; `otelSpans.test.ts` (15) + `otelAuditSweep.pglite.test.ts` (5) pass, including the failed-batch cursor-survival case. Settings panel (`OtelExporterSettings.tsx`) localized in en/zh/es/fr/de.
+- **Ship rule:** `release_notes` row `category=new` (version 2026.11.150) ships in migration 1346 itself.
+
+## ✅ RESOLVED 2026-11-17 — PRDs verified against the code and consolidated into six domain PRDs (docs only)
+
+- **What changed:** every numbered PRD in `docs/specs/` and the PRD-like design docs were checked section by section against the current code. The open work now lives in one PRD per stage of the arc: `docs/specs/idea.md`, `make.md`, `run.md`, `measure.md`, `reach.md` and `platform.md`. Each keeps its PRDs' original § numbers under a `## PRD NN — …` heading, so a citation like `PRD 38 §4.3` still resolves: open sections are in the domain file, and finished ones are in the entries below.
+- **Retired files:** PRDs 05, 08, 09, 18, 19, 20, 21, 22, 23, 25, 25a, 30, 31, 33, 35, 37, 38, 39, 40, 41, 43, 45, 46 and 47; `44-q4-2026-prd-consolidation.md` (the status index, superseded by `docs/specs/README.md`); `45-triage-backlog-2026-11-13.md` (its two open items are carried in make › PRD 45); `SOC2_TYPE1_COMPLIANCE.md` (its open gaps are in run.md); `internet-search-subsystem.md`, `blog-capability-gap-register.md` and `agent-framework-registrations.md`. Git history keeps every original. `26-prd-advisor-platform.md` remains as a one-line redirect because boards #2522 and #2545 cite that path.
+- **Kept as reference docs:** `docs/design/*` (code headers cite them, and their open items are carried in the domain files), `docs/design/creation-canvas/` (OPERATIONS is a runbook; the evidence example is read by `qa-e2e/src/canvas-release-audit.ts`), `API-CONTRACTS.md` and `MERGE_PROCESS.md`.
+- **Verdicts:** 35, 40 and 46 have shipped with no open work. 33 is shipped in code, with only operator provisioning left. 09, 20, 37, 38, 39, 41, 43, 45 and 05 are mostly built. 08, 18, 19, 21, 22, 23, 25, 26, 30, 31 and 47 are partly built. The per-section evidence is in the domain files.
+- **API-CONTRACTS drift fixed:** `PUT …/knowledge/extracted/:hash` is replaced by the real `POST …/knowledge/extracted/bulk`; the missing `DELETE …/knowledge/scopes/:rootId` is documented; the graph cache key is `kg:v6`.
+- **References repointed:** code comments, package descriptions, `qa-e2e`, design docs and ROADMAP.md now name the domain file. Test fixtures that use a PRD path only as a string, and applied migrations, are unchanged.
+
+## ✅ RESOLVED 2026-11-17 — ROADMAP entries found already done during the PRD verification
+
+- **Change-set records sync.** `runChangeSetId` now returns `stableEntityId('changeset:<runId>:<repoKey>')`, a UUID (`clients/vscode/src/runChangeSets.ts:119`), and legacy text ids stay readable.
+- **Shipped VSIX runs close their ticket on evidence.** The ship gate runs at preflight (`brain-embedded/src/runStore/callPreflight.ts:210`), so a live run now writes the evidence ledger that `brainCloseOut.ts` reads.
+- **PRD 09 G2 secret containment.** The model shell runs as a separate `bfagent` user (`api/container/Dockerfile:41-43`); every audit write goes through the one redacting writer (`toolAuditWrite.ts` `redactAuditRow`, the reaper via `insertToolAudit`), and `scripts/check-tool-audit-writes.mjs` has no exceptions. G1 egress stays open.
+- **esbuild ≥ 0.28.1** in `clients/chrome` (`^0.28.2`) and `feedback-sdk` (`^0.28.1`).
+- **Knowledge view work committed.** The P1/P4/P7 view surfaces, P3 Graph parity and the stage-by-default work landed in `7674bbd64` (perf baseline `0196e5683`); the `kg.stage` flag is gone; `EXTRACTOR_VERSION` 7 shipped in builderforce-memory v2026.10.81/82. The remaining B8 deletions and the review of `7674bbd64` stay in ROADMAP.
+- **PRD 41 WS13 harness, WS17, WS21 and WS22 are on main** (`d6ba59ae2`, `c91aedc9e`, `4647b5365`, `1fdf21e32`). Their unwired consumers stay in ROADMAP.
+- **PRD 39 §2: one comment store.** Canvas comments are kernel annotations, and migration `1350_prd39_annotations_contract_drop.sql` drops the old table. (§4a SIEM export is recorded on 2026-11-18.)
+- **PRD 47 W0** contracts, bulk route, collection components and the `archived_at` expand migration (1352) landed. The W0 remainder and W1 stay in ROADMAP.
+
+## ✅ RESOLVED 2026-11-17 — PRD 09: finished sections archived on consolidation (Cloud Agent Validation & Hardening)
+- **Verified 2026-11-17:**
+  - §1 Scope, §2 Architecture, §2.1 session key — `cloudAgentEngine.ts`, `cloudLoopControl.ts`, `cloudFinalize.ts`, `recordRunFailureEvent.ts:21-30`.
+  - D5 — `api/src/application/runtime/taskRunChips.ts` (board agent-history chips).
+  - D6 — `presentation/routes/executionAdmissionGate.ts:75`, `runtime/dispatchAdmission.ts`.
+  - D8 — `runtime/concurrentRunCap.ts`, migration 1330.
+  - S3 — `runtime/steerGuard.ts`.
+  - S4 — `runtime/cloudLoopControl.ts:98-160`, `cloudRunHost.ts:250`.
+  - S7 — `runtime/followUpRun.ts`, `runtimeRoutes.ts:1129`, `lateSteerFollowUp.ts`.
+  - O4 — `runtime/staleExecutionReaper.ts`, `staleExecutionProbe.ts`.
+  - O6 — `costMetrics/costMetricsService.ts` `getRunCostBreakdown` (`costMetricsRoutes.ts:25`).
+  - B3 — `runtime/runBudgetEstimate.ts`.
+  - G2 — `audit/toolAuditWrite.ts:25-26` (`redactAuditRow`), reaper via `insertToolAudit` (`staleExecutionReaper.ts:323`), `scripts/check-tool-audit-writes.mjs` has no exceptions; `bfagent` user `api/container/Dockerfile:41-43`.
+  - G3 — `api/container/workspaceAgent.mjs` `insideClone`, `containerSandboxFsGuard.test.ts`.
+  - V1 offline suite — `api/package.json:60` `qa:cloud-agents`.
+  - §7 closed/superseded rows — as cited in that table.
+- **Archived word for word** from `docs/specs/09-prd-cloud-agent-validation.md`:
+  - lines 20–58 (§1 Scope, §2 Architecture, §2.1);
+  - §4 items 2, 3, 4, 13, 14, 15, 16, 17, 19 (lines in 94–124: GAP-D5, D6, D8, S3, S4, S7, O4, O6, B3);
+  - §6 Phasing (lines 150–157) — superseded;
+  - §7 table (lines 159–177) with G2 row corrected: the "Open follow-up: staleExecutionReaper.ts … must call redactAuditRow" sentence is resolved (reaper writes through `insertToolAudit`).
+  - Drop the two stray rows at lines 1–2 (duplicate G3 / stale G2 PARTIAL).
+
+### §4 (finished items, quoted)
+2. **GAP-D5 (P1)** — `tasks.assignedAgentRef` is not surfaced on the task card, so a buyer cannot see which cloud agent ran. *Acceptance:* render agent attribution on the task card.
+3. **GAP-D6 (P2)** — No idempotency key on `POST /executions`; a double-click can spawn two concurrent runs on one ticket branch. *Acceptance:* idempotency key plus dedupe within an in-flight window.
+4. **GAP-D8 (P2)** — No per-tenant cap on simultaneous cloud executions. *Acceptance:* per-tenant concurrent-execution limit.
+13. **GAP-S3 (P1)** — No backpressure: a user can spam steers. *Acceptance:* rate limit per execution.
+14. **GAP-S4 (P1)** — Cancel must tear down the in-flight provider request and stop usage accrual. *Acceptance:* test asserting the abort and no further usage rows.
+15. **GAP-S7 (P1)** — Implement the S7 decision end to end: a steer to a terminal run starts a follow-up run via `followUpRun.ts`; the portal shows the new run. *Acceptance:* test that a terminal-run steer yields a linked follow-up execution, not a 409 and not a silent drop.
+16. **GAP-O4 (P1)** — A crashed run can leave an execution "running" forever. *Acceptance:* heartbeat plus reaper marks orphaned executions `failed`.
+17. **GAP-O6 (P2)** — No per-execution cost rollup surfaced ("$ for this ticket"). *Acceptance:* execution cost summary from `llm_usage_log`.
+19. **GAP-B3 (P1)** — No pre-flight budget check before dispatch. *Acceptance:* reserve or estimate before dispatch.
+
+## ✅ RESOLVED 2026-11-17 — PRD 23: finished sections archived on consolidation (Manager PR Review, Acceptance Evidence, and Ticket Recovery)
+- **Verified 2026-11-17:**
+  - §5.1 — `packages/agent-run/src/policy/finish/gates.ts:52,221`, `runtime/cloudRunTail.ts:164-165`, `reviewVerdictGate.test.ts`; §5.1.6 `activity/verdictCompliance.ts`.
+  - §5.2 — already summarised in an earlier DONE.md entry (migration 1312, `validatorSlotBridge.ts`, `invalidateAcceptanceOnPush.ts`).
+  - §5.3.1, .2, .4 — `repos/commitPrdToRepo.ts:21-24` (path is `docs/specs/tasks/task-<id>.md`).
+  - §5.4 ready→in_review, stable repair head, pending wait — `reconciliation/prReconciliationService.ts:574-618`.
+  - §5.5 401/403 cooldown — `reconciliation/githubCredentialCooldown.ts`.
+  - §5.6 canary — `manager/managerCanary.ts`, `managerPolicy.ts:320` (an earlier DONE.md entry).
+  - §6 dispositions — `manager/backlogDisposition{Rules,Pass,Apply,Sweep}.ts`, `backlogDispositionRoutes.ts` (an earlier DONE.md entry).
+  - §7 steps 1–3 — the above.
+- **Archived word for word** from `docs/specs/23-prd-manager-pr-ticket-recovery.md`: lines 28–202 (§1–§4: why, production evidence, root cause, alignment); lines 205–227 (§5.1, §5.2); §5.3 items 1, 2, 4 (lines 230–234); §5.4 table rows Ready/Merge conflict/Change-specific CI/Pending/High-confidence close (lines 238–251); §5.6 (262–273); §6.1–§6.4 (275–323); §7 steps 1–3 (lines 327–329); §8 criteria 1, 2, 3, 5, 6, 7, 8, 11 — verified met 2026-11-17; criteria 4, 9, 10 and 12 stay open in make.md (lines 346–357); §10 (372–392, historical).
+
+### 1 · Why this PRD exists
+
+The Builderforce project accumulated hundreds of open tickets and PRs while the product appeared
+to have a Manager capable of assigning and completing them. Production evidence showed that the
+visible queue was not an executable control loop:
+
+1. reconciliation classified PRs but mostly wrote queue-shaped strings into an audit journal;
+2. reviewer runs were dispatched but could finish without recording a verdict;
+3. acceptance reviews and lane sign-offs were stored in separate evidence systems;
+4. generated PRDs were counted as delivered files and could open documentation-only PRs;
+5. every task wrote the same root `PRD.md`, creating artificial merge conflicts;
+6. provider and GitHub failures retried without an effective recovery circuit; and
+7. the production Manager was disabled, so no later sweep consumed otherwise actionable work.
+
+The result was activity without convergence: agent executions and PR creation grew much faster
+than merged changes or completed tickets.
+
+---
+
+### 2 · Production evidence
+
+#### 2.1 Snapshot boundary
+
+Counts in this section are observations from 2026-08-10 and will change as users and automation
+continue operating. The diagnostics queries, not these copied values, are the runtime source of
+truth.
+
+#### 2.2 Pull requests and tickets
+
+| Observation | Evidence |
+|---|---:|
+| GitHub open PRs | 495 |
+| Internally recorded open PR rows | 729 |
+| Stale internal-open surplus | 234 |
+| Non-Done Builderforce tickets | 664 |
+| Tickets with at least one internally open PR | 610 |
+| Tickets pointing only to closed, unmerged PRs | 7 |
+| Tickets with no internal PR | 47 |
+| True `backlog` tickets | 43 |
+
+The audited 495 GitHub PRs classified as:
+
+| Disposition | Count |
+|---|---:|
+| Merge conflict / repair | 292 |
+| Change-specific CI failure / repair | 155 |
+| Shared infrastructure failure | 31 |
+| Green and ready for review | 15 |
+| Human investigation | 2 |
+
+Additional quality signals:
+
+- 318 PRs changed documentation only.
+- 448 PRs changed the repository-wide root `PRD.md`.
+- 453 PR descriptions said no test or build was run.
+- All 495 had no recorded GitHub review decision at the audit boundary.
+
+#### 2.3 Manager and review evidence
+
+Production project configuration showed:
+
+- `enabled = false`;
+- `allowAutoMerge = true`;
+- `prMergePolicy = on_green`; and
+- `requireSignoffToComplete = false`.
+
+The system had dispatched 678 Manager sign-off executions: 597 completed and 81 failed. Across
+all 678, the tool audit contained **zero** successful `builtin_kanban_signoff` calls. Recent
+payloads correctly named the tool, exact `roleKey`, and exact `laneKey`; the runtime nevertheless
+allowed the model to end without calling it.
+
+The ledger contained 1,125 role sign-offs, but almost all were producer credits:
+
+| Role | Sign-offs |
+|---|---:|
+| Business Analyst | 354 |
+| Developer | 287 |
+| Architect | 254 |
+| Product Manager | 219 |
+| QA Tester | 6 |
+| Product Owner | 2 |
+| Code Reviewer | 1 |
+| Team Lead | 1 |
+| Validator | 1 |
+
+This distribution is not credible evidence of a functioning review process. It reflects automatic
+producer attestation, not considered reviewer verdicts.
+
+Acceptance validation used a second ledger: 59 `task_reviews` records across 37 tasks, with 38
+`gaps` and 21 `complete` verdicts. These records do not satisfy `ticket_role_signoffs`, so a valid
+Validator review cannot currently release a lane sign-off gate without an explicit bridge.
+
+#### 2.4 System errors
+
+The system error log and grouped error tables showed:
+
+- approximately 2,011 `prReconciliation.collection` GitHub GraphQL HTTP 403 errors and another
+  approximately 2,010 sweep-level reports of the same failures;
+- 10,964 failed executions, dominated by gateway HTTP 429 limits, exhausted cloud allowances,
+  and unusable BYO provider credentials;
+- historical terminal-transition races attempting to complete already failed/completed runs; and
+- transient database and shared-build failures recorded as if the individual ticket were defective.
+
+The PR reconciler retried permanent 403 authorization failures on the frequent cron. This created
+error volume without increasing the probability of success.
+
+---
+
+### 3 · Root cause
+
+```text
+Manager disabled
+    ↓
+No project sweep consumes review/repair work
+    ↓
+Reconciler writes "queue_review" / "queue_repair_pr" journal labels
+    ↓
+Labels are mistaken for executable jobs
+    ↓
+Historical reviewer runs finish without mandatory signoff calls
+    ↓
+No reviewer evidence is published to the PR or matched to the lane slot
+    ↓
+PR stays open; ticket stays non-Done; another agent pass may create more PRD activity
+```
+
+There are five distinct defects:
+
+1. **Configuration defect:** the Manager is disabled and signoff completion is optional.
+2. **Dispatch defect:** reconciliation dispositions were not durable executable transitions.
+3. **Runtime defect:** neither `finish` nor a no-tool model response required reviewer evidence.
+4. **Evidence-model defect:** acceptance reviews and role sign-offs are separate, unbridged ledgers.
+5. **Delivery-accounting defect:** a generated PRD could masquerade as an implementation file.
+
+Provider failures amplified these defects but did not cause the missing verdicts: reviewer payloads
+were delivered successfully hundreds of times and still produced zero signoff calls.
+
+---
+
+### 4 · Product alignment
+
+#### 4.1 PRD 21 and IDEA → REAL
+
+PRD 21 governs the continuous experience: one Canvas, panels instead of destination sprawl, and
+the IDEA → MAKE → RUN/REAL arc. This PRD governs the delivery proof beneath that experience.
+
+The Manager contributes to the arc as follows:
+
+| Journey stage | Manager responsibility |
+|---|---|
+| IDEA | Ensure the ticket and task-scoped PRD describe a real unmet outcome |
+| MAKE | Assign a capable producer and require non-document implementation evidence |
+| RUN | Reconcile CI, conflicts, infrastructure, review, and merge state |
+| REAL | Require acceptance evidence, merge/close the PR under policy, and close the ticket |
+
+A backlog ticket need not be a literal PRD 21 UI item to remain valid. Security, reliability,
+tenancy, agent execution, and governance work may be owned by `ROADMAP.md` while still enabling
+IDEA → REAL. Conversely, a ticket is not valid merely because some of its words appear in a PRD.
+
+#### 4.2 Roadmap relationship
+
+`ROADMAP.md` is the source of truth for open product and engineering capabilities. Tickets are the
+executable slices of those capabilities. Multiple gap tickets may reference one Roadmap item, but
+they must not become parallel copies of the same missing behavior.
+
+Every non-Done ticket must carry one disposition:
+
+- `roadmap_capability`: the exact Roadmap section or stable capability identifier;
+- `prd_alignment`: direct PRD, enabling infrastructure, operational defect, or out of scope;
+- `delivery_state`: not started, implemented/unverified, review, repair, blocked, or terminal;
+- `evidence`: code/PR/check/review references supporting that state; and
+- `duplicate_of` or `superseded_by` when it should not remain independently open.
+
+---
+
+
+
+#### 5.1 Reviewer assignment and completion
+
+1. A reviewer execution payload must identify `reviewRole` and the exact `laneKey`.
+2. The runtime must advertise `builtin_kanban_signoff` with those exact values.
+3. A reviewer run must not finish through either `finish` or a no-tool response until a successful
+   signoff call records `approved` or `changes_requested` for the exact role/lane.
+4. A signoff aimed at another role or lane does not satisfy the run.
+5. Exhausting the run step limit without a verdict fails the execution and leaves the participant
+   slot open for retry or escalation.
+6. Reviewer compliance rate must be measurable by tenant, agent, model, role, and lane.
+
+#### 5.2 Acceptance evidence
+
+The platform must define one authoritative completion predicate. Until the ledgers are unified:
+
+- `task_reviews` remains Validator acceptance evidence;
+- `ticket_role_signoffs` remains lifecycle accountability evidence; and
+- a deterministic, audited bridge must link an applicable Validator review to the corresponding
+  Validator participant slot without fabricating other role approvals.
+
+Every accepted verdict must link to its execution, reviewed commit/PR head, comments, and any
+reported gaps. A newer PR head invalidates acceptance evidence recorded against an older head.
+
+
+
+1. Repository PRDs are task-scoped at `specs/tasks/task-<id>.md`.
+2. A task PRD may share the implementation branch, but it does not count as a code deliverable.
+3. A PR must not open when the run produced only a PRD or documentation unless the ticket is
+   explicitly classified as documentation work.
+4. Root `PRD.md` is a product-level document and must not be rewritten by every ticket.
+
+
+#### 5.4 Reconciliation must create work, not labels
+
+| Classification | Required action |
+|---|---|
+| Ready for review | Move the linked ticket into `in_review`; dispatch required reviewers |
+| Merge conflict | Activate one stable repair head; update the existing branch, never create a replacement PR |
+| Change-specific CI failure | Dispatch repair against the existing PR and failing check evidence |
+| Shared infrastructure failure | Quarantine under one infrastructure incident; do not blame every PR |
+| Pending checks / draft | Wait with a bounded next-check time |
+| No check evidence / unlinked | Quarantine for human investigation |
+| High-confidence stale/duplicate/empty | Close under audited policy |
+
+Queue metrics must report actual lane transitions and execution IDs, not the number of strings
+written to a journal.
+
+
+#### 5.6 Manager enablement
+
+The Manager may be enabled only after:
+
+1. reviewer evidence gating is deployed;
+2. reconciliation credentials pass a live read;
+3. one green PR completes the full review/signoff path in canary mode;
+4. repair dispatch is limited to one stable head per repository;
+5. provider budgets and retry ceilings are configured; and
+6. automatic ticket closure is dry-run compared against the disposition report.
+
+---
+
+
+### 6 · Backlog disposition policy
+
+#### 6.1 Close
+
+Close a ticket without implementation only when evidence proves it is:
+
+- explicitly retracted or based on nonexistent code;
+- a duplicate with a surviving canonical ticket;
+- superseded by a newer ticket or completed capability;
+- an operational transient with no recurrence through the defined observation window; or
+- attached to an intentionally closed PR and the underlying outcome is no longer required.
+
+Known immediate candidates from the audit are:
+
+- **#386** — its own description says the older backlog pass was closed and superseded;
+- **#542** and **#543** — explicitly retracted hallucinated security findings.
+
+#### 6.2 Consolidate
+
+The following clusters describe shared root capabilities and should not remain as independent
+parallel backlog items:
+
+- participant assignment/tool gaps: **#1496–#1503 and #1510–#1523**;
+- quality-risk-score tests/property gaps: **#1504–#1508**;
+- signoff authentication/evidence failures: **#1531, #1539, #1540, #1541**; and
+- terminal execution-transition errors: **#1485 and #1488**.
+
+Consolidation retains one canonical ticket with every distinct acceptance criterion and links the
+closed duplicates to it. It must not discard a unique requirement.
+
+#### 6.3 Keep open
+
+Keep a ticket open when repository and production evidence show a real unmet capability. Examples
+from the audited backlog include marketplace escrow/milestone payments, tenant isolation proof,
+duplicate-board remediation, delivery-health persistence, required verification filters, and
+missing production surfaces.
+
+#### 6.4 Quarantine
+
+Do not automatically complete or close:
+
+- the seven tickets whose only PRs are closed and unmerged;
+- vague feature requests without acceptance criteria;
+- tickets whose PR cannot be correlated to the requested outcome; or
+- PRs with no check evidence or no trustworthy ticket reference.
+
+Quarantine means a bounded human decision queue, not an indefinite open state.
+
+---
+
+
+1. Commit and deploy the runtime evidence gate and task-scoped PRD change.
+2. Repair GitHub credentials and verify reconciliation collection without 403s.
+3. Run reconciliation in read-only mode and compare all provider/ticket decisions.
+
+
+### 8 · Acceptance criteria
+
+- [ ] A reviewer cannot complete without an exact successful role/lane signoff.
+- [ ] A no-tool response cannot bypass the evidence gate.
+- [ ] Step-cap exhaustion without a verdict fails rather than accepts the run.
+
+
+- [ ] Concurrent tickets never contend on root `PRD.md`.
+- [ ] Every ready-for-review reconciliation item creates an `in_review` transition and reviewer dispatch.
+- [ ] Repair items update the existing PR branch and do not create replacement PRs.
+- [ ] GitHub 403 and provider 429 failures enter visible bounded cooldowns.
+
+
+- [ ] Ticket completion requires implementation, checks, required review, acceptance, and terminal PR evidence.
+
+
+### 10 · Implementation state on 2026-08-10
+
+Update 2026-11-08: the slot link, push invalidation, disposition computation (dry-run) and the
+Manager canary flag are built; see DONE.md "autonomous delivery closes its loops". Still open:
+the acceptance criteria above, a live canary run (§7 steps 4–5), and applying a reviewed
+disposition batch (§7 step 8).
+
+The local workspace contains an uncommitted first slice:
+
+- reviewer verdicts are mandatory at both `finish` and no-tool termination;
+- exact role/lane matching is persisted across durable ticks;
+- step-cap exhaustion cannot bypass review evidence;
+- task PRDs use `specs/tasks/task-<id>.md`;
+- task PRDs no longer seed the run's implementation file set;
+- ready-for-review reconciliation moves tickets into `in_review`; and
+- repeated GitHub GraphQL 403 failures back off for six hours.
+
+Focused verification passed 32 tests, both TypeScript checkers, and the layering, tenant-scope,
+prompt-tool-name, and searchable-source guards. This is implementation evidence, not production
+evidence: the slice must still be committed, reviewed, deployed, and canary-verified before the
+Manager is enabled or backlog closure is automated.
+
+
+## ✅ RESOLVED 2026-11-17 — PRD 37: finished sections archived on consolidation (Coordinated Role Participation & Execution Verification)
+- **Verified 2026-11-17:**
+  - §3 roles — `kanban/roleCatalog.ts:32-36`, `kanban/roleCapability.ts:28-31`.
+  - §5.1 — migration 0336 (`ticket_type`, `quorum`, `condition`), `kanban/templateCatalog.ts:148-207` (`STANDARD_SWE_V2`).
+  - §5.2 — migration 0334, `kanban/ticketParticipants.ts`.
+  - §5.3 — `ide_agents.role_keys`, `metrics/assigneeRecommender.ts:208-220`, `swimlane/evaluateAutoRun.ts:801-885`.
+  - §5.4 — `swimlane/laneRequirementGate.ts`.
+  - §5.5 — `kanban/ticketCoordinator.ts`, `manager/coordinateTicket.ts`.
+  - §5.6 — `audit/auditRules.ts:36-43,139-143`, `kanban/attributeRunToManifest.ts`.
+  - §5.7 — `prd/taskPrd.ts:207`, `runtime/cloudAgent/prd.ts:295-297`.
+  - §5.8 — `kanbanRoutes.ts:440-445,474`, `approval/decideApproval.ts`.
+  - §5.9 — `kanbanRoutes.ts:495`, `kanban/accountabilityGaps.ts`, `frontend/src/components/task/AccountabilityTab.tsx`.
+  - §5.10 edge + RCA view — `prod_incident_implicated_tasks`, `incident/IncidentService.ts:599-615`, `frontend/src/app/incidents/IncidentsPageClient.tsx`.
+  - §8 routes — `kanbanRoutes.ts:421,491,495,503,519`; MCP `builtinMcpService.ts:3886-3894`.
+  - §9 UI — `TaskMgmtContent.tsx:140,504-506,1036`.
+- **Archived word for word** from `docs/specs/37-prd-coordinated-role-participation.md`: lines 1–319 **except** the §5.10 "Process improvement loop" bullet (line 183), the §8 MCP `kanban.handoff` clause (line 226), and the §13 Phase 5 convergence clause (line 284), which stay open in in make.md. §15 open questions (297–302) are answered in code: distinct `product-owner`; Coordinator = Assignee.
+
+## PRD 37 — Coordinated Role Participation & Execution Verification for Tickets
+
+> Status: **Complete** (2026-11-08; migrations 0334/0336, `ticketCoordinator.ts`, `coordinateTicket.ts`, `ticketParticipants.ts`, `attributeRunToManifest.ts`, `AccountabilityTab.tsx`, plus the final three open items shipped 2026-11-08: lane chaining / one notifier — Coordinator advance+rewind and `completeTaskOnMerge` now broadcast via the one notifier and the advance emits `ticket.handoff`; per-role audit verification — capability re-check inside the audit engine + evidence in `ticket_audits.missing[]`; Coordinator-routed stakeholder notifications — role-ask instructions name the Coordinator via `resolveStakeholderVoice`). Renumbered from `PRD-coordinated-role-participation.md` on 2026-10-25. · Author: platform · Date: 2026-07-12
+> Supersedes nothing; **extends** the "Agentic Workforce Kanban" (migration 0274). Aligns with specs `03` (Kanban), `04` (Agentic Dev Layer), `08` (Governance — reuse its "BLOCKER gates merge" pattern), `11` (engine seam). Reuses the Compile/PolicyGate primitive only where noted.
+
+---
+
+### 1. Problem & Goal
+
+#### The incident
+A trivial one-line bug ticket (#467, "fix duplicate `padding` property") was **owned by a Sr. Product Manager agent (Ada)** and auto-dispatched to *write code* — 30+ times, every run failing. A Product Manager should never have been the one implementing a coding ticket. Root-causing this surfaced a **systemic** gap, not a one-off:
+
+1. **Assignment is role-blind.** `recommendTopAssignee` (`api/src/application/metrics/assigneeRecommender.ts`) scores only availability + WIP + optional skill-match, and both callers (`ManagerService.ts` assign step, the Epic fan-out in `index.ts`) pass **empty `requiredSkills`**. So the *most-available* teammate wins regardless of role — a free PM outranks a busy developer on a coding ticket. There is no first-class "this agent can act as role X" capability on `ide_agents`.
+2. **Producer participation is never enforced.** The lane gate (`enforceLaneRequirements`, `api/src/application/swimlane/laneRequirementGate.ts`) only enforces **reviewer** requirements (`kind==='review'` or `responsibility==='reviewer'`). Requirements with `responsibility` `owner`/`contributor` (the *producers* — the BA who writes requirements, the Developer who implements) are audited for coverage but **never gate advancement and never get the right role dispatched**.
+3. **There is no per-ticket coordinator.** The Manager is a *per-project* pass (score → rank → assign one owner → PR → audit). Nothing walks a *single ticket* through BA → Design → Implement → Review → Test → Validate, ensuring each required role actually participates and hands off.
+4. **Verification is weak.** "Owner performed work" is satisfied merely by the existence of a sign-off row; there is no automatic link from "an agent ran as role Y" to "role Y participated," no evidence check (PR opened? tests ran and passed? diagnostic threshold met?), the HTTP sign-off route doesn't even emit to the unified `activity_log`, and human `ask_human` approvals don't count as role sign-offs.
+
+#### Goal
+**The primary goal is accountability and auditability.** An operator (or an incident investigator) must be able to open any ticket and see, at a glance, that the standard was met: **every required workforce resource has signed off**, and for each sign-off — **Who** (the human or agent, by identity + the role they acted as), **When** (timestamp), **Verdict**, **Comments**, and a link to their **actual contribution/interaction** (the execution, the PRD section they authored, the diff they wrote, the review they left). This record is **append-only and immutable**, so that when something goes wrong — surfaced through **incident management** — the ticket's audit history is a first-class input to root-cause analysis and continuous process improvement (e.g. "a required reviewer was waived", or "QA signed off with no test run").
+
+To make that accountability record trustworthy, every ticket moves through a **defined lifecycle of required role participation**, where:
+- specific **roles** must each participate at the right stage (BA, Architect, Developer, Team Lead, Validator, QA, Product Owner);
+- exactly **one accountable owner — the Coordinator, who IS the ticket's Assignee** (a human workforce member or an assigned "Agent Manager") — drives the ticket, owns all internal and **exterior communication/collaboration**, and guarantees every required participant executes and hands off (the Coordinator coordinates; it does **not** produce the work);
+- **one PRD artifact per ticket** is the shared, signed hand-off contract updated by each role;
+- advancement is **gated** on each required participant completing *and being verified* (evidence, not just a checkbox); and
+- the whole thing is **fully audited** — who did what, when, as which role, with what evidence — and that audit is **queryable per ticket** and **consumable by incident management**.
+
+This is an **extension of the Agentic Workforce Kanban**, not a rewrite. We add: (a) role-aware assignment, (b) a per-ticket **Participation Manifest**, (c) producer gating, (d) a **Coordinator** that sequences roles, (e) an **execution-verification** layer, (f) ticket-type-scoped process templates, and (g) a **Ticket Accountability Report** that feeds incident RCA.
+
+---
+
+### 2. What already exists (build-on inventory)
+
+| Capability | Where | Reuse |
+|---|---|---|
+| Role catalog (10 built-ins + tenant `job_roles`) | `kanban/roleCatalog.ts`, `jobRoleService.ts` | Extend with `team-lead`, `validator`, `product-owner` |
+| Process templates binding roles→lanes | `kanban/templateCatalog.ts` (`STANDARD_SWE`), `kanban_templates*` tables | Extend with ticket-type scope + producer gates |
+| Per-lane requirements (role/review/diagnostic + owner/reviewer/contributor + isRequired + `off/soft/hard` gate) | `swimlane_requirements`, `swimlanes.requirement_gate` | The requirement primitive — extend, don't replace |
+| Sign-off ledger (`approved`/`changes_requested`) | `ticket_role_signoffs`, `ticketAuditService.recordSignoff`, `POST /api/kanban/tasks/:id/signoff`, MCP `kanban.signoff` | Add states + evidence + RBAC |
+| Cumulative coverage audit + flag | `ticketAuditService.computeAudit`, `auditRules.ts`, `ticket_audits`, `tasks.auditStatus/auditFlagCount` | The audit engine — extend rules |
+| Lane gate + reviewer round-trip | `laneRequirementGate.ts` (via `maybeAutoRunOnLaneEntry`) | Extend to gate producers |
+| Role→assignee resolution | `project_role_assignments`, `RoleAssignmentService`, `RosterService.compute`, `resolveRoleAgent` | Make authoritative + role-aware |
+| One PRD artifact per ticket (3 synced copies, per-run signing) | `prd/taskPrd.ts`, `task_specs` primary link, `commitPrdToRepo.ts`, `DrizzlePrdEnsurer` | Add structured per-role sign-off sections |
+| Per-ticket lifecycle state machine (opt-in) | `ticket_runs`, `SwimlaneCoordinator`, `swimlane_transitions` | Converge toward; manifest is the bridge |
+| Manager coordinator (per-project) | `manager/ManagerService.ts` | Host the per-ticket Coordinator here |
+| Unified audit stream | `activity_log`, `recordActivity`, `AuditTrailPanel` | Emit structured participation/hand-off events |
+| Human-in-the-loop | `approvals`, `ask_human`, `resumePausedExecution` | Bridge approvals ↔ role sign-offs |
+| Broadcast (chat milestones, tool_audit_events, WS stream) | `RuntimeService.onRunMilestone`, `ChatTicketService.postRunMilestone`, `recordCloudToolEvent` | Emit the "role completed step / handing off" signal |
+| Round-table participation pattern | `ceremony_sessions`/`ceremony_participants` | Pattern to mirror for ticket participants |
+| Circuit-breaker on repeated failure | `evaluateAutoRun.ts` `run_cap_exhausted` | Already stops the 30×-burn; keep |
+
+**Net:** ~70% of the machinery exists. This PRD wires the missing 30% and closes the four holes.
+
+---
+
+### 3. Roles
+
+Map the operator's lifecycle to catalog role keys; **add three** missing built-ins (aligning to existing runtime personas so dispatch resolves cleanly):
+
+| Lifecycle actor | Role key | Status |
+|---|---|---|
+| Business Analyst | `business-analyst` | exists |
+| Architect | `architect` | exists |
+| Coder / Developer | `developer` | exists (runtime persona `code-creator`) |
+| Code Reviewer | `code-reviewer` | exists |
+| QA / Tester | `qa-tester` | exists (runtime persona `test-generator`) |
+| Team Lead | `team-lead` | **NEW** (runtime persona: `validator-agent`, "senior team-lead") |
+| Validator | `validator` | **NEW** (runtime persona `validator-agent`) |
+| Product Owner | `product-owner` | **NEW** (or alias to `product-manager` — see Open Questions) |
+| Coordinator / Delivery Manager | `manager` | exists (owns the roster + coverage) |
+
+> Reconcile the `roleCatalog.ts` keys with the `agent-runtime/agent-roles.ts` taxonomy (`developer`↔`code-creator`, `qa-tester`↔`test-generator`, `architect`↔`architecture-advisor`) with an explicit alias map so role→persona→agent resolution is deterministic (today it's convention-only).
+
+---
+
+### 4. The canonical lifecycle
+
+A **Process Template** binds, per ticket type, an ordered set of **stages**, each with required **participants** (role + responsibility) and a **gate**:
+
+| # | Stage | Required participants (responsibility) | Gate | Verified by (evidence) |
+|---|---|---|---|---|
+| 1 | **Requirements Review** | `business-analyst` (owner), `product-owner` (reviewer) | soft | PRD "Requirements" section present + BA sign-off |
+| 2 | **Design Review** | `architect` (owner), `developer` (contributor) | soft | PRD "Design" section + architect sign-off |
+| 3 | **Implementation** | `developer` (owner), `architect` (contributor) | **hard** | PR opened + non-empty diff on branch |
+| 4 | **Implementation Review** | `code-reviewer` (reviewer), `architect` (reviewer), `team-lead` (reviewer) | **hard** | reviewer `approved` sign-offs (quorum) |
+| 5 | **Test** | `qa-tester` (owner) | **hard** | test run recorded + CI green (or QA sign-off) |
+| 6 | **Business Validation** | `validator` (reviewer), `business-analyst` (reviewer), `product-owner` (reviewer) | **hard** | acceptance-criteria check + validator sign-off |
+| — | **Done** | (Coordinator confirms all stages verified) | terminal | manifest 100% satisfied |
+
+The **Coordinator** (`manager` role, the ticket's accountable owner) is present across all stages: it resolves the concrete agent/person for each required role, sequences dispatch, chases stalled participants, and blocks Done until the manifest is fully verified.
+
+This maps 1:1 onto the existing `STANDARD_SWE` template shape (which already gates Ready/Review/Done on architect + code-reviewer + qa-tester reviews); we generalize it to include producer stages and business validation.
+
+---
+
+### 5. Core concepts / new primitives
+
+#### 5.1 Process Template, scoped by ticket type
+Extend `kanban_template_lane_requirements` and `swimlane_requirements` with an optional **`ticket_type`** discriminator (`null` = applies to all). Extend the requirement row with:
+- **`quorum`** (int, default = count of required rows of that kind at the stage; supports "2 of 3 reviewers");
+- **`condition`** (nullable predicate, e.g. `taskType==='security'` → require `security` role) — start with a small enum of conditions, not a DSL;
+- keep `responsibility` (`owner|reviewer|contributor`) — now **all three are enforceable** (see 5.4).
+
+A **built-in default lifecycle template** (`STANDARD_SWE_V2`) ships in `templateCatalog.ts` encoding §4. `KanbanTemplateService.applyToProject` materializes it (already does lanes→`swimlane_requirements`).
+
+#### 5.2 Ticket Participation Manifest (the new heart)
+New table **`ticket_participants`** — the per-ticket, forward-looking roster (mirrors `ceremony_participants`, but ticket-scoped and stateful):
+
+```
+ticket_participants(
+  id, tenant_id, task_id,
+  stage_key,            -- lane/stage this participation belongs to
+  role_key,             -- required role
+  responsibility,       -- owner | reviewer | contributor
+  assignee_kind,        -- agent | human | hire | null (unresolved)
+  assignee_ref,         -- resolved concrete participant (or null)
+  state,                -- pending | assigned | in_progress | completed | changes_requested | waived | skipped
+  signoff_id,           -- FK ticket_role_signoffs (the verdict that satisfied it)
+  evidence,             -- JSON: { prUrl?, diffFiles?, testRunId?, diagnosticToolId?, executionId? }
+  required boolean,
+  quorum_group,         -- rows sharing this key form a quorum set
+  created_at, updated_at
+)
+```
+
+The manifest is **derived on ticket creation / template apply** from the applicable process template (the required rows across all stages), and **kept live** by the audit engine. It is the single queryable answer to *"who must participate, who has, and with what evidence."* State is now **explicit** (no more deriving from the latest verdict).
+
+#### 5.3 Role-aware assignment (fixes the root cause)
+- Add a first-class **agent↔role capability**: a `ide_agents.role_keys` (JSON) column *and/or* an `agent_role_capabilities` join, populated from `builtin_kind`, assigned personas/skills (`resolveArtifacts`), and explicit config. One resolver `resolveRoleCapableAgents(tenant, projectId, roleKey)` with precedence: **explicit `project_role_assignments` pin → roster fill (`RosterService`) → ranked role-fit**.
+- Make `recommendTopAssignee` **role-aware**: add a `roleKey`/`requiredRoles` parameter; when set, filter/boost candidates by role capability. Derive `requiredSkills`/`roleKey` from the ticket's **stage requirement** and **`action_type`** at both call sites (`ManagerService` assign, Epic fan-out) instead of passing `[]`.
+- **Owner-fallback guardrail:** in `evaluateAutoRun.ts` / `withOwnerAgentFallback`, the capability-unconstrained owner fallback must respect the **stage's producer role** — a ticket in an Implementation stage must not auto-run as a non-`developer` owner. (This directly prevents the Ada incident.)
+
+#### 5.4 Enforced producer gates (close the enforcement hole)
+Generalize `enforceLaneRequirements` so **all responsibilities gate**, not just reviewers:
+- **owner/contributor (producer)**: on stage entry, if the required producer role has not *completed* (evidence-verified, see 5.6), resolve the role-capable agent (5.3) and **dispatch it as that role** (not the ticket's generic owner); block the lane's generic auto-run until the producer step completes. This is the same round-trip machinery, extended past reviewers.
+- **reviewer**: unchanged (round-trip + sign-off), plus **quorum** support.
+- Gate strictness stays per-stage (`off|soft|hard`); `hard` blocks advance until the manifest's required participants for that stage are `completed`.
+- Serial → **bounded parallel**: dispatch all currently-unblocked required participants for a stage (respecting the stage's `executionMode`), not strictly one-per-hop, with the existing live-run guard + `run_cap_exhausted` circuit-breaker.
+
+#### 5.5 The Coordinator = the ticket's Assignee (one accountable owner per ticket)
+**The Assignee of the ticket IS the Coordinator** — a **human workforce member** *or* an **assigned "Agent Manager"** (a cloud/host agent designated as the manager). This is the decisive design rule and the cleanest fix for the incident: the assignee **coordinates**; it does **not** produce the work. Ada-the-PM should have been the *assignee/coordinator* who dispatches a `developer` to implement — never the implementer.
+
+- **Assignee ≠ executor (the key decoupling).** Today the run resolves its executor as `parseCloudAgentRef(payload) ?? tasks.assigned_agent_ref` (`cloudAgentEngine.ts`), and the owner-fallback (`withOwnerAgentFallback`) auto-runs the ticket *as its assignee* — so the assignee is the default executor. That is exactly how a PM assignee ran code. Under this PRD the **assignee (Coordinator) is never the default executor**: the per-stage **producer** is resolved from the manifest by role capability (§5.3) and the run is attributed to that producer (`executions.cloud_agent_ref` already records the actual runner). Remove the assignee→executor fallback for lifecycle-managed tickets.
+- **The Coordinator is set as the Assignee.** `resolveManagerAssignee(managerRef)` already decodes a manager (human `u:` / agent `c:`/`h:`) into the `assigned_user_id` / `assigned_agent_ref` / `assigned_agent_host_id` columns — reuse it so designating the ticket's manager *is* setting its assignee. Default = the project's Delivery Manager (human or Agent Manager); configurable per template/ticket type.
+- **The Coordinator owns communication & collaboration — internal AND exterior.** At each stage/swimlane gate and every outward interaction, the Coordinator is the single point of contact and the broadcaster:
+  - *internal* — sequences roles, records hand-offs (§5.8), keeps the PRD artifact and the Accountability Report current;
+  - *exterior* — owns the ticket's outward communication: the linked Brain chat (`ChatTicketService`), stakeholder updates/notifications, `ask_human` escalations, human approvals at `human`-gated lanes, external board sync comments, and — for incident tickets — the war-room chat. Outbound ticket communications are attributed to and routed through the Coordinator, so there is one accountable voice per ticket.
+- **Per-ticket coordination tick** `coordinateTicket(taskId)` (new, hosted in `manager/`, invoked from `maybeAutoRunOnLaneEntry` + a light sweep): reads the manifest, finds the next unsatisfied required participant for the current stage, resolves + dispatches the role-capable **producer** (never itself), records the hand-off + broadcasts the update, and — when the stage manifest is satisfied — advances the lane. Replaces the "role-blind assign one owner then hope" behavior for lifecycle-managed tickets.
+- The Coordinator is the **single writer** of stage advancement for managed tickets, reconciling the two engines (task-status flow ↔ `ticket_runs`) by treating the manifest as the shared source of truth.
+
+#### 5.6 Execution verification (auditing is key)
+Each participation step is `completed` only when its **evidence** predicate passes — not merely a sign-off row:
+- **producer (Implementation)**: a PR row exists for the ticket AND the branch diff is non-empty (`resolveTaskPrSignal`, `listBranchDiff`).
+- **producer (Requirements/Design)**: the PRD artifact has the corresponding structured section authored by that role (see 5.7).
+- **reviewer**: an `approved` sign-off by a role-capable member (RBAC, 5.8), meeting quorum.
+- **QA/Test**: a `tool_run` of the test diagnostic exists **and passes a threshold** (extend diagnostics from existence-only to pass/fail), or CI is green on the PR, or an explicit QA sign-off.
+- **Validation**: acceptance-criteria check (reuse `semanticEval`/`lexicalEval` from `scoreRunOutcome` as a first-pass, plus validator sign-off).
+
+`auditRules.ts` `requirementUnmetReason` is extended to consult **evidence**, and `computeAudit` writes the evidence into the manifest + `ticket_audits.missing[]`. Auto-link participation: when an execution finalizes, attribute it to the **role it ran as** (from the dispatch payload `reviewRole`/new `actAsRole`) and mark that manifest step `in_progress`/`completed` with the `executionId` as evidence — closing the "ran as role Y but nothing recorded role Y participated" gap.
+
+#### 5.7 The single PRD artifact as the hand-off contract
+- Keep the existing one-logical-PRD invariant (`task_specs` primary, `PRD.md` on branch, `specs.prd`). **Harden the 3-copy sync** (currently best-effort/silent) so a failed commit surfaces a reconcile task instead of silent divergence (log to gap register).
+- Replace free-text "signing" with **structured per-role sections**: the PRD template gains anchored sections (`## Requirements` (BA), `## Design` (Architect), `## Implementation Notes` (Developer), `## Review` (reviewers), `## Test Evidence` (QA), `## Acceptance` (Validator/PO)). A role's participation is partly verified by its section being authored + its sign-off referencing the PRD revision. `appendPrdRevision` continues to append the audit trail of edits.
+
+#### 5.8 RBAC on sign-off + hand-off events
+- **Who may sign off as role X:** enforce at `POST /api/kanban/tasks/:id/signoff` (today any caller can post any `roleKey`) — the actor must be role-capable for `roleKey` (explicit pin, roster fill, or the dispatched reviewer for this hop). Reuse the `SecurityTicketAccessService` **default-deny** pattern.
+- **Structured events:** emit `activity_log` verbs `ticket.role.dispatched`, `ticket.role.completed`, `ticket.handoff` (from → to role), `ticket.signed_off` on **both** the HTTP and MCP paths (today only MCP emits). Bridge **approvals → sign-offs**: resolving an `ask_human` approval tied to a role step records the corresponding `ticket_role_signoffs` row.
+
+#### 5.9 The Accountability Record — Who / When / Comments / Contribution (the operator's core ask)
+The sign-off ledger is the **accountability record of truth**. Every required-role sign-off (human OR agent) captures, immutably:
+- **Who** — `member_kind` (`human|agent|hire`) + `member_ref` + a resolved display identity (name), and the **role acted as** (`role_key`). Never anonymous "system".
+- **When** — the sign-off timestamp (already `created_at`); the ledger is **append-only** (no updates/deletes), so the history — including a *superseded* `changes_requested` before a later `approved` — is preserved for audit.
+- **Verdict** — `approved | changes_requested | waived | delegated` (see §5.2 states; `waived`/`delegated` require a reason + are role-capability-gated).
+- **Comments** — free-text rationale the signer provides (required for `changes_requested`/`waived`).
+- **Contribution / interaction** — a `contribution` JSON linking to the *actual work* backing the sign-off: the `execution_id` the role ran, the PRD `revision` it authored, the PR/diff files, the review thread (chat/`execution_messages`), the diagnostic `tool_run`. This is what makes a sign-off **verifiable, not a rubber stamp** — a reviewer "approve" with no linked review interaction is itself an audit finding.
+
+**Ticket Accountability Report** — one read model, `GET /api/kanban/tasks/:id/accountability` (cached, version-token invalidated on any sign-off/manifest write), assembling per required role: the role, the resolved participant, state, verdict, when, comments, and contribution links — plus **gaps** (required roles with no sign-off, sign-offs with no linked contribution, waived-with-reason). Rendered on the ticket as a plain, human-readable **"Sign-off & Accountability"** table (localized, dark/light, responsive). This is the "open a ticket and see the standard was met" surface.
+
+#### 5.10 Incident-management linkage (audit history → RCA → process improvement)
+Incident management already exists — `prod_incidents` (`root_cause`, `postmortem_url`, `board_task_id` → the incident kanban ticket), the incident timeline (mig 0325), postmortem docs, `error_groups`. Wire the accountability record into it:
+- **Implicated-change linkage:** an incident references not just its own incident ticket but the **delivery ticket(s) whose change caused it** (via the PR/commit that shipped the regression, or a manual "implicated ticket" link on `prod_incidents`). Add a light join so RCA can pull those tickets' Accountability Reports.
+- **RCA input:** the postmortem/RCA view surfaces the implicated ticket's Accountability Report inline — *which roles signed off, with what evidence, and where the process was skipped/waived*. A common finding ("the required reviewer approved with no linked review", "QA was waived", "no Architect design sign-off") becomes concrete and actionable.
+
+
+- No new incident engine — this is a **read linkage + one implicated-ticket edge**, reusing `prod_incidents`, postmortem docs, and the Accountability Report.
+
+---
+
+### 6. Functional requirements
+
+- **FR-1 Role-aware assignment.** No ticket is auto-assigned or auto-run as an owner whose role is incapable of the current stage's producer responsibility. `recommendTopAssignee` accepts and honors a role/skill constraint derived from the stage + `action_type`.
+- **FR-2 Participation manifest.** Every lifecycle-managed ticket has a `ticket_participants` manifest derived from its type's process template, with explicit per-participant state + evidence.
+- **FR-3 Producer gating.** A `hard` producer stage does not advance until the producer role has *completed with verified evidence*; the correct role-capable agent is dispatched to do it.
+- **FR-4 Reviewer gating + quorum.** Reviewer stages require N-of-M `approved` sign-offs by role-capable members; `changes_requested` returns the ticket to the producer without re-summoning the reviewer every hop (keep current loop-safety).
+- **FR-5 Coordinator = Assignee.** The ticket's **Assignee** is the Coordinator — a human workforce member or an assigned Agent Manager. It sequences the manifest, dispatches each required **producer** role in order (never runs the work itself), records hand-offs, owns all internal + **exterior** communication/collaboration (linked chat, stakeholder updates, `ask_human`, approvals, external sync, incident war-room), and is the single writer of stage advancement. The assignee is **never** the default per-stage executor (that fallback is removed for lifecycle-managed tickets).
+- **FR-6 One PRD artifact.** One primary PRD per ticket, threaded through every role via structured sections + signed revisions; the 3 physical copies stay coherent or raise a reconcile.
+- **FR-7 Verification.** Each step's completion is evidence-backed (PR/diff, test-pass/CI, diagnostic threshold, reviewer approval, acceptance check), not sign-off-existence alone.
+- **FR-8 Audit.** Every dispatch, completion, hand-off, and sign-off is on the unified `activity_log` (HTTP + MCP), queryable per ticket and per actor; per-ticket coverage + evidence is visible.
+- **FR-9 RBAC.** Only role-capable members may sign off as a role; enforced default-deny.
+- **FR-10 Ticket-type templates.** Required roles/stages are scoped by ticket type (a Security ticket requires the Security role; a docs ticket does not require QA).
+- **FR-11 No regression to the circuit-breaker.** Repeated-failure halting (`run_cap_exhausted`) and the manager backlog pass continue to work; the Coordinator respects them.
+- **FR-12 Accountability record.** Every required-role sign-off captures Who + role, When, Verdict, Comments, and a Contribution link to the actual work; the ledger is append-only/immutable. A ticket exposes a human-readable **Accountability Report** (`GET .../accountability`) showing all required roles, their sign-off status, and gaps.
+- **FR-13 Incident RCA linkage.** An incident can reference the delivery ticket(s) that caused it; the RCA/postmortem view surfaces those tickets' Accountability Reports so process gaps (skipped/waived/evidence-less sign-offs) are visible and feed process improvement.
+
+---
+
+### 7. Data model changes
+
+- `ide_agents.role_keys` JSON (or `agent_role_capabilities` join) — first-class role capability.
+- `swimlane_requirements` + `kanban_template_lane_requirements`: add `ticket_type` (nullable), `quorum` (int), `condition` (nullable enum).
+- **New** `ticket_participants` (§5.2).
+- `ticket_role_signoffs` (the **accountability record** — append-only, never updated/deleted): ensure it captures **Who** (`member_kind`+`member_ref`+denormalized `member_name`, `role_key`), **When** (`created_at`), **Verdict** (widen to `approved|changes_requested|waived|delegated`), **Comments** (`summary`/`comment`, required for `changes_requested`/`waived`), and **Contribution** (`contribution` JSON: `{ executionId?, prdRevision?, prUrl?, diffFiles?, reviewThreadRef?, toolRunId? }`). Add `waive_reason`. Enforce immutability at the write layer.
+- `prod_incidents`: add an **implicated-ticket** edge (a `prod_incident_implicated_tasks(incident_id, task_id, relation)` join, or reuse an existing link) so RCA can pull the delivery ticket's Accountability Report; no other incident-schema change.
+- `ticket_audits.missing[]` already JSON — include evidence gaps.
+- `tool_runs`: add a `passed boolean` / `score` so a `diagnostic` requirement can gate on pass, not existence.
+- **Assignee/executor decoupling (semantic, not additive):** `tasks.assigned_agent_ref`/`assigned_user_id` now mean **Coordinator**, not executor. The executor is per-run (`executions.cloud_agent_ref`, already exists) resolved from the manifest producer. Remove the `?? tasks.assigned_agent_ref` executor fallback (`cloudAgentEngine.ts`) and the capability-unconstrained owner-fallback auto-run (`withOwnerAgentFallback`/`evaluateAutoRun.ts`) **for lifecycle-managed tickets**; keep legacy behavior for un-managed boards behind the template flag to avoid a big-bang change.
+- Migrations are additive; `applyToProject` materializes the new fields. Follow the DRY/caching rules (roster + audit reads are already cached; invalidate on manifest write).
+
+---
+
+### 8. API + MCP surface
+
+- `GET /api/kanban/tasks/:id/participants` — the manifest (cached, version-token invalidated on write).
+- `GET /api/kanban/tasks/:id/accountability` — the **Accountability Report** (per-role Who/When/Verdict/Comments/Contribution + gaps), cached with the same version token. Also embeddable in the incident RCA view for an implicated ticket.
+- `POST /api/kanban/tasks/:id/signoff` — add RBAC + evidence; emit `activity_log`.
+- `POST /api/kanban/tasks/:id/coordinate` — force a Coordinator tick (manual "drive this ticket").
+
+
+- Reuse `/api/kanban/projects/:id/apply` for template application; extend the template editor payload with ticket-type/quorum/condition.
+
+### 9. UI surface (localized, dark/light, responsive)
+
+- **Ticket Participation panel** (SlideOutPanel, not modal): the manifest as a stage-ordered checklist — each participant's role, resolved assignee, state chip, evidence link, and a "Run role now" / "Sign off" action gated by RBAC. Mirrors the existing Triage control pattern.
+- **Sign-off & Accountability table** (on the ticket, §5.9): a plain, scannable table — one row per required role with **Who · Role · When · Verdict · Comments · Contribution**, plus a clear "N of M signed off" header and flagged gaps (unsigned roles, evidence-less/waived sign-offs). This is the "open a ticket and see the standard was met" surface; it appears in the RCA/postmortem view for an implicated ticket too.
+- **Board card**: extend the existing audit flag chip to show `X/Y participants complete`.
+- **Audit trail**: `AuditTrailPanel` already renders `activity_log`; the new verbs appear automatically.
+- All new strings through `next-intl` across the 5 catalogs; theme tokens only; fluid layout.
+
+---
+
+### 10. Auditing & verification (the operator's core requirement)
+
+- **The Accountability Record (per ticket):** for every required role — **Who** signed (identity + role, human or agent), **When**, **Verdict**, **Comments**, and a link to the **contribution/interaction** that backs it. Append-only and immutable, so the full history (including superseded `changes_requested` → later `approved`) survives for audit. Surfaced as the plain **"Sign-off & Accountability"** table on the ticket.
+- **Forward audit:** the manifest shows, at any moment, exactly which required roles are outstanding and why (missing evidence vs missing sign-off vs unresolved assignee).
+- **Backward audit:** `activity_log` gives the immutable "who did what as which role, when, with what evidence" timeline per ticket; `ticket_role_signoffs` (the accountability ledger) + `swimlane_transitions` + `ticket_audits` are the durable stores.
+- **Evidence-based completion** (5.6) means a green manifest *means the work actually happened* — a reviewer can't "approve" a stage with no linked review, QA can't pass with no test run. An evidence-less or waived sign-off is itself a visible audit finding.
+- **Coverage metric:** `ticket_audits.coverage` becomes participation-weighted; a Done ticket with < 100% verified participation is flagged and blocked from terminal.
+- **Incident feedback loop (§5.10):** when an incident occurs, its RCA pulls the implicated delivery ticket's Accountability Report — turning "was the process followed?" into a concrete, evidenced answer, and aggregating accountability gaps across incidents into process-improvement signal.
+
+---
+
+### 11. Enforcement / gating semantics (summary)
+
+- **owner/contributor (producer)** on `hard` stage → block generic auto-run, dispatch the role-capable producer, require evidence.
+- **reviewer** on `hard` stage → require quorum of `approved` sign-offs by role-capable members.
+- **`soft`** → flag + dispatch, don't hard-block (advisory round-trip).
+- **`off`** → audit only.
+- Done is terminal only when the manifest is 100% verified.
+
+---
+
+### 12. Acceptance criteria
+
+- **AC-1** A coding ticket entering Implementation is auto-run as a `developer`-capable agent; a PM-only agent is never dispatched to produce code (regression test on the #467 scenario).
+- **AC-1b** The ticket's Assignee (Coordinator — human or Agent Manager) is never auto-dispatched as the executor of a stage; the run is attributed to the resolved per-stage producer, not the assignee. Removing the assignee→executor fallback does not break a normally-staffed lane.
+- **AC-2** A ticket cannot reach Done with any required participant not `completed`-with-evidence; the board shows the outstanding roles.
+- **AC-3** The manifest for a `STANDARD_SWE_V2` feature ticket lists all six stages' required participants with live state.
+- **AC-4** A reviewer stage with quorum 2-of-3 advances on the 2nd `approved` sign-off, not the 1st.
+- **AC-5** A human `ask_human` approval tied to a role step records a `ticket_role_signoffs` row and clears that manifest step.
+- **AC-6** `POST /signoff` as a role the caller is not capable of is rejected (403), default-deny.
+- **AC-7** Every dispatch/completion/hand-off/sign-off appears in `activity_log` (HTTP and MCP paths).
+- **AC-8** A Security-type ticket's manifest includes the `security` role; a docs-type ticket's does not.
+- **AC-9** All new UI localized in 5 catalogs, verified in dark + light + 360px.
+- **AC-10** `tsgo` clean, migrations + drift green, `vitest` green for the audit-rules/manifest/assignment units.
+- **AC-11** Opening any ticket shows a **Sign-off & Accountability** table: for each required role — Who (identity + role), When, Verdict, Comments, and a link to the contribution; roles with no sign-off, and sign-offs with no linked contribution, are flagged. The ledger cannot be edited or deleted (append-only).
+- **AC-12** From a resolved incident, the RCA view links to the implicated delivery ticket(s) and displays their Accountability Reports; a ticket where a required reviewer was waived or approved with no linked review interaction is visibly flagged in that view.
+
+---
+
+### 13. Rollout / phases
+
+- **Phase 1 — Stop the bleeding (role-aware assignment).** `ide_agents.role_keys` + `resolveRoleCapableAgents`; make `recommendTopAssignee` role-aware; constrain the owner-fallback by stage producer role. Closes the #467 root cause. *(Small, high-value, mostly `assigneeRecommender.ts` + `evaluateAutoRun.ts`.)*
+- **Phase 2 — Manifest + accountability record.** `ticket_participants`; derive on template apply; extend `computeAudit`/`auditRules` to write manifest + evidence; enrich `ticket_role_signoffs` (Who/When/Verdict/Comments/Contribution, immutable); participants + **Accountability Report** API; the **Sign-off & Accountability** ticket panel. *(This is the operator's headline deliverable — visible accountability on every ticket — and can ship before full producer gating.)*
+- **Phase 3 — Producer gating + Coordinator.** Extend `enforceLaneRequirements` to producers; `coordinateTicket` tick; structured hand-off + `activity_log` verbs; RBAC on sign-off; approvals↔sign-offs bridge.
+- **Phase 4 — Verification + templates.** Evidence predicates (PR/diff, test-pass/CI, diagnostic threshold, acceptance eval); ticket-type-scoped requirements + quorum/condition; structured PRD sections; `STANDARD_SWE_V2` default.
+
+
+
+Each phase ships a working vertical slice; nothing is left half-wired.
+
+---
+
+### 14. Out of scope
+
+- Rebuilding the compile/PolicyGate primitive to express role sign-off (it is tool-scoped; we bridge, not replace).
+- Building the full spec-08 governance policy-pack store (optional Phase 5 tenant-baseline layer only).
+- A general condition/quorum DSL (start with a small enum).
+- Cross-project portfolio-level role orchestration (planning spine stays a rollup).
+
+### 15. Open questions (decisions needed)
+
+1. **`product-owner` vs `product-manager`:** add a distinct role, or alias? (Recommend: distinct built-in, aliased to `product-manager` for resolution until staffed separately.)
+2. **Coordinator identity:** always the `manager` role, or per-template configurable (e.g. Team Lead coordinates engineering-heavy templates)?
+3. **Which engine is canonical** for managed tickets in Phase 3 — extend the live task-status flow, or promote `ticket_runs` to always-on? (Recommend: task-status flow + manifest now; converge in Phase 5.)
+4. **Test evidence source of truth:** CI-green vs an in-agent test run vs QA sign-off — precedence order?
+
+### 16. Risks
+
+- **Two-engine drift** (task-status vs `ticket_runs`) — mitigated by making the manifest the shared source of truth and one Coordinator writer.
+- **Over-gating stalls tickets** — mitigate with `soft` defaults for non-critical stages, the `run_cap_exhausted` breaker, and a Coordinator "waive with reason" path (audited).
+- **Role-capability accuracy** — fuzzy `agentMatchesRole` must be superseded by explicit `role_keys`; seed built-ins deterministically.
+- **PRD 3-copy divergence** under load — harden sync + reconcile task.
+
+### 17. Gap-register items surfaced (to log regardless of PRD adoption)
+
+- `recommendTopAssignee` is role-blind and both callers pass `[]` skills → non-role-fit assignment (the #467 root cause).
+- `enforceLaneRequirements` gates only reviewers; `owner`/`contributor` requirements are audit-only.
+- HTTP `POST /signoff` doesn't emit `activity_log`; approvals don't record role sign-offs.
+- No RBAC on `/signoff` — any caller can sign off as any role.
+- Diagnostic requirements are existence-only (no pass/fail threshold).
+- PRD 3-copy sync is best-effort/silent (can diverge on failed commit).
+- Two swimlane engines (`tasks.status` flow vs `ticket_runs`) are only loosely connected.
+
+
+## ✅ RESOLVED 2026-11-17 — PRD 45: finished sections archived on consolidation (Deterministic run gates and loop economics)
+- **Verified 2026-11-17:**
+  - A1 — `packages/run-guards/src/evidence/{ledger,gates,gitCommandPattern}.ts`.
+  - A2 — `clients/vscode/src/verify/*`.
+  - A3 — `brain-embedded/src/runStore/callRunner.ts:197-205`.
+  - A4 — `callPreflight.ts:210`, `shipGates.ts`, `completionGuard.ts:50`, `runTypes.ts:75,193`, `brainRunHostPorts.ts:220`, `run/parity/scenarios/gates.ts`.
+  - A5 — `verify/reviewerPort.ts`, `shipGates.ts:215,295`.
+  - A6 — `agent-runtime/src/plugins/registry.ts:55,296`, `gateway/server/plugins-http.ts:50,97`.
+  - B1–B9 — `readinessAdvisory.ts`, cost lever `c10_outline_first_reads` (`cost-levers/src/index.ts:87`), `agent-tools/src/edit.ts:299-319`, `batchingNudge.ts`, `run/progressLine.ts`, `builderforce-memory/.../working/fold.ts:170,222`, `toolExposure.ts`, `runBackstops.ts:352`.
+  - W0 — `api/scripts/chat-replay-baseline.cjs`. (an earlier DONE.md entry already records the PRD 46 binding of these ports.)
+- **Archived word for word** from `docs/specs/45-prd-deterministic-run-gates.md`: lines 1–241 (header, §1–§4.5 table and the `shipGates.ts` paragraph) **except** the §4.5 "Directive" paragraph (lines 242–244); lines 246–325 (§4.6, §4.7, §5, §6, §7 except the W9 row at 316); §8 baseline column rows and the W0 harness note (lines 326–344 baseline values, 368–375); §8 "W9 re-measure" verdict text (345–366) as the record of what W9 measured.
+
+## PRD 45 — Deterministic run gates and loop economics
+
+**Status:** Approved — decisions OD-1–OD-3 made 2026-11-08 (§6); revised after an Opus design review the same day ·
+**Owner:** agent runtime · **Written:** 2026-11-08
+**Surfaces:** VS Code (VSIX / Brain) first. The gate *decisions* are pure and shared, so on-prem and cloud can bind the same
+rules later; this PRD only wires the VSIX.
+**For:** the agent or engineer implementing this. Every claim names the file it was checked in. Read §3 before touching
+code — most of what you need already exists, and the seams are specific.
+
+---
+
+### 1. Why
+
+Two VS Code sessions on 2026-11-08 show the agent shipping work that a deterministic check would have refused, and
+spending most of its tokens re-sending context instead of working.
+
+**Chat #214 ("A2A")** — `local/kimi-code/kimi-for-coding`, 69 turns, 3.02M prompt / 33.6k completion tokens.
+It committed and pushed ~900 lines to `main` (`41b0ff264`, `4df6b756e`) containing:
+
+- a call to `runEmbeddedAgent` missing the required `timeoutMs` and `runId`
+  (`agent-runtime/src/agents/embedded-runner/run/params.ts`). **A typecheck cannot see this:** the caller declares the
+  function as `(params: Record<string, unknown>) => …`. Only a test that exercises the code, or a reviewer, catches it;
+- zero tests for three new source files;
+- unused code (`spawnSync`, `messageToText`) and a header describing a surface that does not exist;
+- a "typecheck passed" claim from `npx tsc --noEmit | grep … | head; echo DONE`, which exits 0 whatever `tsc` does;
+- a review it recorded on itself (`builtin_reviews_record` → `complete`) and the ticket moved to `done`;
+- one further finding, tracked out of source control (operator has it).
+
+**Chat #216 ("Visualizer")** — 31 turns, 2.08M prompt / 18k completion tokens, prompt peak 93k.
+- 16 planning turns reading ~30 whole files (5–18 KB each); it said "I have enough to act" three times and kept reading.
+- 15 code turns with **one edit each**, each re-sending ~80k of prompt (~1.2M tokens for 11 edits).
+- A 14 KB rewrite of `Towers.tsx` introduced a rules-of-hooks violation, caught only because one turn happened to be routed
+  to another model; the file was then re-read and rewritten.
+- Repeated narration every turn ("I'm mid-implementation across the four views… Continuing…").
+- Ticket titled "Code change (1 file)" while ~8 files changed.
+
+Any model does this. **The host must decide what "verified", "reviewed" and "done" mean, from checks it runs itself, and
+refuse side effects without them** — and the loop must stop paying a full prompt for every single tool call.
+
+### 2. Goals and non-goals
+
+**Goals**
+
+- G1. No base-branch push, pull request, ticket→`done` or review→`complete` without host-recorded evidence for every
+  file in the outgoing commits, plus an approving review from a different model (OD-1).
+- G2. A broken edit is reported on the edit's own result within seconds.
+- G3. Evidence cannot be manufactured: only host-run checks count, keyed by the bytes they saw.
+- G4. Halve prompt tokens per unit of work on runs like #216 (measured, §8).
+- G5. Gate decisions are pure modules; the VSIX supplies ports. Hosts that bind no ports (web Brain, parity harness)
+  behave exactly as today.
+
+**Non-goals**
+
+- Fixing the A2A extension (separate Gap Register entry). It is the test case, not the scope.
+- Catching design errors deterministically ("this isn't really the A2A protocol"). That is the OD-1 reviewer's job.
+- A model-maintained plan checklist (`update_task_state` stays off on the VSIX; see B5).
+- Wiring on-prem or cloud. Their existing gates are unchanged.
+- Any frontend UI.
+
+### 3. What exists today (checked — reuse, do not rebuild)
+
+| Piece | Where | Notes |
+|---|---|---|
+| Brain run composition | `brain-embedded/src/run/runPrepared.ts:76-89` | `modules: { compaction, model }`. Do **not** add `finish`: the VSIX excludes the `finish` tool (`clients/vscode/src/fileTools.ts:55`), so runs settle in prose. |
+| Brain run policy | `brain-embedded/src/run/webAdapter.ts:113` | `levers: []`, `verify: 'none'`, `approvalGates: []`. The R10 comment says gating belongs in the Brain's own preflight. |
+| Call preflight | `brain-embedded/src/runStore/callPreflight.ts` (290 lines) | Router unwrap and alias resolution end at ~line 72. `stampRunChat`, then the human confirm gate (`needsConfirm` → `requestRunConfirm`) at ~163-166. `brainPlatformTools.ts:99` only delegates here; `execute()` also reaches it when the kernel skipped preflight (`brainPlatformTools.ts:116-121`). |
+| Call runner / result shaping | `brain-embedded/src/runStore/callRunner.ts:121-190` | Results are shaped and advisories attached **before** `trimToolResult`. Ticket completion is already guarded here (`:147-161`) via `brain-embedded/src/completionGuard.ts` (`canCompleteTicket`, `TICKET_UPDATE`). |
+| Host request | `brain-embedded/src/runStore/runTypes.ts` (~line 98) | Host-supplied ports: `runTool`, `needsConfirm`, … New ports go here. |
+| End-of-run gates | `brain-embedded/src/runStore/deliveryGates.ts` read by `brainDelivery.ts` | "The run's ONE gate" (`webAdapter.ts:143`). Includes the placeholder ledger. |
+| Self-review ship flow | `brain-embedded/src/selfReviewShip.ts` | Review → commit → push → ticket closes. Keep the flow; change its review step (OD-1). |
+| Ship evidence | `brain-embedded/src/shipVerification.ts` | `gitCommandPattern()` at `:85`; `shippedToBaseBranch`. Tickets close after a verified push via `completeShippedTickets` — so the **push gate is the real done gate**. |
+| Ticket titling backstop | `brain-embedded/src/runStore/runBackstops.ts` | Where B9 goes. |
+| Post-edit note format (D7) | `packages/agent-run/src/policy/guards/postEdit.ts:72-83` | `postEditNote` / `withPostEditNote`. Reuse the format. |
+| Sandbox verify | `packages/agent-run/src/policy/verify/sandboxVerify.ts` | `runSandboxVerify` behind `VerifySandbox`/`VerifyShell` ports gives honest exit codes. It uses `planInRunVerify` (`inRunVerify.ts`), whose plan includes `${runner} run test` (`:90`) — the **full suite**; filter it (§4.4). |
+| Progress / readiness | `packages/run-guards/src/progressDetector.ts`, `readinessClaim.ts`; VSIX via `brain-embedded/src/runStore/progressGuard.ts` | `UNKEPT_READY_AT = 2` (`readinessClaim.ts:16`). `unkept_ready: 4` is a **rank** (`SIGNAL_RANK`, `:37-44`), not a threshold. The ladder (1st trip steer, 2nd escalate, 3rd pause, `:248-256`) is shared by every signal. Built fresh per run; **no persisted state**. |
+| Device levers | `brain-embedded/src/runStore/deviceLevers.ts:9` | `deviceLeverOn(id)` = manifest default + `process.env` (`COST_LEVER_<ID>=off`), tenant `null`. Levers with rollout < 100 are therefore **off** on the VSIX (C3 rollout 10 → off). |
+| Cost levers | `packages/cost-levers/src/index.ts` | `c8_token_compression` (`:82`), `c9_price_tier_budget` exist — pick the next free id. |
+| Outline tool | `file_outline` in the VSIX tool host (`clients/vscode/src/fileTools.ts:125` labels it) | Reuse its executor for B2. |
+| LSP diagnostics | `clients/vscode/src/prefetch/lspDiagnostics.ts` | Open documents only. |
+| Sub-agents / review stage | `clients/vscode/src/subagentTool.ts`; `clients/vscode/src/stageModels.ts:7,46` (`builderforce.models.review` → `verify` stage); delivery gates' `entersVerify` | OD-1 builds on these. |
+| Working-transcript fold | `brain-embedded/src/run/brainFold.ts` → `buildWorkingTranscript` from `@seanhogg/builderforce-memory/working` | B6/B7 belong in builderforce-memory. |
+| Repo guard runner | `scripts/run-checks.mjs` + `{api,frontend}/scripts/checks.manifest.mjs` | |
+| String edit | `packages/agent-tools/src/edit.ts` `applyStringEdit` | One replacement per call; returns an excerpt. |
+| Tool result caps | `packages/tool-output-policy/src/caps.ts:19` | `read_file` cap is 16,000 chars. |
+| Plugin HTTP dispatch | `agent-runtime/src/gateway/server/plugins-http.ts` `createGatewayPluginRequestHandler`; `agent-runtime/src/plugins/registry.ts`, `plugins/http-registry.ts` | `registerHttpHandler` carries no path. Callers: a2a, bluebubbles, googlechat, nostr, zalo. |
+| Package wiring | `clients/vscode/tsconfig.json:31` aliases `run-guards` | The esbuild alias must match; `scripts/check-source-package-graph.mjs` enforces it. |
+
+### 4. Design
+
+#### 4.1 Principle
+
+Evidence is a host fact keyed by the **bytes on disk**. Gates hash the files themselves at gate time; they never trust
+the model's prose, the model's commands, or a record of what the model said it wrote. A refusal is an ordinary tool
+result the model reads and acts on.
+
+Every gate is **inert unless the host binds its port** (§4.5). The web Brain and the parity harness bind none, so they
+are unchanged.
+
+#### 4.2 Evidence ledger (pure)
+
+New: `packages/run-guards/src/evidence/ledger.ts`. run-guards is already imported by `brain-embedded` and `agent-run`;
+`clients/vscode` reaches it through its tsconfig alias (add the esbuild alias too).
+
+```ts
+export type CheckKind = "diagnostics" | "typecheck" | "test" | "guard";
+
+export interface CheckRecord {
+  kind: CheckKind;
+  name: string;                 // "lsp", "pnpm --filter @builderforce/agent-tools typecheck", "check:source-package-graph"
+  outcome: "pass" | "fail" | "unavailable";   // unavailable = no such check here, or it timed out (OD-3)
+  exitCode: number | null;      // the process exit code the HOST captured; null for lsp/unavailable
+  findings: readonly string[];  // ≤ 20 lines "path:line:col severity message (code)"
+  at: number;                   // epoch ms, passed in (module stays clock-free)
+}
+
+export interface EvidenceLedger {
+  record(absPath: string, contentHash: string, check: CheckRecord): void;
+  /** Evidence recorded against exactly this content hash. */
+  for(absPath: string, contentHash: string): readonly CheckRecord[];
+  /** A write the run made: drops evidence for older hashes of this path (memory only — correctness never depends on it). */
+  noteWrite(absPath: string): void;
+}
+export function createEvidenceLedger(): EvidenceLedger;
+```
+
+Rules:
+- **Keys are absolute paths.** `edit_file` paths are workspace-relative; `git_commit` paths are repo-relative with a
+  `repo` argument (`packages/agent-tools/src/git-tools.ts:443`). Normalise both through one helper.
+- **Gates hash the bytes at gate time.** Files changed by sub-agents, `run_command`, `delete_file`, the human in the
+  editor, or an earlier run are all handled the same way: hash now, look up evidence for that hash, run checks if none.
+- **Deleted paths** need no checks of their own; the owning package's typecheck (which runs for any change in the package)
+  covers what imported them.
+- **Lifetime: one run.** The ledger lives on the run context (`BrainRunContext`) and is not persisted. A resumed run or
+  the next run re-checks — cheap, because the host verifier caches results by `(absPath, hash, check name)` in process
+  memory (one module, §4.4).
+
+#### 4.3 Gate decisions (pure)
+
+New: `packages/run-guards/src/evidence/gates.ts`. All take facts, return a verdict, and do no I/O.
+
+```ts
+export type GateVerdict = { ok: true; unavailable: readonly string[] } | { ok: false; reason: string };
+
+export interface EvidencePolicy {
+  required: Readonly<Record<string, readonly CheckKind[]>>; // by extension, e.g. ".ts": ["diagnostics","typecheck","test"]
+  newSourceNeedsTest: boolean;                              // a NEW source file must ship with a test in the same push
+  checkTimeoutMs: number;                                   // per check; a timeout records "unavailable", never "pass"
+}
+export const DEFAULT_EVIDENCE_POLICY: EvidencePolicy;
+
+export interface OutgoingFile { absPath: string; hash: string; isNew: boolean; deleted: boolean }
+
+/** The push / pull-request gate — the real done gate (tickets close after a verified push). */
+export function outgoingGate(files: readonly OutgoingFile[], ledger: EvidenceLedger, policy: EvidencePolicy): GateVerdict;
+
+/** OD-1. */
+export interface ReviewVerdict { reviewerModel: string; verdict: "approved" | "changes_requested"; diffHash: string; findings: readonly string[] }
+export function reviewGate(review: ReviewVerdict | undefined, authorModels: readonly string[], currentDiffHash: string): GateVerdict;
+
+/** Early feedback only — the outgoing gate is what actually holds. */
+export function shellPublishHint(command: string): string | null;
+```
+
+- A required check passes when its `outcome` is `pass`. `unavailable` passes **and is reported** in the verdict's
+  `unavailable` list so the approval prompt can say so (OD-3). `fail` refuses.
+- `newSourceNeedsTest`: a new `x.ts(x)` needs a new or changed test file in the outgoing set whose name starts with `x.`
+  (`x.test.ts`, `x.foo.test.ts`). **This, plus OD-1, is what catches chat #214's missing parameters** — a test that calls
+  the code fails at runtime where the typecheck could not.
+- `reason` names the file, the failing check and its first findings, and what to do:
+  *"git_push refused: agent-runtime/extensions/a2a/src/inbound.ts is new and has no test in this push. Add
+  inbound.test.ts covering it, commit, and push again — the host runs the checks."*
+- `reviewGate` refuses when there is no review, the reviewer model is one of `authorModels`, the verdict is
+  `changes_requested` (findings returned as the reason), or `diffHash` differs from `currentDiffHash`.
+- **Move** `gitCommandPattern` from `brain-embedded/src/shipVerification.ts:85` into run-guards and update its importers
+  (`selfReviewShip.ts`, `shipVerification.ts`). No re-export, no second copy.
+
+**Ticket completion:** extend `brain-embedded/src/completionGuard.ts` `canCompleteTicket` (already enforced in
+`callRunner.ts:147-161`) with one more condition: when the git port is bound, the run has no unpushed or uncommitted
+changes that failed `outgoingGate`. Do not write a second done check.
+
+#### 4.4 Host ports
+
+Added to the host request in `brain-embedded/src/runStore/runTypes.ts`, next to `needsConfirm`. All optional.
+
+```ts
+export interface VerifierPort {
+  /** Fast tier, ≤ 3 s: language-server diagnostics for exactly these files. Null = unavailable on this host. */
+  diagnostics(absPaths: readonly string[]): Promise<CheckRecord | null>;
+  /** Full tier for these files: owning packages' typecheck + targeted tests + repo guards. Cached by (path, hash, check). */
+  full(absPaths: readonly string[]): Promise<ReadonlyMap<string, readonly CheckRecord[]>>;
+}
+
+export interface GitPort {
+  /** Files in commits not yet on the upstream (`git log @{u}..HEAD`, plus the HEAD tree's bytes for each path). */
+  outgoing(repo: string): Promise<{ files: OutgoingFile[]; diffHash: string; baseBranch: boolean }>;
+}
+// diffHash = sha-256 of `git diff --binary <merge-base(@{u}, HEAD)>..HEAD`.
+
+export interface ReviewerPort {
+  /** OD-1: one review sub-run on a different model, given the diff and the evidence summary only. */
+  review(input: { repo: string; diff: string; evidence: string; authorModels: readonly string[] }): Promise<ReviewVerdict | { refused: string }>;
+}
+```
+
+**VSIX implementation** — new folder `clients/vscode/src/verify/`, one concern per file, none over ~200 lines:
+
+- `pathDiagnostics.ts` — `vscode.workspace.openTextDocument` each path (not shown), wait for
+  `onDidChangeDiagnostics` for that URI or 3 s, read `getDiagnostics`. Extract the line formatter from
+  `prefetch/lspDiagnostics.ts` into a shared `formatDiagnostic()` used by both.
+- `typecheck.ts` — `runSandboxVerify` with VSIX `VerifyShell`/`VerifySandbox` ports, its plan **filtered to typecheck
+  scripts only**. The `VerifyShell` port runs through the same process runner the host uses for `run_command`, returning
+  the real process exit code. On Windows it must launch `.cmd` shims (`pnpm.cmd`, `npm.cmd`); never a bare
+  `child_process.spawn("pnpm")` without a shell.
+- `targetedTests.ts` — for each changed `x.ts(x)`, co-located `x.test.ts(x)` / `x.*.test.ts(x)`; run only those files with
+  the package's runner (`vitest run <files>` or `jest <files>`, read from its `test` script). Never the full suite.
+- `repoGuards.ts` — if the owning project has `scripts/checks.manifest.mjs`, run `scripts/run-checks.mjs` with it.
+- `cache.ts` — the one in-process cache keyed `(absPath, hash, checkName)`.
+- `gitPort.ts`, `reviewerPort.ts` (§6 OD-1), `index.ts` composing them.
+
+`clients/vscode` passes the three ports where it builds the Brain host request (find the existing `needsConfirm:`
+assignment and add them beside it).
+
+Known limit, stated in the refusal text when it applies: the fast tier only sees the edited file. Dependents in the same
+package are covered by the full tier's package typecheck. Dependents in **other** packages are not checked; the reviewer
+and CI remain the backstop.
+
+#### 4.5 Where each gate fires
+
+| Point | Seam | What happens |
+|---|---|---|
+| After a successful `edit_file` / `write_file` | `callRunner.ts` result shaping (`:121-190`), before `trimToolResult` | `ledger.noteWrite`; `verifier.diagnostics([path])`; errors appended in the D7 `postEditNote` format. Advisory only. |
+| `git_push` (base branch) and `open_pull_request` | `callPreflight.ts`, **after** routing (~72) and **before** the confirm gate (~163) — one call into new `brain-embedded/src/runStore/shipGates.ts` | `git.outgoing` → hash → `verifier.full` for files without evidence → `outgoingGate`; then `reviewer.review` → `reviewGate`. Refusal returns `{ ok:false, error: reason }` without asking the human. |
+| `git_commit` | same | **No refusal.** Runs the full tier early on the committed paths so the push is fast, and returns failures as an advisory on the commit result. (Commits are local and reversible; the push is the act that leaves the machine.) |
+| `run_command` (incl. `background: true`) | same | `shellPublishHint` adds an advisory pointing at `git_push`/`open_pull_request`. Not a refusal: the outgoing gate catches shell commits at push because it reads the real commits. |
+| `builtin_reviews_record` with `complete` | same | Refused unless a `reviewGate`-approved review exists for the current diff; on pass the host attaches the reviewer and evidence summary to the payload. |
+| Ticket → `done` | existing `completionGuard` in `callRunner.ts` | Extended per §4.3. |
+| Approval prompt | `requestRunConfirm` | Pass the gate verdict through the confirm request (new optional `evidence` field); `describeTool` in `fileTools.ts` can't see it because it builds the label from args alone. The prompt then says "checks passed · reviewed by <model>" or "no checks could run for N files". |
+
+`shipGates.ts` holds the orchestration; `callPreflight.ts` gains one call. A push to a non-base branch is not gated
+(it can't land on main without a pull request, which is gated).
+
+
+
+#### 4.6 Plugin HTTP routes authenticate by default (agent-runtime)
+
+Plugin authors must not be able to forget auth.
+- `registerHttpHandler(handler, { auth?: "gateway" | "public" })`, default `"gateway"`, stored on the handler entry in
+  `plugins/registry.ts` (and the equivalent in `plugins/http-registry.ts`).
+- `createGatewayPluginRequestHandler` (`gateway/server/plugins-http.ts`) runs `authorizeGatewayConnect` before calling a
+  `"gateway"` entry; a failed check moves on to the next entry, so a public webhook later in the list still answers.
+  This is decided per entry because handlers carry no path.
+- Classify every existing caller. A webhook may be `"public"` only if it verifies its own signature or token; record
+  which check it uses in a comment at the registration. Any handler that has neither goes to the operator's local
+  security file, not to source control.
+- Opus review (auth).
+
+#### 4.7 Loop economics
+
+| # | Change | Seam | Detail |
+|---|---|---|---|
+| B1 | Earlier readiness steer | new `readinessAdvisory` in `run-guards`, fed from `RunProgressGuard.noteTurnText`/`endTurn` (`progressGuard.ts`) | On the **first** unkept readiness claim, a one-off advisory on the next turn: *"You said you have what you need. Make the edit now; read only files you will change."* It does **not** trip the ladder; the ladder, `UNKEPT_READY_AT` and other signals are unchanged. |
+| B2 | Outline-first reads | decision in `packages/tool-output-policy`; content from the existing `file_outline` executor | `read_file` without `offset`/`limit` on a file > 16,000 chars (the current cap) or > 300 lines returns the outline plus the first 40 lines and says how to request a range. New cost lever (next free `cN_` id, **rollout 100**, so it is on for the VSIX). Setting `builderforce.agent.outlineFirstReads` (boolean, default `true`, in `clients/vscode/package.json` `contributes.configuration`): at activation and on configuration change the extension sets/clears `process.env.COST_LEVER_<ID>=off`, which `deviceLeverOn` already reads. No call-site checks. |
+| B3 | Several edits in one call | `packages/agent-tools/src/edit.ts` + the `edit_file` schema + the VSIX executor | `edit_file` also accepts `edits: [{ path, old_string, new_string, replace_all? }]` (≤ 20). All-or-nothing; on failure name the first edit that didn't match. Reuse `applyStringEdit`; return each file's excerpt. Single form unchanged. |
+| B4 | Batching nudge | new advisory signal `serial_single_calls` in `run-guards` | After 2 consecutive turns that each made exactly one read-only call, the next turn's note says to batch independent calls. Advisory; never trips. |
+| B5 | Host-derived progress line | `brain-embedded/src/run/brainTurnTail.ts` | One deterministic line per turn from the run's own trace: files changed so far, their check state, and what the push gate still needs (`3 files changed · 2 checked · push needs: test for inbound.ts`). No model cooperation, no new tool, `update_task_state` stays off. |
+| B6 | Fold superseded reads | `@seanhogg/builderforce-memory/working` `buildWorkingTranscript` (repo `C:\code\agentic\builderforce-memory`) | When an edit/write to path P succeeds, earlier `read_file` results for P in the **model transcript** become `"(read of P superseded by the edit at step N — re-read if needed)"`. The trace keeps everything. Ships with the memory package's contract snapshot and a `regression:` test; bump and publish memory, then bump `brain-embedded`'s dependency. |
+| B7 | Fold repeated narration | same | Assistant text *preceding tool calls* whose word-set overlap with the previous such text is ≥ 0.8 becomes `"(progress note)"`. Never a final answer or a turn without tool calls. Same tests and release. |
+| B8 | "Tools advertised" counter | new module extracted from `brain-embedded/src/chatDiagnostics.ts` (987 lines — do not grow it) | Chat #216 reported 1 tool advertised per turn while 15+ distinct tools were called. Find what it measures, fix it in the extracted module, `regression:` test. |
+| B9 | Ticket title from the real diff | `brain-embedded/src/runStore/runBackstops.ts` | Re-title "Code change (N files)" from the final changed-path count at ship. |
+
+### 5. Sequence (VSIX)
+
+```
+edit_file x.ts            → callRunner: noteWrite; diagnostics([x.ts]) → "x.ts:52:9 error TS2345 …" on the result
+edit_file x.ts (fix)      → diagnostics clean → no note
+git_commit [x.ts]         → shipGates: full([x.ts]) → typecheck pass; advisory "x.ts is new: push needs x.test.ts"
+write_file x.test.ts; git_commit [x.test.ts]
+git_push (main)           → shipGates: git.outgoing → hashes → full() for x.test.ts → targeted test pass
+                          → outgoingGate ok → reviewer.review (model ≠ author) → approved, diffHash matches
+                          → confirm prompt "checks passed · reviewed by <model>" → push dispatches
+                          → completeShippedTickets closes the ticket (existing)
+```
+
+### 6. Decisions (operator, 2026-11-08)
+
+- **OD-1 Independent review — YES.** Before a base-branch push or a pull request, `ReviewerPort.review` runs one review
+  sub-run through the existing sub-agent path (`clients/vscode/src/subagentTool.ts`; a child is a clone of the parent's
+  catalog), handed the diff and the evidence summary only.
+  - **Reviewer model:** the `builderforce.models.review` stage pin (`stageModels.ts`, the `verify` stage) if it is not one
+    of the author models; otherwise the first model from the run's available models (stage/role pins, then the BYO
+    catalog) that is not an author model; otherwise refuse with how to add one (a BYO account or a review-stage pin).
+  - `changes_requested` returns the reviewer's findings to the author as the push's refusal.
+  - `selfReviewShip.ts` keeps orchestrating review → commit → push → close; its review step calls the reviewer instead of
+    the author recording its own verdict.
+- **OD-2 Outline-first reads — ON by default, with a setting to turn it off** (B2).
+- **OD-3 No verifier available — pass with `unavailable`**, shown in the approval prompt, never reported as verified.
+  Timeouts count as `unavailable`. The OD-1 reviewer is still required.
+
+### 7. Workstreams and done-checks
+
+Order matters; each lands green alone. Each: implement → typecheck + the named tests only → fresh review over the diff →
+fix → commit. **Opus review:** A1–A4 (gating, cross-package), A5 (OD-1), A6 (auth). Sonnet review for the rest.
+
+| WS | Scope | Done when |
+|---|---|---|
+| **W0** Baseline | Replay chats #214 and #216 with `api/scripts/chat-replay-baseline.cjs` (journal replay, not the aggregate `telemetry-baseline.cjs`) | Numbers written into §8 |
+| **A1** Ledger + gates | §4.2, §4.3; move `gitCommandPattern` | Unit tests for every verdict, including `regression: tsc piped through grep is not evidence`, `regression: new source without a test is refused (chat #214)`, `regression: a file changed by run_command is still checked at push`, `regression: reviewer on an author model is refused` |
+| **A2** VSIX verifier | §4.4 `verify/*` | With a fake `vscode` and a temp package: diagnostics for an unopened file; failing script's exit code captured; plan filtered to typecheck; targeted tests only; Windows `.cmd` launch covered; timeout → `unavailable` |
+| **A3** Post-edit diagnostics | §4.5 row 1 in `callRunner.ts` | `regression: hooks-in-map violation reported on the edit result (chat #216)` |
+| **A4** Ship gates | `shipGates.ts`, the `callPreflight.ts` call, `completionGuard` extension, `requestRunConfirm` evidence field, ports in `runTypes.ts`, wiring in `clients/vscode` | New parity scenario `brain-embedded/src/run/parity/scenarios/gates.ts` that **binds fake ports** and replays #214: push refused (no test), `run_command "git commit && git push"` still refused at the next `git_push`, review `complete` refused without a reviewer, ticket `done` refused. Existing scenarios (`ends.ts`, `review.ts`, …) bind no ports and pass **unchanged** |
+| **A5** Reviewer (OD-1) | `reviewerPort.ts` + `selfReviewShip.ts` review step | Same-model reviewer refused; diff changed after review refused; no second model → refusal with the "add a model" text; `changes_requested` findings reach the author |
+| **A6** Plugin route auth | §4.6 | `regression: a plugin handler registered without "auth" rejects a request with no token`; `regression: a "public" webhook still answers`; every existing caller classified |
+| **B1–B9** | §4.7 | One unit test each; B2, B3, B6, B7 each add a `regression:` test naming chat #216 |
+
+
+
+Rules:
+- `callPreflight.ts`, `callRunner.ts`, `selfReviewShip.ts`, `chatDiagnostics.ts`, `runPrepared.ts` gain at most a call into
+  the new modules. No new file over ~400 lines.
+- Existing tests run unchanged; never edit an assertion to make a gate pass.
+- Policy is data: `EvidencePolicy`, lever manifest entries, the advisory thresholds.
+- Extension strings follow the extension's existing pattern; no frontend changes.
+- Lockfiles: if a package's dependencies change, refresh every lockfile that carries it.
+
+### 8. Success measures
+
+| Measure | Baseline (W0) | Target |
+|---|---|---|
+| Base-branch pushes on the VSIX without passing (or reported-unavailable) evidence and a different-model review | unknown (live telemetry behind gates; measure at W9) | 0 |
+| #214 replay: prompt tokens | 3,023,666 (measured, session = lifetime — #214 ran entirely on 2026-11-08; matches narrative 3.02M) | — |
+| #214 replay: completion tokens | 33,643 (measured; matches narrative 33.6k) | — |
+| #214 replay: prompt peak | 70,714 (measured, max single-call prompt) | — |
+| #214 replay: turns (model steps) / code turns / exactly-one-edit turns | 70 turns / 10 edit turns / 1 exactly-one-edit turn (measured; narrative "69 turns" ≈ the 69 journaled code-role calls) | — |
+| #214 replay: median tool calls per turn | 2 (measured, 70 active turns) | — |
+| #214 replay: defects reaching main (missing params via a failing test, no tests) | 2 — git-verified at `4df6b756e`: `inbound.ts` calls `runEmbeddedAgent` without `timeoutMs`/`runId`; 6 new source files, 0 tests; plus unused `spawnSync`/`messageToText` | 0 |
+| #216 replay: prompt tokens | session 4,109,351 (measured, 2026-11-08) — the plan phase alone was 2,083,188 ≈ narrative 2.08M; lifetime 16.4M after the chat kept re-running on 11-09 | ≤ 1.0M |
+| #216 replay: completion tokens | session 32,241 (measured); lifetime 173,974 | — |
+| #216 replay: prompt peak | 93,201 session (measured, ≈ narrative 93k); 107,847 lifetime | — |
+| #216 replay: code turns for the same edits | 66 edit turns / 12 exactly-one-edit turns (measured, lifetime) — narrative 15 ≈ the 12 single-edit turns | ≤ 5 |
+| #216 replay: median tool calls per turn | 2 (measured, 294 active turns) | — |
+| Median tool calls per turn (VSIX, 7-day telemetry) | 2 (measured, 2026-11-03..2026-11-09, 3,788 active turns across 49 chats; replaces narrative ~1.5) | ≥ 2.5 |
+| Readiness claims followed by ≥ 2 read-only turns | #216: 4 (measured, 7 claims) — narrative 3; #214: 0 | ≤ 1 |
+
+#### W9 re-measure (recorded 2026-11-13)
+
+**Verdict on the replay path.** The §8 targets are *outcome* targets on **new post-gate runs** of #214/#216
+(prompt ≤ 1.0M, code turns ≤ 5, calls/turn ≥ 2.5, defects-reach-push 0). `chat-replay-baseline.cjs`
+replays each chat's journaled turns, and those journals are the **pre-gate** transcripts — #214 ran
+entirely on 2026-11-08, before any PRD 45 gate existed (the gate set landed 2026-11-09 → 2026-11-12). A
+replay therefore re-derives the W0 baseline, never a post-gate result, so §8's per-chat outcome targets
+**cannot be scored from a replay**. They are scored on a fresh post-gate run of the same task.
+
+**What W9 did measure / verify:**
+
+- **Gating live, not narrated.** Commit `9b76c1575` ("Brain: fix editor-path runs stop/restart + tickets
+  never reaching 100% (PRD 45 ship gates)") shipped the ship-gate wiring and fixed the "tickets never
+  reaching 100%" defect class live — a "defects reaching push" instance caught and repaired. The §8
+  gate row (evidence + different-model review before push) is live in the Brain preflight and VSIX.
+- **Trace reader confirmed.** `chat-replay-baseline.cjs` re-run 2026-11-13 reproduces the §8 W0 numbers
+  from the local-first journal (read-only, no production DB): #214 prompt 3,023,666 / completion
+  33,643 / 70 turns; #216 session prompt 4,109,351 / lifetime 54.8M / 819 turns. The W0 harness is
+  deterministic and re-runnable, so the W0 column is reproducible on demand.
+- **Remaining §8 outcome targets** (#216 prompt ≤ 1.0M, code turns ≤ 5, VSIX calls/turn ≥ 2.5,
+  readiness ≤ 1) are **open** — they require a fresh post-gate run of the same edits/task, not a replay
+  of the pre-gate transcript. Tracked as follow-up; not claimed met.
+
+> **W0 harness** (measured 2026-11-09): `api/scripts/chat-replay-baseline.cjs` — replays the VSIX
+> `local-first-v3.journal` READ-ONLY and prints these §8 baselines. Chats identified by content
+> fingerprint (the "#NNN" display number is not stored locally): **#214** = serverId 55221
+> ("I see messages being sent back and forth between…", 2026-11-08T21:20Z, kimi-for-coding,
+> names commits `4df6b756e`/`41b0ff264`); **#216** = serverId 56654 ("REview the Visualizer's Map,
+> Graph, Tower, and 3D…", 2026-11-08T22:47Z, mentions `Towers.tsx` + the verbatim "mid-implementation
+> across the four views" narration). "Session" = the chat's creation-day (UTC) window, matching when
+> PRD 45 was written.
+
+
+## ✅ RESOLVED 2026-11-17 — Agent framework registrations: shipped reference doc archived on consolidation
+- **Verified 2026-11-17:** catalog `api/src/application/agent/agentRegistration.ts:7-17`; routes `presentation/routes/agentRegistrationRoutes.ts:112,119,205,227` (mounted `index.ts:1037`); `credentialRef` rule `:65-66`; `agentRegistrationId` on executions `runtimeRoutes.ts:208,442,505`; legacy 410 + Sunset `agentRoutes.ts:18-36`; migration 0394.
+- **Text:** `docs/specs/agent-framework-registrations.md` lines 1–47 word for word (everything but the final "Do not drop…" paragraph, which stays open).
+
+## Agent framework registrations
+
+Builderforce registers callable runtimes in `agent_registrations`. A registration's
+`framework` identifies the implementation and its `protocol` identifies the wire
+contract. Framework names are slugs rather than a database enum, so adding a new
+framework does not require a schema migration.
+
+### Supported integration paths
+
+| Framework | Preferred protocol |
+| --- | --- |
+| LangGraph | A2A |
+| Microsoft Agent Framework | A2A |
+| Google ADK | A2A |
+| Pydantic AI | Builderforce Worker |
+| CrewAI | Builderforce Worker |
+| OpenAI Agents SDK | Builderforce Worker |
+| Claude | ACP, Builderforce Worker, or native HTTP |
+| OpenClaw | Builderforce Worker or native HTTP |
+| Hermes | ACP or native HTTP |
+
+The live catalog is returned by `GET /api/agent-registrations/frameworks`.
+
+### Registration lifecycle
+
+1. A manager calls `POST /api/agent-registrations` with a name, framework,
+   protocol, and either a public endpoint or an `agentHostId`.
+2. The runtime or its bound AgentHost calls
+   `POST /api/agent-registrations/{id}/capabilities` with discovered capability
+   slugs, health, and an optional Agent Card.
+3. Dispatch clients use the registration UUID as `agentRegistrationId` on
+   `POST /api/runtime/executions`.
+4. `DELETE /api/agent-registrations/{id}` deactivates the registration without
+   deleting execution history.
+
+Declared capabilities express what an operator permits/configures. Discovered
+capabilities express what the runtime reports. The API returns their deduplicated
+union as `capabilities` while retaining both source lists for governance.
+
+`credentialRef` accepts only opaque `vault:` or `integration:` references. Secrets
+must never be placed in a registration, endpoint URL, Agent Card, or metadata.
+
+### Legacy table deprecation
+
+Migration `0394_agent_registrations.sql` backfills every legacy `agents` row and its
+skill names, adds canonical registration references to executions and dispatches,
+and leaves the old foreign keys nullable for historical reads. `POST /api/agents`
+
+
+## ✅ RESOLVED 2026-11-17 — Internet search subsystem: phases 1–2 archived on consolidation
+- **Verified 2026-11-17:** migration 0456; `api/src/application/webSearch/{crawlerService,demandSearch,searchService,factory,ports}.ts`; `infrastructure/webSearch/postgresWebSearchStore.ts:30-36,89-90`; `presentation/routes/webSearchRoutes.ts`; MCP `web.search` / `web.research_status` (`builtinMcpService.ts:3604,3623`); `webSearchServices.test.ts`.
+- **Archived word for word** from `docs/specs/internet-search-subsystem.md`: "Architecture audit" (lines 1–14); Decisions 3, 5, 7; "Phase 1–2 (this increment)" bullet; "Run migration `0456_web_search.sql`. No Cloudflare resource must be provisioned for lexical search."
+
+## Internet search subsystem
+
+### Architecture audit
+
+Builderforce already provides the infrastructure this subsystem needs:
+
+- Cloudflare Workers is the API and orchestration runtime.
+- Neon Postgres is the typed system of record and supports transactional frontier claims.
+- The Worker already has tenant JWT authentication, a per-tenant rate limiter, structured error reporting, cron dispatch, and guarded outbound HTTP.
+- The LLM gateway exposes one built-in MCP catalog to the Brain, VS Code, cloud agents, and remote MCP clients.
+- Vendor-backed `web.search` and guarded `web.fetch` exist. They remain a coverage fallback while the owned index is populated.
+- Embedding vendors already sit behind the gateway. A future Vectorize adapter can therefore be added without coupling crawling or lexical retrieval to a specific model.
+
+No new independently operated database, auth system, or LLM gateway is introduced.
+
+## ✅ RESOLVED 2026-11-17 — PRD 41: finished sections archived on consolidation (Offline understanding and the run delta)
+- **Verified 2026-11-17:**
+  - §A1–§A5 (WS1) — already archived an earlier DONE.md entry-08 ("offline closure (PRD 41 WS1)"); evidence `clients/vscode/src/capabilityContext.ts`, `clients/vscode/scripts/check-signed-in-when.mjs`, `clients/vscode/package.json:100-124,1351-1356`, `clients/vscode/src/codebaseScan.ts:286`.
+  - §A7 (design and replica stack), §A8 — already archived an earlier DONE.md entry-07 (A7 + A8); evidence `packages/agent-tools/src/knowledge/replicatedStore.ts`, `clients/vscode/src/knowledge/review/*`. A7's acceptance digest test stays open.
+  - §A9–§A11 — already archived an earlier DONE.md entry-07.
+  - §B2, §B4 — already archived an earlier DONE.md entry-08 / 2026-11-10 (G03, WS2); evidence `builderforce-memory/packages/memory/src/knowledge/{contentHash,merkle,statManifest}.ts`, `packages/agent-tools/src/node-knowledge-store.ts`, `clients/vscode/src/knowledge/factStoreNode.ts`.
+  - §B6 — already archived an earlier DONE.md entry-10 (WS3); evidence `clients/vscode/src/knowledge/{backgroundIndexer,rootIndexer}.ts`, `clients/vscode/src/power/powerSource.ts`.
+  - §C1, §C2, §C3, §C4, §C9, §C10 — already archived an earlier DONE.md entry-10 (WS6/WS7); evidence `packages/run-delta/src/engine/*`, `builderforce-memory/packages/memory/src/knowledge/{findingIdentity,lineage,comparability}.ts`.
+  - §C6.2/§C8.4, §C11, §C12, §C14 (VSIX + server half) — already archived an earlier DONE.md entry-10 (WS10/WS11/WS12); evidence `packages/run-delta/src/dynamic/*`, `packages/knowledge-graph-view/src/delta/*`, `packages/sarif`, `api/migrations/1344_run_deltas.sql`.
+  - §D0, §D1, §D2, §D6, §D9, §D13 — already archived an earlier DONE.md entry-10 (WS15/WS16/WS19/WS20); evidence `scripts/check-run-delta-layers.mjs`, `clients/vscode/src/runOutcomes/*`, `packages/prefetch/src/calibrate.ts:15`, `packages/run-delta/src/predict/{naturalness,scheduler}.ts`.
+  - §D10.1 — NEW, below: `packages/run-delta/src/predict/ranking.ts` (+ `ranking.test.ts`), consumed at `packages/knowledge-graph-view/src/delta/RunDeltaPanel.tsx:9,38` (4647b5365).
+  - §7 WS7 open item "change-set records use non-UUID ids and never sync" — NEW, below: fixed 6296e81de, 9a21c3cb0 (2026-11-16).
+
+### §D10 What to look at first — D10.1 Learning to rank findings
+
+**D10.1 Learning to rank findings.**
+- **Model:** pairwise logistic loss, `log(1 + e^{−(sᵢ − sⱼ)})`, over finding features.
+- **Features:** severity, rule precision posterior (D3), lineage, dimension, centrality,
+  entry-point reach and confidence.
+- **Labels:**
+  - Fix with agent or Accept risk: relevant;
+  - Mark as wrong: negative;
+  - Shown and ignored: weak negative, with **inverse propensity weighting** for position bias.
+- **Effect:** it changes **order only**. Ties break by `findingId`. Evaluated with NDCG@5.
+
+(As built: the ranking orders each dimension's findings in `RunDeltaPanel`; the inverse-propensity exploration over click data stays open with D10.2 in the consolidated PRD.)
+
+### §7 WS7 — change-set record ids
+
+~~change-set records use non-UUID ids and never sync~~ (fixed 2026-11-18 on main: change-set/lifecycle ids are `stableEntityId('changeset:<runId>:<repoKey>')` UUIDs, and the run-delta key derivations read `runId`/`repoKey` from the payload — `runDelta`, `runDeltaPredictions`, `changeSetSyncedIdentity` suites green).
+
+## ✅ RESOLVED 2026-11-17 — Design: local-first closure G03/G21/G23 — finished sections archived on consolidation
+- **Verified 2026-11-17:**
+  - §1 G03 — already archived an earlier DONE.md entry-08 ("a folder's knowledge lives in one SQLite file…"); evidence `packages/agent-tools/src/node-local-sqlite.ts`, `packages/agent-tools/src/node-knowledge-store.ts`, `builderforce-memory/packages/memory/src/knowledge/stores/rowDelta.ts`; `requireNodeSqlite` and `localRecordTransaction.ts` gone.
+  - §2 G21 + G23 — already archived an earlier DONE.md entry-08 ("a bound chat shows its tickets and runs offline…"); evidence `clients/vscode/src/chatRail/*`, `api/src/application/sync/importers/importSyncedChatTicketLink.ts`, `clients/vscode/package.json:103` (`builderforce.localWork`), `clients/vscode/src/sync/syncSummary.ts`.
+  - No new text to archive.
+
+## ✅ RESOLVED 2026-11-17 — Design: VSIX/Web/Rovr offline-first review — finished gaps archived on consolidation
+- **Verified 2026-11-17:** G01 — `frontend/src/components/PlatformPolicyBoot.tsx`, `clients/chrome/src/background/serviceWorker.ts`; G03/G26 — `clients/vscode/src/durableLocalFirstStore.ts`, `durableLocalFirstRecovery.ts`; G06 — `packages/local-first/src/localTools.ts` (`executeDomainTool`); G07/G08 — `clients/vscode/src/auditExecution.ts` → `startLocalAuditRun`; G09 — `configurePolicyGatesPersistence` in `clients/vscode/src/extension.ts`; G10–G18, G24, G25 — `api/src/presentation/routes/syncRoutes.ts` (mounted `api/src/index.ts:129`), `api/src/application/sync/importers/*`, `api/src/application/sync/syncEnvelope.ts` (`occurredAtError`), `clients/vscode/src/installSyncCoordinator.ts`; G19 — change sets wired (6296e81de); G21/G23 — closure §2; G22 — `clients/vscode/src/installRunRecovery.ts`.
+- The review's 2026-10-18 "Implementation status" section is a superseded baseline; the original document is retained in git history rather than copied here.
+
+## ✅ RESOLVED 2026-11-17 — PRD 38: finished sections archived on consolidation (The knowledge graph)
+- **Verified 2026-11-17:**
+  - "A knowledge review of the `agentic` workspace fails" › Do 1 — memory `^2026.10.82` in `clients/vscode/package.json:1335`, `packages/agent-tools/package.json:38`, `api/package.json:74`.
+  - Do 2 — `preloadExtracted` `packages/knowledge-client/src/client.ts:195`; bulk route `api/src/presentation/routes/projectKnowledgeRoutes.ts:261`. Client-side `batched` obsolete: linked writes go through the BFKP sync pack (`client.ts:18-20`); store `batched` in builderforce-memory `knowledge/stores/localSnapshotStore.ts:226`.
+  - Do 3 — `client.ts:59-110` (429, `Retry-After`, bounded); too-large skip builderforce-memory `knowledge/plan.ts:183`.
+  - Do 4 — builderforce-memory `knowledge/reviewAnalyse.ts:6-45`.
+  - Predicted measures › "What exists today" — `importance.ts`, `retrieval/`, `communities.ts`, `coChange.ts` (already summarized in an earlier DONE.md entry-10).
+  - P4 view surfaces (What changed partners, done-when partners, Hidden coupling overlay) — committed in `7674bbd64`: `packages/knowledge-graph-view/src/surface/{PartnerList,HiddenPartners}.tsx`, `coupling.ts`, `coChange.ts`.
+  - Everything else finished in PRD 38 is already in DONE.md ("PRD 38: everything finished, moved out of the spec", 2026-10-31, and 2026-11-10 "predicted measures P4 co-change and P7 transitions"); not duplicated.
+### A knowledge review of the `agentic` workspace fails — what was found and Do 1–4
+Source: `docs/specs/38-prd-knowledge-graph.md` lines 11–29 (the measure table, the two scale defects, and Do items 1–4).
+
+#### A knowledge review of the `agentic` workspace fails
+
+The exact exception has not been observed. The failure card and the BuilderForce output channel report it (since 2026.10.115). A headless run of the shared review over `c:\code\agentic` on 2026-10-31 found two scale defects, either of which can stop a review of a tree this size:
+
+| Measure | Value |
+|---|---|
+| Files planned | 16,722 (the walk stops at `MAX_LISTED_FILES`, 20,000) |
+| Estimated model calls | 17,949, against a budget of 200 |
+| Time to plan | 329 s on node fs; `vscode.workspace.fs` is expected to be slower |
+
+- **Unlinked folders: fixed in builderforce-memory 2026.10.36, not yet in a VSIX.** Each change used to rewrite the whole snapshot: 16.4 GB written over 2,340 files for a 5.8 MB snapshot. A review now writes a bounded number of times, and stores everything before it saves a manifest.
+- **Linked projects: open.** The knowledge client makes 3 requests per file on the tenant's plan-rpm bucket (300 to 3,000 a minute), about 50,000 for this tree. A 429 from any of them ends the review, and so does a 413 from a file over the 1 MB limit. The largest of the first 2,346 files was 170 KB, so the 413 has not been seen. The workspace holds no snapshot file, which fits this path.
+
+**Do:**
+
+1. Move Builderforce to builderforce-memory 2026.10.36 and package a VSIX.
+2. Implement `batched` and `preloadExtracted` in `packages/knowledge-client`, with bulk routes for extracted output in `projectKnowledgeRoutes.ts`. The routes must land on both doors, and stale marks already batch through `/knowledge/write`.
+3. Honour 429 and `Retry-After` in the client with bounded retries. A file too large to store is skipped and counted, and never ends the review.
+4. Check the analyzer step on a folder that is not a git repository. `pack.analyzers.analyse` runs uncaught in `reviewDirectory`, and the headless run did not reach it.
+
+### Predicted measures — What exists today
+Source: `docs/specs/38-prd-knowledge-graph.md` lines 61–64.
+
+**What exists today:**
+- PageRank sets node importance (`knowledge/importance.ts`).
+- Retrieval uses BM25, cosine over HNSW, MMR and time decay (`retrieval/`).
+- P1 communities, P4 co-change (`coChange`, `coChangeHidden`) and P7 station transitions are computed in builderforce-memory.
+
+
+## ✅ RESOLVED 2026-11-17 — PRD 40: finished sections archived on consolidation (Portable knowledge packs)
+- **Verified 2026-11-17:**
+  - Naming — `packages/agent-tools/src/knowledge/portablePack.ts:37` (`PortableKnowledgePack`).
+  - The seam — `packages/agent-tools/src/knowledge/index/packRetrieval.ts:44,49,69,124`.
+  - OD-2 — `packages/agent-tools/src/knowledge/rootId.ts:52,69`; an earlier DONE.md entry-06 PRD 40 entry.
+  - OD-1, OD-3 — `portablePack.ts:50,71`; `api/migrations/1294_knowledge_scope_provenance.sql`.
+  - The shipped format, VS Code commands, registry, Measure proof and pack store are already in DONE.md ("PRD 40 portable knowledge packs", 2026-11-06); not duplicated.
+### Naming (still binding)
+Source: `docs/specs/40-prd-knowledge-packs.md` lines 12–14.
+
+### Naming (still binding)
+
+The memory package's `KnowledgePack` type is the **plugin** contract: parsers, partitions, findings and judgement. The artifact is the **portable knowledge pack** (`PortableKnowledgePack`, "portable pack", `.bfpack` on disk). Code and docs never call the portable artifact `KnowledgePack` alone.
+
+### The seam (still binding)
+Source: `docs/specs/40-prd-knowledge-packs.md` lines 16–18.
+
+### The seam (still binding)
+
+There is exactly one seam between knowing which packs exist and retrieving from them: `PackRegistry` → `PackRetrievalPort`, plus `withPacks` and `mergeRecalls` in `packages/agent-tools/src/knowledge/index/packRetrieval.ts`. Every consumer goes through it: VS Code chat, the context pack and Synapse, web chat `knowledge.ask`, and the Canvas Evermind turn. A new consumer adds a registry implementation, never a second merge or retrieval path.
+
+### Decided (OD-1, OD-2, OD-3) and Open decisions (none)
+Source: `docs/specs/40-prd-knowledge-packs.md` lines 20–37.
+
+### Decided
+
+- **OD-2: the platform pack store.** Decided by the operator on 2026-11-06 and shipped.
+  - Uploading a pack turns it into a knowledge root of the project it was uploaded to. Its root id uses the `pack` host (`packRootIdFor` / `isPackRootId`).
+  - There is no new table. The pack is visible to the project's members.
+  - Every fact written to a pack root carries the root as its `source`. Removing a pack deletes only those facts, and only a developer or higher may remove one.
+  - Uploaded pack facts join the project's facts, so they seed that project's Evermind. The Evermind pack picker steers retrieval only.
+
+- **OD-1: no embeddings in the pack.** Decided by the operator on 2026-11-06. Packs stay model-agnostic: consumers re-embed from card text by hash, and no format version adds an embeddings section.
+- **OD-3: provenance.** Decided by the operator on 2026-11-06.
+  - A pack carries an optional `provenance: { reviewedBy?, judgeModel?, policy?, reviewedAt? }`, filled automatically on Create and Update.
+  - Uploading stores it on the pack's scope row, in the `knowledge_scopes.provenance` column (nullable jsonb).
+  - The Evermind pack picker and the VS Code pack lists show it as a "Reviewed by … with …" line.
+  - Packs without provenance stay valid, and their bytes are unchanged.
+
+### Open decisions
+
+None.
+
+
+## ✅ RESOLVED 2026-11-17 — PRD 43: finished sections archived on consolidation (One 3D stage for every knowledge camera)
+- **Verified 2026-11-17:**
+  - Why — context (perf table).
+  - Part A A1–A3 — `packages/knowledge-graph-view/src/compute/` (`workerHost.ts`, `client.ts`, `protocol.ts`, `useComputed.ts`).
+  - B1 — superseded by B1a (archived for its `LinkBatch`/`LabelRun`/`CameraRig` shapes, which B1a keeps).
+  - B1a rules 1–10, contract, worker tasks, done checks, interim fixes — `compute/tasks/{markSet,markPaint,stage,stageModel}.ts`, `compute/tasks/placement/`, `shapes.ts`, `fourPlusOne.ts`, `stage/drill/useSemanticZoom.ts` wired at `stage/overlay/useStageWiring.tsx:49,118`, `stage/overlay/StageCard.tsx:39`.
+  - P1a results — `shapes.distinct.test.ts`, `stage/marks/shader.ts`.
+  - B2 — `surface/cameras.tsx:31-42`.
+  - B3 (all but `compileAsync`, three.js prefetch, `labelPlacement` grid) — `stage/Stage.tsx`, `renderer.ts`, `marks/`, `links/`, `labels/LabelLayer.ts`, `captions/`, `anchor/useSlotAnchor.ts`, `contextLoss.ts:24`, `fonts.ts:17`.
+  - B4 — `compute/tasks/bundle.ts`, `stage/labels/lod.ts`.
+  - B5 — `stage/pick.ts`, `pickGrid.ts`, `StageProxies.tsx`, `useRoving.ts:12-21`.
+  - B7 — `compute/tasks/markPaint.ts`, `compute/lru.ts`.
+  - B8 done part — `GraphScene`, `Towers`, `shapeMeshes`, DOM System/Style/Heat/Features bodies deleted; no-WebGL → List `stage/host/StageHost.tsx:12`; 3D Suspense fallback rewired (`ViewSurface.tsx:29-30`).
+  - Done checks: draw calls, 0 meshes / ≤ 3 uploads — `stage/renderer.test.ts`; an earlier DONE.md entry-10.
+  - Phases P0, P0b, P0c, P1a, P1 (minus deletions), P1b, P2, P3 (minus deletions), P4, P5 — an earlier DONE.md entry-10 entries "one stage for the knowledge view" and "code links on real repos"; code committed `7674bbd64`.
+  - Status (2026-11-10) section — superseded by this verification.
+### Why
+Source: `docs/specs/43-prd-knowledge-3d-stage.md` lines 5–24.
+
+### Why
+
+On the `agentic` workspace (2000 of 3138 nodes drawn, 104,972 of 158,663 edges drawn, 20,738 findings, 389 stations), every graph camera blocks the screen for 1.5–4.5 s. The cameras are Graph, Map, Transit, Tower, 3D and Sequence, built on five rendering stacks:
+
+- SVG for Graph 2D, the mind map, the transit map, Tower (2.5D SVG) and Sequence;
+- R3F for the 3D scene.
+
+Only the 3D scene has depth. The operator wants every one of these cameras fast and able to show depth. Future work will edit code from the visualizer, so the renderer must take slot patches rather than rebuilding everything.
+
+The `src/perf` harness (run with `KG_PERF=1`) measured these steps on a synthetic graph with the same statistics:
+
+| Step | Median ms | Note |
+|---|---|---|
+| `insightsOf` | 1477 | runs for every camera |
+| `rankTask` | 1460 | one idle step is a 1069 ms sort |
+| `pathOfStations` | 1272 | scans 150k edges per hop |
+| `layout2dTask` / `layoutTask` | 1122 / 1083 | longest single step 730 / 394 |
+| `canonicalEdges` | ≈455 | computed 3× |
+| `buildLines` + `buildStations` + outline decode | ≈1370 | synchronous in `useSurface`, so every camera pays it |
+| Rendered, longest stall | 4415 / 1686 / 1599 / 266 | Graph 2D / Transit / Tower / Map |
+
+### Part A — computation off the main thread (A1–A3)
+Source: lines 26–35.
+
+### Part A — computation off the main thread (in flight; prerequisite)
+
+- **A1.** Fix the pure algorithms with outputs unchanged.
+- **A2.** Build ONE graph compute worker (`src/compute/`):
+  - the graph is loaded once and stays resident in the worker;
+  - typed tasks run there, and results come back as **indices**, so object identity holds;
+  - when no worker is available, the same tasks run in-process.
+- **A3.** Coalesce wheel zoom so it causes no React commit per tick.
+
+Done when no main-thread task in the harness exceeds 50 ms. Part B adds its tasks to this worker; it never adds a second one. The one exception is troika's own SDF worker, which is internal to the text library.
+
+### B1. The contract (superseded by B1a)
+Source: lines 41–122.
+
+#### B1. The contract
+
+A graph camera stops rendering its own scene. It supplies:
+
+1. **A spec builder.** A pure function `(graph, SpecInput) → SceneSpec` that runs in the compute worker.
+2. **A `CameraRig`.**
+3. **Optionally, a DOM overlay** of cards and panels, plus captions in the UI font (see B3, Labels).
+
+**Rule: no host-supplied functions cross into a spec builder.** `SpecInput` is serializable. Today's closures move into pure registries that the worker imports:
+
+- `SurfaceModel.overlay.style()` / `lineWidth()`, which become overlay bindings as data;
+- `LensDef.nodeStyle`, which becomes the lens registry looked up by lens id;
+- the transit `noteOf`, which becomes the question registry looked up by question id.
+
+```ts
+interface SpecInput {
+    camera: ViewMode; lensId: string; questionId: string | null; family: string | null;
+    overlay: OverlayBindings;            // data, not functions
+    lit: string[] | null; pins: Pin[]; selected: string | null; lineId: string | null;
+    drill: DrillLevel | null; unfolded: string | null; roles: [ref: string, role: TowerRole][] | null;
+    viewport: { width: number; height: number; dpr: number };
+    lod: number;                          // the current level-of-detail band, set when zoom settles
+    strings: Record<string, string>;      // the catalog strings the spec embeds (already localized)
+}
+
+interface SceneSpec {
+    generation: number;
+    keys: string[];                       // stable key per slot (node ref, station id, line id, pin id)
+    marks: MarkBatch[];                   // ONE batch per shape
+    links: LinkBatch[];                   // ONE batch per style family (all per-segment attributes)
+    planes: PlaneSpec[];                  // bands, partition planes, lifeline planes (alternating tone per plane)
+    labels: LabelRun[];                   // SDF (mono names); UI captions go to `captions`
+    captions: Caption[];                  // localized UI-font text drawn in the DOM caption layer
+    a11y: A11yItem[];                     // Tab stops, label, pressed/current state, the view description
+    pick: PickGrid;                       // typed-array spatial grid over projected boxes (see B5)
+    caption: { shown: number; total: number; capped: boolean };  // "Showing N of M", as EdgesCapped does today
+    bounds: { min: Vec3; max: Vec3 };
+}
+
+interface MarkBatch {
+    shape: 'disc' | 'square' | 'towerSprite' | 'tower' | 'sphere' | 'pin' | 'satellite'
+         | 'terminusTank' | 'terminusGlobe' | 'terminusCross' | 'terminusBox' | 'cycle'
+         | 'lifelineHead' | 'arrowhead';
+    slots: Uint32Array; position: Float32Array; scale: Float32Array;
+    tone: Uint8Array;                     // body tone (theme tone table index)
+    tone2: Uint8Array;                    // ring / fill / coverage tone
+    fill: Float32Array;                   // 0..1: the coverage arc for a disc, the fill band for a tower
+    flags: Uint8Array;                    // bits: DIM, SHELL, DOC, INTERCHANGE, OUTLINE, PULSE, SELECTABLE
+    number?: Uint16Array;                 // a pin's count (drawn in the shader)
+    tooltip?: string[];                   // per slot; the hover tooltip replaces SVG <title>
+}
+
+interface LinkBatch {
+    family: 'route' | 'edge' | 'describes' | 'wall' | 'arrow';
+    points: Float32Array;                 // polylines with breaks; corners pre-rounded by the worker
+    runLength: Float32Array;              // running length along the polyline (continuous dashes)
+    tone: Uint8Array; width: Float32Array; dash: Uint8Array;   // per segment; dash = pattern id (9/7, 3/5, 2/5, 5/4, 2.5 wall)
+    casing?: { tone: number; extra: number };                  // the background underlay under every hop
+    widthUnit: 'world' | 'px';            // Transit/Tower scale with zoom (world); graph edges are px
+    flags: Uint8Array;                    // per segment: DIM (blend toward the background colour, never alpha), FLOW, PICKABLE
+    slot?: Uint32Array;                   // per segment: the line key, so a line can be selected
+    aggregate?: Uint32Array;              // a bundle's edge count
+}
+
+interface LabelRun {
+    slot: number; text: string; position: Vec3; offsetPx: [number, number];
+    font: 'mono'; size: number; weight: 400 | 500 | 700; anchor: 'start' | 'middle' | 'end';
+    tone: number; halo: { tone: number; px: number };
+    note?: { text: string; tone: number };   // the accent second line
+    priority: number;
+    scale: 'world' | 'screen';            // world = placed once (Transit, Tower); screen = placement redone when zoom settles
+}
+
+interface CameraRig {
+    projection: 'orthographic' | 'perspective';
+    frame: 'fill' | 'document';           // document = sized to content; the page scrolls; no wheel capture
+    home: { position: Vec3; target: Vec3; up: Vec3 };
+    depth: { tilt: [min: number, max: number]; orbit: boolean };
+}
+```
+
+A camera's `CameraDef` (`surface/cameras.tsx`) gains `spec` and `rig`. A new camera is registry data, never a branch inside the stage.
+
+### B1a. Amendment 2026-11-10 — rules 1–10, contract, done checks, interim fixes
+Source: lines 124–174.
+
+#### B1a. Amendment 2026-11-10 (operator): render the data ONCE, a camera is only a layout
+
+Operator: "you're rendering the same data using different surfaces — render the data 1 time with the shapes on 1 surface, then lay out the shapes based upon the selection (Map/Tower/3D, etc.)". Opus design review 2026-11-10: approved with changes (folded in below). **B1a supersedes B1's `SpecInput`/`SceneSpec`/`MarkBatch`, B2's Tower bullet, B3's `disc` and capacity rules, B5's worker pick grid, and the deferral of camera-switch tweens.**
+
+1. **`MarkSet` — built once per GRAPH, never per camera, drill or lens.** A drill APPENDS symbol slots (ranged upload into preallocated headroom); a lens, question or overlay change is a `MarkPaint` patch (tone/flags only). Switching camera never rebuilds it, re-uploads it, or creates a mesh.
+2. **Shape = node type, the same in every camera.** `markTypeOf(node)` in `src/shapes.ts` over (`kind` ∈ memory `NODE_KINDS` = file/section/symbol/area/entity/claim/fact, plus `missing`; `fileCategory`; `symbolSort`), computed in the worker once per resident graph as `type: Uint8Array`, with a fallback type. Vocabulary: class/type → square, function/method → circle, file(source) → rounded square, test → diamond, doc → tile, config → triangle, style → rounded triangle, data (`fileCategory` gains `.sql`/`.prisma`/migrations → `data`) → drum, section → bookmark, entity → pentagon, claim/fact → small star, missing/external → dashed octagon, aggregates: system/package (aggregate-only, never a node) → hexagon, area/folder → its members' dominant type. **Every 3D shape is its 2D silhouette extruded; flat = extrude 0**, so a node reads the same from above and in depth. The three existing tables (`lenses.ts` `KIND_SHAPE`, mind-map `MapBranch.shape`, `scene/shapeMeshes.tsx`) fold into this one. One legend for every camera. Below ~10 px tone stays the primary cue.
+3. **Slot universe and parents.** One slot table per graph: `node:<ref>` for every node of the whole graph (not the 2,000-node focus cap), `st:<id>` per station aggregate, `dir:<path>` per mind-map folder; forest arrays `parentStation: Int32Array` and `parentFolder: Int32Array`. Satellites and drilled symbols are member slots; Sequence lifelines reuse `st:` slots. Decorations (pins, termini, cycle, satellites' badges, arrowheads) are ONE SDF `glyph` batch with a glyph-id attribute.
+4. **`Placement` — all a camera supplies.** A pure worker task writes position, scale and extrude for EVERY slot, plus the camera's links, planes, captions, slot-relative labels, a11y order, caption counts, bounds and rig. A hidden slot is anchored at its nearest visible ancestor (scheme `station` | `folder`, named by the placement) at scale 0; a hidden aggregate sits at its members' centroid at scale 0 — visibility is scale. The vertex shader culls scale 0.
+5. **Tween.** Two attribute pairs `(posA, scaleA, extrudeA) → (posB, scaleB, extrudeB)` mixed by a uniform `t` over ≤ 400 ms; reduced motion jumps. Map → Graph: members grow out of their station while it shrinks into the centroid; the reverse collapses them. LOD band changes, unfold and drill use the same mechanism. Labels fade during a tween and are placed after; picking is off during a tween.
+6. **Cache.** Placements are an LRU keyed by graph digest + camera + drill + unfolded + pathId + viewport band + lod band — never selection. Returning to a camera is a buffer swap with no worker trip. Layout never re-runs on a re-render or a scrollbar wobble; the rig re-fits, re-placement happens only when the width crosses a band.
+7. **Map = Transit + Tower, ONE camera (operator: "Combine the Tower / Map — they are the same thing").** Flat home view; the depth control tilts it and extrudes each station into its tower (height = size channel). A tower is the station's silhouette extruded; the coverage ring follows the outline (operator supersedes the mockup's disc). Graph, Mind map, 3D and Sequence are other placements of the SAME marks.
+8. **Every representation is a 3D modelling surface (operator, 2026-11-10: "Even use the 3D graph visuals for sequencing diagrams; every representation is a 3D modeling surface; the sequencing diagram should be composed of the same artifacts that were drawn on the surface").** Sequence is a placement, not a diagram type: its participants ARE the type-shaped marks already on the stage (the stations/nodes on the path), which tween from where they stood into a row; each lifeline is a decoration hanging from that mark; each message is a link between those same slots, ordered along the time axis, with layer climb as depth. Selecting a participant selects the same slot in every camera. The path strip ("where does it go") shows the same marks. System, Heat, Style and Features are placements of the same marks too (System = systems as hexagon aggregates on planes; Heat = the marks on a grid, height/tone = heat; Style/Features = the marks grouped into their view's planes). **There is no 4+1 camera** (operator, 2026-11-10). 4+1 is a checklist, not a view: every aspect is covered by an existing camera, as recorded in `src/fourPlusOne.ts` and checked by its test.
+- Logical → Graph and the class band.
+- Development → Map and System.
+- Process → Sequence.
+- Scenarios → Sequence from entry points, and Features.
+- Physical → whatever that coverage map proves, or a gap.
+
+The old 4+1 view retires at make-default. **Only List stays DOM** — the accessible list and the no-WebGL fallback.
+
+9. **Semantic zoom is the navigation (operator, 2026-11-10: "at a macro level you see a system (logical grouping — a directory, or DDD/layer associations); then the user zooms in like on a map: the detail reveals composition and associations with Classes; zoom further: Methods; zoom in to reveal the Code").** One continuous zoom on one surface replaces "Go inside" as the primary way down (the card's Go inside becomes a shortcut that animates the same zoom). Four abstraction bands, each a level of the SAME slot forest, entered by screen size of the parent mark, not by a click:
+   - **System** — systems/apps (hexagon aggregates) grouped by directory or by DDD context / layer (the grouping scheme is a choice; layers are the planes). Links = system-to-system dependencies, bundled.
+   - **Module / class** — as a system's mark grows past the threshold, its members fade in around it (the parent tweens into a translucent hull): files/modules and the classes/types they declare, with **composition and association links** between classes (owns/contains, extends/implements, uses/calls, imports) — distinct link families with their own dash/tone.
+   - **Method** — as a class grows, its methods/functions appear as circle members inside it; call links between methods; the class's fields/data as drum members.
+   - **Code** — as a method grows past the last threshold, its source is revealed in place: a DOM code layer (syntax-highlighted, read-only in this PRD, editable in the editing PRD) anchored to the method's slot with `useSlotAnchor`, scaling with the zoom until it hands off to the editor (VS Code: "open at line" reveals the real editor; web: the code drawer).
+   Rules: every band is ONE placement family (members placed relative to their parent so a zoom is a continuous tween, not a camera switch); the band thresholds live in `lod.ts` as data; zoom out collapses members back into the parent; labels at each band are the band's names (system names, class names, method signatures). **Data:** classes/methods come from symbol records (`withSymbolRecords`, the drill's `symbols` op) — loaded lazily for the systems/classes entering the viewport at the module band, prefetched one band ahead, appended as slots (rule 1); class↔class composition/association edges and method↔method call edges must be carried by the knowledge graph's symbol extraction — the memory package does NOT emit them today (checked 2026-11-10: `EDGE_KINDS` = references, links, contains, mentions, duplicate, near-duplicate, contradicts, agrees, supersedes, about, co-changed — no extends/implements/composes/uses/calls), so phase **P0b** adds them in builderforce-memory's code extractor (`extends`, `implements`, `composes` (field of a class type), `uses` (type reference), `calls` (method → method, resolved within the root, unresolved calls to externals as terminus edges)), with the pack format change, contract snapshot and one regression test per kind, published before the module band ships. They are never invented in the view. Code text comes from the host (`readSource(rootId, path, range)`, local file in the editor, server copy on the web), never shipped in the graph.
+10. **Sequence follows the same zoom (operator, 2026-11-10: "the sequence diagrams need this association too").** A sequence is drawn at the band the user is zoomed to, from the same slots and the same symbol-level edges:
+   - **System band** — participants are systems; messages are the bundled system→system dependencies along the path.
+   - **Class band** — participants are the classes on the path; messages are the `calls` between their methods (labelled with the method), with `extends`/`implements`/`composes` shown as the participant's association stubs so the reader sees why one class can reach another.
+   - **Method band** — participants are the methods; each message is one call, ordered by **call-site order** (the order the calls appear in the caller's body), with activation bars for nested calls and a return marker; an unresolved/external call ends at an external terminus.
+   - **Code band** — selecting a message reveals the call-site line in the code layer.
+   Zooming the sequence moves between bands exactly like the map: a system participant splits into its classes, a class into its methods (member tweens, rule 5). The path strip follows the same band. **Data:** `calls` edges carry the call site (`path`, `line`, `column`) and an `order` index within the caller so a sequence is the real call order, not an inference from file hops (P0b).
+
+**Contract (replaces B1's types):**
+
+```ts
+interface MarkSet { generation: number; digest: string; keys: string[]; slotKind: Uint8Array; type: Uint8Array;
+  parentStation: Int32Array; parentFolder: Int32Array; label: string[]; tooltip: string[];
+  batches: { type: number; slots: Uint32Array }[]; capacity: number }
+interface MarkPaint { generation: number; tone: Uint8Array; tone2: Uint8Array; fill: Float32Array; flags: Uint8Array }
+interface Placement { generation: number; cacheKey: string; anchor: 'station' | 'folder';
+  position: Float32Array /*3N*/; scale: Float32Array; extrude: Float32Array;
+  links: LinkBatch[]; planes: PlaneSpec[]; labels: LabelRun[] /*slot-relative*/; captions: Caption[];
+  a11y: A11yItem[]; caption: { shown: number; total: number; capped: boolean }; bounds: { min: Vec3; max: Vec3 }; rig: CameraRig }
+```
+
+Worker tasks in `protocol.ts` `TaskTable`: `markSet {graph, changed, strings}`, `markPaint {graph, generation, lensId, questionId, overlay, lit, roles, family}` (ranged), `placement {graph, generation, camera, drill, unfolded, pins, pathId, viewportBand, lod}`. Selection stays out of all three. Typed arrays go through `transfer.ts`. `LinkBatch`, `PlaneSpec`, `LabelRun`, `Caption`, `A11yItem`, `CameraRig` keep B1's shapes.
+
+**Done checks added:** a camera switch creates 0 `InstancedMesh` and makes ≤ 3 attribute uploads per batch (renderer spy; capacity overflow is the only rebuild path); a node keeps its type shape and colour in every camera (test over the harness graph); draw calls ≤ ~9 type batches + 1 glyph + 1 plane + ~4 link families + 1 text + ~3 overlay.
+
+**Interim fixes (2026-11-10)** — Map flicker, Tower tab folded into Map, Graph2D layout, per-renderer type shapes, the Go-inside crash, the error boundary — keep the current cameras usable until their placements land; the renderers they touch retire per B8, and the `shapes.ts` registry becomes rule 2's single source.
+
+### P1a results (2026-11-10)
+Source: lines 176–214.
+
+##### P1a results (2026-11-10)
+
+**What was built** (P1's foundation, behind the `kg.stage = spike` opt-in — `localStorage` in the VS Code webview, `?kgStage=spike` or `localStorage` on the web; `ViewSurface` mounts `stage/spike/StageSpike.tsx` in place of Transit/Graph only then):
+- worker tasks `markSet`, `markPaint`, `placement` in `TaskTable` (`compute/tasks/stage.ts`; builders `markSet.ts`, `markPaint.ts`, `stageModel.ts`, `placement/{map,graph,anchor,links,request,index}.ts`). `markSet` types every slot with `markTypeOf`; `placement/map.ts` reads `layoutTransit` and `placement/graph.ts` reads `layout2d` unchanged; `anchor.ts` implements rule 4 (hidden aggregate at its visible members' centroid, hidden node at its nearest placed ancestor, scale 0).
+- `src/stage/`: `types.ts` (the contract), `tones.ts`, `slots.ts`, `stats.ts`, `tween.ts`, `marks/{geometry,shader,MarkLayer}.ts` (one `InstancedMesh` per type batch, walls of `shapeGeometry`'s extrusion + one SDF cap quad, A/B sets mixed by `uT`), `links/{shader,LinkLayer}.ts` (the one instanced-quad line shader), `renderer.ts` (`StageRenderer` port: WebGL + no-op), `Stage.tsx` (one `<Canvas frameloop="demand">`), `pick.ts`, `StageProxies.tsx`.
+
+**How it was measured.** A scratch page bundled with esbuild from the package sources, run in headless Chromium 145 (playwright-core) on the **real GPU** — `ANGLE (AMD Radeon(TM) Graphics (0x1681) Direct3D11)`, an integrated GPU — at 1280×800, DPR 1. Frame time = `stage.tick` + `renderer.render` + a 1-px `readPixels` (forces the GPU to finish, so it is CPU + GPU time per frame and pessimistic). Uploads and mesh creations are the stage's own counters (`stats.ts`; every upload goes through `uploadRange`), cross-checked in the unit test by the attributes' `version`. Six alternating Map↔Graph switches per graph, 400 ms tween. The "10k" graph is `buildPerfGraph({ scale: 3.19 })` (9,979 nodes, 505,596 edges, 11,243 slots) with Graph at lod 1 (every node shown, all 11k slots move); its scaled-up outline collapses to 2 stations, so its Map side is small — the switch still moves every slot. Artifacts (PNGs, `results.json`) are in the session scratchpad, `p1a/gpu/`.
+
+| | harness (3,138 nodes, 3,975 slots, Graph shows 2,000) | 10k (9,979 nodes, 11,243 slots, Graph shows 9,979) |
+|---|---|---|
+| Tween frame p50 / p95 / max | 9.2 / 13.7 / 26.4 ms (an earlier run: 5.0 / 6.7) | 18.4 / 22.0 / 25.1 ms; rAF interval p95 33 ms |
+| `setPlacement` (main thread, the swap itself) | 0.1–0.4 ms | 0.4 ms |
+| InstancedMesh created per switch | **0** (6 of 6 switches) | **0** |
+| Attribute uploads per mark batch per switch | **2** (`place` of the stale set + `extrudeAB`) | **2** |
+| Bytes uploaded per switch | 93 KB → Graph; 144 KB → Map (+ 3 link uploads, 72 hops) | 264 KB either way |
+| Draw calls | 2 type batches + 1 route family | same |
+| First frame incl. shader compile | 253 ms | 303 ms |
+| Worker side (once, cached) | stage model 1.23 s (`buildStations` + `buildLines` dominate), paint 30 ms, Map 22 ms, Graph 463 ms | 1.93 s, 68 ms, 11 ms, 5.7 s |
+
+**Shapes at 6 / 8 / 12 px** (13 types, one row per size and DPR; metric = XOR / union of the thresholded silhouettes, < 0.10 counted indistinguishable):
+
+| | DPR 1 | DPR 2 |
+|---|---|---|
+| 6 px | source/data, function/source, function/data | class/source, style/config |
+| 8 px | source/data, function/system, class/data, function/source | class/source, class/data |
+| 12 px | class/source, style/config | class/source, source/data, class/data, style/config, function/system |
+
+(12 px at DPR 1 and 6 px at DPR 2 rasterise to the same device pixels and measured identical — a sanity check of the metric.) Every other pair is distinct at every size. The near-misses are always the same few silhouette pairs, not AA failure: square vs rounded square (corner radius 0.35 of 0.9), triangle vs rounded triangle, circle vs hexagon, drum vs rounded square.
+
+**Line shader vs today's SVG** (harness Map, 72 hops, the same colours; SVG = `HopPath`'s casing + core paths rasterised by the browser): mean absolute difference over inked pixels **6.1 / 255 at DPR 1, 3.5 at DPR 2**; pixels differing by > 32: 6.0 % / 3.8 %. The diff image shows only AA fringes on curves and dash phase on dashed hops (the SVG measures dash length on the true quadratic, the shader on the 6-step sampled corner). Casing, round joins, and later-hop-over-earlier-hop paint order match. **Stations** (36 marks, SDF cap vs `StationMark`'s `ShapePath` + back disc): 22.9 / 255 at DPR 1, 13.2 at DPR 2 — all of it a 1-px ring at the outline: the SVG strokes 2 px of background centred on the outline (insetting the fill 1 px) and backs it with a circle, the cap follows the outline (operator rule 7).
+
+**Found during the spike (fixed):** twelve separate per-instance attributes (`posA`, `scaleA`, … `flags`) plus `InstancedMesh`'s `instanceMatrix` exceed D3D11 ANGLE's 16-attribute limit and **do not link** ("Too many attributes"). The attributes are packed: `placeA`/`placeB` (xyz + scale), `extrudeAB`, `paint` (tone, tone2, fill, flags) — 4 slots + instanceMatrix. Line quads also need `DoubleSide` (their winding depends on segment direction).
+
+**Not measured:** SwiftShader / software GL (the real GPU was available); real browsers' compositor timing (headless); a discrete GPU; text (troika is not in P1a).
+
+**Verdict: PASS, with three B1a revisions.**
+1. **Rule 5 / Contract:** the per-slot A/B pairs are *packed* attributes — `placeA`/`placeB` = (x, y, z, scale), `extrudeAB`, and one `paint` vec4 — and a switch is **2** uploads per batch (done check stays ≤ 3). Name them so in P1.
+2. **Rule 2 vocabulary:** square/rounded square, triangle/rounded triangle and circle/hexagon cannot be told apart at ≤ 12 px. Before P1 ships the legend, change the rounded variants' silhouettes so they differ at 8 px (e.g. `source` = rounded square with radius ≥ 0.6 or a 4:3 rectangle; `style` = triangle pointing down; `system` hexagon with a flat top and ≥ 1.2 radius), and re-run this metric as a unit test over the registry (`shapes.test.ts`, XOR/union ≥ 0.10 at 8 px DPR 1). Below 8 px tone stays the primary cue, as rule 2 says.
+3. **B3 Marks budget:** with every one of 10k marks visible the tween runs 18–22 ms on an integrated GPU (the cap's polygon SDF loop is per fragment). P1 keeps the Graph overview at its 2,000-node LOD cap (hidden slots are culled in the vertex shader for free) and P3's LOD/bundling decides what more is shown; if a camera must show > ~5k marks at once, bake each shape's SDF into a small texture atlas instead of the per-fragment polygon loop.
+
+### B2. The six cameras
+Source: lines 216–235.
+
+#### B2. The six cameras
+
+| Camera | Home view | Depth axis | Frame |
+|---|---|---|---|
+| Map (Transit + Tower) | the mockup's flat map (bands, routed lines, stations); tilted = towers | layer tier; tilt extrudes stations (height = size channel) | document |
+| Graph | partitions as bands, nodes by importance (looks like today's 2D) | partition, so the bands become stacked planes | fill |
+| Mind map | radial folder tree | folder depth, so the tree becomes a cone | fill |
+| 3D | today's scene | free orbit | fill |
+| Sequence | the path's own marks in a row (tweened from the previous camera), lifelines hanging from them, messages as links top to bottom | each stop's layer, so a hop that skips or climbs a layer moves in depth | document |
+| System · Heat · Style · Features (no 4+1 camera: see rule 8) | the same marks placed on that view's planes / grid (B1a rule 8) | plane stack; Heat: height = heat | fill |
+
+- **Every mark is unlit, in flat token colours.** The 3D camera's lit spheres are the only exception.
+- **Tower.** SUPERSEDED by B1a rule 7 (a tower is the station's silhouette extruded). Historical note: the mockup's tower is not a projection of anything: top ellipse 0.44, shadow 0.42, a 6 px right side face in `towerSide`, a brightened top, and an unforeshortened map plane. So the home view draws each tower as an **unlit, screen-facing SDF quad (`towerSprite`)** that reproduces `TowerMark`'s 2D drawing exactly: body, side face, top, shadow, coverage tint, the 2 px fill line, and the dashed shell. When the user tilts into depth, `towerSprite` swaps to the real-geometry `tower` (the 3D camera's cylinders), with height = size channel and the fill band from `fill`/`tone2`.
+- **Camera switch.** Superseded by B1a rule 3: the same marks tween to the new placement (≤ 400 ms), or jump when reduced motion is on.
+- **Only List stays DOM** (B1a rule 8). List is also the no-WebGL fallback (B7).
+- **Gestures:**
+  - On `fill` frames, wheel zooms.
+  - On `document` frames, wheel scrolls the page (as today) and zoom uses the overlay's +/− and Fit buttons. Tilt comes only from the depth control.
+  - On touch, one finger pans or scrolls, a pinch zooms, and tilt uses the depth control only, never a two-finger gesture, so tilt never collides with pinch or page scroll.
+  - The stage registers through the existing `usePanZoomRegistration` (`surface/zoom.tsx`), so +, −, Fit and `ScaleLine` keep working.
+
+### B3. The renderer (finished bullets)
+Source: lines 237–240, 243–266, 268–273 (line 241 three.js prefetch, 242 `compileAsync` and 267 `labelPlacement` grid stay open in the domain file).
+
+#### B3. The renderer (`src/stage/`)
+
+- **The canvas:**
+  - One persistent R3F `<Canvas frameloop="demand">` per `KnowledgeGraphView`, mounted under the graph cameras.
+
+
+  - drei is kept out of the stage: `OrbitControls` comes from `three/addons`, and troika is imported directly.
+- **`StageRenderer` port.** The WebGL implementation, plus a no-op implementation for jsdom. With the no-op, the a11y list, the DOM overlays, the cards and picking still mount and work.
+- **Marks:**
+  - Each batch is ONE `InstancedMesh`.
+  - One silhouette SDF cap shader with a shape-id attribute draws every type mark's top face (anti-aliased outline, no MSAA): backing, interchange backing, the coverage arc following the outline from `fill`/`tone2`, the dashed outline, the pulse (a time uniform) and selection; extrusion adds the side walls.
+  - Capacity is sized at MarkSet build plus drill headroom; a rebuild happens only on overflow.
+  - Removed slots become zero-scale holes, compacted only on a full rebuild, so key → slot stays stable.
+  - Uploads are ranged (`addUpdateRange`).
+- **Links: one instanced-quad line shader of our own (about 150 lines), the same shader for every family.** It does:
+  - colour, width and dash per segment;
+  - running-length dashes along a polyline;
+  - round joins and caps with no overlap blending;
+  - the casing in the same pass;
+  - anti-aliasing via `fwidth` without MSAA, so 1.5 px describes links stay crisp at DPR 1;
+  - world or pixel width.
+
+  The worker samples `roundedPath`'s corners (radius 14) into the polyline.
+- **Labels:**
+  - JetBrains Mono names use troika `BatchedText`: one draw call, the halo through `outlineWidth`/`outlineColor`.
+  - `troika-three-text` becomes a declared peer.
+  - The fallback-font CDN download is disabled.
+  - Font URLs come from the host through a port, from the hosts' `@fontsource` files; check that troika reads woff2, or ship woff/ttf.
+  - **UI-font captions are positioned DOM text** in a caption layer that moves with one CSS transform on pan or zoom: band titles, wall label, describes label, terminus names, plane captions (at most about 60). That gives exact Inter rendering, i18n glyph fallback and accessibility.
+  - The cycle mark and the terminus glyphs are mark shapes, not text.
+
+
+- **Overlay.** Selection ring, hover and path highlight. Pins are a `MarkBatch` (they are per-station data and clickable), not overlay.
+- **Cards.** A card is anchored with `useSlotAnchor(key)`, which writes the card's transform from the frame loop with no React commit. This replaces `useCardAnchor`.
+- **Theme.** A theme flip rewrites only the tone colour attributes. Dimming blends toward the background colour.
+- **Decorative motion** (the flow on the selected line, pulse) runs continuous frames only while visible, is capped at 30 fps, and is off when reduced motion is on.
+- **Context loss.** Restore from the last spec. Browsers cap WebGL contexts and VS Code runs many webviews.
+
+
+### B4. Detail by zoom
+Source: lines 274–279.
+
+#### B4. Detail by zoom
+
+- **Bundles.** Bundles are made only between the aggregate marks visible at the current LOD band, keeping the top K by count. The rest are counted in `caption`.
+- **Detail.** Individual edges are drawn for the selection (complete) and inside the viewport above the band threshold.
+- **Aggregate marks.** Folders aggregate below a screen-size threshold. Communities (builderforce-memory `communities.ts`, owned by another session) replace folders once that work is published.
+- **Thresholds.** Marks, labels and links each have their own threshold.
+
+### B5. Picking and accessibility
+Source: lines 281–290.
+
+#### B5. Picking and accessibility
+
+- **Picking is a main-thread pass over the slots' world positions**, re-projected into a screen grid when the camera settles (≈0.3 ms at 10k slots; a worker-built grid would go stale on tilt and orbit), covering the extruded body, line segments, glyphs and lifelines. Off during a tween. Select and hover never wait behind a worker task. Proxies are rebuilt on settle for visible on-screen slots only (≤ ~200), with roving focus.
+- **The exact phase** is today's `hitTest.nearestHit`: nearest centre in screen pixels, ties broken by importance then id, a 40 px target.
+- **The ranked incident index** is sent once as typed arrays, so select slices incident edges on the main thread.
+- **Accessibility uses positioned proxies, not an off-screen list.** Transparent focusable buttons sit over the projected Tab-stop marks, repositioned when the camera settles, so magnifiers and touch screen readers find them by position.
+  - Each proxy carries `aria-label`, `aria-pressed` and `aria-current="step"`, and the view description, from `spec.a11y`.
+  - Focusing an off-screen slot pans the camera to it.
+  - `useRoving` widens from SVG to `Element`.
+  - Focus return after a card closes (`focusStation`) and Map's Escape/Backspace "Out" target the proxies.
+
+### B7. Update rules
+Source: lines 296–310.
+
+#### B7. Update rules
+
+| Change | Work |
+|---|---|
+| Selection | overlay + incident slice (main thread); card anchor |
+| Question / lens / lit set | flags only (DIM, lit) |
+| Overlay binding | tone, tone2, fill and width attributes only |
+| Tower roles / Show in Tower | flags + tone only |
+| Path strip highlight | link flags only |
+| Camera switch | cached placement swap + tween (worker only on a cache miss) |
+| Unfold | placement patch (satellites are member slots) + re-placed labels |
+| Drill enter / exit | symbol slots appended (ranged) + a new placement, tweened |
+| Zoom settles in a new LOD band | a spec refinement (worker) → slot patch |
+| Resize | rig + label pass for `screen` labels |
+| Theme | tone colours |
+
+### Status (2026-11-10) and Phases
+Source: lines 369–386.
+
+### Status (2026-11-10, paused by the operator)
+
+- **Committed:** P0b, P0c, P1a, the P1 stage behind `kg.stage=spike`, the P2–P5 placements, 4+1 Physical (deploy units on the System camera) and the `fourPlusOne.ts` coverage map.
+- **Uncommitted, tests red, in the working tree:** P3 Graph parity (built, its own tests pass); make-default/B8 (GraphScene, Towers, shapeMeshes, the 4+1 views and the DOM System/Style bodies deleted; flag removal, `cameras.tsx`, Graph2D/MindMap/transit SVG/panzoom deletion and test migration left); P1b (`useSemanticZoom`, `CodeLayer`, `zoomBand` written but not wired into `useStageWiring`/`StageCard`).
+- **Open outside this package:** the `extractorKey` wiring (memory 2026.10.72) and `EXTRACTOR_VERSION` 7 (uncommitted in builderforce-memory; it ships in the next memory version after 2026.10.80).
+- The full list lives in ROADMAP.md under this PRD.
+
+### Phases (each one ships)
+
+- **P0:** Part A (in flight).
+- **P0b:** builderforce-memory: symbol-level edge kinds (`extends`, `implements`, `composes`, `uses`, `calls`) in the code extractor + pack format + contract snapshot + regression tests; publish; bump memory in every consumer lockfile. Prerequisite for the module and method bands (B1a rule 9).
+- **P1a:** spike on the harness graph and a 10k synthetic graph, one canvas: a `markSet` with real types and two placements built from the existing `transitLayout` and `layout2d` outputs; extruded shapes with the SDF cap; the tween. Measured: tween frame time, bytes uploaded per switch, zero mesh creations, shapes distinguishable at 6/8/12 px at DPR 1 and 2, the line shader and stations diffed against the SVG. If it fails, B1a is revised before P1.
+- **P1:** the `markTypeOf` registry and the three tasks (`markSet`, `markPaint`, `placement`); slots with A/B attributes; the stage core, `StageRenderer` port, picking, proxies, card anchoring, captions and labels; the **Map (Transit + Tower)** placement (flat home view, tilt = extrude) and a minimal **Graph** placement so the switch check is real — behind a flag, then the default. Delete the SVG transit and tower marks.
+- **P1b:** **semantic zoom** (B1a rule 9): system → module/class → method bands as continuous member tweens, lazy symbol slots, the code layer anchored to the method slot, host `readSource`; Go inside becomes the zoom shortcut.
+- **P2:** **Mind map** and **Sequence** placements. Update the design-match memory.
+- **P3:** **Graph** to full parity, with bundling, LOD and the `labelPlacement` grid. Delete `Graph2D` and `MindMap`.
+- **P4:** the **3D** camera port. Delete `GraphScene` and `Towers`.
+- **P5:** **System, Heat, Style and Features** placements (B1a rule 8), plus the 4+1 coverage map (`src/fourPlusOne.ts`) proving that every 4+1 aspect has a camera. Retire the 4+1 view. Delete their DOM/SVG scene bodies; List stays DOM.
+
+### Code map
+Source: lines 392–417.
+
+### Code map
+
+```
+src/compute/                 (A2) worker, protocol (+ priority/cancel), client, useComputed
+src/compute/tasks/           markSet.ts · markPaint.ts · bundle.ts · lod.ts · a11y.ts · input.ts (guards)
+src/compute/tasks/placement/ map.ts (Transit+Tower) · graph.ts · mind.ts · scene3d.ts · sequence.ts
+src/shapes.ts                markTypeOf + the ONE type → silhouette registry
+src/stage/
+  Stage.tsx                  the ONE canvas; lazy; StageRenderer port selection
+  renderer.ts                StageRenderer port + WebGL + no-op implementations
+  types.ts                   SceneSpec, SpecInput, MarkBatch, LinkBatch, LabelRun, Caption, A11yItem, CameraRig
+  slots.ts                   key→slot, capacity doubling, holes, ranged uploads
+  marks/Instanced.tsx        one component for every shape (a geometry and shader table)
+  marks/shaders/             disc.ts · towerSprite.ts · pin.ts
+  links/Links.tsx + links/shader.ts   the one line shader
+  labels/BatchedLabels.tsx   troika BatchedText
+  captions/CaptionLayer.tsx  DOM UI-font text, one transform
+  overlay/                   Selection.tsx · Hover.tsx · PathHighlight.tsx
+  rig/useRig.ts · rig/DepthControl.tsx   localized via KnowledgeGraphLabels; registers via usePanZoomRegistration
+  pick/usePick.ts            main-thread grid query + nearestHit
+  a11y/StageProxies.tsx      positioned focus proxies + useRoving(Element)
+  anchor/useSlotAnchor.ts
+  fonts.ts                   host font-URL port
+```
+
+No file over about 300 lines. One responsibility per module. New cameras arrive as registry data.
+
+
+## ✅ RESOLVED 2026-11-17 — Design: deterministic knowledge index — finished sections archived on consolidation
+- **Verified 2026-11-17:**
+  - Contract / engine — builderforce-memory `packages/memory/src/retrieval/knowledge-index/*`.
+  - Determinism rules 1–5 — `retrieval/order.ts`; `hnsw.ts:73,105,285`; `weightedFusion.ts:102`; `memory/SemanticRecall.ts:85`; `vectorstore/MemoryVectorStore.ts:196`; `knowledge-index/digest.ts:26`.
+  - Search cascade, expand, storage, exact mode, v2 format — `cascade.ts`, `expand.ts`, `compact.ts:70`, `state.ts:18-20`, `serialize.ts:6-72`.
+  - Cards — `knowledge/cards.ts:25`.
+  - Where it runs — `clients/vscode/src/knowledge/index/hostKnowledgeIndex.ts`, `embedderPort.ts`; `agent-runtime/src/agents/knowledge/index/onPremKnowledgeIndex.ts`; `api/src/application/knowledge/knowledgeIndexPort.ts`; route `projectKnowledgeRoutes.ts:302`; `builderforce-inference/crates/bf-index/src/index.rs:296`. Deviation: `api/src/application/repos/repoSymbolVectors.ts` is kept as the embedding cache; its search goes through `r2KnowledgeIndexPort` (`:20-23,248`).
+  - Consumers (prefetch, graph search, `similarPairs`, entity resolution) — `clients/vscode/src/contextPack/knowledgeSource.ts`; `packages/agent-tools/src/knowledge/index/{knowledgeAsk,searchRecall,hostIndex}.ts`; builderforce-memory `knowledge/resolve.ts:46-56`.
+  - Done-checks 1, 2, 3, 5, 7, 8 — `packages/memory/tests/knowledge-index.determinism.test.ts:15,36,72,108`, `retrieval-order.test.ts`, `knowledge-index.test.ts:43`.
+  - WS1–WS4 and open decisions 1–3 (taken as proposed) — an earlier DONE.md entry-28 entry.
+### Goal, What exists, Contract, Determinism rules, Search, Storage, Cards, Where it runs, Consumers (prefetch + graph), Sequence, Code map
+Source: `docs/design/deterministic-knowledge-index.md` lines 1–225 (minus lines 186–187, the memory-recall consumer, which stays open).
+
+## Deterministic knowledge index (LEANN-style) — end state
+
+Status: APPROVED 2026-10-28, in implementation. The open decisions below were taken as
+proposed.
+Companions: [deterministic-prefetch.md](deterministic-prefetch.md) (the gate that consumes it) and
+[PRD 38 rev 3](../specs/38-prd-knowledge-graph.md) (the knowledge graph whose cards it indexes:
+any reviewed directory, with code and docs packs first).
+Inspiration: [LEANN](https://github.com/StarTrail-org/LEANN) (MIT). It uses a graph-based
+index with high-degree-preserving pruning and CSR storage, and recomputes embeddings on the
+search path instead of storing them all. LEANN is Python-only, so we port the technique into
+builderforce-memory's TypeScript retrieval; we do not take on a Python dependency.
+
+### Goal
+
+Memory answers meta questions about any reviewed directory fast, and **the same answer every
+time**. In code:
+
+- "where is billing handled"
+- "which area owns webhooks"
+- "what is similar to `retryPolicy.ts`"
+- "which layer is this file in"
+
+In docs:
+
+- "what does the lease say about termination"
+- "which specs mention SSO"
+
+The targets:
+- p50 ≤ 20 ms locally on 50k cards;
+- byte-identical results for the same index digest and query, on any machine, CPU or GPU;
+- storage at most 30% of today's float vectors.
+
+### What exists, and what is wrong with it
+
+| Today | Where | Problem |
+|---|---|---|
+| Pure-TS HNSW (M=16, efC=200, efS=50), seeded RNG `0x5eed` | `builderforce-memory/packages/memory/src/retrieval/hnsw.ts` | Each node's level comes from a *sequential* RNG, so the graph depends on insertion order. |
+| `denseSearch`, `bm25`, `fusion` (RRF), `weightedFusion`, `SemanticRecall`, `MemoryVectorStore` | `retrieval/*`, `memory/SemanticRecall.ts`, `vectorstore/MemoryVectorStore.ts` | **Six rankers sort by score only** (`hnsw.ts:209`, `denseSearch:236`, `fusion.ts:50`, `bm25.ts:139`, `SemanticRecall.ts:83`, `MemoryVectorStore.ts:195`). Ties fall back to input order. Only `mmr.ts` breaks ties. |
+| Evermind CPU embedder (mean-pool + L2), with a fingerprinted cache | `memory-mcp/src/embedding/evermind-embedder.ts` | Float32 cosine differs in the last bits between CPU and WebGPU, so near-ties can flip. With no checkpoint loaded, ranking silently goes lexical. |
+| Cloud `semantic_search`: bge-m3 on Workers AI, brute-force cosine | `api/src/application/repos/repoSymbolVectors.ts` | A second vector engine. O(n) per query. |
+| Desktop `bf-index`: bge-small 384-d, SQLite, brute-force cosine | `builderforce-inference/crates/bf-index/src/index.rs:290` | A third. `partial_cmp`, with no tie-break. |
+| contextPack / preSearch | `clients/vscode/src/contextPack/*`, `agent-tools/preSearch.ts` | Uses the definition index and ripgrep only, with no semantic recall and no repo-map. |
+| Repository and directory meta | `project_facts`, `codemap:<area>` | Flat text, recalled by text. There is no per-node card (path, partition, area, symbols or headings, neighbours). Recall cannot follow relations, and non-code folders have nothing at all. |
+
+### Contract
+
+#### Engine: builderforce-memory `retrieval/knowledge-index`, exported from `/knowledge`
+
+The engine is generic: it indexes documents. Cards come from the knowledge graph's
+`toCards(graph)` (PRD 38 §4.1), one per node of every pack, in the same memory package.
+
+```ts
+export interface IndexDoc {
+  id: string;                 // stable, e.g. `${repoId}::${path}` or `…#${symbol}`
+  text: string;               // card text, deterministic (see Cards)
+  keys?: string[];            // exact-match keys: path, basename, symbols, area
+  hash?: string;              // content hash; computed from text when absent
+}
+export interface EmbedderPort {
+  fingerprint: string;        // model id + version + dims; vectors with another fingerprint are never compared
+  dims: number;
+  embed(texts: string[]): Promise<Float32Array[]>;
+}
+export interface IndexHit { id: string; score: number; tier: 'exact' | 'lexical' | 'dense'; }
+export interface KnowledgeIndex {
+  upsert(docs: IndexDoc[]): Promise<void>;          // skips unchanged hashes
+  remove(ids: string[]): void;
+  search(q: string, opts?: { k?: number; tiers?: Array<IndexHit['tier']> }): Promise<IndexHit[]>;
+  expand(hits: IndexHit[], graph: GraphNeighbours, opts?: { hops?: 1 | 2; edgeKinds?: string[] }): IndexHit[];  // recall + neighbours
+  similarPairs(opts: { minSimilarity: number; maxPairs: number; kinds?: string[] }): Array<{ a: string; b: string; similarity: number }>;
+  compact(): Promise<void>;                          // canonical rebuild (see Determinism)
+  digest(): string;                                  // sha-256 over the canonical state
+  serialize(): Uint8Array;
+}
+export function createKnowledgeIndex(opts: { embedder?: EmbedderPort; params?: Partial<IndexParams> }): KnowledgeIndex;
+export function loadKnowledgeIndex(bytes: Uint8Array, embedder?: EmbedderPort): KnowledgeIndex;
+```
+
+#### Determinism rules (all of retrieval, not only the new index)
+
+1. **One total order.** `compareHits(a, b)` returns score descending, then id ascending.
+   - Scores are quantized before the comparison: dense to 1e-4, BM25 and RRF to 1e-6.
+   - It is exported from `retrieval/order.ts`, and **all six rankers above, plus `mmr`,
+     migrate to it** in the same pass. No ranker keeps its own sort.
+2. **Insertion-order-free graph.** A node's HNSW level is `levelOf(hash(id))`: a geometric
+   draw from the id's hash, not from a sequential RNG. `compact()` rebuilds by inserting in
+   id order. So **the same document set and the same fingerprint give the same graph**, byte
+   for byte, whatever order the upserts arrived in.
+3. **Integer similarity for traversal.** Vectors are stored as int8 codes, with a per-index
+   symmetric scale fixed at first compaction.
+   - Traversal scores are int8 dot products in exact integer arithmetic, so they are
+     **bit-identical on every platform**.
+   - Float math is used only in the final rerank, and rule 1's quantization absorbs its noise.
+4. **The digest names the state.** `digest()` hashes sorted `(id, hash)` pairs, the
+   fingerprint, the params, the int8 scale and the CSR graph.
+   - Every result is a pure function of `(digest, query, opts)`.
+   - The digest is logged on every `prefetch.decision` trace, so a disputed answer can be
+     replayed.
+5. **No silent fallback.** With no embedder, or a fingerprint mismatch, the dense tier is
+   *absent*: hits carry `tier`, and the caller sees `tiers: ['exact', 'lexical']`. Vectors
+   from two fingerprints are never mixed. A mismatch triggers a background re-embed.
+
+#### Search: a cascade, cheapest tier first (the same shape as the prefetch gate)
+
+1. **Exact** (<1 ms). The `keys` map covers path, basename, symbol and area, and is
+   case-folded. An exact hit scores 1.0. When the hits fill `k`, the search returns without
+   touching other tiers.
+2. **Lexical** (~ms). BM25 over the card text, with the code-aware tokenizer: it splits
+   camelCase, snake_case and paths.
+3. **Dense** (~ms):
+   - Graph search over the int8 codes (efS=64) gives `4k` candidates.
+   - The search then **recomputes** float embeddings for those candidates, from card text
+     through the embedder's LRU cache (keyed by hash), and reranks.
+   - This is LEANN's selective recompute, applied only where precision matters.
+4. **Fuse.** RRF (k=60) across the tiers that ran, ordered by `compareHits`.
+5. **Expand** (opt-in, ~µs). Add the hits' graph neighbours (1–2 hops over chosen edge
+   kinds, from the knowledge graph), each scored as the hit's score × edge weight × 0.5 per
+   hop, then ordered by `compareHits` again.
+   - This is what makes recall return *knowledge*, not isolated facts. Asked about a claim,
+     recall also returns its source section, the claims that contradict it, and the entity
+     it is about.
+
+#### Storage (LEANN technique, sized for repositories)
+
+- **Graph.** The base layer is pruned with **high-degree-preserving pruning**:
+  - hubs (the top 2% by in-degree) keep M=16 edges;
+  - every other node keeps M/2;
+  - upper layers stay unpruned.
+
+  The graph is stored as **CSR**: a `Uint32Array` of offsets plus a `Uint32Array` of
+  neighbours.
+- **Vectors.** int8 codes by default (`dims` bytes per doc).
+  - **Lean mode** (opt-in, for repositories over 200k cards) drops the codes of non-hub
+    nodes and recomputes them on the search path, as LEANN does.
+  - It is off by default, because our CPU embedder makes full recompute too slow for the
+    p50 target.
+- **Exact mode below 20k cards (`exactBelow`).** A graph only pays off at scale. Below the
+  threshold, `compact()` builds no graph: the dense tier is an exact integer scan over every
+  int8 code (ties by id), followed by the same float rerank.
+  - It has no construction cost, which matters in a Worker, and it is trivially
+    deterministic.
+  - `similarPairs` scores every pair up to about 700 cards. Above that it uses fixed
+    sign-bucket blocking (8 tables × 10 dims, the next 32 in each bucket), capped at 250k
+    evaluations, in a deterministic order.
+  - The mode is part of the digest. The format is v2, and v1 blobs still load, as graph mode.
+- **Budget at 50k cards, 384 dims:**
+  - float32 today: ≈ 77 MB;
+  - int8 + CSR: ≈ 19 MB + ≈ 2.4 MB, which is ≈ 28%;
+  - lean mode: ≈ 6 MB.
+
+#### Cards (memory `/knowledge` `toCards`)
+
+There is one card per graph node (PRD 38 §4.1). The text is built deterministically from the
+node and its pack:
+
+| Node kind | Card text | `keys` |
+|---|---|---|
+| code file | path · area · partition (layer) · exported symbols (sorted) · first doc-comment line · top-5 neighbours by weight | path, basename, symbols, area |
+| doc section | file · heading breadcrumb · first 400 characters of the body · outgoing link targets | file path, heading slug, front-matter keys |
+| entity (`ent:`) | name · type · the sources that mention it (top 5 by importance) | the normalized name and its aliases |
+| claim (`claim:`) | subject · predicate · object · quote · source section | subject and object entity keys |
+| area | path · partition · top-10 members by importance | path |
+
+The `hash` is computed over the text, so a node whose card did not change is never
+re-embedded.
+
+### Where it runs
+
+| Host | Embedder port | Index lives | Built from |
+|---|---|---|---|
+| VS Code | Synapse `bfi-node` embed, then the Evermind CPU embed (a local checkpoint, loaded on idle), then a resident Ollama embedding model (`/api/ps` + `/api/embed`); lexical only when none is warm | `.builderforce/knowledge/<rootId>.idx`, keyed by digest; loaded at activation | `buildGraph` → `toCards` for every reviewed root (the workspace repository is reviewed by the code pack on first use); incremental on save and on review |
+| On-prem agent | the same ports | the same path | the same |
+| Cloud (API) | **bge-m3 on Workers AI** behind `EmbedderPort` | R2 `knowledge-index/{tenant}/{project}/{rootId}/{scopeDigest}.bin`, read through `getOrSetCached` by digest | the server-built graph → cards. **`repoSymbolVectors.ts`'s brute-force loop is deleted.** Its `semantic_search` calls `KnowledgeIndexPort.search` over the repository's root, and its existing tests run unchanged as the parity oracle. |
+| Web / Rovr | none (they call the API) | — | `GET /api/projects/:id/knowledge/search` |
+| Desktop `bf-index` (Rust) | — | — | Gets the same total order: score desc, then id asc, with the same quantization, in the same pass. The graph index port is open decision 2. |
+
+### Consumers
+
+- **Prefetch.**
+  - `context.pre-search` adds knowledge-index hits to the context pack, in the volatile tail.
+    The hits are exact + lexical, with dense only when warm, and are expanded by one hop.
+  - The ANSWER row `knowledge.ask` (PRD 38 §4.9) covers "where is X handled", "which file
+    owns Y" and "what does <doc> say about Z". It settles when the exact tier hits, or when
+    the top fused hit clears its learned threshold, and records `skippedLlm` and a savings
+    row. Otherwise the hits ride in as PREFETCH context.
+
+
+- **The knowledge graph** (PRD 38):
+  - the search box (every node is reachable, not only rendered nodes);
+  - the Duplication lens's near-duplicates (`similarPairs`, minSimilarity 0.92 by default,
+    deterministic pair order);
+  - review-time entity resolution, where near-duplicate entities become "possible-same"
+    findings;
+  - the claim pairs sent for contradiction judgement.
+
+### Sequence
+
+```
+save / review / run end / new sha ─▶ toCards(graph) ─▶ index.upsert(changed cards only)
+                                                   └─ idle: compact() when churn > 10% ─▶ new digest ─▶ persist
+query ─▶ exact ─(k filled?)─▶ return
+          └▶ lexical ─▶ dense(int8 graph → recompute rerank) ─▶ RRF ─▶ compareHits ─▶ hits(tier, digest)
+```
+
+### Code map
+
+`builderforce-memory/packages/memory/src/`:
+
+| File | Responsibility |
+|---|---|
+| `retrieval/order.ts` | `compareHits` + quantization; migrate hnsw, denseSearch, bm25, fusion, weightedFusion, mmr, SemanticRecall, MemoryVectorStore |
+| `retrieval/hnsw.ts` | hash-derived levels, `canonicalBuild(ids sorted)`, a pruning hook. It does not grow: CSR and pruning go in their own files. |
+| `retrieval/knowledge-index/{index.ts,csr.ts,prune.ts,quantize.ts,cascade.ts,expand.ts,tokenize.ts,digest.ts,serialize.ts}` | each under 200 lines; re-exported from `/knowledge` |
+| `knowledge/cards.ts` | `toCards` (PRD 38 §4.1), with one card shape per node kind |
+| `package.json` | `exports["./knowledge"]`, published via tag (CI release) |
+
+`Builderforce.ai`:
+
+| File | Responsibility |
+|---|---|
+| `clients/vscode/src/knowledge/{hostKnowledgeIndex.ts,embedderPort.ts}` | load, incremental update, persist per root; the contextPack and prefetch sources |
+| `agent-runtime/src/agents/knowledge/onPremKnowledgeIndex.ts` | the same, on-prem |
+| `api/src/application/knowledge/knowledgeIndexPort.ts` | the use case behind the `semantic_search` tool and the search route; `repoSymbolVectors.ts` folds into it and is deleted |
+
+`builderforce-inference/crates/bf-index/src/index.rs` gets the total-order comparator.
+
+### Done-checks 1–3, 5, 7, 8
+Source: lines 229–238, 241–242, 249–252.
+
+1. **Order-free:**
+   - Build the same 5k cards in 3 shuffled orders, then `compact()`.
+   - Identical digest, and identical results for 200 fixed queries.
+2. **Cross-platform:**
+   - Int8 traversal gives identical candidates for CPU and WebGPU embeddings of the same text.
+   - The final lists are identical after quantization (a fixture test with recorded
+     embeddings).
+3. **Tie-break:** every migrated ranker returns id-ascending order on equal scores. Existing
+   retrieval tests run **unchanged**. A test that relied on input-order ties is a named
+   behaviour change, recorded in DONE.md.
+
+
+5. **Lean:** int8 + CSR is ≤ 30% of float32 on the fixture. In lean mode, recall@10 stays
+   within 2 points of full mode.
+
+
+7. **One engine:** cloud `semantic_search` runs through the index, the brute-force loop is
+   gone, and its tests pass unchanged.
+8. **Explicit tiers:** with no embedder, results carry only `exact` / `lexical` tiers, never
+   mislabelled.
+
+### Workstreams and Open decisions
+Source: lines 254–277.
+
+### Workstreams
+
+| WS | Scope |
+|---|---|
+| WS1 | `retrieval/order.ts` and the migration of every ranker; `hnsw.ts` hash-derived levels and canonical build; the `bf-index` comparator. Release builderforce-memory via tag. |
+| WS2 | Knowledge-index engine: CSR, pruning, int8, cascade, `expand`, digest, serialize, lean mode; `toCards`. Release. |
+| WS3 | Builderforce: the VS Code and on-prem host index per root; the contextPack/preSearch source; the `knowledge.ask` executor; the graph-view search and `similarPairs` ports. |
+| WS4 | API: `KnowledgeIndexPort`; the R2 index per scope digest; `repoSymbolVectors.ts` folded in and deleted; the search route. |
+
+The order is WS1, then WS2, then WS3 and WS4 in parallel. WS1–2 run beside PRD 38 WS1, in the
+same memory release train. Sonnet verifies each with targeted test files only.
+
+### Open decisions for the operator
+
+1. **The cloud embedder.** Keep bge-m3 on Workers AI (proposed: it is already paid for and
+   multilingual), or use the Evermind embedder in the container, so that cloud and local
+   share a fingerprint and an index built locally can be uploaded and reused.
+2. **Desktop `bf-index`.**
+   - Option (a), proposed: in this program, it gets the shared comparator and its search
+     stays brute force; full parity is a follow-up register entry.
+   - Option (b): port the graph index to Rust now.
+3. **Symbol-level cards.** Index exported symbols as their own cards from day one (about 3×
+   the cards, sharper "where is X" answers), or code files and areas only, with symbols left
+   to the exact `keys` map (proposed). Doc sections are always cards.
+
+
+## ✅ RESOLVED 2026-11-17 — Design: deterministic-first PreFetch — finished sections archived on consolidation
+- **Verified 2026-11-17:**
+  - Seams — `brain-embedded/src/runStore/runTypes.ts:20,298`, `prefetchGate.ts`, `adoptAnswer.ts`.
+  - Contract + gate — `packages/prefetch/src/{types,registry,classify,lexical,logprob,calibrate,runGate}.ts`; `packages/local-inference/src/logprobs.ts`.
+  - Registry rows — `packages/agent-tools/src/prefetch/rows.ts:34-129`, `knowledgeRows.ts`, `codePackExecutors.ts:126-129`; `clients/vscode/src/prefetch/{executors,lspDiagnostics,detectTools}.ts`.
+  - Sequence/rules — `runGate.ts`, `brain-embedded/src/runStore/prefetchGate.confirm.test.ts`, `packages/brain-ui/src/prefetch/PrefetchChips.tsx`.
+  - Cost and savings + gate column — `brain-embedded/src/localChat/{routeLedger,gateLedger}.ts`, `gateReport.test.ts`.
+  - On-prem — `agent-runtime/src/builderforce/prefetch/onprem-prefetch-port.ts`, `agent-loop/prefetch-preamble.ts`.
+  - Done-checks 1–4, 7, 8 — `prefetchGate.test.ts`, `prefetchGate.codepack.test.ts`, `classify.test.ts`, `gateReport.test.ts`; largest file 263 lines.
+  - Already summarized in an earlier DONE.md entry-28 ("Prefetch" bullets); the text below is not.
+### Goal, What exists, Contract, Confidence gate, Initial action registry, Sequence, Cost and savings, Code map
+Source: `docs/design/deterministic-prefetch.md` lines 1–144.
+
+## Deterministic-first PreFetch — end state
+
+Status: APPROVED 2026-10-28, in implementation.
+
+### Goal
+
+Before any LLM call, run cheap deterministic actions (MCP tools, `/` actions, static
+analyzers, codegen). A confidence gate decides per request:
+
+- **ANSWER**: a deterministic action settles the turn, and no model is called.
+- **PREFETCH**: actions run and their output rides into the turn as context, so the model
+  starts with facts instead of spending exploration turns.
+- **LLM**: nothing confident enough; the run proceeds exactly as today.
+
+### What exists (extended, never duplicated)
+
+| Seam | Where | Becomes |
+|---|---|---|
+| `answerWithoutModel` (one host function: "where is X defined") | `brain-embedded/src/runStore/adoptAnswer.ts`, `clients/vscode/src/runSetupPorts.ts` | The first registered ANSWER action; the port changes from one function to the registry. |
+| `adoptAnswerWithoutModel` (settle + persist + `recall` trace, `skippedLlm`) | `adoptAnswer.ts` | The ONE settle path for every ANSWER action. |
+| Memory-first answer | `runMemory.answerFromMemory` | Unchanged; still runs after deterministic answers. |
+| preSearch / context pack | `agent-tools/preSearch.ts`, `clients/vscode/src/contextPack/*` | The first registered PREFETCH action; its output already lands in `host.turnContext` (volatile tail). |
+| Scorers: `difficulty-router`, `pipeline-route`, `localSuccessRouter`, `learned-routing` | `packages/*` | Unchanged; they pick a model tier *after* the gate says LLM. |
+| Local engines: `bfi-node` (Synapse), WebLLM, Ollama | `packages/local-inference` | Host the logprob classifier (tier 3). |
+| Savings ledger: `spend-contract`, `llm_usage_log.pipeline_route/route_score` | api + tx tracks | Records gate decisions and avoided model calls; no new table. |
+
+### Contract: `packages/prefetch` (new, pure, no I/O)
+
+```ts
+type PrefetchKind = 'answer' | 'prefetch';
+type SideEffect = 'read' | 'write';            // write ⇒ always confirm, never auto-run
+
+interface PrefetchAction {
+  id: string;                                  // 'symbols.where-defined', 'dup.jscpd', …
+  kind: PrefetchKind;
+  sideEffect: SideEffect;
+  surfaces: Array<'vscode' | 'onprem' | 'cloud' | 'web'>;
+  slash?: string;                              // explicit `/dup`, `/lint`, … (tier 1)
+  patterns?: RegExp[];                         // rule match (tier 1)
+  examples: string[];                          // phrasings for tiers 2–3 (registry data)
+  budgetMs: number;                            // hard deadline (withinMs)
+}
+
+interface GateDecision {
+  route: 'answer' | 'prefetch' | 'llm';
+  actions: Array<{ id: string; p: number; tier: 1 | 2 | 3 }>;
+  pNeedsLlm: number;
+}
+
+classify(request, registry, ports): Promise<GateDecision>
+```
+
+Actions are **registry data**. A host supplies an executor per id through a port
+(`PrefetchExecutors`); the package never runs a tool itself. A new tool is a registry row
+plus an executor, never a new branch in the gate.
+
+### The confidence gate: a cascade, cheapest tier first
+
+1. **Exact** (<1 ms): a `/` action typed in the composer, or a rule pattern. p = 1.
+2. **Lexical/embedding + logistic** (~ms): similarity to each action's `examples`, then a
+   per-action logistic head (same family as `difficulty-router/head.ts`). It learns online
+   from outcomes.
+3. **Logprob classifier on a local SLM** (~50–300 ms on CPU): one forward pass with the
+   label set `[...actionIds, 'needs-llm']`, reading each label token's logprob. It runs on
+   our engines (Synapse/`bfi-node` → WebLLM → Ollama last). It runs only when tiers 1–2
+   are ambiguous and a local engine is warm; otherwise it is skipped.
+4. **LLM**: when the top p is below the action's learned threshold, or `needs-llm` wins.
+
+The thresholds are per action and calibrated from logged outcomes (accepted, or the user
+re-asked the LLM). The cold-start threshold is conservative, at 0.9 for ANSWER.
+
+### Initial action registry
+
+| id | kind | tool | surfaces |
+|---|---|---|---|
+| symbols.where-defined | answer | symbol index (exists) | vscode, onprem |
+| context.pre-search | prefetch | preSearch (exists) | all |
+| diag.typecheck | prefetch | LSP diagnostics / `tsc --noEmit` on touched files | vscode, onprem |
+| lint.check / lint.fix | prefetch / answer(write) | ESLint, Biome, Ruff | vscode, onprem |
+| dup.check | answer | jscpd | vscode, onprem |
+| deadcode.check | answer | knip | vscode, onprem |
+| deps.cycles | answer | dependency-cruiser / madge | vscode, onprem |
+| arch.boundaries | prefetch | dependency-cruiser rules / our `scripts/check-*.mjs` | vscode, onprem |
+| deps.audit | answer | osv-scanner / `npm audit` | vscode, onprem |
+| secrets.scan | answer | gitleaks | vscode, onprem |
+| tests.related | prefetch | `vitest related` file list | vscode, onprem |
+| scaffold.* | answer(write) | Plop/Hygen templates, `ide-templates` | vscode, onprem |
+| codegen.openapi / codegen.prisma / codegen.graphql | answer(write) | OpenAPI Generator/orval, Prisma, GraphQL Codegen | vscode, onprem |
+| codemod.pattern | answer(write) | ast-grep | vscode, onprem |
+| format.apply | answer(write) | Prettier/Biome/Black | vscode, onprem |
+| memory.answer | answer | answerFromMemory (exists) | all |
+| knowledge.review-dir | answer(write) | memory `/knowledge` `planReview` → confirm chip → `reviewDirectory` ([PRD 38](../specs/38-prd-knowledge-graph.md) §4.3) | all |
+| knowledge.ask | answer | knowledge index + graph expansion ([deterministic-knowledge-index.md](deterministic-knowledge-index.md)); otherwise PREFETCH | all |
+| knowledge.graph | answer | open the knowledge-graph view, focused on the named files | all |
+
+A tool that isn't installed in the workspace isn't offered. Detection is via `package.json`
+or the PATH, memoised per workspace.
+
+### Sequence (one flow)
+
+```
+user text ─▶ runPreamble
+   ├─ classify()                               (packages/prefetch, ≤ budget)
+   ├─ route=answer, read      ─▶ executor ─▶ adoptAnswerWithoutModel  (skippedLlm)
+   ├─ route=answer, write     ─▶ composer confirm chip ─▶ executor ─▶ adopt
+   ├─ route=prefetch          ─▶ executors in parallel (withinMs) ─▶ host.turnContext (volatile tail)
+   └─ route=llm               ─▶ answerFromMemory ─▶ model routing (unchanged)
+outcome ─▶ trace `prefetch.decision` + llm_usage_log.route_score ─▶ head update
+```
+
+Rules:
+- The gate runs inside the existing preamble. There is no second flow and no separate panel.
+- The output of `/` actions renders in the same composer transcript.
+- PREFETCH output is per-turn content, so it goes only in the trailing `<run-state>`,
+  never in the system prompt. This keeps the prompt cache intact.
+- Write actions never auto-run. A confirm chip is shown whatever p is.
+- The executor deadline is enforced and Stop aborts it (the same `withinMs` and abort as
+  preSearch).
+- Cloud and web get the gate plus the read-only actions that need no shell. Analyzers run
+  where the workspace is: VSIX, on-prem, or the cloud container sandbox.
+
+### Cost and savings
+
+- Each ANSWER logs an avoided call through the existing usage-row savings fold
+  (`spend-contract`), estimated at the routed model's price for a median turn. This needs
+  no new table or endpoint.
+- Each PREFETCH logs the turns saved, compared with the run's own exploration baseline.
+- The Pipeline route report (exists) gains a gate column: answer / prefetch / llm rates
+  and accuracy.
+
+### Code map
+
+- `packages/prefetch/src/{registry.ts,classify.ts,lexical.ts,logprob.ts,calibrate.ts,index.ts}`:
+  each file is under 200 lines.
+- `brain-embedded/src/runStore/adoptAnswer.ts`: `answerDeterministically` iterates the
+  gate's ANSWER actions instead of calling one function.
+- `brain-embedded/src/runStore/runTypes.ts`: `answerWithoutModel` is replaced by
+  `prefetch?: PrefetchPort`, with every caller migrated (VSIX runSetupPorts, chatParticipant,
+  nativeBrainRun, chatReferences, tests).
+- `clients/vscode/src/prefetch/{executors.ts,detectTools.ts}`: executors wrap the existing
+  tools. Analyzers run through the existing exec/shell tool path.
+- `agent-runtime`: the same executors for on-prem.
+- `packages/local-inference`: adds a `logprobs(prompt, labels)` call on Synapse/WebLLM/Ollama.
+- i18n: confirm-chip and trace labels go in the VSIX nls ×5 and the frontend catalogs ×5.
+
+### Done-checks 1–4, 7, 8
+Source: lines 146–153, 157–158.
+
+### Done-checks
+
+1. "where is X defined" still answers with no model. The existing tests run unchanged.
+2. `/dup` and "find duplicate code" both settle via jscpd with `skippedLlm: true` and a
+   savings row.
+3. An ambiguous request ("make this better") routes to the LLM. Tier 3 is never consulted
+   when no local engine is warm.
+4. A write action never runs without the confirm chip.
+
+
+7. The Pipeline route report shows the answer/prefetch/llm split.
+8. No file is over 400 lines, and there is no second flow.
+
+## ✅ RESOLVED 2026-11-17 — PRD 18: finished sections archived on consolidation (hired.video → Builderforce.ai port)
+
+The six editing runtimes are already archived in DONE.md ("canvas runtimes and studio: six editors", 2026-11-08) and are not repeated here. an earlier DONE.md entry (`people_strategic_objectives` guardrail) is a pointer only; that mapping is still open (run T3).
+
+- **Verified 2026-11-17:**
+  - §1.1 Two built-in agents: `api/src/application/agent/provisionBuiltinAgents.ts:177,185`; backfill `api/migrations/0436_remaining_seat_agents.sql`.
+  - §1.5 Marketing campaigns: one engine, `api/src/application/marketing/campaignEngine.ts` + `marketing/campaign/{audiences,campaigns,render}.ts`; no second campaign service.
+  - T0 Foundation: superseded by §5a. There are zero new tables; every table is mapped in `docs/specs/data-model/source-to-target.tsv`. Cache seam: `career/resumeAi.ts:33,220`.
+  - T1 cut-over (seam inversion): `hiredVideo.ts`, `HIRED_API_*` and `isHiredConfigured` are gone from api/src and frontend/src; `freelance/provisionForHire.ts:12` is native. Binary résumé extraction: `career/resumeExtract.ts:17`.
+  - §5a.0 job_items collision: `application/sourcing/sourcingListings.ts:24` writes `catalog_items`.
+  - §5a.1 mapping rows except affiliates:
+    - points: `application/points/*`
+    - phone: `phone/phoneCalls.ts`, `phoneMessaging.ts:84`, `commsBalance.ts:9`
+    - learning: `learning/{learningPaths,lrsStatements,lrsCredentials}.ts`, migration 1112
+    - sourcing: `sourcing/sourcingSources.ts`
+    - companies: `companies/companyDirectory.ts:4`
+    - reviews: `reviews/objectReviews.ts:14`
+    - payouts: `payouts/PayoutAccountService.ts`
+    - passkeys: `auth/PasskeyService.ts`
+    - bookings: `commerce/bookings.ts`
+  - §5a.2 corrections: recorded facts.
+  - §8.2, 45 PORTED rows (R-001–R-006, R-008–R-015, R-017–R-025, R-027, R-031–R-043, R-045, R-046, R-048, R-050–R-052, R-055, R-056): `frontend/src/components/creation-canvas/CanvasResumeEditor.tsx`, `lib/canvasResume.ts`, `lib/canvasResumeDiff.ts`, `lib/canvasResumeConsolidate.ts`, `lib/publicResumeApi.ts`, `components/resume/PublicResumeView.tsx`, `lib/resumeImportApi.ts`.
+  - §8.3, 11 of 12 résumé designs, all 15 video-résumé templates, and RR-001–RR-006, RR-008, RR-009, RR-012, RR-015–RR-023: `lib/canvasResumeRenderer.ts` (`renderCanvasResumeRevision`), `lib/videoResumeTemplates.ts`.
+  - §1.3 capture primitive: `frontend/src/lib/useDisplayCapture.ts`, `lib/useCameraCapture.ts`, consumed by `hooks/useCanvasMediaCapture.ts` and `lib/live/LiveSessionContext.tsx`.
+  - §8.7 V-001–V-006, V-008, V-009, V-014–V-016, V-021: `components/creation-canvas/CanvasVideoEditor.tsx`, `lib/canvasVideoRender.ts`, `lib/canvasVideoTimeline` tests.
+  - §8.4 PORTED rows (S-001–S-003, S-006–S-010, S-013, S-018, S-020, S-025–S-028, S-031–S-034, S-036) and §8.9 X-003, X-004, X-016: Canvas shell (DONE elsewhere for the generic features).
+
+### §1.1 Two new built-in agents
+Archived: lines 119–142 of `docs/specs/18-prd-hired-video-port.md`, word for word.
+
+#### 1.1 Two new built-in agents
+
+Both are ordinary `ide_agents` rows carrying a stable `builtin_kind` (the pattern set by
+migration 0289 and `application/agent/provisionBuiltinAgents.ts`), so the roster, the
+designation picker, lane dispatch, `manager.*` staffing and per-project Brain chat all
+reach them through machinery that already exists. Add both to `BUILTIN_AGENTS` **and** ship
+the backfill migration in the same pass, or existing tenants never get them.
+
+**`builtin_kind = 'recruiter'` — Recruiter**
+> Sources, screens and packages candidates. Given a résumé and a job description it produces
+> a tailored résumé, an ATS score with the specific gaps named, a match explanation, and a
+> candidate packet. Runs intake on a role brief, builds the pipeline, drafts outreach, sets
+> up screening and interview kits, and scores submissions against the scorecard it published.
+
+**`builtin_kind = 'hr'` — HR** (Human Resources / People)
+> Owns the people side: Career 360 and career coaching for individuals, and organisational
+> design for the company. Reads the connected HRMS, reviews the org plan against the
+> strategic objectives, and recommends where to hire, where to redeploy and where to reduce —
+> with the headcount, cost and capability evidence for each recommendation. It never issues
+> an employment decision; it produces a reviewable recommendation with its evidence attached.
+
+Both bios must name **no tool ids** — the persisted-bio-vs-code-catalog trap documented on
+the Manager seed (migration 0376/0379). Tools are resolved live and named by the framing
+helper in `brain/BrainService.ts`.
+
+
+### §1.5 Marketing campaigns
+Archived: lines 238–244 of `docs/specs/18-prd-hired-video-port.md`, word for word.
+
+#### 1.5 Marketing campaigns
+
+hired.video's `CampaignService` (590 LOC) + `campaigns-public` + audiences/targeting
+(`shared/audiences.ts`, `ad-targeting.ts`, `content-audiences.ts`) merge **into**
+`api/src/application/marketing/campaignEngine.ts` (894 LOC), which already covers site
+campaigns after migration 0412. This is a merge, not a second engine — two campaign engines
+is exactly the technical debt the standing rule forbids ([[no-technical-debt-rule]]).
+
+
+### T0 · Foundation (blocks everything) — superseded by §5a
+Archived: lines 253–277 of `docs/specs/18-prd-hired-video-port.md`, word for word.
+
+#### T0 · Foundation (blocks everything)
+
+1. **Tenant scoping.** hired.video is user/workspace-scoped; Builderforce is tenant-scoped.
+   Every ported table gains `tenant_id INTEGER NOT NULL REFERENCES tenants(id) ON DELETE
+   CASCADE` plus a `(tenant_id, …)` index. Write the mapping once as a codemod over the
+   Drizzle schema files; do not hand-edit 155 tables.
+2. **Migration renumbering.** hired.video's `api/drizzle/*` is replayed as Builderforce
+   migrations starting at `0414`, one per track slice. `neon-http` has **no interactive
+   transactions** ([[gap-register-burndown]]) — every migration must be
+   independently re-runnable, `IF NOT EXISTS` throughout.
+3. **Identity mapping.** hired `users.id` (uuid string) → Builderforce `users.id`
+   (varchar 36). Same shape. `user_profiles` merges into the Builderforce profile row;
+   `career_target` (the Career 360 document) becomes a JSONB column on it.
+4. **Auth/roles.** hired's `shared/user-roles.ts` + `role-access.ts` + `ModuleGate` fold
+   into `lib/rbac.ts` + `<RoleGate>` ([[rbac-rolegate-primitives]]) — disable, never hide.
+   hired's `NON_CANDIDATE_ROLES` becomes a role-catalog entry, not a second enum.
+5. **Plan gating.** hired's tier enforcement (`attachTokenBudget` / `requireTokenBudget`)
+   maps onto `planFeatures.ts` + `featureGate.ts` — **one evaluator**, superadmin bypass,
+   miss = 402 ([[paid-plan-feature-gate]]). Do **not** port `tierEnforcement.ts`.
+6. **Caching.** hired's `utils/edge-cache.ts` `getOrSetCached` maps onto Builderforce's
+   canonical `getOrSetCached` (L1 Map + L2 KV). Every ported read endpoint is cached or
+   states why it cannot be.
+
+**Exit criteria:** a ported table can be created, tenant-scoped, read through the cache, and
+gated by plan — proven end-to-end on one table (`resumes`) before T1 starts.
+
+
+### T1 · Résumé spine + the Recruiter agent — finished parts
+Archived: lines 279–320 of `docs/specs/18-prd-hired-video-port.md`, word for word. Still open and kept in run: R-016/R-047 Recruiter citations and score delta. Corrected there: there is no `packages/recruiting-contract`.
+
+#### T1 · Résumé spine + the Recruiter agent — *the Phase 1 deliverable*
+
+This is the smallest slice that makes the headline capability real.
+
+**Port:**
+- `services/resume/*` — `parse.ts` (814), `merge.ts` (988), `ResumeService.ts` (1,010),
+  `analyze.ts`, `rewrite-xyz.ts`, `skills.ts` (620), `extractFile.ts`, `redaction.ts`,
+  `summarize.ts`, `score-with-llm.ts`, `view.ts`
+- `services/job/match-handlers.ts` — `handleAnalyze` / `handleTailor` / `handleByContent`
+- `shared/resume.ts` (655) + `resume-markdown.ts` + `tool-schemas.ts` +
+  `shared/ai-prompts/*` → a new `packages/recruiting-contract`
+- Tables: `resumes` (8), `resumeFeedback` (2), `jobs` (6), `match` (1), `candidates` (6)
+- `DocumentStage` + `ResumeDocumentView` + `document-state.ts` + `document-templates.ts` +
+  `resume-sections/*` + `resume-renderer/*` → the `resume` Canvas kind
+
+**Build:**
+- `builtin_kind='recruiter'` seed in `provisionBuiltinAgents.ts` + backfill migration
+- `recruiter.*` MCP tools in `builtinMcpService.ts`, with the `advertisedName()` assertion test
+- Canvas `resume` object: generate → **edit in `DocumentStage`** → export PDF/DOCX via
+  `canvasExports.ts` ([[canvas-document-editing-and-export]] — `richText.ts` /
+  `printDocument.ts` / `canvasExports.ts` are the only implementations; do not add a second)
+
+**Non-destructive source invariant:** an uploaded résumé is an immutable source revision. “Create
+me a new résumé” creates a derived résumé with `source_resume_id` and `source_revision_id`; it
+never overwrites the uploaded source. The Canvas résumé header exposes **Original**, every named
+derived version, **Compare**, **Restore as new version**, **Make active**, and **Promote to master**.
+Canvas session history is useful recovery infrastructure but is not a substitute for this
+résumé-domain lineage: the user must be able to return to the original without knowing when a
+checkpoint was created or restoring unrelated Canvas objects.
+
+**Cut over:** reimplement `application/integrations/hiredVideo.ts` natively behind its
+existing exported signatures. `isHiredConfigured()` becomes `true` unconditionally; the
+remote SDK path is deleted once the native path is green. `provisionForHire.ts` and the
+freelance marketplace change **zero call sites** — this is the whole point of anchoring on
+the seam.
+
+> Also closes an open roadmap item: *"Résumé auto-fill can't parse binary PDF/DOCX locally
+> without a linked hired.video."* `extractFile.ts` ports server-side text extraction, so the
+> binary-résumé gap dies with T1.
+
+**Demo that proves the track:** upload a résumé + paste a JD → Recruiter returns a tailored
+résumé as an editable Canvas document → export PDF. No hired.video key involved.
+
+
+### §5a · The 2026-08-22 mapping audit (§5a intro, §5a.0, §5a.1, §5a.2)
+Archived: lines 533–615 of `docs/specs/18-prd-hired-video-port.md`, word for word. The affiliates row (L584) stays open in reach.
+
+### 5a · The 2026-08-22 mapping audit — what is actually left, and where it lands
+
+This section replaces the assumption the tracks were written under. The tracks assumed the
+remaining port was a SCHEMA port: ~360 tables to create, then behaviour on top. It is not.
+`docs/specs/data-model/source-to-target.tsv` — the committed coverage map, guarded by
+`check-model-coverage.mjs` — already assigns **every remaining hired.video table to a primitive
+this schema owns**, and the target schema is 362/363 written. Re-verified table by table on
+2026-08-22 against `api/src/infrastructure/database/schema/`.
+
+**The consequence: the remaining port needs ZERO new tables.** What it needs is application
+code and surfaces over primitives that already exist. Two column additions (migration 1106)
+were the entire schema cost of the two biggest remaining domains.
+
+#### 5a.0 One map row is a NAME COLLISION, and the code does not follow it
+
+`HV job_items → keep job_items` reads as "these are the same table". They are not, and the
+sourcing port does not write to `job_items`:
+
+* **hired.video's `job_items`** is the SCRAPED POSTING store — what the job-board scraper
+  inserts, deduplicated on a fingerprint of title/company/location.
+* **This schema's `job_items`** (`api/src/infrastructure/database/schema/hiring.ts`) is "a line
+  item on a job — a requirement, a benefit, a responsibility": an ordered bullet under a
+  `job_postings` row.
+
+Writing third-party listings into a table of requirement bullets would corrupt both readings of
+it. So `application/sourcing/` writes a sourced listing to **`catalog_items` with
+`kind='job_listing'`** — which is the map's OWN answer for this concept two hundred rows further
+down (`HV job_sourcing_listings → catalog_item`), and which gets deduplication for free from the
+`uq_catalog_items_slug (tenant, kind, slug)` index that already exists.
+
+**The row stays as it is, deliberately.** The map keys on a globally unique source-table name,
+holds a fixed 1,130 rows reconciled against PRD 20 §3, and GENERATES DDL — so `job_items` cannot
+appear twice, and re-typing the row as `primitive` would leave this schema's own `job_items` as
+the one keep target no row declares, which is a table the generator would stop emitting. The row
+therefore records that the TARGET `job_items` is kept; it does not assert that the hired.video
+table of the same name is the same thing. Read it that way, and read this note before mapping
+anything else onto a name that already exists.
+
+*Scraped postings are not `job_postings` either:* that table is the freelance marketplace's own
+posting — authored by a tenant, bid on by freelancers, carrying a budget and screening questions.
+A row scraped from somebody else's board has no author here and no bidding, and putting it there
+would drop third-party listings into the pool the marketplace takes proposals against.
+
+#### 5a.1 The mapping, verified
+
+| hired.video source | Lands in | State |
+|---|---|---|
+| `user_points_balance`, `points_ledger` | `ledger_entries` denomination `points` | **DONE** |
+| `points_streaks`, `points_task_streaks`, `points_activity_counters` | `settings` scope=`user` feature=`points` | **DONE** |
+| `points_fraud_flags` | `alert_events` + subject columns (1106) | **DONE** |
+| `badges`, `user_badges`, `point_redemptions` | already existed; had no feature path | **DONE** |
+
+
+| `payout_profiles`, `payout_ledger_entries`, `payouts` | `connections` capability=`payout` + `ledger_entries` — **already built** (`PayoutAccountService`, `withdrawalMethods`, escrow) | closed, roadmap was stale |
+| `business_phone_numbers` | exists | exists |
+| `call_logs` | `activity_log` | open |
+| `sms_messages` | `deliveries` channel=`sms` | open |
+| `phone_balances`, `phone_balance_transactions` | `ledger_entries` denomination `comm_credits` | open |
+| `learning_paths`, `learning_path_courses`, `learning_path_enrollments` | `courses` + `relations` (ordered edges) + `course_enrollments` | open |
+| `xapi_statements`, `lrs_statements` | `activity_log` (actor-verb-object is its shape) | open |
+| `external_lrs_targets`, `lrs_credentials` | `connections` + `credentials` | open |
+| `job_board_sources`, `job_board_sync_log` | `connections` + `sync_states` | open |
+| `job_sourcing_listings` | `catalog_items` | open |
+| `company_profiles` + the 6 company satellites | `companies` + `party_roles` | open |
+| `reviews`, `review_comments` | `annotations` kind=`rating` + `status` (1106) | open |
+| `booking_*` | `booking_services` / `booking_hosts` / `booking_reservations` — already exist | exists |
+| `whitelabel_tenants`, `courses`+5, `employer_branding_pages` | already exist | exists |
+
+#### 5a.2 Corrections to earlier claims in this repo
+
+* **"The Studio source is not checked out here" is FALSE.** `C:\code\hired\hired.video` is
+  present on the build machine with `frontend/lib/studio` intact. The T4 canvas-runtime port is
+  large but it is **not blocked**, and the ROADMAP entry saying otherwise was wrong.
+* **"Payouts are an env-gated stub" is FALSE.** `PayoutAccountService`, `payoutProviders`,
+  `withdrawalMethods`, `earningsLedger` and the escrow milestone flow are built and ledgered.
+  The `paidCents` escrow-conflation bug that `earningsLedger`'s docstring still described as
+  open was already fixed.
+* **`points_fraud_flags` → `ledger_entry` was a bad map row** and is corrected to `alert_event`:
+  a flag has no amount and no denomination, and filing it in the ledger would put non-money rows
+  in the table every balance sums over.
+* **Affiliates are the Associate program** (operator decision, 2026-08-22). hired.video's six
+  affiliate tables do not become a second referral economy; they reconcile onto
+  `sales_referrals` / `sales_associate_settings` / `sales_commission_rules`. `affiliate_referrals`
+  in `growth.ts` is a duplicate of that shape and is retired rather than populated.
+
+
+### §8.2 Required résumé user journey — PORTED rows
+Archived: lines 822–825 (heading and table header) of `docs/specs/18-prd-hired-video-port.md`, plus every row in lines 826–881 whose Status is **PORTED**, word for word.
+
+#### 8.2 Required résumé user journey — release blocker
+
+| ID | User-visible behavior | Hired evidence | Builderforce evidence / current result | Status | Done when |
+|---|---|---|---|---|---|
+| R-001 | Drop or choose a résumé file | `ResumeUpload.tsx` dropzone and picker | `CanvasResumeEditor` has a résumé-specific empty state, picker and accepted-format guidance | **PORTED** | A résumé-specific empty state and picker exist inside the `resume` object. |
+| R-002 | Accept PDF | Hired parses PDF server-side | Browser extraction feeds the canonical structurer when readable; scanned/encoded PDFs fall through to the multimodal extraction endpoint; source file is retained in tenant storage | **PORTED** | Import produces structured résumé data and preserves the source file. |
+| R-003 | Accept DOC/DOCX | Hired accepts `.doc`/`.docx` | DOCX is extracted locally then structured; legacy DOC and unreadable DOCX are sent as bounded file inputs to the multimodal extraction endpoint; source is retained | **PORTED** | DOC and DOCX both parse into the canonical résumé schema. |
+| R-004 | Accept image/photo scans | Hired accepts JPG/PNG and vision OCR | Résumé picker accepts JPG/JPEG/PNG/WebP and routes the scan through the OCR-capable model pool into canonical JSON Resume while preserving the scan | **PORTED** | OCR produces a reviewable structured résumé and keeps the scan. |
+| R-005 | Accept Markdown/TXT | Hired parses both | Résumé picker routes Markdown/TXT through `canvasFileImport` and stores the result in the résumé family | **PORTED** | Import recognizes résumé intent and creates a `resume`, not only `document`. |
+| R-006 | Accept JSON Resume without flattening | `parseJsonResumeFile` preserves structure | `resumeDocumentFromJson` deep-clones the complete document, retains unknown top-level/nested extension fields, and stores it on the immutable revision | **PORTED** | JSON Resume fields round-trip losslessly. |
+| R-008 | Show selected filename, size and type icon | Hired upload review card | Import review shows filename, extension badge and KB size before any résumé mutation | **PORTED** | Resume import review shows this before mutation. |
+| R-009 | Show parse/upload progress | Hired progress bar | Import review exposes uploading, local extraction and canonical structuring/OCR phases with progress and disables duplicate actions while busy | **PORTED** | Upload, extraction, OCR and structuring phases are visible and retryable. |
+| R-010 | Auto-name from embedded JSON title or filename | Hired does both | Résumé import uses `basics.name` when present and falls back to the filename stem | **PORTED** | Structured résumé name wins, filename is fallback. |
+| R-011 | Choose public/private privacy at creation | Hired resume privacy | Canvas résumé family independently persists private, recruiter-only, connections, public or draft visibility; public and embed resolvers re-check `public` on every request | **PORTED** | Changing away from public immediately disables every issued link without exposing the containing Canvas. |
+| R-012 | Mark first résumé as master automatically | Hired service promotes first upload | `createResumeFamily` makes the imported source both active and master | **PORTED** | First source is master; later imports do not silently replace it. |
+| R-013 | Import into an existing résumé with confirmation | Hired `targetResumeId` overwrite flow | Canvas résumé import asks for confirmation and appends the parsed source as a new active derived revision instead of replacing the family | **PORTED** | Confirmation snapshots current résumé, then imports into a new version. |
+| R-014 | Preserve a named pre-import version | Hired creates “Before résumé import” | Existing active revision is retained unchanged in the family and the imported revision points back to it with a named `Imported · …` head | **PORTED** | A résumé-domain version is created automatically before replacement. |
+| R-015 | Keep uploaded original immutable | Required product invariant | `updateActiveResume` rejects original mutation and the editor disables original editing/template changes | **PORTED** | Original source/revision cannot be overwritten or deleted while derivatives exist. |
+| R-017 | Derive from original without replacing it | Hired parent/variation APIs | Canvas résumé family persists original, active and source revision IDs; new versions default to the original | **PORTED** | Derived résumé stores source résumé + exact source revision IDs. |
+| R-018 | Name and rename a derived résumé | Hired variation title | Derived version exposes an explicit persisted version-name field; Canvas object projection follows the active revision | **PORTED** | Rename persists on the résumé artifact and its version list. |
+| R-019 | See Original and all derived résumés together | Hired master résumé groups | Canvas résumé header lists every family revision, with Original labeled and master marked | **PORTED** | Canvas resume header lists lineage with Original pinned first. |
+| R-020 | Switch back to Original in one action | Hired master/variant model | Revision selector changes only the active rendition and synchronizes exported `markdown`/`content` | **PORTED** | “Original” switches the active rendition without changing other Canvas state. |
+| R-021 | Compare original vs generated résumé | Hired merge analysis/preview APIs | Compare mode renders both templates side by side and reports canonical field/array/bullet paths with before/after values, section counts and changed sections | **PORTED** | Side-by-side and field/bullet diff use the canonical résumé schema. |
+| R-022 | Restore an old résumé version without destroying head | Hired version restore | “Restore as new” derives a new head from the selected revision and retains all prior revisions | **PORTED** | Restore creates a new résumé head version and preserves both states. |
+| R-023 | Promote a variant to master | Hired `promoteVariantToMaster` | Canvas exposes an accessible impact-confirmation dialog, then atomically persists master/active IDs through the Canvas command/history path | **PORTED** | Promotion is explicit, confirmed, atomic and audited. |
+| R-024 | Detach a variant from its parent | Hired `detachFromParent` | Canvas “Detach as résumé” clones the selected canonical revision and design into a new independent object with a new protected Original/master identity | **PORTED** | User can copy a variant into an independent résumé. |
+| R-025 | Clone a résumé | Hired `cloneResume` | Canvas Duplicate / Ctrl+D creates a new Canvas object identity containing the complete canonical family, structured content, source metadata and presentation settings | **PORTED** | Clone includes structured content, template and metadata with a new identity. |
+| R-027 | Delete with lineage-aware confirmation | Hired delete/promote tests | Accessible confirmation names the revision and descendant impact; Original/Master are protected, active deletion returns to Master, and direct descendants are safely reparented instead of retaining dangling lineage | **PORTED** | Deletion explains descendants and protects the last original/master. |
+| R-031 | Consolidate duplicate bullets | Hired consolidate API | Résumé analysis deterministically detects normalized near-duplicate highlights across work, volunteer and projects, previews the retained/deleted bullets, and applies selected consolidation through canonical document mutation | **PORTED** | Preview is non-mutating; apply is a normal version edit and therefore reversible through retained revisions/session history. |
+| R-032 | Parse and structure contact basics | Hired canonical resume schema | Every imported format now passes through a constrained JSON Resume extraction contract covering typed name, label, image, email, phone, URL, location and summary; deterministic JSON Resume imports bypass the model | **PORTED** | Name, label, email, phone, location, URLs and summary are typed fields. |
+| R-033 | Edit work experience | Hired `SectionEditor` | Canvas structured editor supports add/edit/remove/reorder for company, position, dates, work mode, description and highlights | **PORTED** | Add/edit/remove/reorder jobs, dates and highlights. |
+| R-034 | Edit education | Hired `SectionEditor` | Canvas structured editor supports add/edit/remove/reorder for institution, degree, area, dates, score and courses | **PORTED** | Add/edit/remove/reorder institutions, study, dates and score. |
+| R-035 | Edit volunteer experience | Hired renderer/section schema | Canvas structured editor provides volunteer organization, position, URL, dates, summary and highlights with add/remove/reorder; canonical renderer/export includes the section | **PORTED** | Structured volunteer entries render and export. |
+| R-036 | Edit skills | Hired renderer/section schema | Canvas structured editor supports named skill groups, levels, keywords, add/remove and ordering | **PORTED** | Structured skills can be grouped and reordered. |
+| R-037 | Edit languages | Hired renderer/section schema | Canvas structured editor provides language/fluency CRUD and ordering; canonical renderer/export includes the section | **PORTED** | Language and fluency fields render and export. |
+| R-038 | Edit projects and media | Hired renderer supports project media | Canvas supports structured project fields and a localized per-project media URL editor; metadata is ID-bound and images/video/links render only in descriptors with `showMedia` | **PORTED** | Structured projects support URL, role, dates, highlights and media. |
+| R-039 | Edit awards, certificates and publications | Hired renderer/section schema | All three sections now have structured fields, add/remove/reorder controls and canonical rendering/export | **PORTED** | Each section has structured CRUD and ordering. |
+| R-040 | Edit interests and references | Hired renderer/section schema | Both sections have structured CRUD and ordering; references expose an explicit private control and the canonical renderer suppresses private entries from Canvas/public/HTML/PDF | **PORTED** | Each section has structured CRUD and privacy-safe export behavior. |
+| R-041 | Reorder sections | Hired sortable sections and document blocks | Canvas section-layout controls expose focusable up/down actions and persist an explicit order applied by preview, HTML, PDF and DOCX; pointer drag remains tracked under RR-010 | **PORTED** | Keyboard-accessible reorder persists per résumé/template. |
+| R-042 | Collapse/expand sections while editing | Hired collapse context | Every structured section is an independent collapsible editor detail; collapse state does not mutate the résumé or export | **PORTED** | Collapse is view preference and does not alter export. |
+| R-043 | Hide/show sections | Template descriptor `enabled` | Canvas persists per-revision hidden section IDs; preview/export omit hidden sections while canonical content remains intact | **PORTED** | Visibility toggles persist without deleting content. |
+| R-045 | AI rewrite selected content | Hired AI Rewrite action | Dedicated AI writing panel targets `basics.summary`, includes the current value and optional direction, forbids unsupported facts/changes to other fields, and requires Brain approval before the complete canonical patch creates a reversible derivative | **PORTED** | Selection-scoped rewrite previews a résumé-field patch. |
+| R-046 | AI create a hook/summary | Hired AI Hook action | Dedicated headline/hook action targets only `basics.label`, requires a proposed field preview, and applies through the same protected canonical derivative contract | **PORTED** | Dedicated action targets summary/headline and is reversible. |
+| R-048 | Export PDF | Hired WYSIWYG browser-print renderer | `canvasResumeRenderer` now supplies identical template-tagged HTML/CSS to Canvas preview, standalone HTML and the A4 browser-print/PDF path | **PORTED** | Export uses the exact selected résumé template and pagination. |
+| R-050 | Export HTML/Markdown/copy | Hired has export/download helpers | Builderforce exposes all four | **PORTED** | Keep existing Canvas implementation; feed it canonical résumé content. |
+| R-051 | Public share URL/slug | Hired public résumé and slug validation | Résumé card issues stable 256-bit token URLs through the kernel share registry; only token hashes persist; active links list use count/expiry and can be revoked | **PORTED** | `/resume/:token` returns only the résumé projection, uses the family default template, and re-checks public privacy on every view. |
+| R-052 | Embedded résumé view | Hired embed endpoint | Résumé card can copy `/embed/resume/:token`; the anonymous surface uses the same token, projection and canonical renderer as public view | **PORTED** | Embed adds no alternate privacy or rendering path. |
+| R-055 | Autosave and visible save status | Hired server autosave indicator | Canvas autosaves and shows state | **PORTED** | Keep Canvas persistence; include structured résumé payload. |
+| R-056 | Offline/retry safety | Hired save pipeline | Canvas shows offline/reconnecting and retains local state | **PORTED** | Resume mutations use the same persistence queue. |
+
+
+### §8.3 Résumé template and renderer inventory — PORTED rows
+Archived: lines 883–891 and 907–930 of `docs/specs/18-prd-hired-video-port.md`. Plus:
+
+#### 8.3 Résumé template and renderer inventory
+
+Hired contains **12 document résumé designs** in `types/resume-template.ts`. Each descriptor
+controls document mode, theme, font, heading style, density, card style, title sizing, one/two
+columns, sidebar placement, hero/avatar/contact/summary/video visibility, section order, section
+layout, and optional media/highlights. Builderforce now registers all 12 IDs with a first-pass
+declarative Canvas renderer (mode, columns, palette, font and density); the remaining descriptor
+fields and print-parity work stay explicitly partial below.
+
+| Template ID | Hired design behavior | Builderforce status |
+|---|---|---|
+
+
+| `payroll-iron-gray` | Finance; serif; compact two-column; skills/education/credentials sidebar | **PORTED** — Canonical descriptor styling and sidebar section routing render in Canvas, preview, HTML and PDF. |
+| `risk-asphalt` | Consulting; sans; caps; two-column credential sidebar | **PORTED** — Canonical descriptor styling and credential sidebar routing render in Canvas, preview, HTML and PDF. |
+| `executive-taupe` | Executive; serif; spacious one-column divider layout | **PORTED** — Serif, spacious density, one-column layout and divider headings use the shared renderer. |
+| `intern-education-first` | New-grad; education first; projects/skills emphasis | **PORTED** — Descriptor-enabled sections, education-first ordering and two-column skill grids are enforced by the shared renderer. |
+| `hospitality-amber` | Hospitality; warm amber; caps; one column | **PORTED** — Palette, caps headings and one-column descriptor render through the shared pipeline. |
+| `creative-minimal` | Minimal slate; mono; spacious plain headings | **PORTED** — Mono, spacious density and plain headings render through the shared pipeline. |
+| `software-engineer-graphite` | Developer graphite; mono; two-column skills/projects sidebar | **PORTED** — Skills/projects/credentials route to the descriptor sidebar with mono styling. |
+| `healthcare-clinical-blue` | Clinical blue; compact two-column credentials sidebar | **PORTED** — Credentials/skills/education/languages route to the compact clinical sidebar. |
+| `sales-growth-emerald` | Sales; emerald; achievement-led caps headings | **PORTED** — Emerald palette, caps headings and one-column descriptor render through the shared pipeline. |
+| `actor-headshot-hero` | Headshot/video hero; credits first; special skills/dialects/representation | **PORTED** — hero avatar/video, contact/summary controls, credits-first enabled order, project media and specialty sections render from canonical fields |
+| `director-filmography-serif` | Filmography/festivals/press first; spacious serif print design | **PORTED** — enabled-section filtering, filmography/festival/press ordering and project media projection render in the serif design. |
+
+The separate Hired data bundle contains **15 video-résumé compositions**. Builderforce now loads
+all 15 into the Canvas video Studio with profession/search discovery, palette, duration, scene timing,
+editable storyboard fields and Hired.VIDEO first-party attribution.
+
+| Template asset | Intended résumé story | Builderforce status |
+|---|---|---|
+| `video-resume-professional` | General professional introduction, achievements, skills and close | **PORTED** — First-party storyboard, duration, palette, profession metadata and scene timing are selectable and editable in the Canvas video studio. |
+| `video-resume-minimal` | Minimal visual résumé | **PORTED** — First-party storyboard, duration, palette, profession metadata and scene timing are selectable and editable in the Canvas video studio. |
+| `video-resume-candidate-intro` | Candidate introduction | **PORTED** — First-party storyboard, duration, palette, profession metadata and scene timing are selectable and editable in the Canvas video studio. |
+| `video-resume-hook-led` | Hook-first pitch | **PORTED** — First-party storyboard, duration, palette, profession metadata and scene timing are selectable and editable in the Canvas video studio. |
+| `video-resume-story-led` | Narrative/story-first pitch | **PORTED** — First-party storyboard, duration, palette, profession metadata and scene timing are selectable and editable in the Canvas video studio. |
+| `video-resume-pivot-led` | Career-pivot narrative | **PORTED** — First-party storyboard, duration, palette, profession metadata and scene timing are selectable and editable in the Canvas video studio. |
+| `video-resume-gig-rapid-deploy` | Gig/rapid-availability pitch | **PORTED** — First-party storyboard, duration, palette, profession metadata and scene timing are selectable and editable in the Canvas video studio. |
+| `video-resume-campaign-staff` | Political/campaign staff pitch | **PORTED** — First-party storyboard, duration, palette, profession metadata and scene timing are selectable and editable in the Canvas video studio. |
+| `video-resume-government-clearance` | Government-cleared candidate | **PORTED** — First-party storyboard, duration, palette, profession metadata and scene timing are selectable and editable in the Canvas video studio. |
+| `video-resume-security-cleared` | Security-cleared candidate | **PORTED** — First-party storyboard, duration, palette, profession metadata and scene timing are selectable and editable in the Canvas video studio. |
+| `video-resume-law-enforcement` | Law-enforcement candidate | **PORTED** — First-party storyboard, duration, palette, profession metadata and scene timing are selectable and editable in the Canvas video studio. |
+| `video-resume-legal-bar` | Legal/bar-qualified candidate | **PORTED** — First-party storyboard, duration, palette, profession metadata and scene timing are selectable and editable in the Canvas video studio. |
+| `video-resume-medical-credentialed` | Medical/credentialed candidate | **PORTED** — First-party storyboard, duration, palette, profession metadata and scene timing are selectable and editable in the Canvas video studio. |
+| `video-resume-trade-licensed` | Licensed-trade candidate | **PORTED** — First-party storyboard, duration, palette, profession metadata and scene timing are selectable and editable in the Canvas video studio. |
+| `video-resume-beauty-portfolio` | Beauty/portfolio candidate | **PORTED** — First-party storyboard, duration, palette, profession metadata and scene timing are selectable and editable in the Canvas video studio. |
+
+Renderer parity is independently required; copying IDs is not completion.
+
+
+
+| ID | Renderer/editor capability | Current status | Acceptance evidence |
+|---|---|---|---|
+| RR-001 | One canonical renderer for edit preview, public view and PDF | **PORTED** | Canvas preview, template thumbnails, public view, embed, standalone HTML and PDF all call `renderCanvasResumeRevision`; regression coverage must keep these entry points on that renderer. |
+| RR-002 | Hero and print document modes | **PORTED** | All 12 normalize to the v1.2 descriptor contract and canonical output carries hero/print mode plus hero layout flags. |
+| RR-003 | Letter, Legal and A4 page sizes | **PORTED** | Revision persists the size; true-size preview, standalone HTML and PDF `@page` use it. |
+| RR-004 | Portrait and landscape orientation | **PORTED** | Revision persists orientation; preview dimensions and PDF `@page` match. |
+| RR-005 | One- and two-column/sidebar layouts | **PORTED** | Canonical renderer routes each descriptor's complete named sections into main/sidebar across preview, HTML and PDF. |
+| RR-006 | Page-break guides and page numbers | **PORTED** — ResizeObserver-backed pagination computes page count from the true-size rendered artifact; paged/spread modes paint exact page-height boundaries and label every page. | True-size editor displays computed boundaries. |
+| RR-008 | Zoom control bound to the document sheet | **PORTED** | Family persists 40–125% preview zoom; print dimensions remain physical page dimensions. |
+| RR-009 | Move blocks up/down | **PORTED** — Focusable up/down actions persist section order and entry order in the canonical structured document. | Buttons and keyboard action update persisted order. |
+| RR-012 | Delete block with undo | **PORTED** — Deleting any structured entity entry captures its section, index and complete typed record; the sticky Undo action restores it at the prior position. | Canvas undo restores block and typed data. |
+| RR-015 | Apply template to live document | **PORTED** | Content survives every template switch. |
+| RR-016 | Set current template as résumé default | **PORTED** | Family persists an explicit default template independently of current revision selection. |
+| RR-017 | Template gallery thumbnails and selected/default states | **PORTED** | All 12 use the canonical live renderer for accessible thumbnails with selected/default states. |
+| RR-018 | Template JSON validation/version compatibility | **PORTED** | `resumeTemplateFromDescriptor` accepts only known IDs and v1.0–v1.2, bounds enums/columns/sidebar/section rules, migrates omitted legacy values from the stock descriptor, and returns null for malformed/unknown input. |
+| RR-019 | Theme palette, font family, heading style and density | **PORTED** | All four heading treatments plus template palette, font and density are canonical renderer attributes/styles shared by preview/export. |
+| RR-020 | Avatar, contact buttons, summary and video hero controls | **PORTED** — Shared Canvas/HTML/PDF markup independently projects safe avatar, mail/phone/portfolio actions, summary and associated MP4/WebM video according to the validated descriptor. | Canonical output independently carries the four validated descriptor flags and visual projection. |
+| RR-021 | Section layouts: timeline, grid, cards and list | **PORTED** | Canonical renderer consumes normalized per-section descriptor rules, including compact/grid columns, rather than a second template-ID switch. |
+| RR-022 | Date sorting and highlights/media flags | **PORTED** — The canonical structured document is cloned for presentation, date-sorted per descriptor, highlight-suppressed when requested, and item-bound image/video/link metadata is rendered for media-led sections without mutating content. | Descriptor behavior is visible in Canvas, public view, HTML and PDF. |
+| RR-023 | Print/PDF from preview overlay | **PORTED** | Existing PDF action invokes the canonical résumé renderer, not Markdown print. |
+
+- the rows in lines 892–905 except `hired-default` (L894);
+- the rows in lines 931–956 whose Current status begins **PORTED**.
+
+
+### §8.4 / §8.7 / §8.9 — PORTED and REPLACE rows
+
+| ID | Hired UI/UX feature | Builderforce mapping | Status |
+|---|---|---|---|
+| S-001 | One landing workspace for signed-in and anonymous visitors | Creation Canvas supports local and server sessions | **PORTED** |
+| S-002 | Create a real persisted draft before entering editor | Server Canvas sessions persist; guests use local state | **PORTED** |
+| S-003 | Anonymous work survives sign-in | `ResumeWorkBridge`/session adoption behavior | **PORTED** |
+| S-004 | New-project split button | Object palette + create actions | **REPLACE** |
+| S-006 | Template catalog with thumbnails | Searchable Canvas pack catalog plus 15 video-résumé starter swatches and 12 live-rendered résumé design thumbnails | **PORTED** |
+| S-007 | Filter templates by category | Canvas template catalog has a localized category filter spanning marketplace packs and object packs | **PORTED** |
+| S-008 | Filter templates by media kind | Catalog derives the complete object/media-kind vocabulary from installed packs and filters packs containing that kind | **PORTED** |
+| S-009 | Search templates | Localized search covers translated name, description, media kinds and object titles while composing with both filters | **PORTED** |
+| S-010 | Audience/profession template discovery | Video résumé catalog filters the complete starter set by profession and free-text scene/audience terms; résumé designs label their target industry | **PORTED** |
+| S-013 | First-party badge and creator attribution | Every built-in video and document résumé template carries `creator: Hired.VIDEO`, `firstParty: true`, and renders localized first-party attribution in its gallery | **PORTED** |
+| S-016 | Recent projects grid | Canvas session list exists outside this runtime | **REPLACE** |
+| S-018 | Media-kind badge | Canvas object labels kinds | **PORTED** |
+| S-020 | Rename project inline | Canvas title is inline editable | **PORTED** |
+| S-021 | Clone project | Canvas can duplicate object/branch session | **REPLACE** |
+| S-023 | Project details sheet | Canvas inspector supplies object details | **REPLACE** |
+| S-024 | Workspace switcher | Builderforce workspace shell owns this | **REPLACE** |
+| S-025 | Autosave indicator | Canvas shows saved/offline/reconnecting state | **PORTED** |
+| S-026 | Collaborator presence bar | Canvas has avatars, typing, cursor/viewport follow | **PORTED** |
+| S-027 | Invite/share with roles | Canvas share menu supports invitations/roles | **PORTED** |
+| S-028 | Object edit locks | Canvas creation-session locks exist | **PORTED** |
+| S-031 | Version-history dialog | Canvas history/checkpoints are user-reachable | **PORTED** |
+| S-032 | Named checkpoint | Canvas supports named checkpoints | **PORTED** |
+| S-033 | Branch and reviewed merge | Canvas supports both | **PORTED** |
+| S-034 | Undo/redo toolbar and shortcuts | Canvas supports both | **PORTED** |
+| S-036 | Fullscreen/presentation mode | Canvas has fullscreen and present mode | **PORTED** |
+
+
+| ID | Hired Studio control | Builderforce evidence / current result | Status |
+|---|---|---|---|
+| E-024 | Chart widget | Canvas Chart object exists, not a Studio widget | **REPLACE** |
+| E-047 | Brain edits same persisted artifact as pointer edits | Canvas proposed changes mutate canonical object data | **PORTED** |
+| E-048 | AI selection chip scopes generation to selection | Canvas Brain scopes to Canvas/selection/connected/frame | **REPLACE** |
+
+
+| ID | Hired action | Builderforce evidence / current result | Status |
+|---|---|---|---|
+| A-007 | Webcam recording | Basic Canvas video editor records camera | **PORTED** |
+| A-008 | Screen recording | Basic Canvas video editor records screen | **PORTED** |
+| A-019 | Chapter markers | Visual clips persist editable chapter titles alongside clip timing | **PORTED** |
+
+
+| ID | Feature | Builderforce evidence / current result | Status |
+|---|---|---|---|
+| V-001 | Visual, music, voiceover and SFX tracks | Four tracks exist | **PORTED** |
+| V-002 | Add image/video/audio files | Supported | **PORTED** |
+| V-003 | Clip start, length and trim-start | Supported | **PORTED** |
+| V-004 | Per-audio-clip volume | Supported | **PORTED** |
+| V-005 | Remove clip | Supported | **PORTED** |
+| V-006 | Live composited preview and scrubber | Basic composition supported | **PORTED** |
+| V-008 | Split audio/video at playhead | Canvas split action divides the active source window at the absolute playhead, preserving source/track/volume and advancing the right clip trim offset | **PORTED** |
+| V-009 | Multiple scenes and scene transitions | Persisted storyboard supports multiple scenes, editable timing/title, duplication/deletion/reorder and cut/fade/slide/zoom transition selection | **PORTED** |
+| V-014 | Captions, chapters and teleprompter | Per-visual-clip caption/teleprompter and chapter fields persist; captions render live and burn into exported Canvas frames | **PORTED** |
+| V-015 | Video generation returns editable frames/clips | Generated frames become editable visual clips | **PORTED** |
+| V-016 | Export real composed video | Browser renderer exists | **PORTED** |
+| V-021 | YouTube publish | Rendered Canvas video loads authenticated YouTube connections, supports title/description/privacy, OAuth connection, upload, persisted video ID/URL and linked playback | **PORTED** |
+
+
+| ID | Feature | Builderforce evidence / current result | Status |
+|---|---|---|---|
+| X-001 | Primary Save persists draft without rendering | Canvas autosave provides equivalent behavior | **REPLACE** |
+| X-003 | Export creates a child rendition without replacing editable source | Canvas deliverables attach to object | **PORTED** |
+| X-004 | Download/result appears in Canvas Files library | Implemented | **PORTED** |
+| X-016 | Copy public share link | Canvas share link exists | **PORTED** |
+| X-017 | Copy editor link | Session URL provides equivalent | **REPLACE** |
+| X-029 | Project clone/delete/template lifecycle actions in one menu | Canvas has equivalent actions across menus | **REPLACE** |
+
+Archived from `docs/specs/18-prd-hired-video-port.md`, word for word, every row whose Status is **PORTED** or **REPLACE**:
+- §8.4: lines 960–999
+- §8.5: lines 1003–1052 (E-024, E-047, E-048)
+- §8.6: lines 1056–1092 (A-007, A-008, A-019)
+- §8.7: video lines 1098–1123
+- §8.9: lines 1242–1273 (X-001, X-003, X-004, X-016, X-017, X-029)
+
+## ✅ RESOLVED 2026-11-17 — PRD 31: finished sections archived on consolidation (Build, run and ship a real app on Builderforce)
+
+**Verified 2026-11-17:**
+- **W1.7 Preview in the UI:** `frontend/src/components/preview/LivePreviewPanel.tsx` (device frame, Expo QR, service tabs, restart, 402 gate). It is mounted at `frontend/src/components/agent/AgentExecutionPanel.tsx:969` and `frontend/src/components/apps/ProjectAppPanel.tsx:103`.
+- **W2 contract:** `packages/creation-canvas-contract/src/appBlueprint.ts`.
+- **W2 detector registry:** 12 detectors in `api/src/application/blueprint/detectors/`. The registry is in place, but the wrangler TOML parsing stays OPEN in in make.md.
+- **W2 `builderforce.json` override:** `detectors/builderforceJsonDetector.ts` and `blueprintOverrides.ts`. The fix history is already in an earlier DONE.md entry.
+- **W2 storage:** `api/migrations/1184_app_blueprint_storage.sql`, with the single writer `api/src/application/blueprint/detectBlueprintForProject.ts`.
+- **§4.7 `app_blueprint.*`:** `api/src/application/llm/appBlueprintToolCatalog.ts:78,105`.
+- **W1.4 Vite-marker bug:** fixed at `api/src/application/runtime/previewDevServer.ts:238`.
+- **W8 `companyId` persistence:** an earlier DONE.md entry already records it. Tenant validation stays OPEN.
+- **§1 Verdict and the "Today" table:** historical. This text archives as history.
+
+### §1 Verdict
+Source `docs/specs/31-prd-customer-app-platform.md` lines 9–41, word for word.
+
+### 1. Verdict
+
+Users want to build apps of hired.video's calibre on Builderforce and run them there. hired.video is:
+
+- a Hono Worker with 3 Durable Objects (WebSocket hibernation), R2, KV, Workers AI and a `*/5` cron;
+- a Vite SPA with Pages Functions;
+- Neon Postgres (428 tables, 262 migrations);
+- about 80 secrets, and its own auth (JWT, passkeys, 4 OAuth providers);
+- 11 domains.
+
+Builderforce today can take such an app as far as **"the agent opens a PR"**. After that the flow stops:
+
+| Step | Today | Evidence |
+|---|---|---|
+| Company → project | Companies own projects through `projects.company_id` (mig 1120) and the attach/detach UI in Investor → Companies. **A project cannot be created under a company in one step.** | `investorRoutes.ts`, `companyWorkspace.ts:564 linkProjectToCompany`, `POST /api/projects` has no `companyId` |
+| Connect repo | Works (PAT). The GitHub App is not registered. | `resolveRepoCredential.ts`, `githubApp.ts` |
+| Agent edits | Works on durable (commit + PR, no shell) and GitHub Actions. The container surface is **built, not live**. | `cloudDispatch.ts`, ROADMAP "cloud-container needs a live image" |
+| **Run + see it** | The container, dev-server start, preview proxy (WS/HMR), signed URLs and idle eviction are all coded. **Not live**, plus 5 functional gaps (§4.1). | `AgentContainerDO`, `server.mjs`, `previewDevServer.ts`, `previewIngress.ts` |
+| **Build** | No Builderforce build. The generated workflow is `npm run build` at the root. | `ide/deployWorkflow.ts` |
+| **Provision** | Nothing. No Cloudflare, Neon, GCP or Azure API writes. No IaC. The only IaC is a generated SAM template. | audit 2026-09-26 |
+| **Deploy server code** | Static `dist/` only. `project_sites.mode` is only ever `'static'`. | ROADMAP "A published site cannot run ARBITRARY server code" |
+| Secrets | Vault exists (`project_secrets`). Values reach declarative handlers only. The customer copies them into GitHub by hand. | `projectSecrets.ts` |
+| Custom domain | Code-complete, not live (Cloudflare for SaaS entitlement). Serves static sites only. | `customDomain.ts` |
+| **Marketplace** | Canvas-born sessions only. No project-sourced listing, no mobile kind. `open` renders in a sandboxed iframe, so an own-auth app breaks. | `listings/target.ts`, `creationListings.launch.tsx` |
+| End-user accounts | Builderforce `site_users` (email code) only. An own-auth app needs its own server running. | `siteAuth.ts` |
+
+This PRD closes the rows after "Agent edits". It works as **three loops** built on the seams that already exist, not a second platform:
+
+1. **Run loop:** clone → install → dev server → live preview in the Builderforce UI → agent edits → HMR reload → verify → commit/PR. This is the "cloud loop" the operator asked for.
+2. **Ship loop:** blueprint → provision → build → migrate → deploy → domain. It targets the **customer's own cloud** (connected account) or **Builderforce's own infrastructure** (paid).
+3. **Sell loop:** list a repo-connected project (web or mobile) → launch on its own domain, or install it on a phone → end users sign up in the app's own auth.
+
+Everything an agent can do in these loops is also an **MCP tool** (§4.7), so the Brain and cloud agents drive the same path a human clicks through.
+
+
+### §4 W1.7 Preview in the UI
+Source lines 91 (item 7), word for word.
+
+### §4 W2 — Contract, `builderforce.json` override, storage
+Source lines 99–103 (Contract), 113 (override) and 114 (Stored per project + commit), word for word.
+
+- **Contract:** `packages/creation-canvas-contract/src/appBlueprint.ts` (shared by the API, web, container and VSIX). It declares:
+  - `services[]`: each has kind (`worker` / `spa` / `node` / `container` / `mobile-expo` / `mobile-capacitor`), root dir, package manager, install/dev/build/start/verify commands, output dir and ports;
+  - `bindings[]`: `durableObject` (class names + migrations), `r2`, `kv`, `d1`, `queue`, `cron`, `ai`, `vectorize`, `browser`;
+  - `database`: engine, migration command(s), seed command;
+  - `secrets[]`: names only; `vars`; `domains[]`.
+
+
+- **An optional repo override:** `builderforce.json` at the root, with the same shape. It is merged over detection, never a second source of truth. The agent can write it when detection is ambiguous.
+- **Stored per project + commit:** `project_app_blueprints (project_id, commit_sha, blueprint jsonb, detected_at)`, with a unique `(project_id, commit_sha)`. This is a cache of a derivation, so it is written only by the detector use case.
+
+
+### §4.7 MCP tool surface — `app_blueprint.*`
+Source line 289 (the `app_blueprint.*` table row), word for word.
+
+---
+
+## ✅ RESOLVED 2026-11-17 — Design: Creation Canvas — finished sections archived on consolidation (`docs/design/creation-canvas/README.md`, `DELIVERY-ARCHITECTURE.md`)
+
+**Verified 2026-11-17:**
+- **Routes:** `frontend/src/app/create/{page.tsx,new,[sessionId],invitations,join}`. The legacy redirects are `BrainstormCanvasRedirect.tsx`, `WorkflowBuilderCanvasRedirect.tsx` and `frontend/src/middleware.ts:224-234`.
+- **Product model and canvas objects:** `packages/creation-canvas-contract/src/objectKinds.ts:491-742`.
+- **Session first, project optional:** the `creation_session_project_links` table and the `creation_project_expanded` / `creation_projects_compared` events.
+- **Cross-object evaluation:** the `creation_ai_evaluation_completed` and `creation_change_set_applied` events, and `hooks/useCanvasProposalReview.ts`.
+- **Creation-to-delivery:** `hooks/useCanvasProjectActions.ts:267` and `frontend/src/lib/creationDeliverables.ts`.
+- **Multiplayer:** migrations `0388`–`0393`, plus follow mode at `chrome/CanvasDesktopCommandBar.tsx:76,113`.
+- **VS Code:** `clients/vscode/package.json:158-159`. The webview compiles the frontend canvas (`clients/vscode/webview/vite.config.ts:36`).
+- **Phases 1–3:** `qa-e2e/tests/creation-canvas.spec.ts` and `creation-canvas-release.spec.ts`.
+- **DELIVERY-ARCHITECTURE:** `/api/brain/chats/:id/agent-reply` (`api/src/presentation/routes/brainRoutes.ts`), `creationDeliverables.ts`, `packages/creation-canvas-contract/src/realizationDelivery.ts`, and `api/src/application/outcomes/proofJourney.test.ts:147`.
+
+### README.md — Recommendation, Product model, Session first, Primary interaction, Canvas objects, Cross-object AI evaluation, Creation-to-delivery loop, Multiplayer collaboration, Layout, Reuse plan, Suggested data shape, VS Code extension, Delivery sequence Phases 1–3, Success criteria, Mockups
+Source `docs/design/creation-canvas/README.md`:
+- Lines 1–244, word for word. Keep the `/workflows` row (line 25) and Phase 4 (lines 245–249) in in idea.md as open work.
+
+## Creation Canvas
+
+The execution and artifact handoff contract is documented in [DELIVERY-ARCHITECTURE.md](./DELIVERY-ARCHITECTURE.md).
+
+Production deployment, observation, and rollback guidance lives in [OPERATIONS.md](./OPERATIONS.md).
+
+### Recommendation
+
+Replace Brainstorm, the workflow builder, and the IDE launcher as separate creation destinations with one session-based surface:
+
+```text
+/create                         New or recent creation sessions
+/create/new                     Create a blank session, then replace the URL
+/create/:sessionId              Open a creation session
+/create/:sessionId?focus=:id    Open and select one canvas object
+```
+
+`/create/:sessionId` is the canonical route. A session is the durable container; workflows, chats, prototypes, datasets, models, voice clips, and optional projects are objects on its canvas.
+
+The existing routes should remain as compatibility entry points during migration:
+
+| Existing entry | New behavior |
+| --- | --- |
+| `/brainstorm` | Open a new or most recent session with a Chat object selected |
+
+
+| `/workflows/builder?id=:id` | Open the owning session with that Workflow object selected |
+| `/ide/dashboard` | Open the creation-session library, filtered to projects and prototypes |
+| `/ide/:id` | Open the owning session with its Code/Preview object selected |
+
+Do not immediately hard-redirect old routes. First make them thin views over the shared session model, then add redirects after saved workflows and projects have session ownership.
+
+### Product model
+
+The canvas is the product. Chat is a familiar control and a reusable canvas object, not the page shell.
+
+- **Session**: scope for history, permissions, files, MCP connections, agent state, and version history.
+- **Object**: a movable live view such as Chat, Workflow, Website, Dataset, Chart, Dashboard, Agent, Staff Member, WYSIWYG Prototype, Code, Browser Preview, LLM, Voice, Document, Slide, or Spreadsheet.
+- **Connection**: an explicit typed edge. `data`, `control`, `reference`, and `presentation` edges should be visually distinct.
+- **Selection**: supplies context to the agent. The bottom composer targets the selected object, a multi-selection, or the entire canvas.
+- **Agent action**: produces a visible proposal before destructive changes and records mutations in session history.
+- **MCP capability**: appears as an available action or workflow node based on the selected object; MCP configuration stays out of the main canvas until needed.
+- **Resource reference**: links an object to its canonical application entity. Editing a Workflow, Website, Agent, report, or dashboard on the canvas edits the same resource seen elsewhere in Builderforce.ai.
+
+Spatial proximity must not imply execution. Only a connection or explicit agent action changes data flow or workflow behavior.
+
+### Session first, project optional
+
+The user returns to a **session**, which is the evolution of chat: a persistent place where conversation, visual context, generated work, and collaborators remain together. Creating a session must not require choosing or creating a project.
+
+A Project is an optional live object that supplies organizational context and a delivery destination. A session can contain zero, one, or several projects:
+
+- With no Project object, users can brainstorm and build freely.
+- With one Project object, Brain can use its tasks, agents, files, workflows, maturity, performance, and roadmap as grounded context.
+- With multiple Project objects, Brain can compare features, health, delivery performance, maturity, or dependencies.
+- **Add all related items** expands a Project into a visual subgraph. Filters control whether the expansion includes everything, delivery work, metrics, customer feedback, or another lens.
+
+Team and organization metrics remain attached to canonical projects. Sessions reference and visualize those metrics but do not force project-management structure onto individual creation.
+
+### Primary interaction
+
+1. The user types into the familiar bottom composer or adds an object from the compact palette.
+2. The agent creates objects directly on the canvas and connects them when the relationship is executable or data-bearing.
+3. Selecting an object changes the composer scope and opens a contextual inspector.
+4. The user can drag, resize, connect, draw, annotate, or ask the agent to transform selected objects.
+5. Outputs remain first-class artifacts. Each supports copy, download/export, duplicate, version, and "use as input" actions.
+
+Objects have three presentation levels without changing identity:
+
+- **Card** for status, summary, and connecting objects.
+- **Expanded** for direct interaction in place, such as editing a workflow or website.
+- **Focus** for a full-canvas editing experience with the rest of the session still available through breadcrumbs or zoom-to-selection.
+
+A dragged resource is therefore a portal, not an export. Dropping a saved marketing workflow lets the team run and change that workflow in the session. Dropping a website opens its live preview and WYSIWYG controls. Changes use the resource's existing permissions, validation, versioning, and audit trail.
+
+The composer remains stable at the bottom, but has a scope chip:
+
+- `Entire canvas` for session intent.
+- `Selected: Interactive prototype` for targeted edits.
+- `3 selected objects` for transformations such as "turn this dataset and sketch into a dashboard."
+
+### Canvas objects
+
+| Object | Purpose | Key actions |
+| --- | --- | --- |
+| Chat | Familiar conversation stream | Prompt, copy, branch, turn response into object |
+| Workflow | Executable graph or collapsed workflow group | Connect, validate, run, inspect output |
+| Project | Optional organizational context and delivery destination | Expand relationships, compare, inspect health, attach outputs |
+| Website | Live site, page, or WYSIWYG creation surface | Edit, preview, evaluate, publish |
+| Dataset | Imported CSV/XLSX/JSON/database result | Profile, clean, filter, visualize |
+| Chart | Live view bound to a dataset | Change encoding, filter, export, use in prototype |
+| Report/Dashboard | Existing informational widget or a canvas-native composition | Filter, refresh, drill down, connect as evidence |
+| WYSIWYG Prototype | High-fidelity interactive UI | Edit visually, bind data, preview breakpoints, export |
+| Code/Browser | Source and live runtime preview | Edit, run, inspect, deploy |
+| LLM | Model, prompt, knowledge, memory, and evaluation configuration | Test, compare, train, package |
+| Voice | Recording, generated speech, or voice interface | Transcribe, synthesize, attach, route |
+| Agent | Live workforce member and configuration | Assign, inspect activity, edit model/tools/instructions/autonomy |
+| Staff Member | Human collaborator or stakeholder | Invite, mention, assign, join stand-up, share context |
+| Document/Slide/Sheet | Existing generated deliverables | Edit, copy, download, use as input |
+| Roadmap | Canvas-native or project-backed narrative/timeline | Tailor for sales, executive, delivery, or product audiences |
+| Mockup | Interactive visual artifact or a set of feature concepts | Review, attach to task, assign agent, deliver to project |
+| Task | Project delivery unit | Assign agent, run, approve, inspect output |
+
+The Add palette should expose the application's object registry, not a second hard-coded catalog. Anything that has a detail view in Builderforce.ai should be able to declare a canvas renderer, compact renderer, inspector, actions, permissions, and agent-readable context adapter.
+
+### Cross-object AI evaluation
+
+The agent must reason about the actual selected resources and their typed relationships, not just a screenshot of the board. For example:
+
+1. The user drags a saved marketing Workflow and a proposed Website page into the session.
+2. The user connects them or multi-selects both and asks, "Will this campaign workflow be effective with this landing page?"
+3. The canvas context service supplies the workflow definition, audience and timing, page content/structure, analytics, constraints, recent runs, and relevant MCP data.
+4. The agent adds a `Canvas evaluation` object with a verdict, evidence linked back to source objects, gaps, confidence, and proposed changes.
+5. `Apply recommendations` previews a multi-resource change set. The user can accept changes individually before the workflow or website is mutated.
+
+Evaluation objects remain on the canvas so collaborators can comment, revisit the evidence, and compare a later evaluation after changes.
+
+### Creation-to-delivery loop
+
+The canvas should close the loop between ideation and execution:
+
+1. A user asks Brain to create a sales or executive roadmap based on a Project object.
+2. Brain adds a Roadmap object grounded in the project's actual features, metrics, and delivery state.
+3. A user asks for a mockup, or for a visual summary of the ten most-requested features and a mockup for each.
+4. Brain adds a Feature Summary connected to a Mockup Set. Each feature retains citations to its feedback evidence.
+5. From a Mockup object, **Add to project and assign** creates or links a Task, attaches the artifact, chooses an Agent, and starts the existing approval-gated delivery flow.
+6. Build progress and output stream back into the same session objects, so the user never has to leave the creative context to check execution.
+
+All multi-resource mutations must be previewable and auditable. The canvas command may orchestrate several existing APIs, but it does not bypass their permissions or approval policies.
+
+### Multiplayer collaboration
+
+- Presence, cursors, selections, object locks, comments, mentions, and viewport following are session-scoped.
+- Invites support view, comment, edit, and run permissions; underlying resource permissions still apply.
+- Canvas geometry and comments use realtime collaborative state. Resource edits continue through their authoritative APIs.
+- Agent actions stream into the same session for every collaborator and identify who requested the action.
+- A lightweight activity feed records joins, prompts, runs, approvals, settings changes, and applied recommendations.
+- Collaborators may enter a temporary presentation/follow mode without moving other users' personal viewport.
+
+An **Impromptu stand-up** is a frame template, not a separate meeting product. Staff Member and Agent objects can be dropped into it; each card surfaces current work, blockers, recent activity, and availability. The Brain can facilitate, summarize updates, identify dependencies, and turn follow-ups into tasks or workflow changes.
+
+### Layout
+
+- Keep the existing global top bar and collapsed navigation rail.
+- Use an infinite dotted canvas with pan, zoom, minimap, marquee select, and undo/redo.
+- Put a compact searchable Add palette at the upper left. It may collapse to one button.
+- Use a contextual right inspector only while an object is selected.
+- Float the agent composer at bottom center so it remains familiar and reachable.
+- Let Chat exist anywhere on the canvas and collapse to a small conversation chip.
+- Allow freehand drawing, arrows, frames, sticky notes, and comments without requiring workflow semantics.
+
+### Reuse plan
+
+*Verified 2026-11-01. The original table referenced `components/workflow-builder/*` and
+`components/canvas/CanvasBoard.tsx`, which no longer exist; the workflow surface now lives in
+`app/workflows/builder/`, `app/agents/workflow-builder/` and `domains/workflow/`.*
+
+The first implementation should compose existing code rather than replace it:
+
+| Existing component/module | Reuse in Creation Canvas |
+| --- | --- |
+| `app/workflows/builder/` route + `domains/workflow/` board model (`boardFlow.ts`, `compileBoardFlow.ts`) | Executable graph rendering and save/run behaviors; the node registry moved to `domains/workflow/domain/stepCatalog.ts` |
+| `domains/workflow/domain/stepKinds/*` (composition, connect, evermind, flowControl, output, textParser, tools) | Initial Logic, LLM, training, and integration palette registry |
+| `domains/workflow/presentation/StepConfigForm.tsx` | Starting point for the contextual right inspector |
+| `domains/workflow/presentation/EvermindBuildPanel.tsx` | LLM build inspector shown when an LLM/train object is selected |
+| `components/brain/BrainPanel.tsx` and `components/brain/panel/` | Chat object content and session conversation behavior |
+| `components/ChatInput.tsx` | Global bottom composer; add canvas-selection scope |
+| `components/ChatMessageBubble.tsx` and `ChatMessageActions.tsx` | Messages, copy, and artifact actions inside Chat objects |
+| `components/canvas/CanvasStage.tsx` and `CreationSessionClient.tsx` | The current creation-session canvas host: pan/zoom/viewport model, selection, and block geometry |
+
+### Suggested data shape
+
+```ts
+type CreationObjectKind =
+  | 'chat' | 'workflow' | 'project' | 'website' | 'dataset' | 'chart' | 'dashboard' | 'report' | 'prototype'
+  | 'code' | 'browser' | 'llm' | 'voice'
+  | 'agent' | 'staff' | 'evaluation'
+  | 'document' | 'slides' | 'spreadsheet' | 'note' | 'drawing' | 'frame';
+
+type CreationSession = {
+  id: string;
+  projectId?: number;
+  title: string;
+  objects: CreationObject[];
+  connections: CreationConnection[];
+  viewport: { x: number; y: number; zoom: number };
+  revision: number;
+};
+
+type CreationConnection = {
+  id: string;
+  sourceObjectId: string;
+  targetObjectId: string;
+  kind: 'data' | 'control' | 'reference' | 'presentation';
+};
+
+type CanvasResourceRef = {
+  resourceType: string;
+  resourceId: string;
+  revision?: string;
+};
+```
+
+Large payloads (datasets, generated files, code trees, audio, and prototype bundles) should be stored as artifact references, not embedded in the canvas JSON.
+
+### VS Code extension
+
+The canvas should be available in the VSIX as the same tenant session, not as a separate local whiteboard.
+
+- Add **Open Creation Session…** to the command palette and BuilderForce activity view.
+- List recent tenant sessions and allow a new blank session without selecting a project.
+- Open the selected session in a full editor tab; a narrow sidebar is insufficient for spatial work.
+- Reuse the same session graph, commands, resource adapters, permissions, and realtime collaboration transport as the web route.
+- Add editor-aware objects such as current file, selection, diagnostics, terminal output, repository, and local preview.
+- Double-clicking Code, Task, or file-backed objects should open the corresponding native VS Code editor or BuilderForce panel.
+- Presence should identify a collaborator as using Web or VS Code while keeping one shared cursor/comment/activity model.
+
+The current VSIX deliberately uses bundled native React webviews because iframe-based `/embed/*` surfaces proved unreliable in VS Code. Therefore the production implementation should extract the canvas engine and object registry into a shared UI package consumed by both `frontend` and `clients/vscode/webview`; it should not iframe `/create` into the extension.
+
+### Delivery sequence
+
+#### Phase 1 — Unified shell
+
+- Add `/create/new` and `/create/:sessionId`.
+- Extract the XYFlow canvas shell and palette registry.
+- Ship Chat, Workflow, Note, and Browser Preview objects.
+- Add the scoped bottom composer and contextual inspector.
+- Open legacy workflows and Brain chats in a generated session wrapper.
+
+#### Phase 2 — Data and prototype loop
+
+- Add Dataset import with profiling and schema preview.
+- Add charts with live bindings to Dataset objects.
+- Add the WYSIWYG Prototype object, breakpoints, interactions, and browser preview.
+- Let the agent create and mutate these objects through typed canvas commands.
+- Add the application-wide object registry and live Report/Dashboard widgets.
+
+#### Phase 3 — Model and voice creation
+
+- Add LLM configuration/training/evaluation objects using the Evermind panels.
+- Add Voice recording, transcription, synthesis, and voice-interface bindings.
+- Add Agent and Staff Member objects, collaborative presence, comments, and stand-up frames.
+- Add cross-object evaluation with cited evidence and previewable multi-resource change sets.
+- Add session templates and export/deploy flows.
+
+
+- Lines 251–272, word for word.
+
+### Success criteria
+
+- A user can go from prompt to workflow to live prototype without changing routes.
+- A dataset can become a chart and bind into a prototype within the same session.
+- A saved workflow and website can be edited in place and evaluated together by the agent.
+- Reports, dashboards, charts, agents, and staff can be pulled from the application into a session as live objects.
+- Multiple invited users can concurrently build, comment, prompt, and see agent output.
+- An agent settings change made from the canvas uses the canonical agent API and is visible everywhere.
+- Chat can be added, moved, collapsed, duplicated, and removed like any other object.
+- Every generated output is visible, reusable, and exportable from the canvas.
+- Selecting an object makes agent scope unambiguous before a prompt is submitted.
+- Existing workflows, chats, and projects open without data loss through compatibility routes.
+
+### Mockups
+
+![Unified creation canvas overview](./creation-canvas-overview.png)
+
+![Dataset visualization and WYSIWYG prototype](./creation-canvas-data-prototype.png)
+
+![Collaborative campaign evaluation, agents, widgets, and stand-up](./creation-canvas-collaboration.png)
+
+These are direction-setting mockups. Exact UI copy and object chrome should be implemented with the existing design tokens and localization system.
+
+
+Lines 266–270 reference three PNG mockups (`creation-canvas-overview.png`, `creation-canvas-data-prototype.png`, `creation-canvas-collaboration.png`). Either keep those images where they are or move them next to DONE.md.
+
+### DELIVERY-ARCHITECTURE.md
+Source `docs/design/creation-canvas/DELIVERY-ARCHITECTURE.md` lines 1–43, word for word. The last line is the standing rule, which is also kept in in idea.md.
+
+## Creation delivery architecture
+
+The product flow is **Imagine → Create → Deliver**. A Creation Session owns the conversation and graph; Projects are optional context; canonical services own execution and published artifacts.
+
+### Agent conversation
+
+1. The Chat object is lazily linked to a canonical Brain chat (`chat:<id>`).
+2. Agent objects linked to Chat must carry a canonical workforce ref (`agent:<ref>`) to participate as deployed agents.
+3. The current user turn is persisted in that chat before any agent runs.
+4. `@AgentName` addresses one participant. Unaddressed and “ask all” turns address every connected agent.
+5. Agent replies run concurrently through `/api/brain/chats/:id/agent-reply`. That path supplies the triggering user's permissions, the agent's configured model/tools, usage accounting, trace, audit provenance, and project Evermind behavior.
+6. Canvas Brain receives the attributed replies as synthesis context and owns the final graph change set.
+
+Guest Canvas personas may assist with local ideation, but they are explicitly not canonical workforce participants.
+
+### Deliverable contract
+
+Every executed output appends a `CreationDeliverable` to its source object's `deliverables` array. The record has:
+
+- stable `id`, `action`, and `artifactKind`;
+- `running | delivered | failed` terminal lifecycle;
+- provider and canonical resource reference;
+- URL/file metadata where applicable;
+- validation result and bounded operational metadata;
+- correlated Creation outcome events (`started` plus a terminal phase).
+
+Adapters live outside the Canvas component in `frontend/src/lib/creationDeliverables.ts`. Canvas coordinates selection, permissions, locks, and UI state; the adapter builds or calls the actual artifact service.
+
+Currently connected delivery adapters:
+
+| Canvas object/action | Canonical execution | Delivered result |
+| --- | --- | --- |
+| Website / publish | IDE static-site publish | versioned live URL, path URL, asset proof |
+| Video / generate | published Evermind media model | generated frame sequence, first-frame preview, model/usage proof |
+| Workflow / run | canonical workflow runtime | workflow run id and terminal status |
+| Mockup / deliver | canonical project task | task resource linked to project/agent |
+| Document / Word | Office export service | downloaded `.docx` |
+| Slides / PowerPoint | Office export service | downloaded `.pptx` |
+| Idea → Real proof (`demo-video`, `clickable-prototype`, `smoke-test`, `wizard-of-oz`, `poc`, `pilot`, `phone-line`, `live-system`) / publish | IDE static-site publish (`website.publish` → `artifact.publish`) | versioned live URL, path URL, asset proof |
+
+Marketed proofs land as Website / publish via `realizationCanvasDelivery` in `@builderforce/creation-canvas-contract`. `canvas_realize` puts a WYSIWYG site (plus the generated runbook) on the board; it does not call `POST /api/realizations/:id/build` — that stays the human-reviewed step. Journey test: `api/src/application/outcomes/proofJourney.test.ts` (`marketed artifact %s reaches graded proof`).
+
+New operational actions are not complete until they have a real adapter, a terminal deliverable record, an outcome correlation, and a journey test.
+
+
+---
+
+## ✅ RESOLVED 2026-11-17 — Design: Creation outcome metrics — finished sections archived on consolidation (`docs/design/creation-canvas/OUTCOME-METRICS.md`)
+
+**Verified 2026-11-17:**
+- **Definitions:** `api/src/application/outcomes/outcomeMetricContract.ts` (`OUTCOME_DEFINITION_VERSION` at :65, `OUTCOME_BASELINE_COHORT` at :72, metric keys at :264-458).
+- **Ledger:** `outcomeLedger.ts`.
+- **Presentation contract:** `frontend/src/lib/outcomeMetrics.ts`.
+- **Proof lifecycle:** `api/src/application/realization/proofOutcomes.ts`.
+- **Card acts:** `packages/creation-canvas-contract/src/canvasActionOutcomes.ts:48`.
+- **Session gate:** `resolveOutcomeSession` (`outcomeLedger.ts`, `realizationRoutes.ts`).
+- **Latency:** `durationMs` is recorded (`outcomeLedger.ts:57,93,110`).
+
+### Purpose, Where the definitions live, Correlation contract, Proof lifecycle, Metric definitions, Diagnostics that are not value, Aggregation and sales-deck rules, Instrumentation rollout
+Source `docs/design/creation-canvas/OUTCOME-METRICS.md` lines 1–92, word for word. The "Cost per delivered outcome" row (line 70) and the last two sentences of line 92 also stay in in measure.md as open work.
+
+## Creation outcome metrics
+
+### Purpose
+
+Builderforce measures whether one Creation Session moved a user from an idea to a **graded proof** — a Build whose kill condition was measured, not merely a deliverable that was produced. Runtime activity is useful diagnostic evidence, but it is not value by itself, and a deliverable nobody graded is a launch with extra steps.
+
+The same outcome ledger serves three consumers:
+
+1. The session scorecard opened from the outcome icon: this session versus an aggregated tenant baseline.
+2. Project and tenant value reviews: outcomes, speed, quality, reuse, intervention, cost, and latency.
+3. A privacy-safe sales deck: platform-level value generation without tenant content or identifying session data.
+
+### Where the definitions live
+
+Every metric is declared exactly once, in `api/src/application/outcomes/outcomeMetricContract.ts`. A metric carries both halves of its own definition — the **session** value (TypeScript, from the shared fact row) and the **aggregate** value (a SQL expression over the same facts) — so the session scorecard and every rollup compute the same number from the same rows. The single write path into the ledger is `api/src/application/outcomes/outcomeLedger.ts`; the presentation contract (labels, units, comparison arithmetic) is `frontend/src/lib/outcomeMetrics.ts`, shared by both the in-canvas scorecard and the superadmin Value outcomes panel.
+
+`OUTCOME_DEFINITION_VERSION` rides every payload, so a deck states which definition set produced the figure it quotes.
+
+### Correlation contract
+
+Every meaningful action emits a `started` event and exactly one terminal event with the same `correlationId` and `action`. Terminal phases are `succeeded`, `failed`, `validated`, or `reused`.
+
+Each event carries:
+
+- scope: `sessionId`, `projectId` when applicable, and server-derived `tenantId`;
+- actor: user, agent, Brain, or system;
+- action and phase;
+- optional artifact ID, metric key/value/unit, duration, cost, and non-sensitive metadata;
+- occurrence time.
+
+The API derives tenant and user identity rather than trusting client-supplied scope. Named agent/Brain actors are accepted only from session roles allowed to perform the action. A project ID is accepted only when it is linked to the session; a session ID supplied by a producer outside the canvas is accepted only when `resolveOutcomeSession` proves it is a live board in the caller's tenant that the caller belongs to. The unique `(session, correlation, action, phase)` key makes retries idempotent.
+
+`correlation_coverage = terminal events with a matching started event / terminal events` is itself a first-class quality metric. A feature is not considered fully instrumented while this falls below 100% for its meaningful actions.
+
+#### The proof lifecycle in the ledger
+
+The method — Read → Prove → Build → Measure — records itself through `api/src/application/realization/proofOutcomes.ts`:
+
+| Action | Emitted by | Meaning |
+|---|---|---|
+| `idea.read` | `POST /api/realizations/plan` | The idea was read into a spec and the proof forms were ranked. Nothing else is persisted by that call. |
+| `proof.choose` | `POST /api/realizations` | A proof form was chosen. Carries the target's effort and fidelity. |
+| `proof.build` | `POST /api/realizations/:id/build` | The proof was built. `succeeded` carries `metadata.reachable` when it published an address a person can open. |
+| `proof.grade` | build success (`started`), verdict rollup (`validated`), park (`failed`) | The kill condition was measured. `metricValue` is 1 for met and 0 for missed — both are grades. Abandoning terminates as `failed`, because parking an idea is a judgement, not a measurement. |
+
+A proof records nothing when it has no `realizations.session_id`: the ledger's grain is the session, and a proof started outside a board never entered that grain. Measurement is best-effort and can never fail a build; a lost write shows up honestly as `correlationCoverage` below 100%.
+
+### Metric definitions
+
+The north-star metric is **ideas reaching a graded proof**. Metrics are grouped by the act of the method they measure, and every surface renders them in this order.
+
+| Metric | Family | Session value | Aggregate value | Direction |
+|---|---|---:|---:|---|
+| **Ideas reaching a graded proof** (north star) | Measure | 0 or 1 | sessions with a graded proof / eligible sessions | Higher |
+| Time to a chosen proof form | Read → Prove | first `proof.choose` − first prompt | mean seconds | Lower |
+| Ideas that Read before they Build | Read → Prove | 0 or 1, only once a build started | read-first builders / builders | Higher |
+| Time to first meaningful artifact | Read → Prove | first non-chat artifact − first prompt | mean seconds | Lower |
+| Proofs reaching a real, reachable artifact | Build | reachable builds / build attempts | same ratio over cohort | Higher |
+| Sessions reaching a real deliverable | Build | 0 or 1 | delivered sessions / eligible sessions | Higher |
+| Artifact validation pass rate | Build | passed validations / validations | same ratio over cohort | Higher |
+| Delivery success rate | Build | successful deliveries / attempts | same ratio over cohort | Higher |
+| Delivery retry rate | Build | failed attempts followed by another attempt / attempts | same ratio over cohort | Lower |
+| Proofs whose kill condition was graded | Measure | graded proofs / proofs built | same ratio over cohort | Higher |
+| Sessions inviting a human or agent | Collaboration | 0 or 1 | collaborative sessions / eligible sessions | Higher |
+| Agent group-chat participation | Collaboration | distinct contributing agents | mean and distribution | Higher, with quality guardrail |
+| Successful synthesis | Collaboration | 0 or 1 after agent turns | synthesized group sessions / group sessions | Higher |
+| Sessions resumed in 7/30 days | Compounding value | 0 or 1 for each window | resumed sessions / eligible sessions | Higher |
+| Outputs reused as inputs | Compounding value | reuse events | sum and per-session mean | Higher |
+| Human intervention per delivery | Efficiency | intervention events / successful deliveries | same ratio over cohort | Lower, with safety guardrails |
+| Cost per delivered outcome | Efficiency | attributed cost / successful deliveries | same ratio over cohort | Lower |
+| Latency per delivered outcome | Efficiency | outcome duration | mean seconds | Lower |
+| Correlation coverage | Measurement integrity | matched terminal events / terminal events | same ratio over cohort | Higher; target 100% |
+
+“Real deliverable” requires a successful canonical delivery action such as publish, project handoff, or workflow execution. Creating a draft canvas object does not qualify. “Successful synthesis” requires an explicit Brain synthesis after participating agent turns; agent message volume alone does not qualify. “Graded” requires a measured verdict — met **or** missed; a proof that was abandoned was not graded, and the artifact validation pass rate deliberately excludes proof grading, because a missed kill condition is a finding rather than a defect.
+
+### Diagnostics that are not value
+
+GitHub stars, package downloads, workflow counts, MCP connections, and active-agent counts remain operational or acquisition diagnostics. They are not evidence of customer value, they are absent from the metric registry, and they do not lead roadmap prioritization or any value review.
+
+### Aggregation and sales-deck rules
+
+- Session is the source grain. Project, tenant, and platform values are derived, never separately hand-entered.
+- Project rollups include only sessions explicitly linked to that project.
+- Tenant comparisons expose aggregates, sample size, scope, and time window—not peer session titles, prompts, artifacts, or users.
+- The session scorecard's baseline is a cohort aggregate over the workspace's most recently active boards (`OUTCOME_BASELINE_COHORT`), computed with the same expressions the rollups use, and excludes the session being scored.
+- Platform sales-deck figures use minimum cohort thresholds, suppress small segments, and include denominator, time window, and data freshness.
+- Cost and latency remain `Not measured` until authoritative telemetry is attached. The UI never substitutes zero for missing data.
+- Historical definitions are versioned. A deck states the definition version so a changing qualification rule cannot silently rewrite prior claims.
+
+### Instrumentation rollout
+
+The outcome ledger and scorecard are the foundation. Session open, prompt evaluation, validation, delivery, output reuse, and the full proof lifecycle (read, choose, build, grade) are correlated actions today. The superadmin Value outcomes dashboard supplies platform, tenant, and project cohorts; equal-period comparisons; trends including graded proofs; and a content-free sales brief guarded by a ten-session external-use threshold and stamped with its definition version. Canvas card acts share that contract through `packages/creation-canvas-contract/src/canvasActionOutcomes.ts`: the runner (and the poll / gate paths that are not card acts) emit `started` then one terminal with the same `correlationId`. `idea.explore`/`test`/`reveal` map onto `idea.read` / `proof.choose` / `proof.grade`; `form.publish` and `poll.publish` map onto `artifact.publish` + `proof.build` with `metadata.reachable` derived from the join URL (`/f/{slug}`, `/p/{slug}`). Unmapped connected acts still record as `{kind}.{action}` so coverage never depends on remembering a case. Notice-only refusals (no questions, unpublished, nothing to grade) do not start a correlation. Binding live experiment traffic is a different ticket — an authored table is not a measured split. A rendered presentation export remains follow-up work.
+
+
+---
+
+## Not archived (operator/planner call)
+- **`docs/design/creation-canvas/OPERATIONS.md`** is a deploy/observe/support/rollback runbook. Its "Repository release-candidate evidence — 2026-08-02" section (lines 30–36) is history and could archive. The rest should stay a runbook, not PRD text.
+- **`docs/design/creation-canvas/evidence/README.md` + `release-evidence.example.json`** are the input contract of `qa-e2e/src/canvas-release-audit.ts`. They stay as files.
+
+## ✅ RESOLVED 2026-11-17 — PRD 08: finished sections archived on consolidation (Agentic Security & Governance)
+- **Verified 2026-11-17:**
+  - §2 Domain model: `api/migrations/1336_governance_policy_packs.sql`, `api/src/infrastructure/database/schema/governance.ts:952-1047` (the migration landed as 1336, not 0100; the project FK is bigint per 1337).
+  - §3 DB-baseline resolve + hash (step 1 and step 3 only; the in-repo merge stays open): `api/src/application/governance/governanceRuleAudits.ts:76-110`.
+  - §4.1 role: `agent-runtime/src/builderforce/agent-roles.ts:439-450`.
+  - §4.3 workflow: `agent-runtime/src/builderforce/orchestrator.ts:1313-1319`, `shared-tools/node-orchestration-tools.ts:47`.
+  - §5 agent endpoints `GET /rules/resolve`, `POST /audits`, `POST /audits/:id/findings`: `api/src/presentation/routes/governanceRuleAuditRoutes.ts:86-115`.
+  - §10 DevSecOps layer: already archived at an earlier DONE.md entry (not duplicated). Its "Not built" limits stay in in run.md.
+
+### §2 Domain model additions (append to doc 01; all `(tenantId, segmentId)`-scoped, Drizzle)
+Source: `docs/specs/08-prd-agentic-governance.md` lines 74-164 (the schema block, indexes and migration note).
+
+Real schema is Drizzle (`api/src/infrastructure/database/schema.ts`), so the PRD specifies it in that
+shape (not Prisma) — `tenantId` is `integer → tenants.id`, `segmentId` is nullable `uuid → segments.id`,
+matching the existing `socControls`/`securityVendors` tables. New migration: **`0100_agentic_governance.sql`**.
+
+```ts
+// A named bundle of rules. Org baseline ("Default Security Baseline") or a custom pack.
+export const governancePolicyPacks = pgTable('governance_policy_packs', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  projectId:   uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }), // null = tenant/segment-wide
+  name:        varchar('name', { length: 255 }).notNull(),
+  description: text('description'),
+  framework:   varchar('framework', { length: 40 }),     // soc2|owasp|gdpr|pci|internal|custom
+  status:      varchar('status', { length: 20 }).notNull().default('active'), // active|draft|archived
+  isBaseline:  boolean('is_baseline').notNull().default(false),
+  createdBy:   varchar('created_by', { length: 64 }),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+});
+
+// One enforceable rule. `check` carries the deterministic pre-filter; `guidance` drives the LLM triage.
+export const governanceRules = pgTable('governance_rules', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  packId:      uuid('pack_id').notNull().references(() => governancePolicyPacks.id, { onDelete: 'cascade' }),
+  ruleRef:     varchar('rule_ref', { length: 80 }).notNull(),   // e.g. "SEC.SECRET.NO_HARDCODED"
+  category:    varchar('category', { length: 40 }).notNull(),   // secrets|authz|injection|deps|license|change_mgmt|pii|custom
+  title:       varchar('title', { length: 255 }).notNull(),
+  description: text('description').notNull(),                    // the rule, in plain language (LLM reads this)
+  severity:    varchar('severity', { length: 20 }).notNull().default('medium'), // blocker|critical|high|medium|low|info
+  // Deterministic pre-filter (optional). kind drives the matcher; absent → LLM-only rule.
+  check:       jsonb('check'),  // { kind:"regex"|"path_required"|"path_forbidden"|"dependency"|"glob", pattern, paths?, options? }
+  guidance:    text('guidance'),                                // remediation hint surfaced on findings
+  enabled:     boolean('enabled').notNull().default(true),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+});
+
+// One audit execution of a repo/ref against a resolved ruleset.
+export const governanceAuditRuns = pgTable('governance_audit_runs', {
+  id:           uuid('id').primaryKey().defaultRandom(),
+  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:    uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  projectId:    uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  repoRef:      varchar('repo_ref', { length: 500 }),           // repo url/id
+  ref:          varchar('ref', { length: 200 }),                // branch/commit/PR audited
+  trigger:      varchar('trigger', { length: 20 }).notNull(),   // manual|agent_pr|schedule
+  agentRunId:   varchar('agent_run_id', { length: 64 }),        // execution id when triggered on an agent PR
+  status:       varchar('status', { length: 20 }).notNull().default('queued'), // queued|running|completed|failed
+  rulesetHash:  varchar('ruleset_hash', { length: 64 }),        // hash of (DB packs + in-repo overrides) used
+  packsApplied: jsonb('packs_applied'),                         // [{ packId, name, source:"db"|"repo" }]
+  summary:      jsonb('summary'),                               // { blocker, critical, high, medium, low, info, passed }
+  gateResult:   varchar('gate_result', { length: 16 }),         // pass|blocked|null(not gating)
+  startedAt:    timestamp('started_at'),
+  finishedAt:   timestamp('finished_at'),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+});
+
+// One finding raised by an audit run against one rule.
+export const governanceFindings = pgTable('governance_findings', {
+  id:           uuid('id').primaryKey().defaultRandom(),
+  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:    uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  runId:        uuid('run_id').notNull().references(() => governanceAuditRuns.id, { onDelete: 'cascade' }),
+  ruleId:       uuid('rule_id').references(() => governanceRules.id, { onDelete: 'set null' }),
+  ruleRef:      varchar('rule_ref', { length: 80 }).notNull(),  // denormalized so findings survive rule deletion
+  severity:     varchar('severity', { length: 20 }).notNull(),
+  title:        varchar('title', { length: 255 }).notNull(),
+  detail:       text('detail').notNull(),                       // what was found + why it violates the rule
+  filePath:     varchar('file_path', { length: 1000 }),
+  line:         integer('line'),
+  evidence:     text('evidence'),                               // matched snippet / explanation
+  remediation:  text('remediation'),
+  source:       varchar('source', { length: 16 }).notNull().default('agent'), // prefilter|agent|vuln_scan
+  confidence:   varchar('confidence', { length: 10 }),          // high|medium|low (LLM self-rated)
+  status:       varchar('status', { length: 20 }).notNull().default('open'),  // open|triaged|fixed|accepted_risk|false_positive
+  incidentId:   uuid('incident_id'),                            // set when CRITICAL auto-opens a SecurityIncident
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+  updatedAt:    timestamp('updated_at').notNull().defaultNow(),
+});
+```
+
+Indexes: every table on `(tenant_id, segment_id)`; `governance_rules` on `(pack_id)`; runs on
+`(tenant_id, segment_id, project_id, status)`; findings on `(run_id, severity)` and
+`(tenant_id, segment_id, status)`.
+
+**Migration note:** `0100` creates the four tables only — additive, no edits to existing governance
+tables. The `check` matcher kinds are an enum-in-JSON (not a DB enum) so packs can grow matchers
+without a migration.
+
+
+### §4.1 New role — `governance-auditor`
+Add to [agent-roles.ts](../../agent-runtime/src/builderforce/agent-roles.ts) alongside `code-reviewer`/
+`bug-analyzer`. System prompt: *"You are a Governance Auditor. You are given a repository diff/tree and
+a resolved policy ruleset (rules with refs, descriptions, severities, and any deterministic
+pre-filter hits). For each rule, determine conformance. Emit one structured finding per genuine
+violation with file/line, the matched evidence, why it violates the named rule, a severity (never
+exceed the rule's severity unless you downgrade with justification), a remediation, and a confidence.
+Do not invent violations; a rule with no violation passes silently. Prefer precision — a false BLOCKER
+stops a merge."*
+
+### §4.3 Workflow — `createGovernanceAuditWorkflow(repoRef)`
+Add to [orchestrator.ts](../../agent-runtime/src/builderforce/orchestrator.ts) next to
+`createSecurityAuditWorkflow` (which stays — it's the generic OWASP self-audit). Phases:
+`resolve-ruleset (deterministic) → governance-auditor assess → code-reviewer verify gate`. Registered
+as the `SecurityAudit` workflow template's policy-aware sibling and selectable from `orchestrate`.
+
+---
+
+## ✅ RESOLVED 2026-11-17 — PRD 19: finished sections archived on consolidation (burnrateos.com → Builderforce.ai consolidation)
+- **Verified 2026-11-17:**
+  - Implementation audit (no runtime pull; meters; C-suite menu): `api/src/application/seams/burnRateService.ts`, `api/scripts/check-no-burnrate-runtime.mjs`, `check-model-coverage.mjs`, `check-table-adoption.mjs`, `frontend/src/components/PromptUseCasePicker.tsx`, `api/src/application/agent/provisionBuiltinAgents.ts`.
+  - Shutdown gates Decision / Tenancy / Extraction / C-suite: `api/src/application/migration/burnrateCutoverPolicy.json`, `api/scripts/check-burnrate-parity.mjs`; recount of `docs/specs/data-model/burnrate-modules.tsv` = 78 full · 16 partial · 1 gap · 11 stateless; `burnrate-parity.tsv` = 0 build · 7 transform · 4 retire.
+  - Identity / Data / Production-data execution gates and the user-migration manifest: **withdrawn** by operator decision 2026-09-05 (no data migration).
+  - §0, §1, §7, §8 (reference narrative): no code obligations.
+  - §3.1 selective transformation: policy JSON.
+  - §3.2 tenancy mapping: designed, then mooted by the 2026-09-05 decision. `burnrateTenantCompanyMapping.ts` has since been removed; `api/scripts/audit-burnrate-tenancy.mjs` remains.
+  - §3.3 and §3.4: no Redis or Mantine survives.
+  - §4 tracks B0-B9 (behaviour): the §9.7 landing files exist (`api/src/application/{marketing/webSurface,finance/scenarioModelling,finance/churnPrediction,sales/contactProfile,sales/revenueIntelligence,delivery/actionItems,delivery/agileCost,approval/approvalChain,commerce/bookings,commerce/agencyPractice,people/peopleInsight,investor/portfolioIntel,support/customerSurface,tenant/onboardingFlows}.ts`).
+  - §4.1 pricing cart: `frontend/src/app/pricing/PricingPageClient.tsx:108-296`, `frontend/src/components/ShoppingCart.tsx:196`, `frontend/src/lib/CartContext.tsx:53-70`.
+  - §5 decisions 1-7: policy JSON.
+  - §9.0-§9.2, §9.4-§9.7: parity checker + TSVs, `api/src/presentation/routes/webSurfaceRoutes.ts`, migration 1160.
+  - §10 listing / investors / runway: `frontend/src/components/startups/StartupDirectory.tsx`, `api/src/presentation/routes/publicStartupRoutes.ts`, `investorRoutes.ts:31-32`, `biRoutes.ts:24`, `api/src/application/finance/runwayReport.ts`, `packages/creation-canvas-contract/src/startupListing.ts:166,199`, `frontend/src/app/finance/page.tsx`, `frontend/src/app/marketplace/company/[slug]`, migrations 1173/1175.
+
+### Implementation audit — 2026-08-25 (Executive verdict, Evidence by track, C-suite Creation Canvas menu mapping, Extraction boundary, Source code still unique, Reproducible audit commands)
+Source: `docs/specs/19-prd-burnrateos-consolidation.md` lines 10-220 and 314-370. The open rows of "Runtime and integration gaps" and the open gates move to in run.md. Lines 239-263 ("User and customer-data migration status") are archived as **withdrawn 2026-09-05**.
+
+### Implementation audit — 2026-08-25
+
+This section reports the repository state, not the intended destination described by the rest of
+the PRD. A table in a migration, a row in the source-to-target map, a generic CRUD endpoint, a
+marketing page, and a working migrated feature are five different states. Only the last one is
+sufficient evidence for shutting down BurnRateOS.
+
+**Audit baseline:** Builderforce `95bedac24fb7d9d2702d4aecdb65cd668b3f3364` and BurnRateOS
+`cc23b2139e5846228fc255952cbf3bc733437668`. The prior baseline was
+`6b9b31b89a4fc85ea351c16dbea5b02d4b7601b5` / `708f0d8b1b0f9d59b091e23634257159d6777766`
+(2026-08-10); deltas below are measured against it.
+
+#### Executive verdict
+
+> **DIRECTIVE CHANGE — 2026-08-25.** The operator directive is now **deprecation of
+> `burnrateos.com`**, which is a parity obligation: every source capability must be built or
+> explicitly retired, because a capability that is neither is lost at shutdown. This **supersedes
+> the scoping half of the 2026-08-10 selective-extraction decision** (§0, DONE.md) — that decision's
+> engineering conclusions stand, its *boundary* does not. **[§9](#9--deprecation-parity-audit--2026-08-25)
+> is the inventory, the mapping and the gap register the new directive requires**, and it is the
+> authority on what is left to build. The gates in this section remain the authority on shutdown
+> readiness.
+
+**Do not redirect or terminate `burnrateos.com` yet.** Builderforce has completed most of the
+*destination-model* work, but not the source-data move or most feature behavior:
+
+- [`check-model-coverage.mjs`](../../api/scripts/check-model-coverage.mjs) passes: all **1,130**
+  distinct source tables are assigned a disposition and all **363/363** keep targets have a
+  Drizzle declaration — the target schema reached **100%** on 2026-08-25. The last gap was a stale
+  map row rather than missing work: `gig_disputes` was generalised into `marketplace_disputes` by
+  migration 0986 and the map still named the retired table. This proves design coverage, not
+  migrated rows or behavior.
+- [`check-table-adoption.mjs`](../../api/scripts/check-table-adoption.mjs) reports **358** tables
+  created by migrations 0418+, **358** registered with the generic entity layer, **177**
+  reached by a feature path (162 import, 44 raw SQL), and **181 registry-only**, 0 unreachable.
+  Registration by [`entityCatalog.ts`](../../api/src/application/domains/entityCatalog.ts) is
+  deliberately excluded from feature adoption by the checker. This is the migration-status meter
+  and it has moved: 36 → 177 feature-reached since 2026-08-10, against 100 more tables created.
+  **Of the 181 still registry-only, 99 originate in BurnRateOS** and 80 in hired.video; the
+  BurnRateOS remainder concentrates in Growth & marketing (25), Finance (16), Delivery & work (11)
+  and Revenue & CRM (10) — i.e. tracks B4, B1, B6 and B3.
+- Migrations 0418–0433 contain **245 `CREATE TABLE` statements and zero `INSERT ... SELECT` or
+  `UPDATE` data transforms**. There is no BurnRateOS database extractor/loader, ID map, replay,
+  reconciliation report, or rollback manifest in this repository.
+- **Decision 2026-09-05 (operator): none will be built.** Existing BurnRateOS data is NOT
+  migrated into Builderforce; this program consolidates FUNCTIONALITY only. The seven-part
+  migration manifest is withdrawn as a requirement. `burnrateTenantCompanyMapping.ts` stays as
+  the mapping contract (documentation of the tenancy axes), never as the seed of an ETL.
+- **Resolved 2026-08-10:** Builderforce makes no runtime HTTP pull to BurnRateOS.
+  [`burnRateService.ts`](../../api/src/application/seams/burnRateService.ts) reads tenant-scoped
+  `metric_facts`; [`validationEngagementsService.ts`](../../api/src/application/seams/validationEngagementsService.ts)
+  reads local validation results, validation dashboards and feedback collectors. The host URL/token
+  configuration routes and frontend client were removed. CI runs
+  [`check-no-burnrate-runtime.mjs`](../../api/scripts/check-no-burnrate-runtime.mjs) to reject a
+  restored `hostBi` setting, `/api/bi/config`, or BurnRateOS API URL in runtime source.
+- The six new C-suite teammates are provisioned by
+  [`provisionBuiltinAgents.ts`](../../api/src/application/agent/provisionBuiltinAgents.ts). The
+  **48/48** BurnRateOS executive intents are now executable from Creation Canvas' searchable “Choose a
+  starting point” menu by
+  [`PromptUseCasePicker.tsx`](../../frontend/src/components/PromptUseCasePicker.tsx), retaining each
+  dotted source contract as its audit/search id. Every item now has an evidence mode, operation,
+  entity-selection hints, permitted existing output kinds and a measurable completion condition.
+  This is intentionally one Canvas execution path—not 48 new MCP endpoints and not new tables. It
+  closes intent discovery and execution contracts; it does **not** by itself migrate production
+  source rows or close the provider/domain-service gaps in B1–B8 below.
+- The UI has a useful shared seat surface and generated record browser
+  ([`DomainSurface`](../../frontend/src/components/kernel/DomainSurface.tsx),
+  [`EntityBrowser`](../../frontend/src/components/kernel/EntityBrowser.tsx)), but it does not
+  preserve the workflows, calculations, provider actions, public viewers, or guided states of the
+  262 BurnRateOS pages. The `/<burnrateDomain>` and `/features/<burnrateFeature>` catch-alls are
+  translated **marketing explainers**, not migrated application surfaces.
+
+The fastest safe end-of-week outcome is therefore either (a) finish the P0 gates below and then
+redirect, or (b) close new sign-ups and put BurnRateOS in read-only legacy mode while its API,
+database and object storage remain available. A hard shutdown without either path loses features
+and customer data access.
+
+#### Evidence by track
+
+“Feature-reached” below uses the strict definition in
+[`tableAdoption.test.ts`](../../api/src/application/kernel/tableAdoption.test.ts): a non-test,
+non-registry reader or writer imports the table or queries it directly. Existing Builderforce owner
+implementations can still satisfy the *merge* half of a track, but do not prove that BurnRateOS data
+or behavior was moved onto them.
+
+| Track | Destination evidence in Builderforce | Actual status and unported behavior |
+|---|---|---|
+| **B0 · Foundation** | Source map is complete; 0418–0433 create the consolidated targets; generic entity API and shared seat UI exist; password hashes use the same PBKDF2/SHA-256, 100k-iteration, `salt:hash` format in both products. The tenant/company planner now maps explicit account→tenant assignments onto existing `segments`, tenant `companies`, registered `objects` and `relations`, with strict ambiguity rejection and no DDL. | **Partial / production cutover blocker.** The mapping contract is implemented and tested, but no production account map, source-row ETL or reconciliation report has been run. No port of BurnRateOS account locks, login-attempt history, bot-block events, refresh sessions, or MFA-secret transformation. Existing sessions cannot survive the domain/JWT change. |
+| **B1 · CFO / BI** | Migration 0424 creates 20 finance targets; kernel ledger/settings/metrics can absorb balances and series. The legacy burn/runway seam now reads local tenant-scoped `metric_facts`; no Builderforce runtime calls BurnRateOS. | **Partial / production-data blocker: 0/20 finance target tables feature-reached.** The local seam closes the network dependency, not finance parity. Break-even, forecast assumptions/sensitivity/Monte Carlo, ARR projections, cohort retention, CAC/LTV/payback, expense classification, company P&L, Plaid sync, TCO, custom KPI formulas, scenario calculations and sprint financial impact still require production-use classification and, where retained, existing-owner behavior plus transformed rows. Builderforce FinOps is cloud/AI spend, not a replacement for company finance. |
+| **B2 · CEO / Investor** | Migration 0422 creates 12 investor/portfolio targets; kernel artifacts/revisions/shares can represent deck content and versions. | **Not ported: 0/12 target tables feature-reached.** No pitch-deck generator/version/share-view analytics flow, investor updates and approvals, investor reports/digests, board packages, data-room ACL/download flow, due-diligence workflow, portfolio health scoring, funding-history/valuation/exit models, or investor portal migration. Generic artifact and entity forms do not enforce these workflows. |
+| **B3 · CRO / CRM + VoIP** | Migration 0421 creates 20 revenue targets; existing Builderforce sales routes cover a simpler contact/pipeline; the Twilio connector remains the phone-action ceiling. | **CRM extraction remains production-driven: 1/20 targets feature-reached (`business_phone_numbers`).** Contact provenance/edit logs, identity/source history, enrichment credits/providers, dedup/import, ICPs, sequences, conversion/quota analytics, communications ops and deal-risk logic require active-use classification and transformed data where retained. The SignalWire hosted carrier product is intentionally retired: export call/SMS history, port or release active numbers, reconcile add-ons, and add no provider configuration or phone tables. |
+| **B4 · CMO / Growth** | Migration 0432 creates 47 targets; the pre-existing campaign/site/mailbox engines are valid merge owners. | **Mostly not extracted: 2/47 targets feature-reached (`announcement_banners`, `email_otp_challenges`), neither proves the CMO workflows.** Heatmaps, nurture execution, lead forms, landing blocks, A/B allocation, NPS, email parity, SEO, brand/content and public widgets require active-use classification. Affiliate administration and Web Push are intentionally retired; retain/export required history and consent, delete push tokens, and do not add VAPID, queue/DLQ or PWA runtime. |
+| **B5 · CPO / Product** | Builderforce PMO, product, feedback and validation owners exist; consolidated work/items/artifacts can represent several source models. Validation engagement reads are now local. | **Partial merge only.** Feature voting/adoption, scoring, product ideas/company workflows, release plans, public roadmap/deck, validation AI insights/scenarios, MVP scaffolding, entity version/sign-off/model-lock workflows still need domain-backed behavior and migrated source rows. |
+| **B6 · CTO / Agile** | Builderforce boards/tasks/sprints, poker/retro, ceremonies and shell session remain the correct owners. | **Core merge owner exists; retained source behavior/data is not migrated.** Missing cost-per-sprint/runway coupling, capacity and velocity parity, bottleneck/technical-debt/deployment rollups, cost calculation and source work/session data transformation. BurnRateOS `SessionRoom` is intentionally not ported as a second room; only active-session state that customers must retain is transformed/exported into the shell owner. Do not migrate duplicate Kanban/poker tables. |
+| **B7 · HR / Operational cadence** | Migration 0420 creates 22 people/HR targets; one `builtin_kind='hr'` teammate is provisioned; existing meetings/pulse owners remain. | **Not ported: 0/22 targets feature-reached.** Employee/employment/emergency contacts, headcount and hiring forecasts, goals/reviews/1:1/check-ins, weekly syncs, scorecards, ScratchPad pages/collaborators/transcripts/templates/attachments, bookings/calendar links and Slack workflows lack feature services. Booking targets in 0425 are registry-only. Recall.ai notetaker config and attachment-row/object migration are absent. |
+| **B8 · CISO / Governance** | Builderforce SOC/security/uptime owners exist; migration 0428 adds two identity/governance targets. | **Partial merge only: 0/2 new targets feature-reached.** BurnRateOS vendors, DPAs, PII inventory, compliance events, security training, DSR/suppression, terms agreement history, embed consent, public DSR, and uptime-monitor source data/alert behavior are not ported. The BurnRateOS 5-minute uptime sweep and support-chat behavior are not wired into Builderforce jobs. |
+| **B9 · Platform** | Migration 0425 creates 20 commerce targets; cart/order checkout integration is real; Builderforce has marketplace, billing, support, content and admin owners. | **Partial: 3/20 targets feature-reached (`carts`, `orders`, `order_line_items`).** Consultant settlement, booking webhooks, retained credit-value transforms, templates/licenses, white-label data, evidence-backed support chat, guest claim continuity and active media/free-tool state remain classification/ETL work. Affiliate administration is retired after history export and unsettled-payout reconciliation. Cart/order support still does not migrate existing BurnRateOS purchases or subscriptions. |
+
+#### C-suite Creation Canvas menu mapping — implemented 2026-08-10
+
+The migration decision is to expose these as executive creation intents in the existing Canvas
+menu. Selecting an item gives Brain a bounded, machine-readable workflow to create or update
+existing Canvas objects from available evidence. It does not create a parallel C-suite service
+layer.
+
+| Source tool family | Count | Existing Canvas destinations |
+|---|---:|---|
+| Agile / delivery | 5 | dashboard, chart, report, table, roadmap |
+| CRM / revenue | 4 | sales pipeline, dashboard, table, chart, KPI |
+| Cross-domain risk | 1 | dashboard, report |
+| Finance | 5 | KPI, dashboard, table, chart, scenario comparison report |
+| Governance | 5 | table, report, dashboard, roadmap |
+| Investor market | 5 | target market, report, sourced comparison dataset |
+| Marketing | 5 | table, dashboard, report, chart, evaluation |
+| Operations / people | 5 | dashboard, roadmap, chart, spreadsheet, report |
+| Product / company | 5 | product-ideas table, feature summary, report, target market, dashboard |
+| Research + ScratchPad | 8 | sourced dataset, report, document pages, slides |
+| **Total** | **48** | **Only existing Creation Canvas object kinds and actions** |
+
+Implementation evidence:
+
+- `C_SUITE_CANVAS_USE_CASES` contains **48 unique legacy ids** and is merged into the localized
+  Creation Canvas starting-point catalog for every locale.
+- `C_SUITE_CANVAS_WORKFLOWS` contains exactly the same **48 ids**. Every contract declares domain,
+  Canvas or web evidence; the intended operation; entity-selection terms; permitted existing output
+  kinds; target-confirmation policy; and a completion condition.
+- Menu search includes the legacy dotted id, label, category and prescription, so operators can
+  locate either “Runway snapshot” or `finance.runway.snapshot`.
+- Prescriptions name the existing destination object and require source evidence/no invented
+  values. Canonical sales requests use the existing sales workspace. Market-peer deletion requires
+  an identified target rather than a broad destructive action.
+- Creation Canvas exposes `canvas_prepare_executive_use_case`, one read-only dispatcher over the
+  existing 15-domain summary, entity, item and metric APIs. Domain contracts select live readable
+  entities by semantic hints and fall back to the domain's objects/metrics rather than assuming a
+  table. Canvas contracts read the selected object/snapshot; web contracts require search + fetch +
+  sourced dataset. Existing `canvas_read_domain` remains available for follow-up inspection. Writes
+  continue through existing reviewed Canvas/canonical actions.
+- A run is not counted complete merely because Brain returned prose. The dotted id is written into
+  prompt outcome/activity metadata, and completion requires a successful proposed mutation to one
+  of that contract's allowed existing object kinds. A missing artifact produces an explicit
+  incomplete system event and failed outcome.
+- [`PromptUseCasePicker.test.tsx`](../../frontend/src/components/PromptUseCasePicker.test.tsx)
+  asserts the 48-entry/48-unique invariant, exact workflow coverage, valid existing output kinds,
+  evidence configuration, completion contracts, dotted-id search and selection.
+- Verification on 2026-08-10: focused Vitest **6/6 passed**; frontend `tsgo --noEmit` passed; no
+  schema or migration file was added.
+
+#### Extraction boundary — IDEA → REAL decision (2026-08-10)
+
+This supersedes “port every BurnRateOS page.” The source is a capability quarry, not the target
+architecture. A capability is extracted only when it shortens or strengthens this loop:
+
+| Stage | Extract from BurnRateOS | Existing Builderforce destination |
+|---|---|---|
+| **Idea** | scratch pad/notes, product ideas, validation evidence, market and competitor research, company/market analysis, pitch narrative | Creation Canvas documents/datasets/slides, Product Discovery, validation owners, CEO/CPO agents |
+| **Make** | scenario-to-plan handoff, sprint/velocity/bottleneck/debt/deployment evidence, release readiness | Projects, tasks, sprints, ceremonies, roadmaps, Builder workspaces, Manager/CTO agents |
+| **Run** | runway/forecast/break-even/ARR, pipeline/deal risk/quota, campaigns/experiments, headcount/cadence, governance/vendors/incidents | Existing finance, revenue, growth, people and governance domains rendered into Canvas |
+| **Measure** | cross-domain risk, conversion, channel performance, delivery health and executive snapshots | `metric_facts`, domain summaries and Canvas dashboards/charts/reports |
+
+Explicit non-targets:
+
+- BurnRateOS navigation, page-for-page Mantine UI, AI hub/assistant rooms, duplicate auth/tenant
+  administration, duplicate Kanban/CRM/campaign/support implementations and per-feature authoring
+  containers are retired—not ported.
+- A source table is **not** evidence that a target table is required. Authored/session content lands
+  in Canvas/kernel primitives; derived values land in `metric_facts`; vendor state lands in the
+  connector platform; duplicate business entities land in their existing domain owner.
+- No new table may be introduced for this extraction unless a reviewed invariant cannot be stored
+  safely in an existing owner, production source rows prove the capability is used, and a named
+  workflow reads/writes it. Generic registry reachability does not meet this threshold.
+- Data belonging to an extracted capability is transformed into its existing owner. Data belonging
+  only to a retired capability receives a customer-readable export and retention/erasure handling;
+  it does not force dead schema into Builderforce.
+
+The C-suite catalog encodes the same decision: every family declares its IDEA/MAKE/RUN/MEASURE
+stage and existing owner domains; every individual use case declares its evidence, operation,
+entity hints, allowed Canvas output kinds and completion condition. Selecting one instructs Brain
+to prepare it through `canvas_prepare_executive_use_case` and explicitly forbids proposing a
+database table. Tests assert all 48 contracts have an extraction owner and workflow, every stage
+belongs to IDEA → REAL, and every output kind already exists in the Creation Canvas contract.
+
+#### Source code still unique to BurnRateOS
+
+These are concrete source-only implementation families, not just missing schema names. Some should
+be rewritten onto a Builderforce owner rather than copied, but none can be deleted until its
+behavior is either ported or explicitly retired:
+
+- `product/api/src/worker/routes`: all **103 top-level + 6 nested** feature route modules remain the
+  reference implementation for the workflows listed above. Builderforce's generic five-handler
+  entity router is reachability, not a replacement for their validation, calculations, public
+  grants, provider calls, approvals and side effects.
+- `product/api/src/worker/ai/personaPrompts.ts` and `ai/tools/{agile,crm,cross,finance,governance,
+  investor,marketing,ops,product,research,scratchpad}.ts`: all 48 user-facing intents are mapped to
+  the Creation Canvas menu, but the source selectors, per-company query semantics and underlying
+  domain calculations/providers remain reference behavior until B1–B8 feature services and data
+  migration are complete. The approved target is the Canvas menu and existing platform actions,
+  not a duplicate `builtinMcpService.ts` C-suite catalog.
+- `product/api/src/worker/services/{plaid,signalwire,recall,uptime}.ts`, `services/push/*` and
+  `services/payment/{stripeProvider,helcimProvider}.ts`: provider implementations and their
+  idempotent workflows are absent or only partially replaced in Builderforce.
+- `product/api/src/worker/durable/{NotificationRoom,SessionRoom,SupportChatRoom}.ts`: the duplicate
+  notification/session objects are intentionally retired, not ported. What remains is to inventory
+  active state and transform or export customer-required messages/participants into the existing
+  shell owners; support chat is extracted only if active-tenant evidence makes it an IDEA → REAL
+  requirement. An equivalently named primitive is not proof that state was moved.
+- `product/frontend/src/domains/*`: the Mantine pages and components still contain the only product
+  UX for most B1–B9 workflows. The shared Builderforce record browser exposes rows, but does not
+  port the workflow-specific presentation/application logic beneath those pages.
+- `product/packages/push-pwa`: the service-worker registration/subscription package has no target
+  package or Builderforce integration.
+
+
+
+#### User and customer-data migration status
+
+There is currently **no executable user migration**. The generic Builderforce migration wizard is
+for board providers (`DISCOVERY_PROVIDER_IDS`); it is not a BurnRateOS account/database importer.
+Before any redirect, implement and retain a reproducible manifest covering:
+
+1. BurnRateOS `User` → Builderforce `users`, preserving UUID, normalized email, name, locale,
+   verification time, suspension state, created time and compatible password hash. Resolve email
+   collisions deterministically; never create two Builderforce identities for one email.
+2. `Account`/memberships/roles/invitations → `tenants`/`tenant_members`/kernel invitations, with a
+   durable source-ID↔target-ID table. Provision default project/segment exactly once per imported
+   tenant and do not accidentally start trials, agents or paid usage during replay.
+3. Company graph and active-company/default-company state, after the §3.2 mismatch above is
+   resolved. A tenant/segment approximation is not enough for agencies, investors or shared
+   companies unless the product explicitly drops those semantics.
+4. Every surviving domain row using the source-to-target map, with child ordering, public tokens,
+   slugs, timestamps, audit actors, money denominations and external provider references preserved.
+5. Password continuity (hashes are compatible), forced new sessions, and either an MFA-secret
+   decrypt/re-encrypt transform or a deliberate MFA re-enrollment campaign. Do not copy refresh or
+   access tokens.
+6. Billing customers/subscriptions, active plan/interval/seats, phone add-ons, credit/ledger
+   balances, invoices/orders/refunds and webhook idempotency keys. Prove no user is double-billed
+   and no paid user lands on Free.
+7. R2 attachments/decks/screenshots, public-share URLs, embed keys, OAuth connections, email
+   preferences, unsubscribe/suppression state and legal acceptances.
+
+
+#### Reproducible audit commands
+
+Run from the Builderforce repository:
+
+```powershell
+cd api
+node scripts/check-model-coverage.mjs
+node scripts/check-table-adoption.mjs
+pnpm run check:no-burnrate-runtime
+pnpm run check:burnrate-policy
+pnpm run audit:burnrate-cutover:validate
+pnpm run audit:burnrate-tenancy:validate
+```
+
+With read-only production credentials, generate the immutable evidence report without changing
+either database:
+
+```powershell
+$env:BURNRATE_SOURCE_DATABASE_URL = '<read-only BurnRateOS PostgreSQL URL>'
+$env:NEON_DATABASE_URL = '<read-only Builderforce PostgreSQL URL>'
+node scripts/audit-burnrate-cutover.mjs --output .\burnrate-reconciliation.json --strict
+node scripts/audit-burnrate-tenancy.mjs --account-map .\burnrate-account-tenants.json --output .\burnrate-tenancy.json --strict
+```
+
+The audit inventories all 344 mapped BurnRateOS source tables and directly compares only the 114
+one-to-one `keep` candidates. Collapsed/session/derived rows are marked `transform_required`; the
+tool does not pretend row-count equality can validate a many-to-one extraction and performs no
+writes or DDL.
+
+The tenancy audit consumes the explicit account→tenant file produced by the identity dry run. It
+does not infer tenants from names, domains or email suffixes. It verifies source accounts, target
+tenants, active relationship authorization, unique company-only ownership and primary-company
+cardinality, then reports the existing/missing `segments` needed by the later ETL. Its output is
+also read-only and immutable (`flag: wx`).
+
+Expected at the audited baseline:
+
+```text
+1130 source tables mapped, 0 unaccounted; target schema 363/363
+358 consolidation tables created; 177 feature-reached; 181 registry-only; 0 unreachable
+```
+
+The first line is the architecture milestone. The second line is the migration-status meter and
+must not be collapsed into the first when reporting readiness.
+
+> **The experience half of every track is decided by
+> [PRD 21 — The Unified Experience](./21-prd-unified-experience.md), not here.** A track may land
+> its schema, its migrations and its API at any time. What it may **not** do is ship a surface as a
+> page: every track's UI arrives as a **panel over the mounted canvas**, and the C-suite seats this
+> PRD completes appear as **teammates in the footer**, never as a navigation rail. PRD 21 §5.1 is
+> the gate; its E0–E2 block frontend work on B1–B9.
+
+> **Read §2 before scheduling any track in this PRD or in PRD 18.** The two consolidations
+> collide *with each other* on at least twelve capabilities. Run independently, they will each
+> add a second affiliate system, a second bookings system, a second phone product, a third
+> campaign engine, a third OKR store and a third people/HR module. §2 is the register that
+> prevents that; it governs **both** PRDs.
+
+
+### End-of-week shutdown gates — closed and withdrawn items
+Source: lines 270-300 (Decision, Tenancy mapping, Extraction, C-suite gates [x]; Identity, Data and Production-data execution gates, withdrawn 2026-09-05).
+
+- [x] **Decision gate:** §2 rows 4, 6 and 12 plus pricing, push and provider ownership are settled
+  in this PRD and enforced by the versioned cutover-policy manifest/CI check.
+- [x] **Tenancy mapping gate:** the strict account→tenant/company/project planner, row resolver and
+  read-only production audit are implemented and tested on existing shapes with no DDL. Supplying
+  the production identity account map and applying/reconciling its output remain Identity/Data work.
+- [ ] **Identity gate (withdrawn 2026-09-05):** dry-run all users, collisions, memberships, roles and verified emails;
+  login with an imported password; require fresh sessions; test OAuth-only and MFA users.
+- [ ] **Data gate (withdrawn 2026-09-05):** run idempotent ETL against a production snapshot; publish per-table source,
+  transformed, inserted, merged, rejected and orphan counts plus financial totals and attachment
+  checksums; rerun to prove zero duplicates.
+- [x] **Extraction gate — MEASURED AND CLOSED 2026-08-25, see [§9](#9--deprecation-parity-audit--2026-08-25):**
+  every feature used by an active BurnRateOS tenant is classified, and under the deprecation
+  directive the classification is binary — an extracted capability has a tested Builderforce
+  workflow, or it has an explicit customer-approved retirement/export. §9 resolves all 106 source
+  modules: **78 at full parity, 16 partial, 1 gap, 11 stateless**, and
+  [`burnrate-parity.tsv`](../data-model/burnrate-parity.tsv) now reads **build 0 · transform 7 ·
+  retire 4**. (76 / 18 and transform 9 at closure; on 2026-09-12 migration 1160 folded two of the
+  three §9.7 duplicates, `kanban_columns` → `swimlanes` and `release_plans` → `product_releases`,
+  when the spec PM spine was unified onto `projects`/`tasks`/`specs`, bringing `kanban` and
+  `productManagement` to 100%.) Every one of the 16 partial modules is partial only in
+  `transform`/`retire` targets — pricing, affiliates, blog, phone, and the remaining §9.7
+  duplicate (`ri_sequences`). **Zero new tables were
+  added.** **CAVEAT, and it is the distinction this whole PRD draws:** this closes the BEHAVIOUR
+  half. The *data* half — the Data gate below — is untouched, and no BurnRateOS row has moved.
+- [x] **C-suite Canvas execution gate:** map all 48 CxO intents to existing Creation Canvas
+  objects/actions; retain searchable legacy ids; give each an evidence/operation/output/completion
+  contract; fail outcomes that do not mutate an allowed artifact; test exact coverage; add no tables.
+- [ ] **Production-data execution gate (withdrawn 2026-09-05):** the tenant-scoped contract dispatcher is implemented;
+  prove each mapped intent against migrated production data, apply Builderforce confirmation policy
+  to its canonical writes, and pass persona-specific read/write integration tests. Contract presence
+  and a generic read alone do not satisfy this gate.
+
+
+### §0 · This is a MERGE, not a port — §1 · What BurnRateOS actually contributes
+Source: lines 374-497.
+
+### 0 · This is a MERGE, not a port
+
+PRD 18 is mostly **additive** — Builderforce has no résumé parser, no ATS, no Canvas
+runtimes, so hired.video fills empty space. BurnRateOS is the opposite: it is a second
+implementation of much of what Builderforce already does, aimed at a different buyer
+(startup CxO rather than engineering org).
+
+Confirmed overlaps against live Builderforce tables — every one of these is a *name-level*
+collision, not a conceptual one:
+
+| BurnRateOS model | Builderforce table | Source |
+|---|---|---|
+| `SocControl`, `SocEvidence` | `soc_controls`, `soc_evidence` | migration 0254 already had to rename a collision of exactly this shape ([[finops-soc-controls-collision]]) |
+| `SupportTicket` | `support_tickets` | 0236 |
+| `UptimeMonitor` / `UptimeCheck` | `uptime_samples` | 0236 |
+| `PlanningPokerSession`, `Retrospective`, `RetrospectiveItem` | `poker_sessions`, `retrospectives`, `retro_items` | 0062 |
+| `SupportArticle` | `knowledge_documents` | 0227 |
+| `KanbanBoard`, `KanbanColumn`, `WorkItem`, `Sprint` | boards / swimlanes / tasks / sprints | core |
+| `StrategicObjective`, `ObjectiveOutcome`, `ObjectiveMilestone` | `objectives`, `key_results`, `objective_links` | 0268 |
+| `SalesPipeline`, `PipelineStage`, `Deal`, `Contact` | sales pipeline / contacts / deals | canvas + sales |
+| `MarketingCampaign`, `MarketingEmail` | `campaignEngine.ts` | 0412 |
+| `PulseCheck`, `PulseQuestion`, `PulseResponse` | `pulse_surveys` | 0317 |
+| `Invoice`, `PaymentTransaction`, `BillingPlan`, `PlanFeature` | billing + `planFeatures.ts` | core |
+
+So the governing rule is **one owner per capability**. Where BurnRateOS and Builderforce both
+implement something, exactly one implementation survives and the other's call sites migrate to
+it in the same pass ([[no-technical-debt-rule]]). A "port" that lands a second table with the
+same meaning is a failure of this PRD, not a delivery against it.
+
+#### The stack conversion is real (unlike PRD 18)
+
+| Layer | BurnRateOS | Builderforce | Cost |
+|---|---|---|---|
+| Runtime | Cloudflare Workers | Cloudflare Workers | **none** |
+| Database | **Neon Postgres** | Neon Postgres | **none** |
+| Schema / migrations | **Prisma** (`schema.prisma`, 404 models) | **Drizzle** + numbered SQL | **conversion** — 404 models → Drizzle schema + SQL migrations |
+| Runtime queries | raw Neon tagged-template SQL (`SqlClient`) | Drizzle | **low** — raw SQL ports; only the typing changes |
+| Cache | **Valkey/Redis** (docker) + KV | `getOrSetCached` (L1 Map + L2 KV) | **conversion** — no Redis in the target |
+| Frontend | Vite SPA + **Mantine 8** + TanStack Query | Next 15 App Router + Tailwind/shadcn + next-intl | **high** — component-library swap, not just a router swap |
+| Tenancy | **two-level: Account → Company → rows** | `tenant_id` + `project_id` | **decision** (§3.2) |
+| LLM | already calls Builderforce via `@seanhogg/builderforce-sdk` | — | **none** — the seam exists |
+
+The Mantine→Tailwind conversion is the single biggest line item and has no equivalent in
+PRD 18: hired.video was already Tailwind/shadcn, so its leaf components moved nearly verbatim.
+BurnRateOS's 262 pages and ~600 components are built on Mantine primitives (`@mantine/core`,
+`form`, `dates`, `modals`, `notifications`, `tiptap`, `carousel`) and must be rebuilt against
+Builderforce's component set. Budget for a rewrite of the presentation layer, a port of the
+logic beneath it.
+
+#### Scale, measured
+
+| Thing | Count |
+|---|---|
+| Prisma models | **404** |
+| API route modules | **103** top-level + 6 nested (`auth/`, `systemAdmin/`) |
+| API LOC (tests excluded) | **~97,300** |
+| Frontend domains / pages | **20 domains, 262 pages** |
+| Frontend LOC (tests excluded) | **~63,800** |
+| Durable Objects | 3 — `NotificationRoom`, `SessionRoom`, `SupportChatRoom` |
+| Cron schedules / queues | 2 (`0 3 * * *`, `*/5 * * * *`) / 1 (`push-fanout` + DLQ) |
+| Workspace packages | 1 — `packages/push-pwa` |
+| CxO AI tools | **48** across 11 tool modules |
+
+**Combined incoming (PRD 18 + PRD 19):** **832 tables** (428 + 404), **328 API route modules**
+(219 + 109), **471 pages** (209 + 262). Against Builderforce's own 78 surveyed routes that
+makes **549 destinations** the navigation architecture has to hold — a 7× increase on what it
+was designed against.
+
+#### The one free lunch
+
+`api/src/worker/services/builderforceClient.ts` — **BurnRateOS already routes every LLM and
+embedding call through the Builderforce gateway** via `@seanhogg/builderforce-sdk`, with
+`useCase` + `metadata` passed for billing trace-back. That is the same strangler-fig anchor
+PRD 18 has in `hiredVideo.ts`, and it means the AI substrate needs no migration at all —
+only the removal of the HTTP hop once the code lives in-process.
+
+---
+
+### 1 · What BurnRateOS actually contributes
+
+Strip the overlap and the net-new surface is sharp:
+
+**The rest of the C-suite.** Builderforce has CTO, Product Manager, Product Owner, Designer,
+Manager, Security, Incident Manager, Validator, Compliance Audit, PR Reconciler — and PRD 18
+adds Recruiter + HR. BurnRateOS has eight CxO personas (`ai/personaPrompts.ts`) with 48
+domain tools behind them. The missing seats are **CEO, CFO, CRO, CMO**; `CPO` maps to Product
+Manager, `CISO` to Security, **`CHRO` to the HR agent PRD 18 introduces — they must be the
+same agent, not two.**
+
+**Startup finance.** Runway/burn, break-even scenarios, forecast scenarios + assumptions +
+sensitivity + Monte Carlo, ARR projections, cohort retention, CAC/LTV/payback, expense
+classification, Plaid bank sync, TCO settings, sprint financial impact. Builderforce has
+FinOps for *cloud/AI spend*; it has no company P&L model. **Net-new, and the strongest single
+reason to do this consolidation.**
+
+**Investor intelligence.** Pitch decks (versions, share links, per-slide view analytics),
+investor updates + approvals, data rooms, due-diligence checklists, cap-table-adjacent
+funding rounds, portfolio health scoring, deal flow. Builderforce has `pitch*` Canvas objects
+for *competition* pitches — a different artifact. **Net-new.**
+
+**Growth & marketing instrumentation.** Heatmaps (pages, captures, screenshots, analysis),
+landing pages + blocks, lead forms, nurture flows + enrollment, A/B tests + variants +
+segments, NPS surveys, referral codes, email tracking/sends, SEO pages, brand kits, content
+calendar. **Mostly net-new**; campaigns merge.
+
+**CRM + VoIP.** Contacts with provenance/edit logs, companies, deals, quota attainment,
+conversion rates, sequences/campaigns (`Ri*`), enrichment credits, dedup, plus a **business
+phone product** on SignalWire (numbers, porting, balances, voice agent). Sales pipeline
+merges; **VoIP is net-new — and collides with hired.video's phone product (§2).**
+
+**Consultant marketplace + affiliate + credits.** Consultant profiles, knowledge docs,
+consultations, earnings, marketplace settlement/payouts, AI credit balances/transactions/
+purchases, cart + orders + line items. Marketplace merges; **the AI-credit economy is
+net-new and is a better fit than the token-cap model for self-serve.**
+
+**ScratchPad / meetings.** 13 models — pages, shares, collaborators, scheduled meetings,
+attendees, transcripts, notes templates, attachments. Overlaps Builderforce meetings +
+knowledge; the *transcript + notes-template* half is net-new.
+
+**Web push.** `MarketingPushSubscriber/Campaign/Delivery`, a `push-fanout` queue, and
+`packages/push-pwa`. **Builderforce deliberately DELETED web push in migration 0195**
+([[push-removed-burnrateos]] — "never reintroduce VAPID"). Consolidation reverses that
+decision. See §5 exception 2.
+
+
+
+### §3.1 Selective source transformation — RESOLVED 2026-08-10
+There is no 404-model Prisma→Drizzle codemod. Production-used IDEA → REAL rows transform into
+existing Builderforce owners; retired capabilities are exported/erased under the cutover policy.
+A source model is evidence to classify and transform, not permission to emit DDL.
+
+### §3.2 Tenancy and company ownership — IMPLEMENTED 2026-08-10
+Source: lines 542-566.
+
+#### 3.2 Tenancy and company ownership — IMPLEMENTED 2026-08-10
+
+No junction table is added. Builderforce already has every required shape:
+
+- an identity dry run supplies the explicit **BurnRateOS account id → Builderforce tenant id** map;
+- existing `segments` owns the unique `(tenant_id, external_account_id, external_company_id)`
+  coordinate and becomes the primary project/company scope;
+- existing tenant-scoped `companies` receives one copy per authorized tenant/company pair, with
+  source ids, relationship kinds and claim evidence preserved in `attrs`;
+- registered `objects` plus kernel `relations(kind='associated_with')` represent additional
+  project↔company associations. The primary OWNER company selects the project's `segment_id`.
+
+[`burnrateTenantCompanyMapping.ts`](../../api/src/application/migration/burnrateTenantCompanyMapping.ts)
+implements the pure plan and row resolver. It does not guess ownership: account+company rows require
+an active relationship; company-only rows require exactly one active mapped OWNER; rows with neither
+coordinate are rejected unless their classifier explicitly permits platform-global data. Conflicting
+account maps, multiple primary companies, unknown relationship kinds, unauthorized project links and
+target company-name collisions are blockers. Unclaimed global companies are exported/retired rather
+than forcing a global directory or nullable tenant ownership into Builderforce.
+
+[`audit-burnrate-tenancy.mjs`](../../api/scripts/audit-burnrate-tenancy.mjs) validates the identity
+account map against both databases with read-only credentials and reports assignments, missing
+segments and every ambiguity. The planner and audit add no database table or migration. Running the
+production account map and applying the accepted ETL remain part of the Identity/Data gates, not an
+unresolved ownership design.
+
+
+### §3.3 Valkey/Redis → `getOrSetCached` · §3.4 Mantine → Builderforce components
+Source: lines 568-580.
+
+#### 3.3 Valkey/Redis → `getOrSetCached`
+
+BurnRateOS runs Valkey in Docker for dev and caches through `services/cache.ts`. There is no
+Redis in the Builderforce target and there must not be an inline `Map`+TTL: every cached read
+moves to the canonical `getOrSetCached` (L1 in-isolate Map + L2 KV) with write-invalidation,
+and the `invalidateCached`/`cacheKey` helpers map onto it 1:1.
+
+#### 3.4 Mantine → Builderforce components
+
+Per-page rebuild. Rules that apply to every rebuilt page, in the same pass as the rebuild:
+theme tokens only, light **and** dark, fluid to 360px ([[theme-and-responsive-ui]]), and
+next-intl keys in all five catalogs with real translations ([[i18n-localization]]).
+BurnRateOS ships no i18n at all today — this is net-new work on 262 pages, not a migration.
+
+
+### §4 · Tracks · §4.1 B9 pricing-cart acceptance contract
+Source: lines 591-628.
+
+### 4 · Tracks
+
+Each track is **merge-first**: reconcile against the §2 owner, then port only what survives.
+
+| Track | Scope | Net-new vs merge |
+|---|---|---|
+| **B0** | Foundation (§3) — selective transforms, implemented tenant/company mapping, cache, auth, component-system baseline | all retained foundation behavior/data |
+| **B1 · CFO / Business Intelligence** | Runway, burn, break-even, forecast scenarios + assumptions + sensitivity + Monte Carlo, ARR projections, cohort retention, CAC/LTV/payback, expenses + AI expense classification, Plaid sync, financial accounts/transactions/categories, TCO, custom KPIs + formulas + thresholds, what-if scenarios, dashboard widgets/layouts | **mostly net-new** — merges only with FinOps |
+| **B2 · CEO / Investor Intelligence** | Pitch decks + versions + share links + slide analytics + comments, investor profiles/updates/reports/approvals, portfolio companies, health scoring, funding rounds, data rooms, due diligence, deal flow, investor portal access | **net-new** |
+| **B3 · CRO / CRM + VoIP** | Contacts (+identifiers, sources, provenance, edit logs, experience/education/compensation), companies + CRM/billing/support/product/marketing facets, deals, pipelines, quota, conversion rates, sequences (`Ri*`), dedup, enrichment credits, **business phone** (numbers, porting, balances, voice agent) | merge pipeline/contacts; **VoIP net-new** (§2 row 6) |
+| **B4 · CMO / Marketing & Growth** | Heatmaps (pages/captures/screenshots/analysis/events), landing pages + blocks, website pages, lead forms, nurture flows + steps + enrollment, A/B tests + variants + segments, NPS, referral codes, email sends + tracking, SEO pages, brand kits, content items, **web push** (§5 ex. 2) | merge campaigns; rest **net-new** |
+| **B5 · CPO / Product Management** | Features, feature requests + voting + adoption, experiments, release plans, roadmap items, product ideas, market/competitive analysis, customer insights, validation (results, imports, AI insights, dashboards, scenarios), MVP scenarios, approval workflows, entity versions, sign-offs, model locks | merge onto PMO/product; **validation + voting net-new** |
+| **B6 · CTO / Agile Survival** | Kanban, sprints, velocity, capacity, bottlenecks, risk assessment, technical debt, deployments, dev integrations (issues/commits/PRs/time/releases), cost calculation, sprint financial impact, runway↔sprint link | **mostly merge** — the *financial* half (cost per sprint, runway link) is net-new |
+| **B7 · CHRO / Operational Cadence** | Employees + employment records + emergency contacts, goals, performance reviews, 1:1s, check-ins, startup sync + agenda + metrics, scorecards, ScratchPad + meetings + transcripts + notes templates, calendar + bookings, Slack | merge with PRD 18 T3 (**same HR agent**, §2 row 1); bookings per §2 row 5 |
+| **B8 · CISO / Governance** | SOC controls + evidence, security incidents, vendors, DPAs, PII data assets, security training, compliance events, DSR (public + internal), data suppression, terms versions + agreements, embed consent | merge onto `soc_controls`/security; **vendors + DPA + PII assets net-new** |
+| **B9 · Platform remainder** | Marketplace + consultants + settlement, AI credits, cart/orders/invoicing, affiliate (§2 row 4), onboarding flows, announcement banners, changelog, user segments, coach marks, agency branding + clients, impersonation, system admin, embeds + widgets, uptime, waitlist, webinars/podcast/learn-video, blog (§2 row 12), guest sessions, free tools | merge-heavy |
+
+#### 4.1 · B9 pricing-cart acceptance contract
+
+The BurnRateOS migration includes its self-serve plan-selection journey, not only the
+cart/order tables. Builderforce's published pricing document and subscription checkout endpoint
+remain the system of record; the BurnRateOS UI behavior is merged onto those seams.
+
+- The pricing cards expose monthly and annual billing before a buyer selects a plan. Every shown
+  total, cart line, renewal label, and checkout payload uses the selected interval.
+- Teams exposes its published minimum-seat scale on the card and displays the arithmetic
+  (`per-seat price × seats = recurring total`) before the plan enters the cart.
+- Each card's top action shows either `Current plan` or the applicable upgrade action. Paid-plan
+  actions add one replaceable subscription line to the shared header cart; they do not bypass it.
+- An anonymous cart survives account creation. Registration continues through workspace creation
+  or selection, then returns to `/pricing`, reopens the saved cart, and asks the buyer to confirm
+  secure checkout.
+- Authenticated checkout supplies the selected plan, interval, seat count, retained discount, and
+  account billing email to `POST /api/tenants/:id/subscription/checkout`, then redirects only to
+  the payment-provider URL returned by that endpoint. Plan activation still occurs only from the
+  verified provider webhook.
+- Marketplace artifacts, business phone, and a base-plan subscription cannot be combined in one
+  provider checkout; the cart explains that they must be purchased separately.
+
+
+### §5 · Exceptions — decisions, not engineering
+Source: lines 632-658.
+
+### 5 · Exceptions — decisions, not engineering
+
+1. ~~**Tenancy model**~~ — **RESOLVED 2026-08-07** (§3.2). Company is a first-class axis;
+   tenant↔company is many-to-many via the `account_company_relationships` junction BurnRateOS
+   already ships; projects associate with one or more companies with one primary; a CEO agent
+   creates companies. B0's codemod and the navigation architecture's scope rules are both
+   unblocked. The one condition carried into B0: `tenant_id NOT NULL` denormalized onto all 404
+   models in the same pass, because 162 of them carry `companyId` with no tenant column today.
+2. ~~**Web push**~~ — **RESOLVED 2026-08-10:** stays retired. Do not reintroduce VAPID,
+   `push-fanout`, a DLQ or `packages/push-pwa`. Export consent history required for the customer
+   record, delete legacy push tokens at shutdown, and use existing email/in-app channels.
+3. ~~**Rows 4, 6 and 12 of §2**~~ — **RESOLVED 2026-08-10:** affiliate administration retires
+   after export/settlement; SignalWire hosted phone retires after history export and number
+   port/release; published content transforms into `knowledge_documents` and existing public
+   content routes with slugs/redirects preserved.
+4. ~~**AI credits vs token caps**~~ — **RESOLVED 2026-08-10:** Builderforce consumption meters,
+   plan features and kernel ledger are canonical. Valid customer value transforms to a meter/ledger
+   denomination or is refunded; no parallel credit balance survives.
+5. ~~**Two self-serve price points**~~ — **RESOLVED 2026-08-10:** Builderforce's published price
+   list and verified Stripe checkout/webhook path are canonical. No BurnRateOS plan is recreated.
+6. ~~**Provider ownership**~~ — **RESOLVED 2026-08-10:** Stripe is reconciled; retained connectors
+   are reauthorized through existing owners; Helcim/SignalWire/Recall/LinkedIn retire after their
+   named settlement/export actions. The complete credential and data dispositions are enforced by
+   [`burnrateCutoverPolicy.json`](../../api/src/application/migration/burnrateCutoverPolicy.json).
+7. ~~**Bulk schema/tier and Prisma dual-schema decisions**~~ — **RETIRED 2026-08-10:** selective
+   extraction emits no bulk BurnRateOS schema, so neither a 404-model codemod nor its table-count
+   capacity decision exists.
+
+
+### §7 · Coverage appendix · §8 · Planned coverage confirmation
+Source: lines 683-769.
+
+### 7 · Coverage appendix
+
+#### 7.1 API route modules (103 + 6 nested) → track
+
+**B1 (CFO):** `financial`, `expenses`, `breakEven`, `forecasting`, `predictiveAnalytics`,
+`revenueAnalytics`, `revenueIntelligence`, `businessIntelligence`, `agileCost`, `analytics`,
+`dashboard`, `pricing`, `pricingAggregator`
+
+**B2 (CEO):** `investorIntelligence`, `investors`, `investorUpdates`, `pitchDeck`,
+`portfolioComms`, `growth`
+
+**B3 (CRO):** `crmDeals`, `contacts`, `v1Contacts`, `companies`, `businessProfiles`,
+`customerEngagement`, `salesGrowth`, `phone`, `numberPorting`, `commsOps`, `dedup`,
+`sourcingExtractor`, `importSync`, `googleImport`, `leadForms`(→B4), `nurtureFlows`(→B4)
+
+**B4 (CMO):** `marketing`, `marketingGrowth`, `heatmaps`, `landingPages`, `blog`, `nps`,
+`referrals`, `emailTracking`, `emailConfig`, `push`, `publicWidgets`, `widgetJs`,
+`hrWidgetJs`, `embed`, `sitemap`, `freeTools`, `catalog`
+
+**B5 (CPO):** `productManagement`, `featureVoting`, `featureScoring`, `featureAdoption`,
+`roadmap`(via productManagement), `knowledgeBase`
+
+**B6 (CTO):** `agileSurvival`, `kanban`, `planningPoker`, `retrospectives`, `events`
+
+**B7 (CHRO):** `operationalCadence`, `hrAdmin`, `hrLegal`, `hrPanel`, `v1Hr`, `bookings`,
+`meetingNotesTemplates`, `scratchPad`, `slackIntegration`, `notifications`
+
+**B8 (CISO):** `governance`, `soc2`, `dsrPublic`, `terms`, `uptime`
+
+**B9 (platform):** `accounts`, `auth` + `auth/*`, `oauth`, `users`, `teams`, `billing`,
+`invoicing`, `marketplace`, `consultant`, `agency`, `affiliate`(via referrals), `ai`,
+`aiCredits`, `aiProductivity`, `coach`, `coachMarks`, `onboarding`, `impersonation`,
+`systemAdmin` + `systemAdmin/*`, `system`, `guest`, `health`, `lookups`, `migrate`,
+`supportTickets`, `usageTracking`, `contact`, `emailPreference`(via emailConfig)
+
+#### 7.2 Frontend domains (20, 262 pages) → track
+
+`businessIntelligence`(20)→B1 · `investorIntelligence`(22)→B2 ·
+`customerEngagement`(25)+`revenueIntelligence`(9)→B3 · `marketing`(60)+`growth`(11)→B4 ·
+`productManagement`(17)→B5 · `agileSurvival`(14)→B6 · `operationalCadence`(24)→B7 ·
+`governanceCollaboration`(19)→B8 · `account`(10)+`auth`(12)+`company`(5)+`system`(2)+
+`marketplace`(6)+`affiliate`(3)+`support`(1)+`dashboard`(2)+`ai`(6)→B9 · `common`(3)→B0
+
+#### 7.3 Runtime infrastructure
+
+| BurnRateOS | Builderforce target | Track |
+|---|---|---|
+| DO `SupportChatRoom` | merge with support (0236) — contributes the live-chat half | B9 |
+| DO `NotificationRoom` | existing notification/relay DO | B9 |
+| DO `SessionRoom` | existing session/collab DO | B6 |
+| Queue `push-fanout` + DLQ | **§5 exception 2** | B4 |
+| `packages/push-pwa` | **§5 exception 2** | B4 |
+| Cron `0 3 * * *` (churn recalc, digests, coach) | `cronSweeps.ts` behind the KV work-gate | B9 |
+| Cron `*/5 * * * *` (uptime sweep) | merge into monitoring sweeps | B8 |
+| `frontend/src/workers/sourcingExtractor.worker.ts` | browser worker, ports as-is | B3 |
+| `ai/personaPrompts.ts` (8 CxO) + `ai/tools/*` (48 intents, 11 modules) | `provisionBuiltinAgents.ts` seeds + Creation Canvas `PromptUseCasePicker` mapped onto existing object/actions | B0 → per-domain |
+| `services/builderforceClient.ts` | **delete** — in-process once consolidated | B0 |
+| Prisma `schema.mysql.prisma` / `schema.neon.prisma` | **§5 exception 7** | B0 |
+
+#### 7.4 Out of scope
+
+`.augment/`, `.kiro/`, `.windsurf/`, `.claude/` — editor/agent configuration, not product.
+`SECRETS.md` — operational credentials; migrate to the secret store, never to source.
+
+---
+
+### 8 · Planned coverage confirmation
+
+**The strategy assigns every BurnRateOS capability a destination; it does not confirm that the
+migration has happened.** All 109 route modules, all 20 frontend domains / 262 pages, all 404
+models, all 3 Durable Objects, both crons, the queue and the workspace package have a named
+destination above. The dated implementation audit at the top of this PRD is the authority for
+actual shutdown readiness.
+
+Two honest qualifications, both decisions rather than gaps:
+
+1. **Not every feature or table survives — but under the 2026-08-25 deprecation directive, each
+   casualty now needs a NAMED decision rather than a boundary.** Duplicate application structure is
+   still retired and non-target data is still exported rather than used to justify schema; what
+   changed is that "outside the IDEA → REAL boundary" is no longer by itself a reason not to build.
+   [§9](#9--deprecation-parity-audit--2026-08-25) carries the resulting register, now **0 build, 7
+   transform, 4 retire** — every casualty is a named decision rather than an omission.
+2. **§5 lists seven decisions** — tenancy axis, web push, three either/or capability calls, the
+   credits-vs-caps pricing model, and the Neon tier. Each changes what gets built. §3.2 closed the
+   tenancy decision on 2026-08-10 — `burnrateTenantCompanyMapping.ts` implements the planner and row
+   resolver and `audit-burnrate-tenancy.mjs` validates it read-only — so what remains there is
+   supplying the production account map and applying its output, not an unresolved design.
+
+
+### §9 · Deprecation parity audit (§9.0-§9.2, §9.4-§9.7)
+Source: lines 773-860 and 917-1048. The open `transform`/`retire` rows of §9.3 move to in run.md; the §9.3 narrative (lines 861-915) is archived here as history.
+
+### 9 · Deprecation parity audit — 2026-08-25
+
+#### 9.0 The directive changed, and this section is what changed with it
+
+**The operator directive is now DEPRECATION of `burnrateos.com`, and deprecation is a parity
+obligation.** The 2026-08-10 decision recorded in §0 and in DONE.md — a selective IDEA → REAL
+extraction, explicitly "not a 404-model/262-page port" — is **superseded for scoping purposes**. It
+is not deleted, because it is a recorded operator decision and because most of its engineering
+conclusions survive intact (no second invitation economy, no parallel schema, no duplicate provider
+product). What does not survive is its *boundary*: under selective extraction, a BurnRateOS
+capability with no Builderforce owner was **out of scope by definition**. Under deprecation, the
+same capability is a **gap that must be closed or explicitly retired with customer approval**.
+There is no third option, because when the source is switched off, a capability that is neither
+built nor retired is simply lost.
+
+This section is the inventory, the mapping and the gap register that the deprecation directive
+requires. Everything in it is measured from source, not asserted, and both registers are committed
+so the numbers are reproducible rather than a snapshot.
+
+#### 9.1 Step 1 — the full scope of `burnrateos.com`, measured
+
+Measured at BurnRateOS `cc23b2139e5846228fc255952cbf3bc733437668`:
+
+| Surface | Count | How it was measured |
+|---|---|---|
+| API route modules | **106** | `api/src/worker/routes/**/*.ts`, excluding `__tests__` |
+| API endpoints | **1,739** | `.get/.post/.put/.patch/.delete/.all` registrations, deduplicated per module |
+| Frontend `<Route>` paths | **481** unique | `App.tsx` |
+| — real destinations | **348** | routes whose element is not a `<Navigate>` |
+| — legacy redirects | **133** | already self-deprecated inside BurnRateOS |
+| Frontend domains | **20** | `frontend/src/domains/*` |
+| Frontend page components | **337** | `*.tsx` under a `pages` path |
+| Prisma models | **404** | `model ` declarations in `schema.prisma` |
+| Durable Objects · crons · queues | 3 · 2 · 1 | §7.3 |
+
+The earlier "262 pages" figure counted only the nine product domains and excluded `system` (52),
+`auth` (13) and `account` (10). **348 real routes is the deprecation surface**, not 262: a redirect
+that returns 404 after shutdown is as broken as a missing feature.
+
+The ten largest modules carry 660 of the 1,739 endpoints — `operationalCadence` (91),
+`productManagement` (86), `businessIntelligence` (83), `investors` (80), `systemAdmin` (77),
+`governance` (67), `billing` (52), `kanban` (45), `investorIntelligence` (42), `scratchPad` (39).
+
+For comparison, Builderforce at `95bedac24fb7d9d2702d4aecdb65cd668b3f3364` has **226 route modules,
+3,887 endpoints and 188 pages**. The destination is larger than the source; the question this
+section answers is not *capacity* but *coverage*.
+
+#### 9.2 Step 2 — the mapping, and how parity is decided without guessing
+
+Mapping 106 modules by name similarity would be a guess. The method used instead is evidence-driven
+and mechanical, and it works because BurnRateOS writes **raw SQL**, so every route module names the
+tables it touches in its own source:
+
+1. For each BurnRateOS route module, extract the tables it reads or writes
+   (`FROM|JOIN|INTO|UPDATE <table>`).
+2. Resolve each table through [`source-to-target.tsv`](./data-model/source-to-target.tsv) to its
+   Builderforce target and disposition.
+3. A `primitive` / `merged` / `session` / `flatten` disposition means the row was absorbed by a
+   kernel primitive, which is feature-reached by construction. Only a `keep` target can sit
+   unreached.
+4. A `keep` target is **reached** unless it appears in
+   [`.table-adoption-baseline.txt`](../../api/scripts/.table-adoption-baseline.txt), which is the
+   existing, CI-maintained list of tables that *only* the generic entity layer touches.
+5. A module's parity is the share of its tables whose targets are reached.
+
+This deliberately reuses the adoption checker rather than inventing a second definition of
+"migrated". "Opens in `EntityBrowser`" already does not count as adoption anywhere else in this
+repository, and it does not count here.
+
+**Result across 106 modules** — committed as
+[`burnrate-modules.tsv`](./data-model/burnrate-modules.tsv):
+
+| Verdict | Modules | Meaning |
+|---|---|---|
+| **Full parity (100%)** | **76** | every table the module touches is reached by a Builderforce feature path |
+| **Partial (1–99%)** | **18** | the remainder of each is a `transform` or `retire` target, not unbuilt work |
+| **Gap (0%)** | **1** | `blog` — `blogContent → transform_existing` onto `knowledge_documents` |
+| No table evidence | 11 | `health`, `sitemap`, `auth/geo`, `widgetJs`, `hrWidgetJs`, `hrPanel`, `coach`, `dedup`, `featureAdoption`, `numberPorting`, `v1Hr` — stateless proxies, embeddable JS, or delegating shims |
+
+The 11 no-evidence modules were read individually rather than assumed: none holds state of its own.
+`numberPorting` is covered by the `phoneVoip → retire_port_out` decision; the two `widgetJs` modules
+serve embeddable script and are a real surface obligation tracked under `embed_widget_layout` below.
+
+**Partial is the important verdict, and it is why a module-level "mapped" column would have lied.**
+`productManagement` is 38% — features, requests, roadmap and experiments land on existing owners,
+while A/B testing, release plans and heatmap-backed feedback do not. Reporting that module as
+"mapped to PMO" would have hidden five capabilities.
+
+#### 9.3 Step 3 — the gap register, which is the build backlog
+
+Deduplicating every unreached target across all 106 modules gave the distinct Builderforce targets
+that a BurnRateOS route module depends on and that no Builderforce feature path reached. The audit
+opened at **74**. **All 60 `build` items are now closed** (§9.6, §9.7); the 13 rows that remain are
+the ones a decision, not a build, disposes of. Committed as
+[`burnrate-parity.tsv`](./data-model/burnrate-parity.tsv), classified against cutover policy v1:
+
+| Disposition | Count | Meaning |
+|---|---|---|
+| **`build`** | **0** | **closed 2026-08-25** — see §9.7 |
+| `transform` | 6 | a Builderforce owner is already canonical; the source rows transform onto it |
+| `retire` | 4 | already decided in `burnrateCutoverPolicy.json`; export, do not rebuild |
+
+`transform` is `billing_plans`, `plan_features`, `business_pricing_models`, `pricing_simulations`,
+`system_features` (all `pricing → transform_existing`; `PlanLimits.ts` and
+`pricingConfiguration.ts` stay canonical and are not in scope to change) and `payment_methods`
+(`stripe → retain_reconcile`). `retire` is `affiliate_referrals` and `referral_entries`
+(`affiliates → retire_export`), `ai_voice_agent_calls` (`phoneVoip → retire_port_out`) and
+`blog_posts` (`blogContent → transform_existing` onto `knowledge_documents`).
+
+**The single most important finding: all 74 targets already have a Drizzle declaration.** Verified
+against `schema/*.ts` — zero of them need new schema. The entire deprecation backlog is application
+code and surfaces over tables that already exist, which is exactly what
+`burnrateCutoverPolicy.json`'s `newTablesAllowed: false` asserts, and it is the same shape the
+2026-08-22 hired.video mapping audit found for PRD 18. **A gap here is a missing feature path, never
+a missing table.**
+
+##### The remaining `build` items by domain
+
+| Domain | n | Targets |
+|---|---|---|
+| **Growth & marketing** | **14** | `marketing_content_items`, `marketing_emails`, `nurture_flows`, `ab_tests`, `ab_test_variants`, `customer_journeys`, `journey_touchpoints`, `marketing_heatmap_pages`, `marketing_heatmap_screenshots`, `brand_kits`, `embed_widget_layout`, `learn_videos`, `podcast_outreach`, `waitlist_entries` *(the four web-surface targets closed — §9.6)* |
+| **Revenue & CRM** | **9** | `ri_icps`, `ri_prospects`, `ri_sequences`, `ri_ids`, `deal_flow_opportunities`, `contact_experiences`, `contact_educations`, `contact_compensations`, `saved_contact_searches` |
+| **Commerce** | **8** | `booking_hosts`, `booking_services`, `booking_reservations`, `agency_brandings`, `agency_clients`, `consultant_consultations`, `consultant_knowledge_docs`, `card_decks` |
+| **Delivery & work** | **6** | `action_items`, `kanban_columns`, `release_plans`, `task_effort_estimates`, `sprint_financial_impact`, `approval_actions` |
+| **Identity & tenancy** | **5** | `user_terms_agreements`, `onboarding_flows`, `onboarding_progress`, `stage_lookup`, `region_waitlist` |
+| **Finance** | **5** | `break_even_scenarios`, `churn_predictions`, `monte_carlo_simulations`, `payback_period`, `saved_calculations` |
+| **Agents & runtime** | **4** | `ai_tool_calls`, `ai_competitors`, `ai_email_classifications`, `enrichment_cache` |
+| **Investor & portfolio** | **3** | `investor_peer_comparables`, `scratch_pad_attachments`, `modules` |
+| **Support & knowledge** | **2** | `customer_engagement_feedback_widgets`, `support_articles` |
+| **People & HR** | **2** | `hr_emergency_contacts`, `health_dimensions` |
+| **Hiring** | **1** | `cohort_retention` |
+| **Platform & observability** | **1** | `uptime_monitors` |
+
+##### Sequencing, by how many source modules a target unblocks
+
+`user_terms_agreements` (4 modules), `action_items` (3), `churn_predictions` (3),
+`customer_engagement_feedback_widgets` (3), `marketing_heatmap_pages` (3),
+`deal_flow_opportunities` (2), `investor_peer_comparables` (2), `onboarding_flows` (2),
+`break_even_scenarios` (2), `ai_tool_calls` (2), `customer_journeys` (2) come first: each closes
+part of more than one BurnRateOS module, so the parity percentage of several modules moves per unit
+of work. Growth & marketing was the largest single block at 18, and its web-surface question — `landing_pages`
+/ `website_pages` / `marketing_seo_pages` overlapping the existing `sites` and `siteManage` owners —
+is **answered in §9.6** rather than left open. §2 still governs every remaining item.
+
+#### 9.4 What this section does NOT change
+
+- **No new tables.** `newTablesAllowed: false` stands, and the audit above shows it is achievable.
+- **§2 capability ownership still governs.** A gap being real is not permission to create a second
+  owner. Every item lands on the owner §2 names.
+- **PRD 21 still owns the experience.** Each closed gap arrives as a **panel over the mounted
+  canvas**, never as a standalone page, and never as a horizontal tab bar.
+- **Pricing is out of scope.** `PlanLimits.ts` and `pricingConfiguration.ts` are an operator
+  decision; the six `transform` rows reconcile *onto* them.
+- **The Claim-to-Proof gate still binds public copy.** Closing all 64 items would still not license
+  the word "migrated": no BurnRateOS source rows have moved, and the Data gate in the implementation
+  audit is still open.
+- **Behaviour parity is not data parity.** This section closes the *extraction* gate. The
+  *identity*, *data*, *provider*, *runtime*, *billing*, *cutover* and *rollback* gates are untouched
+  by it, and the ETL those gates need still does not exist in this repository.
+
+#### 9.6 Closed — the web surface, and what "merge" means in practice
+
+**`landing_pages` · `landing_page_blocks` · `website_pages` · `marketing_seo_pages` — 74 → 70.**
+`landingPages` moves 0% → **100%** parity and `marketingGrowth` 33% → 67%; full-parity modules go
+44 → 45 and zero-parity modules 6 → 5.
+
+**Merge means ONE combined feature, not a port beside the existing one.** The rule applied here, and
+to be applied to the remaining 60: compare the two sides, keep the more mature one, and add only
+what the other has that it lacks. Builderforce was the more mature side and kept everything it
+already had — kernel `objects` registration (`landing_page` is a registered kind, so a page is
+addressable by the id every other object uses), `shell_kind` so the renderer is resolved rather than
+remembered, `campaign_id` + `goal_metric` so a page is an attributable part of a campaign, and the
+publish/release, custom-domain and traffic pipeline `siteManageRoutes` already owns for a project's
+hosted site.
+
+BurnRateOS's `landingPages` module (426 lines, 11 endpoints) contributed exactly the behaviour
+Builderforce had schema for and no path to: the block-based builder, the website page's navigation
+tree (`nav_label` / `nav_position` / `parent_path`) and its canonical-path decision, and the
+unauthenticated read of a published page. **What did not come across was its second notion of a
+"site" and its plain per-table CRUD** — importing those would have produced two answers to "what
+does this tenant publish", which is the outcome §2 exists to prevent.
+
+Three tables stayed three tables. The `landing_pages` docstring already argued that pairing — a
+landing page has a campaign, a conversion goal and a lifespan in weeks; a website page has a
+navigation position and a permanent URL SEO depends on — and merging them is how a campaign page
+ends up in the sitemap. One owner and one service, not one table.
+
+**Shipped:** [`webSurface.ts`](../../api/src/application/marketing/webSurface.ts) (the rules) and
+[`webSurfaceRoutes.ts`](../../api/src/presentation/routes/webSurfaceRoutes.ts) (`/api/web` authoring,
+`/api/public/web` reading), 27 tests, zero new tables, zero migrations.
+
+Four decisions worth carrying forward, because each is a defect the straight port would have shipped:
+
+1. **Publication is a transition, not a column write.** `publishLandingPage` stamps `published_at` in
+   the same statement that sets `live`, and `updateLandingPage` cannot write `status` at all — so a
+   live page with no publication time is unrepresentable rather than merely unlikely.
+2. **Leaving `live` is two different events.** The caller must say `ended` (campaign over, numbers
+   final) or `draft` (coming back); the route rejects anything else rather than defaulting, because
+   a default turns "this campaign is over" into "still editing" in every later report.
+3. **Reordering blocks parks at negative positions first.** `position` is UNIQUE per page, so
+   writing final positions directly collides the instant two blocks swap. Two passes inside one
+   transaction; the negative window is outside any real block's range.
+4. **The public read cannot be talked into serving a draft.** It filters `status` and `ends_at`
+   inside the query, takes no actor, and has no argument that relaxes either — so no future call
+   site can reuse it for an authoring view and quietly publish drafts.
+
+#### 9.7 Closed — the remaining 60, and what doing the merge properly revealed
+
+**`build` reached 0 on 2026-08-25.** All 106 source modules resolve: **76 at full parity, 18
+partial, 1 gap, 11 stateless**. Every partial and the single gap is partial only in a
+`transform`/`retire` target — there is no unbuilt capability left in the register. Consolidation
+tables reached by a feature path moved **177 → 245**; registry-only **181 → 113**.
+
+**Zero new tables. Zero migrations.** §9.3's headline claim held for all 60 items, which is the
+strongest evidence that the mapping was right: not one gap turned out to be a schema request.
+
+| Batch | Targets closed | Landed on |
+|---|---|---|
+| Web surface | 4 (+0) | `marketing/webSurface.ts` |
+| Consent | 2 (+0) | extended `legal/termsAcceptance.ts` |
+| Delivery flow | 4 (+0) | `delivery/actionItems.ts`, `delivery/agileCost.ts`, `approval/approvalChain.ts` |
+| Scenario + churn | 5 (+2) | `finance/scenarioModelling.ts`, `finance/churnPrediction.ts` |
+| Contact depth + revenue intel | 9 (+0) | `sales/contactProfile.ts`, `sales/revenueIntelligence.ts` |
+| Growth ops + arrival | 18 (+4) | `marketing/{experimentation,contentStudio,pageInsight,waitlist}.ts`, `tenant/onboardingFlows.ts`, `kernel/platformVocabulary.ts` |
+| Practice ops | 18 (+0) | `commerce/{bookings,agencyPractice}.ts`, `agent/aiOperations.ts`, `people/peopleInsight.ts`, `investor/portfolioIntel.ts`, `support/customerSurface.ts` |
+
+The `(+n)` are tables the register did NOT name that had to be closed anyway, because the register
+lists what BurnRateOS *touched* rather than what a coherent feature *needs*: `scenario_assumptions`
+and `roi_timeline_entries` (a scenario with no inputs is not a scenario), `onboarding_checklists`
+and `onboarding_tasks` (a flow with no steps), `ab_test_segments`, and `countries`.
+
+##### Three duplicates the merge found, which a name-matching audit would have built twice
+
+The most valuable output of doing this by comparing MATURITY rather than by matching names is the
+work that did **not** happen. Three register rows moved from `build` to `transform` because the
+Builderforce owner was already richer, and building them would have given the platform two answers
+to one question — the outcome §2 exists to prevent:
+
+| Target | Existing owner | Why it wins |
+|---|---|---|
+| `kanban_columns` | `swimlanes` | Carries agents, `gate`/`gate_source`, parking-vs-terminal semantics and completion ranking. `kanban_columns` adds only a colour token and a WIP limit. **Folded and dropped by migration 1160 (2026-09-12)**; `swimlanes` gained `wip_limit` + `color_token`. |
+| `release_plans` | `product_releases` | Same shape, already feature-reached. **Folded and dropped by migration 1160 (2026-09-12)**, its registered `objects` re-pointed. |
+| `ri_sequences` | the canvas-object cadence | `sequenceRunner.ts` runs cadences as a sweep over "who is due" rather than a timer per person, an argument that module makes at length and that this schema has already applied twice. A second sequence table means two answers to "what is about to be sent to this person". |
+
+##### The pattern, for anyone extending this
+
+Every batch followed §9.6's rule — compare, keep the more mature side, add only the delta — and the
+recurring shapes are worth naming because they are what "merged properly" looks like rather than
+"ported":
+
+1. **A gate keeps its hot path; the audit trail is added beside it.** Consent's cached
+   `checkTermsAcceptance` was untouched; what it could not do — survive an audit, or record that a
+   *company* agreed — became the evidence row and the organisation binding, written by the same call
+   so they cannot drift.
+2. **A result that needs a sample refuses to report before it has one.** A/B lift, a heatmap, and a
+   churn model all return null-with-a-reason rather than a number that looks like a finding.
+3. **A derived verdict is derived, never stored.** Approval outcome, funnel percent and implied
+   valuation are computed from rows, so nothing can disagree with them.
+4. **An exclusive flag is enforced by its writer, in a transaction.** Scenario baseline, default ICP,
+   default brand kit, current estimate, current role, primary emergency contact — six instances of
+   the same defect, closed the same way.
+5. **A number whose provenance is weak says so.** Scenario provenance is `declared`, compensation
+   carries `confidence`, a churn score requires a `model`, and a valuation states its method.
+
+#### 9.5 Reproducing this audit
+
+Both registers are regenerated from source, never hand-edited:
+
+```powershell
+cd api
+node scripts/check-burnrate-parity.mjs            # verifies the committed registers still match source
+node scripts/check-burnrate-parity.mjs --update    # regenerates them after a gap is closed
+```
+
+The checker is the meter for this section: as each of the 64 items gains a feature path, the
+`build` count falls, and it must never rise silently.
+
+
+### §10 · Idea → REAL for founders: listing, investors, runway — shipped 2026-09-15
+Source: lines 1050-1117.
+
+### 10 · Idea → REAL for founders: listing, investors, runway — shipped 2026-09-15
+
+**Operator ask (2026-09-15):** "help founders go from idea to real by promoting their business —
+create the company, list it, find investors; provide runway, cashflow and the product-management
+content; assess all pages/content/materials within burnrateos.com and add them." Clarified
+mid-pass: **startup listings are part of the marketplace.**
+
+#### 10.1 What shipped, and where it landed
+
+| BurnRateOS | Builderforce owner | Landed as |
+|---|---|---|
+| `/businesses` directory · `BusinessDirectoryGrid` · `FundingStageShowcase` · filters | Marketplace, `company` family, `business` kind | `components/startups/StartupDirectory.tsx` over `GET /api/public/startups` (`application/investor/startupDirectory.ts`). Stage chips, sector / business-stage / sort, server paging, cached under one version token. |
+| `/businesses/:slug` public profile (948 lines Mantine) | `PublicDetailLayout` | `/marketplace/company/[slug]` — edge-rendered, indexable, Organization JSON-LD, listed in `sitemap.ts`. |
+| `InvestorInquiryDrawer` + `InvestorInquiryModal` ("Express Interest") | `deal_flow_opportunities` (revenue owner) | ONE `ExpressInterestPanel` (slide-out). `POST /api/public/startups/:slug/inquiries` → `recordDealFlow` with `source='investor_inquiry'` + `subject_company_id`; owners/managers notified in-app. |
+| Onboarding `BusinessProfileStep` · `BusinessContextStep` · `VisibilityPreferencesStep` (7-step stepper, 871 lines) | `companies` (CEO root) | Three-step `StartupListingWizard` on the new **Investors → Listing** tab; steps are data (`listingSteps.ts`); each step SAVES (create/patch company · declare finance · visibility). `/register?intent=startup` carries the intent and lands on it. |
+| `Company.isPubliclyListed / isSeekingInvestment / allowInvestorInquiries / tagline / …` | `companies` columns | Migration 1173 — the listing FACET (23 columns), partial unique index on `slug WHERE is_publicly_listed`, `stage_lookup` seeded from the ONE vocabulary. Zero new tables. |
+| `investor_inquiries` (+ the CRM `deals` row BurnRateOS wrote beside it) | `deal_flow_opportunities` | `subject_company_id`, `contact_name`, `details` columns (1173). Founder triage on **Investors → Interest** with the CRO's own statuses; `publicInquiryCounts` is the card's social proof. |
+| `RunwayTrackerPage` · `financialService.getRunwayMetrics` | Finance (CFO) | New destination `/finance` (`components/finance/*`), `GET /api/bi/runway` (`application/finance/runwayReport.ts`): OBSERVED (`finance.*` metric facts, 12 months) beside DECLARED (`companies.cash_on_hand / monthly_budget / monthly_revenue / team_cost`, stamped), each labelled. Cached on two version tokens (tenant declared write · finance rollup pass). |
+| `CashflowVisualizerPage` | Finance (CFO) | `/finance?tab=cashflow` — observed series and the declared projection (`projectCashflow`), chart + table, toggle names the series. |
+| `businessCalculations.ts` (`calculateRunway`) ×3 copies | `packages/creation-canvas-contract/src/startupListing.ts` | ONE `computeRunway` (cash ÷ NET burn) + `projectCashflow`, imported by API, web and the marketing calculator. Tested once. |
+| `/tools/runway` free tool | BI explainer | `RunwayCalculatorSection` registered in `domainExtras.tsx` for `businessIntelligence`; the CTA carries the numbers into `/register?intent=startup` or `/finance`. |
+| `/tools/burn-rate` · `/tools/churn` · `/break-even-calculator` · `/pricing-simulator` | Tools registry (`/tools`) | `application/tools/startupFinanceTools.ts` — five `CalculatorTool`s under the new `finance` category, localized through the tool catalogs. |
+| "Discover startups" home band · "Ready to connect? For Investors / For Startups" | Investor Intelligence explainer + marketplace | `StartupDirectoryTeaser` (newest six + the two doors) registered for `investorIntelligence`; `StartupDoors` under the marketplace grid. |
+| `/product-management` (8 owned features, funding-stage use cases, 5 FAQs) and the other eight domain explainers | `burnrateMarketing.domains.*` | Feature copy expanded from 3 to the catalog's owned features per domain (8 · 11 · 6 · 9 · 4 · 12 · 7 · 9 · 14), `useCases` for PM / BI / Investor, `faq` for all nine — rendered by `BurnrateDomainPage` (`useCases`, `faq` optional in the copy type). Five locales. |
+| `constants.ts` funding rounds / business stages / seeking types / investor types | contract package | `FUNDING_STAGES`, `BUSINESS_STAGES`, `STARTUP_SECTORS`, `SEEKING_TYPES`, `INVESTMENT_TYPES`, `INQUIRY_TIMEFRAMES`, `EXPERTISE_AREAS` — one declaration; labels in `startups.vocab.*`. |
+
+Release notes (category `new`) ship by migration 1175. Marketing: `content/blog/list-your-startup-and-meet-investors.md`.
+
+#### 10.2 What a stranger may see — the tier rule
+
+`toPublicProfile(row, viewer, inquiryCount)` is the ONE redaction. `public`: profile, stage, sector, raising, total raised, MRR, headcount, runway **health**. `member` (any signed-in reader): + runway in months + the investor contact the founder chose. **Never** cash on hand, burn or team cost. BurnRateOS's third "investor" tier is the platform's company GRANT (`companyInvestorAccess.ts`) — it opens a data room, not a paragraph.
+
+#### 10.3 Content assessment — every public BurnRateOS route
+
+348 real routes were measured in §9.1; the PUBLIC ones (the marketing shell) resolve as follows. Everything marked *merged* renders today in five locales; nothing here is described as migrated data.
+
+| BurnRateOS public route(s) | Builderforce | Status |
+|---|---|---|
+| `/` (landing: hero, Ask your AI C-Suite, discover startups, Ready to connect) | `/` (canvas-first home) · `/marketplace?family=company` · `/investor-intelligence` teaser | merged — the C-suite is the roster; startups are a marketplace family |
+| `/features`, `/features/<tool>` (ai-coach, ai-email-classifier, ai-contract-analyzer, ai-competitor-monitor, ai-expense-categorizer, ai-pitch-deck-feedback, ai-productivity) | `/features`, `/features/[burnrateFeature]`, `/features/ai-coach` | merged (registry projection); `ai-voice-agent` and `business-phone` retired by policy |
+| `/product-management` · `/business-intelligence` · `/survival-focused-agile` · `/sales-revenue` · `/customer-engagement` · `/investor-intelligence` · `/operational-cadence` · `/governance-security` · `/marketing-growth` | same slugs via `[burnrateDomain]` | merged — full feature catalog, use cases, FAQ (this pass) |
+| `/ideas` (Ideas scratch pad marketing) | `/create` (the canvas IS the front door) | merged — the Ideas canvas feature card points at it |
+| `/businesses`, `/businesses/:slug` | `/marketplace?family=company&kind=business`, `/marketplace/company/:slug` | **merged (this pass)** |
+| `/register` (founder / investor role) | `/register?intent=startup` | merged — intent, not a fourth account type |
+| `/tools`, `/tools/runway`, `/tools/burn-rate`, `/tools/churn`, `/break-even-calculator`, `/pricing-simulator` | `/business-intelligence` calculator · `/tools` finance category | **merged (this pass)** |
+| `/pricing`, `/pricing-simulator` (plans) | `/pricing` | pricing is `transform_existing` — Builderforce plans are canonical (§9.3) |
+| `/competitors`, `/competitors/<domain>` (8 hubs) | `/compare/[competitor]` | merged earlier — one comparison surface |
+| `/blog`, `/blog/:slug`, `/changelog`, `/case-studies`, `/wall-of-love` | `/blog`, `/blog/[slug]`, product updates panel, `/media` | merged — `blogContent → transform_existing` |
+| `/docs/**` (agile-poker docs, API docs) | `/docs`, `/developers` | merged — the developer portal is the API docs owner |
+| `/about`, `/contact`, `/trust`, `/privacy`, `/terms` | `/about`, `/book-demo`, `/soc2`, `/legal/*` | merged |
+| `/integrations`, `/integrations-marketplace` | `/integrations`, `/settings/integrations` | merged |
+| `/affiliate-program`, `/affiliate-dashboard`, `/affiliate/*` | — | **retired** (`affiliates → retire_export`) |
+| `/features/business-phone`, `/features/ai-voice-agent`, VoIP marketing | Twilio connector (workflow calls) | **retired** (`phoneVoip → retire_port_out`) |
+| `/email/preferences`, `/email/unsubscribe` | `/settings` email preferences · unsubscribe links | merged |
+| `/d/:token`, `/deck/:token`, `/data-room/:token`, `/investor-portal/*` | `/data-rooms/shared/[token]`, `/investor/shared/[token]` | merged (IN-2) |
+| `/book/:handle` | `/book` | merged (bookings owner) |
+| `/consultant/onboarding`, `/consultant/dashboard`, `/marketplace` (CxO experts) | `/marketplace?family=talent` · `/freelancer/*` | merged — experts are the talent family |
+| `/community`, `/analytics-hub`, `/enterprise/admin` | `/insights`, `/admin` | merged |
+
+Everything else on the 348 is an authenticated product route already mapped by §9.2 (76 modules at full parity, 18 partial only in `transform`/`retire` targets).
+
+#### 10.4 Decisions worth carrying forward
+
+1. **The listing is a FACET, not a profile table.** BurnRateOS's own end state had collapsed `BusinessProfile` into `Company`; a `startup_profiles` sibling would have re-split it. Columns, a partial unique index, `newTablesAllowed: false` intact.
+2. **Runway is never stored.** Every surface derives it from the declared inputs by one function; a stored figure is one that can disagree with its inputs.
+3. **An inquiry is deal flow.** Not a notification, not a second inbox: the CRO's queue and the founder's Interest tab read the same rows, narrowed by `subject_company_id`.
+4. **Publishing is a transition with a gate.** `setListingVisibility` refuses an incomplete profile and stamps `listed_at`; `LISTING_REQUIRED_FIELDS` is read by the gate AND the completeness meter.
+5. **Marketing copy is bound by the Claim-to-Proof gate.** The catalog's fabricated percentages ("40% faster MVP") were replaced with qualitative outcomes; retired capabilities are not advertised.
+
+
+---
+
+## ✅ RESOLVED 2026-11-17 — PRD 26: finished sections archived on consolidation (Advisor Platform)
+- **Verified 2026-11-17:**
+  - §1-§3 goal, roles, scope: narrative.
+  - §4.1 / FR-2 Advisors filter: `api/src/presentation/routes/freelancerRoutes.ts:554,591`; `frontend/src/components/freelance/BookAdvisorPanel.tsx`, `frontend/src/app/talent/[id]/TalentDetailClient.tsx`.
+  - §4.2 / FR-3 kind `advisory`: `api/src/presentation/routes/meetingRoutes.ts:49,52`. (The frontend mirror stays open as a §10 follow-on.)
+  - §4.3 origins: `api/src/application/commerce/advisoryProvisioning.ts`, `api/migrations/1249_advisory_meeting_reservation_ref.sql`, `frontend/src/app/book/[token]`.
+  - FR-1 / FR-6 / §6 / §7 / §9: contract and split. Children were merged per an earlier DONE.md entry (that entry's "minutes→tasks + follow-up" claim is contradicted by the code for advisory meetings; see in run.md §4.5).
+  - §12 "Built" (A0 bind, A1 provisioning): as above.
+  - §12 item 6 pro-bono badge: `frontend/src/components/freelance/ProBonoBadge.tsx`.
+
+### §1 Goal · §2 Who · §3 In scope for epic #2522
+Source: `docs/specs/26-prd-advisor-platform.md` lines 23-50.
+
+### 1. Goal
+
+Founders and operators can find Advisors on the talent catalog, hold an **advisory** meeting as a first-class meeting kind, and get structured minutes onto the board **without** a standup ritual and **without** a second scrape pipeline.
+
+SCORE.org remains a **capability checklist**, not a product to clone. Builderforce does not add a fifth marketplace family, an `/advisors` destination, or `advisor` as a listing kind.
+
+---
+
+### 2. Who
+
+| Role | Need |
+|---|---|
+| **Founder / operator** | Hire or meet Advisors; keep a durable record of advisory conversations on the board |
+| **Advisor** | Talent listed under `category=advisors`; run advisory meetings; notes land without a separate standup |
+| **Meeting Notes agent** | Input = the advisory meeting; output = structured minutes suitable for the shared board pull |
+| **Board-sync** | One generalised pull path for standup **and** advisory minutes |
+| **Downstream implementer on #2522** | Must not also build marketplace family Book bind, academy, workshops, packs, or restricted Brain from this PRD |
+
+---
+
+### 3. In scope for epic #2522
+
+1. Talent listing / filter for Advisors (`category=advisors`).
+2. First-class meeting kind `advisory` (create, list, complete).
+3. Meeting Notes agent scoped to advisory meetings.
+4. Minutes → board via **one** generalised pull of today’s standup-minutes pull (standup and advisory share the path).
+
+**Not in scope for #2522** (owned by **#2545**, not “later in 26”): A2–A5 workshops / academy / packs; `/marketplace?family=talent` Book bind; a restricted Brain thread for advisor conversations; advisory meetings existing *only* as a side effect of a Book bind.
+
+
+### §4.1 Advisors talent filter
+Source: lines 56-65.
+
+#### 4.1 Advisors talent filter
+
+Users can filter talent to Advisors and act on that list.
+
+- Advisors is a talent **category / listing filter** (`category=advisors` on the existing talent catalog). It is **not** a marketplace family, **not** a listing kind, **not** a second user type, and **not** a new `/advisors` route.
+- Do **not** add `advisor` (or `advisors`) to `MARKETPLACE_LISTING_KINDS`.
+- Do **not** invent `/advisors` as a marketplace family route as part of this epic.
+- Do **not** specify this filter as `/marketplace?family=talent` Book bind (that bind is **#2545**).
+- In-scope action on the list is the **advisory-meeting flow** (schedule / join / notes). Existing talent CTAs (e.g. Hire when the person is also available-for-hire) may remain; they are not this epic’s product.
+- Advisor profile fields that make the filter useful (expertise, industries, languages, methods, stages, session length, price including 0, location, confidentiality *default on the listing*) are compatible with child **#2527**. They do not create a new user type and do not add `advisory` to `PEOPLE_OBJECT_KINDS`.
+
+
+### §4.2 Meeting kind `advisory`
+Source: lines 67-75.
+
+#### 4.2 Meeting kind `advisory`
+
+Creating, listing, and completing advisory meetings uses kind `advisory`.
+
+- **Standup** remains a distinct kind. Advisory is not a standup with a different label.
+- Unknown kinds continue to coerce to `adhoc` (existing behaviour).
+- Register `advisory` in the meeting-kind list used to create/list/complete meetings. Child **#2536** owns that registration. Do **not** add `advisory` to `TEAM_CEREMONY_KINDS` (`standup` / `planning` / `retrospective` / `review`). Advisory must **not** default-link team chat.
+- There is **no** requirement that an advisory meeting exists only as a side effect of a Book bind.
+- Frontend `ScheduleMeetingPanel` (or equivalent) duplicating the KINDS list is a **follow-on**, not shipped by this rewrite and not claimed as already done.
+
+
+### §4.3 Origins of an advisory meeting
+Source: lines 77-87.
+
+#### 4.3 Origins of an advisory meeting
+
+An `advisory` meeting is first-class. Any of the following may create one; **none** is the only origin:
+
+| Origin | Status on this epic |
+|---|---|
+| Authenticated schedule / create with kind `advisory` | Required (R4) |
+| Public ATS-style `/book/[token]` (or slug-scoped token) that writes kind `advisory`, advisor as organizer, visitor as attendee | **Allowed** — child **#2532**. Compatible. Must **not** be specified as `/marketplace?family=talent` Book bind. Must **not** be the only origin |
+| A0 storefront Book CTA on `/marketplace?family=talent` binding Talent listing ↔ `booking_services` | **Not this epic** — **#2545** |
+
+Visitor join-by-token, if shipped by **#2532**, must not punch a hole in auth for the whole meetings surface.
+
+
+### §5 Functional requirements — FR-1, FR-2, FR-3, FR-6
+Source: lines 112-129 and 143-145.
+
+#### FR-1 — Single product on this file (R0, R1, R7, R8)
+
+- **FR-1.1** #2522 Spec remains this path.
+- **FR-1.2** Notes compose; they do not become a second PRD.
+- **FR-1.3** This file is sufficient for children to implement #2522 without reading #2545’s product as in-scope.
+
+#### FR-2 — Advisors filter (R3)
+
+- **FR-2.1** Talent catalog accepts `category=advisors` and returns Advisor listings.
+- **FR-2.2** Users can act on that list via the advisory-meeting flow.
+- **FR-2.3** No `advisor` listing kind; no `/advisors` family route; not `/marketplace?family=talent` Book bind.
+
+#### FR-3 — Kind `advisory` (R4)
+
+- **FR-3.1** Create / list / complete with kind `advisory`.
+- **FR-3.2** Standup stays distinct; unknown kinds still coerce to `adhoc`.
+- **FR-3.3** `advisory` is not a team-ceremony kind and does not default-link team chat.
+- **FR-3.4** Advisory meetings are not Book-only.
+
+
+#### FR-6 — Explicit split (R2)
+
+- **FR-6.1** A2–A5, `/marketplace?family=talent` Book bind, and restricted Brain are **#2545**, worded as owned by **#2545**, not as later work in 26.
+
+
+### §6 Explicit split — epic #2545 owns the rest · §7 Children · §9 Out of scope
+Source: lines 149-179 and 198-208.
+
+### 6. Explicit split — epic #2545 owns the rest
+
+The following were previously documented in this file as PRD 26. They are **not** #2522 delivery. They are **not** “later in 26”. They belong to epic **#2545**.
+
+| Item | What it is | Owner |
+|---|---|---|
+| **A0 · Bind** | Talent `person` listing ↔ `booking_services`; Book CTA on `/marketplace?family=talent`. Recommended bind: `booking_hosts.host_ref` = talent userId (composition notes / **#2593**). Do **not** add `advisor` to `MARKETPLACE_LISTING_KINDS`. | **#2545** |
+| **A1 · Session** | Reservation → meeting + calendar + **restricted Brain thread** (confidentiality default `restricted`; not in `aiContext` unless the founder invites) | **#2545** |
+| **A2 · Group** | Workshops as `one_to_many` (capacity counted; no `/webinars` page) | **#2545** |
+| **A3 · Academy** | Stage-tagged `course` listings + LMS enrolment | **#2545** |
+| **A4 · Toolkit** | One `pack` per `BUSINESS_STAGES` | **#2545** |
+| **A5 · Engagement** | Continue-with-this-advisor (prefer a relation, not a new table) | **#2545** |
+
+**#2545**’s own Spec field may still point at this path. After this revision, **#2545 must not treat this file as its product contract.** Its board description (A0–A5 acceptance) remains the checklist until #2545 has its own spec. **This ticket does not create that spec** and does not rewrite #2545 beyond this pointer.
+
+Kill conditions that still apply to **#2545** (not to #2522): a reviewer can kill #2545 if it requires a `/advisors` page, a new listing family, or a volunteer/chapter table. Those constraints remain good hygiene for #2522 as well (see §9) but they are not #2522’s acceptance.
+
+---
+
+### 7. Children (not re-parented by #2604)
+
+Existing children stay under **#2522**. After this rewrite they follow **this** PRD. A later coordinator may re-align titles/section cites (`§4.2` / `§8` / `§9` on the old research artifact are void). Do not invent a third product.
+
+| Child | Follows this PRD |
+|---|---|
+| **#2527** | FR-2 Advisors filter / listing mode on talent (not a second user type) |
+| **#2532** | FR-3 kind `advisory` + allowed public token-book origin (not family=talent Book bind) |
+| **#2536** | Register `advisory` in meeting KINDS only; not `TEAM_CEREMONY_KINDS` |
+| **#2538** | FR-4 agent + FR-5 generalised pull; marketplace `agent` listing optional P1 |
+
+Siblings **#2605** (unshipped routes as done) and **#2606** (real module names) stay out of this rewrite.
+
+
+### 9. Out of scope / non-goals (R9)
+
+- Building or restating epic **#2545** in this file beyond the pointer in §6.
+- New meeting kinds other than `advisory`.
+- Changing standup except for sharing the pull path.
+- Pipeline, billing, or talent-category work unrelated to Advisors.
+- Rewriting implementation notes so that #2522 would ship marketplace / A0–A5 / restricted Brain.
+- Absorbing sibling gaps **#2605** and **#2606**.
+- A volunteer/SBA/chapter network, U.S.-only eligibility, SCORE branding, in-person venue logistics.
+- Adding `advisor` to `MARKETPLACE_LISTING_KINDS` or a sixth canvas launch mode.
+- A dedicated Advisor destination or rail item parallel to Marketplace.
+
+
+### §12 Built (2026-10-25 review)
+The A0 bind, the public `GET /api/freelancers/:id/booking-services`
+catalogue and Book on talent profiles (`BookAdvisorPanel` in `TalentDetailClient`); A1 — a confirmed
+1:1 reservation provisions an `advisory` meeting, a calendar event for both attendees and a restricted
+Brain thread in the advisor's tenant, idempotent by `meetings.advisory_reservation_id`
+(`api/src/application/commerce/advisoryProvisioning.ts`, migration 1249).
+
+### §12 item 6 (part) — pro-bono badge
+P3: a pro-bono badge when sessions are unpaid.
+
+---
+
+## ✅ RESOLVED 2026-11-17 — SOC 2 Type I checklist: finished items archived on consolidation (SOC2_TYPE1_COMPLIANCE)
+- **Verified 2026-11-17:**
+  - §1 "In place" controls and the §2 inventory: every cited file exists (`api/src/presentation/middleware/{authMiddleware,webAuthMiddleware,requirePermission,tenantContext,superAdminMiddleware,rateLimitMiddleware}.ts`, `api/src/application/activity/activityLog.ts`, `auth/sessionRevocation.ts`, `legal/termsAcceptance.ts`, `integrations/credentialCrypto.ts`, `integrations/integrationCredentialSecret.ts`, `tools/auditScanners.ts`; CC1-CC9 baseline `api/src/application/governance/soc2Baseline.ts`).
+  - G-04: `clients/chrome/package.json:36` esbuild `^0.28.2`, `feedback-sdk/package.json:64` `^0.28.1`.
+  - G-13: `.github/CODEOWNERS`.
+
+### §1 SOC 2 Type I Compliance Checklist · §2 Existing Security Controls Documented in Codebase
+Source: `docs/specs/SOC2_TYPE1_COMPLIANCE.md` lines 9-134.
+
+### 1. SOC 2 Type I Compliance Checklist
+
+#### CC1: Control Environment (25 points)
+
+| Control | Requirement | Status | Evidence |
+|---------|-------------|--------|----------|
+| CC1.1 | Integrity & ethical values | ✅ In place | Code of conduct in docs/, terms acceptance middleware |
+| CC1.2 | Board independence & oversight | ⚠️ Gap | No formal board documented |
+| CC1.3 | Structures & reporting lines | ✅ In place | Tenant/member roles (TenantRole), org structure in schema |
+| CC1.4 | Commitment to competence | ✅ In place | Training tracker (securityTrainings table) |
+| CC1.5 | Management responsibilities | ✅ In place | RBAC with TenantRole (OWNER, ADMIN, MANAGER, MEMBER, BILLING) |
+
+#### CC2: Communication & Information (16 points)
+
+| Control | Requirement | Status | Evidence |
+|---------|-------------|--------|----------|
+| CC2.1 | Quality information | ✅ In place | Activity logging, audit trail in activityLog table |
+| CC2.2 | Internal communication | ✅ In place | Terms acceptance, session revocation tracking |
+| CC2.3 | External communication | ⚠️ Gap | No documented external communication policy |
+
+#### CC3: Risk Assessment (16 points)
+
+| Control | Requirement | Status | Evidence |
+|---------|-------------|--------|----------|
+| CC3.1 | Objectives & risk | ✅ In place | Risk identification in incident management |
+| CC3.2 | Risk identification | ✅ In place | securityIncidents table, vuln scan tracking |
+| CC3.3 | Fraud risk | ⚠️ Gap | No formal fraud risk assessment |
+| CC3.4 | Change risk | ✅ In place | Git history, change tracking in activityLog |
+
+#### CC4: Monitoring Activities (16 points)
+
+| Control | Requirement | Status | Evidence |
+|---------|-------------|--------|----------|
+| CC4.1 | Control monitoring | ✅ In place | SOC2 control tracker in governanceRoutes.ts |
+| CC4.2 | Deficiency communication | ✅ In place | Activity log, incident reporting workflow |
+
+#### CC5: Control Activities (20 points)
+
+| Control | Requirement | Status | Evidence |
+|---------|-------------|--------|----------|
+| CC5.1 | Control activities | ✅ In place | RBAC via requirePermission middleware |
+| CC5.2 | Technology controls | ⚠️ Gap | No formal IT general controls documented |
+| CC5.3 | Policies & procedures | ⚠️ Gap | Policy documents missing (ISMS) |
+
+#### CC6: Logical & Physical Access Controls (30 points)
+
+| Control | Requirement | Status | Evidence |
+|---------|-------------|--------|----------|
+| CC6.1 | Logical access security | ✅ In place | JWT auth via authMiddleware, segment-based tenant isolation |
+| CC6.2 | Access provisioning | ✅ In place | TenantRole assignment, member management |
+| CC6.3 | Access removal | ✅ In place | Session revocation, member removal |
+| CC6.4 | Access authorization | ✅ In place | Permission system via requirePermission middleware |
+| CC6.5 | Security awareness | ✅ In place | Security training tracker |
+| CC6.6 | External threats | ⚠️ Gap | No formal vulnerability management program |
+| CC6.7 | Data transmission | ✅ In place | HTTPS/TLS enforced, credential encryption |
+
+#### CC7: System Operations (20 points)
+
+| Control | Requirement | Status | Evidence |
+|---------|-------------|--------|----------|
+| CC7.1 | Vulnerability detection | ✅ In place | vulnerabilityScans table, GitHub dependency scanning |
+| CC7.2 | Security monitoring | ✅ In place | Activity logging, rate limiting via TenantRateLimiterDO |
+| CC7.3 | Incident evaluation | ✅ In place | securityIncidents table with severity/tracking |
+| CC7.4 | Incident response | ⚠️ Gap | No formal IRP documented |
+| CC7.5 | Change management | ✅ In place | Git-based change tracking |
+
+#### CC8: Change Management (16 points)
+
+| Control | Requirement | Status | Evidence |
+|---------|-------------|--------|----------|
+| CC8.1 | Authorization of changes | ⚠️ Gap | No formal change approval process |
+| CC8.2 | Testing | ⚠️ Gap | Test coverage varies by module |
+| CC8.3 | Approval | ⚠️ Gap | No formal CAB/process |
+
+#### CC9: Risk Mitigation (16 points)
+
+| Control | Requirement | Status | Evidence |
+|---------|-------------|--------|----------|
+| CC9.1 | Risk mitigation | ✅ In place | Vendor risk management (securityVendors table) |
+| CC9.2 | Vendor risk | ✅ In place | DPA tracking, subprocessors table |
+
+---
+
+### 2. Existing Security Controls Documented in Codebase
+
+#### 2.1 Authentication & Authorization
+
+| Component | Location | Description |
+|-----------|----------|-------------|
+| JWT Authentication | `api/src/presentation/middleware/authMiddleware.ts` | Bearer token verification with session revocation |
+| Web Auth | `api/src/presentation/middleware/webAuthMiddleware.ts` | Separate JWT for web sessions |
+| Role-Based Access | `api/src/presentation/middleware/requirePermission.ts` | Fine-grained permission gating |
+| Tenant Isolation | `api/src/presentation/middleware/tenantContext.ts` | segmentId-based tenant scoping |
+| Super Admin | `api/src/presentation/middleware/superAdminMiddleware.ts` | Platform-level admin access |
+| Rate Limiting | `api/src/presentation/middleware/rateLimitMiddleware.ts` | Per-tenant RPM limits (60/300/1000) |
+
+#### 2.2 Audit & Logging
+
+| Component | Location | Description |
+|-----------|----------|-------------|
+| Activity Log | `api/src/application/activity/activityLog.ts` | Comprehensive audit trail |
+| Session Revocation | `api/src/application/auth/sessionRevocation.ts` | Force-logout capability |
+| Terms Acceptance | `api/src/application/legal/termsAcceptance.ts` | Legal compliance tracking |
+
+#### 2.3 Data Protection
+
+| Component | Location | Description |
+|-----------|----------|-------------|
+| Credential Encryption | `api/src/application/integrations/credentialCrypto.ts` | AES-256 encryption for stored credentials |
+| Integration Secrets | `api/src/application/integrations/integrationCredentialSecret.ts` | Dedicated secret management |
+| Segment Isolation | Database schema | tenantId + segmentId multi-tenancy |
+
+#### 2.4 Governance & Compliance (Product Features)
+
+| Component | Location | Description |
+|-----------|----------|-------------|
+| SOC2 Control Tracker | `api/src/presentation/routes/governanceRoutes.ts` | 28-control CC1-CC9 baseline |
+| Evidence Management | `socEvidence` table | Control evidence attachments |
+| Vendor Management | `securityVendors` table | Vendor risk tracking |
+| DPA Tracking | `securityDpas` table | Data Processing Agreements |
+| Incident Management | `securityIncidents` table | Security incident tracking |
+| Training Tracker | `securityTrainings` table | Security awareness training |
+| Vulnerability Scans | `vulnerabilityScans` table | Dependency vulnerability tracking |
+| Access Reviews | `accessReviews` table | Periodic access certification |
+| Data Inventory | `piiDataAssets` table | PII data asset tracking |
+| DSR Processing | `dataSubjectRequests` table | GDPR data subject requests |
+
+
+### §3 Gaps closed
+| Gap ID | Control | Issue | Impact |
+|--------|---------|-------|--------|
+| G-04 | CC7.1 | esbuild GHSA vulnerabilities in 6 packages | Known CVEs in dependencies |
+| G-13 | CC1 | No repo-root CODEOWNERS | Ownership gap |
+
+## ✅ RESOLVED 2026-11-17 — PRD 25: finished sections archived on consolidation (Vertical KPI Dashboards)
+- **Verified 2026-11-17:** §1–§4 verdict, Carta research, stage table, coverage snapshot — narrative/reference, superseded by the build
+- **Verified 2026-11-17:** §6.1 product is a template — `api/src/application/templates/dashboardOutput.ts`, `api/src/application/templates/defaults/verticalDashboards.ts`, `api/src/application/dashboards/dashboardPresets.ts:153`
+- **Verified 2026-11-17:** §6.4 one vertical vocabulary — `api/migrations/1176_vertical_vocabulary.sql`, `api/src/application/insights/benchmarkProfile.test.ts`
+- **Verified 2026-11-17:** §6.6 marketplace cards and `/finance` tab — `frontend/src/components/finance/FinanceClient.tsx:50`, `FinanceDashboardView.tsx`, `DashboardInstallPrompt.tsx`
+- **Verified 2026-11-17:** §7 Slice A delivered — `api/src/application/dashboards/founderMetrics.ts`, `frontend/src/components/insights/widgets/founderWidgets.tsx`, `api/migrations/1179_release_note_vertical_kpi_dashboards.sql`, `frontend/src/content/blog/install-your-verticals-kpi-dashboard.md`
+- **Verified 2026-11-17:** 25a §0.1 slice 0, §1 seams, §2 A1–A7, §6 shared `resolveBenchmarkProfilePatch` (`dashboardOutput.ts:72`, `benchmarkingRoutes.ts:91`)
+
+### §1 Verdict · §2 What Carta provides · §3 What a business actually uses · §4 Builderforce today
+Source `docs/specs/25-prd-vertical-kpi-dashboards.md` lines 15–120, verbatim.
+
+### 1. Verdict
+
+Carta is an **equity system of record**. Its analysis is ownership and exit mathematics (cap table, pro forma, waterfall, breakpoints, sensitivity) plus the benchmark data that falls out of hosting 33K+ cap tables (round sizes, valuations, dilution, compensation bands). It does **not** run the company: no runway, no burn, no revenue, no product, no clinical or payments metrics. A founder on Carta still keeps the operating dashboard in a spreadsheet.
+
+Builderforce should **not** chase 409A valuations, ASC 718, fund administration, or liquidity. Those are regulated services with a human back office and they are the part of Carta that is expensive to replicate and cheap to partner for. Builderforce competes on the two things Carta cannot do from its position:
+
+1. **The operating dashboard, per vertical, preconfigured.** The founder declares a sector at listing (`companies.sector`) and installs the vertical's dashboard from the marketplace: the right KPIs, the right benchmark cohort and the right next actions, with nothing to configure.
+2. **Ownership math beside the operating numbers.** The cap-table engine, round model and SAFE conversion already exist in the repo. Adding the exit waterfall over the share-class terms that are already stored closes the only analysis gap that matters to a founder, on the same canvas as runway and revenue.
+
+Carta's own retreat from secondaries after the 2024 data-misuse allegation is the positioning: **Builderforce never trades on your data.** The tier rule in `toPublicProfile()` (public sees runway health only, cash never leaves the workspace) is the same promise applied to a number.
+
+---
+
+### 2. What Carta provides
+
+Grouped by who uses it. "Tier" is Carta's public plan structure: Launch (free, ≤25 stakeholders and <$1M raised), Build, Grow, Scale/Enterprise (quote only; median startup spend about $15.4K a year, early-stage $3–8K, late-stage $30K+).
+
+#### 2.1 Company and founder analyses
+
+| # | Analysis | Inputs | Outputs and the decision it supports | Tier |
+|---|---|---|---|---|
+| 1 | **Cap table** (fully diluted) | Issuances, option grants, SAFEs, notes, pool | Ownership % by holder and class, FD share count, history by round. *Who owns what.* | Launch |
+| 2 | **Financing round modeling / pro forma** | Pre-money, raise amount, pool top-up, SAFE/note conversion terms | Post-money, price per share, new share count, dilution per holder, pro forma cap table you can switch scenarios on. *Should I take this term sheet.* | Build |
+| 3 | **Exit waterfall** | Exit value, exit date, non-convertible debt, vesting treatment (normal or accelerated), share-class terms (preference multiple, participation, seniority, conversion) | Payout per class and per holder, breakpoints where each class converts, IRR and multiple per investor, goal-seek "what exit value yields X% IRR". *What do I actually get at $50M / $200M.* | Grow |
+| 4 | **Sensitivity analysis** | A range of exit values over the waterfall | Payout curves per holder across the range. *Where the preferences bite.* | Grow |
+| 5 | **Option pool planning** | Hiring plan, target grant sizes | Pool size needed, unallocated pool, dilution of the top-up. | Build |
+| 6 | **409A valuation** | Financials, cap table, comparable set | Audit-ready FMV for option strike prices, refreshed yearly or on a round. Regulated deliverable. | Grow (included) |
+| 7 | **ASC 718 stock-comp expense** | Grants, vesting, FMV | GAAP expense schedule for the auditor. | Grow |
+| 8 | **Equity plan administration** | Grants, vesting schedules, exercises, terminations | Cliff and vest calendars, exercise windows, 83(b) and QSBS tracking, employee portal. | Build |
+| 9 | **Total Compensation benchmarks** | Role, level, location, stage, valuation band | Salary and equity bands at p25/p50/p75, custom pay bands, offer letters against the band. Refreshed quarterly from Carta's own grant data. | Add-on |
+| 10 | **Board consents and signatures** | Round documents, option grants | Signed approvals tied to the cap-table event. | Build |
+| 11 | **Investor updates** | Narrative plus metrics | Distributed update to the investor list. | Build |
+
+#### 2.2 Investor and fund analyses
+
+| # | Analysis | Outputs |
+|---|---|---|
+| 12 | **Fund administration** | IRR, TVPI, DPI, RVPI per fund, capital calls, distributions, LP statements. |
+| 13 | **Portfolio waterfall** | The same exit waterfall run from the investor's side: proceeds and multiple to each fund. |
+| 14 | **ASC 820 portfolio valuations, K-1s, SPVs, capital-call credit lines** | Regulated back-office deliverables. |
+
+#### 2.3 Data products
+
+| # | Report | What it benchmarks |
+|---|---|---|
+| 15 | **State of Private Markets** (quarterly) | Round sizes, pre-money valuations, dilution and down-round share by stage and industry (SaaS, healthtech, hardware, fintech, consumer, biopharma, energy, medical devices, adtech, education); Q1 2026: $30.4B raised, 60%+ to AI companies, foundational-model Series A median $300M vs $55M non-AI. |
+| 16 | **State of Pre-Seed** (quarterly) | SAFE volumes and valuation caps by size; Q2 2026: $3.19B across 11.5K instruments, 90th-percentile caps to $100M on SAFEs over $2.5M. |
+| 17 | **State of Startup Compensation** (half-yearly) plus the quarterly benchmark refresh | Salary, total cash and equity by function, level and geography. |
+
+#### 2.4 What Carta does not do
+
+Runway and burn. Revenue, MRR/ARR, retention, CAC, LTV. Product or usage metrics. Anything clinical, regulatory, climate or payments-specific. Market sizing. Its scenario tools model **the cap table**, not the business.
+
+---
+
+### 3. What a business actually uses, by stage
+
+| Stage | Uses weekly | Uses at an event (raise, hire, exit) | Never touches |
+|---|---|---|---|
+| **Pre-seed / SAFE** | Runway, burn, cash-zero date | Cap table (who owns what after the SAFEs), pro forma for the first priced round | Waterfall, 409A, ASC 718, comp bands |
+| **Seed** | Runway, burn, the vertical KPI set | Pro forma per term sheet, option-pool sizing, SAFE conversion, first 409A (regulated, buy it), cliff calendar | ASC 718, fund admin |
+| **Series A** | Vertical KPI set with benchmarks, board pack | Waterfall and sensitivity (the preference stack now matters), comp bands for the hiring plan, 409A refresh, investor updates | Fund admin |
+| **Series B+** | Everything above plus cohort LTV, NRR by segment | ASC 718 (auditor asks), tender-offer modeling, secondary sales | — |
+
+The weekly surface is the operating dashboard, which Carta does not have, and it is the surface that earns the login. The event surfaces are already mostly built in Builderforce (§4); the waterfall is the one that is not.
+
+---
+
+### 4. Builderforce today: coverage against Carta
+
+Evidence is a file path. "Partial" means the data or terms exist and the calculation or surface does not.
+
+| Carta analysis | State | Where it lives |
+|---|---|---|
+| Cap table, fully diluted | **Have** | `api/src/application/finance/equity.ts` `capTable()`, `GET /api/equity/cap-table`, canvas kind `capTable` (`frontend/src/lib/founderObjects.ts`), `/investor?tab=round` |
+| Round modeling / pro forma | **Have** | `modelRound()` and `applyRoundConversions()` in `equity.ts`, `POST /api/equity/rounds/model` and `/rounds/apply`, `funding_rounds` with `pre_money`/`post_money` |
+| SAFE / convertible conversion (pre- and post-money) | **Have** | `recordConvertible()`, `convertible_instruments.post_money`, `equity.test.ts` |
+| Vesting schedules, cliffs | **Have** | `grantVesting()` derived from terms (never stored), `GET /api/equity/cliffs` |
+| Exit waterfall, breakpoints, sensitivity | **Partial** | Terms are stored: `share_classes.liquidation_multiple`, `participating`, `seniority`, `conversion_ratio`. No payout calculation, no route, no canvas kind. |
+| Option pool planning | **Partial** | Pool is a `share_classes` row; no "pool needed for this hiring plan" calculation. |
+| 409A valuation | **Missing, do not build** | `equity_grants` has an FMV column for the result. Partner or import. |
+| ASC 718 | **Missing, do not build** | Grants and vesting exist; expense schedule is an export for a later stage. |
+| Compensation benchmarks | **Partial** | `compensation_structures` holds the tenant's own bands; `industry_benchmarks` is DORA metrics only, no pay data. |
+| Market benchmarks (round size, valuation, dilution) | **Partial** | `investor_peer_comparables` stores hand-entered comparables per company; no seeded distribution. |
+| Investor updates | **Have** | `investorUpdateDelivery.ts`, `/api/investor-updates`, canvas kind `investorUpdate` |
+| Data room, diligence, fundraising pack | **Have** | `dataRoomSharing.ts`, `fundraisingPack.ts`, `/investor?tab=dataroom|diligence|pack` |
+| Fund administration, LP reporting | **Missing, do not build** | Out of scope by design. |
+| Board consents / e-signature | **Missing** | Not required for the dashboard thesis; revisit with the governance seat. |
+
+The operating layer Carta lacks, where Builderforce already leads:
+
+| Capability | State | Where it lives |
+|---|---|---|
+| Runway, net burn, cash-zero date, 12-month projection | **Have** | `computeRunway`/`projectCashflow` in `packages/creation-canvas-contract/src/startupListing.ts`, `runwayReport.ts`, `/finance`, `GET /api/bi/runway` |
+| Observed finance series | **Have** | `metric_facts` keys `finance.burn`, `finance.revenue`, `finance.cash`, `finance.mrr`, `finance.runway_months`, `finance.monthly_burn` (`kernel/rollups/finance.ts`) |
+| Break-even, forecast, what-if, Monte Carlo | **Have** | `scenarioModelling.ts`, `/api/scenarios/*` |
+| Composable dashboards, pins, presets | **Have** | `metricRegistry.ts` (whitelist), `dashboardPresets.ts` (one preset: `executive`), `widgetIds.ts`, `frontend/src/components/widgets/allComponents.ts`, `dashboard_pins` |
+| Custom KPIs with versioned formulas | **Have** | `custom_kpis` + `kpi_formulas` (`schema/finance.ts`) |
+| Industry benchmarking (DORA, six cohorts) | **Have** | `benchmarkingInsights.ts`, `industry_benchmarks` (p10–p90), `tenant_benchmark_profiles` |
+| **One industry vocabulary** | **Have (1176)** | `STARTUP_SECTORS` is canonical; cohorts renamed; `alignBenchmarkIndustry` on listing; `verticalForSector()` — §6.4 |
+| Marketplace templates that install into a tenant | **Have** | `catalog_items` kind `template`, `templateRegistry.ts` (builtin/tenant/marketplace origins), `installTemplate.ts`, output kinds `workflow` and `tasks` — §6.1 |
+| Free calculators (runway, burn, churn/LTV, break-even, pricing) | **Have** | `startupFinanceTools.ts`, `/tools` |
+| TAM / SAM / SOM | **Missing** | Nothing in api, frontend or packages. Nearest kinds: canvas `targetMarket`, `customerSegment`. |
+| LTV, CAC, LTV:CAC, CAC payback as tracked metrics | **Missing** | Calculator-only. No metric key, no `metric_facts` producer, no widget. |
+| Revenue / customer cohorts | **Missing** | `cohort_retention` is a hiring table. |
+| Vertical KPI sets | **Missing** | No preset beyond `executive`; no `dashboard` template output kind. |
+
+
+### §5.1 How they were chosen · §5.2 Universal founder layer
+Source `docs/specs/25-prd-vertical-kpi-dashboards.md` lines 124–157, verbatim.
+
+### 5. The ten verticals
+
+#### 5.1 How they were chosen
+
+Ranked by 2025–2026 venture dollars, cross-checked against the industries Carta reports on and the verticals with a KPI set distinct enough to deserve its own dashboard. Sources in §9.
+
+| Rank | Vertical (`sector` value) | Signal | Why its own dashboard |
+|---|---|---|---|
+| 1 | AI-native (`ai_ml`) | ~50–60% of all 2025–26 venture dollars ($211B–$259B in 2025; 60¢ of every Carta dollar in Q1 2026) | Inference sits in COGS: gross margin ~52% vs 75–85% SaaS; investors ask for the margin trajectory |
+| 2 | SaaS (`saas`) | Largest company count on every platform; the default cohort | NRR, CAC payback, magic number, burn multiple |
+| 3 | FinTech (`fintech`) | $52–53B in 2025 | TPV, take rate, fraud loss, licences |
+| 4 | Digital health (`healthtech`) | Healthcare + biotech $71.7B in 2025; healthcare #1 vertical by deal count | Patient acquisition, engaged patients, payer contracts, outcomes |
+| 5 | MedTech / devices (`medtech`) | Carta reports "medical devices" as its own industry; 510(k) path averages $31M | Regulatory pathway is the spine; runway vs months-to-milestone |
+| 6 | BioTech / biopharma (`biotech`) | $33.8B biopharma VC in 2025 | IND and phase milestones; 20%/15% Phase 2/3 success; 24+ months cash survives |
+| 7 | Climate & energy (`climate_energy`) | $40–42B in 2025 | LCOE, tCO2e abated, MW deployed, offtake |
+| 8 | Hardware, robotics, defence (`hardware_robotics`) | Defence tech $49B broad / robotics $13.8B in 2025; manufacturing fastest-growing vertical | BOM cost, hardware gross margin, backlog, contract pipeline |
+| 9 | Cybersecurity (`cybersecurity`) | A top-five VC category every year; $3M ARR is the institutional threshold | ARR, NRR 110%+, pipeline coverage 3–5×, POC conversion |
+| 10 | Marketplaces & consumer commerce (`marketplace`) | Largest consumer category; e-commerce, marketplace and consumer apps fold here | GMV, take rate, liquidity, DAU/MAU |
+
+Sectors without a vertical of their own fold by `verticalForSector()` (`packages/creation-canvas-contract/src/verticals.ts`): `ecommerce` and `consumer_apps` → marketplace; `enterprise_software` and `edtech` → saas; `blockchain` → fintech; `gaming`, `media_entertainment`, `real_estate`, `logistics`, `other` → the founder layer alone. Watch-list for an eleventh: legal, manufacturing and AEC were 2025's fastest-growing vertical-software categories.
+
+#### 5.2 Universal founder layer (every vertical)
+
+| KPI | Definition | Source in repo | Benchmark / rule |
+|---|---|---|---|
+| Cash on hand | Declared or ledger-observed | `companies.cash_on_hand`, `finance.cash` | — |
+| Net burn | Spend − revenue, monthly | `finance.monthly_burn`, `computeRunway` | — |
+| Runway (months) and cash-zero date | cash ÷ net burn, never stored | `computeRunway`, `zeroCashDateFrom` | Watch < 12, critical < 6; post-raise target 18–24 months |
+| Fully diluted ownership | Founders, investors, pool, unallocated | `capTable()` | — |
+| Dilution this round (pro forma) | Ownership before vs after the modeled round | `modelRound()` | Carta medians by stage once seeded |
+| Exit payout at three exit values | Waterfall over stored share-class terms | **New:** `exitWaterfall()` §6.3 | — |
+| Cliffs due in 90 days | Grants reaching cliff | `cliffsDueWithin()` | — |
+| TAM / SAM / SOM | Bottom-up primary, top-down to triangulate | **New:** canvas kind `marketSize` §6.3 | Methods within 15% = sound; SOM tied to plan |
+| Benchmark position | Percentile against the sector cohort | `computeBenchmarking()` | Elite / high / medium / low; `cohortSeeded: false` says when there is no cohort yet |
+
+
+### §6 (preamble) · §6.1 The product is a template; the template installs a dashboard
+Source `docs/specs/25-prd-vertical-kpi-dashboards.md` lines 296–311, verbatim.
+
+### 6. Design: a first-party marketplace product
+
+**No new tables.** `newTablesAllowed: false` from the BurnRateOS cutover still holds and nothing here needs one: dashboards are `saved_dashboards` + `dashboard_widgets`, products are `catalog_items`, metrics are `metric_facts`, hand-entered KPIs are `custom_kpis`, market sizes are canvas objects, benchmarks are `industry_benchmarks` rows.
+
+#### 6.1 The product is a template; the template installs a dashboard
+
+The repo already has the seam. A template **is** a `catalog_items` row (`kind='template'`, manifest in `body`) with three origins (`builtin` from code in `api/src/application/templates/defaults/`, `tenant`, `marketplace`), an install path (`installTemplate.ts`: re-validate → bind `{{setup.x}}` → materialise each output → bump `install_count`) and an open registry of **output kinds** (`outputKinds.ts`: `workflow`, `tasks`) whose own header names "publish a dashboard" as the intended next extension.
+
+The build is therefore:
+
+1. **A `dashboard` output kind.** `registerOutputKind({ kind: 'dashboard', … })` in `api/src/application/templates/outputKinds.ts` and `'dashboard'` added to `TEMPLATE_OUTPUT_KINDS` in `domain/template/templateManifest.ts` (the contract test that every declarable kind has a materialiser covers it). The materialiser calls the existing `applyDashboardPreset(db, tenantId, segmentId, presetKey, createdBy)` and, when the manifest names a vertical, `alignBenchmarkIndustry`. Idempotent by construction: `applyDashboardPreset` already re-applies onto a partially built dashboard without doubling tiles.
+2. **Presets are data.** `DASHBOARD_PRESETS` gains `founder` and one key per `DashboardVertical` (`ai_ml`, `saas`, …, `marketplace`), each an ordered list of registry keys. The existing test that every preset key is whitelisted covers them. A vertical preset lists the founder layer's tiles first, then its own.
+3. **Ten built-in templates.** `templates/defaults/vertical-dashboards.ts`: one `TemplateManifest` per vertical (`key: 'vertical-dashboard-<sector>'`, one `choice` step for the size band, output `{ kind: 'dashboard', preset: '<sector>' }`), plus `vertical-dashboard-founder`. Built-ins are code, protected by `isReservedTemplateKey`, origin `builtin`, and they surface in the marketplace's asset family under the `template` chip with no publisher step. This is the "built by Builderforce" marker the platform already has; `catalog_items.tenantId IS NULL` remains the public-listing rule.
+4. **Install is the existing door.** `POST /api/templates/:key/install` (DEVELOPER role) and the `/templates?open=<key>` wizard. The marketplace card's launch verb is `install`. No new route.
+5. **Dogfood.** The Builderforce workspace declares `saas` on its own `companies` row and installs `vertical-dashboard-saas`. The kill conditions in §7 are measured on that install first.
+6. **Not the extension marketplace.** PRD 24's `extension_packages` is for third-party connectors and MCP servers with scopes, plans and metering. A dashboard has no scopes to consent to and no metering; forcing it through that path would add a publisher flow for a product the platform ships itself. `EXTENSION_KINDS` already lists `template` as declared-not-submittable, which is consistent with this choice.
+
+
+### §6.4 One vertical vocabulary — SHIPPED 2026-09-15 (migration 1176)
+Source `docs/specs/25-prd-vertical-kpi-dashboards.md` lines 338–340, verbatim.
+
+#### 6.4 One vertical vocabulary — SHIPPED 2026-09-15 (migration 1176)
+
+`STARTUP_SECTORS` is canonical. `industry_benchmarks.industry` and `tenant_benchmark_profiles.industry` were migrated (`software_saas` → `saas`, `enterprise_it` → `enterprise_software`, `agency_services` → `other`), the profile default is `saas`, and `companies.sector = 'sustainability'` became `climate_energy`. `application/insights/benchmarkProfile.ts` is the one writer; `updateStartupListing` calls `alignBenchmarkIndustry` so a declared sector places the company in its cohort. A sector with no seeded cohort is reported (`cohortSeeded: false`, localized notice), not refused. `verticals.ts` carries `DASHBOARD_VERTICALS` and `verticalForSector()`.
+
+
+### §6.6 Where it appears (shipped bullets: Marketplace, `/finance`, Canvas, Brain)
+Source `docs/specs/25-prd-vertical-kpi-dashboards.md` lines 346–353, minus the Insights hub and company profile bullets (still open).
+
+#### 6.6 Where it appears
+
+- **Marketplace:** `/marketplace?family=asset&kind=template`, the ten cards plus the founder layer, launch verb *install*, free.
+- **`/finance`:** the installed dashboard is the first tab when the company has a sector; Runway and Cashflow remain.
+- **Insights hub:** the same dashboard under the Finance lens, pinnable per user through `dashboard_pins`.
+- **Canvas:** any tile on the `dashboard` kind (registry components resolve identically on the board).
+- **Marketplace company profile:** benchmark position only (elite/high/medium/low), never the numbers, extending `toPublicProfile()`.
+- **Brain:** opens any tile through the existing `show_widget` bridge.
+
+
+### §7 Slice A row + "Delivered"
+Source `docs/specs/25-prd-vertical-kpi-dashboards.md` line 361 and lines 368–382, verbatim.
+
+| A | `dashboard` output kind; `founder` preset over existing services (runway, burn, ownership, cliffs, dilution); `vertical-dashboard-founder` built-in template; the ten vertical template manifests registered (each installs founder + its preset, presets initially founder-only until B/D fill them) | Installing from the marketplace produces the dashboard on `/finance` with no configuration; the Builderforce workspace installs it on its own company | Fewer than half of newly listed companies install it in their first week |
+
+
+#### Delivered
+
+**Slice A — shipped 2026-09-16** (frontend `2026.9.35`, api `2026.9.37`).
+
+| Step | What landed |
+|---|---|
+| A1 | `dashboard` output kind + materialiser (`application/templates/outputs/dashboardOutput.ts`); `DashboardOutput` in `templateManifest.ts` |
+| A2 | `DASHBOARD_VERTICALS` + `verticalForSector` fold in the canvas contract; sector ids use underscores, template keys hyphenate |
+| A3 | Metric registry keys `finance.runwayMonths`, `finance.cash`, `finance.netBurn`, `finance.cashZeroDate`, `equity.founderOwnership`, `equity.poolUnallocated`, `equity.cliffsDue90d` — each resolving from existing finance/equity services, `null` when not measured |
+| A4 | Founder widgets `founder.runway-projection`, `founder.ownership`, `bench.position` (`founderWidgets.tsx`, spread into `ALL_COMPONENTS`) |
+| A5 | Eleven built-in templates from `VERTICAL_DASHBOARD_TEMPLATES`, derived from `DASHBOARD_VERTICALS` + founder; one size-band question; registered in `BUILTIN_TEMPLATE_SOURCES` |
+| A6 | `/finance?tab=dashboard` — `FinanceDashboardView` + `DashboardInstallPrompt`, nav tab, i18n ×5 |
+| A7 | Release note migration `1179_release_note_vertical_kpi_dashboards.sql` (category `new`); blog post `install-your-verticals-kpi-dashboard` ×5 locales + OG cards |
+
+A metric with no producer renders as **not measured** — never `0`, never an invented trend line. Adding a twelfth vertical is a data change to `DASHBOARD_VERTICALS`, not a release.
+
+
+### 25a §0.1 Slice 0 · §1 What already exists · §2 Slice A (A1–A7)
+Source `docs/specs/25a-vertical-kpi-dashboards-implementation.md` lines 18–135, verbatim.
+
+### 0.1 Slice 0 — confirm what already shipped (do this first)
+
+The vocabulary change described in §1 **was verified on 2026-09-15 and is clean.** Recorded so nobody re-runs it blind:
+
+- **Contract:** `verticals.test.ts` + `startupListing.test.ts` → 14 tests pass. The package has no standalone typecheck; it is checked transitively by the API and frontend, both clean.
+- **API:** tsgo and tsc both pass with no errors (tsc needs `--max-old-space-size=8192`; the default heap OOMs on this repo regardless of this change). All 34 checks in `api/scripts/checks.manifest.mjs` pass, including migration sequence (561 files, 1176 counted, no duplicate prefix), tenant scope (no new unscoped statements) and the BurnRateOS cutover policy (no new tables).
+- **Frontend:** typecheck clean, the i18n catalog-parity test passes 108/108, and `check-i18n-keys` resolves every rendered key. One design-token regression was found and fixed in place: the `noCohort` notice used literal `borderRadius: 8` and `fontSize: '0.82rem'`, which tripped `check:design-scale`; both are now `var(--radius-md)` / `var(--font-size-small)`, the identical values as tokens.
+- **Migration 1176** is file-only; it needs `db:migrate` on deploy like every other migration here. **This is the one step still outstanding.**
+
+**One coverage gap to close in slice A, since you will be editing these files anyway.** `api/src/application/insights/benchmarkProfile.ts` has no test, and neither does `benchmarkingInsights.ts` or `benchmarkingRoutes.ts` (the only file under `insights/` with tests is the unrelated agent-eval benchmark). Write `benchmarkProfile.test.ts` covering: a blank patch keeps the current value; `assertKnownCohort` rejects an unseeded industry and an unseeded size band with the list in the error; `setBenchmarkProfile` upserts and bumps the version token; `alignBenchmarkIndustry` is a no-op when the industry already matches and writes when it does not. Add `rankPercentile` unit tests while you are there — it is pure and currently untested.
+
+Two failures you may still see are **not** from this change and were left alone: a one-millisecond timing flake in `api/src/application/investor/startupListing.test.ts` (the runway facet, logged in the roadmap), and frontend typecheck plus react-hooks failures in the brain-embedded chat-diagnostics exports, manager-autonomy types, `BrainDock.tsx` and `WorldViewport.tsx`, which another session was editing in this shared working tree at the time. Confirmed unrelated by content grep and file timestamps. Re-check once that workstream settles.
+
+### 1. What already exists (do not rebuild)
+
+| Seam | Where | Use it for |
+|---|---|---|
+| Sector vocabulary + verticals | `packages/creation-canvas-contract/src/startupListing.ts` (`STARTUP_SECTORS`, 20 values), `verticals.ts` (`DASHBOARD_VERTICALS`, `verticalForSector`, `isDashboardVertical`) | The ten preset keys and the fold |
+| Benchmark profile writer | `api/src/application/insights/benchmarkProfile.ts` (`setBenchmarkProfile`, `alignBenchmarkIndustry`, `assertKnownCohort`) | Set the cohort on install |
+| Benchmark read | `benchmarkingInsights.ts` (`computeBenchmarking` → `cohortSeeded`, `metrics[]` with `p50/p90/percentile/rating`) | The "benchmark position" tile |
+| Presets | `api/src/application/dashboards/dashboardPresets.ts` (`DASHBOARD_PRESETS`, `PresetTile`, `applyDashboardPreset(db, tenantId, segmentId, presetKey, createdBy)` idempotent, `presetMetricKeysAreWhitelisted`) | Every vertical preset |
+| Metric whitelist | `api/src/application/dashboards/metricRegistry.ts` (`MetricDef { label, unit, description, goodWhenUp?, compute, series? }`) | Every new metric key |
+| Widget ids | `api/src/application/dashboards/widgetIds.ts` (`COMPOSABLE_WIDGET_IDS`) ↔ `frontend/src/components/widgets/allComponents.ts` ↔ `frontend/src/components/insights/askWidgetIds.test.ts` | Every new widget |
+| Widget module pattern | `frontend/src/components/insights/widgets/financeWidgets.tsx` (`FINANCE_COMPONENTS`), `frontend/src/lib/widgets/sharedSource.ts` (`useSharedSource`) | Copy for `founderWidgets.tsx` etc. |
+| Templates | `api/src/domain/template/templateManifest.ts` (`TemplateManifest`, `TEMPLATE_OUTPUT_KINDS`, `TemplateOutput`), `api/src/application/templates/outputKinds.ts` (`registerOutputKind`, `OutputResult`, `MaterializeOutputContext`), `templates/defaults/{dsl.ts,index.ts}` (`BuiltinTemplate`, `ask`, `projectStep`), `installTemplate.ts`, `templateRegistry.ts` (origin `builtin`) | The product packaging |
+| Template routes | `api/src/presentation/routes/templateRoutes.ts` — `GET /`, `GET /:key`, `POST /:key/setup`, `POST /:key/install` (DEVELOPER) | No new route needed |
+| Marketplace surface | `frontend/src/lib/marketplaceFamilies.ts` (asset family, `template` chip), `MarketplacePageClient.tsx`, `/templates?open=<key>` wizard | Cards appear automatically for built-ins |
+| Runway | `computeRunway`, `zeroCashDateFrom`, `projectCashflow` (contract), `application/finance/runwayReport.ts` (`runwayReport(db, env, tenantId, companyId)`), `GET /api/bi/runway` | Founder-layer computes |
+| Equity | `application/finance/equity.ts` (`capTable`, `modelRound`, `cliffsDueWithin`, `grantVesting`), `share_classes` terms (`liquidation_multiple`, `participating`, `seniority`, `conversion_ratio`), `equityVersionKey` | Founder-layer computes + the waterfall |
+| Observed finance | `metric_facts` keys `finance.burn`, `finance.revenue`, `finance.cash`, `finance.mrr`, `finance.runway_months`, `finance.monthly_burn` (`kernel/rollups/finance.ts`) | `growth.*` computes |
+| Declared KPIs | `custom_kpis` (`key, name, unit, goodDirection, target, cadence`) + `kpi_formulas` (versioned `expression`, `inputs`) | Milestone and hand-entered tiles |
+| Canvas spec kinds | `frontend/src/lib/founderObjects.ts` (`FOUNDER_OBJECT_SPECS`, `derive` fields), `packages/creation-canvas-contract/src/objectKinds.ts` | `marketSize`, `exitScenario` |
+| Deck binding | `api/src/application/deck/dataSources.ts` | Market slide ← `marketSize` |
+| `/finance` | `frontend/src/components/finance/FinanceClient.tsx` (`?tab=`), `RunwayView.tsx`, `CashflowView.tsx`, `lib/financeApi.ts` | The dashboard tab |
+
+### 2. Slice A — the product exists and installs (founder layer)
+
+#### A1. `dashboard` template output kind
+- `api/src/domain/template/templateManifest.ts`: add `'dashboard'` to `TEMPLATE_OUTPUT_KINDS`; add
+  ```ts
+  export interface DashboardOutput {
+    kind: 'dashboard';
+    id: string;
+    /** A key of DASHBOARD_PRESETS. */
+    preset: string;
+    /** When set, the install aligns the tenant's benchmark cohort to this sector. */
+    sector?: string;
+    /** From the template's `size_band` step, bound as `{{setup.size_band}}`. */
+    sizeBand?: 'small' | 'mid' | 'large';
+  }
+  export type TemplateOutput = WorkflowOutput | TasksOutput | DashboardOutput;
+  ```
+  Validate `preset` is a non-empty `[a-z0-9_]+` string and `sector`, when present, satisfies `isStartupSector` (import from the contract package). Update the manifest validation error text list at the existing site (~line 244).
+- `api/src/application/templates/outputKinds/dashboardOutput.ts` (new file; do not grow `outputKinds.ts` beyond the registration import): `registerOutputKind<DashboardOutput>({ kind: 'dashboard', async materialize(output, ctx) { … } })`. Body: `if (!isPresetKey(output.preset)) return { ok:false, error: uninstallableOutputError-style sentence naming listPresetKeys() }`; then
+
+  ```ts
+  const { dashboardId, createdDashboard, addedWidgets } =
+    await applyDashboardPreset(ctx.db, ctx.tenantId, segmentId, output.preset, createdBy);
+  if (output.sector) await alignBenchmarkIndustry(ctx.db, ctx.env, ctx.tenantId, output.sector);
+  if (output.sizeBand) await setBenchmarkProfile(ctx.db, ctx.env, ctx.tenantId, { industry: output.sector ?? current, sizeBand: output.sizeBand });
+  return { ok: true, href: '/finance?tab=dashboard', ref: String(dashboardId), detail: `${addedWidgets} tile(s) placed` };
+  ```
+
+  Two signature facts, already verified — do not rediscover them:
+  - **`applyDashboardPreset` already returns the counts**: `Promise<ApplyPresetResult>` = `{ dashboardId, createdDashboard, addedWidgets }`. Nothing to extend. Write `detail` from `addedWidgets` and `createdDashboard`.
+  - **Its `segmentId` parameter is `string`, but `MaterializeOutputContext.segmentId` is `string | null`.** Decide once and state it in the module header: pass `ctx.segmentId ?? ''` only if `''` is what `GET /api/dashboards/dashboards` lists on for a segmentless tenant — check `dashboardsRoutes.ts`'s own scope call — otherwise widen `applyDashboardPreset` to `string | null` and let the query use `isNull`. Getting this wrong materialises the dashboard into a segment the installer cannot open, which is the exact failure the function's own comment warns about.
+  - `createdBy` is not on the context: add `installedByUserId: number | null` to `MaterializeOutputContext` and thread it from `installTemplate.ts` (the route knows the user), then pass `String(installedByUserId)` or `null`.
+  - Import the module for its side effect from `outputKinds.ts` (one line) so registration happens at load, exactly as `workflow`/`tasks` do.
+- Tests: `outputKinds.test.ts` (or the existing templates contract test) — `registeredOutputKinds()` includes `dashboard`; materialising twice inserts once; an unknown preset reports `ok:false` with the installable preset list; a `sector` aligns the benchmark profile (assert through `getBenchmarkProfile`).
+
+#### A2. Presets
+- `dashboardPresets.ts`: add `founder` and one entry per `DashboardVertical` (`ai_ml`, `saas`, `fintech`, `healthtech`, `medtech`, `biotech`, `climate_energy`, `hardware_robotics`, `cybersecurity`, `marketplace`). In slice A each vertical preset is `founder`'s tiles plus a single `{ widgetKey: 'bench.position', title }` tile; slices B and D fill them. `name` strings: `'Founder'`, `'SaaS'`, `'AI-native'`, `'FinTech'`, `'Digital health'`, `'MedTech'`, `'BioTech'`, `'Climate & energy'`, `'Hardware & robotics'`, `'Cybersecurity'`, `'Marketplace'` (the `saved_dashboards.name` is also the idempotence key — keep them stable).
+- `founder` tiles, in order: `finance.runwayMonths` (stat) · `finance.cash` (stat) · `finance.netBurn` (stat) · `finance.cashZeroDate` (stat, unit `date`, see A3) · `equity.founderOwnership` (stat) · `equity.poolUnallocated` (stat) · `equity.cliffsDue90d` (stat) · widget `founder.runway-projection` · widget `founder.ownership` · widget `bench.position`.
+- Add a test in `dashboardPresets.test.ts` asserting every `DashboardVertical` is a `PresetKey` and every preset's metric keys are whitelisted (extend the existing assertion).
+
+#### A3. Metric keys (founder layer) in `metricRegistry.ts`
+Each `compute` calls an existing service; no SQL of its own:
+- `finance.runwayMonths` — `runwayReport(...)` for the tenant's listed company (resolve the company via `application/investor/companyWorkspace.ts`; if the tenant has several, the one with `is_publicly_listed` or the newest); return `verdict.months` or `null`. `goodWhenUp: true`, unit `months`.
+- `finance.cash` — declared `cash_on_hand` if `finance_declared_at` is set, else observed `finance.cash` latest fact; unit `USD`.
+- `finance.netBurn` — `computeRunway(...).netBurn`; `goodWhenUp: false`, unit `USD`.
+- `finance.cashZeroDate` — `zeroCashDateFrom(...)` as a UTC day number (`MetricDef.unit: 'date'`; add `'date'` to the unit rendering in the stat widget if not present, rendering through `useFormat().date`).
+- `equity.founderOwnership` — `capTable(...)`, sum of holders with `role='founder'` fully diluted %; unit `%`.
+- `equity.poolUnallocated` — pool class authorized minus granted, as % fully diluted; unit `%`.
+- `equity.cliffsDue90d` — `cliffsDueWithin(db, tenantId, 90).length`; `goodWhenUp` omitted.
+The `series` hook for `finance.netBurn` and `finance.cash` reads the 12-month `runwayReport.observed` pivot (month grain is fine; `MetricPoint` accepts any date).
+The registry file is already large: put these in `metricRegistry/founderMetrics.ts` exporting `FOUNDER_METRICS: Record<string, MetricDef>` and spread it into the whitelist object; do the same for every later family (`growthMetrics.ts`, …). Keep `metricRegistry.ts` as the aggregation point only.
+
+#### A4. Widgets
+- `api/src/application/dashboards/widgetIds.ts`: add `'founder.runway-projection'`, `'founder.ownership'`, `'bench.position'`.
+- `frontend/src/components/insights/widgets/founderWidgets.tsx` — `FOUNDER_COMPONENTS`: `founder.runway-projection` (12-month cash line from `financeApi.runway()`, using the `TrendChart` primitive in `components/charts/`, watch/critical bands from `RUNWAY_WATCH_MONTHS`/`RUNWAY_CRITICAL_MONTHS`), `founder.ownership` (`DonutChart` over `capTable` holders: founders / investors / pool / unallocated), and `bench.position` (rating pill + percentile from `benchmarkingApi.get()`; when `cohortSeeded` is false render the `insights.benchmarking.noCohort` sentence). Each card body only; `WidgetCard` supplies chrome. Data through `useSharedSource` so N tiles dedupe to one request. Spread into `allComponents.ts`.
+- i18n: `widgets.title.founder.*`, `widgets.group.founder` in all five catalogs.
+
+#### A5. Built-in templates
+- `api/src/application/templates/defaults/verticalDashboards.ts`: `BuiltinTemplate[]` generated from `DASHBOARD_VERTICALS` plus `founder`:
+  ```ts
+  key: `vertical-dashboard-${sector}`   // and 'vertical-dashboard-founder'
+  category: 'analytics'
+  icon: per vertical (🤖 🧩 💳 🩺 🩹 🧬 🌍 🦾 🛡️ 🛒; founder 🚀)
+  requiredConnectors: []
+  steps: [ choose('size_band', 'How big is the team?', [['small','1–20'],['mid','21–200'],['large','200+']]) ]
+  outputs: [ { kind: 'dashboard', id: 'dashboard', preset: sector, sector, sizeBand: '{{setup.size_band}}' } ]
+  ```
+  Two DSL facts, already verified:
+  - **`BuiltinTemplate` is `Omit<TemplateManifest, 'requiredSecrets' | 'tags' | 'successCriteria'>`** — do not write those three fields; the barrel supplies them.
+  - **`defaults/dsl.ts` has no `choice` helper** (it exports `trigger`, `llm`, `agent`, `call`, `transform`, `filter`, `output`, `chain`, `needs`, `checklist`, `ask`, `projectStep`). Add `choose(id, title, options, help?)` to `dsl.ts` returning a `GuidedStep` of `kind: 'choice'` with `options: ChoiceOption[]` and `required: true` — eleven templates need it, so it belongs in the DSL rather than eleven inline literals.
+
+  Names and summaries come from the PRD 25 §5 tables (one sentence each). Register in `defaults/index.ts` (`ALL`). `sizeBand` on the output is bound by the existing `{{setup.x}}` binder, so add it to `DashboardOutput` in A1 and validate it against `['small','mid','large']`.
+- Names/summaries/step titles of built-in templates are English in code today (check how `business.ts` is localized — if the catalogue localizes by key, add `templates.builtin.vertical-dashboard-*.{name,summary}` keys in five catalogs; if not, follow the existing convention and note it).
+- Test: `templateRegistry` lists eleven `vertical-dashboard-*` keys with origin `builtin`; `isReservedTemplateKey('vertical-dashboard-saas')` is true.
+
+#### A6. `/finance` dashboard tab
+- `FinanceClient.tsx`: add `tab=dashboard`, default when the tenant has a `saved_dashboards` row named after a preset (read via the existing `GET /api/dashboards/dashboards`); otherwise keep `runway` default and show a `DashboardInstallPrompt` (new small component: one sentence + a link to `/templates?open=vertical-dashboard-<verticalForSector(company.sector) ?? 'founder'>`). Render the dashboard with the existing `WidgetGrid`/`ReorderableWidgetGrid` over `GET /api/dashboards/dashboards/:id/data`.
+- i18n: `finance.dashboard.*` keys × 5.
+
+#### A7. Dogfood + ship
+- Builderforce's own workspace: declare `sector = 'saas'` on its `companies` row (through `/investor?tab=listing`), install `vertical-dashboard-saas` from `/marketplace?family=asset&kind=template`, confirm `/finance?tab=dashboard` renders with the founder tiles and the benchmark position.
+- Release note (category `new`): "Install your vertical's KPI dashboard from the Marketplace". Blog post per §0.
+- Proof/kill from PRD 25 §7 row A recorded in the roadmap entry.
+
+
+### 25a §6 Small items (benchmark profile patch, `benchmarkingApi` comment, first-draft HTML note)
+Source `docs/specs/25a-vertical-kpi-dashboards-implementation.md` lines 192–194, verbatim. (Line 191, sector writes, stays open.)
+
+- `benchmarkingRoutes.ts` still keeps `BenchmarkProfileBody` (zod) in the route; fine, but the `sizeBand` step answer from A5 must pass through `resolveBenchmarkProfilePatch` so both doors bound the same way.
+- `frontend/src/lib/benchmarkingApi.ts` comment says cohorts are labelled by `useStartupLabels` — keep it true if the lens moves.
+- The first-draft HTML page (`c:\tmp\beyond-carta.html`) predates the ten-vertical list; PRD 25 is authoritative.
+
+
+---
+
+## ✅ RESOLVED 2026-11-17 — PRD 33: finished sections archived on consolidation (Insights: session replay, heatmaps, live visitors, prescriptive fixes)
+- **Verified 2026-11-17:** build summaries already in DONE.md ("RESOLVED 2026-10-13 — Insights (PRD 33) … built end to end", an earlier DONE.md entry; "RESOLVED 2026-10-29 — PRD 33 (Insights) audit", an earlier DONE.md entry) — not duplicated
+- **Verified 2026-11-17:** §3 data model — `api/migrations/1216_replay_core.sql`, `1217_replay_operational_mirror.sql`, `1220_replay_exports.sql`, `api/transactional-migrations/0015_replay.sql`
+- **Verified 2026-11-17:** §3.3 ingest — `api/src/application/replay/ReplayIngestService.ts`
+- **Verified 2026-11-17:** §3.4 contracts — `packages/interaction-contract`; §3.5 — `replay-sdk/`, `.github/workflows/release.yml:105` (`publish-cdn`)
+- **Verified 2026-11-17:** §4 one home/one panel — `frontend/src/components/insights/InsightsHome.tsx`, `InsightsPanel.tsx`, `panelKinds.ts`
+- **Verified 2026-11-17:** §5.1 — `api/src/domain/replay/prescriptions/rules.ts`, `application/replay/prescriptionSweep.ts`, `prescriptionVerify.ts`
+- **Verified 2026-11-17:** §5.2 — `api/qa-container/pageCapture.mjs`, `application/replay/visionReview.ts`, `domain/replay/pageScore.ts`
+- **Verified 2026-11-17:** §5.3 — `frontend/src/components/creation-canvas/ProofScoreboard.tsx`, `application/replay/ticketEffect.ts`
+- **Verified 2026-11-17:** §6 guardrails — `application/replay/replayVisitorEraser.ts`, `replayRetention.ts`, `replayCacheKeys.ts`
+- **Verified 2026-11-17:** §8 S0–S8 — routes `replayRoutes.ts`, `replayIngestRoutes.ts`, `replayProjectRoutes.ts`, `replayOpsRoutes.ts`, `capabilityRoutes.ts`; `frontend/src/components/ReplayLoader.tsx`; `CanvasInsightsSurface.tsx`; release note correction `api/migrations/1283_release_note_session_replay_correction.sql`
+
+### §0 The problem · §0.1 Build status · §0.2 · §0.3 Amendments · §1 Outcome · §2 Decisions (D1–D17, and D18 except its last sentence) · §2.1 Competitive matrix · §3 Architecture (§3.1–§3.5) · §4 Experience (§4.1–§4.3) · §5 Behaviour specifications (§5.1–§5.3) · §6 Guardrails · §7 Non-goals · §8 Slices S0–S8 · §9 Verification · §10 Audit checklist
+Source `docs/specs/33-prd-session-replay.md` lines 1–321, verbatim (the D18 event-lake deferral and §11 stay in the open PRD).
+
+## PRD 33 — Insights: session replay, heatmaps, live visitors and prescriptive fixes
+
+> **Status:** consolidated 2026-10-12. This file merges the former PRD 33 and its hand-off 33a, which is deleted. Where the two disagreed, the later amendments (D15 scale, D16 one screen, D17 customer #1) were folded in, and the superseded text was removed rather than left beside its replacement.
+> **Owner:** the planning session, which also audits each slice (§10).
+> **Mockup:** https://claude.ai/artifact/ThFJoMFxQ8hguwVJWV82Ea (layout only; this PRD wins on any conflict).
+> **Arc:** Measure. It turns a live app (Run) into evidence about what to change (Measure → back to Make and Idea).
+> **Correction on record:** DONE.md's 2026-10-11 "full S0–S8 launch" entry overstated the build. On 2026-10-12 an audit found S1, S3–S7 almost entirely unbuilt, the commerce modules unwired, and release note 1211 advertising a feature that did not run. §0.1 is the true status, kept current per slice.
+
+### 0. The problem, stated against the code
+
+Builderforce cannot see what a visitor does on a page. `lib/visitorJourney.ts` → `POST /api/visitor/events` → `activity_log` records that a visitor arrived, which pages they opened, what they typed into the composer, errors and sign-up. Nothing records where they clicked, what they clicked that did nothing, what they rage-clicked, how far they scrolled, or what the page looked like when they gave up, and nothing ties behaviour to a release. Customers who publish an app from a canvas get page views only (`site_traffic_daily`).
+
+#### 0.1 Build status (kept current by the planning session)
+
+**2026-10-13: every slice S0–S7 is built in code, plus S8's content.** Per operator instruction, nothing in this build was compiled or test-run; the tests were written alongside the code, and CI runs them on merge. Live validation (§11) needs the operator.
+
+| Slice | Status 2026-10-13 | Where it lives |
+|---|---|---|
+| S0 Consolidation | Built | `packages/interaction-contract` (realigned to §3.4; API DTOs split under `src/api/*`); `components/insights/*` (ONE `InsightsHome`, ONE `InsightsPanel`, `INSIGHT_PANEL_KINDS`, `?panel=` that follows the URL); admin `LEGACY_ADMIN_SUB` |
+| S1 Data plane | Built | migrations 1216 (core), 1217 (operational mirror), transactional 0015; `application/replay/*` (ingest, rollup buffers + flush, chunk store, sites, config, read services, usage over the wallet, erasers, retention); `/api/replay-ingest`, `/api/replay`, `/api/admin/replay-ops` |
+| S2 Recorder + CDN | Built | `replay-sdk` (loader, `BFReplay`, buffer mode + keep triggers, gzip, masking/blocking, release key, vitals); CDN bundles: loader, recorder, `player` (rrweb Replayer), `pagekit` (selector + visual patch for the runner); `publish-cdn` job in `release.yml` |
+| S3 Dogfood + player | Built | `ReplayLoader` (consent; `NEXT_PUBLIC_REPLAY_RECORD_SIGNED_IN`; `replayExcluded` via the consumption snapshot); sensitive-region attributes; legal DRAFT (migration 1219); `components/replay/*` player, list, timeline, ticket from a moment |
+| S4 Heatmaps + S4b MP4 | Built | `ReplayHeatmapService`, `HEATMAP_INSIGHT_RULES`, heat/stuck lenses, `route` kind; MP4 via the QA runner `replay_export` job, charged 10 units on delivery |
+| S4c Analysis parity | Built | one `replayFilterCompiler`, segments, overview, smart events, funnels + flow, cited summaries on one AI budget, nightly representatives + regressions, Brain `replay.*` tools, `replay:read` keys |
+| S4d Method link | Built | `ProofMeasure` (smoke test only — the other targets' criteria are not visitor behaviour), measured verdicts with evidence, read-again `priorGrade`, ticket effect, journey make/measure, method events + operator-seeded method funnel, `ProofScoreboard` |
+| S4e Prescriptions | Built | `domain/replay/prescriptions/*`, sweep + cited drafts, actions with human gates, verify (`prescription.verify`), sites-Worker A/B split, preview links, Fixes UI (`PrescriptionCard`, `DoNext`, `ScoreStrip`, `fix`/`fixes`/`release` kinds) |
+| S4f Page review | Built | captures via the QA runner (`page_capture`, `page_render_after`), page rules, anchored vision review, validated visual patches, improvement prompts, page score; page review UI |
+| S5 Live + Flow links | Built | `replay_live` + `LiveView` + follow mode; `FlowView` with a `source` registry |
+| S6 Commerce + buyer path | Built | `capability` kind + catalog row, held-licence entitlement, `replay_pack` settler/refunder, `bfr_` keys, sites, landing, `resumeIntent`, `/apps/[slug]` + setup, Insights operations panel |
+| S7 Buyer surfaces | Built | hosted loader injection; canvas Measure ▸ Visitors (`CanvasVisitorsSurface`, three entitlement states, panel opposite the Brain) |
+| S8 Ship | Content built | release notes 1211 + 1224; blog posts `see-why-visitors-leave` and `fix-what-visitors-tell-you` ×5 locales; runbook (§11) needs the operator |
+
+#### 0.2 Amendments taken during the build (2026-10-13)
+- **Contract split:** `packages/interaction-contract/src/api.ts` is a barrel over `api/{core,heat,analysis,prescriptions,review,paths}.ts`.
+- **Player delivery:** rrweb is not a frontend dependency. The replay-sdk publishes the Replayer as a hashed CDN bundle named in `manifest.player`, and the frontend CSP allows `https://cdn.builderforce.ai`. The QA runner loads `manifest.pageKit` for `deriveSelector` + `applyVisualPatch` (one copy of that logic).
+- **Signed-in recording switch:** a deploy-time env (`NEXT_PUBLIC_REPLAY_RECORD_SIGNED_IN`), not a platform settings row. `replayExcluded` and `replayFreeAllowanceOverride` are set by a superadmin in Admin ▸ Growth ▸ Insights operations.
+- **Funnel kind tabs:** Steps · Events · Flow (smart events live in Events). The funnel editor is a panel level (`funnel_edit`), never a second overlay. The funnel window is up to 30 days (`FUNNEL_WINDOW_MAX_MINUTES`).
+- **Ticket moment:** tasks have no metadata column. The replay moment rides a hidden trailer in the description (`formatReplayMomentTrailer`), which every ticket view strips.
+- **Read gate:** `/api/replay/*` reads pass for a workspace holding Insights OR for its own live proof site (`isProofSite`, the same clause as `replayEntitledForSite`).
+- **MP4 export:** checked up front, charged once on delivery (`replay-export:<id>`). A failed or `unavailable` export costs nothing.
+- **Fix it preview:** `publishPreviewRelease` records a release without moving the live pointer. A person sees it through a 30-minute preview link (`?bf_preview=`), and publishes or reverts through the existing pointer move.
+- **Method funnel:** seeded by a superadmin action on the Builderforce workspace's site, not by a fixed-uuid migration.
+
+#### 0.3 Amendments from the 2026-10-29 audit
+- **Fix it builds its preview in the browser.** A cloud run on a hosted project edits the project's IDE workspace (`taskWorkspaceTarget`), and only the browser builds an app. The agent changes the workspace and publishes nothing. "Build the preview" on the fix opens the IDE publish panel with `prescription=<id>`. A person builds the app there, and the panel posts `preview=1&prescription=<id>` to `POST /api/ide/projects/:projectId/publish` (`publishPreviewRelease` + `notePrescriptionPreview`). Publish preview, Test it and Revert follow from that release.
+- **Follow up** writes enrolments into the canvas sequence object's `content.enrolments`, which is the structure `sequenceRunner` drives. The 1234 trigger clears `next_due_at`, so the runner picks the new enrolments up on its next tick. `salesPolicy.ts` (commission helpers) has no part in it.
+- **Project scope:** the canvas resolves its hosted site once (`GET /api/projects/:projectId/replay/site`), then reads through `/api/replay/*?site=`. Nothing is mounted twice.
+- **Live** is served by `ReplayReadService.live` and `recordingStatus`; there is no separate `ReplayLiveService`. `active` and `byRoute` are exact counts, and only the visitor list is capped.
+- **The Flow detail strip** opens the issue groups for a path (D15: never browse raw sessions). Recordings are reached from each issue.
+- **Release compare** lives in `HeatmapView`/`HeatmapControls` (side-by-side and difference modes); there is no separate `ReleaseCompare` component.
+- **`replay:read` keys** reach the documented read API: overview, recordings and funnel evaluation (`docs-site …/developers/insights-api.md`). The other reads are for members only.
+- **A proof never overrides the off switch.** Building a measured proof creates the project's replay site if it has none. A site a person switched off stays off, the proof records a `replay.proof.site_disabled` trace, and its measure keeps collecting.
+- **Recorder hash** length is one contract constant shared by `emit-assets` and `pickRecorder`. `cdn-publish.sh` carries `pinned`/`channels` forward from the live manifest, so a pin survives the next release.
+
+### 1. Outcome
+
+**The point is to tell people how to improve their website, render the improvement, hand it to an AI as a prompt, and measure the result.** Fixes lead the home of the Insights app for every site, Builderforce's own included (D17). Recordings, heatmaps, funnels, flow, live and overview are evidence, reached from a fix or browsed beside it.
+
+1. **Every workspace, through the Marketplace.** A workspace installs **Insights** (listing slug `session-replay`) for free, gets 5,000 kept recordings a month, and buys prepaid packs above that. On an external site it pastes one loader tag once; recorder updates and releases are detected automatically. A Builderforce-hosted app needs only a switch. It reviews everything at `/apps/insights` and in the canvas under Measure ▸ Visitors.
+2. **Builderforce is customer #1 (D17).** The Builderforce workspace installs Insights like anyone else and builderforce.ai carries the same public snippet. Superadmins see Builderforce's recordings as members of that workspace. Admin gets only an aggregated Insights operations view.
+3. **At least Clarity's web analysis** (D11, §2.1): Overview dashboard, one filter bar with saved segments, frustration signals, funnels over pages/clicks/smart events, AI summaries of one recording or a segment, and Brain answers over the same numbers.
+4. **The method runs on it** (D12, §5.3). Proofs are graded by what visitors did; each grade carries its evidence; "Read again with what we learned" closes the loop; tickets raised from a replay moment are measured on the release that ships the fix; the journey learns Make and Measure; builderforce.ai sees where people drop out of the method.
+5. **Prescriptive AI** (D13, §5.1): ranked fixes, each with a deterministic finding, a prescription, an impact range from the site's own data, one action (Fix it / Test it / Follow up / Ticket), and a measured verdict on the next release.
+6. **The page review** (D14, §5.2): screen + metrics + SEO + content per key page per release → a rendered before/after → an improvement prompt for the ONE composer, a coding agent or any AI tool → measured.
+7. **Privacy by default:** inputs masked in the browser; password and card fields never captured; DNT and GPC honoured; builderforce.ai records only after analytics consent; deleting a visitor deletes their recordings; recordings expire.
+
+### 2. Decisions
+
+Each decision is settled. An implementing agent never changes one; if one proves wrong it stops and reports to the planning session.
+
+| # | Decision |
+|---|---|
+| D1 | **Recorder engine: rrweb**, pinned exactly (`2.1.7` today). |
+| D2 | **Storage tiers are §3.2** (D18 replaces the original D2 and the D15 tier list). Recording bytes live in R2 (`UPLOADS`) as gzip NDJSON chunks under `replay/`. Telemetry tables live in the **transactional** database (`buildTransactionalDatabase`); definitions people edit live in core. |
+| D3 | **Retention:** 30 days per recording by default; a site setting may raise it to 90 (`settings.retentionDays`). Daily rollups keep 13 months. |
+| D4 | **Pricing:** billable unit = one **kept** recording, up to 2 MiB compressed; each further 2 MiB counts again (`max(1, ceil(bytes / 2 MiB))`). 5,000 free a month per installed workspace. Above that, prepaid packs (credits last 12 months): 10k **$40** · 50k **$140** · 150k **$240** · 500k **$650** · 1M **$1,200** — data in the catalog item's `body.packs`. Events of unkept sessions are never billed. Auto-recharge is an emailed top-up link (the provider has no off-session charge). |
+| D5 | **CDN:** `https://cdn.builderforce.ai`, public R2 bucket `builderforce-cdn` with a no-Worker route. `/replay/v1/loader.js` (max-age 300), `/replay/r/recorder.<hash>.js` (immutable), `/replay/manifest.json` (max-age 60), `/embed/v1.js` (max-age 300). Config and ingest stay on `https://api.builderforce.ai/api/replay-ingest/v1/*`. |
+| D6 | **Liveness:** polling about every 5 s; no WebSockets in v1. |
+| D7 | **Consent:** builderforce.ai records only after `CookieConsentManager` reports analytics consent. Buyer sites: setting "Wait for consent" (default off) plus `BFReplay.consent(true)`. |
+| D8 | **Real-payment validation** by a dedicated non-superadmin workspace with `replayFreeAllowanceOverride = 0` (runbook §11). |
+| D9 | **Signed-in recording on builderforce.ai** is gated by the platform setting `replay.recordSignedIn` (default `false` until the legal disclosure is published) and the per-workspace `tenants.settings.replayExcluded`. Sensitive regions carry `data-bf-block` / `data-bf-mask`. |
+| D10 | **Replay is a DOM reconstruction played like a video**, never OS screen capture. Canvas/WebGL content is captured as frames when the site enables `recordCanvas` (2 fps, JPEG 0.4; on for builderforce.ai). MP4 export renders the replay headlessly in the QA runner and costs 10 units. |
+| D11 | **Competitive bar:** every Clarity web analysis feature in §2.1 ships for every site. |
+| D12 | **Method link:** replay is the Measure instrument; proof sites are recorded with no install and count toward the free allowance. |
+| D13 | **Findings are deterministic** (`PRESCRIPTION_RULES`); AI only phrases cited findings and drafts changes; uncited sentences are dropped; nothing reaches production on its own. A finding observed by vision is shown only when it names an element in the capture's rect map AND cites a measured page fact; it is labelled "observed". |
+| D14 | **Page review per release** for key pages (§5.2). |
+| D15 | **Scale principles:** count every session, keep only recordings that matter, group into issues, never browse raw sessions; Postgres rows grow with routes, issues, releases and kept recordings only; every number says whether it is exact or estimated (≈). |
+| D16 | **One screen, one panel:** ONE home (`InsightsHome`) that fits the viewport plus ONE stacked `SlideOutPanel` (`InsightsPanel`) whose levels are registered **panel kinds** (§4.1). No view switcher, no second overlay. |
+| D17 | **Customer #1:** scope is `{ tenantId, siteId }`, nothing else. No platform scope, no `tenant_id NULL` site, no superadmin data path, no unmetered back door. The Builderforce workspace holds an audited credit grant (`ledger_entries`, reference `replay-grant:<audit id>`). Admin sees aggregates only (`/api/admin/replay-ops/*`). |
+| D18 | **Storage works with zero extra provisioning** (decided 2026-10-12, replaces the Analytics Engine + Pipelines/R2 SQL tiers of the earlier D15 text). A Pipelines binding fails the deploy when its pipeline does not exist, and Analytics Engine reads need an API token the platform does not hold; a design that cannot run is not shipped. Instead: (1) **additive daily rollups** in transactional Postgres, written by per-isolate buffers at ingest (`INSERT … ON CONFLICT DO UPDATE SET n = n + EXCLUDED.n`), keyed by route × day × release × device — bounded by routes, never by sessions; (2) **one compact row per kept recording** with the arrays filters and funnels need; (3) R2 chunks + `marks.json` per kept recording. Funnels, flow, segments and AI digests run over kept recordings weighted by `sample_weight` and are shown as ≈; route counts, frustration counts, heat cells and vitals are exact over every session. An event lake is a later scale-up, recorded on the ROADMAP; it is not a dependency of anything in this PRD. |
+
+#### 2.1 Competitive matrix (Clarity web feature → ours)
+
+| Capability | Ours | Slice |
+|---|---|---|
+| Recordings with masking | Inputs always masked; `data-bf-mask` / `data-bf-block` | S2, S3 |
+| Click / scroll / area heatmaps | Per release; Areas mode boxes the top elements | S4, S4c |
+| Rage, dead clicks, quick backs, excessive scrolling, JS errors | Detected in the browser, folded into issues | S2, S1 |
+| Dashboard | the `metric` panel kind and the home tiles | S4c |
+| Filters + saved segments | ONE `ReplayFilter`, ONE compiler, every band and panel | S4c |
+| Custom tags / identifier | `BFReplay.tag(key, value)`; `BFReplay.identify(id, traits)` when the site allows it | S2 |
+| Smart events (auto + custom, retroactive) | `BUILTIN_SMART_EVENTS`, `BFReplay.event(name)`, point-and-click rules | S4c |
+| Funnels | with "watch who dropped at step N" | S4c |
+| AI summary of one recording / a segment | cited, deep-linked | S4c |
+| Chat with your data | Brain `replay.*` tools | S4c |
+| Share a recording link | `?panel=recording:<id>&t=<s>` | S3 |
+| Data export API | documented read API with `replay:read` keys | S4c |
+| Mobile SDKs, GA/Ads integrations | **No** (non-goals) | — |
+| **beyond:** release compare, live view + follow, canvas frames, MP4 export, replay → ticket → measured fix, prescriptions, page review | Yes | S1, S4, S4b, S5, S4d–S4f |
+
+### 3. Architecture
+
+```
+Browser (any site)
+  <script async src=https://cdn.builderforce.ai/replay/v1/loader.js data-site=bfr_… | hosted:<siteId> [data-release]>
+    loader (≤2 KB gz): DNT/GPC → GET /api/replay-ingest/v1/config → sample/consent → inject recorder
+    recorder.<hash>.js: ids · release key · marks · rrweb ring buffer (60 s) · keep triggers
+      └─ POST /api/replay-ingest/v1/chunks (gzip, every 5 s visible + pagehide keepalive)
+API Worker
+  ReplayIngestService ─┬─ rollup buffers  → replay_route_daily, replay_breakdown_daily, replay_heat_daily,
+                       │                    replay_vitals_daily, replay_issues + replay_issue_daily, replay_live
+                       ├─ kept only       → R2 replay/t<tenant>/<site>/<day>/<recording>/<seq>.ndjson.gz + marks.json
+                       │                    + replay_recordings upsert + usage debit
+                       └─ replay_releases first/last seen
+  /api/replay/*  (membership + requireFeature('sessionReplay'); ?site= must belong to the caller's workspace)
+  /api/projects/:projectId/replay/site  (resolve/enable the project's hosted site; reads then use /api/replay/*?site=)
+  /api/admin/replay-ops/*  (superadmin, aggregates only)
+Frontend: /apps/insights · canvas Measure ▸ Visitors · Admin link → ONE InsightsHome + ONE InsightsPanel
+```
+
+**Scope** is `ReplayScope = { tenantId: number; siteId: string }`. Every read takes it as a parameter; a read never infers scope from a row.
+
+#### 3.1 Release identity
+First match wins: (1) `data-release` / `window.BF_RELEASE`; (2) hosted apps: `site_releases.version_token` written onto the injected tag; (3) builderforce.ai: `NEXT_PUBLIC_APP_VERSION` on the tag; (4) fingerprint: first 12 hex of SHA-256 over sorted `script[src]` + `link[rel=stylesheet][href]` URLs containing a `[.-][0-9a-f]{6,}[.-]` segment. Releases read `R<n> · first seen <date>` until renamed.
+
+#### 3.2 Data model (final)
+
+**Core** (definitions; one migration):
+- `replay_sites`: `id uuid pk`, `tenant_id int not null` → tenants, `kind varchar(16)` (`hosted|external`), `project_id int null` (bare id), `label varchar(200)`, `api_key_id uuid null` → `tenant_api_keys.id` (the `bfr_` key; allowed origins live on the key), `settings jsonb` (`maskAllText`, `consentRequired`, `keepRate`, `recordCanvas`, `identify`, `retentionDays`, `recorderChannel`, `publicKey`), `status varchar(16)`, timestamps. Unique `(tenant_id, project_id)` where `project_id` is not null.
+- `replay_segments` (`id, site_id, name, filter jsonb, created_by, created_at`; unique `(site_id, name)`).
+- `replay_smart_events` (`id, site_id, name, rule_kind page|click|custom, match, match_mode equals|prefix|contains, created_by, created_at`; unique `(site_id, name)`). Built-ins are code data.
+- `replay_funnels` (`id, site_id, name, window_minutes default 30, created_by, created_at`) + `replay_funnel_steps` (`funnel_id, ord, step_kind page|click|event, match, match_mode`; pk `(funnel_id, ord)`).
+- `replay_prescriptions`: `id, site_id, rule_id varchar(48), area varchar(16)` (`funnel|ux|site|sales|seo|content|performance|accessibility`), `source rule|observed`, `subject_key varchar(400)`, `page_path null`, `capture_id null`, `status` (`proposed|applied|measuring|worked|no_effect|worse|dismissed`), `finding jsonb`, `prescription text null`, `change jsonb null`, `visual jsonb null`, `impact jsonb`, `action_kind null`, `action_ref null`, `acceptance jsonb null`, `measured jsonb null`, `dismiss_reason null`, `decided_by null`, timestamps. Unique `(site_id, rule_id, subject_key)` where status is not terminal. One writer per column group: sweep (finding, impact, prescription, change, visual), action route (action, status), verifier (measured, status).
+- `replay_page_captures`: `id, site_id, path, release_key, device_class, captured_at, screenshot_key, fold_screenshot_key, rect_map_key, seo jsonb, content jsonb, lab_perf jsonb, a11y jsonb, score jsonb`; unique `(site_id, path, release_key, device_class)`.
+- `realizations.measure jsonb null` (S4d).
+- The `catalog_items` row for `session-replay` (S6).
+- `DROP TABLE replay_visits` (the misplaced 0486 table; its only reader is retired in S1).
+
+**Transactional** (`0015_replay.sql`):
+- `replay_recordings` — one row per **kept** recording: `id uuid pk, site_id, tenant_id not null, visitor_id, visit_id` (unique `(site_id, visit_id)`), `started_at, last_event_at, ended_at, duration_ms, active_ms, entry_path, exit_path, page_count, release_key, recorder_version, device_class, viewport_w, viewport_h, browser, os, country, referrer_host, click_count, rage_count, dead_count, error_count, quickback_count, excessive_scroll_count, converted, keep_reason` (`sample|frustration|error|goal|tag|manual`), `sample_weight real, variant null, identified_id null, traits jsonb null, billable_units, chunk_count, bytes, routes text[], events text[], frustrations text[], clicked text[]` (≤50), `issue_fps text[], steps text[]` (ordered route/event sequence, ≤60, for funnels and flow), `tags jsonb`. Indexes: `(site_id, started_at desc)`, `(site_id, release_key)`, `(visitor_id)`, GIN on `routes`, `events`, `frustrations`, `issue_fps`.
+- `replay_releases` (`site_id, release_key` pk, `label, source explicit|hosted|fingerprint, first_seen_at, last_seen_at`).
+- `replay_route_daily` (`site_id, day, release_key, route, device_class` unique; `sessions, entries, exits, pageviews, new_visitors, conversions, frustrated, errors, active_ms_sum, scroll_depth_sum`).
+- `replay_breakdown_daily` (`site_id, day, dim` (`country|device|browser|os|referrer|entry|exit`), `value` unique; `sessions`).
+- `replay_heat_daily` (`site_id, day, release_key, route, device_class, kind click|rage|dead|scroll, selector, label, gx, gy` unique; `n`). Scroll uses `gy` = depth decile, empty selector.
+- `replay_vitals_daily` (`site_id, day, release_key, route, device_class, metric LCP|CLS|INP, bucket smallint` unique; `n`). p75 is read from the histogram; buckets are a contract constant.
+- `replay_issues` (`id uuid, site_id, fingerprint` unique per site, `kind, route, subject, title, first_release, last_release, first_seen_at, last_seen_at, status new|ongoing|regressed|proposed|preview|measuring|verified|ignored, prescription_id null`) + `replay_issue_daily` (`issue_id, day, release_key, device_class` unique; `sessions`) + `replay_issue_representatives` (`issue_id, rank, recording_id, share, label`).
+- `replay_visit_summaries` (`recording_id pk, summary, citations jsonb, model, generated_at`).
+- `replay_live` (`site_id, visit_id` pk, `last_seen_at, route, device_class, x, y, recording_id null`); rows older than 5 minutes are purged by the cron sweep.
+
+Nothing in the visitor stream is copied: builderforce.ai's page views and prompts stay `activity_log` rows; replay joins on `visit_id`.
+
+#### 3.3 Ingest (`ReplayIngestService.ingest`, never throws to the route, always 202)
+1. Resolve the site (`bfr_` key hash → `tenant_api_keys` with scope `replay:ingest`, not revoked, `originAllowed`; or `hosted:<siteId>` whose origin equals the hosted subdomain or custom domain). Cached 5 min.
+2. Per-IP daily budget (`replay:ingest:ip:` KV prefix, `REPLAY_IP_DAILY_CHUNKS = 3000`, fail-open), max chunk size, gunzip, `parseReplayChunk`.
+3. Fold every chunk's marks into the rollup buffers (route, breakdown on `seq 0`, heat, vitals, issues via `issueFingerprint`, live).
+4. Kept chunks only: `replayEntitledForSite` + usage (`canKeepNewRecording`: free allowance, then credits; drops NEW kept recordings when spent, keeps recordings in progress), store chunk, upsert `replay_recordings` (via `foldVisit`), append `marks.json`, debit units through the wallet (reference `replay-use:<recordingId>:<unit>`).
+5. Release first/last seen; bump the site's cache version at most once per 60 s.
+Trace verbs (`recordActivity`, separate module): `replay.loader.hit` (first config hit per site per day), `replay.ingest.first_event`, `replay.credits.first_debit`, `replay.allowance.exhausted`.
+
+#### 3.4 Contracts (`packages/interaction-contract`, shared by recorder, API and frontend)
+Realign the existing package to these exact shapes; migrate every caller in the same pass.
+- `selector.ts`: `deriveSelector(el)`, `redactInput`.
+- `kinds.ts`: `MARK_KINDS = ['page','click','event','rage','dead','quickback','excessive_scroll','error','vital','scroll'] as const`; `GRID = 50`; `toGridCell(x, y, docW, docH)`.
+- `frustration.ts`: `FRUSTRATION_THRESHOLDS` (rage ≥3 in 700 ms within 30 px; dead = non-interactive + no navigation/mutation in 500 ms; quick back = last three pages A→B→A with B < 7 s; excessive scroll = ≥3 reversals in 5 s, or > 3 viewport heights in 10 s with no click) and `isRageClick`, `isDeadClickCandidate`, `isQuickBack`, `isExcessiveScroll`.
+- `chunk.ts`: `ReplayMark = { kind, key, label?, atMs, gx?, gy?, value? }`; `ReplayChunk = { v:1, visitorId, visitId, seq, startedAt, release, recorderVersion, device: { class, w, h, docW?, docH? }, browser?, os?, referrer?, newVisitor, keep: KeepReason | null, sampleWeight, marks, tags?, identify?, variant?, events?: unknown[], end? }`; `parseReplayChunk`; `REPLAY_LIMITS = { maxChunkBytes: 512_000, maxEventsPerChunk: 5_000, flushMs: 5_000, maxMarksPerVisit: 300, maxTagsPerVisit: 20, bufferMs: 60_000 }`; `VISIT_IDLE_MS`, `VISITOR_ID_PATTERN`; `VITAL_BUCKETS`.
+- `routeTemplate(path, learned?)` (numeric, uuid, hex and long-token segments → `:id`) and `issueFingerprint({ siteId, route, kind, subject })`.
+- `filters.ts`: `ReplayFilter = { all: ReplayFilterClause[] }`, `FILTER_FIELDS` (`{ id, ops, valueKind }`: device, browser, os, country, referrer, entryPath, exitPath, visitedPath, clickedSelector, frustration, durationMs, activeMs, pageCount, release, smartEvent, tag, converted, variant), `parseReplayFilter` (≤12 clauses, rejects unknowns), `filterToQuery` / `filterFromQuery`.
+- `smartEvents.ts`: `SmartEventRule = { name, ruleKind: 'page'|'click'|'custom', match, matchMode }`, `BUILTIN_SMART_EVENTS` (sign up, purchase, add to cart, begin checkout, contact, download; five locales), `markMatchesRule`.
+- `release.ts`: `releaseKeyFromAssets(urls): Promise<string | null>`.
+- `snippets.ts`: `replaySnippets({ siteKey })` → script tag, npm, GTM.
+- `proofMeasure.ts` (S4d), `visualPatch.ts` + `improvementPrompt.ts` (S4f).
+
+#### 3.5 Recorder delivery
+The loader URL never changes. On each page load the config answer names the recorder (site channel, platform pin, else the manifest's latest, read from `REPLAY_MANIFEST_URL` and cached 10 min). Rollback is a pin. Every recording stores `recorder_version`.
+
+### 4. Experience
+
+#### 4.1 One screen, one panel (D16)
+`InsightsHome` fits 1440×900 with nothing below the fold (reflows to 1024; stacks and may scroll at ≤900):
+
+| Band | Content | Click → kind |
+|---|---|---|
+| Header | breadcrumb, the query bar (`ReplayFilterBar`), period, release compare, proof chip while a proof is live | `proof` |
+| Goal + numbers | goal selector (Activation · Revenue · Sign-ups · Retention) + six tiles (sessions, goal metric ≈ interval, frustrated sessions, JS errors per 1k, p75 LCP, site score), each with a sparkline | `metric` |
+| Funnel | the site's funnel as one row of segments | `funnel` |
+| Body | **Issues** (38%, issue groups ranked by goal impact, rows that fit + "View all") · **Page stage** (34%, the selected route with lenses Heat · Stuck · Fixes · Live) · **Do next** (28%, ranked fixes as before → after, "Apply all", score-by-release strip) | `issue`, `issues`, `fix`, `route`, `release`, `live` |
+
+`InsightsPanel` is ONE `SlideOutPanel` (`width="wide"`, `widthStorageKey="insights-panel"`) holding a stack of levels with a breadcrumb. `INSIGHT_PANEL_KINDS` (data, `components/insights/panelKinds.ts`):
+
+| Kind | Tabs |
+|---|---|
+| `recording` | Replay · Journey · Lead (identified visitors) |
+| `issue` | Overview · Recordings · Fix · History |
+| `fix` | Change · Prompt · Measure |
+| `route` | the page review |
+| `metric` | trend, breakdowns, segments |
+| `funnel` | Steps · Events · Flow (+ the `funnel_edit` level) |
+| `live`, `proof`, `release`, `issues`, `sites`, `plan` | — |
+
+Rules: a slice registers a kind or a tab row, never a route or a second overlay; `?panel=<kind>:<id>[:<tab>]` (and `&t=<s>` for a recording) opens the panel on load; home lists are bounded, panel lists cursor-paginated; legacy admin URLs alias to the app with the matching `?panel=`. Canvas Measure ▸ Visitors renders the same home with the panel docked opposite the Brain.
+
+#### 4.2 The buyer's path (D17)
+1. **Find:** `/marketplace/listing/session-replay` carries a landing from `LISTING_LANDINGS` (data by slug; sections hero, install, pillars, compare, pricing, faq, proof).
+2. **Sign up:** "Start free" → `registerHref('/apps/insights/setup', 'install:insights')`; `resumeIntent(intent)` in `lib/auth.ts` survives sign-up, verification and workspace choice (used by every free listing).
+3. **Licence:** `acquireListing` (free) → `template_licenses`; that licence IS the entitlement (`heldCapabilityFeatures` → `sessionReplay`).
+4. **Site:** name, allowed domains, privacy switches → `replay_sites` + a `bfr_` key (`mintTenantApiKey`, scope `replay:ingest`).
+5. **Snippet:** script tag · npm · GTM · Builderforce app switch.
+6. **Verify:** live checks from trace verbs (loader hit, origin ok, first event, first kept recording).
+7. **Plan:** 5,000 free; packs via one-off checkout.
+8. **Use:** `/apps/insights` (`/apps/[slug]` from `CAPABILITY_APPS`) with the site switcher (`sites` kind) and usage chip (`plan` kind). The workspace nav lists installed capability apps from `GET /acquired`.
+
+#### 4.3 Theme, responsive, accessibility
+Tokens only (`var(--surface-card)`, `var(--text-primary)`, `var(--border)`, `var(--accent)`, `var(--error)`, `var(--warning)`, `var(--success)`); fixed colours only inside the replay iframe. Tables scroll in their own box. 44 px targets on phones. The scrubber is `<input type="range">`; timeline markers are buttons with `aria-label`; tablists use `role="tab"` / `aria-selected`; the heat legend carries "cold/hot" text.
+
+### 5. Behaviour specifications
+
+#### 5.1 Prescriptions (D13)
+1. **Diagnose:** `PRESCRIPTION_RULES` (`domain/replay/prescriptions/rules.ts`): `{ id, area, detect(aggregates): Finding[], effort 1|2|3, actions, thresholds }`, pure over aggregates the application passes in. Rules: `rage_on_element` (≥3% of visits reaching an element rage it), `error_on_step` (an error fingerprint in ≥30% of drops at a step), `dead_click_heading`, `cta_below_fold` (CTA below the depth ≥40% reach), `quickback_after_reveal`, `excessive_scroll_missing_info`, `device_gap` (phone < 50% of desktop), `release_regression` (≥10 points down vs previous release), `pricing_hesitation` and `checkout_abandon_known` (identifiable visitors only), `objection_pattern`, `proof_missed_reason`; plus the page-review rules of §5.2.
+2. **Estimate:** `estimateImpact(finding, cohorts)` = affected × (conversion without − with), 30-day projection, Wilson interval on both cohorts; `confidence: 'low'` and no point estimate below 100 visits in either cohort. Ranked by impact ÷ effort.
+3. **Prescribe:** for the top ≤5 new findings per site per day, `condenseTranscript` (moved to `application/llm/condense.ts`) gets the finding, cited recording digests and the element map, and returns prescription, change and acceptance; uncited sentences are dropped. Shares `REPLAY_SUMMARY_DAILY_LIMIT = 200` per tenant per day.
+4. **Apply:** `PRESCRIPTION_ACTIONS` registry — **Fix it** (task + `dispatchCloudRunForTask` for hosted sites with a coding agent → a preview release a person builds from the IDE publish panel and publishes (§0.3)), **Test it** (`ab_tests` draft via `marketing/experimentation.ts`; the sites Worker serves a sticky `bf_ab_<testId>` split and the loader carries `data-variant`), **Follow up** (enrolment into the canvas sequence object that `sequenceRunner` drives, contacts only via `resolveKnownContacts`), **Ticket**, **Dismiss** (reason required; 30-day suppression), and from §5.2 **Apply in composer**, **Copy prompt**, **Apply page**.
+5. **Verify:** fix/ticket by the ticket effect (§5.3.4), test by `variantResults`, follow-up by enrolled vs matched-not-enrolled conversion. Status `worked|no_effect|worse`, outcome event `prescription.verify` (phase `validated`); `worse` on a published Fix it offers Revert.
+
+#### 5.2 The page review (D14)
+- **Which pages:** entry pages, funnel steps, proof pages and the top 20 routes, ≤25 per site per release; a new release (first seen) triggers capture, otherwise weekly.
+- **Capture:** `dispatchQaRunner` job `page_capture` in `api/qa-container/server.mjs`: Playwright at 1440×900 and 390×844, full and fold screenshots, rect map (`{selector,x,y,w,h,label,role}`), SEO facts, content facts (skipping masked/blocked regions), lab performance, accessibility facts. Never submits forms or signs in. Search Console via the analytics port when connected, never fabricated.
+- **Review:** rules `seo_title_length`, `seo_missing_meta_description`, `seo_multiple_h1`, `seo_no_structured_data`, `seo_low_ctr_high_impressions`, `content_no_value_prop_above_fold`, `content_cta_vague`, `content_readability`, `content_missing_trust`, `perf_lcp_poor`, `perf_cls_poor`, `perf_heavy_hero_image`, `a11y_contrast`, `a11y_tap_targets`, `a11y_missing_labels`; plus ONE multimodal vision request per page through the gateway capability gate (≤5 observed findings, kept only by `acceptObserved`).
+- **Render:** `VisualPatch` ops (`setText`, `setAttr` allow-list, `setStyle` allow-list, `moveBefore`, `moveAfter`, `insertAfter` sanitised, `hide`), validated by `validateVisualPatch`, applied in the runner (`page_render_after`) → before (numbered callouts) / after screenshots; SEO meta changes render as a SERP preview + JSON-LD diff.
+- **Prompt:** `compileImprovementPrompt(input, { audience: 'composer'|'coding_agent'|'site_builder' })`, pure, fixed sections, never stored.
+- **Measure:** `pageScore(facts, PAGE_SCORE_WEIGHTS)` per capture; the improvement ledger shows releases with the fixes they shipped and their verdicts.
+
+#### 5.3 The method link (D12)
+1. **Proof measures:** `ProofMeasure = { sample: { filter, min }, success: { kind: 'smartEvent'|'funnel', ref }, threshold: { op, value, unit }, windowDays }` on `RealizationOutput.measure`, filled by each live target from its charter numbers (left undefined, and said so, where a criterion is not visitor behaviour); persisted in `realizations.measure`; generated pages call `BFReplay.event(<success>)` and tag `source`. `evaluateProofMeasure` → `collecting|met|missed` with evidence. `replayEntitledForSite` is true for a licensed workspace OR a project with a live realization.
+2. **Measured verdicts:** `syncRealizationVerdict` precedence: a person's abandon; a posted verdict only when the sample is reached or with a written early-call reason (numbers replaced by the measured ones); otherwise `verdictMetric.held = 'sample_not_reached'`; at window end the measured verdict is written by the daily maintenance runner. `proof.grade` metadata gains `evidence`.
+3. **Read again:** `realizationApi.plan(…, { priorRealizationId })` → `idea.read` with `metadata.priorGrade`; `PRIOR_GRADE_RULES` steer the recommender; `proofJourney` chains attempts.
+4. **Ticket effect:** a ticket from a replay moment stores `replayMoment` in task metadata; `effectFor(task)` (on read, never stored) reports before/after once the newer release has ≥200 visits on the route.
+5. **Journey signal:** `GET /api/realizations/journey-signal` → `make|measure|null`; `useFounderJourney` widens to make/measure.
+6. **Method funnel:** `emitMethodEvent` from the `realizationApi` wrappers only; on builderforce.ai the four acts are smart events and "The method" funnel is seeded for the Builderforce workspace's site once it exists (seeded by the site-creation path, not a fixed uuid).
+
+### 6. Guardrails (audited per slice)
+- **One of each:** one visitor panel, one player, one stat tile, one selector derivation, one zone-ranking rule (`rankHeatZones`), one site key type (a scope on `tenant_api_keys`), one credit mechanism (`ledger_entries` denomination `replay_recordings` + one `ONE_OFF_SETTLERS` row), one usage meter (`application/consumption/meters.ts`, displayed == enforced), one filter contract and one compiler, one flow fold (`buildVisitorFlowGraph`), one condense primitive, one A/B engine, one runner, one prescription table, one entitlement function.
+- **Layering:** routes construct application services and never import tables; components fetch through `lib/replayApi.ts` (and `lib/capabilityApi.ts`) only.
+- **Size:** no new file over ~400 lines; `adminRoutes.ts`, `adminApi.ts` and `CreationCanvas.tsx` are not grown.
+- **Caching:** every read through `getOrSetCached` with keys from `application/replay/replayCacheKeys.ts` carrying the site's version token; live TTL ~5 s; chunk bytes served with `Cache-Control: private, max-age=31536000, immutable` instead.
+- **Abuse ceilings:** origin-bound keys, per-IP budget, max chunk size, monthly allowance; ingest never says why it dropped a chunk.
+- **Privacy:** masking in the browser only; `VISITOR_DATA_ERASERS` (prompts, journey, replay) behind the one erase route; retention registered in `retentionPurge.ts` + an R2 prefix sweep.
+- **i18n:** every string in all five catalogs with real translations: `replay.*`, `insights.*`, `creationCanvas.surface.sessions.*`, `marketplace.landing.insights.*`, `marketplace.capability.*`, `admin.insights.*`.
+
+### 7. Non-goals (v1)
+Native mobile SDKs; OS screen capture; metered subscriptions; cross-domain stitching; WebSocket push; fingerprinting (identity only via `BFReplay.identify` with the site's setting on); staff reading another workspace's recordings; GA / ad integrations; an event lake (ROADMAP scale-up).
+
+### 8. Slices — remaining build work
+
+Each slice lists only what remains. Tests ship with the code.
+
+#### S0 — Consolidation (finish)
+- Realign `interaction-contract` to §3.4 and migrate callers (`replay-sdk`, `lib/qa/telemetry.ts`, `lib/visitorJourney.ts`); add `routeTemplate`, `issueFingerprint`, `snippets`; a test asserting `telemetry.ts` re-exports the shared `deriveSelector`; a `QaHeatmapService` byte-identical ranking test.
+- `components/insights/panelKinds.ts` (`InsightPanelKind`, `InsightPanelLevel`, `INSIGHT_PANEL_KINDS` with `{ kind, labelKey, tabs: { id, labelKey, Component }[] }`), `InsightsPanel.tsx` (stack, breadcrumb, `?panel=` parse, Esc), `usePanel` context, `InsightsHome.tsx` + bands (`GoalBar`, `KpiTiles`, `FunnelBand`, `IssuesTable`, `PageStage`, `DoNext`, `ScoreStrip`), each ≤150 lines taking `{ scope, filter, days }`.
+- `RecordingPanel` content becomes the `recording` kind (tabs `VISITOR_PANEL_TABS` registry with `requires`), `widthStorageKey="insights-panel"`.
+- `adminGroups.ts`: export `LEGACY_ADMIN_SUB`; `resolveAdminRoute` returns `panel`. Admin ▸ Growth ▸ Visitors keeps Flow and Leads (builderforce.ai's `activity_log` journey) and links to `/apps/insights` and Insights operations.
+- Delete `components/admin/visitor-flow/VisitorJourneyDrawer.tsx`.
+- Tests: `InsightsHome.test.tsx`, `InsightsPanel.test.tsx`, `RecordingPanel.test.tsx`, `adminGroups.test.ts`.
+
+#### S1 — Data plane
+- Migrations per §3.2 (core `1216_replay_core.sql` incl. `DROP TABLE replay_visits`; transactional `0015_replay.sql`) + Drizzle schema; update the entity-catalog ratchet.
+- `domain/replay/`: realign `foldVisit`, `aggregateInteractions` (→ rollup cells), `marksToInsert` (→ `marks.json` cap), `replayScope` (`{tenantId, siteId}`, no platform); `billing.ts` `billableUnits`.
+- `application/replay/`: `replayCacheKeys`, `replayChunkStore` (R2), `replaySites` (`resolveSiteForIngest`, `getSite`, `listSitesForTenant`), `ReplayConfigService`, `ReplayIngestService`, `replayRollupBuffer` (the `siteTraffic.ts` shape), `ReplayReadService` (`listRecordings` cursor 50, `getRecording` + marks, `chunk`, `releases`, `renameRelease`), `replayEntitlement` (`replayEntitledForSite`), `replayTrace` (trace verbs), `ReplayOpsService` (admin aggregates).
+- Usage: retire `metering/replayUsage.ts`'s 50/month cap; ONE `replayUsage` over the wallet (`freeAllowance` with `replayFreeAllowanceOverride`, `creditBalance`, `canKeepNewRecording`, `chargeUnits`); `replay_recordings` meter in `meters.ts` + `usageMeter.replay_recordings` ×5.
+- `visitorDataErasers.ts` registry (prompts, journey, replay); `GuestPromptService.forgetVisitor` runs it. Retention: register the transactional tables and the R2 sweep; purge `replay_live` > 5 min.
+- Keys: `'bfr'` in `HashService.generateApiKey`; `replay:ingest`, `replay:read` in `TENANT_API_SCOPES`; security test: a key with only `replay:ingest` is refused by `GET /api/projects`.
+- Routes: `replayIngestRoutes.ts` (`/api/replay-ingest`, CORS public prefix), `replayRoutes.ts` (`/api/replay`), `replayProjectRoutes.ts` (`/api/projects/:projectId/replay`), `replayOpsRoutes.ts` (`/api/admin/replay-ops`), sharing handler factories. Remove `GET /api/admin/replay-visits`, `adminApi.replayVisits`, `ReplayVisitService`.
+- Tests: ingest (bad key, wrong origin, oversize, unkept chunk rolls up without a recording, kept chunk writes R2 + row, exhausted allowance stops new kept recordings only, retry never double-debits), sites, usage, erasers, routes (scope 403 across workspaces; `REPLAY_VIEWED`/`replay.session.viewed`), security.
+
+#### S2 — Recorder + CDN (finish)
+Loader (`data-site`, `data-release`, `data-variant`, `data-api`; DNT/GPC first; config fetch `credentials:'omit'`; sampling; consent wait; queued `BFReplay` stub; `window.__bfReplay` hand-off). Recorder: ids (`bf_*` on builderforce.ai, `bfr_*` elsewhere), release key, rrweb (`maskAllInputs: true` hard, `maskTextSelector`, `blockSelector: '[data-bf-block]'`, password/`cc-*` never, sampling, `recordCanvas`), 60 s ring buffer, keep on sample/trigger, marks + `active_ms`, `vital` marks at pagehide, `scroll` depth per page, error + `unhandledrejection` (120 chars, fingerprint), gzip via `CompressionStream`, self-disable on error. `window.BFReplay = { consent, event, tag, identify, keep, stop, version }` with name/length checks and email/card refusal. `npm.ts` → `startReplay({ site, release })` injecting the loader. Splice `infra/cdn/publish-cdn.job.yml` into `release.yml` and add `replay-sdk` to the npm matrix. Tests as listed for each behaviour.
+
+#### S3 — Dogfood + player
+`ReplayLoader.tsx` in `app/layout.tsx` (Builderforce workspace's site key from `NEXT_PUBLIC_REPLAY_SITE_KEY`; nothing rendered when unset; consent; `replay.recordSignedIn`; `replayExcluded`; identify on sign-in). `data-bf-block` / `data-bf-mask` on the sensitive components + test. Legal disclosure as a DRAFT legal version. `lib/replayApi.ts` (scope `{ siteId } | { projectId }`). `components/replay/RecordingsList`, `ReplayPlayer` (+ `useReplayPlayback`, `ReplayTimeline`, `ReplayEventList`, rrweb Replayer lazy-loaded), ticket-from-moment through the existing task flow, link-at-time. Recording kind's replay tab; issue kind's recordings tab.
+
+#### S4 — Heatmaps; S4b — MP4
+`ReplayHeatmapService` (`grid`, `elements` ranked by `rankHeatZones`, `scrollDepth`, `routes`) over `replay_heat_daily`; `HeatmapView` (+ `HeatmapOverlay`, `ElementTable`, `ReleaseCompare`, `HeatmapInsights` with `HEATMAP_INSIGHT_RULES`) as the Page stage's Heat lens and inside the `route` kind; background = the latest kept recording's first full snapshot rebuilt in a sandboxed iframe. S4b: `replayVideoExport` via the QA runner job `replay_export`, 10 units once, `unavailable` honestly when no runner.
+
+#### S4c — Analysis parity
+`replayFilterCompiler` (parameterised WHERE over `replay_recordings` arrays/columns; rollup target for exact counts), `replaySegments`, `filter-options`, `ReplayFilterBar` + `useReplayFilter` (URL-synced), `ReplayOverviewService` (rollups), `replaySmartEvents`, `ReplayFunnelService` + `domain/replay/funnelFold.ts` (batched, 20k ceiling, `truncated`), `replayFlow` (→ `buildVisitorFlowGraph`), `condenseTranscript` → `application/llm/condense.ts`, `domain/replay/visitDigest.ts`, `replaySummaries` (visit + segment, cited, cached, limited), `REPLAY_TOOLS` in `builtinMcpService.ts` (entitlement-gated, read-only), the `metric`, `issues`, `issue` (overview, recordings) and `funnel` (steps, clusters, flow) kinds, and the read-API docs.
+
+#### S4d — Method link
+Per §5.3, with tests per target and `ProofScoreboard.tsx`.
+
+#### S4e — Prescriptions
+Per §5.1: domain rules/impact/rank, `prescriptionSweep` (daily runner + "Find fixes now" hourly-limited), `prescriptionActions`, `prescriptionVerify`, `resolveKnownContacts`, the sites Worker A/B split (`check:sites-worker-graph`), `PrescriptionCard` + `PrescriptionActions` (registry-rendered), `DoNext`, `ScoreStrip`, the `fix` and `release` kinds and the issue kind's fix/history tabs, Brain `replay.prescriptions` / `replay.prescription_draft`.
+
+#### S4f — Page review
+Per §5.2: `pageSelection`, `pageCapture` + runner handlers (`page_capture`, `page_render_after`), `visionReview` + `acceptObserved`, `visualPatch`, `improvementPrompt`, `pageScore`, `BeforeAfter`, `SerpPreview`, the `route` kind, Fixes as the home's lead column.
+
+#### S5 — Live + Flow links
+`ReplayLiveService` (`active`, `byRoute` from `replay_live`, TTL 5 s; `tail`), `LiveView` (polling pauses while hidden), follow mode, `FlowView` detail strip via `onSelectNode` → recordings filtered by path, the `live` kind.
+
+#### S6 — Commerce + buyer path
+`capability` kind (`deliveries: ['entitlement']`) in `marketplaceListings.ts`; the `catalog_items` row; `sessionReplay` in `PlanLimits` + `PLAN_FEATURE_LABEL`; `heldCapabilityFeatures` + `CAPABILITY_FEATURES` in `evaluateFeatureEntitlement`; `replay_pack` settler in `purchaseRegistry.ts`; refund hook; `capabilityRoutes.ts` (`POST /api/capabilities/session-replay/packs/:packId/checkout`, `MANAGER` + `BILLING_MANAGE`, 503 when unconfigured; `GET /api/capabilities/:slug/state`); `replaySiteAdmin` (external + hosted sites, key minting, settings); `LISTING_LANDINGS`, `resumeIntent`, `/apps/[slug]` + `CAPABILITY_APPS`, `/apps/insights/setup` (`CapabilityInstall`, `CapabilityVerify`), the `sites` and `plan` kinds, the superadmin credit grant (audited).
+
+#### S7 — Buyer surfaces
+`injectBeforeBodyClose` extracted from `injectSiteBadge`; `siteReplayInjection.withReplayLoader` composed at both sites-Worker call sites (dependency-light); `CanvasInsightsSurface` replacing `CanvasSessionsSurface` (not entitled → listing link, no fetch; entitled + off → switch; else `InsightsHome` with `{ projectId }`, panel opposite the Brain via `useCounterBrainDockSide`); `useCapability(slug)`.
+
+#### S8 — Ship
+Correct release note 1211's body to what ships (a new migration updating the row); keep the blog; version bumps; ROADMAP/DONE moves; operator runbook (§11).
+
+### 9. Verification (Sonnet subagent)
+Never the full vitest suite. Per slice: `api` type-check + `npm run check`; `frontend` type-check + `npm run check`; `packages/interaction-contract` tests; `replay-sdk` type-check/test/build/size; the slice's named test files; `check:sites-worker-graph` for S4e/S7; `bash .github/scripts/cdn-ensure.sh --dry-run` and `cdn-publish.sh --dry-run` for S2.
+
+### 10. Audit checklist (planning session)
+Decisions obeyed; no duplicates (`function (FunnelStat|Stat)\b` → 0; `0\.97` only in `heatZones.ts`; one `condenseTranscript`; `ReplayFilter` only from the contract); layering (no `schema` imports in `replay*Routes.ts`/`capabilityRoutes.ts`; no `fetch(` in `components/replay|visitors|insights`); sizes; registries not branches; caching on every GET; i18n ×5 with real translations; tokens only; accessibility; dead code removed; tests assert behaviour. Per slice: S1 `bfr_` refused elsewhere, 202 always, no `activity_log` writes in the ingest service; S2 `maskAllInputs` hard-true, DNT/GPC before any network call, manifest uploaded last; S3 signed-in gate + consent, rrweb only dynamically imported in the frontend; S4c one compiler, parameterised; S4d one verdict sync; S4e human gates hold; S4f one runner, anchored observed findings; S6 one install path, one payment path, idempotent ledger; S7 graph guard green.
+
+
+---
+
+## ✅ RESOLVED 2026-11-17 — PRD 30: finished sections archived on consolidation (Prompt-driven marketing campaign)
+- **Verified 2026-11-17:** §4 C0 journey prompt — `frontend/src/lib/canvasAiSystemPrompt.ts:105-108` (CAMPAIGN block), inbox gated at `:116-128`; test `frontend/src/lib/creationCanvasAi.test.ts:165-175`; intake `frontend/src/lib/canvasMarketing.ts:178-188`, `packages/creation-canvas-contract/src/guidedCampaign.ts:57-65`
+- **Verified 2026-11-17:** §5 acceptance 1–6 — same test (run not table; guest board has no `canvas_add_inbox`; confirm-before-send; no invented ROI)
+- **Verified 2026-11-17:** §1–§3 verdict, checklist and evidence — narrative, superseded by C0
+
+### §1 Verdict · §2.1 What the founder actually needs · §2.3 What we will build instead · §3 Evidence
+Source `docs/specs/30-prd-guided-marketing-campaign.md` lines 9–39 and 50–96, verbatim (§2.2 lines 41–48 stay in the open PRD as working rules).
+
+### 1. Verdict
+
+A founder who says **“I want to run a marketing campaign”** is asking for a **run**: name the business, the vertical and the ICP, clear a short checklist, connect a channel, author copy, send only after confirm, then read **campaign ROI**.
+
+Builderforce already has the **engines**. It does not have that **journey**. Today the same prompt is answered with a campaign **portfolio table** (`marketing.campaigns.list` in the executive catalog) or a bare refusal on an anonymous canvas (measured: “connect my email” with tools the turn did not have — `CreationCanvas.tsx` ~8986, `canvasAiSystemPrompt.ts` anonymous block).
+
+| HubSpot-shaped ask | Builderforce primitive that already exists |
+|---|---|
+| Email / SMS blast | Growth `email_campaigns` + `campaign.create` (draft) / `campaign.send` (irreversible) · canvas kind `emailCampaign` · transports `platform` \| `mailbox` \| `sendgrid` |
+| Audience | canvas kind `audience` · Growth audiences · `marketing_campaign_sends` idempotent per (campaign, recipient) |
+| Brand | canvas kind `brandKit` · `BRAND_BOUND_KINDS` includes `emailCampaign` / `socialCampaign` / `emailTemplate` |
+| Social announce + publish | `canvas_connect_social_account` (guest-gated) · `canvas_create_social_campaign` · `canvas_publish_social_campaign` (confirm; public; cannot undo) |
+| Paid ads | `CanvasAdsPanel` / `adsApi` — created **paused** unless `launch`; spend is real money |
+| ICP | CRO `ri_icps` (`revenue.ts`, migration 0421) — **API only, no frontend** |
+| Delivery counters | campaign `sent` / `opened` / `clicked`; ads spend / impressions / clicks / conversions / CPC / CPA |
+| Campaign ROI | **gap** — `canvasRunComparison.ts` names it; opens/clicks are not ROI |
+
+**Do not clone HubSpot** (or the remaining BurnRateOS CMO tables: heatmaps, nurture streams, A/B). Those are a second product. This PRD **composes** Growth + canvas kinds + social/ads tools into one prompt-driven sequence. Cloud agents stay **draft/read only**. Anonymous canvases may **author**, never send.
+
+---
+
+### 2. Why HubSpot is the wrong product and the right checklist
+
+#### 2.1 What the founder actually needs (the checklist)
+
+1. **Intake** — business, vertical, who it is for (ICP).
+2. **Blockers on the board** — brandKit, consent-capable audience, offer/CTA, channel.
+3. **Connect** — mailbox (email) or social accounts or ads account. Never type a password into chat.
+4. **Copy** — `emailCampaign` / `emailTemplate` bound to brand; social via the SOCIAL tools (never a hand-authored `socialCampaign`).
+5. **Confirm then send / publish / launch** — drafting is the default; send is irreversible; ads spend real money.
+6. **Campaign ROI** — not opens, clicks, or follower counts. CAC / attributed revenue / ROAS against spend and pipeline. **Not v1.**
+
+
+#### 2.3 What we will build instead
+
+One founder journey, existing objects:
+
+```
+“I want to run a marketing campaign”
+        │
+        ├─ (1) INTAKE     audience + short document (business / vertical / ICP)
+        ├─ (2) CHECKLIST  brandKit, consent audience, offer/CTA, channel
+        ├─ (3) CONNECT    social: canvas_connect_social_account (every board)
+        │                 email:  canvas_add_inbox on a tenant board;
+        │                         else author locally and name the account gate
+        ├─ (4) COPY       emailCampaign + emailTemplate via canvas_add_object
+        │                 social via canvas_create_social_campaign (not add_object)
+        └─ (5) CONFIRM    send / publish / launch only on an explicit user act
+                          ROI is out of v1 — do not invent it
+```
+
+---
+
+### 3. Evidence — what is already in the repo
+
+#### 3.1 Why the prompt becomes a table
+
+`frontend/src/lib/promptUseCases.ts` — `marketing.campaigns.list` = “Create a campaign portfolio table from available email…”. `C_SUITE_CANVAS_OWNERS.executiveMarketing.objects` is `table, dashboard, report, chart, evaluation` — **no** `emailCampaign`. Closed catalog of 48 dotted ids. Adding a use-case is a coordinated bump (workflows, use-case array, i18n `promptUseCases.items`, round-trip tests). **Not this slice.** The canvas system prompt is the path the founder actually types on.
+
+#### 3.2 Canvas tools (do not name what the turn lacks)
+
+| Tool | Class | Notes |
+|---|---|---|
+| `canvas_add_object` | guest-safe | Legal for `emailCampaign`, `audience`, `brandKit`, `emailTemplate`. **Illegal** for `socialCampaign` / `socialPost` / `socialFeed` (fake ledger). |
+| `canvas_connect_social_account` | guest-gated | Opens the connect panel. Unconditional SOCIAL block already names it. |
+| `canvas_create_social_campaign` / `canvas_publish_social_campaign` | guest-gated | Draft vs public publish. Confirm before publish. |
+| `canvas_add_inbox` | **account-required** | Reads a connected mailbox onto the board. If none is connected, returns `Connect one in Growth → Mailboxes.` There is **no** `canvas_connect_mailbox` (OAuth lives on `CanvasEmailComposer` and Growth → Mailboxes). Naming this tool on an anonymous board is the 2026-08 “connect my email” failure. |
+
+Rule 3 (`api/scripts/check-canvas-tool-contract.mjs`): a `canvas_*` name that reaches the model must be a name the model can call. Inbox instructions live behind `persistence === 'server'`.
+
+#### 3.3 Agent / Growth HTTP
+
+`builtinMcpService.ts` `campaign.create` → `POST /api/growth/campaigns` **draft only**. Required `name`, `audienceId`. No `icpId` / vertical / business. `campaign.send` is irreversible and **off** the autonomous toolset. `cloudAgentToolset.ts` allows `campaign.list` + `campaign.create` only.
+
+#### 3.4 ICP and ROI
+
+- ICP: `ri_icps` in `revenue.ts` (~321), `revenueIntelligence.ts`, migration `0421_revenue_and_crm_domain.sql`. Frontend has **zero** `revenueIntelligence` / `icpFit` / `idealCustomer` call sites (copy only).
+- Delivery ≠ ROI. Ads insights are a 28-day ledger (`VISIBLE_ROWS=60`), not attributed campaign ROI.
+
+---
+
+
+### §4 C0 row
+Source `docs/specs/30-prd-guided-marketing-campaign.md` lines 100–102 (header + C0 row) and line 108, verbatim.
+
+| Track | What ships | Proof form | Kill condition |
+|---|---|---|---|
+| **C0 · Journey prompt** | Canvas system prompt walks intake → checklist → copy → confirm. Tenant boards name `canvas_add_inbox`. Anonymous boards still author `audience` / `brandKit` / `emailCampaign` and do not hear `canvas_add_inbox`. | smoke-test (`creationCanvasAi.test.ts` promptOf) | “Run a campaign” is still answered with a portfolio table, or a guest prompt names `canvas_add_inbox` |
+
+
+### §5 Acceptance (epic) · §6 Out of scope
+Source `docs/specs/30-prd-guided-marketing-campaign.md` lines 134–156, verbatim.
+
+### 5. Acceptance (epic)
+
+A founder can type **“I want to run a marketing campaign”** on the Creation Canvas and, without a HubSpot tab:
+
+1. Get a run (intake + checklist + copy objects), **not** a portfolio table.
+2. On a **guest** board: brandKit / audience / emailCampaign authored locally; one sentence that send needs an account; **no** `canvas_add_inbox` in the prompt.
+3. On a **tenant** board: `canvas_add_inbox` is named; a missing mailbox relays Growth → Mailboxes rather than a competitor.
+4. Social follows the existing SOCIAL block (connect / draft / confirm-publish).
+5. Nothing is sent, published, or spent unless the user confirmed in that turn.
+6. The model does not invent CAC / ROAS / attributed revenue.
+
+A reviewer can kill the epic if any of those six requires a new campaign app, a HubSpot import, autonomous send, or labelling opens as ROI.
+
+---
+
+### 6. Out of scope
+
+- HubSpot CRM, workflows, heatmaps, nurture, A/B as v1.
+- Cloud-agent send / publish / ads launch / logo generation.
+- Frontend ICP picker (C3).
+- Campaign ROI engine (C4).
+- Overwriting `marketing.campaigns.list` (the portfolio table remains valid for “show me my campaigns”).
+- The former doc 06 marketing-parity work (Jira/Linear/DORA/git/Slack).
+
+
+---
+
+## ✅ RESOLVED 2026-11-17 — Blog capability gap register: implemented slice archived on consolidation
+- **Verified 2026-11-17 (spot-checked):** direct-media-only meetings and selected-path reporting — `frontend/src/lib/useMediaRoom.ts` (+ `useMediaRoom.test.ts`), `frontend/src/components/meetings/MeetingRoom.tsx`
+- **Verified 2026-11-17 (spot-checked):** creative canvas deliverables with manifest — `frontend/src/lib/creationDeliverables.ts:197-302`
+- Remaining eight bullets (LoRA WGSL, Evermind train/evaluate, VS Code catch-up/checkpoints, migration rollback lineage, semantic cache L1→L2) taken from the register; not individually re-audited this pass.
+
+### Implemented in this slice
+Source `docs/specs/blog-capability-gap-register.md` lines 7–18, verbatim.
+
+### Implemented in this slice
+
+- `webgpu-lora-explained`, `local-first-ai-webgpu-in-the-browser`: LoRA rank/alpha now drive a real frozen-base adapter; local-only mode performs no training API calls; output is PEFT-shaped safetensors; the API validates LoRA A/B tensors and bounds before R2 persistence. On capable devices the adapter's merged forward, exact A/B gradient projection, gradient accumulation, and AdamW update run in WGSL; base-model loss/autograd remains on the CPU and is disclosed as a hybrid path.
+- `build-and-train-evermind-on-the-creation-canvas`, `brain-operates-the-creation-canvas`: an Evermind object's `train` action now opens the real adapter studio, links a completed workspace job/artifact to the object, and `evaluate` invokes the canonical evaluation endpoint instead of creating an unevaluated placeholder.
+- `real-time-collaboration-humans-and-agents`, `video-meetings-standups-and-shared-calendars`: meetings now expose a direct-media-only control. That mode requests STUN-only ICE configuration and tests prove every TURN URL is removed; relay-fallback explicitly discloses that encrypted media may traverse TURN.
+- `multiplayer-creation-canvas-web-vscode`, `vs-code-command-center-for-your-agentic-workforce`: the VS Code Canvas already uses the canonical object/command contract and durable Session endpoints; it now catches up from the same revisioned event log every two seconds so web edits arrive without manual refresh or a separate document format.
+- `build-and-train-evermind-on-the-creation-canvas`, `inside-evermind-architecture`: browser training now packages the merged base, adapter, and matching tokenizer into a validated `.evermind`; Canvas can publish it as a tenant model and invoke the same live runtime used by the gateway. Publication requires held-out text, runs the immutable package through an automatic quality gate before registration, and removes rejected uploads. The studio can re-point a stable callable slug to a prior tenant-owned package and returns a reversal token.
+- `creation-canvas-beyond-chat`, `forty-eight-live-objects-one-creation-canvas`: Image, Animation, Podcast, Comic, Game, CAD, 3D Model, Resume, and Template actions now generate, preview, and download real browser artifacts. Each action writes a transport-neutral deliverable manifest with MIME type, filename, provider, and validation evidence; formats without a renderer are not falsely reported as produced.
+- `multiplayer-creation-canvas-web-vscode`, `creation-canvas-templates-frames-branches-checkpoints`: VS Code now exposes native checkpoints, restore-as-new-revision, branches, per-object reviewed merges, and modal destructive deletion over the canonical graph.
+- `migrate-and-integrate-jira-monday-rally-gitlab-bitbucket`, `single-pane-board-connectors`: every committed migration stamps projects, tasks, and sync connections with its import-run lineage. Manager API, built-in MCP, and the migration wizard can atomically roll back only that run; imported projects containing later work are preserved.
+- `real-time-collaboration-humans-and-agents`, `video-meetings-standups-and-shared-calendars`: meeting and ceremony controls now report the selected runtime ICE candidate path. The UI distinguishes a verified direct path from an encrypted TURN-relay path instead of inferring privacy from configuration alone.
+- `semantic-response-cache`: the browser cache now connects its on-device L1 to the shared gateway L2. Server partitions include tenant, role, and authenticated principal, writes invalidate read-through state, and an explicit scoped purge path is tested.
+
+## ✅ RESOLVED 2026-11-17 — PRD 20: finished sections archived on consolidation (The Consolidated Data Model)
+- **Verified 2026-11-17:**
+  - §1 Where the 1,206 come from — `docs/specs/data-model/source-to-target.tsv` (1,130 rows)
+  - §2 The kernel — `api/src/infrastructure/database/schema/kernel.ts` (kernel tables declared; writer gap for `runs`/`work_items` stays open in the PRD)
+  - §2.1 The session test — `CREATION_OBJECT_KINDS`; presence hoist owned by PRD 21
+  - §2.2 Normal form — design rule, enforced via `check-signature-duplication.mjs` 0.55 gate
+  - §3 Domain roster — `api/src/infrastructure/database/schema/{hiring,people,investor,revenue,support,...}.ts`
+  - §3.1 The five flattening moves — method
+  - §3.3 adjudicated collapses (all but `sales_campaigns`) — tables absent from `schema/*.ts`; retractions/retirements via migrations 0442, 1131, 1160
+  - §4 checks exist and are wired — `api/package.json:29-36,61`
+  - §5 Step 0 — `api/scripts/lib/ratchet.mjs`, seven `check-*.mjs`
+  - §5 Step 1 — decisions recorded
+  - §5 Step 2 — `api/scripts/gen-consolidation-migration.mjs`, `lib/ddlFromDrizzle.mjs`, migrations 0418–0433; 357/358 keep targets declared
+  - §5 Step 5 access layer — `api/src/application/domains/{entityDefinition,EntityService}.ts`, `presentation/routes/domainRoutes.ts`, `frontend/src/components/kernel/EntityBrowser.tsx`
+  - §5 Step 6 kernel half — `api/src/application/kernel/{ObjectRegistry,DomainService}.ts`, `presentation/routes/objectRoutes.ts`, mounted `api/src/index.ts:752,1341`
+  - §5 Step 7 components — `frontend/src/components/kernel/*`, `frontend/src/app/seat/[domain]/page.tsx` (`RosterNav` later retired by PRD 21 §11.4.2)
+  - §6.1 / §6.2 layer ownership and SOLID — standing rules, `check-layering.mjs`
+  - §7 / §7.1 experience bullets — `classifyShell` in `frontend/src/lib/shellRouting.ts`; recents/roster owned by PRD 21
+  - §8 Operator decisions — settled 2026-08-08
+  - §9 Method and its limits — narrative
+
+Archived source ranges of `docs/specs/20-prd-consolidated-data-model.md` word for word:
+
+### Header and §0–§3.3 (lines 1–423) <!-- verbatim -->
+
+## PRD 20 — The Consolidated Data Model, the API on it, and the Experience on that
+
+> **The "Experience on that" is now owned by
+> [PRD 21 — The Unified Experience](./21-prd-unified-experience.md).** This PRD keeps the data
+> model, the kernel and the fifteen domains; PRD 21 decides where any of it appears and to whom.
+> The bridge is §3's **owner** column: each domain's owner becomes a **teammate in the canvas
+> footer**, and each domain becomes a **panel over the mounted board** — never a page. A domain
+> owned by `platform` has no teammate, which is the test for who belongs in the footer, taken from
+> the data rather than from taste. See PRD 21 §4.
+
+> **Status:** Steps 0–3, step 5's access layer, and the kernel halves of 6–7 are built and green.
+> The target schema exists — `check-model-coverage.mjs` reports **360 / 360 (100%)** — the kernel is
+> exposed once at `/api/objects`, the fifteen domain route groups are live at `/api/<domain>`, and
+> the fifteen domain surfaces render from ONE component at `/seat/<domain>`.
+> **Every one of the 333 consolidated tables now has a code path**: `check-table-adoption.mjs` went
+> 237 cold → **0 unreachable**, which is a hard floor rather than a baseline. What it still counts is
+> the weaker tier — **198 reachable ONLY through the generic entity layer** (135 have a feature path),
+> shrink-only, and the meter for steps 6–7. One entity layer
+> (`api/src/application/domains/`) serves all of them — reflected from the Drizzle declaration,
+> tenant-scoped, redacted, cached, and rendered by ONE `EntityBrowser` on every seat.
+> What remains is the data and the product behaviour: Step 4 (converting BurnRateOS's 404 Prisma
+> models into the target shape) and Step 5 (moving LIVE rows out of the 96 legacy tables shape-lint
+> still names, and the 129 application folders / 196 route files / 170 pages onto the new boundary
+> — re-measured 2026-08-19; folders and pages have grown, which is the finding, not a typo).
+> Those are behaviour moves against a running system, not schema decisions.
+> The six validation checks were written before the data moved, which is the only time a check can
+> be written honestly.
+> **Governs:** the B0 schema conversion in [PRD 19](./19-prd-burnrateos-consolidation.md) and the
+> T0 foundation in [PRD 18](./18-prd-hired-video-port.md). Both are blocked on this document, not
+> the other way round: a codemod that runs before the target shape is decided has to run twice.
+> **Evidence:** [`data-model/source-to-target.tsv`](./data-model/source-to-target.tsv) — all 1,130
+> distinct source tables, each mapped to its target and the move that takes it there. Zero
+> unaccounted.
+>
+> ### **1,206 declarations → 1,130 distinct names → 385 tables**
+>
+> **25 kernel + 360 domain**, across 15 domains, one owner each. The file above is the proof:
+> 566 absorbed by a kernel primitive, 168 merged into a sibling, 24 into the canvas, 9 flattened,
+> and **363 distinct kept targets** — which is the domain count arrived at independently.
+> Of the 388, **371 are measured and reproducible**; the last 17 are the eleven named judgements
+> in §3.3, each rejectable on its own.
+>
+> *The domain figure was 362 until the `marketing_sessions` adjudication was retracted (§3.3) — a
+> pre-tenant lead row cannot become a `metric_facts` row, which is `tenant_id NOT NULL` and derived.
+> That is what a rejectable judgement looks like when it is rejected: the total moves by exactly one.*
+
+---
+
+### 0 · The rule
+
+**A feature may add domain tables. It may not add another instance of an existing shape.**
+
+Needing comments does not earn a comments table; it earns a row kind. Needing a balance does not
+earn a balance table; it earns a denomination. Needing an integration does not earn a connections
+table; it earns a manifest row.
+
+This is not imported from somebody else's architecture. The platform has already made this call
+three times and won each time:
+
+| Precedent | What it did |
+|---|---|
+| Migration **0295** | Dropped `audit_events`, made `activity_log` the single audit store. |
+| Migration **0410** | Connector platform: vendors are **manifest data**, not DDL. Adding a vendor adds no tables. |
+| `CREATION_OBJECT_KINDS` | **74 heterogeneous artifact kinds in one table** — document, video, game, cad, resume, slides, terminal. |
+
+Writing the rule down is what stops the count climbing back after the merge.
+
+---
+
+### 1 · Where the 1,206 come from
+
+Parsed from source: Builderforce **374** `pgTable` declarations, hired.video **428**, BurnRateOS
+**404** Prisma models. **1,206 declarations, 1,130 distinct names.**
+
+Exact name collisions across products are only **79**, so name matching finds almost none of the
+duplication. The duplication is **shape repetition**, and the column distribution proves it is not
+a schema of trivial tables:
+
+| Payload columns (boilerplate excluded) | Tables |
+|---|---|
+| 1–3 | 78 |
+| 4–6 | 340 |
+| 7–10 | 419 |
+| 11–20 | 257 |
+| 21+ | 36 |
+
+---
+
+### 2 · The kernel — 25 tables, owned by no domain
+
+Every domain uses these. **No domain may fork one.** They absorb **564** source tables.
+
+| Primitive | Absorbs | What it replaces |
+|---|---|---|
+| `object` | — | The registry every addressable entity registers in, so polymorphic references keep a real foreign key. **New table; it is what makes the rest safe.** |
+| `activity_log` | 70 | Every subsystem's own event / log / history / audit stream. Partitioned by month. |
+| `ledger_entry` | 59 | Points, tokens, AI credits, enrichment credits, campaign dollars, phone balance, partner and seller balances, payouts, commissions. Denomination is a column. |
+| `connection` | 58 | A table per vendor. Vendors become manifest rows. |
+| `membership` | 43 | Who is on this thing — chats, boards, teams, rotations, cohorts, ceremonies. |
+| `annotation` | 33 | Comments, notes, tags, likes, votes, ratings. |
+| `setting` | 31 | Per-feature settings singletons. Typed user data stays typed columns on its owner. |
+| `run` | 30 | Jobs, executions, attempts, steps. |
+| `artifact` | 30 | Per-media-type tables for one thing: a made object with a kind. |
+| `metric_fact` | 28 | Derived numbers that were given their own DDL. |
+| `work_item` | 25 | Task, epic, story, subtask, objective, key result, initiative, milestone. |
+| `share_link` | 24 | Tokens that grant access to one object. One expiry policy, one revocation path. |
+| `catalog_item` | 22 | Templates, presets, packs, listings, offerings. |
+| `party_role` | 19 | A profile table per role a person or company can hold. |
+| `revision` | 18 | Version history per versionable thing. |
+| `relation` | 17 | Mappings, dependencies, associations, overrides. Typed edges. |
+| `delivery` | 16 | Outbound sends, dispatches, notifications, alerts, webhook attempts. |
+| `credential` | 13 | Secrets per integration. One encrypted store. |
+| `response` | 13 | An answer to a question, whatever asked it. |
+| `message` | 12 | A message in a thread, whatever the channel. |
+| `question_set` | 12 | Surveys, pulses, check-ins, scorecards, screening forms. Cadence is config. |
+| `invitation` | 9 | Invite somebody to something. |
+| `sync_state` | 7 | Staging and cursor state per importer. |
+| `snapshot` | 6 | Point-in-time copies, addressed by object. |
+| `thread` | 5 | A conversation, whatever it is about. |
+| `rendition` | 4 | Derived media off one artifact: recordings, captions, transcripts, thumbnails, exports. |
+
+#### 2.1 · The session test
+
+**If a thing is authored content, that people can be present in, and can be shared — it is not a
+feature. It is the canvas.** An idea is not an entity: it is conversational history plus the files
+it generated.
+
+**75 tables** across the three schemas sit in exactly that shape and need **zero new tables**:
+13 authoring containers · **15 per-feature meeting tables** · 8 attendee/invitee · 6 transcript /
+recording · 16 share-and-view (six independently reinvented view-duration tracking) · 18
+thread/message.
+
+Verified, not assumed: every container kind — document, note, slides, report, dashboard, diagram,
+drawing, knowledge, pitch, file, chat, standup, frame, comment — is already a value in
+`CREATION_OBJECT_KINDS`; and `useMediaRoom` is keyed by an arbitrary `roomKey`, so any object can
+**be** a room without **owning** a room table.
+
+**This makes the navigation decision a schema decision.** `scratch_pad_meetings` exists only
+because the pad owned its own meeting. Hoisting presence into the shell (navigation design
+Phase 4) is also what deletes 15 meeting, 8 attendee and 6 transcript tables. One hoist, paid for
+once.
+
+#### 2.2 · Normal form — BCNF, deliberately no further
+
+**None of this is a normalization exercise.** Normal forms describe redundancy *within* a table,
+and every one of the 1,206 tables is individually fine. You can have 1,206 flawlessly-3NF tables
+and still have written `comments` forty times — no normal form catches that, which is why the
+duplication check in §4 is column-signature similarity *between* tables.
+
+**4NF/5NF decomposition is part of how the sprawl happened.** Splitting a table because two
+independent multi-valued facts coexist yields two tables that are always joined back together —
+formally purer, operationally a second thing to keep in step. The five per-company facet tables
+are that mistake wearing a respectable name.
+
+| Move | Effect on normal form | Bound |
+|---|---|---|
+| Derived → `metric_fact` | **Stricter.** A stored derived value depends on other rows, not on the key. | None needed. |
+| Polymorphic `annotation` / `membership` / `share_link` | **Stricter.** Untouched by normal form; the issue is declarative referential integrity, which a naked `(kind, id)` destroys. | The `object` registry restores a real FK. Without it the move is indefensible; with it the design is *more* relationally sound than what it replaces. |
+| Ledger with a denomination column | **Neutral.** Clean BCNF event table. | None needed. |
+| Facet → columns on the parent | **Neutral.** A 1:1 vertical split is already 5NF; recombining stays 5NF. Never a normalization decision — a filing one. | Wide tables. `company` already carries 66 columns. |
+| Kind-split → one table + discriminator | **Looser.** Single-table inheritance: subtype columns depend on `kind`, not on the key alone. A real departure from BCNF. | Collapse only when the shared column set is the *majority* of both tables (what the 0.55 threshold enforces). Subtype payload goes in a typed `attrs` JSONB or a small satellite table. **Never null-pad the union.** |
+| Thin child list → array / JSONB | **Looser.** Non-atomic values break 1NF. The only outright departure. | Only when the list is never filtered, joined or aggregated independently. 26 tables; the first move to reverse if it bites. |
+
+**Target, plainly:** domain tables in BCNF; kernel tables in BCNF except where a discriminator is
+the entire point, and there the subtype payload is explicitly typed rather than smeared into
+nullable columns. No 4NF or 5NF decomposition.
+
+---
+
+### 3 · The domains — documented as the roster
+
+**One seat owns one bounded context.** The navigation design argues the team panel *is* the
+navigation because ownership already exists in the data; this section is that claim in schema
+form. The roster is the module list.
+
+**Holding rule: one table, one domain.** Cross-domain reads go through the kernel or a named view,
+never a direct join into another domain's tables. That is what keeps 15 modules independently
+reviewable, and what gives the next feature an obvious place to put its data.
+
+| Domain | Owner | Source | After the kernel | Last pass | **Final** |
+|---|---|---|---|---|---|
+| Growth & marketing | CMO | 142 | 65 | −6 | **59** |
+| Delivery & work | Manager | 123 | 55 | −1 | **54** |
+| Agents & runtime | platform | 75 | 41 | −1 | **40** |
+| Hiring | Recruiter | 79 | 30 | −3 | **27** |
+| Finance | CFO | 70 | 33 | −7 | **26** |
+| Revenue & CRM | CRO | 48 | 27 | −3 | **24** |
+| Commerce | platform | 58 | 24 | −0 | **24** |
+| Identity & tenancy | platform | 123 | 26 | −3 | **23** |
+| People & HR | HR | 74 | 25 | −2 | **23** |
+| Platform & observability | platform | 137 | 16 | −0 | **16** |
+| Governance & security | Security | 27 | 15 | −0 | **15** |
+| Investor & portfolio | CEO | 54 | 16 | −2 | **14** |
+| Support & knowledge | Support | 22 | 9 | −0 | **9** |
+| Canvas & ideas | Brain | 57 | 8 | −0 | **8** |
+| Integrations | platform | 41 | 1 | −0 | **1** |
+| **Domain total** | | **1130** | **391** | **−28** | **363** |
+| **Kernel** | platform | | | | **25** |
+| **TOTAL** | | **1130** | | | **388** |
+
+**Canvas at 8 and Integrations at 1 are the proof, not a gap.** Those two domains are almost
+entirely kernel — the canvas *is* `artifact` + `thread` + `message` + `rendition` + `share_link`;
+integrations *are* `connection` + `credential` + `delivery` + `sync_state`. A domain whose tables
+all became kernel was generalised correctly.
+
+**Redundant by shape, complementary by domain.** Counting which product each *surviving* table
+came from, each dominates precisely what it was built for: hired.video owns hiring (21 of 27) and
+people (18 of 23); BurnRateOS owns finance (16 of 26) and investor (10 of 14); Builderforce owns
+delivery (37 of 54), agents (30 of 40) and governance (13 of 15). Three products overlapped on
+*shape* almost completely and on *capability* barely at all — which is the case for merging them
+rather than running them side by side.
+
+#### 3.1 · The five flattening moves
+
+Applied globally in the passes above; what remains per domain is listed in §3.2.
+
+| Move | Test | Becomes |
+|---|---|---|
+| **Facet** | One row per parent, split by which screen reads it | Columns on the parent |
+| **Kind-split** | Same root word, differing by a qualifier, overlapping columns | One table + a `kind` |
+| **Template / instance** | An `X_template` beside an `X` with the same columns | One row + `is_template` |
+| **Derived** | A computed number with its own DDL | `metric_fact` + a scheduled rollup |
+| **Thin** | ≤3 payload columns | A column, an array, or a JSONB key |
+| **Lookup** | The table *is* an enum | An enum + a CHECK constraint |
+
+<!-- GENERATED — regenerate with scratchpad/gendoc.js against the schemas -->
+#### 3.2 · Per-domain detail
+
+#### Growth & marketing — owned by the **CMO**
+
+Root entity `campaign`. **142 source tables in → 65 out** (65 absorbed by the kernel, 2 by the canvas, 10 merged into a sibling). Contributed by Builderforce 13 · hired.video 23 · BurnRateOS 29.
+
+Flattening still to apply:
+
+- **Derived → `metric_fact`** (2): `channel_performance`, `site_traffic_daily`
+
+#### Delivery & work — owned by the **Manager**
+
+Root entity `work_item`. **123 source tables in → 55 out** (48 absorbed by the kernel, 2 by the canvas, 18 merged into a sibling). Contributed by Builderforce 37 · hired.video 3 · BurnRateOS 15.
+
+_No flattening left: every table here is a distinct noun with its own columns._
+
+#### Agents & runtime — owned by **the platform**
+
+Root entity `agent`. **75 source tables in → 41 out** (28 absorbed by the kernel, 1 by the canvas, 5 merged into a sibling). Contributed by Builderforce 31 · hired.video 3 · BurnRateOS 7.
+
+Flattening still to apply:
+
+- **Thin → a column, array or JSONB key** (1): `agent_host_projects`
+
+#### Finance — owned by the **CFO**
+
+Root entity `ledger_entry`. **70 source tables in → 33 out** (31 absorbed by the kernel, 1 by the canvas, 5 merged into a sibling). Contributed by Builderforce 7 · hired.video 5 · BurnRateOS 21.
+
+Flattening still to apply:
+
+- **Kind-split → one `plans` with a kind**: `billing_plans` = `pricing_plans` = `subscription_plans` — shared: name, description, currency
+- **Derived → `metric_fact`** (3): `arr_projections`, `quota_attainment`, `rd_financials_quarterly`
+
+#### Hiring — owned by the **Recruiter**
+
+Root entity `job_posting`. **79 source tables in → 30 out** (38 absorbed by the kernel, 1 by the canvas, 10 merged into a sibling). Contributed by Builderforce 4 · hired.video 24 · BurnRateOS 2.
+
+Flattening still to apply:
+
+- **Lookup → an enum + CHECK** (1): `assessment_dimension_norms`
+
+#### Revenue & CRM — owned by the **CRO**
+
+Root entity `deal`. **48 source tables in → 27 out** (15 absorbed by the kernel, 0 by the canvas, 6 merged into a sibling). Contributed by Builderforce 6 · hired.video 9 · BurnRateOS 12.
+
+Flattening still to apply:
+
+- **Kind-split → one `contacts` with a kind**: `business_contacts` = `sales_contacts` — shared: name, company, email
+- **Kind-split → one `searches` with a kind**: `saved_contact_searches` = `saved_searches` — shared: user_id, name, filters
+
+#### Identity & tenancy — owned by **the platform**
+
+Root entity `party`. **123 source tables in → 26 out** (56 absorbed by the kernel, 3 by the canvas, 38 merged into a sibling). Contributed by Builderforce 8 · hired.video 10 · BurnRateOS 8.
+
+Flattening still to apply:
+
+- **Facet → columns on `party`** (1): `company_crm`
+- **Kind-split → one `sessions` with a kind**: `auth_user_sessions` = `extension_sessions` = `sessions` — shared: user_id, user_agent, ip_address
+- **Thin → a column, array or JSONB key** (1): `team_projects`
+
+#### People & HR — owned by the **HR**
+
+Root entity `employment`. **74 source tables in → 25 out** (38 absorbed by the kernel, 1 by the canvas, 10 merged into a sibling). Contributed by Builderforce 1 · hired.video 20 · BurnRateOS 4.
+
+Flattening still to apply:
+
+- **Kind-split → one `enrollments` with a kind**: `course_enrollments` = `learning_path_enrollments` — shared: user_id, enrolled_at, started_at, completed_at
+
+#### Commerce — owned by **the platform**
+
+Root entity `listing`. **58 source tables in → 24 out** (32 absorbed by the kernel, 0 by the canvas, 2 merged into a sibling). Contributed by Builderforce 4 · hired.video 10 · BurnRateOS 10.
+
+_No flattening left: every table here is a distinct noun with its own columns._
+
+#### Investor & portfolio — owned by the **CEO**
+
+Root entity `company`. **54 source tables in → 16 out** (21 absorbed by the kernel, 7 by the canvas, 10 merged into a sibling). Contributed by Builderforce 3 · hired.video 1 · BurnRateOS 12.
+
+Flattening still to apply:
+
+- **Kind-split → one `scenarios` with a kind**: `mvp_scenarios` = `validation_scenarios` — shared: name, description, status
+
+#### Platform & observability — owned by **the platform**
+
+Root entity `signal`. **137 source tables in → 16 out** (92 absorbed by the kernel, 3 by the canvas, 26 merged into a sibling). Contributed by Builderforce 7 · hired.video 3 · BurnRateOS 6.
+
+_No flattening left: every table here is a distinct noun with its own columns._
+
+#### Governance & security — owned by the **Security**
+
+Root entity `control`. **27 source tables in → 15 out** (9 absorbed by the kernel, 1 by the canvas, 2 merged into a sibling). Contributed by Builderforce 13 · hired.video 2 · BurnRateOS 0.
+
+_No flattening left: every table here is a distinct noun with its own columns._
+
+#### Support & knowledge — owned by the **Support**
+
+Root entity `ticket`. **22 source tables in → 9 out** (12 absorbed by the kernel, 1 by the canvas, 0 merged into a sibling). Contributed by Builderforce 6 · hired.video 0 · BurnRateOS 3.
+
+_No flattening left: every table here is a distinct noun with its own columns._
+
+#### Canvas & ideas — owned by the **Brain**
+
+Root entity `creation_session`. **57 source tables in → 8 out** (46 absorbed by the kernel, 1 by the canvas, 2 merged into a sibling). Contributed by Builderforce 6 · hired.video 2 · BurnRateOS 0.
+
+_No flattening left: every table here is a distinct noun with its own columns._
+
+#### Integrations — owned by **the platform**
+
+Root entity `connection`. **41 source tables in → 1 out** (33 absorbed by the kernel, 0 by the canvas, 7 merged into a sibling). Contributed by Builderforce 1 · hired.video 0 · BurnRateOS 0.
+
+_No flattening left: every table here is a distinct noun with its own columns._
+
+---
+
+### 3.3 · The last pass — 391 → 363, and where the machine stops
+
+The five moves ran globally before the domains were drawn; §3.2 lists what each domain had left.
+Running them again over the 391 survivors, then re-running the duplication test, gives three
+passes with very different standing. **Read the third one differently from the first two.**
+
+| Pass | What it is | Removed |
+|---|---|---|
+| **A — residual flattening** | The five moves re-applied per domain, with kind-split gated at the 0.55 shared-column rule | **−9** |
+| **B — cross-cutting noun collapse** | Same head noun, qualifier is a value of one dimension, mean column kinship ≥ 0.25 | **−2** |
+| **C — adjudicated** | Same noun, *no* column kinship — because two teams wrote the same fact in different shapes | **−17** |
+
+Passes A and B are reproducible: re-run the scripts and you get the same 11 tables.
+**Pass C is eleven named judgements**, each with the evidence that justifies it. Reject any line
+and the total moves by exactly its count — and one has since been rejected, below.
+
+| Collapses into | Tables removed | Why the machine could not see it |
+|---|---|---|
+| `campaign` (+ channel) | `marketing_push_campaigns`, `ri_campaigns`, `sales_campaigns` | Each is a named send to an audience with a status and reply counters; three teams named the counters differently |
+| `enrollment` (sequence) | `outplacement_enrollments`, `nurture_flow_enrollments`, `recruiter_outreach_enrollments` | All four are person + sequence + status + `current_step` + `next_send_at` |
+| `scenario` (+ kind) | `forecast_scenarios`, `what_if_scenarios`, `validation_scenarios` | Assumptions in, projected numbers out. `break_even_scenarios` survives as the root; its cost columns become assumption keys |
+| `brand_kit` | `marketing_brand_kits` | One stores colour and font as columns, the other as a `colors` JSON — the same fact in two shapes, so column overlap reads as 0.11 |
+| `board` | `kanban_boards` | Both are a named lane container scoped to a team or project. **Zero** column overlap: Builderforce stores policy, BurnRateOS stores dates and budget |
+| `deal` (+ kind) | `recruiter_deals` | Both carry `pipeline_id`, a stage, an owner and a fee — a placement fee is a deal |
+| `plan` | `pricing_plans` | Third member of `billing_plans` = `subscription_plans`; missed because `pricing` is also a head noun elsewhere |
+| `enrollment` (learning) | `learning_path_enrollments` | Its columns are a strict subset of `course_enrollments` |
+| kernel `work_item` | `features` | `reach`, `impact`, `confidence`, `effort`, `rice_score` — a scored idea is a work item of kind `feature` |
+| kernel `setting` | `account_features` | `account_id` + `feature_id` + `is_enabled` + consent fields is an entitlement grant |
+| kernel `relation` | `learning_path_courses` | `path_id` + `course_id` + `display_order` + `is_required` is an ordered join row |
+
+**Retracted — `marketing_sessions` → kernel `metric_fact`.** This was the twelfth judgement and it
+was wrong, on two counts the columns above do not show. `metric_facts` declares `tenant_id NOT NULL`,
+and a marketing session is written **before an account exists** — there is no tenant to scope it to.
+And the row is an *entity*, not a derived number: it carries a conversion pointer to `users` and a
+per-UTC-day guest allowance counter that is authoritative rather than computed, while `metric_facts`
+is by its own docstring "a derived number that was given its own DDL". What legitimately becomes a
+`metric_facts` row is the **daily aggregate over** these rows, not the rows. The map now files it
+`keep`, which is why the domain total read 363 rather than 362 at the time. The same argument covers
+`marketing_session_prompts` (migration 0434), which hangs off the same pre-tenant `visitor_id`.
+
+**Retired after the fact — `team_memory` → `agent_memory`.** The cross-host memory feed was folded
+into the governed memory store by migration 0442 (every row became a tenant-scoped fact keyed
+`team:<host>:<run>`), `/api/teams/memory` has read and written `agent_memory` ever since, and 1131
+dropped the empty table. Its map row now reads `merged`, which brings the domain total back to 362
+and the schema to 387.
+
+**Retired after the fact — `kanban_columns` → `swimlanes`, `release_plans` → `product_releases`.**
+PRD 19 §9.7 had already classified both as `transform`: a duplicate of a richer Builderforce owner
+the platform already feature-reaches. The 2026-09-12 operator decision to UNIFY the spec PM spine
+(docs 01/04/05) onto `projects` / `tasks` / `specs` made that final. Migration 1160 folds every row
+(a lane keyed `(board_id, key)`; a release, with its registered kernel `objects` re-pointed so
+annotations survive), gives `swimlanes` the two KanbanColumn attributes it lacked (`wip_limit`,
+`color_token`) as columns, and drops both tables. The same migration turns the delivery tables'
+`work_item_ref` / `sprint_ref` / `project_ref` strings into typed foreign keys on `tasks` /
+`sprints` / `projects`. Their map rows now read `merged`, which brings the domain total to **360**
+and the schema to **385**.
+
+**The three tables the machine kept, and should have.** `promo_projects` is a client creative
+*order*, not a project. `modules` is a permission module, `course_modules` a chapter.
+`mvp_scenarios` carries pricing model, team size and timeline constraint — a business-model
+variant, not a financial projection. Same word, different noun, in all three.
+
+#### The duplication test now passes on its own output
+
+Re-running the IDF-weighted signature check across all 382 survivors of passes A and B:
+
+| Band | Pairs |
+|---|---|
+| ≥ 0.55 (the CI gate) | **0** |
+| 0.35 – 0.55 | 0 |
+| 0.30 – 0.35 | 4 |
+
+The four are `marketing_leads` ~ `sales_leads` (already merged in pass B),
+`follow_up_enrollments` ~ `recruiter_outreach_enrollments` (merged in pass C),
+`landing_pages` ~ `website_pages`, and one false positive
+(`job_applications` ~ `queue_job_to_resume`, matching on the word *job*).
+
+**A clean signature test is not proof of a clean model, and that is the finding.** The same run
+that returned zero pairs above 0.55 also found **56 head nouns living in two or more domains**.
+The signature test finds tables that *look* alike; it is blind to tables that *mean* alike —
+`boards` and `kanban_boards` share not one payload column. That is the ceiling stated in §9,
+measured: the machine gets to 405 and the last 17 need a person who knows the domain.
+
+
+Lines 1–46 (title, PRD 21 hand-off note, status block, headline counts), 47–67 (§0, also kept as a working rule in the PRD), 68–86 (§1), 87–120 (§2), 122–141 (§2.1), 143–166 (§2.2), 170–211 (§3 roster), 213–224 (§3.1), 226–337 (§3.2 generated per-domain detail — open residuals stay in the PRD), 341–422 (§3.3 incl. retractions, retirements, the three kept tables, duplication-test result).
+
+### §4 Validation (lines 426–442) <!-- verbatim -->
+
+### 4 · Validation — the model is checkable before a line of application code
+
+The model is not "validated" by review. It is validated by five machine checks that run in CI
+against the target schema, plus one coverage proof.
+
+| Check | Invariant | Fails when |
+|---|---|---|
+| **Coverage** | Every one of the 1,130 source tables maps to a target | A capability was dropped silently. Current state: 1,130 mapped, **0 unaccounted**, and the 360 distinct `keep` targets reconcile with the domain roster row-for-row. |
+| **Tenancy** | Every table carries `tenant_id NOT NULL` | 162 BurnRateOS models carry `company_id` and no tenant column; every gate in the platform runs on tenant. |
+| **Referential integrity** | Every polymorphic `(kind, id)` references `object` | A generic table can orphan rows the old per-entity table could not. |
+| **Shape lint** | No table outside the kernel implements a kernel shape | Someone adds `X_comments`. This is the rule from §0 as a test. |
+| **Domain boundary** | No query joins across two domains without going through the kernel or a named view | The 15 modules stop being independently reviewable. |
+| **Signature duplication** | No two tables exceed 0.55 IDF-weighted column-signature similarity | The next `boosts` / `company_boosts` / `job_boosts` gets caught at review, not two years later. |
+
+The last one is the important one: **the analysis that produced this document becomes a test.**
+It found 35 duplicate clusters, 23 of them inside a single codebase. Running it in CI is what
+stops the 24th.
+
+Archive the narrative; the checks table is kept in the PRD as the gate list.
+
+### §5 Steps 0, 1, 2 (lines 451–534) <!-- verbatim -->
+
+#### Step 0 · Six checks landed as ratchets against today's schema — ✅ **DONE 2026-08-08**
+
+The checks in §4 did not need the target schema to exist. Run against the current
+`api/src/infrastructure/database/schema/*.ts` (374 `pgTable` declarations across 16 modules) each
+reports a **baseline** that can only shrink. That is the existing repo pattern — `api/package.json`
+already chained eleven such guards before `vitest run`; it now chains seventeen.
+
+All six ride the existing `scripts/lib/drizzleSchema.mjs` parser (**no new parser was written**),
+and share one new `scripts/lib/ratchet.mjs` for the baseline file format, the `--update` flag and
+stale-entry reporting — extracted from the pattern `check-tenant-scope.mjs` and
+`check-migrations.mjs` already used by hand.
+
+| Script in `api/scripts/` | **Baseline it printed** |
+|---|---|
+| `check-signature-duplication.mjs` | **8** duplicate-shape clusters at ≥0.55 |
+| `check-shape-lint.mjs` | **93** table names matching a kernel shape |
+| `check-tenant-column.mjs` | **72** tables with no tenant-scoping column |
+| `check-polymorphic-fk.mjs` | **3** `(kind, id)` pairs with no `objects` registry |
+| `check-domain-boundary.mjs` | **82** cross-module schema imports, including cycles |
+| `check-model-coverage.mjs` | 1,130 mapped · 0 unaccounted · 362 keeps + 25 kernel = 387 (360 + 25 = 385 since migration 1160) |
+
+**The eight duplicate clusters inside this repo today, before any merge:**
+
+`drive_connections` = `mailbox_connections` · `portfolios` = `initiatives` ·
+`tenant_custom_roles` = `platform_modules` · `tool_runs` = `marketing_tool_runs` ·
+`tenant_manager_defaults` = `project_manager_configs` ·
+`tenant_skill_assignments` = `agent_host_skill_assignments` ·
+`import_type_mappings` = `board_type_mappings` ·
+`kanban_template_lane_requirements` = `swimlane_requirements`
+
+Three of those are already the target design (`drive` + `mailbox` fold into kernel `connection`;
+`portfolios` / `initiatives` into `work_item`), which means **this guard would have prevented them
+being written at all.** That is the argument for landing it before the merge rather than after.
+
+`check-model-coverage.mjs` is deliberately more than a parse check: it independently recounts the
+number the whole PRD rests on, and fails if the map and §3 stop agreeing. It also reports how much
+of the target schema exists (**140 / 363 today**) and becomes a hard gate at 100%.
+
+**Exit criteria:** met — `cd api && npm test` green with all six wired.
+
+#### Step 1 · Settle the model — ✅ **SETTLED 2026-08-08**
+
+| # | Decision | Taken |
+|---|---|---|
+| 1 | Which kernel primitives are accepted | **All, minus one.** `rendition` was written and then folded into `artifact`: `check-signature-duplication.mjs` scored the pair at **0.60**, over §2.2's own 0.55 gate, on its first run. A rendition is an artifact with a `derived_from_id`. The kernel is **25** because the guard said so, not because the number was chosen. |
+| 2 | Which product wins each contested area | Per [PRD 19 §2](./19-prd-burnrateos-consolidation.md), unchanged. |
+| 3 | `account_*` or `tenant_*` | **`tenant_*`** — settled by precedent, not preference: every gate in the platform already runs on tenant, and `check-tenant-column.mjs` scopes on `tenant_id`. |
+| 4 | Database tier | Not a schema decision. The 388 land as ~250 additive new tables. |
+| 5 | The twelve adjudications in §3.3 | **Accepted**, and each is visible in the schema it produced — the `kind` column on `email_campaigns`, `deals`, `break_even_scenarios` and `follow_up_enrollments`. |
+
+#### Step 2 · Write the target schema, kernel first, then domains ascending — ✅ **DONE 2026-08-08**
+
+**`check-model-coverage.mjs`: 140 / 363 → 363 / 363 (100%).**
+
+The DDL is **generated, not transcribed**. `scripts/gen-consolidation-migration.mjs` derives each
+migration from its Drizzle module via `scripts/lib/ddlFromDrizzle.mjs`, because hand-typing 248
+tables twice — once as Drizzle, once as SQL — is the two-sources-of-truth problem this document is
+about, one layer down. It refuses to emit a table it cannot parse rather than guessing, which is
+the only safe failure mode for a generator whose output is a migration. Migrations **0418–0433**,
+plus `transactional-migrations/0004` for the operational track.
+
+Kernel (25) into a new `schema/kernel.ts`, then domain by domain in ascending final size so the
+pattern is proven where being wrong is cheapest:
+
+> Integrations 1 · Canvas 8 · Support 9 · Investor 14 · Governance 15 · Platform 16 ·
+> Identity 23 · People 23 · Commerce 24 · Revenue 24 · Finance 26 · Hiring 27 · Agents 40 ·
+> Delivery 54 · Growth 58
+
+The 16 modules that exist are already most of the domain map, so this is largely a rename plus
+four new files, not a greenfield:
+
+| Existing module | Becomes |
+|---|---|
+| `drive.ts`, `mailbox.ts` | fold into kernel `connection` + `credential` + `sync_state` |
+| `brain.ts`, `collaboration.ts` | merge → `canvas.ts` |
+| `work.ts`, `delivery.ts`, `pmo.ts` | merge → `delivery.ts` |
+| `runtime.ts`, `llm.ts` | merge → `agents.ts` |
+| `billing.ts` | → `finance.ts` |
+| `growth.ts`, `commerce.ts`, `governance.ts`, `identity.ts`, `platform.ts` | keep the name, adopt the domain boundary |
+| `common.ts` | → `kernel.ts` |
+| — | **new:** `hiring.ts`, `people.ts`, `investor.ts`, `revenue.ts`, `support.ts` |
+
+**Exit criteria:** met — `npx tsgo --noEmit` clean, `check-model-coverage.mjs` reports 363 / 363,
+and `npm test` green across all 17 guards.
+
+Step 0 ratchets (451–489), Step 1 settle the model (491–499), Step 2 target schema (501–534).
+
+### §5 Step 3 history (lines 536–564) <!-- verbatim -->
+
+#### Step 3 · Turn the ratchets into gates — ✅ **MOVED 2026-08-08**
+
+| Guard | Was | Now |
+|---|---|---|
+| `check-model-coverage.mjs` | 140 / 363 | **363 / 363 — the gate is met** |
+| `check-domain-boundary.mjs` | 82 edges | **38.** Every merge deleted its own cycles, and the two categories that were never violations — a read of the kernel, a foreign key to `tenants` — are exempt *by rule* now rather than by baseline |
+| `check-signature-duplication.mjs` | 8 clusters | 8, and **three genuine duplicates caught and fixed while the target schema was being written** |
+| `check-shape-lint.mjs` | 93 names | 93 + **five adjudications** carrying their reason in code, where `--update` cannot drop it |
+| `check-tenant-column.mjs` | 72 tables | 71, + a `TENANT_INDEPENDENT` register separating a global catalogue from a pre-tenant row |
+| `check-polymorphic-fk.mjs` | 3 pairs | 3 — `objects` exists and every kernel reference is a real `uuid` FK |
+| `check-layering.mjs` | 144 files | **144, unchanged and deliberately so** — the two new route groups take an application port and import no infrastructure |
+
+**The three duplicates the guard caught:**
+
+- `renditions` = `artifacts` (0.60) → folded. The kernel is 25, not 26.
+- `boost_checkouts` = `course_checkouts` (0.60) → both had grown their own copy of amount,
+  currency, status, provider ref and completion time — the money half of an `orders` row, written
+  twice more. Both narrowed to order satellites.
+- `email_otp_challenges` = `email_verification_codes` (0.62) → the same table under two names, one
+  of them **already in production since migration 0285**. Consolidated into one store with a
+  `purpose` column; rows carried across, the old table dropped, `EmailVerificationService`
+  repointed and scoped so a newsletter opt-in can never satisfy an account-activation check.
+
+That last one is the argument for landing the guard *before* the merge rather than after, with a
+number attached.
+
+Same six scripts — already written and green — now pointed at the target schema with the
+baselines **emptied**. A check written after the migration is a check written to pass; these were
+written in step 0 against a schema that violates all six, which is the whole point.
+
+The "Was / Now" table and the three caught duplicates (`renditions`, `boost_checkouts`/`course_checkouts`, `email_otp_challenges`). The exit criterion stays open in the PRD.
+
+### §5 Step 5 access layer landed (lines 589–617) <!-- verbatim -->
+
+**Landed 2026-08-08 — the half that is not a data move.** A cutover needs somewhere to cut TO, and
+on the day the target schema shipped, 237 of its 244 tables were read by nothing. That number is
+what `check-table-adoption.mjs` exists to report, and it is now **0**.
+
+The answer is ONE layer rather than 237 services, for the reason §0 gives about tables: 237
+near-identical list/get/create/update services is the same shape repetition, one tier up — and 237
+chances to forget tenant scoping, bounds, caching or redaction.
+
+| File | What it is |
+|---|---|
+| `application/domains/entityDefinition.ts` | Reflection over the Drizzle module — name, key, tenant column, title, ordering, retirement column are READ, never restated. Redaction applied at definition time. |
+| `application/domains/<scope>/entities.ts` (×16) | Every consolidated table declared once, filed under exactly one scope. The kernel's primitives keep their own scope; `integrations` is legitimately empty. |
+| `application/domains/EntityService.ts` | The generic use cases: tenant predicate on read, tenant stamp on write, bounded limits, version-token cache keys, `objects` registration + `activity_log` on every write. |
+| `presentation/routes/domainRoutes.ts` | Five handlers at `/api/<scope>/entities/…`, one error→status translation, taking the application port. |
+| `components/kernel/EntityBrowser.tsx` | ONE record surface for all 245 tables, form GENERATED from field metadata, both themes, five catalogs. |
+
+Two things the pass found and fixed rather than logged: substring redaction was withholding
+`input_tokens` / `color_token` (segment-anchored now), and "no tenant column" was being read as
+"global" — which would have served `email_otp_challenges` to every tenant. Readability of a
+tenant-less table is opt-IN, held to three reference tables by a test.
+
+**What this deliberately is NOT:** the product behaviour of the two merged products. The ATS funnel,
+the ad manager, the LMS player, the boost checkout and the scenario planner live in
+`hired.video/api/src/routes` and BurnRateOS's Prisma models; each is a per-feature port under PRD 18
+and PRD 19 §2's ownership register. The entity layer is the floor those land on, not a substitute.
+Likewise, consolidating video data into `artifact`, `revision` and `rendition` does not reduce the
+hired.video editor to file storage or a generated manifest. PRD 18 T4 ports prompt-driven video
+authoring, capture, timeline/scene editing, audio mixing and export as capabilities of the existing
+Canvas over one editable `video` object — never as a separate Studio domain or destination.
+
+### §5 Step 6 kernel landed (lines 630–641) <!-- verbatim -->
+
+**Landed 2026-08-08.** `application/kernel/ObjectRegistry.ts` and
+`application/kernel/DomainService.ts` are the two services; `presentation/routes/objectRoutes.ts`
+and `presentation/routes/domainRoutes.ts` are the two route groups. Between them they serve the
+seven kernel routes of §6.3 and the fifteen domain groups — and the domain groups are ONE router
+with a validated `:domain` parameter, not fifteen near-identical ones, because fifteen copies of a
+shape is the disease of §0 one layer up. The per-seat difference is `DOMAIN_MANIFEST` data, so a
+sixteenth seat adds a manifest row and no routing.
+
+Both route files take an application-layer **port** rather than a database, so neither imports
+`src/infrastructure` and the layering baseline stayed at 144 instead of growing by two. Every read
+goes through `getOrSetCached` on a key derived from `(tenant, domain, object)` — which is exactly
+what §6.3 says the kernel finally makes possible — and every write ends in an `invalidate…` call.
+
+### §5 Step 7 components landed (lines 657–681) <!-- verbatim -->
+
+**Landed 2026-08-08**, under `frontend/src/components/kernel/`:
+
+| Component | The family it makes singular |
+|---|---|
+| `ObjectTimeline` | ONE timeline, mounted by both an object panel and a seat's surface |
+| `ObjectComments` | ONE comment thread — all seven `annotation` kinds through one `kind` prop |
+| `ObjectShareSheet` | ONE share sheet with ONE revocation path |
+| `MetricChart` | ONE chart primitive fed by one `metric_facts` shape |
+| `ObjectPanel` | ONE detail surface: breadcrumb from `/trail`, the five relations as tabs |
+| `RosterNav` | the roster IS the navigation |
+| `DomainSurface` | **the fifteen domain surfaces, as one component** |
+
+`/seat/<domain>` is one route serving all fifteen. `RosterNav` encodes both corrections from the
+navigation design: the team is always listed because it is navigation, only the scope chips are
+earned because they are state — one exported `earned(rung, reached)` decides it — and the collapse
+seam has ONE definition, a `ResizeObserver` calling the same `rail()` the toggle calls, so the
+breakpoint and the button cannot drift apart.
+
+§7.2 was honoured in the same pass rather than deferred: every colour is a theme token, every
+layout is `auto-fit`/`minmax` with horizontal scroll only inside the chart's own container, and all
+83 strings are in **all five catalogs with real translations** — asserted by a test that fails if a
+catalog is more than 15% identical to English.
+
+**Nothing in steps 6 or 7 starts before step 3 passes at zero**, because every shortcut taken in
+the schema is paid for in every feature built on it — and, per §7.1, in every component too.
+
+### "Who is waiting on whom" (lines 683–694) <!-- verbatim -->
+
+#### Who is waiting on whom
+
+| Step | Blocked by | State |
+|---|---|---|
+| 0 · checks as ratchets | — | ✅ **done 2026-08-08** |
+| 1 · settle the model | operator (§8) | ✅ **settled 2026-08-08** |
+| 2 · target schema | step 1 | ✅ **done 2026-08-08** — coverage 363 / 363 |
+| 3 · gates | step 2 | ✅ **moved 2026-08-08** — coverage at its gate; boundary 82 → 38 |
+| 4 · convert | step 3 | **unblocked** — there is now a target shape to emit into |
+| 5 · migrate families | step 4 | ✅ **access layer landed 2026-08-08** — adoption 237 cold → 0, gate armed; the ROW MOVE is still ahead |
+| 6 · collapse API layers (§6) | step 3 | ✅ **kernel + roster landed**; 101 folders / 197 routes still to migrate |
+| 7 · build the experience (§7) | step 6 | ✅ **components + 15 surfaces landed**; 134 pages still to migrate |
+
+### §6.1–§6.2 (lines 721–761) <!-- verbatim -->
+
+#### 6.1 · What each layer owns
+
+| Layer | Owns | Must not know |
+|---|---|---|
+| **Infrastructure** | The 388 tables (§2, §3), migrations, the `getOrSetCached` L1+L2 read-through, R2/KV access | HTTP. What a route is. What a user sees. |
+| **Domain** | Invariants, value types, the `kind` taxonomies, state machines | Drizzle. Hono. Any vendor. |
+| **Application** | Use cases, ports, tenancy enforcement, cache keys and invalidation | Request and response shapes. |
+| **Presentation** | HTTP: parse, authorise, call one application service, serialise | SQL. Table names. |
+
+**The domain layer is the one this consolidation actually fixes.** It holds 40 files against the
+application layer's 643 — an anemic domain, because when a concept is spread across 25 tables
+there is nothing coherent to put invariants *on*. A single `work_item` with a `kind` has real
+invariants (a key result cannot be its own parent; a milestone has no assignee) that twenty-five
+separate tables could only express twenty-five times, or not at all. **Collapsing the schema is
+what gives the domain layer something to be.**
+
+#### 6.2 · SOLID, as decisions already made in this document
+
+Not the textbook version — each of these is a specific line in §2 or §3, and each has a guard.
+
+- **Single responsibility.** One seat owns one domain (§3). This is why `scratch_pad_meetings` was
+  wrong: the pad had two responsibilities, authoring and presence, so it grew a second table for
+  the second one.
+- **Open/closed.** The kernel *is* the open/closed test, and the platform has passed it three
+  times already: adding a connector vendor adds a manifest row, not DDL (0410); adding an artifact
+  kind adds a value to `CREATION_OBJECT_KINDS`, already at 74; adding an audit source adds an
+  `activity_log` row, not a table (0295). **Extension without modification, proven in-repo before
+  it was proposed here.**
+- **Liskov.** This is the constraint behind §2.2's 0.55 rule, and it is worth naming as such: a
+  kind-split subtype must be substitutable for the base in every query written against the base.
+  That is precisely why the union must never be null-padded and why subtype payload goes in a
+  typed `attrs` — a base query that silently returns rows full of meaningless nulls is an LSP
+  violation wearing a schema.
+- **Interface segregation.** The `object` registry is deliberately the narrowest possible
+  interface: identity and kind, nothing else, so `annotation`, `membership` and `share_link`
+  depend on almost nothing. The counter-example has a number: **144 presentation files still
+  import infrastructure directly**, each depending on the entire schema to read three columns.
+- **Dependency inversion.** Already the house pattern — `DriveProvider`, `MailboxProvider`,
+  `BoardProvider`, `PolicyGate` are ports with swappable adapters. The rule to hold: the domain
+  layer depends on the interface, the application layer chooses the adapter, infrastructure
+  implements it.
+
+### §7 and §7.1 (lines 785–826) <!-- verbatim -->
+
+### 7 · The experience — the roster is the navigation
+
+The navigation design argues that the team panel *is* the navigation, because ownership already
+exists in the data. §3 is that claim in schema form. This section closes the loop: **the fifteen
+domains and the fifteen seats are the same list, and neither may drift from the other.**
+
+- **The canvas is the front door.** Not a feature behind a nav item — §2.1's session test says
+  authored content plus presence plus shareable *is* the canvas, so the schema has no scratch pad
+  to route to. The UI matches: there is one canvas, and everything else is a lens on it.
+- **Progressive disclosure gates state, never capability.** The team roster is always listed; only
+  the scope chips are earned, through one `earned(rung)` helper. A dimmed CFO is an invitation; a
+  missing CFO is a secret. Schema equivalent: a domain's tables exist whether or not the tenant
+  has reached the rung that lights them up.
+- **Recents is derived, never a stored list.** Only possible because `object` + `activity_log`
+  exist: one query answers "what did I touch", where today it would need a union across thirty
+  tables and would silently miss the thirty-first.
+- **The collapse seam.** Compress what is identity (initials stay legible at 21px → the rail), fly
+  out what is text (titles → the flyout). One overlay serves both tooltip and list; a
+  `ResizeObserver` sets the same state the toggle sets, through one `rail()` helper.
+- **The public shell is a classification, not a copy.** `classifyShell()` returns one of four
+  shell kinds from a deny-list default, so a new marketing page cannot accidentally render
+  logged-in chrome.
+
+#### 7.1 · The UI dedupe is downstream of the schema dedupe
+
+This is what justifies doing the data model first. Every kernel primitive collapses a family of
+components, not just a family of tables:
+
+| Kernel primitive | Component it makes singular |
+|---|---|
+| `object` | One detail route. One breadcrumb. One "open in canvas". |
+| `activity_log` | **One** timeline component, instead of a per-subsystem feed. |
+| `thread` + `message` | One conversation surface — chat, comments, support, ceremony notes. |
+| `artifact` + `rendition` | One viewer with kind-specific renderers, instead of ~30 per-media pages. |
+| `annotation` | One comment thread, mountable anywhere. |
+| `share_link` | One share sheet with one revocation path — there are three API-key revocation paths alone today. |
+| `question_set` + `response` | One form runner for surveys, pulses, check-ins, scorecards and screening. |
+| `metric_fact` | One chart primitive fed by one shape, which is what makes "insights everywhere" affordable. |
+
+134 `page.tsx` routes exist today. The target is not 134 rewritten pages — it is **15 domain
+surfaces plus the canvas**, each composed from the kernel components above. Building the UI first
+would mean building those components against thirty different shapes and then rebuilding them.
+
+### §8 Operator decisions (lines 845–857) <!-- verbatim -->
+
+### 8 · Operator decisions — ✅ **SETTLED 2026-08-08** (recorded in §5 step 1)
+
+1. **Which of the 25 kernel primitives are accepted.** Each is independently rejectable; the
+   published analysis lets you toggle any of them and see the resulting count.
+2. **Which product wins each of the nine contested capability areas** — kanban, marketplace,
+   objectives, SOC 2, support, affiliates, bookings, company, pitch decks. Settled per row in
+   [PRD 19 §2](./19-prd-burnrateos-consolidation.md); the schema work behind each is small once
+   the decision exists.
+3. **`account_*` or `tenant_*`.** BurnRateOS's 11 and Builderforce's 17 are the same axis under
+   two words. Renaming is free now; not renaming means every future reader learns both.
+4. **The database tier.** 388 tables is a different bill from 78.
+5. **The twelve adjudications in §3.3.** They are the last 18 tables and the only part of the
+   count that is judgement rather than measurement. Each is independently rejectable.
+
+### §9 Method and its limits (lines 861–880) <!-- verbatim -->
+
+### 9 · Method and its limits
+
+- **Exact:** the 1,206 / 1,130 counts, the 79 name collisions, the column distribution, and the
+  coverage map. All parsed from source, brace-matched. An earlier pass under-counted hired.video at
+  215 by matching only single-line declarations.
+- **Inferred:** assignment to primitives, by an ordered name-and-shape classifier, first match
+  wins. A deterministic 32-sample spot check found **3–4 misfiled, every one into an adjacent
+  primitive** rather than into "should have stayed separate". The 564 aggregate is robust; the
+  per-primitive split carries ~10% noise.
+- **Judgement:** the domain assignment (prefix rules, then a token vocabulary, then eight placed by
+  hand) and the residual dedupe. ~5% noise — `admin_impersonation_sessions` landed in Growth,
+  `geocoder_cache` in Agents. It does not move the totals.
+- **Judgement, isolated and countable:** the eleven adjudications in §3.3 — **17 of the 388**.
+  They are quarantined in their own pass precisely so the headline can be read two ways: the
+  machine floor is **405**, the model as proposed is **388**. Nothing else in this document
+  depends on accepting them.
+- **Not done:** this reads no row counts, no index usage, no query plans. Two tables can look
+  identical and diverge for a good reason nobody wrote down. **Every primitive needs one engineer
+  with the domain in their head to confirm before its migration is written.** The analysis narrows
+  1,206 candidates to about 40 clusters worth an hour each — it says where to look, not what to run.
+
+
+---
+
+## ✅ RESOLVED 2026-11-17 — PRD 05: finished sections archived on consolidation (Integration, Embed-Back & Identity Federation)
+- **Verified 2026-11-17:**
+  - §1 Topology — narrative
+  - §2.1 host-JWT verification half — `api/src/application/auth/hostOidc.ts`, `presentation/middleware/serviceTokenAuth.ts:39` (claim consumption stays open)
+  - §2.3 Service-to-service auth — `api/src/application/llm/tenantApiKeyService.ts:42-67,290`, migration 0070
+  - §3.1 lazy create — `api/src/infrastructure/auth/segmentResolver.ts`
+  - §3.2 eager provisioning row — `presentation/routes/seamRoutes.ts:174`
+  - §3.4 erasure — `seamRoutes.ts:254` → `application/tenant/segmentLifecycle.ts:103 eraseSegment`
+  - §4.1 BI pull — OBSOLETE, replaced by tenant-local `application/seams/burnRateService.ts` (`biRoutes.ts:18`)
+  - §4.2 feedback ingest — `seamRoutes.ts:80`; engagements proxy OBSOLETE, replaced by `application/seams/validationEngagementsService.ts` (`biRoutes.ts:38`)
+  - §4.3 outbound webhooks — `application/seams/webhookService.ts:15-22,50-51`, `application/task/taskLifecycle.ts:255`, `presentation/routes/agileRoutes.ts:23`, `productRoutes.ts:28`, `seamRoutes.ts:113-152`
+  - §4.4, §5.1, §5.3 — OBSOLETE (host-side; burnrateos.com deprecation, PRD 19 2026-08-25)
+  - §5.2 `<BuilderForceEmbed>` — `builderforce-embedded/src/BuilderForceEmbed.tsx`, `views.ts`, `frontend/src/app/embed/[view]/page.tsx`
+  - §6 gateway unchanged — `@seanhogg/builderforce-sdk` (per-Segment ledger stays open)
+  - §7 JWT verified, service tokens scoped, webhooks HMAC + replay, DSR erasure — as above
+  - §8 API surface summary — `api/src/index.ts:1024` (note: its "engagements proxy is not built" cell is superseded by `/api/bi/validation-engagements`)
+
+Archived source ranges of `docs/specs/05-integration-embed-and-identity.md` word for word:
+- Title, intro and status note: lines 1–13 <!-- verbatim -->
+
+## 05 — PRD: Integration, Embed-Back & Identity Federation
+
+This is the **contract between the two apps**. It specifies how BurnRateOS authenticates into
+BuilderForce, how Segments are provisioned, how BuilderForce surfaces re-embed into BurnRateOS,
+the cross-domain API seams, and how the BurnRateOS PM/Agile pages become thin shells.
+
+> **Status note (2026-10-25).** Live contract. Docs 00–04 and 06–07, which this PRD was written
+> beside, shipped or were folded and have been removed (see [DONE.md](../../DONE.md)); "doc 0n"
+> references below are historical. The open identity work (inbound OIDC, `resolveSegment(jwt)`, S2S
+> tokens) is in [ROADMAP.md](../../ROADMAP.md) › OTHER › Identity and governance. The roadmap's old
+> `tenant_webhooks` item is very likely satisfied by `webhook_subscriptions` (§4.3) and is marked
+> there for confirmation.
+
+
+- §1 Topology: lines 16–35 <!-- verbatim -->
+
+### 1. Topology
+
+```
+┌──────────────────────────────┐                         ┌──────────────────────────────┐
+│           BurnRateOS          │                         │          BuilderForce.ai       │
+│                              │                         │                                │
+│  Identity Provider (OIDC)    │ ──(1) SSO: OIDC/JWT────► │  Tenant: "burnrateos"          │
+│  Account / Company / User    │      tenant+acct+co      │  resolveSegment() → Segment    │
+│                              │                         │                                │
+│  Embed rail (embed.ts)       │ ──(2) embed snippet────► │  Embeddable surfaces           │
+│   SystemFeature/AccountFeature│      view=ideas|kanban   │   (ideas, backlog, kanban,…)   │
+│                              │                         │                                │
+│  BI / CRM / Investor domains │ ◄─(3) cross-domain API─► │  /v1 PM+Agile+Agent API        │
+│                              │                         │                                │
+│  api.builderforce.ai (LLM)   │ ◄─(4) gateway (unchanged)│  callAiAndCharge (per Segment) │
+└──────────────────────────────┘                         └──────────────────────────────┘
+```
+
+Four channels: **(1) identity**, **(2) embed UI**, **(3) data API**, **(4) LLM gateway**
+(already exists, unchanged).
+
+- §2.3 Service-to-service auth: lines 77–82 <!-- verbatim -->
+
+#### 2.3 Service-to-service auth
+
+For channel (3) (cross-domain API, no end-user present, e.g. a CRM webhook), use a **tenant
+service token** (client-credentials) that carries `tenant` + the target `accountId`/`companyId`
+in the request so BuilderForce resolves the Segment server-side. Scope tokens to specific
+endpoints (e.g. `ingest:feedback`).
+
+- §4 Cross-domain API seams (§4.1–§4.4): lines 101–153 <!-- verbatim -->
+
+### 4. Cross-domain API seams (channel 3)
+
+These replace the in-process coupling that existed when PM/Agile lived inside BurnRateOS. All are
+async/eventual and never block a render path.
+
+#### 4.1 BI → cost-aware planning (runway/burn) — *BuilderForce pulls*
+
+- BuilderForce calls BurnRateOS `GET /api/bi/burn-rate?companyId=…` (tenant service token, scope
+  `read:bi.burn`) to get the Segment's current monthly burn + runway months.
+- Used by AS-7 cost-per-point and AS-4 runway-aware sprint caps. Cached on
+  `RunwayForecastLink.externalBurnRateMetricRef`. **Closes the "cost-aware agile" marketing gap
+  that the BurnRateOS code never wired.**
+- Graceful fallback to manual burn input if the scope isn't granted or BI is unavailable.
+
+#### 4.2 CRM feedback → backlog/validation — *BurnRateOS pushes*
+
+- BurnRateOS Customer Engagement posts feedback events to BuilderForce
+  `POST /v1/ingest/feedback { companyId, widgetId, eventId, text, sentiment, contact }`
+  (service token, scope `ingest:feedback`).
+- BuilderForce creates a `customer_feedback` row (the spec's `CustomerInsight(insightType=FEEDBACK)`;
+  `external_ref` is the host event id, unique per segment) and/or a backlog ticket candidate — a
+  `tasks` row, the spec's `WorkItem` (per Segment setting). Implemented as `POST /v1/ingest/feedback`
+  (`seamRoutes.ts`, migration 0071). The founder triages from a
+  "Voice of customer" inbox. **Implements the catalog's promised feedback→backlog flow that was
+  only manually linkable before.**
+- Validation Lab's `GET /v1/validation/engagements` proxies BurnRateOS to list the Segment's
+  feedback widgets/cohorts for the engagement link (PM-4).
+
+#### 4.3 Build results → host metrics — *BuilderForce pushes (webhooks)*
+
+- BuilderForce emits webhooks BurnRateOS can subscribe to (HMAC-signed, per tenant):
+  - `workitem.released` → feeds Investor board decks / Changelog.
+  - `sprint.completed` (velocity, financial impact) → feeds BI / health scoring.
+  - `roadmap.published` → feeds Investor Intelligence roadmap slides.
+- **Implemented on the platform's own rows** (the PM spine is unified onto `projects` / `tasks` /
+  `specs`, decided 2026-09-12). Subscriptions are `webhook_subscriptions` (segment-scoped, 0071)
+  managed at `GET|POST /v1/webhooks` and `DELETE /v1/webhooks/:id`; deliveries are audited in
+  `webhook_deliveries`. The three producers:
+  - `workitem.released` — `releaseWorkItemWebhook` (`application/seams/workItemWebhook.ts`), called
+    from the task lifecycle when a **`tasks` row first enters a done-class lane**. Payload
+    `{ id, key, title, status, projectId, priority, releasedAt }` — `id` is the integer `tasks.id`,
+    `key` its human key; there is no uuid work-item id.
+  - `sprint.completed` — the `/api/agile/sprints` tracker when a `sprints` row's `status` becomes
+    `completed`.
+  - `roadmap.published` — the `/api/product/roadmap` tracker when a `roadmap_items` row's `status`
+    becomes `shipped`.
+- Lets BurnRateOS's Investor/BI domains read velocity/roadmap/release data they previously had no
+  coupling to (a gap the inventory found).
+
+#### 4.4 Embedded read for cross-links
+
+BurnRateOS pages that deep-link into PM/Agile (e.g. an MVP scenario referenced from a CFO view)
+call BuilderForce `GET /v1/…` with the user JWT and render inline or link out to the embed.
+
+- §5 Embed-back (§5.1–§5.3): lines 157–210 <!-- verbatim -->
+
+### 5. Embed-back: BurnRateOS thin shells (channel 2)
+
+#### 5.1 Reuse the existing embed rail — do not build a parallel one
+
+Per the unified-embed-snippet rule, BuilderForce embedding rides the **same rail** as the
+heatmap/support/feedback widgets:
+
+1. Add **one** embed feature key `embed_builderforce` to `EMBED_FEATURE_KEYS` in
+   `routes/embed.ts`.
+2. Migration: one `SystemFeature` row (`type = SUB_FEATURE`, `parentFeatureId = product_management`
+   or a new `builderforce` parent), `requiredPlan` set, default `HIDDEN` until wired.
+3. Extend `/api/embed/config` with the BuilderForce bootstrap (the BuilderForce embed base URL +
+   the per-view route map).
+4. Add a subsystem block to the snippet that mounts a BuilderForce surface where the page markup
+   requests it.
+5. Add the toggle card to `EmbedBurnRateOSPage.tsx`; reuse the existing consent modal +
+   `PUT /api/embed/settings` flow (records `consentVersion`).
+6. Default OFF; opt-in per (account, company) with the consent moment — same legal posture.
+
+#### 5.2 The thin-shell pages
+
+Each BurnRateOS PM/Agile page becomes a shell that mounts the corresponding BuilderForce view,
+passing the SSO JWT (so BuilderForce resolves the Segment):
+
+```
+/product/ideas           → <BuilderForceEmbed view="ideas" />
+/product/mvp             → <BuilderForceEmbed view="mvp" />
+/product/backlog         → <BuilderForceEmbed view="backlog" />
+/product/validation      → <BuilderForceEmbed view="validation" />
+/product/roadmap         → <BuilderForceEmbed view="roadmap" />
+/product/feature-roi     → <BuilderForceEmbed view="feature-roi" />
+/agile/kanban            → <BuilderForceEmbed view="kanban" />
+/planning-poker          → <BuilderForceEmbed view="poker" />
+/retrospectives          → <BuilderForceEmbed view="retros" />
+/agile/sprint-planning   → <BuilderForceEmbed view="sprints" />
+/velocity                → <BuilderForceEmbed view="velocity" />
+/feature-scoring         → <BuilderForceEmbed view="feature-scoring" />
+```
+
+- The nav entries (`product_management`, `agile_survival` in the domain catalog + sidebar) stay
+  unchanged — dogfooding + persona gating preserved.
+- `<BuilderForceEmbed>` is a single shared component (DRY): it handles the iframe/web-component
+  mount, JWT handoff, height/resize, deep-link sync (URL ↔ embed route), and a loading/erorr
+  state. One component, parameterized by `view` — not N bespoke embeds.
+
+#### 5.3 Migration sequence for BurnRateOS
+
+1. Ship `embed_builderforce` (HIDDEN) + the `<BuilderForceEmbed>` component.
+2. Behind a feature flag, swap one page (e.g. `/agile/kanban`) to the shell; validate parity for
+   one Segment.
+3. Roll the rest; keep legacy pages importable until parity is confirmed.
+4. **Then** delete the legacy `domains/productManagement` + `domains/agileSurvival` frontend code
+   and the moved backend routes/models (per the "no legacy tables / clean replacement" rule).
+   Verify zero references before deleting.
+
+- §6 LLM gateway: lines 214–224 <!-- verbatim -->
+
+### 6. LLM gateway (channel 4) — unchanged
+
+- BuilderForce keeps using `@seanhogg/builderforce-sdk` → `api.builderforce.ai` for all LLM
+  dispatch, exactly as BurnRateOS does today: caller passes `useCase` + `viewer`; the gateway
+  owns vendor failover; usage is projected to hide vendor/model from non-admins.
+- The credit ledger, tier rates, and viewer projection live in BuilderForce, **scoped per
+  Segment** (the `viewer` carries the Segment + role/plan from the JWT).
+- New `dev.*` use cases (doc 01 §8) are added to BuilderForce's `AI_USE_CASES` registry.
+- Note the naming collision to keep straight: **BuilderForce-the-gateway** (`api.builderforce.ai`,
+  the LLM dispatch service) is distinct from **BuilderForce-the-product** (this PM/Agile/agent
+  app). The product is a *client* of the gateway, just like BurnRateOS.
+
+- §8 API surface summary: lines 245–261 <!-- verbatim -->
+
+### 8. API surface summary (BuilderForce `/v1`)
+
+The spec named a parallel `/v1` surface per group. With the PM spine unified onto the platform
+(decided 2026-09-12), only the cross-app **seams** live under `/v1`; every PM / Agile / agentic
+capability is the platform's own route over its own rows (doc 01 §4–§7).
+
+| Group | Spec endpoints | Platform owner (implemented) |
+|-------|----------------|------------------------------|
+| Identity/admin | `POST/PUT/DELETE /v1/admin/segments`, `resolveSegment` (internal) | `/api/segments` (`segments`) |
+| Product Mgmt | `/v1/ideas*`, `/v1/mvp*`, `/v1/roadmap*`, `/v1/validation*`, `/v1/backlog*`, `/v1/business-value-config*`, `/v1/feature-roi*`, `/v1/ab-tests*` | `/api/product/{mvp,validation,roadmap,release-planning,changelog,feature-flags,business-value,feature-roi}`, `/api/releases`, `/api/specs`, `/api/pmo`; the backlog is `/api/tasks` + `/api/kanban` |
+| Agile | `/v1/poker*`, `/v1/retros*`, `/v1/kanban*`, `/v1/sprints*`, `/v1/velocity*`, `/v1/feature-scoring*`, `/v1/capacity*`, `/v1/agile/*` (cost), `/v1/action-items*` | `/api/agile/{sprints,velocity,capacity,cost,feature-scoring,poker,retros,ceremonies}`, `/api/boards`, `/api/kanban`, `/api/delivery-flow/{action-items,estimates,sprints/:sprintId/cost}` |
+| Agentic | `/v1/repos*`, `/v1/work-items/:id/agent-run`, `/v1/agent-runs*`, `/v1/orchestrations*`, `/v1/pull-requests/:ref/review`, `/v1/findings*` | `/api/repos`, `/api/integrations`, `POST /api/tasks/:id/run-now`, `/api/runtime/executions*`, `/api/workflows`, `/api/qa`, SCM `/api/webhooks` |
+| Seams | `/v1/ingest/feedback`, `/v1/validation/engagements` (proxy), outbound webhooks | `POST /v1/ingest/feedback`, `GET/POST/DELETE /v1/webhooks` (`seamRoutes.ts`); the engagements proxy is not built |
+| Realtime | poker/retro rooms + `agent-runs/:id` stream (WebSocket/SSE, Segment-authorized) | ceremony rooms (`/api/agile/ceremonies`); run progress through `/api/runtime/executions/:id/coordination` |
+
+All `/v1` require a Segment-scoped JWT (end-user) or a tenant service token (S2S); all are
+Segment-isolated and rate-limited per Segment.
+
+## ✅ RESOLVED 2026-11-17 — PRD 21: finished sections archived on consolidation (The Unified Experience)
+
+DONE.md held only the decision line at an earlier DONE.md entry (§7.2, §11.9.3, §11.9.6); no section text was archived before. The source ranges below are archived word for word from `docs/specs/21-prd-unified-experience.md`. Standing design-system rules (§0, §2.0–2.6, §2.8, §3.4–3.6, §5.1, §11.0, §11.10) stay in in platform.md as Working rules and are NOT archived here.
+
+- **Verified 2026-11-17:**
+  - §1 Why this PRD exists (lines 45-75) — narrative, superseded by the built shell.
+  - §2.7 The finding (lines 310-360) — literal hex 0 / radii 0: `frontend/scripts/check-design-scale.mjs:72,129`; the Surface sweep continues in in platform.md.
+  - §2.9 What has to be built (lines 373-384) — `freelance/formStyles.ts` deleted; ratchets `check-design-scale.mjs:785-850`, wired via `frontend/scripts/edit-ratchets.manifest.mjs:25-26`. (Item 1's continuing sweep is in in platform.md.)
+  - §3.1 Layout, §3.2 Left panel, §3.3 Footer (lines 390-443) — `frontend/src/components/SessionList.tsx`, `team/TeamBar.tsx`, `lib/team/teammate.ts`.
+  - §4 The seat is the teammate + §4.1 one roster (lines 490-531) — `api/src/application/kernel/TeamRoster.ts` → `GET /api/roster/team`.
+  - §5 Sequence E0–E6 (lines 535-550) — `shell/ShellPanel.tsx`, `shell/DestinationIndex.tsx`, `workspace/LastBoardBridge.tsx`, `check:design-scale`.
+  - §6 Acceptance criteria (lines 560-573) — `shell/unifiedExperience.test.tsx`; `SectionTabs`/`PillTabs`/`AdminGroupNav` appear only in comments.
+  - §7 Open decisions 1–2 (lines 577-588) — "Viewpoint" rename `frontend/src/lib/navGroups.ts:507-510`; `/security` kept (`AccountSecurityPanel` only in `security/SecurityClient.tsx`; an earlier DONE.md entry).
+  - §8 Out of scope (lines 592-599), §9 Already landed (lines 603-632) — history.
+  - §11 preamble, §11.1 seven registries (lines 636-641, 657-691) — `burnrateCatalog.ts` deleted; `check:destinations` `frontend/scripts/checks.manifest.mjs:18`.
+  - §11.2 unified model (lines 693-750) — built in `navGroups.ts` (`seat`, `stage`) + `lib/marketplaceFamilies.ts`; the `parent` field is open (platform fragment).
+  - §11.3 arc, §11.3.1, §11.3.2 (lines 752-801) — `navGroups.ts:59-64` (`market` renamed `reach`); `system_features` reduced to entitlement/rollout (`api/src/infrastructure/database/schema/platform.ts:452-468`); no `/ai` rows.
+  - §11.4.1 left panel (lines 805-859) — `components/Sidebar.tsx:71,191,231`.
+  - §11.4.2 footer (lines 861-865) — `app/seat/[domain]/page.tsx:33`.
+  - §11.4.3 width-control half (lines 889-895) — `components/SlideOutPanel.tsx:69,115`.
+  - §11.4.5 reference page is a panel (lines 897-920) — `lib/workbenchPolicy.ts`, `check:container-queries` (`checks.manifest.mjs:19`).
+  - §11.4.6 public header (lines 922-937) — `components/MarketingHeader.tsx:382,398`.
+  - §11.5 marketplace families (lines 956-988) — `lib/marketplaceFamilies.ts:33,167` (company flow now `listing`, `:217-221`).
+  - §11.5.4 cart and purchase memory (lines 1057-1072) — `components/ShoppingCart.tsx:71,401-405`; `TopBar.tsx:140`; `MarketingHeader.tsx` → `HeaderCartButton.tsx`; `GET /marketplace/purchases` `api/src/presentation/routes/marketplaceRoutes.ts:497-499`.
+  - §11.6 deletions except `ADMIN_GROUP_META` (lines 1074-1102) — as above.
+  - §11.7 M0, M1, M2 + §11.7.1 ratchet (lines 1104-1136, those rows) — `frontend/scripts/check-destinations.mjs`.
+  - §11.8 criteria 1-4, 6, 8-17 (lines 1138-1167) — evidence above.
+  - §11.9.3 Run vs Real, §11.9.6 Things vs Assets (lines 1173-1175, 1183-1184) — an earlier DONE.md entry.
+  - §11.11 What shipped (lines 1322-1355) — history; its item 4 (two entitlement helpers) is resolved: one `destinationReachable` (`Sidebar.tsx:176-179`), `earnedRung` no longer exists.
+
+### §1 Why this PRD exists
+<!-- from docs/specs/21-prd-unified-experience.md lines 45-75 -->
+
+### 1 · Why this PRD exists
+
+PRD 19 and PRD 20 each solve half of a problem whose other half is the experience, and neither
+owns it:
+
+| | PRD 19 | PRD 20 | **PRD 21** |
+|---|---|---|---|
+| **Answers** | What arrives, and who owns each contested capability | What the data is, once deduplicated | **Where any of it appears, and to whom** |
+| **Unit** | A track (B0–B9) | A domain (15) + kernel (25 tables) | A **panel**, a **teammate**, a **session** |
+| **Scale fact** | 328 API modules + 471 pages arrive on top of 78 surveyed routes | 1,206 → **387** tables | **549 destinations, 0 of them pages** |
+| **Organised by** | C-suite seat (B1 CFO, B2 CEO, B3 CRO, …) | C-suite seat (owner column, §3) | C-suite seat (**the footer roster**) |
+
+The last row is the reason these consolidate rather than merely relate. **All three are already
+organised by the same list of seats.** PRD 20 §3 says so outright — *"the navigation design argues
+the team panel* is *the navigation because ownership already exists in the data; this section is
+that claim in schema form."* PRD 21 is the other end of that sentence: it makes the seat a
+teammate, the domain a panel, and the merge invisible to the person using it.
+
+Without this PRD, PRD 19's 471 pages land as 471 **pages**, and the product that sells "one
+continuous session" ships a shell that destroys the session on every click.
+
+#### What this PRD takes over
+
+- **From PRD 19:** the *experience* half of every track. Tracks keep their data and API scope; how
+  their surfaces appear is decided here, once, instead of nine times.
+- **From PRD 20:** §7 (the experience layer). The data model, the kernel and the 15 domains are
+  unchanged and remain PRD 20's.
+- **Nothing else moves.** PRD 19's §2 ownership register and PRD 20's §3 roster stay authoritative
+  where they are; this PRD cites them and must never restate them.
+
+---
+
+### §2.7 The finding, and where it ended up
+<!-- from docs/specs/21-prd-unified-experience.md lines 310-360 -->
+
+#### 2.7 The finding, and where it ended up
+
+The system existed on paper and was not adopted.
+
+| Measure | When this PRD was written | 2026-08-09 |
+|---|---|---|
+| Files importing `@/components/ui` | **3** (was 2 before this PRD's first fix) | 12 |
+| Files hand-rolling `border: '1px solid var(--border-subtle)'` | **301** | unchanged — see below |
+| Inline `style={{…}}` sites in `frontend/src` | **~9,400** | unchanged — see below |
+| Files carrying a literal hex | **315** (405 on the ratchet's wider sweep) | **0** |
+| Distinct `border-radius` values across 26 CSS modules | **20+**, against a documented 5-step scale | **9**, each a live expression |
+| Design-token guard (`check-design-tokens.mjs`) | **Passes** — 245 declared | Passes — 287 declared |
+| Distinct `font-size` literals on the public surface | not measured | **89** (1,185 uses) — see §2.3 |
+| Distinct `clamp()` type ramps on the public surface | not measured | **129** |
+| Marketing files importing `@/components/ui` | not measured | **4** of 478 |
+
+The token guard is why *undeclared-token* bugs are gone. It could not see a literal hex or an
+off-scale radius, which is why every other row was still true.
+
+**It can now.** `check-design-scale.mjs` reads every `.ts`/`.tsx`/`.css` under `src`, counts each
+corner of a multi-value declaration, and is wired into `npm test`.
+
+- **Radius: shrink-only.** Baselined at 2,087, now **9**. A count that goes UP fails the build; a
+  count that comes in BELOW its baseline ALSO fails, with the instruction to lower the baseline —
+  which is what stops a ratchet from quietly going slack.
+- **Colour: no longer a count.** The baseline is **0** and `COLOUR_EXEMPT` is an allowlist where
+  every entry carries a written reason. A number lets 341 files sit there looking like progress; a
+  list makes the next author say out loud why a token cannot reach their case. Six reasons qualify:
+  where the tokens are declared, documents opened outside this app, generated project source,
+  third-party brand marks, colour the AUTHOR picks and we persist, and consumers that never read a
+  stylesheet.
+
+**The two "unchanged" rows are deliberate.** Hand-rolled borders and inline styles are a
+*primitive-adoption* measure, not a *correctness* one: an inline `border: '1px solid
+var(--border-subtle)'` is themed correctly and renders right in both themes — it is verbose, not
+broken. The literal-hex row was the one that shipped bugs, and it is the one that is closed. Moving
+9,400 inline styles onto `<Surface>` is a continuing sweep with no ratchet, because a ratchet that
+counts verbosity would fail builds over nothing.
+
+**A literal is not always the wrong answer, and four ways of "fixing" one are worse than leaving
+it.** Each of these shipped in an earlier pass of this very migration and was found by the sweep
+that closed it (see DONE.md, 2026-08-09):
+
+1. **A consumer that never reads our CSS.** xterm paints its own canvas from a JS theme object;
+   `<meta name="theme-color">` is read by the browser chrome before a stylesheet exists.
+2. **A document opened somewhere else** — a print sheet, a downloadable landing page, a generated
+   React Native scaffold where `borderRadius` must be a number.
+3. **A control whose VALUE is a colour.** `<input type="color">` takes `#rrggbb` and nothing else;
+   given a `var()` it shows black and writes black on first touch.
+4. **A cycle.** `--text-primary: var(--text-primary)` in a scope meaning to OVERRIDE it is invalid
+   at computed-value time and takes the token from every descendant.
+
+### §2.9 What has to be built
+<!-- from docs/specs/21-prd-unified-experience.md lines 373-384 -->
+
+#### 2.9 What has to be built
+
+1. **Migrate onto the primitives.** `Button`, `Surface`, `Badge`, `Field`, `PageHeader`,
+   `EmptyState` already exist and are backed by real `.ui-*` CSS. The work is call sites, not
+   components. Start with the surfaces the shell touches (§3), then sweep.
+2. **Delete the parallel vocabularies.** `freelance/formStyles.ts` (`talentCard` / `talentLabel` /
+   `talentInput` / `talentSoftBtn`) re-declares card, label, input and button. It goes, and its
+   consumers move onto the primitives.
+3. **Extend the guard with two shrink-only ratchets** — literal-hex count and off-scale-radius
+   count — baselined at the post-migration numbers and wired into the existing `npm test` guard
+   chain. **This is the item that makes the rest permanent. It lands with the migration, not
+   after it.**
+
+### §3.1 Layout · §3.2 The left panel — sessions · §3.3 The footer — the team
+<!-- from docs/specs/21-prd-unified-experience.md lines 390-443 -->
+
+#### 3.1 Layout
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│  sessions        │  board top: scope · canvas · ⌘K · live    │
+│  ─────────       │                                            │
+│  New canvas      │                                            │
+│  Canvases        │            THE BOARD                       │
+│  Projects        │        (mounted once, kept)                │
+│  Artifacts       │                              ┌───────────┐ │
+│  Scheduled       │        composer              │  PANEL    │ │
+│                  │      (bottom-centre)         │  slides   │ │
+│  ACTIVE ●        │                              │  over it  │ │
+│  Bakery landing  │                              └───────────┘ │
+│  RECENTS         ├────────────────────────────────────────────┤
+│  …               │  ALWAYS ON  CEO CFO CTO CMO CHRO CISO      │
+│  ───────         │  TEAM  Jules  Tom  Mia  + Invite   ● Cam   │
+│  Sean Hogg  MAX  │                                            │
+└──────────────────────────────────────────────────────────────┘
+```
+
+#### 3.2 The left panel — sessions
+
+Today `Sidebar.tsx` renders `NAV_GROUPS`, so the persistent surface is a site map and the person's
+own work appears nowhere. It becomes: **New canvas**, a short object index (Canvases, Projects,
+Artifacts, Scheduled, Knowledge), then **Active** (live dot) and **Recents**. Collapsible to a
+single floating control, which is the default posture for real work.
+
+**The recorded block was stale.** `listLocalCreationSessions()` does exist
+(`lib/creationSessions.ts`), is self-healing on both sides, and is already what `pendingWork.ts`
+reads — so a guest's session list is complete. `SessionList` reads it beside `fetchRecentCanvases()`,
+which is shared and read-through, so mounting next to the canvas switcher costs one request.
+
+**One deliberate departure.** The destinations are not deleted from the left panel; they follow the
+sessions under a `Workspace` label. §3.2's "short object index" is only short if what it omits is
+reachable another way, and today `⌘K` is the only other way in — so removing Insights, Growth,
+Reliability and the rest would put real destinations behind a keystroke. They are secondary here,
+not absent.
+
+> **Superseded in part by §11.** Keeping the destinations was right; calling the block `Workspace`
+> and letting a *second* block (`Product Domains`) sit under it was not. §11 replaces both with one
+> registry grouped by the Idea → Make → Run arc. Read §11 before touching this surface.
+
+#### 3.3 The footer — the team
+
+The always-on C-suite agents sit beside the humans you invited. One chip shape, one drag, one
+presence model, because **to a session they are the same kind of participant**.
+
+- **Drag a teammate onto the board** → it joins the session, takes a seat, appears in presence, and
+  can be addressed in the composer.
+- **Keyboard parity is mandatory.** Focus + `Enter` does the same thing. A drag must never be the
+  only route in.
+- **Locked teammates stay visible and disabled** with an upgrade path, per the standing `RoleGate`
+  rule ("disable, never hide") — which navigation does not currently honour.
+
+### §4 The seat is the teammate · §4.1 The blocking dependency: one roster
+<!-- from docs/specs/21-prd-unified-experience.md lines 490-531 -->
+
+### 4 · The seat is the teammate
+
+**This section reverses a decision.** The navigation architecture proposed a nine-door rail of
+C-suite *domains*. That was wrong: it modelled the seats as navigation. They are team members who
+are always available, and the rail is deleted.
+
+PRD 20 §3 already assigns each domain an owner. That column becomes the footer roster:
+
+| Domain (PRD 20 §3) | Owner | Tables | Appears as |
+|---|---|---|---|
+| Growth & marketing | **CMO** | 58 | Teammate + panel |
+| Delivery & work | **Manager** | 54 | Teammate + panel |
+| Agents & runtime | platform | 40 | Panel only |
+| Hiring | **Recruiter** | 27 | Teammate + panel |
+| Finance | **CFO** | 26 | Teammate + panel |
+| Revenue & CRM | **CRO** | 24 | Teammate + panel |
+| Commerce | platform | 24 | Panel only |
+| Identity & tenancy | platform | 23 | Panel only |
+| People & HR | **HR** | 23 | Teammate + panel |
+| Platform & observability | platform | 16 | Panel only |
+| Governance & security | **Security** | 15 | Teammate + panel |
+| Investor & portfolio | **CEO** | 14 | Teammate + panel |
+| Support & knowledge | **Support** | 9 | Teammate + panel |
+| Canvas & ideas | **Brain** | 8 | The board itself |
+| Integrations | platform | 1 | Panel only |
+
+**A domain owned by `platform` has no teammate** — there is no one to drag in, so it is a panel
+only. That is the test for whether a seat belongs in the footer, and it comes from the data rather
+than from taste.
+
+#### 4.1 The blocking dependency: one roster
+
+`WorkforceCard` unifies the *card*. It does not unify the *roster* — `AgentCard` reads
+`ide_agents`, `MemberCard` reads the members path. There is no single list a footer, a presence
+pile or a drop target can read, and no `kind` discriminator to render them uniformly.
+
+**Required:** one roster read model — `kind: 'human' | 'agent'`, id, display name, role,
+availability, avatar — served through `getOrSetCached` and invalidated on membership writes. Both
+cards become renderers of one row shape.
+
+**3NF note:** this is a **read model over the existing owners**, not a third table. A new kind is a
+column value, not a new table (PRD 20 §0).
+
+### §5 Sequence
+<!-- from docs/specs/21-prd-unified-experience.md lines 535-550 -->
+
+### 5 · Sequence
+
+Each step is shippable and leaves the app working.
+
+| Step | Work | Gate | State |
+|---|---|---|---|
+| **E0** | Roster read model (§4.1) + `getOrSetCached` + invalidation | One endpoint returns humans and agents in one shape | ✅ `GET /api/roster/team`; `invalidateTeamCaches` is now THE membership invalidation and every prior `assignableWorkforceCacheKey` site was migrated onto it |
+| **E1** | `TeamBar` + canvas drop target + keyboard parity | A teammate can join a session by drag **and** by keyboard | ✅ one payload (`lib/team/teammate.ts`) carried by both routes, one `seatTeammate` on the board |
+| **E2** | Panel primitive at three widths + index column; port Settings and Profile | Settings opens over a mounted board; the board's agent turn survives it | ✅ the dock is deleted; every workbench route renders inside `ShellPanel`, and the board is now VISIBLE under it rather than merely mounted |
+| **E3** | Left panel becomes sessions; `listLocalCreationSessions()` lands | Sign-in returns you to your last board | ✅ `SessionList`; the helper already existed (see §3.2). `LastBoardBridge` closes §6.7 and §6.8 together |
+| **E4** | Delete `SectionTabs`, `PillTabs`, `AdminGroupNav`; migrate every group's tabs into panel indexes | Zero references to all three; no horizontal tab bar over 6 items | ✅ one `DestinationIndex` that picks its own orientation past six items — the rule is in the primitive, not in review |
+| **E5** | Primitive migration sweep + delete `freelance/formStyles.ts` | Literal-hex and off-scale-radius counts drop | ✅ the parallel vocabulary is deleted; literal-hex files 403 → **0** and off-scale radii 2,086 → **9** (2026-08-09). The inline-style/`<Surface>` sweep continues without a ratchet — see §2.7 |
+| **E6** | Two guard ratchets wired into `npm test` | The build fails on a new literal hex or off-scale radius | ✅ `check:design-scale` — radius shrink-only in both directions, colour now an allowlist at zero |
+
+**E6 is not optional and is not last-if-time-permits.** Without it, E5 is undone by the next
+feature and this PRD gets rewritten in a quarter.
+
+### §6 Acceptance criteria
+<!-- from docs/specs/21-prd-unified-experience.md lines 560-573 -->
+
+### 6 · Acceptance criteria
+
+1. Opening any authenticated destination does **not** unmount the canvas: an in-flight agent turn,
+   a peer cursor, presence and an active call all survive it. Asserted by test, not by eye.
+2. `SectionTabs`, `PillTabs` and `AdminGroupNav` have **zero references** in the repo.
+3. No horizontal tab bar renders more than 6 items anywhere.
+4. The footer roster renders humans and agents from **one** endpoint returning one row shape.
+5. A teammate can be added to a session by drag **and** by keyboard.
+6. Locked destinations and locked teammates render **visible and disabled**, never hidden.
+7. `/settings` (and every other legacy destination URL) resolves to a board plus an open panel.
+8. Sign-in lands on the last board, not a dashboard.
+9. `check:design-tokens` passes **and** both new ratchets are wired into `npm test` and shrink-only.
+10. Every surface touched renders correctly in **both themes** at **360px** and is fully localized
+    in all five catalogs.
+
+### §7 Open decisions (settled) · §8 Out of scope · §9 Already landed
+<!-- from docs/specs/21-prd-unified-experience.md lines 577-632 -->
+
+### 7 · Open decisions — operator, not engineering
+
+Neither is an engineering call, and both block a specific step.
+
+1. **"Persona" vs "Personality".** `navGroups.ts:224` **Persona** is the insight lens
+   (CEO/CFO/CTO reshaping of dashboards); `SettingsClient.tsx:168` **Personality** is the user's
+   psychometric profile. Adjacent, unrelated, near-homographs. One must be renamed. *Blocks E2's
+   Settings index copy.*
+2. **`/security` vs `?sub=sessions`.** Account security is reachable twice — the L2 Security tab
+   routes to `/security`, the L3 Sessions pill renders `AccountSecurityPanel` inline. The file's own
+   comment says sessions "moved here from /security", but the tab was never removed. One survives.
+   *Blocks E4, which cannot place a surface that exists in two places.*
+
+---
+
+### 8 · Out of scope
+
+- The data model, the kernel and the 15 domains — those stay PRD 20's.
+- PRD 19's §2 ownership register — cited here, never restated.
+- The marketing site's information architecture. It keeps its pages and its sections; it adopts the
+  palette and type scale only.
+- Mobile-native shells. The panel becomes a full-height bottom sheet and the roster scrolls
+  horizontally; that is responsive web, not a separate app.
+
+---
+
+### 9 · Already landed
+
+- `settings.logsTab` — the Logs sub-tab was a hardcoded English string; now in all five catalogs.
+- The Save Personality button rendered `var(--accent, #6366f1)` from a hand-rolled `<button>`;
+  now the `Button` primitive, with the spinner and `aria-busy` it never had.
+- `LandingCanvasHero` carries the shell's aesthetic: a session bar with presence, the always-on
+  roster along the bottom, an agent object tinted rather than merely labelled, and its two
+  off-scale radii moved onto the scale. Blur and click-to-seed are unchanged; the roster seeds the
+  composer exactly as the objects do.
+- **The whole sequence, E0–E6.** The dock is gone: a destination now opens as a panel over a board
+  that stays mounted *and visible*, at one of three widths chosen by `panelWidth()` rather than by a
+  call site. Three tab bars became one `DestinationIndex` that turns vertical past six items on its
+  own. The footer is the roster — the PRD 20 §3 seats beside the invited team, in one row shape from
+  one endpoint, joinable by drag and by keyboard through one payload. The left panel leads with the
+  person's own sessions. Two shrink-only ratchets hold the scale.
+- **Two corrections to this document, made against the code rather than around it.** §2.8 claimed
+  controls of `29 / 34 / 44px` where `globals.css` — which §2 says wins — declares `32 / 36 / 44px`.
+  §3.2 recorded E3 as blocked on a helper that already existed.
+- **A latent panel bug.** `SlideOutPanel` closed on the scrim but not on `Esc`, so a keyboard user
+  could open a panel they had no way to dismiss. §2.5 had always said otherwise.
+- **The last two residuals, 2026-08-09.** The literal-hex sweep finished at zero and the panel
+  gained its size container. What the sweep cost was not the 1,483 mechanical replacements but the
+  nine shipped defects it walked into — six of them left by EARLIER passes of this same migration,
+  each one a token put somewhere a token cannot go: a self-referential CSS variable that stripped
+  the landing hero's ink, an xterm cursor that vanished, an unthemed light-mode address bar, a
+  React Native scaffold with `borderRadius: 'var(--radius-xl)'`, tokens written into a print sheet
+  and a downloadable proposal, and white ink on a white page. Three duplicated palettes (Evermind's
+  regions ×3, the Canvas object kinds ×2, the board's series colours inside a 5,000-line component)
+  became one declaration each. That is why §2.7 now ends with the four ways of "fixing" a literal
+  that are worse than leaving it, and why the colour ratchet asks for a REASON rather than a number.
+
+### §11 preamble · §11.1 The finding — seven registries for one product
+<!-- from docs/specs/21-prd-unified-experience.md lines 636-641, 657-691 -->
+
+### 11 · The unified menu — one destination registry, one arc, one storefront
+
+> **Status:** design, 2026-08-09. E0–E6 built the *shell*: a panel over a mounted board, three
+> widths, one design system. What they did not touch is what is *in* the left panel — and there the
+> product still carries seven separate lists of destinations. §11 is that half. It changes no shell
+> mechanic; §§0–10 stay authoritative for those.
+
+
+#### 11.1 The finding — seven registries for one product
+
+Measured 2026-08-09 against live source.
+
+| # | Registry | File | Rows | Renders as |
+|---|---|---|---|---|
+| 1 | `NAV_GROUPS` | `frontend/src/lib/navGroups.ts` | 15 groups + 48 tabs | left panel, **WORKSPACE** block |
+| 2 | `BURNRATE_DOMAINS` | `frontend/src/lib/burnrateCatalog.ts` | 9 domains + 3 foundations | left panel, **PRODUCT DOMAINS** block → **marketing pages** |
+| 3 | `DOMAINS` (kernel) | `frontend/src/lib/kernel/kernelApi.ts` | 15 seats | `/seat/<domain>` + `RosterNav` |
+| 4 | Team roster | `GET /api/roster/team` | humans + agents | footer `TeamBar` (§3.3) |
+| 5 | `ADMIN_GROUP_META` | `frontend/src/lib/adminGroups.ts` | 10 groups | admin index |
+| 6 | `CATEGORY_IDS` | `app/marketplace/MarketplacePageClient.tsx:56` | 8 categories | marketplace tabs |
+| 7 | `system_features` | BurnRateOS Postgres (incoming, PRD 19) | 9 categories + ~120 leaves, persona- and plan-gated, **recursive** | its own sidebar |
+
+**The CFO exists four times:**
+
+| Where | Called | Goes to |
+|---|---|---|
+| `BURNRATE_DOMAINS` | Business Intelligence `CFO` | `/business-intelligence` — **a marketing page** |
+| kernel `DOMAINS` | finance | `/seat/finance` |
+| footer `TeamBar` | CFO | drag-to-seat |
+| `NAV_GROUPS` → Insights | Finance | `/insights/finance` |
+
+Four names, four icons, four hrefs, one job. On screen today the left panel renders **WORKSPACE**
+above **PRODUCT DOMAINS** (`Product Management CPO`, `Business Intelligence CFO`, `Agile Survival
+CTO`, `Sales & Revenue CRO`) while the footer simultaneously renders `CMO · Manager · Recruiter ·
+CFO · CRO · HR · Security · CEO · Support`. **Two rosters, disjoint, visible at once** — and the
+left one navigates out of the product.
+
+**Why it happened.** Each list was correct when written. `NAV_GROUPS` predates the seats.
+`BURNRATE_DOMAINS` landed as *marketing* taxonomy and was later reused as navigation because it was
+the only list that knew about CFO/CMO/CRO. Kernel `DOMAINS` came from PRD 20's data model. The
+roster came from E0. Nobody added a duplicate; four people each added the first one for their layer.
+**A registry is not prevented by review — it is prevented by there being only one place a
+destination can be declared** (§11.7.1).
+
+### §11.2 The unified model · §11.3 The arc (incl. 11.3.1, 11.3.2)
+<!-- from docs/specs/21-prd-unified-experience.md lines 693-801 -->
+
+#### 11.2 The unified model
+
+One row shape, one array, four renderers.
+
+```ts
+// frontend/src/lib/destinations.ts — THE registry
+export type Stage = 'idea' | 'make' | 'run' | 'measure' | 'market' | 'admin';
+
+export interface Destination {
+  /** Stable and unique across the whole product. */
+  id: string;
+  /** PRD 20 §3 owner. `'platform'` means no teammate — panel only (§4). */
+  seat: Domain | 'platform';
+  /** Where in Idea → Make → Run this sits. Decides the LEFT PANEL grouping. */
+  stage: Stage;
+  /** i18n key under `nav`. THE name — marketing, app rail, ⌘K and the seat index all read it. */
+  labelKey: string;
+  icon: string;
+  /** The in-app destination. Never a marketing route. */
+  href: string;
+  /** The signed-out twin, when one exists. Rendered only by the public shell. */
+  marketingHref?: string;
+  /** How this destination presents when someone signed in opens it (§11.4.5).
+   *  `'panel'` — mounts over the canvas at `full` width; the stage never unmounts.
+   *  `'page'` — a real page; only auth, legal and the blog qualify (§3.6). */
+  surface?: 'panel' | 'page';
+  /** Progressive disclosure: the row is always LISTED; the rung gates its STATE (§11.4.4). */
+  rung: number;
+  plan?: 'free' | 'pro' | 'scale';
+  /** Level 2 — this row is a leaf of a seat's workbench index. */
+  parent?: string;
+  /** Marketplace family, when this destination is also listable (§11.5). */
+  listable?: Family;
+}
+
+/** The marketplace families. ONE derivation for the filter label, the publish
+ *  CTA and the flow that CTA runs — so the button can never disagree with the
+ *  filter above it, and "Publish a company" genuinely runs the claim (§11.5). */
+export const FAMILIES = {
+  talent:  { label: 'Talent',    publish: 'Publish a listing', flow: 'listing' },
+  company: { label: 'Companies', publish: 'Publish a company', flow: 'claim'   },
+  agent:   { label: 'Agents',    publish: 'Publish an agent',  flow: 'agent'   },
+  asset:   { label: 'Assets',    publish: 'Publish an asset',  flow: 'asset'   },
+} as const;
+export type Family = keyof typeof FAMILIES;
+```
+
+| Surface | Projection over the one array |
+|---|---|
+| Left panel | `group by stage`, top-level rows only (`!parent`) |
+| Footer roster | `group by seat`, joined to `GET /api/roster/team` for presence + avatar |
+| `⌘K` | flat search |
+| Seat workbench index (§3.4's index column) | `filter(parent === seat)` — where the ~120 BurnRateOS leaves land |
+| Public shell / marketing | `filter(marketingHref)`, same `labelKey` — so a marketing page can never describe a feature by a name the product does not use |
+
+`NAV_GROUPS`, `BURNRATE_DOMAINS`, `ADMIN_GROUP_META` and `CATEGORY_IDS` become derived selectors
+over this array in the migration pass, then are deleted. Kernel `DOMAINS` stays — it is the *seat*
+enum, and `Destination.seat` references it.
+
+#### 11.3 The arc — Idea → Make → Run
+
+The operator's framing, made into an information architecture: *one canvas — idea to real — with
+all the AI and business tools you need to go from a business idea to a company.*
+
+| Stage | The question | What lives here | Owning seats |
+|---|---|---|---|
+| **Idea** | *what if?* | Canvas · Challenges · Ideas & scratch pad · Validation lab · Market & competitor research · Pitch & narrative | Brain · CPO · CEO |
+| **Make** | *build it* | Projects · Delivery board · Sprints & ceremonies · Agents & runtime · Quality · Knowledge · Deploy & embed | Manager · CTO · platform |
+| **Run** | *run it as a company* | Finance · Revenue & CRM · Growth & marketing · People & HR · Hiring · Investors & fundraising · Governance & SOC 2 · Support · Commerce & billing | CFO · CRO · CMO · HR · Recruiter · CEO · Security · Support |
+| **Measure** | *is it working?* | Insights — the one analytics hub | platform |
+| **Market** | *sell · buy · hire · be found* | Marketplace: talent · companies · things | platform |
+| **Admin** | *settings* | Settings · Security · Billing · Tenants · Platform admin | platform |
+
+**Stage is not a synonym for seat.** A seat can own rows in more than one stage — the CEO owns Pitch
+in Idea and Investors in Run. That is precisely why two axes are needed, and why they must be two
+**columns on one row** rather than two registries.
+
+##### 11.3.1 BurnRateOS's nine categories, mapped
+
+Verified against `api/prisma/migrations/20260411_seed_feature_tree/migration.sql` plus the twelve
+later menu migrations.
+
+| BurnRateOS category | Leaves | Stage | Seat | Destination |
+|---|---|---|---|---|
+| Product Management | 8 | idea → make | CPO / Manager | `/projects?tab=pm` |
+| Agile Survival | 7 | make | CTO / Manager | `/projects?tab=ceremonies` |
+| Business Intelligence | 8 | run | **CFO** | `/seat/finance` |
+| Operational Cadence | 8 | run | **HR** | `/seat/people` |
+| Customer Engagement | 8 | run | **CRO** | `/seat/support` + `/quality?tab=feedback` |
+| Investor Intelligence | 13 | idea (pitch) + run | **CEO** | `/seat/investor` |
+| Revenue & Growth | 20+ | run | **CRO** + **CMO** | `/seat/revenue` · `/seat/growth` |
+| Governance & Collaboration | 14 | run | **Security** | `/seat/governance` |
+| **AI Assistant** | 4 | — | Brain | **deleted — see below** |
+
+##### 11.3.2 "AI Assistant" is deleted, and that is the largest simplification the merge buys
+
+In BurnRateOS the AI was a *department*: `/ai/coach`, `/ai/hub`, `/ai-assistant/insights`,
+`/ai-assistant/predictive`, `/ai/competitor-monitor`, `/ai/contract-analyzer`,
+`/ai/email-classifier`, `/ai/expense-categorizer`, `/ai/pitch-deck-feedback`, `/ai/voice-agent` —
+ten destinations whose only shared property is *the implementation uses a model*.
+
+In Builderforce the AI is the *surface*. Each of those ten is a capability of the seat that owns the
+work: expense categorisation is the CFO's, contract analysis is Security's, competitor monitoring is
+the CMO's, pitch-deck feedback is the CEO's. **They become tools on a teammate, not rooms in a
+building.** BurnRateOS itself started this — migration `20260412_consolidate_ai_menu` deleted four
+and reparented six to their owner domains. This finishes it.
+
+The corollary is load-bearing: **there is no "AI" item in the unified menu at all.** A menu item
+named after the technology is the tell that the product has not decided who the work belongs to.
+
+### §11.4.1 The left panel · §11.4.2 The footer
+<!-- from docs/specs/21-prd-unified-experience.md lines 805-865 -->
+
+##### 11.4.1 The left panel
+
+```
+┌────────────────────────┐
+│  ✦ New                 │   always: empty board + prompt, one meaning everywhere
+├────────────────────────┤
+│  ● ACTIVE              │   the live session (canvas OR chat — one stream, 0409 `mode`)
+│    Bakery landing      │
+│  RECENTS               │
+│    LLM startup comp…   │
+├────────────────────────┤
+│  IDEA                  │
+│    Canvas · Challenges │
+│  MAKE                  │
+│    Projects · Quality  │
+│    Knowledge · Deploy  │
+│  RUN                   │   ← the eight seats' domains, by NAME not by acronym
+│    Finance        CFO  │
+│    Revenue        CRO  │
+│    Growth         CMO  │
+│    People          HR  │
+│    Hiring   Recruiter  │
+│    Investors      CEO  │
+│    Governance Security │
+│    Support     Support │
+│  MEASURE  Insights     │
+│  MARKET   Marketplace  │
+├────────────────────────┤
+│  Settings              │
+│  Sean Hogg        MAX  │
+└────────────────────────┘
+```
+
+Three deliberate departures from what ships today:
+
+1. **PRODUCT DOMAINS is deleted as a block.** Its nine rows are not lost — they are the RUN group,
+   under their *product* names with the seat as a trailing chip rather than as the identity. "You
+   are going to Finance, which the CFO owns" reads correctly; "you are going to CFO" does not.
+2. **The `seat` nav group is deleted.** `/seat/delivery` as a menu item was a door labelled *door*.
+   Each seat's surface is reached by its RUN row or by its footer chip; `/seat/<domain>` remains the
+   route both resolve to.
+3. **`dashboard` is deleted.** §6.8 already requires sign-in to land on the last board; a Dashboard
+   nav item is the thing that undoes it.
+
+**Every stage header collapses, and the state persists.** With PRD 18/19 landed the Run group alone
+carries nine rows, and a person who lives in Make should not scroll past a company they only touch
+on Fridays. The header is a `<button aria-expanded>` with a rotating chevron — not a hover
+affordance, because the stage underneath is a drag surface and a hover-opened region at the left
+edge eats drags. Collapse is per-group, keyed by `stage`, and stored beside the rail's
+collapsed/expanded preference so the panel reopens the way it was left.
+
+Collapsed-rail behaviour is unchanged: identity compresses, text flies out. Sessions leave the rail
+and return as a click-opened flyout; stage groups become icon runs with their eyebrow as tooltip —
+and a collapsed *group* inside an expanded rail is a different state from a collapsed *rail*, so
+the two preferences are stored separately and neither infers the other.
+
+##### 11.4.2 The footer — the roster, and the only seat list
+
+Behaviour is unchanged from §3.3 (one row shape, drag **and** keyboard, disable-never-hide). What
+changes is that it becomes the **only** place a seat is enumerated. A left-panel RUN row is a
+*domain*; a footer chip is a *person*. Clicking either opens the same panel; only the chip drags.
+
+### §11.4.3 (width control) · §11.4.5 · §11.4.6
+<!-- from docs/specs/21-prd-unified-experience.md lines 889-937 -->
+
+**The width control returns to the panel header.** §3.4 declares three widths and `panelWidth()`
+picks one, but a *policy* choosing the width is not the same as a *person* choosing it — a Gantt in
+a 660px drawer and a settings form in 94% are both wrong, and only the reader knows which. So
+`SlideOutPanel` gains a three-step control in its header (`440 · 660 · 94%`), keyboard-reachable,
+with `panelWidth()` supplying the default rather than the final answer. The choice persists per
+destination, because the person who widens Finance wants Finance wide every time and does not want
+Settings to follow it. Widening never navigates and never remounts the stage.
+
+##### 11.4.5 A reference page is a panel, not a page
+
+`/soc2`, `/integrations`, `/survival-focused-agile` and the other eight domain pages are the last
+place the product still navigates *away* from the board. They carry `surface: 'panel'`:
+
+| Who is looking | What the route resolves to |
+|---|---|
+| signed out | a real page, real URL, real SEO, inside `MarketingShell` — unchanged (§3.6) |
+| signed in | the **same route component**, mounted in `ShellPanel` at `full` width over the board |
+
+Three things this buys, and one it does not cost:
+
+- **One implementation, two shells.** A marketing page that drifts from the product lies. `/soc2`
+  signed out explains the controls; signed in it shows *your* controls, from the same component
+  reading the same endpoint at a different rung.
+- **The session survives a curiosity.** Someone mid-agent-turn who wants to check whether an HRMS
+  is supported opens Integrations, reads it, presses `Esc`, and the turn is still running. Today
+  that is a full navigation and the answer to "is my work still there" is *no*.
+- **SEO is untouched**, because the signed-out path is the one crawlers take and its URL shape does
+  not change. This is what makes it cheap: no redirect map, no slug migration.
+
+The cost is the one §3.4 already paid — these routes must measure the **panel**, not the viewport,
+via `@container panel`. A domain page written against `@media (max-width: 700px)` lays itself out
+for a screen it does not have. That is a per-route fix at M3, not a blocker.
+
+##### 11.4.6 The public header is the same registry
+
+The signed-out header is a fourth renderer, not a fourth list. Two corrections it needs, both from
+the operator's 2026-08-09 review:
+
+1. **`Home` is deleted.** The logo already is home; a `Home` item is the second way to do the one
+   thing every logo in every product already does. Six items become five plus the mark.
+2. **`Get Started →` opens the canvas, not a signup form.** The board is real, local-first and
+   theirs before an account exists (`newLocalCreationSession()`, `LOCAL_CREATION_PREFIX`), so the
+   primary CTA should hand over the product. A signup wall in front of a product that works without
+   one is an acquisition cost spent on a form.
+
+`Product ▾` is the arc — Idea / Make / Run columns rendered from `stage`. `Learn ▾` is the
+reference set. Every item in both menus carries `surface:'panel'`, so a signed-in visitor clicking
+`SOC 2` from the marketing header lands on their board with the panel open rather than being thrown
+out of their session into a brochure.
+
+### §11.5 The marketplace — families · §11.5.4 Cart and purchase memory
+<!-- from docs/specs/21-prd-unified-experience.md lines 956-988, 1057-1072 -->
+
+#### 11.5 The marketplace — three listing families, one storefront
+
+Today `CATEGORY_IDS` is `all · personas · skills · workforce · talent · models · gigs · publish` —
+eight tabs mixing *what is sold* with *who sells it* with *a verb*. The ask is to add companies;
+adding a ninth tab to that list is how it reaches fifteen.
+
+| Family | Kinds | Who lists | Who is buying |
+|---|---|---|---|
+| **Talent** | person · gig | freelancers, agencies | anyone hiring |
+| **Companies** | business · service · product · storefront | claimed company owners | customers, partners, investors, acquirers |
+| **Agents** | built-in · community | agent authors, the platform | anyone staffing a seat |
+| **Assets** | model · skill · persona · prompt · template · canvas | builders | anyone |
+
+`publish` is not a family — it is the **verb**, and it belongs on a primary button. `all` is the
+absence of a filter, not a filter.
+
+**There is no `/agents` destination.** An agent is a *listing* whose purchase writes a roster row —
+so the catalog and the footer are the same rows at two rungs and cannot drift. Agents split out of
+Talent rather than sitting inside it because, although a person and an agent are the same kind of
+*participant* to a session, they are not the same kind of *listing*: one has availability and an
+hourly rate, the other has a price, a seat and a set of tools. Merging them forces one publish form
+to serve two shapes, which is where the honest flow dies.
+
+**The publish CTA is derived, and that is the point of `FAMILIES` (§11.2).** Four buttons written
+by hand drift from the filter above them within one release; one `FAMILIES[active].publish` cannot.
+The `flow` field matters as much as the label — **"Publish a company" runs the claim-and-verify
+flow, not a listing form**, because a company you do not own is not yours to list.
+
+> **Copy decision, flagged for the operator.** The fourth family was drafted as **Things**, which
+> fails the CTA test — no product ships a button reading *Publish a thing*. **Assets** survives the
+> publish sentence, so §11 uses it. The test itself is the durable rule: **a family name that
+> cannot complete "Publish a ___" is not a family name.** It is also what splits Talent's CTA to
+> "Publish a listing" rather than the ungrammatical *Publish a talent*.
+
+
+##### 11.5.4 Cart and purchase memory
+
+The cart is global chrome, not a marketplace-page widget. The same cart icon and item count appear
+in the signed-out public header and the signed-in top bar, and its drawer survives navigation. Every
+marketplace listing that can be acquired enters this cart before checkout; subscriptions and other
+recurring services may share the drawer but complete through their own provider checkout.
+
+**Free is a price, not an absence of a transaction.** Completing checkout for a zero-dollar skill,
+persona or content item writes a `marketplace_purchases` row with `price_cents = 0` before the item
+is removed from the cart. Paid acquisitions write the same record only after payment is verified.
+The drawer exposes the authenticated person's purchase history, newest first, so acquisition history
+does not disappear merely because an item was free, later uninstalled, or no longer listed.
+
+The server-owned listing price is authoritative at checkout. The cart may display a cached price for
+responsiveness, but it cannot confer an entitlement or submit a client-selected amount. Mixed carts
+that require different checkout providers are completed separately and say so explicitly.
+
+### §11.6 What gets deleted · §11.7 Sequence (M0–M2) · §11.7.1 The ratchet · §11.8 Acceptance criteria
+<!-- from docs/specs/21-prd-unified-experience.md lines 1074-1167 -->
+
+#### 11.6 What gets deleted
+
+Deletion is the deliverable; an addition that leaves the old list standing is the failure mode this
+section exists to prevent.
+
+| Deleted | Replaced by | Milestone |
+|---|---|---|
+| `BURNRATE_PRODUCT_DOMAINS` as a nav rail (`.nav-domain-section` in `Sidebar.tsx`) | the RUN group | M1 |
+| `burnrateCatalog.ts` (whole file) | `destinations.ts` + the `marketingHref` field | M1 |
+| `NAV_GROUPS` / `FOR_HIRE_NAV_GROUPS` / `FREELANCER_NAV_GROUPS` / `SALES_NAV_GROUPS` | one array + an account-type selector | M1 |
+| The `seat` nav group · the `dashboard` nav group | RUN rows + footer chips · last-board landing (§6.8) | M1 |
+| The public header's `Home` item | the logo, which was always home (§11.4.6) | M1 |
+| The signup-form destination behind `Get Started →` | `/create/new` — a real local-first board (§11.4.6) | M1 |
+| Standalone page rendering for the nine domain pages + `/soc2` + `/integrations` when signed in | `surface:'panel'` over the mounted board (§11.4.5) | M3 |
+| `ADMIN_GROUP_META` as its own list | `stage:'admin'`, `parent:'admin'` rows | M3 |
+| `CATEGORY_IDS` literal (8 mixed tabs) | `FAMILIES` — four families, derived label + CTA + flow | M4 |
+| The `/agents` destination | the `agent` marketplace family (§11.5) | M4 |
+| Per-surface seat colours (roster / marketing cards / canvas agent objects) | `--seat-*`, one declaration (§11.10.1) | M0 |
+| BurnRateOS "AI Assistant" category, `/ai/hub`, `/ai/coach` | the composer and the owning seats | M3 |
+| BurnRateOS hard-coded "Hubs" block (`/bi/hub`, `/ops/hub`, `/ai/hub`, `/agile/holistic`) | the seat workbench home | M3 |
+| BurnRateOS `system_features` **as a menu mechanism** | the registry; the table survives as *entitlement only* | M3 |
+
+> **`system_features` deserves its own line.** BurnRateOS drives its sidebar from a database table
+> carrying `menuLabel`, `menuIcon`, `menuOrder`, `route`, `parentFeatureId` and `allowedPersonas`.
+> It is a good entitlement store and a bad navigation store: a route rename becomes a migration, a
+> label is untranslatable (that side ships no i18n at all), and the tree can render a link to a
+> route that no longer exists. **Split it:** `enabled(featureKey, tenant)` is data and survives;
+> label / icon / order / route / parent are code and move into the registry, where next-intl and the
+> type system can see them.
+
+#### 11.7 Sequence
+
+| # | Work | Gate |
+|---|---|---|
+| **M0** | `destinations.ts` + the `Destination` type + `FAMILIES`; populate from all five existing lists **with no UI change**. Declare `--seat-*`, `--grad-brand`, `--wash-hero` in both themes (§11.10). Add the ratchet (§11.7.1) baselined at today's numbers. | Every currently-reachable route resolves through the registry; every seat has a hue in both themes; ratchet green |
+| **M1** | Left panel renders from the registry, grouped by stage, with collapsible headers. `burnrateCatalog.ts`, the `seat` group and the `dashboard` group are deleted. The public header drops `Home` and repoints its CTA at the canvas. `SlideOutPanel` gets its width control back. | Zero references to `burnrateCatalog`; no marketing href reachable from the app rail; the CTA lands on a board |
+| **M2** | The footer is the only seat enumeration; a RUN row and a footer chip resolve to the same panel. | One roster endpoint, one seat list, drag + keyboard parity retained (§6.4, §6.5) |
+| **M3** | Seat workbench index = `filter(parent === seat)`. Absorb `ADMIN_GROUP_META` and, as PRD 19 tracks land, the `system_features` leaves; demote that table to entitlement. **Flip the reference destinations to `surface:'panel'`** (§11.4.5) and fix their viewport-vs-container queries. | §6.3 still holds; every ported leaf has a `parent`; a signed-in `/soc2` opens over a board whose agent turn survives it |
+| **M4** | Marketplace: four families from `FAMILIES`, the `company` listing kind, the claim flow surfaced, `publish` becomes a derived button. The `/agents` destination is deleted and becomes the `agent` family. | Browse → claim → verify → RUN activates; the CTA label and flow are derived, never written per tab |
+| **M5** | Progressive disclosure through one `earned(rung)` helper; dim rows open a real preview. | A visitor sees every row; a claimed company activates eight seats |
+
+Against PRD 18/19: **M0–M2 block no track's schema or API, and gate every track's left-panel
+entry.** A track registers its destinations in the same pass that lands its surface — §5.1's rule,
+restated for the menu.
+
+##### 11.7.1 The ratchet — the item that makes it permanent
+
+`frontend/scripts/check-destinations.mjs`, wired into `npm test` beside `check:design-tokens` and
+`check:design-scale`:
+
+1. **One declaration.** Any array literal outside `destinations.ts` whose elements carry both an
+   `href`/`route` and a `labelKey`/`menuLabel` fails the build. Allowlist entries carry a written
+   reason — the pattern §2.7 settled on after a count-based ratchet went slack.
+2. **No duplicate labels.** Two rows resolving to the same `labelKey` fail.
+3. **No marketing href in an app surface.** A `Destination.href` matching `PUBLIC_SHELL_PREFIXES`
+   fails unless the row also sets `marketingHref` and the app rail reads `href`.
+4. **Every seat is covered.** Each kernel `DOMAINS` entry either owns ≥1 destination or is
+   explicitly `platform`.
+5. **The registry count is deliberately NOT ratcheted** — PRD 18/19 add hundreds of leaves. What is
+   ratcheted is the number of *registries*, and that number is 1.
+
+**M0 and the ratchet land together.** Without it, M1–M5 are undone by the first track that ships a
+surface — the same argument §5 makes about E6.
+
+#### 11.8 Acceptance criteria
+
+1. `frontend/src/lib/destinations.ts` is the only file declaring a navigable destination's label,
+   icon, href and parent. Enforced by `npm run check:destinations`.
+2. No seat is enumerated in two places: the footer roster is the only seat list.
+3. No in-app navigation control resolves to a route in `PUBLIC_SHELL_PREFIXES`.
+4. The left panel renders `Idea · Make · Run · Measure · Market · Admin`, in that order, at every
+   rung — rows dim, never disappear (§2.6 rule 7).
+5. Every BurnRateOS `system_features` leaf and every hired.video page group has exactly one `parent`
+   in the registry before its track's UI ships.
+6. The marketplace exposes exactly four families from `FAMILIES`; the publish CTA's label **and**
+   flow are derived from the active family, and `/agents` has zero references as a destination.
+7. A company can be browsed unclaimed, claimed with verification, and the claim activates the RUN
+   group and the eight business seats for that tenant.
+8. Every registry string is a `labelKey` present in all five catalogs with real translations.
+9. Both themes, 360px, `@container panel` for anything rendered inside a panel (§3.4).
+10. `check:design-tokens`, `check:design-scale` and `check:destinations` all pass.
+11. Every left-panel stage header collapses, is a `<button aria-expanded>`, and its state persists
+    independently of the rail's collapsed state (§11.4.1).
+12. `SlideOutPanel` exposes a keyboard-reachable three-step width control; the choice persists per
+    destination and never remounts the stage (§11.4.4).
+13. Every `surface:'panel'` destination renders identically signed out (as a page) and signed in
+    (in `ShellPanel` at `full`), from one component, with its public URL unchanged (§11.4.5).
+14. The public header has no `Home` item, and its primary CTA resolves to a real board (§11.4.6).
+15. Every seat in kernel `DOMAINS` has a `--seat-*` token declared in both themes, no two seats
+    share a hue, and no surface hard-codes a seat colour (§11.10.1).
+16. The Features page renders its domain cards from the registry — title, seat, hue, stage and
+    feature bullets — and carries no second copy of any of them (§11.10.3).
+17. Both public and signed-in headers expose the same persisted cart; completing a free marketplace
+    acquisition creates a queryable purchase-history row with a zero amount (§11.5.4).
+
+### §11.11 What shipped, and what did not — 2026-08-09
+<!-- from docs/specs/21-prd-unified-experience.md lines 1322-1355 -->
+
+#### 11.11 What shipped, and what did not — 2026-08-09
+
+**Built.**
+
+| Milestone | What landed |
+|---|---|
+| **M0** | `NavGroup` gains `seat`, `stage` and `rung`; `REFERENCE_DESTINATIONS`, `PUBLIC_NAV` and `bottomNavFor()` join it, so `navGroups.ts` is the one declaration site. `lib/seats.ts` + `--seat-*` / `--stage-*` / `--grad-brand` / `--wash-hero` in `globals.css`. `scripts/check-destinations.mjs` wired into `npm test`. |
+| **M1** | The left panel renders the arc with collapsible, persisted stage headers and a seat badge in each RUN row's own hue. `burnrateCatalog.ts` **deleted** (12 rows moved onto the registry as reference destinations). The `seat` and `dashboard` rows **deleted**. The public header drops `Home`, folds Agents into Marketplace, and its CTA opens `/create/new`. `SlideOutPanel` gains the three-step width control, persisted per destination. |
+| **M2** | `RosterNav` no longer renders on `/seat/<domain>` — it was a third seat enumeration beside the RUN rows and the footer. The footer is the only one. |
+| **M3** (IA half) | `surface:'panel'` behaviour is live: the nine domain pages, `/soc2`, `/integrations` and `/features` are ordinary pages signed out and full-width panels over a mounted board signed in. |
+| **M4** (IA half) | Four families from `FAMILIES`, kinds as sub-filters, and a publish CTA whose label **and** flow are derived. Every legacy `?category=` link still resolves. |
+| **Features** | `/features` rebuilt on the ported band rhythm, every card projected from the registry, counts computed from it. |
+
+**The ratchet earned its keep on day one.** It failed its first run against two lists nobody had
+noticed: the marketing header's `FLAT_LINKS` and `MobileBottomNav`'s item table. Both were {href,
+labelKey} arrays living beside the component that rendered them — the sixth and seventh registries,
+found by a script rather than by a person. Both are now registry rows.
+
+**Not built, and why.**
+
+1. **M3's other half — the seat workbench index.** Level 2 is still each destination's existing tab
+   set; `filter(parent === seat)` waits on the PRD 19 tracks that bring leaves to parent.
+2. **M4's company directory and claim flow.** The `companies` table exists (PRD 20, investor
+   domain) but is tenant-scoped with no nullable-owner column and no verification. The directory
+   needs the company graph PRD 19 B0 brings *and* the answer to §7's decision 4. The family is
+   therefore **visible and inert** with an honest line, per §2.6 rule 7 — not hidden.
+3. **M5's preview state.** `earnedRung()` exists and dims what is unearned; clicking a dim row does
+   not yet open its workbench in preview.
+4. **Two entitlement helpers.** `earnedRung()` (three rungs: public / signed-in / workspace) and
+   `RosterNav`'s `earned()` (PRD 20's manifest rungs) now coexist. Reconciling them is a *data*
+   decision about the manifest's rung scale, not a UI one.
+5. **The fourth rung.** "Claimed a company" cannot be enforced until a company can be claimed, so
+   RUN rows sit at `WORKSPACE`. That is honest: they need a workspace, and there is not yet a
+   company for them to need.
+
+
+---
+
+## ✅ RESOLVED 2026-11-17 — PRD 47: finished sections archived on consolidation (One Collection view)
+
+- **Verified 2026-11-17:**
+  - §1 Why — what the analysis found (lines 13-28) — analysis narrative; F6 still live and restated in in platform.md.
+  - §3.1 Frontend files table + `CollectionDescriptor` type (lines 68-110) — all 16 modules in `frontend/src/components/collection/` (`Collection.tsx`, `CollectionHeader.tsx`, `CollectionTable.tsx`, `CollectionCards.tsx`, `CollectionFooter.tsx`, `CollectionBulkBar.tsx`, `MergeTargetPanel.tsx`, `SortableTh.tsx`, `useCollectionSort.ts`, `useCollectionSelection.ts`, `useCollectionPaging.ts`, `collectionPreferences.ts`, `sources.ts`, `useBulkAction.ts`, `descriptor.ts`, `collectionTypes.ts`) and `frontend/src/lib/collectionsApi.ts`. Unconsumed and untested — open in in platform.md.
+  - §3.3 shared types — `packages/interaction-contract/src/api/collection.ts` (exported `api.ts:21`).
+  - §3.3 bulk route + `runBulkAction` — `api/src/presentation/routes/collectionBulkRoutes.ts` (zod `:27`, idempotent replay `:49`), mounted `api/src/index.ts:716`; `api/src/application/collections/runBulkAction.ts:63,104,113`; RBAC `frontend/src/lib/rbac.ts:229-233`.
+  - §3.3 archive expand migration — `api/migrations/1352_prd47_collection_archived_at_expand.sql:17-48`.
+  - §11 Decisions D1–D7 — kept in in platform.md as contract (not archived).
+
+### §1. Why — what the analysis found
+<!-- from docs/specs/47-prd-collection-view.md lines 13-28 -->
+
+### 1. Why — what the analysis found
+
+| # | Finding | Evidence |
+|---|---|---|
+| F1 | The Card \| List toggle is shared, the collection is not. `ViewToggle` has ~31 importers; each one re-implements the grid, the `<table>`, the empty state and the count. | `components/ViewToggle.tsx`; e.g. `ProjectsContent.tsx` + `ProjectTable.tsx`, `TeamsView.tsx`, `PersonasClient.tsx` |
+| F2 | A paging chrome exists and is almost unused. `DataList` has ONE consumer (Tasks); `DataTable` has ZERO. Page sizes are 50/100/200, not 50/100/250. | `components/dataTable/*`, `usePageSize.ts:18` |
+| F3 | Pagination reaches 5 surfaces (blog, marketplace, prompts, startups, tasks). Four others roll their own "Load more" (creation library, quality, ceremony history, replay). ~120 surfaces render every row. | `components/Pagination.tsx` importers |
+| F4 | Sorting exists only in admin (`useTableSort`/`SortableTh` in `admin/adminShared.tsx:214-320`), plus one-offs in `LeadsView`, `RecordingsTable`, `SkillsBrowser`, `/prompts`. | — |
+| F5 | Selection is hand-rolled 4 times (`CreationLibraryPanel`, `TaskMgmtContent`, `SessionList`, `SuspectAccountsPanel`); no shared hook, no indeterminate header checkbox, no select-all on the creation library. | — |
+| F6 | **The bulk actions that exist fan out one request per record** — the 429 the operator hit. `useCreationLibraryActions.ts:82,89` (`Promise.all(ids.map(update/remove))`), `:93-96` (sequential merge loop), `TaskMgmtContent.tsx:978-1002` (sequential status/move loops). Seven more per-id `Promise.all` fan-outs in galleries/settings. | rate limiter: one per-tenant sliding window, FREE 300 / PRO 1200 / TEAMS 3000 rpm (`api/src/application/ratelimit/tenantBuckets.ts:27`) |
+| F7 | The server has no bulk contract, no page contract, no sort allowlist helper. Every collection `GET` is unbounded or capped at `LIST_ROW_CAP = 1000` and returns a bare array or `{plural}`. Only `/api/personas/public` and `/api/prompts/public` take `sort + limit + offset`. | `api/src/domain/shared/boundedInt.ts:33-71`; `personaRoutes.ts:145-179`, `promptLibraryRoutes.ts:125-176` |
+| F8 | Archive is represented four ways (`tasks.archived` bool, `projects.status='archived'`, `creation_sessions.archived_at`+`status`, `brain_chats.is_archived`) and is absent for most entities (workflows, teams, personas, prompts, …). | `api/src/infrastructure/database/schema/*` |
+| F9 | Merge exists for 3 entities, each with its own route and shape: contributors (preview + apply + revert), creation sessions (pairwise), brain chats (`consolidate`). | `contributorRoutes.ts:177-198`, `creationSessionRoutes.ts:1941`, `brainRoutes.ts:479` |
+| F10 | `CreationLibraryPanel` already has the target UX (Card\|List, checkboxes, `SessionBulkBar` with Merge/Archive/Delete, merge slide-out, `useConfirm`, persisted view) — but it is local to creation-sessions and uses raw `localStorage`. | `components/creation-sessions/*` |
+
+The pieces are all present. The work is to **extract them into one component, add the missing server contracts, and migrate every surface** — not to write a new parallel copy.
+
+### §3.1 Frontend files — `frontend/src/components/collection/`
+<!-- from docs/specs/47-prd-collection-view.md lines 68-110 -->
+
+#### 3.1 Frontend files — `frontend/src/components/collection/`
+
+Each module has one job and stays well under 400 lines. A new entity adds DATA (a descriptor and a port row),
+never a branch.
+
+| File | Responsibility | Origin (extract, then delete the original) |
+|---|---|---|
+| `Collection.tsx` | Composes header, bulk bar, body, footer; flex-column layout that fills the parent, `min-height:0`, body `overflow:auto` | `DataList.tsx` + `DataTable.tsx` layout contract |
+| `CollectionHeader.tsx` | search, filter `children` slot, result count, card-mode sort select, ViewToggle | `CatalogToolbar.tsx` |
+| `CollectionTable.tsx` | `<table>`, sticky `<thead>`, checkbox column (sticky-left), sortable headers | `DataTable.tsx`, `dataTableStyles.ts`, `.data-table` CSS |
+| `CollectionCards.tsx` | auto-fill `minmax()` grid; wraps the descriptor's `card(row)` with a selection checkbox | `CreationSessionTile.tsx` card chrome |
+| `CollectionFooter.tsx` | range text, `Pagination`, per-page select | `DataTable.tsx` footer |
+| `CollectionBulkBar.tsx` | selection count, select-all-matching, Archive/Restore, Merge, Delete, Clear; `useConfirm({destructive:true})` for Delete | `creation-sessions/SessionBulkBar.tsx` (+ module css) |
+| `MergeTargetPanel.tsx` | `SlideOutPanel` with a target `Select` and `dryRun` preview counts | `SessionEditorPanel.tsx` merge usage |
+| `SortableTh.tsx`, `useCollectionSort.ts` | `aria-sort` header button; local comparator sort or server `sort/dir` state | `admin/adminShared.tsx:214-320` |
+| `useCollectionSelection.ts` | `Set<string>` keyed by row id, survives page changes, page-scoped header state (none/some/all → `indeterminate`), `selectAllMatching()` | new; replaces 4 hand-rolled copies |
+| `useCollectionPaging.ts` | page + pageSize (50/100/250), resets page on filter/sort change | `dataTable/usePageSize.ts` |
+| `collectionPreferences.ts` | per-surface persisted view mode + page size via `lib/storage.ts` (`readLocalJson`/`writeLocalJson`), `useSyncExternalStore`, legacy `list`→`table` mapping | `creation-sessions/libraryViewPreference.ts` (removes a raw-storage site) |
+| `sources.ts` | `CollectionSource<Row>` port: `useLocalSource(rows, comparators)` (static catalogs, client sort/slice) and `useServerSource(fetchPage)` (server page/sort, keeps previous page while loading) | new |
+| `useBulkAction.ts` | calls `collectionsApi.bulk`, then refetches the page, clears the selection, shows the toast with `succeeded`/`skipped` counts | new; replaces `useCreationLibraryActions` loops |
+| `descriptor.ts` | `CollectionDescriptor<Row>` type (below) | new |
+| `lib/collectionsApi.ts` | typed client over `apiRequest` for `bulk` | new |
+
+```ts
+export interface CollectionDescriptor<Row> {
+  entity: BulkEntityKey | null;          // null = read-only collection (no selection, no bulk bar)
+  surfaceKey: string;                     // preference key, e.g. 'projects.tasks'
+  rowId: (row: Row) => string;
+  columns: CollectionColumn<Row>[];       // List mode
+  card: (row: Row) => React.ReactNode;    // Card mode body (selection checkbox is added by CollectionCards)
+  label: (row: Row) => string;            // merge picker + confirm copy
+  defaultView?: 'card' | 'table';
+  defaultSort: { key: string; dir: 'asc' | 'desc' };
+  emptyKey: string;                       // i18n key
+}
+export interface CollectionColumn<Row> {
+  key: string; header: string;            // header is an already-translated string
+  cell: (row: Row) => React.ReactNode;
+  sortKey?: string;                       // must match the server allowlist for server sources
+  compare?: (a: Row, b: Row) => number;   // local sources
+  width?: string; align?: 'start' | 'end';
+}
+```
+
+## ✅ RESOLVED 2026-11-17 — PRD 22: finished sections archived on consolidation (Browser Performance, Domain Execution, and Codebase Health)
+- **Verified 2026-11-17:**
+  - §2 What is already correctly placed: `frontend/src/lib/mamba-worker-client.ts:42`, `frontend/public/sw.js` update flow.
+  - §3.1 Canvas stage delivered eagerly: `frontend/src/components/AppShell.tsx:28-29` (`dynamic` `CanvasStage`); `creation-canvas/canvasLazyPanels.ts:62`, `builder/WorkspaceSidePanels.tsx:22` (`AITrainingPanel` dynamic).
+  - §3.3 Training resource cleanup: `frontend/src/lib/webgpu-trainer.ts:392-404` (`finally` and `destroy()` release the adapter and `GPUDevice`); `AITrainingPanel.tsx:145,297` (unmount and stop).
+  - §3.8 Offline fallback precached: `frontend/public/sw.js:27-29,78`; `frontend/public/offline.html`.
+  - §3.13 One client read-through cache: `frontend/src/infrastructure/http/readThrough.ts:63,83,89`; 39 consumers including all inventoried sites; `frontend/scripts/check-api-transport.mjs:190-194`.
+  - §3.15 Frontend architecture ratchet (layering and size half): `frontend/scripts/check-layering.mjs` + `.layering-baseline.txt`; `check-frontend-architecture.mjs` + `.frontend-architecture-baseline.json`. The complexity half stays open in the PRD.
+  - §3.16 Dead Fontshare CSP: resolved 2026-08-08 per the PRD; `next.config.js` CSP is `'self'`.
+  - §4.4 (a) aggregate root, (c) context map and (d) glossary: `frontend/src/lib/canvas/boundedContexts.ts`, `frontend/src/domains/canvas/domain/canvasBoard.ts`, `frontend/scripts/check-canvas-glossary.mjs`. These are already noted at DONE.md "PRD 22 context map, Canvas aggregate root and creational ratchet exist". (b) events on the wire stays open.
+  - §3.14 step 3, root provider split: `frontend/src/app/layout.tsx:233-322` (Locale, Auth, Confirm, Toast, Theme only); `components/ConditionalAppShell.tsx:415`; `scripts/check-root-layout-providers.mjs`. The page conversion stays open (21 of 208 pages; 200 of 3,914 files carry `'use client'`, down from 755 of 1,228).
+- Analysis-only sections, archived by range rather than copied (their figures describe the 2026-08-08 tree and are superseded by the verified numbers in the platform domain file):
+  - §0–§1: Source: `docs/specs/22-prd-browser-performance-domain-execution-analysis.md` lines 36–106
+
+### 0 · Initial scoping directive
+
+The operator's initial directive is the scope and decision rule for this analysis:
+
+> a key feature of any application is its ability to perform at optimium speed in the browser; some actions shoudl run in webgl, some should run in webml, etc. some should be pushed directly into the users browser via PWA and/or WASM.  Logic is best structured within Domains.
+
+For implementation purposes, this document interprets **WebML** as the browser machine-learning
+execution layer available through **WebNN** and runtimes such as ONNX Runtime Web. WebGPU is the
+preferred broadly useful GPU-compute path where WebNN is unavailable. WebGL remains a graphics
+fallback; it is not the default general-compute target.
+
+The directive does **not** mean that every operation should be moved to the most specialised
+browser API. The rule is:
+
+> **Put business policy in its owning domain. Put expensive work on the cheapest capable execution
+> target that profiling proves suitable, without blocking the browser's interaction thread.**
+
+That yields five distinct decisions:
+
+1. **Domain placement:** which bounded context owns the policy and data transformation?
+2. **Delivery:** should its code and assets arrive eagerly, on route entry, on feature activation,
+   or through an installable/offline PWA path?
+3. **Scheduling:** may it run on the interaction thread, or must it run in a worker?
+4. **Compute backend:** JavaScript, WASM/SIMD, WebGL, WebGPU, WebNN, or a server?
+5. **Fallback:** what happens on an unsupported, memory-constrained, offline, or lost-device path?
+
+---
+
+### 1 · Scope and method
+
+#### 1.1 Repositories and surfaces inspected
+
+The workspace contains two substantial projects:
+
+| Area | Role in this analysis |
+|---|---|
+| `Builderforce.ai/frontend` | Primary browser application: Next.js shell, Canvas, IDE, training, PWA |
+| `Builderforce.ai/studio` | Browser video/ML engine: WebNN, WebGPU, WASM, IndexedDB, WebCodecs |
+| `Builderforce.ai/studio-embedded` | React presentation and lifecycle integration for Studio |
+| `Builderforce.ai/brain-embedded` | Browser conversation/orchestration package |
+| `Builderforce.ai/browser-sdk` | Browser client surface |
+| `builderforce-memory` | Supporting memory/model engine; inspected where frontend imports it |
+
+The primary recommendations apply to `Builderforce.ai/frontend`. They do not propose relocating
+server-authoritative tenancy, billing, permissions, audit, or collaboration policy into the browser.
+
+#### 1.2 Evidence standard
+
+This is a static code audit, not a production trace. Findings are labelled as:
+
+- **Observed:** directly present in source.
+- **Likely consequence:** follows from the import or execution graph, but must be confirmed through
+  a production build or browser performance trace.
+- **Proposed:** a design to test, not a claim that it will necessarily be faster.
+
+The existing `.next` directory did not contain deployable `.next/static/chunks` during the audit,
+so this document does not invent route bundle sizes. Bundle conclusions must be verified with a
+fresh production build and bundle analyser before and after a change.
+
+#### 1.3 Existing engineering constraint
+
+`AGENTS.md` requires the dependency direction:
+
+```text
+presentation -> application -> domain -> infrastructure
+```
+
+Presentation owns view state, application coordinates use cases, domain owns business rules, and
+infrastructure implements storage and runtime adapters. Findings below treat violations of this
+rule as architecture defects even where current behaviour is correct.
+
+
+  - §3.17 Ranking: lines 876–900
+  - §8 Evidence index: lines 1304–1333
+  - §9 Baseline: lines 1337–1475
+  - §10 Status table: lines 1479–1510
+  - §13 Program phases: lines 1680–1731
+
+### §2 What is already correctly placed
+Source: `docs/specs/22-prd-browser-performance-domain-execution-analysis.md` lines 109–196
+
+### 2 · What is already correctly placed
+
+This is not a greenfield browser-compute implementation. Several patterns already match the
+directive and should be retained.
+
+#### 2.1 Local Mamba execution already has a worker boundary
+
+`frontend/src/lib/mamba-worker-client.ts:35-38` creates a dedicated module worker:
+
+```ts
+function defaultWorkerFactory(): Worker {
+  return new Worker(new URL('./mamba.worker.ts', import.meta.url), { type: 'module' });
+}
+```
+
+`frontend/src/lib/mamba.worker.ts:25-27` supports transferable payloads:
+
+```ts
+function reply(msg: WorkerResponse, transfer?: Transferable[]): void {
+  if (transfer && transfer.length) self.postMessage(msg, transfer);
+  else self.postMessage(msg);
+}
+```
+
+The worker owns `init`, `generate`, `stream`, `train`, `export`, and `dispose` operations
+(`mamba.worker.ts:35-80`). This is the reference pattern for other on-device model workloads.
+
+#### 2.2 Studio already routes across WebNN, WebGPU, and CPU
+
+`studio/src/engine/device-router.ts:82-116` orders the automatic target probe as WebNN, WebGPU,
+then CPU. ONNX sessions preserve a WASM fallback in
+`studio/src/engine/diffusion-engine.ts:980-982`:
+
+```ts
+if (device === 'webnn') return { ...base, executionProviders: ['webnn', 'wasm'] };
+if (device === 'webgpu') return { ...base, executionProviders: ['webgpu', 'wasm'] };
+return { ...base, executionProviders: ['wasm'] };
+```
+
+The engine also releases ONNX sessions and destroys an owned `GPUDevice`
+(`diffusion-engine.ts:418-451`). This is the required lifecycle standard for every GPU-backed
+domain adapter.
+
+#### 2.3 Heavy IDE/editor features demonstrate activation-time delivery
+
+`frontend/src/components/creation-canvas/CanvasBuildPanel.tsx:21` defers the IDE:
+
+```ts
+const IDE = dynamic(
+  () => import('@/components/IDE').then((m) => m.IDE),
+  { ssr: false },
+);
+```
+
+The direct IDE route uses the same pattern at `frontend/src/app/ide/[id]/page.tsx:20`.
+
+**Verified (2026-08-08 re-audit).** The claim that Monaco, Mermaid, xterm, WebContainer, voice and
+model-provider code contain dynamic imports is **correct**, via runtime `import()` rather than
+`next/dynamic`:
+
+| Library | Site |
+|---|---|
+| Mermaid | `components/MermaidDiagram.tsx:48` |
+| xterm + fit + web-links addons | `components/Terminal.tsx:22-24` |
+| WebContainer | `hooks/useWebContainer.ts:70`; `lib/browserRuntime/factory.ts:85`; both `app/webcontainer/connect` pages |
+| onnxruntime-web (voice) | `lib/voiceEngine.ts:54` |
+| y-monaco | `components/CodeEditor.tsx:75` |
+
+There are 57 `await import(...)` sites in total. These do split chunks, and the pattern is genuine.
+
+**The distinction that matters for §3.1 and §5 Phase 1** is *what* is deferred. Runtime `import()`
+inside an already-loaded client module defers a **library**; `next/dynamic` / `React.lazy` defers a
+**component subtree**, including everything that subtree statically imports. The second kind is what
+§3.1's finding requires, and it is rare: `next/dynamic` appears in exactly four files
+(`app/ide/[id]/page.tsx`, `components/CodeEditor.tsx`, `components/agent/FileChangeViewer.tsx`,
+`components/creation-canvas/CanvasBuildPanel.tsx`) and `React.lazy` in zero.
+
+So the library-level precedent is established and should be followed; the **component-level**
+precedent is four files and needs a per-route owner list rather than an assumption that the pattern
+is already in place.
+
+#### 2.4 The PWA has a controlled update protocol
+
+`frontend/public/sw.js:9-19` documents a stamped build version, waiting service worker, visible
+update prompt, and explicit `SKIP_WAITING`. This avoids silently replacing a running application
+under the user.
+
+---
+
+
+### §3.1 P0 — The application shell likely delivers the Canvas and training graph eagerly
+Source: `docs/specs/22-prd-browser-performance-domain-execution-analysis.md` lines 200–255
+
+#### 3.1 P0 — The application shell likely delivers the Canvas and training graph eagerly
+
+**Observed.** `frontend/src/components/AppShell.tsx:14` statically imports the Canvas stage:
+
+```ts
+import { CanvasStage } from './canvas/CanvasStage';
+```
+
+`CanvasStage.tsx:6` statically imports `CreationCanvas`, and `CreationCanvas.tsx:81,107` statically
+imports modality panels including `VoiceConfigPanel` and `AITrainingPanel`:
+
+```ts
+import { VoiceConfigPanel } from '@/components/ide/VoiceConfigPanel';
+import { AITrainingPanel } from '@/components/AITrainingPanel';
+```
+
+`AITrainingPanel.tsx:24-28` then statically imports the trainer and model types:
+
+```ts
+import { WebGPUTrainer, canTrainInBrowser, ... } from '@/lib/webgpu-trainer';
+import { MambaEngine } from '@/lib/mamba-engine';
+import type { HuggingFaceTokenizerSpec } from '@seanhogg/builderforce-memory-engine';
+```
+
+`webgpu-trainer.ts:33` has a runtime import from `@seanhogg/builderforce-memory-engine`.
+
+**Likely consequence.** A signed-in route that renders `AppShell` can download and parse the Canvas
+dependency graph even when `stageActive` is false. This makes the statement at
+`AppShell.tsx:64-67` incomplete:
+
+```ts
+// Everyone who has not opened a canvas pays nothing: `stageActive` is false ...
+```
+
+They may pay nothing in mounted Canvas work, but the static import graph may still impose network,
+parse, compile, and memory costs.
+
+**Direction.** Make activation boundaries explicit:
+
+```ts
+const CanvasStage = dynamic(
+  () => import('./canvas/CanvasStage').then((module) => module.CanvasStage),
+  { ssr: false },
+);
+
+const AITrainingPanel = dynamic(
+  () => import('@/components/AITrainingPanel').then((module) => module.AITrainingPanel),
+  { ssr: false },
+);
+```
+
+The stage must remain mounted after it opens, as required by PRD 21. Dynamic first activation and
+persistent mounting are compatible requirements.
+
+**Proof required.** Compare initial JS transferred, JS parsed, total blocking time, and heap usage
+for dashboard, workforce, and Canvas routes before and after the split.
+
+
+### §3.3 P0 — Training resource cleanup is incomplete
+Source: `docs/specs/22-prd-browser-performance-domain-execution-analysis.md` lines 330–358
+
+#### 3.3 P0 — Training resource cleanup is incomplete
+
+**Observed.** The adapter buffers have a destroy method at `webgpu-trainer.ts:167`, and the normal
+completion path calls it at line 340. However, `gpuAdapter` is scoped inside the `try`; the catch
+block at lines 388-395 cannot release it after an exception. `WebGPUTrainer.destroy()` at
+lines 398-401 changes flags but does not destroy `this.gpuDevice`:
+
+```ts
+destroy(): void {
+  this.stopped = true;
+  this.ready = false;
+}
+```
+
+**Direction.** The training domain adapter must implement deterministic disposal:
+
+```ts
+try {
+  await runTraining();
+} finally {
+  gpuAdapter?.destroy();
+  gpuDevice?.destroy();
+  gpuAdapter = null;
+  gpuDevice = null;
+}
+```
+
+Disposal is required on completion, stop, exception, component unmount, worker termination, device
+loss, and training-option changes.
+
+
+### §3.8 P1 — The PWA offline fallback is not actually precached
+Source: `docs/specs/22-prd-browser-performance-domain-execution-analysis.md` lines 563–586
+
+#### 3.8 P1 — The PWA offline fallback is not actually precached
+
+**Observed.** `frontend/public/sw.js:25-29` precaches only:
+
+```js
+const PRECACHE_URLS = [
+  '/manifest.json',
+  '/icon-192.png',
+  '/agentHost.png',
+];
+```
+
+Navigation failure asks for `/` at `sw.js:69-73`:
+
+```js
+fetch(request).catch(() =>
+  caches.match('/').then((r) => r ?? new Response('Offline', { status: 503 }))
+)
+```
+
+Because `/` is not in `PRECACHE_URLS`, a fresh install has no guaranteed HTML fallback.
+
+**Direction.** Precache a real, localised offline shell and route offline navigation to it. The
+shell should explain which local capabilities remain usable and which require network access.
+
+
+### §3.13 P1 — Client read-through caching is real but re-implemented thirteen times
+Source: `docs/specs/22-prd-browser-performance-domain-execution-analysis.md` lines 695–782
+
+#### 3.13 P1 — Client read-through caching is real but re-implemented thirteen times
+
+> Re-ranked from P0 to P1 on 2026-08-08. The first draft rated it P0 on an unmeasured latency claim;
+> §3.17 records why. It stays high because thirteen invalidation policies is a correctness risk, not
+> because a speedup has been shown.
+
+**Observed.** The API enforces one read-through caching contract (`getOrSetCached`, L1 isolate Map +
+L2 KV, invalidated on write). The browser has **no shared primitive**: no `@tanstack/react-query`,
+no SWR, no cache layer in `frontend/package.json`, and
+`frontend/src/lib/apiClient.ts` — the single sanctioned transport, and the only thing
+`check-api-transport.mjs` guards — is 274 lines with zero cache, dedup or in-flight map. It issues a
+`fetch` per call, every call.
+
+What exists instead is **thirteen independent module-level caches**, each re-deriving the same
+pattern:
+
+| Site | Shape |
+|---|---|
+| `lib/useConsumption.ts:23-26` | 60 s TTL + single-flight + `invalidateConsumption()` |
+| `lib/pendingWork.ts:53,163-166` | 30 s TTL, tenant-keyed + `invalidateRecentCanvases()` |
+| `lib/widgets/sharedSource.ts:25-26` | 30 s TTL `Map`, single-flight, expiry-only |
+| `lib/useLlmModels.ts:78-79,141` | cache + in-flight + `invalidateLlmModels()` |
+| `lib/team/useTeamRoster.ts:25-27` | cache + audience key + in-flight |
+| `lib/useLensPersona.ts:38-39` | cache + in-flight |
+| `lib/usePsychometricCatalog.ts:19` | `Map<string, Promise<…>>` |
+| `lib/modelCatalog.ts:139` | in-flight only |
+| `lib/usePersonalityBlock.ts:29` | in-flight only |
+| `lib/semantic-cache.ts:27` | promise memo |
+| `lib/api.ts:53` | `inFlightProjects`, cleared on settle |
+| `lib/builderforceApi.ts:596` | `brainTraceCache` `Map`, cleared on append |
+| `components/freelance/useMyTalentProfile.ts:16` | promise memo |
+
+**This code is not careless.** Several carry accurate documentation of why they exist —
+`useConsumption.ts:15-20` records that *"without this, one page load fired N identical requests"*,
+and three explicitly describe themselves as client mirrors of `getOrSetCached`
+(`lib/api.ts:51`, `widgets/sharedSource.ts:15-16`, `team/useTeamRoster.ts:14`). Each is a correct
+local solution.
+
+**Likely consequence.** The defect is the *absence of the primitive*, not the presence of the caches:
+
+- Thirteen TTL policies (60 s, 30 s, 30 s, none, …) with no stated rationale for the differences.
+- Three separate hand-written `invalidate*()` functions, so a write that should dirty two of these
+  caches has no single place to say so; the other ten invalidate on expiry only.
+- No shared key namespace, so cross-cache invalidation cannot be expressed at all.
+- Every *new* read path starts uncached by default. 270 modules import `@/lib/builderforceApi` and
+  740 `useEffect` call sites across 401 files fire requests; thirteen caches do not cover them.
+
+This is the "ad-hoc in-process Map caches" pattern the repository's own caching rule prohibits, at
+thirteen sites. The correct claim is **not** that the app is uncached — it is that caching is a
+per-author decision re-litigated thirteen times, and that the default for anything new is no cache.
+
+**Scope honesty.** Whether this is a material *load-time* win is unmeasured. The hot paths those
+thirteen authors cared about are already cached; the win is in the long tail, in consistency, and in
+removing thirteen invalidation policies. §5 Phase 0's request census is the gate, and this finding
+should not be sold as a guaranteed speedup before it runs.
+
+**Direction.** One browser-side read-through primitive owned by
+`infrastructure/http/`, mirroring the server contract by name so the two are obviously the same idea:
+
+```ts
+// infrastructure/http/readThrough.ts
+export function getOrSetClientCached<T>(
+  key: string,
+  load: (signal: AbortSignal) => Promise<T>,
+  opts?: { ttlMs?: number; staleWhileRevalidate?: boolean },
+): Promise<T>;
+
+export function invalidateClientCache(keyOrPrefix: string): void;
+```
+
+Requirements:
+
+1. In-flight dedup by key (one network request for N concurrent callers).
+2. Explicit TTL plus opt-in stale-while-revalidate; no unbounded growth.
+3. **Invalidation on write** — every mutating gateway call declares the key prefixes it dirties, the
+   same discipline the API already keeps.
+4. Version-token keys where the keyspace is unbounded (search, filtered lists).
+5. All thirteen existing ad-hoc request/result caches migrate to it **in the same slice** that
+   introduces it. A fourteenth parallel policy is a worse outcome than the current thirteen.
+6. `check-api-transport.mjs` extends to detect new hand-rolled HTTP request/result caches while
+   allowing registries and bounded computational memoization. The check enforces the ownership
+   contract rather than banning every legitimate `Map` or TTL in `src/lib/**`.
+
+Adopting a library (`@tanstack/react-query`) is an acceptable implementation of this contract, but the
+domain gateways must depend on the **contract**, not on the library, so the cache is replaceable.
+
+**Proof required.** Request count and total transferred bytes for a dashboard → workforce → dashboard
+navigation loop, before and after.
+
+
+### §3.15 P1 — There is no frontend architecture ratchet (layering and size half)
+Source: `docs/specs/22-prd-browser-performance-domain-execution-analysis.md` lines 839–861
+
+#### 3.15 P1 — There is no frontend architecture ratchet
+
+**Observed.** Every architecture ratchet in this repository is API-side. `api/scripts/` contains
+`check-layering.mjs`, `check-domain-boundary.mjs`, `check-db-access.mjs`, `check-shape-lint.mjs`,
+`check-signature-duplication.mjs` and twenty more; `.layering-baseline.txt` — the file §9.2's "127
+known presentation files importing infrastructure" counts — lives at
+`api/scripts/.layering-baseline.txt`.
+
+`frontend/scripts/` contains three checks, wired into `npm test`: `check-api-transport.mjs`,
+`check-design-tokens.mjs`, `check-design-scale.mjs`. **None of them enforces layering, module size,
+complexity, or code splitting.**
+
+`frontend/src/domains/` does not exist.
+
+**Likely consequence.** §6.3 ("automated dependency checks enforce presentation → application →
+domain") and §11.5's complexity/size ratchets have **no frontend implementation to extend**. Read
+literally, §9.2's DDD verdict describes the API only; the frontend's layering state is not
+*better or worse* than 127 violations, it is **unmeasured**. §3.4 and §3.5 propose the largest
+structural moves in this document into a codebase with no guard to hold the result.
+
+**Direction.** Phase 0 must land `frontend/scripts/check-layering.mjs` with its own baseline file
+*before* Phase 3 moves anything, plus a size/complexity ratchet covering both areas. Ordering matters:
+a ratchet added after the move records the move's mistakes as the baseline.
+
+
+### §3.16 P2 — Config carries dead allowlist entries — ✅ RESOLVED 2026-08-08
+Source: `docs/specs/22-prd-browser-performance-domain-execution-analysis.md` lines 863–874
+
+#### 3.16 P2 — Config carries dead allowlist entries — ✅ RESOLVED 2026-08-08
+
+**Observed.** `next.config.js:169-170` allowlists `api.fontshare.com` in `style-src` and
+`cdn.fontshare.com`/`api.fontshare.com` in `font-src`, and `layout.tsx:153` comments *"Fontshare
+loaded via CSS @import in globals.css"*. There is **no** `@import` in `globals.css` and **no**
+reference to `fontshare` anywhere in `frontend/src`. The only font actually loaded is
+`JetBrains_Mono` via `next/font/google`.
+
+**Resolved.** `style-src` and `font-src` are now `'self'` (plus `data:`), and the stale comment is
+replaced with the actual font surface. Verified: `next.config.js` parses and `check:design-tokens`
+passes. A CSP allowlist is a security surface; entries with no corresponding dependency widen it for
+nothing.
+
+
+### §4.4 Where this document is and is not Domain-Driven ((a), (c), (d))
+Source: `docs/specs/22-prd-browser-performance-domain-execution-analysis.md` lines 1037–1107
+
+#### 4.4 Where this document is and is not Domain-Driven
+
+The layering in §4.1 is correct and the ports are correctly shaped. But **layering is not DDD** —
+it is the hexagonal/clean-architecture half. The tactical patterns are present; the strategic ones
+are largely absent. Named honestly:
+
+| DDD element | State in this document | Required correction |
+|---|---|---|
+| Layered architecture | ✅ Explicit and enforced (§4.1) | — |
+| Ports and adapters | ✅ `TrainingEngine` + two adapters (§4.1) | — |
+| Repository / gateway | ✅ §3.5 gateway split | — |
+| **Bounded contexts** | 🟡 Named ad hoc — "Canvas domain", "Training domain", "Inference domain", "Voice domain" appear in §4.2 with no defining list | Publish the frontend context list and align it to PRD 20's 15 backend contexts |
+| **Context map** | ❌ Absent | Declare each relationship: shared kernel, customer/supplier, conformist, or anti-corruption layer |
+| **Aggregates and roots** | ❌ Absent | §3.4 proposes `graph.ts`/`history.ts`/`selection.ts` — modules, not aggregates. Name the root and its invariant |
+| **Ubiquitous language** | ❌ Absent | The same concept is `CanvasData`, `node`, `object`, `card` and `creative` across surfaces |
+| **Domain events** | ❌ Absent | §3.7's `CanvasCommand` is a command union; collaboration/undo/persistence need the event side too |
+| **Anti-corruption layer** | ❌ Absent | ONNX/WebGPU/WebContainer/HuggingFace vocabulary would otherwise leak inward |
+| **Invariant enforcement** | 🟡 Asserted, never specified | State the invariants that make an operation illegal |
+
+Four corrections this document needs to actually claim DDD:
+
+**(a) Aggregates before modules.** §3.4 splits `CreationCanvas.tsx` by *topic*, which is a file-layout
+decision. The DDD question is: what is the consistency boundary? A defensible answer:
+
+> **`CanvasBoard` is the aggregate root.** Nodes and edges are entities inside it and are never
+> addressed from outside except through the root. Invariants: no edge may reference a missing node;
+> node ids are unique within the board; a locked board rejects every mutating command; a command that
+> would violate an invariant is rejected *before* it enters history.
+
+Without that, `graph.ts` is a folder of functions and the invariants stay where they are today —
+implicit in React callbacks.
+
+**(b) Commands and events are different things.** §3.7's `CanvasCommand` is an *intent* — it can be
+rejected. Collaboration broadcast, undo, and persistence should ride the *fact* that follows:
+
+```ts
+// intent — may be rejected by the aggregate
+type CanvasCommand = { type: 'node.move'; id: string; to: Point };
+
+// fact — already happened, safe to broadcast/persist/replay
+type CanvasEvent   = { type: 'node.moved'; id: string; from: Point; to: Point; at: number };
+```
+
+§3.7 says *"Collaboration can broadcast the same commands where ordering rules allow it"* — and that
+hedge is doing real work, so this is a sharpening rather than a contradiction. Made explicit: when a
+command is broadcast, every peer re-runs validation and may legitimately disagree, which is a
+divergence bug rather than a performance one. The hedge should become the rule — broadcast events,
+keep command validation on the originating aggregate — so that "where ordering rules allow it" is not
+left as a judgement call at each call site.
+
+**(c) Context alignment is a decision, not an accident.** PRD 20 established 15 backend bounded
+contexts. §4.2 introduces frontend "domains" with no stated relationship to them. Every frontend
+context must declare one:
+
+- **Conformist** — the frontend adopts the backend's model as-is (most CRUD surfaces).
+- **Anti-corruption layer** — the frontend keeps its own model and translates (Canvas, whose graph
+  model is genuinely browser-native and must not be dragged toward the persistence shape).
+- **Shared kernel** — one model, changed only by joint agreement (tenancy, permissions, plan
+  entitlement).
+
+Unstated, the default outcome is that backend table shapes leak into component props, which is what
+§3.5's god module already demonstrates at 8,408 lines.
+
+**(d) Ubiquitous language has a gate, or it does not exist.** Add a glossary to the Canvas domain and
+assert it — the repository already proves the technique works with
+`api/scripts/check-prompt-tool-names.mjs`, which pins prompt vocabulary to advertised tool names.
+
+**Verdict.** §9.2's "partially Domain-Driven" is accurate for the API and **generous for the
+frontend**, where the finding is not partial adoption but absence of the strategic layer entirely.
+The corrections above are the difference between this program producing *smaller files* and producing
+*owned domains*.
+
+
+---
+
+## ✅ RESOLVED 2026-11-17 — PRD 39: finished sections archived on consolidation (Platform close-out)
+- **Verified 2026-11-17:**
+  - §2 Canvas comments into `annotations`, all three pushes:
+    - The gate: `api/src/application/kernel/ObjectRegistry.ts:657-669` (`viewerRef` → `readable`; `addAnnotation` → `writable`) and `objectRelationGate.ts:22`.
+    - The expand/move/contract migrations: `api/migrations/1298_annotations_fold_expand.sql`, `1299_annotations_fold_backfill.sql`, and `1350_prd39_annotations_contract_drop.sql`, which drops `creation_session_comments`. The Drizzle declaration is removed.
+    - `api/src/application/canvas/canvasComments.ts` owns reads and writes.
+    - Pins clear on object delete: `api/src/application/creation/creationGraphWriter.ts:182-196`.
+    - The activity feed still emits `comment.created` / `comment.resolved` (`creationSessionRoutes.ts:1408`).
+    - Leftover: `clearCommentPins` (`canvasComments.ts:274`) is an uncalled export whose doc comment (line 25) wrongly says it is called.
+  - §4a SIEM export: already archived in DONE.md ("SIEM audit export — a tenant's security trail now ships to its own collector (PRD 39 §4a, ticket #6652)"), so it is not duplicated. Code: `api/src/application/observability/otelAuditSweep.ts`, migration `1346_otel_siem_export.sql`.
+  - §1 push 1 and §3 push 1, partially finished: the shipped halves are recorded inline in the platform domain file's §1 and §3, because those sections still carry open push-2 work.
+
+### §2 Canvas comments into `annotations`
+Source: `docs/specs/39-prd-platform-closeout.md` lines 78–110
+
+### 2. Canvas comments into `annotations`
+
+**Why.** `creation_session_comments` and kernel `annotations` hold the same row: an author, a target, a body, an anchor and a thread. `annotations` was built to be the one store. Canvas comments are also five query statements (32 lines) inside `creationSessionRoutes.ts`, a god route file.
+
+**Field mapping.**
+
+| `creation_session_comments` | `annotations` | Note |
+|---|---|---|
+| `id` (uuid) | **new** `public_id` (uuid, unique) | Clients hold these ids, so the wire id stays a uuid |
+| `session_id` | `object_id` | The session's kernel object, kind `creation_session`, via `registerObject` |
+| (from the session) | `tenant_id` | NOT NULL on `annotations`; the comment table has no tenant column, so it comes from the session |
+| `object_id` | `anchor.canvasObjectId` | Plus a partial expression index for the object filter. The old FK's ON DELETE SET NULL is lost, so deleting a canvas object must clear the pin in `canvasComments.ts` |
+| `parent_comment_id` | `parent_id` | Resolved from `public_id` at backfill |
+| `body`, `anchor` | same | The 1–5000 character CHECK from migration 0388 moves to `canvasComments.ts` or a kind-scoped CHECK |
+| `mentions` | **new** `mentions` jsonb | |
+| `created_by` | `author_ref` | `author_kind = 'user'`. No FK, so a deleted user's comments keep the ref rather than being set to NULL |
+| `resolved_by` | **new** `resolved_by` | `resolved_at` already exists |
+
+**End state.** `application/canvas/canvasComments.ts` owns all reads and writes, and the routes become thin. The response shape does not change, so existing route tests run unchanged as the parity oracle.
+
+**Required access change, before any row moves.** Moving comments alone would open private sessions. `objectRelationGate.ts` gates relations, but `registry.annotations` and `addAnnotation` are ungated (`ObjectRegistry.ts:659-661`), and `objectRoutes.ts:137,147` scope only by tenant. Any tenant member could read and post on a private session's comments through `/api/objects/:id/annotations`. Push 1 must gate annotations for `DOMAIN_GATED_RELATION_KINDS` in the registry facade, which means the facade's `annotations` read must take a `viewerRef`. The existing gate refuses all generic writes, so comments are written only through `canvasComments.ts`. Tests prove a non-member is refused on read and that generic writes are refused for everyone. `activity` at `ObjectRegistry.ts:657` is also ungated; check in the same push whether comment activity is reachable through it.
+
+**Sequence (expand/contract).**
+
+Migrations run before the Worker deploys, so a backfill in push 1 would expose private comments through the old, ungated Worker. The gate therefore ships first and the rows move later.
+
+1. **Push 1 (gate and expand).** Ship the annotation gate. Add the columns and a fold ledger, with no rows copied. Keep comments on the old table.
+2. **Push 2 (move).** With the gated Worker live, backfill idempotently and move reads and writes to `canvasComments.ts`. Keep the old table declared `@deprecated`. During this deploy window the old Worker still writes to the old table, and the ledger records what was copied.
+3. **Push 3 (contract).** Re-run the backfill, reconcile against the ledger, drop the table.
+
+**Done when.** Row counts reconcile per session. Threads, mentions, resolve and object filtering all pass the unchanged tests. `creationSessionRoutes.ts` loses every comment query. The activity feed still shows `comment.created` and `comment.resolved`.
+
+**Decision:** approve `public_id` for wire ids and `anchor.canvasObjectId` for pins. The alternative for pins is registering every canvas object as a kernel object, which adds a row per object and buys nothing today.
+
+## ✅ RESOLVED 2026-11-17 — PRD 41: the spec text of every finished section, archived on consolidation (Offline understanding and the run delta)
+- Archived word for word from `docs/specs/41-prd-offline-understanding-and-run-delta.md` as it stood at consolidation, so the code's `PRD 41 §…` citations resolve. Sections that are entirely open (A6, B3, B9, B10, C5–C8, C13, D3–D5, D7, D8, D11, D12, §11, §12) live only in `docs/specs/make.md`. Sections archived here that still carry an open remainder (A7 acceptance, B2 targets, B7 L3 tier, B8 rule 6, C1/C4 contract size, C11 telemetry, C14 cloud runs, D10.2, D14.6–D14.7, §7, §8, §10) have that remainder in `make.md`.
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 1–9.
+
+## PRD 41 — Offline understanding and the run delta
+
+| | |
+|---|---|
+| Status | In build; paused by the operator 2026-11-10. Status by workstream is at the top of §7. This document is the end state to build against. |
+| Owner | Agents program. Model roles are in CLAUDE.md. |
+| Roadmap | `ROADMAP.md` › Make › Cloud and IDE agent runs, and › Local-first. Builds on [PRD 38](./38-prd-knowledge-graph.md) (the knowledge graph), [PRD 40](./40-prd-knowledge-packs.md) (portable packs), the [offline-first review](../design/vsix-offline-first-architecture-review.md) (G01–G27), the [deterministic knowledge index](../design/deterministic-knowledge-index.md) and [deterministic prefetch](../design/deterministic-prefetch.md). |
+| Date | 2026-11-06 |
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 10–43.
+
+### 1. What and why
+
+People increasingly do not read the code an agent writes. They still need to know what the
+code *is*, and above all what a run *did* to it. This PRD delivers three things:
+
+1. **Offline VSIX.** The VS Code extension opens a folder, understands it, shows it in the
+   visualizer, runs agents on local models and reports on those runs with **no sign-in and
+   no BuilderForce API**. Signing in adds sync, gateway inference and cloud features. It
+   never unlocks understanding.
+2. **Incremental, deterministic understanding.** Understanding starts when a folder opens or
+   the extension activates, and it does not wait for an explicit `/review`. It updates in
+   proportion to what changed. The same bytes on disk give the same facts, findings and
+   digests on any machine.
+3. **The run delta.** After every agentic run, a report card answers four questions from
+   measured facts, not from reading diffs:
+   - Did the **security** attack surface or vectors change?
+   - Did **performance** change?
+   - Did any of the **-ilities** change? The list is ISO/IEC 25010.
+   - Did **quality** change? This includes whether the agent weakened the tests that judge it.
+
+4. **Predicted measures (Part D).** Classic statistics and ML formulas estimate what cannot
+   be measured at run end:
+   - the probability that a run will need a follow-up fix;
+   - how many problems no detector found;
+   - whether a trend is a real change;
+   - which expensive checks are worth running;
+   - which findings to show first.
+
+   Predictions are labelled, versioned and reproducible, and they never set a verdict.
+
+The governing idea is **diff the facts, not the text**. Both sides of a run are reduced to
+sets of facts and findings by deterministic extractors and analyzers. The delta is a set
+difference with lineage, and every verdict can be traced to evidence and then to code.
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 44–62.
+
+### 2. Principles
+
+1. **Deterministic first.** Verdicts are computed. A model may write a narrative over the
+   computed delta, labelled as narrative, and it never sets or changes a verdict. This is the
+   same rule as [deterministic prefetch](../design/deterministic-prefetch.md).
+2. **Local first.** The local store is the system of record. The server is a sync peer.
+   Signed-out is a capability state, not an error state.
+3. **Incremental by construction.** Every derived artifact names its inputs by content hash.
+   A change recomputes only what depends on it, and an unchanged result stops propagation
+   (early cutoff).
+4. **Honest comparability.** A finding missing from an incomplete or changed measurement is
+   never "resolved". Each verdict is one of `better`, `worse`, `same`, `not_comparable` or
+   `not_measured`.
+5. **Registry data, not branches.** Dimensions, rules, analyzers, sources and sinks, guard
+   names and metric thresholds are registry rows. A new check is a row plus an executor; it
+   never adds a branch to the engine.
+6. **One flow.** The delta shows at the end of the run in the chat that ran it, in the ONE
+   run surface. It is not a separate "analysis" product with its own entry point.
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 63–68.
+
+### 3. What exists today
+
+Facts checked on 2026-11-06. `BM` is `builderforce-memory/packages/memory/src/knowledge`, `AT` is
+`Builderforce.ai/packages/agent-tools/src`, `VS` is `Builderforce.ai/clients/vscode/src` and
+`KGV` is `Builderforce.ai/packages/knowledge-graph-view/src`.
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 69–87.
+
+#### 3.1 Already incremental and deterministic
+
+| Capability | Where | State |
+|---|---|---|
+| Review stages: plan → per changed file (read, parse, extract, judge, write, markStale) → analyzers → compare → manifest and digest | `BM/review.ts:5-11` | Built |
+| Plan is a hash diff. An unchanged file is never read. | `BM/plan.ts:4-5` | Built. **Cost:** planning took 329 s for 16,722 files (PRD 38) because every file is hashed. |
+| Extract cache keyed by content hash plus `extractorVersion` (`EXTRACTOR_VERSION = 2`). A version bump marks every file "owed". | `BM/extractFile.ts:50-52`, `BM/sources.ts:23`, `BM/owedFiles.ts:61` | Built |
+| Judge skip: a judged section is skipped when its text hash is unchanged | `BM/review.ts:200` | Built |
+| Review digest is sha256 of `{rootId, packs, files}` | `BM/review.ts:287` | Built |
+| Only judge and compare call a model. The code pack has no judgement. | `BM/judge.ts:2`, `AT/knowledge/codePack.ts:14` | Built |
+| Code-pack analyzers: dependency-cruiser 16.10.4, jscpd 4.0.5, knip 5.30.0 and the repo-map file graph | `AT/codeAnalysisTool.ts:9-11`, `AT/knowledge/codeAnalyzers.ts:29-38` | Built. They are **downloaded via `npm exec --yes` on first use**: the command strings are in `ANALYZERS` at `codeAnalysisTool.ts:9-11`, and dependency-cruiser and knip also pin `typescript@5.6.3`. They run whole-repo, and a failure is swallowed (`BM/review.ts:242-257`). |
+| Findings: cycle, clone-group, near-duplicate, partition-violation, unpartitioned, stale, plus unused-file, unused-export and unused-dependency for code | `BM/findings.ts:78-146`, `AT/knowledge/codeFindings.ts:28-52` | Built. **`unusedCodeRule` emits one repo-wide finding per kind**, with an id hashed over every file that has unused items, so it has no per-item identity (fixed in C3). |
+| Five code layers (entry, presentation, application, domain, infrastructure) | `AT/knowledge/codeLayers.ts:1-26` | Built |
+| Per-file badges: cyclomatic complexity, routes, patterns. These are regex over masked source. | `AT/knowledge/codeComplexity.ts`, `codeRoutes.ts`, `codePatterns.ts` | Built |
+| Root signals: coverage (reads lcov or istanbul only), CODEOWNERS, entry points, churn and history | `AT/knowledge/codeCoverage.ts`, `codeOwners.ts`, `codeEntryPoints.ts`, `codeRootSignals.ts` | Built |
+| Symbol source: tree-sitter in the VSIX. The regex extractor is used elsewhere. | `VS/knowledge/knowledgeService.ts:152`, `AT/node-tree-sitter.ts`, `AT/knowledge/codePack.ts:51` | Built |
+| Compare: a set difference on `finding.id` plus per-kind counts. A `comparable === false` baseline hides added and resolved. | `KGV/graphModel.ts:123-140`, `KGV/ComparePanel.tsx:31-38,65`, `KGV/types.ts:160-168` | Built. **The VSIX baseline never sets `comparable`**, and it returns `null` when unlinked (`VS/knowledge/knowledgeBridge.ts:195-203`). |
+| Analysis comparability (scope, repo, branch and tool versions match) | `AT/codeAnalysis.ts:60-70` | Built. Web only (`frontend/src/lib/knowledge/codeAnalysisSource.ts:65`). |
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 88–96.
+
+#### 3.2 Already offline-capable
+
+| Capability | Where |
+|---|---|
+| Activation needs no sign-in. The policy defaults to `local-only`, and the host runs `network:"denied"`. | `VS/platformPolicy.ts:19-20`, `VS/extension.ts:170` |
+| An unlinked review uses a local store, `.builderforce/knowledge/<root>.json` plus a manifest | `VS/knowledge/knowledgeStores.ts:2-15,40-43`, `VS/knowledge/knowledgeService.ts:218-238` |
+| The visualizer opens signed out on a `localSession`, and a local board never calls the gateway | `VS/workspaceSession.ts:62,106-113`, `webview/src/canvas/useBoardAuth.ts:15`, `webview/src/signedOutGate.ts:21-27` |
+| Docs judgement runs on a local model when no client is available | `VS/knowledge/knowledgeJudgement.ts:28-43` |
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 97–105.
+
+#### 3.3 Already recorded for runs
+
+| Capability | Where | State |
+|---|---|---|
+| Run baseline: per repo, root, URL, branch, `baseCommit`, and a fingerprint per *dirty* file (sha256 up to 256 KB, else size plus mtime) | `VS/runChangeBaseline.ts:20-41` | Live |
+| Immutable `changeset:<runId>:<repoKey>` with per-file `{path, beforeHash, afterHash, attribution, status}`. Hashes only, no content. | `VS/runChangeSets.ts:1-30,56-65` | Live, wrapped around every host start (`VS/brainRunHostPorts.ts:381-401`) |
+| Lifecycle `changeset-lifecycle:<runId>` (baseline hash, finalization) | `VS/changeSetLifecycle.ts:21-40` | Live |
+| **Readers of `changeset:` records** | none | **Nothing reads them.** |
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 106–115.
+
+#### 3.4 Security and other analysis already present
+
+| Capability | Where |
+|---|---|
+| osv-scanner or npm/pnpm audit as a PreFetch executor | `AT/prefetch/tools.ts:35,48-62`, `AT/prefetch/checkExecutors.ts:77-104` |
+| gitleaks secrets scan (redacted) as a PreFetch executor | `AT/prefetch/checkExecutors.ts:120-136` |
+| Server OSV-shaped advisory feed; GitHub CodeQL and Dependabot alerts | `api/src/application/security/advisoryFeed.ts:83-180`, `githubAlerts.ts` |
+| SARIF 2.1 **ingest** (`sarifToFindings`, CodeQL and Semgrep security-severity), fingerprint dedupe | `api/src/domain/security/scanReportParsers.ts:13-17,98-165`, `api/migrations/1132_vulnerability_findings_fingerprint.sql` |
+| Taint analysis, attack-surface inventory, mutation testing, SARIF export | **None** |
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 116–123.
+
+#### 3.5 Duplicated "understanding" paths (consolidation targets)
+
+| Path | What it does | Problem |
+|---|---|---|
+| `VS/codebaseScan.ts` | Walks the workspace and writes `.builderforce/{context.yaml, project-map.md, architecture.md, README.md, memory/, scan.json}`, plus one `routeComplete` overview (`:278-294`) | One `versionToken` over the whole workspace (`:155-165`), so any edit invalidates everything. The LLM overview is the only non-deterministic part. `maybeScan` returns early twice: when no local or specific model is available (`VS/extension.ts:1686-1690`), and when there is no key and the route needs sign-in (`:1691`). |
+| `packages/repo-map` | Regex facts plus a file graph, serialized for the R2 cache | A second extractor beside the knowledge code pack. It runs in Workers, where there is no parser. |
+| Knowledge review (code pack) | The canonical, incremental pipeline in §3.1 | Starts only from `/review` (`VS/knowledge/knowledgeCommands.ts:86`) |
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 124–133.
+
+#### 3.6 Signed-out gaps found
+
+| Gap | Where |
+|---|---|
+| A selected project persisted while signed out makes every knowledge call throw `NOT_SIGNED_IN`. "Linked" means a project was selected; it does not mean signed in. | `VS/knowledge/knowledgeService.ts:64-75`, `VS/projectState.ts:20-21` |
+| Analyzers download from npm on first use and fail with no network | `AT/codeAnalysisTool.ts:9-11` |
+| The `work`, `inbox`, `health` and `evermind` views are hidden until sign-in | `clients/vscode/package.json:100,105,114,120` |
+| The workspace scan is skipped with no model, and again with no key | `VS/extension.ts:1686-1691` |
+| `installRunChangeSets.ts` (and its `installRunChangeSets.test.ts`) and `runChangeSetRecorder.ts` have no production references. Their "not referenced" comments are stale against `brainRunHostPorts`. | `VS/installRunChangeSets.ts:4-5`, `VS/runChangeSetRecorder.ts:15-16` |
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 134–147.
+
+#### 3.7 Primitives this PRD must reuse (found in review)
+
+| Primitive | Where | Reused by |
+|---|---|---|
+| SQLite system of record (G03): runtime `node:sqlite` load, `busy_timeout`, refuses corrupt files | `VS/localRecordTransaction.ts`; `agent-runtime/src/memory/sqlite.ts` (`requireNodeSqlite`) | B4 fact-store adapter |
+| Durable file write | `packages/local-first/src/durableWrite.ts:38` (`writeDurably`) | B4 objects, C1 pre-images |
+| Classical ML catalog: logistic, linear, kNN, EWMA, robust-z, anomaly composite, isolation forest, GBM, naive Bayes, k-means | `builderforce-memory/packages/memory-engine/src/ml/classical/*` | Part D (D13) |
+| ML task catalog, including a run anomaly task | `builderforce-memory/packages/memory-engine/src/ml/tasks/{run_anomaly,local_success,experience}.ts` | D2.5, D5, D14 |
+| Other copies of model maths to migrate | `packages/difficulty-router/src/head.ts` (logistic head), `packages/pipeline-route/src/score.ts`, `wilsonInterval` in `api/src/domain/replay/prescriptions/impact.ts`, the seeded layout RNG in `packages/knowledge-graph-view` `layout3d.ts`, `packages/prefetch/src/calibrate.ts`, the learned-routing sampler (`exploration.ts`) | D13 |
+| Default vector space: bge-m3, 1024 dimensions, with a resumable keyset backfill sweep | `api/migrations/1256_memory_embedding_1024.sql`, `MEMORY_VECTOR_SPACES` (`memoryEmbeddingBackfill.ts:14-18`) | C14 |
+| Reporting line: `dev_teams.manager_id` → contributors | `api/src/infrastructure/database/schema/canvas.ts:850` | D14 |
+
+---
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 148–149.
+
+### Part A — Offline VSIX
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 150–168.
+
+#### A1. Capability states, not a login gate
+
+The extension's capabilities are a product of the platform policy (`packages/local-first`
+capability matrix, G01/G21) and what is installed locally:
+
+| Capability | Signed out, offline | Signed in, sync off | Signed in, sync on |
+|---|---|---|---|
+| Understand folder (L0–L3, §B6) | ✔ | ✔ | ✔ |
+| Visualizer, graph, findings, compare | ✔ (local board) | ✔ | ✔ (+ server board). The view always draws from the local projection (A7) |
+| Agent runs | ✔ with a local model (bfi-node, WebLLM, Ollama) or a direct BYO provider key; else "set up a model" | ✔ | ✔ (+ gateway inference if granted) |
+| Run delta (static tier) | ✔ | ✔ | ✔ (+ synced to account) |
+| LLM narrative over a delta, docs judgement | Local model only, else omitted with a visible reason | Same | Gateway allowed if granted |
+| Tickets, inbox, cloud runs, team features | Hidden behind a capability notice, never a 401 | Local records (G05) | ✔ |
+
+**Rule.** Every view and command decides its own visibility from the capability matrix
+through ONE hook (`useCapability(id)` in webviews, `capabilityContextKeys` for
+`package.json` `when` clauses). `builderforce.signedIn` stays only for account-only
+surfaces. `health` and `evermind` move to capability keys (see Open decisions §12.4).
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 169–179.
+
+#### A2. Linked means signed in and granted
+
+`knowledgeService` treats a workspace as linked only when **all three** hold:
+- a project is selected;
+- a session exists;
+- the `synchronize` capability is granted.
+
+Otherwise it uses the local store. A persisted project selection made while signed out
+becomes a **pending binding**. It binds through the existing destination-binding path (G10)
+on the next granted sync, and it never throws `NOT_SIGNED_IN` into a review.
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 180–192.
+
+#### A3. Analyzers ship with the VSIX
+
+dependency-cruiser, jscpd and knip move from `npm exec --yes` to **pinned, packaged
+dependencies** of the VSIX, run in-process or as bundled CLIs from the extension's install
+directory. The bundle includes the `typescript@5.6.3` that dependency-cruiser and knip pin.
+Versions stay pinned in one place, `codeAnalysisTool.ts`, and are reported in each analysis
+record so comparability (C9) can check them. WS1 measures the VSIX size before and after and
+records it in the release notes.
+
+Bundling was decided on 2026-11-06 (§12.1). If a bundled analyzer fails to start:
+- that analyzer's findings are `not_measured`, with the reason `analyzer-unavailable`;
+- a missing analyzer is never shown as zero findings.
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 193–199.
+
+#### A4. The scan never needs a key
+
+`maybeScan` always runs the deterministic part. Both early returns go: the no-model one at
+`extension.ts:1686-1690` and the no-key one at `:1691`. Only the optional narrative needs a
+model route (§B9). With no route, the overview section is omitted and marked
+`overview: { status: 'skipped', reason: 'no-model-route' }`.
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 200–212.
+
+#### A5. The visualizer's network touches are all optional
+
+The open path is: `workspaceCanvasSession` → (signed in) `getTenantJwt`,
+`listCreationSessions` → `buildWorkspaceInit` → `getCurrentUserId` (`/api/vscode/me`),
+`resolveModelRoute`, then `fetchLimbic`.
+
+Each of these is already budgeted and degrades. Required behaviour:
+- With `network: denied`, **none of them is attempted**. The capability check comes first;
+  timing out is not an acceptable way to degrade.
+- `getCurrentUserId` results are cached in `globalState` with the session's key id, so a
+  signed-in person who goes offline keeps their personality block.
+- `fetchLimbic` reads the local limbic state when the platform is denied.
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 213–268.
+
+#### A7. The visualizer draws from the local projection, linked or not
+
+**Why.** On 2026-11-07 a linked workspace (`agentic`, VS Code 2026.10.133) drew a broken map:
+- one line;
+- about 45 stations named after single files;
+- every channel "Not set up".
+
+The cause was that the production API had not deployed the outline release. The view drew whatever `GET /knowledge-graph` returned: a cut of 119 of 3,038 files, with no per-file badges. The status strip read "0 here · 2,945 on the server", because a linked review keeps no local snapshot (PRD 38, "Linked projects"). What the person sees must never depend on the server's version, its reachability or its rate limits.
+
+**Rule.**
+1. **The local store is the source of truth for drawing, in every capability state.**
+   - A linked review writes the local store first, then syncs to the server as a replica. The sync uses the batched path in PRD 38 › "Do" 2–3.
+   - A 429, a 413 or the server being unreachable delays the sync. It never ends the review and never changes the map.
+2. **The host computes everything the view draws from the local projection:**
+   - the cut;
+   - the outline (`outlineOf`, already pure in builderforce-memory);
+   - the area roll-up;
+   - badges, findings and the data-coverage facts.
+   
+   The VSIX ships the memory version that computes them, so a view upgrade never waits for an API deploy.
+3. **`GET /knowledge-graph` serves surfaces with no local tree:** the web app, a teammate's machine, and portable packs (PRD 40). The VS Code view calls it only to fill the Sync drawer's server column and to seed a workspace once (rule 5).
+4. **Sync compares two real counts.**
+   - The strip never reads "Synced" when the local side has zero files.
+   - A workspace with no local projection says "Not reviewed on this machine" and offers **Review**, or **Use the server's copy** when online.
+5. **Migration.** Existing linked workspaces have no local snapshot. On first open after this ships:
+   - **If online:** pull the server's full graph once, through the pack import path (PRD 40), into the local store, then re-review incrementally (B2).
+   - **If offline:** run the local review (L0–L3, B6).
+   
+   Neither path ever falls back to drawing the server cut.
+6. **Diagnostics.** The diagnostics name the map source, for example `map source: local projection (L2 complete, L3 measuring)`, and the data coverage per channel. A server-sourced map is a defect that the diagnostics flag, not a mode.
+
+**Accept.**
+- On a linked workspace of about 2,000 files, the map with network denied equals the map online: the same stations, lines and badge coverage, compared by a digest of the drawn model.
+- With the API pinned to an older build, the map is unchanged.
+- A review that hits a 429 on every sync request finishes, and the map opens.
+
+**Design (end state, 2026-11-07).** The code map was traced on 2026-11-07. The root cause is a single fork: `selectKnowledgeStore` (`clients/vscode/src/knowledge/knowledgeStores.ts`) returns the server store **or** the local store, never both. `loadGraph` and `rootSyncStatus` branch on the same `linkedKnowledgeClient`.
+
+1. **`replicatedKnowledgeStore(local, replica, queue)`** lives in `packages/agent-tools/src/knowledge/`. It replaces the fork. Every workspace review uses it, linked or not; unlinked passes no replica.
+   - Reads and writes go to `local` (memory's `localSnapshotStore`, `batched()` as today).
+   - Every write is also appended to a **replica queue**. The queue is persisted beside the snapshot as `.builderforce/knowledge/<root>.replica.json`, holding ops and content hashes, never file bodies twice.
+   - A **replica pump** drains the queue:
+     - It uses the existing batched client calls: `write` in chunks of 500 rows, the bulk extracted routes, and `putAnalysis`.
+     - It retries 429 with `Retry-After` and backoff, with no cap on attempts; the queue simply waits.
+     - It drops 413 as `skipped`, as today.
+   - Pump failures never reach the review. They surface as the replica state on the Sync drawer: `queued`, `sending`, `waiting (429, retry in Ns)` or `failed (reason)`.
+   - `uploadLocalSnapshot` / `pushSnapshot` become the pump's first-sync case. There is one upload path, not two.
+2. **Drawing.**
+   - `loadGraph` always builds from the local projection (`buildStoredGraph`, the same `buildCodeGraph` with cut and outline as memory computes them, bundled in the VSIX). `client.graph` is called only by the Sync drawer's server column.
+   - With no local projection, the view shows **Not reviewed on this machine**, with the actions **Review** and, when online, **Use the server's copy**.
+3. **Use the server's copy** is not a second import path. It is a local review run with a **server read-through**: before extracting a file, the extractor asks `preloadExtracted` (the bulk route) for the file's content hash and uses the server's `Extracted` when it is there. Unchanged files therefore cost one bulk read and no model call. Offline, the same review runs without the read-through.
+4. **Sync status.**
+   - Local counts come from the local projection (`graphCounts` of the local graph). Server counts come from `client.graph` when it is reachable.
+   - The replica state is a third row.
+5. **Diagnostics.** These print `map source: local projection` and the replica state. A `server` map source no longer exists in the editor.
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 269–319.
+
+#### A8. A review is a run you can watch, and it runs in parallel
+
+**Why.** On 2026-11-07 the operator pressed **Re-review this folder** on `agentic` (3,581 files). The view showed only a pill reading "Updating…". The code reasons:
+- **Work is sequential.** Only file read and extract run 8 wide (`prefetchOrdered`, `DEFAULT_REVIEW_CONCURRENCY = 8`). Judging and writing go one file at a time on the extension host's thread.
+- **One failure ends everything.** One file whose extraction throws ends the whole run.
+- **Nothing to drill into.** There is no run record, so a person cannot tell a slow run from a stuck one.
+
+**Rule.**
+1. **A review is a run with an id, a record and a view.**
+   - `ReviewRun` holds:
+     - `id`, `root`, `kind` (`review` | `re-review` | `seed`), `startedAt` and `endedAt`;
+     - `phases[]`, each with `phase`, `startedAt`, `endedAt`, `done` and `total`;
+     - `lanes[]`, one per worker: `id`, the current `path`, `done` and `busyMs`;
+     - `steps`: a ring of the last 200 `{ path, phase, ms, outcome: ok | cached | skipped | failed, reason? }`;
+     - `failures[]`, with path, phase and reason, all kept;
+     - `replica`, the queue state from A7;
+     - `outcome`, plus the `ReviewReport`.
+   - The host persists the last 20 runs per root to `.builderforce/knowledge/runs/<runId>.json`.
+   - Live updates ride the existing `KNOWLEDGE_EVENT` stream as `run` events, throttled to at most 10 per second.
+2. **The view.**
+   - **Review**, **Re-review**, the sync pill while reviewing, and the "Updating…" state all open the **Run panel**. It is a `SlideOutPanel`, not a modal. It shows:
+     - a phase timeline (plan → extract → judge → write → index → done), with the done/total and rate per phase and an ETA from the measured rate;
+     - one live lane per worker, showing the file it is on;
+     - a step feed that can be filtered to failures;
+     - the failures, each with **Retry**;
+     - the replica state;
+     - **Stop**.
+   - **History** lists the past runs per root. Opening one shows the same panel, frozen.
+   - Text is localized in all five catalogs. The panel works in both themes and at 360 px.
+3. **Parallelism.**
+   - **Extraction runs in a `worker_threads` pool** in the extension host. The pool is `min(availableParallelism() - 1, 8)` workers, at least 1. Extraction is CPU-bound parsing, and memory's extractors are pure.
+   - The pool is a port in memory: `ReviewArgs.extractPool?: (job) => Promise<Extracted>`. The default runs in-thread, so the web and tests are unchanged.
+   - **Judging runs N-wide.** N defaults to 4. The provider's rate-limit headroom is enforced by ONE shared model-call limiter across all files (default 6 calls in flight). It halves on a rate limit and grows by 1 after 20 successes (AIMD), so a width of 4 never multiplies provider load.
+   - **One symbol rule on both paths.** An index hit uses the editor's symbol index (the main thread puts those symbols in the job); an index miss uses the regex extractor on both paths (memory's `symbolsOf` is synchronous and tree-sitter loads asynchronously) — so a pool never changes what is stored.
+   - **A pool that cannot start falls back to in-thread** for the rest of the session, and the panel says so. A machine with 2 cores or fewer runs no pool.
+   - **Writes stay ordered.** A single writer consumes results in plan order, so the snapshot stays deterministic (B-part guarantee: equal input gives equal bytes).
+   - Same-hash files stay serialized (`hashTail`).
+4. **No single failure ends a run.**
+   - An extraction that throws becomes a `failed` step and a `failures[]` entry. Its prior knowledge and manifest hash are kept, as read errors are today, and it is retried on the next review or by **Retry**. Retry marks the failed files owed, then runs the normal plan → estimate → confirm flow. It is offered only on a root's latest run, and never while that root is under review.
+   - Only abort, or a store write failure on the **local** store, ends a run.
+5. **Cancellation.** **Stop** aborts all lanes. In-flight worker jobs are terminated, completed work is kept, and the run is recorded as `stopped`.
+
+**Accept.**
+- **Re-review on 3,581 files.**
+  - The Run panel opens within 200 ms.
+  - Lanes show more than one file in flight on a machine with 4 or more cores.
+  - The extract phase finishes at least 2.5× faster than the single-thread baseline. This is measured by `ReviewReport.durationMs` per phase on the fixture repo in CI.
+- **A poisoned fixture file** (an extractor that throws) produces one `failed` step, and the run finishes `done`.
+- **The snapshot bytes** after a parallel review equal those after a sequential one (`concurrency: 1`).
+- **Stop** during extract ends the run as `stopped` within 1 s, and a follow-up review resumes from the kept work.
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 341–342.
+
+### Part B — Incremental, deterministic understanding
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 343–366.
+
+#### B1. Model: a content-addressed fact graph with early cutoff
+
+Understanding is a **build system over facts**, in the sense of *Build Systems à la Carte*
+(Mokhov, Mitchell, Peyton Jones 2018) and Salsa/rustc red-green queries:
+
+- **Inputs** are files, identified by content hash.
+- **Per-file queries** run as `extract(fileHash, extractorVersion) → FileFacts`. They are
+  pure and cached by key. This already exists (§3.1).
+- **Cross-file queries** derive facts such as `resolveImports`, `fileGraph`, `layers` and
+  `findings`. Their inputs are the *fact hashes* of the files they read, not the file hashes.
+- **Early cutoff.** If an edit changes a file's bytes but not its *structural* facts hash, no
+  structural cross-file query reruns. A comment or whitespace edit is the typical case.
+  - `FileFacts` is split into fact kinds, each with its own hash:
+    - `structure`: symbols, imports, exports;
+    - `body`: calls, complexity, `testFacts`, def-use and loop facts;
+    - `content`: the normalized bytes themselves.
+  - A rule's `reads` names the kinds it consumes. A body edit still reruns `body`-reading rules
+    such as `io-in-loop` and taint.
+  - Rules that need raw text declare `reads: ['content']`. Examples are gitleaks over hunks,
+    TODO counts and snippet-hash anchors. Cutoff never applies to them.
+- **Verifying traces.** Each derived result stores the hashes of the inputs it read. It is
+  valid while those hashes are current. No dirty flags propagate through the store, so the
+  store can be thrown away and rebuilt to the same bytes.
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 367–406.
+
+#### B2. Change detection: Merkle tree plus a stat prefilter
+
+Planning today hashes every file (329 s for 16.7k files). That cost goes:
+
+0. **Content identity is EOL-normalized.**
+   - The content hash is sha256 over the file's bytes with CRLF and lone CR converted to LF,
+     for files detected as text. Binary files are hashed raw.
+   - So a Windows `core.autocrlf` checkout and a Linux checkout of the same commit hash
+     identically. The cross-OS digest, pre-image hashes and the oracle all rely on this.
+   - The normalization rule is recorded in the extractor state (`contentHashRule`; an absent record is the baseline `eol-lf@1`), separate from `EXTRACTOR_VERSION`. It never owes files on its own: adopting it moves the hash of every CRLF file, so those re-extract through the content change, and LF files keep their hash.
+1. **Stat manifest.** `(path, size, mtimeNs, ino/fileId)` per file, persisted with the plan
+   manifest. Stats are read with `bigint: true`, because Windows file ids and nanosecond
+   mtimes lose precision as JS numbers. A file whose stat tuple is unchanged reuses its stored
+   hash without being read.
+2. **Racy-file rule** (from git's index): if a file's `mtime` is within 2 s of the manifest's
+   write time, it is re-hashed on the next plan, whatever its stat says.
+3. **Git fast path.** In a git repo, `git ls-files -s` plus `git status --porcelain=v2 -z`
+   identify tracked files that are clean against the index.
+   - A blob id (`git:<sha1>`) is stored as a **lookup hint** beside the sha256 content hash,
+     so a clean file at a blob the cache already knows reuses its facts without being read.
+   - It is never an identity. Under autocrlf, working-tree bytes differ from blob bytes, so
+     facts are always keyed by the normalized sha256 from step 0.
+4. **Directory Merkle hashes.** A directory's hash is sha256 over its sorted
+   `(name, kind, childHash)`. An unchanged directory hash skips the whole subtree, and two
+   roots compare in O(changed).
+5. **Watcher plus reconcile.** A `FileSystemWatcher` feeds a coalescing queue (100 ms debounce,
+   path dedupe). Watchers drop events, so activation and every window refocus run a
+   **reconciling plan** (steps 1–4) that catches whatever was missed.
+
+**Target:** a warm plan of the `agentic` tree in under 3 s; a cold plan in git under 30 s.
+
+**Roots.**
+- **Multi-root workspaces:** each workspace folder is its own `rootId` with its own store
+  under that folder's `.builderforce/cache/`.
+- **Monorepos:** one root per workspace folder, not per package.
+- **Large roots:** a root over `MAX_LISTED_FILES` (20,000, `fsDirectorySource.ts:65`) is
+  planned in full by the B2 stat path, because the cap exists for the old hash-every-file
+  plan. The cap moves to L3 analyzer scope, where truncation marks the analysis
+  `not_comparable` (C9).
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 439–504.
+
+#### B4. Fact store: content-addressed segments
+
+The single snapshot JSON (`.builderforce/knowledge/<root>.json`) is rewritten on flush, which
+does not suit continuous indexing.
+
+**Port and adapter.**
+- memory `/knowledge` is Worker-safe and pure ("no I/O"), so it gains only a
+  **`FactStorePort`**: `getObject`, `putObject`, `manifest` read and write in one transaction,
+  `derived` get and put, and `canonicalDump()`.
+- The Node adapter lives in the VSIX and the on-prem host, **on the existing G03 SQLite store**
+  (`VS/localRecordTransaction.ts`, `requireNodeSqlite`). WS2 wires G03 rather than opening a
+  second SQLite path.
+- The Worker host keeps its R2 and KV adapter behind the same port.
+- Every `/knowledge` contract change ships as a builderforce-memory publish plus a pin bump in
+  the same workstream.
+
+On disk, the store becomes:
+
+```
+<workspace>/.builderforce/cache/knowledge/<rootId>/
+  objects/<aa>/<sha256>.json     # FileFacts and analyzer outputs, immutable, content-addressed
+  index.sqlite                   # manifest (path → {stat, sha256, gitBlob?, factsHash}) + derived
+                                 #   query results and their input-hash traces, in one transactional file
+  snapshot.json                  # the PRD 38 KnowledgeSnapshot, now a projection rebuilt from the above
+```
+
+- **Deviation (2026-11-08, G03 as built).** There is no `objects/` directory and no `snapshot.json`.
+  The extract bodies live in an `extracted(hash PRIMARY KEY, json)` table in `index.sqlite`, loaded
+  lazily per hash, so nothing needs a durable file writer or a reference table. Unreferenced rows still need a sweep:
+  memory's `FactStorePort.sweepObjects` / `sweepFactStore` (correction 2026-11-10). The
+  `KnowledgeSnapshot` projection is memory's `canonicalDump(store)`, read on demand (it is not
+  kept on disk). The file is one per workspace folder, not one per root: rows carry their root id.
+- Object writes use the existing `writeDurably` (`packages/local-first/src/durableWrite.ts:38`).
+  (Superseded by the deviation above: there are no object files.)
+- **Migration.** The `.builderforce/knowledge/<stem>.*` layout is shared with the knowledge
+  index and the on-prem host (`knowledgeStores.ts:24-25`). WS2 migrates all three readers:
+  - On first open, the old snapshot is imported into the new store and renamed `*.migrated`.
+  - The link-upload path (`uploadLocalSnapshot`) reads the projection from the new store.
+- Objects are write-once, so a crash leaves at worst an unreferenced object, which a sweep
+  removes.
+- The `KnowledgeSnapshot` and PRD 40 portable pack formats do not change. Both are
+  projections of the store.
+- **Location** (decided 2026-11-06): the repo directory, `.builderforce/cache/`.
+  - VS Code's `storageUri` gives no I/O speed advantage: both are the same local disk.
+  - The cost of a repo location is **watcher and scanner load**. Thousands of object files
+    inside the workspace would otherwise be seen by:
+    - VS Code's file watcher and search;
+    - git status;
+    - TS server and ESLint watchers;
+    - our own `FileSystemWatcher`, which would create a feedback loop.
+  - So the extension, on first index:
+    - writes `.builderforce/cache/.gitignore` containing `*`, the way `.pytest_cache` does.
+      The repo's own `.gitignore` is never touched;
+    - contributes `configurationDefaults` for `files.watcherExclude` and `search.exclude` on
+      `**/.builderforce/cache/**`;
+    - has its own watcher ignore the path.
+  - The benefit: the cache survives moving or renaming the folder and is easy to inspect or
+    delete. `.builderforce/` outside `cache/` keeps the human-facing outputs (B9).
+- **SQLite from the start** (decided 2026-11-06). `engines.vscode` rises to `^1.101.0`, which
+  closes the G03 engine-floor blocker. `index.sqlite` is opened through the G03 store, with
+  WAL and its busy timeout instead of the 30-second lock steal. `objects/` stays file-based.
+- **Sweeps.** A generation-based mark-and-sweep removes unreferenced objects. It runs when
+  idle, and only for objects not referenced by the current manifest generation, any
+  generation pinned by an open run (C1) or any delta younger than its retention.
+- This is a storage format, so its review goes to an Opus subagent.
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 505–533.
+
+#### B5. Derived knowledge as rules (Datalog-style)
+
+`findings.ts` and `codeFindings.ts` are already rules over facts. They are formalized as:
+
+```ts
+interface FactRule {
+  id: string;                       // 'cycle', 'partition-violation', 'unused-export', 'io-in-loop', …
+  version: number;
+  reads: FactKind[];                // which fact kinds it consumes — the dependency trace
+  scope: 'file' | 'neighbourhood' | 'global';
+  derive(input: RuleInput): Finding[];   // pure; output sorted by findingId
+}
+```
+
+- **`file` rules** recompute only for changed files.
+- **`neighbourhood` rules** recompute for the changed files plus their graph neighbours up to
+  the rule's declared `hops` (default 1, maximum 2, matching the C2 impact set).
+  - Entry-point rules such as "a route lost its guard" declare `hops: 2` and also read the
+    route's **guard chain**: router, middleware and wrapper files resolved from the route
+    registration, which may be further away than 2 import hops.
+- **`global` rules** (cycles, unused exports) recompute when any input fact of their kind
+  changed. A cycle is found with Tarjan's strongly-connected-components algorithm over the
+  sorted node order, so the result is deterministic.
+- A rule's output is cached by `(ruleId, version, hash of its read facts)`. A global rule with
+  unchanged inputs costs only that hash.
+
+Order-independent fixpoints (semi-naive evaluation) are the reference semantics. A rule is
+correct if the full recompute equals the incremental result (B8).
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 534–565.
+
+#### B6. Levels: something useful in under a second
+
+| Level | Content | Source | Budget on the `agentic` tree, warm |
+|---|---|---|---|
+| L0 | Tree, manifests, languages, sizes | Plan (B2) | < 1 s |
+| L1 | Per-file facts (symbols, imports, exports, entry points) | B3 | open and visible files < 1 s; whole tree in the background |
+| L2 | File and symbol graph, layers, partitions | B5 neighbourhood and global rules | < 5 s after L1 settles |
+| L3 | Analyzer findings (deps, clones, unused), metrics, churn and coverage signals | Analyzers (B7) | async; minutes on a cold run |
+| L4 | Docs judgement, narrative overview | Model (optional) | only with a model route; cached by input hash |
+
+The visualizer and the agent context pack read whatever level is complete and show the
+level, for example a "measuring…" state on L3 tiles. L0–L3 are deterministic and need no
+model.
+
+**Scheduling** is a priority queue drained in idle time:
+1. Files open in editors.
+2. Visible files.
+3. Files reachable from (1) within 2 import hops.
+4. Recently changed files (`git log -n 200`).
+5. Everything else.
+
+- Budget: one worker thread, 50 ms slices, yielding when the person types.
+- The work is cancelable, and it pauses when the window loses focus for more than 10 minutes.
+- On battery, levels L3 and L4 wait until the device is charging or the person asks.
+  - The extension host has no power API, so the host asks the OS through one small
+    `powerSource` port, cached for 5 minutes:
+    - Windows: `GetSystemPowerStatus`, via `powershell -NoProfile` querying
+      `Win32_Battery`;
+    - macOS: `pmset -g batt`;
+    - Linux: `/sys/class/power_supply/*/online`.
+  - If the source is unknown, L3 runs only when idle for 2 minutes or more.
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 566–613.
+
+#### B7. Analyzers: whole-repo tools under incremental discipline
+
+The three external analyzers are not incremental, so each gets a strategy:
+
+| Analyzer | Strategy |
+|---|---|
+| dependency-cruiser | Replaced for the per-edit path by the B5 graph rules (cycles, layer violations). The tool runs at L3 to cross-check and is cached by `(tool@version, Merkle root of its input set)`. |
+| jscpd | Run on the **changed files against the token index of the rest**. jscpd's store persists the token index between runs, keyed by file hash. A full run happens only on a version bump. |
+| knip | Whole-program by nature. Run at L3, cached by Merkle root. Between runs, the B5 `unused-export` rule over export and import facts gives the incremental answer, and knip is the periodic oracle. |
+
+**Deviation (measured 2026-11-10): jscpd is not incremental.** jscpd 4's only persisted store,
+`@jscpd/leveldb-store` 4.0.1 (`--store leveldb`), is not a persisted token index: it deletes its
+`.jscpd/<namespace>` database when it opens one and again when it closes, so no run can reuse an
+earlier run's tokens. Measured on this repository (Windows, jscpd 4.0.5, the analyzers' own
+arguments):
+
+| Run | Tree | Store | Wall time |
+|---|---|---|---|
+| cold | `Builderforce.ai/packages` | in-memory | 311 s (357 clone pairs) |
+| warm | `Builderforce.ai/packages` | in-memory | 301 s (OS file cache only) |
+| cold | `Builderforce.ai/packages` | leveldb | still running after 80 min (stopped) |
+| cold | whole `Builderforce.ai` | in-memory | aborted out of memory after 2,942 s (4.2 GB heap) |
+
+The store gives no warm speed-up (it cannot, by construction) and is more than 15× slower cold,
+so it is not bundled and no tokenizer is reimplemented. A whole-tree run cannot finish on this
+repository either, so the run delta SCOPES jscpd: on both sides it runs over the workspace packages
+that hold a changed file (each file's nearest folder with a `package.json`, else its top-level
+folder), over the same file universe, and keeps only the clone groups that include a changed file.
+Clones that cross packages are outside its scope; the built-in `clone-group` rule over the
+knowledge graph still reports them, since a static rule stands whenever the tool does not measure
+its kind. Measured with 2–5 changed files in `packages/run-delta` (scope `packages/run-delta`,
+178 source files, 16 clone pairs), on a machine at 100% CPU from other work:
+
+| Run | Wall time |
+|---|---|
+| first | 97,094 ms |
+| repeat | 26,518 ms, 23,468 ms (one outlier of 2,800,960 ms under contention) |
+
+Within `ANALYZER_TIMEOUT_MS` (5 min). It runs in the run delta's phase 2 (§6 step 4: detached, on
+the indexer's L3 gate — idle, on mains power, one at a time, never on the delta's synchronous
+budget). The L3 cache key includes the scope, and the result is cached in THE L3 result cache that
+the indexer's own L3 pass shares. A scope too large for jscpd still reports `failed` / `timeout`,
+never zero findings.
+
+**Failure is recorded, never swallowed.** An analyzer failure writes `{tool, version, status:
+'failed', reason}` into the analysis record. Every finding kind that tool produces becomes
+`not_measured` for that snapshot. This replaces the swallow at `BM/review.ts:242-257`.
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 614–644.
+
+#### B8. Determinism rules
+
+1. Paths are POSIX, normalized and NFC, then sorted bytewise. Every array in every artifact
+   is sorted by a declared key.
+2. Canonical JSON uses sorted keys. **Every number that enters an identity, digest or cache
+   key is quantized first.**
+   - Quantization means a fixed decimal step per field, serialized as an integer of that step.
+   - This applies to PageRank and centrality, the blast-radius score, the Maintainability Index,
+     every `MetricDelta` value and every statistic.
+   - It follows the [knowledge index](../design/deterministic-knowledge-index.md) convention.
+   - The step is declared in the field's schema.
+3. Every cache key includes extractor, rule and tool versions. Wall-clock time and mtime never
+   appear in an output. mtime is only a hint to skip hashing (B2).
+4. Each computation runs against one manifest generation. A result built from mixed
+   generations is discarded.
+5. Community detection and layout use fixed seeds, and nodes are visited in sorted order.
+   PageRank-style centrality uses power iteration with a fixed iteration cap and tolerance
+   over sorted nodes.
+6. **The oracle test.** For a fixture repo and random sequences of edits, renames and deletes
+   (property-based, seeded), the **canonical dump** of the store must be byte-identical across:
+   - the store after the incremental updates;
+   - a from-scratch build;
+   - a from-scratch build on a second OS in CI, with the fixture checked out with autocrlf on
+     Windows.
+
+   The dump (`FactStorePort.canonicalDump()`) is sorted canonical JSON of the manifest,
+   derived rows and referenced objects. SQLite page layout, freelists and WAL never take part.
+   Analyzer outputs are included.
+
+   This test gates every workstream in Part B.
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 671–672.
+
+### Part C — The run delta
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 673–723.
+
+#### C1. The two sides of a run
+
+- **Before** is the run's baseline: `baseCommit` plus the dirty files at start, as
+  `runChangeBaseline` already records.
+- **After** is the working tree at finalization.
+
+To analyze *before*, the engine needs facts for every file the run touched, and for
+whole-repo analyzers it needs a tree. Resolution, cheapest first:
+
+1. **Extract cache by `beforeHash`.** The background indexer normally already holds facts for
+   every file at its pre-run hash, so per-file rules need no content.
+   - Today `beforeHash` is size plus mtime for files over 256 KB (`runChangeBaseline.ts:21`).
+     The baseline switches to the B2 normalized sha256 for every file, taken from the stat
+     manifest without re-reading unchanged files, so this step can hit for large files too.
+2. **Git.** For files clean at baseline, `git show <baseCommit>:<path>`.
+3. **Baseline pre-images.** At run start, the baseline captures the *bytes* of every file
+   dirty at that moment into the content-addressed store (`objects/`).
+   - Today the baseline only fingerprints them (`runChangeBaseline.ts:20-41`), so their
+     content is lost once the run writes them.
+   - Capture limit: 1 MB per file and 50 MB per run. Above that, the file is
+     `not_comparable` with the reason `preimage-too-large`.
+4. **Before-tree materialization** for whole-repo analyzers. The engine writes the before
+   tree into a temp directory: `git archive <baseCommit>` plus the dirty pre-images
+   overlaid. This is a plain export, not a git worktree.
+   - It is done only when an L3 analyzer has no cached result at the baseline Merkle root.
+   - The analyzer runs with a time budget. On a miss, its findings are `not_comparable`.
+
+Files written by shell commands (formatters, codegen) are covered, because resolution does
+not depend on intercepting writes.
+
+**Non-git workspaces.** Steps 1 and 3 still work, provided pre-images are captured for every
+file in the run's working set. In a non-git root, the baseline captures the whole working
+set, up to the same caps, and the rest becomes `not_comparable`.
+
+**Edge cases.**
+
+| Case | Handling |
+|---|---|
+| Untracked files at baseline | Treated as dirty, so a pre-image is captured |
+| Ignored files | Outside the working set. If the run touched one, it is listed as `changed-ignored` and its findings are `not_comparable`. |
+| Submodules | Opaque: only the commit-pointer change is reported (`submodule-moved`, info) |
+| LFS pointers | Compared as pointers; content is not fetched |
+| Agent ran `git checkout`, `rebase` or `commit` mid-run | Before stays pinned to `baseCommit` plus pre-images. After is the working tree at finalization. The run's own commits are part of after. A `HEAD` that moved to an unrelated branch makes the whole delta `not_comparable` (`head-switched`). |
+| Concurrent human edits or parallel runs on the same tree | Only files whose change-set `attribution` is `run-authored` or `run-modified-existing` enter the delta. Others are listed as "changed outside this run" and excluded from verdicts. |
+
+**Renames.** One in-house matcher runs everywhere, git or not, so the digest never depends on
+the git version or `diff.renameLimit`:
+1. Exact normalized-hash equality.
+2. Otherwise a token-set Jaccard of at least 0.5 over normalized tokens.
+3. Candidate pairs are matched greedily by descending similarity, then by ascending path.
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 724–731.
+
+#### C2. Impact set
+
+The impact set is the changed files, plus their reverse dependents up to 2 hops in the
+file graph, plus the entry points that reach a changed symbol. Neighbourhood rules and the
+blast radius (C10) are computed over it. Global rules and analyzers run on the whole tree,
+but their output is filtered to findings that touch the impact set, or that are introduced or
+resolved anywhere.
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 732–767.
+
+#### C3. Finding identity v2 and lineage
+
+Today `findingId = kind + ":" + hash(sorted refs)` (`BM/findings.ts:29-31`), so a clone group
+that gains a member reads as one resolved finding plus one introduced finding. The fix has
+two parts.
+
+**Stable anchor fingerprints** follow SARIF `partialFingerprints`:
+
+```ts
+interface FindingIdentity {
+  id: string;            // unchanged: exact identity (kind + all refs) — used for set membership
+  anchor: string;        // kind + rule version + PRIMARY anchor (enclosing symbol path, or route key,
+                         //   or package name) + normalized-snippet hash; NO line numbers, NO member set
+  members: string[];     // sorted refs (files/symbols) — for lineage similarity
+}
+```
+
+**Lineage matching** is deterministic:
+1. Exact `id` match: `persisting`.
+2. Same `anchor`: `changed`, with a sub-kind of `grew`, `shrank` or `moved`.
+3. Same `kind` **and the same anchor kind** (symbol, route, package or file), with **two or
+   more members on both sides** and a member-set Jaccard of at least 0.5: `changed`.
+   - Pairs are matched greedily by descending Jaccard, then by ascending id.
+   - Single-member findings never match by rule 3, so two unrelated findings in one file are
+     never "changed".
+4. Remainder: `introduced` (after only) or `resolved` (before only), subject to C9.
+
+**Per-item findings first.** `unusedCodeRule` (`AT/knowledge/codeFindings.ts:28-52`) today
+emits one repo-wide finding per kind. It is split into one finding per unused file, export or
+dependency, anchored on that item, before lineage can work. This is in WS6.
+
+The jscpd and knip issue ids in `AT/codeAnalysis.ts:36-47` adopt the same `anchor` scheme,
+so the web analysis compare and the knowledge compare share one identity. Their two
+implementations collapse into one in the memory package, and the `CodeAnalysisSnapshot`
+types move with `compareAnalysis` into memory `comparability.ts`.
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 768–827.
+
+#### C4. The delta contract
+
+New pure package **`packages/run-delta`**. It has no I/O; hosts supply ports.
+
+```ts
+type Verdict = 'better' | 'worse' | 'same' | 'not_comparable' | 'not_measured';
+type Lineage = 'introduced' | 'resolved' | 'changed' | 'persisting';
+
+interface DeltaFinding {
+  identity: FindingIdentity;
+  dimension: DimensionId;                 // 'security' | 'performance' | 'ilities.<char>' | 'quality'
+  ruleId: string; ruleVersion: number;
+  severity: 'info' | 'warn' | 'error';
+  lineage: Lineage;
+  change?: 'grew' | 'shrank' | 'moved';
+  confidence: 'measured' | 'heuristic';   // heuristic renders with ≈ and never alone sets 'worse' at error
+  evidence: Evidence[];                   // before/after locations, source→sink path, entry-point chain
+  waiver?: { by: string; reason: string; at: string };
+}
+
+interface MetricDelta {
+  metricId: string;                       // 'complexity.max', 'deps.count', 'bundle.bytes', 'coverage.diff'
+  before: number | null; after: number | null;   // null = not measured on that side
+  unit: string; betterWhen: 'lower' | 'higher';
+  threshold: { warn: number; error: number; kind: 'abs' | 'pct' };
+  significance?: { method: 'wilcoxon-signed-rank' | 'sprt-sign' | 'none'; p?: number; ci?: [number, number] };
+}
+
+interface DimensionResult {
+  id: DimensionId; verdict: Verdict; reasons: string[];   // reason codes, localized at render
+  findings: DeltaFinding[]; metrics: MetricDelta[];
+  measuredBy: Array<{ tool: string; version: string; status: 'ok' | 'failed' | 'skipped'; reason?: string }>;
+}
+
+interface RunDelta {
+  version: 1;
+  runId: string;
+  before: { manifestGeneration: string; merkleRoot: string; baseCommit?: string };
+  after:  { manifestGeneration: string; merkleRoot: string };
+  impact: { changedFiles: string[]; dependents: string[]; entryPoints: string[] };
+  dimensions: DimensionResult[];          // sorted by dimension id
+  headline: Verdict;                      // worst of dimensions, by the order worse > not_comparable > better > same > not_measured
+  blastRadius: { score: number; band: 'low' | 'medium' | 'high'; formula: 'v1' };
+  narrative?: { text: string; model: string; inputDigest: string };   // optional, labelled
+  digest: string;                         // sha256(canonical(delta without narrative))
+}
+
+interface DeltaPorts {                    // as built in packages/run-delta/src/contract.ts
+  texts(side: 'before' | 'after', paths: readonly string[]): Promise<Map<string, SideText | UnresolvedFile>>;
+  facts(side: 'before' | 'after'): Promise<SideFacts>;   // before = after graph with IN-RUN files swapped to their before extracts
+  churn(paths: readonly string[]): Promise<Map<string, number>>;   // 90-day commits per file
+  pastScores(): Promise<number[]>;                        // the repo's past blast-radius scores (C10 bands)
+}
+
+computeRunDelta(input: RunChangeSet, registry: DimensionRegistry, ports: DeltaPorts): Promise<RunDelta>;
+```
+
+**Property.** The same `(before, after, registry versions, tool versions)` gives the same
+`digest` on every machine.
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 1031–1048.
+
+#### C9. Comparability rules
+
+A finding kind or metric is `not_comparable` for a delta when **any** of these hold:
+- the producing tool or rule version differs between the two sides;
+- the extractor family differs (tree-sitter vs regex);
+- the tool failed or timed out on either side;
+- the before side could not be resolved (C1);
+- the offline vulnerability database is older than 14 days (vulnerability kind only);
+- the analyzed scope differs, for example truncated by `MAX_LISTED_FILES` on one side.
+
+Rules:
+- A `not_comparable` kind contributes **no** `introduced` or `resolved` entries.
+- Its after-side findings are shown as "present now" without lineage.
+- The VSIX baseline adopts the same rules, which closes the missing `comparable` at
+  `knowledgeBridge.ts:195-203`.
+- `compareAnalysis` (`AT/codeAnalysis.ts:60-70`) and this logic merge into one
+  `comparability.ts` in memory `/knowledge`.
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 1049–1071.
+
+#### C10. Headline and blast radius
+
+**Headline.** The worst dimension verdict, rendered from a deterministic sentence template,
+for example: "Worse: security (1 route lost its auth guard) and quality (2 tests weakened).
+Performance and -ilities unchanged."
+
+**Blast radius, `formula: 'v1'`.**
+
+```
+score = Σ over changed symbols s:  centrality(s) × (1 + log2(1 + churn90d(s file)))
+        + 2 × |entry points reaching a changed symbol|
+```
+
+- `centrality` is PageRank over the symbol call/import graph: damping 0.85, 50 iterations,
+  sorted nodes.
+- The score is normalized against the repo's own distribution of past run scores:
+  - `low` below p50;
+  - `medium` up to p90;
+  - `high` above p90.
+- Bands are percentile-based per repo, so the score means the same thing in a 200-file and a
+  20,000-file repo.
+- The formula is versioned and printed in the evidence.
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 1072–1111.
+
+#### C11. Presentation: for people who don't read code
+
+Everything below is a view over `RunDelta`. Layout depth increases one level at a time:
+headline → dimensions → findings → evidence → code.
+
+1. **Run Delta card.** It appears inside the run's chat transcript when the run finalizes, in
+   the ONE run surface: VSIX chat, web chat and canvas run. It shows:
+   - the headline;
+   - one row per dimension (verdict, introduced/resolved/changed counts, a "static only" or
+     "not comparable" reason chip where relevant);
+   - the blast radius band;
+   - "measuring…" rows while L3 analyzers or the dynamic tier are still running. The card
+     fills progressively, and its digest is final only when every row is final.
+2. **Run Delta panel.** A slide-out panel on the web and a side sheet in the VSIX webview,
+   built from the `knowledge-graph-view` sheet primitives, not a modal. It contains:
+   - findings grouped by dimension, then by lineage;
+   - an **evidence** list, reusing `EvidenceList`: before and after snippets, the source→sink
+     hop chain, the entry-point chain, the metric with its CI;
+   - **graph lens**: the impact set highlighted in the existing knowledge graph view;
+   - actions:
+     - **Fix with agent** seeds the ONE composer with the finding and its evidence;
+     - **Accept risk** records a waiver with a reason, which becomes a fact and is respected
+       by later deltas;
+     - **Mark as wrong** is a false-positive signal (§10);
+     - **Open code**.
+3. **Run history.** The run list shows each run's headline verdict. A project **trend view**
+   charts dimension verdicts and key metrics per run over time (insights everywhere). The
+   analytics UI is enterprise style, with ≈ marking heuristic counts.
+4. **Manager and autonomous delivery.** The delta is the acceptance evidence attached to
+   PR review (PRD 23) and execution verification (PRD 37). A **delta policy**, which is
+   registry data per project, can mark verdicts as blocking for autonomous runs. The default
+   proposal: C8.2 errors and `guard-removed` block finalization of an autonomous run; nothing
+   blocks an interactive run.
+
+UI rules:
+- Every string is localized: VSIX `labels.ts` catalogs; frontend `{en,zh,es,fr,de}`.
+- Colours come only from theme tokens, readable in both themes.
+- Layout is fluid down to 360 px.
+- Verdict colour is never the only signal; each verdict also has a word and an icon.
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 1112–1126.
+
+#### C12. SARIF interchange
+
+- **Export.** `RunDelta` → **SARIF 2.1.0**:
+  - one `run` per tool;
+  - `result.baselineState` set from lineage: `new` (introduced), `absent` (resolved),
+    `updated` (changed), `unchanged` (persisting);
+  - `partialFingerprints.anchor/v1` set to `identity.anchor`.
+
+  This lets GitHub code scanning, IDE SARIF viewers and CI consume the delta.
+- **Import.** External SARIF (Semgrep, CodeQL, ESLint) from either side maps into
+  `DeltaFinding` through the parser that already exists server-side.
+  `sarifToFindings` moves from `api/src/domain/security/scanReportParsers.ts` into a shared
+  source-only package, `packages/sarif`. The API and `run-delta` both import it, and the
+  api copy is deleted.
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 1137–1204.
+
+#### C14. Where deltas are computed and stored
+
+- **VSIX and on-prem.** Computed in the extension host at run finalization, through
+  `brainRunHostPorts` → `recordChangeSetAroundRun`, which already has the change set. Stored
+  as a local-first record type `run-delta`, one per run and repository, under the id
+  `stableEntityId('run-delta:<runId>:<repoKey>')` (`@builderforce/local-first`): every client
+  entity id the sync envelope accepts is a UUID. The payload carries `runId`, `repoKey` and the
+  chat's `projectId`; the server reads them from the payload, never from the id, and requires
+  the id to be the one they name. The evidence objects are in the content-addressed store.
+- **Cloud runs.** The container sandbox executes the same `run-delta` package with the same
+  analyzers. This is the ONE cloud runtime: the container is a sandbox, and the delta is a
+  tool there. The result is attached to the run.
+- **Sync.** `run-delta` is synced as a mirror record through the G15–G18 protocol with a
+  named importer, `importMirrorRecord`. There is no generic payload writer.
+  - *Decided 2026-11-10: the mirror projection (`sync_records.payload`) is the FULL payload.*
+    A pull writes the server projection back over the device's record, and the card reads
+    the full delta from it. A slim projection (summary, digest, ids) plus a per-type merge
+    hook that keeps the local body was possible. But a fresh device, or a reinstall, would
+    then pull only summaries and could not open any past card: the evidence is in R2, which
+    the client does not read. The cost is jsonb size in `sync_records`, bounded by the
+    importer's finding cap.
+- **Server persistence.** This is a storage-format decision, so it gets an Opus review and
+  the expand/contract migration rule. The shape is 3NF, with dimensions as rows because they
+  are registry data (principle 5):
+
+  | Table | One row per | Columns |
+  |---|---|---|
+  | `run_deltas` | run | `run_id`, `digest`, `headline`, `blast_band`, `delta_version`, `created_at` |
+  | `run_delta_dimensions` | run × dimension | `run_id`, `dimension_id`, `verdict`, `introduced`, `resolved`, `changed` |
+  | `run_delta_findings` | finding in a delta | `run_id`, `anchor`, `dimension_id`, `rule_id`, `rule_version`, `severity`, `lineage`, `confidence`, plus the embedding columns below |
+
+  A new dimension is a registry row, never a migration. Evidence stays a blob in R2, keyed by
+  digest. *Decided 2026-11-06: tables, with vectors.*
+- **Vectors** (decided 2026-11-06). These follow the **current** pgvector convention, migration
+  `1256_memory_embedding_1024.sql` and `MEMORY_VECTOR_SPACES`
+  (`memoryEmbeddingBackfill.ts:14-18`), not the legacy 1536 space of 1134:
+  - the default bge-m3 1024-dimension space;
+  - `embedding_model` and `embedded_at` columns;
+  - an HNSW index with `vector_cosine_ops`;
+  - a partial "unembedded" index;
+  - the resumable keyset backfill sweep.
+- **`run_delta_findings.embedding`** embeds the finding's canonical card text: rule, anchor,
+  normalized snippet and evidence summary. It is used for similar findings across runs and
+  repos, duplicate-finding collapse, and retrieving past fixes for *Fix with agent*.
+  - A write never fails for lack of a vector.
+  - The read filters on `embedding_model`.
+  - The table is registered as one more space and row in `MEMORY_VECTOR_SPACES` and its sweep.
+    The sweep is not copied.
+  - Locally, the same cards go through the deterministic knowledge index, so offline similarity
+    works without the server.
+- **Run features are not a vector column.** A fixed-width `vector(k)` would break on every
+  feature-schema change. `RunFeatures` are owned by the run-outcome context (D1) as rows of
+  `run_features(run_id, feature_schema_version, values real[])`.
+  - k-NN (D10.2) and the anomaly score (D2.5) run per repo over at most a few thousand rows.
+  - They are computed in the application layer through the read-through cache, keyed by
+    `(repo, schema version, latest run)`.
+  - Euclidean distance on standardized values. No ANN index is needed at that scale.
+- **Retention.**
+  - `run_deltas`, `run_delta_dimensions` and `run_delta_findings`: 2 years.
+  - R2 evidence: 2 years, the row window, so a stored row never outlives its blob (an object
+    lifecycle rule as code, `infra/uploads/lifecycle.json`, applied on every API deploy).
+  - `run_features` and labels: kept while consent holds.
+  - Person-score audit rows: 2 years.
+
+  All of these are registered in `sweptTables.ts` in WS11 and WS16.
+
+---
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 1205–1215.
+
+### Part D — Predicted measures
+
+Parts B and C *measure*. Part D *predicts* what measurement cannot settle at run end:
+- whether the run will need a follow-up fix;
+- how many problems no detector found;
+- whether a trend is a real change;
+- which expensive checks are worth their cost;
+- what the person should look at first.
+
+Every formula below is classic and explainable, and it is computed reproducibly.
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 1216–1248.
+
+#### D0. The rule: measured decides, predicted advises
+
+1. **A prediction never sets or changes a verdict.**
+   - `packages/run-delta/src/verdict/**` may not import `packages/run-delta/src/predict/**`.
+   - A dependency guard (`check:run-delta-layers`) fails the build otherwise.
+2. **Every prediction carries its uncertainty and its provenance:**
+
+   ```ts
+   interface Prediction {
+     id: string;                         // 'risk.followup-fix', 'estimate.undetected.security', …
+     modelId: string; modelVersion: string; featureSchemaVersion: number;
+     value: number;                      // probability, count or metric
+     interval?: [number, number];        // credible/confidence/prediction interval
+     band?: 'low' | 'medium' | 'high';
+     explanation: Array<{ feature: string; contribution: number }>;   // top contributions, sorted
+     status: 'ok' | 'insufficient-data' | 'not-applicable' | 'model-disabled';
+     inputDigest: string;                // sha256 of the canonical feature vector
+   }
+   ```
+
+3. **Reproducible.**
+   - Models are versioned data artifacts.
+   - Inference uses fixed-point arithmetic (int16 weights, standardized features quantized
+     to 1e-4).
+   - Any randomness uses a PRNG seeded from `inputDigest`.
+   - Outputs are quantized before display.
+   - The same features and model version give the same prediction on every machine, offline
+     included.
+4. **Rendered apart.** Predictions sit in a "Predicted" section of the card and panel. They
+   always carry the word "predicted" or "≈", and they never use verdict colours.
+5. **Below the data threshold, `insufficient-data`.** No prediction is shown from a model
+   that has not met its minimum sample size. A guess is never shown as a prediction.
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 1249–1321.
+
+#### D1. The labels pipeline: start recording at the first delta
+
+Every model in this part learns from outcomes, and outcomes cannot be reconstructed later.
+So labels start recording in the same workstream that ships the delta (WS7), before any model
+exists.
+
+**One owner.** Run features and outcome labels belong to one bounded context, **run
+outcomes**:
+- Locally: the `run-outcome` record.
+- On the server: the `run_features` and `run_outcome_labels` tables.
+- The delta references them by `runId`, and the training store reads them.
+- Nothing else keeps a copy.
+
+**Features are frozen at run end.** A `RunFeatures` vector (versioned schema) is written to
+that record:
+- **Size:** lines added and deleted, files touched.
+- **Spread:** change entropy (D2.1).
+- **Structure:**
+  - centrality sum and max of the touched symbols;
+  - entry points reached;
+  - layers touched;
+  - cross-partition edges changed.
+- **History:**
+  - churn over 90 days of the touched files;
+  - count of past follow-up fixes in those files, read **as of run end** (labels finalized
+    before `finalizedAt` only, so the feature never sees the future);
+  - age of the touched code.
+- **Delta:**
+  - introduced, resolved and changed counts per dimension;
+  - integrity findings;
+  - tests changed;
+  - diff coverage when measured.
+- **Run:**
+  - entry point (VSIX, cloud, web);
+  - autonomous or interactive;
+  - model tier;
+  - steps;
+  - tool failures.
+- **People** (decided 2026-11-06): requester, approver, reviewer and agent ids, plus
+  experience features. Experience means prior runs in the repo, prior changes to the touched
+  files, and tenure in the repo.
+  - These are stored with the features, under the access rules of D14.
+  - The trained artifact contains no code, no paths and no person ids: only aggregate
+    experience values.
+
+**Outcome labels** (`RunOutcomeLabel`, one row per run and label kind):
+
+| Label | How it is derived | Window |
+|---|---|---|
+| `reverted` | A later commit reverts the run's commit, or more than 50% of the run's added lines are deleted | 30 days |
+| `followup-fix` | **SZZ** (Śliwerski, Zimmermann, Zeller):<br>1. For each later *fix* change, blame the lines it modifies at its parent.<br>2. A fix is a bug-type ticket, a commit message matching the fix registry, or a run started from a delta finding's *Fix with agent*.<br>3. Lines whose facts-hash did not change (comments, whitespace) are ignored, using B1 early cutoff.<br>4. Blamed lines map back to the run through **per-run commit attribution**:<br>• when a commit includes content whose normalized hash equals a run's `afterHash` for that path, the run's change set records `{commitSha, path}`;<br>• the VSIX records this at commit time through the git extension API;<br>• the cloud runtime records it at `cloudFinalize`.<br>`runCommitMarker` is per task and cloud-only (`cloudFinalize.ts:219`), so it is not used. Making it per run is the separately logged defect in ROADMAP (branch residue), and WS16 closes both. | 30 days |
+| `ci-red-after-merge` | The first CI run on the merged commit fails in a job touching the changed area | 7 days |
+| `review-rejected` | PR review (PRD 23) requests changes on the run's PR | until the PR closes |
+| `finding-actioned` / `finding-marked-wrong` / `finding-waived` | Panel actions (C11) | immediate |
+
+- **Censoring.** A label is *final* only after its window ends. Before that, the run is
+  right-censored. Survival estimates (D5.4) use censored runs correctly, and classifiers
+  train only on final labels.
+  - `ci-red-after-merge` is not written until a concluded CI run is observed. A recorded
+    `success` may be the pre-merge build rather than a post-merge run; the label then stays
+    censored (`null`) for its 7-day window, so a post-merge failure seen inside the window
+    still turns it `true`, and only an elapsed window makes it a final `false`.
+- **Feature schema versions.** The server accepts every feature schema version still listed
+  (`FEATURE_IDS_BY_SCHEMA`): the current one and earlier ones kept for older clients. It stores
+  each record under its own version and never mixes two versions in one fit. A version newer
+  than the server's is refused as retryable (`run_features_schema_version_ahead`), so the
+  device keeps the record pending until the server deploys that version.
+- **Storage.** Labels and features are local-first records (`run-outcome`), synced as mirror
+  records. Training data lives in the ops database, tenant-scoped. A cross-tenant global
+  model trains only on aggregated features, and only with the tenant's consent (§12.8).
+- **Leakage guard.** A feature may only use data available at run end. A unit test fails any
+  feature whose source timestamp is later than `run.finalizedAt`.
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 1322–1383.
+
+#### D2. Deterministic statistics (no training, ship first)
+
+**D2.1 Change entropy** (Hassan, 2009). With `pᵢ` the share of the run's changed lines that
+fall in file *i*, over the *n* files touched:
+
+```
+H = −Σ pᵢ log₂ pᵢ        Hₙ = H / log₂ n   (n > 1; else 0)
+```
+
+High normalized entropy means a scattered change, which predicts defects better than raw
+size. It is a `MetricDelta` in quality and a top feature for D5.
+
+**D2.2 Maintainability Index.** Uses tree-sitter Halstead counts. `V` is Halstead volume
+`N log₂ η`, `G` is cyclomatic complexity and `LOC` is lines of code. The normalized variant:
+
+```
+MI = max(0, (171 − 5.2 ln V − 0.23 G − 16.2 ln LOC) × 100 / 171)
+```
+
+It is a per-file metric, with its delta over changed files under `ilities.maintainability`.
+
+**D2.3 Distance from the main sequence** (Martin), per partition. `A` is abstractness and
+`I = Ce / (Ca + Ce)` is instability:
+
+```
+D = |A + I − 1|
+```
+
+**D2.4 Capture–recapture estimate of undetected problems.** For a **detector pair**
+registered as covering the same scope and finding kinds:
+- taint-lite × Semgrep (security), with both mapped to the C3 anchor scheme;
+- jscpd (token clones) × `near-duplicate` (vector similarity).
+
+A pair qualifies only if the two detectors use **different methods**. knip × `unused-export`
+is excluded, because both compute the same definition and their overlap says nothing about
+what is missed.
+
+Let `n₁` and `n₂` be the findings each reports, and `m` those both report, matched by anchor.
+The Chapman bias-corrected estimator:
+
+```
+N̂ = (n₁ + 1)(n₂ + 1) / (m + 1) − 1
+Var(N̂) = (n₁ + 1)(n₂ + 1)(n₁ − m)(n₂ − m) / ((m + 1)²(m + 2))
+undetected ≈ N̂ − (n₁ + n₂ − m)
+```
+
+- It is shown only when `m ≥ 3`, otherwise `insufficient-data`.
+- It is always labelled ≈, because the two detectors are rarely truly independent, and the
+  estimate is biased low when they share blind spots.
+
+**D2.5 Run anomaly score.** This **extends memory-engine's existing `ml/tasks/run_anomaly`
+task** and its `anomaly_composite` (robust-z plus EWMA) over the run's `RunFeatures`. It is
+not a new implementation.
+- The composite gains a Mahalanobis term for correlated features:
+  `d² = (x − μ)ᵀ Σ̂⁻¹ (x − μ)`, with `Σ̂` the Ledoit–Wolf shrinkage covariance, computed on
+  log-transformed count features.
+- **Threshold.** The flag fires when the score exceeds the repo's own **empirical 99th
+  percentile** of past scores, computed leave-one-out. The χ² quantile is not used, because
+  skewed count features with *k* close to *n* break its normality assumption.
+- The top contributing features explain the flag.
+- It needs at least 30 past runs.
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 1481–1529.
+
+#### D6. Naturalness: unusual new code
+
+This applies "On the Naturalness of Buggy Code" (Ray et al., 2016; Hindle et al., 2012).
+
+**The v1 scorer is a project-local token trigram** (`predict/ngram.ts`). It uses interpolated
+absolute discounting (D = 0.75) with one slot for unseen tokens. Lines are read through
+agent-tools `maskSource`, and the model is trained per language. Hindle et al. measured
+naturalness with exactly this kind of n-gram model.
+
+The prefetch `logprob.ts` seam can't serve as the scorer. It returns only the first token's
+`top_logprobs`, with `max_tokens: 1`, so it can't score a given line. A model-backed scorer
+needs a token-logprob port (prompt/echo logprobs) first. When that port exists, the model
+scorer replaces the trigram under a new `modelVersion`.
+
+The formula is the same for both scorers:
+
+```
+surprisal(line) = −(1/|T|) Σ_{t∈T} log₂ p(t | context)      z = (surprisal − μ_repo) / σ_repo
+```
+
+- Computed for **changed lines only**, capped at 2,000 lines per run.
+- `μ_repo` and `σ_repo` come from a sample of the repo's unchanged lines under the same model
+  fingerprint.
+  - The sample is split **by file**: even-indexed files train the model and odd-indexed files
+    are held out for μ/σ. Held-out lines and the run's lines are then both scored on files
+    the model never saw.
+  - Only code files take part (`codeLanguageOf` is defined), and each language gets its own
+    model and its own μ/σ.
+  - The input is budgeted before any CPU work. Files come from `git ls-tree -l` with
+    size ≤ 256 KB and generated/vendored paths excluded. The total is capped at 4 MB and
+    20,000 lines. The scorer runs once after the whole run delta, never inside its budget,
+    and yields between files.
+- Lines with `z > 3` are listed as "unusual code" (info), as a place to look. They are never
+  a finding of a defect.
+- Values are quantized to 0.01 bits; z is computed from the unquantized μ/σ.
+- **Not cached in v1.** The trigram's inputs (the run's changed lines and a baseline sampled at
+  the run's base commit) differ on every run, and the bounded budget keeps one scoring pass
+  cheap. A model-backed scorer adds a cache keyed by `(model fingerprint, file hash)`.
+- Status mapping onto `Prediction.status` (D0):
+  - fewer than 200 held-out lines, or σ = 0 → `insufficient-data`;
+  - no scorable changed line → `not-applicable`;
+  - the per-model kill switch (setting `builderforce.runDelta.predict.naturalness`) →
+    `model-disabled`.
+  Each of these renders nothing.
+- The row stays on the device (it holds paths). `explanation` carries `line#<k>` codes, never
+  paths. `inputDigest` hashes the inputs (training digest, held-out digest, each scored line's
+  tokens), and the row records `baseCommit`, the baseline picks and the changed files'
+  after-hashes, so the score can be replayed.
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 1563–1626.
+
+#### D9. Scheduling the expensive tier
+
+**D9.1 Contextual Thompson sampling.**
+- **Decides** whether to run mutation testing, benchmarks or deep SARIF tools on a run.
+- **Context (v1):** the sorted set of dimensions the run touched, one cell per run.
+- **Model (v1):** a hierarchical Beta–Bernoulli posterior of `P(check changes a verdict | cell)`
+  (`betaPosterior`), shrunk toward the check's repo-wide rate with 10 pseudo-observations.
+  - Its posterior is conjugate and exact, so the Thompson draw is exact.
+  - It is stable at the 20–500 runs per repo a device holds.
+  - A Laplace-approximated logistic regression over risk, blast radius, dimensions and files
+    would be under-determined at those sizes. It stays a later, pooled cross-tenant upgrade
+    under the `check_scheduler` ml task.
+- **Credit:** a check is credited with a verdict change in a dimension only when it is
+  decisive there. Leave-one-out: recomputing that dimension's verdict without the check's
+  rules gives a different verdict. Transitions out of `not_measured` don't count.
+- **Decision:** run when the posterior draw ≥ `cost(check) / value(dimension)` and the
+  remaining dynamic budget allows. With fewer than 20 observations, or when the person has not
+  opted in, the opt-in default applies. The scheduler never runs a check nobody asked for.
+- **Exploration:** 10%, seeded. An explored decision still records what the policy would
+  have done (`wouldRun`), so §10 can measure recall against random.
+- **Seed:** the sample comes from a PRNG seeded by the run's `inputDigest`, so the choice is
+  reproducible.
+- **Record:** the delta stores it as `scheduledBy: {policy, modelId, modelVersion, p, seed,
+  wouldRun?}`.
+- **Kill switch:** per model, in the registry. When it is off, the opt-in default applies.
+- Policy-mandated checks always run, in a trusted workspace (C11 item 4, the delta policy;
+  C8.4; C6.2 "Safety and trust").
+- `learned-routing` already does bandit selection for models. Both use the one sampler in
+  the builderforce-memory `stats` module.
+
+**D9.2 Sequential testing for benchmarks: a sign-test SPRT.** This avoids assuming a
+distribution for timings.
+- For each interleaved pair, `sᵢ = 1` if after is slower than before by more than δ/2, else
+  `sᵢ = 0`. Pairs within ±δ/2 are dropped as ties. δ is the metric's warn threshold.
+- Hypotheses on `π = P(sᵢ = 1)`: `H₀: π = 0.5` against `H₁: π = π₁` (default 0.85). This is a
+  simple-versus-simple Bernoulli SPRT with the exact likelihood ratio
+  `Λₙ = Π (π₁/0.5)^{sᵢ} ((1−π₁)/0.5)^{1−sᵢ}`.
+- α = 0.01, β = 0.05. Wald boundaries are `A = (1 − β)/α` and `B = β/(1 − α)`. The same test
+  runs mirrored for improvements.
+- **Stopping (Wald's rule).** The series stops when BOTH directions have resolved, each by
+  rejecting or accepting H₀. It stops at even rounds only, so the AB/BA order stays balanced.
+  - The cap is `max(30, spec.rounds)`, so a configured spec is never cut short.
+  - A minimum is implied by the boundaries: with π₁ = 0.85, rejecting needs at least 9 pairs.
+  - At π₁ = 0.85 the exact average sample number is about 15 pairs under H₀ and about 16 under
+    H₁. A configured `rounds` above the cap keeps its value.
+  - The runner times the first round. If that time × (cap − 1) would overrun the remaining
+    dynamic budget, it runs the spec's fixed rounds instead and doesn't evaluate the SPRT.
+- **Truncation makes the realized error rates differ from α and β.** The realized rates for
+  these boundaries and this cap are computed **exactly**, by dynamic programming over the
+  stopping lattice (not by simulation, so they don't depend on a PRNG), and recorded next to
+  the thresholds. Expected values: α ≈ 0.0075 and β ≈ 0.107 per direction.
+  - The combined bound with the Wilcoxon fallback is documented alongside them.
+- **Reporting.**
+  - A series that rejects early is reported with `method: 'sprt-sign'` and
+    `decision: 'reject'`, not a fixed-sample p-value, which would be invalid after optional
+    stopping.
+  - It keeps its bootstrap CI. The verdict still needs the CI wholly beyond ±warn, which
+    guards against the winner's curse of early stopping.
+  - A series that accepts H₀ in both directions is reported with `decision: 'accept'` and reads
+    as within noise.
+  - An SPRT direction that disagrees with the sign of the Hodges–Lehmann effect falls back to
+    C6.2.
+  - At the cap, C6.2 reporting (Wilcoxon signed-rank) applies.
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 1627–1646.
+
+#### D10. What to look at first
+
+**D10.1 Learning to rank findings.**
+- **Model:** pairwise logistic loss, `log(1 + e^{−(sᵢ − sⱼ)})`, over finding features.
+- **Features:** severity, rule precision posterior (D3), lineage, dimension, centrality,
+  entry-point reach and confidence.
+- **Labels:**
+  - Fix with agent or Accept risk: relevant;
+  - Mark as wrong: negative;
+  - Shown and ignored: weak negative, with **inverse propensity weighting** for position bias.
+- **Effect:** it changes **order only**. Ties break by `findingId`. Evaluated with NDCG@5.
+
+**D10.2 Similar past runs (k-NN).**
+- Uses standardized `RunFeatures` and Euclidean distance, `k = 10`, ties broken by `runId`,
+  over final-labelled runs only.
+- Renders as, for example, "7 of the 10 most similar runs needed no follow-up; 2 were
+  reverted", with links to those runs.
+- It needs at least 50 final-labelled runs in the repo, or in consenting tenants with the
+  same language mix.
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 1675–1733.
+
+#### D13. One home for the maths: the builderforce-memory `stats` module
+
+*Decided 2026-11-06: no new package.* The maths lives in builderforce-memory as a `stats` module
+(`packages/memory/src/stats/`, exported as the `@seanhogg/builderforce-memory/stats` subpath).
+builderforce-memory already owns the deterministic retrieval maths (BM25, MMR, decay) and the
+knowledge graph's PageRank, and every Builderforce package that needs these already depends on
+it. Graph-level predictions (PRD 38 › Predicted measures) call this module at graph build.
+
+**Reuse first.** builderforce-memory's `memory-engine` already has the classical ML catalog in
+`ml/classical`: logistic, linear, kNN, EWMA, robust-z, anomaly composite, isolation forest,
+GBM, naive Bayes and k-means. Its task catalog in `ml/tasks` already includes `run_anomaly`,
+`local_success` and `experience`. So:
+- The `stats` module holds **only what that catalog lacks**. It imports, and never
+  re-implements, the `ml/classical` primitives.
+- Where `ml/classical` needs more (L2, class weights or IRLS in `logistic.ts`; a Mahalanobis
+  term in `anomaly_composite.ts`), it is extended in place. Ledoit–Wolf lives in
+  `ml/classical/covariance.ts`, because the Mahalanobis term fits on it, and `stats` re-exports it.
+- **One deliberate exception: the binary logistic head.** `stats/logistic.ts` (`sigmoid`,
+  `logisticProbability`, `onlineLogisticStep`) is float64 and does not import the engine. It
+  scores a stored head and folds in one outcome at a time on the device, for prefetch calibration
+  and difficulty-head scoring. The engine's `LogisticModel` is a Float32 softmax that fits in
+  batches (gradient descent or IRLS) and remains the only trainer. The engine's training kernels
+  keep their own sigmoid (`training/cpu_ops.ts`).
+- **Two mulberry32 copies stay on purpose; they are not `stats` PRNG copies to migrate.**
+  `packages/knowledge-graph-view/src/perf/syntheticGraph.ts` (test-only) keeps it because the golden SYNTH
+  counts depend on its exact stream. `packages/voice-provenance/src/watermark.ts` keeps it because detecting
+  watermarks that already exist needs the exact chips they were made with.
+- Part D's *models* are registered as `ml/tasks` entries (`run_risk`, `case_mix`,
+  `finding_rank`, `check_scheduler`). The run anomaly score extends the existing `run_anomaly`.
+
+The module is pure and deterministic: seeded PRNG (xoshiro128**), fixed iteration caps,
+quantized outputs. **New in `stats`:**
+
+- **Distributions:** Beta posterior and quantile (regularized incomplete beta inverse); Gamma
+  quantile; exact Poisson (Garwood) interval.
+- **Fitting:** Bayesian logistic with a Laplace posterior; Platt scaling; isotonic regression
+  (PAV).
+- **Tests:** Wilcoxon signed-rank and paired Hodges–Lehmann; seeded (paired) bootstrap CI;
+  sign-test SPRT.
+- **Time series:** CUSUM; Bayesian online change-point detection. EWMA is reused from
+  `ml/classical`.
+- **Multivariate:** Ledoit–Wolf shrinkage; PSI.
+- **Information theory:** Shannon entropy.
+- **Estimators:** Chapman / Lincoln–Petersen; Kaplan–Meier with Greenwood variance;
+  Goel–Okumoto MLE; Gamma–Poisson empirical Bayes.
+- **Scores:** Brier; ECE; PR-AUC; NDCG; Popt; effort-aware recall.
+- **Policies:** Thompson sampling.
+
+**Migrate, then delete, every existing copy** in the same workstream, with their tests run
+unchanged:
+- `packages/prefetch/src/calibrate.ts`;
+- the learned-routing Thompson sampler (`exploration.ts`);
+- `packages/difficulty-router/src/head.ts` (a logistic head, which moves onto
+  `ml/classical/logistic`);
+- `packages/pipeline-route/src/score.ts`, where it duplicates a primitive;
+- `wilsonInterval` in `api/src/domain/replay/prescriptions/impact.ts`;
+- the seeded layout RNG in `packages/knowledge-graph-view` `layout3d.ts`, which moves onto the
+  shared PRNG.
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 1734–1857.
+
+#### D14. People scores for managers
+
+*Decided 2026-11-06: managers need people scored.* This covers humans and agents alike.
+An agent is a first-class worker here: the manager is an agent, and agents are hired and
+unhired. The section defines how scoring is done fairly enough to act on.
+
+**D14.1 Attribution.** Every run records its roles:
+- `requester`: who started it;
+- `approvers`;
+- `reviewer` (PRD 23);
+- `agent`: the executing agent;
+- `manager`: the supervising manager agent, if any.
+
+Each outcome label (D1) and each delta finding is attributed to every role on the run, and
+a score is always reported **per role**. Being the approver of a reverted run is a different
+fact from being its requester.
+
+**D14.2 Measures** per person or agent, per role, per period (rolling 90 days):
+
+| Measure | Definition |
+|---|---|
+| Run quality | Share of runs whose headline is `worse` |
+| Follow-up-fix rate | `followup-fix` labels ÷ final-labelled runs |
+| Revert rate | `reverted` ÷ final-labelled runs |
+| Integrity rate | Runs with a C8.2 error ÷ runs. Agents mainly. |
+| Security introductions | Introduced measured security errors per run |
+| Review rejection rate | `review-rejected` ÷ runs with a PR |
+| Fix effectiveness | Share of *Fix with agent* runs whose finding is resolved in the next delta |
+| Approval accuracy (approvers) | Share of approved runs not later `reverted` or `followup-fix` |
+
+**D14.3 Risk adjustment: observed ÷ expected.** Raw rates punish whoever takes the hard
+work. Each rate is **indirectly standardized**, the method used for hospital standardized
+mortality ratios:
+
+```
+E = Σ_{runs of p} P̂(outcome | case-mix features)       O = observed count
+SR = O / E          95% CI: exact Poisson (Garwood) on O, divided by E
+```
+
+- The **case-mix model** (`ml/tasks/case_mix`) is a separate logistic model of the same form
+  as D5. It uses every factor **outside the scored person's control in their role**:
+  - *change* features: size, entropy, centrality, entry points, churn, layer and dimension
+    flags;
+  - for human roles, also the **executing agent and model tier**. A requester or approver is
+    not penalized for an agent's quality.
+- It deliberately **excludes the scored person's own identity and experience features**.
+  Otherwise it would explain away the very person effect being measured.
+- It is trained in WS22 from the WS16 labels. It does not wait for the D5 gate.
+- The D5 risk model may use experience features for prediction. The two models are
+  different by design.
+
+**D14.4 Shrinkage.** Small samples are pulled toward the team. The rate posterior is
+Gamma–Poisson (empirical Bayes):
+
+```
+λ_p | data ~ Gamma(α₀ + O, β₀ + E)        shown: posterior mean of λ_p and its 95% interval
+```
+
+- The prior comes from everyone in the same tenant and role.
+- **Minimum sample.** Below 20 final-labelled runs in the window, the score is
+  `insufficient-data` and is not shown.
+- **Shrinkage still matters above the minimum.** A person with 25 runs is pulled toward the
+  team average in proportion to their small expected count, rather than showing an extreme
+  rate.
+- **One interval rule.** The posterior interval is 95%, matching the inner funnel limit. The
+  99.8% funnel limit is used only to call a point "outside limits".
+
+**D14.5 Presentation.**
+- **Funnel plot** (Spiegelhalter, 2005): standardized ratio against expected volume, with
+  95% and 99.8% control limits. Only points outside the limits are called out.
+- A ranked table is never the default view. When a table is shown, it is sorted by the
+  posterior, with the interval drawn, and an "outside limits" flag.
+- Every score links to the runs behind it and their deltas, so a manager can see *why*.
+- The trend per person uses the D7 control charts: is this person's ratio drifting?
+- **Surface.** A **People** view on the team (`dev_teams`) page, which is the only
+  manager-to-reports structure. It is not the ticket "Sign-off & Accountability" tab
+  (`AccountabilityTab.tsx`), which is per ticket. The manager agent reads the same scores
+  through an application port for its coaching and stall-triage loop.
+- The manager agent may use agent scores to route work and to coach. It may not act on a
+  *human's* score automatically.
+
+**D14.6 Access and audit.**
+- **Reporting line.** Today's only reporting line is `dev_teams.manager_id` → contributors
+  (`schema/canvas.ts:850`).
+  - WS22 adds one application-layer policy, `mayViewPersonScore(viewer, subject)`.
+  - It resolves a contributor to the user and agent identities that runs record. Where that
+    mapping is missing, WS22 adds it as an id reference, not a copied table.
+  - The server enforces the policy in the route. The frontend `RoleGate` only disables the UI.
+  - `resolveMembership` (private in `gatewayAccess.ts:128`) is not reused for this; it answers
+    a different question.
+- **Who sees what:**
+  - a person sees their own scores;
+  - a manager sees their team's contributors;
+  - a tenant admin sees everyone in the tenant;
+  - superadmin sees nothing cross-tenant without the existing audited cross-tenant scope.
+- Every view of another person's score is audit-logged (viewer, subject, time).
+- **Human scoring is off by default for enterprise plans** and on by default for others.
+  - A tenant admin can switch it on or off.
+  - Enabling it on an enterprise tenant shows a DPIA notice: lawful basis, purpose limited to
+    coaching and capacity, and the works-council consultation the tenant owns.
+  - Agent scoring cannot be disabled.
+- **Data-subject rights.**
+  - A person can export their own scores, inputs and the audit rows about them (access).
+  - On erasure, their person scores and person-feature values are deleted. Their identity in
+    run roles is pseudonymized, so aggregate models are not invalidated. Audit rows keep the
+    pseudonym.
+- No automatic consequence follows from a human score: no blocking, no reassignment and no
+  notification to others.
+
+**D14.7 Done-checks.**
+- [ ] A person with 3 runs shows `insufficient-data`. A person with 25 runs, all
+      high-risk, does not come out worse than the team on raw size alone (a case-mix test).
+- [ ] An approver whose runs all used a weak agent and model tier is not flagged when the
+      agent is the cause (a case-mix test).
+- [ ] A unit test on the case-mix feature schema enforces that it contains none of the scored
+      person's identity or experience features.
+- [ ] Erasure: after the person's erasure request, their scores and person features are gone
+      and their run roles are pseudonymized.
+- [ ] An enterprise tenant has human scoring off by default.
+- [ ] A manager cannot see a non-report's score (an RBAC test), and each view writes an
+      audit row.
+- [ ] With the tenant setting off, every human-score endpoint returns 404 for that tenant.
+      Agent scores are unaffected.
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 1858–1870.
+
+#### D15. Adoption order
+
+| Phase | Ships | Needs |
+|---|---|---|
+| P1 | D0 rule and guard, D1 labels pipeline, D2 deterministic statistics, D13 package | WS7 (the delta exists) |
+| P2 | D3 rule precision, D4 calibration, D7 statistical process control | About 4 weeks of votes and runs |
+| P3 | D5 risk model, survival view, D10.2 similar runs | At least 500 final-labelled runs (global) |
+| P4 | D9 scheduling, D10.1 ranking | WS12 (the optional tier exists) and click data |
+| P5 | D6 naturalness, D8 reliability growth | A logprob-capable local model; at least 10 runs per dimension |
+| P2–P3 | D14 people scores: case-mix model, then views | WS16 labels; at least 20 final-labelled runs per scored person |
+
+---
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 1871–1896.
+
+### 4. Contracts summary (new or changed)
+
+| Contract | Package | Change |
+|---|---|---|
+| `FileFacts` v3 (`exports`, `calls`, `entryPoints`, `capabilityImports`, `testFacts`) | memory `/knowledge` (types), agent-tools (extractors) | Extended; `EXTRACTOR_VERSION = 3` |
+| Stat manifest, Merkle directory hashes, git blob alternate keys | memory `/knowledge` `plan` | New |
+| `FactStorePort` (objects, manifest transaction, derived, `canonicalDump`) | memory `/knowledge` (port only; stays Worker-safe) | New |
+| Node fact-store adapter (`objects/` + `index.sqlite`) | VSIX and on-prem, on the G03 store (`localRecordTransaction.ts`) | Replaces the single snapshot file as the system of record. The snapshot becomes a projection. |
+| `FactRule` (scope, reads, version) | memory `/knowledge` | Formalizes `findings.ts` and `codeFindings.ts` |
+| `FindingIdentity` (`anchor`, `members`), lineage matcher | memory `/knowledge` | New. jscpd and knip ids migrate to it. |
+| `comparability.ts` | memory `/knowledge` | Merges `compareAnalysis` and the baseline `comparable` |
+| `RunDelta`, `DimensionRegistry`, `computeRunDelta`, `DeltaPorts` | `packages/run-delta` (new, pure) | New |
+| Rule registries: guards, sources, sinks, sanitizers, I/O, weak crypto, perf, ilities, integrity | `packages/run-delta/src/registry/*` + `.builderforce/delta.json` overrides | New, data only |
+| Analyzer adapters (osv, gitleaks, jscpd, knip, dep-cruiser, diagnostics, coverage, stryker, bench, SARIF import) | `packages/agent-tools/src/delta/adapters/*` | New; wrap existing executors |
+| SARIF parse and emit | `packages/sarif` (new, source-only) | Extracted from api, plus export |
+| `run-delta` local entity type | `packages/local-first` records | New union member |
+| Capability visibility hook and context keys | `clients/vscode` + `packages/local-first` capability matrix | New. Replaces `signedIn` gating where it is not account-only. |
+| `Prediction`, `RunFeatures` (versioned schema), `RunOutcomeLabel`, model artifact format | `packages/run-delta/src/predict/*` | New (Part D) |
+| `run-outcome` local entity type | `packages/local-first` records | New union member |
+| Statistics primitives | builderforce-memory `stats` module (`@seanhogg/builderforce-memory/stats`) on top of memory-engine `ml/classical` | New module, no new package. Holds only what `ml/classical` lacks, and absorbs the copies listed in D13. |
+| Part D models | memory-engine `ml/tasks`: `run_risk`, `case_mix`, `finding_rank`, `check_scheduler`; `run_anomaly` extended | New task entries |
+| Server tables | `run_deltas`, `run_delta_dimensions`, `run_delta_findings` (+ embedding in the 1024 space), `run_features`, `run_outcome_labels`, `person_score_views` (audit) | New, expand migrations, registered in `sweptTables.ts` |
+| Verdict/predict layering guard | `scripts/check-run-delta-layers.mjs`, wired into `pnpm run check` and CI (WS15) | New |
+| `signedIn` allowlist guard | `clients/vscode/scripts/check-signed-in-when.mjs`, wired into the VSIX check and CI (WS1) | New |
+| Telemetry events | `delta.computed`, `delta.card_opened`, `delta.finding_action`, `index.level_ready`, `index.plan_ms`, `offline.session` (counted locally, sent with the next granted sync batch), `prediction.shown`, `person_score.viewed`; emitted through the existing entry-point-attributed telemetry, `surface` per host | New event names. The owner is the workstream that ships each emitter. |
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 1897–1952.
+
+### 5. Code map
+
+```
+builderforce-memory/packages/memory/src/knowledge/
+  plan.ts                 + stat manifest, racy rule, Merkle dirs, git blob keys
+  stores/factStorePort.ts NEW  port only (objects, manifest txn, derived, canonicalDump); no I/O here
+  rules/factRule.ts       NEW  FactRule contract + incremental evaluator (trace + early cutoff)
+  findings.ts             → rules/*.ts (one rule per file), findingIdentity.ts NEW
+  lineage.ts              NEW  deterministic lineage matcher
+  comparability.ts        NEW  (absorbs Builderforce agent-tools codeAnalysis.compareAnalysis)
+  review.ts               analyzer failure recorded, never swallowed; level reporting
+builderforce-memory/packages/memory/src/stats/          NEW  only what ml/classical lacks (D13)
+builderforce-memory/packages/memory-engine/src/ml/classical/   logistic.ts (+L2, weights, IRLS), anomaly_composite.ts (+Mahalanobis)
+builderforce-memory/packages/memory-engine/src/ml/tasks/       + run_risk, case_mix, finding_rank, check_scheduler; run_anomaly extended
+
+Builderforce.ai/packages/
+  run-delta/              NEW  pure: computeRunDelta, dimensions/, registry/, headline.ts, blastRadius.ts, sarifExport.ts
+  sarif/                  NEW  source-only: parse (moved from api), emit
+  agent-tools/src/knowledge/   extractors → tree-sitter queries (complexity, routes, entry points, capability, test facts)
+  agent-tools/src/delta/adapters/  NEW  one adapter per analyzer; reuse prefetch checkExecutors
+  knowledge-graph-view/src/delta/  NEW  RunDeltaCard, RunDeltaPanel, DimensionRow, DeltaTrend (presentational) + labels
+  local-first/src/records.ts       + 'run-delta', 'run-outcome'
+  run-delta/src/predict/           NEW  features.ts, labels/ (szz.ts, revert.ts, ci.ts, review.ts), risk.ts, survival.ts,
+                                        captureRecapture.ts, anomaly.ts, rulePrecision.ts, naturalness.ts, ranking.ts,
+                                        similarRuns.ts, scheduler.ts, trends.ts, reliabilityGrowth.ts, models/ (artifacts)
+  (no packages/stats — the maths is in builderforce-memory, D13; prefetch calibrate.ts, learned-routing exploration.ts,
+   difficulty-router head.ts, pipeline-route score.ts, knowledge-graph-view layout3d RNG migrate there)
+  sarif/ registered in scripts/check-source-package-graph.mjs aliasing for api and agent-tools
+
+Builderforce.ai/clients/vscode/src/
+  knowledge/backgroundIndexer.ts   NEW  watcher + reconcile + priority scheduler (B2, B6)
+  knowledge/knowledgeService.ts    linked = selected ∧ session ∧ synchronize (A2)
+  knowledge/factStoreAdapter.ts    NEW  FactStorePort on localRecordTransaction (G03) at .builderforce/cache/ (B4)
+  knowledge/knowledgeStores.ts     reads through the port; one-time import of .builderforce/knowledge/*.json (B4 migration)
+  power/powerSource.ts             NEW  OS power-source query, cached (B6)
+  package.json                     engines.vscode ^1.101.0; configurationDefaults watcher/search excludes
+  runDelta/runDeltaHost.ts         NEW  DeltaPorts over the fact store, pre-images, before-tree export
+  runChangeBaseline.ts             + dirty pre-image capture (C1.3)
+  brainRunHostPorts.ts             finalize → computeRunDelta → card
+  codebaseScan.ts                  → projection of the fact store (B9); scan.json + versionToken deleted
+  capabilityContext.ts             NEW  capability → context keys (A1)
+  installRunChangeSets.ts (+ installRunChangeSets.test.ts), runChangeSetRecorder.ts   DELETE (zero production references, verified first)
+  l10n/bundle.l10n.*.json, package.nls.*.json   VSIX strings for new commands/settings, all locales (plus webview labels.ts catalogs)
+
+Builderforce.ai/api/
+  src/domain/security/scanReportParsers.ts   SARIF parsing moves to packages/sarif
+  run delta persistence + importer            (WS11, Opus-reviewed)
+  run outcome labels: SZZ/revert/CI/review label jobs over the ops DB (WS16, Opus-reviewed)
+  scripts/train-run-models.cjs               offline training driver → digest-named model artifacts (WS18)
+  application/people/mayViewPersonScore.ts   the ONE person-score visibility policy (WS22)
+  application/maintenance/sweptTables.ts     + retention rows for the new tables (WS11, WS16, WS22)
+```
+
+No module in this map may grow past about 400 lines. Dimensions, rules and adapters are one
+file each, registered as data.
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 1953–1983.
+
+### 6. Sequences
+
+**Open a folder, offline.**
+activate (policy `local-only`) → `backgroundIndexer.start(root)` → reconcile plan, using the
+stat prefilter and the git fast path → L0 published → visible and open files extracted (L1)
+→ visualizer opens on `localSession` and renders L0/L1 → L2 rules → L3 analyzers from the
+bundled tools → snapshot projection → codebaseScan projection files written. Zero
+platform requests.
+
+**Edit a file.**
+watcher event → 100 ms coalesce → stat changed → hash → facts changed?
+- No (early cutoff): done.
+- Yes: file rules → neighbourhood rules for 1-hop neighbours → global rules whose read kinds
+  changed → derived traces updated → visualizer receives the changed nodes and findings.
+
+**Agent run.**
+run start → `runChangeBaseline` (+ dirty pre-images) → the indexer keeps running → run ends →
+`recordChangeSetAroundRun` finalizes → `computeRunDelta`:
+1. Resolve before facts (C1 steps 1–3).
+2. Compute the impact set.
+3. Run the static rules per dimension.
+4. Run L3 analyzers on the after side, and on the before side via cache or the materialized
+   tree.
+5. Match lineage.
+6. Apply comparability.
+7. Compute verdicts, the headline and the blast radius.
+
+Then the card is posted to the chat in "measuring" state and filled as each analyzer settles.
+After that: an optional narrative, then the delta is stored as a local record, with sync if
+granted. A policy check on autonomous runs can then block finalization.
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 1984–2043.
+
+### 7. Workstreams
+
+**Status (2026-11-10, paused by the operator mid-pass).** Shipped work is in DONE.md ("PRD 41 WS2/WS6/WS7", 2026-11-10). Open work is in ROADMAP.md under "Run delta", with the item-level remainder for each workstream.
+
+- **Shipped:**
+  - WS1 (325f4faaf).
+  - WS2: B2 change detection and the B4 SQLite store (memory 2026.10.68+).
+  - WS3: background indexer (0df16cbf9).
+  - WS6, including C9 versions recorded at review time (memory 2026.10.73, 75a494ffb).
+  - WS7 in the VS Code extension: engine, host, `delta.computed`, and the §12.5 fail-closed hold/release.
+  - The VS Code WS10 card and panel.
+  - The WS9 per-export unused-export fix (87bd0f6aa).
+  - WS15 in memory 2026.10.74–.76 (Wilcoxon exact p, HL bootstrap, `meanAndSd`, the `createRng` shift fix).
+  - The memory primitives for WS4, WS20 and the L3 tier (2026.10.77–.80: `FactStorePort` with epoch/generation CAS, the `check_scheduler` card, the `saveFactGraph` fast path).
+- **Built and reviewed (on main since 7674bbd64):**
+  - WS10: web card, history and trend.
+  - WS11: SARIF, `run_deltas` persistence and the mirror importer.
+  - WS12: dynamic tier.
+  - WS16: labels pipeline.
+  - WS19: naturalness, §D6.
+  - WS20: SPRT and Thompson scheduling, §D9.
+- **Review rounds still open (the code is on main since 7674bbd64, swept in mid-round):** WS4 (FileFacts v3, `FactIndex`), WS8 (security dimension), WS9 (the remaining rules and C8.3) and the L3 analyzer tier.
+- **WS7 open items:** ~~change-set records use non-UUID ids and never sync~~ (fixed 2026-11-18 on main: change-set/lifecycle ids are `stableEntityId('changeset:<runId>:<repoKey>')` UUIDs, and the run-delta key derivations read `runId`/`repoKey` from the payload — `runDelta`, `runDeltaPredictions`, `changeSetSyncedIdentity` suites green); the server does not normalise repository identity on write.
+- **Not started:** WS5, WS13, WS17, WS21, WS22.
+- **WS18:** *Blocker: needs at least 500 final WS16 labels.*
+
+
+The loop for every workstream: a Sonnet subagent at medium effort implements → a Haiku
+subagent verifies (targeted typecheck, guards, the named test files) → review → fixes. Review
+goes to an **Opus** subagent at medium effort where marked; otherwise Sonnet.
+
+| WS | Scope | Depends on | Review |
+|---|---|---|---|
+| WS1 | **Offline closure** (A1–A5): capability hook and context keys plus the `signedIn` allowlist guard; linked-means-granted; bundled analyzers (with `typescript@5.6.3`, size measured before and after); both `maybeScan` early returns removed; visualizer capability-first checks; `engines.vscode ^1.101.0`; delete the two unreferenced change-set files and the test; VSIX l10n bundles | — (runs in parallel with WS2) | Sonnet |
+| WS2 | **Change detection + fact store** (B2, B4): EOL-normalized hashing, BigInt stat manifest, racy rule, Merkle, git blob hints and multi-root (memory `plan`); `FactStorePort` in memory; the Node adapter on the G03 `localRecordTransaction` store (wires G03); `.builderforce/cache/.gitignore`, watcher and search excludes; the object sweep; migration of `.builderforce/knowledge/*` for the VSIX, knowledge index, on-prem and `uploadLocalSnapshot`; `canonicalDump`. Publish memory and bump the pin. | — | **Opus** (storage format) |
+| WS3 | **Background indexer** (B6): watcher, reconcile, priority scheduler, levels, budgets, pause rules, the `powerSource` port, level status to the visualizer, `index.*` telemetry | WS2 | Sonnet |
+| WS4 | **Extraction v3 + rules** (B3, B5): tree-sitter queries for complexity, routes, entry points and guard chains, capability imports, test facts; fact kinds (`structure`, `body`, `content`); composite `EXTRACTOR_VERSION` including grammar versions; WASM parser in the worker; `FactRule` evaluator with `reads` and `hops`; the existing findings ported to rules; the determinism oracle over `canonicalDump` (B8.6), including an autocrlf fixture | WS2 | Sonnet |
+| WS5 | **Consolidation** (B9): codebaseScan as a projection; repo-map `FileFacts` convergence; VSIX stops importing the repo-map extract. Existing tests run unchanged. | WS3, WS4 | Sonnet |
+| WS6 | **Finding identity v2, lineage, comparability** (C3, C9): `unusedCodeRule` split per item; anchor-kind and minimum-member rule; jscpd and knip ids migrated; `compareAnalysis` plus `CodeAnalysisSnapshot` types moved to memory; the VSIX baseline `comparable` | WS4 | **Opus** (cross-package) |
+| WS7 | **run-delta core** (C1, C2, C4, C10): full-sha256 baseline, pre-images, before-tree export, edge cases, the in-house rename matcher, attribution filter, impact set, verdicts, headline, blast radius, quantized digest property test; **the autonomous-run block policy (§12.5)**; `delta.computed` telemetry | WS6 | **Opus** (cross-package, storage) |
+| WS8 | **Security dimension** (C5): guard, source, sink and sanitizer registries, taint-lite, capability delta, osv and gitleaks adapters, config rules, STRIDE template; the `guard-removed` block wired into the WS7 policy | WS7, and WS4 entry-point and guard-chain facts | **Opus** (security) |
+| WS9 | **Performance, -ilities and quality dimensions** (C6.1, C7, C8.1–C8.3), as one Sonnet brief per dimension; the C8.2 integrity block wired into the WS7 policy | WS7, and WS4 `testFacts` | Sonnet |
+| WS10 | **Presentation** (C11): card, panel, history and trend, on VSIX and web; localization in all catalogs; both themes; 360 px | WS7 | Sonnet |
+| WS11 | **SARIF package** (C12), registered in `check-source-package-graph`, with an adapter from `NormalizedFinding` to `DeltaFinding`; plus persistence and sync (C14): the `run-delta` record, the mirror importer, the `run_deltas`, `run_delta_dimensions` and `run_delta_findings` expand migration, the 1024-space embedding registered in `MEMORY_VECTOR_SPACES`, and `sweptTables` retention | WS7; G15–G18 | **Opus** (migration, storage) |
+| WS12 | **Optional dynamic tier** (C6.2, C8.4): benchmark runner, Wilcoxon signed-rank statistics, diff coverage, Stryker incremental | WS9 | Sonnet |
+| WS13 | **Packaged offline acceptance** (A6) and cloud-run delta (C14) | WS1–WS10 | Sonnet |
+| WS14 | **Local-first visualizer** (A7): linked reviews write the local store first and sync as a replica; the host computes cut, outline, roll-up and data coverage from the local projection; Sync shows two real counts; one-time seed from the server via the PRD 40 import path; the A7 network-denied map-digest test. Does not wait for WS2: it uses today's local snapshot store and moves to B4 segments when WS2 lands | WS1 (A2) | Sonnet; Opus review (storage, sync) |
+| WS15 | **builderforce-memory `stats` module and deterministic statistics** (D13, D2, D0 guard): only what `ml/classical` lacks; `ml/classical` extended in place; migrate and delete every copy listed in D13, with their tests unchanged; `check-run-delta-layers` wired into `pnpm run check` and CI | — (pure maths, in parallel) | Sonnet |
+| WS16 | **Labels pipeline** (D1): the run-outcomes context as one owner; `RunFeatures` frozen at run end; per-run commit attribution (VSIX git API, `cloudFinalize`), closing the per-task `runCommitMarker` defect; SZZ, revert, CI and review labellers; censoring; point-in-time features and the leakage guard; consent-scoped training store. Local records start with WS7; the server tables follow WS11. | WS7 (server half: WS11) | **Opus** (storage, privacy, cross-package) |
+| WS17 | **Rule precision, calibration, process control and reliability growth** (D3, D4, D7, D8) | WS15, WS16 | Sonnet |
+| WS18 | **Run risk model** (D5): training driver, rolling-origin validation, artifact format, quantized inference, the replace-`v1` gate, Kaplan–Meier view, model cards and drift (D12) | WS16 with at least 500 final labels | **Opus** (model governance, storage) |
+| WS19 | **Naturalness** (D6), project trigram v1 (the logprob scorer waits on a token-logprob port) | WS15 | Sonnet |
+| WS20 | **Thompson scheduling and SPRT** (D9) | WS12, WS15 | Sonnet |
+| WS21 | **Ranking and similar runs** (D10), plus the card's Predicted block (D11), localized | WS10, WS16 | Sonnet |
+| WS22 | **People scores** (D14): role attribution; the contributor-to-identity mapping; `mayViewPersonScore`; the `case_mix` model (its own, not WS18's); Gamma–Poisson shrinkage; funnel plot and table on the team People view; audit; enterprise default-off with the DPIA notice; access, export and erasure; `person_score.viewed` telemetry. Localized; both themes; 360 px. | WS16 | **Opus** (auth/RBAC, privacy) |
+| WS23 | **Review run view and parallel review** (A8): memory — per-file extraction failure is a step not a fatal error, `extractPool` port, N-wide judging with one ordered writer, `onStep` events, byte-equal parallel vs sequential test; host — `worker_threads` extract pool (its own esbuild worker entry), `ReviewRun` recorder and `runs/` persistence, `run` events, Retry; view — Run panel (`SlideOutPanel`), history, localized, both themes, 360 px | — (ships with WS14) | Sonnet; Opus review (concurrency, storage) |
+| WS14 | **Ship.** This is a new capability, so: a `release_notes` row (category `new`); an Idea-to-Real blog post on the template in `frontend/src/content/blog/run-your-app-on-the-canvas.md`, placing the delta in the **Measure** act of the arc (proof that a run made things better, not just different); DONE.md moves by section number. | WS10, WS13 | Session model |
+
+Version bumps and ROADMAP/DONE entries stay with the session model.
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 2044–2110.
+
+### 8. Done-checks
+
+**Part A**
+- [ ] The packaged VSIX passes A6 with egress denied: zero BuilderForce and zero npm requests.
+      The graph renders, a local-model run completes and a delta appears.
+- [ ] Signed out with a persisted project selection, a review completes on the local store
+      (regression test for `NOT_SIGNED_IN`).
+- [ ] No view or command uses `builderforce.signedIn` except account-only ones, as listed in
+      the capability table. A guard script fails on a new `signedIn` `when` clause outside an
+      allowlist.
+
+**Part B**
+- [ ] Warm plan of the `agentic` tree takes under 3 s; cold plan in git under 30 s.
+- [ ] Saving one file in a 16k-file tree: p95 under 200 ms to updated L1/L2 facts for that
+      file. Global rules are skipped when the read fact kinds did not change (asserted by a
+      trace test).
+- [ ] Determinism oracle (B8.6): the `canonicalDump` of the incremental store equals the
+      scratch build and equals a second OS (Windows with autocrlf), byte for byte, over 500
+      seeded edit sequences.
+- [ ] A body-only edit reruns `body`-reading rules (for example `io-in-loop`) and skips
+      `structure`-only rules (a trace test).
+- [ ] The repo's own `.gitignore` is untouched, and `.builderforce/cache/.gitignore` contains
+      `*`.
+- [ ] `scan.json` and its version token are gone. `codebaseScan` tests pass unchanged against
+      the projection.
+- [ ] An analyzer failure shows as `not_measured` with a reason, never as zero findings.
+
+**Part C**
+- [ ] A clone group gaining a member reads as `changed (grew)`, not resolved plus introduced.
+- [ ] A fixture run that removes `requireAuth` from a route gives security `worse` with
+      `guard-removed` and the route key in evidence.
+- [ ] A fixture run that adds `.skip` to a test and loosens a matcher gives quality `worse`
+      with the headline "tests were weakened".
+- [ ] A fixture run that adds an awaited DB call inside a `.map` gives `io-in-loop`.
+- [ ] A fixture run that changes an exported signature gives `ilities.compatibility`
+      `api-breaking`.
+- [ ] An analyzer version bump between sides makes that kind `not_comparable` and emits no
+      introduced or resolved entries.
+- [ ] The same before/after on Windows and Linux CI gives the same `RunDelta.digest`.
+- [ ] SARIF export validates against the 2.1.0 schema, and `baselineState` round-trips through
+      import.
+- [ ] Static tier p95 under 10 s for runs touching 50 files or fewer on the `agentic` tree.
+      The card shows "measuring" rows until L3 settles.
+- [ ] Card and panel are localized in 5 catalogs, readable in both themes and free of
+      horizontal overflow at 360 px.
+
+**Part D**
+- [ ] `check:run-delta-layers` fails when any `verdict/` file imports `predict/`. A fixture
+      shows a high predicted risk leaving every verdict unchanged.
+- [ ] The same features and model artifact give a byte-identical `Prediction` on Windows and
+      Linux CI, offline.
+- [ ] Below the data threshold, every model returns `insufficient-data` and the card shows
+      nothing for it.
+- [ ] The leakage guard fails a fixture feature that reads data later than `finalizedAt`.
+- [ ] SZZ labeller: on a fixture history with a known fix-inducing run, that run gets
+      `followup-fix`. A comment-only later edit does not.
+- [ ] Chapman estimate: unit tests against textbook values. `m < 3` gives
+      `insufficient-data`.
+- [ ] Rule precision: a rule with 3 votes is never demoted. A rule with 200 votes at 30%
+      precision is demoted, and its per-repo posterior shrinks toward the global one.
+- [ ] Risk model replaces `v1` only when it passes the D5.3 gate. The gate result is
+      recorded in the model card.
+- [ ] `prefetch/calibrate.ts` and the learned-routing sampler import from `@seanhogg/builderforce-memory/stats`.
+      No second implementation remains (grep check). Their existing tests pass unchanged.
+- [ ] The SPRT stops early on a fixture with a 20% regression, and runs to the maximum on a
+      no-change fixture.
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 2111–2123.
+
+### 9. Non-goals
+
+- Full-precision inter-procedural taint analysis or symbolic execution. Taint-lite is a
+  heuristic signal. Deep analysis comes in through SARIF from Semgrep or CodeQL when
+  installed.
+- Running the project's full test suite or build by default. The dynamic tier is opt-in or
+  policy-driven, runs only in a trusted workspace, and never runs in the user's working tree
+  (C6.2 "Safety and trust").
+- Proving functional correctness. The delta reports measured change, not whether the feature
+  is right. Acceptance evidence (PRD 23/37) stays the place for that.
+- Replacing the knowledge review's docs judgement. L4 is unchanged except for caching and
+  capability gating.
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 2124–2166.
+
+### 10. Measure
+
+- **Use.**
+  - The share of runs that produce a delta, by entry point: VSIX, cloud, web.
+  - Delta cards opened, and panel opens per card.
+  - Offline sessions, meaning sessions with the platform denied for their whole life. These
+    are counted locally and reported in the next granted sync batch.
+- **Value.**
+  - Fix-with-agent clicks from delta findings, and the share that resolve the finding in the
+    follow-up run's delta.
+  - Introduced error-level findings caught per 100 runs, split by dimension.
+  - Autonomous runs blocked by policy that were later confirmed as correct blocks.
+  - Integrity findings (C8.2) per 100 autonomous runs, trending down as prompts and policies
+    adapt.
+- **Precision.** The Beta posterior precision per rule (D3). Demotion and restoration follow
+  its credible bounds, and demoted rules are listed for rework.
+- **Prediction quality.** For each model:
+  - Brier score, ECE and PR-AUC on the trailing 30 days;
+  - Popt for run risk;
+  - NDCG@5 for ranking;
+  - coverage of the KM interval;
+  - PSI drift.
+
+  Report also the share of verdict-changing optional checks the scheduler ran versus random
+  scheduling, and the count of labelled runs per week, which gates P3.
+- **Cost.**
+  - Plan time.
+  - Per-save update latency.
+  - Indexer CPU share.
+  - Delta p50/p95 per tier.
+  - Cache hit rate for extract, rules and analyzers.
+  - Pre-image bytes per run.
+- **Kill condition.** After 8 weeks, if fewer than 15% of delta cards are opened **and**
+  "mark as wrong" exceeds 30% across rules, cut the scope back to quality and integrity (C8)
+  plus security `guard-removed`, `secret` and `capability-added`. Retire the rest.
+- **Kill condition for Part D.** Each model stands or falls on its own:
+  - **Run risk:** if it has not passed the D5.3 gate after 2,000 final labels, retire it and
+    keep `v1`.
+  - **Ranking:** if it does not beat severity-then-centrality ordering on NDCG@5 after 8
+    weeks, retire it.
+  - **Naturalness:** if fewer than 5% of "unusual" lines appear in later `followup-fix` blame,
+    retire it.
+
+
+Source: `docs/specs/41-prd-offline-understanding-and-run-delta.md` lines 2219–2264.
+
+### 13. Methodology references
+
+- Local-first software — Kleppmann, Wiggins, van Hardenberg, McGranaghan (Ink & Switch, 2019).
+- *Build Systems à la Carte* — Mokhov, Mitchell, Peyton Jones (ICFP 2018): verifying traces,
+  early cutoff.
+- Salsa / rust-analyzer; rustc red-green incremental queries.
+- Merkle trees; git's index and the racy-git problem.
+- tree-sitter incremental parsing; GitHub stack graphs (file-incremental name binding); SCIP.
+- Datalog semi-naive evaluation; DRed (deletion and re-derivation); CodeQL and Meta Glean as
+  fact-plus-rule code models.
+- Tarjan's SCC; PageRank for code centrality (as in Aider's repo map).
+- Attack-surface metric — Manadhata and Wing (IEEE TSE 2011); STRIDE (Microsoft threat
+  modelling); taint analysis (source, sink, sanitizer).
+- ISO/IEC 25010:2023 product quality model.
+- Robert C. Martin's package metrics (Ca, Ce, instability, abstractness).
+- Change coupling and hotspots — Tornhill, *Your Code as a Crime Scene*; Gall et al. on
+  logical coupling.
+- Wilcoxon signed-rank test, paired Hodges–Lehmann estimator, paired bootstrap CIs for
+  interleaved benchmark comparison.
+- Mutation testing (StrykerJS incremental mode).
+- SARIF 2.1.0 (OASIS): `baselineState`, `partialFingerprints`.
+- Just-in-time defect prediction — Kamei et al. (IEEE TSE 2013); McIntosh and Kamei (TSE 2018);
+  effort-aware evaluation (Popt).
+- SZZ — Śliwerski, Zimmermann and Zeller (MSR 2005).
+- Change entropy — Hassan (ICSE 2009).
+- Naturalness — Hindle et al. (ICSE 2012); Ray et al., "On the Naturalness of Buggy Code"
+  (ICSE 2016).
+- Maintainability Index — Oman and Hagemeister (1992); Halstead (1977).
+- Capture–recapture — Lincoln–Petersen; Chapman (1951); its use in software inspection by
+  Eick et al. (1992).
+- Goel–Okumoto NHPP software reliability growth (1979).
+- Beta–Binomial, empirical Bayes and hierarchical shrinkage — Efron and Morris.
+- Platt scaling (1999); isotonic regression (Zadrozny and Elkan 2002); Brier score; ECE
+  (Guo et al. 2017).
+- Kaplan–Meier (1958) with Greenwood's variance; Cox proportional hazards (1972).
+- EWMA (Roberts 1959); CUSUM (Page 1954); Bayesian online change-point detection (Adams and
+  MacKay 2007).
+- Mahalanobis distance; Ledoit–Wolf shrinkage (2004); population stability index.
+- Thompson sampling (1933; Agrawal and Goyal 2012); Laplace approximation for Bayesian logistic
+  regression.
+- Wald's sequential probability ratio test (1945).
+- Indirect standardization (standardized mortality ratio); Garwood exact Poisson intervals;
+  funnel plots for institutional comparison — Spiegelhalter (Statistics in Medicine, 2005);
+  Gamma–Poisson empirical Bayes.
+- Pairwise learning to rank (RankNet, Burges 2005); unbiased LTR with inverse propensity
+  weighting (Joachims et al. 2017); NDCG.
+
 ## ✅ RESOLVED 2026-11-17: the WebContainers ML modules ship (2026.10.14), and Studio uses them (studio 2026.11.2)
 
 - **WebContainers 2026.10.14 is on npm.** The phase 1–8 ML modules (inference, adaptive, memory, prefetch, kvcache, learning) now live under the `./ml` subpath, and the root export is back to the dev runtime only. The worker bundle is `./ml/worker.js`.

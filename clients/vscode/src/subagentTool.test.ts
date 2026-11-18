@@ -110,7 +110,17 @@ describe("subagentToolDef", () => {
     it("runs a verify slice for an agent with no QA role as an on-demand QA Tester, unattributed", async () => {
       const children = fakeControls();
       const out = JSON.parse(await subagentToolDef({ children, personaBrief: async () => ({ ...ADA, roleKeys: ["developer"] }) })
-        .execute({ label: "check it", task: "review the diff", as_agent: "Ada", role: "verify" }, "/repo"));
+        .execute({ label: "check it", task: "run the tests and report the output", as_agent: "Ada", role: "verify" }, "/repo"));
+      expect(out.ok).toBe(true);
+      expect(children.requests[0]!.asAgent).toBeUndefined();
+      expect(out.staffing).toContain("on-demand QA Tester");
+      expect(out.staffing).toContain("not attributed to Ada");
+    });
+
+    it("runs a review slice for an agent with no QA role as an on-demand QA Tester, unattributed", async () => {
+      const children = fakeControls();
+      const out = JSON.parse(await subagentToolDef({ children, personaBrief: async () => ({ ...ADA, roleKeys: ["developer"] }) })
+        .execute({ label: "check it", task: "review the diff", as_agent: "Ada", role: "review" }, "/repo"));
       expect(out.ok).toBe(true);
       expect(children.requests[0]!.asAgent).toBeUndefined();
       expect(out.staffing).toContain("on-demand QA Tester");

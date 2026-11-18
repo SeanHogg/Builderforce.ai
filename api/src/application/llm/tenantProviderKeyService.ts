@@ -27,6 +27,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  */
 
 import { and, eq, inArray, ne, sql } from 'drizzle-orm';
+import { supportsSubscription } from '@builderforce/model-catalog';
 import type { HonoEnv } from '../../env';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { tenantLlmProviderKeys, tenantMembers } from '../../infrastructure/database/schema';
@@ -63,6 +64,7 @@ import { listProviderModelSelections, type ProviderModelSelections } from './pro
 import { invalidateProviderModelCaches } from './providerModelCacheKeys';
 import { loadTenantProviderRows, invalidateTenantProviderRows } from './tenantProviderRows';
 import { byoSelectedModelRefs } from './byoModelRouting';
+import { compareByoPrecedence } from './byoProviderLadder';
 
 export {
   SUPPORTED_PROVIDERS,
@@ -178,6 +180,30 @@ export function byoVendorIdsFromCredentials(creds: ResolvedByoCredentials): Set<
   }
   for (const { provider, resolved } of OAUTH_RESOLVERS) {
     if (resolved(creds)) set.add(byoVendorIdFor(provider, 'oauth'));
+  }
+  return set;
+}
+
+/**
+ * The connected vendors whose credential THIS call is a consumer SUBSCRIPTION — one quota
+ * every model on the account draws on, so a 429 on one model is the whole account's
+ * (`vendors/accountFailure.ts`). An API key is not: providers meter its limits per model.
+ *
+ * Derived from the same provider data as {@link byoVendorIdsFromCredentials}: every
+ * subscription that resolved on its OAuth slot ({@link OAUTH_RESOLVERS} — Claude on
+ * `anthropic`, ChatGPT on `openai-codex`, SuperGrok on `xai-oauth`), plus a provider that
+ * offers a subscription (`supportsSubscription`) but has no OAuth slot of its own — its
+ * subscription is delivered in its key slot (Kimi Code: `resolveKimiOAuthResolution`), so
+ * its key IS the subscription. An Anthropic API key is never in the set.
+ */
+export function subscriptionVendorIdsFromCredentials(creds: ResolvedByoCredentials): Set<string> {
+  const set = new Set<string>();
+  for (const { provider, resolved } of OAUTH_RESOLVERS) {
+    if (resolved(creds)) set.add(byoVendorIdFor(provider, 'oauth'));
+  }
+  const keys = creds.vendorKeys ?? {};
+  for (const p of Object.keys(keys) as LlmProvider[]) {
+    if (keys[p] && supportsSubscription(p) && !OAUTH_CAPABLE_PROVIDERS.has(p)) set.add(byoVendorIdFor(p, 'api_key'));
   }
   return set;
 }
@@ -768,13 +794,13 @@ export async function providersConnectedInOtherWorkspaces(
 }
 
 /** List which providers a tenant has configured + how each authenticates (no secrets).
- *  Ordered by tenant-set BYO precedence (`priority` ascending; unset rows last), then
- *  provider id — so the caller can read the precedence straight off the array order. */
+ *  Ordered by tenant-set BYO precedence (`priority` ascending), then the UN-RANKED rows by
+ *  how well each provider codes (`compareByoPrecedence` — the catalog's code ladder, not
+ *  the alphabet) — so the caller can read the precedence straight off the array order. */
 export async function listTenantProviderKeys(
   env: Env,
   tenantId: number,
 ): Promise<ProviderKeySummary[]> {
-  // Already ordered by precedence (priority ASC, unset last, then provider).
   return (await loadTenantProviderRows(env, tenantId))
     .filter((r) => isSupportedProvider(r.provider))
     .map((r) => ({
@@ -782,7 +808,8 @@ export async function listTenantProviderKeys(
       provider: r.provider as LlmProvider,
       authType: ((r.authType ?? 'api_key') === 'oauth' ? 'oauth' : 'api_key') as ProviderAuthType,
       priority: r.priority,
-    }));
+    }))
+    .sort(compareByoPrecedence);
 }
 
 /**

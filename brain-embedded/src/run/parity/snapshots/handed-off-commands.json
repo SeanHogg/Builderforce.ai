@@ -1225,7 +1225,7 @@
     }
    ],
    "tool_choice": "auto",
-   "role": "verify",
+   "role": "review",
    "excludeModels": [
     "pinned/model"
    ],
@@ -1745,7 +1745,7 @@
      "model": "fake-model",
      "requestedModel": "default",
      "step": 5,
-     "role": "verify",
+     "role": "review",
      "toolCalls": 0,
      "advertisedTools": 9,
      "catalogTools": 10,
@@ -2131,7 +2131,7 @@
      "model": "fake-model",
      "requestedModel": "default",
      "step": 5,
-     "role": "verify",
+     "role": "review",
      "toolCalls": 0,
      "advertisedTools": 9,
      "catalogTools": 10,

@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { describe, expect, it } from "vitest";
 import { ROLE_MODEL_DEFAULT_ENV, ROLE_MODELS_ENV } from "@builderforce/learned-routing";
-import { modelForChildRun, NATIVE_RUN_ROLE, roleModelPin } from "./roleModelPin";
+import { modelForChildRun, NATIVE_RUN_ROLE, reviewModelPin, roleModelPin } from "./roleModelPin";
 
 const SRC = __dirname;
 
@@ -33,6 +33,21 @@ describe("roleModelPin", () => {
   it("accepts an already-parsed ROLE_MODELS object", () => {
     const bag = { [ROLE_MODELS_ENV]: { developer: "claude-opus-4-8" } } as unknown as NodeJS.ProcessEnv;
     expect(roleModelPin("developer", bag)).toBe("claude-opus-4-8");
+  });
+});
+
+describe("reviewModelPin", () => {
+  it("reads ROLE_MODELS.review, else the legacy verify entry, else the default", () => {
+    expect(reviewModelPin(env({ [ROLE_MODELS_ENV]: '{"review":"opus","verify":"mini"}' }))).toBe("opus");
+    // An operator config written before the review role: its verify pin still reviews.
+    expect(reviewModelPin(env())).toBe("gpt-4.1-mini");
+    expect(reviewModelPin(env({ [ROLE_MODELS_ENV]: '{"code":"opus"}' }))).toBe("claude-sonnet-4-6");
+    expect(reviewModelPin({})).toBeUndefined();
+  });
+
+  it("is the review stage's pin in the editor's stage models", () => {
+    const modelState = fs.readFileSync(path.join(SRC, "modelState.ts"), "utf8");
+    expect(modelState).toContain("review: reviewModelPin()");
   });
 });
 

@@ -38,6 +38,14 @@ export * from "./subagent-tools.js";
 export * from "./live-subagent-tools.js";
 export * from "./childCapabilities.js";
 export * from "./git-tools.js";
+// THE shell-command reader (segments, tokens, git's subcommand) — run-guards' read-only classifier reads it too.
+export * from "./shell-segments.js";
+// "Does this command switch a checkout's branch?" — `run_command` refuses that over pending changes.
+export { detectBranchSwitch, type BranchSwitch } from "./branch-switch.js";
+// THE porcelain reader + pending-changes phrase (run_command's refusal and the on-prem issue workflow's).
+export { parsePorcelainPaths, pendingChangesSummary } from "./git-status.js";
+// THE side-by-side worktree path (`../<branch>-wt` from the repo top level) git_commit, cleanup and the refusals share.
+export { worktreeNameFor, worktreePathFor } from "./worktree-path.js";
 // The run's default checkout in a folder that CONTAINS checkouts (pure resolver).
 export * from "./defaultRepo.js";
 export * from "./symbols.js";

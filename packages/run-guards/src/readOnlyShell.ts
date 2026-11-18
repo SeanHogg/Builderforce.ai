@@ -21,6 +21,10 @@
  * the same commands.
  */
 
+// THE shell reader (segments, tokens, leading construct words, git's subcommand) — shared
+// with the branch-switch detector beside `run_command`.
+import { commandWords, gitSubcommand, shellTokens, splitShellSegments } from "@builderforce/agent-tools";
+
 /** Programs that never change the filesystem when run without output redirection. */
 const READ_ONLY_PROGRAMS = new Set([
   'cat', 'head', 'tail', 'wc', 'ls', 'dir', 'pwd', 'echo', 'printf', 'grep', 'egrep', 'fgrep', 'rg',
@@ -41,58 +45,6 @@ const READ_ONLY_GIT = new Set([
   'whatchanged', 'cherry', 'show-ref', 'show-branch', 'range-diff', 'var', 'check-ignore', 'check-attr',
 ]);
 
-/** Shell keywords that open, continue or close a construct and run nothing themselves. */
-const CONSTRUCT_WORDS = new Set(['then', 'else', 'fi', 'do', 'done', 'esac', '{', '}', '(', ')']);
-
-/** Split into top-level segments on `&&`, `||`, `;`, `|` and newlines, respecting quotes. */
-function splitSegments(command: string): string[] | null {
-  const out: string[] = [];
-  let current = '';
-  let quote: '"' | "'" | null = null;
-  let depth = 0; // inside $( … )
-  for (let i = 0; i < command.length; i += 1) {
-    const ch = command[i];
-    if (quote) {
-      current += ch;
-      if (ch === quote) quote = null;
-      continue;
-    }
-    if (ch === '"' || ch === "'") {
-      quote = ch;
-      current += ch;
-      continue;
-    }
-    if (ch === '$' && command[i + 1] === '(') {
-      depth += 1;
-      current += '$(';
-      i += 1;
-      continue;
-    }
-    if (ch === ')' && depth > 0) {
-      depth -= 1;
-      current += ch;
-      continue;
-    }
-    // `2>&1`, `>&2`, `<&0` and `&>file` are REDIRECTS, not job separators — the `&` belongs
-    // to the redirect, and the redirect itself is judged by `writesViaRedirect`.
-    if (ch === '&' && (command[i - 1] === '>' || command[i - 1] === '<' || command[i + 1] === '>')) {
-      current += ch;
-      continue;
-    }
-    if (depth === 0 && (ch === ';' || ch === '\n' || ch === '|' || ch === '&')) {
-      // `&&` / `||` are one separator; a lone `&` backgrounds a job (still one segment end).
-      if ((ch === '&' || ch === '|') && command[i + 1] === ch) i += 1;
-      if (current.trim()) out.push(current.trim());
-      current = '';
-      continue;
-    }
-    current += ch;
-  }
-  if (quote || depth !== 0) return null; // unbalanced — do not guess
-  if (current.trim()) out.push(current.trim());
-  return out;
-}
-
 /** The `$( … )` bodies inside a segment, so they are checked like any other command. */
 function substitutions(segment: string): string[] {
   const out: string[] = [];
@@ -106,18 +58,6 @@ function substitutions(segment: string): string[] {
     }
     out.push(segment.slice(i + 2, j - 1));
     i = segment.indexOf('$(', j);
-  }
-  return out;
-}
-
-/** Whitespace tokens with quotes stripped. Substitutions are already checked separately. */
-function tokens(segment: string): string[] {
-  const out: string[] = [];
-  const re = /"([^"]*)"|'([^']*)'|(\S+)/g;
-  let m = re.exec(segment);
-  while (m) {
-    out.push(m[1] ?? m[2] ?? m[3] ?? '');
-    m = re.exec(segment);
   }
   return out;
 }
@@ -137,12 +77,7 @@ function writesViaRedirect(segment: string): boolean {
 
 function gitIsReadOnly(args: string[]): boolean {
   // Global options before the subcommand: `-C <dir>`, `-c k=v`, `--no-pager`, …
-  let i = 0;
-  while (i < args.length && (args[i] ?? '').startsWith('-')) {
-    i += args[i] === '-C' || args[i] === '-c' ? 2 : 1;
-  }
-  const sub = args[i];
-  const rest = args.slice(i + 1);
+  const { sub, rest } = gitSubcommand(args);
   if (!sub) return true; // bare `git` prints usage
   if (READ_ONLY_GIT.has(sub)) return true;
   const flags = new Set(rest.filter((a) => a.startsWith('-')));
@@ -193,16 +128,9 @@ function segmentIsReadOnly(segment: string, depth: number): boolean {
   // redirect into a file called `/dev/null)`.
   const flat = segment.replace(/\$\((?:[^()]|\([^()]*\))*\)/g, 'X');
   if (writesViaRedirect(flat)) return false;
-  let words = tokens(flat);
-  // Leading construct words (`do echo …`, `then git log …`) and assignments (`n=$(…)`).
-  const leads = (): boolean => {
-    const first = words[0] ?? '';
-    return CONSTRUCT_WORDS.has(first) || /^[A-Za-z_]\w*=/.test(first) || first === 'if' || first === 'while' || first === 'until' || first === '!';
-  };
-  while (words.length && leads()) {
-    words = words.slice(1);
-  }
-  const [program, ...args] = words;
+  // Leading construct words (`do echo …`, `then git log …`) and assignments (`n=$(…)`) dropped;
+  // substitutions are already checked separately.
+  const [program, ...args] = commandWords(shellTokens(flat));
   if (program === undefined) return true;
   // `for x in a b c` runs nothing; its list was checked through the substitutions above.
   if (program === 'for' || program === 'case') return true;
@@ -217,7 +145,7 @@ function segmentIsReadOnly(segment: string, depth: number): boolean {
 
 function commandIsReadOnly(command: string, depth: number): boolean {
   if (/`/.test(command)) return false; // legacy substitution — not parsed, so not trusted
-  const segments = splitSegments(command);
+  const segments = splitShellSegments(command);
   if (!segments || segments.length === 0) return false;
   return segments.every((s) => segmentIsReadOnly(s, depth));
 }

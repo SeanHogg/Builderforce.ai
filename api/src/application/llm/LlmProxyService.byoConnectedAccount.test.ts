@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { llmProxyForPlan, CODING_BACKSTOP_MODELS, type ProxyEnv } from './LlmProxyService';
 import { _resetMemoryCooldowns, recordFailure } from '../../infrastructure/auth/cooldownStore';
 import { vendorFlagship } from './vendors';
+import { _resetMemoryVendorHealth } from './vendors/vendorHealth';
 /** The CURRENT Anthropic flagships, read from the catalog — never a version literal, so a
  *  model release is a catalog edit and these tests follow it. */
 const OPUS_FLAGSHIP = vendorFlagship('anthropic', true)!;
@@ -240,6 +241,29 @@ describe('MULTIPLE connected accounts fail over to each other', () => {
     expect(seen).toContain(XAI_OAUTH_ENDPOINT);
     // Still inside the BYO boundary: no operator-funded model was touched.
     expect(seen.some((u) => u === OPENROUTER_ENDPOINT)).toBe(false);
+  });
+
+  it('an account that refuses (401) is tried ONCE per turn — its other flagship is skipped, the next account serves', async () => {
+    // Anthropic seeds both flagships (Opus and Sonnet). A rejected credential rejects
+    // both; trying the second one was a wasted round-trip on every turn. (The earlier
+    // tests' 500s left Anthropic on a 5xx streak — clear it so it leads this turn.)
+    _resetMemoryVendorHealth();
+    const seen: string[] = [];
+    const fetchSpy = vi.fn(async (input: string | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      seen.push(url);
+      if (url === ANTHROPIC_ENDPOINT) return new Response(JSON.stringify({ error: { message: 'invalid x-api-key' } }), { status: 401 });
+      if (url === XAI_OAUTH_ENDPOINT) return xaiOk('served by the next account');
+      throw new Error(`shared pool must not be reached: ${url}`);
+    });
+    (globalThis as { fetch: typeof fetch }).fetch = fetchSpy as unknown as typeof fetch;
+
+    const result = await twoAccountProxy().complete(request);
+
+    expect(result.response.status).toBe(200);
+    expect(result.resolvedVendor).toBe('xai-oauth');
+    expect(seen.filter((u) => u === ANTHROPIC_ENDPOINT)).toHaveLength(1);
+    expect(result.failovers.filter((f) => f.vendor === 'anthropic').map((f) => f.code)).toEqual([401]);
   });
 
   it('a COOLED connected model is probed rather than 503-ing while accounts are usable', async () => {

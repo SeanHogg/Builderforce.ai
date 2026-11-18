@@ -12,9 +12,8 @@ import type { ChatCompletionRequest, LlmProxyOptions, ProxyEnv } from './proxyTy
 // what the gateway does with it — through the real seed composition and candidate chain
 // — for the tenant of VS Code chats #6 and #5739: MiniMax, xAI and Moonshot (Kimi)
 // connected, every turn served by MiniMax Flash. A CODE turn must lead the tenant's
-// connected accounts with the strongest coder (Grok ULTRA, Kimi PREMIUM) ahead of
-// MiniMax Flash (STANDARD), whatever order the tenant ranked them in; a PLAN turn keeps
-// the tenant's own order.
+// connected accounts with a better coder (Kimi K3 on the code ladder) ahead of MiniMax
+// Flash, whatever order the tenant ranked them in; a CHAT turn keeps the tenant's own order.
 // ---------------------------------------------------------------------------
 
 const env: ProxyEnv = { OPENROUTER_API_KEY: 'or-free', OPENROUTER_API_KEY_PRO: 'or-pro' };
@@ -65,8 +64,11 @@ describe('a CODE turn leads with the strongest connected coder (chats #6, #5739)
     const ranked = { byoProviderPriorities: [{ vendor: 'minimax', priority: 1 }, { vendor: 'xai', priority: 2 }, { vendor: 'moonshot', priority: 3 }] };
     const code = await connectedOrder(ranked, 'code');
     expect(isMinimax(code[0]!), `connected order for a code turn: ${code.join(' > ')}`).toBe(false);
-    // …while analysis keeps the tenant's own order.
+    // …while a chat turn keeps the tenant's own order (a plan turn, like code, now leads
+    // with the strongest connected judge — see byoRoleOrder.test).
+    const chat = await connectedOrder(ranked, 'chat');
+    expect(isMinimax(chat[0]!), `connected order for a chat turn: ${chat.join(' > ')}`).toBe(true);
     const plan = await connectedOrder(ranked, 'plan');
-    expect(isMinimax(plan[0]!), `connected order for a plan turn: ${plan.join(' > ')}`).toBe(true);
+    expect(isMinimax(plan[0]!), `connected order for a plan turn: ${plan.join(' > ')}`).toBe(false);
   });
 });

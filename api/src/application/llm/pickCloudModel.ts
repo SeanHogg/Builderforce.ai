@@ -97,7 +97,7 @@ export interface PickCloudModelOptions {
    * never an error. Operator decision 2026-09-12.
    */
   evermindCoding?: { model: string; qualified: boolean };
-  /** What kind of call this is (plan/code/verify/explore/chat/utility) — reorders
+  /** What kind of call this is (plan/code/review/verify/explore/chat/utility) — reorders
    *  the BYO soft seed's per-vendor candidates toward that role's objective (see
    *  {@link resolveRoleObjective}) instead of leaving every call on one global
    *  precedence order regardless of what it is actually doing. Absent → balanced,

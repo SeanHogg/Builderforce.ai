@@ -48,7 +48,8 @@ import {
   isServableLocalModel,
   localRuntime,
   formatLocalModelRef,
-  type LocalFirstAccount,
+  type ByoOrderQuery,
+  type LocalFirstAccounts,
   type LocalFirstAttemptRecord,
   type LocalModel,
   type LocalRuntimeProbe,
@@ -88,9 +89,10 @@ export { onDeviceModelAvailable } from "./onDeviceTasks";
 export async function resolveModelRoute(secrets: vscode.SecretStorage, request: RouteRequest = {}): Promise<ModelRoute> {
   const inferenceMode = currentInferenceMode();
   const route = await resolveChoiceRoute(secrets, { ...(await resolveEffectiveModelChoice(secrets)), inferenceMode }, request);
-  // The accounts this editor calls itself (Kimi): tried in Hybrid Auto, and for "use my connected accounts"
-  // (`byo_pool`) in Hybrid and Specific — never Local only. The shared stream owns the rule; this only supplies them.
-  const accounts = (): Promise<readonly LocalFirstAccount[]> => editorAccounts(secrets).hybridAccounts();
+  // The accounts this editor calls itself (Kimi), placed for the call's context (role, project, arc stage, agentic):
+  // tried in Hybrid Auto, and for "use my connected accounts" (`byo_pool`) in Hybrid and Specific — never Local only.
+  // The shared stream owns the rule; this only supplies them.
+  const accounts = (query: ByoOrderQuery): Promise<LocalFirstAccounts> => editorAccounts(secrets).hybridAccounts(query);
   if (inferenceMode === "hybrid" || (route.routingMode === "byo_pool" && inferenceMode !== "local-only")) return { ...route, accounts };
   return route.inferenceMode === "local-only" && !route.local && !route.localFirst ? onDeviceOnly(route, request) : route;
 }

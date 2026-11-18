@@ -11,6 +11,8 @@
  *                      that merely refuses the Worker's egress ({@link vendorRequiresLocalEgress}):
  *                      Kimi is called through the tenant's runtime but runs, and is priced,
  *                      in the cloud.
+ *   • ladder         — the catalog's per-role model ladders (`roleLadders.ts`): which
+ *                      model family leads a plan, review or code turn.
  *   • price          — the live provider catalog (`modelCatalog.ts`, read-through
  *                      cached), the same prices the usage ledger records cost from.
  *
@@ -21,6 +23,7 @@
 
 import {
   EMPTY_PRICE_BOOK,
+  ladderRankOf,
   priceBookFromPrices,
   resolveModelTier,
   withPriceTiers,
@@ -93,6 +96,8 @@ export function registryCatalogView(prices: PriceBook = EMPTY_PRICE_BOOK): Catal
     tierOf: (model) => resolveModelTier({ catalogTier: tierForModel(model), price: prices.priceOf(model) }),
     priceOf: tieredPriceOf,
     residencyOf: (model) => (vendorRunsOnDevice(vendorForModel(model)) ? 'local' : 'cloud'),
+    // The catalog's role ladders — plan/review/code order by model family, not tier.
+    ladderRankOf,
   };
 }
 

@@ -1,5 +1,3 @@
-'use client';
-
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CollectionDescriptor } from './descriptor';
 import type { Page, PageQuery } from './collectionTypes';

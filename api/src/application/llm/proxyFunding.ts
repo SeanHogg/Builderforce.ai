@@ -16,7 +16,7 @@ import {
   type VendorId,
 } from './vendors';
 import { CODING_PREMIUM_FALLBACK_MODELS, PREMIUM_FALLBACK_MODELS } from './modelPool';
-import { PROVIDER_VENDOR_MAP, byoVendorIdsFromCredentials, type TenantVendorKeys } from './tenantProviderKeyService';
+import { PROVIDER_VENDOR_MAP, byoVendorIdsFromCredentials, subscriptionVendorIdsFromCredentials, type TenantVendorKeys } from './tenantProviderKeyService';
 import { bareModelId } from './openRouterConnectionService';
 import type { ProxyResult } from './proxyTypes';
 import type { ProxyConfig } from './proxyConfig';
@@ -64,6 +64,21 @@ export class ProxyFunding {
   }
 
   private connectedByoVendorsMemo?: Set<string>;
+
+  /** Does every model on this vendor draw on ONE quota this request — the tenant's connected
+   *  SUBSCRIPTION ({@link subscriptionVendorIdsFromCredentials})? Only then is a 429 the
+   *  whole account's; an API key's limits are per model (`vendors/accountFailure.ts`). */
+  sharesAccountQuota(vendor: string): boolean {
+    this.subscriptionVendorsMemo ??= subscriptionVendorIdsFromCredentials({
+      anthropicOAuthToken: this.cfg.anthropicOAuthToken,
+      openaiCodexAuth: this.cfg.openaiCodexAuth,
+      xaiOAuthToken: this.cfg.xaiOAuthToken,
+      vendorKeys: this.cfg.tenantVendorKeys,
+    });
+    return this.subscriptionVendorsMemo.has(vendor);
+  }
+
+  private subscriptionVendorsMemo?: Set<string>;
 
   /**
    * Cooldown SCOPE — is this vendor served by the tenant's OWN credential this request?

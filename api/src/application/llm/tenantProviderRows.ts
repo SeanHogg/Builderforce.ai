@@ -30,6 +30,12 @@ export interface TenantProviderRow {
 
 export const tenantProviderRowsCacheKey = (tenantId: number): string => `byo-rows:${tenantId}`;
 
+/**
+ * Drop the cached rows. No routing-version bump goes with it: the rows ARE the derived half
+ * of `routingInputsVersion` (each row's id, auth type and priority), so the next read of
+ * that token reloads them and every cache keyed on it — the editor's per-role order
+ * (`GET /llm/byo-order`) among them — misses on its own.
+ */
 export async function invalidateTenantProviderRows(env: Env, tenantId: number): Promise<void> {
   await invalidateCached(env, tenantProviderRowsCacheKey(tenantId));
 }

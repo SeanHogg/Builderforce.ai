@@ -27,8 +27,15 @@ import {
   type ModelFallbackSurface,
 } from '@builderforce/agent-stall';
 import { fastestCandidate, guardedPick, recordLatency, withinLatencyBudget, type LatencyGuardInput, type LatencySamples } from './latencyGuard.js';
+import { configuredPhaseModel, phaseDefaultModel, reviewing, type PhaseModels } from './phaseModels.js';
 
-/** The working phase of a tool-using run. Only ever moves forward. */
+/**
+ * The working phase of a tool-using run. Only ever moves forward. `verify` is the run's
+ * verification stage: the host runs the project's checks itself (deterministically, not as
+ * a model turn), and every model turn in it REVIEWS the change — so it asks for the
+ * `review` role, the strongest models, unless the run was delegated mechanical checking
+ * (`fixedRole: 'verify'`), which keeps the cheap `verify` role. See {@link nextTurn}.
+ */
 export type RunPhase = Extract<ModelRole, 'plan' | 'code' | 'verify'>;
 
 /**
@@ -102,17 +109,18 @@ export interface RunPolicyOptions {
    *  proved). They join {@link RunPolicyState.broken}. */
   excludeModels?: readonly string[];
   /**
-   * Optional model per phase, read by {@link nextTurn} for every phase. `verify`
-   * overrides the run's own model (a review is never the author's). `plan` and `code`
+   * Optional model per phase, read by {@link nextTurn} for every phase. The review model
+   * (`review`, legacy `verify`) drives the verify phase and overrides the run's own model
+   * (a review is never the author's). `plan` and `code`
    * are the DEFAULT beneath it: they apply only while the run holds no model of its
    * own — no pin, lock or stall failover — so a failover that moved the run off its
    * coder is never undone by the phase table, and a fixed-role run (`explore`) is never
    * handed the coder's model. A phase model that broke this run is routed around like
    * any other. `null` means no model for that phase. `reviewModel` is the legacy alias
-   * for `phaseModels.verify`.
+   * for `phaseModels.review`.
    */
-  phaseModels?: Partial<Record<RunPhase, string | null>>;
-  /** Review model for the verify phase. `null` means none is configured. */
+  phaseModels?: PhaseModels;
+  /** Legacy review model for the verify phase. `null` means none is configured. */
   reviewModel?: string | null;
   /** Per-model turn durations the host already measured (earlier runs) — the latency guard's
    *  starting evidence, before this run times its own turns (`latencyGuard.ts`). */
@@ -285,45 +293,23 @@ export function initialRunPolicy(opts: RunPolicyOptions = {}): RunPolicyState {
   };
 }
 
-/** A configured pin for one phase. Verify also honours the legacy `reviewModel`. */
-function configuredPhaseModel(
-  options: RunPolicyState['options'],
-  phase: RunPhase,
-): string | undefined {
-  const fromMap = options.phaseModels?.[phase];
-  if (typeof fromMap === 'string' && fromMap.trim()) return fromMap.trim();
-  if (phase === 'verify' && typeof options.reviewModel === 'string' && options.reviewModel.trim()) {
-    return options.reviewModel.trim();
-  }
-  return undefined;
-}
-
-/**
- * The plan / code model a run with no model of its own asks for: its phase's entry in
- * `phaseModels`, unless the run has a fixed role (a delegated `explore` slice is not
- * the phase's work) or the model already broke in this run.
- */
-function phaseDefaultModel(state: RunPolicyState): string | undefined {
-  if (state.phase === 'verify' || state.options.fixedRole) return undefined;
-  const model = configuredPhaseModel(state.options, state.phase);
-  return model && !state.broken.includes(model) ? model : undefined;
-}
-
 /** A tool-less turn is conversation, not analysis or code. */
 export function nextTurn(state: RunPolicyState, turn: { hasTools: boolean }): TurnRequest {
   const verifying = state.phase === 'verify';
+  const review = reviewing(state);
   const author = state.authorModel;
-  // Verify overrides the run's model; plan / code only stand in when the run holds
-  // none (see `RunPolicyOptions.phaseModels`) — a per-phase code model must not undo a
-  // stall failover that already moved the run off the original coder.
-  const mapped = verifying ? configuredPhaseModel(state.options, 'verify') : undefined;
+  // The review model overrides the run's model; plan / code only stand in when the run
+  // holds none (see `RunPolicyOptions.phaseModels`) — a per-phase code model must not undo
+  // a stall failover that already moved the run off the original coder.
+  const mapped = review ? configuredPhaseModel(state.options, 'verify') : undefined;
   let model = mapped ?? state.model ?? phaseDefaultModel(state);
   if (verifying && author && model === author) model = undefined;
   const excludeModels = [...state.broken];
   if (verifying && author && !excludeModels.includes(author)) excludeModels.push(author);
   return {
-    // A coding run's verify turn is a review, not whatever fixedRole the child had.
-    role: turn.hasTools ? (verifying ? 'verify' : (state.options.fixedRole ?? state.phase)) : 'chat',
+    // A coding run's verify-phase turn reviews its change (the strongest models), whatever
+    // fixedRole the child had — except a child delegated the mechanical checks themselves.
+    role: turn.hasTools ? (review ? 'review' : (state.options.fixedRole ?? state.phase)) : 'chat',
     model,
     strict: !!model && state.strictPin,
     excludeModels,
@@ -401,7 +387,7 @@ export function reduceRunPolicy(state: RunPolicyState, event: RunPolicyEvent): R
       if (s.phase === 'verify') return s;
       // With no model of its own, the run wrote the change on its phase model.
       const author = s.authorModel ?? s.model ?? phaseDefaultModel(s);
-      const review = configuredPhaseModel(s.options, 'verify');
+      const review = s.options.fixedRole === 'verify' ? undefined : configuredPhaseModel(s.options, 'verify');
       const distinct = review && review !== author ? review : undefined;
       return {
         ...s,

@@ -169,6 +169,41 @@ describe('localFirstPlan', () => {
     expect(refs(localFirstPlan({ probes: [], accounts: [kimi], workload: TOOL_TURN, cloud: {} }))).toEqual(['local/kimi-code/k3', 'cloud:auto']);
     expect(refs(localFirstPlan({ probes: [], accounts: [kimi], workload: TOOL_TURN, cloud: null }))).toEqual(['local/kimi-code/k3']);
   });
+
+  // The tenant's order for the role decides: a `trail` account (another provider leads) goes
+  // after the cloud, its fallback; a `lead` one before it. The attempt carries no placement.
+  it('puts a trailing account after the cloud and a leading one before it', () => {
+    const lead = { ref: 'local/kimi-code/k3', provider: 'kimi-code' as const, model: 'k3', endpoint: { baseUrl: 'https://a' }, placement: 'lead' as const };
+    const trail = { ref: 'local/kimi-code/kimi-for-coding', provider: 'kimi-code' as const, model: 'kimi-for-coding', endpoint: { baseUrl: 'https://b' }, placement: 'trail' as const };
+    const plan = localFirstPlan({ probes: [SYNAPSE], accounts: [trail, lead], workload: TOOL_TURN, cloud: {} });
+    expect(refs(plan)).toEqual(['local/synapse/qwen3-8b', 'local/kimi-code/k3', 'cloud:auto', 'local/kimi-code/kimi-for-coding']);
+    expect(plan.some((a) => 'placement' in a)).toBe(false);
+  });
+
+  // Account-first funding (the order's `freeFirst: false`): the plan pool comes LAST, so the
+  // trailing account is reached before it — not stranded behind a pool that never fails.
+  describe('accountFirst', () => {
+    const lead = { ref: 'local/kimi-code/k3', provider: 'kimi-code' as const, model: 'k3', endpoint: { baseUrl: 'https://a' }, placement: 'lead' as const };
+    const trail = { ref: 'local/kimi-code/kimi-for-coding', provider: 'kimi-code' as const, model: 'kimi-for-coding', endpoint: { baseUrl: 'https://b' }, placement: 'trail' as const };
+    const legs = (plan: LocalFirstAttempt[]): string[] =>
+      plan.map((a) => (a.kind === 'local' ? a.ref : `cloud:${a.routingMode ?? 'call'}`));
+
+    it('device → lead → cloud over the other accounts (byo_pool) → trail → cloud as given', () => {
+      const plan = localFirstPlan({ probes: [SYNAPSE], accounts: [trail, lead], workload: TOOL_TURN, cloud: {}, accountFirst: true });
+      expect(legs(plan)).toEqual(['local/synapse/qwen3-8b', 'local/kimi-code/k3', 'cloud:byo_pool', 'local/kimi-code/kimi-for-coding', 'cloud:call']);
+      // The accounts-only leg names no model: it is the tenant's accounts, not a pick.
+      expect(plan[2]).toEqual({ kind: 'cloud', routingMode: 'byo_pool' });
+    });
+
+    it('changes nothing without a trailing account, or without a cloud', () => {
+      expect(legs(localFirstPlan({ probes: [], accounts: [lead], workload: TOOL_TURN, cloud: {}, accountFirst: true }))).toEqual(['local/kimi-code/k3', 'cloud:call']);
+      expect(legs(localFirstPlan({ probes: [], accounts: [trail], workload: TOOL_TURN, cloud: null, accountFirst: true }))).toEqual(['local/kimi-code/kimi-for-coding']);
+    });
+
+    it('free first (absent or false) keeps the trailing account after the one cloud leg', () => {
+      expect(legs(localFirstPlan({ probes: [], accounts: [trail], workload: TOOL_TURN, cloud: {}, accountFirst: false }))).toEqual(['cloud:call', 'local/kimi-code/kimi-for-coding']);
+    });
+  });
 });
 
 describe('localCatalogView', () => {

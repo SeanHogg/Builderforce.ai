@@ -89,6 +89,33 @@ describe("git_cleanup_merged", () => {
     expect(data(dirty).error).toMatch(/uncommitted changes/);
   });
 
+  it("never force-removes the branch's worktree: a dirty one is kept and named, with the way forward", async () => {
+    const sh = recordingShell();
+    await gitCleanupMergedTool.execute({ branch: "feature/x" }, sh as never);
+    expect(sh.scripts[0]).toContain("DIRTY_WORKTREE");
+    expect(sh.scripts[0]).not.toContain("worktree remove --force");
+
+    const kept = await gitCleanupMergedTool.execute({ branch: "feature/x" }, failingShell(14, "DIRTY_WORKTREE /src/feature-x-wt") as never);
+    expect(data(kept).ok).toBe(false);
+    expect(data(kept).error).toContain("(/src/feature-x-wt) has uncommitted changes, so it was kept and the branch was NOT deleted");
+    expect(data(kept).error).toMatch(/re-run git_cleanup_merged/);
+  });
+
+  it("a worktree git will not remove (locked, submodules) stops the cleanup with the way forward, branch kept", async () => {
+    const sh = recordingShell();
+    await gitCleanupMergedTool.execute({ branch: "feature/x" }, sh as never);
+    expect(sh.scripts[0]).toContain("WORKTREE_KEPT");
+    // The worktree is found and checked BEFORE the cleanup changes anything.
+    expect(sh.scripts[0]!.indexOf("DIRTY_WORKTREE")).toBeLessThan(sh.scripts[0]!.indexOf("git fetch --prune origin"));
+    expect(sh.scripts[0]!.indexOf("DIRTY_WORKTREE")).toBeLessThan(sh.scripts[0]!.indexOf('git checkout "$BASE"'));
+
+    const locked = await gitCleanupMergedTool.execute({ branch: "feature/x" }, failingShell(15, "WORKTREE_KEPT /src/feature-x-wt") as never);
+    expect(data(locked).ok).toBe(false);
+    expect(data(locked).error).toContain("(/src/feature-x-wt) could not be removed — it is locked or has submodules — so the branch was NOT deleted");
+    expect(data(locked).error).toContain("git worktree remove --force /src/feature-x-wt");
+    expect(data(locked).error).toMatch(/only if its contents are not needed/i);
+  });
+
   it("skips the merge check only when the caller declared force", async () => {
     const guarded = recordingShell();
     await gitCleanupMergedTool.execute({ branch: "x" }, guarded as never);

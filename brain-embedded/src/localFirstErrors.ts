@@ -7,8 +7,9 @@
  *    (a plan, region or quota refusal included) maps exactly as the gateway's do.
  *  - {@link withModelRef}: an interruption / transport failure re-reported under the full
  *    `local/<runtime>/<model>` ref.
- *  - {@link withFailedAccounts}: the account pool's final gateway error, prefixed with the
- *    accounts that were tried first — every field of the original error kept.
+ *  - {@link withFailedAccounts}: the account pool's final gateway error, worded with the
+ *    accounts tried before it (leading) and after it (trailing) — every field of the
+ *    original error kept.
  */
 
 import type { LocalFirstAttemptRecord } from '@builderforce/local-inference';
@@ -89,23 +90,33 @@ export function withModelRef(e: unknown, ref: string): unknown {
 }
 
 /**
- * The account pool's final error, honest about the accounts that were tried first: when
- * the gateway's strict BYO leg then fails with its own `BrainRequestError` ("no provider is
- * connected on this workspace"), the person is also told which account failed and why.
+ * The account pool's final error, honest about the accounts that were tried around it: when
+ * the gateway's strict BYO leg fails with its own `BrainRequestError` ("no provider is
+ * connected on this workspace"), the person is also told which account failed and why —
+ * worded by where each account SAT: one tried BEFORE the gateway (`failed`, a leading
+ * account) prefixes the message ("… could not take this turn (…). <gateway error>"); one
+ * tried AFTER it (`trailed`, the gateway's fallback) follows it ("<gateway error> Then … was
+ * tried and also failed (…)."). A trailing account is never described as tried first.
  *
  * The re-wrap is a CLONE: same prototype, EVERY own property of the original copied (so a
  * field added to `BrainRequestError` later is never silently dropped), only the message
- * prefixed, and the original carried as `cause`. Any other error is returned as it came
+ * re-worded, and the original carried as `cause`. Any other error is returned as it came
  * (a Stop, a transport failure).
  */
-export function withFailedAccounts(e: unknown, failed: readonly LocalFirstAttemptRecord[]): unknown {
-  if (!(e instanceof BrainRequestError) || failed.length === 0) return e;
-  const prefix = failed
-    .map((r) => `${r.attempt.kind === 'local' ? r.attempt.ref : 'account'} could not take this turn (${r.detail ?? r.outcome}). `)
-    .join('');
+export function withFailedAccounts(
+  e: unknown,
+  failed: readonly LocalFirstAttemptRecord[],
+  trailed: readonly LocalFirstAttemptRecord[] = [],
+): unknown {
+  if (!(e instanceof BrainRequestError) || failed.length + trailed.length === 0) return e;
+  const refOf = (r: LocalFirstAttemptRecord): string => (r.attempt.kind === 'local' ? r.attempt.ref : 'account');
+  const prefix = failed.map((r) => `${refOf(r)} could not take this turn (${r.detail ?? r.outcome}). `).join('');
+  const trailing = trailed.map((r) => ` Then ${refOf(r)} was tried and also failed (${r.detail ?? r.outcome}).`).join('');
+  // The gateway's sentence is closed before the trailing account's begins.
+  const suffix = trailing && !/[.!?]$/.test(e.message) ? `.${trailing}` : trailing;
   const out = Object.create(Object.getPrototypeOf(e) as object) as BrainRequestError;
   Object.defineProperties(out, Object.getOwnPropertyDescriptors(e));
-  Object.defineProperty(out, 'message', { value: prefix + e.message, writable: true, configurable: true, enumerable: false });
+  Object.defineProperty(out, 'message', { value: prefix + e.message + suffix, writable: true, configurable: true, enumerable: false });
   // The stack's first line is `<name>: <message>` — re-headed so a logged stack reads the prefixed message too.
   // (The header was captured in `super()`, before `name` was set, so it may read `Error: …`.)
   if (typeof e.stack === 'string') {

@@ -41,7 +41,7 @@ import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { AGENT_DEFAULT_MODEL_SENTINEL } from './cloudAgent/agent';
 import {
-  emitModelSelection, hasVendorKeys, refuseCloudRunWithoutByo, requestedModelForRole, resolveCloudRouting,
+  emitModelSelection, hasVendorKeys, refuseCloudRunWithoutByo, requestedModelForRole, requestedReviewModel, resolveCloudRouting,
   resolveLearnedRoutingInputs, cloudRunRoleForModelPin, type CloudRouting,
 } from './cloudAgent/routing';
 import { cloudRunRole } from './cloudAgent/cloudRunModelPolicy';
@@ -104,7 +104,8 @@ export interface CloudRunHost {
   /** The run-start pick: a hard pin when `strict`, else the plan's soft seed. */
   pick: { model: string; strict: boolean };
   runRole: string;
-  verifyPin: string | undefined;
+  /** The model that reviews the run's change (its verify phase) — `requestedReviewModel`. */
+  reviewPin: string | undefined;
   fallbackSurface: ModelFallbackSurface | null;
   ladder: TierLadder;
   features: (turnIndex: number, messages?: readonly unknown[]) => DifficultyFeatures;
@@ -294,7 +295,7 @@ export async function openCloudRunHost(
       cost, declaredLimits, proxy,
       pick: { model: pick.model, strict: pick.strict === true },
       runRole,
-      verifyPin: requestedModelForRole(env, 'verify'),
+      reviewPin: requestedReviewModel(env),
       fallbackSurface: codingFallbackSurface(byoVendors, routing.effectivePlan, routing.premiumOverride),
       ladder,
       features: (turnIndex, messages) => ({ actionType: learned.actionType, role: runRole, promptTokens: messages && messages.length > 0 ? estimateRequestTokens(messages as never, cloudTools) : promptTokens, toolCount: cloudTools.length, turnIndex }),

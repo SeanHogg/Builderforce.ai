@@ -5,6 +5,7 @@
  *
  * GET    /provider-keys                       → configured providers + auth type + priority
  * GET    /byo-precedence                      → the mixed provider/connection precedence
+ * GET    /byo-order[?role=]&projectId=&arcStage=&agentic=1|0 → { role|null, freeFirst, models } — the gateway's BYO order
  * GET    /provider-keys/:provider/status      → credential health + 30-day usage
  * POST   /provider-keys/:provider/test        → one tiny strict-pinned probe
  * PUT    /provider-keys/priority              → set BYO precedence { order: ref[] }
@@ -26,6 +27,10 @@ import {
 } from '../../../application/llm/tenantProviderKeyService';
 import { USAGE_WINDOW_DAYS } from '../../../application/llm/openRouterConnectionService';
 import { listByoPrecedence, parsePrecedenceRef, setByoPrecedence } from '../../../application/llm/byoPrecedence';
+import { loadByoRoleOrder, parseByoOrderQuery } from '../../../application/llm/byoRoleOrder';
+import { resolveUsageWorkHints } from '../../../application/llm/usageWorkHints';
+import { requestFundingOrder } from './requestFundingOrder';
+import { requestDb } from '../../../application/shared/dbHandle';
 import { clearProviderAuthAlert, loadProviderAuthAlert } from '../../../application/llm/providerAuthAlerts';
 import { probeByoProvider } from '../../../application/llm/byoCredentialHealth';
 import { resolveProviderKeyHealth, withOtherWorkspaceVerdict } from '../../../application/llm/providerKeyHealth';
@@ -71,6 +76,34 @@ export function mountProviderKeyRoutes(router: Hono<HonoEnv>): void {
     let access: TenantAccess;
     try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
     return c.json({ entries: await listByoPrecedence(c.env, access.tenantId) });
+  });
+
+  // The connected accounts' models in the order the gateway tries them for a `byo_pool`
+  // call of `role` (absent/unknown → no role: the tenant's precedence, exactly as the
+  // completion route orders a body without one; the answer's `role` is then null), with
+  // the gateway's other order inputs (`projectId`, `arcStage`, `agentic`), so the editor
+  // calls its own accounts in the server's order. The use case is `loadByoRoleOrder`; the
+  // order is the gateway's own. `freeFirst`: this person's cloud order resolves to
+  // free-first — read the ONE way every completion surface reads it
+  // (`requestFundingOrder`). The gateway then tries the free tier before ANY connected
+  // account, so a client places its own account BEHIND the gateway (it trails) even where
+  // the account heads this order (`placeAccount`).
+  router.get('/byo-order', async (c) => {
+    let access: TenantAccess;
+    try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
+    // A project id counts only when it is this tenant's — the gateway's own attribution
+    // check — which also bounds the cache key to the tenant's projects.
+    const query = parseByoOrderQuery({ role: c.req.query('role'), arcStage: c.req.query('arcStage'), agentic: c.req.query('agentic') });
+    const { projectId } = await resolveUsageWorkHints(c.env, access.tenantId, { projectId: c.req.query('projectId') });
+    const { byoConfigured, ...order } = await loadByoRoleOrder(c.env, requestDb(c), access.tenantId, {
+      ...query,
+      ...(projectId ? { projectId } : {}),
+    });
+    const funding = await requestFundingOrder(c, access, {
+      byoConfigured,
+      source: 'presentation/routes/llm/providerKeyRoutes.ts',
+    });
+    return c.json({ role: order.role, freeFirst: funding.freeFirst === true, models: order.models });
   });
 
   // Credential health plus tenant-observed usage for the provider details drawer.

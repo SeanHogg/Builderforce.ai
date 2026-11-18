@@ -148,8 +148,25 @@ describe('hand_off', () => {
 
   it('verify_started moves the phase forward', () => {
     const s = run(initialRunPolicy({ startPhase: 'code' }), { type: 'verify_started' });
-    expect(nextTurn(s, TOOLS).role).toBe('verify');
+    // The verify phase's model turns REVIEW the change — the strongest-model role.
+    expect(nextTurn(s, TOOLS).role).toBe('review');
     expect(offersHandOff(s)).toBe(false);
+  });
+
+  it('a child delegated the checks keeps the cheap verify role and is never handed the review model', () => {
+    const s = run(
+      initialRunPolicy({ startPhase: 'verify', fixedRole: 'verify', phaseModels: { review: 'opus' } }),
+      { type: 'verify_started' },
+    );
+    expect(nextTurn(s, TOOLS)).toMatchObject({ role: 'verify', model: undefined });
+  });
+
+  it('phaseModels.review drives the review over the legacy verify entry', () => {
+    const s = run(
+      initialRunPolicy({ startPhase: 'code', phaseModels: { review: 'opus', verify: 'haiku' } }),
+      { type: 'verify_started' },
+    );
+    expect(nextTurn(s, TOOLS)).toMatchObject({ role: 'review', model: 'opus' });
   });
 
   it('verify_started pins a different review model and excludes the author', () => {
@@ -165,7 +182,7 @@ describe('hand_off', () => {
     expect(s.phase).toBe('verify');
     expect(s.authorModel).toBe('opus');
     expect(nextTurn(s, TOOLS)).toMatchObject({
-      role: 'verify',
+      role: 'review',
       model: 'gpt-4.1',
       excludeModels: ['opus'],
     });
@@ -179,12 +196,12 @@ describe('hand_off', () => {
     expect(nextTurn(s, TOOLS)).toMatchObject({ model: undefined, excludeModels: ['opus'] });
   });
 
-  it('verify is not masked by a fixed role', () => {
+  it('the review is not masked by a fixed role', () => {
     const s = run(
       initialRunPolicy({ startPhase: 'code', pinnedModel: 'opus', fixedRole: 'explore', phaseModels: { verify: 'haiku' } }),
       { type: 'verify_started' },
     );
-    expect(nextTurn(s, TOOLS).role).toBe('verify');
+    expect(nextTurn(s, TOOLS).role).toBe('review');
     expect(nextTurn(s, TOOLS).model).toBe('haiku');
   });
 

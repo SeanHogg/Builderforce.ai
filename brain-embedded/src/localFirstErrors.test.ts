@@ -64,5 +64,20 @@ describe('withFailedAccounts', () => {
     expect(withFailedAccounts(plain, failed)).toBe(plain);
     const brain = new BrainRequestError('x', { status: 500 });
     expect(withFailedAccounts(brain, [])).toBe(brain);
+    expect(withFailedAccounts(brain, [], [])).toBe(brain);
+  });
+
+  // A TRAILING account was tried after the gateway — never "first".
+  it('words a trailing account by its placement: after the gateway error, not before it', () => {
+    const original = new BrainRequestError('no provider is connected', { status: 503 });
+    const out = withFailedAccounts(original, [], failed) as BrainRequestError;
+    expect(out.message).toBe('no provider is connected. Then local/kimi-code/k3 was tried and also failed (HTTP 429).');
+    expect(out.message).not.toContain('could not take this turn');
+    expect(out.status).toBe(503);
+    const lead = [{ attempt: { kind: 'local', ref: 'local/kimi-code/k3' }, outcome: 'failed', detail: 'HTTP 401' }] as unknown as LocalFirstAttemptRecord[];
+    const trail = [{ attempt: { kind: 'local', ref: 'local/kimi-code/kimi-for-coding' }, outcome: 'failed', detail: 'HTTP 429' }] as unknown as LocalFirstAttemptRecord[];
+    expect((withFailedAccounts(original, lead, trail) as BrainRequestError).message).toBe(
+      'local/kimi-code/k3 could not take this turn (HTTP 401). no provider is connected. Then local/kimi-code/kimi-for-coding was tried and also failed (HTTP 429).',
+    );
   });
 });

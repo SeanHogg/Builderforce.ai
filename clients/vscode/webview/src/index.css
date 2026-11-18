@@ -146,6 +146,10 @@ body {
 .bf-run-marker--awaiting {
   color: var(--bf-warning);
 }
+/* An interrupted run: the broken ring the dedicated interrupted rows use. */
+.bf-run-marker--interrupted {
+  color: var(--bf-error);
+}
 
 /**
  * WHERE the chat surface sits when it is mounted as a surface OF the canvas.

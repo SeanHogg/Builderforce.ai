@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { pickCloudModel } from '../../llm/LlmProxyService';
 import { vendorFlagship } from '../../llm/vendors';
 import { ROLE_MODEL_DEFAULT_ENV, ROLE_MODELS_ENV } from '@builderforce/learned-routing';
-import { cloudRunRoleForModelPin, requestedModelForRole } from './routing';
+import { cloudRunRoleForModelPin, requestedModelForRole, requestedReviewModel } from './routing';
 
 /** A real catalog coder so pickCloudModel can strict-pin it on a paid plan. */
 const PIN = vendorFlagship('anthropic', false)!;
@@ -42,6 +42,15 @@ describe('requestedModelForRole', () => {
   it('explicit user/run model still wins', () => {
     expect(requestedModelForRole(env, 'verify', OTHER)).toBe(OTHER);
     expect(requestedModelForRole(env, 'verify', '  ')).toBe(PIN);
+  });
+});
+
+describe('requestedReviewModel', () => {
+  it('reads ROLE_MODELS.review first, the legacy verify entry next, then ROLE_MODEL_DEFAULT', () => {
+    expect(requestedReviewModel({ [ROLE_MODELS_ENV]: `{"review":"${OTHER}","verify":"${PIN}"}` })).toBe(OTHER);
+    expect(requestedReviewModel({ [ROLE_MODELS_ENV]: `{"verify":"${PIN}"}`, [ROLE_MODEL_DEFAULT_ENV]: OTHER })).toBe(PIN);
+    expect(requestedReviewModel({ [ROLE_MODEL_DEFAULT_ENV]: OTHER })).toBe(OTHER);
+    expect(requestedReviewModel({})).toBeUndefined();
   });
 });
 

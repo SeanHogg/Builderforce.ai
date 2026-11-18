@@ -34,7 +34,7 @@ vi.mock("./gateway", () => ({
   getLocalModelsConfig: () => ({ enabled: false, localFirst: false, endpoints: {} }),
 }));
 vi.mock("./localEndpointAuth", () => ({ authorizeLocalEndpoint: async () => ({ ok: true }) }));
-vi.mock("./providerConnect", () => ({ editorAccounts: () => ({ hybridAccounts: async () => [] }) }));
+vi.mock("./providerConnect", () => ({ editorAccounts: () => ({ hybridAccounts: async () => ({ accounts: [] }) }) }));
 vi.mock("./errorReporter", () => ({ logLine: vi.fn() }));
 vi.mock("./localModels", () => ({ probeLocalFirstRuntimes: async () => [], probeOnDeviceRuntimes: async () => [] }));
 vi.mock("./modelState", () => ({ resolveEffectiveModelChoice: async () => ({ model: "auto" }) }));

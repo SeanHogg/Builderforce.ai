@@ -1,6 +1,6 @@
 /**
  * `@builderforce/agent-tools/knowledge` — the code pack for memory's knowledge graph
- * (PRD 38 §4.4–4.5, `docs/specs/38-prd-knowledge-graph.md`). Memory
+ * (PRD 38 §4.4–4.5, archived in `DONE.md`). Memory
  * (`@seanhogg/builderforce-memory/knowledge`) owns the graph; this supplies what code means.
  *
  * Pure and Worker-safe: the API builds graphs from uploaded snapshots with

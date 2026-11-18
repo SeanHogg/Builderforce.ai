@@ -103,5 +103,7 @@ export async function replaceProviderModelSelection(
         AND model_id NOT IN (SELECT model_id FROM chosen)
     `);
   }
+  // No routing-version bump: the selection is part of the DERIVED half of
+  // `routingInputsVersion`, so dropping this read is what moves that token.
   await invalidateCached(env, providerModelSelectionCacheKey(tenantId));
 }

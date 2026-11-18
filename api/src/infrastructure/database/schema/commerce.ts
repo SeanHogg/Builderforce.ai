@@ -362,6 +362,8 @@ export const rfpRequests = pgTable('rfp_requests', {
   createdBy:        varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
   createdAt:        timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt:        timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  /** Archive (PRD 47 §3.3). NULL = active. */
+  archivedAt:       timestamp('archived_at', { withTimezone: true }),
 }, (t) => [
   index('idx_rfp_requests_tenant').on(t.tenantId, t.updatedAt),
   index('idx_rfp_requests_project').on(t.basedOnProjectId),

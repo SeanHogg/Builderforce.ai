@@ -153,21 +153,54 @@ function parseHeader(line: string | undefined): Header {
 
 const CONFLICT = new Set(["DD", "AU", "UD", "UA", "DU", "AA", "UU"]);
 
+/** One porcelain v1 entry line (`XY path`, `XY from -> to`, `?? path`); undefined for a header, an ignored (`!!`) or a malformed line. */
+function porcelainEntry(line: string): { xy: string; path: string; from?: string } | undefined {
+  if (line.startsWith("##")) return undefined;
+  // A shell that trims its output (the VS Code host does) turns the FIRST line's ` M a.ts` into
+  // `M a.ts`: one status letter and a space is that unstaged entry with its leading blank lost.
+  const full = /^(..) (.+)$/.exec(line);
+  const trimmed = full ? null : /^([MADRCUT]) (.+)$/.exec(line);
+  const xy = full ? (full[1] ?? "") : trimmed ? ` ${trimmed[1]}` : undefined;
+  const rest = (full ?? trimmed)?.[2] ?? "";
+  if (xy === undefined || xy === "!!") return undefined;
+  if (xy === "??") return { xy, path: unquoteGitPath(rest) };
+  const arrow = rest.indexOf(" -> ");
+  return arrow === -1 ? { xy, path: unquoteGitPath(rest) } : { xy, path: unquoteGitPath(rest.slice(arrow + 4)), from: unquoteGitPath(rest.slice(0, arrow)) };
+}
+
+/** The VS Code host's stand-in for an empty stdout. */
+const NO_OUTPUT = "(no output)";
+
+/**
+ * THE changed paths of `git status --porcelain [--branch]` output, in order (a rename is its NEW
+ * path). Robust to a shell that trims its output (a first ` M a.ts` arriving as `M a.ts`) or
+ * reports an empty one as `(no output)`; `## …` header lines are skipped.
+ */
+export function parsePorcelainPaths(stdout: string): string[] {
+  if (stdout.trim() === NO_OUTPUT) return [];
+  return stdout.split(/\r?\n/).flatMap((line) => {
+    const entry = porcelainEntry(line);
+    return entry ? [entry.path] : [];
+  });
+}
+
+/** THE pending-changes phrase the branch-switch refusals share: `4 uncommitted change(s) (a, b, c, and 1 more)`. */
+export function pendingChangesSummary(paths: readonly string[], named = 3): string {
+  const more = paths.length > named ? `, and ${paths.length - named} more` : "";
+  return `${paths.length} uncommitted change(s) (${paths.slice(0, named).join(", ")}${more})`;
+}
+
 /** Parse the entry lines (`XY path`, `XY from -> to`, `?? path`) into the four lists. */
 function parseEntries(lines: readonly string[]): Pick<GitStatusReport, "staged" | "unstaged" | "untracked" | "conflicted"> {
   const out = { staged: [] as GitStatusEntry[], unstaged: [] as GitStatusEntry[], untracked: [] as string[], conflicted: [] as string[] };
   for (const line of lines) {
-    if (line.length < 4 || line.startsWith("##")) continue;
-    const xy = line.slice(0, 2);
-    const rest = line.slice(3);
-    if (xy === "!!") continue;
+    const entry = line.length < 4 ? undefined : porcelainEntry(line);
+    if (!entry) continue;
+    const { xy, path, from } = entry;
     if (xy === "??") {
-      out.untracked.push(unquoteGitPath(rest));
+      out.untracked.push(path);
       continue;
     }
-    const arrow = rest.indexOf(" -> ");
-    const path = unquoteGitPath(arrow === -1 ? rest : rest.slice(arrow + 4));
-    const from = arrow === -1 ? undefined : unquoteGitPath(rest.slice(0, arrow));
     if (CONFLICT.has(xy)) {
       out.conflicted.push(path);
       continue;

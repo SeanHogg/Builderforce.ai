@@ -2,10 +2,11 @@
  * What a call is FOR, as a number the ordering can use: +1 pulls toward the strongest
  * model, -1 toward the cheapest, 0 leaves the tenant's own order alone.
  *
- * The objectives encode the product rule: ANALYSIS runs on the tenant's chosen order
- * (whoever the tenant put first plans), CODE is written by the strongest model on
- * offer, and cheap roles (explore, utility) lead with the cheapest. An arc stage nudges
- * every role the same way its question points.
+ * The objectives encode the product rule: PLAN and REVIEW are judged by the strongest
+ * models, CODE is quality-first too (its model ladder picks the best coder per cost — see
+ * `orderForRole`), CHAT runs on the tenant's chosen order, and the mechanical roles
+ * (verify, explore, utility) lead with the cheapest. An arc stage nudges every role the
+ * same way its question points.
  */
 
 import { MODEL_ROLE_OBJECTIVE as ROLE_OBJECTIVE, type ModelRole } from '@builderforce/agent-tools';

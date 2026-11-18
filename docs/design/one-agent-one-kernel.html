@@ -78,7 +78,7 @@ ol.phases { margin: 0; padding-left: 20px; display: grid; gap: 10px; max-width: 
   <p class="muted" style="margin:0">Live copy: https://claude.ai/artifact/Ggc3G5y2ZLkJsVe1jDHag8</p>
   <header style="display:grid;gap:12px">
     <div class="eyebrow">Builderforce.ai · agent runtime audit · 2026-10-24</div>
-    <p class="muted" style="margin:0">The executable plan is <b>PRD 35: One agent, one kernel</b> (<a href="../specs/35-prd-one-agent-one-kernel.md"><code>docs/specs/35-prd-one-agent-one-kernel.md</code></a>). It covers workstreams WS0–WS7, file ownership, the contract and the telemetry gates. This page is its design reference (<code>docs/design/one-agent-one-kernel.html</code>).</p>
+    <p class="muted" style="margin:0">The executable plan is <b>PRD 35: One agent, one kernel</b> (<a href="../../DONE.md"><code>DONE.md</code></a> (PRD 35, shipped 2026-11-01)). It covers workstreams WS0–WS7, file ownership, the contract and the telemetry gates. This page is its design reference (<code>docs/design/one-agent-one-kernel.html</code>).</p>
     <h1>Agent Execution Duplication Map</h1>
     <p class="lede">Builderforce has four entry points: VS Code, Rovr, the on-prem agent, and Cloud/container. They are meant to be ways in, not separate engines. A turn should run the same way whichever door it came through. Today it doesn't. Underneath the four entry points there are six executions, and each one rebuilds the run policy for itself. This page sets out the end state first: one execution, with entry points that only supply ports. After that it shows today's duplication and the plan from here to there.</p>
     <div class="legend">

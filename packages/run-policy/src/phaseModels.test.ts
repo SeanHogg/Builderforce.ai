@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { initialRunPolicy, nextTurn, reduceRunPolicy, type RunPolicyEvent, type RunPolicyState } from './index.js';
+import { initialRunPolicy, nextTurn, reduceRunPolicy, reviewPhaseModel, type RunPolicyEvent, type RunPolicyState } from './index.js';
 
 function run(state: RunPolicyState, ...events: RunPolicyEvent[]): RunPolicyState {
   return events.reduce(reduceRunPolicy, state);
@@ -15,7 +15,7 @@ describe('phaseModels — every phase is read by nextTurn', () => {
     s = run(s, { type: 'hand_off' });
     expect(nextTurn(s, TOOLS)).toMatchObject({ role: 'code', model: 'coder', strict: false });
     s = run(s, { type: 'verify_started' });
-    expect(nextTurn(s, TOOLS)).toMatchObject({ role: 'verify', model: 'reviewer' });
+    expect(nextTurn(s, TOOLS)).toMatchObject({ role: 'review', model: 'reviewer' });
   });
 
   it('a pinned model wins over the plan / code models', () => {
@@ -61,11 +61,20 @@ describe('phaseModels — every phase is read by nextTurn', () => {
       { type: 'verify_started' },
     );
     expect(s.authorModel).toBe('coder');
-    expect(nextTurn(s, TOOLS)).toMatchObject({ role: 'verify', model: undefined, excludeModels: ['coder'] });
+    expect(nextTurn(s, TOOLS)).toMatchObject({ role: 'review', model: undefined, excludeModels: ['coder'] });
   });
 
   it('no phase models keeps the auto-routed request unchanged', () => {
     const s = initialRunPolicy({ startPhase: 'code' });
     expect(nextTurn(s, TOOLS)).toEqual({ role: 'code', model: undefined, strict: false, excludeModels: [] });
+  });
+});
+
+describe('reviewPhaseModel', () => {
+  it('review, else the legacy verify entry, else the legacy reviewModel option', () => {
+    expect(reviewPhaseModel({ review: ' judge ', verify: 'old' }, 'legacy')).toBe('judge');
+    expect(reviewPhaseModel({ verify: 'old' }, 'legacy')).toBe('old');
+    expect(reviewPhaseModel({ review: null, verify: '  ' }, 'legacy')).toBe('legacy');
+    expect(reviewPhaseModel(undefined, null)).toBeUndefined();
   });
 });

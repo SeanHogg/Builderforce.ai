@@ -69,6 +69,16 @@ export function resolveModelForRole(
 }
 
 /**
+ * The model that REVIEWS a run's change (its verify phase): `byRole.review`, else the
+ * legacy `byRole.verify` entry (the review model's name before the `review` role existed),
+ * else `defaultModel`. ONE rule for the cloud run (`requestedReviewModel`) and the editor
+ * (`resolveStageModels`), so an operator's legacy `{"verify": …}` pin reviews on both. Pure.
+ */
+export function resolveReviewModel(config: RoleModelConfig = {}): string | undefined {
+  return trimId(config.byRole?.review) ?? resolveModelForRole('verify', config);
+}
+
+/**
  * Parse an operator role → model map from an env bag.
  *
  * Empty / missing / malformed `ROLE_MODELS` → no overrides (every role uses

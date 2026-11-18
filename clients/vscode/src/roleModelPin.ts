@@ -14,7 +14,7 @@
  */
 
 import { roleLeansCheap } from "@builderforce/agent-tools";
-import { parseRoleModelConfig, resolveModelForRole } from "@builderforce/learned-routing";
+import { parseRoleModelConfig, resolveModelForRole, resolveReviewModel } from "@builderforce/learned-routing";
 
 /** Native editor turns are coding turns (same default as spawn_agent). */
 export const NATIVE_RUN_ROLE = "code";
@@ -25,6 +25,15 @@ export function roleModelPin(
   env: NodeJS.ProcessEnv = process.env,
 ): string | undefined {
   return resolveModelForRole(role, parseRoleModelConfig(env));
+}
+
+/**
+ * The operator's pin for the model that REVIEWS a run's change: `ROLE_MODELS.review`, else
+ * the legacy `ROLE_MODELS.verify`, else `ROLE_MODEL_DEFAULT` — the ONE rule
+ * (`resolveReviewModel`) the cloud run's `requestedReviewModel` reads too.
+ */
+export function reviewModelPin(env: NodeJS.ProcessEnv = process.env): string | undefined {
+  return resolveReviewModel(parseRoleModelConfig(env));
 }
 
 /**

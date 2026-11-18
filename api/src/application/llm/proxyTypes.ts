@@ -52,9 +52,9 @@ export interface ChatCompletionRequest {
    */
   excludeModels?: string[];
   /**
-   * What kind of call this is (plan/code/verify/explore/chat/utility). Orders the
+   * What kind of call this is (plan/code/review/verify/explore/chat/utility). Orders the
    * tenant's connected accounts for the work ({@link orderForRole}): a coding turn
-   * leads with the strongest connected model, a planning turn keeps the tenant's own
+   * leads with the best connected coder per cost, a planning or review turn with the strongest, a chat turn keeps the tenant's own
    * precedence. Unknown values are ignored. Gateway-only: stripped before dispatch.
    */
   role?: string;

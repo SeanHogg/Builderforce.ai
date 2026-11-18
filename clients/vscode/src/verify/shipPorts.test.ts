@@ -101,11 +101,26 @@ describe("createShipPorts", () => {
     const ports = createShipPorts({ vscode: fakeVscode([]), git: async () => ({ stdout: "", exitCode: 0 }) })({
       root: ROOT,
       stream,
-      settings: { phaseModels: { verify: "reviewer-model", code: "author-model" } },
+      settings: { phaseModels: { review: "reviewer-model", verify: "legacy-model", code: "author-model" } },
     });
     const verdict = await ports.reviewer.review({ repo: ROOT, diff: "diff", evidence: "", authorModels: ["author-model"] });
-    expect(asked).toEqual([{ model: "reviewer-model", modelStrict: true, role: "verify" }]);
+    expect(asked).toEqual([{ model: "reviewer-model", modelStrict: true, role: "review" }]);
     expect(verdict).toMatchObject({ reviewerModel: "reviewer-model", verdict: "approved" });
+  });
+
+  it("falls back to the legacy verify stage pin when no review pin is set", async () => {
+    const asked: { model?: string }[] = [];
+    const stream: BrainStreamFn = async (opts) => {
+      asked.push({ model: opts.model });
+      return { text: '{"verdict":"approved","findings":[]}', toolCalls: [], finishReason: "stop" };
+    };
+    const ports = createShipPorts({ vscode: fakeVscode([]), git: async () => ({ stdout: "", exitCode: 0 }) })({
+      root: ROOT,
+      stream,
+      settings: { phaseModels: { verify: "legacy-model", code: "author-model" } },
+    });
+    await ports.reviewer.review({ repo: ROOT, diff: "diff", evidence: "", authorModels: ["author-model"] });
+    expect(asked).toEqual([{ model: "legacy-model" }]);
   });
 
   it("auto-switches to a catalog model when only the author is in the run's pins", async () => {
@@ -202,8 +217,8 @@ describe("parseReviewReply", () => {
 });
 
 describe("review prompt (rounds, resolution, diff budget)", () => {
-  // A verify-stage pin so a reviewer model is always picked and the sub-run's prompt is sent.
-  const settings = { phaseModels: { verify: "reviewer-model" as const } };
+  // A review-stage pin so a reviewer model is always picked and the sub-run's prompt is sent.
+  const settings = { phaseModels: { review: "reviewer-model" as const } };
   const make = (stream: BrainStreamFn) =>
     createShipPorts({ vscode: fakeVscode([]), git: async () => ({ stdout: "", exitCode: 0 }) })({ root: ROOT, stream, settings });
 

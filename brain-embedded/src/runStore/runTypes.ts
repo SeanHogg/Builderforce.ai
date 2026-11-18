@@ -372,7 +372,8 @@ export interface BrainRunRequest {
   /**
    * The model each working phase asks for when the run holds no model of its own
    * (`@builderforce/run-policy` `phaseModels`): the host's stage models instead of one
-   * model pinned to the whole run. `verify` also overrides a pin, as the review model.
+   * model pinned to the whole run. `review` (legacy: `verify`) also overrides a pin, as
+   * the model that reviews the run's change.
    */
   phaseModels?: RunStageModels;
   /**
@@ -428,8 +429,12 @@ export interface AvoidedRunCall {
 /** How a run ended. */
 export type RunEndOutcome = 'succeeded' | 'failed' | 'stopped' | 'budget-contained';
 
-/** The host's per-phase models — absent phase ⇒ the gateway orders by role. */
-export type RunStageModels = Partial<Record<'plan' | 'code' | 'verify', string>>;
+/**
+ * The host's per-stage models — absent stage ⇒ the gateway orders by role. `review` is the
+ * model that judges the run's diff (the run's verify PHASE, `runStore/pipelineRoute.ts`);
+ * `verify` is that phase's legacy name and only applies when no `review` model is set.
+ */
+export type RunStageModels = Partial<Record<'plan' | 'code' | 'review' | 'verify', string>>;
 
 /** How a host wants its runs routed between the full pipeline and a quick pass. */
 export interface RunPipelineSettings {

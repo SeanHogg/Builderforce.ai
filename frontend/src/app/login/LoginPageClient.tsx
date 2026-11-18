@@ -18,7 +18,7 @@ import {
   authFocusIn, authFocusOut, authInputStyle, authLabelStyle,
 } from '@/components/account/AuthFormParts';
 import { useAuthAttempt } from '@/components/account/useAuthAttempt';
-import { ssoDiscoveryApi } from '@/lib/builderforceApi';
+import { ssoDiscoveryApi } from '@/lib/institutionalIdentityApi';
 export default function LoginPageClient() {
   const router = useRouter();
   const t = useTranslations('login');

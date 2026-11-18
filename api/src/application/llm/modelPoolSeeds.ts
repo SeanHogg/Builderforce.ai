@@ -8,20 +8,24 @@
 
 import { catalogEntry, parseVendorPrefix, tierForModel, vendorForModel } from './vendors';
 import { tierRank } from '@builderforce/model-catalog';
+import { codeLadderRung } from './byoProviderLadder';
 import { providerFrontierFlagship } from './modelPoolComposition';
 
 /**
- * The connected owner's OWN premium frontier models to lead auto-select with — ONE
- * flagship per connected provider, so an auto-select turn (no explicit model) uses the
- * owner's account(s) before the free/paid gateway tiers (the "connect your account →
- * it gets used" guarantee the settings/api-keys UI implies).
+ * The connected owner's OWN premium frontier models to lead auto-select with — each
+ * connected provider's flagships ({@link vendorFlagshipSeeds}: this turn shape's first,
+ * then the other's), so an auto-select turn (no explicit model) uses the owner's
+ * account(s) before the free/paid gateway tiers (the "connect your account → it gets
+ * used" guarantee the settings/api-keys UI implies), and the role order downstream
+ * (`rankConnectedForRole`) has every candidate the role could want — Sonnet for code,
+ * Opus for review — rather than whichever one flagship the turn shape named.
  *
  * Purely REGISTRATION-DRIVEN and multi-provider: it reflects exactly what the tenant
  * connected — connect only OpenAI → GPT leads; connect all three → all three frontier
  * flagships lead. Ordering: the tenant's own BYO PRECEDENCE (`opts.vendorPriority`,
- * most-preferred gateway vendor id first — e.g. Meta first) wins, with catalog TIER
- * (ULTRA → PREMIUM → STANDARD) as the tiebreak for un-ranked vendors. With no precedence
- * set it degrades to pure tier order (the prior behaviour). The cascade then fails over
+ * most-preferred gateway vendor id first — e.g. Meta first) wins, with the CODE ladder
+ * (`roleLadders.ts`) and then catalog TIER as the tiebreak for un-ranked vendors. A
+ * vendor's group never interleaves with another's here. The cascade then fails over
  * across the owner's OTHER connected accounts in that order before ever touching a
  * free/paid pool model. It is a SOFT seed: the plan pool stays behind the list as fallback.
  *
@@ -55,8 +59,7 @@ export function byoAutoSeedModels(
     .map((v): string[] => {
       const selected = opts.selectedModels?.[v];
       if (selected?.length) return [...selected];
-      const flagship = providerFrontierFlagship(v, opts.agentic);
-      return flagship !== null && isDispatchableSeed(flagship) ? [flagship] : [];
+      return vendorFlagshipSeeds(v, opts.agentic);
     })
     .filter((group) => group.length > 0);
   // TENANT PRECEDENCE first, catalog tier as tiebreak. `vendorPriority` is the tenant's
@@ -98,8 +101,32 @@ export function byoAutoSeedModels(
     if (h !== 0) return h;
     const p = priorityRank(a) - priorityRank(b);
     if (p !== 0) return p;
+    // Un-ranked vendors: the coding-quality ladder first, catalog tier only after it — a
+    // price band is not a judgement of which account codes best. Live, not dead: the
+    // gateway passes `byoVendorPriority` (every configured vendor), but the coding
+    // fallback surface, a cloud run without precedence and the credential probe call
+    // with none, and a vendor outside the list ties at `priority.length`.
+    const l = codeLadderRung(groupA) - codeLadderRung(groupB);
+    if (l !== 0) return l;
     return tierRank(tierForModel(a)) - tierRank(tierForModel(b));
   }).flat();
+}
+
+/**
+ * A connected vendor's default seed models: its flagship for this turn shape, then its
+ * flagship for the other shape (de-duplicated), each only when it is a dispatchable
+ * catalog id. BOTH flagships, because the role decides which leads — a coding turn wants
+ * Anthropic's Sonnet and a review wants its Opus — and a seed that offered only the one
+ * flagship could never give the role its candidate.
+ *
+ * Plan-gated coders (Kimi Code's K3) are NOT added here: nothing the gateway can read says
+ * the account is entitled to them (Kimi's `/models` refuses the Worker's egress), and a
+ * gated model the plan does not include fails every turn it leads. A tenant whose plan
+ * includes one selects it (provider model choice), and the selection is the group.
+ */
+export function vendorFlagshipSeeds(vendor: string, agentic: boolean): string[] {
+  const ids = [providerFrontierFlagship(vendor, agentic), providerFrontierFlagship(vendor, !agentic)];
+  return [...new Set(ids.filter((id): id is string => id !== null && isDispatchableSeed(id)))];
 }
 
 /** Registered OpenRouter connection refs (`openrouter/<org>/<slug>`), in either shape. */

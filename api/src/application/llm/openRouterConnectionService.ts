@@ -41,6 +41,7 @@ import { encryptSecretForStorage, decryptSecretFromStorage } from '../../infrast
 import { credentialSecret } from '../integrations/credentialCrypto';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { bumpRoutingInputsVersion } from './routingInputsVersion';
 
 type Env = HonoEnv['Bindings'];
 
@@ -517,6 +518,11 @@ export async function invalidateOpenRouterConnections(env: Env, tenantId: number
   await invalidateCached(env, cacheKey(tenantId)).catch((error: unknown) => {
     reportCaughtError(error, { source: 'application/llm/openRouterConnectionService.ts', operation: 'invalidateOpenRouterConnections' });
   });
+  // Connections interleave with the providers in the BYO seed order (the editor reads it
+  // through `GET /llm/byo-order`), and they have no row in the derived half of the routing
+  // token — so bump it, AFTER the invalidation: a reader that mints the new token then
+  // reloads the connections rather than caching the old list under it.
+  await bumpRoutingInputsVersion(env, tenantId);
 }
 
 /** Stamp one connection's precedence. Used only by `byoPrecedence.setByoPrecedence`, which

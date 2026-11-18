@@ -1,5 +1,3 @@
-'use client';
-
 import { useCallback, useState } from 'react';
 import { DEFAULT_PAGE_SIZE, PAGE_SIZES, type PageSize } from './collectionTypes';
 

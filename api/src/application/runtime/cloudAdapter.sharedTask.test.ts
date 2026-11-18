@@ -103,7 +103,7 @@ describe('cloud adapter conformance - the shared scripted task through runCloudA
       env: {}, db: {}, refs: REFS, taskRow: RC.taskRow, meterExecutionId: 4, systemPrompt: 'You are the reviewer.', userContent: CONFORMANCE_PROMPT,
       opts: { ...(over.maxSteps !== undefined ? { maxSteps: over.maxSteps } : {}), ...(over.resume ? { resume: over.resume } : {}), ...(over.requiredSignoff ? { requiredSignoff: over.requiredSignoff } : {}) },
       repoCtx: null, repoMiss: '', routing: { effectivePlan: 'free', premiumOverride: false }, writtenPaths: new Set<string>(), writtenHashes: new Map(),
-      provider: conformanceCapabilities(), declaredLimits: undefined, proxy, pick: { model: 'fake-model', strict: false }, runRole: 'code', verifyPin: undefined,
+      provider: conformanceCapabilities(), declaredLimits: undefined, proxy, pick: { model: 'fake-model', strict: false }, runRole: 'code', reviewPin: undefined,
       fallbackSurface: null, ladder: { candidates: [], rankOf: () => 0 }, features: () => ({}), genParams: {},
       cost: { beforeTurn: async () => null, recordTurn: async () => undefined, turnFields: () => ({}), budgetNote: () => '' },
       cancel: { controller: new AbortController(), stop: () => undefined },

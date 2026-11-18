@@ -45,7 +45,7 @@ vi.mock('../observability/caughtErrorReporter', () => ({ reportCaughtError: h.re
 vi.mock('../llm/builtinMcpService', () => ({ callBuiltinTool: h.callTool }));
 vi.mock('../llm/codingFallbackSurface', () => ({ codingFallbackSurface: () => null }));
 vi.mock('../llm/gatewaySummarizer', () => ({ buildGatewaySummarizer: () => async () => null }));
-vi.mock('../runtime/cloudAgent/routing', () => ({ requestedModelForRole: () => undefined }));
+vi.mock('../runtime/cloudAgent/routing', () => ({ requestedReviewModel: () => undefined }));
 vi.mock('../runtime/cloudAgent/runEndMemory', () => ({
   commitRunMemory: vi.fn(async () => true),
   recordRunVerifyEvents: vi.fn(),
