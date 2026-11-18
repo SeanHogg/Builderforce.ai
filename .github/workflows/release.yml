@@ -144,6 +144,35 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
         run: bash .github/scripts/cdn-publish.sh replay-sdk/dist/assets
 
+  # The .NET runtime bundle for the webcontainers version the frontend installed (its lockfile), mirrored
+  # from npm (@seanhogg/builderforce-webcontainers-dotnet@<version>) into builderforce-cdn under
+  # webcontainers/dotnet/<version>/, where the API serves it on the preview origin at /dotnet/<version>/
+  # (dotnetBundleRoute.ts). Hash-checked against its manifest, manifest uploaded last, and a version already
+  # mirrored is never written again — so after the first run per version this is one R2 read. A version
+  # whose bundle is not on npm is a warning: .NET previews decline cleanly until it is. Independent of
+  # every other job: nothing waits on it.
+  # Secrets: CF_API_TOKEN (R2 edit) and CF_ACCOUNT_ID.
+  publish-dotnet-runtime:
+    name: Mirror the .NET runtime bundle
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      # Once, before the script fans uploads out (deploy-frontend installs it the same way).
+      - name: Install Wrangler
+        run: npm install --global wrangler
+
+      - name: Mirror the bundle into R2 (manifest last)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+        run: node .github/scripts/publish-dotnet-runtime.mjs
+
   # The agent runtime's typecheck and unit suite each take a full runner: concurrently on
   # one they fight over the same cores and memory. Separate legs, and package-agents
   # waits for both.

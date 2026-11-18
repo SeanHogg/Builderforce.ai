@@ -13,6 +13,8 @@ export default [
   ['check:source-package-graph', '../../scripts/check-source-package-graph.mjs'],
   // Its rule 10 (a wrangler bundle resolves through its project's paths), pinned. Plain node:test.
   ['check:wrangler-bundles-rule', '../../scripts/lib/wranglerBundles.test.mjs'],
+  // The .NET runtime bundle mirror's rules (lockfile version, keys, manifest-last, hash check), pinned. Plain node:test.
+  ['check:dotnet-runtime-bundle', '../../scripts/lib/dotnetRuntimeBundle.test.mjs'],
   // One tool side-effect classifier: no second TOOL_SIDE_EFFECT / isMutatingTool / evaluatePolicyGate outside packages/agent-tools.
   ['check:single-tool-classifier', '../../scripts/check-single-tool-classifier.mjs'],
   // Also repo-level: a package nobody depends on directly is held at one version by
