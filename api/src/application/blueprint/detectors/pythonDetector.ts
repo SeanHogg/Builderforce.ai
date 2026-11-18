@@ -38,48 +38,9 @@ import {
   type RootDetection,
   type ServiceRootFiles,
 } from './serviceRoots';
+import { tomlString, tomlStringArrays, tomlTable } from './minimalToml';
 
 const PORT = devPortOf(SERVICE_KINDS.PYTHON);
-
-// ── Minimal TOML reading (the flat tables and string arrays these manifests use) ──
-
-const unquote = (value: string): string => value.trim().replace(/^["']|["']$/g, '');
-
-/** `[table]` → its `key = value` entries (raw values). */
-function tomlTable(text: string, table: string): Map<string, string> {
-  const entries = new Map<string, string>();
-  let current = '';
-  for (const raw of text.split(/\r?\n/)) {
-    const line = raw.trim();
-    if (line.startsWith('[')) {
-      current = /^\[\s*([^\][]+?)\s*\]$/.exec(line)?.[1] ?? '';
-      continue;
-    }
-    if (current !== table) continue;
-    const entry = /^["']?([A-Za-z0-9_.-]+)["']?\s*=\s*(.*)$/.exec(line);
-    if (entry) entries.set(entry[1]!, entry[2]!);
-  }
-  return entries;
-}
-
-/** The quoted strings of every `key = [ … ]` array (extras such as `uvicorn[standard]` included). */
-function tomlStringArrays(text: string, key: string): string[] {
-  const out: string[] = [];
-  const start = new RegExp(`^\\s*${key}\\s*=\\s*\\[`, 'gm');
-  for (const match of text.matchAll(start)) {
-    let quote: string | null = null;
-    let current = '';
-    for (let i = (match.index ?? 0) + match[0].length; i < text.length; i++) {
-      const ch = text[i]!;
-      if (quote) {
-        if (ch === quote) { out.push(current); current = ''; quote = null; } else current += ch;
-      } else if (ch === '"' || ch === "'") quote = ch;
-      else if (ch === '#') i = text.indexOf('\n', i) === -1 ? text.length : text.indexOf('\n', i);
-      else if (ch === ']') break;
-    }
-  }
-  return out;
-}
 
 /** The distribution a requirement line names: `fastapi[all]>=0.110 ; python_version>"3"` → `fastapi`. */
 function requirementName(spec: string): string | null {
@@ -117,7 +78,7 @@ const PYTHON_MANIFESTS: readonly PythonManifest[] = [
     ],
     projectName: (text) => {
       const name = tomlTable(text, 'project').get('name') ?? tomlTable(text, 'tool.poetry').get('name');
-      return name ? unquote(name) : undefined;
+      return tomlString(name);
     },
     install: () => 'pip install .',
   },

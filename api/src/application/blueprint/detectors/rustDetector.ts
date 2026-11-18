@@ -2,23 +2,29 @@
  * W2: Rust detector
  *
  * A Rust HTTP service (`kind: 'rust'`) per service root holding a `Cargo.toml` whose
- * crate serves HTTP (it depends on bfwc-wasi or a web framework). Nothing is compiled
- * in the browser (the in-browser rustc gate has not passed): the browser runtime runs
- * PREBUILT wasm32-wasip1 modules only, so the service's command is the module path —
- * `./target/wasm32-wasip1/release/<name>.wasm` — and the module reads `PORT`. The build
- * is `cargo build --release --target wasm32-wasip1`, run outside the browser; there is
- * nothing to install.
+ * package serves HTTP (it depends on bfwc-wasi or a web framework, in `[dependencies]`
+ * or a `[target.*.dependencies]` table). Two shapes, by what can run where:
  *
- * The module's name: a reactor (`[lib] crate-type = ["cdylib"]`, how a bfwc-wasi service
- * is built) is named after its lib (`-` → `_`); a binary after its first `[[bin]]`, else
- * the package (hyphens kept, as cargo names it). A crate that is a member of a repo-root
- * workspace builds into the workspace's `target/`. A virtual workspace manifest (no
- * `[package]`) is not a service. tokio-postgres (or a `.env.example` Postgres
- * `DATABASE_URL`) yields the blueprint's Postgres `database`, with no migration step.
+ * - **bfwc-wasi** (the browser's service ABI): nothing is compiled in the browser (the
+ *   in-browser rustc gate has not passed) — the browser runtime runs PREBUILT
+ *   wasm32-wasip1 modules, so the command is the module path,
+ *   `./target/wasm32-wasip1/release/<name>.wasm` (the module reads `PORT`), built outside
+ *   the browser by `cargo build --release --target wasm32-wasip1`. A reactor
+ *   (`[lib] crate-type = ["cdylib"]`) is named after its lib (`-` → `_`); a binary after
+ *   its first `[[bin]]`, else the package (hyphens kept, as cargo names it).
+ * - **Any other web framework** (actix-web, rocket, a tokio-run axum): `cargo run
+ *   --release`, a native server. The browser declines it (`cargo` needs a compiler), so it
+ *   goes to the container target — the honest answer.
+ *
+ * A crate that is a member of the repo-root workspace (`members`, globs such as
+ * `crates/*` included) builds into the workspace's `target/`. A virtual workspace
+ * manifest (no `[package]`) is not a service. tokio-postgres (or a `.env.example`
+ * Postgres `DATABASE_URL`) yields the blueprint's Postgres `database`, with no migration step.
  */
 
-import type { AppBlueprint, BlueprintDetector } from '@builderforce/creation-canvas-contract';
+import type { AppBlueprint, AppService, BlueprintDetector } from '@builderforce/creation-canvas-contract';
 import { SERVICE_KINDS } from '@builderforce/creation-canvas-contract';
+import { tomlString, tomlStringArrays, tomlTables, type TomlTables } from './minimalToml';
 import {
   detectAcrossServiceRoots,
   isPrimaryAt,
@@ -32,67 +38,71 @@ import {
 } from './serviceRoots';
 
 export const RUST_TARGET = 'wasm32-wasip1';
-export const RUST_BUILD_COMMAND = `cargo build --release --target ${RUST_TARGET}`;
+const BFWC_CRATE = 'bfwc-wasi';
 
-/** Crates that make a package an HTTP service. */
-const WEB_CRATES = ['bfwc-wasi', 'axum', 'actix-web', 'warp', 'rocket', 'poem', 'hyper', 'salvo', 'tide'];
+/** Crates that make a package an HTTP service (bfwc-wasi included). */
+const WEB_CRATES = [BFWC_CRATE, 'axum', 'actix-web', 'warp', 'rocket', 'poem', 'hyper', 'salvo', 'tide'];
 const POSTGRES_CRATES = ['tokio-postgres', 'deadpool-postgres', 'postgres'];
 
-/** Cargo.toml as `section → key → raw value` (`[[bin]]` keeps its first table). Enough for the keys read here. */
-type Manifest = Map<string, Map<string, string>>;
+/** `[dependencies]` and every `[target.<cfg>.dependencies]` table. */
+const DEPENDENCY_TABLE = /^(?:target\..+\.)?dependencies$/;
+/** A dependency given as its own table: `[dependencies.axum]`, `[target.x.dependencies.axum]`. */
+const DEPENDENCY_SUBTABLE = /^(?:target\..+\.)?dependencies\.([^.]+)$/;
 
-function parseManifest(text: string): Manifest {
-  const manifest: Manifest = new Map();
-  let section = new Map<string, string>();
-  manifest.set('', section);
-  for (const raw of text.split(/\r?\n/)) {
-    const line = raw.replace(/\s+#.*$/, '').trim();
-    const header = /^\[\[?\s*([^\]]+?)\s*\]\]?$/.exec(line);
-    if (header) {
-      const name = header[1]!;
-      section = manifest.get(name) ?? new Map();
-      if (!manifest.has(name)) manifest.set(name, section);
-      continue;
-    }
-    const entry = /^("?[\w.-]+"?)\s*=\s*(.*)$/.exec(line);
-    if (entry && !section.has(entry[1]!.replace(/"/g, ''))) section.set(entry[1]!.replace(/"/g, ''), entry[2]!);
+/** Every dependency the manifest names: `axum = "0.8"`, `axum.workspace = true`, `[dependencies.axum]`. */
+function dependenciesOf(tables: TomlTables): Set<string> {
+  const deps = new Set<string>();
+  for (const [name, entries] of tables) {
+    if (DEPENDENCY_TABLE.test(name)) for (const key of entries.keys()) deps.add(key.split('.')[0]!);
+    const sub = DEPENDENCY_SUBTABLE.exec(name)?.[1];
+    if (sub) deps.add(sub);
   }
-  return manifest;
-}
-
-const unquote = (value: string | undefined) => value?.match(/^["']([^"']*)["']/)?.[1];
-
-function dependsOn(manifest: Manifest, crates: readonly string[]): boolean {
-  const deps = manifest.get('dependencies');
-  // `axum = "0.8"`, or a `[dependencies.axum]` table.
-  return crates.some((crate) => deps?.has(crate) || manifest.has(`dependencies.${crate}`));
+  return deps;
 }
 
 /** The module cargo writes: a reactor's lib name (`-` → `_`), else the binary's name. */
-function moduleName(manifest: Manifest, packageName: string): string {
-  const lib = manifest.get('lib');
-  if (lib?.get('crate-type')?.includes('cdylib')) return (unquote(lib.get('name')) ?? packageName).replace(/-/g, '_');
-  return unquote(manifest.get('bin')?.get('name')) ?? packageName;
+function moduleName(tables: TomlTables, packageName: string): string {
+  const lib = tables.get('lib');
+  if (lib?.get('crate-type')?.includes('cdylib')) return (tomlString(lib.get('name')) ?? packageName).replace(/-/g, '_');
+  return tomlString(tables.get('bin')?.get('name')) ?? packageName;
+}
+
+/** `crates/*` → matches `crates/api`; each `*` is one folder name. */
+function memberMatches(member: string, dir: string): boolean {
+  const pattern = member.replace(/^\.\//, '').replace(/\/$/, '').split('*').map((part) => part.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('[^/]+');
+  return new RegExp(`^${pattern}$`).test(dir);
 }
 
 /** Whether the repo-root Cargo.toml is a workspace this sub-root crate belongs to. */
 function inRootWorkspace(files: Map<string, string>, rootName: string): boolean {
-  if (!rootName) return false;
-  const members = parseManifest(files.get('Cargo.toml') ?? '').get('workspace')?.get('members');
-  return members !== undefined && (members.includes(`"${rootName}"`) || members.includes('"*"'));
+  const text = files.get('Cargo.toml');
+  if (!rootName || text === undefined) return false;
+  return tomlStringArrays(text, 'members', 'workspace').some((member) => memberMatches(member, rootName));
 }
+
+type RustCommands = Pick<AppService, 'devCommand' | 'buildCommand'>;
+
+function prebuiltModule(files: Map<string, string>, rootName: string, tables: TomlTables, packageName: string): RustCommands {
+  const targetDir = inRootWorkspace(files, rootName) ? '../target' : './target';
+  return {
+    devCommand: `${targetDir}/${RUST_TARGET}/release/${moduleName(tables, packageName)}.wasm`,
+    buildCommand: `cargo build --release --target ${RUST_TARGET}`,
+  };
+}
+
+const NATIVE_SERVER: RustCommands = { devCommand: 'cargo run --release', buildCommand: 'cargo build --release' };
 
 /** The service (and database) one root's Cargo.toml describes, or null when it serves nothing. */
 function detectRustRoot(files: Map<string, string>, rootName: string): RootDetection | null {
   const root = serviceRootFiles(files, rootName);
   const text = root.get('Cargo.toml');
   if (text === undefined) return null;
-  const manifest = parseManifest(text);
-  const packageName = unquote(manifest.get('package')?.get('name'));
-  if (!packageName || !dependsOn(manifest, WEB_CRATES)) return null;
+  const tables = tomlTables(text);
+  const packageName = tomlString(tables.get('package')?.get('name'));
+  const deps = dependenciesOf(tables);
+  if (!packageName || !WEB_CRATES.some((crate) => deps.has(crate))) return null;
 
-  const targetDir = inRootWorkspace(files, rootName) ? '../target' : './target';
-  const command = `${targetDir}/${RUST_TARGET}/release/${moduleName(manifest, packageName)}.wasm`;
+  const commands = deps.has(BFWC_CRATE) ? prebuiltModule(files, rootName, tables, packageName) : NATIVE_SERVER;
   const service = {
     ...processService({
       id: serviceIdFor(rootName, packageName, 'rust'),
@@ -100,12 +110,12 @@ function detectRustRoot(files: Map<string, string>, rootName: string): RootDetec
       rootDir: root.rootDir,
       packageManager: 'cargo',
       installCommand: '',
-      devCommand: command,
+      devCommand: commands.devCommand,
       isPrimary: isPrimaryAt(files),
     }),
-    buildCommand: RUST_BUILD_COMMAND,
+    buildCommand: commands.buildCommand,
   };
-  const postgres = dependsOn(manifest, POSTGRES_CRATES) || POSTGRES_DATABASE_URL.test(root.get('.env.example') ?? '');
+  const postgres = POSTGRES_CRATES.some((crate) => deps.has(crate)) || POSTGRES_DATABASE_URL.test(root.get('.env.example') ?? '');
   return { service, database: postgres ? postgresDatabase('', '') : null };
 }
 

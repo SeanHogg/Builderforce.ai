@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { ListFilesResult, ReadFileResult, RepoReadContext } from '../repos/readRepoContents';
-import { blueprintSourcePaths, readBlueprintSources, type BlueprintSourceIo } from './blueprintSources';
+import { blueprintSourcePaths, MAX_FILES_PER_GLOB, readBlueprintSources, type BlueprintSourceIo } from './blueprintSources';
 import { DETECTORS } from './detectors';
 
 const CTX: RepoReadContext = { provider: 'github', host: null, owner: 'acme', repo: 'app', token: 't', ref: 'abc' };
@@ -18,10 +18,12 @@ interface StubOptions {
   treeListingFails?: boolean;
 }
 
-function stubIo(repo: Record<string, string>, opts: StubOptions = {}): BlueprintSourceIo & { readCalls: string[] } {
+function stubIo(repo: Record<string, string>, opts: StubOptions = {}): BlueprintSourceIo & { readCalls: string[]; listCalls: Array<string | undefined> } {
   const readCalls: string[] = [];
+  const listCalls: Array<string | undefined> = [];
   return {
     readCalls,
+    listCalls,
     readRepoFile: async (_ctx, path): Promise<ReadFileResult> => {
       readCalls.push(path);
       if (opts.failing?.includes(path)) return { ok: false, reason: 'provider error' };
@@ -31,6 +33,7 @@ function stubIo(repo: Record<string, string>, opts: StubOptions = {}): Blueprint
         : { ok: true, path, content, truncated: false };
     },
     listRepoFiles: async (_ctx, subPath): Promise<ListFilesResult> => {
+      listCalls.push(subPath);
       if (!subPath && opts.treeListingFails) return { ok: false, reason: 'list not implemented' };
       return {
         ok: true,
@@ -96,5 +99,26 @@ describe('readBlueprintSources', () => {
     const files = await readBlueprintSources(CTX, io);
     expect(io.readCalls.length).toBe(blueprintSourcePaths().exact.length + 1);
     expect([...files.keys()].sort()).toEqual(['.github/workflows/ci.yml', 'package.json']);
+  });
+
+  it('falls back through wildcard folders, listing each folder once for all its globs', async () => {
+    const io = stubIo({
+      '.github/workflows/ci.yml': 'on: push',
+      'api/src/Api/Api.csproj': '<Project />',
+      'api/Tools/Gen.csproj': '<Project />',
+      'api/Api.sln': 'x',
+      'backend/Cargo.toml': '[package]',
+    }, { treeListingFails: true });
+    const files = await readBlueprintSources(CTX, io);
+    expect([...files.keys()].sort()).toEqual(['.github/workflows/ci.yml', 'api/Api.sln', 'api/Tools/Gen.csproj', 'api/src/Api/Api.csproj', 'backend/Cargo.toml']);
+    const listed = io.listCalls.filter((dir) => dir !== undefined);
+    expect(listed.length).toBe(new Set(listed).size);
+    expect(listed).toEqual(expect.arrayContaining(['api', '.github/workflows']));
+  });
+
+  it(`reads at most ${MAX_FILES_PER_GLOB} files per glob`, async () => {
+    const repo = Object.fromEntries(Array.from({ length: MAX_FILES_PER_GLOB + 5 }, (_, i) => [`p${i}/P${i}.csproj`, '<Project />']));
+    const files = await readBlueprintSources(CTX, stubIo(repo));
+    expect(files.size).toBe(MAX_FILES_PER_GLOB);
   });
 });

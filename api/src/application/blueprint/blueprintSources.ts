@@ -31,6 +31,9 @@ export interface BlueprintSourcePaths {
 /** Parallel reads per detection — enough to be quick, few enough to be a polite API client. */
 const READ_CONCURRENCY = 6;
 
+/** At most this many files per glob: a repo of many projects (`*` folders of `.csproj`) must not cost a read each. */
+export const MAX_FILES_PER_GLOB = 40;
+
 function escapeRegExp(s: string): string {
   return s.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -63,10 +66,11 @@ function dirOf(path: string): string {
   return slash === -1 ? '' : path.slice(0, slash);
 }
 
-// A glob's dir may hold `*` segments (`api/*/*.csproj`): each matches one folder name.
+// A glob's dir may hold wildcards (`api/*/*.csproj`): a whole-segment `*` is one folder name.
 function dirMatches(globDir: string, dir: string): boolean {
   if (!globDir.includes('*')) return dir === globDir;
-  return new RegExp(`^${globDir.split('*').map(escapeRegExp).join('[^/]*')}$`).test(dir);
+  const segments = globDir.split('/').map((segment) => (segment === '*' ? '[^/]+' : segment.split('*').map(escapeRegExp).join('[^/]*')));
+  return new RegExp(`^${segments.join('/')}$`).test(dir);
 }
 
 /** The folder to list for a glob when there is no whole-tree listing: its dir up to the first wildcard segment. */
@@ -80,12 +84,17 @@ function matchesGlob(glob: BlueprintDirGlob, path: string): boolean {
   return dirMatches(glob.dir, dir) && glob.test(path.slice(dir ? dir.length + 1 : 0));
 }
 
+/** The paths a glob matches, at most `MAX_FILES_PER_GLOB` (in listing order). */
+function globMatches(glob: BlueprintDirGlob, paths: readonly string[]): string[] {
+  return paths.filter((p) => matchesGlob(glob, p)).slice(0, MAX_FILES_PER_GLOB);
+}
+
 /**
  * Which source paths to read. Normally ONE recursive tree listing, intersected with
  * the wanted paths, so only files that exist are fetched. When the listing fails
  * (a provider without it) or is truncated (a big monorepo past the listing cap,
  * which could hide a root file), fall back to every exact path plus one listing per
- * glob directory — slower, but never blind.
+ * distinct glob folder (up to its first wildcard) — slower, but never blind.
  */
 async function sourcePathsToRead(ctx: RepoReadContext, io: BlueprintSourceIo): Promise<string[]> {
   const { exact, dirGlobs } = blueprintSourcePaths();
@@ -94,15 +103,22 @@ async function sourcePathsToRead(ctx: RepoReadContext, io: BlueprintSourceIo): P
     const present = new Set(tree.paths);
     return [
       ...exact.filter((p) => present.has(p)),
-      ...tree.paths.filter((p) => dirGlobs.some((g) => matchesGlob(g, p))),
+      ...dirGlobs.flatMap((g) => globMatches(g, tree.paths)),
     ];
   }
+  // One listing per distinct folder, shared by every glob under it; the root's is the tree listing above.
+  const listings = new Map<string, Promise<string[]>>([['', Promise.resolve(tree.ok ? tree.paths : [])]]);
+  const listingOf = (dir: string): Promise<string[]> => {
+    let listing = listings.get(dir);
+    if (!listing) {
+      listing = io.listRepoFiles(ctx, dir).then((listed) => (listed.ok ? listed.paths : []));
+      listings.set(dir, listing);
+    }
+    return listing;
+  };
   const globbed: string[] = [];
-  for (const glob of dirGlobs) {
-    const listed = await io.listRepoFiles(ctx, listingDirOf(glob.dir));
-    if (listed.ok) globbed.push(...listed.paths.filter((p) => matchesGlob(glob, p)));
-  }
-  return [...exact, ...globbed];
+  for (const glob of dirGlobs) globbed.push(...globMatches(glob, await listingOf(listingDirOf(glob.dir))));
+  return [...new Set([...exact, ...globbed])];
 }
 
 /**
