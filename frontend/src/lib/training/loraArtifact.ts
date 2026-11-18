@@ -54,6 +54,13 @@ export function exportLoRASafetensors(
   });
 }
 
+/** A base model and the tokenizer it was trained with must agree on the vocabulary — every trainer and importer checks this ONE way. */
+export function assertPairedBase(tokenizer: BPETokenizer, model: EvermindLM): void {
+  if (model.config.vocabSize !== tokenizer.vocabSize) {
+    throw new Error(`Tokenizer vocabulary (${tokenizer.vocabSize}) does not match base model (${model.config.vocabSize}).`);
+  }
+}
+
 export interface ArtifactInputs {
   lora: EvermindLMLoRA;
   model: EvermindLM;
@@ -61,10 +68,12 @@ export interface ArtifactInputs {
   modelId: string;
   params: TrainingParams;
   sequenceCount: number;
+  /** The package card's training summary; default: sequences, epochs and rank from `params`. */
+  trainingSummary?: string;
 }
 
 /** Package a trained adapter. `lora.adapter` must hold the final A/B values. */
-export function packageBrowserLoRAArtifact({ lora, model, tokenizer, modelId, params, sequenceCount }: ArtifactInputs): BrowserLoRAArtifact {
+export function packageBrowserLoRAArtifact({ lora, model, tokenizer, modelId, params, sequenceCount, trainingSummary }: ArtifactInputs): BrowserLoRAArtifact {
   const bytes = exportLoRASafetensors(lora, modelId, LORA_TARGET_MODULE, params.precision === 'float16');
   const footprint = lora.footprint();
   const filename = `${safeModelName(modelId)}-adapter.safetensors`;
@@ -77,7 +86,7 @@ export function packageBrowserLoRAArtifact({ lora, model, tokenizer, modelId, pa
     createdAt: new Date().toISOString(),
     card: {
       description: `Browser-trained LoRA merge for ${modelId}`,
-      trainingSummary: `${sequenceCount} sequences, ${params.epochs} epochs, rank ${params.loraConfig.rank}`,
+      trainingSummary: trainingSummary ?? `${sequenceCount} sequences, ${params.epochs} epochs, rank ${params.loraConfig.rank}`,
       tags: ['builderforce', 'browser-lora', 'evermind'],
     },
   }).toBlob();

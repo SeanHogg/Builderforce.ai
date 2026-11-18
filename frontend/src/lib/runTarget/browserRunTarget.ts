@@ -3,7 +3,10 @@
  * our WebContainers application runtime: Node services on the `node` provider, Python
  * (Pyodide) on `python`, PHP (php-wasm) on `php`, .NET on `dotnet`, prebuilt Rust
  * (wasm32-wasip1) modules on `rust`, the database as PGlite (persistent, host origin)
- * on the `pglite` provider.
+ * on the `pglite` provider, and Python training scripts as `training` services on
+ * `python` (with `import torch`; their saved adapters are read back by
+ * `lib/training/trainingServiceAdapter.ts`). Disposing the application drops its
+ * per-application runtime state (`forgetApplication`, called by the application runtime).
  *
  * It runs on THE page's one preview runtime, holding its lease
  * (`bootSharedPreviewRuntime(owner)`) — never a second instance. So:
@@ -18,6 +21,7 @@
 import type { AppBlueprint } from '@builderforce/creation-canvas-contract';
 import { bootSharedPreviewRuntime, releaseSharedPreviewRuntime, replaceProjectFiles } from '@/lib/browserRuntime/previewRuntime';
 import { PREVIEW_PHP_OPTIONS } from '@/lib/browserRuntime/previewPhpOptions';
+import { PREVIEW_PYTHON_PROVIDES } from '@/lib/browserRuntime/previewPythonOptions';
 import { recordedFailure } from '@/lib/reportError';
 import { PREVIEW_CAPTURE_SCRIPT } from '@/lib/previewCapture/captureScript';
 import { acceptBlueprintInBrowser } from './browserAcceptance';
@@ -97,7 +101,10 @@ async function startSerialised(blueprint: AppBlueprint | null, context: RunConte
     providers: [
       app.createNodeProvider(runtime),
       app.createPgliteProvider(runtime),
-      app.createPythonProvider(runtime, { fs: runtime.fs }),
+      // Training services checkpoint and keep their artifacts through the runtime's training
+      // channel (absent until the runtime boots with `python.training`: then they are declined,
+      // by the provider, with the reason); `import torch` comes from the boot's torch extension.
+      app.createPythonProvider(runtime, { fs: runtime.fs, provides: PREVIEW_PYTHON_PROVIDES, training: runtime.pythonTraining }),
       // The same PHP options the runtime booted with, and the PHP its processes report.
       app.createPhpProvider(runtime, { fs: runtime.fs, php: PREVIEW_PHP_OPTIONS, platform: runtime.phpPlatform }),
       app.createDotnetProvider(runtime, { fs: runtime.fs }),

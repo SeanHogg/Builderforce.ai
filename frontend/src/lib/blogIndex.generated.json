@@ -1,5 +1,19 @@
 [
   {
+    "slug": "train-a-lora-adapter-in-python-in-your-browser-tab",
+    "title": "Train a LoRA adapter in Python, in the browser tab you built it in",
+    "date": "2026-11-18",
+    "description": "A Python training script in your project now runs inside your browser tab, with import torch and import peft on your GPU through WebGPU. It saves its adapter when it finishes or checkpoints when you stop it; load that adapter in the training panel and publish it as a model you can call. Built for small models and LoRA adapters.",
+    "tags": [
+      "ai-training",
+      "runtime",
+      "browser",
+      "idea-to-real",
+      "product"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
     "slug": "your-full-stack-app-now-runs-in-your-browser-tab",
     "title": "Your full-stack app now runs in the browser tab you built it in",
     "date": "2026-11-18",

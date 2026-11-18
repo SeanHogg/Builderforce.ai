@@ -19,6 +19,9 @@
  *   backends on their kind's default — Python and PHP 8000, .NET and Rust 8080) moves to
  *   the next free port, its dev command told so, and its dependents' `localhost:OLD`
  *   with it; a service whose command cannot be told is declined (`mapBlueprint`).
+ * - A `training` service (a Python training script, phase 7) becomes a runtime `training`
+ *   service on `python`: no port, the runtime's readiness (`started`) and restart (`never`)
+ *   defaults, after its root's install; no frontend waits on it.
  * - Only browser-only frontends (an SPA, Vite) are `frontend`: they never depend on the
  *   database, so they never receive `DATABASE_URL`. SSR frameworks (Next, Remix,
  *   SvelteKit, Astro) run server code, so they are backends and do.
@@ -50,7 +53,12 @@ export const KIND_RUNTIME: Readonly<Record<ServiceKind, { runtime: string; role:
   php: { runtime: 'php', role: 'backend' },
   dotnet: { runtime: 'dotnet', role: 'backend' },
   rust: { runtime: 'rust', role: 'backend' },
+  // A Python training script (`python train.py`): a `training` service, never a server.
+  training: { runtime: 'python', role: 'backend' },
 };
+
+/** A blueprint `training` service becomes a runtime `training` service: no port, ready once started, checkpointed on stop. */
+export const isTrainingKind = (kind: ServiceKind): boolean => kind === 'training';
 
 /** Kinds on these runtimes run whatever their command is; any other kind is declined by its kind. */
 const PROCESS_RUNTIMES = new Set([PROCESS_RUNTIME, ...COMMAND_RUNTIMES.map((entry) => entry.runtime)]);
@@ -144,7 +152,8 @@ export interface MappedBlueprint {
 export function mapBlueprint(blueprint: AppBlueprint): MappedBlueprint {
   const taken = new Set<string>(Object.values(RESERVED_IDS));
   const ids = new Map(blueprint.services.map((service) => [service.id, safeId(service.id, taken)]));
-  const backends = blueprint.services.filter((service) => roleOfService(service) === 'backend');
+  // A training script is no frontend's backend (nothing waits on it) and hosts no database step.
+  const backends = blueprint.services.filter((service) => roleOfService(service) === 'backend' && !isTrainingKind(service.kind));
 
   // One install per service root AND runtime, before anything of that runtime in that root
   // runs: a root may hold several (Laravel's package.json beside composer.json → npm AND composer).
@@ -195,7 +204,9 @@ export function mapBlueprint(blueprint: AppBlueprint): MappedBlueprint {
   // Every service gets its own port in the ONE runtime: the database's and the declared
   // ones first, then the defaults — a later Python or PHP API (8000), a .NET or Rust
   // service (8080) moves to the next free port, its command told so, or is declined.
-  const grants = allocatePorts(blueprint.services, database ? [BROWSER_DATABASE_PORT] : []);
+  // A training service serves nothing, so it never holds a port (the runtime refuses one that does).
+  const portable = blueprint.services.map((service) => (isTrainingKind(service.kind) ? { ...service, ports: [] } : service));
+  const grants = allocatePorts(portable, database ? [BROWSER_DATABASE_PORT] : []);
   const declined: string[] = [];
   const moves: Array<{ id: string; from: number; to: number }> = [];
   const services: ServiceSpec[] = blueprint.services.map((service, index) => {
@@ -213,8 +224,17 @@ export function mapBlueprint(blueprint: AppBlueprint): MappedBlueprint {
     const dependsOn = unique([
       // Its own command's runtime's install in its root (a Vite frontend: npm's; a PHP API: composer's).
       ...installOf(root, commandRuntime(command?.command ?? '')), ...declared, ...defaults,
-      ...(serviceRole === 'backend' ? databaseDeps : []),
+      // A training script does not wait on the database (a failing migration never blocks it); it may declare `dependsOn: ['db']`.
+      ...(serviceRole === 'backend' && !isTrainingKind(service.kind) ? databaseDeps : []),
     ]);
+    if (isTrainingKind(service.kind)) {
+      // The runtime's defaults hold: ready once started, never restarted; a declared policy wins.
+      return {
+        id, type: 'training', runtime: KIND_RUNTIME.training.runtime, root, ...(command ?? {}),
+        ...(dependsOn.length > 0 ? { dependsOn } : {}),
+        ...(service.restartPolicy ? { restartPolicy: service.restartPolicy } : {}),
+      };
+    }
     return {
       id,
       type: 'application',

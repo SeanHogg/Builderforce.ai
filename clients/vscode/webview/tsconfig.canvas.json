@@ -106,6 +106,7 @@
       // The browser LoRA training engine (frontend/src/lib/training/** via AITrainingPanel).
       "@webdit/torch/autograd": ["../../../webdit/torch/src/autograd/index.ts"],
       "@webdit/torch/webgpu": ["../../../webdit/torch/src/backend/webgpu/index.ts"],
+      "@webdit/torch/pyodide": ["../../../webdit/torch/src/pyodide/index.ts"],
       // `@builderforce/knowledge-graph-view` is source-only with these as PEERS and no
       // install of its own (as in frontend/tsconfig.json): three and @react-three/* are the
       // frontend's copies (the bundle resolves them there too — vite.config.ts), memory is
