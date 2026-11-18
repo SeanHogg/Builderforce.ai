@@ -19684,7 +19684,8 @@
     "alertsBackfillFailed": "No se pudieron importar las alertas de seguridad",
     "importSkippedPartial": "{count, plural, one {# archivo se leyó} other {# archivos se leyeron}} solo en parte y se omitieron: guardar un fragmento sobrescribiría el archivo real en tu próximo push: {files}",
     "skipTooLarge": "demasiado grande",
-    "skipIncomplete": "lectura interrumpida — vuelve a importar para reintentar"
+    "skipIncomplete": "lectura interrumpida — vuelve a importar para reintentar",
+    "skippedMore": "y {count} más"
   },
   "workflowsContent": {
     "noRunsYet": "Sin ejecuciones aún",

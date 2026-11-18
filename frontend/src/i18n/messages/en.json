@@ -19659,7 +19659,8 @@
     "alertsBackfillFailed": "Could not import security alerts",
     "importSkippedPartial": "{count, plural, one {# file was} other {# files were}} read only in part and left out — saving a fragment would overwrite the real file on your next push: {files}",
     "skipTooLarge": "too large",
-    "skipIncomplete": "read cut short — import again to retry"
+    "skipIncomplete": "read cut short — import again to retry",
+    "skippedMore": "and {count} more"
   },
   "workflowsContent": {
     "noRunsYet": "No runs yet",

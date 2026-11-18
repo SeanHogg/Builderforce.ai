@@ -19659,7 +19659,8 @@
     "alertsBackfillFailed": "无法导入安全告警",
     "importSkippedPartial": "{count, plural, other {# 个文件}}仅被部分读取，已跳过——保存片段会在下次推送时覆盖真实文件：{files}",
     "skipTooLarge": "文件过大",
-    "skipIncomplete": "读取中断——请重新导入以重试"
+    "skipIncomplete": "读取中断——请重新导入以重试",
+    "skippedMore": "以及另外 {count} 个"
   },
   "workflowsContent": {
     "noRunsYet": "暂无运行",

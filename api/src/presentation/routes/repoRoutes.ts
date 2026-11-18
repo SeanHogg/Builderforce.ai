@@ -39,7 +39,8 @@ import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelay
 import { RepoService, type AgentHostDispatcher } from '../../application/repos/RepoService';
 import { resolveRepoCredential, isResolveError } from '../../application/repos/resolveRepoCredential';
 import { importRepoContents } from '../../application/repos/importRepoContents';
-import { recordImportBaseline } from '../../application/ide/workspaceRepoBaseline';
+import { recordRepoImportBaseline } from '../../application/ide/recordRepoImportBaseline';
+import { dropRepoBaseline } from '../../application/ide/workspaceRepoBaseline';
 import { enforceIngestionCap, recordIngestion } from '../../application/ingestion/ingestionLedger';
 import { githubStatusMessage } from '../../application/integrations/githubTestError';
 import { mergeRecordedPullRequest } from '../../application/repos/mergeRecordedPr';
@@ -297,6 +298,15 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
     const id = c.req.param('id');
 
     const body = await parseBody(c, UpdateRepoBody);
+    // Re-pointed at another repository (provider / host / owner / repo): the old repo's
+    // workspace baseline must not drive deletions in the new one.
+    const repointed = body.provider !== undefined || body.host !== undefined || body.owner !== undefined || body.repo !== undefined;
+    const [before] = repointed
+      ? await db
+        .select({ projectId: projectRepositories.projectId, provider: projectRepositories.provider, host: projectRepositories.host, owner: projectRepositories.owner, repo: projectRepositories.repo })
+        .from(projectRepositories)
+        .where(and(eq(projectRepositories.id, id), eq(projectRepositories.tenantId, tenantId)))
+      : [];
 
     await db
       .update(projectRepositories)
@@ -324,6 +334,9 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
       .where(and(eq(projectRepositories.id, id), eq(projectRepositories.tenantId, tenantId)));
     if (!row) return c.json({ error: 'Repository not found' }, 404);
     await invalidateRepoCaches(c.env as Env, tenantId, row.projectId, row.id, db);
+    const bucket = (c.env as Env).UPLOADS;
+    const moved = before && (before.provider !== row.provider || before.host !== row.host || before.owner !== row.owner || before.repo !== row.repo);
+    if (moved && before.projectId != null && bucket) await dropRepoBaseline(bucket, before.projectId, row.id);
     return c.json(row);
   });
 
@@ -457,16 +470,9 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
     const { paths } = await parseBody(c, z.object({ paths: z.array(z.string().min(1).max(1024)).max(5000) }));
-    const [row] = await db
-      .select({ projectId: projectRepositories.projectId })
-      .from(projectRepositories)
-      .where(and(eq(projectRepositories.id, id), eq(projectRepositories.tenantId, tenantId)));
-    if (!row) return c.json({ error: 'Repository not found' }, 404);
-    if (row.projectId == null) return c.json({ error: 'Repository is not bound to a project' }, 400);
-    const bucket = (c.env as Env).UPLOADS;
-    if (!bucket) return c.json({ error: 'Storage not configured' }, 503);
-    await recordImportBaseline(bucket, row.projectId, paths);
-    return c.json({ ok: true, recorded: paths.length });
+    const result = await recordRepoImportBaseline(db, (c.env as Env).UPLOADS, tenantId, id, paths);
+    if (!result.ok) return c.json({ error: result.error }, result.status);
+    return c.json(result);
   });
 
   // DELETE /api/repos/repositories/:id
@@ -482,6 +488,9 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
       .delete(projectRepositories)
       .where(and(eq(projectRepositories.id, id), eq(projectRepositories.tenantId, tenantId)));
     if (row) await invalidateRepoCaches(c.env as Env, tenantId, row.projectId, id);
+    // Unlinked: its workspace baseline describes a repo the workspace no longer pushes to.
+    const bucket = (c.env as Env).UPLOADS;
+    if (row?.projectId != null && bucket) await dropRepoBaseline(bucket, row.projectId, id);
     return c.body(null, 204);
   });
 
