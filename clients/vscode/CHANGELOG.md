@@ -6,11 +6,11 @@ All notable changes to the BuilderForce VS Code extension are documented here.
 
 - **Fixed: `read_file` re-served line 1 whenever the model paged with `offset`.** On a small read budget the run looped over the same window (chat #149169 read one PRD six times). A widened read now keeps the requested offset and only drops `limit`, so paging moves forward.
 - **Fixed: `local/kimi-code/*` runs had an unknown context window.** Kimi's `max_context_size` (262,144 for kimi-for-coding) now reaches the run, so file reads, window fit and @-mention budgets are sized to it instead of the small defaults.
-- **Fixed: a deleted ticket dragged the chat's "% complete" down.** The chat rail's % rollup counted tickets the server had deleted as incomplete work, so a chat with 6 done + 1 deleted read 86% · 6/7 instead of 100% · 6/6. Deleted tickets (`exists: false`) are now excluded from both the brain-ui rollup and the rail's per-ticket progress mapping, so the shown % only counts work that still exists. (This fix is also listed under 2026.10.188; it actually shipped first in this 2026.10.189 build — 2026.10.188 was never packaged or installed.)
+- **Fixed: a deleted ticket dragged the chat's "% complete" down.** The chat rail's % rollup counted tickets the server had deleted as incomplete work, so a chat with 6 done + 1 deleted read 86% · 6/7 instead of 100% · 6/6. Deleted tickets (`exists: false`) are now excluded from both the brain-ui rollup and the rail's per-ticket progress mapping, so the shown % only counts work that still exists. (This fix was originally credited to 2026.10.188, which was never packaged or installed — it first shipped in this 2026.10.189 build.)
 
 ## [2026.10.188] — (never released; see 2026.10.189)
 
-- **Fixed: the chat rail's "% complete" rollup counted tickets the server had deleted, dragging the percentage down.** Deleted tickets are now excluded from both the brain-ui rollup and the rail's per-ticket progress mapping, so the shown % only counts work that still exists.
+_Unreleased build. The deleted-ticket "% complete" rollup fix originally credited here first shipped in 2026.10.189 — see that entry._
 
 ## [2026.10.187] — A finished run ends with its report instead of asking you how to proceed
 
