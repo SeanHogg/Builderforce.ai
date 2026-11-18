@@ -71,7 +71,7 @@ export function SourceControlContent({
   const [testResult, setTestResult] = useState<Record<string, { ok: boolean; message: string }>>({});
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [importing, setImporting] = useState<string | null>(null);
-  const [importResult, setImportResult] = useState<Record<string, { ok: boolean; message: string }>>({});
+  const [importResult, setImportResult] = useState<Record<string, { ok: boolean; message: string; warn?: boolean }>>({});
   // Two maintenance actions that used to be API-only (an operator had to POST
   // them by hand): committing the agent workflow, and backfilling security alerts
   // for a repo connected after its alerts had accumulated.
@@ -227,14 +227,26 @@ export function SourceControlContent({
         setImportResult((p) => ({ ...p, [r.id]: { ok: false, message: t('noImportableFiles') } }));
         return;
       }
-      let written = 0;
+      // The manifest holds whole files only: a file read only in part is in `skipped`, never
+      // saved — its fragment would be pushed back over the real file.
+      const saved: string[] = [];
       for (const f of manifest.files) {
         await saveFile(projectId, f.path, f.content);
-        written++;
-        setImportResult((p) => ({ ...p, [r.id]: { ok: true, message: t('importingProgress', { written, total: manifest.files.length }) } }));
+        saved.push(f.path);
+        setImportResult((p) => ({ ...p, [r.id]: { ok: true, message: t('importingProgress', { written: saved.length, total: manifest.files.length }) } }));
       }
+      // The baseline is what was SAVED, so a later push never deletes a skipped file from the repo.
+      await reposApi.recordImportBaseline(r.id, saved);
+      const written = saved.length;
       const suffix = manifest.truncated ? t('importCapped', { written, discovered: manifest.discovered }) : '';
-      setImportResult((p) => ({ ...p, [r.id]: { ok: true, message: t('importedFiles', { count: written, suffix }) } }));
+      const partial = manifest.skipped.filter((s) => s.reason === 'too-large' || s.reason === 'incomplete');
+      const partialNotice = partial.length > 0
+        ? ` ${t('importSkippedPartial', {
+          count: partial.length,
+          files: partial.map((s) => `${s.path} (${t(s.reason === 'too-large' ? 'skipTooLarge' : 'skipIncomplete')})`).join(', '),
+        })}`
+        : '';
+      setImportResult((p) => ({ ...p, [r.id]: { ok: true, warn: partial.length > 0, message: `${t('importedFiles', { count: written, suffix })}${partialNotice}` } }));
       onImported?.();
     } catch (e) {
       setImportResult((p) => ({ ...p, [r.id]: { ok: false, message: e instanceof Error ? e.message : t('importFailed') } }));
@@ -323,7 +335,7 @@ export function SourceControlContent({
                   </span>
                 )}
                 {imp && (
-                  <span style={{ fontSize: 11, color: imp.ok ? 'var(--success)' : 'var(--danger)' }}>
+                  <span style={{ fontSize: 11, color: !imp.ok ? 'var(--danger)' : imp.warn ? 'var(--warning-text)' : 'var(--success)' }}>
                     ● {imp.message}
                   </span>
                 )}

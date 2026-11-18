@@ -19681,7 +19681,10 @@
     "backfillingAlerts": "Importation…",
     "backfillAlertsTitle": "Importer toutes les alertes ouvertes d’analyse de code et Dependabot de ce dépôt comme constats de sécurité. Réexécution sans risque.",
     "alertsBackfilled": "{count} {count, plural, one {constat} other {constats}} de sécurité importés ({deduped} déjà suivis)",
-    "alertsBackfillFailed": "Impossible d’importer les alertes de sécurité"
+    "alertsBackfillFailed": "Impossible d’importer les alertes de sécurité",
+    "importSkippedPartial": "{count, plural, one {# fichier n’a été lu} other {# fichiers n’ont été lus}} qu’en partie et {count, plural, one {a été ignoré} other {ont été ignorés}} — enregistrer un fragment écraserait le vrai fichier au prochain push : {files}",
+    "skipTooLarge": "trop volumineux",
+    "skipIncomplete": "lecture interrompue — importez à nouveau pour réessayer"
   },
   "workflowsContent": {
     "noRunsYet": "Aucune exécution",

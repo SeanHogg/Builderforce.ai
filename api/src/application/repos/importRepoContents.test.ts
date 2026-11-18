@@ -22,7 +22,9 @@ describe('importRepoContents', () => {
     const r = await importRepoContents(ctx);
     expect(r.ok).toBe(true);
     expect(r.files.map((f) => f.path).sort()).toEqual(['README.md', 'src/app.ts']);
-    expect(r.skipped).toEqual(expect.arrayContaining(['logo.png', 'node_modules/x/index.js', 'dist/out.js']));
+    expect(r.skipped).toEqual(expect.arrayContaining([
+      { path: 'logo.png', reason: 'binary' }, { path: 'node_modules/x/index.js', reason: 'noise' }, { path: 'dist/out.js', reason: 'noise' },
+    ]));
     expect(r.truncated).toBe(false);
   });
 
@@ -49,6 +51,18 @@ describe('importRepoContents', () => {
     );
     const r = await importRepoContents(ctx);
     expect(r.files.map((f) => f.path)).toEqual(['ok.ts']);
-    expect(r.skipped).toContain('gone.ts');
+    expect(r.skipped).toContainEqual({ path: 'gone.ts', reason: 'unreadable' });
+  });
+
+  it('never imports a file read only in part: it is skipped with why (too large / incomplete)', async () => {
+    vi.spyOn(repo, 'listRepoFiles').mockResolvedValue({ ok: true, truncated: false, paths: ['ok.ts', 'big.ts', 'cut.ts'] });
+    vi.spyOn(repo, 'readRepoFile').mockImplementation(async (_c, path) => {
+      if (path === 'big.ts') return { ok: true, path, content: 'x', truncated: true, truncatedReason: 'size' };
+      if (path === 'cut.ts') return { ok: true, path, content: 'y', truncated: true, truncatedReason: 'incomplete' };
+      return { ok: true, path, content: 'ok', truncated: false };
+    });
+    const r = await importRepoContents(ctx);
+    expect(r.files.map((f) => f.path)).toEqual(['ok.ts']);
+    expect(r.skipped).toEqual([{ path: 'big.ts', reason: 'too-large' }, { path: 'cut.ts', reason: 'incomplete' }]);
   });
 });

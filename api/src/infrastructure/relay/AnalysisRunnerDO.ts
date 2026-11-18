@@ -45,6 +45,7 @@ import { decryptCredentials } from '../../application/boardsync/drizzleStore';
 import { WorkerSubrequestExhaustedError } from '../../application/llm/vendors/types';
 import {
   createRepoSource,
+  capContent,
   makeRepoFetch,
   readSourceFile,
   selectEvidence,
@@ -327,8 +328,7 @@ export class AnalysisRunnerDO implements DurableObject {
         // readSourceFile: a paged read that stopped short is truncated too, never sampled as whole.
         const read = await readSourceFile(source, p.path, branch);
         if (read == null) continue;
-        const capped = read.content.length > FILE_CONTENT_CAP;
-        sampledFiles.push({ path: p.path, content: capped ? read.content.slice(0, FILE_CONTENT_CAP) : read.content, truncated: capped || read.truncated });
+        sampledFiles.push({ path: p.path, ...capContent(read, FILE_CONTENT_CAP) });
       }
       const recentCommits = await source.listCommits(branch, 12).catch(() => []);
 

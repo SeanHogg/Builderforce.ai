@@ -12,7 +12,7 @@
 import { normalizeScopeDir, isUnderScopeDir, selectPathsWithinCap } from '@builderforce/agent-tools';
 import { buildGitApiBaseUrl } from './gitProxy';
 import { bitbucketServerPathString, resolveRepoApiTarget } from './repoApiTarget';
-import { createRepoSource, makeRepoFetch, readSourceFile, type FetchLike, type RepoFileRead, type TruncationReason } from './sources/RepoSource';
+import { capContent, createRepoSource, makeRepoFetch, readSourceFile, type FetchLike, type RepoFileRead, type TruncationReason } from './sources/RepoSource';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 
 export interface RepoReadContext {
@@ -53,17 +53,9 @@ export type ReadFileResult =
   | { ok: true; path: string; content: string; truncated: boolean; truncatedReason?: TruncationReason }
   | { ok: false; reason: string };
 
-/**
- * A whole or partial read as a ReadFileResult, held to MAX_FILE_CHARS: past the cap it is
- * cut and truncated for `size`; a read the source already cut keeps its own reason.
- */
-function capContent(path: string, read: RepoFileRead): ReadFileResult {
-  if (read.content.length > MAX_FILE_CHARS) {
-    return { ok: true, path, content: read.content.slice(0, MAX_FILE_CHARS), truncated: true, truncatedReason: read.truncatedReason ?? 'size' };
-  }
-  return read.truncated
-    ? { ok: true, path, content: read.content, truncated: true, truncatedReason: read.truncatedReason ?? 'incomplete' }
-    : { ok: true, path, content: read.content, truncated: false };
+/** A whole or partial read as a ReadFileResult, held to MAX_FILE_CHARS (`capContent`). */
+function fileResult(path: string, read: RepoFileRead): ReadFileResult {
+  return { ok: true, path, ...capContent(read, MAX_FILE_CHARS) };
 }
 
 export type ListFilesResult =
@@ -100,7 +92,7 @@ export async function readRepoFile(ctx: RepoReadContext, path: string): Promise<
       // A paged source says when its read stopped short (`readFile`); that is truncation too.
       const file = await readSourceFile(sourceOf(ctx), path, ctx.ref);
       if (file == null) return { ok: false, reason: `file not found on ${ctx.ref}: ${path}` };
-      return capContent(path, file);
+      return fileResult(path, file);
     } catch (e) {
       return { ok: false, reason: e instanceof Error ? e.message : `read not implemented for provider '${ctx.provider}'` };
     }
@@ -115,7 +107,7 @@ export async function readRepoFile(ctx: RepoReadContext, path: string): Promise<
   if (!json || json.type !== 'file' || typeof json.content !== 'string') {
     return { ok: false, reason: `not a readable file: ${path}` };
   }
-  return capContent(path, { content: json.encoding === 'base64' ? fromBase64Utf8(json.content) : json.content, truncated: false });
+  return fileResult(path, { content: json.encoding === 'base64' ? fromBase64Utf8(json.content) : json.content, truncated: false });
 }
 
 /**

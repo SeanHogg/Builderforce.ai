@@ -39,6 +39,7 @@ import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelay
 import { RepoService, type AgentHostDispatcher } from '../../application/repos/RepoService';
 import { resolveRepoCredential, isResolveError } from '../../application/repos/resolveRepoCredential';
 import { importRepoContents } from '../../application/repos/importRepoContents';
+import { recordImportBaseline } from '../../application/ide/workspaceRepoBaseline';
 import { enforceIngestionCap, recordIngestion } from '../../application/ingestion/ingestionLedger';
 import { githubStatusMessage } from '../../application/integrations/githubTestError';
 import { mergeRecordedPullRequest } from '../../application/repos/mergeRecordedPr';
@@ -446,6 +447,26 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
     }));
 
     return c.json(result);
+  });
+
+  // POST /api/repos/repositories/:id/import-baseline { paths } — after the IDE saved an
+  // imported manifest, record the paths it actually SAVED as the workspace's repo baseline,
+  // so a later push deletes only what was imported and then removed — never a file the
+  // import skipped (read in part, past a cap) or failed to save.
+  router.post('/repositories/:id/import-baseline', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const id = c.req.param('id');
+    const { paths } = await parseBody(c, z.object({ paths: z.array(z.string().min(1).max(1024)).max(5000) }));
+    const [row] = await db
+      .select({ projectId: projectRepositories.projectId })
+      .from(projectRepositories)
+      .where(and(eq(projectRepositories.id, id), eq(projectRepositories.tenantId, tenantId)));
+    if (!row) return c.json({ error: 'Repository not found' }, 404);
+    if (row.projectId == null) return c.json({ error: 'Repository is not bound to a project' }, 400);
+    const bucket = (c.env as Env).UPLOADS;
+    if (!bucket) return c.json({ error: 'Storage not configured' }, 503);
+    await recordImportBaseline(bucket, row.projectId, paths);
+    return c.json({ ok: true, recorded: paths.length });
   });
 
   // DELETE /api/repos/repositories/:id

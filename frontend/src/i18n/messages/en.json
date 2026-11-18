@@ -19656,7 +19656,10 @@
     "backfillingAlerts": "Backfilling…",
     "backfillAlertsTitle": "Import every open code-scanning and Dependabot alert from this repo as a security finding. Safe to re-run.",
     "alertsBackfilled": "Imported {count} security {count, plural, one {finding} other {findings}} ({deduped} already tracked)",
-    "alertsBackfillFailed": "Could not import security alerts"
+    "alertsBackfillFailed": "Could not import security alerts",
+    "importSkippedPartial": "{count, plural, one {# file was} other {# files were}} read only in part and left out — saving a fragment would overwrite the real file on your next push: {files}",
+    "skipTooLarge": "too large",
+    "skipIncomplete": "read cut short — import again to retry"
   },
   "workflowsContent": {
     "noRunsYet": "No runs yet",

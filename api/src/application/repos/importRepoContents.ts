@@ -33,8 +33,21 @@ const SKIP_NOISE = /(^|\/)(node_modules|\.git|dist|build|\.next|coverage|out)\//
 export interface ImportedFile {
   path: string;
   content: string;
-  /** True when the file was clipped to the per-file size cap by readRepoFile. */
+  /** Always false: a file read only in part is never imported — it is `skipped` with its reason. */
   truncated: boolean;
+}
+
+/**
+ * Why a path was left out of the manifest: an asset or generated path, past an import
+ * cap, unreadable, or read only in part — past the per-file read cap (`too-large`) or
+ * cut short by the provider (`incomplete`). A part-read file is never imported: saved,
+ * its fragment would be pushed back over the real file.
+ */
+export type ImportSkipReason = 'binary' | 'noise' | 'cap' | 'unreadable' | 'too-large' | 'incomplete';
+
+export interface SkippedFile {
+  path: string;
+  reason: ImportSkipReason;
 }
 
 export interface ImportRepoResult {
@@ -43,8 +56,8 @@ export interface ImportRepoResult {
   files: ImportedFile[];
   /** Total blob count discovered in the tree (before caps). */
   discovered: number;
-  /** Paths skipped (binary/asset/noise) or dropped because a cap was hit. */
-  skipped: string[];
+  /** Paths left out, each with why. */
+  skipped: SkippedFile[];
   /** True when a cap (file count / total bytes / tree size) clipped the import. */
   truncated: boolean;
   /** Set when the tree listing itself failed. */
@@ -78,21 +91,19 @@ export async function importRepoContents(ctx: RepoReadContext): Promise<ImportRe
     return { ok: false, ref: ctx.ref, files: [], discovered: 0, skipped: [], truncated: false, error: tree.reason };
   }
 
-  const skipped: string[] = [];
+  const skipped: SkippedFile[] = [];
   const importable: string[] = [];
   for (const path of tree.paths) {
-    if (SKIP_BINARY_EXT.test(path) || SKIP_NOISE.test(path)) {
-      skipped.push(path);
-      continue;
-    }
-    importable.push(path);
+    if (SKIP_BINARY_EXT.test(path)) skipped.push({ path, reason: 'binary' });
+    else if (SKIP_NOISE.test(path)) skipped.push({ path, reason: 'noise' });
+    else importable.push(path);
   }
 
   // A cap was hit if the tree itself was truncated, or we have more importable
   // files than we'll read.
   let truncated = tree.truncated || importable.length > MAX_IMPORT_FILES;
   const toRead = importable.slice(0, MAX_IMPORT_FILES);
-  for (const dropped of importable.slice(MAX_IMPORT_FILES)) skipped.push(dropped);
+  for (const dropped of importable.slice(MAX_IMPORT_FILES)) skipped.push({ path: dropped, reason: 'cap' });
 
   const read = await mapLimit(toRead, READ_CONCURRENCY, (path) => readRepoFile(ctx, path));
 
@@ -101,15 +112,19 @@ export async function importRepoContents(ctx: RepoReadContext): Promise<ImportRe
   for (let i = 0; i < read.length; i++) {
     const rf = read[i]!;
     const path = toRead[i]!;
-    if (!rf.ok) { skipped.push(path); continue; }
+    if (!rf.ok) { skipped.push({ path, reason: 'unreadable' }); continue; }
+    if (rf.truncated) {
+      skipped.push({ path, reason: rf.truncatedReason === 'incomplete' ? 'incomplete' : 'too-large' });
+      continue;
+    }
     if (bytes + rf.content.length > MAX_IMPORT_BYTES) {
       // Total-size cap reached: drop this and the rest, mark truncated.
       truncated = true;
-      for (let j = i; j < read.length; j++) skipped.push(toRead[j]!);
+      for (let j = i; j < read.length; j++) skipped.push({ path: toRead[j]!, reason: 'cap' });
       break;
     }
     bytes += rf.content.length;
-    files.push({ path, content: rf.content, truncated: rf.truncated });
+    files.push({ path, content: rf.content, truncated: false });
   }
 
   return { ok: true, ref: ctx.ref, files, discovered: tree.paths.length, skipped, truncated };

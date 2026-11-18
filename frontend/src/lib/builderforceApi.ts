@@ -6998,12 +6998,16 @@ export interface ImportedRepoFile {
   truncated: boolean;
 }
 
+/** Why the server left a path out of an import manifest (mirrors the API's ImportSkipReason). */
+export type ImportSkipReason = 'binary' | 'noise' | 'cap' | 'unreadable' | 'too-large' | 'incomplete';
+
 export interface ImportRepoManifest {
   ok: boolean;
   ref: string;
+  /** Whole files only: a file read only in part is never in here — it is in `skipped`. */
   files: ImportedRepoFile[];
   discovered: number;
-  skipped: string[];
+  skipped: Array<{ path: string; reason: ImportSkipReason }>;
   truncated: boolean;
 }
 
@@ -7018,6 +7022,11 @@ export const reposApi = {
     request<ImportRepoManifest>(
       `/api/repos/repositories/${id}/contents${ref ? `?ref=${encodeURIComponent(ref)}` : ''}`,
     ),
+
+  /** After saving an imported manifest: record the paths actually SAVED, so a later push
+   *  deletes only what was imported and then removed — never a skipped or unsaved file. */
+  recordImportBaseline: (id: string, paths: string[]): Promise<{ ok: boolean; recorded: number }> =>
+    request(`/api/repos/repositories/${id}/import-baseline`, { method: 'POST', body: JSON.stringify({ paths }) }),
 
   add: (projectId: number, body: AddRepositoryBody): Promise<ProjectRepository> =>
     request(`/api/repos/projects/${projectId}/repositories`, { method: 'POST', body: JSON.stringify(body) }),

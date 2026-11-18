@@ -31,6 +31,7 @@ import {
 } from '../../domain/security/diffScanRules';
 import type { ActorIdentity } from '../activity/activityLog';
 import { listBranchDiff, listRepoFiles, readRepoFile, type RepoReadContext } from '../repos/readRepoContents';
+import { scanFailureForTruncated } from '../repos/truncationMessages';
 import { ingestScanFindings } from './vulnerabilityFindings';
 import { endPrScan, ensurePrScan, type PrScanScope } from './prScanStore';
 import { isScaManifestPath, OSV_MAX_PACKAGES, parseManifests, queryOsv } from './osvScaScan';
@@ -96,11 +97,7 @@ async function readAll(read: RepoReadContext, paths: string[]): Promise<ReadAllR
       if (!r.ok) failures.push(`${path}: ${r.reason}`);
       else {
         files.push({ path: r.path, content: r.content });
-        if (r.truncated) {
-          failures.push(r.truncatedReason === 'incomplete'
-            ? `${path}: the provider stopped answering mid-read (e.g. rate limited), so the file was only partly read`
-            : `${path}: file exceeds the read limit and was only partly read`);
-        }
+        if (r.truncated) failures.push(scanFailureForTruncated(path, r.truncatedReason));
       }
     });
   }

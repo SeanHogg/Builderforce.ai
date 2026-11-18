@@ -19681,7 +19681,10 @@
     "backfillingAlerts": "Wird nachgeladen…",
     "backfillAlertsTitle": "Alle offenen Code-Scanning- und Dependabot-Warnungen dieses Repos als Sicherheitsbefunde importieren. Erneutes Ausführen ist unbedenklich.",
     "alertsBackfilled": "{count} {count, plural, one {Sicherheitsbefund} other {Sicherheitsbefunde}} importiert ({deduped} bereits erfasst)",
-    "alertsBackfillFailed": "Sicherheitswarnungen konnten nicht importiert werden"
+    "alertsBackfillFailed": "Sicherheitswarnungen konnten nicht importiert werden",
+    "importSkippedPartial": "{count, plural, one {# Datei wurde} other {# Dateien wurden}} nur teilweise gelesen und ausgelassen — ein gespeichertes Fragment würde beim nächsten Push die echte Datei überschreiben: {files}",
+    "skipTooLarge": "zu groß",
+    "skipIncomplete": "Lesevorgang abgebrochen — erneut importieren"
   },
   "workflowsContent": {
     "noRunsYet": "Noch keine Ausführungen",

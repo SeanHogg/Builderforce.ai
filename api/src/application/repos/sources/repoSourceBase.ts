@@ -53,6 +53,15 @@ export interface RepoFileRead {
   truncatedReason?: TruncationReason;
 }
 
+/**
+ * A read held to `cap` characters: past it, cut and truncated for `size`; a read the
+ * source already cut keeps its own reason. The ONE place a read cap is applied.
+ */
+export function capContent(read: RepoFileRead, cap: number): RepoFileRead {
+  if (read.content.length > cap) return { content: read.content.slice(0, cap), truncated: true, truncatedReason: read.truncatedReason ?? 'size' };
+  return read.truncated ? { ...read, truncatedReason: read.truncatedReason ?? 'incomplete' } : { content: read.content, truncated: false };
+}
+
 /** A source's file read with its truncation, whether or not the source pages its reads. */
 export async function readSourceFile(source: RepoSource, path: string, ref: string): Promise<RepoFileRead | null> {
   if (source.readFile) return source.readFile(path, ref);

@@ -145,10 +145,21 @@ function providerCallBudget(base: FetchLike, limit: number): { fetch: FetchLike;
   };
 }
 
-/** Whether a cut-off read of `path` is still usable: its file name matches a detector's `prefixSafe` glob. */
-function isPrefixSafe(path: string): boolean {
-  const name = path.slice(path.lastIndexOf('/') + 1);
-  return DETECTORS.some((d) => d.prefixSafe?.some((glob) => pathGlobRegExp(glob).test(name)));
+/**
+ * Whether a cut-off read is still usable, per detector: the path is one of the reads a
+ * detector OWNS (an exact `reads` entry, or a match of one of its `reads` globs) and its
+ * file name matches that detector's `prefixSafe` globs — so `*.yml` covers the workflows
+ * detector's `.github/workflows/*.yml`, never some other `.yml`. Compiled once per detection.
+ */
+function prefixSafeTest(): (key: string) => boolean {
+  const owners = DETECTORS.filter((d) => (d.prefixSafe?.length ?? 0) > 0).map((d) => {
+    const names = d.prefixSafe!.map(pathGlobRegExp);
+    const exact = new Set(d.reads.filter((entry) => !entry.includes('*')));
+    const globs = d.reads.filter((entry) => entry.includes('*')).map(toDirGlob);
+    return (key: string) =>
+      names.some((name) => name.test(key.slice(key.lastIndexOf('/') + 1))) && (exact.has(key) || globs.some((g) => matchesGlob(g, key)));
+  });
+  return (key) => owners.some((owns) => owns(key));
 }
 
 /**
@@ -158,12 +169,18 @@ function isPrefixSafe(path: string): boolean {
  * `Dockerfile`) keeps its first part; a whole-file format (`package.json`, `*.csproj`)
  * must not be taken for the whole file, so it is treated as unread — and logged.
  */
-async function readInto(ctx: RepoReadContext, io: BlueprintSourceIo, reads: readonly SourceRead[], files: Map<string, string>): Promise<void> {
+async function readInto(
+  ctx: RepoReadContext,
+  io: BlueprintSourceIo,
+  reads: readonly SourceRead[],
+  files: Map<string, string>,
+  prefixSafe: (key: string) => boolean,
+): Promise<void> {
   const results = await mapWithConcurrency([...reads], READ_CONCURRENCY, (read) => io.readRepoFile(ctx, read.path));
   results.forEach((result, i) => {
     const read = reads[i];
     if (!result.ok || read === undefined) return;
-    if (result.truncated && !isPrefixSafe(read.path)) {
+    if (result.truncated && !prefixSafe(read.key)) {
       console.warn(`[blueprint] ${read.path} was read only in part (${result.truncatedReason ?? 'incomplete'}); detection skips it`);
       return;
     }
@@ -212,7 +229,8 @@ export async function readBlueprintSources(
   );
   mark(globReads);
   const files = new Map<string, string>();
-  await readInto(ctx, io, [...exactReads, ...globReads], files);
+  const prefixSafe = prefixSafeTest();
+  await readInto(ctx, io, [...exactReads, ...globReads], files, prefixSafe);
   issued += exactReads.length + globReads.length;
 
   // What the read files name: only safe repo paths, never one already tried, only what the tree holds (when known).
@@ -222,7 +240,7 @@ export async function readBlueprintSources(
       return key === null ? null : readFor(tree, key);
     });
   const followReads = within(take(named), MAX_PROVIDER_CALLS - spent(), 'files are named by the read ones');
-  if (followReads.length > 0) await readInto(ctx, io, followReads, files);
+  if (followReads.length > 0) await readInto(ctx, io, followReads, files, prefixSafe);
 
   // ALIASED KEYS: every named key gets the content of its provider path, whichever key read
   // it — a glob's `web/Web.csproj` for a solution's `WEB/Web.csproj`, or one follow read for

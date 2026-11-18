@@ -19656,7 +19656,10 @@
     "backfillingAlerts": "正在回填…",
     "backfillAlertsTitle": "将此仓库所有未处理的代码扫描和 Dependabot 告警导入为安全发现。可安全重复运行。",
     "alertsBackfilled": "已导入 {count} 条安全发现（{deduped} 条此前已记录）",
-    "alertsBackfillFailed": "无法导入安全告警"
+    "alertsBackfillFailed": "无法导入安全告警",
+    "importSkippedPartial": "{count, plural, other {# 个文件}}仅被部分读取，已跳过——保存片段会在下次推送时覆盖真实文件：{files}",
+    "skipTooLarge": "文件过大",
+    "skipIncomplete": "读取中断——请重新导入以重试"
   },
   "workflowsContent": {
     "noRunsYet": "暂无运行",

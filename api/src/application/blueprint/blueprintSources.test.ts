@@ -272,6 +272,18 @@ describe('readBlueprintSources', () => {
     expect(detectDotnet(files).services?.[0]).toMatchObject({ id: 'Web', devCommand: 'dotnet run --project src/Web/Web.csproj --urls http://0.0.0.0:8080' });
   });
 
+  it('prefixSafe holds only for the reads its detector owns', async () => {
+    const io = stubIo({ '.github/workflows/ci.yml': 'on: push', '.env.example': 'A=1', 'api/.env.example': 'B=2' }, {
+      truncated: ['.github/workflows/ci.yml', '.env.example', 'api/.env.example'],
+    });
+    const files = await readBlueprintSources(CTX, io);
+    // Owned: the workflows detector's glob, the env-example detector's root file.
+    expect(files.has('.github/workflows/ci.yml')).toBe(true);
+    expect(files.has('.env.example')).toBe(true);
+    // api/.env.example is read by the Python/PHP/Rust detectors, which declare nothing prefix-safe.
+    expect(files.has('api/.env.example')).toBe(false);
+  });
+
   it('the second pass reads only named files the full tree holds', async () => {
     const io = stubIo({ 'Shop.sln': sln(['gone\\Gone.csproj']) });
     await readBlueprintSources(CTX, io);
