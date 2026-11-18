@@ -1,6 +1,6 @@
 /**
  * Egress denial + recording for the PRD 41 §A6 packaged acceptance scenario
- * (Builderforce.ai/docs/specs/41-prd-offline-understanding-and-run-delta.md,
+ * (Builderforce.ai/docs/specs/make.md (PRD 41),
  * workstream WS13).
  *
  * This is the OS-level half of the two-layer denial the PRD requires

@@ -1,5 +1,5 @@
 /**
- * The per-ticket Coordinator tick (docs/specs/37-prd-coordinated-role-participation.md §5.5).
+ * The per-ticket Coordinator tick (PRD 37 §5.5, archived in DONE.md).
  *
  * Forces one coordination pass over a single ticket: ensures its participation
  * manifest is derived, then fires the SAME lane trigger the autonomous flow uses —

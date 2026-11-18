@@ -1,47 +1,65 @@
-# Specs — status index
+# Specs — the domain PRDs
 
-A numbered PRD "PRD N" is the file NN-prd-*.md here. Shipped PRDs are recorded in ../../DONE.md and their files removed; git history keeps them.
+Open product work lives in **one PRD per stage of the arc**. Each file holds only what is left to build;
+finished sections are archived word for word in [DONE.md](../../DONE.md). Outstanding work is also tracked
+in [ROADMAP.md](../../ROADMAP.md) (the Consolidated Gap Register), under the same stage. Consolidated and
+verified against the code on 2026-11-17.
 
-Every file below is a live contract: it is still read when the area changes. Its outstanding work is
-tracked in [ROADMAP.md](../../ROADMAP.md) (the Consolidated Gap Register), under the section named in
-the last column. `NNa-*` is the build hand-off for `NN`. Numbers are never reused; a gap in the
-sequence is a PRD that shipped. Index last rewritten 2026-10-25.
+| Domain | File | Holds |
+|---|---|---|
+| 💡 Idea | [idea.md](./idea.md) | Ideas, sessions, briefs, creation-canvas sessions, experiments, surveys |
+| 🔨 Make | [make.md](./make.md) | Agent runs and the kernel, autonomous delivery, knowledge graph and local-first, canvas runtimes, the customer app platform |
+| ⚙️ Run | [run.md](./run.md) | Governance and SOC 2, BurnRateOS consolidation, hiring and HR, advisors |
+| 📊 Measure | [measure.md](./measure.md) | Vertical KPI dashboards, Insights (session replay), creation outcome metrics |
+| 📣 Reach | [reach.md](./reach.md) | Marketing campaigns, the blog capability register, the company directory, marketing content |
+| 🧰 Platform | [platform.md](./platform.md) | Data model, the UI design system and collection view, browser performance, identity federation, close-out, search, typed ids, cutover |
 
-| # | Title | Status | ROADMAP section |
+## Where a numbered PRD went
+
+A citation like `PRD 38 §4.3` resolves to the `## PRD 38` section of its domain file when that section is
+still open. If the section is missing there, it shipped, and you'll find it in DONE.md under
+"PRD 38: finished sections archived on consolidation" or an earlier PRD 38 entry. Numbers are never reused.
+
+| PRD | Title | Domain file | State on 2026-11-17 |
 |---|---|---|---|
-| 05 | [Integration, Embed-Back & Identity Federation](./05-integration-embed-and-identity.md) | Partly built | OTHER › Identity |
-| 08 | [Agentic Security & Governance (policy packs, governance-auditor, DevSecOps §10)](./08-prd-agentic-governance.md) | Partly built | Run › `[governance]` Security automation |
-| 09 | [Cloud Agent Validation & Hardening](./09-prd-cloud-agent-validation.md) | Partly built (G1 open; rest needs re-audit) | Make › Cloud and IDE agent runs |
-| 18 | [hired.video → Builderforce.ai port](./18-prd-hired-video-port.md) | Partly built | Programs; Make › Canvas runtimes and studio |
-| 19 | [burnrateos.com → Builderforce.ai consolidation](./19-prd-burnrateos-consolidation.md) | Partly built | Programs |
-| 20 | [The Consolidated Data Model](./20-prd-consolidated-data-model.md) | Partly built | OTHER › Data model — PRD 20 |
-| 21 | [The Unified Experience](./21-prd-unified-experience.md) — start here for any UI work | Live (design system); partly built | OTHER › Code health; Reach › Billing and commerce |
-| 22 | [Browser Performance, Domain Execution, and Codebase Health](./22-prd-browser-performance-domain-execution-analysis.md) | Partly built | OTHER › Code health |
-| 23 | [Manager PR Review, Acceptance Evidence, and Ticket Recovery](./23-prd-manager-pr-ticket-recovery.md) | Partly built | Make › Autonomous delivery |
-| 25 | [Vertical KPI Dashboards](./25-prd-vertical-kpi-dashboards.md) · hand-off [25a](./25a-vertical-kpi-dashboards-implementation.md) | Partly built (Slice A shipped) | Measure › `[finance]` |
-| 26 | [Advisor Platform](./26-prd-advisor-platform.md) | Partly built | Reach › Billing and commerce |
-| 30 | [Prompt-driven marketing campaign](./30-prd-guided-marketing-campaign.md) | Partly built | Reach › Marketing and campaigns |
-| 31 | [Build, run and ship a real app on Builderforce](./31-prd-customer-app-platform.md) | Partly built (W1 started) | Make › Previews, repos and hosting |
-| 33 | [Insights: session replay, heatmaps, live visitors](./33-prd-session-replay.md) | Live in code; production provisioning open | Measure › `[growth]` |
-| 35 | [One agent, one kernel](./35-prd-one-agent-one-kernel.md) | Complete, 2026-11-01 (DONE.md) | Make › Cloud and IDE agent runs (ONE execution core) |
-| 37 | [Coordinated Role Participation & Execution Verification](./37-prd-coordinated-role-participation.md) | Mostly built | Make › Autonomous delivery |
-| 38 | [Knowledge graph & extraction](./38-prd-knowledge-graph.md) | Mostly built; open items in ROADMAP | Make › Knowledge review |
-| 39 | [Platform close-out](./39-prd-platform-closeout.md) | Partly built | OTHER › Infrastructure |
-| 40 | [Portable knowledge packs](./40-prd-knowledge-packs.md) | Design for review | Make › Cloud and IDE agent runs |
-| 41 | [Offline understanding and the run delta](./41-prd-offline-understanding-and-run-delta.md) | Design for review | Make › Cloud and IDE agent runs; Local-first |
-| 47 | [One Collection view: Card \| List, selection, bulk Delete/Archive/Merge, server paging and sort](./47-prd-collection-view.md) | Design for review | OTHER › Code health |
+| 05 | Integration, embed-back & identity federation | platform | Mostly built |
+| 08 | Agentic security & governance | run | Partly built |
+| 09 | Cloud agent validation & hardening | make | Mostly built |
+| 18 | hired.video port | run (hiring), make (studio), reach (content), platform (cutover) | Mostly built |
+| 19 | burnrateos.com consolidation | run | Mostly built; shutdown gates open |
+| 20 | Consolidated data model | platform | Mostly built |
+| 21 | Unified experience: the design system (start here for UI work) | platform (rules + build), reach (company claim) | Mostly built |
+| 22 | Browser performance & code health | platform | Partly built |
+| 23 | Manager PR review & ticket recovery | make | Mostly built, dry-run only |
+| 25 / 25a | Vertical KPI dashboards | measure | Partly built (Slice A) |
+| 26 | Advisor platform | run ([redirect](./26-prd-advisor-platform.md) kept for board links) | Partly built |
+| 30 | Prompt-driven marketing campaign | reach | Partly built |
+| 31 | Customer app platform | make | Partly built |
+| 33 | Insights: session replay | measure | Shipped in code; provisioning open |
+| 35 | One agent, one kernel | — | Shipped (DONE.md) |
+| 37 | Coordinated role participation | make | Shipped except 3 gaps |
+| 38 | Knowledge graph & extraction | make | Mostly built |
+| 39 | Platform close-out | platform | Mostly built |
+| 40 | Portable knowledge packs | — | Shipped (DONE.md) |
+| 41 | Offline understanding & the run delta | make | Mostly built |
+| 43 | Knowledge 3D stage | make | Mostly built |
+| 45 | Deterministic run gates | make | Mostly built |
+| 46 | Agent-run findings | — | Shipped (DONE.md) |
+| 47 | One Collection view | platform | Partly built (W0 landed) |
+| — | SOC 2 Type I checklist | run | Partly built |
+| — | Internet search subsystem | platform | Phases 1–2 shipped |
+| — | Blog capability gap register | reach | Open |
+| — | Agent framework registrations | make | Shipped; legacy-table drop open |
 
-Numbers are never reused; a gap in the sequence is a PRD that shipped. Index last rewritten 2026-11-08.
+## Also here
 
-Also here:
+- [API-CONTRACTS.md](./API-CONTRACTS.md): the standing wire contracts.
+- [MERGE_PROCESS.md](./MERGE_PROCESS.md): the merge checklist.
+- [`data-model/`](./data-model/): the consolidation coverage map read by the `check:burnrate-parity` and
+  model-coverage guards.
+- [`tasks/`](./tasks/): per-ticket PRDs (`task-<id>.md`) committed by the platform
+  (`api/src/application/repos/commitPrdToRepo.ts`). These are snapshots and may cite retired PRD paths;
+  use the table above.
 
-- [`data-model/`](./data-model/) — the consolidation coverage map read by the `check:burnrate-parity`
-  and model-coverage guards.
-- [`tasks/`](./tasks/) — per-ticket PRDs (`task-<id>.md`) committed by the platform
-  (`api/src/application/repos/commitPrdToRepo.ts`).
-
-Design docs live in [`../design/`](../design/): the PRD 35 design
-([`one-agent-one-kernel.html`](../design/one-agent-one-kernel.html)), the local-first review
-([`vsix-offline-first-architecture-review.md`](../design/vsix-offline-first-architecture-review.md),
-including the offline memory scope) and the creation-canvas set. Implementation guides (email,
-multi-auth) live in [`../guides/`](../guides/).
+Design references live in [`../design/`](../design/). Code headers cite them, and their open items are
+carried in the domain files. Implementation guides (email, multi-auth) live in [`../guides/`](../guides/).

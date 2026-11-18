@@ -6,7 +6,7 @@ Each finding is folded in below and cited as [R#].
 This design closes three ROADMAP › Local-first entries. Sources:
 
 - [vsix-offline-first-architecture-review.md](./vsix-offline-first-architecture-review.md)
-- [PRD 41 §B4](../specs/41-prd-offline-understanding-and-run-delta.md)
+- [PRD 41 §B4](../../DONE.md) (archived)
 
 Not covered here:
 

@@ -3,7 +3,7 @@
 Status: APPROVED 2026-10-28, in implementation. The open decisions below were taken as
 proposed.
 Companions: [deterministic-prefetch.md](deterministic-prefetch.md) (the gate that consumes it) and
-[PRD 38 rev 3](../specs/38-prd-knowledge-graph.md) (the knowledge graph whose cards it indexes:
+[PRD 38 rev 3](../specs/make.md) (the knowledge graph whose cards it indexes:
 any reviewed directory, with code and docs packs first).
 Inspiration: [LEANN](https://github.com/StarTrail-org/LEANN) (MIT). It uses a graph-based
 index with high-degree-preserving pruning and CSR storage, and recomputes embeddings on the

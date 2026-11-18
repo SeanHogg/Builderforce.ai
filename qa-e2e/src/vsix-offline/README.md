@@ -1,7 +1,7 @@
 # VSIX packaged offline acceptance — PRD 41 §A6 (WS13)
 
 The gate for claiming **offline** in release notes (PRD 41
-`docs/specs/41-prd-offline-understanding-and-run-delta.md` §A6): the shipped
+`docs/specs/make.md (PRD 41)` §A6): the shipped
 `.vsix`, installed into a real VS Code, with **all network egress denied**, must
 
 1. complete the **L0–L3** codebase scan — a deterministic projection, **no key**,

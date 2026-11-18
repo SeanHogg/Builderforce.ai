@@ -16,7 +16,7 @@ hits; `Date` instances are normalized to ISO strings before the fresh value is r
 
 ## Knowledge graph API
 
-The knowledge graph API (PRD 38, `docs/specs/38-prd-knowledge-graph.md` §4.8) is one router
+The knowledge graph API (PRD 38 §4.8, archived in `DONE.md`) is one router
 (`api/src/presentation/routes/projectKnowledgeRoutes.ts`) served at two front doors:
 
 | Door | Prefix | Credential | Acts for |
@@ -37,7 +37,8 @@ project in another tenant is `404 project not found`, never `403`.
 | `GET …/knowledge-graph?root=&focus=&maxNodes=&at=` | `root` required. `focus` may repeat (node refs). `maxNodes` is clamped to 1–2000 (default 400). `at` is a past review digest (hex, 8–64 characters) and builds the graph as that review saw it, with today's facts and relations. | `{ graph }`, a `KnowledgeGraph`: `{ scope: { rootId, packs, digest }, nodes, edges, findings, stats: { sources, nodes, edges, stale, truncated } }` |
 | `POST …/knowledge/write` | `{ scope?, facts[], relations[], stale[] }`, at most 500 rows in total and 4 MB. A fact is `{ key, content, source?, importance?, origin?, fileAnchors[] }`. A relation is `{ from, to, kind, weight, origin, confidence?, sourceHash?, staleAt? }`. A stale mark is `{ sourceRef, currentHash }`. | `{ ok: true, factsWritten, factsSkipped?, relationsWritten, staleMarked }`. `factsSkipped` lists machine facts whose key a person authored; they are never overwritten, and the rest of the batch still lands. |
 | `GET …/knowledge/extracted/:hash` | none | `{ extracted }`, the `Extracted[]` stored under that content hash |
-| `PUT …/knowledge/extracted/:hash` | an `Extracted[]` array, at most 1 MB. Every entry's `sourceHash` must equal `:hash`. | `{ ok: true, hash }` |
+| `POST …/knowledge/extracted/bulk` | `{ hashes: string[] }`, 1–500 content hashes, at most 4 MB. Reads many content hashes in one request (ranged reads over the bundle index when the cache supports it). Extracted output is written through the knowledge sync pack, not per hash. | `{ extracted: [{ hash, entries }] }`; `entries` is `null` for a hash with nothing stored |
+| `DELETE …/knowledge/scopes/:rootId` | none. Only an uploaded pack root (`pack:`); a reviewed root is refused. Allowed for the uploader, a manager or a superadmin, never a host key or machine token. | the delete result, or `{ error, code? }` with 400/403/404 |
 | `PUT …/code-analysis/:sha?root=` | a code-analysis snapshot (`{ version: 1, id, capturedAt, source, tools, nodes, edges, issues }`), at most 2 MB. `root` names the root the snapshot belongs to; without it the project's linked repository is the root. | `{ ok: true, sha, rootId }`. Snapshots are stored per `(root, sha)`. |
 | `POST …/knowledge/judge` | `{ kind: 'extract' \| 'compare', items: [{ ref, text, sourceHash }] }`, 1–8 items, each `text` at most 20,000 characters, body at most 256 KB | a `JudgementResult`: `{ extract?: [{ ref, claims, entities }], compare?: [{ a, b, relation, confidence }], invalid }`. A routed, metered model call under the caller's tenant. |
 | `GET …/knowledge/judge/estimate` | none | `{ perCallUsd, model, local }`; see below |
@@ -88,7 +89,7 @@ No response sets a client cache header, and no read waits on a TTL to see a writ
 
 | Read | Key | Invalidated by |
 |---|---|---|
-| graph | `kg:v3:{tenant}:{project}:{root}:{scopeDigest}:{knowledgeVersion}:{focusHash}:{maxNodes}` | a new review digest, a new commit of the linked repository, any knowledge write |
+| graph | `kg:v6:{tenant}:{project}:{root}:{scopeDigest}:{knowledgeVersion}:{focusHash}:{maxNodes}` | a new review digest, a new commit of the linked repository, any knowledge write |
 | scopes | `ks:v1:{tenant}:{project}:{knowledgeVersion}` | any knowledge write |
 | facts | `kf:v1:{tenant}:{project}:{root}:{scopeDigest}:{knowledgeVersion}` | a new review digest, any knowledge write |
 | judge estimate | `kjc:v2:{tenant}:{routingInputsVersion}`, **300 s TTL** | a change to the tenant's providers, plan or model selection; otherwise the TTL |
