@@ -40438,5 +40438,29 @@
     },
     "expandDetails": "Développer les détails",
     "collapseDetails": "Réduire les détails"
+  },
+  "runtimeShield": {
+    "reason": {
+      "portNotOwner": "Le bouclier de sécurité a bloqué une connexion à un port qui appartient à une autre application.",
+      "portEdgeNotDeclared": "Le bouclier de sécurité a bloqué une connexion entre des services que l'application ne déclare pas.",
+      "dbAuthFailed": "Le bouclier de sécurité a refusé une connexion à la base de données avec des identifiants incorrects.",
+      "dbNotOwner": "Le bouclier de sécurité a bloqué l'accès à une base de données qui appartient à une autre application.",
+      "dbServiceNotAllowed": "Le bouclier de sécurité a bloqué un service qui n'est pas autorisé à utiliser cette base de données.",
+      "processSpawnQuota": "L'application a lancé trop de processus : le bouclier de sécurité a arrêté le dernier.",
+      "processDepthQuota": "L'application a imbriqué des processus trop profondément : le bouclier de sécurité a arrêté le dernier.",
+      "fsOutsideApp": "Le bouclier de sécurité a bloqué un accès à des fichiers hors du dossier de l'application.",
+      "fsProtectedPath": "Le bouclier de sécurité a bloqué la modification d'un fichier protégé.",
+      "fsInvalidOp": "Le bouclier de sécurité a refusé une opération sur fichier non valide.",
+      "ingressBodyTooLarge": "Le bouclier de sécurité a refusé une requête trop volumineuse.",
+      "ingressClientNotBound": "Le bouclier de sécurité a refusé une requête provenant d'un aperçu qu'il ne reconnaît pas.",
+      "ingressAttachRejected": "Le bouclier de sécurité a refusé de connecter un aperçu à l'environnement d'exécution.",
+      "ingressSameOriginRefused": "L'aperçu n'a pas pu démarrer : il se serait exécuté sur l'adresse même de cette page, ce que le bouclier de sécurité n'autorise pas.",
+      "ingressPreviewOriginInvalid": "L'aperçu n'a pas pu démarrer : son adresse isolée n'est pas valide.",
+      "ingressAppOriginMismatch": "Le bouclier de sécurité a bloqué une requête parvenue à l'application par l'aperçu d'une autre application.",
+      "ingressAppOriginRequired": "L'application n'a pas pu démarrer : elle a besoin de sa propre adresse d'aperçu isolée.",
+      "ingressSharedPreviewOrigin": "Cette application partage son adresse d'aperçu avec d'autres applications.",
+      "egressPolicyInvalid": "La politique réseau de l'application n'était pas valide : elle s'exécute donc avec la plus stricte.",
+      "processMessageUndeliverable": "Un processus a été arrêté car un message ne pouvait pas lui être remis."
+    }
   }
 }

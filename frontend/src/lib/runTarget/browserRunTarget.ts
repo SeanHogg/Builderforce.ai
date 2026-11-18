@@ -16,7 +16,10 @@
  * The application runtime itself is loaded on Run, so bundles pay nothing until then.
  */
 import type { AppBlueprint } from '@builderforce/creation-canvas-contract';
-import { bootSharedPreviewRuntime, releaseSharedPreviewRuntime, replaceProjectFiles } from '@/lib/browserRuntime/previewRuntime';
+import {
+  bootSharedPreviewRuntime, releaseSharedPreviewRuntime, replaceProjectFiles, sharedPreviewRuntimeId,
+} from '@/lib/browserRuntime/previewRuntime';
+import { prepareApplicationPolicy } from '@/lib/browserRuntime/previewRuntimeOptions';
 import { PREVIEW_PHP_OPTIONS } from '@/lib/browserRuntime/previewPhpOptions';
 import { recordedFailure } from '@/lib/reportError';
 import { PREVIEW_CAPTURE_SCRIPT } from '@/lib/previewCapture/captureScript';
@@ -58,7 +61,7 @@ async function startSerialised(blueprint: AppBlueprint | null, context: RunConte
   if (unreadable.length > 0) return { ok: false, code: 'noFiles', detail: unreadableDetail(unreadable) };
   if (Object.keys(files).length === 0) return { ok: false, code: 'noFiles' };
 
-  const [app, { VirtualFileSystem }] = await Promise.all([
+  const [app, wc] = await Promise.all([
     import('@seanhogg/builderforce-webcontainers/app'),
     import('@seanhogg/builderforce-webcontainers'),
   ]);
@@ -67,7 +70,7 @@ async function startSerialised(blueprint: AppBlueprint | null, context: RunConte
   // lacks) is judged now, on the loaded files — BEFORE the current run is disposed or the
   // shared runtime is booted and taken from the workspace — so a decline names it and
   // costs nothing, rather than a start that never gets going.
-  const projectFiles = new VirtualFileSystem();
+  const projectFiles = new wc.VirtualFileSystem();
   projectFiles.writeTree(files);
   const judged = acceptBlueprintInBrowser(blueprint, projectFiles);
   if (!judged.ok) return judged;
@@ -83,7 +86,7 @@ async function startSerialised(blueprint: AppBlueprint | null, context: RunConte
       await held?.revoke();
       booted?.setPreviewScripts([]);
     },
-  });
+  }, context.projectId);
   booted = runtime;
   if (token !== generation) return superseded();
   replaceProjectFiles(runtime, files);
@@ -111,6 +114,11 @@ async function startSerialised(blueprint: AppBlueprint | null, context: RunConte
     releaseSharedPreviewRuntime(RUN_TARGET_OWNER);
   });
   current = handle;
+  // The application's signed egress policy, before its first process asks for it (W10 control 6).
+  await prepareApplicationPolicy(context.projectId, application.applicationId, sharedPreviewRuntimeId(),
+    (runtimeId, applicationId) => wc.previewOriginKey(runtimeId, applicationId));
+  // A newer start, a stop or a revocation while it minted: this application must not start.
+  if (token !== generation || current !== handle) return superseded();
   // Not awaited: the session is the surface's view of the start, service by service.
   // A service that fails for good is already on the session (its state and error);
   // anything else is a fault of ours, and recorded.

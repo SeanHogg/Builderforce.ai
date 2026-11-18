@@ -71,7 +71,7 @@ export const OPEN_SOURCE_PACKAGES: readonly OpenSourcePackage[] = [
     quickStartLanguage: 'ts',
     quickStart: `import { startPreviewRuntime } from '@seanhogg/builderforce-webcontainers';
 
-const runtime = await startPreviewRuntime({ serviceWorkerUrl: '/__bfwc/sw.js', id: 'my-project' });
+const runtime = await startPreviewRuntime({ serviceWorkerUrl: '/__bfwc/sw.js', unprotectedSameOrigin: true, id: 'my-project' });
 runtime.writeTree({
   'package.json': JSON.stringify({ dependencies: { react: '^18.3.1', 'react-dom': '^18.3.1' } }),
   'index.html': '<div id="root"></div><script type="module" src="/src/main.tsx"></script>',

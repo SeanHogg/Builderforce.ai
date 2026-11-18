@@ -40438,5 +40438,29 @@
     },
     "expandDetails": "Expandir detalles",
     "collapseDetails": "Contraer detalles"
+  },
+  "runtimeShield": {
+    "reason": {
+      "portNotOwner": "El escudo de seguridad bloqueó una conexión a un puerto que pertenece a otra aplicación.",
+      "portEdgeNotDeclared": "El escudo de seguridad bloqueó una conexión entre servicios que la aplicación no declara.",
+      "dbAuthFailed": "El escudo de seguridad rechazó una conexión a la base de datos con credenciales incorrectas.",
+      "dbNotOwner": "El escudo de seguridad bloqueó el acceso a una base de datos que pertenece a otra aplicación.",
+      "dbServiceNotAllowed": "El escudo de seguridad bloqueó un servicio que no tiene permiso para usar esta base de datos.",
+      "processSpawnQuota": "La aplicación inició demasiados procesos, así que el escudo de seguridad detuvo el último.",
+      "processDepthQuota": "La aplicación anidó procesos a demasiada profundidad, así que el escudo de seguridad detuvo el último.",
+      "fsOutsideApp": "El escudo de seguridad bloqueó un acceso a archivos fuera de la carpeta de la aplicación.",
+      "fsProtectedPath": "El escudo de seguridad bloqueó un cambio en un archivo protegido.",
+      "fsInvalidOp": "El escudo de seguridad rechazó una operación de archivo no válida.",
+      "ingressBodyTooLarge": "El escudo de seguridad rechazó una solicitud demasiado grande.",
+      "ingressClientNotBound": "El escudo de seguridad rechazó una solicitud de una vista previa que no reconoce.",
+      "ingressAttachRejected": "El escudo de seguridad se negó a conectar una vista previa al entorno de ejecución.",
+      "ingressSameOriginRefused": "La vista previa no pudo iniciarse: se habría ejecutado en la propia dirección de esta página, algo que el escudo de seguridad no permite.",
+      "ingressPreviewOriginInvalid": "La vista previa no pudo iniciarse: su dirección aislada no es válida.",
+      "ingressAppOriginMismatch": "El escudo de seguridad bloqueó una solicitud que llegó a la aplicación a través de la vista previa de otra aplicación.",
+      "ingressAppOriginRequired": "La aplicación no pudo iniciarse: necesita su propia dirección de vista previa aislada.",
+      "ingressSharedPreviewOrigin": "Esta aplicación comparte su dirección de vista previa con otras aplicaciones.",
+      "egressPolicyInvalid": "La política de red de la aplicación no era válida, así que se ejecuta con la más estricta.",
+      "processMessageUndeliverable": "Se detuvo un proceso porque no se le pudo entregar un mensaje."
+    }
   }
 }

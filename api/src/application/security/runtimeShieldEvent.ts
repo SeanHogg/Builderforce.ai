@@ -33,6 +33,13 @@ export const SHIELD_REASON_CODES = [
   'ingress.body_too_large',
   'ingress.client_not_bound',
   'ingress.attach_rejected',
+  'ingress.same_origin_refused',
+  'ingress.preview_origin_invalid',
+  'ingress.app_origin_mismatch',
+  'ingress.app_origin_required',
+  'ingress.shared_preview_origin',
+  'egress.policy_invalid',
+  'process.message_undeliverable',
 ] as const;
 export type ShieldReasonCode = (typeof SHIELD_REASON_CODES)[number];
 
@@ -54,11 +61,19 @@ export interface ShieldReasonPolicy {
  *    database or files (`port.not_owner`, `db.not_owner`, `fs.outside_app`), a protected path or a
  *    database the service is not granted (`fs.protected_path`, `db.service_not_allowed`), a failed
  *    database authentication (`db.auth_failed`), and an ingress client that is not bound to the
- *    application or an attach the runtime refused (`ingress.client_not_bound`, `ingress.attach_rejected`).
+ *    application or an attach the runtime refused (`ingress.client_not_bound`, `ingress.attach_rejected`),
+ *    and a request that reached an application's port through another application's preview origin
+ *    (`ingress.app_origin_mismatch`).
  *  - MEDIUM — resource and quota limits and an undeclared edge (`process.spawn_quota`,
  *    `process.depth_quota`, `ingress.body_too_large`, `port.edge_not_declared`): usually a bug or a
- *    misconfiguration in the app, already contained by the runtime; telemetry, not an incident.
- *  - LOW — a malformed filesystem operation (`fs.invalid_op`): the runtime refused bad input.
+ *    misconfiguration in the app, already contained by the runtime; telemetry, not an incident. So are
+ *    the embedder-configuration refusals — a same-origin preview, an invalid or missing per-application
+ *    preview origin, a malformed egress policy id (`ingress.same_origin_refused`,
+ *    `ingress.preview_origin_invalid`, `ingress.app_origin_required`, `egress.policy_invalid`) — and a
+ *    cross-origin message the runtime could not deliver (`process.message_undeliverable`): each is
+ *    Builderforce's own setup refused safely, not an attack.
+ *  - LOW — a malformed filesystem operation (`fs.invalid_op`): the runtime refused bad input. And the
+ *    one notice that refuses nothing (`ingress.shared_preview_origin`, action `monitor`).
  *  - Nothing is CRITICAL: every report is client-attested and unverified, so the server never lets one
  *    claim the top severity; a critical incident comes from a source the server observed itself.
  */
@@ -76,6 +91,13 @@ export const SHIELD_REASON_POLICY: { readonly [C in ShieldReasonCode]: ShieldRea
   'ingress.body_too_large': { severity: 'medium', ruleId: 'shield.ingress.body-too-large' },
   'ingress.client_not_bound': { severity: 'high', ruleId: 'shield.ingress.client-not-bound' },
   'ingress.attach_rejected': { severity: 'high', ruleId: 'shield.ingress.attach-rejected' },
+  'ingress.same_origin_refused': { severity: 'medium', ruleId: 'shield.ingress.same-origin-refused' },
+  'ingress.preview_origin_invalid': { severity: 'medium', ruleId: 'shield.ingress.preview-origin-invalid' },
+  'ingress.app_origin_mismatch': { severity: 'high', ruleId: 'shield.ingress.app-origin-mismatch' },
+  'ingress.app_origin_required': { severity: 'medium', ruleId: 'shield.ingress.app-origin-required' },
+  'ingress.shared_preview_origin': { severity: 'low', ruleId: 'shield.ingress.shared-preview-origin' },
+  'egress.policy_invalid': { severity: 'medium', ruleId: 'shield.egress.policy-invalid' },
+  'process.message_undeliverable': { severity: 'medium', ruleId: 'shield.process.message-undeliverable' },
 };
 
 /**

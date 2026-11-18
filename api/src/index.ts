@@ -235,7 +235,7 @@ import { createLrsAuthMiddleware } from './presentation/middleware/lrsAuthMiddle
 import { createMeasurementRoutes } from './presentation/routes/measurementRoutes';
 import { createYouTubeRoutes }      from './presentation/routes/youtubeRoutes';
 import { maybeHandlePreviewIngress } from './application/runtime/previewIngress';
-import { handleBrowserPreviewOrigin } from './presentation/middleware/browserPreviewOrigin';
+import { browserPreviewOrigin } from './presentation/middleware/browserPreviewOrigin';
 import { createCspReportRoutes } from './presentation/routes/cspReportRoutes';
 import { createWorkerPolicyRoutes } from './presentation/routes/workerPolicyRoutes';
 import { createIdeRoutes }         from './presentation/routes/ideRoutes';
@@ -518,12 +518,12 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // `preview.builderforce.ai` is proxied (HTTP + WebSocket) through the run's container
   // DO to a dev server it started. Inert (404) unless PREVIEW_INGRESS_ENABLED is set —
   // runs BEFORE site-hosting so the reserved `preview` label reaches the proxy, not R2.
-  // In-browser canvas previews: the relay page and service worker of the isolated
-  // preview origin (`preview.builderforce.ai/__bfwc/*`). Static, so it answers
-  // before the container ingress, which owns the rest of that host.
-  // Every script there carries an egress CSP; a worker's signed `?policy=` adds the
-  // app's declared origins (make.md §4 W10, control 6).
-  app.use('*', async (c, next) => (await handleBrowserPreviewOrigin(c.req.raw, c.env.CORS_ORIGINS, c.env.JWT_SECRET)) ?? next());
+  // In-browser canvas previews: the relay page, service worker, process Workers and .NET
+  // bundle of the isolated preview origins (`preview.builderforce.ai`, and each app's
+  // `<key>.preview.builderforce.ai` behind PREVIEW_PER_APP_ORIGINS). Answers before the
+  // container ingress, which owns the rest of the shared host — and puts the preview
+  // document headers on the ingress's answers too (make.md §4 W10, controls 1 and 6).
+  app.use('*', browserPreviewOrigin);
 
   app.use('*', async (c, next) => {
     const res = await maybeHandlePreviewIngress(c.env, c.req.raw);

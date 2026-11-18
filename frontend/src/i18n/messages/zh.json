@@ -39494,5 +39494,29 @@
       "unreadable": "无法读取策略文件[[（{reason}）]]",
       "truncated": "另有 {count} 项未显示"
     }
+  },
+  "runtimeShield": {
+    "reason": {
+      "portNotOwner": "安全防护已阻止连接到属于其他应用的端口。",
+      "portEdgeNotDeclared": "安全防护已阻止应用未声明的服务间连接。",
+      "dbAuthFailed": "安全防护已拒绝凭据错误的数据库连接。",
+      "dbNotOwner": "安全防护已阻止访问属于其他应用的数据库。",
+      "dbServiceNotAllowed": "安全防护已阻止无权使用此数据库的服务。",
+      "processSpawnQuota": "应用启动的进程过多，安全防护已停止最后一个进程。",
+      "processDepthQuota": "应用的进程嵌套过深，安全防护已停止最后一个进程。",
+      "fsOutsideApp": "安全防护已阻止访问应用文件夹之外的文件。",
+      "fsProtectedPath": "安全防护已阻止修改受保护的文件。",
+      "fsInvalidOp": "安全防护已拒绝一个无效的文件操作。",
+      "ingressBodyTooLarge": "安全防护已拒绝一个过大的请求。",
+      "ingressClientNotBound": "安全防护已拒绝来自无法识别的预览的请求。",
+      "ingressAttachRejected": "安全防护已拒绝将预览连接到运行时。",
+      "ingressSameOriginRefused": "预览无法启动：它会在本页面自身的地址上运行，安全防护不允许这样做。",
+      "ingressPreviewOriginInvalid": "预览无法启动：其隔离地址无效。",
+      "ingressAppOriginMismatch": "安全防护已阻止通过其他应用的预览到达此应用的请求。",
+      "ingressAppOriginRequired": "应用无法启动：它需要自己独立的隔离预览地址。",
+      "ingressSharedPreviewOrigin": "此应用与其他应用共用预览地址。",
+      "egressPolicyInvalid": "应用的网络策略无效，因此将以最严格的策略运行。",
+      "processMessageUndeliverable": "由于无法向某个进程传递消息，该进程已被停止。"
+    }
   }
 }

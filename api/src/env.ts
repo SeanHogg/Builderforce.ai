@@ -285,6 +285,10 @@ export interface Env {
   /** R2 bucket for file uploads. */
   UPLOADS?: R2Bucket;
 
+  /** The public CDN bucket (`builderforce-cdn`, `[[r2_buckets]] binding = "CDN"`): the
+   *  preview origins serve the mirrored .NET runtime bundle from it (`dotnetBundleRoute`). */
+  CDN?: R2Bucket;
+
   /** Public CDN origin of the Insights loader and recorder (PRD 33 D5). `[vars]` in
    *  wrangler.toml; recordings themselves go to UPLOADS under `replay/` (D18). */
   REPLAY_CDN_ORIGIN?: string;
@@ -407,6 +411,19 @@ export interface Env {
    *  enables it on a Containers-Paid account. Requires a proxied `preview` DNS record.
    *  Toggle via `wrangler secret put PREVIEW_INGRESS_ENABLED`. */
   PREVIEW_INGRESS_ENABLED?: string;
+
+  /** Per-application preview origins (W10 control 1): when `'true'`, the Worker serves the
+   *  relay, service worker and process Workers on `<key>.preview.builderforce.ai` too
+   *  (`presentation/middleware/browserPreviewOrigin.ts`). Default off: it needs the
+   *  `*.preview` wildcard DNS record and certificate first (an ops step in Cloudflare;
+   *  ROADMAP.md › W10). Turn on together with the frontend's
+   *  `NEXT_PUBLIC_PREVIEW_PER_APP_ORIGINS`. Set in wrangler.toml `[vars]`. */
+  PREVIEW_PER_APP_ORIGINS?: string;
+
+  /** API hosts besides `api.builderforce.ai` (comma-separated, e.g. a staging API) whose
+   *  `/api/runtime/csp-report` a preview relay may name as its report endpoint. Matched exactly:
+   *  never a domain, since `*.builderforce.ai` includes users' published sites. */
+  CSP_REPORT_HOSTS?: string;
 
   /** Cloudflare Container runtime for the Agentic Tester (browser exploration) —
    *  the Playwright runner image (qa-e2e/Dockerfile). The scheduled QA sweep

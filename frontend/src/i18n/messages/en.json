@@ -39494,5 +39494,29 @@
       "unreadable": "The policy file could not be read[[ ({reason})]]",
       "truncated": "{count} more not shown"
     }
+  },
+  "runtimeShield": {
+    "reason": {
+      "portNotOwner": "The security shield blocked a connection to a port that belongs to another app.",
+      "portEdgeNotDeclared": "The security shield blocked a connection between services that the app does not declare.",
+      "dbAuthFailed": "The security shield refused a database connection with the wrong credentials.",
+      "dbNotOwner": "The security shield blocked access to a database that belongs to another app.",
+      "dbServiceNotAllowed": "The security shield blocked a service that is not allowed to use this database.",
+      "processSpawnQuota": "The app started too many processes, so the security shield stopped the last one.",
+      "processDepthQuota": "The app nested processes too deeply, so the security shield stopped the last one.",
+      "fsOutsideApp": "The security shield blocked a file access outside the app's folder.",
+      "fsProtectedPath": "The security shield blocked a change to a protected file.",
+      "fsInvalidOp": "The security shield refused an invalid file operation.",
+      "ingressBodyTooLarge": "The security shield refused a request that was too large.",
+      "ingressClientNotBound": "The security shield refused a request from a preview it does not recognize.",
+      "ingressAttachRejected": "The security shield refused to connect a preview to the runtime.",
+      "ingressSameOriginRefused": "The preview could not start: it would have run on this page's own address, which the security shield does not allow.",
+      "ingressPreviewOriginInvalid": "The preview could not start: its isolated address is not valid.",
+      "ingressAppOriginMismatch": "The security shield blocked a request that reached the app through another app's preview.",
+      "ingressAppOriginRequired": "The app could not start: it needs its own isolated preview address.",
+      "ingressSharedPreviewOrigin": "This app shares its preview address with other apps.",
+      "egressPolicyInvalid": "The app's network policy was not valid, so it runs under the strictest one.",
+      "processMessageUndeliverable": "A process was stopped because a message to it could not be delivered."
+    }
   }
 }

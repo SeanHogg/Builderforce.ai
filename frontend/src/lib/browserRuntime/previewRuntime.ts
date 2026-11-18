@@ -8,7 +8,9 @@
  * `python`/`pip`/`uvicorn`, `php`/`composer`), which the relay starts on that origin. Canvas projects run AI-written code and
  * arbitrary npm packages; on builderforce.ai they could read the user's session.
  * The API serves the relay page and workers there
- * (`api/src/presentation/middleware/browserPreviewOrigin.ts`).
+ * (`api/src/presentation/middleware/browserPreviewOrigin.ts`). Applications get their own
+ * origin, egress policy and shield telemetry from `previewRuntimeOptions.ts`. The runtime's
+ * `id` is the project it is first booted for (`bootSharedPreviewRuntime(owner, projectId)`).
  *
  * The package is imported lazily, so the editor's bundle pays nothing until Run.
  *
@@ -19,6 +21,8 @@
 import type { PreviewRuntime } from '@seanhogg/builderforce-webcontainers';
 import { recordedFailure } from '@/lib/reportError';
 import { PREVIEW_PHP_OPTIONS } from './previewPhpOptions';
+import { previewDotnetOptions } from './previewDotnetOptions';
+import { previewRuntimeIdOf, previewShieldOptions } from './previewRuntimeOptions';
 import { attachPreviewSignals } from './previewSignals';
 import { measureFiles, setPreviewRunningProbe, timeWrite } from './writeTiming';
 
@@ -98,10 +102,12 @@ async function revoke(previous: PreviewRuntimeOwner): Promise<void> {
  * Boot the page's runtime (once) and acquire it for `claimant` — every use of the
  * runtime goes through here, so every user holds the lease. After revoking the previous
  * owner it checks it still holds the claim (another claimant may have taken it while it
- * waited) and claims again, a bounded number of times.
+ * waited) and claims again, a bounded number of times. `projectId` is the runtime's id
+ * when this call boots it (ignored once it is booted).
  */
-export async function bootSharedPreviewRuntime(claimant: PreviewRuntimeOwner = WORKSPACE_OWNER): Promise<PreviewRuntime> {
-  const runtime = await bootRuntime();
+export async function bootSharedPreviewRuntime(claimant: PreviewRuntimeOwner = WORKSPACE_OWNER, projectId?: string): Promise<PreviewRuntime> {
+  if (projectId) currentProjectId = projectId;
+  const runtime = await bootRuntime(projectId);
   for (let attempt = 0; attempt < CLAIM_ATTEMPTS; attempt++) {
     const previous = owner;
     owner = claimant;
@@ -117,9 +123,29 @@ export function releaseSharedPreviewRuntime(ownerId: string): void {
   if (owner?.id === ownerId) owner = null;
 }
 
-function bootRuntime(): Promise<PreviewRuntime> {
+/** The id the page's runtime was booted with (it keys every application's preview origin), or null before boot. */
+let runtimeId: string | null = null;
+/** The project the runtime was last claimed for (shield events no application owns are filed under it). */
+let currentProjectId: string | null = null;
+
+/** The booted runtime's id: the project it was first booted for, else `workspace` ({@link previewRuntimeIdOf}). */
+export function sharedPreviewRuntimeId(): string | null {
+  return runtimeId;
+}
+
+function bootRuntime(projectId?: string): Promise<PreviewRuntime> {
   booting ??= import('@seanhogg/builderforce-webcontainers')
-    .then(({ startPreviewRuntime }) => startPreviewRuntime({ relayUrl: RELAY_URL, attribution: false, php: PREVIEW_PHP_OPTIONS }))
+    .then((wc) => {
+      const id = previewRuntimeIdOf(projectId);
+      runtimeId = id;
+      return wc.startPreviewRuntime({
+        relayUrl: RELAY_URL, id, attribution: false, php: PREVIEW_PHP_OPTIONS,
+        // The .NET bundle on the shared preview host (one URL for every application; the API sends it with CORS).
+        dotnet: previewDotnetOptions(RELAY_URL),
+        // Read only when per-app origins are on (a test's module mock may not provide it).
+        ...previewShieldOptions(RELAY_URL, () => currentProjectId, (template) => wc.previewOriginTemplate(template)),
+      });
+    })
     .then((runtime) => {
       // The preview's errors and console reach the workspace through the runtime's own
       // channel, attached once for the page (`previewSignals.ts`).
@@ -129,6 +155,7 @@ function bootRuntime(): Promise<PreviewRuntime> {
     })
     .catch((error: unknown) => {
       booting = null; // a later Run may retry (the relay was unreachable, say)
+      runtimeId = null;
       throw error;
     });
   return booting;

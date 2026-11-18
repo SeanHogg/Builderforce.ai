@@ -92,7 +92,7 @@ Sirve el service worker del paquete en `/__bfwc/sw.js` y después arranca, monta
 ```ts
 import { startPreviewRuntime } from '@seanhogg/builderforce-webcontainers';
 
-const runtime = await startPreviewRuntime({ serviceWorkerUrl: '/__bfwc/sw.js', id: 'my-project' });
+const runtime = await startPreviewRuntime({ serviceWorkerUrl: '/__bfwc/sw.js', unprotectedSameOrigin: true, id: 'my-project' });
 runtime.writeTree({
   'package.json': JSON.stringify({ dependencies: { react: '^18.3.1', 'react-dom': '^18.3.1' } }),
   'index.html': '<div id="root"></div><script type="module" src="/src/main.tsx"></script>',
@@ -107,7 +107,7 @@ runtime.onError((e) => console.warn('preview crashed:', e.message));
 const { files } = await runtime.build({ base: './' });
 ```
 
-Si el código que previsualizas lo ha escrito una IA o incluye paquetes arbitrarios, sirve los archivos de relay desde un origen separado y pasa `relayUrl` en lugar de `serviceWorkerUrl`. El [README](https://github.com/SeanHogg/builderforce-webcontainers#readme) explica el modo relay, la comprobación de tipos, Vue y Svelte, y el runtime de Node.
+Si el código que previsualizas lo ha escrito una IA o incluye paquetes arbitrarios, sirve los archivos de relay desde un origen separado y pasa `relayUrl` en lugar de `serviceWorkerUrl` y `unprotectedSameOrigin`: el modo de mismo origen es solo para código de confianza, y el runtime lo rechaza salvo que lo actives explícitamente. El [README](https://github.com/SeanHogg/builderforce-webcontainers#readme) explica el modo relay, la comprobación de tipos, Vue y Svelte, y el runtime de Node.
 
 Cada vista previa muestra una pequeña insignia «Built with Builderforce.ai». No es una condición de la licencia, y `attribution: false` la desactiva. Si el runtime te ahorra dinero, dejarla activada es la forma de financiar el proyecto.
 

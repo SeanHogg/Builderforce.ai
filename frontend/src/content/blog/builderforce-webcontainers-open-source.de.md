@@ -92,7 +92,7 @@ Liefern Sie den Service Worker aus dem Paket unter `/__bfwc/sw.js` aus, dann sta
 ```ts
 import { startPreviewRuntime } from '@seanhogg/builderforce-webcontainers';
 
-const runtime = await startPreviewRuntime({ serviceWorkerUrl: '/__bfwc/sw.js', id: 'my-project' });
+const runtime = await startPreviewRuntime({ serviceWorkerUrl: '/__bfwc/sw.js', unprotectedSameOrigin: true, id: 'my-project' });
 runtime.writeTree({
   'package.json': JSON.stringify({ dependencies: { react: '^18.3.1', 'react-dom': '^18.3.1' } }),
   'index.html': '<div id="root"></div><script type="module" src="/src/main.tsx"></script>',
@@ -107,7 +107,7 @@ runtime.onError((e) => console.warn('preview crashed:', e.message));
 const { files } = await runtime.build({ base: './' });
 ```
 
-Wenn der Code in der Vorschau von einer KI stammt oder beliebige Pakete einbindet, liefern Sie die Relay-Dateien von einem eigenen Origin aus und übergeben `relayUrl` statt `serviceWorkerUrl`. Die [README](https://github.com/SeanHogg/builderforce-webcontainers#readme) beschreibt den Relay-Modus, die Typprüfung, Vue und Svelte sowie die Node-Runtime.
+Wenn der Code in der Vorschau von einer KI stammt oder beliebige Pakete einbindet, liefern Sie die Relay-Dateien von einem eigenen Origin aus und übergeben `relayUrl` statt `serviceWorkerUrl` und `unprotectedSameOrigin`: Der Same-Origin-Modus ist nur für Code gedacht, dem Sie vertrauen, und die Laufzeit verweigert ihn, solange Sie ihn nicht ausdrücklich einschalten. Die [README](https://github.com/SeanHogg/builderforce-webcontainers#readme) beschreibt den Relay-Modus, die Typprüfung, Vue und Svelte sowie die Node-Runtime.
 
 Jede Vorschau zeigt ein kleines „Built with Builderforce.ai“-Abzeichen. Es ist keine Lizenzbedingung, und `attribution: false` schaltet es ab. Wenn Ihnen die Runtime Geld spart, finanziert das eingeschaltete Abzeichen das Projekt.
 

@@ -40438,5 +40438,29 @@
     },
     "expandDetails": "Details erweitern",
     "collapseDetails": "Details einklappen"
+  },
+  "runtimeShield": {
+    "reason": {
+      "portNotOwner": "Der Sicherheitsschild hat eine Verbindung zu einem Port blockiert, der zu einer anderen App gehört.",
+      "portEdgeNotDeclared": "Der Sicherheitsschild hat eine Verbindung zwischen Diensten blockiert, die die App nicht deklariert.",
+      "dbAuthFailed": "Der Sicherheitsschild hat eine Datenbankverbindung mit falschen Zugangsdaten abgelehnt.",
+      "dbNotOwner": "Der Sicherheitsschild hat den Zugriff auf eine Datenbank blockiert, die zu einer anderen App gehört.",
+      "dbServiceNotAllowed": "Der Sicherheitsschild hat einen Dienst blockiert, der diese Datenbank nicht verwenden darf.",
+      "processSpawnQuota": "Die App hat zu viele Prozesse gestartet, deshalb hat der Sicherheitsschild den letzten beendet.",
+      "processDepthQuota": "Die App hat Prozesse zu tief verschachtelt, deshalb hat der Sicherheitsschild den letzten beendet.",
+      "fsOutsideApp": "Der Sicherheitsschild hat einen Dateizugriff außerhalb des App-Ordners blockiert.",
+      "fsProtectedPath": "Der Sicherheitsschild hat eine Änderung an einer geschützten Datei blockiert.",
+      "fsInvalidOp": "Der Sicherheitsschild hat eine ungültige Dateioperation abgelehnt.",
+      "ingressBodyTooLarge": "Der Sicherheitsschild hat eine zu große Anfrage abgelehnt.",
+      "ingressClientNotBound": "Der Sicherheitsschild hat eine Anfrage von einer Vorschau abgelehnt, die er nicht erkennt.",
+      "ingressAttachRejected": "Der Sicherheitsschild hat es abgelehnt, eine Vorschau mit der Laufzeit zu verbinden.",
+      "ingressSameOriginRefused": "Die Vorschau konnte nicht starten: Sie wäre unter der eigenen Adresse dieser Seite gelaufen, was der Sicherheitsschild nicht erlaubt.",
+      "ingressPreviewOriginInvalid": "Die Vorschau konnte nicht starten: Ihre isolierte Adresse ist ungültig.",
+      "ingressAppOriginMismatch": "Der Sicherheitsschild hat eine Anfrage blockiert, die die App über die Vorschau einer anderen App erreicht hat.",
+      "ingressAppOriginRequired": "Die App konnte nicht starten: Sie braucht ihre eigene isolierte Vorschauadresse.",
+      "ingressSharedPreviewOrigin": "Diese App teilt ihre Vorschauadresse mit anderen Apps.",
+      "egressPolicyInvalid": "Die Netzwerkrichtlinie der App war ungültig, daher läuft sie mit der strengsten.",
+      "processMessageUndeliverable": "Ein Prozess wurde beendet, weil ihm eine Nachricht nicht zugestellt werden konnte."
+    }
   }
 }

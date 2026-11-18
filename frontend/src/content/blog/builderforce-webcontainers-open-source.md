@@ -102,7 +102,7 @@ Serve the service worker from the package at `/__bfwc/sw.js`, then boot, mount a
 ```ts
 import { startPreviewRuntime } from '@seanhogg/builderforce-webcontainers';
 
-const runtime = await startPreviewRuntime({ serviceWorkerUrl: '/__bfwc/sw.js', id: 'my-project' });
+const runtime = await startPreviewRuntime({ serviceWorkerUrl: '/__bfwc/sw.js', unprotectedSameOrigin: true, id: 'my-project' });
 runtime.writeTree({
   'package.json': JSON.stringify({ dependencies: { react: '^18.3.1', 'react-dom': '^18.3.1' } }),
   'index.html': '<div id="root"></div><script type="module" src="/src/main.tsx"></script>',
@@ -117,7 +117,7 @@ runtime.onError((e) => console.warn('preview crashed:', e.message));
 const { files } = await runtime.build({ base: './' });
 ```
 
-If the code you preview is AI-written or pulls in arbitrary packages, serve the relay files from a separate origin and pass `relayUrl` instead of `serviceWorkerUrl`. The [README](https://github.com/SeanHogg/builderforce-webcontainers#readme) covers relay mode, type-checking, Vue and Svelte, and the Node runtime.
+If the code you preview is AI-written or pulls in arbitrary packages, serve the relay files from a separate origin and pass `relayUrl` instead of `serviceWorkerUrl` and `unprotectedSameOrigin`: same-origin mode is only for code you trust, and the runtime refuses it unless you opt in by name. The [README](https://github.com/SeanHogg/builderforce-webcontainers#readme) covers relay mode, type-checking, Vue and Svelte, and the Node runtime.
 
 Every preview shows a small "Built with Builderforce.ai" badge. It is not a licence condition, and `attribution: false` turns it off. If the runtime saves you money, leaving it on is how the project is funded.
 

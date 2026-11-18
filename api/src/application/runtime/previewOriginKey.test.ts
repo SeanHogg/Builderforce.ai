@@ -13,6 +13,14 @@ describe('previewOriginKey', () => {
     expect(await previewOriginKey(runtimeIdOfProject(7), 'app:7:fedcba9876543210')).toBe('390741d18e1ef147980b9e81741fbf1d');
   });
 
+  it('equals the installed package\'s own previewOriginKey (the key the page opens the origin on)', async () => {
+    const runtime = await import('@seanhogg/builderforce-webcontainers');
+    for (const [projectId, applicationId] of [[42, 'app:42:0123456789abcdef'], [7, 'app:7:fedcba9876543210']] as const) {
+      const runtimeId = runtimeIdOfProject(projectId);
+      expect(await previewOriginKey(runtimeId, applicationId)).toBe(runtime.previewOriginKey(runtimeId, applicationId));
+    }
+  });
+
   it('accepts only application ids of the given project', () => {
     expect(applicationIdPattern(42).test('app:42:0123456789abcdef')).toBe(true);
     expect(applicationIdPattern(42).test('app:43:0123456789abcdef')).toBe(false);

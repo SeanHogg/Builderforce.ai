@@ -44,10 +44,25 @@ custom_domain = true
 pattern = "builderforce.ai/gateway/*"
 zone_name = "builderforce.ai"
 
+# In-browser preview origins (W10 control 1). `preview.builderforce.ai` itself reaches this
+# Worker through the sites Worker's `*.builderforce.ai/*` wildcard (its `API` service
+# binding). Each application's own `<key>.preview.builderforce.ai` is routed here directly
+# — the more specific route wins — and served by `presentation/middleware/browserPreviewOrigin.ts`
+# once PREVIEW_PER_APP_ORIGINS is "true". OPS, before turning that on: a proxied
+# `*.preview` DNS record and a certificate covering `*.preview.builderforce.ai` (Universal
+# SSL covers one level only — an Advanced Certificate or Total TLS). ROADMAP.md › W10.
+[[routes]]
+pattern = "*.preview.builderforce.ai/*"
+zone_name = "builderforce.ai"
+
 [vars]
 # Overridden by Cloudflare dashboard secrets for production.
 CORS_ORIGINS = "*"
 ENVIRONMENT  = "production"
+# Per-application preview origins (`<key>.preview.builderforce.ai`). "true" only after the
+# wildcard DNS record and certificate exist (see the `*.preview` route above), and together
+# with the frontend's NEXT_PUBLIC_PREVIEW_PER_APP_ORIGINS.
+PREVIEW_PER_APP_ORIGINS = "false"
 APP_URL      = "https://builderforce.ai"
 # Public CDN origin. ReplayConfigService fetches REPLAY_MANIFEST_URL (10 min read-through
 # cache) to learn the latest hashed recorder. The hostname has NO

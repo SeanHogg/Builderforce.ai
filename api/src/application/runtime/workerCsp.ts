@@ -1,64 +1,34 @@
 /**
- * Egress CSP for the in-browser preview origin's scripts (make.md §4 W10, control 6).
+ * The Content-Security-Policies of the in-browser preview origins (make.md §4 W10,
+ * controls 1 and 6): `preview.builderforce.ai` (the workspace's shared origin) and each
+ * application's own `<key>.preview.builderforce.ai`.
  *
- * The process Workers (`process-worker.js`, `python-worker.js`, `php-worker.js`,
- * `dotnet-worker.js`, `rust-worker.js`) run the
- * user's app code on `preview.builderforce.ai`. Nothing inside them is a security
- * boundary (W10 principle 2), so egress is decided by the browser: the CSP header on the
- * worker script's own response becomes the Worker global's policy (CSP3). `connect-src`
- * alone would leave `importScripts`, dynamic `import()` and nested Workers open, so every
- * policy here starts from `default-src 'none'` and names `script-src`, `worker-src` and
- * `connect-src` explicitly.
+ * THE CONTRACT is `@seanhogg/builderforce-webcontainers` › packages/browser/README.md ›
+ * "Preview origin headers" (2026.11.5). Every string here is that section's, spelled
+ * once; the headers that carry them are {@link ./previewOriginHeaders}.
  *
- * Pure: strings in, strings out. Which allowlist applies to a request (the signed
- * `?policy=` id) is {@link ./workerEgressPolicy}.
- *
- * ── DECISIONS ────────────────────────────────────────────────────────────────
- * `script-src 'unsafe-eval'`: the Node process worker runs app modules through `eval` /
- * `new Function` (its `vm` and ESM loader shims), so without it no app runs. This CSP is
- * about EGRESS, not script injection: the app's code is untrusted by design and already
- * executes; what must not happen is that code loading or sending anything to a host
- * outside the allowlist. `'wasm-unsafe-eval'` is named as well because Pyodide, php-wasm
- * and PGlite compile WebAssembly (it is implied by `'unsafe-eval'`, listed so the policy
- * still reads correctly if eval is ever dropped).
- *
- * `script-src https://cdn.jsdelivr.net`: Pyodide (`importScripts` / `import()` of
- * `pyodide.js|mjs`), php-wasm and PGlite are imported from jsDelivr at run time. No worker
- * imports a script from its own origin, so `'self'` is not in `script-src` either.
- *
- * `worker-src 'none'`: process Workers never start nested Workers — every process is
- * spawned page-side by the relay (`WorkerSupply` / `relay-spawn`). App code that tries
- * `new Worker()` is a violation and is reported.
- *
- * No `'self'` and no preview origin in `connect-src`: a fetch to the preview origin from
- * a Worker would enter the service worker as if it were preview ingress (identity
- * laundering), and `/__bfwc/` cannot be carved out of `'self'` (CSP source expressions
- * only ALLOW paths; there is no exclusion, and path matching is dropped after a
- * redirect anyway). No worker needs its own origin over the network — loopback
- * (`localhost:<port>`) is served in-runtime by `PortRegistry`, never by `fetch` — so the
- * origin is left out entirely, which excludes `/__bfwc/` with no residual.
- *
- * `sw.js` gets `default-src 'none'; connect-src 'self'`: a routed request is answered
- * from a MessagePort (`respondWith`), and most requests it does not route are left to
- * the browser (no `respondWith`), governed by the requesting client's own CSP. The one
- * exception is the restart re-judge (`sw.ts`, `needsClientLookup`): a same-origin GET/HEAD
- * subresource from a client the worker forgot is looked up, and when it is not a
- * virtual-server page the worker passes it on with `fetch(request)` — a fetch made BY the
- * service worker, governed by THIS policy. `swGuard.needsLookup` limits it to the preview
- * origin, so `'self'` is exactly what it needs. The service worker is platform code, not
- * the app's, so `'self'` here is not the Worker identity-laundering case above. It still
- * imports nothing (`script-src` falls back to `'none'`).
- *
- * `relay.html` keeps `frame-ancestors` first and adds `worker-src` naming exactly the
- * scripts it starts ({@link PREVIEW_WORKER_SCRIPTS}; the query, e.g. `?policy=`, is ignored by CSP path matching),
- * `connect-src 'none'`, `object-src 'none'` and `base-uri 'none'`. It has one inline
- * script, so neither `default-src` nor `script-src` is set on it.
+ * - Process Worker scripts (`process-worker.js`, `python-worker.js`, `php-worker.js`,
+ *   `dotnet-worker.js`, `rust-worker.js`): the app's code runs in them, and nothing
+ *   inside them is a security boundary (W10 principle 2), so the browser decides egress:
+ *   the CSP on the script's own response is the Worker global's policy (CSP3). Their
+ *   `<egress>` is {@link DEFAULT_CONNECT_SOURCES} (what the runtimes and their installers
+ *   read) plus the app's DECLARED origins from a signed `?policy=`
+ *   ({@link ./workerEgressPolicy}). `'unsafe-eval'` because the Node worker runs app
+ *   modules through `eval`/`new Function`; `'wasm-unsafe-eval'` for Pyodide, php-wasm and
+ *   PGlite. No `'self'` in `connect-src`: a Worker fetch to its own origin would enter the
+ *   service worker as preview ingress (identity laundering), and loopback is served
+ *   in-runtime, never by `fetch`.
+ * - `sw.js`: imports nothing and fetches only its own origin (the restart pass-through).
+ * - `relay.html`: one inline script, framed only by the app, starts Workers only from its
+ *   own origin, connects nowhere — so a preview that scripts it gains no egress.
+ * - Every other response from a preview origin (404s, a page loaded before the worker took
+ *   control): the same document policy the service worker stamps, plus `frame-ancestors`.
  *
  * Residual (method-blind): CSP cannot restrict HTTP methods. The npm registry accepts
- * token-authenticated `PUT` (publish), so code holding its own npm token could write to
- * it. Closing that needs a read-only registry proxy on the API, not a CSP.
+ * token-authenticated `PUT` (publish), and `api.github.com` writes with a token, so code
+ * that brings its own token could write there. The runtime never hands GitHub or npm
+ * credentials to app processes; closing it fully needs read-only proxies, not a CSP.
  */
-import { PREVIEW_HOST } from './previewIngress';
 import { DEFAULT_INTERNAL_API_BASE_URL } from './sandbox/egressAllowlist';
 
 /** The preview origin's script directory (the service worker's scope). */
@@ -75,20 +45,11 @@ export const CSP_REPORT_GROUP = 'bfwc-csp';
 export const REPORTING_ENDPOINTS_HEADER = `${CSP_REPORT_GROUP}="${CSP_REPORT_URL}"`;
 
 /**
- * The read-only hosts the runtimes and their installers need, as CSP source expressions.
- * Read from the worker bundles of `@seanhogg/builderforce-webcontainers`: npm tarballs and
- * metadata, jsDelivr (Pyodide, php-wasm, PGlite, Composer's GitHub dists and their
- * listings), PyPI (micropip), Packagist metadata (`/packages/{name}.json` and the `p2`
- * mirror) and GitHub.
- *
- * GitHub (`github.com`, `api.github.com`, `codeload.github.com`, `raw.githubusercontent.com`,
- * `objects.githubusercontent.com`) is allowed so a repo can be imported and run straight
- * in the runtime, and so Composer's `api.github.com/repos/…/zipball/…` dists (which
- * redirect to codeload) install. The write risk on `api.github.com` (gists, pushes) needs a
- * token, and the runtime never hands GitHub credentials to app processes: the user's
- * GitHub connection stays host-side (the Builderforce API or the trusted page), so app
- * code can read public GitHub but cannot write as the user. Residual: an app that brings
- * its own token can still write — CSP cannot restrict methods.
+ * The read-only hosts the runtimes and their installers need, as CSP source expressions:
+ * npm tarballs and metadata, jsDelivr (Pyodide, php-wasm, PGlite, Composer's GitHub dists),
+ * PyPI (micropip), Packagist metadata and GitHub reads (repo import/run, Composer's
+ * `api.github.com/repos/…/zipball/…` dists). Applied to every process Worker whatever
+ * its policy says.
  */
 export const DEFAULT_CONNECT_SOURCES: readonly string[] = [
   'https://registry.npmjs.org',
@@ -99,7 +60,11 @@ export const DEFAULT_CONNECT_SOURCES: readonly string[] = [
   // Path-scoped: only the read-only package metadata, not Packagist's token API.
   'https://packagist.org/packages/',
   'https://repo.packagist.org',
-  // GitHub reads: repo import/run and Composer dists (see above).
+  // NuGet reads for `dotnet restore` (the v3 index and flat container, and the CDN it may
+  // redirect to). Never `https://www.nuget.org`: that is the push (write) path. No crates.io
+  // host: the Rust runtime runs prebuilt wasm and never fetches crates.
+  'https://api.nuget.org',
+  'https://globalcdn.nuget.org',
   'https://github.com',
   'https://api.github.com',
   'https://codeload.github.com',
@@ -107,42 +72,79 @@ export const DEFAULT_CONNECT_SOURCES: readonly string[] = [
   'https://objects.githubusercontent.com',
 ];
 
-/** Where the runtimes import interpreter and library scripts from. */
-export const WORKER_SCRIPT_SOURCES: readonly string[] = ["'unsafe-eval'", "'wasm-unsafe-eval'", 'https://cdn.jsdelivr.net'];
+/**
+ * The egress every preview origin's documents get: the package CDN previews load modules
+ * from (`https://esm.sh`, the runtime's default `cdn`, which it adds to every origin's
+ * egress itself). An application's declared origins come on top, only through its policy.
+ */
+export const PREVIEW_DEFAULT_EGRESS: readonly string[] = ['https://esm.sh'];
 
 /** The scripts the relay may start: the service worker and the five process Workers. */
 export const PREVIEW_WORKER_SCRIPTS = [
   'sw.js', 'process-worker.js', 'python-worker.js', 'php-worker.js', 'dotnet-worker.js', 'rust-worker.js',
 ] as const;
 
-const reporting = `report-uri ${CSP_REPORT_URL}; report-to ${CSP_REPORT_GROUP}`;
+const directive = (name: string, ...sources: readonly string[]) => [name, ...sources].join(' ');
+const unique = (...lists: ReadonlyArray<readonly string[]>) => [...new Set(lists.flat())];
 
-/** The process Workers' CSP: the default allowlist plus the app's declared origins. */
-export function workerScriptCsp(extraConnectSources: readonly string[] = []): string {
-  const connect = [...new Set([...DEFAULT_CONNECT_SOURCES, ...extraConnectSources])];
+/** A process Worker's CSP: the default allowlist plus the app's declared origins (`extraEgress`). */
+export function workerScriptCsp(extraEgress: readonly string[] = []): string {
+  const egress = unique(DEFAULT_CONNECT_SOURCES, extraEgress);
   return [
-    "default-src 'none'",
-    `script-src ${WORKER_SCRIPT_SOURCES.join(' ')}`,
-    "worker-src 'none'",
-    `connect-src ${connect.join(' ')}`,
-    reporting,
+    directive('default-src', "'none'"),
+    directive('script-src', "'self'", "'unsafe-eval'", "'wasm-unsafe-eval'", 'blob:', ...egress),
+    directive('worker-src', "'self'", 'blob:'),
+    directive('connect-src', ...egress),
+    directive('report-to', CSP_REPORT_GROUP),
   ].join('; ');
 }
 
-/** The service worker's CSP: it imports nothing, and fetches only its own origin (the restart pass-through). */
+/** The service worker's CSP: it imports nothing, and fetches only its own origin. */
 export function serviceWorkerCsp(): string {
-  return `default-src 'none'; connect-src 'self'; ${reporting}`;
+  return "default-src 'none'; connect-src 'self'";
 }
 
-/** The relay page's CSP: framed only by the app, starts only the preview scripts, connects nowhere. */
+/** The relay page's CSP: framed only by the app, starts Workers only from its own origin, connects nowhere. */
 export function relayCsp(appOrigins: readonly string[]): string {
-  const workers = PREVIEW_WORKER_SCRIPTS.map((file) => `https://${PREVIEW_HOST}${PREVIEW_SCRIPT_PREFIX}${file}`);
   return [
-    `frame-ancestors ${appOrigins.join(' ')}`,
-    `worker-src ${workers.join(' ')}`,
-    "connect-src 'none'",
-    "object-src 'none'",
-    "base-uri 'none'",
-    reporting,
+    directive('default-src', "'none'"),
+    directive('script-src', "'unsafe-inline'"),
+    directive('worker-src', "'self'"),
+    directive('connect-src', "'none'"),
+    directive('base-uri', "'none'"),
+    directive('form-action', "'none'"),
+    directive('frame-ancestors', ...appOrigins),
+  ].join('; ');
+}
+
+export interface PreviewDocumentCspInput {
+  /** The preview origin's own host (`name[:port]`, lowercase): its `ws:`/`wss:` are named explicitly. */
+  host: string;
+  /** The app origins allowed to frame it. */
+  appOrigins: readonly string[];
+  /** External sources it may reach. Default {@link PREVIEW_DEFAULT_EGRESS}. */
+  egress?: readonly string[];
+}
+
+/**
+ * What every response from a preview origin that the service worker did not serve gets:
+ * the policy the worker stamps (`previewDocumentPolicy` in the package), with
+ * `frame-ancestors` limited to the app.
+ */
+export function previewDocumentCsp({ host, appOrigins, egress = PREVIEW_DEFAULT_EGRESS }: PreviewDocumentCspInput): string {
+  const out = unique(egress);
+  return [
+    directive('default-src', "'self'", ...out),
+    directive('script-src', "'self'", "'unsafe-inline'", "'unsafe-eval'", 'blob:', ...out),
+    directive('style-src', "'self'", "'unsafe-inline'", 'blob:', 'data:', ...out),
+    directive('img-src', "'self'", 'data:', 'blob:', ...out),
+    directive('font-src', "'self'", 'data:', ...out),
+    directive('media-src', "'self'", 'data:', 'blob:', ...out),
+    directive('connect-src', "'self'", `ws://${host}`, `wss://${host}`, 'blob:', 'data:', ...out),
+    directive('frame-src', "'self'", 'blob:'),
+    directive('form-action', "'self'", ...out),
+    directive('worker-src', "'self'", 'blob:'),
+    directive('frame-ancestors', ...appOrigins),
+    directive('report-to', CSP_REPORT_GROUP),
   ].join('; ');
 }

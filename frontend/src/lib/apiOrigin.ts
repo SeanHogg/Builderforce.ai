@@ -9,4 +9,5 @@
  *
  * `check-api-transport` fails any other file that spells the literal.
  */
-export const API_ORIGIN = process.env.NEXT_PUBLIC_AUTH_API_URL || 'https://api.builderforce.ai';
+export const PRODUCTION_API_ORIGIN = 'https://api.builderforce.ai';
+export const API_ORIGIN = process.env.NEXT_PUBLIC_AUTH_API_URL || PRODUCTION_API_ORIGIN;

@@ -92,7 +92,7 @@ Node 程序走的是另一条路径。`runtime.run('node', …)` 会启动一个
 ```ts
 import { startPreviewRuntime } from '@seanhogg/builderforce-webcontainers';
 
-const runtime = await startPreviewRuntime({ serviceWorkerUrl: '/__bfwc/sw.js', id: 'my-project' });
+const runtime = await startPreviewRuntime({ serviceWorkerUrl: '/__bfwc/sw.js', unprotectedSameOrigin: true, id: 'my-project' });
 runtime.writeTree({
   'package.json': JSON.stringify({ dependencies: { react: '^18.3.1', 'react-dom': '^18.3.1' } }),
   'index.html': '<div id="root"></div><script type="module" src="/src/main.tsx"></script>',
@@ -107,7 +107,7 @@ runtime.onError((e) => console.warn('preview crashed:', e.message));
 const { files } = await runtime.build({ base: './' });
 ```
 
-如果你预览的代码是 AI 编写的，或者引入了任意的包，请从独立的源提供中继文件，并传入 `relayUrl` 而不是 `serviceWorkerUrl`。[README](https://github.com/SeanHogg/builderforce-webcontainers#readme) 介绍了中继模式、类型检查、Vue 和 Svelte，以及 Node 运行时。
+如果你预览的代码是 AI 编写的，或者引入了任意的包，请从独立的源提供中继文件，并传入 `relayUrl`，而不是 `serviceWorkerUrl` 和 `unprotectedSameOrigin`：同源模式只适用于你信任的代码，除非你明确开启，否则运行时会拒绝它。[README](https://github.com/SeanHogg/builderforce-webcontainers#readme) 介绍了中继模式、类型检查、Vue 和 Svelte，以及 Node 运行时。
 
 每个预览都会显示一个小小的 “Built with Builderforce.ai” 徽标。它不是许可证条件，`attribution: false` 就可以关闭。如果这个运行时为你省了钱，保留它就是对这个项目的资助。
 
