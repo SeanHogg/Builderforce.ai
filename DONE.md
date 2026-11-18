@@ -1,3 +1,33 @@
+## ✅ RESOLVED 2026-11-18: `main` is green again (two stale "main is red" ROADMAP entries retired)
+
+- **Was:** two entries (2026-11-08) tracked red Release runs from the 3a2c752db / ee2222212 sweeps.
+- **Now:** the Release run on b87e761b3 (2026-11-18) passes every verify job — API (type-check, guards, vitest 1–4/4), frontend (type-check, lint, guards, oracles, conformance, marketing claims), VS Code (type-check, test), kernel packages, `@seanhogg/builderforce-agents` (typecheck, test:fast) and `@webdit/torch` — and publishes. The last two failures before it were fixed by 55ea3b98e (routing tests follow the strongest-first plan policy) and b87e761b3 (the `RunPlanLimitError` English fallback and the preview-capture literal hex).
+- Retired entries, word for word:
+
+  - **Release health: main is still red after the 3a2c752db sweep.** Part 1 is in DONE.md, but the fixes are not committed yet. A Haiku re-run on 2026-11-08 found these still failing.
+  - **From the autonomous-delivery pass:**
+    - `boardLiveReads.test.ts`: 5 tests fail with "load is not a function" (mock at line 4).
+    - `censusRecordedRefusals.test.ts`: "db down" propagates.
+    - api typecheck fails in `kanbanRoutes.templateGet.test.ts`, `kanbanTemplateService.guards.test.ts`, `kanbanTemplateService.ts`, `personProfile.test.ts`, `boardBudgetRoutes.test.ts`, `onReviewerVerdict.test.ts`, `prConductSweep.ts` and `reaperChatNarration.test.ts`.
+    - frontend `root-closure`: `useKanbanTemplateCheckout.ts` and `creationListings.ts` are now reachable from the root layout.
+    - frontend `react-hooks`: `PersonProfileClient.tsx` and `useKanbanTemplateCheckout.ts`.
+  - **From cloud admission, which has no owner:**
+    - `dispatchAdmission.test.ts`: the regression "rank by admission, not by id" fails (got [11,5]).
+    - `dispatchCloudRun.admission.test.ts`: the mock is missing `resolveDefaultRepoForProject`.
+    - `handleCiEventOutcome.test.ts`: the call now carries `parkIfDeferred: true`.
+  - **Owned by other sessions, in flight:**
+    - the voice/studio tenant-scope, layering and unvalidated-body checks;
+    - `hiring_ref_salts` table adoption;
+    - the `connectorManifest` typecheck;
+    - the agent-tools `@seanhogg/builderforce-memory` subpaths `/working`, `/ingest` and `AnalyzerProgress`, which break the api, frontend and VS Code typechecks;
+    - the frontend `creationCanvasAi` and `InvestorUpdateMilestonesPreview` tests;
+    - the `KnowledgeAnalyzePanel` `'use client'` check;
+    - design-scale in PersonasClient and the security and governance panels;
+    - the silent-catch ratchets.
+  - **Canvas webview has no CI typecheck.** `VoiceMarketplaceScreen.tsx` is now only in `webview/tsconfig.canvas.json`, and that project is not in `clients/vscode` `type-check`. Adding it is a one-line change, but today it fails with 14 errors in `packages/knowledge-graph-view/src/surface/useSurface.ts`, `packages/interaction-contract/src/improvementPrompt.ts` and agent-tools knowledge.
+  - *Blocker: the user stopped this pass on 2026-11-08 before the remaining fixes and the commit, and the shared packages above are mid-change in other sessions.*
+  - **`main` is red in CI (Release run 42483919152 on 970d6b6af, 16 jobs).** The old causes in this entry (deleted `src/tui/tui.ts`, oracle drift) no longer apply. The current red came from the 3a2c752db / ee2222212 sweeps of in-progress work from many sessions. Fixed and committed locally, not yet pushed: the builderforce-memory 2026.10.59 pin and lockfile refresh (4397dbab4: agent-tools tests and the `AnalyzerProgress` type errors), and in ee2222212 the publishable-deps scan (quality, replay), `externalUrl.test.ts` and the webview canvas tsconfig. Still red and owned by the sessions working in those areas: API vitest shards and guards (hiring, voice, SOC 2, classifier), API and frontend type-check, frontend build, lint and guards, and the VS Code extension test (`knowledgeLinkedDenied` acceptance, node:sqlite in the extension host). Next: push once the in-progress reviews above land and no CI run is in flight, then re-triage what is still red.
+
 ## ✅ RESOLVED 2026-11-18: PRD 22 §3.2 — browser LoRA training runs off the interaction thread (merge of `builderforce/task-6652`)
 
 - **Was:** `AITrainingPanel` built `new WebGPUTrainer(...)` in a React callback, so tokenizer training, model construction, forward/backward and safetensors packaging all ran on the interaction thread.

@@ -794,7 +794,7 @@ Desktop `bf-index` got the shared comparator only (option a); full graph-index p
 
 > Consolidated 2026-11-17 from `docs/design/deterministic-prefetch.md`. Verified against code 2026-11-17: Shipped except two measurements. Finished sections are archived in DONE.md.
 
-### Done-checks — remaining
+### Done-checks — remaining (PreFetch)
 
 5. PREFETCH output appears only in the volatile tail; the cache-hit probe stays at ≥ 90% on turn 2.
 6. The gate adds ≤ 30 ms p50 when tier 3 is skipped and ≤ 300 ms p95 with tier 3.
@@ -1002,7 +1002,87 @@ W1 runs the app in a cloud container. W9 runs the **same blueprint** in the user
 - Phases 6b (PHP), 6c (.NET), 6d (Rust): not started.
 - Phase 7: the engine (`@webdit/torch` autograd + WebGPU backend + kernel registry), the Python `torch`/`peft` surface over `@webdit/torch/pyodide`, and the browser trainer on the engine in a worker are on main (PRD 22 §3.2 closed). Open: no blueprint service of `kind: 'training'` runs a Python entry point under the application runtime yet (only the `ServiceType` exists, `builderforce-webcontainers/packages/core/src/app/spec.ts:10`), so the "train in Python in the WebContainer → adapter loads for inference" exit test is not recorded.
 
-### §4.7 MCP tool surface (spans W1–W9)
+### §4 W10: Security Shield (mandatory protection for every browser-run app)
+
+*Added 2026-11-18 from the "BuilderForce Security Shield — Technical Architecture & Implementation Plan" (protect mode, ingress + runtime monitoring), aligned against the builderforce-webcontainers runtime at v2026.11.3 and reviewed the same day. W9 runs the user's app in the browser; W10 makes everything that runtime executes protected by default — Node, Python, PHP and, once shipped, .NET — with no manifest switch to turn it off. The container tier (W1) keeps its own boundary: the non-root container + egress allowlist of make.md › PRD 09 G1. The concrete gap inventory from the audit and review (paths, evidence) is tracked out of source control in `SECURITY-FINDINGS.local.md`; this section states the controls that close it.*
+
+**Objective.** Inspect every entry point, monitor activity inside the app, correlate across both, and stop high-confidence attacks with explainable deterministic rules — without breaking legitimate developer traffic (apps that legitimately send SQL, HTML, JS and shell-like text).
+
+**Principles (binding).**
+1. **Mandatory** — an app cannot disable or bypass the shield through its spec or `builderforce.json`; it may only tighten it.
+2. **Enforce on the trusted side.** Process Workers and preview documents run the app's code, so nothing inside them (in-worker `fetch`/`http` hooks, `servedPorts`, env vars such as `BUILDERFORCE_SERVICE`, Postgres `application_name`) is a security boundary — at most it is telemetry. Enforcement lives on the page/host side (`ProcessHost`, `PortRegistry`, `ConnectionRelay`, FsSync, the database host), in the service worker for routing, and in the browser itself (origins, CSP).
+3. **Identity is assigned, never claimed.** Every process gets an (application, service, process) identity minted by the runtime at spawn and kept on the page-side process record; children inherit their parent's identity on the page side; processes started outside an application (terminal, `npm install`, instant preview) carry a `workspace` identity — never `platform`, which is reserved for the host's own calls.
+4. **Shared engine, isolated state** — one security engine per runtime host; per-application counters, policies, events and incidents.
+5. **Deterministic enforcement; behaviour is evidence.** Known signatures, protocol violations and boundary violations block; behavioural signals raise risk and throttle, never block on their own. No LLM in the request path (LLM explanation of incidents is deferred).
+6. **Fail closed at entry points, fail open on telemetry.** A dead enforcement engine holds or rejects protected traffic — never a silent allow-all; a dead event store never disables enforcement. Enforcement health and telemetry health are reported separately.
+7. **Ports, not a parallel stack.** `@seanhogg/builderforce-webcontainers` stays independent of Builderforce: policy comes in through a policy port, events leave through a `SecurityEventSink` port, and the runtime emits reason codes only. Builderforce's adapter maps them to localized copy and to the platform's existing security records — no new incident store or dashboard.
+8. **No god module.** The policy engine is an injected collaborator of `ProcessHost` (the existing `ConnectionRelay` / `ChildRelay` pattern), not inline checks in it; bounded event buffers reuse the runtime's existing ring buffer.
+
+**Trusted chokepoints** (where each flow is decided):
+
+| Flow | Decided at |
+|---|---|
+| Preview HTTP and WebSocket ingress | The service-worker router (routing, client binding) and `PortRegistry.request` / `ProcessHost.upgrade` (inspection) — the worker-side `servedPorts` endpoint is never trusted |
+| In-runtime HTTP between services | `PortRegistry.request` (loopback never reaches the service worker, so it must be decided here) |
+| Host API (`runtime.request`, `listenTcp`, `connect`) | The same decision functions, with the caller's identity |
+| Virtual TCP between services | `ConnectionRelay.dial` → `PortRegistry.connect`, against port ownership and the app's service graph |
+| Database | The gateway on the host origin (authentication, database ownership, protocol-aware statement policy) |
+| Egress (process Workers and preview documents) | The browser: CSP on every worker script and on every routed preview response |
+| Processes | `ProcessHost.spawnChild` / `ChildRelay` / `WorkerSupply` (quotas, attribution) |
+| Filesystem | FsSync on the page side (per-app snapshot and broadcast scope, protected paths, journal-driven detection) |
+| Lifecycle | `startPreviewRuntime` (shield start) and `startApplicationRuntime` / `superviseService` (identity, mandatory readiness) |
+
+**Controls the shield must enforce** (each gets a failing fixture in Phase 0 and goes green in the phase named):
+1. **Origin separation (P2).** Preview documents are served from an origin distinct from the relay frame and the process Workers (e.g. a per-preview subdomain); if that cannot ship first, the preview iframe drops `allow-same-origin`. Relay mode isolates apps from the host, not from each other — origin separation does that.
+2. **Service-worker routing integrity (P2).** The service worker accepts attach/re-attach only from the relay client it registered, with a fresh per-attach nonce, and binds each preview id to the client that attached it; every routed request is checked against that binding.
+3. **Ingress inspection on every path (P2).** Preview HTTP, WebSocket upgrades, in-runtime loopback HTTP and the host API all pass the same decision: normalisation, protocol and size validation (a request-body limit), bounded inspection, OWASP-CRS-derived signatures, per-app and per-source rate limits.
+4. **Port ownership and the service graph (P3).** `PortRegistry.listen` records the owning (app, service); `dial` and `request` are allowed only along the app's declared `dependsOn` edges (or to its own ports).
+5. **Authenticated database (P3).** The gateway authenticates every connection (cleartext or SCRAM over the virtual socket) with per-service credentials the runtime generates; it refuses a database name the app does not own (PGlite has one database, so "own" is the spec's name, not a namespace) and connections from services the graph does not allow. Frontend services never receive credentials.
+6. **Egress CSP (P4).** Worker scripts are served with `default-src`, `script-src`, `worker-src` and `connect-src` allowlists — `connect-src` alone does not cover `importScripts`, dynamic `import()` or nested Workers. Own-origin `/__bfwc/` paths are excluded from `'self'` so a Worker cannot re-enter the service worker as if it were preview ingress. Because policy is per app, worker URLs carry a signed policy id, cache keys vary by policy, and warm spares are keyed by policy (a spare created before the app is known gets the most restrictive policy). Violations are reported through the CSP `report-to` endpoint on the API — never trusted from inside the Worker. The default allowlist is read-only hosts the runtimes and installers need (npm registry, Pyodide/PyPI wheel hosts, php-wasm, Packagist, codeload/raw GitHub, jsDelivr) plus the app's declared external APIs; write-capable APIs are never default. Preview documents get an equivalent CSP stamped by the service worker on every routed response. `blob:`/`data:` Workers inherit their creator's policy (CSP3); Safari behaviour is proven by a Phase 0 fixture.
+7. **Origin storage and channels (P4).** The shared package cache moves to the page (host) side, or every entry is keyed and verified by the registry's `dist.integrity` before use, so one project cannot poison another's install. `BroadcastChannel`, IndexedDB, OPFS and Cache Storage on the process/preview origin are not shared across apps or projects (partitioned names, or not exposed to app code).
+8. **VFS confidentiality and integrity (P4).** A process's snapshot and its `fs` broadcasts are scoped to its app's subtree plus read-only shared dependencies; writes outside the subtree are refused when the journal is applied; platform paths (`/.bfwc/**`, runtime files) are read-only to apps; generated credentials never land in a file another app can read.
+9. **Process quotas and attribution (P4).** Per-app spawn count and depth quotas in `spawnChild`; every child, `detached` included, stays attributed to its app, so stopping or quarantining the app terminates the whole attributed set; restart loops beyond `restartPolicy` suspend the service.
+10. **Relay mode required (P4).** Protect mode refuses to start apps in same-origin mode (processes there share the host origin and the database's tab channel); it is not merely "degraded".
+
+**Design decisions on the proposal** (✅ adopted, ✏️ changed):
+
+| # | Proposal | Decision |
+|---|---|---|
+| 1 | ✅ Data plane / intelligence plane / control plane, in `core/src/security/**` and `browser/src/security/**`. | Adopted as module boundaries behind a `./security` subpath (like `./app`). No AI dependency in the runtime. |
+| 2 | ✏️ Intercept in `servedPorts.ts`, `workerSupply.ts`, `interpreterProcess.ts`. | **Changed:** those run inside, or hand out, untrusted Workers. Decisions are taken at the chokepoints above; worker-side hooks emit telemetry only. |
+| 3 | ✏️ A dedicated Security Worker inspects every request. | **Split:** cheap deterministic checks (identity, ownership, size/framing, rate counters) run synchronously on the page side in the request path; bounded-payload signature inspection runs in the shared Security Worker over typed messages with transferable, bounded buffers, backpressure, timeouts and versioned policy snapshots. An analyzer timeout applies the deterministic result; it never waits unbounded and never defaults to allow. |
+| 4 | ✏️ The shield starts with `startApplicationRuntime()`. | **Changed:** the chokepoints belong to the `PreviewRuntime`, which the terminal, `npm install` and instant preview share without starting an application. The shield starts in `startPreviewRuntime`; `startApplicationRuntime` mints app identities and will not start a service until enforcement health is `ok`. Identity rides a new field on the provider start context and the spawn API that app code cannot set; the readiness probe carries one too. |
+| 5 | ✏️ "Cross-tenant" isolation of VFS and database. | **Reframed:** each project already runs in its own runtime with per-(project, database) storage keys and Web Locks, but a browser profile shares the preview origin's storage across projects, and apps on one runtime share the VFS, ports and database. Controls 1, 4, 5, 7 and 8 are the isolation W10 adds. |
+| 6 | ✅ PostgreSQL inspection understands the wire protocol. | Adopted on the existing gateway frame reader: authentication, database ownership, statement classification of `Query`/`Parse`, per-service rate and transaction-duration limits — without breaking framing or transaction semantics. |
+| 7 | ✅ Resource monitoring with enforceable quotas, not fake precision. | Adopted: spawn/byte/connection/request quotas from the runtime's own counters; Worker CPU/memory reported only where the browser measures them. |
+| 8 | ✅ Risk score 0–100 for prioritisation; signatures and boundary violations enforced regardless of score. | Adopted. Thresholds start in **observe** and are calibrated on the test corpus before protect enforces them. |
+| 9 | ✏️ Persistent event store, incident store and a four-view dashboard. | **Changed (DRY):** bounded in-memory buffers + an IndexedDB event ring on the host origin (redacted evidence only — never passwords, tokens, cookies or full bodies). Incidents leave through `SecurityEventSink`; Builderforce forwards them to `security_incidents` (`detection_source = 'runtime-shield'`) through a dedicated ingest route that is authenticated, rate-limited and records the event as **client-attested**. Only quarantines and signature blocks above a severity floor open incidents (a probe does not). Dedup needs a migration: the unique partial index on `(tenant_id, segment_id, source_ref)` today covers only `finding:%` refs and `segment_id` is nullable, so it is widened to `shield:%` with a non-null key. The finding-kind seam in `criticalFindingIncidents.ts` (also needed by run.md › PRD 08) is built, not assumed. The PRD 39 §4a SIEM export then ships them. App security shows in `LivePreviewPanel`'s service status (enforcement health, held services, last blocks) and the existing security/incident surfaces; the service-communication map is an addition to the run panel. |
+| 10 | ✏️ Multi-tab: one coordinator for shared security state. | **Changed:** each tab has its own runtime, so **every tab enforces locally** — no other tab sits on a request path. Only persisted state (events, incidents, policy versions) is written through one owner per app, using a dedicated per-app Web Lock (the database lock does not exist for in-memory databases). |
+| 11 | ✅ Modes `observe` / `protect` / `strict`. | Adopted. Protect is the default; an app may only tighten (strict). Observe exists for calibration and is platform-set, never app-set. |
+
+**Contract** (`@seanhogg/builderforce-webcontainers/security`): `SecurityContext { applicationId, serviceId, processId?, requestId?, connectionId? }` (filled by the runtime), `SecurityEvent` (category `ingress | network | process | filesystem | database | resource`, rule id, severity, redacted evidence, reason code), `SecurityDecision { action: allow | monitor | throttle | reject | quarantine, riskScore, confidence, reasonCodes, policyVersion }`. `startPreviewRuntime({ security: { policy, sink } })`; `runtime.security()` returns `health()` (enforcement + telemetry), `events()` (a bounded `ReadableStream`), `incidents()` and `onDecision(cb)`; `app.security()` scopes the same to one application.
+
+**Phases** (each has an automated exit test; latency re-based on the W9 Phase-0 harness):
+
+| Phase | Contents | Exit condition |
+|---|---|---|
+| 0 | Turn every item in the gap inventory into a failing fixture, including the browser-specific ones (CSP inheritance for `blob:` workers, Safari); record baseline latency for HTTP, WS, dial and the gateway. | One red test per gap; baseline numbers recorded. |
+| 1 | Identity minted at spawn (start context + spawn API + inheritance + `workspace`); port ownership; shield start in `startPreviewRuntime`; Security Worker + typed protocol; policy port and snapshot; event schema; `SecurityEventSink`; enforcement/telemetry health. | Every runtime starts with the shield; no app service starts before enforcement health is `ok`; a killed Security Worker holds new protected requests and recovers. |
+| 2 | Controls 1–3. | Their fixtures go green; the attack corpus is blocked; the clean corpus passes. |
+| 3 | Controls 4–5. | Unauthorised service→service and frontend→database connections are denied; unmodified `pg`/Drizzle apps still pass the W9 suite. |
+| 4 | Controls 6–10. Python and PHP inherit them because they cross the same page-side chokepoints; .NET when shipped. | Every fixture is green across Node, Python and PHP. |
+| 5 | Signature engine, behavioural signals, correlation keyed on request/connection/pid causality (never time proximity alone), risk scoring, reason codes. | A scripted multi-stage attack yields one correlated incident. |
+| 6 | Automated response: throttle, deny, suspend service, quarantine app, recovery/restart — scoped to one app. | No response crosses an app boundary or stops an unrelated service. |
+| 7 | Builderforce wiring: the adapter's sink → the ingest route → `security_incidents` (with the index migration and the finding-kind seam) → SIEM export; enforcement health and blocks in `LivePreviewPanel`; the communication map; drill-down from the existing security surfaces. Reason codes map to keys in all five catalogs; theme tokens; responsive. | An operator can open any automated block from the panel and see rule, evidence, action and outcome. |
+| 8 | Scale and adversarial validation: many logical app contexts on one engine, concurrent load, queue pressure, multi-tab, evasion (encodings, fragmentation), regression suite in webcontainers CI. | Targets below hold under load; zero bypasses in supported paths. |
+
+**Targets (proposed, re-based on Phase 0):** added latency p95 ≤ 5 ms for simple HTTP inspection and ≤ 15 ms with bounded payload inspection (measured separately from total request time); no unbounded queue anywhere; ≤ 256 KB retained per app context, excluding evidence, measured as the engine's own accounted state (counters, buffers, policy refs) since the browser cannot attribute heap per context; 100% of the agreed attack corpus blocked; < 0.1% false positives on the clean corpus; zero cross-app access and zero bypasses in adversarial tests; Security Worker failure recovers automatically with no allow-all window.
+
+**Limits.** The shield sees only what crosses the runtime's origins, service worker, virtual network and runtime hooks — not arbitrary browser or OS traffic — and it ends when the tab's runtime ends.
+
+**Remaining (verified 2026-11-18):** all of it. Nothing of W10 exists in the runtime yet; on the Builderforce side the ingest route, the index migration, the finding-kind seam and the `runtime-shield` detection source are unbuilt.
+
+### §4.7 MCP tool surface (spans W1–W10)
 
 Each tool is added to the `builtinMcpService.ts` catalogs, grouped as data:
 
@@ -1028,6 +1108,7 @@ Each tool is added to the `builtinMcpService.ts` catalogs, grouped as data:
 | 1b | W9 phases 0–4 (webcontainers repo), in parallel | None |
 | 1c | W9 phase 5 (`RunTarget`) | W2 blueprint; D7 for plan gating |
 | 1d | W9 phases 6a–6d; phase 7 engine work in `@webdit/torch` in parallel (needs only 6a's Pyodide host) | None |
+| 1e | W10 phases 0–3 (bypass fixtures, identity + port ownership, mandatory shield start, ingress, internal network + gateway auth) in the webcontainers repo, then phase 4 (egress CSP, quotas, VFS boundaries). Free-tier browser runs (D7) are not marketed as protected until phase 4's exit holds. | None. It is code. |
 | 2 | W3 + W4 Cloudflare + Neon, W6 against the customer's account | A test Cloudflare account + Neon key |
 | 3 | W7 project listings + `external` + mobile (EAS) | Stripe secrets for *paid* listings only |
 | 4 | W5 hosted (WfP + Neon per app) | D1, D3, D4 |
@@ -1047,6 +1128,7 @@ Each tool is added to the `builtinMcpService.ts` catalogs, grouped as data:
 - **Workers for Platforms parity** with DO + cron + WebSocket hibernation — verify first (Phase 4 gate).
 - **Browser tier (W9):** PGlite is single-connection (serialized, per-connection transactions); IndexedDB flush latency (benchmark both durability modes); browser memory caps (watch per service, bound result sets); the Worker boundary is not a security boundary against same-origin code (relay-origin isolation + HTTP-only preview code carry it). Mitigation: exceeding limits falls back to the container target with the reason shown.
 - **Browser training (phase 7):** VRAM caps model size (LoRA/QLoRA on small bases); `torch` surface is a subset (unsupported ops error by name); JSPI and `shader-f16` not universal (test both readback bridges and an fp32 path); `device.lost` resumes from the last checkpoint.
+- **Security Shield (W10):** false positives on developer apps that legitimately send SQL/HTML/shell text (start in observe, calibrate on the clean corpus, signatures stay narrow); added latency on every request (sync checks on the page side, bounded async inspection, p95 budgets re-based on Phase 0); a stalled Security Worker must hold, not open, protected traffic (enforcement and telemetry health are separate); CSP on worker scripts can break an installer whose host isn't allowlisted (default allowlist from the runtimes' own hosts; a blocked host is reported by name).
 - **Language runtimes (phase 6):** Pyodide pure-Python/Pyodide-built wheels only (native-only declined by name); PHP extensions must be in the Wasm image; .NET Kestrel can't bind sockets (in-memory host); Rust in-browser compile unproven (prebuilt until its gate passes).
 - **Container cost:** a live preview holds an instance; per-tenant cap (2) and global budget (15) hold; run loops are `containerRuntime`-entitled.
 - **Neon quota:** per-app Neon lives in a separate Neon org/project set, never the core/apps endpoints.

@@ -283,9 +283,6 @@ For each of `fintech`, `healthtech`, `medtech`, `biotech`, `climate_energy`, `ha
 | C | Three exits modelled from a real cap table match the recorded spreadsheet case; the deck market slide binds to a `marketSize` object; guards green; release note + blog |
 | D | Eight presets filled with their tiles and milestone bars; seeds sourced where a band exists; two design partners per vertical running for a month; release notes + blog |
 
-### §9 Sources
-
-
 ### 9. Sources
 
 - Carta product and pricing: [Carta best cap table software guide](https://carta.com/best-cap-table-software/), [Carta finance solutions](https://carta.com/solutions/finance/), [Contrary Research on Carta](https://research.contrary.com/company/carta), [Spendflo pricing breakdown](https://www.spendflo.com/blog/how-much-does-carta-cost-a-breakdown-of-plans-and-pricing), [Pulley vs Carta pricing](https://sparklaun.ch/compare/carta-pulley), [Costbench Carta pricing](https://costbench.com/software/equity-management/carta/), [JustPricing Carta review](https://justpricing.com/carta-pricing)
