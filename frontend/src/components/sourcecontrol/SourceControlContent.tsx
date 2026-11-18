@@ -9,8 +9,10 @@ import {
   integrationsApi,
   type ProjectRepository,
   type IntegrationCredential,
+  type ImportRepoManifest,
 } from '@/lib/builderforceApi';
 import { saveFile } from '@/lib/api';
+import { recordedFailure } from '@/lib/reportError';
 import { parseRepoIdentifier, isValidRepoSegment } from '@/lib/repoIdentifier';
 import { formatRepoDiagnostic } from '@/lib/repoDiagnostic';
 import { copyTextToClipboard } from '@/lib/useCopyToClipboard';
@@ -24,6 +26,8 @@ import { faultMessage } from '@/lib/apiClient';
  */
 
 const SCM_PROVIDERS = ['github', 'gitlab', 'bitbucket'] as const;
+/** Part-read files named in the import notice before "and K more". */
+const PARTIAL_FILES_SHOWN = 5;
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 20,
@@ -71,7 +75,7 @@ export function SourceControlContent({
   const [testResult, setTestResult] = useState<Record<string, { ok: boolean; message: string }>>({});
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [importing, setImporting] = useState<string | null>(null);
-  const [importResult, setImportResult] = useState<Record<string, { ok: boolean; message: string }>>({});
+  const [importResult, setImportResult] = useState<Record<string, { ok: boolean; message: string; warn?: boolean }>>({});
   // Two maintenance actions that used to be API-only (an operator had to POST
   // them by hand): committing the agent workflow, and backfilling security alerts
   // for a repo connected after its alerts had accumulated.
@@ -221,26 +225,44 @@ export function SourceControlContent({
     }
     setImporting(r.id);
     setImportResult((p) => ({ ...p, [r.id]: { ok: true, message: t('readingRepo') } }));
+    // The paths actually SAVED: recorded as the repo baseline even when the import stops
+    // partway, so a later push never deletes a file that was skipped or never saved.
+    const saved: string[] = [];
     try {
       const manifest = await reposApi.contents(r.id, r.defaultBranch ?? undefined);
       if (manifest.files.length === 0) {
         setImportResult((p) => ({ ...p, [r.id]: { ok: false, message: t('noImportableFiles') } }));
         return;
       }
-      let written = 0;
+      // The manifest holds whole files only: a file read only in part is in `skipped`, never
+      // saved — its fragment would be pushed back over the real file.
       for (const f of manifest.files) {
         await saveFile(projectId, f.path, f.content);
-        written++;
-        setImportResult((p) => ({ ...p, [r.id]: { ok: true, message: t('importingProgress', { written, total: manifest.files.length }) } }));
+        saved.push(f.path);
+        setImportResult((p) => ({ ...p, [r.id]: { ok: true, message: t('importingProgress', { written: saved.length, total: manifest.files.length }) } }));
       }
+      const written = saved.length;
       const suffix = manifest.truncated ? t('importCapped', { written, discovered: manifest.discovered }) : '';
-      setImportResult((p) => ({ ...p, [r.id]: { ok: true, message: t('importedFiles', { count: written, suffix }) } }));
+      const notice = partialImportNotice(manifest.skipped);
+      setImportResult((p) => ({ ...p, [r.id]: { ok: true, warn: notice !== '', message: `${t('importedFiles', { count: written, suffix })}${notice}` } }));
       onImported?.();
     } catch (e) {
       setImportResult((p) => ({ ...p, [r.id]: { ok: false, message: e instanceof Error ? e.message : t('importFailed') } }));
     } finally {
       setImporting(null);
+      if (saved.length > 0) await reposApi.recordImportBaseline(r.id, saved).catch(recordedFailure('Recording the repo import baseline', undefined));
     }
+  };
+
+  /** The files left out because they were read only in part: the first few by name, then a count. */
+  const partialImportNotice = (skipped: ImportRepoManifest['skipped']): string => {
+    const partial = skipped.filter((s) => s.reason === 'too-large' || s.reason === 'incomplete');
+    if (partial.length === 0) return '';
+    const shown = partial.slice(0, PARTIAL_FILES_SHOWN)
+      .map((s) => `${s.path} (${t(s.reason === 'too-large' ? 'skipTooLarge' : 'skipIncomplete')})`);
+    const more = partial.length - shown.length;
+    const files = more > 0 ? `${shown.join(', ')} ${t('skippedMore', { count: more })}` : shown.join(', ');
+    return ` ${t('importSkippedPartial', { count: partial.length, files })}`;
   };
 
   /**
@@ -323,7 +345,7 @@ export function SourceControlContent({
                   </span>
                 )}
                 {imp && (
-                  <span style={{ fontSize: 11, color: imp.ok ? 'var(--success)' : 'var(--danger)' }}>
+                  <span style={{ fontSize: 11, color: !imp.ok ? 'var(--danger)' : imp.warn ? 'var(--warning-text)' : 'var(--success)' }}>
                     ● {imp.message}
                   </span>
                 )}

@@ -11,6 +11,7 @@ export const dockerfileDetector: BlueprintDetector = {
   id: 'dockerfile',
   name: 'Dockerfile',
   reads: ['Dockerfile', 'Dockerfile.dev', 'Dockerfile.prod'],
+  prefixSafe: ['Dockerfile*'],
   detect: (files: Map<string, string>): any => {
     const result: any = {
       sources: { dockerfile: false },

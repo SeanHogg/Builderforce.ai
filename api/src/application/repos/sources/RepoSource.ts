@@ -26,8 +26,10 @@ export type {
   RepoSourceConfig,
   RepoTreeEntry,
   RepoCommit,
+  RepoFileRead,
+  TruncationReason,
 } from './repoSourceBase';
-export { RepoSourceError, decodeBase64Utf8 } from './repoSourceBase';
+export { RepoSourceError, capContent, decodeBase64Utf8, readSourceFile } from './repoSourceBase';
 
 /**
  * Worker-safe fetch for repo API calls: shared 15s per-call timeout +

@@ -19681,7 +19681,11 @@
     "backfillingAlerts": "Importando…",
     "backfillAlertsTitle": "Importa todas las alertas abiertas de análisis de código y de Dependabot de este repositorio como hallazgos de seguridad. Es seguro repetirlo.",
     "alertsBackfilled": "Se importaron {count} {count, plural, one {hallazgo} other {hallazgos}} de seguridad ({deduped} ya registrados)",
-    "alertsBackfillFailed": "No se pudieron importar las alertas de seguridad"
+    "alertsBackfillFailed": "No se pudieron importar las alertas de seguridad",
+    "importSkippedPartial": "{count, plural, one {# archivo se leyó} other {# archivos se leyeron}} solo en parte y se omitieron: guardar un fragmento sobrescribiría el archivo real en tu próximo push: {files}",
+    "skipTooLarge": "demasiado grande",
+    "skipIncomplete": "lectura interrumpida — vuelve a importar para reintentar",
+    "skippedMore": "y {count} más"
   },
   "workflowsContent": {
     "noRunsYet": "Sin ejecuciones aún",

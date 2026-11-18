@@ -24,7 +24,7 @@ import { buildDatabase } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { IDE_PREFIX } from '../project/projectTemplate';
 import { resolveRepoCredential, isResolveError } from '../repos/resolveRepoCredential';
-import { createRepoSource, makeRepoFetch, isExcludedPath, isBinaryPath, isSecretPath } from '../repos/sources/RepoSource';
+import { createRepoSource, makeRepoFetch, isExcludedPath, isBinaryPath, isSecretPath, readSourceFile } from '../repos/sources/RepoSource';
 import { commitFileToRepo, deleteFileFromRepo } from '../repos/commitFileToRepo';
 import { createPullRequest } from '../repos/createPullRequest';
 import { decryptCredentials } from '../integrations/credentialCrypto';
@@ -36,6 +36,7 @@ import {
 } from '../../infrastructure/database/schema';
 import { resolveRepoApiTarget } from '../repos/repoApiTarget';
 import { renderDeployWorkflow, DEPLOY_WORKFLOW_PATH } from './deployWorkflow';
+import { pathsGoneFromWorkspace, readRepoBaseline, recordImportBaseline, writeRepoBaseline } from './workspaceRepoBaseline';
 
 /** R2 key prefix for a project's Designer workspace. */
 function workspacePrefix(projectId: number): string {
@@ -101,20 +102,66 @@ export async function importRepoToWorkspace(
   const bucket = env.UPLOADS;
   if (!bucket) return { ok: false, status: 503, error: 'Storage not configured' };
   const prefix = workspacePrefix(projectId);
-  let imported = 0;
-  for (const f of files) {
-    const content = await src.getFileContent(f.path, targetRef).catch(() => null);
-    if (content == null) continue; // oversize/binary/unreadable — skip, don't fail the whole import
-    await bucket.put(`${prefix}${f.path}`, content);
-    imported += 1;
+  const importedPaths: string[] = [];
+  let partial = 0;
+  try {
+    for (const f of files) {
+      const read = await readSourceFile(src, f.path, targetRef).catch(() => null);
+      if (read == null) continue; // oversize/binary/unreadable — skip, don't fail the whole import
+      // A partly-read file must never enter the workspace: the next push would commit the
+      // fragment over the real file. Skip it (the import reports itself truncated).
+      if (read.truncated) {
+        console.warn(`[repoBridge] ${f.path} was read only in part (${read.truncatedReason ?? 'incomplete'}); not imported`);
+        partial += 1;
+        continue;
+      }
+      await bucket.put(`${prefix}${f.path}`, read.content);
+      importedPaths.push(f.path);
+    }
+  } finally {
+    // The baseline: only what was imported (so far, if a write failed) — a skipped, capped or
+    // unreadable file is not in it, so the next push never deletes it. Best-effort.
+    await recordImportBaseline(bucket, projectId, repoId, importedPaths);
   }
+  const imported = importedPaths.length;
 
   await db
     .update(projectRepositories)
     .set({ lastSyncedRef: targetRef, lastSyncedAt: new Date() })
     .where(and(eq(projectRepositories.id, repoId), eq(projectRepositories.tenantId, tenantId)));
 
-  return { ok: true, imported, ref: targetRef, truncated: tree.truncated || files.length >= MAX_IMPORT_FILES };
+  return { ok: true, imported, ref: targetRef, truncated: tree.truncated || files.length >= MAX_IMPORT_FILES || partial > 0 };
+}
+
+/**
+ * Delete the baseline paths gone from the workspace that the base tree still holds —
+ * never a vendored, binary or secret path, at most MAX_COMMIT_FILES. `pending`: what is
+ * still to delete next push (a failed delete, past the cap, or the base tree unreadable);
+ * a path no longer on base, or one never to be deleted, is not pending.
+ */
+async function deleteGoneFiles(
+  src: { getTree(ref: string): Promise<{ entries: Array<{ path: string; type: string }> }> },
+  base: string,
+  gone: readonly string[],
+  deleteFile: (path: string) => Promise<{ ok: boolean }>,
+): Promise<{ deleted: number; pending: string[] }> {
+  const deletable = gone.filter((path) => !isExcludedPath(path) && !isBinaryPath(path) && !isSecretPath(path));
+  if (deletable.length === 0) return { deleted: 0, pending: [] };
+  let onBase: Set<string>;
+  try {
+    onBase = new Set((await src.getTree(base)).entries.filter((e) => e.type === 'file').map((e) => e.path));
+  } catch (error) {
+    reportCaughtError(error, { source: 'application/ide/repoBridge.ts', operation: 'deleteGoneFiles', level: 'warning', context: { base } });
+    return { deleted: 0, pending: deletable };
+  }
+  const toDelete = deletable.filter((path) => onBase.has(path));
+  const pending = toDelete.slice(MAX_COMMIT_FILES);
+  let deleted = 0;
+  for (const path of toDelete.slice(0, MAX_COMMIT_FILES)) {
+    if ((await deleteFile(path)).ok) deleted += 1;
+    else pending.push(path);
+  }
+  return { deleted, pending };
 }
 
 /**
@@ -156,22 +203,23 @@ export async function commitWorkspaceToRepo(
     if (res.ok) committed += 1;
   }
 
-  // Deletions: files on the base tree the workspace no longer has (skip vendored/etc).
-  let deleted = 0;
-  const baseTree = await src.getTree(base).catch(() => null);
-  if (baseTree) {
-    const gone = baseTree.entries.filter(
-      (e) => e.type === 'file' && !workspacePaths.has(e.path)
-        && !isExcludedPath(e.path) && !isBinaryPath(e.path) && !isSecretPath(e.path),
-    );
-    for (const e of gone.slice(0, MAX_COMMIT_FILES)) {
-      const res = await deleteFileFromRepo({
-        provider: repo.provider, host: repo.host, owner: repo.owner, repo: repo.repo, token,
-        branch, path: e.path, message: `Designer: remove ${e.path}`,
-      });
-      if (res.ok) deleted += 1;
-    }
+  // Deletions: ONLY what this repo's baseline held and the workspace has since lost (and
+  // the base tree still has). A file never imported — read in part, past an import cap,
+  // unreadable — is not in the baseline, so it is never deleted. A missing baseline (a
+  // workspace from before baselines) deletes nothing; an UNREADABLE one deletes nothing
+  // and is not rewritten, so the deletes it holds wait for it to read again.
+  const bucket = env.UPLOADS;
+  const baseline = bucket ? await readRepoBaseline(bucket, projectId, repoId) : { state: 'missing' as const };
+  if (baseline.state !== 'ok') {
+    console.warn(`[repoBridge] repo ${repoId} of project ${projectId}: baseline ${baseline.state === 'unreadable' ? `unreadable (${baseline.reason})` : 'missing'}; this push deletes nothing`);
   }
+  const deletion = await deleteGoneFiles(src, base, pathsGoneFromWorkspace(baseline, workspacePaths), (path) => deleteFileFromRepo({
+    provider: repo.provider, host: repo.host, owner: repo.owner, repo: repo.repo, token,
+    branch, path, message: `Designer: remove ${path}`,
+  }));
+  const deleted = deletion.deleted;
+  // What the repo now holds of ours: the workspace, plus every delete still pending (retried next push).
+  if (bucket && baseline.state !== 'unreadable') await writeRepoBaseline(bucket, projectId, repoId, [...workspacePaths, ...deletion.pending]);
 
   // Open a PR for a feature branch; an initial push straight to default has no PR.
   let prNumber: number | null = null;

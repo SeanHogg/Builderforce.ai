@@ -19,6 +19,8 @@ const CTX: RepoReadContext = { provider: 'github', host: null, owner: 'acme', re
 interface StubOptions {
   /** Paths whose read fails with a provider error. */
   failing?: string[];
+  /** Paths whose read comes back truncated (read only in part). */
+  truncated?: string[];
   /** Whether the tree listing fails — a provider without listing. */
   treeListingFails?: boolean;
   /** Whether the tree listing is truncated (a repo past the provider's listing limit). */
@@ -35,7 +37,7 @@ function stubIo(repo: Record<string, string>, opts: StubOptions = {}): Blueprint
       const content = repo[path];
       return content === undefined
         ? { ok: false, reason: `file not found on abc: ${path}` }
-        : { ok: true, path, content, truncated: false };
+        : { ok: true, path, content, truncated: opts.truncated?.includes(path) === true };
     },
     listRepoTree: async (): Promise<ListFilesResult> => {
       io.listCalls += 1;
@@ -235,6 +237,51 @@ describe('readBlueprintSources', () => {
     for (const bad of ['', '/etc/x', '../x', 'a/../../x', 'a//b', './a', 'a/./b', 'C:/x', '..', 'a/.../x', 'a/ . /x', 'a\\b', 'a/%2e%2e/x', 'a/\u0001x', 'a/\u007fx']) {
       expect(repoRelativePath(bad)).toBeNull();
     }
+  });
+
+  it('one follow read serves every spelling two solutions name for the same project', async () => {
+    const io = stubIo({
+      'A.sln': sln(['deep\\x\\y\\Web\\Web.csproj']),
+      'B.sln': sln(['DEEP\\x\\y\\Web\\Web.csproj']),
+      'deep/x/y/Web/Web.csproj': WEB,
+    });
+    const files = await readBlueprintSources(CTX, io);
+    expect(io.readCalls.filter((p) => p.endsWith('Web.csproj'))).toEqual(['deep/x/y/Web/Web.csproj']);
+    expect(files.get('deep/x/y/Web/Web.csproj')).toBe(WEB);
+    expect(files.get('DEEP/x/y/Web/Web.csproj')).toBe(WEB);
+  });
+
+  it('a truncated whole-file format (package.json, *.csproj, Cargo.toml) is treated as unread', async () => {
+    const io = stubIo({
+      'package.json': '{"name":"web","dep',
+      'Cargo.toml': '[package]\nname = "a',
+      'web/Web.csproj': '<Project Sdk="Microsoft.NET.Sdk.Web"><Item',
+    }, { truncated: ['package.json', 'Cargo.toml', 'web/Web.csproj'] });
+    const files = await readBlueprintSources(CTX, io);
+    expect(['package.json', 'Cargo.toml', 'web/Web.csproj'].filter((key) => files.has(key))).toEqual([]);
+  });
+
+  it('a .sln past the read cap keeps its first part: its projects are still detected', async () => {
+    // ~120 projects is past the 60k-character read cap; the read comes back cut, the web project listed early.
+    const projects = ['src\\Web\\Web.csproj', ...Array.from({ length: 120 }, (_, i) => `libs\\Lib${i}\\Lib${i}.csproj`)];
+    const io = stubIo({ 'Shop.sln': sln(projects), 'src/Web/Web.csproj': WEB, Dockerfile: 'FROM node', 'schema.prisma': 'datasource db {' }, {
+      truncated: ['Shop.sln', 'Dockerfile', 'schema.prisma'],
+    });
+    const files = await readBlueprintSources(CTX, io);
+    expect(['Shop.sln', 'Dockerfile', 'schema.prisma'].every((key) => files.has(key))).toBe(true);
+    expect(detectDotnet(files).services?.[0]).toMatchObject({ id: 'Web', devCommand: 'dotnet run --project src/Web/Web.csproj --urls http://0.0.0.0:8080' });
+  });
+
+  it('prefixSafe holds only for the reads its detector owns', async () => {
+    const io = stubIo({ '.github/workflows/ci.yml': 'on: push', '.env.example': 'A=1', 'api/.env.example': 'B=2' }, {
+      truncated: ['.github/workflows/ci.yml', '.env.example', 'api/.env.example'],
+    });
+    const files = await readBlueprintSources(CTX, io);
+    // Owned: the workflows detector's glob, the env-example detector's root file.
+    expect(files.has('.github/workflows/ci.yml')).toBe(true);
+    expect(files.has('.env.example')).toBe(true);
+    // api/.env.example is read by the Python/PHP/Rust detectors, which declare nothing prefix-safe.
+    expect(files.has('api/.env.example')).toBe(false);
   });
 
   it('the second pass reads only named files the full tree holds', async () => {

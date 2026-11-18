@@ -133,7 +133,7 @@ function within(reads: SourceRead[], room: number, what: string): SourceRead[] {
  * A fetch that lets at most `limit` calls through; past that it answers 429 without a
  * call, so a read or a page beyond the budget is a miss — never a subrequest.
  */
-export function providerCallBudget(base: FetchLike, limit: number): { fetch: FetchLike; used: () => number } {
+function providerCallBudget(base: FetchLike, limit: number): { fetch: FetchLike; used: () => number } {
   let used = 0;
   return {
     fetch: (input, init) => {
@@ -145,12 +145,46 @@ export function providerCallBudget(base: FetchLike, limit: number): { fetch: Fet
   };
 }
 
-/** Read each `reads` entry into `files` under its key; a miss or a failed read is skipped. */
-async function readInto(ctx: RepoReadContext, io: BlueprintSourceIo, reads: readonly SourceRead[], files: Map<string, string>): Promise<void> {
+/**
+ * Whether a cut-off read is still usable, per detector: the path is one of the reads a
+ * detector OWNS (an exact `reads` entry, or a match of one of its `reads` globs) and its
+ * file name matches that detector's `prefixSafe` globs — so `*.yml` covers the workflows
+ * detector's `.github/workflows/*.yml`, never some other `.yml`. Compiled once per detection.
+ */
+function prefixSafeTest(): (key: string) => boolean {
+  const owners = DETECTORS.filter((d) => (d.prefixSafe?.length ?? 0) > 0).map((d) => {
+    const names = d.prefixSafe!.map(pathGlobRegExp);
+    const exact = new Set(d.reads.filter((entry) => !entry.includes('*')));
+    const globs = d.reads.filter((entry) => entry.includes('*')).map(toDirGlob);
+    return (key: string) =>
+      names.some((name) => name.test(key.slice(key.lastIndexOf('/') + 1))) && (exact.has(key) || globs.some((g) => matchesGlob(g, key)));
+  });
+  return (key) => owners.some((owns) => owns(key));
+}
+
+/**
+ * Read each `reads` entry into `files` under its key; a miss or a failed read is skipped.
+ * A TRUNCATED read (too large, or a paged read the provider stopped) is decided per file
+ * kind, as detector data (`prefixSafe`): a line-oriented file (`.sln`, `schema.prisma`,
+ * `Dockerfile`) keeps its first part; a whole-file format (`package.json`, `*.csproj`)
+ * must not be taken for the whole file, so it is treated as unread — and logged.
+ */
+async function readInto(
+  ctx: RepoReadContext,
+  io: BlueprintSourceIo,
+  reads: readonly SourceRead[],
+  files: Map<string, string>,
+  prefixSafe: (key: string) => boolean,
+): Promise<void> {
   const results = await mapWithConcurrency([...reads], READ_CONCURRENCY, (read) => io.readRepoFile(ctx, read.path));
   results.forEach((result, i) => {
     const read = reads[i];
-    if (result.ok && read !== undefined) files.set(read.key, result.content);
+    if (!result.ok || read === undefined) return;
+    if (result.truncated && !prefixSafe(read.key)) {
+      console.warn(`[blueprint] ${read.path} was read only in part (${result.truncatedReason ?? 'incomplete'}); detection skips it`);
+      return;
+    }
+    files.set(read.key, result.content);
   });
 }
 
@@ -195,7 +229,8 @@ export async function readBlueprintSources(
   );
   mark(globReads);
   const files = new Map<string, string>();
-  await readInto(ctx, io, [...exactReads, ...globReads], files);
+  const prefixSafe = prefixSafeTest();
+  await readInto(ctx, io, [...exactReads, ...globReads], files, prefixSafe);
   issued += exactReads.length + globReads.length;
 
   // What the read files name: only safe repo paths, never one already tried, only what the tree holds (when known).
@@ -204,16 +239,19 @@ export async function readBlueprintSources(
       const key = repoRelativePath(raw);
       return key === null ? null : readFor(tree, key);
     });
-  // ALIASED KEYS: a named file whose provider path was already read under another key
-  // (the solution's `WEB/Web.csproj`, read by a glob as the tree's `web/Web.csproj`) gets
-  // that content under the named key too — so `files` may hold one file under two keys,
-  // each the spelling some detector asked for. It is never re-read.
-  const contentByPath = new Map([...exactReads, ...globReads].filter((r) => files.has(r.key)).map((r) => [r.path, files.get(r.key)!] as const));
+  const followReads = within(take(named), MAX_PROVIDER_CALLS - spent(), 'files are named by the read ones');
+  if (followReads.length > 0) await readInto(ctx, io, followReads, files, prefixSafe);
+
+  // ALIASED KEYS: every named key gets the content of its provider path, whichever key read
+  // it — a glob's `web/Web.csproj` for a solution's `WEB/Web.csproj`, or one follow read for
+  // two solutions spelling the same project differently. So `files` may hold one file under
+  // several keys, each the spelling some detector asked for. Nothing is read twice.
+  const contentByPath = new Map(
+    [...exactReads, ...globReads, ...followReads].filter((r) => files.has(r.key)).map((r) => [r.path, files.get(r.key)!] as const),
+  );
   for (const read of named) {
     const known = read && !files.has(read.key) ? contentByPath.get(read.path) : undefined;
     if (read && known !== undefined) files.set(read.key, known);
   }
-  const followReads = within(take(named), MAX_PROVIDER_CALLS - spent(), 'files are named by the read ones');
-  if (followReads.length > 0) await readInto(ctx, io, followReads, files);
   return files;
 }

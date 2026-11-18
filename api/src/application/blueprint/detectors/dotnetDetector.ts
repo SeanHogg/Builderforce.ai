@@ -139,6 +139,9 @@ export const dotnetDetector: BlueprintDetector = {
   // are read in a second pass (followReads). The globs need the tree listing: when it fails,
   // no solution or project is read, so there is no .NET detection.
   reads: readsUnderServiceRoots(['*.sln', '*.slnx', '*.csproj', '*/*.csproj', '*/*/*.csproj']),
+  // A solution is read project line by project line: a cut-off .sln still lists its first projects.
+  // A .csproj is XML, a whole-file format: never read in part.
+  prefixSafe: ['*.sln', '*.slnx'],
   followReads: solutionListedProjects,
   detect: detectDotnet,
 };

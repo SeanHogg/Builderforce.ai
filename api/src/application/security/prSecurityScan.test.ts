@@ -68,6 +68,17 @@ describe('a read failure is never a clean scan', () => {
     expect(collected).toMatchObject({ ok: true, truncated: true });
   });
 
+  it.each([
+    ['size', 'src/a.ts: file exceeds the read limit and was only partly read'],
+    ['incomplete', 'src/a.ts: the provider stopped answering mid-read (e.g. rate limited), so the file was only partly read'],
+  ] as const)('a %s-truncated read says why', async (truncatedReason, failure) => {
+    h.listBranchDiff.mockResolvedValue(diff(['src/a.ts']));
+    h.readRepoFile.mockResolvedValue({ ok: true, path: 'src/a.ts', content: 'x', truncated: true, truncatedReason });
+    const collected = await collectChangedFiles(read, 'main', SHA);
+    if (collected.ok) expect(collected.readFailures).toEqual([failure]);
+    else throw new Error('expected a readable branch');
+  });
+
   it('when NOTHING could be read the scans FAIL - they do not complete clean', async () => {
     h.listBranchDiff.mockResolvedValue(diff(['src/a.ts', 'src/b.ts']));
     h.readRepoFile.mockResolvedValue({ ok: false, reason: 'timeout' });

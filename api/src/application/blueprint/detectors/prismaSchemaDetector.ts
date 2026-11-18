@@ -11,6 +11,8 @@ export const prismaSchemaDetector: BlueprintDetector = {
   id: 'prisma-schema',
   name: 'Prisma Schema',
   reads: ['schema.prisma', 'prisma/schema.prisma'],
+  // Prisma's schema is read model by model: a cut-off schema still names its datasource.
+  prefixSafe: ['*.prisma'],
   detect: (files: Map<string, string>): any => {
     const result: any = {
       sources: { prismaSchema: false },

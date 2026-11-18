@@ -12,7 +12,7 @@
 import { normalizeScopeDir, isUnderScopeDir, selectPathsWithinCap } from '@builderforce/agent-tools';
 import { buildGitApiBaseUrl } from './gitProxy';
 import { bitbucketServerPathString, resolveRepoApiTarget } from './repoApiTarget';
-import { createRepoSource, makeRepoFetch, type FetchLike } from './sources/RepoSource';
+import { capContent, createRepoSource, makeRepoFetch, readSourceFile, type FetchLike, type RepoFileRead, type TruncationReason } from './sources/RepoSource';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 
 export interface RepoReadContext {
@@ -50,8 +50,13 @@ const MAX_FILE_CHARS = 60_000;
 const MAX_TREE_ENTRIES = 400;
 
 export type ReadFileResult =
-  | { ok: true; path: string; content: string; truncated: boolean }
+  | { ok: true; path: string; content: string; truncated: boolean; truncatedReason?: TruncationReason }
   | { ok: false; reason: string };
+
+/** A whole or partial read as a ReadFileResult, held to MAX_FILE_CHARS (`capContent`). */
+function fileResult(path: string, read: RepoFileRead): ReadFileResult {
+  return { ok: true, path, ...capContent(read, MAX_FILE_CHARS) };
+}
 
 export type ListFilesResult =
   | { ok: true; paths: string[]; truncated: boolean }
@@ -84,10 +89,10 @@ export async function readRepoFile(ctx: RepoReadContext, path: string): Promise<
   // GitHub keeps its richer inline path below (no-regression). [1248]
   if (ctx.provider !== 'github') {
     try {
-      const content = await sourceOf(ctx).getFileContent(path, ctx.ref);
-      if (content == null) return { ok: false, reason: `file not found on ${ctx.ref}: ${path}` };
-      const truncated = content.length > MAX_FILE_CHARS;
-      return { ok: true, path, content: truncated ? content.slice(0, MAX_FILE_CHARS) : content, truncated };
+      // A paged source says when its read stopped short (`readFile`); that is truncation too.
+      const file = await readSourceFile(sourceOf(ctx), path, ctx.ref);
+      if (file == null) return { ok: false, reason: `file not found on ${ctx.ref}: ${path}` };
+      return fileResult(path, file);
     } catch (e) {
       return { ok: false, reason: e instanceof Error ? e.message : `read not implemented for provider '${ctx.provider}'` };
     }
@@ -102,10 +107,7 @@ export async function readRepoFile(ctx: RepoReadContext, path: string): Promise<
   if (!json || json.type !== 'file' || typeof json.content !== 'string') {
     return { ok: false, reason: `not a readable file: ${path}` };
   }
-  let content = json.encoding === 'base64' ? fromBase64Utf8(json.content) : json.content;
-  const truncated = content.length > MAX_FILE_CHARS;
-  if (truncated) content = content.slice(0, MAX_FILE_CHARS);
-  return { ok: true, path, content, truncated };
+  return fileResult(path, { content: json.encoding === 'base64' ? fromBase64Utf8(json.content) : json.content, truncated: false });
 }
 
 /**

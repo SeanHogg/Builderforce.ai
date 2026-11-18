@@ -22,6 +22,8 @@ export interface SampledFile {
   path: string;
   content: string;
   truncated: boolean;
+  /** Set when `truncated`: past the sample cap (`size`), or the provider stopped mid-read (`incomplete`). */
+  truncatedReason?: 'size' | 'incomplete';
 }
 
 export interface RepoEvidence {

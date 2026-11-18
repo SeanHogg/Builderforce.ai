@@ -10,6 +10,7 @@ export const githubWorkflowsDetector: BlueprintDetector = {
   id: 'github-workflows',
   name: 'GitHub Workflows',
   reads: ['.github/workflows/*.yml', '.github/workflows/*.yaml'],
+  prefixSafe: ['*.yml', '*.yaml'],
   detect: (files: Map<string, string>): any => {
     const result: any = {
       sources: { githubWorkflows: false },

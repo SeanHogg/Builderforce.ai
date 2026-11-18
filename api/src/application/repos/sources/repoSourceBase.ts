@@ -38,6 +38,37 @@ export interface RepoCommit {
   date: string;
 }
 
+/**
+ * Why a read stops short of the whole file: `size` — the file is past a read cap;
+ * `incomplete` — the provider stopped answering mid-read (a page cap, a refused or
+ * rate-limited page). The two call for different answers (rewrite vs retry).
+ */
+export type TruncationReason = 'size' | 'incomplete';
+
+/** A file read: its content, and whether (and why) that content stops short of the whole file. */
+export interface RepoFileRead {
+  content: string;
+  truncated: boolean;
+  /** Set when `truncated`. */
+  truncatedReason?: TruncationReason;
+}
+
+/**
+ * A read held to `cap` characters: past it, cut and truncated for `size`; a read the
+ * source already cut keeps its own reason. The ONE place a read cap is applied.
+ */
+export function capContent(read: RepoFileRead, cap: number): RepoFileRead {
+  if (read.content.length > cap) return { content: read.content.slice(0, cap), truncated: true, truncatedReason: read.truncatedReason ?? 'size' };
+  return read.truncated ? { ...read, truncatedReason: read.truncatedReason ?? 'incomplete' } : { content: read.content, truncated: false };
+}
+
+/** A source's file read with its truncation, whether or not the source pages its reads. */
+export async function readSourceFile(source: RepoSource, path: string, ref: string): Promise<RepoFileRead | null> {
+  if (source.readFile) return source.readFile(path, ref);
+  const content = await source.getFileContent(path, ref);
+  return content == null ? null : { content, truncated: false };
+}
+
 export interface RepoSource {
   getDefaultBranch(): Promise<string>;
   /** { language: bytes } — empty object when the provider has no languages API. */
@@ -46,6 +77,11 @@ export interface RepoSource {
   getTree(ref: string): Promise<{ entries: RepoTreeEntry[]; truncated: boolean }>;
   /** File content at `ref`, or null when binary / too large / missing. */
   getFileContent(path: string, ref: string): Promise<string | null>;
+  /**
+   * `getFileContent` plus whether the content is incomplete (a paged read that stopped
+   * early). Sources whose reads are never paged need not implement it.
+   */
+  readFile?(path: string, ref: string): Promise<RepoFileRead | null>;
   listCommits(ref: string, limit: number): Promise<RepoCommit[]>;
 }
 
