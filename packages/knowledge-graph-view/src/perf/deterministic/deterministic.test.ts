@@ -12,6 +12,11 @@
  *
  * The gate scale runs in the normal `npm test`; the full-size graph (the real user's) only with `KG_PERF=1`. The wall-clock
  * harness next to it (`viewPipelines.perf.test.ts`) says which step is slow; this says whether the move off-thread held.
+ *
+ * The baseline is what CI's Node (the `node-version` in `.github/workflows/release.yml`, 24) measures. Graph reads made inside
+ * sort comparators depend on how many comparisons the engine's `Array.prototype.sort` makes, so another Node major (26 counts
+ * 86 more worker reads and 18 more list-mount reads at the gate scale) runs deterministically but against a different number:
+ * record or check the baseline under CI's Node.
  */
 
 import path from 'node:path';

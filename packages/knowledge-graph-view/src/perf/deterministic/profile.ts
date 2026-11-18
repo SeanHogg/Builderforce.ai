@@ -98,8 +98,14 @@ function oversized(report: RenderReport): string[] {
  * One throwaway pass over a small graph before anything is measured. Some costs are paid once per process, not per mount: the
  * 3D camera's `lazy` GraphScene renders its Suspense fallback (the 2D graph, with its own tasks) until its module has loaded,
  * and only the FIRST profile would pay that. Paying it here makes every profile, the first included, start from the same state.
+ *
+ * The stage chunk (`ViewSurface`'s `lazy` StageHost: three.js and the stage) is imported here BEFORE the pass, not left to the
+ * pass's render: transforming that module graph takes seconds of wall-clock, so a pass that only triggered it could end before
+ * it landed, and the measured views then drew the Suspense fallback (`LayingOut`, ~200 fewer DOM nodes) or the stage depending
+ * on the machine's speed. With the module evaluated, the lazy wrapper resolves within the warm-up's own settle.
  */
 async function warmUp(host: ViewHost): Promise<void> {
+    await import('../../stage/host/StageHost');
     await probeViews(makeGraph(50), host);
 }
 

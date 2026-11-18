@@ -13,7 +13,9 @@
  *
  * "Settled" means the loopback has nothing to deliver AND the page stopped changing (reads, commits, DOM, compute events) for
  * three rounds in a row; every round runs inside `act` so the answers' state updates are flushed and the effects they trigger
- * (the next task of a chain) get their turn.
+ * (the next task of a chain) get their turn. Then the delayed timers the view set (the stage bus's settle, tweens) fire on a
+ * {@link VirtualTimers} clock, one due time at a time, each followed by the same calm check: a delayed commit lands in the visit
+ * that caused it on every machine, instead of only on the ones slow enough for its real delay to elapse.
  */
 
 import { createElement, Profiler, type ReactElement } from 'react';
@@ -26,6 +28,7 @@ import { fixtureSource } from '../../testing';
 import { LoopbackWorker, type TaskRun } from './loopbackWorker';
 import { WorkMeter } from './meter';
 import { ProbeLog } from './probeLog';
+import { VirtualTimers } from './virtualTimers';
 import type { WireEntry, WireSummary } from './wireLedger';
 
 /** What the probe needs from the test runner (see the file comment). */
@@ -66,7 +69,14 @@ export interface RenderReport {
 /** The order the views are visited in (fixed: a view's cost depends on what the views before it left memoised).
  * Only cameras the switcher actually offers — `4plus1` was removed from the registry, so it is not probed. */
 export const VIEW_ORDER = ['system', 'graph', 'map', '3d', 'heat', 'list', 'transit', 'style', 'features'] as const;
+/** Bounds loopback rounds AND virtual timer fires together (each fire costs at least three calm rounds). */
 const MAX_ROUNDS = 400;
+/**
+ * The virtual time each settle spans (the clock always ends a settle exactly this far on): past the short one-shot delays the
+ * view sets (stage settle 120 ms, depth 150 ms, tween 400 ms), and a fixed number of ticks of any repeating one. A longer delay
+ * fires in the visit whose span covers it.
+ */
+const TIMER_HORIZON_MS = 2_000;
 
 export async function probeViews(graph: KnowledgeGraph, host: ViewHost): Promise<RenderReport> {
     const main = new WorkMeter('main');
@@ -75,6 +85,8 @@ export async function probeViews(graph: KnowledgeGraph, host: ViewHost): Promise
     const probe = new ProbeLog((id) => { const held = getComputeClient().residency.handleOf(id)?.graph; return held ? weightOf(held) : undefined; });
     let commits = 0;
     const restore = host.environment();
+    const timers = new VirtualTimers();
+    timers.install();
     setWorkerFactory(() => loop);
     setComputeProbe(probe);
     try {
@@ -86,11 +98,23 @@ export async function probeViews(graph: KnowledgeGraph, host: ViewHost): Promise
         const dom = (): number => container.querySelectorAll('*').length;
         const fingerprint = (): string => `${main.reads}|${commits}|${dom()}|${probe.events.length}|${loop.ledger.entries.length}`;
 
+        /**
+         * Calm first (three quiet rounds of the loopback), then the next delayed timer the view set, on the virtual clock, until
+         * none is due within {@link TIMER_HORIZON_MS} of the start: every delayed effect lands inside the visit, whatever the
+         * machine's speed.
+         */
         async function settled(): Promise<void> {
+            const until = timers.now + TIMER_HORIZON_MS;
             let calm = 0, last = fingerprint();
-            for (let round = 0; calm < 3; round++) {
+            for (let round = 0; ; round++) {
                 if (round > MAX_ROUNDS) throw new Error('render probe: the page did not settle');
                 let delivered = 0;
+                if (calm >= 3) {
+                    let fired = 0;
+                    await host.act(async () => { fired = timers.fireNext(until); });
+                    if (fired === 0) { timers.advanceTo(until); return; }
+                    calm = 0;
+                }
                 await host.act(async () => { delivered = await loop.settle(); });
                 const now = fingerprint();
                 calm = delivered === 0 && now === last ? calm + 1 : 0;
@@ -152,5 +176,6 @@ export async function probeViews(graph: KnowledgeGraph, host: ViewHost): Promise
         setWorkerFactory(null);
         loop.terminate();
         restore();
+        timers.uninstall();
     }
 }
