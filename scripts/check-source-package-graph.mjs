@@ -100,6 +100,16 @@ const scanner = createImportScanner({ ts, repoRoot });
 const graph = await sourcePackageGraph(repoRoot, ts);
 const specifiers = [...graph.bySpecifier.keys()];
 
+// The specifier families rules 3–4 govern: the whole `@builderforce/` scope, plus
+// each registry package outside it BY NAME (`EXTRA_SOURCE_PACKAGE_DIRS`, e.g.
+// `@webdit/torch`) — the rest of that package's scope is built or bundled and stays
+// out of the guard.
+const GOVERNED = [
+  ...new Set(graph.nodes.map((node) => (node.name.startsWith('@builderforce/') ? '@builderforce/' : node.name))),
+];
+const governs = (key) =>
+  GOVERNED.some((family) => (family.endsWith('/') ? key.startsWith(family) : key === family || key.startsWith(`${family}/`)));
+
 if (graph.nodes.length === 0) {
   console.error('❌  No source-only packages found under packages/ — the registry read empty, which would make every rule below pass vacuously.');
   process.exit(1);
@@ -148,15 +158,15 @@ for (const project of findTsconfigProjects(repoRoot)) {
   // compiles it into this program, so its package imports are this project's to
   // resolve. (`clients/vscode/webview` → `../src/pageEngineBridgeProtocol.ts` →
   // `@builderforce/local-inference` slipped through when only `include` was scanned.)
-  const reached = await scanner.reachOutside(project.sources, '@builderforce/');
-  const sites = await scanner.scan([...project.sources, ...reached], '@builderforce/');
+  const reached = await scanner.reachOutside(project.sources, GOVERNED);
+  const sites = await scanner.scan([...project.sources, ...reached], GOVERNED);
   const imported = sites.map((site) => site.specifier).filter((specifier) => graph.bySpecifier.has(specifier));
   projects.push({ ...project, declaredHere, linked, imported: [...new Set(imported)].sort() });
 }
 
 const relevant = projects.filter(
   (project) =>
-    project.imported.length > 0 || Object.keys(project.paths).some((key) => key.startsWith('@builderforce/')),
+    project.imported.length > 0 || Object.keys(project.paths).some(governs),
 );
 
 /**
@@ -246,9 +256,10 @@ for (const project of relevant) {
     );
   }
 
-  // Rule 4: a `@builderforce/` key that no longer names a real entry.
+  // Rule 4: a governed key (`@builderforce/…`, or a registry package outside that
+  // scope) that no longer names a real entry.
   for (const key of Object.keys(project.paths)) {
-    if (!key.startsWith('@builderforce/') || key.endsWith('/*')) continue;
+    if (!governs(key) || key.endsWith('/*')) continue;
     const entry = graph.entryBySpecifier.get(key);
     if (entry && resolvesTo(resolveThroughPaths(project.paths, project.dir, key), entry)) continue;
     failures.push({
@@ -256,7 +267,7 @@ for (const project of relevant) {
       detail: `${project.relative} maps '${key}' to ${project.paths[key]?.[0] ?? '(nothing)'}, which is not where that package's source lives.`,
       remedy: entry
         ? `Point it at "${pathsTargetFor(project, key)}".`
-        : `Remove it — no package under packages/ exports '${key}'.`,
+        : `Remove it — no registered source package exports '${key}'.`,
     });
   }
 }

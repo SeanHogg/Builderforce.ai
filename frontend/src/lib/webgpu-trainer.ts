@@ -32,6 +32,8 @@ import {
   type EvermindLMConfig,
 } from '@seanhogg/builderforce-memory-engine';
 import { hasWebGPU } from '@seanhogg/builderforce-brain-embedded';
+// The adapter kernels are the training engine's (PRD 31 §W9 phase 7): ONE copy, owned by @webdit/torch.
+import { ADAMW_WGSL, LORA_BACKWARD_WGSL, LORA_FORWARD_WGSL, TRAINER_PARAM_FLOATS } from '@webdit/torch/kernels';
 import { downloadDataset, uploadArtifact, updateTrainingJob, streamTrainingLogs } from './api';
 import type { TrainingLog } from './types';
 
@@ -95,47 +97,8 @@ export interface WebGPUTrainerOptions {
 
 const BROWSER_LORA_MAX_PARAMS = 20e6;
 
-const LORA_FORWARD_WGSL = `
-@group(0) @binding(0) var<storage,read> base: array<f32>;
-@group(0) @binding(1) var<storage,read> a: array<f32>;
-@group(0) @binding(2) var<storage,read> b: array<f32>;
-@group(0) @binding(3) var<storage,read_write> merged: array<f32>;
-@group(0) @binding(4) var<storage,read> p: array<f32>;
-@compute @workgroup_size(256) fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
-  let rows=u32(p[0]); let cols=u32(p[1]); let rank=u32(p[2]); let idx=gid.x+gid.y*65535u*256u;
-  if(idx>=rows*cols){return;} let row=idx/cols; let col=idx%cols; var delta=0.0;
-  for(var k=0u;k<rank;k=k+1u){delta=delta+b[row*rank+k]*a[k*cols+col];}
-  merged[idx]=base[idx]+p[3]*delta;
-}`;
-
-const LORA_BACKWARD_WGSL = `
-@group(0) @binding(0) var<storage,read> gw: array<f32>;
-@group(0) @binding(1) var<storage,read> a: array<f32>;
-@group(0) @binding(2) var<storage,read> b: array<f32>;
-@group(0) @binding(3) var<storage,read_write> ga: array<f32>;
-@group(0) @binding(4) var<storage,read_write> gb: array<f32>;
-@group(0) @binding(5) var<storage,read> p: array<f32>;
-@compute @workgroup_size(256) fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
-  let rows=u32(p[0]); let cols=u32(p[1]); let rank=u32(p[2]); let idx=gid.x; let scale=p[3];
-  if(idx<rank*cols){let k=idx/cols;let col=idx%cols;var sum=0.0;for(var row=0u;row<rows;row=row+1u){sum=sum+b[row*rank+k]*gw[row*cols+col];}ga[idx]=ga[idx]+scale*sum;}
-  if(idx<rows*rank){let row=idx/rank;let k=idx%rank;var sum=0.0;for(var col=0u;col<cols;col=col+1u){sum=sum+gw[row*cols+col]*a[k*cols+col];}gb[idx]=gb[idx]+scale*sum;}
-}`;
-
-const ADAMW_WGSL = `
-@group(0) @binding(0) var<storage,read_write> w: array<f32>;
-@group(0) @binding(1) var<storage,read_write> g: array<f32>;
-@group(0) @binding(2) var<storage,read_write> m: array<f32>;
-@group(0) @binding(3) var<storage,read_write> v: array<f32>;
-@group(0) @binding(4) var<storage,read> p: array<f32>;
-@compute @workgroup_size(256) fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
-  let i=gid.x;if(i>=arrayLength(&w)){return;}let grad=g[i]*p[9];let b1=p[5];let b2=p[6];
-  m[i]=b1*m[i]+(1.0-b1)*grad;v[i]=b2*v[i]+(1.0-b2)*grad*grad;
-  let mh=m[i]/(1.0-pow(b1,p[10]));let vh=v[i]/(1.0-pow(b2,p[10]));
-  w[i]=w[i]-p[4]*(mh/(sqrt(vh)+p[7])+p[8]*w[i]);g[i]=0.0;
-}`;
-
 class WebGPULoRAAdapterEngine {
-  private readonly params = new Float32Array(16);
+  private readonly params = new Float32Array(TRAINER_PARAM_FLOATS);
   private readonly buffers: GPUBuffer[];
   private readonly base: GPUBuffer; private readonly a: GPUBuffer; private readonly b: GPUBuffer; private readonly merged: GPUBuffer;
   private readonly gw: GPUBuffer; private readonly ga: GPUBuffer; private readonly gb: GPUBuffer;

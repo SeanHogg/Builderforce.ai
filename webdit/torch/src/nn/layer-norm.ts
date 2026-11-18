@@ -107,7 +107,11 @@ export class RMSNorm {
   }
 }
 
-function normalizeOne(
+/**
+ * Normalize one row of `D` values. The training engine's CPU backend calls this
+ * too and passes `stats` to keep the row's mean / reciprocal std for backward.
+ */
+export function normalizeOne(
   out: Float32Array,
   dstBase: number,
   src: Float32Array,
@@ -117,6 +121,7 @@ function normalizeOne(
   eps: number,
   gamma: Float32Array | null,
   beta: Float32Array | null,
+  stats?: { mean: Float32Array; rstd: Float32Array; row: number },
 ): void {
   let mean = 0;
   for (let d = 0; d < D; d++) mean += src[srcBase + d * srcStride]!;
@@ -128,6 +133,10 @@ function normalizeOne(
   }
   variance /= D;
   const invStd = 1 / Math.sqrt(variance + eps);
+  if (stats) {
+    stats.mean[stats.row] = mean;
+    stats.rstd[stats.row] = invStd;
+  }
   for (let d = 0; d < D; d++) {
     let v = (src[srcBase + d * srcStride]! - mean) * invStd;
     if (gamma) v *= gamma[d]!;

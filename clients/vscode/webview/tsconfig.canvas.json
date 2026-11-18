@@ -103,6 +103,8 @@
       "@builderforce/agent-tools/knowledge-index": ["../../../packages/agent-tools/src/knowledge-index.ts"],
       "@builderforce/agent-tools/prefetch": ["../../../packages/agent-tools/src/prefetch/index.ts"],
       "@builderforce/prefetch": ["../../../packages/prefetch/src/index.ts"],
+      // The browser trainer's WGSL kernels (frontend/src/lib/webgpu-trainer.ts via AITrainingPanel).
+      "@webdit/torch/kernels": ["../../../webdit/torch/src/backend/webgpu/kernels/index.ts"],
       // `@builderforce/knowledge-graph-view` is source-only with these as PEERS and no
       // install of its own (as in frontend/tsconfig.json): three and @react-three/* are the
       // frontend's copies (the bundle resolves them there too — vite.config.ts), memory is

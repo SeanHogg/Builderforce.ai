@@ -41,19 +41,35 @@ function escapeRegExp(value) {
  */
 
 /**
- * Every source-only export across `packages/`, subpath exports included.
+ * Source-only packages that live OUTSIDE `packages/`, listed one by one (repo-relative,
+ * POSIX). Each is held to every guard rule exactly like a `packages/*` entry. Only
+ * `webdit/torch` is here: the frontend's browser trainer takes its WGSL kernels from
+ * `@webdit/torch/kernels` (PRD 31 §W9 phase 7 — one engine, no kernel copies). The
+ * other `webdit/*` packages stay out — they reach consumers bundled inside studio's
+ * `dist`, never by source alias.
+ */
+export const EXTRA_SOURCE_PACKAGE_DIRS = ['webdit/torch'];
+
+/**
+ * Every source-only export across `packages/` and `EXTRA_SOURCE_PACKAGE_DIRS`,
+ * subpath exports included.
  *
  * @param {string} repoRoot Absolute path to the repository root.
  * @returns {SourcePackageEntry[]} Sorted by specifier, so callers are stable.
  */
 export function readSourcePackages(repoRoot) {
   const packagesDir = path.join(repoRoot, 'packages');
+  const packageDirs = [
+    ...readdirSync(packagesDir, { withFileTypes: true })
+      .filter((dirent) => dirent.isDirectory())
+      .map((dirent) => `packages/${dirent.name}`),
+    ...EXTRA_SOURCE_PACKAGE_DIRS,
+  ];
   /** @type {SourcePackageEntry[]} */
   const found = [];
 
-  for (const dirent of readdirSync(packagesDir, { withFileTypes: true })) {
-    if (!dirent.isDirectory()) continue;
-    const manifestPath = path.join(packagesDir, dirent.name, 'package.json');
+  for (const packageDir of packageDirs) {
+    const manifestPath = path.join(repoRoot, ...packageDir.split('/'), 'package.json');
     if (!existsSync(manifestPath)) continue;
 
     const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
@@ -64,7 +80,7 @@ export function readSourcePackages(repoRoot) {
     for (const [subpath, target] of Object.entries(manifest.exports)) {
       if (typeof target !== 'string' || !target.startsWith(SOURCE_ENTRY)) continue;
       const specifier = subpath === '.' ? manifest.name : `${manifest.name}/${subpath.replace(/^\.\//, '')}`;
-      const relative = `packages/${dirent.name}/${target.replace(/^\.\//, '')}`;
+      const relative = `${packageDir}/${target.replace(/^\.\//, '')}`;
       found.push({ specifier, entry: path.join(repoRoot, ...relative.split('/')), relative });
     }
   }

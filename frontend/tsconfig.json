@@ -61,6 +61,7 @@
       "@builderforce/agent-tools/knowledge-index": ["../packages/agent-tools/src/knowledge-index.ts"],
       "@builderforce/agent-tools/prefetch": ["../packages/agent-tools/src/prefetch/index.ts"],
       "@builderforce/prefetch": ["../packages/prefetch/src/index.ts"],
+      "@webdit/torch/kernels": ["../webdit/torch/src/backend/webgpu/kernels/index.ts"],
       "react": ["./node_modules/@types/react"],
       "react-dom": ["./node_modules/@types/react-dom"],
       "three": ["./node_modules/@types/three"],

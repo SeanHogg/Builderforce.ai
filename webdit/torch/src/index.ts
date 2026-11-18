@@ -24,3 +24,5 @@ export {
 } from "./shape";
 export * from "./ops";
 export * as nn from "./nn";
+// The training engine lives on its own subpaths — `@webdit/torch/autograd`,
+// `/webgpu`, `/kernels` — so inference consumers of this entry bundle none of it.

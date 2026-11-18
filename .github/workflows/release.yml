@@ -748,6 +748,39 @@ jobs:
         if: ${{ matrix.package == 'run-delta' }}
         run: pnpm run typecheck
 
+  # @webdit/torch — the training engine (PRD 31 §W9 phase 7) whose kernels the frontend's
+  # browser trainer imports by source. Its suites live in `test/`, which no other job's
+  # include reaches (api/vitest.config.ts covers only `<pkg>/src`). Same shape as a
+  # verify-kernel leg. The CPU suites (gradient checks, engine, optimizers, training) always
+  # run; the WebGPU suites need a GPU adapter through Dawn's Node binding and SKIP, with the
+  # probe's reason in the log, on a runner without one.
+  verify-webdit-torch:
+    name: Verify @webdit/torch
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: webdit/torch
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.23.0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - uses: ./.github/actions/pnpm-store-cache
+        with:
+          scope: verify-webdit-torch
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm run typecheck
+
+      - run: pnpm run test
+
   deploy-api:
     name: Deploy API
     runs-on: ubuntu-latest

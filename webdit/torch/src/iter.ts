@@ -8,7 +8,12 @@ import type { Shape } from "./shape";
 export function* iterIndices(shape: Shape): Generator<number[]> {
   const n = shape.length;
   const idx = new Array<number>(n).fill(0);
-  if (n === 0 || shape.some((d) => d === 0)) return;
+  if (shape.some((d) => d === 0)) return;
+  // A 0-d shape has exactly one element, addressed by the empty index.
+  if (n === 0) {
+    yield idx;
+    return;
+  }
   while (true) {
     yield idx;
     let i = n - 1;

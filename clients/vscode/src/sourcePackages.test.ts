@@ -4,7 +4,7 @@ import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { suggestedSubpathTarget, unresolvedNpmSubpaths } from '../../../scripts/lib/npmSubpaths.mjs';
-import { readSourcePackages } from '../../../scripts/sourcePackages.mjs';
+import { EXTRA_SOURCE_PACKAGE_DIRS, readSourcePackages } from '../../../scripts/sourcePackages.mjs';
 import { sourcePackageGraph } from '../../../scripts/sourcePackageGraph.mjs';
 import webviewConfig from '../webview/vite.config';
 
@@ -89,9 +89,14 @@ describe('source-only shared packages', () => {
 
   it('aliases the canvas bundle at package source, not at a copy', () => {
     const alias = webviewConfig.resolve?.alias as { find: string | RegExp; replacement: string }[];
+    // Package sources live under `packages/` plus the registry's explicit extra dirs.
+    const extraRoots = EXTRA_SOURCE_PACKAGE_DIRS.map((dir: string) => join(repoRoot, ...dir.split('/')) + sep);
     const replacements = alias
       .map((entry) => entry.replacement)
-      .filter((replacement) => replacement.split(sep).includes('packages'));
+      .filter(
+        (replacement) =>
+          replacement.split(sep).includes('packages') || extraRoots.some((root: string) => replacement.startsWith(root)),
+      );
 
     // Every package replacement must BE a registry entry: a hand-written alias
     // that drifts from the manifest is the failure mode this registry replaced.
