@@ -1,5 +1,3 @@
-'use client';
-
 import { useTranslations } from 'next-intl';
 import type { CollectionDescriptor } from './descriptor';
 import type { CollectionSelection } from './useCollectionSelection';

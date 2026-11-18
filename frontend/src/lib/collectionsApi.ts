@@ -14,7 +14,7 @@ export async function bulk(
 ): Promise<BulkResult> {
   return apiRequest<BulkResult>(`/api/collections/${encodeURIComponent(entity)}/bulk`, {
     method: 'POST',
-    body: request,
+    body: JSON.stringify(request),
     auth: 'web',
   });
 }
