@@ -251,15 +251,25 @@ describe('readBlueprintSources', () => {
     expect(files.get('DEEP/x/y/Web/Web.csproj')).toBe(WEB);
   });
 
-  it('a truncated read (a partial .sln or package.json) is treated as unread, not as the whole file', async () => {
+  it('a truncated whole-file format (package.json, *.csproj, Cargo.toml) is treated as unread', async () => {
     const io = stubIo({
       'package.json': '{"name":"web","dep',
-      'Shop.sln': sln(['web\\Web.csproj']),
-      'web/Web.csproj': WEB,
-    }, { truncated: ['package.json', 'Shop.sln'] });
+      'Cargo.toml': '[package]\nname = "a',
+      'web/Web.csproj': '<Project Sdk="Microsoft.NET.Sdk.Web"><Item',
+    }, { truncated: ['package.json', 'Cargo.toml', 'web/Web.csproj'] });
     const files = await readBlueprintSources(CTX, io);
-    expect(files.has('package.json')).toBe(false);
-    expect(files.has('Shop.sln')).toBe(false);
+    expect(['package.json', 'Cargo.toml', 'web/Web.csproj'].filter((key) => files.has(key))).toEqual([]);
+  });
+
+  it('a .sln past the read cap keeps its first part: its projects are still detected', async () => {
+    // ~120 projects is past the 60k-character read cap; the read comes back cut, the web project listed early.
+    const projects = ['src\\Web\\Web.csproj', ...Array.from({ length: 120 }, (_, i) => `libs\\Lib${i}\\Lib${i}.csproj`)];
+    const io = stubIo({ 'Shop.sln': sln(projects), 'src/Web/Web.csproj': WEB, Dockerfile: 'FROM node', 'schema.prisma': 'datasource db {' }, {
+      truncated: ['Shop.sln', 'Dockerfile', 'schema.prisma'],
+    });
+    const files = await readBlueprintSources(CTX, io);
+    expect(['Shop.sln', 'Dockerfile', 'schema.prisma'].every((key) => files.has(key))).toBe(true);
+    expect(detectDotnet(files).services?.[0]).toMatchObject({ id: 'Web', devCommand: 'dotnet run --project src/Web/Web.csproj --urls http://0.0.0.0:8080' });
   });
 
   it('the second pass reads only named files the full tree holds', async () => {

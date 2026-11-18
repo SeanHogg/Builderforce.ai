@@ -145,19 +145,26 @@ function providerCallBudget(base: FetchLike, limit: number): { fetch: FetchLike;
   };
 }
 
+/** Whether a cut-off read of `path` is still usable: its file name matches a detector's `prefixSafe` glob. */
+function isPrefixSafe(path: string): boolean {
+  const name = path.slice(path.lastIndexOf('/') + 1);
+  return DETECTORS.some((d) => d.prefixSafe?.some((glob) => pathGlobRegExp(glob).test(name)));
+}
+
 /**
  * Read each `reads` entry into `files` under its key; a miss or a failed read is skipped.
- * So is a TRUNCATED read (past the read cap, or a paged read that stopped early): a
- * partial `.sln` or `package.json` must not be taken for the whole file, so detection
- * treats it as unread — and logs it.
+ * A TRUNCATED read (too large, or a paged read the provider stopped) is decided per file
+ * kind, as detector data (`prefixSafe`): a line-oriented file (`.sln`, `schema.prisma`,
+ * `Dockerfile`) keeps its first part; a whole-file format (`package.json`, `*.csproj`)
+ * must not be taken for the whole file, so it is treated as unread — and logged.
  */
 async function readInto(ctx: RepoReadContext, io: BlueprintSourceIo, reads: readonly SourceRead[], files: Map<string, string>): Promise<void> {
   const results = await mapWithConcurrency([...reads], READ_CONCURRENCY, (read) => io.readRepoFile(ctx, read.path));
   results.forEach((result, i) => {
     const read = reads[i];
     if (!result.ok || read === undefined) return;
-    if (result.truncated) {
-      console.warn(`[blueprint] ${read.path} was read only in part; detection skips it`);
+    if (result.truncated && !isPrefixSafe(read.path)) {
+      console.warn(`[blueprint] ${read.path} was read only in part (${result.truncatedReason ?? 'incomplete'}); detection skips it`);
       return;
     }
     files.set(read.key, result.content);

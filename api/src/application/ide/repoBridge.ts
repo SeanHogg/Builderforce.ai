@@ -24,7 +24,7 @@ import { buildDatabase } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { IDE_PREFIX } from '../project/projectTemplate';
 import { resolveRepoCredential, isResolveError } from '../repos/resolveRepoCredential';
-import { createRepoSource, makeRepoFetch, isExcludedPath, isBinaryPath, isSecretPath } from '../repos/sources/RepoSource';
+import { createRepoSource, makeRepoFetch, isExcludedPath, isBinaryPath, isSecretPath, readSourceFile } from '../repos/sources/RepoSource';
 import { commitFileToRepo, deleteFileFromRepo } from '../repos/commitFileToRepo';
 import { createPullRequest } from '../repos/createPullRequest';
 import { decryptCredentials } from '../integrations/credentialCrypto';
@@ -102,10 +102,18 @@ export async function importRepoToWorkspace(
   if (!bucket) return { ok: false, status: 503, error: 'Storage not configured' };
   const prefix = workspacePrefix(projectId);
   let imported = 0;
+  let partial = 0;
   for (const f of files) {
-    const content = await src.getFileContent(f.path, targetRef).catch(() => null);
-    if (content == null) continue; // oversize/binary/unreadable — skip, don't fail the whole import
-    await bucket.put(`${prefix}${f.path}`, content);
+    const read = await readSourceFile(src, f.path, targetRef).catch(() => null);
+    if (read == null) continue; // oversize/binary/unreadable — skip, don't fail the whole import
+    // A partly-read file must never enter the workspace: the next push would commit the
+    // fragment over the real file. Skip it (the import reports itself truncated).
+    if (read.truncated) {
+      console.warn(`[repoBridge] ${f.path} was read only in part (${read.truncatedReason ?? 'incomplete'}); not imported`);
+      partial += 1;
+      continue;
+    }
+    await bucket.put(`${prefix}${f.path}`, read.content);
     imported += 1;
   }
 
@@ -114,7 +122,7 @@ export async function importRepoToWorkspace(
     .set({ lastSyncedRef: targetRef, lastSyncedAt: new Date() })
     .where(and(eq(projectRepositories.id, repoId), eq(projectRepositories.tenantId, tenantId)));
 
-  return { ok: true, imported, ref: targetRef, truncated: tree.truncated || files.length >= MAX_IMPORT_FILES };
+  return { ok: true, imported, ref: targetRef, truncated: tree.truncated || files.length >= MAX_IMPORT_FILES || partial > 0 };
 }
 
 /**

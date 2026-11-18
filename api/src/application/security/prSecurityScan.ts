@@ -96,7 +96,11 @@ async function readAll(read: RepoReadContext, paths: string[]): Promise<ReadAllR
       if (!r.ok) failures.push(`${path}: ${r.reason}`);
       else {
         files.push({ path: r.path, content: r.content });
-        if (r.truncated) failures.push(`${path}: file exceeds the read limit and was only partly read`);
+        if (r.truncated) {
+          failures.push(r.truncatedReason === 'incomplete'
+            ? `${path}: the provider stopped answering mid-read (e.g. rate limited), so the file was only partly read`
+            : `${path}: file exceeds the read limit and was only partly read`);
+        }
       }
     });
   }

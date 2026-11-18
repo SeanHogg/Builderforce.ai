@@ -38,10 +38,26 @@ export interface RepoCommit {
   date: string;
 }
 
-/** A file read: its content, and whether that content stops short of the whole file. */
+/**
+ * Why a read stops short of the whole file: `size` — the file is past a read cap;
+ * `incomplete` — the provider stopped answering mid-read (a page cap, a refused or
+ * rate-limited page). The two call for different answers (rewrite vs retry).
+ */
+export type TruncationReason = 'size' | 'incomplete';
+
+/** A file read: its content, and whether (and why) that content stops short of the whole file. */
 export interface RepoFileRead {
   content: string;
   truncated: boolean;
+  /** Set when `truncated`. */
+  truncatedReason?: TruncationReason;
+}
+
+/** A source's file read with its truncation, whether or not the source pages its reads. */
+export async function readSourceFile(source: RepoSource, path: string, ref: string): Promise<RepoFileRead | null> {
+  if (source.readFile) return source.readFile(path, ref);
+  const content = await source.getFileContent(path, ref);
+  return content == null ? null : { content, truncated: false };
 }
 
 export interface RepoSource {

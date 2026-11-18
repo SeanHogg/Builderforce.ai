@@ -203,14 +203,16 @@ export class BitbucketRepoSource implements RepoSource {
       const url: string = `${this.api.fileWrite(path)}?at=${encodeURIComponent(ref)}`
         + `&limit=${SERVER_PAGE_LIMIT}&start=${start}`;
       const { ok, body } = await this.getJson<unknown>(url);
-      if (!ok) return pagesText.length > 0 ? { content: pagesText.join('\n'), truncated: true } : null;
+      if (!ok) return pagesText.length > 0 ? { content: pagesText.join('\n'), truncated: true, truncatedReason: 'incomplete' } : null;
       const page = parseBitbucketServerBrowse(body);
       if (page.text === null) return null; // a directory, or an unreadable/binary blob
       pagesText.push(page.text);
       start = page.nextPageStart;
       pages += 1;
     }
-    return { content: pagesText.join('\n'), truncated: start !== null };
+    return start !== null
+      ? { content: pagesText.join('\n'), truncated: true, truncatedReason: 'incomplete' }
+      : { content: pagesText.join('\n'), truncated: false };
   }
 
   async listCommits(ref: string, limit: number): Promise<RepoCommit[]> {

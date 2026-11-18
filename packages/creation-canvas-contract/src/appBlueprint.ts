@@ -292,6 +292,13 @@ export interface BlueprintDetector {
    * sanitised to repo paths and bounded. Given the files read so far, keyed by repo path; returns repo paths.
    */
   followReads?: (files: Map<string, string>) => string[];
+  /**
+   * File-name globs (`*.sln`, `Dockerfile*`) of the files it reads whose FIRST part is
+   * still meaningful — line-oriented formats a reader takes line by line. A read cut short
+   * (too large, or the provider stopped mid-read) is kept for these; any other file
+   * (`package.json`, `Cargo.toml`, `*.csproj`: whole-file formats) is skipped when cut.
+   */
+  prefixSafe?: string[];
   /** Detect from file contents. */
   detect: (files: Map<string, string>) => Partial<AppBlueprint>;
 }

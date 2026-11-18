@@ -10,6 +10,7 @@ export const envExampleDetector: BlueprintDetector = {
   id: 'env-example',
   name: 'Environment Example',
   reads: ['.env.example', '.env.example.local', '.env.example.dev', '.env.example.production'],
+  prefixSafe: ['.env.example*'],
   detect: (files: Map<string, string>): any => {
     const result: any = {
       sources: { envExample: false },

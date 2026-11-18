@@ -46,6 +46,7 @@ import { WorkerSubrequestExhaustedError } from '../../application/llm/vendors/ty
 import {
   createRepoSource,
   makeRepoFetch,
+  readSourceFile,
   selectEvidence,
 } from '../../application/repos/sources/RepoSource';
 import { ArchitectAnalysisService, ArtifactGenerationError } from '../../application/repoanalysis/ArchitectAnalysisService';
@@ -323,10 +324,11 @@ export class AnalysisRunnerDO implements DurableObject {
       });
       const sampledFiles: RepoEvidence['sampledFiles'] = [];
       for (const p of picks) {
-        const content = await source.getFileContent(p.path, branch);
-        if (content == null) continue;
-        const truncated = content.length > FILE_CONTENT_CAP;
-        sampledFiles.push({ path: p.path, content: truncated ? content.slice(0, FILE_CONTENT_CAP) : content, truncated });
+        // readSourceFile: a paged read that stopped short is truncated too, never sampled as whole.
+        const read = await readSourceFile(source, p.path, branch);
+        if (read == null) continue;
+        const capped = read.content.length > FILE_CONTENT_CAP;
+        sampledFiles.push({ path: p.path, content: capped ? read.content.slice(0, FILE_CONTENT_CAP) : read.content, truncated: capped || read.truncated });
       }
       const recentCommits = await source.listCommits(branch, 12).catch(() => []);
 

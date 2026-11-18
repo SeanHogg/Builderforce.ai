@@ -242,7 +242,14 @@ export function buildCloudProvider(args: {
         let rf = await readRepoFile({ ...target, ref: target === repoCtx ? readRef() : target.branch }, path);
         if (!rf.ok && target !== repoCtx) rf = await readRepoFile({ ...target, ref: target.base }, path);
         if (!rf.ok) return { ok: false, error: `cannot edit '${path}': ${rf.reason}` };
-        if (rf.truncated) return { ok: false, error: `'${path}' is too large to edit safely here — rewrite it with write_file instead` };
+        if (rf.truncated) {
+          return {
+            ok: false,
+            error: rf.truncatedReason === 'incomplete'
+              ? `'${path}' could not be read completely (the provider stopped answering mid-read, e.g. rate limited) — retry edit_file shortly, or rewrite the whole file with write_file`
+              : `'${path}' is too large to edit safely here — rewrite it with write_file instead`,
+          };
+        }
         // EOL-tolerant, EOL-preserving match (shared with the VS Code provider) so an
         // agent that emits LF against a CRLF-committed file still edits it instead of
         // failing with "old_string not found" and giving up.

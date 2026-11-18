@@ -226,7 +226,7 @@ describe('BitbucketRepoSource', () => {
       expect(await src.readFile!('big.txt', 'main')).toMatchObject({ truncated: true });
       browsed = 0;
       const read = await readRepoFile({ provider: 'bitbucket', host: 'git.acme.internal', owner: 'PRJ', repo: 'r', token: 't', ref: 'main', fetch, browsePageLimit: 2 }, 'big.txt');
-      expect(read).toMatchObject({ ok: true, truncated: true });
+      expect(read).toMatchObject({ ok: true, truncated: true, truncatedReason: 'incomplete' });
     });
 
     it('/browse read to its last page is whole', async () => {
@@ -235,6 +235,13 @@ describe('BitbucketRepoSource', () => {
         : jsonResponse({ lines: [{ text: 'all' }], isLastPage: true })));
       const read = await readRepoFile({ provider: 'bitbucket', host: 'git.acme.internal', owner: 'PRJ', repo: 'r', token: 't', ref: 'main', fetch }, 'small.txt');
       expect(read).toEqual({ ok: true, path: 'small.txt', content: 'all', truncated: false });
+    });
+
+    it('a file past the read cap is truncated for size, not as incomplete', async () => {
+      const big = 'x'.repeat(70_000);
+      const fetch: FetchLike = vi.fn(async () => textResponse(big));
+      const read = await readRepoFile({ provider: 'bitbucket', host: 'git.acme.internal', owner: 'PRJ', repo: 'r', token: 't', ref: 'main', fetch }, 'big.txt');
+      expect(read).toMatchObject({ ok: true, truncated: true, truncatedReason: 'size' });
     });
 
     it('maxBrowsePages bounds the /browse pages of one file', async () => {
