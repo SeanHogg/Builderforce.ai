@@ -1593,4 +1593,7 @@ export const teams = pgTable('teams', {
   avatarUrl:   text('avatar_url'), // unbounded image URL (R2 upload w/ query params); widened mig 0356
   createdAt:   timestamp('created_at').notNull().defaultNow(),
   updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+  /** Archive (PRD 47 §3.3). NULL = active; members/agent seats are untouched by
+   *  archive (they move only through Merge). */
+  archivedAt:  timestamp('archived_at'),
 });

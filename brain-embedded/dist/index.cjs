@@ -36934,7 +36934,7 @@ var DEFAULT_AGENT_MODEL_SENTINEL = "builderforce-default";
 var AGENT_POOL_PATHS = {
   owned: "/api/workforce/agents/mine",
   purchased: "/api/workforce/agents/purchased",
-  registered: "/api/agents"
+  registered: "/api/agent-registrations"
 };
 function poolAgentsFrom(input) {
   const wfById = /* @__PURE__ */ new Map();
@@ -36946,7 +36946,7 @@ function poolAgentsFrom(input) {
     meta: a.title || a.base_model || "",
     baseModel: a.base_model && a.base_model !== DEFAULT_AGENT_MODEL_SENTINEL ? a.base_model : null
   }));
-  const registered = input.registered.filter((a) => a.isActive).map((a) => ({ kind: "registered", ref: String(a.id), name: a.name, meta: a.type, baseModel: null }));
+  const registered = input.registered.filter((a) => a.status === "active").map((a) => ({ kind: "registered", ref: String(a.id), name: a.name, meta: a.framework, baseModel: null }));
   return [...workforce, ...registered];
 }
 async function loadAgentPoolVia(request) {

@@ -1,3 +1,13 @@
+## ✅ RESOLVED 2026-11-18: SIEM audit export — a tenant's security trail now ships to its own collector (PRD 39 §4a, ticket #6652)
+
+- **`otel_exporters` gained `signals` (`traces` | `audit` | `both`, default `traces`) and `audit_cursor`** (migration `1346`). Existing exporters are unchanged; opting into audit is a settings-panel toggle.
+- **`logsUrl` in `otelSpans.ts`** swaps any `/v1/traces` or `/v1/metrics` suffix on the endpoint for `/v1/logs` — never appends, so a per-signal base never becomes `/v1/traces/v1/logs`.
+- **The sweep (`otelAuditSweep.ts`) runs on the `frequent` cron tick** (`cronSweeps.ts`, key `otel-audit-export`) — never on a request path, so a collector outage cannot slow a request. Outages surface on the exporter row's existing health columns (`last_error`, `consecutive_failures`, `last_export_at`).
+- **Seven sources, one reader each**, read through the handle that owns the table: `auth.sessions`, `memberships`, `api_keys`, `exports`, `integrations`, `approvals` on core; `tool_calls` (`tool_audit_events`) on the operational endpoint via `runTelemetryDatabase`. `admin_audit_log` — the cross-tenant operator trail — is deliberately not a source.
+- **At-least-once with no loss:** the cursor is one JSONB column on the exporter row (`{source: lastSeenId, sent}`) — chosen over a cursor table because exporter and cursor share one lifecycle (deleting the exporter deletes the cursor) and one row write replaces one per source. The cursor advances only after a batch is accepted, so a failed batch retries whole from the last confirmed position; each event id (`<source>:<row id>`, sent as `builderforce.audit.event_id`) is the collector's dedup key. Encrypted headers are reused via the exporter's existing `headersEnc`/`headersIv` columns.
+- **Verified:** `npx tsc --noEmit` clean in `api`; `otelSpans.test.ts` (15) + `otelAuditSweep.pglite.test.ts` (5) pass, including the failed-batch cursor-survival case. Settings panel (`OtelExporterSettings.tsx`) localized in en/zh/es/fr/de.
+- **Ship rule:** `release_notes` row `category=new` (version 2026.11.150) ships in migration 1346 itself.
+
 ## ✅ RESOLVED 2026-11-17: the WebContainers ML modules ship (2026.10.14), and Studio uses them (studio 2026.11.2)
 
 - **WebContainers 2026.10.14 is on npm.** The phase 1–8 ML modules (inference, adaptive, memory, prefetch, kvcache, learning) now live under the `./ml` subpath, and the root export is back to the dev runtime only. The worker bundle is `./ml/worker.js`.

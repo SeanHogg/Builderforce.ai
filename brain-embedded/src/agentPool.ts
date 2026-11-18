@@ -30,12 +30,16 @@ export interface PoolWorkforceAgentRow {
   base_model?: string | null;
 }
 
-/** The fields of a registered remote agent row the pool reads. */
+/**
+ * The fields of a registered remote agent row the pool reads. PRD 39 §3 push 1:
+ * the pool now reads `/api/agent-registrations` (envelope `{agents}`), whose rows
+ * carry `status`/`framework` rather than the legacy `type`/`isActive`.
+ */
 export interface PoolRegisteredAgentRow {
   id: number | string;
   name: string;
-  type: string;
-  isActive: boolean;
+  status: string;
+  framework: string;
 }
 
 /** base_model sentinel meaning "no explicit model — use the default". */
@@ -45,7 +49,7 @@ export const DEFAULT_AGENT_MODEL_SENTINEL = 'builderforce-default';
 export const AGENT_POOL_PATHS = {
   owned: '/api/workforce/agents/mine',
   purchased: '/api/workforce/agents/purchased',
-  registered: '/api/agents',
+  registered: '/api/agent-registrations',
 } as const;
 
 /** Build the pool from its three source lists (owned + purchased deduped by id). */
@@ -65,8 +69,8 @@ export function poolAgentsFrom(input: {
     baseModel: a.base_model && a.base_model !== DEFAULT_AGENT_MODEL_SENTINEL ? a.base_model : null,
   }));
   const registered: PoolAgent[] = input.registered
-    .filter((a) => a.isActive)
-    .map((a) => ({ kind: 'registered', ref: String(a.id), name: a.name, meta: a.type, baseModel: null }));
+    .filter((a) => a.status === 'active')
+    .map((a) => ({ kind: 'registered', ref: String(a.id), name: a.name, meta: a.framework, baseModel: null }));
   return [...workforce, ...registered];
 }
 

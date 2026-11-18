@@ -6,7 +6,7 @@ import { useCollectionPaging } from '../collection/useCollectionPaging';
 import { useCollectionSort } from '../collection/useCollectionSort';
 import { useCollectionPreferences } from '../collection/collectionPreferences';
 import { Collection } from '../collection/Collection';
-import type { WorkflowDefinitionSummary } from '../../lib/workflowApi';
+import type { WorkflowDefinitionSummary } from '@/lib/builderforceApi';
 
 export interface WorkflowsContentProps {
   workflows: WorkflowDefinitionSummary[];

@@ -153,6 +153,7 @@ import { createLlmRatingRoutes }   from './presentation/routes/llmRatingRoutes';
 import { createSemanticCacheRoutes } from './presentation/routes/semanticCacheRoutes';
 import { createAdminRoutes }        from './presentation/routes/adminRoutes';
 import { createBacklogDispositionRoutes } from './presentation/routes/backlogDispositionRoutes';
+import { createCollectionBulkRoutes } from './presentation/routes/collectionBulkRoutes';
 import { createChatRoutes }         from './presentation/routes/chatRoutes';
 import { createSpecRoutes }         from './presentation/routes/specRoutes';
 import { createWorkflowRoutes }     from './presentation/routes/workflowRoutes';
@@ -709,6 +710,10 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/earnings', createEarningsRoutes(db));
   app.route('/api/withdrawal-methods', createWithdrawalMethodRoutes(db));
   app.route('/api/activity', createActivityRoutes(db));
+  // PRD 47 — ONE bulk endpoint for every Collection surface:
+  // POST /api/collections/:entity/bulk { action, ids, targetId?, dryRun? }.
+  // Auth + tenant are the authenticated JWT context (D2); the body carries no tenant.
+  app.route('/api/collections', createCollectionBulkRoutes());
   // Offline-first batch sync (G15–G18): push receipts + cursor pulls. The Drizzle
   // adapter binds the named importers to each event's own transaction.
   app.route(SYNC_ROUTE_BASE, createSyncRoutes(syncStoresFor));

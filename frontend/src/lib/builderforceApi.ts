@@ -1251,15 +1251,19 @@ export const artifactAssignments = {
 // Registered agents (tenant endpoint agents: claude/openai/ollama/http)
 // ---------------------------------------------------------------------------
 
+// PRD 39 §3 push 1: `/api/agent-registrations` returns an envelope `{agents}`
+// whose rows carry `status`/`framework` (not the legacy bare array with
+// `type`/`isActive`). `list()` unwraps the envelope so callers keep a plain array.
 export interface RegisteredAgent {
   id: number;
   name: string;
-  type: string;
-  isActive: boolean;
+  status: string;
+  framework: string;
 }
 
 export const registeredAgents = {
-  list: () => request<RegisteredAgent[]>('/api/agents'),
+  list: () =>
+    request<{ agents: RegisteredAgent[] }>('/api/agent-registrations').then((r) => r.agents ?? []),
 };
 
 // ---------------------------------------------------------------------------

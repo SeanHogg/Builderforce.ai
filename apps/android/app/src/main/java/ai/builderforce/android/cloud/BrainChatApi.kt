@@ -96,9 +96,13 @@ class BrainChatApi(private val session: CloudSession) {
         } catch (_: CloudException) {
           continue
         }
-      for (el in v.arrOrEmpty()) {
+      // The registered-agent endpoint returns `{agents:[...]}`; the workforce
+      // endpoints return bare arrays. Unwrap when the `agents` key is present.
+      val arr = v.objOrNull()?.get("agents")?.arrOrEmpty() ?: v.arrOrEmpty()
+      for (el in arr) {
         val o = el.objOrNull() ?: continue
         if (o["isActive"].boolOrNull() == false) continue
+        if (o["status"].textOrNull() == "inactive") continue
         val id = o["id"].textOrNull() ?: continue
         pool[id] = Recipient(ref = id, name = o["name"].textOrNull() ?: id)
       }
@@ -109,7 +113,10 @@ class BrainChatApi(private val session: CloudSession) {
   companion object {
     private const val CHAT_LIMIT = 50
     private const val MESSAGE_LIMIT = 100
-    private val POOL_PATHS = listOf("/api/workforce/agents/mine", "/api/workforce/agents/purchased", "/api/agents")
+    // PRD 39 §3 push 1: the registered pool reads /api/agent-registrations, which
+    // returns an envelope `{agents:[...]}` with `status` (not the legacy bare array
+    // with `isActive`). The parser unwraps `agents` and filters `status == "inactive"`.
+    private val POOL_PATHS = listOf("/api/workforce/agents/mine", "/api/workforce/agents/purchased", "/api/agent-registrations")
 
     /** The tenant-checked read path of a stored upload. */
     fun uploadPath(key: String): String = "/api/brain/uploads/$key"

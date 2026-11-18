@@ -7633,12 +7633,16 @@ interface PoolWorkforceAgentRow {
     title?: string | null;
     base_model?: string | null;
 }
-/** The fields of a registered remote agent row the pool reads. */
+/**
+ * The fields of a registered remote agent row the pool reads. PRD 39 §3 push 1:
+ * the pool now reads `/api/agent-registrations` (envelope `{agents}`), whose rows
+ * carry `status`/`framework` rather than the legacy `type`/`isActive`.
+ */
 interface PoolRegisteredAgentRow {
     id: number | string;
     name: string;
-    type: string;
-    isActive: boolean;
+    status: string;
+    framework: string;
 }
 /** base_model sentinel meaning "no explicit model — use the default". */
 declare const DEFAULT_AGENT_MODEL_SENTINEL = "builderforce-default";
@@ -7646,7 +7650,7 @@ declare const DEFAULT_AGENT_MODEL_SENTINEL = "builderforce-default";
 declare const AGENT_POOL_PATHS: {
     readonly owned: "/api/workforce/agents/mine";
     readonly purchased: "/api/workforce/agents/purchased";
-    readonly registered: "/api/agents";
+    readonly registered: "/api/agent-registrations";
 };
 /** Build the pool from its three source lists (owned + purchased deduped by id). */
 declare function poolAgentsFrom(input: {

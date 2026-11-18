@@ -58,7 +58,9 @@ export interface ChatTicketsRestOptions {
 const RUNNABLE = new Set(RUNNABLE_KINDS);
 
 interface WorkforceAgent { id: string | number; name: string; title?: string; base_model?: string }
-interface RegisteredAgent { id: string | number; name: string; type: string; isActive: boolean }
+// PRD 39 §3 push 1: read from `/api/agent-registrations` (envelope `{agents}`),
+// whose rows carry `status`/`framework` rather than the legacy `type`/`isActive`.
+interface RegisteredAgent { id: string | number; name: string; status: string; framework: string }
 
 /**
  * The pending questions for a chat, given the links it has: the ONE filter ("a question or feedback
@@ -95,7 +97,9 @@ export function createChatTicketsRestAdapter(opts: ChatTicketsRestOptions): Chat
     const [mine, purchased, registered] = await Promise.all([
       req<WorkforceAgent[]>('/api/workforce/agents/mine').catch(() => [] as WorkforceAgent[]),
       req<WorkforceAgent[]>('/api/workforce/agents/purchased').catch(() => [] as WorkforceAgent[]),
-      req<RegisteredAgent[]>('/api/agents').catch(() => [] as RegisteredAgent[]),
+      req<{ agents: RegisteredAgent[] }>('/api/agent-registrations')
+        .then((r) => r.agents ?? [])
+        .catch(() => [] as RegisteredAgent[]),
     ]);
     const wfById = new Map<string, WorkforceAgent>();
     for (const agent of [...mine, ...purchased]) wfById.set(String(agent.id), agent);
@@ -103,8 +107,8 @@ export function createChatTicketsRestAdapter(opts: ChatTicketsRestOptions): Chat
       kind: 'workforce', ref: String(a.id), name: a.name, meta: a.title || a.base_model || '',
     }));
     const agents: AgentOptionVM[] = registered
-      .filter((a) => a.isActive)
-      .map((a) => ({ kind: 'registered', ref: String(a.id), name: a.name, meta: a.type }));
+      .filter((a) => a.status === 'active')
+      .map((a) => ({ kind: 'registered', ref: String(a.id), name: a.name, meta: a.framework }));
     return [...workforce, ...agents];
   };
 

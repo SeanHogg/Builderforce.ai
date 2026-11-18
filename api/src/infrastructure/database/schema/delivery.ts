@@ -3178,6 +3178,9 @@ export const prodIncidents = pgTable('prod_incidents', {
   externalUrl:        varchar('external_url', { length: 512 }),
   createdAt:      timestamp('created_at').notNull().defaultNow(),
   updatedAt:      timestamp('updated_at').notNull().defaultNow(),
+  /** Archive (PRD 47 §3.3). NULL = active — resolved-and-archived incidents drop
+   *  out of the default list without losing their timeline/war-room rows. */
+  archivedAt:     timestamp('archived_at'),
 }, (t) => ({
   byStarted: index('idx_prod_incidents_started').on(t.tenantId, t.startedAt),
   byStatus:  index('idx_prod_incidents_status').on(t.tenantId, t.status),
@@ -3523,6 +3526,9 @@ export const alerts = pgTable('alerts', {
   createdBy:       varchar('created_by', { length: 36 }),
   createdAt:       timestamp('created_at').notNull().defaultNow(),
   updatedAt:       timestamp('updated_at').notNull().defaultNow(),
+  /** Archive (PRD 47 §3.3): an archived rule stops evaluating and disappears
+   *  from the default list. NULL = active. */
+  archivedAt:      timestamp('archived_at'),
 }, (t) => ({
   byTenantEnabled: index('idx_alerts_tenant_enabled').on(t.tenantId, t.enabled),
 }));
