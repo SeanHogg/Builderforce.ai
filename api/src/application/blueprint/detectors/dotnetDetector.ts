@@ -34,6 +34,7 @@ import {
   serviceRootFiles,
   type RootDetection,
 } from './serviceRoots';
+import { repoRelativePath } from '../pathGlob';
 
 const PORT = devPortOf(SERVICE_KINDS.DOTNET);
 const URLS = `--urls http://0.0.0.0:${PORT}`;
@@ -48,13 +49,15 @@ const SLNX_PROJECT = /<Project\b[^>]*?\bPath\s*=\s*"([^"]+\.csproj)"/gi;
 /** A path the command line can take as one bare word. */
 const BARE_WORD = /^[\w./-]+$/;
 
-/** `src\Api\Api.csproj` → `src/Api/Api.csproj`. */
-function normalizeProjectPath(path: string): string {
-  return path.replace(/\\/g, '/').replace(/^\.\//, '');
+/** `src\Api\Api.csproj` → `src/Api/Api.csproj`; `..` resolved within the root; a path leaving it (or absolute) → null. */
+function normalizeProjectPath(path: string): string | null {
+  return repoRelativePath(path.replace(/\\/g, '/').replace(/^(?:\.\/)+/, ''));
 }
 
 function solutionProjects(text: string): string[] {
-  return [...text.matchAll(SLN_PROJECT), ...text.matchAll(SLNX_PROJECT)].map((m) => normalizeProjectPath(m[1]!));
+  return [...text.matchAll(SLN_PROJECT), ...text.matchAll(SLNX_PROJECT)]
+    .map((m) => normalizeProjectPath(m[1]!))
+    .filter((path): path is string => path !== null);
 }
 
 /** The files directly in `root` (relative names), from the paths detection read. */
@@ -75,22 +78,27 @@ function rootProjects(files: Map<string, string>, rootName: string) {
   return { projectFiles, solutions, candidates: [...new Set([...listed, ...projectFiles])] };
 }
 
+/** The web project a root runs (relative to it): the first web project among its candidates. */
+function pickedProject(files: Map<string, string>, rootName: string, candidates: readonly string[]): string | undefined {
+  return candidates.find((path) => WEB_SDK.test(files.get(pathUnder(rootName, path)) ?? ''));
+}
+
 /**
- * A repo-root solution listing a project that a backend folder's own root also offers
- * (`api/Api.csproj`, or `api/src/Api/Api.csproj` listed by `api/Api.sln`) leaves it to
- * that folder, so one project is never two services.
+ * A repo-root solution listing the project a backend folder's own root RUNS (`api/Api.csproj`,
+ * or `api/src/Api/Api.csproj` picked from `api/Api.sln`) leaves it to that folder, so one
+ * project is never two services. (Backend roots never defer, so their pick is final.)
  */
 function ownedByAnotherRoot(files: Map<string, string>, root: string, project: string): boolean {
   const slash = project.indexOf('/');
   if (root !== '' || slash === -1) return false;
   const first = project.slice(0, slash);
-  return SERVICE_ROOTS.includes(first) && rootProjects(files, first).candidates.includes(project.slice(slash + 1));
+  return SERVICE_ROOTS.includes(first) && pickedProject(files, first, rootProjects(files, first).candidates) === project.slice(slash + 1);
 }
 
 /** One shell word: as is when bare, else single-quoted (an embedded `'` as `'\''`). */
 const shellWord = (path: string): string => (BARE_WORD.test(path) ? path : `'${path.replace(/'/g, `'\\''`)}'`);
 
-/** The projects every root's solutions name, as repo paths — read in a second pass, uncapped. */
+/** The projects every root's solutions name, as repo paths — read in a second pass, past the glob cap. */
 function solutionListedProjects(files: Map<string, string>): string[] {
   return SERVICE_ROOTS.flatMap((root) => rootProjects(files, root).candidates.map((project) => pathUnder(root, project)));
 }
@@ -100,7 +108,7 @@ function detectDotnetRoot(files: Map<string, string>, rootName: string): RootDet
   const root = serviceRootFiles(files, rootName);
   const { projectFiles, solutions, candidates: offered } = rootProjects(files, rootName);
   const candidates = offered.filter((project) => !ownedByAnotherRoot(files, rootName, project));
-  const project = candidates.find((path) => WEB_SDK.test(root.get(path) ?? ''));
+  const project = pickedProject(files, rootName, candidates);
   if (!project) return null;
 
   const ambiguous = project.includes('/') || projectFiles.length + solutions.length > 1;
@@ -128,7 +136,7 @@ export const dotnetDetector: BlueprintDetector = {
   name: '.NET Project',
   // Projects directly in a root, and one or two folders down (where a solution keeps them);
   // blueprintSources caps how many files one glob may pull in; the projects a solution
-  // names are read uncapped (followReads).
+  // names are read past that cap (followReads, bounded by MAX_FOLLOW_READS).
   reads: readsUnderServiceRoots(['*.csproj', '*.sln', '*.slnx', '*/*.csproj', '*/*/*.csproj']),
   followReads: solutionListedProjects,
   detect: detectDotnet,

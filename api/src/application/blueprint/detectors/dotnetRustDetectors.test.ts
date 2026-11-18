@@ -80,7 +80,21 @@ describe('.NET detector', () => {
     expect(result.services?.map((s) => [s.id, s.rootDir, s.devCommand])).toEqual([['Web', '.', `dotnet run --project api/src/Web/Web.csproj ${URLS}`]]);
   });
 
-  it('follows every root solution to its projects (the second, uncapped read pass)', () => {
+  it('a root solution keeps a project the backend folder offers but does not pick', () => {
+    const result = detectDotnet(repo({
+      'App.sln': slnEntry('B', 'api\\src\\B\\B.csproj'),
+      'api/Api.sln': [slnEntry('A', 'src\\A\\A.csproj'), slnEntry('B', 'src\\B\\B.csproj')].join('\n'),
+      'api/src/A/A.csproj': WEB_CSPROJ,
+      'api/src/B/B.csproj': WEB_CSPROJ,
+    }));
+    expect(result.services?.map((s) => [s.id, s.rootDir])).toEqual([['B', '.'], ['api', 'api']]);
+  });
+
+  it('a solution path leaving its root, or absolute, is not a candidate', () => {
+    expect(detectDotnet(repo({ 'api/Api.sln': slnEntry('X', '..\\web\\Web.csproj'), 'web/Web.csproj': WEB_CSPROJ }))).toEqual({});
+  });
+
+  it('follows every root solution to its projects (the second read pass)', () => {
     expect(dotnetDetector.followReads?.(repo({
       'App.sln': slnEntry('Web', 'deep\\a\\b\\Web\\Web.csproj'),
       'api/Api.slnx': '<Solution><Project Path="src/Api/Api.csproj" /></Solution>',

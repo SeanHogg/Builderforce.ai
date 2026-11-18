@@ -288,8 +288,8 @@ export interface BlueprintDetector {
   /** Files this detector reads (`*` globs allowed; a glob's matches are capped). */
   reads: string[];
   /**
-   * Files the read ones NAME, read in a second pass, uncapped (a solution's projects).
-   * Given the files read so far, keyed by repo path; returns repo paths.
+   * Files the read ones NAME, read in a second pass past the glob cap (a solution's projects);
+   * sanitised to repo paths and bounded. Given the files read so far, keyed by repo path; returns repo paths.
    */
   followReads?: (files: Map<string, string>) => string[];
   /** Detect from file contents. */

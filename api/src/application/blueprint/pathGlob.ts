@@ -1,5 +1,5 @@
 /**
- * W2: the ONE path-glob reading the blueprint code shares (detector `reads`, Cargo
+ * W2: the ONE path-glob reading (and repo-path sanitising) the blueprint code shares (detector `reads`, Cargo
  * workspace `members`). One `*` semantic, chosen for repo paths:
  *
  * - a whole segment `*` is exactly one folder or file name (`[^/]+`): `crates/*`
@@ -26,4 +26,23 @@ export function pathGlobSource(glob: string): string {
 /** A path glob as an anchored RegExp: the whole path must match. */
 export function pathGlobRegExp(glob: string): RegExp {
   return new RegExp(`^${pathGlobSource(glob)}$`);
+}
+
+/**
+ * A path a repo file names (a solution's project), as a repo-relative path — or null
+ * when it is not one: absolute, an empty or `.` segment, or `..` climbing above the
+ * repo root. `..` inside the root resolves (`api/../web/W.csproj` → `web/W.csproj`).
+ * Every named path passes here before it reaches a provider URL.
+ */
+export function repoRelativePath(path: string): string | null {
+  if (!path || path.startsWith('/') || /^[A-Za-z]:/.test(path)) return null;
+  const resolved: string[] = [];
+  for (const segment of path.split('/')) {
+    if (segment === '' || segment === '.') return null;
+    if (segment === '..') {
+      if (resolved.length === 0) return null;
+      resolved.pop();
+    } else resolved.push(segment);
+  }
+  return resolved.length > 0 ? resolved.join('/') : null;
 }

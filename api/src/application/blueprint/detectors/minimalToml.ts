@@ -100,7 +100,8 @@ function readStringArray(text: string, from: number): string[] {
     const ch = text[i]!;
     if (quote) {
       if (ch === '\n' || ch === '\r') { quote = null; current = ''; }
-      else if (ch === '\\' && quote === '"' && i + 1 < text.length) current += unescapeBasic(text.slice(i, ++i + 1));
+      // A `\` escapes the next character, never the line break: the string still ends unterminated there.
+      else if (ch === '\\' && quote === '"' && i + 1 < text.length && text[i + 1] !== '\n' && text[i + 1] !== '\r') current += unescapeBasic(text.slice(i, ++i + 1));
       else if (ch === quote) { out.push(current); current = ''; quote = null; }
       else current += ch;
     } else if (ch === '"' || ch === "'") quote = ch;

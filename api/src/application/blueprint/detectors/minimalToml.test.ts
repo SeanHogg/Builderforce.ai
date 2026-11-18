@@ -49,6 +49,9 @@ describe('minimalToml', () => {
   it('an unterminated string stops at the end of its line', () => {
     expect(tomlStringArrays('a = [\n  "open,\n  "ok",\n]', 'a')).toEqual(['ok']);
     expect(tomlString('"open')).toBeUndefined();
+    // A `\` at the end of a line escapes nothing: the string still ends there.
+    expect(tomlStringArrays('a = [\n  "open\\\n  "ok",\n]', 'a')).toEqual(['ok']);
+    expect(tomlStringArrays('a = [\r\n  "open\\\r\n  "ok",\r\n]', 'a')).toEqual(['ok']);
   });
 
   it('a value that is not a quoted string has no string', () => {

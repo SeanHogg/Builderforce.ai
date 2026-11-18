@@ -9,7 +9,8 @@
  *
  * Two passes. The first reads every `reads` path; a glob is speculative, so it reads at
  * most `MAX_FILES_PER_GLOB` files. The second reads what the first pass's files NAME
- * (`followReads`: the projects a `.sln` lists), uncapped — a named file is never dropped.
+ * (`followReads`: the projects a `.sln` lists) past that cap — sanitised to repo paths,
+ * never a path already tried, at most `MAX_FOLLOW_READS` in the order they are named.
  *
  * Reading goes through the provider-agnostic `readRepoContents` primitives — the same
  * ones the cloud agent's `read_file`/`list_files` use — so GitHub, GitLab and Bitbucket
@@ -20,7 +21,7 @@
 import { listRepoFiles, readRepoFile, type RepoReadContext } from '../repos/readRepoContents';
 import { mapWithConcurrency } from '../runtime/boundedPool';
 import { DETECTORS } from './detectors';
-import { pathGlobRegExp } from './pathGlob';
+import { pathGlobRegExp, repoRelativePath } from './pathGlob';
 
 /** A `reads` entry with a wildcard: `dir` (itself a glob, `api/*`) and the name test of its files. */
 export interface BlueprintDirGlob {
@@ -38,6 +39,9 @@ const READ_CONCURRENCY = 6;
 
 /** At most this many files per glob: a repo of many projects (`*` folders of `.csproj`) must not cost a read each. */
 export const MAX_FILES_PER_GLOB = 40;
+
+/** At most this many second-pass reads, in the order they are named: one solution may name thousands of projects. */
+export const MAX_FOLLOW_READS = 48;
 
 /** `.github/workflows/*.yml` → `{ dir: '.github/workflows', test: (name) => /^[^/]*\.yml$/ }`. */
 function toDirGlob(entry: string): BlueprintDirGlob {
@@ -145,10 +149,17 @@ export async function readBlueprintSources(
 ): Promise<Map<string, string>> {
   const first = await firstPass(ctx, io);
   const files = new Map<string, string>();
-  await readInto(ctx, io, [...new Set(first.paths)], files);
-  // The files the first pass's files name (a solution's projects): read whatever is not read yet, uncapped.
-  const named = [...new Set(DETECTORS.flatMap((d) => d.followReads?.(files) ?? []))]
-    .filter((path) => !files.has(path) && (first.present?.has(path) ?? true));
-  if (named.length > 0) await readInto(ctx, io, named, files);
+  const tried = [...new Set(first.paths)];
+  await readInto(ctx, io, tried, files);
+  // The files the first pass's files name (a solution's projects), in the order they are named:
+  // only safe repo paths, never one already tried, only what the tree holds (when listed), at most MAX_FOLLOW_READS.
+  const attempted = new Set(tried);
+  const named = [...new Set(DETECTORS.flatMap((d) => d.followReads?.(files) ?? []).map(repoRelativePath))]
+    .filter((path): path is string => path !== null && !attempted.has(path) && (first.present?.has(path) ?? true));
+  if (named.length > MAX_FOLLOW_READS) {
+    console.warn(`[blueprint] files name ${named.length} more files; reading the first ${MAX_FOLLOW_READS}`);
+  }
+  const follow = named.slice(0, MAX_FOLLOW_READS);
+  if (follow.length > 0) await readInto(ctx, io, follow, files);
   return files;
 }
