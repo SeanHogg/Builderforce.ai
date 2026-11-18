@@ -354,18 +354,26 @@ function finishTreeListing(
 }
 
 export async function listRepoFiles(ctx: RepoReadContext, subPath?: string, glob?: string): Promise<ListFilesResult> {
+  const tree = await listRepoTree(ctx);
+  if (!tree.ok) return tree;
+  const prefix = normalizeScopeDir(subPath);
+  const paths = tree.paths.filter((p) => isUnderScopeDir(p, prefix));
+  return { ok: true, ...finishTreeListing(paths, subPath, glob, tree.truncated) };
+}
+
+/**
+ * Every file path of the repo at `ctx.ref` in ONE provider listing, uncapped — for a
+ * caller that filters the tree itself (blueprint sources). `truncated` is the
+ * PROVIDER's cut only (a GitHub tree past its own limit), never a cap of ours.
+ */
+export async function listRepoTree(ctx: RepoReadContext): Promise<ListFilesResult> {
   // GitLab/Bitbucket via the shared RepoSource.getTree (which also recovers
   // truncated GitHub trees); GitHub keeps its inline path below (no-regression). [1248]
   if (ctx.provider !== 'github') {
     try {
       const src = createRepoSource(ctx.provider, { owner: ctx.owner, repo: ctx.repo, host: ctx.host, token: ctx.token }, makeRepoFetch());
       const { entries, truncated: sourceTruncated } = await src.getTree(ctx.ref);
-      const prefix = normalizeScopeDir(subPath);
-      const paths = entries
-        .filter((e) => e.type === 'file')
-        .map((e) => e.path)
-        .filter((p) => isUnderScopeDir(p, prefix));
-      return { ok: true, ...finishTreeListing(paths, subPath, glob, sourceTruncated === true) };
+      return { ok: true, paths: entries.filter((e) => e.type === 'file').map((e) => e.path), truncated: sourceTruncated === true };
     } catch (e) {
       return { ok: false, reason: e instanceof Error ? e.message : `list not implemented for provider '${ctx.provider}'` };
     }
@@ -379,12 +387,10 @@ export async function listRepoFiles(ctx: RepoReadContext, subPath?: string, glob
   if (!res) return { ok: false, reason: 'list request failed (network)' };
   if (!res.ok) { const t = await res.text().catch(() => ''); return { ok: false, reason: `GitHub ${res.status}: ${t.slice(0, 160)}` }; }
   const json = (await res.json().catch(() => null)) as { tree?: Array<{ path?: string; type?: string }>; truncated?: boolean } | null;
-  const prefix = normalizeScopeDir(subPath);
   const paths = (json?.tree ?? [])
     .filter((n) => n.type === 'blob' && typeof n.path === 'string')
-    .map((n) => n.path as string)
-    .filter((p) => isUnderScopeDir(p, prefix));
-  return { ok: true, ...finishTreeListing(paths, subPath, glob, json?.truncated === true) };
+    .map((n) => n.path as string);
+  return { ok: true, paths, truncated: json?.truncated === true };
 }
 
 export type CommitShaResult = { ok: true; sha: string } | { ok: false; reason: string };

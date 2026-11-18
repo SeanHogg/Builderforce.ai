@@ -98,7 +98,7 @@ function ownedByAnotherRoot(files: Map<string, string>, root: string, project: s
 /** One shell word: as is when bare, else single-quoted (an embedded `'` as `'\''`). */
 const shellWord = (path: string): string => (BARE_WORD.test(path) ? path : `'${path.replace(/'/g, `'\\''`)}'`);
 
-/** The projects every root's solutions name, as repo paths — read in a second pass, past the glob cap. */
+/** The projects every root's solutions name, as repo paths — read in a second pass, within the follow-read reserve. */
 function solutionListedProjects(files: Map<string, string>): string[] {
   return SERVICE_ROOTS.flatMap((root) => rootProjects(files, root).candidates.map((project) => pathUnder(root, project)));
 }
@@ -135,9 +135,10 @@ export const dotnetDetector: BlueprintDetector = {
   id: 'dotnet',
   name: '.NET Project',
   // Projects directly in a root, and one or two folders down (where a solution keeps them);
-  // blueprintSources caps how many files one glob may pull in; the projects a solution
-  // names are read past that cap (followReads, bounded by MAX_FOLLOW_READS).
-  reads: readsUnderServiceRoots(['*.csproj', '*.sln', '*.slnx', '*/*.csproj', '*/*/*.csproj']),
+  // Glob matches share blueprintSources' read budget; the projects a solution
+  // names are read in a second pass (followReads), within blueprintSources' read budget.
+  // Solutions first: glob reads share a budget in this order.
+  reads: readsUnderServiceRoots(['*.sln', '*.slnx', '*.csproj', '*/*.csproj', '*/*/*.csproj']),
   followReads: solutionListedProjects,
   detect: detectDotnet,
 };

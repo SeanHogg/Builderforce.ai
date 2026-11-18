@@ -1,12 +1,14 @@
 /**
- * The source list is derived from the detector registry, so these pin the two ways it
- * can go wrong: a detector's `reads` entry the reader never fetches, and a failed read
- * that aborts detection instead of reading as "file absent".
+ * The source list is derived from the detector registry, so these pin the ways it can
+ * go wrong: a detector's `reads` entry the reader never fetches, a failed read that
+ * aborts detection instead of reading as "file absent", a repo that costs more provider
+ * calls than a webhook can spend, and a named path that leaves the repo.
  */
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import type { BlueprintDetector } from '@builderforce/creation-canvas-contract';
 import type { ListFilesResult, ReadFileResult, RepoReadContext } from '../repos/readRepoContents';
-import { blueprintSourcePaths, MAX_FILES_PER_GLOB, MAX_FOLLOW_READS, readBlueprintSources, type BlueprintSourceIo } from './blueprintSources';
+import { blueprintSourcePaths, FOLLOW_READ_RESERVE, MAX_SOURCE_READS, readBlueprintSources, type BlueprintSourceIo } from './blueprintSources';
 import { DETECTORS } from './detectors';
 import { detectDotnet } from './detectors/dotnetDetector';
 import { repoRelativePath } from './pathGlob';
@@ -16,37 +18,36 @@ const CTX: RepoReadContext = { provider: 'github', host: null, owner: 'acme', re
 interface StubOptions {
   /** Paths whose read fails with a provider error. */
   failing?: string[];
-  /** Whether the whole-tree listing (no subPath) fails — a provider without listing. */
+  /** Whether the tree listing fails — a provider without listing. */
   treeListingFails?: boolean;
-  /** Whether the whole-tree listing is truncated (a repo past the listing cap). */
+  /** Whether the tree listing is truncated (a repo past the provider's listing limit). */
   treeTruncated?: boolean;
 }
 
-function stubIo(repo: Record<string, string>, opts: StubOptions = {}): BlueprintSourceIo & { readCalls: string[]; listCalls: Array<string | undefined> } {
-  const readCalls: string[] = [];
-  const listCalls: Array<string | undefined> = [];
-  return {
-    readCalls,
-    listCalls,
-    readRepoFile: async (_ctx, path): Promise<ReadFileResult> => {
-      readCalls.push(path);
+function stubIo(repo: Record<string, string>, opts: StubOptions = {}): BlueprintSourceIo & { readCalls: string[]; listCalls: number } {
+  const io = {
+    readCalls: [] as string[],
+    listCalls: 0,
+    readRepoFile: async (_ctx: RepoReadContext, path: string): Promise<ReadFileResult> => {
+      io.readCalls.push(path);
       if (opts.failing?.includes(path)) return { ok: false, reason: 'provider error' };
       const content = repo[path];
       return content === undefined
         ? { ok: false, reason: `file not found on abc: ${path}` }
         : { ok: true, path, content, truncated: false };
     },
-    listRepoFiles: async (_ctx, subPath): Promise<ListFilesResult> => {
-      listCalls.push(subPath);
-      if (!subPath && opts.treeListingFails) return { ok: false, reason: 'list not implemented' };
-      return {
-        ok: true,
-        paths: Object.keys(repo).filter((p) => !subPath || p.startsWith(`${subPath}/`)),
-        truncated: !subPath && opts.treeTruncated === true,
-      };
+    listRepoTree: async (): Promise<ListFilesResult> => {
+      io.listCalls += 1;
+      if (opts.treeListingFails) return { ok: false, reason: 'list not implemented' };
+      return { ok: true, paths: Object.keys(repo), truncated: opts.treeTruncated === true };
     },
   };
+  return io;
 }
+
+const sln = (paths: readonly string[]) => paths.map((path, i) => `Project("{X}") = "P${i}", "${path}", "{${i}}"\nEndProject`).join('\n');
+const WEB = '<Project Sdk="Microsoft.NET.Sdk.Web"></Project>';
+const LIB = '<Project Sdk="Microsoft.NET.Sdk"></Project>';
 
 describe('blueprintSourcePaths', () => {
   it('covers every reads entry of every registered detector', () => {
@@ -61,18 +62,25 @@ describe('blueprintSourcePaths', () => {
       expect(dirGlobs.some((g) => g.dir === dir && g.test(sample))).toBe(true);
     }
   });
+
+  it('the exact paths alone fit the read budget, with the follow reserve left', () => {
+    expect(blueprintSourcePaths().exact.length).toBeLessThan(MAX_SOURCE_READS - FOLLOW_READ_RESERVE);
+  });
 });
 
 describe('readBlueprintSources', () => {
-  it('reads exactly the source files the repo holds, workflows included', async () => {
-    const files = await readBlueprintSources(CTX, stubIo({
+  it('reads exactly the source files the repo holds, workflows included, from ONE tree listing', async () => {
+    const io = stubIo({
       'package.json': '{}',
       '.github/workflows/ci.yml': 'on: push',
       '.github/workflows/deploy.yaml': 'on: push',
       '.github/workflows/README.md': 'not a workflow',
       'src/index.ts': 'export {}',
-    }));
+    });
+    const files = await readBlueprintSources(CTX, io);
     expect([...files.keys()].sort()).toEqual(['.github/workflows/ci.yml', '.github/workflows/deploy.yaml', 'package.json']);
+    expect(io.readCalls.sort()).toEqual(['.github/workflows/ci.yml', '.github/workflows/deploy.yaml', 'package.json']);
+    expect(io.listCalls).toBe(1);
   });
 
   it('matches globs at the root and through wildcard folders (.NET projects one and two levels down)', async () => {
@@ -91,99 +99,101 @@ describe('readBlueprintSources', () => {
     expect([...files.keys()]).toEqual(['package.json']);
   });
 
-  it('reads only the files the tree listing shows', async () => {
-    const io = stubIo({ 'package.json': '{}', '.github/workflows/ci.yml': 'on: push', 'src/index.ts': 'export {}' });
+  it('matches the tree case-insensitively, reading its spelling under the asked-for key', async () => {
+    const io = stubIo({ 'Package.JSON': '{}', 'App.sln': sln(['WEB\\Web.csproj']), 'web/Web.csproj': WEB });
     const files = await readBlueprintSources(CTX, io);
-    expect(io.readCalls.sort()).toEqual(['.github/workflows/ci.yml', 'package.json']);
-    expect([...files.keys()].sort()).toEqual(['.github/workflows/ci.yml', 'package.json']);
+    expect(io.readCalls).toEqual(expect.arrayContaining(['Package.JSON', 'web/Web.csproj']));
+    expect(files.get('package.json')).toBe('{}');
+    expect(detectDotnet(files).services?.[0]).toMatchObject({ id: 'Web', devCommand: 'dotnet run --project WEB/Web.csproj --urls http://0.0.0.0:8080' });
   });
 
-  it('falls back to reading every source path when the tree listing fails', async () => {
+  it('when the tree listing fails, reads every exact path blind (no globs, no second listing)', async () => {
     const io = stubIo({ 'package.json': '{}', '.github/workflows/ci.yml': 'on: push' }, { treeListingFails: true });
     const files = await readBlueprintSources(CTX, io);
-    expect(io.readCalls.length).toBe(blueprintSourcePaths().exact.length + 1);
-    expect([...files.keys()].sort()).toEqual(['.github/workflows/ci.yml', 'package.json']);
+    expect(io.readCalls.length).toBe(blueprintSourcePaths().exact.length);
+    expect(io.listCalls).toBe(1);
+    expect([...files.keys()]).toEqual(['package.json']);
   });
 
-  it('falls back through wildcard folders, listing each folder once for all its globs', async () => {
-    const io = stubIo({
-      '.github/workflows/ci.yml': 'on: push',
-      'api/src/Api/Api.csproj': '<Project />',
-      'api/Tools/Gen.csproj': '<Project />',
-      'api/Api.sln': 'x',
-      'backend/Cargo.toml': '[package]',
-    }, { treeListingFails: true });
-    const files = await readBlueprintSources(CTX, io);
-    expect([...files.keys()].sort()).toEqual(['.github/workflows/ci.yml', 'api/Api.sln', 'api/Tools/Gen.csproj', 'api/src/Api/Api.csproj', 'backend/Cargo.toml']);
-    const listed = io.listCalls.filter((dir) => dir !== undefined);
-    expect(listed.length).toBe(new Set(listed).size);
-    expect(listed).toEqual(expect.arrayContaining(['api', '.github/workflows']));
+  it(`worst case: one listing and at most ${MAX_SOURCE_READS} reads, however many files match or are named`, async () => {
+    const repo: Record<string, string> = Object.fromEntries(Array.from({ length: 600 }, (_, i) => [`p${i}/P${i}.csproj`, LIB]));
+    repo['Shop.sln'] = sln(Array.from({ length: 2000 }, (_, i) => `n${i}\\P${i}.csproj`));
+    for (const opts of [{}, { treeTruncated: true }] as const) {
+      const io = stubIo(repo, opts);
+      await readBlueprintSources(CTX, io);
+      expect(io.listCalls + io.readCalls.length).toBeLessThanOrEqual(1 + MAX_SOURCE_READS);
+    }
   });
-
-  it(`reads at most ${MAX_FILES_PER_GLOB} files per glob`, async () => {
-    const repo = Object.fromEntries(Array.from({ length: MAX_FILES_PER_GLOB + 5 }, (_, i) => [`p${i}/P${i}.csproj`, '<Project />']));
-    const files = await readBlueprintSources(CTX, stubIo(repo));
-    expect(files.size).toBe(MAX_FILES_PER_GLOB);
-  });
-
-  it('regression: a solution naming a project past the glob cap still gets it read and detected', async () => {
-    const count = MAX_FILES_PER_GLOB + 5;
-    const repo: Record<string, string> = Object.fromEntries(Array.from({ length: count }, (_, i) => [`p${i}/P${i}.csproj`, '<Project Sdk="Microsoft.NET.Sdk"></Project>']));
-    repo[`p${count - 1}/P${count - 1}.csproj`] = '<Project Sdk="Microsoft.NET.Sdk.Web"></Project>';
-    repo['Shop.sln'] = `Project("{X}") = "Web", "p${count - 1}\\P${count - 1}.csproj", "{1}"\nEndProject\n`;
-    const files = await readBlueprintSources(CTX, stubIo(repo));
-    expect(files.has(`p${count - 1}/P${count - 1}.csproj`)).toBe(true);
-    expect(detectDotnet(files).services?.[0]).toMatchObject({ id: `P${count - 1}`, devCommand: `dotnet run --project p${count - 1}/P${count - 1}.csproj --urls http://0.0.0.0:8080` });
-  });
-
-  // The fallback: no whole tree to check named paths against, so the follow pass's own bounds carry it.
-  const pastCapRepo = (prefix: string) => {
-    const count = MAX_FILES_PER_GLOB + 5;
-    const repo: Record<string, string> = Object.fromEntries(Array.from({ length: count }, (_, i) => [`${prefix}p${i}/P${i}.csproj`, '<Project Sdk="Microsoft.NET.Sdk"></Project>']));
-    repo[`${prefix}p${count - 1}/P${count - 1}.csproj`] = '<Project Sdk="Microsoft.NET.Sdk.Web"></Project>';
-    repo[`${prefix}Shop.sln`] = `Project("{X}") = "Web", "p${count - 1}\\P${count - 1}.csproj", "{1}"\nEndProject\n`;
-    return { repo, last: `${prefix}p${count - 1}/P${count - 1}.csproj` };
-  };
 
   it.each([
-    ['a truncated tree', '', { treeTruncated: true }],
-    ['a failed tree listing (solution in api/)', 'api/', { treeListingFails: true }],
-  ] as const)('fallback, %s: a solution-named project past the glob cap is still read', async (_name, prefix, opts) => {
-    const { repo, last } = pastCapRepo(prefix);
+    ['a full tree', {}],
+    ['a truncated tree', { treeTruncated: true }],
+  ] as const)('regression, %s: a solution naming a project past the glob share still gets it read and detected', async (_name, opts) => {
+    const count = MAX_SOURCE_READS + 40;
+    const repo: Record<string, string> = Object.fromEntries(Array.from({ length: count }, (_, i) => [`p${i}/P${i}.csproj`, LIB]));
+    const last = `p${count - 1}/P${count - 1}.csproj`;
+    repo[last] = WEB;
+    repo['Shop.sln'] = sln([last.replace('/', '\\')]);
     const files = await readBlueprintSources(CTX, stubIo(repo, opts));
     expect(files.has(last)).toBe(true);
+    expect(detectDotnet(files).services?.[0]).toMatchObject({ id: `P${count - 1}`, devCommand: `dotnet run --project ${last} --urls http://0.0.0.0:8080` });
   });
 
-  it(`fallback: the follow pass reads at most ${MAX_FOLLOW_READS} named files, never one the first pass tried`, async () => {
-    const named = Array.from({ length: MAX_FOLLOW_READS + 20 }, (_, i) => `Project("{X}") = "P${i}", "n${i}\\P${i}.csproj", "{${i}}"\nEndProject`);
-    const io = stubIo({
-      'api/Shop.sln': [`Project("{X}") = "Broken", "broken\\Broken.csproj", "{b}"\nEndProject`, ...named].join('\n'),
-      'api/broken/Broken.csproj': '<Project />',
-    }, { treeListingFails: true, failing: ['api/broken/Broken.csproj'] });
+  it('truncated tree: the follow reads are the first named ones in solution order, never one already tried', async () => {
+    const names = Array.from({ length: 300 }, (_, i) => `n${i}/P${i}.csproj`);
+    const io = stubIo({ 'Shop.sln': sln(['broken\\Broken.csproj', ...names.map((n) => n.replace('/', '\\'))]), 'broken/Broken.csproj': LIB }, {
+      treeTruncated: true, failing: ['broken/Broken.csproj'],
+    });
     await readBlueprintSources(CTX, io);
-    expect(io.readCalls.filter((p) => p === 'api/broken/Broken.csproj')).toHaveLength(1);
-    expect(io.readCalls.filter((p) => /^api\/n\d+\//.test(p))).toHaveLength(MAX_FOLLOW_READS);
+    expect(io.readCalls.filter((p) => p === 'broken/Broken.csproj')).toHaveLength(1);
+    const followed = io.readCalls.filter((p) => /^n\d+\//.test(p));
+    expect(followed.length).toBe(MAX_SOURCE_READS - (io.readCalls.length - followed.length));
+    expect(followed).toEqual(names.slice(0, followed.length));
   });
 
-  it('never reads a named path that is absolute or leaves the repo', async () => {
+  it('never reads a solution path that is absolute or leaves the repo (the target deeper than any glob)', async () => {
     const io = stubIo({
-      'Shop.sln': ['..\\..\\secret\\X.csproj', '/etc/Y.csproj', 'a\\\\b\\Z.csproj', 'C:\\w\\W.csproj', 'src\\..\\web\\Web.csproj']
-        .map((path, i) => `Project("{X}") = "P${i}", "${path}", "{${i}}"\nEndProject`).join('\n'),
-      'web/Web.csproj': '<Project />',
-    }, { treeTruncated: true });
+      'Shop.sln': sln(['..\\..\\secret\\X.csproj', '/etc/Y.csproj', 'a\\\\b\\Z.csproj', 'C:\\w\\W.csproj', 'deep\\a\\b\\x\\..\\web\\Web.csproj']),
+      'deep/a/b/web/Web.csproj': WEB,
+    });
     await readBlueprintSources(CTX, io);
-    const followed = io.readCalls.filter((p) => p.endsWith('.csproj'));
-    expect(followed).toEqual(['web/Web.csproj']);
+    expect(io.readCalls.filter((p) => p.endsWith('.csproj'))).toEqual(['deep/a/b/web/Web.csproj']);
   });
 
-  it('repoRelativePath: resolves .. inside the repo, drops absolute, empty, . and escaping paths', () => {
+  describe('every followReads result passes the central sanitiser', () => {
+    const raw: BlueprintDetector = {
+      id: 'raw-follow',
+      name: 'Raw follow reads (test)',
+      reads: [],
+      followReads: () => ['../x', '/etc/x', 'a//b', 'a\\b', 'a/%2e%2e/x', 'a/.../x', 'a/ . /x', 'a/\u0001x', 'src/../web/W.csproj'],
+      detect: () => ({}),
+    };
+    afterEach(() => {
+      const at = DETECTORS.indexOf(raw);
+      if (at !== -1) DETECTORS.splice(at, 1);
+    });
+
+    it('reads only the path that resolves inside the repo', async () => {
+      DETECTORS.push(raw);
+      const io = stubIo({ 'web/W.csproj': 'x' }, { treeTruncated: true });
+      const files = await readBlueprintSources(CTX, io);
+      // A truncated tree: the exact paths are read blind; everything else read is a follow read.
+      const exact = new Set(blueprintSourcePaths().exact);
+      expect(io.readCalls.filter((p) => !exact.has(p))).toEqual(['web/W.csproj']);
+      expect(files.get('web/W.csproj')).toBe('x');
+    });
+  });
+
+  it('repoRelativePath: resolves .. inside the repo; drops absolute, empty, dot-and-space, escaping, \\, % and control-character paths', () => {
     expect(repoRelativePath('src/../web/Web.csproj')).toBe('web/Web.csproj');
     expect(repoRelativePath('api/x.csproj')).toBe('api/x.csproj');
-    for (const bad of ['', '/etc/x', '../x', 'a/../../x', 'a//b', './a', 'a/./b', 'C:/x', '..']) expect(repoRelativePath(bad)).toBeNull();
+    for (const bad of ['', '/etc/x', '../x', 'a/../../x', 'a//b', './a', 'a/./b', 'C:/x', '..', 'a/.../x', 'a/ . /x', 'a\\b', 'a/%2e%2e/x', 'a/\u0001x', 'a/\u007fx']) {
+      expect(repoRelativePath(bad)).toBeNull();
+    }
   });
 
-  it('the second pass reads only named files the tree holds', async () => {
-    const io = stubIo({ 'Shop.sln': 'Project("{X}") = "Gone", "gone\\Gone.csproj", "{1}"\nEndProject\n' });
+  it('the second pass reads only named files the full tree holds', async () => {
+    const io = stubIo({ 'Shop.sln': sln(['gone\\Gone.csproj']) });
     await readBlueprintSources(CTX, io);
     expect(io.readCalls).not.toContain('gone/Gone.csproj');
   });

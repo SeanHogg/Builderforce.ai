@@ -182,4 +182,18 @@ describe('BitbucketRepoSource', () => {
     const commits = await src.listCommits('trunk', 5);
     expect(commits[0]).toEqual({ sha: 'h1', message: 'm', date: '2024-02-02' });
   });
+
+  it('Server: a 404 from /raw is a miss (no /browse retry); another failure retries /browse', async () => {
+    const calls: string[] = [];
+    const fetchFn: FetchLike = vi.fn(async (url: string) => {
+      calls.push(url);
+      if (url.includes('/raw/')) return textResponse('', url.includes('gone.txt') ? 404 : 503);
+      return jsonResponse({ lines: [{ text: 'from browse' }], isLastPage: true });
+    });
+    const src = createRepoSource('bitbucket', { owner: 'PRJ', repo: 'r', token: 't', host: 'git.acme.internal' }, fetchFn);
+    expect(await src.getFileContent('gone.txt', 'main')).toBeNull();
+    expect(calls).toHaveLength(1);
+    expect(await src.getFileContent('kept.txt', 'main')).toBe('from browse');
+    expect(calls.some((url) => url.includes('/browse/'))).toBe(true);
+  });
 });

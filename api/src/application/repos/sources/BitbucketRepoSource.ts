@@ -165,7 +165,9 @@ export class BitbucketRepoSource implements RepoSource {
   async getFileContent(path: string, ref: string): Promise<string | null> {
     const res = await this.fetchFn(this.api.fileContent(path, ref), { headers: this.headers });
     if (res.ok) return res.text().catch(() => null);
-    if (!this.isServer) return null;
+    // A 404 from `/raw` means the file is not there — `/browse` would only spend more
+    // subrequests to say the same; it is for a `/raw` that is unreachable, not a miss.
+    if (!this.isServer || res.status === 404) return null;
     return this.browseFileContent(path, ref);
   }
 

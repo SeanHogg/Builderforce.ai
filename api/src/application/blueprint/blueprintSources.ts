@@ -7,10 +7,15 @@
  * what the detectors expect (the copies this replaced had already missed several
  * `reads` entries, so those detectors never saw their files).
  *
- * Two passes. The first reads every `reads` path; a glob is speculative, so it reads at
- * most `MAX_FILES_PER_GLOB` files. The second reads what the first pass's files NAME
- * (`followReads`: the projects a `.sln` lists) past that cap — sanitised to repo paths,
- * never a path already tried, at most `MAX_FOLLOW_READS` in the order they are named.
+ * Every read is a provider subrequest spent inside a webhook `waitUntil`, so detection
+ * makes ONE tree listing and at most `MAX_SOURCE_READS` reads, in this order:
+ * 1. the exact `reads` paths the tree holds (all of them when the tree is unknown);
+ * 2. glob matches (`*.csproj`), filtered from the one tree in memory — leaving
+ *    `FOLLOW_READ_RESERVE` reads for:
+ * 3. the files the read ones NAME (`followReads`: the projects a `.sln` lists), sanitised
+ *    to repo paths, never a path already tried, in the order they are named.
+ * A cut at any step is logged. Paths are matched to the tree case-insensitively and read
+ * by the tree's own spelling, keyed by the spelling detection asked for.
  *
  * Reading goes through the provider-agnostic `readRepoContents` primitives — the same
  * ones the cloud agent's `read_file`/`list_files` use — so GitHub, GitLab and Bitbucket
@@ -18,7 +23,7 @@
  * (the API is a Worker; there is none).
  */
 
-import { listRepoFiles, readRepoFile, type RepoReadContext } from '../repos/readRepoContents';
+import { listRepoTree, readRepoFile, type RepoReadContext } from '../repos/readRepoContents';
 import { mapWithConcurrency } from '../runtime/boundedPool';
 import { DETECTORS } from './detectors';
 import { pathGlobRegExp, repoRelativePath } from './pathGlob';
@@ -37,11 +42,11 @@ export interface BlueprintSourcePaths {
 /** Parallel reads per detection — enough to be quick, few enough to be a polite API client. */
 const READ_CONCURRENCY = 6;
 
-/** At most this many files per glob: a repo of many projects (`*` folders of `.csproj`) must not cost a read each. */
-export const MAX_FILES_PER_GLOB = 40;
+/** Every read of one detection, all passes together (plus the one tree listing). */
+export const MAX_SOURCE_READS = 160;
 
-/** At most this many second-pass reads, in the order they are named: one solution may name thousands of projects. */
-export const MAX_FOLLOW_READS = 48;
+/** Reads glob matches may not take, so the files a solution names still fit. */
+export const FOLLOW_READ_RESERVE = 32;
 
 /** `.github/workflows/*.yml` → `{ dir: '.github/workflows', test: (name) => /^[^/]*\.yml$/ }`. */
 function toDirGlob(entry: string): BlueprintDirGlob {
@@ -62,7 +67,7 @@ export function blueprintSourcePaths(): BlueprintSourcePaths {
 
 export interface BlueprintSourceIo {
   readRepoFile: typeof readRepoFile;
-  listRepoFiles: typeof listRepoFiles;
+  listRepoTree: typeof listRepoTree;
 }
 
 /** The directory part of a repo path (`''` at the root). */
@@ -71,95 +76,96 @@ function dirOf(path: string): string {
   return slash === -1 ? '' : path.slice(0, slash);
 }
 
-/** The folder to list for a glob when there is no whole-tree listing: its dir up to the first wildcard segment. */
-function listingDirOf(globDir: string): string {
-  const star = globDir.indexOf('*');
-  return star === -1 ? globDir : dirOf(globDir.slice(0, star));
-}
-
 function matchesGlob(glob: BlueprintDirGlob, path: string): boolean {
   const dir = dirOf(path);
   const dirMatches = glob.dir.includes('*') ? pathGlobRegExp(glob.dir).test(dir) : dir === glob.dir;
   return dirMatches && glob.test(path.slice(dir ? dir.length + 1 : 0));
 }
 
-/** The paths a glob matches, at most `MAX_FILES_PER_GLOB` (in listing order); a cut is logged. */
-function globMatches(glob: BlueprintDirGlob, paths: readonly string[]): string[] {
-  const matched = paths.filter((p) => matchesGlob(glob, p));
-  if (matched.length > MAX_FILES_PER_GLOB) {
-    console.warn(`[blueprint] glob ${glob.dir}/… matched ${matched.length} files; reading the first ${MAX_FILES_PER_GLOB}`);
-  }
-  return matched.slice(0, MAX_FILES_PER_GLOB);
+/** One read: the key detection asks for, and the path the provider is asked for (the tree's spelling). */
+interface SourceRead {
+  key: string;
+  path: string;
 }
 
-interface FirstPass {
-  paths: string[];
-  /** The repo's paths when the whole tree was listed; null when it was not (reads then go blind). */
-  present: Set<string> | null;
+/** The repo tree as detection sees it: what it holds (case-insensitively), when that is known. */
+interface RepoTree {
+  /** Tree paths (all of them, or what a truncated listing returned). */
+  paths: readonly string[];
+  /** lower-case path → the tree's spelling; null when the listing failed or was truncated (absence unknown). */
+  spelling: Map<string, string> | null;
 }
 
-/**
- * Which source paths to read first. Normally ONE recursive tree listing, intersected with
- * the wanted paths, so only files that exist are fetched. When the listing fails
- * (a provider without it) or is truncated (a big monorepo past the listing cap,
- * which could hide a root file), fall back to every exact path plus one listing per
- * distinct glob folder (up to its first wildcard) — slower, but never blind.
- */
-async function firstPass(ctx: RepoReadContext, io: BlueprintSourceIo): Promise<FirstPass> {
-  const { exact, dirGlobs } = blueprintSourcePaths();
-  const tree = await io.listRepoFiles(ctx);
-  if (tree.ok && !tree.truncated) {
-    const present = new Set(tree.paths);
-    return { paths: [...exact.filter((p) => present.has(p)), ...dirGlobs.flatMap((g) => globMatches(g, tree.paths))], present };
-  }
-  // One listing per distinct folder, shared by every glob under it; the root's is the tree listing above.
-  const listings = new Map<string, Promise<string[]>>([['', Promise.resolve(tree.ok ? tree.paths : [])]]);
-  const listingOf = (dir: string): Promise<string[]> => {
-    let listing = listings.get(dir);
-    if (!listing) {
-      listing = io.listRepoFiles(ctx, dir).then((listed) => (listed.ok ? listed.paths : []));
-      listings.set(dir, listing);
-    }
-    return listing;
-  };
-  const globbed: string[] = [];
-  for (const glob of dirGlobs) globbed.push(...globMatches(glob, await listingOf(listingDirOf(glob.dir))));
-  return { paths: [...exact, ...globbed], present: null };
+/** The read for `key`: the tree's spelling when listed; null when the full tree shows it is absent. */
+function readFor(tree: RepoTree, key: string, partial: Map<string, string>): SourceRead | null {
+  const spelled = (tree.spelling ?? partial).get(key.toLowerCase());
+  if (spelled !== undefined) return { key, path: spelled };
+  return tree.spelling ? null : { key, path: key };
 }
 
-/** Read `paths` into `files`; a miss or a failed read is skipped. */
-async function readInto(ctx: RepoReadContext, io: BlueprintSourceIo, paths: readonly string[], files: Map<string, string>): Promise<void> {
-  const reads = await mapWithConcurrency([...paths], READ_CONCURRENCY, (path) => io.readRepoFile(ctx, path));
-  reads.forEach((read, i) => {
-    const path = paths[i];
-    if (read.ok && path !== undefined) files.set(path, read.content);
+/** Take at most `room` of `reads`, logging what is cut. */
+function within(reads: SourceRead[], room: number, what: string): SourceRead[] {
+  const kept = reads.slice(0, Math.max(0, room));
+  if (kept.length < reads.length) console.warn(`[blueprint] ${reads.length} ${what}; reading ${kept.length} (read budget ${MAX_SOURCE_READS})`);
+  return kept;
+}
+
+/** Read each `reads` entry into `files` under its key; a miss or a failed read is skipped. */
+async function readInto(ctx: RepoReadContext, io: BlueprintSourceIo, reads: readonly SourceRead[], files: Map<string, string>): Promise<void> {
+  const results = await mapWithConcurrency([...reads], READ_CONCURRENCY, (read) => io.readRepoFile(ctx, read.path));
+  results.forEach((result, i) => {
+    const read = reads[i];
+    if (result.ok && read !== undefined) files.set(read.key, result.content);
   });
 }
 
 /**
  * Read every source file detection needs from the repo at `ctx.ref`, keyed by repo
- * path. Only files the tree listing shows are read, because each read is a provider
- * subrequest spent inside a webhook `waitUntil`. Missing files and failed reads are
- * skipped — absence is information to the detectors, not an error. Never throws for
- * a miss (the primitives never throw).
+ * path. Missing files and failed reads are skipped — absence is information to the
+ * detectors, not an error. Never throws for a miss (the primitives never throw).
  */
 export async function readBlueprintSources(
   ctx: RepoReadContext,
-  io: BlueprintSourceIo = { readRepoFile, listRepoFiles },
+  io: BlueprintSourceIo = { readRepoFile, listRepoTree },
 ): Promise<Map<string, string>> {
-  const first = await firstPass(ctx, io);
+  const { exact, dirGlobs } = blueprintSourcePaths();
+  const listing = await io.listRepoTree(ctx);
+  const paths = listing.ok ? listing.paths : [];
+  const byLowerCase = new Map(paths.map((p) => [p.toLowerCase(), p] as const));
+  const tree: RepoTree = { paths, spelling: listing.ok && !listing.truncated ? byLowerCase : null };
+
+  const tried = new Set<string>();
+  const take = (reads: Array<SourceRead | null>): SourceRead[] => {
+    const fresh = reads.filter((r): r is SourceRead => r !== null && !tried.has(r.key.toLowerCase()));
+    return [...new Map(fresh.map((r) => [r.key.toLowerCase(), r])).values()];
+  };
+  const mark = (reads: SourceRead[]) => reads.forEach((r) => tried.add(r.key.toLowerCase()));
+
+  const exactReads = within(take(exact.map((p) => readFor(tree, p, byLowerCase))), MAX_SOURCE_READS, 'exact source paths');
+  mark(exactReads);
+  const globReads = within(
+    // In `reads` order (a detector lists what matters most first: solutions before projects), then tree order.
+    take(dirGlobs.flatMap((g) => paths.filter((p) => matchesGlob(g, p))).map((p) => ({ key: p, path: p }))),
+    MAX_SOURCE_READS - FOLLOW_READ_RESERVE - exactReads.length,
+    'files match the source globs',
+  );
+  mark(globReads);
   const files = new Map<string, string>();
-  const tried = [...new Set(first.paths)];
-  await readInto(ctx, io, tried, files);
-  // The files the first pass's files name (a solution's projects), in the order they are named:
-  // only safe repo paths, never one already tried, only what the tree holds (when listed), at most MAX_FOLLOW_READS.
-  const attempted = new Set(tried);
-  const named = [...new Set(DETECTORS.flatMap((d) => d.followReads?.(files) ?? []).map(repoRelativePath))]
-    .filter((path): path is string => path !== null && !attempted.has(path) && (first.present?.has(path) ?? true));
-  if (named.length > MAX_FOLLOW_READS) {
-    console.warn(`[blueprint] files name ${named.length} more files; reading the first ${MAX_FOLLOW_READS}`);
+  await readInto(ctx, io, [...exactReads, ...globReads], files);
+
+  // What the read files name: only safe repo paths, never one already tried, only what the tree holds (when known).
+  const named = DETECTORS.flatMap((d) => d.followReads?.(files) ?? [])
+    .map((raw) => {
+      const key = repoRelativePath(raw);
+      return key === null ? null : readFor(tree, key, byLowerCase);
+    });
+  // A named file already read under another spelling (`WEB/Web.csproj` vs the tree's `web/Web.csproj`) is aliased, not re-read.
+  const readKeys = new Map([...files.keys()].map((key) => [key.toLowerCase(), key] as const));
+  for (const read of named) {
+    const known = read && !files.has(read.key) ? readKeys.get(read.key.toLowerCase()) : undefined;
+    if (read && known !== undefined) files.set(read.key, files.get(known)!);
   }
-  const follow = named.slice(0, MAX_FOLLOW_READS);
-  if (follow.length > 0) await readInto(ctx, io, follow, files);
+  const followReads = within(take(named), MAX_SOURCE_READS - exactReads.length - globReads.length, 'files are named by the read ones');
+  if (followReads.length > 0) await readInto(ctx, io, followReads, files);
   return files;
 }

@@ -22,9 +22,12 @@ export function pathUnder(root: string, file: string): string {
   return root ? `${root}/${file}` : file;
 }
 
-/** A detector's `reads`: each of `files` under each service root. */
+/**
+ * A detector's `reads`: each of `files` under each service root — file-major, so `files`'
+ * order is the priority across all roots (glob reads share a budget in `reads` order).
+ */
 export function readsUnderServiceRoots(files: readonly string[]): string[] {
-  return SERVICE_ROOTS.flatMap((root) => files.map((file) => pathUnder(root, file)));
+  return files.flatMap((file) => SERVICE_ROOTS.map((root) => pathUnder(root, file)));
 }
 
 /** The repo's files seen from one service root (paths relative to it). */
