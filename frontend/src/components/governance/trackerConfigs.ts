@@ -38,6 +38,12 @@ export const TRACKER_CONFIGS: Record<string, TrackerSurfaceProps> = {
       { key: 'status', label: 'Status', type: 'select', options: ['open', 'investigating', 'contained', 'resolved'] },
       { key: 'detectionSource', label: 'Detected via' },
       { key: 'assignedTo', label: 'Assigned to' },
+      // Server-owned provenance (mig 1354): a runtime-shield report is `client-attested`. Read-only —
+      // the API's write whitelist refuses it, and TrackerSurface keeps it out of the form.
+      {
+        key: 'attestation', label: 'Attestation', labelKey: 'governance.tracker.incident.attestation', readOnly: true,
+        valueLabelKeys: { 'client-attested': 'governance.tracker.incident.clientAttested' },
+      },
       { key: 'impact', label: 'Impact', type: 'textarea' },
       { key: 'rootCause', label: 'Root cause', type: 'textarea' },
       { key: 'postmortemUrl', label: 'Postmortem', inList: false },

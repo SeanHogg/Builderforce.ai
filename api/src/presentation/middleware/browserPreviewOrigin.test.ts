@@ -47,15 +47,6 @@ describe('serveBrowserPreviewOrigin', () => {
     expect((await res.text()).length).toBeGreaterThan(1000);
   });
 
-  it.each(['python-worker.js', 'php-worker.js'])('serves the %s process worker beside the relay too', async (name) => {
-    const res = get(`https://preview.builderforce.ai/__bfwc/${name}`)!;
-    expect(res.status).toBe(200);
-    expect(res.headers.get('content-type')).toMatch(/javascript/);
-    expect(res.headers.get('content-security-policy')).toBeNull();
-    expect(res.headers.get('cross-origin-resource-policy')).toBe('cross-origin');
-    expect((await res.text()).length).toBeGreaterThan(1000);
-  });
-
   it('never names "*" as an app origin, even when CORS is open', () => {
     const res = serveBrowserPreviewOrigin(new Request(BROWSER_PREVIEW_RELAY_URL), '*')!;
     expect(res.headers.get('content-security-policy')).not.toContain('*');
@@ -80,7 +71,7 @@ function directives(csp: string): Map<string, string[]> {
 }
 
 describe('egress CSP on the preview scripts (W10 control 6)', () => {
-  it.each(WORKERS)('%s gets default-src none, script-src, worker-src and a connect-src with no wildcard, own origin or write API', (name) => {
+  it.each(WORKERS)('%s gets default-src none, script-src, worker-src and a connect-src with GitHub reads but no wildcard or platform host', (name) => {
     const csp = get(`https://preview.builderforce.ai/__bfwc/${name}`)!.headers.get('content-security-policy')!;
     const d = directives(csp);
     expect(d.get('default-src')).toEqual(["'none'"]);
@@ -88,10 +79,14 @@ describe('egress CSP on the preview scripts (W10 control 6)', () => {
     expect(d.get('worker-src')).toEqual(["'none'"]);
     const connect = d.get('connect-src')!;
     expect(connect).toEqual(expect.arrayContaining(['https://registry.npmjs.org', 'https://cdn.jsdelivr.net', 'https://files.pythonhosted.org']));
+    // GitHub reads: run an app straight from a repo, and Composer's api.github.com zipballs.
+    expect(connect).toEqual(expect.arrayContaining([
+      'https://github.com', 'https://api.github.com', 'https://codeload.github.com',
+      'https://raw.githubusercontent.com', 'https://objects.githubusercontent.com',
+    ]));
     expect(csp).not.toContain('*');
-    expect(connect.join(' ')).not.toContain('api.github.com');
     expect(connect).not.toContain("'self'");
-    expect(connect.join(' ')).not.toContain('preview.builderforce.ai');
+    expect(connect.join(' ')).not.toContain('builderforce.ai');
     expect(d.get('report-uri')).toEqual(['https://api.builderforce.ai/api/runtime/csp-report']);
     expect(d.get('report-to')).toEqual(['bfwc-csp']);
   });
@@ -103,9 +98,12 @@ describe('egress CSP on the preview scripts (W10 control 6)', () => {
     }
   });
 
-  it('locks the service worker down: it fetches and imports nothing itself', () => {
+  it('locks the service worker down: it imports nothing and fetches only its own origin', () => {
     const csp = get('https://preview.builderforce.ai/__bfwc/sw.js')!.headers.get('content-security-policy')!;
-    expect(directives(csp).get('default-src')).toEqual(["'none'"]);
+    const d = directives(csp);
+    expect(d.get('default-src')).toEqual(["'none'"]);
+    expect(d.get('connect-src')).toEqual(["'self'"]); // sw.ts restart pass-through `fetch(request)`
+    expect(d.has('script-src')).toBe(false);
   });
 
   it('keeps the relay framable only by the app and lets it start only the preview scripts', () => {

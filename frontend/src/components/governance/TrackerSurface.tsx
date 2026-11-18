@@ -27,6 +27,15 @@ export interface TrackerField {
   required?: boolean;
   /** Show as a column in the list table. */
   inList?: boolean;
+  /**
+   * Server-owned: shown as a badge column in the list, NEVER in the add/edit form
+   * and never sent back (the API's write whitelist refuses it too). Read-only
+   * columns ride after the editable ones and do not spend their column budget.
+   */
+  readOnly?: boolean;
+  /** Full next-intl key per stored value, for a column whose raw values are codes
+   *  (`client-attested`) rather than display text. A value without a key shows raw. */
+  valueLabelKeys?: Record<string, string>;
 }
 
 /**
@@ -86,7 +95,16 @@ export function TrackerSurface({ title, apiBase, listKey, fields, rowAction, hea
   const tRoot = useTranslations();
   const api = useMemo(() => segmentTrackerClient(apiBase, { listKey }), [apiBase, listKey]);
   const fieldLabel = (f: TrackerField): string => (f.labelKey ? tRoot(f.labelKey) : f.label);
-  const listFields = fields.filter((f) => f.inList !== false && f.type !== 'textarea').slice(0, 5);
+  // Read-only fields are list-only badges: never edited, never part of the form or its payload.
+  const formFields = fields.filter((f) => !f.readOnly);
+  const listFields = [
+    ...formFields.filter((f) => f.inList !== false && f.type !== 'textarea').slice(0, 5),
+    ...fields.filter((f) => f.readOnly && f.inList !== false),
+  ];
+  const cell = (f: TrackerField, value: unknown): string => {
+    const valueKey = value == null ? undefined : f.valueLabelKeys?.[String(value)];
+    return valueKey ? tRoot(valueKey) : cellText(fmt, tCommon, f, value);
+  };
 
   const [rows, setRows] = useState<TrackerRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -108,16 +126,16 @@ export function TrackerSurface({ title, apiBase, listKey, fields, rowAction, hea
 
   const openAdd = () => {
     setEditingId(null);
-    setForm(Object.fromEntries(fields.map((f) => [f.key, f.type === 'bool' ? false : ''])));
+    setForm(Object.fromEntries(formFields.map((f) => [f.key, f.type === 'bool' ? false : ''])));
   };
   const openEdit = (row: TrackerRow) => {
     setEditingId(row.id);
-    setForm(Object.fromEntries(fields.map((f) => [f.key, row[f.key] ?? (f.type === 'bool' ? false : '')])));
+    setForm(Object.fromEntries(formFields.map((f) => [f.key, row[f.key] ?? (f.type === 'bool' ? false : '')])));
   };
 
   const save = async () => {
     if (!form) return;
-    for (const f of fields) {
+    for (const f of formFields) {
       if (f.required && (form[f.key] === '' || form[f.key] == null)) {
         setError(tTracker('required', { field: fieldLabel(f) }));
         return;
@@ -169,7 +187,7 @@ export function TrackerSurface({ title, apiBase, listKey, fields, rowAction, hea
         <div style={card}>
           <div style={{ fontWeight: 600, marginBottom: 10 }}>{editingId ? tTracker('editTitle', { title }) : tTracker('newTitle', { title })}</div>
           <div style={{ display: 'grid', gap: 10, gridTemplateColumns: '1fr 1fr' }}>
-            {fields.map((f) => (
+            {formFields.map((f) => (
               <label key={f.key} style={{ display: 'flex', flexDirection: 'column', gap: 4, gridColumn: f.type === 'textarea' ? '1 / -1' : undefined }}>
                 <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{fieldLabel(f)}{f.required ? ' *' : ''}</span>
                 <FieldInput field={f} value={form[f.key]} onChange={(v) => setForm({ ...form, [f.key]: v })} />
@@ -184,6 +202,8 @@ export function TrackerSurface({ title, apiBase, listKey, fields, rowAction, hea
       ) : rows.length === 0 ? (
         <div style={{ color: 'var(--text-secondary)' }}>{tTracker('noEntries')}</div>
       ) : (
+        // Scrolls sideways inside its own box, so a narrow (360px) viewport never scrolls the page.
+        <div style={{ overflowX: 'auto', maxWidth: '100%' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
             <tr>
@@ -196,7 +216,9 @@ export function TrackerSurface({ title, apiBase, listKey, fields, rowAction, hea
               <tr key={row.id}>
                 {listFields.map((f) => (
                   <td key={f.key} style={td}>
-                    {f.type === 'select' ? <span style={badge}>{cellText(fmt, tCommon, f, row[f.key])}</span> : cellText(fmt, tCommon, f, row[f.key])}
+                    {f.readOnly
+                      ? (row[f.key] == null || row[f.key] === '' ? '—' : <span style={readOnlyBadge}>{cell(f, row[f.key])}</span>)
+                      : f.type === 'select' ? <span style={badge}>{cell(f, row[f.key])}</span> : cell(f, row[f.key])}
                   </td>
                 ))}
                 <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
@@ -208,6 +230,7 @@ export function TrackerSurface({ title, apiBase, listKey, fields, rowAction, hea
             ))}
           </tbody>
         </table>
+        </div>
       )}
       {rowAction && actionRow && rowAction.render(actionRow, () => setActionRow(null), load)}
       {headerAction && headerAction.render(headerOpen, () => setHeaderOpen(false), load)}
@@ -246,3 +269,5 @@ const th: React.CSSProperties = { textAlign: 'left', padding: '6px 8px', borderB
 const td: React.CSSProperties = { padding: '6px 8px', borderBottom: '1px solid var(--border-subtle)' };
 const input: React.CSSProperties = { fontSize: 13, padding: '5px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)', width: '100%' };
 const badge: React.CSSProperties = { fontSize: 11, padding: '2px 8px', borderRadius: 'var(--radius-full)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)' };
+/** A server-owned value (e.g. `client-attested`): outlined, so it never reads as an editable select. */
+const readOnlyBadge: React.CSSProperties = { ...badge, background: 'transparent', border: '1px solid var(--border-subtle)', whiteSpace: 'nowrap' };

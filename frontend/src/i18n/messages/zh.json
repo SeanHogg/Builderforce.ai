@@ -34785,6 +34785,10 @@
       "release": {
         "targetDate": "目标日期",
         "releasedAt": "已发布"
+      },
+      "incident": {
+        "attestation": "证明来源",
+        "clientAttested": "客户端自证"
       }
     }
   },

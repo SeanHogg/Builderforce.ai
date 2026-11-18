@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
 import type { HonoEnv } from '../../env';
 import { CSP_REPORT_MAX_BYTES, CSP_REPORT_RPM } from '../../application/runtime/cspReports';
+import { CSP_REPORT_PATH } from '../../application/runtime/workerCsp';
+import { resolveAllowedOrigin } from '../middleware/cors';
 import { createCspReportRoutes } from './cspReportRoutes';
 
 /** A TENANT_RATE_LIMITER whose DO answers like the real sliding window: allow up to `limit`. */
@@ -113,5 +115,9 @@ describe('POST /api/runtime/csp-report', () => {
     expect(keys.every((k) => k === 'csp-report:203.0.113.7')).toBe(true);
     // Another address has its own window.
     expect((await post(LEGACY, 'application/csp-report', env, '198.51.100.1')).status).toBe(204);
+  });
+
+  it('admits the preview origin\'s Reporting API preflight (report-to uploads are CORS)', () => {
+    expect(resolveAllowedOrigin('https://preview.builderforce.ai', 'https://builderforce.ai', CSP_REPORT_PATH)).toBe('*');
   });
 });

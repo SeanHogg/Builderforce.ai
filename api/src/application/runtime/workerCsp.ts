@@ -37,12 +37,16 @@
  * (`localhost:<port>`) is served in-runtime by `PortRegistry`, never by `fetch` — so the
  * origin is left out entirely, which excludes `/__bfwc/` with no residual.
  *
- * `sw.js` gets `default-src 'none'`: the service worker never calls `fetch()` or
- * `importScripts` — a routed request is answered from a MessagePort (`respondWith`), and
- * a request it does not route is left to the browser (no `respondWith`), which is then
- * governed by the requesting client's own CSP, not the service worker's. Any future
- * pass-through `fetch(request)` in the service worker would be blocked and reported, so
- * adding one has to extend {@link serviceWorkerCsp} on purpose.
+ * `sw.js` gets `default-src 'none'; connect-src 'self'`: a routed request is answered
+ * from a MessagePort (`respondWith`), and most requests it does not route are left to
+ * the browser (no `respondWith`), governed by the requesting client's own CSP. The one
+ * exception is the restart re-judge (`sw.ts`, `needsClientLookup`): a same-origin GET/HEAD
+ * subresource from a client the worker forgot is looked up, and when it is not a
+ * virtual-server page the worker passes it on with `fetch(request)` — a fetch made BY the
+ * service worker, governed by THIS policy. `swGuard.needsLookup` limits it to the preview
+ * origin, so `'self'` is exactly what it needs. The service worker is platform code, not
+ * the app's, so `'self'` here is not the Worker identity-laundering case above. It still
+ * imports nothing (`script-src` falls back to `'none'`).
  *
  * `relay.html` keeps `frame-ancestors` first and adds `worker-src` naming exactly the
  * four scripts it starts (the query, e.g. `?policy=`, is ignored by CSP path matching),
@@ -74,8 +78,16 @@ export const REPORTING_ENDPOINTS_HEADER = `${CSP_REPORT_GROUP}="${CSP_REPORT_URL
  * Read from the worker bundles of `@seanhogg/builderforce-webcontainers`: npm tarballs and
  * metadata, jsDelivr (Pyodide, php-wasm, PGlite, Composer's GitHub dists and their
  * listings), PyPI (micropip), Packagist metadata (`/packages/{name}.json` and the `p2`
- * mirror) and GitHub's archive/raw hosts for git dependencies.
- * Never `api.github.com` or any other write-capable API.
+ * mirror) and GitHub.
+ *
+ * GitHub (`github.com`, `api.github.com`, `codeload.github.com`, `raw.githubusercontent.com`,
+ * `objects.githubusercontent.com`) is allowed so a repo can be imported and run straight
+ * in the runtime, and so Composer's `api.github.com/repos/…/zipball/…` dists (which
+ * redirect to codeload) install. The write risk on `api.github.com` (gists, pushes) needs a
+ * token, and the runtime never hands GitHub credentials to app processes: the user's
+ * GitHub connection stays host-side (the Builderforce API or the trusted page), so app
+ * code can read public GitHub but cannot write as the user. Residual: an app that brings
+ * its own token can still write — CSP cannot restrict methods.
  */
 export const DEFAULT_CONNECT_SOURCES: readonly string[] = [
   'https://registry.npmjs.org',
@@ -86,8 +98,12 @@ export const DEFAULT_CONNECT_SOURCES: readonly string[] = [
   // Path-scoped: only the read-only package metadata, not Packagist's token API.
   'https://packagist.org/packages/',
   'https://repo.packagist.org',
+  // GitHub reads: repo import/run and Composer dists (see above).
+  'https://github.com',
+  'https://api.github.com',
   'https://codeload.github.com',
   'https://raw.githubusercontent.com',
+  'https://objects.githubusercontent.com',
 ];
 
 /** Where the runtimes import interpreter and library scripts from. */
@@ -110,9 +126,9 @@ export function workerScriptCsp(extraConnectSources: readonly string[] = []): st
   ].join('; ');
 }
 
-/** The service worker's CSP: it fetches and imports nothing itself. */
+/** The service worker's CSP: it imports nothing, and fetches only its own origin (the restart pass-through). */
 export function serviceWorkerCsp(): string {
-  return `default-src 'none'; ${reporting}`;
+  return `default-src 'none'; connect-src 'self'; ${reporting}`;
 }
 
 /** The relay page's CSP: framed only by the app, starts only the preview scripts, connects nowhere. */

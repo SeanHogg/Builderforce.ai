@@ -73,8 +73,13 @@ function isEditorWebviewOrigin(origin: string): boolean {
  * rate/quota ceilings), and CORS is not the security boundary. Before this, a
  * customer embedding the quality snippet on their own domain got a silent
  * preflight rejection unless the deployment set CORS_ORIGINS=*.
+ *
+ * `/api/runtime/csp-report` (`CSP_REPORT_PATH` in application/runtime/workerCsp) is the
+ * same case: the Reporting API uploads `report-to` reports from the preview origin with
+ * a CORS preflight, and a refused preflight drops them silently (Chromium then ignores
+ * `report-uri` too). Reports are unauthenticated telemetry, rate-limited per IP.
  */
-const PUBLIC_INGEST_PREFIXES = ['/api/quality-ingest', '/api/feedback-ingest', '/api/replay-ingest'];
+const PUBLIC_INGEST_PREFIXES = ['/api/quality-ingest', '/api/feedback-ingest', '/api/replay-ingest', '/api/runtime/csp-report'];
 
 function isPublicIngestPath(path: string): boolean {
   return PUBLIC_INGEST_PREFIXES.some((p) => path === p || path.startsWith(`${p}/`));

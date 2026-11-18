@@ -35527,6 +35527,10 @@
       "release": {
         "targetDate": "Zieldatum",
         "releasedAt": "Veröffentlicht"
+      },
+      "incident": {
+        "attestation": "Bestätigung",
+        "clientAttested": "Vom Client bestätigt"
       }
     }
   },
