@@ -7,6 +7,10 @@
  * what the detectors expect (the copies this replaced had already missed several
  * `reads` entries, so those detectors never saw their files).
  *
+ * Two passes. The first reads every `reads` path; a glob is speculative, so it reads at
+ * most `MAX_FILES_PER_GLOB` files. The second reads what the first pass's files NAME
+ * (`followReads`: the projects a `.sln` lists), uncapped — a named file is never dropped.
+ *
  * Reading goes through the provider-agnostic `readRepoContents` primitives — the same
  * ones the cloud agent's `read_file`/`list_files` use — so GitHub, GitLab and Bitbucket
  * all work, content is decoded UTF-8-safely, and nothing here touches a filesystem
@@ -16,8 +20,9 @@
 import { listRepoFiles, readRepoFile, type RepoReadContext } from '../repos/readRepoContents';
 import { mapWithConcurrency } from '../runtime/boundedPool';
 import { DETECTORS } from './detectors';
+import { pathGlobRegExp } from './pathGlob';
 
-/** A `reads` entry with a wildcard: list `dir`, keep its direct children whose name passes `test`. */
+/** A `reads` entry with a wildcard: `dir` (itself a glob, `api/*`) and the name test of its files. */
 export interface BlueprintDirGlob {
   dir: string;
   test: (name: string) => boolean;
@@ -34,15 +39,11 @@ const READ_CONCURRENCY = 6;
 /** At most this many files per glob: a repo of many projects (`*` folders of `.csproj`) must not cost a read each. */
 export const MAX_FILES_PER_GLOB = 40;
 
-function escapeRegExp(s: string): string {
-  return s.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
-}
-
-/** `.github/workflows/*.yml` → `{ dir: '.github/workflows', test: /^[^/]*\.yml$/ }`. */
+/** `.github/workflows/*.yml` → `{ dir: '.github/workflows', test: (name) => /^[^/]*\.yml$/ }`. */
 function toDirGlob(entry: string): BlueprintDirGlob {
   const slash = entry.lastIndexOf('/');
   const dir = slash === -1 ? '' : entry.slice(0, slash);
-  const pattern = new RegExp(`^${entry.slice(slash + 1).split('*').map(escapeRegExp).join('[^/]*')}$`);
+  const pattern = pathGlobRegExp(entry.slice(slash + 1));
   return { dir, test: (name) => pattern.test(name) };
 }
 
@@ -66,13 +67,6 @@ function dirOf(path: string): string {
   return slash === -1 ? '' : path.slice(0, slash);
 }
 
-// A glob's dir may hold wildcards (`api/*/*.csproj`): a whole-segment `*` is one folder name.
-function dirMatches(globDir: string, dir: string): boolean {
-  if (!globDir.includes('*')) return dir === globDir;
-  const segments = globDir.split('/').map((segment) => (segment === '*' ? '[^/]+' : segment.split('*').map(escapeRegExp).join('[^/]*')));
-  return new RegExp(`^${segments.join('/')}$`).test(dir);
-}
-
 /** The folder to list for a glob when there is no whole-tree listing: its dir up to the first wildcard segment. */
 function listingDirOf(globDir: string): string {
   const star = globDir.indexOf('*');
@@ -81,30 +75,38 @@ function listingDirOf(globDir: string): string {
 
 function matchesGlob(glob: BlueprintDirGlob, path: string): boolean {
   const dir = dirOf(path);
-  return dirMatches(glob.dir, dir) && glob.test(path.slice(dir ? dir.length + 1 : 0));
+  const dirMatches = glob.dir.includes('*') ? pathGlobRegExp(glob.dir).test(dir) : dir === glob.dir;
+  return dirMatches && glob.test(path.slice(dir ? dir.length + 1 : 0));
 }
 
-/** The paths a glob matches, at most `MAX_FILES_PER_GLOB` (in listing order). */
+/** The paths a glob matches, at most `MAX_FILES_PER_GLOB` (in listing order); a cut is logged. */
 function globMatches(glob: BlueprintDirGlob, paths: readonly string[]): string[] {
-  return paths.filter((p) => matchesGlob(glob, p)).slice(0, MAX_FILES_PER_GLOB);
+  const matched = paths.filter((p) => matchesGlob(glob, p));
+  if (matched.length > MAX_FILES_PER_GLOB) {
+    console.warn(`[blueprint] glob ${glob.dir}/… matched ${matched.length} files; reading the first ${MAX_FILES_PER_GLOB}`);
+  }
+  return matched.slice(0, MAX_FILES_PER_GLOB);
+}
+
+interface FirstPass {
+  paths: string[];
+  /** The repo's paths when the whole tree was listed; null when it was not (reads then go blind). */
+  present: Set<string> | null;
 }
 
 /**
- * Which source paths to read. Normally ONE recursive tree listing, intersected with
+ * Which source paths to read first. Normally ONE recursive tree listing, intersected with
  * the wanted paths, so only files that exist are fetched. When the listing fails
  * (a provider without it) or is truncated (a big monorepo past the listing cap,
  * which could hide a root file), fall back to every exact path plus one listing per
  * distinct glob folder (up to its first wildcard) — slower, but never blind.
  */
-async function sourcePathsToRead(ctx: RepoReadContext, io: BlueprintSourceIo): Promise<string[]> {
+async function firstPass(ctx: RepoReadContext, io: BlueprintSourceIo): Promise<FirstPass> {
   const { exact, dirGlobs } = blueprintSourcePaths();
   const tree = await io.listRepoFiles(ctx);
   if (tree.ok && !tree.truncated) {
     const present = new Set(tree.paths);
-    return [
-      ...exact.filter((p) => present.has(p)),
-      ...dirGlobs.flatMap((g) => globMatches(g, tree.paths)),
-    ];
+    return { paths: [...exact.filter((p) => present.has(p)), ...dirGlobs.flatMap((g) => globMatches(g, tree.paths))], present };
   }
   // One listing per distinct folder, shared by every glob under it; the root's is the tree listing above.
   const listings = new Map<string, Promise<string[]>>([['', Promise.resolve(tree.ok ? tree.paths : [])]]);
@@ -118,7 +120,16 @@ async function sourcePathsToRead(ctx: RepoReadContext, io: BlueprintSourceIo): P
   };
   const globbed: string[] = [];
   for (const glob of dirGlobs) globbed.push(...globMatches(glob, await listingOf(listingDirOf(glob.dir))));
-  return [...new Set([...exact, ...globbed])];
+  return { paths: [...exact, ...globbed], present: null };
+}
+
+/** Read `paths` into `files`; a miss or a failed read is skipped. */
+async function readInto(ctx: RepoReadContext, io: BlueprintSourceIo, paths: readonly string[], files: Map<string, string>): Promise<void> {
+  const reads = await mapWithConcurrency([...paths], READ_CONCURRENCY, (path) => io.readRepoFile(ctx, path));
+  reads.forEach((read, i) => {
+    const path = paths[i];
+    if (read.ok && path !== undefined) files.set(path, read.content);
+  });
 }
 
 /**
@@ -132,12 +143,12 @@ export async function readBlueprintSources(
   ctx: RepoReadContext,
   io: BlueprintSourceIo = { readRepoFile, listRepoFiles },
 ): Promise<Map<string, string>> {
-  const paths = [...new Set(await sourcePathsToRead(ctx, io))];
-  const reads = await mapWithConcurrency(paths, READ_CONCURRENCY, (path) => io.readRepoFile(ctx, path));
+  const first = await firstPass(ctx, io);
   const files = new Map<string, string>();
-  reads.forEach((read, i) => {
-    const path = paths[i];
-    if (read.ok && path !== undefined) files.set(path, read.content);
-  });
+  await readInto(ctx, io, [...new Set(first.paths)], files);
+  // The files the first pass's files name (a solution's projects): read whatever is not read yet, uncapped.
+  const named = [...new Set(DETECTORS.flatMap((d) => d.followReads?.(files) ?? []))]
+    .filter((path) => !files.has(path) && (first.present?.has(path) ?? true));
+  if (named.length > 0) await readInto(ctx, io, named, files);
   return files;
 }

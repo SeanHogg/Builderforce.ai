@@ -102,6 +102,14 @@ describe('Python detector', () => {
     else if (database) expect(result.database).toMatchObject(database);
   });
 
+  it('regression: a CRLF pyproject with its dependencies far down is read exactly', () => {
+    const header = Array.from({ length: 26 }, (_, i) => `# v${i}`);
+    const pyproject = [...header, '[project]', 'name = "shop"', 'dependencies = [', '  "fastapi",', '  "pg8000",', ']', ''].join('\r\n');
+    const result = detectPython(repo({ 'pyproject.toml': pyproject, 'main.py': 'app = FastAPI()\n' }));
+    expect(result.services?.[0]).toMatchObject({ id: 'shop', devCommand: 'uvicorn main:app --host 0.0.0.0 --port 8000' });
+    expect(result.database).toMatchObject({ engine: 'postgres' });
+  });
+
   it('a manifest with nothing to serve (tooling) is not a service', () => {
     expect(detectPython(repo({ 'requirements.txt': 'mkdocs\n' }))).toEqual({});
     expect(detectPython(repo({ 'package.json': '{}' }))).toEqual({});

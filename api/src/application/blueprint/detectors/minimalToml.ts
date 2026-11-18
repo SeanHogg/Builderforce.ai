@@ -12,6 +12,8 @@
  * Not a TOML parser: inline tables stay raw text, multi-line strings are not read.
  */
 
+import { escapeRegExp } from '../pathGlob';
+
 /** Drop a `#` comment that is not inside a quoted string. */
 function stripComment(line: string): string {
   let quote: string | null = null;
@@ -64,9 +66,15 @@ export function tomlTable(text: string, table: string): Map<string, string> {
   return tomlTables(text).get(table) ?? new Map();
 }
 
-/** A quoted value's string: `"x" # c` → `x`; anything else → undefined. */
+/** A basic string's escapes (`\"`, `\\`, `\n`, `\t`); any other escaped character as itself. */
+const BASIC_ESCAPES: Readonly<Record<string, string>> = { n: '\n', t: '\t', r: '\r' };
+const unescapeBasic = (text: string): string => text.replace(/\\(.)/g, (_, ch: string) => BASIC_ESCAPES[ch] ?? ch);
+
+/** A quoted value's string: `"a \"b\"" # c` → `a "b"`, `'lit'` → `lit`; anything else (or unterminated) → undefined. */
 export function tomlString(value: string | undefined): string | undefined {
-  return value === undefined ? undefined : /^\s*(?:"([^"]*)"|'([^']*)')/.exec(value)?.slice(1).find((s) => s !== undefined);
+  const match = value === undefined ? null : /^\s*(?:"((?:[^"\\\n]|\\.)*)"|'([^'\n]*)')/.exec(value);
+  if (!match) return undefined;
+  return match[1] !== undefined ? unescapeBasic(match[1]) : match[2];
 }
 
 /** The table each line of `text` sits in. */
@@ -80,29 +88,42 @@ function tableAtLines(lines: readonly string[]): string[] {
 }
 
 /**
+ * The strings of the array starting at `from`: basic strings honour `\` escapes, literal
+ * strings do not; `#` outside a string starts a comment; a string still open at the end
+ * of its line is unterminated and dropped.
+ */
+function readStringArray(text: string, from: number): string[] {
+  const out: string[] = [];
+  let quote: string | null = null;
+  let current = '';
+  for (let i = from; i < text.length; i++) {
+    const ch = text[i]!;
+    if (quote) {
+      if (ch === '\n' || ch === '\r') { quote = null; current = ''; }
+      else if (ch === '\\' && quote === '"' && i + 1 < text.length) current += unescapeBasic(text.slice(i, ++i + 1));
+      else if (ch === quote) { out.push(current); current = ''; quote = null; }
+      else current += ch;
+    } else if (ch === '"' || ch === "'") quote = ch;
+    else if (ch === '#') { const eol = text.indexOf('\n', i); i = eol === -1 ? text.length : eol; }
+    else if (ch === ']') break;
+  }
+  return out;
+}
+
+/**
  * The quoted strings of every `key = [ … ]` array — in `table` only, when given — read
- * across lines; `#` outside a string starts a comment.
+ * across lines. Lines split on `\n` alone, so each offset is exact (a CRLF line keeps its `\r`).
  */
 export function tomlStringArrays(text: string, key: string, table?: string): string[] {
-  const out: string[] = [];
-  const lines = text.split(/\r?\n/);
+  const lines = text.split('\n');
   const tables = tableAtLines(lines);
-  const offsets: number[] = [];
-  lines.reduce((offset, line) => (offsets.push(offset), offset + line.length + 1), 0);
-  const start = new RegExp(`^\\s*["']?${key.replace(/[.*+?^${}()|[\]\\-]/g, '\\$&')}["']?\\s*=\\s*\\[`);
+  const start = new RegExp(`^\\s*["']?${escapeRegExp(key)}["']?\\s*=\\s*\\[`);
+  const out: string[] = [];
+  let offset = 0;
   lines.forEach((line, index) => {
     const match = start.exec(line);
-    if (!match || (table !== undefined && tables[index] !== table)) return;
-    let quote: string | null = null;
-    let current = '';
-    for (let i = offsets[index]! + match[0].length; i < text.length; i++) {
-      const ch = text[i]!;
-      if (quote) {
-        if (ch === quote) { out.push(current); current = ''; quote = null; } else current += ch;
-      } else if (ch === '"' || ch === "'") quote = ch;
-      else if (ch === '#') { const eol = text.indexOf('\n', i); i = eol === -1 ? text.length : eol; }
-      else if (ch === ']') break;
-    }
+    if (match && (table === undefined || tables[index] === table)) out.push(...readStringArray(text, offset + match[0].length));
+    offset += line.length + 1;
   });
   return out;
 }

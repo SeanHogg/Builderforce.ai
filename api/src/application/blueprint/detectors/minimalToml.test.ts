@@ -32,6 +32,25 @@ describe('minimalToml', () => {
     expect(tomlStringArrays(text, 'members', 'project')).toEqual([]);
   });
 
+  it('regression: a CRLF file reads a multi-line array 20+ lines down exactly (pyproject and Cargo)', () => {
+    const filler = Array.from({ length: 24 }, (_, i) => `# line ${i} v${i}`);
+    const pyproject = [...filler, '[project]', 'name = "shop"', 'dependencies = [', '  "fastapi>=0.110",', '  "uvicorn[standard]",', ']', ''].join('\r\n');
+    expect(tomlStringArrays(pyproject, 'dependencies')).toEqual(['fastapi>=0.110', 'uvicorn[standard]']);
+    const cargo = [...filler, '[workspace]', 'members = [', '  "api",', '  "crates/*",', ']', ''].join('\r\n');
+    expect(tomlStringArrays(cargo, 'members', 'workspace')).toEqual(['api', 'crates/*']);
+  });
+
+  it('honours escaped quotes in basic strings; literal strings take none', () => {
+    expect(tomlStringArrays('a = ["say \\"hi\\"", \'c:\\\\x\', "back\\\\slash"]', 'a')).toEqual(['say "hi"', 'c:\\\\x', 'back\\slash']);
+    expect(tomlString('"a \\"b\\"" # c')).toBe('a "b"');
+    expect(tomlString("'c:\\x'")).toBe('c:\\x');
+  });
+
+  it('an unterminated string stops at the end of its line', () => {
+    expect(tomlStringArrays('a = [\n  "open,\n  "ok",\n]', 'a')).toEqual(['ok']);
+    expect(tomlString('"open')).toBeUndefined();
+  });
+
   it('a value that is not a quoted string has no string', () => {
     expect(tomlString('true')).toBeUndefined();
     expect(tomlString(undefined)).toBeUndefined();

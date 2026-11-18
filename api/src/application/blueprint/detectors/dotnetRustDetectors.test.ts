@@ -62,11 +62,30 @@ describe('.NET detector', () => {
     expect(result.services?.[0]).toMatchObject({ id: 'Web', devCommand: `dotnet run --project src/Web/Web.csproj ${URLS}` });
   });
 
-  it('quotes a project path with spaces', () => {
+  it('single-quotes a project path with spaces, escaping an embedded quote', () => {
     const result = detectDotnet(repo({ 'Shop.sln': slnEntry('My Api', 'src\\My Api\\My Api.csproj'), 'src/My Api/My Api.csproj': WEB_CSPROJ }));
     expect(result.services?.[0]).toMatchObject({
-      installCommand: 'dotnet restore "src/My Api/My Api.csproj"', devCommand: `dotnet run --project "src/My Api/My Api.csproj" ${URLS}`,
+      installCommand: "dotnet restore 'src/My Api/My Api.csproj'", devCommand: `dotnet run --project 'src/My Api/My Api.csproj' ${URLS}`,
     });
+    const quoted = detectDotnet(repo({ 'Shop.sln': slnEntry('Bob', "src\\Bob's\\Api.csproj"), "src/Bob's/Api.csproj": WEB_CSPROJ }));
+    expect(quoted.services?.[0]?.installCommand).toBe("dotnet restore 'src/Bob'\\''s/Api.csproj'");
+  });
+
+  it('a root solution keeps a project the backend folder does not offer (api/ holds only a library)', () => {
+    const result = detectDotnet(repo({
+      'App.sln': slnEntry('Web', 'api\\src\\Web\\Web.csproj'),
+      'api/Lib.csproj': LIB_CSPROJ,
+      'api/src/Web/Web.csproj': WEB_CSPROJ,
+    }));
+    expect(result.services?.map((s) => [s.id, s.rootDir, s.devCommand])).toEqual([['Web', '.', `dotnet run --project api/src/Web/Web.csproj ${URLS}`]]);
+  });
+
+  it('follows every root solution to its projects (the second, uncapped read pass)', () => {
+    expect(dotnetDetector.followReads?.(repo({
+      'App.sln': slnEntry('Web', 'deep\\a\\b\\Web\\Web.csproj'),
+      'api/Api.slnx': '<Solution><Project Path="src/Api/Api.csproj" /></Solution>',
+      'api/Direct.csproj': LIB_CSPROJ,
+    }))).toEqual(['deep/a/b/Web/Web.csproj', 'api/src/Api/Api.csproj', 'api/Direct.csproj']);
   });
 
   it('a repo-root solution leaves a project in a .NET backend folder to that folder (one service, not two)', () => {

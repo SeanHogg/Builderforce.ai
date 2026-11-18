@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import type { ListFilesResult, ReadFileResult, RepoReadContext } from '../repos/readRepoContents';
 import { blueprintSourcePaths, MAX_FILES_PER_GLOB, readBlueprintSources, type BlueprintSourceIo } from './blueprintSources';
 import { DETECTORS } from './detectors';
+import { detectDotnet } from './detectors/dotnetDetector';
 
 const CTX: RepoReadContext = { provider: 'github', host: null, owner: 'acme', repo: 'app', token: 't', ref: 'abc' };
 
@@ -120,5 +121,21 @@ describe('readBlueprintSources', () => {
     const repo = Object.fromEntries(Array.from({ length: MAX_FILES_PER_GLOB + 5 }, (_, i) => [`p${i}/P${i}.csproj`, '<Project />']));
     const files = await readBlueprintSources(CTX, stubIo(repo));
     expect(files.size).toBe(MAX_FILES_PER_GLOB);
+  });
+
+  it('regression: a solution naming a project past the glob cap still gets it read and detected', async () => {
+    const count = MAX_FILES_PER_GLOB + 5;
+    const repo: Record<string, string> = Object.fromEntries(Array.from({ length: count }, (_, i) => [`p${i}/P${i}.csproj`, '<Project Sdk="Microsoft.NET.Sdk"></Project>']));
+    repo[`p${count - 1}/P${count - 1}.csproj`] = '<Project Sdk="Microsoft.NET.Sdk.Web"></Project>';
+    repo['Shop.sln'] = `Project("{X}") = "Web", "p${count - 1}\\P${count - 1}.csproj", "{1}"\nEndProject\n`;
+    const files = await readBlueprintSources(CTX, stubIo(repo));
+    expect(files.has(`p${count - 1}/P${count - 1}.csproj`)).toBe(true);
+    expect(detectDotnet(files).services?.[0]).toMatchObject({ id: `P${count - 1}`, devCommand: `dotnet run --project p${count - 1}/P${count - 1}.csproj --urls http://0.0.0.0:8080` });
+  });
+
+  it('the second pass reads only named files the tree holds', async () => {
+    const io = stubIo({ 'Shop.sln': 'Project("{X}") = "Gone", "gone\\Gone.csproj", "{1}"\nEndProject\n' });
+    await readBlueprintSources(CTX, io);
+    expect(io.readCalls).not.toContain('gone/Gone.csproj');
   });
 });

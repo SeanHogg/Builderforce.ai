@@ -285,8 +285,13 @@ export interface BlueprintDetector {
   id: string;
   /** Human-readable name. */
   name: string;
-  /** Files this detector reads. */
+  /** Files this detector reads (`*` globs allowed; a glob's matches are capped). */
   reads: string[];
+  /**
+   * Files the read ones NAME, read in a second pass, uncapped (a solution's projects).
+   * Given the files read so far, keyed by repo path; returns repo paths.
+   */
+  followReads?: (files: Map<string, string>) => string[];
   /** Detect from file contents. */
   detect: (files: Map<string, string>) => Partial<AppBlueprint>;
 }

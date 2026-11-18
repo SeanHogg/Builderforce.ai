@@ -24,6 +24,7 @@
 
 import type { AppBlueprint, AppService, BlueprintDetector } from '@builderforce/creation-canvas-contract';
 import { SERVICE_KINDS } from '@builderforce/creation-canvas-contract';
+import { pathGlobRegExp } from '../pathGlob';
 import { tomlString, tomlStringArrays, tomlTables, type TomlTables } from './minimalToml';
 import {
   detectAcrossServiceRoots,
@@ -67,10 +68,9 @@ function moduleName(tables: TomlTables, packageName: string): string {
   return tomlString(tables.get('bin')?.get('name')) ?? packageName;
 }
 
-/** `crates/*` → matches `crates/api`; each `*` is one folder name. */
+/** `crates/*` matches `crates/api` (a whole-segment `*` is one folder name; `pathGlob`'s one semantic). */
 function memberMatches(member: string, dir: string): boolean {
-  const pattern = member.replace(/^\.\//, '').replace(/\/$/, '').split('*').map((part) => part.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('[^/]+');
-  return new RegExp(`^${pattern}$`).test(dir);
+  return pathGlobRegExp(member.replace(/^\.\//, '').replace(/\/$/, '')).test(dir);
 }
 
 /** Whether the repo-root Cargo.toml is a workspace this sub-root crate belongs to. */

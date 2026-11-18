@@ -11,7 +11,7 @@
  *   the kind's port, so the URL is named; launch profiles yield to it.
  * - `--project <path>` whenever the root is ambiguous (a solution, several project files)
  *   or the project sits in a subfolder: the runtime builds one project, never a solution.
- *   A path with spaces or shell characters is quoted.
+ *   A path with spaces or shell characters is single-quoted.
  * - `dotnet restore [<path>]` installs (the runtime checks packages against its bundle).
  *
  * Npgsql (directly or through its EF Core provider) yields the blueprint's Postgres
@@ -25,6 +25,7 @@ import {
   detectAcrossServiceRoots,
   devPortOf,
   isPrimaryAt,
+  pathUnder,
   postgresDatabase,
   processService,
   readsUnderServiceRoots,
@@ -65,31 +66,40 @@ function directFiles(files: Map<string, string>, root: string): string[] {
     .sort();
 }
 
-/** Whether a root holds a project or solution file directly — then it detects its own service. */
-function holdsDotnetManifest(files: Map<string, string>, root: string): boolean {
-  return directFiles(files, root).some((name) => PROJECT.test(name) || SOLUTION.test(name));
+/** A root's project and solution files (directly in it), and the projects it can run (relative to it). */
+function rootProjects(files: Map<string, string>, rootName: string) {
+  const direct = directFiles(files, rootName);
+  const projectFiles = direct.filter((name) => PROJECT.test(name));
+  const solutions = direct.filter((name) => SOLUTION.test(name));
+  const listed = solutions.flatMap((sln) => solutionProjects(files.get(pathUnder(rootName, sln)) ?? ''));
+  return { projectFiles, solutions, candidates: [...new Set([...listed, ...projectFiles])] };
 }
 
 /**
- * A repo-root solution listing a project inside a backend folder that is a .NET root of
- * its own (`api/Api.csproj`, `api/src/Api/Api.csproj` beside `api/Api.sln`) leaves it to
+ * A repo-root solution listing a project that a backend folder's own root also offers
+ * (`api/Api.csproj`, or `api/src/Api/Api.csproj` listed by `api/Api.sln`) leaves it to
  * that folder, so one project is never two services.
  */
 function ownedByAnotherRoot(files: Map<string, string>, root: string, project: string): boolean {
-  const first = project.split('/')[0]!;
-  return root === '' && project.includes('/') && first !== '' && SERVICE_ROOTS.includes(first) && holdsDotnetManifest(files, first);
+  const slash = project.indexOf('/');
+  if (root !== '' || slash === -1) return false;
+  const first = project.slice(0, slash);
+  return SERVICE_ROOTS.includes(first) && rootProjects(files, first).candidates.includes(project.slice(slash + 1));
 }
 
-const shellWord = (path: string): string => (BARE_WORD.test(path) ? path : `"${path}"`);
+/** One shell word: as is when bare, else single-quoted (an embedded `'` as `'\''`). */
+const shellWord = (path: string): string => (BARE_WORD.test(path) ? path : `'${path.replace(/'/g, `'\\''`)}'`);
+
+/** The projects every root's solutions name, as repo paths — read in a second pass, uncapped. */
+function solutionListedProjects(files: Map<string, string>): string[] {
+  return SERVICE_ROOTS.flatMap((root) => rootProjects(files, root).candidates.map((project) => pathUnder(root, project)));
+}
 
 /** The service (and database) one root's web project describes, or null when it holds none. */
 function detectDotnetRoot(files: Map<string, string>, rootName: string): RootDetection | null {
   const root = serviceRootFiles(files, rootName);
-  const direct = directFiles(files, rootName);
-  const projectFiles = direct.filter((name) => PROJECT.test(name));
-  const solutions = direct.filter((name) => SOLUTION.test(name));
-  const candidates = [...new Set([...solutions.flatMap((sln) => solutionProjects(root.get(sln) ?? '')), ...projectFiles])]
-    .filter((project) => !ownedByAnotherRoot(files, rootName, project));
+  const { projectFiles, solutions, candidates: offered } = rootProjects(files, rootName);
+  const candidates = offered.filter((project) => !ownedByAnotherRoot(files, rootName, project));
   const project = candidates.find((path) => WEB_SDK.test(root.get(path) ?? ''));
   if (!project) return null;
 
@@ -117,7 +127,9 @@ export const dotnetDetector: BlueprintDetector = {
   id: 'dotnet',
   name: '.NET Project',
   // Projects directly in a root, and one or two folders down (where a solution keeps them);
-  // blueprintSources caps how many files one glob may pull in.
+  // blueprintSources caps how many files one glob may pull in; the projects a solution
+  // names are read uncapped (followReads).
   reads: readsUnderServiceRoots(['*.csproj', '*.sln', '*.slnx', '*/*.csproj', '*/*/*.csproj']),
+  followReads: solutionListedProjects,
   detect: detectDotnet,
 };
