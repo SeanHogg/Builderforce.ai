@@ -24,7 +24,7 @@ export function counting(inner: Backend): { backend: Backend; live: () => number
           return member.call(target, h);
         };
       }
-      if (prop === "download") return member.bind(target);
+      if (prop === "download" || prop === "storageOf") return member.bind(target);
       return (...args: unknown[]) => note(member.apply(target, args));
     },
   });

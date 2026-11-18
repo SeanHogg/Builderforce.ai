@@ -4,6 +4,7 @@ import { createWebGPUBackend } from "../backend/webgpu/webgpu-backend";
 import { intTensor, manualSeed, ones, randn, tensor, uniform, zeros } from "../autograd/creation";
 import type { AnyBackend, DeviceTensor } from "../autograd/device-tensor";
 import { isGradEnabled, setGradEnabled } from "../autograd/mode";
+import { keep } from "../autograd/scope";
 import { AdamW } from "../autograd/optim/adamw";
 import type { Optimizer } from "../autograd/optim/optimizer";
 import { SGD } from "../autograd/optim/sgd";
@@ -68,6 +69,10 @@ export interface TorchBridge {
   is_grad_enabled(): boolean;
   zero_grad(ids: ArrayLike<number>, setToNone?: boolean): void;
   copy_into(dst: number, src: number): void;
+  /** The storage version (`Tensor._version`). */
+  version(id: number): number;
+  /** `t.grad = g`: `g` (same shape, dtype, device) becomes the tensor's gradient, owned by it. */
+  set_grad(id: number, gradId: number): void;
 
   optimizer(kind: string, ids: ArrayLike<number>, lr: number, a?: number, b?: number, c?: number, d?: number): number;
   optimizer_step(optId: number, lr: number): void;
@@ -211,14 +216,21 @@ export async function createTorchBridge(options: TorchBridgeOptions = {}): Promi
       }
       handles.collect();
     },
-    copy_into: (dst, src) => {
-      const target = handles.get(dst);
-      if (handles.referencedByGraph(target)) {
-        throw new Error(
-          "copy_: a tensor needed for gradient computation would be modified in place — call backward() first, or copy into a tensor no graph uses",
-        );
+    // The write bumps the storage's version; a pending graph that read the old values fails at backward (PyTorch's check).
+    copy_into: (dst, src) => copyInto(handles.get(dst), handles.get(src)),
+    version: (id) => handles.get(id).version,
+    set_grad: (id, gradId) => {
+      const p = handles.get(id);
+      const g = handles.get(gradId);
+      if (g.backend !== p.backend || g.dtype !== p.dtype || g.shape.join() !== p.shape.join()) {
+        throw new Error(`assigned grad has data of a different type, device or shape than the tensor ([${g.shape}] vs [${p.shape}])`);
       }
-      copyInto(target, handles.get(src));
+      const previous = p.grad;
+      p.grad = keep(g);
+      if (previous && previous !== g && !previous.isDisposed) {
+        if (handles.isPinned(previous)) handles.adopt(previous);
+        else previous.dispose();
+      }
     },
 
     optimizer: (kind, ids, lr, a, b, c, d) => {

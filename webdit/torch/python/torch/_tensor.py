@@ -144,9 +144,17 @@ class Tensor(TensorIO):
 
     @grad.setter
     def grad(self, value):
-        if value is not None:
-            raise unsupported("assigning Tensor.grad", "only `t.grad = None` is supported")
-        js.zero_grad(b.ints([self._id]), True)
+        if value is None:
+            js.zero_grad(b.ints([self._id]), True)
+        elif isinstance(value, Tensor):
+            js.set_grad(self._id, value._id)
+        else:
+            raise TypeError(f"assigned grad expected to be a Tensor or None but got {type(value).__name__}")
+
+    @property
+    def _version(self):
+        """In-place writes to this tensor's storage so far, through any view (PyTorch's `_version`)."""
+        return int(js.version(self._id))
 
     def backward(self, gradient=None, retain_graph=None, create_graph=False):
         if create_graph:

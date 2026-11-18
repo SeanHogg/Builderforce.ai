@@ -47,9 +47,14 @@ export class HandleTable {
     private readonly byteSlack = 64 * 1024 * 1024,
   ) {}
 
-  /** Run one bridge call inside the scope. */
+  /**
+   * Run one bridge call inside the scope. Under no_grad nothing a call creates
+   * can be recorded by a graph, so whatever it made that ended up without an id
+   * (an op's internal intermediates) is freed as the call returns.
+   */
   run<T>(fn: () => T): T {
-    return this.scope.run(fn);
+    if (isGradEnabled()) return this.scope.run(fn);
+    return this.scope.run(fn, (t) => this.pins.has(t));
   }
 
   /** A new id for `t` (one per Python wrapper). May collect garbage created earlier. */

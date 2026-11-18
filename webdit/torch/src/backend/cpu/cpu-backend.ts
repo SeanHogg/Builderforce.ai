@@ -10,6 +10,7 @@ import { Tensor } from "../../tensor";
 import type { AdamWStep, Backend, BinaryOp, EngineDType, HostArray, SgdStep, UnaryOp } from "../backend";
 import { matmulShape, reducePlan } from "../shape-rules";
 import * as rows from "./row-kernels";
+import { bumpVersion } from "../storage-version";
 import * as updates from "./update-kernels";
 
 const GELU_C = Math.sqrt(2 / Math.PI);
@@ -64,6 +65,11 @@ export class CpuBackend implements Backend<Tensor> {
 
   release(): void {
     // Garbage-collected storage: nothing to return.
+  }
+
+  /** A CPU tensor's storage is its data array, which every reshape view shares. */
+  storageOf(h: Tensor): object {
+    return h.data;
   }
 
   full(shape: Shape, value: number): Tensor {
@@ -160,9 +166,11 @@ export class CpuBackend implements Backend<Tensor> {
   }
   addInPlace(target: Tensor, src: Tensor): void {
     updates.addInPlace(target, src);
+    bumpVersion(target.data);
   }
   copyInPlace(target: Tensor, src: Tensor): void {
     updates.copyInPlace(target, src);
+    bumpVersion(target.data);
   }
   cast(a: Tensor, dtype: EngineDType): Tensor {
     return updates.cast(a, dtype);
@@ -173,12 +181,17 @@ export class CpuBackend implements Backend<Tensor> {
   }
   loraBackward(gw: Tensor, a: Tensor, b: Tensor, scale: number, ga: Tensor, gb: Tensor): void {
     updates.loraBackward(gw, a, b, scale, ga, gb);
+    bumpVersion(ga.data);
+    bumpVersion(gb.data);
   }
   adamwStep(param: Tensor, grad: Tensor, m: Tensor, v: Tensor, step: AdamWStep): void {
     updates.adamwStep(param, grad, m, v, step);
+    for (const h of step.keepGrad ? [param, m, v] : [param, grad, m, v]) bumpVersion(h.data);
   }
   sgdStep(param: Tensor, grad: Tensor, momentumBuf: Tensor | null, step: SgdStep): void {
     updates.sgdStep(param, grad, momentumBuf, step);
+    bumpVersion(param.data);
+    if (momentumBuf) bumpVersion(momentumBuf.data);
   }
 }
 

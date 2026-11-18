@@ -38,7 +38,7 @@ export function embedding(ids: DeviceTensor, weight: DeviceTensor): DeviceTensor
   return record("embedding", be.embedding(weight.handle, ids.handle), [weight, ids], (gy) => [
     be.embeddingBackward(ids.handle, gy, numEmbeddings, hostIndicesOf(ids)),
     null,
-  ]);
+  ], [], [1]);
 }
 
 export type Reduction = "mean" | "sum" | "none";
@@ -70,7 +70,7 @@ export function crossEntropy(
 
   if (reduction === "none") {
     be.release(valid);
-    return record("cross_entropy", loss, [logits, targets], (gy) => [rowsBackward(gy), null], [probs]);
+    return record("cross_entropy", loss, [logits, targets], (gy) => [rowsBackward(gy), null], [probs], [1]);
   }
   const total = be.sum(loss, [0], false);
   be.release(loss);
@@ -81,7 +81,7 @@ export function crossEntropy(
       const g = rowsBackward(gRows);
       be.release(gRows);
       return [g, null];
-    }, [probs]);
+    }, [probs], [1]);
   }
   const count = be.sum(valid, [0], false);
   be.release(valid);
@@ -93,7 +93,7 @@ export function crossEntropy(
     const g = rowsBackward(gRows);
     releaseAll(be, scaled, gRows);
     return [g, null];
-  }, [probs, count]);
+  }, [probs, count], [1]);
 }
 
 /**
@@ -112,5 +112,5 @@ export function loraMerge(base: DeviceTensor, a: DeviceTensor, b: DeviceTensor, 
     if (needs[2]) out[2] = gb;
     releaseAll(be, ...(needs[1] ? [] : [ga]), ...(needs[2] ? [] : [gb]));
     return out;
-  });
+  }, [], [1, 2]);
 }

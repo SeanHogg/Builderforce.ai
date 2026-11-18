@@ -6,10 +6,14 @@ import { backendOf, record, releaseAll, sumTo } from "../record";
 
 export function add(a: DeviceTensor, b: DeviceTensor): DeviceTensor {
   const be = backendOf("add", a, b);
-  return record("add", be.binary("add", a.handle, b.handle), [a, b], (gy, needs) => [
-    needs[0] ? sumTo(be, gy, a.shape) : null,
-    needs[1] ? sumTo(be, gy, b.shape) : null,
-  ]);
+  return record(
+    "add",
+    be.binary("add", a.handle, b.handle),
+    [a, b],
+    (gy, needs) => [needs[0] ? sumTo(be, gy, a.shape) : null, needs[1] ? sumTo(be, gy, b.shape) : null],
+    [],
+    [],
+  );
 }
 
 export function sub(a: DeviceTensor, b: DeviceTensor): DeviceTensor {
@@ -22,7 +26,7 @@ export function sub(a: DeviceTensor, b: DeviceTensor): DeviceTensor {
       be.release(neg);
     }
     return [needs[0] ? sumTo(be, gy, a.shape) : null, gb];
-  });
+  }, [], []);
 }
 
 export function mul(a: DeviceTensor, b: DeviceTensor): DeviceTensor {
@@ -64,7 +68,7 @@ export function div(a: DeviceTensor, b: DeviceTensor): DeviceTensor {
 /** `a * scale + shift` — scalar multiply / add / negate. */
 export function affine(a: DeviceTensor, scale: number, shift = 0): DeviceTensor {
   const be = backendOf("affine", a);
-  return record("affine", be.affine(a.handle, scale, shift), [a], (gy) => [be.affine(gy, scale, 0)]);
+  return record("affine", be.affine(a.handle, scale, shift), [a], (gy) => [be.affine(gy, scale, 0)], [], []);
 }
 
 export const mulScalar = (a: DeviceTensor, s: number) => affine(a, s, 0);

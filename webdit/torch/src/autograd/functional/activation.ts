@@ -20,7 +20,7 @@ export function exp(x: DeviceTensor): DeviceTensor {
   const be = backendOf("exp", x);
   const out = be.unary("exp", x.handle);
   const y = be.reshape(out, x.shape);
-  return record("exp", out, [x], (gy) => [be.binary("mul", gy, y)], [y]);
+  return record("exp", out, [x], (gy) => [be.binary("mul", gy, y)], [y], []);
 }
 
 export function log(x: DeviceTensor): DeviceTensor {
@@ -40,7 +40,7 @@ export function softmax(x: DeviceTensor, dim = -1): DeviceTensor {
   const be = backendOf("softmax", x);
   const out = be.softmax(x.handle);
   const y = be.reshape(out, x.shape);
-  return record("softmax", out, [x], (gy) => [be.softmaxBackward(y, gy)], [y]);
+  return record("softmax", out, [x], (gy) => [be.softmaxBackward(y, gy)], [y], []);
 }
 
 export function logSoftmax(x: DeviceTensor, dim = -1): DeviceTensor {
@@ -48,5 +48,5 @@ export function logSoftmax(x: DeviceTensor, dim = -1): DeviceTensor {
   const be = backendOf("log_softmax", x);
   const out = be.logSoftmax(x.handle);
   const y = be.reshape(out, x.shape);
-  return record("log_softmax", out, [x], (gy) => [be.logSoftmaxBackward(y, gy)], [y]);
+  return record("log_softmax", out, [x], (gy) => [be.logSoftmaxBackward(y, gy)], [y], []);
 }

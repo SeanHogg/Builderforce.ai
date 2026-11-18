@@ -3,8 +3,10 @@ updates and the copy protocol. Mixed into `torch.Tensor` (see _tensor.py for the
 
 In-place rule: `t += x`, `t.copy_(x)`, `t.zero_()`, … write into `t`'s storage through the
 engine's bit-exact copy. Allowed on a leaf that does not require grad, or under `no_grad()`
-(a manual SGD step); refused by name on a tensor that requires grad while grad mode is on, on a
-non-leaf, and on any tensor a pending graph still needs.
+(a manual SGD step); refused by name on a tensor that requires grad while grad mode is on, and on a
+non-leaf. Every write bumps the storage's version (`t._version`, shared by all views), so a
+pending graph that read the old values fails at `backward()` with PyTorch's "modified by an
+inplace operation" error — writes through a `detach()`ed alias included.
 """
 
 from . import _bridge as b
@@ -198,7 +200,11 @@ class TensorIO:
             return memo[id(self)]
         with no_grad():
             fresh = self._plain(js.op("clone", self._id))
+            grad = self.grad
+            grad_copy = None if grad is None else self._plain(js.op("clone", grad._id))
         out = self._rewrap_like(fresh)
+        if grad_copy is not None:
+            out.grad = grad_copy  # torch copies .grad too
         memo[id(self)] = out
         return out
 

@@ -17,7 +17,7 @@ export function reshape(x: DeviceTensor, shape: readonly number[]): DeviceTensor
   if (productOf(resolved) !== x.size) {
     throw new Error(`reshape: ${JSON.stringify(shape)} does not hold ${x.size} elements`);
   }
-  const out = record("reshape", be.reshape(x.handle, resolved), [x], (gy) => [be.reshape(gy, x.shape)]);
+  const out = record("reshape", be.reshape(x.handle, resolved), [x], (gy) => [be.reshape(gy, x.shape)], [], []);
   return carryHostIndices(x, out);
 }
 
@@ -52,5 +52,5 @@ export function transpose(x: DeviceTensor, dim0 = -2, dim1 = -1): DeviceTensor {
     [back[a], back[b]] = [back[b]!, back[a]!];
     [gStrides[a], gStrides[b]] = [gStrides[b]!, gStrides[a]!];
     return [be.stridedCopy(gy, back, gStrides, 0)];
-  });
+  }, [], []);
 }

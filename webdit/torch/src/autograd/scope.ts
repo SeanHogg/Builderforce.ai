@@ -57,9 +57,17 @@ export function endScope(kept: Iterable<DeviceTensor> = []): void {
 export class HostScope {
   private readonly members = new MemberSet();
 
-  run<T>(fn: () => T): T {
+  /**
+   * With `retainFresh`, the members that JOIN during this call and that it
+   * rejects are disposed as the call ends — for a host that knows nothing
+   * created in the call can be referenced afterwards except what it retains
+   * (the bridge under no_grad: no graph records them, so an intermediate an op
+   * made internally is garbage the moment the op returns).
+   */
+  run<T>(fn: () => T, retainFresh?: (t: DeviceTensor) => boolean): T {
     const depth = scopes.length;
     scopes.push(this.members);
+    const fresh = retainFresh && !this.members.fresh ? (this.members.fresh = new Set()) : null;
     let completed = false;
     try {
       const result = fn();
@@ -68,6 +76,10 @@ export class HostScope {
     } finally {
       const balanced = scopes.length === depth + 1 && scopes[depth] === this.members;
       scopes.length = depth; // restore the stack either way
+      if (fresh) {
+        this.members.fresh = null;
+        for (const t of fresh) if (this.members.has(t) && !retainFresh!(t)) this.discard(t);
+      }
       // Only a call that RETURNED reports imbalance; a throwing call keeps its own error.
       if (completed && !balanced) throw new Error("HostScope.run: the scope stack was left unbalanced inside the call");
     }
@@ -118,9 +130,14 @@ export class HostScope {
 /** A Set that keeps the byte total of its tensors as they join and leave (the engine's `trackInScope` adds through it). */
 class MemberSet extends Set<DeviceTensor> {
   bytes = 0;
+  /** While a `run(fn, retainFresh)` is open: the members that joined during it. */
+  fresh: Set<DeviceTensor> | null = null;
 
   override add(t: DeviceTensor): this {
-    if (!this.has(t)) this.bytes += t.size * 4;
+    if (!this.has(t)) {
+      this.bytes += t.size * 4;
+      this.fresh?.add(t);
+    }
     return super.add(t);
   }
 

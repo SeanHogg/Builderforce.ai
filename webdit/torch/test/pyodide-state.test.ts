@@ -101,10 +101,11 @@ try:
     nonleaf = "no error"
 except NotImplementedError as e:
     nonleaf = str(e)
-z = w @ torch.ones(1, 2)
+z = (w @ torch.ones(1, 2)).sum()
+with torch.no_grad():
+    w.add_(1.0)  # legal now (as in PyTorch); the pending graph that read w fails at backward
 try:
-    with torch.no_grad():
-        w.add_(1.0)
+    z.backward()
     pending = "no error"
 except Exception as e:
     pending = str(e)
@@ -113,7 +114,65 @@ json.dumps({"first": first, "last": last, "refused": refused, "nonleaf": nonleaf
     expect(r.last as number).toBeLessThan((r.first as number) * 0.05);
     expect(r.refused).toMatch(/__iadd__.*requires grad/);
     expect(r.nonleaf).toMatch(/__iadd__ on a non-leaf/);
-    expect(r.pending).toMatch(/needed for gradient computation/);
+    expect(r.pending).toMatch(/modified by an inplace operation: \[torch\.FloatTensor \[3, 1\]\].* is at version \d+; expected version \d+ instead/);
+  });
+
+  it("version counter: a write through a detach()ed view after forward fails backward; optimizer steps between iterations do not", async () => {
+    const r = await json<Record<string, unknown>>(`
+torch.set_default_device(DEVICE)
+w = torch.randn(3, 3, requires_grad=True)
+x = torch.randn(2, 3)
+alias = w.detach()
+v0 = w._version
+loss = (x @ w).relu().sum()
+with torch.no_grad():
+    alias.mul_(2.0)  # same storage as w, different tensor
+bumped = w._version == v0 + 1 and alias._version == w._version
+try:
+    loss.backward()
+    detached = "no error"
+except Exception as e:
+    detached = str(e)
+m = nn.Linear(3, 2)
+opt = torch.optim.AdamW(m.parameters(), lr=0.01)
+for _ in range(4):
+    opt.zero_grad()
+    m(x).sum().backward()  # a fresh graph each iteration: the previous step's writes are older than it
+    opt.step()
+json.dumps({"bumped": bumped, "detached": detached, "steps_ok": True, "param_version": m.weight._version})
+`, { DEVICE: device });
+    expect(r.bumped).toBe(true);
+    expect(r.detached).toMatch(/modified by an inplace operation: \[torch\.FloatTensor \[3, 3\]\], which is needed by matmul, is at version 1; expected version 0 instead/);
+    expect(r.steps_ok).toBe(true);
+    expect(r.param_version as number).toBeGreaterThanOrEqual(4);
+  });
+
+  it("deepcopy copies .grad (a clone, not an alias)", async () => {
+    const r = await json<Record<string, unknown>>(`
+torch.set_default_device(DEVICE)
+m = nn.Linear(2, 1)
+m(torch.ones(1, 2)).sum().backward()
+m2 = copy.deepcopy(m)
+with torch.no_grad():
+    m.weight.grad.mul_(3.0)
+json.dumps({"copied": m2.weight.grad.tolist(), "original": m.weight.grad.tolist(), "none_bias": copy.deepcopy(nn.Linear(1, 1)).bias.grad is None})
+`, { DEVICE: device });
+    expect(r).toEqual({ copied: [[1, 1]], original: [[3, 3]], none_bias: true });
+  });
+
+  it("under no_grad an op's internal intermediates are freed as the call returns", async () => {
+    const r = await json<Record<string, number>>(`
+torch.set_default_device(DEVICE)
+x = torch.randn(256, 256)
+w = torch.randn(256, 256)
+bias = torch.zeros(256)
+with torch.no_grad():
+    before = torch.memory_stats()["scopedBytes"]
+    y = F.linear(x, w, bias)  # matmul result + bias add: the matmul result is internal
+    after = torch.memory_stats()["scopedBytes"]
+json.dumps({"delta": after - before, "result": y.numel() * 4})
+`, { DEVICE: device });
+    expect(r.delta).toBe(r.result);
   });
 
   it("deepcopy(model) and deepcopy(state_dict()) give independent tensors with fresh ids; pickling is refused", async () => {

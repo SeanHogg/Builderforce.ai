@@ -1,4 +1,5 @@
 import type { Backend, BackendTensor, HostArray } from "../backend/backend";
+import { versionOf } from "../backend/storage-version";
 import { productOf, type Shape } from "../shape";
 import { runBackward } from "./engine";
 import { trackInScope } from "./scope";
@@ -66,6 +67,11 @@ export class DeviceTensor {
   }
   get isLeaf(): boolean {
     return this.gradFn === null;
+  }
+
+  /** In-place writes to this tensor's storage so far (PyTorch `_version`), through any view of it. */
+  get version(): number {
+    return versionOf(this.backend.storageOf(this.handle));
   }
 
   /**

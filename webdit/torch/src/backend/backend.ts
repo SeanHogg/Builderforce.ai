@@ -12,7 +12,7 @@ import type { Shape } from "../shape";
  *  - `release` gives a handle's storage back (pooled on WebGPU); a handle is
  *    never used after it is released;
  *  - in-place methods (`*Step`, `loraBackward`, `addInPlace`, `copyInPlace`) mutate the handles they name and
- *    nothing else.
+ *    nothing else, and bump the version counter of each storage they write (`storage-version.ts`).
  */
 
 export type EngineDType = "float32" | "int32";
@@ -95,6 +95,11 @@ export interface Backend<H extends BackendTensor = BackendTensor> {
   /** Async readback — the only awaited call on the port. */
   download(h: H): Promise<HostArray>;
   release(h: H): void;
+  /**
+   * The storage object `h` views — shared by every reshape / detach of it. Keys
+   * the version counters (`storage-version.ts`) that every in-place method bumps.
+   */
+  storageOf(h: H): object;
 
   full(shape: Shape, value: number): H;
   /** Contiguous view with a new shape; may share storage with `a`. */
