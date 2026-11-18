@@ -12,7 +12,7 @@
 import { normalizeScopeDir, isUnderScopeDir, selectPathsWithinCap } from '@builderforce/agent-tools';
 import { buildGitApiBaseUrl } from './gitProxy';
 import { bitbucketServerPathString, resolveRepoApiTarget } from './repoApiTarget';
-import { createRepoSource, makeRepoFetch } from './sources/RepoSource';
+import { createRepoSource, makeRepoFetch, type FetchLike } from './sources/RepoSource';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 
 export interface RepoReadContext {
@@ -23,7 +23,26 @@ export interface RepoReadContext {
   token: string;
   /** Branch/ref to read from. */
   ref: string;
+  /**
+   * Every provider call of `readRepoFile` / `listRepoTree` goes through this when set
+   * (pages and fallbacks included) — a caller's call budget. Default: the vendor fetch.
+   */
+  fetch?: FetchLike;
+  /** Bitbucket Server: at most this many `/browse` pages per file (default: the source's own limit). */
+  browsePageLimit?: number;
 }
+
+/** The repo source of `ctx` (GitLab / Bitbucket), its calls through `ctx.fetch` when given. */
+function sourceOf(ctx: RepoReadContext) {
+  return createRepoSource(
+    ctx.provider,
+    { owner: ctx.owner, repo: ctx.repo, host: ctx.host, token: ctx.token, maxBrowsePages: ctx.browsePageLimit },
+    ctx.fetch ?? makeRepoFetch(),
+  );
+}
+
+/** A GitHub call, through `ctx.fetch` when given. */
+const githubCall = (ctx: RepoReadContext, url: string, init: RequestInit): Promise<Response> => (ctx.fetch ?? fetch)(url, init);
 
 /** Cap on a single file read so one huge file can't blow the model's context. */
 const MAX_FILE_CHARS = 60_000;
@@ -65,8 +84,7 @@ export async function readRepoFile(ctx: RepoReadContext, path: string): Promise<
   // GitHub keeps its richer inline path below (no-regression). [1248]
   if (ctx.provider !== 'github') {
     try {
-      const src = createRepoSource(ctx.provider, { owner: ctx.owner, repo: ctx.repo, host: ctx.host, token: ctx.token }, makeRepoFetch());
-      const content = await src.getFileContent(path, ctx.ref);
+      const content = await sourceOf(ctx).getFileContent(path, ctx.ref);
       if (content == null) return { ok: false, reason: `file not found on ${ctx.ref}: ${path}` };
       const truncated = content.length > MAX_FILE_CHARS;
       return { ok: true, path, content: truncated ? content.slice(0, MAX_FILE_CHARS) : content, truncated };
@@ -76,7 +94,7 @@ export async function readRepoFile(ctx: RepoReadContext, path: string): Promise<
   }
   const apiBase = buildGitApiBaseUrl(ctx.provider, ctx.host);
   const url = `${apiBase}/repos/${ctx.owner}/${ctx.repo}/contents/${encodeURIComponent(path)}?ref=${encodeURIComponent(ctx.ref)}`;
-  const res = await fetch(url, { headers: ghHeaders(ctx.token) }).catch(() => null);
+  const res = await githubCall(ctx, url, { headers: ghHeaders(ctx.token) }).catch(() => null);
   if (!res) return { ok: false, reason: 'read request failed (network)' };
   if (res.status === 404) return { ok: false, reason: `file not found on ${ctx.ref}: ${path}` };
   if (!res.ok) { const t = await res.text().catch(() => ''); return { ok: false, reason: `GitHub ${res.status}: ${t.slice(0, 160)}` }; }
@@ -363,16 +381,18 @@ export async function listRepoFiles(ctx: RepoReadContext, subPath?: string, glob
 
 /**
  * Every file path of the repo at `ctx.ref` in ONE provider listing, uncapped — for a
- * caller that filters the tree itself (blueprint sources). `truncated` is the
- * PROVIDER's cut only (a GitHub tree past its own limit), never a cap of ours.
+ * caller that filters the tree itself (blueprint sources). `truncated` means the
+ * listing is incomplete: the provider cut it (a GitHub tree past its own limit), or the
+ * source stopped paging at its page limit — never the 400-entry cap `listRepoFiles`
+ * applies. A page `ctx.fetch` refuses fails the listing. A paged provider (GitLab, Bitbucket) costs
+ * one call per page.
  */
 export async function listRepoTree(ctx: RepoReadContext): Promise<ListFilesResult> {
   // GitLab/Bitbucket via the shared RepoSource.getTree (which also recovers
   // truncated GitHub trees); GitHub keeps its inline path below (no-regression). [1248]
   if (ctx.provider !== 'github') {
     try {
-      const src = createRepoSource(ctx.provider, { owner: ctx.owner, repo: ctx.repo, host: ctx.host, token: ctx.token }, makeRepoFetch());
-      const { entries, truncated: sourceTruncated } = await src.getTree(ctx.ref);
+      const { entries, truncated: sourceTruncated } = await sourceOf(ctx).getTree(ctx.ref);
       return { ok: true, paths: entries.filter((e) => e.type === 'file').map((e) => e.path), truncated: sourceTruncated === true };
     } catch (e) {
       return { ok: false, reason: e instanceof Error ? e.message : `list not implemented for provider '${ctx.provider}'` };
@@ -383,7 +403,7 @@ export async function listRepoTree(ctx: RepoReadContext): Promise<ListFilesResul
   // "builderforce/task-12" must keep its slash, so encode segments individually.
   const refPath = ctx.ref.split('/').map(encodeURIComponent).join('/');
   const url = `${apiBase}/repos/${ctx.owner}/${ctx.repo}/git/trees/${refPath}?recursive=1`;
-  const res = await fetch(url, { headers: ghHeaders(ctx.token) }).catch(() => null);
+  const res = await githubCall(ctx, url, { headers: ghHeaders(ctx.token) }).catch(() => null);
   if (!res) return { ok: false, reason: 'list request failed (network)' };
   if (!res.ok) { const t = await res.text().catch(() => ''); return { ok: false, reason: `GitHub ${res.status}: ${t.slice(0, 160)}` }; }
   const json = (await res.json().catch(() => null)) as { tree?: Array<{ path?: string; type?: string }>; truncated?: boolean } | null;

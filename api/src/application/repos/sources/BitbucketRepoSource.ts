@@ -44,6 +44,13 @@ const MAX_TREE_PAGES = 20;
 /** Server `/files` page size — its hard cap is 1000. */
 const SERVER_PAGE_LIMIT = 1000;
 
+/** Whether a Server 404 is its own "no such path" answer (`errors[].exceptionName` …NoSuchPathException). */
+async function isNoSuchPath(res: Response): Promise<boolean> {
+  const body = (await res.json().catch(() => null)) as { errors?: Array<{ exceptionName?: unknown }> } | null;
+  return Array.isArray(body?.errors)
+    && body.errors.some((error) => typeof error?.exceptionName === 'string' && error.exceptionName.includes('NoSuchPathException'));
+}
+
 export class BitbucketRepoSource implements RepoSource {
   private readonly api: RepoApiTarget;
 
@@ -165,9 +172,11 @@ export class BitbucketRepoSource implements RepoSource {
   async getFileContent(path: string, ref: string): Promise<string | null> {
     const res = await this.fetchFn(this.api.fileContent(path, ref), { headers: this.headers });
     if (res.ok) return res.text().catch(() => null);
-    // A 404 from `/raw` means the file is not there — `/browse` would only spend more
-    // subrequests to say the same; it is for a `/raw` that is unreachable, not a miss.
-    if (!this.isServer || res.status === 404) return null;
+    if (!this.isServer) return null;
+    // Server's own "no such file" (a 404 whose JSON names NoSuchPathException) is a miss:
+    // `/browse` would only spend subrequests to say the same. Any other 404 — an HTML page
+    // from a proxy, an old Data Center build without `/raw` — still tries `/browse`.
+    if (res.status === 404 && await isNoSuchPath(res)) return null;
     return this.browseFileContent(path, ref);
   }
 
@@ -176,7 +185,8 @@ export class BitbucketRepoSource implements RepoSource {
     const pagesText: string[] = [];
     let start: number | null = 0;
     let pages = 0;
-    while (start !== null && pages < MAX_TREE_PAGES) {
+    const maxPages = this.cfg.maxBrowsePages ?? MAX_TREE_PAGES;
+    while (start !== null && pages < maxPages) {
       const url: string = `${this.api.fileWrite(path)}?at=${encodeURIComponent(ref)}`
         + `&limit=${SERVER_PAGE_LIMIT}&start=${start}`;
       const { ok, body } = await this.getJson<unknown>(url);

@@ -183,17 +183,44 @@ describe('BitbucketRepoSource', () => {
     expect(commits[0]).toEqual({ sha: 'h1', message: 'm', date: '2024-02-02' });
   });
 
-  it('Server: a 404 from /raw is a miss (no /browse retry); another failure retries /browse', async () => {
-    const calls: string[] = [];
-    const fetchFn: FetchLike = vi.fn(async (url: string) => {
-      calls.push(url);
-      if (url.includes('/raw/')) return textResponse('', url.includes('gone.txt') ? 404 : 503);
-      return jsonResponse({ lines: [{ text: 'from browse' }], isLastPage: true });
+  describe('Server: /raw 404s', () => {
+    const NO_SUCH_PATH = { errors: [{ exceptionName: 'com.atlassian.bitbucket.content.NoSuchPathException', message: 'gone' }] };
+    const serverWith = (raw404: () => Response) => {
+      const calls: string[] = [];
+      const fetchFn: FetchLike = vi.fn(async (url: string) => {
+        calls.push(url);
+        if (url.includes('/raw/')) return raw404();
+        return jsonResponse({ lines: [{ text: 'from browse' }], isLastPage: true });
+      });
+      return { calls, src: createRepoSource('bitbucket', { owner: 'PRJ', repo: 'r', token: 't', host: 'git.acme.internal' }, fetchFn) };
+    };
+
+    it("Server's own NoSuchPathException is a miss, with no /browse call", async () => {
+      const { calls, src } = serverWith(() => jsonResponse(NO_SUCH_PATH, 404));
+      expect(await src.getFileContent('gone.txt', 'main')).toBeNull();
+      expect(calls).toHaveLength(1);
     });
-    const src = createRepoSource('bitbucket', { owner: 'PRJ', repo: 'r', token: 't', host: 'git.acme.internal' }, fetchFn);
-    expect(await src.getFileContent('gone.txt', 'main')).toBeNull();
-    expect(calls).toHaveLength(1);
-    expect(await src.getFileContent('kept.txt', 'main')).toBe('from browse');
-    expect(calls.some((url) => url.includes('/browse/'))).toBe(true);
+
+    it.each([
+      ['an HTML 404 (a proxy without /raw)', () => new Response('<html>Not Found</html>', { status: 404, headers: { 'Content-Type': 'text/html' } })],
+      ['an empty 404 (an old Data Center build)', () => new Response(null, { status: 404 })],
+      ['a JSON 404 naming another error', () => jsonResponse({ errors: [{ exceptionName: 'com.atlassian.OtherException' }] }, 404)],
+    ])('%s still goes to /browse', async (_name, raw404) => {
+      const { calls, src } = serverWith(raw404);
+      expect(await src.getFileContent('kept.txt', 'main')).toBe('from browse');
+      expect(calls.some((url) => url.includes('/browse/'))).toBe(true);
+    });
+
+    it('maxBrowsePages bounds the /browse pages of one file', async () => {
+      let browsed = 0;
+      const fetchFn: FetchLike = vi.fn(async (url: string) => {
+        if (url.includes('/raw/')) return new Response(null, { status: 404 });
+        browsed += 1;
+        return jsonResponse({ lines: [{ text: `p${browsed}` }], isLastPage: false, nextPageStart: browsed * 1000 });
+      });
+      const src = createRepoSource('bitbucket', { owner: 'PRJ', repo: 'r', token: 't', host: 'git.acme.internal', maxBrowsePages: 2 }, fetchFn);
+      expect(await src.getFileContent('big.txt', 'main')).toBe('p1\np2');
+      expect(browsed).toBe(2);
+    });
   });
 });

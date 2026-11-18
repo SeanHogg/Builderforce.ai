@@ -20,6 +20,8 @@ export interface RepoSourceConfig {
   token: string;
   /** Bitbucket app-password auth needs a username for Basic auth. */
   username?: string | null;
+  /** Bitbucket Server: at most this many `/browse` pages per file read (default: the tree page limit). */
+  maxBrowsePages?: number;
 }
 
 export interface RepoTreeEntry {

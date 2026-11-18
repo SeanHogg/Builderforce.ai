@@ -8,7 +8,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { BlueprintDetector } from '@builderforce/creation-canvas-contract';
 import type { ListFilesResult, ReadFileResult, RepoReadContext } from '../repos/readRepoContents';
-import { blueprintSourcePaths, FOLLOW_READ_RESERVE, MAX_SOURCE_READS, readBlueprintSources, type BlueprintSourceIo } from './blueprintSources';
+import { BLUEPRINT_BROWSE_PAGES, blueprintSourcePaths, FOLLOW_READ_RESERVE, MAX_PROVIDER_CALLS, readBlueprintSources, type BlueprintSourceIo } from './blueprintSources';
+import type { FetchLike } from '../repos/sources/RepoSource';
 import { DETECTORS } from './detectors';
 import { detectDotnet } from './detectors/dotnetDetector';
 import { repoRelativePath } from './pathGlob';
@@ -64,7 +65,7 @@ describe('blueprintSourcePaths', () => {
   });
 
   it('the exact paths alone fit the read budget, with the follow reserve left', () => {
-    expect(blueprintSourcePaths().exact.length).toBeLessThan(MAX_SOURCE_READS - FOLLOW_READ_RESERVE);
+    expect(blueprintSourcePaths().exact.length).toBeLessThan(MAX_PROVIDER_CALLS - FOLLOW_READ_RESERVE);
   });
 });
 
@@ -107,6 +108,22 @@ describe('readBlueprintSources', () => {
     expect(detectDotnet(files).services?.[0]).toMatchObject({ id: 'Web', devCommand: 'dotnet run --project WEB/Web.csproj --urls http://0.0.0.0:8080' });
   });
 
+  it('an exact-case path wins over its case twin (Dockerfile beside dockerfile)', async () => {
+    const io = stubIo({ dockerfile: 'lower', Dockerfile: 'FROM node' });
+    const files = await readBlueprintSources(CTX, io);
+    expect(files.get('Dockerfile')).toBe('FROM node');
+    expect(io.readCalls).toContain('Dockerfile');
+    expect(io.readCalls).not.toContain('dockerfile');
+  });
+
+  it('case-twin projects matched by a glob are two files, each read once', async () => {
+    const io = stubIo({ 'Api/Api.csproj': WEB, 'api/Api.csproj': LIB });
+    const files = await readBlueprintSources(CTX, io);
+    expect(io.readCalls.filter((p) => p.endsWith('.csproj')).sort()).toEqual(['Api/Api.csproj', 'api/Api.csproj']);
+    expect(files.get('Api/Api.csproj')).toBe(WEB);
+    expect(files.get('api/Api.csproj')).toBe(LIB);
+  });
+
   it('when the tree listing fails, reads every exact path blind (no globs, no second listing)', async () => {
     const io = stubIo({ 'package.json': '{}', '.github/workflows/ci.yml': 'on: push' }, { treeListingFails: true });
     const files = await readBlueprintSources(CTX, io);
@@ -115,21 +132,48 @@ describe('readBlueprintSources', () => {
     expect([...files.keys()]).toEqual(['package.json']);
   });
 
-  it(`worst case: one listing and at most ${MAX_SOURCE_READS} reads, however many files match or are named`, async () => {
+  it(`worst case: one listing plus reads, at most ${MAX_PROVIDER_CALLS} in all, however many files match or are named`, async () => {
     const repo: Record<string, string> = Object.fromEntries(Array.from({ length: 600 }, (_, i) => [`p${i}/P${i}.csproj`, LIB]));
     repo['Shop.sln'] = sln(Array.from({ length: 2000 }, (_, i) => `n${i}\\P${i}.csproj`));
     for (const opts of [{}, { treeTruncated: true }] as const) {
       const io = stubIo(repo, opts);
       await readBlueprintSources(CTX, io);
-      expect(io.listCalls + io.readCalls.length).toBeLessThanOrEqual(1 + MAX_SOURCE_READS);
+      expect(io.listCalls + io.readCalls.length).toBeLessThanOrEqual(MAX_PROVIDER_CALLS);
     }
+  });
+
+  it(`worst case on Bitbucket Server, real io: every call counted (tree pages, /raw, /browse pages) — at most ${MAX_PROVIDER_CALLS}`, async () => {
+    const tree = [...Array.from({ length: 2500 }, (_, i) => `p${i}/P${i}.csproj`), 'Shop.sln'];
+    const calls: string[] = [];
+    const fetch: FetchLike = async (url) => {
+      calls.push(url);
+      if (url.includes('/files?')) {
+        const start = Number(new URL(url).searchParams.get('start') ?? 0);
+        // An endless tree: every page says there is another.
+        return Response.json({ values: tree.slice(start, start + 1000), isLastPage: false, nextPageStart: start + 1000 });
+      }
+      // /raw answers an HTML 404 (a proxy), so every read falls back to /browse, whose pages never end.
+      if (url.includes('/raw/')) return new Response('<html>404</html>', { status: 404 });
+      const start = Number(new URL(url).searchParams.get('start') ?? 0);
+      const text = url.includes('Shop.sln') ? sln(Array.from({ length: 2000 }, (_, i) => `n${i}\\P${i}.csproj`)) : LIB;
+      return Response.json({ lines: [{ text }], isLastPage: false, nextPageStart: start + 1000 });
+    };
+    const ctx: RepoReadContext = { provider: 'bitbucket', host: 'git.acme.internal', owner: 'PRJ', repo: 'r', token: 't', ref: 'main', fetch };
+    await readBlueprintSources(ctx);
+    expect(calls.length).toBeLessThanOrEqual(MAX_PROVIDER_CALLS);
+    const browsePerFile = new Map<string, number>();
+    for (const url of calls.filter((u) => u.includes('/browse/'))) {
+      const file = url.split('?')[0]!;
+      browsePerFile.set(file, (browsePerFile.get(file) ?? 0) + 1);
+    }
+    expect(Math.max(0, ...browsePerFile.values())).toBeLessThanOrEqual(BLUEPRINT_BROWSE_PAGES);
   });
 
   it.each([
     ['a full tree', {}],
     ['a truncated tree', { treeTruncated: true }],
   ] as const)('regression, %s: a solution naming a project past the glob share still gets it read and detected', async (_name, opts) => {
-    const count = MAX_SOURCE_READS + 40;
+    const count = MAX_PROVIDER_CALLS + 40;
     const repo: Record<string, string> = Object.fromEntries(Array.from({ length: count }, (_, i) => [`p${i}/P${i}.csproj`, LIB]));
     const last = `p${count - 1}/P${count - 1}.csproj`;
     repo[last] = WEB;
@@ -147,7 +191,8 @@ describe('readBlueprintSources', () => {
     await readBlueprintSources(CTX, io);
     expect(io.readCalls.filter((p) => p === 'broken/Broken.csproj')).toHaveLength(1);
     const followed = io.readCalls.filter((p) => /^n\d+\//.test(p));
-    expect(followed.length).toBe(MAX_SOURCE_READS - (io.readCalls.length - followed.length));
+    // The one listing counts too: the follow reads fill what the listing and the first pass left.
+    expect(followed.length).toBe(MAX_PROVIDER_CALLS - io.listCalls - (io.readCalls.length - followed.length));
     expect(followed).toEqual(names.slice(0, followed.length));
   });
 

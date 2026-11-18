@@ -7,10 +7,13 @@
  * what the detectors expect (the copies this replaced had already missed several
  * `reads` entries, so those detectors never saw their files).
  *
- * Every read is a provider subrequest spent inside a webhook `waitUntil`, so detection
- * makes ONE tree listing and at most `MAX_SOURCE_READS` reads, in this order:
+ * Every provider call is a subrequest spent inside a webhook `waitUntil`, so detection
+ * makes at most `MAX_PROVIDER_CALLS` of them — counted at the fetch every call goes
+ * through (`ctx.fetch`: tree pages of GitLab/Bitbucket, reads, Bitbucket Server `/browse`
+ * pages, at most `BLUEPRINT_BROWSE_PAGES` per file). ONE tree listing, then reads in this order:
  * 1. the exact `reads` paths the tree holds (all of them when the tree is unknown);
- * 2. glob matches (`*.csproj`), filtered from the one tree in memory — leaving
+ * 2. glob matches (`*.csproj`), filtered from the one tree in memory — none when the
+ *    listing FAILED, so a failed listing means no `.sln`/`.csproj`, hence no .NET detection — leaving
  *    `FOLLOW_READ_RESERVE` reads for:
  * 3. the files the read ones NAME (`followReads`: the projects a `.sln` lists), sanitised
  *    to repo paths, never a path already tried, in the order they are named.
@@ -24,6 +27,7 @@
  */
 
 import { listRepoTree, readRepoFile, type RepoReadContext } from '../repos/readRepoContents';
+import { makeRepoFetch, type FetchLike } from '../repos/sources/RepoSource';
 import { mapWithConcurrency } from '../runtime/boundedPool';
 import { DETECTORS } from './detectors';
 import { pathGlobRegExp, repoRelativePath } from './pathGlob';
@@ -42,8 +46,11 @@ export interface BlueprintSourcePaths {
 /** Parallel reads per detection — enough to be quick, few enough to be a polite API client. */
 const READ_CONCURRENCY = 6;
 
-/** Every read of one detection, all passes together (plus the one tree listing). */
-export const MAX_SOURCE_READS = 160;
+/** Every provider call of one detection: tree pages, reads and `/browse` pages, all passes together. */
+export const MAX_PROVIDER_CALLS = 160;
+
+/** Bitbucket Server `/browse` pages per file during detection (a manifest fits in one or two). */
+export const BLUEPRINT_BROWSE_PAGES = 2;
 
 /** Reads glob matches may not take, so the files a solution names still fit. */
 export const FOLLOW_READ_RESERVE = 32;
@@ -88,26 +95,54 @@ interface SourceRead {
   path: string;
 }
 
-/** The repo tree as detection sees it: what it holds (case-insensitively), when that is known. */
+/** The repo tree as detection sees it. */
 interface RepoTree {
   /** Tree paths (all of them, or what a truncated listing returned). */
-  paths: readonly string[];
-  /** lower-case path → the tree's spelling; null when the listing failed or was truncated (absence unknown). */
-  spelling: Map<string, string> | null;
+  paths: ReadonlySet<string>;
+  /** lower-case path → the tree's spelling (the first, for case twins). */
+  byLowerCase: ReadonlyMap<string, string>;
+  /** Whether `paths` is the whole tree, so absence from it means absent (false: failed or truncated listing). */
+  complete: boolean;
 }
 
-/** The read for `key`: the tree's spelling when listed; null when the full tree shows it is absent. */
-function readFor(tree: RepoTree, key: string, partial: Map<string, string>): SourceRead | null {
-  const spelled = (tree.spelling ?? partial).get(key.toLowerCase());
+function repoTree(paths: readonly string[], complete: boolean): RepoTree {
+  const byLowerCase = new Map<string, string>();
+  for (const path of paths) if (!byLowerCase.has(path.toLowerCase())) byLowerCase.set(path.toLowerCase(), path);
+  return { paths: new Set(paths), byLowerCase, complete };
+}
+
+/**
+ * The read for `key`: the exact path when the tree has it (`Dockerfile` beside `dockerfile`),
+ * else the tree's case-insensitive spelling; unlisted, read blind unless the tree is complete.
+ */
+function readFor(tree: RepoTree, key: string): SourceRead | null {
+  if (tree.paths.has(key)) return { key, path: key };
+  const spelled = tree.byLowerCase.get(key.toLowerCase());
   if (spelled !== undefined) return { key, path: spelled };
-  return tree.spelling ? null : { key, path: key };
+  return tree.complete ? null : { key, path: key };
 }
 
 /** Take at most `room` of `reads`, logging what is cut. */
 function within(reads: SourceRead[], room: number, what: string): SourceRead[] {
   const kept = reads.slice(0, Math.max(0, room));
-  if (kept.length < reads.length) console.warn(`[blueprint] ${reads.length} ${what}; reading ${kept.length} (read budget ${MAX_SOURCE_READS})`);
+  if (kept.length < reads.length) console.warn(`[blueprint] ${reads.length} ${what}; reading ${kept.length} (provider call budget ${MAX_PROVIDER_CALLS})`);
   return kept;
+}
+
+/**
+ * A fetch that lets at most `limit` calls through; past that it answers 429 without a
+ * call, so a read or a page beyond the budget is a miss — never a subrequest.
+ */
+export function providerCallBudget(base: FetchLike, limit: number): { fetch: FetchLike; used: () => number } {
+  let used = 0;
+  return {
+    fetch: (input, init) => {
+      if (used >= limit) return Promise.resolve(new Response(null, { status: 429, statusText: 'blueprint call budget spent' }));
+      used += 1;
+      return base(input, init);
+    },
+    used: () => used,
+  };
 }
 
 /** Read each `reads` entry into `files` under its key; a miss or a failed read is skipped. */
@@ -129,43 +164,56 @@ export async function readBlueprintSources(
   io: BlueprintSourceIo = { readRepoFile, listRepoTree },
 ): Promise<Map<string, string>> {
   const { exact, dirGlobs } = blueprintSourcePaths();
+  // Every provider call — tree pages, reads, /browse pages — goes through one counted fetch.
+  const budget = providerCallBudget(ctx.fetch ?? makeRepoFetch(), MAX_PROVIDER_CALLS);
+  ctx = { ...ctx, fetch: budget.fetch, browsePageLimit: BLUEPRINT_BROWSE_PAGES };
+  let issued = 0;
+  /** Calls spent so far: the counted ones, or at least one per listing and read issued (an io that bypasses `ctx.fetch`). */
+  const spent = () => Math.max(budget.used(), issued);
   const listing = await io.listRepoTree(ctx);
+  issued += 1;
   const paths = listing.ok ? listing.paths : [];
-  const byLowerCase = new Map(paths.map((p) => [p.toLowerCase(), p] as const));
-  const tree: RepoTree = { paths, spelling: listing.ok && !listing.truncated ? byLowerCase : null };
+  const tree = repoTree(paths, listing.ok && !listing.truncated);
 
-  const tried = new Set<string>();
+  /** The provider paths already asked for: a later pass never asks again. */
+  const askedFor = new Set<string>();
+  /** Fresh reads, de-duplicated by the provider path (case twins in the tree are two files). */
   const take = (reads: Array<SourceRead | null>): SourceRead[] => {
-    const fresh = reads.filter((r): r is SourceRead => r !== null && !tried.has(r.key.toLowerCase()));
-    return [...new Map(fresh.map((r) => [r.key.toLowerCase(), r])).values()];
+    const fresh = reads.filter((r): r is SourceRead => r !== null && !askedFor.has(r.path));
+    return [...new Map(fresh.map((r) => [r.path, r])).values()];
   };
-  const mark = (reads: SourceRead[]) => reads.forEach((r) => tried.add(r.key.toLowerCase()));
+  const mark = (reads: SourceRead[]) => reads.forEach((r) => askedFor.add(r.path));
 
-  const exactReads = within(take(exact.map((p) => readFor(tree, p, byLowerCase))), MAX_SOURCE_READS, 'exact source paths');
+  // Room is planned at one call per read; the counted fetch is the hard stop when a read costs more (/browse pages).
+  const exactReads = within(take(exact.map((p) => readFor(tree, p))), MAX_PROVIDER_CALLS - spent(), 'exact source paths');
   mark(exactReads);
   const globReads = within(
     // In `reads` order (a detector lists what matters most first: solutions before projects), then tree order.
     take(dirGlobs.flatMap((g) => paths.filter((p) => matchesGlob(g, p))).map((p) => ({ key: p, path: p }))),
-    MAX_SOURCE_READS - FOLLOW_READ_RESERVE - exactReads.length,
+    MAX_PROVIDER_CALLS - FOLLOW_READ_RESERVE - spent() - exactReads.length,
     'files match the source globs',
   );
   mark(globReads);
   const files = new Map<string, string>();
   await readInto(ctx, io, [...exactReads, ...globReads], files);
+  issued += exactReads.length + globReads.length;
 
   // What the read files name: only safe repo paths, never one already tried, only what the tree holds (when known).
   const named = DETECTORS.flatMap((d) => d.followReads?.(files) ?? [])
     .map((raw) => {
       const key = repoRelativePath(raw);
-      return key === null ? null : readFor(tree, key, byLowerCase);
+      return key === null ? null : readFor(tree, key);
     });
-  // A named file already read under another spelling (`WEB/Web.csproj` vs the tree's `web/Web.csproj`) is aliased, not re-read.
-  const readKeys = new Map([...files.keys()].map((key) => [key.toLowerCase(), key] as const));
+  // ALIASED KEYS: a named file whose provider path was already read under another key
+  // (the solution's `WEB/Web.csproj`, read by a glob as the tree's `web/Web.csproj`) gets
+  // that content under the named key too — so `files` may hold one file under two keys,
+  // each the spelling some detector asked for. It is never re-read.
+  const contentByPath = new Map([...exactReads, ...globReads].filter((r) => files.has(r.key)).map((r) => [r.path, files.get(r.key)!] as const));
   for (const read of named) {
-    const known = read && !files.has(read.key) ? readKeys.get(read.key.toLowerCase()) : undefined;
-    if (read && known !== undefined) files.set(read.key, files.get(known)!);
+    const known = read && !files.has(read.key) ? contentByPath.get(read.path) : undefined;
+    if (read && known !== undefined) files.set(read.key, known);
   }
-  const followReads = within(take(named), MAX_SOURCE_READS - exactReads.length - globReads.length, 'files are named by the read ones');
+  const followReads = within(take(named), MAX_PROVIDER_CALLS - spent(), 'files are named by the read ones');
   if (followReads.length > 0) await readInto(ctx, io, followReads, files);
   return files;
 }

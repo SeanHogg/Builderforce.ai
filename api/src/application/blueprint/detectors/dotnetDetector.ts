@@ -134,10 +134,10 @@ export function detectDotnet(files: Map<string, string>): Partial<AppBlueprint> 
 export const dotnetDetector: BlueprintDetector = {
   id: 'dotnet',
   name: '.NET Project',
-  // Projects directly in a root, and one or two folders down (where a solution keeps them);
-  // Glob matches share blueprintSources' read budget; the projects a solution
-  // names are read in a second pass (followReads), within blueprintSources' read budget.
-  // Solutions first: glob reads share a budget in this order.
+  // Solutions first, then projects directly in a root and one or two folders down: glob
+  // reads share blueprintSources' read budget in this order. The projects a solution names
+  // are read in a second pass (followReads). The globs need the tree listing: when it fails,
+  // no solution or project is read, so there is no .NET detection.
   reads: readsUnderServiceRoots(['*.sln', '*.slnx', '*.csproj', '*/*.csproj', '*/*/*.csproj']),
   followReads: solutionListedProjects,
   detect: detectDotnet,
