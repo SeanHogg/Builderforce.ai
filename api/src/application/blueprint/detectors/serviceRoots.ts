@@ -1,5 +1,5 @@
 /**
- * W2: Service roots — the shared seam of the language detectors (Python, PHP) whose
+ * W2: Service roots — the shared seam of the language detectors (Python, PHP, .NET, Rust) whose
  * service need not sit at the repo root.
  *
  * A full-stack repo keeps its backend beside the frontend: a Vite app at the root and a

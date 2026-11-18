@@ -1,0 +1,111 @@
+/**
+ * W2: .NET detector
+ *
+ * An ASP.NET Core service (`kind: 'dotnet'`) per service root holding a web project: a
+ * `*.csproj` on `Microsoft.NET.Sdk.Web`, found directly in the root or listed by a
+ * solution (`.sln` / `.slnx`) there. A class library, console or worker project is not a
+ * service. Commands are the ones the browser runtime's `dotnet` takes:
+ *
+ * - `dotnet run --urls http://0.0.0.0:8080` — Kestrel's default (5000) would not match
+ *   the kind's port, so the URL is named; launch profiles yield to it.
+ * - `--project <path>` whenever the root is ambiguous (a solution, several project files)
+ *   or the project sits in a subfolder: the runtime builds one project, never a solution.
+ * - `dotnet restore [<path>]` installs (the runtime checks packages against its bundle).
+ *
+ * Npgsql (directly or through its EF Core provider) yields the blueprint's Postgres
+ * `database`. EF migrations are not run (`dotnet ef` is declined in the browser), so
+ * there is no migration step.
+ */
+
+import type { AppBlueprint, BlueprintDetector } from '@builderforce/creation-canvas-contract';
+import { SERVICE_KINDS } from '@builderforce/creation-canvas-contract';
+import {
+  detectAcrossServiceRoots,
+  devPortOf,
+  isPrimaryAt,
+  pathUnder,
+  postgresDatabase,
+  processService,
+  readsUnderServiceRoots,
+  SERVICE_ROOTS,
+  serviceIdFor,
+  serviceRootFiles,
+  type RootDetection,
+} from './serviceRoots';
+
+const PORT = devPortOf(SERVICE_KINDS.DOTNET);
+const URLS = `--urls http://0.0.0.0:${PORT}`;
+
+const PROJECT = /\.csproj$/i;
+const SOLUTION = /\.slnx?$/i;
+const WEB_SDK = /\b(?:Sdk|Name)\s*=\s*["']Microsoft\.NET\.Sdk\.Web(?:\/[^"']*)?["']/i;
+const NPGSQL = /<PackageReference\s+Include\s*=\s*["']Npgsql(?:\.EntityFrameworkCore\.PostgreSQL)?["']/i;
+/** `Project("{guid}") = "Api", "src\Api\Api.csproj", "{guid}"` (.sln) and `<Project Path="src/Api/Api.csproj" />` (.slnx). */
+const SLN_PROJECT = /^Project\("[^"]*"\)\s*=\s*"[^"]*"\s*,\s*"([^"]+\.csproj)"/gim;
+const SLNX_PROJECT = /<Project\s+Path\s*=\s*"([^"]+\.csproj)"/gi;
+
+/** `src\Api\Api.csproj` → `src/Api/Api.csproj`. */
+function normalizeProjectPath(path: string): string {
+  return path.replace(/\\/g, '/').replace(/^\.\//, '');
+}
+
+function solutionProjects(text: string): string[] {
+  return [...text.matchAll(SLN_PROJECT), ...text.matchAll(SLNX_PROJECT)].map((m) => normalizeProjectPath(m[1]!));
+}
+
+/** The files directly in `root` (relative names), from the paths detection read. */
+function directFiles(files: Map<string, string>, root: string): string[] {
+  const prefix = root ? `${root}/` : '';
+  return [...files.keys()]
+    .filter((path) => path.startsWith(prefix) && !path.slice(prefix.length).includes('/'))
+    .map((path) => path.slice(prefix.length))
+    .sort();
+}
+
+/**
+ * A repo-root solution listing a project directly in a backend folder (`api/Api.csproj`)
+ * leaves it to that folder's own root, so one project is never two services.
+ */
+function ownedByAnotherRoot(root: string, project: string): boolean {
+  const dir = project.includes('/') ? project.slice(0, project.lastIndexOf('/')) : '';
+  return root === '' && dir !== '' && SERVICE_ROOTS.includes(dir);
+}
+
+/** The service (and database) one root's web project describes, or null when it holds none. */
+function detectDotnetRoot(files: Map<string, string>, rootName: string): RootDetection | null {
+  const root = serviceRootFiles(files, rootName);
+  const direct = directFiles(files, rootName);
+  const projectFiles = direct.filter((name) => PROJECT.test(name));
+  const solutions = direct.filter((name) => SOLUTION.test(name));
+  const candidates = [...new Set([...solutions.flatMap((sln) => solutionProjects(root.get(sln) ?? '')), ...projectFiles])]
+    .filter((project) => !ownedByAnotherRoot(rootName, project));
+  const project = candidates.find((path) => WEB_SDK.test(root.get(path) ?? ''));
+  if (!project) return null;
+
+  const ambiguous = project.includes('/') || projectFiles.length + solutions.length > 1;
+  const target = ambiguous ? ` ${project}` : '';
+  const service = processService({
+    id: serviceIdFor(rootName, project.split('/').pop()!.replace(PROJECT, ''), 'dotnet'),
+    kind: SERVICE_KINDS.DOTNET,
+    rootDir: root.rootDir,
+    packageManager: 'dotnet',
+    installCommand: `dotnet restore${target}`,
+    devCommand: ambiguous ? `dotnet run --project ${project} ${URLS}` : `dotnet run ${URLS}`,
+    isPrimary: isPrimaryAt(files),
+  });
+  const database = NPGSQL.test(root.get(project) ?? '') ? postgresDatabase('', '') : null;
+  return { service, database };
+}
+
+/** Detect every ASP.NET Core service across the service roots. */
+export function detectDotnet(files: Map<string, string>): Partial<AppBlueprint> {
+  return detectAcrossServiceRoots(files, detectDotnetRoot);
+}
+
+export const dotnetDetector: BlueprintDetector = {
+  id: 'dotnet',
+  name: '.NET Project',
+  // Projects directly in a root, and one or two folders down (where a solution keeps them).
+  reads: readsUnderServiceRoots(['*.csproj', '*.sln', '*.slnx', '*/*.csproj', '*/*/*.csproj']),
+  detect: detectDotnet,
+};

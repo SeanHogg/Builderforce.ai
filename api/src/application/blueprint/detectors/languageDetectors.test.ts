@@ -1,5 +1,5 @@
 /**
- * The Python and PHP detectors: each row is a repo (path → content) and the service /
+ * The Python, PHP, .NET and Rust detectors: each row is a repo (path → content) and the service /
  * database detection must write for it — the commands are the ones the browser
  * runtime serves (`uvicorn`, `flask --app … run`, `gunicorn …wsgi`, `php -S`).
  */
@@ -8,6 +8,8 @@ import { describe, expect, it } from 'vitest';
 import type { AppDatabase, AppService } from '@builderforce/creation-canvas-contract';
 import { detectPython, pythonDetector } from './pythonDetector';
 import { detectPhp, phpDetector } from './phpDetector';
+import { detectDotnet, dotnetDetector } from './dotnetDetector';
+import { detectRust, rustDetector } from './rustDetector';
 import { runDetectors } from './index';
 
 const repo = (files: Record<string, string>) => new Map(Object.entries(files));
@@ -185,6 +187,103 @@ describe('PHP detector', () => {
 
   it('reads composer.json at the root and in the backend folders', () => {
     expect(phpDetector.reads).toEqual(expect.arrayContaining(['composer.json', 'api/composer.json', 'backend/artisan']));
+  });
+});
+
+const WEB_CSPROJ = '<Project Sdk="Microsoft.NET.Sdk.Web"><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>';
+const LIB_CSPROJ = '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>';
+
+describe('.NET detector', () => {
+  it('a web csproj at the root runs with `dotnet run` on the kind port', () => {
+    const result = detectDotnet(repo({ 'Shop.csproj': WEB_CSPROJ, 'Program.cs': 'var app = WebApplication.Create();' }));
+    expect(result.services).toEqual([expect.objectContaining({
+      id: 'Shop', kind: 'dotnet', rootDir: '.', packageManager: 'dotnet', installCommand: 'dotnet restore',
+      devCommand: 'dotnet run --urls http://0.0.0.0:8080', ports: [8080], isPrimary: true,
+    })]);
+    expect(result.database).toBeUndefined();
+  });
+
+  it('a class library is not a service', () => {
+    expect(detectDotnet(repo({ 'Core.csproj': LIB_CSPROJ }))).toEqual({});
+  });
+
+  it('a .sln with several projects runs its web project by path; Npgsql yields Postgres', () => {
+    const sln = [
+      'Microsoft Visual Studio Solution File, Format Version 12.00',
+      'Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Core", "src\\Core\\Core.csproj", "{1}"',
+      'EndProject',
+      'Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Api", "src\\Api\\Api.csproj", "{2}"',
+      'EndProject',
+      'Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Api.Tests", "tests\\Api.Tests\\Api.Tests.csproj", "{3}"',
+      'EndProject',
+    ].join('\n');
+    const result = detectDotnet(repo({
+      'Shop.sln': sln,
+      'src/Core/Core.csproj': LIB_CSPROJ,
+      'src/Api/Api.csproj': WEB_CSPROJ.replace('</Project>', '<ItemGroup><PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.0" /></ItemGroup></Project>'),
+      'tests/Api.Tests/Api.Tests.csproj': LIB_CSPROJ,
+    }));
+    expect(result.services).toEqual([expect.objectContaining({
+      id: 'Api', rootDir: '.', installCommand: 'dotnet restore src/Api/Api.csproj',
+      devCommand: 'dotnet run --project src/Api/Api.csproj --urls http://0.0.0.0:8080',
+    })]);
+    expect(result.database).toMatchObject({ engine: 'postgres', migrationCommand: '' });
+  });
+
+  it('reads project and solution files at the root and in the backend folders, with globs', () => {
+    expect(dotnetDetector.reads).toEqual(expect.arrayContaining(['*.csproj', '*.sln', 'api/*.csproj', 'backend/*/*.csproj']));
+  });
+});
+
+describe('Rust detector', () => {
+  it('a bfwc-wasi reactor runs as its prebuilt wasm32-wasip1 module', () => {
+    const result = detectRust(repo({
+      'Cargo.toml': '[package]\nname = "todo-service"\n\n[lib]\ncrate-type = ["cdylib"]\n\n[dependencies]\nbfwc-wasi = { path = "../bfwc-wasi" }\naxum = "0.8"\ntokio-postgres = { version = "0.7", default-features = false }\n',
+    }));
+    expect(result.services).toEqual([expect.objectContaining({
+      id: 'todo-service', kind: 'rust', rootDir: '.', packageManager: 'cargo', installCommand: '',
+      devCommand: './target/wasm32-wasip1/release/todo_service.wasm', startCommand: './target/wasm32-wasip1/release/todo_service.wasm',
+      buildCommand: 'cargo build --release --target wasm32-wasip1', ports: [8080],
+    })]);
+    expect(result.database).toMatchObject({ engine: 'postgres', migrationCommand: '' });
+  });
+
+  it('a Cargo.toml in a subroot, member of the root workspace, builds into the workspace target', () => {
+    const result = detectRust(repo({
+      'Cargo.toml': '[workspace]\nmembers = ["api"]\n',
+      'api/Cargo.toml': '[package]\nname = "shop-api"\n\n[[bin]]\nname = "shop"\n\n[dependencies.axum]\nversion = "0.8"\n',
+    }));
+    expect(result.services).toEqual([expect.objectContaining({ id: 'api', rootDir: 'api', devCommand: '../target/wasm32-wasip1/release/shop.wasm' })]);
+  });
+
+  it('a crate that serves nothing is not a service', () => {
+    expect(detectRust(repo({ 'Cargo.toml': '[package]\nname = "tool"\n\n[dependencies]\nserde = "1"\n' }))).toEqual({});
+  });
+
+  it('reads Cargo.toml at the root and in the backend folders', () => {
+    expect(rustDetector.reads).toEqual(expect.arrayContaining(['Cargo.toml', 'api/Cargo.toml', 'server/Cargo.toml']));
+  });
+});
+
+describe('mixed roots: .NET and Rust beside other services', () => {
+  it('Vite (root) + ASP.NET (api/) + Rust (backend/): one service each, the Node one primary', () => {
+    const result = runDetectors(repo({
+      'package.json': JSON.stringify({ name: 'web', scripts: { dev: 'vite' }, dependencies: { react: '18' } }),
+      'api/Api.csproj': WEB_CSPROJ,
+      'backend/Cargo.toml': '[package]\nname = "jobs"\n[lib]\ncrate-type = ["cdylib"]\n[dependencies]\nbfwc-wasi = "*"\n',
+    }));
+    expect(result.services?.map((s) => [s.id, s.kind, s.rootDir, s.isPrimary])).toEqual([
+      ['web', 'vite-react', '.', true], ['api', 'dotnet', 'api', false], ['backend', 'rust', 'backend', false],
+    ]);
+    expect(result.services?.find((s) => s.id === 'api')?.devCommand).toBe('dotnet run --urls http://0.0.0.0:8080');
+  });
+
+  it('a repo-root solution listing api/Api.csproj leaves it to the api root (one service, not two)', () => {
+    const result = detectDotnet(repo({
+      'App.sln': 'Project("{X}") = "Api", "api\\Api.csproj", "{1}"\nEndProject\n',
+      'api/Api.csproj': WEB_CSPROJ,
+    }));
+    expect(result.services?.map((s) => [s.id, s.rootDir])).toEqual([['api', 'api']]);
   });
 });
 

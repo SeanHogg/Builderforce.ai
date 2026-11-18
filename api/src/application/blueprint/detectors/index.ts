@@ -24,6 +24,8 @@ import { githubWorkflowsDetector } from './githubWorkflowsDetector';
 import { builderforceJsonDetector } from './builderforceJsonDetector';
 import { pythonDetector } from './pythonDetector';
 import { phpDetector } from './phpDetector';
+import { dotnetDetector } from './dotnetDetector';
+import { rustDetector } from './rustDetector';
 
 /** All available detectors */
 export const DETECTORS: BlueprintDetector[] = [
@@ -33,6 +35,8 @@ export const DETECTORS: BlueprintDetector[] = [
   // `database` wins when a repo has both.
   pythonDetector,
   phpDetector,
+  dotnetDetector,
+  rustDetector,
   viteConfigDetector,
   nextConfigDetector,
   expoConfigDetector,

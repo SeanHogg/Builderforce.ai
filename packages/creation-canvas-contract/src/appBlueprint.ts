@@ -27,6 +27,8 @@ export const SERVICE_KINDS = {
   ASTRO: 'astro',         // Astro
   PYTHON: 'python',       // Python server (FastAPI, Flask, Django …)
   PHP: 'php',             // PHP server (`php -S`, Slim, Laravel …)
+  DOTNET: 'dotnet',       // ASP.NET Core server (`dotnet run`)
+  RUST: 'rust',           // Rust HTTP service, run as a prebuilt wasm32-wasip1 module
 } as const;
 
 export type ServiceKind = typeof SERVICE_KINDS[keyof typeof SERVICE_KINDS];
@@ -54,6 +56,9 @@ export const SERVICE_KIND_DEV_PORTS: Readonly<Record<ServiceKind, number | null>
   // uvicorn, `fastapi run` and Django default to 8000 (`php -S` names its own); Flask's 5000 is declared in `ports`.
   python: 8000,
   php: 8000,
+  // The detectors name these: `dotnet run --urls http://0.0.0.0:8080`; a Rust module reads `PORT` (bfwc-wasi's default 8080).
+  dotnet: 8080,
+  rust: 8080,
 };
 
 /**
@@ -80,8 +85,8 @@ export interface AppService {
   kind: ServiceKind;
   /** Root directory of this service (relative to repo root). */
   rootDir: string;
-  /** Detected package manager (npm/pnpm/yarn/bun; pip for a Python service, composer for PHP). */
-  packageManager: 'npm' | 'pnpm' | 'yarn' | 'bun' | 'pip' | 'composer';
+  /** Detected package manager (npm/pnpm/yarn/bun; pip for a Python service, composer for PHP, dotnet for .NET, cargo for Rust). */
+  packageManager: 'npm' | 'pnpm' | 'yarn' | 'bun' | 'pip' | 'composer' | 'dotnet' | 'cargo';
   /** Install command (with flags for CI/frozen lockfile). */
   installCommand: string;
   /** Dev server command. */

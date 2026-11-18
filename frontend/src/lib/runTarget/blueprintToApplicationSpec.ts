@@ -40,6 +40,8 @@ export const KIND_RUNTIME: Readonly<Record<ServiceKind, { runtime: string; role:
   'mobile-capacitor': { runtime: 'capacitor', role: 'frontend' },
   python: { runtime: 'python', role: 'backend' },
   php: { runtime: 'php', role: 'backend' },
+  dotnet: { runtime: 'dotnet', role: 'backend' },
+  rust: { runtime: 'rust', role: 'backend' },
 };
 
 /**

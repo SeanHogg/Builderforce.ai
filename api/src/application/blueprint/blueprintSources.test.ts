@@ -49,7 +49,7 @@ describe('blueprintSourcePaths', () => {
         expect(exact).toContain(entry);
         continue;
       }
-      const dir = entry.slice(0, entry.lastIndexOf('/'));
+      const dir = entry.includes('/') ? entry.slice(0, entry.lastIndexOf('/')) : '';
       const sample = entry.slice(entry.lastIndexOf('/') + 1).replace('*', 'sample');
       expect(dirGlobs.some((g) => g.dir === dir && g.test(sample))).toBe(true);
     }
@@ -66,6 +66,17 @@ describe('readBlueprintSources', () => {
       'src/index.ts': 'export {}',
     }));
     expect([...files.keys()].sort()).toEqual(['.github/workflows/ci.yml', '.github/workflows/deploy.yaml', 'package.json']);
+  });
+
+  it('matches globs at the root and through wildcard folders (.NET projects one and two levels down)', async () => {
+    const files = await readBlueprintSources(CTX, stubIo({
+      'Shop.sln': 'x',
+      'src/Api/Api.csproj': '<Project />',
+      'tools/Gen.csproj': '<Project />',
+      'a/b/c/Deep.csproj': '<Project />',
+      'api/Api.csproj': '<Project />',
+    }));
+    expect([...files.keys()].sort()).toEqual(['Shop.sln', 'api/Api.csproj', 'src/Api/Api.csproj', 'tools/Gen.csproj']);
   });
 
   it('skips a failed read rather than throwing', async () => {

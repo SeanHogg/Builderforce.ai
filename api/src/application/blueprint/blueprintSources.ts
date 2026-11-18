@@ -63,8 +63,21 @@ function dirOf(path: string): string {
   return slash === -1 ? '' : path.slice(0, slash);
 }
 
+// A glob's dir may hold `*` segments (`api/*/*.csproj`): each matches one folder name.
+function dirMatches(globDir: string, dir: string): boolean {
+  if (!globDir.includes('*')) return dir === globDir;
+  return new RegExp(`^${globDir.split('*').map(escapeRegExp).join('[^/]*')}$`).test(dir);
+}
+
+/** The folder to list for a glob when there is no whole-tree listing: its dir up to the first wildcard segment. */
+function listingDirOf(globDir: string): string {
+  const star = globDir.indexOf('*');
+  return star === -1 ? globDir : dirOf(globDir.slice(0, star));
+}
+
 function matchesGlob(glob: BlueprintDirGlob, path: string): boolean {
-  return dirOf(path) === glob.dir && glob.test(path.slice(glob.dir ? glob.dir.length + 1 : 0));
+  const dir = dirOf(path);
+  return dirMatches(glob.dir, dir) && glob.test(path.slice(dir ? dir.length + 1 : 0));
 }
 
 /**
@@ -86,7 +99,7 @@ async function sourcePathsToRead(ctx: RepoReadContext, io: BlueprintSourceIo): P
   }
   const globbed: string[] = [];
   for (const glob of dirGlobs) {
-    const listed = await io.listRepoFiles(ctx, glob.dir);
+    const listed = await io.listRepoFiles(ctx, listingDirOf(glob.dir));
     if (listed.ok) globbed.push(...listed.paths.filter((p) => matchesGlob(glob, p)));
   }
   return [...exact, ...globbed];
