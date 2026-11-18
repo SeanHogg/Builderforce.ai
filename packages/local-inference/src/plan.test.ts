@@ -169,6 +169,16 @@ describe('localFirstPlan', () => {
     expect(refs(localFirstPlan({ probes: [], accounts: [kimi], workload: TOOL_TURN, cloud: {} }))).toEqual(['local/kimi-code/k3', 'cloud:auto']);
     expect(refs(localFirstPlan({ probes: [], accounts: [kimi], workload: TOOL_TURN, cloud: null }))).toEqual(['local/kimi-code/k3']);
   });
+
+  // The tenant's order for the role decides: a `trail` account (another provider leads) goes
+  // after the cloud, its fallback; a `lead` one before it. The attempt carries no placement.
+  it('puts a trailing account after the cloud and a leading one before it', () => {
+    const lead = { ref: 'local/kimi-code/k3', provider: 'kimi-code' as const, model: 'k3', endpoint: { baseUrl: 'https://a' }, placement: 'lead' as const };
+    const trail = { ref: 'local/kimi-code/kimi-for-coding', provider: 'kimi-code' as const, model: 'kimi-for-coding', endpoint: { baseUrl: 'https://b' }, placement: 'trail' as const };
+    const plan = localFirstPlan({ probes: [SYNAPSE], accounts: [trail, lead], workload: TOOL_TURN, cloud: {} });
+    expect(refs(plan)).toEqual(['local/synapse/qwen3-8b', 'local/kimi-code/k3', 'cloud:auto', 'local/kimi-code/kimi-for-coding']);
+    expect(plan.some((a) => 'placement' in a)).toBe(false);
+  });
 });
 
 describe('localCatalogView', () => {

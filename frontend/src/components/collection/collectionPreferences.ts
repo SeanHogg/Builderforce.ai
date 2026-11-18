@@ -1,5 +1,3 @@
-'use client';
-
 import { useCallback, useSyncExternalStore } from 'react';
 import { readLocalJson, writeLocalJson } from '@/lib/storage';
 import { DEFAULT_PAGE_SIZE, PAGE_SIZES, type PageSize } from './collectionTypes';

@@ -36,7 +36,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import PageContainer from '@/components/PageContainer';
-import { ltiDeepLinkApi, type LtiDeepLinkOptions } from '@/lib/builderforceApi';
+import { ltiDeepLinkApi, type LtiDeepLinkOptions } from '@/lib/institutionalIdentityApi';
 
 type Phase = 'loading' | 'ready' | 'failed' | 'returning';
 

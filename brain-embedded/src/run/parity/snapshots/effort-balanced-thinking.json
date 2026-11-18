@@ -188,6 +188,10 @@
      "role": "tool",
      "content": "{\"ok\":true,\"content\":\"export const a = 1;\\n\"}",
      "tool_call_id": "c1"
+    },
+    {
+     "role": "user",
+     "content": "<run-state>\nFiles already in your context this run — a file marked unchanged is still above you: do not read it again, act on it.\n- a.ts · lines 1 · unchanged\n</run-state>"
     }
    ],
    "metadata": {

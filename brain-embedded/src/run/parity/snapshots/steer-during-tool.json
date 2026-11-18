@@ -175,6 +175,10 @@
     {
      "role": "user",
      "content": "only the API half"
+    },
+    {
+     "role": "user",
+     "content": "<run-state>\nFiles already in your context this run — a file marked unchanged is still above you: do not read it again, act on it.\n- a.ts · lines 1 · unchanged\n</run-state>"
     }
    ],
    "metadata": {

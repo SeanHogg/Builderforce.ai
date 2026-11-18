@@ -48,5 +48,5 @@ export function orderPoolForWorkload(
     minSamples: evidence.minSamples,
     ...(evidence.explore ? { explore: evidence.explore } : {}),
   });
-  return liftUntriedStronger(learned, evidence.stats, resolveRoleObjective(workload.role, workload.arcStage), view, evidence.minSamples);
+  return liftUntriedStronger(learned, evidence.stats, resolveRoleObjective(workload.role, workload.arcStage), view, evidence.minSamples, workload.role);
 }

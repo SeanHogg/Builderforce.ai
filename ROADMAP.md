@@ -213,6 +213,8 @@ Public copy states today's evidence. **Available** = shipped and repeatably veri
 
 Source: [offline-first review](./docs/design/vsix-offline-first-architecture-review.md).
 
+- **The BYO pool always leads with Kimi in VS Code, ignoring the tenant's server-set precedence (found 2026-11-17, chat #153027).** The cause is `brain-embedded/src/hostModelStream.ts`, which tries the accounts the editor calls itself (Kimi Code) before the gateway on every `byo_pool` and Hybrid Auto turn, and `packages/provider-connect/src/connectedAccounts.ts` `hybridAccounts()`, which never reads `/llm/provider-keys` order. Unranked providers also default to alphabetical order or catalog tier, with no coding/agentic rank. Fix: a host account leads only when it is first in the tenant's healthy precedence and otherwise trails the gateway. Unranked providers default to `codingRank` (`@builderforce/model-catalog`).
+
 - **Local model context windows are still unknown on three paths (found 2026-11-17 while fixing chat #149169). VSIX 2026.10.189 fixed the Kimi Code CLI install.**
   - `clients/vscode/src/modelRouting.ts` `localWindowProbes()` returns `[]` unless `localModels.localFirst` is on, so a pinned Ollama, Synapse or FreeToken model gets only the shipped catalog window.
   - The transport's sync `window()` (`brain-embedded/src/run/modelTransport.ts`) never sees live probe windows such as Ollama's `num_ctx`.

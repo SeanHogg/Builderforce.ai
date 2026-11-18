@@ -3,7 +3,7 @@
 import { useId, useState, type FormEvent } from 'react';
 import { useTranslations } from 'next-intl';
 import { Button, TextField } from '@/components/ui';
-import { ssoDiscoveryApi } from '@/lib/builderforceApi';
+import { ssoDiscoveryApi } from '@/lib/institutionalIdentityApi';
 import { faultMessage } from '@/lib/apiClient';
 
 /**

@@ -24,6 +24,12 @@ export interface CatalogView {
   priceOf?(model: string): ModelPrice | undefined;
   /** Where it runs. Absent = `cloud`. */
   residencyOf?(model: string): ModelResidency;
+  /**
+   * The model's rung on the role's ladder (`roleLadders.ts`, 0 leads), `undefined` when
+   * the role has no ladder or the model is off it. Absent = the host orders every role
+   * by tier and price alone.
+   */
+  ladderRankOf?(role: string, model: string): number | undefined;
 }
 
 /** Residency through the optional port method — `cloud` when the host doesn't say. */

@@ -29,8 +29,13 @@ export interface RoutingByRole {
   coderReasks: number;
   /** Explicit `hand_off` calls the planner made. */
   handOffs: number;
-  /** Times the analysis budget forced the hand-off turn (`loop.hand_off_due`). */
+  /** Times a rule forced the hand-off turn: the analysis budget (`loop.hand_off_due`) or A3's escalation
+   *  (`loop.progress_forced` with `forced: 'hand_off'`, e.g. the read-only streak). */
   handOffsForced: number;
+  /** Of {@link handOffsForced}, the ones A3's progress guard forced. */
+  handOffsForcedByProgress?: number;
+  /** The progress signals behind those (e.g. `read_only_streak`), distinct, in trace order. */
+  handOffsForcedSignals?: string[];
   /** Times analysis ended without a hand-off once the budget was spent. */
   planBudgetsSpent: number;
   /** How each hand-off ran (`hand_off.mode`): side by side, inline or mixed, and the overlap that decided it. */
@@ -76,6 +81,13 @@ export function routingByRole(turns: readonly ModelTurn[], events: readonly Brai
   // left (`from`), the explicit `hand_off` names the tool it came through (`via`).
   const roleHandoffs = events.filter((e) => e.label === 'llm.role_handoff');
   const hasArg = (e: BrainTraceEvent, key: string): boolean => !!e.args && typeof e.args === 'object' && key in (e.args as Record<string, unknown>);
+  // A3's escalation forces the same single-tool hand_off turn the budget does (`progressBudget.ts` `forcedProgressTurn`).
+  const progressForced = events
+    .filter((e) => e.label === 'loop.progress_forced' && !!e.args && typeof e.args === 'object')
+    .map((e) => e.args as Record<string, unknown>)
+    .filter((a) => a.forced === 'hand_off');
+  const progressForcedHandOffs = progressForced.length;
+  const progressSignals = [...new Set(progressForced.map((a) => (typeof a.signal === 'string' ? a.signal : '')).filter(Boolean))];
   return {
     roles: [...byRole.entries()].map(([role, e]) => ({
       role,
@@ -85,11 +97,21 @@ export function routingByRole(turns: readonly ModelTurn[], events: readonly Brai
     })),
     coderReasks: roleHandoffs.filter((e) => hasArg(e, 'from')).length,
     handOffs: roleHandoffs.filter((e) => hasArg(e, 'via')).length,
-    handOffsForced: count('loop.hand_off_due'),
+    handOffsForced: count('loop.hand_off_due') + progressForcedHandOffs,
+    handOffsForcedByProgress: progressForcedHandOffs,
+    handOffsForcedSignals: progressSignals,
     planBudgetsSpent: count('loop.plan_budget_spent'),
     handOffModes: events.filter((e) => e.label === HAND_OFF_MODE_LABEL).map(decisionOf).filter((d): d is HandOffDecision => d !== null),
     handOffClashesRefused: count(HAND_OFF_CLASH_LABEL),
   };
+}
+
+/** ` · N forced by <cause>` — the analysis budget, the progress guard, or both ('' when nothing forced a hand-off). */
+function forcedText(r: RoutingByRole): string {
+  const byProgress = r.handOffsForcedByProgress ?? 0;
+  const byBudget = r.handOffsForced - byProgress;
+  const causes = [byBudget > 0 ? 'the analysis budget' : '', byProgress > 0 ? `the progress guard${r.handOffsForcedSignals?.length ? ` (${r.handOffsForcedSignals.join(', ')})` : ''}` : ''].filter(Boolean);
+  return r.handOffsForced ? ` · ${r.handOffsForced} forced by ${causes.join(' and ')}` : '';
 }
 
 /** `Routing by role:` lines — nothing when no turn recorded its role. */
@@ -105,7 +127,7 @@ export function formatRoutingByRole(r: RoutingByRole | undefined): string[] {
   }
   lines.push(
     `  • analysis → code: ${r.coderReasks} re-ask(s) on a first edit · ${r.handOffs} hand_off call(s)`
-      + (r.handOffsForced ? ` · ${r.handOffsForced} forced by the analysis budget` : '')
+      + forcedText(r)
       + (r.planBudgetsSpent ? ` · ${r.planBudgetsSpent} ended analysis with no hand-off` : '')
       + (r.handOffClashesRefused ? ` · ${r.handOffClashesRefused} plan(s) sent back once for overlapping paths` : ''),
   );

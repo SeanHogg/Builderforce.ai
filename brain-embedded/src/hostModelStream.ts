@@ -28,8 +28,9 @@
  *    through `createLocalFirstStream`, which owns which calls are open to local-first
  *    (`localFirstApplies`) and the invisible failover; with nothing probed, the gateway.
  *    A connected subscription this host calls itself (`accounts` — Kimi, which refuses our
- *    cloud) is tried after this device and before the gateway, the way the gateway leads
- *    with the tenant's other connected accounts.
+ *    cloud) takes its place in the tenant's BYO order for the turn's role (the server's
+ *    order): it is tried after this device and before the gateway only when it LEADS that
+ *    order, else after the gateway, only when the gateway fails before any output.
  *    With a `localSuccess` store, the engine's `run.local-success` predictor is consulted
  *    before the local attempt — skipped when it is confident the turn would fail there —
  *    and every outcome (local served, local failed → gateway, skipped) trains it. Only
@@ -48,9 +49,11 @@
  *    run, so the turn goes straight to Auto.
  *  - **Specific with a pick:** exactly that route, hard-pinned (`modelStrict`) — no local
  *    attempt and no fallback. "Use my connected accounts" (`routingMode: 'byo_pool'`) is
- *    a pick of the person's ACCOUNTS, in Hybrid too: the ones this host calls itself
- *    (`accounts` — Kimi) first, then the gateway's BYO pool, which stays strict. Never a
- *    device runtime and never the free pool; with no host accounts, exactly the pool.
+ *    a pick of the person's ACCOUNTS, in Hybrid too, in the tenant's order for the turn's
+ *    role: an account this host calls itself (`accounts` — Kimi) before the gateway's BYO
+ *    pool (which stays strict) when it leads that order, else after it as the fallback
+ *    (the gateway's error surfaces when both fail). Never a device runtime and never the
+ *    free pool; with no host accounts, exactly the pool.
  *  - **Specific with no pick:** fails `no_specific_model` — never a silent Hybrid.
  *
  * When no model can serve a turn, the error says WHY: `not_signed_in` only for a person
@@ -116,11 +119,12 @@ export interface HostModelStreamInput {
   probes?: () => Promise<readonly LocalRuntimeProbe[]>;
   /**
    * The connected accounts this host calls itself (Kimi), read per Hybrid Auto call and per
-   * "use my connected accounts" call (Hybrid or Specific) — never prompting; an account
-   * that is not connected is simply absent. Absent = none (the web
+   * "use my connected accounts" call (Hybrid or Specific) with the call's `role` (absent =
+   * a coding turn), each `placement`d in the tenant's order for that role — never
+   * prompting; an account that is not connected is simply absent. Absent = none (the web
    * app, which cannot reach Kimi).
    */
-  accounts?: () => Promise<readonly LocalFirstAccount[]>;
+  accounts?: (role?: string) => Promise<readonly LocalFirstAccount[]>;
   /** The gateway stream for this call, or null signed out. */
   cloud: () => MaybePromise<StreamFn | null>;
   /** The local fetch (page engines' shim, the editor's bridge…); the global by default. */
@@ -209,9 +213,9 @@ export function createHostModelStream(input: HostModelStreamInput): StreamFn {
     const signedIn = !localOnly && (input.signedIn ? await input.signedIn() : cloud !== null);
     const noModel = localOnly || signedIn ? NO_LOCAL_MODEL : NOT_SIGNED_IN;
 
-    /** The connected accounts this host calls itself, read per call; none when unreadable or unlent. */
-    const readAccounts = async (): Promise<readonly LocalFirstAccount[]> =>
-      input.accounts ? input.accounts().catch(accountsUnavailable) : [];
+    /** The connected accounts this host calls itself, placed for the call's role; none when unreadable or unlent. */
+    const readAccounts = async (role: string | undefined): Promise<readonly LocalFirstAccount[]> =>
+      input.accounts ? input.accounts(role).catch(accountsUnavailable) : [];
     /** The one local-first stream assembly — Auto's, and the account pool's (no probes, no predictor). */
     const localFirst = (
       probes: readonly LocalRuntimeProbe[],
@@ -241,7 +245,7 @@ export function createHostModelStream(input: HostModelStreamInput): StreamFn {
       }
       const probes = input.probes ? await input.probes() : [];
       // Hybrid only: Local only never leaves the device, and Specific makes no Auto attempt.
-      const accounts = mode === 'hybrid' ? await readAccounts() : [];
+      const accounts = mode === 'hybrid' ? await readAccounts(call.role) : [];
       if (probes.length === 0 && accounts.length === 0) {
         if (!cloud) throw new Error(noModel);
         return cloud(call, h);
@@ -280,11 +284,12 @@ export function createHostModelStream(input: HostModelStreamInput): StreamFn {
     // as it stands — a local ref it names runs where it runs, anything else local first.
     const strict = mode === 'specific';
     if (!pick) {
-      // "Use my connected accounts" (Hybrid and Specific): the person's ACCOUNTS — those this
-      // host calls itself (Kimi) first, then the gateway's BYO pool (still strict). Never a
+      // "Use my connected accounts" (Hybrid and Specific): the person's ACCOUNTS in the tenant's
+      // order for the call's role — a host-called account (Kimi) before the gateway's BYO pool
+      // (still strict) only when it leads that order, else after it as the fallback. Never a
       // device runtime and never the free pool, so no probes and no local-success predictor.
       if (isAccountPoolCall(opts)) {
-        const accounts = await readAccounts();
+        const accounts = await readAccounts(opts.role);
         if (accounts.length > 0) return localFirst([], accounts)(opts, handlers);
       }
       if (strict) {

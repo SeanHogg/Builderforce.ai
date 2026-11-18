@@ -1,19 +1,25 @@
 /**
  * Order candidate models for what the call is FOR.
  *
- * A quality-first objective leads with the STRONGEST tier, a cost-first one with the
- * CHEAPEST — and within a tier, by per-token price where the catalog knows it — and a
- * balanced one keeps the given order exactly. Across vendors, not within one: a role
- * that only reordered inside a provider could never move a strong model ahead of a
+ * A role with a model LADDER (plan, review, code — `roleLadders.ts` in
+ * `@builderforce/model-catalog`, read through `CatalogView.ladderRankOf`) leads with its
+ * ladder: the strongest judge for planning and review, the best coder PER COST for code
+ * (Sonnet before Opus). On-ladder models sort before off-ladder ones; the tier and price
+ * keys below break ties within a rung and order whatever the ladder does not name.
+ *
+ * Otherwise a quality-first objective leads with the STRONGEST tier, a cost-first one
+ * with the CHEAPEST — and within a tier, by per-token price where the catalog knows it —
+ * and a balanced one keeps the given order exactly. Across vendors, not within one: a
+ * role that only reordered inside a provider could never move a strong model ahead of a
  * precedence-first cheap one for a coding turn, which is the point.
  *
  * Vendor HEALTH is the outermost key: a vendor known to be failing never leads because
- * a role asked for its tier. Stable, so equal keys keep the given order; never adds,
- * drops or invents a model. Pure.
+ * a role asked for its rung or tier. Stable, so equal keys keep the given order (the
+ * tenant's precedence); never adds, drops or invents a model. Pure.
  *
  * The optional LATENCY guard demotes a failover candidate whose measured p50 is more
  * than 3× the primary's ({@link latencyDemotion}): it sorts behind every candidate
- * within budget within the same tier, never ahead. Unmeasured models and a down
+ * within budget within the same rung and tier, never ahead. Unmeasured models and a down
  * primary are neutral; the caller decides when the guard applies (code/verify roles).
  */
 
@@ -28,17 +34,33 @@ function blendedUnitPrice(view: CatalogView, model: string): number | undefined 
   return price ? price.input + 3 * price.output : undefined;
 }
 
+/** Rung for a model the role's ladder does not name — after every named rung. */
+const OFF_LADDER = Number.MAX_SAFE_INTEGER;
+
+/**
+ * The role's ladder as a sort key, or `undefined` when the role has none here (no role,
+ * a ladder-less role, or a host whose view carries no ladders). Pure.
+ */
+export function ladderKey(view: CatalogView, role: string | undefined): ((model: string) => number) | undefined {
+  const rankOf = view.ladderRankOf;
+  if (!role || !rankOf) return undefined;
+  return (model) => rankOf(role, model) ?? OFF_LADDER;
+}
+
 export function orderForRole(
   models: readonly string[],
   objective: number,
   view: CatalogView,
   demotedVendors?: ReadonlySet<string>,
   latency?: LatencyGuardInput,
+  role?: string,
 ): string[] {
   const byTier = !isBalancedObjective(objective);
+  const ladder = byTier ? ladderKey(view, role) : undefined;
   if (!byTier && !demotedVendors?.size && !latency) return [...models];
   const costFirst = byTier && objective < 0;
   const health = (m: string): number => (demotedVendors?.has(view.vendorOf(m)) ? 1 : 0);
+  const rung = (m: string): number => (ladder ? ladder(m) : 0);
   const tier = (m: string): number => {
     if (!byTier) return 0;
     const rank = tierRank(view.tierOf(m));
@@ -55,6 +77,7 @@ export function orderForRole(
     .map((m, i) => ({ m, i, p: price(m) }))
     .sort((a, b) =>
       health(a.m) - health(b.m) ||
+      compareNumbers(rung(a.m), rung(b.m)) ||
       tier(a.m) - tier(b.m) ||
       slow(a.m) - slow(b.m) ||
       compareNumbers(a.p, b.p) ||

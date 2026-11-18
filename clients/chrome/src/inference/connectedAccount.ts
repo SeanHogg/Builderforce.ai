@@ -47,8 +47,9 @@ export interface ConnectedAccount {
   /** Where a Kimi pin (`local/kimi-code/<model>` or the gateway's `direct/kimi-code/<model>`)
    *  runs, or null for any other ref. */
   pinFor(ref: string): Promise<HostLocalPin | null>;
-  /** The accounts Hybrid tries before the gateway — none until Kimi's origin is granted. */
-  hybridAccounts(): Promise<LocalFirstAccount[]>;
+  /** The accounts Hybrid tries, placed in the tenant's order for the call's role (before or
+   *  after the gateway) — none until Kimi's origin is granted. */
+  hybridAccounts(role?: string): Promise<LocalFirstAccount[]>;
 }
 
 /**
@@ -88,8 +89,8 @@ export function createConnectedAccount(deps: {
       if (outcome.kind === 'unavailable') throw new Error(outcome.detail);
       throw new ProviderConnectRequired(provider, outcome.reason);
     },
-    async hybridAccounts() {
-      return (await deps.originGranted()) ? accounts.hybridAccounts() : [];
+    async hybridAccounts(role) {
+      return (await deps.originGranted()) ? accounts.hybridAccounts(role) : [];
     },
   };
 }

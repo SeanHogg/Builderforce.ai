@@ -248,7 +248,7 @@ export async function createPanelServices(): Promise<PanelServices> {
     // The side panel's model picker persists its pin here (Settings → Model).
     pinned: () => settings.pinnedModel(),
     accountPin: (ref) => kimi.pinFor(ref),
-    accounts: () => kimi.hybridAccounts(),
+    accounts: (role) => kimi.hybridAccounts(role),
     mode: () => rovrPolicy.inferenceMode().mode,
     gatewayAllowed: () => rovrPolicy.allows('gateway-inference'),
     onFallback: modelFallback.report,

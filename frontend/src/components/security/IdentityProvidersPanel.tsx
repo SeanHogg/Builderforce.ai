@@ -38,7 +38,7 @@ import {
   type LtiRegistration,
   type LtiToolUrls,
   type SsoConnection,
-} from '@/lib/builderforceApi';
+} from '@/lib/institutionalIdentityApi';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { RoleGate } from '@/components/RoleGate';

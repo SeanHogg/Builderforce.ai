@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { PLAN_TURN_BUDGET } from '@builderforce/run-policy';
+import { READ_ONLY_STREAK_TURNS } from '@builderforce/run-guards';
 import { StreamInterruptedError } from '../streamChatCompletion';
 import { queueRunSteering } from '../runSteering';
 import { chatAsks } from '../runStore/chatAsks';
@@ -91,7 +91,8 @@ describe('T9 a provider that broke is retried inside the turn', () => {
     const forced = run.asked.filter((r) => r.tools?.length === 1 && r.tools[0]!.function.name === 'hand_off');
     expect(forced.length).toBeGreaterThanOrEqual(2);
     const turnsBeforeForced = run.asked.findIndex((r) => r.tools?.length === 1 && r.tools[0]!.function.name === 'hand_off');
-    expect(turnsBeforeForced).toBe(PLAN_TURN_BUDGET);
+    // A3's read-only streak forces the hand-off (steer at READ_ONLY_STREAK_TURNS, escalate after as many more), before the analysis budget.
+    expect(turnsBeforeForced).toBe(2 * READ_ONLY_STREAK_TURNS);
   });
 });
 

@@ -350,6 +350,10 @@
      "role": "tool",
      "content": "{\"ok\":true,\"path\":\"a.ts\",\"content\":\"export const a = 1;\\n\",\"totalLines\":1}",
      "tool_call_id": "c2"
+    },
+    {
+     "role": "user",
+     "content": "<run-state>\nFiles already in your context this run — a file marked unchanged is still above you: do not read it again, act on it.\n- a.ts · lines 1 · unchanged\n</run-state>"
     }
    ],
    "metadata": {

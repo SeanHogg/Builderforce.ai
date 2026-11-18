@@ -500,6 +500,78 @@ describe('createHostModelStream', () => {
         expect(err).toMatchObject({ status: 503, code: 'byo_required' });
         expect((err as BrainRequestError).message).toMatch(/^local\/kimi-code\/k3 could not take this turn \(.+\)\. BYO execution is required/);
       });
+
+      // The tenant's order for the turn's role puts another provider first: the gateway
+      // (which alone can call it) leads, and the host-called account is its fallback.
+      describe('a TRAILING account (another provider leads the role\'s order)', () => {
+        const trailing = { ...kimi, placement: 'trail' as const };
+
+        it('reads the accounts for the call\'s role', async () => {
+          const { cloud } = fakeCloud();
+          const accounts = vi.fn(async (_role?: string) => [trailing]);
+          await createHostModelStream({ mode: () => 'specific', accounts, cloud: () => cloud, fit: async (m) => m })({ ...pool, role: 'plan' });
+          expect(accounts).toHaveBeenCalledWith('plan');
+        });
+
+        it('the gateway goes first; the account is untouched when the gateway answers', async () => {
+          const { cloud, calls } = fakeCloud();
+          const fetchImpl = vi.fn(async () => sse('from-kimi'));
+          const stream = createHostModelStream({ mode: () => 'hybrid', accounts: async () => [trailing], cloud: () => cloud, fetch: fetchImpl, fit: async (m) => m });
+          expect((await stream(pool)).text).toBe('from-cloud');
+          expect(calls).toHaveLength(1);
+          expect(calls[0]!.routingMode).toBe('byo_pool');
+          expect(fetchImpl).not.toHaveBeenCalled();
+        });
+
+        it('the gateway failing before any output falls to the account', async () => {
+          const calls: Array<Parameters<BrainStreamFn>[0]> = [];
+          const cloud: BrainStreamFn = async (opts) => {
+            calls.push(opts);
+            throw new BrainRequestError('upstream down', { status: 503 });
+          };
+          const stream = createHostModelStream({ mode: () => 'specific', accounts: async () => [trailing], cloud: () => cloud, fetch: vi.fn(async () => sse('from-kimi')), fit: async (m) => m });
+          const result = await stream(pool);
+          expect(result.resolvedModel).toBe('local/kimi-code/k3');
+          expect(calls).toHaveLength(1);
+        });
+
+        it('both failing surfaces the GATEWAY\'s error, not the account\'s', async () => {
+          const cloud: BrainStreamFn = async () => {
+            throw new BrainRequestError('BYO execution is required, but no provider is connected on this workspace', { status: 503, code: 'byo_required' });
+          };
+          const stream = createHostModelStream({
+            mode: () => 'specific',
+            accounts: async () => [trailing],
+            cloud: () => cloud,
+            fetch: vi.fn(async () => new Response('{"error":"expired"}', { status: 401 })),
+            fit: async (m) => m,
+          });
+          const err = await stream(pool).catch((e: unknown) => e);
+          expect(err).toBeInstanceOf(BrainRequestError);
+          expect(err).toMatchObject({ status: 503, code: 'byo_required' });
+          expect((err as BrainRequestError).message).toContain('BYO execution is required');
+        });
+      });
+    });
+
+    it('Hybrid + Auto: device → leading account → gateway → trailing account', async () => {
+      const lead = { ref: 'local/kimi-code/k3', provider: 'kimi-code' as const, model: 'k3', endpoint: { baseUrl: 'https://lead.example/v1', token: 't' }, placement: 'lead' as const };
+      const trail = { ref: 'local/kimi-code/kimi-for-coding', provider: 'kimi-code' as const, model: 'kimi-for-coding', endpoint: { baseUrl: 'https://trail.example/v1', token: 't' }, placement: 'trail' as const };
+      const order: string[] = [];
+      const fetchImpl = vi.fn(async (url: string) => {
+        order.push(url.startsWith('http://127.0.0.1:11434') ? 'device' : url.startsWith('https://lead.example') ? 'lead' : 'trail');
+        return order.at(-1) === 'trail' ? sse('from-trail') : new Response('down', { status: 503 });
+      });
+      const cloud: BrainStreamFn = async () => {
+        order.push('cloud');
+        throw new BrainRequestError('gateway down', { status: 503 });
+      };
+      const accounts = vi.fn(async (_role?: string) => [trail, lead]);
+      const stream = createHostModelStream({ mode: () => 'hybrid', probes: async () => [synapse], accounts, cloud: () => cloud, fetch: fetchImpl, fit: async (m) => m });
+      const result = await stream({ ...hello, role: 'review' });
+      expect(order).toEqual(['device', 'lead', 'cloud', 'trail']);
+      expect(result.resolvedModel).toBe('local/kimi-code/kimi-for-coding');
+      expect(accounts).toHaveBeenCalledWith('review');
     });
   });
 });

@@ -106,7 +106,7 @@ export const failedReask: Scenario = {
 };
 
 export const retryOnForcedTurn: Scenario = {
-  id: 'retry-forced-turn', rows: ['T9'], loopShows: ['loop.hand_off_due', 'llm.stream_interrupted', 'builtin_tasks_create'], title: 'a transport failure on the forced hand_off turn retries with the same menu and brief, spending nothing forced twice',
+  id: 'retry-forced-turn', rows: ['T9'], loopShows: ['loop.progress_forced', 'llm.stream_interrupted', 'builtin_tasks_create'], title: 'a transport failure on the forced hand_off turn retries with the same menu and brief, spending nothing forced twice',
   async run(h) {
     h.tools({ read_file: (a) => ({ ok: true, content: `body ${JSON.stringify(a)}` }), builtin_tasks_create: () => ({ id: 901 }), spawn_agents: () => ({ ok: true }) });
     let reads = 0;

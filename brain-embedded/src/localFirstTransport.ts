@@ -79,8 +79,9 @@ export function localFirstWorkload(call: {
  * the editor's route and the web app's stream both read it.
  *
  * Device runtimes stay out of `byo_pool` here. The pool's one exception is not a device
- * model: the connected ACCOUNTS a host calls itself (Kimi) are tried before the gateway's
- * pool, with no probes (see {@link createLocalFirstStream}).
+ * model: the connected ACCOUNTS a host calls itself (Kimi) join the gateway's pool where the
+ * tenant's order places them (before it when they lead, after it when they trail), with no
+ * probes (see {@link createLocalFirstStream}).
  */
 export function localFirstApplies(call: { model?: string; routingMode?: 'auto' | 'byo_pool'; role?: string }): boolean {
   // A UTILITY call (the summary stamps it) is mechanical compaction, not the person's
@@ -95,7 +96,7 @@ export const UTILITY_ROLE = 'utility';
 /**
  * Whether a call is "use my connected accounts": the BYO pool with no model named. The ONE
  * statement of it — the stream and the host's routing step both read it; with accounts the
- * pool is those first, then the gateway's pool.
+ * pool is the gateway's pool with each account before or after it by its `placement`.
  */
 export function isAccountPoolCall(call: { model?: string; routingMode?: 'auto' | 'byo_pool' }): boolean {
   return !call.model && call.routingMode === 'byo_pool';
@@ -105,9 +106,11 @@ export function isAccountPoolCall(call: { model?: string; routingMode?: 'auto' |
 export interface LocalFirstStreamInput {
   /** The runtimes as probed WITH capabilities (`createLocalRuntimeProber({ capabilities: true })`). */
   probes: readonly LocalRuntimeProbe[];
-  /** Connected accounts this host calls itself (Kimi), tried after the device and before
-   *  the cloud — Hybrid Auto, and "use my connected accounts" (`byo_pool`, device excluded)
-   *  in Hybrid and Specific (`createHostModelStream`). */
+  /** Connected accounts this host calls itself (Kimi) — Hybrid Auto, and "use my connected
+   *  accounts" (`byo_pool`, device excluded) in Hybrid and Specific (`createHostModelStream`).
+   *  Each sits where its `placement` puts it in the tenant's precedence: a `lead` account
+   *  after the device and before the cloud, a `trail` account after the cloud, tried only
+   *  when the cloud fails before any output (the cloud's error is then the one surfaced). */
   accounts?: readonly LocalFirstAccount[];
   /** The gateway stream, or null when signed out (local-only). */
   cloud: StreamFn | null;
@@ -172,8 +175,9 @@ export function createLocalFirstStream(input: LocalFirstStreamInput): StreamFn {
     // model the plan would have tried first.
     //
     // The ONE exception is the account pool: "use my connected accounts" (`byo_pool`, no
-    // model) with accounts this host calls itself (Kimi) tries THOSE first, then the
-    // gateway's pool (the call keeps `routingMode: 'byo_pool'`, so the gateway stays strict).
+    // model) with accounts this host calls itself (Kimi) tries a `lead` account before the
+    // gateway's pool and a `trail` one after it (the call keeps `routingMode: 'byo_pool'`, so
+    // the gateway stays strict).
     // Device runtimes are never part of it (`probes: []`) and neither is the free pool.
     const accountPool = isAccountPoolCall(opts) && !!input.accounts?.length;
     if (!localFirstApplies(opts) && !accountPool) {
@@ -211,23 +215,36 @@ export function createLocalFirstStream(input: LocalFirstStreamInput): StreamFn {
     // Only an error the CLOUD attempt threw is re-worded with the accounts that failed first;
     // an account's own final error already says why it failed.
     let cloudStarted = false;
+    // A `trail` account runs only after the cloud failed before any output. Unless it then
+    // streamed (and so owns the turn), the CLOUD's error is the one surfaced, not the fallback's.
+    const trailing = { cloudError: undefined as { error: unknown } | undefined, committed: false, servingCloud: false };
     let ran: LocalFirstRunResult<StreamChatResult>;
     try {
       ran = await runLocalFirst(
         plan,
         async (attempt, commit) => {
+          trailing.servingCloud = attempt.kind === 'cloud';
           if (attempt.kind === 'cloud') {
             cloudStarted = true;
-            return input.cloud!(cloudOpts, committingHandlers(handlers, commit));
+            try {
+              return await input.cloud!(cloudOpts, committingHandlers(handlers, commit));
+            } catch (e) {
+              trailing.cloudError = { error: e };
+              throw e;
+            }
           }
+          const afterCloud = trailing.cloudError !== undefined;
+          const commitOwn = afterCloud ? () => { trailing.committed = true; commit(); } : commit;
           const transport = localTransport(attempt.endpoint, input.fetch, { failFast: true, runtime: attempt.provider });
           const messages = await fittedFor(attempt, routed, input.fit, probes);
-          return streamOnLocal(attempt, routed, committingHandlers(handlers, commit, attempt.ref), transport, messages, false);
+          return streamOnLocal(attempt, routed, committingHandlers(handlers, commitOwn, attempt.ref), transport, messages, false);
         },
-        { signal: opts.signal, accept: answered, onAttempt },
+        // The cloud's answer is final, as when it was always last: an empty one is not failed over.
+        { signal: opts.signal, accept: (r) => trailing.servingCloud || answered(r), onAttempt },
       );
     } catch (e) {
-      throw accountPool && cloudStarted ? withFailedAccounts(e, failedAccounts) : e;
+      const surfaced = trailing.cloudError && !trailing.committed && !opts.signal?.aborted ? trailing.cloudError.error : e;
+      throw accountPool && cloudStarted ? withFailedAccounts(surfaced, failedAccounts) : surfaced;
     }
     const { result, attempts } = ran;
     const summaries: LocalFirstAttemptSummary[] = attempts.map(summarizeLocalFirstAttempt);

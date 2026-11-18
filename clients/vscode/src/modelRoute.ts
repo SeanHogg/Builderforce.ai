@@ -53,12 +53,13 @@ export interface ModelRoute {
    */
   pickUnavailable?: { model: string; detail: string };
   /**
-   * The connected accounts this editor calls itself (Kimi), read per call: in Hybrid Auto,
-   * tried after this device and before the gateway; for "use my connected accounts"
-   * (`byo_pool`, Hybrid or Specific), tried first, then the gateway's BYO pool
-   * (`createHostModelStream`). Never set for Local only.
+   * The connected accounts this editor calls itself (Kimi), read per call with the call's
+   * role (Hybrid Auto, and "use my connected accounts" — `byo_pool`, Hybrid or Specific),
+   * each placed in the tenant's order for that role: before the gateway when it leads it,
+   * after the gateway as its fallback when it trails (`createHostModelStream`). Never set
+   * for Local only.
    */
-  accounts?: () => Promise<readonly LocalFirstAccount[]>;
+  accounts?: (role?: string) => Promise<readonly LocalFirstAccount[]>;
 }
 
 /** Who is asking for a route. */

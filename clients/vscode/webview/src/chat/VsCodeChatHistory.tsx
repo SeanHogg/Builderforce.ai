@@ -76,19 +76,27 @@ export interface VsCodeChatHistoryProps {
   bundle: LabelBundle;
 }
 
-/** A live run (a filled dot) or a question waiting on you (a question mark in a ring). */
-function RunMarker({ status, label }: { status: Exclude<ChatRunStatus, null>; label: string }) {
+/** A live run (a filled dot), a question waiting on you (a question mark in a ring), or an interrupted run (a broken ring). */
+function RunMarker({ status, label }: { status: 'running' | 'awaiting' | 'interrupted'; label: string }) {
   return (
     <svg width="12" height="12" viewBox="0 0 24 24" role="img" aria-label={label} className={`bf-run-marker bf-run-marker--${status}`}>
       <title>{label}</title>
       {status === 'running'
         ? <circle cx="12" cy="12" r="6" fill="currentColor" />
-        : (
-          <g fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round">
-            <circle cx="12" cy="12" r="10" />
-            <path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01" />
-          </g>
-        )}
+        : status === 'interrupted'
+          ? (
+            /* The same broken-circle glyph the dedicated InterruptedRunRow uses. */
+            <g fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round">
+              <path d="M12 2a10 10 0 0 1 10 10" />
+              <path d="M12 22A10 10 0 1 1 22 12" />
+            </g>
+          )
+          : (
+            <g fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round">
+              <circle cx="12" cy="12" r="10" />
+              <path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01" />
+            </g>
+          )}
     </svg>
   );
 }
@@ -124,7 +132,17 @@ export function VsCodeChatHistory({ id, chats, total, loading, activeId, titleOf
     [chats, interruptedRuns, interrupted],
   );
 
-  const interruptedStates: InterruptedChatState[] = useMemo(() => interruptedRuns.map((run) => {
+  // One row per chat: a resumable interrupted chat (under 100%, not running, no resume
+  // in flight) renders as its chat's SINGLE normal row below — an interrupted marker plus
+  // the Resume action — NOT again as a dedicated interrupted row. Only NON-resumable
+  // interrupted chats (complete, running, or a resume already pending) and runs whose
+  // chat is unknown keep a dedicated interrupted row.
+  const interruptedStates: InterruptedChatState[] = useMemo(() => interruptedRuns
+    .filter((run) => {
+      const chatId = run.chatId != null ? Number(run.chatId) : NaN;
+      return !Number.isInteger(chatId) || dedicatedInterruptedIds.has(chatId);
+    })
+    .map((run) => {
     const chatId = run.chatId != null ? Number(run.chatId) : NaN;
     const hasChat = Number.isInteger(chatId);
     const pending = interrupted.pending.has(run.runId);
@@ -145,7 +163,9 @@ export function VsCodeChatHistory({ id, chats, total, loading, activeId, titleOf
       onDismiss: () => acknowledgeInterruptedRun(run.runId),
       labels,
     };
-  }), [interruptedRuns, interrupted, pendingChats, chatTitleOf, onOpenChat, locale, labels]);
+    }),
+    [interruptedRuns, interrupted, pendingChats, dedicatedInterruptedIds, chatTitleOf, onOpenChat, locale, labels],
+  );
 
   const filter = (
     <div className="bf-history__controls">
@@ -185,6 +205,9 @@ export function VsCodeChatHistory({ id, chats, total, loading, activeId, titleOf
             rows={rows}
             labels={labels}
             bundle={bundle}
+            // The chat has a journaled interrupted run and renders as this ONE normal row:
+            // it carries the interrupted marker (its current state) alongside the Resume action.
+            interrupted={interruptedRuns.some((r) => r.chatId != null && Number(r.chatId) === chat.id)}
             // The interrupted, not-100% rows carry the same Resume the dedicated
             // interrupted rows offer — one mechanism (`interrupted.resume`), injected
             // through the shared row's `extraActions` slot.
@@ -222,7 +245,7 @@ interface ResumeAction {
 
 /** One history row. Hooks live here (not in the list's `.map`) so they run unconditionally. */
 function VsCodeChatHistoryRow({
-  chat, active, titleOf, runStatus, rows, labels, bundle, resumeAction,
+  chat, active, titleOf, runStatus, rows, labels, bundle, resumeAction, interrupted = false,
 }: {
   chat: BrainChat;
   active: boolean;
@@ -232,6 +255,8 @@ function VsCodeChatHistoryRow({
   labels: ReturnType<typeof chatHistoryLabels>;
   bundle: LabelBundle;
   resumeAction?: ResumeAction;
+  /** The chat has a journaled interrupted run: the row carries the interrupted marker. */
+  interrupted?: boolean;
 }) {
   const t = makeT(bundle);
   const status = runStatus(chat.id);
@@ -259,7 +284,7 @@ function VsCodeChatHistoryRow({
         daysIdle: daysIdleOf(chat),
       }}
       active={active}
-      marker={status ? <RunMarker status={status} label={status === 'running' ? t('app.chatRunning', 'Running') : t('app.chatAwaiting', 'Needs an answer')} /> : undefined}
+      marker={status ? <RunMarker status={status} label={status === 'running' ? t('app.chatRunning', 'Running') : t('app.chatAwaiting', 'Needs an answer')} /> : interrupted ? <RunMarker status="interrupted" label={labels.interrupted ?? 'Interrupted'} /> : undefined}
       {...rows.rowProps(chat.id)}
       labels={labels}
       // The interrupted, not-100% rows get the same Resume the dedicated interrupted

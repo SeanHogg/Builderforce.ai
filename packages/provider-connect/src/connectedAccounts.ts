@@ -27,6 +27,7 @@ import {
 } from '@builderforce/local-inference';
 import { createLocalCredentialStore, type CredentialStringStore, type LocalCredentialStore } from './localCredential.js';
 import type { GatewayRequest } from './port.js';
+import { DEFAULT_BYO_ROLE, createByoOrderCache, placeAccount } from './byoOrder.js';
 
 /** Where a connected account's runtime is called, or what stands in the way. */
 export type AccountEndpointOutcome =
@@ -58,14 +59,16 @@ export interface ConnectedAccounts {
    *  null for any other ref. */
   pinFor(ref: string): Promise<(AccountEndpointOutcome & { model: string }) | null>;
   /**
-   * The connected accounts this host calls itself: Hybrid tries them after this device and
-   * before the cloud, and "use my connected accounts" (`byo_pool`, Hybrid or Specific)
-   * tries them before the gateway's BYO pool — each on its lead model (the tenant's
-   * order, position 0). Never prompts: an account that is not
-   * connected is simply absent — asked of the gateway once per session, so an unconnected
-   * workspace costs no round trip per call.
+   * The connected accounts this host calls itself, placed in the tenant's BYO order for the
+   * call's `role` (absent = `code`) — the SERVER's order (`GET /llm/byo-order`, see
+   * `byoOrder.ts`), cached per role for a minute. An account LEADS (after this device, before
+   * the gateway) only when its provider is the role's first healthy entry, on that entry's
+   * model; otherwise it TRAILS the gateway, tried only when the gateway fails before any
+   * output. With the order unreadable it leads on the credential's first model, as before.
+   * Never prompts: an account that is not connected is simply absent — asked of the gateway
+   * once per session, so an unconnected workspace costs no round trip per call.
    */
-  hybridAccounts(): Promise<LocalFirstAccount[]>;
+  hybridAccounts(role?: string): Promise<LocalFirstAccount[]>;
   /** Forget every held credential — sign-out; the next account starts clean. */
   clear(): Promise<void>;
 }
@@ -78,11 +81,14 @@ export function createConnectedAccounts(deps: {
   onChange?: () => void;
 }): ConnectedAccounts {
   const stores = new Map<string, LocalCredentialStore>();
+  const orders = createByoOrderCache({ request: deps.request, now: deps.now });
 
   const store = (provider: string): LocalCredentialStore => {
     const existing = stores.get(provider);
     if (existing) return existing;
     const created = createLocalCredentialStore({ request: deps.request, provider, store: deps.store, now: deps.now });
+    // A credential that arrived or dropped may be a different account (or none): re-ask the order.
+    created.subscribe(() => orders.clear());
     if (deps.onChange) created.subscribe(deps.onChange);
     // Hydrate before the first resolve, so a token persisted by an earlier session is reused
     // rather than raced by a network fetch that a late hydrate would then overwrite.
@@ -122,7 +128,7 @@ export function createConnectedAccounts(deps: {
   /** Providers already asked this session — a store with no credential after that is
    *  not connected, and is not asked again until a credential arrives. */
   const asked = new Set<string>();
-  const hybridAccount = async (runtime: (typeof LOCAL_RUNTIMES)[number]): Promise<LocalFirstAccount[]> => {
+  const hybridAccount = async (runtime: (typeof LOCAL_RUNTIMES)[number], role: string): Promise<LocalFirstAccount[]> => {
     const provider = runtime.accountProvider;
     if (!provider) return [];
     const held = store(provider);
@@ -130,13 +136,16 @@ export function createConnectedAccounts(deps: {
     asked.add(provider);
     const outcome = await held.resolve();
     if (outcome.kind !== 'credential') return [];
-    const lead = outcome.credential.models[0];
-    if (!lead) return [];
+    const listed = outcome.credential.models.map((m) => m.model);
+    if (listed.length === 0) return [];
+    const placed = placeAccount(await orders.read(role), { provider, runtime: runtime.id, listed });
+    if (!placed) return [];
     return [{
-      ref: formatLocalModelRef(runtime.id, lead.model),
+      ref: formatLocalModelRef(runtime.id, placed.model),
       provider: runtime.id,
-      model: lead.model,
+      model: placed.model,
       endpoint: { baseUrl: outcome.credential.baseUrl, token: outcome.credential.accessToken, credential: credentialFor(provider) },
+      ...(placed.placement ? { placement: placed.placement } : {}),
     }];
   };
 
@@ -155,9 +164,11 @@ export function createConnectedAccounts(deps: {
       const outcome = await endpointFor(pin.provider);
       return outcome ? { ...outcome, model: pin.model } : null;
     },
-    hybridAccounts: async () => (await Promise.all(LOCAL_RUNTIMES.map(hybridAccount))).flat(),
+    hybridAccounts: async (role) =>
+      (await Promise.all(LOCAL_RUNTIMES.map((runtime) => hybridAccount(runtime, role || DEFAULT_BYO_ROLE)))).flat(),
     clear: async () => {
       asked.clear();
+      orders.clear();
       await Promise.all([...stores.values()].map((s) => s.clear()));
     },
   };

@@ -72,11 +72,12 @@ export interface RovrRouteDeps {
    */
   accountPin?(ref: string): Promise<HostLocalPin | null>;
   /**
-   * The connected accounts Hybrid tries after this machine and before the gateway (Kimi),
-   * read per Auto call; never prompts — an account not connected (or its origin not
+   * The connected accounts this host calls itself (Kimi), read per Auto call with the call's
+   * role and placed in the tenant's order for it (before the gateway when they lead it,
+   * after it when they trail); never prompts — an account not connected (or its origin not
    * granted) is simply absent.
    */
-  accounts?(): Promise<readonly LocalFirstAccount[]>;
+  accounts?(role?: string): Promise<readonly LocalFirstAccount[]>;
   onAttempt?(record: LocalFirstAttemptRecord): void;
   /** The person's inference mode, read per call; absent = Hybrid. */
   mode?(): InferenceMode;

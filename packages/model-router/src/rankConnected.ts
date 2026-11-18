@@ -3,7 +3,7 @@
  * and the cloud-run pick, so a chat turn and a cloud run with the same role and the
  * same evidence lead with the same model.
  *
- * 1. The role orders by tier and price ({@link orderForRole}).
+ * 1. The role orders by its model ladder, then tier and price ({@link orderForRole}).
  * 2. Where the role lets the system choose ({@link roleUsesLearnedRanking}), models
  *    with enough evidence re-rank by what they actually delivered; the role order
  *    stays the tie-break and the order for everything still cold — except that an
@@ -57,7 +57,7 @@ export function rankConnectedForRole(
   const latencyGuard = roleAppliesLatencyGuard(opts.role)
     ? (opts.latency ?? { primary: models[0], samples: latencySnapshot() })
     : undefined;
-  const byRole = orderForRole(models, objective, view, opts.demotedVendors, latencyGuard);
+  const byRole = orderForRole(models, objective, view, opts.demotedVendors, latencyGuard, opts.role);
   if (!roleUsesLearnedRanking(opts.role, opts.arcStage)) return byRole;
   const bias = opts.bias && Object.keys(opts.bias).length > 0 ? opts.bias : undefined;
   const learned = rankModelsForAction(byRole, opts.stats, {
@@ -65,5 +65,7 @@ export function rankConnectedForRole(
     ...(bias ? { bias } : {}),
     ...(opts.explore ? { explore: opts.explore } : {}),
   });
-  return orderForRole(liftUntriedStronger(learned, opts.stats, objective, view, opts.minSamples), 0, view, opts.demotedVendors, latencyGuard);
+  const lifted = liftUntriedStronger(learned, opts.stats, objective, view, opts.minSamples, opts.role);
+  // Objective 0 and no role: health and latency re-applied, the learned order otherwise kept.
+  return orderForRole(lifted, 0, view, opts.demotedVendors, latencyGuard);
 }

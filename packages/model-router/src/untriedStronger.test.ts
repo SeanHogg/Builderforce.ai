@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { CatalogView, ModelTier } from '@builderforce/model-catalog';
+import { ladderRankOf, type CatalogView, type ModelTier } from '@builderforce/model-catalog';
 import { orderPoolForWorkload, rankConnectedForRole } from './index.js';
 import { liftUntriedStronger } from './untriedStronger.js';
 
@@ -51,6 +51,16 @@ describe('liftUntriedStronger', () => {
   it('the plan pool gets the same rule on a coding call', () => {
     const work = { arcStage: undefined, inputTokens: 1_000, outputTokens: 100 };
     expect(orderPoolForWorkload(['minimax', 'grok'], { ...work, role: 'code' }, VIEW, { stats: [proven('minimax')] })[0]).toBe('grok');
+  });
+
+  it('on a laddered role the ladder is the measure: an untried Opus does not unseat a measured Sonnet for code', () => {
+    const LADDERED: CatalogView = { ...VIEW, ladderRankOf: (role, m) => ladderRankOf(role, `claude-${m}`) ?? ladderRankOf(role, m) };
+    const sonnetProven = [proven('sonnet')];
+    expect(rankConnectedForRole(['sonnet', 'opus'], LADDERED, { role: 'code', stats: sonnetProven })[0]).toBe('sonnet');
+    // …but on a planning turn the same untried Opus is the stronger judge and keeps the lead.
+    expect(rankConnectedForRole(['sonnet', 'opus'], LADDERED, { role: 'plan', stats: sonnetProven })[0]).toBe('opus');
+    // An untried Sonnet still lifts over a measured MiniMax on a coding turn.
+    expect(rankConnectedForRole(['minimax', 'sonnet'], LADDERED, { role: 'code', stats: [proven('minimax')] })[0]).toBe('sonnet');
   });
 
   it('never adds or drops a model', () => {

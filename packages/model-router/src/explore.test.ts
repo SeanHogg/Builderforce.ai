@@ -27,6 +27,6 @@ describe('exploration is threaded through the router (D3)', () => {
 
   it('a role that keeps the tenant order never explores', () => {
     const explore = { rng: () => 0, coldShare: 1 };
-    expect(rankConnectedForRole(['b', 'a', 'cold'], VIEW, { role: 'plan', stats, explore })).toEqual(['b', 'a', 'cold']);
+    expect(rankConnectedForRole(['b', 'a', 'cold'], VIEW, { role: 'chat', stats, explore })).toEqual(['b', 'a', 'cold']);
   });
 });

@@ -38,6 +38,10 @@ export * from "./subagent-tools.js";
 export * from "./live-subagent-tools.js";
 export * from "./childCapabilities.js";
 export * from "./git-tools.js";
+// THE shell-command reader (segments, tokens, git's subcommand) — run-guards' read-only classifier reads it too.
+export * from "./shell-segments.js";
+// "Does this command switch a checkout's branch?" — `run_command` refuses that over pending changes.
+export { detectBranchSwitch, type BranchSwitch } from "./branch-switch.js";
 // The run's default checkout in a folder that CONTAINS checkouts (pure resolver).
 export * from "./defaultRepo.js";
 export * from "./symbols.js";

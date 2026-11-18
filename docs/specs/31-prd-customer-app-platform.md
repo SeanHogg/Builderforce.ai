@@ -61,7 +61,7 @@ Everything an agent can do in these loops is also an **MCP tool** (§4.7), so th
 | D5 | Register the **GitHub App** | smoother repo connect + secret push | Yes. The code is complete. |
 | D6 | A **container instance type** for run loops (the default is the smallest) | W1 | `standard` at least, since `npm install` + Vite + Miniflare on the smallest instance will OOM. Budget it per the `containerRuntime` entitlement. |
 | D7 | Is the **browser run tier (W9) the free-plan run loop**, with the container tier paid? | W9 Phase 5 gating | Yes. The browser tier costs Builderforce nothing per run, and the container tier keeps its `containerRuntime` entitlement. |
-| D8 | **Which runtimes beyond Node** does W9 commit to? | W9 Phase 6 | None up front. Python (Pyodide) is the first feasibility gate, and only once demand is measured. Rust and .NET are gates only. |
+| D8 | ✅ **Decided 2026-11-17:** W9 commits to **Python, PHP, Rust and .NET**. Python also runs **LLM training on WebGPU** (§W9 "Python training on WebGPU"). | W9 Phases 6–7 | Decided. |
 
 ---
 
@@ -199,7 +199,7 @@ What is missing is *the application*: starting several services as one app, conn
 | 5 | ✏️ The database is reached through a custom `bfdb://` RPC client and per-language adapter packages; Postgres wire compatibility comes later. | **Reordered for Node.** An app that has to import a Builderforce client is not the user's app. PGlite runs in its own Worker behind a MessagePort RPC; that internal transport is adopted as proposed. The *app-facing* contract is a real `DATABASE_URL=postgres://…@localhost:5432/…`. Node's `net` module gains a client `createConnection` to virtual TCP ports (today it only reserves ports for get-port/detect-port), and a Postgres wire gateway (`execProtocolRaw`) sits on that port. That makes unmodified `pg`, `postgres`, Drizzle and Prisma (driver adapters) work, and it is one piece of work, not one adapter per language. The `bfdb://` client stays as a fallback only if the wire gateway fails its gate. |
 | 6 | ✅ PGlite in a dedicated Worker, serialized queries with transaction-aware scheduling, and storage outside the project VFS (IndexedDB, per project + database id) with export, import, reset and restore. Not in source ZIP exports. | Adopted. The database outlives API and frontend restarts and closes only with the app. Multi-tab: one leader-elected owner per project database, other tabs proxy to it. The Worker starts in the relay frame, like process workers since 2026.10.3, so data never splits across origins. Preview code can reach only HTTP, never the database port. |
 | 7 | ✅ Shared, copy-on-read VFS with a change journal before more processes. | Adopted, and moved **first**. Every process gets a full filesystem snapshot today (webcontainers ROADMAP item 18), and Next's first page takes about 20–35 s. A three-service app multiplies that cost. |
-| 8 | ✏️ Python, PHP, Rust and .NET runtimes as phase 4. | **Kept as feasibility gates, not commitments.** Builderforce's run loop is JS/TS-first. Python on Pyodide is the first candidate, and only when demand is measured. Rust and .NET each need a real HTTP framework that serves a request and queries the database under browser networking before any work is scheduled. Each runtime declares supported project profiles and declines the rest. |
+| 8 | ✅ Python, PHP, Rust and .NET runtimes. | **Committed (D8).** They come after the Node path is proven (phases 1–4), because they reuse its pieces: the service graph, the virtual TCP sockets and the Postgres wire gateway. Each runtime is a `RuntimeProvider` adapter: one registry entry, not a branch in the orchestrator. Each declares the project profiles it supports and declines the rest with a reason. |
 | 9 | ✅ Lifecycle state machine (discovered → preparing → starting → ready → running → stopping/stopped, failed), readiness before dependents start, and restart policy per service. A failed API does not kill the frontend. | Adopted. Readiness means: database = accepts a query; API = health URL answers; frontend = port open. |
 | 10 | ✏️ Module layout of `application-manager.ts`, `startup-manager.ts`, `health-manager.ts`… | **Use cases, not managers** (no-god-class rule): `startApplication`, `stopApplication`, `restartService`, `serviceGraph`, `readiness`, `serviceEnv`, `databaseHost`, `pgGateway`. They live in the existing `core` / `browser` packages, exposed as a new `./app` subpath (like `./ml`) so preview-only consumers never load them. `startPreviewRuntime()` is unchanged. `startApplicationRuntime(spec)` is the new entry. |
 
@@ -222,7 +222,45 @@ What is missing is *the application*: starting several services as one app, conn
 | 3 | Service networking: the project-scoped service map, the dev-server `/api` proxy, and connection cleanup when a service stops. | The frontend calls the API with relative `fetch('/api/…')`. Streaming and WebSocket regression tests pass. |
 | 4 | Database: the PGlite Worker, IndexedDB persistence, `net.createConnection` to virtual TCP ports, the Postgres wire gateway, blueprint migrations, export/import/reset, and the multi-tab leader. | An **unmodified** Express + `pg` (and Drizzle) API does CRUD with transactions and rollback. Data survives API restart, frontend restart and page reload. Two projects stay isolated. |
 | 5 | Builderforce wiring: the `RunTarget` port, the blueprint → spec mapping, `LivePreviewPanel` reading either target, and the `runtime.*` tools routed by target. | A canvas app with a Vite frontend, an Express API and Postgres runs in the panel on a free tenant. An agent edit hot-reloads it. The agent's `preview_screenshot` sees it. |
-| 6 | Feasibility gates: Python (Pyodide) first, then Rust and .NET. | Each gate passes only with a real framework serving requests against the same database. |
+| 6a | **Python** (Pyodide in a process Worker): ASGI/WSGI apps such as FastAPI or Flask, served request-driven from the API's virtual port (no real socket bind). `micropip` installs pure-Python and Pyodide-built wheels. Python's `socket` maps to virtual TCP, so pure-Python `pg8000` reaches the wire gateway. | A FastAPI app does CRUD against the shared database, and the frontend calls it through `/api`. |
+| 6b | **PHP** (php-wasm): request-driven server adapter. PDO `pgsql` is built into the PHP Wasm image, with PHP's socket layer bridged to virtual TCP. Composer installs pure-PHP packages. | A Slim or Laravel-lite app does CRUD against the shared database. |
+| 6c | **.NET** (the Mono `browser-wasm` runtime, with Roslyn compiled to Wasm for in-browser builds): ASP.NET Core minimal APIs hosted through an in-memory server adapter, because Kestrel can't bind sockets. `Npgsql`'s stream is bridged to virtual TCP. | A minimal-API service builds in the browser and does CRUD against the shared database. |
+| 6d | **Rust**: `wasm32-wasip1` / `wasip2` binaries run on the existing WASI host. HTTP goes through a `wasi:http`-style request handler; database access uses `tokio-postgres` over a WASI socket bridge to virtual TCP. Compiling in the browser is a separate gate. Until it passes, Rust services arrive prebuilt from the container/CI build (W6). | A prebuilt axum-on-WASI service does CRUD. A gate result is recorded for in-browser `rustc`. |
+| 7 | **Python training on WebGPU** (see below). | A LoRA fine-tune written in PyTorch-style Python runs in the WebContainer with its math on WebGPU, writes an adapter, and the adapter loads in the existing inference path. |
+
+**Python training on WebGPU (phase 7).** The goal is training code a user writes in Python, in PyTorch style, that runs inside the WebContainer while the heavy math runs on the GPU.
+
+*Constraints that shape the design:*
+- PyTorch itself has no WebAssembly build and cannot run in Pyodide.
+- WebGPU runs in dedicated workers.
+- The runtime refuses to require SharedArrayBuffer.
+
+*The design:*
+- **ONE WebGPU tensor engine.** `@webdit/torch`, the PyTorch-style TypeScript tensor library (CPU-only today), gains a WebGPU backend and reverse-mode autograd. The WGSL kernels that already exist in `frontend/src/lib/webgpu-trainer.ts` move into it: LoRA forward, the chain-rule backward and AdamW. **They are not copied.** The engine owns:
+  - GPU-resident tensors and the kernel registry (matmul, softmax, layernorm, the attention blocks, cross-entropy and AdamW, each a WGSL kernel entry);
+  - buffer pooling;
+  - mixed fp16/fp32 where `shader-f16` is available.
+- **A `torch` module for Python.** It is a Pyodide package whose objects are thin handles to engine tensors, through Pyodide's JS FFI in the same Worker. Tensor data never crosses into the Python heap: Python orchestrates and the GPU computes.
+  - **Supported surface:** `torch.tensor` / `zeros` / `randn`, the ops above, `.backward()`, `torch.no_grad()`, `nn.Linear` / `Embedding` / `LayerNorm` / `Module`, `optim.AdamW`, `save` / `load` (safetensors) and a `peft`-style `LoraConfig`.
+  - **Outside that surface:** a clear error naming the op, never a silent CPU fallback.
+- **Async readback without SharedArrayBuffer.** Kernel enqueues are synchronous WebGPU calls. Only readback (`.item()`, `.numpy()`, `.tolist()`) waits on `mapAsync`. That wait is bridged with JSPI where the browser has it, or otherwise with an awaitable `item_async()` in an `asyncio` training loop. Losses are logged every N steps so the loop isn't stalled reading back every step.
+- **Scope that fits a browser:** LoRA / QLoRA fine-tunes of small causal LMs.
+  - **Weights:** the frozen base loads quantized (4/8-bit) through the `./ml` model cache. Only the adapter weights and their optimizer state are trainable and in fp32.
+  - **VRAM budget:** set by `createMemoryManager` (the same budget primitive Studio uses), so a run that cannot fit declines before it starts.
+  - **Out of scope:** full-parameter training of multi-billion-parameter models, which goes to the container or cloud tier.
+- **Training is a service kind.** A blueprint service `kind: 'training'` runs a Python entry point under the application runtime:
+  - logs, loss and step metrics stream through `logs()`;
+  - checkpoints go to project storage outside the VFS, like the database;
+  - stopping the app checkpoints first, then stops.
+  - The output adapter is the artifact that the existing local-inference path loads (`BrowserLoRAArtifact`).
+- **This closes PRD 22 §3.2.** `AITrainingPanel`'s `WebGPUTrainer` migrates onto the same engine, running in a worker instead of on the interaction thread. There are then two front ends (the panel, and Python) and one engine.
+
+*Phase 7 exit tests:*
+- Gradients match a CPU reference (`@webdit/torch`'s CPU backend) within tolerance for every kernel.
+- A LoRA run on a small model reduces loss on a fixed dataset, deterministically under a fixed seed.
+- The run's VRAM stays within the manager's budget.
+- Interaction-thread long tasks stay at zero during training.
+- The adapter round-trips: train in Python, then generate with the adapter loaded.
 
 **Acceptance (W9).** A developer opens one project and presses Run, and:
 1. The blueprint resolves to the browser target.
@@ -267,6 +305,7 @@ Each tool below is added to `builtinMcpService.ts` catalogs, grouped as data, no
 | **1** | W1 (run loop) + W2 (blueprint) + W8 | Container image deploy + D6. Everything else is code. |
 | **1b** | W9 phases 0–4 (browser runtime: shared VFS, application runtime, service networking, PGlite + wire gateway). They run in parallel with Phase 1 because they live in the webcontainers repo. | None. All of it is code in `builderforce-webcontainers`. |
 | **1c** | W9 phase 5 (the `RunTarget` port, so the browser and container targets share one panel and one tool set) | W2 blueprint landed. D7 for plan gating. |
+| **1d** | W9 phase 6a–6d (Python, PHP, .NET, Rust) after phase 4. Phase 7 (Python training on WebGPU) starts with the engine work in `@webdit/torch` in parallel, because it needs only phase 6a's Pyodide host to finish. | None. It is code. Phase 7 also closes PRD 22 §3.2. |
 | **2** | W3 Cloudflare + Neon connections, W4 Cloudflare + Neon adapters, W6 against the **customer's** account | None beyond a test Cloudflare account and Neon key. |
 | **3** | W7 project listings + `external` launch + mobile kind (EAS) | Stripe secrets for *paid* listings (existing ROADMAP item). Free listings are not blocked. |
 | **4** | W5 Builderforce-hosted (WfP + Neon per app) | D1, D3, D4. |
@@ -293,6 +332,16 @@ Each tool below is added to `builtinMcpService.ts` catalogs, grouped as data, no
   - **Browser memory caps:** each service's memory is watched, and result sets are bounded.
   - **The Worker boundary is not a security boundary** against same-origin code: relay-origin isolation and preview code that can reach HTTP only carry that.
   - **Mitigation:** an app that exceeds these limits falls back to the container target, with the reason shown.
+- **Browser training limits (W9 phase 7):**
+  - **Size:** VRAM caps model size, so training is limited to LoRA/QLoRA on small bases.
+  - **Kernel coverage:** the `torch` surface is a subset; unsupported ops error by name.
+  - **Platform support:** JSPI and `shader-f16` are not universal, so both readback bridges and an fp32 path are tested.
+  - **Device loss:** a mid-run `device.lost` resumes from the last checkpoint.
+- **Language runtime maturity (W9 phase 6):**
+  - **Python:** Pyodide covers only pure-Python and Pyodide-built wheels; native-only packages are declined by name.
+  - **PHP:** extensions must be built into the PHP Wasm image.
+  - **.NET:** Kestrel can't bind sockets in `browser-wasm`, hence the in-memory host.
+  - **Rust:** in-browser compilation is unproven, so services arrive prebuilt until its gate passes.
 - **Container cost:** a live preview holds an instance. The existing per-tenant cap (2) and global budget (15) hold, the instance type raises cost per hour, and a run loop is `containerRuntime`-entitled.
 - **Neon quota:** Builderforce's own Free-tier pressure (ROADMAP 🔴) must not absorb customer databases. Per-app Neon lives in a separate Neon org/project set, never the core/apps endpoints.
 - **Secret blast radius:** the container gets secrets as env. The agent's `run_command` output is redacted, and the clone token issue (ROADMAP L242) is fixed in the same image pass (scoped git proxy).

@@ -18,6 +18,7 @@ import type { ShellJobStatus, ShellResult } from "./capabilities.js";
 import { searchNoMatch } from "./shell-command-shape.js";
 import { stripTailLimit } from "./shell-pipe.js";
 import { outputFilterTool } from "./shell-output-filter.js";
+import { refuseBranchSwitchOverChanges } from "./branch-switch-guard.js";
 
 /** The longest a `yieldMs` / `waitMs` may hold the call (the foreground ceiling). */
 const SHELL_WAIT_MAX_MS = 10 * 60 * 1000;
@@ -93,6 +94,9 @@ export async function runShellCommand(args: Record<string, unknown>, ctx: ToolCo
   const background = args.background === true;
   const yieldMs = waitArg(args.yieldMs);
   let note: string | undefined;
+  // Never switch the branch of a checkout with uncommitted changes (foreground AND background).
+  const refused = await refuseBranchSwitchOverChanges(command, dir, ctx);
+  if (refused) return { data: { ok: false, refused: "branch-switch", error: refused, ...where } };
 
   if (background || yieldMs !== undefined) {
     if (shell.start && shell.poll) {
