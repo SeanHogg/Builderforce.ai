@@ -68,6 +68,7 @@ const footerStyle: React.CSSProperties = {
   flexWrap: 'wrap',
   padding: '10px 4px 0',
   borderTop: '1px solid var(--border-subtle)',
+  flexShrink: 0,
 };
 
 const resultCountStyle: React.CSSProperties = {
@@ -125,7 +126,10 @@ export function DataList<Row>({
     <div className={className} style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       {header && <div style={{ flexShrink: 0 }}>{header}</div>}
 
-      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+      {/* Bounded body: in a plain block parent the list would otherwise grow to
+          its full height and push the pager below the fold. Capping it to the
+          viewport keeps the header above and the footer under it always visible. */}
+      <div style={{ flex: 1, minHeight: 0, maxHeight: 'var(--data-list-body-max, calc(100vh - 340px))', overflowY: 'auto' }}>
         {totalCount === 0 ? (
           <div style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)', fontSize: 'var(--font-size-small)' }}>
             {empty ?? t('noResults')}

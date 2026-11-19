@@ -66,6 +66,7 @@ const footerStyle: React.CSSProperties = {
   flexWrap: 'wrap',
   padding: '10px 12px 0',
   borderTop: '1px solid var(--border-subtle)',
+  flexShrink: 0,
 };
 
 const resultCountStyle: React.CSSProperties = {
@@ -133,9 +134,9 @@ export function DataTable<Row>({
 
   return (
     <div className={className} style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-      <div style={{ ...tableWrapStyle, overflowY: 'auto', maxHeight: '100%', flex: 1, minHeight: 0 }}>
+      <div style={{ ...tableWrapStyle, overflowY: 'auto', maxHeight: 'var(--data-list-body-max, calc(100vh - 340px))', flex: 1, minHeight: 0 }}>
         <table style={tableStyle}>
-          <thead>
+          <thead style={{ position: 'sticky', top: 0, zIndex: 1, background: 'var(--bg-elevated)' }}>
             <tr style={theadRowStyle}>
               {columns.map((col) => (
                 <th key={col.key} style={{ ...thStyle, textAlign: col.numeric ? 'right' : 'left', ...(col.style ?? {}) }}>
