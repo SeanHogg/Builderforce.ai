@@ -7,7 +7,7 @@
  * Regenerate with `node scripts/gen-container-shared.mjs` (from `api/`).
  * `--check` fails the build when the source no longer matches the hash below.
  *
- * @source-sha256 c6f4d4c2eff2bd3cac7e8f62edd0f606844ca4d71912d9228135732856ae5bde
+ * @source-sha256 97580521e8f82bfc14b95956dae16f59c54c0e2d256af1c06462a84cffa7f6ba
  */
 // ── caps.ts ──
 /**
@@ -50,6 +50,42 @@ const TOOL_OUTPUT_CAPS = {
     canvas_read_object: 32_000,
     canvas_read_build_file: 16_000,
 };
+/**
+ * The cap for an INDEX result — a survey that answers "what is there?" in one short,
+ * pipe-delimited line per record (`{ format: 'id|status|…', lines: '…', … }`, e.g.
+ * `tasks.list { fields: "index" }`). Sized so ~300 lines fit: under the 6K default a
+ * 1,253-ticket board took ~18 calls to survey (VS Code chat #273).
+ *
+ * Granted only to a KNOWN producer ({@link INDEX_RESULT_TOOLS}) returning a KNOWN format
+ * ({@link INDEX_FORMATS}): the same tool's compact/slim rows are JSON objects several times
+ * larger per record, and any other tool (an MCP relay, a web fetch) could return the same
+ * shape — neither may claim 24K by looking like an index.
+ */
+const INDEX_RESULT_CHARS = 24_000;
+/** `tasks.list { fields: "index" }`'s column header — the api's producer imports it from here. */
+const TASK_INDEX_FORMAT = 'id|status|type|parent|title';
+/** Every index `format` header the policy recognises. */
+const INDEX_FORMATS = new Set([TASK_INDEX_FORMAT]);
+/** The tools allowed to return an index survey: the catalog id and its advertised name. */
+const INDEX_RESULT_TOOLS = new Set(['tasks.list', 'builtin_tasks_list']);
+/** Whether `tool`'s result is an index survey ({@link INDEX_RESULT_CHARS}): a known producer,
+ *  a known `format` header, and the rows as one `lines` string. */
+function isIndexResult(tool, out) {
+    if (!INDEX_RESULT_TOOLS.has(tool))
+        return false;
+    if (!out || typeof out !== 'object' || Array.isArray(out))
+        return false;
+    const r = out;
+    return typeof r.format === 'string' && INDEX_FORMATS.has(r.format) && typeof r.lines === 'string';
+}
+/**
+ * The table cap for this RESULT: {@link INDEX_RESULT_CHARS} for an index survey (never
+ * another tool's row), else the tool's own row. A tool's index mode is recognised from
+ * what it returned, so no caller has to thread the call's arguments.
+ */
+function resultTableCap(tool, out, caps = TOOL_OUTPUT_CAPS) {
+    return isIndexResult(tool, out) ? Math.max(DEFAULT_TOOL_OUTPUT_CHARS, INDEX_RESULT_CHARS) : toolOutputCap(tool, caps);
+}
 /** The tool whose results are paged by line rather than sliced by char. */
 const READ_FILE_TOOL = 'read_file';
 /**
@@ -647,12 +683,43 @@ function attach(value, opts) {
     return opts.advisory && opts.attachAdvisory ? opts.attachAdvisory(value, opts.advisory) : value;
 }
 /** The cap for a tool on this call. The per-tool rows beyond `read_file` are a C7
- *  behaviour, so with the lever off every other tool keeps the generic cap it always had. */
-function capFor(tool, opts) {
+ *  behaviour, so with the lever off every other tool keeps the generic cap it always had —
+ *  except an index survey ({@link isIndexResult}), which is compact by construction and
+ *  gets its larger cap either way. */
+function capFor(tool, out, opts) {
     if (opts.maxChars !== undefined)
         return opts.maxChars;
-    const tableCap = !opts.summarize && !isPagedReadTool(tool) ? DEFAULT_TOOL_OUTPUT_CHARS : toolOutputCap(tool, opts.caps);
+    const tableCap = isIndexResult(tool, out)
+        ? resultTableCap(tool, out, opts.caps)
+        : !opts.summarize && !isPagedReadTool(tool) ? DEFAULT_TOOL_OUTPUT_CHARS : toolOutputCap(tool, opts.caps);
     return windowedCap(tool, tableCap, opts.contextWindowTokens);
+}
+/**
+ * The longest whole-line prefix of an index survey that `fits`, with `returned`,
+ * `truncated` and `nextOffset` rewritten so the next page starts at the first line
+ * dropped. Null when not even one line fits (the generic cut then applies).
+ */
+function pageIndexResult(out, fits) {
+    const all = out.lines ? out.lines.split('\n') : [];
+    const offset = typeof out.offset === 'number' ? out.offset : 0;
+    const pageOf = (n) => {
+        // Envelope first (paging fields re-set), `lines` last — the producer's key order.
+        const envelope = { ...out };
+        delete envelope.lines;
+        delete envelope.nextOffset;
+        return { ...envelope, returned: n, truncated: true, nextOffset: offset + n, lines: all.slice(0, n).join('\n') };
+    };
+    // Binary search the most lines that fit (the serialized size grows with n).
+    let lo = 0;
+    let hi = all.length - 1;
+    while (lo < hi) {
+        const mid = Math.ceil((lo + hi) / 2);
+        if (fits(pageOf(mid)))
+            lo = mid;
+        else
+            hi = mid - 1;
+    }
+    return lo > 0 && fits(pageOf(lo)) ? pageOf(lo) : null;
 }
 /** Shrink the log fields of a structured shell result so the whole result fits. */
 function shrinkLogFields(tool, out, cap, overhead) {
@@ -698,11 +765,18 @@ function shapeToolResult(tool, out, opts = {}) {
         const windowed = isReadFileResult(out) ? windowReadFile(out, windowOpts) : windowReadFiles(out, windowOpts);
         return { content: JSON.stringify(windowed.value), bytes, truncated: windowed.truncated, served: windowed.served };
     }
-    const cap = capFor(tool, opts);
+    const cap = capFor(tool, out, opts);
     const full = JSON.stringify(attach(out ?? null, opts));
     if (full.length <= cap)
         return { content: full, bytes, truncated: false };
     const advisoryChars = opts.advisory ? opts.advisory.length + 16 : 0;
+    // An index survey over its served cap (a small window, an explicit cap, an advisory) is
+    // cut at a LINE, with its paging rewritten — never head/tail-cut mid-list.
+    if (isIndexResult(tool, out)) {
+        const paged = pageIndexResult(out, (shaped) => JSON.stringify(attach(shaped, opts)).length <= cap);
+        if (paged)
+            return { content: JSON.stringify(attach(paged, opts)), bytes, truncated: true };
+    }
     if (opts.summarize) {
         // A log as a bare string, or in a structured shell result's log fields.
         if (typeof out === 'string') {
