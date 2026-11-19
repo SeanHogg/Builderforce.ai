@@ -11,7 +11,7 @@
  * disabled-state. Theme-token styled, responsive, localized (`lensSnapshots`).
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import {
   lensSnapshotsApi,
@@ -96,10 +96,15 @@ export function LensSnapshotsPanel() {
 
   const cadenceLabel = useMemo(() => (c: SnapshotCadence | null) => (c ? t(c) : '—'), [t]);
 
+  // openSnapshot is recreated every render (it closes over openId); the memoized
+  // descriptor calls the latest one through a ref so a click is never stale.
+  const openSnapshotRef = useRef(openSnapshot);
+  useEffect(() => { openSnapshotRef.current = openSnapshot; });
+
   // Read-only Collection descriptor (entity: null) — a snapshot has no bulk API.
   const descriptor = useMemo<CollectionDescriptor<LensSnapshotMeta>>(() => {
     const viewButton = (s: LensSnapshotMeta) => (
-      <button type="button" style={{ ...btn, padding: '4px 10px', fontSize: 11 }} onClick={() => void openSnapshot(s.id)}>
+      <button type="button" style={{ ...btn, padding: '4px 10px', fontSize: 11 }} onClick={() => void openSnapshotRef.current(s.id)}>
         {openId === s.id ? t('hide') : t('view')}
       </button>
     );

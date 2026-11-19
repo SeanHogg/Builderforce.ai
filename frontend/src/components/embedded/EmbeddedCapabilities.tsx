@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, type ComponentType } from 'react';
+import { useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { replaySnippets } from '@builderforce/interaction-contract';
@@ -134,12 +134,17 @@ export function EmbeddedCapabilities() {
   // bar); the per-row switch is the only mutation. Search + category filters keep
   // their page-level state and feed the source.
   type Capability = (typeof EMBEDDED_CAPABILITIES)[number];
+  // requestToggle is recreated every render; the memoized descriptor calls it
+  // through a ref so a click never runs a stale closure.
+  const requestToggleRef = useRef(requestToggle);
+  useEffect(() => { requestToggleRef.current = requestToggle; });
+  const capabilitiesDescriptor = useMemo<CollectionDescriptor<Capability>>(() => {
   const capName = (item: Capability) => t(`features.${item.key}.name`);
   const capSwitch = (item: Capability) => {
     const state = config?.customerFeatures[item.key];
-    return <button type="button" role="switch" aria-checked={state?.enabled ?? false} aria-label={t('toggleLabel', { feature: capName(item) })} className={`${styles.switch} ${state?.enabled ? styles.switchOn : ''}`} disabled={!config || !canManage || saving === item.key} onClick={() => requestToggle(item.key)} />;
+    return <button type="button" role="switch" aria-checked={state?.enabled ?? false} aria-label={t('toggleLabel', { feature: capName(item) })} className={`${styles.switch} ${state?.enabled ? styles.switchOn : ''}`} disabled={!config || !canManage || saving === item.key} onClick={() => requestToggleRef.current(item.key)} />;
   };
-  const capabilitiesDescriptor: CollectionDescriptor<Capability> = {
+  return {
     entity: null,
     surfaceKey: 'embedded.capabilities',
     rowId: (item) => item.key,
@@ -172,6 +177,7 @@ export function EmbeddedCapabilities() {
       </article>
     ),
   };
+  }, [t, config, canManage, saving, siteKey]);
   const capabilitiesSource = useLocalSource(visible, capabilitiesDescriptor, { key: 'name', dir: 'asc' }, { page: 1, pageSize: 250 });
 
   return <div className={styles.page}>

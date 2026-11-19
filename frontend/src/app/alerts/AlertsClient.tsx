@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import PageContainer from '@/components/PageContainer';
 import { RoleGate } from '@/components/RoleGate';
@@ -110,7 +110,15 @@ export function AlertsClient() {
 
   // Read-only Collection descriptors (entity: null) — alert rules/firings have no bulk API;
   // the per-row enable/test/delete/acknowledge actions stay as row controls.
+  // run/testRule/metricLabel/comparatorLabel are recreated every render; the memoized
+  // descriptors reach the latest ones through a ref so a click never uses a stale closure.
+  const latest = useRef({ run, testRule, metricLabel, comparatorLabel });
+  useEffect(() => { latest.current = { run, testRule, metricLabel, comparatorLabel }; });
   const ruleDescriptor = useMemo<CollectionDescriptor<Alert>>(() => {
+    const metricLabel = (m: AlertMetric | null) => latest.current.metricLabel(m);
+    const comparatorLabel = (c: AlertComparator | null) => latest.current.comparatorLabel(c);
+    const run = (fn: () => Promise<unknown>) => latest.current.run(fn);
+    const testRule = (id: string) => latest.current.testRule(id);
     const statusBtn = (a: Alert) => (
       <button type="button" style={ghostBtnStyle} disabled={busy}
         onClick={() => run(() => alertsApi.update(a.id, { enabled: !a.enabled }))}>
@@ -161,6 +169,8 @@ export function AlertsClient() {
   }, [t, fmt, busy, tested]);
 
   const eventDescriptor = useMemo<CollectionDescriptor<AlertEvent>>(() => {
+    const metricLabel = (m: AlertMetric | null) => latest.current.metricLabel(m);
+    const run = (fn: () => Promise<unknown>) => latest.current.run(fn);
     const ack = (ev: AlertEvent) =>
       ev.status === 'triggered' ? (
         <button type="button" style={ghostBtnStyle} disabled={busy}

@@ -325,6 +325,30 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
     }
   }, [projectId, load, t]);
 
+  // Collection descriptors. Hooks, so they MUST sit above the early returns below
+  // (a conditional hook count crashes with "Rendered more hooks"). They read only
+  // t / memberName / relative / fmt, never `data`.
+  const backlogDescriptor = useMemo(() => managerBacklogDescriptor({
+    rank: t('backlog.rank'), key: t('backlog.key'), title: t('backlog.taskTitle'), priority: t('backlog.priority'),
+    businessValue: t('backlog.businessValue'), dueDate: t('backlog.dueDate'), assignee: t('backlog.assignee'),
+    unassigned: t('backlog.unassigned'), noRationale: t('backlog.noRationale'),
+    priorityLabel: (p) => t(`priority.${p}`),
+    owner: (i) => memberName(i.assignedUserId, i.assignedAgentRef, i.assignedAgentHostId),
+    due: (iso) => fmt.dateWith(iso, { month: 'short', day: 'numeric' }),
+  }), [t, memberName, fmt]);
+  const runTasksDescriptor = useMemo(() => managerRunTasksDescriptor({
+    key: t('backlog.key'), status: t('runTasks.statusCol'), result: t('runTasks.resultCol'), owner: t('backlog.assignee'), when: t('runTasks.whenCol'),
+    statusLabel: (s) => t(`runTasks.status.${s}`),
+    ownerName: (rt) => memberName(rt.assignedUserId, rt.assignedAgentRef, rt.assignedAgentHostId),
+    systemOwner: t('runTasks.systemOwner'),
+    whenText: (rt) => relative(rt.completedAt ?? rt.createdAt),
+  }), [t, memberName, relative]);
+  const activityDescriptor = useMemo(() => managerActivityDescriptor({
+    summary: t('activity.title'), type: t('backlog.key'), when: t('runTasks.whenCol'),
+    typeLabel: (a) => t(`action.${a.actionType}`),
+    whenText: (a) => relative(a.createdAt),
+  }), [t, relative]);
+
   // ── Empty / loading / error states (all localized) ──
   if (projectId == null) {
     return <Notice title={t('noProject.title')} body={t('noProject.body')} />;
@@ -383,27 +407,6 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
   const currentTypeDescription = currentType
     ? (isBuiltinType(currentType.id) ? t(`type.${currentType.id}.description`) : currentType.description)
     : '';
-
-  const backlogDescriptor = useMemo(() => managerBacklogDescriptor({
-    rank: t('backlog.rank'), key: t('backlog.key'), title: t('backlog.taskTitle'), priority: t('backlog.priority'),
-    businessValue: t('backlog.businessValue'), dueDate: t('backlog.dueDate'), assignee: t('backlog.assignee'),
-    unassigned: t('backlog.unassigned'), noRationale: t('backlog.noRationale'),
-    priorityLabel: (p) => t(`priority.${p}`),
-    owner: (i) => memberName(i.assignedUserId, i.assignedAgentRef, i.assignedAgentHostId),
-    due: (iso) => fmt.dateWith(iso, { month: 'short', day: 'numeric' }),
-  }), [t, memberName, fmt]);
-  const runTasksDescriptor = useMemo(() => managerRunTasksDescriptor({
-    key: t('backlog.key'), status: t('runTasks.statusCol'), result: t('runTasks.resultCol'), owner: t('backlog.assignee'), when: t('runTasks.whenCol'),
-    statusLabel: (s) => t(`runTasks.status.${s}`),
-    ownerName: (rt) => memberName(rt.assignedUserId, rt.assignedAgentRef, rt.assignedAgentHostId),
-    systemOwner: t('runTasks.systemOwner'),
-    whenText: (rt) => relative(rt.completedAt ?? rt.createdAt),
-  }), [t, memberName, relative]);
-  const activityDescriptor = useMemo(() => managerActivityDescriptor({
-    summary: t('activity.title'), type: t('backlog.key'), when: t('runTasks.whenCol'),
-    typeLabel: (a) => t(`action.${a.actionType}`),
-    whenText: (a) => relative(a.createdAt),
-  }), [t, relative]);
 
   const priorityChart: BarDatum[] = PRIORITIES.map((p) => ({
     key: p,

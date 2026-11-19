@@ -11,7 +11,7 @@
 
 import { Icon } from '@/components/ui/Icon';
 import { LabelField } from '@/components/ui/Field';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -823,11 +823,16 @@ function OnCallSection({ t, tc, canManage }: SectionProps) {
   // No rotation bulk port is registered in BULK_CAPABILITIES, so entity is null
   // (read-only: no selection / bulk bar); per-rotation delete stays in the row.
   const [search, setSearch] = useState('');
+  // The handlers are recreated every render; the memoized descriptor reaches them
+  // through a ref so a click never runs a stale closure.
+  const handlersRef = useRef({ removeRotation, removeMember, addMember });
+  useEffect(() => { handlersRef.current = { removeRotation, removeMember, addMember }; });
+  const rotationsDescriptor = useMemo<CollectionDescriptor<OnCallRotation>>(() => {
   const renderRotationActions = (r: OnCallRotation) => (
-    <button type="button" className="btn btn-secondary btn-sm" onClick={() => removeRotation(r)} disabled={!canManage}>{tc('delete')}</button>
+    <button type="button" className="btn btn-secondary btn-sm" onClick={() => handlersRef.current.removeRotation(r)} disabled={!canManage}>{tc('delete')}</button>
   );
   const onCallLabel = (r: OnCallRotation) => (r.onCall ? (r.onCall.displayName || r.onCall.memberRef) : t('noOneOnCall'));
-  const rotationsDescriptor: CollectionDescriptor<OnCallRotation> = {
+  return {
     entity: null,
     surfaceKey: 'incidents.oncall',
     rowId: (r) => r.id,
@@ -866,7 +871,7 @@ function OnCallSection({ t, tc, canManage }: SectionProps) {
                   <span style={{ color: 'var(--text-primary)' }}>{m.displayName || m.memberRef}</span>
                   <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>{m.memberRef}</span>
                   <span style={{ flex: 1 }} />
-                  <button type="button" className="btn btn-secondary btn-sm" onClick={() => removeMember(r, m.id)} disabled={!canManage} aria-label={t('removeMember')}><Icon source="✕" size="1em" /></button>
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={() => handlersRef.current.removeMember(r, m.id)} disabled={!canManage} aria-label={t('removeMember')}><Icon source="✕" size="1em" /></button>
                 </div>
               ))}
           </div>
@@ -883,7 +888,7 @@ function OnCallSection({ t, tc, canManage }: SectionProps) {
                   <input className="input" value={d.memberRef} onChange={(e) => setMemberDraft((p) => ({ ...p, [r.id]: { ...d, memberRef: e.target.value } }))} placeholder={t('memberRefPlaceholder')} />
                 </LabelField>
               </div>
-              <button type="button" className="btn btn-secondary btn-sm" onClick={() => addMember(r)}>{t('addMember')}</button>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => handlersRef.current.addMember(r)}>{t('addMember')}</button>
             </div>
           )}
           <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0 }}>{t('memberRefHelp')}</p>
@@ -891,6 +896,7 @@ function OnCallSection({ t, tc, canManage }: SectionProps) {
       );
     },
   };
+  }, [t, tc, canManage, memberDraft]);
   const visibleRotations = useMemo(() => {
     const q = search.trim().toLowerCase();
     return q ? rotations.filter((r) => `${r.name} ${r.description ?? ''}`.toLowerCase().includes(q)) : rotations;
