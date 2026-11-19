@@ -1,7 +1,9 @@
 import { roiApi, type RoiRollup } from '@/lib/builderforceApi';
 import { usePmScope } from '@/lib/pm/scope';
 import { usePmData } from '@/lib/pm/usePmData';
-import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
+import { useMemo } from 'react';
+import { LocalCollection } from './LocalCollection';
+import { roiProjectsDescriptor, roiTasksDescriptor, roiFeaturesDescriptor } from './roiDescriptors';
 import { PmCard, PmEmpty, PmError, StatCard } from './pmShared';
 import { useFormat } from "@/i18n/useFormat";
 
@@ -19,6 +21,10 @@ export function RoiDashboard() {
     () => roiApi.rollup(projectId ?? undefined),
     [projectId],
   );
+
+  const projectsDesc = useMemo(() => roiProjectsDescriptor({ project: 'Project', completed: 'Completed', spend: 'Agent LLM spend' }, fmt.money), [fmt]);
+  const tasksDesc = useMemo(() => roiTasksDescriptor({ task: 'Task', spend: 'Agent LLM spend' }, fmt.money), [fmt]);
+  const featuresDesc = useMemo(() => roiFeaturesDescriptor({ feature: 'Feature', type: 'Type', status: 'Status' }), []);
 
   if (error) return <PmError message={error} />;
   if (!data) return <PmEmpty message="Loading ROI…" />;
@@ -45,74 +51,19 @@ export function RoiDashboard() {
 
       {isPortfolio && data.byProject.length > 0 && (
         <PmCard title="By project">
-          <div style={tableWrapStyle}>
-            <table style={tableStyle}>
-              <thead>
-                <tr style={theadRowStyle}>
-                  <th style={thStyle}>Project</th>
-                  <th style={thStyle}>Completed</th>
-                  <th style={thStyle}>Agent LLM spend</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.byProject.map((p) => (
-                  <tr key={p.projectId} style={trStyle}>
-                    <td style={tdStyle}>{p.projectName}</td>
-                    <td style={tdMutedStyle}>{p.completedCount}</td>
-                    <td style={tdMutedStyle}>{fmt.money(p.agentLlmCostUsd)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <LocalCollection descriptor={projectsDesc} rows={data.byProject} searchText={(p) => p.projectName} />
         </PmCard>
       )}
 
       {data.byTask.length > 0 && (
         <PmCard title="Top spend by task">
-          <div style={tableWrapStyle}>
-            <table style={tableStyle}>
-              <thead>
-                <tr style={theadRowStyle}>
-                  <th style={thStyle}>Task</th>
-                  <th style={thStyle}>Agent LLM spend</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.byTask.map((t) => (
-                  <tr key={t.taskId} style={trStyle}>
-                    <td style={tdStyle}>{t.taskKey ? `${t.taskKey} · ` : ''}{t.title}</td>
-                    <td style={tdMutedStyle}>{fmt.money(t.agentLlmCostUsd)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <LocalCollection descriptor={tasksDesc} rows={data.byTask} searchText={(r) => (r.taskKey ?? '') + ' ' + r.title} />
         </PmCard>
       )}
 
       {data.roi.length > 0 && (
         <PmCard title="Tracked features">
-          <div style={tableWrapStyle}>
-            <table style={tableStyle}>
-              <thead>
-                <tr style={theadRowStyle}>
-                  <th style={thStyle}>Feature</th>
-                  <th style={thStyle}>Type</th>
-                  <th style={thStyle}>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.roi.map((r) => (
-                  <tr key={String(r.id)} style={trStyle}>
-                    <td style={tdStyle}>{String(r.featureName ?? '')}</td>
-                    <td style={tdMutedStyle}>{String(r.featureType ?? '—')}</td>
-                    <td style={tdMutedStyle}>{String(r.status ?? '—')}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <LocalCollection descriptor={featuresDesc} rows={data.roi} searchText={(r) => String(r.featureName ?? '')} />
         </PmCard>
       )}
     </div>

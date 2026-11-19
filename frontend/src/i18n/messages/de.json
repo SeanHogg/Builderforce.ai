@@ -2057,6 +2057,15 @@
       "search": "Suchen",
       "loading": "Wird geladen…",
       "empty": "Hier ist noch nichts.",
+      "emptySnapshots": "Noch keine Snapshots erfasst",
+      "emptyAlertRules": "Noch keine Alarmregeln. Lege oben eine an.",
+      "emptyAlertEvents": "Noch kein Alarm ausgelöst.",
+      "emptyComplianceTools": "Keine geprüften Tool-Ereignisse in diesem Zeitraum.",
+      "emptyComplianceAgents": "Keine geprüften Tool-Ereignisse in diesem Zeitraum.",
+      "emptyPersonasMine": "No custom personas yet. Create one to get started.",
+      "emptyPersonasMarketplace": "No personas found.",
+      "emptyPromptsMine": "You haven't saved any prompts yet.",
+      "emptyPromptsPublic": "No prompts match your search.",
       "selectPage": "Seite auswählen",
       "selectRow": "{label} auswählen",
       "selected": "{count, plural, one {# ausgewählt} other {# ausgewählt}}",
@@ -2101,7 +2110,17 @@
         "builtin": "Integriert",
         "conflict": "Konflikt mit einem anderen Datensatz",
         "already": "Bereits erledigt"
-      }
+      },
+      "emptyOnCallRotations": "Noch keine Rotationen. Lege eine an, um festzulegen, wer Bereitschaft hat.",
+      "emptyWorkforceAgents": "Noch keine Agenten oder Mitglieder.",
+      "emptyEmbeddedCapabilities": "Keine eingebetteten Funktionen entsprechen deiner Suche.",
+      "emptyManagerBacklog": "Noch keine Tickets in diesem Backlog.",
+      "emptyManagerRunTasks": "Der Manager hat noch keine Durchläufe ausgeführt.",
+      "emptyManagerActivity": "Der Manager hat noch keine Aktionen ausgeführt.",
+      "emptyManagerStalls": "Nichts hängt fest – jedes Ticket ist in Bewegung oder abgeschlossen.",
+      "emptyRoi": "Für diesen Bereich gibt es noch nichts anzuzeigen.",
+      "emptyKnowledge": "Keine Wissensdokumente entsprechen diesen Filtern.",
+      "emptySkillsMarketplace": "Keine Skills gefunden."
     },
     "resultCount": "{n, plural, =0 {Keine Ergebnisse} one {# Ergebnis} other {# Ergebnisse}}",
     "done": "Fertig",
@@ -2722,6 +2741,11 @@
         "deliveryAtRisk": "Reduziere die parallele Arbeit und liefere diese Woche die kleinste Änderung Ende zu Ende.",
         "noSignal": "Verbinde Deployments oder schließe eine erste Aufgabe ab, damit die Lieferung messbar wird.",
         "onTrack": "Weiter so – kein Eingreifen nötig."
+      },
+      "col": {
+        "project": "Projekt",
+        "health": "Zustand",
+        "progress": "Fortschritt"
       }
     }
   },
@@ -4944,7 +4968,12 @@
     "checkoutCancelled": "Die Zahlung wurde abgebrochen. Es wurde nichts berechnet.",
     "checkoutFailed": "Wir konnten diese Zahlung nicht bestätigen. Falls dir etwas berechnet wurde, wende dich an den Support.",
     "installing": "Installation…",
-    "by": "von {author}"
+    "by": "von {author}",
+    "colTitle": "Titel",
+    "colType": "Typ",
+    "colStatus": "Status",
+    "colVersion": "Version",
+    "colTags": "Tags"
   },
   "canvas": {
     "kinds": {
@@ -15868,7 +15897,11 @@
       "data": "Daten",
       "security": "Sicherheit",
       "other": "Sonstiges"
-    }
+    },
+    "colRole": "Rolle",
+    "colType": "Typ",
+    "colDiscipline": "Disziplin",
+    "colAssigned": "Zugewiesen"
   },
   "taskPrd": {
     "emptyTask": "Für diese Aufgabe gibt es noch kein PRD. Agenten nutzen das PRD, um das Ziel zu verstehen und die Arbeit zwischen Swimlanes zu übergeben.",
@@ -15975,7 +16008,12 @@
     "release": "Release",
     "delayReason": "Verzögerungsgrund",
     "lifecycleAction": "Lebenszyklus",
-    "lifecycleActionTitle": "Lebenszyklus & Autonomie-Nachweis — hat sich dieses Ticket selbst bewegt, oder hat es bei jedem Schritt ein Mensch geschoben?"
+    "lifecycleActionTitle": "Lebenszyklus & Autonomie-Nachweis — hat sich dieses Ticket selbst bewegt, oder hat es bei jedem Schritt ein Mensch geschoben?",
+    "bulkArchive": "Archivieren",
+    "bulkArchiveConfirm": "{count} ausgewählte Aufgabe(n) archivieren?",
+    "bulkDeleteConfirm": "{count} ausgewählte Aufgabe(n) endgültig löschen? Dies kann nicht rückgängig gemacht werden.",
+    "bulkStopExecutionFirst": "Bei mindestens einer ausgewählten Aufgabe läuft eine Agentenausführung. Beende sie vor dem Archivieren oder Löschen.",
+    "bulkPartialFailure": "{failed} von {total} Aufgaben konnten nicht aktualisiert werden und bleiben ausgewählt."
   },
   "ticketLifecycle": {
     "title": "Lebenszyklus / Autonomie-Nachweis",
@@ -18749,6 +18787,9 @@
     "lens": "Lens",
     "cadence": "Rhythmus",
     "captureNow": "Jetzt erfassen",
+    "period": "Zeitraum",
+    "capturedColumn": "Erfasst",
+    "actionsColumn": "Aktionen",
     "capturing": "Wird erfasst…",
     "monthly": "Monatlich",
     "quarterly": "Vierteljährlich",
@@ -21654,6 +21695,13 @@
       "setup": "Insights einrichten",
       "open": "Insights öffnen",
       "standaloneTitle": "Nur Sitzungsaufzeichnung (ohne Widgets)"
+    },
+    "columns": {
+      "capability": "Funktion",
+      "category": "Kategorie",
+      "replaces": "Ersetzt",
+      "examples": "Beispiele",
+      "enabled": "Aktiviert"
     }
   },
   "embedInstall": {
@@ -29767,7 +29815,11 @@
       "callEarlyFailed": "Die Entscheidung konnte nicht gespeichert werden. Bitte erneut versuchen.",
       "readAgain": "Mit dem Gelernten neu lesen"
     },
-    "memoryLoading": "Speichereinstellung dieser Unterhaltung wird gelesen…"
+    "memoryLoading": "Speichereinstellung dieser Unterhaltung wird gelesen…",
+    "libraryColTitle": "Name",
+    "libraryColKind": "Art",
+    "libraryColFolder": "Ordner",
+    "libraryColUpdated": "Aktualisiert"
   },
   "canvasCommands": {
     "cleanLayout": "Leinwand-Layout aufräumen",

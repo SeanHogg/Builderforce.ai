@@ -9,7 +9,8 @@ import { buildPortfolioHealth, RAG_TONE, type Rag } from '@/lib/pm/portfolioHeal
 import { statusColor } from '@/lib/statusTone';
 import { InsightStat } from '@/components/dashboard/InsightStat';
 import { PmEmpty, PmError } from './pmShared';
-import { PortfolioHealthCard } from './PortfolioHealthCard';
+import { LocalCollection } from './LocalCollection';
+import { portfolioHealthDescriptor } from './portfolioHealthDescriptor';
 
 /**
  * Portfolio → Health — the cross-project health dashboard: one card per live project
@@ -57,6 +58,20 @@ export function PortfolioHealthContent() {
   // clock — it is the snapshot's age, not the render's.
   const generatedAt = useMemo(() => (projects ? new Date() : null), [projects]);
   const portfolio = useMemo(() => (projects ? buildPortfolioHealth(projects) : null), [projects]);
+  const descriptor = useMemo(
+    () => portfolioHealthDescriptor({
+      project: t('health.col.project'),
+      health: t('health.col.health'),
+      progress: t('health.col.progress'),
+      blocker: t('health.blockerLabel'),
+      action: t('health.actionLabel'),
+      rag: (item) => t(`health.rag.${item.rag}`),
+      progressText: (item) => t('health.taskSummary', { done: item.health.completed, total: item.health.total, open: item.health.open }),
+      blockerText: (item) => t(`health.blocker.${item.blocker.key}`, item.blocker.values),
+      actionText: (item) => t(`health.action.${item.action.key}`, item.action.values),
+    }),
+    [t],
+  );
 
   if (error) return <PmError message={error} />;
   if (!portfolio) return <PmEmpty message={t('loading')} />;
@@ -116,11 +131,11 @@ export function PortfolioHealthContent() {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))', gap: 12 }}>
-        {items.map((item) => (
-          <PortfolioHealthCard key={item.id} item={item} />
-        ))}
-      </div>
+      <LocalCollection
+        descriptor={descriptor}
+        rows={items}
+        searchText={(item) => item.name}
+      />
     </div>
   );
 }

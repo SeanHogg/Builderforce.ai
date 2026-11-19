@@ -15,6 +15,9 @@ import { usePermission } from '@/lib/rbac';
 import { embedApi, type CustomerEmbedFeatureKey, type EmbedConfigResult } from '@/lib/builderforceApi';
 import { capabilitySnippet, EMBEDDED_CAPABILITIES, unifiedEmbedSnippet, type EmbeddedCapabilityCategory } from '@/lib/embeddedCapabilities';
 import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
+import { Collection } from '@/components/collection/Collection';
+import { useLocalSource } from '@/components/collection/sources';
+import type { CollectionDescriptor } from '@/components/collection/descriptor';
 import { usePublishReferenceChrome, usePublishReferenceSelect, useReferenceRailActive } from '@/lib/referenceChrome';
 import styles from './EmbeddedCapabilities.module.css';
 import { useFormat } from "@/i18n/useFormat";
@@ -126,6 +129,51 @@ export function EmbeddedCapabilities() {
 
   const filters: Filter[] = ['all', 'engage', 'measure', 'govern', 'operate'];
 
+  // The ONE Collection (PRD 47): the capability catalog is a static in-memory
+  // list → local source. entity: null — a read-only catalog (no selection / bulk
+  // bar); the per-row switch is the only mutation. Search + category filters keep
+  // their page-level state and feed the source.
+  type Capability = (typeof EMBEDDED_CAPABILITIES)[number];
+  const capName = (item: Capability) => t(`features.${item.key}.name`);
+  const capSwitch = (item: Capability) => {
+    const state = config?.customerFeatures[item.key];
+    return <button type="button" role="switch" aria-checked={state?.enabled ?? false} aria-label={t('toggleLabel', { feature: capName(item) })} className={`${styles.switch} ${state?.enabled ? styles.switchOn : ''}`} disabled={!config || !canManage || saving === item.key} onClick={() => requestToggle(item.key)} />;
+  };
+  const capabilitiesDescriptor: CollectionDescriptor<Capability> = {
+    entity: null,
+    surfaceKey: 'embedded.capabilities',
+    rowId: (item) => item.key,
+    label: capName,
+    defaultView: 'card',
+    defaultSort: { key: 'name', dir: 'asc' },
+    emptyKey: 'emptyEmbeddedCapabilities',
+    columns: [
+      { key: 'name', header: t('columns.capability'), sortKey: 'name', compare: (a, b) => capName(a).localeCompare(capName(b)), cell: capName },
+      { key: 'category', header: t('columns.category'), sortKey: 'category', compare: (a, b) => a.category.localeCompare(b.category), cell: (item) => <span className={styles.badge}>{t(`categories.${item.category}`)}</span> },
+      { key: 'replaces', header: t('columns.replaces'), cell: (item) => item.replaces.join(' · ') },
+      { key: 'examples', header: t('columns.examples'), sortKey: 'examples', compare: (a, b) => a.examples - b.examples, cell: (item) => item.examples },
+      { key: 'enabled', header: t('columns.enabled'), align: 'end', cell: capSwitch },
+    ],
+    card: (item) => (
+      <article className={styles.card} key={item.key} style={{ border: 'none' }}>
+        <div className={styles.cardIcon}><Icon source={item.icon} size={20} /></div>
+        <div>
+          <h3>{capName(item)}</h3>
+          <p>{t(`features.${item.key}.description`)}</p>
+          {/* What a team buys INSTEAD of this row — the worth, not just the function. */}
+          <p className={styles.replaces}>{t('replaces', { tools: item.replaces.join(' · ') })}</p>
+          <div className={styles.meta}>
+            <span className={styles.badge}>{t(`categories.${item.category}`)}</span>
+            <span>{t('examples', { count: item.examples })}</span>
+          </div>
+          <CapabilityNote capability={item.key} siteKey={siteKey} />
+        </div>
+        {capSwitch(item)}
+      </article>
+    ),
+  };
+  const capabilitiesSource = useLocalSource(visible, capabilitiesDescriptor, { key: 'name', dir: 'asc' }, { page: 1, pageSize: 250 });
+
   return <div className={styles.page}>
     <section className={styles.hero}>
       <div>
@@ -153,32 +201,9 @@ export function EmbeddedCapabilities() {
 
     {tab === 'features' && <>
       <EmbeddedStackValue activeCount={activeCount} onShowInstall={() => setTab('install')} />
-      <div className={styles.toolbar}>
-        <input className={styles.search} value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t('search')} aria-label={t('search')} />
+      <Collection descriptor={capabilitiesDescriptor} source={capabilitiesSource} search={search} onSearchChange={setSearch}>
         {filters.map((item) => <button key={item} type="button" className={`${styles.filter} ${filter === item ? styles.filterActive : ''}`} onClick={() => setFilter(item)}>{t(`categories.${item}`)}</button>)}
-      </div>
-      <div className={styles.grid}>
-        {visible.map((item) => {
-          const state = config?.customerFeatures[item.key];
-          return <article className={styles.card} key={item.key}>
-            <div className={styles.cardIcon}><Icon source={item.icon} size={20} /></div>
-            <div>
-              <h3>{t(`features.${item.key}.name`)}</h3>
-              <p>{t(`features.${item.key}.description`)}</p>
-              {/* What a team buys INSTEAD of this row. A description says what a
-                  capability does; this says what it is worth, which is the half
-                  a catalog of thirteen switches was never making. */}
-              <p className={styles.replaces}>{t('replaces', { tools: item.replaces.join(' · ') })}</p>
-              <div className={styles.meta}>
-                <span className={styles.badge}>{t(`categories.${item.category}`)}</span>
-                <span>{t('examples', { count: item.examples })}</span>
-              </div>
-              <CapabilityNote capability={item.key} siteKey={siteKey} />
-            </div>
-            <button type="button" role="switch" aria-checked={state?.enabled ?? false} aria-label={t('toggleLabel', { feature: t(`features.${item.key}.name`) })} className={`${styles.switch} ${state?.enabled ? styles.switchOn : ''}`} disabled={!config || !canManage || saving === item.key} onClick={() => requestToggle(item.key)} />
-          </article>;
-        })}
-      </div>
+      </Collection>
     </>}
 
     {tab === 'install' && <section className={styles.panel}>

@@ -19,6 +19,8 @@ import {
   type SnapshotCadence,
 } from '@/lib/personaCadenceApi';
 import { Select } from '@/components/Select';
+import { LocalCollection } from '@/components/pm/LocalCollection';
+import type { CollectionDescriptor } from '@/components/collection/descriptor';
 import { useFormat } from "@/i18n/useFormat";
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 const card: React.CSSProperties = {
@@ -94,6 +96,63 @@ export function LensSnapshotsPanel() {
 
   const cadenceLabel = useMemo(() => (c: SnapshotCadence | null) => (c ? t(c) : '—'), [t]);
 
+  // Read-only Collection descriptor (entity: null) — a snapshot has no bulk API.
+  const descriptor = useMemo<CollectionDescriptor<LensSnapshotMeta>>(() => {
+    const viewButton = (s: LensSnapshotMeta) => (
+      <button type="button" style={{ ...btn, padding: '4px 10px', fontSize: 11 }} onClick={() => void openSnapshot(s.id)}>
+        {openId === s.id ? t('hide') : t('view')}
+      </button>
+    );
+    const payloadBlock = (s: LensSnapshotMeta) =>
+      openId === s.id ? (
+        <pre style={{
+          margin: 0, padding: 12, borderTop: '1px solid var(--border-subtle)', overflowX: 'auto',
+          fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', maxHeight: 320, whiteSpace: 'pre-wrap',
+        }}>
+          {payload ? JSON.stringify(payload, null, 2) : t('loading')}
+        </pre>
+      ) : null;
+    return {
+      entity: null,
+      surfaceKey: 'insights.snapshots',
+      rowId: (s) => s.id,
+      label: (s) => `${t(`lensNames.${s.lens}`)} ${s.period}`,
+      defaultView: 'table',
+      defaultSort: { key: 'generatedAt', dir: 'desc' },
+      emptyKey: 'emptySnapshots',
+      card: (s) => (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 12 }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{t(`lensNames.${s.lens}`)}</span>
+          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)' }}>{s.period} · {cadenceLabel(s.cadence)}</span>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('generatedAt', { at: fmt.dateTime(s.generatedAt) })}</span>
+          <div>{viewButton(s)}</div>
+          {payloadBlock(s)}
+        </div>
+      ),
+      columns: [
+        {
+          key: 'lens', header: t('lens'), sortKey: 'lens',
+          compare: (a, b) => a.lens.localeCompare(b.lens),
+          cell: (s) => (
+            <div>
+              <span style={{ fontWeight: 600 }}>{t(`lensNames.${s.lens}`)}</span>
+              {payloadBlock(s)}
+            </div>
+          ),
+        },
+        { key: 'period', header: t('period'), sortKey: 'period', compare: (a, b) => a.period.localeCompare(b.period), cell: (s) => s.period },
+        { key: 'cadence', header: t('cadence'), sortKey: 'cadence', compare: (a, b) => (a.cadence ?? '').localeCompare(b.cadence ?? ''), cell: (s) => cadenceLabel(s.cadence) },
+        {
+          key: 'generatedAt', header: t('capturedColumn'), sortKey: 'generatedAt',
+          compare: (a, b) => a.generatedAt.localeCompare(b.generatedAt),
+          cell: (s) => fmt.dateTime(s.generatedAt),
+        },
+        { key: 'actions', header: t('actionsColumn'), cell: (s) => viewButton(s) },
+      ],
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [t, fmt, cadenceLabel, openId, payload]);
+
   return (
     <div style={card}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
@@ -126,36 +185,8 @@ export function LensSnapshotsPanel() {
 
       {loading ? (
         <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('loading')}</div>
-      ) : snapshots.length === 0 ? (
-        <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('empty')}</div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {snapshots.map((s) => (
-            <div key={s.id} style={{ border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px' }}>
-                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', minWidth: 110 }}>{t(`lensNames.${s.lens}`)}</span>
-                <span style={{
-                  fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 'var(--radius-full)',
-                  background: 'var(--bg-surface, var(--bg-base))', color: 'var(--text-secondary)',
-                }}>{s.period}</span>
-                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{cadenceLabel(s.cadence)}</span>
-                <span style={{ flex: 1 }} />
-                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('generatedAt', { at: fmt.dateTime(s.generatedAt) })}</span>
-                <button type="button" style={{ ...btn, padding: '4px 10px', fontSize: 11 }} onClick={() => void openSnapshot(s.id)}>
-                  {openId === s.id ? t('hide') : t('view')}
-                </button>
-              </div>
-              {openId === s.id && (
-                <pre style={{
-                  margin: 0, padding: 12, borderTop: '1px solid var(--border-subtle)', overflowX: 'auto',
-                  fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', maxHeight: 320,
-                }}>
-                  {payload ? JSON.stringify(payload, null, 2) : t('loading')}
-                </pre>
-              )}
-            </div>
-          ))}
-        </div>
+        <LocalCollection descriptor={descriptor} rows={snapshots} />
       )}
     </div>
   );

@@ -2057,6 +2057,15 @@
       "search": "Buscar",
       "loading": "Cargando…",
       "empty": "Aún no hay nada aquí.",
+      "emptySnapshots": "Aún no se han capturado instantáneas",
+      "emptyAlertRules": "Aún no hay reglas de alerta. Crea una arriba.",
+      "emptyAlertEvents": "Aún no se ha disparado ninguna alerta.",
+      "emptyComplianceTools": "No hay eventos de herramientas auditados en esta ventana.",
+      "emptyComplianceAgents": "No hay eventos de herramientas auditados en esta ventana.",
+      "emptyPersonasMine": "No custom personas yet. Create one to get started.",
+      "emptyPersonasMarketplace": "No personas found.",
+      "emptyPromptsMine": "You haven't saved any prompts yet.",
+      "emptyPromptsPublic": "No prompts match your search.",
       "selectPage": "Seleccionar página",
       "selectRow": "Seleccionar {label}",
       "selected": "{count, plural, one {# seleccionado} other {# seleccionados}}",
@@ -2101,7 +2110,17 @@
         "builtin": "Integrado",
         "conflict": "Conflicto con otro registro",
         "already": "Ya realizado"
-      }
+      },
+      "emptyOnCallRotations": "Aún no hay rotaciones. Crea una para definir quién está de guardia.",
+      "emptyWorkforceAgents": "Aún no hay agentes ni miembros.",
+      "emptyEmbeddedCapabilities": "Ninguna capacidad integrada coincide con tu búsqueda.",
+      "emptyManagerBacklog": "Aún no hay tickets en este backlog.",
+      "emptyManagerRunTasks": "El gestor aún no ha ejecutado ninguna pasada.",
+      "emptyManagerActivity": "El gestor aún no ha realizado ninguna acción.",
+      "emptyManagerStalls": "Nada está atascado: cada ticket avanza o está terminado.",
+      "emptyRoi": "Aún no hay nada que mostrar para este ámbito.",
+      "emptyKnowledge": "Ningún documento de conocimiento coincide con estos filtros.",
+      "emptySkillsMarketplace": "No se encontraron habilidades."
     },
     "resultCount": "{n, plural, =0 {Sin resultados} one {# resultado} other {# resultados}}",
     "done": "Listo",
@@ -2722,6 +2741,11 @@
         "deliveryAtRisk": "Reduce el trabajo en curso y entrega esta semana el cambio más pequeño de principio a fin.",
         "noSignal": "Conecta los despliegues o completa una primera tarea para poder medir la entrega.",
         "onTrack": "Sigue así: no hace falta intervenir."
+      },
+      "col": {
+        "project": "Proyecto",
+        "health": "Salud",
+        "progress": "Progreso"
       }
     }
   },
@@ -4944,7 +4968,12 @@
     "checkoutCancelled": "Se canceló el pago. No se realizó ningún cargo.",
     "checkoutFailed": "No pudimos confirmar ese pago. Si se te cobró, contacta con soporte.",
     "installing": "Instalando…",
-    "by": "por {author}"
+    "by": "por {author}",
+    "colTitle": "Título",
+    "colType": "Tipo",
+    "colStatus": "Estado",
+    "colVersion": "Versión",
+    "colTags": "Etiquetas"
   },
   "canvas": {
     "kinds": {
@@ -15868,7 +15897,11 @@
       "data": "Datos",
       "security": "Seguridad",
       "other": "Otros"
-    }
+    },
+    "colRole": "Rol",
+    "colType": "Tipo",
+    "colDiscipline": "Disciplina",
+    "colAssigned": "Asignado"
   },
   "taskPrd": {
     "emptyTask": "Esta tarea todavía no tiene PRD. Los agentes usan el PRD para entender el objetivo y traspasar el trabajo entre carriles.",
@@ -15975,7 +16008,12 @@
     "release": "Versión",
     "delayReason": "Motivo del retraso",
     "lifecycleAction": "Ciclo de vida",
-    "lifecycleActionTitle": "Ciclo de vida y prueba de autonomía: ¿avanzó este ticket por sí solo o lo empujó una persona en cada paso?"
+    "lifecycleActionTitle": "Ciclo de vida y prueba de autonomía: ¿avanzó este ticket por sí solo o lo empujó una persona en cada paso?",
+    "bulkArchive": "Archivar",
+    "bulkArchiveConfirm": "¿Archivar {count} tarea(s) seleccionada(s)?",
+    "bulkDeleteConfirm": "¿Eliminar permanentemente {count} tarea(s) seleccionada(s)? Esta acción no se puede deshacer.",
+    "bulkStopExecutionFirst": "Una o más tareas seleccionadas tienen una ejecución de agente en curso. Detenla antes de archivar o eliminar.",
+    "bulkPartialFailure": "No se pudieron actualizar {failed} de {total} tareas y siguen seleccionadas."
   },
   "ticketLifecycle": {
     "title": "Ciclo de vida / prueba de autonomía",
@@ -18749,6 +18787,9 @@
     "lens": "Lente",
     "cadence": "Cadencia",
     "captureNow": "Capturar ahora",
+    "period": "Periodo",
+    "capturedColumn": "Capturado",
+    "actionsColumn": "Acciones",
     "capturing": "Capturando…",
     "monthly": "Mensual",
     "quarterly": "Trimestral",
@@ -21654,6 +21695,13 @@
       "setup": "Configurar Insights",
       "open": "Abrir Insights",
       "standaloneTitle": "Solo grabación de sesiones (sin widgets)"
+    },
+    "columns": {
+      "capability": "Capacidad",
+      "category": "Categoría",
+      "replaces": "Reemplaza",
+      "examples": "Ejemplos",
+      "enabled": "Habilitado"
     }
   },
   "embedInstall": {
@@ -29767,7 +29815,11 @@
       "callEarlyFailed": "No se pudo registrar la decisión. Inténtalo de nuevo.",
       "readAgain": "Leer de nuevo con lo aprendido"
     },
-    "memoryLoading": "Leyendo la configuración de memoria de esta conversación…"
+    "memoryLoading": "Leyendo la configuración de memoria de esta conversación…",
+    "libraryColTitle": "Nombre",
+    "libraryColKind": "Tipo",
+    "libraryColFolder": "Carpeta",
+    "libraryColUpdated": "Actualizado"
   },
   "canvasCommands": {
     "cleanLayout": "Ordenar el diseño del lienzo",

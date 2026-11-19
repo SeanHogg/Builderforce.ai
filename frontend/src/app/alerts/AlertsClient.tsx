@@ -1,14 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import PageContainer from '@/components/PageContainer';
 import { RoleGate } from '@/components/RoleGate';
 import { Select } from '@/components/Select';
 import { PmCard, PmEmpty, PmError } from '@/components/pm/pmShared';
-import {
-  tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle,
-} from '@/components/dataTableStyles';
+import { LocalCollection } from '@/components/pm/LocalCollection';
+import type { CollectionDescriptor } from '@/components/collection/descriptor';
 import { usePmData } from '@/lib/pm/usePmData';
 import {
   alertsApi,
@@ -109,6 +108,93 @@ export function AlertsClient() {
 
   const canCreate = draft.name.trim().length > 0 && draft.threshold.trim().length > 0;
 
+  // Read-only Collection descriptors (entity: null) — alert rules/firings have no bulk API;
+  // the per-row enable/test/delete/acknowledge actions stay as row controls.
+  const ruleDescriptor = useMemo<CollectionDescriptor<Alert>>(() => {
+    const statusBtn = (a: Alert) => (
+      <button type="button" style={ghostBtnStyle} disabled={busy}
+        onClick={() => run(() => alertsApi.update(a.id, { enabled: !a.enabled }))}>
+        {a.enabled ? t('rules.enabled') : t('rules.disabled')}
+      </button>
+    );
+    const actions = (a: Alert) => (
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+        <button type="button" style={ghostBtnStyle} disabled={busy} onClick={() => testRule(a.id)}>
+          {t('rules.test')}
+        </button>
+        <button type="button" style={ghostBtnStyle} disabled={busy}
+          onClick={() => run(() => alertsApi.remove(a.id))}>
+          {t('common.delete')}
+        </button>
+        {tested[a.id] && <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{tested[a.id]}</span>}
+      </div>
+    );
+    const condition = (a: Alert) => `${comparatorLabel(a.comparator)} ${fmt.number(a.threshold, { maximumFractionDigits: 2 })}`;
+    return {
+      entity: null,
+      surfaceKey: 'alerts.rules',
+      rowId: (a) => a.id,
+      label: (a) => a.name,
+      defaultSort: { key: 'name', dir: 'asc' },
+      emptyKey: 'emptyAlertRules',
+      card: (a) => (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 12 }}>
+          <span style={{ fontWeight: 600 }}>{a.name}</span>
+          <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>
+            {metricLabel(a.metric)} · {condition(a)} · {t('days', { n: a.windowDays })} · {t(`scope.${a.scopeKind}`)}
+          </span>
+          <div>{statusBtn(a)}</div>
+          {actions(a)}
+        </div>
+      ),
+      columns: [
+        { key: 'name', header: t('field.name'), sortKey: 'name', compare: (a, b) => a.name.localeCompare(b.name), cell: (a) => a.name },
+        { key: 'metric', header: t('field.metric'), sortKey: 'metric', compare: (a, b) => a.metric.localeCompare(b.metric), cell: (a) => metricLabel(a.metric) },
+        { key: 'condition', header: t('rules.condition'), cell: condition },
+        { key: 'windowDays', header: t('field.windowDays'), sortKey: 'windowDays', compare: (a, b) => a.windowDays - b.windowDays, cell: (a) => t('days', { n: a.windowDays }) },
+        { key: 'scope', header: t('field.scope'), sortKey: 'scope', compare: (a, b) => a.scopeKind.localeCompare(b.scopeKind), cell: (a) => t(`scope.${a.scopeKind}`) },
+        { key: 'status', header: t('rules.status'), sortKey: 'status', compare: (a, b) => Number(b.enabled) - Number(a.enabled), cell: statusBtn },
+        { key: 'actions', header: t('rules.actions'), cell: actions },
+      ],
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [t, fmt, busy, tested]);
+
+  const eventDescriptor = useMemo<CollectionDescriptor<AlertEvent>>(() => {
+    const ack = (ev: AlertEvent) =>
+      ev.status === 'triggered' ? (
+        <button type="button" style={ghostBtnStyle} disabled={busy}
+          onClick={() => run(() => alertsApi.ackEvent(ev.id))}>
+          {t('events.acknowledge')}
+        </button>
+      ) : <span style={{ color: 'var(--text-muted)' }}>—</span>;
+    return {
+      entity: null,
+      surfaceKey: 'alerts.events',
+      rowId: (ev) => ev.id,
+      label: (ev) => ev.message,
+      defaultSort: { key: 'when', dir: 'desc' },
+      emptyKey: 'emptyAlertEvents',
+      card: (ev) => (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 12 }}>
+          <span style={{ fontWeight: 600 }}>{ev.message}</span>
+          <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>
+            {fmt.dateTime(ev.createdAt)} · {metricLabel(ev.metric)} · {t(`eventStatus.${ev.status}`)}
+          </span>
+          <div>{ack(ev)}</div>
+        </div>
+      ),
+      columns: [
+        { key: 'when', header: t('events.when'), sortKey: 'when', compare: (a, b) => a.createdAt.localeCompare(b.createdAt), cell: (ev) => fmt.dateTime(ev.createdAt) },
+        { key: 'metric', header: t('field.metric'), sortKey: 'metric', compare: (a, b) => (a.metric ?? '').localeCompare(b.metric ?? ''), cell: (ev) => metricLabel(ev.metric) },
+        { key: 'message', header: t('events.message'), cell: (ev) => ev.message },
+        { key: 'status', header: t('rules.status'), sortKey: 'status', compare: (a, b) => a.status.localeCompare(b.status), cell: (ev) => t(`eventStatus.${ev.status}`) },
+        { key: 'actions', header: t('rules.actions'), cell: ack },
+      ],
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [t, fmt, busy]);
+
   return (
     <PageContainer>
       <div style={{ marginBottom: 18 }}>
@@ -171,93 +257,14 @@ export function AlertsClient() {
           <PmCard title={t('rules.title')}>
             {rules.error ? <PmError message={rules.error} />
               : !rules.data ? <PmEmpty message={t('loading')} />
-              : rules.data.alerts.length === 0 ? <PmEmpty message={t('rules.empty')} />
-              : (
-                <div style={tableWrapStyle}>
-                  <table style={tableStyle}>
-                    <thead>
-                      <tr style={theadRowStyle}>
-                        <th style={thStyle}>{t('field.name')}</th>
-                        <th style={thStyle}>{t('field.metric')}</th>
-                        <th style={thStyle}>{t('rules.condition')}</th>
-                        <th style={thStyle}>{t('field.windowDays')}</th>
-                        <th style={thStyle}>{t('field.scope')}</th>
-                        <th style={thStyle}>{t('rules.status')}</th>
-                        <th style={thStyle}>{t('rules.actions')}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rules.data.alerts.map((a) => (
-                        <tr key={a.id} style={trStyle}>
-                          <td style={tdStyle}>{a.name}</td>
-                          <td style={tdMutedStyle}>{metricLabel(a.metric)}</td>
-                          <td style={tdMutedStyle}>{comparatorLabel(a.comparator)} {fmt.number(a.threshold, { maximumFractionDigits: 2 })}</td>
-                          <td style={tdMutedStyle}>{t('days', { n: a.windowDays })}</td>
-                          <td style={tdMutedStyle}>{t(`scope.${a.scopeKind}`)}</td>
-                          <td style={tdMutedStyle}>
-                            <button type="button" style={ghostBtnStyle} disabled={busy}
-                              onClick={() => run(() => alertsApi.update(a.id, { enabled: !a.enabled }))}>
-                              {a.enabled ? t('rules.enabled') : t('rules.disabled')}
-                            </button>
-                          </td>
-                          <td style={tdMutedStyle}>
-                            <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                              <button type="button" style={ghostBtnStyle} disabled={busy} onClick={() => testRule(a.id)}>
-                                {t('rules.test')}
-                              </button>
-                              <button type="button" style={ghostBtnStyle} disabled={busy}
-                                onClick={() => run(() => alertsApi.remove(a.id))}>
-                                {t('common.delete')}
-                              </button>
-                              {tested[a.id] && <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{tested[a.id]}</span>}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+              : <LocalCollection descriptor={ruleDescriptor} rows={rules.data.alerts} searchText={(a) => a.name} />}
           </PmCard>
 
           {/* Recent events */}
           <PmCard title={t('events.title')}>
             {events.error ? <PmError message={events.error} />
               : !events.data ? <PmEmpty message={t('loading')} />
-              : events.data.events.length === 0 ? <PmEmpty message={t('events.empty')} />
-              : (
-                <div style={tableWrapStyle}>
-                  <table style={tableStyle}>
-                    <thead>
-                      <tr style={theadRowStyle}>
-                        <th style={thStyle}>{t('events.when')}</th>
-                        <th style={thStyle}>{t('field.metric')}</th>
-                        <th style={thStyle}>{t('events.message')}</th>
-                        <th style={thStyle}>{t('rules.status')}</th>
-                        <th style={thStyle}>{t('rules.actions')}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {events.data.events.map((ev) => (
-                        <tr key={ev.id} style={trStyle}>
-                          <td style={tdMutedStyle}>{fmt.dateTime(ev.createdAt)}</td>
-                          <td style={tdMutedStyle}>{metricLabel(ev.metric)}</td>
-                          <td style={tdStyle}>{ev.message}</td>
-                          <td style={tdMutedStyle}>{t(`eventStatus.${ev.status}`)}</td>
-                          <td style={tdMutedStyle}>
-                            {ev.status === 'triggered' ? (
-                              <button type="button" style={ghostBtnStyle} disabled={busy}
-                                onClick={() => run(() => alertsApi.ackEvent(ev.id))}>
-                                {t('events.acknowledge')}
-                              </button>
-                            ) : <span style={{ color: 'var(--text-muted)' }}>—</span>}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+              : <LocalCollection descriptor={eventDescriptor} rows={events.data.events} searchText={(ev) => ev.message} />}
           </PmCard>
         </div>
       </RoleGate>

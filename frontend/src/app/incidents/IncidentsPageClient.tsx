@@ -11,7 +11,7 @@
 
 import { Icon } from '@/components/ui/Icon';
 import { LabelField } from '@/components/ui/Field';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -46,6 +46,9 @@ import { useErrorMessage } from '@/i18n/useErrorMessage';
 import { SECTION_CARD as card, SectionEmpty, SectionError, SectionLoading } from '@/components/ui/SectionState';
 import { SEVERITIES, SEVERITY_BADGE } from '@/lib/reliability/severity';
 import { Badge } from '@/components/ui';
+import { Collection } from '@/components/collection/Collection';
+import { useLocalSource } from '@/components/collection/sources';
+import type { CollectionDescriptor } from '@/components/collection/descriptor';
 import { statusTone, type StatusToneMap } from '@/lib/statusTone';
 
 const STATUS_TONE: StatusToneMap<IncidentStatus> = {
@@ -816,6 +819,84 @@ function OnCallSection({ t, tc, canManage }: SectionProps) {
     catch (e) { setError(errorMessage(e)); }
   };
 
+  // The ONE Collection (PRD 47): rotations are an in-memory list → local source.
+  // No rotation bulk port is registered in BULK_CAPABILITIES, so entity is null
+  // (read-only: no selection / bulk bar); per-rotation delete stays in the row.
+  const [search, setSearch] = useState('');
+  const renderRotationActions = (r: OnCallRotation) => (
+    <button type="button" className="btn btn-secondary btn-sm" onClick={() => removeRotation(r)} disabled={!canManage}>{tc('delete')}</button>
+  );
+  const onCallLabel = (r: OnCallRotation) => (r.onCall ? (r.onCall.displayName || r.onCall.memberRef) : t('noOneOnCall'));
+  const rotationsDescriptor: CollectionDescriptor<OnCallRotation> = {
+    entity: null,
+    surfaceKey: 'incidents.oncall',
+    rowId: (r) => r.id,
+    label: (r) => r.name,
+    defaultView: 'card',
+    defaultSort: { key: 'name', dir: 'asc' },
+    emptyKey: 'emptyOnCallRotations',
+    columns: [
+      { key: 'name', header: t('rotationName'), sortKey: 'name', compare: (a, b) => a.name.localeCompare(b.name), cell: (r) => <strong>{r.name}</strong> },
+      { key: 'kind', header: t('rotationKindLabel'), sortKey: 'kind', compare: (a, b) => a.rotationKind.localeCompare(b.rotationKind), cell: (r) => <span className="badge-muted">{t(`rotationKind.${r.rotationKind}`)}</span> },
+      { key: 'onCall', header: t('currentlyOnCall'), cell: onCallLabel },
+      { key: 'members', header: t('members'), sortKey: 'members', compare: (a, b) => a.members.length - b.members.length, cell: (r) => r.members.length },
+      { key: 'actions', header: '', align: 'end', cell: renderRotationActions },
+    ],
+    card: (r) => {
+      const d = memberDraft[r.id] ?? { displayName: '', memberRef: '' };
+      return (
+        <div style={{ padding: 16, paddingTop: 32, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)' }}>{r.name}</span>
+            <span className="badge-muted">{t(`rotationKind.${r.rotationKind}`)}</span>
+            <span style={{ flex: 1 }} />
+            {renderRotationActions(r)}
+          </div>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+            {t('currentlyOnCall')}: <strong style={{ color: 'var(--text-primary)' }}>{onCallLabel(r)}</strong>
+          </span>
+          {r.description && <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{r.description}</div>}
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>{t('members')}</span>
+            {r.members.length === 0
+              ? <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('noMembers')}</span>
+              : r.members.map((m) => (
+                <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+                  <span style={{ color: 'var(--text-primary)' }}>{m.displayName || m.memberRef}</span>
+                  <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>{m.memberRef}</span>
+                  <span style={{ flex: 1 }} />
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={() => removeMember(r, m.id)} disabled={!canManage} aria-label={t('removeMember')}><Icon source="✕" size="1em" /></button>
+                </div>
+              ))}
+          </div>
+
+          {canManage && (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: 140 }}>
+                <LabelField label={t('memberDisplayName')}>
+                  <input className="input" value={d.displayName} onChange={(e) => setMemberDraft((p) => ({ ...p, [r.id]: { ...d, displayName: e.target.value } }))} />
+                </LabelField>
+              </div>
+              <div style={{ flex: 1, minWidth: 140 }}>
+                <LabelField label={t('memberRef')}>
+                  <input className="input" value={d.memberRef} onChange={(e) => setMemberDraft((p) => ({ ...p, [r.id]: { ...d, memberRef: e.target.value } }))} placeholder={t('memberRefPlaceholder')} />
+                </LabelField>
+              </div>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => addMember(r)}>{t('addMember')}</button>
+            </div>
+          )}
+          <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0 }}>{t('memberRefHelp')}</p>
+        </div>
+      );
+    },
+  };
+  const visibleRotations = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return q ? rotations.filter((r) => `${r.name} ${r.description ?? ''}`.toLowerCase().includes(q)) : rotations;
+  }, [rotations, search]);
+  const rotationsSource = useLocalSource(visibleRotations, rotationsDescriptor, { key: 'name', dir: 'asc' }, { page: 1, pageSize: 250 });
+
   return (
     <>
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
@@ -826,60 +907,8 @@ function OnCallSection({ t, tc, canManage }: SectionProps) {
 
       {loading && <SectionLoading label={tc('loading')} />}
       <SectionError error={error} />
-      {!loading && !error && (rotations.length === 0
-        ? <SectionEmpty message={t('emptyRotations')} />
-        : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {rotations.map((r) => {
-              const d = memberDraft[r.id] ?? { displayName: '', memberRef: '' };
-              return (
-                <div key={r.id} style={{ ...card, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                    <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)' }}>{r.name}</span>
-                    <span className="badge-muted">{t(`rotationKind.${r.rotationKind}`)}</span>
-                    <span style={{ flex: 1 }} />
-                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                      {t('currentlyOnCall')}: <strong style={{ color: 'var(--text-primary)' }}>{r.onCall ? (r.onCall.displayName || r.onCall.memberRef) : t('noOneOnCall')}</strong>
-                    </span>
-                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => removeRotation(r)} disabled={!canManage}>{tc('delete')}</button>
-                  </div>
-                  {r.description && <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{r.description}</div>}
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>{t('members')}</span>
-                    {r.members.length === 0
-                      ? <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('noMembers')}</span>
-                      : r.members.map((m) => (
-                        <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
-                          <span style={{ color: 'var(--text-primary)' }}>{m.displayName || m.memberRef}</span>
-                          <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>{m.memberRef}</span>
-                          <span style={{ flex: 1 }} />
-                          <button type="button" className="btn btn-secondary btn-sm" onClick={() => removeMember(r, m.id)} disabled={!canManage} aria-label={t('removeMember')}><Icon source="✕" size="1em" /></button>
-                        </div>
-                      ))}
-                  </div>
-
-                  {canManage && (
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-                      <div style={{ flex: 1, minWidth: 140 }}>
-                        <LabelField label={t('memberDisplayName')}>
-                          <input className="input" value={d.displayName} onChange={(e) => setMemberDraft((p) => ({ ...p, [r.id]: { ...d, displayName: e.target.value } }))} />
-                        </LabelField>
-                      </div>
-                      <div style={{ flex: 1, minWidth: 140 }}>
-                        <LabelField label={t('memberRef')}>
-                          <input className="input" value={d.memberRef} onChange={(e) => setMemberDraft((p) => ({ ...p, [r.id]: { ...d, memberRef: e.target.value } }))} placeholder={t('memberRefPlaceholder')} />
-                        </LabelField>
-                      </div>
-                      <button type="button" className="btn btn-secondary btn-sm" onClick={() => addMember(r)}>{t('addMember')}</button>
-                    </div>
-                  )}
-                  <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0 }}>{t('memberRefHelp')}</p>
-                </div>
-              );
-            })}
-          </div>
-        )
+      {!loading && !error && (
+        <Collection descriptor={rotationsDescriptor} source={rotationsSource} search={search} onSearchChange={setSearch} />
       )}
 
       <SlideOutPanel open={createOpen} onClose={() => setCreateOpen(false)} title={t('newRotation')} widthStorageKey="incidents-rotation">

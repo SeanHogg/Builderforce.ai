@@ -18,6 +18,9 @@ import type { JobRole, TemplateSummary, RoleAssignment, AssigneeKind, Discipline
 import { RoleAssigneePicker, useAssignableWorkforce } from './RoleAssigneePicker';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
+import { Collection } from '@/components/collection/Collection';
+import { useLocalSource } from '@/components/collection/sources';
+import type { CollectionDescriptor } from '@/components/collection/descriptor';
 const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 16 };
 const chip = (bg: string, fg: string): React.CSSProperties => ({
   display: 'inline-flex', alignItems: 'center', gap: 4, padding: '1px 8px', borderRadius: 'var(--radius-full)', fontSize: 11, fontWeight: 600, background: bg, color: fg,
@@ -94,15 +97,6 @@ export function RolesView() {
     return m;
   }, [assignments]);
 
-  // Standard roles for the chosen template first, then the rest.
-  const sortedRoles = useMemo(() => {
-    return [...roles].sort((a, b) => {
-      const sa = standardKeys.has(a.key) ? 0 : 1;
-      const sb = standardKeys.has(b.key) ? 0 : 1;
-      return sa - sb || a.position - b.position;
-    });
-  }, [roles, standardKeys]);
-
   const onAssign = async (roleKey: string, a: { assigneeKind: AssigneeKind; assigneeRef: string; assigneeName: string }) => {
     setAssignBusy(true); setError(null);
     try {
@@ -137,6 +131,102 @@ export function RolesView() {
   };
 
   const kindLabel = (k: string) => tk(k === 'agent' ? 'assigneeAgent' : k === 'hire' ? 'assigneeHire' : 'assigneeHuman');
+
+  // The ONE Collection (PRD 47): roles are an in-memory catalog → a local source.
+  // Standard-for-template roles sort first by default (`standard` column), then position.
+  const [search, setSearch] = useState('');
+  const rolesDescriptor = useMemo<CollectionDescriptor<JobRole>>(() => {
+    const assigneeChips = (role: JobRole) => {
+      const roleAssignments = assignmentsByRole.get(role.key) ?? [];
+      return roleAssignments.length > 0 ? (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {roleAssignments.map((a) => (
+            <span key={a.id} style={{ ...chip('var(--surface-2)', 'var(--text-secondary)'), border: '1px solid var(--border-subtle)' }}>
+              <span aria-hidden>{a.assigneeKind === 'agent' ? <Icon source="🤖" size="1em" /> : a.assigneeKind === 'hire' ? <Icon source="🤝" size="1em" /> : <Icon source="🧑" size="1em" />}</span>
+              {a.assigneeName ?? a.assigneeRef}
+              <span style={{ color: 'var(--text-muted)', fontSize: 10 }}>· {kindLabel(a.assigneeKind)}</span>
+              {canManage && (
+                <button type="button" aria-label={tk('unassign')} onClick={() => onUnassign(a.id)} style={{ marginLeft: 2, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 13, lineHeight: 1, padding: 0 }}>×</button>
+              )}
+            </span>
+          ))}
+        </div>
+      ) : (
+        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('noneAssigned')}</span>
+      );
+    };
+    const badges = (role: JobRole) => (
+      <>
+        {standardKeys.has(role.key) && <span style={chip('var(--surface-coral-soft)', 'var(--accent)')}>{t('standard')}</span>}{' '}
+        {role.builtin
+          ? <span style={chip('var(--surface-2)', 'var(--text-muted)')}>{tk('builtin')}</span>
+          : <span style={chip('var(--surface-2)', 'var(--text-secondary)')}>{t('custom')}</span>}
+      </>
+    );
+    const actions = (role: JobRole) => (
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+        {canManage && (
+          <button type="button" onClick={() => setAssigningRole(assigningRole === role.key ? null : role.key)} style={{ fontSize: 12, padding: '4px 10px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', background: 'transparent', color: 'var(--accent)', border: '1px solid var(--accent)' }}>
+            {tk('assign')}
+          </button>
+        )}
+        {canManage && !role.builtin && (
+          <button type="button" onClick={() => onDeleteRole(role)} style={{ fontSize: 12, padding: '4px 10px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', background: 'transparent', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>
+            {t('delete')}
+          </button>
+        )}
+      </div>
+    );
+    const picker = (role: JobRole) =>
+      canManage && assigningRole === role.key ? (
+        <RoleAssigneePicker workforce={workforce} busy={assignBusy} onAssign={(a) => onAssign(role.key, a)} onCancel={() => setAssigningRole(null)} />
+      ) : null;
+    return {
+      // Bulk delete + merge through the role port (built-ins are skipped server-side).
+      entity: 'role',
+      surfaceKey: 'workforce.roles',
+      rowId: (r) => r.key,
+      label: (r) => r.name,
+      defaultView: 'card',
+      defaultSort: { key: 'standard', dir: 'asc' },
+      emptyKey: 'empty',
+      columns: [
+        { key: 'name', header: t('colRole'), sortKey: 'name', compare: (a, b) => a.name.localeCompare(b.name), cell: (r) => (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            <span aria-hidden><Icon source={r.icon ?? 'person'} size={16} /></span>
+            <span style={{ fontWeight: 600 }}>{r.name}</span>
+          </span>
+        ) },
+        { key: 'standard', header: t('colType'), sortKey: 'standard', compare: (a, b) => (standardKeys.has(a.key) ? 0 : 1) - (standardKeys.has(b.key) ? 0 : 1) || a.position - b.position, cell: badges },
+        { key: 'discipline', header: t('colDiscipline'), sortKey: 'discipline', compare: (a, b) => a.discipline.localeCompare(b.discipline), cell: (r) => t(`discipline.${r.discipline}`) },
+        { key: 'assignees', header: t('colAssigned'), cell: (r) => (
+          <div style={{ whiteSpace: 'normal' }}>{assigneeChips(r)}{picker(r)}</div>
+        ) },
+        { key: 'actions', header: '', align: 'end', cell: actions },
+      ],
+      card: (role) => (
+        <div style={{ padding: 12, paddingTop: 32, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span aria-hidden><Icon source={role.icon ?? 'person'} size={16} /></span>
+            <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-strong)' }}>{role.name}</span>
+            {badges(role)}
+            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t(`discipline.${role.discipline}`)}</span>
+          </div>
+          {role.description && <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{role.description}</div>}
+          {assigneeChips(role)}
+          {actions(role)}
+          {picker(role)}
+        </div>
+      ),
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assignmentsByRole, standardKeys, canManage, assigningRole, assignBusy, workforce, t, tk]);
+
+  const visibleRoles = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return q ? roles.filter((r) => `${r.name} ${r.description ?? ''} ${r.key}`.toLowerCase().includes(q)) : roles;
+  }, [roles, search]);
+  const rolesSource = useLocalSource(visibleRoles, rolesDescriptor, { key: 'standard', dir: 'asc' }, { page: 1, pageSize: 250 });
 
   return (
     <section>
@@ -178,64 +268,12 @@ export function RolesView() {
       {loading ? (
         <div style={{ color: 'var(--muted)', fontSize: 13, padding: 24 }}>{t('loading')}</div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {sortedRoles.map((role) => {
-            const roleAssignments = assignmentsByRole.get(role.key) ?? [];
-            const isStandard = standardKeys.has(role.key);
-            return (
-              <div key={role.key} style={{ ...card, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <span aria-hidden><Icon source={role.icon ?? 'person'} size={16} /></span>
-                  <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-strong)' }}>{role.name}</span>
-                  {isStandard && <span style={chip('var(--surface-coral-soft)', 'var(--accent)')}>{t('standard')}</span>}
-                  {role.builtin
-                    ? <span style={chip('var(--surface-2)', 'var(--text-muted)')}>{tk('builtin')}</span>
-                    : <span style={chip('var(--surface-2)', 'var(--text-secondary)')}>{t('custom')}</span>}
-                  <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t(`discipline.${role.discipline}`)}</span>
-                  <span style={{ flex: 1 }} />
-                  {canManage && (
-                    <button type="button" onClick={() => setAssigningRole(assigningRole === role.key ? null : role.key)} style={{ fontSize: 12, padding: '4px 10px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', background: 'transparent', color: 'var(--accent)', border: '1px solid var(--accent)' }}>
-                      {tk('assign')}
-                    </button>
-                  )}
-                  {canManage && !role.builtin && (
-                    <button type="button" onClick={() => onDeleteRole(role)} style={{ fontSize: 12, padding: '4px 10px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', background: 'transparent', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>
-                      {t('delete')}
-                    </button>
-                  )}
-                </div>
-
-                {role.description && <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{role.description}</div>}
-
-                {roleAssignments.length > 0 ? (
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    {roleAssignments.map((a) => (
-                      <span key={a.id} style={{ ...chip('var(--surface-2)', 'var(--text-secondary)'), border: '1px solid var(--border-subtle)' }}>
-                        <span aria-hidden>{a.assigneeKind === 'agent' ? <Icon source="🤖" size="1em" /> : a.assigneeKind === 'hire' ? <Icon source="🤝" size="1em" /> : <Icon source="🧑" size="1em" />}</span>
-                        {a.assigneeName ?? a.assigneeRef}
-                        <span style={{ color: 'var(--text-muted)', fontSize: 10 }}>· {kindLabel(a.assigneeKind)}</span>
-                        {canManage && (
-                          <button type="button" aria-label={tk('unassign')} onClick={() => onUnassign(a.id)} style={{ marginLeft: 2, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 13, lineHeight: 1, padding: 0 }}>×</button>
-                        )}
-                      </span>
-                    ))}
-                  </div>
-                ) : (
-                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('noneAssigned')}</div>
-                )}
-
-                {canManage && assigningRole === role.key && (
-                  <RoleAssigneePicker
-                    workforce={workforce}
-                    busy={assignBusy}
-                    onAssign={(a) => onAssign(role.key, a)}
-                    onCancel={() => setAssigningRole(null)}
-                  />
-                )}
-              </div>
-            );
-          })}
-        </div>
+        <Collection
+          descriptor={rolesDescriptor}
+          source={rolesSource}
+          search={search}
+          onSearchChange={setSearch}
+        />
       )}
     </section>
   );

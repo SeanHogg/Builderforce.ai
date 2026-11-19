@@ -1,12 +1,9 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useTranslations, useFormatter } from 'next-intl';
-import Link from 'next/link';
 import { BarChart, type BarDatum } from '@/components/charts/BarChart';
 import { managerApi, type StallRegister, type StallWatchRow } from '@/lib/builderforceApi';
-import { ticketHref } from '@/lib/ticketHref';
-import {
-  tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle,
-} from '@/components/dataTableStyles';
+import { LocalCollection } from '@/components/pm/LocalCollection';
+import { managerStallsDescriptor } from '@/components/manager/managerDescriptors';
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
 /**
@@ -39,27 +36,6 @@ const panelStyle: CSSProperties = {
 };
 const sectionTitleStyle: CSSProperties = { fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)' };
 const mutedStyle: CSSProperties = { color: 'var(--text-muted)', fontSize: '0.8rem' };
-
-/** Escalated rows read as "needs a human"; everything else as "manager working". */
-function toneFor(row: StallWatchRow): { fg: string; bg: string } {
-  return row.escalatedAt
-    ? { fg: 'var(--warning-text)', bg: 'var(--warning-bg, rgba(180, 83, 9, 0.12))' }
-    : { fg: 'var(--text-muted)', bg: 'var(--bg-base)' };
-}
-
-function Badge({ label, fg, bg }: { label: string; fg: string; bg: string }) {
-  return (
-    <span
-      style={{
-        display: 'inline-block', padding: '2px 8px', borderRadius: 'var(--radius-full)',
-        fontSize: '0.72rem', fontWeight: 700, color: fg, background: bg,
-        border: '1px solid var(--border-subtle)', whiteSpace: 'nowrap',
-      }}
-    >
-      {label}
-    </span>
-  );
-}
 
 export interface ManagerStallRegisterProps {
   projectId: number;
@@ -101,6 +77,16 @@ export function ManagerStallRegister({ projectId }: ManagerStallRegisterProps) {
     const days = Math.floor(ms / 86_400_000);
     return days >= 1 ? t('idleDays', { days }) : t('idleToday');
   }, [t]);
+
+  const maxAttempts = data?.maxAttempts ?? 3;
+  const descriptor = useMemo(() => managerStallsDescriptor({
+    ticket: t('col.ticket'), cause: t('col.cause'), doing: t('col.doing'), attempts: t('col.attempts'), stuckFor: t('col.stuckFor'),
+    causeLabel: (r) => t(`cause.${r.cause}`),
+    lastTried: (r) => (r.lastAttemptAt ? t('lastTried', { when: relative(r.lastAttemptAt) }) : null),
+    needsYou: t('needsYou'),
+    attemptsText: (r) => t('attemptsOf', { attempts: r.attempts, max: maxAttempts }),
+    idle: idleLabel,
+  }), [t, relative, idleLabel, maxAttempts]);
 
   const causeBars: BarDatum[] = useMemo(
     () => (data?.byCause ?? []).map((c) => ({ key: c.cause, label: t(`cause.${c.cause}`), value: c.count })),
@@ -177,62 +163,11 @@ export function ManagerStallRegister({ projectId }: ManagerStallRegisterProps) {
             </div>
           )}
 
-          <div style={tableWrapStyle}>
-            <table style={tableStyle}>
-              <thead>
-                <tr style={theadRowStyle}>
-                  <th style={thStyle}>{t('col.ticket')}</th>
-                  <th style={{ ...thStyle, width: 190 }}>{t('col.cause')}</th>
-                  <th style={thStyle}>{t('col.doing')}</th>
-                  <th style={{ ...thStyle, width: 110 }}>{t('col.attempts')}</th>
-                  <th style={{ ...thStyle, width: 120 }}>{t('col.stuckFor')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => {
-                  const tone = toneFor(row);
-                  return (
-                    <tr key={row.taskId} style={trStyle}>
-                      <td style={tdStyle}>
-                        <Link
-                          href={ticketHref(row.taskId)}
-                          style={{ color: 'var(--accent)', fontWeight: 600, textDecoration: 'none' }}
-                        >
-                          {row.title}
-                        </Link>
-                        <div style={{ ...mutedStyle, marginTop: 2 }}>{row.status}</div>
-                      </td>
-                      <td style={tdStyle}>
-                        <Badge label={t(`cause.${row.cause}`)} fg={tone.fg} bg={tone.bg} />
-                      </td>
-                      <td style={tdMutedStyle}>
-                        {row.detail}
-                        {row.lastAttemptAt && (
-                          <div style={{ ...mutedStyle, marginTop: 2 }}>
-                            {t('lastTried', { when: relative(row.lastAttemptAt) })}
-                          </div>
-                        )}
-                      </td>
-                      <td style={tdStyle}>
-                        {row.escalatedAt ? (
-                          <Badge
-                            label={t('needsYou')}
-                            fg="var(--warning-text)"
-                            bg="var(--warning-bg, rgba(180, 83, 9, 0.12))"
-                          />
-                        ) : (
-                          <span style={mutedStyle}>
-                            {t('attemptsOf', { attempts: row.attempts, max: data?.maxAttempts ?? 3 })}
-                          </span>
-                        )}
-                      </td>
-                      <td style={tdMutedStyle}>{idleLabel(row.idleMs)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <LocalCollection
+            descriptor={descriptor}
+            rows={rows}
+            searchText={(r) => r.title + ' ' + r.detail}
+          />
         </>
       )}
     </div>

@@ -23,9 +23,10 @@ import { fetchProjects } from '@/lib/api';
 import type { Project } from '@/lib/types';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
-import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import { TeamChatButton } from '@/components/brain/TeamChatButton';
-import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
+import { Collection } from '@/components/collection/Collection';
+import { useLocalSource } from '@/components/collection/sources';
+import type { CollectionDescriptor } from '@/components/collection/descriptor';
 import { faultMessage } from '@/lib/apiClient';
 import { initialsOf } from '@/lib/initials';
 import { TeamPeopleView } from './TeamPeopleView';
@@ -112,8 +113,7 @@ export function TeamsView() {
   const [teams, setTeams] = useState<TeamSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>('card');
-  const [hoveredId, setHoveredId] = useState<number | null>(null);
+  const [search, setSearch] = useState('');
 
   // Create slide-out
   const [createOpen, setCreateOpen] = useState(false);
@@ -233,6 +233,64 @@ export function TeamsView() {
     await refreshAfterMutation(detail.id);
   };
 
+  // The ONE Collection (PRD 47): teams are an in-memory list → local source.
+  // Bulk delete only (BULK_CAPABILITIES.team); opening a team stays a click on the name.
+  const teamsDescriptor = useMemo<CollectionDescriptor<TeamSummary>>(() => ({
+    entity: 'team',
+    surfaceKey: 'workforce.teams',
+    rowId: (team) => String(team.id),
+    label: (team) => team.name,
+    defaultView: 'card',
+    defaultSort: { key: 'name', dir: 'asc' },
+    emptyKey: 'empty',
+    columns: [
+      {
+        key: 'name', header: t('colTeam'), sortKey: 'name',
+        compare: (a, b) => a.name.localeCompare(b.name),
+        cell: (team) => (
+          <button type="button" onClick={() => openTeam(team.id)} aria-label={t('manageTeam', { name: team.name })}
+            style={{ all: 'unset', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, fontWeight: 600 }}>
+            <TeamAvatar name={team.name} url={team.avatarUrl} size={24} />
+            {team.name}
+          </button>
+        ),
+      },
+      { key: 'description', header: t('colDescription'), cell: (team) => <span style={{ color: 'var(--text-muted)' }}>{team.description || '—'}</span> },
+      { key: 'members', header: t('colMembers'), sortKey: 'members', compare: (a, b) => a.memberCount - b.memberCount, cell: (team) => team.memberCount },
+      { key: 'projects', header: t('colProjects'), sortKey: 'projects', compare: (a, b) => a.projectCount - b.projectCount, cell: (team) => team.projectCount },
+    ],
+    card: (team) => (
+      <button
+        type="button"
+        onClick={() => openTeam(team.id)}
+        aria-label={t('manageTeam', { name: team.name })}
+        style={{ all: 'unset', boxSizing: 'border-box', width: '100%', cursor: 'pointer', padding: 16, paddingTop: 32, display: 'flex', flexDirection: 'column', gap: 8 }}
+      >
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+            <TeamAvatar name={team.name} url={team.avatarUrl} />
+            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{team.name}</div>
+          </div>
+          <Icon name="edit" size={16} style={manageIconStyle(false)} />
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', minHeight: 32, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+          {team.description || t('noDescription')}
+        </div>
+        <div style={{ display: 'flex', gap: 14, fontSize: 12, color: 'var(--text-muted)', marginTop: 'auto' }}>
+          <span>{t.rich('memberCount', { count: team.memberCount, b: (c) => <strong style={{ color: 'var(--text-primary)' }}>{c}</strong> })}</span>
+          <span>{t.rich('projectCount', { count: team.projectCount, b: (c) => <strong style={{ color: 'var(--text-primary)' }}>{c}</strong> })}</span>
+        </div>
+      </button>
+    ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [t]);
+
+  const visibleTeams = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return q ? teams.filter((x) => `${x.name} ${x.description ?? ''}`.toLowerCase().includes(q)) : teams;
+  }, [teams, search]);
+  const teamsSource = useLocalSource(visibleTeams, teamsDescriptor, { key: 'name', dir: 'asc' }, { page: 1, pageSize: 250 });
+
   if (!tenant || !tenantToken) return null;
 
   return (
@@ -327,7 +385,6 @@ export function TeamsView() {
             )}
           </h2>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <ViewToggle value={viewMode} onChange={setViewMode} />
             <button type="button" style={btnPrimary} onClick={() => setCreateOpen(true)}>{t('new')}</button>
           </div>
         </div>
@@ -340,85 +397,8 @@ export function TeamsView() {
 
         {loading ? (
           <div style={{ color: 'var(--text-muted)', fontSize: 13, padding: '12px 0' }}>{t('loadingTeams')}</div>
-        ) : teams.length === 0 ? (
-          <div style={{ color: 'var(--text-muted)', fontSize: 13, padding: '12px 0' }}>
-            {t('empty', { action: t('new') })}
-          </div>
-        ) : viewMode === 'card' ? (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
-            {teams.map((team) => (
-              <button
-                key={team.id}
-                type="button"
-                onClick={() => openTeam(team.id)}
-                onMouseEnter={() => setHoveredId(team.id)}
-                onMouseLeave={() => setHoveredId((h) => (h === team.id ? null : h))}
-                aria-label={t('manageTeam', { name: team.name })}
-                style={{
-                  textAlign: 'left', padding: 16, display: 'flex', flexDirection: 'column', gap: 8,
-                  background: 'var(--bg-base)',
-                  border: `1px solid ${hoveredId === team.id ? 'var(--coral-bright)' : 'var(--border-subtle)'}`,
-                  borderRadius: 'var(--radius-lg)', cursor: 'pointer',
-                  boxShadow: hoveredId === team.id ? '0 4px 14px rgba(0,0,0,0.10)' : 'none',
-                  transform: hoveredId === team.id ? 'translateY(-1px)' : 'none',
-                  transition: 'border-color 120ms, box-shadow 120ms, transform 120ms',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-                    <TeamAvatar name={team.name} url={team.avatarUrl} />
-                    <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{team.name}</div>
-                  </div>
-                  <Icon name="edit" size={16} style={manageIconStyle(hoveredId === team.id)} />
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', minHeight: 32, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                  {team.description || t('noDescription')}
-                </div>
-                <div style={{ display: 'flex', gap: 14, fontSize: 12, color: 'var(--text-muted)', marginTop: 'auto' }}>
-                  <span>{t.rich('memberCount', { count: team.memberCount, b: (c) => <strong style={{ color: 'var(--text-primary)' }}>{c}</strong> })}</span>
-                  <span>{t.rich('projectCount', { count: team.projectCount, b: (c) => <strong style={{ color: 'var(--text-primary)' }}>{c}</strong> })}</span>
-                </div>
-              </button>
-            ))}
-          </div>
         ) : (
-          <div style={tableWrapStyle}>
-            <table style={tableStyle}>
-              <thead>
-                <tr style={theadRowStyle}>
-                  <th style={thStyle}>{t('colTeam')}</th>
-                  <th style={thStyle}>{t('colDescription')}</th>
-                  <th style={thStyle}>{t('colMembers')}</th>
-                  <th style={thStyle}>{t('colProjects')}</th>
-                  <th style={{ ...thStyle, width: 40 }} aria-label={t('manage')} />
-                </tr>
-              </thead>
-              <tbody>
-                {teams.map((team) => (
-                  <tr
-                    key={team.id}
-                    style={{ ...trStyle, cursor: 'pointer', background: hoveredId === team.id ? 'var(--bg-hover, rgba(127,127,127,0.06))' : undefined }}
-                    onClick={() => openTeam(team.id)}
-                    onMouseEnter={() => setHoveredId(team.id)}
-                    onMouseLeave={() => setHoveredId((h) => (h === team.id ? null : h))}
-                  >
-                    <td style={{ ...tdStyle, fontWeight: 600 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <TeamAvatar name={team.name} url={team.avatarUrl} size={24} />
-                        {team.name}
-                      </div>
-                    </td>
-                    <td style={tdMutedStyle}>{team.description || '—'}</td>
-                    <td style={tdStyle}>{team.memberCount}</td>
-                    <td style={tdStyle}>{team.projectCount}</td>
-                    <td style={{ ...tdStyle, textAlign: 'right', width: 40 }}>
-                      <Icon name="edit" size={16} style={manageIconStyle(hoveredId === team.id)} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <Collection descriptor={teamsDescriptor} source={teamsSource} search={search} onSearchChange={setSearch} />
         )}
       </section>
 

@@ -1,5 +1,5 @@
 import { Icon } from '@/components/ui/Icon';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
 import { useBrainDataRefresh } from '@/lib/brain/useBrainDataRefresh';
 import {
@@ -35,8 +35,9 @@ import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { InviteTeamMembers } from '@/components/InviteTeamMembers';
-import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
-import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
+import { Collection } from '@/components/collection/Collection';
+import { useLocalSource } from '@/components/collection/sources';
+import type { CollectionDescriptor } from '@/components/collection/descriptor';
 import { isPlanLimitError, type PlanLimitError } from '@/lib/planLimitError';
 import { CloudAgentSlideOutPanel, type CloudAgentPanelTab } from './CloudAgentSlideOutPanel';
 import { ConfiguredQuickstartPopover } from './ConfiguredQuickstartPopover';
@@ -92,7 +93,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
 
   // Card | List view mode (session-only) — same shared toggle as every other
   // collection page. Defaults to the card grid.
-  const [viewMode, setViewMode] = useState<ViewMode>('card');
+  const [dirSearch, setDirSearch] = useState('');
 
   // --- Consolidate people (relocated from the Contributors tab) ------------
   // Managers can checkbox-select human members in list view and merge their
@@ -390,14 +391,186 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
   const isEmpty = hosts.length === 0 && cloudAgents.length === 0 && visiblePurchased.length === 0
     && members.length === 0 && pendingInvites.length === 0;
 
+
+  // The ONE Collection (PRD 47): the directory is a heterogeneous in-memory list
+  // (people, pending invites, hosts, editors, cloud + hired agents) → one local
+  // source over a discriminated row. Members' bulk "consolidate" stays the
+  // dedicated panel, so the bulk bar is off here (read-only entity: null) — the
+  // per-row actions (remove / revoke / unhire / owner actions) are in the rows.
+  type DirRow =
+    | { kind: 'member'; id: string; m: TenantMember }
+    | { kind: 'invite'; id: string; inv: PendingInvitation }
+    | { kind: 'host'; id: string; host: AgentHost }
+    | { kind: 'vscode'; id: string; conn: VscodeConnection }
+    | { kind: 'cloud'; id: string; a: PublishedAgent }
+    | { kind: 'purchased'; id: string; a: PublishedAgent };
+  const dirRows: DirRow[] = [
+    ...members.map((m): DirRow => ({ kind: 'member', id: `member-${m.id}`, m })),
+    ...pendingInvites.map((inv): DirRow => ({ kind: 'invite', id: `invite-${inv.id}`, inv })),
+    ...hosts.map((host): DirRow => ({ kind: 'host', id: `host-${host.id}`, host })),
+    ...vscodeConns.map((conn): DirRow => ({ kind: 'vscode', id: `vscode-${conn.id}`, conn })),
+    ...cloudAgents.map((a): DirRow => ({ kind: 'cloud', id: `cloud-${a.id}`, a })),
+    ...visiblePurchased.map((a): DirRow => ({ kind: 'purchased', id: `purchased-${a.id}`, a })),
+  ];
+  const dirName = (r: DirRow): string =>
+    r.kind === 'member' ? (r.m.displayName ?? r.m.username ?? r.m.email)
+    : r.kind === 'invite' ? r.inv.email
+    : r.kind === 'host' ? r.host.name
+    : r.kind === 'vscode' ? r.conn.machineName
+    : r.a.name;
+  const dirOrder: Record<DirRow['kind'], number> = { member: 0, invite: 1, host: 2, vscode: 3, cloud: 4, purchased: 5 };
+  const dirStatus = (r: DirRow): string =>
+    r.kind === 'member' ? r.m.email
+    : r.kind === 'invite' ? tWf('invitedAs', { role: r.inv.role })
+    : r.kind === 'host' ? (r.host.online ? tWf('statusOnline') : tWf('statusOffline'))
+    : r.kind === 'vscode' ? (isVscodeConnectionOnline(r.conn) ? tWf('vscode.online') : tWf('vscode.offline'))
+    : r.kind === 'cloud' ? (r.a.published ? tWf('statusPublished') : tWf('statusDraft'))
+    : '—';
+  const dirCard = (r: DirRow): React.ReactNode => {
+    if (r.kind === 'member') {
+      return <MemberCard member={r.m} onRemove={setConfirmRemove} onChangeRole={handleChangeRole} removing={removingMemberId === r.m.id} changingRole={changingRoleId === r.m.id} />;
+    }
+    if (r.kind === 'invite') {
+      return <PendingInviteCard invite={r.inv} onRevoke={handleRevokeInvite} revoking={revokingInviteId === r.inv.id} />;
+    }
+    if (r.kind === 'host') {
+      const host = r.host;
+      const isDefault = defaultAgentHostId != null && host.id === defaultAgentHostId;
+      const lastSeen = host.lastSeenAt ? fmt.dateTime(host.lastSeenAt) : '—';
+      return (
+        <div
+          className="card"
+          role="button"
+          tabIndex={0}
+          onClick={() => setSelectedHost(host)}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedHost(host); } }}
+          style={{ ...cardStyle, cursor: 'pointer' }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-strong)', flex: 1 }}>{host.name}</span>
+            <AgentTypePill kind="host" />
+            {isDefault && (
+              <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-coral-soft)', color: 'var(--coral-bright)' }}>{tWf('defaultBadge')}</span>
+            )}
+            <StatusBadge variant={host.online ? 'online' : 'offline'} />
+          </div>
+          <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--muted)' }}>{host.slug ?? host.name}</div>
+          <div style={{ fontSize: 12, color: 'var(--muted)' }}>{tWf('hostLastSeen', { when: lastSeen })}</div>
+          <div style={{ marginTop: 4 }}>
+            <button type="button" onClick={(e) => { e.stopPropagation(); setSelectedHost(host); }} style={btnPrimary}>{tWf('open')}</button>
+          </div>
+        </div>
+      );
+    }
+    if (r.kind === 'vscode') {
+      const conn = r.conn;
+      const online = isVscodeConnectionOnline(conn);
+      const lastSeen = conn.lastSeenAt ? fmt.dateTime(conn.lastSeenAt) : '—';
+      return (
+        <div className="card" style={cardStyle}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-strong)', flex: 1 }}>{conn.machineName}</span>
+            <AgentTypePill kind="vscode" />
+            <StatusBadge variant={online ? 'online' : 'offline'} />
+          </div>
+          {conn.extensionVersion && (
+            <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--muted)' }}>{conn.extensionVersion}</div>
+          )}
+          <div style={{ fontSize: 12, color: 'var(--muted)' }}>{tWf('vscode.lastSeen', { when: lastSeen })}</div>
+        </div>
+      );
+    }
+    if (r.kind === 'cloud') {
+      return <AgentCard agent={r.a} manifest={agentManifests[r.a.id]} onOpenPanel={openAgentPanel} onUnpublish={unpublish} onDelete={deleteOwned} />;
+    }
+    return <AgentCard agent={r.a} manifest={agentManifests[r.a.id]} hired onUnhire={unhire} unhiring={unhiringId === r.a.id} />;
+  };
+  const dirActions = (r: DirRow): React.ReactNode => {
+    if (r.kind === 'member') {
+      return (
+        <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
+          <RoleSelect value={r.m.role} onChange={(role) => handleChangeRole(r.m, role)} busy={changingRoleId === r.m.id} compact />
+          <button type="button" style={btnSubtle} disabled={removingMemberId === r.m.id} onClick={() => setConfirmRemove(r.m)}>
+            {removingMemberId === r.m.id ? tWf('removing') : tWf('remove')}
+          </button>
+        </span>
+      );
+    }
+    if (r.kind === 'invite') {
+      return (
+        <button type="button" style={btnSubtle} disabled={revokingInviteId === r.inv.id} onClick={() => handleRevokeInvite(r.inv)}>
+          {revokingInviteId === r.inv.id ? tWf('revoking') : tWf('revoke')}
+        </button>
+      );
+    }
+    if (r.kind === 'host') {
+      return <button type="button" onClick={() => setSelectedHost(r.host)} style={btnSubtle}>{tWf('open')}</button>;
+    }
+    if (r.kind === 'vscode') return null;
+    if (r.kind === 'cloud') {
+      return <AgentOwnerActions agent={r.a} onOpenPanel={openAgentPanel} onUnpublish={unpublish} onDelete={deleteOwned} includeEditPrice={false} />;
+    }
+    return (
+      <button type="button" style={btnSubtle} disabled={unhiringId === r.a.id} onClick={() => unhire(r.a.id)}>
+        {unhiringId === r.a.id ? tWf('unhiring') : tWf('unhire')}
+      </button>
+    );
+  };
+  const dirPill = (r: DirRow): React.ReactNode =>
+    r.kind === 'member' ? <AgentTypePill kind="human" />
+    : r.kind === 'invite' ? <AgentTypePill kind="pending" />
+    : r.kind === 'host' ? <AgentTypePill kind="host" />
+    : r.kind === 'vscode' ? <AgentTypePill kind="vscode" />
+    : r.kind === 'cloud' ? <AgentTypePill kind="cloud" />
+    : <AgentTypePill kind="marketplace" />;
+  const directoryDescriptor: CollectionDescriptor<DirRow> = {
+    entity: null,
+    surfaceKey: 'workforce.directory',
+    rowId: (r) => r.id,
+    label: dirName,
+    defaultView: 'card',
+    defaultSort: { key: 'type', dir: 'asc' },
+    emptyKey: 'emptyWorkforceAgents',
+    columns: [
+      { key: 'name', header: tWf('colName'), sortKey: 'name', compare: (x, y) => dirName(x).localeCompare(dirName(y)), cell: (r) => (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          {dirName(r)}
+          {(r.kind === 'cloud' || r.kind === 'purchased') && <BuiltinKindBadge kind={r.a.builtin_kind} />}
+          {r.kind === 'host' && defaultAgentHostId != null && r.host.id === defaultAgentHostId && (
+            <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-coral-soft)', color: 'var(--coral-bright)' }}>{tWf('defaultBadge')}</span>
+          )}
+        </span>
+      ) },
+      { key: 'type', header: tWf('colType'), sortKey: 'type', compare: (x, y) => dirOrder[x.kind] - dirOrder[y.kind], cell: dirPill },
+      { key: 'status', header: tWf('colStatus'), cell: dirStatus },
+      { key: 'runtime', header: tWf('colRuntime'), cell: (r) =>
+        r.kind === 'member' ? roleText.label(r.m.role)
+        : r.kind === 'host' ? tWf('runtimeRemote')
+        : r.kind === 'vscode' ? tWf('vscode.runtime')
+        : r.kind === 'cloud' || r.kind === 'purchased' ? RUNTIME_LABELS[r.a.runtime_support ?? 'cloud']
+        : '—' },
+      { key: 'price', header: tWf('colPrice'), cell: (r) => (r.kind === 'cloud' || r.kind === 'purchased') ? formatAgentPrice(r.a) : '—' },
+      { key: 'config', header: tWf('colConfiguration'), cell: (r) =>
+        (r.kind === 'cloud' || r.kind === 'purchased') ? <AgentManifestInline agent={r.a} manifest={agentManifests[r.a.id]} />
+        : r.kind === 'vscode' ? (r.conn.extensionVersion ?? '—')
+        : '—' },
+      { key: 'actions', header: '', align: 'end', cell: dirActions },
+    ],
+    card: dirCard,
+  };
+  const visibleDirRows = (() => {
+    const q = dirSearch.trim().toLowerCase();
+    return q ? dirRows.filter((r) => dirName(r).toLowerCase().includes(q)) : dirRows;
+  })();
+  const directorySource = useLocalSource(visibleDirRows, directoryDescriptor, { key: 'type', dir: 'asc' }, { page: 1, pageSize: 250 });
+
   return (
    <WorkforceMetricsProvider>
     <section data-tour="demo-roster">
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
         <h2 style={{ fontSize: 18, fontWeight: 600, color: 'var(--text-strong)', margin: 0 }}>{tWf('workforceTitle')}</h2>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        {!loading && !isEmpty && <ViewToggle value={viewMode} onChange={setViewMode} />}
-        {canConsolidate && viewMode === 'table' && (
+        {canConsolidate && (
           <button type="button" onClick={() => setConsolidateOpen(true)} style={inviteBtn}>
             {selectedMembers.length > 0 ? tWf('consolidateActionCount', { count: selectedMembers.length }) : tWf('consolidateAction')}
           </button>
@@ -457,269 +630,13 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
             </RoleGate>
           </div>
         </div>
-      ) : viewMode === 'card' ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
-          {/* People first — human members, then pending invites */}
-          {members.map((m) => (
-            <MemberCard
-              key={`member-${m.id}`}
-              member={m}
-              onRemove={setConfirmRemove}
-              onChangeRole={handleChangeRole}
-              removing={removingMemberId === m.id}
-              changingRole={changingRoleId === m.id}
-            />
-          ))}
-          {pendingInvites.map((inv) => (
-            <PendingInviteCard
-              key={`invite-${inv.id}`}
-              invite={inv}
-              onRevoke={handleRevokeInvite}
-              revoking={revokingInviteId === inv.id}
-            />
-          ))}
-
-          {/* Remote agentHosts */}
-          {hosts.map((host) => {
-            const connected = !!host.online;
-            const isDefault = defaultAgentHostId != null && host.id === defaultAgentHostId;
-            const lastSeen = host.lastSeenAt ? fmt.dateTime(host.lastSeenAt) : '—';
-            return (
-              <div
-                key={`host-${host.id}`}
-                className="card"
-                role="button"
-                tabIndex={0}
-                onClick={() => setSelectedHost(host)}
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedHost(host); } }}
-                style={{ ...cardStyle, cursor: 'pointer' }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-strong)', flex: 1 }}>{host.name}</span>
-                  <AgentTypePill kind="host" />
-                  {isDefault && (
-                    <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-coral-soft)', color: 'var(--coral-bright)' }}>{tWf('defaultBadge')}</span>
-                  )}
-                  <StatusBadge variant={connected ? 'online' : 'offline'} />
-                </div>
-                <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--muted)' }}>{host.slug ?? host.name}</div>
-                <div style={{ fontSize: 12, color: 'var(--muted)' }}>{tWf('hostLastSeen', { when: lastSeen })}</div>
-                <div style={{ marginTop: 4 }}>
-                  <button type="button" onClick={(e) => { e.stopPropagation(); setSelectedHost(host); }} style={btnPrimary}>{tWf('open')}</button>
-                </div>
-              </div>
-            );
-          })}
-
-          {/* VS Code editor connections — read-only presence cards (no mgmt panel) */}
-          {vscodeConns.map((conn) => {
-            const online = isVscodeConnectionOnline(conn);
-            const lastSeen = conn.lastSeenAt ? fmt.dateTime(conn.lastSeenAt) : '—';
-            return (
-              <div key={`vscode-${conn.id}`} className="card" style={cardStyle}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-strong)', flex: 1 }}>{conn.machineName}</span>
-                  <AgentTypePill kind="vscode" />
-                  <StatusBadge variant={online ? 'online' : 'offline'} />
-                </div>
-                {conn.extensionVersion && (
-                  <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--muted)' }}>{conn.extensionVersion}</div>
-                )}
-                <div style={{ fontSize: 12, color: 'var(--muted)' }}>{tWf('vscode.lastSeen', { when: lastSeen })}</div>
-              </div>
-            );
-          })}
-
-          {/* Cloud agents the tenant owns — the card detects ownership from auth
-              and renders the management actions. */}
-          {cloudAgents.map((a) => (
-            <AgentCard
-              key={`cloud-${a.id}`}
-              agent={a}
-              manifest={agentManifests[a.id]}
-              onOpenPanel={openAgentPanel}
-              onUnpublish={unpublish}
-              onDelete={deleteOwned}
-            />
-          ))}
-
-          {/* Purchased (marketplace) agents — already hired, so the card offers
-              Unhire (release from this workforce). */}
-          {visiblePurchased.map((a) => (
-            <AgentCard
-              key={`purchased-${a.id}`}
-              agent={a}
-              manifest={agentManifests[a.id]}
-              hired
-              onUnhire={unhire}
-              unhiring={unhiringId === a.id}
-            />
-          ))}
-        </div>
       ) : (
-        /* List (table) view — every collection (people + agents) flattened into
-           one shared-chrome table. */
-        <div style={tableWrapStyle}>
-          <table style={tableStyle}>
-            <thead>
-              <tr style={theadRowStyle}>
-                {canConsolidate && <th style={{ ...thStyle, width: 36 }} aria-label={tWf('selectToConsolidateAria')} />}
-                <th style={thStyle}>{tWf('colName')}</th>
-                <th style={thStyle}>{tWf('colType')}</th>
-                <th style={thStyle}>{tWf('colStatus')}</th>
-                <th style={thStyle}>{tWf('colRuntime')}</th>
-                <th style={thStyle}>{tWf('colPrice')}</th>
-                <th style={thStyle}>{tWf('colConfiguration')}</th>
-                <th style={thStyle} aria-label={tWf('colActionsAria')} />
-              </tr>
-            </thead>
-            <tbody>
-              {/* People — human members */}
-              {members.map((m) => (
-                <tr key={`member-${m.id}`} style={trStyle}>
-                  {canConsolidate && (
-                    <td style={tdStyle}>
-                      <input
-                        type="checkbox"
-                        checked={selectedMemberIds.has(m.id)}
-                        onChange={() => toggleMemberSelected(m.id)}
-                        aria-label={tWf('selectMemberAria', { name: m.displayName ?? m.email })}
-                      />
-                    </td>
-                  )}
-                  <td style={tdStyle}>{m.displayName ?? m.username ?? m.email}</td>
-                  <td style={tdStyle}><AgentTypePill kind="human" /></td>
-                  <td style={tdMutedStyle}>{m.email}</td>
-                  <td style={tdMutedStyle}>{roleText.label(m.role)}</td>
-                  <td style={tdMutedStyle}>—</td>
-                  <td style={tdStyle}>
-                    <RoleSelect value={m.role} onChange={(role) => handleChangeRole(m, role)} busy={changingRoleId === m.id} compact />
-                  </td>
-                  <td style={tdStyle}>
-                    <button type="button" style={btnSubtle} disabled={removingMemberId === m.id} onClick={() => setConfirmRemove(m)}>
-                      {removingMemberId === m.id ? tWf('removing') : tWf('remove')}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-
-              {/* People — pending invites */}
-              {pendingInvites.map((inv) => (
-                <tr key={`invite-${inv.id}`} style={trStyle}>
-                  {canConsolidate && <td style={tdStyle} />}
-                  <td style={tdStyle}>{inv.email}</td>
-                  <td style={tdStyle}><AgentTypePill kind="pending" /></td>
-                  <td style={tdMutedStyle}>{tWf('invitedAs', { role: inv.role })}</td>
-                  <td style={tdMutedStyle}>—</td>
-                  <td style={tdMutedStyle}>—</td>
-                  <td style={tdMutedStyle}>—</td>
-                  <td style={tdStyle}>
-                    <button type="button" style={btnSubtle} disabled={revokingInviteId === inv.id} onClick={() => handleRevokeInvite(inv)}>
-                      {revokingInviteId === inv.id ? tWf('revoking') : tWf('revoke')}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-
-              {/* Remote agentHosts */}
-              {hosts.map((host) => {
-                const connected = !!host.online;
-                const isDefault = defaultAgentHostId != null && host.id === defaultAgentHostId;
-                return (
-                  <tr
-                    key={`host-${host.id}`}
-                    style={{ ...trStyle, cursor: 'pointer' }}
-                    onClick={() => setSelectedHost(host)}
-                  >
-                    {canConsolidate && <td style={tdStyle} />}
-                    <td style={tdStyle}>
-                      {host.name}
-                      {isDefault && (
-                        <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-coral-soft)', color: 'var(--coral-bright)' }}>{tWf('defaultBadge')}</span>
-                      )}
-                    </td>
-                    <td style={tdStyle}><AgentTypePill kind="host" /></td>
-                    <td style={tdMutedStyle}>{connected ? tWf('statusOnline') : tWf('statusOffline')}</td>
-                    <td style={tdMutedStyle}>{tWf('runtimeRemote')}</td>
-                    <td style={tdMutedStyle}>—</td>
-                    <td style={tdMutedStyle}>—</td>
-                    <td style={tdStyle} onClick={(e) => e.stopPropagation()}>
-                      <button type="button" onClick={() => setSelectedHost(host)} style={btnSubtle}>{tWf('open')}</button>
-                    </td>
-                  </tr>
-                );
-              })}
-
-              {/* VS Code editor connections */}
-              {vscodeConns.map((conn) => {
-                const online = isVscodeConnectionOnline(conn);
-                return (
-                  <tr key={`vscode-${conn.id}`} style={trStyle}>
-                    {canConsolidate && <td style={tdStyle} />}
-                    <td style={tdStyle}>{conn.machineName}</td>
-                    <td style={tdStyle}><AgentTypePill kind="vscode" /></td>
-                    <td style={tdMutedStyle}>{online ? tWf('vscode.online') : tWf('vscode.offline')}</td>
-                    <td style={tdMutedStyle}>{tWf('vscode.runtime')}</td>
-                    <td style={tdMutedStyle}>—</td>
-                    <td style={tdMutedStyle}>{conn.extensionVersion ?? '—'}</td>
-                    <td style={tdStyle} />
-                  </tr>
-                );
-              })}
-
-              {/* Cloud agents */}
-              {cloudAgents.map((a) => (
-                <tr key={`cloud-${a.id}`} style={trStyle}>
-                  {canConsolidate && <td style={tdStyle} />}
-                  <td style={tdStyle}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                      {a.name}
-                      <BuiltinKindBadge kind={a.builtin_kind} />
-                    </span>
-                  </td>
-                  <td style={tdStyle}><AgentTypePill kind="cloud" /></td>
-                  <td style={tdMutedStyle}>{a.published ? tWf('statusPublished') : tWf('statusDraft')}</td>
-                  <td style={tdMutedStyle}>{RUNTIME_LABELS[a.runtime_support ?? 'cloud']}</td>
-                  <td style={tdMutedStyle}>{formatAgentPrice(a)}</td>
-                  <td style={tdStyle}><AgentManifestInline agent={a} manifest={agentManifests[a.id]} /></td>
-                  <td style={tdStyle}>
-                    <AgentOwnerActions
-                      agent={a}
-                      onOpenPanel={openAgentPanel}
-                      onUnpublish={unpublish}
-                      onDelete={deleteOwned}
-                      includeEditPrice={false}
-                    />
-                  </td>
-                </tr>
-              ))}
-
-              {/* Purchased (marketplace) agents — not owned, so Unhire instead
-                  of the owner action set. */}
-              {visiblePurchased.map((a) => (
-                <tr key={`purchased-${a.id}`} style={trStyle}>
-                  {canConsolidate && <td style={tdStyle} />}
-                  <td style={tdStyle}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                      {a.name}
-                      <BuiltinKindBadge kind={a.builtin_kind} />
-                    </span>
-                  </td>
-                  <td style={tdStyle}><AgentTypePill kind="marketplace" /></td>
-                  <td style={tdMutedStyle}>—</td>
-                  <td style={tdMutedStyle}>{RUNTIME_LABELS[a.runtime_support ?? 'cloud']}</td>
-                  <td style={tdMutedStyle}>{formatAgentPrice(a)}</td>
-                  <td style={tdStyle}><AgentManifestInline agent={a} manifest={agentManifests[a.id]} /></td>
-                  <td style={tdStyle}>
-                    <button type="button" style={btnSubtle} disabled={unhiringId === a.id} onClick={() => unhire(a.id)}>
-                      {unhiringId === a.id ? tWf('unhiring') : tWf('unhire')}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Collection
+          descriptor={directoryDescriptor}
+          source={directorySource}
+          search={dirSearch}
+          onSearchChange={setDirSearch}
+        />
       )}
 
       {/* Fleet mesh visualization */}

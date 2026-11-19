@@ -1,4 +1,8 @@
-import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
+import { LocalCollection } from '@/components/pm/LocalCollection';
+import {
+  managerBacklogDescriptor, managerRunTasksDescriptor, managerActivityDescriptor,
+} from '@/components/manager/managerDescriptors';
 import { useManagerOverviewLive } from './useManagerOverviewLive';
 import { useTranslations, useFormatter } from 'next-intl';
 import Link from 'next/link';
@@ -379,6 +383,27 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
   const currentTypeDescription = currentType
     ? (isBuiltinType(currentType.id) ? t(`type.${currentType.id}.description`) : currentType.description)
     : '';
+
+  const backlogDescriptor = useMemo(() => managerBacklogDescriptor({
+    rank: t('backlog.rank'), key: t('backlog.key'), title: t('backlog.taskTitle'), priority: t('backlog.priority'),
+    businessValue: t('backlog.businessValue'), dueDate: t('backlog.dueDate'), assignee: t('backlog.assignee'),
+    unassigned: t('backlog.unassigned'), noRationale: t('backlog.noRationale'),
+    priorityLabel: (p) => t(`priority.${p}`),
+    owner: (i) => memberName(i.assignedUserId, i.assignedAgentRef, i.assignedAgentHostId),
+    due: (iso) => fmt.dateWith(iso, { month: 'short', day: 'numeric' }),
+  }), [t, memberName, fmt]);
+  const runTasksDescriptor = useMemo(() => managerRunTasksDescriptor({
+    key: t('backlog.key'), status: t('runTasks.statusCol'), result: t('runTasks.resultCol'), owner: t('backlog.assignee'), when: t('runTasks.whenCol'),
+    statusLabel: (s) => t(`runTasks.status.${s}`),
+    ownerName: (rt) => memberName(rt.assignedUserId, rt.assignedAgentRef, rt.assignedAgentHostId),
+    systemOwner: t('runTasks.systemOwner'),
+    whenText: (rt) => relative(rt.completedAt ?? rt.createdAt),
+  }), [t, memberName, relative]);
+  const activityDescriptor = useMemo(() => managerActivityDescriptor({
+    summary: t('activity.title'), type: t('backlog.key'), when: t('runTasks.whenCol'),
+    typeLabel: (a) => t(`action.${a.actionType}`),
+    whenText: (a) => relative(a.createdAt),
+  }), [t, relative]);
 
   const priorityChart: BarDatum[] = PRIORITIES.map((p) => ({
     key: p,
@@ -888,37 +913,11 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
       /* ── Ranked backlog ── */
       <div>
         <div style={{ ...sectionTitleStyle, marginBottom: 8 }}>{t('backlog.title')}</div>
-        {backlog.length === 0 ? (
-          <div style={{ ...panelStyle, ...mutedStyle }}>{t('backlog.empty')}</div>
-        ) : (
-          <div style={tableWrapStyle}>
-            <table style={tableStyle}>
-              <thead>
-                <tr style={theadRowStyle}>
-                  <th style={{ ...thStyle, width: 56 }}>{t('backlog.rank')}</th>
-                  <th style={thStyle}>{t('backlog.key')}</th>
-                  <th style={thStyle}>{t('backlog.taskTitle')}</th>
-                  <th style={thStyle}>{t('backlog.priority')}</th>
-                  <th style={{ ...thStyle, width: 160 }}>{t('backlog.businessValue')}</th>
-                  <th style={thStyle}>{t('backlog.dueDate')}</th>
-                  <th style={thStyle}>{t('backlog.assignee')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {backlog.map((item) => (
-                  <BacklogRow
-                    key={item.id}
-                    item={item}
-                    assignee={memberName(item.assignedUserId, item.assignedAgentRef, item.assignedAgentHostId)}
-                    unassignedLabel={t('backlog.unassigned')}
-                    priorityLabel={t(`priority.${item.priority}`)}
-                    bvTooltip={t('backlog.noRationale')}
-                  />
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <LocalCollection
+          descriptor={backlogDescriptor}
+          rows={backlog}
+          searchText={(i) => `${i.key} ${i.title}`}
+        />
       </div>
       )}
 
@@ -957,35 +956,11 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
       <div>
         <div style={{ ...sectionTitleStyle, marginBottom: 4 }}>{t('runTasks.title')}</div>
         <div style={{ ...mutedStyle, marginBottom: 8 }}>{t('runTasks.caption')}</div>
-        {runTasks.length === 0 ? (
-          <div style={{ ...panelStyle, ...mutedStyle }}>{t('runTasks.empty')}</div>
-        ) : (
-          <div style={tableWrapStyle}>
-            <table style={tableStyle}>
-              <thead>
-                <tr style={theadRowStyle}>
-                  <th style={thStyle}>{t('backlog.key')}</th>
-                  <th style={{ ...thStyle, width: 130 }}>{t('runTasks.statusCol')}</th>
-                  <th style={thStyle}>{t('runTasks.resultCol')}</th>
-                  <th style={thStyle}>{t('backlog.assignee')}</th>
-                  <th style={{ ...thStyle, width: 120 }}>{t('runTasks.whenCol')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {runTasks.map((rt) => (
-                  <RunTaskRow
-                    key={rt.id}
-                    task={rt}
-                    statusLabel={t(`runTasks.status.${runTaskStatusKey(rt.status)}`)}
-                    owner={memberName(rt.assignedUserId, rt.assignedAgentRef, rt.assignedAgentHostId)}
-                    systemOwnerLabel={t('runTasks.systemOwner')}
-                    when={relative(rt.completedAt ?? rt.createdAt)}
-                  />
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <LocalCollection
+          descriptor={runTasksDescriptor}
+          rows={runTasks}
+          searchText={(rt) => `${rt.key} ${rt.summary ?? rt.title}`}
+        />
       </div>
 
       {/* ── Activity feed ── */}
@@ -999,15 +974,11 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
             </span>
           )}
         </div>
-        {actions.length === 0 ? (
-          <div style={{ ...panelStyle, ...mutedStyle }}>{t('activity.empty')}</div>
-        ) : (
-          <div style={{ ...panelStyle, display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {actions.map((a) => (
-              <ActivityRow key={a.id} action={a} typeLabel={t(`action.${a.actionType}`)} when={relative(a.createdAt)} />
-            ))}
-          </div>
-        )}
+        <LocalCollection
+          descriptor={activityDescriptor}
+          rows={actions}
+          searchText={(a) => `${a.summary} ${a.ticketKey ?? ''} ${a.ticketTitle ?? ''}`}
+        />
       </div>
       </>
       )}
@@ -1027,112 +998,6 @@ function Notice({ title, body, muted, retryLabel, onRetry }: {
       {onRetry && retryLabel && (
         <button type="button" style={{ ...primaryBtn, marginTop: 16 }} onClick={onRetry}>{retryLabel}</button>
       )}
-    </div>
-  );
-}
-
-function BusinessValueBar({ value, rationale, noRationale }: { value: number | null; rationale: string | null; noRationale: string }) {
-  if (value == null) return <span style={{ color: 'var(--text-muted)' }}>—</span>;
-  const pct = Math.max(0, Math.min(100, value));
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }} title={rationale || noRationale}>
-      <span style={{ fontWeight: 700, fontSize: '0.82rem', minWidth: 26, color: 'var(--text-primary)' }}>{value}</span>
-      <div style={{ position: 'relative', flex: 1, height: 8, minWidth: 40, background: 'var(--border-subtle)', borderRadius: 'var(--radius-sm)' }}>
-        <div style={{ position: 'absolute', inset: 0, width: `${pct}%`, background: 'var(--accent)', borderRadius: 'var(--radius-sm)' }} />
-      </div>
-    </div>
-  );
-}
-
-function BacklogRow({ item, assignee, unassignedLabel, priorityLabel, bvTooltip }: {
-  item: ManagerBacklogItem; assignee: string; unassignedLabel: string; priorityLabel: string; bvTooltip: string;
-}) {
-  const fmt = useFormat();
-  const unassigned = item.assignedUserId == null && item.assignedAgentRef == null && item.assignedAgentHostId == null;
-  return (
-    <tr style={trStyle}>
-      <td style={{ ...tdStyle, fontWeight: 700, textAlign: 'center' }}>
-        {item.managerRank != null ? `#${item.managerRank}` : '—'}
-      </td>
-      <td style={{ ...tdMutedStyle, fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>{item.key}</td>
-      <td style={tdStyle}>{item.title}</td>
-      <td style={tdStyle}>
-        <span className={taskPriorityBadgeClass(item.priority)} style={{ fontSize: 10, padding: '2px 6px', borderRadius: 'var(--radius-sm)' }}>
-          {priorityLabel}
-        </span>
-      </td>
-      <td style={tdStyle}>
-        <BusinessValueBar value={item.businessValue} rationale={item.businessValueRationale} noRationale={bvTooltip} />
-      </td>
-      <td style={{ ...tdMutedStyle, whiteSpace: 'nowrap' }}>
-        {item.dueDate ? fmt.dateWith(item.dueDate, { month: 'short', day: 'numeric' }) : '—'}
-      </td>
-      <td style={{ ...tdMutedStyle }}>{unassigned ? unassignedLabel : assignee}</td>
-    </tr>
-  );
-}
-
-/** Map a run task's board status onto one of the four run-task status i18n keys. */
-function runTaskStatusKey(status: string): 'in_progress' | 'done' | 'blocked' | 'open' {
-  if (status === 'in_progress') return 'in_progress';
-  if (status === 'done') return 'done';
-  if (status === 'blocked') return 'blocked';
-  return 'open';
-}
-
-/** Status → theme tone for the run-task badge (light + dark safe via `lib/statusTone`). */
-const RUN_TASK_TONE: StatusToneMap<'in_progress' | 'done' | 'blocked' | 'open'> = {
-  in_progress: 'accent',
-  done: 'success',
-  blocked: 'warning',
-  open: 'neutral',
-};
-
-function RunTaskRow({ task, statusLabel, owner, systemOwnerLabel, when }: {
-  task: ManagerRunTask; statusLabel: string; owner: string; systemOwnerLabel: string; when: string;
-}) {
-  const key = runTaskStatusKey(task.status);
-  const tone = statusColor(RUN_TASK_TONE, key);
-  const unowned = task.assignedUserId == null && task.assignedAgentRef == null && task.assignedAgentHostId == null;
-  return (
-    <tr style={trStyle}>
-      <td style={{ ...tdMutedStyle, fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>{task.key}</td>
-      <td style={tdStyle}>
-        <span style={{
-          display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.75rem', fontWeight: 600,
-          color: tone, border: `1px solid ${statusColor(RUN_TASK_TONE, key, 'border')}`, borderRadius: 'var(--radius-full)', padding: '2px 9px',
-        }}>
-          <span aria-hidden style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor' }} />
-          {statusLabel}
-        </span>
-      </td>
-      <td style={tdStyle}>{task.summary || task.title}</td>
-      <td style={tdMutedStyle}>{unowned ? systemOwnerLabel : owner}</td>
-      <td style={{ ...tdMutedStyle, whiteSpace: 'nowrap' }}>{when}</td>
-    </tr>
-  );
-}
-
-function ActivityRow({ action, typeLabel, when }: { action: ManagerAction; typeLabel: string; when: string }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '8px 0', borderBottom: '1px solid var(--border-subtle)' }}>
-      <span aria-hidden style={{ flexShrink: 0 }}><Icon source={managerActionIcon(action.actionType)} size={18} /></span>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        {action.taskId != null && (
-          <Link
-            href={ticketHref(action.taskId)}
-            style={{ display: 'inline-block', marginBottom: 3, color: 'var(--accent)', fontSize: '0.78rem', fontWeight: 700, textDecoration: 'none' }}
-          >
-            {action.ticketKey ?? `#${action.taskId}`}{action.ticketTitle ? ` · ${action.ticketTitle}` : ''}
-          </Link>
-        )}
-        <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)' }}>{action.summary}</div>
-        {action.detail && <div style={{ ...mutedStyle, marginTop: 2 }}>{action.detail}</div>}
-      </div>
-      <div style={{ flexShrink: 0, textAlign: 'right' }}>
-        <div style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-secondary)' }}>{typeLabel}</div>
-        <div style={{ ...mutedStyle, fontSize: '0.72rem' }}>{when}</div>
-      </div>
     </div>
   );
 }

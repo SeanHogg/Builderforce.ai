@@ -9,7 +9,7 @@ const auth = vi.hoisted(() => ({
 }));
 const api = vi.hoisted(() => ({ getConfig: vi.fn(), setFeature: vi.fn() }));
 
-vi.mock('@/lib/AuthContext', () => ({ useAuth: () => auth }));
+vi.mock('@/lib/AuthContext', () => ({ useAuth: () => auth, useOptionalAuth: () => auth }));
 vi.mock('@/lib/rbac', () => ({
   usePermission: () => ({ allowed: auth.tenant.role === 'owner' || auth.tenant.role === 'manager', role: auth.tenant.role, required: 'manager' }),
 }));
@@ -18,7 +18,7 @@ vi.mock('@/components/settings/EmbedIntegrationSettings', () => ({ EmbedIntegrat
 vi.mock('@/components/SlideOutPanel', () => ({ SlideOutPanel: ({ children }: { children: ReactNode }) => children }));
 vi.mock('@/components/ui/Icon', () => ({ Icon: () => null }));
 const insightsSite = vi.hoisted(() => ({ siteKey: null as string | null, entitled: false as boolean | null }));
-vi.mock('./useInsightsSite', () => ({ useInsightsSite: () => insightsSite }));
+vi.mock('@/components/embedded/useInsightsSite', () => ({ useInsightsSite: () => insightsSite }));
 
 import { EmbeddedCapabilities } from './EmbeddedCapabilities';
 
