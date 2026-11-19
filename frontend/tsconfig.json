@@ -63,6 +63,7 @@
       "@builderforce/prefetch": ["../packages/prefetch/src/index.ts"],
       "@webdit/torch/autograd": ["../webdit/torch/src/autograd/index.ts"],
       "@webdit/torch/webgpu": ["../webdit/torch/src/backend/webgpu/index.ts"],
+      "@webdit/torch/pyodide": ["../webdit/torch/src/pyodide/index.ts"],
       "react": ["./node_modules/@types/react"],
       "react-dom": ["./node_modules/@types/react-dom"],
       "three": ["./node_modules/@types/three"],

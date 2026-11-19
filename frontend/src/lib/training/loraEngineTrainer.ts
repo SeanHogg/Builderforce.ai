@@ -19,7 +19,7 @@ import {
 } from '@seanhogg/builderforce-memory-engine';
 import { F, keep, optim, tensor, type Backend, type DeviceTensor } from '@webdit/torch/autograd';
 import { EvermindEngineGraph } from './evermindEngineGraph';
-import { packageBrowserLoRAArtifact } from './loraArtifact';
+import { assertPairedBase, packageBrowserLoRAArtifact } from './loraArtifact';
 import type { BrowserLoRAArtifact, EngineTrainingRequest, TrainingProgress, TrainingStep } from './protocol';
 
 export interface EngineTrainingHooks {
@@ -53,9 +53,7 @@ function buildBase(request: EngineTrainingRequest, examples: string[]): { tokeni
   const model = request.baseCheckpoint
     ? importEvermind(new Uint8Array(request.baseCheckpoint))
     : new EvermindLM({ vocabSize: tokenizer.vocabSize, ...DEFAULT_BASE, ...request.modelConfig });
-  if (model.config.vocabSize !== tokenizer.vocabSize) {
-    throw new Error(`Tokenizer vocabulary (${tokenizer.vocabSize}) does not match base model (${model.config.vocabSize}).`);
-  }
+  assertPairedBase(tokenizer, model);
   return { tokenizer, model };
 }
 

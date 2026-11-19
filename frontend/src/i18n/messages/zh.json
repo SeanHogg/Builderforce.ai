@@ -13136,6 +13136,10 @@
         "title": "无需账户，无需 GPU，无需网络——而且由你决定你的文字去向何处",
         "description": "Studio 和 Rovr 现在一打开就有可用的模型，无需账号、无需注册调用、无需 GPU。每个界面——网页、VS Code 扩展和 Rovr 侧边栏——都只问一个问题：你的文字在哪里运行？仅本地、混合，或某一个指定模型。混合模式还会在你的设备上学习哪些轮次该留在本地。"
       },
+      "train-a-lora-adapter-in-python-in-your-browser-tab": {
+        "title": "在你构建它的浏览器标签页里，用 Python 训练 LoRA 适配器",
+        "description": "你项目中的 Python 训练脚本现在可以在浏览器标签页内运行，import torch 和 import peft 通过 WebGPU 在你的 GPU 上工作。它会在完成时保存适配器，或在你停止它时保存检查点；在训练面板中加载该适配器，并将其发布为可调用的模型。专为小模型和 LoRA 适配器打造。"
+      },
       "your-full-stack-app-now-runs-in-your-browser-tab": {
         "title": "你的全栈应用现在就在你构建它的浏览器标签页里运行",
         "description": "前端、API 和 Postgres 数据库过去需要云容器才能看到它们协同工作。现在 Run 会在浏览器标签页内同时启动这三者——Node、Python 和 PHP 服务（FastAPI、Flask、Django、Laravel、Slim）连同 Postgres，无需启动或配置容器，也不消耗云端算力——Brain 读取日志、重启服务、捕获预览的方式与对待容器时相同。"
@@ -19019,7 +19023,23 @@
     "logMambaEpoch": "  📊 第 {epoch} 轮：损失={loss}",
     "logMambaComplete": "✅ Mamba 训练完成 —— 最终损失：{loss}",
     "logMambaFailed": "❌ Mamba 训练失败：{error}",
-    "corpusRefused": "该数据集不能用作训练语料。"
+    "corpusRefused": "该数据集不能用作训练语料。",
+    "pythonTrainingTitle": "来自 Python 训练服务的适配器",
+    "pythonTrainingHint": "本项目 builderforce.json 中的训练服务（python train.py）会把保存的适配器保留在此浏览器中。在这里加载它即可发布和测试。如果保存内容不含自己的基础模型，则使用在此面板中选择的热启动检查点和分词器。",
+    "pythonTrainingNone": "本项目的蓝图中还没有训练服务。",
+    "pythonTrainingServiceAria": "训练服务",
+    "pythonTrainingLoad": "加载已保存的适配器",
+    "pythonTrainingLoading": "正在加载…",
+    "pythonTrainingLoaded": "已加载 {service} 保存的适配器。",
+    "pythonTrainingFailed": "无法加载已保存的适配器。",
+    "pythonTrainingBlueprintFailed": "无法读取本项目的蓝图。",
+    "pythonTrainingIssue": {
+      "noSave": "{service} 尚未在此浏览器中保存任何内容。运行它，然后停止它或等待它完成。",
+      "noAdapter": "{service} 没有保存 adapter_model.safetensors。请用 peft 的 save_pretrained 将适配器保存到 bfwc.training.artifact_dir()。",
+      "notEmbeddingAdapter": "{service} 保存的适配器不是针对 embed_tokens 的，而浏览器模型只在该模块上加载适配器。",
+      "shapeMismatch": "{service} 保存的适配器与基础模型的嵌入层不匹配。请在同一个基础模型上训练。",
+      "noBase": "保存内容中没有基础模型。请在热启动基础中选择训练时使用的基础检查点和分词器，或将 base_model.safetensors 和 tokenizer.json 一并保存。"
+    }
   },
   "evermindBuild": {
     "title": "Evermind 构建",

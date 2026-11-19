@@ -21,6 +21,8 @@ import { evaluateDatasetUse, normalizeClassifications, normalizeUsePolicy } from
 import { downloadBlob } from '@/lib/download';
 import { hasWebGPU } from '@seanhogg/builderforce-brain-embedded';
 import { useBrowserLoRARun } from '@/components/ai-training/useBrowserLoRARun';
+import { PythonTrainingImport } from '@/components/ai-training/PythonTrainingImport';
+import { WarmStartBaseFields } from '@/components/ai-training/WarmStartBaseFields';
 import { canTrainInBrowser, type BrowserLoRAArtifact, type TrainingDataMode, type TrainingStep } from '@/lib/training/protocol';
 import { benchmarkPublishedModel, listEvermindModels, publishEvermindModel, rollbackPublishedEvermindModel, testPublishedEvermindModel, type PublishedEvermindModel, type PublishedEvermindResult } from '@/lib/studioModelsApi';
 import { MambaEngine } from '@/lib/mamba-engine';
@@ -92,9 +94,9 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted, initialDataM
   const [publishedVersions, setPublishedVersions] = useState<PublishedEvermindModel[]>([]);
   const [rollbackTarget, setRollbackTarget] = useState('');
   const [baseCheckpoint, setBaseCheckpoint] = useState<ArrayBuffer | undefined>();
-  const [baseCheckpointName, setBaseCheckpointName] = useState('');
   const [tokenizerSpec, setTokenizerSpec] = useState<HuggingFaceTokenizerSpec | undefined>();
-  const [tokenizerName, setTokenizerName] = useState('');
+  /** The chosen warm-start file names: panel state, so they survive the fields unmounting on a mode switch. */
+  const [warmStartNames, setWarmStartNames] = useState({ base: '', tokenizer: '' });
   /** Optional generation model — e.g. an OpenRouter model id; empty = gateway default pool. */
   const [genModel, setGenModel] = useState<string>('');
   const [logs, setLogs] = useState<string[]>([]);
@@ -624,27 +626,7 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted, initialDataM
                     {canUseBrowserTraining ? (webgpuAvailable ? t('hybridWebgpuLora') : t('exactBrowserLoraCpu')) : t('cloudOffload')}
                   </div>
                 )}
-                <details className="mt-2 rounded border border-gray-700 bg-gray-900 p-2">
-                  <summary className="cursor-pointer text-xs text-gray-300">{t('warmStartSummary')}</summary>
-                  <div className="mt-2 space-y-2 text-xs text-gray-400">
-                    <label className="block">{t('baseSafetensorsLabel')}
-                      <input type="file" accept=".safetensors,application/octet-stream" className="mt-1 block w-full text-xs" onChange={(event) => {
-                        const file = event.target.files?.[0];
-                        if (!file) { setBaseCheckpoint(undefined); setBaseCheckpointName(''); return; }
-                        void file.arrayBuffer().then((bytes) => { setBaseCheckpoint(bytes); setBaseCheckpointName(file.name); });
-                      }} />
-                    </label>
-                    <label className="block">{t('matchingTokenizerLabel')}
-                      <input type="file" accept=".json,application/json" className="mt-1 block w-full text-xs" onChange={(event) => {
-                        const file = event.target.files?.[0];
-                        if (!file) { setTokenizerSpec(undefined); setTokenizerName(''); return; }
-                        void file.text().then((text) => { setTokenizerSpec(JSON.parse(text) as HuggingFaceTokenizerSpec); setTokenizerName(file.name); }).catch(() => appendLog(t('logTokenizerParseFailed')));
-                      }} />
-                    </label>
-                    <div>{baseCheckpointName || t('noBaseSelected')} · {tokenizerName || t('noTokenizerSelected')}</div>
-                    {(baseCheckpoint && !tokenizerSpec) || (!baseCheckpoint && tokenizerSpec) ? <div className="text-amber-400">{t('selectBothFiles')}</div> : null}
-                  </div>
-                </details>
+                <WarmStartBaseFields hasBase={!!baseCheckpoint} hasTokenizer={!!tokenizerSpec} names={warmStartNames} onNames={setWarmStartNames} onBase={setBaseCheckpoint} onTokenizer={setTokenizerSpec} onTokenizerError={() => appendLog(t('logTokenizerParseFailed'))} />
               </div>
             )}
             {/* Capability prompt — shown for behavior + hybrid */}
@@ -861,6 +843,10 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted, initialDataM
                 </div>
               </div>
             )}
+
+            <PythonTrainingImport projectId={projectId} baseCheckpoint={baseCheckpoint} tokenizerSpec={tokenizerSpec} baseModelId={config.baseModel} onArtifact={(artifact, serviceId) => {
+              setCompletedArtifact(artifact); setPublishName(t('adapterName', { model: serviceId })); appendLog(t('pythonTrainingLoaded', { service: serviceId }));
+            }} />
 
             {completedArtifact && (
               <div className="rounded border border-emerald-800 bg-emerald-950/30 p-2 space-y-2">

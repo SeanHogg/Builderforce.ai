@@ -29,6 +29,7 @@ export const SERVICE_KINDS = {
   PHP: 'php',             // PHP server (`php -S`, Slim, Laravel …)
   DOTNET: 'dotnet',       // ASP.NET Core server (`dotnet run`)
   RUST: 'rust',           // Rust HTTP service, run as a prebuilt wasm32-wasip1 module
+  TRAINING: 'training',   // Python training script (`python train.py`): no port, checkpoints on stop, keeps its artifacts
 } as const;
 
 export type ServiceKind = typeof SERVICE_KINDS[keyof typeof SERVICE_KINDS];
@@ -59,6 +60,8 @@ export const SERVICE_KIND_DEV_PORTS: Readonly<Record<ServiceKind, number | null>
   // The detectors name these: `dotnet run --urls http://0.0.0.0:8080`; a Rust module reads `PORT` (bfwc-wasi's default 8080).
   dotnet: 8080,
   rust: 8080,
+  // A training script serves nothing: it runs to completion (or a checkpointing stop).
+  training: null,
 };
 
 /**
@@ -85,7 +88,7 @@ export interface AppService {
   kind: ServiceKind;
   /** Root directory of this service (relative to repo root). */
   rootDir: string;
-  /** Detected package manager (npm/pnpm/yarn/bun; pip for a Python service, composer for PHP, dotnet for .NET, cargo for Rust). */
+  /** Detected package manager (npm/pnpm/yarn/bun; pip for a Python or training service, composer for PHP, dotnet for .NET, cargo for Rust). */
   packageManager: 'npm' | 'pnpm' | 'yarn' | 'bun' | 'pip' | 'composer' | 'dotnet' | 'cargo';
   /** Install command (with flags for CI/frozen lockfile). */
   installCommand: string;

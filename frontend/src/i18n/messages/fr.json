@@ -13165,6 +13165,10 @@
         "title": "Sans compte, sans GPU, sans réseau — et vous choisissez où vont vos mots",
         "description": "Studio et Rovr s’ouvrent désormais avec un modèle opérationnel, sans compte, sans appel d’inscription et sans GPU. Chaque surface — le web, l’extension VS Code et le panneau latéral Rovr — pose une seule question sur l’endroit où vos mots s’exécutent : Local uniquement, Hybride ou un Modèle spécifique. Et Hybride apprend, sur votre appareil, quels tours garder en local."
       },
+      "train-a-lora-adapter-in-python-in-your-browser-tab": {
+        "title": "Entraînez un adaptateur LoRA en Python, dans l'onglet de navigateur où vous l'avez créé",
+        "description": "Un script d'entraînement Python de votre projet s'exécute désormais dans votre onglet de navigateur, avec import torch et import peft sur votre GPU via WebGPU. Il enregistre son adaptateur à la fin ou crée un checkpoint quand vous l'arrêtez ; chargez cet adaptateur dans le panneau d'entraînement et publiez-le comme un modèle que vous pouvez appeler. Conçu pour les petits modèles et les adaptateurs LoRA."
+      },
       "your-full-stack-app-now-runs-in-your-browser-tab": {
         "title": "Votre app full-stack s'exécute maintenant dans l'onglet de navigateur où vous l'avez créée",
         "description": "Un frontend, une API et une base Postgres nécessitaient un conteneur cloud avant de les voir fonctionner ensemble. Désormais Run démarre les trois dans votre onglet de navigateur — des services Node, Python et PHP (FastAPI, Flask, Django, Laravel, Slim) avec Postgres, sans conteneur à démarrer ni à provisionner et sans calcul cloud — et le Brain lit ses logs, la redémarre et capture son aperçu comme pour un conteneur."
@@ -19044,7 +19048,23 @@
     "logMambaEpoch": "  📊 Époque {epoch} : perte={loss}",
     "logMambaComplete": "✅ Entraînement Mamba terminé — perte finale : {loss}",
     "logMambaFailed": "❌ Échec de l’entraînement Mamba : {error}",
-    "corpusRefused": "Ce jeu de données ne peut pas servir de corpus d’entraînement."
+    "corpusRefused": "Ce jeu de données ne peut pas servir de corpus d’entraînement.",
+    "pythonTrainingTitle": "Adaptateur d'un service d'entraînement Python",
+    "pythonTrainingHint": "Un service d'entraînement du builderforce.json de ce projet (python train.py) conserve dans ce navigateur l'adaptateur qu'il enregistre. Chargez-le ici pour le publier et le tester. Un enregistrement sans modèle de base propre utilise le checkpoint et le tokenizer de démarrage à chaud choisis dans ce panneau.",
+    "pythonTrainingNone": "Le blueprint de ce projet n'a pas encore de service d'entraînement.",
+    "pythonTrainingServiceAria": "Service d'entraînement",
+    "pythonTrainingLoad": "Charger l'adaptateur enregistré",
+    "pythonTrainingLoading": "Chargement…",
+    "pythonTrainingLoaded": "Adaptateur enregistré par {service} chargé.",
+    "pythonTrainingFailed": "Impossible de charger l'adaptateur enregistré.",
+    "pythonTrainingBlueprintFailed": "Impossible de lire le blueprint de ce projet.",
+    "pythonTrainingIssue": {
+      "noSave": "{service} n'a encore rien enregistré dans ce navigateur. Lancez-le, puis arrêtez-le ou laissez-le terminer.",
+      "noAdapter": "{service} n'a pas enregistré adapter_model.safetensors. Enregistrez l'adaptateur avec save_pretrained de peft dans bfwc.training.artifact_dir().",
+      "notEmbeddingAdapter": "L'adaptateur enregistré par {service} ne cible pas embed_tokens, le module sur lequel les modèles du navigateur chargent les adaptateurs.",
+      "shapeMismatch": "L'adaptateur enregistré par {service} ne correspond pas à l'embedding du modèle de base. Entraînez-le sur la même base.",
+      "noBase": "L'enregistrement n'a pas de modèle de base. Choisissez comme base de démarrage à chaud le checkpoint de base et le tokenizer utilisés pour l'entraîner, ou enregistrez base_model.safetensors et tokenizer.json avec lui."
+    }
   },
   "evermindBuild": {
     "title": "Build Evermind",

@@ -3,8 +3,9 @@
  * given to the runtime (`previewRuntime.ts`), to the run target's `php` provider, and to the
  * browser acceptance check (`runTarget/browserAcceptance.ts`), so every check judges the
  * same PHP the processes run. Its own light module (a type-only import), so the acceptance
- * path reads it without pulling the runtime in. Python needs no options: Pyodide comes from
- * jsDelivr's absolute, CORS-served URL, which relay mode requires.
+ * path reads it without pulling the runtime in. Python's (the torch extension, training
+ * services) are `previewPythonOptions.ts`; Pyodide itself comes from jsDelivr's absolute,
+ * CORS-served URL, which relay mode requires.
  */
 import type { PhpHostOptions } from '@seanhogg/builderforce-webcontainers/app';
 

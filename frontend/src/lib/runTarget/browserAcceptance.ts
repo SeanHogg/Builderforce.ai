@@ -9,7 +9,9 @@
  * packages (`psycopg2`, `torch` …), a composer.json needing what php-wasm lacks
  * (`ext-pgsql`, a PHP version) — so the check takes them when the caller has them
  * (the start does); without them it judges the services alone. PHP is judged against the
- * PHP the preview runtime boots (`PREVIEW_PHP_OPTIONS`), not the package default. A shell
+ * PHP the preview runtime boots (`PREVIEW_PHP_OPTIONS`), not the package default; Python
+ * against what the runtime's Python boots with (`previewPythonOptions.ts`: `torch`/`peft`
+ * provided, training services enabled). A shell
  * line's Python / PHP commands (`pip install … && python app.py`) are judged by their own
  * runtime as well as by the shell's.
  */
@@ -31,6 +33,7 @@ import {
   type ServiceSpec,
 } from '@seanhogg/builderforce-webcontainers/app';
 import { PREVIEW_PHP_OPTIONS } from '@/lib/browserRuntime/previewPhpOptions';
+import { PREVIEW_PYTHON_PROVIDES, PREVIEW_PYTHON_TRAINING } from '@/lib/browserRuntime/previewPythonOptions';
 import { acceptanceProbe, mapBlueprint, shellRuntimeProbes } from './blueprintToApplicationSpec';
 import type { Acceptance } from './runTarget';
 
@@ -44,7 +47,8 @@ const PREVIEW_PHP_PLATFORM = expectedPlatform({ php: PREVIEW_PHP_OPTIONS });
 export const BROWSER_RUNTIMES: Readonly<Record<string, BrowserAccepts>> = {
   node: acceptsNodeService,
   pglite: acceptsPgliteService,
-  python: acceptsPythonService,
+  // What the torch extension provides is never declined; training services run where the runtime boots with training.
+  python: (service, files) => acceptsPythonService(service, files, PREVIEW_PYTHON_PROVIDES, PREVIEW_PYTHON_TRAINING),
   php: (service, files) => acceptsPhpService(service, files, PREVIEW_PHP_PLATFORM),
   dotnet: acceptsDotnetService,
   rust: acceptsRustService,

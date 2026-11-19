@@ -10,7 +10,7 @@
     "app/incidents/IncidentsPageClient.tsx": 1208,
     "app/knowledge/[id]/KnowledgeDocClient.tsx": 1099,
     "app/marketplace/MarketplacePageClient.tsx": 1162,
-    "components/AITrainingPanel.tsx": 1006,
+    "components/AITrainingPanel.tsx": 992,
     "components/ObservabilityContent.tsx": 1027,
     "components/ProviderKeysSettings.tsx": 1333,
     "components/TaskMgmtContent.tsx": 2704,

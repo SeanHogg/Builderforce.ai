@@ -13165,6 +13165,10 @@
         "title": "Sin cuenta, sin GPU, sin red: y tú eliges adónde van tus palabras",
         "description": "Studio y Rovr ahora se abren con un modelo funcionando y sin cuenta, sin llamada de registro y sin necesidad de GPU. Cada superficie —la web, la extensión de VS Code y el panel lateral de Rovr— hace una sola pregunta sobre dónde se ejecutan tus palabras: Solo local, Híbrido o un Modelo específico. Y Híbrido aprende, en tu dispositivo, qué turnos mantener en local."
       },
+      "train-a-lora-adapter-in-python-in-your-browser-tab": {
+        "title": "Entrena un adaptador LoRA en Python, en la pestaña del navegador donde lo creaste",
+        "description": "Un script de entrenamiento en Python de tu proyecto ahora se ejecuta dentro de tu pestaña del navegador, con import torch e import peft en tu GPU a través de WebGPU. Guarda su adaptador al terminar o crea un checkpoint cuando lo detienes; carga ese adaptador en el panel de entrenamiento y publícalo como un modelo al que puedes llamar. Pensado para modelos pequeños y adaptadores LoRA."
+      },
       "your-full-stack-app-now-runs-in-your-browser-tab": {
         "title": "Tu app full-stack ahora se ejecuta en la pestaña del navegador donde la creaste",
         "description": "Un frontend, una API y una base de datos Postgres necesitaban un contenedor en la nube antes de verlos funcionar juntos. Ahora Run inicia los tres dentro de tu pestaña del navegador —servicios Node, Python y PHP (FastAPI, Flask, Django, Laravel, Slim) con Postgres, sin contenedor que arrancar ni aprovisionar y sin cómputo en la nube— y el Brain lee sus logs, la reinicia y captura su vista previa igual que con un contenedor."
@@ -19044,7 +19048,23 @@
     "logMambaEpoch": "  📊 Época {epoch}: pérdida={loss}",
     "logMambaComplete": "✅ Entrenamiento Mamba completado — pérdida final: {loss}",
     "logMambaFailed": "❌ Falló el entrenamiento Mamba: {error}",
-    "corpusRefused": "Este conjunto de datos no puede usarse como corpus de entrenamiento."
+    "corpusRefused": "Este conjunto de datos no puede usarse como corpus de entrenamiento.",
+    "pythonTrainingTitle": "Adaptador de un servicio de entrenamiento en Python",
+    "pythonTrainingHint": "Un servicio de entrenamiento en el builderforce.json de este proyecto (python train.py) guarda en este navegador el adaptador que produce. Cárgalo aquí para publicarlo y probarlo. Si el guardado no incluye su propio modelo base, se usan el checkpoint y el tokenizador de arranque en caliente elegidos en este panel.",
+    "pythonTrainingNone": "El blueprint de este proyecto aún no tiene servicios de entrenamiento.",
+    "pythonTrainingServiceAria": "Servicio de entrenamiento",
+    "pythonTrainingLoad": "Cargar adaptador guardado",
+    "pythonTrainingLoading": "Cargando…",
+    "pythonTrainingLoaded": "Se cargó el adaptador guardado por {service}.",
+    "pythonTrainingFailed": "No se pudo cargar el adaptador guardado.",
+    "pythonTrainingBlueprintFailed": "No se pudo leer el blueprint de este proyecto.",
+    "pythonTrainingIssue": {
+      "noSave": "{service} todavía no ha guardado nada en este navegador. Ejecútalo y luego detenlo o deja que termine.",
+      "noAdapter": "{service} no guardó adapter_model.safetensors. Guarda el adaptador con save_pretrained de peft en bfwc.training.artifact_dir().",
+      "notEmbeddingAdapter": "El adaptador que guardó {service} no apunta a embed_tokens, el módulo en el que los modelos del navegador cargan adaptadores.",
+      "shapeMismatch": "El adaptador que guardó {service} no encaja con el embedding del modelo base. Entrénalo sobre la misma base.",
+      "noBase": "El guardado no tiene modelo base. Elige como base de arranque en caliente el checkpoint base y el tokenizador con los que se entrenó, o guarda base_model.safetensors y tokenizer.json junto a él."
+    }
   },
   "evermindBuild": {
     "title": "Compilación de Evermind",

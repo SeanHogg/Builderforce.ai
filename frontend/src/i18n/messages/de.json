@@ -13165,6 +13165,10 @@
         "title": "Kein Konto, keine GPU, kein Netz – und Sie bestimmen, wohin Ihre Worte gehen",
         "description": "Studio und Rovr starten jetzt mit einem funktionierenden Modell – ohne Konto, ohne Registrierungsaufruf und ohne GPU. Jede Oberfläche – das Web, die VS-Code-Erweiterung und der Rovr-Seitenbereich – stellt eine einzige Frage dazu, wo Ihre Worte laufen: Nur lokal, Hybrid oder ein bestimmtes Modell. Und Hybrid lernt auf Ihrem Gerät, welche Züge lokal bleiben."
       },
+      "train-a-lora-adapter-in-python-in-your-browser-tab": {
+        "title": "Trainieren Sie einen LoRA-Adapter in Python, in dem Browser-Tab, in dem Sie ihn gebaut haben",
+        "description": "Ein Python-Trainingsskript in Ihrem Projekt läuft jetzt in Ihrem Browser-Tab, mit import torch und import peft auf Ihrer GPU über WebGPU. Es speichert seinen Adapter am Ende oder legt einen Checkpoint an, wenn Sie es stoppen; laden Sie diesen Adapter im Trainingsbereich und veröffentlichen Sie ihn als Modell, das Sie aufrufen können. Gebaut für kleine Modelle und LoRA-Adapter."
+      },
       "your-full-stack-app-now-runs-in-your-browser-tab": {
         "title": "Ihre Full-Stack-App läuft jetzt in dem Browser-Tab, in dem Sie sie gebaut haben",
         "description": "Ein Frontend, eine API und eine Postgres-Datenbank brauchten früher einen Cloud-Container, bevor man sie zusammenarbeiten sah. Jetzt startet Run alle drei in Ihrem Browser-Tab — Node-, Python- und PHP-Dienste (FastAPI, Flask, Django, Laravel, Slim) mit Postgres, ohne Container, der gestartet oder bereitgestellt werden muss, und ohne Cloud-Rechenleistung — und das Brain liest ihre Logs, startet sie neu und erfasst ihre Vorschau wie bei einem Container."
@@ -19044,7 +19048,23 @@
     "logMambaEpoch": "  📊 Epoche {epoch}: Verlust={loss}",
     "logMambaComplete": "✅ Mamba-Training abgeschlossen — Endverlust: {loss}",
     "logMambaFailed": "❌ Mamba-Training fehlgeschlagen: {error}",
-    "corpusRefused": "Dieser Datensatz kann nicht als Trainingskorpus verwendet werden."
+    "corpusRefused": "Dieser Datensatz kann nicht als Trainingskorpus verwendet werden.",
+    "pythonTrainingTitle": "Adapter aus einem Python-Trainingsdienst",
+    "pythonTrainingHint": "Ein Trainingsdienst in der builderforce.json dieses Projekts (python train.py) bewahrt den gespeicherten Adapter in diesem Browser auf. Laden Sie ihn hier, um ihn zu veröffentlichen und zu testen. Eine Speicherung ohne eigenes Basismodell verwendet den in diesem Bereich gewählten Warmstart-Checkpoint und Tokenizer.",
+    "pythonTrainingNone": "Der Blueprint dieses Projekts hat noch keine Trainingsdienste.",
+    "pythonTrainingServiceAria": "Trainingsdienst",
+    "pythonTrainingLoad": "Gespeicherten Adapter laden",
+    "pythonTrainingLoading": "Wird geladen…",
+    "pythonTrainingLoaded": "Der von {service} gespeicherte Adapter wurde geladen.",
+    "pythonTrainingFailed": "Der gespeicherte Adapter konnte nicht geladen werden.",
+    "pythonTrainingBlueprintFailed": "Der Blueprint dieses Projekts konnte nicht gelesen werden.",
+    "pythonTrainingIssue": {
+      "noSave": "{service} hat in diesem Browser noch nichts gespeichert. Starten Sie ihn und stoppen Sie ihn dann oder lassen Sie ihn fertig laufen.",
+      "noAdapter": "{service} hat keine adapter_model.safetensors gespeichert. Speichern Sie den Adapter mit save_pretrained von peft in bfwc.training.artifact_dir().",
+      "notEmbeddingAdapter": "Der von {service} gespeicherte Adapter zielt nicht auf embed_tokens, das Modul, auf dem Browsermodelle Adapter laden.",
+      "shapeMismatch": "Der von {service} gespeicherte Adapter passt nicht zum Embedding des Basismodells. Trainieren Sie ihn auf derselben Basis.",
+      "noBase": "Die Speicherung enthält kein Basismodell. Wählen Sie als Warmstart-Basis den Basis-Checkpoint und Tokenizer, mit denen trainiert wurde, oder speichern Sie base_model.safetensors und tokenizer.json mit."
+    }
   },
   "evermindBuild": {
     "title": "Evermind-Build",
