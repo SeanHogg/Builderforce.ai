@@ -17,12 +17,8 @@
  * through its CLI fallbacks — on a host where Git is absent or disabled.
  */
 
-import { exec } from "node:child_process";
-import { promisify } from "node:util";
 import * as vscode from "vscode";
 import { contains } from "./gitChangeModel";
-
-const execAsync = promisify(exec);
 
 /** One changed resource as the Git extension reports it. */
 export interface GitApiChange {
@@ -115,39 +111,6 @@ export function watchGitRepositories(onChange: () => void): vscode.Disposable {
 // `git` CLI fallback
 // ---------------------------------------------------------------------------
 
-/**
- * Run a git command in `cwd` and return its trimmed stdout; undefined when git is
- * missing or the command failed. `core.quotepath=false` keeps non-ASCII paths
- * readable (no octal escapes) for every caller that parses output.
- *
- * The fallback path for hosts without the Git extension — shared so the two
- * consumers cannot disagree about timeout, quoting or failure handling.
- */
-export async function runGit(cwd: string, args: string): Promise<string | undefined> {
-  const out = (await runGitRaw(cwd, args))?.trim();
-  return out || undefined;
-}
-
-/**
- * {@link runGit}, UNTRIMMED and with empty output kept distinct from failure (`""` vs
- * `undefined`) — for callers that parse whitespace-significant output (a diff's last
- * context row is a lone space) or must tell "nothing to show" from "git refused".
- * Larger output and a longer timeout are the caller's to ask for.
- */
-export async function runGitRaw(
-  cwd: string,
-  args: string,
-  limits: { timeoutMs?: number; maxBuffer?: number } = {},
-): Promise<string | undefined> {
-  try {
-    const { stdout } = await execAsync(`git --no-optional-locks -c core.quotepath=false ${args}`, {
-      cwd,
-      timeout: limits.timeoutMs ?? 5_000,
-      windowsHide: true,
-      maxBuffer: limits.maxBuffer ?? 8 * 1024 * 1024,
-    });
-    return stdout;
-  } catch {
-    return undefined;
-  }
-}
+// The runner lives in `gitCli.ts` (no `vscode` import, so the publish gate and its tests can load it); re-exported here
+// so every existing importer keeps its one entry point.
+export { runGit, runGitRaw } from "./gitCli";

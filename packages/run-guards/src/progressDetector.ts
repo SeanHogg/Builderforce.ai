@@ -54,6 +54,7 @@ import { UNKEPT_READY_AT, UnkeptClaimTracker, type UnkeptClaimState } from "./re
 import { ReadinessAdvisory, type ReadinessAdvisoryState } from "./readinessAdvisory.js";
 import { BatchingNudge, type BatchingNudgeState, turnCallsOf } from "./batchingNudge.js";
 import { ReverifyTracker, type ReverifyState } from "./reverifyTracker.js";
+import { SuiteRepeat, type SuiteRepeatState } from "./suiteRepeat.js";
 import { READ_ONLY_STREAK_CALLS, READ_ONLY_STREAK_TURNS, ReadOnlyStreak, type ReadOnlyStreakState } from "./readOnlyStreak.js";
 
 /** Ground-progress, signal-free turns in a row that clear the trip ladder: trips far apart are
@@ -125,6 +126,7 @@ export interface ProgressDetectorState extends ReverifyState {
   batching?: BatchingNudgeState;
   /** Whether the run wrote, and a check passed after its last write ({@link VerifiedWork}). Omitted when empty. */
   work?: VerifiedWorkState;
+  suites?: SuiteRepeatState; // the repeated-full-suite advisory (`suiteRepeat.ts`); omitted when empty
 }
 
 export interface ProgressDetectorPorts extends NoProgressPorts {
@@ -186,6 +188,7 @@ export class ProgressDetector {
   private turnCalls: Array<{ tool: string; args: unknown; result: ObservedResult }>;
   /** Made a change and saw a check pass after it — turns an idle-shaped trip into `finish`. */
   private readonly work: VerifiedWork;
+  private readonly suites: SuiteRepeat; // a repeated full-suite sweep (`suiteRepeat.ts`)
 
   constructor(state: ProgressDetectorState = {}, private readonly ports: ProgressDetectorPorts = {}) {
     this.visits = new VisitTally(state.visits);
@@ -204,6 +207,7 @@ export class ProgressDetector {
     this.reverify = new ReverifyTracker(state);
     this.turnCalls = [];
     this.work = new VerifiedWork(state.work);
+    this.suites = new SuiteRepeat(state.suites);
   }
 
   private raise(signal: ProgressSignal): void {
@@ -226,6 +230,7 @@ export class ProgressDetector {
     this.readOnlyStreak.observe(readOnly);
     const ok = succeeded(result);
     const unscoped = (this.ports.isUnscopedMutation ?? ((t) => t === "run_command"))(tool, args);
+    if (tool === "run_command") this.suites.ranCommand(shellCommandOf(args));
     // Every file the call changes — one, or several in a batched `edits: [...]` call.
     const changed = changedPathsOf(args);
     const wrote = ok && (changed.length > 0 || (unscoped && this.ports.isReadOnly?.(tool, args) !== true));
@@ -329,6 +334,9 @@ export class ProgressDetector {
       this.readiness.endTurn();
       const advisoryNote = this.readiness.observe(this.unkeptTurns);
       if (advisoryNote) return { kind: "advisory", note: advisoryNote };
+      // A repeated full-suite sweep (chat #275): taken (marked shown) only here, where it is the note returned.
+      const suiteNote = this.suites.take();
+      if (suiteNote) return { kind: "advisory", note: suiteNote };
       // B4: the batching nudge, on the turn after SERIAL_SINGLE_CALLS_AT consecutive
       // single-readonly turns. Advisory only — the ladder, UNKEPT_READY_AT and every other
       // signal are untouched, and it sits inside `if (!signal)` so it never masks a trip.
@@ -427,6 +435,7 @@ export class ProgressDetector {
         const w = this.work.snapshot();
         return w.wrote ? { work: w } : {};
       })(),
+      ...this.suites.snapshotField(),
     };
   }
 

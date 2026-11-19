@@ -8,6 +8,7 @@
  * capability provider that executes them — see {@link buildLocalCapabilityProvider}.
  */
 
+import * as path from "node:path";
 import type { Capability } from "@builderforce/agent-tools";
 import { buildCoreToolRegistry, schemaForCapabilities } from "@builderforce/agent-tools";
 import { buildLocalCapabilityProvider, LOCAL_SURFACE_CAPS } from "./localCapabilities";
@@ -17,6 +18,8 @@ import { hostCostLeverOn } from "./hostCostLevers";
 import { outlineFirstReadsOn } from "./outlineFirstReads";
 import { resolveLocalSemantic } from "./localSemantic";
 import { editorResearchCapability } from "./localResearch/researchCapability";
+import { publishGateFor } from "./publishGate";
+import { SCRATCH_DIR_NOTE } from "./scratchDir";
 
 /**
  * One definition per tool: name, JSON-schema params, whether it mutates the
@@ -66,6 +69,14 @@ export function callUsesSemantic(requires: readonly Capability[], compressOutput
   return requires.some((c) => c === "repo.semantic" || c === "repo.compress" || (compressOutputs && c === "shell"));
 }
 
+/** The tools a throwaway script is written or run with. */
+const SCRATCH_NOTE_TOOLS = new Set(["run_command", "write_file"]);
+
+/** `description`, plus the scratch-directory note for the tools in {@link SCRATCH_NOTE_TOOLS}. */
+function withScratchNote(name: string, description: string): string {
+  return SCRATCH_NOTE_TOOLS.has(name) ? `${description} ${SCRATCH_DIR_NOTE}` : description;
+}
+
 /** Adapt the shared registry's tools (for the local surface) to the extension's
  *  `ToolDef` shape: same schema the cloud advertises, executed via the local provider. */
 export const TOOL_DEFS: ToolDef[] = registry
@@ -73,11 +84,16 @@ export const TOOL_DEFS: ToolDef[] = registry
   .filter((def) => !EXCLUDED_TOOLS.has(def.name))
   .map((def) => ({
     name: def.name,
-    description: schemaForCapabilities(def, LOCAL_SURFACE_CAPS).function.description,
+    // The editor's shell gives every run a scratch directory (`scratchDir.ts`); the two tools a throwaway script is
+    // written with say where it goes.
+    description: withScratchNote(def.name, schemaForCapabilities(def, LOCAL_SURFACE_CAPS).function.description),
     parameters: def.schema.function.parameters as Record<string, unknown>,
     // The shared classifier decides (catalog entry, else fail closed) — no local read-only list or capability guess.
     mutating: toolMutating(def.name),
     execute: async (args, root, run) => {
+      // What a commit may not carry (a raised ratchet baseline, a swept scratch script) is refused before the script runs.
+      const refused = def.name === "git_commit" || def.name === "git_push" ? await publishGate(def.name, args, root, run) : null;
+      if (refused) return JSON.stringify({ ok: false, action: def.name === "git_push" ? "push" : "commit", error: refused });
       const research = editorResearchCapability(root);
       const compressLargeOutputs = hostCostLeverOn("c8_token_compression");
       const semantic = callUsesSemantic(def.requires, compressLargeOutputs) ? await resolveLocalSemantic(root) : undefined;
@@ -105,6 +121,12 @@ export const TOOL_DEFS: ToolDef[] = registry
       return JSON.stringify(result.data);
     },
   }));
+
+/** The publish gate (`publishGate.ts`) for a call, run in its repository (`repo`, else the run's default checkout). */
+function publishGate(name: string, args: Record<string, unknown>, root: string, run?: ToolRunOptions): Promise<string | null> {
+  const repo = typeof args.repo === "string" && args.repo.trim() ? args.repo : run?.defaultRepo;
+  return publishGateFor(name, args, repo ? path.resolve(root, repo) : root);
+}
 
 /** Human-readable one-liner for an approval prompt / activity row. */
 export function describeTool(name: string, args: Record<string, unknown>): string {

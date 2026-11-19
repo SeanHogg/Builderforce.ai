@@ -64,6 +64,38 @@ export function runsCheck(command: string): boolean {
   return !!subs && !!sub && subs.has(sub);
 }
 
+/** Script names that run a WHOLE suite when given no further argument (`pnpm run check`, `npm test`). */
+const SUITE_SCRIPT = /^(test|tests|lint|typecheck|type-check|check)$/i;
+/** Runners that sweep everything when given no target (`vitest run`, `jest`). */
+const SUITE_RUNNERS = new Set(["vitest", "jest", "pytest", "mocha", "playwright"]);
+/** A ratchet guard script (`check-react-hooks-ratchet.mjs`): run bare, it sweeps the whole tree. */
+const RATCHET_SCRIPT = /^check-[\w.-]*ratchet[\w.-]*\.(?:m|c)?[jt]s$/i;
+
+/** The tokens up to a pipe or a redirection: `pnpm run check 2>&1 | tail -40` runs `pnpm run check`. */
+function untilPipe(tokens: readonly string[]): string[] {
+  const end = tokens.findIndex((t) => t === "|" || /^\d*>/.test(t) || t.startsWith("<"));
+  return end < 0 ? [...tokens] : tokens.slice(0, end);
+}
+
+/**
+ * The FULL-SUITE key of a shell command, or null when it is targeted (or no check at all): `pnpm run check`, `npm test`,
+ * `pnpm test`, `vitest run` with no file, a ratchet guard run bare. The key is the command up to its first pipe or
+ * redirection, so a repeat of the same sweep is recognisable whatever output filter rode it. VS Code chat #275 ran `pnpm run check`
+ * twice (3m24s, 4m58s) when four guards had failed.
+ */
+export function fullSuiteKey(command: string): string | null {
+  const [exe, ...rest] = untilPipe(executableTokensOf(command));
+  if (!exe) return null;
+  const positional = rest.filter((tok) => !tok.startsWith("-"));
+  const script = positional.length === 1 ? positional[0]!.split(/[\\/]/).pop() ?? "" : "";
+  const sweeps =
+    (SUITE_SCRIPT.test(exe) && positional.length === 0) ||
+    (SUITE_RUNNERS.has(exe) && positional.every((tok) => tok === "run")) ||
+    ((exe === "node" || exe === "tsx") && RATCHET_SCRIPT.test(script) && !rest.includes("--update"));
+  // Keyed on the whole command before any pipe, so `cd api && pnpm run check` and `cd frontend && pnpm run check` differ.
+  return sweeps ? untilPipe(tokensOf(command)).join(" ") : null;
+}
+
 /** Whether a shell command only records or reports VCS state (`git add/commit/status/diff/log/push/…`). */
 export function isVcsBookkeeping(command: string): boolean {
   const [exe, sub] = executableTokensOf(command);

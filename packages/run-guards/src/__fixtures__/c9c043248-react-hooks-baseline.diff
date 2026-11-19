@@ -1,0 +1,90 @@
+commit c9c043248d5ef36093a27a15498304602134d0ee
+Author: Sean Hogg <seanhogg@gmail.com>
+Date:   Thu Nov 19 04:49:06 2026 -0500
+
+    Record react-hooks ratchet improvement for IncidentsPageClient after ImplicatedTicketsSection split
+
+diff --git a/frontend/scripts/.react-hooks-baseline.txt b/frontend/scripts/.react-hooks-baseline.txt
+index 5be043af3..006e3b92e 100644
+--- a/frontend/scripts/.react-hooks-baseline.txt
++++ b/frontend/scripts/.react-hooks-baseline.txt
+@@ -16,9 +16,9 @@ src/app/freelancer/disputes/FreelancerDisputesClient.tsx 1
+ src/app/freelancer/profile/page.tsx 2
+ src/app/freelancer/timecard/page.tsx 1
+ src/app/freelancer/workspace/page.tsx 2
+-src/app/incidents/IncidentsPageClient.tsx 8
++src/app/incidents/IncidentsPageClient.tsx 7
+ src/app/insights/InsightsHomeClient.tsx 2
+-src/app/knowledge/KnowledgeClient.tsx 1
++src/app/knowledge/[id]/KnowledgeDocClient.tsx 1
+ src/app/login/LoginPageClient.tsx 2
+ src/app/lti/deep-link/DeepLinkPickerClient.tsx 1
+ src/app/marketplace/CreationsSection.tsx 1
+@@ -29,15 +29,16 @@ src/app/marketplace/MarketplacePageClient.tsx 7
+ src/app/marketplace/ModelsExplorer.tsx 1
+ src/app/marketplace/publish-gig/PublishGigClient.tsx 1
+ src/app/marketplace/SellerEarnings.tsx 1
+-src/app/personas/PersonasClient.tsx 1
++src/app/personas/PersonasClient.tsx 2
+ src/app/pricing/PricingPageClient.tsx 3
+ src/app/projects/rfp/[id]/RfpDetailClient.tsx 4
+-src/app/prompts/PromptsPageClient.tsx 2
++src/app/prompts/PromptsPageClient.tsx 1
+ src/app/realize/page.tsx 2
+ src/app/references/ReferencesClient.tsx 1
+ src/app/register/RegisterPageClient.tsx 1
+ src/app/skills/SkillsClient.tsx 1
+ src/app/talent/shortlist/ShortlistClient.tsx 1
++src/app/voice/verify/VoiceVerifyClient.tsx 1
+ src/app/workforce/hire/page.tsx 1
+ src/components/account/EmailPreferencesCard.tsx 1
+ src/components/admin/adminShared.tsx 2
+@@ -100,6 +101,7 @@ src/components/board/TeamMemberAvatarFilter.tsx 1
+ src/components/board/useBoardConfig.ts 1
+ src/components/brain/FloatingBrain.tsx 1
+ src/components/brain/GuestRoomMeeting.tsx 1
++src/components/brain/useGuestBrainSession.ts 1
+ src/components/builder/BuilderProjectsContent.tsx 1
+ src/components/builder/database/useSiteTables.ts 2
+ src/components/builder/EvermindLearnings.tsx 1
+@@ -175,6 +177,8 @@ src/components/FinetuneStudioPanel.tsx 1
+ src/components/freelance/JobAlertsPanel.tsx 1
+ src/components/freelance/MilestoneSchedulePanel.tsx 1
+ src/components/freelance/ProfileResumePanel.tsx 1
++src/components/governance/DsrExecutePanel.tsx 1
++src/components/governance/RunScanPanel.tsx 3
+ src/components/governance/Soc2Content.tsx 1
+ src/components/governance/TrackerSurface.tsx 1
+ src/components/governance/VulnerabilityFindingsPanel.tsx 1
+@@ -237,6 +241,7 @@ src/components/onboarding/SectionTour.tsx 1
+ src/components/onboarding/useSectionTour.ts 2
+ src/components/panelWidthControl.tsx 1
+ src/components/payouts/PayoutConnections.tsx 2
++src/components/people/PersonProfileClient.tsx 1
+ src/components/PersonaAssignmentsContent.tsx 1
+ src/components/PersonalityUsagePanel.tsx 1
+ src/components/phone/TopUpPanel.tsx 1
+@@ -246,7 +251,6 @@ src/components/pm/PmoStructure.tsx 6
+ src/components/pm/PmVisualizersContent.tsx 2
+ src/components/pm/RoadmapTimeline.tsx 1
+ src/components/PRDsContent.tsx 2
+-src/components/preview/useLivePreview.ts 1
+ src/components/privacy/CookieConsentManager.tsx 1
+ src/components/profile/ProfileIdentityCard.tsx 1
+ src/components/project-details/useProjectEditForm.ts 1
+@@ -355,6 +359,7 @@ src/lib/betaPrograms.ts 1
+ src/lib/canvas/ActiveCanvasContext.tsx 1
+ src/lib/canvas/useRoomSpot.ts 1
+ src/lib/canvasCapabilitiesApi.ts 1
++src/lib/knowledge/useProjectKnowledgePacks.ts 1
+ src/lib/live/LiveSessionContext.tsx 3
+ src/lib/marketplace/useInstalledCapabilityApps.ts 1
+ src/lib/NavigationFeaturesContext.tsx 2
+@@ -372,6 +377,7 @@ src/lib/useFounderJourney.ts 1
+ src/lib/useGithubActionsReadiness.ts 1
+ src/lib/useGuestRoom.ts 1
+ src/lib/useImportKinds.ts 1
++src/lib/useKanbanTemplateCheckout.ts 1
+ src/lib/useLensPersona.ts 1
+ src/lib/useMarketingVisitor.ts 1
+ src/lib/useMediaRoom.ts 3

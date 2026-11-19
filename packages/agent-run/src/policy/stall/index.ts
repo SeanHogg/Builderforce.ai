@@ -57,6 +57,7 @@ import {
   type StallShape,
 } from "@builderforce/agent-stall";
 import { liftProseAskUser, trimRepetitionLoop } from "@builderforce/agent-loop";
+import { ANNOUNCED_DELIVERABLE_STEER, announcesDeliverable } from "@builderforce/run-guards";
 import type { StallState } from "../../contract.js";
 import type { DeliveryLedger } from "../../surface.js";
 import { walkLadder, walkLadderAsync } from "./ladder.js";
@@ -139,7 +140,7 @@ export const stallHook = {
       const owed = walkLadder(ctx, delivery);
       if (owed || delivery.owns?.narration) return owed;
     }
-    return narrationRecover(ctx);
+    return narrationRecover(ctx) ?? deliverableRecover(ctx);
   },
 
   /** {@link recover} for a ledger whose rungs need a promise to say which hold; the kernel calls this one. */
@@ -151,7 +152,7 @@ export const stallHook = {
       const owed = await walkLadderAsync(ctx, delivery);
       if (owed || delivery.owns?.narration) return owed;
     }
-    return narrationRecover(ctx);
+    return narrationRecover(ctx) ?? deliverableRecover(ctx);
   },
 
   /**
@@ -188,6 +189,24 @@ export const stallHook = {
       : FORCED_SYNTHESIS_PROMPT;
   },
 } satisfies StallHook;
+
+/** The one-time marker (`StallState.said`) that the run already spent its announced-deliverable turn. */
+export const ANNOUNCED_DELIVERABLE_ID = "announced_deliverable";
+
+/**
+ * The ANNOUNCED DELIVERABLE at settle: a reply the narration judgement accepted as the answer, whose sign-off announces a
+ * deliverable it never produced ("I have enough to write the ≤800-word alignment report." — VS Code chat #273, which
+ * settled on that sentence). The run gets ONE more turn, with a steer to produce it in that reply; never a second
+ * (`StallState.said` remembers it across a stepped run), so it cannot loop. Detection is `announcesDeliverable`
+ * (`@builderforce/run-guards`, beside the readiness claim it extends).
+ */
+function deliverableRecover(ctx: PolicyContext): StallDecision | undefined {
+  const text = ctx.judged ?? (typeof ctx.content === "string" ? ctx.content : "");
+  const said = ctx.state.stall?.said ?? [];
+  if (said.includes(ANNOUNCED_DELIVERABLE_ID) || !announcesDeliverable(text)) return undefined;
+  ctx.state.stall = { ...(ctx.state.stall ?? { recoveriesUsed: 0 }), said: [...said, ANNOUNCED_DELIVERABLE_ID] };
+  return { action: "steer", note: ANNOUNCED_DELIVERABLE_STEER, detail: { model: ctx.state.model.model ?? null, shape: "announced-deliverable" } };
+}
 
 /** Whether the surface's stall style judges the model's narration before the delivery rungs (and the ledger leaves narration to the agent). */
 function narratesFirst(delivery: DeliveryLedger): boolean {

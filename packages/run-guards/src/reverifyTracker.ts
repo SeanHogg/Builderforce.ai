@@ -5,6 +5,8 @@
  * half-applied, chat #70776); only a later look at the same unchanged bytes is
  * re-verification.
  *
+ * Its suite-scale twin — a repeated full-suite command — is `suiteRepeat.ts`, which shares the bounded sets below.
+ *
  * Pure; the state is plain JSON and bounded, so the cloud durable loop carries it.
  */
 
@@ -19,8 +21,8 @@ export interface ReverifyState {
   readBackSinceWrite?: string[];
 }
 
-/** Add `path` as the most recent member, dropping the oldest past {@link MAX_REVERIFY_PATHS}. */
-function addBounded(set: Set<string>, path: string): void {
+/** Add `path` as the most recent member, dropping the oldest past {@link MAX_REVERIFY_PATHS}. Shared with `suiteRepeat.ts`. */
+export function addBounded(set: Set<string>, path: string): void {
   set.delete(path);
   set.add(path);
   while (set.size > MAX_REVERIFY_PATHS) {
@@ -30,8 +32,8 @@ function addBounded(set: Set<string>, path: string): void {
   }
 }
 
-/** A restored path list, trimmed to the newest {@link MAX_REVERIFY_PATHS}. */
-function restoreBounded(paths: readonly string[] | undefined): Set<string> {
+/** A restored path list, trimmed to the newest {@link MAX_REVERIFY_PATHS}. Shared with `suiteRepeat.ts`. */
+export function restoreBounded(paths: readonly string[] | undefined): Set<string> {
   return new Set((paths ?? []).slice(-MAX_REVERIFY_PATHS));
 }
 

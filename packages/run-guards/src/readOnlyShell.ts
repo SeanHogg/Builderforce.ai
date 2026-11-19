@@ -45,8 +45,8 @@ const READ_ONLY_GIT = new Set([
   'whatchanged', 'cherry', 'show-ref', 'show-branch', 'range-diff', 'var', 'check-ignore', 'check-attr',
 ]);
 
-/** The `$( … )` bodies inside a segment, so they are checked like any other command. */
-function substitutions(segment: string): string[] {
+/** The `$( … )` bodies inside a segment, so they are checked like any other command. Shared with `mutatingShell.ts`. */
+export function substitutions(segment: string): string[] {
   const out: string[] = [];
   let i = segment.indexOf('$(');
   while (i >= 0) {
@@ -62,8 +62,8 @@ function substitutions(segment: string): string[] {
   return out;
 }
 
-/** A redirect that WRITES somewhere other than a null device or another descriptor. */
-function writesViaRedirect(segment: string): boolean {
+/** A redirect that WRITES somewhere other than a null device or another descriptor. Shared with `mutatingShell.ts`. */
+export function writesViaRedirect(segment: string): boolean {
   const unquoted = segment.replace(/"[^"]*"|'[^']*'/g, '""');
   const re = /(\d*)>>?\s*(&\d+|\S+)?/g;
   let m = re.exec(unquoted);

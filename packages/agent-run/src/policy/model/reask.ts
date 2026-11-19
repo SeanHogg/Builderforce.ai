@@ -15,6 +15,7 @@
  */
 
 import { coderHandoffBrief, nextTurn, reduceRunPolicy } from "@builderforce/run-policy";
+import { isMutatingShellCall } from "@builderforce/run-guards";
 import type { ModelCompletion, RunMessage, RunPolicy, RunState } from "../../contract.js";
 import type { TurnAsk } from "./handoff.js";
 
@@ -26,10 +27,29 @@ export interface CoderReask {
   brief: RunMessage;
 }
 
+/** A call's arguments as the readers want them: the transport carries them as a JSON string. */
+function parsedArgs(raw: string): unknown {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Whether one call may change code: a named code-change tool, or a `run_command` that may write (`isMutatingShellCall`:
+ * not provably read-only and not a check runner — an inline `node -e` that splits a file, a `sed -i`, a ratchet
+ * `--update`). VS Code chat #275: the planner ran a mutating `run_command` and nothing re-asked it, because only
+ * `edit_file`/`write_file` counted. The shell tool stays out of `codeChangeTools` itself (it mostly runs builds and tests).
+ */
+function changesCode(tools: readonly string[], call: { name: string; arguments: string }): boolean {
+  return tools.includes(call.name) || isMutatingShellCall(call.name, parsedArgs(call.arguments));
+}
+
 /** Whether a turn that just answered called a tool that changes code. */
 function changedCode(policy: Pick<RunPolicy, "codeChangeTools">, completion: ModelCompletion): boolean {
   const tools = policy.codeChangeTools;
-  return !!tools && tools.length > 0 && (completion.toolCalls ?? []).some((call) => tools.includes(call.name));
+  return !!tools && tools.length > 0 && (completion.toolCalls ?? []).some((call) => changesCode(tools, call));
 }
 
 /**

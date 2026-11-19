@@ -72,6 +72,53 @@ export function claimsReady(text: string): boolean {
   return ownWords(text).toLowerCase().split(/(?<=[.!?])\s+|\n+/).some(sentenceClaims);
 }
 
+/** A forward promise to PRODUCE the deliverable: "Next I'll write the report", "Let me now draft the summary". */
+const DELIVERABLE_PROMISE =
+  /\b(?:next,?\s+|now,?\s+|then,?\s+)?(?:i'll|i\s+will|i\s+am\s+going\s+to|i'm\s+going\s+to|i\s+am\s+about\s+to|i'm\s+about\s+to|let\s+me|let's)\s+(?:now\s+|next\s+|then\s+|go\s+ahead\s+and\s+)?(?:write|draft|produce|compose|prepare|put\s+together|assemble|deliver|create|implement|build)\b/;
+
+/** A sentence that OFFERS rather than promises — the person decides ("if you'd like, I'll write the tests"). */
+const OFFER = /\b(?:if\s+you|would\s+you\s+like|do\s+you\s+want|want\s+me\s+to|shall\s+i|should\s+i)\b/;
+
+/** A reply longer than this many sentences, or {@link ANNOUNCEMENT_MAX_CHARS} of prose, IS an answer — its closing
+ *  "Next, I'll implement the remaining endpoints." is a next step, not an unmade deliverable. */
+const ANNOUNCEMENT_MAX_SENTENCES = 2;
+const ANNOUNCEMENT_MAX_CHARS = 400;
+
+/** A markdown list item ("- I'll create the migration in a follow-up PR"): a plan, not a sign-off. */
+const LIST_ITEM = /^\s*(?:[-*+•]|\d+[.)])\s+/;
+
+/** Work deferred on purpose ("in a follow-up PR", "later", "in a separate ticket"). */
+const DEFERRED = /\b(?:follow[- ]?up|later|afterwards|in\s+(?:a|the)\s+(?:separate|next|future|another|subsequent)\s+(?:pr|pull\s+request|ticket|issue|change|commit|task|step)|next\s+(?:pr|pull\s+request|ticket|sprint|iteration)|future\s+(?:pr|work|change))\b/;
+
+/**
+ * Does the CLOSING of a final, tool-free reply announce a deliverable it has not produced? A readiness claim
+ * ({@link claimsReady}: "I have enough to write the ≤800-word alignment report.") or a forward promise ("Next I'll write
+ * the report", "Let me now write it") as the reply's sign-off. VS Code chat #273 settled on exactly that sentence:
+ * the {@link UnkeptClaimTracker} only counts claims followed by READS, so a claim followed by the end of the turn was
+ * never caught. Only a reply that is MOSTLY the announcement counts (≤ {@link ANNOUNCEMENT_MAX_SENTENCES} sentences,
+ * ≤ {@link ANNOUNCEMENT_MAX_CHARS} chars of prose): a finished report that closes on a next step is an answer. List
+ * items, deferred work ("in a follow-up PR"), an offer ("if you'd like, I'll…") and a question are not promises.
+ */
+export function announcesDeliverable(text: string): boolean {
+  if (!text || !text.trim()) return false;
+  const prose = ownWords(text).toLowerCase().split(/\n+/).filter((line) => !LIST_ITEM.test(line)).join("\n").trim();
+  if (!prose || prose.length > ANNOUNCEMENT_MAX_CHARS) return false;
+  const sentences = prose.split(/(?<=[.!?])\s+|\n+/).map((s) => s.trim()).filter(Boolean);
+  if (sentences.length > ANNOUNCEMENT_MAX_SENTENCES) return false;
+  return sentences.some((sentence) => {
+    if (sentence.endsWith("?") || OFFER.test(sentence) || DEFERRED.test(sentence)) return false;
+    if (sentenceClaims(sentence)) return true;
+    const m = DELIVERABLE_PROMISE.exec(sentence);
+    return !!m && !NEGATION.test(sentence.slice(0, m.index + m[0].length));
+  });
+}
+
+/** The ONE extra turn's steer for a run whose closing reply announced a deliverable it never produced. */
+export const ANNOUNCED_DELIVERABLE_STEER =
+  "Your last reply announced the deliverable (\"I have enough to write…\", \"Next I'll write…\") and then ended the turn without producing it. " +
+  "Produce it NOW, in this reply: write the report or answer itself in full, or make the tool call that creates it. " +
+  "Do not announce it again and do not describe what you are about to do.";
+
 export interface UnkeptClaimState {
   unkept: number;
 }

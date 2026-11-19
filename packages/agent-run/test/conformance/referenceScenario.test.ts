@@ -90,7 +90,7 @@ function reactiveModel(readsPerTurn: 1 | 2): (request: ModelRequest) => ModelCom
     }
     if (recent.includes("STOP READING AND DELEGATE")) {
       spawnedAt = turn;
-      return { content: "", toolCalls: [call(`s${turn}`, "spawn_agents", { workstreams: [{ label: "WS2", task: "Review section 2 and report." }, { label: "WS4", task: "Review section 4 and report." }] })] };
+      return { content: "", toolCalls: [call(`s${turn}`, "spawn_agents", { workstreams: [{ label: "WS2", task: "Review section 2 and report.", role: "review" }, { label: "WS4", task: "Review section 4 and report.", role: "review" }] })] };
     }
     // Turn 2 asks for lines the model has seen (1-120, 121-240) AND lines it has not (241-300); turn 3 re-reads lines it HAS seen.
     const ahead = { path: PRD_PATH, offset: next, limit: WINDOW };

@@ -20,6 +20,7 @@ import { spawnCommand, stopCommand } from "./processTree";
 import { killJob, pollJob, startJob, type JobOwner } from "./localShellJobs";
 import { readOutput, retainOutput } from "./localShellOutputs";
 import { cachedResult, invalidateRunCache, rememberResult, shellCacheEffect, workspaceFingerprint } from "./localShellCache";
+import { withScratchEnv } from "./scratchDir";
 
 // Bound a command's wall-clock + the output handed back to the model. Matches the cloud
 // Container's COMMAND_TIMEOUT_MS (api/container/server.mjs) — a build/type-check/test
@@ -122,7 +123,8 @@ export function createLocalShell(root: string, opts: { jobOwner?: JobOwner } = {
     // `spawnCommand` puts it in its own process group, so Stop can kill the group.
     let child: ChildProcess;
     try {
-      child = spawnCommand(withPipefail(command, bash, process.platform), bash, { cwd: dir, ...(options.env ? { env: { ...process.env, ...options.env } } : {}) });
+      // Every command sees the run's scratch directory (`$BF_SCRATCH_DIR`, `scratchDir.ts`): throwaway scripts go there, not the repo.
+      child = spawnCommand(withPipefail(command, bash, process.platform), bash, { cwd: dir, env: { ...process.env, ...withScratchEnv(owner, options.env) } });
     } catch (e) {
       return { ok: false, exitCode: 1, stdout: e instanceof Error ? e.message : String(e) };
     }
@@ -198,7 +200,7 @@ export function createLocalShell(root: string, opts: { jobOwner?: JobOwner } = {
         bash: route.bash,
         maxOutput: RUN_MAX_OUTPUT,
         ...(owner !== undefined ? { owner } : {}),
-        ...(options.env ? { env: options.env } : {}),
+        env: withScratchEnv(owner, options.env),
         ...(options.signal ? { signal: options.signal } : {}),
       });
     },

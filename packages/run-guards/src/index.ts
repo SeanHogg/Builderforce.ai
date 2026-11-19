@@ -11,7 +11,9 @@
 export { callFingerprint, contentHash, pathArgOf } from "./fingerprint.js";
 export { callChangesOf, changedPathsOf, type CallChange } from "./callChanges.js";
 export { VerifiedWork, type VerifiedWorkState } from "./verifiedWork.js";
-export { executableTokensOf, isVcsBookkeeping, runsCheck, shellCommandOf } from "./checkCommand.js";
+export { executableTokensOf, fullSuiteKey, isVcsBookkeeping, runsCheck, shellCommandOf } from "./checkCommand.js";
+export { targetedReverifyNote, type SuiteRepeatState } from "./suiteRepeat.js";
+export { BASELINE_DIFF_CONTEXT, BASELINE_RAISE_TRAILER, baselineRaiseRefusal, baselineRaises, isBaselineFile, ownsBaselineRaise, type BaselineRaise } from "./baselineRaise.js";
 export {
   REVISIT_HARD_AT,
   REVISIT_NUDGE_AT,
@@ -31,6 +33,7 @@ export {
 export { perFileResults, singleReadsOf } from "./multiRead.js";
 export { parseShellFileRead, shellReadAsFileRead, type ShellFileRead, type ShellReadAsFileRead } from "./shellFileRead.js";
 export { isReadOnlyShellCall, isReadOnlyShellCommand } from "./readOnlyShell.js";
+export { isMutatingShellCall, isMutatingShellCommand } from "./mutatingShell.js";
 export { recordShellFileRead, shellPrintAsRead } from "./shellPrint.js";
 export {
   FAILURE_HARD_AT,
@@ -72,7 +75,7 @@ export {
 // One trace row for every detector action — trips and the never-a-trip advisories.
 export { progressTraceStep, type ProgressAdvisorySource, type ProgressTraceStep, type ProgressTripOverride } from "./progressTrace.js";
 // "Now I have everything I need", then another read (PRD 35 WS8p).
-export { UNKEPT_READY_AT, UnkeptClaimTracker, claimsReady, type UnkeptClaimState } from "./readinessClaim.js";
+export { ANNOUNCED_DELIVERABLE_STEER, UNKEPT_READY_AT, UnkeptClaimTracker, announcesDeliverable, claimsReady, type UnkeptClaimState } from "./readinessClaim.js";
 // Turn after turn of reads (new files or not) and no change: `read_only_streak`.
 export { READ_ONLY_STREAK_TURNS, READ_ONLY_STREAK_CALLS, ReadOnlyStreak, type ReadOnlyStreakState } from "./readOnlyStreak.js";
 // B4: the one-off batching nudge after SERIAL_SINGLE_CALLS_AT single-readonly turns
