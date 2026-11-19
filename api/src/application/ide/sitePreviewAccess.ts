@@ -15,11 +15,12 @@
  * deleting one key.
  */
 import type { Env } from '../../env';
-import { readCookie } from '../../domain/replay/abSplit';
+import { hostCookieUpgrade, hostSetCookie, readHostCookieEntry, type HostCookieRead } from '../../domain/shared/hostCookie';
 import type { SiteRecord } from './siteHosting';
 import { randomHex } from '../../domain/shared/bytes';
 
 export const SITE_PREVIEW_PARAM = 'bf_preview';
+/** Base cookie name; written only as `__Host-bf_preview` (`hostCookie.ts`). */
 export const SITE_PREVIEW_COOKIE = 'bf_preview';
 export const SITE_PREVIEW_TTL_SECONDS = 30 * 60;
 
@@ -42,7 +43,12 @@ export interface SitePreviewDecision {
   /** Arrived on the query string: set the cookie so the page's assets follow. */
   fromQuery: boolean;
   maxAgeSeconds: number;
+  /** Upgrade-on-read `Set-Cookie`s for a granted token still under the legacy cookie name. */
+  upgradeCookies: string[];
 }
+
+/** The preview cookie's own attributes, beside the prefix's `Path=/; Secure` and a `Max-Age`. */
+const SITE_PREVIEW_COOKIE_ATTRIBUTES = 'HttpOnly; SameSite=Lax';
 
 function newToken(): string {
   return randomHex(16);
@@ -64,11 +70,11 @@ export async function grantSitePreview(
 }
 
 /** The preview token a request carries (query first, then cookie), or null. */
-export function previewTokenOf(request: Request): { token: string; fromQuery: boolean } | null {
+export function previewTokenOf(request: Request): { token: string; fromQuery: boolean; cookie: HostCookieRead | null } | null {
   const query = new URL(request.url).searchParams.get(SITE_PREVIEW_PARAM);
-  if (query && TOKEN.test(query)) return { token: query, fromQuery: true };
-  const cookie = readCookie(request.headers.get('cookie'), SITE_PREVIEW_COOKIE);
-  return cookie && TOKEN.test(cookie) ? { token: cookie, fromQuery: false } : null;
+  if (query && TOKEN.test(query)) return { token: query, fromQuery: true, cookie: null };
+  const cookie = readHostCookieEntry(request.headers.get('cookie'), SITE_PREVIEW_COOKIE);
+  return cookie && TOKEN.test(cookie.value) ? { token: cookie.value, fromQuery: false, cookie } : null;
 }
 
 /**
@@ -93,6 +99,8 @@ export async function resolveSitePreview(env: Env, site: SiteRecord, request: Re
       served: { ...site, r2Prefix: grant.r2Prefix, versionToken: grant.versionToken },
       fromQuery: carried.fromQuery,
       maxAgeSeconds,
+      // The grant above validated the token; a legacy-named cookie is re-issued as `__Host-`.
+      upgradeCookies: hostCookieUpgrade(carried.cookie, SITE_PREVIEW_COOKIE, SITE_PREVIEW_COOKIE_ATTRIBUTES, maxAgeSeconds),
     };
   } catch {
     return null;
@@ -106,7 +114,8 @@ export function withPreviewHeaders(response: Response, decision: SitePreviewDeci
   headers.set('X-Robots-Tag', 'noindex, nofollow');
   headers.append('Vary', 'Cookie');
   if (decision.fromQuery) {
-    headers.append('Set-Cookie', `${SITE_PREVIEW_COOKIE}=${decision.token}; Path=/; Max-Age=${decision.maxAgeSeconds}; HttpOnly; Secure; SameSite=Lax`);
+    headers.append('Set-Cookie', hostSetCookie(SITE_PREVIEW_COOKIE, decision.token, `${SITE_PREVIEW_COOKIE_ATTRIBUTES}; Max-Age=${decision.maxAgeSeconds}`));
   }
+  for (const cookie of decision.upgradeCookies) headers.append('Set-Cookie', cookie);
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }

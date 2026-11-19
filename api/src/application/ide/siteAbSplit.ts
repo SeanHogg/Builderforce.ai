@@ -4,7 +4,7 @@
  * When an `ab_tests` row whose arms name an Insights site (variant payload
  * `{ siteId, versionToken?, r2Prefix? }` — a prescription's `rx-<id>` test) is
  * RUNNING, a hosted app's visitors are split between the live release and the
- * preview release: the first page view assigns a sticky `bf_ab_<testId>` cookie by the
+ * preview release: the first page view assigns a sticky `__Host-bf_ab_<testId>` cookie by the
  * variants' allocation and counts ONE exposure through THE A/B engine
  * (`marketing/experimentation.recordExposure`); every later request (the page's
  * own assets included) is served from the same arm. The injected Insights loader
@@ -25,10 +25,11 @@ import { abTests, abTestVariants } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import {
-  abCookieName,
+  AB_COOKIE_BASE_PREFIX,
+  abCookieUpgrade,
   abSetCookie,
   assignVariant,
-  readCookie,
+  readAbCookie,
   variantLabel,
   type SplitVariant,
 } from '../../domain/replay/abSplit';
@@ -125,6 +126,8 @@ export interface SiteSplitDecision {
   label: string;
   /** The site with the arm's release in place of the live pointer. */
   served: SiteRecord;
+  /** Upgrade-on-read `Set-Cookie`s for a sticky arm still under the legacy cookie name. */
+  upgradeCookies: string[];
 }
 
 /** Uniform in [0, 100). */
@@ -144,13 +147,14 @@ export async function resolveSiteSplit(
   opts: { mayAssign: boolean; roll?: () => number },
 ): Promise<SiteSplitDecision | null> {
   // The hot path: an asset request from a visitor in no test costs no lookup at all.
-  if (!opts.mayAssign && !(request.headers.get('cookie') ?? '').includes('bf_ab_')) return null;
+  if (!opts.mayAssign && !(request.headers.get('cookie') ?? '').includes(AB_COOKIE_BASE_PREFIX)) return null;
   try {
     const replaySiteId = await enabledHostedReplaySiteId(env, site.tenantId, site.projectId);
     if (!replaySiteId) return null;
     const split = await runningSplitForSite(env, site.tenantId, replaySiteId);
     if (!split) return null;
-    const cookie = readCookie(request.headers.get('cookie'), abCookieName(split.testId));
+    const carried = readAbCookie(request.headers.get('cookie'), split.testId);
+    const cookie = carried?.value ?? null;
     if (!cookie && !opts.mayAssign) return null;
     const pick = assignVariant(split.variants, cookie, (opts.roll ?? roll)());
     if (!pick) return null;
@@ -158,7 +162,11 @@ export async function resolveSiteSplit(
     const served = variant.r2Prefix && variant.versionToken
       ? { ...site, r2Prefix: variant.r2Prefix, versionToken: variant.versionToken }
       : site;
-    return { testId: split.testId, variant, assigned: pick.assigned, label: variantLabel(split.testId, variant.key), served };
+    return {
+      testId: split.testId, variant, assigned: pick.assigned, label: variantLabel(split.testId, variant.key), served,
+      // Only a sticky hit (the cookie named one of this test's arms) is upgraded.
+      upgradeCookies: pick.assigned ? [] : abCookieUpgrade(split.testId, carried),
+    };
   } catch (error) {
     reportCaughtError(error, { source: SOURCE, operation: 'resolveSiteSplit' });
     return null;
@@ -172,6 +180,7 @@ export async function resolveSiteSplit(
 export function withSplitCookie(response: Response, decision: SiteSplitDecision): Response {
   const headers = new Headers(response.headers);
   if (decision.assigned) headers.append('Set-Cookie', abSetCookie(decision.testId, decision.variant.key));
+  for (const cookie of decision.upgradeCookies) headers.append('Set-Cookie', cookie);
   headers.set('Cache-Control', 'private, max-age=0, must-revalidate');
   headers.append('Vary', 'Cookie');
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });

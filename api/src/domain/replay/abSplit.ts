@@ -8,6 +8,7 @@
  * on the injected loader tag so the recording — and the conversion ingest records
  * against the variant — know which arm the visitor saw.
  */
+import { hostCookieUpgrade, hostSetCookie, readHostCookieEntry, type HostCookieRead } from '../shared/hostCookie';
 
 /** The `ab_tests.key` prefix of a prescription's test. */
 export const PRESCRIPTION_TEST_KEY_PREFIX = 'rx-';
@@ -27,7 +28,11 @@ export interface SplitVariant {
 
 const VARIANT_KEY = /^[a-z0-9_-]{1,48}$/;
 
-export const abCookieName = (testId: number): string => `bf_ab_${testId}`;
+/** The base name every split cookie starts with (the `__Host-` form contains it too). */
+export const AB_COOKIE_BASE_PREFIX = 'bf_ab_';
+
+/** The base (un-prefixed) cookie name of a test; written only as `__Host-<name>`. */
+export const abCookieName = (testId: number): string => `${AB_COOKIE_BASE_PREFIX}${testId}`;
 
 /** The `data-variant` label (and `replay_recordings.variant`). */
 export const variantLabel = (testId: number, key: string): string => `ab${testId}:${key}`;
@@ -37,17 +42,6 @@ export function parseVariantLabel(label: string | null | undefined): { testId: n
   const match = /^ab(\d{1,10}):([a-z0-9_-]{1,48})$/.exec(label ?? '');
   if (!match) return null;
   return { testId: Number(match[1]), key: match[2]! };
-}
-
-/** One cookie's value from a `Cookie` header. */
-export function readCookie(header: string | null | undefined, name: string): string | null {
-  if (!header) return null;
-  for (const part of header.split(';')) {
-    const eq = part.indexOf('=');
-    if (eq <= 0) continue;
-    if (part.slice(0, eq).trim() === name) return decodeURIComponent(part.slice(eq + 1).trim());
-  }
-  return null;
 }
 
 /**
@@ -82,7 +76,23 @@ export function assignVariant<T extends SplitVariant>(
   return picked ? { variant: picked, assigned: true } : null;
 }
 
-/** The `Set-Cookie` value for an assignment. */
+/** The visitor's sticky arm for a test, from a `Cookie` header (`__Host-` name first, and which name carried it). */
+export function readAbCookie(header: string | null | undefined, testId: number): HostCookieRead | null {
+  return readHostCookieEntry(header, abCookieName(testId));
+}
+
+/** The split cookie's own attributes, beside the prefix's `Path=/; Secure` and a `Max-Age`. */
+const AB_COOKIE_ATTRIBUTES = 'SameSite=Lax';
+
+/** The `Set-Cookie` value for an assignment — `__Host-` so a same-site sibling cannot shadow it. */
 export function abSetCookie(testId: number, key: string): string {
-  return `${abCookieName(testId)}=${encodeURIComponent(key)}; Path=/; Max-Age=${AB_COOKIE_MAX_AGE_SECONDS}; SameSite=Lax; Secure`;
+  return hostSetCookie(abCookieName(testId), encodeURIComponent(key), `Max-Age=${AB_COOKIE_MAX_AGE_SECONDS}; ${AB_COOKIE_ATTRIBUTES}`);
+}
+
+/**
+ * Upgrade on read: a sticky arm (already matched to one of the test's variants) carried
+ * only under the legacy name is re-issued as `__Host-` and the legacy cookie expired.
+ */
+export function abCookieUpgrade(testId: number, read: HostCookieRead | null): string[] {
+  return hostCookieUpgrade(read, abCookieName(testId), AB_COOKIE_ATTRIBUTES, AB_COOKIE_MAX_AGE_SECONDS);
 }

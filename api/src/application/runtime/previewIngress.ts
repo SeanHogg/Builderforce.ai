@@ -21,6 +21,13 @@ import { verifyPreviewToken } from './previewToken';
 import { touchPreviewSession } from './previewSessions';
 import type { Env } from '../../env';
 import { PREVIEW_HOST } from '../../domain/shared/previewHosts';
+import {
+  hostCookieUpgrade,
+  hostSetCookie,
+  readHostCookieEntry,
+  withSetCookies,
+  type HostCookieRead,
+} from '../../domain/shared/hostCookie';
 
 /** Path prefix the container's dev-server passthrough (`server.mjs`) listens on, so a
  *  preview request can't collide with the container's own `/health` / `/run` ops. */
@@ -41,18 +48,28 @@ export const PREVIEW_CONTAINER_PATH_PREFIX = '/__preview__';
  * `HttpOnly` (no script needs it), `Secure`, `SameSite=Lax` — the phone navigates to the
  * URL top-level, and no cross-site POST should ever ride this. It is scoped to the
  * preview host only, and it is still just a bearer of the SAME signed, expiring token:
- * the cookie widens nothing the URL did not already grant.
+ * the cookie widens nothing the URL did not already grant. Written as `__Host-bf_preview`
+ * (Secure, Path=/, no Domain) so a same-site preview origin cannot shadow it with a
+ * `Domain=builderforce.ai` cookie (`hostCookie.ts`).
  */
-const PREVIEW_COOKIE = 'bf_preview';
+export const PREVIEW_COOKIE = 'bf_preview';
 
-/** Read the preview token a browser already holds for this host, if any. */
-function cookieToken(req: Request): string {
-  const header = req.headers.get('cookie') ?? '';
-  for (const part of header.split(';')) {
-    const [k, ...v] = part.trim().split('=');
-    if (k === PREVIEW_COOKIE) return decodeURIComponent(v.join('='));
-  }
-  return '';
+/** The preview cookie's own attributes, beside the prefix's `Path=/; Secure`. A browser-session cookie. */
+const PREVIEW_COOKIE_ATTRIBUTES = 'HttpOnly; SameSite=Lax';
+
+/** The preview token a browser already holds for this host (and which name carried it), if any. */
+export function previewCookieEntry(req: Request): HostCookieRead | null {
+  return readHostCookieEntry(req.headers.get('cookie'), PREVIEW_COOKIE);
+}
+
+/** The `Set-Cookie` that pins a preview token to the browser. */
+export function previewCookieHeader(token: string): string {
+  return hostSetCookie(PREVIEW_COOKIE, encodeURIComponent(token), PREVIEW_COOKIE_ATTRIBUTES);
+}
+
+/** Upgrade on read: a VERIFIED token carried only under the legacy name is re-pinned as `__Host-`. */
+export function previewCookieUpgrade(entry: HostCookieRead | null): string[] {
+  return hostCookieUpgrade(entry, PREVIEW_COOKIE, PREVIEW_COOKIE_ATTRIBUTES);
 }
 
 /** Looks like a preview token (`<id>.<exp>.<hmac>`) rather than an app path segment. */
@@ -79,7 +96,8 @@ export async function maybeHandlePreviewIngress(env: Env, req: Request): Promise
   // A tokened URL (the QR, or a manual paste) pins the token to this browser; every
   // root-relative asset request afterwards arrives WITHOUT one and rides the cookie.
   const fromPath = looksLikeToken(segments[0] ?? '') ? (segments.shift() as string) : '';
-  const token = fromPath || cookieToken(req);
+  const carried = fromPath ? null : previewCookieEntry(req);
+  const token = fromPath || carried?.value || '';
   if (!token) return new Response('Missing preview token.', { status: 400 });
 
   const secret = env.JWT_SECRET ?? '';
@@ -99,14 +117,14 @@ export async function maybeHandlePreviewIngress(env: Env, req: Request): Promise
   try {
     const stub = env.AGENT_CONTAINER.get(env.AGENT_CONTAINER.idFromName(`exec:${verified.executionId}`));
     const proxied = await stub.fetch(new Request(containerUrl, req));
-    if (!fromPath || proxied.status === 101) return proxied;
+    if (proxied.status === 101) return proxied;
+    // A cookie-borne token (already verified above) still under the legacy name is
+    // re-pinned as `__Host-` and the legacy cookie expired.
+    if (!fromPath) return withSetCookies(proxied, previewCookieUpgrade(carried));
     // Pin the token on the entry request. A 101 carries no settable headers, and a WS
     // handshake is never the entry request anyway (the page loads first).
     const res = new Response(proxied.body, proxied);
-    res.headers.append(
-      'Set-Cookie',
-      `${PREVIEW_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=Lax`,
-    );
+    res.headers.append('Set-Cookie', previewCookieHeader(token));
     return res;
   } catch {
     return new Response('Preview container unavailable.', { status: 502 });

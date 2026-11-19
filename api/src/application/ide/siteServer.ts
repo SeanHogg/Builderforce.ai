@@ -38,9 +38,13 @@ import {
   resolveSiteUser,
   signOutSiteUser,
   siteSessionCookie,
+  siteSessionCookies,
+  siteSessionLegacyExpiry,
+  siteSessionUpgradeCookies,
   siteSessionCookieHeader,
   verifySiteSignIn,
 } from './siteAuth';
+import { withSetCookies } from '../../domain/shared/hostCookie';
 import { sendRawEmail } from '../../infrastructure/email/EmailService';
 import { utcDay, visitorHash, visitorSalt } from './siteTraffic';
 import { buildDatabase } from '../../infrastructure/database/connection';
@@ -175,6 +179,18 @@ async function handleSiteApi(
 }
 
 /**
+ * Upgrade-on-read for every `/__api/*` answer (auth, billing, collections): a session
+ * still carried under the legacy cookie name is re-issued as `__Host-`. Not for
+ * sign-out / verify, which write the session cookie themselves, nor a preflight.
+ */
+async function siteSessionUpgradeFor(env: Env, site: SiteRecord, request: Request, path: string): Promise<string[]> {
+  if (request.method === 'OPTIONS') return [];
+  const rest = path.slice(SITE_API_PREFIX.length);
+  if (rest === 'auth/signout' || rest === 'auth/verify') return [];
+  return siteSessionUpgradeCookies(buildDatabase(env), site.siteId, site.tenantId, request.headers.get('cookie'));
+}
+
+/**
  * `/__api/auth/*` — request a code, redeem it, read the session, end it.
  *
  * Every answer here is deliberately uninformative about whether an address is
@@ -198,8 +214,15 @@ async function handleSiteAuth(
   }
 
   if (action === 'signout' && request.method === 'POST') {
-    await signOutSiteUser(db, site.siteId, site.tenantId, cookie);
-    return jsonResponse({ ok: true }, 200, { 'set-cookie': siteSessionCookieHeader(null, 0) });
+    // Both names: a leftover legacy cookie must not resolve once the `__Host-` one is cleared.
+    for (const token of siteSessionCookies(request.headers.get('cookie'))) {
+      await signOutSiteUser(db, site.siteId, site.tenantId, token);
+    }
+    // Clear the `__Host-` cookie AND the legacy one (`siteSessionLegacyExpiry`).
+    return withSetCookies(
+      jsonResponse({ ok: true }, 200, { 'set-cookie': siteSessionCookieHeader(null, 0) }),
+      [siteSessionLegacyExpiry()],
+    );
   }
 
   if (action === 'request' && request.method === 'POST') {
@@ -351,7 +374,10 @@ export async function tryServeHostedSite(
   };
 
   if (path.startsWith(SITE_API_PREFIX)) {
-    const response = await handleSiteApi(env, site, request, path);
+    const response = withSetCookies(
+      await handleSiteApi(env, site, request, path),
+      await siteSessionUpgradeFor(env, site, request, path),
+    );
     // A submission is a page-level event; count it so form conversion shows up
     // in the same series as the views that produced it.
     await count(0);

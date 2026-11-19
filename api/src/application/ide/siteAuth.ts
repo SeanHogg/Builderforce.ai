@@ -40,6 +40,14 @@ import { isSendableEmail, normalizeEmail } from '../shared/dnsVerification';
 import { sha256Hex } from '../../infrastructure/crypto/digest';
 import { randomHex } from '../../domain/shared/bytes';
 import { DAY_MS } from '../../domain/shared/time';
+import {
+  hostCookieUpgrade,
+  hostSetCookie,
+  legacyCookieExpiry,
+  readHostCookie,
+  readHostCookieEntry,
+  readHostCookieValues,
+} from '../../domain/shared/hostCookie';
 
 /** How long a one-time code is good for. Long enough to switch to an inbox. */
 export const CODE_TTL_MS = 10 * 60 * 1000;
@@ -50,7 +58,8 @@ export const SESSION_TTL_MS = 30 * DAY_MS;
 /** Wrong-code attempts before the request is dead and a new code is needed. */
 export const MAX_CODE_ATTEMPTS = 5;
 
-/** The cookie a signed-in end user's browser carries on the SITE's own origin. */
+/** The cookie a signed-in end user's browser carries on the SITE's own origin.
+ *  Base name; written only as `__Host-bf_site_session` (`hostCookie.ts`). */
 export const SITE_SESSION_COOKIE = 'bf_site_session';
 
 /** SHA-256 hex. The only form a secret is ever persisted in. */
@@ -244,10 +253,23 @@ export interface SiteUserIdentity {
  * and never delivered — act as though the code had been entered.
  */
 export async function resolveSiteUser(db: Db, siteId: number, tenantId: number, token: string | null | undefined): Promise<SiteUserIdentity | null> {
+  return (await resolveSiteSession(db, siteId, tenantId, token))?.identity ?? null;
+}
+
+/** {@link resolveSiteUser} plus when the session ends — what an upgrade-on-read re-issues against. */
+async function resolveSiteSession(
+  db: Db,
+  siteId: number,
+  tenantId: number,
+  token: string | null | undefined,
+): Promise<{ identity: SiteUserIdentity; expiresAt: Date } | null> {
   if (!token || !/^[0-9a-f]{64}$/.test(token)) return null;
   // site tables live on the apps database — both sides of this join are site tables
   const [row] = await appsDatabaseOf(db)
-    .select({ userId: siteUsers.id, email: siteUsers.email, displayName: siteUsers.displayName, status: siteUsers.status })
+    .select({
+      userId: siteUsers.id, email: siteUsers.email, displayName: siteUsers.displayName, status: siteUsers.status,
+      expiresAt: siteUserSessions.expiresAt,
+    })
     .from(siteUserSessions)
     .innerJoin(siteUsers, eq(siteUsers.id, siteUserSessions.siteUserId))
     .where(scopedToTenant(
@@ -259,7 +281,7 @@ export async function resolveSiteUser(db: Db, siteId: number, tenantId: number, 
     ))
     .limit(1);
   if (!row || row.status !== 'active') return null;
-  return { userId: row.userId, email: row.email, displayName: row.displayName };
+  return { identity: { userId: row.userId, email: row.email, displayName: row.displayName }, expiresAt: row.expiresAt };
 }
 
 /** End a session. Idempotent: an unknown token is already signed out. */
@@ -270,23 +292,52 @@ export async function signOutSiteUser(db: Db, siteId: number, tenantId: number, 
     .where(scopedToTenant(siteUserSessions, tenantId, eq(siteUserSessions.siteId, siteId), eq(siteUserSessions.tokenHash, await hash(token))));
 }
 
-/** Read the session token out of the site's own cookie header. */
+/** Read the session token out of the site's own cookie header (`__Host-` name first). */
 export function siteSessionCookie(header: string | null): string | null {
-  if (!header) return null;
-  for (const part of header.split(';')) {
-    const [name, ...rest] = part.trim().split('=');
-    if (name === SITE_SESSION_COOKIE) return rest.join('=') || null;
-  }
-  return null;
+  return readHostCookie(header, SITE_SESSION_COOKIE);
+}
+
+/** Every session token the header carries (prefixed and legacy name) — what a sign-out revokes. */
+export function siteSessionCookies(header: string | null): string[] {
+  return readHostCookieValues(header, SITE_SESSION_COOKIE);
 }
 
 /**
  * The `Set-Cookie` for a session. `HttpOnly` so the generated app's own
  * JavaScript — which a model wrote — can never read it, `SameSite=Lax` so a
  * cross-site form post cannot act as the user, and `Secure` because every
- * published site is HTTPS.
+ * published site is HTTPS. The `__Host-` name (Secure, Path=/, no Domain) stops a
+ * same-site preview origin from shadowing or fixating it with a `Domain=` cookie.
  */
 export function siteSessionCookieHeader(token: string | null, maxAgeSeconds: number): string {
-  const value = token ?? '';
-  return `${SITE_SESSION_COOKIE}=${value}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${token ? maxAgeSeconds : 0}`;
+  return hostSetCookie(SITE_SESSION_COOKIE, token ?? '', `${SITE_SESSION_COOKIE_ATTRIBUTES}; Max-Age=${token ? maxAgeSeconds : 0}`);
+}
+
+/** The session cookie's own attributes, beside the prefix's `Path=/; Secure` and a `Max-Age`. */
+const SITE_SESSION_COOKIE_ATTRIBUTES = 'HttpOnly; SameSite=Lax';
+
+/** The `Set-Cookie` that deletes the legacy un-prefixed session cookie (sent on sign-out). */
+export function siteSessionLegacyExpiry(): string {
+  return legacyCookieExpiry(SITE_SESSION_COOKIE, SITE_SESSION_COOKIE_ATTRIBUTES);
+}
+
+/**
+ * Upgrade on read: when the request's session was carried ONLY under the legacy name and
+ * still resolves to a live session, the `Set-Cookie` values that re-issue it as
+ * `__Host-` for its remaining lifetime and expire the legacy one. Otherwise none — and
+ * no lookup at all unless the legacy name was the source.
+ */
+export async function siteSessionUpgradeCookies(
+  db: Db,
+  siteId: number,
+  tenantId: number,
+  header: string | null,
+  now: number = Date.now(),
+): Promise<string[]> {
+  const read = readHostCookieEntry(header, SITE_SESSION_COOKIE);
+  if (!read?.upgradable) return [];
+  const session = await resolveSiteSession(db, siteId, tenantId, read.value);
+  if (!session) return [];
+  const remaining = Math.floor((session.expiresAt.getTime() - now) / 1000);
+  return hostCookieUpgrade(read, SITE_SESSION_COOKIE, SITE_SESSION_COOKIE_ATTRIBUTES, remaining);
 }

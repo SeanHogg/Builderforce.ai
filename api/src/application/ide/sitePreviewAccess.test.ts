@@ -26,6 +26,7 @@ vi.mock('./siteTraffic', async (importOriginal) => ({
 
 import {
   grantSitePreview,
+  previewTokenOf,
   resolveSitePreview,
   SITE_PREVIEW_TTL_SECONDS,
   sitePreviewKey,
@@ -88,6 +89,28 @@ describe('resolveSitePreview', () => {
     expect(fromCookie).toMatchObject({ fromQuery: false });
   });
 
+  it('reads the __Host- cookie, still honours the legacy name, and prefers __Host- when both are present', () => {
+    const a = 'a'.repeat(32);
+    const b = 'b'.repeat(32);
+    const at = (cookie: string) => previewTokenOf(new Request('https://shop.builderforce.ai/app.js', { headers: { cookie } }));
+    expect(at(`__Host-bf_preview=${a}`)).toMatchObject({ token: a, fromQuery: false, cookie: { legacy: false } });
+    expect(at(`bf_preview=${b}`)).toMatchObject({ token: b, fromQuery: false, cookie: { legacy: true } });
+    expect(at(`bf_preview=${b}; __Host-bf_preview=${a}`)).toMatchObject({ token: a, fromQuery: false, cookie: { legacy: false } });
+  });
+
+  it('upgrades a granted legacy-named cookie to __Host- on read, and leaves a __Host- one alone', async () => {
+    const token = await grant();
+    const legacy = (await resolveSitePreview(env as never, SITE, new Request('https://shop.builderforce.ai/app.js', { headers: { cookie: `bf_preview=${token}` } }), NOW.getTime()))!;
+    expect(legacy.upgradeCookies).toEqual([
+      `__Host-bf_preview=${token}; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=${SITE_PREVIEW_TTL_SECONDS}`,
+      'bf_preview=; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=0',
+    ]);
+    const res = withPreviewHeaders(new Response('x'), legacy);
+    expect(res.headers.get('set-cookie')).toBe(legacy.upgradeCookies.join(', '));
+    const current = (await resolveSitePreview(env as never, SITE, new Request('https://shop.builderforce.ai/app.js', { headers: { cookie: `__Host-bf_preview=${token}` } }), NOW.getTime()))!;
+    expect(current.upgradeCookies).toEqual([]);
+  });
+
   it('refuses another site’s grant, an expired one, a malformed token — and costs no lookup without one', async () => {
     const other = await grant({ projectId: 43 });
     expect(await resolveSitePreview(env as never, SITE, new Request(`https://shop.builderforce.ai/?bf_preview=${other}`), NOW.getTime())).toBeNull();
@@ -102,12 +125,13 @@ describe('resolveSitePreview', () => {
 
   it('answers privately, never cached or indexed, setting the cookie on the first hit only', async () => {
     const res = withPreviewHeaders(new Response('x', { headers: { 'Cache-Control': 'public, max-age=60' } }), {
-      token: 'a'.repeat(32), served: SITE, fromQuery: true, maxAgeSeconds: 100,
+      token: 'a'.repeat(32), served: SITE, fromQuery: true, maxAgeSeconds: 100, upgradeCookies: [],
     });
     expect(res.headers.get('cache-control')).toBe('private, no-store');
     expect(res.headers.get('x-robots-tag')).toContain('noindex');
-    expect(res.headers.get('set-cookie')).toContain('bf_preview=');
+    expect(res.headers.get('set-cookie')).toMatch(/^__Host-bf_preview=a{32}; Path=\/; Secure; /);
     expect(res.headers.get('set-cookie')).toContain('HttpOnly');
+    expect(res.headers.get('set-cookie')).not.toMatch(/Domain=/i);
   });
 });
 

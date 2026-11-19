@@ -45,6 +45,12 @@ These close the 2026-11-18 browser-run-tier findings, which are tracked out of s
   - The existing `*.builderforce.ai` wildcard (DNS, Universal SSL, the sites Worker's route) delivers it. `isReservedSubdomain` keeps `<32 hex>-preview` from ever being a site, so the sites Worker forwards it to the API. The `*.preview` route is gone.
   - The host shape lives once, in `domain/shared/previewHosts.ts`.
   - `PREVIEW_PER_APP_ORIGINS` and `NEXT_PUBLIC_PREVIEW_PER_APP_ORIGINS` are on, so cross-app isolation is in force without an ops step. The same-site trade-off is recorded in make.md › W10 control 1.
+  - `release.yml`: `deploy-frontend` now waits for `deploy-api`, which serves the app hosts the frontend opens.
+- **Cookie tossing closed:**
+  - Same-site preview code could set `Domain=builderforce.ai` cookies that shadow published-site cookies.
+  - The site session, site preview, container-preview and A/B cookies are now `__Host-` cookies, through ONE helper (`domain/shared/hostCookie.ts`).
+  - Readers prefer the new name and fall back to the legacy one until 2026-12-18. A validated, unambiguous legacy cookie is re-issued as `__Host-` and the legacy one expired, on read.
+  - Sign-out collects every value under both names, revokes them all, and deletes both cookies.
 
 ## ✅ RESOLVED 2026-11-18: PRD 31 §W9 phases 6c (.NET) and 6d (Rust) released in builderforce-webcontainers v2026.11.4
 

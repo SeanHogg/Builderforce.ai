@@ -71,6 +71,16 @@ describe('resolveSiteSplit', () => {
     expect(decision).toMatchObject({ assigned: false, label: 'ab12:preview' });
   });
 
+  it('reads the __Host- cookie, still honours the legacy name, and prefers __Host- when both are present', async () => {
+    expect(await resolveSiteSplit(env, site, req('__Host-bf_ab_12=preview'), { mayAssign: false, roll: () => 1 }))
+      .toMatchObject({ assigned: false, label: 'ab12:preview' });
+    expect(await resolveSiteSplit(env, site, req('bf_ab_12=live'), { mayAssign: false, roll: () => 99 }))
+      .toMatchObject({ assigned: false, label: 'ab12:live' });
+    // A tossed `Domain=builderforce.ai` legacy cookie cannot override the host's own arm.
+    expect(await resolveSiteSplit(env, site, req('bf_ab_12=live; __Host-bf_ab_12=preview'), { mayAssign: false, roll: () => 1 }))
+      .toMatchObject({ assigned: false, label: 'ab12:preview' });
+  });
+
   it('never assigns on an asset request, and serves live when nothing is running or recording is off', async () => {
     expect(await resolveSiteSplit(env, site, req(), { mayAssign: false, roll: () => 75 })).toBeNull();
     expect(mocks.selects).toBe(0); // the hot path costs no lookup
@@ -87,7 +97,8 @@ describe('withSplitCookie and the exposure', () => {
   it('sets the sticky cookie on an assignment, keeps the response private, and counts one exposure', async () => {
     const decision = (await resolveSiteSplit(env, site, req(), { mayAssign: true, roll: () => 75 }))!;
     const res = withSplitCookie(new Response('<html></html>', { headers: { 'Cache-Control': 'public, max-age=60' } }), decision);
-    expect(res.headers.get('Set-Cookie')).toMatch(/^bf_ab_12=preview; Path=\/; Max-Age=\d+; SameSite=Lax; Secure$/);
+    expect(res.headers.get('Set-Cookie')).toMatch(/^__Host-bf_ab_12=preview; Path=\/; Secure; Max-Age=\d+; SameSite=Lax$/);
+    expect(res.headers.get('Set-Cookie')).not.toMatch(/Domain=/i);
     expect(res.headers.get('Cache-Control')).toContain('private');
     expect(res.headers.get('Vary')).toContain('Cookie');
     await recordSplitExposure(env, 7, decision);
@@ -95,9 +106,23 @@ describe('withSplitCookie and the exposure', () => {
   });
 
   it('counts nothing for a returning visitor', async () => {
-    const decision = (await resolveSiteSplit(env, site, req('bf_ab_12=live'), { mayAssign: true }))!;
+    const decision = (await resolveSiteSplit(env, site, req('__Host-bf_ab_12=live'), { mayAssign: true }))!;
     await recordSplitExposure(env, 7, decision);
     expect(mocks.recordExposure).not.toHaveBeenCalled();
     expect(withSplitCookie(new Response('x'), decision).headers.get('Set-Cookie')).toBeNull();
+  });
+
+  it('upgrades a returning visitor still on the legacy cookie name to __Host- (no exposure counted)', async () => {
+    const decision = (await resolveSiteSplit(env, site, req('bf_ab_12=live'), { mayAssign: true }))!;
+    await recordSplitExposure(env, 7, decision);
+    expect(mocks.recordExposure).not.toHaveBeenCalled();
+    expect(decision.upgradeCookies).toEqual([
+      expect.stringMatching(/^__Host-bf_ab_12=live; Path=\/; Secure; SameSite=Lax; Max-Age=\d+$/),
+      'bf_ab_12=; Path=/; Secure; SameSite=Lax; Max-Age=0',
+    ]);
+    expect(withSplitCookie(new Response('x'), decision).headers.get('Set-Cookie')).toBe(decision.upgradeCookies.join(', '));
+    // A cookie that names no arm of this test is a fresh assignment, never an upgrade.
+    const stranger = (await resolveSiteSplit(env, site, req('bf_ab_12=nope'), { mayAssign: true, roll: () => 75 }))!;
+    expect(stranger).toMatchObject({ assigned: true, upgradeCookies: [] });
   });
 });
