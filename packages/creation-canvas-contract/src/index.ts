@@ -146,6 +146,9 @@ export * from './creativeCapabilities';
 // the same set; see channelPlatforms.ts.
 export * from './channelPlatforms';
 export * from './verticals';
+// TAM / SAM / SOM, both ways — shared so the canvas `marketSize` card and the deck's market
+// slide compute one number. See marketSize.ts.
+export * from './marketSize';
 export * from './startupListing';
 export * from './deviceClients';
 export * from './workflowNodeKinds';

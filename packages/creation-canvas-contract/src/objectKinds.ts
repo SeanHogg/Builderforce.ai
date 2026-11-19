@@ -79,6 +79,13 @@ export const FOUNDER_OBJECT_KINDS = [
   // a GTM plan names the motion, the channels and the economics that make the segment
   // reachable — which is what turns "potential customers" into a list with a route.
   'customerSegment', 'gtmPlan',
+  // HOW BIG THE MARKET IS, BOTH WAYS. Bottom-up (customers × ARPA) beside top-down (a cited
+  // market figure × a share), with TAM/SAM/SOM and the triangulation gap DERIVED, never
+  // stored — see `marketSize` in `founderObjects.ts` (PRD 25 §5.5).
+  'marketSize',
+  // WHO TAKES WHAT AT AN EXIT. Inputs only (`exitValue`, `debt`, `vesting`); the payouts are
+  // derived from the board's cap table through the waterfall and never stored (PRD 25 §6.3).
+  'exitScenario',
   // HOW WE WIN A NAMED RIVAL'S CUSTOMER. Deliberately its own kind rather than a field
   // on `competitor`: the analysis of a rival and the plan to take their customers have
   // different authors, different review cycles, and different lifetimes.

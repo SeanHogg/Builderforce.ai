@@ -57,6 +57,29 @@ export const COMPOSABLE_WIDGET_IDS = [
   'founder.runway-projection',
   'founder.ownership',
   'bench.position',
+  // Market size (PRD 25 Slice C) — canvas widget host tile, shown only when the board has a marketSize.
+  'founder.market-size',
+  // SaaS + AI-native (PRD 25 Slice B) — ids the frontend registers in saasWidgets / aiWidgets.
+  'growth.nrr',
+  'growth.grr',
+  'growth.cac-payback',
+  'growth.ltv-cac',
+  'growth.ltv-tranches',
+  'ai.inference-margin',
+  'ai.inference-efficiency',
+  // Vertical KPI widgets (PRD 25 Slice D)
+  'clinical.stage',
+  'clinical.reimbursement',
+  'clinical.trial-economics',
+  'payments.volume',
+  'payments.risk',
+  'climate.cost-curve',
+  'climate.deployment',
+  'hardware.production-stage',
+  'hardware.margin-backlog',
+  'security.pipeline',
+  'market.liquidity',
+  'market.unit-economics',
 ] as const;
 
 /** A widget id the server may return — narrowed from {@link COMPOSABLE_WIDGET_IDS}. */

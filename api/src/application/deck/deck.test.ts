@@ -15,6 +15,7 @@ function emptyData(): DeckData {
     people: { attritionRatePct: 5, devSatisfactionScore: null, waterfall: [], openPositions: [['UX Lead', 'high', '36', '2026-07-01']] },
     ai: { productivityScore: 72, programInvestedUsd: 50000, adoption: [], programs: [] },
     finance: { spendUsd: 200, forecastUsd: 400, costPerMergedPrUsd: 5 },
+    market: { tamUsd: null, samUsd: null, somUsd: null, topDownSomUsd: null, triangulationGap: null, inconsistent: null },
   };
 }
 

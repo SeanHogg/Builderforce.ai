@@ -421,6 +421,9 @@ export const ACCOUNT_REQUIRED_CANVAS_TOOLS = [
   'canvas_record_convertible',
   'canvas_record_equity_event',
   'canvas_model_round',
+  // Who gets what at an exit. Writes only the scenario INPUTS onto an `exitScenario`
+  // card; the payouts are computed by POST /api/equity/waterfall and never stored.
+  'canvas_model_exit',
   // Re-reads the domain metric series a `liveMetric` object was bound to. This is the
   // LIVE half the finance and investor answers never had: without it every runway, burn
   // and pipeline number on a board is a snapshot with an as-of date and no way to ask

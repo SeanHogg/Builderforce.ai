@@ -32,7 +32,7 @@
  */
 
 import { desc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
-import { slugify as slugifyBase } from '@builderforce/creation-canvas-contract';
+import { isStartupSector, slugify as slugifyBase, STARTUP_SECTORS } from '@builderforce/creation-canvas-contract';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import {
@@ -365,7 +365,7 @@ export async function createCompany(db: Db, env: Env, tenantId: number, input: C
       slug: slugify(name),
       website: input.website?.trim() || null,
       stage: input.stage?.trim() || null,
-      sector: input.sector?.trim() || null,
+      sector: sectorFromInput(input.sector),
       country: input.country?.trim().toUpperCase().slice(0, 2) || null,
       headcount: Number.isFinite(input.headcount) ? (input.headcount as number) : null,
       arr: input.arr ?? null,
@@ -393,6 +393,22 @@ export async function createCompany(db: Db, env: Env, tenantId: number, input: C
 }
 
 const slugify = (value: string): string => slugifyBase(value, { maxLength: 200, fallback: 'company' });
+
+/**
+ * The sector a new company is written with: blank → null, otherwise it must be in
+ * the shared vocabulary (PRD 25 §8) — the same rule `validateListingPatch` applies
+ * to the listing editor, so the two writers of `companies.sector` cannot disagree.
+ */
+function sectorFromInput(raw: string | null | undefined): string | null {
+  const trimmed = raw?.trim();
+  if (!trimmed) return null;
+  // The same vocabulary gate `validateListingPatch` enforces on the listing editor
+  // (isStartupSector), applied at the create path so a free-form sector can never
+  // be written. Imported directly rather than through validateListingPatch to keep
+  // companyWorkspace and startupListing acyclic.
+  if (!isStartupSector(trimmed)) throw new CompanyError(`sector must be one of: ${STARTUP_SECTORS.join(', ')}`, 400);
+  return trimmed;
+}
 
 // ---------------------------------------------------------------------------
 // One company, in full

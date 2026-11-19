@@ -125,6 +125,91 @@ const VERTICAL_TILES: PresetTile[] = [
   { widgetKey: 'bench.position', title: 'Position vs peers' },
 ];
 
+/**
+ * Slice D — the §5.3 KPI tiles for the eight non-SaaS verticals, as DATA keyed by
+ * vertical (no branch anywhere). Appended after the founder layer + peer tile, so
+ * every vertical still opens with runway. Verticals absent here (saas, ai_ml) are
+ * filled by their own slice and fall back to the base tiles.
+ */
+const VERTICAL_KPI_TILES: Partial<Record<DashboardVertical, PresetTile[]>> = {
+  fintech: [
+    { metricKey: 'payments.tpv', viz: 'stat', title: 'Total payment volume' },
+    { metricKey: 'payments.takeRate', viz: 'stat', title: 'Take rate' },
+    { metricKey: 'payments.fundedAccountRatio', viz: 'stat', title: 'Funded-account ratio' },
+    { metricKey: 'payments.fraudLossBps', viz: 'stat', title: 'Fraud loss rate' },
+    { metricKey: 'payments.payoutLatency', viz: 'stat', title: 'Payout latency' },
+    { widgetKey: 'payments.volume', title: 'Volume and take rate' },
+    { widgetKey: 'payments.risk', title: 'Fraud and payout risk' },
+  ],
+  healthtech: [
+    { metricKey: 'clinical.reimbursementStatus', viz: 'stat', title: 'Reimbursement status' },
+    { widgetKey: 'clinical.reimbursement', title: 'Reimbursement path' },
+  ],
+  medtech: [
+    { metricKey: 'clinical.stage', viz: 'stat', title: 'Regulatory stage' },
+    { metricKey: 'clinical.monthsToMilestone', viz: 'stat', title: 'Months to next milestone' },
+    { metricKey: 'clinical.regulatorySpendPct', viz: 'stat', title: 'Regulatory spend share' },
+    { metricKey: 'clinical.costPerDataPoint', viz: 'stat', title: 'Cost per clinical data point' },
+    { metricKey: 'clinical.enrollmentRate', viz: 'stat', title: 'Enrollment vs plan' },
+    { widgetKey: 'clinical.stage', title: 'Regulatory stage' },
+    { widgetKey: 'clinical.reimbursement', title: 'Reimbursement path' },
+    { widgetKey: 'clinical.trial-economics', title: 'Trial economics' },
+  ],
+  biotech: [
+    { metricKey: 'clinical.stage', viz: 'stat', title: 'Development stage' },
+    { metricKey: 'clinical.monthsToMilestone', viz: 'stat', title: 'Months to next readout' },
+    { metricKey: 'clinical.costPerDataPoint', viz: 'stat', title: 'Cost per patient enrolled' },
+    { metricKey: 'clinical.enrollmentRate', viz: 'stat', title: 'Enrollment vs plan' },
+    { widgetKey: 'clinical.stage', title: 'Development stage' },
+    { widgetKey: 'clinical.trial-economics', title: 'Trial economics' },
+  ],
+  climate_energy: [
+    { metricKey: 'climate.unitCostVsIncumbent', viz: 'stat', title: 'Unit cost vs incumbent' },
+    { metricKey: 'climate.tco2eAbated', viz: 'stat', title: 'tCO2e abated' },
+    { metricKey: 'climate.capacityDeployed', viz: 'stat', title: 'Capacity deployed' },
+    { metricKey: 'climate.offtakePipeline', viz: 'stat', title: 'Offtake pipeline' },
+    { widgetKey: 'climate.cost-curve', title: 'Cost curve vs incumbent' },
+    { widgetKey: 'climate.deployment', title: 'Deployment and offtake' },
+  ],
+  hardware_robotics: [
+    { metricKey: 'hardware.productionStage', viz: 'stat', title: 'Production run stage' },
+    { metricKey: 'hardware.bomCost', viz: 'stat', title: 'BOM cost' },
+    { metricKey: 'hardware.grossMargin', viz: 'stat', title: 'Hardware gross margin' },
+    { metricKey: 'hardware.backlog', viz: 'stat', title: 'Signed backlog' },
+    { widgetKey: 'hardware.production-stage', title: 'Production run stage' },
+    { widgetKey: 'hardware.margin-backlog', title: 'Margin and backlog' },
+  ],
+  cybersecurity: [
+    { metricKey: 'security.pipelineCoverage', viz: 'stat', title: 'Pipeline coverage' },
+    { metricKey: 'security.pocConversion', viz: 'stat', title: 'POC conversion' },
+    { metricKey: 'security.timeToValue', viz: 'stat', title: 'Time to value' },
+    { widgetKey: 'security.pipeline', title: 'Pipeline and POC' },
+  ],
+  marketplace: [
+    { metricKey: 'market.gmv', viz: 'stat', title: 'GMV' },
+    { metricKey: 'market.liquidity', viz: 'stat', title: 'Liquidity (fill rate)' },
+    { metricKey: 'market.repeatRate', viz: 'stat', title: 'Repeat rate (90d)' },
+    { metricKey: 'market.contributionPerOrder', viz: 'stat', title: 'Contribution per order' },
+    { widgetKey: 'market.liquidity', title: 'Marketplace liquidity' },
+    { widgetKey: 'market.unit-economics', title: 'Order unit economics' },
+  ],
+  // Slice B — SaaS and AI-native §5.3 tiles. Registry widgets the frontend renders.
+  saas: [
+    { widgetKey: 'growth.nrr', title: 'Net revenue retention' },
+    { widgetKey: 'growth.grr', title: 'Gross revenue retention' },
+    { widgetKey: 'growth.cac-payback', title: 'CAC payback' },
+    { widgetKey: 'growth.ltv-cac', title: 'LTV:CAC' },
+    { widgetKey: 'growth.ltv-tranches', title: 'LTV:CAC by tranche' },
+  ],
+  ai_ml: [
+    { widgetKey: 'ai.inference-margin', title: 'Inference margin' },
+    { widgetKey: 'ai.inference-efficiency', title: 'Inference efficiency' },
+    { widgetKey: 'growth.nrr', title: 'Net revenue retention' },
+    { widgetKey: 'growth.grr', title: 'Gross revenue retention' },
+    { widgetKey: 'growth.ltv-cac', title: 'LTV:CAC' },
+  ],
+};
+
 /** Display names, so a materialised dashboard is titled the way a founder says it. */
 const VERTICAL_NAMES: Record<DashboardVertical, string> = {
   ai_ml: 'AI-native',
@@ -156,7 +241,7 @@ export const ALL_DASHBOARD_PRESETS = {
   ...Object.fromEntries(
     DASHBOARD_VERTICALS.map((vertical) => [
       vertical,
-      { name: `${VERTICAL_NAMES[vertical]} KPIs`, tiles: VERTICAL_TILES },
+      { name: `${VERTICAL_NAMES[vertical]} KPIs`, tiles: [...VERTICAL_TILES, ...(VERTICAL_KPI_TILES[vertical] ?? [])] },
     ]),
   ),
 } as Record<PresetKey, DashboardPreset>;

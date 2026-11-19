@@ -107,6 +107,18 @@ export interface DeckData {
     forecastUsd: number | null;
     costPerMergedPrUsd: number | null;
   };
+  /** Market slide — bound to the tenant's `marketSize` canvas object (PRD 25 §6.3). Every
+   *  leaf is null when the tenant has no such object or an input is missing (never 0). */
+  market: {
+    tamUsd: number | null;
+    samUsd: number | null;
+    somUsd: number | null;
+    topDownSomUsd: number | null;
+    /** Fractional gap between the two methods; within 0.15 is a health mark. */
+    triangulationGap: number | null;
+    /** True when SOM <= SAM <= TAM is violated — the slide must not present it as sound. */
+    inconsistent: boolean | null;
+  };
 }
 
 export type DeckArchetype = 'board' | 'cfo_devfinops' | 'custom' | 'generative';

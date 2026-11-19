@@ -26,6 +26,8 @@
  *   DELETE /:id/widgets/:w  remove widget                      [manager]
  *   GET    /:id/data        resolve every widget's metric      [member]
  *   GET    /metrics                    list whitelisted metric keys       [member]
+ *   GET    /metrics/:key/value         one whitelisted scalar             [member]
+ *   GET    /ltv-tranches               LTV:CAC by plan/cohort/channel     [member]
  *   GET    /workforce-health           over-allocated / under-used / idle [member]
  *   POST   /query                      natural-language composed answer   [member]
  *
@@ -55,6 +57,10 @@ import { metricCacheKey, type MetricCache } from '../../application/dashboards/n
 import { composeAnswer } from '../../application/dashboards/answerComposer';
 import { applyDashboardPreset, isPresetKey, listPresetKeys } from '../../application/dashboards/dashboardPresets';
 import { computeWorkforceHealth } from '../../application/dashboards/workforceHealth';
+import { computeLtvTranches, LTV_DIMENSIONS, nextActionTranche, type LtvDimension } from '../../application/dashboards/ltvTranches';
+import { loadCustomerEconomics } from '../../application/finance/customerEconomics';
+import { financeVersionKey } from '../../application/insights/versionKeys';
+import { getCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { positiveIntOrNull, daysParam } from './queryParams';
@@ -116,6 +122,54 @@ export function createDashboardsRoutes(db: Db): Hono<HonoEnv> {
       })
       .filter((m): m is NonNullable<typeof m> => m !== null);
     return c.json({ metrics });
+  });
+
+  // One whitelisted scalar. The SaaS / AI tiles call this directly rather than
+  // materialising a saved dashboard. Unknown keys are 404 — never a silent 0.
+  router.get('/metrics/:key/value', async (c) => {
+    const { tenantId } = scope(c);
+    const key = decodeURIComponent(c.req.param('key'));
+    const def = METRIC_REGISTRY[key];
+    if (!def) return c.json({ error: 'unknown metric' }, 404);
+    const days = daysParam(c.req.query('days'), 30);
+    const env = c.env as Env;
+    const value = await getOrSetCached(
+      env,
+      metricCacheKey(tenantId, key, days),
+      () => def.compute(db, tenantId, days),
+      SHORT_TTL,
+    );
+    return c.json({
+      key,
+      value,
+      unit: def.unit,
+      label: def.label,
+      goodWhenUp: def.goodWhenUp ?? null,
+    });
+  });
+
+  // LTV:CAC per tranche (PRD 25 §5.4). Cached under the finance version token so a
+  // finance write orphans the previous answer instead of waiting out the TTL.
+  router.get('/ltv-tranches', async (c) => {
+    const { tenantId } = scope(c);
+    const raw = c.req.query('dimension') ?? 'plan';
+    if (!(LTV_DIMENSIONS as readonly string[]).includes(raw)) {
+      return c.json({ error: 'dimension must be plan, cohort, channel or segment' }, 400);
+    }
+    const dimension = raw as LtvDimension;
+    const env = c.env as Env;
+    const version = await getCacheVersion(env, financeVersionKey(tenantId));
+    const result = await getOrSetCached(
+      env,
+      `dashboards:ltv-tranches:t:${tenantId}:d:${dimension}:v:${version}`,
+      async () => {
+        const rows = await loadCustomerEconomics(db, tenantId);
+        const tranches = computeLtvTranches(rows, { dimension });
+        return { dimension, tranches, nextAction: nextActionTranche(tranches) };
+      },
+      SHORT_TTL,
+    );
+    return c.json(result);
   });
 
   // ── AI-Powered Query (deterministic NL → composed, whitelisted answer) ─────

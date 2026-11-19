@@ -25,6 +25,15 @@ import { dailyCountSeries, dailySumSeries, seriesTotal, type MetricPoint } from 
 import { currentPeriodMonth } from '../../domain/shared/period';
 import { usageDatabaseOf } from '../llm/usageLedger';
 import { FOUNDER_METRICS } from './founderMetrics';
+import { GROWTH_METRICS } from './growthMetrics';
+import { AI_METRICS } from './aiMetrics';
+import { CLINICAL_METRICS } from './clinicalMetrics';
+import { PAYMENTS_METRICS } from './paymentsMetrics';
+import { CLIMATE_METRICS } from './climateMetrics';
+import { HARDWARE_METRICS } from './hardwareMetrics';
+import { SECURITY_METRICS } from './securityMetrics';
+import { MARKET_METRICS } from './marketMetrics';
+import { EXIT_METRICS } from './exitMetrics';
 import { tenantCostSummary } from '../costMetrics/costMetricsService';
 import type { CostGroupMetrics } from '../costMetrics/costMetricsShape';
 
@@ -45,6 +54,12 @@ export interface MetricDef {
    * widget then renders the delta in a neutral tone instead of green/red.
    */
   goodWhenUp?: boolean;
+  /**
+   * Milestone metrics (`unit: 'stage'`): the ordered stage names as DATA. The
+   * scalar is the 0-based ordinal into this list, and one `StageBar` renders any
+   * of them — no per-vertical branch.
+   */
+  stages?: readonly string[];
   /** Compute the scalar for this metric over the tenant + window. */
   compute(db: Db, tenantId: number, days: number): Promise<number | null>;
   /**
@@ -364,6 +379,18 @@ export const METRIC_REGISTRY: Record<string, MetricDef> = {
   // insights service, and spread here so they are whitelisted like everything
   // else — a founder tile is not a special case to the route or the NL parser.
   ...FOUNDER_METRICS,
+  // SaaS growth and AI-native economics (PRD 25 Slice B). Declared values until a
+  // monthly producer writes observed facts; null means "Not measured", never 0.
+  ...GROWTH_METRICS,
+  ...AI_METRICS,
+  // Vertical families (PRD 25 Slice D) — one spread per file.
+  ...CLINICAL_METRICS,
+  ...PAYMENTS_METRICS,
+  ...CLIMATE_METRICS,
+  ...HARDWARE_METRICS,
+  ...SECURITY_METRICS,
+  ...MARKET_METRICS,
+  ...EXIT_METRICS,
 };
 
 /** The whitelisted metric keys (stable order) — drives the widget picker + parser. */

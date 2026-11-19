@@ -59,6 +59,8 @@ export interface ProofOutcomeInput extends ProofSubject {
   metricKey?: string | null;
   metricValue?: number | null;
   unit?: string | null;
+  /** Authoritative run LLM cost (millicents) when known; omit — never 0 — when not recorded. */
+  costUsdMillicents?: number | null;
   metadata?: Record<string, unknown>;
 }
 
@@ -83,6 +85,7 @@ export async function recordProofOutcome(db: Db, input: ProofOutcomeInput): Prom
       metricValue: input.metricValue ?? null,
       unit: input.unit ?? null,
       durationMs: input.durationMs ?? null,
+      costUsdMillicents: input.costUsdMillicents ?? null,
       metadata: { ...(input.targetKey ? { targetKey: input.targetKey } : {}), ...(input.metadata ?? {}) },
     });
   } catch (error) {

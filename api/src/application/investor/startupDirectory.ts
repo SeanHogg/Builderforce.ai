@@ -55,6 +55,7 @@ import { getCacheVersion, getOrSetCached } from '../../infrastructure/cache/read
 import { fnv1a32 } from '../../domain/shared/strings';
 import { notify } from '../notifications/notify';
 import { INVESTOR_INQUIRY_SOURCE, publicInquiryCounts, recordDealFlow } from '../sales/revenueIntelligence';
+import type { BenchmarkRating } from '../insights/benchmarkingInsights';
 import { CompanyError } from './companyWorkspace';
 import {
   STARTUP_DIRECTORY_TTL_SECONDS,
@@ -148,6 +149,12 @@ export interface StartupCard {
   /** Health for everyone; months only for a signed-in reader. */
   runwayHealth: RunwayVerdict['health'] | null;
   runwayMonths: number | null;
+  /**
+   * Benchmark POSITION against the company's sector cohort (PRD 25 §6.6) — the
+   * rating word only, never the percentile or the values behind it. Null when the
+   * cohort has no seeded band or nothing is measured.
+   */
+  benchmarkRating: BenchmarkRating | null;
   inquiryCount: number;
   listedAt: string | null;
   updatedAt: string;
@@ -173,6 +180,13 @@ export interface DirectoryPage {
 
 type CompanyRow = typeof companies.$inferSelect;
 
+const BENCHMARK_RATINGS: readonly BenchmarkRating[] = ['elite', 'high', 'medium', 'low'];
+
+/** Only the four rating words may reach a public card — anything else is dropped, never echoed. */
+function isBenchmarkRating(value: unknown): value is BenchmarkRating {
+  return typeof value === 'string' && (BENCHMARK_RATINGS as readonly string[]).includes(value);
+}
+
 const num = (v: string | number | null | undefined): number | null => {
   if (v === null || v === undefined || v === '') return null;
   const n = Number(v);
@@ -184,7 +198,12 @@ const num = (v: string | number | null | undefined): number | null => {
  * the directory and the profile both go through it, so neither can leak a field
  * the other hides.
  */
-export function toPublicProfile(row: CompanyRow, viewer: ViewerTier, inquiryCount: number): StartupCard & Pick<StartupProfile, 'investorContactName' | 'investorContactEmail' | 'financeDeclaredAt'> {
+export function toPublicProfile(
+  row: CompanyRow,
+  viewer: ViewerTier,
+  inquiryCount: number,
+  benchmarkRating: BenchmarkRating | null = null,
+): StartupCard & Pick<StartupProfile, 'investorContactName' | 'investorContactEmail' | 'financeDeclaredAt'> {
   const finance = {
     cashOnHand: num(row.cashOnHand),
     monthlyBudget: num(row.monthlyBudget),
@@ -217,6 +236,7 @@ export function toPublicProfile(row: CompanyRow, viewer: ViewerTier, inquiryCoun
     monthlyRevenue: finance.monthlyRevenue,
     runwayHealth: runway?.health ?? null,
     runwayMonths: member && runway ? runway.runwayMonths : null,
+    benchmarkRating: isBenchmarkRating(benchmarkRating) ? benchmarkRating : null,
     inquiryCount,
     listedAt: row.listedAt ? row.listedAt.toISOString() : null,
     updatedAt: row.updatedAt.toISOString(),

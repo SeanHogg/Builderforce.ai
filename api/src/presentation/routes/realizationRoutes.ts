@@ -50,6 +50,7 @@ import {
 } from '../../application/realization/realizationStore';
 import { syncRealizationVerdict } from '../../application/realization/realizationVerdict';
 import { proofReachable, recordProofOutcome } from '../../application/realization/proofOutcomes';
+import { readDeliveryCostMillicents } from '../../application/outcomes/deliveryCost';
 import { resolveOutcomeSession } from '../../application/outcomes/outcomeLedger';
 import { ingressForPlanning, realize } from '../../application/realization/realizeService';
 import { REALIZATION_TARGETS, realizationTargetByKey, recommendRealizations } from '../../application/realization/targets';
@@ -378,12 +379,18 @@ export function createRealizationRoutes(db: Db, runtimeService: RuntimeService):
       });
       const reachable = proofReachable(result.liveUrl);
       const built = { ...subject, projectId: result.projectId ?? row.projectId, realizationId: row.id, targetKey: row.targetKey };
+      // The build's attributed LLM spend (undefined — not 0 — when none is recorded, so
+      // the metric stays "Not measured"). Only a reachable proof is a delivery.
+      const costUsdMillicents = reachable
+        ? await readDeliveryCostMillicents(db, { tenantId, projectId: built.projectId, correlationId: buildCorrelation })
+        : undefined;
       await recordProofOutcome(db, {
         ...built,
         correlationId: buildCorrelation,
         action: 'proof.build',
         phase: 'succeeded',
         durationMs: Date.now() - buildStartedAt,
+        costUsdMillicents,
         metricKey: 'reachable_proofs',
         metricValue: reachable ? 1 : 0,
         unit: 'count',

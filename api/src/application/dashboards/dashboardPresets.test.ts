@@ -157,6 +157,43 @@ describe('founder + vertical presets (PRD 25 A2)', () => {
   });
 });
 
+describe('Slice D vertical KPI tiles (PRD 25 §5.3)', () => {
+  // Each vertical must carry at least its headline §5.3 tile, by identity.
+  const HEADLINE: Record<string, string[]> = {
+    fintech: ['m:payments.tpv', 'm:payments.takeRate', 'm:payments.fraudLossBps'],
+    healthtech: ['m:clinical.reimbursementStatus'],
+    medtech: ['m:clinical.stage', 'm:clinical.monthsToMilestone', 'm:clinical.regulatorySpendPct', 'w:clinical.stage'],
+    biotech: ['m:clinical.stage', 'm:clinical.monthsToMilestone', 'w:clinical.trial-economics'],
+    climate_energy: ['m:climate.unitCostVsIncumbent', 'm:climate.tco2eAbated', 'm:climate.offtakePipeline'],
+    hardware_robotics: ['m:hardware.productionStage', 'm:hardware.grossMargin', 'm:hardware.backlog'],
+    cybersecurity: ['m:security.pipelineCoverage', 'm:security.pocConversion', 'm:security.timeToValue'],
+    marketplace: ['m:market.gmv', 'm:market.liquidity', 'm:market.repeatRate', 'm:market.contributionPerOrder'],
+  };
+
+  it('fills saas and ai_ml with their §5.3 tiles, after the founder layer', () => {
+    const founderLen = ALL_DASHBOARD_PRESETS.founder.tiles.length;
+    const required: Record<string, string[]> = {
+      saas: ['w:growth.nrr', 'w:growth.grr', 'w:growth.cac-payback', 'w:growth.ltv-cac', 'w:growth.ltv-tranches'],
+      ai_ml: ['w:ai.inference-margin', 'w:ai.inference-efficiency', 'w:growth.nrr', 'w:growth.ltv-cac'],
+    };
+    for (const [vertical, ids] of Object.entries(required)) {
+      const tiles = ALL_DASHBOARD_PRESETS[vertical as keyof typeof ALL_DASHBOARD_PRESETS].tiles.map(tileIdentity);
+      for (const id of ids) expect(tiles, `${vertical}:${id}`).toContain(id);
+      expect(tiles.indexOf(ids[0]!), vertical).toBeGreaterThan(founderLen);
+    }
+  });
+
+  it('fills each of the eight verticals with its headline tiles, after the founder layer', () => {
+    const founderLen = ALL_DASHBOARD_PRESETS.founder.tiles.length;
+    for (const [vertical, required] of Object.entries(HEADLINE)) {
+      const ids = ALL_DASHBOARD_PRESETS[vertical as keyof typeof ALL_DASHBOARD_PRESETS].tiles.map(tileIdentity);
+      for (const id of required) expect(ids, `${vertical}:${id}`).toContain(id);
+      // Vertical tiles come after the founder layer + peer tile.
+      expect(ids.indexOf(required[0]!), vertical).toBeGreaterThan(founderLen);
+    }
+  });
+});
+
 describe('isPresetKey — the gate', () => {
   it('accepts only the declared keys', () => {
     for (const key of listPresetKeys()) expect(isPresetKey(key)).toBe(true);

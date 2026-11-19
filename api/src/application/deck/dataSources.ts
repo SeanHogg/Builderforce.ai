@@ -7,10 +7,11 @@
  */
 
 import { and, desc, eq } from 'drizzle-orm';
+import { summarizeMarketSize } from '@builderforce/creation-canvas-contract';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
-import { initiatives, aiProgramInitiatives, aiToolAdoption, tenants } from '../../infrastructure/database/schema';
+import { initiatives, aiProgramInitiatives, aiToolAdoption, tenants, creationSessions, creationSessionObjects } from '../../infrastructure/database/schema';
 import { buildExecutiveSummary } from '../reports/executiveSummary';
 import { computeDora } from '../metrics/workforceMetrics';
 import { computeFinanceInsights } from '../insights/financeInsights';
@@ -90,6 +91,7 @@ async function loadDeckData(db: Db, tenantId: number, quarter: string): Promise<
   const fteByCategory = (lastQuarter?.fteByCategory ?? []).map((r) => [r.category, String(round(r.fte, 1) ?? '—')]);
 
   const aiProgramInvested = aiPrograms.reduce((a, p) => a + (p.investedUsd || 0), 0);
+  const market = await loadMarket(db, tenantId);
 
   return {
     meta: { quarter, tenantName: tenantRow[0]?.name ?? null, generatedAt: new Date(now).toISOString() },
@@ -144,6 +146,37 @@ async function loadDeckData(db: Db, tenantId: number, quarter: string): Promise<
       forecastUsd: round(finance.totals.forecastUsd, 2),
       costPerMergedPrUsd: round(finance.totals.costPerMergedPrUsd ?? null, 2),
     },
+    market,
+  };
+}
+
+/**
+ * The market slide's source: the tenant's most recently updated `marketSize` canvas object,
+ * run through the contract's `summarizeMarketSize` (the same function the canvas card derives
+ * through). No such object → every leaf null, so the slide renders its fallback + warning
+ * rather than a zero.
+ */
+async function loadMarket(db: Db, tenantId: number): Promise<DeckData['market']> {
+  const empty: DeckData['market'] = {
+    tamUsd: null, samUsd: null, somUsd: null, topDownSomUsd: null, triangulationGap: null, inconsistent: null,
+  };
+  const rows = await db
+    .select({ canvasData: creationSessionObjects.canvasData })
+    .from(creationSessionObjects)
+    .innerJoin(creationSessions, eq(creationSessions.id, creationSessionObjects.sessionId))
+    .where(and(eq(creationSessions.tenantId, tenantId), eq(creationSessionObjects.kind, 'marketSize')))
+    .orderBy(desc(creationSessionObjects.updatedAt))
+    .limit(1);
+  const data = rows[0]?.canvasData;
+  if (!data || typeof data !== 'object') return empty;
+  const s = summarizeMarketSize(data as Record<string, unknown>);
+  return {
+    tamUsd: s.tam ?? null,
+    samUsd: s.sam ?? null,
+    somUsd: s.som ?? null,
+    topDownSomUsd: s.topDownSom ?? null,
+    triangulationGap: s.triangulationGap ?? null,
+    inconsistent: s.tam === undefined && s.sam === undefined && s.som === undefined ? null : s.inconsistent,
   };
 }
 
