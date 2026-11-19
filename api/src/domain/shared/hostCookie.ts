@@ -17,6 +17,22 @@
 /** The browser-enforced prefix: Secure, Path=/, no Domain. */
 export const HOST_COOKIE_PREFIX = '__Host-';
 
+/**
+ * Where a cookie value that fails to decode is reported (the domain's port; it carries the
+ * cookie NAME only, never the value, which may be a session token). Each Worker's composition
+ * root wires it to the caught-error reporter (`configureDomainFailureSinks`); until then it logs.
+ */
+export type CookieDecodeFailureSink = (error: unknown, cookieName: string) => void;
+
+let cookieDecodeFailureSink: CookieDecodeFailureSink = (error, cookieName) => {
+  console.error('[cookie-decode-failed]', { cookieName, error });
+};
+
+/** Route decode failures to `sink` (composition roots only). */
+export function configureCookieDecodeFailureSink(sink: CookieDecodeFailureSink): void {
+  cookieDecodeFailureSink = sink;
+}
+
 /** The `__Host-` name for a base cookie name. */
 export const hostCookieName = (base: string): string => `${HOST_COOKIE_PREFIX}${base}`;
 
@@ -35,8 +51,9 @@ export function readCookieValues(header: string | null | undefined, name: string
     try {
       const value = decodeURIComponent(part.slice(eq + 1).trim());
       if (value) values.push(value);
-    } catch {
-      continue; // a malformed escape (URIError) is not a value: skip this entry, read the rest
+    } catch (error) {
+      // A malformed escape (URIError) is not a value: reported, then this entry is skipped and the rest are read.
+      cookieDecodeFailureSink(error, name);
     }
   }
   return values;

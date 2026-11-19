@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  configureCookieDecodeFailureSink,
   hostCookieName,
   hostCookieUpgrade,
   hostSetCookie,
@@ -71,8 +72,14 @@ describe('hostCookie', () => {
     expect(withSetCookies(original, [])).toBe(original);
   });
 
-  it('decodes values and treats a malformed escape as absent', () => {
+  it('decodes values; a malformed escape is reported by cookie name (never value) and read as absent', () => {
+    const reported: Array<{ error: unknown; cookieName: string }> = [];
+    configureCookieDecodeFailureSink((error, cookieName) => reported.push({ error, cookieName }));
     expect(readCookie('a=x%20y', 'a')).toBe('x y');
+    expect(reported).toEqual([]);
     expect(readCookie('a=%', 'a')).toBeNull();
+    expect(readCookie('a=%; a=ok', 'a')).toBe('ok');
+    expect(reported).toHaveLength(2);
+    expect(reported.every((r) => r.cookieName === 'a' && r.error instanceof URIError)).toBe(true);
   });
 });

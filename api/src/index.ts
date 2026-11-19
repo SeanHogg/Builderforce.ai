@@ -375,12 +375,14 @@ import {
 } from './application/observability/caughtErrorReporter';
 import { runInRequestScope } from './application/shared/requestScope';
 import { persistCaughtError } from './infrastructure/observability/persistCaughtError';
+import { configureDomainFailureSinks } from './application/observability/domainFailureSinks';
 import { inProcessRouteReplay } from './application/llm/replayApp';
 import { configureRouteReplay } from './application/llm/routeReplay';
 import { stripGatewayPrefix } from './presentation/gatewayPrefix';
 import { taskCreatedHook } from './application/task/taskCreationHook';
 
 configureCaughtErrorReporter(persistCaughtError);
+configureDomainFailureSinks();
 
 // Bind the RouteReplay port for THIS Worker: a builtin MCP tool call replays an
 // `/api/*` route IN-PROCESS through the app. The gateway Worker binds the same
