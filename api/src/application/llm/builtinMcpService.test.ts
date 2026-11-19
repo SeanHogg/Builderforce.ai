@@ -506,6 +506,30 @@ describe('callBuiltinTool', () => {
     expect(taskSvc.updateTask).toHaveBeenCalled();
   });
 
+  it('tasks.archive_many archives each tenant-owned id, restores on archived:false, and reports per-id failures without aborting', async () => {
+    taskSvc.getTask.mockReset();
+    taskSvc.updateTask.mockReset();
+    taskSvc.getTask.mockImplementation(async (id: number) => {
+      if (id === 8) throw new Error('Task not found');
+      return { projectId: 4, toPlain: () => ({ id }) };
+    });
+    projectSvc.getProject.mockResolvedValue({ id: 4 });
+    taskSvc.updateTask.mockResolvedValue({ toPlain: () => ({}) });
+
+    const res = await callBuiltinTool(db, { tenantId: TENANT, tool: 'tasks.archive_many', arguments: { ids: [7, 8, 9] } });
+    expect(res).toMatchObject({ archived: [7, 9], count: 2 });
+    expect((res as { failed: Array<{ id: unknown; error: string }> }).failed).toEqual([{ id: 8, error: 'Task not found' }]);
+    expect(taskSvc.updateTask).toHaveBeenCalledTimes(2);
+    expect(taskSvc.updateTask).toHaveBeenCalledWith(7, { archived: true });
+
+    const back = await callBuiltinTool(db, { tenantId: TENANT, tool: 'tasks.archive_many', arguments: { ids: [7], archived: false } });
+    expect(back).toMatchObject({ restored: [7], count: 1 });
+    expect(taskSvc.updateTask).toHaveBeenLastCalledWith(7, { archived: false });
+
+    await expect(callBuiltinTool(db, { tenantId: TENANT, tool: 'tasks.archive_many', arguments: { ids: [] } })).rejects.toThrow(/non-empty/);
+    await expect(callBuiltinTool(db, { tenantId: TENANT, tool: 'tasks.archive_many', arguments: { ids: Array.from({ length: 201 }, (_, i) => i + 1) } })).rejects.toThrow(/capped at 200/);
+  });
+
   it('tasks.get includes implementer activity and stale-delivery evidence', async () => {
     taskSvc.getTask.mockResolvedValue({ projectId: 4, toPlain: () => ({ id: 9, projectId: 4, status: 'in_review' }) });
     projectSvc.getProject.mockResolvedValue({ id: 4 });

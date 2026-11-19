@@ -1259,6 +1259,29 @@ const CATALOG: BuiltinTool[] = [
     },
   },
   { tool: 'tasks.delete', mutates: true, description: 'Permanently delete a task — it cannot be recovered. Only when the user explicitly asked to delete; otherwise archive it with tasks.update { archived: true }.', parameters: obj({ id: N }, ['id']), run: async (ctx, a) => { await getTenantTask(ctx, idArg(a.id, 'id')); await ctx.tasks.deleteTask(idArg(a.id, 'id')); return { deleted: idArg(a.id, 'id') }; } },
+  {
+    tool: 'tasks.archive_many', mutates: true,
+    description: 'Archive (or restore with archived:false) MANY tasks in one call — up to 200 ids. Archiving is recoverable and is the way to clear backlog noise (fan-out copies, duplicates, stale records). Each id is tenant-checked individually; ids that fail are reported in `failed` and do not abort the rest. Returns { archived|restored:[ids], failed:[{id,error}], count }.',
+    parameters: obj({ ids: { type: 'array', items: N }, archived: B }, ['ids']),
+    run: async (ctx, a) => {
+      if (!Array.isArray(a.ids) || a.ids.length === 0) throw new Error('ids must be a non-empty array');
+      if (a.ids.length > 200) throw new Error('ids is capped at 200 per call');
+      const flag = typeof a.archived === 'boolean' ? a.archived : true;
+      const done: number[] = [];
+      const failed: Array<{ id: unknown; error: string }> = [];
+      for (const raw of a.ids as unknown[]) {
+        try {
+          const id = idArg(raw, 'id');
+          await getTenantTask(ctx, id);
+          await ctx.tasks.updateTask(id, { archived: flag });
+          done.push(id);
+        } catch (e) {
+          failed.push({ id: raw, error: e instanceof Error ? e.message : String(e) });
+        }
+      }
+      return { [flag ? 'archived' : 'restored']: done, failed, count: done.length };
+    },
+  },
   { tool: 'tasks.move', mutates: true, description: 'Move a task to another project board (re-keys it).', parameters: obj({ id: N, projectId: N }, ['id', 'projectId']), run: (ctx, a) => ctx.tasks.moveTask(idArg(a.id, 'id'), idArg(a.projectId, 'projectId'), ctx.tenantId).then((t) => t.toPlain()) },
 
   // ---- Work-delta capture + Validator review (0270) ----
