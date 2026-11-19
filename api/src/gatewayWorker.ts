@@ -30,9 +30,11 @@ import { configureRouteReplay } from './application/llm/routeReplay';
 import { configureCaughtErrorReporter } from './application/observability/caughtErrorReporter';
 import { runInRequestScope } from './application/shared/requestScope';
 import { persistCaughtError } from './infrastructure/observability/persistCaughtError';
+import { configureDomainFailureSinks } from './application/observability/domainFailureSinks';
 import { buildGatewayApp } from './presentation/gatewayApp';
 
 configureCaughtErrorReporter(persistCaughtError);
+configureDomainFailureSinks();
 
 /** Env of the gateway Worker: the API service binding plus everything the gateway
  *  routes read (same bindings as the API for the buckets/namespaces they share). */
