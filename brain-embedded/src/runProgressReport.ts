@@ -49,7 +49,7 @@ function formatRuns(runs: readonly RunSummary[]): string {
     return `#${first + i + 1} "${label}" ${r.turns} turn(s) · ${r.calls} call(s)`
       + `${r.cacheAnswered ? ` · ${r.cacheAnswered} cache-answered` : ''} · ${r.mutationsSucceeded} changed${r.spinning ? ' ⚠ SPUN' : ''}`;
   });
-  return `Runs (latest last; the figures above are run #${runs.length}'s): ${first ? `(${first} earlier) ` : ''}${named.join(' | ')}`;
+  return `Runs (latest last; the "Latest run" figures are run #${runs.length}'s): ${first ? `(${first} earlier) ` : ''}${named.join(' | ')}`;
 }
 
 /**
@@ -57,14 +57,34 @@ function formatRuns(runs: readonly RunSummary[]): string {
  * something to say — a run that advanced cleanly adds a single "Progress:" line
  * rather than four sections of zeroes.
  */
-export function formatRunProgress(p: RunProgress): string[] {
+/**
+ * The chat-wide sums beside the latest run's figures — in a multi-run chat the Progress /
+ * Effect / Time lines describe ONE run (chat #273 run #6: "Time 1m 11s" read as the whole
+ * chat), so the totals are stated next to them.
+ */
+function formatChatTotals(runs: readonly RunSummary[]): string {
+  const sum = (pick: (r: RunSummary) => number) => runs.reduce((n, r) => n + pick(r), 0);
+  return `Chat totals (${runs.length} runs): ${sum((r) => r.turns)} turn(s) · ${sum((r) => r.calls)} call(s)`
+    + ` · ${sum((r) => r.mutationsSucceeded)} change(s) · ${progressDuration(sum((r) => r.activeMs ?? 0))} active`;
+}
+
+/** Options for {@link formatRunProgress}. */
+export interface FormatRunProgressOptions {
+  /** The run was still executing at capture: no "nothing was changed" claim is made. */
+  running?: boolean;
+}
+
+export function formatRunProgress(p: RunProgress, opts: FormatRunProgressOptions = {}): string[] {
   const lines: string[] = [];
+  // In a multi-run chat every figure below is the LATEST run's — label it so, explicitly.
+  const multi = p.runs.length > 1;
+  const scope = multi ? `Latest run (#${p.runs.length} of ${p.runs.length}) · ` : '';
 
   const reach = p.targetedCalls > 0
     ? `${p.distinctTargets} distinct target(s) over ${p.targetedCalls} targeted call(s)`
     : 'no targeted calls';
   lines.push(
-    `Progress: ${reach}${p.repeatedTargets.length ? ` · ${Math.round(p.revisitRatio * 100)}% of calls revisited ground already covered` : ' · no repeats'}`
+    `${scope}Progress: ${reach}${p.repeatedTargets.length ? ` · ${Math.round(p.revisitRatio * 100)}% of calls revisited ground already covered` : ' · no repeats'}`
     + `${p.duplicateCalls ? ` · ${p.duplicateCalls} EXACT duplicate call(s)` : ''}`
     + `${p.cacheAnswered ? ` · ${p.cacheAnswered} call(s) answered from the read cache, never re-run` : ''}`
     + `${p.longestStreak ? ` · ${formatStreak(p.longestStreak)}${p.streaks > 1 ? ` (${p.streaks} such streaks)` : ''}` : ''}`,
@@ -78,21 +98,22 @@ export function formatRunProgress(p: RunProgress): string[] {
     lines.push(`Revisited: ${named}${rest > 0 ? ` (+${rest} more)` : ''}`);
   }
 
-  if (p.runs.length > 1) lines.push(formatRuns(p.runs));
+  if (multi) lines.push(formatRuns(p.runs), formatChatTotals(p.runs));
 
+  const pending = opts.running ? ' · run in progress — no effect verdict yet' : '';
   if (p.editIntent) {
     lines.push(
-      `Effect: the request asked for a CHANGE · ${p.mutationsAttempted} mutating call(s) attempted, ${p.mutationsSucceeded} succeeded`
-      + `${p.noEffect ? ' · ⚠ NOTHING WAS CHANGED' : ''}`,
+      `${scope}Effect: the request asked for a CHANGE · ${p.mutationsAttempted} mutating call(s) attempted, ${p.mutationsSucceeded} succeeded`
+      + `${opts.running ? pending : p.noEffect ? ' · ⚠ NOTHING WAS CHANGED' : ''}`,
     );
   } else if (p.mutationsAttempted > 0) {
-    lines.push(`Effect: ${p.mutationsAttempted} mutating call(s) attempted, ${p.mutationsSucceeded} succeeded.`);
+    lines.push(`${scope}Effect: ${p.mutationsAttempted} mutating call(s) attempted, ${p.mutationsSucceeded} succeeded${pending}.`);
   }
 
   if (p.wallClockMs > 0) {
     const active = Math.max(0, p.wallClockMs - p.idleMs);
     lines.push(
-      `Time: ${progressDuration(active)} wall clock · ${progressDuration(p.modelMs)} in the model · ${progressDuration(p.toolMs)} in tools`
+      `${scope}Time: ${progressDuration(active)} wall clock · ${progressDuration(p.modelMs)} in the model · ${progressDuration(p.toolMs)} in tools`
       + `${p.slowestStep ? ` · slowest ${p.slowestStep.label} (${progressDuration(p.slowestStep.ms)})` : ''}`
       + `${p.idleMs > 0 ? ` · ${progressDuration(p.idleMs)} waiting on the user between turns, excluded (span ${progressDuration(p.wallClockMs)})` : ''}`,
     );

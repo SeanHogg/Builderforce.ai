@@ -125,6 +125,13 @@ export interface ChatDiagnosticsAccount {
   planModelCount?: number;
   /** Connected bring-your-own provider keys (empty ⇒ every turn is plan-funded). */
   byoProviders?: string[];
+  /**
+   * Which account ACTUALLY served this chat's turns, across EVERY turn of the trace:
+   * `own` · `shared` · `shared_byo_unused` when all turns agree, `mixed` when they differ. Null when no
+   * turn recorded one. The plan signal reads it so it never claims "funded by the shared
+   * free pool" over turns the tenant's own key paid for.
+   */
+  servedBy?: string | null;
   /** Client build + gateway it is talking to, so a report pins the exact surface. */
   extensionVersion?: string | null;
   baseUrl?: string | null;
@@ -274,6 +281,13 @@ export interface ChatDiagnosticsData {
    * — never as "nothing ran", which is a different and much stronger claim.
    */
   runs?: ChatDiagnosticsRuns | null;
+  /**
+   * Successful writes/commits/pushes the SESSION made itself, off the chat's trace
+   * (`sessionShippedInTrace`). Non-zero turns "zero runs dispatched" from a staffing gap
+   * into a neutral fact: the session did the work, no dispatch was needed. Absent/null
+   * means not measured (no trace was handed to the gatherer).
+   */
+  sessionShipped?: number | null;
   tickets?: Array<{ kind: string; ref: string; label?: string; linkType?: string; status?: string }>;
   /** Plan, quota and model entitlement for the signed-in tenant (see the interface). */
   account?: ChatDiagnosticsAccount | null;
@@ -497,7 +511,14 @@ function diagnosticsSignals(d: ChatDiagnosticsData): string[] {
   // three agents present, seven tickets linked, every code change made by the local
   // session, and no line anywhere saying so.
   const runs = d.runs;
-  if (runs && agentCount > 0 && runs.linkedRunnableTickets > 0 && runs.runs.length === 0) {
+  const selfServed = (d.sessionShipped ?? 0) > 0;
+  if (runs && agentCount > 0 && runs.linkedRunnableTickets > 0 && runs.runs.length === 0 && selfServed) {
+    // The session changed and shipped the code itself — no dispatch was needed, so the
+    // empty history is the editor path working, not a staffing gap (chat #275).
+    out.push(
+      `ℹ️ Self-served: no agent was dispatched for this chat's ${runs.linkedRunnableTickets} runnable ticket(s) because the session did the work itself (${d.sessionShipped} successful write/commit/push call(s)).`,
+    );
+  } else if (runs && agentCount > 0 && runs.linkedRunnableTickets > 0 && runs.runs.length === 0) {
     const names = (d.agents ?? []).map((a) => a.name?.trim() || a.agentRef).join(', ');
     out.push(
       `⚠️ ${agentCount} agent(s) are in this chat (${names}) and ZERO runs have ever been started against its ${runs.linkedRunnableTickets} runnable ticket(s).`
@@ -595,12 +616,31 @@ function diagnosticsSignals(d: ChatDiagnosticsData): string[] {
   if (acct) {
     const free = acct.plan === 'free';
     const noCard = acct.billingStatus === 'none' || acct.billingStatus == null;
+    // Each expectation is DERIVED from the data, never asserted from the plan name alone:
+    // a free tenant can be premium-entitled and pay for its turns with its own key (chat
+    // #275 ran Opus on the tenant's Anthropic key while this line said "no premium models,
+    // funded by the shared free pool").
+    const premium = acct.canUsePremiumModels === true;
+    // `servedBy` is aggregated over every turn: `own` only when ALL were own-key, `mixed`
+    // when some were and some were not — in which case neither funding claim is made.
+    const mixed = acct.servedBy === 'mixed';
+    const ownFunded = acct.servedBy === 'own' || (!mixed && (acct.modelFunding ?? '').startsWith('byo:'));
     if (free && noCard) {
+      const expect = ['the smaller monthly token allowance'];
+      if (!premium) expect.push('no premium/frontier models');
+      if (!ownFunded && !mixed) expect.push('turns funded by the shared free pool');
+      const facts = [
+        ...(premium ? ['premium/frontier models ARE entitled on this tenant'] : []),
+        ...(ownFunded ? ["this chat's turns were paid by your own connected provider account, not the shared pool"] : []),
+        ...(mixed ? ["this chat's turns were served by more than one account (some by your own key, some by the shared pool)"] : []),
+      ];
       out.push(
-        'ℹ️ Free plan with NO payment method on file. Expect the smaller monthly token allowance, no premium/frontier models, and turns funded by the shared free pool — none of this is a fault. Adding a card (or connecting your own provider account) lifts all three.',
+        `ℹ️ Free plan with NO payment method on file. Expect ${expect.length > 1 ? `${expect.slice(0, -1).join(', ')}, and ${expect[expect.length - 1]}` : expect[0]} — none of this is a fault.`
+          + (facts.length ? ` (${facts.join('; ')}.)` : '')
+          + ` Adding a card (or connecting your own provider account) lifts ${expect.length === 3 ? 'all three' : 'these limits'}.`,
       );
     } else if (free) {
-      out.push('ℹ️ Free plan — premium/frontier models are not entitled and the monthly token allowance is the free tier\'s.');
+      out.push(`ℹ️ Free plan — ${premium ? 'premium/frontier models ARE entitled on this tenant' : 'premium/frontier models are not entitled'} and the monthly token allowance is the free tier's.`);
     }
     if (acct.billingStatus === 'past_due') {
       out.push('⚠️ Billing status is past_due — plan entitlements may be suspended until payment succeeds, which reads as sudden model/quota downgrade.');
@@ -620,7 +660,7 @@ function diagnosticsSignals(d: ChatDiagnosticsData): string[] {
         `⚠️ Model "${acct.model}" is a premium/metered model but this plan is NOT entitled to premium models — the gateway rejects it (402) or falls back to the plan pool, which is why answers look weaker than the picked model implies.`,
       );
     }
-    if ((acct.byoProviders?.length ?? 0) === 0 && free) {
+    if ((acct.byoProviders?.length ?? 0) === 0 && free && !ownFunded) {
       out.push('ℹ️ No bring-your-own provider accounts connected, so every turn spends the plan allowance above. Connecting your own Claude/OpenAI account makes turns $0 against the plan.');
     }
   }
@@ -702,12 +742,17 @@ function shortTime(iso: string | null | undefined): string {
  *                     the transcript of a chat whose work was done by the local session
  *                     is indistinguishable from one whose agents are working on it.
  */
-function runHistoryLines(runs: ChatDiagnosticsRuns | null | undefined): string[] {
+function runHistoryLines(runs: ChatDiagnosticsRuns | null | undefined, sessionShipped: number): string[] {
   if (!runs) {
     return ['- Execution history: not gathered (this surface did not read the chat\'s runs — absent is NOT the same as "nothing ran")'];
   }
   if (runs.linkedRunnableTickets === 0) {
     return ['- Execution history: no runnable ticket (task/epic/gap) is linked to this chat, so there is nothing here that could have been run.'];
+  }
+  if (runs.runs.length === 0 && sessionShipped > 0) {
+    return [
+      `- Execution history: self-served — no cloud run against ${runs.linkedRunnableTickets} linked runnable ticket(s); this session changed the code itself (${sessionShipped} successful write/commit/push call(s)), so no dispatch was needed.`,
+    ];
   }
   if (runs.runs.length === 0) {
     return [
@@ -998,7 +1043,7 @@ export function formatChatDiagnostics(d: ChatDiagnosticsData): string[] {
     lines.push('- Linked tickets (0)');
   }
 
-  lines.push(...runHistoryLines(d.runs));
+  lines.push(...runHistoryLines(d.runs, d.sessionShipped ?? 0));
 
   const signals = diagnosticsSignals(d);
   if (signals.length) {

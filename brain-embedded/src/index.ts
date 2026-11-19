@@ -375,7 +375,7 @@ export { createComposingActivity, toolCallArgBytes, utf8ByteLength } from './com
 export type { ComposingActivity, ComposingSink, ComposingOptions } from './composingActivity';
 
 // Size budget for a copied triage report, so its END survives pasting.
-export { createPayloadBudget, cutMiddleToFit, truncateMiddle, PASTE_SAFE_REPORT_CHARS } from './transcriptBudget';
+export { createPayloadBudget, cutMiddleToFit, truncateMiddle, PASTE_SAFE_REPORT_CHARS, payloadPriority, DEFAULT_HIGH_PRIORITY_RESERVE } from './transcriptBudget';
 
 // Did the run's change actually SHIP? The evidence a run holds first-hand when it
 // pushed straight to the base branch — the case no merge webhook can ever see.
@@ -401,7 +401,7 @@ export { HISTORY_TOKEN_BUDGET } from '@seanhogg/builderforce-memory/working';
 export { readWithIdleWatchdog, StreamIdleError, STREAM_IDLE_MS } from './streamIdleWatchdog';
 export type { IdleWatchdogOptions, IdleWatchdogReader } from './streamIdleWatchdog';
 export { stableStringify } from '@builderforce/agent-tools';
-export type { PayloadBudget, PayloadBudgetOptions, PayloadBudgetStats } from './transcriptBudget';
+export type { PayloadBudget, PayloadBudgetOptions, PayloadBudgetStats, PayloadPriority, ChargePriority } from './transcriptBudget';
 
 // Durable tool/memory STEP rows — the reader for what the run loop persisted, so a
 // reopened chat's timeline AND its triage diagnostics both see the steps the live

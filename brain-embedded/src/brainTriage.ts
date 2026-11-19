@@ -11,39 +11,39 @@
 
 import { announcesUntakenAction } from '@builderforce/agent-stall';
 import { turnInterruption } from './finishReason';
-import { describeStreamFailure, type StreamFailureDetail } from './streamFailureDetail';
+import type { StreamFailureDetail } from './streamFailureDetail';
 import type { BrainMessage } from './types';
 import { isModelReply } from './modelReply';
 import { traceWithPersistedSteps } from './persistedSteps';
 import { computeRunProgress, type RunProgress } from './runProgress';
-import { formatRunProgress, runProgressVerdict, spunEarlier } from './runProgressReport';
-import { formatModelScorecard, formatModelTurnLog, modelScorecard, modelTurnLog, type ModelScore, type ModelTurn } from './modelScorecard';
-import { formatRoutingByRole, routingByRole, type RoutingByRole } from './routingByRole';
-import { formatStaffingSummary, staffingSummaryInTrace, workFiledNotStaffedVerdict, type StaffingSummary } from './staffingSummary';
+import { spunEarlier } from './runProgressReport';
+import { modelScorecard, modelTurnLog, type ModelScore, type ModelTurn } from './modelScorecard';
+import { routingByRole, type RoutingByRole } from './routingByRole';
+import { sessionShippedInTrace, staffingSummaryInTrace, type StaffingSummary } from './staffingSummary';
 import { parseMessageProvenance } from './provenance';
 import { STOPPED_TURN_STEP } from './stoppedTurn';
 import { isCodeChangeTool } from './localWorkspaceTools';
 import { LOCAL_TICKET_CREATE_LABEL } from './ticketToolVocabulary';
-import { MAX_TOOL_RESULT_CHARS, READ_FILE_TOOL } from './toolResultBudget';
-import { HISTORY_TOKEN_BUDGET } from '@seanhogg/builderforce-memory/working';
+import { READ_FILE_TOOL } from './toolResultBudget';
+import { midRunNotice, type BrainRunActivity } from './runActivity';
+import {
+  CONTEXT_PROMPT_PEAK,
+  LARGE_LOSSY_RESULT_BYTES,
+  decideLikelyCause,
+  isHealthyRun,
+  recoveredFailuresInTrace,
+  type LikelyCause,
+} from './brainVerdict';
+import { formatBrainDiagnostics } from './brainDiagnosticsText';
+import { isFailedToolResult } from './toolFailure';
 
-/**
- * A prompt at or past this many tokens is context PRESSURE.
- *
- * DERIVED from the working transcript's own budget rather than guessed: the request is
- * the system prompt + the tool catalog + the history, and the first two are ~15–30k on a
- * coding turn, so a full prompt at the budget lands around 1.5×. A prompt below this is
- * the design working, not a symptom.
- *
- * It was a hardcoded 24k, written when the history budget was 24k and never moved when
- * the budget became 64k. Chat #113 therefore reported "Likely CONTEXT EXHAUSTION — the
- * prompt peaked at 90,129 tokens" on a turn that had exhausted nothing: 90k is what a
- * 64k-token transcript is SUPPOSED to cost.
- */
-const CONTEXT_PROMPT_PEAK = Math.round(HISTORY_TOKEN_BUDGET * 1.5);
-/** A single LOSSY tool result at least this large is context pressure too. */
-const LARGE_LOSSY_RESULT_BYTES = 20_000;
-import { formatBytes, midRunNotice, type BrainRunActivity } from './runActivity';
+// Lives in the leaf `toolFailure.ts` (no import cycles); re-exported for existing callers.
+export { isFailedToolResult };
+
+// The report TEXT lives in `brainDiagnosticsText.ts`; re-exported so this stays the one import.
+export { formatBrainDiagnostics };
+// Moved to `staffingSummary.ts` beside the staffing verdict that reads it; re-exported for callers.
+export { sessionShippedInTrace };
 
 /** One step of the Brain agent loop, recorded as it runs. */
 export interface BrainTraceEvent {
@@ -100,37 +100,6 @@ export interface BrainTraceEvent {
    * one, so mismatched coverage is labelled instead of silently averaged in.
    */
   recovered?: boolean;
-}
-
-/**
- * Did a tool result represent a failure?
- *
- * Tool results in this codebase signal failure by SHAPE, not prose: the platform
- * actions return `{ ok: false }` or `{ error: "<message>" }` (the tenant guard,
- * the dispatcher's unknown-capability, a thrown handler). We inspect that shape
- * instead of regex-scanning the whole stringified payload — the old
- * `\b(error|failed|exception)\b` scan misfired on any legit data that merely
- * CONTAINED the word "error" (e.g. a task titled "Fix login error", an audit
- * row, a search result), mis-marking a successful run as ERROR in the report.
- *
- * For a STRING result we only flag an embedded `{ ok: false }` / `"error":`
- * envelope (a stringified error object), never a free-text occurrence of the
- * word — a plain-string success like `"done"` or `"No errors found"` is not a
- * failure.
- */
-export function isFailedToolResult(result: unknown): boolean {
-  if (result == null) return false;
-  if (typeof result === 'object') {
-    const r = result as Record<string, unknown>;
-    if (r.ok === false) return true;
-    if (typeof r.error === 'string' && r.error) return true;
-    return false;
-  }
-  if (typeof result === 'string') {
-    // Only a serialized error envelope counts — not the bare word "error".
-    return /"ok"\s*:\s*false/.test(result) || /"error"\s*:\s*"[^"]/.test(result);
-  }
-  return false;
 }
 
 /** Tool labels that PERSIST a file/attachment change. A "saved the file" claim is
@@ -600,7 +569,11 @@ export interface BrainDiagnostics {
    * whole transcript hunting for the failure. Capped, because a run that fails
    * repeatedly should not push everything else out of the report.
    */
-  errorSteps: { label: string; message: string; model?: string; failure?: StreamFailureDetail; requiredRole?: string; callerRole?: string; remediation?: string }[];
+  errorSteps: { label: string; message: string; model?: string; failure?: StreamFailureDetail; requiredRole?: string; callerRole?: string; remediation?: string; recovered?: boolean }[];
+  /** Of `errors`, the failed tool steps a later success on the same target recovered — see `brainVerdict.ts`. */
+  recoveredFailures: number;
+  /** True when the run was still executing at capture — the verdict is then `run-in-progress`. */
+  running: boolean;
   /** Distinct models that actually answered, first-seen order. */
   modelsUsed: string[];
   /** What each of those models did with the turns it served — see `modelScorecard.ts`. */
@@ -699,42 +672,8 @@ export interface BrainDiagnostics {
    * or a later read came back clean. See {@link unresolvedAppFailuresInTrace}.
    */
   unresolvedAppFailures: number;
-  /**
-   * Best-effort verdict — the header a triager reads first. `healthy` is distinct
-   * from `inconclusive`: the former means there is no failure to explain, the
-   * latter that there IS one but the signals don't separate A from B. Collapsing
-   * both into "inconclusive" made a clean run read as an unsolved problem.
-   *
-   * `tool-calls-not-emitted` outranks the rest: a run that narrated its calls did
-   * nothing at all, and every other signal on it reads clean.
-   *
-   * `no-tools-advertised` and `tool-not-advertised` outrank even that, because they are
-   * OUR fault rather than the model's, and the remedy ("pick a different model") that
-   * `tool-calls-not-emitted` prescribes is actively wrong for them.
-   *
-   * `no-progress` sits above `context-exhaustion` and `model-degradation` for the same
-   * reason: a run that re-read one file until its budget was gone will ALSO show a high
-   * prompt peak and truncated tool results, so the context signals fire — but they are a
-   * CONSEQUENCE of the loop, and acting on them (shrink the transcript, swap the model)
-   * changes nothing. The loop has to be named first or it is never seen.
-   *
-   * `work-filed-not-staffed` sits LAST among the causes, above only `healthy`/`inconclusive`:
-   * it is a verdict about the run's OUTCOME, not its mechanics, so any genuine exhaustion,
-   * model fault or narrated-call failure explains the missing dispatch better and outranks it.
-   */
-  likelyCause:
-    | 'memory-answered'
-    | 'no-tools-advertised'
-    | 'tool-not-advertised'
-    | 'tool-calls-not-emitted'
-    | 'answered-in-prose'
-    | 'no-progress'
-    | 'context-exhaustion'
-    | 'model-degradation'
-    | 'app-errors-unresolved'
-    | 'work-filed-not-staffed'
-    | 'inconclusive'
-    | 'healthy';
+  /** Best-effort verdict — the header a triager reads first. Ordering: `brainVerdict.ts`. */
+  likelyCause: LikelyCause;
 }
 
 /**
@@ -883,20 +822,6 @@ export function formatMemoryUsage(m: MemoryUsageSummary): string {
   );
 }
 
-/**
- * Writes and publishes this session made itself. Ticket creates do not count: filing
- * work and then not dispatching it is exactly the staffing gap. A successful edit,
- * commit or push means the session did the work a cloud run would have done.
- */
-export function sessionShippedInTrace(events: BrainTraceEvent[]): number {
-  let n = 0;
-  for (const ev of events) {
-    if (ev.category !== 'tool' || ev.isError || isFailedToolResult(ev.result)) continue;
-    if (isCodeChangeTool(ev.label) || ev.label === 'git_commit' || ev.label === 'git_push') n += 1;
-  }
-  return n;
-}
-
 export function computeBrainDiagnostics(
   events: BrainTraceEvent[],
   requestedModel?: string,
@@ -973,7 +898,8 @@ export function computeBrainDiagnostics(
   }
 
   // WHAT failed, not just how many. Newest first: the last failure is usually the
-  // one that ended the run.
+  // one that ended the run. A failure a later retry recovered is marked as such.
+  const recovered = recoveredFailuresInTrace(events);
   const errorSteps = errors
     .slice(-MAX_REPORTED_ERRORS)
     .reverse()
@@ -989,6 +915,7 @@ export function computeBrainDiagnostics(
         ...(failure && typeof failure === 'object' ? { failure } : {}),
         ...(gate.requiredRole ? { requiredRole: gate.requiredRole, remediation: ROLE_GATE_REMEDIATION } : {}),
         ...(gate.callerRole ? { callerRole: gate.callerRole } : {}),
+        ...(recovered.has(e) ? { recovered: true } : {}),
       };
     });
 
@@ -1085,28 +1012,40 @@ export function computeBrainDiagnostics(
     sessionShipped === 0
     && (staffing.verdict === 'filed-not-staffed' || staffing.verdict === 'staffing-refused');
   const unresolvedAppFailures = unresolvedAppFailuresInTrace(events);
-  const healthy =
-    errors.length === 0 && !loopExhausted && emptyOrLengthFinishes === 0 && !contextSignal
-    && !announcedUnmadeToolCall && !answeredInProse && !noProgress && unresolvedAppFailures === 0 && didWork;
-  const likelyCause: BrainDiagnostics['likelyCause'] =
-    memoryOnlyRun ? 'memory-answered'
-      : noToolsAdvertised ? 'no-tools-advertised'
-        : narratedUnadvertisedTools.length > 0 ? 'tool-not-advertised'
-          : announcedUnmadeToolCall ? 'tool-calls-not-emitted'
-            : answeredInProse ? 'answered-in-prose'
-            : noProgress ? 'no-progress'
-            : contextSignal && !degradationSignal ? 'context-exhaustion'
-              : degradationSignal && !contextSignal ? 'model-degradation'
-                : unresolvedAppFailures > 0 ? 'app-errors-unresolved'
-                : workFiledNotStaffed ? 'work-filed-not-staffed'
-                  : healthy ? 'healthy'
-                    : 'inconclusive';
+  const running = ctx.running === true;
+  const likelyCause = decideLikelyCause({
+    running,
+    memoryOnlyRun,
+    noToolsAdvertised,
+    narratedUnadvertised: narratedUnadvertisedTools.length > 0,
+    announcedUnmadeToolCall,
+    answeredInProse,
+    noProgress,
+    contextSignal,
+    degradationSignal,
+    unresolvedAppFailures,
+    workFiledNotStaffed,
+    healthy: isHealthyRun({
+      errors: errors.length,
+      recoveredFailures: recovered.size,
+      loopExhausted,
+      emptyOrLengthFinishes,
+      contextSignal,
+      announcedUnmadeToolCall,
+      answeredInProse,
+      noProgress,
+      unresolvedAppFailures,
+      didWork,
+    }),
+  });
 
   return {
     turns: llm.length,
     toolCalls: toolEvents.length,
     errors: errors.length,
     errorSteps,
+    recoveredFailures: recovered.size,
+    running,
     loopExhausted,
     tokensMeasured,
     promptTokenPeak,
@@ -1144,188 +1083,6 @@ export function computeBrainDiagnostics(
     unresolvedAppFailures,
     likelyCause,
   };
-}
-
-/** Human-readable KB. ONE formatter for the package — see `runActivity.ts`. */
-const kb = formatBytes;
-
-/**
- * WHAT tripped the context verdict, stated as the evidence it is. The old line claimed
- * "the transcript outgrew the model window" whatever the signal — on a 46k-token peak
- * against a model with a ~1M window, where the true reading is "a large prompt and some
- * results cut to the per-result budget". The reader decides from the numbers.
- */
-function contextEvidence(d: BrainDiagnostics): string {
-  const parts: string[] = [];
-  if (d.promptTokenPeak >= CONTEXT_PROMPT_PEAK) parts.push(`the prompt peaked at ${d.promptTokenPeak.toLocaleString('en-US')} tokens`);
-  // NOT "cut before the model saw them": a trim to the per-result budget is the budget
-  // working, and calling it a loss turned the most routine line in the report into the
-  // headline evidence for a failure that had not happened.
-  if (d.truncatedToolResults > 0) parts.push(`${d.truncatedToolResults} tool result(s) were trimmed to the ${toolResultBudgetText()} tool-result budget (by design)`);
-  if (d.downgradeEvents > 0) parts.push(`${d.downgradeEvents} turn(s) were served by a smaller model than asked`);
-  if (parts.length === 0 && d.largestToolResult) parts.push(`one ${d.largestToolResult.label} result was ${kb(d.largestToolResult.bytes)}`);
-  return parts.length ? parts.join('; ') : 'context pressure without a single dominant signal';
-}
-
-/** The per-result cap, stated as a reader reads it. Derived, never typed twice. */
-function toolResultBudgetText(): string {
-  return `${Math.round(MAX_TOOL_RESULT_CHARS / 1000)} KB`;
-}
-
-/**
- * The advisory that replaces a verdict when the run showed context pressure and nothing
- * broke. It has to say the numbers (a reader who sees 90k tokens and is told nothing
- * assumes the worst) AND why they are normal, in one line.
- */
-function contextPressureLine(d: BrainDiagnostics): string | null {
-  if (!d.contextPressureOnly) return null;
-  const parts: string[] = [];
-  if (d.tokensMeasured && d.promptTokenPeak > 0) parts.push(`prompt peaked at ${d.promptTokenPeak.toLocaleString('en-US')} tokens`);
-  if (d.truncatedToolResults > 0) parts.push(`${d.truncatedToolResults} tool result(s) trimmed to the ${toolResultBudgetText()} budget by design`);
-  if (!parts.length && d.largestToolResult) parts.push(`one ${d.largestToolResult.label} result was ${kb(d.largestToolResult.bytes)}`);
-  return `Context: pressure noted (${parts.join('; ')}) — no turn was cut short by it. The working transcript is held to a ${HISTORY_TOKEN_BUDGET.toLocaleString('en-US')}-token budget on purpose, so a prompt above that figure is the design working, not a fault.`;
-}
-
-/**
- * Render {@link BrainDiagnostics} as transcript lines. Shared by both copy
- * surfaces so the "Diagnostics" block is identical on web and in VS Code. Emits
- * a leading `--- Diagnostics ---` header and returns the lines (caller joins).
- */
-export function formatBrainDiagnostics(d: BrainDiagnostics): string[] {
-  const evermindAnswers = d.memoryAnswers?.filter((m) => m.source === 'evermind') ?? [];
-  const verdict =
-    d.likelyCause === 'memory-answered'
-      ? `ANSWERED FROM MEMORY — no model ran this turn. The reply was served by the memory-first short-circuit (${(d.memoryAnswers ?? []).map((m) => m.source === 'evermind' ? `the project Evermind SSM${m.projectId != null ? ` of project #${m.projectId}` : ''}${m.version != null ? ` v${m.version}` : ''}` : m.source === 'symbol-index' ? 'the workspace symbol index' : m.source === 'deterministic' ? `the deterministic workspace action ${m.actionId ?? ''}`.trim() : 'the Q&A cache').join(', ')}), so zero turns, zero tokens and zero tool calls is EXPECTED, not a fault. ${evermindAnswers.length ? 'The Evermind SSM cannot call tools and answers only from what it has learned, so it can neither fetch live data nor do work — if the reply was wrong, garbled or stale, that is the cause. Turn Memory off for this chat, or disable inference on that head.' : (d.memoryAnswers ?? []).every((m) => m.source === 'symbol-index') ? 'The request was only "where is X defined?" and the symbol index resolved every name, so the definitions were listed without a model; ask for anything more to reach the model.' : (d.memoryAnswers ?? []).every((m) => m.source === 'symbol-index' || m.source === 'deterministic') ? 'A deterministic workspace action (the PreFetch gate) settled the request without a model; ask for anything more to reach the model.' : 'The reply is a replay of an earlier answer to the same question; ask a differently-worded question to reach the model.'} Switching models changes nothing here.`
-    : d.likelyCause === 'no-tools-advertised'
-      ? 'NO TOOLS ADVERTISED — at least one turn was handed ZERO tool definitions, so it could not have emitted a call whatever it wanted to do. This is a catalog/config failure on our side, not a model fault: the gateway MCP catalog (`/llm/v1/mcp/tools`) failed to load, or no actions were registered for this surface. See the "Tools available to the model" line in the Chat diagnostics block for the fetch error. Switching models will not help.'
-      : d.likelyCause === 'tool-not-advertised'
-        ? `TOOL NOT ADVERTISED — a turn wrote out ${d.narratedUnadvertisedTools.map((n) => `\`${n}\``).join(', ')} as prose while that tool was NOT among the ones it was offered that turn. No model can emit a call for a function it was never given, so this is OUR per-turn tool selection dropping a tool the prompt asked for — not a model that "won't call tools". Fix the selection (pin the tool, or name it in the system prompt so it is force-included) rather than switching models.`
-        : d.likelyCause === 'tool-calls-not-emitted'
-          ? 'TOOL CALLS NOT EMITTED — a turn NARRATED a tool call in prose ("I\'ll call the tool…", a bare `builtin_…` name) but the run recorded ZERO tool steps, so nothing executed and the answer never got its data. The tools WERE advertised and the agent loop only runs structured `tool_calls`, so this is a model/provider fault: the model is describing calls instead of emitting them. Try a different model.'
-          : d.likelyCause === 'answered-in-prose'
-            ? 'ANSWERED IN PROSE — at least one turn was handed tool definitions but replied with text and ZERO tool calls, so nothing ran. The tools were advertised; the model described the work instead of doing it. This is a model/provider fault: try a different model, or pin one that emits structured calls.'
-          : d.likelyCause === 'no-progress'
-            ? ((d.progress && runProgressVerdict(d.progress)) ?? 'NO PROGRESS — the run repeated work without advancing.')
-          : d.likelyCause === 'context-exhaustion'
-            ? `Likely CONTEXT EXHAUSTION (case A) — ${contextEvidence(d)}.`
-            : d.likelyCause === 'model-degradation'
-              ? 'Likely MODEL DEGRADATION (case B) — an Evermind/SSM turn returned empty while tokens stayed low.'
-              : d.likelyCause === 'app-errors-unresolved'
-                ? `APP STILL BROKEN — every tool call succeeded, but the run's last diagnostics read still reported ${d.unresolvedAppFailures} build/runtime failure(s) in the app it was working on. The tools are fine; the app is not. Read that diagnostics result in the trace below for the error — if it points into a package CDN or the preview runtime rather than the project's own files, the fault is the platform's, and rewriting project files will not fix it.`
-              : d.likelyCause === 'work-filed-not-staffed'
-                ? workFiledNotStaffedVerdict(d.staffing)
-              : d.likelyCause === 'healthy'
-                ? 'No failure signal — no errors, no truncated or empty turns, and no context pressure. Nothing here needs triaging.'
-                : 'Inconclusive — not enough signal to separate context exhaustion from model degradation.';
-
-  const lines: string[] = ['--- Diagnostics ---', `Likely cause: ${verdict}`];
-  // When the turn/token figures cover only THIS session while the tool figures
-  // cover the whole conversation, say so on the line itself — read together
-  // without it, "Turns: 2 · Tool calls: 44" looks like corrupt data.
-  const scope = d.turnCoveragePartial ? ' (this session)' : '';
-  lines.push(`Turns${scope}: ${d.turns} · Tool calls: ${d.toolCalls} · Errors: ${d.errors}${d.loopExhausted ? ' · LOOP EXHAUSTED' : ''}`);
-  if (d.tokensMeasured) {
-    lines.push(
-      `Tokens${scope}: prompt peak ${d.promptTokenPeak.toLocaleString()} · last-turn prompt ${d.lastPromptTokens.toLocaleString()} · completion total ${d.completionTokenTotal.toLocaleString()}`,
-    );
-  } else {
-    lines.push('Tokens: not reported by the gateway for this run.');
-  }
-  if (d.turnCoveragePartial) {
-    lines.push(
-      'Coverage: tool steps were recovered from this chat\'s durable history, but its earlier TURNS predate durable turn records — so the turn and token counts above describe only the current session, not the whole conversation. Send a new turn to capture a fully-measured run.',
-    );
-  }
-  lines.push(
-    `Tool results: ${kb(d.toolResultBytes)} total${d.largestToolResult ? ` · largest ${d.largestToolResult.label} (${kb(d.largestToolResult.bytes)})` : ''}${d.truncatedToolResults ? ` · ${d.truncatedToolResults} trimmed to the ${toolResultBudgetText()} per-result budget (by design)` : ''}${d.pagedReadWindows ? ` · ${d.pagedReadWindows} read_file window(s) paged (continued by offset, not lost)` : ''}`,
-  );
-  // Pressure without a consequence. Stated here, next to the numbers that produced it,
-  // so a reader meets the explanation in the same breath as the figure.
-  const pressure = contextPressureLine(d);
-  if (pressure) lines.push(pressure);
-  // Repetition / reach / effect / timing. Placed directly under the tool-result
-  // sizes because they answer the question those sizes raise: 102 KB of tool output
-  // across 26 calls is either research or a loop, and only these lines say which.
-  lines.push(...(d.progress ? formatRunProgress(d.progress) : []));
-  // Filed vs staffed. Sits beside progress because it answers the same class of question
-  // — "did anything actually come of this?" — for the half progress cannot see: work that
-  // was created perfectly and handed to nobody. See `staffingSummary.ts`.
-  if (d.memoryUsage) lines.push(formatMemoryUsage(d.memoryUsage));
-  lines.push(...(d.staffing ? formatStaffingSummary(d.staffing, { sessionShipped: d.sessionShipped }) : []));
-  // WHICH steps failed. `Errors: 1` alone forced a reader to scroll the transcript
-  // hunting for the failure; naming it is the difference between a number and a lead.
-  if (d.errorSteps?.length) {
-    for (const e of d.errorSteps) {
-      lines.push(
-        `Failed step: ${e.label}${e.model ? ` on ${e.model}` : ''} — ${e.message}`
-          + (e.requiredRole || e.callerRole
-            ? ` — requires ${e.requiredRole ?? 'unknown'}, caller is ${e.callerRole ?? 'unknown'}${e.remediation ? `; ${e.remediation}` : ''}`
-            : ''),
-      );
-      if (e.failure) lines.push(`  ${describeStreamFailure(e.failure)}`);
-    }
-    if (d.errors > d.errorSteps.length) lines.push(`(+${d.errors - d.errorSteps.length} earlier failure(s) not listed)`);
-  }
-  // What the model could actually CALL, per turn — not the registry-wide total. A run
-  // whose turns saw 0 tools and a run whose turns saw 64 and ignored them used to render
-  // identically, which is how "try a different model" became the standing advice for a
-  // fault that no model change could fix.
-  if (d.advertisedToolsLastTurn != null) {
-    const range =
-      d.advertisedToolsMin != null && d.advertisedToolsMin !== d.advertisedToolsLastTurn
-        ? `${d.advertisedToolsMin}–${d.advertisedToolsLastTurn}`
-        : `${d.advertisedToolsLastTurn}`;
-    lines.push(
-      `Tools advertised per turn: ${range}${d.catalogTools ? ` (of ${d.catalogTools} in the catalog)` : ''}${d.advertisedToolsMin === 0 ? ' · ⚠ a turn was offered NONE' : ''}`,
-    );
-  } else {
-    lines.push('Tools advertised per turn: not recorded (this run predates per-turn tool accounting).');
-  }
-  if (d.narratedUnadvertisedTools.length) {
-    lines.push(`Narrated but never advertised: ${d.narratedUnadvertisedTools.join(', ')} — the model was told to call a tool it was not given.`);
-  }
-  // How the loop FOUGHT the stall. Without these a report showing nine turns and zero
-  // tool calls reads as though nothing intervened, when in fact the loop re-prompted
-  // three times and swapped models twice before giving up.
-  if (d.stallRecoveries > 0 || d.modelFailovers > 0 || d.stallUnrecovered) {
-    lines.push(
-      `Stall handling: ${d.stallRecoveries} re-prompt(s) · ${d.modelFailovers} model failover(s)${d.stallUnrecovered
-        ? ' · GAVE UP (the stall survived every attempt)'
-        : d.stallRecovered
-          ? ' · recovered'
-          : ' · NOT recovered (no tool ran after the last re-prompt — the run ended on a turn the stall detector accepted as an answer)'}`,
-    );
-  }
-  // A turn whose stream broke is retried ONCE on another model; a second break ends the run.
-  if (d.streamRetries?.length) {
-    lines.push(`Stream retries: ${d.streamRetries.length} — ${d.streamRetries.join(', ')} broke mid-turn and the turn was retried on another model (one retry per turn).`);
-  }
-  // WHICH model did what. "Models used: a, b" cannot say that one of them never called
-  // a tool, or that its calls were written in markup nothing parsed; these lines can.
-  lines.push(...formatModelScorecard(d.modelScores ?? []));
-  lines.push(...formatRoutingByRole(d.routing));
-  // Ordered per-output attribution — the scorecard aggregates; this lists each
-  // llm.complete so "which outputs were Grok rambling" is answerable without counting.
-  // Clearer diagnostics do NOT fix Grok tool calling: production API must include the
-  // Responses adapter deploy (a client ahead of the gateway still lacks it).
-  lines.push(...formatModelTurnLog(d.modelTurns ?? []));
-  if (d.downgradeEvents > 0) lines.push(`Model downgrades: ${d.downgradeEvents} turn(s) answered by a different model than requested (gateway failover).`);
-  if (d.emptyOrLengthFinishes > 0) lines.push(`Degenerate turns: ${d.emptyOrLengthFinishes} ended on \`length\` or returned empty text.`);
-  if (d.evermindUsed.length) lines.push(`Evermind/SSM answered: ${d.evermindUsed.join(', ')}`);
-  // Always reported when it happened, even on a mixed run where the model handled the
-  // other turns — otherwise a memory-answered reply is invisible in the numbers and the
-  // reader attributes its (tool-less, token-less) shape to the model.
-  if (d.memoryAnswers?.length) {
-    lines.push(
-      `Answered from memory (LLM skipped): ${d.memoryAnswers.length} turn(s) — `
-      + d.memoryAnswers
-        .map((m) => m.source === 'evermind'
-          ? `Evermind SSM${m.projectId != null ? ` (project #${m.projectId}` : ''}${m.version != null ? `${m.projectId != null ? ', ' : ' ('}v${m.version}` : ''}${m.projectId != null || m.version != null ? ')' : ''}`
-          : m.source === 'symbol-index' ? 'symbol index' : m.source === 'deterministic' ? `workspace action ${m.actionId ?? ''}`.trim() : 'Q&A cache')
-        .join(', '),
-    );
-  }
-  return lines;
 }
 
 export interface BuildBrainTriageOptions {

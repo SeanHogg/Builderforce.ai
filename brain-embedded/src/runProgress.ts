@@ -31,7 +31,8 @@
 
 import { asksForChange, isContinuationDirective } from '@builderforce/agent-stall';
 import { isCodeChangeTool } from './localWorkspaceTools';
-import { isFailedToolResult, type BrainTraceEvent } from './brainTriage';
+import type { BrainTraceEvent } from './brainTriage';
+import { isFailedToolResult } from './toolFailure';
 import { visitTarget } from './runActivity';
 import { BACK_TO_BACK_AT, callFingerprint } from '@builderforce/run-guards';
 import type { BrainMessage } from './types';
@@ -110,7 +111,35 @@ function callSignature(ev: BrainTraceEvent): string {
  */
 function targetSignature(ev: BrainTraceEvent): string | null {
   const target = subjectOf(ev);
-  return target ? `${ev.label}:${target}` : null;
+  if (target) return `${ev.label}:${target}`;
+  // A DATA/LIST read names no file, but it is still aimed at something: the tool, its
+  // filters and the page. Chat #273 paged `builtin_tasks_list` fifteen times and the
+  // report said "no targeted calls"; with the whole argument set as the target, every
+  // distinct page is new ground and a page fetched again is a revisit.
+  return isPagedDataCall(ev) ? `${ev.label}:${callFingerprint('', ev.args)}` : null;
+}
+
+/**
+ * What a call was aimed at, for matching a later call against it: its target when it
+ * has one, else its exact signature (tool + arguments). The recovery check in
+ * `brainVerdict.ts` reads this, so "the same call succeeded later" means the same
+ * command / the same file — never merely the same tool.
+ */
+export function callTargetKey(ev: BrainTraceEvent): string {
+  return targetSignature(ev) ?? callSignature(ev);
+}
+
+const PAGE_KEYS = ['offset', 'page', 'cursor', 'skip', 'after', 'pageToken', 'page_token', 'next'] as const;
+
+/**
+ * A non-mutating call carrying a page cursor. Only PAGED calls become targets: an
+ * unpaged list call repeated is usually legitimate polling ("is the run done yet?"),
+ * and counting it would turn a watch loop into a no-progress verdict.
+ */
+function isPagedDataCall(ev: BrainTraceEvent): boolean {
+  if (isMutationTool(ev.label)) return false;
+  const args = ev.args && typeof ev.args === 'object' ? (ev.args as Record<string, unknown>) : null;
+  return !!args && PAGE_KEYS.some((k) => args[k] != null);
 }
 
 /** What a call was aimed at, one spelling per file: `./src/a.ts`, `src\a.ts` and
@@ -144,6 +173,8 @@ export interface RunSummary {
   cacheAnswered: number;
   mutationsSucceeded: number;
   spinning: boolean;
+  /** Active wall clock of the run (span minus idle gaps), so a chat total can be summed. */
+  activeMs: number;
 }
 
 export interface RunProgress {
@@ -239,6 +270,7 @@ export function computeRunProgress(events: BrainTraceEvent[], messages: BrainMes
     cacheAnswered: p.cacheAnswered,
     mutationsSucceeded: p.mutationsSucceeded,
     spinning: p.spinning,
+    activeMs: Math.max(0, p.wallClockMs - p.idleMs),
   }));
   return { ...each[each.length - 1]!.p, runs };
 }

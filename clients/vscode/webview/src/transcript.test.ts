@@ -190,3 +190,80 @@ describe('buildTranscript whole-report ceiling', () => {
     expect(() => JSON.parse(jsonBlock(text)!)).not.toThrow();
   });
 });
+
+describe('buildTranscript payload ranking', () => {
+  it('regression: keeps the commit after reads drained the budget, prints shell output once, omits tiny repeated inputs', () => {
+    const trace: BrainTraceEvent[] = [];
+    for (let i = 0; i < 30; i++) {
+      trace.push({
+        ts: `2026-09-15T10:${String(i).padStart(2, '0')}:00.000Z`,
+        category: 'tool',
+        label: 'read_file',
+        args: { path: `src/file${i}.ts` },
+        result: { ok: true, content: `line ${i} `.repeat(800) },
+      });
+    }
+    for (let i = 0; i < 5; i++) {
+      trace.push({
+        ts: `2026-09-15T10:${String(30 + i).padStart(2, '0')}:00.000Z`,
+        category: 'tool',
+        label: 'run_command',
+        args: { command: `pnpm check:${i}`, cwd: 'C:/repo' },
+        result: { ok: true, exitCode: 0, stdout: `guard ${i} passed — all files clean and consistent`, cwd: 'C:/repo' },
+      });
+    }
+    trace.push({
+      ts: '2026-09-15T10:40:00.000Z',
+      category: 'tool',
+      label: 'git_commit',
+      args: { message: 'COMMIT-MESSAGE-MARKER fix the guards', files: ['src/a.ts'] },
+      result: { ok: true, output: '[main abc1234] COMMIT-MESSAGE-MARKER fix the guards' },
+    });
+    const text = buildTranscript({ messages: MESSAGES, trace, assistantName: 'ZetaBot', diagnostics: CHAT });
+    expect(text.length).toBeLessThanOrEqual(50_000);
+    // The commit survives in full although 30 large reads came first.
+    expect(text).toContain('"message": "COMMIT-MESSAGE-MARKER fix the guards"');
+    // Each command's output is printed once — no `{ok, exitCode, stdout}` envelope beneath it.
+    expect(text.split('guard 2 passed').length - 1).toBe(1);
+    // The repeated tiny `{"cwd": …}` input is reprinted (cheaper than a back reference), never dropped.
+    expect(text).not.toContain('identical to the');
+    expect(text.split('"cwd": "C:/repo"').length - 1).toBeGreaterThanOrEqual(5);
+  });
+
+  it('regression: errors and diffs past the whole budget still leave the last ask and final reply intact', () => {
+    const trace: BrainTraceEvent[] = Array.from({ length: 40 }, (_, i) => ({
+      ts: `2026-09-15T10:${String(i).padStart(2, '0')}:00.000Z`,
+      category: 'tool',
+      label: 'run_command',
+      args: { command: `pnpm test --shard ${i}` },
+      result: { ok: false, exitCode: 1, stdout: `diff --git a/f${i} b/f${i}\n@@ -1 +1 @@\n${'- failing line\n'.repeat(400)}` },
+      isError: true,
+    }) as BrainTraceEvent);
+    const messages: BrainMessage[] = [
+      { role: 'user', content: `FIRST-ASK ${'please '.repeat(60)}` } as BrainMessage,
+      { role: 'user', content: `LAST-ASK-MARKER ${'and then ship it '.repeat(30)}` } as BrainMessage,
+      { role: 'assistant', content: `FINAL-REPLY-MARKER ${'conclusion '.repeat(300)}` } as BrainMessage,
+    ];
+    const text = buildTranscript({ messages, trace, assistantName: 'ZetaBot', diagnostics: CHAT });
+    expect(text.length).toBeLessThanOrEqual(50_000);
+    expect(text).toContain(`LAST-ASK-MARKER ${'and then ship it '.repeat(30)}`.trim());
+    expect(text).toContain(`FINAL-REPLY-MARKER ${'conclusion '.repeat(300)}`.trim());
+  });
+
+  it('regression: a read-heavy run with no high-priority payload still prints its final reply', () => {
+    const trace: BrainTraceEvent[] = Array.from({ length: 40 }, (_, i) => ({
+      ts: `2026-09-15T10:${String(i).padStart(2, '0')}:00.000Z`,
+      category: 'tool',
+      label: 'read_file',
+      args: { path: `src/file${i}.ts` },
+      result: { ok: true, content: `line ${i} `.repeat(800) },
+    }) as BrainTraceEvent);
+    const messages: BrainMessage[] = [
+      { role: 'user', content: 'review the code' } as BrainMessage,
+      { role: 'assistant', content: `FINAL-REPLY-MARKER ${'conclusion '.repeat(300)}` } as BrainMessage,
+    ];
+    const text = buildTranscript({ messages, trace, assistantName: 'ZetaBot', diagnostics: CHAT });
+    expect(text.length).toBeLessThanOrEqual(50_000);
+    expect(text).toContain(`FINAL-REPLY-MARKER ${'conclusion '.repeat(100)}`);
+  });
+});

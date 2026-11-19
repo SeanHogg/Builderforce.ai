@@ -11,6 +11,8 @@
  * Pure: the surface hands in each child's trace and state; nothing here reads a store.
  */
 
+import { liftProseAskUser, parseAskUser, stripAskUser } from '@builderforce/agent-loop';
+import { announcesDeliverable } from '@builderforce/run-guards';
 import { isFailedToolResult, modelsUsedInTrace, type BrainTraceEvent } from './brainTriage';
 import { codeChangesOf } from './codeChanges';
 import { describeLiveStep, type BrainRunActivity } from './runActivity';
@@ -48,10 +50,26 @@ const excerpt = (v: unknown): string => {
   return text.length > EXCERPT_CHARS ? `${text.slice(0, EXCERPT_CHARS)}…` : text;
 };
 
+/**
+ * A finished child is only `done` when its last reply IS the report. Two endings look
+ * finished and are not (chat #273: "I have enough to produce the report … ```ask-user"):
+ *  - it ASKED A QUESTION — no person can answer a sub-agent, so the question is a dead end;
+ *  - it ANNOUNCED a deliverable in its sign-off and ended without producing it.
+ * Read with the run loop's own predicates (`parseAskUser`/`liftProseAskUser` from
+ * agent-loop, `announcesDeliverable` from run-guards), never a second text detector.
+ */
 function stateOf(c: SubagentDiagnosticsInput): string {
   if (c.running) return 'running';
   if (c.error) return 'failed';
-  return c.lastMessage?.trim() ? 'done' : 'ended without a report';
+  const last = c.lastMessage?.trim() ?? '';
+  if (!last) return 'ended without a report';
+  if (parseAskUser(liftProseAskUser(last))) {
+    return 'ENDED ON A QUESTION — it asked the user something, and no one can answer a sub-agent; its work is unfinished';
+  }
+  if (announcesDeliverable(stripAskUser(last))) {
+    return 'ENDED WITHOUT ITS DELIVERABLE — its last reply announced the report/output and the run stopped before producing it';
+  }
+  return 'done';
 }
 
 function spanOf(events: BrainTraceEvent[]): string {
@@ -73,12 +91,13 @@ export function formatSubagentDiagnostics(children: readonly SubagentDiagnostics
     for (const e of tools) for (const f of codeChangesOf(e.label, e.args, e.result) ?? []) files.add(f);
     const models = modelsUsedInTrace(c.events);
     const span = spanOf(c.events);
+    const state = stateOf(c);
 
     lines.push(
       `• ${c.handle} ${c.name} — "${c.label}" · sub-agent of ${c.owner}${c.depth > 1 ? ` (depth ${c.depth})` : ''}${c.ticket ? ` · ticket ${c.ticket}` : ''}`,
     );
     lines.push(
-      `  State: ${stateOf(c)} · Turns: ${c.events.filter((e) => e.category === 'llm').length} · Tool calls: ${tools.length} · Failed: ${failures.length}${span ? ` · ${span}` : ''}`,
+      `  State: ${state} · Turns: ${c.events.filter((e) => e.category === 'llm').length} · Tool calls: ${tools.length} · Failed: ${failures.length}${span ? ` · ${span}` : ''}`,
     );
     if (models.length) lines.push(`  Models: ${models.join(', ')}`);
     if (c.running && c.activity) lines.push(`  Now: ${describeLiveStep(c.activity, capturedAtMs)}`);
@@ -86,7 +105,7 @@ export function formatSubagentDiagnostics(children: readonly SubagentDiagnostics
     for (const f of failures.slice(0, MAX_FAILURES)) lines.push(`  Failed step: ${f.label} — ${excerpt(f.result)}`);
     if (failures.length > MAX_FAILURES) lines.push(`  …and ${failures.length - MAX_FAILURES} more failed step(s)`);
     if (c.error) lines.push(`  Error: ${excerpt(c.error)}`);
-    if (c.lastMessage?.trim()) lines.push(`  ${c.running ? 'Last message' : 'Report'}: ${excerpt(c.lastMessage)}`);
+    if (c.lastMessage?.trim()) lines.push(`  ${state === 'done' ? 'Report' : 'Last message'}: ${excerpt(c.lastMessage)}`);
   }
   return lines;
 }

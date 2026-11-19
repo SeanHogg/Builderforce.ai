@@ -19,8 +19,8 @@
  * a gateway MCP shell tool and any future one without an allow-list to maintain.
  *
  * Nothing is ever hidden to achieve this: the raw argument JSON is still rendered for
- * whatever the command line did not already show, and the raw result JSON is dropped
- * ONLY when every field in it is one the terminal panel already displays.
+ * whatever the command line did not already show, and the raw result JSON keeps ONLY
+ * the fields the terminal panel does not already display (nothing is printed twice).
  */
 
 import { activityTarget } from '@seanhogg/builderforce-brain-embedded';
@@ -59,7 +59,7 @@ export interface ToolStepView {
   preview: ToolPreview | null;
   /** Raw argument JSON, minus anything the command line already shows. `''` = omit. */
   argsText: string;
-  /** Raw result JSON. `''` = the terminal panel already shows all of it. */
+  /** Raw result JSON — for a command, only the fields its terminal panel does not show. `''` = nothing left. */
   resultText: string;
   /** Whether the step opens expanded: a failure exists to be read without a click;
    *  everything else — including a shell step — starts collapsed so a run's tool
@@ -188,6 +188,23 @@ function residualArgs(args: unknown, command: string | null): unknown {
 }
 
 /**
+ * The result fields a command card does NOT already show. The terminal panel renders
+ * stdout/stderr/output/error, the exit code and the outcome, so repeating them in a raw
+ * JSON panel printed every shell step's output twice (and a copied triage report paid
+ * for both). Only what is left — `files`, `cwd`, anything a host adds — is rendered.
+ * A result that is not a record is fully shown by the terminal panel already.
+ */
+function residualResult(result: unknown): string {
+  const record = shellResultRecord(result);
+  if (!record) return '';
+  const rest: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(record)) {
+    if (!SHELL_RESULT_KEYS.has(key)) rest[key] = value;
+  }
+  return Object.keys(rest).length > 0 ? formatPayload(rest) : '';
+}
+
+/**
  * The header subject: the call's target, or — for a call that reads several files at
  * once (`paths`) — their basenames, since the shared directory says nothing.
  */
@@ -211,7 +228,7 @@ export function toolStepView({ args, result, isError }: { args: unknown; result:
     command,
     preview: toolPreview(args),
     argsText: formatPayload(residualArgs(args, commandLine)),
-    resultText: command?.outputComplete ? '' : formatPayload(result),
+    resultText: command ? residualResult(result) : formatPayload(result),
     // Only a FAILURE opens by default — it is the step nobody should have to click to
     // read. A command is exactly the opposite: its header already carries the command
     // line (the subject), so opening it would push the transcript's body down with

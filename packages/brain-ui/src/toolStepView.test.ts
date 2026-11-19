@@ -115,6 +115,17 @@ describe('toolStepView', () => {
     expect(view.resultText).toContain('"files"');
   });
 
+  it('regression: a command result never repeats the output its terminal panel already shows', () => {
+    const view = toolStepView({
+      args: { command: 'pnpm check' },
+      result: { ok: true, exitCode: 0, stdout: 'All 29 guards passed', cwd: '/repo' },
+      isError: false,
+    });
+    expect(view.command?.output).toBe('All 29 guards passed');
+    expect(view.resultText).toBe(JSON.stringify({ cwd: '/repo' }, null, 2));
+    expect(view.resultText).not.toContain('All 29 guards passed');
+  });
+
   it('leaves a non-shell step exactly as it was: raw input and output, folded away', () => {
     const view = toolStepView({ args: { path: 'src/a.ts' }, result: { ok: true, content: 'x' }, isError: false });
     expect(view.command).toBeNull();

@@ -25,7 +25,10 @@
 import type { SpendSavingsSummary } from './spendSavings';
 import { classifyModelFunding, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsMeter, type ChatDiagnosticsRuns } from './chatDiagnostics';
 import { toolExposureInTrace } from './toolExposure';
-import type { BrainTraceEvent } from './brainTriage';
+import { accountUsedInTrace, type BrainTraceEvent } from './brainTriage';
+import { sessionShippedInTrace } from './staffingSummary';
+import { traceWithPersistedSteps } from './persistedSteps';
+import type { BrainMessage } from './types';
 import { publishHoldFromPersonTurns } from './runStore/publishHold';
 import { isStepMessage } from './types';
 import { selectPendingAskUser } from '@builderforce/agent-loop';
@@ -167,6 +170,22 @@ export interface ChatDiagnosticsSources {
   readApiVersion?: () => Promise<string | null>;
 }
 
+/**
+ * Which account served this chat's turns, across EVERY turn (not just the last):
+ * the one account when they all agree, `mixed` when they differ, null when no turn
+ * recorded one. `accountUsedInTrace` is last-seen, which would let one own-key turn
+ * speak for a chat whose other turns the shared pool paid for.
+ */
+function accountsAcrossTurns(events: readonly BrainTraceEvent[]): string | null {
+  const seen = new Set<string>();
+  for (const ev of events) {
+    if (ev.category !== 'llm') continue;
+    const a = accountUsedInTrace([ev]);
+    if (a) seen.add(a);
+  }
+  return seen.size === 0 ? null : seen.size === 1 ? [...seen][0]! : 'mixed';
+}
+
 /** Run a best-effort read: never throws, never rejects, degrades to `fallback`. */
 function safely<T>(read: (() => Promise<T>) | undefined, fallback: T): Promise<T> {
   if (!read) return Promise.resolve(fallback);
@@ -221,6 +240,12 @@ export async function gatherChatDiagnostics(src: ChatDiagnosticsSources): Promis
   // What the model was ACTUALLY handed per turn, off the run's own trace — the number
   // the ceiling used to stand in for. Nulls when no turn in this run was measured.
   const exposure = src.trace ? toolExposureInTrace([...src.trace]) : null;
+  // The MERGED trace (live steps + steps recovered from durable history) — what the
+  // session itself shipped, and which account actually paid for its turns. Null when
+  // there is nothing to measure, so "not measured" never reads as "none".
+  const merged = traceWithPersistedSteps(msgs as unknown as BrainMessage[], src.trace ? [...src.trace] : []);
+  const sessionShipped = merged.length ? sessionShippedInTrace(merged) : null;
+  const servedBy = accountsAcrossTurns(merged);
 
   // The publish hold, re-derived from the PERSON's own user turns in the durable
   // transcript. The person-turn mark (`chatAsks.personTurns`) lives on the run's working
@@ -259,6 +284,7 @@ export async function gatherChatDiagnostics(src: ChatDiagnosticsSources): Promis
     ...(src.modelSurface?.canUsePremiumModels != null ? { canUsePremiumModels: src.modelSurface.canUsePremiumModels } : {}),
     ...(src.modelSurface?.data ? { planModelCount: src.modelSurface.data.length } : {}),
     byoProviders: src.modelSurface?.byo?.providers ?? [],
+    servedBy,
     extensionVersion: src.uiVersion ?? null,
     baseUrl: src.baseUrl ?? null,
   };
@@ -295,6 +321,7 @@ export async function gatherChatDiagnostics(src: ChatDiagnosticsSources): Promis
       ...(a.builtinKind != null ? { builtinKind: a.builtinKind } : {}),
     })),
     runs,
+    sessionShipped,
     tickets: tickets.map((tk) => ({ kind: tk.kind, ref: tk.ref, label: tk.label, linkType: tk.linkType, status: tk.status })),
     account,
     spend: src.spend ?? null,

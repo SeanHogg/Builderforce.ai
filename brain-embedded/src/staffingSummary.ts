@@ -22,8 +22,23 @@
  */
 
 import { isFailedToolResult, isTicketWriteTool, type BrainTraceEvent } from './brainTriage';
+import { isCodeChangeTool } from './localWorkspaceTools';
 import { isLocalTicketCreateLabel } from './ticketToolVocabulary';
 import { toolResultRecord } from './toolResultRecord';
+
+/**
+ * Writes and publishes this session made itself. Ticket creates do not count: filing
+ * work and then not dispatching it is exactly the staffing gap. A successful edit,
+ * commit or push means the session did the work a cloud run would have done.
+ */
+export function sessionShippedInTrace(events: readonly BrainTraceEvent[]): number {
+  let n = 0;
+  for (const ev of events) {
+    if (ev.category !== 'tool' || ev.isError || isFailedToolResult(ev.result)) continue;
+    if (isCodeChangeTool(ev.label) || ev.label === 'git_commit' || ev.label === 'git_push') n += 1;
+  }
+  return n;
+}
 
 /**
  * Tool labels that put a HUMAN OR AGENT on work: the direct dispatch, the ticket
@@ -93,8 +108,11 @@ export interface StaffingSummary {
    *  - `filed-locally`     — every ticket was filed on this device; the session and its local sub-agents run the
    *                           work here, and the tickets sync to the account when sync is on (the import never staffs).
    *  - `staffing-refused`  — somebody was asked and the platform said no.
+   *  - `self-served`       — work was filed, nobody was dispatched, and none was needed: the
+   *                           session itself changed and shipped the code ({@link sessionShippedInTrace}).
+   *                           A neutral outcome, not the staffing gap `filed-not-staffed` names.
    */
-  verdict: 'no-work-filed' | 'staffed' | 'filed-not-staffed' | 'filed-locally' | 'staffing-refused';
+  verdict: 'no-work-filed' | 'staffed' | 'filed-not-staffed' | 'filed-locally' | 'staffing-refused' | 'self-served';
 }
 
 
@@ -189,7 +207,7 @@ export function staffingSummaryInTrace(events: BrainTraceEvent[]): StaffingSumma
         : ticketsCreated > 0 && filedLocally === ticketsCreated
           ? 'filed-locally'
           : ticketsCreated > 0
-          ? 'filed-not-staffed'
+          ? (sessionShippedInTrace(events) > 0 ? 'self-served' : 'filed-not-staffed')
           : 'no-work-filed';
 
   return { ticketsCreated, filedLocally, dispatchAttempts, dispatched, dispatchRefusals, personaSubagents, verdict };
@@ -234,9 +252,11 @@ export function formatStaffingSummary(s: StaffingSummary, opts?: { sessionShippe
   // "0 dispatched" as "nobody is running it" is how a local editor run that committed
   // the work was reported as stuck (chat #150).
   const shipped = opts?.sessionShipped ?? 0;
-  const sessionDidIt = shipped > 0 && (s.verdict === 'filed-not-staffed' || s.verdict === 'staffing-refused');
+  const sessionDidIt = shipped > 0 && (s.verdict === 'filed-not-staffed' || s.verdict === 'staffing-refused' || s.verdict === 'self-served');
   const tail = sessionDidIt
     ? ` — the session itself changed the code (${shipped} write/commit call(s) succeeded); a cloud dispatch was not required`
+    : s.verdict === 'self-served'
+      ? ' — self-served: the session itself changed the code; a cloud dispatch was not required'
     : s.verdict === 'filed-not-staffed'
       ? ' — the work was filed but nobody is running it'
       : s.verdict === 'filed-locally'

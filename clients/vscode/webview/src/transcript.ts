@@ -14,6 +14,7 @@ import {
   formatAssistantTranscriptHeading,
   traceWithPersistedSteps,
   createPayloadBudget,
+  payloadPriority,
   cutMiddleToFit,
   PASTE_SAFE_REPORT_CHARS,
 } from '@seanhogg/builderforce-brain-embedded';
@@ -25,6 +26,8 @@ import type {
   ChatDiagnosticsData,
   ChatDiagnosticsReport,
   PayloadBudget,
+  PayloadPriority,
+  ChargePriority,
   SubagentDiagnosticsInput,
 } from '@seanhogg/builderforce-brain-embedded';
 
@@ -110,14 +113,97 @@ const MAX_REASONING_CHARS = 1_500;
 /** Text shorter than this is not worth charging (or back-referencing: "continue" twice). */
 const MIN_CHARGED_TEXT_CHARS = 240;
 
-function fenced(label: string, payload: string, budget: PayloadBudget, lines: string[]): void {
-  if (!payload) return;
-  lines.push(`${label}:`, '```', budget.cap(payload, label), '```');
+type TimelineNode = ReturnType<typeof buildTimeline>[number];
+type ToolNode = Extract<TimelineNode, { kind: 'tool' }>;
+
+/** One payload block of a tool step, as it will be charged. */
+interface ToolBlock {
+  label: string;
+  payload: string;
+  priority?: PayloadPriority;
+}
+
+/** Tools whose payloads are the change itself — ranked above reads when the budget runs short. */
+const SHIP_TOOLS = new Set(['git_commit', 'git_push']);
+
+/**
+ * The payload blocks of one tool step — ONE derivation, read both by the pre-scan that sizes
+ * the high-priority hold and by the renderer, so the two can never disagree. The SAME
+ * view-model the timeline renders from, so a pasted report shows a shell step the way the
+ * reader saw it: the command line and what it printed, then only the residual fields.
+ */
+function toolBlocks(node: ToolNode): ToolBlock[] {
+  const view = toolStepView(node);
+  // A failed step and a commit/push carry what triage needs most: never let the run's
+  // earlier reads starve them. Everything else is ranked by the budget itself.
+  const priority: PayloadPriority | undefined = node.isError || SHIP_TOOLS.has(node.label) ? 'high' : undefined;
+  const blocks: ToolBlock[] = [];
+  if (view.command) {
+    blocks.push({ label: 'Command', payload: `$ ${view.command.command}`, priority });
+    blocks.push({
+      label: view.command.exitCode != null && view.command.exitCode !== 0 ? `Output (exit ${view.command.exitCode})` : 'Output',
+      payload: view.command.output || '(no output)',
+      priority,
+    });
+  }
+  blocks.push({ label: 'Input', payload: view.argsText, priority }, { label: 'Output', payload: view.resultText, priority });
+  return blocks;
+}
+
+/** The key of the LAST node of `kind` — the final reply and the last user message are the report's END. */
+function lastKeyOf(nodes: readonly TimelineNode[], kind: 'assistant' | 'user'): string | null {
+  for (let i = nodes.length - 1; i >= 0; i--) if (nodes[i]!.kind === kind) return nodes[i]!.key;
+  return null;
+}
+
+/** Characters a message body will be charged (0 when it is too short to be charged at all). */
+function chargedChars(text: string | undefined, maxChars: number): number {
+  const n = (text ?? '').length;
+  return n < MIN_CHARGED_TEXT_CHARS ? 0 : Math.min(n, maxChars);
+}
+
+/** Largest share of the timeline budget set aside for the final reply + last user message. */
+const MAX_TAIL_RESERVE_SHARE = 0.5;
+
+/**
+ * Room set aside, before anything else, for the report's END — the final assistant reply
+ * and the last user message — released only to those two (charged `'tail'`). Without it a
+ * long chat whose errors and diffs came first spent the pool and printed the last reply as
+ * "…omitted", which is exactly what the budget exists to prevent.
+ */
+function tailReserve(nodes: readonly TimelineNode[], keys: ReadonlySet<string>, total: number): number {
+  let chars = 0;
+  for (const node of nodes) {
+    if (!keys.has(node.key)) continue;
+    if (node.kind === 'user') chars += chargedChars(node.text, MAX_USER_TEXT_CHARS);
+    else if (node.kind === 'assistant') chars += chargedChars(node.text || '', MAX_REPLY_CHARS);
+  }
+  return Math.min(chars, Math.floor(total * MAX_TAIL_RESERVE_SHARE));
+}
+
+/**
+ * How many characters of HIGH-priority payload the timeline will charge — the person's
+ * messages and every high-ranked tool block — so the budget holds room for exactly what
+ * is coming and no more (an unused hold would starve the tail). The two `tail` payloads
+ * are not counted: they have their own reservation.
+ */
+function highPriorityDemand(nodes: readonly TimelineNode[], tailKeys: ReadonlySet<string>): number {
+  let demand = 0;
+  for (const node of nodes) {
+    if (tailKeys.has(node.key)) continue;
+    if (node.kind === 'user') demand += chargedChars(node.text, MAX_USER_TEXT_CHARS);
+    else if (node.kind === 'tool') {
+      for (const b of toolBlocks(node)) {
+        if (b.payload && (b.priority ?? payloadPriority(b.label, b.payload)) === 'high') demand += Math.min(b.payload.length, MAX_PAYLOAD_CHARS);
+      }
+    }
+  }
+  return demand;
 }
 
 /** Charge a message body against the shared budget; short text passes through. */
-function chargeText(text: string, label: string, budget: PayloadBudget, maxChars: number): string {
-  return text.length < MIN_CHARGED_TEXT_CHARS ? text : budget.cap(text, label, maxChars);
+function chargeText(text: string, label: string, budget: PayloadBudget, maxChars: number, priority?: ChargePriority): string {
+  return text.length < MIN_CHARGED_TEXT_CHARS ? text : budget.cap(text, label, maxChars, priority);
 }
 
 
@@ -150,14 +236,23 @@ export function buildTranscript(input: TranscriptInput): string {
   );
   // ONE budget for the timeline, spent as the turns are walked, so an early
   // verbose tool dump cannot starve the tail. See `transcriptBudget.ts`.
-  const budget = createPayloadBudget({ total: timelineBudget, perPayload: MAX_PAYLOAD_CHARS });
+  // The person's words are ranked high, with the hold sized to the high-priority payload
+  // actually present; the final reply and the last user message — the report's END — get
+  // their own reservation, charged `'tail'`.
+  const tailKeys = new Set([lastKeyOf(nodes, 'assistant'), lastKeyOf(nodes, 'user')].filter((k): k is string => k != null));
+  const budget = createPayloadBudget({
+    total: timelineBudget,
+    perPayload: MAX_PAYLOAD_CHARS,
+    highPriorityDemand: highPriorityDemand(nodes, tailKeys),
+    tailReserve: tailReserve(nodes, tailKeys, timelineBudget),
+  });
   const lines: string[] = [];
 
   for (const node of nodes) {
     switch (node.kind) {
       case 'user':
         lines.push('## You');
-        if (node.text) lines.push(chargeText(node.text, 'user message', budget, MAX_USER_TEXT_CHARS));
+        if (node.text) lines.push(chargeText(node.text, 'user message', budget, MAX_USER_TEXT_CHARS, tailKeys.has(node.key) ? 'tail' : 'high'));
         for (const img of node.images) lines.push(`[image: ${img.name ?? img.url}]`);
         break;
       case 'assistant': {
@@ -176,11 +271,12 @@ export function buildTranscript(input: TranscriptInput): string {
         // the reasoning AS the reply. The report says so, rather than printing
         // "(no response)" over a turn the reader could in fact read.
         const rescued = node.key === stranded ? thoughts : '';
+        const replyPriority: ChargePriority | undefined = tailKeys.has(node.key) ? 'tail' : undefined;
         if (rescued) {
           lines.push(
             "_(reply recovered from the model's reasoning — the turn ended without a separate reply)_",
             '',
-            chargeText(rescued, 'assistant reply', budget, MAX_REPLY_CHARS),
+            chargeText(rescued, 'assistant reply', budget, MAX_REPLY_CHARS, replyPriority),
           );
         } else {
           // A turn that only REASONED (then called a tool) rendered as one collapsed
@@ -188,7 +284,7 @@ export function buildTranscript(input: TranscriptInput): string {
           // response)" over every step of a working run.
           lines.push(
             answer
-              ? chargeText(answer, 'assistant reply', budget, MAX_REPLY_CHARS)
+              ? chargeText(answer, 'assistant reply', budget, MAX_REPLY_CHARS, replyPriority)
               : (thoughts ? '_(reasoning only — no reply text this turn)_' : '(no response)'),
           );
           // Reasoning is kept, clearly marked as not-the-reply — it is often where a
@@ -210,24 +306,7 @@ export function buildTranscript(input: TranscriptInput): string {
         lines.push(
           `### Tool: ${node.label}${node.durationMs != null ? ` (${formatDuration(node.durationMs)})` : ''}${node.isError ? ' — ERROR' : ''}`,
         );
-        // The SAME view-model the timeline renders from, so a pasted report shows a
-        // shell step the way the reader saw it — the command line and what it printed,
-        // not `{"command":…}` above `{"ok":true,"stdout":…}`. The residual panels below
-        // still carry anything the terminal view did not account for.
-        const view = toolStepView(node);
-        if (view.command) {
-          fenced('Command', `$ ${view.command.command}`, budget, lines);
-          fenced(
-            view.command.exitCode != null && view.command.exitCode !== 0
-              ? `Output (exit ${view.command.exitCode})`
-              : 'Output',
-            view.command.output || '(no output)',
-            budget,
-            lines,
-          );
-        }
-        fenced('Input', view.argsText, budget, lines);
-        fenced('Output', view.resultText, budget, lines);
+        for (const b of toolBlocks(node)) lines.push(...budget.fence(b.label, b.payload, undefined, b.priority));
         break;
       }
       case 'error':
@@ -236,7 +315,7 @@ export function buildTranscript(input: TranscriptInput): string {
       case 'compacted':
         // A fold is triage-relevant: everything above it reached the model only as this note.
         lines.push(`### Context auto-compacted (${node.count} step(s))`);
-        if (node.note) fenced('Memory note', node.note, budget, lines);
+        lines.push(...budget.fence('Memory note', node.note ?? ''));
         break;
     }
     lines.push('');
