@@ -5,9 +5,7 @@ import { slugify } from '@builderforce/creation-canvas-contract';
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
-import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
-import { contrastText } from '@/lib/contrastText';
 import {
   artifactAssignments,
   marketplaceStats,
@@ -18,15 +16,13 @@ import {
   type PublicPersona,
 } from '@/lib/builderforceApi';
 import { BUILTIN_PERSONAS, type Persona, type UserPersona } from '@/lib/marketplaceData';
-import ArtifactAssigner from '@/components/ArtifactAssigner';
+import { MyPersonasList, MarketplaceList } from './PersonasLists';
 import { CatalogInsightsBar, type CatalogInsightsItem } from '@/components/CatalogInsightsBar';
 import PsychometricEditor from '@/components/PsychometricEditor';
 import type { PsychometricProfile } from '@/lib/psychometric';
 import PageContainer from '@/components/PageContainer';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { PersonaAssignmentsContent } from '@/components/PersonaAssignmentsContent';
-import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
-import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 import { faultText } from '@/lib/apiClient';
 import { useErrorText } from '@/i18n/useErrorMessage';
 /** Map a server-owned persona (from GET /api/personas/mine) into the flat display
@@ -85,8 +81,8 @@ export default function PersonasPage() {
   const tenantNum = Number(tenantId);
 
   const [tab, setTab] = useState<'assigned' | 'marketplace' | 'my-personas'>('assigned');
-  const [viewMode, setViewMode] = useState<ViewMode>('card');
   const [search, setSearch] = useState('');
+  const [mineSearch, setMineSearch] = useState('');
   const [expanded, setExpanded] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -259,30 +255,10 @@ export default function PersonasPage() {
     ...BUILTIN_PERSONAS.filter((p) => !serverSlugs.has(p.name)),
   ];
 
-  const filteredMarketplace = marketplacePersonas.filter(
-    (p) =>
-      !search ||
-      p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.description.toLowerCase().includes(search.toLowerCase()) ||
-      (p.tags ?? []).some((t) => t.includes(search.toLowerCase()))
-  );
-
   const insightsItems: CatalogInsightsItem[] = marketplacePersonas.map((p) => {
     const stat = stats[p.name] ?? { likes: 0, installs: 0, liked: false };
     return { key: p.name, name: p.name, group: p.source ?? null, primary: stat.installs, secondary: stat.likes };
   });
-
-  const sourceBadge = (source: Persona['source']) => {
-    const map: Record<string, { label: string; color: string }> = {
-      builtin: { label: t('sourceBuiltin'), color: 'var(--accent)' },
-      agenthub: { label: t('sourceAgenthub'), color: 'var(--success-text)' },
-      'project-local': { label: t('sourceProject'), color: 'var(--warning-text)' },
-      'user-global': { label: t('sourceUser'), color: 'var(--cyan-bright)' },
-      'agentlink-assigned': { label: t('sourceAssigned'), color: 'var(--pink-bright)' },
-    };
-    const m = map[source] ?? { label: source, color: 'var(--muted)' };
-    return <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 'var(--radius-full)', background: m.color, color: contrastText(m.color), textTransform: 'uppercase' }}>{m.label}</span>;
-  };
 
   return (
     <PageContainer width="readable">
@@ -312,11 +288,6 @@ export default function PersonasPage() {
         <button type="button" className={`btn ${tab === 'my-personas' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('my-personas')}>
           {t('tabMyPersonas', { n: userPersonas.length })}
         </button>
-        {tab !== 'assigned' && (
-          <div style={{ marginLeft: 'auto' }}>
-            <ViewToggle value={viewMode} onChange={setViewMode} />
-          </div>
-        )}
       </div>
 
       {loading && tab !== 'assigned' ? (
@@ -331,222 +302,39 @@ export default function PersonasPage() {
           </div>
         )
       ) : tab === 'my-personas' ? (
-        userPersonas.length === 0 ? (
+        userPersonas.length === 0 && !mineSearch ? (
           <div className="empty-state">
             <div className="empty-state-icon"><Icon source="🎭" size="1em" /></div>
             <div className="empty-state-title">{t('noCustomTitle')}</div>
             <div className="empty-state-sub">{t('noCustomSub')}</div>
             <button type="button" className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => setCreateOpen(true)}>{t('newPersonaShort')}</button>
           </div>
-        ) : viewMode === 'card' ? (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
-            {userPersonas.map((p) => (
-              <div key={p.id} className="card" style={{ overflow: 'hidden' }}>
-                {p.image && <div style={{ width: '100%', height: 100, background: `url('${p.image}') center/cover`, borderBottom: '1px solid var(--border)' }} />}
-                <div style={{ padding: p.image ? 12 : 0 }}>
-                  <div className="card-header">
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <span style={{ fontSize: 20 }}><Icon source="🎭" size="1em" /></span>
-                      <div>
-                        <div className="card-title">{p.name}</div>
-                        <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
-                          {p.tags.slice(0, 3).map((t) => (
-                            <span key={t} className="badge badge-gray">{t}</span>
-                          ))}
-                          {p.shared && <span className="badge badge-green">{t('shared')}</span>}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  {p.description && <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5, margin: '8px 0' }}>{p.description}</div>}
-                  <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
-                    <button type="button" className="btn btn-primary btn-sm" disabled={publishingId === p.id} onClick={() => publishPersona(p)}>
-                      {publishingId === p.id ? t('publishing') : p.shared ? t('rePublish') : t('publishToRegistry')}
-                    </button>
-                    <button type="button" className="btn btn-danger btn-sm" onClick={() => deleteUserPersona(p.id)}>{tc('delete')}</button>
-                    <ArtifactAssigner artifactType="persona" artifactSlug={p.slug} artifactName={p.name} />
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
         ) : (
-          <div style={{ ...tableWrapStyle, overflowX: 'auto' }}>
-            <table style={tableStyle}>
-              <thead>
-                <tr style={theadRowStyle}>
-                  <th style={thStyle}>{t('colName')}</th>
-                  <th style={thStyle}>{t('colDescription')}</th>
-                  <th style={thStyle}>{t('colTags')}</th>
-                  <th style={thStyle}>{t('colActions')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {userPersonas.map((p) => (
-                  <tr key={p.id} style={trStyle}>
-                    <td style={{ ...tdStyle, fontWeight: 600, whiteSpace: 'nowrap' }}>
-                      <span style={{ marginRight: 6 }}><Icon source="🎭" size="1em" /></span>{p.name}
-                      {p.shared && <span className="badge badge-green" style={{ marginLeft: 6 }}>{t('shared')}</span>}
-                    </td>
-                    <td style={tdMutedStyle}>{p.description || '—'}</td>
-                    <td style={tdMutedStyle}>
-                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                        {p.tags.length ? p.tags.map((t) => <span key={t} className="badge badge-gray">{t}</span>) : '—'}
-                      </div>
-                    </td>
-                    <td style={tdStyle}>
-                      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                        <button type="button" className="btn btn-primary btn-sm" disabled={publishingId === p.id} onClick={() => publishPersona(p)}>{publishingId === p.id ? t('publishing') : p.shared ? t('rePublish') : t('publishShort')}</button>
-                        <button type="button" className="btn btn-danger btn-sm" onClick={() => deleteUserPersona(p.id)}>{tc('delete')}</button>
-                        <ArtifactAssigner artifactType="persona" artifactSlug={p.slug} artifactName={p.name} />
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <MyPersonasList
+            personas={userPersonas}
+            search={mineSearch}
+            onSearchChange={setMineSearch}
+            publishingId={publishingId}
+            onPublish={publishPersona}
+            onDelete={deleteUserPersona}
+            onReload={load}
+          />
         )
       ) : (
         <>
           <CatalogInsightsBar entity="personas" items={insightsItems} primaryMetric="installs" secondaryMetric="likes" groupKind="source" />
-          <div style={{ marginBottom: 16 }}>
-            <input
-              type="search"
-              className="input"
-              style={{ maxWidth: 320 }}
-              placeholder={t('searchPlaceholder')}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-          {filteredMarketplace.length === 0 ? (
-            <div className="empty-state"><div className="empty-state-title">{t('noPersonasFound')}</div></div>
-          ) : viewMode === 'card' ? (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
-              {filteredMarketplace.map((p) => {
-                const stat = stats[p.name] ?? { likes: 0, installs: 0, liked: false };
-                const installed = installedSlugs.has(p.name);
-                const isOpen = expanded === p.name;
-                return (
-                  <div key={p.name} className="card" style={{ overflow: 'hidden', borderColor: isOpen ? 'var(--accent)' : undefined }}>
-                    {p.image && <div style={{ width: '100%', height: 100, background: `url('${p.image}') center/cover`, borderBottom: '1px solid var(--border)' }} />}
-                    <div style={{ padding: p.image ? 12 : 0 }} onClick={() => setExpanded(isOpen ? null : p.name)}>
-                      <div className="card-header">
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <span style={{ fontSize: 20 }}><Icon source="🎭" size="1em" /></span>
-                          <div>
-                            <div className="card-title">{p.name}</div>
-                            <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
-                              {sourceBadge(p.source)}
-                              {(p.tags ?? []).slice(0, 2).map((t) => <span key={t} className="badge badge-gray">{t}</span>)}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                      {p.description && <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5, margin: '8px 0' }}>{p.description}</div>}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 11, color: 'var(--muted)', margin: '4px 0 8px' }}>
-                        <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 11, color: stat.liked ? 'var(--error)' : 'var(--muted)' }} title={stat.liked ? t('unlike') : t('like')} onClick={(e) => { e.stopPropagation(); toggleLike(p.name); }}>{stat.liked ? <Icon source="❤️" size="1em" /> : <Icon source="🤍" size="1em" />} {stat.likes}</button>
-                        <span title={t('installsTitle')}><Icon source="⬇️" size="1em" /> {stat.installs}</span>
-                        {p.author && <span>{t('byAuthor', { author: p.author })}</span>}
-                      </div>
-                      {isOpen && (
-                        <div style={{ marginTop: 12, borderTop: '1px solid var(--border)', paddingTop: 12, display: 'grid', gap: 10 }}>
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 8 }}>
-                            <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: 8 }}>
-                              <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 3 }}>{t('voiceLabel')}</div>
-                              <div style={{ fontSize: 12, color: 'var(--text)' }}>{p.voice}</div>
-                            </div>
-                            <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: 8 }}>
-                              <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 3 }}>{t('perspectiveLabel')}</div>
-                              <div style={{ fontSize: 12, color: 'var(--text)' }}>{p.perspective}</div>
-                            </div>
-                            <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: 8 }}>
-                              <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 3 }}>{t('decisionStyleLabel')}</div>
-                              <div style={{ fontSize: 12, color: 'var(--text)' }}>{p.decisionStyle}</div>
-                            </div>
-                          </div>
-                          <div>
-                            <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 4 }}>{t('capabilitiesLabel')}</div>
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>{p.capabilities.map((c) => <span key={c} className="badge badge-gray">{c}</span>)}</div>
-                          </div>
-                          <div style={{ fontSize: 12, color: 'var(--muted)' }}>{t('outputPrefixLabel')} <code style={{ background: 'var(--surface-2)', padding: '1px 6px', borderRadius: 'var(--radius-sm)', fontSize: 11 }}>{p.outputPrefix}</code></div>
-                        </div>
-                      )}
-                    </div>
-                    <div style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '0 0 4px' }} onClick={(e) => e.stopPropagation()}>
-                      {installed ? (
-                        <>
-                          <button type="button" className="btn btn-danger btn-sm" onClick={() => unassignPersona(p.name)}>{t('uninstall')}</button>
-                          <ArtifactAssigner artifactType="persona" artifactSlug={p.name} artifactName={p.name} />
-                        </>
-                      ) : (
-                        <>
-                          <button type="button" className="btn btn-primary btn-sm" onClick={() => assignPersona(p.name)}>{t('install')}</button>
-                          <ArtifactAssigner artifactType="persona" artifactSlug={p.name} artifactName={p.name} />
-                          <Link href={`/personas/${encodeURIComponent(p.name)}`} className="btn btn-secondary btn-sm">{tc('view')}</Link>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div style={{ ...tableWrapStyle, overflowX: 'auto' }}>
-              <table style={tableStyle}>
-                <thead>
-                  <tr style={theadRowStyle}>
-                    <th style={thStyle}>{t('colName')}</th>
-                    <th style={thStyle}>{t('colDescription')}</th>
-                    <th style={thStyle}>{t('colSourceTags')}</th>
-                    <th style={thStyle}>{t('colStats')}</th>
-                    <th style={thStyle}>{t('colActions')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredMarketplace.map((p) => {
-                    const stat = stats[p.name] ?? { likes: 0, installs: 0, liked: false };
-                    const installed = installedSlugs.has(p.name);
-                    return (
-                      <tr key={p.name} style={trStyle}>
-                        <td style={{ ...tdStyle, fontWeight: 600, whiteSpace: 'nowrap' }}>
-                          <span style={{ marginRight: 6 }}><Icon source="🎭" size="1em" /></span>{p.name}
-                        </td>
-                        <td style={tdMutedStyle}>{p.description || '—'}</td>
-                        <td style={tdMutedStyle}>
-                          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
-                            {sourceBadge(p.source)}
-                            {(p.tags ?? []).slice(0, 2).map((t) => <span key={t} className="badge badge-gray">{t}</span>)}
-                          </div>
-                        </td>
-                        <td style={{ ...tdMutedStyle, whiteSpace: 'nowrap' }}>
-                          <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 11, color: stat.liked ? 'var(--error)' : 'var(--muted)' }} title={stat.liked ? t('unlike') : t('like')} onClick={() => toggleLike(p.name)}>{stat.liked ? <Icon source="❤️" size="1em" /> : <Icon source="🤍" size="1em" />} {stat.likes}</button>
-                          <span style={{ marginLeft: 10, fontSize: 11 }}><Icon source="⬇️" size="1em" /> {stat.installs}</span>
-                        </td>
-                        <td style={tdStyle}>
-                          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                            {installed ? (
-                              <>
-                                <button type="button" className="btn btn-danger btn-sm" onClick={() => unassignPersona(p.name)}>{t('uninstall')}</button>
-                                <ArtifactAssigner artifactType="persona" artifactSlug={p.name} artifactName={p.name} />
-                              </>
-                            ) : (
-                              <>
-                                <button type="button" className="btn btn-primary btn-sm" onClick={() => assignPersona(p.name)}>{t('install')}</button>
-                                <ArtifactAssigner artifactType="persona" artifactSlug={p.name} artifactName={p.name} />
-                                <Link href={`/personas/${encodeURIComponent(p.name)}`} className="btn btn-secondary btn-sm">{tc('view')}</Link>
-                              </>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <MarketplaceList
+            personas={marketplacePersonas}
+            search={search}
+            onSearchChange={setSearch}
+            stats={stats}
+            installedSlugs={installedSlugs}
+            expanded={expanded}
+            onExpand={setExpanded}
+            onInstall={assignPersona}
+            onUninstall={unassignPersona}
+            onToggleLike={toggleLike}
+          />
         </>
       )}
 

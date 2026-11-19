@@ -21,8 +21,12 @@ import { WorkspaceSkillReview } from '@/components/skills/WorkspaceSkillReview';
 import { WorkspaceSkillAuthor } from '@/components/skills/WorkspaceSkillAuthor';
 import type { WorkspaceSkillStatus } from '@/lib/workspaceSkillsApi';
 import { SkillAssignmentsContent } from '@/components/SkillAssignmentsContent';
-import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
-import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
+import { Collection } from '@/components/collection/Collection';
+import type { CollectionDescriptor } from '@/components/collection/descriptor';
+import { useLocalSource } from '@/components/collection/sources';
+import { useCollectionSort } from '@/components/collection/useCollectionSort';
+import { useCollectionPaging } from '@/components/collection/useCollectionPaging';
+import { useCollectionPreferences } from '@/components/collection/collectionPreferences';
 import { useErrorText } from '@/i18n/useErrorMessage';
 type SkillItem = { slug: string; name: string; description: string; category?: string; icon?: string; emoji?: string; author?: string };
 
@@ -38,7 +42,6 @@ export default function SkillsPage() {
   // Which review filter the workspace tab opens on — a skill a person just wrote is
   // approved on arrival, so after saving one the tab opens where it landed.
   const [workspaceView, setWorkspaceView] = useState<{ status: WorkspaceSkillStatus; key: number }>({ status: 'draft', key: 0 });
-  const [viewMode, setViewMode] = useState<ViewMode>('card');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -148,6 +151,100 @@ export default function SkillsPage() {
     return { key: s.slug, name: s.name, group: s.category ?? null, primary: stat.installs, secondary: stat.likes };
   });
 
+  const renderActions = (s: SkillItem) => {
+    const installed = installedSlugs.has(s.slug);
+    return (
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+        {installed ? <button type="button" className="btn btn-danger btn-sm" onClick={() => unassign(s.slug)}>{t('uninstall')}</button> : <button type="button" className="btn btn-primary btn-sm" onClick={() => assign(s.slug)}>{t('install')}</button>}
+        <ArtifactAssigner artifactType="skill" artifactSlug={s.slug} artifactName={s.name} />
+        <Link href={`/skills/${encodeURIComponent(s.slug)}`} className="btn btn-secondary btn-sm">{tc('view')}</Link>
+      </div>
+    );
+  };
+
+  const renderLike = (s: SkillItem) => {
+    const stat = stats[s.slug] ?? { likes: 0, installs: 0, liked: false };
+    return (
+      <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 'var(--font-size-eyebrow)', color: stat.liked ? 'var(--error)' : 'var(--muted)' }} title={stat.liked ? t('unlike') : t('like')} onClick={() => toggleLike(s.slug)}>{stat.liked ? <Icon source="❤️" size="1em" /> : <Icon source="🤍" size="1em" />} {stat.likes}</button>
+    );
+  };
+
+  // Marketplace skills are builtin/marketplace catalog rows — read-only (entity null): no
+  // selection and no bulk bar. Search and filtering stay in this page.
+  const descriptor: CollectionDescriptor<SkillItem> = {
+    entity: null,
+    surfaceKey: 'skills.marketplace',
+    rowId: (s) => s.slug,
+    label: (s) => s.name,
+    defaultView: 'card',
+    defaultSort: { key: 'name', dir: 'asc' },
+    emptyKey: 'emptySkillsMarketplace',
+    columns: [
+      {
+        key: 'name', header: t('colName'), sortKey: 'name',
+        compare: (a, b) => a.name.localeCompare(b.name),
+        cell: (s) => (<span style={{ fontWeight: 600 }}><Icon source={s.emoji ?? 'sparkles'} size={16} style={{ marginRight: 6 }} />{s.name}</span>),
+      },
+      { key: 'description', header: t('colDescription'), cell: (s) => s.description || '—' },
+      {
+        key: 'category', header: t('colCategory'), sortKey: 'category',
+        compare: (a, b) => (a.category ?? '').localeCompare(b.category ?? ''),
+        cell: (s) => (
+          <>
+            {s.category ? <span className="badge badge-gray" style={{ fontSize: 'var(--font-size-eyebrow)' }}>{s.category}</span> : '—'}
+            {s.author && <div style={{ fontSize: 'var(--font-size-eyebrow)', marginTop: 2 }}>{t('byAuthor', { author: s.author })}</div>}
+          </>
+        ),
+      },
+      {
+        key: 'stats', header: t('colStats'), sortKey: 'installs',
+        compare: (a, b) => (stats[a.slug]?.installs ?? 0) - (stats[b.slug]?.installs ?? 0),
+        cell: (s) => (
+          <>
+            {renderLike(s)}
+            <span style={{ marginLeft: 10, fontSize: 'var(--font-size-eyebrow)' }}><Icon source="⬇️" size="1em" /> {stats[s.slug]?.installs ?? 0}</span>
+          </>
+        ),
+      },
+      { key: 'actions', header: t('colActions'), cell: renderActions },
+    ],
+    card: (s) => {
+      const stat = stats[s.slug] ?? { likes: 0, installs: 0, liked: false };
+      return (
+        <div className="card" style={{ overflow: 'hidden', border: 'none' }}>
+          {s.icon && <div style={{ width: '100%', height: 100, background: `url('${s.icon}') center/cover`, borderBottom: '1px solid var(--border)' }} />}
+          <div style={{ padding: s.icon ? 12 : 0 }}>
+            <div className="card-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 32, height: 32, background: 'var(--accent-subtle)', borderRadius: 'var(--radius-sm)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon source={s.emoji ?? 'sparkles'} size={18} /></div>
+                <div>
+                  <div className="card-title">{s.name}</div>
+                  <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
+                    {s.category && <span className="badge badge-gray" style={{ fontSize: 'var(--font-size-eyebrow)' }}>{s.category}</span>}
+                  </div>
+                </div>
+              </div>
+            </div>
+            {s.description && <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--muted)', lineHeight: 1.5, margin: '8px 0' }}>{s.description}</div>}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 'var(--font-size-eyebrow)', color: 'var(--muted)', margin: '4px 0 8px' }}>
+              {renderLike(s)}
+              <span><Icon source="⬇️" size="1em" /> {stat.installs}</span>
+              {s.author && <span>{t('byAuthor', { author: s.author })}</span>}
+            </div>
+            {renderActions(s)}
+          </div>
+        </div>
+      );
+    },
+  };
+
+  // `Collection` owns its sort/paging chrome, so the local source mirrors the same state
+  // (same shape as components/pm/LocalCollection) and slices the page's filtered rows.
+  const prefs = useCollectionPreferences(descriptor.surfaceKey, descriptor.defaultView ?? 'table');
+  const paging = useCollectionPaging(prefs.pageSize);
+  const sort = useCollectionSort(descriptor, paging.reset);
+  const source = useLocalSource(marketplaceItems, descriptor, { key: sort.key, dir: sort.dir }, { page: paging.page, pageSize: paging.pageSize });
+
   return (
     <PageContainer width="readable">
       <div className="page-header" style={{ marginBottom: 24 }}>
@@ -167,11 +264,6 @@ export default function SkillsPage() {
             or proposed by its agents. A draft is inert until someone approves it, so
             this tab is also where that decision is made. */}
         <button type="button" className={`btn ${tab === 'workspace' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('workspace')}>{t('tabWorkspace')}</button>
-        {tab === 'marketplace' && (
-          <div style={{ marginLeft: 'auto' }}>
-            <ViewToggle value={viewMode} onChange={setViewMode} />
-          </div>
-        )}
       </div>
 
       {loading && tab === 'marketplace' ? (
@@ -190,91 +282,7 @@ export default function SkillsPage() {
       ) : (
         <>
           <CatalogInsightsBar entity="skills" items={insightsItems} primaryMetric="installs" secondaryMetric="likes" groupKind="category" />
-          <div style={{ marginBottom: 16 }}>
-            <input type="search" className="input" style={{ maxWidth: 320 }} placeholder={t('searchPlaceholder')} value={search} onChange={(e) => setSearch(e.target.value)} />
-          </div>
-          {marketplaceItems.length === 0 ? (
-            <div className="empty-state"><div className="empty-state-title">{t('noSkillsFound')}</div></div>
-          ) : viewMode === 'card' ? (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
-              {marketplaceItems.map((s) => {
-                const stat = stats[s.slug] ?? { likes: 0, installs: 0, liked: false };
-                const installed = installedSlugs.has(s.slug);
-                return (
-                  <div key={s.slug} className="card" style={{ overflow: 'hidden' }}>
-                    {s.icon && <div style={{ width: '100%', height: 100, background: `url('${s.icon}') center/cover`, borderBottom: '1px solid var(--border)' }} />}
-                    <div style={{ padding: s.icon ? 12 : 0 }}>
-                      <div className="card-header">
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <div style={{ width: 32, height: 32, background: 'var(--accent-subtle)', borderRadius: 'var(--radius-sm)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon source={(s as { emoji?: string }).emoji ?? 'sparkles'} size={18} /></div>
-                          <div>
-                            <div className="card-title">{s.name}</div>
-                            <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
-                              {s.category && <span className="badge badge-gray" style={{ fontSize: 'var(--font-size-eyebrow)' }}>{s.category}</span>}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                      {s.description && <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--muted)', lineHeight: 1.5, margin: '8px 0' }}>{s.description}</div>}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 'var(--font-size-eyebrow)', color: 'var(--muted)', margin: '4px 0 8px' }}>
-                        <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 'var(--font-size-eyebrow)', color: stat.liked ? 'var(--error)' : 'var(--muted)' }} title={stat.liked ? t('unlike') : t('like')} onClick={() => toggleLike(s.slug)}>{stat.liked ? <Icon source="❤️" size="1em" /> : <Icon source="🤍" size="1em" />} {stat.likes}</button>
-                        <span><Icon source="⬇️" size="1em" /> {stat.installs}</span>
-                        {s.author && <span>{t('byAuthor', { author: s.author })}</span>}
-                      </div>
-                      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                        {installed ? <button type="button" className="btn btn-danger btn-sm" onClick={() => unassign(s.slug)}>{t('uninstall')}</button> : <button type="button" className="btn btn-primary btn-sm" onClick={() => assign(s.slug)}>{t('install')}</button>}
-                        <ArtifactAssigner artifactType="skill" artifactSlug={s.slug} artifactName={s.name} />
-                        <Link href={`/skills/${encodeURIComponent(s.slug)}`} className="btn btn-secondary btn-sm">{tc('view')}</Link>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div style={{ ...tableWrapStyle, overflowX: 'auto' }}>
-              <table style={tableStyle}>
-                <thead>
-                  <tr style={theadRowStyle}>
-                    <th style={thStyle}>{t('colName')}</th>
-                    <th style={thStyle}>{t('colDescription')}</th>
-                    <th style={thStyle}>{t('colCategory')}</th>
-                    <th style={thStyle}>{t('colStats')}</th>
-                    <th style={thStyle}>{t('colActions')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {marketplaceItems.map((s) => {
-                    const stat = stats[s.slug] ?? { likes: 0, installs: 0, liked: false };
-                    const installed = installedSlugs.has(s.slug);
-                    return (
-                      <tr key={s.slug} style={trStyle}>
-                        <td style={{ ...tdStyle, fontWeight: 600, whiteSpace: 'nowrap' }}>
-                          <Icon source={(s as { emoji?: string }).emoji ?? 'sparkles'} size={16} style={{ marginRight: 6 }} />{s.name}
-                        </td>
-                        <td style={tdMutedStyle}>{s.description || '—'}</td>
-                        <td style={tdMutedStyle}>
-                          {s.category ? <span className="badge badge-gray" style={{ fontSize: 'var(--font-size-eyebrow)' }}>{s.category}</span> : '—'}
-                          {s.author && <div style={{ fontSize: 'var(--font-size-eyebrow)', marginTop: 2 }}>{t('byAuthor', { author: s.author })}</div>}
-                        </td>
-                        <td style={{ ...tdMutedStyle, whiteSpace: 'nowrap' }}>
-                          <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 'var(--font-size-eyebrow)', color: stat.liked ? 'var(--error)' : 'var(--muted)' }} title={stat.liked ? t('unlike') : t('like')} onClick={() => toggleLike(s.slug)}>{stat.liked ? <Icon source="❤️" size="1em" /> : <Icon source="🤍" size="1em" />} {stat.likes}</button>
-                          <span style={{ marginLeft: 10, fontSize: 'var(--font-size-eyebrow)' }}><Icon source="⬇️" size="1em" /> {stat.installs}</span>
-                        </td>
-                        <td style={tdStyle}>
-                          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                            {installed ? <button type="button" className="btn btn-danger btn-sm" onClick={() => unassign(s.slug)}>{t('uninstall')}</button> : <button type="button" className="btn btn-primary btn-sm" onClick={() => assign(s.slug)}>{t('install')}</button>}
-                            <ArtifactAssigner artifactType="skill" artifactSlug={s.slug} artifactName={s.name} />
-                            <Link href={`/skills/${encodeURIComponent(s.slug)}`} className="btn btn-secondary btn-sm">{tc('view')}</Link>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <Collection descriptor={descriptor} source={source} search={search} onSearchChange={(q) => { setSearch(q); paging.reset(); }} />
         </>
       )}
 

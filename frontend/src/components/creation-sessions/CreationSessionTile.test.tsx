@@ -50,7 +50,6 @@ function renderTile(overrides: Partial<Parameters<typeof CreationSessionTile>[0]
     item: canvasItem,
     view: 'table' as const,
     selected: false,
-    onSelectedChange: vi.fn(),
     projectLabel: (id: number) => `Project ${id}`,
     onOpen: vi.fn(),
     onFolderSelect: vi.fn(),
@@ -74,13 +73,12 @@ describe('CreationSessionTile', () => {
     expect(meta?.textContent).toContain('creationCanvas.sessionObjectsPeople');
   });
 
-  it('offers selection without opening the session', () => {
-    const { props } = renderTile();
+  // Selection belongs to the Collection that wraps the tile (its card checkbox and
+  // bulk bar), so the tile draws no checkbox of its own.
+  it('draws no selection checkbox of its own', () => {
+    renderTile();
 
-    fireEvent.click(screen.getByRole('checkbox', { name: 'creationCanvas.selectSession Launch plan' }));
-
-    expect(props.onSelectedChange).toHaveBeenCalledWith(true);
-    expect(props.onOpen).not.toHaveBeenCalled();
+    expect(screen.queryByRole('checkbox')).toBeNull();
   });
 
   it('filters by folder when the folder chip is pressed', () => {

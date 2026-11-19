@@ -14,17 +14,13 @@ import {
   type CreatePromptBody,
 } from '@/lib/builderforceApi';
 import { getStoredUser } from '@/lib/auth';
-import { type ViewMode } from '@/components/ViewToggle';
-import { CatalogToolbar } from '@/components/CatalogToolbar';
 import { FilterChips, type FilterChip } from '@/components/FilterChips';
-import { Pagination } from '@/components/Pagination';
+import { PromptsList } from './PromptsList';
 import { CatalogInsightsBar, type CatalogInsightsItem } from '@/components/CatalogInsightsBar';
 import { PromptVersionDiff } from '@/components/prompts/PromptVersionDiff';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import type { PromptAnalysis } from '@/lib/builderforceApi';
-import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 import { copyTextToClipboard } from '@/lib/useCopyToClipboard';
-import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
 import { usePanelTask } from '@/hooks/usePanelTask';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
@@ -38,12 +34,8 @@ const card: React.CSSProperties = {
 
 type Tab = 'public' | 'mine';
 
-/** Prompts per page. Matches the marketplace's grid so the two pages page alike. */
-const PAGE_SIZE = 12;
-
 export default function PromptsPage() {
   const errorMessage = useErrorMessage();
-  const fmt = useFormat();
   const t = useTranslations('promptsPage');
   const tCommon = useTranslations('common');
   const isAuthed = !!getStoredUser();
@@ -54,11 +46,9 @@ export default function PromptsPage() {
   const [q, setQ] = useState('');
   const [sort, setSort] = useState<'popular' | 'recent' | 'featured'>('popular');
   const [category, setCategory] = useState('');
-  const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<PromptPublicView | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
-  const [viewMode, setViewMode] = useState<ViewMode>('card');
 
   const loadPublic = (search?: string) => {
     setLoading(true);
@@ -110,14 +100,6 @@ export default function PromptsPage() {
     () => (category ? prompts.filter((p) => p.category?.trim() === category) : prompts),
     [prompts, category],
   );
-
-  const pageCount = Math.max(1, Math.ceil(results.length / PAGE_SIZE));
-  const currentPage = Math.min(page, pageCount);
-  const visible = results.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
-
-  // Any narrowing returns to page 1 — otherwise a filter applied from page 4
-  // lands on an empty grid.
-  useEffect(() => { setPage(1); }, [category, tab, sort]);
 
   const openDetail = async (p: PromptSummary) => {
     try {
@@ -195,106 +177,33 @@ export default function PromptsPage() {
         </div>
       )}
 
-      {/* Search + sort + count + view — the same bar the marketplace and the blog
-          carry, so the three catalogues browse identically. */}
-      <CatalogToolbar
-        search={q}
-        onSearch={setQ}
-        onSubmit={() => { if (tab === 'public') loadPublic(q); }}
-        searchPlaceholder={t('searchPlaceholder')}
-        view={viewMode}
-        onView={setViewMode}
-        resultCount={loading ? undefined : results.length}
-      >
-        {tab === 'public' && (
-          <Select
-            className="input"
-            style={{ maxWidth: 160 }}
-            value={sort}
-            onChange={(e) => setSort(e.target.value as typeof sort)}
-            aria-label={t('sortLabel')}
-          >
-            <option value="popular">{t('sortPopular')}</option>
-            <option value="recent">{t('sortRecent')}</option>
-            <option value="featured">{t('sortFeatured')}</option>
-          </Select>
-        )}
-      </CatalogToolbar>
-
       {loading && <div style={card}>{t('loading')}</div>}
       {error && <div style={{ ...card, borderColor: 'var(--danger)', color: 'var(--danger)' }}>{error}</div>}
 
-      {!loading && !error && viewMode === 'card' && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
-          {visible.map((p) => (
-            <button key={p.id} onClick={() => openDetail(p)} style={{ ...card, textAlign: 'left', cursor: 'pointer' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
-                <span style={{ fontWeight: 700, fontSize: 'var(--font-size-body)' }}>{p.title}</span>
-                {p.isFeatured && <span title={t('featured')}><Icon source="⭐" size="1em" /></span>}
-              </div>
-              {p.description && <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', margin: '0 0 10px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.description}</p>}
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
-                {p.category && <span className="badge badge-gray">{p.category}</span>}
-                {p.tags.slice(0, 3).map((tag) => <span key={tag} className="badge badge-gray">#{tag}</span>)}
-              </div>
-              <div style={{ display: 'flex', gap: 14, fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>
-                <span><Icon source="▶" size="1em" /> {t('usesCount', { n: p.usageCount })}</span>
-                <span><Icon source="★" size="1em" /> {p.starCount}</span>
-                {p.authorName && <span>{t('byAuthor', { name: p.authorName })}</span>}
-              </div>
-            </button>
-          ))}
-          {results.length === 0 && (
-            <div style={{ ...card, gridColumn: '1 / -1', color: 'var(--text-muted)' }}>
-              {tab === 'mine' ? t('emptyMine') : t('emptyPublic')}
-            </div>
+      {!loading && !error && (
+        <PromptsList
+          prompts={results}
+          tab={tab}
+          search={q}
+          onSearchChange={setQ}
+          onOpen={openDetail}
+          onReload={reloadPrompts}
+        >
+          {tab === 'public' && (
+            <Select
+              className="input"
+              style={{ maxWidth: 160 }}
+              value={sort}
+              onChange={(e) => setSort(e.target.value as typeof sort)}
+              aria-label={t('sortLabel')}
+            >
+              <option value="popular">{t('sortPopular')}</option>
+              <option value="recent">{t('sortRecent')}</option>
+              <option value="featured">{t('sortFeatured')}</option>
+            </Select>
           )}
-        </div>
+        </PromptsList>
       )}
-
-      {!loading && !error && viewMode === 'table' && (
-        results.length === 0 ? (
-          <div style={{ ...card, color: 'var(--text-muted)' }}>
-            {tab === 'mine' ? t('emptyMine') : t('emptyPublic')}
-          </div>
-        ) : (
-          <div style={tableWrapStyle}>
-            <table style={tableStyle}>
-              <thead>
-                <tr style={theadRowStyle}>
-                  <th style={thStyle}>{t('colTitle')}</th>
-                  <th style={thStyle}>{t('colCategory')}</th>
-                  <th style={thStyle}>{t('colUses')}</th>
-                  <th style={thStyle}>{t('colStars')}</th>
-                  <th style={thStyle}>{t('colAuthor')}</th>
-                  <th style={thStyle}>{t('colActions')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visible.map((p) => (
-                  <tr key={p.id} style={trStyle}>
-                    <td style={{ ...tdStyle, fontWeight: 600 }}>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                        {p.title}
-                        {p.isFeatured && <span title={t('featured')}><Icon source="⭐" size="1em" /></span>}
-                      </span>
-                    </td>
-                    <td style={tdMutedStyle}>{p.category ?? '—'}</td>
-                    <td style={tdMutedStyle}>{fmt.number(p.usageCount)}</td>
-                    <td style={tdMutedStyle}>{p.starCount}</td>
-                    <td style={tdMutedStyle}>{p.authorName ?? '—'}</td>
-                    <td style={tdStyle}>
-                      <button type="button" className="btn btn-secondary btn-sm" onClick={() => openDetail(p)}>{tCommon('view')}</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )
-      )}
-
-      {!loading && !error && <Pagination page={currentPage} pageCount={pageCount} onChange={setPage} />}
 
       {selected && (
         <PromptDetail

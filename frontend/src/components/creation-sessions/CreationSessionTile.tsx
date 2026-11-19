@@ -35,10 +35,9 @@ interface Props {
   item: CreationLibraryItem;
   /** `card` is the gallery, `table` the row list — the same facts, one layout token. */
   view: 'card' | 'table';
-  selected: boolean;
-  /** Selection is session-scoped (the bulk bar archives, merges and deletes sessions),
-   *  so the checkbox stands itself down for an item that has none. */
-  onSelectedChange: (selected: boolean) => void;
+  /** Selection is owned by the Collection that wraps this tile (its card checkbox and
+   *  bulk bar), so the tile only reflects it. */
+  selected?: boolean;
   /** Reads a linked project's name; the tile never fetches one itself. */
   projectLabel: (projectId: number) => string;
   onOpen: () => void;
@@ -50,7 +49,7 @@ interface Props {
   children?: ReactNode;
 }
 
-export function CreationSessionTile({ item, view, selected, onSelectedChange, projectLabel, onOpen, onFolderSelect, folderActive, children }: Props) {
+export function CreationSessionTile({ item, view, selected = false, projectLabel, onOpen, onFolderSelect, folderActive, children }: Props) {
   const t = useTranslations('creationCanvas');
   const fmt = useFormat();
   const running = item.objects.filter((object) => RUNNING_KINDS.includes(object.kind) && RUNNING_STATUSES.includes(String(object.status || '').toLowerCase())).length;
@@ -80,16 +79,6 @@ export function CreationSessionTile({ item, view, selected, onSelectedChange, pr
         {item.objects.length === 0 && (item.icon
           ? <span className={styles.previewIcon} aria-hidden><Icon source={item.icon} size={30} /></span>
           : <span className={styles.previewEmpty}>{t('blankCanvasEmpty')}</span>)}
-        {item.managed && (
-          <input
-            type="checkbox"
-            className={styles.select}
-            checked={selected}
-            aria-label={t('selectSession', { title: item.title })}
-            onClick={(event) => event.stopPropagation()}
-            onChange={(event) => onSelectedChange(event.target.checked)}
-          />
-        )}
       </div>
       <div className={styles.body}>
         <div className={styles.details}>

@@ -21,6 +21,13 @@ import { MyTrainingSection, ComplianceAuditSection } from './KnowledgeTraining';
 import { badge, btnGhost, btnPrimary, chip, chipActive, inputStyle, statusColorStyle, tagChip } from './knowledgeStyles';
 import { useCreateKnowledge } from './useCreateKnowledge';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
+import { Collection } from '@/components/collection/Collection';
+import type { CollectionDescriptor } from '@/components/collection/descriptor';
+import type { Page, PageQuery } from '@/components/collection/collectionTypes';
+import { useServerSource } from '@/components/collection/sources';
+import { useCollectionSort } from '@/components/collection/useCollectionSort';
+import { useCollectionPaging } from '@/components/collection/useCollectionPaging';
+import { useCollectionPreferences } from '@/components/collection/collectionPreferences';
 
 /**
  * Unified Knowledge home. SOPs, Processes and Documents are no longer separate
@@ -194,51 +201,171 @@ const TYPE_FILTERS: Array<{ id: '' | DocType; labelKey: string }> = [
 
 function Library({ projectId, t }: { projectId: number | null; t: ReturnType<typeof useTranslations> }) {
   const errorMessage = useErrorMessage();
-  const [docs, setDocs] = useState<KnowledgeDoc[]>([]);
   const [allTags, setAllTags] = useState<string[]>([]);
   const [typeFilter, setTypeFilter] = useState<'' | DocType>('');
   const [tagFilter, setTagFilter] = useState('');
   const [search, setSearch] = useState('');
-  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(() => {
-    setLoaded(false);
-    knowledgeApi
-      .list({ type: typeFilter || undefined, project: projectId, tag: tagFilter || undefined, q: search || undefined })
-      .then(setDocs)
-      .catch((e: unknown) => setError(errorMessage(e)))
-      .finally(() => setLoaded(true));
-  }, [typeFilter, projectId, tagFilter, search, errorMessage]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
 
   useEffect(() => {
     knowledgeApi.tags().then(setAllTags).catch(() => setAllTags([]));
   }, []);
 
+  // Knowledge documents have no bulk entity key, so the library is a READ-ONLY collection (entity null).
+  const descriptor = useMemo<CollectionDescriptor<KnowledgeDoc>>(
+    () => ({
+      entity: null,
+      surfaceKey: 'knowledge.library',
+      rowId: (d) => d.id,
+      label: (d) => d.title,
+      defaultView: 'card',
+      defaultSort: { key: 'title', dir: 'asc' },
+      emptyKey: 'emptyKnowledge',
+      columns: [
+        {
+          key: 'title',
+          header: t('colTitle'),
+          sortKey: 'title',
+          compare: (a, b) => a.title.localeCompare(b.title),
+          cell: (d) => (
+            <Link href={`/knowledge/${d.id}`} style={{ fontWeight: 600, color: 'inherit', textDecoration: 'none' }}>
+              {d.title}
+            </Link>
+          ),
+        },
+        {
+          key: 'type',
+          header: t('colType'),
+          sortKey: 'type',
+          compare: (a, b) => a.docType.localeCompare(b.docType),
+          cell: (d) => (
+            <span style={{ ...badge, background: 'var(--surface-2)', color: 'var(--text-muted)' }}>{t(DOC_TYPE_LABELS[d.docType])}</span>
+          ),
+        },
+        {
+          key: 'status',
+          header: t('colStatus'),
+          sortKey: 'status',
+          compare: (a, b) => a.status.localeCompare(b.status),
+          cell: (d) => <span style={{ ...badge, ...statusColorStyle(d.status) }}>{t(`status_${d.status}`)}</span>,
+        },
+        {
+          key: 'version',
+          header: t('colVersion'),
+          sortKey: 'version',
+          align: 'end',
+          compare: (a, b) => a.versionNumber - b.versionNumber,
+          cell: (d) => (d.versionNumber > 0 ? `v${d.versionNumber}` : '—'),
+        },
+        {
+          key: 'tags',
+          header: t('colTags'),
+          cell: (d) => (
+            <span style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap' }}>
+              {d.requiresAck && <span style={{ ...badge, ...statusColorStyle('warning') }}>{t('requiresAckBadge')}</span>}
+              {d.tags.map((tg) => (
+                <span key={tg} style={tagChip}>
+                  {tg}
+                </span>
+              ))}
+            </span>
+          ),
+        },
+      ],
+      card: (doc) => (
+        <Link href={`/knowledge/${doc.id}`} style={{ display: 'block', padding: 16, textDecoration: 'none', color: 'inherit' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
+            <span style={{ fontWeight: 600, fontSize: 16 }}>{doc.title}</span>
+            <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <span style={{ ...badge, background: 'var(--surface-2)', color: 'var(--text-muted)' }}>{t(DOC_TYPE_LABELS[doc.docType])}</span>
+              <span style={{ ...badge, ...statusColorStyle(doc.status) }}>{t(`status_${doc.status}`)}</span>
+            </span>
+          </div>
+          {doc.summary && <p style={{ margin: '6px 0 0', color: 'var(--text-muted)', fontSize: 14 }}>{doc.summary}</p>}
+          <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+            {doc.requiresAck && <span style={{ ...badge, ...statusColorStyle('warning') }}>{t('requiresAckBadge')}</span>}
+            {doc.versionNumber > 0 && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>v{doc.versionNumber}</span>}
+            {doc.tags.map((tg) => (
+              <span key={tg} style={tagChip}>
+                {tg}
+              </span>
+            ))}
+          </div>
+        </Link>
+      ),
+    }),
+    [t],
+  );
+
+  // The list endpoint returns every matching document (type/tag/project/q are server filters);
+  // sort + page are applied here so Collection's header sort and pager work as is.
+  const fetchPage = useCallback(
+    async (q: PageQuery): Promise<Page<KnowledgeDoc>> => {
+      try {
+        setError(null);
+        const docs = await knowledgeApi.list({ type: typeFilter || undefined, project: projectId, tag: tagFilter || undefined, q: q.q || undefined });
+        const cmp = descriptor.columns.find((c) => (c.sortKey ?? c.key) === q.sort)?.compare;
+        const sorted = cmp ? [...docs].sort((x, y) => (q.dir === 'asc' ? cmp(x, y) : cmp(y, x))) : docs;
+        const start = (q.page - 1) * q.pageSize;
+        return { items: sorted.slice(start, start + q.pageSize), total: sorted.length, page: q.page, pageSize: q.pageSize, sort: q.sort, dir: q.dir };
+      } catch (e) {
+        setError(errorMessage(e));
+        throw e;
+      }
+    },
+    [typeFilter, projectId, tagFilter, descriptor, errorMessage],
+  );
+
+  // Collection owns the sort/paging chrome; mirror its state to key the server source.
+  const prefs = useCollectionPreferences(descriptor.surfaceKey, descriptor.defaultView ?? 'table');
+  const paging = useCollectionPaging(prefs.pageSize);
+  const sort = useCollectionSort(descriptor, paging.reset);
+  const source = useServerSource(fetchPage, {
+    page: paging.page,
+    pageSize: paging.pageSize,
+    sort: sort.key,
+    dir: sort.dir,
+    archived: 'exclude',
+    q: search || undefined,
+  });
+
   return (
     <section data-tour="demo-knowledge">
       <h2 style={{ fontSize: 16, margin: '0 0 12px' }}>{t('allKnowledge')}</h2>
-
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+      {error && <div style={{ color: 'var(--error-text, var(--error))' }}>{error}</div>}
+      <Collection
+        descriptor={descriptor}
+        source={source}
+        search={search}
+        onSearchChange={(q) => {
+          setSearch(q);
+          paging.reset();
+        }}
+      >
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           {TYPE_FILTERS.map((f) => (
             <button
               key={f.id || 'all'}
               type="button"
-              onClick={() => setTypeFilter(f.id)}
+              onClick={() => {
+                setTypeFilter(f.id);
+                paging.reset();
+              }}
               style={typeFilter === f.id ? chipActive : chip}
             >
               {t(f.labelKey)}
             </button>
           ))}
         </div>
-        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('searchPlaceholder')} style={inputStyle} />
         {allTags.length > 0 && (
-          <Select value={tagFilter} onChange={(e) => setTagFilter(e.target.value)} style={inputStyle}>
+          <Select
+            value={tagFilter}
+            onChange={(e) => {
+              setTagFilter(e.target.value);
+              paging.reset();
+            }}
+            style={inputStyle}
+          >
             <option value="">{t('allTags')}</option>
             {allTags.map((tg) => (
               <option key={tg} value={tg}>
@@ -247,51 +374,7 @@ function Library({ projectId, t }: { projectId: number | null; t: ReturnType<typ
             ))}
           </Select>
         )}
-      </div>
-
-      {error && <div style={{ color: 'var(--error-text, var(--error))' }}>{error}</div>}
-      {!loaded && <div style={{ color: 'var(--text-muted)' }}>{t('loading')}</div>}
-      {loaded && docs.length === 0 && (
-        <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--text-muted)' }}>{t('empty')}</div>
-      )}
-
-      <div style={{ display: 'grid', gap: 10 }}>
-        {docs.map((doc) => (
-          <Link
-            key={doc.id}
-            href={`/knowledge/${doc.id}`}
-            style={{
-              display: 'block',
-              padding: 16,
-              borderRadius: 'var(--radius-lg)',
-              border: '1px solid var(--border)',
-              background: 'var(--surface)',
-              textDecoration: 'none',
-              color: 'inherit',
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
-              <span style={{ fontWeight: 600, fontSize: 16 }}>{doc.title}</span>
-              <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                <span style={{ ...badge, background: 'var(--surface-2)', color: 'var(--text-muted)' }}>
-                  {t(DOC_TYPE_LABELS[doc.docType])}
-                </span>
-                <span style={{ ...badge, ...statusColorStyle(doc.status) }}>{t(`status_${doc.status}`)}</span>
-              </span>
-            </div>
-            {doc.summary && <p style={{ margin: '6px 0 0', color: 'var(--text-muted)', fontSize: 14 }}>{doc.summary}</p>}
-            <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-              {doc.requiresAck && <span style={{ ...badge, ...statusColorStyle('warning') }}>{t('requiresAckBadge')}</span>}
-              {doc.versionNumber > 0 && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>v{doc.versionNumber}</span>}
-              {doc.tags.map((tg) => (
-                <span key={tg} style={tagChip}>
-                  {tg}
-                </span>
-              ))}
-            </div>
-          </Link>
-        ))}
-      </div>
+      </Collection>
     </section>
   );
 }
