@@ -14,8 +14,9 @@
  * A failed direct write changed nothing, so it yields nothing. Pure: no I/O.
  */
 
+import { isScratchScriptPath } from '@builderforce/run-guards';
 import { isFailedToolResult } from './brainTriage';
-import { codeChangeFile } from './chatWorkLinking';
+import { codeChangeFiles } from './chatWorkLinking';
 import { isCodeChangeTool } from './localWorkspaceTools';
 import { HAND_OFF_TOOL } from './planHandoff';
 
@@ -38,15 +39,19 @@ export function isDelegationTool(name: string): boolean {
 export function codeChangesOf(name: string, args: unknown, out: unknown): string[] | null {
   if (isCodeChangeTool(name)) {
     if (isFailedToolResult(out)) return null;
-    const file = codeChangeFile(args);
-    return file ? [file] : [];
+    const files = codeChangeFiles(args);
+    // A throwaway helper is not a change to the project (VS Code chat #275: a `_split.cjs`
+    // helper opened "Code change (1 file)" before any real file changed).
+    const real = files.filter((f) => !isScratchScriptPath(f));
+    if (files.length > 0 && real.length === 0) return null;
+    return real;
   }
   // A delegation is read by what it REPORTS, not by whether it succeeded: a child that
   // wrote two files and then ran out of budget still moved the tree.
   if (isDelegationTool(name)) {
     const files = (out as { changedFiles?: unknown } | null)?.changedFiles;
     if (!Array.isArray(files)) return null;
-    const named = files.filter((f): f is string => typeof f === 'string' && f.trim().length > 0);
+    const named = files.filter((f): f is string => typeof f === 'string' && f.trim().length > 0 && !isScratchScriptPath(f));
     return named.length ? named : null;
   }
   return null;

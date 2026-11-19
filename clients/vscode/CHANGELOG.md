@@ -2,6 +2,19 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.193] — Sub-agents start from what you know and bring back what they found
+
+- **Fixed: a sub-agent re-did work its owner had already done, and its findings were lost.** A delegated agent now starts with a short "already established" brief: what its owner read, the lookups it made, and any facts it states. Its report comes back with what it covered and a link to a file of everything it read, so the owner builds on it instead of fetching the same pages again. Every delegation names its kind of work (review, explore, plan, code). An audit or comparison goes to a strong model, not the cheapest coder. A sub-agent stays on one model instead of switching every turn.
+- **Fixed: a sub-agent could end on a question nobody could answer and still be marked done.** A sub-agent can't ask you anything, so one that ends asking, or that says "I have enough to write the report" and stops, now gets one more turn to write its report. If it still doesn't, it's marked incomplete, never done.
+- **Fixed: a run could promise its answer and stop.** When a run's last reply only announces what it will produce ("I have enough to write the report."), it gets one more turn to produce it.
+- **Fixed: a push could quietly raise a quality baseline.** Committing or pushing now refuses a change that adds to or raises a ratchet baseline (react-hooks warnings, file-size ceilings, design scale) unless the commit message gives a `baseline-raise:` reason. A planning turn can no longer run a command that changes files. Throwaway scripts go in the run's own scratch folder, and stray `_*.cjs` helpers aren't swept into commits or counted as code changes on your ticket.
+- **Faster: reading a big backlog.** Agents can count tickets by status, type, parent or assignee in one call, and read about 300 tickets per call in the one-line index view instead of about 5.
+- **Clearer: "Copy chat diagnostics".**
+  - A run that recovered from its own errors reads as completed, and a copy taken mid-run says the verdict is pending.
+  - Figures say which run they describe, with chat totals alongside.
+  - The size budget keeps your edits, commits and errors, plus your last message and the final reply, ahead of file reads.
+  - A sub-agent that ended on a question is flagged instead of shown as done.
+
 ## [2026.10.192] — Kimi Code tested and placed from your own machine
 
 - **Fixed: Kimi Code tested and placed from your own machine.** Since 2026.10.191, Kimi Code could drop behind the gateway, and pressing **Test** on it said it was "reachable only from a machine of your own". The editor calls Kimi Code itself, but the server can reach Kimi Code only through a Builderforce runtime, so it never saw your Kimi calls and an old warning on the account never cleared. The server now leaves out of its health check any account it cannot reach and marks it in the order (`callableByGateway: false`). The editor judges Kimi Code by your own credential, so it goes first again where your order puts it. **Test** (in the Connections picker and in the composer's Status tab) now sends one small real request to Kimi from this machine. It reports either that the account works, with the model it used, or Kimi's own HTTP status and message: reconnect for 401, wait for your plan's usage window for 402 or 429. Other providers are still tested by the server.

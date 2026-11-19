@@ -32,6 +32,21 @@ describe('recordCodeChangeTicket reads the ticket off from_delta\'s real answer'
     expect(calls[1]!.taskId).toBe(6523);
   });
 
+  // regression: a writer with no readable path yielded `files: []`; the mint was refused
+  // server-side (no_changed_files), added an error step, and the real change was never ticketed.
+  it('does not call from_delta with no file and no ticket — waits for a pass that names a file', async () => {
+    const c = state([]);
+    const { calls, req } = relay((taskId) => ({ deltaId: 1, taskId }));
+    await recordCodeChangeTicket(7, c, req, 'open');
+    await recordCodeChangeTicket(7, c, req, 'settle');
+    expect(calls).toHaveLength(0);
+    expect(c.ticketRecorded).toBe(false);
+    c.touchedFiles = ['src/a.ts'];
+    await recordCodeChangeTicket(7, c, req, 'settle');
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({ files: ['src/a.ts'], summary: 'Code change (1 file) from Brain chat #7' });
+  });
+
   it('reads a JSON-text result and a numeric-string taskId', async () => {
     const c = state(['src/a.ts']);
     const { req } = relay((taskId) => JSON.stringify({ deltaId: 1, taskId: String(taskId) }));

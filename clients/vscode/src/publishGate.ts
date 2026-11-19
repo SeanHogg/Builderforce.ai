@@ -8,7 +8,9 @@
  *    (`@builderforce/run-guards`); added or raised entries are refused unless the message carries
  *    `baseline-raise: <reason>`.
  *  - A SCRATCH SCRIPT. The same run wrote `_split.cjs` helpers INTO `frontend/`. A commit that names a DIRECTORY sweeps
- *    every untracked file under it, so new untracked `_*.{js,cjs,mjs,ts}` files are refused unless named exactly.
+ *    every untracked file under it, so new untracked scratch scripts (`_*.cjs` / `_*.mjs`, run-guards `isScratchScriptPath`) are refused unless named
+ *    exactly. Real underscore files (`_worker.js`, `pages/_app.ts`) are never refused — a deliberate trade-off: a
+ *    throwaway `_*.js`/`_*.ts` helper is no longer caught here, accepted so real project files are never blocked.
  *    Throwaway scripts belong in `$BF_SCRATCH_DIR` (`scratchDir.ts`), never the repo.
  *
  * Git is reached through an injected runner so the judgement is testable without a repository. When git cannot answer
@@ -24,6 +26,7 @@ import {
   baselineRaiseRefusal,
   baselineRaises,
   isBaselineFile,
+  isScratchScriptPath,
   ownsBaselineRaise,
 } from "@builderforce/run-guards";
 import { runGitRaw } from "./gitCli";
@@ -39,9 +42,6 @@ export interface GateDeps {
 
 /** The most unpushed commits a push gate reads; past it the oldest are CI's to judge. */
 const MAX_PUSH_COMMITS = 50;
-
-/** A new untracked helper script: `_split.cjs`, `_extract.ts`. */
-const SCRATCH_SCRIPT = /^_[^/\\]*\.(?:js|cjs|mjs|ts)$/i;
 
 /** A path safe to hand the shell inside double quotes: no quote, no expansion (`$`, backtick, cmd.exe's `%`). */
 function quotable(p: string): boolean {
@@ -75,7 +75,8 @@ export function repoRelative(repoRoot: string, cwd: string, p: string): string {
 /** New untracked scratch scripts (repo-relative) a commit of `named` (repo-relative) would sweep in without naming them. */
 export function sweptScratchScripts(untracked: readonly string[], named: readonly string[]): string[] {
   const exact = new Set(named);
-  return untracked.filter((file) => SCRATCH_SCRIPT.test(file.split("/").pop() ?? "") && !exact.has(file));
+  // THE scratch predicate (run-guards): `_*.cjs` / `_*.mjs` only, so `_worker.js` and `pages/_app.ts` are never refused.
+  return untracked.filter((file) => isScratchScriptPath(file) && !exact.has(file));
 }
 
 /** The refusal for swept scratch scripts. */

@@ -274,6 +274,27 @@ export function codeChangeFile(args: unknown): string | null {
 }
 
 /**
+ * Every workspace-relative path a code-change call touched, in every real arg shape:
+ * `path` (write_file / edit_file / delete_file / canvas_{write,edit,restore}_build_file)
+ * and a batched `edit_file { edits: [{ path, … }] }` — which carries no top-level `path`,
+ * so reading `path` alone recorded a multi-file edit as a change with no file. Deduped,
+ * in call order.
+ */
+export function codeChangeFiles(args: unknown): string[] {
+  const files: string[] = [];
+  const top = codeChangeFile(args);
+  if (top) files.push(top);
+  const edits = args && typeof args === 'object' ? (args as { edits?: unknown }).edits : undefined;
+  if (Array.isArray(edits)) {
+    for (const edit of edits) {
+      const p = codeChangeFile(edit);
+      if (p && !files.includes(p)) files.push(p);
+    }
+  }
+  return files;
+}
+
+/**
  * The system-prompt block that binds a chat's work to the conversation. Encodes BOTH
  * operator requirements: investigation-identified work → create + link; and a code
  * change → from_delta tied to this chat. Uses the advertised `builtin_*` tool names

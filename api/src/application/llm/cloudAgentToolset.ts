@@ -48,7 +48,7 @@ export const CLOUD_AGENT_PLATFORM_TOOLS: readonly string[] = [
   // Projects — read + write (no delete)
   'projects.list', 'projects.get', 'projects.create', 'projects.update', 'projects.check_key',
   // Tasks — read + write + move + assignees (no delete). "create other tasks for gaps".
-  'tasks.list', 'tasks.get', 'tasks.create', 'tasks.update', 'tasks.move', 'tasks.assignees',
+  'tasks.list', 'tasks.census', 'tasks.get', 'tasks.create', 'tasks.update', 'tasks.move', 'tasks.assignees',
   // Sequencing is half of planning — a PM agent that can date work but not order it
   // can only ever produce a flat plan.
   'tasks.dependencies', 'tasks.add_dependency', 'tasks.remove_dependency',

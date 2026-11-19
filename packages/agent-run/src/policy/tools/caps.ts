@@ -16,21 +16,24 @@
  * and Node.
  */
 
-import { shapeToolResult, toolOutputCap, truncatedResultNote, windowedCap } from "@builderforce/tool-output-policy";
+import { resultTableCap, shapeToolResult, toolOutputCap, truncatedResultNote, windowedCap } from "@builderforce/tool-output-policy";
 
 export { toolOutputCap, windowedCap };
 
 /**
  * The cap on one tool's result for this run: the package's table row, sized by the
  * serving model's context window. Unknown model or window ⇒ the table row (today's caps).
+ * Pass the result as `data` so a result-shaped row applies (`resultTableCap`: an index
+ * survey gets the larger index cap — chat #273's 6K cut of `tasks.list { fields: "index" }`).
  */
 export function resultCapFor(
   tool: string,
   model: { window?(model: string): number | undefined },
   servingModel: string | undefined,
+  data?: unknown,
 ): number {
   const window = servingModel && typeof model.window === "function" ? model.window(servingModel) : undefined;
-  return windowedCap(tool, toolOutputCap(tool), window);
+  return windowedCap(tool, resultTableCap(tool, data), window);
 }
 
 /** A failed result's own error text, bounded so it never crowds out the body. */

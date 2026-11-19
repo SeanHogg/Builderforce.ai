@@ -14,7 +14,7 @@
  * Pure: no I/O, no clock, no env. The lever decision arrives as a parameter.
  */
 
-import { DEFAULT_TOOL_OUTPUT_CHARS, isPagedReadTool, isShellTool, toolOutputCap, windowedCap } from './caps.js';
+import { DEFAULT_TOOL_OUTPUT_CHARS, isIndexResult, isPagedReadTool, isShellTool, resultTableCap, toolOutputCap, windowedCap } from './caps.js';
 import { projectJson } from './jsonProjection.js';
 import { isReadFileResult, isReadFilesResult, windowReadFile, windowReadFiles, type AttachAdvisory } from './readFileWindow.js';
 import { detectRunner, summarizeShellOutput } from './shellSummary.js';
@@ -83,11 +83,48 @@ function attach(value: unknown, opts: ShapeToolResultOptions): unknown {
 }
 
 /** The cap for a tool on this call. The per-tool rows beyond `read_file` are a C7
- *  behaviour, so with the lever off every other tool keeps the generic cap it always had. */
-function capFor(tool: string, opts: ShapeToolResultOptions): number {
+ *  behaviour, so with the lever off every other tool keeps the generic cap it always had —
+ *  except an index survey ({@link isIndexResult}), which is compact by construction and
+ *  gets its larger cap either way. */
+function capFor(tool: string, out: unknown, opts: ShapeToolResultOptions): number {
   if (opts.maxChars !== undefined) return opts.maxChars;
-  const tableCap = !opts.summarize && !isPagedReadTool(tool) ? DEFAULT_TOOL_OUTPUT_CHARS : toolOutputCap(tool, opts.caps);
+  const tableCap = isIndexResult(tool, out)
+    ? resultTableCap(tool, out, opts.caps)
+    : !opts.summarize && !isPagedReadTool(tool) ? DEFAULT_TOOL_OUTPUT_CHARS : toolOutputCap(tool, opts.caps);
   return windowedCap(tool, tableCap, opts.contextWindowTokens);
+}
+
+interface IndexResult {
+  lines: string;
+  returned?: number;
+  offset?: number;
+  total?: number;
+  [key: string]: unknown;
+}
+
+/**
+ * The longest whole-line prefix of an index survey that `fits`, with `returned`,
+ * `truncated` and `nextOffset` rewritten so the next page starts at the first line
+ * dropped. Null when not even one line fits (the generic cut then applies).
+ */
+function pageIndexResult(out: IndexResult, fits: (shaped: IndexResult) => boolean): IndexResult | null {
+  const all = out.lines ? out.lines.split('\n') : [];
+  const offset = typeof out.offset === 'number' ? out.offset : 0;
+  const pageOf = (n: number): IndexResult => {
+    // Envelope first (paging fields re-set), `lines` last — the producer's key order.
+    const envelope: Record<string, unknown> = { ...out };
+    delete envelope.lines;
+    delete envelope.nextOffset;
+    return { ...envelope, returned: n, truncated: true, nextOffset: offset + n, lines: all.slice(0, n).join('\n') };
+  };
+  // Binary search the most lines that fit (the serialized size grows with n).
+  let lo = 0;
+  let hi = all.length - 1;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (fits(pageOf(mid))) lo = mid; else hi = mid - 1;
+  }
+  return lo > 0 && fits(pageOf(lo)) ? pageOf(lo) : null;
 }
 
 /** Shrink the log fields of a structured shell result so the whole result fits. */
@@ -135,11 +172,18 @@ export function shapeToolResult(tool: string, out: unknown, opts: ShapeToolResul
     return { content: JSON.stringify(windowed.value), bytes, truncated: windowed.truncated, served: windowed.served };
   }
 
-  const cap = capFor(tool, opts);
+  const cap = capFor(tool, out, opts);
   const full = JSON.stringify(attach(out ?? null, opts));
   if (full.length <= cap) return { content: full, bytes, truncated: false };
 
   const advisoryChars = opts.advisory ? opts.advisory.length + 16 : 0;
+
+  // An index survey over its served cap (a small window, an explicit cap, an advisory) is
+  // cut at a LINE, with its paging rewritten — never head/tail-cut mid-list.
+  if (isIndexResult(tool, out)) {
+    const paged = pageIndexResult(out as IndexResult, (shaped) => JSON.stringify(attach(shaped, opts)).length <= cap);
+    if (paged) return { content: JSON.stringify(attach(paged, opts)), bytes, truncated: true };
+  }
 
   if (opts.summarize) {
     // A log as a bare string, or in a structured shell result's log fields.

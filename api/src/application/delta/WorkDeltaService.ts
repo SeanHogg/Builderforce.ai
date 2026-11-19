@@ -57,6 +57,7 @@ import { TaskPriority, TaskStatus } from '../../domain/shared/types';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { taskCreatedHook } from '../task/taskCreationHook';
+import { advertisedName } from '../llm/toolNaming';
 
 export const DELTA_KINDS = ['improvement', 'fix', 'bug'] as const;
 export type DeltaKind = (typeof DELTA_KINDS)[number];
@@ -98,6 +99,26 @@ export interface RecordDeltaResult {
    *  or failed link is said here instead of vanishing. */
   chatLink?: ChatLinkOutcome;
 }
+
+/**
+ * A delta that would MINT a ticket for no recorded change. Measured on VS Code chats #273
+ * and #275: the run's auto-capture opened "Code change from Brain chat #273" with no
+ * files, before the session had written anything, and the empty ticket sat `in_review`
+ * on the board. A ticket for a change is minted once there is a change to name; until
+ * then the call is refused with what to do instead — a failed result, so the caller's
+ * backstop retries at settle time with the files it then holds.
+ */
+export interface DeltaRefusal {
+  ok: false;
+  recorded: false;
+  reason: 'no_changed_files';
+  error: string;
+}
+
+export const NO_CHANGED_FILES_ERROR =
+  'No ticket was created: this delta names no changed files, so there is no change to record yet. '
+  + `Call ${advertisedName('tickets.from_delta')} AFTER a write succeeds, passing files: [the paths you changed] — `
+  + 'or pass taskId to attach to the ticket that already tracks this work.';
 
 /** Match the same project + normalized-title idempotency contract as tasks.create. */
 function normalizedTitle(value: string): string {
@@ -169,7 +190,7 @@ export class WorkDeltaService {
    * Record a code delta and (by default) mint the associated ticket.
    * Tenant-scoped via the project ownership check inside TaskService.createTask.
    */
-  async record(tenantId: number, userId: string | null, input: RecordDeltaInput): Promise<RecordDeltaResult> {
+  async record(tenantId: number, userId: string | null, input: RecordDeltaInput): Promise<RecordDeltaResult | DeltaRefusal> {
     const summary = input.summary.trim();
     if (!summary) throw new Error('summary is required');
     const kind: DeltaKind = input.kind && DELTA_KINDS.includes(input.kind)
@@ -197,6 +218,9 @@ export class WorkDeltaService {
         taskId = existing.id;
         taskKey = existing.key;
         deduped = true;
+      } else if (!files || files.length === 0) {
+        // Nothing changed yet — never mint (and never write a provenance row for) an empty change.
+        return { ok: false, recorded: false, reason: 'no_changed_files', error: NO_CHANGED_FILES_ERROR };
       } else {
         const bodyParts: string[] = [];
         if (input.detail) bodyParts.push(input.detail);

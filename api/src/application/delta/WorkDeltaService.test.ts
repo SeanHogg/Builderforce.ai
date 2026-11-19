@@ -78,6 +78,62 @@ describe('WorkDeltaService ticket deduplication', () => {
     expect(mocks.linkTicket).toHaveBeenCalledWith(1, 89, null, expect.objectContaining({ createdBy: 'agent-7' }));
   });
 
+  /** A DB whose existing-ticket lookup finds nothing; records inserts and status writes. */
+  function noTicketDb(inserted: Record<string, unknown>[] = [], updates: Record<string, unknown>[] = []): Db {
+    return {
+      select: vi.fn(() => ({
+        from: vi.fn(() => ({
+          innerJoin: vi.fn(() => ({
+            where: vi.fn(() => ({ limit: vi.fn().mockResolvedValue([]) })),
+          })),
+        })),
+      })),
+      update: vi.fn(() => ({
+        set: vi.fn((value: Record<string, unknown>) => {
+          updates.push(value);
+          return { where: vi.fn().mockResolvedValue(undefined) };
+        }),
+      })),
+      insert: vi.fn(() => ({
+        values: vi.fn((value: Record<string, unknown>) => {
+          inserted.push(value);
+          return { returning: vi.fn().mockResolvedValue([{ id: 54 }]) };
+        }),
+      })),
+    } as unknown as Db;
+  }
+
+  // regression: chats #273/#275 — the run's auto-capture minted "Code change from Brain chat
+  // #273" before the session had changed anything; an empty ticket sat in_review on the board.
+  it('refuses to mint a ticket for a delta that names no changed files, and writes nothing', async () => {
+    const inserted: Record<string, unknown>[] = [];
+    const updates: Record<string, unknown>[] = [];
+    for (const files of [undefined, []]) {
+      const result = await new WorkDeltaService(noTicketDb(inserted, updates), {} as never).record(1, 'user-1', {
+        projectId: 11, chatId: 273, summary: 'Code change from Brain chat #273', kind: 'improvement', ...(files ? { files } : {}),
+      });
+      expect(result).toMatchObject({ ok: false, recorded: false, reason: 'no_changed_files' });
+      expect((result as { error: string }).error).toMatch(/files/);
+    }
+    expect(mocks.createTask).not.toHaveBeenCalled();
+    expect(mocks.linkTicket).not.toHaveBeenCalled();
+    expect(inserted).toHaveLength(0);
+    expect(updates).toHaveLength(0);
+  });
+
+  it('mints the review-lane ticket once the delta names a changed file', async () => {
+    mocks.createTask.mockResolvedValueOnce({ id: 6898, key: 'P-001' });
+    const inserted: Record<string, unknown>[] = [];
+    const updates: Record<string, unknown>[] = [];
+    const result = await new WorkDeltaService(noTicketDb(inserted, updates), {} as never).record(1, 'user-1', {
+      projectId: 11, summary: 'Code change (1 file)', kind: 'improvement', files: ['src/a.ts'],
+    });
+    expect(mocks.createTask).toHaveBeenCalledTimes(1);
+    expect(updates[0]).toMatchObject({ status: 'in_review' });
+    expect(inserted[0]).toMatchObject({ taskId: 6898, files: ['src/a.ts'] });
+    expect(result).toMatchObject({ deltaId: 54, taskId: 6898, taskKey: 'P-001', deduped: false });
+  });
+
   it('attaches a delta to the matching project ticket instead of creating a duplicate', async () => {
     const inserted: Record<string, unknown>[] = [];
     const db = {

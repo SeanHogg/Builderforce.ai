@@ -142,3 +142,4 @@ export {
   type ReviewVerdict,
 } from "./evidence/gates.js";
 export { gitCommandPattern } from "./evidence/gitCommandPattern.js";
+export { isScratchScriptPath, SCRATCH_DIR_SEGMENT } from "./scratchScript.js";

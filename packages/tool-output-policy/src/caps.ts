@@ -41,6 +41,46 @@ export const TOOL_OUTPUT_CAPS: Readonly<Record<string, number>> = {
   canvas_read_build_file: 16_000,
 };
 
+/**
+ * The cap for an INDEX result — a survey that answers "what is there?" in one short,
+ * pipe-delimited line per record (`{ format: 'id|status|…', lines: '…', … }`, e.g.
+ * `tasks.list { fields: "index" }`). Sized so ~300 lines fit: under the 6K default a
+ * 1,253-ticket board took ~18 calls to survey (VS Code chat #273).
+ *
+ * Granted only to a KNOWN producer ({@link INDEX_RESULT_TOOLS}) returning a KNOWN format
+ * ({@link INDEX_FORMATS}): the same tool's compact/slim rows are JSON objects several times
+ * larger per record, and any other tool (an MCP relay, a web fetch) could return the same
+ * shape — neither may claim 24K by looking like an index.
+ */
+export const INDEX_RESULT_CHARS = 24_000;
+
+/** `tasks.list { fields: "index" }`'s column header — the api's producer imports it from here. */
+export const TASK_INDEX_FORMAT = 'id|status|type|parent|title';
+
+/** Every index `format` header the policy recognises. */
+export const INDEX_FORMATS: ReadonlySet<string> = new Set([TASK_INDEX_FORMAT]);
+
+/** The tools allowed to return an index survey: the catalog id and its advertised name. */
+export const INDEX_RESULT_TOOLS: ReadonlySet<string> = new Set(['tasks.list', 'builtin_tasks_list']);
+
+/** Whether `tool`'s result is an index survey ({@link INDEX_RESULT_CHARS}): a known producer,
+ *  a known `format` header, and the rows as one `lines` string. */
+export function isIndexResult(tool: string, out: unknown): boolean {
+  if (!INDEX_RESULT_TOOLS.has(tool)) return false;
+  if (!out || typeof out !== 'object' || Array.isArray(out)) return false;
+  const r = out as Record<string, unknown>;
+  return typeof r.format === 'string' && INDEX_FORMATS.has(r.format) && typeof r.lines === 'string';
+}
+
+/**
+ * The table cap for this RESULT: {@link INDEX_RESULT_CHARS} for an index survey (never
+ * another tool's row), else the tool's own row. A tool's index mode is recognised from
+ * what it returned, so no caller has to thread the call's arguments.
+ */
+export function resultTableCap(tool: string, out: unknown, caps: Readonly<Record<string, number>> = TOOL_OUTPUT_CAPS): number {
+  return isIndexResult(tool, out) ? Math.max(DEFAULT_TOOL_OUTPUT_CHARS, INDEX_RESULT_CHARS) : toolOutputCap(tool, caps);
+}
+
 /** The tool whose results are paged by line rather than sliced by char. */
 export const READ_FILE_TOOL = 'read_file';
 

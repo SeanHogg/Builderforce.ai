@@ -73,6 +73,12 @@ describe("commitGateRefusal", () => {
     expect(sweptScratchScripts(["tools/_notes.md", "tools/x_y.ts"], ["tools"])).toEqual([]);
   });
 
+  it("never refuses a real underscore-named project file swept by a directory commit", async () => {
+    const git = repo({ "ls-files": "public/_worker.js\npages/_app.ts\n", "diff --name-only": "" });
+    expect(await commitGateRefusal(git, ROOT, { message: "deploy worker", paths: ["public", "pages"] }, deps())).toBeNull();
+    expect(sweptScratchScripts(["public/_worker.js", "pages/_app.ts", "tools/_probe.mjs"], ["public", "pages", "tools"])).toEqual(["tools/_probe.mjs"]);
+  });
+
   it("fails open with a warning outside a repository", async () => {
     const d = deps();
     expect(await commitGateRefusal(fakeGit({}), ROOT, { message: "x", paths: ["a.ts"] }, d)).toBeNull();

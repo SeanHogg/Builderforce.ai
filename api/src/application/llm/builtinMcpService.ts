@@ -38,6 +38,8 @@ import { SKILL_LIBRARY_TOOLS } from './skillLibraryToolCatalog';
 import { invalidateSkillAssignmentCaches } from '../skills/skillAssignmentCache';
 import { assertSkillAssignable } from '../marketplace/skillEntitlement';
 import { AGENT_ASSIGNMENT_TOOLS } from './agentAssignmentToolCatalog';
+import { TASK_CENSUS_TOOLS } from './taskCensusToolCatalog';
+import { clampIndexLimit, projectTaskIndex } from './taskIndexProjection';
 import { readTicketPendingChanges } from '../task/ticketPendingChangesPort';
 import { decideTicketPendingChanges } from '../task/ticketPendingChanges';
 import { buildTransactionalDatabase, type Db } from '../../infrastructure/database/connection';
@@ -1009,7 +1011,7 @@ const CATALOG: BuiltinTool[] = [
   // ---- Tasks ----
   {
     tool: 'tasks.list', mutates: false,
-    description: 'List tasks as a COMPACT projection (id/key/title/status/priority/type/parent/assignee/points/dueDate/archived + a short description snippet + progress). scope picks which tickets: "open" (default — work still owed), "closed" (done, cancelled or archived — a cancelled ticket counts as done and reads 100%), or "all". Filter further by projectId and/or status; capped by limit (default 50, max 200). Tickets are ordered by id; PAGE through ALL of them with `offset` (the result carries `nextOffset` while truncated — repeat until it is absent). Pass fields:"slim" for a bulk read (no progress breakdown, 300-char description snippet), or fields:\"index\" to survey many tickets at once (one `id|status|type|parent|title` line each in a `lines` string and nothing else, so 200 fit under a tool-result cap). The result is { tasks, total, returned, offset, truncated, nextOffset?, scope } (index mode returns { format, lines, total, returned, offset, truncated, nextOffset?, scope }). Use tasks.get for one task\'s full detail; change status or archive with tasks.update; tasks.delete is permanent.',
+    description: 'List tasks as a COMPACT projection (id/key/title/status/priority/type/parent/assignee/points/dueDate/archived + a short description snippet + progress). scope picks which tickets: "open" (default — work still owed), "closed" (done, cancelled or archived — a cancelled ticket counts as done and reads 100%), or "all". Filter further by projectId and/or status; capped by limit (default 50, max 200). Tickets are ordered by id; PAGE through ALL of them with `offset` (the result carries `nextOffset` while truncated — repeat until it is absent). Pass fields:"slim" for a bulk read (no progress breakdown, 300-char description snippet), or fields:\"index\" to survey many tickets at once (one `id|status|type|parent|title` line each in a `lines` string and nothing else; up to 300 per page). The result is { tasks, total, returned, offset, truncated, nextOffset?, scope } (index mode returns { format, total, returned, offset, truncated, nextOffset?, scope, lines }). For COUNTS (how many tickets, the status/type breakdown) call tasks.census once instead of listing or guessing statuses. Use tasks.get for one task\'s full detail; change status or archive with tasks.update; tasks.delete is permanent.',
     parameters: obj({ projectId: N, status: S, scope: { type: 'string', enum: [...TASK_LIST_SCOPES] }, limit: N, offset: N, fields: { type: 'string', enum: ['compact', 'slim', 'index'] } }),
     run: async (ctx, a) => {
       const status = a.status != null ? str(a.status) : undefined;
@@ -1025,16 +1027,11 @@ const CATALOG: BuiltinTool[] = [
       rows = await maskSecurityTasks(ctx, rows);
       // Stable order so offset paging never skips or repeats a ticket between pages.
       rows.sort((x, y) => Number(x.id) - Number(y.id));
-      const limit = clampLimit(a.limit);
       const offset = a.offset != null ? Math.max(0, Math.floor(num(a.offset))) : 0;
+      // One line per ticket, paged to the tool-output policy's index budget (taskIndexProjection.ts).
+      if (a.fields === 'index') return projectTaskIndex(rows, offset, clampIndexLimit(a.limit), scope);
+      const limit = clampLimit(a.limit);
       const page = rows.slice(offset, offset + limit);
-      if (a.fields === 'index') {
-        // One line per ticket — a survey that fits a tool-result cap (~80 chars/row).
-        const lines = page.map((row) => `${row.id}|${row.status ?? ''}|${row.taskType ?? ''}|${row.parentTaskId ?? ''}|${snippet(row.title, 90) ?? ''}`).join('\n');
-        const indexEnd = offset + page.length;
-        const indexTruncated = rows.length > indexEnd;
-        return { format: 'id|status|type|parent|title', lines, total: rows.length, returned: page.length, offset, truncated: indexTruncated, ...(indexTruncated ? { nextOffset: indexEnd } : {}), scope };
-      }
       const slim = a.fields === 'slim';
       // `slim` drops the progress breakdown (3 extra queries) and keeps a 300-char
       // snippet — built for bulk-reading every open ticket (e.g. roadmap alignment).
@@ -1267,7 +1264,7 @@ const CATALOG: BuiltinTool[] = [
   // ---- Work-delta capture + Validator review (0270) ----
   {
     tool: 'tickets.from_delta', mutates: true,
-    description: 'Record a code CHANGE you just made as a classified work delta so it is visible on the board. If an existing ticket already tracks the work, pass taskId and the delta attaches to it without creating a duplicate; otherwise an associated ticket is opened. kind: improvement (new/better behaviour) | fix (repaired something) | bug (a defect you are logging). Pass files you touched and, when working in a Brain chat, the chatId so the ticket is tied back to this conversation. A newly-created ticket opens in review and completes automatically when the change is merged + deployed.',
+    description: 'Record a code CHANGE you just made as a classified work delta so it is visible on the board. If an existing ticket already tracks the work, pass taskId and the delta attaches to it without creating a duplicate; otherwise an associated ticket is opened. kind: improvement (new/better behaviour) | fix (repaired something) | bug (a defect you are logging). Pass files you touched — a new ticket is only opened for a delta that names at least one changed file, so call it AFTER the write — and, when working in a Brain chat, the chatId so the ticket is tied back to this conversation. A newly-created ticket opens in review and completes automatically when the change is merged + deployed.',
     parameters: obj({
       projectId: N, summary: S, detail: S,
       kind: { type: 'string', enum: ['improvement', 'fix', 'bug'] },
@@ -1292,6 +1289,8 @@ const CATALOG: BuiltinTool[] = [
         createdBy: ctx.userId ?? null,
         createTicket: typeof a.createTicket === 'boolean' ? a.createTicket : true,
       });
+      // A delta naming no changed files is refused, not minted (WorkDeltaService `DeltaRefusal`).
+      if ('ok' in recorded) return recorded;
       // `syncId`: the ticket the delta landed on, as the ONE id field (platform.md typed entity ids §5).
       return { ...recorded, ...syncIdField(recorded.taskId) };
     },
@@ -4300,6 +4299,8 @@ const CATALOG: BuiltinTool[] = [
   // ---- Agent assignments: project staffing, workspace identities, every scope ----
   // Through THE assignment use case and its role policy (agentAssignmentToolCatalog.ts).
   ...AGENT_ASSIGNMENT_TOOLS,
+  // ---- Ticket census: counts by status/type/group in one call (taskCensusToolCatalog.ts) ----
+  ...TASK_CENSUS_TOOLS,
 ];
 
 

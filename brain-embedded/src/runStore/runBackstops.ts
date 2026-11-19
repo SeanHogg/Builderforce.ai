@@ -115,12 +115,15 @@ export async function recordCodeChangeTicket(
   // Nothing new to say about a ticket that already exists — don't spend a call on it.
   if (phase === 'settle' && c.deltaTicketId != null && files.length === 0) return;
   const attachTo = c.deltaTicketId;
+  // No file to name and no ticket to attach to: the server refuses a fileless mint
+  // (`tickets.from_delta` → no_changed_files), so the call would only add an error step.
+  // Wait for a pass that holds a path (`ticketRecorded` stays false, so settle retries).
+  if (files.length === 0 && attachTo == null) return;
   // An unbound local chat (PRD 36) still gets its ticket — on the project, linked to no
   // chat, because it has none on the platform to link to.
   const source = serverChatId != null ? `Brain chat #${serverChatId}` : 'a local editor chat';
-  const summary = files.length
-    ? `Code change (${files.length} file${files.length === 1 ? '' : 's'}) from ${source}`
-    : `Code change from ${source}`;
+  // Always names files here: a fileless capture returned above (mint) or before that (attach).
+  const summary = `Code change (${files.length} file${files.length === 1 ? '' : 's'}) from ${source}`;
   const toolStart = nowMs();
   const args = {
     projectId: req.projectId,

@@ -3,7 +3,7 @@
  * `RunState.reads.served` — what every dispatched call goes through.
  */
 import { describe, expect, it } from "vitest";
-import { toolOutputCap, windowedCap } from "@builderforce/tool-output-policy";
+import { INDEX_RESULT_CHARS, toolOutputCap, windowedCap } from "@builderforce/tool-output-policy";
 import { capToolResult, coveredReadAnswer, recordServedRead, resultCapFor } from "../../src/policy/tools/index.js";
 import { policyCtx } from "../support/policyContext.js";
 
@@ -17,6 +17,16 @@ describe("resultCapFor", () => {
   it("sizes the cap to the serving model's window", () => {
     expect(resultCapFor("read_file", { window: () => 200_000 }, "m")).toBe(windowedCap("read_file", toolOutputCap("read_file"), 200_000));
     expect(resultCapFor("search_code", { window: () => 8_000 }, "m")).toBe(windowedCap("search_code", toolOutputCap("search_code"), 8_000));
+  });
+
+  // regression: chat #273 — the cap was decided before the result was seen, so a
+  // `tasks.list { fields: "index" }` survey was cut at the 6K default.
+  it("gives an index survey result the index cap, and leaves other results of the tool alone", () => {
+    const lines = Array.from({ length: 250 }, (_, i) => `${i}|backlog|task||A ticket title of a typical length`).join("\n");
+    const index = { format: "id|status|type|parent|title", total: 250, returned: 250, offset: 0, truncated: false, scope: "open", lines };
+    expect(resultCapFor("builtin_tasks_list", {}, "m", index)).toBe(INDEX_RESULT_CHARS);
+    expect(resultCapFor("builtin_tasks_list", {}, "m", { tasks: [] })).toBe(toolOutputCap("builtin_tasks_list"));
+    expect(capToolResult("builtin_tasks_list", index, resultCapFor("builtin_tasks_list", {}, "m", index))).toBe(index);
   });
 });
 

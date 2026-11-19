@@ -334,7 +334,7 @@ export async function dispatchCall(input: RunAgentInput, state: RunState, call: 
       : await runToolWithWatch(exec, watch, signal, call.name, call.args, own ? platform?.interruptible : undefined);
     // A surface that guards its own context says its share; any other result is capped by the tool's table row, sized by the window.
     const surfaceCap = own ? platform?.resultCap?.(state.model.model) : undefined;
-    const capped = capToolResult(call.name, data, surfaceCap ?? resultCapFor(call.name, ports.model, state.model.model));
+    const capped = capToolResult(call.name, data, surfaceCap ?? resultCapFor(call.name, ports.model, state.model.model, data));
     // A surface's own tool says for itself whether it failed; a registry tool says so with `ok: false`.
     // A call that never started (a steer was already waiting) did not fail: its dispatch is not an error, so the breaker does not count it.
     // Like any dispatch that did not fail, it clears the failure streak (as a kill does): the streak is reset to 0, not held.
