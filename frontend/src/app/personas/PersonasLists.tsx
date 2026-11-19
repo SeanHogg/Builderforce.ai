@@ -25,7 +25,7 @@ function useLocalList<Row>(descriptor: CollectionDescriptor<Row>, rows: Row[]) {
     page: paging.page,
     pageSize: paging.pageSize,
   });
-  return { source, paging };
+  return { source, paging, sort };
 }
 
 const imageStyle = (image: string): React.CSSProperties => ({
@@ -131,11 +131,11 @@ export function MyPersonasList({ personas, search, onSearchChange, publishingId,
     );
   }, [personas, search]);
 
-  const { source } = useLocalList(descriptor, filtered);
+  const { source, paging, sort } = useLocalList(descriptor, filtered);
   const withReload = useMemo(() => ({ ...source, refetch: onReload }), [source, onReload]);
 
   return (
-    <Collection descriptor={descriptor} source={withReload} search={search} onSearchChange={onSearchChange} />
+    <Collection descriptor={descriptor} source={withReload} sort={sort} paging={paging} search={search} onSearchChange={onSearchChange} />
   );
 }
 
@@ -323,9 +323,9 @@ export function MarketplaceList({
     );
   }, [personas, search]);
 
-  const { source } = useLocalList(descriptor, filtered);
+  const { source, paging, sort } = useLocalList(descriptor, filtered);
 
   return (
-    <Collection descriptor={descriptor} source={source} search={search} onSearchChange={onSearchChange} />
+    <Collection descriptor={descriptor} source={source} sort={sort} paging={paging} search={search} onSearchChange={onSearchChange} />
   );
 }

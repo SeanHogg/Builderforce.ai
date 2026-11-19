@@ -148,6 +148,8 @@ export function PromptsList({ prompts, tab, search, onSearchChange, onOpen, onRe
     <Collection
       descriptor={descriptor}
       source={withReload}
+      sort={sort}
+      paging={paging}
       search={search}
       onSearchChange={onSearchChange}
     >

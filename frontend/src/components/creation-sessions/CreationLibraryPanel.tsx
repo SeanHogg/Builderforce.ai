@@ -212,5 +212,5 @@ function LibraryCollection({ descriptor, rows, loading, reload, ...rest }: Libra
     () => ({ ...local, loading, refetch: reload }),
     [local, loading, reload],
   );
-  return <Collection descriptor={descriptor} source={source} {...rest} />;
+  return <Collection descriptor={descriptor} source={source} sort={sort} paging={paging} {...rest} />;
 }

@@ -282,7 +282,7 @@ export default function SkillsPage() {
       ) : (
         <>
           <CatalogInsightsBar entity="skills" items={insightsItems} primaryMetric="installs" secondaryMetric="likes" groupKind="category" />
-          <Collection descriptor={descriptor} source={source} search={search} onSearchChange={(q) => { setSearch(q); paging.reset(); }} />
+          <Collection descriptor={descriptor} source={source} sort={sort} paging={paging} search={search} onSearchChange={(q) => { setSearch(q); paging.reset(); }} />
         </>
       )}
 

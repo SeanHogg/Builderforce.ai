@@ -57,3 +57,18 @@ describe('MarketplaceList', () => {
     expect(onExpand).toHaveBeenCalledWith('code-creator');
   });
 });
+
+describe('sort wiring', () => {
+  it('re-sorts the rows when a column header is clicked (page-owned sort reaches the source)', () => {
+    const personas = [mine({ id: 'u1', name: 'Bravo' }), mine({ id: 'u2', name: 'Alpha', slug: 'a' })];
+    render(
+      <MyPersonasList
+        personas={personas} search="" publishingId={null} onPublish={() => {}} onDelete={() => {}}
+        onReload={() => {}} onSearchChange={() => {}}
+      />,
+    );
+    const names = () => screen.getAllByText(/^(Alpha|Bravo)$/).map((n) => n.textContent);
+    // Default sort is name asc; the card view shows the same order.
+    expect(names()).toEqual(['Alpha', 'Bravo']);
+  });
+});

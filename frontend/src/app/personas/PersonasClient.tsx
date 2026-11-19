@@ -109,8 +109,10 @@ export default function PersonasPage() {
     image: '',
   });
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  // `silent` reloads without swapping the tab body for the loading branch, so a bulk
+  // action refreshes the list in place and keeps selection / page / sort state.
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     setError('');
     try {
       const [all, agentHostList, pub, mine] = await Promise.all([
@@ -145,6 +147,14 @@ export default function PersonasPage() {
   useEffect(() => {
     load();
   }, [tenantId, load]);
+
+  const reloadSilently = useCallback(() => { void load(true); }, [load]);
+
+  // The search box lives inside the list; once the owned list is empty the page shows the
+  // create-first empty state instead, so a stale query must not hide its CTA.
+  useEffect(() => {
+    if (userPersonas.length === 0 && mineSearch) setMineSearch('');
+  }, [userPersonas.length, mineSearch]);
 
   const assignPersona = async (slug: string) => {
     if (!tenantNum) return;
@@ -317,7 +327,7 @@ export default function PersonasPage() {
             publishingId={publishingId}
             onPublish={publishPersona}
             onDelete={deleteUserPersona}
-            onReload={load}
+            onReload={reloadSilently}
           />
         )
       ) : (

@@ -303,7 +303,7 @@ function Library({ projectId, t }: { projectId: number | null; t: ReturnType<typ
     async (q: PageQuery): Promise<Page<KnowledgeDoc>> => {
       try {
         setError(null);
-        const docs = await knowledgeApi.list({ type: typeFilter || undefined, project: projectId, tag: tagFilter || undefined, q: q.q || undefined });
+        const docs = await knowledgeApi.list({ type: typeFilter || undefined, project: projectId, tag: tagFilter || undefined, q: q.q?.split('\u0000')[0] || undefined });
         const cmp = descriptor.columns.find((c) => (c.sortKey ?? c.key) === q.sort)?.compare;
         const sorted = cmp ? [...docs].sort((x, y) => (q.dir === 'asc' ? cmp(x, y) : cmp(y, x))) : docs;
         const start = (q.page - 1) * q.pageSize;
@@ -326,7 +326,9 @@ function Library({ projectId, t }: { projectId: number | null; t: ReturnType<typ
     sort: sort.key,
     dir: sort.dir,
     archived: 'exclude',
-    q: search || undefined,
+    // The fetcher reads type/tag/project from its closure, so they must also key the
+    // request or a filter change on page 1 would not refetch.
+    q: `${search}\u0000${typeFilter}\u0000${tagFilter}\u0000${projectId ?? ''}`,
   });
 
   return (
@@ -336,6 +338,8 @@ function Library({ projectId, t }: { projectId: number | null; t: ReturnType<typ
       <Collection
         descriptor={descriptor}
         source={source}
+        sort={sort}
+        paging={paging}
         search={search}
         onSearchChange={(q) => {
           setSearch(q);

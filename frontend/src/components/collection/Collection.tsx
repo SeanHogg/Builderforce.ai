@@ -6,8 +6,8 @@ import type { CollectionDescriptor } from './descriptor';
 import type { CollectionSource } from './sources';
 import type { CollectionSelection } from './useCollectionSelection';
 import { useCollectionSelection } from './useCollectionSelection';
-import { useCollectionPaging } from './useCollectionPaging';
-import { useCollectionSort } from './useCollectionSort';
+import { useCollectionPaging, type CollectionPaging } from './useCollectionPaging';
+import { useCollectionSort, type CollectionSort } from './useCollectionSort';
 import { useCollectionPreferences, type CollectionView } from './collectionPreferences';
 import { useBulkAction } from './useBulkAction';
 import { CollectionHeader } from './CollectionHeader';
@@ -62,6 +62,15 @@ export interface CollectionProps<Row> {
   search?: string;
   onSearchChange?: (q: string) => void;
   className?: string;
+  /**
+   * Page-owned sort/paging state. A page whose source depends on the sort/page
+   * (a server source, or a local one it slices itself) creates these hooks, feeds
+   * the source from them AND passes them here, so a header/pager click changes the
+   * state the source reads. Omit both and Collection keeps its own (the source
+   * must then not depend on either).
+   */
+  sort?: CollectionSort;
+  paging?: CollectionPaging;
 }
 
 const rootStyle: React.CSSProperties = {
@@ -91,11 +100,15 @@ export function Collection<Row>({
   search = '',
   onSearchChange,
   className,
+  sort: sortProp,
+  paging: pagingProp,
 }: CollectionProps<Row>) {
   const t = useTranslations('common.collection');
   const prefs = useCollectionPreferences(descriptor.surfaceKey, descriptor.defaultView ?? 'table');
-  const paging = useCollectionPaging(prefs.pageSize);
-  const sort = useCollectionSort(descriptor, paging.reset);
+  const ownPaging = useCollectionPaging(prefs.pageSize);
+  const paging = pagingProp ?? ownPaging;
+  const ownSort = useCollectionSort(descriptor, paging.reset);
+  const sort = sortProp ?? ownSort;
 
   // Changing a filter or the search clears the selection (§3.2).
   const filterKey = useMemo(
