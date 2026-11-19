@@ -19,10 +19,18 @@ export function ImplicatedTicketsSection({ t, canManage, incidentId }: { t: T; c
   const load = useCallback(() => { setLoading(true); setReloadKey((k) => k + 1); }, []);
   useEffect(() => {
     let cancelled = false;
-    incidentsApi.implicated(incidentId)
-      .catch(recordedFailure('Reading the implicated tickets of an incident', [] as ImplicatedTicket[]))
-      .then((r) => { if (!cancelled) setRows(r); })
-      .finally(() => { if (!cancelled) setLoading(false); });
+    (async () => {
+      try {
+        const r = await incidentsApi.implicated(incidentId);
+        if (!cancelled) setRows(r);
+      } catch (caught) {
+        // Degrade to the empty state, but record why (ApiRequestError is already surfaced by the client).
+        recordedFailure('Reading the implicated tickets of an incident', null)(caught);
+        if (!cancelled) setRows([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
     return () => { cancelled = true; };
   }, [incidentId, reloadKey]);
 
@@ -73,7 +81,7 @@ export function ImplicatedTicketsSection({ t, canManage, incidentId }: { t: T; c
       )}
       {canManage && (
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <input className="input" style={{ maxWidth: 160 }} value={addId} onChange={(e) => setAddId(e.target.value)} placeholder={t('implicated.addPlaceholder')} inputMode="numeric" />
+          <input className="input" style={{ maxWidth: 160 }} value={addId} onChange={(e) => setAddId(e.target.value)} placeholder={t('implicated.addPlaceholder')} aria-label={t('implicated.addPlaceholder')} inputMode="numeric" />
           <button type="button" className="btn btn-secondary btn-sm" disabled={busy || !addId.trim()} onClick={add}>{t('implicated.add')}</button>
         </div>
       )}

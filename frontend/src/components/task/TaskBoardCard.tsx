@@ -6,6 +6,7 @@
  * every handler comes in through props.
  */
 
+import { memo, useCallback } from 'react';
 import type { CSSProperties, MouseEvent } from 'react';
 import { Icon } from '@/components/ui/Icon';
 import { Select } from '@/components/Select';
@@ -43,7 +44,7 @@ export interface TaskBoardCardProps {
   onPatchStatus: (status: string) => void;
 }
 
-export function TaskBoardCard({
+function TaskBoardCardImpl({
   task,
   runs,
   cardStyle,
@@ -61,11 +62,19 @@ export function TaskBoardCard({
   onEditStatus,
   onPatchStatus,
 }: TaskBoardCardProps) {
+  const openCard = useCallback(() => onOpen(), [onOpen]);
+  const openAgentTab = useCallback(
+    (e: MouseEvent) => {
+      e.stopPropagation();
+      onOpen('agent');
+    },
+    [onOpen],
+  );
   return (
     <div
       draggable
       onDragStart={onDragStart}
-      onClick={() => onOpen()}
+      onClick={openCard}
       style={{ ...cardStyle, padding: 12, cursor: 'grab', position: 'relative' }}
     >
       <div style={{ position: 'absolute', top: 8, right: 8 }}>
@@ -86,9 +95,13 @@ export function TaskBoardCard({
             ))}
           </Select>
         ) : (
-          <span
+          <button
+            type="button"
+            aria-label={statusLabel}
             className={taskStatusBadgeClass(task.status)}
             style={{
+              border: 'none',
+              font: 'inherit',
               fontSize: 10,
               padding: '2px 8px',
               borderRadius: 'var(--radius-sm)',
@@ -101,7 +114,7 @@ export function TaskBoardCard({
             }}
           >
             {statusLabel}
-          </span>
+          </button>
         )}
       </div>
       <div style={{ fontWeight: 500, fontSize: 13, color: task.restricted ? 'var(--text-muted)' : 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -132,10 +145,7 @@ export function TaskBoardCard({
               status={r.status}
               meta={r.status !== 'completed' ? r.status : undefined}
               title={`${r.label} — execution #${r.execId} · ${r.status}. Click to open the Agent tab.`}
-              onClick={(e) => {
-                e.stopPropagation();
-                onOpen('agent');
-              }}
+              onClick={openAgentTab}
             />
           ))
         ) : (task.assignedAgentHostId || task.assignedAgentRef || task.assignedUserId) ? (
@@ -168,3 +178,5 @@ export function TaskBoardCard({
     </div>
   );
 }
+
+export const TaskBoardCard = memo(TaskBoardCardImpl);

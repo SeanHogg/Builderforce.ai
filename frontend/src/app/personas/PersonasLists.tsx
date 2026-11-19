@@ -235,7 +235,17 @@ export function MarketplaceList({
         return (
           <div style={{ overflow: 'hidden', outline: isOpen ? '1px solid var(--accent)' : undefined }}>
             {p.image && <div style={imageStyle(p.image)} />}
-            <div style={{ padding: p.image ? 12 : 0, cursor: 'pointer' }} onClick={() => onExpand(isOpen ? null : p.name)}>
+            <div
+              role="button"
+              tabIndex={0}
+              aria-expanded={isOpen}
+              style={{ padding: p.image ? 12 : 0, cursor: 'pointer' }}
+              onClick={() => onExpand(isOpen ? null : p.name)}
+              onKeyDown={(e) => {
+                if (e.target !== e.currentTarget) return;
+                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onExpand(isOpen ? null : p.name); }
+              }}
+            >
               <div className="card-header">
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <span style={{ fontSize: 20 }}><Icon source="🎭" size="1em" /></span>
