@@ -27,6 +27,15 @@ type State = { phase: 'idle' } | { phase: 'checking' } | { phase: 'done'; outcom
 
 const WATERMARK_ID = /^[0-9a-f]{16}$/;
 
+/** Run one verification to its terminal phase — the page shows `failed` for any rejection. */
+async function settle(job: () => Promise<VerifyOutcome>): Promise<State> {
+  try {
+    return { phase: 'done', outcome: await job() };
+  } catch {
+    return { phase: 'failed' };
+  }
+}
+
 /** Success tone ONLY for a verified record; a licensee's registration is neutral, a bare mark is a warning. */
 const TRUST_TONE: Record<VoiceTrust, { box: React.CSSProperties; text: string }> = {
   verified: { box: { borderColor: 'var(--success-border)', background: 'var(--success-bg)' }, text: 'var(--success-text)' },
@@ -40,22 +49,31 @@ export default function VoiceVerifyClient() {
   const format = useFormatter();
   const params = useSearchParams();
   const input = useRef<HTMLInputElement | null>(null);
-  const [state, setState] = useState<State>({ phase: 'idle' });
+  const prefill = params.get('watermarkId');
+  const prefillId = prefill && WATERMARK_ID.test(prefill) ? prefill : null;
+  // A `?watermarkId=` link starts in `checking`; when the param changes, the phase is
+  // adjusted during render (not in the effect), so the effect only settles the result.
+  const [state, setState] = useState<State>(() => (prefillId ? { phase: 'checking' } : { phase: 'idle' }));
+  const [checkedPrefill, setCheckedPrefill] = useState(prefillId);
+  if (prefillId !== checkedPrefill) {
+    setCheckedPrefill(prefillId);
+    if (prefillId) setState({ phase: 'checking' });
+    // The id was removed mid-check: the effect's cleanup drops that answer, so stop waiting.
+    else if (state.phase === 'checking') setState({ phase: 'idle' });
+  }
   const [dragging, setDragging] = useState(false);
 
   const run = useCallback(async (job: () => Promise<VerifyOutcome>) => {
     setState({ phase: 'checking' });
-    try {
-      setState({ phase: 'done', outcome: await job() });
-    } catch {
-      setState({ phase: 'failed' });
-    }
+    setState(await settle(job));
   }, []);
 
-  const prefill = params.get('watermarkId');
   useEffect(() => {
-    if (prefill && WATERMARK_ID.test(prefill)) void run(() => verifyWatermarkId(prefill));
-  }, [prefill, run]);
+    if (!prefillId) return;
+    let cancelled = false;
+    void settle(() => verifyWatermarkId(prefillId)).then((next) => { if (!cancelled) setState(next); });
+    return () => { cancelled = true; };
+  }, [prefillId]);
 
   const onFile = (file: File | undefined) => {
     if (file) void run(() => verifyAudioFile(file));

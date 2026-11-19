@@ -1,7 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
+import { useEffectEvent } from '@/hooks/useEffectEvent';
 import { creationListingApi } from './creationListings';
 import { isPurchaseRequiredError } from './planLimitError';
 import { readSession, removeSession, writeSession } from './storage';
@@ -42,8 +43,9 @@ export function useKanbanTemplateCheckout(consumer: string, handlers: {
   onFailed?: (message: string) => void;
 } = {}) {
   const t = useTranslations('kanbanTemplateCheckout');
-  const latest = useRef(handlers);
-  latest.current = handlers;
+  // The caller's LATEST handlers, without the effect re-running when they change.
+  const onGranted = useEffectEvent((templateId: string) => handlers.onGranted?.(templateId));
+  const onFailed = useEffectEvent((message: string) => handlers.onFailed?.(message));
 
   useEffect(() => {
     const templateId = readPending(consumer);
@@ -58,8 +60,8 @@ export function useKanbanTemplateCheckout(consumer: string, handlers: {
     url.searchParams.delete('checkout');
     window.history.replaceState(null, '', url.toString());
     creationListingApi.completeCheckout(session)
-      .then(() => latest.current.onGranted?.(templateId))
-      .catch(() => latest.current.onFailed?.(t('completeFailed')));
+      .then(() => onGranted(templateId))
+      .catch(() => onFailed(t('completeFailed')));
   }, [t, consumer]);
 
   return useCallback(async (error: unknown, templateId: string): Promise<string | null> => {

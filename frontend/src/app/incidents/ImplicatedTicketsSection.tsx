@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { useTranslations } from 'next-intl';
 import type { ImplicatedTicket } from '@/lib/kanban';
 import { incidentsApi } from '@/lib/builderforceApi';
+import { recordedFailure } from '@/lib/reportError';
 import { SECTION_CARD as card } from '@/components/ui/SectionState';
 
 type T = ReturnType<typeof useTranslations>;
@@ -19,8 +20,8 @@ export function ImplicatedTicketsSection({ t, canManage, incidentId }: { t: T; c
   useEffect(() => {
     let cancelled = false;
     incidentsApi.implicated(incidentId)
+      .catch(recordedFailure('Reading the implicated tickets of an incident', [] as ImplicatedTicket[]))
       .then((r) => { if (!cancelled) setRows(r); })
-      .catch(() => { if (!cancelled) setRows([]); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [incidentId, reloadKey]);

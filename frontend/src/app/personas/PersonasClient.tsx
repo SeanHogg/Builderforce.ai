@@ -126,6 +126,10 @@ export default function PersonasPage() {
       ]);
       setAssigned(all);
       setUserPersonas(mine.map(serverToUserPersona));
+      // The search box lives inside the list; once the owned list is empty the page shows the
+      // create-first empty state instead, so a stale query must not hide its CTA. Cleared
+      // where the list empties (here and on delete), not in an effect watching its length.
+      if (mine.length === 0) setMineSearch('');
       setHasAgentHosts(agentHostList.length > 0);
       setInstalledSlugs(new Set(all.map((a) => a.artifactSlug)));
       // Server personas first, then builtins not already present (dedup by slug/name).
@@ -149,12 +153,6 @@ export default function PersonasPage() {
   }, [tenantId, load]);
 
   const reloadSilently = useCallback(() => { void load(true); }, [load]);
-
-  // The search box lives inside the list; once the owned list is empty the page shows the
-  // create-first empty state instead, so a stale query must not hide its CTA.
-  useEffect(() => {
-    if (userPersonas.length === 0 && mineSearch) setMineSearch('');
-  }, [userPersonas.length, mineSearch]);
 
   const assignPersona = async (slug: string) => {
     if (!tenantNum) return;
@@ -233,6 +231,7 @@ export default function PersonasPage() {
     try {
       await personasApi.remove(id);
       setUserPersonas((prev) => prev.filter((p) => p.id !== id));
+      if (userPersonas.every((p) => p.id === id)) setMineSearch('');
     } catch (e) {
       setError(faultText(e, t('deleteFailed')));
     }

@@ -40,10 +40,19 @@ export function RunScanPanel({ open, onClose, onDone }: RunScanPanelProps) {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<BranchScanResult | null>(null);
 
+  // Opening the panel starts from a clean slate: reset during render when it opens, so the
+  // effect below only fetches.
+  const [wasOpen, setWasOpen] = useState(open);
+  if (wasOpen !== open) {
+    setWasOpen(open);
+    if (open) {
+      setResult(null);
+      setError(null);
+    }
+  }
+
   useEffect(() => {
     if (!open) return;
-    setResult(null);
-    setError(null);
     listScannableRepos()
       .then((r) => { setRepos(r); setRepoId((cur) => cur || r[0]?.id || ''); })
       .catch(() => setError(t('loadReposError')));
@@ -149,11 +158,24 @@ function AcceptRiskSection({ open }: { open: boolean }) {
   // What the manager is shown for the chosen PR: its head commit and why the gate holds it. The commit
   // shown is the commit sent back as `expectedHeadSha`. An answer for a PR no longer selected (a quick
   // A -> B switch where A answers last) is dropped.
+  //
+  // A message about the previous PR (its gate failed to load, its risk was accepted) is not about
+  // this one, and none survives the panel reopening: both are cleared during render when the open
+  // PR changes or the panel opens, so the effects below only fetch.
+  const gateFor = open && prId ? prId : null;
+  const [shownGateFor, setShownGateFor] = useState(gateFor);
+  const [wasOpen, setWasOpen] = useState(open);
+  if (shownGateFor !== gateFor || wasOpen !== open) {
+    if ((shownGateFor !== gateFor && gateFor !== null) || (wasOpen !== open && open)) {
+      setError(null);
+      setNotice(null);
+    }
+    setShownGateFor(gateFor);
+    setWasOpen(open);
+  }
+
   useEffect(() => {
     if (!open || !prId) return;
-    // A message about the previous PR (its gate failed to load, its risk was accepted) is not about this one.
-    setError(null);
-    setNotice(null);
     let current = true;
     getPrGate(prId).then(
       (state) => { if (current) setLoadedGate({ prId, state }); },
@@ -164,8 +186,6 @@ function AcceptRiskSection({ open }: { open: boolean }) {
 
   useEffect(() => {
     if (!open) return;
-    setNotice(null);
-    setError(null);
     listOpenPullRequests().then((r) => { setPrs(r); setPrId((cur) => cur || r[0]?.id || ''); }).catch(() => setError(t('loadPrsError')));
   }, [open, t]);
 

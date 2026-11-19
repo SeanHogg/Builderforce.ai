@@ -1,11 +1,11 @@
 'use client';
 
 import { Icon } from '@/components/ui/Icon';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { DocumentMarkdown } from '@/components/DocumentMarkdown';
-import { withDirtyTracking } from '@/domains/collab/presentation/withDirtyTracking';
+import { createDirtyFlag, withDirtyTracking } from '@/domains/collab/presentation/withDirtyTracking';
 import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
 import PageContainer from '@/components/PageContainer';
@@ -70,7 +70,7 @@ export default function KnowledgeDocClient({ docId }: { docId: string }) {
 
   const [mode, setMode] = useState<'edit' | 'preview'>('preview');
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
-  const dirtyRef = useRef(false);
+  const [dirty] = useState(createDirtyFlag);
 
   // `content` here is a SEED, not the live value — once mounted, `blockDoc.markdown`
   // is the document. `ready` gates the hook's own setup until the real content has
@@ -91,8 +91,7 @@ export default function KnowledgeDocClient({ docId }: { docId: string }) {
   // dirty: it already reached the server through whoever typed it, and every
   // connected client autosaving on every remote keystroke would be a PATCH storm
   // proportional to participants × keystrokes.
-  const markEditorDirty = useCallback(() => { dirtyRef.current = true; }, []);
-  const editorDoc: BlockDocument = withDirtyTracking(blockDoc, markEditorDirty);
+  const editorDoc: BlockDocument = withDirtyTracking(blockDoc, dirty.mark);
 
   const reload = useCallback(() => {
     knowledgeApi
@@ -116,13 +115,14 @@ export default function KnowledgeDocClient({ docId }: { docId: string }) {
 
   // Debounced autosave (anyone with edit access to this document). Fires on every
   // `blockDoc.markdown` change — including a PEER's, since the CRDT store's
-  // snapshot changes either way — but only ever WRITES when `dirtyRef` is set,
+  // snapshot changes either way — but only ever WRITES when the `dirty` flag is set,
   // which `editorDoc`'s wrapper reserves for edits this client made. A remote
   // change bails out below at no cost beyond the effect re-running.
   useEffect(() => {
-    if (!doc || !canEdit || !dirtyRef.current) return;
-    setSaveState('saving');
+    if (!doc || !canEdit || !dirty.isSet()) return;
     const handle = setTimeout(async () => {
+      // "Saving…" starts when a save actually runs (a retry included), never on a no-op edit.
+      setSaveState('saving');
       try {
         await knowledgeApi.update(docId, {
           title: title.trim() || doc.title,
@@ -132,7 +132,7 @@ export default function KnowledgeDocClient({ docId }: { docId: string }) {
           requiresAck,
         });
         await knowledgeApi.setTags(docId, tags);
-        dirtyRef.current = false;
+        dirty.clear();
         setSaveState('saved');
         setTimeout(() => setSaveState('idle'), 1500);
       } catch {
@@ -144,7 +144,7 @@ export default function KnowledgeDocClient({ docId }: { docId: string }) {
   }, [title, summary, blockDoc.markdown, docType, requiresAck, tags]);
 
   const markDirty = <T,>(setter: (v: T) => void) => (v: T) => {
-    dirtyRef.current = true;
+    dirty.mark();
     setter(v);
   };
 

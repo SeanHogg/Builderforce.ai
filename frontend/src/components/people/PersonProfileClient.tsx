@@ -18,16 +18,18 @@ import { peopleApi, type PersonProfileDto } from '@/lib/peopleApi';
 export default function PersonProfileClient({ userId }: { userId: string }) {
   const t = useTranslations('personProfile');
   const roleText = useRoleText();
-  const [person, setPerson] = useState<PersonProfileDto | null>(null);
-  const [error, setError] = useState<unknown>(null);
+  // The answer is held WITH the person it was read for: another person's profile (or
+  // error) is never shown while this one loads, without resetting state in the effect.
+  const [loaded, setLoaded] = useState<{ userId: string; person: PersonProfileDto | null; error: unknown } | null>(null);
+  const current = loaded?.userId === userId ? loaded : null;
+  const person = current?.person ?? null;
+  const error = current?.error ?? null;
 
   useEffect(() => {
     let live = true;
-    setPerson(null);
-    setError(null);
     peopleApi.get(userId)
-      .then((p) => { if (live) setPerson(p); })
-      .catch((e) => { if (live) setError(e); });
+      .then((p) => { if (live) setLoaded({ userId, person: p, error: null }); })
+      .catch((e: unknown) => { if (live) setLoaded({ userId, person: null, error: e }); });
     return () => { live = false; };
   }, [userId]);
 

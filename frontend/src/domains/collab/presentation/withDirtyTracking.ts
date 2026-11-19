@@ -4,6 +4,21 @@ import type { BlockDocument } from './useBlockDocument';
 const NON_MUTATING: ReadonlySet<string> = new Set(['setFocusedBlock']);
 
 /**
+ * "This client edited the document since the last autosave" — the flag `withDirtyTracking`'s
+ * `markDirty` usually sets. Not React state (setting it must not re-render) and not a ref
+ * (it is handed to the wrapper during render): create it once, e.g. `useState(createDirtyFlag)`,
+ * and read it only from effects and handlers.
+ */
+export function createDirtyFlag(): { mark: () => void; clear: () => void; isSet: () => boolean } {
+  let dirty = false;
+  return {
+    mark: () => { dirty = true; },
+    clear: () => { dirty = false; },
+    isSet: () => dirty,
+  };
+}
+
+/**
  * A `BlockDocument` whose every mutating operation first calls `markDirty`.
  *
  * Wraps EVERY function on the document except the explicit non-mutating ones, so a

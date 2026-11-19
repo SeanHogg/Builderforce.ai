@@ -45,14 +45,23 @@ export function DsrExecutePanel({ requestId, subject, open, onClose, onDone }: D
   const shown = useRef(requestId);
   const acting = useRef(false);
 
+  // A different request (or a reopened panel) starts from nothing: the previous one's plan
+  // (e.g. `verified`) must never enable Run for this one while its own plan loads. Reset
+  // during render when the open request changes, so the effect below only fetches.
+  const session = open ? requestId : null;
+  const [shownSession, setShownSession] = useState(session);
+  if (shownSession !== session) {
+    setShownSession(session);
+    if (session !== null) {
+      setPlan(null);
+      setResult(null);
+      setError(null);
+    }
+  }
+
   useEffect(() => {
     shown.current = requestId;
     if (!open) return;
-    // A different request starts from nothing: the previous one's plan (e.g. `verified`) must
-    // never enable Run for this one while its own plan loads.
-    setPlan(null);
-    setResult(null);
-    setError(null);
     let current = true;
     planDsr(requestId).then(
       (next) => { if (current) setPlan(next); },

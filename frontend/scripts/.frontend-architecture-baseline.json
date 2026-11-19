@@ -7,13 +7,13 @@
     "components/AgentStateViewer.tsx"
   ],
   "oversizedProductionFileLines": {
-    "app/incidents/IncidentsPageClient.tsx": 1208,
+    "app/incidents/IncidentsPageClient.tsx": 1174,
     "app/knowledge/[id]/KnowledgeDocClient.tsx": 1099,
     "app/marketplace/MarketplacePageClient.tsx": 1162,
     "components/AITrainingPanel.tsx": 992,
     "components/ObservabilityContent.tsx": 1027,
     "components/ProviderKeysSettings.tsx": 1333,
-    "components/TaskMgmtContent.tsx": 2704,
+    "components/TaskMgmtContent.tsx": 2657,
     "components/agent/AgentExecutionPanel.tsx": 977,
     "components/creation-canvas/CreationCanvas.tsx": 928,
     "components/manager/ManagerContent.tsx": 1007,

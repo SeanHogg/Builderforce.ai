@@ -20,6 +20,7 @@ import { useTranslations } from 'next-intl';
 import { routingModeForSelection, type ChatModelSelection } from '@seanhogg/builderforce-brain-embedded';
 import { useInferenceModeGate } from '@seanhogg/builderforce-brain-ui';
 import { usePolledResource } from '@/hooks/usePolledResource';
+import { useLatestRef } from '@/components/creation-canvas/hooks/useLatestRef';
 import { useWebInferenceMode } from '@/lib/localFirst/useWebInferenceMode';
 import { webInferenceModeNow } from '@/lib/localFirst/webInferenceMode';
 import { useBrainChats, useBrainConversation, isStepMessage, getBrainCapability, GUEST_ROOM_CHAT_ID, type BrainCapabilityId } from '@/lib/brain';
@@ -197,8 +198,7 @@ export function useGuestBrainSession({ initialPrompt, inviteCode }: { initialPro
   // Auto-send the one-shot initial prompt exactly once — through THE first-run gate, so a
   // visitor who never chose where models run is asked first and the prompt is sent the
   // moment they answer (Local only: on this device; Hybrid: minted, then sent).
-  const doSendRef = useRef(doSend);
-  doSendRef.current = doSend;
+  const doSendRef = useLatestRef(doSend);
   const sentInitialRef = useRef(false);
   const { request: requestTurn } = modeGate;
   useEffect(() => {
@@ -207,7 +207,7 @@ export function useGuestBrainSession({ initialPrompt, inviteCode }: { initialPro
     sentInitialRef.current = true;
     const text = initialPrompt.trim();
     requestTurn(() => { void doSendRef.current(text); });
-  }, [ready, usable, capReached, pendingInvite, initialPrompt, requestTurn]);
+  }, [ready, usable, capReached, pendingInvite, initialPrompt, requestTurn, doSendRef]);
 
   // A turn mid-run is not supported by the guest conversation: the box stays
   // writable and the text stays put until the run ends (or is stopped).
