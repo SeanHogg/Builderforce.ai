@@ -1009,8 +1009,8 @@ const CATALOG: BuiltinTool[] = [
   // ---- Tasks ----
   {
     tool: 'tasks.list', mutates: false,
-    description: 'List tasks as a COMPACT projection (id/key/title/status/priority/type/parent/assignee/points/dueDate/archived + a short description snippet + progress). scope picks which tickets: "open" (default — work still owed), "closed" (done, cancelled or archived — a cancelled ticket counts as done and reads 100%), or "all". Filter further by projectId and/or status; capped by limit (default 50, max 200). The result is { tasks, total, returned, truncated, scope } — when truncated, narrow with projectId/status/limit. Use tasks.get for one task\'s full detail; change status or archive with tasks.update; tasks.delete is permanent.',
-    parameters: obj({ projectId: N, status: S, scope: { type: 'string', enum: [...TASK_LIST_SCOPES] }, limit: N }),
+    description: 'List tasks as a COMPACT projection (id/key/title/status/priority/type/parent/assignee/points/dueDate/archived + a short description snippet + progress). scope picks which tickets: "open" (default — work still owed), "closed" (done, cancelled or archived — a cancelled ticket counts as done and reads 100%), or "all". Filter further by projectId and/or status; capped by limit (default 50, max 200). Tickets are ordered by id; PAGE through ALL of them with `offset` (the result carries `nextOffset` while truncated — repeat until it is absent). Pass fields:"slim" for a bulk read (no progress breakdown, 300-char description snippet). The result is { tasks, total, returned, offset, truncated, nextOffset?, scope }. Use tasks.get for one task\'s full detail; change status or archive with tasks.update; tasks.delete is permanent.',
+    parameters: obj({ projectId: N, status: S, scope: { type: 'string', enum: [...TASK_LIST_SCOPES] }, limit: N, offset: N, fields: { type: 'string', enum: ['compact', 'slim'] } }),
     run: async (ctx, a) => {
       const status = a.status != null ? str(a.status) : undefined;
       // An explicit status ("done") is its own scope — defaulting to open would empty it.
@@ -1023,11 +1023,23 @@ const CATALOG: BuiltinTool[] = [
       // SECURITY tickets are included but MASKED for a caller without clearance
       // (surfaced-not-hidden; governed by security_ticket_access).
       rows = await maskSecurityTasks(ctx, rows);
+      // Stable order so offset paging never skips or repeats a ticket between pages.
+      rows.sort((x, y) => Number(x.id) - Number(y.id));
       const limit = clampLimit(a.limit);
-      const page = rows.slice(0, limit);
-      const progress = await loadTaskProgress(ctx, page.filter((row) => row.restricted !== true));
-      const projected = page.map((row) => ({ ...compactTask(row), ...(row.restricted === true ? {} : { progress: progress.get(Number(row.id)) }) }));
-      return { tasks: projected, total: rows.length, returned: projected.length, truncated: rows.length > projected.length, scope };
+      const offset = a.offset != null ? Math.max(0, Math.floor(num(a.offset))) : 0;
+      const page = rows.slice(offset, offset + limit);
+      const slim = a.fields === 'slim';
+      // `slim` drops the progress breakdown (3 extra queries) and keeps a 300-char
+      // snippet — built for bulk-reading every open ticket (e.g. roadmap alignment).
+      const progress = slim ? new Map<number, unknown>() : await loadTaskProgress(ctx, page.filter((row) => row.restricted !== true));
+      const projected = page.map((row) => ({
+        ...compactTask(row),
+        ...(slim && snippet(row.description, 300) ? { descriptionSnippet: snippet(row.description, 300) } : {}),
+        ...(slim || row.restricted === true ? {} : { progress: progress.get(Number(row.id)) }),
+      }));
+      const end = offset + projected.length;
+      const truncated = rows.length > end;
+      return { tasks: projected, total: rows.length, returned: projected.length, offset, truncated, ...(truncated ? { nextOffset: end } : {}), scope };
     },
   },
   { tool: 'tasks.get', mutates: false, description: 'Get a task by id, including implementer activity and stale-delivery evidence. If the numeric id is missing, a ticket whose title starts with `#<id>:` (or `#<id> `) in this workspace is returned instead.', parameters: obj({ id: N }, ['id']), run: async (ctx, a) => {

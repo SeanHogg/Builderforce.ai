@@ -477,6 +477,16 @@ describe('callBuiltinTool', () => {
     // An explicit status is its own scope, so "done" is not emptied by the open default.
     const done = await callBuiltinTool(emptyDb, { tenantId: TENANT, tool: 'tasks.list', arguments: { projectId: 3, status: 'done' } });
     expect(ids(done)).toEqual([3]);
+
+    // Offset paging walks the whole set in stable id order; slim omits progress.
+    const p1 = await callBuiltinTool(emptyDb, { tenantId: TENANT, tool: 'tasks.list', arguments: { scope: 'all', limit: 2, fields: 'slim' } });
+    expect(ids(p1)).toEqual([1, 2]);
+    expect(p1).toMatchObject({ total: 4, returned: 2, offset: 0, truncated: true, nextOffset: 2 });
+    expect((p1 as { tasks: Array<Record<string, unknown>> }).tasks[0]).not.toHaveProperty('progress');
+    const p2 = await callBuiltinTool(emptyDb, { tenantId: TENANT, tool: 'tasks.list', arguments: { scope: 'all', limit: 2, offset: 2, fields: 'slim' } });
+    expect(ids(p2)).toEqual([3, 4]);
+    expect(p2).toMatchObject({ offset: 2, truncated: false });
+    expect(p2).not.toHaveProperty('nextOffset');
   });
 
   it('enforces tenant ownership on tasks.update (via the project lookup)', async () => {
