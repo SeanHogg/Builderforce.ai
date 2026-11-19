@@ -161,6 +161,10 @@ export const BRAIN_HOST_MESSAGES = [
   'open.web',
   /** Open a provider's sign-in page (Connected accounts → Reconnect) in the browser. */
   'open.external',
+  /** Connected accounts → Test, for an account the editor calls itself (Kimi Code): request
+   *  `{ provider }` → `ProviderTestResult` from a probe run on this machine, or `null` for a
+   *  provider the editor does not call itself (the webview then runs the gateway's Test). */
+  'connections.testLocally',
   'open.artifact',
   'changes.open',
   'changes.review',

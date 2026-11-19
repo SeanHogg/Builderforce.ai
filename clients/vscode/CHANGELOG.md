@@ -2,6 +2,10 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.192] — Kimi Code tested and placed from your own machine
+
+- **Fixed: Kimi Code tested and placed from your own machine.** Since 2026.10.191, Kimi Code could drop behind the gateway, and pressing **Test** on it said it was "reachable only from a machine of your own". The editor calls Kimi Code itself, but the server can reach Kimi Code only through a Builderforce runtime, so it never saw your Kimi calls and an old warning on the account never cleared. The server now leaves out of its health check any account it cannot reach and marks it in the order (`callableByGateway: false`). The editor judges Kimi Code by your own credential, so it goes first again where your order puts it. **Test** (in the Connections picker and in the composer's Status tab) now sends one small real request to Kimi from this machine. It reports either that the account works, with the model it used, or Kimi's own HTTP status and message: reconnect for 401, wait for your plan's usage window for 402 or 429. Other providers are still tested by the server.
+
 ## [2026.10.191] — Your connected accounts are used in your order, and each kind of turn gets a model suited to it
 
 - **Fixed: "use my connected accounts" always ran Kimi Code first.** The editor tried the Kimi Code subscription it calls itself before the gateway on every turn, so the order you set on the server never applied. The editor now reads that order (`GET /llm/byo-order`) for each turn and puts Kimi Code where the order puts it: first only when it heads your healthy accounts, otherwise after the gateway as a fallback. In Hybrid Auto your own accounts are tried before the platform pool.

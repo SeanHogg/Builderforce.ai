@@ -1301,5 +1301,13 @@
   "Choose the folder whose code analyzers should run again": "选择要重新运行代码分析器的文件夹",
   "Choose the folder whose code analyzers were skipped": "选择代码分析器被跳过的文件夹",
   "The code analyzers ran again for {0}.": "已为 {0} 重新运行代码分析器。",
-  "The code analyzers will run again for {0} when the folder is free, or when you next review it.": "当文件夹空闲时，或在你下次审查它时，将为 {0} 重新运行代码分析器。"
+  "The code analyzers will run again for {0} when the folder is free, or when you next review it.": "当文件夹空闲时，或在你下次审查它时，将为 {0} 重新运行代码分析器。",
+  "{0} works from this machine (model {1}).": "{0} 可从本机正常使用（模型 {1}）。",
+  "{0} refused this machine's credential (HTTP {1}: {2}). Reconnect the account.": "{0} 拒绝了本机的凭据（HTTP {1}：{2}）。请重新连接该账户。",
+  "{0} is out of capacity (HTTP {1}: {2}). Wait for your plan's usage window to reset.": "{0} 已无可用额度（HTTP {1}：{2}）。请等待你的套餐使用窗口重置。",
+  "{0} answered HTTP {1}: {2}": "{0} 返回 HTTP {1}：{2}",
+  "{0} could not be reached from this machine: {1}": "无法从本机访问 {0}：{1}",
+  "{0} needs to be reconnected: {1}": "{0} 需要重新连接：{1}",
+  "{0} is not connected. Connect the account first.": "{0} 未连接。请先连接该账户。",
+  "Could not get the {0} credential from Builderforce: {1}": "无法从 Builderforce 获取 {0} 的凭据：{1}"
 }

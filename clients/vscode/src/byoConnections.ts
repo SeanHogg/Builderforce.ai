@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import { LLM_PROVIDER_INFO } from "@builderforce/model-catalog";
 import * as bfApi from "./bfApi";
 import { connectProviderInteractively, editorAccounts } from "./providerConnect";
+import { testAccountFromEditor } from "./localAccountTest";
 
 /**
  * Manage BYO (bring-your-own) model provider connections from the editor.
@@ -121,6 +122,14 @@ async function testConnection(secrets: vscode.SecretStorage, provider: bfApi.Byo
   const label = info?.label ?? provider.id;
 
   try {
+    // An account this editor calls itself (Kimi Code) is tested from THIS machine, by the
+    // client that calls it — the gateway can reach it only through an agent host.
+    const local = await testAccountFromEditor(secrets, provider.id);
+    if (local) {
+      const text = vscode.l10n.t("BuilderForce: {0}", local.message ?? label);
+      void (local.ok ? vscode.window.showInformationMessage(text) : vscode.window.showWarningMessage(text));
+      return;
+    }
     const result = await bfApi.testByoProvider(secrets, provider.id);
     if (result?.ok) {
       void vscode.window.showInformationMessage(

@@ -1301,5 +1301,13 @@
   "Choose the folder whose code analyzers should run again": "Choose the folder whose code analyzers should run again",
   "Choose the folder whose code analyzers were skipped": "Choose the folder whose code analyzers were skipped",
   "The code analyzers ran again for {0}.": "The code analyzers ran again for {0}.",
-  "The code analyzers will run again for {0} when the folder is free, or when you next review it.": "The code analyzers will run again for {0} when the folder is free, or when you next review it."
+  "The code analyzers will run again for {0} when the folder is free, or when you next review it.": "The code analyzers will run again for {0} when the folder is free, or when you next review it.",
+  "{0} works from this machine (model {1}).": "{0} works from this machine (model {1}).",
+  "{0} refused this machine's credential (HTTP {1}: {2}). Reconnect the account.": "{0} refused this machine's credential (HTTP {1}: {2}). Reconnect the account.",
+  "{0} is out of capacity (HTTP {1}: {2}). Wait for your plan's usage window to reset.": "{0} is out of capacity (HTTP {1}: {2}). Wait for your plan's usage window to reset.",
+  "{0} answered HTTP {1}: {2}": "{0} answered HTTP {1}: {2}",
+  "{0} could not be reached from this machine: {1}": "{0} could not be reached from this machine: {1}",
+  "{0} needs to be reconnected: {1}": "{0} needs to be reconnected: {1}",
+  "{0} is not connected. Connect the account first.": "{0} is not connected. Connect the account first.",
+  "Could not get the {0} credential from Builderforce: {1}": "Could not get the {0} credential from Builderforce: {1}"
 }

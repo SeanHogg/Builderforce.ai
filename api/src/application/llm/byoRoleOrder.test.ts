@@ -117,7 +117,7 @@ describe('BYO seeds are ordered by role', () => {
     // The client puts its host-called Kimi Code account before the gateway only when it
     // heads the healthy order; here it must not.
     const order = byoRoleOrderFor(credentials(['anthropic']), { role: 'code', demotedVendors: new Set(['anthropic']) });
-    expect(order.models[0]).toEqual({ ref: MOONSHOT_K3, vendor: 'moonshot', provider: 'moonshot', healthy: true });
+    expect(order.models[0]).toEqual({ ref: MOONSHOT_K3, vendor: 'moonshot', provider: 'moonshot', healthy: true, callableByGateway: true });
     expect(order.models[0]!.vendor).not.toBe('kimi-code');
     expect(order.models[1]!.ref).toBe(K3);
   });
@@ -147,6 +147,33 @@ describe('BYO seeds are ordered by role', () => {
   });
 });
 
+describe('the server does not vouch for an account it cannot observe', () => {
+  it('Kimi Code with a stale alert and NO online host: healthy, keeps its place, callableByGateway false', () => {
+    // The gateway never dispatches Kimi Code without a host and the editor's own calls never
+    // reach the server, so the alert can never clear — it must not demote the account.
+    const order = byoRoleOrderFor(kimiCodeBeforeMoonshot(['kimi-code']), { role: 'code', demotedVendors: new Set(['kimi-code']) });
+    expect(order.models.find((m) => m.ref === K3)).toEqual({
+      ref: K3, vendor: 'kimi-code', provider: 'kimi', healthy: true, callableByGateway: false,
+    });
+    expect(order.models.map((m) => m.ref)).toEqual(refs(kimiCodeBeforeMoonshot(), 'code'));
+    expect(order.models[1]!.ref).toBe(K3);
+    expect(order.models.filter((m) => m.vendor !== 'kimi-code').every((m) => m.callableByGateway)).toBe(true);
+  });
+
+  it('…with an online host the gateway observes it: the alert demotes it and it is callable', () => {
+    const order = byoRoleOrderFor(kimiCodeBeforeMoonshot(['kimi-code']), {
+      role: 'code', demotedVendors: new Set(['kimi-code']), localEgress: true,
+    });
+    expect(order.models.find((m) => m.ref === K3)).toMatchObject({ healthy: false, callableByGateway: true });
+    expect(order.models.at(-1)!.vendor).toBe('kimi-code');
+  });
+
+  it('every other vendor is callable by the gateway and keeps its server-side health', () => {
+    const order = byoRoleOrderFor(credentials(['anthropic']), { role: 'code', demotedVendors: new Set(['anthropic']) });
+    expect(order.models.find((m) => m.ref === SONNET)).toMatchObject({ healthy: false, callableByGateway: true });
+  });
+});
+
 describe('OpenRouter connections stay in the order', () => {
   /** Kimi Code and an OpenRouter connection, the connection ranked #1 and Kimi Code #2. */
   function connectionFirst(model: string): TenantLlmCredentials {
@@ -167,7 +194,7 @@ describe('OpenRouter connections stay in the order', () => {
 
   it('code: the #1 OpenRouter connection heads the list (provider null), not Kimi Code', () => {
     const order = byoRoleOrderFor(connectionFirst('anthropic/claude-sonnet-4.5'), { role: 'code', demotedVendors: new Set() });
-    expect(order.models[0]).toEqual({ ref: 'openrouter/anthropic/claude-sonnet-4.5', vendor: 'openrouter', provider: null, healthy: true });
+    expect(order.models[0]).toEqual({ ref: 'openrouter/anthropic/claude-sonnet-4.5', vendor: 'openrouter', provider: null, healthy: true, callableByGateway: true });
     expect(order.models.map((m) => m.ref)).toEqual(['openrouter/anthropic/claude-sonnet-4.5', K3, KIMI_CODER]);
   });
 

@@ -20,6 +20,7 @@ import { createLateRepushLimit } from "./initBudget";
 import { LocalFetchProxy } from "./localFetchProxy";
 import { pickWorkspaceContext } from "./contextPicker";
 import { hostAttachmentIngress } from "./hostIngress";
+import { testAccountFromEditor } from "./localAccountTest";
 import { handleRunDeltaRequest } from "./runDelta/runDeltaSurface";
 import type { AttachmentIngressRequest } from "./attachmentIngress";
 
@@ -80,6 +81,8 @@ export interface BrainInbound extends WebviewInbound {
   url?: string;
   method?: string;
   headers?: Record<string, string>;
+  /** For `connections.testLocally`: the connected-account provider to test from this machine. */
+  provider?: string;
   body?: string | null;
 }
 
@@ -426,6 +429,17 @@ export class WorkspaceSurface implements vscode.Disposable {
         if (isSubscriptionSignInUrl(url)) void vscode.env.openExternal(vscode.Uri.parse(url));
         break;
       }
+      // Connected accounts → Test for an account the editor calls itself: probed from this
+      // machine (the webview cannot reach the provider, and the gateway can only through an
+      // agent host). Null for any other provider — the webview runs the gateway's Test.
+      case "connections.testLocally":
+        try {
+          const provider = typeof msg.provider === "string" ? msg.provider : "";
+          this.respond(msg.id, true, provider ? await testAccountFromEditor(this.ctx.secrets, provider) : null);
+        } catch (error) {
+          this.respond(msg.id, false, undefined, error instanceof Error ? error.message : String(error));
+        }
+        break;
       // The chat's pending-changes bar: open ONE changed file's diff, or take the
       // user to the full Changes list. Both go through the same commands the sidebar
       // uses, so "open" and "review" mean exactly one thing across the extension.

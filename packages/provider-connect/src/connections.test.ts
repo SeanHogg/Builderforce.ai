@@ -3,6 +3,7 @@ import {
   ProviderConnectError,
   completePasteConnect,
   connectionHealth,
+  createProviderConnectionsClient,
   listProviderConnections,
   testProviderConnection,
   type GatewayRequest,
@@ -70,6 +71,26 @@ describe('testProviderConnection', () => {
       ok: false, error: 'xai connection test paused: usage allowance depleted', authAlert: { reason: 'capacity', status: 403 },
     }), 'xai');
     expect(result).toEqual({ ok: false, health: 'capacity', message: 'xai connection test paused: usage allowance depleted' });
+  });
+});
+
+describe('createProviderConnectionsClient — Test of an account the host calls itself', () => {
+  const clock = { sleep: async () => undefined, now: () => 0 };
+
+  it('runs the host’s probe from this machine and never asks the gateway', async () => {
+    const request = answering(200, { ok: false, status: 'local_egress_required', error: 'reachable only from your machine' });
+    const client = createProviderConnectionsClient(request, clock, {
+      testLocally: async (provider) => (provider === 'kimi' ? { ok: true, health: 'ok', message: 'Kimi K3 answered' } : null),
+    });
+    expect(await client.test('kimi')).toEqual({ ok: true, health: 'ok', message: 'Kimi K3 answered' });
+    expect(request.calls).toEqual([]);
+  });
+
+  it('a provider the host does not call itself: the gateway’s Test, unchanged', async () => {
+    const request = answering(200, { ok: true });
+    const client = createProviderConnectionsClient(request, clock, { testLocally: async () => null });
+    expect(await client.test('xai')).toEqual({ ok: true, health: 'ok', message: null });
+    expect(request.calls[0]?.path).toBe('/llm/provider-keys/xai/test');
   });
 });
 

@@ -171,6 +171,18 @@ describe("createConnectedAccounts", () => {
       expect(await placed(accounts, "verify")).toEqual([expect.objectContaining({ model: "k3", placement: "lead" })]);
     });
 
+    it("regression: a stale server alert on Kimi Code the gateway cannot call (healthy false, callableByGateway false) — Kimi still LEADS on k3", async () => {
+      const stale = [{ ...entry("direct/kimi-code/k3", "kimi", false), callableByGateway: false }, entry("direct/anthropic/claude-sonnet", "anthropic")];
+      const accounts = createConnectedAccounts({ request: serving((role) => ({ status: 200, body: { role, freeFirst: false, models: stale } })), store: memoryStore(), now: () => now });
+      expect(await placed(accounts, "code")).toEqual([expect.objectContaining({ ref: "local/kimi-code/k3", model: "k3", placement: "lead" })]);
+    });
+
+    it("a healthy gateway-callable account ahead of Kimi Code (callableByGateway false) still makes Kimi trail", async () => {
+      const ahead = [entry("direct/anthropic/claude-sonnet", "anthropic"), { ...entry("direct/kimi-code/k3", "kimi"), callableByGateway: false }];
+      const accounts = createConnectedAccounts({ request: serving((role) => ({ status: 200, body: { role, freeFirst: false, models: ahead } })), store: memoryStore(), now: () => now });
+      expect(await placed(accounts, "code")).toEqual([expect.objectContaining({ model: "k3", placement: "trail" })]);
+    });
+
     it("a gateway-only account (provider null, e.g. OpenRouter) heading the order makes the gateway lead: Kimi TRAILS", async () => {
       const accounts = createConnectedAccounts({ request: serving(byRole), store: memoryStore(), now: () => now });
       expect(await placed(accounts, "review")).toEqual([expect.objectContaining({ model: "k3", placement: "trail" })]);

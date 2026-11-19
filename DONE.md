@@ -2599,6 +2599,15 @@ Status: DESIGN v2, revised after an Opus review on 2026-11-10. Owner: the sessio
 > Planned fix: [PRD 31 §W9 phase 7](./docs/specs/make.md#prd-31--build-run-and-ship-a-real-app-on-builderforce). `WebGPUTrainer`'s kernels move into one WebGPU tensor engine in `@webdit/torch`, which runs in a worker and is shared by `AITrainingPanel` and Python training in the WebContainer.
 
 Tokenizer training, model construction, tokenisation, base-model forward/loss/backprop, the CPU `lora.fit` fallback and safetensors packaging all run in the caller's thread. Introduce a training-domain worker adapter modelled on the Mamba worker (`presentation → RunBrowserTraining → browser-training-worker-client → browser-training.worker`). The worker must request its own GPU adapter/device; a `GPUDevice` is never created on the main thread and treated as transferable.
+## ✅ RESOLVED 2026-11-19: Kimi Code leads again, and its Test runs from the editor's machine
+
+The role-ordered BYO pool (below) made the editor place a host-called account by the server's `healthy` flag. The server cannot reach Kimi Code without an online agent host, so it could never clear a stale alert. Kimi Code stayed "unhealthy", trailed the gateway, and chat failed with `local_egress_required`.
+
+- **Server (api 2026.10.101):** `byoRoleOrder.ts` entries carry `callableByGateway`. A vendor that needs local egress with no host is `healthy: true, callableByGateway: false` and keeps its place.
+- **Editor (VSIX 2026.10.192):** `placeAccount` judges the account's own entries by its own resolved credential and skips other providers' gateway-uncallable entries.
+- **Test:** `packages/provider-connect/src/accountTest.ts` `testAccountFromThisMachine` probes the account from this machine (models list, then a 1-token completion). VS Code's picker Test and the composer Test (`connections.testLocally`) use it; the web Test is unchanged.
+- **Proved live:** with the Kimi Code CLI login, `GET api.kimi.ai/coding/v1/models` returned 200, and an invalid bearer returned 401 with remedy reconnect.
+
 ## ✅ RESOLVED 2026-11-18: The BYO pool follows the tenant's order, and models are picked by role (chat #153027)
 
 - **Bug:** VS Code's "use my connected accounts" always ran `local/kimi-code/kimi-for-coding`. `brain-embedded/src/hostModelStream.ts` tried the accounts the editor calls itself (Kimi Code) before the gateway on every `byo_pool` and Hybrid Auto turn, and `hybridAccounts()` never read the tenant's order. Unranked providers fell back to alphabetical order or catalog tier.

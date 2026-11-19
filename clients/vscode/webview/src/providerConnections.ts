@@ -5,14 +5,18 @@
  * The composer's Status tab lists, tests and reconnects through it — the same section
  * the web app and Rovr show.
  */
-import { createProviderConnectionsClient } from '@builderforce/provider-connect';
+import { createProviderConnectionsClient, type ProviderTestResult } from '@builderforce/provider-connect';
 import type { ComposerConnections } from '@seanhogg/builderforce-brain-ui';
 import { authedGateway } from './authedFetch';
-import { getToken, post, refreshToken } from './vscodeBridge';
+import { getToken, post, refreshToken, request } from './vscodeBridge';
 
 export function editorConnections(baseUrl: string): ComposerConnections {
   return {
-    client: createProviderConnectionsClient(authedGateway(baseUrl, getToken, refreshToken)),
+    // Test of an account the editor calls itself (Kimi Code) runs on the host, from this
+    // machine (`connections.testLocally`); every other provider gets the gateway's Test.
+    client: createProviderConnectionsClient(authedGateway(baseUrl, getToken, refreshToken), undefined, {
+      testLocally: (provider) => request<ProviderTestResult | null>('connections.testLocally', { provider }),
+    }),
     openUrl: (url) => post('open.external', { url }),
   };
 }

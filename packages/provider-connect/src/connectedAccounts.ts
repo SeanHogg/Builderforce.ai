@@ -27,9 +27,25 @@ import {
   type LocalFirstAccounts,
   type LocalRuntimeId,
 } from '@builderforce/local-inference';
-import { createLocalCredentialStore, type CredentialStringStore, type LocalCredentialStore } from './localCredential.js';
+import {
+  createLocalCredentialStore,
+  type CredentialStringStore,
+  type LocalCredentialOutcome,
+  type LocalCredentialStore,
+} from './localCredential.js';
 import type { GatewayRequest } from './port.js';
+import type { ConnectionHealth } from './connections.js';
 import { createByoOrderCache, placeAccount, type ByoOrderOutcome } from './byoOrder.js';
+import { testAccountFromThisMachine, type AccountTestOutcome, type FetchLike } from './accountTest.js';
+
+export {
+  ACCOUNT_TEST_TIMEOUT_MS,
+  testAccountFromThisMachine,
+  type AccountTestOutcome,
+  type AccountTestRemedy,
+  type AccountUnderTest,
+  type FetchLike,
+} from './accountTest.js';
 
 /** Where a connected account's runtime is called, or what stands in the way. */
 export type AccountEndpointOutcome =
@@ -38,6 +54,10 @@ export type AccountEndpointOutcome =
   | { kind: 'connect'; provider: string; reason: 'not_connected' | 'reconnect'; detail?: string }
   /** No answer from the gateway — say so; connecting would not help. */
   | { kind: 'unavailable'; provider: string; detail: string };
+
+/** A Test of an account this client calls itself: the provider's answer from this machine,
+ *  or why there was nothing to send (not connected, grant dead, no credential answer). */
+export type AccountTestReport = AccountTestOutcome | Exclude<AccountEndpointOutcome, { kind: 'endpoint' }>;
 
 export interface ConnectedAccounts {
   /** Every provider a client calls with the workspace's account (registry `accountProvider`). */
@@ -76,8 +96,45 @@ export interface ConnectedAccounts {
    * round trip per call.
    */
   hybridAccounts(query?: ByoOrderQuery): Promise<LocalFirstAccounts>;
+  /**
+   * Test one of {@link providers} FROM THIS MACHINE — the client that actually calls it — with
+   * the account's own credential and one minimal real request on its lead model
+   * (`testAccountFromThisMachine`). Never prompts and never throws; `null` for a provider this
+   * client does not call itself (the gateway's Test is the one for it).
+   */
+  testFromThisMachine(provider: string, fetchImpl: FetchLike): Promise<AccountTestReport | null>;
   /** Forget every held credential — sign-out; the next account starts clean. */
   clear(): Promise<void>;
+}
+
+/** A Test report's verdict on the connection scale a row shows; null when it says nothing
+ *  about the account (no answer, or a refusal that is neither auth nor capacity). */
+export function accountTestHealth(report: AccountTestReport): ConnectionHealth | null {
+  switch (report.kind) {
+    case 'working':
+      return 'ok';
+    case 'refused':
+      return report.remedy === 'reconnect' ? 'rejected' : report.remedy === 'wait' ? 'capacity' : null;
+    case 'connect':
+      return report.reason === 'reconnect' ? 'rejected' : 'unresolved';
+    default:
+      return null;
+  }
+}
+
+/** Why a provider's store has no credential to send, as an endpoint outcome. */
+function withoutCredential(
+  provider: string,
+  outcome: Exclude<LocalCredentialOutcome, { kind: 'credential' }>,
+): Exclude<AccountEndpointOutcome, { kind: 'endpoint' }> {
+  switch (outcome.kind) {
+    case 'not_connected':
+      return { kind: 'connect', provider, reason: 'not_connected' };
+    case 'reconnect':
+      return { kind: 'connect', provider, reason: 'reconnect', detail: outcome.detail };
+    default:
+      return { kind: 'unavailable', provider, detail: outcome.detail };
+  }
 }
 
 export function createConnectedAccounts(deps: {
@@ -112,24 +169,17 @@ export function createConnectedAccounts(deps: {
 
   const providerFor = (runtime: LocalRuntimeId): string | null => localRuntime(runtime).accountProvider ?? null;
 
+  /** The live endpoint for a resolved credential — one shape for chat, pins and Test. */
+  const endpointOf = (provider: string, credential: { baseUrl: string; accessToken: string }): LocalEndpoint & { token: string } => (
+    { baseUrl: credential.baseUrl, token: credential.accessToken, credential: credentialFor(provider) }
+  );
+
   const endpointFor = async (runtime: LocalRuntimeId): Promise<AccountEndpointOutcome | null> => {
     const provider = providerFor(runtime);
     if (!provider) return null;
     const outcome = await store(provider).resolve();
-    switch (outcome.kind) {
-      case 'credential':
-        return {
-          kind: 'endpoint',
-          provider,
-          endpoint: { baseUrl: outcome.credential.baseUrl, token: outcome.credential.accessToken, credential: credentialFor(provider) },
-        };
-      case 'not_connected':
-        return { kind: 'connect', provider, reason: 'not_connected' };
-      case 'reconnect':
-        return { kind: 'connect', provider, reason: 'reconnect', detail: outcome.detail };
-      default:
-        return { kind: 'unavailable', provider, detail: outcome.detail };
-    }
+    if (outcome.kind !== 'credential') return withoutCredential(provider, outcome);
+    return { kind: 'endpoint', provider, endpoint: endpointOf(provider, outcome.credential) };
   };
 
   /** Providers already asked this session — a store with no credential after that is
@@ -154,7 +204,7 @@ export function createConnectedAccounts(deps: {
       ref: formatLocalModelRef(runtime.id, placed.model),
       provider: runtime.id,
       model: placed.model,
-      endpoint: { baseUrl: outcome.credential.baseUrl, token: outcome.credential.accessToken, credential: credentialFor(provider) },
+      endpoint: endpointOf(provider, outcome.credential),
       ...(placed.placement ? { placement: placed.placement } : {}),
     }];
   };
@@ -181,6 +231,24 @@ export function createConnectedAccounts(deps: {
       const accounts = (await Promise.all(LOCAL_RUNTIMES.map((runtime) => hybridAccount(runtime, readOrder)))).flat();
       const outcome = order && accounts.length > 0 ? await order : null;
       return outcome?.kind === 'order' ? { accounts, freeFirst: outcome.freeFirst } : { accounts };
+    },
+    testFromThisMachine: async (provider, fetchImpl) => {
+      const runtime = LOCAL_RUNTIMES.find((r) => r.accountProvider === provider);
+      if (!runtime) return null;
+      const outcome = await store(provider).resolve();
+      switch (outcome.kind) {
+        case 'credential': {
+          const { credential } = outcome;
+          return testAccountFromThisMachine({
+            provider,
+            endpoint: endpointOf(provider, credential),
+            model: credential.models[0]?.model ?? '',
+            ...(runtime.providerSampling ? { providerSampling: true } : {}),
+          }, fetchImpl);
+        }
+        default:
+          return withoutCredential(provider, outcome);
+      }
     },
     clear: async () => {
       asked.clear();

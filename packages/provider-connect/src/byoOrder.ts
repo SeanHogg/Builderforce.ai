@@ -11,7 +11,7 @@
  * precedence, not as a coding turn, and the order read for it must be that one. The client
  * never keeps a second ladder; it only reads where its own account falls in that one:
  *
- *  - the order's first HEALTHY entry is the account's provider, and the tenant funds its
+ *  - the order's first LIVE entry is the account's provider, and the tenant funds its
  *    connected accounts first (`freeFirst: false`) → it LEADS (before the gateway), on that
  *    entry's model;
  *  - the same, but the tenant funds the FREE tier first (`freeFirst: true`) → it TRAILS, on
@@ -23,6 +23,11 @@
  *    gateway can call) ranking ahead, and the server not listing the account at all;
  *  - the order cannot be read (403, offline, signed out) → it leads as it always did, on the
  *    credential's own position 0 (the tenant's model order the credential carries).
+ *
+ * A LIVE entry is one of this account's own (judged by the account's own resolved credential,
+ * never by the server's `healthy`, which cannot observe an account only this host calls), or
+ * another entry that is `healthy` AND `callableByGateway` (an entry the gateway would skip
+ * cannot lead anything). An absent `callableByGateway` (an older server) reads as true.
  *
  * An entry's model must be one the account's credential lists (matched through the
  * catalog's `ladderModelId` and the runtime registry's catalog aliases, so `k3` and
@@ -41,7 +46,12 @@ export interface ByoOrderEntry {
   vendor: string;
   /** The account provider, e.g. `kimi`; null for a gateway-only connection (OpenRouter). */
   provider: string | null;
+  /** The gateway's view of the vendor's health — never consulted for this account's OWN
+   *  entries (the account is judged by its own resolved credential). */
   healthy: boolean;
+  /** False when the gateway cannot dispatch this vendor at all (it needs local egress and
+   *  the tenant has no online agent host). Absent (an older server) = true. */
+  callableByGateway: boolean;
 }
 
 export type ByoOrderOutcome =
@@ -73,7 +83,13 @@ export function parseByoOrder(body: unknown): { entries: ByoOrderEntry[]; freeFi
     const ref = stringField(entry, 'ref');
     if (!ref) return null;
     const provider = stringField(entry, 'provider') || null;
-    entries.push({ ref, vendor: stringField(entry, 'vendor'), provider, healthy: field(entry, 'healthy') !== false });
+    entries.push({
+      ref,
+      vendor: stringField(entry, 'vendor'),
+      provider,
+      healthy: field(entry, 'healthy') !== false,
+      callableByGateway: field(entry, 'callableByGateway') !== false,
+    });
   }
   return { entries, freeFirst: field(body, 'freeFirst') !== false };
 }
@@ -167,9 +183,14 @@ export function placeAccount(
   if (!fallback) return null;
   if (order.kind === 'unreadable') return { model: fallback };
   const mine = order.entries.filter((e) => e.provider === account.provider);
-  // The FIRST healthy entry decides — whoever it is. A gateway-only account (`provider: null`)
-  // heading the order means the gateway leads, so this account trails.
-  const first = order.entries.find((e) => e.healthy);
+  // The FIRST live entry decides — whoever it is. A gateway-only account (`provider: null`)
+  // heading the order means the gateway leads, so this account trails. This account's own
+  // entries are live because its credential resolved (that is how it got here) — the server
+  // cannot observe an account it never calls, so its `healthy` is not the judge of them.
+  // Another provider's entry the gateway cannot call (`callableByGateway: false`) leads
+  // nothing: the gateway would skip it.
+  const first = order.entries.find((e) =>
+    e.provider === account.provider || (e.healthy && e.callableByGateway));
   const heads = !!first && first.provider === account.provider;
   // Heading the order leads only when the tenant funds its accounts first: free first, the
   // gateway tries the free tier before any connected account, so this one trails it — still

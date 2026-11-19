@@ -20,6 +20,7 @@ export {
   listProviderConnections,
   testProviderConnection,
   type ConnectionHealth,
+  type LocalProviderTest,
   type ProviderConnection,
   type ProviderConnectionsClient,
   type ProviderTestResult,

@@ -31,6 +31,18 @@
  * Kimi while the tenant's #1 is an OpenRouter connection. `healthy: false` marks a model
  * whose vendor the gateway is demoting right now — an alerted or low-headroom account, or a
  * vendor on a 5xx streak.
+ *
+ * THE SERVER DOES NOT VOUCH FOR WHAT IT CANNOT OBSERVE. A vendor that requires local egress
+ * (`vendorRequiresLocalEgress` — Kimi Code, ollama-local, freetoken) is reachable by the
+ * gateway only through an online agent host of the tenant (`buildHostEgressForVendors`).
+ * Without one the gateway never dispatches it, and the editor's own calls to that account
+ * never reach the server — so an alert, low-headroom mark or 5xx streak on it is never
+ * cleared and says nothing about the account now. For such a vendor the answer therefore
+ * ignores the server-side demotion (it keeps its place in the tenant's order and reads
+ * `healthy: true`) and says `callableByGateway: false`, so the client judges the account by
+ * its own credential and knows the gateway cannot run it. `callableByGateway` is true for
+ * every other entry. The GATEWAY's own dispatch order is untouched: it skips such a vendor
+ * anyway, so where the vendor sits in it changes nothing the gateway does.
  */
 
 import { isModelRole, type ModelRole } from '@builderforce/agent-tools';
@@ -47,7 +59,8 @@ import { providerForVendor, type LlmProvider } from './llmProviderCatalog';
 import { routingInputsVersion } from './routingInputsVersion';
 import { roleRoutingStats } from './routingTable';
 import { byoVendorIdsFromCredentials, resolveTenantLlmCredentials, type TenantLlmCredentials } from './tenantProviderKeyService';
-import { vendorForModel } from './vendors';
+import { buildHostEgressForVendors } from './hostEgress';
+import { vendorForModel, vendorRequiresLocalEgress, type VendorId } from './vendors';
 
 export interface ByoRoleOrderModel {
   /** The routed model ref, e.g. `direct/kimi-code/k3` or `openrouter/<org>/<slug>`. */
@@ -56,8 +69,13 @@ export interface ByoRoleOrderModel {
   vendor: string;
   /** The BYO provider account it runs on; null for a ref no provider owns (an OpenRouter connection). */
   provider: LlmProvider | null;
-  /** False while the gateway is demoting this vendor (alerted, low headroom, 5xx streak). */
+  /** False while the gateway is demoting this vendor (alerted, low headroom, 5xx streak).
+   *  Never false from server-side signals for an entry the gateway cannot call
+   *  (`callableByGateway: false`) — the server cannot observe that account. */
   healthy: boolean;
+  /** False when the gateway cannot dispatch this vendor at all: it requires local egress and
+   *  the tenant has no online agent host. A client that calls the account itself still can. */
+  callableByGateway: boolean;
 }
 
 export interface ByoRoleOrder {
@@ -110,6 +128,9 @@ export interface ByoRoleOrderCall {
   agentic?: boolean;
   demotedVendors: ReadonlySet<string>;
   stats?: ReadonlyArray<ActionModelRankStat>;
+  /** True when the gateway has a local-egress route (an online agent host of the tenant).
+   *  Absent/false: a vendor that requires local egress is not callable by the gateway. */
+  localEgress?: boolean;
 }
 
 /** The order for one call from already-resolved inputs. Pure. */
@@ -118,6 +139,9 @@ export function byoRoleOrderFor(
   call: ByoRoleOrderCall,
   view: CatalogView = REGISTRY_CATALOG_VIEW,
 ): ByoRoleOrder {
+  const gatewayCanCall = (vendor: VendorId): boolean => call.localEgress === true || !vendorRequiresLocalEgress(vendor);
+  // The server's demotion of a vendor it cannot observe is stale by construction — drop it.
+  const demotedVendors = new Set([...call.demotedVendors].filter((vendor) => gatewayCanCall(vendor as VendorId)));
   const { ordered } = orderByoSeeds({
     connectedByo: byoVendorIdsFromCredentials(creds),
     vendorPriority: creds.vendorPriority,
@@ -128,13 +152,19 @@ export function byoRoleOrderFor(
     agentic: call.agentic ?? true,
     ...(call.role ? { role: call.role } : {}),
     ...(call.arcStage ? { arcStage: call.arcStage } : {}),
-    demotedVendors: call.demotedVendors,
+    demotedVendors,
     ...(call.stats ? { stats: call.stats } : {}),
     latency: NEUTRAL_LATENCY,
   }, view);
   const models = ordered.map((ref): ByoRoleOrderModel => {
     const vendor = vendorForModel(ref);
-    return { ref, vendor, provider: providerForVendor(vendor) ?? null, healthy: !call.demotedVendors.has(vendor) };
+    return {
+      ref,
+      vendor,
+      provider: providerForVendor(vendor) ?? null,
+      healthy: !demotedVendors.has(vendor),
+      callableByGateway: gatewayCanCall(vendor),
+    };
   });
   return { role: call.role ?? null, models };
 }
@@ -164,7 +194,7 @@ export async function loadByoRoleOrder(env: Env, db: Db, tenantId: number, query
     // → global) for the role and arc stage — and none at all for a role-less call, which
     // the route never reads stats for — and prices only for a cost-first call.
     const role = query.role;
-    const [demotedVendors, stats, prices] = await Promise.all([
+    const [demotedVendors, stats, prices, hostEgress] = await Promise.all([
       loadByoDemotedVendors(env, connected, creds.alertedVendors ?? []),
       role
         ? roleRoutingStats(env, db, {
@@ -175,6 +205,9 @@ export async function loadByoRoleOrder(env: Env, db: Db, tenantId: number, query
           })
         : undefined,
       pricesForCall(env, role ?? null, query.arcStage),
+      // The gateway's own local-egress decision: null without an online host (and without
+      // any connected vendor that needs one — then no entry asks).
+      buildHostEgressForVendors(env, tenantId, connected),
     ]);
     const order = byoRoleOrderFor(creds, {
       ...(role ? { role } : {}),
@@ -182,6 +215,7 @@ export async function loadByoRoleOrder(env: Env, db: Db, tenantId: number, query
       agentic: query.agentic,
       demotedVendors,
       ...(stats ? { stats } : {}),
+      localEgress: hostEgress !== null,
     }, registryCatalogView(prices));
     return { ...order, byoConfigured: creds.configuredProviders.length > 0 };
   }, { kvTtlSeconds: BYO_ROLE_ORDER_TTL_SECONDS, l1TtlMs: 15_000 });

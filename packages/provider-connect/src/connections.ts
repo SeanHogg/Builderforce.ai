@@ -144,16 +144,27 @@ export interface ProviderConnectionsClient {
   awaitDevice(provider: string, start: ProviderConnectStart, signal: AbortSignal): Promise<void>;
 }
 
+/**
+ * A host's Test for an account it calls ITSELF (Kimi Code from the editor or Rovr): the probe
+ * from this machine (`testAccountFromThisMachine`, on the `/accounts` subpath), worded by the
+ * host. `null` for a provider the host does not call itself — the gateway's Test runs. The
+ * gateway cannot test such an account without an agent host of the tenant, and its answer
+ * says nothing about whether the account works from the machine that calls it.
+ */
+export type LocalProviderTest = (provider: string) => Promise<ProviderTestResult | null>;
+
 export function createProviderConnectionsClient(
   request: GatewayRequest,
   clock: Pick<DeviceApprovalDeps, 'sleep' | 'now'> = {
     sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     now: () => Date.now(),
   },
+  options: { testLocally?: LocalProviderTest } = {},
 ): ProviderConnectionsClient {
+  const { testLocally } = options;
   return {
     list: () => listProviderConnections(request),
-    test: (provider) => testProviderConnection(request, provider),
+    test: async (provider) => (testLocally ? await testLocally(provider) : null) ?? testProviderConnection(request, provider),
     start: (provider) => startProviderConnect(request, provider),
     completePaste: (provider, code, state) => completePasteConnect(request, provider, code, state),
     awaitDevice: (provider, start, signal) => awaitDeviceApproval(request, provider, start, { ...clock, signal }),
