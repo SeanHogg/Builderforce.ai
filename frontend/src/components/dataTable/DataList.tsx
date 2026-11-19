@@ -57,6 +57,13 @@ export interface DataListProps<Row> {
   empty?: React.ReactNode;
   /** Extra footer content rendered beside the pager (e.g. a total-cost figure). */
   footerExtras?: React.ReactNode;
+  /**
+   * Opt-in cap on the scrolling body (e.g. `'max(240px, calc(100vh - 340px))'`)
+   * for a surface whose parent is NOT a height-bounded flex column — without it
+   * the body grows to full height and the pager falls below the fold. Unset =
+   * unchanged behaviour, so modals/drawers/panels are not affected.
+   */
+  bodyMaxHeight?: string | number;
   className?: string;
 }
 
@@ -107,6 +114,7 @@ export function DataList<Row>({
   onPageSizeChange,
   empty,
   footerExtras,
+  bodyMaxHeight,
   className,
 }: DataListProps<Row>) {
   const t = useTranslations('common.pagination');
@@ -126,10 +134,7 @@ export function DataList<Row>({
     <div className={className} style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       {header && <div style={{ flexShrink: 0 }}>{header}</div>}
 
-      {/* Bounded body: in a plain block parent the list would otherwise grow to
-          its full height and push the pager below the fold. Capping it to the
-          viewport keeps the header above and the footer under it always visible. */}
-      <div style={{ flex: 1, minHeight: 0, maxHeight: 'var(--data-list-body-max, calc(100vh - 340px))', overflowY: 'auto' }}>
+      <div style={{ flex: 1, minHeight: 0, ...(bodyMaxHeight != null ? { maxHeight: bodyMaxHeight } : {}), overflowY: 'auto' }}>
         {totalCount === 0 ? (
           <div style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)', fontSize: 'var(--font-size-small)' }}>
             {empty ?? t('noResults')}

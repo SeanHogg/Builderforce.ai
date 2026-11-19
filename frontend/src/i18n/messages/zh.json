@@ -1424,7 +1424,7 @@
     "clearProjectFilter": "清除项目筛选",
     "loadingProjects": "正在加载项目…",
     "noProjectsFilter": "没有符合此筛选条件的项目。请在上方新建一个。",
-    "noProjectsYet": "暂无项目。请在上方选择一种类型来创建第一个项目。",
+    "noProjectsYet": "暂无项目。请在热启动基础中选择一种类型来创建第一个项目。",
     "deleteFailed": "删除项目失败",
     "title": "Builder",
     "subtitle": "新建一个 Builder 项目或打开现有项目。",
@@ -13136,13 +13136,13 @@
         "title": "无需账户，无需 GPU，无需网络——而且由你决定你的文字去向何处",
         "description": "Studio 和 Rovr 现在一打开就有可用的模型，无需账号、无需注册调用、无需 GPU。每个界面——网页、VS Code 扩展和 Rovr 侧边栏——都只问一个问题：你的文字在哪里运行？仅本地、混合，或某一个指定模型。混合模式还会在你的设备上学习哪些轮次该留在本地。"
       },
-      "train-a-lora-adapter-in-python-in-your-browser-tab": {
-        "title": "在你构建它的浏览器标签页里，用 Python 训练 LoRA 适配器",
-        "description": "你项目中的 Python 训练脚本现在可以在浏览器标签页内运行，import torch 和 import peft 通过 WebGPU 在你的 GPU 上工作。它会在完成时保存适配器，或在你停止它时保存检查点；在训练面板中加载该适配器，并将其发布为可调用的模型。专为小模型和 LoRA 适配器打造。"
-      },
       "your-full-stack-app-now-runs-in-your-browser-tab": {
         "title": "你的全栈应用现在就在你构建它的浏览器标签页里运行",
         "description": "前端、API 和 Postgres 数据库过去需要云容器才能看到它们协同工作。现在 Run 会在浏览器标签页内同时启动这三者——Node、Python 和 PHP 服务（FastAPI、Flask、Django、Laravel、Slim）连同 Postgres，无需启动或配置容器，也不消耗云端算力——Brain 读取日志、重启服务、捕获预览的方式与对待容器时相同。"
+      },
+      "train-a-lora-adapter-in-python-in-your-browser-tab": {
+        "title": "在你构建它的浏览器标签页里，用 Python 训练 LoRA 适配器",
+        "description": "你项目中的 Python 训练脚本现在可以在浏览器标签页内运行，import torch 和 import peft 通过 WebGPU 在你的 GPU 上工作。它会在完成时保存适配器，或在你停止它时保存检查点；在训练面板中加载该适配器，并将其发布为可调用的模型。专为小模型和 LoRA 适配器打造。"
       }
     }
   },
@@ -15882,6 +15882,11 @@
   },
   "taskMgmt": {
     "bulkChangeStatus": "批量更改状态…",
+    "bulkArchive": "归档",
+    "bulkArchiveConfirm": "归档所选的 {count} 个任务？",
+    "bulkDeleteConfirm": "永久删除所选的 {count} 个任务？此操作无法撤销。",
+    "bulkStopExecutionFirst": "所选任务中有正在运行的代理执行。请先停止后再归档或删除。",
+    "bulkPartialFailure": "{total} 个任务中有 {failed} 个未能更新，仍保持选中。",
     "branchAndPr": "分支和 PR",
     "unassigned": "未分配",
     "teamMembers": "团队成员",
@@ -16312,7 +16317,7 @@
         "resetPassword": "重置密码",
         "suspendBusy": "正在暂停…",
         "suspendAccount": "暂停账户",
-        "selectWorkspaceAbove": "请在上方选择一个工作区。",
+        "selectWorkspaceAbove": "请在热启动基础中选择一个工作区。",
         "noPermissionData": "无权限数据。",
         "roleLabel": "角色：",
         "effectivePermissionsCount": "{count, plural, other {# 项生效权限}}",

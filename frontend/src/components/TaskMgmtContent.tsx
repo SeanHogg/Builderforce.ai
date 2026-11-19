@@ -934,71 +934,40 @@ export function TaskMgmtContent({
       await moveTask(id, targetProjectId);
     }
   };
-  const applyBulkArchive = async () => {
+  // Shared runner for bulk archive/delete: refuses while any selected ticket has a
+  // live agent run, keeps FAILED ids selected so the user can retry just those,
+  // and reports how many succeeded/failed instead of only the last error.
+  const runBulkRemoval = async (
+    mode: 'archive' | 'delete',
+  ) => {
     const ids = selectedIds.slice();
     if (ids.length === 0) return;
-    if (!(await confirm(`Archive ${ids.length} selected task(s)?`))) return;
-    setSelectedIds([]);
-    for (const id of ids) {
-      try {
-        await tasksApi.update(id, { archived: true });
-        setTasks((prev) => prev.filter((t) => t.id !== id));
-        if (drawerTask?.id === id) setDrawerTask(null);
-      } catch (e) {
-        setError(faultMessage(e, tTask('errUpdate')));
-      }
-    }
-  };
-
-  const applyBulkDelete = async () => {
-    const ids = selectedIds.slice();
-    if (ids.length === 0) return;
-    const running = ids.filter((id) => hasActiveExecution(agentRunsByTask.get(id)));
-    if (running.length > 0) {
-      await confirm({ message: tCommon('stopExecutionToDelete'), confirmLabel: tCommon('dismiss') });
+    if (ids.some((id) => hasActiveExecution(agentRunsByTask.get(id)))) {
+      await confirm({ message: tTask('bulkStopExecutionFirst'), confirmLabel: tCommon('dismiss') });
       return;
     }
-    if (!(await confirm(`Permanently delete ${ids.length} selected task(s)? This cannot be undone.`))) return;
-    setSelectedIds([]);
+    const message = mode === 'archive'
+      ? tTask('bulkArchiveConfirm', { count: ids.length })
+      : tTask('bulkDeleteConfirm', { count: ids.length });
+    if (!(await confirm(message))) return;
+    const failed: number[] = [];
     for (const id of ids) {
       try {
-        await tasksApi.delete(id);
+        if (mode === 'archive') await tasksApi.update(id, { archived: true });
+        else await tasksApi.delete(id);
         setTasks((prev) => prev.filter((t) => t.id !== id));
-        if (drawerTask?.id === id) setDrawerTask(null);
-      } catch (e) {
-        setError(faultMessage(e, tTask('errDelete')));
+        setDrawerTask((cur) => (cur && cur.id === id ? null : cur));
+      } catch {
+        failed.push(id);
       }
     }
-  };
-
-  // Merge: the first selected task survives; the others' descriptions are folded
-  // into it and they are archived (recoverable) rather than hard-deleted.
-  const applyBulkMerge = async () => {
-    const ids = selectedIds.slice();
-    if (ids.length < 2) return;
-    const byId = new Map(tasks.map((t) => [t.id, t] as const));
-    const [keepId, ...rest] = ids;
-    const keep = byId.get(keepId);
-    if (!keep) return;
-    if (!(await confirm(`Merge ${rest.length} task(s) into "${keep.title}"? The merged tasks will be archived.`))) return;
-    setSelectedIds([]);
-    try {
-      const folded = rest
-        .map((id) => byId.get(id))
-        .filter((t): t is Task => !!t)
-        .map((t) => `- ${t.key}: ${t.title}${t.description ? `\n  ${t.description.replace(/\n/g, '\n  ')}` : ''}`)
-        .join('\n');
-      const description = `${keep.description ?? ''}${keep.description ? '\n\n' : ''}Merged tasks:\n${folded}`;
-      const updated = await tasksApi.update(keepId, { description });
-      setTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
-      for (const id of rest) {
-        await tasksApi.update(id, { archived: true });
-        setTasks((prev) => prev.filter((t) => t.id !== id));
-      }
-    } catch (e) {
-      setError(faultMessage(e, tTask('errUpdate')));
+    setSelectedIds(failed);
+    if (failed.length > 0) {
+      setError(tTask('bulkPartialFailure', { failed: failed.length, total: ids.length }));
     }
   };
+  const applyBulkArchive = () => runBulkRemoval('archive');
+  const applyBulkDelete = () => runBulkRemoval('delete');
 
   const onDrop = (e: React.DragEvent, status: string) => {
     e.preventDefault();
@@ -1657,6 +1626,7 @@ export function TaskMgmtContent({
                 pageSize={tablePageSize}
                 onPageSizeChange={setTablePageSize}
                 empty={tTask('noTasks')}
+                bodyMaxHeight="max(240px, calc(100vh - 340px))"
                 header={selectedIds.length > 0 ? (
                 <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                   <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
@@ -1683,16 +1653,7 @@ export function TaskMgmtContent({
                     onMove={applyBulkMove}
                   />
                   <button type="button" style={{ ...buttonTertiary, padding: '4px 8px', fontSize: 12 }} onClick={() => void applyBulkArchive()}>
-                    Archive
-                  </button>
-                  <button
-                    type="button"
-                    style={{ ...buttonTertiary, padding: '4px 8px', fontSize: 12 }}
-                    disabled={selectedIds.length < 2}
-                    title="Merge the selected tasks into the first one; the rest are archived"
-                    onClick={() => void applyBulkMerge()}
-                  >
-                    Merge
+                    {tTask('bulkArchive')}
                   </button>
                   <button
                     type="button"

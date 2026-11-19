@@ -55,6 +55,8 @@ export interface DataTableProps<Row> {
   onPageSizeChange: (size: number) => void;
   /** Extra footer content rendered beside the pager. */
   footerExtras?: React.ReactNode;
+  /** Opt-in cap on the scrolling body for surfaces whose parent is not a bounded flex column. */
+  bodyMaxHeight?: string | number;
   className?: string;
 }
 
@@ -104,6 +106,7 @@ export function DataTable<Row>({
   pageSize,
   onPageSizeChange,
   footerExtras,
+  bodyMaxHeight,
   className,
 }: DataTableProps<Row>) {
   const t = useTranslations('common.pagination');
@@ -134,7 +137,7 @@ export function DataTable<Row>({
 
   return (
     <div className={className} style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-      <div style={{ ...tableWrapStyle, overflowY: 'auto', maxHeight: 'var(--data-list-body-max, calc(100vh - 340px))', flex: 1, minHeight: 0 }}>
+      <div style={{ ...tableWrapStyle, overflowY: 'auto', maxHeight: bodyMaxHeight ?? '100%', flex: 1, minHeight: 0 }}>
         <table style={tableStyle}>
           <thead style={{ position: 'sticky', top: 0, zIndex: 1, background: 'var(--bg-elevated)' }}>
             <tr style={theadRowStyle}>
