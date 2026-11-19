@@ -39,6 +39,7 @@ import {
 import {
   applyRound,
   capTable,
+  exitWaterfall,
   modelRound,
   recordConvertible,
   recordEquityEvent,
@@ -539,6 +540,53 @@ export function canvasEquityActions(ctx: CanvasFounderOpsContext): BrainAction[]
           instruction: applied
             ? 'The round is RECORDED — real shares issued and real instruments converted. Report what changed and by how much.'
             : 'Nothing has been recorded: this is a model. Lead with each existing holder\'s before-and-after percentage, and state every caveat returned — they are the assumptions the numbers depend on, not footnotes.',
+        };
+      },
+    },
+    {
+      name: 'canvas_model_exit',
+      description:
+        'Model who gets what at an exit, from this company\'s REAL cap table — liquidation preferences by seniority, participating and non-participating classes, conversion breakpoints, debt repaid first, and unvested options under normal or accelerated vesting. Call it when the user asks what they would take home at an exit value. It authors/updates an `exitScenario` card holding ONLY the inputs (exitValue, debt, vesting); the payouts are computed on every call and are NEVER written to the card — report them from this result.',
+      parameters: {
+        type: 'object', additionalProperties: false,
+        required: ['exitValue'],
+        properties: {
+          companyRef: { type: 'string' },
+          exitValue: { type: 'number', minimum: 0 },
+          debt: { type: 'number', minimum: 0 },
+          vesting: { type: 'string', enum: ['normal', 'accelerated'] },
+          asOf: { type: 'string' },
+        },
+      },
+      mutates: () => true,
+      run: async (raw: unknown) => {
+        const blocked = guard();
+        if (blocked) return blocked;
+        const args = raw as { companyRef?: string; exitValue: number; debt?: number; vesting?: 'normal' | 'accelerated'; asOf?: string };
+        const companyRef = boardCompanyRef(args.companyRef);
+        if (!companyRef) return { error: 'Which company? Name it in `companyRef`, or put a `company` object on this board first.' };
+        const vesting = args.vesting ?? 'normal';
+        const result = await exitWaterfall({ companyRef, exitValue: args.exitValue, debt: args.debt ?? null, vesting, asOf: args.asOf ?? null });
+        // INPUTS only — a stored payout would disagree with the ledger the day it moves.
+        const fields = {
+          companyRef,
+          exitValue: args.exitValue,
+          ...(args.debt != null ? { debt: args.debt } : {}),
+          vesting,
+          summary: `Exit at ${integer(args.exitValue)}${args.debt ? ` after ${integer(args.debt)} of debt` : ''}, ${vesting} vesting. Payouts are computed from the cap table on read, not stored here.`,
+        };
+        const existing = ctx.objects().find((object) => object.kind === 'exitScenario'
+          && Number(object.data.exitValue) === args.exitValue && partyRef(String(object.data.companyRef ?? '')) === companyRef);
+        const objectId = existing
+          ? (ctx.updateObject(existing.id, fields, 'Refreshed the exit scenario'), existing.id)
+          : ctx.addObject('exitScenario', { title: `Exit · ${integer(args.exitValue)}`, ...fields }).objectId;
+        return {
+          ok: true, proposed: true, objectId,
+          netExit: result.netExit,
+          byHolder: result.byHolder,
+          byClass: result.byClass,
+          breakpoints: result.breakpoints,
+          instruction: 'Report each holder\'s payout and multiple from this result, and name the breakpoints where a class converts. These figures are computed, not saved on the card.',
         };
       },
     },

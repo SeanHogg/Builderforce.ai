@@ -18,6 +18,14 @@ import { useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { adminApi, type AdminOutcomeMetric, type AdminTenant } from '@/lib/adminApi';
 import { copyTextToClipboard } from '@/lib/useCopyToClipboard';
+import { downloadText } from '@/lib/download';
+import {
+  buildSalesBriefModel,
+  renderSalesBriefHtml,
+  renderSalesBriefMarkdown,
+  salesBriefFilename,
+  type SalesBriefLabels,
+} from '@/lib/outcomeSalesBriefExport';
 import { AdminError, AdminLoading, AdminPanelHeader, useAdminData } from '@/components/admin/adminShared';
 import { useAdminFormat } from '@/components/admin/adminShared';
 import {
@@ -82,6 +90,52 @@ export default function OutcomeMetricsPanel() {
     ];
     await copyTextToClipboard(lines.join('\n'));
     setCopyStatus(t('briefCopied'));
+    window.setTimeout(() => setCopyStatus(''), 2_000);
+  };
+
+  const exportBrief = (format: 'html' | 'markdown' | 'print') => {
+    if (!data || !data.privacy.externalClaimsEligible) return;
+    const labels: SalesBriefLabels = {
+      title: t('exportSlidesTitle'),
+      period: t('briefPeriod', { start: fmt.date(data.period.start), end: fmt.date(data.period.end) }),
+      cohort: t('briefCohort', { sessions: fmtNum(data.sampleSize), delivered: fmtNum(data.deliveredSessions), graded: fmtNum(data.gradedSessions ?? 0) }),
+      northStar: t('northStarLabel'),
+      prior: t('briefPrior'),
+      definitions: t('definitionVersion', { version: data.definitionVersion ?? '—' }),
+      freshness: t('exportFreshness', { generated: fmt.dateTime(data.generatedAt) }),
+      denominator: t('exportDenominator', { sessions: fmtNum(data.sampleSize) }),
+      suppressed: '',
+      window: t('exportWindow', { days: data.period.days }),
+      segmentsTitle: t('exportSegmentsTitle'),
+      workspacesLabel: t('workspaceValue'),
+      projectsLabel: t('projectValue'),
+      sessionsColumn: t('sessionsColumn'),
+      deliveredColumn: t('deliveredColumn'),
+      gradedColumn: t('gradedColumn'),
+      notEligible: t('exportNotEligible'),
+      lang: document.documentElement.lang || 'en',
+    };
+    const model = buildSalesBriefModel({
+      rollup: data,
+      metricT: m,
+      labels,
+      segmentName: (kind, n) => t(kind === 'workspace' ? 'exportWorkspaceSegment' : 'exportProjectSegment', { n }),
+    });
+    labels.suppressed = t('exportSuppressed', { count: model.stamps.suppressedSegments, threshold: model.stamps.minimumCohort });
+    if (format === 'markdown') {
+      downloadText(renderSalesBriefMarkdown(model, labels), salesBriefFilename(model, 'md'), 'text/markdown');
+    } else if (format === 'html') {
+      downloadText(renderSalesBriefHtml(model, labels), salesBriefFilename(model, 'html'), 'text/html');
+    } else {
+      const popup = window.open('', '_blank');
+      if (!popup) return;
+      popup.document.open();
+      popup.document.write(renderSalesBriefHtml(model, labels));
+      popup.document.close();
+      popup.focus();
+      popup.print();
+    }
+    setCopyStatus(t('exportDownloaded'));
     window.setTimeout(() => setCopyStatus(''), 2_000);
   };
 
@@ -175,7 +229,12 @@ export default function OutcomeMetricsPanel() {
           </p>
           <p className="text-muted" style={{ margin: '4px 0 0', fontSize: 'var(--font-size-eyebrow)' }}>{t('definitionVersion', { version: data.definitionVersion ?? '—' })}</p>
         </div>
-        <button type="button" className="btn-ghost" disabled={!data.privacy.externalClaimsEligible} onClick={() => void copyBrief()}>{copyStatus || t('copyBrief')}</button>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          <button type="button" className="btn-ghost" disabled={!data.privacy.externalClaimsEligible} onClick={() => void copyBrief()}>{copyStatus || t('copyBrief')}</button>
+          <button type="button" className="btn-ghost" disabled={!data.privacy.externalClaimsEligible} onClick={() => exportBrief('markdown')}>{t('exportMarkdown')}</button>
+          <button type="button" className="btn-ghost" disabled={!data.privacy.externalClaimsEligible} onClick={() => exportBrief('html')}>{t('exportHtml')}</button>
+          <button type="button" className="btn-ghost" disabled={!data.privacy.externalClaimsEligible} onClick={() => exportBrief('print')}>{t('exportPrint')}</button>
+        </div>
       </section>
     </>}
   </div>;

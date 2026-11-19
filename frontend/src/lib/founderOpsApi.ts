@@ -492,6 +492,23 @@ export const capTable = (companyRef: string, asOf?: string) => {
   return apiRequest<CapTable>(`/api/equity/cap-table?${params}`);
 };
 
+export interface ExitWaterfallResult {
+  byClass: Array<{ classRef: string; preference: number; participation: number; converted: boolean; payout: number }>;
+  byHolder: Array<{ partyRef: string; payout: number; multiple: number | null }>;
+  breakpoints: Array<{ exitValue: number; classRef: string; event: 'preference_satisfied' | 'converts' }>;
+  netExit: number;
+}
+
+/** Who gets what at an exit — computed from the real cap table on every call and never
+ *  stored. Cached server-side under the company's equity version token. */
+export const exitWaterfall = (body: {
+  companyRef?: string | null;
+  exitValue: number;
+  debt?: number | null;
+  vesting?: 'normal' | 'accelerated';
+  asOf?: string | null;
+}) => apiRequest<ExitWaterfallResult>('/api/equity/waterfall', { method: 'POST', body: JSON.stringify(body) });
+
 export interface RecordGrantBody {
   companyRef?: string | null;
   reference: string;

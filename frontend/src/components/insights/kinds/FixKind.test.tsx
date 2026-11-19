@@ -65,8 +65,8 @@ afterEach(() => {
 });
 
 describe('fix kind', () => {
-  it('is registered with Change and Measure tabs, and the issue kind with Fix and History', () => {
-    expect(panelKindDef('fix')?.tabs.map((tab) => tab.id)).toEqual(['change', 'measure']);
+  it('is registered with Change, Prompt and Measure tabs, and the issue kind with Fix and History', () => {
+    expect(panelKindDef('fix')?.tabs.map((tab) => tab.id)).toEqual(['change', 'prompt', 'measure']);
     expect(panelKindDef('issue')?.tabs.map((tab) => tab.id)).toEqual(['overview', 'recordings', 'fix', 'history']);
     expect(panelKindDef('fixes')?.tabs.map((tab) => tab.id)).toEqual(['main']);
   });

@@ -147,11 +147,53 @@ export interface ApplyPresetResult {
   addedWidgets: number;
 }
 
+/** The grouping dimensions an LTV tranche read can be split by (PRD 25 B3). */
+export const LTV_DIMENSIONS = ['plan', 'cohort', 'channel', 'segment'] as const;
+export type LtvDimension = (typeof LTV_DIMENSIONS)[number];
+
+/** One tranche row. Every economics figure is null when it could not be measured — never 0. */
+export interface LtvTranche {
+  tranche: string;
+  ltv: number | null;
+  cac: number | null;
+  ratio: number | null;
+  paybackMonths: number | null;
+  /** True when the figure was declared by the founder rather than measured from customer rows. */
+  declared: boolean;
+}
+
+export interface LtvTranchesResult {
+  dimension: LtvDimension;
+  tranches: LtvTranche[];
+  /** The tranche furthest below 3:1, or null when none is. */
+  nextAction: { tranche: string; ratio: number } | null;
+}
+
+/** A single resolved scalar metric value (`GET /api/dashboards/metrics/:key/value`). */
+export interface MetricScalarValue {
+  key: string;
+  /** Null = not measured. Callers must not render it as 0. */
+  value: number | null;
+  unit: string;
+  label: string;
+  /** Previous-window value, when the metric has a trend. */
+  previous?: number | null;
+  goodWhenUp?: boolean | null;
+}
+
 const fetchMetricCatalog = (): Promise<{ metrics: MetricCatalogEntry[] }> => apiRequest('/api/dashboards/metrics');
 
 export const dashboardsApi = {
   // ── Metric catalogue ───────────────────────────────────────────────────────
   metrics: fetchMetricCatalog,
+
+  /** One whitelisted metric resolved to a scalar (null value = not measured). */
+  metricValue: (key: string, days = 30): Promise<MetricScalarValue> =>
+    apiRequest(`/api/dashboards/metrics/${encodeURIComponent(key)}/value?days=${days}`),
+
+  /** LTV:CAC by tranche — plan, cohort, channel or segment (PRD 25 B3). */
+  ltvTranches: (dimension: LtvDimension): Promise<LtvTranchesResult> =>
+    apiRequest(`/api/dashboards/ltv-tranches?dimension=${encodeURIComponent(dimension)}`),
 
   // ── Dashboards CRUD ──────────────────────────────────────────────────────────
   list: (): Promise<{ dashboards: SavedDashboard[] }> =>

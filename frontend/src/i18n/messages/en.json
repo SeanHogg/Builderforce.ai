@@ -6060,7 +6060,8 @@
       "appProduct": "Product",
       "appAgile": "Delivery",
       "appGovernance": "Governance & Security",
-      "founder": "Founder"
+      "founder": "Founder",
+      "verticals": "Verticals"
     },
     "title": {
       "aiProductivity": "AI Productivity Score",
@@ -6247,7 +6248,27 @@
       "aiHubBenchmark": "Agent benchmark",
       "founderRunway": "Runway Projection",
       "founderOwnership": "Cash Commitment",
-      "benchPosition": "Peer Position"
+      "benchPosition": "Peer Position",
+      "founderMarketSize": "Market size",
+      "growthNrr": "Net revenue retention",
+      "growthGrr": "Gross revenue retention",
+      "growthCacPayback": "CAC payback",
+      "growthLtvCac": "LTV : CAC",
+      "growthLtvTranches": "LTV by tranche",
+      "aiInferenceMargin": "Inference gross margin",
+      "aiInferenceEfficiency": "Inference efficiency",
+      "clinicalStage": "Regulatory stage",
+      "clinicalReimbursement": "Reimbursement path",
+      "clinicalTrialEconomics": "Trial economics",
+      "paymentsVolume": "Payment volume",
+      "paymentsRisk": "Payments risk",
+      "climateCostCurve": "Cost curve",
+      "climateDeployment": "Deployment",
+      "hardwareProductionStage": "Production stage",
+      "hardwareMarginBacklog": "Margin & backlog",
+      "securityPipeline": "Security pipeline",
+      "marketLiquidity": "Marketplace liquidity",
+      "marketUnitEconomics": "Marketplace unit economics"
     },
     "loading": "Loading…",
     "overview": {
@@ -6500,6 +6521,7 @@
     "founder": {
       "runwayUndeclared": "No finances declared yet — add cash and burn to see your runway.",
       "ownershipEmpty": "No equity recorded yet — add your cap table to see ownership.",
+      "marketSizeOnCanvas": "Model market size on the canvas — a marketSize object supplies TAM, SAM and SOM.",
       "noCohort": "No peer cohort seeded for your sector yet.",
       "profitable": "Profitable",
       "cash": "Cash",
@@ -6507,6 +6529,105 @@
       "months": "{count} months",
       "zeroOn": "Cash out {date}",
       "percentile": "{value}th percentile"
+    },
+    "saas": {
+      "notMeasured": "Not measured",
+      "connectSource": "Connect a source to start measuring this.",
+      "delta": "{value} vs prior period",
+      "benchmark": "Peer range",
+      "peerMedian": "median {value}",
+      "ratio": "{value}:1",
+      "months": "{count} months",
+      "declared": "declared",
+      "tableView": "Table view",
+      "chartView": "Chart view",
+      "target3to1": "Dashed line = 3:1 target",
+      "below3to1": "{tranche} is below 3:1 ({ratio}) — fix its CAC or expansion first.",
+      "dimension": {
+        "label": "Group by",
+        "plan": "Plan",
+        "cohort": "Cohort",
+        "channel": "Channel",
+        "segment": "Segment"
+      },
+      "col": {
+        "tranche": "Tranche",
+        "ltv": "LTV",
+        "cac": "CAC",
+        "ratio": "LTV:CAC",
+        "payback": "Payback"
+      },
+      "rating": {
+        "elite": "Elite",
+        "high": "High",
+        "medium": "Medium",
+        "low": "Low"
+      },
+      "action": {
+        "nrr": "Above 100% means expansion outpaces churn — upsell the accounts that are growing.",
+        "grr": "Find the accounts that churned and fix the cause before spending more on growth.",
+        "cacPayback": "Cut the costliest acquisition channel or raise first-year price to shorten payback.",
+        "ltvCac": "Aim for 3:1 or better — open the tranche breakdown to see where the gap is.",
+        "inferenceMargin": "Route routine calls to a cheaper model, or reprice the heaviest-use plan.",
+        "inferenceEfficiency": "Cache repeated prompts and trim context so each inference dollar earns more."
+      }
+    },
+    "stage": {
+      "concept": "Concept",
+      "design_freeze": "Design freeze",
+      "verification": "Verification",
+      "submission": "Submission",
+      "clearance": "Clearance",
+      "first_commercial_use": "First commercial use",
+      "none": "None",
+      "code_identified": "Code identified",
+      "coverage_decision": "Coverage decision",
+      "payer_contracts": "Payer contracts",
+      "prototype": "Prototype",
+      "pilot_run": "Pilot run",
+      "first_production_run": "First production run",
+      "rate_production": "Rate production"
+    },
+    "vertical": {
+      "notMeasured": "Not measured",
+      "connectSource": "Connect a source to start measuring this.",
+      "metric": {
+        "payments": {
+          "tpv": "Total payment volume",
+          "takeRate": "Take rate",
+          "fundedAccountRatio": "Funded account ratio",
+          "fraudLossBps": "Fraud loss (bps)",
+          "payoutLatency": "Payout latency"
+        },
+        "clinical": {
+          "monthsToMilestone": "Months to next milestone",
+          "regulatorySpendPct": "Regulatory spend share",
+          "costPerDataPoint": "Cost per clinical data point",
+          "enrollmentRate": "Enrollment rate"
+        },
+        "climate": {
+          "unitCostVsIncumbent": "Unit cost vs incumbent",
+          "tco2eAbated": "tCO2e abated",
+          "capacityDeployed": "Capacity deployed",
+          "offtakePipeline": "Offtake pipeline"
+        },
+        "hardware": {
+          "bomCost": "BOM cost",
+          "grossMargin": "Gross margin",
+          "backlog": "Backlog"
+        },
+        "security": {
+          "pipelineCoverage": "Pipeline coverage",
+          "pocConversion": "POC conversion",
+          "timeToValue": "Time to value"
+        },
+        "market": {
+          "liquidity": "Liquidity",
+          "repeatRate": "Repeat rate",
+          "gmv": "GMV",
+          "contributionPerOrder": "Contribution per order"
+        }
+      }
     }
   },
   "compile": {
@@ -17225,6 +17346,19 @@
       "deckIneligible": "Below the {threshold}-session minimum. These numbers stay internal until the cohort is large enough.",
       "definitionVersion": "Definitions {version}",
       "copyBrief": "Copy brief",
+      "exportHtml": "Download slides (HTML)",
+      "exportMarkdown": "Download brief (Markdown)",
+      "exportPrint": "Print / save as PDF",
+      "exportSlidesTitle": "Outcome value brief",
+      "exportWindow": "Window: {days} days",
+      "exportDenominator": "Denominator: {sessions} sessions",
+      "exportFreshness": "Data as of {generated}",
+      "exportSuppressed": "{count} small segments suppressed (fewer than {threshold} sessions)",
+      "exportNotEligible": "Below the minimum cohort for external use. These figures are internal-only and are not exported.",
+      "exportSegmentsTitle": "Where the value came from",
+      "exportWorkspaceSegment": "Workspace {n}",
+      "exportProjectSegment": "Project {n}",
+      "exportDownloaded": "Brief exported",
       "sessionsColumn": "Sessions",
       "deliveredColumn": "Delivered",
       "gradedColumn": "Graded",
@@ -23641,6 +23775,8 @@
       "competitor": "Competitor",
       "customerSegment": "Customer segment",
       "gtmPlan": "GTM plan",
+      "marketSize": "Market size",
+      "exitScenario": "Exit scenario",
       "battlecard": "Battlecard",
       "customerInterview": "Customer interview",
       "experiment": "Experiment",
@@ -25176,7 +25312,9 @@
         "payRun": "Pay run",
         "idea": "Idea",
         "customerInterview": "Customer interview",
-        "risk": "Risk"
+        "risk": "Risk",
+        "marketSize": "Market size",
+        "exitScenario": "Exit scenario"
       },
       "field": {
         "actualTotal": "actual total",
@@ -25403,7 +25541,23 @@
         "nextStep": "Next step",
         "testedBy": "Tested by",
         "capturedAt": "Captured",
-        "promotedTo": "Became"
+        "promotedTo": "Became",
+        "method": "Method",
+        "potentialCustomers": "Potential customers",
+        "serviceableCustomers": "Serviceable customers",
+        "reachableCustomers": "Reachable customers",
+        "arpa": "ARPA (per year)",
+        "achievableShare": "Achievable share",
+        "topDownMarket": "Top-down market",
+        "topDownShare": "Top-down share",
+        "tam": "TAM",
+        "sam": "SAM",
+        "som": "SOM",
+        "triangulationGap": "Triangulation gap",
+        "sizeCheck": "Size check",
+        "exitValue": "Exit value",
+        "debt": "Debt",
+        "vesting": "Vesting treatment"
       },
       "column": {
         "actual": "Actual",
@@ -25544,6 +25698,12 @@
           "nothingYet": "NOTHING here is significant yet.",
           "real": "{variant} is {direction, select, up {up} other {down}} {points, number}pp on the control (p={p}), interval {low, number} to {high, number}pp.",
           "noise": "{variant} is within noise of the control (p={p}); n is too small to call."
+        },
+        "marketSize": {
+          "consistent": "SOM ≤ SAM ≤ TAM holds.",
+          "inconsistent": "Inconsistent: SOM ≤ SAM ≤ TAM is broken — a narrower market cannot be larger than a wider one.",
+          "triangulated": "Bottom-up and top-down agree within 15%.",
+          "divergent": "Bottom-up and top-down differ by more than 15% — revisit the assumptions."
         },
         "ownership": {
           "balanced": "Holders and the unallocated pool account for {accounted}% of the fully diluted total.",

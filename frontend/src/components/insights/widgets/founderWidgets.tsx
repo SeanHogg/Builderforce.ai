@@ -181,8 +181,19 @@ function BenchPositionCard(_: ComponentSurfaceProps) {
 
 // ── Registry ─────────────────────────────────────────────────────────────────
 
+/**
+ * Market size (PRD 25 §5.5). The figures live on the board's `marketSize` object and are
+ * derived there — this tile is the canvas-widget-host id, and it says so rather than
+ * inventing a zero when the board has not modelled one.
+ */
+function MarketSizeCard(_: ComponentSurfaceProps) {
+  const t = useTranslations('components');
+  return <Muted>{t('founder.marketSizeOnCanvas')}</Muted>;
+}
+
 export const FOUNDER_COMPONENTS: ComponentDef[] = [
   { id: 'founder.runway-projection', group: 'founder', titleKey: 'founderRunway', capability: FOUNDER_CAP, size: 'lg', Surface: RunwayProjectionCard, drill: FOUNDER_DRILL },
   { id: 'founder.ownership', group: 'founder', titleKey: 'founderOwnership', capability: FOUNDER_CAP, size: 'md', Surface: OwnershipCard, drill: FOUNDER_DRILL },
   { id: 'bench.position', group: 'founder', titleKey: 'benchPosition', capability: FOUNDER_CAP, size: 'md', Surface: BenchPositionCard, drill: FOUNDER_DRILL },
+  { id: 'founder.market-size', group: 'founder', titleKey: 'founderMarketSize', capability: FOUNDER_CAP, size: 'md', Surface: MarketSizeCard, drill: FOUNDER_DRILL },
 ];

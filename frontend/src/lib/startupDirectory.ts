@@ -44,6 +44,8 @@ export interface StartupCard {
   monthlyRevenue: number | null;
   runwayHealth: RunwayVerdict['health'] | null;
   runwayMonths: number | null;
+  /** Benchmark position vs the sector cohort — the rating word only, never numbers. */
+  benchmarkRating?: 'elite' | 'high' | 'medium' | 'low' | null;
   inquiryCount: number;
   listedAt: string | null;
   updatedAt: string;

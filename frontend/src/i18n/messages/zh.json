@@ -6075,7 +6075,8 @@
       "appProduct": "产品",
       "appAgile": "交付",
       "appGovernance": "治理与安全",
-      "founder": "创始人"
+      "founder": "创始人",
+      "verticals": "垂直行业"
     },
     "title": {
       "aiProductivity": "AI 生产力评分",
@@ -6262,7 +6263,27 @@
       "aiHubBenchmark": "智能体基准",
       "founderRunway": "现金跑道预测",
       "founderOwnership": "现金承诺",
-      "benchPosition": "同行对比"
+      "benchPosition": "同行对比",
+      "founderMarketSize": "市场规模",
+      "growthNrr": "净收入留存率",
+      "growthGrr": "毛收入留存率",
+      "growthCacPayback": "CAC 回收期",
+      "growthLtvCac": "LTV : CAC",
+      "growthLtvTranches": "按分层的 LTV",
+      "aiInferenceMargin": "推理毛利率",
+      "aiInferenceEfficiency": "推理效率",
+      "clinicalStage": "监管阶段",
+      "clinicalReimbursement": "报销路径",
+      "clinicalTrialEconomics": "试验经济性",
+      "paymentsVolume": "支付量",
+      "paymentsRisk": "支付风险",
+      "climateCostCurve": "成本曲线",
+      "climateDeployment": "部署",
+      "hardwareProductionStage": "生产阶段",
+      "hardwareMarginBacklog": "毛利与积压订单",
+      "securityPipeline": "安全销售管线",
+      "marketLiquidity": "市场流动性",
+      "marketUnitEconomics": "市场单位经济"
     },
     "loading": "加载中…",
     "overview": {
@@ -6515,6 +6536,7 @@
     "founder": {
       "runwayUndeclared": "尚未填写财务数据 — 添加现金与消耗以查看跑道。",
       "ownershipEmpty": "尚未记录股权 — 添加股权表以查看持股。",
+      "marketSizeOnCanvas": "在画布上建模市场规模——marketSize 对象提供 TAM、SAM 和 SOM。",
       "noCohort": "您所在行业尚无同行对比数据。",
       "profitable": "已盈利",
       "cash": "现金",
@@ -6522,6 +6544,105 @@
       "months": "{count} 个月",
       "zeroOn": "现金将于 {date} 耗尽",
       "percentile": "第 {value} 百分位"
+    },
+    "saas": {
+      "notMeasured": "未衡量",
+      "connectSource": "连接数据源即可开始衡量。",
+      "delta": "较上期 {value}",
+      "benchmark": "同行区间",
+      "peerMedian": "中位数 {value}",
+      "ratio": "{value}:1",
+      "months": "{count} 个月",
+      "declared": "已声明",
+      "tableView": "表格视图",
+      "chartView": "图表视图",
+      "target3to1": "虚线 = 3:1 目标",
+      "below3to1": "{tranche} 低于 3:1（{ratio}）— 请先优化其获客成本或扩张。",
+      "dimension": {
+        "label": "分组方式",
+        "plan": "套餐",
+        "cohort": "同期群",
+        "channel": "渠道",
+        "segment": "细分"
+      },
+      "col": {
+        "tranche": "分层",
+        "ltv": "LTV",
+        "cac": "CAC",
+        "ratio": "LTV:CAC",
+        "payback": "回收期"
+      },
+      "rating": {
+        "elite": "顶尖",
+        "high": "较高",
+        "medium": "中等",
+        "low": "较低"
+      },
+      "action": {
+        "nrr": "高于 100% 说明扩张快于流失 — 向增长中的账户追加销售。",
+        "grr": "找出流失的账户并先解决原因，再增加投入。",
+        "cacPayback": "砍掉成本最高的获客渠道或提高首年价格，以缩短回收期。",
+        "ltvCac": "目标为 3:1 或更高 — 查看分层明细了解差距所在。",
+        "inferenceMargin": "把常规调用路由到更便宜的模型，或为用量最大的套餐重新定价。",
+        "inferenceEfficiency": "缓存重复的提示并精简上下文，让每一美元推理成本产生更多价值。"
+      }
+    },
+    "stage": {
+      "concept": "Concept",
+      "design_freeze": "Design freeze",
+      "verification": "Verification",
+      "submission": "Submission",
+      "clearance": "Clearance",
+      "first_commercial_use": "First commercial use",
+      "none": "None",
+      "code_identified": "Code identified",
+      "coverage_decision": "Coverage decision",
+      "payer_contracts": "Payer contracts",
+      "prototype": "Prototype",
+      "pilot_run": "Pilot run",
+      "first_production_run": "First production run",
+      "rate_production": "Rate production"
+    },
+    "vertical": {
+      "notMeasured": "Not measured",
+      "connectSource": "Connect a source to start measuring this.",
+      "metric": {
+        "payments": {
+          "tpv": "Total payment volume",
+          "takeRate": "Take rate",
+          "fundedAccountRatio": "Funded account ratio",
+          "fraudLossBps": "Fraud loss (bps)",
+          "payoutLatency": "Payout latency"
+        },
+        "clinical": {
+          "monthsToMilestone": "Months to next milestone",
+          "regulatorySpendPct": "Regulatory spend share",
+          "costPerDataPoint": "Cost per clinical data point",
+          "enrollmentRate": "Enrollment rate"
+        },
+        "climate": {
+          "unitCostVsIncumbent": "Unit cost vs incumbent",
+          "tco2eAbated": "tCO2e abated",
+          "capacityDeployed": "Capacity deployed",
+          "offtakePipeline": "Offtake pipeline"
+        },
+        "hardware": {
+          "bomCost": "BOM cost",
+          "grossMargin": "Gross margin",
+          "backlog": "Backlog"
+        },
+        "security": {
+          "pipelineCoverage": "Pipeline coverage",
+          "pocConversion": "POC conversion",
+          "timeToValue": "Time to value"
+        },
+        "market": {
+          "liquidity": "Liquidity",
+          "repeatRate": "Repeat rate",
+          "gmv": "GMV",
+          "contributionPerOrder": "Contribution per order"
+        }
+      }
     }
   },
   "compile": {
@@ -17240,6 +17361,19 @@
       "deckIneligible": "尚未达到 {threshold} 个会话的最低要求。在样本量足够之前，这些数字仅供内部使用。",
       "definitionVersion": "定义版本 {version}",
       "copyBrief": "复制简报",
+      "exportHtml": "下载演示稿（HTML）",
+      "exportMarkdown": "下载简报（Markdown）",
+      "exportPrint": "打印 / 另存为 PDF",
+      "exportSlidesTitle": "价值成果简报",
+      "exportWindow": "时间窗口：{days} 天",
+      "exportDenominator": "分母：{sessions} 个会话",
+      "exportFreshness": "数据截至 {generated}",
+      "exportSuppressed": "已隐藏 {count} 个小分段（会话数少于 {threshold}）",
+      "exportNotEligible": "低于对外使用的最小样本量。这些数字仅供内部使用，不会导出。",
+      "exportSegmentsTitle": "价值来自何处",
+      "exportWorkspaceSegment": "工作区 {n}",
+      "exportProjectSegment": "项目 {n}",
+      "exportDownloaded": "简报已导出",
       "sessionsColumn": "会话",
       "deliveredColumn": "已交付",
       "gradedColumn": "已评定",
@@ -23666,6 +23800,8 @@
       "competitor": "竞争对手",
       "customerSegment": "客户细分",
       "gtmPlan": "市场进入计划",
+      "marketSize": "市场规模",
+      "exitScenario": "退出情景",
       "battlecard": "竞争应对卡",
       "customerInterview": "客户访谈",
       "experiment": "实验",
@@ -25918,7 +26054,9 @@
         "payRun": "工资单",
         "idea": "想法",
         "customerInterview": "客户访谈",
-        "risk": "风险"
+        "risk": "风险",
+        "marketSize": "市场规模",
+        "exitScenario": "退出情景"
       },
       "field": {
         "actualTotal": "实际总额",
@@ -26145,7 +26283,23 @@
         "nextStep": "下一步",
         "testedBy": "验证来源",
         "capturedAt": "记录于",
-        "promotedTo": "转化为"
+        "promotedTo": "转化为",
+        "method": "方法",
+        "potentialCustomers": "潜在客户数",
+        "serviceableCustomers": "可服务客户数",
+        "reachableCustomers": "可触达客户数",
+        "arpa": "每账户年均收入 (ARPA)",
+        "achievableShare": "可达成份额",
+        "topDownMarket": "自上而下市场规模",
+        "topDownShare": "自上而下份额",
+        "tam": "TAM",
+        "sam": "SAM",
+        "som": "SOM",
+        "triangulationGap": "交叉验证差距",
+        "sizeCheck": "规模校验",
+        "exitValue": "退出估值",
+        "debt": "债务",
+        "vesting": "归属处理方式"
       },
       "column": {
         "actual": "实际",
@@ -26306,6 +26460,12 @@
           "tested": "已通过{interviews, plural, =0 {0 次访谈} other {# 次访谈}}和{experiments, plural, =0 {0 个实验} other {# 个实验}}验证。",
           "testedForms": "已通过{forms, plural, =0 {0 份表单} other {# 份表单}}验证。",
           "missing": "此看板上尚不存在：{refs}。"
+        },
+        "marketSize": {
+          "consistent": "满足 SOM ≤ SAM ≤ TAM。",
+          "inconsistent": "不一致：SOM ≤ SAM ≤ TAM 不成立——较小的市场不可能大于较大的市场。",
+          "triangulated": "自下而上与自上而下的结果相差在 15% 以内。",
+          "divergent": "自下而上与自上而下的结果相差超过 15%——请重新检查假设。"
         }
       }
     },
