@@ -1,5 +1,5 @@
-import { B as BrainTraceEvent, U as UsageSurface, a as BrainMessage, P as PackageDirProbe } from './brainTriage-BinfeJfQ.js';
-import { L as LocalRuntimeId, a as LocalEndpoint, b as LocalRuntimeProbe, c as LocalModel } from './probe-BGCNrsPi.js';
+import { a as BrainTraceEvent, U as UsageSurface, b as BrainMessage, P as PackageDirProbe } from './brainTriage-V3v9mk1-.cjs';
+import { L as LocalRuntimeId, a as LocalEndpoint, b as LocalRuntimeProbe, c as LocalModel } from './probe-BGCNrsPi.cjs';
 import { EvermindRecallResult } from '@seanhogg/builderforce-memory/evermind';
 import { ConsolidateOptions, ConsolidatedMemory } from '@seanhogg/builderforce-memory/working';
 
@@ -1665,7 +1665,7 @@ interface OnDeviceTasks {
 }
 
 /**
- * The deterministic-first PreFetch contract (docs/design/deterministic-prefetch.md).
+ * The deterministic-first PreFetch contract (DONE.md, deterministic-first PreFetch archive).
  *
  * Actions are REGISTRY DATA. A host supplies one executor per action id; the gate never
  * runs a tool itself. A new tool is a registry row plus an executor, never a gate branch.

@@ -665,7 +665,7 @@ declare function stringsFrom<T extends object>(defaults: T, lookup: LabelLookup,
 declare function bundleLookup(bundle: Readonly<Record<string, string>>, keyOf: (key: string) => string | undefined, format?: (value: number) => string): LabelLookup;
 
 /**
- * The PreFetch chips (docs/design/deterministic-prefetch.md) — ONE component family every
+ * The PreFetch chips (DONE.md, deterministic-first PreFetch archive) — ONE component family every
  * surface (the VS Code chat, the web Brain panel, Rovr) renders in the SAME composer
  * transcript, never a modal or a panel of its own:
  *
@@ -907,8 +907,8 @@ declare function timelineLabelsFrom(lookup: TimelineCatalogLookup, overrides?: P
  * a gateway MCP shell tool and any future one without an allow-list to maintain.
  *
  * Nothing is ever hidden to achieve this: the raw argument JSON is still rendered for
- * whatever the command line did not already show, and the raw result JSON is dropped
- * ONLY when every field in it is one the terminal panel already displays.
+ * whatever the command line did not already show, and the raw result JSON keeps ONLY
+ * the fields the terminal panel does not already display (nothing is printed twice).
  */
 /** A change an edit_file / write_file call carries in its own arguments. */
 type ToolPreview = {
@@ -948,7 +948,7 @@ interface ToolStepView {
     preview: ToolPreview | null;
     /** Raw argument JSON, minus anything the command line already shows. `''` = omit. */
     argsText: string;
-    /** Raw result JSON. `''` = the terminal panel already shows all of it. */
+    /** Raw result JSON — for a command, only the fields its terminal panel does not show. `''` = nothing left. */
     resultText: string;
     /** Whether the step opens expanded: a failure exists to be read without a click;
      *  everything else — including a shell step — starts collapsed so a run's tool

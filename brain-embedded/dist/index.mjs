@@ -107,6 +107,7 @@ import {
   reportPageEngineFailure
 } from "./chunk-SLI7C3HD.mjs";
 import {
+  ANNOUNCED_DELIVERABLE_STEER,
   BACK_TO_BACK_AT,
   BASE_BRANCHES,
   BOUND_ONLY_VERSION,
@@ -165,6 +166,7 @@ import {
   activityMessageCount,
   activityTarget,
   activityTone,
+  announcesDeliverable,
   announcesUntakenAction,
   answeredInProseInTrace,
   applyReviewRoundCap,
@@ -246,6 +248,7 @@ import {
   isMalformedToolCall,
   isModelReply,
   isModelRole,
+  isMutatingShellCall,
   isMutatingTool,
   isMutationTool,
   isNotARepo,
@@ -254,6 +257,7 @@ import {
   isReadOnlyShellCall,
   isRepoPublishTool,
   isRepoStateReadTool,
+  isScratchScriptPath,
   isStepMessage,
   isStoppedBeforeStart,
   isStoppedTurn,
@@ -308,6 +312,7 @@ import {
   repeatedWriteNote,
   requestedReadWindow,
   resolveToolAlias,
+  resultTableCap,
   reviewGate,
   revisitAdvisory,
   runProgressVerdict,
@@ -316,6 +321,7 @@ import {
   searchToolSchemas,
   selectRecords,
   serverChatIdOf,
+  sessionShippedInTrace,
   shapeToolResult,
   shellPrintAsRead,
   shellPublishHint,
@@ -347,7 +353,6 @@ import {
   toolCallPaths,
   toolExposureInTrace,
   toolNamesMentionedIn,
-  toolOutputCap,
   toolResultRecord,
   toolSideEffect,
   traceWithPersistedSteps,
@@ -361,7 +366,7 @@ import {
   withAdvisory,
   withProvenanceMetadata,
   workFiledNotStaffedVerdict
-} from "./chunk-ZVZGRSV4.mjs";
+} from "./chunk-JAACVKV7.mjs";
 
 // src/config.tsx
 import { createContext, useContext, useEffect, useMemo } from "react";
@@ -1429,9 +1434,9 @@ var PRICE_SNAPSHOT = {
   "~anthropic/claude-haiku-latest": [1e-7, 5e-7],
   "~anthropic/claude-opus-latest": [4e-6, 2e-5],
   "~anthropic/claude-sonnet-latest": [2e-6, 1e-5],
-  "~deepseek/deepseek-flash-latest": [36e-9, 5e-7],
+  "~deepseek/deepseek-flash-latest": [35e-9, 15e-8],
   "~deepseek/deepseek-pro-latest": [999e-10, 8e-6],
-  "~deepseek/deepseek-v4-flash-latest": [434e-10, 3e-7],
+  "~deepseek/deepseek-v4-flash-latest": [6e-8, 18e-8],
   "~google/gemini-flash-latest": [15e-7, 75e-7],
   "~google/gemini-pro-latest": [2e-6, 1e-5],
   "~moonshotai/kimi-latest": [1824e-10, 110055e-10],
@@ -1504,18 +1509,18 @@ var PRICE_SNAPSHOT = {
   "deepseek/deepseek-chat": [2574e-10, 10287e-10],
   "deepseek/deepseek-chat-v3-0324": [29e-8, 114e-8],
   "deepseek/deepseek-chat-v3.1": [25e-8, 95e-8],
-  "deepseek/deepseek-r1-0528": [5e-7, 215e-8],
+  "deepseek/deepseek-r1-0528": [571e-9, 2286e-9],
   "deepseek/deepseek-v3.1-terminus": [27e-8, 1e-6],
   "deepseek/deepseek-v3.2": [26e-8, 38e-8],
   "deepseek/deepseek-v3.2-exp": [27e-8, 41e-8],
   "deepseek/deepseek-v4-flash": [9e-8, 18e-8],
-  "deepseek/deepseek-v4-flash-0731": [6e-8, 18e-8],
+  "deepseek/deepseek-v4-flash-0731": [62e-9, 3e-7],
   "deepseek/deepseek-v4-flash-0731:batch": [48e-9, 144e-9],
   "deepseek/deepseek-v4-flash-vision-exp": [44e-8, 132e-8],
   "deepseek/deepseek-v4-pro": [9e-7, 15e-7],
   "deepseek/deepseek-v4-pro-0813": [111e-9, 444e-8],
-  "deepseek/deepseek-v4.1-flash": [51e-9, 567e-9],
-  "deepseek/deepseek-v4.1-flash-1017": [36e-9, 5e-7],
+  "deepseek/deepseek-v4.1-flash": [3e-7, 12e-7],
+  "deepseek/deepseek-v4.1-flash-1017": [15e-8, 6e-7],
   "deepseek/deepseek-v4.1-flash-1017:batch": [36e-9, 15e-8],
   "deepseek/deepseek-v4.1-flash:batch": [112e-9, 336e-9],
   "dots-studio/dots-3-note-preview:free": [0, 0],
@@ -1555,14 +1560,16 @@ var PRICE_SNAPSHOT = {
   "google/gemini-4-carbon:batch": [1e-6, 5e-6],
   "google/gemini-4-hydrogen": [15e-7, 75e-7],
   "google/gemini-4-hydrogen:batch": [75e-8, 375e-8],
+  "google/gemini-4-neon": [3e-6, 15e-6],
+  "google/gemini-4-neon:batch": [15e-7, 75e-7],
   "google/gemini-nano-banana-2.1": [15e-7, 75e-7],
   "google/gemini-omni-1.1-flash": [15e-7, 9e-6],
   "google/gemini-omni-1.2-flash": [15e-7, 9e-6],
   "google/gemma-2-27b-it": [65e-8, 65e-8],
   "google/gemma-3-12b-it": [5e-8, 15e-8],
-  "google/gemma-3-27b-it": [8e-8, 45e-8],
+  "google/gemma-3-27b-it": [8e-8, 16e-8],
   "google/gemma-3-4b-it": [5e-8, 1e-7],
-  "google/gemma-4-26b-a4b-it": [765e-10, 255e-9],
+  "google/gemma-4-26b-a4b-it": [9e-8, 3e-7],
   "google/gemma-4-26b-a4b-it:free": [0, 0],
   "google/gemma-4-31b-it": [2e-7, 4e-7],
   "google/gemma-4-31b-it:free": [0, 0],
@@ -1635,10 +1642,10 @@ var PRICE_SNAPSHOT = {
   "moonshotai/kimi-k2-thinking": [6e-7, 25e-7],
   "moonshotai/kimi-k2.5": [5e-7, 25e-7],
   "moonshotai/kimi-k2.6": [65e-8, 341e-8],
-  "moonshotai/kimi-k2.7-code": [7e-7, 375e-8],
+  "moonshotai/kimi-k2.7-code": [66e-8, 35e-7],
   "moonshotai/kimi-k3": [192e-9, 16e-6],
   "moonshotai/kimi-k3:batch": [228e-8, 114e-7],
-  "moonshotai/kimi-k3.1-pro": [2403e-10, 84023e-10],
+  "moonshotai/kimi-k3.1-pro": [253e-9, 88e-7],
   "moonshotai/kimi-k3.1-pro:batch": [372e-9, 5583e-9],
   "morph/morph-v3-fast": [8e-7, 12e-7],
   "morph/morph-v3-fast:batch": [4e-7, 6e-7],
@@ -1803,10 +1810,10 @@ var PRICE_SNAPSHOT = {
   "qwen/qwen3-vl-30b-a3b-instruct": [15e-8, 6e-7],
   "qwen/qwen3-vl-8b-instruct": [25e-8, 75e-8],
   "qwen/qwen3.5-122b-a10b": [26e-8, 208e-8],
-  "qwen/qwen3.5-27b": [3e-7, 24e-7],
+  "qwen/qwen3.5-27b": [195e-9, 156e-8],
   "qwen/qwen3.5-35b-a3b": [14e-8, 1e-6],
   "qwen/qwen3.5-397b-a17b": [45e-8, 3e-6],
-  "qwen/qwen3.5-9b": [143e-9, 211e-9],
+  "qwen/qwen3.5-9b": [142e-9, 208e-9],
   "qwen/qwen3.5-flash-02-23": [65e-9, 26e-8],
   "qwen/qwen3.5-plus-02-15": [26e-8, 156e-8],
   "qwen/qwen3.5-plus-20260420": [3e-7, 18e-7],
@@ -1828,7 +1835,7 @@ var PRICE_SNAPSHOT = {
   "qwen/qwen3.8-omni-flash": [15e-8, 47e-8],
   "qwen/qwen4-max": [1425e-9, 4275e-9],
   "recursive/flint-v1.0:free": [0, 0],
-  "reflection/beam-1.0-501b-a23b": [3e-7, 1e-6],
+  "reflection/beam-1.0-501b-a23b": [25e-8, 1e-6],
   "rekaai/reka-edge": [1e-7, 1e-7],
   "rekaai/reka-flash-3": [1e-7, 2e-7],
   "relace/relace-apply-3": [85e-8, 125e-8],
@@ -1879,7 +1886,7 @@ var PRICE_SNAPSHOT = {
   "x-ai/grok-4.7:batch": [16e-7, 48e-7],
   "x-ai/grok-build-0.1": [1e-6, 2e-6],
   "xiaomi/mimo-v2.5": [4e-7, 2e-6],
-  "xiaomi/mimo-v2.5-pro": [435e-9, 87e-8],
+  "xiaomi/mimo-v2.5-pro": [48e-8, 18e-7],
   "xiaomi/mimo-v2.6-flash": [14e-8, 28e-8],
   "xiaomi/mimo-v2.6-pro": [435e-9, 87e-8],
   "xiaomi/mimo-v2.6-pro-ultraspeed": [435e-8, 87e-7],
@@ -1892,11 +1899,11 @@ var PRICE_SNAPSHOT = {
   "z-ai/glm-4.7-flash": [605e-10, 4e-7],
   "z-ai/glm-5": [1e-6, 32e-7],
   "z-ai/glm-5-turbo": [12e-7, 4e-6],
-  "z-ai/glm-5.1": [14e-7, 44e-7],
-  "z-ai/glm-5.2": [7e-9, 68e-7],
+  "z-ai/glm-5.1": [119e-8, 374e-8],
+  "z-ai/glm-5.2": [62e-8, 242e-8],
   "z-ai/glm-5.2:batch": [322e-9, 989e-9],
   "z-ai/glm-5.3": [699e-10, 14e-7],
-  "z-ai/glm-5.3-flash": [399e-10, 784e-10],
+  "z-ai/glm-5.3-flash": [15e-8, 5e-7],
   "z-ai/glm-5.3-flash:batch": [24e-9, 69e-9],
   "z-ai/glm-5.3-flashx": [37e-8, 125e-8],
   "z-ai/glm-5.3-flashx-legal": [37e-8, 125e-8],
@@ -10290,6 +10297,19 @@ function codeChangeFile(args) {
   }
   return null;
 }
+function codeChangeFiles(args) {
+  const files = [];
+  const top = codeChangeFile(args);
+  if (top) files.push(top);
+  const edits = args && typeof args === "object" ? args.edits : void 0;
+  if (Array.isArray(edits)) {
+    for (const edit of edits) {
+      const p = codeChangeFile(edit);
+      if (p && !files.includes(p)) files.push(p);
+    }
+  }
+  return files;
+}
 function chatWorkLinkingDirective(chatId, tickets = SERVER_TICKET_TOOLS) {
   const linked = chatId != null;
   const createBullet = tickets.local ? `\u2022 When your investigation concludes that something needs to be DONE \u2014 a bug to fix, a missing capability, a follow-up, or a gap you identified \u2014 do not merely describe it. Create the work item with ${tickets.createName} (projectId, title, description, taskType "task", "epic", or "gap"; file an epic first, then its tasks with parentTicketId=<the epic's returned id>; or the matching builtin_*_create for an objective, spec, or roadmap item). It is saved on this device, syncs to the account in the background and is linked to this chat automatically \u2014 do NOT call builtin_chats_link_ticket, and do not create tickets with builtin_tasks_create. The id it returns is a LOCAL id: use it with the ticket-* tools.
@@ -11249,7 +11269,7 @@ var stallHook = {
       const owed = walkLadder(ctx, delivery);
       if (owed || delivery.owns?.narration) return owed;
     }
-    return narrationRecover(ctx);
+    return narrationRecover(ctx) ?? deliverableRecover(ctx);
   },
   /** {@link recover} for a ledger whose rungs need a promise to say which hold; the kernel calls this one. */
   async recoverAsync(ctx) {
@@ -11260,7 +11280,7 @@ var stallHook = {
       const owed = await walkLadderAsync(ctx, delivery);
       if (owed || delivery.owns?.narration) return owed;
     }
-    return narrationRecover(ctx);
+    return narrationRecover(ctx) ?? deliverableRecover(ctx);
   },
   /**
    * The settled answer, shaped the way every source shapes it: a reply stuck on one
@@ -11287,6 +11307,14 @@ var stallHook = {
     return ctx.task.agentName ? FORCED_SYNTHESIS_PROMPT.replace("AS the agent", `AS ${ctx.task.agentName}`) : FORCED_SYNTHESIS_PROMPT;
   }
 };
+var ANNOUNCED_DELIVERABLE_ID = "announced_deliverable";
+function deliverableRecover(ctx) {
+  const text2 = ctx.judged ?? (typeof ctx.content === "string" ? ctx.content : "");
+  const said = ctx.state.stall?.said ?? [];
+  if (said.includes(ANNOUNCED_DELIVERABLE_ID) || !announcesDeliverable(text2)) return void 0;
+  ctx.state.stall = { ...ctx.state.stall ?? { recoveriesUsed: 0 }, said: [...said, ANNOUNCED_DELIVERABLE_ID] };
+  return { action: "steer", note: ANNOUNCED_DELIVERABLE_STEER, detail: { model: ctx.state.model.model ?? null, shape: "announced-deliverable" } };
+}
 function narratesFirst(delivery) {
   return delivery.stall?.narrationFirst === true && !delivery.owns?.narration;
 }
@@ -13462,9 +13490,9 @@ async function gateCall(ctx, call2) {
 }
 
 // ../packages/agent-run/src/policy/tools/caps.ts
-function resultCapFor(tool, model, servingModel2) {
+function resultCapFor(tool, model, servingModel2, data) {
   const window2 = servingModel2 && typeof model.window === "function" ? model.window(servingModel2) : void 0;
-  return windowedCap(tool, toolOutputCap(tool), window2);
+  return windowedCap(tool, resultTableCap(tool, data), window2);
 }
 var ERROR_CHARS = 500;
 function failedResult(data) {
@@ -13824,9 +13852,19 @@ function turnSucceeded(state, served) {
 }
 
 // ../packages/agent-run/src/policy/model/reask.ts
+function parsedArgs(raw) {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return void 0;
+  }
+}
+function changesCode(tools, call2) {
+  return tools.includes(call2.name) || isMutatingShellCall(call2.name, parsedArgs(call2.arguments));
+}
 function changedCode(policy, completion) {
   const tools = policy.codeChangeTools;
-  return !!tools && tools.length > 0 && (completion.toolCalls ?? []).some((call2) => tools.includes(call2.name));
+  return !!tools && tools.length > 0 && (completion.toolCalls ?? []).some((call2) => changesCode(tools, call2));
 }
 function reaskAsCoder(state, policy, completion, asked) {
   if (asked.role !== "plan" || !changedCode(policy, completion)) return void 0;
@@ -14094,7 +14132,7 @@ async function dispatchCall(input, state, call2, watch, facts = { refused: false
     };
     const data = own && platform?.watchesItself ? await exec(call2.name, call2.args) : await runToolWithWatch(exec, watch, signal, call2.name, call2.args, own ? platform?.interruptible : void 0);
     const surfaceCap = own ? platform?.resultCap?.(state.model.model) : void 0;
-    const capped = capToolResult(call2.name, data, surfaceCap ?? resultCapFor(call2.name, ports.model, state.model.model));
+    const capped = capToolResult(call2.name, data, surfaceCap ?? resultCapFor(call2.name, ports.model, state.model.model, data));
     const failed4 = box.failed === true || !own && !!capped && capped.ok === false && capped.skipped !== true;
     const dispatched = { data: capped, ...box.control ? { control: box.control } : {}, ...failed4 ? { isError: true } : {} };
     if (box.kind) callKinds.set(dispatched, box.kind);
@@ -16764,8 +16802,9 @@ async function recordCodeChangeTicket(serverChatId, c, req, phase) {
   const files = c.touchedFiles.filter((f) => !known.has(f)).slice(0, 50);
   if (phase === "settle" && c.deltaTicketId != null && files.length === 0) return;
   const attachTo = c.deltaTicketId;
+  if (files.length === 0 && attachTo == null) return;
   const source = serverChatId != null ? `Brain chat #${serverChatId}` : "a local editor chat";
-  const summary = files.length ? `Code change (${files.length} file${files.length === 1 ? "" : "s"}) from ${source}` : `Code change from ${source}`;
+  const summary = `Code change (${files.length} file${files.length === 1 ? "" : "s"}) from ${source}`;
   const toolStart = nowMs2();
   const args = {
     projectId: req.projectId,
@@ -17228,13 +17267,15 @@ function isDelegationTool(name) {
 function codeChangesOf(name, args, out) {
   if (isCodeChangeTool(name)) {
     if (isFailedToolResult(out)) return null;
-    const file = codeChangeFile(args);
-    return file ? [file] : [];
+    const files = codeChangeFiles(args);
+    const real = files.filter((f) => !isScratchScriptPath(f));
+    if (files.length > 0 && real.length === 0) return null;
+    return real;
   }
   if (isDelegationTool(name)) {
     const files = out?.changedFiles;
     if (!Array.isArray(files)) return null;
-    const named = files.filter((f) => typeof f === "string" && f.trim().length > 0);
+    const named = files.filter((f) => typeof f === "string" && f.trim().length > 0 && !isScratchScriptPath(f));
     return named.length ? named : null;
   }
   return null;
@@ -23428,53 +23469,104 @@ function parseResumeState(value) {
   return { ...ask2 ? { ask: ask2 } : {}, ...plan ? { plan } : {}, ...files ? { files } : {}, ...steps ? { steps } : {} };
 }
 
+// src/payloadPriority.ts
+var MUTATING_COMMAND = new RegExp(
+  [
+    String.raw`\bgit\s+(?:commit|push|apply|merge|rebase|cherry-pick|am|reset|checkout|switch|add|rm|mv|tag|stash|restore)\b`,
+    String.raw`(?:^|[\s;&|$])(?:rm|mv|cp|mkdir|touch|tee|patch|chmod|ln)\s`,
+    String.raw`\bsed\s+-i\b`,
+    String.raw`\b(?:npm|pnpm|yarn|bun)\s+(?:i|install|add|remove|uninstall|version|publish)\b`,
+    String.raw`[^\d&]>>?\s*(?!&|\s*/dev/null)[\w./~"'-]`
+  ].join("|")
+);
+var CHANGE_ARGS = /"(?:old_string|new_string|content|patch|diff|edits|replacement)"\s*:/;
+var DIFF_OUTPUT = /^diff --git |^@@ -\d+(?:,\d+)? \+\d+/m;
+var ERROR_RESULT = /"ok"\s*:\s*false|"isError"\s*:\s*true|"error"\s*:\s*"[^"]/;
+var FAILED_EXIT_LABEL = /\(exit (?!0\))/;
+var SHIP_OUTPUT = /^\[[\w./-]+ [0-9a-f]{7,}\]|^\s*[0-9a-f]{7,}\.\.[0-9a-f]{7,}\s+\S+\s+->\s+\S+/m;
+function payloadPriority(label, payload) {
+  if (FAILED_EXIT_LABEL.test(label)) return "high";
+  if (/^command$/i.test(label.trim()) && MUTATING_COMMAND.test(payload)) return "high";
+  if (CHANGE_ARGS.test(payload) || DIFF_OUTPUT.test(payload) || SHIP_OUTPUT.test(payload) || ERROR_RESULT.test(payload)) return "high";
+  return "normal";
+}
+
 // src/transcriptBudget.ts
 var DEFAULT_MIN_PAYLOAD = 240;
+var DEFAULT_HIGH_PRIORITY_RESERVE = 0.3;
+var TINY_REPEAT_CHARS = 160;
 function createPayloadBudget(opts) {
   const minPayload = Math.min(opts.minPayload ?? DEFAULT_MIN_PAYLOAD, opts.perPayload);
-  let remaining = Math.max(0, opts.total);
+  const total = Math.max(0, opts.total);
+  const share = Math.min(1, Math.max(0, opts.highPriorityReserve ?? DEFAULT_HIGH_PRIORITY_RESERVE));
+  const demandDeclared = opts.highPriorityDemand != null;
+  const demand = demandDeclared ? Math.max(0, opts.highPriorityDemand) : Number.POSITIVE_INFINITY;
+  let tailLeft = Math.min(total, Math.max(0, opts.tailReserve ?? 0));
+  let held = Math.min(Math.floor((total - tailLeft) * share), demand);
+  let remaining = total;
   let spent = 0;
   let trimmed = 0;
   let deduped = 0;
   let dedupedChars = 0;
+  let tinyRepeats = 0;
   const seen = /* @__PURE__ */ new Map();
   let ordinal = 0;
-  return {
-    cap(payload, label, maxChars) {
-      if (!payload) return payload;
-      const ceiling = maxChars != null && maxChars > 0 ? maxChars : opts.perPayload;
-      const floor = Math.min(minPayload, ceiling);
-      ordinal += 1;
-      const prior = seen.get(payload);
-      if (prior) {
-        deduped += 1;
-        dedupedChars += payload.length;
-        return `\u2026(identical to the ${ordinalWord(prior.ordinal)} payload in this report \u2014 ${prior.label}, ${formatCount(payload.length)} chars. Repeated verbatim; not reprinted.)`;
-      }
-      seen.set(payload, { ordinal, label });
-      const cap = Math.max(floor, Math.min(ceiling, remaining));
-      if (payload.length <= cap) {
-        remaining -= payload.length;
-        spent += payload.length;
+  const charge = (chars, high, tail) => {
+    remaining -= chars;
+    spent += chars;
+    if (tail) tailLeft = Math.max(0, tailLeft - chars);
+    held = Math.max(0, Math.min(held - (high ? chars : 0), remaining - tailLeft));
+  };
+  const cap = (payload, label, maxChars, priority) => {
+    if (!payload) return payload;
+    const ceiling = maxChars != null && maxChars > 0 ? maxChars : opts.perPayload;
+    const floor = Math.min(minPayload, ceiling);
+    ordinal += 1;
+    const prior = seen.get(payload);
+    if (prior) {
+      if (payload.length <= TINY_REPEAT_CHARS) {
+        tinyRepeats += 1;
         return payload;
       }
-      if (remaining < floor) {
-        trimmed += 1;
-        return `\u2026(${formatCount(payload.length)} chars omitted \u2014 the report hit its size budget. The full result is on the live timeline.)`;
-      }
+      deduped += 1;
+      dedupedChars += payload.length;
+      return `\u2026(identical to the ${ordinalWord(prior.ordinal)} payload in this report \u2014 ${prior.label}, ${formatCount(payload.length)} chars. Repeated verbatim; not reprinted.)`;
+    }
+    seen.set(payload, { ordinal, label });
+    const tail = priority === "tail";
+    const high = tail || (priority ?? payloadPriority(label, payload)) === "high";
+    const room = tail ? remaining : remaining - tailLeft;
+    const available = high ? Math.max(0, room) : Math.max(0, room - held);
+    const capChars = Math.max(floor, Math.min(ceiling, available));
+    if (payload.length <= capChars) {
+      if (high || payload.length <= available) charge(payload.length, high, tail);
+      return payload;
+    }
+    if (room < floor) {
       trimmed += 1;
-      remaining -= cap;
-      spent += cap;
-      return `${payload.slice(0, cap)}
-\u2026(+${formatCount(payload.length - cap)} chars truncated \u2014 full result is on the live timeline)`;
+      return `\u2026(${formatCount(payload.length)} chars omitted \u2014 the report hit its size budget. The full result is on the live timeline.)`;
+    }
+    if (!high && available < floor && demandDeclared) {
+      trimmed += 1;
+      return `\u2026(${formatCount(payload.length)} chars omitted \u2014 the report hit its size budget; the remaining room is held for the changes, errors and replies still to come. The full result is on the live timeline.)`;
+    }
+    trimmed += 1;
+    charge(capChars, high, tail);
+    return `${payload.slice(0, capChars)}
+\u2026(+${formatCount(payload.length - capChars)} chars truncated \u2014 full result is on the live timeline)`;
+  };
+  return {
+    cap,
+    fence(label, payload, maxChars, priority) {
+      return payload ? [`${label}:`, "```", cap(payload, label, maxChars, priority), "```"] : [];
     },
     stats() {
-      return { spent, trimmed, deduped, dedupedChars };
+      return { spent, trimmed, deduped, dedupedChars, tinyRepeats };
     },
     note() {
       if (trimmed === 0 && deduped === 0) return null;
       const parts = [];
-      if (trimmed) parts.push(`${trimmed} oversized payload(s) shortened`);
+      if (trimmed) parts.push(`${trimmed} oversized payload(s) shortened (changes, diffs, errors and the conversation kept ahead of reads)`);
       if (deduped) {
         parts.push(
           `${deduped} payload(s) were byte-identical repeats and are shown as back references (${(dedupedChars / 1024).toFixed(1)} KB of repetition \u2014 itself a signal, see the Progress lines)`
@@ -24073,7 +24165,12 @@ function diagnosticsSignals(d) {
     out.push("\u2139\uFE0F No agents are invited into this chat (chats.list_agents is empty), so dispatched agents post nothing back here.");
   }
   const runs = d.runs;
-  if (runs && agentCount > 0 && runs.linkedRunnableTickets > 0 && runs.runs.length === 0) {
+  const selfServed = (d.sessionShipped ?? 0) > 0;
+  if (runs && agentCount > 0 && runs.linkedRunnableTickets > 0 && runs.runs.length === 0 && selfServed) {
+    out.push(
+      `\u2139\uFE0F Self-served: no agent was dispatched for this chat's ${runs.linkedRunnableTickets} runnable ticket(s) because the session did the work itself (${d.sessionShipped} successful write/commit/push call(s)).`
+    );
+  } else if (runs && agentCount > 0 && runs.linkedRunnableTickets > 0 && runs.runs.length === 0) {
     const names = (d.agents ?? []).map((a) => a.name?.trim() || a.agentRef).join(", ");
     out.push(
       `\u26A0\uFE0F ${agentCount} agent(s) are in this chat (${names}) and ZERO runs have ever been started against its ${runs.linkedRunnableTickets} runnable ticket(s). The work was filed and staffed on paper; nobody was dispatched. Anything that got done was done by this session itself. Start one with the \u25B6 control on a linked ticket, or ask in-chat for the agent to be dispatched.`
@@ -24144,12 +24241,23 @@ function diagnosticsSignals(d) {
   if (acct) {
     const free = acct.plan === "free";
     const noCard = acct.billingStatus === "none" || acct.billingStatus == null;
+    const premium = acct.canUsePremiumModels === true;
+    const mixed = acct.servedBy === "mixed";
+    const ownFunded = acct.servedBy === "own" || !mixed && (acct.modelFunding ?? "").startsWith("byo:");
     if (free && noCard) {
+      const expect = ["the smaller monthly token allowance"];
+      if (!premium) expect.push("no premium/frontier models");
+      if (!ownFunded && !mixed) expect.push("turns funded by the shared free pool");
+      const facts = [
+        ...premium ? ["premium/frontier models ARE entitled on this tenant"] : [],
+        ...ownFunded ? ["this chat's turns were paid by your own connected provider account, not the shared pool"] : [],
+        ...mixed ? ["this chat's turns were served by more than one account (some by your own key, some by the shared pool)"] : []
+      ];
       out.push(
-        "\u2139\uFE0F Free plan with NO payment method on file. Expect the smaller monthly token allowance, no premium/frontier models, and turns funded by the shared free pool \u2014 none of this is a fault. Adding a card (or connecting your own provider account) lifts all three."
+        `\u2139\uFE0F Free plan with NO payment method on file. Expect ${expect.length > 1 ? `${expect.slice(0, -1).join(", ")}, and ${expect[expect.length - 1]}` : expect[0]} \u2014 none of this is a fault.` + (facts.length ? ` (${facts.join("; ")}.)` : "") + ` Adding a card (or connecting your own provider account) lifts ${expect.length === 3 ? "all three" : "these limits"}.`
       );
     } else if (free) {
-      out.push("\u2139\uFE0F Free plan \u2014 premium/frontier models are not entitled and the monthly token allowance is the free tier's.");
+      out.push(`\u2139\uFE0F Free plan \u2014 ${premium ? "premium/frontier models ARE entitled on this tenant" : "premium/frontier models are not entitled"} and the monthly token allowance is the free tier's.`);
     }
     if (acct.billingStatus === "past_due") {
       out.push("\u26A0\uFE0F Billing status is past_due \u2014 plan entitlements may be suspended until payment succeeds, which reads as sudden model/quota downgrade.");
@@ -24169,7 +24277,7 @@ function diagnosticsSignals(d) {
         `\u26A0\uFE0F Model "${acct.model}" is a premium/metered model but this plan is NOT entitled to premium models \u2014 the gateway rejects it (402) or falls back to the plan pool, which is why answers look weaker than the picked model implies.`
       );
     }
-    if ((acct.byoProviders?.length ?? 0) === 0 && free) {
+    if ((acct.byoProviders?.length ?? 0) === 0 && free && !ownFunded) {
       out.push("\u2139\uFE0F No bring-your-own provider accounts connected, so every turn spends the plan allowance above. Connecting your own Claude/OpenAI account makes turns $0 against the plan.");
     }
   }
@@ -24212,12 +24320,17 @@ function shortTime(iso) {
   if (!iso) return "\u2014";
   return iso.length >= 16 ? `${iso.slice(0, 10)} ${iso.slice(11, 16)}` : iso;
 }
-function runHistoryLines(runs) {
+function runHistoryLines(runs, sessionShipped) {
   if (!runs) {
     return [`- Execution history: not gathered (this surface did not read the chat's runs \u2014 absent is NOT the same as "nothing ran")`];
   }
   if (runs.linkedRunnableTickets === 0) {
     return ["- Execution history: no runnable ticket (task/epic/gap) is linked to this chat, so there is nothing here that could have been run."];
+  }
+  if (runs.runs.length === 0 && sessionShipped > 0) {
+    return [
+      `- Execution history: self-served \u2014 no cloud run against ${runs.linkedRunnableTickets} linked runnable ticket(s); this session changed the code itself (${sessionShipped} successful write/commit/push call(s)), so no dispatch was needed.`
+    ];
   }
   if (runs.runs.length === 0) {
     return [
@@ -24385,7 +24498,7 @@ function formatChatDiagnostics(d) {
   } else {
     lines.push("- Linked tickets (0)");
   }
-  lines.push(...runHistoryLines(d.runs));
+  lines.push(...runHistoryLines(d.runs, d.sessionShipped ?? 0));
   const signals = diagnosticsSignals(d);
   if (signals.length) {
     lines.push("", "### Signals");
@@ -24404,7 +24517,15 @@ var excerpt = (v) => {
 function stateOf(c) {
   if (c.running) return "running";
   if (c.error) return "failed";
-  return c.lastMessage?.trim() ? "done" : "ended without a report";
+  const last = c.lastMessage?.trim() ?? "";
+  if (!last) return "ended without a report";
+  if (parseAskUser(liftProseAskUser(last))) {
+    return "ENDED ON A QUESTION \u2014 it asked the user something, and no one can answer a sub-agent; its work is unfinished";
+  }
+  if (announcesDeliverable(stripAskUser(last))) {
+    return "ENDED WITHOUT ITS DELIVERABLE \u2014 its last reply announced the report/output and the run stopped before producing it";
+  }
+  return "done";
 }
 function spanOf(events) {
   const times = events.map((e) => Date.parse(e.ts)).filter(Number.isFinite);
@@ -24423,11 +24544,12 @@ function formatSubagentDiagnostics(children, capturedAtMs) {
     for (const e of tools) for (const f of codeChangesOf(e.label, e.args, e.result) ?? []) files.add(f);
     const models = modelsUsedInTrace(c.events);
     const span = spanOf(c.events);
+    const state = stateOf(c);
     lines.push(
       `\u2022 ${c.handle} ${c.name} \u2014 "${c.label}" \xB7 sub-agent of ${c.owner}${c.depth > 1 ? ` (depth ${c.depth})` : ""}${c.ticket ? ` \xB7 ticket ${c.ticket}` : ""}`
     );
     lines.push(
-      `  State: ${stateOf(c)} \xB7 Turns: ${c.events.filter((e) => e.category === "llm").length} \xB7 Tool calls: ${tools.length} \xB7 Failed: ${failures.length}${span ? ` \xB7 ${span}` : ""}`
+      `  State: ${state} \xB7 Turns: ${c.events.filter((e) => e.category === "llm").length} \xB7 Tool calls: ${tools.length} \xB7 Failed: ${failures.length}${span ? ` \xB7 ${span}` : ""}`
     );
     if (models.length) lines.push(`  Models: ${models.join(", ")}`);
     if (c.running && c.activity) lines.push(`  Now: ${describeLiveStep(c.activity, capturedAtMs)}`);
@@ -24435,12 +24557,21 @@ function formatSubagentDiagnostics(children, capturedAtMs) {
     for (const f of failures.slice(0, MAX_FAILURES)) lines.push(`  Failed step: ${f.label} \u2014 ${excerpt(f.result)}`);
     if (failures.length > MAX_FAILURES) lines.push(`  \u2026and ${failures.length - MAX_FAILURES} more failed step(s)`);
     if (c.error) lines.push(`  Error: ${excerpt(c.error)}`);
-    if (c.lastMessage?.trim()) lines.push(`  ${c.running ? "Last message" : "Report"}: ${excerpt(c.lastMessage)}`);
+    if (c.lastMessage?.trim()) lines.push(`  ${state === "done" ? "Report" : "Last message"}: ${excerpt(c.lastMessage)}`);
   }
   return lines;
 }
 
 // src/gatherChatDiagnostics.ts
+function accountsAcrossTurns(events) {
+  const seen = /* @__PURE__ */ new Set();
+  for (const ev of events) {
+    if (ev.category !== "llm") continue;
+    const a = accountUsedInTrace([ev]);
+    if (a) seen.add(a);
+  }
+  return seen.size === 0 ? null : seen.size === 1 ? [...seen][0] : "mixed";
+}
 function safely(read, fallback) {
   if (!read) return Promise.resolve(fallback);
   try {
@@ -24481,6 +24612,9 @@ async function gatherChatDiagnostics(src) {
     }
   }
   const exposure = src.trace ? toolExposureInTrace([...src.trace]) : null;
+  const merged = traceWithPersistedSteps(msgs, src.trace ? [...src.trace] : []);
+  const sessionShipped = merged.length ? sessionShippedInTrace(merged) : null;
+  const servedBy = accountsAcrossTurns(merged);
   const publishHold2 = publishHoldFromPersonTurns(
     msgs.filter((m) => m.role === "user" && typeof m.content === "string" && m.content.trim()).map((m) => ({ text: m.content.trim() }))
   );
@@ -24501,6 +24635,7 @@ async function gatherChatDiagnostics(src) {
     ...src.modelSurface?.canUsePremiumModels != null ? { canUsePremiumModels: src.modelSurface.canUsePremiumModels } : {},
     ...src.modelSurface?.data ? { planModelCount: src.modelSurface.data.length } : {},
     byoProviders: src.modelSurface?.byo?.providers ?? [],
+    servedBy,
     extensionVersion: src.uiVersion ?? null,
     baseUrl: src.baseUrl ?? null
   };
@@ -24536,6 +24671,7 @@ async function gatherChatDiagnostics(src) {
       ...a.builtinKind != null ? { builtinKind: a.builtinKind } : {}
     })),
     runs,
+    sessionShipped,
     tickets: tickets.map((tk) => ({ kind: tk.kind, ref: tk.ref, label: tk.label, linkType: tk.linkType, status: tk.status })),
     account,
     spend: src.spend ?? null,
@@ -25493,6 +25629,7 @@ export {
   DEFAULT_AGENT_MODEL_SENTINEL,
   DEFAULT_CHAT_ACTIVITY_LABELS,
   DEFAULT_CHAT_TITLE,
+  DEFAULT_HIGH_PRIORITY_RESERVE,
   DEFAULT_MODEL_CHOICE_LABELS,
   DEFAULT_MODEL_FALLBACK_TEMPLATE,
   DEFAULT_MODEL_IDENTITY,
@@ -25833,6 +25970,7 @@ export {
   parseRoleGateRefusal,
   parseStepMessage,
   parseSubagentOrigin,
+  payloadPriority,
   perMillionUsd,
   personaAgentOf,
   personaModalityOf,

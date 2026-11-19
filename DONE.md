@@ -1,3 +1,46 @@
+## ✅ RESOLVED 2026-11-19: Agent pipeline — hand-offs, run guards, ratchet integrity, ticket reads, diagnostics (VS Code chats #273, #275)
+
+Triage of two VSIX runs found:
+- a `--update` that grandfathered about 11 new react-hooks warnings;
+- a plan-role model that mutated files;
+- scratch scripts written into the repo, and a full guard suite run twice;
+- sub-agents that defaulted to the `code` role and hopped models;
+- sub-agents that re-derived their owner's facts, ended on `ask-user` and were marked done, and lost their data;
+- a run that promised its report and stopped;
+- 13 status-guessing probes, and 5-row pages;
+- a ticket opened before any real change;
+- a diagnostics report with misleading verdicts and a budget that dropped mutations.
+
+The fixes:
+- **0188ec1ea (frontend):** react-hooks `--update` is lower-only (`--allow-raise "<reason>"` to raise). The baseline is restored and the grandfathered warnings are fixed. The silent catch in ImplicatedTicketsSection now reports.
+- **2c6a51a2d (run-guards, agent-run, VS Code):**
+  - Announced-deliverable steer at settle.
+  - A plan turn's mutating `run_command` is re-asked on code (`mutatingShell`).
+  - The `git_commit`/`git_push` baseline-raise gate (`baseline-raise:` to override).
+  - `$BF_SCRATCH_DIR` for throwaway scripts.
+  - An advisory against repeating a full-suite command.
+- **fc939c496 (sub-agents):**
+  - `role` is required.
+  - Per-child model stickiness, released after 2 misses.
+  - An owner hand-off block and a coverage/data-file result packet, both redacted and bounded.
+  - An ask-user or unkept-claim reply is incomplete and gets one report turn; settle always completes.
+  - One `ignoredCacheDir` helper.
+- **4d5313506 (diagnostics):**
+  - A recovered-failure healthy verdict, matched by target.
+  - No verdict mid-run.
+  - Latest-run labels and chat totals.
+  - Mutation-first budget with a tail reserve.
+  - `self-served` staffing.
+  - A data-derived plan signal and sub-agent end-state flags.
+  - `brainTriage.ts` split.
+- **babb3a0cc (tickets):**
+  - `tasks.census`.
+  - `tasks.list` index pages of 300 rows under a 24K cap scoped to tasks.list's format.
+  - The agent-run cap is result-aware.
+  - `from_delta` refuses a fileless delta.
+  - One `isScratchScriptPath`.
+- **Release:** VSIX 2026.10.193, api 2026.10.102, brain-embedded 2026.10.91, brain-ui 2026.10.34, frontend 2026.10.103.
+
 ## ✅ RESOLVED 2026-11-18: PRD 31 §W10 Security Shield phases 1–4 (browser run tier)
 
 These close the 2026-11-18 browser-run-tier findings, which are tracked out of source control.

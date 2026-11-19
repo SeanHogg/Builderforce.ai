@@ -1013,20 +1013,22 @@ function stableStringify(value) {
 // ../packages/agent-tools/src/modelRoles.ts
 var MODEL_ROLES = ["plan", "code", "review", "verify", "explore", "chat", "utility"];
 var MODEL_ROLE_DESCRIPTIONS = {
-  plan: "Deciding an approach or breaking work down \u2014 no code written yet.",
-  code: "Writing or editing code. The default when no role is named.",
-  review: "Judging work \u2014 reviewing a diff or a plan for correctness and design.",
+  plan: "Deciding \u2014 choosing an approach, breaking work down, sequencing it. Produces a decision, not code.",
+  code: "Writing or editing code or files. Only when the child must CHANGE something; reading and reporting is never code.",
+  review: "Judging \u2014 auditing, comparing, aligning or reconciling one thing against another (tickets vs roadmap, a diff vs its spec, a plan vs the code) and saying what is wrong or missing.",
   verify: "Mechanical checks \u2014 building, compiling, running tests and reading their output.",
-  explore: "Investigation \u2014 locating, searching, summarising.",
+  explore: "Locating and summarising \u2014 finding where something lives, bulk-reading pages or files and reporting what is there, without judging it.",
   chat: "A conversational answer with no task-shaped work behind it.",
   utility: "Small, mechanical, low-stakes work \u2014 formatting, extraction, a lookup."
 };
+var MISSING_ROLE_ERROR = `role is required \u2014 say what kind of work the child does so it is routed to a model suited to it: ${MODEL_ROLES.join(" | ")}. Auditing, comparing or aligning is review; locating or bulk-reading and summarising is explore; deciding is plan; code is only for a child that must change files.`;
 var ROLE_SET = new Set(MODEL_ROLES);
 function isModelRole(value) {
   return typeof value === "string" && ROLE_SET.has(value);
 }
-function delegationRole(raw) {
-  return isModelRole(raw) ? raw : "code";
+function requiredDelegationRole(raw) {
+  const role = typeof raw === "string" ? raw.trim().toLowerCase() : raw;
+  return isModelRole(role) ? role : null;
 }
 
 // ../packages/agent-tools/src/callShape.ts
@@ -5763,9 +5765,53 @@ var SUBAGENT_CONTROL_TOOLS = [waitAgentsTool, messageAgentTool, stopAgentTool];
 
 // ../packages/agent-tools/src/subagent-tools.ts
 var ROLE_ENUM_DESCRIPTION = MODEL_ROLES.map((role) => `${role} \u2014 ${MODEL_ROLE_DESCRIPTIONS[role]}`).join(" \xB7 ");
+var HANDOFF_NOTE = "The child does not see this conversation. Put the job in `task` and every fact you already established (counts, conclusions, what you ruled out, pages or files already read) in `context` \u2014 the child starts from it instead of re-deriving it; where the host keeps your run record it also appends the files, windows and data calls you already made. Its report carries its coverage (what it read, with offsets) and, where the host keeps them, the path of a file holding the data it collected \u2014 read that file instead of fetching the same pages again.";
+var HANDOFF_CHARS = 2e3;
+var HANDOFF_HEAD = "Already established by your owner \u2014 do not re-derive:";
+function ownerHandoffBlock(input, maxChars = HANDOFF_CHARS) {
+  const context = (input.context ?? "").trim();
+  const established = (input.established ?? []).map((l) => l.trim()).filter(Boolean);
+  if (!context && established.length === 0) return "";
+  const lines = [HANDOFF_HEAD];
+  let used = HANDOFF_HEAD.length;
+  if (context) {
+    const room = Math.max(0, maxChars - used - 1);
+    const clipped = context.length > room ? `${context.slice(0, Math.max(0, room - 1))}\u2026` : context;
+    lines.push(clipped);
+    used += clipped.length + 1;
+  }
+  if (established.length) {
+    const head = "Your owner already made these calls; their conclusions are stated above. Re-read only what you need verbatim:";
+    if (used + head.length + 1 < maxChars) {
+      lines.push(head);
+      used += head.length + 1;
+      let shown = 0;
+      for (const line of established) {
+        const row = `- ${line}`;
+        const rest = established.length - shown - 1;
+        const tail = rest > 0 ? `- \u2026 and ${rest} more` : "";
+        if (used + row.length + 1 + (rest > 0 ? tail.length + 1 : 0) > maxChars) break;
+        lines.push(row);
+        used += row.length + 1;
+        shown += 1;
+      }
+      if (shown < established.length) lines.push(`- \u2026 and ${established.length - shown} more`);
+    }
+  }
+  return lines.join("\n");
+}
+function briefWithHandoff(task, block) {
+  return block ? `${task}
+
+${block}` : task;
+}
+var CONTEXT_PARAM = {
+  type: "string",
+  description: "Facts you have ALREADY established that the child must not re-derive \u2014 counts, conclusions, what you ruled out, which pages/files/windows you already read and what they held. Shown to the child first under 'Already established by your owner'."
+};
 var spawnAgentTool = withDelegationNote(defineTool({
   name: "spawn_agent",
-  description: "Delegate a self-contained sub-task to a child agent that works in its OWN context and reports back when it is done. Use it when finding something out would take many turns you do not want to carry \u2014 locating where a behaviour lives across an unfamiliar tree, checking whether a pattern is used anywhere else, summarising a large file you only need one fact from. The child sees NOTHING of this conversation, so `task` must state everything it needs to know, and it answers in prose \u2014 it cannot hand you files or tool output. Do NOT delegate work you can do in a turn or two. The child is a clone of you: it holds every tool you hold and carries its slice out end to end \u2014 investigating, editing, running commands, recording the work. You remain accountable for what ships, so check what it reports. " + LIVE_DELEGATION_NOTE,
+  description: "Delegate a self-contained sub-task to a child agent that works in its OWN context and reports back when it is done. Use it when finding something out would take many turns you do not want to carry \u2014 locating where a behaviour lives across an unfamiliar tree, checking whether a pattern is used anywhere else, summarising a large file you only need one fact from. " + HANDOFF_NOTE + " Name its `role` \u2014 it decides which model does the work. Do NOT delegate work you can do in a turn or two. The child is a clone of you: it holds every tool you hold and carries its slice out end to end \u2014 investigating, editing, running commands, recording the work. You remain accountable for what ships, so check what it reports. " + LIVE_DELEGATION_NOTE,
   parameters: {
     type: "object",
     properties: {
@@ -5775,19 +5821,20 @@ var spawnAgentTool = withDelegationNote(defineTool({
       },
       task: {
         type: "string",
-        description: "The child's complete brief: what to find out or do, where to look, and exactly what to report back. Assume it knows nothing about the ticket beyond what you write here."
+        description: "The child's job: what to find out or do, where to look, and exactly what to report back. Facts you already established go in `context`."
       },
+      context: CONTEXT_PARAM,
       role: {
         type: "string",
         enum: [...MODEL_ROLES],
-        description: `What kind of call the child's turns are \u2014 lets the surface pick a model suited to the work rather than reusing yours. Defaults to 'code'. ${ROLE_ENUM_DESCRIPTION}`
+        description: `REQUIRED. What kind of work the child's turns are \u2014 the surface routes them to a model suited to it, and the child keeps that model for its whole life. ${ROLE_ENUM_DESCRIPTION}`
       },
       as_agent: {
         type: "string",
         description: "Run the child AS one of the workspace's agents \u2014 its id or name (e.g. 'Ada'). The child adopts that agent's role, bio, skills and personality so the delegated slice is done in that agent's voice and expertise. Prefer an agent already in this chat (builtin_chats_list_agents) or from builtin_cloud_agents_list_mine. Optional: when no teammate's role fits the slice, omit it and the child runs as a plain sub-agent."
       }
     },
-    required: ["label", "task"]
+    required: ["label", "task", "role"]
   },
   requires: ["orchestrate"],
   async execute(args, ctx) {
@@ -5795,11 +5842,13 @@ var spawnAgentTool = withDelegationNote(defineTool({
     const label = str5(args.label);
     const task = str5(args.task);
     if (!task) return { data: { ok: false, error: "task is required \u2014 the child sees none of your conversation" } };
-    const role = delegationRole(args.role);
+    const role = requiredDelegationRole(args.role);
+    if (!role) return { data: { ok: false, error: MISSING_ROLE_ERROR } };
     const asAgent = str5(args.as_agent);
     const r = await ctx.caps.orchestration.spawn({
       label: label || task.slice(0, 60),
-      task,
+      // The cloud surface keeps no owner run record here: the hand-off is the owner's `context`.
+      task: briefWithHandoff(task, ownerHandoffBlock({ context: str5(args.context) })),
       role,
       ...asAgent ? { asAgent } : {}
     });
@@ -5820,13 +5869,16 @@ function parseWorkstreams(raw) {
     const w = item ?? {};
     const task = str5(w.task);
     if (!task) return `workstream ${i + 1} has no task \u2014 each child sees none of your conversation`;
+    const role = requiredDelegationRole(w.role);
+    if (!role) return `workstream ${i + 1}: ${MISSING_ROLE_ERROR}`;
     const ticket = str5(w.ticket);
-    const role = str5(w.role);
+    const context = str5(w.context);
     out.push({
       label: str5(w.label) || task.slice(0, 60),
       task,
       ...ticket ? { ticket } : {},
-      ...role ? { role } : {},
+      role,
+      ...context ? { context } : {},
       asAgent: str5(w.as_agent)
     });
   }
@@ -5834,7 +5886,7 @@ function parseWorkstreams(raw) {
 }
 var spawnAgentsTool = withDelegationNote(defineTool({
   name: SPAWN_AGENTS_TOOL,
-  description: `Run SEVERAL independent workstreams side by side \u2014 up to ${MAX_WORKSTREAMS} child agents at once, each in its own context, each reporting back to the chat. Use it when the request splits into slices that do not depend on each other: a PRD's workstreams, one change per package or feature. Each child is a clone of you with every tool you hold, and carries its slice out end to end. Give slices that do not touch the same files, so they do not overwrite each other; once their reports are in, check the combined result and report per workstream. File one ticket per workstream first and pass its id as \`ticket\`. Each child sees nothing of this conversation, so every \`task\` must stand alone: what to change, where, and how to know it is done. ` + LIVE_DELEGATION_NOTE,
+  description: `Run SEVERAL independent workstreams side by side \u2014 up to ${MAX_WORKSTREAMS} child agents at once, each in its own context, each reporting back to the chat. Use it when the request splits into slices that do not depend on each other: a PRD's workstreams, one change per package or feature. Each child is a clone of you with every tool you hold, and carries its slice out end to end. Give slices that do not touch the same files, so they do not overwrite each other; once their reports are in, check the combined result and report per workstream. File one ticket per workstream first and pass its id as \`ticket\`. Every \`task\` must stand alone: what to change, where, and how to know it is done; name each workstream's \`role\`. ` + HANDOFF_NOTE + " " + LIVE_DELEGATION_NOTE,
   parameters: {
     type: "object",
     properties: {
@@ -5848,11 +5900,12 @@ var spawnAgentsTool = withDelegationNote(defineTool({
           properties: {
             label: { type: "string", description: "A few words naming the workstream, e.g. 'W8: company \u2192 project'." },
             task: { type: "string", description: "The child's complete, standalone brief." },
+            context: CONTEXT_PARAM,
             ticket: { type: "string", description: "The ticket this workstream delivers, echoed in the result." },
-            role: { type: "string", enum: [...MODEL_ROLES], description: "Model role for the child. Defaults to code." },
+            role: { type: "string", enum: [...MODEL_ROLES], description: `REQUIRED. What kind of work this child does \u2014 it routes the child's model. ${ROLE_ENUM_DESCRIPTION}` },
             as_agent: { type: "string", description: "Run this workstream AS one of the workspace's agents (its name or id). Optional: omit it when no teammate's role fits, and the child runs as a plain sub-agent." }
           },
-          required: ["label", "task"]
+          required: ["label", "task", "role"]
         }
       }
     },
@@ -5868,8 +5921,8 @@ var spawnAgentsTool = withDelegationNote(defineTool({
     const outputChars = Math.floor(FANOUT_OUTPUT_CHARS / parsed.length);
     const results = await Promise.all(parsed.map((w) => ctx.caps.orchestration.spawn({
       label: w.label,
-      task: w.task,
-      role: delegationRole(w.role),
+      task: briefWithHandoff(w.task, ownerHandoffBlock({ ...w.context ? { context: w.context } : {} })),
+      role: w.role,
       outputChars,
       ...w.ticket ? { ticket: w.ticket } : {},
       ...w.asAgent ? { asAgent: w.asAgent } : {}
@@ -6929,10 +6982,129 @@ function runsCheck(command) {
   const subs = SUBCOMMAND_RUNNERS[exe];
   return !!subs && !!sub && subs.has(sub);
 }
+var SUITE_SCRIPT = /^(test|tests|lint|typecheck|type-check|check)$/i;
+var SUITE_RUNNERS = /* @__PURE__ */ new Set(["vitest", "jest", "pytest", "mocha", "playwright"]);
+var RATCHET_SCRIPT = /^check-[\w.-]*ratchet[\w.-]*\.(?:m|c)?[jt]s$/i;
+function untilPipe(tokens) {
+  const end = tokens.findIndex((t) => t === "|" || /^\d*>/.test(t) || t.startsWith("<"));
+  return end < 0 ? [...tokens] : tokens.slice(0, end);
+}
+function fullSuiteKey(command) {
+  const [exe, ...rest] = untilPipe(executableTokensOf(command));
+  if (!exe) return null;
+  const positional = rest.filter((tok) => !tok.startsWith("-"));
+  const script = positional.length === 1 ? positional[0].split(/[\\/]/).pop() ?? "" : "";
+  const sweeps = SUITE_SCRIPT.test(exe) && positional.length === 0 || SUITE_RUNNERS.has(exe) && positional.every((tok) => tok === "run") || (exe === "node" || exe === "tsx") && RATCHET_SCRIPT.test(script) && !rest.includes("--update");
+  return sweeps ? untilPipe(tokensOf(command)).join(" ") : null;
+}
 function isVcsBookkeeping(command) {
   const [exe, sub] = executableTokensOf(command);
   return exe === "git" && !!sub && VCS_BOOKKEEPING.has(sub);
 }
+
+// ../packages/run-guards/src/reverifyTracker.ts
+var MAX_REVERIFY_PATHS = 200;
+function addBounded(set, path) {
+  set.delete(path);
+  set.add(path);
+  while (set.size > MAX_REVERIFY_PATHS) {
+    const oldest = set.values().next().value;
+    if (oldest === void 0) break;
+    set.delete(oldest);
+  }
+}
+function restoreBounded(paths) {
+  return new Set((paths ?? []).slice(-MAX_REVERIFY_PATHS));
+}
+var ReverifyTracker = class {
+  writtenPaths;
+  readBackSinceWrite;
+  /** Read-only targets seen this turn, to tell an all-written re-read turn from real work. */
+  readsThisTurn = 0;
+  /** Whether every read this turn was a repeat read-back of an unchanged written path. */
+  allRepeatReadBacks = true;
+  constructor(state = {}) {
+    this.writtenPaths = restoreBounded(state.writtenPaths);
+    this.readBackSinceWrite = restoreBounded(state.readBackSinceWrite);
+  }
+  /** A call that may have changed ANY file wrote: no read-back is a look at unchanged bytes. */
+  wroteAnything() {
+    this.readBackSinceWrite.clear();
+  }
+  /** `path` was written: its next read-back inspects the edit again. */
+  wrote(path) {
+    addBounded(this.writtenPaths, path);
+    this.readBackSinceWrite.delete(path);
+  }
+  /** A successful read-only call visited `target`. */
+  read(target) {
+    this.readsThisTurn += 1;
+    if (this.writtenPaths.has(target)) {
+      if (!this.readBackSinceWrite.has(target)) this.allRepeatReadBacks = false;
+      addBounded(this.readBackSinceWrite, target);
+    } else {
+      this.allRepeatReadBacks = false;
+    }
+  }
+  /** The turn ended: how many reads it made when ALL were repeat read-backs (else 0). Starts the next turn. */
+  endTurn() {
+    const count = this.readsThisTurn > 0 && this.allRepeatReadBacks ? this.readsThisTurn : 0;
+    this.readsThisTurn = 0;
+    this.allRepeatReadBacks = true;
+    return count;
+  }
+  snapshot() {
+    return {
+      ...this.writtenPaths.size ? { writtenPaths: [...this.writtenPaths] } : {},
+      ...this.readBackSinceWrite.size ? { readBackSinceWrite: [...this.readBackSinceWrite] } : {}
+    };
+  }
+};
+
+// ../packages/run-guards/src/suiteRepeat.ts
+function targetedReverifyNote(command) {
+  return `You have now run the full suite \`${command}\` more than once. Do not re-run the whole suite to confirm a fix: re-run ONLY the checks that failed (the specific guard script, test file or package typecheck), and leave the full sweep to CI.`;
+}
+var SuiteRepeat = class {
+  run;
+  shownSuites;
+  pending;
+  constructor(state = {}) {
+    this.run = restoreBounded(state.run);
+    this.shownSuites = restoreBounded(state.shown);
+    this.pending = state.pending;
+  }
+  /** A shell command ran. */
+  ranCommand(command) {
+    const key = fullSuiteKey(command);
+    if (!key) return;
+    if (this.run.has(key) && !this.shownSuites.has(key)) this.pending ??= key;
+    addBounded(this.run, key);
+  }
+  /**
+   * The owed advisory ("" when none), marked shown — never again for that suite. The detector calls this only where
+   * the note becomes the turn's returned action; a turn that ends in a trip or another advisory leaves it owed.
+   */
+  take() {
+    const key = this.pending;
+    if (!key) return "";
+    addBounded(this.shownSuites, key);
+    this.pending = void 0;
+    return targetedReverifyNote(key);
+  }
+  snapshot() {
+    return {
+      ...this.run.size ? { run: [...this.run] } : {},
+      ...this.shownSuites.size ? { shown: [...this.shownSuites] } : {},
+      ...this.pending ? { pending: this.pending } : {}
+    };
+  }
+  /** The detector's snapshot field: `{ suites }`, or nothing when empty. */
+  snapshotField() {
+    const s = this.snapshot();
+    return Object.keys(s).length > 0 ? { suites: s } : {};
+  }
+};
 
 // ../packages/run-guards/src/multiRead.ts
 function singleReadsOf(tool, args) {
@@ -7278,6 +7450,101 @@ function shellReadAsFileRead(command, stdout) {
   return { args, result: { ok: true, path: read.path, content: body, offset: read.from, truncated: true } };
 }
 
+// ../packages/run-guards/src/mutatingShell.ts
+var FILE_WRITERS = /* @__PURE__ */ new Set([
+  "rm",
+  "rmdir",
+  "mv",
+  "cp",
+  "tee",
+  "touch",
+  "ln",
+  "truncate",
+  "unlink",
+  "install",
+  "patch",
+  // cmd.exe
+  "del",
+  "erase",
+  "move",
+  "copy",
+  "ren",
+  "rename",
+  "rd",
+  // PowerShell
+  "remove-item",
+  "move-item",
+  "copy-item",
+  "new-item",
+  "set-content",
+  "add-content",
+  "out-file",
+  "rename-item",
+  "clear-content"
+]);
+var GIT_WRITERS = /* @__PURE__ */ new Set([
+  "commit",
+  "checkout",
+  "switch",
+  "reset",
+  "restore",
+  "push",
+  "pull",
+  "rebase",
+  "merge",
+  "apply",
+  "am",
+  "cherry-pick",
+  "revert",
+  "clean",
+  "rm",
+  "mv",
+  "stash"
+]);
+var INLINE_FLAGS = {
+  node: ["-e", "--eval", "-p", "--print"],
+  python: ["-c"],
+  python3: ["-c"],
+  py: ["-c"]
+};
+var WRITE_API = /\b(?:writeFile(?:Sync)?|appendFile(?:Sync)?|rmSync|rmdirSync|unlink(?:Sync)?|rename(?:Sync)?|mkdirSync|copyFile(?:Sync)?|cpSync|createWriteStream|truncate(?:Sync)?|write_text|write_bytes|os\.remove|os\.unlink|os\.rename|shutil\.\w+)\b|\bopen\([^)]*,\s*['"][wax]\+?b?['"]/;
+var REGENERATING = /^--(?:update|fix|write|updateSnapshot|update-snapshots?)(?:=.*)?$/;
+function gitWrites(args) {
+  const { sub, rest } = gitSubcommand(args);
+  if (!sub || !GIT_WRITERS.has(sub)) return false;
+  return !(sub === "stash" && ["list", "show"].includes(rest.find((a) => !a.startsWith("-")) ?? ""));
+}
+function segmentWrites(segment, depth) {
+  if (depth > 4) return false;
+  if (substitutions(segment).some((body) => commandWrites(body, depth + 1))) return true;
+  const flat = segment.replace(/\$\((?:[^()]|\([^()]*\))*\)/g, "X");
+  if (writesViaRedirect(flat)) return true;
+  const [rawProgram, ...args] = commandWords(shellTokens(flat));
+  if (rawProgram === void 0) return false;
+  const program = (rawProgram.split(/[\\/]/).pop() ?? rawProgram).toLowerCase().replace(/\.exe$/, "");
+  if (FILE_WRITERS.has(program)) return true;
+  if (program === "git") return gitWrites(args);
+  if (program === "sed" && args.some((a) => a.startsWith("-i") || a.startsWith("--in-place"))) return true;
+  if (program === "perl" && args.some((a) => /^-[a-z]*i/.test(a))) return true;
+  if (args.some((a) => REGENERATING.test(a))) return true;
+  if (args.includes("-u") && runsCheck(flat)) return true;
+  const inline = INLINE_FLAGS[program];
+  if (inline && args.some((a) => inline.includes(a)) && WRITE_API.test(flat)) return true;
+  return false;
+}
+function commandWrites(command, depth) {
+  const segments = splitShellSegments(command);
+  if (!segments) return segmentWrites(command, depth);
+  return segments.some((s) => segmentWrites(s, depth));
+}
+function isMutatingShellCommand(command) {
+  const trimmed = command.trim();
+  return trimmed !== "" && commandWrites(trimmed, 0);
+}
+function isMutatingShellCall(tool, args) {
+  return tool === "run_command" && isMutatingShellCommand(shellCommandOf(args));
+}
+
 // ../packages/run-guards/src/shellPrint.ts
 function cleanPrint(args, out) {
   if (!args || typeof args !== "object" || !out || typeof out !== "object" || Array.isArray(out)) return null;
@@ -7611,6 +7878,26 @@ function claimsReady(text) {
   if (!text) return false;
   return ownWords(text).toLowerCase().split(/(?<=[.!?])\s+|\n+/).some(sentenceClaims);
 }
+var DELIVERABLE_PROMISE = /\b(?:next,?\s+|now,?\s+|then,?\s+)?(?:i'll|i\s+will|i\s+am\s+going\s+to|i'm\s+going\s+to|i\s+am\s+about\s+to|i'm\s+about\s+to|let\s+me|let's)\s+(?:now\s+|next\s+|then\s+|go\s+ahead\s+and\s+)?(?:write|draft|produce|compose|prepare|put\s+together|assemble|deliver|create|implement|build)\b/;
+var OFFER2 = /\b(?:if\s+you|would\s+you\s+like|do\s+you\s+want|want\s+me\s+to|shall\s+i|should\s+i)\b/;
+var ANNOUNCEMENT_MAX_SENTENCES = 2;
+var ANNOUNCEMENT_MAX_CHARS = 400;
+var LIST_ITEM = /^\s*(?:[-*+•]|\d+[.)])\s+/;
+var DEFERRED = /\b(?:follow[- ]?up|later|afterwards|in\s+(?:a|the)\s+(?:separate|next|future|another|subsequent)\s+(?:pr|pull\s+request|ticket|issue|change|commit|task|step)|next\s+(?:pr|pull\s+request|ticket|sprint|iteration)|future\s+(?:pr|work|change))\b/;
+function announcesDeliverable(text) {
+  if (!text || !text.trim()) return false;
+  const prose = ownWords(text).toLowerCase().split(/\n+/).filter((line) => !LIST_ITEM.test(line)).join("\n").trim();
+  if (!prose || prose.length > ANNOUNCEMENT_MAX_CHARS) return false;
+  const sentences = prose.split(/(?<=[.!?])\s+|\n+/).map((s) => s.trim()).filter(Boolean);
+  if (sentences.length > ANNOUNCEMENT_MAX_SENTENCES) return false;
+  return sentences.some((sentence) => {
+    if (sentence.endsWith("?") || OFFER2.test(sentence) || DEFERRED.test(sentence)) return false;
+    if (sentenceClaims(sentence)) return true;
+    const m = DELIVERABLE_PROMISE.exec(sentence);
+    return !!m && !NEGATION.test(sentence.slice(0, m.index + m[0].length));
+  });
+}
+var ANNOUNCED_DELIVERABLE_STEER = `Your last reply announced the deliverable ("I have enough to write\u2026", "Next I'll write\u2026") and then ended the turn without producing it. Produce it NOW, in this reply: write the report or answer itself in full, or make the tool call that creates it. Do not announce it again and do not describe what you are about to do.`;
 var UnkeptClaimTracker = class {
   unkept;
   claimed = false;
@@ -7718,65 +8005,6 @@ function turnCallsOf(calls, isReadOnly) {
   return calls.map((c) => ({ readOnly: isReadOnly?.(c.tool, c.args) === true }));
 }
 
-// ../packages/run-guards/src/reverifyTracker.ts
-var MAX_REVERIFY_PATHS = 200;
-function addBounded(set, path) {
-  set.delete(path);
-  set.add(path);
-  while (set.size > MAX_REVERIFY_PATHS) {
-    const oldest = set.values().next().value;
-    if (oldest === void 0) break;
-    set.delete(oldest);
-  }
-}
-function restoreBounded(paths) {
-  return new Set((paths ?? []).slice(-MAX_REVERIFY_PATHS));
-}
-var ReverifyTracker = class {
-  writtenPaths;
-  readBackSinceWrite;
-  /** Read-only targets seen this turn, to tell an all-written re-read turn from real work. */
-  readsThisTurn = 0;
-  /** Whether every read this turn was a repeat read-back of an unchanged written path. */
-  allRepeatReadBacks = true;
-  constructor(state = {}) {
-    this.writtenPaths = restoreBounded(state.writtenPaths);
-    this.readBackSinceWrite = restoreBounded(state.readBackSinceWrite);
-  }
-  /** A call that may have changed ANY file wrote: no read-back is a look at unchanged bytes. */
-  wroteAnything() {
-    this.readBackSinceWrite.clear();
-  }
-  /** `path` was written: its next read-back inspects the edit again. */
-  wrote(path) {
-    addBounded(this.writtenPaths, path);
-    this.readBackSinceWrite.delete(path);
-  }
-  /** A successful read-only call visited `target`. */
-  read(target) {
-    this.readsThisTurn += 1;
-    if (this.writtenPaths.has(target)) {
-      if (!this.readBackSinceWrite.has(target)) this.allRepeatReadBacks = false;
-      addBounded(this.readBackSinceWrite, target);
-    } else {
-      this.allRepeatReadBacks = false;
-    }
-  }
-  /** The turn ended: how many reads it made when ALL were repeat read-backs (else 0). Starts the next turn. */
-  endTurn() {
-    const count = this.readsThisTurn > 0 && this.allRepeatReadBacks ? this.readsThisTurn : 0;
-    this.readsThisTurn = 0;
-    this.allRepeatReadBacks = true;
-    return count;
-  }
-  snapshot() {
-    return {
-      ...this.writtenPaths.size ? { writtenPaths: [...this.writtenPaths] } : {},
-      ...this.readBackSinceWrite.size ? { readBackSinceWrite: [...this.readBackSinceWrite] } : {}
-    };
-  }
-};
-
 // ../packages/run-guards/src/readOnlyStreak.ts
 var READ_ONLY_STREAK_TURNS = 6;
 var READ_ONLY_STREAK_CALLS = 18;
@@ -7843,6 +8071,7 @@ function visitTargetOf(args) {
   return path ?? question?.trim() ?? null;
 }
 var ProgressDetector = class {
+  // a repeated full-suite sweep (`suiteRepeat.ts`)
   constructor(state = {}, ports = {}) {
     this.ports = ports;
     this.visits = new VisitTally(state.visits);
@@ -7861,6 +8090,7 @@ var ProgressDetector = class {
     this.reverify = new ReverifyTracker(state);
     this.turnCalls = [];
     this.work = new VerifiedWork(state.work);
+    this.suites = new SuiteRepeat(state.suites);
   }
   ports;
   visits;
@@ -7886,6 +8116,7 @@ var ProgressDetector = class {
   turnCalls;
   /** Made a change and saw a check pass after it — turns an idle-shaped trip into `finish`. */
   work;
+  suites;
   raise(signal) {
     if (!this.turnSignal || SIGNAL_RANK[signal.kind] < SIGNAL_RANK[this.turnSignal.kind]) this.turnSignal = signal;
   }
@@ -7901,6 +8132,7 @@ var ProgressDetector = class {
     this.readOnlyStreak.observe(readOnly);
     const ok = succeeded2(result);
     const unscoped = (this.ports.isUnscopedMutation ?? ((t) => t === "run_command"))(tool, args);
+    if (tool === "run_command") this.suites.ranCommand(shellCommandOf(args));
     const changed = changedPathsOf(args);
     const wrote = ok && (changed.length > 0 || unscoped && this.ports.isReadOnly?.(tool, args) !== true);
     const isDelete = (this.ports.isDelete ?? ((t) => t === "delete_file"))(tool);
@@ -7974,6 +8206,8 @@ var ProgressDetector = class {
       this.readiness.endTurn();
       const advisoryNote = this.readiness.observe(this.unkeptTurns);
       if (advisoryNote) return { kind: "advisory", note: advisoryNote };
+      const suiteNote = this.suites.take();
+      if (suiteNote) return { kind: "advisory", note: suiteNote };
       if (batchNote && this.progress.lastTurnIdle) return { kind: "advisory", note: batchNote };
       if (this.progress.lastTurnGround) this.quietTurns += 1;
       else if (idle > 0) this.quietTurns = 0;
@@ -8052,7 +8286,8 @@ var ProgressDetector = class {
       ...(() => {
         const w = this.work.snapshot();
         return w.wrote ? { work: w } : {};
-      })()
+      })(),
+      ...this.suites.snapshotField()
     };
   }
   /** The run's change is made and a check passed after its last write. */
@@ -8607,6 +8842,15 @@ function shellPublishHint(command) {
   return "That shell command publishes. Use the git_commit / git_push tools instead: git_push runs the evidence gates and the independent review before the push leaves the machine.";
 }
 
+// ../packages/run-guards/src/scratchScript.ts
+var SCRATCH_SCRIPT = /^_[^/\\]*\.(?:cjs|mjs)$/i;
+var SCRATCH_DIR_SEGMENT = "builderforce-scratch";
+function isScratchScriptPath(file) {
+  const parts = file.split(/[/\\]/);
+  if (parts.includes(SCRATCH_DIR_SEGMENT)) return true;
+  return SCRATCH_SCRIPT.test(parts.pop() ?? "");
+}
+
 // src/finishReason.ts
 var TRUNCATED_REASONS = /* @__PURE__ */ new Set(["length", "max_tokens", "maxtokens", "model_length", "output_limit"]);
 var MALFORMED_TOOL_CALL_REASONS = /* @__PURE__ */ new Set(["malformed_function_call", "malformed_tool_call", "invalid_tool_call"]);
@@ -8766,6 +9010,19 @@ var TOOL_OUTPUT_CAPS = {
   canvas_read_object: 32e3,
   canvas_read_build_file: 16e3
 };
+var INDEX_RESULT_CHARS = 24e3;
+var TASK_INDEX_FORMAT = "id|status|type|parent|title";
+var INDEX_FORMATS = /* @__PURE__ */ new Set([TASK_INDEX_FORMAT]);
+var INDEX_RESULT_TOOLS = /* @__PURE__ */ new Set(["tasks.list", "builtin_tasks_list"]);
+function isIndexResult(tool, out) {
+  if (!INDEX_RESULT_TOOLS.has(tool)) return false;
+  if (!out || typeof out !== "object" || Array.isArray(out)) return false;
+  const r = out;
+  return typeof r.format === "string" && INDEX_FORMATS.has(r.format) && typeof r.lines === "string";
+}
+function resultTableCap(tool, out, caps = TOOL_OUTPUT_CAPS) {
+  return isIndexResult(tool, out) ? Math.max(DEFAULT_TOOL_OUTPUT_CHARS, INDEX_RESULT_CHARS) : toolOutputCap(tool, caps);
+}
 var READ_FILE_TOOL = "read_file";
 var PAGED_READ_TOOLS = {
   // `read_file`'s `offset` applies to each path of a `paths[]` read (agent-tools core-tools).
@@ -9088,10 +9345,28 @@ function fitToolText(text, maxChars, opts = {}) {
 function attach(value, opts) {
   return opts.advisory && opts.attachAdvisory ? opts.attachAdvisory(value, opts.advisory) : value;
 }
-function capFor(tool, opts) {
+function capFor(tool, out, opts) {
   if (opts.maxChars !== void 0) return opts.maxChars;
-  const tableCap = !opts.summarize && !isPagedReadTool(tool) ? DEFAULT_TOOL_OUTPUT_CHARS : toolOutputCap(tool, opts.caps);
+  const tableCap = isIndexResult(tool, out) ? resultTableCap(tool, out, opts.caps) : !opts.summarize && !isPagedReadTool(tool) ? DEFAULT_TOOL_OUTPUT_CHARS : toolOutputCap(tool, opts.caps);
   return windowedCap(tool, tableCap, opts.contextWindowTokens);
+}
+function pageIndexResult(out, fits) {
+  const all = out.lines ? out.lines.split("\n") : [];
+  const offset = typeof out.offset === "number" ? out.offset : 0;
+  const pageOf = (n) => {
+    const envelope = { ...out };
+    delete envelope.lines;
+    delete envelope.nextOffset;
+    return { ...envelope, returned: n, truncated: true, nextOffset: offset + n, lines: all.slice(0, n).join("\n") };
+  };
+  let lo = 0;
+  let hi = all.length - 1;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (fits(pageOf(mid))) lo = mid;
+    else hi = mid - 1;
+  }
+  return lo > 0 && fits(pageOf(lo)) ? pageOf(lo) : null;
 }
 function shrinkLogFields(tool, out, cap2, overhead) {
   const fields = LOG_FIELDS.filter((f) => typeof out[f] === "string" && out[f].length > 0);
@@ -9122,10 +9397,14 @@ function shapeToolResult(tool, out, opts = {}) {
     const windowed = isReadFileResult(out) ? windowReadFile(out, windowOpts) : windowReadFiles(out, windowOpts);
     return { content: JSON.stringify(windowed.value), bytes, truncated: windowed.truncated, served: windowed.served };
   }
-  const cap2 = capFor(tool, opts);
+  const cap2 = capFor(tool, out, opts);
   const full = JSON.stringify(attach(out ?? null, opts));
   if (full.length <= cap2) return { content: full, bytes, truncated: false };
   const advisoryChars = opts.advisory ? opts.advisory.length + 16 : 0;
+  if (isIndexResult(tool, out)) {
+    const paged = pageIndexResult(out, (shaped) => JSON.stringify(attach(shaped, opts)).length <= cap2);
+    if (paged) return { content: JSON.stringify(attach(paged, opts)), bytes, truncated: true };
+  }
   if (opts.summarize) {
     if (typeof out === "string") {
       const inflation = out.length > 0 ? (bytes - 2) / out.length : 1;
@@ -9712,6 +9991,220 @@ function memoryToolsIn(toolNames) {
   return toolNames.filter(isProjectMemoryTool);
 }
 
+// src/toolFailure.ts
+function isFailedToolResult(result) {
+  if (result == null) return false;
+  if (typeof result === "object") {
+    const r = result;
+    if (r.ok === false) return true;
+    if (typeof r.error === "string" && r.error) return true;
+    return false;
+  }
+  if (typeof result === "string") {
+    return /"ok"\s*:\s*false/.test(result) || /"error"\s*:\s*"[^"]/.test(result);
+  }
+  return false;
+}
+
+// src/runSlices.ts
+var at = (iso) => {
+  const t = Date.parse(iso);
+  return Number.isFinite(t) ? t : Number.NaN;
+};
+var stepOf = (ev) => {
+  if (ev.label !== "llm.complete") return null;
+  const step = ev.args?.step;
+  return typeof step === "number" && Number.isFinite(step) ? step : null;
+};
+function runStarts(events, persons) {
+  const turns = events.map((ev) => ({ t: at(ev.ts), step: stepOf(ev) })).filter((x) => x.step !== null && Number.isFinite(x.t)).sort((a, b) => a.t - b.t);
+  if (turns.length === 0) return persons.map((m) => ({ t: at(m.createdAt), ask: m.content }));
+  const starts = [];
+  let prevStep = Number.POSITIVE_INFINITY;
+  let prevTurn = Number.NEGATIVE_INFINITY;
+  let prevStart = Number.NEGATIVE_INFINITY;
+  for (const turn of turns) {
+    const messaged = persons.some((m) => at(m.createdAt) > prevTurn && at(m.createdAt) <= turn.t);
+    const reset = starts.length === 0 || turn.step < prevStep || turn.step === prevStep && messaged;
+    prevStep = turn.step;
+    prevTurn = turn.t;
+    if (!reset) continue;
+    const asked = [...persons].reverse().find((m) => at(m.createdAt) <= turn.t && at(m.createdAt) > prevStart);
+    const t = asked ? at(asked.createdAt) : turn.t;
+    starts.push({ t, ask: asked?.content ?? "" });
+    prevStart = t;
+  }
+  return starts;
+}
+function splitRuns(events, messages) {
+  const persons = messages.filter((m) => m.role === "user" && Number.isFinite(at(m.createdAt))).sort((a, b) => at(a.createdAt) - at(b.createdAt));
+  const starts = persons.length === 0 ? [] : runStarts(events, persons);
+  if (starts.length <= 1) return [{ ask: starts[0]?.ask ?? persons[0]?.content ?? "", events: [...events], messages: [...messages] }];
+  const slices = starts.map((s) => ({ ask: s.ask, events: [], messages: [] }));
+  const sliceAt = (iso) => {
+    const t = at(iso);
+    let i = 0;
+    if (Number.isFinite(t)) while (i + 1 < starts.length && starts[i + 1].t <= t) i++;
+    return slices[i];
+  };
+  for (const ev of events) sliceAt(ev.ts).events.push(ev);
+  for (const m of messages) sliceAt(m.createdAt).messages.push(m);
+  return slices;
+}
+
+// src/runProgress.ts
+var MUTATION_TOOL = /(^|_)(write|edit|save|create|update|delete|apply|patch|publish|send|dispatch|run_command|assign|link|move|set)(_|$)/i;
+function isMutationTool(name) {
+  return isCodeChangeTool(name) || MUTATION_TOOL.test(name);
+}
+function hasEditIntent(messages) {
+  return messages.some((m) => m.role === "user" && asksForChange(m.content));
+}
+function callSignature(ev) {
+  return callFingerprint(ev.label, ev.args);
+}
+function targetSignature(ev) {
+  const target = subjectOf(ev);
+  if (target) return `${ev.label}:${target}`;
+  return isPagedDataCall(ev) ? `${ev.label}:${callFingerprint("", ev.args)}` : null;
+}
+function callTargetKey(ev) {
+  return targetSignature(ev) ?? callSignature(ev);
+}
+var PAGE_KEYS = ["offset", "page", "cursor", "skip", "after", "pageToken", "page_token", "next"];
+function isPagedDataCall(ev) {
+  if (isMutationTool(ev.label)) return false;
+  const args = ev.args && typeof ev.args === "object" ? ev.args : null;
+  return !!args && PAGE_KEYS.some((k) => args[k] != null);
+}
+function subjectOf(ev) {
+  return visitTarget(ev.args)?.replace(/\\/g, "/").replace(/^\.\//, "");
+}
+function isCacheAnswered(ev) {
+  const r = ev.result;
+  if (!r || typeof r !== "object") return false;
+  const o = r;
+  return o.covered === true || o.replayed === true || o.derived === true || o.skipped === true && typeof o.note === "string" || typeof o.note === "string" && /^Duplicate \S+ call/.test(o.note);
+}
+var IDLE_GAP_MS = 12e4;
+function computeRunProgress(events, messages = []) {
+  const slices = splitRuns(events, messages);
+  if (slices.length === 1) return { ...progressOf(events, hasEditIntent(messages)), runs: [] };
+  const intentOf = (ask, own2) => hasEditIntent(own2) || isContinuationDirective(ask) && hasEditIntent(messages);
+  const each = slices.map((s) => ({ s, p: progressOf(s.events, intentOf(s.ask, s.messages)) }));
+  const runs = each.map(({ s, p }) => ({
+    ask: s.ask,
+    turns: s.events.filter((e) => e.label === "llm.complete").length,
+    calls: s.events.filter((e) => e.category === "tool").length,
+    cacheAnswered: p.cacheAnswered,
+    mutationsSucceeded: p.mutationsSucceeded,
+    spinning: p.spinning,
+    activeMs: Math.max(0, p.wallClockMs - p.idleMs)
+  }));
+  return { ...each[each.length - 1].p, runs };
+}
+function progressOf(events, editIntent) {
+  const tools = events.filter((e) => e.category === "tool");
+  const seenCalls = /* @__PURE__ */ new Map();
+  let duplicateCalls = 0;
+  let cacheAnswered = 0;
+  const targetCounts = /* @__PURE__ */ new Map();
+  const sinceEdit = /* @__PURE__ */ new Map();
+  const revisitsOf = /* @__PURE__ */ new Map();
+  let revisits = 0;
+  let targetedCalls = 0;
+  let mutationsAttempted = 0;
+  let mutationsSucceeded = 0;
+  let streaks = 0;
+  let longestStreak = null;
+  let current = null;
+  for (const ev of tools) {
+    const sig = callSignature(ev);
+    const subject = subjectOf(ev);
+    if (seenCalls.has(sig)) duplicateCalls += 1;
+    else seenCalls.set(sig, subject);
+    const cached = isCacheAnswered(ev);
+    if (cached) cacheAnswered += 1;
+    const failed2 = Boolean(ev.isError) || isFailedToolResult(ev.result);
+    if (current && current.sig === sig) {
+      current.streak.count += 1;
+      if (failed2) current.streak.failed += 1;
+      if (current.streak.count === 2) streaks += 1;
+      if (!longestStreak || current.streak.count > longestStreak.count) longestStreak = current.streak;
+    } else {
+      current = { sig, streak: { label: ev.label, count: 1, failed: failed2 ? 1 : 0 } };
+    }
+    const target = targetSignature(ev);
+    if (target) {
+      targetedCalls += 1;
+      targetCounts.set(target, (targetCounts.get(target) ?? 0) + 1);
+      const seen = sinceEdit.get(target) ?? 0;
+      if (seen > 0) {
+        revisits += 1;
+        revisitsOf.set(target, (revisitsOf.get(target) ?? 0) + 1);
+      }
+      sinceEdit.set(target, seen + 1);
+    }
+    if (isMutationTool(ev.label)) {
+      mutationsAttempted += 1;
+      if (!cached && !ev.isError && !isFailedToolResult(ev.result)) {
+        mutationsSucceeded += 1;
+        if (subject) {
+          for (const key of sinceEdit.keys()) if (key.endsWith(`:${subject}`)) sinceEdit.set(key, 0);
+          for (const [s, t] of seenCalls) if (t === subject) seenCalls.delete(s);
+        }
+      }
+    }
+  }
+  const repeatedTargets = [...revisitsOf.entries()].map(([label, again]) => ({ label, count: again + 1 })).sort((a, b) => b.count - a.count);
+  const distinctTargets = targetCounts.size;
+  const revisitRatio = targetedCalls > 0 ? revisits / targetedCalls : 0;
+  let modelMs = 0;
+  let toolMs = 0;
+  let slowestStep = null;
+  const timed = [];
+  for (const ev of events) {
+    const ms = typeof ev.durationMs === "number" && Number.isFinite(ev.durationMs) ? ev.durationMs : 0;
+    const t = Date.parse(ev.ts);
+    if (Number.isFinite(t)) timed.push({ t, ms });
+    if (ev.category === "llm") modelMs += ms;
+    else if (ev.category === "tool") toolMs += ms;
+    if (ms > 0 && (!slowestStep || ms > slowestStep.ms)) slowestStep = { label: ev.label, ms };
+  }
+  timed.sort((a, b) => a.t - b.t);
+  let idleMs = 0;
+  for (let i = 1; i < timed.length; i++) {
+    const uncovered = timed[i].t - timed[i - 1].t - timed[i].ms;
+    if (uncovered > IDLE_GAP_MS) idleMs += uncovered;
+  }
+  const wallClockMs = timed.length > 1 ? timed[timed.length - 1].t - timed[0].t : 0;
+  const didWork = tools.length > 0;
+  const noEffect = editIntent && didWork && mutationsSucceeded === 0;
+  const stuckOnCall = longestStreak !== null && longestStreak.count >= BACK_TO_BACK_AT;
+  const spinning = targetedCalls >= 6 && revisitRatio >= 0.4 || stuckOnCall;
+  return {
+    duplicateCalls,
+    cacheAnswered,
+    longestStreak,
+    streaks,
+    stuckOnCall,
+    repeatedTargets,
+    distinctTargets,
+    targetedCalls,
+    revisitRatio,
+    mutationsAttempted,
+    mutationsSucceeded,
+    editIntent,
+    noEffect,
+    spinning,
+    wallClockMs,
+    idleMs,
+    modelMs,
+    toolMs,
+    slowestStep
+  };
+}
+
 // src/runProgressReport.ts
 function progressDuration(ms) {
   if (!Number.isFinite(ms) || ms <= 0) return "0s";
@@ -9740,31 +10233,38 @@ function formatRuns(runs) {
     const label = ask.length > ASK_LABEL_CHARS ? `${ask.slice(0, ASK_LABEL_CHARS)}\u2026` : ask;
     return `#${first + i + 1} "${label}" ${r.turns} turn(s) \xB7 ${r.calls} call(s)${r.cacheAnswered ? ` \xB7 ${r.cacheAnswered} cache-answered` : ""} \xB7 ${r.mutationsSucceeded} changed${r.spinning ? " \u26A0 SPUN" : ""}`;
   });
-  return `Runs (latest last; the figures above are run #${runs.length}'s): ${first ? `(${first} earlier) ` : ""}${named.join(" | ")}`;
+  return `Runs (latest last; the "Latest run" figures are run #${runs.length}'s): ${first ? `(${first} earlier) ` : ""}${named.join(" | ")}`;
 }
-function formatRunProgress(p) {
+function formatChatTotals(runs) {
+  const sum = (pick) => runs.reduce((n, r) => n + pick(r), 0);
+  return `Chat totals (${runs.length} runs): ${sum((r) => r.turns)} turn(s) \xB7 ${sum((r) => r.calls)} call(s) \xB7 ${sum((r) => r.mutationsSucceeded)} change(s) \xB7 ${progressDuration(sum((r) => r.activeMs ?? 0))} active`;
+}
+function formatRunProgress(p, opts = {}) {
   const lines = [];
+  const multi = p.runs.length > 1;
+  const scope = multi ? `Latest run (#${p.runs.length} of ${p.runs.length}) \xB7 ` : "";
   const reach = p.targetedCalls > 0 ? `${p.distinctTargets} distinct target(s) over ${p.targetedCalls} targeted call(s)` : "no targeted calls";
   lines.push(
-    `Progress: ${reach}${p.repeatedTargets.length ? ` \xB7 ${Math.round(p.revisitRatio * 100)}% of calls revisited ground already covered` : " \xB7 no repeats"}${p.duplicateCalls ? ` \xB7 ${p.duplicateCalls} EXACT duplicate call(s)` : ""}${p.cacheAnswered ? ` \xB7 ${p.cacheAnswered} call(s) answered from the read cache, never re-run` : ""}${p.longestStreak ? ` \xB7 ${formatStreak(p.longestStreak)}${p.streaks > 1 ? ` (${p.streaks} such streaks)` : ""}` : ""}`
+    `${scope}Progress: ${reach}${p.repeatedTargets.length ? ` \xB7 ${Math.round(p.revisitRatio * 100)}% of calls revisited ground already covered` : " \xB7 no repeats"}${p.duplicateCalls ? ` \xB7 ${p.duplicateCalls} EXACT duplicate call(s)` : ""}${p.cacheAnswered ? ` \xB7 ${p.cacheAnswered} call(s) answered from the read cache, never re-run` : ""}${p.longestStreak ? ` \xB7 ${formatStreak(p.longestStreak)}${p.streaks > 1 ? ` (${p.streaks} such streaks)` : ""}` : ""}`
   );
   if (p.repeatedTargets.length) {
     const named = p.repeatedTargets.slice(0, MAX_NAMED_TARGETS).map((t) => `${t.label} \xD7${t.count}`).join(" \xB7 ");
     const rest = p.repeatedTargets.length - MAX_NAMED_TARGETS;
     lines.push(`Revisited: ${named}${rest > 0 ? ` (+${rest} more)` : ""}`);
   }
-  if (p.runs.length > 1) lines.push(formatRuns(p.runs));
+  if (multi) lines.push(formatRuns(p.runs), formatChatTotals(p.runs));
+  const pending = opts.running ? " \xB7 run in progress \u2014 no effect verdict yet" : "";
   if (p.editIntent) {
     lines.push(
-      `Effect: the request asked for a CHANGE \xB7 ${p.mutationsAttempted} mutating call(s) attempted, ${p.mutationsSucceeded} succeeded${p.noEffect ? " \xB7 \u26A0 NOTHING WAS CHANGED" : ""}`
+      `${scope}Effect: the request asked for a CHANGE \xB7 ${p.mutationsAttempted} mutating call(s) attempted, ${p.mutationsSucceeded} succeeded${opts.running ? pending : p.noEffect ? " \xB7 \u26A0 NOTHING WAS CHANGED" : ""}`
     );
   } else if (p.mutationsAttempted > 0) {
-    lines.push(`Effect: ${p.mutationsAttempted} mutating call(s) attempted, ${p.mutationsSucceeded} succeeded.`);
+    lines.push(`${scope}Effect: ${p.mutationsAttempted} mutating call(s) attempted, ${p.mutationsSucceeded} succeeded${pending}.`);
   }
   if (p.wallClockMs > 0) {
     const active = Math.max(0, p.wallClockMs - p.idleMs);
     lines.push(
-      `Time: ${progressDuration(active)} wall clock \xB7 ${progressDuration(p.modelMs)} in the model \xB7 ${progressDuration(p.toolMs)} in tools${p.slowestStep ? ` \xB7 slowest ${p.slowestStep.label} (${progressDuration(p.slowestStep.ms)})` : ""}${p.idleMs > 0 ? ` \xB7 ${progressDuration(p.idleMs)} waiting on the user between turns, excluded (span ${progressDuration(p.wallClockMs)})` : ""}`
+      `${scope}Time: ${progressDuration(active)} wall clock \xB7 ${progressDuration(p.modelMs)} in the model \xB7 ${progressDuration(p.toolMs)} in tools${p.slowestStep ? ` \xB7 slowest ${p.slowestStep.label} (${progressDuration(p.slowestStep.ms)})` : ""}${p.idleMs > 0 ? ` \xB7 ${progressDuration(p.idleMs)} waiting on the user between turns, excluded (span ${progressDuration(p.wallClockMs)})` : ""}`
     );
   }
   return lines;
@@ -9783,23 +10283,6 @@ function runProgressVerdict(p) {
   const effect = p.noEffect ? `The request asked for a change and the run finished with ZERO successful mutating calls${p.mutationsAttempted ? ` (${p.mutationsAttempted} attempted, all failed)` : " \u2014 it never attempted one"}, so nothing was actually modified. ` : "";
   const remedy = p.spinning ? `This is a LOOP, not context pressure and not a model that "won't call tools" \u2014 the numbers on those signals are a consequence of the repetition, not its cause. ${streak && p.longestStreak && p.longestStreak.failed > 0 ? "A call repeated back-to-back after FAILING is the model ignoring the error it was given: the failure text usually names the exact change to make (a `repo`, a path, a missing argument). Check that the tool result reached the model un-truncated, and that the repeated-failure advisory fired; if it did and the model still repeated the call, the model is not reading tool results \u2014 switch models for this run." : streak ? "A call repeated back-to-back after SUCCEEDING is the model not retaining the answer it already has: the result was truncated, or too large to keep in the transcript. Check the truncated-results count above, and shrink or page that result rather than the transcript." : "Look at the repeated targets above: the agent is not retaining what it already read (the result was truncated, or the read was too narrow to answer the question). Widen the read, or cache the file in the transcript, rather than shrinking context or switching models."}` : 'Check the "Answered from memory" line first \u2014 a turn served from the Q&A cache or an Evermind head does NO work by construction, so a run made largely of those has no mutating call to find. Otherwise check whether the agent was ever offered a mutating tool this run (see the tools-advertised line) before concluding the model refused to act.';
   return `${loop}${effect}${remedy}`;
-}
-
-// src/runStore/gatewayRoutingTrace.ts
-var FAILOVER_SEPARATOR = ", ";
-function formatFailovers(routing) {
-  const failovers = routing?.failovers ?? [];
-  if (failovers.length === 0) return void 0;
-  return failovers.map((f) => `${f.model}:${f.code}${f.kind ? ` ${f.kind}` : ""}`).join(FAILOVER_SEPARATOR);
-}
-function gatewayRoutingArgs(routing) {
-  if (!routing) return {};
-  const failovers = formatFailovers(routing);
-  return {
-    ...failovers ? { failovers } : {},
-    ...routing.candidates?.length ? { candidates: routing.candidates.join(" > ") } : {},
-    ...routing.traceId ? { traceId: routing.traceId } : {}
-  };
 }
 
 // src/handOffParallelism.ts
@@ -9904,6 +10387,23 @@ function scopeClashCorrective(clash) {
   return `hand_off not filed: the tasks cannot run side by side \u2014 ${describeClash(clash)}. Narrow each task's paths to the files and directories it actually changes: a parent directory that contains another task's paths blocks parallel work. Then call hand_off again with the same tasks. If they genuinely share files, call it again unchanged: every task from the first overlapping one onward then runs inline, in plan order, after any tasks before it.`;
 }
 
+// src/runStore/gatewayRoutingTrace.ts
+var FAILOVER_SEPARATOR = ", ";
+function formatFailovers(routing) {
+  const failovers = routing?.failovers ?? [];
+  if (failovers.length === 0) return void 0;
+  return failovers.map((f) => `${f.model}:${f.code}${f.kind ? ` ${f.kind}` : ""}`).join(FAILOVER_SEPARATOR);
+}
+function gatewayRoutingArgs(routing) {
+  if (!routing) return {};
+  const failovers = formatFailovers(routing);
+  return {
+    ...failovers ? { failovers } : {},
+    ...routing.candidates?.length ? { candidates: routing.candidates.join(" > ") } : {},
+    ...routing.traceId ? { traceId: routing.traceId } : {}
+  };
+}
+
 // src/routingByRole.ts
 function decisionOf(e) {
   const a = e.args;
@@ -9975,113 +10475,6 @@ function formatRoutingByRole(r) {
   const code = r.roles.find((x) => x.role === "code");
   if (r.coderReasks > 0 && plan && code && code.models.length === 1 && code.models[0].model === plan) {
     lines.push(`  \u26A0 every code turn was answered by the planning model (${plan}) \u2014 no stronger connected coder served one. See "gateway left" above, or the connected accounts' health in the / menu.`);
-  }
-  return lines;
-}
-
-// src/toolResultRecord.ts
-function toolResultRecord(result) {
-  if (typeof result === "string") {
-    try {
-      const parsed = JSON.parse(result);
-      return parsed && typeof parsed === "object" ? parsed : null;
-    } catch {
-      return null;
-    }
-  }
-  return result && typeof result === "object" ? result : null;
-}
-function entityIdsOf(result) {
-  const record2 = toolResultRecord(result);
-  if (!record2) return { localId: null, syncId: null };
-  const idRef = parseEntityRef(record2.id);
-  const syncId = parseSyncId(record2.syncId) ?? parseSyncId(record2.taskId) ?? (idRef && "sync" in idRef ? idRef.sync : null);
-  const localId = isLocalId(record2.localId) ? record2.localId : idRef && "local" in idRef ? idRef.local : null;
-  return { localId, syncId };
-}
-
-// src/staffingSummary.ts
-var DISPATCH_TOOL = /chats[._](dispatch_agent|execute_as_agent)|kanban[._](coordinate|materialize_work_items|assess_resource|assign_participant)|executions[._]submit|run[._-]?now/i;
-function isDispatchTool(label) {
-  return DISPATCH_TOOL.test(label);
-}
-var MAX_REFUSAL_CHARS = 180;
-function didDispatch(ev) {
-  if (ev.isError || isFailedToolResult(ev.result)) return false;
-  const r = toolResultRecord(ev.result);
-  if (!r) return true;
-  const autoRun = r.autoRun && typeof r.autoRun === "object" ? r.autoRun : null;
-  if (autoRun && typeof autoRun.dispatched === "boolean") return autoRun.dispatched;
-  if (typeof r.dispatched === "boolean") return r.dispatched;
-  return true;
-}
-function refusalMessage(ev) {
-  const r = toolResultRecord(ev.result);
-  const raw = r && typeof r.error === "string" && r.error || r && typeof r.detail === "string" && r.detail || (r && r.autoRun && typeof r.autoRun === "object" && typeof r.autoRun.detail === "string" ? String(r.autoRun.detail) : "") || (typeof ev.result === "string" ? ev.result : "") || (r ? JSON.stringify(r) : "") || "no reason given";
-  const flat = String(raw).replace(/\s+/g, " ").trim();
-  return flat.length > MAX_REFUSAL_CHARS ? `${flat.slice(0, MAX_REFUSAL_CHARS)}\u2026` : flat || "no reason given";
-}
-function asAgentOf(args) {
-  const a = args && typeof args === "object" ? args : null;
-  const v = a?.as_agent;
-  return typeof v === "string" ? v.trim() : "";
-}
-function staffingSummaryInTrace(events) {
-  let ticketsCreated = 0;
-  let filedLocally = 0;
-  let dispatchAttempts = 0;
-  let dispatched = 0;
-  const dispatchRefusals = [];
-  const personaSubagents = [];
-  for (const ev of events) {
-    if (ev.category !== "tool") continue;
-    if (isTicketWriteTool(ev.label) && !ev.isError && !isFailedToolResult(ev.result)) {
-      ticketsCreated += 1;
-      if (isLocalTicketCreateLabel(ev.label)) filedLocally += 1;
-    }
-    if (isDispatchTool(ev.label)) {
-      dispatchAttempts += 1;
-      if (didDispatch(ev)) dispatched += 1;
-      else dispatchRefusals.push({ label: ev.label, message: refusalMessage(ev) });
-    }
-    if (ev.label === "spawn_agent") {
-      const agent = asAgentOf(ev.args);
-      if (!agent) continue;
-      const args = ev.args;
-      const result = toolResultRecord(ev.result);
-      const label = typeof args?.label === "string" && args.label.trim() || typeof result?.label === "string" && result.label.trim() || (typeof args?.task === "string" ? args.task.trim().slice(0, 60) : "") || "delegated work";
-      personaSubagents.push({
-        agent,
-        label,
-        ok: !ev.isError && !isFailedToolResult(ev.result) && result?.ok !== false
-      });
-    }
-  }
-  const verdict = dispatched > 0 || personaSubagents.some((p) => p.ok) ? "staffed" : dispatchRefusals.length > 0 ? "staffing-refused" : ticketsCreated > 0 && filedLocally === ticketsCreated ? "filed-locally" : ticketsCreated > 0 ? "filed-not-staffed" : "no-work-filed";
-  return { ticketsCreated, filedLocally, dispatchAttempts, dispatched, dispatchRefusals, personaSubagents, verdict };
-}
-function formatDispatchRefusals(refusals) {
-  const counts = /* @__PURE__ */ new Map();
-  for (const r of refusals) counts.set(r.message, (counts.get(r.message) ?? 0) + 1);
-  return [...counts.entries()].map(([msg, n]) => n > 1 ? `${msg} \xD7${n}` : msg).join("; ");
-}
-function workFiledNotStaffedVerdict(s) {
-  const refused = s.dispatchRefusals.length ? ` (${s.dispatchRefusals.length} refused: ${formatDispatchRefusals(s.dispatchRefusals)})` : "";
-  return `Likely WORK FILED BUT NOT STAFFED \u2014 ${s.ticketsCreated} ticket(s) created, ${s.dispatched} dispatched${refused}. Nobody is running the work.`;
-}
-function formatStaffingSummary(s, opts) {
-  if (s.verdict === "no-work-filed" && s.dispatchAttempts === 0 && s.personaSubagents.length === 0) return [];
-  const refused = s.dispatchRefusals.length ? ` (${s.dispatchRefusals.length} refused: ${formatDispatchRefusals(s.dispatchRefusals)})` : "";
-  const shipped = opts?.sessionShipped ?? 0;
-  const sessionDidIt = shipped > 0 && (s.verdict === "filed-not-staffed" || s.verdict === "staffing-refused");
-  const tail = sessionDidIt ? ` \u2014 the session itself changed the code (${shipped} write/commit call(s) succeeded); a cloud dispatch was not required` : s.verdict === "filed-not-staffed" ? " \u2014 the work was filed but nobody is running it" : s.verdict === "filed-locally" ? " \u2014 filed on this device; the work runs here, by the session and its local sub-agents, and the tickets sync to the account when sync is on" : s.verdict === "staffing-refused" ? " \u2014 every attempt to staff the work was refused, so nobody is running it" : "";
-  const lines = [
-    `Staffing: ${s.ticketsCreated} ticket(s) filed \xB7 ${s.dispatched} dispatched${refused} \xB7 ${s.personaSubagents.length} persona sub-agent(s)${tail}`
-  ];
-  if (s.personaSubagents.length) {
-    lines.push(
-      `Persona sub-agents: ${s.personaSubagents.map((p) => `${p.agent} \u2014 ${p.label}${p.ok ? "" : " (no answer)"}`).join("; ")}`
-    );
   }
   return lines;
 }
@@ -10178,8 +10571,166 @@ function requestedReadWindow2(out, start, end) {
   return isReadFileResult(out) ? sliceReadFile(out, start, end) : out;
 }
 
-// src/brainTriage.ts
+// src/brainVerdict.ts
 import { HISTORY_TOKEN_BUDGET } from "@seanhogg/builderforce-memory/working";
+var CONTEXT_PROMPT_PEAK = Math.round(HISTORY_TOKEN_BUDGET * 1.5);
+var LARGE_LOSSY_RESULT_BYTES = 2e4;
+function decideLikelyCause(s) {
+  if (s.running) return "run-in-progress";
+  if (s.memoryOnlyRun) return "memory-answered";
+  if (s.noToolsAdvertised) return "no-tools-advertised";
+  if (s.narratedUnadvertised) return "tool-not-advertised";
+  if (s.announcedUnmadeToolCall) return "tool-calls-not-emitted";
+  if (s.answeredInProse) return "answered-in-prose";
+  if (s.noProgress) return "no-progress";
+  if (s.contextSignal && !s.degradationSignal) return "context-exhaustion";
+  if (s.degradationSignal && !s.contextSignal) return "model-degradation";
+  if (s.unresolvedAppFailures > 0) return "app-errors-unresolved";
+  if (s.workFiledNotStaffed) return "work-filed-not-staffed";
+  return s.healthy ? "healthy" : "inconclusive";
+}
+var succeeded3 = (ev) => ev.category === "tool" && !ev.isError && !isFailedToolResult(ev.result);
+function recoveredFailuresInTrace(events) {
+  const lastOnTarget = /* @__PURE__ */ new Map();
+  for (const ev of events) if (ev.category === "tool") lastOnTarget.set(callTargetKey(ev), ev);
+  const recovered = /* @__PURE__ */ new Set();
+  for (const ev of events) {
+    if (!ev.isError || ev.category !== "tool") continue;
+    const last = lastOnTarget.get(callTargetKey(ev));
+    if (last && last !== ev && succeeded3(last)) recovered.add(ev);
+  }
+  return recovered;
+}
+function isHealthyRun(h) {
+  return h.errors === h.recoveredFailures && !h.loopExhausted && h.emptyOrLengthFinishes === 0 && !h.contextSignal && !h.announcedUnmadeToolCall && !h.answeredInProse && !h.noProgress && h.unresolvedAppFailures === 0 && h.didWork;
+}
+
+// src/brainDiagnosticsText.ts
+import { HISTORY_TOKEN_BUDGET as HISTORY_TOKEN_BUDGET2 } from "@seanhogg/builderforce-memory/working";
+var kb = formatBytes;
+function contextEvidence(d) {
+  const parts = [];
+  if (d.promptTokenPeak >= CONTEXT_PROMPT_PEAK) parts.push(`the prompt peaked at ${d.promptTokenPeak.toLocaleString("en-US")} tokens`);
+  if (d.truncatedToolResults > 0) parts.push(`${d.truncatedToolResults} tool result(s) were trimmed to the ${toolResultBudgetText()} tool-result budget (by design)`);
+  if (d.downgradeEvents > 0) parts.push(`${d.downgradeEvents} turn(s) were served by a smaller model than asked`);
+  if (parts.length === 0 && d.largestToolResult) parts.push(`one ${d.largestToolResult.label} result was ${kb(d.largestToolResult.bytes)}`);
+  return parts.length ? parts.join("; ") : "context pressure without a single dominant signal";
+}
+function toolResultBudgetText() {
+  return `${Math.round(MAX_TOOL_RESULT_CHARS / 1e3)} KB`;
+}
+function contextPressureLine(d) {
+  if (!d.contextPressureOnly) return null;
+  const parts = [];
+  if (d.tokensMeasured && d.promptTokenPeak > 0) parts.push(`prompt peaked at ${d.promptTokenPeak.toLocaleString("en-US")} tokens`);
+  if (d.truncatedToolResults > 0) parts.push(`${d.truncatedToolResults} tool result(s) trimmed to the ${toolResultBudgetText()} budget by design`);
+  if (!parts.length && d.largestToolResult) parts.push(`one ${d.largestToolResult.label} result was ${kb(d.largestToolResult.bytes)}`);
+  return `Context: pressure noted (${parts.join("; ")}) \u2014 no turn was cut short by it. The working transcript is held to a ${HISTORY_TOKEN_BUDGET2.toLocaleString("en-US")}-token budget on purpose, so a prompt above that figure is the design working, not a fault.`;
+}
+function healthyVerdict(d) {
+  const recovered = d.recoveredFailures ?? 0;
+  return recovered > 0 ? `Completed \u2014 ${recovered} failed step(s) recovered (each was followed by a successful retry of the same command or file). No unrecovered failure, no truncated or empty turns, and no context pressure. Nothing here needs triaging.` : "No failure signal \u2014 no errors, no truncated or empty turns, and no context pressure. Nothing here needs triaging.";
+}
+function verdictText(d) {
+  const evermindAnswers = d.memoryAnswers?.filter((m) => m.source === "evermind") ?? [];
+  switch (d.likelyCause) {
+    case "run-in-progress":
+      return 'Run in progress \u2014 verdict pending. The capture was taken while the run was still executing, so no cause is named and no "nothing was changed" claim is made; copy the report again once the run settles.';
+    case "memory-answered":
+      return `ANSWERED FROM MEMORY \u2014 no model ran this turn. The reply was served by the memory-first short-circuit (${(d.memoryAnswers ?? []).map((m) => m.source === "evermind" ? `the project Evermind SSM${m.projectId != null ? ` of project #${m.projectId}` : ""}${m.version != null ? ` v${m.version}` : ""}` : m.source === "symbol-index" ? "the workspace symbol index" : m.source === "deterministic" ? `the deterministic workspace action ${m.actionId ?? ""}`.trim() : "the Q&A cache").join(", ")}), so zero turns, zero tokens and zero tool calls is EXPECTED, not a fault. ${evermindAnswers.length ? "The Evermind SSM cannot call tools and answers only from what it has learned, so it can neither fetch live data nor do work \u2014 if the reply was wrong, garbled or stale, that is the cause. Turn Memory off for this chat, or disable inference on that head." : (d.memoryAnswers ?? []).every((m) => m.source === "symbol-index") ? 'The request was only "where is X defined?" and the symbol index resolved every name, so the definitions were listed without a model; ask for anything more to reach the model.' : (d.memoryAnswers ?? []).every((m) => m.source === "symbol-index" || m.source === "deterministic") ? "A deterministic workspace action (the PreFetch gate) settled the request without a model; ask for anything more to reach the model." : "The reply is a replay of an earlier answer to the same question; ask a differently-worded question to reach the model."} Switching models changes nothing here.`;
+    case "no-tools-advertised":
+      return 'NO TOOLS ADVERTISED \u2014 at least one turn was handed ZERO tool definitions, so it could not have emitted a call whatever it wanted to do. This is a catalog/config failure on our side, not a model fault: the gateway MCP catalog (`/llm/v1/mcp/tools`) failed to load, or no actions were registered for this surface. See the "Tools available to the model" line in the Chat diagnostics block for the fetch error. Switching models will not help.';
+    case "tool-not-advertised":
+      return `TOOL NOT ADVERTISED \u2014 a turn wrote out ${d.narratedUnadvertisedTools.map((n) => `\`${n}\``).join(", ")} as prose while that tool was NOT among the ones it was offered that turn. No model can emit a call for a function it was never given, so this is OUR per-turn tool selection dropping a tool the prompt asked for \u2014 not a model that "won't call tools". Fix the selection (pin the tool, or name it in the system prompt so it is force-included) rather than switching models.`;
+    case "tool-calls-not-emitted":
+      return 'TOOL CALLS NOT EMITTED \u2014 a turn NARRATED a tool call in prose ("I\'ll call the tool\u2026", a bare `builtin_\u2026` name) but the run recorded ZERO tool steps, so nothing executed and the answer never got its data. The tools WERE advertised and the agent loop only runs structured `tool_calls`, so this is a model/provider fault: the model is describing calls instead of emitting them. Try a different model.';
+    case "answered-in-prose":
+      return "ANSWERED IN PROSE \u2014 at least one turn was handed tool definitions but replied with text and ZERO tool calls, so nothing ran. The tools were advertised; the model described the work instead of doing it. This is a model/provider fault: try a different model, or pin one that emits structured calls.";
+    case "no-progress":
+      return (d.progress && runProgressVerdict(d.progress)) ?? "NO PROGRESS \u2014 the run repeated work without advancing.";
+    case "context-exhaustion":
+      return `Likely CONTEXT EXHAUSTION (case A) \u2014 ${contextEvidence(d)}.`;
+    case "model-degradation":
+      return "Likely MODEL DEGRADATION (case B) \u2014 an Evermind/SSM turn returned empty while tokens stayed low.";
+    case "app-errors-unresolved":
+      return `APP STILL BROKEN \u2014 every tool call succeeded, but the run's last diagnostics read still reported ${d.unresolvedAppFailures} build/runtime failure(s) in the app it was working on. The tools are fine; the app is not. Read that diagnostics result in the trace below for the error \u2014 if it points into a package CDN or the preview runtime rather than the project's own files, the fault is the platform's, and rewriting project files will not fix it.`;
+    case "work-filed-not-staffed":
+      return workFiledNotStaffedVerdict(d.staffing);
+    case "healthy":
+      return healthyVerdict(d);
+    case "inconclusive":
+      return "Inconclusive \u2014 not enough signal to separate context exhaustion from model degradation.";
+    default: {
+      const unhandled = d.likelyCause;
+      return `Unrecognised verdict: ${String(unhandled)}`;
+    }
+  }
+}
+function formatBrainDiagnostics(d) {
+  const lines = ["--- Diagnostics ---", `Likely cause: ${verdictText(d)}`];
+  const scope = d.turnCoveragePartial ? " (this session)" : "";
+  lines.push(`Turns${scope}: ${d.turns} \xB7 Tool calls: ${d.toolCalls} \xB7 Errors: ${d.errors}${d.recoveredFailures ? ` (${d.recoveredFailures} recovered)` : ""}${d.loopExhausted ? " \xB7 LOOP EXHAUSTED" : ""}`);
+  if (d.tokensMeasured) {
+    lines.push(
+      `Tokens${scope}: prompt peak ${d.promptTokenPeak.toLocaleString()} \xB7 last-turn prompt ${d.lastPromptTokens.toLocaleString()} \xB7 completion total ${d.completionTokenTotal.toLocaleString()}`
+    );
+  } else {
+    lines.push("Tokens: not reported by the gateway for this run.");
+  }
+  if (d.turnCoveragePartial) {
+    lines.push(
+      "Coverage: tool steps were recovered from this chat's durable history, but its earlier TURNS predate durable turn records \u2014 so the turn and token counts above describe only the current session, not the whole conversation. Send a new turn to capture a fully-measured run."
+    );
+  }
+  lines.push(
+    `Tool results: ${kb(d.toolResultBytes)} total${d.largestToolResult ? ` \xB7 largest ${d.largestToolResult.label} (${kb(d.largestToolResult.bytes)})` : ""}${d.truncatedToolResults ? ` \xB7 ${d.truncatedToolResults} trimmed to the ${toolResultBudgetText()} per-result budget (by design)` : ""}${d.pagedReadWindows ? ` \xB7 ${d.pagedReadWindows} read_file window(s) paged (continued by offset, not lost)` : ""}`
+  );
+  const pressure = contextPressureLine(d);
+  if (pressure) lines.push(pressure);
+  lines.push(...d.progress ? formatRunProgress(d.progress, { running: d.running }) : []);
+  if (d.memoryUsage) lines.push(formatMemoryUsage(d.memoryUsage));
+  lines.push(...d.staffing ? formatStaffingSummary(d.staffing, { sessionShipped: d.sessionShipped }) : []);
+  if (d.errorSteps?.length) {
+    for (const e of d.errorSteps) {
+      lines.push(
+        `Failed step: ${e.label}${e.model ? ` on ${e.model}` : ""}${e.recovered ? " (recovered by a later successful retry)" : ""} \u2014 ${e.message}` + (e.requiredRole || e.callerRole ? ` \u2014 requires ${e.requiredRole ?? "unknown"}, caller is ${e.callerRole ?? "unknown"}${e.remediation ? `; ${e.remediation}` : ""}` : "")
+      );
+      if (e.failure) lines.push(`  ${describeStreamFailure(e.failure)}`);
+    }
+    if (d.errors > d.errorSteps.length) lines.push(`(+${d.errors - d.errorSteps.length} earlier failure(s) not listed)`);
+  }
+  if (d.advertisedToolsLastTurn != null) {
+    const range = d.advertisedToolsMin != null && d.advertisedToolsMin !== d.advertisedToolsLastTurn ? `${d.advertisedToolsMin}\u2013${d.advertisedToolsLastTurn}` : `${d.advertisedToolsLastTurn}`;
+    lines.push(
+      `Tools advertised per turn: ${range}${d.catalogTools ? ` (of ${d.catalogTools} in the catalog)` : ""}${d.advertisedToolsMin === 0 ? " \xB7 \u26A0 a turn was offered NONE" : ""}`
+    );
+  } else {
+    lines.push("Tools advertised per turn: not recorded (this run predates per-turn tool accounting).");
+  }
+  if (d.narratedUnadvertisedTools.length) {
+    lines.push(`Narrated but never advertised: ${d.narratedUnadvertisedTools.join(", ")} \u2014 the model was told to call a tool it was not given.`);
+  }
+  if (d.stallRecoveries > 0 || d.modelFailovers > 0 || d.stallUnrecovered) {
+    lines.push(
+      `Stall handling: ${d.stallRecoveries} re-prompt(s) \xB7 ${d.modelFailovers} model failover(s)${d.stallUnrecovered ? " \xB7 GAVE UP (the stall survived every attempt)" : d.stallRecovered ? " \xB7 recovered" : " \xB7 NOT recovered (no tool ran after the last re-prompt \u2014 the run ended on a turn the stall detector accepted as an answer)"}`
+    );
+  }
+  if (d.streamRetries?.length) {
+    lines.push(`Stream retries: ${d.streamRetries.length} \u2014 ${d.streamRetries.join(", ")} broke mid-turn and the turn was retried on another model (one retry per turn).`);
+  }
+  lines.push(...formatModelScorecard(d.modelScores ?? []));
+  lines.push(...formatRoutingByRole(d.routing));
+  lines.push(...formatModelTurnLog(d.modelTurns ?? []));
+  if (d.downgradeEvents > 0) lines.push(`Model downgrades: ${d.downgradeEvents} turn(s) answered by a different model than requested (gateway failover).`);
+  if (d.emptyOrLengthFinishes > 0) lines.push(`Degenerate turns: ${d.emptyOrLengthFinishes} ended on \`length\` or returned empty text.`);
+  if (d.evermindUsed.length) lines.push(`Evermind/SSM answered: ${d.evermindUsed.join(", ")}`);
+  if (d.memoryAnswers?.length) {
+    lines.push(
+      `Answered from memory (LLM skipped): ${d.memoryAnswers.length} turn(s) \u2014 ` + d.memoryAnswers.map((m) => m.source === "evermind" ? `Evermind SSM${m.projectId != null ? ` (project #${m.projectId}` : ""}${m.version != null ? `${m.projectId != null ? ", " : " ("}v${m.version}` : ""}${m.projectId != null || m.version != null ? ")" : ""}` : m.source === "symbol-index" ? "symbol index" : m.source === "deterministic" ? `workspace action ${m.actionId ?? ""}`.trim() : "Q&A cache").join(", ")
+    );
+  }
+  return lines;
+}
 
 // src/toolExposure.ts
 function toolExposureInTrace(events) {
@@ -10211,21 +10762,6 @@ function formatAdvertised(tools, defaultToolLimit) {
 }
 
 // src/brainTriage.ts
-var CONTEXT_PROMPT_PEAK = Math.round(HISTORY_TOKEN_BUDGET * 1.5);
-var LARGE_LOSSY_RESULT_BYTES = 2e4;
-function isFailedToolResult(result) {
-  if (result == null) return false;
-  if (typeof result === "object") {
-    const r = result;
-    if (r.ok === false) return true;
-    if (typeof r.error === "string" && r.error) return true;
-    return false;
-  }
-  if (typeof result === "string") {
-    return /"ok"\s*:\s*false/.test(result) || /"error"\s*:\s*"[^"]/.test(result);
-  }
-  return false;
-}
 var FILE_WRITE_TOOL = /(attachments|files?|project_files)[._](write|save|update)/i;
 function isFileWriteTool(label) {
   return isCodeChangeTool(label) || FILE_WRITE_TOOL.test(label);
@@ -10481,14 +11017,6 @@ function formatMemoryUsage(m) {
   const tok = m.evermindPromptTokens > 0 ? `, ~${m.evermindPromptTokens.toLocaleString("en-US")} prompt tok` : "";
   return `BuilderForce memory: Evermind recalls ${m.evermindRecalls} (${m.evermindItems} item(s)${tok}) \xB7 learn steps ${m.learnSteps} \xB7 reconcile ${m.reconcileSteps} \xB7 project-fact reads ${m.factsRead} \xB7 project-fact writes ${m.factsWritten}`;
 }
-function sessionShippedInTrace(events) {
-  let n = 0;
-  for (const ev of events) {
-    if (ev.category !== "tool" || ev.isError || isFailedToolResult(ev.result)) continue;
-    if (isCodeChangeTool(ev.label) || ev.label === "git_commit" || ev.label === "git_push") n += 1;
-  }
-  return n;
-}
 function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}) {
   const llm = events.filter((e) => e.category === "llm");
   const toolEvents = events.filter((e) => e.category === "tool");
@@ -10536,6 +11064,7 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
     if (!paged && bytes > largestLossyResultBytes) largestLossyResultBytes = bytes;
     if (!largestToolResult || bytes > largestToolResult.bytes) largestToolResult = { label: ev.label, bytes };
   }
+  const recovered = recoveredFailuresInTrace(events);
   const errorSteps = errors.slice(-MAX_REPORTED_ERRORS).reverse().map((e) => {
     const model = e.args?.model;
     const failure = e.args?.failure;
@@ -10547,7 +11076,8 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
       ...typeof model === "string" && model !== "default" ? { model } : {},
       ...failure && typeof failure === "object" ? { failure } : {},
       ...gate.requiredRole ? { requiredRole: gate.requiredRole, remediation: ROLE_GATE_REMEDIATION } : {},
-      ...gate.callerRole ? { callerRole: gate.callerRole } : {}
+      ...gate.callerRole ? { callerRole: gate.callerRole } : {},
+      ...recovered.has(e) ? { recovered: true } : {}
     };
   });
   const modelsUsed = modelsUsedInTrace(events);
@@ -10583,13 +11113,39 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
   const memoryUsage = memoryUsageInTrace(events);
   const workFiledNotStaffed = sessionShipped === 0 && (staffing.verdict === "filed-not-staffed" || staffing.verdict === "staffing-refused");
   const unresolvedAppFailures = unresolvedAppFailuresInTrace(events);
-  const healthy = errors.length === 0 && !loopExhausted && emptyOrLengthFinishes === 0 && !contextSignal && !announcedUnmadeToolCall && !answeredInProse && !noProgress && unresolvedAppFailures === 0 && didWork;
-  const likelyCause = memoryOnlyRun ? "memory-answered" : noToolsAdvertised ? "no-tools-advertised" : narratedUnadvertisedTools.length > 0 ? "tool-not-advertised" : announcedUnmadeToolCall ? "tool-calls-not-emitted" : answeredInProse ? "answered-in-prose" : noProgress ? "no-progress" : contextSignal && !degradationSignal ? "context-exhaustion" : degradationSignal && !contextSignal ? "model-degradation" : unresolvedAppFailures > 0 ? "app-errors-unresolved" : workFiledNotStaffed ? "work-filed-not-staffed" : healthy ? "healthy" : "inconclusive";
+  const running = ctx.running === true;
+  const likelyCause = decideLikelyCause({
+    running,
+    memoryOnlyRun,
+    noToolsAdvertised,
+    narratedUnadvertised: narratedUnadvertisedTools.length > 0,
+    announcedUnmadeToolCall,
+    answeredInProse,
+    noProgress,
+    contextSignal,
+    degradationSignal,
+    unresolvedAppFailures,
+    workFiledNotStaffed,
+    healthy: isHealthyRun({
+      errors: errors.length,
+      recoveredFailures: recovered.size,
+      loopExhausted,
+      emptyOrLengthFinishes,
+      contextSignal,
+      announcedUnmadeToolCall,
+      answeredInProse,
+      noProgress,
+      unresolvedAppFailures,
+      didWork
+    })
+  });
   return {
     turns: llm.length,
     toolCalls: toolEvents.length,
     errors: errors.length,
     errorSteps,
+    recoveredFailures: recovered.size,
+    running,
     loopExhausted,
     tokensMeasured,
     promptTokenPeak,
@@ -10627,93 +11183,6 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
     unresolvedAppFailures,
     likelyCause
   };
-}
-var kb = formatBytes;
-function contextEvidence(d) {
-  const parts = [];
-  if (d.promptTokenPeak >= CONTEXT_PROMPT_PEAK) parts.push(`the prompt peaked at ${d.promptTokenPeak.toLocaleString("en-US")} tokens`);
-  if (d.truncatedToolResults > 0) parts.push(`${d.truncatedToolResults} tool result(s) were trimmed to the ${toolResultBudgetText()} tool-result budget (by design)`);
-  if (d.downgradeEvents > 0) parts.push(`${d.downgradeEvents} turn(s) were served by a smaller model than asked`);
-  if (parts.length === 0 && d.largestToolResult) parts.push(`one ${d.largestToolResult.label} result was ${kb(d.largestToolResult.bytes)}`);
-  return parts.length ? parts.join("; ") : "context pressure without a single dominant signal";
-}
-function toolResultBudgetText() {
-  return `${Math.round(MAX_TOOL_RESULT_CHARS / 1e3)} KB`;
-}
-function contextPressureLine(d) {
-  if (!d.contextPressureOnly) return null;
-  const parts = [];
-  if (d.tokensMeasured && d.promptTokenPeak > 0) parts.push(`prompt peaked at ${d.promptTokenPeak.toLocaleString("en-US")} tokens`);
-  if (d.truncatedToolResults > 0) parts.push(`${d.truncatedToolResults} tool result(s) trimmed to the ${toolResultBudgetText()} budget by design`);
-  if (!parts.length && d.largestToolResult) parts.push(`one ${d.largestToolResult.label} result was ${kb(d.largestToolResult.bytes)}`);
-  return `Context: pressure noted (${parts.join("; ")}) \u2014 no turn was cut short by it. The working transcript is held to a ${HISTORY_TOKEN_BUDGET.toLocaleString("en-US")}-token budget on purpose, so a prompt above that figure is the design working, not a fault.`;
-}
-function formatBrainDiagnostics(d) {
-  const evermindAnswers = d.memoryAnswers?.filter((m) => m.source === "evermind") ?? [];
-  const verdict = d.likelyCause === "memory-answered" ? `ANSWERED FROM MEMORY \u2014 no model ran this turn. The reply was served by the memory-first short-circuit (${(d.memoryAnswers ?? []).map((m) => m.source === "evermind" ? `the project Evermind SSM${m.projectId != null ? ` of project #${m.projectId}` : ""}${m.version != null ? ` v${m.version}` : ""}` : m.source === "symbol-index" ? "the workspace symbol index" : m.source === "deterministic" ? `the deterministic workspace action ${m.actionId ?? ""}`.trim() : "the Q&A cache").join(", ")}), so zero turns, zero tokens and zero tool calls is EXPECTED, not a fault. ${evermindAnswers.length ? "The Evermind SSM cannot call tools and answers only from what it has learned, so it can neither fetch live data nor do work \u2014 if the reply was wrong, garbled or stale, that is the cause. Turn Memory off for this chat, or disable inference on that head." : (d.memoryAnswers ?? []).every((m) => m.source === "symbol-index") ? 'The request was only "where is X defined?" and the symbol index resolved every name, so the definitions were listed without a model; ask for anything more to reach the model.' : (d.memoryAnswers ?? []).every((m) => m.source === "symbol-index" || m.source === "deterministic") ? "A deterministic workspace action (the PreFetch gate) settled the request without a model; ask for anything more to reach the model." : "The reply is a replay of an earlier answer to the same question; ask a differently-worded question to reach the model."} Switching models changes nothing here.` : d.likelyCause === "no-tools-advertised" ? 'NO TOOLS ADVERTISED \u2014 at least one turn was handed ZERO tool definitions, so it could not have emitted a call whatever it wanted to do. This is a catalog/config failure on our side, not a model fault: the gateway MCP catalog (`/llm/v1/mcp/tools`) failed to load, or no actions were registered for this surface. See the "Tools available to the model" line in the Chat diagnostics block for the fetch error. Switching models will not help.' : d.likelyCause === "tool-not-advertised" ? `TOOL NOT ADVERTISED \u2014 a turn wrote out ${d.narratedUnadvertisedTools.map((n) => `\`${n}\``).join(", ")} as prose while that tool was NOT among the ones it was offered that turn. No model can emit a call for a function it was never given, so this is OUR per-turn tool selection dropping a tool the prompt asked for \u2014 not a model that "won't call tools". Fix the selection (pin the tool, or name it in the system prompt so it is force-included) rather than switching models.` : d.likelyCause === "tool-calls-not-emitted" ? 'TOOL CALLS NOT EMITTED \u2014 a turn NARRATED a tool call in prose ("I\'ll call the tool\u2026", a bare `builtin_\u2026` name) but the run recorded ZERO tool steps, so nothing executed and the answer never got its data. The tools WERE advertised and the agent loop only runs structured `tool_calls`, so this is a model/provider fault: the model is describing calls instead of emitting them. Try a different model.' : d.likelyCause === "answered-in-prose" ? "ANSWERED IN PROSE \u2014 at least one turn was handed tool definitions but replied with text and ZERO tool calls, so nothing ran. The tools were advertised; the model described the work instead of doing it. This is a model/provider fault: try a different model, or pin one that emits structured calls." : d.likelyCause === "no-progress" ? (d.progress && runProgressVerdict(d.progress)) ?? "NO PROGRESS \u2014 the run repeated work without advancing." : d.likelyCause === "context-exhaustion" ? `Likely CONTEXT EXHAUSTION (case A) \u2014 ${contextEvidence(d)}.` : d.likelyCause === "model-degradation" ? "Likely MODEL DEGRADATION (case B) \u2014 an Evermind/SSM turn returned empty while tokens stayed low." : d.likelyCause === "app-errors-unresolved" ? `APP STILL BROKEN \u2014 every tool call succeeded, but the run's last diagnostics read still reported ${d.unresolvedAppFailures} build/runtime failure(s) in the app it was working on. The tools are fine; the app is not. Read that diagnostics result in the trace below for the error \u2014 if it points into a package CDN or the preview runtime rather than the project's own files, the fault is the platform's, and rewriting project files will not fix it.` : d.likelyCause === "work-filed-not-staffed" ? workFiledNotStaffedVerdict(d.staffing) : d.likelyCause === "healthy" ? "No failure signal \u2014 no errors, no truncated or empty turns, and no context pressure. Nothing here needs triaging." : "Inconclusive \u2014 not enough signal to separate context exhaustion from model degradation.";
-  const lines = ["--- Diagnostics ---", `Likely cause: ${verdict}`];
-  const scope = d.turnCoveragePartial ? " (this session)" : "";
-  lines.push(`Turns${scope}: ${d.turns} \xB7 Tool calls: ${d.toolCalls} \xB7 Errors: ${d.errors}${d.loopExhausted ? " \xB7 LOOP EXHAUSTED" : ""}`);
-  if (d.tokensMeasured) {
-    lines.push(
-      `Tokens${scope}: prompt peak ${d.promptTokenPeak.toLocaleString()} \xB7 last-turn prompt ${d.lastPromptTokens.toLocaleString()} \xB7 completion total ${d.completionTokenTotal.toLocaleString()}`
-    );
-  } else {
-    lines.push("Tokens: not reported by the gateway for this run.");
-  }
-  if (d.turnCoveragePartial) {
-    lines.push(
-      "Coverage: tool steps were recovered from this chat's durable history, but its earlier TURNS predate durable turn records \u2014 so the turn and token counts above describe only the current session, not the whole conversation. Send a new turn to capture a fully-measured run."
-    );
-  }
-  lines.push(
-    `Tool results: ${kb(d.toolResultBytes)} total${d.largestToolResult ? ` \xB7 largest ${d.largestToolResult.label} (${kb(d.largestToolResult.bytes)})` : ""}${d.truncatedToolResults ? ` \xB7 ${d.truncatedToolResults} trimmed to the ${toolResultBudgetText()} per-result budget (by design)` : ""}${d.pagedReadWindows ? ` \xB7 ${d.pagedReadWindows} read_file window(s) paged (continued by offset, not lost)` : ""}`
-  );
-  const pressure = contextPressureLine(d);
-  if (pressure) lines.push(pressure);
-  lines.push(...d.progress ? formatRunProgress(d.progress) : []);
-  if (d.memoryUsage) lines.push(formatMemoryUsage(d.memoryUsage));
-  lines.push(...d.staffing ? formatStaffingSummary(d.staffing, { sessionShipped: d.sessionShipped }) : []);
-  if (d.errorSteps?.length) {
-    for (const e of d.errorSteps) {
-      lines.push(
-        `Failed step: ${e.label}${e.model ? ` on ${e.model}` : ""} \u2014 ${e.message}` + (e.requiredRole || e.callerRole ? ` \u2014 requires ${e.requiredRole ?? "unknown"}, caller is ${e.callerRole ?? "unknown"}${e.remediation ? `; ${e.remediation}` : ""}` : "")
-      );
-      if (e.failure) lines.push(`  ${describeStreamFailure(e.failure)}`);
-    }
-    if (d.errors > d.errorSteps.length) lines.push(`(+${d.errors - d.errorSteps.length} earlier failure(s) not listed)`);
-  }
-  if (d.advertisedToolsLastTurn != null) {
-    const range = d.advertisedToolsMin != null && d.advertisedToolsMin !== d.advertisedToolsLastTurn ? `${d.advertisedToolsMin}\u2013${d.advertisedToolsLastTurn}` : `${d.advertisedToolsLastTurn}`;
-    lines.push(
-      `Tools advertised per turn: ${range}${d.catalogTools ? ` (of ${d.catalogTools} in the catalog)` : ""}${d.advertisedToolsMin === 0 ? " \xB7 \u26A0 a turn was offered NONE" : ""}`
-    );
-  } else {
-    lines.push("Tools advertised per turn: not recorded (this run predates per-turn tool accounting).");
-  }
-  if (d.narratedUnadvertisedTools.length) {
-    lines.push(`Narrated but never advertised: ${d.narratedUnadvertisedTools.join(", ")} \u2014 the model was told to call a tool it was not given.`);
-  }
-  if (d.stallRecoveries > 0 || d.modelFailovers > 0 || d.stallUnrecovered) {
-    lines.push(
-      `Stall handling: ${d.stallRecoveries} re-prompt(s) \xB7 ${d.modelFailovers} model failover(s)${d.stallUnrecovered ? " \xB7 GAVE UP (the stall survived every attempt)" : d.stallRecovered ? " \xB7 recovered" : " \xB7 NOT recovered (no tool ran after the last re-prompt \u2014 the run ended on a turn the stall detector accepted as an answer)"}`
-    );
-  }
-  if (d.streamRetries?.length) {
-    lines.push(`Stream retries: ${d.streamRetries.length} \u2014 ${d.streamRetries.join(", ")} broke mid-turn and the turn was retried on another model (one retry per turn).`);
-  }
-  lines.push(...formatModelScorecard(d.modelScores ?? []));
-  lines.push(...formatRoutingByRole(d.routing));
-  lines.push(...formatModelTurnLog(d.modelTurns ?? []));
-  if (d.downgradeEvents > 0) lines.push(`Model downgrades: ${d.downgradeEvents} turn(s) answered by a different model than requested (gateway failover).`);
-  if (d.emptyOrLengthFinishes > 0) lines.push(`Degenerate turns: ${d.emptyOrLengthFinishes} ended on \`length\` or returned empty text.`);
-  if (d.evermindUsed.length) lines.push(`Evermind/SSM answered: ${d.evermindUsed.join(", ")}`);
-  if (d.memoryAnswers?.length) {
-    lines.push(
-      `Answered from memory (LLM skipped): ${d.memoryAnswers.length} turn(s) \u2014 ` + d.memoryAnswers.map((m) => m.source === "evermind" ? `Evermind SSM${m.projectId != null ? ` (project #${m.projectId}` : ""}${m.version != null ? `${m.projectId != null ? ", " : " ("}v${m.version}` : ""}${m.projectId != null || m.version != null ? ")" : ""}` : m.source === "symbol-index" ? "symbol index" : m.source === "deterministic" ? `workspace action ${m.actionId ?? ""}`.trim() : "Q&A cache").join(", ")
-    );
-  }
-  return lines;
 }
 function buildBrainTriageReport(opts) {
   const { capturedAt, messages = [], chatId, chatTitle, agentLabel, configuredModel, surface, error, running, activity } = opts;
@@ -10763,192 +11232,119 @@ function buildBrainTriageReport(opts) {
   return lines.join("\n");
 }
 
-// src/runSlices.ts
-var at = (iso) => {
-  const t = Date.parse(iso);
-  return Number.isFinite(t) ? t : Number.NaN;
-};
-var stepOf = (ev) => {
-  if (ev.label !== "llm.complete") return null;
-  const step = ev.args?.step;
-  return typeof step === "number" && Number.isFinite(step) ? step : null;
-};
-function runStarts(events, persons) {
-  const turns = events.map((ev) => ({ t: at(ev.ts), step: stepOf(ev) })).filter((x) => x.step !== null && Number.isFinite(x.t)).sort((a, b) => a.t - b.t);
-  if (turns.length === 0) return persons.map((m) => ({ t: at(m.createdAt), ask: m.content }));
-  const starts = [];
-  let prevStep = Number.POSITIVE_INFINITY;
-  let prevTurn = Number.NEGATIVE_INFINITY;
-  let prevStart = Number.NEGATIVE_INFINITY;
-  for (const turn of turns) {
-    const messaged = persons.some((m) => at(m.createdAt) > prevTurn && at(m.createdAt) <= turn.t);
-    const reset = starts.length === 0 || turn.step < prevStep || turn.step === prevStep && messaged;
-    prevStep = turn.step;
-    prevTurn = turn.t;
-    if (!reset) continue;
-    const asked = [...persons].reverse().find((m) => at(m.createdAt) <= turn.t && at(m.createdAt) > prevStart);
-    const t = asked ? at(asked.createdAt) : turn.t;
-    starts.push({ t, ask: asked?.content ?? "" });
-    prevStart = t;
+// src/toolResultRecord.ts
+function toolResultRecord(result) {
+  if (typeof result === "string") {
+    try {
+      const parsed = JSON.parse(result);
+      return parsed && typeof parsed === "object" ? parsed : null;
+    } catch {
+      return null;
+    }
   }
-  return starts;
+  return result && typeof result === "object" ? result : null;
 }
-function splitRuns(events, messages) {
-  const persons = messages.filter((m) => m.role === "user" && Number.isFinite(at(m.createdAt))).sort((a, b) => at(a.createdAt) - at(b.createdAt));
-  const starts = persons.length === 0 ? [] : runStarts(events, persons);
-  if (starts.length <= 1) return [{ ask: starts[0]?.ask ?? persons[0]?.content ?? "", events: [...events], messages: [...messages] }];
-  const slices = starts.map((s) => ({ ask: s.ask, events: [], messages: [] }));
-  const sliceAt = (iso) => {
-    const t = at(iso);
-    let i = 0;
-    if (Number.isFinite(t)) while (i + 1 < starts.length && starts[i + 1].t <= t) i++;
-    return slices[i];
-  };
-  for (const ev of events) sliceAt(ev.ts).events.push(ev);
-  for (const m of messages) sliceAt(m.createdAt).messages.push(m);
-  return slices;
+function entityIdsOf(result) {
+  const record2 = toolResultRecord(result);
+  if (!record2) return { localId: null, syncId: null };
+  const idRef = parseEntityRef(record2.id);
+  const syncId = parseSyncId(record2.syncId) ?? parseSyncId(record2.taskId) ?? (idRef && "sync" in idRef ? idRef.sync : null);
+  const localId = isLocalId(record2.localId) ? record2.localId : idRef && "local" in idRef ? idRef.local : null;
+  return { localId, syncId };
 }
 
-// src/runProgress.ts
-var MUTATION_TOOL = /(^|_)(write|edit|save|create|update|delete|apply|patch|publish|send|dispatch|run_command|assign|link|move|set)(_|$)/i;
-function isMutationTool(name) {
-  return isCodeChangeTool(name) || MUTATION_TOOL.test(name);
-}
-function hasEditIntent(messages) {
-  return messages.some((m) => m.role === "user" && asksForChange(m.content));
-}
-function callSignature(ev) {
-  return callFingerprint(ev.label, ev.args);
-}
-function targetSignature(ev) {
-  const target = subjectOf(ev);
-  return target ? `${ev.label}:${target}` : null;
-}
-function subjectOf(ev) {
-  return visitTarget(ev.args)?.replace(/\\/g, "/").replace(/^\.\//, "");
-}
-function isCacheAnswered(ev) {
-  const r = ev.result;
-  if (!r || typeof r !== "object") return false;
-  const o = r;
-  return o.covered === true || o.replayed === true || o.derived === true || o.skipped === true && typeof o.note === "string" || typeof o.note === "string" && /^Duplicate \S+ call/.test(o.note);
-}
-var IDLE_GAP_MS = 12e4;
-function computeRunProgress(events, messages = []) {
-  const slices = splitRuns(events, messages);
-  if (slices.length === 1) return { ...progressOf(events, hasEditIntent(messages)), runs: [] };
-  const intentOf = (ask, own2) => hasEditIntent(own2) || isContinuationDirective(ask) && hasEditIntent(messages);
-  const each = slices.map((s) => ({ s, p: progressOf(s.events, intentOf(s.ask, s.messages)) }));
-  const runs = each.map(({ s, p }) => ({
-    ask: s.ask,
-    turns: s.events.filter((e) => e.label === "llm.complete").length,
-    calls: s.events.filter((e) => e.category === "tool").length,
-    cacheAnswered: p.cacheAnswered,
-    mutationsSucceeded: p.mutationsSucceeded,
-    spinning: p.spinning
-  }));
-  return { ...each[each.length - 1].p, runs };
-}
-function progressOf(events, editIntent) {
-  const tools = events.filter((e) => e.category === "tool");
-  const seenCalls = /* @__PURE__ */ new Map();
-  let duplicateCalls = 0;
-  let cacheAnswered = 0;
-  const targetCounts = /* @__PURE__ */ new Map();
-  const sinceEdit = /* @__PURE__ */ new Map();
-  const revisitsOf = /* @__PURE__ */ new Map();
-  let revisits = 0;
-  let targetedCalls = 0;
-  let mutationsAttempted = 0;
-  let mutationsSucceeded = 0;
-  let streaks = 0;
-  let longestStreak = null;
-  let current = null;
-  for (const ev of tools) {
-    const sig = callSignature(ev);
-    const subject = subjectOf(ev);
-    if (seenCalls.has(sig)) duplicateCalls += 1;
-    else seenCalls.set(sig, subject);
-    const cached = isCacheAnswered(ev);
-    if (cached) cacheAnswered += 1;
-    const failed2 = Boolean(ev.isError) || isFailedToolResult(ev.result);
-    if (current && current.sig === sig) {
-      current.streak.count += 1;
-      if (failed2) current.streak.failed += 1;
-      if (current.streak.count === 2) streaks += 1;
-      if (!longestStreak || current.streak.count > longestStreak.count) longestStreak = current.streak;
-    } else {
-      current = { sig, streak: { label: ev.label, count: 1, failed: failed2 ? 1 : 0 } };
-    }
-    const target = targetSignature(ev);
-    if (target) {
-      targetedCalls += 1;
-      targetCounts.set(target, (targetCounts.get(target) ?? 0) + 1);
-      const seen = sinceEdit.get(target) ?? 0;
-      if (seen > 0) {
-        revisits += 1;
-        revisitsOf.set(target, (revisitsOf.get(target) ?? 0) + 1);
-      }
-      sinceEdit.set(target, seen + 1);
-    }
-    if (isMutationTool(ev.label)) {
-      mutationsAttempted += 1;
-      if (!cached && !ev.isError && !isFailedToolResult(ev.result)) {
-        mutationsSucceeded += 1;
-        if (subject) {
-          for (const key of sinceEdit.keys()) if (key.endsWith(`:${subject}`)) sinceEdit.set(key, 0);
-          for (const [s, t] of seenCalls) if (t === subject) seenCalls.delete(s);
-        }
-      }
-    }
-  }
-  const repeatedTargets = [...revisitsOf.entries()].map(([label, again]) => ({ label, count: again + 1 })).sort((a, b) => b.count - a.count);
-  const distinctTargets = targetCounts.size;
-  const revisitRatio = targetedCalls > 0 ? revisits / targetedCalls : 0;
-  let modelMs = 0;
-  let toolMs = 0;
-  let slowestStep = null;
-  const timed = [];
+// src/staffingSummary.ts
+function sessionShippedInTrace(events) {
+  let n = 0;
   for (const ev of events) {
-    const ms = typeof ev.durationMs === "number" && Number.isFinite(ev.durationMs) ? ev.durationMs : 0;
-    const t = Date.parse(ev.ts);
-    if (Number.isFinite(t)) timed.push({ t, ms });
-    if (ev.category === "llm") modelMs += ms;
-    else if (ev.category === "tool") toolMs += ms;
-    if (ms > 0 && (!slowestStep || ms > slowestStep.ms)) slowestStep = { label: ev.label, ms };
+    if (ev.category !== "tool" || ev.isError || isFailedToolResult(ev.result)) continue;
+    if (isCodeChangeTool(ev.label) || ev.label === "git_commit" || ev.label === "git_push") n += 1;
   }
-  timed.sort((a, b) => a.t - b.t);
-  let idleMs = 0;
-  for (let i = 1; i < timed.length; i++) {
-    const uncovered = timed[i].t - timed[i - 1].t - timed[i].ms;
-    if (uncovered > IDLE_GAP_MS) idleMs += uncovered;
+  return n;
+}
+var DISPATCH_TOOL = /chats[._](dispatch_agent|execute_as_agent)|kanban[._](coordinate|materialize_work_items|assess_resource|assign_participant)|executions[._]submit|run[._-]?now/i;
+function isDispatchTool(label) {
+  return DISPATCH_TOOL.test(label);
+}
+var MAX_REFUSAL_CHARS = 180;
+function didDispatch(ev) {
+  if (ev.isError || isFailedToolResult(ev.result)) return false;
+  const r = toolResultRecord(ev.result);
+  if (!r) return true;
+  const autoRun = r.autoRun && typeof r.autoRun === "object" ? r.autoRun : null;
+  if (autoRun && typeof autoRun.dispatched === "boolean") return autoRun.dispatched;
+  if (typeof r.dispatched === "boolean") return r.dispatched;
+  return true;
+}
+function refusalMessage(ev) {
+  const r = toolResultRecord(ev.result);
+  const raw = r && typeof r.error === "string" && r.error || r && typeof r.detail === "string" && r.detail || (r && r.autoRun && typeof r.autoRun === "object" && typeof r.autoRun.detail === "string" ? String(r.autoRun.detail) : "") || (typeof ev.result === "string" ? ev.result : "") || (r ? JSON.stringify(r) : "") || "no reason given";
+  const flat = String(raw).replace(/\s+/g, " ").trim();
+  return flat.length > MAX_REFUSAL_CHARS ? `${flat.slice(0, MAX_REFUSAL_CHARS)}\u2026` : flat || "no reason given";
+}
+function asAgentOf(args) {
+  const a = args && typeof args === "object" ? args : null;
+  const v = a?.as_agent;
+  return typeof v === "string" ? v.trim() : "";
+}
+function staffingSummaryInTrace(events) {
+  let ticketsCreated = 0;
+  let filedLocally = 0;
+  let dispatchAttempts = 0;
+  let dispatched = 0;
+  const dispatchRefusals = [];
+  const personaSubagents = [];
+  for (const ev of events) {
+    if (ev.category !== "tool") continue;
+    if (isTicketWriteTool(ev.label) && !ev.isError && !isFailedToolResult(ev.result)) {
+      ticketsCreated += 1;
+      if (isLocalTicketCreateLabel(ev.label)) filedLocally += 1;
+    }
+    if (isDispatchTool(ev.label)) {
+      dispatchAttempts += 1;
+      if (didDispatch(ev)) dispatched += 1;
+      else dispatchRefusals.push({ label: ev.label, message: refusalMessage(ev) });
+    }
+    if (ev.label === "spawn_agent") {
+      const agent = asAgentOf(ev.args);
+      if (!agent) continue;
+      const args = ev.args;
+      const result = toolResultRecord(ev.result);
+      const label = typeof args?.label === "string" && args.label.trim() || typeof result?.label === "string" && result.label.trim() || (typeof args?.task === "string" ? args.task.trim().slice(0, 60) : "") || "delegated work";
+      personaSubagents.push({
+        agent,
+        label,
+        ok: !ev.isError && !isFailedToolResult(ev.result) && result?.ok !== false
+      });
+    }
   }
-  const wallClockMs = timed.length > 1 ? timed[timed.length - 1].t - timed[0].t : 0;
-  const didWork = tools.length > 0;
-  const noEffect = editIntent && didWork && mutationsSucceeded === 0;
-  const stuckOnCall = longestStreak !== null && longestStreak.count >= BACK_TO_BACK_AT;
-  const spinning = targetedCalls >= 6 && revisitRatio >= 0.4 || stuckOnCall;
-  return {
-    duplicateCalls,
-    cacheAnswered,
-    longestStreak,
-    streaks,
-    stuckOnCall,
-    repeatedTargets,
-    distinctTargets,
-    targetedCalls,
-    revisitRatio,
-    mutationsAttempted,
-    mutationsSucceeded,
-    editIntent,
-    noEffect,
-    spinning,
-    wallClockMs,
-    idleMs,
-    modelMs,
-    toolMs,
-    slowestStep
-  };
+  const verdict = dispatched > 0 || personaSubagents.some((p) => p.ok) ? "staffed" : dispatchRefusals.length > 0 ? "staffing-refused" : ticketsCreated > 0 && filedLocally === ticketsCreated ? "filed-locally" : ticketsCreated > 0 ? sessionShippedInTrace(events) > 0 ? "self-served" : "filed-not-staffed" : "no-work-filed";
+  return { ticketsCreated, filedLocally, dispatchAttempts, dispatched, dispatchRefusals, personaSubagents, verdict };
+}
+function formatDispatchRefusals(refusals) {
+  const counts = /* @__PURE__ */ new Map();
+  for (const r of refusals) counts.set(r.message, (counts.get(r.message) ?? 0) + 1);
+  return [...counts.entries()].map(([msg, n]) => n > 1 ? `${msg} \xD7${n}` : msg).join("; ");
+}
+function workFiledNotStaffedVerdict(s) {
+  const refused = s.dispatchRefusals.length ? ` (${s.dispatchRefusals.length} refused: ${formatDispatchRefusals(s.dispatchRefusals)})` : "";
+  return `Likely WORK FILED BUT NOT STAFFED \u2014 ${s.ticketsCreated} ticket(s) created, ${s.dispatched} dispatched${refused}. Nobody is running the work.`;
+}
+function formatStaffingSummary(s, opts) {
+  if (s.verdict === "no-work-filed" && s.dispatchAttempts === 0 && s.personaSubagents.length === 0) return [];
+  const refused = s.dispatchRefusals.length ? ` (${s.dispatchRefusals.length} refused: ${formatDispatchRefusals(s.dispatchRefusals)})` : "";
+  const shipped = opts?.sessionShipped ?? 0;
+  const sessionDidIt = shipped > 0 && (s.verdict === "filed-not-staffed" || s.verdict === "staffing-refused" || s.verdict === "self-served");
+  const tail = sessionDidIt ? ` \u2014 the session itself changed the code (${shipped} write/commit call(s) succeeded); a cloud dispatch was not required` : s.verdict === "self-served" ? " \u2014 self-served: the session itself changed the code; a cloud dispatch was not required" : s.verdict === "filed-not-staffed" ? " \u2014 the work was filed but nobody is running it" : s.verdict === "filed-locally" ? " \u2014 filed on this device; the work runs here, by the session and its local sub-agents, and the tickets sync to the account when sync is on" : s.verdict === "staffing-refused" ? " \u2014 every attempt to staff the work was refused, so nobody is running it" : "";
+  const lines = [
+    `Staffing: ${s.ticketsCreated} ticket(s) filed \xB7 ${s.dispatched} dispatched${refused} \xB7 ${s.personaSubagents.length} persona sub-agent(s)${tail}`
+  ];
+  if (s.personaSubagents.length) {
+    lines.push(
+      `Persona sub-agents: ${s.personaSubagents.map((p) => `${p.agent} \u2014 ${p.label}${p.ok ? "" : " (no answer)"}`).join("; ")}`
+    );
+  }
+  return lines;
 }
 
 // src/shipVerification.ts
@@ -10988,7 +11384,7 @@ function outputOf(ev) {
   }
   return "";
 }
-function succeeded3(ev) {
+function succeeded4(ev) {
   return !ev.isError && !isFailedToolResult(ev.result);
 }
 function isPush(ev) {
@@ -11016,7 +11412,7 @@ var DEFAULT_BRANCH_CMD = gitCommandPattern("remote|symbolic-ref|branch");
 function defaultBranchFromTrace(steps) {
   for (let i = steps.length - 1; i >= 0; i -= 1) {
     const ev = steps[i];
-    if (!succeeded3(ev) || !DEFAULT_BRANCH_CMD.test(commandOf(ev))) continue;
+    if (!succeeded4(ev) || !DEFAULT_BRANCH_CMD.test(commandOf(ev))) continue;
     const out = outputOf(ev);
     const m = /HEAD branch:\s*(\S+)/.exec(out) ?? /origin\/HEAD\s*->\s*origin\/(\S+)/.exec(out) ?? /^\s*refs\/remotes\/origin\/(\S+)\s*$/m.exec(out);
     if (m?.[1] && m[1] !== "HEAD" && m[1] !== "(unknown)") return m[1];
@@ -11037,13 +11433,13 @@ function shippedToBaseBranch(events, opts) {
   const isBase = (branch) => BASE_BRANCHES.has(branch) || branch === defaultBranch;
   let pushedAt = -1;
   for (let i = 0; i < steps.length; i += 1) {
-    if (succeeded3(steps[i]) && isPush(steps[i])) pushedAt = i;
+    if (succeeded4(steps[i]) && isPush(steps[i])) pushedAt = i;
   }
   if (pushedAt < 0) return false;
   const touched = opts?.touchedFiles ?? [];
   for (let i = pushedAt; i < steps.length; i += 1) {
     const ev = steps[i];
-    if (!succeeded3(ev)) continue;
+    if (!succeeded4(ev)) continue;
     const isStatus = i === pushedAt || ev.label === "git_status" || GIT_STATUS_CMD.test(commandOf(ev));
     if (!isStatus) continue;
     const output = outputOf(ev);
@@ -11217,6 +11613,7 @@ export {
   ReadCoverage,
   parseShellFileRead,
   isReadOnlyShellCall,
+  isMutatingShellCall,
   shellPrintAsRead,
   recordShellFileRead,
   FAILURE_NUDGE_AT,
@@ -11228,6 +11625,8 @@ export {
   repeatedWriteNote,
   isTestPath,
   claimsReady,
+  announcesDeliverable,
+  ANNOUNCED_DELIVERABLE_STEER,
   ProgressDetector,
   progressAdvice,
   progressPauseQuestion,
@@ -11249,6 +11648,7 @@ export {
   applyReviewRoundCap,
   reviewGate,
   shellPublishHint,
+  isScratchScriptPath,
   turnInterruption,
   isTruncatedTurn,
   isMalformedToolCall,
@@ -11261,7 +11661,7 @@ export {
   ticketStatusMove,
   toolResultRecord,
   entityIdsOf,
-  toolOutputCap,
+  resultTableCap,
   windowedCap,
   truncateMiddle,
   isReadFileResult,
@@ -11309,6 +11709,7 @@ export {
   canReviewInPreview,
   studioToolsIn,
   memoryToolsIn,
+  isFailedToolResult,
   isMutationTool,
   hasEditIntent,
   isCacheAnswered,
@@ -11327,6 +11728,7 @@ export {
   splitLayoutLine,
   scopeClashCorrective,
   routingByRole,
+  sessionShippedInTrace,
   isDispatchTool,
   staffingSummaryInTrace,
   formatDispatchRefusals,
@@ -11336,9 +11738,9 @@ export {
   READ_FILE_RESULT_CHARS2 as READ_FILE_RESULT_CHARS,
   trimToolResult,
   requestedReadWindow2 as requestedReadWindow,
+  formatBrainDiagnostics,
   toolExposureInTrace,
   formatAdvertised,
-  isFailedToolResult,
   UNBACKED_WRITE_CLAIM_NOTICE,
   UNBACKED_TICKET_CLAIM_NOTICE,
   isTicketWriteTool,
@@ -11361,7 +11763,6 @@ export {
   ROLE_GATE_REMEDIATION,
   parseRoleGateRefusal,
   computeBrainDiagnostics,
-  formatBrainDiagnostics,
   buildBrainTriageReport,
   BASE_BRANCHES,
   parseGitShortStatus,
@@ -11373,4 +11774,4 @@ export {
   toolCallArgBytes,
   createComposingActivity
 };
-//# sourceMappingURL=chunk-ZVZGRSV4.mjs.map
+//# sourceMappingURL=chunk-JAACVKV7.mjs.map

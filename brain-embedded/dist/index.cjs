@@ -56,11 +56,12 @@ __export(src_exports, {
   CHAT_STAMPED_CREATE_TOOLS: () => CHAT_STAMPED_CREATE_TOOLS,
   CODE_CHANGE_TOOLS: () => CODE_CHANGE_TOOLS,
   CONNECT_RETRY_DELAYS_MS: () => CONNECT_RETRY_DELAYS_MS,
-  CONSOLIDATION_MARKER_PREFIX: () => import_working21.CONSOLIDATION_MARKER_PREFIX,
-  CONSOLIDATION_META: () => import_working21.CONSOLIDATION_META,
+  CONSOLIDATION_MARKER_PREFIX: () => import_working22.CONSOLIDATION_MARKER_PREFIX,
+  CONSOLIDATION_META: () => import_working22.CONSOLIDATION_META,
   DEFAULT_AGENT_MODEL_SENTINEL: () => DEFAULT_AGENT_MODEL_SENTINEL,
   DEFAULT_CHAT_ACTIVITY_LABELS: () => DEFAULT_CHAT_ACTIVITY_LABELS,
   DEFAULT_CHAT_TITLE: () => DEFAULT_CHAT_TITLE,
+  DEFAULT_HIGH_PRIORITY_RESERVE: () => DEFAULT_HIGH_PRIORITY_RESERVE,
   DEFAULT_MODEL_CHOICE_LABELS: () => DEFAULT_MODEL_CHOICE_LABELS,
   DEFAULT_MODEL_FALLBACK_TEMPLATE: () => DEFAULT_MODEL_FALLBACK_TEMPLATE,
   DEFAULT_MODEL_IDENTITY: () => DEFAULT_MODEL_IDENTITY,
@@ -79,7 +80,7 @@ __export(src_exports, {
   FailureTally: () => FailureTally,
   HAND_OFF_TOOL: () => HAND_OFF_TOOL,
   HAND_OFF_TOOL_SPEC: () => HAND_OFF_TOOL_SPEC,
-  HISTORY_TOKEN_BUDGET: () => import_working20.HISTORY_TOKEN_BUDGET,
+  HISTORY_TOKEN_BUDGET: () => import_working21.HISTORY_TOKEN_BUDGET,
   INFERENCE_MODES: () => INFERENCE_MODES,
   JUDGEMENT_SCHEMAS: () => JUDGEMENT_SCHEMAS,
   LOCAL_ENGINE_FAILURE_CODES: () => LOCAL_ENGINE_FAILURE_CODES,
@@ -210,9 +211,9 @@ __export(src_exports, {
   composeEvermindHooks: () => composeEvermindHooks,
   computeBrainDiagnostics: () => computeBrainDiagnostics,
   computeRunProgress: () => computeRunProgress,
-  consolidationMarkerContent: () => import_working21.consolidationMarkerContent,
-  consolidationMarkerOf: () => import_working21.consolidationMarkerOf,
-  consolidationMetadata: () => import_working21.consolidationMetadata,
+  consolidationMarkerContent: () => import_working22.consolidationMarkerContent,
+  consolidationMarkerOf: () => import_working22.consolidationMarkerOf,
+  consolidationMetadata: () => import_working22.consolidationMetadata,
   contextUsageOf: () => contextUsageOf,
   contextWindowOf: () => contextWindowOf,
   countReconciledMemories: () => import_evermind3.countReconciledMemories,
@@ -308,7 +309,7 @@ __export(src_exports, {
   isCoderReask: () => isCoderReask,
   isConnectFailure: () => isConnectFailure,
   isConnectedAccountUnused: () => isConnectedAccountUnused,
-  isConsolidationMarker: () => import_working21.isConsolidationMarker,
+  isConsolidationMarker: () => import_working22.isConsolidationMarker,
   isDirectedToParticipant: () => isDirectedToParticipant,
   isDispatchTool: () => isDispatchTool,
   isEffort: () => isEffort,
@@ -343,7 +344,7 @@ __export(src_exports, {
   joinRestorableTurns: () => joinRestorableTurns,
   jsonClientResult: () => jsonClientResult,
   judgeClientFirstFor: () => judgeClientFirstFor,
-  lastConsolidationIndex: () => import_working21.lastConsolidationIndex,
+  lastConsolidationIndex: () => import_working22.lastConsolidationIndex,
   lastServedModel: () => lastServedModel,
   leftChangeUnreviewed: () => leftChangeUnreviewed,
   leftChangeUnshipped: () => leftChangeUnshipped,
@@ -401,6 +402,7 @@ __export(src_exports, {
   parseRoleGateRefusal: () => parseRoleGateRefusal,
   parseStepMessage: () => parseStepMessage,
   parseSubagentOrigin: () => parseSubagentOrigin,
+  payloadPriority: () => payloadPriority,
   perMillionUsd: () => perMillionUsd,
   personaAgentOf: () => personaAgentOf,
   personaModalityOf: () => personaModalityOf,
@@ -466,7 +468,7 @@ __export(src_exports, {
   runProgressVerdict: () => runProgressVerdict,
   savePendingPrompt: () => savePendingPrompt,
   savedChatOf: () => savedChatOf,
-  scopeToConsolidation: () => import_working21.scopeToConsolidation,
+  scopeToConsolidation: () => import_working22.scopeToConsolidation,
   selectPendingAskUser: () => selectPendingAskUser,
   selfReviewShipDirective: () => selfReviewShipDirective,
   serializeAskUser: () => serializeAskUser,
@@ -3285,9 +3287,9 @@ var PRICE_SNAPSHOT = {
   "~anthropic/claude-haiku-latest": [1e-7, 5e-7],
   "~anthropic/claude-opus-latest": [4e-6, 2e-5],
   "~anthropic/claude-sonnet-latest": [2e-6, 1e-5],
-  "~deepseek/deepseek-flash-latest": [36e-9, 5e-7],
+  "~deepseek/deepseek-flash-latest": [35e-9, 15e-8],
   "~deepseek/deepseek-pro-latest": [999e-10, 8e-6],
-  "~deepseek/deepseek-v4-flash-latest": [434e-10, 3e-7],
+  "~deepseek/deepseek-v4-flash-latest": [6e-8, 18e-8],
   "~google/gemini-flash-latest": [15e-7, 75e-7],
   "~google/gemini-pro-latest": [2e-6, 1e-5],
   "~moonshotai/kimi-latest": [1824e-10, 110055e-10],
@@ -3360,18 +3362,18 @@ var PRICE_SNAPSHOT = {
   "deepseek/deepseek-chat": [2574e-10, 10287e-10],
   "deepseek/deepseek-chat-v3-0324": [29e-8, 114e-8],
   "deepseek/deepseek-chat-v3.1": [25e-8, 95e-8],
-  "deepseek/deepseek-r1-0528": [5e-7, 215e-8],
+  "deepseek/deepseek-r1-0528": [571e-9, 2286e-9],
   "deepseek/deepseek-v3.1-terminus": [27e-8, 1e-6],
   "deepseek/deepseek-v3.2": [26e-8, 38e-8],
   "deepseek/deepseek-v3.2-exp": [27e-8, 41e-8],
   "deepseek/deepseek-v4-flash": [9e-8, 18e-8],
-  "deepseek/deepseek-v4-flash-0731": [6e-8, 18e-8],
+  "deepseek/deepseek-v4-flash-0731": [62e-9, 3e-7],
   "deepseek/deepseek-v4-flash-0731:batch": [48e-9, 144e-9],
   "deepseek/deepseek-v4-flash-vision-exp": [44e-8, 132e-8],
   "deepseek/deepseek-v4-pro": [9e-7, 15e-7],
   "deepseek/deepseek-v4-pro-0813": [111e-9, 444e-8],
-  "deepseek/deepseek-v4.1-flash": [51e-9, 567e-9],
-  "deepseek/deepseek-v4.1-flash-1017": [36e-9, 5e-7],
+  "deepseek/deepseek-v4.1-flash": [3e-7, 12e-7],
+  "deepseek/deepseek-v4.1-flash-1017": [15e-8, 6e-7],
   "deepseek/deepseek-v4.1-flash-1017:batch": [36e-9, 15e-8],
   "deepseek/deepseek-v4.1-flash:batch": [112e-9, 336e-9],
   "dots-studio/dots-3-note-preview:free": [0, 0],
@@ -3411,14 +3413,16 @@ var PRICE_SNAPSHOT = {
   "google/gemini-4-carbon:batch": [1e-6, 5e-6],
   "google/gemini-4-hydrogen": [15e-7, 75e-7],
   "google/gemini-4-hydrogen:batch": [75e-8, 375e-8],
+  "google/gemini-4-neon": [3e-6, 15e-6],
+  "google/gemini-4-neon:batch": [15e-7, 75e-7],
   "google/gemini-nano-banana-2.1": [15e-7, 75e-7],
   "google/gemini-omni-1.1-flash": [15e-7, 9e-6],
   "google/gemini-omni-1.2-flash": [15e-7, 9e-6],
   "google/gemma-2-27b-it": [65e-8, 65e-8],
   "google/gemma-3-12b-it": [5e-8, 15e-8],
-  "google/gemma-3-27b-it": [8e-8, 45e-8],
+  "google/gemma-3-27b-it": [8e-8, 16e-8],
   "google/gemma-3-4b-it": [5e-8, 1e-7],
-  "google/gemma-4-26b-a4b-it": [765e-10, 255e-9],
+  "google/gemma-4-26b-a4b-it": [9e-8, 3e-7],
   "google/gemma-4-26b-a4b-it:free": [0, 0],
   "google/gemma-4-31b-it": [2e-7, 4e-7],
   "google/gemma-4-31b-it:free": [0, 0],
@@ -3491,10 +3495,10 @@ var PRICE_SNAPSHOT = {
   "moonshotai/kimi-k2-thinking": [6e-7, 25e-7],
   "moonshotai/kimi-k2.5": [5e-7, 25e-7],
   "moonshotai/kimi-k2.6": [65e-8, 341e-8],
-  "moonshotai/kimi-k2.7-code": [7e-7, 375e-8],
+  "moonshotai/kimi-k2.7-code": [66e-8, 35e-7],
   "moonshotai/kimi-k3": [192e-9, 16e-6],
   "moonshotai/kimi-k3:batch": [228e-8, 114e-7],
-  "moonshotai/kimi-k3.1-pro": [2403e-10, 84023e-10],
+  "moonshotai/kimi-k3.1-pro": [253e-9, 88e-7],
   "moonshotai/kimi-k3.1-pro:batch": [372e-9, 5583e-9],
   "morph/morph-v3-fast": [8e-7, 12e-7],
   "morph/morph-v3-fast:batch": [4e-7, 6e-7],
@@ -3659,10 +3663,10 @@ var PRICE_SNAPSHOT = {
   "qwen/qwen3-vl-30b-a3b-instruct": [15e-8, 6e-7],
   "qwen/qwen3-vl-8b-instruct": [25e-8, 75e-8],
   "qwen/qwen3.5-122b-a10b": [26e-8, 208e-8],
-  "qwen/qwen3.5-27b": [3e-7, 24e-7],
+  "qwen/qwen3.5-27b": [195e-9, 156e-8],
   "qwen/qwen3.5-35b-a3b": [14e-8, 1e-6],
   "qwen/qwen3.5-397b-a17b": [45e-8, 3e-6],
-  "qwen/qwen3.5-9b": [143e-9, 211e-9],
+  "qwen/qwen3.5-9b": [142e-9, 208e-9],
   "qwen/qwen3.5-flash-02-23": [65e-9, 26e-8],
   "qwen/qwen3.5-plus-02-15": [26e-8, 156e-8],
   "qwen/qwen3.5-plus-20260420": [3e-7, 18e-7],
@@ -3684,7 +3688,7 @@ var PRICE_SNAPSHOT = {
   "qwen/qwen3.8-omni-flash": [15e-8, 47e-8],
   "qwen/qwen4-max": [1425e-9, 4275e-9],
   "recursive/flint-v1.0:free": [0, 0],
-  "reflection/beam-1.0-501b-a23b": [3e-7, 1e-6],
+  "reflection/beam-1.0-501b-a23b": [25e-8, 1e-6],
   "rekaai/reka-edge": [1e-7, 1e-7],
   "rekaai/reka-flash-3": [1e-7, 2e-7],
   "relace/relace-apply-3": [85e-8, 125e-8],
@@ -3735,7 +3739,7 @@ var PRICE_SNAPSHOT = {
   "x-ai/grok-4.7:batch": [16e-7, 48e-7],
   "x-ai/grok-build-0.1": [1e-6, 2e-6],
   "xiaomi/mimo-v2.5": [4e-7, 2e-6],
-  "xiaomi/mimo-v2.5-pro": [435e-9, 87e-8],
+  "xiaomi/mimo-v2.5-pro": [48e-8, 18e-7],
   "xiaomi/mimo-v2.6-flash": [14e-8, 28e-8],
   "xiaomi/mimo-v2.6-pro": [435e-9, 87e-8],
   "xiaomi/mimo-v2.6-pro-ultraspeed": [435e-8, 87e-7],
@@ -3748,11 +3752,11 @@ var PRICE_SNAPSHOT = {
   "z-ai/glm-4.7-flash": [605e-10, 4e-7],
   "z-ai/glm-5": [1e-6, 32e-7],
   "z-ai/glm-5-turbo": [12e-7, 4e-6],
-  "z-ai/glm-5.1": [14e-7, 44e-7],
-  "z-ai/glm-5.2": [7e-9, 68e-7],
+  "z-ai/glm-5.1": [119e-8, 374e-8],
+  "z-ai/glm-5.2": [62e-8, 242e-8],
   "z-ai/glm-5.2:batch": [322e-9, 989e-9],
   "z-ai/glm-5.3": [699e-10, 14e-7],
-  "z-ai/glm-5.3-flash": [399e-10, 784e-10],
+  "z-ai/glm-5.3-flash": [15e-8, 5e-7],
   "z-ai/glm-5.3-flash:batch": [24e-9, 69e-9],
   "z-ai/glm-5.3-flashx": [37e-8, 125e-8],
   "z-ai/glm-5.3-flashx-legal": [37e-8, 125e-8],
@@ -9468,20 +9472,22 @@ function isArcStage(value) {
 // ../packages/agent-tools/src/modelRoles.ts
 var MODEL_ROLES = ["plan", "code", "review", "verify", "explore", "chat", "utility"];
 var MODEL_ROLE_DESCRIPTIONS = {
-  plan: "Deciding an approach or breaking work down \u2014 no code written yet.",
-  code: "Writing or editing code. The default when no role is named.",
-  review: "Judging work \u2014 reviewing a diff or a plan for correctness and design.",
+  plan: "Deciding \u2014 choosing an approach, breaking work down, sequencing it. Produces a decision, not code.",
+  code: "Writing or editing code or files. Only when the child must CHANGE something; reading and reporting is never code.",
+  review: "Judging \u2014 auditing, comparing, aligning or reconciling one thing against another (tickets vs roadmap, a diff vs its spec, a plan vs the code) and saying what is wrong or missing.",
   verify: "Mechanical checks \u2014 building, compiling, running tests and reading their output.",
-  explore: "Investigation \u2014 locating, searching, summarising.",
+  explore: "Locating and summarising \u2014 finding where something lives, bulk-reading pages or files and reporting what is there, without judging it.",
   chat: "A conversational answer with no task-shaped work behind it.",
   utility: "Small, mechanical, low-stakes work \u2014 formatting, extraction, a lookup."
 };
+var MISSING_ROLE_ERROR = `role is required \u2014 say what kind of work the child does so it is routed to a model suited to it: ${MODEL_ROLES.join(" | ")}. Auditing, comparing or aligning is review; locating or bulk-reading and summarising is explore; deciding is plan; code is only for a child that must change files.`;
 var ROLE_SET = new Set(MODEL_ROLES);
 function isModelRole(value) {
   return typeof value === "string" && ROLE_SET.has(value);
 }
-function delegationRole(raw) {
-  return isModelRole(raw) ? raw : "code";
+function requiredDelegationRole(raw) {
+  const role = typeof raw === "string" ? raw.trim().toLowerCase() : raw;
+  return isModelRole(role) ? role : null;
 }
 
 // ../packages/agent-tools/src/callShape.ts
@@ -14228,9 +14234,53 @@ var SUBAGENT_CONTROL_TOOLS = [waitAgentsTool, messageAgentTool, stopAgentTool];
 
 // ../packages/agent-tools/src/subagent-tools.ts
 var ROLE_ENUM_DESCRIPTION = MODEL_ROLES.map((role) => `${role} \u2014 ${MODEL_ROLE_DESCRIPTIONS[role]}`).join(" \xB7 ");
+var HANDOFF_NOTE = "The child does not see this conversation. Put the job in `task` and every fact you already established (counts, conclusions, what you ruled out, pages or files already read) in `context` \u2014 the child starts from it instead of re-deriving it; where the host keeps your run record it also appends the files, windows and data calls you already made. Its report carries its coverage (what it read, with offsets) and, where the host keeps them, the path of a file holding the data it collected \u2014 read that file instead of fetching the same pages again.";
+var HANDOFF_CHARS = 2e3;
+var HANDOFF_HEAD = "Already established by your owner \u2014 do not re-derive:";
+function ownerHandoffBlock(input, maxChars = HANDOFF_CHARS) {
+  const context = (input.context ?? "").trim();
+  const established = (input.established ?? []).map((l) => l.trim()).filter(Boolean);
+  if (!context && established.length === 0) return "";
+  const lines = [HANDOFF_HEAD];
+  let used = HANDOFF_HEAD.length;
+  if (context) {
+    const room = Math.max(0, maxChars - used - 1);
+    const clipped = context.length > room ? `${context.slice(0, Math.max(0, room - 1))}\u2026` : context;
+    lines.push(clipped);
+    used += clipped.length + 1;
+  }
+  if (established.length) {
+    const head = "Your owner already made these calls; their conclusions are stated above. Re-read only what you need verbatim:";
+    if (used + head.length + 1 < maxChars) {
+      lines.push(head);
+      used += head.length + 1;
+      let shown = 0;
+      for (const line of established) {
+        const row = `- ${line}`;
+        const rest = established.length - shown - 1;
+        const tail = rest > 0 ? `- \u2026 and ${rest} more` : "";
+        if (used + row.length + 1 + (rest > 0 ? tail.length + 1 : 0) > maxChars) break;
+        lines.push(row);
+        used += row.length + 1;
+        shown += 1;
+      }
+      if (shown < established.length) lines.push(`- \u2026 and ${established.length - shown} more`);
+    }
+  }
+  return lines.join("\n");
+}
+function briefWithHandoff(task, block) {
+  return block ? `${task}
+
+${block}` : task;
+}
+var CONTEXT_PARAM = {
+  type: "string",
+  description: "Facts you have ALREADY established that the child must not re-derive \u2014 counts, conclusions, what you ruled out, which pages/files/windows you already read and what they held. Shown to the child first under 'Already established by your owner'."
+};
 var spawnAgentTool = withDelegationNote(defineTool({
   name: "spawn_agent",
-  description: "Delegate a self-contained sub-task to a child agent that works in its OWN context and reports back when it is done. Use it when finding something out would take many turns you do not want to carry \u2014 locating where a behaviour lives across an unfamiliar tree, checking whether a pattern is used anywhere else, summarising a large file you only need one fact from. The child sees NOTHING of this conversation, so `task` must state everything it needs to know, and it answers in prose \u2014 it cannot hand you files or tool output. Do NOT delegate work you can do in a turn or two. The child is a clone of you: it holds every tool you hold and carries its slice out end to end \u2014 investigating, editing, running commands, recording the work. You remain accountable for what ships, so check what it reports. " + LIVE_DELEGATION_NOTE,
+  description: "Delegate a self-contained sub-task to a child agent that works in its OWN context and reports back when it is done. Use it when finding something out would take many turns you do not want to carry \u2014 locating where a behaviour lives across an unfamiliar tree, checking whether a pattern is used anywhere else, summarising a large file you only need one fact from. " + HANDOFF_NOTE + " Name its `role` \u2014 it decides which model does the work. Do NOT delegate work you can do in a turn or two. The child is a clone of you: it holds every tool you hold and carries its slice out end to end \u2014 investigating, editing, running commands, recording the work. You remain accountable for what ships, so check what it reports. " + LIVE_DELEGATION_NOTE,
   parameters: {
     type: "object",
     properties: {
@@ -14240,19 +14290,20 @@ var spawnAgentTool = withDelegationNote(defineTool({
       },
       task: {
         type: "string",
-        description: "The child's complete brief: what to find out or do, where to look, and exactly what to report back. Assume it knows nothing about the ticket beyond what you write here."
+        description: "The child's job: what to find out or do, where to look, and exactly what to report back. Facts you already established go in `context`."
       },
+      context: CONTEXT_PARAM,
       role: {
         type: "string",
         enum: [...MODEL_ROLES],
-        description: `What kind of call the child's turns are \u2014 lets the surface pick a model suited to the work rather than reusing yours. Defaults to 'code'. ${ROLE_ENUM_DESCRIPTION}`
+        description: `REQUIRED. What kind of work the child's turns are \u2014 the surface routes them to a model suited to it, and the child keeps that model for its whole life. ${ROLE_ENUM_DESCRIPTION}`
       },
       as_agent: {
         type: "string",
         description: "Run the child AS one of the workspace's agents \u2014 its id or name (e.g. 'Ada'). The child adopts that agent's role, bio, skills and personality so the delegated slice is done in that agent's voice and expertise. Prefer an agent already in this chat (builtin_chats_list_agents) or from builtin_cloud_agents_list_mine. Optional: when no teammate's role fits the slice, omit it and the child runs as a plain sub-agent."
       }
     },
-    required: ["label", "task"]
+    required: ["label", "task", "role"]
   },
   requires: ["orchestrate"],
   async execute(args, ctx) {
@@ -14260,11 +14311,13 @@ var spawnAgentTool = withDelegationNote(defineTool({
     const label = str7(args.label);
     const task = str7(args.task);
     if (!task) return { data: { ok: false, error: "task is required \u2014 the child sees none of your conversation" } };
-    const role = delegationRole(args.role);
+    const role = requiredDelegationRole(args.role);
+    if (!role) return { data: { ok: false, error: MISSING_ROLE_ERROR } };
     const asAgent = str7(args.as_agent);
     const r = await ctx.caps.orchestration.spawn({
       label: label || task.slice(0, 60),
-      task,
+      // The cloud surface keeps no owner run record here: the hand-off is the owner's `context`.
+      task: briefWithHandoff(task, ownerHandoffBlock({ context: str7(args.context) })),
       role,
       ...asAgent ? { asAgent } : {}
     });
@@ -14285,13 +14338,16 @@ function parseWorkstreams(raw) {
     const w = item ?? {};
     const task = str7(w.task);
     if (!task) return `workstream ${i + 1} has no task \u2014 each child sees none of your conversation`;
+    const role = requiredDelegationRole(w.role);
+    if (!role) return `workstream ${i + 1}: ${MISSING_ROLE_ERROR}`;
     const ticket = str7(w.ticket);
-    const role = str7(w.role);
+    const context = str7(w.context);
     out.push({
       label: str7(w.label) || task.slice(0, 60),
       task,
       ...ticket ? { ticket } : {},
-      ...role ? { role } : {},
+      role,
+      ...context ? { context } : {},
       asAgent: str7(w.as_agent)
     });
   }
@@ -14299,7 +14355,7 @@ function parseWorkstreams(raw) {
 }
 var spawnAgentsTool = withDelegationNote(defineTool({
   name: SPAWN_AGENTS_TOOL,
-  description: `Run SEVERAL independent workstreams side by side \u2014 up to ${MAX_WORKSTREAMS} child agents at once, each in its own context, each reporting back to the chat. Use it when the request splits into slices that do not depend on each other: a PRD's workstreams, one change per package or feature. Each child is a clone of you with every tool you hold, and carries its slice out end to end. Give slices that do not touch the same files, so they do not overwrite each other; once their reports are in, check the combined result and report per workstream. File one ticket per workstream first and pass its id as \`ticket\`. Each child sees nothing of this conversation, so every \`task\` must stand alone: what to change, where, and how to know it is done. ` + LIVE_DELEGATION_NOTE,
+  description: `Run SEVERAL independent workstreams side by side \u2014 up to ${MAX_WORKSTREAMS} child agents at once, each in its own context, each reporting back to the chat. Use it when the request splits into slices that do not depend on each other: a PRD's workstreams, one change per package or feature. Each child is a clone of you with every tool you hold, and carries its slice out end to end. Give slices that do not touch the same files, so they do not overwrite each other; once their reports are in, check the combined result and report per workstream. File one ticket per workstream first and pass its id as \`ticket\`. Every \`task\` must stand alone: what to change, where, and how to know it is done; name each workstream's \`role\`. ` + HANDOFF_NOTE + " " + LIVE_DELEGATION_NOTE,
   parameters: {
     type: "object",
     properties: {
@@ -14313,11 +14369,12 @@ var spawnAgentsTool = withDelegationNote(defineTool({
           properties: {
             label: { type: "string", description: "A few words naming the workstream, e.g. 'W8: company \u2192 project'." },
             task: { type: "string", description: "The child's complete, standalone brief." },
+            context: CONTEXT_PARAM,
             ticket: { type: "string", description: "The ticket this workstream delivers, echoed in the result." },
-            role: { type: "string", enum: [...MODEL_ROLES], description: "Model role for the child. Defaults to code." },
+            role: { type: "string", enum: [...MODEL_ROLES], description: `REQUIRED. What kind of work this child does \u2014 it routes the child's model. ${ROLE_ENUM_DESCRIPTION}` },
             as_agent: { type: "string", description: "Run this workstream AS one of the workspace's agents (its name or id). Optional: omit it when no teammate's role fits, and the child runs as a plain sub-agent." }
           },
-          required: ["label", "task"]
+          required: ["label", "task", "role"]
         }
       }
     },
@@ -14333,8 +14390,8 @@ var spawnAgentsTool = withDelegationNote(defineTool({
     const outputChars = Math.floor(FANOUT_OUTPUT_CHARS / parsed.length);
     const results = await Promise.all(parsed.map((w) => ctx.caps.orchestration.spawn({
       label: w.label,
-      task: w.task,
-      role: delegationRole(w.role),
+      task: briefWithHandoff(w.task, ownerHandoffBlock({ ...w.context ? { context: w.context } : {} })),
+      role: w.role,
       outputChars,
       ...w.ticket ? { ticket: w.ticket } : {},
       ...w.asAgent ? { asAgent: w.asAgent } : {}
@@ -18880,10 +18937,129 @@ function runsCheck(command) {
   const subs = SUBCOMMAND_RUNNERS[exe];
   return !!subs && !!sub && subs.has(sub);
 }
+var SUITE_SCRIPT = /^(test|tests|lint|typecheck|type-check|check)$/i;
+var SUITE_RUNNERS = /* @__PURE__ */ new Set(["vitest", "jest", "pytest", "mocha", "playwright"]);
+var RATCHET_SCRIPT = /^check-[\w.-]*ratchet[\w.-]*\.(?:m|c)?[jt]s$/i;
+function untilPipe(tokens) {
+  const end = tokens.findIndex((t) => t === "|" || /^\d*>/.test(t) || t.startsWith("<"));
+  return end < 0 ? [...tokens] : tokens.slice(0, end);
+}
+function fullSuiteKey(command) {
+  const [exe, ...rest] = untilPipe(executableTokensOf(command));
+  if (!exe) return null;
+  const positional = rest.filter((tok) => !tok.startsWith("-"));
+  const script = positional.length === 1 ? positional[0].split(/[\\/]/).pop() ?? "" : "";
+  const sweeps = SUITE_SCRIPT.test(exe) && positional.length === 0 || SUITE_RUNNERS.has(exe) && positional.every((tok) => tok === "run") || (exe === "node" || exe === "tsx") && RATCHET_SCRIPT.test(script) && !rest.includes("--update");
+  return sweeps ? untilPipe(tokensOf2(command)).join(" ") : null;
+}
 function isVcsBookkeeping(command) {
   const [exe, sub] = executableTokensOf(command);
   return exe === "git" && !!sub && VCS_BOOKKEEPING.has(sub);
 }
+
+// ../packages/run-guards/src/reverifyTracker.ts
+var MAX_REVERIFY_PATHS = 200;
+function addBounded(set, path) {
+  set.delete(path);
+  set.add(path);
+  while (set.size > MAX_REVERIFY_PATHS) {
+    const oldest = set.values().next().value;
+    if (oldest === void 0) break;
+    set.delete(oldest);
+  }
+}
+function restoreBounded(paths) {
+  return new Set((paths ?? []).slice(-MAX_REVERIFY_PATHS));
+}
+var ReverifyTracker = class {
+  writtenPaths;
+  readBackSinceWrite;
+  /** Read-only targets seen this turn, to tell an all-written re-read turn from real work. */
+  readsThisTurn = 0;
+  /** Whether every read this turn was a repeat read-back of an unchanged written path. */
+  allRepeatReadBacks = true;
+  constructor(state = {}) {
+    this.writtenPaths = restoreBounded(state.writtenPaths);
+    this.readBackSinceWrite = restoreBounded(state.readBackSinceWrite);
+  }
+  /** A call that may have changed ANY file wrote: no read-back is a look at unchanged bytes. */
+  wroteAnything() {
+    this.readBackSinceWrite.clear();
+  }
+  /** `path` was written: its next read-back inspects the edit again. */
+  wrote(path) {
+    addBounded(this.writtenPaths, path);
+    this.readBackSinceWrite.delete(path);
+  }
+  /** A successful read-only call visited `target`. */
+  read(target2) {
+    this.readsThisTurn += 1;
+    if (this.writtenPaths.has(target2)) {
+      if (!this.readBackSinceWrite.has(target2)) this.allRepeatReadBacks = false;
+      addBounded(this.readBackSinceWrite, target2);
+    } else {
+      this.allRepeatReadBacks = false;
+    }
+  }
+  /** The turn ended: how many reads it made when ALL were repeat read-backs (else 0). Starts the next turn. */
+  endTurn() {
+    const count2 = this.readsThisTurn > 0 && this.allRepeatReadBacks ? this.readsThisTurn : 0;
+    this.readsThisTurn = 0;
+    this.allRepeatReadBacks = true;
+    return count2;
+  }
+  snapshot() {
+    return {
+      ...this.writtenPaths.size ? { writtenPaths: [...this.writtenPaths] } : {},
+      ...this.readBackSinceWrite.size ? { readBackSinceWrite: [...this.readBackSinceWrite] } : {}
+    };
+  }
+};
+
+// ../packages/run-guards/src/suiteRepeat.ts
+function targetedReverifyNote(command) {
+  return `You have now run the full suite \`${command}\` more than once. Do not re-run the whole suite to confirm a fix: re-run ONLY the checks that failed (the specific guard script, test file or package typecheck), and leave the full sweep to CI.`;
+}
+var SuiteRepeat = class {
+  run;
+  shownSuites;
+  pending;
+  constructor(state = {}) {
+    this.run = restoreBounded(state.run);
+    this.shownSuites = restoreBounded(state.shown);
+    this.pending = state.pending;
+  }
+  /** A shell command ran. */
+  ranCommand(command) {
+    const key = fullSuiteKey(command);
+    if (!key) return;
+    if (this.run.has(key) && !this.shownSuites.has(key)) this.pending ??= key;
+    addBounded(this.run, key);
+  }
+  /**
+   * The owed advisory ("" when none), marked shown — never again for that suite. The detector calls this only where
+   * the note becomes the turn's returned action; a turn that ends in a trip or another advisory leaves it owed.
+   */
+  take() {
+    const key = this.pending;
+    if (!key) return "";
+    addBounded(this.shownSuites, key);
+    this.pending = void 0;
+    return targetedReverifyNote(key);
+  }
+  snapshot() {
+    return {
+      ...this.run.size ? { run: [...this.run] } : {},
+      ...this.shownSuites.size ? { shown: [...this.shownSuites] } : {},
+      ...this.pending ? { pending: this.pending } : {}
+    };
+  }
+  /** The detector's snapshot field: `{ suites }`, or nothing when empty. */
+  snapshotField() {
+    const s = this.snapshot();
+    return Object.keys(s).length > 0 ? { suites: s } : {};
+  }
+};
 
 // ../packages/run-guards/src/visitTally.ts
 var REVISIT_NUDGE_AT = 3;
@@ -19486,6 +19662,101 @@ function isReadOnlyShellCall(tool, args) {
   return isReadOnlyShellCommand(command);
 }
 
+// ../packages/run-guards/src/mutatingShell.ts
+var FILE_WRITERS = /* @__PURE__ */ new Set([
+  "rm",
+  "rmdir",
+  "mv",
+  "cp",
+  "tee",
+  "touch",
+  "ln",
+  "truncate",
+  "unlink",
+  "install",
+  "patch",
+  // cmd.exe
+  "del",
+  "erase",
+  "move",
+  "copy",
+  "ren",
+  "rename",
+  "rd",
+  // PowerShell
+  "remove-item",
+  "move-item",
+  "copy-item",
+  "new-item",
+  "set-content",
+  "add-content",
+  "out-file",
+  "rename-item",
+  "clear-content"
+]);
+var GIT_WRITERS = /* @__PURE__ */ new Set([
+  "commit",
+  "checkout",
+  "switch",
+  "reset",
+  "restore",
+  "push",
+  "pull",
+  "rebase",
+  "merge",
+  "apply",
+  "am",
+  "cherry-pick",
+  "revert",
+  "clean",
+  "rm",
+  "mv",
+  "stash"
+]);
+var INLINE_FLAGS = {
+  node: ["-e", "--eval", "-p", "--print"],
+  python: ["-c"],
+  python3: ["-c"],
+  py: ["-c"]
+};
+var WRITE_API = /\b(?:writeFile(?:Sync)?|appendFile(?:Sync)?|rmSync|rmdirSync|unlink(?:Sync)?|rename(?:Sync)?|mkdirSync|copyFile(?:Sync)?|cpSync|createWriteStream|truncate(?:Sync)?|write_text|write_bytes|os\.remove|os\.unlink|os\.rename|shutil\.\w+)\b|\bopen\([^)]*,\s*['"][wax]\+?b?['"]/;
+var REGENERATING = /^--(?:update|fix|write|updateSnapshot|update-snapshots?)(?:=.*)?$/;
+function gitWrites(args) {
+  const { sub, rest } = gitSubcommand(args);
+  if (!sub || !GIT_WRITERS.has(sub)) return false;
+  return !(sub === "stash" && ["list", "show"].includes(rest.find((a) => !a.startsWith("-")) ?? ""));
+}
+function segmentWrites(segment, depth2) {
+  if (depth2 > 4) return false;
+  if (substitutions(segment).some((body) => commandWrites(body, depth2 + 1))) return true;
+  const flat = segment.replace(/\$\((?:[^()]|\([^()]*\))*\)/g, "X");
+  if (writesViaRedirect(flat)) return true;
+  const [rawProgram, ...args] = commandWords(shellTokens(flat));
+  if (rawProgram === void 0) return false;
+  const program = (rawProgram.split(/[\\/]/).pop() ?? rawProgram).toLowerCase().replace(/\.exe$/, "");
+  if (FILE_WRITERS.has(program)) return true;
+  if (program === "git") return gitWrites(args);
+  if (program === "sed" && args.some((a) => a.startsWith("-i") || a.startsWith("--in-place"))) return true;
+  if (program === "perl" && args.some((a) => /^-[a-z]*i/.test(a))) return true;
+  if (args.some((a) => REGENERATING.test(a))) return true;
+  if (args.includes("-u") && runsCheck(flat)) return true;
+  const inline = INLINE_FLAGS[program];
+  if (inline && args.some((a) => inline.includes(a)) && WRITE_API.test(flat)) return true;
+  return false;
+}
+function commandWrites(command, depth2) {
+  const segments = splitShellSegments(command);
+  if (!segments) return segmentWrites(command, depth2);
+  return segments.some((s) => segmentWrites(s, depth2));
+}
+function isMutatingShellCommand(command) {
+  const trimmed = command.trim();
+  return trimmed !== "" && commandWrites(trimmed, 0);
+}
+function isMutatingShellCall(tool, args) {
+  return tool === "run_command" && isMutatingShellCommand(shellCommandOf(args));
+}
+
 // ../packages/run-guards/src/shellPrint.ts
 function cleanPrint(args, out) {
   if (!args || typeof args !== "object" || !out || typeof out !== "object" || Array.isArray(out)) return null;
@@ -19861,6 +20132,26 @@ function claimsReady(text2) {
   if (!text2) return false;
   return ownWords(text2).toLowerCase().split(/(?<=[.!?])\s+|\n+/).some(sentenceClaims);
 }
+var DELIVERABLE_PROMISE = /\b(?:next,?\s+|now,?\s+|then,?\s+)?(?:i'll|i\s+will|i\s+am\s+going\s+to|i'm\s+going\s+to|i\s+am\s+about\s+to|i'm\s+about\s+to|let\s+me|let's)\s+(?:now\s+|next\s+|then\s+|go\s+ahead\s+and\s+)?(?:write|draft|produce|compose|prepare|put\s+together|assemble|deliver|create|implement|build)\b/;
+var OFFER2 = /\b(?:if\s+you|would\s+you\s+like|do\s+you\s+want|want\s+me\s+to|shall\s+i|should\s+i)\b/;
+var ANNOUNCEMENT_MAX_SENTENCES = 2;
+var ANNOUNCEMENT_MAX_CHARS = 400;
+var LIST_ITEM = /^\s*(?:[-*+•]|\d+[.)])\s+/;
+var DEFERRED = /\b(?:follow[- ]?up|later|afterwards|in\s+(?:a|the)\s+(?:separate|next|future|another|subsequent)\s+(?:pr|pull\s+request|ticket|issue|change|commit|task|step)|next\s+(?:pr|pull\s+request|ticket|sprint|iteration)|future\s+(?:pr|work|change))\b/;
+function announcesDeliverable(text2) {
+  if (!text2 || !text2.trim()) return false;
+  const prose = ownWords(text2).toLowerCase().split(/\n+/).filter((line) => !LIST_ITEM.test(line)).join("\n").trim();
+  if (!prose || prose.length > ANNOUNCEMENT_MAX_CHARS) return false;
+  const sentences = prose.split(/(?<=[.!?])\s+|\n+/).map((s) => s.trim()).filter(Boolean);
+  if (sentences.length > ANNOUNCEMENT_MAX_SENTENCES) return false;
+  return sentences.some((sentence) => {
+    if (sentence.endsWith("?") || OFFER2.test(sentence) || DEFERRED.test(sentence)) return false;
+    if (sentenceClaims(sentence)) return true;
+    const m = DELIVERABLE_PROMISE.exec(sentence);
+    return !!m && !NEGATION.test(sentence.slice(0, m.index + m[0].length));
+  });
+}
+var ANNOUNCED_DELIVERABLE_STEER = `Your last reply announced the deliverable ("I have enough to write\u2026", "Next I'll write\u2026") and then ended the turn without producing it. Produce it NOW, in this reply: write the report or answer itself in full, or make the tool call that creates it. Do not announce it again and do not describe what you are about to do.`;
 var UnkeptClaimTracker = class {
   unkept;
   claimed = false;
@@ -19968,65 +20259,6 @@ function turnCallsOf(calls, isReadOnly) {
   return calls.map((c) => ({ readOnly: isReadOnly?.(c.tool, c.args) === true }));
 }
 
-// ../packages/run-guards/src/reverifyTracker.ts
-var MAX_REVERIFY_PATHS = 200;
-function addBounded(set, path) {
-  set.delete(path);
-  set.add(path);
-  while (set.size > MAX_REVERIFY_PATHS) {
-    const oldest = set.values().next().value;
-    if (oldest === void 0) break;
-    set.delete(oldest);
-  }
-}
-function restoreBounded(paths) {
-  return new Set((paths ?? []).slice(-MAX_REVERIFY_PATHS));
-}
-var ReverifyTracker = class {
-  writtenPaths;
-  readBackSinceWrite;
-  /** Read-only targets seen this turn, to tell an all-written re-read turn from real work. */
-  readsThisTurn = 0;
-  /** Whether every read this turn was a repeat read-back of an unchanged written path. */
-  allRepeatReadBacks = true;
-  constructor(state = {}) {
-    this.writtenPaths = restoreBounded(state.writtenPaths);
-    this.readBackSinceWrite = restoreBounded(state.readBackSinceWrite);
-  }
-  /** A call that may have changed ANY file wrote: no read-back is a look at unchanged bytes. */
-  wroteAnything() {
-    this.readBackSinceWrite.clear();
-  }
-  /** `path` was written: its next read-back inspects the edit again. */
-  wrote(path) {
-    addBounded(this.writtenPaths, path);
-    this.readBackSinceWrite.delete(path);
-  }
-  /** A successful read-only call visited `target`. */
-  read(target2) {
-    this.readsThisTurn += 1;
-    if (this.writtenPaths.has(target2)) {
-      if (!this.readBackSinceWrite.has(target2)) this.allRepeatReadBacks = false;
-      addBounded(this.readBackSinceWrite, target2);
-    } else {
-      this.allRepeatReadBacks = false;
-    }
-  }
-  /** The turn ended: how many reads it made when ALL were repeat read-backs (else 0). Starts the next turn. */
-  endTurn() {
-    const count2 = this.readsThisTurn > 0 && this.allRepeatReadBacks ? this.readsThisTurn : 0;
-    this.readsThisTurn = 0;
-    this.allRepeatReadBacks = true;
-    return count2;
-  }
-  snapshot() {
-    return {
-      ...this.writtenPaths.size ? { writtenPaths: [...this.writtenPaths] } : {},
-      ...this.readBackSinceWrite.size ? { readBackSinceWrite: [...this.readBackSinceWrite] } : {}
-    };
-  }
-};
-
 // ../packages/run-guards/src/readOnlyStreak.ts
 var READ_ONLY_STREAK_TURNS = 6;
 var READ_ONLY_STREAK_CALLS = 18;
@@ -20093,6 +20325,7 @@ function visitTargetOf(args) {
   return path ?? question?.trim() ?? null;
 }
 var ProgressDetector = class {
+  // a repeated full-suite sweep (`suiteRepeat.ts`)
   constructor(state = {}, ports = {}) {
     this.ports = ports;
     this.visits = new VisitTally(state.visits);
@@ -20111,6 +20344,7 @@ var ProgressDetector = class {
     this.reverify = new ReverifyTracker(state);
     this.turnCalls = [];
     this.work = new VerifiedWork(state.work);
+    this.suites = new SuiteRepeat(state.suites);
   }
   ports;
   visits;
@@ -20136,6 +20370,7 @@ var ProgressDetector = class {
   turnCalls;
   /** Made a change and saw a check pass after it — turns an idle-shaped trip into `finish`. */
   work;
+  suites;
   raise(signal) {
     if (!this.turnSignal || SIGNAL_RANK[signal.kind] < SIGNAL_RANK[this.turnSignal.kind]) this.turnSignal = signal;
   }
@@ -20151,6 +20386,7 @@ var ProgressDetector = class {
     this.readOnlyStreak.observe(readOnly);
     const ok = succeeded3(result);
     const unscoped = (this.ports.isUnscopedMutation ?? ((t) => t === "run_command"))(tool, args);
+    if (tool === "run_command") this.suites.ranCommand(shellCommandOf(args));
     const changed2 = changedPathsOf(args);
     const wrote = ok && (changed2.length > 0 || unscoped && this.ports.isReadOnly?.(tool, args) !== true);
     const isDelete = (this.ports.isDelete ?? ((t) => t === "delete_file"))(tool);
@@ -20224,6 +20460,8 @@ var ProgressDetector = class {
       this.readiness.endTurn();
       const advisoryNote = this.readiness.observe(this.unkeptTurns);
       if (advisoryNote) return { kind: "advisory", note: advisoryNote };
+      const suiteNote = this.suites.take();
+      if (suiteNote) return { kind: "advisory", note: suiteNote };
       if (batchNote && this.progress.lastTurnIdle) return { kind: "advisory", note: batchNote };
       if (this.progress.lastTurnGround) this.quietTurns += 1;
       else if (idle > 0) this.quietTurns = 0;
@@ -20302,7 +20540,8 @@ var ProgressDetector = class {
       ...(() => {
         const w = this.work.snapshot();
         return w.wrote ? { work: w } : {};
-      })()
+      })(),
+      ...this.suites.snapshotField()
     };
   }
   /** The run's change is made and a check passed after its last write. */
@@ -20858,6 +21097,15 @@ function reviewGate(review, authorModels, currentDiffHash) {
 function shellPublishHint(command) {
   if (!gitCommandPattern("commit|push").test(command)) return null;
   return "That shell command publishes. Use the git_commit / git_push tools instead: git_push runs the evidence gates and the independent review before the push leaves the machine.";
+}
+
+// ../packages/run-guards/src/scratchScript.ts
+var SCRATCH_SCRIPT = /^_[^/\\]*\.(?:cjs|mjs)$/i;
+var SCRATCH_DIR_SEGMENT = "builderforce-scratch";
+function isScratchScriptPath(file) {
+  const parts = file.split(/[/\\]/);
+  if (parts.includes(SCRATCH_DIR_SEGMENT)) return true;
+  return SCRATCH_SCRIPT.test(parts.pop() ?? "");
 }
 
 // src/finishReason.ts
@@ -21662,6 +21910,19 @@ function codeChangeFile(args) {
     if (typeof p === "string" && p.trim()) return p;
   }
   return null;
+}
+function codeChangeFiles(args) {
+  const files = [];
+  const top = codeChangeFile(args);
+  if (top) files.push(top);
+  const edits = args && typeof args === "object" ? args.edits : void 0;
+  if (Array.isArray(edits)) {
+    for (const edit of edits) {
+      const p = codeChangeFile(edit);
+      if (p && !files.includes(p)) files.push(p);
+    }
+  }
+  return files;
 }
 function chatWorkLinkingDirective(chatId, tickets = SERVER_TICKET_TOOLS) {
   const linked = chatId != null;
@@ -22612,7 +22873,7 @@ var stallHook = {
       const owed = walkLadder(ctx, delivery);
       if (owed || delivery.owns?.narration) return owed;
     }
-    return narrationRecover(ctx);
+    return narrationRecover(ctx) ?? deliverableRecover(ctx);
   },
   /** {@link recover} for a ledger whose rungs need a promise to say which hold; the kernel calls this one. */
   async recoverAsync(ctx) {
@@ -22623,7 +22884,7 @@ var stallHook = {
       const owed = await walkLadderAsync(ctx, delivery);
       if (owed || delivery.owns?.narration) return owed;
     }
-    return narrationRecover(ctx);
+    return narrationRecover(ctx) ?? deliverableRecover(ctx);
   },
   /**
    * The settled answer, shaped the way every source shapes it: a reply stuck on one
@@ -22650,6 +22911,14 @@ var stallHook = {
     return ctx.task.agentName ? FORCED_SYNTHESIS_PROMPT.replace("AS the agent", `AS ${ctx.task.agentName}`) : FORCED_SYNTHESIS_PROMPT;
   }
 };
+var ANNOUNCED_DELIVERABLE_ID = "announced_deliverable";
+function deliverableRecover(ctx) {
+  const text2 = ctx.judged ?? (typeof ctx.content === "string" ? ctx.content : "");
+  const said = ctx.state.stall?.said ?? [];
+  if (said.includes(ANNOUNCED_DELIVERABLE_ID) || !announcesDeliverable(text2)) return void 0;
+  ctx.state.stall = { ...ctx.state.stall ?? { recoveriesUsed: 0 }, said: [...said, ANNOUNCED_DELIVERABLE_ID] };
+  return { action: "steer", note: ANNOUNCED_DELIVERABLE_STEER, detail: { model: ctx.state.model.model ?? null, shape: "announced-deliverable" } };
+}
 function narratesFirst(delivery) {
   return delivery.stall?.narrationFirst === true && !delivery.owns?.narration;
 }
@@ -23146,8 +23415,8 @@ function hasNoCodeDeliverable(writtenPaths) {
 var MAX_PLACEHOLDER_FINISH_BLOCKS = 2;
 
 // ../packages/agent-run/src/policy/finish/gates.ts
-function matchesRequiredReviewSignoff(required, toolName, args, succeeded10) {
-  if (!required || !succeeded10 || toolName !== "builtin_kanban_signoff") return false;
+function matchesRequiredReviewSignoff(required, toolName, args, succeeded11) {
+  if (!required || !succeeded11 || toolName !== "builtin_kanban_signoff") return false;
   const roleKey = typeof args.roleKey === "string" ? args.roleKey.trim() : "";
   const laneKey = typeof args.laneKey === "string" ? args.laneKey.trim() : void 0;
   return roleKey === required.roleKey && laneKey === required.laneKey;
@@ -24560,6 +24829,19 @@ var TOOL_OUTPUT_CAPS = {
   canvas_read_object: 32e3,
   canvas_read_build_file: 16e3
 };
+var INDEX_RESULT_CHARS = 24e3;
+var TASK_INDEX_FORMAT = "id|status|type|parent|title";
+var INDEX_FORMATS = /* @__PURE__ */ new Set([TASK_INDEX_FORMAT]);
+var INDEX_RESULT_TOOLS = /* @__PURE__ */ new Set(["tasks.list", "builtin_tasks_list"]);
+function isIndexResult(tool, out) {
+  if (!INDEX_RESULT_TOOLS.has(tool)) return false;
+  if (!out || typeof out !== "object" || Array.isArray(out)) return false;
+  const r = out;
+  return typeof r.format === "string" && INDEX_FORMATS.has(r.format) && typeof r.lines === "string";
+}
+function resultTableCap(tool, out, caps = TOOL_OUTPUT_CAPS) {
+  return isIndexResult(tool, out) ? Math.max(DEFAULT_TOOL_OUTPUT_CHARS, INDEX_RESULT_CHARS) : toolOutputCap(tool, caps);
+}
 var READ_FILE_TOOL = "read_file";
 var PAGED_READ_TOOLS = {
   // `read_file`'s `offset` applies to each path of a `paths[]` read (agent-tools core-tools).
@@ -24954,10 +25236,28 @@ function fitToolText(text2, maxChars, opts = {}) {
 function attach(value, opts) {
   return opts.advisory && opts.attachAdvisory ? opts.attachAdvisory(value, opts.advisory) : value;
 }
-function capFor(tool, opts) {
+function capFor(tool, out, opts) {
   if (opts.maxChars !== void 0) return opts.maxChars;
-  const tableCap = !opts.summarize && !isPagedReadTool(tool) ? DEFAULT_TOOL_OUTPUT_CHARS : toolOutputCap(tool, opts.caps);
+  const tableCap = isIndexResult(tool, out) ? resultTableCap(tool, out, opts.caps) : !opts.summarize && !isPagedReadTool(tool) ? DEFAULT_TOOL_OUTPUT_CHARS : toolOutputCap(tool, opts.caps);
   return windowedCap(tool, tableCap, opts.contextWindowTokens);
+}
+function pageIndexResult(out, fits) {
+  const all = out.lines ? out.lines.split("\n") : [];
+  const offset = typeof out.offset === "number" ? out.offset : 0;
+  const pageOf = (n2) => {
+    const envelope = { ...out };
+    delete envelope.lines;
+    delete envelope.nextOffset;
+    return { ...envelope, returned: n2, truncated: true, nextOffset: offset + n2, lines: all.slice(0, n2).join("\n") };
+  };
+  let lo = 0;
+  let hi = all.length - 1;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (fits(pageOf(mid))) lo = mid;
+    else hi = mid - 1;
+  }
+  return lo > 0 && fits(pageOf(lo)) ? pageOf(lo) : null;
 }
 function shrinkLogFields(tool, out, cap2, overhead) {
   const fields = LOG_FIELDS.filter((f) => typeof out[f] === "string" && out[f].length > 0);
@@ -24988,10 +25288,14 @@ function shapeToolResult(tool, out, opts = {}) {
     const windowed2 = isReadFileResult(out) ? windowReadFile(out, windowOpts) : windowReadFiles(out, windowOpts);
     return { content: JSON.stringify(windowed2.value), bytes, truncated: windowed2.truncated, served: windowed2.served };
   }
-  const cap2 = capFor(tool, opts);
+  const cap2 = capFor(tool, out, opts);
   const full = JSON.stringify(attach(out ?? null, opts));
   if (full.length <= cap2) return { content: full, bytes, truncated: false };
   const advisoryChars = opts.advisory ? opts.advisory.length + 16 : 0;
+  if (isIndexResult(tool, out)) {
+    const paged = pageIndexResult(out, (shaped) => JSON.stringify(attach(shaped, opts)).length <= cap2);
+    if (paged) return { content: JSON.stringify(attach(paged, opts)), bytes, truncated: true };
+  }
   if (opts.summarize) {
     if (typeof out === "string") {
       const inflation = out.length > 0 ? (bytes - 2) / out.length : 1;
@@ -25314,9 +25618,9 @@ async function gateCall(ctx, call2) {
 }
 
 // ../packages/agent-run/src/policy/tools/caps.ts
-function resultCapFor(tool, model, servingModel2) {
+function resultCapFor(tool, model, servingModel2, data) {
   const window2 = servingModel2 && typeof model.window === "function" ? model.window(servingModel2) : void 0;
-  return windowedCap(tool, toolOutputCap(tool), window2);
+  return windowedCap(tool, resultTableCap(tool, data), window2);
 }
 var ERROR_CHARS = 500;
 function failedResult(data) {
@@ -25676,9 +25980,19 @@ function turnSucceeded(state, served) {
 }
 
 // ../packages/agent-run/src/policy/model/reask.ts
+function parsedArgs(raw) {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return void 0;
+  }
+}
+function changesCode(tools, call2) {
+  return tools.includes(call2.name) || isMutatingShellCall(call2.name, parsedArgs(call2.arguments));
+}
 function changedCode(policy, completion) {
   const tools = policy.codeChangeTools;
-  return !!tools && tools.length > 0 && (completion.toolCalls ?? []).some((call2) => tools.includes(call2.name));
+  return !!tools && tools.length > 0 && (completion.toolCalls ?? []).some((call2) => changesCode(tools, call2));
 }
 function reaskAsCoder(state, policy, completion, asked) {
   if (asked.role !== "plan" || !changedCode(policy, completion)) return void 0;
@@ -25946,7 +26260,7 @@ async function dispatchCall(input, state, call2, watch, facts = { refused: false
     };
     const data = own2 && platform?.watchesItself ? await exec(call2.name, call2.args) : await runToolWithWatch(exec, watch, signal, call2.name, call2.args, own2 ? platform?.interruptible : void 0);
     const surfaceCap = own2 ? platform?.resultCap?.(state.model.model) : void 0;
-    const capped2 = capToolResult(call2.name, data, surfaceCap ?? resultCapFor(call2.name, ports.model, state.model.model));
+    const capped2 = capToolResult(call2.name, data, surfaceCap ?? resultCapFor(call2.name, ports.model, state.model.model, data));
     const failed5 = box.failed === true || !own2 && !!capped2 && capped2.ok === false && capped2.skipped !== true;
     const dispatched = { data: capped2, ...box.control ? { control: box.control } : {}, ...failed5 ? { isError: true } : {} };
     if (box.kind) callKinds.set(dispatched, box.kind);
@@ -29070,6 +29384,21 @@ function memoryToolsIn(toolNames) {
   return toolNames.filter(isProjectMemoryTool);
 }
 
+// src/toolFailure.ts
+function isFailedToolResult(result) {
+  if (result == null) return false;
+  if (typeof result === "object") {
+    const r = result;
+    if (r.ok === false) return true;
+    if (typeof r.error === "string" && r.error) return true;
+    return false;
+  }
+  if (typeof result === "string") {
+    return /"ok"\s*:\s*false/.test(result) || /"error"\s*:\s*"[^"]/.test(result);
+  }
+  return false;
+}
+
 // src/runSlices.ts
 var at = (iso) => {
   const t = Date.parse(iso);
@@ -29129,7 +29458,17 @@ function callSignature(ev) {
 }
 function targetSignature(ev) {
   const target2 = subjectOf(ev);
-  return target2 ? `${ev.label}:${target2}` : null;
+  if (target2) return `${ev.label}:${target2}`;
+  return isPagedDataCall(ev) ? `${ev.label}:${callFingerprint("", ev.args)}` : null;
+}
+function callTargetKey(ev) {
+  return targetSignature(ev) ?? callSignature(ev);
+}
+var PAGE_KEYS = ["offset", "page", "cursor", "skip", "after", "pageToken", "page_token", "next"];
+function isPagedDataCall(ev) {
+  if (isMutationTool(ev.label)) return false;
+  const args = ev.args && typeof ev.args === "object" ? ev.args : null;
+  return !!args && PAGE_KEYS.some((k) => args[k] != null);
 }
 function subjectOf(ev) {
   return visitTarget(ev.args)?.replace(/\\/g, "/").replace(/^\.\//, "");
@@ -29152,7 +29491,8 @@ function computeRunProgress(events, messages = []) {
     calls: s.events.filter((e) => e.category === "tool").length,
     cacheAnswered: p.cacheAnswered,
     mutationsSucceeded: p.mutationsSucceeded,
-    spinning: p.spinning
+    spinning: p.spinning,
+    activeMs: Math.max(0, p.wallClockMs - p.idleMs)
   }));
   return { ...each[each.length - 1].p, runs };
 }
@@ -29286,31 +29626,38 @@ function formatRuns(runs) {
     const label = ask2.length > ASK_LABEL_CHARS ? `${ask2.slice(0, ASK_LABEL_CHARS)}\u2026` : ask2;
     return `#${first + i + 1} "${label}" ${r.turns} turn(s) \xB7 ${r.calls} call(s)${r.cacheAnswered ? ` \xB7 ${r.cacheAnswered} cache-answered` : ""} \xB7 ${r.mutationsSucceeded} changed${r.spinning ? " \u26A0 SPUN" : ""}`;
   });
-  return `Runs (latest last; the figures above are run #${runs.length}'s): ${first ? `(${first} earlier) ` : ""}${named.join(" | ")}`;
+  return `Runs (latest last; the "Latest run" figures are run #${runs.length}'s): ${first ? `(${first} earlier) ` : ""}${named.join(" | ")}`;
 }
-function formatRunProgress(p) {
+function formatChatTotals(runs) {
+  const sum = (pick2) => runs.reduce((n2, r) => n2 + pick2(r), 0);
+  return `Chat totals (${runs.length} runs): ${sum((r) => r.turns)} turn(s) \xB7 ${sum((r) => r.calls)} call(s) \xB7 ${sum((r) => r.mutationsSucceeded)} change(s) \xB7 ${progressDuration(sum((r) => r.activeMs ?? 0))} active`;
+}
+function formatRunProgress(p, opts = {}) {
   const lines = [];
+  const multi = p.runs.length > 1;
+  const scope = multi ? `Latest run (#${p.runs.length} of ${p.runs.length}) \xB7 ` : "";
   const reach = p.targetedCalls > 0 ? `${p.distinctTargets} distinct target(s) over ${p.targetedCalls} targeted call(s)` : "no targeted calls";
   lines.push(
-    `Progress: ${reach}${p.repeatedTargets.length ? ` \xB7 ${Math.round(p.revisitRatio * 100)}% of calls revisited ground already covered` : " \xB7 no repeats"}${p.duplicateCalls ? ` \xB7 ${p.duplicateCalls} EXACT duplicate call(s)` : ""}${p.cacheAnswered ? ` \xB7 ${p.cacheAnswered} call(s) answered from the read cache, never re-run` : ""}${p.longestStreak ? ` \xB7 ${formatStreak(p.longestStreak)}${p.streaks > 1 ? ` (${p.streaks} such streaks)` : ""}` : ""}`
+    `${scope}Progress: ${reach}${p.repeatedTargets.length ? ` \xB7 ${Math.round(p.revisitRatio * 100)}% of calls revisited ground already covered` : " \xB7 no repeats"}${p.duplicateCalls ? ` \xB7 ${p.duplicateCalls} EXACT duplicate call(s)` : ""}${p.cacheAnswered ? ` \xB7 ${p.cacheAnswered} call(s) answered from the read cache, never re-run` : ""}${p.longestStreak ? ` \xB7 ${formatStreak(p.longestStreak)}${p.streaks > 1 ? ` (${p.streaks} such streaks)` : ""}` : ""}`
   );
   if (p.repeatedTargets.length) {
     const named = p.repeatedTargets.slice(0, MAX_NAMED_TARGETS).map((t) => `${t.label} \xD7${t.count}`).join(" \xB7 ");
     const rest = p.repeatedTargets.length - MAX_NAMED_TARGETS;
     lines.push(`Revisited: ${named}${rest > 0 ? ` (+${rest} more)` : ""}`);
   }
-  if (p.runs.length > 1) lines.push(formatRuns(p.runs));
+  if (multi) lines.push(formatRuns(p.runs), formatChatTotals(p.runs));
+  const pending = opts.running ? " \xB7 run in progress \u2014 no effect verdict yet" : "";
   if (p.editIntent) {
     lines.push(
-      `Effect: the request asked for a CHANGE \xB7 ${p.mutationsAttempted} mutating call(s) attempted, ${p.mutationsSucceeded} succeeded${p.noEffect ? " \xB7 \u26A0 NOTHING WAS CHANGED" : ""}`
+      `${scope}Effect: the request asked for a CHANGE \xB7 ${p.mutationsAttempted} mutating call(s) attempted, ${p.mutationsSucceeded} succeeded${opts.running ? pending : p.noEffect ? " \xB7 \u26A0 NOTHING WAS CHANGED" : ""}`
     );
   } else if (p.mutationsAttempted > 0) {
-    lines.push(`Effect: ${p.mutationsAttempted} mutating call(s) attempted, ${p.mutationsSucceeded} succeeded.`);
+    lines.push(`${scope}Effect: ${p.mutationsAttempted} mutating call(s) attempted, ${p.mutationsSucceeded} succeeded${pending}.`);
   }
   if (p.wallClockMs > 0) {
     const active = Math.max(0, p.wallClockMs - p.idleMs);
     lines.push(
-      `Time: ${progressDuration(active)} wall clock \xB7 ${progressDuration(p.modelMs)} in the model \xB7 ${progressDuration(p.toolMs)} in tools${p.slowestStep ? ` \xB7 slowest ${p.slowestStep.label} (${progressDuration(p.slowestStep.ms)})` : ""}${p.idleMs > 0 ? ` \xB7 ${progressDuration(p.idleMs)} waiting on the user between turns, excluded (span ${progressDuration(p.wallClockMs)})` : ""}`
+      `${scope}Time: ${progressDuration(active)} wall clock \xB7 ${progressDuration(p.modelMs)} in the model \xB7 ${progressDuration(p.toolMs)} in tools${p.slowestStep ? ` \xB7 slowest ${p.slowestStep.label} (${progressDuration(p.slowestStep.ms)})` : ""}${p.idleMs > 0 ? ` \xB7 ${progressDuration(p.idleMs)} waiting on the user between turns, excluded (span ${progressDuration(p.wallClockMs)})` : ""}`
     );
   }
   return lines;
@@ -29526,6 +29873,14 @@ function formatRoutingByRole(r) {
 }
 
 // src/staffingSummary.ts
+function sessionShippedInTrace(events) {
+  let n2 = 0;
+  for (const ev of events) {
+    if (ev.category !== "tool" || ev.isError || isFailedToolResult(ev.result)) continue;
+    if (isCodeChangeTool(ev.label) || ev.label === "git_commit" || ev.label === "git_push") n2 += 1;
+  }
+  return n2;
+}
 var DISPATCH_TOOL = /chats[._](dispatch_agent|execute_as_agent)|kanban[._](coordinate|materialize_work_items|assess_resource|assign_participant)|executions[._]submit|run[._-]?now/i;
 function isDispatchTool(label) {
   return DISPATCH_TOOL.test(label);
@@ -29582,7 +29937,7 @@ function staffingSummaryInTrace(events) {
       });
     }
   }
-  const verdict = dispatched > 0 || personaSubagents.some((p) => p.ok) ? "staffed" : dispatchRefusals.length > 0 ? "staffing-refused" : ticketsCreated > 0 && filedLocally === ticketsCreated ? "filed-locally" : ticketsCreated > 0 ? "filed-not-staffed" : "no-work-filed";
+  const verdict = dispatched > 0 || personaSubagents.some((p) => p.ok) ? "staffed" : dispatchRefusals.length > 0 ? "staffing-refused" : ticketsCreated > 0 && filedLocally === ticketsCreated ? "filed-locally" : ticketsCreated > 0 ? sessionShippedInTrace(events) > 0 ? "self-served" : "filed-not-staffed" : "no-work-filed";
   return { ticketsCreated, filedLocally, dispatchAttempts, dispatched, dispatchRefusals, personaSubagents, verdict };
 }
 function formatDispatchRefusals(refusals) {
@@ -29598,8 +29953,8 @@ function formatStaffingSummary(s, opts) {
   if (s.verdict === "no-work-filed" && s.dispatchAttempts === 0 && s.personaSubagents.length === 0) return [];
   const refused = s.dispatchRefusals.length ? ` (${s.dispatchRefusals.length} refused: ${formatDispatchRefusals(s.dispatchRefusals)})` : "";
   const shipped = opts?.sessionShipped ?? 0;
-  const sessionDidIt = shipped > 0 && (s.verdict === "filed-not-staffed" || s.verdict === "staffing-refused");
-  const tail = sessionDidIt ? ` \u2014 the session itself changed the code (${shipped} write/commit call(s) succeeded); a cloud dispatch was not required` : s.verdict === "filed-not-staffed" ? " \u2014 the work was filed but nobody is running it" : s.verdict === "filed-locally" ? " \u2014 filed on this device; the work runs here, by the session and its local sub-agents, and the tickets sync to the account when sync is on" : s.verdict === "staffing-refused" ? " \u2014 every attempt to staff the work was refused, so nobody is running it" : "";
+  const sessionDidIt = shipped > 0 && (s.verdict === "filed-not-staffed" || s.verdict === "staffing-refused" || s.verdict === "self-served");
+  const tail = sessionDidIt ? ` \u2014 the session itself changed the code (${shipped} write/commit call(s) succeeded); a cloud dispatch was not required` : s.verdict === "self-served" ? " \u2014 self-served: the session itself changed the code; a cloud dispatch was not required" : s.verdict === "filed-not-staffed" ? " \u2014 the work was filed but nobody is running it" : s.verdict === "filed-locally" ? " \u2014 filed on this device; the work runs here, by the session and its local sub-agents, and the tickets sync to the account when sync is on" : s.verdict === "staffing-refused" ? " \u2014 every attempt to staff the work was refused, so nobody is running it" : "";
   const lines = [
     `Staffing: ${s.ticketsCreated} ticket(s) filed \xB7 ${s.dispatched} dispatched${refused} \xB7 ${s.personaSubagents.length} persona sub-agent(s)${tail}`
   ];
@@ -29627,8 +29982,166 @@ function requestedReadWindow2(out, start, end) {
   return isReadFileResult(out) ? sliceReadFile(out, start, end) : out;
 }
 
-// src/brainTriage.ts
+// src/brainVerdict.ts
 var import_working10 = require("@seanhogg/builderforce-memory/working");
+var CONTEXT_PROMPT_PEAK = Math.round(import_working10.HISTORY_TOKEN_BUDGET * 1.5);
+var LARGE_LOSSY_RESULT_BYTES = 2e4;
+function decideLikelyCause(s) {
+  if (s.running) return "run-in-progress";
+  if (s.memoryOnlyRun) return "memory-answered";
+  if (s.noToolsAdvertised) return "no-tools-advertised";
+  if (s.narratedUnadvertised) return "tool-not-advertised";
+  if (s.announcedUnmadeToolCall) return "tool-calls-not-emitted";
+  if (s.answeredInProse) return "answered-in-prose";
+  if (s.noProgress) return "no-progress";
+  if (s.contextSignal && !s.degradationSignal) return "context-exhaustion";
+  if (s.degradationSignal && !s.contextSignal) return "model-degradation";
+  if (s.unresolvedAppFailures > 0) return "app-errors-unresolved";
+  if (s.workFiledNotStaffed) return "work-filed-not-staffed";
+  return s.healthy ? "healthy" : "inconclusive";
+}
+var succeeded6 = (ev) => ev.category === "tool" && !ev.isError && !isFailedToolResult(ev.result);
+function recoveredFailuresInTrace(events) {
+  const lastOnTarget = /* @__PURE__ */ new Map();
+  for (const ev of events) if (ev.category === "tool") lastOnTarget.set(callTargetKey(ev), ev);
+  const recovered = /* @__PURE__ */ new Set();
+  for (const ev of events) {
+    if (!ev.isError || ev.category !== "tool") continue;
+    const last = lastOnTarget.get(callTargetKey(ev));
+    if (last && last !== ev && succeeded6(last)) recovered.add(ev);
+  }
+  return recovered;
+}
+function isHealthyRun(h) {
+  return h.errors === h.recoveredFailures && !h.loopExhausted && h.emptyOrLengthFinishes === 0 && !h.contextSignal && !h.announcedUnmadeToolCall && !h.answeredInProse && !h.noProgress && h.unresolvedAppFailures === 0 && h.didWork;
+}
+
+// src/brainDiagnosticsText.ts
+var import_working11 = require("@seanhogg/builderforce-memory/working");
+var kb = formatBytes;
+function contextEvidence(d) {
+  const parts = [];
+  if (d.promptTokenPeak >= CONTEXT_PROMPT_PEAK) parts.push(`the prompt peaked at ${d.promptTokenPeak.toLocaleString("en-US")} tokens`);
+  if (d.truncatedToolResults > 0) parts.push(`${d.truncatedToolResults} tool result(s) were trimmed to the ${toolResultBudgetText()} tool-result budget (by design)`);
+  if (d.downgradeEvents > 0) parts.push(`${d.downgradeEvents} turn(s) were served by a smaller model than asked`);
+  if (parts.length === 0 && d.largestToolResult) parts.push(`one ${d.largestToolResult.label} result was ${kb(d.largestToolResult.bytes)}`);
+  return parts.length ? parts.join("; ") : "context pressure without a single dominant signal";
+}
+function toolResultBudgetText() {
+  return `${Math.round(MAX_TOOL_RESULT_CHARS / 1e3)} KB`;
+}
+function contextPressureLine(d) {
+  if (!d.contextPressureOnly) return null;
+  const parts = [];
+  if (d.tokensMeasured && d.promptTokenPeak > 0) parts.push(`prompt peaked at ${d.promptTokenPeak.toLocaleString("en-US")} tokens`);
+  if (d.truncatedToolResults > 0) parts.push(`${d.truncatedToolResults} tool result(s) trimmed to the ${toolResultBudgetText()} budget by design`);
+  if (!parts.length && d.largestToolResult) parts.push(`one ${d.largestToolResult.label} result was ${kb(d.largestToolResult.bytes)}`);
+  return `Context: pressure noted (${parts.join("; ")}) \u2014 no turn was cut short by it. The working transcript is held to a ${import_working11.HISTORY_TOKEN_BUDGET.toLocaleString("en-US")}-token budget on purpose, so a prompt above that figure is the design working, not a fault.`;
+}
+function healthyVerdict(d) {
+  const recovered = d.recoveredFailures ?? 0;
+  return recovered > 0 ? `Completed \u2014 ${recovered} failed step(s) recovered (each was followed by a successful retry of the same command or file). No unrecovered failure, no truncated or empty turns, and no context pressure. Nothing here needs triaging.` : "No failure signal \u2014 no errors, no truncated or empty turns, and no context pressure. Nothing here needs triaging.";
+}
+function verdictText(d) {
+  const evermindAnswers = d.memoryAnswers?.filter((m) => m.source === "evermind") ?? [];
+  switch (d.likelyCause) {
+    case "run-in-progress":
+      return 'Run in progress \u2014 verdict pending. The capture was taken while the run was still executing, so no cause is named and no "nothing was changed" claim is made; copy the report again once the run settles.';
+    case "memory-answered":
+      return `ANSWERED FROM MEMORY \u2014 no model ran this turn. The reply was served by the memory-first short-circuit (${(d.memoryAnswers ?? []).map((m) => m.source === "evermind" ? `the project Evermind SSM${m.projectId != null ? ` of project #${m.projectId}` : ""}${m.version != null ? ` v${m.version}` : ""}` : m.source === "symbol-index" ? "the workspace symbol index" : m.source === "deterministic" ? `the deterministic workspace action ${m.actionId ?? ""}`.trim() : "the Q&A cache").join(", ")}), so zero turns, zero tokens and zero tool calls is EXPECTED, not a fault. ${evermindAnswers.length ? "The Evermind SSM cannot call tools and answers only from what it has learned, so it can neither fetch live data nor do work \u2014 if the reply was wrong, garbled or stale, that is the cause. Turn Memory off for this chat, or disable inference on that head." : (d.memoryAnswers ?? []).every((m) => m.source === "symbol-index") ? 'The request was only "where is X defined?" and the symbol index resolved every name, so the definitions were listed without a model; ask for anything more to reach the model.' : (d.memoryAnswers ?? []).every((m) => m.source === "symbol-index" || m.source === "deterministic") ? "A deterministic workspace action (the PreFetch gate) settled the request without a model; ask for anything more to reach the model." : "The reply is a replay of an earlier answer to the same question; ask a differently-worded question to reach the model."} Switching models changes nothing here.`;
+    case "no-tools-advertised":
+      return 'NO TOOLS ADVERTISED \u2014 at least one turn was handed ZERO tool definitions, so it could not have emitted a call whatever it wanted to do. This is a catalog/config failure on our side, not a model fault: the gateway MCP catalog (`/llm/v1/mcp/tools`) failed to load, or no actions were registered for this surface. See the "Tools available to the model" line in the Chat diagnostics block for the fetch error. Switching models will not help.';
+    case "tool-not-advertised":
+      return `TOOL NOT ADVERTISED \u2014 a turn wrote out ${d.narratedUnadvertisedTools.map((n2) => `\`${n2}\``).join(", ")} as prose while that tool was NOT among the ones it was offered that turn. No model can emit a call for a function it was never given, so this is OUR per-turn tool selection dropping a tool the prompt asked for \u2014 not a model that "won't call tools". Fix the selection (pin the tool, or name it in the system prompt so it is force-included) rather than switching models.`;
+    case "tool-calls-not-emitted":
+      return 'TOOL CALLS NOT EMITTED \u2014 a turn NARRATED a tool call in prose ("I\'ll call the tool\u2026", a bare `builtin_\u2026` name) but the run recorded ZERO tool steps, so nothing executed and the answer never got its data. The tools WERE advertised and the agent loop only runs structured `tool_calls`, so this is a model/provider fault: the model is describing calls instead of emitting them. Try a different model.';
+    case "answered-in-prose":
+      return "ANSWERED IN PROSE \u2014 at least one turn was handed tool definitions but replied with text and ZERO tool calls, so nothing ran. The tools were advertised; the model described the work instead of doing it. This is a model/provider fault: try a different model, or pin one that emits structured calls.";
+    case "no-progress":
+      return (d.progress && runProgressVerdict(d.progress)) ?? "NO PROGRESS \u2014 the run repeated work without advancing.";
+    case "context-exhaustion":
+      return `Likely CONTEXT EXHAUSTION (case A) \u2014 ${contextEvidence(d)}.`;
+    case "model-degradation":
+      return "Likely MODEL DEGRADATION (case B) \u2014 an Evermind/SSM turn returned empty while tokens stayed low.";
+    case "app-errors-unresolved":
+      return `APP STILL BROKEN \u2014 every tool call succeeded, but the run's last diagnostics read still reported ${d.unresolvedAppFailures} build/runtime failure(s) in the app it was working on. The tools are fine; the app is not. Read that diagnostics result in the trace below for the error \u2014 if it points into a package CDN or the preview runtime rather than the project's own files, the fault is the platform's, and rewriting project files will not fix it.`;
+    case "work-filed-not-staffed":
+      return workFiledNotStaffedVerdict(d.staffing);
+    case "healthy":
+      return healthyVerdict(d);
+    case "inconclusive":
+      return "Inconclusive \u2014 not enough signal to separate context exhaustion from model degradation.";
+    default: {
+      const unhandled = d.likelyCause;
+      return `Unrecognised verdict: ${String(unhandled)}`;
+    }
+  }
+}
+function formatBrainDiagnostics(d) {
+  const lines = ["--- Diagnostics ---", `Likely cause: ${verdictText(d)}`];
+  const scope = d.turnCoveragePartial ? " (this session)" : "";
+  lines.push(`Turns${scope}: ${d.turns} \xB7 Tool calls: ${d.toolCalls} \xB7 Errors: ${d.errors}${d.recoveredFailures ? ` (${d.recoveredFailures} recovered)` : ""}${d.loopExhausted ? " \xB7 LOOP EXHAUSTED" : ""}`);
+  if (d.tokensMeasured) {
+    lines.push(
+      `Tokens${scope}: prompt peak ${d.promptTokenPeak.toLocaleString()} \xB7 last-turn prompt ${d.lastPromptTokens.toLocaleString()} \xB7 completion total ${d.completionTokenTotal.toLocaleString()}`
+    );
+  } else {
+    lines.push("Tokens: not reported by the gateway for this run.");
+  }
+  if (d.turnCoveragePartial) {
+    lines.push(
+      "Coverage: tool steps were recovered from this chat's durable history, but its earlier TURNS predate durable turn records \u2014 so the turn and token counts above describe only the current session, not the whole conversation. Send a new turn to capture a fully-measured run."
+    );
+  }
+  lines.push(
+    `Tool results: ${kb(d.toolResultBytes)} total${d.largestToolResult ? ` \xB7 largest ${d.largestToolResult.label} (${kb(d.largestToolResult.bytes)})` : ""}${d.truncatedToolResults ? ` \xB7 ${d.truncatedToolResults} trimmed to the ${toolResultBudgetText()} per-result budget (by design)` : ""}${d.pagedReadWindows ? ` \xB7 ${d.pagedReadWindows} read_file window(s) paged (continued by offset, not lost)` : ""}`
+  );
+  const pressure = contextPressureLine(d);
+  if (pressure) lines.push(pressure);
+  lines.push(...d.progress ? formatRunProgress(d.progress, { running: d.running }) : []);
+  if (d.memoryUsage) lines.push(formatMemoryUsage(d.memoryUsage));
+  lines.push(...d.staffing ? formatStaffingSummary(d.staffing, { sessionShipped: d.sessionShipped }) : []);
+  if (d.errorSteps?.length) {
+    for (const e of d.errorSteps) {
+      lines.push(
+        `Failed step: ${e.label}${e.model ? ` on ${e.model}` : ""}${e.recovered ? " (recovered by a later successful retry)" : ""} \u2014 ${e.message}` + (e.requiredRole || e.callerRole ? ` \u2014 requires ${e.requiredRole ?? "unknown"}, caller is ${e.callerRole ?? "unknown"}${e.remediation ? `; ${e.remediation}` : ""}` : "")
+      );
+      if (e.failure) lines.push(`  ${describeStreamFailure(e.failure)}`);
+    }
+    if (d.errors > d.errorSteps.length) lines.push(`(+${d.errors - d.errorSteps.length} earlier failure(s) not listed)`);
+  }
+  if (d.advertisedToolsLastTurn != null) {
+    const range = d.advertisedToolsMin != null && d.advertisedToolsMin !== d.advertisedToolsLastTurn ? `${d.advertisedToolsMin}\u2013${d.advertisedToolsLastTurn}` : `${d.advertisedToolsLastTurn}`;
+    lines.push(
+      `Tools advertised per turn: ${range}${d.catalogTools ? ` (of ${d.catalogTools} in the catalog)` : ""}${d.advertisedToolsMin === 0 ? " \xB7 \u26A0 a turn was offered NONE" : ""}`
+    );
+  } else {
+    lines.push("Tools advertised per turn: not recorded (this run predates per-turn tool accounting).");
+  }
+  if (d.narratedUnadvertisedTools.length) {
+    lines.push(`Narrated but never advertised: ${d.narratedUnadvertisedTools.join(", ")} \u2014 the model was told to call a tool it was not given.`);
+  }
+  if (d.stallRecoveries > 0 || d.modelFailovers > 0 || d.stallUnrecovered) {
+    lines.push(
+      `Stall handling: ${d.stallRecoveries} re-prompt(s) \xB7 ${d.modelFailovers} model failover(s)${d.stallUnrecovered ? " \xB7 GAVE UP (the stall survived every attempt)" : d.stallRecovered ? " \xB7 recovered" : " \xB7 NOT recovered (no tool ran after the last re-prompt \u2014 the run ended on a turn the stall detector accepted as an answer)"}`
+    );
+  }
+  if (d.streamRetries?.length) {
+    lines.push(`Stream retries: ${d.streamRetries.length} \u2014 ${d.streamRetries.join(", ")} broke mid-turn and the turn was retried on another model (one retry per turn).`);
+  }
+  lines.push(...formatModelScorecard(d.modelScores ?? []));
+  lines.push(...formatRoutingByRole(d.routing));
+  lines.push(...formatModelTurnLog(d.modelTurns ?? []));
+  if (d.downgradeEvents > 0) lines.push(`Model downgrades: ${d.downgradeEvents} turn(s) answered by a different model than requested (gateway failover).`);
+  if (d.emptyOrLengthFinishes > 0) lines.push(`Degenerate turns: ${d.emptyOrLengthFinishes} ended on \`length\` or returned empty text.`);
+  if (d.evermindUsed.length) lines.push(`Evermind/SSM answered: ${d.evermindUsed.join(", ")}`);
+  if (d.memoryAnswers?.length) {
+    lines.push(
+      `Answered from memory (LLM skipped): ${d.memoryAnswers.length} turn(s) \u2014 ` + d.memoryAnswers.map((m) => m.source === "evermind" ? `Evermind SSM${m.projectId != null ? ` (project #${m.projectId}` : ""}${m.version != null ? `${m.projectId != null ? ", " : " ("}v${m.version}` : ""}${m.projectId != null || m.version != null ? ")" : ""}` : m.source === "symbol-index" ? "symbol index" : m.source === "deterministic" ? `workspace action ${m.actionId ?? ""}`.trim() : "Q&A cache").join(", ")
+    );
+  }
+  return lines;
+}
 
 // src/toolExposure.ts
 function toolExposureInTrace(events) {
@@ -29660,21 +30173,6 @@ function formatAdvertised(tools, defaultToolLimit) {
 }
 
 // src/brainTriage.ts
-var CONTEXT_PROMPT_PEAK = Math.round(import_working10.HISTORY_TOKEN_BUDGET * 1.5);
-var LARGE_LOSSY_RESULT_BYTES = 2e4;
-function isFailedToolResult(result) {
-  if (result == null) return false;
-  if (typeof result === "object") {
-    const r = result;
-    if (r.ok === false) return true;
-    if (typeof r.error === "string" && r.error) return true;
-    return false;
-  }
-  if (typeof result === "string") {
-    return /"ok"\s*:\s*false/.test(result) || /"error"\s*:\s*"[^"]/.test(result);
-  }
-  return false;
-}
 var FILE_WRITE_TOOL = /(attachments|files?|project_files)[._](write|save|update)/i;
 function isFileWriteTool(label) {
   return isCodeChangeTool(label) || FILE_WRITE_TOOL.test(label);
@@ -29930,14 +30428,6 @@ function formatMemoryUsage(m) {
   const tok = m.evermindPromptTokens > 0 ? `, ~${m.evermindPromptTokens.toLocaleString("en-US")} prompt tok` : "";
   return `BuilderForce memory: Evermind recalls ${m.evermindRecalls} (${m.evermindItems} item(s)${tok}) \xB7 learn steps ${m.learnSteps} \xB7 reconcile ${m.reconcileSteps} \xB7 project-fact reads ${m.factsRead} \xB7 project-fact writes ${m.factsWritten}`;
 }
-function sessionShippedInTrace(events) {
-  let n2 = 0;
-  for (const ev of events) {
-    if (ev.category !== "tool" || ev.isError || isFailedToolResult(ev.result)) continue;
-    if (isCodeChangeTool(ev.label) || ev.label === "git_commit" || ev.label === "git_push") n2 += 1;
-  }
-  return n2;
-}
 function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}) {
   const llm = events.filter((e) => e.category === "llm");
   const toolEvents2 = events.filter((e) => e.category === "tool");
@@ -29985,6 +30475,7 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
     if (!paged && bytes > largestLossyResultBytes) largestLossyResultBytes = bytes;
     if (!largestToolResult || bytes > largestToolResult.bytes) largestToolResult = { label: ev.label, bytes };
   }
+  const recovered = recoveredFailuresInTrace(events);
   const errorSteps = errors.slice(-MAX_REPORTED_ERRORS).reverse().map((e) => {
     const model = e.args?.model;
     const failure = e.args?.failure;
@@ -29996,7 +30487,8 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
       ...typeof model === "string" && model !== "default" ? { model } : {},
       ...failure && typeof failure === "object" ? { failure } : {},
       ...gate.requiredRole ? { requiredRole: gate.requiredRole, remediation: ROLE_GATE_REMEDIATION } : {},
-      ...gate.callerRole ? { callerRole: gate.callerRole } : {}
+      ...gate.callerRole ? { callerRole: gate.callerRole } : {},
+      ...recovered.has(e) ? { recovered: true } : {}
     };
   });
   const modelsUsed = modelsUsedInTrace(events);
@@ -30032,13 +30524,39 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
   const memoryUsage = memoryUsageInTrace(events);
   const workFiledNotStaffed = sessionShipped === 0 && (staffing.verdict === "filed-not-staffed" || staffing.verdict === "staffing-refused");
   const unresolvedAppFailures = unresolvedAppFailuresInTrace(events);
-  const healthy = errors.length === 0 && !loopExhausted && emptyOrLengthFinishes === 0 && !contextSignal && !announcedUnmadeToolCall && !answeredInProse && !noProgress && unresolvedAppFailures === 0 && didWork;
-  const likelyCause = memoryOnlyRun ? "memory-answered" : noToolsAdvertised ? "no-tools-advertised" : narratedUnadvertisedTools.length > 0 ? "tool-not-advertised" : announcedUnmadeToolCall ? "tool-calls-not-emitted" : answeredInProse ? "answered-in-prose" : noProgress ? "no-progress" : contextSignal && !degradationSignal ? "context-exhaustion" : degradationSignal && !contextSignal ? "model-degradation" : unresolvedAppFailures > 0 ? "app-errors-unresolved" : workFiledNotStaffed ? "work-filed-not-staffed" : healthy ? "healthy" : "inconclusive";
+  const running = ctx.running === true;
+  const likelyCause = decideLikelyCause({
+    running,
+    memoryOnlyRun,
+    noToolsAdvertised,
+    narratedUnadvertised: narratedUnadvertisedTools.length > 0,
+    announcedUnmadeToolCall,
+    answeredInProse,
+    noProgress,
+    contextSignal,
+    degradationSignal,
+    unresolvedAppFailures,
+    workFiledNotStaffed,
+    healthy: isHealthyRun({
+      errors: errors.length,
+      recoveredFailures: recovered.size,
+      loopExhausted,
+      emptyOrLengthFinishes,
+      contextSignal,
+      announcedUnmadeToolCall,
+      answeredInProse,
+      noProgress,
+      unresolvedAppFailures,
+      didWork
+    })
+  });
   return {
     turns: llm.length,
     toolCalls: toolEvents2.length,
     errors: errors.length,
     errorSteps,
+    recoveredFailures: recovered.size,
+    running,
     loopExhausted,
     tokensMeasured,
     promptTokenPeak,
@@ -30076,93 +30594,6 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
     unresolvedAppFailures,
     likelyCause
   };
-}
-var kb = formatBytes;
-function contextEvidence(d) {
-  const parts = [];
-  if (d.promptTokenPeak >= CONTEXT_PROMPT_PEAK) parts.push(`the prompt peaked at ${d.promptTokenPeak.toLocaleString("en-US")} tokens`);
-  if (d.truncatedToolResults > 0) parts.push(`${d.truncatedToolResults} tool result(s) were trimmed to the ${toolResultBudgetText()} tool-result budget (by design)`);
-  if (d.downgradeEvents > 0) parts.push(`${d.downgradeEvents} turn(s) were served by a smaller model than asked`);
-  if (parts.length === 0 && d.largestToolResult) parts.push(`one ${d.largestToolResult.label} result was ${kb(d.largestToolResult.bytes)}`);
-  return parts.length ? parts.join("; ") : "context pressure without a single dominant signal";
-}
-function toolResultBudgetText() {
-  return `${Math.round(MAX_TOOL_RESULT_CHARS / 1e3)} KB`;
-}
-function contextPressureLine(d) {
-  if (!d.contextPressureOnly) return null;
-  const parts = [];
-  if (d.tokensMeasured && d.promptTokenPeak > 0) parts.push(`prompt peaked at ${d.promptTokenPeak.toLocaleString("en-US")} tokens`);
-  if (d.truncatedToolResults > 0) parts.push(`${d.truncatedToolResults} tool result(s) trimmed to the ${toolResultBudgetText()} budget by design`);
-  if (!parts.length && d.largestToolResult) parts.push(`one ${d.largestToolResult.label} result was ${kb(d.largestToolResult.bytes)}`);
-  return `Context: pressure noted (${parts.join("; ")}) \u2014 no turn was cut short by it. The working transcript is held to a ${import_working10.HISTORY_TOKEN_BUDGET.toLocaleString("en-US")}-token budget on purpose, so a prompt above that figure is the design working, not a fault.`;
-}
-function formatBrainDiagnostics(d) {
-  const evermindAnswers = d.memoryAnswers?.filter((m) => m.source === "evermind") ?? [];
-  const verdict = d.likelyCause === "memory-answered" ? `ANSWERED FROM MEMORY \u2014 no model ran this turn. The reply was served by the memory-first short-circuit (${(d.memoryAnswers ?? []).map((m) => m.source === "evermind" ? `the project Evermind SSM${m.projectId != null ? ` of project #${m.projectId}` : ""}${m.version != null ? ` v${m.version}` : ""}` : m.source === "symbol-index" ? "the workspace symbol index" : m.source === "deterministic" ? `the deterministic workspace action ${m.actionId ?? ""}`.trim() : "the Q&A cache").join(", ")}), so zero turns, zero tokens and zero tool calls is EXPECTED, not a fault. ${evermindAnswers.length ? "The Evermind SSM cannot call tools and answers only from what it has learned, so it can neither fetch live data nor do work \u2014 if the reply was wrong, garbled or stale, that is the cause. Turn Memory off for this chat, or disable inference on that head." : (d.memoryAnswers ?? []).every((m) => m.source === "symbol-index") ? 'The request was only "where is X defined?" and the symbol index resolved every name, so the definitions were listed without a model; ask for anything more to reach the model.' : (d.memoryAnswers ?? []).every((m) => m.source === "symbol-index" || m.source === "deterministic") ? "A deterministic workspace action (the PreFetch gate) settled the request without a model; ask for anything more to reach the model." : "The reply is a replay of an earlier answer to the same question; ask a differently-worded question to reach the model."} Switching models changes nothing here.` : d.likelyCause === "no-tools-advertised" ? 'NO TOOLS ADVERTISED \u2014 at least one turn was handed ZERO tool definitions, so it could not have emitted a call whatever it wanted to do. This is a catalog/config failure on our side, not a model fault: the gateway MCP catalog (`/llm/v1/mcp/tools`) failed to load, or no actions were registered for this surface. See the "Tools available to the model" line in the Chat diagnostics block for the fetch error. Switching models will not help.' : d.likelyCause === "tool-not-advertised" ? `TOOL NOT ADVERTISED \u2014 a turn wrote out ${d.narratedUnadvertisedTools.map((n2) => `\`${n2}\``).join(", ")} as prose while that tool was NOT among the ones it was offered that turn. No model can emit a call for a function it was never given, so this is OUR per-turn tool selection dropping a tool the prompt asked for \u2014 not a model that "won't call tools". Fix the selection (pin the tool, or name it in the system prompt so it is force-included) rather than switching models.` : d.likelyCause === "tool-calls-not-emitted" ? 'TOOL CALLS NOT EMITTED \u2014 a turn NARRATED a tool call in prose ("I\'ll call the tool\u2026", a bare `builtin_\u2026` name) but the run recorded ZERO tool steps, so nothing executed and the answer never got its data. The tools WERE advertised and the agent loop only runs structured `tool_calls`, so this is a model/provider fault: the model is describing calls instead of emitting them. Try a different model.' : d.likelyCause === "answered-in-prose" ? "ANSWERED IN PROSE \u2014 at least one turn was handed tool definitions but replied with text and ZERO tool calls, so nothing ran. The tools were advertised; the model described the work instead of doing it. This is a model/provider fault: try a different model, or pin one that emits structured calls." : d.likelyCause === "no-progress" ? (d.progress && runProgressVerdict(d.progress)) ?? "NO PROGRESS \u2014 the run repeated work without advancing." : d.likelyCause === "context-exhaustion" ? `Likely CONTEXT EXHAUSTION (case A) \u2014 ${contextEvidence(d)}.` : d.likelyCause === "model-degradation" ? "Likely MODEL DEGRADATION (case B) \u2014 an Evermind/SSM turn returned empty while tokens stayed low." : d.likelyCause === "app-errors-unresolved" ? `APP STILL BROKEN \u2014 every tool call succeeded, but the run's last diagnostics read still reported ${d.unresolvedAppFailures} build/runtime failure(s) in the app it was working on. The tools are fine; the app is not. Read that diagnostics result in the trace below for the error \u2014 if it points into a package CDN or the preview runtime rather than the project's own files, the fault is the platform's, and rewriting project files will not fix it.` : d.likelyCause === "work-filed-not-staffed" ? workFiledNotStaffedVerdict(d.staffing) : d.likelyCause === "healthy" ? "No failure signal \u2014 no errors, no truncated or empty turns, and no context pressure. Nothing here needs triaging." : "Inconclusive \u2014 not enough signal to separate context exhaustion from model degradation.";
-  const lines = ["--- Diagnostics ---", `Likely cause: ${verdict}`];
-  const scope = d.turnCoveragePartial ? " (this session)" : "";
-  lines.push(`Turns${scope}: ${d.turns} \xB7 Tool calls: ${d.toolCalls} \xB7 Errors: ${d.errors}${d.loopExhausted ? " \xB7 LOOP EXHAUSTED" : ""}`);
-  if (d.tokensMeasured) {
-    lines.push(
-      `Tokens${scope}: prompt peak ${d.promptTokenPeak.toLocaleString()} \xB7 last-turn prompt ${d.lastPromptTokens.toLocaleString()} \xB7 completion total ${d.completionTokenTotal.toLocaleString()}`
-    );
-  } else {
-    lines.push("Tokens: not reported by the gateway for this run.");
-  }
-  if (d.turnCoveragePartial) {
-    lines.push(
-      "Coverage: tool steps were recovered from this chat's durable history, but its earlier TURNS predate durable turn records \u2014 so the turn and token counts above describe only the current session, not the whole conversation. Send a new turn to capture a fully-measured run."
-    );
-  }
-  lines.push(
-    `Tool results: ${kb(d.toolResultBytes)} total${d.largestToolResult ? ` \xB7 largest ${d.largestToolResult.label} (${kb(d.largestToolResult.bytes)})` : ""}${d.truncatedToolResults ? ` \xB7 ${d.truncatedToolResults} trimmed to the ${toolResultBudgetText()} per-result budget (by design)` : ""}${d.pagedReadWindows ? ` \xB7 ${d.pagedReadWindows} read_file window(s) paged (continued by offset, not lost)` : ""}`
-  );
-  const pressure = contextPressureLine(d);
-  if (pressure) lines.push(pressure);
-  lines.push(...d.progress ? formatRunProgress(d.progress) : []);
-  if (d.memoryUsage) lines.push(formatMemoryUsage(d.memoryUsage));
-  lines.push(...d.staffing ? formatStaffingSummary(d.staffing, { sessionShipped: d.sessionShipped }) : []);
-  if (d.errorSteps?.length) {
-    for (const e of d.errorSteps) {
-      lines.push(
-        `Failed step: ${e.label}${e.model ? ` on ${e.model}` : ""} \u2014 ${e.message}` + (e.requiredRole || e.callerRole ? ` \u2014 requires ${e.requiredRole ?? "unknown"}, caller is ${e.callerRole ?? "unknown"}${e.remediation ? `; ${e.remediation}` : ""}` : "")
-      );
-      if (e.failure) lines.push(`  ${describeStreamFailure(e.failure)}`);
-    }
-    if (d.errors > d.errorSteps.length) lines.push(`(+${d.errors - d.errorSteps.length} earlier failure(s) not listed)`);
-  }
-  if (d.advertisedToolsLastTurn != null) {
-    const range = d.advertisedToolsMin != null && d.advertisedToolsMin !== d.advertisedToolsLastTurn ? `${d.advertisedToolsMin}\u2013${d.advertisedToolsLastTurn}` : `${d.advertisedToolsLastTurn}`;
-    lines.push(
-      `Tools advertised per turn: ${range}${d.catalogTools ? ` (of ${d.catalogTools} in the catalog)` : ""}${d.advertisedToolsMin === 0 ? " \xB7 \u26A0 a turn was offered NONE" : ""}`
-    );
-  } else {
-    lines.push("Tools advertised per turn: not recorded (this run predates per-turn tool accounting).");
-  }
-  if (d.narratedUnadvertisedTools.length) {
-    lines.push(`Narrated but never advertised: ${d.narratedUnadvertisedTools.join(", ")} \u2014 the model was told to call a tool it was not given.`);
-  }
-  if (d.stallRecoveries > 0 || d.modelFailovers > 0 || d.stallUnrecovered) {
-    lines.push(
-      `Stall handling: ${d.stallRecoveries} re-prompt(s) \xB7 ${d.modelFailovers} model failover(s)${d.stallUnrecovered ? " \xB7 GAVE UP (the stall survived every attempt)" : d.stallRecovered ? " \xB7 recovered" : " \xB7 NOT recovered (no tool ran after the last re-prompt \u2014 the run ended on a turn the stall detector accepted as an answer)"}`
-    );
-  }
-  if (d.streamRetries?.length) {
-    lines.push(`Stream retries: ${d.streamRetries.length} \u2014 ${d.streamRetries.join(", ")} broke mid-turn and the turn was retried on another model (one retry per turn).`);
-  }
-  lines.push(...formatModelScorecard(d.modelScores ?? []));
-  lines.push(...formatRoutingByRole(d.routing));
-  lines.push(...formatModelTurnLog(d.modelTurns ?? []));
-  if (d.downgradeEvents > 0) lines.push(`Model downgrades: ${d.downgradeEvents} turn(s) answered by a different model than requested (gateway failover).`);
-  if (d.emptyOrLengthFinishes > 0) lines.push(`Degenerate turns: ${d.emptyOrLengthFinishes} ended on \`length\` or returned empty text.`);
-  if (d.evermindUsed.length) lines.push(`Evermind/SSM answered: ${d.evermindUsed.join(", ")}`);
-  if (d.memoryAnswers?.length) {
-    lines.push(
-      `Answered from memory (LLM skipped): ${d.memoryAnswers.length} turn(s) \u2014 ` + d.memoryAnswers.map((m) => m.source === "evermind" ? `Evermind SSM${m.projectId != null ? ` (project #${m.projectId}` : ""}${m.version != null ? `${m.projectId != null ? ", " : " ("}v${m.version}` : ""}${m.projectId != null || m.version != null ? ")" : ""}` : m.source === "symbol-index" ? "symbol index" : m.source === "deterministic" ? `workspace action ${m.actionId ?? ""}`.trim() : "Q&A cache").join(", ")
-    );
-  }
-  return lines;
 }
 function buildBrainTriageReport(opts) {
   const { capturedAt, messages = [], chatId, chatTitle, agentLabel, configuredModel, surface: surface2, error, running, activity } = opts;
@@ -30249,7 +30680,7 @@ function outputOf(ev) {
   }
   return "";
 }
-function succeeded6(ev) {
+function succeeded7(ev) {
   return !ev.isError && !isFailedToolResult(ev.result);
 }
 function isPush(ev) {
@@ -30277,7 +30708,7 @@ var DEFAULT_BRANCH_CMD = gitCommandPattern("remote|symbolic-ref|branch");
 function defaultBranchFromTrace(steps) {
   for (let i = steps.length - 1; i >= 0; i -= 1) {
     const ev = steps[i];
-    if (!succeeded6(ev) || !DEFAULT_BRANCH_CMD.test(commandOf(ev))) continue;
+    if (!succeeded7(ev) || !DEFAULT_BRANCH_CMD.test(commandOf(ev))) continue;
     const out = outputOf(ev);
     const m = /HEAD branch:\s*(\S+)/.exec(out) ?? /origin\/HEAD\s*->\s*origin\/(\S+)/.exec(out) ?? /^\s*refs\/remotes\/origin\/(\S+)\s*$/m.exec(out);
     if (m?.[1] && m[1] !== "HEAD" && m[1] !== "(unknown)") return m[1];
@@ -30298,13 +30729,13 @@ function shippedToBaseBranch(events, opts) {
   const isBase = (branch) => BASE_BRANCHES.has(branch) || branch === defaultBranch;
   let pushedAt = -1;
   for (let i = 0; i < steps.length; i += 1) {
-    if (succeeded6(steps[i]) && isPush(steps[i])) pushedAt = i;
+    if (succeeded7(steps[i]) && isPush(steps[i])) pushedAt = i;
   }
   if (pushedAt < 0) return false;
   const touched = opts?.touchedFiles ?? [];
   for (let i = pushedAt; i < steps.length; i += 1) {
     const ev = steps[i];
-    if (!succeeded6(ev)) continue;
+    if (!succeeded7(ev)) continue;
     const isStatus = i === pushedAt || ev.label === "git_status" || GIT_STATUS_CMD.test(commandOf(ev));
     if (!isStatus) continue;
     const output = outputOf(ev);
@@ -30421,8 +30852,9 @@ async function recordCodeChangeTicket(serverChatId, c, req, phase) {
   const files = c.touchedFiles.filter((f) => !known.has(f)).slice(0, 50);
   if (phase === "settle" && c.deltaTicketId != null && files.length === 0) return;
   const attachTo = c.deltaTicketId;
+  if (files.length === 0 && attachTo == null) return;
   const source = serverChatId != null ? `Brain chat #${serverChatId}` : "a local editor chat";
-  const summary = files.length ? `Code change (${files.length} file${files.length === 1 ? "" : "s"}) from ${source}` : `Code change from ${source}`;
+  const summary = `Code change (${files.length} file${files.length === 1 ? "" : "s"}) from ${source}`;
   const toolStart = nowMs2();
   const args = {
     projectId: req.projectId,
@@ -30497,11 +30929,11 @@ async function moveTicket(c, req, move, reason) {
 }
 var LOCAL_VOCABULARY = ticketToolVocabulary([LOCAL_TICKET_CREATE_TOOL]);
 var MOVE_LABEL = /^(ticket[-_.]move|builtin_tasks_update)$/i;
-var succeeded7 = (ev) => ev.category === "tool" && !ev.isError && !isFailedToolResult(ev.result);
+var succeeded8 = (ev) => ev.category === "tool" && !ev.isError && !isFailedToolResult(ev.result);
 function localTicketsFiledInRun(trace4) {
   const ids2 = [];
   for (const ev of trace4) {
-    if (!succeeded7(ev) || !isLocalTicketCreateLabel(ev.label)) continue;
+    if (!succeeded8(ev) || !isLocalTicketCreateLabel(ev.label)) continue;
     if (ev.args?.reason !== "hand_off") continue;
     const { localId, syncId } = entityIdsOf(ev.result);
     const ref = localId ?? (syncId != null ? syncIdText(syncId) : null);
@@ -30512,7 +30944,7 @@ function localTicketsFiledInRun(trace4) {
 function statusesInRun(trace4) {
   const moved = /* @__PURE__ */ new Map();
   for (const ev of trace4) {
-    if (!succeeded7(ev) || !MOVE_LABEL.test(ev.label)) continue;
+    if (!succeeded8(ev) || !MOVE_LABEL.test(ev.label)) continue;
     const a = ev.args ?? {};
     if ((typeof a.id === "string" || typeof a.id === "number") && typeof a.status === "string") moved.set(String(a.id).trim(), a.status);
   }
@@ -30885,13 +31317,15 @@ function isDelegationTool(name) {
 function codeChangesOf(name, args, out) {
   if (isCodeChangeTool(name)) {
     if (isFailedToolResult(out)) return null;
-    const file = codeChangeFile(args);
-    return file ? [file] : [];
+    const files = codeChangeFiles(args);
+    const real = files.filter((f) => !isScratchScriptPath(f));
+    if (files.length > 0 && real.length === 0) return null;
+    return real;
   }
   if (isDelegationTool(name)) {
     const files = out?.changedFiles;
     if (!Array.isArray(files)) return null;
-    const named = files.filter((f) => typeof f === "string" && f.trim().length > 0);
+    const named = files.filter((f) => typeof f === "string" && f.trim().length > 0 && !isScratchScriptPath(f));
     return named.length ? named : null;
   }
   return null;
@@ -32232,10 +32666,10 @@ function readRequest(c, convo, mode) {
 }
 
 // src/runStore/runPreamble.ts
-var import_working13 = require("@seanhogg/builderforce-memory/working");
+var import_working14 = require("@seanhogg/builderforce-memory/working");
 
 // src/runStore/runFoldMarker.ts
-var import_working11 = require("@seanhogg/builderforce-memory/working");
+var import_working12 = require("@seanhogg/builderforce-memory/working");
 function entryKey(m) {
   return `${m.role}\0${m.role === "assistant" ? replayTextOf(contentText(m.content ?? "")) : contentText(m.content ?? "")}`;
 }
@@ -32279,14 +32713,14 @@ function recordTranscriptAnchors(c, req) {
   }
 }
 async function persistFoldMarker(c, chatId, persistence, fold) {
-  const covered = (0, import_working11.foldKeepFromId)(c.transcriptAnchors, fold.coveredEnd);
+  const covered = (0, import_working12.foldKeepFromId)(c.transcriptAnchors, fold.coveredEnd);
   if (covered === void 0) return;
   const keepFromId = c.unseenFromId === void 0 ? covered : Math.min(covered, c.unseenFromId);
   try {
     const [msg] = await persistence.sendMessages(chatId, [{
       role: "assistant",
-      content: (0, import_working11.consolidationMarkerContent)(fold.note),
-      metadata: (0, import_working11.consolidationMetadata)({ keepFromId, folded: fold.droppedMessages })
+      content: (0, import_working12.consolidationMarkerContent)(fold.note),
+      metadata: (0, import_working12.consolidationMetadata)({ keepFromId, folded: fold.droppedMessages })
     }]);
     if (msg) {
       recordAppended(c, msg);
@@ -32432,7 +32866,7 @@ function seedConfigLog(c, snap) {
 
 // src/runStore/runMemory.ts
 var import_evermind2 = require("@seanhogg/builderforce-memory/evermind");
-var import_working12 = require("@seanhogg/builderforce-memory/working");
+var import_working13 = require("@seanhogg/builderforce-memory/working");
 
 // src/runStore/answerAnchors.ts
 var FILE_READ_TOOLS = /* @__PURE__ */ new Set(["read_file", "view_file", "open_file", "read_files"]);
@@ -32496,7 +32930,7 @@ async function recallForRun(c, convo, evermind, hint) {
   if (recalled?.seeded && recalled.items.length > 0) {
     const block = (0, import_evermind2.formatEvermindMemoryBlock)(recalled.items);
     if (block) {
-      const blockTokens = (0, import_working12.transcriptTokens)([{ role: "system", content: block }]);
+      const blockTokens = (0, import_working13.transcriptTokens)([{ role: "system", content: block }]);
       pushTrace(c, {
         ts: nowIso(),
         category: "recall",
@@ -33010,7 +33444,7 @@ ${c.priorResearch}`;
     ...canAskUser ? [ASK_USER_TOOL] : []
   ];
   const windowFit = createRunWindowFit({
-    workingBudgetTokens: import_working13.HISTORY_TOKEN_BUDGET,
+    workingBudgetTokens: import_working14.HISTORY_TOKEN_BUDGET,
     summarizer: () => ({ stream, model: run.policy.model, signal: c.abort?.signal, ...req.onDeviceTasks ? { onDeviceTasks: req.onDeviceTasks } : {} }),
     ...evermind?.recall ? { recall: (q) => evermind.recall(q), priorRecall } : {},
     ...req.windowSources ? { windowSources: req.windowSources } : {},
@@ -33353,7 +33787,7 @@ function relevantTools(tools, query) {
 }
 
 // src/runStore/callPreflight.ts
-var import_working14 = require("@seanhogg/builderforce-memory/working");
+var import_working15 = require("@seanhogg/builderforce-memory/working");
 function traceRouted(c, step, via, name) {
   pushTrace(c, {
     ts: nowIso(),
@@ -33494,7 +33928,7 @@ function callPreflight(run) {
     if (isDedupableRead(call2.name)) {
       if (readCoverage2.isRepeat(call2.name, args)) {
         const cached2 = readCoverage2.cachedResult(call2.name, args);
-        if (cached2 && !(0, import_working14.stillInWorkingContext)(c, cached2.anchor)) {
+        if (cached2 && !(0, import_working15.stillInWorkingContext)(c, cached2.anchor)) {
           const replayNote = `Replayed from this run's read cache: this exact ${call2.name} call succeeded earlier in the run, but its result was compressed out of the working context, so here it is again \u2014 served from memory, not re-read. Act on it now; do not request it again.`;
           const visit = readCoverage2.record(call2.name, args);
           const target2 = visit ? visitTarget(args) : void 0;
@@ -33533,7 +33967,7 @@ ${revisit}` : replayNote,
         const note = revisit ? `${covered.note}
 
 ${revisit}` : covered.note;
-        if (covered.cached && !(0, import_working14.stillInWorkingContext)(c, covered.cached.anchor)) {
+        if (covered.cached && !(0, import_working15.stillInWorkingContext)(c, covered.cached.anchor)) {
           const requested = requestedReadWindow2(covered.cached.result ?? null, covered.start, covered.end);
           const replayed = trimToolResult(call2.name, requested, { advisory: note, contextWindowTokens: await run.windowFit.contextWindow?.() });
           run.pending.replayed(call2.id, { name: call2.name, args, result: requested, served: replayed.served });
@@ -33589,11 +34023,11 @@ ${revisit}` : covered.note;
 // src/runStore/postEditDiagnostics.ts
 var EDIT_TOOLS2 = /* @__PURE__ */ new Set(["edit_file", "write_file"]);
 var NOTE_ERRORS2 = 5;
-function succeeded8(data) {
+function succeeded9(data) {
   return !(data && typeof data === "object" && data.ok === false);
 }
 async function postEditDiagnostics(call2, verifier) {
-  if (!verifier || !EDIT_TOOLS2.has(call2.name) || !succeeded8(call2.result)) return null;
+  if (!verifier || !EDIT_TOOLS2.has(call2.name) || !succeeded9(call2.result)) return null;
   const paths = editedPathsOf(call2.name, call2.args);
   if (!paths.length) return null;
   let record3;
@@ -33615,11 +34049,11 @@ ${lines.join("\n")}${more}`;
 
 // src/runStore/postEditStructure.ts
 var BALANCE_TOOLS = /* @__PURE__ */ new Set(["edit_file"]);
-function succeeded9(data) {
+function succeeded10(data) {
   return !(data && typeof data === "object" && data.ok === false);
 }
 function bracketBalanceNote(call2) {
-  if (!BALANCE_TOOLS.has(call2.name) || !succeeded9(call2.result)) return null;
+  if (!BALANCE_TOOLS.has(call2.name) || !succeeded10(call2.result)) return null;
   const lines = [];
   for (const e of editedFilesOf(call2.name, call2.args)) {
     if (e.before === void 0 || e.after === void 0) continue;
@@ -34223,13 +34657,13 @@ function brainPlatformTools(run) {
 }
 
 // src/run/brainFold.ts
-var import_working16 = require("@seanhogg/builderforce-memory/working");
+var import_working17 = require("@seanhogg/builderforce-memory/working");
 
 // src/runStore/compactionSaved.ts
-var import_working15 = require("@seanhogg/builderforce-memory/working");
-function compactionSavedTokens(full, working, historyBudgetTokens = import_working15.HISTORY_TOKEN_BUDGET) {
-  const withoutCompaction = Math.min((0, import_working15.transcriptTokens)(full), historyBudgetTokens);
-  return Math.max(0, withoutCompaction - (0, import_working15.transcriptTokens)(working));
+var import_working16 = require("@seanhogg/builderforce-memory/working");
+function compactionSavedTokens(full, working, historyBudgetTokens = import_working16.HISTORY_TOKEN_BUDGET) {
+  const withoutCompaction = Math.min((0, import_working16.transcriptTokens)(full), historyBudgetTokens);
+  return Math.max(0, withoutCompaction - (0, import_working16.transcriptTokens)(working));
 }
 function stampOncePerCall(stamped2, plain2) {
   let used = false;
@@ -34313,7 +34747,7 @@ function brainCompaction(run) {
     hook: {
       async compact(ctx) {
         let folded = false;
-        const working = await (0, import_working16.buildWorkingTranscript)(
+        const working = await (0, import_working17.buildWorkingTranscript)(
           c,
           systemPrompt,
           (msgs) => {
@@ -34353,7 +34787,7 @@ function brainCompaction(run) {
           }
         );
         saved = c.compactMemo ? compactionSavedTokens([{ role: "system", content: systemPrompt }, ...c.transcript], working) : 0;
-        const rows = (0, import_working16.foldWorkingTranscript)(working).map(toRunMessage);
+        const rows = (0, import_working17.foldWorkingTranscript)(working).map(toRunMessage);
         if (sameRows(ctx.messages, rows)) return void 0;
         return { messages: rows, dropped: Math.max(0, ctx.messages.length - rows.length), ...folded ? {} : { reused: true } };
       }
@@ -34642,7 +35076,7 @@ function brainSteeringSource(run, people) {
 }
 
 // src/runStore/failureClose.ts
-var import_working17 = require("@seanhogg/builderforce-memory/working");
+var import_working18 = require("@seanhogg/builderforce-memory/working");
 async function closeAfterFailureStreak(run, streak, step) {
   const { c, chatId, req, convo, systemPrompt, metadata } = run;
   const { routingMode, stream, persistence, onActivity, maxTokens, reasoning } = req;
@@ -34652,7 +35086,7 @@ async function closeAfterFailureStreak(run, streak, step) {
     try {
       const working = [
         { role: "system", content: systemPrompt },
-        ...(0, import_working17.windowed)(convo),
+        ...(0, import_working18.windowed)(convo),
         {
           role: "user",
           content: `This turn was stopped because your last ${streak} tool calls all failed. Do NOT call any more tools. Answer the user now, in prose, using what you have already gathered \u2014 say what you completed, quote what the failing calls answered, and state plainly what is blocking you and what you need (a different argument, a permission, a decision) so the next turn can succeed.`
@@ -36304,14 +36738,14 @@ function usePendingTurns(chatId, messages, options) {
 var import_react11 = require("react");
 
 // src/userTurnRuns.ts
-var import_working18 = require("@seanhogg/builderforce-memory/working");
+var import_working19 = require("@seanhogg/builderforce-memory/working");
 function startsRun(text2) {
   return !stopIntent(text2);
 }
 function unansweredTurnIndex(messages) {
   for (let i = messages.length - 1; i >= 0; i -= 1) {
     const message2 = messages[i];
-    if (isStepMessage(message2) || (0, import_working18.isConsolidationMarker)(message2)) continue;
+    if (isStepMessage(message2) || (0, import_working19.isConsolidationMarker)(message2)) continue;
     return message2.role === "user" && !isMidTurnMetadata(message2.metadata) && startsRun(message2.content) ? i : -1;
   }
   return -1;
@@ -36393,7 +36827,7 @@ function useContinuation(persistence, prepareRun) {
 }
 
 // src/useBrainConversation.ts
-var import_working19 = require("@seanhogg/builderforce-memory/working");
+var import_working20 = require("@seanhogg/builderforce-memory/working");
 
 // src/contextUsage.ts
 var LLM_COMPLETE = "llm.complete";
@@ -36653,7 +37087,7 @@ ${extraSystem}` : resolvedSystemPrompt;
         augmentSystemPrompt,
         seed: seed.messages,
         seedIds: seed.ids,
-        priorResearch: priorResearchDigest((0, import_working19.scopeToConsolidation)(researchFrom)),
+        priorResearch: priorResearchDigest((0, import_working20.scopeToConsolidation)(researchFrom)),
         userTurn,
         ...userTurnMessageId != null ? { userTurnMessageId } : {},
         projectId,
@@ -37139,53 +37573,104 @@ function parseResumeState(value) {
   return { ...ask2 ? { ask: ask2 } : {}, ...plan ? { plan } : {}, ...files ? { files } : {}, ...steps ? { steps } : {} };
 }
 
+// src/payloadPriority.ts
+var MUTATING_COMMAND = new RegExp(
+  [
+    String.raw`\bgit\s+(?:commit|push|apply|merge|rebase|cherry-pick|am|reset|checkout|switch|add|rm|mv|tag|stash|restore)\b`,
+    String.raw`(?:^|[\s;&|$])(?:rm|mv|cp|mkdir|touch|tee|patch|chmod|ln)\s`,
+    String.raw`\bsed\s+-i\b`,
+    String.raw`\b(?:npm|pnpm|yarn|bun)\s+(?:i|install|add|remove|uninstall|version|publish)\b`,
+    String.raw`[^\d&]>>?\s*(?!&|\s*/dev/null)[\w./~"'-]`
+  ].join("|")
+);
+var CHANGE_ARGS = /"(?:old_string|new_string|content|patch|diff|edits|replacement)"\s*:/;
+var DIFF_OUTPUT = /^diff --git |^@@ -\d+(?:,\d+)? \+\d+/m;
+var ERROR_RESULT = /"ok"\s*:\s*false|"isError"\s*:\s*true|"error"\s*:\s*"[^"]/;
+var FAILED_EXIT_LABEL = /\(exit (?!0\))/;
+var SHIP_OUTPUT = /^\[[\w./-]+ [0-9a-f]{7,}\]|^\s*[0-9a-f]{7,}\.\.[0-9a-f]{7,}\s+\S+\s+->\s+\S+/m;
+function payloadPriority(label, payload) {
+  if (FAILED_EXIT_LABEL.test(label)) return "high";
+  if (/^command$/i.test(label.trim()) && MUTATING_COMMAND.test(payload)) return "high";
+  if (CHANGE_ARGS.test(payload) || DIFF_OUTPUT.test(payload) || SHIP_OUTPUT.test(payload) || ERROR_RESULT.test(payload)) return "high";
+  return "normal";
+}
+
 // src/transcriptBudget.ts
 var DEFAULT_MIN_PAYLOAD = 240;
+var DEFAULT_HIGH_PRIORITY_RESERVE = 0.3;
+var TINY_REPEAT_CHARS = 160;
 function createPayloadBudget(opts) {
   const minPayload = Math.min(opts.minPayload ?? DEFAULT_MIN_PAYLOAD, opts.perPayload);
-  let remaining2 = Math.max(0, opts.total);
+  const total = Math.max(0, opts.total);
+  const share = Math.min(1, Math.max(0, opts.highPriorityReserve ?? DEFAULT_HIGH_PRIORITY_RESERVE));
+  const demandDeclared = opts.highPriorityDemand != null;
+  const demand = demandDeclared ? Math.max(0, opts.highPriorityDemand) : Number.POSITIVE_INFINITY;
+  let tailLeft = Math.min(total, Math.max(0, opts.tailReserve ?? 0));
+  let held = Math.min(Math.floor((total - tailLeft) * share), demand);
+  let remaining2 = total;
   let spent = 0;
   let trimmed = 0;
   let deduped = 0;
   let dedupedChars = 0;
+  let tinyRepeats = 0;
   const seen = /* @__PURE__ */ new Map();
   let ordinal = 0;
-  return {
-    cap(payload, label, maxChars) {
-      if (!payload) return payload;
-      const ceiling = maxChars != null && maxChars > 0 ? maxChars : opts.perPayload;
-      const floor = Math.min(minPayload, ceiling);
-      ordinal += 1;
-      const prior = seen.get(payload);
-      if (prior) {
-        deduped += 1;
-        dedupedChars += payload.length;
-        return `\u2026(identical to the ${ordinalWord(prior.ordinal)} payload in this report \u2014 ${prior.label}, ${formatCount(payload.length)} chars. Repeated verbatim; not reprinted.)`;
-      }
-      seen.set(payload, { ordinal, label });
-      const cap2 = Math.max(floor, Math.min(ceiling, remaining2));
-      if (payload.length <= cap2) {
-        remaining2 -= payload.length;
-        spent += payload.length;
+  const charge = (chars, high, tail) => {
+    remaining2 -= chars;
+    spent += chars;
+    if (tail) tailLeft = Math.max(0, tailLeft - chars);
+    held = Math.max(0, Math.min(held - (high ? chars : 0), remaining2 - tailLeft));
+  };
+  const cap2 = (payload, label, maxChars, priority) => {
+    if (!payload) return payload;
+    const ceiling = maxChars != null && maxChars > 0 ? maxChars : opts.perPayload;
+    const floor = Math.min(minPayload, ceiling);
+    ordinal += 1;
+    const prior = seen.get(payload);
+    if (prior) {
+      if (payload.length <= TINY_REPEAT_CHARS) {
+        tinyRepeats += 1;
         return payload;
       }
-      if (remaining2 < floor) {
-        trimmed += 1;
-        return `\u2026(${formatCount(payload.length)} chars omitted \u2014 the report hit its size budget. The full result is on the live timeline.)`;
-      }
+      deduped += 1;
+      dedupedChars += payload.length;
+      return `\u2026(identical to the ${ordinalWord(prior.ordinal)} payload in this report \u2014 ${prior.label}, ${formatCount(payload.length)} chars. Repeated verbatim; not reprinted.)`;
+    }
+    seen.set(payload, { ordinal, label });
+    const tail = priority === "tail";
+    const high = tail || (priority ?? payloadPriority(label, payload)) === "high";
+    const room = tail ? remaining2 : remaining2 - tailLeft;
+    const available = high ? Math.max(0, room) : Math.max(0, room - held);
+    const capChars = Math.max(floor, Math.min(ceiling, available));
+    if (payload.length <= capChars) {
+      if (high || payload.length <= available) charge(payload.length, high, tail);
+      return payload;
+    }
+    if (room < floor) {
       trimmed += 1;
-      remaining2 -= cap2;
-      spent += cap2;
-      return `${payload.slice(0, cap2)}
-\u2026(+${formatCount(payload.length - cap2)} chars truncated \u2014 full result is on the live timeline)`;
+      return `\u2026(${formatCount(payload.length)} chars omitted \u2014 the report hit its size budget. The full result is on the live timeline.)`;
+    }
+    if (!high && available < floor && demandDeclared) {
+      trimmed += 1;
+      return `\u2026(${formatCount(payload.length)} chars omitted \u2014 the report hit its size budget; the remaining room is held for the changes, errors and replies still to come. The full result is on the live timeline.)`;
+    }
+    trimmed += 1;
+    charge(capChars, high, tail);
+    return `${payload.slice(0, capChars)}
+\u2026(+${formatCount(payload.length - capChars)} chars truncated \u2014 full result is on the live timeline)`;
+  };
+  return {
+    cap: cap2,
+    fence(label, payload, maxChars, priority) {
+      return payload ? [`${label}:`, "```", cap2(payload, label, maxChars, priority), "```"] : [];
     },
     stats() {
-      return { spent, trimmed, deduped, dedupedChars };
+      return { spent, trimmed, deduped, dedupedChars, tinyRepeats };
     },
     note() {
       if (trimmed === 0 && deduped === 0) return null;
       const parts = [];
-      if (trimmed) parts.push(`${trimmed} oversized payload(s) shortened`);
+      if (trimmed) parts.push(`${trimmed} oversized payload(s) shortened (changes, diffs, errors and the conversation kept ahead of reads)`);
       if (deduped) {
         parts.push(
           `${deduped} payload(s) were byte-identical repeats and are shown as back references (${(dedupedChars / 1024).toFixed(1)} KB of repetition \u2014 itself a signal, see the Progress lines)`
@@ -37258,7 +37743,7 @@ function ordinalWord(n2) {
 }
 
 // src/index.ts
-var import_working20 = require("@seanhogg/builderforce-memory/working");
+var import_working21 = require("@seanhogg/builderforce-memory/working");
 
 // src/apiVersion.ts
 var API_VERSION_TTL_MS = 6e4;
@@ -37327,7 +37812,7 @@ function takePendingPrompt() {
 }
 
 // src/index.ts
-var import_working21 = require("@seanhogg/builderforce-memory/working");
+var import_working22 = require("@seanhogg/builderforce-memory/working");
 
 // src/agentPool.ts
 var DEFAULT_AGENT_MODEL_SENTINEL = "builderforce-default";
@@ -37775,7 +38260,12 @@ function diagnosticsSignals(d) {
     out.push("\u2139\uFE0F No agents are invited into this chat (chats.list_agents is empty), so dispatched agents post nothing back here.");
   }
   const runs = d.runs;
-  if (runs && agentCount > 0 && runs.linkedRunnableTickets > 0 && runs.runs.length === 0) {
+  const selfServed = (d.sessionShipped ?? 0) > 0;
+  if (runs && agentCount > 0 && runs.linkedRunnableTickets > 0 && runs.runs.length === 0 && selfServed) {
+    out.push(
+      `\u2139\uFE0F Self-served: no agent was dispatched for this chat's ${runs.linkedRunnableTickets} runnable ticket(s) because the session did the work itself (${d.sessionShipped} successful write/commit/push call(s)).`
+    );
+  } else if (runs && agentCount > 0 && runs.linkedRunnableTickets > 0 && runs.runs.length === 0) {
     const names = (d.agents ?? []).map((a) => a.name?.trim() || a.agentRef).join(", ");
     out.push(
       `\u26A0\uFE0F ${agentCount} agent(s) are in this chat (${names}) and ZERO runs have ever been started against its ${runs.linkedRunnableTickets} runnable ticket(s). The work was filed and staffed on paper; nobody was dispatched. Anything that got done was done by this session itself. Start one with the \u25B6 control on a linked ticket, or ask in-chat for the agent to be dispatched.`
@@ -37846,12 +38336,23 @@ function diagnosticsSignals(d) {
   if (acct) {
     const free = acct.plan === "free";
     const noCard = acct.billingStatus === "none" || acct.billingStatus == null;
+    const premium = acct.canUsePremiumModels === true;
+    const mixed = acct.servedBy === "mixed";
+    const ownFunded = acct.servedBy === "own" || !mixed && (acct.modelFunding ?? "").startsWith("byo:");
     if (free && noCard) {
+      const expect = ["the smaller monthly token allowance"];
+      if (!premium) expect.push("no premium/frontier models");
+      if (!ownFunded && !mixed) expect.push("turns funded by the shared free pool");
+      const facts = [
+        ...premium ? ["premium/frontier models ARE entitled on this tenant"] : [],
+        ...ownFunded ? ["this chat's turns were paid by your own connected provider account, not the shared pool"] : [],
+        ...mixed ? ["this chat's turns were served by more than one account (some by your own key, some by the shared pool)"] : []
+      ];
       out.push(
-        "\u2139\uFE0F Free plan with NO payment method on file. Expect the smaller monthly token allowance, no premium/frontier models, and turns funded by the shared free pool \u2014 none of this is a fault. Adding a card (or connecting your own provider account) lifts all three."
+        `\u2139\uFE0F Free plan with NO payment method on file. Expect ${expect.length > 1 ? `${expect.slice(0, -1).join(", ")}, and ${expect[expect.length - 1]}` : expect[0]} \u2014 none of this is a fault.` + (facts.length ? ` (${facts.join("; ")}.)` : "") + ` Adding a card (or connecting your own provider account) lifts ${expect.length === 3 ? "all three" : "these limits"}.`
       );
     } else if (free) {
-      out.push("\u2139\uFE0F Free plan \u2014 premium/frontier models are not entitled and the monthly token allowance is the free tier's.");
+      out.push(`\u2139\uFE0F Free plan \u2014 ${premium ? "premium/frontier models ARE entitled on this tenant" : "premium/frontier models are not entitled"} and the monthly token allowance is the free tier's.`);
     }
     if (acct.billingStatus === "past_due") {
       out.push("\u26A0\uFE0F Billing status is past_due \u2014 plan entitlements may be suspended until payment succeeds, which reads as sudden model/quota downgrade.");
@@ -37871,7 +38372,7 @@ function diagnosticsSignals(d) {
         `\u26A0\uFE0F Model "${acct.model}" is a premium/metered model but this plan is NOT entitled to premium models \u2014 the gateway rejects it (402) or falls back to the plan pool, which is why answers look weaker than the picked model implies.`
       );
     }
-    if ((acct.byoProviders?.length ?? 0) === 0 && free) {
+    if ((acct.byoProviders?.length ?? 0) === 0 && free && !ownFunded) {
       out.push("\u2139\uFE0F No bring-your-own provider accounts connected, so every turn spends the plan allowance above. Connecting your own Claude/OpenAI account makes turns $0 against the plan.");
     }
   }
@@ -37914,12 +38415,17 @@ function shortTime(iso) {
   if (!iso) return "\u2014";
   return iso.length >= 16 ? `${iso.slice(0, 10)} ${iso.slice(11, 16)}` : iso;
 }
-function runHistoryLines(runs) {
+function runHistoryLines(runs, sessionShipped) {
   if (!runs) {
     return [`- Execution history: not gathered (this surface did not read the chat's runs \u2014 absent is NOT the same as "nothing ran")`];
   }
   if (runs.linkedRunnableTickets === 0) {
     return ["- Execution history: no runnable ticket (task/epic/gap) is linked to this chat, so there is nothing here that could have been run."];
+  }
+  if (runs.runs.length === 0 && sessionShipped > 0) {
+    return [
+      `- Execution history: self-served \u2014 no cloud run against ${runs.linkedRunnableTickets} linked runnable ticket(s); this session changed the code itself (${sessionShipped} successful write/commit/push call(s)), so no dispatch was needed.`
+    ];
   }
   if (runs.runs.length === 0) {
     return [
@@ -38087,7 +38593,7 @@ function formatChatDiagnostics(d) {
   } else {
     lines.push("- Linked tickets (0)");
   }
-  lines.push(...runHistoryLines(d.runs));
+  lines.push(...runHistoryLines(d.runs, d.sessionShipped ?? 0));
   const signals = diagnosticsSignals(d);
   if (signals.length) {
     lines.push("", "### Signals");
@@ -38106,7 +38612,15 @@ var excerpt = (v) => {
 function stateOf(c) {
   if (c.running) return "running";
   if (c.error) return "failed";
-  return c.lastMessage?.trim() ? "done" : "ended without a report";
+  const last = c.lastMessage?.trim() ?? "";
+  if (!last) return "ended without a report";
+  if (parseAskUser(liftProseAskUser(last))) {
+    return "ENDED ON A QUESTION \u2014 it asked the user something, and no one can answer a sub-agent; its work is unfinished";
+  }
+  if (announcesDeliverable(stripAskUser(last))) {
+    return "ENDED WITHOUT ITS DELIVERABLE \u2014 its last reply announced the report/output and the run stopped before producing it";
+  }
+  return "done";
 }
 function spanOf(events) {
   const times = events.map((e) => Date.parse(e.ts)).filter(Number.isFinite);
@@ -38125,11 +38639,12 @@ function formatSubagentDiagnostics(children, capturedAtMs) {
     for (const e of tools) for (const f of codeChangesOf(e.label, e.args, e.result) ?? []) files.add(f);
     const models = modelsUsedInTrace(c.events);
     const span = spanOf(c.events);
+    const state = stateOf(c);
     lines.push(
       `\u2022 ${c.handle} ${c.name} \u2014 "${c.label}" \xB7 sub-agent of ${c.owner}${c.depth > 1 ? ` (depth ${c.depth})` : ""}${c.ticket ? ` \xB7 ticket ${c.ticket}` : ""}`
     );
     lines.push(
-      `  State: ${stateOf(c)} \xB7 Turns: ${c.events.filter((e) => e.category === "llm").length} \xB7 Tool calls: ${tools.length} \xB7 Failed: ${failures.length}${span ? ` \xB7 ${span}` : ""}`
+      `  State: ${state} \xB7 Turns: ${c.events.filter((e) => e.category === "llm").length} \xB7 Tool calls: ${tools.length} \xB7 Failed: ${failures.length}${span ? ` \xB7 ${span}` : ""}`
     );
     if (models.length) lines.push(`  Models: ${models.join(", ")}`);
     if (c.running && c.activity) lines.push(`  Now: ${describeLiveStep(c.activity, capturedAtMs)}`);
@@ -38137,12 +38652,21 @@ function formatSubagentDiagnostics(children, capturedAtMs) {
     for (const f of failures.slice(0, MAX_FAILURES)) lines.push(`  Failed step: ${f.label} \u2014 ${excerpt(f.result)}`);
     if (failures.length > MAX_FAILURES) lines.push(`  \u2026and ${failures.length - MAX_FAILURES} more failed step(s)`);
     if (c.error) lines.push(`  Error: ${excerpt(c.error)}`);
-    if (c.lastMessage?.trim()) lines.push(`  ${c.running ? "Last message" : "Report"}: ${excerpt(c.lastMessage)}`);
+    if (c.lastMessage?.trim()) lines.push(`  ${state === "done" ? "Report" : "Last message"}: ${excerpt(c.lastMessage)}`);
   }
   return lines;
 }
 
 // src/gatherChatDiagnostics.ts
+function accountsAcrossTurns(events) {
+  const seen = /* @__PURE__ */ new Set();
+  for (const ev of events) {
+    if (ev.category !== "llm") continue;
+    const a = accountUsedInTrace([ev]);
+    if (a) seen.add(a);
+  }
+  return seen.size === 0 ? null : seen.size === 1 ? [...seen][0] : "mixed";
+}
 function safely(read2, fallback) {
   if (!read2) return Promise.resolve(fallback);
   try {
@@ -38183,6 +38707,9 @@ async function gatherChatDiagnostics(src) {
     }
   }
   const exposure = src.trace ? toolExposureInTrace([...src.trace]) : null;
+  const merged = traceWithPersistedSteps(msgs, src.trace ? [...src.trace] : []);
+  const sessionShipped = merged.length ? sessionShippedInTrace(merged) : null;
+  const servedBy = accountsAcrossTurns(merged);
   const publishHold2 = publishHoldFromPersonTurns(
     msgs.filter((m) => m.role === "user" && typeof m.content === "string" && m.content.trim()).map((m) => ({ text: m.content.trim() }))
   );
@@ -38203,6 +38730,7 @@ async function gatherChatDiagnostics(src) {
     ...src.modelSurface?.canUsePremiumModels != null ? { canUsePremiumModels: src.modelSurface.canUsePremiumModels } : {},
     ...src.modelSurface?.data ? { planModelCount: src.modelSurface.data.length } : {},
     byoProviders: src.modelSurface?.byo?.providers ?? [],
+    servedBy,
     extensionVersion: src.uiVersion ?? null,
     baseUrl: src.baseUrl ?? null
   };
@@ -38238,6 +38766,7 @@ async function gatherChatDiagnostics(src) {
       ...a.builtinKind != null ? { builtinKind: a.builtinKind } : {}
     })),
     runs,
+    sessionShipped,
     tickets: tickets.map((tk) => ({ kind: tk.kind, ref: tk.ref, label: tk.label, linkType: tk.linkType, status: tk.status })),
     account,
     spend: src.spend ?? null,
@@ -39196,6 +39725,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   DEFAULT_AGENT_MODEL_SENTINEL,
   DEFAULT_CHAT_ACTIVITY_LABELS,
   DEFAULT_CHAT_TITLE,
+  DEFAULT_HIGH_PRIORITY_RESERVE,
   DEFAULT_MODEL_CHOICE_LABELS,
   DEFAULT_MODEL_FALLBACK_TEMPLATE,
   DEFAULT_MODEL_IDENTITY,
@@ -39536,6 +40066,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   parseRoleGateRefusal,
   parseStepMessage,
   parseSubagentOrigin,
+  payloadPriority,
   perMillionUsd,
   personaAgentOf,
   personaModalityOf,

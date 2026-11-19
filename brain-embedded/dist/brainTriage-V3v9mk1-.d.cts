@@ -80,7 +80,7 @@ interface SpendSavingsSummary {
 
 /**
  * A chat's VIEW KEY: the numeric id a chat is addressed by in this package (a local chat's
- * device-only key, or a server chat's own id). Not a LocalId (docs/design/typed-entity-ids.md
+ * device-only key, or a server chat's own id). Not a LocalId (docs/specs/platform.md, Typed entity ids
  * §3); an alias only — no field is renamed.
  */
 type ViewKey = number;
@@ -399,6 +399,8 @@ interface RunSummary {
     cacheAnswered: number;
     mutationsSucceeded: number;
     spinning: boolean;
+    /** Active wall clock of the run (span minus idle gaps), so a chat total can be summed. */
+    activeMs: number;
 }
 interface RunProgress {
     /** Tool calls whose label AND arguments exactly repeated an earlier call. */
@@ -780,8 +782,11 @@ interface StaffingSummary {
      *  - `filed-locally`     — every ticket was filed on this device; the session and its local sub-agents run the
      *                           work here, and the tickets sync to the account when sync is on (the import never staffs).
      *  - `staffing-refused`  — somebody was asked and the platform said no.
+     *  - `self-served`       — work was filed, nobody was dispatched, and none was needed: the
+     *                           session itself changed and shipped the code ({@link sessionShippedInTrace}).
+     *                           A neutral outcome, not the staffing gap `filed-not-staffed` names.
      */
-    verdict: 'no-work-filed' | 'staffed' | 'filed-not-staffed' | 'filed-locally' | 'staffing-refused';
+    verdict: 'no-work-filed' | 'staffed' | 'filed-not-staffed' | 'filed-locally' | 'staffing-refused' | 'self-served';
 }
 /** Derive the staffing picture from a recorded trace. Pure — no clock, no I/O. */
 declare function staffingSummaryInTrace(events: BrainTraceEvent[]): StaffingSummary;
@@ -905,6 +910,43 @@ declare function describeLiveStep(step: BrainRunActivity, capturedAtMs: number):
 declare function midRunNotice(activity: BrainRunActivity | null | undefined, capturedAtMs: number): string;
 
 /**
+ * The run VERDICT — the "Likely cause" a triager reads first — as one pure decision over
+ * signals `computeBrainDiagnostics` has already measured. Split out of `brainTriage.ts` so
+ * the ordering of causes (and the two states that are not causes at all: a run still in
+ * flight, and a run with nothing to explain) lives in one small module instead of at the
+ * bottom of a 1,400-line one.
+ */
+
+/**
+ * Best-effort verdict — the header a triager reads first. `healthy` is distinct
+ * from `inconclusive`: the former means there is no failure to explain, the
+ * latter that there IS one but the signals don't separate A from B. Collapsing
+ * both into "inconclusive" made a clean run read as an unsolved problem.
+ *
+ * `run-in-progress` is not a cause: the run was still executing at capture, so every
+ * "and then nothing happened" signal describes an unfinished run (chat #273 run #6,
+ * captured 5 s in, read "Inconclusive" and "NOTHING WAS CHANGED"). It outranks all.
+ *
+ * `tool-calls-not-emitted` outranks the rest: a run that narrated its calls did
+ * nothing at all, and every other signal on it reads clean.
+ *
+ * `no-tools-advertised` and `tool-not-advertised` outrank even that, because they are
+ * OUR fault rather than the model's, and the remedy ("pick a different model") that
+ * `tool-calls-not-emitted` prescribes is actively wrong for them.
+ *
+ * `no-progress` sits above `context-exhaustion` and `model-degradation` for the same
+ * reason: a run that re-read one file until its budget was gone will ALSO show a high
+ * prompt peak and truncated tool results, so the context signals fire — but they are a
+ * CONSEQUENCE of the loop, and acting on them (shrink the transcript, swap the model)
+ * changes nothing. The loop has to be named first or it is never seen.
+ *
+ * `work-filed-not-staffed` sits LAST among the causes, above only `healthy`/`inconclusive`:
+ * it is a verdict about the run's OUTCOME, not its mechanics, so any genuine exhaustion,
+ * model fault or narrated-call failure explains the missing dispatch better and outranks it.
+ */
+type LikelyCause = 'run-in-progress' | 'memory-answered' | 'no-tools-advertised' | 'tool-not-advertised' | 'tool-calls-not-emitted' | 'answered-in-prose' | 'no-progress' | 'context-exhaustion' | 'model-degradation' | 'app-errors-unresolved' | 'work-filed-not-staffed' | 'inconclusive' | 'healthy';
+
+/**
  * Brain execution triage — capture the Brain's run (LLM steps, tool chain,
  * intermediate assistant messages, and errors) as a single paste-able report.
  *
@@ -974,23 +1016,6 @@ interface BrainTraceEvent {
      */
     recovered?: boolean;
 }
-/**
- * Did a tool result represent a failure?
- *
- * Tool results in this codebase signal failure by SHAPE, not prose: the platform
- * actions return `{ ok: false }` or `{ error: "<message>" }` (the tenant guard,
- * the dispatcher's unknown-capability, a thrown handler). We inspect that shape
- * instead of regex-scanning the whole stringified payload — the old
- * `\b(error|failed|exception)\b` scan misfired on any legit data that merely
- * CONTAINED the word "error" (e.g. a task titled "Fix login error", an audit
- * row, a search result), mis-marking a successful run as ERROR in the report.
- *
- * For a STRING result we only flag an embedded `{ ok: false }` / `"error":`
- * envelope (a stringified error object), never a free-text occurrence of the
- * word — a plain-string success like `"done"` or `"No errors found"` is not a
- * failure.
- */
-declare function isFailedToolResult(result: unknown): boolean;
 /** THE honesty-flag lines, shared by every copy surface so they cannot drift apart. */
 declare const UNBACKED_WRITE_CLAIM_NOTICE = "\u26A0 UNBACKED WRITE CLAIM \u2014 an assistant turn claimed it saved/updated a file, but no file-write tool (write_file / edit_file / attachments.write / project_files.save) succeeded in this run. The file was NOT modified.";
 declare const UNBACKED_TICKET_CLAIM_NOTICE = "\u26A0 UNBACKED TICKET CLAIM \u2014 an assistant turn claimed it created/filed/linked a ticket or gap, but no create/link tool (tasks.create / chats.link_ticket / tickets.from_delta) succeeded in this run. Nothing was filed or linked to the chat.";
@@ -1212,7 +1237,12 @@ interface BrainDiagnostics {
         requiredRole?: string;
         callerRole?: string;
         remediation?: string;
+        recovered?: boolean;
     }[];
+    /** Of `errors`, the failed tool steps a later success on the same target recovered — see `brainVerdict.ts`. */
+    recoveredFailures: number;
+    /** True when the run was still executing at capture — the verdict is then `run-in-progress`. */
+    running: boolean;
     /** Distinct models that actually answered, first-seen order. */
     modelsUsed: string[];
     /** What each of those models did with the turns it served — see `modelScorecard.ts`. */
@@ -1311,30 +1341,8 @@ interface BrainDiagnostics {
      * or a later read came back clean. See {@link unresolvedAppFailuresInTrace}.
      */
     unresolvedAppFailures: number;
-    /**
-     * Best-effort verdict — the header a triager reads first. `healthy` is distinct
-     * from `inconclusive`: the former means there is no failure to explain, the
-     * latter that there IS one but the signals don't separate A from B. Collapsing
-     * both into "inconclusive" made a clean run read as an unsolved problem.
-     *
-     * `tool-calls-not-emitted` outranks the rest: a run that narrated its calls did
-     * nothing at all, and every other signal on it reads clean.
-     *
-     * `no-tools-advertised` and `tool-not-advertised` outrank even that, because they are
-     * OUR fault rather than the model's, and the remedy ("pick a different model") that
-     * `tool-calls-not-emitted` prescribes is actively wrong for them.
-     *
-     * `no-progress` sits above `context-exhaustion` and `model-degradation` for the same
-     * reason: a run that re-read one file until its budget was gone will ALSO show a high
-     * prompt peak and truncated tool results, so the context signals fire — but they are a
-     * CONSEQUENCE of the loop, and acting on them (shrink the transcript, swap the model)
-     * changes nothing. The loop has to be named first or it is never seen.
-     *
-     * `work-filed-not-staffed` sits LAST among the causes, above only `healthy`/`inconclusive`:
-     * it is a verdict about the run's OUTCOME, not its mechanics, so any genuine exhaustion,
-     * model fault or narrated-call failure explains the missing dispatch better and outranks it.
-     */
-    likelyCause: 'memory-answered' | 'no-tools-advertised' | 'tool-not-advertised' | 'tool-calls-not-emitted' | 'answered-in-prose' | 'no-progress' | 'context-exhaustion' | 'model-degradation' | 'app-errors-unresolved' | 'work-filed-not-staffed' | 'inconclusive' | 'healthy';
+    /** Best-effort verdict — the header a triager reads first. Ordering: `brainVerdict.ts`. */
+    likelyCause: LikelyCause;
 }
 /**
  * Derive {@link BrainDiagnostics} from a recorded trace. Pure — no clock, no I/O
@@ -1372,12 +1380,6 @@ interface MemoryUsageSummary {
     factsWritten: number;
 }
 declare function computeBrainDiagnostics(events: BrainTraceEvent[], requestedModel?: string, messages?: BrainMessage[], ctx?: BrainDiagnosticsContext): BrainDiagnostics;
-/**
- * Render {@link BrainDiagnostics} as transcript lines. Shared by both copy
- * surfaces so the "Diagnostics" block is identical on web and in VS Code. Emits
- * a leading `--- Diagnostics ---` header and returns the lines (caller joins).
- */
-declare function formatBrainDiagnostics(d: BrainDiagnostics): string[];
 interface BuildBrainTriageOptions {
     /** ISO capture time (caller supplies it so the module stays clock-free). */
     capturedAt: string;
@@ -1412,4 +1414,4 @@ interface BuildBrainTriageOptions {
  */
 declare function buildBrainTriageReport(opts: BuildBrainTriageOptions): string;
 
-export { detectAnnouncedButUnmadeToolCall as $, UNBACKED_WRITE_CLAIM_NOTICE as A, type BrainTraceEvent as B, type ChatInputAttachment as C, type DispatchRefusal as D, type EvermindLearnOutcome as E, USAGE_SURFACES as F, USAGE_SURFACE_HEADER as G, type HandOffMode as H, accountUsedInTrace as I, activityTarget as J, answeredInProseInTrace as K, attachEvermindLearn as L, type ModelScore as M, buildBrainTriageReport as N, byoReasonHint as O, type PackageDirProbe as P, byoUnresolvedInTrace as Q, type RunProgress as R, type StreamFailureDetail as S, byoUnresolvedSummary as T, type UsageSurface as U, type ViewKey as V, canRunInParallel as W, computeBrainDiagnostics as X, computeRunProgress as Y, describeLiveStep as Z, describeStreamFailure as _, type BrainMessage as a, detectUnbackedTicketClaim as a0, detectUnbackedWriteClaim as a1, formatBrainDiagnostics as a2, formatBrainProvenance as a3, formatBytes as a4, formatDispatchRefusals as a5, formatEvermindLearnStep as a6, formatModelScorecard as a7, formatModelTurnLog as a8, formatStaffingSummary as a9, hasEditIntent as aa, isDispatchTool as ab, isEvermindModel as ac, isFailedToolResult as ad, isMutationTool as ae, isStepMessage as af, isTicketWriteTool as ag, isUsageSurface as ah, midRunNotice as ai, modelFailoversInTrace as aj, modelScorecard as ak, modelTurnLog as al, modelsUsedInTrace as am, narratedUnadvertisedInTrace as an, parseByoUnresolved as ao, parseRoleGateRefusal as ap, serverChatIdOf as aq, shortenTarget as ar, staffingSummaryInTrace as as, stallRecoveriesInTrace as at, stallUnrecoveredInTrace as au, toolActivity as av, workFiledNotStaffedVerdict as aw, type RoutingByRole as ax, type BrainRunActivity as b, type BrainChat as c, type SpendSavingsSummary as d, type BrainModality as e, type ScopeClash as f, type HandOffDecision as g, type ParallelSplit as h, type BrainDiagnostics as i, type StaffingSummary as j, type BrainDiagnosticsContext as k, type BrainRunPhase as l, type BuildBrainTriageOptions as m, type ByoUnresolvedEntry as n, type EvermindLearnTarget as o, type ModelTurn as p, type PersonaSubagent as q, ROLE_GATE_REMEDIATION as r, type RepeatStreak as s, type RepeatedTarget as t, STEP_MESSAGE_ROLE as u, type SavingsBreakdown as v, type SavingsBySource as w, type SavingsSourceKey as x, type SpendBreakdown as y, UNBACKED_TICKET_CLAIM_NOTICE as z };
+export { detectAnnouncedButUnmadeToolCall as $, UNBACKED_WRITE_CLAIM_NOTICE as A, type BrainDiagnostics as B, type ChatInputAttachment as C, type DispatchRefusal as D, type EvermindLearnOutcome as E, USAGE_SURFACES as F, USAGE_SURFACE_HEADER as G, type HandOffMode as H, accountUsedInTrace as I, activityTarget as J, answeredInProseInTrace as K, attachEvermindLearn as L, type ModelScore as M, buildBrainTriageReport as N, byoReasonHint as O, type PackageDirProbe as P, byoUnresolvedInTrace as Q, type RunProgress as R, type StreamFailureDetail as S, byoUnresolvedSummary as T, type UsageSurface as U, type ViewKey as V, canRunInParallel as W, computeBrainDiagnostics as X, computeRunProgress as Y, describeLiveStep as Z, describeStreamFailure as _, type BrainTraceEvent as a, detectUnbackedTicketClaim as a0, detectUnbackedWriteClaim as a1, formatBrainProvenance as a2, formatBytes as a3, formatDispatchRefusals as a4, formatEvermindLearnStep as a5, formatModelScorecard as a6, formatModelTurnLog as a7, formatStaffingSummary as a8, hasEditIntent as a9, isDispatchTool as aa, isEvermindModel as ab, isMutationTool as ac, isStepMessage as ad, isTicketWriteTool as ae, isUsageSurface as af, midRunNotice as ag, modelFailoversInTrace as ah, modelScorecard as ai, modelTurnLog as aj, modelsUsedInTrace as ak, narratedUnadvertisedInTrace as al, parseByoUnresolved as am, parseRoleGateRefusal as an, serverChatIdOf as ao, shortenTarget as ap, staffingSummaryInTrace as aq, stallRecoveriesInTrace as ar, stallUnrecoveredInTrace as as, toolActivity as at, workFiledNotStaffedVerdict as au, type RoutingByRole as av, type BrainMessage as b, type BrainRunActivity as c, type BrainChat as d, type SpendSavingsSummary as e, type BrainModality as f, type ScopeClash as g, type HandOffDecision as h, type ParallelSplit as i, type StaffingSummary as j, type BrainDiagnosticsContext as k, type BrainRunPhase as l, type BuildBrainTriageOptions as m, type ByoUnresolvedEntry as n, type EvermindLearnTarget as o, type ModelTurn as p, type PersonaSubagent as q, ROLE_GATE_REMEDIATION as r, type RepeatStreak as s, type RepeatedTarget as t, STEP_MESSAGE_ROLE as u, type SavingsBreakdown as v, type SavingsBySource as w, type SavingsSourceKey as x, type SpendBreakdown as y, UNBACKED_TICKET_CLAIM_NOTICE as z };

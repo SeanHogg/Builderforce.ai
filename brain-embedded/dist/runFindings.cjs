@@ -137,20 +137,22 @@ function analysisOverrun(view) {
 // ../packages/agent-tools/src/modelRoles.ts
 var MODEL_ROLES = ["plan", "code", "review", "verify", "explore", "chat", "utility"];
 var MODEL_ROLE_DESCRIPTIONS = {
-  plan: "Deciding an approach or breaking work down \u2014 no code written yet.",
-  code: "Writing or editing code. The default when no role is named.",
-  review: "Judging work \u2014 reviewing a diff or a plan for correctness and design.",
+  plan: "Deciding \u2014 choosing an approach, breaking work down, sequencing it. Produces a decision, not code.",
+  code: "Writing or editing code or files. Only when the child must CHANGE something; reading and reporting is never code.",
+  review: "Judging \u2014 auditing, comparing, aligning or reconciling one thing against another (tickets vs roadmap, a diff vs its spec, a plan vs the code) and saying what is wrong or missing.",
   verify: "Mechanical checks \u2014 building, compiling, running tests and reading their output.",
-  explore: "Investigation \u2014 locating, searching, summarising.",
+  explore: "Locating and summarising \u2014 finding where something lives, bulk-reading pages or files and reporting what is there, without judging it.",
   chat: "A conversational answer with no task-shaped work behind it.",
   utility: "Small, mechanical, low-stakes work \u2014 formatting, extraction, a lookup."
 };
+var MISSING_ROLE_ERROR = `role is required \u2014 say what kind of work the child does so it is routed to a model suited to it: ${MODEL_ROLES.join(" | ")}. Auditing, comparing or aligning is review; locating or bulk-reading and summarising is explore; deciding is plan; code is only for a child that must change files.`;
 var ROLE_SET = new Set(MODEL_ROLES);
 function isModelRole(value) {
   return typeof value === "string" && ROLE_SET.has(value);
 }
-function delegationRole(raw) {
-  return isModelRole(raw) ? raw : "code";
+function requiredDelegationRole(raw) {
+  const role = typeof raw === "string" ? raw.trim().toLowerCase() : raw;
+  return isModelRole(role) ? role : null;
 }
 
 // ../packages/agent-tools/src/callShape.ts
@@ -4248,9 +4250,53 @@ var SUBAGENT_CONTROL_TOOLS = [waitAgentsTool, messageAgentTool, stopAgentTool];
 
 // ../packages/agent-tools/src/subagent-tools.ts
 var ROLE_ENUM_DESCRIPTION = MODEL_ROLES.map((role) => `${role} \u2014 ${MODEL_ROLE_DESCRIPTIONS[role]}`).join(" \xB7 ");
+var HANDOFF_NOTE = "The child does not see this conversation. Put the job in `task` and every fact you already established (counts, conclusions, what you ruled out, pages or files already read) in `context` \u2014 the child starts from it instead of re-deriving it; where the host keeps your run record it also appends the files, windows and data calls you already made. Its report carries its coverage (what it read, with offsets) and, where the host keeps them, the path of a file holding the data it collected \u2014 read that file instead of fetching the same pages again.";
+var HANDOFF_CHARS = 2e3;
+var HANDOFF_HEAD = "Already established by your owner \u2014 do not re-derive:";
+function ownerHandoffBlock(input, maxChars = HANDOFF_CHARS) {
+  const context = (input.context ?? "").trim();
+  const established = (input.established ?? []).map((l) => l.trim()).filter(Boolean);
+  if (!context && established.length === 0) return "";
+  const lines = [HANDOFF_HEAD];
+  let used = HANDOFF_HEAD.length;
+  if (context) {
+    const room = Math.max(0, maxChars - used - 1);
+    const clipped = context.length > room ? `${context.slice(0, Math.max(0, room - 1))}\u2026` : context;
+    lines.push(clipped);
+    used += clipped.length + 1;
+  }
+  if (established.length) {
+    const head = "Your owner already made these calls; their conclusions are stated above. Re-read only what you need verbatim:";
+    if (used + head.length + 1 < maxChars) {
+      lines.push(head);
+      used += head.length + 1;
+      let shown = 0;
+      for (const line of established) {
+        const row = `- ${line}`;
+        const rest = established.length - shown - 1;
+        const tail = rest > 0 ? `- \u2026 and ${rest} more` : "";
+        if (used + row.length + 1 + (rest > 0 ? tail.length + 1 : 0) > maxChars) break;
+        lines.push(row);
+        used += row.length + 1;
+        shown += 1;
+      }
+      if (shown < established.length) lines.push(`- \u2026 and ${established.length - shown} more`);
+    }
+  }
+  return lines.join("\n");
+}
+function briefWithHandoff(task, block) {
+  return block ? `${task}
+
+${block}` : task;
+}
+var CONTEXT_PARAM = {
+  type: "string",
+  description: "Facts you have ALREADY established that the child must not re-derive \u2014 counts, conclusions, what you ruled out, which pages/files/windows you already read and what they held. Shown to the child first under 'Already established by your owner'."
+};
 var spawnAgentTool = withDelegationNote(defineTool({
   name: "spawn_agent",
-  description: "Delegate a self-contained sub-task to a child agent that works in its OWN context and reports back when it is done. Use it when finding something out would take many turns you do not want to carry \u2014 locating where a behaviour lives across an unfamiliar tree, checking whether a pattern is used anywhere else, summarising a large file you only need one fact from. The child sees NOTHING of this conversation, so `task` must state everything it needs to know, and it answers in prose \u2014 it cannot hand you files or tool output. Do NOT delegate work you can do in a turn or two. The child is a clone of you: it holds every tool you hold and carries its slice out end to end \u2014 investigating, editing, running commands, recording the work. You remain accountable for what ships, so check what it reports. " + LIVE_DELEGATION_NOTE,
+  description: "Delegate a self-contained sub-task to a child agent that works in its OWN context and reports back when it is done. Use it when finding something out would take many turns you do not want to carry \u2014 locating where a behaviour lives across an unfamiliar tree, checking whether a pattern is used anywhere else, summarising a large file you only need one fact from. " + HANDOFF_NOTE + " Name its `role` \u2014 it decides which model does the work. Do NOT delegate work you can do in a turn or two. The child is a clone of you: it holds every tool you hold and carries its slice out end to end \u2014 investigating, editing, running commands, recording the work. You remain accountable for what ships, so check what it reports. " + LIVE_DELEGATION_NOTE,
   parameters: {
     type: "object",
     properties: {
@@ -4260,19 +4306,20 @@ var spawnAgentTool = withDelegationNote(defineTool({
       },
       task: {
         type: "string",
-        description: "The child's complete brief: what to find out or do, where to look, and exactly what to report back. Assume it knows nothing about the ticket beyond what you write here."
+        description: "The child's job: what to find out or do, where to look, and exactly what to report back. Facts you already established go in `context`."
       },
+      context: CONTEXT_PARAM,
       role: {
         type: "string",
         enum: [...MODEL_ROLES],
-        description: `What kind of call the child's turns are \u2014 lets the surface pick a model suited to the work rather than reusing yours. Defaults to 'code'. ${ROLE_ENUM_DESCRIPTION}`
+        description: `REQUIRED. What kind of work the child's turns are \u2014 the surface routes them to a model suited to it, and the child keeps that model for its whole life. ${ROLE_ENUM_DESCRIPTION}`
       },
       as_agent: {
         type: "string",
         description: "Run the child AS one of the workspace's agents \u2014 its id or name (e.g. 'Ada'). The child adopts that agent's role, bio, skills and personality so the delegated slice is done in that agent's voice and expertise. Prefer an agent already in this chat (builtin_chats_list_agents) or from builtin_cloud_agents_list_mine. Optional: when no teammate's role fits the slice, omit it and the child runs as a plain sub-agent."
       }
     },
-    required: ["label", "task"]
+    required: ["label", "task", "role"]
   },
   requires: ["orchestrate"],
   async execute(args, ctx) {
@@ -4280,11 +4327,13 @@ var spawnAgentTool = withDelegationNote(defineTool({
     const label = str4(args.label);
     const task = str4(args.task);
     if (!task) return { data: { ok: false, error: "task is required \u2014 the child sees none of your conversation" } };
-    const role = delegationRole(args.role);
+    const role = requiredDelegationRole(args.role);
+    if (!role) return { data: { ok: false, error: MISSING_ROLE_ERROR } };
     const asAgent = str4(args.as_agent);
     const r = await ctx.caps.orchestration.spawn({
       label: label || task.slice(0, 60),
-      task,
+      // The cloud surface keeps no owner run record here: the hand-off is the owner's `context`.
+      task: briefWithHandoff(task, ownerHandoffBlock({ context: str4(args.context) })),
       role,
       ...asAgent ? { asAgent } : {}
     });
@@ -4305,13 +4354,16 @@ function parseWorkstreams(raw) {
     const w = item ?? {};
     const task = str4(w.task);
     if (!task) return `workstream ${i + 1} has no task \u2014 each child sees none of your conversation`;
+    const role = requiredDelegationRole(w.role);
+    if (!role) return `workstream ${i + 1}: ${MISSING_ROLE_ERROR}`;
     const ticket = str4(w.ticket);
-    const role = str4(w.role);
+    const context = str4(w.context);
     out.push({
       label: str4(w.label) || task.slice(0, 60),
       task,
       ...ticket ? { ticket } : {},
-      ...role ? { role } : {},
+      role,
+      ...context ? { context } : {},
       asAgent: str4(w.as_agent)
     });
   }
@@ -4319,7 +4371,7 @@ function parseWorkstreams(raw) {
 }
 var spawnAgentsTool = withDelegationNote(defineTool({
   name: SPAWN_AGENTS_TOOL,
-  description: `Run SEVERAL independent workstreams side by side \u2014 up to ${MAX_WORKSTREAMS} child agents at once, each in its own context, each reporting back to the chat. Use it when the request splits into slices that do not depend on each other: a PRD's workstreams, one change per package or feature. Each child is a clone of you with every tool you hold, and carries its slice out end to end. Give slices that do not touch the same files, so they do not overwrite each other; once their reports are in, check the combined result and report per workstream. File one ticket per workstream first and pass its id as \`ticket\`. Each child sees nothing of this conversation, so every \`task\` must stand alone: what to change, where, and how to know it is done. ` + LIVE_DELEGATION_NOTE,
+  description: `Run SEVERAL independent workstreams side by side \u2014 up to ${MAX_WORKSTREAMS} child agents at once, each in its own context, each reporting back to the chat. Use it when the request splits into slices that do not depend on each other: a PRD's workstreams, one change per package or feature. Each child is a clone of you with every tool you hold, and carries its slice out end to end. Give slices that do not touch the same files, so they do not overwrite each other; once their reports are in, check the combined result and report per workstream. File one ticket per workstream first and pass its id as \`ticket\`. Every \`task\` must stand alone: what to change, where, and how to know it is done; name each workstream's \`role\`. ` + HANDOFF_NOTE + " " + LIVE_DELEGATION_NOTE,
   parameters: {
     type: "object",
     properties: {
@@ -4333,11 +4385,12 @@ var spawnAgentsTool = withDelegationNote(defineTool({
           properties: {
             label: { type: "string", description: "A few words naming the workstream, e.g. 'W8: company \u2192 project'." },
             task: { type: "string", description: "The child's complete, standalone brief." },
+            context: CONTEXT_PARAM,
             ticket: { type: "string", description: "The ticket this workstream delivers, echoed in the result." },
-            role: { type: "string", enum: [...MODEL_ROLES], description: "Model role for the child. Defaults to code." },
+            role: { type: "string", enum: [...MODEL_ROLES], description: `REQUIRED. What kind of work this child does \u2014 it routes the child's model. ${ROLE_ENUM_DESCRIPTION}` },
             as_agent: { type: "string", description: "Run this workstream AS one of the workspace's agents (its name or id). Optional: omit it when no teammate's role fits, and the child runs as a plain sub-agent." }
           },
-          required: ["label", "task"]
+          required: ["label", "task", "role"]
         }
       }
     },
@@ -4353,8 +4406,8 @@ var spawnAgentsTool = withDelegationNote(defineTool({
     const outputChars = Math.floor(FANOUT_OUTPUT_CHARS / parsed.length);
     const results = await Promise.all(parsed.map((w) => ctx.caps.orchestration.spawn({
       label: w.label,
-      task: w.task,
-      role: delegationRole(w.role),
+      task: briefWithHandoff(w.task, ownerHandoffBlock({ ...w.context ? { context: w.context } : {} })),
+      role: w.role,
       outputChars,
       ...w.ticket ? { ticket: w.ticket } : {},
       ...w.asAgent ? { asAgent: w.asAgent } : {}
@@ -5269,6 +5322,21 @@ function isCodeChangeTool(name) {
   return CODE_CHANGE_TOOLS.has(name);
 }
 
+// src/toolFailure.ts
+function isFailedToolResult(result) {
+  if (result == null) return false;
+  if (typeof result === "object") {
+    const r = result;
+    if (r.ok === false) return true;
+    if (typeof r.error === "string" && r.error) return true;
+    return false;
+  }
+  if (typeof result === "string") {
+    return /"ok"\s*:\s*false/.test(result) || /"error"\s*:\s*"[^"]/.test(result);
+  }
+  return false;
+}
+
 // ../packages/run-guards/src/readinessClaim.ts
 var READY_PATTERNS = [
   // "Now I have everything I need", "I've got all the context", "we now have enough"
@@ -5449,6 +5517,14 @@ function toolResultRecord(result) {
 }
 
 // src/staffingSummary.ts
+function sessionShippedInTrace(events) {
+  let n = 0;
+  for (const ev of events) {
+    if (ev.category !== "tool" || ev.isError || isFailedToolResult(ev.result)) continue;
+    if (isCodeChangeTool(ev.label) || ev.label === "git_commit" || ev.label === "git_push") n += 1;
+  }
+  return n;
+}
 var DISPATCH_TOOL = /chats[._](dispatch_agent|execute_as_agent)|kanban[._](coordinate|materialize_work_items|assess_resource|assign_participant)|executions[._]submit|run[._-]?now/i;
 function isDispatchTool(label) {
   return DISPATCH_TOOL.test(label);
@@ -5505,7 +5581,7 @@ function staffingSummaryInTrace(events) {
       });
     }
   }
-  const verdict = dispatched > 0 || personaSubagents.some((p) => p.ok) ? "staffed" : dispatchRefusals.length > 0 ? "staffing-refused" : ticketsCreated > 0 && filedLocally === ticketsCreated ? "filed-locally" : ticketsCreated > 0 ? "filed-not-staffed" : "no-work-filed";
+  const verdict = dispatched > 0 || personaSubagents.some((p) => p.ok) ? "staffed" : dispatchRefusals.length > 0 ? "staffing-refused" : ticketsCreated > 0 && filedLocally === ticketsCreated ? "filed-locally" : ticketsCreated > 0 ? sessionShippedInTrace(events) > 0 ? "self-served" : "filed-not-staffed" : "no-work-filed";
   return { ticketsCreated, filedLocally, dispatchAttempts, dispatched, dispatchRefusals, personaSubagents, verdict };
 }
 
@@ -5582,22 +5658,14 @@ var PAGED_READ_TOOLS = {
 // ../packages/tool-output-policy/src/readFileWindow.ts
 var READ_FILE_RESULT_CHARS = TOOL_OUTPUT_CAPS.read_file ?? 16e3;
 
-// src/brainTriage.ts
+// src/brainVerdict.ts
 var import_working6 = require("@seanhogg/builderforce-memory/working");
 var CONTEXT_PROMPT_PEAK = Math.round(import_working6.HISTORY_TOKEN_BUDGET * 1.5);
-function isFailedToolResult(result) {
-  if (result == null) return false;
-  if (typeof result === "object") {
-    const r = result;
-    if (r.ok === false) return true;
-    if (typeof r.error === "string" && r.error) return true;
-    return false;
-  }
-  if (typeof result === "string") {
-    return /"ok"\s*:\s*false/.test(result) || /"error"\s*:\s*"[^"]/.test(result);
-  }
-  return false;
-}
+
+// src/brainDiagnosticsText.ts
+var import_working7 = require("@seanhogg/builderforce-memory/working");
+
+// src/brainTriage.ts
 var TICKET_WRITE_TOOL = new RegExp(
   `(tasks|objectives|key_results|initiatives|portfolios|specs|roadmap)[._]create|chats[._]link_ticket|tickets[._]from_delta|${LOCAL_TICKET_CREATE_LABEL.source}`,
   "i"
@@ -5701,14 +5769,14 @@ function promptBloat(view) {
 }
 
 // src/runFindings/detectors/repeatedNarration.ts
-var import_working7 = require("@seanhogg/builderforce-memory/working");
+var import_working8 = require("@seanhogg/builderforce-memory/working");
 function asNarration(t) {
   return { role: "assistant", content: t.text, tool_calls: t.calls.map(() => ({})) };
 }
 var isCandidate = (t) => t.calls.length > 0 && t.text.trim().length > 0;
 function repeatedNarration(view) {
   const msgs = view.turns.map(asNarration);
-  const folded = (0, import_working7.foldRepeatedNarration)(msgs, RUN_FINDING_POLICY.narrationOverlap);
+  const folded = (0, import_working8.foldRepeatedNarration)(msgs, RUN_FINDING_POLICY.narrationOverlap);
   const repeats = /* @__PURE__ */ new Set();
   let lastKept = null;
   for (let i = 0; i < view.turns.length; i++) {

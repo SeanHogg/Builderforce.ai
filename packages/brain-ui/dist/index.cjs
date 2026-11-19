@@ -2512,6 +2512,15 @@ function residualArgs(args, command) {
   }
   return Object.keys(rest).length > 0 ? rest : null;
 }
+function residualResult(result) {
+  const record = shellResultRecord(result);
+  if (!record) return "";
+  const rest = {};
+  for (const [key, value] of Object.entries(record)) {
+    if (!SHELL_RESULT_KEYS.has(key)) rest[key] = value;
+  }
+  return Object.keys(rest).length > 0 ? formatPayload(rest) : "";
+}
 function subjectOf(args, isCommand) {
   const paths = asRecord(args)?.paths;
   const names = Array.isArray(paths) ? paths.filter((path) => typeof path === "string" && !!path.trim()) : [];
@@ -2528,7 +2537,7 @@ function toolStepView({ args, result, isError }) {
     command,
     preview: toolPreview(args),
     argsText: formatPayload(residualArgs(args, commandLine)),
-    resultText: command?.outputComplete ? "" : formatPayload(result),
+    resultText: command ? residualResult(result) : formatPayload(result),
     // Only a FAILURE opens by default — it is the step nobody should have to click to
     // read. A command is exactly the opposite: its header already carries the command
     // line (the subject), so opening it would push the transcript's body down with
