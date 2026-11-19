@@ -308,7 +308,7 @@ const BASELINE = {
    * `DataList`'s empty row (13) had taken the tree to 3242 and turned the Release run
    * red. Both name `--font-size-small` now; the net is one lower than before.
    */
-  offScaleFontSizes: 3240,
+  offScaleFontSizes: 3233,
   /**
    * Page-column literals on the PUBLIC surface — a `max-width` (or `width`)
    * typed as a number between 900px and 1500px on a marketing file.

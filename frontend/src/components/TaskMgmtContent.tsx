@@ -62,6 +62,7 @@ import { TaskPrdTab } from './task/TaskPrdTab';
 import { AssigneeSelect } from './task/AssigneeSelect';
 import { AccountabilityTab } from './task/AccountabilityTab';
 import { TaskBadges } from './task/TaskBadges';
+import { TaskBoardCard } from './task/TaskBoardCard';
 import { TicketContextStrip } from './task/TicketContextStrip';
 import { TicketLifecyclePanel } from './task/TicketLifecyclePanel';
 import { RunTaskButton } from './task/RunTaskButton';
@@ -1003,121 +1004,27 @@ export function TaskMgmtContent({
 
   // One draggable task card, shared by the status board and the standup pivot so
   // both render an identical card (inline status editor, priority/PR/exec chips).
-  const renderTaskCard = (task: Task) => {
-    const runs = agentRunsByTask.get(task.id) ?? [];
-    return (
-      <div
-        key={task.id}
-        draggable
-        onDragStart={() => setDragTaskId(String(task.id))}
-        onClick={() => openTask(task)}
-        style={{ ...cardStyle, padding: 12, cursor: 'grab', position: 'relative' }}
-      >
-        <div style={{ position: 'absolute', top: 8, right: 8 }}>
-          {editingStatusId === task.id ? (
-            <Select
-              value={task.status}
-              onChange={(e) => {
-                e.stopPropagation();
-                patchStatus(task.id, e.target.value);
-                setEditingStatusId(null);
-              }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              {statusChoices.map((s) => (
-                <option key={s.value} value={s.value}>
-                  {s.label}
-                </option>
-              ))}
-            </Select>
-          ) : (
-            <span
-              className={taskStatusBadgeClass(task.status)}
-              style={{
-                fontSize: 10,
-                padding: '2px 8px',
-                borderRadius: 'var(--radius-sm)',
-                textTransform: 'capitalize',
-                cursor: 'pointer',
-              }}
-              onClick={(e) => {
-                e.stopPropagation();
-                setEditingStatusId(task.id);
-              }}
-            >
-              {columnLabel(task.status)}
-            </span>
-          )}
-        </div>
-        <div style={{ fontWeight: 500, fontSize: 13, color: task.restricted ? 'var(--text-muted)' : 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
-          {task.restricted && <span aria-hidden style={{ flexShrink: 0 }}><Icon source="🔒" size="1em" /></span>}
-          <span style={task.restricted ? { fontStyle: 'italic' } : undefined}>{titleOf(task)}</span>
-        </div>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            marginTop: 6,
-            fontSize: 11,
-            color: 'var(--text-muted)',
-            flexWrap: 'wrap',
-          }}
-        >
-          <TaskBadges
-            task={task}
-            showKey
-            flagged={flaggedIds.has(task.id)}
-            participants={participantProgress.get(task.id) ?? null}
-          />
-          {runs.length > 0 ? (
-            // One chip per agent that has touched this task, newest run first, so
-            // history reads left-to-right: a freshly-queued agent (Bob · pending)
-            // sits ahead of a prior one (Kevin, completed). The status meta makes
-            // the live state explicit for any non-completed run.
-            runs.map((r) => (
-              <AgentChip
-                key={r.key}
-                label={r.label}
-                status={r.status}
-                meta={r.status !== 'completed' ? r.status : undefined}
-                title={`${r.label} — execution #${r.execId} · ${r.status}. Click to open the Agent tab.`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  openTask(task, 'agent');
-                }}
-              />
-            ))
-          ) : (task.assignedAgentHostId || task.assignedAgentRef || task.assignedUserId) ? (
-            // No run yet — show who it's assigned to, flagged "pending" when an
-            // agent owns it so a just-dropped card reads "Bob · pending" before its
-            // execution row materializes.
-            (task.assignedAgentHostId || task.assignedAgentRef) ? (
-              <AssigneeHovercard selectValue={taskAssigneeSelectValue(task)}>
-                <AgentChip label={taskAssigneeName(task)} status="pending" meta="pending" title={`${taskAssigneeName(task)} — queued`} />
-              </AssigneeHovercard>
-            ) : (
-              <AssigneeHovercard selectValue={taskAssigneeSelectValue(task)}>
-                <span>{taskAssigneeName(task)}</span>
-              </AssigneeHovercard>
-            )
-          ) : null}
-          {task.githubPrUrl && (
-            <a
-              href={task.githubPrUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              style={{ color: 'var(--text-muted)', textDecoration: 'none', fontWeight: 600 }}
-            >
-              PR#{task.githubPrNumber ?? '—'}
-            </a>
-          )}
-          {task.dueDate && <span style={{ marginLeft: 'auto' }}>{formatTaskDate(fmt, task.dueDate)}</span>}
-        </div>
-      </div>
-    );
-  };
+  const renderTaskCard = (task: Task) => (
+    <TaskBoardCard
+      key={task.id}
+      task={task}
+      runs={agentRunsByTask.get(task.id) ?? []}
+      cardStyle={cardStyle}
+      fmt={fmt}
+      title={titleOf(task)}
+      statusLabel={columnLabel(task.status)}
+      statusChoices={statusChoices}
+      editingStatus={editingStatusId === task.id}
+      flagged={flaggedIds.has(task.id)}
+      participants={participantProgress.get(task.id) ?? null}
+      assigneeName={taskAssigneeName(task)}
+      assigneeSelectValue={taskAssigneeSelectValue(task)}
+      onDragStart={() => setDragTaskId(String(task.id))}
+      onOpen={(tab) => openTask(task, tab)}
+      onEditStatus={(editing) => setEditingStatusId(editing ? task.id : null)}
+      onPatchStatus={(status) => patchStatus(task.id, status)}
+    />
+  );
 
   return (
     <AssigneeProfilesProvider>
