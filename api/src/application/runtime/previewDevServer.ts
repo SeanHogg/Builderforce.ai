@@ -25,7 +25,8 @@
  * vertical: {@link previewStepForRun} returns null, so a launch carries no preview spec
  * and nothing changes for any existing run.
  */
-import { PREVIEW_CONTAINER_PATH_PREFIX, PREVIEW_HOST } from './previewIngress';
+import { PREVIEW_CONTAINER_PATH_PREFIX } from './previewIngress';
+import { PREVIEW_HOST } from '../../domain/shared/previewHosts';
 import { mintPreviewToken, PREVIEW_TOKEN_TTL_SECONDS } from './previewToken';
 import { signalPendingWork } from './cronWorkSignal';
 import {

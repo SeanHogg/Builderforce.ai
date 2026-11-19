@@ -3,7 +3,7 @@
  * (make.md › PRD 31 §4 W10, control 6).
  *
  * The browser runtime asks for the egress policy of one application before it starts that
- * application's process Workers on the app's own origin (`https://<originKey>.preview.builderforce.ai`).
+ * application's process Workers on the app's own origin (`https://<originKey>-preview.builderforce.ai`).
  * The SERVER decides everything that is signed:
  * - the origin key, derived from (projectId, applicationId) with the runtime's own function
  *   ({@link ./previewOriginKey}), so a developer only ever obtains policies for origins of

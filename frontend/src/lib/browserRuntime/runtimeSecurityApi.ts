@@ -16,7 +16,7 @@ export interface MintedWorkerPolicy {
   policy: string;
   /** ISO-8601; after it the API serves the most restrictive policy for this id. */
   expiresAt: string;
-  /** The origin key the server derived: `<originKey>.preview.builderforce.ai`. */
+  /** The origin key the server derived: `<originKey>-preview.builderforce.ai`. */
   originKey: string;
 }
 

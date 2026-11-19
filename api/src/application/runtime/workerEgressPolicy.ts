@@ -7,7 +7,7 @@
  * ({@link ./workerCsp} — the runtimes' hosts plus GitHub reads, always applied, so a
  * policy carries only the app's DECLARED extras). The runtime loads a Worker as
  * `/__bfwc/process-worker.js?policy=<id>` on the app's own origin
- * `https://<originKey>.preview.builderforce.ai`; the URL is the cache key, so two
+ * `https://<originKey>-preview.builderforce.ai`; the URL is the cache key, so two
  * policies never share a cached response. A missing, malformed, tampered, expired or
  * mis-bound id serves the most restrictive default — a warm spare started before its app
  * is known gets exactly that.
@@ -40,7 +40,7 @@
 import { timingSafeEqual } from '../../infrastructure/crypto/constantTime';
 import { hmacSign } from '../../infrastructure/crypto/hmac';
 import { base64UrlDecode, base64UrlEncode, bytesToBase64Url } from '../../domain/shared/bytes';
-import { PREVIEW_HOST } from './previewIngress';
+import { previewOriginKeyOf } from '../../domain/shared/previewHosts';
 import { applicationIdPattern, previewOriginKey, runtimeIdOfProject } from './previewOriginKey';
 import { hostMatchesPattern, isDeniedName, isIpLiteral, normalizeEgressHost } from './sandbox/egressAllowlist';
 
@@ -63,9 +63,6 @@ const signingInput = (payload: string) => `bfwc-egress:${payload}`;
 
 /** The id's shape: base64url payload, `.`, base64url HMAC-SHA256 (32 bytes → 43 chars). */
 const POLICY_ID_SHAPE = /^([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]{43})$/;
-
-/** `<key>.preview.builderforce.ai`, the app's own origin. */
-const APP_ORIGIN_HOST = new RegExp(`^([0-9a-f]{32})\\.${PREVIEW_HOST.replace(/\./g, '\\.')}$`);
 
 /** A mint refused because a declared origin is not allowed or the policy is too large. Carries no origin text. */
 export class WorkerEgressPolicyError extends Error {
@@ -98,7 +95,7 @@ export interface MintedWorkerEgressPolicy {
   policy: string;
   /** ISO-8601; after it the id resolves to the default. */
   expiresAt: string;
-  /** The app origin's key the policy is bound to (`https://<originKey>.preview.builderforce.ai`). */
+  /** The app origin's key the policy is bound to (`https://<originKey>-preview.builderforce.ai`). */
   originKey: string;
 }
 
@@ -119,12 +116,6 @@ async function macOf(secret: string, payload: string): Promise<string> {
 }
 
 const isPositiveInt = (n: unknown): n is number => typeof n === 'number' && Number.isInteger(n) && n > 0;
-
-/** The origin key of an app-origin host (`<key>.preview.builderforce.ai`), or null for any other host. */
-export function previewOriginKeyOf(host: string | null | undefined): string | null {
-  if (typeof host !== 'string') return null;
-  return APP_ORIGIN_HOST.exec(host.toLowerCase())?.[1] ?? null;
-}
 
 /** A declared origin in its canonical form (`https://host[:port]`), or null when it is not allowed. */
 export function normalizeDeclaredOrigin(raw: string): string | null {

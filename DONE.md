@@ -40,6 +40,11 @@ These close the 2026-11-18 browser-run-tier findings, which are tracked out of s
   - The `PREVIEW_PER_APP_ORIGINS` flag defaults to off.
   - Every package reason code goes through the shield sink to the incident route, with localized copy in all five locales.
   - Snippets are updated.
+- **Per-app origins live, on the free certificate:**
+  - The app host is `<key>-preview.builderforce.ai`, one label under the zone, instead of `<key>.preview.builderforce.ai`, which needed a second-level wildcard (Advanced) certificate.
+  - The existing `*.builderforce.ai` wildcard (DNS, Universal SSL, the sites Worker's route) delivers it. `isReservedSubdomain` keeps `<32 hex>-preview` from ever being a site, so the sites Worker forwards it to the API. The `*.preview` route is gone.
+  - The host shape lives once, in `domain/shared/previewHosts.ts`.
+  - `PREVIEW_PER_APP_ORIGINS` and `NEXT_PUBLIC_PREVIEW_PER_APP_ORIGINS` are on, so cross-app isolation is in force without an ops step. The same-site trade-off is recorded in make.md › W10 control 1.
 
 ## ✅ RESOLVED 2026-11-18: PRD 31 §W9 phases 6c (.NET) and 6d (Rust) released in builderforce-webcontainers v2026.11.4
 

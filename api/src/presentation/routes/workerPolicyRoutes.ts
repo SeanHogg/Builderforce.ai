@@ -9,7 +9,7 @@
  *        → 400 / 403 / 429             invalid body / below developer / over the worker-policy bucket
  *
  * Called by the browser runtime before it starts an application's process Workers on the app's
- * own origin `https://<originKey>.preview.builderforce.ai`; it appends `?policy=<policy>` to their
+ * own origin `https://<originKey>-preview.builderforce.ai`; it appends `?policy=<policy>` to their
  * URLs. The SERVER derives `originKey` from (projectId, applicationId) with the runtime's own
  * function and decides the origins (application/runtime/workerEgressGrant). The body is strict, so
  * a client that sends `origins`, `originKey` (or anything else) is refused, never honoured.

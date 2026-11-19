@@ -1,6 +1,6 @@
 /**
  * An application's preview-origin key (make.md › PRD 31 §4 W10, control 1) — the `<key>` of
- * `https://<key>.preview.builderforce.ai`, the origin each browser-run application is served from.
+ * `https://<key>-preview.builderforce.ai`, the origin each browser-run application is served from.
  *
  * The SAME function as `previewOriginKey` in `@seanhogg/builderforce-webcontainers`
  * (`packages/browser/src/previewOrigin.ts`, release 2026.11.5): the first 128 bits of SHA-256 over

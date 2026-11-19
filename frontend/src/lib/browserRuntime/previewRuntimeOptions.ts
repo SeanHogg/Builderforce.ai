@@ -2,12 +2,13 @@
  * The Security Shield half of the page runtime's options (make.md › PRD 31 §4 W10) — what
  * `startPreviewRuntime` is told about origins, egress, policies and telemetry, in one place.
  *
- * - Origins (control 1). With `NEXT_PUBLIC_PREVIEW_PER_APP_ORIGINS=true`, every application
- *   runs on its own `https://<key>.preview.builderforce.ai` (`previewOriginTemplate`); the key
- *   is the package's `previewOriginKey(runtime id, application id)`. That needs the wildcard
- *   DNS record and certificate (ROADMAP.md › W10), so until then applications share the relay's
- *   origin under the package's NAMED opt-out, `sharedPreviewOrigin: 'unprotected'` — explicit,
- *   and logged once by the runtime. The API's twin flag is `PREVIEW_PER_APP_ORIGINS`.
+ * - Origins (control 1). Every application runs on its own `https://<key>-preview.builderforce.ai`
+ *   (`previewOriginTemplate`); the key is the package's `previewOriginKey(runtime id, application
+ *   id)`. One label under the zone, so the existing `*.builderforce.ai` wildcard and Universal SSL
+ *   certificate cover it. `NEXT_PUBLIC_PREVIEW_PER_APP_ORIGINS=false` turns it off: applications
+ *   then share the relay's origin under the package's NAMED opt-out, `sharedPreviewOrigin:
+ *   'unprotected'` — explicit, and logged once by the runtime. The API's twin flag is
+ *   `PREVIEW_PER_APP_ORIGINS`.
  * - Egress (control 6). `previewEgress` is the app's declared external APIs: none yet, because
  *   nothing declares them (ROADMAP.md › W10 gap); the runtime adds its own package CDN.
  *   `workerPolicy` reads the signed policy minted before the app started (`previewWorkerPolicies`).
@@ -19,12 +20,16 @@ import { API_ORIGIN, PRODUCTION_API_ORIGIN } from '@/lib/apiOrigin';
 import { prepareWorkerPolicy, workerPolicyFor } from './previewWorkerPolicies';
 import { createShieldSink } from './shieldSink';
 
-/** Per-application preview origins: on only once their DNS exists. */
-export const PER_APP_PREVIEW_ORIGINS = process.env.NEXT_PUBLIC_PREVIEW_PER_APP_ORIGINS === 'true';
+/** Per-application preview origins: on unless the build sets `NEXT_PUBLIC_PREVIEW_PER_APP_ORIGINS=false`. */
+export const PER_APP_PREVIEW_ORIGINS = process.env.NEXT_PUBLIC_PREVIEW_PER_APP_ORIGINS !== 'false';
 
-/** Each application's own origin, one label under the relay's host; `{key}` is the runtime's `previewOriginKey`. */
+/**
+ * Each application's own origin: `<key>-<relay host>` (`<key>-preview.builderforce.ai`), a SIBLING
+ * of the relay's host — one label under the zone, so a single-level wildcard certificate covers it.
+ * `{key}` is the runtime's `previewOriginKey`.
+ */
 export function previewOriginTemplateOf(relayUrl: string): string {
-  return `https://{key}.${new URL(relayUrl).host}`;
+  return `https://{key}-${new URL(relayUrl).host}`;
 }
 
 /**

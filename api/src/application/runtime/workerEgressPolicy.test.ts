@@ -9,14 +9,15 @@ import { base64UrlDecode, base64UrlEncode, bytesToBase64Url } from '../../domain
 import { hmacSign } from '../../infrastructure/crypto/hmac';
 import { previewOriginKey } from './previewOriginKey';
 import {
-  DEFAULT_WORKER_EGRESS_POLICY, MAX_POLICY_ID_CHARS, MAX_POLICY_ORIGINS, mintWorkerEgressPolicyId, previewOriginKeyOf,
+  DEFAULT_WORKER_EGRESS_POLICY, MAX_POLICY_ID_CHARS, MAX_POLICY_ORIGINS, mintWorkerEgressPolicyId,
   resolveWorkerEgressPolicy, WORKER_EGRESS_POLICY_TTL_SECONDS, WorkerEgressPolicyError,
 } from './workerEgressPolicy';
+import { previewOriginKeyOf } from '../../domain/shared/previewHosts';
 
 const SECRET = 'test-secret';
 const APP_A = 'app:42:0123456789abcdef';
 const APP_B = 'app:43:0123456789abcdef';
-const host = (key: string) => `${key}.preview.builderforce.ai`;
+const host = (key: string) => `${key}-preview.builderforce.ai`;
 const binding = { tenantId: 7, projectId: 42, applicationId: APP_A, origins: ['https://api.example.com', 'wss://stream.example.com'] };
 const nowSec = () => Math.floor(Date.now() / 1000);
 
@@ -61,7 +62,7 @@ describe('worker egress policy ids', () => {
 
   it('serves the default when the host is not the bound app origin', async () => {
     const { policy, originKey } = await mintWorkerEgressPolicyId(SECRET, binding);
-    for (const h of [host('f'.repeat(32)), 'preview.builderforce.ai', 'api.builderforce.ai', `${originKey}.preview.evil.com`, undefined, null]) {
+    for (const h of [host('f'.repeat(32)), 'preview.builderforce.ai', 'api.builderforce.ai', `${originKey}-preview.evil.com`, undefined, null]) {
       expect(await resolveWorkerEgressPolicy(SECRET, policy, h)).toBe(DEFAULT_WORKER_EGRESS_POLICY);
     }
   });
@@ -140,5 +141,9 @@ describe('worker egress policy ids', () => {
     expect(previewOriginKeyOf(host(k).toUpperCase())).toBe(k);
     expect(previewOriginKeyOf('preview.builderforce.ai')).toBeNull();
     expect(previewOriginKeyOf(`x.${host(k)}`)).toBeNull();
+    // The second-level shape needs a certificate the zone does not have: never an app host.
+    expect(previewOriginKeyOf(`${k}.preview.builderforce.ai`)).toBeNull();
+    expect(previewOriginKeyOf(`${k}-preview.evil.com`)).toBeNull();
+    expect(previewOriginKeyOf(`${k.slice(1)}-preview.builderforce.ai`)).toBeNull();
   });
 });

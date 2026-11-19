@@ -19,7 +19,7 @@ describe('previewOriginKey', () => {
       const runtimeId = runtimeIdOfProject(projectId);
       expect(await previewOriginKey(runtimeId, applicationId)).toBe(runtime.previewOriginKey(runtimeId, applicationId));
     }
-  });
+  }, 30_000); // a cold import of the whole runtime package; 5s is not enough under a parallel run
 
   it('accepts only application ids of the given project', () => {
     expect(applicationIdPattern(42).test('app:42:0123456789abcdef')).toBe(true);

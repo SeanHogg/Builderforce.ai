@@ -4,7 +4,7 @@ import {
 } from './dotnetBundleRoute';
 
 const HOST = 'https://preview.builderforce.ai';
-const APP_HOST = 'https://0123456789abcdef0123456789abcdef.preview.builderforce.ai';
+const APP_HOST = 'https://0123456789abcdef0123456789abcdef-preview.builderforce.ai';
 
 /** An R2 bucket holding `objects` (key → text). */
 function bucket(objects: Record<string, string>) {

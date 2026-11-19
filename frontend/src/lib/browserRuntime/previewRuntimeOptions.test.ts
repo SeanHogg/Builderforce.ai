@@ -7,7 +7,7 @@ const RELAY = 'https://preview.builderforce.ai/__bfwc/relay.html';
 
 async function load(perAppOrigins: boolean) {
   vi.resetModules();
-  vi.stubEnv('NEXT_PUBLIC_PREVIEW_PER_APP_ORIGINS', perAppOrigins ? 'true' : '');
+  vi.stubEnv('NEXT_PUBLIC_PREVIEW_PER_APP_ORIGINS', perAppOrigins ? '' : 'false');
   return import('./previewRuntimeOptions');
 }
 
@@ -31,7 +31,7 @@ describe('preview shield options', () => {
     const { previewShieldOptions } = await load(true);
     const template = vi.fn(() => () => 'origin');
     const options = previewShieldOptions(RELAY, () => '42', template);
-    expect(template).toHaveBeenCalledWith('https://{key}.preview.builderforce.ai');
+    expect(template).toHaveBeenCalledWith('https://{key}-preview.builderforce.ai');
     expect('previewOrigin' in options && 'sharedPreviewOrigin' in options).toBe(false);
     expect(options.workerPolicy('app:42:0123456789abcdef')).toBeUndefined();
     expect(typeof options.security.sink.emit).toBe('function');

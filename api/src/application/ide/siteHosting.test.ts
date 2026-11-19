@@ -42,6 +42,14 @@ describe('subdomainFromHost', () => {
     }
   });
 
+  it('never treats an app preview origin (`<32 hex>-preview`) as a site, so it reaches the API', () => {
+    const key = '0123456789abcdef0123456789abcdef';
+    expect(subdomainFromHost(`${key}-preview.builderforce.ai`)).toBeNull();
+    expect(normalizeSubdomain(`${key}-preview`)).toBeNull();
+    // Only that exact shape is reserved: an ordinary site whose name ends in `-preview` still is one.
+    expect(subdomainFromHost('shop-preview.builderforce.ai')).toBe('shop-preview');
+  });
+
   it('reserves every hostname bound to a platform Worker Custom Domain', () => {
     // `worker.builderforce.ai` (builderforce-worker) was claimable as a user site
     // — the wildcard route delivers that Host here and an unreserved label is

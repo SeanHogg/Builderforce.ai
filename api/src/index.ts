@@ -520,7 +520,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // runs BEFORE site-hosting so the reserved `preview` label reaches the proxy, not R2.
   // In-browser canvas previews: the relay page, service worker, process Workers and .NET
   // bundle of the isolated preview origins (`preview.builderforce.ai`, and each app's
-  // `<key>.preview.builderforce.ai` behind PREVIEW_PER_APP_ORIGINS). Answers before the
+  // `<key>-preview.builderforce.ai` behind PREVIEW_PER_APP_ORIGINS). Answers before the
   // container ingress, which owns the rest of the shared host — and puts the preview
   // document headers on the ingress's answers too (make.md §4 W10, controls 1 and 6).
   app.use('*', browserPreviewOrigin);

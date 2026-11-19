@@ -19,6 +19,7 @@ import { projectSites } from '../../infrastructure/database/schema';
 import { acrossTenants } from '../../infrastructure/database/tenantScope';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { appsDatabaseOf } from './appsDatabase';
+import { isAppPreviewLabel } from '../../domain/shared/previewHosts';
 
 /** R2 key prefix all hosted sites live under. */
 export const SITES_PREFIX = 'sites/';
@@ -100,6 +101,15 @@ export const RESERVED_SUBDOMAINS: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * A label no site may claim or be served on: a {@link RESERVED_SUBDOMAINS} name, or an
+ * application's in-browser preview origin (`<32 hex>-preview`, `domain/shared/previewHosts`),
+ * which the wildcard route delivers to the sites Worker and which must reach the API.
+ */
+export function isReservedSubdomain(label: string): boolean {
+  return RESERVED_SUBDOMAINS.has(label) || isAppPreviewLabel(label);
+}
+
+/**
  * Reserved labels that another Worker owns but the greedy `*.builderforce.ai/*`
  * route still delivers to THIS one.
  *
@@ -154,7 +164,7 @@ export function normalizeSubdomain(raw: string): string | null {
     .replace(/^-+|-+$/g, '')
     .slice(0, 63)
     .replace(/-+$/g, '');
-  if (!slug || !LABEL_RE.test(slug) || RESERVED_SUBDOMAINS.has(slug)) return null;
+  if (!slug || !LABEL_RE.test(slug) || isReservedSubdomain(slug)) return null;
   return slug;
 }
 
@@ -171,7 +181,7 @@ export function subdomainFromHost(host: string | undefined): string | null {
   const h = (host.split(':')[0] ?? '').toLowerCase();
   if (!h.endsWith(`.${HOSTING_APEX}`)) return null;
   const label = h.slice(0, h.length - HOSTING_APEX.length - 1);
-  if (!label || label.includes('.') || RESERVED_SUBDOMAINS.has(label)) return null;
+  if (!label || label.includes('.') || isReservedSubdomain(label)) return null;
   return label;
 }
 
@@ -321,7 +331,7 @@ export async function checkSubdomainAvailability(
     // creator needs to know which: "pick different characters" and "that name
     // belongs to the platform" are different instructions.
     const bare = trimmed.toLowerCase().replace(/[\s_]+/g, '-').replace(/[^a-z0-9-]/g, '');
-    const reason: SubdomainAvailabilityReason = RESERVED_SUBDOMAINS.has(bare) ? 'reserved' : 'invalid';
+    const reason: SubdomainAvailabilityReason = isReservedSubdomain(bare) ? 'reserved' : 'invalid';
     return { label: null, available: false, reason, host: null };
   }
 

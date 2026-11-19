@@ -20,9 +20,7 @@
 import { verifyPreviewToken } from './previewToken';
 import { touchPreviewSession } from './previewSessions';
 import type { Env } from '../../env';
-
-/** The public host the preview ingress answers on. */
-export const PREVIEW_HOST = 'preview.builderforce.ai';
+import { PREVIEW_HOST } from '../../domain/shared/previewHosts';
 
 /** Path prefix the container's dev-server passthrough (`server.mjs`) listens on, so a
  *  preview request can't collide with the container's own `/health` / `/run` ops. */

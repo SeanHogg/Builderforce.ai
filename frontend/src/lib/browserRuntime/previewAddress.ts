@@ -1,13 +1,11 @@
 /**
  * The address the preview's toolbar SHOWS: `<project>-preview.builderforce.ai/<path>`.
  *
- * The in-browser preview really lives at `preview.builderforce.ai/__bfwc/<session>/…`:
- * one relay origin whose service worker serves every project running in this
- * browser. A host per project is not possible on that design (each origin would need
- * its own relay and worker), and `<project>.preview.builderforce.ai` would need a
- * second-level wildcard certificate that Cloudflare's free plan does not issue.
- * So this is a readable name for the same page, not a second address: the real URL
- * stays in the tooltip and behind "Open in a new tab".
+ * The in-browser preview really lives at `<key>-preview.builderforce.ai/__bfwc/<session>/…`
+ * (each application's own origin, `<key>` an opaque 32-hex hash) or, with per-app origins
+ * off, `preview.builderforce.ai/__bfwc/<session>/…`. Neither reads well, so this is a
+ * readable name for the same page, not a second address: the real URL stays in the
+ * tooltip and behind "Open in a new tab".
  *
  * A URL that is not a relay preview (a container preview, a published site) is shown
  * as it is.

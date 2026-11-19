@@ -1152,7 +1152,9 @@ jobs:
   deploy-frontend:
     name: Deploy frontend
     runs-on: ubuntu-latest
-    needs: [build-frontend, verify-frontend, verify-kernel]
+    # deploy-api first: the frontend opens app hosts (`<key>-preview.builderforce.ai`) that only
+    # the API it ships with serves, so a frontend ahead of its API fails every app start.
+    needs: [build-frontend, verify-frontend, verify-kernel, deploy-api]
     # Same production gate as deploy-api — see the note there. Gating only the API would
     # let a reviewed backend ship behind an unreviewed frontend.
     environment: production

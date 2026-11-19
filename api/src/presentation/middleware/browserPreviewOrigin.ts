@@ -1,7 +1,7 @@
 /**
  * The preview origins for in-browser canvas previews (BuilderForce WebContainers, relay
  * mode): `preview.builderforce.ai`, shared by the workspace, and — behind
- * `PREVIEW_PER_APP_ORIGINS` — one `<key>.preview.builderforce.ai` per application
+ * `PREVIEW_PER_APP_ORIGINS` — one `<key>-preview.builderforce.ai` per application
  * (W10 control 1), `<key>` being the package's `previewOriginKey` (32 hex).
  *
  * The canvas runs a project's dev server IN the user's browser. That code is AI-written
@@ -30,13 +30,13 @@ import type { MiddlewareHandler } from 'hono';
 import {
   dotnetWorkerSource, phpWorkerSource, processWorkerSource, pythonWorkerSource, relayHtml, rustWorkerSource, serviceWorkerSource,
 } from '@seanhogg/builderforce-webcontainers/assets';
-import { PREVIEW_HOST } from '../../application/runtime/previewIngress';
+import { PREVIEW_HOST, previewOriginKeyOf } from '../../domain/shared/previewHosts';
 import {
   INGRESS_HEADERS, cspReportUrls, previewDocumentHeaders, previewFrameAncestors, relayHeaders, serviceWorkerAllowed, serviceWorkerHeaders,
   serviceWorkerQueryOf, workerScriptHeaders, type HeaderSet,
 } from '../../application/runtime/previewOriginHeaders';
 import { PREVIEW_SCRIPT_PREFIX, PREVIEW_WORKER_SCRIPTS } from '../../application/runtime/workerCsp';
-import { previewOriginKeyOf, resolveWorkerEgressPolicy } from '../../application/runtime/workerEgressPolicy';
+import { resolveWorkerEgressPolicy } from '../../application/runtime/workerEgressPolicy';
 import type { HonoEnv } from '../../env';
 import { DOTNET_BUNDLE_PATH_PREFIX, dotnetBundleBucketOf, serveDotnetBundleFile, type DotnetBundleBucket } from './dotnetBundleRoute';
 
@@ -70,7 +70,7 @@ export interface PreviewOriginOptions {
   cspReportHosts?: string;
   /** Signs the worker egress policy ids. */
   secret: string | undefined;
-  /** `PREVIEW_PER_APP_ORIGINS`: serve `<key>.preview.builderforce.ai` too. */
+  /** `PREVIEW_PER_APP_ORIGINS`: serve `<key>-preview.builderforce.ai` too. */
   perAppOrigins: boolean;
   /** Where the .NET runtime bundle is mirrored (the `CDN` binding); absent, a bundle path is a 404. */
   dotnetBundle?: DotnetBundleBucket;
@@ -83,7 +83,7 @@ export type PreviewOriginOutcome =
   /** The shared host's request is the rest of the worker's (the container ingress); put `headers` on its answer. */
   | { kind: 'pass'; headers: HeaderSet };
 
-/** `PREVIEW_PER_APP_ORIGINS` on: off unless exactly `true` (the wildcard DNS and certificate must exist first). */
+/** `PREVIEW_PER_APP_ORIGINS` on: off unless exactly `true` (wrangler.toml `[vars]` sets it). */
 export function perAppPreviewOrigins(env: { PREVIEW_PER_APP_ORIGINS?: string }): boolean {
   return env.PREVIEW_PER_APP_ORIGINS === 'true';
 }
@@ -146,7 +146,7 @@ export async function handleBrowserPreviewOrigin(request: Request, options: Prev
   if (!shared && previewOriginKeyOf(url.hostname) === null) return null;
   const documentHeaders = previewDocumentHeaders(url.host, previewFrameAncestors(options.corsOrigins, options.environment));
   const notFound = (): PreviewOriginOutcome => ({ kind: 'response', response: respond(404, 'Not found.', documentHeaders) });
-  // An app host with the flag off (its DNS does not exist yet): nothing is served there.
+  // An app host with the flag off: nothing is served there.
   if (!shared && !options.perAppOrigins) return notFound();
 
   const script = request.method === 'GET' || request.method === 'HEAD' ? scriptOf(url.pathname) : null;

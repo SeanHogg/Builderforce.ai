@@ -413,11 +413,10 @@ export interface Env {
   PREVIEW_INGRESS_ENABLED?: string;
 
   /** Per-application preview origins (W10 control 1): when `'true'`, the Worker serves the
-   *  relay, service worker and process Workers on `<key>.preview.builderforce.ai` too
-   *  (`presentation/middleware/browserPreviewOrigin.ts`). Default off: it needs the
-   *  `*.preview` wildcard DNS record and certificate first (an ops step in Cloudflare;
-   *  ROADMAP.md › W10). Turn on together with the frontend's
-   *  `NEXT_PUBLIC_PREVIEW_PER_APP_ORIGINS`. Set in wrangler.toml `[vars]`. */
+   *  relay, service worker and process Workers on `<key>-preview.builderforce.ai` too
+   *  (`presentation/middleware/browserPreviewOrigin.ts`). One label under the zone, so the
+   *  existing `*.builderforce.ai` wildcard and Universal SSL certificate cover it. On in
+   *  wrangler.toml `[vars]`, together with the frontend's `NEXT_PUBLIC_PREVIEW_PER_APP_ORIGINS`. */
   PREVIEW_PER_APP_ORIGINS?: string;
 
   /** API hosts besides `api.builderforce.ai` (comma-separated, e.g. a staging API) whose

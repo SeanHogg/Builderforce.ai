@@ -14,7 +14,7 @@ const CORS = 'https://builderforce.ai,https://www.builderforce.ai';
 const SECRET = 'test-secret';
 const APP_ID = 'app:42:0123456789abcdef';
 const APP_KEY = '96c02ff6106da114d069c7a8eff3c26a'; // previewOriginKey('42', APP_ID)
-const APP_HOST = `${APP_KEY}.preview.builderforce.ai`;
+const APP_HOST = `${APP_KEY}-preview.builderforce.ai`;
 const OTHER_KEY = 'ffffffffffffffffffffffffffffffff';
 const WORKERS = ['process-worker.js', 'python-worker.js', 'php-worker.js', 'dotnet-worker.js', 'rust-worker.js'] as const;
 const REPORTING = `bfwc-csp="${CSP_REPORT_URL}"`;
@@ -188,7 +188,7 @@ describe('per-policy worker CSP on an app host (W10 control 6)', () => {
     const { policy } = await mint();
     const query = `?policy=${encodeURIComponent(policy)}`;
     const defaultCsp = (await get(`https://${APP_HOST}/__bfwc/process-worker.js`)).headers.get('content-security-policy');
-    for (const host of ['preview.builderforce.ai', `${OTHER_KEY}.preview.builderforce.ai`]) {
+    for (const host of ['preview.builderforce.ai', `${OTHER_KEY}-preview.builderforce.ai`]) {
       const csp = (await get(`https://${host}/__bfwc/process-worker.js${query}`)).headers.get('content-security-policy')!;
       expect(csp).not.toContain('example');
     }
@@ -202,7 +202,7 @@ describe('per-policy worker CSP on an app host (W10 control 6)', () => {
     expect((await sw(APP_HOST, 'https://esm.sh https://api.example.com')).status).toBe(200);
     expect((await sw(APP_HOST, 'https://esm.sh')).status).toBe(200);
     expect((await sw(APP_HOST, 'https://esm.sh https://api.example.com https://evil.example')).status).toBe(403);
-    expect((await sw(`${OTHER_KEY}.preview.builderforce.ai`, 'https://esm.sh')).status).toBe(403);
+    expect((await sw(`${OTHER_KEY}-preview.builderforce.ai`, 'https://esm.sh')).status).toBe(403);
     expect((await sw('preview.builderforce.ai', 'https://esm.sh')).status).toBe(403);
     const unsigned = await get(`https://${APP_HOST}/__bfwc/sw.js?${new URLSearchParams({ ...RELAY_SW, egress: 'https://esm.sh https://api.example.com' })}`);
     expect(unsigned.status).toBe(403);
@@ -210,7 +210,7 @@ describe('per-policy worker CSP on an app host (W10 control 6)', () => {
 
   it('binds to the exact app host: port, trailing-dot and lookalike hosts resolve to the default', async () => {
     const { policy } = await mint();
-    for (const host of [`${APP_HOST}:443`, `${APP_HOST}.`, `${APP_HOST}.evil.com`, `x${APP_HOST}`, `${APP_KEY}.preview.builderforce.ai.evil.com`]) {
+    for (const host of [`${APP_HOST}:443`, `${APP_HOST}.`, `${APP_HOST}.evil.com`, `x${APP_HOST}`, `${APP_KEY}-preview.builderforce.ai.evil.com`]) {
       expect(await resolveWorkerEgressPolicy(SECRET, policy, host)).toBe(DEFAULT_WORKER_EGRESS_POLICY);
     }
     // Lookalike and trailing-dot hosts are not preview hosts at all: the rest of the worker answers them.

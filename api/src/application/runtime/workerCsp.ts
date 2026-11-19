@@ -1,7 +1,7 @@
 /**
  * The Content-Security-Policies of the in-browser preview origins (make.md §4 W10,
  * controls 1 and 6): `preview.builderforce.ai` (the workspace's shared origin) and each
- * application's own `<key>.preview.builderforce.ai`.
+ * application's own `<key>-preview.builderforce.ai`.
  *
  * THE CONTRACT is `@seanhogg/builderforce-webcontainers` › packages/browser/README.md ›
  * "Preview origin headers" (2026.11.5). Every string here is that section's, spelled

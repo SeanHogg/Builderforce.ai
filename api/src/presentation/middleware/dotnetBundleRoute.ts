@@ -2,7 +2,7 @@
  * The .NET runtime bundle on the preview origin: `/dotnet/<version>/<file>`.
  *
  * A .NET process (`dotnet run`) runs in a Worker on the preview origin
- * (`preview.builderforce.ai`, or an app's `<key>.preview.builderforce.ai`), and
+ * (`preview.builderforce.ai`, or an app's `<key>-preview.builderforce.ai`), and
  * that Worker loads scripts only from its own origin — so the ~73 MiB Mono
  * browser-wasm bundle (manifest, `_framework/`, `refs/`) is served HERE, same
  * origin, and the frontend passes `<preview origin>/dotnet/<version>/` as

@@ -27,7 +27,7 @@ import type { HonoEnv } from '../../env';
 const SECRET = 'test-secret';
 const APP = 'app:42:0123456789abcdef';
 const valid = { projectId: 42, applicationId: APP };
-const host = (key: string) => `${key}.preview.builderforce.ai`;
+const host = (key: string) => `${key}-preview.builderforce.ai`;
 
 function harness(role = 'developer') {
   const app = new Hono<HonoEnv>();
