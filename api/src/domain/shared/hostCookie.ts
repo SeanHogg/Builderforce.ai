@@ -36,7 +36,7 @@ export function readCookieValues(header: string | null | undefined, name: string
       const value = decodeURIComponent(part.slice(eq + 1).trim());
       if (value) values.push(value);
     } catch {
-      // malformed escape: absent
+      continue; // a malformed escape (URIError) is not a value: skip this entry, read the rest
     }
   }
   return values;
