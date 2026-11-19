@@ -417,7 +417,7 @@ function activityPageSize(limit: number | undefined): number {
   return boundedIntParam(limit, { def: ACTIVITY_PAGE_DEFAULT, min: 1, max: ACTIVITY_PAGE_MAX });
 }
 
-async function queryActivityLog(db: Db, tenantId: number, filter: ActivityLogFilter, limit: number): Promise<ActivityLogPage> {
+async function queryActivityLog(db: Db, coreDb: Db, tenantId: number, filter: ActivityLogFilter, limit: number): Promise<ActivityLogPage> {
   const conds = [eq(activityLog.tenantId, tenantId)];
   if (filter.actorType) conds.push(eq(activityLog.actorType, filter.actorType));
   if (filter.actorRef) conds.push(eq(activityLog.actorRef, filter.actorRef));
@@ -427,13 +427,22 @@ async function queryActivityLog(db: Db, tenantId: number, filter: ActivityLogFil
   if (filter.verb) conds.push(eq(activityLog.verb, filter.verb));
   if (filter.eventType) conds.push(sql`replace(${activityLog.verb}, '.', '_') = ${filter.eventType}`);
   if (filter.objectId) conds.push(eq(activityLog.objectId, filter.objectId));
-  if (filter.domain) conds.push(eq(objects.domain, filter.domain));
   if (filter.beforeId != null) conds.push(lt(activityLog.id, filter.beforeId));
 
-  // `objects` is joined on the SAME database as `activity_log`: the
-  // `activity_log.object_id → objects.id` foreign key means a row can only carry
-  // an object id where that object row exists, so the join is complete by
-  // construction. LEFT, so events that belong to no object still list.
+  // `objects` lives on the CORE database while `activity_log` is read from the
+  // operational sibling (see `activityDatabase`), so the two can never be joined in
+  // SQL — a join there fails with `relation "objects" does not exist` whenever the
+  // split is configured. The domain filter is resolved to object ids, and each row's
+  // kind/title is attached in a second read against the core database.
+  if (filter.domain) {
+    const inDomain = await coreDb
+      .select({ id: objects.id })
+      .from(objects)
+      .where(and(eq(objects.tenantId, tenantId), eq(objects.domain, filter.domain)));
+    if (inDomain.length === 0) return { events: [], nextCursor: null };
+    conds.push(inArray(activityLog.objectId, inDomain.map((o) => o.id)));
+  }
+
   const rows = await db
     .select({
       id: activityLog.id,
@@ -450,17 +459,23 @@ async function queryActivityLog(db: Db, tenantId: number, filter: ActivityLogFil
       occurredAt: activityLog.occurredAt,
       metadata: activityLog.metadata,
       objectId: activityLog.objectId,
-      objectKind: objects.kind,
-      objectTitle: objects.title,
     })
     .from(activityLog)
-    .leftJoin(objects, eq(activityLog.objectId, objects.id))
     .where(and(...conds))
     .orderBy(desc(activityLog.id))
     .limit(limit + 1)
     .offset(filter.offset ?? 0);
 
   const hasMore = rows.length > limit;
+  const objectIds = [...new Set(rows.slice(0, limit).map((r) => r.objectId).filter((id): id is string => !!id))];
+  const objectById = new Map<string, { kind: string | null; title: string | null }>();
+  if (objectIds.length > 0) {
+    const found = await coreDb
+      .select({ id: objects.id, kind: objects.kind, title: objects.title })
+      .from(objects)
+      .where(inArray(objects.id, objectIds));
+    for (const o of found) objectById.set(o.id, { kind: o.kind, title: o.title });
+  }
   const events: ActivityLogRow[] = rows.slice(0, limit).map((r) => ({
     id: Number(r.id),
     actorType: r.actorType,
@@ -476,8 +491,8 @@ async function queryActivityLog(db: Db, tenantId: number, filter: ActivityLogFil
     occurredAt: (r.occurredAt as Date).toISOString(),
     metadata: r.metadata,
     objectId: r.objectId ?? null,
-    objectKind: r.objectKind ?? null,
-    objectTitle: r.objectTitle ?? null,
+    objectKind: (r.objectId && objectById.get(r.objectId)?.kind) || null,
+    objectTitle: (r.objectId && objectById.get(r.objectId)?.title) || null,
   }));
   const last = events[events.length - 1];
   return { events, nextCursor: hasMore && last ? last.id : null };
@@ -493,5 +508,5 @@ export async function getActivityLog(env: Env, db: Db, tenantId: number, filter:
   const limit = activityPageSize(filter.limit);
   const version = await getCacheVersion(env, activityLogVersionKey(tenantId));
   const key = `activity-log:list:tenant:${tenantId}:v:${version}:${JSON.stringify({ ...filter, limit })}`;
-  return getOrSetCached(env, key, () => queryActivityLog(activityDatabase(env, db), tenantId, filter, limit), { kvTtlSeconds: 120 });
+  return getOrSetCached(env, key, () => queryActivityLog(activityDatabase(env, db), db, tenantId, filter, limit), { kvTtlSeconds: 120 });
 }
