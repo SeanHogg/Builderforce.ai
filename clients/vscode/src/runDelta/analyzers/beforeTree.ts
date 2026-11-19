@@ -27,11 +27,12 @@ import * as path from "node:path";
 import type { PreparedDelta } from "../preparedPorts";
 import { whichOnPath } from "../../process/programSearch";
 import { pool } from "./pool";
+import { CACHE_DIR, ensureIgnoredCacheDir } from "../../ignoredCacheDir";
 
 export const MAX_TREE_FILES = 60_000;
 const LIST_TIMEOUT_MS = 30_000;
 /** Where the trees live, under the repository: on its volume (hard links work) and ignored (`.builderforce/cache/.gitignore`). */
-export const TREE_PARENT = [".builderforce", "cache"] as const;
+export const TREE_PARENT = CACHE_DIR;
 export const TREE_PREFIX = "delta-before-";
 /** `copy`-mode trees (and the analyzers' scratch folders): `<os temp>/bf-delta-*`, outside every repository. */
 export const COPY_PREFIX = "bf-delta-";
@@ -152,12 +153,6 @@ async function linkModules(root: string, dir: string, folder: string, mode: Tree
   await entries(source, target, 0);
 }
 
-async function ensureCacheIgnored(root: string): Promise<string> {
-  const parent = path.join(root, ...TREE_PARENT);
-  await fs.mkdir(parent, { recursive: true });
-  await fs.writeFile(path.join(parent, ".gitignore"), "*\n", { flag: "wx" }).catch(() => undefined);
-  return parent;
-}
 
 /** The before tree of `root` with `changed` swapped in; undefined when git cannot list it, it is too large, or any copy fails. */
 export async function materializeBeforeTree(
@@ -169,7 +164,7 @@ export async function materializeBeforeTree(
   // a `git` that walks up, a cache, a report — can land in the user's tree. `link`: on the repository's volume (hard links).
   const dir = mode === "copy"
     ? await fs.mkdtemp(path.join(tmpdir(), COPY_PREFIX))
-    : await fs.mkdtemp(path.join(await ensureCacheIgnored(root), TREE_PREFIX));
+    : await fs.mkdtemp(path.join(await ensureIgnoredCacheDir(root), TREE_PREFIX));
   const dispose = () => removeTree(dir);
   const stamps = new Map<string, number>();
   try {

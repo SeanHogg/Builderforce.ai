@@ -64,7 +64,7 @@ function scenario(state: { doc: string }): Scenario {
         }
         if (recent.includes(NUDGE)) {
           spawned = turn;
-          return completion({ toolCalls: [call('spawn_agents', { workstreams: [{ label: 'WS2', task: 'Review section 2.' }] }, `s${turn}`)], finishReason: 'tool_calls' });
+          return completion({ toolCalls: [call('spawn_agents', { workstreams: [{ label: 'WS2', task: 'Review section 2.', role: 'review' }] }, `s${turn}`)], finishReason: 'tool_calls' });
         }
         read += 1;
         // The third read re-reads lines the model has already been served.

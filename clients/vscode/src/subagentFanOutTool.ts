@@ -13,7 +13,6 @@
 
 import {
   LIVE_FANOUT_NEXT,
-  delegationRole,
   parseWorkstreams,
   schemaForCapabilities,
   spawnAgentsTool,
@@ -45,7 +44,8 @@ export function subagentFanOutToolDef(deps: SubagentToolDeps & Required<Pick<Sub
       }
       // Every persona resolves before any child starts: a refusal found halfway through
       // would leave some slices started and the rest not.
-      const roles = parsed.map((w) => delegationRole(w.role));
+      // `parseWorkstreams` refused any workstream without a role (chat #273).
+      const roles = parsed.map((w) => w.role);
       const people = await Promise.all(parsed.map((w, i) => resolveChildPersona(deps, w.asAgent, roles[i]!, w.ticket)));
       const refused = people.findIndex((p) => !p.ok);
       if (refused >= 0) {
@@ -59,6 +59,7 @@ export function subagentFanOutToolDef(deps: SubagentToolDeps & Required<Pick<Sub
           label: w.label,
           task: w.task,
           role: roles[i]!,
+          ...(w.context ? { context: w.context } : {}),
           ...(w.ticket ? { ticket: w.ticket } : {}),
           ...(who.persona ? { persona: who.persona } : {}),
           ...(who.asAgent ? { asAgent: who.asAgent } : {}),

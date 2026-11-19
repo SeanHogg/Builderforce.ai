@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import type { Capability, CapabilityProvider } from "@builderforce/agent-tools";
+import { MISSING_ROLE_ERROR, type Capability, type CapabilityProvider } from "@builderforce/agent-tools";
 import { childPolicy, childProvider, childResult, runAgent, type ModelCompletion, type ModelRequest, type RunOutcome, type RunPolicy, type RunState } from "../../src/index.js";
 import { TEST_POLICY } from "../support/policyContext.js";
 
@@ -73,7 +73,7 @@ describe("a parent can delegate through the agent's own catalog", () => {
     const spawned: Array<{ label: string; task: string }> = [];
     const requests: ModelRequest[] = [];
     const script: ModelCompletion[] = [
-      { content: "", toolCalls: [{ id: "s1", name: "spawn_agent", arguments: JSON.stringify({ label: "find it", task: "where is the handler?" }) }] },
+      { content: "", toolCalls: [{ id: "s1", name: "spawn_agent", arguments: JSON.stringify({ label: "find it", task: "where is the handler?", role: "explore" }) }] },
       { content: "done" },
     ];
     let call = 0;
@@ -105,5 +105,37 @@ describe("a parent can delegate through the agent's own catalog", () => {
     expect((requests[0]?.tools ?? []).map((t) => t.function.name)).toContain("spawn_agent");
     expect(spawned).toEqual([{ label: "find it", task: "where is the handler?" }]);
     expect(outcome.kind).toBe("finished");
+  });
+
+  it("refuses a delegation that names no role, handing the model the corrective instead of running it as code (chat #273)", async () => {
+    const spawned: string[] = [];
+    const requests: ModelRequest[] = [];
+    const script: ModelCompletion[] = [
+      { content: "", toolCalls: [{ id: "s1", name: "spawn_agent", arguments: JSON.stringify({ label: "bulk read", task: "Bulk-read open tickets vs roadmap" }) }] },
+      { content: "done" },
+    ];
+    let call = 0;
+    await runAgent({
+      task: { prompt: "delegate the read", dispatch: { source: "manual" } },
+      policy: TEST_POLICY,
+      ports: {
+        model: {
+          complete: async (request) => {
+            requests.push(JSON.parse(JSON.stringify(request)) as ModelRequest);
+            return script[call++] ?? { content: "" };
+          },
+        },
+        capabilities: {
+          capabilities: new Set<Capability>(["orchestrate"]),
+          orchestration: { spawn: async (req) => { spawned.push(req.label); return { ok: true }; } },
+        },
+        store: { load: () => undefined, save: () => undefined },
+        events: { emit: () => undefined },
+        human: { ask: async () => ({ kind: "paused" }) },
+        context: { pack: () => ({ focus: [], facts: [], recall: [] }) },
+      },
+    });
+    expect(spawned).toEqual([]);
+    expect(JSON.stringify(requests[1]?.messages ?? [])).toContain(JSON.stringify(MISSING_ROLE_ERROR).slice(1, 40));
   });
 });

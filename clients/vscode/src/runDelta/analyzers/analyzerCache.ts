@@ -10,6 +10,9 @@ import { createHash } from "node:crypto";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import type { L3CacheEntry, L3ResultCache } from "@builderforce/agent-tools";
+import { CACHE_DIR, ensureIgnoredCacheDir } from "../../ignoredCacheDir";
+
+const ANALYZER_CACHE_SUBDIR = "run-delta-analyzers";
 
 export { l3CacheKey as cacheKeyOf } from "@builderforce/agent-tools";
 
@@ -17,8 +20,7 @@ export const sha256 = (text: string): string => createHash("sha256").update(text
 
 /** The store of one repository root. Never throws: a miss or an unwritable folder is just no cache. */
 export function fileAnalyzerCache(root: string): L3ResultCache {
-  const cacheRoot = path.join(root, ".builderforce", "cache");
-  const dir = path.join(cacheRoot, "run-delta-analyzers");
+  const dir = path.join(root, ...CACHE_DIR, ANALYZER_CACHE_SUBDIR);
   return {
     async get(key, tool) {
       try {
@@ -32,8 +34,7 @@ export function fileAnalyzerCache(root: string): L3ResultCache {
     async put(key, entry) {
       if (entry.result.status !== "ok") return;
       try {
-        await fs.mkdir(dir, { recursive: true });
-        await fs.writeFile(path.join(cacheRoot, ".gitignore"), "*\n", { flag: "wx" }).catch(() => undefined);
+        await ensureIgnoredCacheDir(root, ANALYZER_CACHE_SUBDIR);
         await fs.writeFile(path.join(dir, `${key}.json`), JSON.stringify(entry), "utf8");
       } catch {
         /* no cache this time */

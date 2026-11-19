@@ -554,7 +554,7 @@ describe("a sub-agent is a run of its own, in the background, owned by the run t
           if (system.includes("sub-agent spawned by")) return { text: "The auth middleware is in src/auth.ts:12." };
           const users = ctx.messages.filter((m) => m.role === "user").map((m) => String(m.content));
           ownerTurns.push(users[users.length - 1] ?? "");
-          if (ctx.turn === 0) return { toolCalls: [{ name: "spawn_agent", args: { label: "locate auth", task: "Find the auth middleware." } }] };
+          if (ctx.turn === 0) return { toolCalls: [{ name: "spawn_agent", args: { label: "locate auth", task: "Find the auth middleware.", role: "explore" } }] };
           if (users.some((u) => u.startsWith("[Sub-agent a1"))) return { text: "Ada's slice says src/auth.ts:12." };
           return { text: "Started a1; carrying on with the rest." };
         },

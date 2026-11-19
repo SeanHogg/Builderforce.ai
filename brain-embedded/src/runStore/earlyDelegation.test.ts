@@ -18,7 +18,7 @@ const TOOLS = ['read_file', 'spawn_agent', 'spawn_agents'].map((name) => ({
 }));
 type Call = { id: string; name: string; args: string } | null;
 const read = (i: number): Call => ({ id: `r${i}`, name: 'read_file', args: JSON.stringify({ path: `docs/file-${i}.md` }) });
-const SPAWN: Call = { id: 's1', name: 'spawn_agents', args: JSON.stringify({ workstreams: [{ label: 'R1', task: 'research R1' }] }) };
+const SPAWN: Call = { id: 's1', name: 'spawn_agents', args: JSON.stringify({ workstreams: [{ label: 'R1', task: 'research R1', role: 'explore' }] }) };
 const NUDGE = 'STOP READING AND DELEGATE';
 const LABEL = 'loop.nudge_undelegated_request';
 

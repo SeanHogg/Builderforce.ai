@@ -19,14 +19,19 @@ export const MODEL_ROLES: readonly ModelRole[] = ["plan", "code", "review", "ver
 /** One line per role, shown to the delegating MODEL in the `spawn_agent` schema so it
  *  picks deliberately rather than defaulting to whatever it is running as. */
 export const MODEL_ROLE_DESCRIPTIONS: Readonly<Record<ModelRole, string>> = {
-  plan: "Deciding an approach or breaking work down — no code written yet.",
-  code: "Writing or editing code. The default when no role is named.",
-  review: "Judging work — reviewing a diff or a plan for correctness and design.",
+  plan: "Deciding — choosing an approach, breaking work down, sequencing it. Produces a decision, not code.",
+  code: "Writing or editing code or files. Only when the child must CHANGE something; reading and reporting is never code.",
+  review: "Judging — auditing, comparing, aligning or reconciling one thing against another (tickets vs roadmap, a diff vs its spec, a plan vs the code) and saying what is wrong or missing.",
   verify: "Mechanical checks — building, compiling, running tests and reading their output.",
-  explore: "Investigation — locating, searching, summarising.",
+  explore: "Locating and summarising — finding where something lives, bulk-reading pages or files and reporting what is there, without judging it.",
   chat: "A conversational answer with no task-shaped work behind it.",
   utility: "Small, mechanical, low-stakes work — formatting, extraction, a lookup.",
 };
+
+/** The corrective an owner's model is handed when a delegation names no (or no known) role. */
+export const MISSING_ROLE_ERROR =
+  `role is required — say what kind of work the child does so it is routed to a model suited to it: ${MODEL_ROLES.join(" | ")}. ` +
+  "Auditing, comparing or aligning is review; locating or bulk-reading and summarising is explore; deciding is plan; code is only for a child that must change files.";
 
 /**
  * What each role is FOR, as a number routing can use: +1 pulls toward the strongest model,
@@ -67,10 +72,22 @@ export function isModelRole(value: unknown): value is ModelRole {
 /**
  * The role a delegation's turns are routed as. A model that named one gets it;
  * otherwise `code` — a child is a clone of its owner and does the slice end to end.
- * ONE rule for every surface that backs `spawn_agent`.
+ * For PROGRAMMATIC delegations (a planner's hand-off) and readers of a recorded role.
+ * A MODEL's delegation goes through {@link requiredDelegationRole}: a silent `code`
+ * default sent read-and-report children to cheap coders (VS Code chat #273).
  */
 export function delegationRole(raw: unknown): ModelRole {
   return isModelRole(raw) ? raw : "code";
+}
+
+/**
+ * The role a model-authored delegation named, or null when it named none (or an unknown
+ * one) — the spawn tools then refuse with {@link MISSING_ROLE_ERROR}. ONE rule for
+ * `spawn_agent` and `spawn_agents` on every surface.
+ */
+export function requiredDelegationRole(raw: unknown): ModelRole | null {
+  const role = typeof raw === "string" ? raw.trim().toLowerCase() : raw;
+  return isModelRole(role) ? role : null;
 }
 
 /**

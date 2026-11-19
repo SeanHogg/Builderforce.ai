@@ -1309,7 +1309,7 @@ describe('ask_user — a question is a REPLY, and the run ends on it', () => {
       type: 'function' as const,
       function: { name, description: name, parameters: {} },
     }));
-    const SPAWN = { id: 's1', name: 'spawn_agents', args: JSON.stringify({ workstreams: [{ label: 'S2', task: 'do S2', ticket: '2861' }] }) };
+    const SPAWN = { id: 's1', name: 'spawn_agents', args: JSON.stringify({ workstreams: [{ label: 'S2', task: 'do S2', ticket: '2861', role: 'code' }] }) };
 
     it('answers the question with the delegation contract, and the next turn spawns', async () => {
       const rec = recorder();

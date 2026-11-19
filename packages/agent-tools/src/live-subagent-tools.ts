@@ -92,10 +92,13 @@ export function ownerDirectionText(ownerName: string, text: string): string {
 export const SUBAGENT_REPORT_CHARS = 8_000;
 
 /** A child's answer at the length its owner is handed, marked when it was cut. Applied
- *  once, where each surface builds its `ChildReportLike`. */
-export function clipChildOutput(output: string): string {
-  return output.length > SUBAGENT_REPORT_CHARS
-    ? `${output.slice(0, SUBAGENT_REPORT_CHARS)}… [report cut at ${SUBAGENT_REPORT_CHARS} of ${output.length} chars — the full text is in the chat]`
+ *  once, where each surface builds its `ChildReportLike`. `limit` is lower than
+ *  {@link SUBAGENT_REPORT_CHARS} when the report also carries coverage and a data note,
+ *  which share the same budget. */
+export function clipChildOutput(output: string, limit: number = SUBAGENT_REPORT_CHARS): string {
+  const max = Math.max(1_000, Math.min(limit, SUBAGENT_REPORT_CHARS));
+  return output.length > max
+    ? `${output.slice(0, max)}… [report cut at ${max} of ${output.length} chars — the full text is in the chat]`
     : output;
 }
 
@@ -111,12 +114,22 @@ export function isChildReportText(text: string | null | undefined): boolean {
 export function childReportText(report: ChildReportLike): string {
   const head = `${CHILD_REPORT_HEAD}${report.handle} · ${report.name} — ${report.state}] ${report.label}${report.ticket ? ` (ticket ${report.ticket})` : ""}`;
   const files = report.changedFiles?.length ? `Changed: ${report.changedFiles.join(", ")}` : "";
+  const coverage = report.coverage?.length ? `${CHILD_COVERAGE_HEAD}\n${report.coverage.map((c) => `- ${c}`).join("\n")}` : "";
+  const data = report.dataFile ? childDataNote(report.dataFile) : "";
   const issues = report.openIssues?.length
     ? `${OPEN_ISSUES_HEAD}\n${report.openIssues.map((i) => `- ${i}`).join("\n")}`
     : report.state === "failed"
       ? `${OPEN_ISSUES_HEAD}\n- the whole slice: it failed — finish it yourself or delegate it again`
       : "";
-  return [head, report.output, files, issues].filter(Boolean).join("\n\n");
+  return [head, report.output, files, coverage, data, issues].filter(Boolean).join("\n\n");
+}
+
+/** Heads the child's coverage in its report — what it already read, so the owner does not. */
+export const CHILD_COVERAGE_HEAD = "Coverage — what this sub-agent read (do not fetch it again):";
+
+/** The line pointing the owner at the data its child collected. */
+export function childDataNote(path: string): string {
+  return `Collected data: every result its calls returned is saved in ${path} — read_file it (page with offset/limit) instead of re-running those calls.`;
 }
 
 const handlesOf = (v: unknown): string[] =>

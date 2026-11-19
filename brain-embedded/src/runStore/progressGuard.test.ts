@@ -24,7 +24,7 @@ const READY = 'Now I have everything I need.';
 const read = (i: number): Call => ({ id: `r${i}`, name: 'read_file', args: JSON.stringify({ path: `docs/file-${i}.md` }) });
 const edit = (i: number): Call => ({ id: `e${i}`, name: 'edit_file', args: JSON.stringify({ path: `src/f${i}.ts`, old_string: 'a', new_string: 'b' }) });
 const claimAndRead = (i: number): Step => ({ text: READY, call: read(i) });
-const spawn = (i: number): Call => ({ id: `s${i}`, name: 'spawn_agent', args: JSON.stringify({ task: `research ${i}` }) });
+const spawn = (i: number): Call => ({ id: `s${i}`, name: 'spawn_agent', args: JSON.stringify({ task: `research ${i}`, role: 'explore' }) });
 
 interface Request { tools: string[]; text: string }
 

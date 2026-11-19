@@ -19,7 +19,8 @@ import {
   stallShape,
   type StallShape,
 } from "@builderforce/agent-stall";
-import { progressPauseQuestion } from "@builderforce/run-guards";
+import { parseSubagentReport, serializeAskUser } from "@builderforce/agent-loop";
+import { claimsReady, progressPauseQuestion } from "@builderforce/run-guards";
 
 /** One row of the run trace, as the host's `getRunTrace` exposes it. */
 export interface ChildEvidenceStep {
@@ -40,6 +41,12 @@ export interface ChildSettledInput {
   changedFiles: readonly string[];
   /** The run's trace, oldest first — read for the failed-check-after-last-edit look-back. */
   trace?: readonly ChildEvidenceStep[];
+  /**
+   * The model role the child ran as. Only a `code` child (or one whose role is unknown)
+   * must show a real changed file: a review / explore / plan / verify child's deliverable
+   * IS its report.
+   */
+  role?: string;
 }
 
 export interface ChildSettledVerdict {
@@ -109,7 +116,9 @@ export function childSettledState(input: ChildSettledInput): ChildSettledVerdict
   if (input.snapshotError || !input.answer) {
     return { state: "failed", reason: input.snapshotError || "it stopped without a report" };
   }
-  if (input.changedFiles.length === 0) {
+  const unfinished = unfinishedReportReason(input.answer);
+  if (unfinished) return { state: "incomplete", reason: unfinished };
+  if (input.changedFiles.length === 0 && mustChangeFiles(input.role)) {
     return {
       state: "incomplete",
       reason: "it reported done but changed no real file (only scratch/note files)",
@@ -133,6 +142,44 @@ export function childSettledState(input: ChildSettledInput): ChildSettledVerdict
   }
   return { state: "done" };
 }
+
+/** A role whose deliverable is a change: `code`, or a child whose role the host does not know. */
+function mustChangeFiles(role: string | undefined): boolean {
+  return role === undefined || role === "code";
+}
+
+/** The fence tag of the shared question protocol (agent-loop `serializeAskUser`) — derived, never re-spelled. */
+const ASK_USER_FENCE_TAG = serializeAskUser({ question: "", options: [], multiSelect: false }).split("\n")[0]!;
+
+/** Own words at or above this length are a deliverable, whatever their first sentence claims. */
+const REPORT_MIN_CHARS = 800;
+
+/**
+ * Why a child's final reply is NOT its report, or null when it is one (VS Code chat #273):
+ *   - it carries an ask-user block — a sub-agent has no person to answer it, so the run
+ *     settled on a question nobody will see;
+ *   - it claims readiness ("I have enough to produce the report…", `claimsReady`) and then
+ *     delivers nothing — no `Outcome:` line of the report contract (`parseSubagentReport`)
+ *     and too little prose to be the report itself.
+ * The host gives such a child ONE more turn ({@link REPORT_NOW_STEER}) before settling it.
+ */
+export function unfinishedReportReason(answer: string): string | null {
+  const text = answer.trim();
+  if (!text) return null;
+  // The fence itself — never a comparison with `stripAskUser`'s output, which also collapses blank lines.
+  if (text.includes(ASK_USER_FENCE_TAG)) {
+    return "it ended by asking the user a question (an ask-user block) instead of reporting — a sub-agent has no person to answer it";
+  }
+  if (claimsReady(text) && !parseSubagentReport(text).outcome && text.length < REPORT_MIN_CHARS) {
+    return "it said it had enough to write its report, then ended without writing it";
+  }
+  return null;
+}
+
+/** The one extra turn a child whose final reply was not its report is steered with. */
+export const REPORT_NOW_STEER =
+  "You cannot ask the user anything, and your owner only reads your final message. Write your report NOW from what you already have — do not make more calls. " +
+  "State your coverage: every file and window you read and every list/search call with its offsets, and say plainly what you did NOT cover. End with the report lines.";
 
 /**
  * Did the final turn stall — offer a permission menu / hand off / announce work it

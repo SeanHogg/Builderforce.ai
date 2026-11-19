@@ -161,7 +161,7 @@ describe("runOnPremAgent — conformance", () => {
   it("stamps ONE run id: a sub-agent's row names the row of the owner that spawned it", async () => {
     const dir = mkdtempSync(path.join(tmpdir(), "onprem-runid-"));
     try {
-      const SPAWN: ModelCompletion = { content: "", toolCalls: [{ id: "s1", name: "spawn_agent", arguments: '{"label":"look","task":"where is it?"}' }], model: "fake-model" };
+      const SPAWN: ModelCompletion = { content: "", toolCalls: [{ id: "s1", name: "spawn_agent", arguments: '{"label":"look","task":"where is it?","role":"explore"}' }], model: "fake-model" };
       const s = sinks();
       // The child gets its own sinks from `forChild`; collect its row beside the owner's.
       const rows: RunOutcomeRow[] = [];

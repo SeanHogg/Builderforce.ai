@@ -25,14 +25,18 @@ import {
 import { parseSubagentReport } from "@builderforce/agent-loop";
 import {
   RUN_COMMAND_TOOL,
+  SUBAGENT_REPORT_CHARS,
   WAIT_INTERRUPTED_NOTE,
+  childDataNote,
   childReportText as reportText,
   clipChildOutput,
   duplicateOfLiveChild,
   ownerDirectionText as directionText,
   type StartedCommand,
 } from "@builderforce/agent-tools";
-import { childSettledState, realChangedFiles } from "./childDoneEvidence";
+import { childSettledState, realChangedFiles, REPORT_NOW_STEER, unfinishedReportReason } from "./childDoneEvidence";
+import { coverageChars, coverageOf } from "./childCoverage";
+import { noteChildFailure, saveCollectedData } from "./childDataFile";
 import { MAX_CHILD_DEPTH, type ChildReport, type ChildRuns } from "./childRuns";
 import { createChildLedger, type ChildLedger } from "./childLedger";
 import { createLiveChildrenHold, hungChildrenNote, type HeldChild } from "./liveChildrenFinish";
@@ -45,6 +49,8 @@ export interface ChildRequest {
   persona?: { name: string; brief: string };
   asAgent?: { ref: string; name: string };
   ticket?: string;
+  /** Facts the owner states it already established — first in the child's hand-off block. */
+  context?: string;
 }
 
 export type SpawnResult = { ok: true; handle: string; name: string; label: string } | { ok: false; error: string };
@@ -92,6 +98,16 @@ export interface ChildRunHost {
   postDirection(rootChatId: number, from: "owner" | "person", fromName: string, to: { ref: string; name: string } | null, text: string): void;
   /** The chat's set of live children changed. */
   changed(rootChatId: number): void;
+  /**
+   * Run ONE more turn of a settled-but-unfinished child with `text` as its turn (the
+   * report-now steer). Resolves when that turn's run settles. Absent ⇒ no extra turn.
+   */
+  resumeChild?(key: number, text: string): Promise<void>;
+  /**
+   * Save the data a child collected where its owner can `read_file` it; resolves to that
+   * workspace-relative path, or undefined when this host has nowhere to put it.
+   */
+  saveChildData?(rootChatId: number, handle: string, text: string): Promise<string | undefined>;
   /** Every child's brief, commands and outcome — persisted with the parent run when the
    *  host wires a `persist` port (`childRunJournal.ts`). Absent ⇒ an in-memory ledger per host. */
   ledger?: ChildLedger;
@@ -156,9 +172,20 @@ export function ownerFinishHold(host: ChildRunHost, ownerKey: number): () => Pro
 
 export function childControls(host: ChildRunHost, owner: ChildOwner): ChildControls {
   const ledger = ledgerOf(host);
-  const settle = (key: number, lineage: RunLineage, req: ChildRequest): void => {
-    const stopped = host.registry.stopRequested(key);
-    const report = reportOf(key, lineage, req, stopped);
+  const settle = async (key: number, lineage: RunLineage, req: ChildRequest): Promise<void> => {
+    // A final reply that is not the report (an ask-user block, "I have enough…" and then
+    // nothing — chat #273) gets ONE more turn, steered to write it, before the child settles.
+    // `reportNowTurn` catches its own failures: nothing here may stop the registry settling.
+    if (!host.registry.stopRequested(key)) await reportNowTurn(host, key).catch((error: unknown) => noteChildFailure(key, "run.child_report_turn_failed", error));
+    let stopped = host.registry.stopRequested(key);
+    let report: ChildReport;
+    try {
+      report = await reportOf(host, key, lineage, req, stopped);
+    } catch (error) {
+      noteChildFailure(key, "run.child_report_failed", error);
+      stopped = host.registry.stopRequested(key);
+      report = fallbackReport(lineage, req, stopped, error);
+    }
     const undelivered = host.registry.settle(key, report);
     ledger.settled(key, report, undelivered ? "inbox" : "wait");
     host.changed(owner.rootChatId);
@@ -203,8 +230,9 @@ export function childControls(host: ChildRunHost, owner: ChildOwner): ChildContr
       // Not awaited — the owner keeps working. A start that throws settles as failed.
       void host
         .startChild(key, lineage, owner, req)
-        .catch(() => undefined)
-        .finally(() => settle(key, lineage, req));
+        .catch((error: unknown) => noteChildFailure(key, "run.child_start_failed", error))
+        .then(() => settle(key, lineage, req))
+        .catch((error: unknown) => noteChildFailure(key, "run.child_settle_failed", error));
       return { ok: true, handle: lineage.handle, name: lineage.agent.name, label: lineage.label };
     },
 
@@ -237,10 +265,47 @@ export function childControls(host: ChildRunHost, owner: ChildOwner): ChildContr
   };
 }
 
+/**
+ * The report a child settles with when building its real one threw: it ALWAYS settles, so a
+ * `wait_agents` and the owner's finish hold never wait on a child that already ended.
+ */
+export function fallbackReport(lineage: RunLineage, req: ChildRequest, stopped: boolean, error: unknown): ChildReport {
+  const why = error instanceof Error ? error.message : String(error);
+  return {
+    handle: lineage.handle,
+    name: lineage.agent.name,
+    label: lineage.label,
+    state: stopped ? "stopped" : "failed",
+    output: `its report could not be built (${why}) — read its messages in the chat`,
+    ...(req.ticket ? { ticket: req.ticket } : {}),
+  };
+}
+
+/** The child's final model reply, as the run appended it. */
+function finalAnswerOf(key: number): string {
+  return [...getRunSnapshot(key).appended].reverse().find(isModelReply)?.content?.trim() ?? "";
+}
+
+/**
+ * ONE more turn for a child whose final reply is not its report ({@link unfinishedReportReason}),
+ * steered with {@link REPORT_NOW_STEER}. Only once: whatever that turn ends with is settled.
+ */
+async function reportNowTurn(host: ChildRunHost, key: number): Promise<void> {
+  if (!host.resumeChild || getRunSnapshot(key).error) return;
+  const reason = unfinishedReportReason(finalAnswerOf(key));
+  if (!reason) return;
+  noteRunStep(key, { label: "run.child_report_turn", result: reason });
+  try {
+    await host.resumeChild(key, REPORT_NOW_STEER);
+  } catch (error) {
+    noteChildFailure(key, "run.child_report_turn_failed", error);
+  }
+}
+
 /** What a settled child run reported — read from the run itself, never re-derived. */
-function reportOf(key: number, lineage: RunLineage, req: ChildRequest, stopped: boolean): ChildReport {
+async function reportOf(host: ChildRunHost, key: number, lineage: RunLineage, req: ChildRequest, stopped: boolean): Promise<ChildReport> {
   const snapshot = getRunSnapshot(key);
-  const answer = [...snapshot.appended].reverse().find(isModelReply)?.content?.trim() ?? "";
+  const answer = finalAnswerOf(key);
   const files = new Set<string>();
   const trace = getRunTrace(key);
   for (const ev of trace) {
@@ -256,7 +321,11 @@ function reportOf(key: number, lineage: RunLineage, req: ChildRequest, stopped: 
     answer,
     changedFiles: realChangedFiles([...files]),
     trace,
+    role: req.role,
   });
+  // The result packet (chat #273): what the child read, and where the data it collected is kept.
+  const coverage = coverageOf(trace);
+  const dataFile = await saveCollectedData(host, key, lineage, trace);
   const state = verdict.state === "incomplete" ? "failed" : verdict.state;
   const output =
     verdict.state === "incomplete" && verdict.reason
@@ -265,15 +334,19 @@ function reportOf(key: number, lineage: RunLineage, req: ChildRequest, stopped: 
         ? snapshot.error || "it stopped without a report"
         : answer;
   const { openIssues } = parseSubagentReport(answer);
+  // Report + coverage + data note share ONE report budget (the owner's wait_agents result holds several).
+  const packet = coverageChars(coverage) + (dataFile ? childDataNote(dataFile).length + 2 : 0);
   return {
     handle: lineage.handle,
     name: lineage.agent.name,
     label: lineage.label,
     state,
-    output: clipChildOutput(output),
+    output: clipChildOutput(output, SUBAGENT_REPORT_CHARS - packet),
     ...(req.ticket ? { ticket: req.ticket } : {}),
     ...(files.size ? { changedFiles: [...files] } : {}),
     ...(openIssues.length ? { openIssues } : {}),
+    ...(coverage.length ? { coverage } : {}),
+    ...(dataFile ? { dataFile } : {}),
   };
 }
 

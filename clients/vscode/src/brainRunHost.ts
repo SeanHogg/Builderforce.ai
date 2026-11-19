@@ -54,6 +54,7 @@ import { createLlmFailureLogger } from "./llmFailureLog";
 import { hostLog } from "./hostLog";
 import { childControls, ownerFinishHold } from "./childRunSpawner";
 import { createChildRunHost, ownerOf, type RunSpec } from "./childRunHost";
+import { stickyChildStream } from "./childModelStickiness";
 import { createChildApprovalRelay } from "./childApprovalRelay";
 import { createRunWatches } from "./runWatches";
 import { OWNER_NAME, type BrainRunHost, type BrainRunHostPorts, type RunNoteOptions, type ToolRunInfo } from "./brainRunHostContract";
@@ -285,7 +286,10 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     // A sub-agent's stream stays silent: its parent run already told the person.
     const transport = await ports.stream(p.child ? undefined : (event) => broadcast({ type: "run.modelFallback", chatId: key, from: event.from, reason: fallbackDetail(event) }));
     const role = p.child?.role;
-    const routed: BrainStreamFn = role ? (opts, handlers) => transport({ ...opts, role }, handlers) : transport;
+    // …and keeps the model its first turn was routed to for its whole life (chat #273: it hopped models every turn).
+    const routed: BrainStreamFn = role
+      ? stickyChildStream((opts, handlers) => transport({ ...opts, role }, handlers), role, p.child?.model ?? {})
+      : transport;
     const stream: BrainStreamFn = ports.recordUsage
       ? ports.recordUsage(routed, { chatId, runKey: key, ...(p.chatMode ? { mode: p.chatMode } : {}) })
       : routed;
@@ -397,6 +401,8 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     persistence: ports.persistence,
     announce,
     ...(ports.childLedger ? { ledger: ports.childLedger } : {}),
+    // Where a child's collected data is saved for its owner to read_file.
+    workspaceRoot: () => ports.workspaceRoot() || undefined,
   });
   const steering = createRunSteer({
     registry,

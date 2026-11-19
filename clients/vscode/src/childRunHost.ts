@@ -13,9 +13,11 @@
  */
 
 import { MID_TURN_META_KEY, subagentSystemPrompt } from "@builderforce/agent-loop";
+import { briefWithHandoff, ownerHandoffBlock } from "@builderforce/agent-tools";
 import {
   appendRunMessage,
   drainRunSteering,
+  getRunTrace,
   savedChatOf,
   stopRun,
   withDirectedMetadata,
@@ -26,6 +28,9 @@ import type { ChildRuns } from "./childRuns";
 import type { ChildOwner, ChildRequest, ChildRunHost } from "./childRunSpawner";
 import type { ChildLedger } from "./childLedger";
 import type { WebviewRunStart } from "./brainRunHostProtocol";
+import { establishedCalls } from "./childCoverage";
+import { writeChildDataFile } from "./childDataFile";
+import type { StickyModelState } from "./childModelStickiness";
 import { modelForChildRun } from "./roleModelPin";
 
 /** A run as the host executes it: what the panel sends, plus what only the host knows. */
@@ -35,6 +40,11 @@ export interface RunSpec extends WebviewRunStart {
     lineage: RunLineage;
     /** The model role its turns are routed for (explore / code / verify …). */
     role: string;
+    /**
+     * The model the child is held on (`childModelStickiness.ts`) — one object for the
+     * child's whole life, so a resumed turn keeps the model its first turn was routed to.
+     */
+    model?: StickyModelState;
   };
   /** The prompt every run in this tree is built on — the top-level owner's. */
   basePrompt?: string;
@@ -61,7 +71,19 @@ export interface ChildRunHostDeps {
   subagentModel?(): Promise<string | undefined>;
   /** The persisted child ledger (`childLedger.ts`); absent ⇒ the spawner's in-memory one. */
   ledger?: ChildLedger;
+  /** The workspace a child's collected data is saved under; absent (or empty) ⇒ none is saved. */
+  workspaceRoot?(): string | undefined;
 }
+
+/** The hand-off a child's brief carries: the owner's `context`, then the calls its run already made. */
+export function childBrief(req: Pick<ChildRequest, "task" | "context">, ownerKey: number): string {
+  const block = ownerHandoffBlock({
+    ...(req.context ? { context: req.context } : {}),
+    established: establishedCalls(getRunTrace(ownerKey)),
+  });
+  return briefWithHandoff(req.task, block);
+}
+
 
 export function createChildRunHost(deps: ChildRunHostDeps): ChildRunHost & { afterRun(key: number): void } {
   /** Owners asked to wake while still busy — woken again the moment their run settles,
@@ -85,10 +107,14 @@ export function createChildRunHost(deps: ChildRunHostDeps): ChildRunHost & { aft
     const turn = imageAtts.length
       ? [{ type: 'text' as const, text: joinedText }, ...imageAtts.map((a) => ({ type: 'image_url' as const, image_url: { url: a.imageUrl! } }))]
       : joinedText;
-    // The transcript is still in the store, so the wake is just the next turn of it.
-    const { seed: _seed, priorResearch: _prior, ...rest } = spec;
-    void deps.start({ ...rest, userTurn: turn, autoApprove: deps.autoApproveOf(savedChatOf(spec.chatId, spec.child?.lineage)) });
+    void nextTurn(spec, turn);
     return true;
+  };
+
+  /** The next turn of a run the host already knows — the transcript is still in the store. */
+  const nextTurn = (spec: RunSpec, turn: RunSpec["userTurn"]): Promise<void> => {
+    const { seed: _seed, priorResearch: _prior, ...rest } = spec;
+    return deps.start({ ...rest, userTurn: turn, autoApprove: deps.autoApproveOf(savedChatOf(spec.chatId, spec.child?.lineage)) });
   };
 
   return {
@@ -98,6 +124,17 @@ export function createChildRunHost(deps: ChildRunHostDeps): ChildRunHost & { aft
 
     registry: deps.registry,
     ...(deps.ledger ? { ledger: deps.ledger } : {}),
+
+    async resumeChild(key, text) {
+      const spec = deps.specOf(key);
+      if (!spec?.child) throw new Error(`sub-agent run ${key} is not known to this host`);
+      await nextTurn(spec, text);
+    },
+
+    async saveChildData(rootChatId, handle, text) {
+      const root = deps.workspaceRoot?.();
+      return root ? writeChildDataFile(root, rootChatId, handle, text) : undefined;
+    },
 
     async startChild(key, lineage, owner, req) {
       const spec = deps.specOf(owner.key);
@@ -115,7 +152,8 @@ export function createChildRunHost(deps: ChildRunHostDeps): ChildRunHost & { aft
         ...(parent.routingMode ? { routingMode: parent.routingMode } : {}),
         ...(parent.maxTokens ? { maxTokens: parent.maxTokens } : {}),
         ...(parent.reasoning ? { reasoning: parent.reasoning } : {}),
-        userTurn: req.task,
+        // The brief plus what the owner already established (chat #273: the child re-derived it all).
+        userTurn: childBrief(req, owner.key),
         projectId: parent.projectId ?? null,
         chatMode: "work",
         autoApprove: deps.autoApproveOf(owner.rootChatId),
@@ -125,6 +163,7 @@ export function createChildRunHost(deps: ChildRunHostDeps): ChildRunHost & { aft
         child: {
           lineage,
           role: req.role,
+          model: {},
         },
       });
     },

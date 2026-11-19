@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { MISSING_ROLE_ERROR } from "@builderforce/agent-tools";
 import { subagentToolDef } from "./subagentTool";
 import type { ToolDef } from "./fileTools";
 import type { ChildControls, ChildRequest } from "./childRunSpawner";
@@ -45,15 +46,22 @@ describe("subagentToolDef", () => {
 
   it("starts the child and returns its handle at once — the owner is not blocked", async () => {
     const children = fakeControls();
-    const out = JSON.parse(await subagentToolDef({ children }).execute({ label: "look", task: "find the auth middleware" }, "/repo"));
+    const out = JSON.parse(await subagentToolDef({ children }).execute({ label: "look", task: "find the auth middleware", role: "explore", context: "it is not in src/auth" }, "/repo"));
     expect(out).toMatchObject({ ok: true, handle: "a1", running: true });
-    expect(children.requests[0]).toEqual({ label: "look", task: "find the auth middleware", role: "code" });
+    expect(children.requests[0]).toEqual({ label: "look", task: "find the auth middleware", role: "explore", context: "it is not in src/auth" });
   });
 
   it("refuses an empty brief — the child sees nothing else", async () => {
     const children = fakeControls();
     const out = JSON.parse(await subagentToolDef({ children }).execute({ label: "x", task: "  " }, "/repo"));
     expect(out.ok).toBe(false);
+    expect(children.spawn).not.toHaveBeenCalled();
+  });
+
+  it("regression: refuses a delegation that names no role instead of running it as code (chat #273)", async () => {
+    const children = fakeControls();
+    const out = JSON.parse(await subagentToolDef({ children }).execute({ label: "bulk read", task: "Bulk-read open tickets vs roadmap and specs" }, "/repo"));
+    expect(out).toEqual({ ok: false, label: "bulk read", error: MISSING_ROLE_ERROR });
     expect(children.spawn).not.toHaveBeenCalled();
   });
 
@@ -68,14 +76,14 @@ describe("subagentToolDef", () => {
 
   it("starts a clone — a stray read_only from an older prompt changes nothing", async () => {
     const children = fakeControls();
-    const out = JSON.parse(await subagentToolDef({ children }).execute({ label: "fix", task: "fix it", read_only: true }, "/repo"));
+    const out = JSON.parse(await subagentToolDef({ children }).execute({ label: "fix", task: "fix it", read_only: true, role: "code" }, "/repo"));
     expect(children.requests[0]).toEqual({ label: "fix", task: "fix it", role: "code" });
     expect(out.readOnly).toBeUndefined();
   });
 
   it("passes a refusal from the controls back to the owner", async () => {
     const children = fakeControls({ spawn: vi.fn(() => ({ ok: false as const, error: "12 sub-agents are already working" })) });
-    const out = JSON.parse(await subagentToolDef({ children }).execute({ label: "x", task: "y" }, "/repo"));
+    const out = JSON.parse(await subagentToolDef({ children }).execute({ label: "x", task: "y", role: "explore" }, "/repo"));
     expect(out).toMatchObject({ ok: false, error: "12 sub-agents are already working" });
   });
 
@@ -85,7 +93,7 @@ describe("subagentToolDef", () => {
     it("resolves the persona and starts the child AS that agent", async () => {
       const personaBrief = vi.fn(async () => ADA);
       const children = fakeControls();
-      const out = JSON.parse(await subagentToolDef({ children, personaBrief }).execute({ label: "port the auth middleware", task: "port it", as_agent: "Ada" }, "/repo"));
+      const out = JSON.parse(await subagentToolDef({ children, personaBrief }).execute({ label: "port the auth middleware", task: "port it", as_agent: "Ada", role: "explore" }, "/repo"));
       expect(personaBrief).toHaveBeenCalledWith("Ada");
       expect(children.requests[0]!.asAgent).toEqual({ ref: "agent_12", name: "Ada" });
       expect(out.name).toBe("Ada");
@@ -93,7 +101,7 @@ describe("subagentToolDef", () => {
 
     it("refuses an agent this workspace does not have, and starts no child", async () => {
       const children = fakeControls();
-      const out = JSON.parse(await subagentToolDef({ children, personaBrief: async () => null }).execute({ label: "port it", task: "port it", as_agent: "Nobody" }, "/repo"));
+      const out = JSON.parse(await subagentToolDef({ children, personaBrief: async () => null }).execute({ label: "port it", task: "port it", as_agent: "Nobody", role: "explore" }, "/repo"));
       expect(out.ok).toBe(false);
       expect(out.error).toContain("no agent named 'Nobody' in this workspace");
       expect(out.error).toContain("builtin_chats_list_agents");
@@ -102,7 +110,7 @@ describe("subagentToolDef", () => {
 
     it("refuses when the host cannot name personas at all", async () => {
       const children = fakeControls();
-      const out = JSON.parse(await subagentToolDef({ children }).execute({ label: "port it", task: "port it", as_agent: "Ada" }, "/repo"));
+      const out = JSON.parse(await subagentToolDef({ children }).execute({ label: "port it", task: "port it", as_agent: "Ada", role: "explore" }, "/repo"));
       expect(out.ok).toBe(false);
       expect(children.spawn).not.toHaveBeenCalled();
     });
@@ -148,7 +156,7 @@ describe("subagentToolDef", () => {
     it("leaves an ordinary delegation untouched", async () => {
       const personaBrief = vi.fn(async () => ADA);
       const children = fakeControls();
-      await subagentToolDef({ children, personaBrief }).execute({ label: "look", task: "find it" }, "/repo");
+      await subagentToolDef({ children, personaBrief }).execute({ label: "look", task: "find it", role: "explore" }, "/repo");
       expect(personaBrief).not.toHaveBeenCalled();
       expect(children.requests[0]!.asAgent).toBeUndefined();
     });

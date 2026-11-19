@@ -32,15 +32,15 @@ const run = async (children: ChildControls, args: Record<string, unknown>) =>
 describe("spawn_agents", () => {
   it("starts every workstream and returns all their handles at once", async () => {
     const children = fakeControls();
-    const out = await run(children, { workstreams: [{ label: "A", task: "look at a" }, { label: "B", task: "look at b" }] });
-    expect(children.requests.map((r) => r.task)).toEqual(["look at a", "look at b"]);
+    const out = await run(children, { workstreams: [{ label: "A", task: "look at a", role: "explore" }, { label: "B", task: "look at b", role: "review", context: "b was audited last week" }] });
+    expect(children.requests.map((r) => [r.task, r.role, r.context])).toEqual([["look at a", "explore", undefined], ["look at b", "review", "b was audited last week"]]);
     expect(out).toMatchObject({ ok: true, running: true });
     expect(out.agents.map((a: { handle: string }) => a.handle)).toEqual(["a1", "a2"]);
   });
 
   it("refuses a fan-out with a commands-only workstream before any child starts", async () => {
     const children = fakeControls();
-    const out = await run(children, { workstreams: [{ label: "A", task: "look at a" }, { label: "checks", task: ["pnpm test", "pnpm lint"].join("\n") }] });
+    const out = await run(children, { workstreams: [{ label: "A", task: "look at a", role: "explore" }, { label: "checks", role: "verify", task: ["pnpm test", "pnpm lint"].join("\n") }] });
     expect(out.ok).toBe(false);
     expect(out.error).toContain("workstream 'checks'");
     expect(out.error).toContain("run these yourself with run_command background:true");
@@ -48,14 +48,14 @@ describe("spawn_agents", () => {
   });
 
   it("refuses more workstreams than it may start", async () => {
-    const workstreams = Array.from({ length: MAX_WORKSTREAMS + 1 }, (_, i) => ({ label: `W${i}`, task: `t${i}` }));
+    const workstreams = Array.from({ length: MAX_WORKSTREAMS + 1 }, (_, i) => ({ label: `W${i}`, task: `t${i}`, role: "explore" }));
     const out = await run(fakeControls(), { workstreams });
     expect(out.error).toContain(`at most ${MAX_WORKSTREAMS}`);
   });
 
   it("starts each workstream as a clone with its ticket, and says what the owner does next", async () => {
     const children = fakeControls();
-    const out = await run(children, { workstreams: [{ label: "B", task: "change b", ticket: "2731" }] });
+    const out = await run(children, { workstreams: [{ label: "B", task: "change b", ticket: "2731", role: "code" }] });
     expect(children.requests[0]).toEqual({ label: "B", task: "change b", role: "code", ticket: "2731" });
     expect(out.agents[0]).toMatchObject({ ticket: "2731" });
     expect(out.next).toContain("check the combined result");
