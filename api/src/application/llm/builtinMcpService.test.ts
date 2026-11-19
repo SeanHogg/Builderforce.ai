@@ -487,6 +487,13 @@ describe('callBuiltinTool', () => {
     expect(ids(p2)).toEqual([3, 4]);
     expect(p2).toMatchObject({ offset: 2, truncated: false });
     expect(p2).not.toHaveProperty('nextOffset');
+
+    // `index` is one pipe-delimited line per ticket, paged the same way, so a survey fits a tool-result cap.
+    const i1 = await callBuiltinTool(emptyDb, { tenantId: TENANT, tool: 'tasks.list', arguments: { scope: 'all', limit: 2, fields: 'index' } }) as { lines: string; format: string };
+    expect(i1).toMatchObject({ total: 4, returned: 2, offset: 0, truncated: true, nextOffset: 2, format: 'id|status|type|parent|title' });
+    expect(i1.lines.split('\n')).toHaveLength(2);
+    expect(i1.lines.split('\n')[0]).toMatch(/^1\|/);
+    expect(i1).not.toHaveProperty('tasks');
   });
 
   it('enforces tenant ownership on tasks.update (via the project lookup)', async () => {
