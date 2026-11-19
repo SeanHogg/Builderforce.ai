@@ -9,8 +9,8 @@ import { renderHot } from './performance/renderHot.js';
 
 /**
  * Regression for the WS9 review's quadratics (H2): each rule that walked a span list per item now sweeps or
- * binary-searches. 4× the input must cost under ~5× the time (a quadratic would cost ~16×). Best of 3 runs
- * after a warm-up, so one scheduler hiccup cannot fail it.
+ * binary-searches. 4× the input must cost under 8× the time: linear is ~4×, a quadratic ~16×, and the margin
+ * absorbs shared-CI-runner noise (5× flaked at 5.8× on 2026-11-19). Best of 5 runs after a warm-up.
  */
 
 /** The rule's own `derive` (not the engine's per-finding lineage / redaction / digest), on a FRESH input each run so no memo carries over. */
@@ -18,7 +18,7 @@ async function best(rule: DeltaRule, path: string, unit: (k: number, side: 'befo
     const text = (side: 'before' | 'after') => Array.from({ length: n }, (_, k) => unit(k, side)).join('');
     const before = text('before'), after = text('after');
     let min = Infinity;
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 5; i++) {
         const input: RuleInput = {
             changed: [{ path, beforeHash: 'b', afterHash: 'a', attribution: 'run-modified-existing', status: 'modified' }],
             before: new Map([[path, { path, text: before }]]), after: new Map([[path, { path, text: after }]]),
@@ -51,10 +51,10 @@ const CASES: Array<{ rule: DeltaRule; path: string; unit: (k: number, side: 'bef
 ];
 
 describe('WS9 rules scale near-linearly (H2)', () => {
-    it.each(CASES.map((c) => [c.rule.id, c] as const))('%s: 4× input under 5× time', async (_id, c) => {
+    it.each(CASES.map((c) => [c.rule.id, c] as const))('%s: 4× input under 8× time', async (_id, c) => {
         await best(c.rule, c.path, c.unit, 200); // warm-up (JIT)
         const small = await best(c.rule, c.path, c.unit, 1000);
         const large = await best(c.rule, c.path, c.unit, 4000);
-        expect(large / Math.max(small, 1)).toBeLessThan(5);
+        expect(large / Math.max(small, 1)).toBeLessThan(8);
     }, 120_000);
 });
