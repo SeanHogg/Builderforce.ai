@@ -41,6 +41,26 @@ describe('detectIngressEvidence — frontend dev proxies', () => {
       .toEqual(['dev-proxy proxy.conf.js']);
   });
 
+  it('Vite regex keys for /api, and the proxy.conf.js array form', () => {
+    expect(kinds({ 'vite.config.ts': VITE("{ '^/api': 'http://localhost:8000' }") })).toEqual(['dev-proxy vite.config.ts']);
+    expect(kinds({ 'vite.config.ts': VITE("{ '^/api/.*': { target: 'http://127.0.0.1:8000' } }") })).toEqual(['dev-proxy vite.config.ts']);
+    expect(kinds({ 'web/proxy.conf.js': "module.exports = [{ context: ['/api', '/auth'], target: 'http://localhost:3000', secure: false }];" }))
+      .toEqual(['dev-proxy web/proxy.conf.js']);
+    expect(kinds({ 'proxy.conf.js': "module.exports = [{ context: ['/api'], target: 'http://localhost:3000', pathRewrite: { '^/api': '' } }];" }))
+      .toEqual(['proxy-rewrite proxy.conf.js']);
+    expect(kinds({ 'proxy.conf.js': "module.exports = [{ context: ['/auth'], target: 'http://localhost:3000' }];" })).toEqual([]);
+  });
+
+  it('a proxy to another host is no evidence; a local one (or a bare port, or a variable) is', () => {
+    expect(kinds({ 'vite.config.ts': VITE("{ '/api': 'https://api.example.com' }") })).toEqual([]);
+    expect(kinds({ 'vite.config.ts': VITE("{ '/api': { target: 'https://api.example.com', changeOrigin: true } }") })).toEqual([]);
+    expect(kinds({ 'proxy.conf.json': JSON.stringify({ '/api': { target: 'https://api.example.com' } }) })).toEqual([]);
+    expect(kinds({ 'proxy.conf.json': JSON.stringify([{ context: ['/api'], target: 'https://api.example.com' }]) })).toEqual([]);
+    expect(kinds({ 'vite.config.ts': VITE("{ '/api': { target: 'http://0.0.0.0:8000' } }") })).toEqual(['dev-proxy vite.config.ts']);
+    expect(kinds({ 'vite.config.ts': VITE("{ '/api': { target: API_TARGET } }") })).toEqual(['dev-proxy vite.config.ts']);
+    expect(kinds({ 'vite.config.ts': VITE("{ '/api': `http://localhost:${port}` }") })).toEqual(['dev-proxy vite.config.ts']);
+  });
+
   it('a Vite config with no /api proxy says nothing', () => {
     expect(kinds({ 'vite.config.ts': VITE("{ '/auth': 'http://localhost:8000' }") })).toEqual([]);
     expect(kinds({ 'vite.config.ts': "export default { server: { port: 5173 } };\n// fetch('/api')" })).toEqual([]);
@@ -68,11 +88,10 @@ describe('detectIngressEvidence — backend routes', () => {
     expect(kinds({ 'public/index.php': "<?php\n$app->group('/api', function ($group) {});" })).toEqual(['backend-routes public/index.php']);
   });
 
-  it('ASP.NET minimal APIs and controllers', () => {
+  it('ASP.NET minimal APIs, and [Route("api…")] in Program.cs', () => {
     expect(kinds({ 'api/Program.cs': 'app.MapGet("/api/items", () => items);' })).toEqual(['backend-routes api/Program.cs']);
     expect(kinds({ 'Program.cs': 'var api = app.MapGroup("/api");' })).toEqual(['backend-routes Program.cs']);
-    expect(kinds({ 'Controllers/ItemsController.cs': '[ApiController]\n[Route("api/[controller]")]\npublic class ItemsController {}' }))
-      .toEqual(['backend-routes Controllers/ItemsController.cs']);
+    expect(kinds({ 'Program.cs': '[ApiController]\n[Route("api/[controller]")]\npublic class ItemsController {}' })).toEqual(['backend-routes Program.cs']);
   });
 
   it('a backend serving at / is no evidence; nor is a frontend calling /api, nor /apis', () => {
@@ -84,11 +103,29 @@ describe('detectIngressEvidence — backend routes', () => {
 
   it('reads only its own files', () => {
     expect(kinds({ 'scripts/deploy.js': "app.use('/api', x);" })).toEqual([]);
-    expect(ingressEvidenceDetector.reads).toEqual(expect.arrayContaining(['vite.config.mjs', '*/vite.config.ts', '*/proxy.conf.json', 'routes/api.php', '*/Program.cs', '*/Controllers/*.cs']));
+    expect(ingressEvidenceDetector.reads).toEqual(expect.arrayContaining(['vite.config.mjs', '*/vite.config.ts', '*/proxy.conf.json', 'api/package.json']));
+  });
+
+  it('keeps its own reads within budget: proxy configs first, backend sources only under found service roots', () => {
+    expect(ingressEvidenceDetector.reads.length).toBeLessThanOrEqual(16);
+    expect(ingressEvidenceDetector.reads.some((entry) => /\.(?:cs|py|php)$|server\.[jt]s$|index\.js$/.test(entry))).toBe(false);
+    const follow = ingressEvidenceDetector.followReads!(repo({
+      'package.json': JSON.stringify({ dependencies: { express: '4' } }),
+      'api/requirements.txt': 'fastapi',
+      'api/manage.py': "os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'shop.settings')",
+      'server/Server.csproj': '<Project />',
+      'docs/package.json': '{}',
+    }));
+    expect(follow).toEqual(expect.arrayContaining(['server.js', 'api/main.py', 'api/src/index.ts', 'api/shop/urls.py', 'server/Program.cs']));
+    expect(follow).not.toContain('src/index.ts');
+    expect(follow.some((path) => path.startsWith('backend/') || path.startsWith('docs/'))).toBe(false);
+    // A root package.json with no server framework is a frontend's: nothing to follow at the root.
+    expect(ingressEvidenceDetector.followReads!(repo({ 'package.json': JSON.stringify({ dependencies: { react: '19' } }) }))).toEqual([]);
   });
 });
 
 describe('detectApp → emitManifest — ingress from the files', () => {
+  // The common shape: a Vite app at the root (package.json + vite.config.js), a FastAPI backend in api/.
   const FULL_STACK = {
     'package.json': JSON.stringify({ name: 'web', scripts: { dev: 'vite' }, dependencies: { react: '19' }, devDependencies: { vite: '6' } }),
     'vite.config.js': VITE("{ '/api': 'http://localhost:8000' }"),
@@ -101,17 +138,39 @@ describe('detectApp → emitManifest — ingress from the files', () => {
     expect(detectApp(repo({ 'package.json': '{"name":"x"}' })).ingressEvidence).toEqual([]);
   });
 
+  it('folds the root Vite config into the root package.json frontend: one frontend, not two', () => {
+    const frontends = detectApp(repo(FULL_STACK)).blueprint.services.filter((s) => s.rootDir === '.');
+    expect(frontends.map((s) => s.id)).toEqual(['web']);
+    expect(frontends[0]!.devCommand).toBe('vite');
+  });
+
+  it('counts routes only under the backend root, and no proxy to another host', () => {
+    const emit = (files: Record<string, string>) => {
+      const detection = detectApp(repo(files));
+      return emitManifest(detection.blueprint, { ingressEvidence: detection.ingressEvidence });
+    };
+    const noProxy = Object.fromEntries(Object.entries(FULL_STACK).filter(([file]) => file !== 'vite.config.js'));
+    // A mock server outside api/ declares /api routes: not the backend's.
+    const mocked = emit({ ...noProxy, 'mock/server.js': "const app = express();\napp.use('/api', items);\n" });
+    expect(mocked.manifest.ingress).toBeUndefined();
+    expect(mocked.notes.some((note) => note.code === 'ingress-not-inferred')).toBe(true);
+    // A proxy to a deployed API says nothing about api/.
+    const remote = emit({ ...FULL_STACK, 'vite.config.js': VITE("{ '/api': 'https://api.example.com' }") });
+    expect(remote.manifest.ingress).toBeUndefined();
+    // The backend's own routes, under api/, do count.
+    const routed = emit({ ...noProxy, 'api/main.py': 'from fastapi import FastAPI\napp = FastAPI()\napp.include_router(r, prefix="/api")\n' });
+    expect(routed.manifest.ingress?.routes[0]).toEqual({ path: '/api', service: 'api' });
+  });
+
   it('emits the route only with the evidence detection found', () => {
     const detection = detectApp(repo(FULL_STACK));
     const served = (manifest: ReturnType<typeof emitManifest>['manifest']) =>
       Object.values(manifest.services).filter((s) => s.port !== undefined).map((s) => s.role ?? 'backend').sort();
     const withEvidence = emitManifest(detection.blueprint, { composeResources: detection.composeResources, ingressEvidence: detection.ingressEvidence });
-    // The route exists only when detection read one frontend and one backend; the evidence decides it either way.
-    if (served(withEvidence.manifest).join() === 'backend,frontend') {
-      expect(withEvidence.manifest.ingress?.routes[0]).toEqual({ path: '/api', service: expect.any(String) });
-      const without = emitManifest(detection.blueprint, { composeResources: detection.composeResources });
-      expect(without.manifest.ingress).toBeUndefined();
-      expect(without.notes.some((note) => note.code === 'ingress-not-inferred')).toBe(true);
-    }
+    expect(served(withEvidence.manifest)).toEqual(['backend', 'frontend']);
+    expect(withEvidence.manifest.ingress?.routes[0]).toEqual({ path: '/api', service: expect.any(String) });
+    const without = emitManifest(detection.blueprint, { composeResources: detection.composeResources });
+    expect(without.manifest.ingress).toBeUndefined();
+    expect(without.notes.some((note) => note.code === 'ingress-not-inferred')).toBe(true);
   });
 });

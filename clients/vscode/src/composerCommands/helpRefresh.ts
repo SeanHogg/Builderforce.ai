@@ -10,6 +10,7 @@
  * drive fakes.
  */
 import * as path from "node:path";
+import { MANIFEST_FILE_NAME } from "@builderforce/app-detect/manifest";
 import type { ComposerCommandsInit } from "./reply";
 
 /** A subscription that can be undone (`vscode.Disposable`). */
@@ -44,7 +45,7 @@ const sameDir = (a: string, b: string): boolean => {
 
 /** Is this `builderforce.json` at a workspace folder's root (not one nested in node_modules or a sub-app)? */
 export function isRootManifest(file: string, roots: readonly string[]): boolean {
-  return path.basename(file) === "builderforce.json" && roots.some((root) => sameDir(path.dirname(file), root));
+  return path.basename(file) === MANIFEST_FILE_NAME && roots.some((root) => sameDir(path.dirname(file), root));
 }
 
 /** Start watching. The returned disposable stops the watcher and any pending recompute. */

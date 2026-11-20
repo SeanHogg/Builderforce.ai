@@ -1,8 +1,13 @@
-// Source-only, no imports of other workspace packages, no install of its own: the API's
-// vitest runs its tests (api/vitest.config.ts collects every source-only package), and
-// its consumers (api, frontend, worker) compile it through their `paths`.
+// Source-only, no install of its own: the API's vitest runs its tests (api/vitest.config.ts
+// collects every source-only package), and its consumers (api, frontend, worker, the VS
+// Code extension) compile it through their `paths`. Its one workspace import is the
+// manifest v1 shape (`@builderforce/app-detect/manifest`, the kits' types).
 {
   "compilerOptions": {
+    "paths": {
+      "@builderforce/app-detect/manifest": ["../app-detect/src/manifest/manifestShape.ts"],
+      "@builderforce/creation-canvas-contract": ["../creation-canvas-contract/src/index.ts"]
+    },
     "target": "ES2022",
     "module": "ES2022",
     "moduleResolution": "bundler",

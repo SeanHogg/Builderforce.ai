@@ -5,10 +5,10 @@
  * N frontends + M backends cover N × M kits. A part is data: the files it writes under
  * its service root, and its fragment of the `builderforce.json` v1 manifest. The v1
  * entry shapes a kit writes (services, resources, ingress routes) are app-detect's — ONE
- * owner, `@builderforce/app-detect/manifest`, which `emitManifest` writes through too;
- * only what a kit adds on top (its environments, the whole document) is declared here.
+ * owner, `@builderforce/app-detect/manifest`, which `emitManifest` writes through too —
+ * the whole document and its environments included (`KitManifest` only narrows it).
  */
-import type { EmittedIngressRoute, EmittedResource, EmittedService } from '@builderforce/app-detect/manifest';
+import type { EmittedManifest, EmittedResource, EmittedService } from '@builderforce/app-detect/manifest';
 
 export type KitPartKind = 'frontend' | 'backend' | 'extra';
 
@@ -58,22 +58,8 @@ export interface KitDefinition {
   extras: string[];
 }
 
-export interface ManifestEnvironment {
-  target: string;
-  tier: 'production' | 'non-production';
-  debug?: boolean;
-}
-
-/** The `builderforce.json` v1 document a kit ships. */
-export interface KitManifest {
-  $schema: string;
-  version: 1;
-  name: string;
-  resources?: Record<string, EmittedResource>;
-  services: Record<string, EmittedService>;
-  ingress: { routes: EmittedIngressRoute[] };
-  environments: Record<string, ManifestEnvironment>;
-}
+/** The `builderforce.json` v1 document a kit ships: app-detect's one document shape, always named and always routed. */
+export type KitManifest = EmittedManifest & Required<Pick<EmittedManifest, 'name' | 'ingress'>>;
 
 /** A conflict: two parts claim one key; the first part's entry is kept. */
 interface KitConflictParams {

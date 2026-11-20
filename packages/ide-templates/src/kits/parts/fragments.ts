@@ -9,7 +9,8 @@
  * would hide the install from readiness, restart it with the server, and stop the
  * runtime judging each command on its own provider.
  */
-import type { KitRoot, KitServiceId, ManifestFragment, ManifestService } from '../types';
+import type { EmittedService } from '@builderforce/app-detect/manifest';
+import type { KitRoot, KitServiceId, ManifestFragment } from '../types';
 
 /** The port every kit backend listens on (its `PORT` default). */
 export const KIT_API_PORT = 8000;
@@ -20,7 +21,7 @@ export const KIT_WEB_PORT = 5173;
 /** The id of the one-off install step for a service. */
 export const installStepId = (serviceId: KitServiceId): string => `install-${serviceId}`;
 
-function installStep(runtime: string, root: KitRoot, command: string): ManifestService {
+function installStep(runtime: string, root: KitRoot, command: string): EmittedService {
   return { runtime, root, command, readiness: { exitZero: true }, restart: 'never' };
 }
 
@@ -34,7 +35,7 @@ interface ServiceShape {
   installRuntime?: string;
 }
 
-function withInstall(shape: ServiceShape, service: ManifestService): ManifestFragment {
+function withInstall(shape: ServiceShape, service: EmittedService): ManifestFragment {
   if (!shape.install) return { services: { [shape.serviceId]: service } };
   const id = installStepId(shape.serviceId);
   return {

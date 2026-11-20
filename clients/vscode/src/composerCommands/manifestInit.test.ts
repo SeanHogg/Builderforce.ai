@@ -1,6 +1,6 @@
 import * as path from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { detectionNote, noteFrom } from "@builderforce/app-detect";
+import { detectionNote, noteFrom, noteMessages } from "@builderforce/app-detect";
 
 const l10nCalls = vi.hoisted(() => [] as string[]);
 vi.mock("vscode", () => ({
@@ -58,7 +58,7 @@ describe("/manifest init", () => {
     const reply = await setup().execute();
     const lines = reply.kind === "text" ? reply.lines : [];
     // The mocked `t` is the identity on the key, so the lines equal the package's English only through the l10n keys.
-    expect(lines).toEqual(expect.arrayContaining(detected.notes.map((note) => note.message)));
+    expect(lines).toEqual(expect.arrayContaining(noteMessages(detected.notes)));
     expect(l10nCalls).toEqual(expect.arrayContaining([
       "Secrets are never written to the file: set {0} in the vault.",
       "env {0} differs between services; the first value is kept",
@@ -74,6 +74,17 @@ describe("/manifest init", () => {
     expect(port.asked).toEqual([]);
     expect(port.files.has(manifestPath)).toBe(false);
     expect(reply).toEqual({ kind: "text", tone: "error", lines: [composerCommandText().writeRefused([manifestPath])] });
+  });
+
+  it("offers /launch locally, and never in a remote extension host (it says why instead)", async () => {
+    const local = await setup().execute();
+    expect(local).toMatchObject({ action: { command: "/launch" } });
+    const { port, execute } = setup();
+    port.remote = "ssh-remote";
+    const remote = await execute();
+    expect(remote.kind === "text" ? remote.action : "no reply").toBeUndefined();
+    expect(remote.kind === "text" ? remote.lines : []).toContain(composerCommandText().launchRemote("ssh-remote"));
+    expect(remote.kind === "text" ? remote.lines : []).not.toContain(composerCommandText().launchHint);
   });
 
   it("with a builderforce.json: shows the diff against it and replaces it only on approval", async () => {

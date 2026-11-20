@@ -5,6 +5,9 @@
  * is unit-tested against an in-memory fake.
  */
 import * as path from "node:path";
+import { LAUNCH_COMMAND_ID } from "./entries";
+import type { ComposerCommandText } from "./labels";
+import type { ComposerReplyAction } from "./reply";
 import type { WriteRefusal } from "./writeContainment";
 
 export interface WorkspaceFolderRef {
@@ -46,6 +49,17 @@ export async function chooseFolder(port: ComposerWorkspacePort, placeHolder: str
   const folders = port.folders();
   if (folders.length <= 1) return folders[0];
   return port.pickFolder(placeHolder);
+}
+
+/**
+ * How a reply that wrote an app ends: the `/launch` hint and action — or, in a remote
+ * extension host where `/launch` cannot run, why not, and no action.
+ */
+export function launchFollowUp(port: ComposerWorkspacePort, text: ComposerCommandText): { line: string; action?: ComposerReplyAction } {
+  const remote = port.remoteName();
+  return remote
+    ? { line: text.launchRemote(remote) }
+    : { line: text.launchHint, action: { label: `/${LAUNCH_COMMAND_ID}`, command: `/${LAUNCH_COMMAND_ID}` } };
 }
 
 /** A project-relative POSIX path (`web/package.json`) under a folder, on this platform. */

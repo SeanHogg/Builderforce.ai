@@ -6,11 +6,11 @@
 import type { DetectionNote } from "@builderforce/app-detect";
 import type { ComposerCommandExecutor } from "./dispatch";
 import type { ComposerCommandText } from "./labels";
-import { chooseFolder, inFolder, type ComposerWorkspacePort } from "./workspacePort";
-import { LAUNCH_COMMAND_ID } from "./entries";
+import { chooseFolder, inFolder, launchFollowUp, type ComposerWorkspacePort } from "./workspacePort";
 import { writeRefusedReply } from "./writeContainment";
 
-export const MANIFEST_FILE_NAME = "builderforce.json";
+import { MANIFEST_FILE_NAME } from "@builderforce/app-detect/manifest";
+export { MANIFEST_FILE_NAME };
 
 /** A detected manifest: its text, the ids it declares, and what detection could not express. */
 export interface DetectedManifest {
@@ -58,6 +58,7 @@ export function manifestInitExecutor({ port, text, readFiles, detect, show }: Ma
     }
     if (!approved) return { kind: "text", tone: "info", lines: [text.manifestDeclined] };
     await port.writeText(file, detected.text);
+    const next = launchFollowUp(port, text);
     return {
       kind: "text",
       tone: "info",
@@ -66,9 +67,9 @@ export function manifestInitExecutor({ port, text, readFiles, detect, show }: Ma
         text.services(detected.services),
         text.resources(detected.resources),
         ...text.noteLines(detected.notes),
-        text.launchHint,
+        next.line,
       ],
-      action: { label: `/${LAUNCH_COMMAND_ID}`, command: `/${LAUNCH_COMMAND_ID}` },
+      ...(next.action ? { action: next.action } : {}),
     };
   };
 }

@@ -6,6 +6,7 @@
 import { lstat } from "node:fs/promises";
 import * as path from "node:path";
 import * as vscode from "vscode";
+import { MANIFEST_FILE_NAME } from "@builderforce/app-detect/manifest";
 import type { ShowManifest } from "./manifestInit";
 import { isMissingPath, refusedWrites, WriteRefusedError } from "./writeContainment";
 import type { ComposerWorkspacePort, WorkspaceFolderRef } from "./workspacePort";
@@ -80,7 +81,7 @@ export function registerManifestPreview(subscriptions: vscode.Disposable[]): Sho
     }),
   );
   return async (proposed, title, currentFile) => {
-    const uri = vscode.Uri.from({ scheme: PREVIEW_SCHEME, path: `/${encodeURIComponent(currentFile ?? "detected")}/builderforce.json` });
+    const uri = vscode.Uri.from({ scheme: PREVIEW_SCHEME, path: `/${encodeURIComponent(currentFile ?? "detected")}/${MANIFEST_FILE_NAME}` });
     proposals.set(uri.toString(), proposed);
     changed.fire(uri);
     if (currentFile) {

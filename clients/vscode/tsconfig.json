@@ -29,6 +29,7 @@
       "@builderforce/ide-templates": ["../../packages/ide-templates/src/index.ts"],
       "@builderforce/ide-templates/kits": ["../../packages/ide-templates/src/kits/index.ts"],
       "@builderforce/app-detect": ["../../packages/app-detect/src/index.ts"],
+      "@builderforce/app-detect/manifest": ["../../packages/app-detect/src/manifest/manifestShape.ts"],
       "@builderforce/run-context": ["../../packages/run-context/src/index.ts"],
       "@builderforce/run-delta": ["../../packages/run-delta/src/index.ts"],
       "@builderforce/run-delta/contract": ["../../packages/run-delta/src/contract.ts"],

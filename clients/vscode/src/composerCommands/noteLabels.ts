@@ -5,8 +5,8 @@ import type { KitIssue } from "@builderforce/ide-templates/kits";
 /**
  * The packages' coded findings, worded in the editor's language (`vscode.l10n`): a starter
  * kit's issues (`composeKit` → `KitIssue`) and app detection's notes and warnings
- * (`emitManifest` / `detectApp` → `DetectionNote`). One key per code; the packages keep the
- * English sentence as `message` for hosts that do not localize.
+ * (`emitManifest` / `detectApp` → `DetectionNote`). One key per code; the packages derive
+ * the English sentence (`noteMessages`) for hosts that do not localize.
  */
 
 const list = (items: readonly string[]): string => items.join(", ");
@@ -53,12 +53,16 @@ function noteBody(note: DetectionNote): string {
     case "secrets-to-vault": return t("Secrets are never written to the file: set {0} in the vault.", list(note.params.names));
     case "domains-dropped": return t("Domains are not part of manifest v1: {0}.", list(note.params.domains));
     case "ingress-api-backend": return t("Ingress sends {0} to \"{1}\" and everything else to \"{2}\": the backend must serve its routes under {0}; edit the ingress routes if it does not.", note.params.path, note.params.backend, note.params.frontend);
+    case "ingress-not-inferred": return t("No ingress was written: nothing shows that \"{0}\" serves its routes under {1} or that \"{2}\"'s dev server forwards {1} to it unchanged. If \"{2}\" calls \"{0}\" by a relative path, add an ingress route for it.", note.params.backend, note.params.path, note.params.frontend);
+    case "ingress-proxy-rewrites": return t("No ingress was written: {0} forwards {1} to the backend with the path rewritten, and the runtime's ingress passes the path through unchanged. If \"{2}\" calls \"{3}\" by a relative path, add an ingress route the backend serves as written.", note.params.file, note.params.path, note.params.frontend, note.params.backend);
+    case "ingress-ambiguous": return t("No ingress was written: routing {0} needs exactly one frontend and one backend with a port, and this app has frontends ({1}) and backends ({2}). If one calls another by a relative path, add the ingress routes by hand.", note.params.path, list(note.params.frontends), list(note.params.backends));
     case "manifest-service-unreadable": return t("service \"{0}\" has no runtime or command and was not read", note.params.service);
     case "manifest-env-differs": return t("env {0} differs between services; the first value is kept", note.params.name);
     case "manifest-runtime-unknown": return t("service \"{0}\" runs on \"{1}\", which the blueprint has no kind for; it is read as node", note.params.service, note.params.runtime);
     case "manifest-readiness-query": return t("service \"{0}\": readiness \"query\" has no blueprint form", note.params.service);
     case "manifest-resource-unmapped": return t("resource \"{0}\" ({1}) has no blueprint field; the runtime reads it from the manifest", note.params.id, note.params.type);
     case "manifest-jobs-unmapped": return t("jobs have no blueprint field; the runtime reads them from the manifest");
+    case "manifest-ingress-unmapped": return t("ingress has no blueprint field; the runtime reads it from the manifest");
     case "manifest-invalid-json": return t("{0} is not valid JSON and was ignored: {1}", note.params.file, note.params.error);
     case "manifest-not-object": return t("{0} is not a JSON object and was ignored", note.params.file);
     case "manifest-unsupported-version": return t("{0} has unsupported version {1} and was ignored", note.params.file, note.params.version);

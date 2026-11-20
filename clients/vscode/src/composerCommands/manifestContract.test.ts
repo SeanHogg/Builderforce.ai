@@ -6,7 +6,8 @@
  */
 import { describe, expect, it } from "vitest";
 import { parseManifest, validateManifest } from "@seanhogg/builderforce-webcontainers-core/manifest";
-import { composeKit, MANIFEST_FILE, NAMED_KITS } from "@builderforce/ide-templates/kits";
+import { composeKit, NAMED_KITS } from "@builderforce/ide-templates/kits";
+import { MANIFEST_FILE_NAME as MANIFEST_FILE } from "@builderforce/app-detect/manifest";
 import { detectWorkspaceManifest } from "./detectManifest";
 
 /** Parse with the runtime's ONE reader, validate again explicitly; every issue found. */
@@ -16,6 +17,21 @@ function runtimeIssues(text: string) {
 }
 
 const pkg = (body: Record<string, unknown>) => JSON.stringify(body);
+
+/** A root Vite app (package.json + vite.config.js proxying /api to a local backend) and its backend in api/. */
+const viteApp = {
+  "package.json": pkg({ name: "web", scripts: { dev: "vite" }, dependencies: { react: "19" }, devDependencies: { vite: "6" } }),
+  "vite.config.js": "import { defineConfig } from 'vite';\nexport default defineConfig({ server: { port: 5173, proxy: { '/api': 'http://localhost:8000' } } });\n",
+};
+
+/** The shapes that DO get an ingress: each must emit one, and the runtime must read it. */
+const INGRESS_FIXTURES: Record<string, Record<string, string>> = {
+  "vite + fastapi under /api": {
+    ...viteApp,
+    "api/requirements.txt": "fastapi\nuvicorn\n",
+    "api/main.py": "from fastapi import FastAPI\napp = FastAPI()\n@app.get(\"/api/items\")\ndef items(): ...\n",
+  },
+};
 
 /** The app shapes app-detect's detector tests cover, as whole folders. */
 const DETECTION_FIXTURES: Record<string, Record<string, string>> = {
@@ -45,15 +61,25 @@ const DETECTION_FIXTURES: Record<string, Record<string, string>> = {
     "api/requirements.txt": "fastapi\nuvicorn\n",
     "api/main.py": "from fastapi import FastAPI\napp = FastAPI()\n",
   },
+  ...INGRESS_FIXTURES,
 };
 
 describe("manifests the extension writes parse cleanly in the runtime", () => {
   it.each([...NAMED_KITS])("starter kit %s: builderforce.json parses and validates with zero issues", (kitId) => {
     const kit = composeKit(kitId);
     expect(kit.issues).toEqual([]);
-    const { manifest, issues } = runtimeIssues(kit.files[MANIFEST_FILE] ?? kit.manifestText);
+    const text = kit.files[MANIFEST_FILE];
+    expect(text).toBeDefined();
+    const { manifest, issues } = runtimeIssues(text!);
     expect(manifest).not.toBeNull();
     expect(issues).toEqual([]);
+  });
+
+  it.each(Object.keys(INGRESS_FIXTURES))("detected app %s: emits the /api ingress, and the runtime reads it with zero issues", (name) => {
+    const detected = detectWorkspaceManifest(new Map(Object.entries(INGRESS_FIXTURES[name]!)));
+    const { manifest, issues } = runtimeIssues(detected.text);
+    expect(issues).toEqual([]);
+    expect(manifest?.ingress?.routes.map((route) => route.path)).toEqual(["/api", "/"]);
   });
 
   it.each(Object.keys(DETECTION_FIXTURES))("detected app %s: detect → emitManifest → parse + validate with zero issues", (name) => {

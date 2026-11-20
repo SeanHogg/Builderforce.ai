@@ -3,6 +3,7 @@
  * `/api` proxied to the kit's backend, and the npm-run fragment. The user's app source,
  * so deliberately not localized.
  */
+import { BACKEND_INGRESS_PATH } from '@builderforce/app-detect/manifest';
 import type { ManifestFragment } from '../types';
 import { frontendFragment, KIT_API_PORT, KIT_WEB_PORT } from './fragments';
 
@@ -17,7 +18,7 @@ export default defineConfig({
   plugins: [${plugin}],
   server: {
     port: ${KIT_WEB_PORT},
-    proxy: { '/api': 'http://localhost:${KIT_API_PORT}' },
+    proxy: { '${BACKEND_INGRESS_PATH}': 'http://localhost:${KIT_API_PORT}' },
   },
 });`;
 }

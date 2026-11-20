@@ -101,10 +101,12 @@ export interface EmittedJob {
   invoke: { service: string; method: 'GET'; path: string };
 }
 
+/** An environment either writer emits: `emitManifest`'s local browser one, the starter kits' local + production ones. */
 export interface EmittedEnvironment {
-  target: 'browser';
-  tier: 'non-production';
-  debug: true;
+  target: 'browser' | 'cloudflare' | 'aws' | 'azure' | 'gcp';
+  tier: 'production' | 'non-production';
+  /** Non-production only. */
+  debug?: boolean;
 }
 
 export interface EmittedIngressRoute {

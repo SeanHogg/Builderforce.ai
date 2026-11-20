@@ -28,6 +28,7 @@ import { phpDetector } from './phpDetector';
 import { dotnetDetector } from './dotnetDetector';
 import { rustDetector } from './rustDetector';
 import { detectionNote, errorText } from '../notes';
+import { KIND_MANIFEST_RUNTIME, runtimeRoot } from '../manifest/serviceRuntime';
 
 /** All available detectors */
 export const DETECTORS: AppDetector[] = [
@@ -161,16 +162,34 @@ function createEmptySources(): BlueprintSourceFlags {
   };
 }
 
+const isFrontend = (service: AppService): boolean => (service.role ?? KIND_MANIFEST_RUNTIME[service.kind]?.role) === 'frontend';
+
+/** The folder a service runs in, normalised (`.`, `./`, `` → `.`; `./web/` → `web`). */
+const rootOf = (service: AppService): string => runtimeRoot(service.rootDir);
+
+/**
+ * Merge `incoming` into `existing`: by id, later detectors overriding earlier ones. A
+ * FRONTEND with a new id in a root that already has a frontend is the same app seen through
+ * another file (the Vite config beside the `package.json` that runs it), so it folds into
+ * that service — the earlier one keeps its id and commands, the later only fills what it
+ * lacked — never a second frontend at one root.
+ */
 function mergeServices(existing: AppService[], incoming: AppService[]): AppService[] {
   if (!existing || existing.length === 0) {
     return incoming;
   }
-  
-  // Merge: incoming overrides existing by id
+
   const byId = new Map(existing.map(s => [s.id, s]));
   for (const service of incoming) {
+    const twin = byId.has(service.id) || !isFrontend(service)
+      ? undefined
+      : [...byId.values()].find((s) => isFrontend(s) && rootOf(s) === rootOf(service));
+    if (twin) {
+      byId.set(twin.id, { ...service, ...twin });
+      continue;
+    }
     byId.set(service.id, { ...byId.get(service.id), ...service });
   }
-  
+
   return Array.from(byId.values());
 }

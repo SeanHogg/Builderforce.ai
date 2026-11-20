@@ -1401,6 +1401,9 @@
   "Secrets are never written to the file: set {0} in the vault.": "Los secretos nunca se escriben en el archivo: define {0} en la bóveda.",
   "Domains are not part of manifest v1: {0}.": "Los dominios no forman parte del manifiesto v1: {0}.",
   "Ingress sends {0} to \"{1}\" and everything else to \"{2}\": the backend must serve its routes under {0}; edit the ingress routes if it does not.": "El ingress envía {0} a «{1}» y todo lo demás a «{2}»: el backend debe servir sus rutas bajo {0}; edita las rutas de ingress si no es así.",
+  "No ingress was written: nothing shows that \"{0}\" serves its routes under {1} or that \"{2}\"'s dev server forwards {1} to it unchanged. If \"{2}\" calls \"{0}\" by a relative path, add an ingress route for it.": "No se escribió ningún ingress: nada indica que «{0}» sirva sus rutas bajo {1} ni que el servidor de desarrollo de «{2}» le reenvíe {1} sin cambios. Si «{2}» llama a «{0}» por una ruta relativa, añade una ruta de ingress para ello.",
+  "No ingress was written: {0} forwards {1} to the backend with the path rewritten, and the runtime's ingress passes the path through unchanged. If \"{2}\" calls \"{3}\" by a relative path, add an ingress route the backend serves as written.": "No se escribió ningún ingress: {0} reenvía {1} al backend con la ruta reescrita, y el ingress del runtime pasa la ruta sin cambios. Si «{2}» llama a «{3}» por una ruta relativa, añade una ruta de ingress que el backend sirva tal como está escrita.",
+  "ingress has no blueprint field; the runtime reads it from the manifest": "ingress no tiene campo en el blueprint; el runtime lo lee del manifiesto",
   "service \"{0}\" has no runtime or command and was not read": "el servicio \"{0}\" no tiene runtime ni comando y no se leyó",
   "env {0} differs between services; the first value is kept": "env {0} difiere entre servicios; se conserva el primer valor",
   "service \"{0}\" runs on \"{1}\", which the blueprint has no kind for; it is read as node": "el servicio \"{0}\" se ejecuta en \"{1}\", para el que el blueprint no tiene tipo; se lee como node",
@@ -1417,5 +1420,8 @@
   "{0} service \"{1}\": image \"{2}\" is not supported by the browser runtime": "{0} servicio \"{1}\": la imagen \"{2}\" no es compatible con el runtime del navegador",
   "{0} service \"{1}\": image \"{2}\" is a {3} resource, which the blueprint has no field for — the manifest declares it": "{0} servicio \"{1}\": la imagen \"{2}\" es un recurso {3}, para el que el blueprint no tiene campo — el manifiesto lo declara",
   "detector {0} failed: {1}": "el detector {0} falló: {1}",
+  "it is a symbolic link or leads outside the workspace folder": "es un enlace simbólico o sale de la carpeta del área de trabajo",
+  "Writing the starter kit stopped at {0}: {1}. Files already written: {2}": "La escritura del kit de inicio se detuvo en {0}: {1}. Archivos ya escritos: {2}",
+  "No ingress was written: routing {0} needs exactly one frontend and one backend with a port, and this app has frontends ({1}) and backends ({2}). If one calls another by a relative path, add the ingress routes by hand.": "No se escribió ningún ingress: enrutar {0} requiere exactamente un frontend y un backend con puerto, y esta aplicación tiene los frontends ({1}) y los backends ({2}). Si uno llama a otro por una ruta relativa, añade las rutas de ingress a mano.",
   "{0}: {1}": "{0}: {1}"
 }

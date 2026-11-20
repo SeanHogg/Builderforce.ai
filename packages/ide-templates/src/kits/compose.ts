@@ -9,12 +9,13 @@
  */
 import { findKitPart, KIT_PARTS, listKitOptions } from './registry';
 import type {
-  ComposedKit, KitDefinition, KitIssue, KitIssueCode, KitIssueParams, KitManifest, KitPart, ManifestResource, ManifestRoute,
-  ManifestService,
+  ComposedKit, KitDefinition, KitIssue, KitIssueCode, KitIssueParams, KitManifest, KitPart,
 } from './types';
+import {
+  BACKEND_INGRESS_PATH, MANIFEST_FILE_NAME, MANIFEST_SCHEMA_URL,
+  type EmittedIngressRoute, type EmittedResource, type EmittedService,
+} from '@builderforce/app-detect/manifest';
 
-export const MANIFEST_SCHEMA_URL = 'https://builderforce.ai/schema/app.v1.json';
-export const MANIFEST_FILE = 'builderforce.json';
 export const KIT_README_FILE = 'README.md';
 
 /** Every kit environment: run locally in the browser with diagnostics, promote to Cloudflare. */
@@ -79,12 +80,12 @@ A Builderforce starter kit composed from:
 
 ${lines.join('\n')}
 
-\`${MANIFEST_FILE}\` declares every service, resource and environment. To run the whole app:
+\`${MANIFEST_FILE_NAME}\` declares every service, resource and environment. To run the whole app:
 
 - in Builderforce or the VS Code extension, type \`/launch\` in the composer (or choose **Run in browser**);
 - \`/launch prod\` runs the production environment's settings.
 
-The API answers \`GET /health\`, \`GET /api/items\` and \`POST /api/items\`; the web app calls it through \`/api\`.
+The API answers \`GET /health\`, \`GET /api/items\` and \`POST /api/items\`; the web app calls it through \`${BACKEND_INGRESS_PATH}\`.
 `;
 }
 
@@ -92,8 +93,8 @@ The API answers \`GET /health\`, \`GET /api/items\` and \`POST /api/items\`; the
 export function composeParts(name: string, parts: readonly KitPart[]): ComposedKit {
   const issues: KitIssue[] = [];
   const files: Record<string, string> = {};
-  const services: Record<string, ManifestService> = {};
-  const resources: Record<string, ManifestResource> = {};
+  const services: Record<string, EmittedService> = {};
+  const resources: Record<string, EmittedResource> = {};
   const owner = new Map<string, string>();
 
   const claim = (code: 'path-conflict' | 'service-conflict' | 'resource-conflict', key: string, partId: string): boolean => {
@@ -141,7 +142,7 @@ export function composeParts(name: string, parts: readonly KitPart[]): ComposedK
   if (web && backend && services[backend.serviceId]) web.dependsOn = [...new Set([...(web.dependsOn ?? []), backend.serviceId])];
 
   // Longest path first, so `/api` wins over `/`.
-  const routes: ManifestRoute[] = parts
+  const routes: EmittedIngressRoute[] = parts
     .filter((part) => part.ingress !== undefined && services[part.serviceId])
     .map((part) => ({ path: part.ingress!, service: part.serviceId }))
     .sort((a, b) => b.path.length - a.path.length);
@@ -156,7 +157,7 @@ export function composeParts(name: string, parts: readonly KitPart[]): ComposedK
     environments: kitEnvironments(),
   };
   const manifestText = `${JSON.stringify(manifest, null, 2)}\n`;
-  for (const [path, content] of [[KIT_README_FILE, kitReadme(name, parts)], [MANIFEST_FILE, manifestText]] as const) {
+  for (const [path, content] of [[KIT_README_FILE, kitReadme(name, parts)], [MANIFEST_FILE_NAME, manifestText]] as const) {
     if (claim('path-conflict', path, 'kit')) files[path] = content;
   }
   return { files, manifest, manifestText, issues };

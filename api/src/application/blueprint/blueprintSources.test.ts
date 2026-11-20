@@ -10,7 +10,7 @@ import type { BlueprintDetector } from '@builderforce/creation-canvas-contract';
 import type { ListFilesResult, ReadFileResult, RepoReadContext } from '../repos/readRepoContents';
 import { BLUEPRINT_BROWSE_PAGES, blueprintSourcePaths, FOLLOW_READ_RESERVE, MAX_PROVIDER_CALLS, readBlueprintSources, type BlueprintSourceIo } from './blueprintSources';
 import type { FetchLike } from '../repos/sources/RepoSource';
-import { DETECTORS, detectDotnet, repoRelativePath } from '@builderforce/app-detect';
+import { DETECTOR_BY_ID, DETECTORS, detectDotnet, repoRelativePath } from '@builderforce/app-detect';
 
 const CTX: RepoReadContext = { provider: 'github', host: null, owner: 'acme', repo: 'app', token: 't', ref: 'abc' };
 
@@ -66,6 +66,10 @@ describe('blueprintSourcePaths', () => {
 
   it('the exact paths alone fit the read budget, with the follow reserve left', () => {
     expect(blueprintSourcePaths().exact.length).toBeLessThan(MAX_PROVIDER_CALLS - FOLLOW_READ_RESERVE);
+  });
+
+  it('the ingress evidence detector adds at most 16 read patterns (its backend sources are follow reads)', () => {
+    expect(DETECTOR_BY_ID.get('ingress-evidence')!.reads.length).toBeLessThanOrEqual(16);
   });
 });
 

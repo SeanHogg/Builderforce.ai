@@ -1401,6 +1401,9 @@
   "Secrets are never written to the file: set {0} in the vault.": "机密从不写入文件：请在保管库中设置 {0}。",
   "Domains are not part of manifest v1: {0}.": "域名不属于清单 v1：{0}。",
   "Ingress sends {0} to \"{1}\" and everything else to \"{2}\": the backend must serve its routes under {0}; edit the ingress routes if it does not.": "入口将 {0} 发送到“{1}”，其余请求发送到“{2}”：后端必须在 {0} 下提供其路由；如果不是这样，请编辑入口路由。",
+  "No ingress was written: nothing shows that \"{0}\" serves its routes under {1} or that \"{2}\"'s dev server forwards {1} to it unchanged. If \"{2}\" calls \"{0}\" by a relative path, add an ingress route for it.": "未写入入口：没有任何迹象表明“{0}”在 {1} 下提供其路由，或“{2}”的开发服务器会原样将 {1} 转发给它。如果“{2}”通过相对路径调用“{0}”，请为其添加一条入口路由。",
+  "No ingress was written: {0} forwards {1} to the backend with the path rewritten, and the runtime's ingress passes the path through unchanged. If \"{2}\" calls \"{3}\" by a relative path, add an ingress route the backend serves as written.": "未写入入口：{0} 在重写路径后将 {1} 转发给后端，而运行时的入口会原样传递路径。如果“{2}”通过相对路径调用“{3}”，请添加一条后端按原样提供的入口路由。",
+  "ingress has no blueprint field; the runtime reads it from the manifest": "入口没有对应的蓝图字段；运行时会从清单中读取它",
   "service \"{0}\" has no runtime or command and was not read": "服务“{0}”没有运行时或命令，未被读取",
   "env {0} differs between services; the first value is kept": "env {0} 在各服务之间不同；保留第一个值",
   "service \"{0}\" runs on \"{1}\", which the blueprint has no kind for; it is read as node": "服务“{0}”运行在“{1}”上，蓝图中没有对应的类型；按 node 读取",
@@ -1417,5 +1420,8 @@
   "{0} service \"{1}\": image \"{2}\" is not supported by the browser runtime": "{0} 服务“{1}”：浏览器运行时不支持镜像“{2}”",
   "{0} service \"{1}\": image \"{2}\" is a {3} resource, which the blueprint has no field for — the manifest declares it": "{0} 服务“{1}”：镜像“{2}”是 {3} 资源，蓝图中没有对应字段——由清单声明它",
   "detector {0} failed: {1}": "检测器 {0} 失败：{1}",
+  "it is a symbolic link or leads outside the workspace folder": "它是符号链接，或指向工作区文件夹之外",
+  "Writing the starter kit stopped at {0}: {1}. Files already written: {2}": "写入入门套件时在 {0} 处停止：{1}。已写入的文件：{2}",
+  "No ingress was written: routing {0} needs exactly one frontend and one backend with a port, and this app has frontends ({1}) and backends ({2}). If one calls another by a relative path, add the ingress routes by hand.": "未写入 ingress：路由 {0} 需要恰好一个带端口的前端和一个带端口的后端，而此应用有前端（{1}）和后端（{2}）。如果其中一个通过相对路径调用另一个，请手动添加 ingress 路由。",
   "{0}: {1}": "{0}：{1}"
 }

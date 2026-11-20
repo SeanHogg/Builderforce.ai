@@ -3,6 +3,7 @@
  * pg8000 is pure Python, the driver the browser runtime's Python reaches Postgres with
  * (psycopg/asyncpg need native code it cannot load).
  */
+import { BACKEND_INGRESS_PATH } from '@builderforce/app-detect/manifest';
 import type { KitPart } from '../types';
 import { ITEMS_MIGRATION, MEMORY_NOTE } from './backendContract';
 import { backendFragment, KIT_API_PORT } from './fragments';
@@ -93,7 +94,7 @@ export const PYTHON_FASTAPI: KitPart = {
   aliases: ['fastapi', 'python'],
   serviceId: 'api',
   root: '/api',
-  ingress: '/api',
+  ingress: BACKEND_INGRESS_PATH,
   files: { 'requirements.txt': REQUIREMENTS, 'main.py': MAIN_PY },
   manifest: backendFragment({
     runtime: 'python',

@@ -8,6 +8,7 @@
  * compiles Angular 17–20 standalone apps itself (JIT) from `angular.json`, while `ng
  * serve` is not handed off and would try to boot the CLI's own bundler.
  */
+import { BACKEND_INGRESS_PATH } from '@builderforce/app-detect/manifest';
 import type { KitPart } from '../types';
 import { frontendFragment, KIT_API_PORT, KIT_WEB_PORT } from './fragments';
 
@@ -106,7 +107,7 @@ const TSCONFIG_APP = JSON.stringify({
   include: ['src/**/*.d.ts'],
 }, null, 2);
 
-const PROXY_CONF = JSON.stringify({ '/api': { target: `http://localhost:${KIT_API_PORT}`, secure: false } }, null, 2);
+const PROXY_CONF = JSON.stringify({ [BACKEND_INGRESS_PATH]: { target: `http://localhost:${KIT_API_PORT}`, secure: false } }, null, 2);
 
 const INDEX_HTML = `<!doctype html>
 <html lang="en">

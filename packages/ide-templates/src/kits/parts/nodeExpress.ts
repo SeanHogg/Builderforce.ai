@@ -1,4 +1,5 @@
 /** The `node-express` backend part: Express + `pg`, on `PORT` (default 8000). */
+import { BACKEND_INGRESS_PATH } from '@builderforce/app-detect/manifest';
 import type { KitPart } from '../types';
 import { ITEMS_MIGRATION, MEMORY_NOTE } from './backendContract';
 import { backendFragment, KIT_API_PORT } from './fragments';
@@ -81,7 +82,7 @@ export const NODE_EXPRESS: KitPart = {
   aliases: ['node', 'express'],
   serviceId: 'api',
   root: '/api',
-  ingress: '/api',
+  ingress: BACKEND_INGRESS_PATH,
   files: { 'package.json': PACKAGE_JSON, 'server.js': SERVER_JS },
   manifest: backendFragment({ runtime: 'node', command: 'npm start', install: 'npm install' }),
 };

@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { refusedWrites, writeRefusal, type ContainmentFs } from "./writeContainment";
+import { refusedWrites, within, writeRefusal, type ContainmentFs } from "./writeContainment";
 
 /**
  * Directory links are made as JUNCTIONS: Windows creates those without the symlink
@@ -84,6 +84,16 @@ describe("write containment (file links and real paths)", () => {
     const web = path.join(root, "web");
     const fs = fakeFs([], [web], { [web]: path.resolve("/elsewhere/web") });
     expect(await writeRefusal(path.join(web, "package.json"), root, fs)).toBe("outside-folder");
+  });
+
+  it("allows a name that only starts with two dots (`..config`); a `..` segment still leaves", async () => {
+    const dotted = path.join(root, "..config");
+    expect(within(root, dotted)).toBe(true);
+    expect(within(root, path.join(root, "..config", "x.json"))).toBe(true);
+    expect(await writeRefusal(dotted, root, fakeFs([], []))).toBeUndefined();
+    expect(within(root, path.join(root, ".."))).toBe(false);
+    expect(within(root, path.join(root, "..", "sibling"))).toBe(false);
+    expect(within(root, path.resolve("/elsewhere"))).toBe(false);
   });
 
   it("accepts a folder that is itself reached through a link (both real paths agree)", async () => {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { composeKit, composeParts, resolveKit, MANIFEST_FILE, MANIFEST_SCHEMA_URL } from './compose';
+import { MANIFEST_FILE_NAME as MANIFEST_FILE, MANIFEST_SCHEMA_URL } from '@builderforce/app-detect/manifest';
+import { composeKit, composeParts, resolveKit } from './compose';
 import { KIT_PARTS, NAMED_KITS, listKitOptions } from './registry';
 import type { KitPart } from './types';
 

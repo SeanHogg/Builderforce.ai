@@ -6,14 +6,16 @@
  * - A folder holding anything besides `.git` / `.vscode` needs a modal approval first,
  *   which names every file that would be overwritten. Declined ⇒ nothing is written.
  * - A path that is a symbolic link, or leads outside the folder, writes NOTHING and is
- *   named in the reply (`writeContainment.ts`).
+ *   named in the reply (`writeContainment.ts`). Every path is checked first; a write that
+ *   still fails partway (the folder changed meanwhile) names the file and every file
+ *   already written.
+ * - In a remote extension host the reply offers no `/launch` (it cannot run there).
  */
 import { composeKit } from "@builderforce/ide-templates/kits";
 import type { ComposerCommandExecutor } from "./dispatch";
 import type { ComposerCommandText } from "./labels";
-import { chooseFolder, inFolder, type ComposerWorkspacePort } from "./workspacePort";
-import { LAUNCH_COMMAND_ID } from "./entries";
-import { writeRefusedReply } from "./writeContainment";
+import { chooseFolder, inFolder, launchFollowUp, type ComposerWorkspacePort } from "./workspacePort";
+import { WriteRefusedError, writeRefusedReply } from "./writeContainment";
 
 /** Entries a fresh folder may already hold: version control and editor settings. */
 const IGNORED_ENTRIES = new Set([".git", ".vscode"]);
@@ -53,7 +55,18 @@ export function starterKitExecutor({ port, text }: StarterKitDeps): ComposerComm
       if (!approved) return { kind: "text", tone: "info", lines: [text.kitDeclined(folder.name)] };
     }
 
-    for (const file of paths) await port.writeText(inFolder(folder, file), kit.files[file]!);
+    const written: string[] = [];
+    for (const file of paths) {
+      try {
+        await port.writeText(inFolder(folder, file), kit.files[file]!);
+      } catch (error) {
+        // A write refused (or failing) partway: name the file, and every file already written.
+        const reason = error instanceof WriteRefusedError ? text.writeRefusedReason : messageOf(error);
+        return { kind: "text", tone: "error", lines: [text.kitStopped(file, reason, written)] };
+      }
+      written.push(file);
+    }
+    const next = launchFollowUp(port, text);
     return {
       kind: "text",
       tone: "info",
@@ -61,9 +74,11 @@ export function starterKitExecutor({ port, text }: StarterKitDeps): ComposerComm
         text.kitWritten(kitId, paths.length, folder.name),
         text.services(Object.keys(kit.manifest.services)),
         text.resources(Object.keys(kit.manifest.resources ?? {})),
-        text.launchHint,
+        next.line,
       ],
-      action: { label: `/${LAUNCH_COMMAND_ID}`, command: `/${LAUNCH_COMMAND_ID}` },
+      ...(next.action ? { action: next.action } : {}),
     };
   };
 }
+
+const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));

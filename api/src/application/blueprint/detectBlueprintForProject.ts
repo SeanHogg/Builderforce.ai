@@ -9,7 +9,7 @@
  * in a `waitUntil`.
  */
 
-import { detectApp } from '@builderforce/app-detect';
+import { detectApp, noteMessages } from '@builderforce/app-detect';
 import type { AppBlueprint } from '@builderforce/creation-canvas-contract';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -83,7 +83,8 @@ export async function detectBlueprintForProject(
       }),
     });
     await deps.storeBlueprint(db, projectId, sha, blueprint, env);
-    return { ok: true, blueprint, warnings: metadata.warnings };
+    // Detection stores its warnings coded; the API's result carries their English sentences.
+    return { ok: true, blueprint, warnings: noteMessages(metadata.warnings) };
   } catch (error) {
     reportCaughtError(error, {
       source: 'application/blueprint/detectBlueprintForProject.ts',

@@ -32,6 +32,10 @@ export interface ComposerCommandText extends ComposerCommandLabels {
   noteLines(notes: readonly DetectionNote[]): string[];
   /** Nothing was written: these paths are symbolic links or lead outside the workspace folder (`writeContainment.ts`). */
   writeRefused(paths: readonly string[]): string;
+  /** Why a write was refused partway (`kitStopped`'s reason for a `WriteRefusedError`). */
+  writeRefusedReason: string;
+  /** A starter-kit write failed partway: the file, why, and every file already written. */
+  kitStopped(file: string, reason: string, written: readonly string[]): string;
   /** Which workspace folder a command works on (several are open). */
   pickFolder: string;
   noFolderChosen: string;
@@ -112,6 +116,9 @@ export function composerCommandText(): ComposerCommandText {
     kitIssue: kitIssueText,
     noteLines: (notes) => (notes.length > 0 ? [t("Notes:"), ...notes.map(detectionNoteText)] : []),
     writeRefused: (paths) => t("Nothing was written: these paths are symbolic links or lead outside the workspace folder: {0}", paths.join(", ")),
+    writeRefusedReason: t("it is a symbolic link or leads outside the workspace folder"),
+    kitStopped: (file, reason, written) =>
+      t("Writing the starter kit stopped at {0}: {1}. Files already written: {2}", file, reason, written.length > 0 ? written.join(", ") : t("none")),
     pickFolder: t("Choose the workspace folder for this command"),
     noFolderChosen: t("No folder was chosen, so nothing was done."),
     kitNonEmpty: (folder, fileCount) => t("{0} is not empty. Write the starter kit's {1} files into it? No existing file is overwritten.", folder, fileCount),

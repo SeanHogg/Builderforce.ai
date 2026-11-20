@@ -11,6 +11,7 @@
  * `php -S` runs every request in a fresh PHP execution, so the no-database fallback is a
  * JSON file in the temp directory rather than memory: memory would empty per request.
  */
+import { BACKEND_INGRESS_PATH } from '@builderforce/app-detect/manifest';
 import type { KitPart } from '../types';
 import { ITEMS_MIGRATION, MEMORY_NOTE } from './backendContract';
 import { backendFragment, KIT_API_PORT } from './fragments';
@@ -151,7 +152,7 @@ export const LARAVEL: KitPart = {
   aliases: ['php', 'slim'],
   serviceId: 'api',
   root: '/api',
-  ingress: '/api',
+  ingress: BACKEND_INGRESS_PATH,
   files: {
     'composer.json': COMPOSER_JSON,
     'public/index.php': INDEX_PHP,

@@ -43,10 +43,14 @@ export const isMissingPath = (error: unknown): boolean => {
   return code === "ENOENT" || code === "ENOTDIR";
 };
 
-/** Is `candidate` the directory `root` or below it? (`path.relative` compares case-insensitively on Windows.) */
-function within(root: string, candidate: string): boolean {
+/**
+ * Is `candidate` the directory `root` or below it? (`path.relative` compares case-insensitively on Windows.)
+ * Only a `..` SEGMENT leaves the folder: `..config` is a name inside it. Exported for tests.
+ */
+export function within(root: string, candidate: string): boolean {
   const relative = path.relative(root, candidate);
-  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+  if (relative === "") return true;
+  return !path.isAbsolute(relative) && relative !== ".." && !relative.startsWith(`..${path.sep}`);
 }
 
 /** Why `file` may not be written in the folder at `root`; undefined when it may. */

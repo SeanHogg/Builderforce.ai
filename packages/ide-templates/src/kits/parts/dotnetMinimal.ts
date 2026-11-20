@@ -5,6 +5,7 @@
  * — and references only packages that bundle carries (Npgsql; any version resolves to the
  * bundled one). `dotnet run` restores and builds by itself, so there is no install step.
  */
+import { BACKEND_INGRESS_PATH } from '@builderforce/app-detect/manifest';
 import type { KitPart } from '../types';
 import { ITEMS_MIGRATION, MEMORY_NOTE } from './backendContract';
 import { backendFragment, KIT_API_PORT } from './fragments';
@@ -130,7 +131,7 @@ export const DOTNET_MINIMAL: KitPart = {
   aliases: ['dotnet', 'aspnet'],
   serviceId: 'api',
   root: '/api',
-  ingress: '/api',
+  ingress: BACKEND_INGRESS_PATH,
   files: { 'Api.csproj': CSPROJ, 'Program.cs': PROGRAM_CS, 'ItemStore.cs': ITEM_STORE_CS },
   manifest: backendFragment({ runtime: 'dotnet', command: 'dotnet run' }),
 };

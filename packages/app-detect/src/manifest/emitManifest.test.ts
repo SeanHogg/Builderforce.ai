@@ -215,6 +215,28 @@ describe('emitManifest — ingress', () => {
     expect(codedNotes.some((note) => note.code === 'ingress-not-inferred')).toBe(false);
   });
 
+  it('says why when more than one frontend or backend leaves no single ingress', () => {
+    const { notes } = emitManifest(blueprint({
+      services: [
+        service({ id: 'web', kind: 'vite-react', rootDir: 'web', ports: [5173], isPrimary: true }),
+        service({ id: 'admin', kind: 'vite-react', rootDir: 'admin', ports: [5174] }),
+        service({ id: 'api', kind: 'node', rootDir: 'api', ports: [8000] }),
+      ],
+    }), { ingressEvidence: API_ROUTES });
+    expect(notes).toContainEqual({ code: 'ingress-ambiguous', params: { frontends: ['web', 'admin'], backends: ['api'], path: '/api' } });
+    expect(noteMessages(notes).some((n) => n.includes('frontends (web, admin) and backends (api)'))).toBe(true);
+  });
+
+  it('counts evidence only from its own service: routes under the backend root, a proxy under the frontend root', () => {
+    const outside: IngressEvidence[] = [{ kind: 'backend-routes', file: 'mock/server.js' }, { kind: 'dev-proxy', file: 'api/vite.config.js' }];
+    const { manifest, notes } = emitManifest(CANVAS_APP, { ingressEvidence: outside });
+    expect(manifest.ingress).toBeUndefined();
+    expect(notes.some((note) => note.code === 'ingress-not-inferred')).toBe(true);
+    // A rewriting proxy outside the frontend is not counter-evidence either.
+    const rewrite = emitManifest(CANVAS_APP, { ingressEvidence: [{ kind: 'proxy-rewrite', file: 'other/vite.config.ts' }] });
+    expect(rewrite.notes.some((note) => note.code === 'ingress-proxy-rewrites')).toBe(false);
+  });
+
   it('writes no ingress for a frontend alone', () => {
     const { manifest } = emitManifest(blueprint({ services: [service({ id: 'web', kind: 'vite-react', ports: [5173], isPrimary: true })] }));
     expect(manifest.ingress).toBeUndefined();

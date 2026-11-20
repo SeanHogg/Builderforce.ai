@@ -1,9 +1,9 @@
 /**
  * Detection notes as data (PRD 31 §W11): every warning detection reports and every note
- * `emitManifest` / `manifestToBlueprintOverrides` writes is a typed code + params, with
- * its English sentence as `message` — the default for hosts that do not localize (the
- * API stores `metadata.warnings` as those strings). Hosts that localize (the VS Code
- * extension's `/manifest init`) word each note from `code` + `params`.
+ * `emitManifest` / `manifestToBlueprintOverrides` writes is a typed code + params,
+ * stored in that one form. Its English sentence is derived at the edge (`noteMessages`) for
+ * hosts that do not localize (the API stores `metadata.warnings` as those strings). Hosts
+ * that localize (the VS Code extension's `/manifest init`) word each note from `code` + `params`.
  *
  * The English templates live HERE, once; producers call `detectionNote(code, params)`.
  */
@@ -32,6 +32,7 @@ export interface DetectionNoteParams {
   'ingress-api-backend': { frontend: string; backend: string; path: string };
   'ingress-not-inferred': { frontend: string; backend: string; path: string };
   'ingress-proxy-rewrites': { frontend: string; backend: string; path: string; file: string };
+  'ingress-ambiguous': { frontends: readonly string[]; backends: readonly string[]; path: string };
   // manifestToBlueprintOverrides (reading a builderforce.json v1)
   'manifest-service-unreadable': { service: string };
   'manifest-env-differs': { name: string };
@@ -57,14 +58,16 @@ export interface DetectionNoteParams {
 
 export type DetectionNoteCode = keyof DetectionNoteParams;
 
-/** One note: code + params, the English sentence, and the file it was read from (when one prefixes it). */
+/**
+ * One note: code + params, and the file it was read from (when one prefixes it) — the ONE
+ * stored form. Its English sentence is derived (`noteMessages`); hosts that localize word
+ * it from `code` + `params` (and `source`) instead.
+ */
 export type DetectionNote = {
   [C in DetectionNoteCode]: {
     code: C;
     params: DetectionNoteParams[C];
-    /** English; hosts that localize word it from `code` + `params` (and `source`) instead. */
-    message: string;
-    /** The file the note is about, prefixed to `message` (`builderforce.json: …`). */
+    /** The file the note is about, prefixed to its sentence (`builderforce.json: …`). */
     source?: string;
   };
 }[DetectionNoteCode];
@@ -97,6 +100,8 @@ const ENGLISH: { [C in DetectionNoteCode]: (p: DetectionNoteParams[C]) => string
     `No ingress was written: nothing shows that "${p.backend}" serves its routes under ${p.path} or that "${p.frontend}"'s dev server forwards ${p.path} to it unchanged. If "${p.frontend}" calls "${p.backend}" by a relative path, add an ingress route for it.`,
   'ingress-proxy-rewrites': (p) =>
     `No ingress was written: ${p.file} forwards ${p.path} to the backend with the path rewritten, and the runtime's ingress passes the path through unchanged. If "${p.frontend}" calls "${p.backend}" by a relative path, add an ingress route the backend serves as written.`,
+  'ingress-ambiguous': (p) =>
+    `No ingress was written: routing ${p.path} needs exactly one frontend and one backend with a port, and this app has frontends (${list(p.frontends)}) and backends (${list(p.backends)}). If one calls another by a relative path, add the ingress routes by hand.`,
   'manifest-service-unreadable': (p) => `service "${p.service}" has no runtime or command and was not read`,
   'manifest-env-differs': (p) => `env ${p.name} differs between services; the first value is kept`,
   'manifest-runtime-unknown': (p) => `service "${p.service}" runs on "${p.runtime}", which the blueprint has no kind for; it is read as node`,
@@ -117,14 +122,20 @@ const ENGLISH: { [C in DetectionNoteCode]: (p: DetectionNoteParams[C]) => string
   'detector-failed': (p) => `detector ${p.detector} failed: ${p.error}`,
 };
 
-/** A note: its code, params and English sentence. */
+/** A note: its code and params. */
 export function detectionNote<C extends DetectionNoteCode>(code: C, params: DetectionNoteParams[C]): DetectionNote {
-  return { code, params, message: ENGLISH[code](params) } as DetectionNote;
+  return { code, params } as DetectionNote;
 }
 
-/** The same note, read from `source`: the English sentence gains the `source: ` prefix. */
+/** The same note, read from `source`: its sentence gains the `source: ` prefix. */
 export function noteFrom(source: string, note: DetectionNote): DetectionNote {
-  return { ...note, source, message: `${source}: ${note.message}` };
+  return { ...note, source };
+}
+
+/** One note's English sentence: the template filled from its params, `source: ` first when it has one. */
+function noteMessage(note: DetectionNote): string {
+  const body = (ENGLISH[note.code] as (p: DetectionNote['params']) => string)(note.params);
+  return note.source === undefined ? body : `${note.source}: ${body}`;
 }
 
 /** An error as the text a note carries. */
@@ -140,5 +151,5 @@ export function warningFindings(notes: readonly DetectionNote[]): { warnings?: D
  * stores or shows text (the API's `metadata.warnings`). Coded notes are the only stored form.
  */
 export function noteMessages(notes: readonly DetectionNote[]): string[] {
-  return notes.map((note) => note.message);
+  return notes.map(noteMessage);
 }

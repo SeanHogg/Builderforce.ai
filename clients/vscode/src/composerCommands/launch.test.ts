@@ -1,6 +1,6 @@
 import * as path from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { detectionNote, noteFrom, type DetectionNote } from "@builderforce/app-detect";
+import { detectionNote, noteFrom, noteMessages, type DetectionNote } from "@builderforce/app-detect";
 
 vi.mock("vscode", () => ({
   l10n: { t: (message: string, ...args: unknown[]) => message.replace(/\{(\d+)\}/g, (_, index: string) => String(args[Number(index)])) },
@@ -52,7 +52,7 @@ describe("/launch", () => {
       text.launchDetected,
       ...text.noteLines(notes),
     ]);
-    expect(text.noteLines(notes)).toEqual(["Notes:", ...notes.map((note) => note.message)]);
+    expect(text.noteLines(notes)).toEqual(["Notes:", ...noteMessages(notes)]);
   });
 
   it("runs the folder's own builderforce.json, in the environment asked for", async () => {

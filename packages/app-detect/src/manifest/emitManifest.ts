@@ -206,22 +206,37 @@ function emitJobs(blueprint: AppBlueprint, ids: Map<string, string>, notes: Dete
   return jobs;
 }
 
+/** Is the repo-relative `file` inside the service root `root` (`/` = the whole repo, `/api` = `api/…`)? */
+function isUnder(file: string, root: string): boolean {
+  const dir = root.replace(/^\/+|\/+$/g, '');
+  return dir === '' || file.startsWith(`${dir}/`);
+}
+
 /**
  * The ingress for exactly one frontend and one HTTP backend among the written services (a
  * route needs a port to reach): `/api` → the backend, `/` → the frontend, longest path first
  * — only on evidence the backend answers under `/api`, since the runtime passes the path
- * through unchanged. Backend routes or an unrewritten dev proxy are that evidence; a dev
- * proxy that rewrites the path, or nothing at all, gets no ingress and a note. Any other
- * shape has no single answer, so it gets none.
+ * through unchanged. Backend routes in a file under the backend's root, or an unrewritten
+ * dev proxy in a file under the frontend's root, are that evidence (a `mock/server.js`
+ * beside them is not); a dev proxy that rewrites the path, or nothing at all, gets no
+ * ingress and a note. More than one frontend or backend has no single answer: no ingress,
+ * and a note naming them.
  */
-function emitIngress(services: Record<string, EmittedService>, evidence: readonly IngressEvidence[], notes: DetectionNote[]): EmittedIngressRoute[] {
+function emitIngress(services: Record<string, EmittedService>, allEvidence: readonly IngressEvidence[], notes: DetectionNote[]): EmittedIngressRoute[] {
   // One-off steps and training services have no port, so only the long-running HTTP services remain.
   const served = Object.entries(services).filter(([, entry]) => entry.port !== undefined);
   const frontends = served.filter(([, entry]) => entry.role === 'frontend');
   const backends = served.filter(([, entry]) => (entry.role ?? 'backend') === 'backend');
-  if (frontends.length !== 1 || backends.length !== 1) return [];
-  const [[frontend], [backend]] = [frontends[0]!, backends[0]!];
   const path = BACKEND_INGRESS_PATH;
+  if (frontends.length > 1 || backends.length > 1) {
+    notes.push(detectionNote('ingress-ambiguous', { frontends: frontends.map(([id]) => id), backends: backends.map(([id]) => id), path }));
+    return [];
+  }
+  if (frontends.length !== 1 || backends.length !== 1) return [];
+  const [[frontend, frontendEntry], [backend, backendEntry]] = [frontends[0]!, backends[0]!];
+  // Evidence counts only from its own service's files: routes from the backend's root, a dev proxy from the frontend's.
+  const evidence = allEvidence.filter((item) =>
+    isUnder(item.file, item.kind === 'backend-routes' ? backendEntry.root : frontendEntry.root));
   if (evidence.some((item) => item.kind !== 'proxy-rewrite')) {
     notes.push(detectionNote('ingress-api-backend', { frontend, backend, path }));
     return [{ path, service: backend }, { path: '/', service: frontend }];

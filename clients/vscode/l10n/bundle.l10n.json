@@ -1401,6 +1401,9 @@
   "Secrets are never written to the file: set {0} in the vault.": "Secrets are never written to the file: set {0} in the vault.",
   "Domains are not part of manifest v1: {0}.": "Domains are not part of manifest v1: {0}.",
   "Ingress sends {0} to \"{1}\" and everything else to \"{2}\": the backend must serve its routes under {0}; edit the ingress routes if it does not.": "Ingress sends {0} to \"{1}\" and everything else to \"{2}\": the backend must serve its routes under {0}; edit the ingress routes if it does not.",
+  "No ingress was written: nothing shows that \"{0}\" serves its routes under {1} or that \"{2}\"'s dev server forwards {1} to it unchanged. If \"{2}\" calls \"{0}\" by a relative path, add an ingress route for it.": "No ingress was written: nothing shows that \"{0}\" serves its routes under {1} or that \"{2}\"'s dev server forwards {1} to it unchanged. If \"{2}\" calls \"{0}\" by a relative path, add an ingress route for it.",
+  "No ingress was written: {0} forwards {1} to the backend with the path rewritten, and the runtime's ingress passes the path through unchanged. If \"{2}\" calls \"{3}\" by a relative path, add an ingress route the backend serves as written.": "No ingress was written: {0} forwards {1} to the backend with the path rewritten, and the runtime's ingress passes the path through unchanged. If \"{2}\" calls \"{3}\" by a relative path, add an ingress route the backend serves as written.",
+  "ingress has no blueprint field; the runtime reads it from the manifest": "ingress has no blueprint field; the runtime reads it from the manifest",
   "service \"{0}\" has no runtime or command and was not read": "service \"{0}\" has no runtime or command and was not read",
   "env {0} differs between services; the first value is kept": "env {0} differs between services; the first value is kept",
   "service \"{0}\" runs on \"{1}\", which the blueprint has no kind for; it is read as node": "service \"{0}\" runs on \"{1}\", which the blueprint has no kind for; it is read as node",
@@ -1417,5 +1420,8 @@
   "{0} service \"{1}\": image \"{2}\" is not supported by the browser runtime": "{0} service \"{1}\": image \"{2}\" is not supported by the browser runtime",
   "{0} service \"{1}\": image \"{2}\" is a {3} resource, which the blueprint has no field for — the manifest declares it": "{0} service \"{1}\": image \"{2}\" is a {3} resource, which the blueprint has no field for — the manifest declares it",
   "detector {0} failed: {1}": "detector {0} failed: {1}",
+  "it is a symbolic link or leads outside the workspace folder": "it is a symbolic link or leads outside the workspace folder",
+  "Writing the starter kit stopped at {0}: {1}. Files already written: {2}": "Writing the starter kit stopped at {0}: {1}. Files already written: {2}",
+  "No ingress was written: routing {0} needs exactly one frontend and one backend with a port, and this app has frontends ({1}) and backends ({2}). If one calls another by a relative path, add the ingress routes by hand.": "No ingress was written: routing {0} needs exactly one frontend and one backend with a port, and this app has frontends ({1}) and backends ({2}). If one calls another by a relative path, add the ingress routes by hand.",
   "{0}: {1}": "{0}: {1}"
 }

@@ -2,6 +2,19 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.197] — `/manifest init` routes `/api` only where your app really serves it
+
+- **Fixed: a Vite app at the repo root with a backend folder got no `/api` routing.** It was counted as two frontends. It is now one, and the route is written when the dev proxy or the backend shows `/api`.
+- **Fixed: a mock server or a proxy to a remote API could switch on `/api` routing.** Only evidence inside the frontend's or backend's own folder counts now. When routing can't be inferred, or the app has several frontends or backends, the reply says so instead of staying silent.
+- **Fixed: if a starter kit stopped partway, you couldn't tell what was written.** The reply now lists the files already written and the one that failed. In a remote window, `/starter-kit` and `/manifest init` no longer offer a `/launch` button that would be refused.
+
+## [2026.10.196] — Start, describe and run a full-stack app from the chat with `/` commands
+
+- **New: `/help`.** Lists every chat command, or shows one command in full.
+- **New: `/starter-kit <kit>`.** Writes a starter app into the workspace folder, with a frontend, a backend, optional extras and its `builderforce.json`. Named kits are `react-node`, `angular-node`, `react-laravel`, `react-dotnet`, `react-fastapi` and `vue-node`, and Postgres can be added as an extra. Files that already exist are shown and only overwritten if you agree. Writes never follow a symlink out of the folder.
+- **New: `/manifest init`.** Detects the app in the folder and writes its `builderforce.json` after showing you the diff.
+- **New: `/launch [environment]`.** Runs the workspace app with its services in your browser through a local HTTPS launcher, using a certificate authority limited to localhost that you approve once. `/launch stop` stops it. In a remote window (SSH, WSL, Codespaces) `/launch` is unavailable and says why.
+
 ## [2026.10.195] — Chat tickets close the right way, and open work no longer reads as done
 
 - **Fixed: a ticket could show as finished while work on it was still open.** Each kind of ticket now has its own closed states, so an open item never shows 100%.

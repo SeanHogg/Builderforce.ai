@@ -65,6 +65,28 @@ describe("/starter-kit", () => {
     expect(reply.kind === "text" ? reply.lines : []).toEqual([composerCommandText().writeRefused([at("builderforce.json")])]);
   });
 
+  it("names the file and every file already written when a write is refused partway", async () => {
+    const port = fakeWorkspacePort([app]);
+    const third = kitFiles[2]!;
+    // Passes the up-front check, then refused at write time (the folder changed in between).
+    port.checkWrites = async () => [];
+    port.refused.add(at(third));
+    const reply = await run(port);
+    const text = composerCommandText();
+    expect(reply).toMatchObject({ kind: "text", tone: "error" });
+    expect(reply.kind === "text" ? reply.lines : []).toEqual([text.kitStopped(third, text.writeRefusedReason, kitFiles.slice(0, 2))]);
+    expect([...port.files.keys()].sort()).toEqual(kitFiles.slice(0, 2).map(at).sort());
+  });
+
+  it("offers no /launch in a remote extension host, and says why", async () => {
+    const port = fakeWorkspacePort([app]);
+    port.remote = "wsl";
+    const reply = await run(port);
+    expect(reply.kind === "text" ? reply.action : "no reply").toBeUndefined();
+    expect(reply.kind === "text" ? reply.lines : []).toContain(composerCommandText().launchRemote("wsl"));
+    expect(reply.kind === "text" ? reply.lines : []).not.toContain(composerCommandText().launchHint);
+  });
+
   it("writes nothing when the kit has issues", async () => {
     const port = fakeWorkspacePort([app]);
     const reply = await run(port, { kit: "no-such-kit" });

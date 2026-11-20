@@ -7,12 +7,11 @@
  * IDE scaffolds. Hosts that compose kits (the VS Code extension's `/starter-kit`) import
  * this entry. The `react-vite` part is built on `VANILLA_TEMPLATE` — one copy of those bytes.
  */
-export { composeKit, composeParts, resolveKit, MANIFEST_FILE, MANIFEST_SCHEMA_URL, KIT_README_FILE } from './compose';
+export { composeKit, composeParts, resolveKit, KIT_README_FILE } from './compose';
 export { KIT_PARTS, NAMED_KITS, findKitPart, listKitOptions } from './registry';
 export type { KitOptions, KitPartOption } from './registry';
 export { installStepId, KIT_API_PORT, KIT_WEB_PORT } from './parts/fragments';
 export type {
   ComposedKit, KitDefinition, KitIssue, KitIssueCode, KitIssueParams, KitManifest, KitPart, KitPartKind, KitRoot, KitServiceId,
-  ManifestEnvironment, ManifestFragment, ManifestReadiness, ManifestResource, ManifestRestart, ManifestRoute,
-  ManifestService, ServiceAttachment,
+  ManifestFragment, ServiceAttachment,
 } from './types';
