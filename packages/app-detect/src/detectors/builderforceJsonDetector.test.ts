@@ -4,6 +4,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { detectApp } from '../detectApp';
+import { noteMessages } from '../notes';
 import { builderforceJsonDetector } from './builderforceJsonDetector';
 
 const files = (content: string) => new Map([['builderforce.json', content]]);
@@ -13,17 +14,17 @@ describe('builderforceJsonDetector — reporting', () => {
     const result = builderforceJsonDetector.detect(files('{nope'));
     expect(result.overrides).toBeUndefined();
     expect(result.warnings).toHaveLength(1);
-    expect(result.warnings![0]).toMatch(/^builderforce\.json is not valid JSON and was ignored: .+/);
+    expect(noteMessages(result.warnings!)[0]).toMatch(/^builderforce\.json is not valid JSON and was ignored: .+/);
   });
 
   it('warns on a non-object file and on an unsupported version', () => {
-    expect(builderforceJsonDetector.detect(files('[1]')).warnings).toEqual(['builderforce.json is not a JSON object and was ignored']);
-    expect(builderforceJsonDetector.detect(files('{"version":2}')).warnings).toEqual(['builderforce.json has unsupported version 2 and was ignored']);
+    expect(noteMessages(builderforceJsonDetector.detect(files('[1]')).warnings!)).toEqual(['builderforce.json is not a JSON object and was ignored']);
+    expect(noteMessages(builderforceJsonDetector.detect(files('{"version":2}')).warnings!)).toEqual(['builderforce.json has unsupported version 2 and was ignored']);
   });
 
   it('carries the warning into the detection metadata', () => {
     const detection = detectApp(files('{"services": ['));
-    expect(detection.metadata.warnings.some((w) => w.startsWith('builderforce.json is not valid JSON'))).toBe(true);
+    expect(noteMessages(detection.metadata.warnings).some((w) => w.startsWith('builderforce.json is not valid JSON'))).toBe(true);
     expect(detection.blueprint.sources.builderforceJson).toBe(false);
   });
 
@@ -56,7 +57,7 @@ describe('builderforceJsonDetector — manifest v1', () => {
     expect(result.overrides?.database?.engine).toBe('postgres');
     expect(result.overrides?.vars).toEqual([{ name: 'MODE', defaultValue: 'dev' }]);
     expect(result.overrides).not.toHaveProperty('version');
-    expect(result.warnings).toEqual(['builderforce.json: resource "cache" (redis) has no blueprint field; the runtime reads it from the manifest']);
+    expect(noteMessages(result.warnings!)).toEqual(['builderforce.json: resource "cache" (redis) has no blueprint field; the runtime reads it from the manifest']);
   });
 
   it('lays the v1 services over detection', () => {

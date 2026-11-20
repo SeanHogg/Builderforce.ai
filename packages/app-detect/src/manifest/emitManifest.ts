@@ -16,8 +16,12 @@
  * - compose resources (Redis, object storage, mail, Postgres) → resources, used by the
  *   services whose `depends_on` names them;
  * - vars with a value → every service's `env`; one environment, `local` (browser, debug);
- * - exactly one frontend and one HTTP backend (each with a port) → ingress: `/api` → the
- *   backend, `/` → the frontend (noted: the backend must serve under `/api`); else none.
+ * - exactly one frontend and one HTTP backend (each with a port) AND evidence that the
+ *   backend answers under `/api` (`AppDetection.ingressEvidence`: a dev proxy forwarding
+ *   `/api` unchanged, or backend routes declared under it) → ingress: `/api` → the backend,
+ *   `/` → the frontend (noted). The runtime's ingress does not strip the prefix, so with no
+ *   evidence — or a dev proxy that rewrites `/api` away — no ingress is written, and a note
+ *   says how to add one; any other shape has no single answer, so it gets none.
  *
  * Everything it cannot express (secrets, domains, other bindings, other database engines …)
  * is a note, never silently dropped.
@@ -26,9 +30,10 @@
 import type { AppBlueprint, AppService } from '@builderforce/creation-canvas-contract';
 import { serviceDevPort } from '@builderforce/creation-canvas-contract';
 import { detectionNote, type DetectionNote } from '../notes';
-import type { ComposeResource } from '../types';
+import type { ComposeResource, IngressEvidence } from '../types';
 import {
-  APP_MANIFEST_SCHEMA_URL,
+  BACKEND_INGRESS_PATH,
+  MANIFEST_SCHEMA_URL,
   type EmittedIngressRoute,
   type EmittedJob,
   type EmittedManifest,
@@ -41,6 +46,8 @@ import { KIND_MANIFEST_RUNTIME, PACKAGE_MANAGER_RUNTIME, runtimeRoot, safeId, ty
 export interface EmitManifestExtras {
   /** Resources a `docker-compose.yml` declares (`AppDetection.composeResources`). */
   composeResources?: ComposeResource[];
+  /** What the files say about serving the backend under `/api` (`AppDetection.ingressEvidence`); none: no ingress. */
+  ingressEvidence?: readonly IngressEvidence[];
   /** The app's name; default: the primary service's id. */
   name?: string;
 }
@@ -49,10 +56,11 @@ export interface EmitManifestResult {
   manifest: EmittedManifest;
   /** `manifest` as the file's text: two-space JSON and a trailing newline. */
   text: string;
-  /** What the manifest could not express, one English sentence each (`codedNotes[i].message`). */
-  notes: string[];
-  /** The same notes as codes + params, same order — for hosts that word them in the person's language. */
-  codedNotes: DetectionNote[];
+  /**
+   * What the manifest could not express, coded — the one stored form: hosts that localize
+   * word each from `code` + `params`, the others take `noteMessages(notes)`.
+   */
+  notes: DetectionNote[];
 }
 
 /** Ids the database and its steps always get (the run target's reserved ids). */
@@ -63,9 +71,6 @@ export const SCHEDULED_ROUTE = '/__scheduled';
 
 /** The suffix of a one-off install service's id. */
 export const INSTALL_SUFFIX = '-install';
-
-/** The ingress path the one HTTP backend is served under (the kits' backend parts use the same). */
-export const BACKEND_INGRESS_PATH = '/api';
 
 const POSTGRES_ENGINES = new Set(['postgres', 'neon']);
 
@@ -203,18 +208,29 @@ function emitJobs(blueprint: AppBlueprint, ids: Map<string, string>, notes: Dete
 
 /**
  * The ingress for exactly one frontend and one HTTP backend among the written services (a
- * route needs a port to reach): `/api` → the backend, `/` → the frontend, longest path first.
- * Any other shape has no single answer, so it gets none.
+ * route needs a port to reach): `/api` → the backend, `/` → the frontend, longest path first
+ * — only on evidence the backend answers under `/api`, since the runtime passes the path
+ * through unchanged. Backend routes or an unrewritten dev proxy are that evidence; a dev
+ * proxy that rewrites the path, or nothing at all, gets no ingress and a note. Any other
+ * shape has no single answer, so it gets none.
  */
-function emitIngress(services: Record<string, EmittedService>, notes: DetectionNote[]): EmittedIngressRoute[] {
+function emitIngress(services: Record<string, EmittedService>, evidence: readonly IngressEvidence[], notes: DetectionNote[]): EmittedIngressRoute[] {
   // One-off steps and training services have no port, so only the long-running HTTP services remain.
   const served = Object.entries(services).filter(([, entry]) => entry.port !== undefined);
   const frontends = served.filter(([, entry]) => entry.role === 'frontend');
   const backends = served.filter(([, entry]) => (entry.role ?? 'backend') === 'backend');
   if (frontends.length !== 1 || backends.length !== 1) return [];
   const [[frontend], [backend]] = [frontends[0]!, backends[0]!];
-  notes.push(detectionNote('ingress-api-backend', { frontend, backend, path: BACKEND_INGRESS_PATH }));
-  return [{ path: BACKEND_INGRESS_PATH, service: backend }, { path: '/', service: frontend }];
+  const path = BACKEND_INGRESS_PATH;
+  if (evidence.some((item) => item.kind !== 'proxy-rewrite')) {
+    notes.push(detectionNote('ingress-api-backend', { frontend, backend, path }));
+    return [{ path, service: backend }, { path: '/', service: frontend }];
+  }
+  const rewrite = evidence.find((item) => item.kind === 'proxy-rewrite');
+  notes.push(rewrite
+    ? detectionNote('ingress-proxy-rewrites', { frontend, backend, path, file: rewrite.file })
+    : detectionNote('ingress-not-inferred', { frontend, backend, path }));
+  return [];
 }
 
 export function emitManifest(blueprint: AppBlueprint, extras: EmitManifestExtras = {}): EmitManifestResult {
@@ -306,7 +322,7 @@ export function emitManifest(blueprint: AppBlueprint, extras: EmitManifestExtras
   }
 
   const jobs = emitJobs(blueprint, ids, notes);
-  const routes = emitIngress(services, notes);
+  const routes = emitIngress(services, extras.ingressEvidence ?? [], notes);
   const secrets = blueprint.secrets.map((secret) => secret.name);
   if (secrets.length > 0) notes.push(detectionNote('secrets-to-vault', { names: secrets }));
   if (blueprint.domains.length > 0) notes.push(detectionNote('domains-dropped', { domains: blueprint.domains.map((d) => d.domain) }));
@@ -314,7 +330,7 @@ export function emitManifest(blueprint: AppBlueprint, extras: EmitManifestExtras
   const primary = blueprint.services.find((service) => service.isPrimary) ?? blueprint.services[0];
   const name = extras.name ?? (primary ? ids.get(primary.id) : undefined);
   const manifest: EmittedManifest = {
-    $schema: APP_MANIFEST_SCHEMA_URL,
+    $schema: MANIFEST_SCHEMA_URL,
     version: 1,
     ...(name ? { name } : {}),
     ...(Object.keys(resources).length > 0 ? { resources } : {}),
@@ -323,5 +339,5 @@ export function emitManifest(blueprint: AppBlueprint, extras: EmitManifestExtras
     ...(routes.length > 0 ? { ingress: { routes } } : {}),
     environments: { local: { target: 'browser', tier: 'non-production', debug: true } },
   };
-  return { manifest, text: `${JSON.stringify(manifest, null, 2)}\n`, notes: notes.map((note) => note.message), codedNotes: notes };
+  return { manifest, text: `${JSON.stringify(manifest, null, 2)}\n`, notes };
 }

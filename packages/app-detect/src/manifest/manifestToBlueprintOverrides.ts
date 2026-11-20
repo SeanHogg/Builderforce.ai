@@ -5,7 +5,7 @@
  * `installCommand`, and `db-migrate` / `db-seed` into the database's commands.
  *
  * The file is untrusted input: anything of the wrong shape, and anything the blueprint has
- * no field for (redis, queues, storage, mail, jobs, environments …), is a note — the
+ * no field for (redis, queues, storage, mail, jobs, ingress, environments …), is a note — the
  * runtime reads those from the manifest itself. Pure.
  */
 
@@ -17,10 +17,8 @@ import { blueprintRootDir, kindOfRuntime, packageManagerOf, type ServiceRole } f
 
 export interface ManifestOverridesResult {
   overrides: Partial<AppBlueprint>;
-  /** What the manifest states that the blueprint cannot hold, or could not be read (English; `codedNotes[i].message`). */
-  notes: string[];
-  /** The same notes as codes + params, same order. */
-  codedNotes: DetectionNote[];
+  /** What the manifest states that the blueprint cannot hold, or could not be read — coded; English is `noteMessages(notes)`. */
+  notes: DetectionNote[];
 }
 
 const RESTARTS = new Set(['never', 'on-failure', 'always']);
@@ -136,5 +134,8 @@ export function manifestToBlueprintOverrides(manifest: ManifestInput): ManifestO
 
   if (vars.size > 0) overrides.vars = [...vars].map(([name, defaultValue]): AppVar => ({ name, defaultValue }));
   if (isRecord(manifest.jobs) && Object.keys(manifest.jobs).length > 0) notes.push(detectionNote('manifest-jobs-unmapped', {}));
-  return { overrides, notes: notes.map((note) => note.message), codedNotes: notes };
+  if (isRecord(manifest.ingress) && Array.isArray(manifest.ingress.routes) && manifest.ingress.routes.length > 0) {
+    notes.push(detectionNote('manifest-ingress-unmapped', {}));
+  }
+  return { overrides, notes };
 }

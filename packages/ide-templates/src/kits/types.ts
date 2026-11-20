@@ -3,11 +3,12 @@
  *
  * A kit is composed from PARTS (one frontend, at most one backend, any extras), so
  * N frontends + M backends cover N × M kits. A part is data: the files it writes under
- * its service root, and its fragment of the `builderforce.json` v1 manifest. The
- * manifest shapes below are the v1 contract (§W11 "Contract — manifest v1"); the parser
- * that owns them lands in `@seanhogg/builderforce-webcontainers-core/manifest`, and these
- * are kept to the subset a kit writes.
+ * its service root, and its fragment of the `builderforce.json` v1 manifest. The v1
+ * entry shapes a kit writes (services, resources, ingress routes) are app-detect's — ONE
+ * owner, `@builderforce/app-detect/manifest`, which `emitManifest` writes through too;
+ * only what a kit adds on top (its environments, the whole document) is declared here.
  */
+import type { EmittedIngressRoute, EmittedResource, EmittedService } from '@builderforce/app-detect/manifest';
 
 export type KitPartKind = 'frontend' | 'backend' | 'extra';
 
@@ -17,39 +18,10 @@ export type KitServiceId = 'web' | 'api';
 /** Where that service's files live, from the project root. */
 export type KitRoot = '/web' | '/api';
 
-/**
- * How the runtime tells a service is ready. `exitZero` marks a one-off step (an install):
- * it is ready when it exits 0 — the same `exit-zero` readiness W9's blueprint mapping
- * gives its install steps.
- */
-export type ManifestReadiness = { http: string } | { port: true } | { exitZero: true } | { started: true };
-
-export type ManifestRestart = 'never' | 'on-failure' | 'always';
-
-/** A `services.<id>` entry of the v1 manifest. */
-export interface ManifestService {
-  runtime: string;
-  root: KitRoot;
-  command: string;
-  port?: number;
-  role?: 'frontend' | 'backend';
-  dependsOn?: string[];
-  uses?: string[];
-  readiness?: ManifestReadiness;
-  restart?: ManifestRestart;
-  env?: Record<string, string>;
-}
-
-/** A `resources.<id>` entry of the v1 manifest. */
-export interface ManifestResource {
-  type: string;
-  persistent?: boolean;
-}
-
 /** The part of the manifest one part contributes. Entries are keyed by id, so two parts naming one id is a conflict. */
 export interface ManifestFragment {
-  services?: Record<string, ManifestService>;
-  resources?: Record<string, ManifestResource>;
+  services?: Record<string, EmittedService>;
+  resources?: Record<string, EmittedResource>;
 }
 
 /** What an extra adds to a service another part declares (the postgres extra: `uses: ['db']` on the backend). */
@@ -66,7 +38,7 @@ export interface KitPart {
   aliases?: readonly string[];
   serviceId: KitServiceId;
   root: KitRoot;
-  /** The ingress path routed to this part's service (`/` for a frontend, `/api` for a backend). */
+  /** The ingress path routed to this part's service (`/` for a frontend, `BACKEND_INGRESS_PATH` for a backend). */
   ingress?: string;
   /** File contents keyed by path RELATIVE to `root`. */
   files: Readonly<Record<string, string>>;
@@ -86,11 +58,6 @@ export interface KitDefinition {
   extras: string[];
 }
 
-export interface ManifestRoute {
-  path: string;
-  service: string;
-}
-
 export interface ManifestEnvironment {
   target: string;
   tier: 'production' | 'non-production';
@@ -102,9 +69,9 @@ export interface KitManifest {
   $schema: string;
   version: 1;
   name: string;
-  resources?: Record<string, ManifestResource>;
-  services: Record<string, ManifestService>;
-  ingress: { routes: ManifestRoute[] };
+  resources?: Record<string, EmittedResource>;
+  services: Record<string, EmittedService>;
+  ingress: { routes: EmittedIngressRoute[] };
   environments: Record<string, ManifestEnvironment>;
 }
 

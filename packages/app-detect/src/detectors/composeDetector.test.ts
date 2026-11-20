@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { noteMessages } from '../notes';
 import { composeDetector, imageName } from './composeDetector';
 import { runDetectors } from './index';
 
@@ -60,7 +61,7 @@ describe('composeDetector', () => {
   });
 
   it('names every resource and every unsupported image in its warnings', () => {
-    const { warnings = [] } = composeDetector.detect(repo({ 'compose.yaml': COMPOSE }));
+    const warnings = noteMessages(composeDetector.detect(repo({ 'compose.yaml': COMPOSE })).warnings ?? []);
     expect(warnings.filter((w) => w.includes('resource'))).toHaveLength(4);
     expect(warnings).toContain('compose.yaml service "search": image "elasticsearch:8.13.0" is not supported by the browser runtime');
   });
@@ -86,9 +87,9 @@ describe('composeDetector', () => {
   });
 
   it('warns on a build context outside the repo and on an unreadable file', () => {
-    expect(composeDetector.detect(repo({ 'compose.yaml': 'services:\n  x:\n    build: ../elsewhere\n' })).warnings)
+    expect(noteMessages(composeDetector.detect(repo({ 'compose.yaml': 'services:\n  x:\n    build: ../elsewhere\n' })).warnings ?? []))
       .toEqual(['compose.yaml service "x": its build context is outside the repository and was not read']);
-    expect(composeDetector.detect(repo({ 'compose.yaml': 'just text' })).warnings)
+    expect(noteMessages(composeDetector.detect(repo({ 'compose.yaml': 'just text' })).warnings ?? []))
       .toEqual(['compose.yaml: no services section could be read']);
   });
 

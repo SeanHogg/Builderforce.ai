@@ -73,7 +73,8 @@ const anySource = (sources: BlueprintSourceFlags | undefined): boolean => Object
 /**
  * Detect an app from its files: the blueprint, the detection metadata (which detectors ran,
  * every warning — an unreadable `builderforce.json`, an unsupported compose image, a detector
- * that threw), and the compose resources the blueprint has no field for (for `emitManifest`).
+ * that threw — coded), and what the blueprint has no field for that `emitManifest` reads:
+ * the compose resources and the ingress evidence.
  * `confidence` is 1 when any source file was recognised (or a compose file / services were read), 0 when the
  * blueprint is only the defaults.
  */
@@ -89,7 +90,7 @@ export function detectApp(files: Map<string, string>, options: DetectAppOptions 
       confidence: recognised ? 1 : 0,
     },
     composeResources: findings.composeResources,
-    codedWarnings: findings.codedWarnings,
+    ingressEvidence: findings.ingressEvidence,
   };
 }
 

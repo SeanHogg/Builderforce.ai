@@ -16,11 +16,9 @@
 
 import type { AppBlueprint } from '@builderforce/creation-canvas-contract';
 import { manifestToBlueprintOverrides } from '../manifest/manifestToBlueprintOverrides';
-import type { ManifestInput } from '../manifest/manifestShape';
+import { MANIFEST_FILE_NAME, type ManifestInput } from '../manifest/manifestShape';
 import { detectionNote, errorText, noteFrom, warningFindings, type DetectionNote } from '../notes';
 import type { AppDetector, DetectorFindings } from '../types';
-
-export const BUILDERFORCE_JSON = 'builderforce.json';
 
 type Read = { overrides: Partial<AppBlueprint>; warnings: DetectionNote[] } | { warning: DetectionNote };
 
@@ -29,24 +27,24 @@ function readBuilderforceJson(content: string): Read {
   try {
     parsed = JSON.parse(content);
   } catch (error) {
-    return { warning: detectionNote('manifest-invalid-json', { file: BUILDERFORCE_JSON, error: errorText(error) }) };
+    return { warning: detectionNote('manifest-invalid-json', { file: MANIFEST_FILE_NAME, error: errorText(error) }) };
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    return { warning: detectionNote('manifest-not-object', { file: BUILDERFORCE_JSON }) };
+    return { warning: detectionNote('manifest-not-object', { file: MANIFEST_FILE_NAME }) };
   }
   const version = (parsed as { version?: unknown }).version;
   if (version === undefined) return { overrides: parsed as Partial<AppBlueprint>, warnings: [] };
-  if (version !== 1) return { warning: detectionNote('manifest-unsupported-version', { file: BUILDERFORCE_JSON, version: String(JSON.stringify(version)) }) };
+  if (version !== 1) return { warning: detectionNote('manifest-unsupported-version', { file: MANIFEST_FILE_NAME, version: String(JSON.stringify(version)) }) };
   const mapped = manifestToBlueprintOverrides(parsed as ManifestInput);
-  return { overrides: mapped.overrides, warnings: mapped.codedNotes.map((note) => noteFrom(BUILDERFORCE_JSON, note)) };
+  return { overrides: mapped.overrides, warnings: mapped.notes.map((note) => noteFrom(MANIFEST_FILE_NAME, note)) };
 }
 
 export const builderforceJsonDetector: AppDetector = {
   id: 'builderforce-json',
   name: 'builderforce.json Overrides',
-  reads: [BUILDERFORCE_JSON],
+  reads: [MANIFEST_FILE_NAME],
   detect: (files: Map<string, string>): DetectorFindings => {
-    const content = files.get(BUILDERFORCE_JSON);
+    const content = files.get(MANIFEST_FILE_NAME);
     const read = content === undefined ? null : readBuilderforceJson(content);
     const overrides = read && 'overrides' in read ? read.overrides : null;
     // `runDetectors` spreads each detector's `sources` over the running flags, so a

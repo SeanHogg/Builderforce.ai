@@ -38,6 +38,7 @@
       "@builderforce/canvas-widget-protocol": ["../packages/canvas-widget-protocol/src/index.ts"],
       "@builderforce/ide-templates": ["../packages/ide-templates/src/index.ts"],
       "@builderforce/app-detect": ["../packages/app-detect/src/index.ts"],
+      "@builderforce/app-detect/manifest": ["../packages/app-detect/src/manifest/manifestShape.ts"],
       "@builderforce/ide-file-contract": ["../packages/ide-file-contract/src/index.ts"],
       "@builderforce/agent-loop": ["../packages/agent-loop/src/index.ts"],
       "@builderforce/agent-run": ["../packages/agent-run/src/index.ts"],

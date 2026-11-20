@@ -11,11 +11,13 @@ export type {
   DetectionFindings,
   DetectOptions,
   DetectorFindings,
+  IngressEvidence,
 } from './types';
 
 export {
   detectionNote,
   noteFrom,
+  noteMessages,
   type DetectionNote,
   type DetectionNoteCode,
   type DetectionNoteParams,
@@ -27,7 +29,8 @@ export { DETECTOR_BY_ID, DETECTORS, runDetectors } from './detectors';
 export { escapeRegExp, pathGlobRegExp, pathGlobSource, repoRelativePath } from './pathGlob';
 
 // Individual detectors' pure readers (tests and hosts that read one format).
-export { BUILDERFORCE_JSON, builderforceJsonDetector } from './detectors/builderforceJsonDetector';
+export { builderforceJsonDetector } from './detectors/builderforceJsonDetector';
+export { detectIngressEvidence, ingressEvidenceDetector } from './detectors/ingressEvidenceDetector';
 export { COMPOSE_FILES, composeDetector, detectFromCompose, imageName } from './detectors/composeDetector';
 export { detectDotnet } from './detectors/dotnetDetector';
 export { parseYaml, yamlMap, yamlScalar, type YamlValue } from './detectors/minimalYaml';
@@ -43,9 +46,14 @@ export {
 } from './manifest/emitManifest';
 export { manifestToBlueprintOverrides, type ManifestOverridesResult } from './manifest/manifestToBlueprintOverrides';
 export {
-  APP_MANIFEST_SCHEMA_URL,
+  BACKEND_INGRESS_PATH,
+  MANIFEST_FILE_NAME,
+  MANIFEST_SCHEMA_URL,
+  type EmittedIngressRoute,
   type EmittedManifest,
+  type EmittedReadiness,
   type EmittedResource,
+  type EmittedRestart,
   type EmittedService,
   type ManifestInput,
   type ManifestServiceInput,

@@ -5,10 +5,11 @@
  */
 import type { AppBlueprint, AppService } from '@builderforce/creation-canvas-contract';
 import { describe, expect, it } from 'vitest';
-import type { ComposeResource } from '../types';
+import { noteMessages } from '../notes';
+import type { ComposeResource, IngressEvidence } from '../types';
 import { emitManifest } from './emitManifest';
 import { manifestToBlueprintOverrides } from './manifestToBlueprintOverrides';
-import { APP_MANIFEST_SCHEMA_URL, type ManifestInput } from './manifestShape';
+import { MANIFEST_SCHEMA_URL, type ManifestInput } from './manifestShape';
 import { runtimeRoot, safeId } from './serviceRuntime';
 
 function service(overrides: Partial<AppService> & Pick<AppService, 'id' | 'kind'>): AppService {
@@ -71,8 +72,9 @@ const PYTHON_AND_PHP = blueprint({
 describe('emitManifest — structure', () => {
   it('writes a v1 manifest: schema, version, keyed services on their runtimes, ports, the local environment', () => {
     const { manifest, text } = emitManifest(CANVAS_APP);
-    expect(Object.keys(manifest)).toEqual(['$schema', 'version', 'name', 'resources', 'services', 'ingress', 'environments']);
-    expect(manifest.$schema).toBe(APP_MANIFEST_SCHEMA_URL);
+    // No ingress: the blueprint alone is no evidence that the backend serves under /api (see "emitManifest — ingress").
+    expect(Object.keys(manifest)).toEqual(['$schema', 'version', 'name', 'resources', 'services', 'environments']);
+    expect(manifest.$schema).toBe(MANIFEST_SCHEMA_URL);
     expect(manifest.version).toBe(1);
     expect(manifest.environments).toEqual({ local: { target: 'browser', tier: 'non-production', debug: true } });
     expect(manifest.resources).toEqual({ db: { type: 'postgres', persistent: true } });
@@ -107,7 +109,8 @@ describe('emitManifest — structure', () => {
   });
 
   it('turns the hired.video shape into a Worker service, a Neon database, an R2 bucket and a cron job', () => {
-    const { manifest, notes } = emitManifest(HIRED_VIDEO);
+    const { manifest, notes: coded } = emitManifest(HIRED_VIDEO);
+    const notes = noteMessages(coded);
     expect(manifest.name).toBe('frontend');
     expect(manifest.resources).toEqual({ db: { type: 'postgres', persistent: true }, media: { type: 'object-storage' } });
     expect(manifest.services['hired-api']).toMatchObject({ runtime: 'node', port: 8787, uses: ['db', 'media'], dependsOn: ['hired-api-install', 'db-migrate', 'db-seed'] });
@@ -123,7 +126,8 @@ describe('emitManifest — structure', () => {
   });
 
   it('maps kinds to runtimes, gives two services on one default port distinct ports, and writes training as a started python service', () => {
-    const { manifest, notes } = emitManifest(PYTHON_AND_PHP);
+    const { manifest, notes: coded } = emitManifest(PYTHON_AND_PHP);
+    const notes = noteMessages(coded);
     expect(manifest.services.py).toMatchObject({ runtime: 'python', port: 8000, dependsOn: ['py-install'] });
     expect(manifest.services.php).toMatchObject({ runtime: 'php', port: 8001, dependsOn: ['php-install'] });
     expect(manifest.services.train).toMatchObject({ runtime: 'python', readiness: { started: true }, restart: 'never' });
@@ -138,7 +142,8 @@ describe('emitManifest — structure', () => {
       { id: 'pg', type: 'postgres', image: 'pgvector/pgvector:pg16', extensions: ['vector'], usedBy: ['api'] },
       { id: 'mail', type: 'mail', image: 'axllent/mailpit', usedBy: ['web'] },
     ];
-    const { manifest, notes } = emitManifest(CANVAS_APP, { composeResources: compose, name: 'shop' });
+    const { manifest, notes: coded } = emitManifest(CANVAS_APP, { composeResources: compose, name: 'shop' });
+    const notes = noteMessages(coded);
     expect(manifest.name).toBe('shop');
     expect(manifest.resources).toEqual({
       db: { type: 'postgres', persistent: true, extensions: ['vector'] },
@@ -151,32 +156,63 @@ describe('emitManifest — structure', () => {
   });
 
   it('notes a database engine it cannot express', () => {
-    const { manifest, notes } = emitManifest(blueprint({
+    const { manifest, notes: coded } = emitManifest(blueprint({
       services: [service({ id: 'api', kind: 'node' })],
       database: { engine: 'mysql', migrationCommand: '', seedCommand: null, migrationsPath: '', connectionSecretName: 'DATABASE_URL' },
     }));
+    const notes = noteMessages(coded);
     expect(manifest.resources).toBeUndefined();
     expect(notes).toContain('The mysql database is not expressible in manifest v1 (postgres only), so no database resource was written.');
   });
 });
 
 describe('emitManifest — ingress', () => {
+  const API_ROUTES: IngressEvidence[] = [{ kind: 'backend-routes', file: 'api/server.js' }];
+
   it('routes /api to the one HTTP backend and / to the one frontend, longest path first, and notes it', () => {
-    const { manifest, codedNotes } = emitManifest(CANVAS_APP);
+    const { manifest, notes: codedNotes } = emitManifest(CANVAS_APP, { ingressEvidence: API_ROUTES });
     expect(manifest.ingress).toEqual({ routes: [{ path: '/api', service: 'api' }, { path: '/', service: 'web' }] });
     expect(codedNotes).toContainEqual(expect.objectContaining({ code: 'ingress-api-backend', params: { frontend: 'web', backend: 'api', path: '/api' } }));
   });
 
+  it('routes on an unrewritten dev proxy alone', () => {
+    const { manifest } = emitManifest(CANVAS_APP, { ingressEvidence: [{ kind: 'dev-proxy', file: 'web/vite.config.js' }] });
+    expect(manifest.ingress?.routes).toEqual([{ path: '/api', service: 'api' }, { path: '/', service: 'web' }]);
+  });
+
+  it('writes no ingress without evidence, and says how to add one', () => {
+    const { manifest, notes } = emitManifest(CANVAS_APP);
+    expect(manifest.ingress).toBeUndefined();
+    expect(notes.some((note) => note.code === 'ingress-api-backend')).toBe(false);
+    expect(notes).toContainEqual(expect.objectContaining({ code: 'ingress-not-inferred', params: { frontend: 'web', backend: 'api', path: '/api' } }));
+    expect(noteMessages(notes).some((n) => n.includes('add an ingress route'))).toBe(true);
+  });
+
+  it('writes no ingress when the dev proxy rewrites /api, and names the file', () => {
+    const { manifest, notes } = emitManifest(CANVAS_APP, { ingressEvidence: [{ kind: 'proxy-rewrite', file: 'web/vite.config.ts' }] });
+    expect(manifest.ingress).toBeUndefined();
+    expect(notes).toContainEqual(expect.objectContaining({
+      code: 'ingress-proxy-rewrites', params: { frontend: 'web', backend: 'api', path: '/api', file: 'web/vite.config.ts' },
+    }));
+    expect(notes.some((note) => note.code === 'ingress-not-inferred')).toBe(false);
+  });
+
+  it('routes when the backend declares /api routes even though a proxy rewrites', () => {
+    const { manifest } = emitManifest(CANVAS_APP, { ingressEvidence: [{ kind: 'proxy-rewrite', file: 'web/vite.config.ts' }, ...API_ROUTES] });
+    expect(manifest.ingress?.routes).toHaveLength(2);
+  });
+
   it('writes no ingress for two HTTP backends', () => {
-    const { manifest, codedNotes } = emitManifest(blueprint({
+    const { manifest, notes: codedNotes } = emitManifest(blueprint({
       services: [
         service({ id: 'web', kind: 'vite-react', ports: [5173], isPrimary: true }),
         service({ id: 'api', kind: 'node', ports: [8000] }),
         service({ id: 'admin', kind: 'node', ports: [8001] }),
       ],
-    }));
+    }), { ingressEvidence: API_ROUTES });
     expect(manifest.ingress).toBeUndefined();
     expect(codedNotes.some((note) => note.code === 'ingress-api-backend')).toBe(false);
+    expect(codedNotes.some((note) => note.code === 'ingress-not-inferred')).toBe(false);
   });
 
   it('writes no ingress for a frontend alone', () => {
@@ -220,5 +256,13 @@ describe('emitManifest → manifestToBlueprintOverrides — round trip', () => {
     const again = emitManifest({ ...CANVAS_APP, ...back }).manifest;
     expect(again.services).toEqual(first.services);
     expect(again.resources).toEqual(first.resources);
+  });
+
+  it('notes the ingress it reads back, which has no blueprint field (as it does jobs)', () => {
+    const { manifest } = emitManifest(CANVAS_APP, { ingressEvidence: [{ kind: 'backend-routes', file: 'api/server.js' }] });
+    const { notes } = manifestToBlueprintOverrides(manifest as ManifestInput);
+    expect(notes).toContainEqual(expect.objectContaining({ code: 'manifest-ingress-unmapped' }));
+    expect(noteMessages(notes)).toContain('ingress has no blueprint field; the runtime reads it from the manifest');
+    expect(manifestToBlueprintOverrides(emitManifest(CANVAS_APP).manifest as ManifestInput).notes.some((n) => n.code === 'manifest-ingress-unmapped')).toBe(false);
   });
 });

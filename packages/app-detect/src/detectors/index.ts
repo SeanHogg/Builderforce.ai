@@ -22,6 +22,7 @@ import { dockerfileDetector } from './dockerfileDetector';
 import { envExampleDetector } from './envExampleDetector';
 import { githubWorkflowsDetector } from './githubWorkflowsDetector';
 import { builderforceJsonDetector } from './builderforceJsonDetector';
+import { ingressEvidenceDetector } from './ingressEvidenceDetector';
 import { pythonDetector } from './pythonDetector';
 import { phpDetector } from './phpDetector';
 import { dotnetDetector } from './dotnetDetector';
@@ -51,6 +52,9 @@ export const DETECTORS: AppDetector[] = [
   envExampleDetector,
   githubWorkflowsDetector,
   builderforceJsonDetector,
+  // Last: it adds no blueprint field, only evidence for `emitManifest`'s ingress, and its
+  // globs take what is left of the read budget after every detector that names services.
+  ingressEvidenceDetector,
 ];
 
 /** Detector by ID */
@@ -132,9 +136,7 @@ export function runDetectors(files: Map<string, string>, options: DetectOptions 
       }
     } catch (error) {
       // One broken detector must not sink detection — report it and run the rest.
-      const failed = detectionNote('detector-failed', { detector: detector.id, error: errorText(error) });
-      result.warnings.push(failed.message);
-      result.codedWarnings.push(failed);
+      result.warnings.push(detectionNote('detector-failed', { detector: detector.id, error: errorText(error) }));
       options.onDetectorError?.(error, detector.id);
     }
   }
