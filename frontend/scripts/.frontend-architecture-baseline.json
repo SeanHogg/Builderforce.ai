@@ -21,8 +21,8 @@
     "components/workforce/WorkforceAgents.tsx": 810,
     "lib/adminApi.ts": 1779,
     "lib/builderforceApi.ts": 9772,
-    "lib/founderObjects.ts": 1623,
-    "lib/founderOpsApi.ts": 1007,
+    "lib/founderObjects.ts": 1596,
+    "lib/founderOpsApi.ts": 823,
     "lib/managerDiagnostics.ts": 1877,
     "lib/structured-data.ts": 932
   },

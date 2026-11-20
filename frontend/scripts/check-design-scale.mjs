@@ -409,6 +409,11 @@ const COLOUR_EXEMPT = [
   // tokens are declared where it renders — and its page must stay white with black
   // ink whether or not the person who exported it had dark mode on.
   /^lib\/canvasResumeRenderer\.ts$/,
+  // The Value-outcomes SALES BRIEF. `renderSalesBriefHtml` composes a standalone
+  // `<!doctype html>` deck that is downloaded, opened in a browser tab of its own and
+  // printed to PDF for a buyer — none of our tokens are declared where it renders, and
+  // a printed slide must stay dark ink on white paper whatever theme exported it.
+  /^lib\/outcomeSalesBriefExport\.ts$/,
   // The RFP proposal is one of those documents; these two hold its palette and
   // the iframe it previews in.
   /^components\/rfp\/RfpContent\.tsx$/,
@@ -609,6 +614,9 @@ const FONT_SIZE_EXEMPT = [
   // The résumé document's own type — see COLOUR_EXEMPT. Its sizes are print
   // measurements inside a standalone HTML document, not roles in this product's ramp.
   /^lib\/canvasResumeRenderer\.ts$/,
+  // The sales-brief deck — see COLOUR_EXEMPT. Its sizes are 16:9 slide typography in a
+  // standalone printable document, not roles in this product's ramp.
+  /^lib\/outcomeSalesBriefExport\.ts$/,
   // The résumé miniature of that same sheet — a 104px-wide A4 page whose type and
   // corners are the DOCUMENT's proportions, not this product's chrome.
   /^components\/blog\/BlogResumeTemplates\.module\.css$/,

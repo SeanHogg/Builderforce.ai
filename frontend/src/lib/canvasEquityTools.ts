@@ -47,7 +47,7 @@ import {
   upsertShareClass,
   type CapTable,
   type RoundModel,
-} from '@/lib/founderOpsApi';
+} from '@/lib/founderEquityApi';
 import type { CanvasFounderOpsContext } from '@/lib/canvasFounderOpsTools';
 import { capTablePercentBalance } from '@/lib/founderObjects';
 

@@ -52,7 +52,7 @@ function LtvTranchesCard(_: ComponentSurfaceProps) {
         <select
           value={dimension}
           onChange={(e) => setDimension(e.target.value as LtvDimension)}
-          style={{ background: 'var(--bg-surface)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 4 }}
+          style={{ background: 'var(--bg-surface)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)' }}
         >
           {LTV_DIMENSIONS.map((d) => (
             <option key={d} value={d}>{t(`saas.dimension.${d}`)}</option>
@@ -63,7 +63,7 @@ function LtvTranchesCard(_: ComponentSurfaceProps) {
         type="button"
         onClick={() => setAsTable((v) => !v)}
         aria-pressed={asTable}
-        style={{ background: 'transparent', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer' }}
+        style={{ background: 'transparent', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}
       >
         {asTable ? t('saas.chartView') : t('saas.tableView')}
       </button>
@@ -135,9 +135,9 @@ function LtvTranchesCard(_: ComponentSurfaceProps) {
               <span style={{ color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {r.tranche}{r.declared ? ` · ${t('saas.declared')}` : ''}
               </span>
-              <div style={{ position: 'relative', height: 12, background: 'var(--bg-elevated)', borderRadius: 2 }}>
+              <div style={{ position: 'relative', height: 12, background: 'var(--bg-elevated)', borderRadius: 'var(--radius-sm)' }}>
                 {r.ratio != null && (
-                  <div style={{ width: `${pct}%`, height: '100%', background: below ? 'var(--warning)' : colorAt(0), borderRadius: 2 }} />
+                  <div style={{ width: `${pct}%`, height: '100%', background: below ? 'var(--warning)' : colorAt(0), borderRadius: 'var(--radius-sm)' }} />
                 )}
                 <div
                   aria-hidden="true"

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { capTableFieldsFrom } from './canvasEquityTools';
-import type { CapTable } from './founderOpsApi';
+import type { CapTable } from './founderEquityApi';
 
 const holder = (holderName: string, shares: number, percentFullyDiluted: number): CapTable['holders'][number] => ({
   holderName, shares, percentFullyDiluted,

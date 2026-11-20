@@ -40,10 +40,6 @@ import { percentBalance } from './canvasMoney';
 import {
   ACCELERATION_KINDS,
   ACCOUNT_RELATIONSHIPS,
-  MARKET_SIZE_METHODS,
-  computeMarketSize,
-  marketSizeInputsFrom,
-  marketSizeVerdicts,
   CONVERTIBLE_KINDS,
   EQUITY_INSTRUMENTS,
   IDEA_STAGES,
@@ -71,6 +67,8 @@ import {
 } from './specObjects';
 import { specVerdict, type SpecVerdict, type SpecVerdictResult } from './specVerdict';
 import { ideaEvidenceVerdict } from './ideaLog';
+import { CURRENCY_FIELD, EXACT_MONEY_HINT, MONEY_HINT } from './founderMoneyFields';
+import { EXIT_SCENARIO_SPEC, MARKET_SIZE_SPEC } from './founderMeasureSpecs';
 
 /** i18n namespace for every founder label, status, field, column and verdict. Named
  *  because `boardRefField` resolves its sentences here even when a legal or hiring kind
@@ -106,40 +104,8 @@ export interface FounderObjectSpec extends SpecObjectSpec {
   group: 'Insights' | 'Work' | 'People' | 'Data' | 'Knowledge' | 'Collaborate';
 }
 
-/**
- * Money is WRITTEN as prose and READ as a number.
- *
- * The original rule was prose-only, and its reasoning was sound: a founder object
- * routinely holds a figure that is a range, an estimate, or explicitly unknown
- * ("~$2–4M ARR", "not disclosed"), and forcing those into an integer either loses the
- * qualifier or invents a precision the source never had — an invented precision in a
- * competitor analysis being exactly what the empty-shell rule exists to stop.
- *
- * The conclusion was wrong, because it made the CFO's most basic operation
- * UNREPRESENTABLE rather than merely unimplemented: a cap table could not be totalled,
- * `committed` could not be compared to `targetAmount`, and no two entities could be
- * consolidated. Every real figure left for a spreadsheet and came back as a screenshot.
- *
- * `canvasMoney.ts` resolves it without changing what the model writes: {@link
- * parseMoney} reads the SAME prose and yields `{amount, currency, approximate, low,
- * high, qualifier}`, so "~$2–4M ARR" is both a preserved qualifier and a real number,
- * and "not disclosed" is `disclosed: false` with NO amount — never a silent zero. So the
- * hint below is unchanged for the research kinds (write what the source said), while the
- * operational kinds added under "the money, operated" ask for a plain number plus a
- * `currency` field, because an invoice's amount is a fact and not a characterisation.
- */
-const MONEY_HINT = 'A human-readable amount including its currency and any qualifier the source actually carried, e.g. "$1.2M ARR (2025 estimate)" or "not disclosed". Never invent a precise figure — it is parsed into a real number for totals, and "not disclosed" is preserved as undisclosed rather than counted as zero.';
-
-/** For the operated kinds, where the number is a fact rather than a characterisation. */
-const EXACT_MONEY_HINT = 'A plain number in major units (dollars, not cents) — no symbols, no "k"/"M" suffix, no commas. The currency lives in the `currency` field so this object can be totalled and consolidated. Leave it empty rather than estimating.';
-
-const CURRENCY_FIELD: FounderField = {
-  name: 'currency',
-  render: 'stat',
-  label: 'currency',
-  hint: 'ISO-4217 code for every amount on this object, e.g. "USD", "EUR", "GBP". One currency per object — a mixed-currency total is refused rather than silently added.',
-};
-
+// `MONEY_HINT`, `EXACT_MONEY_HINT` and `CURRENCY_FIELD` — how a founder kind asks for
+// money — live in `founderMoneyFields.ts`, shared with the kinds split out of this file.
 // `SOURCES_FIELD` and `SUMMARY_FIELD` are imported from `specObjects.ts`. They were
 // declared here too, byte-identical, which is the same duplicate the type alias above
 // removes: two constants that agreed until somebody improved one of them.
@@ -597,76 +563,9 @@ export const FOUNDER_OBJECT_SPECS: readonly FounderObjectSpec[] = [
       SOURCES_FIELD,
     ],
   },
-  // ── How big the market is, both ways (PRD 25 §5.5) ───────────────────────────
-  //
-  // Inputs are authored; TAM / SAM / SOM and the triangulation gap are `derive`d through the
-  // contract's `computeMarketSize`, the SAME function the deck's market slide reads. A missing
-  // input yields `undefined`, never 0. SOM <= SAM <= TAM is enforced as a verdict.
-  {
-    kind: 'marketSize',
-    icon: '◔',
-    group: 'Insights',
-    defaultStatus: 'sizing',
-    actions: ['size', 'review'],
-    fields: [
-      { name: 'method', render: 'stat', label: 'method', hint: `Which method is primary: ${MARKET_SIZE_METHODS.join(' | ')}. Bottom-up (customers × ARPA) is primary; top-down triangulates it.` },
-      { name: 'potentialCustomers', render: 'stat', label: 'potentialCustomers', hint: 'All potential customers worldwide/in scope, as a plain integer. Drives TAM. Leave empty rather than guessing.' },
-      { name: 'serviceableCustomers', render: 'stat', label: 'serviceableCustomers', hint: 'Customers the product can serve today (geography, segment, regulation), a plain integer. Drives SAM. Must not exceed potentialCustomers.' },
-      { name: 'reachableCustomers', render: 'stat', label: 'reachableCustomers', hint: 'Customers the go-to-market can actually reach in the plan horizon, a plain integer. Drives SOM and should be tied to the gtmPlan.' },
-      { name: 'arpa', render: 'stat', label: 'arpa', hint: 'Average revenue per account per YEAR, a plain number in major units. Used for TAM, SAM and SOM.' },
-      { name: 'achievableShare', render: 'stat', label: 'achievableShare', hint: 'Share of the reachable customers the plan can win, as a fraction (0.05) or whole percent (5).' },
-      { name: 'topDownMarket', render: 'stat', label: 'topDownMarket', hint: 'A CITED market figure for the top-down cross-check, a plain number. Cite it in `sources`.' },
-      { name: 'topDownShare', render: 'stat', label: 'topDownShare', hint: 'The share of that market this company can reach, as a fraction (0.0025) or whole percent.' },
-      {
-        name: 'tam', render: 'stat', label: 'tam', derived: true,
-        hint: 'COMPUTED. Total addressable market = potentialCustomers × arpa. Empty when an input is missing.',
-        derive: (data) => computeMarketSize(marketSizeInputsFrom(data)).tam,
-      },
-      {
-        name: 'sam', render: 'stat', label: 'sam', derived: true,
-        hint: 'COMPUTED. Serviceable addressable market = serviceableCustomers × arpa.',
-        derive: (data) => computeMarketSize(marketSizeInputsFrom(data)).sam,
-      },
-      {
-        name: 'som', render: 'stat', label: 'som', derived: true,
-        hint: 'COMPUTED. Serviceable obtainable market = reachableCustomers × arpa × achievableShare.',
-        derive: (data) => computeMarketSize(marketSizeInputsFrom(data)).som,
-      },
-      {
-        name: 'triangulationGap', render: 'stat', label: 'triangulationGap', derived: true,
-        hint: 'COMPUTED. Fractional gap between bottom-up SOM and top-down (topDownMarket × topDownShare). Within 0.15 is a health mark.',
-        derive: (data) => computeMarketSize(marketSizeInputsFrom(data)).triangulationGap,
-      },
-      {
-        name: 'sizeCheck', render: 'verdict', label: 'sizeCheck',
-        hint: 'COMPUTED. Whether SOM <= SAM <= TAM holds (otherwise `inconsistent`) and whether the two methods agree within 15%.',
-        derive: (data) => {
-          const verdicts = marketSizeVerdicts(computeMarketSize(marketSizeInputsFrom(data)));
-          return verdicts.length ? verdicts.map((key) => specVerdict(`marketSize.${key}`)) : undefined;
-        },
-      },
-      SUMMARY_FIELD,
-      SOURCES_FIELD,
-    ],
-  },
-  // ── Who takes what at an exit (PRD 25 §6.3) ──────────────────────────────────
-  //
-  // Inputs only. The founder / investor / pool payouts are computed server-side by
-  // `POST /api/equity/waterfall` from the cap table and are NEVER stored on the card.
-  {
-    kind: 'exitScenario',
-    icon: '⇱',
-    group: 'Work',
-    defaultStatus: 'modelling',
-    actions: ['model'],
-    fields: [
-      { name: 'companyRef', render: 'stat', label: 'companyRef', hint: 'Which company this scenario is for — the same ref the `capTable` uses. Payouts are derived from that cap table, never typed.', bookkeeping: true },
-      { name: 'exitValue', render: 'stat', label: 'exitValue', hint: EXACT_MONEY_HINT },
-      { name: 'debt', render: 'stat', label: 'debt', hint: 'Debt repaid ahead of every share class at exit, a plain number in major units. Empty means none declared.' },
-      { name: 'vesting', render: 'stat', label: 'vesting', hint: 'How unvested options are treated at the exit: normal | accelerated.' },
-      SUMMARY_FIELD,
-    ],
-  },
+  // The Measure-PRD kinds — market size and exit scenario — live in `founderMeasureSpecs.ts`.
+  MARKET_SIZE_SPEC,
+  EXIT_SCENARIO_SPEC,
   {
     kind: 'battlecard',
     icon: '⛊',
