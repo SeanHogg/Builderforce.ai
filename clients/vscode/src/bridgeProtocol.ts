@@ -260,6 +260,19 @@ export type CanvasHostMessage = (typeof CANVAS_HOST_MESSAGES)[number];
 export type HostMessageType = (typeof HOST_MESSAGES)[number];
 
 /**
+ * HOST → WEBVIEW: the composer commands' `/help` model, recomputed after `init` (a
+ * workspace folder was added/removed, a root `builderforce.json` changed —
+ * `composerCommands/helpRefresh.ts`). The webview replaces the model it took from
+ * `init.composerCommands` (`webview/src/chat/useComposerCommands.ts`).
+ */
+export const COMPOSER_COMMANDS_FRAME = 'composer.commands' as const;
+
+export interface ComposerCommandsFrame {
+  type: typeof COMPOSER_COMMANDS_FRAME;
+  composerCommands: import('./composerCommands/reply').ComposerCommandsInit;
+}
+
+/**
  * Prove a host's `switch` covered every message in its slice.
  *
  * Call it in the `default` branch with the narrowed `msg.type`. Once every case is

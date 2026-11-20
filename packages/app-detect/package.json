@@ -3,9 +3,10 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "App detection, host-neutral (PRD 31 §W2 + §W11 phase 2): the pure blueprint detectors (package.json, wrangler, Python, PHP, .NET, Rust, docker-compose, builderforce.json …), the detection pipeline (runDetectors → buildBlueprint → applyOverrides), and the blueprint ↔ builderforce.json v1 adapter (emitManifest / manifestToBlueprintOverrides). Pure: files in, data out — no I/O, no DB, no repo providers. The API, the web app and the VS Code extension all detect through it. Dependency-free by contract (its TOML and compose-YAML readers are minimal in-house readers). Source-only: every consumer aliases the bare specifier straight at src/index.ts.",
+  "description": "App detection, host-neutral (PRD 31 §W2 + §W11 phase 2): the pure blueprint detectors (package.json, wrangler, Python, PHP, .NET, Rust, docker-compose, builderforce.json …), the detection pipeline (runDetectors → buildBlueprint → applyOverrides), and the blueprint ↔ builderforce.json v1 adapter (emitManifest / manifestToBlueprintOverrides). Pure: files in, data out — no I/O, no DB, no repo providers. The API, the web app and the VS Code extension all detect through it. Dependency-free by contract (its TOML and compose-YAML readers are minimal in-house readers). Source-only: every consumer aliases the bare specifier straight at src/index.ts; the manifest v1 shape (types, schema URL, file name, backend ingress path) is also the dependency-free ./manifest subpath (src/manifest/manifestShape.ts), which the starter kits import.",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./manifest": "./src/manifest/manifestShape.ts"
   },
   "types": "./src/index.ts",
   "scripts": {

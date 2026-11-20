@@ -8,7 +8,7 @@
  * - the origin key, derived from (projectId, applicationId) with the runtime's own function
  *   ({@link ./previewOriginKey}), so a developer only ever obtains policies for origins of
  *   projects in their scope;
- * - the origins: the default allowlist ({@link ./workerCsp} `DEFAULT_CONNECT_SOURCES`, applied to
+ * - the origins: the default allowlist (`DEFAULT_CONNECT_SOURCES` of `@seanhogg/builderforce-webcontainers/preview-headers`, applied to
  *   every Worker whatever the policy says) plus the project's DECLARED external APIs
  *   ({@link ./workerEgressDeclarations}). Nothing in the request can add an origin.
  *

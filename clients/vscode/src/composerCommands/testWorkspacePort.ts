@@ -3,10 +3,15 @@
  * Files are keyed by absolute path (`path.join`), so paths read the same as the real port's.
  */
 import * as path from "node:path";
+import { WriteRefusedError, type WriteRefusal } from "./writeContainment";
 import type { ComposerWorkspacePort, WorkspaceFolderRef } from "./workspacePort";
 
 export interface FakeWorkspacePort extends ComposerWorkspacePort {
   files: Map<string, string>;
+  /** Paths the write check refuses (as a symbolic link would be). */
+  refused: Set<string>;
+  /** `remoteName()`'s answer. */
+  remote?: string;
   /** Every `confirm` asked: its message and button. */
   asked: Array<{ message: string; approve: string }>;
   /** The answer the next `confirm`s give. */
@@ -16,11 +21,16 @@ export interface FakeWorkspacePort extends ComposerWorkspacePort {
 }
 
 export function fakeWorkspacePort(folders: WorkspaceFolderRef[], files: Record<string, string> = {}): FakeWorkspacePort {
+  const checkWrites = async (paths: readonly string[]): Promise<WriteRefusal[]> =>
+    paths.filter((file) => port.refused.has(file)).map((file) => ({ file, reason: "symlink" as const }));
   const port: FakeWorkspacePort = {
     files: new Map(Object.entries(files)),
+    refused: new Set(),
     asked: [],
     approve: true,
     folders: () => folders,
+    remoteName: () => port.remote,
+    checkWrites,
     pickFolder: async () => port.picked,
     listDir: async (dir) => {
       const names = new Set<string>();
@@ -30,7 +40,11 @@ export function fakeWorkspacePort(folders: WorkspaceFolderRef[], files: Record<s
     },
     exists: async (file) => port.files.has(file),
     readText: async (file) => port.files.get(file),
-    writeText: async (file, text) => { port.files.set(file, text); },
+    writeText: async (file, text) => {
+      const refused = await checkWrites([file]);
+      if (refused.length > 0) throw new WriteRefusedError(refused);
+      port.files.set(file, text);
+    },
     confirm: async (message, approve) => {
       port.asked.push({ message, approve });
       return port.approve;

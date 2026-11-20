@@ -4,7 +4,10 @@
  * (`createLocalLauncher`) — a VS Code webview cannot register the runtime's service worker.
  *
  * - No `builderforce.json` ⇒ the app is detected and its manifest passed in memory
- *   (`manifestText`), and the reply says so (save it with `/manifest init`).
+ *   (`manifestText`), and the reply says so (save it with `/manifest init`) with detection's
+ *   notes, worded as `/manifest init` words them.
+ * - Unavailable in a remote extension host (`entries.ts`): the launcher binds loopback on
+ *   the host, which is not the person's computer there.
  * - ONE launcher per folder (`FolderLaunchers`): a second `/launch` reopens it; another
  *   environment restarts it; `/launch stop` closes it.
  * - The URL carries the per-launch token in its fragment: it is shown in the chat, and
@@ -15,7 +18,7 @@
 import type { ComposerCommandExecutor } from "./dispatch";
 import type { ComposerCommandText } from "./labels";
 import { LAUNCH_COMMAND_ID, LAUNCH_STOP, LAUNCH_TRUST } from "./entries";
-import type { TrustOutcome } from "./launcherTrust";
+import type { LauncherCa, TrustOutcome } from "./launcherTrust";
 import type { FolderLaunchers, RunningLauncher } from "./folderLaunchers";
 import { MANIFEST_FILE_NAME, type DetectManifest, type ReadFolderFiles } from "./manifestInit";
 import { chooseFolder, inFolder, type ComposerWorkspacePort } from "./workspacePort";
@@ -38,7 +41,7 @@ export interface LaunchDeps {
   readFiles: ReadFolderFiles;
   detect: DetectManifest;
   /** The certificate step (`launcherTrust.ts`), run before the browser opens. Omitted ⇒ none. */
-  trust?: (caCertPath: string | undefined, force: boolean) => Promise<TrustOutcome>;
+  trust?: (ca: LauncherCa | null | undefined, force: boolean) => Promise<TrustOutcome>;
 }
 
 export function launchExecutor(deps: LaunchDeps): ComposerCommandExecutor {
@@ -53,7 +56,7 @@ export function launchExecutor(deps: LaunchDeps): ComposerCommandExecutor {
 
   /** Ask about the launcher's certificate (BEFORE the browser opens on it), then open the browser. */
   const trustThenOpen = async (launcher: RunningLauncher, lines: string[], force: boolean): Promise<ComposerReply> => {
-    const trust = deps.trust ? await deps.trust(launcher.caCertPath, force) : { lines: [], failed: false };
+    const trust = deps.trust ? await deps.trust(launcher.ca, force) : { lines: [], failed: false };
     await deps.openExternal(launcher.url);
     return { ...opened(launcher.url, [...lines, ...trust.lines]), ...(trust.failed ? { tone: "error" as const } : {}) };
   };
@@ -79,7 +82,8 @@ export function launchExecutor(deps: LaunchDeps): ComposerCommandExecutor {
     if (running) await launchers.stop(folder.path);
 
     const hasManifest = await port.exists(inFolder(folder, MANIFEST_FILE_NAME));
-    const manifestText = hasManifest ? undefined : deps.detect(await deps.readFiles(folder.path)).text;
+    const detected = hasManifest ? undefined : deps.detect(await deps.readFiles(folder.path));
+    const manifestText = detected?.text;
     let launcher: RunningLauncher;
     try {
       launcher = await launchers.start(folder.path, choice, () => deps.start({
@@ -90,6 +94,8 @@ export function launchExecutor(deps: LaunchDeps): ComposerCommandExecutor {
     } catch (error) {
       return { kind: "text", tone: "error", lines: [text.launchFailed(error instanceof Error ? error.message : String(error))] };
     }
-    return trustThenOpen(launcher, [text.launchStarted(folder.name), ...(hasManifest ? [] : [text.launchDetected])], forceTrust);
+    // A detected manifest's notes are shown exactly as `/manifest init` shows them: what detection could not express is never dropped.
+    const detectedLines = detected ? [text.launchDetected, ...text.noteLines(detected.notes)] : [];
+    return trustThenOpen(launcher, [text.launchStarted(folder.name), ...detectedLines], forceTrust);
   };
 }

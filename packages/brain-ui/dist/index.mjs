@@ -84,25 +84,34 @@ function isCancelledTaskStatus(status) {
 // ../agent-loop/src/ticketClosedStates.ts
 var TASK_TABLE = { closed: TASK_CLOSED_STATUSES, cancelled: TASK_CANCELLED_STATUSES };
 var CEREMONY_SESSION_CLOSED_STATUSES = ["completed", "cancelled", "closed", "archived"];
-var CEREMONY_SESSION = { closed: CEREMONY_SESSION_CLOSED_STATUSES, cancelled: ["cancelled"] };
+var CEREMONY_SESSION = { closed: CEREMONY_SESSION_CLOSED_STATUSES, cancelled: [] };
+var PORTFOLIO_STATUSES = ["active", "archived"];
+var INITIATIVE_STATUSES = ["proposed", "active", "completed", "archived"];
+var OBJECTIVE_STATUSES = ["active", "achieved", "missed", "archived"];
+var ROADMAP_STATUSES = ["planned", "in_progress", "shipped", "cancelled"];
+var ROADMAP_LEGACY_DELIVERED_STATUSES = ["done", "complete", "completed", "released"];
+function pick(_vocabulary, ...words) {
+  return words;
+}
+var TICKET_STATUS_VALUES = {
+  portfolio: PORTFOLIO_STATUSES,
+  initiative: INITIATIVE_STATUSES,
+  objective: OBJECTIVE_STATUSES,
+  roadmap: [...ROADMAP_STATUSES, ...ROADMAP_LEGACY_DELIVERED_STATUSES]
+};
 var TICKET_CLOSED_STATES = {
   // agent-loop `taskClosedState.ts` TASK_CLOSED_STATUSES / TASK_CANCELLED_STATUSES.
   task: TASK_TABLE,
   gap: TASK_TABLE,
   epic: TASK_TABLE,
-  // api schema/delivery.ts `portfolios.status`: active | archived.
-  portfolio: { closed: ["archived"], cancelled: [] },
-  // api schema/delivery.ts `initiatives.status`: proposed | active | completed | archived.
-  initiative: { closed: ["completed", "archived"], cancelled: [] },
-  // api schema/delivery.ts `objectives.status`: active | achieved | missed | archived
-  // (the `objectives.create` / `objectives.update` tool enum). A MISSED objective is over
-  // without delivering, so it is skipped like a cancelled lane rather than counted done.
-  objective: { closed: ["achieved", "missed", "archived"], cancelled: ["missed"] },
-  // frontend lib/pm/roadmap.ts ROADMAP_STATUSES: planned | in_progress | shipped | cancelled
-  // (`shipped` is the publish marker, api productRoutes.ts); done / complete / completed /
-  // released are the legacy delivered spellings the api's roadmap health already accepted.
-  roadmap: { closed: ["shipped", "done", "complete", "completed", "released", "cancelled"], cancelled: ["cancelled"] },
-  // api schema/kernel.ts `specStatusEnum`: draft | ready | in_progress | complete.
+  portfolio: { closed: pick(PORTFOLIO_STATUSES, "archived"), cancelled: [] },
+  initiative: { closed: pick(INITIATIVE_STATUSES, "completed", "archived"), cancelled: [] },
+  // A MISSED objective is over without delivering, so it is skipped like a cancelled lane
+  // rather than counted done (its own ring still reads 100: it is closed).
+  objective: { closed: pick(OBJECTIVE_STATUSES, "achieved", "missed", "archived"), cancelled: pick(OBJECTIVE_STATUSES, "missed") },
+  roadmap: { closed: pick(TICKET_STATUS_VALUES.roadmap, "shipped", ...ROADMAP_LEGACY_DELIVERED_STATUSES), cancelled: [] },
+  // api schema/kernel.ts `specStatusEnum`: draft | ready | in_progress | complete (a pg
+  // enum, so the api test asserts this word is one of its values).
   spec: { closed: ["complete"], cancelled: [] },
   retro: CEREMONY_SESSION,
   poker: CEREMONY_SESSION
@@ -131,7 +140,7 @@ var CLAIMED_COMPLETE_PROGRESS_CAP = 75;
 function isExcludedFromChatHealth(status, kind) {
   return isCancelledTicketStatus(kind, status);
 }
-function effectiveTicketProgress(status, progressPct, kind = "task") {
+function effectiveTicketProgress(status, progressPct, kind) {
   const raw = typeof progressPct === "number" && Number.isFinite(progressPct) ? progressPct : 0;
   if (isClosedTicketStatus(kind, status)) return Math.max(raw, 100);
   if (raw >= 100 && hasTicketStatusVocabulary(kind)) return CLAIMED_COMPLETE_PROGRESS_CAP;
@@ -4607,7 +4616,7 @@ function ModelPane({ model, labels, identity, inUse, inferenceMode, onPicked }) 
   );
   const activeKey = activeModelKey(model.selection);
   const activeRef = model.selection.mode === "model" ? model.selection.model : void 0;
-  const pick = (selection) => {
+  const pick2 = (selection) => {
     if (inferenceMode) {
       const mode = inferenceModeForModelPick(inferenceMode.value, selection, { undecided: !!inferenceMode.needsChoice });
       if (mode) void Promise.resolve(inferenceMode.onChange(mode)).catch(() => void 0);
@@ -4616,7 +4625,7 @@ function ModelPane({ model, labels, identity, inUse, inferenceMode, onPicked }) 
     setQuery("");
     onPicked();
   };
-  const pickLocal = (ref) => pick({ mode: "model", model: ref });
+  const pickLocal = (ref) => pick2({ mode: "model", model: ref });
   const renderItems = (rows) => rows.map((item) => /* @__PURE__ */ jsxs34(
     "button",
     {
@@ -4625,7 +4634,7 @@ function ModelPane({ model, labels, identity, inUse, inferenceMode, onPicked }) 
       "aria-selected": item.key === activeKey,
       className: `bf-pmenu__option${item.key === activeKey ? " is-active" : ""}`,
       title: item.title,
-      onClick: () => pick(item.selection),
+      onClick: () => pick2(item.selection),
       children: [
         /* @__PURE__ */ jsx38("span", { className: "bf-pmenu__optName", children: item.label }),
         /* @__PURE__ */ jsx38("span", { className: "bf-pmenu__optTag", children: modelCategoryLabel(item.category, labels) }),
@@ -5309,12 +5318,12 @@ function PersonaPicker({ value, onChange, modalities, agents, labels, disabled, 
       active: value !== DEFAULT_PERSONA && (modality != null || agent != null),
       disabled,
       children: (close) => {
-        const pick = (next) => {
+        const pick2 = (next) => {
           onChange(next);
           close();
         };
         return /* @__PURE__ */ jsxs41(Fragment16, { children: [
-          /* @__PURE__ */ jsx45(PickerItem, { icon: /* @__PURE__ */ jsx45(IconBolt, {}), label: l.defaultBrain, active: !modality && !agent, onClick: () => pick(DEFAULT_PERSONA) }),
+          /* @__PURE__ */ jsx45(PickerItem, { icon: /* @__PURE__ */ jsx45(IconBolt, {}), label: l.defaultBrain, active: !modality && !agent, onClick: () => pick2(DEFAULT_PERSONA) }),
           modalities.length > 0 && /* @__PURE__ */ jsxs41(Fragment16, { children: [
             /* @__PURE__ */ jsx45("div", { className: "bf-pmenu__sep" }),
             /* @__PURE__ */ jsx45("div", { className: "bf-pmenu__group", children: l.personas }),
@@ -5324,7 +5333,7 @@ function PersonaPicker({ value, onChange, modalities, agents, labels, disabled, 
                 icon: m.icon ?? "",
                 label: m.label,
                 active: modality?.id === m.id,
-                onClick: () => pick(modalityPersonaChoice(m.id))
+                onClick: () => pick2(modalityPersonaChoice(m.id))
               },
               m.id
             ))
@@ -5338,7 +5347,7 @@ function PersonaPicker({ value, onChange, modalities, agents, labels, disabled, 
                 icon: /* @__PURE__ */ jsx45(Avatar, { name: a.name, kind: "agent", size: 16 }),
                 label: a.name,
                 active: agent != null && agentPersonaChoice(agent) === agentPersonaChoice(a),
-                onClick: () => pick(agentPersonaChoice(a))
+                onClick: () => pick2(agentPersonaChoice(a))
               },
               agentPersonaChoice(a)
             ))
@@ -9073,8 +9082,8 @@ async function loadEvermindBuilds(request2) {
   const rows = await request2("/api/ide-projects");
   return (rows ?? []).filter((r) => r.modality === "evermind" || r.modality === "llm");
 }
-function preferredEvermindBuild(builds, pick = {}) {
-  const { current, resolvedProjectId, activeProjectId } = pick;
+function preferredEvermindBuild(builds, pick2 = {}) {
+  const { current, resolvedProjectId, activeProjectId } = pick2;
   if (current != null && builds.some((b) => b.storageProjectId === current)) return current;
   const resolved = resolvedProjectId ?? activeProjectId;
   const preferred = builds.find((b) => b.storageProjectId === resolved) ?? builds.find((b) => activeProjectId != null && b.containerProjectId === activeProjectId) ?? builds[0];

@@ -25,8 +25,13 @@ export interface ComposerCommandContext {
   hasWorkspace: boolean;
   /** Why not, in the person's language (shown disabled with this reason, never hidden). */
   noWorkspaceReason: string;
-  /** The environments the workspace's `builderforce.json` declares, when it is readable. */
-  environments?: readonly string[];
+  /**
+   * `/launch`'s environment choices: those the open folders' `builderforce.json` files
+   * declare, when readable (several folders ⇒ each labelled with the folders declaring it).
+   */
+  environments?: readonly ComposerCommandChoice[];
+  /** Why `/launch` cannot run in this host even with a folder open (a remote extension host). */
+  launchUnavailableReason?: string;
   /** The label of the `stop` choice. */
   stopLabel: string;
   /** The label of the `trust` choice (trust the launcher's local certificate again). */
@@ -65,6 +70,9 @@ export function buildComposerCommands(context: ComposerCommandContext): Composer
   const availability: ComposerCommandAvailability = context.hasWorkspace
     ? { ok: true }
     : { ok: false, reason: context.noWorkspaceReason };
+  const launchAvailability: ComposerCommandAvailability = availability.ok && context.launchUnavailableReason !== undefined
+    ? { ok: false, reason: context.launchUnavailableReason }
+    : availability;
   const kits = starterKitChoices();
   const extras = starterKitExtraChoices();
   const environments = context.environments ?? [];
@@ -96,15 +104,15 @@ export function buildComposerCommands(context: ComposerCommandContext): Composer
         ...(environments.length > 0
           ? {
               choices: [
-                ...environments.map((value) => ({ value })),
+                ...environments,
                 { value: LAUNCH_STOP, label: context.stopLabel },
                 { value: LAUNCH_TRUST, label: context.trustLabel },
               ],
             }
           : {}),
       }],
-      example: environments[0] ? `/launch ${environments[0]}` : "/launch",
-      availability,
+      example: environments[0] ? `/launch ${environments[0].value}` : "/launch",
+      availability: launchAvailability,
     },
   ];
 }

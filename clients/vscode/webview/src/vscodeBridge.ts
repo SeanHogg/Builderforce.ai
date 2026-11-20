@@ -15,6 +15,7 @@
  *                    'changes.open'{changePath,changeStatus}, 'changes.review'
  *   host → webview : 'init'{…}, 'token'{token}, 'response'{id,ok,result|error}, 'intent'{intent},
  *                    'editorContext'{editorContext}, 'pendingChanges'{pendingChanges}, 'refresh',
+ *                    'composer.commands'{composerCommands} (the `/` menu's recomputed help model),
  *                    'run.sync' / 'run.settled' / 'run.failed' / 'run.tool' / 'run.tools' /
  *                    'run.modelFallback'{chatId,from} (see onHostMessage)
  *

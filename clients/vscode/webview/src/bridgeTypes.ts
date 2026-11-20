@@ -137,6 +137,7 @@ export interface InitData {
   labels: LabelBundle;
   /** The composer commands' `/help` model (PRD 31 §W11), drawn as the `/` menu's Actions tab. Absent from an older host. */
   composerCommands?: import('../../src/composerCommands/reply').ComposerCommandsInit;
+  // Recomputed later by the host and pushed as a {@link ComposerCommandsFrame}, which replaces this.
   /** The editor's display language (`vscode.env.language`, e.g. `de`, `zh-cn`) — how
    *  numbers, money and relative times are formatted in the shared components. */
   locale?: string;
@@ -174,3 +175,6 @@ export interface InitData {
    *  prepared with. Absent from an older host ⇒ the defaults. */
   images?: { maxEdge?: number; jpegQuality?: number };
 }
+
+/** Host → webview: the `/` menu's help model, recomputed after `init` (`src/bridgeProtocol.ts`). */
+export type ComposerCommandsFrame = import('../../src/bridgeProtocol').ComposerCommandsFrame;

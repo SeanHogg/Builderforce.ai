@@ -18,6 +18,7 @@
 
 import type { AppService, ServiceKind } from '@builderforce/creation-canvas-contract';
 import { SERVICE_KIND_DEV_PORTS, SERVICE_KINDS } from '@builderforce/creation-canvas-contract';
+import { detectionNote, errorText, warningFindings, type DetectionNote } from '../notes';
 import type { AppDetector, ComposeResource, ComposeResourceType, DetectorFindings } from '../types';
 import { parseYaml, yamlMap, type YamlValue } from './minimalYaml';
 import { detectFromPackageJson } from './packageJsonDetector';
@@ -103,11 +104,11 @@ function commandLine(value: YamlValue | undefined): string | null {
 }
 
 /** The Node detector's reading of a context's `package.json`; an unreadable one is a warning and the `node` defaults. */
-function nodeService(content: string, warnings: string[], path: string): AppService | undefined {
+function nodeService(content: string, warnings: DetectionNote[], path: string): AppService | undefined {
   try {
     return detectFromPackageJson(content).services?.[0];
   } catch (error) {
-    warnings.push(`${path} could not be read: ${error instanceof Error ? error.message : String(error)}`);
+    warnings.push(detectionNote('compose-package-unreadable', { path, error: errorText(error) }));
     return undefined;
   }
 }
@@ -118,7 +119,7 @@ function appService(
   name: string,
   dir: string,
   entry: { [key: string]: YamlValue },
-  warnings: string[],
+  warnings: DetectionNote[],
 ): AppService | null {
   const manifest = CONTEXT_MANIFESTS.find((m) => files.has(under(dir, m.file)));
   if (dir === '' && manifest) return null;
@@ -160,9 +161,9 @@ function appService(
 /** Detect from a compose file's content. */
 export function detectFromCompose(files: Map<string, string>, fileName: string, content: string): DetectorFindings {
   const services = yamlMap(yamlMap(parseYaml(content))?.services);
-  if (!services) return { warnings: [`${fileName}: no services section could be read`] };
+  if (!services) return warningFindings([detectionNote('compose-no-services', { file: fileName })]);
 
-  const warnings: string[] = [];
+  const warnings: DetectionNote[] = [];
   const resources: ComposeResource[] = [];
   const apps = new Map<string, AppService>();
   const appDepends = new Map<string, string[]>();
@@ -172,7 +173,7 @@ export function detectFromCompose(files: Map<string, string>, fileName: string, 
     if (entry.build !== undefined && entry.build !== null) {
       const dir = contextDir(entry.build);
       if (dir === null) {
-        warnings.push(`${fileName} service "${name}": its build context is outside the repository and was not read`);
+        warnings.push(detectionNote('compose-context-outside', { file: fileName, service: name }));
         continue;
       }
       const service = appService(files, name, dir, entry, warnings);
@@ -182,16 +183,16 @@ export function detectFromCompose(files: Map<string, string>, fileName: string, 
     }
     const image = typeof entry.image === 'string' ? entry.image : null;
     if (!image) {
-      warnings.push(`${fileName} service "${name}": no image and no build context`);
+      warnings.push(detectionNote('compose-no-image', { file: fileName, service: name }));
       continue;
     }
     const known = IMAGE_RESOURCES.find((r) => r.pattern.test(imageName(image)));
     if (!known) {
-      warnings.push(`${fileName} service "${name}": image "${image}" is not supported by the browser runtime`);
+      warnings.push(detectionNote('compose-image-unsupported', { file: fileName, service: name, image }));
       continue;
     }
     resources.push({ id: name, type: known.type, image, ...(known.extensions ? { extensions: known.extensions } : {}), usedBy: [] });
-    warnings.push(`${fileName} service "${name}": image "${image}" is a ${known.type} resource, which the blueprint has no field for — the manifest declares it`);
+    warnings.push(detectionNote('compose-image-resource', { file: fileName, service: name, image, type: known.type }));
   }
 
   // Edges: an app's `depends_on` names another app (→ `dependsOn`) or a resource (→ `usedBy`).
@@ -207,7 +208,7 @@ export function detectFromCompose(files: Map<string, string>, fileName: string, 
   return {
     ...(apps.size > 0 ? { services: [...apps.values()] } : {}),
     ...(resources.length > 0 ? { composeResources: resources } : {}),
-    ...(warnings.length > 0 ? { warnings } : {}),
+    ...warningFindings(warnings),
   };
 }
 

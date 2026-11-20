@@ -7,20 +7,26 @@ const runtime = vi.hoisted(() => ({
   files: new Map<string, string>(),
   scripts: [] as string[][],
 }));
-vi.mock('@seanhogg/builderforce-webcontainers', async (importOriginal) => ({
-  // The real VirtualFileSystem: the start judges the loaded files on one before booting anything.
-  VirtualFileSystem: (await importOriginal<typeof import('@seanhogg/builderforce-webcontainers')>()).VirtualFileSystem,
-  startPreviewRuntime: async () => ({
-    fs: { list: () => [...runtime.files.keys()], rm: (p: string) => runtime.files.delete(p), writeFile: () => undefined, readText: (p: string) => runtime.files.get(p) },
-    writeTree: (tree: Record<string, string>) => { for (const [p, c] of Object.entries(tree)) runtime.files.set(`/${p}`, c); },
-    setPreviewScripts: (scripts: string[]) => { runtime.scripts.push(scripts); },
-    onError: () => () => undefined,
-    onPreviewConsole: () => () => undefined,
-    listProcesses: () => [],
-    portPolicy: { register: () => () => undefined },
-    killApplication: () => undefined,
-  }),
-}));
+vi.mock('@seanhogg/builderforce-webcontainers', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@seanhogg/builderforce-webcontainers')>();
+  return {
+    // The real VirtualFileSystem: the start judges the loaded files on one before booting anything.
+    VirtualFileSystem: real.VirtualFileSystem,
+    // The real origin template and key: the boot builds the per-application `previewOrigin` from them.
+    previewOriginTemplate: real.previewOriginTemplate,
+    previewOriginKey: real.previewOriginKey,
+    startPreviewRuntime: async () => ({
+      fs: { list: () => [...runtime.files.keys()], rm: (p: string) => runtime.files.delete(p), writeFile: () => undefined, readText: (p: string) => runtime.files.get(p) },
+      writeTree: (tree: Record<string, string>) => { for (const [p, c] of Object.entries(tree)) runtime.files.set(`/${p}`, c); },
+      setPreviewScripts: (scripts: string[]) => { runtime.scripts.push(scripts); },
+      onError: () => () => undefined,
+      onPreviewConsole: () => () => undefined,
+      listProcesses: () => [],
+      portPolicy: { register: () => () => undefined },
+      killApplication: () => undefined,
+    }),
+  };
+});
 
 interface FakeApp { dispose: ReturnType<typeof vi.fn>; start: ReturnType<typeof vi.fn> }
 const apps = vi.hoisted(() => [] as FakeApp[]);

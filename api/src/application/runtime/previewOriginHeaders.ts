@@ -1,9 +1,11 @@
 /**
  * The response headers of the in-browser preview origins (make.md › PRD 31 §4 W10,
- * controls 1 and 6) — `@seanhogg/builderforce-webcontainers` › packages/browser/README.md ›
- * "Preview origin headers" (2026.11.5), header for header. The CSP strings are
- * {@link ./workerCsp}; this module decides which set a response gets and whether a
- * service worker script may be served at all.
+ * controls 1 and 6). Every header set and CSP string has ONE owner,
+ * `@seanhogg/builderforce-webcontainers/preview-headers`; this module is the API's
+ * {@link PREVIEW_HEADERS} profile of it (embeddable, reporting to the API, `text/javascript`,
+ * Worker scripts cached five minutes), plus what only the API decides: who may frame a
+ * preview origin, what the container ingress gets, and whether a service worker script may
+ * be served at all.
  *
  * Pure: strings in, header records out. The middleware
  * (`presentation/middleware/browserPreviewOrigin`) only routes.
@@ -14,14 +16,12 @@
  * document or script that does not opt in itself. They add to the contract's headers, never
  * replace one.
  */
+import { PREVIEW_DEFAULT_EGRESS, previewHeaders, type HeaderSet } from '@seanhogg/builderforce-webcontainers/preview-headers';
 import { appOrigins, isDevEnvironment } from '../shared/appOrigins';
-import {
-  CSP_REPORT_PATH, CSP_REPORT_URL, PREVIEW_DEFAULT_EGRESS, REPORTING_ENDPOINTS_HEADER, previewDocumentCsp, relayCsp, serviceWorkerCsp,
-  workerScriptCsp,
-} from './workerCsp';
+import { CSP_REPORT_PATH, CSP_REPORT_URL, PREVIEW_CSP_REPORTING } from './workerCsp';
 import type { WorkerEgressPolicy } from './workerEgressPolicy';
 
-export type HeaderSet = Record<string, string>;
+export type { HeaderSet };
 
 /** What lets the cross-origin-isolated app frame and load the preview origin's files. */
 export const EMBEDDABLE: Readonly<HeaderSet> = Object.freeze({
@@ -29,11 +29,20 @@ export const EMBEDDABLE: Readonly<HeaderSet> = Object.freeze({
   'Cross-Origin-Resource-Policy': 'cross-origin',
 });
 
-const NOSNIFF = { 'X-Content-Type-Options': 'nosniff' } as const;
-const AGENT_CLUSTER = { 'Origin-Agent-Cluster': '?1' } as const;
-
-/** The script MIME type every preview script is served with. */
-export const PREVIEW_SCRIPT_TYPE = 'text/javascript';
+/**
+ * The header sets the API serves on its preview origins: `relay(frameAncestors)`,
+ * `serviceWorker()`, `workerScript([...policy.connectSources, ...ownPaths])` and
+ * `document(host, frameAncestors)`. A process Worker script is cached per URL, and the URL
+ * carries `?policy=`, so two policies never share a cache entry (versioned by the package,
+ * so a short cache is enough); its `ownPaths` are path-scoped sources on the platform's
+ * preview hosts (the .NET bundle's `https://<host>/dotnet/`) — never a bare origin.
+ */
+export const PREVIEW_HEADERS = previewHeaders({
+  embed: EMBEDDABLE,
+  reporting: PREVIEW_CSP_REPORTING,
+  scriptType: 'text/javascript',
+  workerScriptCache: 'public, max-age=300',
+});
 
 /**
  * The pages allowed to frame a preview origin: the app's own origins, and local dev ones only
@@ -43,68 +52,12 @@ export function previewFrameAncestors(corsOrigins: string | undefined, environme
   return appOrigins(corsOrigins, isDevEnvironment(environment));
 }
 
-/** `relay.html`: framed only by `frameAncestors`, never cached (a deploy reaches the next boot). */
-export function relayHeaders(frameAncestors: readonly string[]): HeaderSet {
-  return {
-    ...EMBEDDABLE,
-    'Content-Type': 'text/html; charset=utf-8',
-    'Content-Security-Policy': relayCsp(frameAncestors),
-    ...NOSNIFF,
-    ...AGENT_CLUSTER,
-    'Cache-Control': 'no-store',
-  };
-}
-
-/** `sw.js`: browsers re-check a service worker script on navigation, so never let a cache answer for it. */
-export function serviceWorkerHeaders(): HeaderSet {
-  return {
-    ...EMBEDDABLE,
-    'Content-Type': PREVIEW_SCRIPT_TYPE,
-    'Content-Security-Policy': serviceWorkerCsp(),
-    ...NOSNIFF,
-    'Cache-Control': 'no-cache',
-  };
-}
-
-/**
- * A process Worker script under `policy`. The response is cached per URL, and the URL
- * carries `?policy=`, so two policies never share a cache entry; `Vary` names nothing
- * because the policy is in the URL, not in a request header. `ownPaths`: path-scoped sources on
- * the platform's preview hosts the Worker must load (the .NET bundle's `https://<host>/dotnet/`) —
- * never a bare origin, which would let it re-enter `/__bfwc/` as preview ingress.
- */
-export function workerScriptHeaders(policy: WorkerEgressPolicy, ownPaths: readonly string[] = []): HeaderSet {
-  return {
-    ...EMBEDDABLE,
-    'Content-Type': PREVIEW_SCRIPT_TYPE,
-    'Content-Security-Policy': workerScriptCsp([...policy.connectSources, ...ownPaths]),
-    'Reporting-Endpoints': REPORTING_ENDPOINTS_HEADER,
-    ...NOSNIFF,
-    // Versioned by the package, so a short cache is enough.
-    'Cache-Control': 'public, max-age=300',
-  };
-}
-
-/**
- * Every other response the runtime's origins answer — a 404, a refused `sw.js`, the .NET
- * bundle — on the host it was served from.
- */
-export function previewDocumentHeaders(host: string, frameAncestors: readonly string[]): HeaderSet {
-  return {
-    ...EMBEDDABLE,
-    'Content-Security-Policy': previewDocumentCsp({ host: host.toLowerCase(), appOrigins: frameAncestors }),
-    'Reporting-Endpoints': REPORTING_ENDPOINTS_HEADER,
-    ...NOSNIFF,
-    ...AGENT_CLUSTER,
-  };
-}
-
 /**
  * What the container-preview ingress's answers on the shared host get (a different product
  * that shares the host: its dev servers load what they like, so no document CSP and no CORP
  * override) — only what keeps it from being sniffed or joined to a sibling's agent cluster.
  */
-export const INGRESS_HEADERS: Readonly<HeaderSet> = Object.freeze({ ...NOSNIFF, ...AGENT_CLUSTER });
+export const INGRESS_HEADERS: Readonly<HeaderSet> = Object.freeze({ 'X-Content-Type-Options': 'nosniff', 'Origin-Agent-Cluster': '?1' });
 
 /** The configuration a `sw.js` URL carries (`?mode=relay&policy=<id>&egress=<sources>&report=<url>`). */
 export interface ServiceWorkerQuery {

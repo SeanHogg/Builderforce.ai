@@ -25,6 +25,8 @@ import { testAccountFromEditor } from "./localAccountTest";
 import { handleRunDeltaRequest } from "./runDelta/runDeltaSurface";
 import type { AttachmentIngressRequest } from "./attachmentIngress";
 import { composerCommandHost } from "./composerCommands/host";
+import type { ComposerCommandsInit } from "./composerCommands/reply";
+import { COMPOSER_COMMANDS_FRAME, type ComposerCommandsFrame } from "./bridgeProtocol";
 
 /** Inbound messages unique to the workspace surface (the shared cases live in the bridge). */
 export interface BrainInbound extends WebviewInbound {
@@ -172,6 +174,12 @@ export function refreshWorkspaceSurfaces(): void {
 /** A chat deleted from the Sessions tree: a surface leaves it only if it is the one open. */
 export function notifyChatDeleted(chatId: number): void {
   for (const surface of live) surface.post({ type: "chat.deleted", chatId });
+}
+
+/** The `/` menu's help model was recomputed: every live surface replaces the one its `init` carried. */
+export function notifyComposerCommands(composerCommands: ComposerCommandsInit): void {
+  const frame: ComposerCommandsFrame = { type: COMPOSER_COMMANDS_FRAME, composerCommands };
+  for (const surface of live) surface.post(frame);
 }
 
 /**

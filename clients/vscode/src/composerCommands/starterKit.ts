@@ -5,12 +5,15 @@
  * - A kit with issues (a fragment conflict, a part that needs another) writes NOTHING.
  * - A folder holding anything besides `.git` / `.vscode` needs a modal approval first,
  *   which names every file that would be overwritten. Declined ⇒ nothing is written.
+ * - A path that is a symbolic link, or leads outside the folder, writes NOTHING and is
+ *   named in the reply (`writeContainment.ts`).
  */
 import { composeKit } from "@builderforce/ide-templates/kits";
 import type { ComposerCommandExecutor } from "./dispatch";
 import type { ComposerCommandText } from "./labels";
 import { chooseFolder, inFolder, type ComposerWorkspacePort } from "./workspacePort";
 import { LAUNCH_COMMAND_ID } from "./entries";
+import { writeRefusedReply } from "./writeContainment";
 
 /** Entries a fresh folder may already hold: version control and editor settings. */
 const IGNORED_ENTRIES = new Set([".git", ".vscode"]);
@@ -28,12 +31,15 @@ export function starterKitExecutor({ port, text }: StarterKitDeps): ComposerComm
     const extras = Array.isArray(args.with) ? args.with : typeof args.with === "string" ? [args.with] : [];
     const kit = composeKit(kitId, extras);
     if (kit.issues.length > 0) {
-      return { kind: "text", tone: "error", lines: [text.kitIssues, ...kit.issues.map((issue) => issue.message)] };
+      return { kind: "text", tone: "error", lines: [text.kitIssues, ...kit.issues.map(text.kitIssue)] };
     }
     const folder = await chooseFolder(port, text.pickFolder);
     if (!folder) return { kind: "text", tone: "info", lines: [text.noFolderChosen] };
 
     const paths = Object.keys(kit.files);
+    // Every path is checked BEFORE anything is written or asked: one refused path writes none.
+    const refused = await port.checkWrites(paths.map((file) => inFolder(folder, file)));
+    if (refused.length > 0) return writeRefusedReply(text, refused);
     const occupied = (await port.listDir(folder.path)).some((name) => !IGNORED_ENTRIES.has(name));
     if (occupied) {
       const conflicts: string[] = [];

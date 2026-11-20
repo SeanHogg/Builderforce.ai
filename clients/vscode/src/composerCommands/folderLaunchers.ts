@@ -4,12 +4,13 @@
  * stop` closes it, and disposing the registry — on extension deactivate, through
  * `context.subscriptions` — closes every one, so no loopback server outlives the editor.
  */
+import type { LauncherCa } from "./launcherTrust";
 
 export interface RunningLauncher {
   /** `https://localhost:<port>/#token=…` — the fragment carries the per-launch token. */
   readonly url: string;
-  /** The local CA the launcher's HTTPS certificate chains to (a launcher serving TLS). */
-  readonly caCertPath?: string;
+  /** The local CA the launcher's HTTPS certificate chains to (`LocalLauncher.ca`); null/absent without TLS. */
+  readonly ca?: LauncherCa | null;
   close(): Promise<void>;
 }
 

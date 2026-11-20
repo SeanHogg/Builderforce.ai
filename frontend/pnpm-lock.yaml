@@ -92,8 +92,8 @@ importers:
         specifier: link:../voice
         version: link:../voice
       '@seanhogg/builderforce-webcontainers':
-        specifier: ^2026.11.6
-        version: 2026.11.6(@typescript/typescript6@6.0.2)
+        specifier: ^2026.11.7
+        version: 2026.11.7(@typescript/typescript6@6.0.2)
       '@xterm/addon-fit':
         specifier: ^0.10.0
         version: 0.10.0(@xterm/xterm@5.5.0)
@@ -1419,8 +1419,8 @@ packages:
     resolution: {integrity: sha512-ZTFmbtt3baa8nHP7SwtkhayOH3Ls13jNSvAzOYPso9Gz6Non5EVmUYmS29c8LQwoOMmJjJmCSH/P5juv+xLMlQ==}
     engines: {node: '>=18'}
 
-  '@seanhogg/builderforce-webcontainers-core@2026.11.6':
-    resolution: {integrity: sha512-UPUviQWiMerNxWRuCd08C7KMiFe/9gGhCqYxTZjrRzj9wJVhnhjyMJeMEY4k4SjAPRLxJsHqVAQH5sKajM1icg==}
+  '@seanhogg/builderforce-webcontainers-core@2026.11.7':
+    resolution: {integrity: sha512-0/opTisQni9znXdbwi5NC88dQiHsDZBfUOLhhIBKYr+hGPoLftikyuPVtNfo6oS5zGo2N0nDH/Q4lawFMpUGRA==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
       typescript: '>=5.0.0 <7'
@@ -1428,9 +1428,10 @@ packages:
       typescript:
         optional: true
 
-  '@seanhogg/builderforce-webcontainers@2026.11.6':
-    resolution: {integrity: sha512-vyq0Wb0c8gSE9tfc6imsAeGOhd3+YrKZnY2i2KWHpEaY3dCnp+jB7al1ix8CUy5zuWEJGFCsTn+4rrrgtXT82Q==}
+  '@seanhogg/builderforce-webcontainers@2026.11.7':
+    resolution: {integrity: sha512-K05DtPeIZp3T2a4TLlJ5PuzVdVMHPgO+6YYSiOl+7dFyie6uPMKkrtPQzH12xJGeZu5lq7oUlGn+LwUCJdKpdQ==}
     engines: {node: '>=18.0.0'}
+    hasBin: true
 
   '@sinclair/typebox@0.25.24':
     resolution: {integrity: sha512-XJfwUVUKDHF5ugKwIcxEgc9k8b7HbznCp6eUfWgu710hMPNIO4aw4/zB5RogDQz8nd6gyCDpU9O/m6qYEWY6yQ==}
@@ -4289,6 +4290,10 @@ packages:
       encoding:
         optional: true
 
+  node-forge@1.4.3:
+    resolution: {integrity: sha512-P6wzfh6t70avmV8FrVEAd/36sOPJQ+hkaJVX1Laap9J/77m7M0eyozDvc8SwnDf4P7MP94gwbAAo0rg3YVXT+g==}
+    engines: {node: '>= 6.13.0'}
+
   node-gyp-build@4.1.1:
     resolution: {integrity: sha512-dSq1xmcPDKPZ2EED2S6zw/b9NKsqzXRE6dVr8TVQnI3FJOTteUMuqF3Qqs6LZg+mLGYJWqQzMbIjMtJqTv87nQ==}
     hasBin: true
@@ -6563,17 +6568,18 @@ snapshots:
 
   '@seanhogg/builderforce-quality@2026.8.0': {}
 
-  '@seanhogg/builderforce-webcontainers-core@2026.11.6(@typescript/typescript6@6.0.2)':
+  '@seanhogg/builderforce-webcontainers-core@2026.11.7(@typescript/typescript6@6.0.2)':
     dependencies:
       es-module-lexer: 1.7.0
       fflate: 0.8.3
     optionalDependencies:
       typescript: '@typescript/typescript6@6.0.2'
 
-  '@seanhogg/builderforce-webcontainers@2026.11.6(@typescript/typescript6@6.0.2)':
+  '@seanhogg/builderforce-webcontainers@2026.11.7(@typescript/typescript6@6.0.2)':
     dependencies:
-      '@seanhogg/builderforce-webcontainers-core': 2026.11.6(@typescript/typescript6@6.0.2)
+      '@seanhogg/builderforce-webcontainers-core': 2026.11.7(@typescript/typescript6@6.0.2)
       esbuild-wasm: 0.24.2
+      node-forge: 1.4.3
     transitivePeerDependencies:
       - typescript
 
@@ -9966,6 +9972,8 @@ snapshots:
   node-fetch@2.7.0:
     dependencies:
       whatwg-url: 5.0.0
+
+  node-forge@1.4.3: {}
 
   node-gyp-build@4.1.1:
     optional: true

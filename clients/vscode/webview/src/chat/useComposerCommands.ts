@@ -12,11 +12,13 @@
  * where an entry with no required argument runs at once and any other is put in the box.
  */
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ComposerDraftStore } from '@seanhogg/builderforce-brain-embedded';
 import type { PromptOptionsCommands } from '@seanhogg/builderforce-brain-ui';
-import type { ComposerInputResult, ComposerReply } from '../../../src/composerCommands/reply';
-import { request, type InitData } from '../vscodeBridge';
+import { COMPOSER_COMMANDS_FRAME } from '../../../src/bridgeProtocol';
+import type { ComposerCommandsInit, ComposerInputResult, ComposerReply } from '../../../src/composerCommands/reply';
+import type { ComposerCommandsFrame } from '../bridgeTypes';
+import { onHostMessage, request, type InitData } from '../vscodeBridge';
 
 /** Only these lines can be commands; anything else goes straight through the turn door. */
 const MAY_BE_COMMAND = /^\s*\/(?:\/|[a-z])/;
@@ -80,7 +82,13 @@ export function useComposerCommands({ init, draftStore, submit, seed }: {
     else queueAfter();
   }, [draftStore, submitLine]);
 
-  const help = init.composerCommands?.help;
+  // The host recomputes the model when the workspace changes (a folder, a root builderforce.json) and
+  // pushes it; that replaces the one `init` carried until the next `init` brings its own.
+  const [pushed, setPushed] = useState<{ from: InitData; model: ComposerCommandsInit } | null>(null);
+  useEffect(() => onHostMessage<ComposerCommandsFrame>(COMPOSER_COMMANDS_FRAME, (frame) => {
+    if (frame.composerCommands) setPushed({ from: init, model: frame.composerCommands });
+  }), [init]);
+  const help = (pushed?.from === init ? pushed.model : init.composerCommands)?.help;
   const commands = useMemo<PromptOptionsCommands | undefined>(() => (help ? {
     help,
     onChoose: (id) => {

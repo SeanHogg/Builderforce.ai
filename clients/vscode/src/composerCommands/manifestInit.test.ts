@@ -1,8 +1,15 @@
 import * as path from "node:path";
 import { describe, expect, it, vi } from "vitest";
+import { detectionNote, noteFrom } from "@builderforce/app-detect";
 
+const l10nCalls = vi.hoisted(() => [] as string[]);
 vi.mock("vscode", () => ({
-  l10n: { t: (message: string, ...args: unknown[]) => message.replace(/\{(\d+)\}/g, (_, index: string) => String(args[Number(index)])) },
+  l10n: {
+    t: (message: string, ...args: unknown[]) => {
+      l10nCalls.push(message);
+      return message.replace(/\{(\d+)\}/g, (_, index: string) => String(args[Number(index)]));
+    },
+  },
 }));
 
 import { composerCommandText } from "./labels";
@@ -11,7 +18,15 @@ import { fakeWorkspacePort, folderRef } from "./testWorkspacePort";
 
 const app = folderRef("app");
 const manifestPath = path.join(app.path, "builderforce.json");
-const detected: DetectedManifest = { text: "{\"version\":1}\n", services: ["web", "api"], resources: ["db"], notes: ["secrets are not copied"] };
+const detected: DetectedManifest = {
+  text: "{\"version\":1}\n",
+  services: ["web", "api"],
+  resources: ["db"],
+  notes: [
+    detectionNote("secrets-to-vault", { names: ["API_KEY", "TOKEN"] }),
+    noteFrom("builderforce.json", detectionNote("manifest-env-differs", { name: "PORT" })),
+  ],
+};
 
 function setup(files: Record<string, string> = {}) {
   const port = fakeWorkspacePort([app], files);
@@ -34,8 +49,31 @@ describe("/manifest init", () => {
     expect(reply.kind === "text" ? reply.lines : []).toEqual(expect.arrayContaining([
       "Wrote builderforce.json (2 services, 1 resources).",
       "Notes:",
-      "secrets are not copied",
+      "Secrets are never written to the file: set API_KEY, TOKEN in the vault.",
+      "builderforce.json: env PORT differs between services; the first value is kept",
     ]));
+  });
+
+  it("words every note from its code through vscode.l10n, never the package's English message", async () => {
+    const reply = await setup().execute();
+    const lines = reply.kind === "text" ? reply.lines : [];
+    // The mocked `t` is the identity on the key, so the lines equal the package's English only through the l10n keys.
+    expect(lines).toEqual(expect.arrayContaining(detected.notes.map((note) => note.message)));
+    expect(l10nCalls).toEqual(expect.arrayContaining([
+      "Secrets are never written to the file: set {0} in the vault.",
+      "env {0} differs between services; the first value is kept",
+      "{0}: {1}",
+    ]));
+  });
+
+  it("refuses a builderforce.json that is a symbolic link before showing or asking, naming the path", async () => {
+    const { port, show, execute } = setup();
+    port.refused.add(manifestPath);
+    const reply = await execute();
+    expect(show).not.toHaveBeenCalled();
+    expect(port.asked).toEqual([]);
+    expect(port.files.has(manifestPath)).toBe(false);
+    expect(reply).toEqual({ kind: "text", tone: "error", lines: [composerCommandText().writeRefused([manifestPath])] });
   });
 
   it("with a builderforce.json: shows the diff against it and replaces it only on approval", async () => {

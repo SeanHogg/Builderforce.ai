@@ -36,14 +36,27 @@ describe("composer command entries", () => {
   });
 
   it("offers the manifest's environments and stop to /launch, and accepts any name without a manifest", () => {
-    const withEnvs = buildComposerCommands({ ...context, environments: ["local", "staging"] }).find((command) => command.id === "launch")!;
+    const withEnvs = buildComposerCommands({ ...context, environments: [{ value: "local" }, { value: "staging", label: "staging — declared by api" }] })
+      .find((command) => command.id === "launch")!;
     expect(withEnvs.args[0]!.choices?.map((choice) => choice.value)).toEqual(["local", "staging", "stop", "trust"]);
+    expect(withEnvs.args[0]!.choices?.[1]?.label).toBe("staging — declared by api");
+    expect(withEnvs.example).toBe("/launch local");
     const without = buildComposerCommands(context).find((command) => command.id === "launch")!;
     expect(without.args[0]!.choices).toBeUndefined();
   });
 
+  it("disables only /launch, with its reason, when the host cannot launch (a remote extension host)", () => {
+    const commands = buildComposerCommands({ ...context, launchUnavailableReason: "remote host" });
+    expect(commands.find((command) => command.id === "launch")!.availability).toEqual({ ok: false, reason: "remote host" });
+    for (const command of commands.filter((entry) => entry.id !== "launch")) expect(command.availability).toEqual({ ok: true });
+    // No folder open: that reason wins for every command.
+    for (const command of buildComposerCommands({ ...context, hasWorkspace: false, launchUnavailableReason: "remote host" })) {
+      expect(command.availability).toEqual({ ok: false, reason: "open a folder" });
+    }
+  });
+
   it("registers cleanly and parses each command's own example", () => {
-    const registry = createComposerCommandRegistry(buildComposerCommands({ ...context, environments: ["local"] }), composerCommandText());
+    const registry = createComposerCommandRegistry(buildComposerCommands({ ...context, environments: [{ value: "local" }] }), composerCommandText());
     for (const command of registry.list()) {
       expect(parseComposerInput(command.example, registry)).toMatchObject({ kind: "command", id: command.id });
     }
@@ -51,11 +64,11 @@ describe("composer command entries", () => {
 });
 
 describe("composer command copy", () => {
-  const source = readFileSync(new URL("./labels.ts", import.meta.url), "utf8");
+  const source = ["./labels.ts", "./noteLabels.ts"].map((file) => readFileSync(new URL(file, import.meta.url), "utf8")).join("\n");
   const keys = [...source.matchAll(/\bt\("((?:[^"\\]|\\.)*)"/g)].map((match) => JSON.parse(`"${match[1]}"`) as string);
 
   it("finds the strings it checks", () => {
-    expect(keys.length).toBeGreaterThan(40);
+    expect(keys.length).toBeGreaterThan(80);
   });
 
   it.each(["", ".de", ".es", ".fr", ".zh-cn"])("has every string in bundle.l10n%s.json, translated", (locale) => {

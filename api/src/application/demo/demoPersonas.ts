@@ -9,6 +9,8 @@
  * localized marketing copy; do not rename without migrating tenants.demo_persona.
  */
 
+import type { InitiativeStatus } from '@builderforce/agent-loop';
+
 export type DemoPersonaKey = 'ai-team' | 'insights' | 'pmo' | 'talent' | 'governance';
 
 export const DEMO_PERSONA_KEYS: DemoPersonaKey[] = ['ai-team', 'insights', 'pmo', 'talent', 'governance'];
@@ -108,7 +110,7 @@ export interface DemoBlueprint {
   portfolio?: {
     name: string;
     description: string;
-    initiatives: Array<{ name: string; description: string; status: 'proposed' | 'active' | 'completed'; startDaysAgo: number; targetDaysAhead: number }>;
+    initiatives: Array<{ name: string; description: string; status: InitiativeStatus; startDaysAgo: number; targetDaysAhead: number }>;
   };
   objectives?: DemoObjectiveSeed[];
   knowledge?: DemoKnowledgeSeed[];

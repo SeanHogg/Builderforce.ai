@@ -106,7 +106,9 @@ import { evaluateTaskAutoRun, AUTO_RUN_REASON_TEXT, type AutoRunReason } from '.
 import { invalidateProjectsList } from '../project/projectsListCache';
 import { recordActivity, resolveHumanActor, SYSTEM_ACTOR } from '../activity/activityLog';
 import { pmoVersionKey } from '../pmo/pmoCacheKeys';
-import { bumpCacheVersion, invalidateCached, trackerCacheKey, bumpTicketSearchVersion } from '../../infrastructure/cache/readThroughCache';
+import { bumpCacheVersion, bumpTicketSearchVersion } from '../../infrastructure/cache/readThroughCache';
+import { afterRoadmapWrite, type RoadmapWriteScope } from '../delivery/roadmapWrite';
+import { waitUntilOf } from '../shared/requestScope';
 import { convertWorkItemType, promoteOrphanOkrEpics, ConvertError, type WorkItemKind } from '../workitem/convertWorkItemType';
 import { buildRuntimeService } from '../../buildRuntimeService';
 import { ChatTicketService, ticketKindForTaskType } from '../brain/ChatTicketService';
@@ -240,23 +242,28 @@ function errorLogFilters(a: Json): ErrorLogFilters {
   };
 }
 
-/** Invalidate the roadmap tracker cache (the portfolio `:all` key + the row's project
- *  key) so a Brain-driven roadmap write is visible on the next /api/product/roadmap
- *  read — the SAME keys segmentTrackerRoutes caches (via trackerCacheKey). No-op when
- *  the caller didn't thread the Worker env. */
-async function invalidateRoadmap(ctx: BuiltinCtx, segmentId: string, projectId: number | null): Promise<void> {
-  if (!ctx.env) return;
-  await invalidateCached(ctx.env, trackerCacheKey('roadmap', ctx.tenantId, segmentId)).catch((error) => {
-    reportCaughtError(error, { source: "application/llm/builtinMcpService.ts", operation: "invalidateRoadmap" });
-  });
-  if (projectId != null) {
-    await invalidateCached(ctx.env, trackerCacheKey('roadmap', ctx.tenantId, segmentId, projectId)).catch((error) => {
-      reportCaughtError(error, { source: "application/llm/builtinMcpService.ts", operation: "invalidateRoadmap" });
-    });
-  }
-  // Roadmap items are a link-picker ticket kind — refresh its typeahead cache.
-  await bumpTicketSearchVersion(ctx.env, ctx.tenantId);
+/** A Brain roadmap write's post-write step — the ONE `afterRoadmapWrite` the REST roadmap
+ *  tracker runs too (cache keys + `roadmap.published` on a transition into shipped). */
+function roadmapWriteScope(ctx: BuiltinCtx, segmentId: string): RoadmapWriteScope {
+  return { db: ctx.db, env: ctx.env, tenantId: ctx.tenantId, segmentId, waitUntil: waitUntilOf(ctx.executionCtx) };
 }
+
+/** The stored row an update tool is about to change (tenant + segment scoped), or null — so a
+ *  status the write leaves as it was passes through untouched (`parseTicketStatus`'s `current`). */
+async function storedRow(
+  ctx: BuiltinCtx,
+  table: typeof roadmapItems | typeof portfolios | typeof initiatives | typeof objectives,
+  id: string,
+  segmentId: string,
+): Promise<Record<string, unknown> | null> {
+  const [row] = await ctx.db.select().from(table as typeof roadmapItems)
+    .where(and(eq((table as typeof roadmapItems).id, id), eq((table as typeof roadmapItems).tenantId, ctx.tenantId), eq((table as typeof roadmapItems).segmentId, segmentId)))
+    .limit(1);
+  return (row as Record<string, unknown> | undefined) ?? null;
+}
+
+/** The stored `status` of `row`, for `parseTicketStatus`'s unchanged-value rule. */
+const storedStatus = (row: Record<string, unknown> | null): string | null => (typeof row?.status === 'string' ? row.status : null);
 
 
 // --- tiny JSON-schema helpers ----------------------------------------------
@@ -1627,15 +1634,19 @@ const CATALOG: BuiltinTool[] = [
   // ---- Product roadmap (roadmap_items — a project/segment-scoped product artifact) ----
   // NOT a planning-spine node: its own uuid-keyed table. A chat can be tied to a roadmap
   // item (chats.link_ticket kind='roadmap'); these tools let the Brain read + create +
-  // maintain them. Writes invalidate the SAME tracker cache the /api/product/roadmap
-  // route serves (one key format via trackerCacheKey — no drift, no stale page reads).
+  // maintain them. Writes run the SAME post-write step as the /api/product/roadmap route
+  // (`afterRoadmapWrite`: its cache keys, and `roadmap.published` on a move into shipped).
   { tool: 'roadmap.list', mutates: false, description: 'List product roadmap items, optionally for one project (pass projectId). The UI groups them by horizon (now / next / later).', parameters: obj({ projectId: N }), run: async (ctx, a) => {
       const seg = await resolveSegment(ctx.db, ctx.tenantId);
       const conds = [eq(roadmapItems.tenantId, ctx.tenantId), eq(roadmapItems.segmentId, seg)];
       if (a.projectId != null) conds.push(eq(roadmapItems.projectId, idArg(a.projectId, 'projectId')));
       return ctx.db.select().from(roadmapItems).where(and(...conds)).orderBy(desc(roadmapItems.updatedAt)).limit(200);
     } },
-  { tool: 'roadmap.get', mutates: false, description: 'Get one roadmap item by id (uuid).', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => (await ctx.db.select().from(roadmapItems).where(and(eq(roadmapItems.id, str(a.id)), eq(roadmapItems.tenantId, ctx.tenantId))).limit(1))[0] ?? null },
+  { tool: 'roadmap.get', mutates: false, description: 'Get one roadmap item by id (uuid).', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => {
+      // Segment-scoped like every other roadmap read and write: a tenant's other segments are not this caller's.
+      const seg = await resolveSegment(ctx.db, ctx.tenantId);
+      return (await ctx.db.select().from(roadmapItems).where(and(eq(roadmapItems.id, str(a.id)), eq(roadmapItems.tenantId, ctx.tenantId), eq(roadmapItems.segmentId, seg))).limit(1))[0] ?? null;
+    } },
   {
     tool: 'roadmap.create', mutates: true,
     description: 'Create a product roadmap item. title is required; horizon = now|next|later (default now); status defaults to "planned" (set "shipped" to mark it delivered). Optionally attach to a project (projectId) and set theme / priority / targetDate (ISO) / notes.',
@@ -1648,13 +1659,13 @@ const CATALOG: BuiltinTool[] = [
       const [row] = await ctx.db.insert(roadmapItems).values({
         tenantId: ctx.tenantId, segmentId: seg, projectId, title,
         ...(a.horizon != null ? { horizon: str(a.horizon) } : {}),
-        ...(a.status != null ? { status: parseTicketStatus('roadmap', a.status) } : {}),
+        ...(a.status !== undefined ? { status: parseTicketStatus('roadmap', a.status) } : {}),
         theme: a.theme != null ? str(a.theme) : null,
         priority: a.priority != null ? str(a.priority) : null,
         targetDate: dt(a.targetDate) ?? null,
         notes: a.notes != null ? str(a.notes) : null,
       }).returning();
-      await invalidateRoadmap(ctx, seg, projectId);
+      await afterRoadmapWrite(roadmapWriteScope(ctx, seg), null, (row as Record<string, unknown> | undefined) ?? null);
       return row;
     },
   },
@@ -1664,10 +1675,13 @@ const CATALOG: BuiltinTool[] = [
     parameters: obj({ id: S, title: S, horizon: S, status: { type: 'string', enum: [...TICKET_STATUS_VALUES.roadmap] }, theme: S, priority: S, targetDate: S, notes: S, projectId: N }, ['id']),
     run: async (ctx, a) => {
       const seg = await resolveSegment(ctx.db, ctx.tenantId);
+      // The before-image: an unchanged status passes through, and the post-write step needs it
+      // to tell a transition INTO shipped from a save of an already-shipped item.
+      const before = await storedRow(ctx, roadmapItems, str(a.id), seg);
       const patch: Json = { updatedAt: new Date() };
       if (a.title != null) patch.title = str(a.title);
       if (a.horizon != null) patch.horizon = str(a.horizon);
-      if (a.status != null) patch.status = parseTicketStatus('roadmap', a.status);
+      if (a.status !== undefined) patch.status = parseTicketStatus('roadmap', a.status, storedStatus(before));
       if (a.theme != null) patch.theme = str(a.theme);
       if (a.priority != null) patch.priority = str(a.priority);
       if (a.targetDate != null) patch.targetDate = dt(a.targetDate) ?? null;
@@ -1675,14 +1689,14 @@ const CATALOG: BuiltinTool[] = [
       if (a.projectId != null) patch.projectId = idArg(a.projectId, 'projectId');
       const [row] = await ctx.db.update(roadmapItems).set(patch).where(and(eq(roadmapItems.id, str(a.id)), eq(roadmapItems.tenantId, ctx.tenantId), eq(roadmapItems.segmentId, seg))).returning();
       if (!row) throw new Error('roadmap item not found');
-      await invalidateRoadmap(ctx, seg, (row as { projectId?: number | null }).projectId ?? null);
+      await afterRoadmapWrite(roadmapWriteScope(ctx, seg), before, row as Record<string, unknown>);
       return row;
     },
   },
   { tool: 'roadmap.delete', mutates: true, description: 'Delete a roadmap item by id.', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => {
       const seg = await resolveSegment(ctx.db, ctx.tenantId);
       const rows = await ctx.db.delete(roadmapItems).where(and(eq(roadmapItems.id, str(a.id)), eq(roadmapItems.tenantId, ctx.tenantId), eq(roadmapItems.segmentId, seg))).returning({ id: roadmapItems.id, projectId: roadmapItems.projectId });
-      if (rows[0]) await invalidateRoadmap(ctx, seg, rows[0].projectId ?? null);
+      if (rows[0]) await afterRoadmapWrite(roadmapWriteScope(ctx, seg), rows[0], null);
       return { deleted: rows.length > 0 ? str(a.id) : null };
     } },
 
@@ -1746,7 +1760,7 @@ const CATALOG: BuiltinTool[] = [
     run: async (ctx, a) => {
       const name = str(a.name).trim(); if (!name) throw new Error('name is required');
       const seg = await resolveSegment(ctx.db, ctx.tenantId);
-      const [row] = await ctx.db.insert(portfolios).values({ tenantId: ctx.tenantId, segmentId: seg, name, description: a.description != null ? str(a.description) : null, ...(a.status != null ? { status: parseTicketStatus('portfolio', a.status) } : {}), targetDate: dt(a.targetDate) }).returning();
+      const [row] = await ctx.db.insert(portfolios).values({ tenantId: ctx.tenantId, segmentId: seg, name, description: a.description != null ? str(a.description) : null, ...(a.status !== undefined ? { status: parseTicketStatus('portfolio', a.status) } : {}), targetDate: dt(a.targetDate) }).returning();
       await bumpPmo(ctx);
       return row;
     },
@@ -1760,7 +1774,7 @@ const CATALOG: BuiltinTool[] = [
       const patch: Json = { updatedAt: new Date() };
       if (a.name != null) patch.name = str(a.name);
       if (a.description != null) patch.description = str(a.description);
-      if (a.status != null) patch.status = parseTicketStatus('portfolio', a.status);
+      if (a.status !== undefined) patch.status = parseTicketStatus('portfolio', a.status, storedStatus(await storedRow(ctx, portfolios, str(a.id), seg)));
       if (a.targetDate != null) patch.targetDate = dt(a.targetDate);
       const [row] = await ctx.db.update(portfolios).set(patch).where(and(eq(portfolios.id, str(a.id)), eq(portfolios.tenantId, ctx.tenantId), eq(portfolios.segmentId, seg))).returning();
       if (!row) throw new Error('portfolio not found');
@@ -1783,7 +1797,7 @@ const CATALOG: BuiltinTool[] = [
       const initStart = dt(a.startDate); const initTarget = dt(a.targetDate);
       if (!initStart || !initTarget) throw new Error('startDate and targetDate are required (YYYY-MM-DD)');
       const seg = await resolveSegment(ctx.db, ctx.tenantId);
-      const [row] = await ctx.db.insert(initiatives).values({ tenantId: ctx.tenantId, segmentId: seg, name, description: a.description != null ? str(a.description) : null, ...(a.status != null ? { status: parseTicketStatus('initiative', a.status) } : {}), portfolioId: a.portfolioId != null ? str(a.portfolioId) : null, startDate: initStart, targetDate: initTarget }).returning();
+      const [row] = await ctx.db.insert(initiatives).values({ tenantId: ctx.tenantId, segmentId: seg, name, description: a.description != null ? str(a.description) : null, ...(a.status !== undefined ? { status: parseTicketStatus('initiative', a.status) } : {}), portfolioId: a.portfolioId != null ? str(a.portfolioId) : null, startDate: initStart, targetDate: initTarget }).returning();
       await bumpPmo(ctx);
       return row;
     },
@@ -1797,7 +1811,7 @@ const CATALOG: BuiltinTool[] = [
       const patch: Json = { updatedAt: new Date() };
       if (a.name != null) patch.name = str(a.name);
       if (a.description != null) patch.description = str(a.description);
-      if (a.status != null) patch.status = parseTicketStatus('initiative', a.status);
+      if (a.status !== undefined) patch.status = parseTicketStatus('initiative', a.status, storedStatus(await storedRow(ctx, initiatives, str(a.id), seg)));
       if ('portfolioId' in a) patch.portfolioId = a.portfolioId != null ? str(a.portfolioId) : null;
       if (a.startDate != null) patch.startDate = dt(a.startDate);
       if (a.targetDate != null) patch.targetDate = dt(a.targetDate);
@@ -1821,7 +1835,7 @@ const CATALOG: BuiltinTool[] = [
       // REST tracker). Checked BEFORE the dedupe read so a bad call costs no query.
       const objStart = dt(a.startDate); const objEnd = dt(a.endDate);
       if (!objStart || !objEnd) throw new Error('startDate and endDate are required (YYYY-MM-DD)');
-      const objStatus = a.status != null ? parseTicketStatus('objective', a.status) : undefined;
+      const objStatus = a.status !== undefined ? parseTicketStatus('objective', a.status) : undefined;
       const seg = await resolveSegment(ctx.db, ctx.tenantId);
       // Idempotent create — a same-title objective in this tenant/segment is returned
       // rather than duplicated (guards roadmap-reconciliation reruns).
@@ -1852,7 +1866,7 @@ const CATALOG: BuiltinTool[] = [
       if (a.title != null) patch.title = str(a.title);
       if (a.description != null) patch.description = str(a.description);
       if (a.period != null) patch.period = str(a.period);
-      if (a.status != null) patch.status = parseTicketStatus('objective', a.status);
+      if (a.status !== undefined) patch.status = parseTicketStatus('objective', a.status, storedStatus(await storedRow(ctx, objectives, str(a.id), seg)));
       if ('projectId' in a) patch.projectId = a.projectId != null ? idArg(a.projectId, 'projectId') : null;
       if ('portfolioId' in a) patch.portfolioId = a.portfolioId != null ? str(a.portfolioId) : null;
       if ('initiativeId' in a) patch.initiativeId = a.initiativeId != null ? str(a.initiativeId) : null;
@@ -4708,7 +4722,7 @@ export async function callBuiltinTool(
     });
     // task/spec/from-delta writes change what the chat↔ticket link picker can find but
     // (unlike the pmo/roadmap/project tools) don't route through invalidateProjectsList /
-    // bumpPmo / invalidateRoadmap — so orphan the typeahead cache here for those.
+    // bumpPmo / afterRoadmapWrite — so orphan the typeahead cache here for those.
     if (args.tool.startsWith('tasks.') || args.tool.startsWith('specs.') || args.tool === 'tickets.from_delta') {
       const bump = bumpTicketSearchVersion(args.env, args.tenantId);
       if (args.executionCtx?.waitUntil) args.executionCtx.waitUntil(bump); else await bump.catch((error) => {

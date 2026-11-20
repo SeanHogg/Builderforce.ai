@@ -4,7 +4,7 @@
  *
  * Policy is per app: an app may declare external APIs its code calls, and its Workers
  * need those origins in `connect-src` on top of the default allowlist
- * ({@link ./workerCsp} — the runtimes' hosts plus GitHub reads, always applied, so a
+ * (`DEFAULT_CONNECT_SOURCES` of `@seanhogg/builderforce-webcontainers/preview-headers` — the runtimes' hosts plus GitHub reads, always applied, so a
  * policy carries only the app's DECLARED extras). The runtime loads a Worker as
  * `/__bfwc/process-worker.js?policy=<id>` on the app's own origin
  * `https://<originKey>-preview.builderforce.ai`; the URL is the cache key, so two

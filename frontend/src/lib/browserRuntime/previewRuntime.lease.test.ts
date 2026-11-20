@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('@seanhogg/builderforce-webcontainers', () => ({
+vi.mock('@seanhogg/builderforce-webcontainers', async (importOriginal) => ({
+  // The real template: the boot builds the per-application `previewOrigin` from it.
+  previewOriginTemplate: (await importOriginal<typeof import('@seanhogg/builderforce-webcontainers')>()).previewOriginTemplate,
   startPreviewRuntime: async () => ({
     fs: { list: () => [], rm: () => undefined, writeFile: () => undefined },
     writeTree: () => undefined,

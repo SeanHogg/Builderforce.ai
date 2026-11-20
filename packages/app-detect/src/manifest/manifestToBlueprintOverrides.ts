@@ -10,14 +10,17 @@
  */
 
 import type { AppBlueprint, AppDatabase, AppService, AppServiceReadiness, AppVar } from '@builderforce/creation-canvas-contract';
+import { detectionNote, type DetectionNote } from '../notes';
 import { INSTALL_SUFFIX, MANIFEST_RESERVED_IDS } from './emitManifest';
 import type { ManifestInput, ManifestReadinessInput, ManifestServiceInput } from './manifestShape';
 import { blueprintRootDir, kindOfRuntime, packageManagerOf, type ServiceRole } from './serviceRuntime';
 
 export interface ManifestOverridesResult {
   overrides: Partial<AppBlueprint>;
-  /** What the manifest states that the blueprint cannot hold, or could not be read. */
+  /** What the manifest states that the blueprint cannot hold, or could not be read (English; `codedNotes[i].message`). */
   notes: string[];
+  /** The same notes as codes + params, same order. */
+  codedNotes: DetectionNote[];
 }
 
 const RESTARTS = new Set(['never', 'on-failure', 'always']);
@@ -47,11 +50,11 @@ const isOneOff = (service: ManifestServiceInput): boolean =>
   isRecord(service.readiness) && service.readiness.exitZero === true && service.restart === 'never';
 
 export function manifestToBlueprintOverrides(manifest: ManifestInput): ManifestOverridesResult {
-  const notes: string[] = [];
+  const notes: DetectionNote[] = [];
   const overrides: Partial<AppBlueprint> = {};
   const entries = Object.entries(isRecord(manifest.services) ? manifest.services : {}).filter(([id, service]) => {
     const usable = isRecord(service) && nonEmpty(service.runtime) && nonEmpty(service.command);
-    if (!usable) notes.push(`service "${id}" has no runtime or command and was not read`);
+    if (!usable) notes.push(detectionNote('manifest-service-unreadable', { service: id }));
     return usable;
   });
 
@@ -69,7 +72,7 @@ export function manifestToBlueprintOverrides(manifest: ManifestInput): ManifestO
   for (const [id, service] of entries) {
     for (const [name, value] of Object.entries(isRecord(service.env) ? service.env : {})) {
       if (typeof value !== 'string') continue;
-      if (vars.has(name) && vars.get(name) !== value) notes.push(`env ${name} differs between services; the first value is kept`);
+      if (vars.has(name) && vars.get(name) !== value) notes.push(detectionNote('manifest-env-differs', { name }));
       else vars.set(name, value);
     }
     if (folded.has(id)) continue;
@@ -79,10 +82,10 @@ export function manifestToBlueprintOverrides(manifest: ManifestInput): ManifestO
       && service.readiness.started === true && service.restart === 'never';
     let kind = training ? 'training' as const : kindOfRuntime(service.runtime!, role);
     if (!kind) {
-      notes.push(`service "${id}" runs on "${service.runtime}", which the blueprint has no kind for; it is read as node`);
+      notes.push(detectionNote('manifest-runtime-unknown', { service: id, runtime: service.runtime! }));
       kind = role === 'frontend' ? 'spa' : 'node';
     }
-    if (isRecord(service.readiness) && service.readiness.query === true) notes.push(`service "${id}": readiness "query" has no blueprint form`);
+    if (isRecord(service.readiness) && service.readiness.query === true) notes.push(detectionNote('manifest-readiness-query', { service: id }));
     const dependsOn = strings(service.dependsOn);
     const installCommand = dependsOn.map((dep) => installs.get(dep)).find((line) => line !== undefined) ?? '';
     const ownDeps = dependsOn.filter((dep) => !folded.has(dep));
@@ -126,12 +129,12 @@ export function manifestToBlueprintOverrides(manifest: ManifestInput): ManifestO
         };
         continue;
       }
-      notes.push(`resource "${id}" (${type}) has no blueprint field; the runtime reads it from the manifest`);
+      notes.push(detectionNote('manifest-resource-unmapped', { id, type }));
     }
     overrides.database = database;
   }
 
   if (vars.size > 0) overrides.vars = [...vars].map(([name, defaultValue]): AppVar => ({ name, defaultValue }));
-  if (isRecord(manifest.jobs) && Object.keys(manifest.jobs).length > 0) notes.push('jobs have no blueprint field; the runtime reads them from the manifest');
-  return { overrides, notes };
+  if (isRecord(manifest.jobs) && Object.keys(manifest.jobs).length > 0) notes.push(detectionNote('manifest-jobs-unmapped', {}));
+  return { overrides, notes: notes.map((note) => note.message), codedNotes: notes };
 }

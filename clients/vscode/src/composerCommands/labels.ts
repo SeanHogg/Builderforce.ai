@@ -1,5 +1,8 @@
 import * as vscode from "vscode";
 import type { ComposerCommandLabels, ComposerCommandProblem } from "@seanhogg/builderforce-brain-embedded/composerCommands";
+import type { DetectionNote } from "@builderforce/app-detect";
+import type { KitIssue } from "@builderforce/ide-templates/kits";
+import { detectionNoteText, kitIssueText } from "./noteLabels";
 
 /**
  * Every sentence the composer commands show, in the editor's language (`vscode.l10n`).
@@ -19,6 +22,16 @@ export interface ComposerCommandText extends ComposerCommandLabels {
 
   // /starter-kit
   kitIssues: string;
+  /** One `composeKit` issue, worded from its code + params (`noteLabels.ts`). */
+  kitIssue(issue: KitIssue): string;
+  /**
+   * Detection's notes and warnings as reply lines: a "Notes:" heading, then each note worded
+   * from its code + params (`noteLabels.ts`); nothing when there are none. The ONE rendering
+   * `/manifest init` and `/launch` (no `builderforce.json`) share.
+   */
+  noteLines(notes: readonly DetectionNote[]): string[];
+  /** Nothing was written: these paths are symbolic links or lead outside the workspace folder (`writeContainment.ts`). */
+  writeRefused(paths: readonly string[]): string;
   /** Which workspace folder a command works on (several are open). */
   pickFolder: string;
   noFolderChosen: string;
@@ -41,9 +54,12 @@ export interface ComposerCommandText extends ComposerCommandLabels {
   manifestWriteQuestion: string;
   manifestDeclined: string;
   manifestWritten(services: number, resources: number): string;
-  notes: string;
 
   // /launch
+  /** Why `/launch` is unavailable in a remote extension host (`vscode.env.remoteName`). */
+  launchRemote(remoteName: string): string;
+  /** A `/launch` environment choice when several folders are open: which folders' manifests declare it. */
+  launchEnvironmentIn(environment: string, folders: readonly string[]): string;
   launchDetected: string;
   launchStarted(folder: string): string;
   launchReopened(folder: string): string;
@@ -61,6 +77,8 @@ export interface ComposerCommandText extends ComposerCommandLabels {
   trustUntrusted: string;
   trustDone: string;
   trustFailed(error: string): string;
+  /** The trust command did not finish in time (a confirmation nobody answered, or a hung tool). */
+  trustTimedOut(seconds: number): string;
   trustManual(caCertPath: string): string;
 }
 
@@ -91,6 +109,9 @@ export function composerCommandText(): ComposerCommandText {
     failed: (id, error) => t("/{0} failed: {1}", id, error),
 
     kitIssues: t("The starter kit could not be composed, so nothing was written:"),
+    kitIssue: kitIssueText,
+    noteLines: (notes) => (notes.length > 0 ? [t("Notes:"), ...notes.map(detectionNoteText)] : []),
+    writeRefused: (paths) => t("Nothing was written: these paths are symbolic links or lead outside the workspace folder: {0}", paths.join(", ")),
     pickFolder: t("Choose the workspace folder for this command"),
     noFolderChosen: t("No folder was chosen, so nothing was done."),
     kitNonEmpty: (folder, fileCount) => t("{0} is not empty. Write the starter kit's {1} files into it? No existing file is overwritten.", folder, fileCount),
@@ -112,8 +133,9 @@ export function composerCommandText(): ComposerCommandText {
     manifestWriteQuestion: t("Write the detected builderforce.json shown in the preview?"),
     manifestDeclined: t("builderforce.json was not written."),
     manifestWritten: (services, resources) => t("Wrote builderforce.json ({0} services, {1} resources).", services, resources),
-    notes: t("Notes:"),
 
+    launchRemote: (remoteName) => t("The local launcher opens your app in this computer's browser, but this window's extension host runs remotely ({0}). Open the folder in a local window to use /launch.", remoteName),
+    launchEnvironmentIn: (environment, folders) => t("{0} — declared by {1}", environment, folders.join(", ")),
     launchDetected: t("This folder has no builderforce.json, so the launcher runs a detected manifest. Save it with /manifest init."),
     launchStarted: (folder) => t("The launcher for {0} is running and opened in your browser.", folder),
     launchReopened: (folder) => t("The launcher for {0} was already running; it was opened in your browser again.", folder),
@@ -130,6 +152,7 @@ export function composerCommandText(): ComposerCommandText {
     trustUntrusted: t("The launcher's local certificate is not trusted, so your browser will show a security warning for the preview. Type /launch trust to trust it."),
     trustDone: t("The launcher's local certificate is now trusted."),
     trustFailed: (error) => t("The launcher's local certificate could not be trusted: {0}", error),
+    trustTimedOut: (seconds) => t("The certificate tool did not finish within {0} seconds, so the launcher's local certificate was not trusted. If your system asked you to confirm, answer it, then type /launch trust.", seconds),
     trustManual: (caCertPath) => t("Add this certificate to your system or browser certificate store to remove the browser warning: {0}", caCertPath),
   };
 }

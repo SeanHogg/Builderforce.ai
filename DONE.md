@@ -1,3 +1,7 @@
+## ✅ RESOLVED 2026-11-20: Frontend run-target tests red on missing preview-origin mocks (PRD 31 W11)
+
+`browserRunTarget.test.ts` and `previewRuntime.lease.test.ts` mocked `@seanhogg/builderforce-webcontainers` without `previewOriginTemplate` (called by `previewShieldOptions` since 5312cc044), and `browserRunTarget.test.ts` also lacked `previewOriginKey` (called by `prepareApplicationPolicy`). Both mocks now pass the package's real exports; no assertion changed. 19/19 pass.
+
 ## ✅ RESOLVED 2026-11-20: Runs stop to ask "continue?" or "may I ship?" instead of finishing and following a ship policy (PRD 48, VS Code chat #157440)
 
 Chat #157440 finished, verified and committed its work, then stopped on a progress-guard `ask_user` pause ("no progress — how should it proceed?") and a "push needs approval" card. Cloud project merge settings never reached the run, and cloud merging hung off a platform-wide env flag, which is wrong for a multi-tenant product.

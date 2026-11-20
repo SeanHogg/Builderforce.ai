@@ -9,6 +9,7 @@ import { handleComposerInput, type ComposerCommandExecutor } from "./dispatch";
 import { buildComposerCommands } from "./entries";
 import { composerCommandText } from "./labels";
 import type { ComposerReply } from "./reply";
+import { WriteRefusedError } from "./writeContainment";
 
 const done: ComposerReply = { kind: "text", tone: "info", lines: ["done"] };
 
@@ -51,6 +52,15 @@ describe("handleComposerInput", () => {
     expect(result.handled && result.reply.kind === "help" ? result.reply.help.entries.map((entry) => entry.id) : null)
       .toEqual(["help", "starter-kit", "manifest", "launch"]);
     expect(ranAny()).toBe(false);
+  });
+
+  it("words a write the containment check refused at write time, naming the path", async () => {
+    const { deps, executors } = setup();
+    executors.manifest.mockRejectedValueOnce(new WriteRefusedError([{ file: "/work/app/builderforce.json", reason: "symlink" }]));
+    expect(await handleComposerInput("/manifest init", deps)).toEqual({
+      handled: true,
+      reply: { kind: "text", tone: "error", lines: [deps.text.writeRefused(["/work/app/builderforce.json"])] },
+    });
   });
 
   it("answers /help <command> with that command alone", async () => {

@@ -19678,7 +19678,8 @@
     "themePlaceholder": "Optional grouping",
     "targetDateLabel": "Target date",
     "saveChanges": "Save changes",
-    "create": "Create"
+    "create": "Create",
+    "statusUnknown": "Unknown status: {value}"
   },
   "agentCapabilities": {
     "failedLoadAgents": "Failed to load agents",
@@ -33426,7 +33427,9 @@
     "in_review": "In review",
     "done": "Done",
     "blocked": "Blocked",
-    "shipped": "Shipped"
+    "shipped": "Shipped",
+    "planned": "Planned",
+    "cancelled": "Cancelled"
   },
   "agentWorker": {
     "title": "Browser agent worker",

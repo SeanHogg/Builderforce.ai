@@ -71,7 +71,7 @@ const PYTHON_AND_PHP = blueprint({
 describe('emitManifest — structure', () => {
   it('writes a v1 manifest: schema, version, keyed services on their runtimes, ports, the local environment', () => {
     const { manifest, text } = emitManifest(CANVAS_APP);
-    expect(Object.keys(manifest)).toEqual(['$schema', 'version', 'name', 'resources', 'services', 'environments']);
+    expect(Object.keys(manifest)).toEqual(['$schema', 'version', 'name', 'resources', 'services', 'ingress', 'environments']);
     expect(manifest.$schema).toBe(APP_MANIFEST_SCHEMA_URL);
     expect(manifest.version).toBe(1);
     expect(manifest.environments).toEqual({ local: { target: 'browser', tier: 'non-production', debug: true } });
@@ -157,6 +157,32 @@ describe('emitManifest — structure', () => {
     }));
     expect(manifest.resources).toBeUndefined();
     expect(notes).toContain('The mysql database is not expressible in manifest v1 (postgres only), so no database resource was written.');
+  });
+});
+
+describe('emitManifest — ingress', () => {
+  it('routes /api to the one HTTP backend and / to the one frontend, longest path first, and notes it', () => {
+    const { manifest, codedNotes } = emitManifest(CANVAS_APP);
+    expect(manifest.ingress).toEqual({ routes: [{ path: '/api', service: 'api' }, { path: '/', service: 'web' }] });
+    expect(codedNotes).toContainEqual(expect.objectContaining({ code: 'ingress-api-backend', params: { frontend: 'web', backend: 'api', path: '/api' } }));
+  });
+
+  it('writes no ingress for two HTTP backends', () => {
+    const { manifest, codedNotes } = emitManifest(blueprint({
+      services: [
+        service({ id: 'web', kind: 'vite-react', ports: [5173], isPrimary: true }),
+        service({ id: 'api', kind: 'node', ports: [8000] }),
+        service({ id: 'admin', kind: 'node', ports: [8001] }),
+      ],
+    }));
+    expect(manifest.ingress).toBeUndefined();
+    expect(codedNotes.some((note) => note.code === 'ingress-api-backend')).toBe(false);
+  });
+
+  it('writes no ingress for a frontend alone', () => {
+    const { manifest } = emitManifest(blueprint({ services: [service({ id: 'web', kind: 'vite-react', ports: [5173], isPrimary: true })] }));
+    expect(manifest.ingress).toBeUndefined();
+    expect(Object.keys(manifest)).not.toContain('ingress');
   });
 });
 

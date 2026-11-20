@@ -89,6 +89,7 @@ export function detectApp(files: Map<string, string>, options: DetectAppOptions 
       confidence: recognised ? 1 : 0,
     },
     composeResources: findings.composeResources,
+    codedWarnings: findings.codedWarnings,
   };
 }
 

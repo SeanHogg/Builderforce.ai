@@ -28,7 +28,7 @@ import type { PolicyContext } from '@builderforce/agent-run';
 import { isReadOnlyShellCall } from '@builderforce/run-guards';
 import { isFailedToolResult, type BrainTraceEvent } from '../brainTriage';
 import { normalizeChatMode } from '../chatMode';
-import { canListChatTickets, isOpenLinkedStatus, isReadOnlyPlatformTool, linkedTaskRows, type LinkedTaskRow } from '../chatWorkLinking';
+import { declaresChatTicketListing, isOpenLinkedStatus, isReadOnlyPlatformTool, linkedTaskRows, type LinkedTaskRow } from '../chatWorkLinking';
 import { isCodeChangeTool, isRepoPublishTool } from '../localWorkspaceTools';
 import type { BrainRunContext } from './brainRunContext';
 import { latestStatus, listChatTickets, listingScopeOf, runOwnedTicketRefs, ticketMovesInRun, ticketsCreatedInRun } from './chatTickets';
@@ -135,8 +135,12 @@ export function openLinkedWorkHold(run: BrainRunContext): (ctx: PolicyContext) =
 
   /** The open tickets that hold the run, or null when the account's listing cannot be read (never a hold on an unreadable listing). */
   const openTickets = async (trace: readonly BrainTraceEvent[], executing: boolean): Promise<LinkedTaskRow[] | null> => {
-    // An unbound chat, or a host whose catalog carries no listing, owns only what it filed on the device.
-    if (run.serverChatId == null || !canListChatTickets(run.req.tools)) return localOpenTickets(trace, new Set());
+    // An unbound chat, or a host whose catalog does not declare the listing, owns only what it filed on the device.
+    if (run.serverChatId == null || !declaresChatTicketListing(run.req.tools)) return localOpenTickets(trace, new Set());
+    // A run that is not executing and owns no ticket can be held by none of the listing's rows: it is not asked for (a question
+    // answered in a bound chat makes no ticket call of its own).
+    const owned = runOwnedTicketRefs(trace, run.c.deltaTicketId);
+    if (!executing && owned.size === 0) return [];
     const listed = await listChatTickets(run.req, run.serverChatId, {
       note: noteOf, label: 'finish.open_work_unreadable', consequence: 'the run is not held for them.',
       // A hung listing must not hang the run's end: it is waited for no longer than the settle's own ticket bookkeeping.
@@ -144,7 +148,6 @@ export function openLinkedWorkHold(run: BrainRunContext): (ctx: PolicyContext) =
     }, listingScopeOf(run.c));
     if (listed == null) return null;
     const rows = linkedTaskRows(listed);
-    const owned = runOwnedTicketRefs(trace, run.c.deltaTicketId);
     const linkedOpen = rows.filter((t) => isOpenLinkedStatus(t.status) && (owned.has(t.ref) || (executing && t.status === ACTIVE_STATUS)));
     return [...linkedOpen, ...localOpenTickets(trace, new Set(rows.map((t) => t.ref)))];
   };

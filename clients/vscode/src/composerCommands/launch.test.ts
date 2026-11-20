@@ -1,5 +1,6 @@
 import * as path from "node:path";
 import { describe, expect, it, vi } from "vitest";
+import { detectionNote, noteFrom, type DetectionNote } from "@builderforce/app-detect";
 
 vi.mock("vscode", () => ({
   l10n: { t: (message: string, ...args: unknown[]) => message.replace(/\{(\d+)\}/g, (_, index: string) => String(args[Number(index)])) },
@@ -22,7 +23,7 @@ function setup(files: Record<string, string> = {}, folders = [app]) {
     return launcher;
   });
   const openExternal = vi.fn(async () => undefined);
-  const detect = vi.fn(() => ({ text: "{\"detected\":true}", services: ["web"], resources: [], notes: [] }));
+  const detect = vi.fn(() => ({ text: "{\"detected\":true}", services: ["web"], resources: [] as string[], notes: [] as DetectionNote[] }));
   const readFiles = vi.fn(async () => new Map<string, string>());
   const execute = launchExecutor({ port, text: composerCommandText(), launchers, start, openExternal, readFiles, detect });
   return { port, launchers, start, started, openExternal, detect, launch: (environment?: string) => execute(environment ? { environment } : {}) };
@@ -38,6 +39,20 @@ describe("/launch", () => {
     expect(openExternal).toHaveBeenCalledWith("http://localhost:4000/#token=secret");
     expect(reply).toMatchObject({ kind: "text", tone: "info", link: "http://localhost:4000/#token=secret", action: { command: "/launch" } });
     expect(linesOf(reply).some((line) => line.includes("/manifest init"))).toBe(true);
+  });
+
+  it("shows a detected manifest's notes, worded exactly as /manifest init words them", async () => {
+    const { detect, launch } = setup();
+    const notes = [detectionNote("secrets-to-vault", { names: ["API_KEY"] }), noteFrom("compose.yaml", detectionNote("compose-no-services", { file: "compose.yaml" }))];
+    detect.mockReturnValueOnce({ text: "{}", services: [], resources: [], notes });
+    const lines = linesOf(await launch());
+    const text = composerCommandText();
+    expect(lines).toEqual([
+      "The launcher for app is running and opened in your browser.",
+      text.launchDetected,
+      ...text.noteLines(notes),
+    ]);
+    expect(text.noteLines(notes)).toEqual(["Notes:", ...notes.map((note) => note.message)]);
   });
 
   it("runs the folder's own builderforce.json, in the environment asked for", async () => {

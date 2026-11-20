@@ -13,6 +13,14 @@ export type {
   DetectorFindings,
 } from './types';
 
+export {
+  detectionNote,
+  noteFrom,
+  type DetectionNote,
+  type DetectionNoteCode,
+  type DetectionNoteParams,
+} from './notes';
+
 export { buildBlueprint, detectApp, detectBlueprint, type DetectAppOptions } from './detectApp';
 export { applyOverrides } from './blueprintOverrides';
 export { DETECTOR_BY_ID, DETECTORS, runDetectors } from './detectors';

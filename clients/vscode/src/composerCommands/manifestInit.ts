@@ -3,10 +3,12 @@
  * `app-detect` pipeline, emit its `builderforce.json` v1, SHOW it (a diff against the
  * current file, or a preview when there is none), and write it only on a modal approval.
  */
+import type { DetectionNote } from "@builderforce/app-detect";
 import type { ComposerCommandExecutor } from "./dispatch";
 import type { ComposerCommandText } from "./labels";
 import { chooseFolder, inFolder, type ComposerWorkspacePort } from "./workspacePort";
 import { LAUNCH_COMMAND_ID } from "./entries";
+import { writeRefusedReply } from "./writeContainment";
 
 export const MANIFEST_FILE_NAME = "builderforce.json";
 
@@ -15,7 +17,8 @@ export interface DetectedManifest {
   text: string;
   services: string[];
   resources: string[];
-  notes: string[];
+  /** Detection's warnings, then `emitManifest`'s notes — coded, worded by `text.noteLines`. */
+  notes: DetectionNote[];
 }
 
 /** Detect an app from its files (project-relative POSIX path → text). Pure. */
@@ -41,6 +44,9 @@ export function manifestInitExecutor({ port, text, readFiles, detect, show }: Ma
     if (!folder) return { kind: "text", tone: "info", lines: [text.noFolderChosen] };
     const detected = detect(await readFiles(folder.path));
     const file = inFolder(folder, MANIFEST_FILE_NAME);
+    // Refused before the preview and the question: a builderforce.json that is a symbolic link is never written through.
+    const refused = await port.checkWrites([file]);
+    if (refused.length > 0) return writeRefusedReply(text, refused);
     const current = await port.readText(file);
     let approved: boolean;
     if (current === undefined) {
@@ -59,7 +65,7 @@ export function manifestInitExecutor({ port, text, readFiles, detect, show }: Ma
         text.manifestWritten(detected.services.length, detected.resources.length),
         text.services(detected.services),
         text.resources(detected.resources),
-        ...(detected.notes.length > 0 ? [text.notes, ...detected.notes] : []),
+        ...text.noteLines(detected.notes),
         text.launchHint,
       ],
       action: { label: `/${LAUNCH_COMMAND_ID}`, command: `/${LAUNCH_COMMAND_ID}` },

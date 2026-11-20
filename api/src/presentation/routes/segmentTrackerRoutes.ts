@@ -14,25 +14,47 @@ import { TenantRole } from '../../domain/shared/types';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { emitWebhookEvent, type WebhookEvent } from '../../application/seams/webhookService';
-import { getOrSetCached, invalidateCached, bumpCacheVersion, trackerCacheKey, bumpTicketSearchVersion } from '../../infrastructure/cache/readThroughCache';
+import { getOrSetCached, invalidateCached, bumpCacheVersionSafe, trackerCacheKey, trackerCacheKeysForWrite, bumpTicketSearchVersion } from '../../infrastructure/cache/readThroughCache';
 import { parseBody, zJsonObject } from './requestBody';
 import type { MutationAction } from '../../application/governance/mutationAudit';
 import { auditGovernanceMutation } from './governanceAudit';
-import { scope } from './requestScope';
+import { optionalExecutionCtx, scope } from './requestScope';
+import { waitUntilOf } from '../../application/shared/requestScope';
+import { isTransitionInto, transitionEventId } from '../../application/seams/webhookTransition';
 
-export interface TrackerOpts {
+/** A tracker's post-write step: the generic `cacheNs` invalidation + `emit`, or its own `afterWrite`. */
+type TrackerPostWrite =
+  | {
+    /**
+     * Optional outbound-webhook trigger: when a create/update MOVES `field` INTO
+     * `value` (not on a save of a row already there), emit `event` (segment-scoped)
+     * with the written row as the payload. Emission is fire-and-forget
+     * (executionCtx.waitUntil) and never blocks or fails the response — it is skipped
+     * when no execution context is present (e.g. unit tests that don't supply one).
+     */
+    emit?: { field: string; value: string; event: WebhookEvent };
+    afterWrite?: never;
+  }
+  | {
+    /**
+     * Replaces the tracker's generic `cacheNs` invalidation and `emit` for a table whose writes
+     * have their OWN application step that another writer shares — the roadmap tracker calls
+     * `afterRoadmapWrite`, as the Brain's roadmap tools do. It OWNS the cache keys of `cacheNs`
+     * (which still serves the read-through GET) and any webhook, so `emit` is refused by type.
+     * `bumpVersionKeys` still runs after it. Receives the row before (null on create) and
+     * after (null on delete) the write.
+     */
+    afterWrite: (c: Context<HonoEnv>, db: Db, before: Record<string, unknown> | null, after: Record<string, unknown> | null) => Promise<void>;
+    emit?: never;
+  };
+
+export type TrackerOpts = TrackerOptsBase & TrackerPostWrite;
+
+interface TrackerOptsBase {
   /** Drizzle field names accepted on create/update (whitelist). */
   fields: string[];
   /** Subset of `fields` required (non-empty) on create. */
   required?: string[];
-  /**
-   * Optional outbound-webhook trigger: when a create/update sets `field` to
-   * `value`, emit `event` (segment-scoped) with the written row as the payload.
-   * Emission is fire-and-forget (executionCtx.waitUntil) and never blocks or
-   * fails the response — it is skipped when no execution context is present
-   * (e.g. unit tests that don't supply one).
-   */
-  emit?: { field: string; value: string; event: WebhookEvent };
   /**
    * Dual-scope this tracker by an optional nullable `projectId` column. When set,
    * GET honours `?project=<id>` (project view; absent = portfolio/segment view)
@@ -107,46 +129,55 @@ function parseProjectId(raw: string | undefined): number | undefined {
   return Number.isFinite(n) && n > 0 ? n : undefined;
 }
 
-/** Invalidate the portfolio key plus the row's project key (if any). */
+/**
+ * Invalidate the portfolio key plus the project key of the row before AND after the write
+ * (`trackerCacheKeysForWrite` — a row moved between projects clears both lists). The row is
+ * already written, so a cache (KV) failure is reported, never thrown — as `afterRoadmapWrite` does.
+ */
 async function invalidateTracker(
   env: Env,
   opts: TrackerOpts,
   tenantId: number,
   segmentId: string,
-  projectId: unknown,
+  before: Record<string, unknown> | null,
+  after: Record<string, unknown> | null,
 ): Promise<void> {
-  if (opts.cacheNs) {
-    await invalidateCached(env, trackerCacheKey(opts.cacheNs, tenantId, segmentId));
-    if (typeof projectId === 'number') {
-      await invalidateCached(env, trackerCacheKey(opts.cacheNs, tenantId, segmentId, projectId));
-    }
+  if (!opts.cacheNs) return;
+  for (const key of trackerCacheKeysForWrite(opts.cacheNs, tenantId, segmentId, before, after)) {
+    await invalidateCached(env, key).catch((error) => {
+      reportCaughtError(error, { source: 'presentation/routes/segmentTrackerRoutes.ts', operation: 'invalidateTracker', context: { key } });
+    });
   }
+}
+
+/** Bump the tracker's cross-cache version tokens — after EVERY write, whichever post-write step ran. Never throws. */
+async function bumpTrackerVersions(env: Env, opts: TrackerOpts, tenantId: number): Promise<void> {
   const vks = opts.bumpVersionKeys?.(tenantId) ?? [];
   for (const vk of vks) {
-    await bumpCacheVersion(env, vk);
+    await bumpCacheVersionSafe(env, vk, 'bumpTrackerVersions', { versionKey: vk });
   }
-  // Roadmap items and the PMO trackers (portfolio/initiative/objective/KR) are all
-  // link-picker ticket kinds — orphan the chat↔ticket typeahead when one changes.
-  // Gated so unrelated trackers (governance tools, …) don't over-invalidate it.
-  if (opts.cacheNs === 'roadmap' || vks.some((k) => k.startsWith('pmo-version'))) {
+  // The PMO trackers (portfolio/initiative/objective/KR) are link-picker ticket kinds —
+  // orphan the chat↔ticket typeahead when one changes. (Roadmap items, also a ticket kind,
+  // run their own `afterRoadmapWrite`.) Gated so unrelated trackers don't over-invalidate it.
+  if (vks.some((k) => k.startsWith('pmo-version'))) {
     await bumpTicketSearchVersion(env, tenantId);
   }
 }
 
-/** Fire-and-forget webhook emit when a write set the trigger field to its value. */
+/** Fire-and-forget webhook emit when a write MOVED the trigger field INTO its value. */
 function maybeEmit(
   c: Context<HonoEnv>,
   db: Db,
   opts: TrackerOpts,
-  written: Record<string, unknown>,
+  before: Record<string, unknown> | null,
   row: Record<string, unknown> | undefined,
 ): void {
   const e = opts.emit;
-  if (!e || !row || written[e.field] !== e.value) return;
-  const waitUntil = c.executionCtx?.waitUntil?.bind(c.executionCtx);
+  if (!e || !row || !isTransitionInto(e.field, e.value, before, row)) return;
+  const waitUntil = waitUntilOf(optionalExecutionCtx(c));
   if (!waitUntil) return;
   const { tenantId, segmentId } = scope(c);
-  const eventId = typeof row.id === 'string' || typeof row.id === 'number' ? String(row.id) : crypto.randomUUID();
+  const eventId = transitionEventId(row, e.value);
   waitUntil(
     emitWebhookEvent(db, { tenantId, segmentId, eventType: e.event, eventId, data: row }, { env: c.env }).catch((error) => { /* best-effort */ 
       reportCaughtError(error, { source: "presentation/routes/segmentTrackerRoutes.ts", operation: "maybeEmit" });
@@ -171,14 +202,39 @@ function pick(body: Record<string, unknown>, fields: string[]): Record<string, u
 /**
  * Hold a written `status` to the tracker's status vocabulary ({@link TrackerOpts.statusKind}):
  * normalises it in place, or returns the refusal the route answers 400. No `statusKind`, or no
- * `status` in the write, passes.
+ * `status` in the write, passes. On an update, `before` is the stored row: a status equal to the
+ * stored one is not a change and passes through untouched, so a row carrying an off-vocabulary
+ * legacy status stays editable.
  */
-function statusRefusal(opts: TrackerOpts, written: Record<string, unknown>): string | null {
+function statusRefusal(opts: TrackerOpts, written: Record<string, unknown>, before: Record<string, unknown> | null): string | null {
   if (!opts.statusKind || written.status === undefined) return null;
-  const checked = checkTicketStatus(opts.statusKind, written.status);
+  const current = typeof before?.status === 'string' ? before.status : null;
+  const checked = checkTicketStatus(opts.statusKind, written.status, current);
   if (!checked.ok) return checked.error;
   written.status = checked.value;
   return null;
+}
+
+/**
+ * The tracker's post-write step: its own (`afterWrite`, which owns the `cacheNs` keys and any
+ * webhook) or the default invalidation + `emit` — then the `bumpVersionKeys` tokens either way.
+ */
+async function afterTrackerWrite(
+  c: Context<HonoEnv>,
+  db: Db,
+  opts: TrackerOpts,
+  before: Record<string, unknown> | null,
+  after: Record<string, unknown> | null,
+): Promise<void> {
+  const { tenantId, segmentId } = scope(c);
+  const env = c.env as Env;
+  if (opts.afterWrite) {
+    await opts.afterWrite(c, db, before, after);
+  } else {
+    if (after) maybeEmit(c, db, opts, before, after);
+    await invalidateTracker(env, opts, tenantId, segmentId, before, after);
+  }
+  await bumpTrackerVersions(env, opts, tenantId);
 }
 
 /**
@@ -189,6 +245,8 @@ function statusRefusal(opts: TrackerOpts, written: Record<string, unknown>): str
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function createTrackerRoutes(db: Db, table: any, opts: TrackerOpts): Hono<HonoEnv> {
+  // The type refuses this pairing; a cast past it must fail at mount time, not drop the emit per request.
+  if (opts.afterWrite && opts.emit) throw new Error('tracker opts: afterWrite owns the post-write step — it cannot be combined with emit');
   const router = new Hono<HonoEnv>();
   // projectId is part of the write whitelist for dual-scoped trackers.
   const writeFields = opts.projectScoped ? [...opts.fields, 'projectId'] : opts.fields;
@@ -219,15 +277,14 @@ function createTrackerRoutes(db: Db, table: any, opts: TrackerOpts): Hono<HonoEn
       }
     }
     const written = pick(body, writeFields);
-    const badStatus = statusRefusal(opts, written);
+    const badStatus = statusRefusal(opts, written, null);
     if (badStatus) return c.json({ error: badStatus }, 400);
     const createRefusal = opts.guardMutation?.('create', {}, written);
     if (createRefusal) return c.json({ error: createRefusal }, 403);
     const rows = (await db.insert(table)
       .values({ ...written, tenantId, segmentId, ...opts.serverFieldsOnCreate?.(c) })
       .returning()) as Array<Record<string, unknown>>;
-    maybeEmit(c, db, opts, written, rows[0]);
-    await invalidateTracker(c.env as Env, opts, tenantId, segmentId, rows[0]?.projectId);
+    await afterTrackerWrite(c, db, opts, null, rows[0] ?? null);
     await auditTrackerMutation(c, db, opts, 'create', null, rows[0] ?? null);
     return c.json(rows[0] && opts.project ? opts.project(rows[0]) : rows[0], 201);
   });
@@ -237,23 +294,28 @@ function createTrackerRoutes(db: Db, table: any, opts: TrackerOpts): Hono<HonoEn
     const id = c.req.param('id');
     const patch = pick(await parseBody(c, zJsonObject), writeFields);
     if (Object.keys(patch).length === 0) return c.json({ error: 'nothing to update' }, 400);
-    const badStatus = statusRefusal(opts, patch);
-    if (badStatus) return c.json({ error: badStatus }, 400);
-    patch.updatedAt = new Date();
-    // The before-image only when the tracker is audited — one extra keyed read, not paid by the rest.
-    const before = opts.auditEntity || opts.guardMutation
+    // The before-image only when something reads it — the audit, a guard, a status change
+    // (held to the vocabulary only when it CHANGES the stored value), or a post-write step that
+    // fires on a transition, or a project-scoped cache whose old project key a move must clear —
+    // one extra keyed read, not paid by the rest.
+    const needsBefore = opts.auditEntity || opts.guardMutation || opts.emit || opts.afterWrite
+      || (opts.projectScoped && opts.cacheNs && patch.projectId !== undefined)
+      || (opts.statusKind && patch.status !== undefined);
+    const before = needsBefore
       ? ((await db.select().from(table)
         .where(and(eq(table.id, id), eq(table.tenantId, tenantId), eq(table.segmentId, segmentId)))
         .limit(1)) as Array<Record<string, unknown>>)[0] ?? null
       : null;
+    const badStatus = statusRefusal(opts, patch, before);
+    if (badStatus) return c.json({ error: badStatus }, 400);
+    patch.updatedAt = new Date();
     const refusal = before && opts.guardMutation?.('update', before, patch);
     if (refusal) return c.json({ error: refusal }, 403);
     const rows = (await db.update(table).set(patch)
       .where(and(eq(table.id, id), eq(table.tenantId, tenantId), eq(table.segmentId, segmentId)))
       .returning()) as Array<Record<string, unknown>>;
     if (!rows[0]) return c.json({ error: 'not found' }, 404);
-    maybeEmit(c, db, opts, patch, rows[0]);
-    await invalidateTracker(c.env as Env, opts, tenantId, segmentId, rows[0]?.projectId);
+    await afterTrackerWrite(c, db, opts, before, rows[0]);
     await auditTrackerMutation(c, db, opts, 'update', before, rows[0] ?? null);
     return c.json(opts.project ? opts.project(rows[0]) : rows[0]);
   });
@@ -272,7 +334,7 @@ function createTrackerRoutes(db: Db, table: any, opts: TrackerOpts): Hono<HonoEn
       .where(and(eq(table.id, id), eq(table.tenantId, tenantId), eq(table.segmentId, segmentId)))
       .returning()) as Array<{ id: string; projectId?: unknown }>;
     if (!rows[0]) return c.json({ error: 'not found' }, 404);
-    await invalidateTracker(c.env as Env, opts, tenantId, segmentId, rows[0].projectId);
+    await afterTrackerWrite(c, db, opts, rows[0] as unknown as Record<string, unknown>, null);
     await auditTrackerMutation(c, db, opts, 'delete', rows[0] as unknown as Record<string, unknown>, null);
     return c.json({ deleted: rows[0].id });
   });

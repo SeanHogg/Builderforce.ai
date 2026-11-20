@@ -23,7 +23,24 @@ const kitEnvironments = (): KitManifest['environments'] => ({
   prod: { target: 'cloudflare', tier: 'production' },
 });
 
-const ids = (options: { id: string }[]) => options.map((option) => option.id).join(', ');
+const ids = (options: { id: string }[]) => options.map((option) => option.id);
+
+/** The English default of each issue (`KitIssue.message`); localizing hosts word it from `code` + `params`. */
+const ISSUE_ENGLISH: { [C in KitIssueCode]: (params: KitIssueParams[C]) => string } = {
+  'unknown-kit': (p) =>
+    `Unknown starter kit "${p.kit}". Use <frontend>-<backend> or a frontend alone. Named kits: ${p.namedKits.join(', ')}. Frontends: ${p.frontends.join(', ')}. Backends: ${p.backends.join(', ')}.`,
+  'unknown-extra': (p) => `Unknown extra "${p.extra}". Extras: ${p.extras.join(', ')}.`,
+  'missing-requirement': (p) => `"${p.part}" needs a ${p.kind} part in the kit.`,
+  'path-conflict': (p) => `File "${p.key}" comes from both "${p.kept}" and "${p.dropped}"; kept "${p.kept}"'s.`,
+  'service-conflict': (p) => `Service "${p.key}" comes from both "${p.kept}" and "${p.dropped}"; kept "${p.kept}"'s.`,
+  'resource-conflict': (p) => `Resource "${p.key}" comes from both "${p.kept}" and "${p.dropped}"; kept "${p.kept}"'s.`,
+  'unknown-service': (p) => `"${p.part}" adds to service "${p.service}", which no part in this kit declares.`,
+};
+
+/** An issue: its code, params, the English sentence, and the key it is about. */
+function kitIssue<C extends KitIssueCode>(code: C, key: string, params: KitIssueParams[C]): KitIssue {
+  return { code, key, params, message: ISSUE_ENGLISH[code](params) } as KitIssue;
+}
 
 /** `<frontend>-<backend>` (either by id or alias), or a frontend alone. */
 export function resolveKit(kitId: string, extras: readonly string[] = []): { kit?: KitDefinition; issues: KitIssue[] } {
@@ -38,16 +55,14 @@ export function resolveKit(kitId: string, extras: readonly string[] = []): { kit
   }
   const options = listKitOptions();
   if (!frontend) {
-    issues.push({
-      code: 'unknown-kit',
-      key: kitId,
-      message: `Unknown starter kit "${kitId}". Use <frontend>-<backend> or a frontend alone. Named kits: ${options.namedKits.join(', ')}. Frontends: ${ids(options.frontends)}. Backends: ${ids(options.backends)}.`,
-    });
+    issues.push(kitIssue('unknown-kit', kitId, {
+      kit: kitId, namedKits: options.namedKits, frontends: ids(options.frontends), backends: ids(options.backends),
+    }));
   }
   const extraIds: string[] = [];
   for (const raw of extras) {
     const extra = findKitPart(raw, 'extra');
-    if (!extra) issues.push({ code: 'unknown-extra', key: raw, message: `Unknown extra "${raw}". Extras: ${ids(options.extras)}.` });
+    if (!extra) issues.push(kitIssue('unknown-extra', raw, { extra: raw, extras: ids(options.extras) }));
     else if (!extraIds.includes(extra.id)) extraIds.push(extra.id);
   }
   if (!frontend) return { issues };
@@ -81,26 +96,26 @@ export function composeParts(name: string, parts: readonly KitPart[]): ComposedK
   const resources: Record<string, ManifestResource> = {};
   const owner = new Map<string, string>();
 
-  const claim = (code: KitIssue['code'], what: string, key: string, partId: string): boolean => {
+  const claim = (code: 'path-conflict' | 'service-conflict' | 'resource-conflict', key: string, partId: string): boolean => {
     const held = owner.get(`${code}:${key}`);
     if (held === undefined) {
       owner.set(`${code}:${key}`, partId);
       return true;
     }
-    issues.push({ code, key, message: `${what} "${key}" comes from both "${held}" and "${partId}"; kept "${held}"'s.` });
+    issues.push(kitIssue(code, key, { key, kept: held, dropped: partId }));
     return false;
   };
 
   for (const part of parts) {
     for (const [relative, content] of Object.entries(part.files)) {
       const path = `${part.root.slice(1)}/${relative}`;
-      if (claim('path-conflict', 'File', path, part.id)) files[path] = content;
+      if (claim('path-conflict', path, part.id)) files[path] = content;
     }
     for (const [id, service] of Object.entries(part.manifest.services ?? {})) {
-      if (claim('service-conflict', 'Service', id, part.id)) services[id] = { ...service };
+      if (claim('service-conflict', id, part.id)) services[id] = { ...service };
     }
     for (const [id, resource] of Object.entries(part.manifest.resources ?? {})) {
-      if (claim('resource-conflict', 'Resource', id, part.id)) resources[id] = { ...resource };
+      if (claim('resource-conflict', id, part.id)) resources[id] = { ...resource };
     }
   }
 
@@ -108,14 +123,14 @@ export function composeParts(name: string, parts: readonly KitPart[]): ComposedK
     for (const [id, attachment] of Object.entries(part.attach ?? {})) {
       const service = services[id];
       if (!service) {
-        issues.push({ code: 'unknown-service', key: id, message: `"${part.id}" adds to service "${id}", which no part in this kit declares.` });
+        issues.push(kitIssue('unknown-service', id, { part: part.id, service: id }));
         continue;
       }
       if (attachment.uses?.length) service.uses = [...new Set([...(service.uses ?? []), ...attachment.uses])];
     }
     const missing = (part.requires ?? []).filter((kind) => !parts.some((other) => other.kind === kind));
     for (const kind of missing) {
-      issues.push({ code: 'missing-requirement', key: part.id, message: `"${part.id}" needs a ${kind} part in the kit.` });
+      issues.push(kitIssue('missing-requirement', part.id, { part: part.id, kind }));
     }
   }
 
@@ -142,7 +157,7 @@ export function composeParts(name: string, parts: readonly KitPart[]): ComposedK
   };
   const manifestText = `${JSON.stringify(manifest, null, 2)}\n`;
   for (const [path, content] of [[KIT_README_FILE, kitReadme(name, parts)], [MANIFEST_FILE, manifestText]] as const) {
-    if (claim('path-conflict', 'File', path, 'kit')) files[path] = content;
+    if (claim('path-conflict', path, 'kit')) files[path] = content;
   }
   return { files, manifest, manifestText, issues };
 }

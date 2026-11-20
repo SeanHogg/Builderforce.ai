@@ -23,13 +23,15 @@
  */
 
 import { reportServerError } from '../middleware/errorResponse';
-import { Hono, type Context } from 'hono';
+import { Hono } from 'hono';
 import { listGatewayMcpTools, callGatewayMcpTool, resolveGatewayMcpTool } from '../../application/llm/mcpGateway';
 import { describeToolSurfaces, resolveToolSurface, TOOL_SURFACES } from '../../application/llm/toolSurfaces';
 import { requireTenantAccess, type TenantAccess } from './llmRoutes';
 import type { Env, HonoEnv } from '../../env';
 import { RequestValidationError } from '../../domain/shared/errors';
 import { INVALID_JSON_MESSAGE, parseBody, z } from './requestBody';
+// Tool dispatch defers best-effort audit writes with it; an absent context awaits inline.
+import { optionalExecutionCtx } from './requestScope';
 
 /** One JSON-RPC message, or a batch of them (older clients). `handleRpc` checks each one. */
 const JsonRpcBody = z.union([z.looseObject({}), z.array(z.unknown())]);
@@ -209,19 +211,6 @@ async function handleRpc(
   }
 
   return isNotification(req) ? null : rpcError(id, JSON_RPC.METHOD_NOT_FOUND, `Unknown method '${method}'`);
-}
-
-/**
- * Hono THROWS on `c.executionCtx` when the runtime supplied none. Tool dispatch
- * only uses it to defer best-effort audit writes, so an absent context must
- * degrade to "await inline", never to a 500.
- */
-function optionalExecutionCtx(c: Context<HonoEnv>): ExecutionContext | undefined {
-  try {
-    return c.executionCtx;
-  } catch {
-    return undefined;
-  }
 }
 
 export function createMcpServerRoutes(): Hono<HonoEnv> {

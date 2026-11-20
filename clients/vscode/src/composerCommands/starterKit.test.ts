@@ -55,11 +55,23 @@ describe("/starter-kit", () => {
     expect(port.files.get(at("builderforce.json"))).toBe("{\"mine\":true}");
   });
 
+  it("writes NOTHING, and names the path, when one kit path is refused (a symbolic link)", async () => {
+    const port = fakeWorkspacePort([app]);
+    port.refused.add(at("builderforce.json"));
+    const reply = await run(port);
+    expect(port.files.size).toBe(0);
+    expect(port.asked).toEqual([]);
+    expect(reply).toMatchObject({ kind: "text", tone: "error" });
+    expect(reply.kind === "text" ? reply.lines : []).toEqual([composerCommandText().writeRefused([at("builderforce.json")])]);
+  });
+
   it("writes nothing when the kit has issues", async () => {
     const port = fakeWorkspacePort([app]);
     const reply = await run(port, { kit: "no-such-kit" });
     expect(port.files.size).toBe(0);
     expect(reply).toMatchObject({ kind: "text", tone: "error" });
+    // Worded from the issue's code + params through l10n (the mocked `t` returns the English key filled in).
+    expect(reply.kind === "text" ? reply.lines.slice(1) : []).toEqual(composeKit("no-such-kit").issues.map((issue) => issue.message));
   });
 
   it("asks which folder when several are open, and does nothing when none is picked", async () => {

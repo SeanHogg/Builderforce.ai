@@ -19703,7 +19703,8 @@
     "themePlaceholder": "Regroupement facultatif",
     "targetDateLabel": "Date cible",
     "saveChanges": "Enregistrer les modifications",
-    "create": "Créer"
+    "create": "Créer",
+    "statusUnknown": "Statut inconnu : {value}"
   },
   "agentCapabilities": {
     "failedLoadAgents": "Échec du chargement des agents",
@@ -34168,7 +34169,9 @@
     "in_review": "En revue",
     "done": "Terminé",
     "blocked": "Bloqué",
-    "shipped": "Livré"
+    "shipped": "Livré",
+    "planned": "Planifié",
+    "cancelled": "Annulé"
   },
   "agentWorker": {
     "title": "Exécuteur d'agents dans le navigateur",

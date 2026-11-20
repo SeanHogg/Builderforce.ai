@@ -11,7 +11,8 @@ import { initActivity, trackVsix } from "./activity";
 import { BoardPanel } from "./boardPanel";
 import { BuilderForcePanel } from "./builderforcePanel";
 import { openWorkspace } from "./openWorkspace";
-import { configureWorkspaceSurfaces, notifyChatDeleted, refreshWorkspaceSurfaces } from "./workspaceSurface";
+import { configureWorkspaceSurfaces, notifyChatDeleted, notifyComposerCommands, refreshWorkspaceSurfaces } from "./workspaceSurface";
+import { closeComposerLaunchers, composerCommandHost } from "./composerCommands/host";
 import { registerChatView } from "./chatView";
 import { Project360Panel } from "./project360Panel";
 import { ProjectPagePanel, projectPageChoices } from "./projectPagePanel";
@@ -368,6 +369,8 @@ export function activate(context: vscode.ExtensionContext): void {
     onSelectProject: (projectId) => void selectProjectById(context, projects, projectId),
     openBoard: (sessionId) => void openWorkspace(context, undefined, { surface: "graph", sessionId }),
   });
+  // The `/` menu's help model follows the workspace (folders, root builderforce.json): re-pushed to every surface.
+  context.subscriptions.push(composerCommandHost(context).onDidChangeHelp(notifyComposerCommands));
   // BuilderForce in the editor's agent chat area (secondary sidebar), beside Chat /
   // Claude Code / Codex — the same workspace surface as the editor tab.
   registerChatView(context);
@@ -1314,7 +1317,8 @@ let activeRunHost: BrainRunHost | undefined;
 
 export async function deactivate(): Promise<void> {
   // No run outlives the editor: every background shell job (a dev server, a watcher) dies here.
-  await Promise.all([auditExecution?.flushClose(), killAllJobs()]);
+  // …and no `/launch` loopback server: every local launcher is closed, and awaited.
+  await Promise.all([auditExecution?.flushClose(), killAllJobs(), closeComposerLaunchers()]);
   // A child that settled during close has its persist queued: land it, or the parent's
   // journal record still says `running` and the resume offers a dead child (chat #61651).
   await activeRunHost?.flush?.();

@@ -1,42 +1,45 @@
 /**
  * The composer commands' composition root in the extension host (PRD 31 §W11): the
  * registry for the current workspace, the four executors bound to the editor, and the
- * folder launchers — ONE per extension, closed on deactivate (`context.subscriptions`).
+ * folder launchers — ONE per extension, closed on deactivate (`closeComposerLaunchers`,
+ * awaited by `deactivate`; `context.subscriptions` as the fallback).
  *
  * The chat surface asks it two things: the `/help` model for the `/` menu's Actions tab
  * (`init`), and the answer to a composer line before any run starts (`composer.input`).
  */
 import * as path from "node:path";
 import * as vscode from "vscode";
-import {
-  createComposerCommandRegistry,
-  type ComposerCommandRegistry,
-} from "@seanhogg/builderforce-brain-embedded/composerCommands";
 import { execFile } from "node:child_process";
-import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
 import { promisify } from "node:util";
-import * as launcherServer from "@seanhogg/builderforce-webcontainers/launcher/server";
-import { ensureLauncherTrust, type CaTrustCommand, type CaTrustDecision, type LauncherTrustDeps } from "./launcherTrust";
+import { caTrustCheckCommand, caTrustCommand, createLocalLauncher } from "@seanhogg/builderforce-webcontainers/launcher/server";
+import { watchComposerHelp } from "./helpRefresh";
+import { ensureLauncherTrust, trustCommandRunner, type CaTrustDecision, type LauncherTrustDeps } from "./launcherTrust";
 import { logLine } from "../errorReporter";
 import { detectWorkspaceManifest } from "./detectManifest";
 import { handleComposerInput } from "./dispatch";
-import { buildComposerCommands, LAUNCH_COMMAND_ID, MANIFEST_COMMAND_ID, STARTER_KIT_COMMAND_ID } from "./entries";
+import { LAUNCH_COMMAND_ID, MANIFEST_COMMAND_ID, STARTER_KIT_COMMAND_ID } from "./entries";
 import { FolderLaunchers } from "./folderLaunchers";
 import { composerCommandText, type ComposerCommandText } from "./labels";
 import { launchExecutor } from "./launch";
-import { MANIFEST_FILE_NAME, manifestInitExecutor } from "./manifestInit";
+import { MANIFEST_FILE_NAME, manifestInitExecutor, type ReadFolderFiles } from "./manifestInit";
+import { openUrlVerbatim } from "./openExternal";
 import type { ComposerCommandsInit, ComposerInputResult } from "./reply";
+import { rootManifestWatchers } from "./rootManifestWatchers";
 import { starterKitExecutor } from "./starterKit";
 import { registerManifestPreview, vscodeWorkspacePort } from "./vscodeWorkspacePort";
 import { readWorkspaceFiles } from "./workspaceFiles";
-import type { ComposerWorkspacePort } from "./workspacePort";
+import { workspaceRegistry } from "./workspaceRegistry";
 
 export interface ComposerCommandHost {
   /** The `/help` model for the `/` menu's Actions tab. */
   init(): Promise<ComposerCommandsInit>;
   /** Answer a composer line: not a command, or the reply to show. Never reaches a model. */
   handle(text: string): Promise<ComposerInputResult>;
+  /**
+   * The help model, recomputed: a workspace folder was added/removed or a root
+   * `builderforce.json` was created/changed/deleted (`helpRefresh.ts`).
+   */
+  readonly onDidChangeHelp: vscode.Event<ComposerCommandsInit>;
 }
 
 /**
@@ -51,27 +54,15 @@ const LAUNCHER_CA_DIR = "launcher-ca";
 /** The recorded trust decision, per CA fingerprint (`launcherTrust.ts`). */
 const CA_TRUST_STATE_KEY = "builderforce.launcher.caTrusted";
 
-/**
- * The launcher's TLS surface (`tls` option, `caCertPath`, `caTrustCommand`, `isCaTrusted`) lands
- * with the webcontainers HTTPS release. Read through this view so the extension builds against the
- * current published API and picks the new one up with no edit: absent ⇒ plain HTTP, no trust step.
- */
-interface LauncherTlsApi {
-  caTrustCommand?: (caCertPath: string, platform: NodeJS.Platform) => CaTrustCommand;
-  isCaTrusted?: (caCertPath: string) => boolean | Promise<boolean>;
-}
-const launcherTls = launcherServer as unknown as LauncherTlsApi;
-type LaunchOptionsWithTls = Parameters<typeof launcherServer.createLocalLauncher>[0] & { tls?: { storeDir: string } };
-
 const execFileAsync = promisify(execFile);
+
+const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
 function launcherTrustDeps(ctx: vscode.ExtensionContext, text: ComposerCommandText): LauncherTrustDeps {
   return {
     text,
-    ...(launcherTls.caTrustCommand ? { trustCommand: launcherTls.caTrustCommand } : {}),
-    ...(launcherTls.isCaTrusted ? { isTrusted: launcherTls.isCaTrusted } : {}),
-    platform: process.platform,
-    fingerprint: async (caCertPath) => createHash("sha256").update(await readFile(caCertPath)).digest("hex"),
+    plan: (ca) => caTrustCommand(ca),
+    checkCommand: (ca) => caTrustCheckCommand(ca),
     decision: {
       get: () => ctx.globalState.get<CaTrustDecision>(CA_TRUST_STATE_KEY),
       set: async (decision) => { await ctx.globalState.update(CA_TRUST_STATE_KEY, decision); },
@@ -80,37 +71,37 @@ function launcherTrustDeps(ctx: vscode.ExtensionContext, text: ComposerCommandTe
       const answer = await vscode.window.showInformationMessage(message, { modal: true }, trust, skip);
       return answer === trust ? "trust" : answer === skip ? "skip" : undefined;
     },
-    // An argument array, never a shell string.
-    exec: async (command, args) => { await execFileAsync(command, [...args], { windowsHide: true }); },
+    // The tool by absolute path, an argument array, in the CA store directory — never a shell, never the workspace as cwd.
+    exec: trustCommandRunner(execFileAsync),
+    report: (error, step) => logLine(step === "check"
+      ? `[composer] the launcher certificate check could not run: ${messageOf(error)}`
+      : `[composer] the launcher certificate could not be trusted: ${messageOf(error)}`),
   };
 }
 
-/** The environment names a folder's `builderforce.json` declares; empty when it has none or cannot be read. */
-async function manifestEnvironments(port: ComposerWorkspacePort): Promise<string[]> {
-  const folder = port.folders()[0];
-  if (!folder) return [];
-  const text = await port.readText(path.join(folder.path, MANIFEST_FILE_NAME)).catch((error: unknown) => {
-    logLine(`[composer] could not read ${MANIFEST_FILE_NAME}: ${error instanceof Error ? error.message : String(error)}`);
-    return undefined;
-  });
-  if (!text) return [];
-  try {
-    const environments = (JSON.parse(text) as { environments?: unknown }).environments;
-    return environments && typeof environments === "object" && !Array.isArray(environments) ? Object.keys(environments) : [];
-  } catch {
-    return []; // a broken manifest: `/launch` passes any name through and the launcher reports the file's issues
-  }
+/** Recompute the help model when a folder or a root `builderforce.json` changes; dispose with the extension. */
+function watchHelp(ctx: vscode.ExtensionContext, init: () => Promise<ComposerCommandsInit>, publish: (help: ComposerCommandsInit) => void): void {
+  ctx.subscriptions.push(watchComposerHelp({
+    onFoldersChanged: (listener) => vscode.workspace.onDidChangeWorkspaceFolders(listener),
+    manifestEvents: rootManifestWatchers(MANIFEST_FILE_NAME),
+    folderRoots: () => (vscode.workspace.workspaceFolders ?? []).map((folder) => folder.uri.fsPath),
+    recompute: init,
+    publish,
+    report: (error) => logLine(`[composer] the / menu could not be refreshed: ${messageOf(error)}`),
+  }));
 }
 
-async function registryFor(port: ComposerWorkspacePort, text: ComposerCommandText): Promise<ComposerCommandRegistry> {
-  const entries = buildComposerCommands({
-    hasWorkspace: port.folders().length > 0,
-    noWorkspaceReason: text.noWorkspace,
-    environments: await manifestEnvironments(port),
-    stopLabel: text.launchStopChoice,
-    trustLabel: text.launchTrustChoice,
-  });
-  return createComposerCommandRegistry(entries, text);
+/** Detection's file read: an unreadable subdirectory or file is reported and left out, never the end of detection. */
+const readFolderFiles: ReadFolderFiles = (root) =>
+  readWorkspaceFiles(root, (error, relative) => logLine(`[composer] app detection skipped ${relative} in ${root}: ${messageOf(error)}`));
+
+/** Every host's launchers, so `deactivate` can await their close (`closeComposerLaunchers`). */
+const allLaunchers = new Set<FolderLaunchers>();
+
+/** Close every launcher this extension started; `deactivate` awaits it so no loopback server outlives the editor. */
+export async function closeComposerLaunchers(): Promise<void> {
+  await Promise.all([...allLaunchers].map((launchers) =>
+    launchers.closeAll((error) => logLine(`[composer] a launcher failed to close: ${messageOf(error)}`))));
 }
 
 const hosts = new WeakMap<vscode.ExtensionContext, ComposerCommandHost>();
@@ -120,43 +111,46 @@ export function composerCommandHost(ctx: vscode.ExtensionContext): ComposerComma
   if (existing) return existing;
   const port = vscodeWorkspacePort();
   const launchers = new FolderLaunchers();
+  allLaunchers.add(launchers);
   const show = registerManifestPreview(ctx.subscriptions);
   const distDir = vscode.Uri.joinPath(ctx.extensionUri, ...LAUNCHER_DIST_DIR).fsPath;
   const caDir = path.join(ctx.globalStorageUri.fsPath, LAUNCHER_CA_DIR);
-  ctx.subscriptions.push({
-    dispose: () => void launchers.closeAll((error) => logLine(`[composer] a launcher failed to close: ${error instanceof Error ? error.message : String(error)}`)),
-  });
+  // The fallback when `deactivate` did not run first; a second close of a closed registry is a no-op.
+  ctx.subscriptions.push({ dispose: () => void closeComposerLaunchers() });
+
+  // Never fails the `init` frame it rides in: a registry that cannot be built is reported and the tab is empty.
+  const init = async (): Promise<ComposerCommandsInit> => {
+    try {
+      return { help: (await workspaceRegistry(port, composerCommandText(), logLine)).help() };
+    } catch (error) {
+      logLine(`[composer] the command registry could not be built: ${messageOf(error)}`);
+      return { help: { entries: [] } };
+    }
+  };
+  const helpChanged = new vscode.EventEmitter<ComposerCommandsInit>();
+  ctx.subscriptions.push(helpChanged);
+  watchHelp(ctx, init, (help) => helpChanged.fire(help));
 
   const host: ComposerCommandHost = {
-    // Never fails the `init` frame it rides in: a registry that cannot be built is reported and the tab is empty.
-    init: async () => {
-      try {
-        return { help: (await registryFor(port, composerCommandText())).help() };
-      } catch (error) {
-        logLine(`[composer] the command registry could not be built: ${error instanceof Error ? error.message : String(error)}`);
-        return { help: { entries: [] } };
-      }
-    },
+    init,
+    onDidChangeHelp: helpChanged.event,
     handle: async (line) => {
       // Worded per call: the editor's language is read when the person types, not at activation.
       const text = composerCommandText();
       const result = await handleComposerInput(line, {
-        registry: await registryFor(port, text),
+        registry: await workspaceRegistry(port, text, logLine),
         text,
         executors: {
           [STARTER_KIT_COMMAND_ID]: starterKitExecutor({ port, text }),
-          [MANIFEST_COMMAND_ID]: manifestInitExecutor({ port, text, readFiles: readWorkspaceFiles, detect: detectWorkspaceManifest, show }),
+          [MANIFEST_COMMAND_ID]: manifestInitExecutor({ port, text, readFiles: readFolderFiles, detect: detectWorkspaceManifest, show }),
           [LAUNCH_COMMAND_ID]: launchExecutor({
             port,
             text,
             launchers,
-            start: (request) => launcherServer.createLocalLauncher({ ...request, distDir, tls: { storeDir: caDir } } as LaunchOptionsWithTls),
-            trust: (caCertPath, force) => ensureLauncherTrust(caCertPath, launcherTrustDeps(ctx, text), force),
-            // Handed over as the STRING: `Uri.parse(url).toString()` re-encodes the fragment (`#token=…` →
-            // `#token%3D…`) and the launcher page would find no token. The extension host's `openUri`
-            // accepts a string and opens it verbatim.
-            openExternal: async (url) => { await vscode.env.openExternal(url as unknown as vscode.Uri); },
-            readFiles: readWorkspaceFiles,
+            start: (request) => createLocalLauncher({ ...request, distDir, tls: { storeDir: caDir } }),
+            trust: (ca, force) => ensureLauncherTrust(ca, launcherTrustDeps(ctx, text), force),
+            openExternal: openUrlVerbatim((target) => vscode.env.openExternal(target)),
+            readFiles: readFolderFiles,
             detect: detectWorkspaceManifest,
           }),
         },

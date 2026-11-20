@@ -401,12 +401,6 @@ async function reportAndThrow(
 }
 
 /**
- * The platform policy's gate for one request (`localFirst/platformPolicy`
- * `assertWebApiRequest`). Loaded on first use, never statically: the policy module
- * stays out of the root layout's closure, and in the browser it is already loaded by
- * the boot (`PlatformPolicyBoot`). Throws `PlatformAccessDenied` when refused.
- */
-/**
  * The sample workspace's answer to one read, or `null` for "go to the wire".
  *
  * Loaded through `import()` inside a `typeof window` BRANCH, never statically. The
@@ -416,16 +410,35 @@ async function reportAndThrow(
  * the Worker bundle (where it sat in every route function, unreachable). It is a
  * branch rather than an early return because webpack prunes a constant-false branch
  * but still bundles an `import()` that follows a `return`.
+ *
+ * Only a credential-less GET can ever be answered from the sample, so only that read
+ * loads the chunk: a signed-in request, or any write, never pays for — or waits on —
+ * it. A chunk that fails to load (a tab older than the current deploy, a dropped
+ * connection) is reported and the read goes to the wire instead of throwing.
  */
 async function guestSampleResponse(request: GuestReadRequest): Promise<Response | null> {
-  if (typeof window !== 'undefined') {
-    const { guestReadResponse, resolveGuestReadLoaded } = await import('@/domains/guest/application/guestRead');
-    const sample = await resolveGuestReadLoaded(request);
-    return sample ? guestReadResponse(sample) : null;
+  if (typeof window !== 'undefined' && !request.hadToken && request.method.toUpperCase() === 'GET') {
+    try {
+      const { guestReadResponse, resolveGuestReadLoaded } = await import('@/domains/guest/application/guestRead');
+      const sample = await resolveGuestReadLoaded(request);
+      return sample ? guestReadResponse(sample) : null;
+    } catch (caught) {
+      // reportError imports this module, so it is loaded on demand rather than statically.
+      void import('./reportError').then(({ recordedFailure }) =>
+        recordedFailure('Loading the guest sample workspace', null)(caught),
+      );
+      return null;
+    }
   }
   return null;
 }
 
+/**
+ * The platform policy's gate for one request (`localFirst/platformPolicy`
+ * `assertWebApiRequest`). Loaded on first use, never statically: the policy module
+ * stays out of the root layout's closure, and in the browser it is already loaded by
+ * the boot (`PlatformPolicyBoot`). Throws `PlatformAccessDenied` when refused.
+ */
 async function assertPlatformAllows(url: string, method: string, credentialed: boolean): Promise<void> {
   if (typeof window === 'undefined') return;
   const { assertWebApiRequest } = await import('./localFirst/platformPolicy');
@@ -464,8 +477,8 @@ async function sendRequest(
   // (no credential sent, GET only, browser only, fixture must exist) lives in
   // `resolveGuestRead`, which is the only thing that decides it; a `null` here
   // means "go to the wire" and is the ordinary case for a signed-in person on
-  // every request they ever make. The `Loaded` variant pulls in the registry's
-  // lazy fixture modules first — only for a read that already qualifies.
+  // every request they ever make. The sample chunk is loaded only for a
+  // credential-less GET (see `guestSampleResponse`), never for a signed-in request.
   const sample = await guestSampleResponse({ path, method, hadToken });
   if (sample) return { res: sample, url, method, hadToken };
 

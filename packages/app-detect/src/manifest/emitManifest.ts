@@ -15,7 +15,9 @@
  *   bindings → `queue` (native) and `object-storage` resources the Worker uses;
  * - compose resources (Redis, object storage, mail, Postgres) → resources, used by the
  *   services whose `depends_on` names them;
- * - vars with a value → every service's `env`; one environment, `local` (browser, debug).
+ * - vars with a value → every service's `env`; one environment, `local` (browser, debug);
+ * - exactly one frontend and one HTTP backend (each with a port) → ingress: `/api` → the
+ *   backend, `/` → the frontend (noted: the backend must serve under `/api`); else none.
  *
  * Everything it cannot express (secrets, domains, other bindings, other database engines …)
  * is a note, never silently dropped.
@@ -23,9 +25,11 @@
 
 import type { AppBlueprint, AppService } from '@builderforce/creation-canvas-contract';
 import { serviceDevPort } from '@builderforce/creation-canvas-contract';
+import { detectionNote, type DetectionNote } from '../notes';
 import type { ComposeResource } from '../types';
 import {
   APP_MANIFEST_SCHEMA_URL,
+  type EmittedIngressRoute,
   type EmittedJob,
   type EmittedManifest,
   type EmittedReadiness,
@@ -45,8 +49,10 @@ export interface EmitManifestResult {
   manifest: EmittedManifest;
   /** `manifest` as the file's text: two-space JSON and a trailing newline. */
   text: string;
-  /** What the manifest could not express, one sentence each. */
+  /** What the manifest could not express, one English sentence each (`codedNotes[i].message`). */
   notes: string[];
+  /** The same notes as codes + params, same order — for hosts that word them in the person's language. */
+  codedNotes: DetectionNote[];
 }
 
 /** Ids the database and its steps always get (the run target's reserved ids). */
@@ -57,6 +63,9 @@ export const SCHEDULED_ROUTE = '/__scheduled';
 
 /** The suffix of a one-off install service's id. */
 export const INSTALL_SUFFIX = '-install';
+
+/** The ingress path the one HTTP backend is served under (the kits' backend parts use the same). */
+export const BACKEND_INGRESS_PATH = '/api';
 
 const POSTGRES_ENGINES = new Set(['postgres', 'neon']);
 
@@ -99,7 +108,7 @@ function oneOff(runtime: string, root: string, command: string, extra: Pick<Emit
 }
 
 /** Turn every binding, the database and the compose resources into resources; who uses which. */
-function emitResources(blueprint: AppBlueprint, compose: ComposeResource[], taken: Set<string>, notes: string[]) {
+function emitResources(blueprint: AppBlueprint, compose: ComposeResource[], taken: Set<string>, notes: DetectionNote[]) {
   const resources: Record<string, EmittedResource> = {};
   /** Blueprint service id → resource ids its compose `depends_on` named. */
   const usedBy = new Map<string, string[]>();
@@ -115,10 +124,10 @@ function emitResources(blueprint: AppBlueprint, compose: ComposeResource[], take
     if (POSTGRES_ENGINES.has(database.engine)) {
       resources[MANIFEST_RESERVED_IDS.db] = { type: 'postgres', persistent: true };
       hasDatabase = true;
-      if (database.engine !== 'postgres') notes.push(`The ${database.engine} database is written as a postgres resource: the target picks its host (PGlite in the browser).`);
-      if (database.provider) notes.push(`The database provider "${database.provider}" is not part of the manifest: the target picks its host.`);
+      if (database.engine !== 'postgres') notes.push(detectionNote('db-engine-as-postgres', { engine: database.engine }));
+      if (database.provider) notes.push(detectionNote('db-provider-dropped', { provider: database.provider }));
     } else {
-      notes.push(`The ${database.engine} database is not expressible in manifest v1 (postgres only), so no database resource was written.`);
+      notes.push(detectionNote('db-engine-unsupported', { engine: database.engine }));
     }
   }
 
@@ -127,13 +136,13 @@ function emitResources(blueprint: AppBlueprint, compose: ComposeResource[], take
       const db = resources[MANIFEST_RESERVED_IDS.db] as Extract<EmittedResource, { type: 'postgres' }>;
       if (resource.extensions) db.extensions = [...new Set([...(db.extensions ?? []), ...resource.extensions])];
       for (const serviceId of resource.usedBy) use(serviceId, MANIFEST_RESERVED_IDS.db);
-      notes.push(`The compose service "${resource.id}" (${resource.image}) is the database, written as "db".`);
+      notes.push(detectionNote('compose-postgres-is-db', { id: resource.id, image: resource.image }));
       continue;
     }
     const id = safeId(resource.id, taken);
     if (resource.type === 'postgres') {
       resources[id] = { type: 'postgres', persistent: true, ...(resource.extensions ? { extensions: resource.extensions } : {}) };
-      notes.push(`The compose postgres "${resource.id}" has no migration step: run your migrations against it yourself.`);
+      notes.push(detectionNote('compose-postgres-no-migration', { id: resource.id }));
     } else {
       resources[id] = { type: resource.type };
     }
@@ -146,16 +155,16 @@ function emitResources(blueprint: AppBlueprint, compose: ComposeResource[], take
       const id = safeId(binding.name.toLowerCase(), taken);
       resources[id] = binding.kind === 'queue' ? { type: 'queue', engine: 'native' } : { type: 'object-storage' };
       bindingResources.push(id);
-      if (binding.kind === 'queue') notes.push(`The queue binding ${binding.name} is written as a native queue ("${id}"): the browser runtime runs queues on a redis resource.`);
+      if (binding.kind === 'queue') notes.push(detectionNote('queue-as-native', { binding: binding.name, id }));
       continue;
     }
-    notes.push(`The ${binding.kind} binding ${binding.name} is not expressible in manifest v1.`);
+    notes.push(detectionNote('binding-unsupported', { kind: binding.kind, binding: binding.name }));
   }
   return { resources, usedBy, bindingResources, hasDatabase };
 }
 
 /** One port per service: a port already claimed moves to the next free one. */
-function allocatePorts(services: AppService[], ids: Map<string, string>, notes: string[]): Map<string, number> {
+function allocatePorts(services: AppService[], ids: Map<string, string>, notes: DetectionNote[]): Map<string, number> {
   const claimed = new Set<number>();
   const ports = new Map<string, number>();
   for (const service of services) {
@@ -166,19 +175,21 @@ function allocatePorts(services: AppService[], ids: Map<string, string>, notes: 
     while (claimed.has(port)) port++;
     claimed.add(port);
     ports.set(service.id, port);
-    if (port !== wanted) notes.push(`Service "${ids.get(service.id)}" also wanted port ${wanted}, so it was given ${port}: tell its command (${service.devCommand}).`);
+    if (port !== wanted) {
+      notes.push(detectionNote('port-moved', { service: String(ids.get(service.id)), wanted, port, command: String(service.devCommand) }));
+    }
   }
   return ports;
 }
 
-function emitJobs(blueprint: AppBlueprint, ids: Map<string, string>, notes: string[]): Record<string, EmittedJob> {
+function emitJobs(blueprint: AppBlueprint, ids: Map<string, string>, notes: DetectionNote[]): Record<string, EmittedJob> {
   const jobs: Record<string, EmittedJob> = {};
   const crons = blueprint.bindings.filter((binding) => binding.kind === 'cron' && binding.cron);
   if (crons.length === 0) return jobs;
   const host = blueprint.services.find((service) => service.kind === 'worker')
     ?? blueprint.services.find((service) => roleOf(service) === 'backend' && !isTraining(service));
   if (!host) {
-    notes.push(`The cron schedules (${crons.map((c) => c.cron).join('; ')}) have no backend service to invoke, so no job was written.`);
+    notes.push(detectionNote('cron-no-backend', { schedules: crons.map((c) => String(c.cron)) }));
     return jobs;
   }
   const service = ids.get(host.id)!;
@@ -186,12 +197,28 @@ function emitJobs(blueprint: AppBlueprint, ids: Map<string, string>, notes: stri
   for (const schedule of crons.flatMap((binding) => binding.cron!.split(',').map((s) => s.trim()).filter(Boolean))) {
     jobs[safeId('cron', taken)] = { schedule, invoke: { service, method: 'GET', path: SCHEDULED_ROUTE } };
   }
-  notes.push(`Each cron job invokes GET ${SCHEDULED_ROUTE} on "${service}": a Cloudflare scheduled handler needs a route — \`wrangler dev --test-scheduled\` serves it; elsewhere the app must.`);
+  notes.push(detectionNote('cron-scheduled-route', { service, path: SCHEDULED_ROUTE }));
   return jobs;
 }
 
+/**
+ * The ingress for exactly one frontend and one HTTP backend among the written services (a
+ * route needs a port to reach): `/api` → the backend, `/` → the frontend, longest path first.
+ * Any other shape has no single answer, so it gets none.
+ */
+function emitIngress(services: Record<string, EmittedService>, notes: DetectionNote[]): EmittedIngressRoute[] {
+  // One-off steps and training services have no port, so only the long-running HTTP services remain.
+  const served = Object.entries(services).filter(([, entry]) => entry.port !== undefined);
+  const frontends = served.filter(([, entry]) => entry.role === 'frontend');
+  const backends = served.filter(([, entry]) => (entry.role ?? 'backend') === 'backend');
+  if (frontends.length !== 1 || backends.length !== 1) return [];
+  const [[frontend], [backend]] = [frontends[0]!, backends[0]!];
+  notes.push(detectionNote('ingress-api-backend', { frontend, backend, path: BACKEND_INGRESS_PATH }));
+  return [{ path: BACKEND_INGRESS_PATH, service: backend }, { path: '/', service: frontend }];
+}
+
 export function emitManifest(blueprint: AppBlueprint, extras: EmitManifestExtras = {}): EmitManifestResult {
-  const notes: string[] = [];
+  const notes: DetectionNote[] = [];
   const taken = new Set<string>(Object.values(MANIFEST_RESERVED_IDS));
   const { resources, usedBy, bindingResources, hasDatabase } = emitResources(blueprint, extras.composeResources ?? [], taken, notes);
   const ids = new Map(blueprint.services.map((service) => [service.id, safeId(service.id, taken)]));
@@ -221,7 +248,7 @@ export function emitManifest(blueprint: AppBlueprint, extras: EmitManifestExtras
     blueprint.vars.filter((v) => v.defaultValue !== undefined).map((v) => [v.name, v.defaultValue as string]),
   );
   const unset = blueprint.vars.filter((v) => v.defaultValue === undefined).map((v) => v.name);
-  if (unset.length > 0) notes.push(`Variables with no value are not written: ${unset.join(', ')}.`);
+  if (unset.length > 0) notes.push(detectionNote('vars-unset', { names: unset }));
 
   // The database's migration and seed run where the first backend lives, on its runtime, after its install.
   const steps: Record<string, EmittedService> = {};
@@ -249,20 +276,20 @@ export function emitManifest(blueprint: AppBlueprint, extras: EmitManifestExtras
     const role = roleOf(service);
     const command = service.devCommand?.trim() || service.startCommand?.trim();
     if (!command) {
-      notes.push(`Service "${id}" has no dev or start command, so it was left out.`);
+      notes.push(detectionNote('service-no-command', { service: id }));
       continue;
     }
     const isBackend = role === 'backend' && !isTraining(service);
     const composeUses = usedBy.get(service.id) ?? [];
-    if (role === 'frontend' && composeUses.length > 0) notes.push(`Frontend "${id}" never receives credentials, so it does not use ${composeUses.join(', ')}.`);
+    if (role === 'frontend' && composeUses.length > 0) notes.push(detectionNote('frontend-no-credentials', { service: id, resources: composeUses }));
     const uses = isBackend
       ? [...(hasDatabase ? [MANIFEST_RESERVED_IDS.db] : []), ...composeUses, ...(service.kind === 'worker' || workers.length === 0 ? bindingResources : [])]
       : [];
     const declared = (service.dependsOn ?? []).map((dep) => ids.get(dep) ?? dep);
     const defaults = service.dependsOn ? [] : role === 'frontend' ? backends.map((backend) => ids.get(backend.id)!) : [];
-    if (isTraining(service)) notes.push(`Training service "${id}" is written as a python service that is ready once started (manifest v1 has no training type).`);
-    if (service.kind === 'worker') notes.push(`Worker "${id}" runs through its own command (${command}); the browser runtime has no workerd.`);
-    if (service.kind === 'container') notes.push(`Container "${id}" needs a docker runtime, which the browser runtime does not have.`);
+    if (isTraining(service)) notes.push(detectionNote('training-as-python', { service: id }));
+    if (service.kind === 'worker') notes.push(detectionNote('worker-own-command', { service: id, command }));
+    if (service.kind === 'container') notes.push(detectionNote('container-needs-docker', { service: id }));
     services[id] = serviceEntry({
       runtime: runtimeOf(service),
       root: runtimeRoot(service.rootDir),
@@ -279,9 +306,10 @@ export function emitManifest(blueprint: AppBlueprint, extras: EmitManifestExtras
   }
 
   const jobs = emitJobs(blueprint, ids, notes);
+  const routes = emitIngress(services, notes);
   const secrets = blueprint.secrets.map((secret) => secret.name);
-  if (secrets.length > 0) notes.push(`Secrets are never written to the file: set ${secrets.join(', ')} in the vault.`);
-  if (blueprint.domains.length > 0) notes.push(`Domains are not part of manifest v1: ${blueprint.domains.map((d) => d.domain).join(', ')}.`);
+  if (secrets.length > 0) notes.push(detectionNote('secrets-to-vault', { names: secrets }));
+  if (blueprint.domains.length > 0) notes.push(detectionNote('domains-dropped', { domains: blueprint.domains.map((d) => d.domain) }));
 
   const primary = blueprint.services.find((service) => service.isPrimary) ?? blueprint.services[0];
   const name = extras.name ?? (primary ? ids.get(primary.id) : undefined);
@@ -292,7 +320,8 @@ export function emitManifest(blueprint: AppBlueprint, extras: EmitManifestExtras
     ...(Object.keys(resources).length > 0 ? { resources } : {}),
     services,
     ...(Object.keys(jobs).length > 0 ? { jobs } : {}),
+    ...(routes.length > 0 ? { ingress: { routes } } : {}),
     environments: { local: { target: 'browser', tier: 'non-production', debug: true } },
   };
-  return { manifest, text: `${JSON.stringify(manifest, null, 2)}\n`, notes };
+  return { manifest, text: `${JSON.stringify(manifest, null, 2)}\n`, notes: notes.map((note) => note.message), codedNotes: notes };
 }

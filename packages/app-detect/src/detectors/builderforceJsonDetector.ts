@@ -17,27 +17,28 @@
 import type { AppBlueprint } from '@builderforce/creation-canvas-contract';
 import { manifestToBlueprintOverrides } from '../manifest/manifestToBlueprintOverrides';
 import type { ManifestInput } from '../manifest/manifestShape';
+import { detectionNote, errorText, noteFrom, warningFindings, type DetectionNote } from '../notes';
 import type { AppDetector, DetectorFindings } from '../types';
 
 export const BUILDERFORCE_JSON = 'builderforce.json';
 
-type Read = { overrides: Partial<AppBlueprint>; warnings: string[] } | { warning: string };
+type Read = { overrides: Partial<AppBlueprint>; warnings: DetectionNote[] } | { warning: DetectionNote };
 
 function readBuilderforceJson(content: string): Read {
   let parsed: unknown;
   try {
     parsed = JSON.parse(content);
   } catch (error) {
-    return { warning: `${BUILDERFORCE_JSON} is not valid JSON and was ignored: ${error instanceof Error ? error.message : String(error)}` };
+    return { warning: detectionNote('manifest-invalid-json', { file: BUILDERFORCE_JSON, error: errorText(error) }) };
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    return { warning: `${BUILDERFORCE_JSON} is not a JSON object and was ignored` };
+    return { warning: detectionNote('manifest-not-object', { file: BUILDERFORCE_JSON }) };
   }
   const version = (parsed as { version?: unknown }).version;
   if (version === undefined) return { overrides: parsed as Partial<AppBlueprint>, warnings: [] };
-  if (version !== 1) return { warning: `${BUILDERFORCE_JSON} has unsupported version ${JSON.stringify(version)} and was ignored` };
+  if (version !== 1) return { warning: detectionNote('manifest-unsupported-version', { file: BUILDERFORCE_JSON, version: String(JSON.stringify(version)) }) };
   const mapped = manifestToBlueprintOverrides(parsed as ManifestInput);
-  return { overrides: mapped.overrides, warnings: mapped.notes.map((note) => `${BUILDERFORCE_JSON}: ${note}`) };
+  return { overrides: mapped.overrides, warnings: mapped.codedNotes.map((note) => noteFrom(BUILDERFORCE_JSON, note)) };
 }
 
 export const builderforceJsonDetector: AppDetector = {
@@ -55,7 +56,7 @@ export const builderforceJsonDetector: AppDetector = {
     return {
       sources,
       ...(overrides ? { overrides } : {}),
-      ...(warnings.length > 0 ? { warnings } : {}),
+      ...warningFindings(warnings),
     };
   },
 };

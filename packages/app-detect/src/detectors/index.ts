@@ -26,6 +26,7 @@ import { pythonDetector } from './pythonDetector';
 import { phpDetector } from './phpDetector';
 import { dotnetDetector } from './dotnetDetector';
 import { rustDetector } from './rustDetector';
+import { detectionNote, errorText } from '../notes';
 
 /** All available detectors */
 export const DETECTORS: AppDetector[] = [
@@ -69,6 +70,7 @@ export function runDetectors(files: Map<string, string>, options: DetectOptions 
     overrides: null,
     warnings: [],
     composeResources: [],
+    ingressEvidence: [],
   };
 
   for (const detector of DETECTORS) {
@@ -77,6 +79,7 @@ export function runDetectors(files: Map<string, string>, options: DetectOptions 
 
       if (detectorResult.warnings) result.warnings.push(...detectorResult.warnings);
       if (detectorResult.composeResources) result.composeResources.push(...detectorResult.composeResources);
+      if (detectorResult.ingressEvidence) result.ingressEvidence.push(...detectorResult.ingressEvidence);
 
       // Merge sources
       if (detectorResult.sources) {
@@ -129,7 +132,9 @@ export function runDetectors(files: Map<string, string>, options: DetectOptions 
       }
     } catch (error) {
       // One broken detector must not sink detection — report it and run the rest.
-      result.warnings.push(`detector ${detector.id} failed: ${error instanceof Error ? error.message : String(error)}`);
+      const failed = detectionNote('detector-failed', { detector: detector.id, error: errorText(error) });
+      result.warnings.push(failed.message);
+      result.codedWarnings.push(failed);
       options.onDetectorError?.(error, detector.id);
     }
   }

@@ -3,9 +3,11 @@
  * `vscode.workspace.fs` and a modal warning, and the manifest preview/diff shown before
  * `/manifest init` writes. The ONE place these executors meet `vscode`.
  */
+import { lstat } from "node:fs/promises";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import type { ShowManifest } from "./manifestInit";
+import { isMissingPath, refusedWrites, WriteRefusedError } from "./writeContainment";
 import type { ComposerWorkspacePort, WorkspaceFolderRef } from "./workspacePort";
 
 const refOf = (folder: vscode.WorkspaceFolder): WorkspaceFolderRef => ({ name: folder.name, path: folder.uri.fsPath });
@@ -14,8 +16,11 @@ const isMissing = (error: unknown): boolean => error instanceof vscode.FileSyste
 
 export function vscodeWorkspacePort(): ComposerWorkspacePort {
   const fs = vscode.workspace.fs;
+  const folders = (): WorkspaceFolderRef[] => (vscode.workspace.workspaceFolders ?? []).map(refOf);
+  const checkWrites = (files: readonly string[]) => refusedWrites(files, folders().map((folder) => folder.path));
   return {
-    folders: () => (vscode.workspace.workspaceFolders ?? []).map(refOf),
+    folders,
+    remoteName: () => vscode.env.remoteName,
     pickFolder: async (placeHolder) => {
       const folder = await vscode.window.showWorkspaceFolderPick({ placeHolder });
       return folder ? refOf(folder) : undefined;
@@ -28,12 +33,13 @@ export function vscodeWorkspacePort(): ComposerWorkspacePort {
         throw error;
       }
     },
+    // `lstat`, not `stat`: a symbolic link — dangling or not — is an entry that exists (and a write refuses it).
     exists: async (file) => {
       try {
-        await fs.stat(vscode.Uri.file(file));
+        await lstat(file);
         return true;
       } catch (error) {
-        if (isMissing(error)) return false;
+        if (isMissingPath(error)) return false;
         throw error;
       }
     },
@@ -45,7 +51,10 @@ export function vscodeWorkspacePort(): ComposerWorkspacePort {
         throw error;
       }
     },
+    checkWrites,
     writeText: async (file, text) => {
+      const refused = await checkWrites([file]);
+      if (refused.length > 0) throw new WriteRefusedError(refused);
       await fs.createDirectory(vscode.Uri.file(path.dirname(file)));
       await fs.writeFile(vscode.Uri.file(file), new TextEncoder().encode(text));
     },

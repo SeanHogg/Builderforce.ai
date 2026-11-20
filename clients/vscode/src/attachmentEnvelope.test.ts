@@ -36,6 +36,12 @@ vi.mock("vscode", () => ({
   window: { onDidChangeActiveColorTheme: () => ({ dispose() {} }), showWarningMessage: vi.fn() },
   commands: { executeCommand: vi.fn() },
   l10n: { t: (s: string) => s },
+  // projectState.ts (reached through the knowledge visualizer imports) builds one at module load.
+  EventEmitter: class {
+    event = (): { dispose(): void } => ({ dispose() {} });
+    fire(): void {}
+    dispose(): void {}
+  },
 }));
 vi.mock("./bfApi", () => ({ getCurrentUserId: vi.fn() }));
 vi.mock("./gateway", () => ({ getWebBaseUrl: () => "https://web" }));

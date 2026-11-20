@@ -5,6 +5,7 @@
  * is unit-tested against an in-memory fake.
  */
 import * as path from "node:path";
+import type { WriteRefusal } from "./writeContainment";
 
 export interface WorkspaceFolderRef {
   /** The folder's display name. */
@@ -15,14 +16,26 @@ export interface WorkspaceFolderRef {
 
 export interface ComposerWorkspacePort {
   folders(): readonly WorkspaceFolderRef[];
+  /**
+   * The remote this extension host runs in (`vscode.env.remoteName`: `ssh-remote`, `wsl`,
+   * `dev-container`…), or undefined when it runs on this computer. `/launch` opens a
+   * loopback server in the person's browser, so it needs a LOCAL host.
+   */
+  remoteName(): string | undefined;
   /** Ask which folder (several are open). Undefined when the person cancels. */
   pickFolder(placeHolder: string): Promise<WorkspaceFolderRef | undefined>;
   /** The names directly inside a directory; empty when it does not exist. */
   listDir(dir: string): Promise<string[]>;
+  /** Is there an entry at this path — a symbolic link (dangling included) counts, it is never followed. */
   exists(file: string): Promise<boolean>;
   /** The file's text, or undefined when it does not exist. */
   readText(file: string): Promise<string | undefined>;
-  /** Write a file, creating its parent directories. */
+  /** The files among these that may NOT be written (`writeContainment.ts`), so a command can refuse before writing any. */
+  checkWrites(files: readonly string[]): Promise<WriteRefusal[]>;
+  /**
+   * Write a file, creating its parent directories. A path `checkWrites` refuses is never
+   * written: it rejects with a `WriteRefusedError`.
+   */
   writeText(file: string, text: string): Promise<void>;
   /** A MODAL warning with one approving button. True only when that button was chosen. */
   confirm(message: string, approve: string): Promise<boolean>;

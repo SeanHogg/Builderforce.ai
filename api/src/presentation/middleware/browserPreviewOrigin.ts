@@ -30,12 +30,12 @@ import type { MiddlewareHandler } from 'hono';
 import {
   dotnetWorkerSource, phpWorkerSource, processWorkerSource, pythonWorkerSource, relayHtml, rustWorkerSource, serviceWorkerSource,
 } from '@seanhogg/builderforce-webcontainers/assets';
+import type { PreviewScript } from '@seanhogg/builderforce-webcontainers/preview-headers';
 import { PREVIEW_HOST, previewOriginKeyOf } from '../../domain/shared/previewHosts';
 import {
-  INGRESS_HEADERS, cspReportUrls, previewDocumentHeaders, previewFrameAncestors, relayHeaders, serviceWorkerAllowed, serviceWorkerHeaders,
-  serviceWorkerQueryOf, workerScriptHeaders, type HeaderSet,
+  INGRESS_HEADERS, PREVIEW_HEADERS, cspReportUrls, previewFrameAncestors, serviceWorkerAllowed, serviceWorkerQueryOf, type HeaderSet,
 } from '../../application/runtime/previewOriginHeaders';
-import { PREVIEW_SCRIPT_PREFIX, PREVIEW_WORKER_SCRIPTS } from '../../application/runtime/workerCsp';
+import { PREVIEW_SCRIPT_PREFIX } from '../../application/runtime/workerCsp';
 import { resolveWorkerEgressPolicy } from '../../application/runtime/workerEgressPolicy';
 import type { HonoEnv } from '../../env';
 import { DOTNET_BUNDLE_PATH_PREFIX, dotnetBundleBucketOf, serveDotnetBundleFile, type DotnetBundleBucket } from './dotnetBundleRoute';
@@ -46,10 +46,8 @@ export const BROWSER_PREVIEW_PREFIX = PREVIEW_SCRIPT_PREFIX;
 /** What the frontend passes as `relayUrl`. */
 export const BROWSER_PREVIEW_RELAY_URL = `https://${PREVIEW_HOST}${BROWSER_PREVIEW_PREFIX}relay.html`;
 
-type PreviewScript = (typeof PREVIEW_WORKER_SCRIPTS)[number];
-
 /**
- * Each script the relay may start (`PREVIEW_WORKER_SCRIPTS`, the ONE list) and its source.
+ * Each script the relay may start (the package's `PREVIEW_WORKER_SCRIPTS`, the ONE list) and its source.
  * Keyed by that list's own type, so a script added there without a source here fails to
  * compile, and nothing is served that the relay may not start.
  */
@@ -121,19 +119,20 @@ function dotnetBundleSources(host: string): string[] {
 async function serveScript(request: Request, url: URL, name: PreviewScript | 'relay.html', options: PreviewOriginOptions): Promise<Response> {
   const frameAncestors = previewFrameAncestors(options.corsOrigins, options.environment);
   const refused = () => respond(403, 'This preview configuration is not granted.', {
-    ...previewDocumentHeaders(url.host, frameAncestors), 'Cache-Control': 'no-store',
+    ...PREVIEW_HEADERS.document(url.host, frameAncestors), 'Cache-Control': 'no-store',
   });
   // A service worker registration names its script in this header: only the relay's `sw.js` may be one.
   if (request.headers.has('Service-Worker') && name !== 'sw.js') return refused();
   const body = (source: string) => (request.method === 'HEAD' ? null : source);
-  if (name === 'relay.html') return respond(200, body(relayHtml), relayHeaders(frameAncestors));
+  if (name === 'relay.html') return respond(200, body(relayHtml), PREVIEW_HEADERS.relay(frameAncestors));
   const resolved = await resolveWorkerEgressPolicy(options.secret, url.searchParams.get('policy'), url.hostname);
   if (name === 'sw.js') {
     if (!serviceWorkerAllowed(serviceWorkerQueryOf(url), resolved, cspReportUrls(options.cspReportHosts))) return refused();
-    return respond(200, body(SCRIPT_SOURCES['sw.js']), serviceWorkerHeaders());
+    return respond(200, body(SCRIPT_SOURCES['sw.js']), PREVIEW_HEADERS.serviceWorker());
   }
+  // The policy's declared origins, then the path-scoped own sources (only the .NET Worker has any).
   const ownPaths = name === 'dotnet-worker.js' ? dotnetBundleSources(url.host) : [];
-  return respond(200, body(SCRIPT_SOURCES[name]), workerScriptHeaders(resolved, ownPaths));
+  return respond(200, body(SCRIPT_SOURCES[name]), PREVIEW_HEADERS.workerScript([...resolved.connectSources, ...ownPaths]));
 }
 
 /**
@@ -144,7 +143,7 @@ export async function handleBrowserPreviewOrigin(request: Request, options: Prev
   const url = new URL(request.url);
   const shared = url.hostname === PREVIEW_HOST;
   if (!shared && previewOriginKeyOf(url.hostname) === null) return null;
-  const documentHeaders = previewDocumentHeaders(url.host, previewFrameAncestors(options.corsOrigins, options.environment));
+  const documentHeaders = PREVIEW_HEADERS.document(url.host, previewFrameAncestors(options.corsOrigins, options.environment));
   const notFound = (): PreviewOriginOutcome => ({ kind: 'response', response: respond(404, 'Not found.', documentHeaders) });
   // An app host with the flag off: nothing is served there.
   if (!shared && !options.perAppOrigins) return notFound();

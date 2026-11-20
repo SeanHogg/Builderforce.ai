@@ -188,6 +188,23 @@ export function trackerCacheKey(ns: string, tenantId: number, segmentId: string,
   return `tracker:${ns}:t:${tenantId}:s:${segmentId}:p:${projectId ?? 'all'}`;
 }
 
+/**
+ * The tracker cache keys ONE write touches: the segment's `:all` key plus the project key of the
+ * row BEFORE and AFTER the write (null on create / delete), so a row moved between projects clears
+ * both lists. The single rule the generic tracker routes and the roadmap post-write step share.
+ */
+export function trackerCacheKeysForWrite(
+  ns: string,
+  tenantId: number,
+  segmentId: string,
+  before: { projectId?: unknown } | null,
+  after: { projectId?: unknown } | null,
+): string[] {
+  const projectIds = new Set<number>();
+  for (const row of [before, after]) if (typeof row?.projectId === 'number') projectIds.add(row.projectId);
+  return [trackerCacheKey(ns, tenantId, segmentId), ...[...projectIds].map((p) => trackerCacheKey(ns, tenantId, segmentId, p))];
+}
+
 /** Cache keys for the diagnostics project-score + tenant-rollup reads (which carry the
  *  remediation-badge state). Shared here so EVERY writer that changes badge inputs — a
  *  diagnostic run (`ToolService.persist`) AND a task status/PR transition

@@ -11,10 +11,22 @@
  *
  * When the release carrying `./manifest` lands, consumers switch to the published types;
  * these stay the adapter's minimal view.
+ *
+ * This module is the ONE owner of the v1 shape on this side of the published package —
+ * the writing types, the schema URL, the file name and the backend ingress path. It is
+ * dependency-free and exported as the `@builderforce/app-detect/manifest` subpath, so a
+ * writer that is not a detector (the starter kits' `composeKit`) imports it without the
+ * detection pipeline.
  */
 
 /** The canonical `$schema` URL of a v1 manifest. */
-export const APP_MANIFEST_SCHEMA_URL = 'https://builderforce.ai/schema/app.v1.json';
+export const MANIFEST_SCHEMA_URL = 'https://builderforce.ai/schema/app.v1.json';
+
+/** The manifest's file name, at the project root. */
+export const MANIFEST_FILE_NAME = 'builderforce.json';
+
+/** The ingress path the one HTTP backend is served under (`emitManifest`'s ingress, the kits' backend parts). */
+export const BACKEND_INGRESS_PATH = '/api';
 
 // ---------------------------------------------------------------------------
 // Reading: everything optional and loose — the file is untrusted input.
@@ -53,6 +65,7 @@ export interface ManifestInput {
   resources?: Record<string, ManifestResourceInput>;
   services?: Record<string, ManifestServiceInput>;
   jobs?: Record<string, unknown>;
+  ingress?: { routes?: unknown };
 }
 
 // ---------------------------------------------------------------------------
@@ -94,6 +107,11 @@ export interface EmittedEnvironment {
   debug: true;
 }
 
+export interface EmittedIngressRoute {
+  path: string;
+  service: string;
+}
+
 export interface EmittedManifest {
   $schema: string;
   version: 1;
@@ -101,5 +119,6 @@ export interface EmittedManifest {
   resources?: Record<string, EmittedResource>;
   services: Record<string, EmittedService>;
   jobs?: Record<string, EmittedJob>;
+  ingress?: { routes: EmittedIngressRoute[] };
   environments: Record<string, EmittedEnvironment>;
 }
