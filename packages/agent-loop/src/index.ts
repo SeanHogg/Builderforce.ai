@@ -58,6 +58,8 @@ export {
   CEREMONY_SESSION_CLOSED_STATUSES,
   ROADMAP_STATUSES,
   TICKET_STATUS_VALUES,
+  TICKET_STATUS_ALIASES,
+  type InitiativeStatus,
   parseTicketStatus,
   checkTicketStatus,
   isClosedTicketStatus,

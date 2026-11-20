@@ -18,8 +18,13 @@
  *   skips like a cancelled lane (removed work, not remaining work).
  *
  * The shared cancelled spellings (`cancelled`, `canceled`) are closed-and-cancelled for
- * EVERY kind, so a free-form status column (portfolio, initiative) that someone set to
- * `cancelled` keeps the skip it always had.
+ * EVERY kind, so they are not repeated in a kind's lists: `cancelled` is a value of every
+ * write vocabulary below (portfolio, initiative, objective, roadmap), and "cancel
+ * initiative X" keeps the rollup skip a cancelled task lane has.
+ *
+ * The write vocabularies (`TICKET_STATUS_VALUES`) are the values a write may store; the
+ * api's tools and REST trackers accept nothing else (`checkTicketStatus`), apart from the
+ * per-kind aliases (`TICKET_STATUS_ALIASES`) that are stored as the word they stand for.
  *
  * A kind that is not listed here has no declared vocabulary: it is closed only by the
  * task lanes' words (`isClosedTaskStatus`) and is never capped.
@@ -61,15 +66,18 @@ const CEREMONY_SESSION: TicketStatusVocabulary = { closed: CEREMONY_SESSION_CLOS
 // below with `pick`, which only compiles for a member of the vocabulary).
 
 /** api schema/delivery.ts `portfolios.status`. */
-export const PORTFOLIO_STATUSES = ["active", "archived"] as const;
+export const PORTFOLIO_STATUSES = ["active", "archived", "cancelled"] as const;
 /** api schema/delivery.ts `initiatives.status`. */
-export const INITIATIVE_STATUSES = ["proposed", "active", "completed", "archived"] as const;
+export const INITIATIVE_STATUSES = ["proposed", "active", "completed", "archived", "cancelled"] as const;
 /** api schema/delivery.ts `objectives.status` (also the objectives.create/update tool enum). */
-export const OBJECTIVE_STATUSES = ["active", "achieved", "missed", "archived"] as const;
+export const OBJECTIVE_STATUSES = ["active", "achieved", "missed", "archived", "cancelled"] as const;
 /** Roadmap item lifecycle (the roadmap panel's choices; `shipped` is the publish marker, api productRoutes.ts). */
 export const ROADMAP_STATUSES = ["planned", "in_progress", "shipped", "cancelled"] as const;
-/** Legacy delivered spellings older roadmap rows carry; still accepted as input and read as closed. */
+/** Legacy delivered spellings older roadmap rows carry: read as closed, and accepted as INPUT but stored as `shipped`. */
 export const ROADMAP_LEGACY_DELIVERED_STATUSES = ["done", "complete", "completed", "released"] as const;
+
+export type InitiativeStatus = (typeof INITIATIVE_STATUSES)[number];
+type RoadmapStatus = (typeof ROADMAP_STATUSES)[number];
 
 /** A subset of `vocabulary` — only members compile, so a closed list cannot name a word the column never holds. */
 function pick<T extends string>(_vocabulary: readonly T[], ...words: T[]): readonly string[] {
@@ -77,41 +85,56 @@ function pick<T extends string>(_vocabulary: readonly T[], ...words: T[]): reado
 }
 
 /**
- * Every status a write may set, per kind whose status column is free-form text. Unknown
- * values are rejected by {@link parseTicketStatus}: a typo such as an initiative set to
- * `done` would otherwise never read as closed (stuck at the claimed-complete rung).
+ * Every status a write may STORE, per kind whose status column is free-form text — what the
+ * api's create/update tools advertise. Unknown values are rejected by {@link checkTicketStatus}:
+ * a typo such as an initiative set to `done` would otherwise never read as closed (stuck at
+ * the claimed-complete rung).
  */
 export const TICKET_STATUS_VALUES = {
   portfolio: PORTFOLIO_STATUSES,
   initiative: INITIATIVE_STATUSES,
   objective: OBJECTIVE_STATUSES,
-  roadmap: [...ROADMAP_STATUSES, ...ROADMAP_LEGACY_DELIVERED_STATUSES],
+  roadmap: ROADMAP_STATUSES,
 } as const satisfies Readonly<Record<string, readonly string[]>>;
 
 export type TicketStatusKind = keyof typeof TICKET_STATUS_VALUES;
+
+/** Input spellings a kind still accepts, mapped to the value that is stored. */
+export const TICKET_STATUS_ALIASES: Readonly<Partial<Record<TicketStatusKind, Readonly<Record<string, string>>>>> = {
+  roadmap: Object.fromEntries(ROADMAP_LEGACY_DELIVERED_STATUSES.map((word) => [word, "shipped" satisfies RoadmapStatus])),
+};
 
 /** The outcome of checking a status a write wants to set (see {@link checkTicketStatus}). */
 export type TicketStatusCheck = { ok: true; value: string } | { ok: false; error: string };
 
 /**
- * Check a status a write wants to set on a `kind` item, without throwing — for a caller
- * that answers a refusal itself (an HTTP 400). The value comes back lower-cased; a
- * refusal names the allowed values.
+ * Check a status a write wants to set on a `kind` item, without throwing — for a caller that
+ * answers a refusal itself (an HTTP 400).
+ *
+ * - `current` (an update): a status equal to the stored one (case-insensitively) is not a
+ *   change, so it passes through as the stored value untouched — a row carrying an
+ *   off-vocabulary legacy status stays editable.
+ * - A value of the kind's vocabulary comes back lower-cased; an alias (a legacy roadmap
+ *   `released`) comes back as the value it stands for (`shipped`).
+ * - Anything else — or a null status — is refused with a message naming the allowed values.
  */
-export function checkTicketStatus(kind: TicketStatusKind, raw: unknown): TicketStatusCheck {
+export function checkTicketStatus(kind: TicketStatusKind, raw: unknown, current?: string | null): TicketStatusCheck {
+  if (raw === null || raw === undefined) return { ok: false, error: `${kind} status cannot be null` };
+  const value = norm(String(raw));
+  if (current != null && value === norm(current)) return { ok: true, value: current };
   const allowed: readonly string[] = TICKET_STATUS_VALUES[kind];
-  const value = norm(typeof raw === "string" ? raw : String(raw));
-  return allowed.includes(value)
-    ? { ok: true, value }
-    : { ok: false, error: `${kind} status must be one of: ${allowed.join(", ")} (got "${String(raw)}")` };
+  if (allowed.includes(value)) return { ok: true, value };
+  const alias = TICKET_STATUS_ALIASES[kind]?.[value];
+  if (alias) return { ok: true, value: alias };
+  return { ok: false, error: `${kind} status must be one of: ${allowed.join(", ")} (got "${String(raw)}")` };
 }
 
 /**
- * Validate a status a write wants to set on a `kind` item: returns it lower-cased, or
- * throws an Error naming the allowed values ({@link checkTicketStatus}).
+ * Validate a status a write wants to set on a `kind` item: the value to store, or throws an
+ * Error naming the allowed values ({@link checkTicketStatus}, same `current` rule).
  */
-export function parseTicketStatus(kind: TicketStatusKind, raw: unknown): string {
-  const checked = checkTicketStatus(kind, raw);
+export function parseTicketStatus(kind: TicketStatusKind, raw: unknown, current?: string | null): string {
+  const checked = checkTicketStatus(kind, raw, current);
   if (!checked.ok) throw new Error(checked.error);
   return checked.value;
 }
@@ -127,7 +150,8 @@ export const TICKET_CLOSED_STATES: Readonly<Record<string, TicketStatusVocabular
   // A MISSED objective is over without delivering, so it is skipped like a cancelled lane
   // rather than counted done (its own ring still reads 100: it is closed).
   objective: { closed: pick(OBJECTIVE_STATUSES, "achieved", "missed", "archived"), cancelled: pick(OBJECTIVE_STATUSES, "missed") },
-  roadmap: { closed: pick(TICKET_STATUS_VALUES.roadmap, "shipped", ...ROADMAP_LEGACY_DELIVERED_STATUSES), cancelled: [] },
+  // Legacy delivered spellings are still read as closed: older rows carry them.
+  roadmap: { closed: [...pick(ROADMAP_STATUSES, "shipped"), ...ROADMAP_LEGACY_DELIVERED_STATUSES], cancelled: [] },
   // api schema/kernel.ts `specStatusEnum`: draft | ready | in_progress | complete (a pg
   // enum, so the api test asserts this word is one of its values).
   spec: { closed: ["complete"], cancelled: [] },

@@ -8,7 +8,7 @@
  */
 
 import { isFailedToolResult } from '../brainTriage';
-import { NOT_STARTED_TASK_STATUSES, canListChatTickets, linkedTicketsStillOpen, type LinkedTicketToAdvance } from '../chatWorkLinking';
+import { NOT_STARTED_TASK_STATUSES, canListChatTickets, declaresChatTicketListing, linkedTicketsStillOpen, type LinkedTicketToAdvance } from '../chatWorkLinking';
 import { latestStatus, listChatTickets, listingScopeOf, localTicketFilings, ticketMovesInRun, type ListingScope } from './chatTickets';
 import {
   LOCAL_TICKET_CREATE_TOOL, SERVER_TICKET_TOOLS, ticketStatusMove, ticketToolVocabulary,
@@ -134,8 +134,9 @@ export async function recordCodeChangeTicket(
   const source = serverChatId != null ? `Brain chat #${serverChatId}` : 'a local editor chat';
   // Always names files here: a fileless capture returned above (mint) or before that (attach).
   const summary = `Code change (${files.length} file${files.length === 1 ? '' : 's'}) from ${source}`;
-  // A MINT in a bound chat files under the chat's one open epic, so the epic's progress counts it.
-  const parentTaskId = attachTo == null && serverChatId != null && canListChatTickets(req.tools) ? await soleOpenLinkedEpic(serverChatId, c, req) : null;
+  // A MINT in a bound chat files under the chat's one open epic, so the epic's progress counts it — read only from a listing the
+  // host's catalog declares: on an undeclared catalog the mint goes on without a parent instead of spending a call on a guess.
+  const parentTaskId = attachTo == null && serverChatId != null && declaresChatTicketListing(req.tools) ? await soleOpenLinkedEpic(serverChatId, c, req) : null;
   const toolStart = nowMs();
   const args = {
     projectId: req.projectId,
@@ -223,9 +224,9 @@ async function soleOpenLinkedEpic(serverChatId: number, c: RunCell | BackstopRun
  *
  *  - ADVANCE (`in_progress`, `worked-ticket-off-backlog`): the "a ticket you WORKED
  *    reflects that on the board" guarantee. Every task/epic/gap linked to this chat that
- *    is still in a not-started lane ({@link linkedTicketsToAdvance}) moves to
- *    `in_progress` — the agent started work on linked bug tickets but left them in
- *    backlog.
+ *    is still in a not-started lane moves to `in_progress` — the agent started work on
+ *    linked bug tickets but left them in backlog — except, under an open linked epic, a
+ *    child the run never touched (`linkedTicketsToAdvanceFor`).
  *  - COMPLETE (`done`): the loop `tickets.from_delta` has always promised and never
  *    delivered. A delta ticket opens in `in_review` and "completes automatically once
  *    merged and deployed", but the intended completer — a GitHub merge webhook — cannot

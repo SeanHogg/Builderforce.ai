@@ -4,6 +4,8 @@ import { Select } from '@/components/Select';
 import type { TrackerRow } from '@/lib/builderforceApi';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { roadmapClient, ROADMAP_HORIZONS, ROADMAP_STATUSES, rstr } from '@/lib/pm/roadmap';
+import { roadmapItemBody, roadmapStatusForDisplay, roadmapStatusIsOffVocabulary } from '@/lib/pm/roadmapItemBody';
+import { useTaskStatusLabel } from '@/lib/taskStatusLabel';
 import { usePanelTask } from '@/hooks/usePanelTask';
 /**
  * Create/edit a roadmap item. Shared by RoadmapTimeline (add / click a card) and
@@ -31,20 +33,20 @@ export function RoadmapItemPanel({ open, item, projectId, onClose, onSaved }: Ro
   const isEdit = item != null;
   const [title, setTitle] = useState(item ? rstr(item, 'title') : '');
   const [horizon, setHorizon] = useState(item ? rstr(item, 'horizon') || 'now' : 'now');
-  const [status, setStatus] = useState(item ? rstr(item, 'status') || 'planned' : 'planned');
+  const statusLabel = useTaskStatusLabel();
+  // The stored status, untouched: a value none of the choices stands for is shown as a disabled
+  // placeholder (so picking ANY real status, the first one included, is a change) and is only
+  // written back when the person actually picks a status.
+  const [status, setStatus] = useState(item ? rstr(item, 'status') : '');
+  const [statusChanged, setStatusChanged] = useState(false);
+  const offVocabulary = roadmapStatusIsOffVocabulary(status);
   const [theme, setTheme] = useState(item ? rstr(item, 'theme') : '');
   const [targetDate, setTargetDate] = useState(item ? rstr(item, 'targetDate').slice(0, 10) : '');
   const task = usePanelTask();
 
   const save = async () => {
     if (!title.trim()) { task.fail(t('titleRequired')); return; }
-    const body: Record<string, unknown> = {
-      title: title.trim(),
-      horizon,
-      status,
-      theme: theme.trim() || null,
-      targetDate: targetDate ? new Date(targetDate).toISOString() : null,
-    };
+    const body = roadmapItemBody({ title, horizon, status, theme, targetDate }, { isEdit, statusChanged });
     const result = await task.run(async () => {
       if (isEdit) await roadmapClient.update(String(item!.id), body);
       else await roadmapClient.create({ ...body, projectId: projectId ?? undefined });
@@ -71,8 +73,9 @@ export function RoadmapItemPanel({ open, item, projectId, onClose, onSaved }: Ro
           </div>
           <div>
             <label style={labelStyle} htmlFor="rm-status">{t('statusLabel')}</label>
-            <Select id="rm-status" value={status} onChange={(e) => setStatus(e.target.value)} style={fieldStyle}>
-              {ROADMAP_STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
+            <Select id="rm-status" value={offVocabulary ? status : roadmapStatusForDisplay(status)} onChange={(e) => { setStatus(e.target.value); setStatusChanged(true); }} style={fieldStyle}>
+              {offVocabulary && <option value={status} disabled>{t('statusUnknown', { value: status })}</option>}
+              {ROADMAP_STATUSES.map((s) => <option key={s} value={s}>{statusLabel(s)}</option>)}
             </Select>
           </div>
         </div>

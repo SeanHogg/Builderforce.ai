@@ -266,9 +266,29 @@ export function linkedTicketsStillOpen(listResult: unknown): LinkedTaskRow[] {
 /** The account's linked-ticket listing tool. */
 export const CHAT_TICKET_LIST_TOOL = 'builtin_chats_list_tickets';
 
-/** Whether the host's catalog carries the linked-ticket listing — a host without it has no listing to read, which is not a failure. */
+/**
+ * Whether the host can be asked for the linked-ticket listing. A DECLARED catalog answers for itself: one without the listing
+ * has none to read, which is not a failure. A host that declares no catalog at all (`undefined` — the web Brain's runner with
+ * no tool specs) still dispatches its platform tools, so the listing is asked for and a failure is reported like any other.
+ */
 export function canListChatTickets(tools: readonly { function: { name: string } }[] | undefined): boolean {
+  return tools === undefined || declaresChatTicketListing(tools);
+}
+
+/** Whether the host's catalog DECLARES the linked-ticket listing — what a hold on the run's end rests on (never on a guess). */
+export function declaresChatTicketListing(tools: readonly { function: { name: string } }[] | undefined): boolean {
   return (tools ?? []).some((t) => t.function.name === CHAT_TICKET_LIST_TOOL);
+}
+
+/**
+ * The linked tickets a code-changing run advances to `in_progress`: the not-started ones it OWNS (`owned` — its delta, the
+ * tickets it moved or created) and, when the chat links no open epic, every not-started one — a chat's own linked ticket is
+ * the work it was opened for, so a run that changed code worked it. Under an open epic, a not-started child the run never
+ * touched is the epic's remaining backlog, not this run's work, and stays where it is (chat #276).
+ */
+export function linkedTicketsToAdvanceFor(listResult: unknown, owned: ReadonlySet<string>): LinkedTicketToAdvance[] {
+  const underOpenEpic = linkedTicketsStillOpen(listResult).some((t) => t.kind === 'epic');
+  return linkedTicketsToAdvance(listResult).filter((t) => !underOpenEpic || owned.has(t.ref));
 }
 
 /** THE "still owed" lane rule {@link linkedTicketsStillOpen} applies — shared with the run's own device-filed tickets, whose local ids the account's row filter cannot read. */

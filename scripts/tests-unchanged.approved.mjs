@@ -220,6 +220,25 @@ export const APPROVED_THIS_PUSH = [
         : ''),
     approvedBy: APPROVED_BY,
   })),
+  // Spawn calls name their `role` (fc939c496, chat #273): a role-less spawn_agent / spawn_agents is refused with a corrective error.
+  ...[
+    'agent-runtime/src/run/onPremAdapter.test.ts',
+    'brain-embedded/src/referenceScenario.test.ts',
+    'brain-embedded/src/runStore/earlyDelegation.test.ts',
+    'brain-embedded/src/runStore/progressGuard.test.ts',
+    'packages/agent-run/test/conformance/referenceScenario.test.ts',
+  ].map((file) => ({
+    file,
+    changed: "The scripted spawn_agent / spawn_agents call's args gain a `role` (explore / review); every expectation is unchanged.",
+    reason: 'Intended change (fc939c496, chat #273): spawn_agent / spawn_agents require `role` (audit/compare/align = review, locate/bulk-read = explore, decide = plan) and a missing role is answered with a corrective error instead of a role-less child, so a fixture that delegates must name one to keep exercising the delegation it tests.',
+    approvedBy: APPROVED_BY,
+  })),
+  {
+    file: 'packages/agent-run/test/subagents/child.test.ts',
+    changed: "The delegating script's spawn_agent args gain `role: \"explore\"`; one case is added (a role-less spawn is refused with MISSING_ROLE_ERROR and nothing is spawned), with its MISSING_ROLE_ERROR import. Every existing expectation is unchanged.",
+    reason: 'Intended change (fc939c496, chat #273): spawn_agent / spawn_agents require `role`; a missing role is answered with a corrective error instead of a role-less child. The added case pins the refusal.',
+    approvedBy: APPROVED_BY,
+  },
 ];
 
 export const APPROVED = [...APPROVED_PERMANENT, ...APPROVED_THIS_PUSH];

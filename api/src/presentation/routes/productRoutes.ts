@@ -21,11 +21,20 @@ import {
 } from '../../infrastructure/database/schema';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { afterRoadmapWrite, ROADMAP_CACHE_NS } from '../../application/delivery/roadmapWrite';
+import { optionalExecutionCtx, scope } from './requestScope';
+import { waitUntilOf } from '../../application/shared/requestScope';
+
+/** The roadmap tracker's post-write step, bound to the request's scope and execution context. */
+const roadmapAfterWrite: NonNullable<TrackerOpts['afterWrite']> = (c, db, before, after) =>
+  afterRoadmapWrite({ db, env: c.env, ...scope(c), waitUntil: waitUntilOf(optionalExecutionCtx(c)) }, before, after);
 
 const TRACKERS: Array<{ path: string; table: unknown; opts: TrackerOpts }> = [
   { path: '/mvp', table: mvpScenarios, opts: { fields: ['name', 'description', 'pricingModel', 'targetRevenue', 'timelineConstraint', 'budgetConstraint', 'teamSize', 'status', 'notes'], required: ['name'] } },
   { path: '/validation', table: validationResults, opts: { fields: ['hypothesis', 'validationType', 'method', 'result', 'metrics', 'learnings', 'nextSteps', 'notes'], required: ['hypothesis'] } },
-  { path: '/roadmap', table: roadmapItems, opts: { fields: ['title', 'horizon', 'status', 'theme', 'targetDate', 'priority', 'notes'], required: ['title'], emit: { field: 'status', value: 'shipped', event: 'roadmap.published' }, projectScoped: true, cacheNs: 'roadmap', statusKind: 'roadmap' } },
+  // The post-write step (cache + `roadmap.published` on a transition into shipped) is the ONE
+  // `afterRoadmapWrite` the Brain's roadmap tools call too.
+  { path: '/roadmap', table: roadmapItems, opts: { fields: ['title', 'horizon', 'status', 'theme', 'targetDate', 'priority', 'notes'], required: ['title'], projectScoped: true, cacheNs: ROADMAP_CACHE_NS, statusKind: 'roadmap', afterWrite: roadmapAfterWrite } },
   { path: '/changelog', table: changelogEntries, opts: { fields: ['version', 'title', 'body', 'releasedAt', 'status'], required: ['version'] } },
   { path: '/feature-flags', table: featureFlags, opts: { fields: ['key', 'name', 'status', 'rolloutPercentage', 'description', 'notes'], required: ['key'] } },
   { path: '/business-value', table: businessValueConfigs, opts: { fields: ['name', 'valueType', 'displayMode', 'rewardMultiplier', 'isActive', 'notes'], required: ['name'] } },

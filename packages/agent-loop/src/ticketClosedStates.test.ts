@@ -2,10 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { CLAIMED_COMPLETE_PROGRESS_CAP, effectiveTicketProgress, isExcludedFromChatHealth, rollupChatTicketHealth } from './chatTicketHealth';
 import { TASK_CLOSED_STATUSES } from './taskClosedState';
 import {
+  checkTicketStatus,
   isCancelledTicketStatus,
   isClosedTicketStatus,
   parseTicketStatus,
   TICKET_CLOSED_STATES,
+  TICKET_STATUS_ALIASES,
   TICKET_STATUS_VALUES,
   type TicketStatusKind,
 } from './ticketClosedStates';
@@ -35,17 +37,41 @@ describe('TICKET_CLOSED_STATES', () => {
     for (const kind of Object.keys(TICKET_CLOSED_STATES)) expect(covered, kind).toContain(kind);
   });
 
-  it('every closed word is a value of its column vocabulary', () => {
+  it('every closed word is a value of its column vocabulary or one of its legacy aliases', () => {
     for (const kind of Object.keys(TICKET_STATUS_VALUES) as TicketStatusKind[]) {
-      const values: readonly string[] = TICKET_STATUS_VALUES[kind];
-      for (const word of TICKET_CLOSED_STATES[kind]?.closed ?? []) expect(values, `${kind}:${word}`).toContain(word);
+      const accepted = [...TICKET_STATUS_VALUES[kind], ...Object.keys(TICKET_STATUS_ALIASES[kind] ?? {})];
+      for (const word of TICKET_CLOSED_STATES[kind]?.closed ?? []) expect(accepted, `${kind}:${word}`).toContain(word);
+    }
+  });
+
+  it('every write vocabulary can say cancelled, and it keeps the rollup skip', () => {
+    for (const kind of Object.keys(TICKET_STATUS_VALUES) as TicketStatusKind[]) {
+      expect(TICKET_STATUS_VALUES[kind] as readonly string[], kind).toContain('cancelled');
+      expect(isCancelledTicketStatus(kind, 'cancelled')).toBe(true);
     }
   });
 
   it('parseTicketStatus accepts a known value (case-insensitive) and rejects an unknown one naming the allowed values', () => {
     expect(parseTicketStatus('initiative', 'Completed')).toBe('completed');
-    expect(parseTicketStatus('roadmap', 'released')).toBe('released');
-    expect(() => parseTicketStatus('initiative', 'done')).toThrow('initiative status must be one of: proposed, active, completed, archived');
+    expect(() => parseTicketStatus('initiative', 'done')).toThrow('initiative status must be one of: proposed, active, completed, archived, cancelled');
+  });
+
+  it('a legacy roadmap spelling is accepted as input and stored as shipped; the tools advertise only the vocabulary', () => {
+    for (const word of ['done', 'complete', 'completed', 'Released']) expect(parseTicketStatus('roadmap', word)).toBe('shipped');
+    expect(TICKET_STATUS_VALUES.roadmap).toEqual(['planned', 'in_progress', 'shipped', 'cancelled']);
+  });
+
+  it('a null status is refused with a clear message', () => {
+    expect(checkTicketStatus('portfolio', null)).toEqual({ ok: false, error: 'portfolio status cannot be null' });
+    expect(() => parseTicketStatus('roadmap', undefined)).toThrow('roadmap status cannot be null');
+  });
+
+  it('an update that keeps the stored status passes it through untouched, even off-vocabulary', () => {
+    expect(checkTicketStatus('roadmap', 'In Progress', 'in progress')).toEqual({ ok: true, value: 'in progress' });
+    expect(parseTicketStatus('roadmap', 'released', 'released')).toBe('released');
+    // A CHANGE is still held to the vocabulary.
+    expect(checkTicketStatus('roadmap', 'wip', 'in progress').ok).toBe(false);
+    expect(parseTicketStatus('roadmap', 'shipped', 'in progress')).toBe('shipped');
   });
 
   it('task-tier kinds reuse TASK_CLOSED_STATUSES (no copy)', () => {
