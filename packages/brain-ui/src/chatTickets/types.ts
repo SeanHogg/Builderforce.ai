@@ -46,9 +46,12 @@ export interface TicketLinkVM {
    * 0–100 completion percentage for the linked work item.
    *
    * `progressPct === 100` is the authoritative completion signal: it is emitted
-   * ONLY once the work item is fully complete (a leaf that is marked done, or a
-   * container whose every child/target is done — i.e. `done === total`). It is
-   * never reported before completion, and a value approaching 100 (e.g. 99) does
+   * ONLY once the work item is fully complete. For a task, gap or epic that means its
+   * LANE IS CLOSED: only a closed lane may emit 100, and a closed lane always does —
+   * an open epic whose children are all done (`done === total`) reads 75 (the
+   * claimed-complete rung), and an epic closed with 3 of 5 children done reads 100.
+   * For other containers it means every child/target is done (`done === total`). It
+   * is never reported before completion, and a value approaching 100 (e.g. 99) does
    * NOT mean done — only an exact 100 does. Health is derived live on every read,
    * so 100 is an idempotent terminal state (reported on every subsequent read),
    * not a one-shot event delivered exactly once.

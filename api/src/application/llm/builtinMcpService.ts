@@ -1287,12 +1287,12 @@ const CATALOG: BuiltinTool[] = [
   // ---- Work-delta capture + Validator review (0270) ----
   {
     tool: 'tickets.from_delta', mutates: true,
-    description: 'Record a code CHANGE you just made as a classified work delta so it is visible on the board. If an existing ticket already tracks the work, pass taskId and the delta attaches to it without creating a duplicate; otherwise an associated ticket is opened. kind: improvement (new/better behaviour) | fix (repaired something) | bug (a defect you are logging). Pass files you touched — a new ticket is only opened for a delta that names at least one changed file, so call it AFTER the write — and, when working in a Brain chat, the chatId so the ticket is tied back to this conversation. A newly-created ticket opens in review and completes automatically when the change is merged + deployed.',
+    description: 'Record a code CHANGE you just made as a classified work delta so it is visible on the board. If an existing ticket already tracks the work, pass taskId and the delta attaches to it without creating a duplicate; otherwise an associated ticket is opened. kind: improvement (new/better behaviour) | fix (repaired something) | bug (a defect you are logging). Pass files you touched — a new ticket is only opened for a delta that names at least one changed file, so call it AFTER the write — and, when working in a Brain chat, the chatId so the ticket is tied back to this conversation; pass parentTaskId to file a newly-opened ticket under an open epic (ignored when the delta attaches to an existing ticket). A newly-created ticket opens in review and completes automatically when the change is merged + deployed.',
     parameters: obj({
       projectId: N, summary: S, detail: S,
       kind: { type: 'string', enum: ['improvement', 'fix', 'bug'] },
       files: { type: 'array', items: S }, modality: S, chatId: N, taskId: N,
-      createTicket: B,
+      parentTaskId: N, createTicket: B,
     }, ['projectId', 'summary']),
     run: async (ctx, a) => {
       if (!ctx.env) throw new Error('work-delta recording requires the worker env');
@@ -1309,6 +1309,7 @@ const CATALOG: BuiltinTool[] = [
         modality: a.modality != null ? str(a.modality) : 'mcp',
         chatId: deltaChatId,
         taskId: a.taskId != null ? idArg(a.taskId, 'taskId') : null,
+        parentTaskId: a.parentTaskId != null ? idArg(a.parentTaskId, 'parentTaskId') : null,
         createdBy: ctx.userId ?? null,
         createTicket: typeof a.createTicket === 'boolean' ? a.createTicket : true,
       });

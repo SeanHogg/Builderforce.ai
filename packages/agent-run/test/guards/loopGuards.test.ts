@@ -91,6 +91,14 @@ describe("RunGuards — D1 cascade", () => {
     expect(guards.tailSections().join("\n")).toContain("stub code");
   });
 
+  it("never escalates on a finish held for open linked work: it is owed work, not a failed check", async () => {
+    const { guards, ports, model, outcome } = harness(ON);
+    await guards.seedModel(model(), { strict: false, ladder, features: feat("bugfix") }).then((s) => ports.model?.set(s));
+    expect(await guards.finish({ block: "Epic #6902 is still open", reason: "linked_work_open" }, 1, ports)).toBe("Epic #6902 is still open");
+    expect(model().model).toBe("weak");
+    expect(outcome).not.toHaveBeenCalledWith(expect.objectContaining({ passed: false }));
+  });
+
   it("starts a soft seed on the weakest tier, unless the difficulty router says skip", async () => {
     const a = harness(ON, "strong");
     const seeded = await a.guards.seedModel(a.model(), { strict: false, ladder, features: feat("bugfix") });

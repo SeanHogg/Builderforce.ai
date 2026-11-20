@@ -16,6 +16,15 @@ describe('the Brain finish module', () => {
     expect(await hook.liveChildren?.(owner)).toBeNull();
   });
 
+  it('binds the open-work port, and the deterministic-finish wrapper keeps it', async () => {
+    const hook = brainFinishHook({}, async () => 'Epic #6902 is still open.');
+    expect(await hook.openWork?.(owner)).toBe('Epic #6902 is still open.');
+    const { withDeterministicFinish } = await import('../runStore/deterministicFinish');
+    const wrapped = withDeterministicFinish({} as never, hook);
+    expect(await wrapped.openWork?.(owner)).toBe('Epic #6902 is still open.');
+    expect(await brainFinishHook({}).openWork?.(owner)).toBeNull();
+  });
+
   it('is the port-less default on a surface with no delegation', async () => {
     expect(await brainFinishHook({}).liveChildren?.(owner)).toBeNull();
   });

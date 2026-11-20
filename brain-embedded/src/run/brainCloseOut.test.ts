@@ -43,7 +43,8 @@ type FinishInput = CloseOutInput & { verified: boolean; hasTicket: boolean };
  */
 function input(tools: ReturnType<typeof fakeTools>, over: Partial<FinishInput> = {}): FinishInput {
   const base: CloseOutInput = {
-    serverChatId: 7, view: view(), req: { runTool: tools.runTool, projectId: 3 }, needsTicket: true, shipped: true,
+    // The host's catalog carries the linked-ticket listing (the backstops read the chat's tickets only where it does).
+    serverChatId: 7, view: view(), req: { runTool: tools.runTool, projectId: 3, tools: [{ type: 'function', function: { name: 'builtin_chats_list_tickets', description: '', parameters: {} } }] } as CloseOutInput['req'], needsTicket: true, shipped: true,
     reviewedInPreview: [], openPlaceholders: 0, trace: [], evidence: evidence('/repo/src/a.ts', ['pass']), ...over,
   };
   return {

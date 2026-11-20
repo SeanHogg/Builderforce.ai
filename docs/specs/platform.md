@@ -2085,14 +2085,14 @@ book changes, which is why it also expires.
 
 ### Overview: The progressPct=100 Rule
 
-A chat's linked work items are read with `GET /api/brain/chats/:id/tickets` (`api/src/presentation/routes/brainRoutes.ts:409`), which answers `{ tickets }` where each ticket is a `TicketHealth` (plus `linkId`, `linkType`, `createdBy`, `createdAt`): `{ kind, ref, label, status, progressPct, unsupportedDelivery?, done, total, exists, parent? }`. `kind` is one of `portfolio`, `objective`, `initiative`, `roadmap`, `spec`, `epic`, `gap`, `task`, `retro`, `poker` (`chatTicketTypes.ts:22`). The Brain's built-in MCP ticket lookup reads the same health (`api/src/application/llm/builtinMcpService.ts:2247`).
+A chat's linked work items are read with `GET /api/brain/chats/:id/tickets` (`api/src/presentation/routes/brainRoutes.ts:409`), which answers `{ tickets }` where each ticket is a `TicketHealth` (plus `linkId`, `linkType`, `createdBy`, `createdAt`): `{ kind, ref, label, status, progressPct, done, total, exists, parent? }`. `kind` is one of `portfolio`, `objective`, `initiative`, `roadmap`, `spec`, `epic`, `gap`, `task`, `retro`, `poker` (`chatTicketTypes.ts:22`). The Brain's built-in MCP ticket lookup reads the same health (`api/src/application/llm/builtinMcpService.ts:2247`).
 
 | Constraint | Explanation |
 |------------|-------------|
 | **Idempotent, not single emission** | Health is derived live on every read (deliberately uncached), so a completed item reports `progressPct: 100` on every subsequent read. Treat 100 as a terminal state, never as a one-shot event, and never assume it is delivered exactly once |
-| **Only after completion** | A leaf reads 100 only when marked done (`completedAt != null` or status ∈ {done, completed, archived}); a container only when every counted child is complete (`done === total`). An in-progress item reads below 100 (a leaf in progress or in review reads 50) |
-| **Agrees with `done`/`total`** | `progressPct === 100` corresponds to `done === total` and, for a leaf, to a terminal `status` |
-| **Unsupported-delivery cap** | An epic whose children read complete, but whose live execution left no non-documentation file, is capped at `UNSUPPORTED_DELIVERY_PROGRESS_CAP` (75) with `unsupportedDelivery: true` — until its lane closes; a closed lane reads 100 (`effectiveTicketProgress`) |
+| **Only after completion** | A task, gap or epic reads 100 only when its lane is closed (status ∈ {done, completed, cancelled, canceled, archived}; `completedAt` alone is not done); other containers only when every counted child is complete (`done === total`). An open leaf follows the status ladder (`buildTaskProgressBreakdown`): backlog/todo 0, ready 10, in progress 50, in review 75 |
+| **Agrees with `done`/`total`** | For other containers `progressPct === 100` corresponds to `done === total`. For an epic, a child counts toward `done` only when its own lane is closed, and the epic's own lane decides 100 (see the next row) |
+| **Only a closed lane emits 100** | A task, gap or epic whose lane is not closed never reads 100: an open epic whose filed children are all done, or an open task whose PR merged, reads `CLAIMED_COMPLETE_PROGRESS_CAP` (75, the `in_review` rung), so `done === total` can coexist with 75. A closed lane always reads 100, even an epic closed with 3 of 5 children done (`effectiveTicketProgress`) |
 
 > **⚠️ WARNING:** Do NOT Treat Intermediate Values as Completion
 >
@@ -2115,7 +2115,7 @@ While `progressPct: 100` is the authoritative signal for consumers of ticket hea
 
 #### 1. No Completion Signal
 
-There is no stream to time out. A consumer polls (or re-reads on its own trigger) and stops when it sees 100. If an item it expects to be finished still reads below 100, re-read the ticket itself, and check `unsupportedDelivery` — a capped epic is waiting for delivery evidence or for its lane to close, not stuck.
+There is no stream to time out. A consumer polls (or re-reads on its own trigger) and stops when it sees 100. If an item it expects to be finished still reads below 100, re-read the ticket itself and check its `status` — a task-tier item reading 75 with `done === total` is waiting for its lane to close, not stuck.
 
 #### 2. Out-of-Range Values
 
@@ -2127,7 +2127,7 @@ When displaying progress to users:
 
 1. **Do not show "Complete" for 99% (or 75%)** – treat it as "Almost done" / "in review"
 2. **Stop polling after 100%** – no further reads are needed
-3. **A closed lane reads 100** – the in-app ticket rail uses `effectiveTicketProgress(status, pct, unsupportedDelivery, 'complete')` so a DONE badge and its ring can never disagree
+3. **A closed lane reads 100** – the in-app ticket rail uses `effectiveTicketProgress(status, pct)` for task/gap/epic (and `closedLaneProgress` for other tiers), the same rule the server applies, so a DONE badge and its ring can never disagree
 
 ### Summary Checklist
 
@@ -2140,7 +2140,7 @@ Before consuming ticket progress:
 - [ ] You distinguish 100% from other terminal status fields where applicable
 
 **Remaining (verified 2026-11-18):**
-- `docs/api/event-payload.schema.json` (the guide's "Event Payload Schema" link) still documents the retired contract: its `progressPct` description says it "MUST be emitted only once", its `kind` enum has `goal` and lacks `gap`, `retro`, `poker`, and it has no `unsupportedDelivery` or `parent`. Nothing else links it (`git grep event-payload.schema` → only the guide). Correct it to `TicketHealth` or delete it (decision for the planning model).
+- `docs/api/event-payload.schema.json` (the guide's "Event Payload Schema" link) still documents the retired contract: its `progressPct` description says it "MUST be emitted only once", its `kind` enum has `goal` and lacks `gap`, `retro`, `poker`, and it has no `parent`. Nothing else links it (`git grep event-payload.schema` → only the guide). Correct it to `TicketHealth` or delete it (decision for the planning model).
 
 ---
 

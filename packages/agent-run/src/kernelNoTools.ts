@@ -13,6 +13,7 @@ import type { LoopHooks } from "@builderforce/agent-loop";
 import type { RunMessage, RunPart } from "./contract.js";
 import type { PolicyContext } from "./policy/index.js";
 import { emit } from "./runContext.js";
+import { LINKED_WORK_OPEN } from "./policy/finish/index.js";
 import type { KernelRun } from "./kernelHooks.js";
 
 type StepAt = { step: number; stepInCall: number };
@@ -127,6 +128,14 @@ export function noToolCallsHook(run: KernelRun, deps: NoToolCallsDeps): NonNulla
     const block = owed ?? hooks.subagents.backstop(pctx);
     if (block) {
       await requeue(pctx, ctx.step, turn.content, block);
+      return { action: "continue" };
+    }
+    // …and so does work the run owns that is still open (its linked tickets): the model goes on executing instead of summarising
+    // what is left. Never on A3's final turn — that turn offers no tools to do the work with.
+    const open = finalTurn ? null : await hooks.finish.openWork?.(pctx);
+    if (open) {
+      await emit(ports.events, { kind: "finish.blocked", step: ctx.step, reason: LINKED_WORK_OPEN, block: open });
+      await requeue(pctx, ctx.step, turn.content, open);
       return { action: "continue" };
     }
     const output = hooks.stall.settle ? hooks.stall.settle(pctx, turn.content) : turn.content;

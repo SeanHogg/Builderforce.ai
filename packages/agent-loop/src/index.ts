@@ -30,10 +30,11 @@ export { subagentReportMessage, type SubagentReportLike } from "./subagentReport
 export {
   rollupChatTicketHealth,
   effectiveTicketProgress,
+  closedLaneProgress,
   isExcludedFromChatHealth,
   displayChatProgressPct,
   chatProgressIsStale,
-  UNSUPPORTED_DELIVERY_PROGRESS_CAP,
+  CLAIMED_COMPLETE_PROGRESS_CAP,
   type ChatTicketHealth,
   type ChatTicketHealthInput,
 } from "./chatTicketHealth.js";

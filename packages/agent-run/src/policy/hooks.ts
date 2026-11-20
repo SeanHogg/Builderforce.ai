@@ -174,6 +174,11 @@ export interface FinishHook {
    * reports would strand. Null when none is live or the surface has no delegation.
    */
   liveChildren?(ctx: PolicyContext): Promise<string | null>;
+  /**
+   * The block on ANY end of a run while work the run owns (its linked tickets) is still open — the model reads it and goes on
+   * executing. Null when nothing is owed or the surface binds no port.
+   */
+  openWork?(ctx: PolicyContext): Promise<string | null>;
 }
 
 /** WS2d — the in-run guards: progress (A3), cascade (D1), post-edit check (D7), parallel reads (D8). */

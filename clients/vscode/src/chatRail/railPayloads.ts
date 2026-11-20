@@ -11,7 +11,7 @@
  * never disagree about what names a ticket.
  */
 
-import { effectiveTicketProgress } from "@builderforce/agent-loop";
+import { closedLaneProgress, effectiveTicketProgress } from "@builderforce/agent-loop";
 import { TASK_TABLE_KINDS, tierRefText, type EntityScope, type LocalFirstTransaction, type ServerMapping, type TicketValue } from "@builderforce/local-first";
 import type { RailRun, RailTicketParent } from "./railProtocol";
 
@@ -64,21 +64,28 @@ export interface RailTicketProgress {
  * it) is drawn as `backlog` — the not-started lane the board shows — so the rail never renders an
  * empty or undefined status chip.
  */
-export function railTicketProgress(payload: TicketValue & Partial<Pick<RailTicketPayload, "progressPct" | "done" | "total" | "exists">>): RailTicketProgress {
+export function railTicketProgress(payload: TicketValue & Partial<Pick<RailTicketPayload, "progressPct" | "done" | "total" | "exists" | "railKind">>): RailTicketProgress {
   // An empty or whitespace-only status is the same "not started yet" as undefined: the record has
   // not been assigned a lane. Only a real lane (a non-blank string) is drawn verbatim.
   const status = typeof payload.status === "string" && payload.status.trim() !== "" ? payload.status : "backlog";
-  // Delegate to the shared closed-lane rule (agent-loop `effectiveTicketProgress`):
-  // a closed (done) lane always reads 100 — never demoted by a stale progressPct
-  // still on the record from an earlier open-lane snapshot — and the
-  // unsupported-delivery cap applies only pre-close. Same rule as the server's
-  // taskTierTicketHealth and the shared rollup; no local copy.
-  if (effectiveTicketProgress(status, payload.progressPct, undefined, "complete") >= 100) {
+  // Delegate to the shared rule (agent-loop): a closed (done) lane always reads 100 —
+  // never demoted by a stale progressPct still on the record from an earlier open-lane
+  // snapshot. A task-table record (task, gap, epic — or a locally authored one, which has
+  // no `railKind`) additionally follows `effectiveTicketProgress`: only a closed lane may
+  // read 100, so an open lane still carrying a 100 reads the claimed-complete rung. Other
+  // tiers speak their own status vocabulary, so they get only the closed-lane half.
+  // Same rule as the server's taskTierTicketHealth; no local copy.
+  const railKind = payload.railKind;
+  const taskTable = railKind === undefined || TASK_TABLE_KINDS.has(railKind);
+  const pct = taskTable
+    ? effectiveTicketProgress(status, payload.progressPct)
+    : closedLaneProgress(status, payload.progressPct);
+  if (pct >= 100) {
     return { status, progressPct: 100, done: 1, total: 1, exists: payload.exists };
   }
   return {
     status,
-    progressPct: payload.progressPct ?? 0,
+    progressPct: pct,
     done: payload.done ?? 0,
     total: payload.total ?? 0,
     exists: payload.exists,

@@ -20,7 +20,8 @@ import { emptyRunUsage } from '../memorySavings';
 import { emit, getCell, nowIso, recordRunFailure, runTrace } from './runCells';
 import { appendRunMessage } from './runControl';
 import { keepStoppedTurn, persistStep } from './turnPersistence';
-import { localTicketsFiledInRun, settleView } from './runBackstops';
+import { settleView } from './runBackstops';
+import { localTicketsFiledInRun } from './chatTickets';
 import { verificationOf, type CloseOutInput } from '../run/brainCloseOut';
 import { deterministicFinish, finishConditionMet, holdsLinkedTicket } from './deterministicFinish';
 import type { BrainRunContext } from './brainRunContext';
@@ -199,7 +200,7 @@ export async function startRun(runKey: number, request: BrainRunRequest, claim?:
       await within(left(), async () => {
         // A ticket the chat links (its delta id never read back, or linked by hand) is the run's ticket too:
         // read the listing only when it is the one thing the finish gate still lacks. Inside the bounded settle.
-        if (!closeOut.hasTicket && finishConditionMet({ ...closeOut, hasTicket: true })) closeOut.hasTicket = await holdsLinkedTicket(trace, serverChatId, req);
+        if (!closeOut.hasTicket && finishConditionMet({ ...closeOut, hasTicket: true })) closeOut.hasTicket = await holdsLinkedTicket(trace, serverChatId, req, { deltaTicketId: view.deltaTicketId, note: view.note });
         await deterministicFinish(closeOut, { c, req, serverChatId, recalled: null } as BrainRunContext);
       }, () => view.note?.({
         ts: nowIso(),

@@ -27,6 +27,7 @@ import { CascadeSession } from "./cascade.js";
 import { verifyAfterEdit, withPostEditNote } from "./postEdit.js";
 import type { VerifyResult } from "./sourcePolicy.js";
 import { isReadOnlyCloudTool } from "./readOnly.js";
+import { LINKED_WORK_OPEN } from "../finish/index.js";
 import { guardLeversOf, type GuardLevers, type GuardPorts } from "./ports.js";
 
 export { guardLeversOf, type GuardLevers, type GuardPorts };
@@ -122,7 +123,7 @@ export class RunGuards {
   async finish(verdict: { block: string | null; reason?: string }, step: number, ports: GuardPorts): Promise<string | null> {
     if (!this.cascade.on) return verdict.block;
     const v = verdict.block
-      ? { passed: false, verifier: `finish_gates:${verdict.reason ?? "blocked"}`, reason: verdict.block, inconclusive: verdict.reason === "branch_ci_pending" || verdict.reason === "children_running" }
+      ? { passed: false, verifier: `finish_gates:${verdict.reason ?? "blocked"}`, reason: verdict.block, inconclusive: verdict.reason === "branch_ci_pending" || verdict.reason === "children_running" || verdict.reason === LINKED_WORK_OPEN }
       : { passed: true, verifier: "finish_gates" };
     await this.judge("finish", v, step, ports);
     return verdict.block;

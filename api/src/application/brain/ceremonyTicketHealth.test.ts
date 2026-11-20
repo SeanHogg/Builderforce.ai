@@ -19,7 +19,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
  * link, however many ceremonies a chat references.
  */
 
-import { rollupChatTicketHealth } from '@builderforce/agent-loop';
+import { CLAIMED_COMPLETE_PROGRESS_CAP, rollupChatTicketHealth } from '@builderforce/agent-loop';
 import { ChatTicketService, TICKET_KINDS } from './ChatTicketService';
 
 /** Results the fake hands back, in the order ChatTicketService asks for them. */
@@ -157,13 +157,24 @@ describe('epic health (container, over its children)', () => {
     expect(h).toMatchObject({ kind: 'epic', done: 5, total: 5, progressPct: 100, exists: true, status: 'done' });
   });
 
-  it('stays at 0/5 while children are still open, even if the parent is done', async () => {
+  it('regression: a closed epic reads 100 whatever its children say — counter stays 0/5', async () => {
+    // A closed lane IS complete (the rail already said so); the server used to pass
+    // the raw 0/5 = 0 through, so the web panel and the VS Code rail disagreed.
     queue = [
       [{ id: 2473, title: 'Speech hop', status: 'done', completedAt: new Date() }],
       [{ parentId: 2473, total: 5, done: 0 }],
     ];
     const h = (await service().ticketHealthBatch(1, [{ kind: 'epic', ref: '2473' }])).get('epic:2473')!;
-    expect(h).toMatchObject({ done: 0, total: 5, progressPct: 0, status: 'done' });
+    expect(h).toMatchObject({ done: 0, total: 5, progressPct: 100, status: 'done' });
+  });
+
+  it('regression: a closed epic with 3 of 5 children done reads 100 server-side', async () => {
+    queue = [
+      [{ id: 2474, title: 'Closed early', status: 'done', completedAt: null }],
+      [{ parentId: 2474, total: 5, done: 3 }],
+    ];
+    const h = (await service().ticketHealthBatch(1, [{ kind: 'epic', ref: '2474' }])).get('epic:2474')!;
+    expect(h).toMatchObject({ done: 3, total: 5, progressPct: 100, status: 'done' });
   });
 
   it('mixes closed and open children', async () => {
@@ -175,94 +186,69 @@ describe('epic health (container, over its children)', () => {
     expect(h).toMatchObject({ done: 3, total: 5, progressPct: 60 });
   });
 
-  it('grants 100 when every child is done and the delivery is docs-only — nothing a check could fail', async () => {
-    // Epic #6550: 2/2 documentation children, developer runs, zero code files. A
-    // docs-only change ships no file any policy check could fail, so there is nothing
-    // "unsupported" to withhold — pinning a legitimately-complete docs epic at the
-    // unsupported-delivery cap was the bug this corrects.
+  it('grants 100 in a closed lane — the lane, not run history, is the completion signal', async () => {
+    // #6550 / #6618: a done epic must never read 75%. Whatever its runs did or did not
+    // deliver, the status ladder is authoritative once the lane is closed.
     queue = [
       [{ id: 2545, title: 'Advisor platform', status: 'done', completedAt: new Date() }],
       [{ parentId: 2545, total: 2, done: 2 }],
-      [{ id: 31648, taskId: 2546, parentTaskId: 2545, payload: JSON.stringify({ roleKey: 'developer' }) }],
-      [{ executionId: 31648, path: 'docs/specs/26-prd-advisor-platform.md' }],
-    ];
-    const h = (await service().ticketHealthBatch(1, [{ kind: 'epic', ref: '2545' }])).get('epic:2545')!;
-    expect(h.progressPct).toBe(100);
-    expect(h.unsupportedDelivery).toBeUndefined();
-    expect(h).toMatchObject({ done: 2, total: 2, status: 'done' });
-  });
-
-  it('grants 100 in a closed lane even when live runs left no delivery record', async () => {
-    // A developer run that recorded ZERO file changes shipped nothing anyone can
-    // verify — but the lane is closed. The status ladder is authoritative once
-    // closed: the unsupported-delivery cap applies only BEFORE the lane closes
-    // (a pre-close in_review claim with no delivery evidence stays capped). This
-    // is the #6618 contract: a done epic must not read 75%.
-    queue = [
-      [{ id: 2545, title: 'Advisor platform', status: 'done', completedAt: new Date() }],
-      [{ parentId: 2545, total: 2, done: 2 }],
-      [{ id: 31650, taskId: 2546, parentTaskId: 2545, payload: JSON.stringify({ roleKey: 'developer' }) }],
-      [],
     ];
     const h = (await service().ticketHealthBatch(1, [{ kind: 'epic', ref: '2545' }])).get('epic:2545')!;
     expect(h.progressPct).toBe(100);
     expect(h).toMatchObject({ done: 2, total: 2, status: 'done' });
   });
 
-  it('does not cap a pre-close claim when the live run left no file rows — absence is not evidence', async () => {
-    // A failed or timed-out run that touched nothing is not delivery evidence either
-    // way. The lane is not closed, but there is nothing to judge, so the epic is not
-    // unsupported and reads 100. (The cap only fires when a run actually shipped files
-    // the delivery check fails — see the next test.)
+  it('caps a pre-close claim: an open epic whose children are all done reads 75', async () => {
+    // Only a closed lane may emit 100. Claimed complete by its children while the lane
+    // is still in_review reads the claimed-complete rung, same as in_review itself.
     queue = [
       [{ id: 2545, title: 'Advisor platform', status: 'in_review', completedAt: null }],
       [{ parentId: 2545, total: 2, done: 2 }],
-      [{ id: 31650, taskId: 2546, parentTaskId: 2545, payload: JSON.stringify({ roleKey: 'developer' }) }],
-      [],
     ];
     const h = (await service().ticketHealthBatch(1, [{ kind: 'epic', ref: '2545' }])).get('epic:2545')!;
-    expect(h.progressPct).toBe(100);
-    expect(h.unsupportedDelivery).toBeUndefined();
+    expect(h.progressPct).toBe(CLAIMED_COMPLETE_PROGRESS_CAP);
     expect(h).toMatchObject({ done: 2, total: 2, status: 'in_review' });
   });
 
-  it('caps a pre-close claim when a live run shipped files the delivery check fails', async () => {
-    // Same delivery shape, but the lane is NOT closed: claimed complete by children
-    // while a live run produced files that fail the delivery check (a non-coder role
-    // touching a code file) is genuinely unsupported and stays capped.
+  it('regression: chat #276 — an open epic whose filed children are all done reads 75, not 100', async () => {
+    // Epic "Measure PRD" sat in_progress with two done children: the ring read 100
+    // ("done") while the lane said open and unfiled slices remained.
     queue = [
-      [{ id: 2545, title: 'Advisor platform', status: 'in_review', completedAt: null }],
-      [{ parentId: 2545, total: 2, done: 2 }],
-      [{ id: 31650, taskId: 2546, parentTaskId: 2545, payload: JSON.stringify({ roleKey: 'qa' }) }],
-      [{ executionId: 31650, path: 'src/advisor/check.ts' }],
+      [{ id: 276, title: 'Measure PRD', status: 'in_progress', completedAt: null }],
+      [{ parentId: 276, total: 2, done: 2 }],
     ];
-    const h = (await service().ticketHealthBatch(1, [{ kind: 'epic', ref: '2545' }])).get('epic:2545')!;
-    expect(h.progressPct).toBe(75);
-    expect(h.unsupportedDelivery).toBe(true);
-    expect(h).toMatchObject({ done: 2, total: 2, status: 'in_review' });
+    const h = (await service().ticketHealthBatch(1, [{ kind: 'epic', ref: '276' }])).get('epic:276')!;
+    expect(h).toMatchObject({ progressPct: CLAIMED_COMPLETE_PROGRESS_CAP, done: 2, total: 2, status: 'in_progress' });
   });
 
-  it('keeps 100 when a coder run on a child changed a non-doc file', async () => {
-    queue = [
-      [{ id: 2545, title: 'Advisor platform', status: 'done', completedAt: new Date() }],
-      [{ parentId: 2545, total: 2, done: 2 }],
-      [{ id: 31649, taskId: 2546, parentTaskId: 2545, payload: JSON.stringify({ roleKey: 'developer' }) }],
-      [{ executionId: 31649, path: 'api/src/application/commerce/bookings.ts' }],
-    ];
-    const h = (await service().ticketHealthBatch(1, [{ kind: 'epic', ref: '2545' }])).get('epic:2545')!;
-    expect(h.progressPct).toBe(100);
-    expect(h.unsupportedDelivery).toBeUndefined();
-  });
-
-  it('keeps 100 when there is no execution to judge — absence is not evidence', async () => {
+  it('keeps 100 for a closed epic with no run history', async () => {
     queue = [
       [{ id: 2473, title: 'Speech hop', status: 'done', completedAt: new Date() }],
       [{ parentId: 2473, total: 5, done: 5 }],
-      [],
     ];
     const h = (await service().ticketHealthBatch(1, [{ kind: 'epic', ref: '2473' }])).get('epic:2473')!;
     expect(h.progressPct).toBe(100);
-    expect(h.unsupportedDelivery).toBeUndefined();
+  });
+});
+
+describe('leaf task/gap health — "done" means the lane is closed', () => {
+  it('regression: an open task with completed_at stamped is not done (0/1) and stays off 100', async () => {
+    // A stamped `completed_at` on an open lane used to read done 1/1 at 100%. The lane
+    // decides: open ⇒ the status ladder (in_progress 50, in_review 75), never 100.
+    queue = [[{ id: 5001, title: 'Stamped but open', status: 'in_progress', completedAt: new Date(), taskType: 'task', parentTaskId: null }]];
+    const t = (await service().ticketHealthBatch(1, [{ kind: 'task', ref: '5001' }])).get('task:5001')!;
+    expect(t).toMatchObject({ progressPct: 50, done: 0, total: 1 });
+
+    queue = [[{ id: 5002, title: 'Stamped gap in review', status: 'in_review', completedAt: new Date(), taskType: 'gap', parentTaskId: null }]];
+    const g = (await service().ticketHealthBatch(1, [{ kind: 'gap', ref: '5002' }])).get('gap:5002')!;
+    expect(g).toMatchObject({ progressPct: CLAIMED_COMPLETE_PROGRESS_CAP, done: 0, total: 1 });
+    expect(g.progressPct).toBeLessThan(100);
+  });
+
+  it('regression: a closed leaf reads 100 and done 1/1, with or without completed_at', async () => {
+    queue = [[{ id: 5003, title: 'Closed', status: 'done', completedAt: null, taskType: 'task', parentTaskId: null }]];
+    const t = (await service().ticketHealthBatch(1, [{ kind: 'task', ref: '5003' }])).get('task:5003')!;
+    expect(t).toMatchObject({ progressPct: 100, done: 1, total: 1 });
   });
 });
 

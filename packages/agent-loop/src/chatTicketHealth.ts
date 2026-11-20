@@ -31,13 +31,31 @@
  *   counted it. An all-deleted list is 100% (nothing owed), like all-cancelled.
  * - `done`/`total` are still returned for the "4/6" counter beside the percent.
  *
+ * EXACT 100 IS THE ONLY COMPLETION SIGNAL, AND ONLY A CLOSED LANE MAY EMIT IT
+ * A task-table ticket (task, gap, epic) whose lane is not closed (`isClosedTaskStatus`
+ * false) never reads 100, whatever its raw figure says: an open epic whose filed
+ * children are all done, an open task stamped `completed_at`, or an open task whose PR
+ * merged reads {@link CLAIMED_COMPLETE_PROGRESS_CAP} (75) — claimed complete, not
+ * closed, the same rung as `in_review`. Real work (unfiled slices, review, the close
+ * itself) can still remain while the lane is open, so the ring must not say "done"
+ * before the lane does (chat #276: epic in_progress with two done children read 100).
+ * The cap never raises a lower figure. Conversely a CLOSED lane always reads 100, even
+ * an epic closed with only 3 of 5 children done — "done" means the lane is closed.
+ * A custom board's terminal lane whose key is not in `TASK_CLOSED_STATUSES` is not
+ * closed to this rule: it reads 75 until the ticket moves to a closed lane.
+ * The rule is {@link effectiveTicketProgress}; its PRODUCERS apply it — the server's
+ * task-tier health and the rail's mapping of a task-table record — because only they
+ * know a ticket's tier. Other tiers (spec, roadmap, retro, objective …) speak their own status
+ * vocabulary ("complete", "shipped"), which `isClosedTaskStatus` does not know, so the
+ * rule is never applied to them; the rollup below therefore averages what each producer
+ * emitted and only floors a closed lane to 100 ({@link closedLaneProgress}).
+ *
  * OPEN / COMPLETED TICKETS
  * `openTickets` / `completedTickets` count TICKETS (not sub-items) for the history
  * row's "3 open · 2 done" line. A ticket is completed when its effective progress is
- * at least 100. The unsupported-delivery cap can keep a pre-close "done-claim" below
- * 100, but once the lane itself is closed the ticket is complete and counts as done.
- * Cancelled tickets count as neither. open = counted − completed, so an
- * empty or all-cancelled list is 0 / 0.
+ * at least 100, which for a task-table ticket means its lane is closed. Cancelled
+ * tickets count as neither. open = counted − completed, so an empty or all-cancelled
+ * list is 0 / 0.
  */
 
 import { isCancelledTaskStatus, isClosedTaskStatus } from "./taskClosedState.js";
@@ -59,21 +77,14 @@ export interface ChatTicketHealthInput {
    *   ticket exists (every producer that knows the flag passes it).
    */
   exists?: boolean;
-  /**
-   * The reported `progressPct` is not backed by delivery evidence. Lowers a 100
-   * to {@link UNSUPPORTED_DELIVERY_PROGRESS_CAP}; never raises a lower figure.
-   */
-  unsupportedDelivery?: boolean;
 }
 
 /**
- * Ceiling for a ticket whose children (or own status) read complete, but a live
- * execution exists and no coder run left a non-documentation file. Same rung as
- * `in_review` on the status ladder: claimed done, not verified by delivery.
- * Exact 100 remains the only completion signal — this cap exists so a
- * documentation-only close cannot emit it.
+ * Ceiling for a task-table ticket whose raw progress reads complete while its lane is
+ * still open. Same rung as `in_review` on the status ladder: claimed complete, not
+ * closed. Exact 100 is the only completion signal and only a closed lane may emit it.
  */
-export const UNSUPPORTED_DELIVERY_PROGRESS_CAP = 75;
+export const CLAIMED_COMPLETE_PROGRESS_CAP = 75;
 
 export interface ChatTicketHealth {
   /** Overall progress 0–100. */
@@ -94,42 +105,45 @@ export function isExcludedFromChatHealth(status?: string | null): boolean {
 }
 
 /**
- * The ONE "what does this ticket's progress read" rule, shared by the rail
- * (`railTicketProgress`), the server's epic branch (taskTierTicketHealth), and
- * this rollup.
+ * The closed-lane half of the rule, for ANY tier: a closed lane IS complete by
+ * definition — the status ladder is authoritative once closed — so a stale, partial or
+ * demoted record percent never wins; the lane reads 100. This is the contract behind a
+ * chip that shows DONE beside its ring: the badge (status) and the ring (percent) cannot
+ * disagree, on the server, in the web panel and in the VS Code rail alike.
  *
- * The unsupported-delivery cap applies only BEFORE the lane closes and only to a
- * claimed-complete ticket: an open ticket whose raw progress is 100 but whose
- * delivery is unsupported reads the cap rung (75); the cap never raises a lower
- * figure. A closed (done) lane is handled by `whenClosed`, because "closed" means
- * two different things to the two consumers of this rule:
+ * An open lane passes its raw percent through: this half never caps, so it is safe for
+ * a tier whose status vocabulary is not the task lanes'.
+ */
+export function closedLaneProgress(
+  status: string | null | undefined,
+  progressPct: number | null | undefined,
+): number {
+  const raw = typeof progressPct === "number" && Number.isFinite(progressPct) ? progressPct : 0;
+  return isClosedTaskStatus(status) ? Math.max(raw, 100) : raw;
+}
+
+/**
+ * The ONE "what does a task-table ticket's progress read" rule, shared by the server's
+ * task tier (`buildTaskProgressBreakdown`, `taskTierTicketHealth`) and the rail
+ * (`railTicketProgress`, for task/gap/epic records).
  *
- * - `'passthrough'` (the default — the rollup and the server's epic branch): a
- *   done lane passes its raw percent through unchanged. Delivery evidence only
- *   CAPS a claimed-complete ticket; it never floors one, so a done ticket still
- *   carrying a pre-close capped percent (75) reads 75 until the record refreshes.
- * - `'complete'` (the rail / every UI surface): a done lane IS complete by
- *   definition — the status ladder is authoritative once closed — so a stale or
- *   demoted record percent must never win; the lane reads 100. This is the
- *   UI/UX contract behind a chip that shows DONE beside a 75% ring: the badge
- *   (status) and the ring (percent) cannot disagree.
+ * Exact 100 is the only completion signal, and only a closed lane may emit it: a closed
+ * lane reads 100 ({@link closedLaneProgress}); an open lane whose raw progress is 100 or
+ * more reads {@link CLAIMED_COMPLETE_PROGRESS_CAP}; the cap never raises a lower figure.
  */
 export function effectiveTicketProgress(
   status: string | null | undefined,
   progressPct: number | null | undefined,
-  unsupportedDelivery?: boolean,
-  whenClosed: "passthrough" | "complete" = "passthrough",
 ): number {
-  const raw = typeof progressPct === "number" && Number.isFinite(progressPct) ? progressPct : 0;
-  if (isClosedTaskStatus(status)) {
-    return whenClosed === "complete" ? Math.max(raw, 100) : raw;
-  }
-  if (unsupportedDelivery === true && raw >= 100) return UNSUPPORTED_DELIVERY_PROGRESS_CAP;
-  return raw;
+  const pct = closedLaneProgress(status, progressPct);
+  if (!isClosedTaskStatus(status) && pct >= 100) return CLAIMED_COMPLETE_PROGRESS_CAP;
+  return pct;
 }
 
 function effectiveProgressPct(t: ChatTicketHealthInput): number {
-  return effectiveTicketProgress(t.status, t.progressPct, t.unsupportedDelivery);
+  // The rollup sees every tier, so it applies only the closed-lane half (a closed lane is
+  // 100); each task-table producer has already applied the open-lane cap (module comment).
+  return closedLaneProgress(t.status, t.progressPct);
 }
 
 /** Roll a chat's linked tickets up into its one progress figure. */

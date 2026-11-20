@@ -24,6 +24,7 @@
  *
  * Kept framework-free (pure strings + Sets) so it is safe in every bundle.
  */
+import { isClosedTaskStatus } from '@builderforce/agent-loop';
 import { syncIdText } from '@builderforce/local-first';
 import { LOCAL_TICKET_CREATE_TOOL, SERVER_TICKET_LINK_TOOL, SERVER_TICKET_TOOLS, type TicketToolVocabulary } from './ticketToolVocabulary';
 import { entityIdsOf } from './toolResultRecord';
@@ -184,17 +185,23 @@ export interface LinkedTicketToAdvance {
  * [] for anything unusable), and skips deleted/unresolved links.
  */
 export function linkedTicketsToAdvance(listResult: unknown): LinkedTicketToAdvance[] {
-  return selectLinkedTasks(listResult, NOT_STARTED_TASK_STATUSES);
+  return refsOf(selectLinkedTasks(listResult, inLane(NOT_STARTED_TASK_STATUSES)));
 }
 
-/**
- * The shared row filter behind {@link linkedTicketsToAdvance} and
- * {@link linkedTicketsToComplete}: task-tier, still existing, with a resolvable ref
- * and a status in `statuses`. Extracted so the two selectors differ ONLY in which
- * lane they act on — a second hand-rolled copy is exactly how one of them would
- * quietly stop tolerating a JSON-string result or start acting on deleted links.
- */
-function selectLinkedTasks(listResult: unknown, statuses: ReadonlySet<string>): LinkedTicketToAdvance[] {
+/** A linked task-tier ticket as the shared row filter reads it: its lane (lower-cased) and its display title. */
+export interface LinkedTaskRow extends LinkedTicketToAdvance {
+  status: string;
+  title: string;
+}
+
+/** A status predicate over one lane set (statuses compared lower-cased). */
+const inLane = (statuses: ReadonlySet<string>) => (status: string): boolean => statuses.has(status);
+
+/** The `{ kind, ref }` the move selectors hand the backstops. */
+const refsOf = (rows: readonly LinkedTaskRow[]): LinkedTicketToAdvance[] => rows.map(({ kind, ref }) => ({ kind, ref }));
+
+/** The rows of a `builtin_chats_list_tickets` result: the tool's `{ tickets, total, matched, hasMore }` page, a bare array, or either as JSON text. */
+function listedRows(listResult: unknown): unknown[] {
   let rows: unknown = listResult;
   if (typeof rows === 'string') {
     try {
@@ -203,21 +210,71 @@ function selectLinkedTasks(listResult: unknown, statuses: ReadonlySet<string>): 
       return [];
     }
   }
-  if (!Array.isArray(rows)) return [];
-  const out: LinkedTicketToAdvance[] = [];
-  for (const r of rows) {
+  if (rows && typeof rows === 'object' && !Array.isArray(rows)) rows = (rows as { tickets?: unknown }).tickets;
+  return Array.isArray(rows) ? rows : [];
+}
+
+/**
+ * THE shared row filter behind every linked-ticket selector ({@link linkedTicketsToAdvance},
+ * {@link linkedTicketsToComplete}, {@link linkedTicketsReviewedComplete}, {@link linkedTicketsStillOpen}):
+ * task-tier, still existing, with a resolvable ref and a status `keep` accepts. One filter so the
+ * selectors differ ONLY in which lanes they act on — a second hand-rolled copy is exactly how one of
+ * them would quietly stop tolerating a JSON-string result or start acting on deleted links.
+ */
+function selectLinkedTasks(listResult: unknown, keep: (status: string) => boolean): LinkedTaskRow[] {
+  const out: LinkedTaskRow[] = [];
+  for (const r of listedRows(listResult)) {
     if (!r || typeof r !== 'object') continue;
-    const row = r as { kind?: unknown; ref?: unknown; syncId?: unknown; status?: unknown; exists?: unknown };
+    const row = r as { kind?: unknown; ref?: unknown; syncId?: unknown; status?: unknown; exists?: unknown; label?: unknown; title?: unknown };
     if (typeof row.kind !== 'string' || !TASK_TIER_KINDS.has(row.kind)) continue;
     if (row.exists === false) continue;
     // A task-tier row's ref IS its account id: the row's `syncId`, else its numeric `ref`.
     const { syncId } = entityIdsOf({ syncId: row.syncId, id: row.ref });
     if (syncId == null) continue;
     const ref = syncIdText(syncId);
-    if (typeof row.status !== 'string' || !statuses.has(row.status.toLowerCase())) continue;
-    out.push({ kind: row.kind, ref });
+    if (typeof row.status !== 'string') continue;
+    const status = row.status.toLowerCase();
+    if (!keep(status)) continue;
+    // The listing's display name is `label` (`TicketHealth.label`); `title` is tolerated for other producers.
+    const title = typeof row.label === 'string' ? row.label : typeof row.title === 'string' ? row.title : '';
+    out.push({ kind: row.kind, ref, status, title });
   }
   return out;
+}
+
+/**
+ * Lanes a linked ticket may end a run in without being finished: `blocked` (a stated blocker — the
+ * person is told why) and `in_review` (handed off for review; the deterministic close-out owns it).
+ */
+const ALLOWED_OPEN_END_STATUSES: ReadonlySet<string> = new Set(['blocked', 'in_review']);
+
+/**
+ * From a `builtin_chats_list_tickets` result, every linked task-tier ticket (any lane) — {@link linkedTicketsStillOpen} keeps
+ * the ones still OPEN — not closed
+ * (`isClosedTaskStatus`), not `blocked`, not `in_review` — the work a run in this chat still owes
+ * (`runStore/openLinkedWorkHold.ts`). Deleted links and other tiers are skipped, as every selector does.
+ */
+export function linkedTaskRows(listResult: unknown): LinkedTaskRow[] {
+  return selectLinkedTasks(listResult, () => true);
+}
+
+/** The open ones of {@link linkedTaskRows}. */
+export function linkedTicketsStillOpen(listResult: unknown): LinkedTaskRow[] {
+  return selectLinkedTasks(listResult, isOpenLinkedStatus);
+}
+
+/** The account's linked-ticket listing tool. */
+export const CHAT_TICKET_LIST_TOOL = 'builtin_chats_list_tickets';
+
+/** Whether the host's catalog carries the linked-ticket listing — a host without it has no listing to read, which is not a failure. */
+export function canListChatTickets(tools: readonly { function: { name: string } }[] | undefined): boolean {
+  return (tools ?? []).some((t) => t.function.name === CHAT_TICKET_LIST_TOOL);
+}
+
+/** THE "still owed" lane rule {@link linkedTicketsStillOpen} applies — shared with the run's own device-filed tickets, whose local ids the account's row filter cannot read. */
+export function isOpenLinkedStatus(status: string): boolean {
+  const lane = status.toLowerCase();
+  return !isClosedTaskStatus(lane) && !ALLOWED_OPEN_END_STATUSES.has(lane);
 }
 
 /**
@@ -241,7 +298,7 @@ const SHIPPABLE_TASK_STATUSES: ReadonlySet<string> = new Set(['in_review']);
  * permanently. Same tolerant parsing as {@link linkedTicketsToAdvance}.
  */
 export function linkedTicketsToComplete(listResult: unknown): LinkedTicketToAdvance[] {
-  return selectLinkedTasks(listResult, SHIPPABLE_TASK_STATUSES);
+  return refsOf(selectLinkedTasks(listResult, inLane(SHIPPABLE_TASK_STATUSES)));
 }
 
 /**
@@ -260,7 +317,7 @@ const REVIEWED_TASK_STATUSES: ReadonlySet<string> = new Set(['in_progress', 'in_
  */
 export function linkedTicketsReviewedComplete(listResult: unknown, reviewedTaskIds: readonly number[]): LinkedTicketToAdvance[] {
   const reviewed = new Set(reviewedTaskIds.map(String));
-  return selectLinkedTasks(listResult, REVIEWED_TASK_STATUSES).filter((ticket) => reviewed.has(ticket.ref));
+  return refsOf(selectLinkedTasks(listResult, inLane(REVIEWED_TASK_STATUSES)).filter((ticket) => reviewed.has(ticket.ref)));
 }
 
 /** The workspace-relative path a code-change tool touched (for delta provenance),
@@ -325,6 +382,9 @@ export function chatWorkLinkingDirective(chatId: number | null, tickets: TicketT
       ? `• When your turn ADDS or CHANGES code, record it with builtin_tickets_from_delta (chatId=${chatId}, the current projectId, the files you touched, kind improvement|fix|bug, modality "ide"). If builtin_chats_list_tickets shows a ticket already tracking this work, pass its numeric ref as taskId so the delta attaches to it instead of creating a duplicate; otherwise the delta creates a linked ticket that completes when it ships.\n`
       : `• When your turn ADDS or CHANGES code, record it with builtin_tickets_from_delta (the current projectId, the files you touched, kind improvement|fix|bug, modality "ide"; no chatId). If a ticket you already know of tracks this work, pass its numeric ref as taskId so the delta attaches to it instead of creating a duplicate.\n`) +
     `• Keep the board honest about STATUS. The MOMENT you start actively working an existing ${linked ? 'linked ' : ''}task/epic/gap — investigating its fix, editing code for it, or driving it — move it out of the backlog with ${statusTool}. When the work is finished: if this session can commit and push (it has git_commit and git_push), YOU are the reviewer — self-review, ship it, and move it to "done" (see the SHIP YOUR OWN CHANGE contract); otherwise advance it to "in_review" for someone who can (or "done" if it needs no review). Never leave a ticket you are actively working sitting in backlog.` +
+    (linked
+      ? `\n• When an open EPIC is linked to this chat, its remaining work belongs under it: record a code change for it with builtin_tickets_from_delta passing parentTaskId=<the epic's numeric ref> (so a newly minted ticket is filed under the epic), and file a child task with ${tickets.createName} (${tickets.local ? 'parentTicketId' : 'parentTaskId'}=<the epic's ref>) for each remaining slice of the epic that has no ticket yet.`
+      : '') +
     (linked
       ? `\n• Call builtin_chats_list_tickets (chatId=${chatId}) to see what is already linked — both to AVOID creating a duplicate and to know which linked tickets need their status advanced. Never end a turn having identified actionable work or changed code without it being a ticket linked to this chat whose status reflects the work you did.`
       : `\n• Never end a turn having identified actionable work or changed code without it being a ticket whose status reflects the work you did.`)

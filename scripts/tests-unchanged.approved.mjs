@@ -57,9 +57,9 @@ export const APPROVED_PERMANENT = [
   },
   {
     file: 'brain-embedded/src/run/brainCloseOut.test.ts',
-    blob: 'b6d6df92d116604a91c4ae1ccb7b01cc39448a69',
-    changed: "Four expectations: a close-out over a self-review now finishes with reviewRecorded false (was true) and records no review, while the ticket still moves to done.",
-    reason: "Intended change (5e1c0144c, chat #230): the ship close-out records a review only when an approved INDEPENDENT review of the shipped diff exists; a self-review the review gate refuses is no longer recorded as one. The old assertions pinned that bug.",
+    blob: 'dd0b5c60393809d25ca731135f88058075ce55ca',
+    changed: "Four expectations: a close-out over a self-review now finishes with reviewRecorded false (was true) and records no review, while the ticket still moves to done. (chat #276) The fixture request's `tools` now lists builtin_chats_list_tickets; no assertion changed.",
+    reason: "Intended change (5e1c0144c, chat #230): the ship close-out records a review only when an approved INDEPENDENT review of the shipped diff exists; a self-review the review gate refuses is no longer recorded as one. The old assertions pinned that bug. Intended change (chat #276, 2026-11-19): the ticket backstops read the chat's tickets only where the host's catalog carries the listing tool, so the fixture host must declare it.",
     approvedBy: APPROVED_BY,
   },
   {
@@ -86,9 +86,9 @@ export const APPROVED_PERMANENT = [
   },
   {
     file: 'packages/agent-run/test/guards/loopGuards.test.ts',
-    blob: 'b94c3122922927c62e86b2c2bfa8ffa5c5d5a2a4',
-    changed: "vi.hoisted telemetry, difficulty-gate and env-lever mocks replaced by GuardPorts and GuardLevers. All 12 source cases have a counterpart (one is split: its levers-off pass-through case is guards/leversOffPassThrough.test.ts); one case is new.",
-    reason: "The engine read levers from env strings and wrote telemetry through module imports; the policy takes them as ports.",
+    blob: 'cb5c12807871f4804e093933e96cb8304074a55f',
+    changed: "vi.hoisted telemetry, difficulty-gate and env-lever mocks replaced by GuardPorts and GuardLevers. All 12 source cases have a counterpart (one is split: its levers-off pass-through case is guards/leversOffPassThrough.test.ts); one case is new. (chat #276, 2026-11-19) One case appended — 'never escalates on a finish held for open linked work' — every existing line unchanged.",
+    reason: "The engine read levers from env strings and wrote telemetry through module imports; the policy takes them as ports. Re-approved 2026-11-19 for an append-only case: a linked_work_open finish hold is owed work, not a failed verifier, so it must not escalate the model.",
     approvedBy: APPROVED_BY,
   },
   {
@@ -162,8 +162,26 @@ export const APPROVED_THIS_PUSH = [
   })),
   {
     file: 'packages/agent-loop/src/chatTicketHealth.test.ts',
-    changed: "Three rollupChatTicketHealth toEqual expectations gain openTickets/completedTickets (3 done + 1 cancelled -> 0/3; all-cancelled -> 0/0; in_progress + canceled -> 1/0); pct/done/total are unchanged. Four cases are added.",
-    reason: "Intended change (0b42a0c29, open/completed ticket counts on every chat summary): ChatTicketHealth's shape extended with two ticket counts; every original pct/done/total value is asserted exactly as before.",
+    changed: "(0b42a0c29) Three rollupChatTicketHealth toEqual expectations gain openTickets/completedTickets (3 done + 1 cancelled -> 0/3; all-cancelled -> 0/0; in_progress + canceled -> 1/0). (chat #276) effectiveTicketProgress/closedLaneProgress lose their third (unsupportedDelivery) and fourth (whenClosed) arguments: the 'complete'/'passthrough' mode cases are folded into one closed-lane case; an open lane at raw 100 ('in_review', 100) now expects CLAIMED_COMPLETE_PROGRESS_CAP (was 100); a closed lane carrying a stale 75 ('done', 75) now expects 100 (was 75 under passthrough). Rollup fixtures pass the producer's output instead of the deleted flag. Regression cases added for chat #276.",
+    reason: "Intended change (0b42a0c29): ChatTicketHealth gained two ticket counts, original pct/done/total kept. Intended change (chat #276, 2026-11-19): 'exact 100 is the only completion signal and only a CLOSED lane emits it' — an in_progress epic whose filed children were all done read 100% on the chat ring while the PRD was still open. A closed lane reads 100 on every surface (server = rail). unsupportedDelivery was fully subsumed by the open-lane cap and deleted; an independent Opus review confirmed the subsumption.",
+    approvedBy: APPROVED_BY,
+  },
+  {
+    file: 'api/src/application/brain/ceremonyTicketHealth.test.ts',
+    changed: "The unsupported-delivery cases (execution/file-change fixtures for the deleted epicsWithUnsupportedDelivery query) become lane-based cases; 'does not cap a pre-close claim when the live run left no file rows' now expects the claimed-complete cap (was 100); 'stays at 0/5 … parent is done' now expects 100 (closed lane); the docs-only-epic (#6550) and 'coder run changed a non-doc file' cases are dropped — they only exercised the deleted query and are covered by the closed-lane / open-lane cases. Leaf and closed-epic regression cases added.",
+    reason: "Intended change (chat #276, 2026-11-19): same rule as chatTicketHealth.test.ts; 'done' now means the lane is closed (completed_at alone no longer counts), so an epic's done/total agrees with its children's chips.",
+    approvedBy: APPROVED_BY,
+  },
+  {
+    file: 'brain-embedded/src/runStore/startRun.lateBackstop.test.ts',
+    changed: "The codeRun fixture passes `tools` (builtin_chats_list_tickets) to startRun alongside runTool; every expectation is unchanged.",
+    reason: "Intended change (chat #276, 2026-11-19): the ticket backstops read the chat's tickets only where the host's catalog carries the listing tool; the Stop-during-settle case depends on that listing call being made, so the fixture host must declare the tool.",
+    approvedBy: APPROVED_BY,
+  },
+  {
+    file: 'api/src/application/task/taskProgressBreakdown.test.ts',
+    changed: "'can report delivered merged code as complete before the lane catches up' now expects CLAIMED_COMPLETE_PROGRESS_CAP (was 100). One regression case added (open epic whose subtasks are all closed).",
+    reason: "Intended change (chat #276, 2026-11-19): the agent's own task tools (builtinMcpService loadTaskProgress / single-task read) must not report 100 for an open lane while the chat chip reads 75 — the model read 'complete' from its own tool. Every return of buildTaskProgressBreakdown now goes through effectiveTicketProgress.",
     approvedBy: APPROVED_BY,
   },
   // The parity snapshots reconciled with the same intended change by
