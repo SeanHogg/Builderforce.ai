@@ -338,7 +338,27 @@ describe("a governance gate", () => {
   it("blocks the call before it reaches the implementation and tells the model why", async () => {
     const run = toolDef("run_command", { mutating: true });
     const gates: PolicyGate[] = [{ id: "no-shell", tool: "run_command", effect: "block", reason: "shell is off-limits" }];
+    // A read-only command: the gate blocks the shell outright. (A WRITING command on the planning turn is first re-asked of the
+    // coder — 2c6a51a2d — which is the role hand-off's behaviour, not the gate's; `requests` below counts the gate's run only.)
     const { log, requests } = await runTurn({
+      tools: [run],
+      policyGates: gates,
+      permissionMode: "acceptEdits",
+      script: (ctx) =>
+        ctx.turn === 0 ? { toolCalls: [{ name: "run_command", args: { command: "ls /" } }] } : { text: "I cannot." },
+    });
+
+    expect(run.calls).toHaveLength(0);
+    expect(log.toolResults.some((r) => !r.ok)).toBe(true);
+    // The refusal is a recoverable tool result, so the run continues to an answer.
+    expect(requests).toHaveLength(2);
+    expect(log.text).toContain("I cannot.");
+  });
+
+  it("still blocks a WRITING command after the planning turn's call is re-asked of the coder", async () => {
+    const run = toolDef("run_command", { mutating: true });
+    const gates: PolicyGate[] = [{ id: "no-shell", tool: "run_command", effect: "block", reason: "shell is off-limits" }];
+    const { log } = await runTurn({
       tools: [run],
       policyGates: gates,
       permissionMode: "acceptEdits",
@@ -348,8 +368,6 @@ describe("a governance gate", () => {
 
     expect(run.calls).toHaveLength(0);
     expect(log.toolResults.some((r) => !r.ok)).toBe(true);
-    // The refusal is a recoverable tool result, so the run continues to an answer.
-    expect(requests).toHaveLength(2);
     expect(log.text).toContain("I cannot.");
   });
 
