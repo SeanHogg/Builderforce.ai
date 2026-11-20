@@ -1,3 +1,11 @@
+## ✅ RESOLVED 2026-11-19: VS Code 3D text worker failed in the webview (troika `init did not return a callable function`)
+
+The webview's 3D stage logged `Worker module function was called but init did not return a callable function` more than 35 times (VSIX .193, `chunk-StageHost.js`).
+- **Cause:** troika-three-text lays out text in a `blob:` Worker and rebuilds each module there with `importScripts(blob: URL)`. A blob worker inherits the page CSP, and `importScripts` is checked against `script-src`, which `worker-src` does not cover.
+- The webview's `bundleCsp` `script-src` had no `blob:`, so every module came back `undefined` and every text layout failed. The web app's CSP already allowed `blob:`, which is why the web app was unaffected.
+- **Fix:** `blob:` added to `script-src` in `clients/vscode/src/webviewBundleShell.ts`, after a security review. A blob: URL can only be created by code already running in this origin, and its name is an unguessable UUID, so injected markup gains nothing. The accepted cost is that already-running code can turn a string into script this way, which is equivalent to eval.
+- **Test:** a regression test pins the exact `script-src` source list.
+
 ## ✅ RESOLVED 2026-11-19: VS Code "Webview is disposed" uncaught error (VSIX .193 Runtime Status)
 
 Cause: the Visualization panel's KnowledgeBridge posted with `postToWebview(this.panel.webview, …)`. A knowledge review run that outlived the panel then read the `WebviewPanel.webview` getter on a disposed panel, and that getter throws. The same lazy reads, plus view chrome writes after an `await`, existed in several more places. Fixes:
