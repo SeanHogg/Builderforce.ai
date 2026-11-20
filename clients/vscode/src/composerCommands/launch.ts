@@ -53,7 +53,7 @@ export function launchExecutor(deps: LaunchDeps): ComposerCommandExecutor {
 
   /** Ask about the launcher's certificate (BEFORE the browser opens on it), then open the browser. */
   const trustThenOpen = async (launcher: RunningLauncher, lines: string[], force: boolean): Promise<ComposerReply> => {
-    const trust = deps.trust ? await deps.trust(launcher.caCertPath, force) : { lines: [], failed: false };
+    const trust = deps.trust ? await deps.trust(launcher.caCertPath ?? undefined, force) : { lines: [], failed: false };
     await deps.openExternal(launcher.url);
     return { ...opened(launcher.url, [...lines, ...trust.lines]), ...(trust.failed ? { tone: "error" as const } : {}) };
   };

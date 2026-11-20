@@ -8,8 +8,8 @@
 export interface RunningLauncher {
   /** `https://localhost:<port>/#token=…` — the fragment carries the per-launch token. */
   readonly url: string;
-  /** The local CA the launcher's HTTPS certificate chains to (a launcher serving TLS). */
-  readonly caCertPath?: string;
+  /** The local CA the launcher's HTTPS certificate chains to; `null` (or absent) when it serves no TLS. */
+  readonly caCertPath?: string | null;
   close(): Promise<void>;
 }
 
