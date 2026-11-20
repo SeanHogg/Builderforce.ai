@@ -33,6 +33,7 @@ import { EvermindRunChip } from './EvermindRunChip';
 import { useExecutionStream, type ExecutionFileChange } from './useExecutionStream';
 import { parseResult, filesFromResult } from './executionResultFiles';
 import { useExecutionTrace } from './useExecutionTrace';
+import { execCloudAgentRef, executionAgentName, type ExecutionAgentLabels } from './executionAgent';
 import { agentMessageText, isGenuineToolCall, runDispatchType, runProvenance } from './executionTraceEvents';
 import { ObservabilityContent } from '../ObservabilityContent';
 import { TaskChangesPanel } from './TaskChangesPanel';
@@ -72,37 +73,6 @@ const RUNNING = new Set(['pending', 'submitted', 'running']);
  * waiting for an answer to THIS one.
  */
 const LIVE = new Set([...RUNNING, 'paused']);
-
-/** The cloud agent that ran a specific execution — read from that execution's own
- *  persisted payload, so each run's logs/triage are scoped to the agent that
- *  ACTUALLY ran it (not the task's current `assignedAgentRef`, which later runs
- *  overwrite). Returns undefined for host runs / default runs with no pinned ref. */
-function execCloudAgentRef(payload: unknown): string | undefined {
-  if (typeof payload !== 'string' || !payload) return undefined;
-  try {
-    const p = JSON.parse(payload) as { cloudAgentRef?: unknown };
-    return typeof p.cloudAgentRef === 'string' && p.cloudAgentRef.trim() ? p.cloudAgentRef.trim() : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-/** Display name of the agent that ran a SPECIFIC execution — a self-hosted host,
- *  a named cloud agent, or the gateway-default bucket. Read from the execution's
- *  OWN fields (`agentHostId` / `cloudAgentRef`, stamped at dispatch), so it always
- *  reflects who actually ran THAT run — never the task's current assignment, which
- *  a later run overwrites. Shared by the execution header and the chip tooltips. */
-function executionAgentName(
-  e: { agentHostId?: number | null; cloudAgentRef?: string | null; payload?: unknown } | null | undefined,
-  agentHosts: AgentHost[],
-  cloudAgentNames: Map<string, string>,
-): string {
-  const hostId = e?.agentHostId;
-  if (hostId != null) return agentHosts.find((h) => h.id === hostId)?.name ?? `Agent ${hostId}`;
-  const ref = e?.cloudAgentRef ?? execCloudAgentRef(e?.payload);
-  if (!ref) return 'BuilderForce Cloud (default)';
-  return cloudAgentNames.get(ref) ?? 'Cloud agent';
-}
 
 export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task: Task; agentHosts: AgentHost[]; onTaskChanged?: () => void }) {
   const fmt = useFormat();
@@ -402,10 +372,13 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
   // run: a self-hosted host (execution.agentHostId) or, for cloud runs, the
   // ticket's assigned cloud agent (telemetry is keyed by its ide_agents.id, or
   // the '__default__' bucket when no named agent ran).
+  const agentLabels = useMemo<ExecutionAgentLabels>(() => ({
+    host: (id) => t('agentName.host', { id }), defaultCloud: t('agentName.defaultCloud'), cloud: t('agentName.cloud'),
+  }), [t]);
   const obsScopeProps = useMemo(() => {
     const hostId = (selected as { agentHostId?: number | null } | null)?.agentHostId;
     if (hostId != null) {
-      return { agentHostId: hostId, agentHostName: agentHosts.find((h) => h.id === hostId)?.name ?? `Agent ${hostId}` };
+      return { agentHostId: hostId, agentHostName: agentHosts.find((h) => h.id === hostId)?.name ?? agentLabels.host(hostId) };
     }
     // Scope to the agent that ran THE SELECTED execution: its persisted
     // `cloudAgentRef` (stamped at dispatch), else its payload, else the task's
@@ -415,9 +388,9 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
     const ref = (selected as { cloudAgentRef?: string | null } | null)?.cloudAgentRef
       ?? execCloudAgentRef(selected?.payload)
       ?? task.assignedAgentRef ?? '__default__';
-    const name = cloudAgentNames.get(ref) ?? (ref === '__default__' ? 'BuilderForce Cloud (default)' : 'Cloud agent');
+    const name = cloudAgentNames.get(ref) ?? (ref === '__default__' ? agentLabels.defaultCloud : agentLabels.cloud);
     return { cloudAgentRef: ref, cloudAgentName: name };
-  }, [selected, agentHosts, task.assignedAgentRef, cloudAgentNames]);
+  }, [selected, agentHosts, task.assignedAgentRef, cloudAgentNames, agentLabels]);
 
   // Per-run agent identity for the selected execution's header: the name of the
   // agent that ACTUALLY ran it (from its own stamped fields) plus the authoritative
@@ -425,8 +398,8 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
   // run, so reopening an older execution shows what ran it — not the task's current
   // (possibly since-changed V1↔V2) assignment.
   const runAgentName = useMemo(
-    () => (selected ? executionAgentName(selected, agentHosts, cloudAgentNames) : ''),
-    [selected, agentHosts, cloudAgentNames],
+    () => (selected ? executionAgentName(selected, agentHosts, cloudAgentNames, agentLabels) : ''),
+    [selected, agentHosts, cloudAgentNames, agentLabels],
   );
   const runAgentType = useMemo(() => runDispatchType(toolEvents), [toolEvents]);
   const evermindModels = useMemo(() => runProvenance(toolEvents).models, [toolEvents]);
@@ -657,7 +630,7 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
                 onSelect={() => setSelectedId(e.id)}
                 onRerun={() => rerun(e, st)}
                 rerunning={rerunningId === e.id}
-                agentName={executionAgentName(e, agentHosts, cloudAgentNames)}
+                agentName={executionAgentName(e, agentHosts, cloudAgentNames, agentLabels)}
                 // NEWEST RUN ONLY (the list is newest-first). The build verdict is a fact
                 // about the branch as it stands now, so badging every historical chip
                 // with it would claim each of those runs had been validated separately.

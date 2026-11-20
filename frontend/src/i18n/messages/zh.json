@@ -19061,6 +19061,11 @@
     "noExecutions": "暂无执行记录。使用上方的运行按钮将此任务排入代理队列。",
     "executionHeader": "执行 #{id}",
     "agentThatRan": "运行此次执行的代理",
+    "agentName": {
+      "host": "代理 {id}",
+      "defaultCloud": "Builderforce Cloud（默认）",
+      "cloud": "云代理"
+    },
     "ranAs": " · 以 {type} 身份运行",
     "live": "实时",
     "polling": "轮询中",

@@ -15,15 +15,16 @@ export function MergeGrantStatus({ executionId, runStatus }: {
   runStatus?: string | null;
 }) {
   const t = useTranslations('mergeGrant');
-  const [grant, setGrant] = useState<MergeGrantView | null>(null);
+  // Keyed by the execution it was read for, so switching runs never shows the previous run's grant.
+  const [loaded, setLoaded] = useState<{ executionId: number; grant: MergeGrantView | null } | null>(null);
+  const grant = loaded?.executionId === executionId ? loaded.grant : null;
 
   useEffect(() => {
     let live = true;
-    setGrant(null);
     // Through a resolved promise, so even a synchronous throw from the client lands in the reporter below.
     Promise.resolve()
       .then(() => runtimeApi.mergeGrant(executionId))
-      .then((r) => { if (live) setGrant(r?.grant ?? null); })
+      .then((r) => { if (live) setLoaded({ executionId, grant: r?.grant ?? null }); })
       // The run view still stands without the grant panel; the miss is reported, not swallowed.
       .catch((error: unknown) => void reportBackgroundFailure({
         title: 'MergeGrantStatusLoadFailed',
@@ -44,7 +45,7 @@ export function MergeGrantStatus({ executionId, runStatus }: {
     <div
       style={{
         display: 'grid', gap: 4, marginBottom: 10, padding: '8px 10px', minWidth: 0,
-        background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', fontSize: 12,
+        background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', fontSize: 'var(--font-size-small)',
       }}
     >
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'baseline' }}>

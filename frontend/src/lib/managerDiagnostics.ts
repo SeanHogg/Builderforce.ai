@@ -27,7 +27,6 @@
 import type {
   ManagerAction,
   ManagerConfig,
-  ManagerDailyDigest,
   ManagerOverview,
   ManagerPolicy,
   ManagerPassRecord,
@@ -36,6 +35,7 @@ import type {
   StallRegister,
   StallWatchRow,
 } from './builderforceApi';
+import type { ManagerDailyDigest } from './managerDigestClient';
 import {
   capText,
   collapseRuns,

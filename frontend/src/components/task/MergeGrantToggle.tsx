@@ -43,7 +43,7 @@ export function MergeGrantToggle({ value, onChange, disabled, cloudTarget = true
       <label
         title={tooltip}
         style={{
-          display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, color: 'var(--text-primary)',
+          display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 'var(--font-size-small)', color: 'var(--text-primary)',
           cursor: locked ? 'not-allowed' : 'pointer', opacity: available ? 1 : 0.6, flexWrap: 'wrap',
         }}
       >
@@ -57,12 +57,12 @@ export function MergeGrantToggle({ value, onChange, disabled, cloudTarget = true
         />
         <span style={{ display: 'grid', gap: 2, minWidth: 0, flex: '1 1 200px' }}>
           <span style={{ fontWeight: 600 }}>{t('label')}</span>
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('help')}</span>
+          <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{t('help')}</span>
         </span>
       </label>
       {value.enabled && available && (
         <div style={{ display: 'grid', gap: 4, minWidth: 0 }}>
-          <label htmlFor={reasonId} style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>
+          <label htmlFor={reasonId} style={{ fontSize: 'var(--font-size-small)', fontWeight: 600, color: 'var(--text-secondary)' }}>
             {t('reasonLabel')}
           </label>
           <textarea
@@ -76,12 +76,12 @@ export function MergeGrantToggle({ value, onChange, disabled, cloudTarget = true
             aria-invalid={missingReason}
             onChange={(e) => onChange({ ...value, reason: e.target.value })}
             style={{
-              width: '100%', boxSizing: 'border-box', padding: '7px 10px', fontSize: 13, resize: 'vertical',
+              width: '100%', boxSizing: 'border-box', padding: '7px 10px', fontSize: 'var(--font-size-small)', resize: 'vertical',
               border: `1px solid ${missingReason ? 'var(--danger)' : 'var(--border-subtle)'}`,
               borderRadius: 'var(--radius-md)', background: 'var(--bg-deep)', color: 'var(--text-primary)',
             }}
           />
-          {missingReason && <span style={{ fontSize: 12, color: 'var(--danger)' }}>{t('reasonRequired')}</span>}
+          {missingReason && <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--danger)' }}>{t('reasonRequired')}</span>}
         </div>
       )}
     </div>
