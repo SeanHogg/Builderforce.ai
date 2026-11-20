@@ -24,7 +24,7 @@ import {
   appendTaskPrdRevision, editTaskPrdSection, ensureTaskPrdRecord, findTaskPrimarySpec,
 } from '../../prd/taskPrd';
 import { resolveTicketRepoContext } from '../../repos/commitFileAsPendingChange';
-import { commitPrdAsPendingChange, taskPrdRepoPath } from '../../repos/commitPrdToRepo';
+import { commitPrdAsPendingChange, taskPrdRepoPath, type CommitPrdResult } from '../../repos/commitPrdToRepo';
 import { listBranchDiff, listRepoFiles } from '../../repos/readRepoContents';
 import { resolveIdeWorkspaceForRun, snapshotIdeWorkspace } from './ideWorkspaceCoding';
 import { recordCloudToolEvent } from '../cloudToolEvents';
@@ -44,9 +44,11 @@ export async function recordTaskFileChange(
   path: string,
   change: 'created' | 'modified' | 'deleted',
   agent: string,
+  /** The commit the provider says this write created — the platform's record of its own commits. */
+  commitSha: string | null = null,
 ): Promise<void> {
   try {
-    await db.insert(taskFileChanges).values({ tenantId, taskId, executionId, path, change, agent });
+    await db.insert(taskFileChanges).values({ tenantId, taskId, executionId, path, change, agent, commitSha: commitSha?.toLowerCase() ?? null });
   } catch (error) {
     reportCaughtError(error, { source: "application/runtime/cloudAgent/prd.ts", operation: "recordTaskFileChange", context: { logMessage: '[cloud-run] task file-change persistence failed', details: { tenantId, taskId, executionId, path, change, error } } });
   }
@@ -284,9 +286,16 @@ async function landPrdChange(
 ): Promise<string | null> {
   const fileChange = args.isUpdate ? 'modified' : 'created';
   const prdPath = taskPrdRepoPath(args.taskId);
-  await recordTaskFileChange(db, args.tenantId, args.taskId, args.executionId, prdPath, fileChange, args.agentLabel);
-
-  const committed = await commitPrdAsPendingChange(db, integrationCredentialSecret(env), args.tenantId, args.taskId, args.taskTitle, args.prd, args.agentLabel);
+  // The change is recorded whether or not the commit lands (as before), and carries the SHA the
+  // provider returned when it did — the platform's proof that commit is this run's (PRD 48 §4.6).
+  let committedSha: string | null = null;
+  let committed: CommitPrdResult;
+  try {
+    committed = await commitPrdAsPendingChange(db, integrationCredentialSecret(env), args.tenantId, args.taskId, args.taskTitle, args.prd, args.agentLabel);
+    if (committed.ok) committedSha = committed.commitSha;
+  } finally {
+    await recordTaskFileChange(db, args.tenantId, args.taskId, args.executionId, prdPath, fileChange, args.agentLabel, committedSha);
+  }
   if (committed.ok) {
     await db.update(tasks)
       .set({ gitBranch: committed.branch, updatedAt: new Date() })

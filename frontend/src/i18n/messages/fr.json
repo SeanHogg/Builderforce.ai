@@ -17881,6 +17881,7 @@
     "grantedBy": "Autorisée par {name}",
     "reasonShown": "Raison : {reason}",
     "cloudOnly": "La fusion dans main une fois terminé n’est disponible que pour les exécutions d’agents cloud. Choisissez un agent cloud pour l’autoriser.",
+    "multiRepo": "Ce ticket couvre plusieurs dépôts, une seule autorisation ne peut donc pas couvrir ses pull requests. Fusionnez chacune dans le produit.",
     "recordFailed": "L’exécution a démarré, mais la fusion dans main n’a pas pu être enregistrée. Fusionnez sa pull request dans le produit lorsqu’elle sera prête.",
     "held": {
       "ci_pending": "En attente de la réussite de la CI sur le commit couvert par l’autorisation.",
@@ -17892,7 +17893,12 @@
       "cancelled": "L’exécution a été annulée, donc rien n’est fusionné.",
       "no_pull_request": "L’exécution s’est terminée sans sa propre pull request, donc rien n’est fusionné.",
       "head_moved": "De nouveaux commits ont été poussés après l’exécution, l’autorisation ne couvre donc plus cette pull request.",
-      "no_head": "Le commit de la pull request n’a pas pu être lu à la fin de l’exécution, donc rien n’est fusionné."
+      "no_head": "Le commit de la pull request n’a pas pu être lu à la fin de l’exécution, donc rien n’est fusionné.",
+      "run_failed": "L’exécution a échoué avant d’ouvrir sa pull request, donc rien n’est fusionné.",
+      "pr_closed": "La pull request a été fermée sans être fusionnée, l’autorisation ne s’applique donc plus.",
+      "expired": "L’autorisation a expiré sept jours après avoir été accordée. Fusionnez la pull request dans le produit.",
+      "granter_revoked": "La personne qui a autorisé la fusion ne peut plus fusionner de pull requests dans cet espace de travail, l’autorisation ne s’applique donc plus.",
+      "foreign_commits": "La pull request contient des commits que cette exécution n’a pas écrits, l’autorisation ne la couvre donc pas. Fusionnez-la dans le produit après relecture."
     }
   },
   "runAgentControl": {

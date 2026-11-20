@@ -67,9 +67,8 @@ import { readRuntimeDashboard } from '../../application/runtime/runtimeDashboard
 import { ExecutionStatus, TenantRole } from '../../domain/shared/types';
 import type { ResolvedArtifacts } from '../../domain/shared/types';
 import { parseBody, parseOptionalBody, z, zNonEmptyString, zNumberLike, zPositiveInt } from './requestBody';
-import { grantMergeFromRequest, refuseMergeGrant, zMergeGrant } from './mergeGrantRequest';
-import { mergeGrantTargetRefusal, mergeGrantView } from '../../application/runtime/mergeGrants';
-import { payloadNamesCloudAgent } from './mergeGrantRequest';
+import { grantMergeFromRequest, refuseMergeGrant, refuseMergeGrantDispatch, zMergeGrant } from './mergeGrantRequest';
+import { mergeGrantView } from '../../application/runtime/mergeGrants';
 import { parseJsonArray } from '../../domain/shared/json';
 import type { Execution } from '../../domain/execution/Execution';
 import type { Env, HonoEnv } from '../../env';
@@ -506,14 +505,12 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       return c.json({ error: 'Task not found' }, 404);
     }
 
-    // A merge grant is for a CLOUD run only: one aimed at an on-prem host (explicitly, or by the
-    // ticket's host assignment with no cloud agent named) is refused before anything starts.
-    if (body.mergeGrant) {
-      const hostTarget = agentHostIdFromHeader ?? body.agentHostId
-        ?? (taskRow.assignedAgentHostId != null && !payloadNamesCloudAgent(body.payload) ? taskRow.assignedAgentHostId : null);
-      const notCloud = mergeGrantTargetRefusal(hostTarget);
-      if (notCloud) return c.json({ error: notCloud, code: 'merge_grant_not_cloud' }, 400);
-    }
+    // A merge grant is for a CLOUD run on a single-repo ticket — decided by the dispatcher's own
+    // routing rule (`runHostBinding`), before anything starts.
+    const grantDispatchRefused = await refuseMergeGrantDispatch(c, db, body.mergeGrant, {
+      taskId: body.taskId, agentHostId: agentHostIdFromHeader ?? body.agentHostId ?? null, payload: body.payload,
+    });
+    if (grantDispatchRefused) return grantDispatchRefused;
 
     // Admission (dedupe / cap / budget floor), the token gate and the approval gate — one shared helper.
     const gateBlock = await submitRunGates(c, db, { task: taskRow, agentHostId: agentHostIdFromHeader ?? body.agentHostId ?? null, payload: body.payload });

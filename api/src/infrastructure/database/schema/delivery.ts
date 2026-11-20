@@ -1778,9 +1778,16 @@ export const taskFileChanges = pgTable('task_file_changes', {
   change:      text('change').notNull(),
   /** Executing agent label (attribution). */
   agent:       text('agent').notNull(),
+  /**
+   * The commit the provider returned for THIS write (lower-case), or null when it named none
+   * (1358). The platform's own record of which commits on a ticket branch are its runs' — a merge
+   * grant binds only to these (PRD 48 §4.6), never to a commit message anyone can type.
+   */
+  commitSha:   varchar('commit_sha', { length: 64 }),
   createdAt:   timestamp('created_at').notNull().defaultNow(),
 }, (t) => ({
   byTask: index('idx_task_file_changes_task').on(t.taskId, t.createdAt),
+  byCommit: index('idx_task_file_changes_commit').on(t.tenantId, t.taskId, t.commitSha).where(sql`${t.commitSha} IS NOT NULL`),
 }));
 
 

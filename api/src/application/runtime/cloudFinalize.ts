@@ -33,6 +33,7 @@ import { type Db } from '../../infrastructure/database/connection';
 import { executions, tasks } from '../../infrastructure/database/schema';
 import { gateRunPullRequest } from './cloudFinalizeSecurity';
 import { bindGrantToThisRunsPr, voidMergeGrant } from './mergeGrants';
+import { findOpenPullRequestByTask } from '../repos/recordPullRequestRow';
 
 /**
  * Land a finished cloud run: open a PR (recording it for the in-product approval
@@ -75,7 +76,9 @@ export async function finalizeCloudRun(
   // When files were produced but no PR ends up open, capture WHY so the run's
   // summary / timeline explains it instead of silently showing no Pull Request tab.
   let noPrReason = '';
-  // Whether a person's merge grant on this run was bound to the PR it opened (PRD 48 §4.6).
+  // A person's merge grant on this run (PRD 48 §4.6): the PR it would bind, and whether it was
+  // bound (or already settled — a void here is final, so the "no PR" void below must not repeat it).
+  let grantTarget: { prRowId: string; headSha: string | null } | null = null;
   let grantBound = false;
   // The PR this finalize opened, hoisted so the rollback snapshot below can record
   // exactly what a later revert would have to close.
@@ -126,11 +129,9 @@ export async function finalizeCloudRun(
     // already recorded for this head (see cloudFinalizeSecurity: fails closed on a PR that is not recorded).
     const verdict = await gateRunPullRequest(env, db, { tenantId, cloudAgentRef, executionId, agentLabel, repoCtx, pr, prRowId });
 
-    // PRD 48 §4.6 — a person's merge grant on THIS run binds to the PR this run opened, pinned to
-    // the head the security step just judged (resolved from the provider when the step had none).
-    if (prOpened && prRowId) {
-      grantBound = await bindGrantToThisRunsPr(env, db, { tenantId, executionId, prRowId, headSha: verdict.headSha });
-    }
+    // PRD 48 §4.6 — a person's merge grant on THIS run binds to the PR this run opened. Bound after
+    // the branch listing below, which is what proves the head is the run's own last commit.
+    if (prOpened && prRowId) grantTarget = { prRowId, headSha: verdict.headSha };
 
     // THE RUN NEVER MERGES (PRD 48 §4.3). It opens its PR and ends; the PR merge sweep
     // (`repos/prMergeSweep.ts`) is the single merge writer and merges by the PROJECT's settings
@@ -143,6 +144,16 @@ export async function finalizeCloudRun(
       result: prOpened ? `opened PR #${pr.ok ? pr.number : ''} — merge follows the project's settings` : `pr failed: ${pr.ok ? '' : pr.reason}`.slice(0, 300),
     });
     if (prOpened) await recordTypedExecutionClaim(db, { tenantId, executionId, kind: 'delivery', statement: `Opened pull request #${pr.ok ? pr.number : ''}; the project's merge settings decide the merge.` });
+  } else if (repoCtx && opened && 'claimLost' in opened && writtenPaths.size > 0 && !cancelled) {
+    // A RE-RUN on a ticket whose PR is already open: the claim is lost because the PR exists, and
+    // this run pushed onto its branch. A grant on this run binds THAT PR (PRD 48 §4.6), pinned below
+    // to the commit this run pushed — never voided as "no pull request".
+    const existing = await findOpenPullRequestByTask(db, tenantId, taskRow.id, repoCtx.branch)
+      .catch((error) => {
+        reportCaughtError(error, { source: 'application/runtime/cloudFinalize.ts', operation: 'finalizeCloudRun.existingPr', context: { tenantId, executionId } });
+        return null;
+      });
+    if (existing && existing.status !== 'closed') grantTarget = { prRowId: existing.id, headSha: null };
   } else if (!repoCtx && writtenPaths.size > 0 && !cancelled) {
     // The agent produced changes but there is no repo to open a PR against —
     // record why (no linked repo / unusable credential) so it's visible in the
@@ -218,6 +229,14 @@ ${ciVerified
       if (listing.commits) {
         await recordCloudRunAttributions(db, { tenantId, executionId, taskId: taskRow.id, repoCtx, commits: listing.commits })
           .catch((error) => reportCaughtError(error, { source: 'application/runtime/cloudFinalize.ts', operation: 'finalizeCloudRun', context: { logMessage: '[cloud-finalize] run commit attribution failed', details: { tenantId, executionId, taskId: taskRow.id, error } } }));
+      }
+      // PRD 48 §4.6 — pin a person's merge grant to the LAST COMMIT THIS RUN PUSHED, proven from the
+      // same listing: the PR's head must be one of this run's own commits, or the grant is voided.
+      if (grantTarget) {
+        grantBound = await bindGrantToThisRunsPr(env, db, {
+          tenantId, executionId, taskId: taskRow.id, prRowId: grantTarget.prRowId,
+          headSha: grantTarget.headSha, runCommits: listing.commits,
+        });
       }
     }
   }

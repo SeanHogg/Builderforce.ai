@@ -18,6 +18,7 @@ import { RoleGate } from '@/components/RoleGate';
 import { useTaskRunner, defaultRunTarget } from './useTaskRunner';
 import { TicketRepoSet } from './TicketRepoSet';
 import { MergeGrantToggle, mergeGrantOf, type MergeGrantValue } from './MergeGrantToggle';
+import { reportBackgroundFailure } from '@/lib/reportError';
 
 /**
  * Run-with-agent control — replaces the old "Send to AgentHost" button. A button
@@ -71,7 +72,9 @@ export function RunAgentControl({ task, agentHosts, onRan, onAwaitingApproval }:
   const [mergeGrant, setMergeGrant] = useState<MergeGrantValue>({ enabled: false, reason: '' });
   // A grant is for a CLOUD run only (the server refuses one aimed at an on-prem host or "auto").
   const targetIsCloud = target.startsWith('cloud:');
-  const grantActive = targetIsCloud && mergeGrant.enabled;
+  // …and to a single-repo ticket (read below from its bound repo set).
+  const [multiRepo, setMultiRepo] = useState(false);
+  const grantActive = targetIsCloud && !multiRepo && mergeGrant.enabled;
   const grantIncomplete = grantActive && !mergeGrantOf(mergeGrant);
 
   // Surface "the agent can't commit" before a run silently degrades to a text
@@ -84,6 +87,18 @@ export function RunAgentControl({ task, agentHosts, onRan, onAwaitingApproval }:
   useEffect(() => {
     reposApi.list(task.projectId).then(setRepos).catch(() => setRepos([]));
   }, [task.projectId]);
+
+  // PRD 48 §4.6 — a grant covers ONE pull request, so a ticket spanning several repositories
+  // cannot take one (the server refuses it too). Read the ticket's bound repo set to say so up front.
+  useEffect(() => {
+    reposApi.getTaskRepoBindings(task.id)
+      .then((set) => setMultiRepo(set.bindings.length > 1))
+      .catch((error: unknown) => void reportBackgroundFailure({
+        title: 'RunAgentControlRepoSetLoadFailed',
+        message: error instanceof Error ? error.message : String(error),
+        level: 'warning',
+      }));
+  }, [task.id]);
 
   return (
     <div>
@@ -185,7 +200,7 @@ export function RunAgentControl({ task, agentHosts, onRan, onAwaitingApproval }:
           </button>
         </RoleGate>
       </div>
-      <MergeGrantToggle value={mergeGrant} onChange={setMergeGrant} disabled={running} cloudTarget={targetIsCloud} />
+      <MergeGrantToggle value={mergeGrant} onChange={setMergeGrant} disabled={running} cloudTarget={targetIsCloud} multiRepo={multiRepo} />
       {error && <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 6 }}>{error}</div>}
       {mergeGrantFailed && <div style={{ fontSize: 12, color: 'var(--warning)', marginTop: 6 }}>{tGrant('recordFailed')}</div>}
       {/* MULTI-REPO SPANNING: the picker above pins the ONE repo a run resolves to;

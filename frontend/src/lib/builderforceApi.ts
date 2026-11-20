@@ -2985,15 +2985,16 @@ export interface AttentionResponse {
 
 /** A person's "merge into main" grant on a run (PRD 48 §4.6), and where it stands. */
 export interface MergeGrantView {
-  grantedBy: string;
-  grantedByName: string | null;
+  /** Null once the granting user has been deleted — `grantedByName` is the snapshot that survives. */
+  grantedBy: string | null;
+  grantedByName: string;
   reason: string;
   createdAt: string;
   status: 'pending' | 'merged' | 'held' | 'voided';
   /** Why the merge sweep is holding it right now — set when `status` is `held`. A code the UI words. */
   heldCode: 'ci_pending' | 'ci_failed' | 'security' | 'merge_refused' | null;
   /** Why the grant can no longer apply — set when `status` is `voided`. A code the UI words. */
-  voidCode: 'cancelled' | 'no_pull_request' | 'head_moved' | 'no_head' | null;
+  voidCode: 'cancelled' | 'run_failed' | 'no_pull_request' | 'head_moved' | 'no_head' | 'pr_closed' | 'expired' | 'granter_revoked' | 'foreign_commits' | null;
 }
 
 export interface ExecutionControlResponse {

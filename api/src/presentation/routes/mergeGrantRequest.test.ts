@@ -5,23 +5,25 @@
 import { Hono } from 'hono';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const h = vi.hoisted(() => ({ record: vi.fn(async (..._a: unknown[]) => undefined) }));
+const h = vi.hoisted(() => ({
+  record: vi.fn(async (..._a: unknown[]) => undefined),
+  dispatchRefusal: vi.fn(async (..._a: unknown[]) => null as unknown),
+}));
 vi.mock('../../application/runtime/mergeGrants', async (orig) => ({
-  ...(await orig<Record<string, unknown>>()), recordMergeGrant: h.record,
+  ...(await orig<Record<string, unknown>>()), recordMergeGrant: h.record, mergeGrantDispatchRefusal: h.dispatchRefusal,
 }));
 vi.mock('../../application/activity/activityLog', async (orig) => ({
   ...(await orig<Record<string, unknown>>()),
   resolveActorFromContext: vi.fn(async () => ({ type: 'user', ref: 'user-1', name: 'Ada' })),
 }));
 
-import { grantMergeFromRequest, payloadNamesCloudAgent, refuseMergeGrant, zMergeGrant } from './mergeGrantRequest';
-import { mergeGrantTargetRefusal } from '../../application/runtime/mergeGrants';
+import { grantMergeFromRequest, refuseMergeGrant, refuseMergeGrantDispatch, zMergeGrant } from './mergeGrantRequest';
 import { parseBody, z } from './requestBody';
 import { errorHandler } from '../middleware/errorHandler';
 
 const Body = z.object({ mergeGrant: zMergeGrant });
 
-function app(identity: { role: string; agentActorRef?: string; machineActor?: unknown }) {
+function app(identity: { role: string; agentActorRef?: string; machineActor?: unknown; apiKeyId?: string; clientSurface?: string }) {
   const a = new Hono();
   a.onError(errorHandler as never);
   a.post('/dispatch', async (c) => {
@@ -29,6 +31,8 @@ function app(identity: { role: string; agentActorRef?: string; machineActor?: un
     ctx.set('tenantId', 7); ctx.set('userId', 'user-1'); ctx.set('role', identity.role);
     if (identity.agentActorRef) ctx.set('agentActorRef', identity.agentActorRef);
     if (identity.machineActor) ctx.set('machineActor', identity.machineActor);
+    if (identity.apiKeyId) ctx.set('apiKeyId', identity.apiKeyId);
+    if (identity.clientSurface) ctx.set('clientSurface', identity.clientSurface);
     const body = await parseBody(c as never, Body);
     const refused = refuseMergeGrant(c as never, body.mergeGrant);
     if (refused) return refused;
@@ -99,17 +103,40 @@ describe('a dispatch route\'s merge grant', () => {
   });
 });
 
-describe('a grant is for a CLOUD run only', () => {
-  it('a run aimed at an on-prem host refuses a grant; a cloud run does not', () => {
-    expect(mergeGrantTargetRefusal(5)).toMatch(/cloud runs only/);
-    expect(mergeGrantTargetRefusal(null)).toBeNull();
-    expect(mergeGrantTargetRefusal(undefined)).toBeNull();
+describe('a grant comes from a PERSON in the WEB APP only', () => {
+  it('is refused (403) for an API-key call, and nothing is recorded', async () => {
+    const res = await post({ role: 'owner', apiKeyId: 'key-1' }, { mergeGrant: { reason: 'ship it' } });
+    expect(res.status).toBe(403);
+    expect(h.record).not.toHaveBeenCalled();
   });
 
-  it('a payload naming a cloud agent makes the run a cloud run, whatever host the ticket is assigned', () => {
-    expect(payloadNamesCloudAgent(JSON.stringify({ cloudAgentRef: 'agent-1' }))).toBe(true);
-    expect(payloadNamesCloudAgent(JSON.stringify({ model: 'x' }))).toBe(false);
-    expect(payloadNamesCloudAgent('not json')).toBe(false);
-    expect(payloadNamesCloudAgent(undefined)).toBe(false);
+  it('is refused (403) from a device client (VS Code), and nothing is recorded', async () => {
+    const res = await post({ role: 'owner', clientSurface: 'vscode' }, { mergeGrant: { reason: 'ship it' } });
+    expect(res.status).toBe(403);
+    expect(h.record).not.toHaveBeenCalled();
+  });
+});
+
+describe('refuseMergeGrantDispatch — the dispatch must be a single-repo CLOUD run', () => {
+  it('answers 400 with the dispatcher-derived code before anything is dispatched', async () => {
+    h.dispatchRefusal.mockResolvedValueOnce({ code: 'merge_grant_not_cloud', error: 'on-prem host' });
+    const a = new Hono();
+    a.post('/x', async (c) => {
+      (c as never as { set(k: string, v: unknown): void }).set('tenantId', 7);
+      const refused = await refuseMergeGrantDispatch(c as never, {} as never, { reason: 'hotfix' }, { taskId: 9 });
+      return refused ?? c.json({ ok: true });
+    });
+    const res = await a.request('/x', { method: 'POST' }, {});
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'on-prem host', code: 'merge_grant_not_cloud' });
+    expect(h.dispatchRefusal).toHaveBeenCalledWith(expect.anything(), expect.anything(), { tenantId: 7, taskId: 9 });
+  });
+
+  it('asks nothing when the request carries no grant', async () => {
+    h.dispatchRefusal.mockClear();
+    const a = new Hono();
+    a.post('/x', async (c) => (await refuseMergeGrantDispatch(c as never, {} as never, undefined, { taskId: 9 })) ?? c.json({ ok: true }));
+    expect((await a.request('/x', { method: 'POST' }, {})).status).toBe(200);
+    expect(h.dispatchRefusal).not.toHaveBeenCalled();
   });
 });

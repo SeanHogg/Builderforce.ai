@@ -14,6 +14,7 @@ import {
   bigint,
   bigserial,
   boolean,
+  check,
   date,
   index,
   integer,
@@ -601,17 +602,23 @@ export const mergeGrants = pgTable('merge_grants', {
   id:          uuid('id').primaryKey().defaultRandom(),
   tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   executionId: integer('execution_id').notNull().references(() => executions.id, { onDelete: 'cascade' }),
-  grantedBy:   varchar('granted_by', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  /** The person — nullable, SET NULL on user deletion: the audit row must outlive them. */
+  grantedBy:   varchar('granted_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  /** Their name at grant time — the audit answer that survives the user's deletion. */
+  grantedByLabel: text('granted_by_label').notNull(),
   reason:      text('reason').notNull(),
   createdAt:   timestamp('created_at').notNull().defaultNow(),
   consumedAt:  timestamp('consumed_at'),
-  /** Set when the grant can no longer apply: the run ended without a PR or was cancelled, or
-   *  the bound PR's head moved past the pinned commit. `voidReason` is a code the UI words. */
+  /** Set when the grant can no longer apply (run ended without its PR, cancelled, failed, head
+   *  moved, expired, granter revoked, PR closed). `voidReason` is a code the UI words. */
   voidedAt:    timestamp('voided_at'),
   voidReason:  varchar('void_reason', { length: 40 }),
+  /** When the sweep last visited it — rotates the cohort so no tenant's held grants starve another's. */
+  lastConsideredAt: timestamp('last_considered_at'),
 }, (t) => [
   uniqueIndex('uq_merge_grants_execution').on(t.executionId),
-  index('idx_merge_grants_open').on(t.tenantId, t.executionId).where(sql`${t.consumedAt} IS NULL AND ${t.voidedAt} IS NULL`),
+  index('idx_merge_grants_rotation').on(t.lastConsideredAt, t.createdAt).where(sql`${t.consumedAt} IS NULL AND ${t.voidedAt} IS NULL`),
+  check('chk_merge_grants_reason', sql`length(btrim(${t.reason})) > 0`),
 ]);
 
 /**

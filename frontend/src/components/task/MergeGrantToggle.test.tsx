@@ -24,6 +24,16 @@ describe('MergeGrantToggle — PRD 48 §4.6', () => {
     expect(screen.queryByRole('textbox')).toBeNull();
   });
 
+  it('is DISABLED (not hidden) for a multi-repo ticket, with why as its tooltip', () => {
+    perm.allowed = true;
+    render(<MergeGrantToggle value={{ enabled: true, reason: 'hotfix' }} onChange={noop} cloudTarget multiRepo />);
+    const box = screen.getByRole('checkbox');
+    expect(box).toBeDisabled();
+    expect(box).not.toBeChecked();
+    expect(box.closest('label')?.getAttribute('title')).toBe('mergeGrant.multiRepo');
+    expect(screen.queryByRole('textbox')).toBeNull();
+  });
+
   it('is DISABLED with the role hint for a role that cannot grant', () => {
     perm.allowed = false;
     render(<MergeGrantToggle value={{ enabled: false, reason: '' }} onChange={noop} />);

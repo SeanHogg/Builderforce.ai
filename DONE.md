@@ -180,9 +180,12 @@ dedupe — and is documented as the single writer. Runs never merge.
      starts (the dispatcher's `onSubmitted` hook), so prep always reads it. A failed write never fails the
      dispatch: the response says `mergeGrant: 'failed'`. No agent tool carries a grant.
    - **Binding.** The grant BINDS at the run's finalize to the PR that run opened, or, on a re-run of a ticket that
-     already has an open PR, to that PR. Either way it is pinned to the last commit THIS run pushed: the PR head must be
-     one of the run's own commits (the `— task #N · run #M (` marker in the branch listing), otherwise the grant voids
-     `head_moved`, and with no readable head it voids `no_head`. There is no fallback to whatever head the provider
+     already has an open PR, to that PR. Either way it is pinned to the last commit THIS run pushed, proven by SHA and
+     never by commit text (the subject marker is a public string). Every platform write records the commit SHA its
+     provider returned (`task_file_changes.commit_sha`, migration 1358). The PR head must be a SHA recorded for THIS
+     execution, otherwise the grant voids `head_moved`, and with no readable head it voids `no_head`. Every commit ahead
+     of base must be recorded for a run of the same ticket, otherwise it voids `foreign_commits`; commits from before
+     1358 and platform base-sync merge commits count as foreign, so such a PR is merged in-product after review. There is no fallback to whatever head the provider
      reports. A run that ends without a PR voids `no_pull_request` / `cancelled`. A run that dies before finalize
      voids at the central terminal transition (the execution repository's terminal and reaper hooks): an unbound
      grant voids `run_failed` / `cancelled`.
@@ -190,8 +193,9 @@ dedupe — and is documented as the single writer. Runs never merge.
      head off the pin). Grants are visited in `last_considered_at NULLS FIRST` order and stamped on each visit, so no
      tenant starves another under the per-tick cap. Before the claim, the sweep re-checks that the granter is STILL a
      tenant member with the merge role. If not, the grant voids `granter_revoked`. It then claims the grant atomically.
-     The claim is released only on a definite refusal (`ok:false`): on a thrown merge the claim is KEPT and the
-     settle pass reconciles it.
+     The claim is released only on a definite refusal (`ok:false`): on a thrown merge the claim is KEPT. Once it is
+     30 minutes old with its PR still open, the sweep asks the provider: merged keeps the grant spent; not merged
+     releases the claim back to live and reports the release.
    - **Settle and expiry.** Each tick settles grants whose bound PRs are all closed or merged: one merged elsewhere
      consumes the grant, all closed voids `pr_closed`. A grant still open 7 days after `created_at` voids `expired`.
      When a PR was already merged, the journal says it was settled without a merge, never that the platform merged

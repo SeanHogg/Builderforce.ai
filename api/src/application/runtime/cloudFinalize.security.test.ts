@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const h = vi.hoisted(() => ({
   bind: vi.fn(async (..._a: unknown[]) => false),
+  existingPr: vi.fn(async (..._a: unknown[]) => null as unknown),
+  commits: [{ sha: 'abc123', message: 'Update a.ts — task #7 · run #42 (Coder)', authorName: null }] as unknown[],
   voidGrant: vi.fn(async (..._a: unknown[]) => undefined),
   markMerged: vi.fn(async () => null),
   publishVerdict: vi.fn(async (..._a: unknown[]) => undefined),
@@ -11,10 +13,14 @@ const h = vi.hoisted(() => ({
 }));
 
 vi.mock('../integrations/integrationCredentialSecret', () => ({ integrationCredentialSecret: () => 'secret' }));
-vi.mock('../observability/caughtErrorReporter', () => ({ reportCaughtError: vi.fn() }));
+vi.mock('../observability/caughtErrorReporter', () => ({
+  reportCaughtError: vi.fn(),
+  reportedFallback: <T,>(fallback: T) => () => fallback,
+}));
 vi.mock('../skills/skillReflection', () => ({ recordRunReflection: vi.fn(async () => undefined) }));
 vi.mock('../repos/recordPullRequestRow', () => ({
   recordPullRequestRow: vi.fn(async () => ({ id: 'row-1' })), markPullRequestMergedById: h.markMerged,
+  findOpenPullRequestByTask: h.existingPr,
 }));
 vi.mock('../repos/recordTaskPullRequest', () => ({ recordTaskPullRequest: vi.fn(async () => ({ id: 'row-1' })) }));
 vi.mock('../checks/publishTaskVerdict', () => ({ publishAgentRunVerdict: h.publishVerdict }));
@@ -29,7 +35,10 @@ vi.mock('./cloudToolEvents', () => ({ recordCloudToolEvent: h.toolEvent }));
 vi.mock('./mergeGrants', () => ({ bindGrantToThisRunsPr: h.bind, voidMergeGrant: h.voidGrant }));
 vi.mock('./adoptRunDraftPr', () => ({ adoptRunDraftPr: vi.fn(async () => null) }));
 vi.mock('./runPullRequestText', () => ({ runPullRequestText: vi.fn(() => '') }));
-vi.mock('./runRollback', () => ({ recordRunRollbackSnapshot: vi.fn(async () => undefined) }));
+// The branch listing finalize already makes — handed back so the grant can be pinned to the run's own last commit.
+vi.mock('./runRollback', () => ({
+  recordRunRollbackSnapshot: vi.fn(async (_db: unknown, a: { onListed?: (c: unknown[]) => void }) => { a.onListed?.(h.commits); return null; }),
+}));
 vi.mock('./runBranchTeardown', () => ({ teardownRunBranch: vi.fn(async () => undefined) }));
 vi.mock('../../env', () => ({ resolveAppBaseUrl: () => 'https://app.test' }));
 vi.mock('../provenance/finishClaimService', () => ({ recordTypedExecutionClaim: vi.fn(async () => ({ ok: true })) }));
@@ -63,7 +72,7 @@ const ENVS: Array<Record<string, string>> = [
 
 beforeEach(() => {
   h.markMerged.mockClear(); h.publishVerdict.mockClear(); h.step.mockReset(); h.openPr.mockReset(); h.toolEvent.mockClear();
-  h.bind.mockReset().mockResolvedValue(false); h.voidGrant.mockClear();
+  h.bind.mockReset().mockResolvedValue(false); h.voidGrant.mockClear(); h.existingPr.mockReset().mockResolvedValue(null);
 });
 
 describe('finalizeCloudRun calls no merge endpoint (the sweep is the single merge writer)', () => {
@@ -83,12 +92,24 @@ describe('finalizeCloudRun calls no merge endpoint (the sweep is the single merg
 });
 
 describe('finalizeCloudRun — a person\'s merge grant (PRD 48 §4.6)', () => {
-  it('binds the grant to the PR THIS run opened, pinned to the head its security step judged', async () => {
+  it('binds the grant to the PR THIS run opened, with the run\'s own commits to pin it to', async () => {
     h.openPr.mockResolvedValue({ ok: true, number: 9, url: 'https://x/pull/9' });
     h.step.mockResolvedValue({ verdict: { allow: true, headSha: 'abc123' }, scanStatuses: [], incidentsOpened: 0 });
     h.bind.mockResolvedValue(true);
     await finalizeCloudRun({} as never, db, args);
-    expect(h.bind).toHaveBeenCalledWith({}, db, { tenantId: 1, executionId: 42, prRowId: 'row-1', headSha: 'abc123' });
+    expect(h.bind).toHaveBeenCalledWith({}, db, {
+      tenantId: 1, executionId: 42, taskId: 7, prRowId: 'row-1', headSha: 'abc123', runCommits: h.commits,
+    });
+    expect(h.voidGrant).not.toHaveBeenCalled();
+  });
+
+  it('RE-RUN: the ticket\'s PR already exists (claim lost) — binds THAT PR instead of voiding "no pull request"', async () => {
+    h.openPr.mockResolvedValue({ ok: false, claimLost: true });
+    h.existingPr.mockResolvedValue({ id: 'existing-pr', status: 'open' });
+    h.bind.mockResolvedValue(true);
+    await finalizeCloudRun({} as never, db, args);
+    expect(h.existingPr).toHaveBeenCalledWith(db, 1, 7, 'builderforce/task-7');
+    expect(h.bind).toHaveBeenCalledWith({}, db, expect.objectContaining({ prRowId: 'existing-pr', headSha: null, runCommits: h.commits }));
     expect(h.voidGrant).not.toHaveBeenCalled();
   });
 

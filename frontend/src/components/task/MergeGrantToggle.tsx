@@ -18,21 +18,25 @@ export interface MergeGrantValue {
   reason: string;
 }
 
-export function MergeGrantToggle({ value, onChange, disabled, cloudTarget = true }: {
+export function MergeGrantToggle({ value, onChange, disabled, cloudTarget = true, multiRepo = false }: {
   value: MergeGrantValue;
   onChange: (next: MergeGrantValue) => void;
   disabled?: boolean;
   /** A grant applies to a CLOUD run only — disabled (with why) for an on-prem host or "auto". */
   cloudTarget?: boolean;
+  /** A grant covers ONE pull request — disabled (with why) for a ticket spanning several repos. */
+  multiRepo?: boolean;
 }) {
   const t = useTranslations('mergeGrant');
   const tCommon = useTranslations('common');
   const { allowed, required } = usePermission('runtime.mergeGrant');
-  const available = allowed && cloudTarget;
+  const available = allowed && cloudTarget && !multiRepo;
   const locked = !available || disabled;
   const reasonId = useId();
   const missingReason = available && value.enabled && value.reason.trim() === '';
-  const tooltip = !allowed ? tCommon('requiresRoleHint', { role: required }) : !cloudTarget ? t('cloudOnly') : t('help');
+  const tooltip = !allowed
+    ? tCommon('requiresRoleHint', { role: required })
+    : !cloudTarget ? t('cloudOnly') : multiRepo ? t('multiRepo') : t('help');
 
   return (
     <div style={{ marginTop: 8, display: 'grid', gap: 6, minWidth: 0 }}>

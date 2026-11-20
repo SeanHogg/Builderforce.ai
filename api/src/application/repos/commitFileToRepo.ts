@@ -31,8 +31,14 @@ export interface CommitFileInput {
   message: string;
 }
 
+/**
+ * `commitSha` is the commit the provider says THIS write created — the proof a caller records
+ * so a later check can tell the platform's own commits from anyone else's on the branch (PRD 48
+ * §4.6 binds a merge grant only to recorded SHAs). Null when the provider's response did not
+ * name it; a null is never treated as proof of anything.
+ */
 export type CommitFileResult =
-  | { ok: true; branch: string; commitUrl: string | null; existed: boolean }
+  | { ok: true; branch: string; commitUrl: string | null; commitSha: string | null; existed: boolean }
   | { ok: false; code: 'unsupported' | 'provider_error' | 'unreadable' | 'destructive_overwrite'; reason: string };
 
 function unreadableExisting(reason: string): CommitFileResult {
@@ -124,25 +130,29 @@ function toBase64Utf8(str: string): string {
  * Best-effort by construction — a failure here must never turn a SUCCESSFUL commit
  * into a failed one, so every path returns null rather than throwing.
  */
-async function gitlabBranchCommitUrl(
+async function gitlabBranchCommit(
   proj: string,
   branch: string,
   headers: Record<string, string>,
-): Promise<string | null> {
+): Promise<{ commitUrl: string | null; commitSha: string | null }> {
+  // GitLab's Repository Files API does not return the commit it made, so the SHA is the branch
+  // head read right after the write — the provider's best answer, not a guess from our side.
   const res = await fetch(`${proj}/repository/branches/${encodeURIComponent(branch)}`, { headers }).catch(() => null);
-  if (!res || !res.ok) return null;
-  const body = (await res.json().catch(() => null)) as { commit?: { web_url?: string } } | null;
-  return body?.commit?.web_url ?? null;
+  if (!res || !res.ok) return { commitUrl: null, commitSha: null };
+  const body = (await res.json().catch(() => null)) as { commit?: { web_url?: string; id?: string } } | null;
+  return { commitUrl: body?.commit?.web_url ?? null, commitSha: body?.commit?.id ?? null };
 }
 
-/** Bitbucket Cloud: `Location: …/repositories/{o}/{r}/commit/{hash}` → the web URL. */
-function bitbucketCommitUrlFromLocation(
+/** Bitbucket Cloud: `Location: …/repositories/{o}/{r}/commit/{hash}` → the web URL and the hash. */
+function bitbucketCommitFromLocation(
   location: string | null,
   owner: string,
   repo: string,
-): string | null {
+): { commitUrl: string | null; commitSha: string | null } {
   const hash = /\/commit\/([0-9a-f]{7,40})/i.exec(location ?? '')?.[1];
-  return hash ? `https://bitbucket.org/${owner}/${repo}/commits/${hash}` : null;
+  return hash
+    ? { commitUrl: `https://bitbucket.org/${owner}/${repo}/commits/${hash}`, commitSha: hash }
+    : { commitUrl: null, commitSha: null };
 }
 
 /** GitLab path — Repository Files API (plain-text content; branch auto-forked
@@ -181,7 +191,7 @@ async function gitlabCommit(input: CommitFileInput): Promise<CommitFileResult> {
   }).catch(() => null);
   if (!res) return { ok: false, code: 'provider_error', reason: 'commit request failed (network)' };
   if (!res.ok) { const t = await res.text().catch(() => ''); return { ok: false, code: 'provider_error', reason: `GitLab ${res.status}: ${t.slice(0, 200)}` }; }
-  return { ok: true, branch: input.branch, commitUrl: await gitlabBranchCommitUrl(proj, input.branch, headers), existed };
+  return { ok: true, branch: input.branch, ...(await gitlabBranchCommit(proj, input.branch, headers)), existed };
 }
 
 /** Bitbucket Cloud path — create the branch off base (needs the base commit
@@ -233,7 +243,7 @@ async function bitbucketCommit(input: CommitFileInput): Promise<CommitFileResult
   return {
     ok: true,
     branch: input.branch,
-    commitUrl: bitbucketCommitUrlFromLocation(res.headers.get('location'), input.owner, input.repo),
+    ...bitbucketCommitFromLocation(res.headers.get('location'), input.owner, input.repo),
     existed,
   };
 }
@@ -292,6 +302,7 @@ async function bitbucketServerCommit(input: CommitFileInput, api: RepoApiTarget)
     ok: true,
     branch: input.branch,
     commitUrl: bitbucketServerCommitUrl(input.host, input.owner, input.repo, commit?.id),
+    commitSha: commit?.id ?? null,
     existed,
   };
 }
@@ -378,8 +389,8 @@ export async function commitFileToRepo(input: CommitFileInput): Promise<CommitFi
     const t = await put.text().catch(() => '');
     return { ok: false, code: 'provider_error', reason: `commit ${put.status}: ${t.slice(0, 200)}` };
   }
-  const commitUrl = ((await put.json().catch(() => null)) as { commit?: { html_url?: string } } | null)?.commit?.html_url ?? null;
-  return { ok: true, branch: input.branch, commitUrl, existed: Boolean(existingSha) };
+  const putCommit = ((await put.json().catch(() => null)) as { commit?: { html_url?: string; sha?: string } } | null)?.commit;
+  return { ok: true, branch: input.branch, commitUrl: putCommit?.html_url ?? null, commitSha: putCommit?.sha ?? null, existed: Boolean(existingSha) };
 }
 
 export interface DeleteFileInput {
@@ -396,7 +407,7 @@ export interface DeleteFileInput {
 }
 
 export type DeleteFileResult =
-  | { ok: true; branch: string; commitUrl: string | null }
+  | { ok: true; branch: string; commitUrl: string | null; commitSha: string | null }
   | { ok: false; code: 'unsupported' | 'not_found' | 'provider_error'; reason: string };
 
 /**
@@ -421,7 +432,7 @@ async function gitlabDelete(input: DeleteFileInput): Promise<DeleteFileResult> {
   if (!res) return { ok: false, code: 'provider_error', reason: 'delete request failed (network)' };
   if (res.status === 404) return { ok: false, code: 'not_found', reason: `file not on branch ${input.branch}: ${input.path}` };
   if (!res.ok) { const t = await res.text().catch(() => ''); return { ok: false, code: 'provider_error', reason: `GitLab ${res.status}: ${t.slice(0, 200)}` }; }
-  return { ok: true, branch: input.branch, commitUrl: await gitlabBranchCommitUrl(proj, input.branch, headers) };
+  return { ok: true, branch: input.branch, ...(await gitlabBranchCommit(proj, input.branch, headers)) };
 }
 
 /** Bitbucket Cloud path — delete via the form-encoded `/src` API: a `files`
@@ -459,7 +470,7 @@ async function bitbucketDelete(input: DeleteFileInput): Promise<DeleteFileResult
   return {
     ok: true,
     branch: input.branch,
-    commitUrl: bitbucketCommitUrlFromLocation(res.headers.get('location'), input.owner, input.repo),
+    ...bitbucketCommitFromLocation(res.headers.get('location'), input.owner, input.repo),
   };
 }
 
@@ -499,6 +510,6 @@ export async function deleteFileFromRepo(input: DeleteFileInput): Promise<Delete
     const t = await del.text().catch(() => '');
     return { ok: false, code: 'provider_error', reason: `delete ${del.status}: ${t.slice(0, 200)}` };
   }
-  const commitUrl = ((await del.json().catch(() => null)) as { commit?: { html_url?: string } } | null)?.commit?.html_url ?? null;
-  return { ok: true, branch: input.branch, commitUrl };
+  const delCommit = ((await del.json().catch(() => null)) as { commit?: { html_url?: string; sha?: string } } | null)?.commit;
+  return { ok: true, branch: input.branch, commitUrl: delCommit?.html_url ?? null, commitSha: delCommit?.sha ?? null };
 }

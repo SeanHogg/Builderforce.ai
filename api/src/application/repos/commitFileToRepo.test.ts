@@ -128,7 +128,7 @@ describe('commitFileToRepo — GitHub overwrite guard', () => {
       if (url.includes('/contents/') && method === 'GET') return contents;
       if (url.includes('/contents/') && method === 'PUT') {
         if (!put) throw new Error('PUT should not have been sent');
-        return res({ commit: { html_url: 'https://example/commit' } });
+        return res({ commit: { html_url: 'https://example/commit', sha: 'c0ffee' } });
       }
       return res({}, 404);
     });
@@ -139,6 +139,8 @@ describe('commitFileToRepo — GitHub overwrite guard', () => {
     const r = await commitFileToRepo({ ...commitBase, provider: 'github' });
     expect(r.ok).toBe(true);
     expect(r.ok && r.existed).toBe(false);
+    // The SHA GitHub returned for THIS write — the platform's proof of its own commit (PRD 48 §4.6).
+    expect(r.ok && r.commitSha).toBe('c0ffee');
   });
 
   it('hard-stops when GitHub cannot read the existing file', async () => {

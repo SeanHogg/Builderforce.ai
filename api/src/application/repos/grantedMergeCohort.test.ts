@@ -21,6 +21,11 @@ const h = vi.hoisted(() => ({
   setHold: vi.fn(async (..._a: unknown[]) => undefined),
   journal: vi.fn(async (..._a: unknown[]) => undefined),
   journalOnChange: vi.fn(async (..._a: unknown[]) => true),
+  touch: vi.fn(async (..._a: unknown[]) => undefined),
+  granter: vi.fn(async (..._a: unknown[]) => true),
+  expire: vi.fn(async (..._a: unknown[]) => 0),
+  settle: vi.fn(async (..._a: unknown[]) => 0),
+  stuck: vi.fn(async (..._a: unknown[]) => 0),
   policy: vi.fn(),
 }));
 
@@ -30,7 +35,8 @@ vi.mock('./pollPrCiStatus', () => ({ pollPrCiHead: h.ci }));
 vi.mock('./mergeRecordedPr', () => ({ mergeRecordedPullRequest: h.merge }));
 vi.mock('../runtime/mergeGrants', () => ({
   claimMergeGrant: h.claim, releaseMergeGrant: h.release, voidMergeGrant: h.void, setMergeGrantHold: h.setHold,
-  MERGE_GRANT_HELD_ACTION: 'merge_grant_held',
+  touchMergeGrant: h.touch, granterStillAuthorized: h.granter, expireMergeGrants: h.expire, settleGrantsWithoutOpenPr: h.settle,
+  reconcileStuckMergeClaims: h.stuck, MERGE_GRANT_HELD_ACTION: 'merge_grant_held',
 }));
 vi.mock('../manager/managerActionJournal', () => ({
   recordManagerAction: h.journal, recordManagerActionOnChange: h.journalOnChange, stateFingerprint: (p: unknown[]) => JSON.stringify(p),
@@ -44,14 +50,14 @@ import { loadGrantedPrs, runGrantedMerges, MAX_GRANTED_MERGES_PER_TICK, type Gra
 const dialect = new PgDialect();
 const sqlOf = (s: SQL) => dialect.sqlToQuery(s).sql;
 
-/** A db double that records the joins and filter the cohort query builds, and answers `rows`. */
+/** A db double that records the joins, filter and order the cohort query builds, and answers `rows`. */
 function recordingDb(rows: GrantedPr[]) {
-  const seen: { joins: string[]; where?: string } = { joins: [] };
+  const seen: { joins: string[]; where?: string; order: string[] } = { joins: [], order: [] };
   const chain: Record<string, unknown> = {
     from: () => chain,
     innerJoin: (_t: unknown, on: SQL) => { seen.joins.push(sqlOf(on)); return chain; },
     where: (w: SQL) => { seen.where = sqlOf(w); return chain; },
-    orderBy: () => chain,
+    orderBy: (...o: SQL[]) => { seen.order = o.map(sqlOf); return chain; },
     limit: async () => rows,
   };
   return { db: { select: () => chain } as never, seen };
@@ -71,6 +77,7 @@ beforeEach(() => {
   h.ci.mockResolvedValue({ headSha: 'abc123', green: true });
   h.merge.mockResolvedValue({ ok: true, merged: true, sha: 'm1', pullRequest: null });
   h.claim.mockResolvedValue(true);
+  h.granter.mockResolvedValue(true);
 });
 
 describe('the cohort QUERY binds a grant to the PR its run opened — never the ticket', () => {
@@ -85,6 +92,12 @@ describe('the cohort QUERY binds a grant to the PR its run opened — never the 
     expect(prJoin).toContain('"pull_requests"."tenant_id" = "merge_grant_pull_requests"."tenant_id"');
     // An ungranted re-run's PR on the same ticket cannot be reached: nothing joins on the ticket.
     expect(seen.joins.join(' ')).not.toContain('task_id');
+  });
+
+  it('ROTATES: least-recently-considered grant first, never-visited first — no tenant starves another', async () => {
+    const { db, seen } = recordingDb([]);
+    await loadGrantedPrs(db);
+    expect(seen.order[0]).toContain('"merge_grants"."last_considered_at" asc nulls first');
   });
 
   it('only LIVE grants (neither consumed nor voided) on OPEN pull requests', async () => {
@@ -185,6 +198,48 @@ describe('runGrantedMerges — the loop over bound PRs', () => {
     const out = await runGrantedMerges({} as never, db, budget);
     expect(h.gate).not.toHaveBeenCalled();
     expect(out.considered).toBe(0);
+  });
+
+  it('expires stale grants, settles grants whose PRs closed or merged elsewhere, and stamps each grant it visits', async () => {
+    const { db } = recordingDb([bound(), bound({ id: 'pr-2', bindingId: 'b-2' })]);
+    h.claim.mockResolvedValueOnce(true);
+    await runGrantedMerges({} as never, db, budget);
+    expect(h.expire).toHaveBeenCalledOnce();
+    expect(h.settle).toHaveBeenCalledOnce();
+    // Stuck claims (kept over a thrown merge) are reconciled with the provider every tick.
+    expect(h.stuck).toHaveBeenCalledOnce();
+    expect(h.touch).toHaveBeenCalledTimes(1);
+    expect(h.touch).toHaveBeenCalledWith(db, 4, 'g-1');
+  });
+
+  it('a granter who may no longer merge VOIDS the grant (granter_revoked) — nothing is claimed or merged', async () => {
+    h.granter.mockResolvedValue(false);
+    const { db } = recordingDb([bound()]);
+    const out = await runGrantedMerges({} as never, db, budget);
+    expect(h.void).toHaveBeenCalledWith(db, { tenantId: 4, grantId: 'g-1', reason: 'granter_revoked' });
+    expect(h.claim).not.toHaveBeenCalled();
+    expect(h.merge).not.toHaveBeenCalled();
+    expect(out.voided).toBe(1);
+    h.granter.mockResolvedValue(true);
+  });
+
+  it('a THROW after the provider call keeps the claim (it may have merged) — never released, never merged twice', async () => {
+    h.merge.mockRejectedValue(new Error('socket hang up'));
+    const { db } = recordingDb([bound()]);
+    const out = await runGrantedMerges({} as never, db, budget);
+    expect(h.claim).toHaveBeenCalledOnce();
+    expect(h.release).not.toHaveBeenCalled();
+    expect(out.merged).toBe(0);
+  });
+
+  it('a PR that was already merged is settled without claiming the merge in the journal', async () => {
+    h.merge.mockResolvedValue({ ok: true, merged: false, alreadyMerged: true, sha: null, pullRequest: null });
+    const { db } = recordingDb([bound()]);
+    const out = await runGrantedMerges({} as never, db, budget);
+    expect(out.merged).toBe(0);
+    const summary = (h.journal.mock.calls[0]![1] as { summary: string }).summary;
+    expect(summary).toContain('already merged');
+    expect(summary).not.toContain('Merged PR');
   });
 
   it('caps the merges per tick and stops when the sweep budget is spent', async () => {

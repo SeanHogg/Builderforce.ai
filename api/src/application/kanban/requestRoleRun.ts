@@ -69,6 +69,8 @@ export interface RoleRunRequest {
    * for an ordinary autonomous ask, which is what the breaker exists to stop.
    */
   force?: boolean;
+  /** Passed to the dispatcher: runs after the execution row exists, before the run starts. */
+  onSubmitted?: (executionId: number) => Promise<void>;
 }
 
 /**
@@ -129,6 +131,7 @@ export async function requestRoleRun(
       // to the cloud, which is the one thing the operator's runtime choice forbids.
       ...(req.agentHostId != null ? { agentHostId: req.agentHostId } : {}),
       ...(req.force ? { force: true } : {}),
+      ...(req.onSubmitted ? { onSubmitted: req.onSubmitted } : {}),
     },
   ).catch((error: unknown) => {
     // A THROW is a refusal with a reason, not a reasonless null. This used to swallow the

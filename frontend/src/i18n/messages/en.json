@@ -17856,6 +17856,7 @@
     "grantedBy": "Granted by {name}",
     "reasonShown": "Reason: {reason}",
     "cloudOnly": "Merging into main when done is available for cloud agent runs only. Pick a cloud agent to grant it.",
+    "multiRepo": "This ticket spans several repositories, so one grant cannot cover its pull requests. Merge each one in-product instead.",
     "recordFailed": "The run started, but the merge into main could not be recorded. Merge its pull request in-product when it is ready.",
     "held": {
       "ci_pending": "Waiting for CI to pass on the commit the grant covers.",
@@ -17867,7 +17868,12 @@
       "cancelled": "The run was cancelled, so nothing merges.",
       "no_pull_request": "The run ended without its own pull request, so nothing merges.",
       "head_moved": "Someone pushed new commits after the run, so the grant no longer covers this pull request.",
-      "no_head": "The pull request's commit could not be read when the run finished, so nothing merges."
+      "no_head": "The pull request's commit could not be read when the run finished, so nothing merges.",
+      "run_failed": "The run failed before it opened its pull request, so nothing merges.",
+      "pr_closed": "The pull request was closed without merging, so the grant no longer applies.",
+      "expired": "The grant expired seven days after it was given. Merge the pull request in-product instead.",
+      "granter_revoked": "The person who granted the merge can no longer merge pull requests in this workspace, so the grant no longer applies.",
+      "foreign_commits": "The pull request contains commits this run did not write, so the grant does not cover it. Merge it in-product after review."
     }
   },
   "runAgentControl": {

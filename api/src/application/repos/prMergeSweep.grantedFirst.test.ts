@@ -5,6 +5,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const h = vi.hoisted(() => ({
+  bound: vi.fn(async (..._a: unknown[]) => new Set<string>()),
+  planned: [] as unknown[],
   order: [] as string[],
   granted: vi.fn(async (..._a: unknown[]) => ({ considered: 1, merged: 1, held: 0, voided: 0 })),
 }));
@@ -25,8 +27,40 @@ vi.mock('../../infrastructure/database/connection', async (orig) => ({
   },
 }));
 
-import { runPrMergeSweep } from './prMergeSweep';
+vi.mock('../runtime/mergeGrants', () => ({ prsBoundToLiveGrants: h.bound }));
+vi.mock('../manager/prMergeQueue', async (orig) => ({
+  ...(await orig<Record<string, unknown>>()),
+  planMergeQueue: vi.fn((prs: unknown[]) => { h.planned.push(...prs); return []; }),
+}));
+
+import { sql } from 'drizzle-orm';
+import { runPrMergeForProject, runPrMergeSweep } from './prMergeSweep';
 import { createTickDispatchBudget } from '../runtime/tickDispatchBudget';
+import { DEFAULT_MANAGER_POLICY } from '../manager/managerPolicy';
+
+describe('the MANAGED queue skips a PR bound to a person\'s live merge grant', () => {
+  it('a granted PR never reaches the queue plan (its base sync would move the head and void the grant)', async () => {
+    h.planned = [];
+    h.bound.mockResolvedValue(new Set(['pr-granted']));
+    const placeholder = new Proxy({}, { get: () => sql`1` });
+    const openPrs = [
+      { id: 'pr-granted', number: 1, taskId: 1, buildStatus: 'success', repoId: 'r', updatedAt: new Date() },
+      { id: 'pr-managed', number: 2, taskId: 2, buildStatus: 'success', repoId: 'r', updatedAt: new Date() },
+    ];
+    const chain: Record<string, unknown> = {};
+    const pass = () => chain;
+    chain.from = pass; chain.where = pass; chain.groupBy = pass; chain.leftJoin = pass; chain.orderBy = pass;
+    chain.as = () => placeholder;
+    chain.limit = async () => openPrs;
+    const db = { select: () => chain } as never;
+    await runPrMergeForProject({} as never, db, { listActiveByTasks: async () => [] } as never, {
+      tenantId: 4, projectId: 9, policy: { ...DEFAULT_MANAGER_POLICY, allowAutoMerge: true },
+      runs: { spend: async () => ({ result: false }) } as never,
+    });
+    expect(h.bound).toHaveBeenCalledWith(db, 4, ['pr-granted', 'pr-managed']);
+    expect(h.planned.map((p) => (p as { id: string }).id)).toEqual(['pr-managed']);
+  });
+});
 
 beforeEach(() => { h.order = []; h.granted.mockClear(); });
 

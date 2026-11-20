@@ -9,7 +9,11 @@ import { reportBackgroundFailure } from '@/lib/reportError';
  * or voided (with why). Codes from the server, worded here. Renders nothing for a run without a
  * grant. Theme tokens only; wraps at 360px.
  */
-export function MergeGrantStatus({ executionId }: { executionId: number }) {
+export function MergeGrantStatus({ executionId, runStatus }: {
+  executionId: number;
+  /** The run's live status: the grant is re-read whenever it changes (a finished run binds or voids it). */
+  runStatus?: string | null;
+}) {
   const t = useTranslations('mergeGrant');
   const [grant, setGrant] = useState<MergeGrantView | null>(null);
 
@@ -27,7 +31,7 @@ export function MergeGrantStatus({ executionId }: { executionId: number }) {
         level: 'warning',
       }));
     return () => { live = false; };
-  }, [executionId]);
+  }, [executionId, runStatus]);
 
   if (!grant) return null;
   const tone = grant.status === 'merged'
@@ -48,7 +52,7 @@ export function MergeGrantStatus({ executionId }: { executionId: number }) {
         <span style={{ fontWeight: 600, color: tone }}>{t(`status.${grant.status}`)}</span>
       </div>
       <div style={{ color: 'var(--text-secondary)', overflowWrap: 'anywhere' }}>
-        {t('grantedBy', { name: grant.grantedByName ?? grant.grantedBy })}
+        {t('grantedBy', { name: grant.grantedByName })}
       </div>
       <div style={{ color: 'var(--text-secondary)', overflowWrap: 'anywhere' }}>{t('reasonShown', { reason: grant.reason })}</div>
       {detail && <div style={{ color: 'var(--warning)', overflowWrap: 'anywhere' }}>{detail}</div>}

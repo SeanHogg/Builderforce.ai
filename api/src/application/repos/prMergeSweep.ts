@@ -72,6 +72,7 @@ import type { Env } from '../../env';
 import { composeDispatcherLabel } from '../runtime/dispatcherLabel';
 import { sweepSecurityGate } from './sweepSecurityGate';
 import { runGrantedMerges } from './grantedMergeCohort';
+import { prsBoundToLiveGrants } from '../runtime/mergeGrants';
 import { taskHasLiveRun } from '../runtime/liveExecutionStatus';
 
 /**
@@ -417,7 +418,14 @@ async function runPrMergeQueueBody(
   // branches all targeting one base is a QUEUE and not twenty independent repairs. The
   // counters are read straight off the PR row (the grouped scan above is keyed on
   // `pr_id`), so there is no intermediate map that could reintroduce a ticket key.
-  const queue = planMergeQueue(openPrs, {
+  // PRD 48 §4.6 — a PR bound to a person's LIVE merge grant belongs to the granted cohort, not this
+  // queue: the base sync and conflict recovery below would move its head off the granted commit and
+  // void the grant. A failed read is reported and the queue proceeds without the skip.
+  const grantBound = await prsBoundToLiveGrants(db, tenantId, openPrs.map((pr) => pr.id)).catch((error) => {
+    reportCaughtError(error, { source: 'application/repos/prMergeSweep.ts', operation: 'prsBoundToLiveGrants', context: { tenantId, projectId } });
+    return new Set<string>();
+  });
+  const queue = planMergeQueue(openPrs.filter((pr) => !grantBound.has(pr.id)), {
     hasActiveRun: (pr) => pr.taskId != null && activePrTaskIds.has(pr.taskId),
     requireGreen: policy.prMergePolicy === 'on_green',
   });

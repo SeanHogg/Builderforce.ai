@@ -49,6 +49,7 @@ import { deliverToPinnedHosts, getDispatchTargets, type DispatchMessage } from '
 import { admissionOutcome, admissionRefusalOf, admitCloudRun, preAdmitRun } from './dispatchAdmission';
 import type { DeferredParkRequest } from './deferredDispatch';
 import { submittingUserId } from './dispatcherLabel';
+import { isHostBoundRun } from './runHostBinding';
 
 export type ExecutionTaskRow = {
   id: number;
@@ -208,6 +209,13 @@ export async function dispatchCloudRunForTask(
      * exists to make impossible.
      */
     execMemo?: ExecutionReadMemo;
+    /**
+     * Called with the new execution's id AFTER its row exists and BEFORE the run starts — the
+     * window a caller needs to attach a fact the run must read at its first tick (PRD 48 §4.6:
+     * a person's merge grant, which the run's prep reads to state it). Never fails the dispatch:
+     * the hook owns its own error handling.
+     */
+    onSubmitted?: (executionId: number) => Promise<void>;
   },
 ): Promise<CloudDispatchOutcome> {
   const [taskRow] = await db
@@ -393,6 +401,8 @@ export async function dispatchCloudRunForTask(
   // A run is starting — drop the skip-suppression marker so a stall AFTER this run is
   // recorded in full rather than swallowed as a repeat of the pre-run state.
   await clearAutoRunSkip(env, params.tenantId, params.taskId);
+  // The caller's facts the run must read at its first tick — after the row exists, before the start.
+  if (params.onSubmitted) await params.onSubmitted(execution.id);
   // A resolved `cloudGate` is handed down so the choke point below does not re-run the
   // cap query — one check per dispatch, two places that can act on it. Omitted for a
   // host-pinned dispatch, so a host that fails delivery still gets capped down there.
@@ -504,7 +514,8 @@ export async function startDispatchedExecution(
   // headed for a pinned host is held to the per-task dedupe only, and is admitted again as a
   // cloud run below if the host does not take it.
   const hostAllowed = agentAllowsHostExecution(agent.runtimeSupport);
-  const hostBound = pinnedHostId != null && hostAllowed;
+  // THE routing rule, shared with every caller that must know it before dispatch (`runHostBinding`).
+  const hostBound = isHostBoundRun(pinnedHostId, agent.runtimeSupport);
   const refusedUpFront = await admitCloudRun(env, db, runtimeService, {
     tenantId, taskId: taskRow.id, executionId: execution.id, cloudAgentRef: agent.ref,
     actingUserId: opts?.actingUserId ?? null, cloudBound: !hostBound,

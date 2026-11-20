@@ -227,7 +227,7 @@ export function buildCloudProvider(args: {
         // created vs modified comes from whether the path pre-existed in the repo
         // (commit.existed), not first-write-this-run.
         const change = commit.existed ? 'modified' : 'created';
-        await recordTaskFileChange(db, tenantId, taskRow.id, executionId, path, change, agentLabel);
+        await recordTaskFileChange(db, tenantId, taskRow.id, executionId, path, change, agentLabel, commit.commitSha);
         notifyExecutionSubscribers(executionId, { type: 'file_change', executionId, path, change, ts: new Date().toISOString() });
         return { ok: true, branch: target.branch, commitUrl: commit.commitUrl, change };
       },
@@ -262,7 +262,7 @@ export function buildCloudProvider(args: {
         // always see the CURRENT bytes, memo or no memo.
         forgetReads(path);
         await recordRepoWrite(db, tenantId, taskRow.id, target);
-        await recordTaskFileChange(db, tenantId, taskRow.id, executionId, path, 'modified', agentLabel);
+        await recordTaskFileChange(db, tenantId, taskRow.id, executionId, path, 'modified', agentLabel, commit.commitSha);
         notifyExecutionSubscribers(executionId, { type: 'file_change', executionId, path, change: 'modified', ts: new Date().toISOString() });
         return { ok: true, branch: target.branch, commitUrl: commit.commitUrl, change: 'modified', ...editFacts(edit) };
       },
@@ -279,7 +279,7 @@ export function buildCloudProvider(args: {
           // content that no longer exists.
           forgetReads(path);
           await recordRepoWrite(db, tenantId, taskRow.id, target);
-          await recordTaskFileChange(db, tenantId, taskRow.id, executionId, path, 'deleted', agentLabel);
+          await recordTaskFileChange(db, tenantId, taskRow.id, executionId, path, 'deleted', agentLabel, del.commitSha);
           notifyExecutionSubscribers(executionId, { type: 'file_change', executionId, path, change: 'deleted', ts: new Date().toISOString() });
           return { ok: true, branch: target.branch, commitUrl: del.commitUrl };
         }

@@ -9,25 +9,24 @@
  * the managed queue, inside the sweep's own budget.
  *
  * WHAT MERGES IS NARROW, ON PURPOSE:
- *   - only a PR the granted run itself opened (`merge_grant_pull_requests`, bound at its finalize)
- *     — never another run's PR on the same ticket;
- *   - only at the head that run left (`head_sha`). A head that moved past it means someone else
- *     pushed: the grant is VOIDED, never merged on commits nobody granted;
- *   - only ONCE: the grant is claimed atomically before the merge (`claimMergeGrant`) and given
- *     back if the merge does not happen, so two bound PRs or two overlapping sweeps cannot both
- *     merge on one grant.
+ *   - only a PR bound to the grant at its run's finalize (`merge_grant_pull_requests`);
+ *   - only at the commit that run pushed (`head_sha`). A head that moved past it means someone
+ *     else pushed: the grant is VOIDED, never merged on commits nobody granted;
+ *   - only while the person who granted it may STILL merge (current membership + role), else
+ *     voided `granter_revoked`;
+ *   - only ONCE: the grant is claimed atomically before the merge (`claimMergeGrant`). It is given
+ *     back ONLY on a definite provider refusal; a THROW keeps the claim (the merge may have
+ *     happened), and once the claim is 30 minutes old with its PR still open the reconcile
+ *     (`reconcileStuckMergeClaims`) asks the provider — merged → spent, not merged → released.
+ *
+ * FAIRNESS: grants are visited least-recently-considered first and stamped on every visit, so a
+ * tenant's held grants cannot starve another's; a grant expires seven days after it was given.
  *
  * NO BASE SYNC. The managed queue updates a branch from its base before merging; doing that here
- * would move the head off the commit the person's grant (and the run's checks) covered. A granted
- * PR merges at its pinned commit or not at all — the provider refuses (conflict / branch rule)
- * when that is not possible, and the hold says so.
- *
- * A hold is the binding's CURRENT `hold_code` (cleared when it clears) plus one PR-timeline line
- * per change of reason (`merge_grant_held`, `recordManagerActionOnChange`) — its own type, so it
- * never feeds the managed queue's `merge_blocked` ceilings. The sweep calls this; it is still the
- * ONE automatic merge writer.
+ * would move the head off the commit the person granted. The managed queue in turn SKIPS a PR
+ * bound to a live grant, so its sync and conflict recovery can never void one.
  */
-import { and, asc, eq, isNull } from 'drizzle-orm';
+import { and, asc, eq, isNull, sql } from 'drizzle-orm';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { mergeGrantPullRequests, mergeGrants, pullRequests } from '../../infrastructure/database/schema';
@@ -36,7 +35,8 @@ import { recordManagerAction, recordManagerActionOnChange, stateFingerprint } fr
 import type { PassBudget } from '../manager/passBudget';
 import { taskHasLiveRun } from '../runtime/liveExecutionStatus';
 import {
-  claimMergeGrant, releaseMergeGrant, setMergeGrantHold, voidMergeGrant,
+  claimMergeGrant, expireMergeGrants, granterStillAuthorized, reconcileStuckMergeClaims, releaseMergeGrant, setMergeGrantHold,
+  settleGrantsWithoutOpenPr, touchMergeGrant, voidMergeGrant,
   MERGE_GRANT_HELD_ACTION, type MergeGrantHoldCode,
 } from '../runtime/mergeGrants';
 import { INLINE_STEP_MIN_REMAINING_MS } from '../security/ensurePrSecurityVerdict';
@@ -52,7 +52,7 @@ export const MAX_GRANTED_MERGES_PER_TICK = 3;
 export interface GrantedPr {
   bindingId: string;
   grantId: string;
-  grantedBy: string;
+  grantedBy: string | null;
   pinnedHeadSha: string;
   tenantId: number;
   projectId: number;
@@ -67,8 +67,9 @@ export interface GrantedPr {
 export interface GrantedMergeResult { considered: number; merged: number; held: number; voided: number }
 
 /**
- * The bound PRs of LIVE grants, oldest grant first. Bound through `merge_grant_pull_requests` —
- * the PR the granted run opened — and tenant-correlated at every join.
+ * The bound PRs of LIVE grants, LEAST-RECENTLY-CONSIDERED grant first (never-visited first). Bound
+ * through `merge_grant_pull_requests` — the PR the granted run opened — and tenant-correlated at
+ * every join.
  */
 export async function loadGrantedPrs(db: Db, limit: number = GRANTED_MERGE_WINDOW): Promise<GrantedPr[]> {
   const rows = await db
@@ -93,7 +94,7 @@ export async function loadGrantedPrs(db: Db, limit: number = GRANTED_MERGE_WINDO
       isNull(mergeGrants.voidedAt),
       eq(pullRequests.status, 'open'),
     ))
-    .orderBy(asc(mergeGrants.createdAt), asc(mergeGrantPullRequests.createdAt))
+    .orderBy(sql`${mergeGrants.lastConsideredAt} asc nulls first`, asc(mergeGrants.createdAt), asc(mergeGrantPullRequests.createdAt))
     .limit(limit);
   return rows.flatMap((r) => (r.projectId == null ? [] : [{ ...r, projectId: r.projectId }]));
 }
@@ -117,16 +118,35 @@ async function hold(db: Db, pr: GrantedPr, code: MergeGrantHoldCode, why: string
  */
 export async function runGrantedMerges(env: Env, db: Db, budget: PassBudget): Promise<GrantedMergeResult> {
   const out: GrantedMergeResult = { considered: 0, merged: 0, held: 0, voided: 0 };
+  // Housekeeping first, so the cohort below only sees grants that can still apply.
+  out.voided += await expireMergeGrants(db).catch((error) => {
+    reportCaughtError(error, { source: 'application/repos/grantedMergeCohort.ts', operation: 'expireMergeGrants' });
+    return 0;
+  });
+  await settleGrantsWithoutOpenPr(db).catch((error) => {
+    reportCaughtError(error, { source: 'application/repos/grantedMergeCohort.ts', operation: 'settleGrantsWithoutOpenPr' });
+  });
+  // A claim kept over a thrown merge whose PR is still open is asked of the provider (merged →
+  // spent; not merged → released back to live), so it can never sit "pending" forever.
+  await reconcileStuckMergeClaims(env, db).catch((error) => {
+    reportCaughtError(error, { source: 'application/repos/grantedMergeCohort.ts', operation: 'reconcileStuckMergeClaims' });
+  });
   const granted = await loadGrantedPrs(db).catch((error) => {
     reportCaughtError(error, { source: 'application/repos/grantedMergeCohort.ts', operation: 'loadGrantedPrs' });
     return [] as GrantedPr[];
   });
-  /** Grants spent (merged, voided) this tick — a second PR bound to the same grant is skipped. */
+  /** Grants spent (merged, voided, claimed) this tick — a second PR bound to the same grant is skipped. */
   const spent = new Set<string>();
+  /** Grants already stamped as visited this tick. */
+  const touched = new Set<string>();
   for (const pr of granted) {
     if (budget.over() || out.merged >= MAX_GRANTED_MERGES_PER_TICK) break;
     if (spent.has(pr.grantId)) continue;
     try {
+      if (!touched.has(pr.grantId)) {
+        touched.add(pr.grantId);
+        await touchMergeGrant(db, pr.tenantId, pr.grantId);
+      }
       // The run (or a later one) is still writing the ticket's branch: nothing to judge yet.
       if (pr.taskId != null && await taskHasLiveRun(db, pr.tenantId, pr.taskId)) continue;
       out.considered += 1;
@@ -160,17 +180,31 @@ export async function runGrantedMerges(env: Env, db: Db, budget: PassBudget): Pr
         continue;
       }
 
-      // ONCE: claim the grant atomically, merge, and give it back if the merge did not happen.
+      // THE GRANTER'S AUTHORITY, NOW — not as it was when they clicked.
+      if (!(await granterStillAuthorized(env, db, pr.tenantId, pr.grantedBy))) {
+        await voidMergeGrant(db, { tenantId: pr.tenantId, grantId: pr.grantId, reason: 'granter_revoked' });
+        spent.add(pr.grantId);
+        out.voided += 1;
+        continue;
+      }
+
+      // ONCE: claim the grant atomically, then merge.
       if (!(await claimMergeGrant(db, pr.tenantId, pr.grantId))) { spent.add(pr.grantId); continue; }
       spent.add(pr.grantId);
-      const result = await mergeRecordedPullRequest(db, env, {
-        tenantId: pr.tenantId, prId: pr.id, method: 'squash', mergedBy: pr.grantedBy,
-        expectedHeadSha: pr.pinnedHeadSha,
-      }).catch(async (error) => {
-        await releaseMergeGrant(db, pr.tenantId, pr.grantId);
-        throw error;
-      });
+      let result: Awaited<ReturnType<typeof mergeRecordedPullRequest>>;
+      try {
+        result = await mergeRecordedPullRequest(db, env, {
+          tenantId: pr.tenantId, prId: pr.id, method: 'squash', mergedBy: pr.grantedBy,
+          expectedHeadSha: pr.pinnedHeadSha,
+        });
+      } catch (error) {
+        // The provider may have merged before the throw: KEEP the claim, so nothing merges twice on
+        // one grant. The reconcile settles it from the PR row (merged → spent, closed → voided).
+        reportCaughtError(error, { source: 'application/repos/grantedMergeCohort.ts', operation: 'mergeRecordedPullRequest', context: { prId: pr.id, grantId: pr.grantId } });
+        continue;
+      }
       if (!result.ok) {
+        // A DEFINITE refusal: the merge did not happen, so the grant is given back.
         await releaseMergeGrant(db, pr.tenantId, pr.grantId);
         if (result.code === 'head_moved') {
           await voidMergeGrant(db, { tenantId: pr.tenantId, grantId: pr.grantId, reason: 'head_moved' });
@@ -182,6 +216,14 @@ export async function runGrantedMerges(env: Env, db: Db, budget: PassBudget): Pr
         continue;
       }
       await setMergeGrantHold(db, pr.tenantId, pr.bindingId, null);
+      if (result.alreadyMerged) {
+        await recordManagerAction(db, {
+          tenantId: pr.tenantId, projectId: pr.projectId, taskId: pr.taskId, prId: pr.id, actionType: 'merge_pr',
+          summary: `PR #${pr.number ?? '?'} was already merged; the person's merge grant on it is settled without a merge.`,
+          detail: { grantId: pr.grantId, alreadyMerged: true },
+        });
+        continue;
+      }
       out.merged += 1;
       await recordManagerAction(db, {
         tenantId: pr.tenantId, projectId: pr.projectId, taskId: pr.taskId, prId: pr.id, actionType: 'merge_pr',

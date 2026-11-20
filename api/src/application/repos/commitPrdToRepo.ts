@@ -14,7 +14,7 @@ import { commitFileToRepo } from './commitFileToRepo';
 import { ticketBranchName } from './commitFileAsPendingChange';
 
 export type CommitPrdResult =
-  | { ok: true; branch: string; path: string }
+  | { ok: true; branch: string; path: string; commitSha: string | null }
   | { ok: false; reason: string };
 
 /** Keep concurrent ticket briefs independent instead of making every agent rewrite
@@ -59,5 +59,5 @@ export async function commitPrdAsPendingChange(
 
   // No PR is opened here: the single run-level PR (opened at finalize) covers
   // The task brief + every file the agent writes on this same branch.
-  return { ok: true, branch, path };
+  return { ok: true, branch, path, commitSha: commit.commitSha };
 }

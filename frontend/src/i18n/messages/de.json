@@ -17881,6 +17881,7 @@
     "grantedBy": "Freigegeben von {name}",
     "reasonShown": "Grund: {reason}",
     "cloudOnly": "Das Mergen in main nach Abschluss ist nur für Cloud-Agent-Läufe verfügbar. Wählen Sie einen Cloud-Agenten, um es freizugeben.",
+    "multiRepo": "Dieses Ticket umfasst mehrere Repositories, daher kann eine Freigabe seine Pull Requests nicht abdecken. Mergen Sie jeden einzeln im Produkt.",
     "recordFailed": "Der Lauf wurde gestartet, aber der Merge in main konnte nicht gespeichert werden. Mergen Sie den Pull Request im Produkt, sobald er bereit ist.",
     "held": {
       "ci_pending": "Wartet darauf, dass die CI auf dem freigegebenen Commit erfolgreich ist.",
@@ -17892,7 +17893,12 @@
       "cancelled": "Der Lauf wurde abgebrochen, daher wird nichts gemergt.",
       "no_pull_request": "Der Lauf endete ohne eigenen Pull Request, daher wird nichts gemergt.",
       "head_moved": "Nach dem Lauf wurden neue Commits gepusht, daher deckt die Freigabe diesen Pull Request nicht mehr ab.",
-      "no_head": "Der Commit des Pull Requests konnte beim Ende des Laufs nicht gelesen werden, daher wird nichts gemergt."
+      "no_head": "Der Commit des Pull Requests konnte beim Ende des Laufs nicht gelesen werden, daher wird nichts gemergt.",
+      "run_failed": "Der Lauf ist fehlgeschlagen, bevor er seinen Pull Request geöffnet hat, daher wird nichts gemergt.",
+      "pr_closed": "Der Pull Request wurde ohne Merge geschlossen, daher gilt die Freigabe nicht mehr.",
+      "expired": "Die Freigabe ist sieben Tage nach ihrer Erteilung abgelaufen. Mergen Sie den Pull Request stattdessen im Produkt.",
+      "granter_revoked": "Die Person, die den Merge freigegeben hat, darf in diesem Workspace keine Pull Requests mehr mergen, daher gilt die Freigabe nicht mehr.",
+      "foreign_commits": "Der Pull Request enthält Commits, die dieser Lauf nicht geschrieben hat, daher deckt die Freigabe ihn nicht ab. Mergen Sie ihn nach der Prüfung im Produkt."
     }
   },
   "runAgentControl": {
