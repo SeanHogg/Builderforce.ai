@@ -77,7 +77,6 @@ Public copy states today's evidence. **Available** = shipped and repeatably veri
 
 ### Cloud and IDE agent runs `[agents]`
 
-- **Runs stop to ask about shipping instead of following a ship policy (PRD 48).** VSIX shipping is decided by prompt prose, a regex-derived chat hold and the `permissionMode` confirm card ("a push needs approval", chat #157440). Cloud project settings (`allowAutoMerge`, `prMergePolicy`, `requireSignoffToComplete`) never reach the run, and merge is decided by the `CLOUD_AUTOMERGE_ENABLED` env flag. Fix: one `ShipPolicy` in `RunPolicy`, set by the VS Code setting locally and by project settings in the cloud. [make.md › PRD 48](./docs/specs/make.md#prd-48--ship-policy-autonomous-runs-ship-by-rule-never-by-mid-run-question)
 - **The PreFetch cache-hit and latency done-checks are unmeasured.** Add the turn-2 cache-hit probe (at least 90%) and the gate latency measurement (at most 30 ms p50 without tier 3, at most 300 ms p95 with it). [make.md › PreFetch](./docs/specs/make.md#done-checks--remaining-prefetch)
 - **Desktop `bf-index` search is still brute force.** Only the shared comparator was ported. Bring full graph-index parity to `builderforce-inference/crates/bf-index`. [make.md › Knowledge index](./docs/specs/make.md#open-decision-2-follow-up)
 - **The knowledge index's speed and recall are unproven.** Add a 50k-card benchmark (p50 at most 20 ms, p95 at most 60 ms) and labelled recall@10 fixtures for code and for docs `expand`. [make.md › Knowledge index](./docs/specs/make.md#done-checks--remaining)

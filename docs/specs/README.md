@@ -46,7 +46,7 @@ still open. If the section is missing there, it shipped, and you'll find it in D
 | 45 | Deterministic run gates | make | Mostly built |
 | 46 | Agent-run findings | — | Shipped (DONE.md) |
 | 47 | One Collection view | platform | Partly built (W0 landed) |
-| 48 | Ship policy: runs ship by rule, never by mid-run question | make | Designed 2026-11-19 |
+| 48 | Ship policy: runs ship by rule, never by mid-run question | — | Shipped 2026-11-20 (DONE.md) |
 | — | SOC 2 Type I checklist | run | Partly built |
 | — | Internet search subsystem | platform | Phases 1–2 shipped |
 | — | Blog capability gap register | reach | Open |

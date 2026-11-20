@@ -1,3 +1,223 @@
+## ✅ RESOLVED 2026-11-20: Runs stop to ask "continue?" or "may I ship?" instead of finishing and following a ship policy (PRD 48, VS Code chat #157440)
+
+Chat #157440 finished, verified and committed its work, then stopped on a progress-guard `ask_user` pause ("no progress — how should it proceed?") and a "push needs approval" card. Cloud project merge settings never reached the run, and cloud merging hung off a platform-wide env flag, which is wrong for a multi-tenant product.
+- **Progress guard never asks a person.** The ladder is steer → escalate (or a second steer when no stronger model exists) → finish. Finish is a no-tools final report, marked verified or stalled. Delegated work counts as progress (`changedFiles`/`reports` in delegation results and injected child reports). Waits are neutral up to `MAX_WAIT_TURNS = 12`. A stalled planner hands to the coder once before finishing. `pendingPause`, `PAUSE_OPTIONS` and the brain pause are deleted.
+- **One `ShipPolicy` (`leave_uncommitted | commit | commit_push | pull_request`)** in `packages/run-guards/src/shipPolicy.ts`, carried on `RunPolicy.ship`. It is a per-project, per-tenant DB setting (`ship_mode` on `project_manager_configs` and `tenant_manager_defaults`, migration 1356), read and written through `GET/PUT /api/manager/:projectId`, `PATCH /defaults` and the `manager.policy` / `manager.configure` MCP tools. It is never a VS Code setting or an env var. Unset means `commit`, with no mid-run ask. The VSIX fetches it per run; children run `leave_uncommitted` and the owner ships once. `publishAllowed` refuses publish calls the policy forbids, and a merge by any agent tool is refused in every mode.
+- **Cloud runs open a PR and never merge.** `cloudShipGate` refuses raw shell push/PR/merge in the cloud. Every `CLOUD_AUTOMERGE_ENABLED` / `CLOUD_AUTOMERGE_REQUIRE_GREEN` branch is deleted (`mergeOnGreen`, `securityVerdictCatchup`, `mergeBranchToBase`), so `prMergeSweep` is the only automatic merge writer, per project manager policy. The manager's merges and the human Merge button are untouched by the ship rules.
+- **Per-run merge grant (§4.6).** A person dispatching a cloud run from the web app can grant "merge into main" for that run (security fix, urgent feature). It overrides project merge settings the way the Merge button does, through the same `gateHumanMerge` check plus green CI on the pinned commit. It is bound to the PR that run opened at the commit it pushed, claimed atomically once, and voided on cancel, failure, a moved head, a closed PR, expiry or a revoked granter. The granted cohort of `prMergeSweep` executes it. It is web-UI and person only, and refused for on-prem targets, API keys, agent tools and multi-repo tickets.
+- On-prem `buildCodingPrompt` uses the server's `shipDirective`; the on-prem host never merges.
+
+**PRD 48 spec, archived word for word from make.md on 2026-11-20:**
+
+### PRD 48 — Ship policy: autonomous runs ship by rule, never by mid-run question
+
+> Opened 2026-11-19 from VS Code chat #157440: an orchestrator implemented and verified a whole PRD, committed it, then
+> stopped twice for a human — a progress-guard "how should it proceed?" (fixed separately: the A3 ladder now ends in a
+> final report, never a question) and "a push needs approval". Operator rule: a run finishes on its own. What it does
+> with finished work is a **standing policy**, not a question. `ask_user` is for genuine business questions only.
+
+#### §1 The rule
+
+| Host | Who sets the ship policy | Where it lives | How the run gets it |
+|---|---|---|---|
+| VSIX (local) | The **person**, through the project's settings (the Manager tab, the API, or by telling the agent, which calls `manager.configure`) | **The database:** the project's `ship_mode` setting (§4.0), tenant default + project override, in the same manager-policy fold as the merge flags | Fetched per run for the chat's project through the policy-gate fetch/cache seam (`clients/vscode/src/policyGates.ts`, offline snapshot) → `EditorRunSettings` → the run request (`runRequestFields`) → `BrainRunContext.shipPolicy` (every enforcement seam reads the context), mirrored into `RunPolicy.ship` by `brainRunPolicy` |
+| Cloud | The **project's settings** | The database: the same fold (`managerPolicy.ts` → `getEffectiveManagerPolicy`): `allowAutoMerge` (ceiling), `requireSignoffToComplete` (floor), `prMergePolicy` | Loaded at dispatch into `CloudRunOpts` → `RunPolicy.ship` (descriptive: the prompt and the push refusal). **`prMergeSweep` stays the single merge writer** |
+
+No ship or merge decision reads a Cloudflare env var or secret, and none reads a VS Code setting. Every one is a
+tenant/project row read and written through the API and the MCP.
+
+A chat-scoped **publish hold** (`brain-embedded/src/runStore/publishHold.ts` — "don't commit until I validate") stays as
+the person's per-chat override ABOVE the VSIX rule: it can only narrow (hold), and a later explicit ship order in the same
+chat lifts it back to the rule. Nothing else overrides the policy: not a sub-agent, not a nudge, not the model. Tenant
+governance (`PolicyGate` `require-approval` / `block` on publish tools) still outranks the person's setting.
+
+#### §2 Contract — one type, both hosts (`packages/run-guards/src/shipPolicy.ts`)
+
+`run-guards` already owns `PUBLISH_TOOLS` (`inRunVerify.ts`) and `gitCommandPattern`, and depends on `agent-tools` — so
+the contract lives in `run-guards` (an `agent-tools` home would be a cycle). `agent-run`, `brain-embedded` and
+`clients/vscode` already import `run-guards`. `RunPolicy` (`packages/agent-run/src/contract.ts`) gains `ship?: ShipPolicy`.
+
+```ts
+export type ShipMode = 'leave_uncommitted' | 'commit' | 'commit_push' | 'pull_request';
+export interface ShipPolicy {
+  mode: ShipMode;
+  /** pull_request only: when the PR merges. 'never' = a human merges. */
+  merge: 'never' | 'immediate' | 'on_green';
+  /** pull_request only: a recorded independent review/sign-off is required before merge. */
+  review: 'none' | 'required';
+  /** Provenance, shown in the directive and diagnostics. */
+  source: 'project_settings' | 'chat_hold' | 'subagent' | 'person_grant' | 'default';
+}
+export const DEFAULT_SHIP_POLICY: ShipPolicy;                    // mode 'commit', source 'default'
+export type ShipHost = 'editor' | 'cloud';                       // cloud = the platform opens the PR (cloud + on-prem agent hosts)
+export function shipDirective(p: ShipPolicy, ctx?: { chatId?: number | null; host?: ShipHost }): string; // the ONE ship directive for every host
+export function shipNudge(p: ShipPolicy, host?: ShipHost): string | null; // the ONE "you left it unshipped" nudge (null when the mode ships nothing)
+export function publishVerbOf(tool: string, args: unknown): 'commit' | 'push' | 'pull_request' | 'cleanup' | 'merge' | null;
+export function publishAllowed(p: ShipPolicy, tool: string, args: unknown, host?: ShipHost): { ok: true } | { ok: false; error: string };
+export function narrowShipPolicy(p: ShipPolicy, to: ShipPolicy | null): ShipPolicy; // stricter of the two
+export function narrowByHold(p: ShipPolicy, hold: { messageNumber: number; text: string } | null): ShipPolicy;
+```
+
+- `publishVerbOf` is THE publish matcher: `git_commit` / `git_push` / `open_pull_request` / `git_cleanup_merged` by name
+  (`PUBLISH_TOOLS` + `REPO_PUBLISH_TOOLS`), and a `run_command` whose command is a raw `git commit`, `git push`,
+  `gh pr create` / `gh pr new` or `gh pr merge` (verb `merge`). `brain-embedded` `isPublishCall` (`publishHold.ts`) and
+  the duplicate `RAW_PUBLISH` in `selfReviewShip.ts` are deleted and their callers migrated.
+- `publishAllowed`: `merge` is refused in every mode (runs never merge; `prMergeSweep` does). `leave_uncommitted`
+  refuses every verb; `commit` refuses push/PR; `commit_push` refuses PR; `pull_request` refuses a direct push to the
+  base branch — a refspec naming main/master, no refspec, or a bare `HEAD` / `@`. `cleanup` follows `push`.
+- `host: 'cloud'` (cloud runs and on-prem agent hosts, whose platform opens the PR) words the directive, nudge and
+  refusal without git tools; `editor` (default) is the VS Code wording.
+- **Sub-agents (new rule, not current behaviour):** brain-embedded derives a child's policy from `req.lineage` (the input
+  `toolScope: 'subagent'` already uses) as `leave_uncommitted` / `source: 'subagent'`. The OWNER ships once, after
+  verifying the fan-out.
+- `shipDirective` replaces `selfReviewShipDirective` + `publishHoldDirective`; `shipNudge` replaces
+  `unshippedChangeNudge`; `leftChangeUnshipped` reads only the policy (no separate `declinesShipping(requestText)`).
+  This closes PRD 45 §4.5 (its `builtin_reviews_record complete` wording moves here) — §4.5's "leave
+  `unshippedChangeNudge` unchanged" is superseded by this section.
+
+#### §3 VSIX wiring
+
+1. No VS Code setting. The host reads the project's `shipPolicy` from `GET /api/manager/:projectId` (§4.5) through the
+   same fetch/cache seam as `resolveRunPolicyGates` (`clients/vscode/src/policyGates.ts`, cached, offline snapshot).
+2. No project, no snapshot while offline, or no stored value → `DEFAULT_SHIP_POLICY` (source `default`). Into
+   `EditorRunSettings` → `runRequestFields` (`stageModels.ts`, spread at `nativeBrainRun.ts`) → the run request.
+3. `runPreamble.ts`: beside `c.publishHold`, compute `c.shipPolicy = narrowByHold(childOrRequestPolicy, hold)`; copy it
+   onto `BrainRunContext`; `brainRunPolicy` (`run/webAdapter.ts`) mirrors it into `RunPolicy.ship`. The directive branch
+   becomes `shipDirective(c.shipPolicy)`.
+4. `runStore/callPreflight.ts`: the hold refusal becomes `publishAllowed(run.shipPolicy, …)` — same position (before the
+   confirm gate), so `acceptEdits` and child contexts cannot waive it.
+5. `clients/vscode/src/nativeRunTool.ts` `nativeNeedsConfirm`: a publish call the policy ALLOWS is not confirmed in
+   `ask` mode — the setting is the person's standing approval — UNLESS a governance gate says `require-approval`. The
+   `shipGatePreflight` evidence that only the approval card showed is written to the trace instead when the card is skipped.
+6. `runStore/deliveryGates.ts` `brain.ship`: fires only when `shipNudge(policy)` is non-null and the run did not ship.
+7. **No value yet:** the run never asks. It ships under `DEFAULT_SHIP_POLICY` (`commit` — local and reversible), and its
+   final report says the project's ship policy is unset and can be set in the project's settings or by asking the agent.
+8. **The agent changes it when the person tells it to.** "From now on commit and push" → one `manager.configure`
+   call with `shipMode` (§4.5), and every later run on that project follows it. The route's existing manager-role gate
+   applies. A sub-agent's widening call (the VSIX tool gate, by lineage) is refused with the reason, never turned into a
+   question.
+9. Diagnostics: `chatDiagnostics.ts` / `gatherChatDiagnostics.ts` replace `publishHold` with
+   `shipPolicy { mode, source, hold? }` read from the run record, so an uncommitted change under `leave_uncommitted` is
+   reported as policy, not as a parked ticket.
+
+#### §4 Cloud wiring
+
+0. **Storage — `ship_mode`.** Expand-only migration: a nullable `ship_mode` (`leave_uncommitted | commit | commit_push |
+   pull_request`) on `project_manager_configs` and on the tenant tier that holds `allowAutoMerge`
+   (`schema/identity.ts`). The fold (`managerPolicy.ts`) resolves it as a plain override (project beats tenant beats the
+   built-in `commit`), stays pure, and exposes `shipMode`. It is read and written ONLY through the existing manager
+   config route, the workspace-defaults route and `manager.configure`, which keep their role gate, normalizer, tri-state
+   `null` = inherit, and audit. The Manager tab and workspace defaults (`ManagerAutonomyControls.tsx`,
+   `ManagerDefaults.tsx`) get the control, localized in all five catalogs, working in both themes and on narrow screens.
+   VSIX runs use `shipMode`. Cloud runs always open a PR (`mode: 'pull_request'`), whatever `shipMode` says.
+
+**One merge writer.** `api/src/application/repos/prMergeSweep.ts` already merges by project settings — `prMergePolicy`,
+sign-off, `allowAutoMerge`, the security verdict, the manager-enabled join, `MERGE_QUEUE_DEPTH` and `merge_blocked`
+dedupe — and is documented as the single writer. Runs never merge.
+
+1. Dispatch loads the effective manager policy (`getEffectiveManagerPolicy`) into `CloudRunOpts`
+   (`runtime/cloudRunOpts.ts`); `cloudAdapter.policyOf` maps it to `RunPolicy.ship` with ONE pure mapper beside the fold
+   (`manager/shipPolicyOf.ts`): `mode: 'pull_request'`;
+   `merge = !managed || canary || !enabled || !allowAutoMerge || prMergePolicy === 'queue' ? 'never' : prMergePolicy === 'on_green' ? 'on_green' : 'immediate'`
+   (`managed` = `isProjectManaged`, the sweep's own opt-in; canary holds every merge — so `merge` says exactly what the sweep does)
+   (`immediate` = whatever the sweep does for it today); `review = requireSignoffToComplete ? 'required' : 'none'`;
+   `source: 'project_settings'`.
+2. The cloud system prompt carries `shipDirective(policy, { host: 'cloud' })`: the platform opens the PR when the run
+   ends, who reviews, when it merges — and that it must not ask, merge or push to the base branch. The cloud tool gate
+   (`publishAllowed(…, 'cloud')`) refuses EVERY raw shell push, `gh pr create` and merge from `run_command`
+   categorically. A run that wrote code but whose PR failed to open lands `failed` with the reason.
+3. Retire the `CLOUD_AUTOMERGE_ENABLED` / `CLOUD_AUTOMERGE_REQUIRE_GREEN` merge branches at every site —
+   `finalizeCloudRun` (`cloudFinalize.ts`), `ingestRepoCiEvent.ts`, `openTaskPullRequest.ts` (Done-drag `taskFinalize.ts`,
+   on-prem `agentHostRoutes.ts`, dispatch PRs), `securityVerdictCatchup.ts` — and `cloudAutoMergeEnabled` /
+   `cloudMergeOnGreenCi` with them. A run opens its PR and ends; the sweep merges it per the project's settings.
+   (The flag is in no committed config. If it is set as a Worker secret, projects without an enabled manager stop
+   auto-merging — intended: project settings now decide.)
+4. On-prem agent hosts build their own prompt: they get the same `shipDirective` from the same mapper through the
+   agent-host run payload (`agentHostRoutes.ts`).
+5. **The project's flags live behind the API, and agents can change them.** Merge authority is the project setting
+   (`allowAutoMerge`, `prMergePolicy`, `requireSignoffToComplete`, `canary`) — read and written through
+   `GET/PUT /api/manager/:projectId` and the built-in MCP tools `manager.policy` / `manager.configure`, which replay that
+   same route (role gate, normalizers, tri-state inherit, audit), now including `shipMode`. No env var decides it.
+   `GET /api/manager/:projectId` and `manager.policy` also return the derived `shipPolicy` — the VSIX-run policy built
+   from `shipMode`, and the cloud-run policy from the §4.1 mapper — so an agent reads exactly what a run would follow.
+   The VSIX agent reaches both through its platform tool router; a test pins that `manager.configure` is in the VSIX
+   catalog.
+6. **A person can grant "merge into main" for ONE cloud run** (operator, 2026-11-19: a security fix or a high-priority
+   feature must not wait for the manager). Decisions:
+   - **The grant is a pre-approved human merge.** It overrides the project's merge settings (`allowAutoMerge` off, the
+     manager off, canary, sign-off), exactly as the in-product Merge button is not bound by them, and applies exactly
+     that button's checks (`humanMergeGate`, shared) plus green CI. There is no tenant governance merge gate outside run
+     tool calls (`require-approval` / `block` gate a run's own tools, which never merge), so none applies here — the
+     same as for the button.
+   - **Checks: the security verdict passes AND CI is green.** A failing or missing check holds the merge, and the run's
+     report and the PR timeline say why.
+   - **Who:** only a PERSON may grant, with the same role the in-product merge route requires
+     (`POST /pull-requests/:id/merge`), from the web UI only — never through an agent tool (a Brain run calls tools
+     with the person's own token, so a model or a prompt injection could otherwise grant one), never a run or a machine
+     caller, never an API key and never a non-web client surface. Cloud runs only: every entry point asks ONE predicate
+     that mirrors the dispatcher's own routing (`runtime/runHostBinding.ts` `wouldRunOnHost`: a pinned host AND an
+     agent that allows host execution) before dispatch, so a ticket assigned to a host refuses a grant on run-now too
+     (400 `merge_grant_not_cloud`). Single-repo tickets only: a ticket bound to more than one repo refuses a grant
+     (400 `merge_grant_multi_repo`). RBAC: the control is disabled, not hidden, with the reason as its tooltip, for a
+     role that cannot grant, a non-cloud target and a multi-repo ticket.
+   - **Storage:** one `merge_grants` row per granted execution — `execution_id`, `granted_by` (nullable, `ON DELETE
+     SET NULL`, so the audit row survives the user's deletion) with `granted_by_label` (the granter's name at grant
+     time), `reason` (required, CHECK non-blank in SQL and Drizzle), `created_at`, `consumed_at`,
+     `voided_at`/`void_reason`, `last_considered_at` — plus `merge_grant_pull_requests` (the PR the granted run
+     opened, `head_sha`, `hold_code`), in the domain that owns executions. Audited as an activity record.
+   - **Execution — still one automatic merge writer.** The run never merges; it opens its PR as always.
+     `prMergeSweep` gains a second cohort: open PRs the granted execution itself opened (bound at finalize), selected regardless of the
+     manager opt-in, ahead of the queue, merged through `mergeRecordedPr` once the security verdict passes and CI is
+     green (the CI verdict already arms the sweep's tick via `ciMergeQueueSignal`). The grant is consumed on merge.
+   - **The run knows.** A granted run's `RunPolicy.ship` has `merge: 'on_green'` with `source: 'person_grant'`, so its
+     directive says a person authorized the merge, the platform merges it when the checks pass, and it must still not
+     merge or push the base branch itself.
+   - **UI:** the web app's cloud-run dispatch control gets "Merge into main when done" plus a required reason, in all
+     five catalogs, both themes, at 360px.
+   - **As built:** the role is ONE constant (`repos/prMergeAuthority.ts` `PR_MERGE_MIN_ROLE`, also the in-product merge
+     route's gate). Grants arrive on `POST /api/runtime/executions` (written before the run starts, so prep reads it)
+     and `POST /api/tasks/:id/run-now`. On both, the grant is written after the execution is submitted and BEFORE it
+     starts (the dispatcher's `onSubmitted` hook), so prep always reads it. A failed write never fails the
+     dispatch: the response says `mergeGrant: 'failed'`. No agent tool carries a grant.
+   - **Binding.** The grant BINDS at the run's finalize to the PR that run opened, or, on a re-run of a ticket that
+     already has an open PR, to that PR. Either way it is pinned to the last commit THIS run pushed: the PR head must be
+     one of the run's own commits (the `— task #N · run #M (` marker in the branch listing), otherwise the grant voids
+     `head_moved`, and with no readable head it voids `no_head`. There is no fallback to whatever head the provider
+     reports. A run that ends without a PR voids `no_pull_request` / `cancelled`. A run that dies before finalize
+     voids at the central terminal transition (the execution repository's terminal and reaper hooks): an unbound
+     grant voids `run_failed` / `cancelled`.
+   - **The sweep.** The sweep merges only a bound PR at its pinned commit, with no base sync (a sync would move the
+     head off the pin). Grants are visited in `last_considered_at NULLS FIRST` order and stamped on each visit, so no
+     tenant starves another under the per-tick cap. Before the claim, the sweep re-checks that the granter is STILL a
+     tenant member with the merge role. If not, the grant voids `granter_revoked`. It then claims the grant atomically.
+     The claim is released only on a definite refusal (`ok:false`): on a thrown merge the claim is KEPT and the
+     settle pass reconciles it.
+   - **Settle and expiry.** Each tick settles grants whose bound PRs are all closed or merged: one merged elsewhere
+     consumes the grant, all closed voids `pr_closed`. A grant still open 7 days after `created_at` voids `expired`.
+     When a PR was already merged, the journal says it was settled without a merge, never that the platform merged
+     it.
+   - **Managed queue.** The managed queue skips a PR bound to a live grant, so only one cohort ever touches it.
+   - **Holds and the run view.** A hold is the binding's current `hold_code` plus a `merge_grant_held` timeline line
+     (deduped on change) — its own type, so it never feeds the managed queue's `merge_blocked` ceilings.
+     `GET /api/runtime/executions/:id/merge-grant` serves the run view (codes, not prose). It shows `merged` only when a
+     bound PR's status is `merged`, and the view refetches when the run's status changes.
+
+#### §5 Done checks
+
+- VSIX, project `shipMode: commit_push`, `permissionMode: ask`, no governance gate: a run commits and pushes with no confirmation card and no question.
+- VSIX, a governance `require-approval` gate on `git_push`: the card still shows despite `commit_push`.
+- Tenant default `commit_push`, project `leave_uncommitted`: the project value wins; `null` on the project inherits the tenant.
+- VSIX, project `leave_uncommitted`: `git_commit` and a raw `gh pr create` refused before the confirm gate; final report lists changed paths.
+- VSIX, no value anywhere (or offline with no snapshot): no question in any run; it commits locally and the final report says the project's ship policy is unset.
+- "From now on commit and push" in a VSIX chat → one `manager.configure { shipMode: 'commit_push' }`; the next run reads it from the API.
+- VSIX, a sub-agent calls `git_commit`: refused; the owner commits once after the fan-out.
+- VSIX, chat says "don't commit until I check": held for that chat regardless of setting; "ok commit and push" restores the setting.
+- Cloud, project `allowAutoMerge: true, prMergePolicy: on_green`, manager enabled: the run opens a PR and ends; `prMergeSweep` merges on green.
+- Cloud, defaults: the PR opens, nothing merges, the run's prompt says so, and it ends without asking.
+- `git grep -E "CLOUD_AUTOMERGE|cloudAutoMergeEnabled|selfReviewShipDirective|publishHoldDirective|unshippedChangeNudge|RAW_PUBLISH"` → nothing outside the shared module and tests.
+
+---
+
 ## ✅ RESOLVED 2026-11-19: A run ends with its linked tickets still open; open epics and containers read 100% (VS Code chat #276)
 
 Chat #276 ("implement the full PRD") ended its last run in prose while epic #6902 was `in_progress` and the open slices were listed in the reply; the epic's ring read 0% beside two done code-change tickets.

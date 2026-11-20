@@ -25,6 +25,37 @@ import { vi } from 'vitest';
  * of them uses a jest-dom matcher, which `setupEnvironment.test.ts` asserts by
  * reading them, so the gate cannot rot into a confusing "not a function".
  */
+/**
+ * WEB STORAGE ON NODE ≥ 25.
+ *
+ * Node ships its own `localStorage` / `sessionStorage` globals, and without `--localstorage-file`
+ * they are `undefined` ("localStorage is not available…"). Vitest's jsdom environment copies the
+ * window's properties onto `globalThis` but skips keys that already exist — so Node's empty global
+ * SHADOWS jsdom's real Storage, and any component that reads storage on mount (`ChatInput` →
+ * `useWebInferenceMode` → `getStoredWebToken`) throws "Cannot read properties of undefined". Install
+ * an in-memory Storage wherever the global one is unusable, on both `globalThis` and `window`.
+ */
+function memoryStorage(): Storage {
+  const items = new Map<string, string>();
+  return {
+    get length() { return items.size; },
+    clear: () => items.clear(),
+    getItem: (key: string) => (items.has(key) ? items.get(key)! : null),
+    key: (index: number) => [...items.keys()][index] ?? null,
+    removeItem: (key: string) => { items.delete(key); },
+    setItem: (key: string, value: string) => { items.set(key, String(value)); },
+  } as Storage;
+}
+for (const name of ['localStorage', 'sessionStorage'] as const) {
+  for (const target of [globalThis, typeof window !== 'undefined' ? window : undefined]) {
+    if (!target) continue;
+    const current = Reflect.get(target, name) as Storage | undefined;
+    if (typeof current?.getItem !== 'function') {
+      Object.defineProperty(target, name, { value: memoryStorage(), configurable: true, writable: true });
+    }
+  }
+}
+
 if (typeof document !== 'undefined') {
   // The `/vitest` entry, not the bare package: it registers the matchers against
   // vitest's own `expect`, and its types are a MODULE, which a dynamic import

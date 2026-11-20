@@ -9,6 +9,9 @@
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "lib": ["ES2022", "DOM"],
+    // Node types for the package's own tests (`baselineRaise.test.ts` reads fixtures with `node:fs`),
+    // the same way agent-run declares them.
+    "types": ["node"],
     "declaration": true,
     "skipLibCheck": true,
     "noEmit": true,
