@@ -102,7 +102,7 @@ export class BuilderForcePanel extends WebviewPanelBase<BrainInbound> {
     // the constructor returns, so `onMessage` always finds the surface.
     this.surface = new WorkspaceSurface(
       ctx,
-      { webview: this.panel.webview, owner: this.panel, onSessionMeta: (chatId, title) => this.bindSession(chatId, title) },
+      { webview: this.webview, owner: this.panel, onSessionMeta: (chatId, title) => this.bindSession(chatId, title) },
       session,
       surface,
       intent,
@@ -120,6 +120,8 @@ export class BuilderForcePanel extends WebviewPanelBase<BrainInbound> {
    * starts tracking its own live status. In reuse mode only the title is recorded.
    */
   private bindSession(chatId: number | undefined, title: string | undefined): void {
+    // A late session.meta must not re-register a closed tab in byChat / unassigned.
+    if (this.isDisposed) return;
     if (title !== undefined) this.chatTitle = title;
     if (this.mode === "perSession" && chatId !== this.ownChatId) {
       if (this.ownChatId != null && BuilderForcePanel.byChat.get(this.ownChatId) === this) {
@@ -145,7 +147,8 @@ export class BuilderForcePanel extends WebviewPanelBase<BrainInbound> {
    * Reuse mode keeps the product title (its one tab is not a single session).
    */
   private applyTabStatus(): void {
-    if (this.mode !== "perSession") return;
+    // A closed tab's `title` / `iconPath` setters throw.
+    if (this.mode !== "perSession" || this.isDisposed) return;
     // The panel's chat is a LOCAL id: its own runs, not the server map (PRD 36).
     const state = this.ownChatId != null ? editorChatState(this.ownChatId) : undefined;
     const name = this.chatTitle.trim() || "BuilderForce";

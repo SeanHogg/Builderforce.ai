@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import { boundToken, refreshTenantJwt } from "./bfApi";
 import type { LocalFirstChange } from "@builderforce/local-first";
-import { logLine } from "./errorReporter";
+import { logLine, reportExtensionError } from "./errorReporter";
 import { getBaseUrl, getWebBaseUrl } from "./gateway";
 import { localBrainApplication } from "./localFirstStore";
 import { platformInferenceMode, platformPolicy } from "./platformPolicy";
@@ -322,7 +322,15 @@ export async function handleSharedHostMessage(
       return true;
     // A fresh nonce makes it a different document, which VS Code re-renders from scratch.
     case "webview.reload":
-      if (webview) webview.html = withFreshNonce(webview.html);
+      try {
+        if (webview) webview.html = withFreshNonce(webview.html);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        // `html` get/set throws on a disposed webview: the panel closed while the reload
+        // was queued — expected, so logged only. Anything else is a real failure.
+        if (/disposed/i.test(message)) logLine(`[webview] reload dropped: ${message}`);
+        else void reportExtensionError(error, { operation: "webview.reload" });
+      }
       return true;
     case "webview.copy": {
       const text = (msg as WebviewInbound & { text?: unknown }).text;

@@ -1,3 +1,17 @@
+## ✅ RESOLVED 2026-11-19: VS Code "Webview is disposed" uncaught error (VSIX .193 Runtime Status)
+
+Cause: the Visualization panel's KnowledgeBridge posted with `postToWebview(this.panel.webview, …)`. A knowledge review run that outlived the panel then read the `WebviewPanel.webview` getter on a disposed panel, and that getter throws. The same lazy reads, plus view chrome writes after an `await`, existed in several more places. Fixes:
+- `WebviewPanelBase` captures the webview once and owns `isDisposed`. `postMessage` on a captured webview returns false after dispose instead of throwing. Messages that arrive after teardown are dropped.
+- `VisualizationPanel` and `BuilderForcePanel` post only through the captured webview. A per-session tab no longer repaints or re-registers once it is closed.
+- The chat view (`chatView.ts`):
+  - It does not build a surface for a view that has already closed.
+  - A failed board lookup is reported, and the view shows a localized warning instead of producing unhandled rejections.
+  - An intent sent while the lookup is in flight survives that view closing.
+- `evermindView` and `voiceMarketplaceView` `sendInit` stop if the view changed while awaiting.
+- A `webview.reload` on a disposed webview is logged; any other reload error is reported.
+- The silent catches in `WebviewPanelBase.teardown` and `WorkspaceSurface.dispose` now report the error.
+- Regression tests: `chatView.test.ts`, `visualizationPanel.test.ts`, `webviewHostBridge.test.ts`.
+
 ## ✅ RESOLVED 2026-11-19: Agent pipeline — hand-offs, run guards, ratchet integrity, ticket reads, diagnostics (VS Code chats #273, #275)
 
 Triage of two VSIX runs found:

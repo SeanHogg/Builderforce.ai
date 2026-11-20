@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { logLine } from "./errorReporter";
 import { getBaseUrl } from "./gateway";
 import { makeNonce, renderBundleShell } from "./webviewBundleShell";
 import { handleSharedHostMessage, postToWebview, respondToWebview, type WebviewInbound } from "./webviewHostBridge";
@@ -61,8 +62,15 @@ export type { WebviewInbound } from "./webviewHostBridge";
  */
 export abstract class WebviewPanelBase<M extends WebviewInbound = WebviewInbound> {
   protected readonly panel: vscode.WebviewPanel;
+  /** The panel's webview, captured ONCE. `panel.webview` THROWS ("Webview is disposed")
+   *  once the panel closes, while `postMessage` on this captured object just resolves
+   *  false — so async continuations (a knowledge run, a late reply) must use this. */
+  protected readonly webview: vscode.Webview;
   protected readonly disposables: vscode.Disposable[] = [];
   private readonly htmlTitle: string;
+  /** Set FIRST on teardown: a closed panel's chrome setters throw, and a message still in
+   *  flight must not reach a subclass whose surface is gone. */
+  private disposed = false;
 
   protected constructor(
     protected readonly ctx: vscode.ExtensionContext,
@@ -86,11 +94,12 @@ export abstract class WebviewPanelBase<M extends WebviewInbound = WebviewInbound
         localResourceRoots: init.localResourceRoots ?? [vscode.Uri.joinPath(ctx.extensionUri, "media")],
       },
     );
+    this.webview = this.panel.webview;
     this.panel.iconPath = vscode.Uri.joinPath(ctx.extensionUri, "media", "icon.png");
     // Listener before html — same race as EvermindViewProvider: the bundle posts
     // `ready` at module load, and a dropped ready leaves the panel on the sign-in wall.
-    this.panel.webview.onDidReceiveMessage((m) => void this.dispatchMessage(m as M), undefined, this.disposables);
-    this.panel.webview.html = this.renderHtml(this.panel.webview);
+    this.webview.onDidReceiveMessage((m) => void this.dispatchMessage(m as M), undefined, this.disposables);
+    this.webview.html = this.renderHtml(this.webview);
     this.panel.onDidDispose(() => this.teardown(), undefined, this.disposables);
   }
 
@@ -116,27 +125,35 @@ export abstract class WebviewPanelBase<M extends WebviewInbound = WebviewInbound
    *  The shared set lives in `webviewHostBridge` because the Evermind SIDEBAR VIEW
    *  answers the same messages and cannot extend this panel base. */
   private async dispatchMessage(msg: M): Promise<void> {
-    if (await handleSharedHostMessage(this.ctx, this.panel.webview, msg, this.panel)) return;
+    if (this.disposed) return;
+    if (await handleSharedHostMessage(this.ctx, this.webview, msg, this.panel)) return;
     await this.onMessage(msg);
   }
 
   /** Fire-and-forget post to the webview. */
   protected post(msg: unknown): void {
-    postToWebview(this.panel.webview, msg, this.panel);
+    postToWebview(this.webview, msg, this.panel);
   }
 
   /** Reply to a webview `request` round-trip; a no-op without an id (fire-and-forget). */
   protected respond(id: string | undefined, ok: boolean, result?: unknown, error?: string): void {
-    respondToWebview(this.panel.webview, id, ok, result, error);
+    respondToWebview(this.webview, id, ok, result, error);
+  }
+
+  /** True once the panel closed — for subclasses that write panel chrome from callbacks. */
+  protected get isDisposed(): boolean {
+    return this.disposed;
   }
 
   private teardown(): void {
+    this.disposed = true;
     this.onDispose();
     for (const d of this.disposables) {
       try {
         d.dispose();
-      } catch {
-        /* noop */
+      } catch (error) {
+        // Reported, then the rest still dispose.
+        logLine(`[webview] panel teardown: a disposable threw: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
   }

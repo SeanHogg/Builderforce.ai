@@ -1309,5 +1309,6 @@
   "{0} could not be reached from this machine: {1}": "{0} could not be reached from this machine: {1}",
   "{0} needs to be reconnected: {1}": "{0} needs to be reconnected: {1}",
   "{0} is not connected. Connect the account first.": "{0} is not connected. Connect the account first.",
-  "Could not get the {0} credential from Builderforce: {1}": "Could not get the {0} credential from Builderforce: {1}"
+  "Could not get the {0} credential from Builderforce: {1}": "Could not get the {0} credential from Builderforce: {1}",
+  "BuilderForce could not open the chat. Close and reopen the view to try again.": "BuilderForce could not open the chat. Close and reopen the view to try again."
 }

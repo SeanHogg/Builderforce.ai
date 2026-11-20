@@ -56,10 +56,13 @@ export class VoiceMarketplaceViewProvider implements vscode.WebviewViewProvider 
   }
 
   private async sendInit(): Promise<void> {
-    if (!this.view) return;
+    const view = this.view;
+    if (!view) return;
     const signedIn = !!(await this.ctx.secrets.get(SECRET_KEY));
     const token = signedIn ? ((await getTenantJwt(this.ctx.secrets)) ?? null) : null;
-    void this.view.webview.postMessage({
+    // The view closed (or was re-resolved) during the awaits: its `webview` getter throws.
+    if (this.view !== view) return;
+    void view.webview.postMessage({
       type: "init",
       view: "voiceMarketplace",
       baseUrl: getBaseUrl(),

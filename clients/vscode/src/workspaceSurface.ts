@@ -3,6 +3,7 @@ import { isSubscriptionSignInUrl } from "@builderforce/model-catalog";
 import { artifactRoutePath, type ChatInputAttachment, type SteerTurn } from "@seanhogg/builderforce-brain-embedded";
 import { steerFromMessage } from "./steerMessage";
 import { getCurrentUserId } from "./bfApi";
+import { logLine } from "./errorReporter";
 import type { BrainRunHost, WebviewRunStart } from "./brainRunHost";
 import { getWebBaseUrl } from "./gateway";
 import { turnLimbicBlock } from "./personalityLimbic";
@@ -619,8 +620,9 @@ export class WorkspaceSurface implements vscode.Disposable {
     for (const d of this.disposables) {
       try {
         d.dispose();
-      } catch {
-        /* noop */
+      } catch (error) {
+        // Reported, then the rest still dispose.
+        logLine(`[workspace] surface dispose: a disposable threw: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
   }
