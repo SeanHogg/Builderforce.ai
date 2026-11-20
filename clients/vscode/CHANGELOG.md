@@ -2,6 +2,11 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.195] — Chat tickets close the right way, and open work no longer reads as done
+
+- **Fixed: a ticket could show as finished while work on it was still open.** Each kind of ticket now has its own closed states, so an open item never shows 100%.
+- **Fixed: closing out a run could undo a board change made while it was finishing.** Moving a chat's tickets on close-out now reads the board fresh each time. The run's own ticket still moves when the tool catalog has no ticket listing.
+
 ## [2026.10.194] — 3D labels render again, and closing a panel no longer throws errors
 
 - **Fixed: text in the 3D views was blank or failed.** Labels on the stage, the knowledge graph and the world views now lay out again. Every text layout used to fail with "init did not return a callable function".
