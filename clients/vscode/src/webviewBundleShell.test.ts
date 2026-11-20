@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BOOT_STRINGS_ELEMENT_ID, inlineJson, renderBundleShell, withFreshNonce, type RootFallbackStrings } from "./webviewBundleShell";
+import { BOOT_STRINGS_ELEMENT_ID, bundleCsp, inlineJson, renderBundleShell, withFreshNonce, type RootFallbackStrings } from "./webviewBundleShell";
 
 const NONCE = "AbCdEfGhIjKlMnOpQrStUvWxYz012345";
 
@@ -53,6 +53,22 @@ describe("the bundle shell's boot strings", () => {
     const value = { a: "</script>", b: "<!--", c: [1, "<"] };
     expect(inlineJson(value)).not.toContain("<");
     expect(JSON.parse(inlineJson(value))).toEqual(value);
+  });
+});
+
+describe("the bundle CSP", () => {
+  it("regression: script-src grants blob: so troika's text worker can importScripts its modules, without opening eval or inline script", () => {
+    const csp = bundleCsp({ cspSource: "vscode-resource:", nonce: NONCE, apiOrigin: "https://api.example" });
+    const scriptSrc = csp
+      .split(";")
+      .map((directive) => directive.trim().split(/\s+/))
+      .find(([name]) => name === "script-src");
+    expect(scriptSrc).toBeDefined();
+    const sources = scriptSrc!.slice(1);
+    // Exact list, in order: any later widening (https:, *, 'strict-dynamic') fails here.
+    expect(sources).toEqual([`'nonce-${NONCE}'`, "vscode-resource:", "'wasm-unsafe-eval'", "blob:"]);
+    expect(sources).not.toContain("'unsafe-eval'");
+    expect(sources).not.toContain("'unsafe-inline'");
   });
 });
 

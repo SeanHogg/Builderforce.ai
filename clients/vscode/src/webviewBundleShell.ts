@@ -89,7 +89,14 @@ export function bundleCsp({ cspSource, nonce, apiOrigin }: Pick<BundleShellInput
   // `'wasm-unsafe-eval'` is also what lets the page engines (PRD 34) compile WebLLM's and
   // `bfi`'s WebAssembly here; their model downloads (huggingface.co, *.hf.co,
   // raw.githubusercontent.com) ride the `https:` grant in `connect-src` below.
-  const scriptSrc = `'nonce-${nonce}' ${cspSource} 'wasm-unsafe-eval'`;
+  // `blob:` is for troika-three-text (every 3D text in this webview): it typesets in a
+  // `blob:` Worker and rehydrates each module there with `importScripts(blob: URL)`. A blob
+  // worker inherits this CSP and `importScripts` is gated by `script-src` (`worker-src` does
+  // not cover it, and no directive separates it from `<script src>`). A blob: URL can only be
+  // minted by code already executing in this origin and is an unguessable UUID, so injected
+  // markup gains nothing; the cost is that already-running code can turn a string into script
+  // this way (eval-equivalent). Never widen this to `'unsafe-eval'` or `'unsafe-inline'`.
+  const scriptSrc = `'nonce-${nonce}' ${cspSource} 'wasm-unsafe-eval' blob:`;
   return [
     `default-src 'none'`,
     `img-src ${cspSource} https: data: blob:`,
