@@ -21,7 +21,7 @@ const jwt = vi.hoisted(() => ({
   boundToken: vi.fn((token: string | undefined) => (token ? { token } : null)),
 }));
 vi.mock("./bfApi", () => jwt);
-vi.mock("./errorReporter", () => ({ logLine: vi.fn() }));
+vi.mock("./errorReporter", () => ({ logLine: vi.fn(), reportExtensionError: vi.fn(async () => undefined) }));
 vi.mock("./gateway", () => ({ getBaseUrl: () => "https://api.example", getWebBaseUrl: () => "https://web.example" }));
 const workRepo = vi.hoisted(() => ({ createLocalWorkRepository: vi.fn() }));
 vi.mock("./localWorkRepository", () => workRepo);
@@ -63,7 +63,7 @@ vi.mock("./platformCallGate", () => ({
 }));
 
 import { handleSharedHostMessage, watchedWebviewCount, webviewErrorLines } from "./webviewHostBridge";
-import { logLine } from "./errorReporter";
+import { logLine, reportExtensionError } from "./errorReporter";
 import { UNKNOWN_PERSISTENCE_METHOD } from "./localPersistenceDispatch";
 
 type Ctx = Parameters<typeof handleSharedHostMessage>[0];
@@ -258,6 +258,27 @@ describe("the root error fallback's host messages", () => {
     const next = (view.webview as { html: string }).html;
     expect(next).not.toBe(html);
     expect(next).not.toContain("abc123");
+    view.dispose();
+  });
+
+  it("regression: a reload on a disposed webview is reported, never thrown", async () => {
+    const view = surface();
+    Object.defineProperty(view.webview, "html", {
+      get: () => { throw new Error("Webview is disposed"); },
+      set: () => { throw new Error("Webview is disposed"); },
+    });
+    await expect(handleSharedHostMessage(ctx, view.webview, { type: "webview.reload" }, view.owner)).resolves.toBe(true);
+    expect(logLine).toHaveBeenCalledWith("[webview] reload dropped: Webview is disposed");
+    expect(reportExtensionError).not.toHaveBeenCalled();
+    view.dispose();
+  });
+
+  it("regression: a reload that fails for any other reason is reported as an error", async () => {
+    const view = surface();
+    const failure = new Error("bad document");
+    Object.defineProperty(view.webview, "html", { get: () => { throw failure; } });
+    await expect(handleSharedHostMessage(ctx, view.webview, { type: "webview.reload" }, view.owner)).resolves.toBe(true);
+    expect(reportExtensionError).toHaveBeenCalledWith(failure, { operation: "webview.reload" });
     view.dispose();
   });
 

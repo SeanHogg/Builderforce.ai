@@ -1309,5 +1309,6 @@
   "{0} could not be reached from this machine: {1}": "{0} ist von diesem Rechner aus nicht erreichbar: {1}",
   "{0} needs to be reconnected: {1}": "{0} muss neu verbunden werden: {1}",
   "{0} is not connected. Connect the account first.": "{0} ist nicht verbunden. Verbinden Sie zuerst das Konto.",
-  "Could not get the {0} credential from Builderforce: {1}": "Die Anmeldedaten für {0} konnten nicht von Builderforce abgerufen werden: {1}"
+  "Could not get the {0} credential from Builderforce: {1}": "Die Anmeldedaten für {0} konnten nicht von Builderforce abgerufen werden: {1}",
+  "BuilderForce could not open the chat. Close and reopen the view to try again.": "BuilderForce konnte den Chat nicht öffnen. Schließen Sie die Ansicht und öffnen Sie sie erneut."
 }

@@ -3,7 +3,6 @@ import { WebviewPanelBase } from "./webviewShared";
 import { workspaceCanvasSession, type WorkspaceCanvasSession } from "./workspaceSession";
 import { WorkspaceSurface, type BrainInbound } from "./workspaceSurface";
 import { asVisualizationFrame } from "./visualizationInitFrame";
-import { postToWebview, respondToWebview } from "./webviewHostBridge";
 import { KnowledgeBridge, setPendingKnowledgeFocus } from "./knowledge/knowledgeBridge";
 import { KNOWLEDGE_CALL, KNOWLEDGE_FOCUS, type KnowledgeCall, type KnowledgeFocusFrame } from "./knowledge/knowledgeProtocol";
 
@@ -52,11 +51,13 @@ export class VisualizationPanel extends WebviewPanelBase<BrainInbound> {
     // webview's, and this one opens beside the chat — it would load the chat's models.
     this.surface = new WorkspaceSurface(
       ctx,
-      { webview: this.panel.webview, owner: this.panel, frame: asVisualizationFrame, offersPageEngines: false },
+      { webview: this.webview, owner: this.panel, frame: asVisualizationFrame, offersPageEngines: false },
       session,
       "graph",
     );
-    this.knowledge = new KnowledgeBridge({ ctx, post: (msg) => postToWebview(this.panel.webview, msg, this.panel) });
+    // The CAPTURED webview (via `post`): a knowledge review run can finish after the
+    // panel closed, and re-reading `panel.webview` then throws "Webview is disposed".
+    this.knowledge = new KnowledgeBridge({ ctx, post: (msg) => this.post(msg) });
   }
 
   /**
@@ -68,7 +69,7 @@ export class VisualizationPanel extends WebviewPanelBase<BrainInbound> {
     setPendingKnowledgeFocus(frame);
     await VisualizationPanel.open(ctx);
     const current = VisualizationPanel.current;
-    if (current) postToWebview(current.panel.webview, { type: KNOWLEDGE_FOCUS, ...frame }, current.panel);
+    if (current) current.post({ type: KNOWLEDGE_FOCUS, ...frame });
   }
 
   /** Open (or reveal) the visualization panel in the editor area. Rejects when the
@@ -92,9 +93,9 @@ export class VisualizationPanel extends WebviewPanelBase<BrainInbound> {
     if (msg.type !== KNOWLEDGE_CALL) return this.surface.handle(msg);
     const { type: _type, id, ...call } = msg as unknown as KnowledgeCall & { type: string; id?: string };
     try {
-      respondToWebview(this.panel.webview, id, true, await this.knowledge.handle(call as KnowledgeCall));
+      this.respond(id, true, await this.knowledge.handle(call as KnowledgeCall));
     } catch (error) {
-      respondToWebview(this.panel.webview, id, false, undefined, error instanceof Error ? error.message : String(error));
+      this.respond(id, false, undefined, error instanceof Error ? error.message : String(error));
     }
   }
 

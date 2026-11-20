@@ -1309,5 +1309,6 @@
   "{0} could not be reached from this machine: {1}": "无法从本机访问 {0}：{1}",
   "{0} needs to be reconnected: {1}": "{0} 需要重新连接：{1}",
   "{0} is not connected. Connect the account first.": "{0} 未连接。请先连接该账户。",
-  "Could not get the {0} credential from Builderforce: {1}": "无法从 Builderforce 获取 {0} 的凭据：{1}"
+  "Could not get the {0} credential from Builderforce: {1}": "无法从 Builderforce 获取 {0} 的凭据：{1}",
+  "BuilderForce could not open the chat. Close and reopen the view to try again.": "BuilderForce 无法打开聊天。请关闭并重新打开该视图后重试。"
 }
