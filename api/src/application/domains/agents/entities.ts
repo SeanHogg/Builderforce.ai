@@ -30,6 +30,8 @@ import {
   executionLimits,
   geocoderCache,
   llmActionRatings,
+  mergeGrantPullRequests,
+  mergeGrants,
   modelLocks,
   skillFiles,
   tenantSkills,
@@ -115,4 +117,11 @@ export const AGENTS_ENTITIES = defineDomainEntities('agents', [
    *  retries and settles each row under a lease, so a hand-moved `state` is a dispatch
    *  that runs twice or never. */
   entity(deferredDispatches, { readOnly: true }),
+  /** A person's "merge into main" grant for one cloud run, and the pull request(s) it is pinned to
+   *  (PRD 48 §4.6, migration 1357). Read-only AUDIT rows: a grant overrides the project's merge
+   *  settings, so it is written only by the role-gated grant route and settled (consumed / voided /
+   *  held) only by the PR merge sweep (`application/runtime/mergeGrants.ts`). A generic write would be
+   *  a merge into main nobody granted, or a pin moved to a commit nobody saw. */
+  entity(mergeGrants, { readOnly: true }),
+  entity(mergeGrantPullRequests, { readOnly: true }),
 ]);

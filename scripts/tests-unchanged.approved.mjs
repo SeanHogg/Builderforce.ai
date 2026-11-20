@@ -86,9 +86,9 @@ export const APPROVED_PERMANENT = [
   },
   {
     file: 'packages/agent-run/test/guards/loopGuards.test.ts',
-    blob: 'cb5c12807871f4804e093933e96cb8304074a55f',
-    changed: "vi.hoisted telemetry, difficulty-gate and env-lever mocks replaced by GuardPorts and GuardLevers. All 12 source cases have a counterpart (one is split: its levers-off pass-through case is guards/leversOffPassThrough.test.ts); one case is new. (chat #276, 2026-11-19) One case appended — 'never escalates on a finish held for open linked work' — every existing line unchanged.",
-    reason: "The engine read levers from env strings and wrote telemetry through module imports; the policy takes them as ports. Re-approved 2026-11-19 for an append-only case: a linked_work_open finish hold is owed work, not a failed verifier, so it must not escalate the model.",
+    blob: 'f824173f4639ca120fb90fd2b62cde1fb11851b5',
+    changed: "vi.hoisted telemetry, difficulty-gate and env-lever mocks replaced by GuardPorts and GuardLevers. All 12 source cases have a counterpart (one is split: its levers-off pass-through case is guards/leversOffPassThrough.test.ts); one case is new. (chat #276, 2026-11-19) One case appended — 'never escalates on a finish held for open linked work' — every existing line unchanged. (PRD 48, 296818c0b) The harness's `pause` port is removed, and 'steers on the first trip, escalates on the second, pauses on the third' becomes '… finishes on the third': the third trip expects finalTurnDue, no pendingPause in the snapshot and a final-report tail note, instead of an ask_human park from beforeDispatchPause.",
+    reason: "The engine read levers from env strings and wrote telemetry through module imports; the policy takes them as ports. Re-approved 2026-11-19 for an append-only case: a linked_work_open finish hold is owed work, not a failed verifier, so it must not escalate the model. Re-approved 2026-11-20 for PRD 48 (ship policy, chat #157440): the progress guard ladder is steer -> escalate -> finish and never asks a person whether to continue; the pause rung and its port are deleted, so the old assertions pinned the superseded behaviour.",
     approvedBy: APPROVED_BY,
   },
   {
@@ -237,6 +237,31 @@ export const APPROVED_THIS_PUSH = [
     file: 'packages/agent-run/test/subagents/child.test.ts',
     changed: "The delegating script's spawn_agent args gain `role: \"explore\"`; one case is added (a role-less spawn is refused with MISSING_ROLE_ERROR and nothing is spawned), with its MISSING_ROLE_ERROR import. Every existing expectation is unchanged.",
     reason: 'Intended change (fc939c496, chat #273): spawn_agent / spawn_agents require `role`; a missing role is answered with a corrective error instead of a role-less child. The added case pins the refusal.',
+    approvedBy: APPROVED_BY,
+  },
+  // PRD 48 ship policy (296818c0b, chat #157440): the progress guard ladder is steer -> escalate -> finish and never asks a person.
+  {
+    file: 'brain-embedded/src/run/parity/scenarios/ends.ts',
+    changed: "The ship-gate scenario's h.start gains `...SHIPS_TO_MAIN` (shipPolicy commit_push from project_settings), with its import; every expectation is unchanged.",
+    reason: 'Intended change (PRD 48 ship policy): a run pushes to the base branch only when its ship policy says so, so the ship-gate scenario must declare the commit_push policy to keep exercising the push it records.',
+    approvedBy: APPROVED_BY,
+  },
+  {
+    file: 'packages/agent-run/test/guards/guardsHook.test.ts',
+    changed: "'A3: a parked run skips the next call with an ask_human control, once' becomes 'regression: chat #157440 — A3 never parks a run; an old saved pendingPause is ignored on resume': the hook has no beforeDispatch, and a saved pendingPause key is dropped by the next observe. The header comment says so.",
+    reason: 'Intended change (PRD 48 ship policy, chat #157440): the progress guard never asks a human whether to continue — its third trip finishes the run on a no-tools report — so the pause rung, its ask_human control and beforeDispatch are deleted. The old case pinned the superseded behaviour; the new one pins that state saved before the change is harmless.',
+    approvedBy: APPROVED_BY,
+  },
+  {
+    file: 'packages/agent-run/test/guards/progressFinish.test.ts',
+    changed: "The chat #146477 case drops its two pause expectations (pendingPause undefined, beforeDispatch undefined) and ', never a pause' from its title, since the pause field and beforeDispatch no longer exist. A chat #157440 regression case is added (no stronger model: second trip is a second steer, third trip finishes on a no-tools report, no ask_human).",
+    reason: 'Intended change (PRD 48 ship policy, chat #157440): the guard ladder is steer -> escalate -> finish and never pauses for a person, so there is no pause to assert absent; the finish expectations of the original case are unchanged.',
+    approvedBy: APPROVED_BY,
+  },
+  {
+    file: 'api/src/application/runtime/cloudAdapter.conformance.test.ts',
+    changed: "The `../llm/vendors/registry` vi.mock factory spreads the real module (importOriginal) and overrides only `catalogEntry: () => null` (was a factory exporting catalogEntry alone); every expectation is unchanged.",
+    reason: "Mock repair, no behaviour change: modules on the cloud adapter's import path now read the registry at load (llm/vendors/modelTwins.ts calls getCatalog, llm/modelPoolComposition.ts calls autoRoutableModelsByTier), so the catalogEntry-only factory failed the suite before any case ran ('No \"getCatalog\" export is defined on the mock'). The fake the cases depend on (no catalog entry for the fake model) is kept.",
     approvedBy: APPROVED_BY,
   },
 ];
