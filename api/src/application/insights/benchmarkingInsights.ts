@@ -35,6 +35,7 @@ import { clampScore } from '../../domain/shared/numbers';
 import { computeDora } from '../metrics/workforceMetrics';
 import { computeEngineeringInsights } from './engineeringInsights';
 import { computeAiAdoption } from '../metrics/aiAdoption';
+import { buildLiveValues, registryReader } from './benchmarkLiveValues';
 
 export const DEFAULT_INDUSTRY = 'saas';
 export const DEFAULT_SIZE_BAND = 'mid';
@@ -80,9 +81,19 @@ const METRIC_LABELS: Record<string, string> = {
   ai_merge_rate_pct: 'AI merge rate',
   cost_per_merged_pr_usd: 'Cost per merged PR',
   ai_adoption_pct: 'AI adoption',
+  nrr_pct: 'Net revenue retention',
+  grr_pct: 'Gross revenue retention',
+  gross_margin_pct: 'Gross margin',
+  cac_payback_months: 'CAC payback',
+  ltv_cac_ratio: 'LTV:CAC ratio',
+  magic_number: 'Magic number',
+  burn_multiple: 'Burn multiple',
+  logo_churn_pct_monthly: 'Monthly logo churn',
+  arr_growth_pct: 'ARR growth',
+  inference_margin_pct: 'Inference margin',
 };
 
-/** The metric order shown in the lens (DORA four-keys, then AI signals). */
+/** The metric order shown in the lens (DORA four-keys, AI signals, then growth economics). */
 export const BENCHMARK_METRICS = [
   'deploy_freq_per_week',
   'lead_time_hours',
@@ -91,6 +102,16 @@ export const BENCHMARK_METRICS = [
   'ai_merge_rate_pct',
   'cost_per_merged_pr_usd',
   'ai_adoption_pct',
+  'nrr_pct',
+  'grr_pct',
+  'gross_margin_pct',
+  'cac_payback_months',
+  'ltv_cac_ratio',
+  'magic_number',
+  'burn_multiple',
+  'logo_churn_pct_monthly',
+  'arr_growth_pct',
+  'inference_margin_pct',
 ] as const;
 
 function ratingForPercentile(p: number): BenchmarkRating {
@@ -259,7 +280,6 @@ export async function computeBenchmarking(
     computeAiAdoption(db, tenantId, days, projectId),
   ]);
 
-  const merged = eng.totals.mergedRatePct;
   // AI adoption is now MEASURED, not proxied: the share of tickets completed in
   // the window that had at least one live agent run — which is the definition the
   // 0230 cohort percentiles were seeded against ("% of delivered work touched by
@@ -272,15 +292,19 @@ export async function computeBenchmarking(
   // unknown, so it joins neither side).
   const costPerMergedPr = eng.totals.costPerMergedPrUsd;
 
-  const liveValues: Record<string, number | null> = {
-    deploy_freq_per_week: dora.deploymentFrequencyPerDay * 7,
-    lead_time_hours: dora.leadTimeHours,
-    change_failure_rate_pct: dora.changeFailureRatePct,
-    mttr_hours: dora.mttrHours,
-    ai_merge_rate_pct: eng.totals.runs > 0 ? merged : null,
-    cost_per_merged_pr_usd: costPerMergedPr,
-    ai_adoption_pct: adoption,
-  };
+  const liveValues = await buildLiveValues(
+    {
+      deploymentFrequencyPerDay: dora.deploymentFrequencyPerDay,
+      leadTimeHours: dora.leadTimeHours,
+      changeFailureRatePct: dora.changeFailureRatePct,
+      mttrHours: dora.mttrHours,
+      mergedRatePct: eng.totals.mergedRatePct,
+      runs: eng.totals.runs,
+      costPerMergedPrUsd: costPerMergedPr,
+      adoptionPct: adoption,
+    },
+    registryReader(db, tenantId, days),
+  );
 
   const metrics = BENCHMARK_METRICS.map((m) => buildMetric(m, liveValues[m] ?? null, byMetric.get(m)));
 

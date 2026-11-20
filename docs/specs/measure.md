@@ -17,6 +17,47 @@
 
 ---
 
+## Features and tasks — status
+
+Verified against the code 2026-11-20. This replaces the per-section `Remaining (verified …)` notes, which were stale: each now points at a row ID below. **Status** is `Complete`, `Incomplete`, or `Blocked — operator` (needs a credential, a provisioned resource or a business relationship, not code). The prose in the sections that follow is unchanged and remains the spec.
+
+### PRD 25 — Vertical KPI Dashboards
+
+| ID | Feature / task | Spec § | Status | Evidence (file paths) |
+|---|---|---|---|---|
+| P25-01 | Vertical presets carry their §5.3 KPI tiles (saas, ai_ml, fintech, medtech, biotech and the rest) | §5.3 | Complete | `api/src/application/dashboards/dashboardPresets.ts`, `dashboardPresets.test.ts` |
+| P25-02 | LTV tranches: `computeLtvTranches`, `customerEconomics` port, `GET /api/dashboards/ltv-tranches`, `growth.ltv-tranches` widget | §5.4, §25a.3 B3 | Complete | `api/src/application/dashboards/ltvTranches.ts` (+test), `api/src/application/finance/customerEconomics.ts` (+test), `api/src/presentation/routes/dashboardsRoutes.ts` |
+| P25-03 | `marketSize` canvas kind with TAM/SAM/SOM derive, deck `dataSources.ts` binding | §5.5, §6.3, §25a.4 C2 | Complete | `packages/creation-canvas-contract/src/marketSize.ts` (+test), `objectKinds.ts`, `api/src/application/deck/dataSources.ts` |
+| P25-04 | Metric keys `growth.*`, `ai.*` and vertical families (`clinical`, `payments`, `climate`, `hardware`, `security`, `market`) in the registry; `growth.*` is declared-only via `custom_kpis` (`latestDeclaredValue`) with derived cacPayback / ltv / ltvCac | §6.2, §25a.3 B2 | Complete | `api/src/application/dashboards/{growthMetrics,aiMetrics,declaredKpi,declaredStageKpi,clinicalMetrics,paymentsMetrics,climateMetrics,hardwareMetrics,securityMetrics,marketMetrics}.ts`, `verticalMetrics.test.ts`, `metricRegistry.ts` |
+| P25-05 | Vertical widget modules and `StageBar`, ids in `COMPOSABLE_WIDGET_IDS` | §6.2, §25a.3 B5, §25a.5 | Complete | `frontend/src/components/insights/widgets/{saasWidgets,aiWidgets,verticalWidgets,verticalTiles,StageBar}.tsx`, `api/src/application/dashboards/widgetIds.ts` |
+| P25-06 | Exit waterfall (`computeWaterfall`), `exitScenario` kind, `equity.exitPayoutAt`, waterfall routes | §6.3, §25a.4 C1 | Complete | `api/src/application/finance/exitWaterfall.ts` (+test), `exitWaterfallService.ts`, `api/src/application/dashboards/exitMetrics.ts` (+test), `objectKinds.ts` |
+| P25-07 | B1 MRR-economics producer rollup (MRR, new/expansion/contraction/churned MRR, customers, COGS, S&M, inference spend) with fact names that do not collide with marketing `growth.leads/conversions/spend` | §6.2, §7 B, §25a.3 B1 | Incomplete | Gap: `api/src/application/kernel/rollups/finance.ts` emits only `finance.mrr`; `kernel/rollups/growth.ts` emits marketing facts only |
+| P25-08 | B4 benchmark seeds for `saas` and `ai_ml` (sourced rows; `ON CONFLICT DO NOTHING`) plus `BENCHMARK_METRICS` growth keys and `benchmarkLiveValues.ts` extraction | §6.5, §25a.3 B4 | Incomplete | Gap: no migration contains `nrr_pct` (next free number 1359+); `api/src/application/insights/benchmarkingInsights.ts` lists 7 DORA/AI keys and assembles `liveValues` inline |
+| P25-09 | Slice D benchmark seeds for the other eight verticals (sourced rows only; no band, no rows) | §6.5, §25a.5 | Incomplete | Gap: no seed migration after `1176_vertical_vocabulary.sql`; lens reports `cohortSeeded: false` |
+| P25-10 | FinanceLens reads the installed preset dashboard | §6.6 | Incomplete | Gap: `frontend/src/components/insights/FinanceLens.tsx` never reads it; client is `frontend/src/lib/dashboardsApi.ts` |
+| P25-11 | `toPublicProfile` carries the benchmark rating (elite/high/medium/low, never numbers) | §6.6 | Complete | `api/src/application/investor/startupDirectory.ts`, `frontend/src/lib/startupDirectory.ts` |
+| P25-12 | `companies.sector` validated through `isStartupSector` | §8 | Complete | `api/src/application/investor/companyWorkspace.ts` (`createCompany` uses `sectorFromInput`) |
+| P25-13 | Release notes (category `new`) for slices B, C and D | §7 ship rule, §25a.0 | Incomplete | Gap: only `api/migrations/1179_release_note_vertical_kpi_dashboards.sql` (slice A) exists |
+| P25-14 | Slice D design-partner proof: two design-partner tenants per vertical run the dashboard for a month | §7 D, §25a.7 | Blocked — operator | Business relationship, not code |
+
+### PRD 33 — Insights
+
+| ID | Feature / task | Spec § | Status | Evidence (file paths) |
+|---|---|---|---|---|
+| P33-01 | D18 event lake (exact funnels, flow, segments) | §2 | Blocked — operator | Operator provisions the pipeline; a Pipelines binding fails deploy when the pipeline does not exist |
+| P33-02 | `NEXT_PUBLIC_REPLAY_SITE_KEY` set for builderforce.ai | §11 | Blocked — operator | Read by `frontend/src/components/ReplayLoader.tsx`; set only in `frontend/.env.local.example` |
+| P33-03 | Stripe secrets and webhook (session-replay pack checkout answers 503 until set) | §11 | Blocked — operator | Credentials; see Reach › Billing |
+
+### Creation outcome metrics
+
+| ID | Feature / task | Spec § | Status | Evidence (file paths) |
+|---|---|---|---|---|
+| OUT-01 | `costPerDelivery` producer: attach the authoritative run cost (`llm_usage_log.cost_usd_millicents`) to delivery outcomes | Metric definitions — Cost per delivered outcome | Incomplete | Gap: no producer sends `costUsdMillicents` to `api/src/application/outcomes/outcomeLedger.ts`; source is `api/src/application/costMetrics/costMetricsStore.ts` |
+| OUT-02 | Presentation export of the sales brief (slides / PDF) | Instrumentation rollout | Incomplete | Gap: wording in `outcomeMetricContract.ts`, presentation in `frontend/src/lib/outcomeMetrics.ts`; nothing renders it |
+| OUT-03 | Bind live experiment traffic (`experiment` in `CONNECTED_CANVAS_ACTIONS`) | Instrumentation rollout | Incomplete | Gap: `frontend/src/domains/canvas/domain/canvasChange.ts`; tracked in ROADMAP Measure |
+
+---
+
 ## PRD 25 — Vertical KPI Dashboards
 
 > Consolidated 2026-11-17 from `docs/specs/25-prd-vertical-kpi-dashboards.md` and its hand-off `docs/specs/25a-vertical-kpi-dashboards-implementation.md` (25a sections appear here as §25a.N). Verified against code 2026-11-17: Partly built — Slice A shipped; Slices B, C, D not started.
@@ -152,8 +193,7 @@ Benchmarks are 2026 public figures and are seeds for `industry_benchmarks`, each
 | DAU/MAU, NPS | Consumer engagement | — |
 
 
-**Remaining (verified 2026-11-17):**
-- Every vertical preset is the founder tiles + `bench.position` only (`api/src/application/dashboards/dashboardPresets.ts:123-126,159`). No vertical KPI is in any preset.
+**Status:** see [P25-01](#features-and-tasks--status) (Complete).
 
 ### §5.4 LTV tranches
 
@@ -161,15 +201,13 @@ A single blended LTV is a vanity number. A **tranche** is a partition of the cus
 
 LTV per tranche = ARPA(tranche) × gross margin ÷ monthly churn(tranche). Cohort tranches use observed retention curves once 12+ months of `metric_facts` exist; before that the churn calculator's assumption is used and the tile is labelled *declared*, the same claim-to-proof rule `/finance` already applies.
 
-**Remaining (verified 2026-11-17):**
-- Not started: no `ltvTranches.ts`, `computeLtvTranches`, `customerEconomics.ts` or `growth.ltv-tranches` widget anywhere in `api/src` / `frontend/src`.
+**Status:** see [P25-02](#features-and-tasks--status) (Complete).
 
 ### §5.5 TAM / SAM / SOM
 
 Both methods, side by side, with the assumptions written down. **Bottom-up** is primary: SOM = reachable customers × ARPA × achievable share; SAM = serviceable customers × ARPA; TAM = all potential customers × ARPA. **Top-down** triangulates from a cited market figure and a share assumption. Rules the object enforces: SOM ≤ SAM ≤ TAM; SOM is tied to the plan; the two methods within 15% of each other is a health mark; every figure carries a source.
 
-**Remaining (verified 2026-11-17):**
-- Not started: no `marketSize` kind in `packages/creation-canvas-contract/src`, `frontend/src/lib/founderObjects.ts` or `api/src/application/deck/dataSources.ts`.
+**Status:** see [P25-03](#features-and-tasks--status) (Complete).
 
 ### §6.2 Metric keys and widgets
 
@@ -189,9 +227,7 @@ Every metric a preset names must be a `MetricDef` in `metricRegistry.ts`, which 
 
 Widgets: one `*_COMPONENTS` module per vertical under `frontend/src/components/insights/widgets/` (`saasWidgets.tsx`, …), spread into `allComponents.ts`, ids added to `COMPOSABLE_WIDGET_IDS`; `askWidgetIds.test.ts` enforces the three-way contract. Each tile: value, benchmark band, delta, next action. Titles under `widgets.title.*` in all five catalogs.
 
-**Remaining (verified 2026-11-17):**
-- No `growth.*` MRR-economics producer: `api/src/application/kernel/rollups/growth.ts` emits only marketing `growth.leads` / `growth.conversions` / `growth.spend` (`:146,189,244`). The `growth.*` keys above need new fact names that do not collide with these.
-- Only `founderWidgets.tsx` exists; no vertical widget module.
+**Status:** keys — [P25-04](#features-and-tasks--status) (Complete); widgets — [P25-05](#features-and-tasks--status) (Complete); MRR-economics producer — [P25-07](#features-and-tasks--status) (Incomplete).
 
 ### §6.3 Exit waterfall and market size
 
@@ -199,24 +235,20 @@ Widgets: one `*_COMPONENTS` module per vertical under `frontend/src/components/i
 
 Canvas kind `marketSize` in `FOUNDER_OBJECT_SPECS`: fields `method`, `potentialCustomers`, `serviceableCustomers`, `reachableCustomers`, `arpa`, `achievableShare`, `topDownMarket`, `topDownShare`, `sources`; `derive` fields `tam`, `sam`, `som`, `triangulationGap`, returning `undefined` on missing inputs. The deck engine's `dataSources.ts` binds the market slide to it.
 
-**Remaining (verified 2026-11-17):**
-- Nothing built: `api/src/application/finance/` holds only `equity.ts`; `exitWaterfall`, `computeWaterfall`, `exitScenario`, `marketSize` return no hits in `api/src`, `packages`, `frontend/src`. Stored terms to use: `share_classes.liquidation_multiple`, `participating`, `seniority`, `conversion_ratio`.
+**Status:** see [P25-06](#features-and-tasks--status) (exit waterfall, Complete) and [P25-03](#features-and-tasks--status) (market size, Complete). Stored terms used: `share_classes.liquidation_multiple`, `participating`, `seniority`, `conversion_ratio`.
 
 ### §6.5 Benchmark seeds
 
 Add `industry_benchmarks` rows for the §5.3 metrics per vertical and size band, each with a `source` naming the public report and quarter; a seed row with no source is rejected. Carta's own reports are a legitimate source for round-size, valuation and dilution bands. Compensation bands stay out until there is a licensed source.
 
-**Remaining (verified 2026-11-17):**
-- No seed migration exists after `1176_vertical_vocabulary.sql`; the numbers 1177/1178 named in 25a were used by unrelated migrations, so seeds need new numbers. Cohorts with no seed today: `ai_ml`, `medtech`, `biotech`, `climate_energy`, `hardware_robotics`, `cybersecurity`, `marketplace` (lens reports `cohortSeeded: false`).
+**Status:** `saas` / `ai_ml` seeds — [P25-08](#features-and-tasks--status) (Incomplete); the other eight verticals — [P25-09](#features-and-tasks--status) (Incomplete). Seeds need migration numbers after the latest existing one (1177/1178 named in 25a were used by unrelated migrations).
 
 ### §6.6 Where it appears
 
 - **Insights hub:** the same dashboard under the Finance lens, pinnable per user through `dashboard_pins`.
 - **Marketplace company profile:** benchmark position only (elite/high/medium/low), never the numbers, extending `toPublicProfile()`.
 
-**Remaining (verified 2026-11-17):**
-- `frontend/src/components/insights/FinanceLens.tsx` never reads the installed preset dashboard.
-- `toPublicProfile` (`api/src/application/investor/startupDirectory.ts:187`) carries no benchmark rating.
+**Status:** FinanceLens — [P25-10](#features-and-tasks--status) (Incomplete); `toPublicProfile` benchmark rating — [P25-11](#features-and-tasks--status) (Complete).
 
 ### §7 Sequencing (open slices)
 
@@ -313,15 +345,12 @@ For each of `fintech`, `healthtech`, `medtech`, `biotech`, `climate_energy`, `ha
 ### §2 D18 — event lake (deferred scale-up)
 Funnels, flow, segments and AI digests run over kept recordings weighted by `sample_weight` and are shown as ≈. An event lake that makes them exact is a later scale-up; it is not a dependency of anything in this PRD.
 
-**Remaining (verified 2026-11-17):**
-- Not built, by design. *Blocker: operator provisions the pipeline (a Pipelines binding fails deploy when the pipeline does not exist).*
+**Status:** see [P33-01](#features-and-tasks--status) (Blocked — operator).
 
 ### §11 Production provisioning (operator)
 Prerequisites: Stripe secrets and webhook; `CLOUDFLARE_API_TOKEN` with R2/DNS/Routes; the legal disclosure published (draft from migration 1219); `NEXT_PUBLIC_REPLAY_SITE_KEY` set for builderforce.ai; a non-superadmin test workspace.
 
-**Remaining (verified 2026-11-17):**
-- `NEXT_PUBLIC_REPLAY_SITE_KEY` is read by `frontend/src/components/ReplayLoader.tsx:44` but set nowhere except `frontend/.env.local.example:12`; no workflow injects it, so builderforce.ai records nothing.
-- Stripe secrets unset (see Reach › Billing), so `POST /api/capabilities/session-replay/packs/:packId/checkout` answers 503.
+**Status:** replay site key — [P33-02](#features-and-tasks--status); Stripe secrets (`POST /api/capabilities/session-replay/packs/:packId/checkout` answers 503 until set) — [P33-03](#features-and-tasks--status). Both Blocked — operator.
 
 ---
 
@@ -409,10 +438,7 @@ The north-star metric is **ideas reaching a graded proof**. Metrics are grouped 
 |---|---|---:|---:|---|
 | Cost per delivered outcome | Efficiency | attributed cost / successful deliveries | same ratio over cohort | Lower |
 
-**Remaining (verified 2026-11-18):**
-- The metric is defined (`api/src/application/outcomes/outcomeMetricContract.ts:435-446`, key `costPerDelivery`). Its session fact sums `creation_outcome_events.cost_usd_millicents` (`outcomeMetricContract.ts:237`), and the ledger accepts `costUsdMillicents` (`outcomeLedger.ts:58,94,111`; `api/src/presentation/routes/creationSessionRoutes.ts:337,1188`).
-- No producer ever sends it. Outside the ledger, the only references are the route schema and the client type (`frontend/src/lib/builderforceApi.ts:8880`), so the metric is permanently "Not measured".
-- The fix: attach the authoritative run cost to delivery outcomes. The source is the run's LLM usage, which `api/src/application/costMetrics/costMetricsStore.ts:205,225` already aggregates from `llm_usage_log.cost_usd_millicents`.
+**Status:** see [OUT-01](#features-and-tasks--status) (Incomplete). The metric is defined (`outcomeMetricContract.ts`, key `costPerDelivery`) and the ledger accepts `costUsdMillicents`, but no producer sends it, so it reads "Not measured"; the cost source is `llm_usage_log.cost_usd_millicents` via `costMetricsStore.ts`.
 
 ### Diagnostics that are not value
 
@@ -432,9 +458,7 @@ GitHub stars, package downloads, workflow counts, MCP connections, and active-ag
 
 The outcome ledger and scorecard are the foundation. Session open, prompt evaluation, validation, delivery, output reuse, and the full proof lifecycle (read, choose, build, grade) are correlated actions today. The superadmin Value outcomes dashboard supplies platform, tenant, and project cohorts; equal-period comparisons; trends including graded proofs; and a content-free sales brief guarded by a ten-session external-use threshold and stamped with its definition version. Canvas card acts share that contract through `packages/creation-canvas-contract/src/canvasActionOutcomes.ts`: the runner (and the poll / gate paths that are not card acts) emit `started` then one terminal with the same `correlationId`. `idea.explore`/`test`/`reveal` map onto `idea.read` / `proof.choose` / `proof.grade`; `form.publish` and `poll.publish` map onto `artifact.publish` + `proof.build` with `metadata.reachable` derived from the join URL (`/f/{slug}`, `/p/{slug}`). Unmapped connected acts still record as `{kind}.{action}` so coverage never depends on remembering a case. Notice-only refusals (no questions, unpublished, nothing to grade) do not start a correlation. Binding live experiment traffic is a different ticket — an authored table is not a measured split. A rendered presentation export remains follow-up work.
 
-**Remaining (verified 2026-11-18):**
-- There is no presentation export of the sales brief. The brief's wording comes from `outcomeMetricContract.ts:93,146` and its presentation from `frontend/src/lib/outcomeMetrics.ts:15`. Nothing renders it as slides or a PDF.
-- Live experiment traffic is not bound. `experiment` is not in `CONNECTED_CANVAS_ACTIONS` (`frontend/src/domains/canvas/domain/canvasChange.ts:59-132`). This is tracked in ROADMAP Measure, "`experiment` cards are never measured".
+**Status:** presentation export — [OUT-02](#features-and-tasks--status) (Incomplete); live experiment traffic — [OUT-03](#features-and-tasks--status) (Incomplete; also tracked in ROADMAP Measure, "`experiment` cards are never measured").
 
 *Verified 2026-11-18:* `OUTCOME_DEFINITION_VERSION` (`outcomeMetricContract.ts:65`, currently `2026.10-prescription-verify`); `OUTCOME_BASELINE_COHORT` (`:72`, 500 boards); the metric registry (`:264-467`; its families are `read-prove`, `build`, `measure`, `collaboration`, `compounding`, `efficiency`, `integrity`, in the table's order); proof actions (`api/src/application/realization/proofOutcomes.ts:53`); `resolveOutcomeSession` (`outcomeLedger.ts:129`, used by `api/src/presentation/routes/realizationRoutes.ts:53`); latency comes from the recorded `durationMs`. No drift in the contract text. The registry's labels are worded slightly differently from the table: "Successful agent synthesis", "Sessions resumed within 7 days" and "within 30 days" (two keys), "Created outputs reused as inputs", "Human interventions per delivery" and "Actions with a correlated outcome". The table names the concepts; `outcomeMetrics.ts` owns the labels on screen.
 
