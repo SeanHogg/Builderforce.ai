@@ -28,6 +28,7 @@ import {
   type LocalRecord,
 } from "@builderforce/local-first";
 import type { PolicyGate } from "@builderforce/agent-tools";
+import type { ShipPolicy } from "@builderforce/run-guards";
 
 /** 2: snapshots may hold compact `sideEffect` gates (read from a server that was told `gates=2`). */
 export const POLICY_SNAPSHOT_SCHEMA_VERSION = 2;
@@ -43,6 +44,8 @@ export interface PolicySnapshotValue {
   validUntil: string;
   /** What this snapshot permits while the platform is unreachable. */
   offlinePermissions: { allowOfflineRuns: boolean };
+  /** The project's ship policy (PRD 48) as last read; absent/null = none recorded or none set. */
+  shipPolicy?: ShipPolicy | null;
 }
 
 /**
@@ -83,6 +86,8 @@ export async function savePolicySnapshot(
   const id = policySnapshotRecordId(args.scopeKey);
   await store.transact(async (tx) => {
     const existing = await tx.get<PolicySnapshotValue>("policy-snapshot", id);
+    // A gate re-read keeps the ship policy the scope last recorded (`saveShipPolicySnapshot`).
+    if (existing?.payload.shipPolicy !== undefined) value.shipPolicy = existing.payload.shipPolicy;
     const record: LocalRecord<PolicySnapshotValue> = existing
       ? { ...existing, version: existing.version + 1, updatedAt: value.fetchedAt, payload: value }
       : newLocalRecord<PolicySnapshotValue>({
@@ -105,6 +110,38 @@ export async function savePolicySnapshot(
       dependsOn: [],
       destination: record.destination,
       payload: value,
+    });
+  });
+}
+
+/**
+ * Record the project's ship policy (PRD 48) on the scope's EXISTING gate snapshot. Never
+ * creates one: a snapshot with no gates read would pass for "no gates" offline, so the
+ * ship policy only rides a snapshot the gate read already made.
+ */
+export async function saveShipPolicySnapshot(
+  store: LocalFirstStore,
+  deps: { now?: () => Date },
+  args: { scopeKey: string; shipPolicy: ShipPolicy | null },
+): Promise<void> {
+  const id = policySnapshotRecordId(args.scopeKey);
+  const at = (deps.now?.() ?? new Date()).toISOString();
+  await store.transact(async (tx) => {
+    const existing = await tx.get<PolicySnapshotValue>("policy-snapshot", id);
+    if (!existing) return;
+    const payload: PolicySnapshotValue = { ...existing.payload, shipPolicy: args.shipPolicy };
+    const record: LocalRecord<PolicySnapshotValue> = { ...existing, version: existing.version + 1, updatedAt: at, payload };
+    await tx.put(record, existing.version);
+    await tx.append({
+      idempotencyKey: `policy-snapshot:ship:${id}:${at}`,
+      clientEntityId: id,
+      entityType: "policy-snapshot",
+      operation: "update",
+      schemaVersion: record.schemaVersion,
+      occurredAt: at,
+      dependsOn: [],
+      destination: record.destination,
+      payload,
     });
   });
 }
@@ -136,9 +173,11 @@ export function createPolicyGatesPersistence(
 ): {
   save(scopeKey: string, projectId: number | undefined, gates: PolicyGate[]): Promise<void>;
   load(scopeKey: string): Promise<PolicySnapshotValue | undefined>;
+  saveShipPolicy(scopeKey: string, shipPolicy: ShipPolicy | null): Promise<void>;
 } {
   return {
     save: (scopeKey, projectId, gates) => savePolicySnapshot(store, deps, { scopeKey, projectId, gates }),
     load: async (scopeKey) => (await loadPolicySnapshot(store, scopeKey))?.payload,
+    saveShipPolicy: (scopeKey, shipPolicy) => saveShipPolicySnapshot(store, deps, { scopeKey, shipPolicy }),
   };
 }

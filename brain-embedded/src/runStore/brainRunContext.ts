@@ -15,7 +15,7 @@ import { isRepoStateReadTool } from '../localWorkspaceTools';
 import { isReadOnlyPlatformTool } from '../chatWorkLinking';
 import type { ReadCoverage } from '../readCoverage';
 import type { RunKnowledgeLog } from '@builderforce/agent-tools';
-import { failureReason, repeatedFailureAdvisory, type EvidenceLedger, type FailureTally, type WriteLedger } from '@builderforce/run-guards';
+import { failureReason, repeatedFailureAdvisory, type EvidenceLedger, type FailureTally, type ShipPolicy, type WriteLedger } from '@builderforce/run-guards';
 import type { PlaceholderLedger } from '../completionGuard';
 import type { turnInterruption } from '../finishReason.js';
 import type { RunWindowFit } from '../windowFit/runWindowFit';
@@ -105,6 +105,8 @@ export interface BrainRunContext {
   userRequest: string;
   /** This chat's PUBLISH HOLD ({@link publishHold}), or null while the chat may ship. */
   publishHold: PublishHold | null;
+  /** The run's SHIP POLICY (PRD 48) — the cell's, copied once; every enforcement seam reads this. */
+  shipPolicy: ShipPolicy;
   /** The goal a hand-off states to its coders — {@link userRequest} plus the chat's earlier asks. */
   goal: string;
   /** The previous turn's reply — what a restated final answer is compared against. */

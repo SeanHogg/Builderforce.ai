@@ -10,6 +10,7 @@
  * silently stop reaching the service.
  */
 import { AgentType, TaskPriority, TaskType } from '../../domain/shared/types';
+import { zMergeGrant } from './mergeGrantRequest';
 import { z, zNumberLike } from './requestBody';
 
 /** `POST /decomposition-cleanup/apply` — ids that are not candidates are refused per id by the service. */
@@ -23,7 +24,8 @@ export const DecompositionCleanupBody = z.object({
 });
 
 /** `POST /:id/run-now` — `chatId` is type-guarded by the handler, and the body may be absent. */
-export const RunNowBody = z.object({ chatId: z.unknown().optional() });
+// `mergeGrant` — PRD 48 §4.6: a person's "merge into main when done" for THIS run.
+export const RunNowBody = z.object({ chatId: z.unknown().optional(), mergeGrant: zMergeGrant });
 
 /** `POST /:id/dependencies` — the handler refuses a missing predecessor and an unknown `depType` itself. */
 export const AddDependencyBody = z.object({

@@ -49,10 +49,9 @@ describe('signalMergeQueueOnCiResult', () => {
     expect(signalled()).toBe(false);
   });
 
-  it('does NOT signal for an in-progress ping or a build the ingest already merged', async () => {
+  it('does NOT signal for an in-progress ping', async () => {
     const { env, signalled } = fakeCronKv();
     await signalMergeQueueOnCiResult(env, dbWith([{ id: 1 }]), { taskId: 7, tenantId: 3, buildStatus: 'pending' });
-    await signalMergeQueueOnCiResult(env, dbWith([{ id: 1 }]), { taskId: 7, tenantId: 3, buildStatus: 'success', merged: true });
     expect(signalled()).toBe(false);
   });
 

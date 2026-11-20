@@ -12,8 +12,9 @@
  *  - GROUND: a call naming a path the run had not touched before (read or write —
  *    exploring new files IS progress), a write to a test file, a check/test run whose
  *    result differs from the last one, or an external-side-effect call the host counts
- *    as platform progress (a ticket update, a dispatch). Ground always counts and
- *    clears the churn count.
+ *    as platform progress (a ticket update, a dispatch), or a delegation whose children
+ *    reported back or changed files (its result's `reports` / `changedFiles`). Ground
+ *    always counts and clears the churn count.
  *  - RE-GROUND: a read of a DISTINCT path the run had already seen but not recently —
  *    spaced revisits across a wide survey are re-engagement, not circling. A run that
  *    revisits an old target is on a new trail; {@link VisitTally} already catches the
@@ -42,6 +43,7 @@ import { callFingerprint, contentHash, pathArgOf } from "./fingerprint.js";
 import { changedPathsOf } from "./callChanges.js";
 import { runsCheck, shellCommandOf } from "./checkCommand.js";
 import { isReadOnlyShellCall } from "./readOnlyShell.js";
+import { WaitCeiling, type WaitCeilingState } from "./waitCeiling.js";
 
 /** Idle turns in a row that count as no progress (no new path, no change the run had not
  *  already made, no test movement). Four is past an honest "read, think,
@@ -64,7 +66,7 @@ const MAX_SEEN = 500;
 
 const TEST_PATH = /(^|\/)(__tests__|tests?|spec)\/|\.(test|spec)\.[a-z0-9]+$|_test\.(go|py)$/i;
 
-export interface NoProgressState {
+export interface NoProgressState extends WaitCeilingState {
   seen: string[];
   idleTurns: number;
   /** The turn index each path was last read on, so a spaced revisit is re-engagement,
@@ -80,6 +82,22 @@ export interface NoProgressState {
   /** Job ids of checks started in the background (newest last, bounded), so the poll that
    *  brings a job's answer back is judged as the check. Absent in an older snapshot. */
   checkJobs?: string[];
+}
+
+/** What one observed call did, as the window reads it. */
+export interface NoProgressOutcome {
+  ok: boolean;
+  /** It changed content (a file edit, or a mutating command that names no file). */
+  wrote: boolean;
+  result?: unknown;
+  /** Files a delegation's children changed, from its RESULT (`delegatedChanges.ts`): targets the run wrote. */
+  delegatedPaths?: readonly string[];
+  /** A delegation returned a child report that moved the work (done, or changed files): platform progress even with no files. */
+  delegationReported?: boolean;
+  /** This call waits on children or a background job that are STILL RUNNING: what it waits on (`delegatedChanges.ts`
+   *  `waitDigestOf`, kept for diagnostics). A turn made ONLY of such waits is not idle — for at most `MAX_WAIT_TURNS`
+   *  consecutive wait-only turns with no ground progress (`waitCeiling.ts`). */
+  waitingOn?: string;
 }
 
 /** What one observed call meant for the check window. */
@@ -121,7 +139,7 @@ export function isTestPath(path: string): boolean {
 
 /** The tools that poll a background shell job by its `id` (`@builderforce/agent-tools`
  *  shell-tools): `command_status` reports it, `command_stop` kills it and reports its end. */
-const JOB_POLL_TOOLS: ReadonlySet<string> = new Set(["command_status", "command_stop"]);
+export const JOB_POLL_TOOLS: ReadonlySet<string> = new Set(["command_status", "command_stop"]);
 
 /** Background check jobs remembered — a run rarely has more than a few in flight. */
 const MAX_CHECK_JOBS = 16;
@@ -173,6 +191,11 @@ export class NoProgressTracker {
   private checkJobs: string[];
   private groundThisTurn = false;
   private churnThisTurn = false;
+  /** This turn's calls, and the digests of the still-running waits among them: a turn made ONLY of waits is not idle. */
+  private callsThisTurn = 0;
+  private waitsThisTurn: string[] = [];
+  /** The ceiling on waiting on an unchanged state (`waitCeiling.ts`). */
+  private readonly waits: WaitCeiling;
   private churnTurns: number;
   private lastGround = false;
   private lastIdle = false;
@@ -194,6 +217,7 @@ export class NoProgressTracker {
     this.targetOf = ports.targetOf ?? ((_tool, args) => pathArgOf(args));
     this.isCheckCall = ports.isCheckCall ?? isCheckCallDefault;
     this.isPlatformProgress = ports.isPlatformProgress;
+    this.waits = new WaitCeiling(state);
   }
 
   /**
@@ -202,10 +226,14 @@ export class NoProgressTracker {
    * whether the call was a check whose result CHANGED — a failing check that answers
    * differently each time is the run fixing things, not repeating a failure.
    */
-  observe(tool: string, args: unknown, outcome: { ok: boolean; wrote: boolean; result?: unknown }): NoProgressObservation {
+  observe(tool: string, args: unknown, outcome: NoProgressOutcome): NoProgressObservation {
+    const delegated = outcome.delegatedPaths ?? [];
+    this.callsThisTurn += 1;
+    if (outcome.ok && outcome.waitingOn) this.waitsThisTurn.push(outcome.waitingOn);
     // The call's own target plus every file it changes: one batched `edits: [...]` call
-    // reaches several paths, none of them at its top level.
-    const targets = [...new Set([this.targetOf(tool, args), ...changedPathsOf(args)].filter((p): p is string => !!p))];
+    // reaches several paths, none of them at its top level — and the files a delegation's
+    // children changed, which its result reports.
+    const targets = [...new Set([this.targetOf(tool, args), ...changedPathsOf(args), ...delegated].filter((p): p is string => !!p))];
     for (const path of targets) {
       if (!this.seen.has(path)) {
         this.seen.add(path);
@@ -224,7 +252,9 @@ export class NoProgressTracker {
     // An external side effect (a ticket created/updated, a dispatch) advances the work —
     // a turn that only moved the platform is not idle.
     if (outcome.ok && targets.length === 0 && this.isPlatformProgress?.(tool, args)) this.groundThisTurn = true;
-    if (outcome.ok && outcome.wrote) {
+    // A child that answered moved the work, files or not.
+    if (outcome.ok && outcome.delegationReported) this.groundThisTurn = true;
+    if (outcome.ok && (outcome.wrote || delegated.length > 0)) {
       if (targets.some(isTestPath)) this.groundThisTurn = true;
       const fingerprint = contentHash(callFingerprint(tool, args));
       if (!this.changes.has(fingerprint)) {
@@ -254,6 +284,22 @@ export class NoProgressTracker {
     return { checkChanged: true, check };
   }
 
+  /**
+   * A child's report that reached the run OUTSIDE a call (injected as a message): the files
+   * it changed are paths the run reached, and a report that moved the work is ground — the
+   * same reading a `wait_agents` result gets.
+   */
+  noteChildReport(changedPaths: readonly string[], moved: boolean): void {
+    for (const path of changedPaths) {
+      if (!this.seen.has(path)) {
+        this.seen.add(path);
+        if (this.seen.size > MAX_SEEN) this.seen.delete(this.seen.values().next().value as string);
+      }
+      this.lastSeenAt.set(path, this.turn);
+    }
+    if (moved || changedPaths.length > 0) this.groundThisTurn = true;
+  }
+
   /** A poll of a background job a check command started ({@link JOB_POLL_TOOLS}). */
   private isCheckJobPoll(tool: string, args: unknown): boolean {
     if (!JOB_POLL_TOOLS.has(tool) || !args || typeof args !== "object") return false;
@@ -273,11 +319,20 @@ export class NoProgressTracker {
       this.churnTurns += 1;
       progressed = this.churnTurns <= CHURN_TURNS;
     }
+    // A turn made ONLY of waits on work still running elsewhere is not idling (nor ground) — for at most MAX_WAIT_TURNS
+    // such turns in a row, whatever they wait on. A mixed turn is judged by its other calls; ground progress or any call
+    // that is not a wait starts the ceiling over.
+    const allWaiting = this.callsThisTurn > 0 && this.waitsThisTurn.length === this.callsThisTurn;
+    if (allWaiting && !this.groundThisTurn) {
+      if (this.waits.waited([...this.waitsThisTurn].sort().join("|"))) progressed = true;
+    } else if (this.callsThisTurn > 0 || this.groundThisTurn) this.waits.reset();
     this.lastGround = this.groundThisTurn;
     this.lastIdle = !progressed;
     this.idleTurns = progressed ? 0 : this.idleTurns + 1;
     this.groundThisTurn = false;
     this.churnThisTurn = false;
+    this.callsThisTurn = 0;
+    this.waitsThisTurn = [];
     this.turn += 1;
     return this.idleTurns;
   }
@@ -298,7 +353,9 @@ export class NoProgressTracker {
     this.idleTurns = 0;
     this.groundThisTurn = false;
     this.churnThisTurn = false;
-    // churnTurns stays: only real ground ends a drift, so a drifting run keeps tripping.
+    this.callsThisTurn = 0;
+    this.waitsThisTurn = [];
+    // churnTurns (and the wait ceiling) stays: only real ground ends a drift, so a drifting run keeps tripping.
   }
 
   snapshot(): NoProgressState {
@@ -310,6 +367,7 @@ export class NoProgressTracker {
       ...(this.churnTurns ? { churnTurns: this.churnTurns } : {}),
       ...(this.lastCheck ? { lastCheck: this.lastCheck } : {}),
       ...(this.checkJobs.length ? { checkJobs: [...this.checkJobs] } : {}),
+      ...this.waits.snapshot(),
     };
   }
 }

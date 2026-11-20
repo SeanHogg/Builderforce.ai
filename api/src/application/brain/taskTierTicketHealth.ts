@@ -1,31 +1,26 @@
 /**
  * taskTierTicketHealth — health for the three kinds that live in the `tasks` table
- * (task, gap, epic): leaf status ladder, epic child rollup, the unsupported-delivery
- * cap, and the parent epic each row hangs under. Batched: a constant handful of
- * queries however many task-tier links a chat carries.
+ * (task, gap, epic): leaf status ladder, epic child rollup (raw — `ticketHealthBatch`
+ * applies the shared "only a closed lane may emit 100" rule to every kind), and the
+ * parent epic each row hangs under. Batched: a
+ * constant handful of queries however many task-tier links a chat carries.
  */
-import { and, eq, inArray, or, sql } from 'drizzle-orm';
-import { effectiveTicketProgress, TASK_CLOSED_STATUSES } from '@builderforce/agent-loop';
-import { DEFAULT_EVIDENCE_POLICY, fileIsUnchecked } from '@builderforce/run-guards';
-import { tasks, projects, executions, taskFileChanges } from '../../infrastructure/database/schema';
+import { and, eq, inArray, sql } from 'drizzle-orm';
+import { isClosedTaskStatus, TASK_CLOSED_STATUSES } from '@builderforce/agent-loop';
+import { tasks, projects } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { buildTaskProgressBreakdown } from '../task/taskProgressBreakdown';
-import { coderProducedCode } from '../task/taskActivity';
-import { liveExecution } from '../rehearsal/executionMode';
 import type { Db } from '../../infrastructure/database/connection';
 import { missingTicket, ticketKey, ticketKindForTaskType, type TicketHealth, type TicketParent } from './chatTicketTypes';
 
-/** Task/epic statuses that count as complete when a ticket has no completed_at —
- *  the shared closed class, so a cancelled ticket reads done (100%), never 0%. */
-const DONE_STATUS: ReadonlySet<string> = new Set(TASK_CLOSED_STATUSES);
-
 /**
- * Container rollup: count a child as done the same way a leaf chip does
- * (`completed_at` stamped OR status in {@link DONE_STATUS}). `count(completed_at)`
- * alone reported 0/N for children that were Done by status only — the epic-close
- * chip that stayed at 0/5 after the parent shipped.
+ * Container rollup: count a child as done the same way a leaf chip does — its LANE is
+ * closed (the shared closed class, so a cancelled child is owed nothing). "Done" means
+ * the lane is closed: a stamped `completed_at` on an open lane is not done, so an
+ * epic's done/total and its children's chips always agree. (`count(completed_at)` alone
+ * once reported 0/N for children that were Done by status only.)
  */
-export const SQL_COUNT_DONE = sql<number>`coalesce(sum(CASE WHEN ${tasks.completedAt} IS NOT NULL OR ${inArray(tasks.status, [...TASK_CLOSED_STATUSES])} THEN 1 ELSE 0 END), 0)`;
+export const SQL_COUNT_DONE = sql<number>`coalesce(sum(CASE WHEN ${inArray(tasks.status, [...TASK_CLOSED_STATUSES])} THEN 1 ELSE 0 END), 0)`;
 
 /**
  * Name the PARENT of every task-tier row that has one — child task ⇒ its epic,
@@ -80,79 +75,6 @@ async function resolveTaskParents(
 }
 
 /**
- * Epics that read complete, but a live execution on the epic or a direct child
- * exists and no coder run left a non-documentation file.
- *
- * Same grain as the child rollup (one parent hop) and the same evidence as
- * `summarizeTaskActivity`'s `staleImplementation`. No executions ⇒ unknown,
- * not unsupported: absence is not evidence, and a genuinely closed epic with
- * no run history must still emit 100.
- */
-async function epicsWithUnsupportedDelivery(db: Db, tenantId: number, epicIds: number[]): Promise<Set<number>> {
-  const unsupported = new Set<number>();
-  if (epicIds.length === 0) return unsupported;
-  const wanted = new Set(epicIds);
-  const execRows = await db
-    .select({
-      id: executions.id,
-      taskId: executions.taskId,
-      parentTaskId: tasks.parentTaskId,
-      payload: executions.payload,
-    })
-    .from(executions)
-    .innerJoin(tasks, eq(tasks.id, executions.taskId))
-    .where(and(
-      eq(executions.tenantId, tenantId),
-      liveExecution(),
-      or(inArray(executions.taskId, epicIds), inArray(tasks.parentTaskId, epicIds)),
-    ));
-  if (execRows.length === 0) return unsupported;
-  const fileRows = await db
-    .select({ executionId: taskFileChanges.executionId, path: taskFileChanges.path })
-    .from(taskFileChanges)
-    .where(inArray(taskFileChanges.executionId, execRows.map((row) => row.id)));
-  const pathsByExec = new Map<number, string[]>();
-  for (const file of fileRows) {
-    const list = pathsByExec.get(file.executionId) ?? [];
-    list.push(file.path);
-    pathsByExec.set(file.executionId, list);
-  }
-  const byEpic = new Map<number, typeof execRows>();
-  for (const row of execRows) {
-    const owners: number[] = [];
-    if (wanted.has(row.taskId)) owners.push(row.taskId);
-    if (row.parentTaskId != null && wanted.has(row.parentTaskId)) owners.push(row.parentTaskId);
-    for (const epicId of owners) {
-      const list = byEpic.get(epicId) ?? [];
-      list.push(row);
-      byEpic.set(epicId, list);
-    }
-  }
-  for (const epicId of epicIds) {
-    const rows = byEpic.get(epicId);
-    if (!rows || rows.length === 0) continue;
-    // A child ships either by producing a non-documentation file OR by delivering a
-    // change no policy check could fail (docs-only by design — e.g. the W0 telemetry
-    // baseline or a specs edit). Reusing the ship-gate's own `fileIsUnchecked` keeps the
-    // Epic tier and the gate in agreement on "nothing here is verifiable", so a complete
-    // docs-only epic reads 100 rather than being pinned at the unsupported-delivery cap.
-    // A live execution that produced NO file rows is not delivery evidence either
-    // way: a failed or timed-out run leaves nothing to verify, so per this module's
-    // own rule — "absence is not evidence" — it must not mark a claimed-complete
-    // epic unsupported. Only runs that actually touched files get a verdict.
-    const rowsWithFiles = rows.filter((row) => (pathsByExec.get(row.id) ?? []).length > 0);
-    if (rowsWithFiles.length === 0) continue;
-    const supported = rowsWithFiles.some((row) => {
-      const paths = pathsByExec.get(row.id) ?? [];
-      if (coderProducedCode(row.payload, paths)) return true;
-      return paths.every((p) => fileIsUnchecked({ absPath: p, isNew: false }, DEFAULT_EVIDENCE_POLICY));
-    });
-    if (!supported) unsupported.add(epicId);
-  }
-  return unsupported;
-}
-
-/**
  * Write task/gap/epic health into `out`. Tasks + epics + gaps share the tasks table:
  * fetch self rows (title/status) for all, plus child rollups for epics. Gaps are leaf
  * work items (like tasks). Every row additionally carries {@link TicketHealth.parent}.
@@ -168,7 +90,7 @@ export async function addTaskTierHealth(
   if (allTaskLike.length === 0) return;
   const rows = await db
     .select({
-      id: tasks.id, title: tasks.title, status: tasks.status, completedAt: tasks.completedAt,
+      id: tasks.id, title: tasks.title, status: tasks.status,
       // Named so the rail can say which epic a chip belongs to (see resolveTaskParents).
       taskType: tasks.taskType, parentTaskId: tasks.parentTaskId,
     })
@@ -185,12 +107,12 @@ export async function addTaskTierHealth(
       const r = selfById.get(id);
       if (!r) { out.set(ticketKey(kind, String(id)), missingTicket(kind, String(id))); continue; }
       const parent = parentByChild.get(id);
-      const done = r.completedAt != null || DONE_STATUS.has(r.status) ? 1 : 0;
-      // Delegate to the canonical status ladder so a chat ticket chip and the
-      // task list API never disagree about the same task (in_review is 75, not 50).
-      const progressPct = done
-        ? 100
-        : buildTaskProgressBreakdown({ status: r.status }).progressPct;
+      // "Done" means the lane is closed — a `completed_at` stamped on an open lane is not.
+      const done = isClosedTaskStatus(r.status) ? 1 : 0;
+      // Delegate to the canonical status ladder so a chat ticket chip and the task list
+      // API never disagree about the same task (in_review is 75, not 50). The ladder
+      // already applies the shared "only a closed lane emits 100" rule.
+      const progressPct = buildTaskProgressBreakdown({ status: r.status }).progressPct;
       out.set(ticketKey(kind, String(id)), {
         kind, ref: String(id), label: r.title, status: r.status,
         progressPct,
@@ -211,37 +133,21 @@ export async function addTaskTierHealth(
     .where(scopedToTenant(tasks, tenantId, inArray(tasks.parentTaskId, [...epicIds])))
     .groupBy(tasks.parentTaskId);
   const childByParent = new Map(childRows.map((r) => [Number(r.parentId), { total: Number(r.total), done: Number(r.done) }]));
-  // Only epics that would emit 100 are worth a delivery read. A partial
-  // container is already < 100; querying it would not change the chip.
-  const claimedComplete: number[] = [];
-  for (const id of epicIds) {
-    const r = selfById.get(id);
-    if (!r) continue;
-    const c = childByParent.get(id) ?? { total: 0, done: 0 };
-    const claimed = c.total > 0
-      ? c.done === c.total
-      : (r.completedAt != null || DONE_STATUS.has(r.status));
-    if (claimed) claimedComplete.push(id);
-  }
-  const unsupported = await epicsWithUnsupportedDelivery(db, tenantId, claimedComplete);
   for (const id of epicIds) {
     const r = selfById.get(id);
     if (!r) { out.set(ticketKey('epic', String(id)), missingTicket('epic', String(id))); continue; }
     const c = childByParent.get(id) ?? { total: 0, done: 0 };
     const total = c.total;
     const done = c.done;
-    const claimed = total > 0
-      ? Math.round((done / total) * 100)
-      : (r.completedAt != null || DONE_STATUS.has(r.status) ? 100 : 0);
-    const unsupportedDelivery = unsupported.has(id);
-    // Delegate to the shared closed-lane rule (agent-loop `effectiveTicketProgress`):
-    // the unsupported-delivery cap applies only BEFORE the lane closes — a done
-    // epic is complete by definition and must not be demoted to the in_review rung.
-    const progressPct = effectiveTicketProgress(r.status, claimed, unsupportedDelivery);
+    // The RAW child rollup. `ticketHealthBatch` applies the shared rule to every row once
+    // (agent-loop `effectiveTicketProgress`): only a closed lane may emit 100, and a closed
+    // lane always does — even with 3 of 5 children done. An open epic whose filed children
+    // are all done reads the claimed-complete rung (75): unfiled work can remain until the
+    // lane closes.
+    const progressPct = total > 0 ? Math.round((done / total) * 100) : 0;
     const parent = parentByChild.get(id);
     out.set(ticketKey('epic', String(id)), {
       kind: 'epic', ref: String(id), label: r.title, status: r.status, progressPct, done, total, exists: true,
-      ...(unsupportedDelivery ? { unsupportedDelivery: true } : {}),
       ...(parent ? { parent } : {}),
     });
   }

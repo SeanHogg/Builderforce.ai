@@ -27,7 +27,7 @@ import { emit, nowIso, nowMs, pushTrace, recordAppended } from './runCells';
 import { requestRunConfirm } from './runControl';
 import { createLinkedToChat, isTicketRecordingTool, stampRunChat } from '../chatWorkLinking';
 import { attachDeltaToRunTicket } from './runBackstops';
-import { isPublishCall, publishHoldRefusal } from './publishHold';
+import { publishAllowed } from '@builderforce/run-guards';
 import { shipGatePreflight } from './shipGates';
 import { isDedupableRead, reportToPolicy, type BrainRunContext } from './brainRunContext';
 
@@ -194,15 +194,16 @@ export function callPreflight(run: BrainRunContext): NonNullable<LoopHooks<ChatC
     // stamped here — before the confirm gate, the trace and the dispatch — so the server
     // links the item to this conversation in the create call itself.
     stampRunChat(call.name, args, run.serverChatId);
-    // PUBLISH HOLD (incident #56886): refuse commit / push / PR calls BEFORE the confirm
-    // gate, so neither `acceptEdits` nor a sub-agent's inherited context can waive it.
-    // The hold is the ROOT chat's (the run's own transcript IS the root's when seeded),
-    // so a child can never lift its owner's hold. The model gets a recoverable refusal
-    // naming the exact user turn that set it.
-    if (c.publishHold && isPublishCall(call.name, args)) {
-      const refusal = publishHoldRefusal(c.publishHold);
-      pushTrace(c, { ts: nowIso(), category: 'tool', label: call.name, args, result: { publishHold: c.publishHold.messageNumber, note: refusal.error } });
-      return { result: { data: refusal } };
+    // SHIP POLICY (PRD 48): refuse a commit / push / PR the run's policy does not allow
+    // BEFORE the confirm gate, so neither `acceptEdits` nor a sub-agent's inherited context
+    // can waive it. The policy is already narrowed by the chat's PUBLISH HOLD (incident
+    // #56886 — the ROOT chat's, so a child can never lift it) and by the sub-agent rule; the
+    // model gets a recoverable refusal naming the policy and where it came from.
+    const allowed = publishAllowed(run.shipPolicy, call.name, args);
+    if (!allowed.ok) {
+      const hold = run.shipPolicy.hold;
+      pushTrace(c, { ts: nowIso(), category: 'tool', label: call.name, args, result: { shipPolicy: run.shipPolicy.mode, source: run.shipPolicy.source, ...(hold ? { publishHold: hold.messageNumber } : {}), note: allowed.error } });
+      return { result: { data: allowed } };
     }
     // SHIP GATES (PRD 45 §4.5): a base-branch push, a pull request, a `complete` review
     // record — refused on failing evidence or no independent review, WITHOUT asking the
@@ -215,7 +216,14 @@ export function callPreflight(run: BrainRunContext): NonNullable<LoopHooks<ChatC
     // Human-in-the-loop gate: pause for an explicit confirm when the host's
     // predicate says so. The resolver lives on the cell, so whichever Brain
     // instance is mounted (even after a navigation swapped it) can answer.
-    if (needsConfirm && needsConfirm({ name: call.name, args })) {
+    // The host reads the run's (narrowed) ship policy: a publish it allows is the project's
+    // standing approval, so the host may skip the card for it (`nativeNeedsConfirm`).
+    const confirm = !!needsConfirm && needsConfirm({ name: call.name, args, shipPolicy: run.shipPolicy });
+    if (!confirm && ship.evidence) {
+      // No card to carry the ship gate's evidence line: the trace records it instead.
+      pushTrace(c, { ts: nowIso(), category: 'message', label: 'ship.gate_evidence', args: { step: iter, tool: call.name }, result: ship.evidence });
+    }
+    if (confirm) {
       // The prompt belongs to THIS run's cell — a sub-agent asks on its own, named.
       const ok = await requestRunConfirm(runKey, { name: call.name, args, ...(ship.evidence ? { evidence: ship.evidence } : {}) }, { step: iter });
       if (!ok) {

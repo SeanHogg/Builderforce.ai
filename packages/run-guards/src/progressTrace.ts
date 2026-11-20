@@ -19,7 +19,7 @@ export interface ProgressTraceStep {
 
 /**
  * What a host that ACTED on a trip adds to its row: the outcome it took (a host whose
- * escalation found no stronger model pauses instead) and the facts it records beside it.
+ * escalation found no stronger model finishes instead) and the facts it records beside it.
  * With `detail`, the row's args are the host's own record of the trip.
  */
 export interface ProgressTripOverride {
@@ -43,10 +43,15 @@ export function progressTraceStep(action: ProgressAction, override: ProgressTrip
     };
   }
   const outcome = override.outcome ?? action.kind;
+  // A finish ends the run on its own report — the row says whether it is a verified wrap-up or the ladder's last rung.
+  const finish = outcome !== "finish"
+    ? ""
+    : action.kind === "finish" && action.verified
+      ? " (the change is made and verified — the run writes its final report, no more tool calls)"
+      : " (the run is not converging — it ends on an honest report of what is done and what blocks the rest, no more tool calls)";
   return {
     label: "loop.progress_check",
     args: override.detail ?? { trip: action.trip, signal: action.signal.kind, action: action.kind },
-    // A finish is the verified run's wrap-up, not a stall — the row says so.
-    result: `progress check ${action.trip}: ${action.signal.kind} → ${outcome}${outcome === "finish" ? " (the change is made and verified — the run writes its final report, no more tool calls)" : ""}`,
+    result: `progress check ${action.trip}: ${action.signal.kind} → ${outcome}${finish}`,
   };
 }

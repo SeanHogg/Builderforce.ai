@@ -33,7 +33,7 @@ export {
   isExcludedFromChatHealth,
   displayChatProgressPct,
   chatProgressIsStale,
-  UNSUPPORTED_DELIVERY_PROGRESS_CAP,
+  CLAIMED_COMPLETE_PROGRESS_CAP,
   type ChatTicketHealth,
   type ChatTicketHealthInput,
 } from "./chatTicketHealth.js";
@@ -51,6 +51,19 @@ export {
   type TaskClosedFacts,
   type TaskListScope,
 } from "./taskClosedState.js";
+// Per-kind finished-status words (spec "complete", roadmap "shipped" …) — the ONE
+// registry the progress rule, the rollup's cancelled skip and the api list filters read.
+export {
+  TICKET_CLOSED_STATES,
+  CEREMONY_SESSION_CLOSED_STATUSES,
+  ROADMAP_STATUSES,
+  TICKET_STATUS_VALUES,
+  parseTicketStatus,
+  checkTicketStatus,
+  isClosedTicketStatus,
+  type TicketStatusKind,
+  type TicketStatusVocabulary,
+} from "./ticketClosedStates.js";
 // The reasoning channel — one reading of what a turn SAID versus what it THOUGHT, and
 // the policies each surface applies to it. Written four times before this, disagreeing
 // on whether an unclosed block counts and whether a tag inside a code fence does; see

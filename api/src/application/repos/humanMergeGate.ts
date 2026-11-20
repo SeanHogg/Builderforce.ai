@@ -20,8 +20,17 @@ export type HumanMergeGate =
   /** `error` is English (logs, API clients); the UI words `details.reasons` itself, by `code`, in the viewer's language. */
   | { ok: false; status: 409; body: { error: string; code: 'security_gate'; details: { reasons: GateReason[]; headSha: string | null } } };
 
-export async function gateHumanMerge(db: Db, env: Env, tenantId: number, pullRequestId: string): Promise<HumanMergeGate> {
-  const verdict = await securityVerdictEnsuringScan(db, env, tenantId, pullRequestId, { mode: 'defer' });
+/**
+ * The checks a PERSON's merge passes — the in-product button, and a person's pre-approved merge
+ * grant (PRD 48 §4.6, `grantedMergeCohort.ts`), which must work EXACTLY like the button. One
+ * function, so the two cannot drift. `mode` only says WHERE a missing scan runs: the request
+ * defers it past the response; the sweep may run it inline when its budget affords one.
+ */
+export async function gateHumanMerge(
+  db: Db, env: Env, tenantId: number, pullRequestId: string,
+  options: { mode?: 'defer' | 'inline' } = {},
+): Promise<HumanMergeGate> {
+  const verdict = await securityVerdictEnsuringScan(db, env, tenantId, pullRequestId, { mode: options.mode ?? 'defer' });
   if (verdict.allow) return { ok: true, headSha: verdict.headSha };
   return {
     ok: false, status: 409,

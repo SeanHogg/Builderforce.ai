@@ -106,11 +106,17 @@ describe('the readiness loop (WS8p)', () => {
     expect(checks(trace)).toHaveLength(0);
   });
 
-  it('the third trip asks the person, with ask_user alone on the menu', async () => {
-    const { requests, trace } = await scripted(4808, 'update the PRD with the WS8p design', Array.from({ length: 6 }, (_, i) => claimAndRead(i)));
-    expect(checks(trace).map((e) => (e.args as { action: string }).action)).toEqual(['steer', 'escalate', 'pause']);
-    const asked = requests.find((r) => r?.tools.length === 1 && r.tools[0] === 'ask_user');
-    expect(asked?.text).toContain('Continue with guidance');
+  it('regression: chat #157440 — a run that keeps reading gets one forced change turn, then a no-tools report turn, never ask_user', async () => {
+    const { requests, trace } = await scripted(4808, 'update the PRD with the WS8p design', Array.from({ length: 8 }, (_, i) => claimAndRead(i)));
+    expect(checks(trace).map((e) => (e.args as { action: string }).action)).toEqual(['steer', 'escalate', 'finish', 'finish']);
+    expect(trace.filter((e) => e.label === 'loop.progress_forced').map((e) => (e.args as { forced?: string }).forced)).toEqual(['hand_off', 'change', 'finish']);
+    expect(trace.some((e) => e.label === 'loop.plan_budget_spent')).toBe(true);
+    // ask_user stays on the ordinary menu (the model's own business questions) — never forced alone.
+    expect(requests.some((r) => r?.tools.length === 1 && r.tools[0] === 'ask_user')).toBe(false);
+    expect(trace.some((e) => e.label === 'loop.progress_forced' && (e.args as { forced?: string }).forced === 'ask_user')).toBe(false);
+    const report = requests.find((r) => r?.tools.length === 0);
+    expect(report?.text).toContain('final report');
+    expect(report?.text).not.toContain('Continue with guidance');
   });
 });
 

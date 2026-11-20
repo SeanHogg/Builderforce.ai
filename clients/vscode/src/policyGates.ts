@@ -18,8 +18,9 @@
  */
 
 import type * as vscode from "vscode";
-import { fetchPolicyGates } from "./bfApi";
+import { fetchPolicyGates, fetchProjectShipPolicy } from "./bfApi";
 import type { PolicyGate } from "@builderforce/agent-tools";
+import { DEFAULT_SHIP_POLICY, narrowShipPolicy, type ShipPolicy } from "@builderforce/run-guards";
 import { snapshotPermitsOfflineRun, type PolicySnapshotValue } from "./policySnapshots";
 
 /** Raised when a tenant's gates could not be resolved — the run must not start. */
@@ -46,6 +47,8 @@ export const POLICY_GATES_STALE_MS = 10 * 60_000;
 export interface PolicyGatesPersistence {
   save(scopeKey: string, projectId: number | undefined, gates: PolicyGate[]): Promise<void>;
   load(scopeKey: string): Promise<PolicySnapshotValue | undefined>;
+  /** Record the project's ship policy (PRD 48) on the scope's existing snapshot. */
+  saveShipPolicy?(scopeKey: string, shipPolicy: ShipPolicy | null): Promise<void>;
 }
 
 let persistence: PolicyGatesPersistence | undefined;
@@ -54,14 +57,20 @@ export function configurePolicyGatesPersistence(port: PolicyGatesPersistence | u
   persistence = port;
 }
 
-interface CachedGates {
-  gates: PolicyGate[];
+/** One cached read: the project's gates, or its ship policy (keyed apart, same windows). */
+interface CachedRead<T> {
+  value: T;
   readAt: number;
 }
 
-const cache = new Map<string, CachedGates>();
+const cache = new Map<string, CachedRead<unknown>>();
 
 const cacheKey = (projectId: number | undefined): string => (projectId == null ? "workspace" : `project:${projectId}`);
+const shipCacheKey = (projectId: number): string => `ship:${cacheKey(projectId)}`;
+
+function cachedRead<T>(key: string): CachedRead<T> | undefined {
+  return cache.get(key) as CachedRead<T> | undefined;
+}
 
 /** Forget every cached policy — a sign-out, a workspace switch, or a test. */
 export function resetPolicyGatesCache(): void {
@@ -75,11 +84,11 @@ export async function resolveRunPolicyGates(
   now: number = Date.now(),
 ): Promise<PolicyGate[]> {
   const key = cacheKey(projectId);
-  const cached = cache.get(key);
-  if (cached && now - cached.readAt < POLICY_GATES_FRESH_MS) return cached.gates;
+  const cached = cachedRead<PolicyGate[]>(key);
+  if (cached && now - cached.readAt < POLICY_GATES_FRESH_MS) return cached.value;
   try {
     const gates = (await fetchPolicyGates(secrets, projectId)) ?? [];
-    cache.set(key, { gates, readAt: now });
+    cache.set(key, { value: gates, readAt: now });
     // Persist before returning so a sign-out that clears this cache in the same turn
     // still has a snapshot. A failed save must not refuse a turn the read already answered.
     try {
@@ -89,11 +98,51 @@ export async function resolveRunPolicyGates(
     }
     return gates;
   } catch (e) {
-    if (cached && now - cached.readAt < POLICY_GATES_STALE_MS) return cached.gates;
+    if (cached && now - cached.readAt < POLICY_GATES_STALE_MS) return cached.value;
     // Durable last resort: a valid snapshot that permits offline runs still governs
     // this scope across restarts. Missing or expired required policy fails closed.
     const snapshot = await persistence?.load(key).catch(() => undefined);
     if (snapshot && snapshotPermitsOfflineRun(snapshot, new Date(now))) return snapshot.gates;
     throw new PolicyGatesUnavailableError(e);
+  }
+}
+
+/**
+ * The project's effective SHIP POLICY (PRD 48) for a run started now — read through the
+ * SAME cache windows and durable snapshot as the gates above. Never refuses a run: no
+ * project, signed out, no value, or an unreadable API with nothing cached or snapshotted
+ * all mean `DEFAULT_SHIP_POLICY` (source `default`), which the run states in its report.
+ * A failed read is handed to `report`, never swallowed.
+ */
+export async function resolveRunShipPolicy(
+  secrets: vscode.SecretStorage,
+  projectId: number | undefined,
+  report: (message: string) => void,
+  now: number = Date.now(),
+): Promise<ShipPolicy> {
+  if (projectId == null) return DEFAULT_SHIP_POLICY;
+  const key = shipCacheKey(projectId);
+  const cached = cachedRead<ShipPolicy | null>(key);
+  if (cached && now - cached.readAt < POLICY_GATES_FRESH_MS) return cached.value ?? DEFAULT_SHIP_POLICY;
+  try {
+    const policy = (await fetchProjectShipPolicy(secrets, projectId)) ?? null;
+    cache.set(key, { value: policy, readAt: now });
+    try {
+      await persistence?.saveShipPolicy?.(cacheKey(projectId), policy);
+    } catch (error) {
+      report(`ship policy snapshot for project ${projectId} not saved: ${String(error)}`);
+    }
+    return policy ?? DEFAULT_SHIP_POLICY;
+  } catch (e) {
+    report(`ship policy for project ${projectId} unreadable (${String(e)}); using the last known value (never looser than the default) or the default`);
+    // A stale value may predate the project NARROWING its policy, so it is never looser than
+    // the default: a remembered `commit_push` commits until the project's policy is read again.
+    if (cached && now - cached.readAt < POLICY_GATES_STALE_MS) return narrowShipPolicy(cached.value ?? DEFAULT_SHIP_POLICY, DEFAULT_SHIP_POLICY);
+    const snapshot = await persistence?.load(cacheKey(projectId)).catch((error: unknown) => {
+      report(`ship policy snapshot for project ${projectId} unreadable: ${String(error)}`);
+      return undefined;
+    });
+    if (snapshot?.shipPolicy && snapshotPermitsOfflineRun(snapshot, new Date(now))) return narrowShipPolicy(snapshot.shipPolicy, DEFAULT_SHIP_POLICY);
+    return DEFAULT_SHIP_POLICY;
   }
 }

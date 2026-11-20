@@ -48,6 +48,9 @@ export function brainSteeringSource(run: BrainRunContext, people: PersonSteers):
         const parts = imagePartsOf(content);
         const text = typeof content === 'string' ? content : content.map((p) => ('text' in p && typeof p.text === 'string' ? p.text : '')).join('');
         if (steer.fromPerson) people.note(text);
+        // A child's report delivered to the inbox (not through `wait_agents`): its files and outcome reach the progress
+        // detector as data, the same reading a `wait_agents` result gets (VS Code chat #157440).
+        if (steer.childReport) run.progress.observeChildReport(steer.childReport);
         out.push({
           text,
           ...(parts.length > 0 ? { parts } : {}),

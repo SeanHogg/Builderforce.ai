@@ -130,10 +130,10 @@ describe('handleCiEventOutcome', () => {
   });
 
   it('a green build emits nothing extra', async () => {
-    ingestMock.mockResolvedValue({ processed: true, taskId: 7, tenantId: 3, buildStatus: 'success', merged: true });
+    ingestMock.mockResolvedValue({ processed: true, taskId: 7, tenantId: 3, buildStatus: 'success' });
     const { deps, inserts, dispatchRun } = makeDeps();
     const res = await handleCiEventOutcome(deps, { ...EVT, outcome: 'success' }, 'gitlab');
-    expect(res.merged).toBe(true);
+    expect(res.buildStatus).toBe('success');
     expect(dispatchRun).not.toHaveBeenCalled();
     expect(inserts).toHaveLength(0);
   });

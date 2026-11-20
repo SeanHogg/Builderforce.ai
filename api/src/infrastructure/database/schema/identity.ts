@@ -645,6 +645,9 @@ export const tenantManagerDefaults = pgTable('tenant_manager_defaults', {
    *  lane (1153)? WORKSPACE-ONLY — an account-admin decision with no project column.
    *  NULL = no opinion = the built-in `false`. See `reviewGateAuthority.ts`. */
   managerMayCloseReviewedTickets: boolean('manager_may_close_reviewed_tickets'),
+  /** Workspace default SHIP MODE for local (VS Code) runs (PRD 48, 1356) — a plain
+   *  override a project row beats. NULL = no workspace opinion (built-in 'commit'). */
+  shipMode:          varchar('ship_mode', { length: 20 }),
   /** Who last changed the workspace autonomy posture — the governance question is
    *  "who granted the manager merge rights?", so the answer is stored. */
   updatedBy:         varchar('updated_by', { length: 36 }),

@@ -5,8 +5,8 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  *
  * Two correlation paths:
  *   1. Pre-merge: an event on a `builderforce/task-<id>` branch is recorded on that
- *      task's latest execution; when auto-merge is enabled (and the green gate
- *      is on — the default) a successful build merges the branch.
+ *      task's latest execution and its open PR. It never merges: the PR merge sweep
+ *      merges by the project's settings (PRD 48 §4.3).
  *   2. Post-merge: an event on the DEPLOY branch (e.g. `main`) is correlated by its
  *      head SHA to the merged PR we recorded that `merge_sha` for. We record the
  *      build outcome on the task and, on FAILURE, return an `autoFix` intent so the
@@ -22,8 +22,7 @@ import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { peekCached, setCached } from '../../infrastructure/cache/readThroughCache';
 import { resolveRepoCredential, isResolveError } from '../repos/resolveRepoCredential';
-import { cloudMergeOnGreenCi, cloudAutofixOnBuildFailure, MAX_AUTOFIX_ATTEMPTS } from '../repos/mergeBranchToBase';
-import { mergeOnGreen } from './mergeOnGreen';
+import { cloudAutofixOnBuildFailure, MAX_AUTOFIX_ATTEMPTS } from './buildAutofixPolicy';
 import { findMergedPullRequestBySha, findOpenPullRequestByTask, findOpenPullRequestByProject, setPullRequestBuildStatus, isMergeCandidate } from '../repos/recordPullRequestRow';
 import { closeTicketAutomatically } from '../manager/reviewGateAuthority';
 import { fetchBuildError } from './fetchBuildError';
@@ -108,7 +107,6 @@ export interface IngestResult {
   /** Owning tenant of the correlated task (set whenever `taskId` is). */
   tenantId?: number;
   executionId?: number;
-  merged?: boolean;
   buildStatus?: 'success' | 'failure' | 'pending';
   /** When set, the caller should dispatch a fix run for this task. */
   autoFix?: AutoFixIntent;
@@ -426,21 +424,15 @@ async function ingestPreMergeEvent(db: Db, env: Env, secret: string, evt: RepoCi
     });
   }
 
-  // Gated shipping: merge only on green, and only when auto-merge is actually
-  // enabled. Green is the default when auto-merge is on; the default overall is
-  // still "PR open, human approves" (CLOUD_AUTOMERGE_ENABLED off).
-  let merged = false;
-  if (evt.outcome === 'success' && actionable && cloudMergeOnGreenCi(env)) {
-    merged = await mergeOnGreen(db, env, secret, {
-      tenantId: task.tenantId, taskId, execId: execId ?? null, branch: evt.branch ?? null, eventSha: evt.sha ?? null,
-    }, 'defer');
-  }
+  // NO MERGE HERE (PRD 48 §4.3). A green build is recorded on the PR row above; the PR merge
+  // sweep (`repos/prMergeSweep.ts`) is the single merge writer and merges by the project's
+  // settings — the caller's `signalMergeQueueOnCiResult` wakes it for exactly this verdict.
 
   // Carry the build status + any auto-fix intent (failure) up to the webhook, which
   // owns the run dispatch — same contract the post-merge path returns. The `reason`
   // rides along too: it is what `handleCiEventOutcome` turns into the observable
   // `build.autofix_skipped` event, so dropping it here blinded the pre-merge path.
-  return { processed: true, taskId, tenantId: task.tenantId, executionId: execId, merged, buildStatus: buildResult?.buildStatus, autoFix: buildResult?.autoFix, reason: buildResult?.reason };
+  return { processed: true, taskId, tenantId: task.tenantId, executionId: execId, buildStatus: buildResult?.buildStatus, autoFix: buildResult?.autoFix, reason: buildResult?.reason };
 }
 
 /** Path 2 — an event on the deploy branch (post-merge): validate + maybe auto-fix. */

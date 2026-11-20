@@ -1,16 +1,17 @@
 /**
- * A DRAFT pull request is never merged or auto-fixed by CI (`isMergeCandidate`): the platform's early draft
- * belongs to a run that is still live, and a human's draft is not ready. Green CI on it must not merge the
- * in-progress branch; red CI on it must not dispatch a second run. The build status is still recorded.
+ * A DRAFT pull request is never auto-fixed by CI (`isMergeCandidate`): the platform's early draft belongs to a
+ * run that is still live, and a human's draft is not ready. Red CI on it must not dispatch a second run. The
+ * build status is still recorded.
  *
- * The merge path here is REAL: `securityGateForTask` (with its draft exclusion) and `mergeOnGreen` run; only the
- * provider head lookup, the repo resolution and the live-run read are stubbed, so a "no merge" result can only
- * come from the code under test.
+ * And the CI webhook never MERGES anything (PRD 48 §4.3): green CI is recorded on the PR row, and the PR merge
+ * sweep — the single merge writer — merges by the project's settings. That holds for every env, including the
+ * retired `CLOUD_AUTOMERGE_*` switches, so the merge path's own collaborators (the provider head lookup, the
+ * repo resolution) are spied on and must never be reached.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const h = vi.hoisted(() => ({
-  head: vi.fn(async (..._a: unknown[]) => ({ ok: true as const, sha: 'other-sha' })),
+  head: vi.fn(async (..._a: unknown[]) => ({ ok: true as const, sha: 'sha1' })),
   repo: vi.fn(async (..._a: unknown[]) => null),
   live: vi.fn(async (..._a: unknown[]) => false),
   toolEvent: vi.fn(async (..._a: unknown[]) => undefined),
@@ -49,41 +50,25 @@ const rows = (...prs: Array<ReturnType<typeof prRow>>) => new Map<TableRef, unkn
 ]);
 const green: RepoCiEvent = { eventType: 'workflow_run', branch: 'builderforce/task-78', sha: 'sha1', outcome: 'success', rawState: 'success', targetUrl: null, runId: 99 };
 const red: RepoCiEvent = { ...green, outcome: 'failure', rawState: 'failure' };
-const mergingEnv = { CLOUD_AUTOMERGE_ENABLED: '1' } as unknown as Env;
+/** The retired env switches, set the way that used to merge on green. */
+const retiredMergingEnv = { CLOUD_AUTOMERGE_ENABLED: '1', CLOUD_AUTOMERGE_REQUIRE_GREEN: '1' } as unknown as Env;
 
-beforeEach(() => { vi.clearAllMocks(); h.live.mockResolvedValue(false); h.head.mockResolvedValue({ ok: true, sha: 'other-sha' }); });
+beforeEach(() => { vi.clearAllMocks(); h.live.mockResolvedValue(false); h.head.mockResolvedValue({ ok: true, sha: 'sha1' }); });
 
-describe('ingestRepoCiEvent - a draft PR is not a merge candidate', () => {
-  it('regression: green CI on a draft does not merge it - the draft is not counted by the gate, so nothing reaches the repo/merge step', async () => {
-    const res = await ingestRepoCiEvent(makeFakeDb(rows(prRow('draft'))), mergingEnv, 'secret', green);
-    expect(res).toMatchObject({ processed: true, merged: false, buildStatus: 'success' });
-    expect(h.head).not.toHaveBeenCalled();
-    expect(h.repo).not.toHaveBeenCalled();
-  });
+describe('ingestRepoCiEvent - green CI is recorded, never merged by the webhook', () => {
+  for (const status of ['draft', 'open']) {
+    for (const [label, env] of [['no env', {} as Env], ['the retired merge env', retiredMergingEnv]] as const) {
+      it(`green CI on a ${status} PR with ${label} records the build and reaches no merge step`, async () => {
+        const res = await ingestRepoCiEvent(makeFakeDb(rows(prRow(status))), env, 'secret', green);
+        expect(res).toMatchObject({ processed: true, buildStatus: 'success' });
+        expect(h.head).not.toHaveBeenCalled();
+        expect(h.repo).not.toHaveBeenCalled();
+      });
+    }
+  }
+});
 
-  it('regression: MAJOR 3 - a live run\'s draft AT the green sha plus a newer non-draft row on the task does not merge: only the non-draft is judged, and it is not at that commit', async () => {
-    h.head.mockImplementation(async (...a: unknown[]) => ({ ok: true as const, sha: a[3] === 'draft-id' ? 'sha1' : 'newer-sha' }));
-    // Newest first: the fake ignores ORDER BY, and `findOpenPullRequestByTask` takes the newest row (the open one).
-    const res = await ingestRepoCiEvent(makeFakeDb(rows(prRow('open', 'newer-id'), prRow('draft', 'draft-id'))), mergingEnv, 'secret', green);
-    expect(res.merged).toBe(false);
-    expect(h.head.mock.calls.map((c) => c[3])).toEqual(['newer-id']); // the draft was never even resolved
-    expect(h.repo).not.toHaveBeenCalled();
-  });
-
-  it('regression: Minor 6 - green CI while the task still has a live run does not merge', async () => {
-    h.live.mockResolvedValue(true);
-    const res = await ingestRepoCiEvent(makeFakeDb(rows(prRow('open'))), mergingEnv, 'secret', green);
-    expect(res.merged).toBe(false);
-    expect(h.head).not.toHaveBeenCalled();
-  });
-
-  it('control: green CI on an open PR at the event sha reaches the repo step (the gate really runs)', async () => {
-    h.head.mockResolvedValue({ ok: true, sha: 'sha1' });
-    // Past the head lookup the gate needs a real scan store; only the fact that the gate got that far matters here.
-    await ingestRepoCiEvent(makeFakeDb(rows(prRow('open'))), mergingEnv, 'secret', green).catch(() => undefined);
-    expect(h.head).toHaveBeenCalled();
-  });
-
+describe('ingestRepoCiEvent - a draft PR is not an auto-fix candidate', () => {
   it('regression: red CI on a draft records the failure but dispatches no auto-fix run', async () => {
     const res = await ingestRepoCiEvent(makeFakeDb(rows(prRow('draft'))), {} as Env, 'secret', red);
     expect(res.buildStatus).toBe('failure');

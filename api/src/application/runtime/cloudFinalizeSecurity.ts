@@ -3,8 +3,7 @@
  * `cloudFinalize.ts` so that file stays the landing sequence and not a second home for the gate.
  *
  * FAILS CLOSED: the verdict starts as a BLOCK and only the security step, run on a RECORDED pull request,
- * can change it. So a PR that failed to open (`pr.ok === false`), or that could not be recorded, can never
- * reach `mergeBranchToBase`: there is no verdict to merge on.
+ * can change it. A run never merges (PRD 48 §4.3); the verdict it records is what the PR merge sweep reads.
  */
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -45,18 +44,4 @@ export async function gateRunPullRequest(env: Env, db: Db, a: RunGateArgs): Prom
     result: (step.verdict.allow ? 'no open blocking security findings' : describeSecurityBlock(step.verdict)).slice(0, 300),
   });
   return step.verdict;
-}
-
-/** An immediate auto-merge held by the gate: journal it and return the note for the run summary. */
-export async function recordMergeHeld(
-  db: Db, a: Pick<RunGateArgs, 'tenantId' | 'cloudAgentRef' | 'executionId' | 'repoCtx'>,
-  verdict: Extract<PinnedVerdict, { allow: false }>,
-): Promise<string> {
-  await recordCloudToolEvent(db, {
-    tenantId: a.tenantId, cloudAgentRef: a.cloudAgentRef, executionId: a.executionId,
-    toolName: 'merge_blocked_security', category: 'tool',
-    detail: { base: a.repoCtx.base, head: a.repoCtx.branch, reasons: verdict.reasons },
-    result: describeSecurityBlock(verdict).slice(0, 300),
-  });
-  return ` - NOT auto-merged: ${describeSecurityBlock(verdict)}`;
 }

@@ -3,7 +3,8 @@ import { createEvidenceLedger } from '@builderforce/run-guards';
 import type { BrainTraceEvent } from '../brainTriage';
 import type { BrainRunContext } from './brainRunContext';
 import { deterministicFinish } from './deterministicFinish';
-import { localTicketsFiledInRun, updateRunLocalTickets, type BackstopRun } from './runBackstops';
+import { updateRunLocalTickets, type BackstopRun } from './runBackstops';
+import { localTicketsFiledInRun } from './chatTickets';
 
 /**
  * Regression (VS Code chat #70776): the hand-off filed four device-local tickets and they stayed

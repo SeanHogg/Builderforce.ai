@@ -38,7 +38,6 @@ interface LegacyLoopState {
   loadedTools?: string[];
   progress?: ProgressDetectorState;
   cascade?: unknown;
-  pendingPause?: string;
   checksNote?: string;
 }
 
@@ -92,7 +91,6 @@ export function toRunState(saved: CloudLoopState | undefined, trustedApprovals: 
     guards: {
       ...(saved.progress ? { progress: saved.progress } : {}),
       ...(saved.cascade ? { cascade: saved.cascade as unknown as NonNullable<RunState['guards']['cascade']> } : {}),
-      ...(saved.pendingPause ? { pendingPause: saved.pendingPause } : {}),
       ...(saved.checksNote ? { checksNote: saved.checksNote } : {}),
     },
     finish: {

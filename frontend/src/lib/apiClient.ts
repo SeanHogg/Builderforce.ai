@@ -36,7 +36,7 @@ import { dispatchApiError } from './errors/apiErrorEvent';
 import { fetchWithTransportReport, TRANSPORT_FAILURE_STATUS } from './errors/transportFailure';
 import { signalTermsGate } from './errors/termsGateEvent';
 import { LOCALE_HEADER, readLocaleCookie } from '@/i18n/config';
-import { guestReadResponse, resolveGuestReadLoaded } from '@/domains/guest/application/guestRead';
+import type { GuestReadRequest } from '@/domains/guest/application/guestRead';
 import { noteSignedOutRead } from '@/domains/guest/application/guestWall';
 
 export function getApiBaseUrl(): string {
@@ -406,6 +406,26 @@ async function reportAndThrow(
  * stays out of the root layout's closure, and in the browser it is already loaded by
  * the boot (`PlatformPolicyBoot`). Throws `PlatformAccessDenied` when refused.
  */
+/**
+ * The sample workspace's answer to one read, or `null` for "go to the wire".
+ *
+ * Loaded through `import()` inside a `typeof window` BRANCH, never statically. The
+ * fixtures are a browser-only answer — `resolveGuestRead` refuses on the server — and
+ * Next's compiler folds `typeof window` to "undefined" for the server and edge builds,
+ * so webpack drops the branch and the whole sample workspace behind it never enters
+ * the Worker bundle (where it sat in every route function, unreachable). It is a
+ * branch rather than an early return because webpack prunes a constant-false branch
+ * but still bundles an `import()` that follows a `return`.
+ */
+async function guestSampleResponse(request: GuestReadRequest): Promise<Response | null> {
+  if (typeof window !== 'undefined') {
+    const { guestReadResponse, resolveGuestReadLoaded } = await import('@/domains/guest/application/guestRead');
+    const sample = await resolveGuestReadLoaded(request);
+    return sample ? guestReadResponse(sample) : null;
+  }
+  return null;
+}
+
 async function assertPlatformAllows(url: string, method: string, credentialed: boolean): Promise<void> {
   if (typeof window === 'undefined') return;
   const { assertWebApiRequest } = await import('./localFirst/platformPolicy');
@@ -446,8 +466,8 @@ async function sendRequest(
   // means "go to the wire" and is the ordinary case for a signed-in person on
   // every request they ever make. The `Loaded` variant pulls in the registry's
   // lazy fixture modules first — only for a read that already qualifies.
-  const sample = await resolveGuestReadLoaded({ path, method, hadToken });
-  if (sample) return { res: guestReadResponse(sample), url, method, hadToken };
+  const sample = await guestSampleResponse({ path, method, hadToken });
+  if (sample) return { res: sample, url, method, hadToken };
 
   // THE platform gate — every request this transport sends passes the person's
   // inference mode first (Local only sends nothing their credential rides on: no memory

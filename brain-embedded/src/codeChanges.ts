@@ -14,22 +14,10 @@
  * A failed direct write changed nothing, so it yields nothing. Pure: no I/O.
  */
 
-import { isScratchScriptPath } from '@builderforce/run-guards';
+import { delegatedChangedPathsOf, isScratchScriptPath } from '@builderforce/run-guards';
 import { isFailedToolResult } from './brainTriage';
 import { codeChangeFiles } from './chatWorkLinking';
 import { isCodeChangeTool } from './localWorkspaceTools';
-import { HAND_OFF_TOOL } from './planHandoff';
-
-/** The tools a run delegates through — one child, or several side by side. Each result
- *  carries the files its children changed. */
-// `hand_off` is one too: a plan handed to parallel coding children reports their files.
-// `wait_agents` is where an editor owner COLLECTS its background children's reports,
-// so the files they changed reach the ticket backstop through it.
-export const DELEGATION_TOOLS: ReadonlySet<string> = new Set(['spawn_agent', 'spawn_agents', 'wait_agents', HAND_OFF_TOOL]);
-
-export function isDelegationTool(name: string): boolean {
-  return DELEGATION_TOOLS.has(name);
-}
 
 /**
  * The files a finished call changed, or `null` when the call changes no code at all.
@@ -46,13 +34,8 @@ export function codeChangesOf(name: string, args: unknown, out: unknown): string
     if (files.length > 0 && real.length === 0) return null;
     return real;
   }
-  // A delegation is read by what it REPORTS, not by whether it succeeded: a child that
-  // wrote two files and then ran out of budget still moved the tree.
-  if (isDelegationTool(name)) {
-    const files = (out as { changedFiles?: unknown } | null)?.changedFiles;
-    if (!Array.isArray(files)) return null;
-    const named = files.filter((f): f is string => typeof f === 'string' && f.trim().length > 0 && !isScratchScriptPath(f));
-    return named.length ? named : null;
-  }
-  return null;
+  // A delegation (`DELEGATION_TOOLS`, `@builderforce/run-guards`) is read by what it REPORTS, not by whether it succeeded: a
+  // child that wrote two files and then ran out of budget still moved the tree. THE reader, which is empty for any other tool.
+  const named = delegatedChangedPathsOf(name, out).filter((f) => !isScratchScriptPath(f));
+  return named.length ? named : null;
 }

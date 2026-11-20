@@ -13,7 +13,9 @@ export const ROADMAP_HORIZONS: Array<{ key: string; label: string }> = [
   { key: 'later', label: 'Later' },
 ];
 
-export const ROADMAP_STATUSES = ['planned', 'in_progress', 'shipped', 'cancelled'];
+// The roadmap lifecycle is declared ONCE, beside the words that mean "closed" (agent-loop
+// ticketClosedStates.ts) — the same list the api's roadmap tools accept.
+export { ROADMAP_STATUSES } from '@builderforce/agent-loop';
 
 /** Read a string field off a roadmap TrackerRow (values are loosely typed). */
 export function rstr(row: TrackerRow, key: string): string {

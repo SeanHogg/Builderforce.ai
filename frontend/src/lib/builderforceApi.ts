@@ -21,6 +21,9 @@ import { AMBIENT_REQUEST_ERRORS } from './errors/transportFailure';
 import type { SessionApp } from './embeddedApps';
 import type { OutcomeMetric, OutcomeMetricFamilyRef } from './outcomeMetrics';
 import type { ListingTier, LlmProvider } from '@builderforce/model-catalog';
+import type { ShipMode, ShipPolicy } from '@builderforce/run-guards';
+
+export type { ShipMode, ShipPolicy };
 
 /**
  * `request` / `webRequest` are the two credential flavours this module's ~250
@@ -2070,6 +2073,9 @@ export interface ManagerConfig {
   allowAutoStaffLanes: boolean | null;
   agentReassignIdleHours: number | null;
   agentReassignMaxPerSession: number | null;
+  /** PRD 48 (1356): what a VS Code run does with finished work on this project. `null` =
+   *  inherit the workspace default. Optional for an API build that predates it. */
+  shipMode?: ShipMode | null;
   managerType: ManagerTypeId;
   lastRunAt: string | null;
 }
@@ -2144,6 +2150,21 @@ export interface ManagerPolicy {
    * a person closes every ticket on such a lane; the manager still reviews it.
    */
   managerMayCloseReviewedTickets: boolean;
+  /**
+   * The resolved SHIP MODE for VS Code runs (PRD 48) — project beats workspace beats the
+   * built-in `commit`. Optional for an API build that predates it.
+   */
+  shipMode?: ShipMode;
+  /** Which tier set {@link shipMode}: `default` = nobody has. */
+  shipModeSource?: 'project' | 'workspace' | 'default';
+}
+
+/** The two ship policies a project's runs follow (PRD 48), derived server-side. */
+export interface ManagerShipPolicies {
+  /** A VS Code run: the project's `shipMode`. */
+  local: ShipPolicy;
+  /** A cloud / agent-host run: always a pull request; `merge` is what the merge sweep will do. */
+  cloud: ShipPolicy;
 }
 
 /**
@@ -2170,6 +2191,9 @@ export interface ManagerTenantDefaults {
   agentReassignMaxPerSession: number | null;
   /** Review-and-close authority (1153) — workspace-only; `null` = the built-in `true` (1161). */
   managerMayCloseReviewedTickets: boolean | null;
+  /** Default ship mode for VS Code runs (PRD 48); `null` = the built-in `commit`. Optional
+   *  for an API build that predates it. */
+  shipMode?: ShipMode | null;
 }
 
 /** GET/PATCH /api/manager/defaults. Every resolved value is server-computed. */
@@ -2437,6 +2461,9 @@ export interface ManagerOverview {
    *  resolved by the server. Distinct from `policy`, which includes this project's row.
    *  Shipped so the form can say "inherited: on/off" without re-folding the tiers. */
   tenantPolicy: ManagerPolicy;
+  /** What a run on this project does with finished work (PRD 48), derived from `policy`
+   *  server-side. Optional for an API build that predates it. */
+  shipPolicy?: ManagerShipPolicies;
 }
 
 /** Editable subset accepted by PUT /api/manager/:projectId. */
@@ -2464,6 +2491,8 @@ export type ManagerConfigPatch = Partial<{
   allowAutoStaffLanes: boolean | null;
   agentReassignIdleHours: number | null;
   agentReassignMaxPerSession: number | null;
+  /** PRD 48 — what a VS Code run does with finished work; `null` = inherit the workspace. */
+  shipMode: ShipMode | null;
 }>;
 
 /** Editable subset accepted by PATCH /api/manager/defaults. `null` clears an opinion. */
@@ -2475,8 +2504,8 @@ export const managerApi = {
     request<ManagerOverview>(`/api/manager/${projectId}`),
 
   /** Update the manager config (manager-role only). Returns the fresh config + policy. */
-  update: (projectId: number, patch: ManagerConfigPatch): Promise<{ config: ManagerConfig; policy: ManagerPolicy }> =>
-    request<{ config: ManagerConfig; policy: ManagerPolicy }>(`/api/manager/${projectId}`, {
+  update: (projectId: number, patch: ManagerConfigPatch): Promise<{ config: ManagerConfig; policy: ManagerPolicy; shipPolicy?: ManagerShipPolicies }> =>
+    request<{ config: ManagerConfig; policy: ManagerPolicy; shipPolicy?: ManagerShipPolicies }>(`/api/manager/${projectId}`, {
       method: 'PUT',
       body: JSON.stringify(patch),
     }),
@@ -2822,7 +2851,10 @@ export interface AwaitingApprovalExecution {
   reason: string;
 }
 
-export type SubmitExecutionResponse = Execution | AwaitingApprovalExecution;
+export type SubmitExecutionResponse = (Execution | AwaitingApprovalExecution) & {
+  /** PRD 48 §4.6 — set when the request carried a merge grant: whether it was recorded. */
+  mergeGrant?: 'recorded' | 'failed';
+};
 
 export function isAwaitingApprovalExecution(
   value: SubmitExecutionResponse
@@ -2951,6 +2983,19 @@ export interface AttentionResponse {
   manager: AttentionManager;
 }
 
+/** A person's "merge into main" grant on a run (PRD 48 §4.6), and where it stands. */
+export interface MergeGrantView {
+  grantedBy: string;
+  grantedByName: string | null;
+  reason: string;
+  createdAt: string;
+  status: 'pending' | 'merged' | 'held' | 'voided';
+  /** Why the merge sweep is holding it right now — set when `status` is `held`. A code the UI words. */
+  heldCode: 'ci_pending' | 'ci_failed' | 'security' | 'merge_refused' | null;
+  /** Why the grant can no longer apply — set when `status` is `voided`. A code the UI words. */
+  voidCode: 'cancelled' | 'no_pull_request' | 'head_moved' | 'no_head' | null;
+}
+
 export interface ExecutionControlResponse {
   enabled: boolean;
   stopped?: { requested: number; cancelled: number; failed: number[] };
@@ -2963,11 +3008,17 @@ export const runtimeApi = {
     agentHostId?: number | null;
     sessionId?: string;
     payload?: string;
+    /** PRD 48 §4.6 — a person's "merge into main when done" grant for THIS run. */
+    mergeGrant?: { reason: string };
   }): Promise<SubmitExecutionResponse> =>
     request<SubmitExecutionResponse>('/api/runtime/executions', {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+
+  /** PRD 48 §4.6 — the run's "merge into main" grant, or `grant: null` when it has none. */
+  mergeGrant: (executionId: number): Promise<{ grant: MergeGrantView | null }> =>
+    request<{ grant: MergeGrantView | null }>(`/api/runtime/executions/${executionId}/merge-grant`),
 
   /** Execution history for a task (newest first). */
   listForTask: (taskId: number): Promise<Execution[]> =>

@@ -20,7 +20,7 @@ import { nativeOfTurn } from "./runRows.js";
 import { volatileTail } from "./policy/compaction/pack.js";
 import type { UsdBudget } from "./policy/budget/usd.js";
 import type { CacheServedStreak } from "./policy/tools/cacheServedStreak.js";
-import { lastFinishReason } from "./policy/finish/index.js";
+import { LINKED_WORK_OPEN, lastFinishReason } from "./policy/finish/index.js";
 import { bumpMutations, tallyCall, tallyTurn, tallyVerify, type RunTally } from "./telemetry/runTally.js";
 import { isReadOnlyShellCall } from "@builderforce/run-guards";
 import type { ToolSchema } from "@builderforce/agent-tools";
@@ -98,7 +98,7 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
   // The results a covered read was answered with: no tool ran, so none of them is a
   // served read, a write, a counted call or a fact for memory — only a stub the model reads.
   const stubs = new WeakSet<LoopDispatchResult>();
-  // The results of a call the run PARKED on a person (a governance gate, A3's pause): the call never ran, so it is no counted
+  // The results of a call the run PARKED on a person (a governance gate): the call never ran, so it is no counted
   // call and no error; the retry after the answer is the call that counts.
   const held = new WeakSet<LoopDispatchResult>();
   /** When each call started, so a call's duration is MEASURED, not inferred from the events around it. */
@@ -213,8 +213,8 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
         if (gated.control) held.add(refused);
         return { result: refused };
       }
-      // A3's pause parks the run on a person (the control); any other skip just answers.
-      const decision = await hooks.guards.beforeDispatch(pctx, pcall);
+      // A guard's skip answers the call; one carrying a control parks the run on a person.
+      const decision = await hooks.guards.beforeDispatch?.(pctx, pcall);
       if (decision?.skip) {
         const { data, isError, control } = decision.skip;
         const skipped: LoopDispatchResult = { data, isError: isError ?? true, ...(control ? { control: asLoopControl(control) } : {}) };
@@ -261,10 +261,13 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
       const gated = verifyRefused ?? (await hooks.finish.gate(pctx));
       // D1: the cascade learns the NAMED verdict of this finish attempt (a red CI is the model's failure, CI still running is not).
       // A refusal by the verify phase is not a finish gate's: it carries no gate reason.
-      const judged = hooks.guards.finish ? await hooks.guards.finish(pctx, { block: gated, reason: verifyRefused ? "verify" : lastFinishReason(state) }) : gated;
+      const reason = verifyRefused ? "verify" : lastFinishReason(state);
+      const judged = hooks.guards.finish ? await hooks.guards.finish(pctx, { block: gated, reason }) : gated;
       const block = judged ?? hooks.subagents.backstop(pctx);
       if (block) {
-        state.finish = { ...state.finish, finishBlockedOnce: true };
+        // An open-work hold is not a gate the finish failed: it must not spend the one-shot honesty gate (`finishBlockedOnce`).
+        const openWorkHold = gated != null && block === gated && reason === LINKED_WORK_OPEN;
+        if (!openWorkHold) state.finish = { ...state.finish, finishBlockedOnce: true };
         return block;
       }
       // A message steered in while this finish was in flight is never lost (§6.3): the call

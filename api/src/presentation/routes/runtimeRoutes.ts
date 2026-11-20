@@ -67,6 +67,9 @@ import { readRuntimeDashboard } from '../../application/runtime/runtimeDashboard
 import { ExecutionStatus, TenantRole } from '../../domain/shared/types';
 import type { ResolvedArtifacts } from '../../domain/shared/types';
 import { parseBody, parseOptionalBody, z, zNonEmptyString, zNumberLike, zPositiveInt } from './requestBody';
+import { grantMergeFromRequest, refuseMergeGrant, zMergeGrant } from './mergeGrantRequest';
+import { mergeGrantTargetRefusal, mergeGrantView } from '../../application/runtime/mergeGrants';
+import { payloadNamesCloudAgent } from './mergeGrantRequest';
 import { parseJsonArray } from '../../domain/shared/json';
 import type { Execution } from '../../domain/execution/Execution';
 import type { Env, HonoEnv } from '../../env';
@@ -210,6 +213,8 @@ const SubmitRunBody = z.object({
   sessionId: z.string().optional(),
   // Gates are resolved server-side at submit; a client cannot supply them.
   payload: z.string().optional().transform(stripClientPolicyGates),
+  // PRD 48 §4.6 — a person's "merge into main when done" grant for THIS run.
+  mergeGrant: zMergeGrant,
 });
 const ExecutionControlBody = z.object({ enabled: z.boolean() });
 const ResumeBody = z.object({ answer: z.string().optional() });
@@ -240,13 +245,16 @@ async function dispatchAndQueue(
   execution: SubmittedExecution,
   taskRow: ExecutionTaskRow,
   payload: string | undefined,
+  /** Extra facts the started run's response carries (PRD 48 §4.6: whether its merge grant was recorded). */
+  extra?: Record<string, unknown>,
 ): Promise<Response> {
   const result = await startDispatchedExecution(
     c.env as Env, db, runtimeService, (p) => c.executionCtx.waitUntil(p),
     c.get('tenantId'), execution, taskRow, payload, { actingUserId: c.get('userId') },
   );
   const refusal = admissionRefusalOf(result); // the choke point's typed refusal -> 409 / 429
-  return refusal ? admissionRefusalToResponse(c, refusal) : c.json(result, 201);
+  if (refusal) return admissionRefusalToResponse(c, refusal);
+  return c.json(extra && result && typeof result === 'object' ? { ...(result as object), ...extra } : result, 201);
 }
 
 /**
@@ -469,6 +477,9 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   // Submit a task for execution — the primary "start a billable run" entry point.
   router.post('/executions', requireRole(TenantRole.DEVELOPER), replayOnIdempotencyKey<RuntimeHonoEnv>(), async (c) => {
     const body = await parseBody(c, SubmitRunBody);
+    // A merge grant is a person's, with the in-product merge role — refused before anything starts.
+    const grantRefused = refuseMergeGrant(c, body.mergeGrant);
+    if (grantRefused) return grantRefused;
     const agentHostIdFromHeader = parseOptionalNumber(c.req.header('X-AgentHost-Id'));
 
     const [taskRow] = await db
@@ -495,6 +506,15 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       return c.json({ error: 'Task not found' }, 404);
     }
 
+    // A merge grant is for a CLOUD run only: one aimed at an on-prem host (explicitly, or by the
+    // ticket's host assignment with no cloud agent named) is refused before anything starts.
+    if (body.mergeGrant) {
+      const hostTarget = agentHostIdFromHeader ?? body.agentHostId
+        ?? (taskRow.assignedAgentHostId != null && !payloadNamesCloudAgent(body.payload) ? taskRow.assignedAgentHostId : null);
+      const notCloud = mergeGrantTargetRefusal(hostTarget);
+      if (notCloud) return c.json({ error: notCloud, code: 'merge_grant_not_cloud' }, 400);
+    }
+
     // Admission (dedupe / cap / budget floor), the token gate and the approval gate — one shared helper.
     const gateBlock = await submitRunGates(c, db, { task: taskRow, agentHostId: agentHostIdFromHeader ?? body.agentHostId ?? null, payload: body.payload });
     if (gateBlock) return gateBlock;
@@ -511,7 +531,20 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       source:      c.get('clientSurface') === 'vscode' ? 'vscode' : 'agent',
     });
 
-    return dispatchAndQueue(c, runtimeService, db, execution, taskRow, body.payload);
+    // The grant is written BEFORE the run is started, so its prep tick reads it (the run states it).
+    // A failed write is reported and SAID (`mergeGrant: 'failed'`), never a 500 on a run that started.
+    const mergeGrant = await grantMergeFromRequest(c, db, body.mergeGrant, { executionId: execution.id, projectId: taskRow.projectId });
+
+    return dispatchAndQueue(c, runtimeService, db, execution, taskRow, body.payload, mergeGrant ? { mergeGrant } : undefined);
+  });
+
+  // GET /executions/:id/merge-grant — PRD 48 §4.6: a person's "merge into main" grant on this
+  // run, who gave it, why, and where it stands (pending / merged / held: why). `grant: null`
+  // when the run has none.
+  router.get('/executions/:id/merge-grant', async (c) => {
+    const id = Number(c.req.param('id'));
+    if (!(await loadOwnedExecution(c, runtimeService, id))) return c.json({ error: 'Execution not found' }, 404);
+    return c.json({ grant: await mergeGrantView(db, c.get('tenantId'), id) });
   });
 
   // List executions for the caller's tenant

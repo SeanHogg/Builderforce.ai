@@ -34,7 +34,15 @@ export function lastFinishReason(state: object): string | undefined {
 export interface FinishPorts extends FinishGatePorts {
   /** The run belongs to a delegation tree (its owner or a child). Absent ⇒ only a child (`parentRunId`) is. */
   delegated?: boolean;
+  /**
+   * The block reason while work the run owns (its linked tickets) is still open, or null. Consulted only after every other gate
+   * passed, so it holds the `finish` tool exactly as it holds a prose answer. Absent ⇒ never held.
+   */
+  openWork?: (ctx: PolicyContext) => Promise<string | null>;
 }
+
+/** The named verdict a finish refused for open linked work carries (`lastFinishReason`, the `finish.blocked` event). */
+export const LINKED_WORK_OPEN = "linked_work_open";
 
 /**
  * Read the run's written paths. `runAgent.ts` maintains `state.writtenPaths`; the @-reply
@@ -108,10 +116,13 @@ export function signoffSettleBlock(ctx: PolicyContext): string | null {
  */
 export function createFinishHook(ports: FinishPorts = {}): FinishHook {
   const delegated = (ctx: PolicyContext): boolean => ports.delegated ?? ctx.task.dispatch.parentRunId !== undefined;
+  const openWork = async (ctx: PolicyContext): Promise<string | null> => (ports.openWork ? ports.openWork(ctx) : null);
   return {
     settleBlock: signoffSettleBlock,
     // An owner never ends with children still working — on `finish` (below) or in prose.
     liveChildren: async (ctx: PolicyContext): Promise<string | null> => (delegated(ctx) && ports.liveChildren ? ports.liveChildren() : null),
+    // A run never ends while the tickets it owns are open — on `finish` (below, after every other gate) or in prose (the kernel).
+    openWork,
     async gate(ctx: PolicyContext): Promise<string | null> {
       noteSignoff(ctx);
       const verdict = await evaluateFinishGates({
@@ -130,9 +141,13 @@ export function createFinishHook(ports: FinishPorts = {}): FinishHook {
       if (verdict.writtenPaths) ctx.state.writtenPaths = [...verdict.writtenPaths];
       if (verdict.block) {
         ctx.state.finish = { ...ctx.state.finish, finishBlockedOnce: true };
+        lastReasons.set(ctx.state, verdict.reason);
+        return verdict.block;
       }
-      lastReasons.set(ctx.state, verdict.reason);
-      return verdict.block;
+      // Every gate passed: the run's own open tickets still hold it, exactly as they hold a prose answer.
+      const owed = await openWork(ctx);
+      lastReasons.set(ctx.state, owed ? LINKED_WORK_OPEN : verdict.reason);
+      return owed;
     },
   };
 }

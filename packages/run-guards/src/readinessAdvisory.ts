@@ -1,7 +1,7 @@
 /**
  * The EARLY READINESS STEER (PRD 45 §4.7 B1): the run declared it has what it needs
  * ("Now I have everything I need", "one final check, then I write") and then only read.
- * {@link UNKEPT_READY_AT} claims still make a TRIP (the pause/escalate ladder), but one
+ * {@link UNKEPT_READY_AT} claims still make a TRIP (the steer/escalate/finish ladder), but one
  * unkept claim is already worth a one-off note on the NEXT turn — the model is one
  * read-only turn away from acting, and a gentle "make the edit now" arrives a full
  * {@link UNKEPT_READY_AT} turns earlier than the ladder's first steer.

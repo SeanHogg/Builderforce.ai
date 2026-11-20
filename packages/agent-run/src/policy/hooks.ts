@@ -174,12 +174,17 @@ export interface FinishHook {
    * reports would strand. Null when none is live or the surface has no delegation.
    */
   liveChildren?(ctx: PolicyContext): Promise<string | null>;
+  /**
+   * The block on ANY end of a run while work the run owns (its linked tickets) is still open — the model reads it and goes on
+   * executing. Null when nothing is owed or the surface binds no port.
+   */
+  openWork?(ctx: PolicyContext): Promise<string | null>;
 }
 
 /** WS2d — the in-run guards: progress (A3), cascade (D1), post-edit check (D7), parallel reads (D8). */
 export interface GuardsHook {
-  /** Before a call dispatches. A hook may skip it. */
-  beforeDispatch(ctx: PolicyContext, call: PolicyToolCall): Promise<GuardDecision | void> | GuardDecision | void;
+  /** Before a call dispatches. A hook may skip it. Absent ⇒ every call dispatches. */
+  beforeDispatch?(ctx: PolicyContext, call: PolicyToolCall): Promise<GuardDecision | void> | GuardDecision | void;
   /**
    * After a call returned. Returns the replacement result when a guard has something the
    * model must read on it (D7's post-edit note), or nothing to let the result stand.
@@ -218,7 +223,7 @@ export interface GuardControl {
 
 /** What a guard decided about a call. */
 export interface GuardDecision {
-  /** Skip the call and push this result instead; a `control` parks the run (A3's pause). */
+  /** Skip the call and push this result instead; a `control` parks the run on a person. */
   skip?: { data: unknown; isError?: boolean; control?: GuardControl };
 }
 

@@ -1,6 +1,7 @@
 import type * as vscode from "vscode";
 import { SIDE_EFFECT_GATES_WIRE_LEVEL, type PolicyGate } from "@builderforce/agent-tools";
 import { renderPlatformContextSection, type RunContextEnvelope } from "@builderforce/run-context";
+import { isShipMode, type ShipPolicy } from "@builderforce/run-guards";
 import { authed } from "./transport";
 
 /**
@@ -23,6 +24,31 @@ export async function fetchPolicyGates(
   const r = await authed<{ gates?: PolicyGate[] }>(secrets, `/api/governance/policy-gates/effective${suffix}`);
   if (r === undefined) return undefined;
   return Array.isArray(r.gates) ? r.gates : [];
+}
+
+/**
+ * The project's effective SHIP POLICY (PRD 48) — a project setting stored per tenant,
+ * returned as `shipPolicy: { local, cloud }` on `GET /api/manager/:projectId` (api
+ * `manager/shipPolicyOf.ts`; written through `PUT /api/manager/:projectId` and the
+ * `manager.configure` MCP tool). A VS Code run follows `local`, whose `source` says whether
+ * the project set it (`project_settings`) or it is the built-in `default` — kept, so an unset
+ * project's run says so. `undefined` = signed out, or no well-formed `local` policy. Throws
+ * when the read fails — the caller (`policyGates.resolveRunShipPolicy`) falls back to its
+ * cache and snapshot.
+ */
+export async function fetchProjectShipPolicy(
+  secrets: vscode.SecretStorage,
+  projectId: number,
+): Promise<ShipPolicy | undefined> {
+  const r = await authed<{ shipPolicy?: { local?: Partial<ShipPolicy> | null } | null }>(secrets, `/api/manager/${projectId}`);
+  const p = r?.shipPolicy?.local;
+  if (!p || !isShipMode(p.mode)) return undefined;
+  return {
+    mode: p.mode,
+    merge: p.merge === "immediate" || p.merge === "on_green" ? p.merge : "never",
+    review: p.review === "required" ? "required" : "none",
+    source: p.source === "project_settings" ? "project_settings" : "default",
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

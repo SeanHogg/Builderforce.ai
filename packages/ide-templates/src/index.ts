@@ -25,6 +25,10 @@
  */
 export { VANILLA_TEMPLATE, MOBILE_TEMPLATE, RETIRED_SCAFFOLD_CONTENT } from './scaffolds';
 
+// The starter kits are NOT re-exported here: they are the `./kits` subpath
+// (`@builderforce/ide-templates/kits`), so the Workers that import this root for the
+// scaffolds never bundle the kit parts' source strings.
+
 import { VANILLA_TEMPLATE, MOBILE_TEMPLATE, RETIRED_SCAFFOLD_CONTENT } from './scaffolds';
 
 /** Line endings and surrounding whitespace never make a file someone's own work. */

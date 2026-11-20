@@ -4,10 +4,10 @@
  * PURE: scans and findings in, a verdict out. No IO, so every merge path asks the same question the
  * same way and the rule is testable without a database. `securityMergeGate` judges findings alone;
  * `evaluateSecurityGate` (below) is the complete verdict every merge path uses. The paths that consult it:
- *   - `runtime/cloudFinalize.ts`        immediate auto-merge at the end of a cloud run
- *   - `repos/openTaskPullRequest.ts`    the Done-drag path
- *   - `ci/ingestRepoCiEvent.ts`         merge-on-green-CI
- *   - `repos/prMergeSweep.ts`           the manager's autonomous merge
+ *   - `runtime/cloudFinalize.ts`        records the verdict at the end of a cloud run (it never merges)
+ *   - `repos/openTaskPullRequest.ts`    the Done-drag path (records it likewise)
+ *   - `repos/prMergeSweep.ts`           the manager's autonomous merge — the single merge writer
+ *   - the human merge route
  * Each loads the PR's scans and findings through `prSecurityGate.ts` (the one reader) and calls it.
  *
  * BLOCKER MAPS ONTO THE EXISTING SEVERITY VOCABULARY. The platform has four severities

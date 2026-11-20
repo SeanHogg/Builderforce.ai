@@ -86,6 +86,8 @@ import { VsCodeChatNotices } from './VsCodeChatNotices';
 import { railHasContent, VsCodeChatRail } from './VsCodeChatRail';
 import { VsCodeChatThread } from './VsCodeChatThread';
 import { VsCodeComposer } from './VsCodeComposer';
+import { ComposerCommandReply } from './ComposerCommandReply';
+import { useComposerCommands } from './useComposerCommands';
 
 const HISTORY_ID = 'bf-chat-history';
 
@@ -238,6 +240,10 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
 
   // A starter seeds the box (the person edits and sends it) and hands it focus.
   const pickStarter = useCallback((prompt: string) => { draftStore.set(prompt); setFocusToken((n) => n + 1); }, [draftStore]);
+  // `/` commands are answered by the HOST before the turn door (never a model turn); the `/` menu's Actions tab.
+  const composerCommands = useComposerCommands({ init, draftStore, submit, seed: pickStarter });
+  const { queueOr } = composerCommands;
+  const queueOrCommand = useMemo(() => queueOr(queueAfter), [queueOr, queueAfter]);
 
   // The groups the memoized composer and rail are handed: one identity until what is in them moves, so a streamed token
   // (which re-renders this component) leaves them alone.
@@ -325,7 +331,12 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
           onResolveDelta={pickStarter}
         />
       )}
-      notices={<VsCodeChatNotices conv={conv} chatsError={vsChats.error} onDismissChatsError={vsChats.clearError} bundle={init.labels} init={init} composerId={composerId} />}
+      notices={(
+        <>
+          <ComposerCommandReply reply={composerCommands.reply} init={init} commands={composerCommands.commands} onRun={composerCommands.run} onDismiss={composerCommands.dismiss} />
+          <VsCodeChatNotices conv={conv} chatsError={vsChats.error} onDismissChatsError={vsChats.clearError} bundle={init.labels} init={init} composerId={composerId} />
+        </>
+      )}
       footer={(
         <SurfaceFooter
           // The composer belongs in the footer — the prompt is the conversation's
@@ -343,8 +354,8 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
               onAttach={conv.attach}
               onRemoveAttachment={conv.removeAttachment}
               contextUsage={conv.contextUsage}
-              onSubmit={submit}
-              onQueue={queueAfter}
+              onSubmit={composerCommands.submit}
+              onQueue={queueOrCommand}
               sendSteers={sendSteers}
               onStop={stop}
               onPickStarter={pickStarter}
@@ -373,6 +384,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
               session={session}
               // The empty state shows the same starters as tiles.
               suggest={chatId != null}
+              commands={composerCommands.commands}
             />
           )}
           // The chat's live sub-agents: who works for whom, and the owner's levers.

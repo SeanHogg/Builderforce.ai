@@ -136,7 +136,7 @@ export function createBitbucketWebhookRoutes(db: Db, runtimeService: RuntimeServ
 
     // CI feedback: a build status posted against a commit is Bitbucket's build
     // result — correlate it back to the cloud execution that pushed the ticket
-    // branch (build.result telemetry, PR build_status, merge-on-green, auto-fix).
+    // branch (build.result telemetry, PR build_status, the merge-sweep wake-up, auto-fix).
     // The post-ingest half is the shared, provider-independent handler.
     if (key === 'repo:commit_status_created' || key === 'repo:commit_status_updated'
         || key === 'repo:build_status_created' || key === 'repo:build_status_updated') {

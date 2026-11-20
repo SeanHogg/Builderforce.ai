@@ -1,6 +1,7 @@
 import { useTranslations } from 'next-intl';
 import type { CSSProperties } from 'react';
-import type { ManagerPolicy, PrMergePolicy } from '@/lib/builderforceApi';
+import { SHIP_MODES } from '@builderforce/run-guards';
+import type { ManagerPolicy, PrMergePolicy, ShipMode } from '@/lib/builderforceApi';
 
 /**
  * The AI Manager's autonomy controls — ONE control set rendered at TWO scopes.
@@ -61,6 +62,11 @@ export interface ManagerAutonomyValue {
   /** null = inherit the tier below. */
   agentReassignIdleHours: number | null;
   agentReassignMaxPerSession: number | null;
+  /**
+   * What a VS Code run does with finished work (PRD 48) — at BOTH tiers, `null` = inherit.
+   * Optional so a value built against an API that predates it still type-checks.
+   */
+  shipMode?: ShipMode | null;
 }
 
 /** Server-side clamps, mirrored so the inputs cannot offer an ignored value. */
@@ -68,6 +74,14 @@ const IDLE_HOURS = { min: 1, max: 24 * 90 } as const;
 const MAX_PER_SESSION = { min: 0, max: 50 } as const;
 
 const PR_POLICIES: PrMergePolicy[] = ['immediate', 'on_green', 'queue'];
+
+/** The modes this control has localized labels for (`manager.policy.shipMode.<mode>`). `satisfies`
+ *  fails the build here if `@builderforce/run-guards` ever adds a mode with no label. */
+const LOCALIZED_SHIP_MODES = {
+  leave_uncommitted: true, commit: true, commit_push: true, pull_request: true,
+} as const satisfies Record<ShipMode, true>;
+/** The picker's options: THE mode list, in its order, from the contract. */
+const SHIP_MODE_OPTIONS: readonly ShipMode[] = SHIP_MODES.filter((mode) => LOCALIZED_SHIP_MODES[mode]);
 
 const mutedStyle: CSSProperties = { color: 'var(--text-muted)', fontSize: '0.8rem' };
 const fieldLabelStyle: CSSProperties = {
@@ -308,6 +322,10 @@ export function ManagerEffectiveSummary({ effective }: { effective: ManagerPolic
       tone: effective.managerMayCloseReviewedTickets ? 'on' : 'off',
     },
     { text: t(`policy.prMerge.${effective.prMergePolicy}.label`), tone: 'on' },
+    // PRD 48: what a VS Code run does with finished work — absent on an older API build.
+    ...(effective.shipMode
+      ? [{ text: t('policy.effective.shipMode', { mode: t(`policy.shipMode.${effective.shipMode}.label`) }), tone: 'on' as const }]
+      : []),
   ];
   return (
     <div style={{
@@ -569,6 +587,58 @@ export function ManagerAutonomyControls({
             {t('policy.prMerge.needsAuthority')}
           </div>
         )}
+      </div>
+
+      {/* SHIP MODE (PRD 48) — what a VS Code run does with finished work, as a standing
+          rule rather than a mid-run question. Tri-state at BOTH tiers (a nullable column
+          everywhere), so "inherit" is always offered and labelled with what it resolves to. */}
+      <ShipModeRow
+        value={value.shipMode ?? null}
+        inheritedAs={inherited.shipMode
+          ? t(workspace ? 'policy.tri.builtinIs' : 'policy.tri.workspaceIs', {
+            value: t(`policy.shipMode.${inherited.shipMode}.label`),
+          })
+          : undefined}
+        disabled={disabled}
+        onChange={(v) => onChange({ shipMode: v })}
+      />
+    </div>
+  );
+}
+
+/** The ship-mode picker: inherit plus the four modes, same segmented control as PR timing. */
+function ShipModeRow({ value, inheritedAs, disabled, onChange }: {
+  value: ShipMode | null;
+  inheritedAs?: string;
+  disabled?: boolean;
+  onChange: (v: ShipMode | null) => void;
+}) {
+  const t = useTranslations('manager');
+  return (
+    <div style={{ padding: '12px 0 0', marginTop: 12, borderTop: '1px solid var(--border-subtle)' }}>
+      <span style={fieldLabelStyle}>{t('policy.shipMode.label')}</span>
+      <div style={{ ...mutedStyle, margin: '2px 0 8px' }}>{t('policy.shipMode.help')}</div>
+      <div role="radiogroup" aria-label={t('policy.shipMode.label')} style={segmentGroupStyle}>
+        <Segment
+          label={t('policy.tri.inherit')}
+          title={inheritedAs}
+          active={value === null}
+          disabled={disabled}
+          onClick={() => onChange(null)}
+        />
+        {SHIP_MODE_OPTIONS.map((mode) => (
+          <Segment
+            key={mode}
+            label={t(`policy.shipMode.${mode}.label`)}
+            title={t(`policy.shipMode.${mode}.help`)}
+            active={value === mode}
+            disabled={disabled}
+            onClick={() => onChange(mode)}
+          />
+        ))}
+      </div>
+      <div style={{ ...mutedStyle, marginTop: 8 }}>
+        {value ? t(`policy.shipMode.${value}.help`) : inheritedAs}
       </div>
     </div>
   );

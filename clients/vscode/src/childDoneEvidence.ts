@@ -20,7 +20,7 @@ import {
   type StallShape,
 } from "@builderforce/agent-stall";
 import { parseSubagentReport, serializeAskUser } from "@builderforce/agent-loop";
-import { claimsReady, progressPauseQuestion } from "@builderforce/run-guards";
+import { claimsReady } from "@builderforce/run-guards";
 
 /** One row of the run trace, as the host's `getRunTrace` exposes it. */
 export interface ChildEvidenceStep {
@@ -196,18 +196,14 @@ function finalTurnStall(answer: string): StallShape | null {
   });
 }
 
-/** The progress wording shared with the run's own progress detector (PRD A3). */
-const NO_PROGRESS_QUESTION = progressPauseQuestion({ kind: "no_progress" }, 1);
-
 /**
- * A final turn that is PURELY a question — the ask_user shape typed into prose, or the
- * detector's own no-progress pause question — is an unanswered question, not an answer.
+ * A final turn that is PURELY a question — the ask_user shape typed into prose — is an
+ * unanswered question, not an answer.
  * Permission-menu offers are caught by the stall shape above first, so only a bare
  * question reaches here.
  */
 function isUnansweredQuestion(answer: string): boolean {
   const t = answer.trim();
   if (!t) return false;
-  if (t === NO_PROGRESS_QUESTION) return true;
   return /[?]\s*$/.test(t) && t.replace(/\s+/g, " ").split(" ").length <= 60;
 }

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import {
   runCodingDispatch,
+  buildCodingPrompt,
   codingBranchSlug,
   diffWorkspace,
   type CodingDispatchDeps,
@@ -89,6 +90,35 @@ describe("codingBranchSlug", () => {
   it("produces a branch-safe slug", () => {
     expect(codingBranchSlug("Add a Hello Function!")).toBe("add-a-hello-function");
     expect(codingBranchSlug("")).toBe("task");
+  });
+});
+
+describe("buildCodingPrompt — ship instruction (PRD 48 §4.4)", () => {
+  const LEGACY =
+    "Do NOT run git commit/push — that is handled for you after you finish. Just make the code changes.";
+
+  it("uses the payload's shipDirective instead of the hard-coded prose", () => {
+    const directive = "SHIP POLICY — open a pull request (`pull_request`, set by project settings).";
+    const prompt = buildCodingPrompt(detail({ shipDirective: directive }), "/work/x");
+    expect(prompt).toContain(directive);
+    expect(prompt).not.toContain(LEGACY);
+  });
+
+  it("falls back to the pre-PRD-48 prose when the API sent no directive", () => {
+    expect(buildCodingPrompt(detail(), "/work/x")).toContain(LEGACY);
+    expect(buildCodingPrompt(detail({ shipDirective: null }), "/work/x")).toContain(LEGACY);
+    expect(buildCodingPrompt(detail({ shipDirective: "  " }), "/work/x")).toContain(LEGACY);
+  });
+
+  it("sends the directive to the agent on a real dispatch", async () => {
+    const directive = "SHIP POLICY — commit and push (`commit_push`, set by project settings).";
+    const d = deps({
+      http: fakeHttp({ fetchDispatchDetail: vi.fn(async () => detail({ shipDirective: directive })) }),
+    });
+    await runCodingDispatch(d, "d-1234567890");
+    const message = (d.agent.run as ReturnType<typeof vi.fn>).mock.calls[0]?.[1] as string;
+    expect(message).toContain(directive);
+    expect(message).not.toContain(LEGACY);
   });
 });
 

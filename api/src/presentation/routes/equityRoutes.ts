@@ -33,9 +33,7 @@ import {
   recordGrant,
   upsertShareClass,
 } from '../../application/finance/equity';
-import { companyKey, equityVersionKey } from '../../application/finance/equity';
-import { computeWaterfall, exitRange, sensitivity, goalSeekExit } from '../../application/finance/exitWaterfall';
-import { getCacheVersion, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
+import { exitWaterfall, exitWaterfallSensitivity } from '../../application/finance/exitWaterfallService';
 import { limitParam } from './queryParams';
 import { parseBody, z, zNonEmptyString } from './requestBody';
 
@@ -269,64 +267,17 @@ export function createEquityRoutes(db: Db): Hono<HonoEnv> {
 
   /**
    * Who gets what at an exit. Pure projection over the cap table — writes NOTHING and
-   * stores no total. Cached under the company's `equityVersionKey` token, so any ledger
-   * write retires every cached waterfall for that company at once.
+   * stores no total. Cached in `exitWaterfallService` under the company's version token.
    */
   router.post('/waterfall', async (c) => {
     const body = await parseBody(c, WaterfallBody);
-    const tenantId = tenant(c);
-    const company = companyKey(body.companyRef);
-    const asOf = body.asOf ?? new Date().toISOString();
-    const version = await getCacheVersion(c.env as Env, equityVersionKey(tenantId, company));
-    const key = `finance:equity:waterfall:${tenantId}:${company}:${version}:${asOf.slice(0, 10)}:`
-      + `${body.exitValue}:${body.debt ?? 0}:${body.vesting ?? 'normal'}:${JSON.stringify(body.participationCaps ?? {})}`;
-    return Response.json(await getOrSetCached(c.env as Env, key, async () => {
-      const table = await capTable(db, c.env as Env, tenantId, company, asOf);
-      return computeWaterfall({
-        holders: table.holders,
-        classes: table.classes,
-        exitValue: body.exitValue,
-        debt: body.debt ?? 0,
-        vesting: body.vesting ?? 'normal',
-        asOf: new Date(asOf),
-        participationCaps: body.participationCaps,
-      });
-    }, { kvTtlSeconds: 300, l1TtlMs: 30_000 }));
+    return Response.json(await exitWaterfall(db, c.env as Env, tenant(c), body));
   });
 
   /** The same function over a range of exits; optionally a goal-seek bisection. */
   router.post('/waterfall/sensitivity', async (c) => {
     const body = await parseBody(c, WaterfallSensitivityBody);
-    const tenantId = tenant(c);
-    const company = companyKey(body.companyRef);
-    const asOf = body.asOf ?? new Date().toISOString();
-    const version = await getCacheVersion(c.env as Env, equityVersionKey(tenantId, company));
-    const key = `finance:equity:waterfall-sens:${tenantId}:${company}:${version}:${asOf.slice(0, 10)}:`
-      + `${JSON.stringify(body)}`;
-    return Response.json(await getOrSetCached(c.env as Env, key, async () => {
-      const table = await capTable(db, c.env as Env, tenantId, company, asOf);
-      const base = {
-        holders: table.holders,
-        classes: table.classes,
-        debt: body.debt ?? 0,
-        vesting: body.vesting ?? 'normal' as const,
-        asOf: new Date(asOf),
-        participationCaps: body.participationCaps,
-      };
-      const exits = body.exitValues?.length
-        ? body.exitValues
-        : exitRange(body.from ?? 0, body.to ?? 250_000_000, Math.min(60, body.steps ?? 11));
-      return {
-        points: sensitivity(base, exits),
-        goal: body.goal
-          ? {
-            partyRef: body.goal.partyRef,
-            targetPayout: body.goal.targetPayout,
-            exitValue: goalSeekExit(base, body.goal.partyRef, body.goal.targetPayout),
-          }
-          : null,
-      };
-    }, { kvTtlSeconds: 300, l1TtlMs: 30_000 }));
+    return Response.json(await exitWaterfallSensitivity(db, c.env as Env, tenant(c), body));
   });
 
   /** Model a priced round. Writes NOTHING — see the module note. */

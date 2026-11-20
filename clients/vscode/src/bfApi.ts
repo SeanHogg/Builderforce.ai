@@ -111,7 +111,7 @@ export type { BfMeetingDetail, BfMeetingJoin } from "./bfApi/meetings";
 export { beginMcpOAuthConnect, createMcpExtension, listMcpExtensions } from "./bfApi/mcpExtensions";
 export type { BfMcpExtension } from "./bfApi/mcpExtensions";
 
-export { fetchPolicyGates, fetchRunContextSection } from "./bfApi/runContext";
+export { fetchPolicyGates, fetchProjectShipPolicy, fetchRunContextSection } from "./bfApi/runContext";
 
 export {
   listByoProviders,

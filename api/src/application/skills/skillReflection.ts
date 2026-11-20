@@ -12,7 +12,7 @@
  *  - {@link skillReflectionDirective} rides in the run's PROMPT. Only the agent knows
  *    which of the fifty things it did were the repeatable ones, and it knows that at
  *    the moment it is about to finish — not when the prompt was assembled.
- *  - {@link runEarnedReflection} runs at FINALIZE, where merge state and the outcome
+ *  - {@link runEarnedReflection} runs at FINALIZE, where the run's output and the outcome
  *    score are finally known, and answers the reviewer's question: did this run clear
  *    the bar? That is what makes "a qualifying run proposed nothing" a visible fact
  *    rather than a silence.
@@ -20,7 +20,7 @@
  * Either way the agent only ever produces a DRAFT, and only a human makes one binding.
  *
  * E1 (lever `e1_skill_ranking`) closes the gap the prompt half leaves: a VERIFIED run —
- * merged, or committed with branch CI green — whose model never called `skill_propose`
+ * committed with branch CI green — whose model never called `skill_propose`
  * gets a draft written for it from what it actually did ({@link draftSkillFromRun}: the
  * tool-call trace, the files touched, how it was verified). Still a draft; still only a
  * human approves it.
@@ -37,8 +37,6 @@ import { proposeSkill, skillProposedByExecution, type ProposeSkillInput } from '
 
 /** What the run achieved. Known at finalize, not at prompt-build time. */
 export interface RunReflectionSignals {
-  /** The run's work was merged. */
-  merged?: boolean;
   /** A pull request was opened for it. */
   prOpened?: boolean;
   /** The run wrote something to the repository. */
@@ -53,13 +51,13 @@ export const REFLECTION_SCORE_FLOOR = 0.6;
 /**
  * Whether this run earned the right to have proposed a skill.
  *
- * Merged work counts on its own. An unmerged run counts only with BOTH real changes
- * and a graded score above the floor — otherwise every run that touched a file would
- * be writing instructions for every other run, which is how a skill catalogue fills
- * with confident nonsense.
+ * A run counts only with BOTH real changes and a graded score above the floor —
+ * otherwise every run that touched a file would be writing instructions for every
+ * other run, which is how a skill catalogue fills with confident nonsense. (A run
+ * never merges its own work — PRD 48 §4.3 — so "merged" is not a signal it can have
+ * at finalize.)
  */
 export function runEarnedReflection(signals: RunReflectionSignals): boolean {
-  if (signals.merged) return true;
   const graded = typeof signals.score === 'number' && signals.score >= REFLECTION_SCORE_FLOOR;
   return Boolean(graded && (signals.producedChanges || signals.prOpened));
 }
@@ -82,7 +80,7 @@ export function skillReflectionDirective(canProposeSkills: boolean): string {
   return [
     '## Reflection — before you finish',
     '',
-    'If this run reached a VERIFIED result (your change is merged, or it is committed and its checks pass), the sequence that got you there is evidence rather than a guess.',
+    'If this run reached a VERIFIED result (your change is committed and its checks pass), the sequence that got you there is evidence rather than a guess.',
     'In that case only: if you worked out a repeatable way to do something non-obvious in this codebase that a future run would otherwise rediscover, call `skill_propose` with the steps, the exact commands, and how to tell it worked. Call `skill_list` first, so you revise an existing draft instead of adding a near-duplicate.',
     '',
     'Do NOT propose a skill for a one-off fix, for something the repository already documents, or for anything you did not actually finish and verify. Proposing nothing is the right answer for most runs.',
@@ -99,7 +97,7 @@ export interface RunTraceStep {
 }
 
 /** How a run's result was verified — what makes its procedure evidence. */
-export type RunVerification = 'merged' | 'ci_green';
+export type RunVerification = 'ci_green';
 
 /** Calls that are the loop steering itself, not steps of the procedure. */
 const NON_PROCEDURE_TOOLS: ReadonlySet<string> = new Set([
@@ -146,7 +144,7 @@ export function draftSkillFromRun(run: {
     else steps.push({ tool: s.tool, target, times: 1 });
   }
   const shown = steps.slice(0, MAX_DRAFT_STEPS);
-  const verified = run.verification === 'merged' ? 'the change was merged' : 'it was committed and branch CI went green';
+  const verified = 'it was committed and branch CI went green';
   const body = [
     `## When to use`,
     `A task like: "${run.taskTitle.trim()}" (task #${run.taskId}).`,
@@ -166,7 +164,7 @@ export function draftSkillFromRun(run: {
   return {
     slug: `auto-task-${run.taskId}`,
     name: `How to: ${run.taskTitle.trim()}`.slice(0, 255),
-    description: `Auto-drafted from verified run #${run.executionId} (${run.verification === 'merged' ? 'merged' : 'CI green'}) of task #${run.taskId}. Needs human review.`,
+    description: `Auto-drafted from verified run #${run.executionId} (CI green) of task #${run.taskId}. Needs human review.`,
     body,
     evidence: `execution ${run.executionId}: ${verified}; files: ${run.filesTouched.slice(0, 20).join(', ') || 'none'}`,
     projectId: run.projectId,
@@ -208,7 +206,6 @@ export async function recordRunReflection(env: Env, db: Db, run: {
   taskRow: { id: number; title: string };
   agentLabel: string;
   projectId: number | null;
-  merged: boolean;
   prOpened: boolean;
   ciVerified: boolean;
   writtenPaths: readonly string[];
@@ -216,14 +213,14 @@ export async function recordRunReflection(env: Env, db: Db, run: {
   const producedChanges = run.writtenPaths.length > 0;
   const evt = { tenantId: run.tenantId, cloudAgentRef: run.cloudAgentRef, executionId: run.executionId };
   try {
-    if (runEarnedReflection({ merged: run.merged, prOpened: run.prOpened, producedChanges })) {
+    if (runEarnedReflection({ prOpened: run.prOpened, producedChanges })) {
       await recordCloudToolEvent(db, {
         ...evt, toolName: 'skill.reflection', category: 'lifecycle',
-        detail: { merged: run.merged, prOpened: run.prOpened, producedChanges },
+        detail: { prOpened: run.prOpened, producedChanges },
         result: 'run cleared the reflection bar',
       });
     }
-    const verification: RunVerification | null = run.merged ? 'merged' : producedChanges && run.ciVerified ? 'ci_green' : null;
+    const verification: RunVerification | null = producedChanges && run.ciVerified ? 'ci_green' : null;
     if (!verification || !isCostLeverOn(env, 'e1_skill_ranking', run.tenantId)) return;
     if (await skillProposedByExecution(db, run.tenantId, run.executionId)) return;
     const draft = draftSkillFromRun({

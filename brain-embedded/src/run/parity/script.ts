@@ -6,6 +6,7 @@
 
 import type { AssembledToolCall, StreamChatResult } from '../../streamChatCompletion';
 import type { ScriptedTurn, TurnInput } from './types';
+import { shipPolicyOf } from '@builderforce/run-guards';
 
 /** The gateway's default completion in the stream's result shape. */
 export function completion(over: Partial<StreamChatResult> = {}): StreamChatResult {
@@ -45,6 +46,9 @@ export function streamsUntilStopped(started: () => void, deltas: string[] = [], 
 
 /** A model the person pinned: it writes its own code, so an edit is not re-asked of a coder and the script is one turn per call. */
 export const PINNED = { model: 'pinned/model', modelStrict: true } as const;
+
+/** A project whose ship policy (PRD 48) is to commit and push the base branch — the runs that push to main. */
+export const SHIPS_TO_MAIN = { shipPolicy: shipPolicyOf('commit_push', 'project_settings') } as const;
 
 /** The first line of the memory package's summarizer prompt: what makes a model call a fold's summary. */
 export const SUMMARY_PROMPT_HEAD = 'You compress an in-progress AI agent transcript';

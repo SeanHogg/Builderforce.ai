@@ -165,6 +165,7 @@ export function classifyModelFunding(
 }
 
 import { DEFAULT_TOOL_LIMIT } from '@builderforce/agent-run';
+import type { ShipMode, ShipPolicySource } from '@builderforce/run-guards';
 import { formatAdvertised } from './toolExposure';
 import { PROJECT_EVERMIND_MODEL_PREFIX } from './modelChoice';
 
@@ -201,12 +202,14 @@ export interface ChatDiagnosticsData {
    */
   mode?: string | null;
   /**
-   * This chat's PUBLISH HOLD (incident #56886), if one is in force: which user turn set
-   * it, and that turn's words. Reported because it inverts the ship contract — a held
-   * chat that changed code and left it uncommitted is CORRECT, not a parked ticket —
-   * so a report without it reads a deliberate hold as an unfinished execution.
+   * The SHIP POLICY the chat's last run worked under (PRD 48): its mode, where it came from,
+   * and the PUBLISH HOLD (incident #56886) when one narrowed it — which user turn set it, and
+   * that turn's words. Reported because it decides what "finished" means: a change left
+   * uncommitted under `leave_uncommitted` is policy, not a parked ticket, so a report without
+   * it reads a deliberate rule as an unfinished execution. Null when no run recorded one and
+   * no hold is in force.
    */
-  publishHold?: { messageNumber: number; text: string } | null;
+  shipPolicy?: { mode: ShipMode; source: ShipPolicySource; hold?: { messageNumber: number; text: string } } | null;
   /**
    * The questions this chat has PROMPTED but not yet had answered — an `ask_user` that
    * settled the run terminally, blocking on a human. Reported because the report
@@ -875,10 +878,15 @@ export function formatChatDiagnostics(d: ChatDiagnosticsData): string[] {
   // Directly under the chat line, because it qualifies everything below it: the same
   // trace reads as a healthy answer in `chat` and as an unfinished execution in `work`.
   if (d.mode) lines.push(`- Mode: ${d.mode}`);
-  // A publish hold inverts the ship contract below: commits/pushes are REFUSED on
-  // purpose until the person lifts it, so the run ending uncommitted is correct.
-  if (d.publishHold) {
-    lines.push(`- Publish hold: ON (set by user message #${d.publishHold.messageNumber}: "${d.publishHold.text.slice(0, 120)}") — commit/push/PR calls are refused until the user explicitly asks to ship`);
+  // The ship policy decides what the ship contract below means: under `leave_uncommitted`
+  // (a setting, a sub-agent, or a publish hold) commits/pushes are REFUSED on purpose, so
+  // the run ending uncommitted is correct.
+  if (d.shipPolicy) {
+    const sp = d.shipPolicy;
+    lines.push(`- Ship policy: ${sp.mode} (source: ${sp.source})${sp.mode === 'leave_uncommitted' ? ' — commit/push/PR calls are refused by policy, so uncommitted changes are expected' : ''}`);
+    if (sp.hold) {
+      lines.push(`  - Publish hold: ON (set by user message #${sp.hold.messageNumber}: "${sp.hold.text.slice(0, 120)}") — lifted only when the user explicitly asks to ship`);
+    }
   }
   // A pending question is the one state that makes a FINISHED run still need the human:
   // the run settled terminally on an `ask_user`, so the chat is blocked on a decision.

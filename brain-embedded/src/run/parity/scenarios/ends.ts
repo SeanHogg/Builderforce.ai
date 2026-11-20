@@ -6,7 +6,7 @@
 
 import { stopRun } from '../../../runStore/runControl';
 import { StreamInterruptedError } from '../../../streamChatCompletion';
-import { calls, call, completion, decide, fails, reply, streamsUntilStopped, PINNED } from '../script';
+import { calls, call, completion, decide, fails, reply, streamsUntilStopped, PINNED, SHIPS_TO_MAIN } from '../script';
 import type { Scenario } from '../types';
 
 const IDE = {
@@ -91,7 +91,7 @@ export const shipGate: Scenario = {
       calls([call('git_push', { allowBaseBranch: true }, 'g2')]),
       reply('Shipped as abc123 - pushed to main.'),
     ]);
-    await h.start({ ...PINNED, projectId: 11, userTurn: 'fix the deep link' });
+    await h.start({ ...PINNED, ...SHIPS_TO_MAIN, projectId: 11, userTurn: 'fix the deep link' });
   },
 };
 

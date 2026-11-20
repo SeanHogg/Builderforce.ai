@@ -396,6 +396,7 @@ export function createPmoRoutes(db: Db): Hono<HonoEnv> {
         fields: ['name', 'description', 'status', 'ownerUserId', 'targetDate', 'costClass', 'costClassSource'],
         required: ['name'],
         cacheNs: 'pmo-portfolios',
+        statusKind: 'portfolio',
         bumpVersionKeys,
       },
     },
@@ -411,6 +412,7 @@ export function createPmoRoutes(db: Db): Hono<HonoEnv> {
         // only in the form: the MCP tool and any raw API caller create these too.
         required: ['name', 'startDate', 'targetDate'],
         cacheNs: 'pmo-initiatives',
+        statusKind: 'initiative',
         bumpVersionKeys,
       },
     },
@@ -423,6 +425,7 @@ export function createPmoRoutes(db: Db): Hono<HonoEnv> {
         // failure, and an OKR nobody dated is an OKR nobody is accountable for.
         required: ['title', 'startDate', 'endDate'],
         cacheNs: 'pmo-objectives',
+        statusKind: 'objective',
         bumpVersionKeys: objectiveBumpKeys,
       },
     },

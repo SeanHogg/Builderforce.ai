@@ -20,6 +20,8 @@ import { loadCapabilityContext } from '../artifact/capabilityContext';
 import { recordPersonalityEvent, compilePersonalityApplication } from '../persona/recordPersonalityEvent';
 import { notifyExecutionSubscribers } from './executionEvents';
 import { type AgentExecParams } from '@builderforce/agent-tools';
+import { shipDirective, type ShipPolicy } from '@builderforce/run-guards';
+import { cloudRunShipPolicy } from './mergeGrants';
 import { renderRunContext, summarizeBlocks, type RunContextBlock } from '@builderforce/run-context';
 import { RUN_CONTEXT_ORDER } from './runContextSource';
 import { buildRunContext } from './runContextService';
@@ -74,7 +76,7 @@ export async function prepareCloudRun(
      * run. Live runs omit this and freeze the current row at the run boundary. */
     agentDefinitionSnapshot?: Record<string, unknown>;
   },
-): Promise<{ systemPrompt: string; userContent: string; execParams: AgentExecParams; agentPsychometric: string | null }> {
+): Promise<{ systemPrompt: string; userContent: string; execParams: AgentExecParams; agentPsychometric: string | null; shipPolicy: ShipPolicy }> {
   const tPrep0 = Date.now();
   // The capability set this run's surface advertises. Resolved ONCE: the identity it
   // issues and the prompt it builds have to agree about which tools exist, and a
@@ -95,7 +97,7 @@ export async function prepareCloudRun(
   // keeping it overlapped with every other read exactly as the old inline `Promise.all`
   // did. Only the CLOUD path may create a PRD; every other surface reads the stored one.
   const prdPromise = ensureTaskPrd(env, db, executionId, taskRow, tenantId, projectId, taskRow.id, agentLabel, model, opts?.readOnly === true);
-  const [capabilities, workspace, workspaceSkills] = await Promise.all([
+  const [capabilities, workspace, workspaceSkills, shipPolicy] = await Promise.all([
     loadCapabilityContext(env, db, tenantId, artifacts, agentPsychometric),
     // The repo the agent runs against — its identity + top-level shape (so a wrong/
     // empty binding is visible before any LLM spend) AND what a prior pass already
@@ -106,6 +108,11 @@ export async function prepareCloudRun(
     // after producing graded proof. Cached read; only `approved` rows are returned,
     // so a draft never reaches a prompt.
     approvedSkillsForRun(env, db, tenantId, projectId ?? null),
+    // The run's SHIP POLICY (PRD 48 §4.1) — from the PROJECT's settings, never an env flag: a
+    // cloud run opens a PR, and the merge sweep merges it per allowAutoMerge / prMergePolicy /
+    // sign-off. A failed read is reported and falls back to the built-in policy (nothing merges).
+    // PRD 48 §4.6: a person's merge grant on THIS execution makes it `on_green` / `person_grant`.
+    cloudRunShipPolicy(db, tenantId, projectId, executionId, env),
   ]);
   const prd = await prdPromise;
   const priorChanges = workspace.priorChanges;
@@ -273,6 +280,14 @@ export async function prepareCloudRun(
       }),
     },
     {
+      // THE SHIP POLICY (PRD 48 §4.2) — the ONE directive every host states (`shipDirective`):
+      // it opens a PR, who reviews it, when it merges, and that the run never asks, merges or
+      // pushes the base branch. The tool gate (`cloudShipGate`) refuses that push too.
+      kind: 'tooling', subject: 'ship-policy', channel: 'system',
+      order: RUN_CONTEXT_ORDER.coreTooling, trustTier: 'operator', pinned: true,
+      body: shipDirective(shipPolicy, { host: 'cloud' }),
+    },
+    {
       // Platform (project-management) tools — advertised alongside the repo tools on
       // every cloud surface (durable + container). This is what lets a run manage the
       // project as it works instead of silently dropping out-of-scope findings.
@@ -354,7 +369,7 @@ export async function prepareCloudRun(
     durationMs: Date.now() - tPrep0,
   });
 
-  return { systemPrompt, userContent, execParams: capabilities.execParams, agentPsychometric };
+  return { systemPrompt, userContent, execParams: capabilities.execParams, agentPsychometric, shipPolicy };
 }
 
 /**

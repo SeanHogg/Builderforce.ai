@@ -2,10 +2,9 @@
  * prSecurityGate — the ONE reader that feeds the merge verdict (PRD 08 §10 acceptance: "no agent PR
  * auto-merges with an open BLOCKER security finding", and no PR merges on a scan that did not happen).
  *
- * FIVE callers, one gate, no shortcut:
- *   - `runtime/cloudFinalize.ts`      immediate auto-merge at the end of a cloud run  (via the step's verdict)
+ * Callers, one gate, no shortcut (a run never merges — PRD 48 §4.3 — so the first two only RECORD a verdict):
+ *   - `runtime/cloudFinalize.ts`      the scan at the end of a cloud run               (via the step's verdict)
  *   - `repos/openTaskPullRequest.ts`  the Done-drag path                               (via the step's verdict)
- *   - `ci/ingestRepoCiEvent.ts`       merge-on-green-CI                                (ensurePrSecurityVerdict)
  *   - `repos/prMergeSweep.ts`         the manager's autonomous merge                   (sweepSecurityGate)
  *   - `POST /api/repos/pull-requests/:id/merge` the human merge                        (ensurePrSecurityVerdict)
  * The step computes its verdict with `securityGateAtHead` and the others ask the provider for the head

@@ -17,8 +17,8 @@
  *      names the model that served each role.
  *
  * Plus the two ways the chain must hold anyway: a planner that ignores even the forced
- * turn (planning ends, the coder takes the next turn), and a sub-agent (it starts in
- * `code`, never re-analysing). And the one way it must NOT fire: a question is answered,
+ * turn (planning ends, the coder takes the next turn — never a question for the person),
+ * and a sub-agent (it starts in `code`, never re-analysing). And the one way it must NOT fire: a question is answered,
  * however many reads it takes.
  */
 
@@ -166,7 +166,7 @@ describe('a change request goes from analysis to code that runs (end to end)', (
     expect(lines.some((l) => l.startsWith('  ⚠'))).toBe(false);
   });
 
-  it('ends planning even when the planner ignores the forced turn, and the coder makes the edit', async () => {
+  it('ends planning even when the planner ignores the forced turn, and the coder makes the edit — never asking the person', async () => {
     const turns: Turn[] = [];
     const calls: Call[] = [];
     await startRun(6102, {
@@ -180,17 +180,20 @@ describe('a change request goes from analysis to code that runs (end to end)', (
     const trace = getRunTrace(6102);
     const forcedAt = turns.findIndex((t) => t.tools.length === 1 && t.tools[0] === 'hand_off');
     expect(forcedAt).toBe(STREAK_FORCED_AT);
-    // The streak's forced hand-off was ignored: its ladder pauses (ask_user alone, required) after as many more all-read turns,
-    // and planning ends at the analysis budget — that turn is the coder's, with the full menu and no hand_off.
-    const pausedAt = turns.findIndex((t) => t.tools.length === 1 && t.tools[0] === 'ask_user');
-    expect(pausedAt).toBe(forcedAt + READ_ONLY_STREAK_TURNS);
-    expect(turns.slice(0, PLAN_TURN_BUDGET).every((t) => t.role === 'plan')).toBe(true);
-    const next = turns[PLAN_TURN_BUDGET]!;
+    // The streak's forced hand-off was ignored. After as many more all-read turns the ladder's third rung would end the run, but a
+    // change request that changed nothing gets one more chance to do the work (chat #157440): analysis ends there and the coder takes
+    // that turn, with the change tools and no hand_off — never ask_user alone, never a final report before the edit.
+    const codeAt = forcedAt + READ_ONLY_STREAK_TURNS;
+    expect(codeAt).toBeLessThanOrEqual(PLAN_TURN_BUDGET);
+    expect(turns.slice(0, codeAt).every((t) => t.role === 'plan')).toBe(true);
+    const next = turns[codeAt]!;
     expect(next.role).toBe('code');
     expect(next.tools).toContain('edit_file');
     expect(next.tools).not.toContain('hand_off');
     expect(trace.some((e) => e.label === 'loop.plan_budget_spent')).toBe(true);
     expect(calls.some((c) => c.name === 'edit_file')).toBe(true);
+    expect(turns.some((t) => t.tools.length === 1 && t.tools[0] === 'ask_user')).toBe(false);
+    expect(turns.slice(0, codeAt + 1).some((t) => t.tools.length === 0)).toBe(false);
     // Nothing was fanned out — the run itself coded.
     expect(calls.some((c) => c.name === 'spawn_agents')).toBe(false);
   });

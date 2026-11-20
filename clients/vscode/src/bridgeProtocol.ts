@@ -171,6 +171,9 @@ export const BRAIN_HOST_MESSAGES = [
   /** The working tree's unified diff (request → string) — the Visualization panel's before/after rows. */
   'changes.diff',
   'fetchLimbic',
+  /** A composer line that may be a `/` command (PRD 31 §W11) — request `{ text }` → `ComposerInputResult`
+   *  (`composerCommands/reply.ts`): not a command (send it, perhaps unescaped), or the host's reply. Never reaches a model. */
+  'composer.input',
 ] as const;
 
 /**

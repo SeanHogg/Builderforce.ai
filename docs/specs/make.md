@@ -15,6 +15,7 @@
 - [PRD 23 — Manager PR Review, Acceptance Evidence, and Ticket Recovery](#prd-23--manager-pr-review-acceptance-evidence-and-ticket-recovery)
 - [PRD 37 — Coordinated Role Participation & Execution Verification](#prd-37--coordinated-role-participation--execution-verification)
 - [PRD 45 — Deterministic run gates and loop economics](#prd-45--deterministic-run-gates-and-loop-economics)
+- [PRD 48 — Ship policy: autonomous runs ship by rule, never by mid-run question](#prd-48--ship-policy-autonomous-runs-ship-by-rule-never-by-mid-run-question)
 - [Agent framework registrations — legacy table contract step](#agent-framework-registrations--legacy-table-contract-step)
 - [PRD 41 — Offline understanding and the run delta](#prd-41--offline-understanding-and-the-run-delta)
 - [Design — Local-first closure: G03, G21 + G23, G27](#design--local-first-closure-g03-g21--g23-g27)
@@ -197,7 +198,7 @@ Reconcile the task-status flow and `SwimlaneCoordinator`/`ticket_runs` around th
 > section numbers are kept, so a gap in numbering is a shipped section.
 
 ### §4.5 Directive
-Edit only the Brain's `selfReviewShipDirective`: the host runs the checks and the reviewer at push, and a refusal is expected feedback. Leave `VERIFY_STEP` and `unshippedChangeNudge` unchanged — they are shared.
+Superseded 2026-11-19 by [PRD 48 §2](#prd-48--ship-policy-autonomous-runs-ship-by-rule-never-by-mid-run-question): `selfReviewShipDirective` and `unshippedChangeNudge` are replaced by `shipDirective(policy)` / `shipNudge(policy)`, and the wording fix below lands there. `VERIFY_STEP` stays shared and unchanged.
 
 **Remaining (verified 2026-11-17):**
 - `brain-embedded/src/selfReviewShip.ts:56-58` still says "in this session YOU are its reviewer" and tells the author to record `builtin_reviews_record` `complete` itself, which `shipGates.ts:336` now refuses without an approved independent review (OD-1).
@@ -217,6 +218,194 @@ A replay of the pre-gate journals re-derives the W0 baseline only; the targets a
 
 **Remaining (verified 2026-11-17):**
 - No chat-scoped telemetry trace reader exists (triage item 6596): only the local-journal replay `api/scripts/chat-replay-baseline.cjs`. Either build the reader or score W9 with the replay script against a fresh post-gate run (6595).
+
+---
+
+## PRD 48 — Ship policy: autonomous runs ship by rule, never by mid-run question
+
+> Opened 2026-11-19 from VS Code chat #157440: an orchestrator implemented and verified a whole PRD, committed it, then
+> stopped twice for a human — a progress-guard "how should it proceed?" (fixed separately: the A3 ladder now ends in a
+> final report, never a question) and "a push needs approval". Operator rule: a run finishes on its own. What it does
+> with finished work is a **standing policy**, not a question. `ask_user` is for genuine business questions only.
+
+### §1 The rule
+
+| Host | Who sets the ship policy | Where it lives | How the run gets it |
+|---|---|---|---|
+| VSIX (local) | The **person**, through the project's settings (the Manager tab, the API, or by telling the agent, which calls `manager.configure`) | **The database:** the project's `ship_mode` setting (§4.0), tenant default + project override, in the same manager-policy fold as the merge flags | Fetched per run for the chat's project through the policy-gate fetch/cache seam (`clients/vscode/src/policyGates.ts`, offline snapshot) → `EditorRunSettings` → the run request (`runRequestFields`) → `BrainRunContext.shipPolicy` (every enforcement seam reads the context), mirrored into `RunPolicy.ship` by `brainRunPolicy` |
+| Cloud | The **project's settings** | The database: the same fold (`managerPolicy.ts` → `getEffectiveManagerPolicy`): `allowAutoMerge` (ceiling), `requireSignoffToComplete` (floor), `prMergePolicy` | Loaded at dispatch into `CloudRunOpts` → `RunPolicy.ship` (descriptive: the prompt and the push refusal). **`prMergeSweep` stays the single merge writer** |
+
+No ship or merge decision reads a Cloudflare env var or secret, and none reads a VS Code setting. Every one is a
+tenant/project row read and written through the API and the MCP.
+
+A chat-scoped **publish hold** (`brain-embedded/src/runStore/publishHold.ts` — "don't commit until I validate") stays as
+the person's per-chat override ABOVE the VSIX rule: it can only narrow (hold), and a later explicit ship order in the same
+chat lifts it back to the rule. Nothing else overrides the policy: not a sub-agent, not a nudge, not the model. Tenant
+governance (`PolicyGate` `require-approval` / `block` on publish tools) still outranks the person's setting.
+
+### §2 Contract — one type, both hosts (`packages/run-guards/src/shipPolicy.ts`)
+
+`run-guards` already owns `PUBLISH_TOOLS` (`inRunVerify.ts`) and `gitCommandPattern`, and depends on `agent-tools` — so
+the contract lives in `run-guards` (an `agent-tools` home would be a cycle). `agent-run`, `brain-embedded` and
+`clients/vscode` already import `run-guards`. `RunPolicy` (`packages/agent-run/src/contract.ts`) gains `ship?: ShipPolicy`.
+
+```ts
+export type ShipMode = 'leave_uncommitted' | 'commit' | 'commit_push' | 'pull_request';
+export interface ShipPolicy {
+  mode: ShipMode;
+  /** pull_request only: when the PR merges. 'never' = a human merges. */
+  merge: 'never' | 'immediate' | 'on_green';
+  /** pull_request only: a recorded independent review/sign-off is required before merge. */
+  review: 'none' | 'required';
+  /** Provenance, shown in the directive and diagnostics. */
+  source: 'project_settings' | 'chat_hold' | 'subagent' | 'person_grant' | 'default';
+}
+export const DEFAULT_SHIP_POLICY: ShipPolicy;                    // mode 'commit', source 'default'
+export type ShipHost = 'editor' | 'cloud';                       // cloud = the platform opens the PR (cloud + on-prem agent hosts)
+export function shipDirective(p: ShipPolicy, ctx?: { chatId?: number | null; host?: ShipHost }): string; // the ONE ship directive for every host
+export function shipNudge(p: ShipPolicy, host?: ShipHost): string | null; // the ONE "you left it unshipped" nudge (null when the mode ships nothing)
+export function publishVerbOf(tool: string, args: unknown): 'commit' | 'push' | 'pull_request' | 'cleanup' | 'merge' | null;
+export function publishAllowed(p: ShipPolicy, tool: string, args: unknown, host?: ShipHost): { ok: true } | { ok: false; error: string };
+export function narrowShipPolicy(p: ShipPolicy, to: ShipPolicy | null): ShipPolicy; // stricter of the two
+export function narrowByHold(p: ShipPolicy, hold: { messageNumber: number; text: string } | null): ShipPolicy;
+```
+
+- `publishVerbOf` is THE publish matcher: `git_commit` / `git_push` / `open_pull_request` / `git_cleanup_merged` by name
+  (`PUBLISH_TOOLS` + `REPO_PUBLISH_TOOLS`), and a `run_command` whose command is a raw `git commit`, `git push`,
+  `gh pr create` / `gh pr new` or `gh pr merge` (verb `merge`). `brain-embedded` `isPublishCall` (`publishHold.ts`) and
+  the duplicate `RAW_PUBLISH` in `selfReviewShip.ts` are deleted and their callers migrated.
+- `publishAllowed`: `merge` is refused in every mode (runs never merge; `prMergeSweep` does). `leave_uncommitted`
+  refuses every verb; `commit` refuses push/PR; `commit_push` refuses PR; `pull_request` refuses a direct push to the
+  base branch — a refspec naming main/master, no refspec, or a bare `HEAD` / `@`. `cleanup` follows `push`.
+- `host: 'cloud'` (cloud runs and on-prem agent hosts, whose platform opens the PR) words the directive, nudge and
+  refusal without git tools; `editor` (default) is the VS Code wording.
+- **Sub-agents (new rule, not current behaviour):** brain-embedded derives a child's policy from `req.lineage` (the input
+  `toolScope: 'subagent'` already uses) as `leave_uncommitted` / `source: 'subagent'`. The OWNER ships once, after
+  verifying the fan-out.
+- `shipDirective` replaces `selfReviewShipDirective` + `publishHoldDirective`; `shipNudge` replaces
+  `unshippedChangeNudge`; `leftChangeUnshipped` reads only the policy (no separate `declinesShipping(requestText)`).
+  This closes PRD 45 §4.5 (its `builtin_reviews_record complete` wording moves here) — §4.5's "leave
+  `unshippedChangeNudge` unchanged" is superseded by this section.
+
+### §3 VSIX wiring
+
+1. No VS Code setting. The host reads the project's `shipPolicy` from `GET /api/manager/:projectId` (§4.5) through the
+   same fetch/cache seam as `resolveRunPolicyGates` (`clients/vscode/src/policyGates.ts`, cached, offline snapshot).
+2. No project, no snapshot while offline, or no stored value → `DEFAULT_SHIP_POLICY` (source `default`). Into
+   `EditorRunSettings` → `runRequestFields` (`stageModels.ts`, spread at `nativeBrainRun.ts`) → the run request.
+3. `runPreamble.ts`: beside `c.publishHold`, compute `c.shipPolicy = narrowByHold(childOrRequestPolicy, hold)`; copy it
+   onto `BrainRunContext`; `brainRunPolicy` (`run/webAdapter.ts`) mirrors it into `RunPolicy.ship`. The directive branch
+   becomes `shipDirective(c.shipPolicy)`.
+4. `runStore/callPreflight.ts`: the hold refusal becomes `publishAllowed(run.shipPolicy, …)` — same position (before the
+   confirm gate), so `acceptEdits` and child contexts cannot waive it.
+5. `clients/vscode/src/nativeRunTool.ts` `nativeNeedsConfirm`: a publish call the policy ALLOWS is not confirmed in
+   `ask` mode — the setting is the person's standing approval — UNLESS a governance gate says `require-approval`. The
+   `shipGatePreflight` evidence that only the approval card showed is written to the trace instead when the card is skipped.
+6. `runStore/deliveryGates.ts` `brain.ship`: fires only when `shipNudge(policy)` is non-null and the run did not ship.
+7. **No value yet:** the run never asks. It ships under `DEFAULT_SHIP_POLICY` (`commit` — local and reversible), and its
+   final report says the project's ship policy is unset and can be set in the project's settings or by asking the agent.
+8. **The agent changes it when the person tells it to.** "From now on commit and push" → one `manager.configure`
+   call with `shipMode` (§4.5), and every later run on that project follows it. The route's existing manager-role gate
+   applies. A sub-agent's widening call (the VSIX tool gate, by lineage) is refused with the reason, never turned into a
+   question.
+9. Diagnostics: `chatDiagnostics.ts` / `gatherChatDiagnostics.ts` replace `publishHold` with
+   `shipPolicy { mode, source, hold? }` read from the run record, so an uncommitted change under `leave_uncommitted` is
+   reported as policy, not as a parked ticket.
+
+### §4 Cloud wiring
+
+0. **Storage — `ship_mode`.** Expand-only migration: a nullable `ship_mode` (`leave_uncommitted | commit | commit_push |
+   pull_request`) on `project_manager_configs` and on the tenant tier that holds `allowAutoMerge`
+   (`schema/identity.ts`). The fold (`managerPolicy.ts`) resolves it as a plain override (project beats tenant beats the
+   built-in `commit`), stays pure, and exposes `shipMode`. It is read and written ONLY through the existing manager
+   config route, the workspace-defaults route and `manager.configure`, which keep their role gate, normalizer, tri-state
+   `null` = inherit, and audit. The Manager tab and workspace defaults (`ManagerAutonomyControls.tsx`,
+   `ManagerDefaults.tsx`) get the control, localized in all five catalogs, working in both themes and on narrow screens.
+   VSIX runs use `shipMode`. Cloud runs always open a PR (`mode: 'pull_request'`), whatever `shipMode` says.
+
+**One merge writer.** `api/src/application/repos/prMergeSweep.ts` already merges by project settings — `prMergePolicy`,
+sign-off, `allowAutoMerge`, the security verdict, the manager-enabled join, `MERGE_QUEUE_DEPTH` and `merge_blocked`
+dedupe — and is documented as the single writer. Runs never merge.
+
+1. Dispatch loads the effective manager policy (`getEffectiveManagerPolicy`) into `CloudRunOpts`
+   (`runtime/cloudRunOpts.ts`); `cloudAdapter.policyOf` maps it to `RunPolicy.ship` with ONE pure mapper beside the fold
+   (`manager/shipPolicyOf.ts`): `mode: 'pull_request'`;
+   `merge = !managed || canary || !enabled || !allowAutoMerge || prMergePolicy === 'queue' ? 'never' : prMergePolicy === 'on_green' ? 'on_green' : 'immediate'`
+   (`managed` = `isProjectManaged`, the sweep's own opt-in; canary holds every merge — so `merge` says exactly what the sweep does)
+   (`immediate` = whatever the sweep does for it today); `review = requireSignoffToComplete ? 'required' : 'none'`;
+   `source: 'project_settings'`.
+2. The cloud system prompt carries `shipDirective(policy, { host: 'cloud' })`: the platform opens the PR when the run
+   ends, who reviews, when it merges — and that it must not ask, merge or push to the base branch. The cloud tool gate
+   (`publishAllowed(…, 'cloud')`) refuses EVERY raw shell push, `gh pr create` and merge from `run_command`
+   categorically. A run that wrote code but whose PR failed to open lands `failed` with the reason.
+3. Retire the `CLOUD_AUTOMERGE_ENABLED` / `CLOUD_AUTOMERGE_REQUIRE_GREEN` merge branches at every site —
+   `finalizeCloudRun` (`cloudFinalize.ts`), `ingestRepoCiEvent.ts`, `openTaskPullRequest.ts` (Done-drag `taskFinalize.ts`,
+   on-prem `agentHostRoutes.ts`, dispatch PRs), `securityVerdictCatchup.ts` — and `cloudAutoMergeEnabled` /
+   `cloudMergeOnGreenCi` with them. A run opens its PR and ends; the sweep merges it per the project's settings.
+   (The flag is in no committed config. If it is set as a Worker secret, projects without an enabled manager stop
+   auto-merging — intended: project settings now decide.)
+4. On-prem agent hosts build their own prompt: they get the same `shipDirective` from the same mapper through the
+   agent-host run payload (`agentHostRoutes.ts`).
+5. **The project's flags live behind the API, and agents can change them.** Merge authority is the project setting
+   (`allowAutoMerge`, `prMergePolicy`, `requireSignoffToComplete`, `canary`) — read and written through
+   `GET/PUT /api/manager/:projectId` and the built-in MCP tools `manager.policy` / `manager.configure`, which replay that
+   same route (role gate, normalizers, tri-state inherit, audit), now including `shipMode`. No env var decides it.
+   `GET /api/manager/:projectId` and `manager.policy` also return the derived `shipPolicy` — the VSIX-run policy built
+   from `shipMode`, and the cloud-run policy from the §4.1 mapper — so an agent reads exactly what a run would follow.
+   The VSIX agent reaches both through its platform tool router; a test pins that `manager.configure` is in the VSIX
+   catalog.
+6. **A person can grant "merge into main" for ONE cloud run** (operator, 2026-11-19: a security fix or a high-priority
+   feature must not wait for the manager). Decisions:
+   - **The grant is a pre-approved human merge.** It overrides the project's merge settings (`allowAutoMerge` off, the
+     manager off, canary, sign-off), exactly as the in-product Merge button is not bound by them, and applies exactly
+     that button's checks (`humanMergeGate`, shared) plus green CI. There is no tenant governance merge gate outside run
+     tool calls (`require-approval` / `block` gate a run's own tools, which never merge), so none applies here — the
+     same as for the button.
+   - **Checks: the security verdict passes AND CI is green.** A failing or missing check holds the merge, and the run's
+     report and the PR timeline say why.
+   - **Who:** only a PERSON may grant, with the same role the in-product merge route requires
+     (`POST /pull-requests/:id/merge`), from the web UI only — never through an agent tool (a Brain run calls tools
+     with the person's own token, so a model or a prompt injection could otherwise grant one), never a run or a machine
+     caller. Cloud runs only: a run aimed at an on-prem host refuses a grant. RBAC: the control is disabled, not hidden,
+     for a role that cannot grant, and for a non-cloud target.
+   - **Storage:** one `merge_grants` row per granted execution — `execution_id`, `granted_by`, `reason` (required),
+     `created_at`, `consumed_at`, `voided_at`/`void_reason` — plus `merge_grant_pull_requests` (the PR(s) the granted
+     run opened, `head_sha`, `hold_code`), in the domain that owns executions. Audited as an activity record.
+   - **Execution — still one automatic merge writer.** The run never merges; it opens its PR as always.
+     `prMergeSweep` gains a second cohort: open PRs the granted execution itself opened (bound at finalize), selected regardless of the
+     manager opt-in, ahead of the queue, merged through `mergeRecordedPr` once the security verdict passes and CI is
+     green (the CI verdict already arms the sweep's tick via `ciMergeQueueSignal`). The grant is consumed on merge.
+   - **The run knows.** A granted run's `RunPolicy.ship` has `merge: 'on_green'` with `source: 'person_grant'`, so its
+     directive says a person authorized the merge, the platform merges it when the checks pass, and it must still not
+     merge or push the base branch itself.
+   - **UI:** the web app's cloud-run dispatch control gets "Merge into main when done" plus a required reason, in all
+     five catalogs, both themes, at 360px.
+   - **As built:** the role is ONE constant (`repos/prMergeAuthority.ts` `PR_MERGE_MIN_ROLE`, also the in-product merge
+     route's gate). Grants arrive on `POST /api/runtime/executions` (written before the run starts, so prep reads it)
+     and `POST /api/tasks/:id/run-now` (written once the dispatcher returns the execution — the prep tick can race it,
+     in which case only the run's prompt omits the grant; the merge is unaffected). A failed write never fails the
+     dispatch: the response says `mergeGrant: 'failed'`. No agent tool carries a grant. The grant BINDS at the run's
+     finalize to the PR that run opened, pinned to the head its security step judged (`merge_grant_pull_requests`);
+     the sweep merges only a bound PR at that commit, claims the grant atomically first (released if the merge does
+     not happen), and VOIDS it when the run ends without its PR / is cancelled or the PR's head moves past the pin. A
+     run that crashes before finalize leaves an unbound grant, which merges nothing. No base sync for a granted PR
+     (it would move the head off the pinned commit). A hold is the binding's current `hold_code` plus a
+     `merge_grant_held` timeline line (deduped on change) — its own type so it never feeds the managed queue's
+     `merge_blocked` ceilings. `GET /api/runtime/executions/:id/merge-grant` serves the run view (codes, not prose).
+
+### §5 Done checks
+
+- VSIX, project `shipMode: commit_push`, `permissionMode: ask`, no governance gate: a run commits and pushes with no confirmation card and no question.
+- VSIX, a governance `require-approval` gate on `git_push`: the card still shows despite `commit_push`.
+- Tenant default `commit_push`, project `leave_uncommitted`: the project value wins; `null` on the project inherits the tenant.
+- VSIX, project `leave_uncommitted`: `git_commit` and a raw `gh pr create` refused before the confirm gate; final report lists changed paths.
+- VSIX, no value anywhere (or offline with no snapshot): no question in any run; it commits locally and the final report says the project's ship policy is unset.
+- "From now on commit and push" in a VSIX chat → one `manager.configure { shipMode: 'commit_push' }`; the next run reads it from the API.
+- VSIX, a sub-agent calls `git_commit`: refused; the owner commits once after the fan-out.
+- VSIX, chat says "don't commit until I check": held for that chat regardless of setting; "ok commit and push" restores the setting.
+- Cloud, project `allowAutoMerge: true, prMergePolicy: on_green`, manager enabled: the run opens a PR and ends; `prMergeSweep` merges on green.
+- Cloud, defaults: the PR opens, nothing merges, the run's prompt says so, and it ends without asking.
+- `git grep -E "CLOUD_AUTOMERGE|cloudAutoMergeEnabled|selfReviewShipDirective|publishHoldDirective|unshippedChangeNudge|RAW_PUBLISH"` → nothing outside the shared module and tests.
 
 ---
 
@@ -1189,7 +1378,7 @@ Binding (2026-09-26): (1) hired.video still ports; (2) **paid tenants may choose
 
 ### §4 W2: `AppBlueprint`, one detection of what the app is
 
-- **Detectors are a registry** (`api/src/application/blueprint/detectors/*`), each a pure function over a repo file listing plus a few file reads, **cached by commit SHA with `getOrSetCached`**. `wrangler.toml` / `wrangler.jsonc` needs a real TOML parser (`smol-toml`, zero-dep).
+- **Detectors are a registry** (`packages/app-detect/src/detectors/*`, moved from the API on 2026-11-19 for W11 so the VSIX and the web app can detect locally), each a pure function over a repo file listing plus a few file reads, **cached by commit SHA with `getOrSetCached`**. `wrangler.toml` / `wrangler.jsonc` needs a real TOML parser (`smol-toml`, zero-dep).
 - **UI:** a blueprint card on the project page showing services, bindings and the database, plus "N secrets missing" (names from the blueprint minus names in `project_secrets`).
 
 **Acceptance:** hired.video is detected as 2 services, the bindings in its `wrangler.toml` (3 DOs, R2, KV, AI, cron `*/5`), Neon Postgres with `drizzle push` + `run-sql-migrations.mjs` + seed, and the secret names from `wrangler.toml` comments + `.env.example`, with no `builderforce.json`.
@@ -1413,6 +1602,264 @@ W1 runs the app in a cloud container. W9 runs the **same blueprint** in the user
 
 **Remaining (verified 2026-11-18):** all of it. Nothing of W10 exists in the runtime yet; on the Builderforce side the ingest route, the index migration, the finding-kind seam and the `runtime-shield` detection source are unbuilt.
 
+### §4 W11: The app manifest — infrastructure as code, environments, diagnostics and starter kits
+
+Designed 2026-11-19. Users who treat the WebContainer as a full runtime platform want to **define the app's whole infrastructure as code**: services, background workers, cron jobs, Redis, queues, storage. They want to **test all of it locally in the browser**, then **promote the same definition** to permanent infrastructure. W9 gave the runtime multi-service apps (`ApplicationSpec`, the service graph, readiness, restart policy, PGlite). W11 adds the declaration, the missing resource kinds, environments, diagnostics, and starter kits that prove it all works.
+
+**Gaps it closes (verified 2026-11-19):**
+- `builderforce.json` is an unversioned `Partial<AppBlueprint>` with replace-whole-array semantics. Invalid JSON is dropped without a word (`builderforceJsonDetector.ts`).
+- There are no scheduled jobs. `BINDING_KINDS.CRON` and `QUEUE` are metadata that no target runs.
+- `AppServiceReadiness` has no `started`, so a worker with no port maps to `exit-zero`, a one-off.
+- The blueprint holds one `database`, the browser hosts only Postgres, and nothing produces `redis://`.
+- Every target lasts only as long as a session: the tab, or a preview container with 3-minute idle eviction.
+- There is no production/non-production notion, no debug mode, and no diagnostics surface.
+- There is no starter-kit flow, and no way to write a manifest for an existing app.
+
+#### W11 decisions (binding, user 2026-11-19)
+
+1. **D9 — the deployment target is a port.** Its adapters are **browser** (webcontainers, temporary), **cloudflare** (Workers, Cron Triggers, Queues, R2, D1, Containers; in Builderforce's account or the customer's) and **customer cloud** (AWS/Azure/GCP). The model is CI/CD: run and test the full infrastructure locally, then promote the same manifest to permanent infrastructure. This port **is** W4's `InfraProvider`, renamed. There is one port, never both.
+2. **D10 — Redis in the browser** ships without Lua first. Lua `EVAL` (needed by BullMQ) is a later phase.
+3. **The manifest** stays `builderforce.json`: JSON with a published JSON Schema, `version: 1`. YAML may come later, and only through the same parser.
+4. **Environment tier.** Every environment is `production` or `non-production`. `debug` is allowed only on non-production, and a debug flag on production is a validation error. Non-production may expose diagnostics. "Built with Builderforce" becomes an expandable **diagnostics panel** that streams what the ecosystem is doing.
+5. **Validation order: the manifest first, then starter kits.** Kits are the acceptance matrix. `/starter-kit <kit>` scaffolds an app whose manifest runs it. The reverse also exists: create a manifest for an existing app, then run it in the WebContainer.
+6. **Graph on Postgres** (Apache AGE): a spike runs alongside W11 and does not block it.
+
+#### Contract — manifest v1
+
+The parser, validation, schema and the manifest-to-`ApplicationSpec` mapping live in **`@seanhogg/builderforce-webcontainers-core/manifest`**. The MIT runtime reads `builderforce.json` itself, as W9 decision 2 promised, and Builderforce consumes the same module from npm. There is one parser for the standalone runtime, the API, the web app and the VSIX. `AppBlueprint` imports these types for services, resources, jobs and environments, and keeps only identity and provenance of its own (one fact, one place).
+
+```json
+{
+  "$schema": "https://builderforce.ai/schema/app.v1.json",
+  "version": 1,
+  "name": "acme-shop",
+  "resources": {
+    "db":    { "type": "postgres", "persistent": true, "extensions": ["vector"] },
+    "cache": { "type": "redis", "persistent": true, "maxMemoryMb": 64 },
+    "tasks": { "type": "queue", "engine": "redis", "on": "cache" },
+    "files": { "type": "object-storage" },
+    "mail":  { "type": "mail" }
+  },
+  "services": {
+    "api":    { "runtime": "node", "root": "/api", "command": "npm start", "port": 8000, "uses": ["db", "cache", "files", "mail"],
+                "readiness": { "http": "/health" }, "scale": { "min": 1, "max": 4, "metric": "concurrency" } },
+    "worker": { "runtime": "python", "root": "/worker", "command": "rq worker", "uses": ["tasks", "db"], "restart": "always" },
+    "web":    { "runtime": "node", "root": "/web", "command": "npm run dev", "port": 5173, "role": "frontend", "dependsOn": ["api"] }
+  },
+  "jobs": {
+    "nightly": { "schedule": "0 3 * * *", "timezone": "UTC", "run": { "service": "worker", "command": "python digest.py" },
+                 "concurrency": "forbid", "timeout": "10m", "missed": "skip", "availability": "always-on" },
+    "poll":    { "schedule": "*/5 * * * *", "invoke": { "service": "api", "method": "POST", "path": "/internal/poll" } }
+  },
+  "ingress": { "routes": [ { "path": "/api", "service": "api" }, { "path": "/", "service": "web" } ] },
+  "environments": {
+    "local":   { "target": "browser", "tier": "non-production", "debug": true },
+    "staging": { "target": "cloudflare", "connection": "cf-acme", "tier": "non-production" },
+    "prod":    { "target": "aws", "connection": "aws-acme", "tier": "production",
+                 "overrides": { "services": { "api": { "scale": { "min": 2, "max": 10 } } } } }
+  }
+}
+```
+
+- **Entries are keyed by id.** Duplicate ids become impossible, and `overrides` merge deep and per key (unlike today's whole-array replace).
+- **`parseManifest(text) → { manifest, issues: ManifestIssue[] }`** returns typed issues, like `SpecIssue`. Today's unversioned `Partial<AppBlueprint>` files parse through the same function, on its legacy path. **An unreadable file is reported, never dropped**: the blueprint card shows each issue against its key.
+- **`toApplicationSpec(manifest, envName) → ApplicationSpec`** is pure. Overrides apply first, then the tier environment. A service with no port and `restart: always` defaults to readiness `started`.
+- **Resource types** are a registry: `postgres`, `redis`, `queue`, `object-storage`, `mail`, `graph`, `connection` and `external`. A new type is one registry entry. Each type's environment names are table data:
+
+  | Type | Variables |
+  |---|---|
+  | `postgres` | `DATABASE_URL` / `<ID>_DATABASE_URL` |
+  | `redis` | `REDIS_URL` / `<ID>_REDIS_URL` |
+  | `queue` | `<ID>_QUEUE` plus its engine's URL |
+  | `object-storage` | `S3_ENDPOINT` / `<ID>_BUCKET` plus credentials |
+  | `mail` | `SMTP_URL` |
+
+- **`connection`** names a Connected Account, such as Stripe or Slack, and its credentials reach the runtime from the vault. **`external`** names an OpenTofu, Terraform, Bicep or CloudFormation module that only a customer-cloud target applies. Its `outputs` become environment variables.
+- **`availability: session | always-on`** applies to services and jobs. The dev loop runs everything while the session lives and labels always-on items "runs while this session is open". A deploy needs a target whose capabilities include always-on, or it declines with a reason.
+- **Connections are referenced by id.** No secret is ever in the file.
+
+#### Capability matrix — `DeploymentTarget.capabilities()`
+
+| Resource | Browser | Cloudflare | Customer cloud (OpenTofu) |
+|---|---|---|---|
+| Services (Node / Python / PHP / .NET / Rust) | ✅ (W9) | Workers (Worker-compatible code); Containers (other processes) | Cloud Run / ECS / Container Apps |
+| Background workers | ✅ in-session | Containers | ✅ |
+| Jobs (cron) | ✅ in-session, leader tab | Cron Triggers | Cloud Scheduler / EventBridge / Container Apps jobs |
+| postgres (+ `vector`) | PGlite | Neon / D1 not compatible → Neon | RDS / Azure PG / Cloud SQL |
+| postgres `age` (graph) | spike | Neon: no → decline | Azure PG: yes; others decline |
+| redis | RESP gateway (W11) | Upstash via connection | ElastiCache / Azure Cache / Memorystore |
+| queue | engine `redis` | Queues | SQS / Service Bus / Pub/Sub |
+| object-storage | S3 endpoint on the host origin | R2 | S3 / Blob / GCS |
+| mail | catcher inbox | connection (Resend / SES) | connection |
+| graph (Neo4j/Memgraph) | decline | decline | Aura via connection / container |
+| `scale` + `ingress` | ≤ 3 replicas, round-robin in the port router | Workers autoscale (advisory) | min/max instances + load balancer |
+| `external` modules | decline | decline | ✅ |
+
+**Local stand-ins must speak the real protocol** (PGlite for Postgres, RESP for Redis, the S3 API for storage). A stand-in with different semantics is a decline, never a fake. Every stand-in has a **parity contract suite** that runs against both the stand-in and the real engine.
+
+#### Environments, tier and debug
+
+- **`tierEnv(runtime, tier, debug)`** is a pure function in core, driven by one data table of framework conventions. Its output layers below the service's own `env`. The table sets:
+  - `BUILDERFORCE_ENV`, `BUILDERFORCE_TIER` and `BUILDERFORCE_DEBUG` for every runtime;
+  - `NODE_ENV` for Node;
+  - `APP_ENV` and `APP_DEBUG` for Laravel;
+  - `ASPNETCORE_ENVIRONMENT` for .NET;
+  - `FLASK_DEBUG`, `DJANGO_DEBUG` and `PYTHONDEVMODE` for Python;
+  - `RUST_LOG` for Rust.
+- **`diagnosticsLevel(env) → off | basic | verbose`** is the one gate. Production is `off`, non-production is `basic`, and non-production with debug is `verbose`. Every producer, transport and surface asks it; none re-derives it.
+- **Production never ships the diagnostics script.** It is not injected at all, rather than injected and hidden. The owner's operations view still receives errors through the existing monitoring path.
+- **Promotion** is `plan(staging) → plan(prod)`. Production applies are confirm-gated through the existing approval governance. CI runs the same browser target headless (Playwright driving the runtime), so the full-stack tests a user ran locally gate the deploy.
+
+#### Diagnostics — one event stream, one panel
+
+- **Event schema.** It lives in core `./diagnostics`: `DiagnosticEvent { at, env, source, serviceId?, traceId?, kind, severity, data }`. `source` is one of `service | job | http | database | cache | queue | storage | mail | shield | resource`. `data` is **redacted at the producer**.
+- **Producers** (each emits only when the level allows):
+  - the application runtime: state changes, log lines, restarts, job runs;
+  - the virtual port router: method, path, status and duration. No bodies, and only allow-listed headers;
+  - the pg gateway: duration and a statement fingerprint, never parameters;
+  - the RESP gateway: command name and latency;
+  - the memory manager: per-service estimates;
+  - W10 `SecurityEvent`s, which are already redacted.
+- **Every stream is bounded.** Ring buffers drop the overflow and count it, as `logs()` does today.
+- **Transport in the browser.** The badge script asks the host page for a `MessagePort` over the existing preview bridge. The host checks `diagnosticsLevel` and streams events. There is no network hop.
+- **Transport on cloud targets.** `/__bf/diagnostics` is served by the target's edge as Server-Sent Events. It needs a short-lived **signed debug token minted only for project members**: non-production does not mean public.
+- **The badge.** `attributionScript` gains a `diagnostics` option. The pill gains an expand control that opens a drawer in the same closed shadow root, written in vanilla JS with no framework. Its tabs are **Services · Requests · Jobs · Data · Logs · Shield**. The DOM is bounded and virtualised. It follows light/dark, and at phone width the drawer is a bottom sheet.
+- **The panel can exist without the link.** It mounts even when a host sets `attribution: false`, because diagnostics and attribution are separate concerns sharing one mount.
+- **Labels are passed in by the host**, the same way `AttributionOptions.label` is. Builderforce supplies them from all five catalogs (`appDiagnostics.*`), and the standalone runtime defaults to English.
+
+#### Starter kits and manifest init — the acceptance matrix
+
+- **Kits are composed from parts**, so N + M parts cover N × M kits. **Parts are data** in `packages/ide-templates`, which is already "the ONE source" for scaffolds:
+  - frontends: `react-vite`, `angular`, `vue-vite`, `svelte`, `next`;
+  - backends: `node-express`, `laravel`, `dotnet-minimal`, `python-fastapi`, `rust-axum` (prebuilt, W9 6d);
+  - extras: `postgres`, `redis`, `queue`, `jobs`, `storage`, `mail`.
+- **Each part carries** a file tree under its service root, a manifest fragment, a `/health` endpoint, a **feature that exercises every resource it uses**, and a smoke script. The features are: CRUD on Postgres, a cache hit counter, enqueue → worker → result, a cron heartbeat row, upload/download, and send → inbox.
+- **`composeKit(kitId, extras) → { files, manifest, issues }`** is pure. Fragment conflicts are issues, never silent overwrites.
+- **`VANILLA_TEMPLATE` becomes the `react-vite` kit, and its callers migrate.** There are no parallel scaffolds.
+- **Named kits are a list:** `react-node`, `angular-node`, `react-laravel`, `react-dotnet`, `react-fastapi`, `vue-node`. Any frontend × backend pair is accepted when its parts exist.
+- **Command surface — `/` actions.** The composer's `/` menu (`PromptOptionsMenu`, the ONE `/` affordance) gains an **Actions** tab with a fixed list:
+  - **Starter kit**: frontend × backend × extras, with a preview of the file tree and manifest;
+  - **Create manifest from this app**;
+  - **Run in browser**.
+
+  Typing `/starter-kit angular-node --with redis,jobs` or `/manifest init` is parsed deterministically, with no model call, into the same action. The action registry lives in host-neutral `brain-embedded`, and brain-ui renders it. The web, canvas and VSIX composers share it.
+- **`/help` is the default action (user, 2026-11-19).** A bare `/help`, a lone `/` followed by Enter, or an unknown `/command` lists **every available action** from the same registry. Each entry shows its typed syntax, a one-line description, its arguments (with the kits and extras taken from the `ide-templates` part registry, never a second list) and an example. `/help <action>` shows one entry in full.
+  - `/help` is not hand-written copy. It is rendered from the registry entries, so an action added to the registry appears in `/help` with no other edit, and a test asserts that every registered action has help text in all five catalogs.
+  - An action the current host or plan cannot run is shown disabled with the reason, never hidden (the RoleGate convention).
+  - An unknown command answers "no such action" followed by the `/help` list, and never falls through to the model.
+- **Each host writes through a `ScaffoldSink` port.**
+  - Web/canvas writes the project's files through the files API.
+  - The VSIX writes the workspace folder through `vscode.workspace.fs`.
+  - Writing into a non-empty location needs a `useConfirm` approval. Existing files are never overwritten without it.
+- **`/manifest init`** runs the blueprint detectors on the current files and calls `emitManifest(blueprint) → builderforce.json v1`. It shows the diff, writes on approval, then offers Run in browser. For this, **the detectors move (not copy) from `api/src/application/blueprint/detectors` into a host-neutral source package** (`packages/app-detect`, aliased wherever it is consumed). The VSIX and the web app then detect locally, and the API imports the same code. Wrangler `cron` and `queue` bindings map to jobs and queue resources. A new `docker-compose.yml` detector maps known images (`postgres`, `redis`/`valkey`, `minio`, `mailpit`) to resources and build contexts to services. Other images decline by name.
+- **The kit matrix is the W11 acceptance.** In CI, every named kit (plus every extra on `react-node`) is scaffolded, its manifest parsed with zero issues, and the browser target accepts it. In the webcontainers CI (headless), each kit then:
+  1. starts;
+  2. returns 200 from `/health`;
+  3. passes each resource smoke (jobs under a fake clock);
+  4. sends diagnostics events at `verbose` on `local`;
+  5. **injects no diagnostics script** under a `production` environment.
+
+  The same matrix runs against `/manifest init` on the hired.video fork and the W9 fixtures.
+
+#### Codemap
+
+| Where | What |
+|---|---|
+| webcontainers `core/src/manifest/` | types, `parseManifest`, `validateManifest`, JSON Schema export, `toApplicationSpec`, `mergeOverrides`, resource-type registry |
+| webcontainers `core/src/manifest/` (as built) | `tierEnv.ts` (convention table + `diagnosticsLevel`), `cron.ts` (`parseCron`, `nextFire`), `duration.ts`, `capabilities.ts`, `overrides.ts`, `toApplicationSpec.ts` |
+| webcontainers `core/src/app/` | `jobDecision.ts` (Phase 5); `spec.ts` gains `jobs` and the `redis` engine (Phases 5–6) |
+| webcontainers `core/src/diagnostics/` | `DiagnosticEvent`, the redaction helpers, the bounded ring |
+| webcontainers `browser/src/app/` | `jobScheduler.ts` (single timer, leader via the extracted `navigator.locks` primitive), `redisProvider.ts`, `storageProvider.ts`, `mailProvider.ts`, replica round-robin in the port router, the diagnostics bridge |
+| webcontainers `core/src/attribution.ts` | the `diagnostics` option and the drawer (split into `attribution/` once it passes ~400 lines: badge, drawer, tabs) |
+| Builderforce `packages/creation-canvas-contract` | `AppBlueprint` imports the manifest types; `database` retired over expand/contract |
+| Builderforce `packages/app-detect` (new, source-only) | detectors moved from the API, `emitManifest`, the compose detector |
+| Builderforce `packages/ide-templates` | `kits/` parts + `composeKit`; `VANILLA_TEMPLATE` → `react-vite` |
+| Builderforce `packages/brain-embedded` + `brain-ui` | the composer action registry and its deterministic parser; the Actions tab |
+| Builderforce `api/src/application/infra/` | the `DeploymentTarget` port (W4's `InfraProvider`), the ledger, the cloudflare adapter, the OpenTofu emitter |
+| Builderforce `frontend` | the Jobs tab in `LivePreviewPanel`; the blueprint card issues; `appDiagnostics.*` / `composerActions.*` in all five catalogs |
+
+#### Phases (each ships on its own, with an automated exit test)
+
+| Phase | Contents | Exit test |
+|---|---|---|
+| 1 | **Manifest v1**: parser, schema, typed issues, environments/tier/debug, `tierEnv`, `toApplicationSpec`; Builderforce detector and blueprint on it (expand migration) | Legacy and v1 files parse; a broken file shows issues; `debug` on production is an issue; hired.video's `*/5` cron appears as a job |
+| 2 | **Manifest init**: `app-detect` package (move), `emitManifest`, compose detector, `/manifest init` action (web + VSIX) | detect → emit → parse round-trips with zero issues on the W9 fixtures and the hired.video fork |
+| 3 | **Starter kits**: parts, `composeKit`, the six named kits, the `/` Actions tab, the typed command, `/help`, `ScaffoldSink` (web + VSIX) | Kit matrix steps 1–2 green for every named kit; `/help` lists every registered action with all five catalogs' text (registry-driven test) |
+| 4 | **Diagnostics**: schema, producers, gate, browser bridge, badge drawer, labels | Matrix step 4 green at `verbose`; step 5 (production injects nothing) green |
+| 5 | **Jobs + background workers**: cron, `jobDecision`, scheduler, leader tab, Jobs tab, `runtime.jobs.*` tools | Fake clock: `*/1` fires every minute, `forbid` holds, `missed: skip` after sleep, two tabs fire once |
+| 6 | **Redis, no Lua** (D10) + `queue` on redis; kits gain `redis` / `queue` | Unmodified ioredis, redis-py and an RQ worker pass the parity suite; data survives restart and reload; two projects stay isolated |
+| 7 | **Object storage, mail catcher, `scale`/`ingress`, Postgres `extensions`** (AGE from the spike) | S3 SDK upload/download parity; replicas expose an in-memory-session bug in a fixture |
+| 8 | **Lua EVAL** | Unmodified BullMQ producer and worker |
+| 9 | **`DeploymentTarget`**: browser adapter (wraps `RunTarget`), cloudflare adapter, OpenTofu emitter, promotion plan, `infra.*` tools; cloud diagnostics SSE behind signed debug tokens | A kit's `staging` plan → apply on a test Cloudflare account; the generated OpenTofu passes `tofu validate` per cloud |
+
+#### Rev 2 — corrections from the design review (Opus, APPROVE WITH CHANGES, 2026-11-19). These override the sections above.
+
+1. **`DeploymentTarget` is for durable infrastructure only** (plan/apply/destroy/drift), with adapters `cloudflare` and `customer-cloud`. Resource providers (neon, upstash) sit beneath it; they are not deployment targets.
+   - Browser runs stay on the frontend `RunTarget`. There is no browser `DeploymentTarget` adapter.
+   - **The capability matrix is data in core `manifest/capabilities.ts`** (resource type × target). `browserAcceptance.ts` and `DeploymentTarget.capabilities()` both read it, so nothing derives capabilities twice.
+2. **Diagnostics never trust the previewed page.** Inside Builderforce (web and VSIX), the diagnostics view lives in **host chrome**: a tab beside the preview, and the launcher's own panel in the VSIX.
+   - The in-page badge drawer stays, as the user asked. It is a module served beside the worker scripts, loaded with `script src` only when the level is not `off`.
+   - It receives **only its own application's events**, through a port bound to (runtime nonce, project id), and **its threat model is stated in the docs**: anything it shows is readable by the app's own code, third-party dependencies included.
+   - Phase 4 adds two negative exit tests: a frame from another project receives nothing, and a known injected secret printed to a log is scrubbed.
+3. **Redaction.** The runtime scrubs the exact values it injects itself: database, RESP and S3 credentials, and vault values handed to it. Free-form logs are not claimed redacted beyond that.
+   - The host injects its redactor (Builderforce: `packages/secret-redaction`) as a function. There is no second copy of the redaction logic in core.
+4. **Composer commands, not actions.** `brain-embedded` (published, MIT, at `Builderforce.ai/brain-embedded`) holds a **composer command registry**: pure data, the deterministic parser and the `/help` model. "Action registry" already names the model's tools in `BrainActionsContext.tsx`.
+   - **Hosts inject the entries.** The starter-kit entry is built by the host from `ide-templates`, a private source-only package that published packages may not import (source-package-graph rule 6).
+5. **`PromptOptionsMenu` gains `'actions'`** in its `PromptOptionsTab` union, in `composerMenuRequest` and in its labels.
+6. **Each extra ships in the phase that adds its runtime.** Phase 3 kits carry `postgres` only. `redis` arrives in Phase 6, `jobs` in Phase 5, and `storage`/`mail` in Phase 7. The Node `queue` part needs Lua (BullMQ) and lands in Phase 8; the Python `queue` part (RQ) lands in Phase 6.
+7. **Release order.** Core gains a pure `./manifest` subpath (`sideEffects: false`). Phase 1 begins with a webcontainers release, and every consumer then adds the dependency: api, frontend, studio and **the VSIX**. `creation-canvas-contract` stays dependency-free and keeps its own blueprint types. The adapter between blueprint and manifest lives in `app-detect`.
+8. **Reader compatibility, not migration.** `project_app_blueprints.blueprint` is a JSONB blob per (project, commit), and old rows stay. Old blueprints and unversioned `builderforce.json` files are read **permanently** through the parser's legacy path. Nothing is backfilled.
+9. **Who decides production.** Builderforce-hosted surfaces (custom domains, marketplace listings, `<sub>.builderforce.ai`) **force `production`**, whatever the manifest says. Cloud diagnostics over server-sent events exist only on Builderforce-hosted and Cloudflare targets. Customer-cloud targets get none, which keeps them reproducible without Builderforce.
+10. **Command parsing.** Only `^/[a-z][a-z-]*(\s|$)` is a command, so `/api/users returns 500` is a normal message, and `//` escapes a leading slash. A lone `/` still opens the `/` menu (its keyboard selection wins). `/help` is typed, or chosen from the Actions tab.
+11. **Credentials for new resources.** `CREDENTIAL_POLICY` (`serviceEnv.ts`) widens from databases to every credentialed resource (Redis, S3, SMTP), so frontends never hold them.
+    - Credentials are generated per client service: RESP `AUTH` and S3 keys follow the pg gateway pattern.
+    - Data lives on the host origin under (project id, resource id).
+    - Presigned S3 URLs reach the preview through the port router under the same policy.
+12. **Exit tests, corrected.**
+    - Phase 1 also proves a broken legacy file is *reported* (today it is dropped).
+    - The `VANILLA_TEMPLATE` move keeps `scaffoldRepair` recognising projects already seeded.
+    - Phase 9's `tofu validate` is a syntax check only, and the Cloudflare apply test is what proves the deploy.
+
+#### Local launch from the VSIX (added 2026-11-19, user: test the support in the VSIX through a `/` command)
+
+A VS Code webview cannot register the runtime's service worker, so the VSIX launches the app in a real browser through a **local launcher**. The launcher belongs to the MIT runtime, which makes it reusable outside the VSIX (e.g. as a CLI).
+
+- **`createLocalLauncher({ projectDir, environment })`** is a Node module in webcontainers at `./launcher/server` (`node:http`, no dependencies). It serves three things:
+  1. **the launcher host page** on `http://localhost:<port>/`;
+  2. **the relay and runtime assets** (the service worker, `relay.html` and the process/language worker scripts) on loopback preview origins, `http://127.0.0.1:<port>` for the relay and `http://{key}.localhost:<port>` for each application, so control 1's per-app origins hold locally;
+  3. **the project tree** at `/__bf/files`: read-only, bounded, excluding `node_modules`, `.git` and anything outside `projectDir`.
+
+  **HTTPS, from a locally generated certificate authority (user, 2026-11-19).** All three kinds of origin are `https`. The runtime's https-only rule for previews stays exactly as it is, with no plain-`http` exception, not even for loopback.
+  - **The authority.** The launcher creates a local certificate authority once, stored in the VSIX's global storage or `~/.builderforce/launcher-ca`, with the private key file at mode 0600. It is **name-constrained** (critical) to DNS `localhost` and `.localhost` and to IP `127.0.0.1`, so the key cannot vouch for any real site.
+  - **The certificates.** A leaf certificate (valid at most 397 days) is issued per host on demand through SNI. Browsers ignore `*.localhost` wildcards, so each host needs its own. A name the Host allowlist refuses is refused at SNI as well.
+  - **Trust needs your approval.** On the first `/launch`, the VSIX asks in a modal before trusting the certificate authority, and `/launch trust` repeats the step. It installs the authority in the **user** store: `certutil -user -addstore Root` on Windows, `security add-trusted-cert` into the login keychain on macOS, and printed steps on Linux, where the system store needs root.
+  - **Declining still launches,** but the browser shows its certificate warning.
+- **The launcher page** (in webcontainers `browser/src/launcher/`, plain DOM, labels injectable, English by default):
+  1. reads `builderforce.json`;
+  2. turns it into an application spec with `toApplicationSpec(manifest, environment)`;
+  3. calls `startPreviewRuntime` (relay mode) and then `startApplicationRuntime` with every provider;
+  4. shows each service's state and logs, the primary frontend in a frame, and the typed declines and issues when it cannot start.
+- **VSIX `/` commands** go into the composer command registry and are run by the extension host:
+
+  | Command | What it does |
+  |---|---|
+  | `/help` | Lists every command |
+  | `/starter-kit <frontend>-<backend> [--with postgres]` | `composeKit`, then writes the kit into the workspace folder, with `useConfirm` approval when the folder is not empty |
+  | `/manifest init` | Detects the app, writes `builderforce.json` after showing a diff |
+  | `/launch [environment]` | Starts `createLocalLauncher` and opens its URL with `vscode.env.openExternal` |
+
+  Each result is shown in the chat as a host message. None of them calls the model.
+
+#### Risks
+
+- **Browser lifetime.** Background tabs throttle and can be frozen or discarded. The scheduler runs in a worker, compares against the wall clock, catches up per `missed`, and labels every in-session job.
+- **RESP engine fidelity.** Command semantics drift from real Redis. The parity suite against real Redis in CI guards it, and unsupported commands return an error naming the command.
+- **Diagnostics leaking data.** Redaction happens at the producer. Production is off by construction. Cloud diagnostics need a member-only signed token.
+- **Kit rot.** Framework versions move. Kits pin versions, and the matrix runs in CI, so a broken kit is red rather than silently stale.
+- **AGE on PGlite.** Unproven, hence the spike. If it fails, graph stays cloud-only (Azure PG).
+
+**Remaining (2026-11-19):** all of it. Design only.
+
 ### §4.7 MCP tool surface (spans W1–W10)
 
 Each tool is added to the `builtinMcpService.ts` catalogs, grouped as data:
@@ -1444,6 +1891,8 @@ Each tool is added to the `builtinMcpService.ts` catalogs, grouped as data:
 | 3 | W7 project listings + `external` + mobile (EAS) | Stripe secrets for *paid* listings only |
 | 4 | W5 hosted (WfP + Neon per app) | D1, D3, D4 |
 | 5 | W3/W4 GCP, Azure, AWS | Test accounts per cloud |
+| 1f | W11 phases 1–8 (manifest → init → kits → diagnostics → jobs → Redis → storage/mail/scale → Lua), in the webcontainers repo and Builderforce packages | None. It is code. |
+| 2b | W11 phase 9 (`DeploymentTarget` = W4) | Same as phase 2: a test Cloudflare account |
 
 **Program acceptance (against a hired.video fork, never production):**
 1. Create a company, then a project under it, then connect the fork.

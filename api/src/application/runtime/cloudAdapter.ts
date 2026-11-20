@@ -88,6 +88,8 @@ export function policyOf(host: CloudRunHost): RunPolicy {
     delegation: { requested: asksForSubagents(`${host.taskRow.title}\n${host.taskRow.description ?? ''}`), readsBeforeNudge: DEFAULT_READS_BEFORE_NUDGE },
     // Nothing left to try ends the run with what it said; whatever it committed still ships.
     stallExhausted: 'finish',
+    // The project's ship policy (PRD 48 §4.1): descriptive — the prompt states it, the tool gate enforces it.
+    ...(opts.shipPolicy ? { ship: opts.shipPolicy } : {}),
     modelStart: {
       model: host.pick.model,
       strict: host.pick.strict,
@@ -168,6 +170,7 @@ export async function runCloudAgent(
         taskTitle: host.taskRow.title,
         ladder: host.ladder, features: host.features, resolvedModel: model.servedModel,
         ...(opts.execParams ? { execParams: opts.execParams } : {}),
+        ...(opts.shipPolicy ? { ship: opts.shipPolicy } : {}),
         onState: (state) => { live.state = state; },
       }),
     });

@@ -71,6 +71,7 @@ import type { EffectiveManagerPolicy } from '../manager/managerPolicy';
 import type { Env } from '../../env';
 import { composeDispatcherLabel } from '../runtime/dispatcherLabel';
 import { sweepSecurityGate } from './sweepSecurityGate';
+import { runGrantedMerges } from './grantedMergeCohort';
 import { taskHasLiveRun } from '../runtime/liveExecutionStatus';
 
 /**
@@ -144,6 +145,10 @@ export interface PrMergeSweepResult {
   retired: number;
   /** Projects never started because {@link PR_MERGE_SWEEP_BUDGET_MS} elapsed. */
   notReached: number;
+  /** PRD 48 §4.6 — granted PRs merged this tick (also counted in `merged`). */
+  grantedMerged?: number;
+  /** Granted PRs held this tick (CI not green, security failing). */
+  grantedHeld?: number;
 }
 
 interface QueueProject { projectId: number; tenantId: number; }
@@ -752,14 +757,21 @@ export async function runPrMergeSweep(
 ): Promise<PrMergeSweepResult> {
   const db = buildDatabase(env);
   const runtimeService = buildRuntimeService(env, db);
+
+  // The sweep's wall clock starts HERE, so the granted cohort spends the same budget the queues do.
+  const startedAt = Date.now();
+
+  // PRD 48 §4.6 — the GRANTED cohort first: PRs a person granted a merge into main, selected
+  // regardless of the manager opt-in, merge authority and canary, ahead of the managed queue.
+  const granted = await runGrantedMerges(env, db, createPassBudget(startedAt, PR_MERGE_SWEEP_BUDGET_MS, 0));
+
   const projects = await loadPrQueueProjects(db, MAX_PROJECTS_PER_TICK);
 
   const result: PrMergeSweepResult = {
-    projects: projects.length, worked: 0, merged: 0, dispatched: 0,
-    queued: 0, retired: 0, notReached: 0,
+    projects: projects.length, worked: 0, merged: granted.merged, dispatched: 0,
+    queued: 0, retired: 0, notReached: 0, grantedMerged: granted.merged, grantedHeld: granted.held,
   };
 
-  const startedAt = Date.now();
   const pool = await runBoundedPool(
     projects,
     { limit: MAX_CONCURRENT_PROJECT_QUEUES, deadlineAt: startedAt + PR_MERGE_SWEEP_BUDGET_MS },

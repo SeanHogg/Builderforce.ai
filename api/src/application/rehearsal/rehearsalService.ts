@@ -245,6 +245,8 @@ export async function runRehearsal(env: Env, db: Db, input: StartRehearsalInput,
       ...(agentRef ? { cloudAgentRef: agentRef } : {}),
       isCancelled: async () => false,
       execParams: prep.execParams,
+      // The same ship policy a live run on this project would follow (PRD 48).
+      shipPolicy: prep.shipPolicy,
       surface: {
         kind: 'rehearsal',
         maxSteps: REHEARSAL_MAX_STEPS,

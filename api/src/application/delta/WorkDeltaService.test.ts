@@ -176,3 +176,99 @@ describe('WorkDeltaService ticket deduplication', () => {
     expect(result).toEqual({ deltaId: 53, kind: 'fix', taskId: 1377, taskKey: 'BF-1377', deduped: true, chatLink: { linked: true, chatId: 89, linkType: 'linked' } });
   });
 });
+
+// regression: VS Code chat #276 — deltas recorded while working epic #6902 minted standalone
+// tickets, so the epic's progress ring stayed at 0% with two of its code changes done.
+describe('WorkDeltaService parentTaskId', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.resolveSegment.mockResolvedValue('00000000-0000-0000-0000-000000000001');
+    mocks.resolveActorByRef.mockResolvedValue({ type: 'user', id: 'user-1' });
+    mocks.recordActivity.mockResolvedValue(undefined);
+    mocks.linkTicket.mockResolvedValue({});
+  });
+
+  /** A DB whose successive tenant+project ticket lookups answer from `lookups`, in order. */
+  function lookupDb(
+    lookups: Array<Array<{ id: number; key: string; status?: string }>>,
+    inserted: Record<string, unknown>[] = [],
+    updates: Record<string, unknown>[] = [],
+  ): Db {
+    const limit = vi.fn();
+    for (const rows of lookups) limit.mockResolvedValueOnce(rows);
+    return {
+      select: vi.fn(() => ({
+        from: vi.fn(() => ({
+          innerJoin: vi.fn(() => ({ where: vi.fn(() => ({ limit })) })),
+        })),
+      })),
+      update: vi.fn(() => ({
+        set: vi.fn((value: Record<string, unknown>) => {
+          updates.push(value);
+          return { where: vi.fn().mockResolvedValue(undefined) };
+        }),
+      })),
+      insert: vi.fn(() => ({
+        values: vi.fn((value: Record<string, unknown>) => {
+          inserted.push(value);
+          return { returning: vi.fn().mockResolvedValue([{ id: 55 }]) };
+        }),
+      })),
+    } as unknown as Db;
+  }
+
+  it('files a newly-minted ticket under a valid parent in the same project', async () => {
+    mocks.createTask.mockResolvedValueOnce({ id: 6910, key: 'P-010' });
+    // 1st lookup: no existing ticket for the summary; 2nd: the parent epic is active here.
+    const result = await new WorkDeltaService(lookupDb([[], [{ id: 6902, key: 'P-002', status: 'in_progress' }]]), {} as never).record(1, 'user-1', {
+      projectId: 11, summary: 'Measure slice A', kind: 'improvement', files: ['src/a.ts'], parentTaskId: 6902,
+    });
+    expect(mocks.createTask).toHaveBeenCalledWith(expect.objectContaining({ projectId: 11, parentTaskId: 6902 }), 1);
+    expect(result).toMatchObject({ taskId: 6910, deduped: false });
+  });
+
+  it('rejects a parent that is not an active ticket in the project (e.g. another project) and writes nothing', async () => {
+    const inserted: Record<string, unknown>[] = [];
+    await expect(new WorkDeltaService(lookupDb([[], []], inserted), {} as never).record(1, 'user-1', {
+      projectId: 11, summary: 'Measure slice B', kind: 'improvement', files: ['src/b.ts'], parentTaskId: 777,
+    })).rejects.toThrow('parentTaskId 777 is not an active ticket in project 11');
+    expect(mocks.createTask).not.toHaveBeenCalled();
+    expect(inserted).toHaveLength(0);
+  });
+
+  it('rejects a closed (done/cancelled) parent and writes nothing', async () => {
+    for (const status of ['done', 'cancelled']) {
+      const inserted: Record<string, unknown>[] = [];
+      await expect(new WorkDeltaService(lookupDb([[], [{ id: 6902, key: 'P-002', status }]], inserted), {} as never).record(1, 'user-1', {
+        projectId: 11, summary: 'Measure slice D', kind: 'improvement', files: ['src/e.ts'], parentTaskId: 6902,
+      })).rejects.toThrow(`parentTaskId 6902 is closed (status ${status}) in project 11`);
+      expect(inserted).toHaveLength(0);
+    }
+    expect(mocks.createTask).not.toHaveBeenCalled();
+  });
+
+  it('ignores parentTaskId when the delta attaches to an existing ticket (never re-parents)', async () => {
+    const inserted: Record<string, unknown>[] = [];
+    const updates: Record<string, unknown>[] = [];
+    const db = lookupDb([[{ id: 1377, key: 'BF-1377', status: 'in_progress' }]], inserted, updates);
+    const result = await new WorkDeltaService(db, {} as never).record(1, 'user-1', {
+      projectId: 11, taskId: 1377, summary: 'Fix it', kind: 'fix', files: ['src/c.ts'], parentTaskId: 777,
+    });
+    // No ticket is minted and nothing is written to the existing ticket — no parent anywhere.
+    expect(mocks.createTask).not.toHaveBeenCalled();
+    expect(updates).toHaveLength(0);
+    // The delta lands on the existing ticket.
+    expect(inserted).toHaveLength(1);
+    expect(inserted[0]).toMatchObject({ taskId: 1377 });
+    expect(result).toMatchObject({ taskId: 1377, taskKey: 'BF-1377', deduped: true });
+  });
+
+  it('mints without a parent when parentTaskId is omitted (unchanged behaviour)', async () => {
+    mocks.createTask.mockResolvedValueOnce({ id: 6911, key: 'P-011' });
+    const db = lookupDb([[]]);
+    await new WorkDeltaService(db, {} as never).record(1, 'user-1', {
+      projectId: 11, summary: 'Measure slice C', kind: 'improvement', files: ['src/d.ts'],
+    });
+    expect(mocks.createTask.mock.calls[0]![0]).not.toHaveProperty('parentTaskId');
+  });
+});

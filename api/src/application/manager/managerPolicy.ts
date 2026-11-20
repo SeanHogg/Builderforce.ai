@@ -40,7 +40,7 @@
  * exists to withhold.
  *
  * Everything else (`prMergePolicy`, `autoAssign`, `autoBusinessValue`, `autoPrioritize`,
- * `managerType`, `managerRef`) is a plain override where the project tier wins — those
+ * `managerType`, `managerRef`, `shipMode`) is a plain override where the project tier wins — those
  * are tuning knobs, not permissions, so local judgement should beat a global preference.
  *
  * The fold is pure and total: every caller (the cron sweep, the run-now endpoint, the
@@ -48,6 +48,7 @@
  * the UI can never disagree about what the manager is allowed to do.
  */
 
+import { isShipMode, type ShipMode } from '@builderforce/run-guards';
 import { normalizeManagerType, DEFAULT_MANAGER_TYPE } from './managerTypes';
 
 /** PR authority tiers (see migration 0265). */
@@ -87,6 +88,8 @@ export interface ManagerPolicyOverride {
   coordinationRequiresManager?: boolean | null;
   /** PROJECT-ONLY (1312) — PRD 23 canary mode; see the effective field. */
   canary?: boolean | null;
+  /** PRD 48 (1356) — a plain override at both tiers; see the effective field. */
+  shipMode?: string | null;
 }
 
 /** The persisted config shape (a `project_manager_configs` row projection). */
@@ -122,6 +125,9 @@ export interface ManagerConfigRow {
   coordinationRequiresManager?: boolean;
   /** Canary mode (1312) — NOT NULL DEFAULT false. Optional here for pre-migration projections. */
   canary?: boolean;
+  /** Ship mode for local runs (PRD 48, 1356). Nullable = inherit the workspace tier. Optional
+   *  here so a row projected before the migration lands still type-checks. */
+  shipMode?: string | null;
 }
 
 /**
@@ -146,7 +152,12 @@ export interface TenantManagerDefaultsRow {
   /** May the manager review and close a ticket through a human-gated review lane (1153)?
    *  Workspace-only: an account-admin decision, never a per-project one. */
   managerMayCloseReviewedTickets: boolean | null;
+  /** Workspace default ship mode for local runs (PRD 48, 1356). NULL = no workspace opinion. */
+  shipMode: string | null;
 }
+
+/** Which tier the effective {@link EffectiveManagerPolicy.shipMode} came from. */
+export type ShipModeSource = 'project' | 'workspace' | 'default';
 
 export interface EffectiveManagerPolicy {
   /** Whether the manager acts on this project at all. */
@@ -324,6 +335,20 @@ export interface EffectiveManagerPolicy {
    * an operator-enabled rollout mode, not a workspace posture.
    */
   canary: boolean;
+  /**
+   * SHIP MODE (PRD 48, migration 1356) — what a LOCAL (VS Code) run does with finished
+   * work: `leave_uncommitted` | `commit` | `commit_push` | `pull_request`. The person's
+   * standing rule, so the run never stops to ask "should I commit / push?".
+   *
+   * A plain override (project beats workspace beats the built-in `commit`): a tuning knob
+   * about how one team ships, not a permission — `allowAutoMerge` stays the authority
+   * gate on the base branch. Cloud runs ignore it: they always open a pull request, and
+   * the PR merge sweep merges by the fields above (`shipPolicyOf.ts`).
+   */
+  shipMode: ShipMode;
+  /** Which tier set {@link shipMode} — `default` when nobody has (the run's final report
+   *  then says the project's ship policy is unset). */
+  shipModeSource: ShipModeSource;
 }
 
 /**
@@ -380,6 +405,10 @@ export const DEFAULT_MANAGER_POLICY: EffectiveManagerPolicy = {
   coordinationRequiresManager: false,
   // OFF by default (1312): canary is something an operator enables for a rollout.
   canary: false,
+  // PRD 48: with no setting a local run commits locally — reversible, never leaves the
+  // machine — and never asks.
+  shipMode: 'commit',
+  shipModeSource: 'default',
 };
 
 /**
@@ -415,6 +444,15 @@ export function isProjectManaged(tiers: {
 }
 
 const VALID_PR_POLICIES: ReadonlySet<string> = new Set(['immediate', 'on_green', 'queue']);
+
+/**
+ * Normalize a stored/sent ship mode (PRD 48). Unlike {@link normalizePrMergePolicy} it does
+ * NOT default: an unknown value is "no opinion" (null), so a malformed column can never
+ * pin a mode nobody chose — the tier below decides instead.
+ */
+export function normalizeShipMode(v: unknown): ShipMode | null {
+  return isShipMode(v) ? v : null;
+}
 
 /** Normalize an arbitrary PR-policy string, defaulting to the tenant default. */
 export function normalizePrMergePolicy(v: unknown): PrMergePolicy {
@@ -547,6 +585,9 @@ export function resolveTieredManagerPolicy(tiers: {
   // column), so the project's value — including an explicit null meaning "the system
   // service" — is simply the answer whenever the project tier is present.
   const managerRef = lastSet<string | null>(d.managerRef, tenant?.managerRef, project?.managerRef)?.trim() || null;
+  // Ship mode (PRD 48) — a plain override; an unknown stored value is "no opinion".
+  const projectShip = normalizeShipMode(project?.shipMode);
+  const tenantShip = normalizeShipMode(tenant?.shipMode);
 
   return {
     // Authority gates — most restrictive tier wins.
@@ -605,6 +646,8 @@ export function resolveTieredManagerPolicy(tiers: {
     autoPrioritize: lastSet(d.autoPrioritize, tenant?.autoPrioritize, project?.autoPrioritize),
     autoSchedule: lastSet(d.autoSchedule, tenant?.autoSchedule, project?.autoSchedule),
     managerType: normalizeManagerType(lastSet<string>(d.managerType, tenant?.managerType, project?.managerType)),
+    shipMode: projectShip ?? tenantShip ?? d.shipMode,
+    shipModeSource: projectShip ? 'project' : tenantShip ? 'workspace' : 'default',
   };
 }
 

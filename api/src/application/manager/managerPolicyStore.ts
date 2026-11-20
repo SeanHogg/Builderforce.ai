@@ -21,9 +21,12 @@ import { projectManagerConfigs, tenantManagerDefaults } from '../../infrastructu
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { normalizeManagerType } from './managerTypes';
 import {
-  resolveTieredManagerPolicy, normalizePrMergePolicy, DEFAULT_MANAGER_POLICY, isProjectManaged,
+  resolveTieredManagerPolicy, normalizePrMergePolicy, normalizeShipMode, DEFAULT_MANAGER_POLICY, isProjectManaged,
   type EffectiveManagerPolicy, type ManagerConfigRow, type TenantManagerDefaultsRow,
 } from './managerPolicy';
+import { shipPoliciesOf, type ProjectShipPolicies } from './shipPolicyOf';
+import type { ShipPolicy } from '@builderforce/run-guards';
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 
 
 /**
@@ -68,6 +71,8 @@ export async function getManagerConfigRow(
       // workspace tier.
       coordinationRequiresManager: projectManagerConfigs.coordinationRequiresManager,
       canary: projectManagerConfigs.canary,
+      // Ship mode (PRD 48, 1356) — nullable, inherits the workspace tier.
+      shipMode: projectManagerConfigs.shipMode,
       lastRunAt: projectManagerConfigs.lastRunAt,
       lastSweepDecision: projectManagerConfigs.lastSweepDecision,
       lastSweepReason: projectManagerConfigs.lastSweepReason,
@@ -113,6 +118,8 @@ export async function getTenantManagerDefaults(
         allowAutoStaffLanes: tenantManagerDefaults.allowAutoStaffLanes,
         // Review-and-close authority (1153) — workspace-only, read by the same fold.
         managerMayCloseReviewedTickets: tenantManagerDefaults.managerMayCloseReviewedTickets,
+        // Ship mode (PRD 48, 1356) — the workspace default a project row overrides.
+        shipMode: tenantManagerDefaults.shipMode,
       })
       .from(tenantManagerDefaults)
       .where(eq(tenantManagerDefaults.tenantId, tenantId))
@@ -150,6 +157,9 @@ export async function upsertTenantManagerDefaults(
     ...(patch.prMergePolicy !== undefined
       ? { prMergePolicy: patch.prMergePolicy === null ? null : normalizePrMergePolicy(patch.prMergePolicy) }
       : {}),
+    // Same for the ship mode (PRD 48): an unknown value clears to "no opinion" rather than
+    // pinning a mode nobody chose; the route rejects one before it gets here.
+    ...(patch.shipMode !== undefined ? { shipMode: normalizeShipMode(patch.shipMode) } : {}),
   };
   await db
     .insert(tenantManagerDefaults)
@@ -169,6 +179,7 @@ export async function upsertTenantManagerDefaults(
       agentReassignMaxPerSession: normalized.agentReassignMaxPerSession ?? null,
       allowAutoStaffLanes: normalized.allowAutoStaffLanes ?? null,
       managerMayCloseReviewedTickets: normalized.managerMayCloseReviewedTickets ?? null,
+      shipMode: normalized.shipMode ?? null,
       updatedBy: opts?.updatedBy ?? null,
       updatedAt: now,
     })
@@ -189,6 +200,7 @@ export async function upsertTenantManagerDefaults(
         ...(normalized.agentReassignMaxPerSession !== undefined ? { agentReassignMaxPerSession: normalized.agentReassignMaxPerSession } : {}),
         ...(normalized.allowAutoStaffLanes !== undefined ? { allowAutoStaffLanes: normalized.allowAutoStaffLanes } : {}),
         ...(normalized.managerMayCloseReviewedTickets !== undefined ? { managerMayCloseReviewedTickets: normalized.managerMayCloseReviewedTickets } : {}),
+        ...(normalized.shipMode !== undefined ? { shipMode: normalized.shipMode } : {}),
         ...(opts?.updatedBy !== undefined ? { updatedBy: opts.updatedBy } : {}),
         updatedAt: now,
       },
@@ -207,6 +219,38 @@ export async function getEffectiveManagerPolicy(
   db: Db, tenantId: number, projectId: number, env?: Env,
 ): Promise<EffectiveManagerPolicy> {
   return (await getProjectManagerState(db, tenantId, projectId, env)).policy;
+}
+
+/**
+ * The ship policies a project's runs follow (PRD 48): `local` for a VS Code run, `cloud` for a
+ * cloud or agent-host run — from the same effective policy every other reader uses, so the
+ * Manager tab, `manager.policy`, the cloud prompt and the agent-host payload can never
+ * disagree about it.
+ */
+export async function getProjectShipPolicies(
+  db: Db, tenantId: number, projectId: number, env?: Env,
+): Promise<ProjectShipPolicies> {
+  const { policy, managed } = await getProjectManagerState(db, tenantId, projectId, env);
+  return shipPoliciesOf(policy, managed);
+}
+
+/**
+ * The CLOUD run's ship policy (always a pull request) for a project, for the two run hosts that
+ * state it to the model: the cloud prompt (`cloudPrepare`) and the on-prem agent-host payload. A
+ * failed read is REPORTED and falls back to the built-in policy — a PR that nothing merges —
+ * so a database blip never widens what a run may do.
+ */
+export async function getCloudShipPolicy(
+  db: Db, tenantId: number, projectId: number, env?: Env,
+): Promise<ShipPolicy> {
+  try {
+    return (await getProjectShipPolicies(db, tenantId, projectId, env)).cloud;
+  } catch (error) {
+    reportCaughtError(error, {
+      source: 'application/manager/managerPolicyStore.ts', operation: 'getCloudShipPolicy', context: { tenantId, projectId },
+    });
+    return shipPoliciesOf(DEFAULT_MANAGER_POLICY, false).cloud;
+  }
 }
 
 /**
@@ -242,7 +286,7 @@ export async function upsertManagerConfig(
   db: Db,
   tenantId: number,
   projectId: number,
-  patch: Partial<Pick<ManagerConfigRow, 'managerRef' | 'enabled' | 'prMergePolicy' | 'autoAssign' | 'autoBusinessValue' | 'autoPrioritize' | 'autoSchedule' | 'managerType' | 'requireSignoffToComplete' | 'allowAutoMerge' | 'allowUnattendedCeremonies' | 'allowAgentReassignment' | 'agentReassignIdleHours' | 'agentReassignMaxPerSession' | 'allowAutoStaffLanes' | 'coordinationRequiresManager' | 'canary'>>,
+  patch: Partial<Pick<ManagerConfigRow, 'managerRef' | 'enabled' | 'prMergePolicy' | 'autoAssign' | 'autoBusinessValue' | 'autoPrioritize' | 'autoSchedule' | 'managerType' | 'requireSignoffToComplete' | 'allowAutoMerge' | 'allowUnattendedCeremonies' | 'allowAgentReassignment' | 'agentReassignIdleHours' | 'agentReassignMaxPerSession' | 'allowAutoStaffLanes' | 'coordinationRequiresManager' | 'canary' | 'shipMode'>>,
 ): Promise<ManagerConfigRow> {
   const now = new Date();
   await db
@@ -284,6 +328,8 @@ export async function upsertManagerConfig(
       coordinationRequiresManager: patch.coordinationRequiresManager ?? DEFAULT_MANAGER_POLICY.coordinationRequiresManager,
       // 1312 — NOT NULL, project-only; takes the shared hardcoded floor (off).
       canary: patch.canary ?? DEFAULT_MANAGER_POLICY.canary,
+      // PRD 48 (1356) — NULL on insert = inherit the workspace tier, like allowAutoMerge.
+      shipMode: normalizeShipMode(patch.shipMode),
       updatedAt: now,
     })
     .onConflictDoUpdate({
@@ -306,6 +352,7 @@ export async function upsertManagerConfig(
         ...(patch.allowAutoStaffLanes !== undefined ? { allowAutoStaffLanes: patch.allowAutoStaffLanes } : {}),
         ...(patch.coordinationRequiresManager !== undefined ? { coordinationRequiresManager: patch.coordinationRequiresManager } : {}),
         ...(patch.canary !== undefined ? { canary: patch.canary } : {}),
+        ...(patch.shipMode !== undefined ? { shipMode: normalizeShipMode(patch.shipMode) } : {}),
         updatedAt: now,
       },
     });

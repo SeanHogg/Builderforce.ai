@@ -37,6 +37,7 @@ import { agentMessageText, isGenuineToolCall, runDispatchType, runProvenance } f
 import { ObservabilityContent } from '../ObservabilityContent';
 import { TaskChangesPanel } from './TaskChangesPanel';
 import { PullRequestPanel } from './PullRequestPanel';
+import { MergeGrantStatus } from './MergeGrantStatus';
 import { RunThinkingPanel, thinkingEventsOf } from './RunThinkingPanel';
 import { LateSteerNote } from './LateSteerNote';
 import { useFormat } from "@/i18n/useFormat";
@@ -673,6 +674,8 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
       {/* Selected execution */}
       {selected && (
         <div style={card}>
+          {/* PRD 48 §4.6 — a person's "merge into main" grant on this run, and where it stands. */}
+          <MergeGrantStatus executionId={selected.id} />
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10, flexWrap: 'wrap' }}>
             <span style={{ fontWeight: 600, fontSize: 13 }}>{t('executionHeader', { id: selected.id })}</span>
             <span style={{ fontSize: 12, fontWeight: 600, color: statusColor(EXECUTION_STATUS_TONE, status) }}>{status}</span>

@@ -11,10 +11,9 @@
  * WHERE THE SCAN RUNS depends on who is asking (`mode`):
  *   - `inline`  the merge SWEEP, when its budget affords the step (a model review of up to 25s): runs the
  *               step itself and merges in the same pass if the verdict comes back clean;
- *   - `defer`   the CI WEBHOOK, the human merge route, and a sweep short on budget: SCHEDULES the step past
- *               the response (`deferPastResponse`, i.e. `ctx.waitUntil`) and returns a block that says so.
- *               When the scheduled step finishes it calls `afterScan`, which is the caller's own
- *               merge-on-green evaluation, so the merge really does happen then (and not "eventually");
+ *   - `defer`   the human merge route and a sweep short on budget: SCHEDULES the step past the response
+ *               (`deferPastResponse`, i.e. `ctx.waitUntil`) and returns a block that says so. When the
+ *               scheduled step finishes it calls `afterScan`, the caller's own re-evaluation;
  *   - `check`   never scans: evaluates what is recorded. Used by `afterScan` itself, so a scan that
  *               ends blocked cannot reschedule itself forever.
  * With no invocation to defer to (a non-Worker caller, a test) nothing is scheduled and the block says
@@ -33,7 +32,6 @@ import type { Db } from '../../infrastructure/database/connection';
 import { pullRequests } from '../../infrastructure/database/schema';
 import { integrationCredentialSecret } from '../integrations/integrationCredentialSecret';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
-import { isMergeCandidate } from '../repos/recordPullRequestRow';
 import { isResolveError, resolveRepoCredential } from '../repos/resolveRepoCredential';
 import { deferPastResponse } from '../shared/requestScope';
 import { loadGateInputs, resolvePullRequestHead, securityGateAtHead } from './prSecurityGate';
@@ -136,47 +134,4 @@ export async function securityVerdictEnsuringScan(
 
   const step = await runStepForPullRequest(db, env, tenantId, pullRequestId);
   return step ? step.verdict : verdict;
-}
-
-/**
- * The merge verdict for the task's open PR whose head IS the commit CI reported on (`eventSha`). A task
- * can have several open PRs (a spanning task, a retry); the green CI result belongs to exactly one of them,
- * and judging - or merging - a different one on its strength would be wrong. With no `eventSha` every open
- * PR must pass. No matching PR (CI ran on a commit that is no longer anyone's head) is a block.
- */
-export async function securityGateForTask(
-  db: Db, env: Env, tenantId: number, taskId: number, options: EnsureOptions & { eventSha?: string | null } = {},
-): Promise<PinnedVerdict> {
-  const prs = await db
-    .select({ id: pullRequests.id, status: pullRequests.status })
-    .from(pullRequests)
-    .where(and(eq(pullRequests.tenantId, tenantId), eq(pullRequests.taskId, taskId)));
-  const open = prs.filter((p) => p.status !== 'merged' && p.status !== 'closed' && isMergeCandidate(p));
-  // No recorded PR to attach scans to means nothing was scanned: block, never allow.
-  if (open.length === 0) {
-    return { allow: false, reasons: [gateReason('no_pr_for_task', 'no pull request is recorded for this task, so nothing was scanned')], headSha: null };
-  }
-
-  let candidates = open.map((p) => p.id);
-  if (options.eventSha) {
-    const wanted = options.eventSha.toLowerCase();
-    const matching: string[] = [];
-    for (const id of candidates) {
-      const head = await resolvePullRequestHead(db, env, tenantId, id);
-      if (head.ok && head.sha.toLowerCase() === wanted) matching.push(id);
-    }
-    if (matching.length === 0) {
-      return { allow: false, reasons: [gateReason('no_pr_at_commit', 'no open pull request of this task is at the commit CI reported')], headSha: null };
-    }
-    candidates = matching;
-  }
-
-  let last: PinnedVerdict | null = null;
-  for (const id of candidates) {
-    // The CI webhook answers fast: a missing scan is scheduled past the response, never run inline.
-    const verdict = await securityVerdictEnsuringScan(db, env, tenantId, id, { mode: options.mode ?? 'defer', afterScan: options.afterScan });
-    if (!verdict.allow) return verdict;
-    last = verdict;
-  }
-  return last ?? { allow: false, reasons: [gateReason('no_pr_judged', 'no pull request could be judged')], headSha: null };
 }

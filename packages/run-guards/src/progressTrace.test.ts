@@ -33,10 +33,10 @@ describe("progressTraceStep", () => {
     d.observe("write_file", { path: "a.ts", content: "B" }, okData);
     d.observe("write_file", { path: "a.ts", content: "A" }, okData);
     const action = d.endTurn()!;
-    expect(progressTraceStep(action, { outcome: "pause", detail: { trip: 1, outcome: "pause" } })).toEqual({
+    expect(progressTraceStep(action, { outcome: "finish", detail: { trip: 1, outcome: "finish" } })).toEqual({
       label: "loop.progress_check",
-      args: { trip: 1, outcome: "pause" },
-      result: "progress check 1: edit_revert → pause",
+      args: { trip: 1, outcome: "finish" },
+      result: "progress check 1: edit_revert → finish (the run is not converging — it ends on an honest report of what is done and what blocks the rest, no more tool calls)",
     });
   });
 

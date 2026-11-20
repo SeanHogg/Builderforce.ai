@@ -97,6 +97,8 @@ export const APP_BLUEPRINT_TOOLS: BuiltinTool[] = [
         projectId,
         detected: true,
         blueprint: summarizeBlueprint(result.blueprint),
+        // What detection could not use (an unreadable builderforce.json …): reported, never dropped.
+        ...(result.warnings?.length ? { warnings: result.warnings } : {}),
         instruction: OVERRIDE_HINT,
       };
     },

@@ -94,9 +94,9 @@ describe("sustained progress clears the trip ladder", () => {
     }
   });
 
-  it("still steers → escalates → pauses when the stuck stretches are back to back", () => {
+  it("still steers → escalates → finishes when the stuck stretches are back to back", () => {
     const d = touched();
-    expect([1, 2, 3].map(() => stuckStretch(d)?.kind)).toEqual(["steer", "escalate", "pause"]);
+    expect([1, 2, 3].map(() => stuckStretch(d)?.kind)).toEqual(["steer", "escalate", "finish"]);
   });
 
   it("does not clear the ladder after fewer than LADDER_RESET_TURNS productive turns", () => {
@@ -106,7 +106,7 @@ describe("sustained progress clears the trip ladder", () => {
       kinds.push(stuckStretch(d)?.kind);
       productiveTurns(d, LADDER_RESET_TURNS - 1);
     }
-    expect(kinds).toEqual(["steer", "escalate", "pause"]);
+    expect(kinds).toEqual(["steer", "escalate", "finish"]);
   });
 
   it("keeps the run telemetry when it clears the ladder", () => {
@@ -224,16 +224,16 @@ describe("churn is bounded", () => {
     expect(run(d, (i) => edit(d, "a.ts", `v${i}`, `v${i + 1}`), CHURN_TURNS).filter(Boolean)).toEqual([]);
   });
 
-  it("reaches a pause on endless distinct no-op commands", () => {
+  it("reaches the finish on endless distinct no-op commands", () => {
     const d = touched();
     const kinds = run(d, (i) => d.observe("run_command", { command: `echo ${i}` }, okData), 200);
-    expect(kinds.filter(Boolean).slice(0, 3)).toEqual(["steer", "escalate", "pause"]);
+    expect(kinds.filter(Boolean).slice(0, 3)).toEqual(["steer", "escalate", "finish"]);
   });
 
-  it("reaches a pause on endless one-character edit drift", () => {
+  it("reaches the finish on endless one-character edit drift", () => {
     const d = touched();
     const kinds = run(d, (i) => edit(d, "a.ts", `v${i}`, `v${i + 1}`), 200);
-    expect(kinds.filter(Boolean).slice(0, 3)).toEqual(["steer", "escalate", "pause"]);
+    expect(kinds.filter(Boolean).slice(0, 3)).toEqual(["steer", "escalate", "finish"]);
   });
 
   it("never trips on distinct edits interleaved with a changing check", () => {

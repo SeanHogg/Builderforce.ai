@@ -16,6 +16,7 @@ import {
 } from './ModePane';
 import { ModelPane, type PromptOptionsModel } from './ModelPane';
 import { InferenceModeControl, type PromptOptionsInferenceMode } from '../inferenceMode/InferenceModeControl';
+import { ActionsPane, type PromptOptionsCommands } from './ActionsPane';
 
 export type {
   PromptOptionsAutoMode,
@@ -25,6 +26,7 @@ export type {
   PromptOptionsSession,
 } from './ModePane';
 export type { PromptOptionsModel } from './ModelPane';
+export type { PromptOptionsCommands } from './ActionsPane';
 export type { PromptOptionsInferenceMode } from '../inferenceMode/InferenceModeControl';
 
 export interface PromptOptionsMenuProps {
@@ -59,6 +61,8 @@ export interface PromptOptionsMenuProps {
   status?: ReactNode;
   /** The Spend tab: its name and body (the composer wires `WorkSpendPanel`). Absent ⇒ no tab. */
   spend?: { label: string; content: ReactNode };
+  /** The composer commands for the Actions tab, rendered from brain-embedded's `/help` model. Absent ⇒ no tab. */
+  commands?: PromptOptionsCommands;
   onAccountSettings?: () => void;
   className?: string;
 }
@@ -71,7 +75,7 @@ const EFFORT_LABEL: Record<Effort, 'effortQuick' | 'effortBalanced' | 'effortTho
   thorough: 'effortThorough',
 };
 
-export type PromptOptionsTab = 'mode' | 'effort' | 'model' | 'status' | 'spend';
+export type PromptOptionsTab = 'mode' | 'effort' | 'model' | 'actions' | 'status' | 'spend';
 
 /** Open the `/` menu on `tab`; bump `token` for each new request. */
 export interface PromptOptionsOpenRequest {
@@ -82,11 +86,12 @@ export interface PromptOptionsOpenRequest {
 /**
  * The composer's `/` control: everything that shapes the NEXT TURN — the mode it
  * runs in, whether it remembers, whether actions auto-apply, run shaping (effort,
- * thinking), the model in use and the model picker, plus account status. One
+ * thinking), the model in use and the model picker, the composer commands (Actions),
+ * plus account status. One
  * affordance, shared by every BuilderForce prompt surface (web Brain, Creation
  * Canvas, the VS Code webview).
  *
- * The popover is tabbed (Mode, Effort, Model, Status, Spent) so the user is not scrolling
+ * The popover is tabbed (Mode, Effort, Model, Actions, Status, Spent) so the user is not scrolling
  * a single mixed list to find the setting they opened the menu for. The trigger
  * still states the two consequential ones (the armed mode, the model in use) so
  * nothing has to be opened to read what will happen.
@@ -111,6 +116,7 @@ export function PromptOptionsMenu({
   openOn,
   status,
   spend,
+  commands,
   onAccountSettings,
   className,
 }: PromptOptionsMenuProps) {
@@ -140,9 +146,10 @@ export function PromptOptionsMenu({
   const hasModelTab = !!(model || inferenceMode);
   const hasStatusTab = !!(status || onAccountSettings);
   const hasSpendTab = !!spend;
+  const hasActionsTab = !!commands;
 
   // Nothing wired ⇒ no control (the component decides its own visibility).
-  if (!hasModeTab && !hasEffortTab && !hasModelTab && !hasStatusTab && !hasSpendTab) return null;
+  if (!hasModeTab && !hasEffortTab && !hasModelTab && !hasActionsTab && !hasStatusTab && !hasSpendTab) return null;
 
   const activeMode = mode?.choices.find((choice) => choice.value === mode.value);
   // The trigger names what is ARMED — the mode first, because it decides whether this
@@ -157,6 +164,7 @@ export function PromptOptionsMenu({
   if (hasModeTab) tabs.push({ id: 'mode', label: labels.mode });
   if (hasEffortTab) tabs.push({ id: 'effort', label: labels.effort });
   if (hasModelTab) tabs.push({ id: 'model', label: labels.model });
+  if (hasActionsTab) tabs.push({ id: 'actions', label: labels.actionsTab });
   if (hasStatusTab) tabs.push({ id: 'status', label: labels.status ?? 'Status' });
   if (spend) tabs.push({ id: 'spend', label: spend.label });
   const activeTab = tabs.some((entry) => entry.id === tab) ? tab : tabs[0]!.id;
@@ -260,6 +268,8 @@ export function PromptOptionsMenu({
                 {model && <ModelPane model={model} labels={labels} identity={identity} inUse={inUse} {...(inferenceMode ? { inferenceMode } : {})} onPicked={close} />}
               </>
             )}
+
+            {activeTab === 'actions' && commands && <ActionsPane commands={commands} labels={labels} close={close} />}
 
             {activeTab === 'status' && (
               <div className="bf-pmenu__status">

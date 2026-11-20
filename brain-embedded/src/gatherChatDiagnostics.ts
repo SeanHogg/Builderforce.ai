@@ -29,7 +29,8 @@ import { accountUsedInTrace, type BrainTraceEvent } from './brainTriage';
 import { sessionShippedInTrace } from './staffingSummary';
 import { traceWithPersistedSteps } from './persistedSteps';
 import type { BrainMessage } from './types';
-import { publishHoldFromPersonTurns } from './runStore/publishHold';
+import { publishHoldFromPersonTurns, type PublishHold } from './runStore/publishHold';
+import { isShipMode, narrowByHold, shipPolicyOf, type ShipPolicySource } from '@builderforce/run-guards';
 import { isStepMessage } from './types';
 import { selectPendingAskUser } from '@builderforce/agent-loop';
 
@@ -170,6 +171,31 @@ export interface ChatDiagnosticsSources {
   readApiVersion?: () => Promise<string | null>;
 }
 
+const SHIP_SOURCES: ReadonlySet<string> = new Set<ShipPolicySource>(['project_settings', 'chat_hold', 'subagent', 'person_grant', 'default']);
+
+/**
+ * The ship policy for the report: the newest `run.ship_policy` step (written by the run
+ * preamble), narrowed by a hold the transcript still holds; a hold alone when no run
+ * recorded a policy; null when neither exists.
+ */
+export function shipPolicyOfTrace(events: readonly BrainTraceEvent[], hold: PublishHold | null): ChatDiagnosticsData['shipPolicy'] {
+  let recorded: { mode: unknown; source: unknown } | null = null;
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i];
+    if (e?.label === 'run.ship_policy' && e.args && typeof e.args === 'object') {
+      recorded = e.args as { mode: unknown; source: unknown };
+      break;
+    }
+  }
+  const base = recorded && isShipMode(recorded.mode) && typeof recorded.source === 'string' && SHIP_SOURCES.has(recorded.source)
+    ? shipPolicyOf(recorded.mode, recorded.source as ShipPolicySource)
+    : null;
+  if (!base && !hold) return null;
+  // No recorded run: a hold alone narrows "something" — the default — to uncommitted.
+  const p = narrowByHold(base ?? shipPolicyOf('commit', 'default'), hold);
+  return { mode: p.mode, source: p.source, ...(p.hold ? { hold: p.hold } : {}) };
+}
+
 /**
  * Which account served this chat's turns, across EVERY turn (not just the last):
  * the one account when they all agree, `mixed` when they differ, null when no turn
@@ -258,6 +284,10 @@ export async function gatherChatDiagnostics(src: ChatDiagnosticsSources): Promis
     msgs.filter((m) => m.role === 'user' && typeof m.content === 'string' && m.content.trim())
         .map((m) => ({ text: m.content!.trim() })),
   );
+  // The SHIP POLICY (PRD 48), read from the run record: the newest `run.ship_policy` step the
+  // preamble wrote. A hold in force narrows it, exactly as the preamble does; with no recorded
+  // run, a hold alone still reports `leave_uncommitted` from `chat_hold`.
+  const shipPolicy = shipPolicyOfTrace(merged, publishHold);
 
   // A pending question is the one state that makes a FINISHED run still need the human:
   // the run settled terminally on an `ask_user`, so the chat is blocked on a decision
@@ -312,7 +342,7 @@ export async function gatherChatDiagnostics(src: ChatDiagnosticsSources): Promis
     role: src.role ?? null,
     evermind: toEvermind(head),
     lastLearn,
-    publishHold,
+    shipPolicy,
     pendingQuestions,
     agents: agents.map((a) => ({
       agentRef: a.agentRef,

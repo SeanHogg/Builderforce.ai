@@ -17,6 +17,7 @@ import { ModelSelect } from '@/components/llm/ModelSelect';
 import { RoleGate } from '@/components/RoleGate';
 import { useTaskRunner, defaultRunTarget } from './useTaskRunner';
 import { TicketRepoSet } from './TicketRepoSet';
+import { MergeGrantToggle, mergeGrantOf, type MergeGrantValue } from './MergeGrantToggle';
 
 /**
  * Run-with-agent control — replaces the old "Send to AgentHost" button. A button
@@ -45,6 +46,7 @@ export interface RunAgentControlProps {
 
 export function RunAgentControl({ task, agentHosts, onRan, onAwaitingApproval }: RunAgentControlProps) {
   const t = useTranslations('runAgentControl');
+  const tGrant = useTranslations('mergeGrant');
   // target encodes the run target: '' = auto, 'host:<id>' = a self-hosted
   // executor, 'cloud:<ref>' = run AS a cloud agent (its model via an executor).
   // Default to the ticket's assignee so the control reflects who actually runs it.
@@ -58,13 +60,19 @@ export function RunAgentControl({ task, agentHosts, onRan, onAwaitingApproval }:
   const { canChooseModel } = useLlmModels();
   // Single shared submit path (also powers the one-click RunTaskButton). It owns
   // the run state + cloud-agent pool; we drive it with the picker's target/model.
-  const { run, running, error, cloudAgents } = useTaskRunner({ task, onRan, onAwaitingApproval });
+  const { run, running, error, cloudAgents, mergeGrantFailed } = useTaskRunner({ task, onRan, onAwaitingApproval });
   const [repoStatus, setRepoStatus] = useState<TaskRepoStatus | null>(null);
   // Run-time repo selection. '' = Auto (default/inferred); a repo id pins this run
   // (and its finalize/CI/PRD) to that repo. Defaults to the task's existing pin so
   // reopening reflects the bound repo — fixes "agent ran against the wrong repo".
   const [repos, setRepos] = useState<ProjectRepository[]>([]);
   const [repoId, setRepoId] = useState<string>(task.explicitRepoId ?? '');
+  // PRD 48 §4.6 — "Merge into main when done" for THIS run, with its required reason.
+  const [mergeGrant, setMergeGrant] = useState<MergeGrantValue>({ enabled: false, reason: '' });
+  // A grant is for a CLOUD run only (the server refuses one aimed at an on-prem host or "auto").
+  const targetIsCloud = target.startsWith('cloud:');
+  const grantActive = targetIsCloud && mergeGrant.enabled;
+  const grantIncomplete = grantActive && !mergeGrantOf(mergeGrant);
 
   // Surface "the agent can't commit" before a run silently degrades to a text
   // summary. Re-checked when the task changes (binding happens in Source Control).
@@ -158,12 +166,15 @@ export function RunAgentControl({ task, agentHosts, onRan, onAwaitingApproval }:
         <RoleGate capability="runtime.execute" style={{ flexShrink: 0, alignSelf: 'stretch' }}>
           <button
             type="button"
-            onClick={() => run({ target, model, ...(repos.length > 1 ? { repoId } : {}) })}
-            disabled={running}
+            onClick={() => run({
+              target, model, ...(repos.length > 1 ? { repoId } : {}),
+              ...(grantActive && mergeGrantOf(mergeGrant) ? { mergeGrant: mergeGrantOf(mergeGrant) } : {}),
+            })}
+            disabled={running || grantIncomplete}
             style={{
               padding: '7px 16px', fontSize: 13, fontWeight: 600, border: 'none',
-              background: 'var(--coral-bright)', color: 'var(--text-on-accent)', cursor: running ? 'default' : 'pointer',
-              opacity: running ? 0.7 : 1, display: 'flex', alignItems: 'center', gap: 6,
+              background: 'var(--coral-bright)', color: 'var(--text-on-accent)', cursor: running || grantIncomplete ? 'default' : 'pointer',
+              opacity: running || grantIncomplete ? 0.7 : 1, display: 'flex', alignItems: 'center', gap: 6,
               flexShrink: 0, whiteSpace: 'nowrap',
             }}
           >
@@ -174,7 +185,9 @@ export function RunAgentControl({ task, agentHosts, onRan, onAwaitingApproval }:
           </button>
         </RoleGate>
       </div>
+      <MergeGrantToggle value={mergeGrant} onChange={setMergeGrant} disabled={running} cloudTarget={targetIsCloud} />
       {error && <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 6 }}>{error}</div>}
+      {mergeGrantFailed && <div style={{ fontSize: 12, color: 'var(--warning)', marginTop: 6 }}>{tGrant('recordFailed')}</div>}
       {/* MULTI-REPO SPANNING: the picker above pins the ONE repo a run resolves to;
           this binds the SET a run may span (branch + PR per repo that gets code).
           Self-hiding when the project has fewer than two repos. */}

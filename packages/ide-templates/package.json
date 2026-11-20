@@ -3,9 +3,16 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "The IDE starter scaffolds (vanilla Vite + React Native/react-native-web) and the modality→scaffold registry, shared by the API Worker that seeds them into R2, the legacy worker's file router, and the Next app that mounts them as the Run fallback. Source-only: every consumer aliases the bare specifier straight at src/index.ts.",
+  "description": "The IDE starter scaffolds (vanilla Vite + React Native/react-native-web), the modality→scaffold registry, and the starter-kit parts + composeKit (frontend × backend × extras → files and one builderforce.json v1 manifest), shared by the API Worker that seeds them into R2, the legacy worker's file router, and the Next app that mounts them as the Run fallback. Source-only: every consumer aliases the bare specifier straight at src/index.ts; the starter kits are the ./kits subpath (src/kits/index.ts), kept out of the root so the Workers that import the scaffolds never bundle them.",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./kits": "./src/kits/index.ts"
   },
-  "types": "./src/index.ts"
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "vitest run --passWithNoTests"
+  },
+  "devDependencies": {
+    "vitest": "^4.0.18"
+  }
 }

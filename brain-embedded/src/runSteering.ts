@@ -48,7 +48,7 @@ export interface RunSteerMessage extends Omit<QueuedSteerMessage, 'attachments'>
 export function queueRunSteering(
   runKey: number,
   text: string,
-  opts?: { interrupt?: boolean; attachments?: ChatInputAttachment[]; fromPerson?: boolean; persist?: boolean; saved?: boolean; eventKey?: string },
+  opts?: { interrupt?: boolean; attachments?: ChatInputAttachment[]; fromPerson?: boolean; persist?: boolean; saved?: boolean; eventKey?: string; childReport?: RunSteerMessage['childReport'] },
 ): void {
   // The queue keys the words the run will save (`persist`) as it takes them in; a requeue passes the key it already has.
   // (A steer with no key - an owner's, a child's - is keyed by the continuation before its first save attempt.)

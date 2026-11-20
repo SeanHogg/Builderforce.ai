@@ -1,6 +1,6 @@
 /**
- * cloudFinalize — landing a finished cloud run: the pull request, the optional
- * auto-merge, the run summary and the ticket stamps. Moved verbatim out of
+ * cloudFinalize — landing a finished cloud run: the pull request, the run summary and
+ * the ticket stamps. The run never merges (PRD 48 §4.3): the PR merge sweep does. Moved verbatim out of
  * `cloudAgentEngine.ts` (PRD 35 WS3): this is HOST work above the one agent (the board
  * and governance layer, §6.9), not run policy. Shared by the cloud adapter and the
  * Container executor's `container-op` endpoint.
@@ -10,8 +10,6 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { and, eq } from 'drizzle-orm';
 import { recordRunReflection } from '../skills/skillReflection';
 import { type TicketRepoContext } from '../repos/commitFileAsPendingChange';
-import { mergeBranchToBase, cloudAutoMergeRequiresGreen, cloudAutoMergeEnabled } from '../repos/mergeBranchToBase';
-import { markPullRequestMergedById } from '../repos/recordPullRequestRow';
 import { recordTaskPullRequest } from '../repos/recordTaskPullRequest';
 import { publishAgentRunVerdict } from '../checks/publishTaskVerdict';
 import { postRepoPrComment } from '../repos/postPrComment';
@@ -33,17 +31,17 @@ import { revokeRunPrincipal } from '../agentIdentity/agentRunIdentity';
 import { inspectOutboundContent } from '../trust/trustService';
 import { type Db } from '../../infrastructure/database/connection';
 import { executions, tasks } from '../../infrastructure/database/schema';
-import { gateRunPullRequest, recordMergeHeld } from './cloudFinalizeSecurity';
+import { gateRunPullRequest } from './cloudFinalizeSecurity';
+import { bindGrantToThisRunsPr, voidMergeGrant } from './mergeGrants';
 
 /**
  * Land a finished cloud run: open a PR (recording it for the in-product approval
- * flow), optionally auto-merge, and emit the `pr_opened` / `merge_to_main` timeline
- * events. The single finalize implementation, shared by the in-worker tool loop
+ * flow and the merge sweep), run its security step, and emit the `pr_opened` timeline
+ * event. The single finalize implementation, shared by the in-worker tool loop
  * ({@link runCloudToolLoop}) and the long-lived Container executor (which runs the
  * loop in its own process and calls this via the internal container-op endpoint).
- * By default the run STOPS with the PR open — nothing merges to the deploy branch
- * until a human approves. When `CLOUD_AUTOMERGE_ENABLED` is on, shipping waits for
- * green CI by default (`CLOUD_AUTOMERGE_REQUIRE_GREEN`; opt out with 0/false/off).
+ * The run ALWAYS stops with the PR open: whether and when it merges is the project's
+ * setting, applied by `repos/prMergeSweep.ts` — never an env flag (PRD 48 §4.3).
  * Never throws.
  */
 export async function finalizeCloudRun(
@@ -73,11 +71,12 @@ export async function finalizeCloudRun(
   // after its terminal transition — CloudRunnerDO.cleanup, and the container / GitHub
   // Actions `finalize` op.
   let prOpened = false;
-  let merged = false;
   let mergeNote = '';
   // When files were produced but no PR ends up open, capture WHY so the run's
   // summary / timeline explains it instead of silently showing no Pull Request tab.
   let noPrReason = '';
+  // Whether a person's merge grant on this run was bound to the PR it opened (PRD 48 §4.6).
+  let grantBound = false;
   // The PR this finalize opened, hoisted so the rollback snapshot below can record
   // exactly what a later revert would have to close.
   let openedPrNumber: number | null = null;
@@ -97,8 +96,6 @@ export async function finalizeCloudRun(
     const pr = opened;
     prOpened = pr.ok;
     if (!pr.ok) noPrReason = pr.reason;
-
-    const autoMerge = cloudAutoMergeEnabled(env);
 
     // Record the PR row so the in-product Pull Request tab / approval flow can act on it. It is
     // ALWAYS recorded 'open': 'merged' is stamped only once a merge has actually happened. Keep the
@@ -125,56 +122,27 @@ export async function finalizeCloudRun(
       .where(eq(tasks.id, taskRow.id))
       .catch((error) => reportCaughtError(error, { source: "application/runtime/cloudFinalize.ts", operation: "finalizeCloudRun", context: { logMessage: '[cloud-finalize] task PR metadata update failed', details: { tenantId, executionId, taskId: taskRow.id, error } } }));
 
-    // SECURITY STEP (PRD 08 §10): scan + review the PR and read the merge verdict BEFORE any merge below
-    // (see cloudFinalizeSecurity: fails closed, so `pr.ok === false` can never reach `mergeBranchToBase`).
-    const securityVerdict = await gateRunPullRequest(env, db, { tenantId, cloudAgentRef, executionId, agentLabel, repoCtx, pr, prRowId });
+    // SECURITY STEP (PRD 08 §10): scan + review the PR now, so the verdict the merge sweep reads is
+    // already recorded for this head (see cloudFinalizeSecurity: fails closed on a PR that is not recorded).
+    const verdict = await gateRunPullRequest(env, db, { tenantId, cloudAgentRef, executionId, agentLabel, repoCtx, pr, prRowId });
 
-    if (!autoMerge) {
-      // Approval-gated default: open the PR and stop. A human merges in-product.
-      mergeNote = prOpened ? ` — opened a PR for review (awaiting approval before merge to \`${repoCtx.base}\`)` : '';
-      merged = false;
-      await recordCloudToolEvent(db, {
-        tenantId, cloudAgentRef, executionId,
-        toolName: 'pr_opened', category: 'tool',
-        detail: { base: repoCtx.base, head: repoCtx.branch },
-        result: prOpened ? `opened PR #${pr.ok ? pr.number : ''} — awaiting human approval` : `pr failed: ${pr.ok ? '' : pr.reason}`.slice(0, 300),
-      });
-      if (prOpened) await recordTypedExecutionClaim(db, { tenantId, executionId, kind: 'delivery', statement: `Opened pull request #${pr.ok ? pr.number : ''} for human review.` });
-    } else if (cloudAutoMergeRequiresGreen(env)) {
-      // Auto-merge enabled, gated on green CI: a successful CI webhook merges later.
-      mergeNote = ` — pending CI (will merge to \`${repoCtx.base}\` on green)`;
-      merged = true; // not a merge failure; the gate intentionally defers it
-    } else if (!securityVerdict.allow) {
-      // Auto-merge enabled, immediate - but an open BLOCKER security finding holds it. The PR stays
-      // open (recorded 'open' above) for a human to fix, triage, or explicitly approve in-product.
-      mergeNote = await recordMergeHeld(db, { tenantId, cloudAgentRef, executionId, repoCtx }, securityVerdict);
-      merged = false;
-    } else {
-      // Auto-merge enabled, immediate: ship to the deploy branch now.
-      const m = await mergeBranchToBase({
-        provider: repoCtx.provider, host: repoCtx.host, owner: repoCtx.owner, repo: repoCtx.repo,
-        token: repoCtx.token, base: repoCtx.base, head: repoCtx.branch,
-        message: `Task #${taskRow.id}: ${taskRow.title} (BuilderForce auto-merge by ${agentLabel})`,
-        // Merge exactly the commit the gate verified; a head that moved since is a non-merge (`head_moved`).
-        expectedHeadSha: securityVerdict.headSha,
-      });
-      merged = m.ok;
-      // Stamp the merge SHA so the post-merge deploy-branch build correlates back
-      // to this task (build validation + auto-fix loop).
-      if (m.ok && prRowId) {
-        await markPullRequestMergedById(db, prRowId, tenantId, { mergeSha: m.sha ?? null, env })
-          .catch((error) => reportCaughtError(error, { source: "application/runtime/cloudFinalize.ts", operation: "finalizeCloudRun", context: { logMessage: '[cloud-finalize] merged PR persistence failed', details: { tenantId, executionId, prRowId, error } } }));
-      }
-      mergeNote = m.ok
-        ? ` and auto-merged to \`${repoCtx.base}\` (deploy triggered)`
-        : ` — auto-merge to \`${repoCtx.base}\` failed: ${m.reason}`;
-      await recordCloudToolEvent(db, {
-        tenantId, cloudAgentRef, executionId,
-        toolName: 'merge_to_main', category: 'tool',
-        detail: { base: repoCtx.base, head: repoCtx.branch },
-        result: m.ok ? `merged${m.merged ? '' : ' (already up to date)'}${m.sha ? ` · ${m.sha.slice(0, 7)}` : ''}` : `failed: ${m.reason}`.slice(0, 300),
-      });
+    // PRD 48 §4.6 — a person's merge grant on THIS run binds to the PR this run opened, pinned to
+    // the head the security step just judged (resolved from the provider when the step had none).
+    if (prOpened && prRowId) {
+      grantBound = await bindGrantToThisRunsPr(env, db, { tenantId, executionId, prRowId, headSha: verdict.headSha });
     }
+
+    // THE RUN NEVER MERGES (PRD 48 §4.3). It opens its PR and ends; the PR merge sweep
+    // (`repos/prMergeSweep.ts`) is the single merge writer and merges by the PROJECT's settings
+    // (`allowAutoMerge`, `prMergePolicy`, `requireSignoffToComplete`, the security verdict).
+    mergeNote = prOpened ? ` — opened a PR into \`${repoCtx.base}\` (the project's merge settings decide whether and when it merges)` : '';
+    await recordCloudToolEvent(db, {
+      tenantId, cloudAgentRef, executionId,
+      toolName: 'pr_opened', category: 'tool',
+      detail: { base: repoCtx.base, head: repoCtx.branch },
+      result: prOpened ? `opened PR #${pr.ok ? pr.number : ''} — merge follows the project's settings` : `pr failed: ${pr.ok ? '' : pr.reason}`.slice(0, 300),
+    });
+    if (prOpened) await recordTypedExecutionClaim(db, { tenantId, executionId, kind: 'delivery', statement: `Opened pull request #${pr.ok ? pr.number : ''}; the project's merge settings decide the merge.` });
   } else if (!repoCtx && writtenPaths.size > 0 && !cancelled) {
     // The agent produced changes but there is no repo to open a PR against —
     // record why (no linked repo / unusable credential) so it's visible in the
@@ -271,9 +239,18 @@ ${ciVerified
     (writtenPaths.size > 0
       ? `Committed ${writtenPaths.size} file(s)${repoCtx?.branch ? ` to \`${repoCtx.branch}\`` : ''}${prOpened ? ', opened a PR' : ''}${mergeNote}${noPrNote}.${spanningNote}`
       : cancelled ? RUN_CANCELLED_NOTICE : '(no output produced)');
-  // Only a FAILED auto-merge breaks the "ship it" contract. Approval-gated runs end
-  // with the PR open by design, so an unmerged PR there is success, not failure.
-  const autoMergeFailed = prOpened && cloudAutoMergeEnabled(env) && !merged;
+  // THE RUN FAILED TO DELIVER: it wrote to a bound repo but its pull request did not open. The PR
+  // IS the deliverable (the run never merges), so this is a failed run carrying the reason — not a
+  // success with a footnote. A LOST claim records no reason (another path is opening the PR) and
+  // is not a failure.
+  const prFailed = !!repoCtx && writtenPaths.size > 0 && !cancelled && !prOpened && noPrReason !== '';
+  const prFailedNote = prFailed && finalOutput ? `\n\n⚠ No pull request was opened: ${noPrReason}` : '';
+  // A merge grant on a run that ends without its own PR (cancelled, nothing written, the open failed,
+  // or another path holds the claim) can never apply: void it, so nothing else rides on it.
+  if (!grantBound) {
+    await voidMergeGrant(db, { tenantId, executionId, reason: cancelled ? 'cancelled' : 'no_pull_request' })
+      .catch((error) => reportCaughtError(error, { source: 'application/runtime/cloudFinalize.ts', operation: 'finalizeCloudRun.voidMergeGrant', context: { tenantId, executionId } }));
+  }
   // Mark the result unverified whenever a PR was opened: nothing was built or tested
   // in-agent, so the summary's claims are not authoritative — CI on the PR is.
   const unverifiedNote = prOpened && ciVerified
@@ -290,10 +267,10 @@ ${ciVerified
   if (repoCtx?.projectId && !cancelled && output.trim().length >= 20) {
     // Thread the task title as the teacher prompt so a pinned frontier teacher learns
     // (task → ideal answer), not just a refinement of this run's output. Weight the
-    // contribution by run QUALITY (merged > opened > wrote-files > no-op) instead of
-    // the old text-length proxy, so a merged run teaches harder than a failed one.
+    // contribution by run QUALITY (opened > wrote-files > no-op) instead of the old
+    // text-length proxy. A run never merges (PRD 48): `scoreRunOutcome` grades the merge.
     const learnWeight = finalizeLearnWeight({
-      merged, prOpened, autoMergeFailed, producedChanges: writtenPaths.size > 0,
+      prOpened, producedChanges: writtenPaths.size > 0,
     });
     // Fan out to EVERY live Evermind this project targets (its own head + the IDE builds
     // grouped under it), not just the one projectId — the same resolver the chat learn
@@ -314,11 +291,11 @@ ${ciVerified
   if (writtenPaths.size > 0 || prOpened) {
     await publishAgentRunVerdict(env, db, tenantId, taskRow.id, {
       executionId,
-      outcome: cancelled ? 'cancelled' : autoMergeFailed ? 'failed' : 'completed',
+      outcome: cancelled ? 'cancelled' : prFailed ? 'failed' : 'completed',
       // Reuse the run summary verbatim, including the unverified caveat — the
       // whole point of the check is that a reviewer sees what the agent claims
       // AND that it was not verified in-agent.
-      summary: output + unverifiedNote,
+      summary: output + unverifiedNote + prFailedNote,
       filesChanged: [...writtenPaths],
       appBaseUrl: resolveAppBaseUrl(env),
     }).catch((error) => reportCaughtError(error, { source: "application/runtime/cloudFinalize.ts", operation: "finalizeCloudRun", context: { logMessage: '[cloud-finalize] GitHub check publication failed', details: { tenantId, executionId, prNumber: openedPrNumber, error } } }));
@@ -367,7 +344,7 @@ ${ciVerified
   // already takes of a cancellation, and of a platform eviction.
   if (!cancelled) {
     await db.update(executions)
-      .set({ produced: runProducedOutput({ merged, prOpened, producedChanges: writtenPaths.size > 0 }) })
+      .set({ produced: runProducedOutput({ prOpened, producedChanges: writtenPaths.size > 0 }) })
       .where(eq(executions.id, executionId))
       .catch((error) => reportCaughtError(error, { source: 'application/runtime/cloudFinalize.ts', operation: 'finalizeCloudRun', context: { logMessage: '[cloud-finalize] produced-stamp failed — this run will not count toward the autonomy breaker', details: { tenantId, executionId, taskId: taskRow.id, error } } }));
   }
@@ -378,7 +355,7 @@ ${ciVerified
   // it from its own trace. Never throws.
   await recordRunReflection(env, db, {
     tenantId, ...(cloudAgentRef ? { cloudAgentRef } : {}), executionId, taskRow, agentLabel,
-    projectId: repoCtx?.projectId ?? null, merged, prOpened, ciVerified, writtenPaths: [...writtenPaths],
+    projectId: repoCtx?.projectId ?? null, prOpened, ciVerified, writtenPaths: [...writtenPaths],
   });
 
   // The run is terminal: its callback principal stops authenticating NOW, not at its
@@ -387,5 +364,7 @@ ${ciVerified
   await revokeRunPrincipal(db, tenantId, executionId)
     .catch((error) => reportCaughtError(error, { source: 'application/runtime/cloudFinalize.ts', operation: 'finalizeCloudRun', context: { logMessage: '[cloud-finalize] run principal revocation failed', details: { tenantId, executionId, error } } }));
 
-  return { ok: !autoMergeFailed, output: output + unverifiedNote };
+  // The run opens its PR and ends: an unmerged PR is the designed outcome, never a failure — but
+  // a PR that did not open after the run wrote code is (`prFailed`, reason in the output).
+  return { ok: !prFailed, output: output + unverifiedNote + prFailedNote };
 }

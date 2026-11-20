@@ -45,49 +45,20 @@ import {
   webGpuSupport
 } from "./chunk-FRBQT4HO.mjs";
 import {
-  ASK_USER_TOOL,
-  ASK_USER_TOOL_SPEC,
-  DEFAULT_TOOL_FAILURE_STREAK,
-  MALFORMED_CALL_RESULT,
-  MID_TURN_META_KEY,
-  TRUNCATED_CALL_RESULT,
-  answerTextOf,
-  asToolArgs,
-  askUserAnchorId,
-  askUserBlock,
   bounded,
   budget,
-  canonicalReasoningText,
   clearPendingWords,
-  coerceAskUserPayload,
   continuationLimits,
-  detectRepetitionLoop,
   forgetPendingWords,
-  isMidTurnMetadata,
-  liftProseAskUser,
-  malformedCallLabel,
-  malformedCallOutcome,
   markPendingWordsRead,
-  parseAskUser,
-  parseToolArgs,
   registerPendingWordsReplay,
   rememberPendingWords,
   replayPendingWords,
-  replayTextOf,
-  runAgentLoop,
-  selectPendingAskUser,
-  serializeAskUser,
   setPendingWordsOwner,
   settledWithin,
-  splitVendorReasoning,
   steerMetadata,
-  stepRow,
-  stripAskUser,
-  stripReasoningTagsFromText,
-  thoughtTextOf,
-  trimRepetitionLoop,
   within
-} from "./chunk-6LA2S4K3.mjs";
+} from "./chunk-EU2CIM43.mjs";
 import {
   BrainRequestError,
   LOCAL_ENGINE_FAILURE_CODES,
@@ -111,10 +82,13 @@ import {
   BACK_TO_BACK_AT,
   BASE_BRANCHES,
   BOUND_ONLY_VERSION,
+  CHAT_STAMPED_CREATE_TOOLS,
+  CHAT_TICKET_LIST_TOOL,
   CODE_CHANGE_TOOLS,
   CONTROL_TOOL_NAMES,
   DEFAULT_CHAT_ACTIVITY_LABELS,
   DEFAULT_EVIDENCE_POLICY,
+  DEFAULT_SHIP_POLICY,
   FAILURE_HARD_AT,
   FAILURE_NUDGE_AT,
   FailureTally,
@@ -128,9 +102,9 @@ import {
   MAX_BLOCKING_REVIEW_ROUNDS,
   MAX_MODEL_FAILOVERS,
   MAX_TOOL_RESULT_CHARS,
+  NOT_STARTED_TASK_STATUSES,
   PREVIEW_REVIEW_TOOL,
   PROVENANCE_META_KEY,
-  PUBLISH_TOOLS,
   ProgressDetector,
   READS_BEFORE_DELEGATION_NUDGE,
   READ_FILE_RESULT_CHARS,
@@ -151,6 +125,7 @@ import {
   STOPPED_TURN_STEP,
   STUDIO_WORKSPACE_TOOLS,
   SUBAGENT_TOOLS,
+  TICKET_RECORDING_TOOLS,
   TOOL_SEARCH_SCHEMA,
   TOOL_SEARCH_TOOL,
   UNBACKED_TICKET_CLAIM_NOTICE,
@@ -181,6 +156,7 @@ import {
   byoUnresolvedInTrace,
   byoUnresolvedSummary,
   canChangeCodeHere,
+  canListChatTickets,
   canReviewInPreview,
   canRunInParallel,
   canShipHere,
@@ -188,16 +164,19 @@ import {
   catalogToolNamesMentionedIn,
   changesBalance,
   chatActivityText,
+  chatWorkLinkingDirective,
   chooseStallFailover,
   claimsMissingToolData,
   classifyTool,
-  commandOf,
+  codeChangeFile,
+  codeChangesOf,
   computeBrainDiagnostics,
   computeRunProgress,
   contextFoldActivity,
   continuationDirective,
   createComposingActivity,
   createEvidenceLedger,
+  createLinkedToChat,
   defaultInferenceMode,
   defineRecordIndex,
   describeBracketDelta,
@@ -226,7 +205,6 @@ import {
   formatRunProgress,
   formatStaffingSummary,
   gatewayRoutingArgs,
-  gitCommandPattern,
   handOffModeSentence,
   hasEditIntent,
   hostOf,
@@ -237,6 +215,7 @@ import {
   isConnectedAccountUnused,
   isContinuationDirective,
   isCostLeverOn,
+  isDelegationTool,
   isDispatchTool,
   isEvermindModel,
   isExhaustedStall,
@@ -248,20 +227,24 @@ import {
   isMalformedToolCall,
   isModelReply,
   isModelRole,
+  isMutatingPlatformTool,
   isMutatingShellCall,
   isMutatingTool,
   isMutationTool,
   isNotARepo,
+  isOpenLinkedStatus,
   isOwnRecord,
   isReadFileResult,
+  isReadOnlyPlatformTool,
   isReadOnlyShellCall,
   isRepoPublishTool,
   isRepoStateReadTool,
-  isScratchScriptPath,
+  isShipMode,
   isStepMessage,
   isStoppedBeforeStart,
   isStoppedTurn,
   isTestPath,
+  isTicketRecordingTool,
   isTicketWriteTool,
   isTruncatedTurn,
   isUnscopedMutationTool,
@@ -270,6 +253,11 @@ import {
   lastServedModel,
   lexicalStems,
   limbicTraits,
+  linkedTaskRows,
+  linkedTicketsReviewedComplete,
+  linkedTicketsStillOpen,
+  linkedTicketsToAdvance,
+  linkedTicketsToComplete,
   localToolsIn,
   memoryReplayable,
   memoryToolsIn,
@@ -281,6 +269,7 @@ import {
   modelTurnLog,
   modelsUsedInTrace,
   narratedUnadvertisedInTrace,
+  narrowByHold,
   newLocalRecord,
   nextFallbackModel,
   normalizeEvidencePath,
@@ -301,9 +290,11 @@ import {
   policyGateCallKey,
   progressAdvice,
   progressDuration,
-  progressPauseQuestion,
+  progressSteerNote,
   progressTraceStep,
   promisesUnfinishedWork,
+  publishAllowed,
+  publishVerbOf,
   queueImport,
   rankLexically,
   recordShellFileRead,
@@ -325,6 +316,10 @@ import {
   shapeToolResult,
   shellPrintAsRead,
   shellPublishHint,
+  shipDirective,
+  shipNudge,
+  shipPolicyOf,
+  shipSourceLabel,
   shippedToBaseBranch,
   shortenTarget,
   shouldRecoverStalledTurn,
@@ -340,6 +335,7 @@ import {
   stallRecoveryToolChoice,
   stallShape,
   stallUnrecoveredInTrace,
+  stampRunChat,
   stepSig,
   stopIntent,
   stoppedBeforeStartRow,
@@ -366,7 +362,44 @@ import {
   withAdvisory,
   withProvenanceMetadata,
   workFiledNotStaffedVerdict
-} from "./chunk-JAACVKV7.mjs";
+} from "./chunk-GJZU3WFY.mjs";
+import {
+  ASK_USER_TOOL,
+  ASK_USER_TOOL_SPEC,
+  DEFAULT_TOOL_FAILURE_STREAK,
+  MALFORMED_CALL_RESULT,
+  MID_TURN_META_KEY,
+  TRUNCATED_CALL_RESULT,
+  answerTextOf,
+  asToolArgs,
+  askUserAnchorId,
+  askUserBlock,
+  canonicalReasoningText,
+  coerceAskUserPayload,
+  detectRepetitionLoop,
+  isMidTurnMetadata,
+  liftProseAskUser,
+  malformedCallLabel,
+  malformedCallOutcome,
+  parseAskUser,
+  parseToolArgs,
+  replayTextOf,
+  runAgentLoop,
+  selectPendingAskUser,
+  serializeAskUser,
+  splitVendorReasoning,
+  stepRow,
+  stripAskUser,
+  stripReasoningTagsFromText,
+  thoughtTextOf,
+  trimRepetitionLoop
+} from "./chunk-PK5ZQFTV.mjs";
+import {
+  HELP_COMMAND_ID,
+  createComposerCommandRegistry,
+  describeComposerProblem,
+  parseComposerInput
+} from "./chunk-3H4JVERX.mjs";
 
 // src/config.tsx
 import { createContext, useContext, useEffect, useMemo } from "react";
@@ -2502,6 +2535,9 @@ var ACCOUNT_REQUIRED_CANVAS_TOOLS = [
   "canvas_record_convertible",
   "canvas_record_equity_event",
   "canvas_model_round",
+  // Who gets what at an exit. Writes only the scenario INPUTS onto an `exitScenario`
+  // card; the payouts are computed by POST /api/equity/waterfall and never stored.
+  "canvas_model_exit",
   // Re-reads the domain metric series a `liveMetric` object was bound to. This is the
   // LIVE half the finance and investor answers never had: without it every runway, burn
   // and pipeline number on a board is a snapshot with an as-of date and no way to ask
@@ -3439,6 +3475,13 @@ var FOUNDER_OBJECT_KINDS = [
   // reachable — which is what turns "potential customers" into a list with a route.
   "customerSegment",
   "gtmPlan",
+  // HOW BIG THE MARKET IS, BOTH WAYS. Bottom-up (customers × ARPA) beside top-down (a cited
+  // market figure × a share), with TAM/SAM/SOM and the triangulation gap DERIVED, never
+  // stored — see `marketSize` in `founderObjects.ts` (PRD 25 §5.5).
+  "marketSize",
+  // WHO TAKES WHAT AT AN EXIT. Inputs only (`exitValue`, `debt`, `vesting`); the payouts are
+  // derived from the board's cap table through the waterfall and never stored (PRD 25 §6.3).
+  "exitScenario",
   // HOW WE WIN A NAMED RIVAL'S CUSTOMER. Deliberately its own kind rather than a field
   // on `competitor`: the analysis of a rival and the plan to take their customers have
   // different authors, different review cycles, and different lifetimes.
@@ -10140,194 +10183,6 @@ function useOptionalBrainContext() {
 // src/useBrainChats.ts
 import { useCallback as useCallback4, useEffect as useEffect6, useMemo as useMemo5, useRef as useRef4, useState as useState5 } from "react";
 
-// src/chatWorkLinking.ts
-var TICKET_RECORDING_TOOLS = /* @__PURE__ */ new Set([
-  "builtin_tickets_from_delta",
-  "builtin_chats_link_ticket",
-  "builtin_reviews_record",
-  // The editor's device-local create: it IS the recording — it links its chat LOCALLY in
-  // the create's own transaction, and the link syncs to the account with the ticket.
-  LOCAL_TICKET_CREATE_TOOL
-]);
-var CHAT_STAMPED_CREATE_TOOLS = /* @__PURE__ */ new Set([
-  "builtin_tasks_create",
-  "builtin_objectives_create",
-  "builtin_specs_create",
-  "builtin_portfolios_create",
-  "builtin_initiatives_create",
-  // Team ceremonies: a retro or estimation session set up FROM a conversation is that
-  // conversation's outcome, so it links like any other item the agent creates.
-  "builtin_retro_create",
-  "builtin_poker_create_session"
-]);
-function stampRunChat(toolName, args, serverChatId) {
-  if (!CHAT_STAMPED_CREATE_TOOLS.has(toolName)) return;
-  if (!args || typeof args !== "object" || Array.isArray(args)) return;
-  const bag = args;
-  if (serverChatId != null) bag.chatId = serverChatId;
-  else delete bag.chatId;
-}
-function createLinkedToChat(toolName, result) {
-  if (!CHAT_STAMPED_CREATE_TOOLS.has(toolName)) return false;
-  let row = result;
-  if (typeof row === "string") {
-    try {
-      row = JSON.parse(row);
-    } catch {
-      return false;
-    }
-  }
-  if (!row || typeof row !== "object") return false;
-  const link = row.chatLink;
-  return !!link && typeof link === "object" && link.linked === true;
-}
-function isTicketRecordingTool(name) {
-  return TICKET_RECORDING_TOOLS.has(name);
-}
-var READ_ONLY_PLATFORM_SUFFIXES = [
-  "_list",
-  "_get",
-  "_search",
-  "_recall",
-  "_read",
-  "_assignees",
-  "_audit",
-  "_trace",
-  "_tree",
-  "_rollup",
-  "_runs",
-  "_graph",
-  "_triggers",
-  "_metrics",
-  "_usage",
-  "_query",
-  "_health",
-  "_models",
-  "_providers",
-  "_proposals",
-  "_ticket_lineage",
-  "_get_messages",
-  "_run_targets",
-  "_activity_calendar",
-  "_check_key",
-  "_browse_public",
-  "_tool_audit",
-  "_task_file_changes",
-  "_list_active",
-  "_list_agents",
-  "_list_all",
-  "_list_for_task",
-  "_list_mine",
-  "_list_recent",
-  "_list_tickets",
-  "_list_sessions",
-  "_list_users",
-  "_list_templates",
-  "_list_purchased",
-  "_list_directories",
-  "_list_error_groups",
-  "_list_pull_requests",
-  "_get_session",
-  "_get_stats",
-  "_get_user",
-  "_get_config",
-  "_get_access",
-  "_get_error_group",
-  // The BOARD-SURVEY reads. All three are `mutates: false` and all three are expensive —
-  // `tickets.pending_changes` compares every ticket branch against its base, and the
-  // stall census walks every non-terminal ticket. Their absence here is what let VS Code
-  // chat #115 (2026-09-20) call `builtin_tickets_pending_changes` twice with BYTE-
-  // IDENTICAL arguments, six seconds and 19 KB apiece, for an answer already in its
-  // context. Safe to dedupe only because a `git_push` / `open_pull_request` now forgets
-  // platform reads (see `REPO_PUBLISH_TOOLS`) — these read branch state, so a run that
-  // pushes between two surveys must see the second one for real.
-  "_pending_changes",
-  "_stalled_tickets",
-  "_census"
-];
-function isReadOnlyPlatformTool(name) {
-  if (!name.startsWith("builtin_")) return false;
-  return READ_ONLY_PLATFORM_SUFFIXES.some((s) => name.endsWith(s));
-}
-function isMutatingPlatformTool(name) {
-  return name.startsWith("builtin_") && !isReadOnlyPlatformTool(name);
-}
-var NOT_STARTED_TASK_STATUSES = /* @__PURE__ */ new Set(["backlog", "todo", "ready"]);
-var TASK_TIER_KINDS = /* @__PURE__ */ new Set(["task", "epic", "gap"]);
-function linkedTicketsToAdvance(listResult) {
-  return selectLinkedTasks(listResult, NOT_STARTED_TASK_STATUSES);
-}
-function selectLinkedTasks(listResult, statuses) {
-  let rows = listResult;
-  if (typeof rows === "string") {
-    try {
-      rows = JSON.parse(rows);
-    } catch {
-      return [];
-    }
-  }
-  if (!Array.isArray(rows)) return [];
-  const out = [];
-  for (const r of rows) {
-    if (!r || typeof r !== "object") continue;
-    const row = r;
-    if (typeof row.kind !== "string" || !TASK_TIER_KINDS.has(row.kind)) continue;
-    if (row.exists === false) continue;
-    const { syncId } = entityIdsOf({ syncId: row.syncId, id: row.ref });
-    if (syncId == null) continue;
-    const ref = syncIdText(syncId);
-    if (typeof row.status !== "string" || !statuses.has(row.status.toLowerCase())) continue;
-    out.push({ kind: row.kind, ref });
-  }
-  return out;
-}
-var SHIPPABLE_TASK_STATUSES = /* @__PURE__ */ new Set(["in_review"]);
-function linkedTicketsToComplete(listResult) {
-  return selectLinkedTasks(listResult, SHIPPABLE_TASK_STATUSES);
-}
-var REVIEWED_TASK_STATUSES = /* @__PURE__ */ new Set(["in_progress", "in_review"]);
-function linkedTicketsReviewedComplete(listResult, reviewedTaskIds) {
-  const reviewed = new Set(reviewedTaskIds.map(String));
-  return selectLinkedTasks(listResult, REVIEWED_TASK_STATUSES).filter((ticket) => reviewed.has(ticket.ref));
-}
-function codeChangeFile(args) {
-  if (args && typeof args === "object" && "path" in args) {
-    const p = args.path;
-    if (typeof p === "string" && p.trim()) return p;
-  }
-  return null;
-}
-function codeChangeFiles(args) {
-  const files = [];
-  const top = codeChangeFile(args);
-  if (top) files.push(top);
-  const edits = args && typeof args === "object" ? args.edits : void 0;
-  if (Array.isArray(edits)) {
-    for (const edit of edits) {
-      const p = codeChangeFile(edit);
-      if (p && !files.includes(p)) files.push(p);
-    }
-  }
-  return files;
-}
-function chatWorkLinkingDirective(chatId, tickets = SERVER_TICKET_TOOLS) {
-  const linked = chatId != null;
-  const createBullet = tickets.local ? `\u2022 When your investigation concludes that something needs to be DONE \u2014 a bug to fix, a missing capability, a follow-up, or a gap you identified \u2014 do not merely describe it. Create the work item with ${tickets.createName} (projectId, title, description, taskType "task", "epic", or "gap"; file an epic first, then its tasks with parentTicketId=<the epic's returned id>; or the matching builtin_*_create for an objective, spec, or roadmap item). It is saved on this device, syncs to the account in the background and is linked to this chat automatically \u2014 do NOT call builtin_chats_link_ticket, and do not create tickets with builtin_tasks_create. The id it returns is a LOCAL id: use it with the ticket-* tools.
-` : `\u2022 When your investigation concludes that something needs to be DONE \u2014 a bug to fix, a missing capability, a follow-up, or a gap you identified \u2014 do not merely describe it. First use builtin_tasks_assignees to select the ticket's accountable Coordinator/Manager, then create the work item (${tickets.createName} with exactly one assignee and taskType "task", "epic", or "gap"; or the matching builtin_*_create for an objective, spec, or roadmap item)${linked ? `. It is linked to this chat automatically \u2014 do not call ${SERVER_TICKET_LINK_TOOL} for an item you just created` : ""}. The ticket assignee COORDINATES delivery; do not assume that person/agent performs every specialist contribution.
-`;
-  const scopingBullet = tickets.kanbanScoping ? `\u2022 Every created ticket must be resource-scoped before you report success: inspect its template manifest with builtin_kanban_participants; infer all additional roles required by its description and acceptance criteria; add each with builtin_kanban_assess_resource; then call builtin_kanban_accountability and explicitly report any unstaffed resource gaps. For an epic or multi-role ticket, call builtin_kanban_materialize_work_items so each required resource has an assigned child work item. Call builtin_kanban_coordinate when work should begin now. Never treat 0 required roles / 0 sign-offs as complete.
-` : `\u2022 A ticket filed with ${tickets.createName} is on this device first. The builtin_kanban_* resource-scoping tools address the account's tickets, so use them on a ticket only once it has synced (they answer plainly when it has not); file the work first and scope, staff and coordinate it afterwards.
-`;
-  const statusTool = tickets.local ? `ticket-move (id=<its local id>, status="in_progress") for a ticket filed here, or builtin_tasks_update (id=<the ticket's ref>, status="in_progress") for one that exists only on the account` : `builtin_tasks_update (id=<the ticket's ref>, status="in_progress")`;
-  return (linked ? `You are working inside Brain chat #${chatId}. Tie the work of this conversation back to it:
-` : `This conversation lives only on this machine \u2014 it has no platform chat to link work to, so never pass a chatId and do not call builtin_chats_link_ticket or builtin_chats_list_tickets. Still make the work visible on the board:
-`) + createBullet + scopingBullet + (linked ? `\u2022 When your turn ADDS or CHANGES code, record it with builtin_tickets_from_delta (chatId=${chatId}, the current projectId, the files you touched, kind improvement|fix|bug, modality "ide"). If builtin_chats_list_tickets shows a ticket already tracking this work, pass its numeric ref as taskId so the delta attaches to it instead of creating a duplicate; otherwise the delta creates a linked ticket that completes when it ships.
-` : `\u2022 When your turn ADDS or CHANGES code, record it with builtin_tickets_from_delta (the current projectId, the files you touched, kind improvement|fix|bug, modality "ide"; no chatId). If a ticket you already know of tracks this work, pass its numeric ref as taskId so the delta attaches to it instead of creating a duplicate.
-`) + `\u2022 Keep the board honest about STATUS. The MOMENT you start actively working an existing ${linked ? "linked " : ""}task/epic/gap \u2014 investigating its fix, editing code for it, or driving it \u2014 move it out of the backlog with ${statusTool}. When the work is finished: if this session can commit and push (it has git_commit and git_push), YOU are the reviewer \u2014 self-review, ship it, and move it to "done" (see the SHIP YOUR OWN CHANGE contract); otherwise advance it to "in_review" for someone who can (or "done" if it needs no review). Never leave a ticket you are actively working sitting in backlog.` + (linked ? `
-\u2022 Call builtin_chats_list_tickets (chatId=${chatId}) to see what is already linked \u2014 both to AVOID creating a duplicate and to know which linked tickets need their status advanced. Never end a turn having identified actionable work or changed code without it being a ticket linked to this chat whose status reflects the work you did.` : `
-\u2022 Never end a turn having identified actionable work or changed code without it being a ticket whose status reflects the work you did.`);
-}
-
 // src/chatMode.ts
 var CHAT_MODES = ["chat", "work"];
 var NEW_CHAT_MODE = "work";
@@ -11392,7 +11247,7 @@ function queueRunSteering(runKey, text2, opts) {
   const trimmed = text2.trim();
   if (!trimmed) return void 0;
   const eventKey = opts?.eventKey ?? (opts?.persist ? newSteerKey() : void 0);
-  const message = { text: trimmed, attachments: opts?.attachments, ...opts?.fromPerson ? { fromPerson: true } : {}, ...opts?.persist ? { persist: true } : {}, ...opts?.saved ? { saved: true } : {}, ...eventKey ? { eventKey } : {} };
+  const message = { text: trimmed, attachments: opts?.attachments, ...opts?.fromPerson ? { fromPerson: true } : {}, ...opts?.persist ? { persist: true } : {}, ...opts?.saved ? { saved: true } : {}, ...eventKey ? { eventKey } : {}, ...opts?.childReport ? { childReport: opts.childReport } : {} };
   const queue = inboxes.get(runKey) ?? [];
   queue.push(message);
   inboxes.set(runKey, queue);
@@ -11811,8 +11666,8 @@ function hasNoCodeDeliverable(writtenPaths) {
 var MAX_PLACEHOLDER_FINISH_BLOCKS = 2;
 
 // ../packages/agent-run/src/policy/finish/gates.ts
-function matchesRequiredReviewSignoff(required, toolName, args, succeeded7) {
-  if (!required || !succeeded7 || toolName !== "builtin_kanban_signoff") return false;
+function matchesRequiredReviewSignoff(required, toolName, args, succeeded6) {
+  if (!required || !succeeded6 || toolName !== "builtin_kanban_signoff") return false;
   const roleKey = typeof args.roleKey === "string" ? args.roleKey.trim() : "";
   const laneKey = typeof args.laneKey === "string" ? args.laneKey.trim() : void 0;
   return roleKey === required.roleKey && laneKey === required.laneKey;
@@ -11951,6 +11806,7 @@ var lastReasons = /* @__PURE__ */ new WeakMap();
 function lastFinishReason(state) {
   return lastReasons.get(state);
 }
+var LINKED_WORK_OPEN = "linked_work_open";
 function writtenPathsOf(ctx) {
   return ctx.state.writtenPaths ?? [];
 }
@@ -11994,10 +11850,13 @@ function signoffSettleBlock(ctx) {
 }
 function createFinishHook(ports = {}) {
   const delegated = (ctx) => ports.delegated ?? ctx.task.dispatch.parentRunId !== void 0;
+  const openWork = async (ctx) => ports.openWork ? ports.openWork(ctx) : null;
   return {
     settleBlock: signoffSettleBlock,
     // An owner never ends with children still working — on `finish` (below) or in prose.
     liveChildren: async (ctx) => delegated(ctx) && ports.liveChildren ? ports.liveChildren() : null,
+    // A run never ends while the tickets it owns are open — on `finish` (below, after every other gate) or in prose (the kernel).
+    openWork,
     async gate(ctx) {
       noteSignoff(ctx);
       const verdict = await evaluateFinishGates({
@@ -12015,9 +11874,12 @@ function createFinishHook(ports = {}) {
       if (verdict.writtenPaths) ctx.state.writtenPaths = [...verdict.writtenPaths];
       if (verdict.block) {
         ctx.state.finish = { ...ctx.state.finish, finishBlockedOnce: true };
+        lastReasons.set(ctx.state, verdict.reason);
+        return verdict.block;
       }
-      lastReasons.set(ctx.state, verdict.reason);
-      return verdict.block;
+      const owed = await openWork(ctx);
+      lastReasons.set(ctx.state, owed ? LINKED_WORK_OPEN : verdict.reason);
+      return owed;
     }
   };
 }
@@ -12218,8 +12080,7 @@ var RunGuards = class {
   progress;
   postEdit;
   levers;
-  pendingPause;
-  /** A3's `finish`: the next turn offers no tools — the verified run's final report. */
+  /** A3's `finish`: the next turn offers no tools — the run's final report. */
   finishDue;
   /** This turn's post-edit verdicts — the D1 code unit's verifier. */
   turnEdits = [];
@@ -12238,7 +12099,6 @@ var RunGuards = class {
     });
     this.progress = levers.a3_progress_detector ? new ProgressDetector(resume?.progress, { isReadOnly: (tool) => isReadOnlyCloudTool(tool) }) : null;
     this.postEdit = !!levers.d7_deterministic_handlers;
-    this.pendingPause = resume?.pendingPause;
     this.finishDue = resume?.finishDue === true;
     this.checksNote = resume?.checksNote ?? "";
     this.escalations = resume?.escalations ?? 0;
@@ -12261,7 +12121,6 @@ var RunGuards = class {
       ...this.progress ? { progress: this.progress.snapshot() } : {},
       // The cascade's seed facts serve A3's escalation too; with both levers off nothing persists.
       ...this.cascade.on || this.progress ? { cascade: this.cascade.snapshot() } : {},
-      ...this.pendingPause ? { pendingPause: this.pendingPause } : {},
       ...this.finishDue ? { finishDue: true } : {},
       ...this.checksNote ? { checksNote: this.checksNote } : {},
       ...this.escalations ? { escalations: this.escalations } : {}
@@ -12288,7 +12147,7 @@ var RunGuards = class {
    */
   async finish(verdict, step, ports) {
     if (!this.cascade.on) return verdict.block;
-    const v = verdict.block ? { passed: false, verifier: `finish_gates:${verdict.reason ?? "blocked"}`, reason: verdict.block, inconclusive: verdict.reason === "branch_ci_pending" || verdict.reason === "children_running" } : { passed: true, verifier: "finish_gates" };
+    const v = verdict.block ? { passed: false, verifier: `finish_gates:${verdict.reason ?? "blocked"}`, reason: verdict.block, inconclusive: verdict.reason === "branch_ci_pending" || verdict.reason === "children_running" || verdict.reason === LINKED_WORK_OPEN } : { passed: true, verifier: "finish_gates" };
     await this.judge("finish", v, step, ports);
     return verdict.block;
   }
@@ -12343,12 +12202,9 @@ var RunGuards = class {
         model.set(next);
         this.escalations += 1;
       } else {
-        this.pendingPause = progressPauseQuestion(action.signal, action.trip);
-        this.progress?.setSteer(void 0);
-        outcome = "pause";
+        this.progress?.setSteer(progressSteerNote(action.signal, action.trip, false));
+        outcome = "steer";
       }
-    } else if (action.kind === "pause") {
-      this.pendingPause = action.question;
     } else if (action.kind === "finish") {
       this.finishDue = true;
     }
@@ -12358,35 +12214,13 @@ var RunGuards = class {
     });
     await ports.onEvent?.({ tool: s.label, detail: s.args, result: s.result });
   }
-  /** A3's `finish`: whether the next turn is the verified run's final report (no tools). A peek — {@link finalTurnDone} spends it. */
+  /** A3's `finish`: whether the next turn is the run's final report (no tools). A peek — {@link finalTurnDone} spends it. */
   get finalTurnDue() {
     return this.finishDue;
   }
   /** The final turn was answered: the finish is spent. */
   finalTurnDone() {
     this.finishDue = false;
-  }
-  /** A3: a pause parked the run — the next dispatched call returns it, once. */
-  consumePendingPause() {
-    const q = this.pendingPause;
-    this.pendingPause = void 0;
-    return q;
-  }
-  /**
-   * A pause A3 parked the run on: the skip the model reads, with the `ask_human` control
-   * so the kernel parks on the human answer (the same park the governance gate uses).
-   * The engine's park port names the approval when the surface has one; without it the
-   * run's HumanChannel is asked through the ask hook, with the two answers A3 offers.
-   * `undefined` when the run is not parked — the kernel dispatches the call normally.
-   */
-  async beforeDispatchPause(ports) {
-    const pending = this.consumePendingPause();
-    if (pending === void 0) return void 0;
-    const parked = ports.pause ? await ports.pause(pending) : void 0;
-    return {
-      data: { ok: false, error: `Paused for a human: ${pending}` },
-      control: { kind: "ask_human", ...parked ? { approvalId: parked.approvalId } : {}, question: pending, options: PAUSE_OPTIONS }
-    };
   }
   /** A3: what the turn said, judged against what its calls did (WS8p). */
   noteTurnText(text2) {
@@ -12398,7 +12232,6 @@ var RunGuards = class {
     this.progress?.observe(call2.name, call2.args, { data: result });
   }
 };
-var PAUSE_OPTIONS = ["Continue with guidance", "Stop the run"];
 var sessions = /* @__PURE__ */ new WeakMap();
 function sessionOf(ctx, ports) {
   let s = sessions.get(ctx.state);
@@ -12415,13 +12248,6 @@ function guardsTurnNote(ctx) {
 }
 function createGuardsHook(ports = {}) {
   return {
-    async beforeDispatch(ctx, _call) {
-      const g = sessionOf(ctx, ports);
-      const paused = await g.beforeDispatchPause(ports);
-      if (!paused) return void 0;
-      ctx.state.guards = g.snapshot();
-      return { skip: { data: paused.data, isError: true, control: paused.control } };
-    },
     async observe(ctx, call2, result) {
       const g = sessionOf(ctx, ports);
       const noted = await g.checkEdit(call2, result, ports);
@@ -14379,6 +14205,12 @@ ${notice}` : notice };
       await requeue2(pctx, ctx.step, turn.content, block);
       return { action: "continue" };
     }
+    const open2 = finalTurn ? null : await hooks.finish.openWork?.(pctx);
+    if (open2) {
+      await emit(ports.events, { kind: "finish.blocked", step: ctx.step, reason: LINKED_WORK_OPEN, block: open2 });
+      await requeue2(pctx, ctx.step, turn.content, open2);
+      return { action: "continue" };
+    }
     const output = hooks.stall.settle ? hooks.stall.settle(pctx, turn.content) : turn.content;
     if (steersFirst) {
       const late2 = await deps.takeJoined(ctx);
@@ -14518,7 +14350,7 @@ function kernelHooks(run) {
         if (gated.control) held.add(refused);
         return { result: refused };
       }
-      const decision = await hooks.guards.beforeDispatch(pctx, pcall);
+      const decision = await hooks.guards.beforeDispatch?.(pctx, pcall);
       if (decision?.skip) {
         const { data, isError, control } = decision.skip;
         const skipped = { data, isError: isError ?? true, ...control ? { control: asLoopControl(control) } : {} };
@@ -14555,10 +14387,12 @@ function kernelHooks(run) {
       pctx.toolCalls = [toPolicyCall(call2)];
       const verifyRefused = await verifyBlock(pctx);
       const gated = verifyRefused ?? await hooks.finish.gate(pctx);
-      const judged = hooks.guards.finish ? await hooks.guards.finish(pctx, { block: gated, reason: verifyRefused ? "verify" : lastFinishReason(state) }) : gated;
+      const reason = verifyRefused ? "verify" : lastFinishReason(state);
+      const judged = hooks.guards.finish ? await hooks.guards.finish(pctx, { block: gated, reason }) : gated;
       const block = judged ?? hooks.subagents.backstop(pctx);
       if (block) {
-        state.finish = { ...state.finish, finishBlockedOnce: true };
+        const openWorkHold = gated != null && block === gated && reason === LINKED_WORK_OPEN;
+        if (!openWorkHold) state.finish = { ...state.finish, finishBlockedOnce: true };
         return block;
       }
       return lateSteerNote(ctx);
@@ -15103,6 +14937,7 @@ function makeCell() {
     claim: null,
     stoppedTurn: null,
     publishHold: null,
+    shipPolicy: DEFAULT_SHIP_POLICY,
     authorModels: /* @__PURE__ */ new Set(),
     shipReviews: [],
     shipReviewRounds: [],
@@ -16767,9 +16602,114 @@ function unreviewedChangeNudge() {
   return 'You changed the app in this run and ended the turn without reviewing it. In the Studio you are the reviewer \u2014 nobody else can see this preview, so an unreviewed change parks its ticket in review forever. Finish it now: call `canvas_inspect_preview` with the selectors your change targets and the widths the request is about, check the measurements against what was asked (fix and re-inspect if they fail), then record builtin_reviews_record on each ticket the change delivers \u2014 verdict "complete" quoting the measurements, or "gaps" naming what is missing. A complete review after a passing inspection closes the ticket when your turn ends. If you genuinely cannot verify \u2014 the preview is not running, or the change is unfinished \u2014 say so plainly at the TOP of your answer and name exactly what is left.';
 }
 
+// src/runStore/chatTickets.ts
+var MOVE_LABEL = /^(ticket[-_.]move|builtin_tasks_update)$/i;
+var stepSucceeded = (ev) => ev.category === "tool" && !ev.isError && !isFailedToolResult(ev.result);
+function ticketsCreatedInRun(trace4) {
+  const filings = [];
+  for (const ev of trace4) {
+    const local = isLocalTicketCreateLabel(ev.label);
+    if (!stepSucceeded(ev) || !local && ev.label !== SERVER_TICKET_CREATE_TOOL) continue;
+    const args = ev.args ?? {};
+    const { localId, syncId } = entityIdsOf(ev.result);
+    const syncRef = syncId != null ? syncIdText(syncId) : null;
+    const ref = localId ?? syncRef;
+    if (!ref || filings.some((f) => f.ref === ref)) continue;
+    filings.push({ ref, syncRef, ids: [localId, syncRef].filter((id) => id != null), args, local, handOff: args.reason === "hand_off" });
+  }
+  return filings;
+}
+function localTicketFilings(trace4) {
+  return ticketsCreatedInRun(trace4).filter((f) => f.local && f.handOff);
+}
+function localTicketsFiledInRun(trace4) {
+  return localTicketFilings(trace4).map((f) => f.ref);
+}
+function ticketMovesInRun(trace4) {
+  const moved = /* @__PURE__ */ new Map();
+  trace4.forEach((ev, at) => {
+    if (!stepSucceeded(ev) || !MOVE_LABEL.test(ev.label)) return;
+    const a = ev.args ?? {};
+    if ((typeof a.id === "string" || typeof a.id === "number") && typeof a.status === "string") moved.set(String(a.id).trim(), { status: a.status, at });
+  });
+  return moved;
+}
+function latestStatus(moves, ids) {
+  let latest;
+  for (const id of ids) {
+    const move = moves.get(id);
+    if (move && (!latest || move.at > latest.at)) latest = move;
+  }
+  return latest?.status;
+}
+function runOwnedTicketRefs(trace4, deltaTicketId = null) {
+  const owned = /* @__PURE__ */ new Set();
+  if (deltaTicketId != null) owned.add(String(deltaTicketId));
+  for (const ev of trace4) {
+    if (ev.label !== "builtin_tickets_from_delta" || !stepSucceeded(ev)) continue;
+    const taskId = ev.args?.taskId;
+    if (typeof taskId === "number" || typeof taskId === "string") owned.add(String(taskId).trim());
+    const { syncId } = entityIdsOf(ev.result);
+    if (syncId != null) owned.add(syncIdText(syncId));
+  }
+  for (const id of ticketMovesInRun(trace4).keys()) owned.add(id);
+  for (const filing of ticketsCreatedInRun(trace4)) for (const id of filing.ids) owned.add(id);
+  return owned;
+}
+var listingScopeOf = (cell) => ({ cell, runId: cell.runId });
+var memoisedListings = /* @__PURE__ */ new WeakMap();
+function forgetChatTicketListing(cell) {
+  memoisedListings.delete(cell);
+}
+var changesListing = (ev) => ev.category === "llm" || ev.category === "tool" && (isMutatingPlatformTool(ev.label) || isLocalTicketCreateLabel(ev.label) || MOVE_LABEL.test(ev.label));
+function memoisedListing(scope, chatId) {
+  const { cell, runId } = scope;
+  const memo = memoisedListings.get(cell);
+  if (!memo || memo.runId !== runId || cell.runId !== runId || memo.chatId !== chatId) return void 0;
+  const at = cell.trace.lastIndexOf(memo.mark);
+  if (at < 0 || at < cell.runTraceFrom || at > memo.length - 1) return void 0;
+  for (let i = at + 1; i < cell.trace.length; i += 1) if (changesListing(cell.trace[i])) return void 0;
+  return memo.listed;
+}
+async function listChatTickets(req, chatId, report, scope) {
+  if (!req.runTool) return null;
+  if (scope) {
+    const memo = memoisedListing(scope, chatId);
+    if (memo !== void 0) return memo;
+  }
+  const before = scope ? runTrace(scope.cell) : [];
+  const mark = before[before.length - 1];
+  const length = scope ? scope.cell.trace.length : 0;
+  let listed;
+  try {
+    const call2 = req.runTool(CHAT_TICKET_LIST_TOOL, { chatId });
+    listed = await (report.timeoutMs != null ? bounded(report.timeoutMs, call2) : call2);
+  } catch (e) {
+    listed = { ok: false, error: errorMessage(e) };
+  }
+  if (!isFailedToolResult(listed)) {
+    if (scope && mark && scope.cell.runId === scope.runId) memoisedListings.set(scope.cell, { runId: scope.runId, chatId, listed, mark, length });
+    else if (scope) memoisedListings.delete(scope.cell);
+    return listed;
+  }
+  const why = listed?.error;
+  report.note?.({
+    ts: nowIso(),
+    category: "message",
+    label: report.label,
+    args: { chatId },
+    result: `The chat's linked tickets could not be listed${typeof why === "string" ? ` (${why})` : ""}: ${report.consequence}`
+  });
+  return null;
+}
+
 // src/runStore/runBackstops.ts
+function listingScopeOfRun(c) {
+  return "trace" in c ? listingScopeOf(c) : c.listing;
+}
 function settleView(c, runId) {
   return {
+    listing: { cell: c, runId },
     touchedFiles: [...c.touchedFiles],
     deltaRecordedFiles: [...c.deltaRecordedFiles],
     deltaTicketId: c.deltaTicketId,
@@ -16805,6 +16745,7 @@ async function recordCodeChangeTicket(serverChatId, c, req, phase) {
   if (files.length === 0 && attachTo == null) return;
   const source = serverChatId != null ? `Brain chat #${serverChatId}` : "a local editor chat";
   const summary = `Code change (${files.length} file${files.length === 1 ? "" : "s"}) from ${source}`;
+  const parentTaskId = attachTo == null && serverChatId != null && canListChatTickets(req.tools) ? await soleOpenLinkedEpic(serverChatId, c, req) : null;
   const toolStart = nowMs2();
   const args = {
     projectId: req.projectId,
@@ -16814,13 +16755,29 @@ async function recordCodeChangeTicket(serverChatId, c, req, phase) {
     kind: "improvement",
     modality: "ide",
     ...serverChatId != null ? { chatId: serverChatId } : {},
-    ...attachTo != null ? { taskId: attachTo } : {}
+    ...attachTo != null ? { taskId: attachTo } : {},
+    ...parentTaskId != null ? { parentTaskId } : {}
   };
-  let out;
-  try {
-    out = await req.runTool("builtin_tickets_from_delta", args);
-  } catch (e) {
-    out = { ok: false, error: e instanceof Error ? e.message : String(e) };
+  const send = async (bag) => {
+    try {
+      return { out: await req.runTool("builtin_tickets_from_delta", bag), thrown: false };
+    } catch (e) {
+      return { out: { ok: false, error: e instanceof Error ? e.message : String(e) }, thrown: true };
+    }
+  };
+  const first = await send(args);
+  let out = first.out;
+  if (parentTaskId != null && !first.thrown && isFailedToolResult(out) && !isRoleRefusal(out)) {
+    const why = out?.error;
+    noteOf(c)({
+      ts: nowIso(),
+      category: "message",
+      label: "ticket.parent_epic_refused",
+      args: { parentTaskId },
+      result: `The server refused to file the code-change ticket under epic #${parentTaskId}${typeof why === "string" ? ` (${why})` : ""}: it is minted once more, without a parent.`
+    });
+    delete args.parentTaskId;
+    out = (await send(args)).out;
   }
   if (!isFailedToolResult(out)) {
     c.deltaRecordedFiles = [...c.deltaRecordedFiles, ...files];
@@ -16841,16 +16798,23 @@ async function recordCodeChangeTicket(serverChatId, c, req, phase) {
     isError: isFailedToolResult(out)
   });
 }
-async function updateLinkedTickets(serverChatId, c, req, select, status2, reason) {
-  if (!req.runTool || serverChatId == null) return 0;
-  let listed;
-  try {
-    listed = await req.runTool("builtin_chats_list_tickets", { chatId: serverChatId });
-  } catch {
-    return 0;
-  }
+async function soleOpenLinkedEpic(serverChatId, c, req) {
+  const listed = await listChatTickets(req, serverChatId, {
+    note: noteOf(c),
+    label: "ticket.parent_epic_unreadable",
+    consequence: "the code-change ticket is minted without a parent epic."
+  }, listingScopeOfRun(c));
+  if (listed == null) return null;
+  const epics = linkedTicketsStillOpen(listed).filter((t) => t.kind === "epic");
+  const id = epics.length === 1 ? Number(epics[0].ref) : NaN;
+  return Number.isFinite(id) ? id : null;
+}
+async function updateLinkedTickets(serverChatId, c, req, select, status2, reason, owned) {
+  if (!req.runTool || serverChatId == null || !canListChatTickets(req.tools)) return 0;
+  const listed = await listChatTickets(req, serverChatId, { note: noteOf(c), label: "ticket.links_unreadable", consequence: `no linked ticket was moved to ${status2}.` });
+  if (listed == null) return 0;
   let moved = 0;
-  for (const t of select(listed)) {
+  for (const t of select(listed).filter((t2) => owned === "selected" || owned.has(t2.ref))) {
     const move = ticketStatusMove(t.ref, status2, SERVER_TICKET_TOOLS);
     if (move && await moveTicket(c, req, move, reason)) moved += 1;
   }
@@ -16878,41 +16842,19 @@ async function moveTicket(c, req, move, reason) {
   return !failed4;
 }
 var LOCAL_VOCABULARY = ticketToolVocabulary([LOCAL_TICKET_CREATE_TOOL]);
-var MOVE_LABEL = /^(ticket[-_.]move|builtin_tasks_update)$/i;
-var succeeded4 = (ev) => ev.category === "tool" && !ev.isError && !isFailedToolResult(ev.result);
-function localTicketsFiledInRun(trace4) {
-  const ids = [];
-  for (const ev of trace4) {
-    if (!succeeded4(ev) || !isLocalTicketCreateLabel(ev.label)) continue;
-    if (ev.args?.reason !== "hand_off") continue;
-    const { localId, syncId } = entityIdsOf(ev.result);
-    const ref = localId ?? (syncId != null ? syncIdText(syncId) : null);
-    if (ref && !ids.includes(ref)) ids.push(ref);
-  }
-  return ids;
-}
-function statusesInRun(trace4) {
-  const moved = /* @__PURE__ */ new Map();
-  for (const ev of trace4) {
-    if (!succeeded4(ev) || !MOVE_LABEL.test(ev.label)) continue;
-    const a = ev.args ?? {};
-    if ((typeof a.id === "string" || typeof a.id === "number") && typeof a.status === "string") moved.set(String(a.id).trim(), a.status);
-  }
-  return moved;
-}
 function mayMove(current, status2) {
   if (current === void 0 || NOT_STARTED_TASK_STATUSES.has(current)) return true;
   return status2 === "done" && current === "in_progress";
 }
 async function updateRunLocalTickets(trace4, c, req, status2, reason, deltaTicketId = null) {
   if (!req.runTool) return 0;
-  const already = statusesInRun(trace4);
+  const already = ticketMovesInRun(trace4);
   const moves = [];
-  for (const ref of localTicketsFiledInRun(trace4)) {
-    const move = mayMove(already.get(ref), status2) ? ticketStatusMove(ref, status2, LOCAL_VOCABULARY) : null;
+  for (const filing of localTicketFilings(trace4)) {
+    const move = mayMove(latestStatus(already, filing.ids), status2) ? ticketStatusMove(filing.ref, status2, LOCAL_VOCABULARY) : null;
     if (move) moves.push(move);
   }
-  if (status2 === "done" && deltaTicketId != null && mayMove(already.get(String(deltaTicketId)), status2)) {
+  if (status2 === "done" && deltaTicketId != null && mayMove(latestStatus(already, [String(deltaTicketId)]), status2)) {
     const move = ticketStatusMove(deltaTicketId, status2, SERVER_TICKET_TOOLS);
     if (move) moves.push(move);
   }
@@ -16999,286 +16941,6 @@ async function recordShipReview(input, taskId, checks, approvedReview = null) {
     result: out ?? null,
     isError: isFailedToolResult(out)
   });
-}
-
-// src/handOffNext.ts
-var INLINE_NEXT = `HAND-OFF: the analysis is complete and you are the coding model. Implement the tasks below in order \u2014 do not re-plan or re-read what the planner already read. When all are done, check them. ${VERIFY_STEP} Then commit and push, and report per ticket.`;
-var RESOLVE_REPORTS = `Each report ends with its Open issues \u2014 ${RESOLVE_OPEN_ISSUES}. Fix what the slices broke between them, and implement any task that failed.`;
-var PARALLEL_NEXT = `HAND-OFF: the tasks ran side by side, one coding agent each, and each has reported into the chat. You are the coding model. ${RESOLVE_REPORTS} Then check the combined change. ${VERIFY_DELEGATION_STEP} Then commit, push and report per ticket.`;
-var BACKGROUND_NEXT = `HAND-OFF: one coding agent per task is now running IN THE BACKGROUND, each posting into the chat under its own name. You are the coding model: do not redo their tasks. Work on anything not delegated, then call wait_agents for their reports (or act on each as it arrives). ${RESOLVE_REPORTS} Then check the combined change. ${VERIFY_DELEGATION_STEP} Then commit, push and report per ticket.`;
-var MIXED_PARALLEL_NEXT = `HAND-OFF: some of the tasks ran side by side, one coding agent each, and each has reported into the chat. You are the coding model. ${RESOLVE_REPORTS} Then implement the remaining tasks below in plan order \u2014 they overlap those paths or own none, so they were not run beside them; do not re-plan or re-read what the planner already read. Then check the combined change. ${VERIFY_DELEGATION_STEP} Then commit, push and report per ticket.`;
-var MIXED_BACKGROUND_NEXT = `HAND-OFF: some of the tasks are now running IN THE BACKGROUND, one coding agent each, posting into the chat under its own name. You are the coding model: do not redo their tasks. The remaining tasks below are yours and come after theirs in the plan; they overlap those paths or own none, so call wait_agents for their reports FIRST, then implement them in plan order \u2014 do not re-plan or re-read what the planner already read. ${RESOLVE_REPORTS} Then check the combined change. ${VERIFY_DELEGATION_STEP} Then commit, push and report per ticket.`;
-
-// src/handOffFanOut.ts
-var FAN_OUT_TOOL = "spawn_agents";
-var FAN_OUT_BATCH = 4;
-function inlineTaskList(plan, indexes, ids, brief) {
-  return indexes.map((i) => `${i + 1}. ${ids[i] != null ? `#${ids[i]} ` : ""}${plan.tasks[i].title}
-${brief(i)}`).join("\n\n");
-}
-async function fanOut(plan, indexes, ids, brief, call2) {
-  const workstreams = [];
-  const changed2 = /* @__PURE__ */ new Set();
-  const placeholders = [];
-  let background = false;
-  for (let start = 0; start < indexes.length; start += FAN_OUT_BATCH) {
-    const batch = indexes.slice(start, start + FAN_OUT_BATCH);
-    const out = toolResultRecord(await call2(FAN_OUT_TOOL, {
-      workstreams: batch.map((i) => {
-        const t = plan.tasks[i];
-        const id = ids[i];
-        return {
-          label: id != null ? `#${id} ${t.title}` : t.title,
-          task: brief(i),
-          role: "code",
-          ...id != null ? { ticket: String(id) } : {}
-        };
-      })
-    }));
-    const started = Array.isArray(out?.agents) ? out.agents : Array.isArray(out?.workstreams) ? out.workstreams : null;
-    if (!out || out.ok === false && !started) {
-      if (start === 0) return null;
-      workstreams.push({ ok: false, error: typeof out?.error === "string" ? out.error : "fan-out failed", tasks: batch.map((i) => plan.tasks[i].title) });
-      continue;
-    }
-    if (started) workstreams.push(...started);
-    if (out.running === true) background = true;
-    if (Array.isArray(out.changedFiles)) {
-      for (const f of out.changedFiles) if (typeof f === "string") changed2.add(f);
-    }
-    if (Array.isArray(out.placeholders)) placeholders.push(...out.placeholders);
-  }
-  return { workstreams, changedFiles: [...changed2], placeholders, background };
-}
-
-// src/planHandoff.ts
-var HAND_OFF_TOOL = "hand_off";
-var MAX_HAND_OFF_TASKS = 12;
-var HAND_OFF_TOOL_SPEC = {
-  type: "function",
-  function: {
-    name: HAND_OFF_TOOL,
-    description: "OPTIONAL \u2014 for work that splits into SEVERAL separate tasks. A change you can already make (a bug fix, a small refactor, a copy or style change, anything a few edits cover) you simply MAKE now: your first edit moves the run into coding by itself, no hand_off needed, so never stall in analysis waiting to call this. When the work genuinely breaks into multiple tasks, call this ONCE with them instead of editing. Each task becomes a ticket linked to this chat. Tasks that own separate files run side by side, one coding agent each, and each reports back to this chat; otherwise the coding model implements them in order. Every task must stand alone \u2014 the agent that implements it sees none of this conversation: say what to change, where, and how to know it is done.",
-    parameters: {
-      type: "object",
-      properties: {
-        summary: {
-          type: "string",
-          description: "The research, summarised for the coders \u2014 they see nothing else. Everything your analysis AND any research sub-agents reported that the change needs: the files and functions involved, what they do today, the decisions made and why, and the traps found. Facts, not a recap of what you did."
-        },
-        tasks: {
-          type: "array",
-          minItems: 1,
-          maxItems: MAX_HAND_OFF_TASKS,
-          items: {
-            type: "object",
-            properties: {
-              title: { type: "string", description: 'Ticket title, e.g. "Rebuild UserDetailDrawer on SlideOutPanel".' },
-              brief: { type: "string", description: "The complete, standalone instruction: files, the change, the primitives to use." },
-              paths: {
-                type: "array",
-                items: { type: "string" },
-                description: "Workspace-relative files or directories this task OWNS. Tasks with disjoint paths run in parallel."
-              },
-              acceptance: { type: "string", description: "How to know it is done (tests, behaviour)." },
-              constraints: {
-                type: "string",
-                description: "What the coder must NOT do: files or modules to leave alone, primitives to reuse rather than copy, files not to grow, behaviour that must not change."
-              }
-            },
-            required: ["title", "brief"]
-          }
-        }
-      },
-      required: ["summary", "tasks"]
-    }
-  }
-};
-var str = (v) => typeof v === "string" ? v.trim() : "";
-function parseHandOff(args) {
-  const a = args ?? {};
-  const summary = str(a.summary);
-  if (!Array.isArray(a.tasks) || a.tasks.length === 0) {
-    return "hand_off needs { summary, tasks:[{ title, brief, paths? }] } with at least one task";
-  }
-  if (a.tasks.length > MAX_HAND_OFF_TASKS) {
-    return `at most ${MAX_HAND_OFF_TASKS} tasks per hand-off \u2014 merge related slices`;
-  }
-  const tasks = [];
-  for (const [i, raw] of a.tasks.entries()) {
-    const t = raw ?? {};
-    const title = str(t.title);
-    const brief = str(t.brief);
-    if (!title || !brief) return `task ${i + 1} needs both a title and a brief`;
-    const paths = Array.isArray(t.paths) ? t.paths.map(str).filter(Boolean) : [];
-    const acceptance = str(t.acceptance);
-    const constraints = str(t.constraints);
-    tasks.push({ title, brief, paths, ...acceptance ? { acceptance } : {}, ...constraints ? { constraints } : {} });
-  }
-  return { summary, tasks };
-}
-var TICKET_CONTEXT_MAX_CHARS = 600;
-function ticketDescription(task, summary) {
-  const context = summary.length > TICKET_CONTEXT_MAX_CHARS ? `${summary.slice(0, TICKET_CONTEXT_MAX_CHARS - 1).trimEnd()}\u2026` : summary;
-  return [
-    task.brief,
-    task.paths.length ? `Paths: ${task.paths.join(", ")}` : "",
-    task.acceptance ? `Done when: ${task.acceptance}` : "",
-    task.constraints ? `Do not: ${task.constraints}` : "",
-    context ? `Context: ${context}` : ""
-  ].filter(Boolean).join("\n\n");
-}
-var MAX_REQUEST_CHARS = 2e3;
-function childTaskBrief(task, ctx, ticketId) {
-  const request = ctx.request?.trim();
-  return [
-    ticketId != null ? `Ticket #${ticketId}: ${task.title}` : task.title,
-    request ? `The goal \u2014 what the user asked for: ${request.length > MAX_REQUEST_CHARS ? `${request.slice(0, MAX_REQUEST_CHARS)}\u2026` : request}` : "",
-    task.brief,
-    task.paths.length ? `Your slice covers: ${task.paths.join(", ")}. Sibling slices are working beside you on other paths.` : "",
-    task.constraints ? `Do not: ${task.constraints}` : "",
-    task.acceptance ? `Done when: ${task.acceptance}` : "",
-    ctx.summary ? `Research handed to you (the analysis is finished \u2014 do not redo it): ${ctx.summary}` : "",
-    ctx.knowledge ? `What the research already read and searched (read again only what your change itself needs):
-${ctx.knowledge}` : "",
-    "Make the change now. Read only what the change itself needs."
-  ].filter(Boolean).join("\n\n");
-}
-function planMessage(plan, ticketIds, layout) {
-  const lines = plan.tasks.map((t, i) => {
-    const id = ticketIds[i];
-    return `${i + 1}. ${id != null ? `#${id} ` : ""}${t.title}${t.paths.length ? ` \u2014 ${t.paths.join(", ")}` : ""}`;
-  });
-  const mode = typeof layout === "boolean" ? layout ? "parallel" : "inline" : modeOf(layout);
-  const header = mode === "parallel" ? " (running side by side; each reports back here)" : mode === "mixed" ? " (partly side by side; each agent reports back here)" : "";
-  return [
-    `**Plan \u2014 ${plan.tasks.length} task${plan.tasks.length === 1 ? "" : "s"}**${header}`,
-    typeof layout === "boolean" ? "" : splitLayoutLine(layout),
-    plan.summary,
-    lines.join("\n")
-  ].filter(Boolean).join("\n\n");
-}
-function isFailed(out) {
-  if (out == null) return true;
-  if (typeof out !== "object") return false;
-  const o = out;
-  return o.ok === false || typeof o.error === "string" && o.error.length > 0;
-}
-async function call(ports, name, args) {
-  const now = ports.now ?? (() => Date.now());
-  const start = now();
-  let out;
-  try {
-    out = await ports.runTool(name, args);
-  } catch (e) {
-    out = { ok: false, error: e instanceof Error ? e.message : String(e) };
-  }
-  ports.step?.(name, { ...args, auto: true, reason: "hand_off" }, out, now() - start);
-  return out;
-}
-function filedTicketRef(record2, local) {
-  const { localId, syncId } = entityIdsOf(record2);
-  if (!local) return syncId ?? void 0;
-  if (localId) return localId;
-  if (syncId != null) return syncId;
-  const opaque = record2?.id;
-  return typeof opaque === "string" && opaque.trim() ? opaque : void 0;
-}
-async function fileTickets(plan, ports) {
-  const vocabulary = ticketToolVocabulary(ports.toolNames);
-  const createTool = vocabulary.createTool;
-  if (ports.projectId == null || !createTool) return plan.tasks.map(() => void 0);
-  const ids = [];
-  for (const task of plan.tasks) {
-    const out = await call(ports, createTool, {
-      // The local tool takes its project as text; the account's takes the number.
-      projectId: vocabulary.local ? String(ports.projectId) : ports.projectId,
-      title: task.title,
-      description: ticketDescription(task, plan.summary),
-      taskType: "task"
-    });
-    const record2 = toolResultRecord(out);
-    const failed4 = isFailed(record2 ?? out);
-    ids.push(failed4 ? void 0 : filedTicketRef(record2, vocabulary.local));
-    if (!failed4) await ports.afterCreate?.(createTool, out).catch(() => void 0);
-  }
-  return ids;
-}
-async function startTickets(ids, ports) {
-  const vocabulary = ticketToolVocabulary(ports.toolNames);
-  for (const id of ids) {
-    if (id == null) continue;
-    const move = ticketStatusMove(id, "in_progress", vocabulary);
-    if (!move || !ports.toolNames.has(move.tool)) continue;
-    await call(ports, move.tool, { ...move.args });
-  }
-}
-async function executeHandOff(plan, ports) {
-  const ids = await fileTickets(plan, ports);
-  await startTickets(ids, ports);
-  const tickets = plan.tasks.map((t, i) => ({ title: t.title, ...ids[i] != null ? { id: ids[i] } : {} }));
-  const all = plan.tasks.map((_, i) => i);
-  const canFanOut = ports.toolNames.has(FAN_OUT_TOOL);
-  const split = canFanOut ? splitForParallel(plan.tasks, ports.isPackageDir) : { parallel: [], inline: all, clash: null };
-  const briefContext = { summary: plan.summary, request: ports.request, knowledge: ports.knowledge };
-  const brief = (i) => childTaskBrief(plan.tasks[i], briefContext, ids[i]);
-  await ports.postPlan?.(planMessage(plan, ids, split)).catch(() => void 0);
-  const decide = (mode, parallel, inline) => ports.decided?.({
-    mode,
-    parallelTasks: parallel.map((i) => plan.tasks[i].title),
-    inlineTasks: inline.map((i) => plan.tasks[i].title),
-    clash: split.clash
-  });
-  const clash = split.clash ? { clash: split.clash } : {};
-  const ran = split.parallel.length ? await fanOut(plan, split.parallel, ids, brief, (name, args) => call(ports, name, args)) : null;
-  if (ran) {
-    const mode = modeOf(split);
-    decide(mode, split.parallel, split.inline);
-    return {
-      ok: true,
-      mode,
-      tickets,
-      workstreams: ran.workstreams,
-      ...ran.changedFiles.length ? { changedFiles: ran.changedFiles } : {},
-      ...ran.placeholders.length ? { placeholders: ran.placeholders } : {},
-      ...mode === "mixed" ? clash : {},
-      next: mode === "parallel" ? ran.background ? BACKGROUND_NEXT : PARALLEL_NEXT : `${ran.background ? MIXED_BACKGROUND_NEXT : MIXED_PARALLEL_NEXT}
-
-${inlineTaskList(plan, split.inline, ids, brief)}`
-    };
-  }
-  decide("inline", [], all);
-  return {
-    ok: true,
-    mode: "inline",
-    tickets,
-    ...clash,
-    next: `${INLINE_NEXT}
-
-${inlineTaskList(plan, all, ids, brief)}`
-  };
-}
-
-// src/codeChanges.ts
-var DELEGATION_TOOLS = /* @__PURE__ */ new Set(["spawn_agent", "spawn_agents", "wait_agents", HAND_OFF_TOOL]);
-function isDelegationTool(name) {
-  return DELEGATION_TOOLS.has(name);
-}
-function codeChangesOf(name, args, out) {
-  if (isCodeChangeTool(name)) {
-    if (isFailedToolResult(out)) return null;
-    const files = codeChangeFiles(args);
-    const real = files.filter((f) => !isScratchScriptPath(f));
-    if (files.length > 0 && real.length === 0) return null;
-    return real;
-  }
-  if (isDelegationTool(name)) {
-    const files = out?.changedFiles;
-    if (!Array.isArray(files)) return null;
-    const named = files.filter((f) => typeof f === "string" && f.trim().length > 0 && !isScratchScriptPath(f));
-    return named.length ? named : null;
-  }
-  return null;
 }
 
 // src/placeholderGuard.ts
@@ -17723,12 +17385,12 @@ async function shipGateAdvisory(run, name, args, out) {
     if (typeof command === "string") return shellPublishHint(command);
     return null;
   }
-  const publishSucceeded = (name === "git_push" || name === "open_pull_request") && !isFailed2(out);
+  const publishSucceeded = (name === "git_push" || name === "open_pull_request") && !isFailed(out);
   if (publishSucceeded) {
     const repo = repoArgOf(args);
     run.c.shipReviewRounds = run.c.shipReviewRounds.filter((r) => r.repo !== repo);
   }
-  if (name === "git_commit" && run.req.verifier && !isFailed2(out)) {
+  if (name === "git_commit" && run.req.verifier && !isFailed(out)) {
     const verdict = await outgoingEvidenceVerdict(run, repoArgOf(args));
     return verdict && !verdict.ok ? `ADVISORY (commit not refused): ${verdict.reason}` : null;
   }
@@ -17746,7 +17408,7 @@ async function outgoingEvidenceVerdict(run, repo) {
     return { ok: false, reason: `the ship gate could not read or verify the outgoing change (${why}). Fix the repository state and retry.` };
   }
 }
-function isFailed2(out) {
+function isFailed(out) {
   const o = out;
   return o != null && typeof o === "object" && o.ok === false;
 }
@@ -17766,7 +17428,7 @@ async function deterministicFinish(input, run) {
     await recordCodeChangeTicket(input.serverChatId, view, fullReq, "settle");
   }
   if (needsTicket) {
-    await updateLinkedTickets(input.serverChatId, view, fullReq, linkedTicketsToAdvance, "in_progress", "worked-ticket-off-backlog");
+    await updateLinkedTickets(input.serverChatId, view, fullReq, linkedTicketsToAdvance, "in_progress", "worked-ticket-off-backlog", runOwnedTicketRefs(input.trace, view.deltaTicketId));
     await updateRunLocalTickets(input.trace, view, fullReq, "in_progress", "worked-ticket-off-backlog");
   }
   if (shipped && req.projectId != null) {
@@ -17798,11 +17460,11 @@ async function deterministicFinish(input, run) {
       }
     }
   }
-  if (finishing && await updateLinkedTickets(run.serverChatId, view, req, linkedTicketsToComplete, "done", "shipped-to-base-branch") > 0) result.ticketClosed = true;
+  if (finishing && await updateLinkedTickets(run.serverChatId, view, req, linkedTicketsToComplete, "done", "shipped-to-base-branch", runOwnedTicketRefs(input.trace, view.deltaTicketId)) > 0) result.ticketClosed = true;
   const unlistedDelta = run.serverChatId == null ? view.deltaTicketId : null;
   if (finishing && await updateRunLocalTickets(input.trace, view, fullReq, "done", "shipped-to-base-branch", unlistedDelta) > 0) result.ticketClosed = true;
   if (reviewedInPreview.length && req.projectId != null) {
-    await updateLinkedTickets(input.serverChatId, view, fullReq, (l) => linkedTicketsReviewedComplete(l, reviewedInPreview), "done", "reviewed-in-preview");
+    await updateLinkedTickets(input.serverChatId, view, fullReq, (l) => linkedTicketsReviewedComplete(l, reviewedInPreview), "done", "reviewed-in-preview", "selected");
   }
   result.finished = finishing;
   return result;
@@ -17812,19 +17474,16 @@ async function shippedOf(run) {
   return onBaseBranch(run.req.git, run.c.touchedFiles, run.c.deltaTicketId);
 }
 async function hasLinkedTicket(run) {
-  return holdsLinkedTicket(runTrace(run.c), run.serverChatId, run.req);
+  return holdsLinkedTicket(runTrace(run.c), run.serverChatId, run.req, { deltaTicketId: run.c.deltaTicketId, note: (ev) => pushTrace(run.c, ev), listing: listingScopeOf(run.c) });
 }
-async function holdsLinkedTicket(trace4, serverChatId, req) {
+async function holdsLinkedTicket(trace4, serverChatId, req, opts = {}) {
   if (!req.runTool) return false;
   if (localTicketsFiledInRun(trace4).length > 0) return true;
-  if (serverChatId == null) return false;
-  let listed;
-  try {
-    listed = await req.runTool("builtin_chats_list_tickets", { chatId: serverChatId });
-  } catch {
-    return false;
-  }
-  return linkedTicketsToComplete(listed).length > 0;
+  if (serverChatId == null || !canListChatTickets(req.tools)) return false;
+  const listed = await listChatTickets(req, serverChatId, { note: opts.note, label: "ticket.links_unreadable", consequence: "the run holds no linked ticket to close." }, opts.listing);
+  if (listed == null) return false;
+  const owned = runOwnedTicketRefs(trace4, opts.deltaTicketId ?? null);
+  return linkedTicketsToComplete(listed).some((t) => owned.has(t.ref));
 }
 async function finishCloseOut(run) {
   const c = run.c;
@@ -17908,6 +17567,264 @@ function deviceLeverOn(id) {
   return isCostLeverOn(env, id, null);
 }
 
+// src/handOffNext.ts
+var INLINE_NEXT = `HAND-OFF: the analysis is complete and you are the coding model. Implement the tasks below in order \u2014 do not re-plan or re-read what the planner already read. When all are done, check them. ${VERIFY_STEP} Then commit and push, and report per ticket.`;
+var RESOLVE_REPORTS = `Each report ends with its Open issues \u2014 ${RESOLVE_OPEN_ISSUES}. Fix what the slices broke between them, and implement any task that failed.`;
+var PARALLEL_NEXT = `HAND-OFF: the tasks ran side by side, one coding agent each, and each has reported into the chat. You are the coding model. ${RESOLVE_REPORTS} Then check the combined change. ${VERIFY_DELEGATION_STEP} Then commit, push and report per ticket.`;
+var BACKGROUND_NEXT = `HAND-OFF: one coding agent per task is now running IN THE BACKGROUND, each posting into the chat under its own name. You are the coding model: do not redo their tasks. Work on anything not delegated, then call wait_agents for their reports (or act on each as it arrives). ${RESOLVE_REPORTS} Then check the combined change. ${VERIFY_DELEGATION_STEP} Then commit, push and report per ticket.`;
+var MIXED_PARALLEL_NEXT = `HAND-OFF: some of the tasks ran side by side, one coding agent each, and each has reported into the chat. You are the coding model. ${RESOLVE_REPORTS} Then implement the remaining tasks below in plan order \u2014 they overlap those paths or own none, so they were not run beside them; do not re-plan or re-read what the planner already read. Then check the combined change. ${VERIFY_DELEGATION_STEP} Then commit, push and report per ticket.`;
+var MIXED_BACKGROUND_NEXT = `HAND-OFF: some of the tasks are now running IN THE BACKGROUND, one coding agent each, posting into the chat under its own name. You are the coding model: do not redo their tasks. The remaining tasks below are yours and come after theirs in the plan; they overlap those paths or own none, so call wait_agents for their reports FIRST, then implement them in plan order \u2014 do not re-plan or re-read what the planner already read. ${RESOLVE_REPORTS} Then check the combined change. ${VERIFY_DELEGATION_STEP} Then commit, push and report per ticket.`;
+
+// src/handOffFanOut.ts
+var FAN_OUT_TOOL = "spawn_agents";
+var FAN_OUT_BATCH = 4;
+function inlineTaskList(plan, indexes, ids, brief) {
+  return indexes.map((i) => `${i + 1}. ${ids[i] != null ? `#${ids[i]} ` : ""}${plan.tasks[i].title}
+${brief(i)}`).join("\n\n");
+}
+async function fanOut(plan, indexes, ids, brief, call2) {
+  const workstreams = [];
+  const changed2 = /* @__PURE__ */ new Set();
+  const placeholders = [];
+  let background = false;
+  for (let start = 0; start < indexes.length; start += FAN_OUT_BATCH) {
+    const batch = indexes.slice(start, start + FAN_OUT_BATCH);
+    const out = toolResultRecord(await call2(FAN_OUT_TOOL, {
+      workstreams: batch.map((i) => {
+        const t = plan.tasks[i];
+        const id = ids[i];
+        return {
+          label: id != null ? `#${id} ${t.title}` : t.title,
+          task: brief(i),
+          role: "code",
+          ...id != null ? { ticket: String(id) } : {}
+        };
+      })
+    }));
+    const started = Array.isArray(out?.agents) ? out.agents : Array.isArray(out?.workstreams) ? out.workstreams : null;
+    if (!out || out.ok === false && !started) {
+      if (start === 0) return null;
+      workstreams.push({ ok: false, error: typeof out?.error === "string" ? out.error : "fan-out failed", tasks: batch.map((i) => plan.tasks[i].title) });
+      continue;
+    }
+    if (started) workstreams.push(...started);
+    if (out.running === true) background = true;
+    if (Array.isArray(out.changedFiles)) {
+      for (const f of out.changedFiles) if (typeof f === "string") changed2.add(f);
+    }
+    if (Array.isArray(out.placeholders)) placeholders.push(...out.placeholders);
+  }
+  return { workstreams, changedFiles: [...changed2], placeholders, background };
+}
+
+// src/planHandoff.ts
+var HAND_OFF_TOOL = "hand_off";
+var MAX_HAND_OFF_TASKS = 12;
+var HAND_OFF_TOOL_SPEC = {
+  type: "function",
+  function: {
+    name: HAND_OFF_TOOL,
+    description: "OPTIONAL \u2014 for work that splits into SEVERAL separate tasks. A change you can already make (a bug fix, a small refactor, a copy or style change, anything a few edits cover) you simply MAKE now: your first edit moves the run into coding by itself, no hand_off needed, so never stall in analysis waiting to call this. When the work genuinely breaks into multiple tasks, call this ONCE with them instead of editing. Each task becomes a ticket linked to this chat. Tasks that own separate files run side by side, one coding agent each, and each reports back to this chat; otherwise the coding model implements them in order. Every task must stand alone \u2014 the agent that implements it sees none of this conversation: say what to change, where, and how to know it is done.",
+    parameters: {
+      type: "object",
+      properties: {
+        summary: {
+          type: "string",
+          description: "The research, summarised for the coders \u2014 they see nothing else. Everything your analysis AND any research sub-agents reported that the change needs: the files and functions involved, what they do today, the decisions made and why, and the traps found. Facts, not a recap of what you did."
+        },
+        tasks: {
+          type: "array",
+          minItems: 1,
+          maxItems: MAX_HAND_OFF_TASKS,
+          items: {
+            type: "object",
+            properties: {
+              title: { type: "string", description: 'Ticket title, e.g. "Rebuild UserDetailDrawer on SlideOutPanel".' },
+              brief: { type: "string", description: "The complete, standalone instruction: files, the change, the primitives to use." },
+              paths: {
+                type: "array",
+                items: { type: "string" },
+                description: "Workspace-relative files or directories this task OWNS. Tasks with disjoint paths run in parallel."
+              },
+              acceptance: { type: "string", description: "How to know it is done (tests, behaviour)." },
+              constraints: {
+                type: "string",
+                description: "What the coder must NOT do: files or modules to leave alone, primitives to reuse rather than copy, files not to grow, behaviour that must not change."
+              }
+            },
+            required: ["title", "brief"]
+          }
+        }
+      },
+      required: ["summary", "tasks"]
+    }
+  }
+};
+var str = (v) => typeof v === "string" ? v.trim() : "";
+function parseHandOff(args) {
+  const a = args ?? {};
+  const summary = str(a.summary);
+  if (!Array.isArray(a.tasks) || a.tasks.length === 0) {
+    return "hand_off needs { summary, tasks:[{ title, brief, paths? }] } with at least one task";
+  }
+  if (a.tasks.length > MAX_HAND_OFF_TASKS) {
+    return `at most ${MAX_HAND_OFF_TASKS} tasks per hand-off \u2014 merge related slices`;
+  }
+  const tasks = [];
+  for (const [i, raw] of a.tasks.entries()) {
+    const t = raw ?? {};
+    const title = str(t.title);
+    const brief = str(t.brief);
+    if (!title || !brief) return `task ${i + 1} needs both a title and a brief`;
+    const paths = Array.isArray(t.paths) ? t.paths.map(str).filter(Boolean) : [];
+    const acceptance = str(t.acceptance);
+    const constraints = str(t.constraints);
+    tasks.push({ title, brief, paths, ...acceptance ? { acceptance } : {}, ...constraints ? { constraints } : {} });
+  }
+  return { summary, tasks };
+}
+var TICKET_CONTEXT_MAX_CHARS = 600;
+function ticketDescription(task, summary) {
+  const context = summary.length > TICKET_CONTEXT_MAX_CHARS ? `${summary.slice(0, TICKET_CONTEXT_MAX_CHARS - 1).trimEnd()}\u2026` : summary;
+  return [
+    task.brief,
+    task.paths.length ? `Paths: ${task.paths.join(", ")}` : "",
+    task.acceptance ? `Done when: ${task.acceptance}` : "",
+    task.constraints ? `Do not: ${task.constraints}` : "",
+    context ? `Context: ${context}` : ""
+  ].filter(Boolean).join("\n\n");
+}
+var MAX_REQUEST_CHARS = 2e3;
+function childTaskBrief(task, ctx, ticketId) {
+  const request = ctx.request?.trim();
+  return [
+    ticketId != null ? `Ticket #${ticketId}: ${task.title}` : task.title,
+    request ? `The goal \u2014 what the user asked for: ${request.length > MAX_REQUEST_CHARS ? `${request.slice(0, MAX_REQUEST_CHARS)}\u2026` : request}` : "",
+    task.brief,
+    task.paths.length ? `Your slice covers: ${task.paths.join(", ")}. Sibling slices are working beside you on other paths.` : "",
+    task.constraints ? `Do not: ${task.constraints}` : "",
+    task.acceptance ? `Done when: ${task.acceptance}` : "",
+    ctx.summary ? `Research handed to you (the analysis is finished \u2014 do not redo it): ${ctx.summary}` : "",
+    ctx.knowledge ? `What the research already read and searched (read again only what your change itself needs):
+${ctx.knowledge}` : "",
+    "Make the change now. Read only what the change itself needs."
+  ].filter(Boolean).join("\n\n");
+}
+function planMessage(plan, ticketIds, layout) {
+  const lines = plan.tasks.map((t, i) => {
+    const id = ticketIds[i];
+    return `${i + 1}. ${id != null ? `#${id} ` : ""}${t.title}${t.paths.length ? ` \u2014 ${t.paths.join(", ")}` : ""}`;
+  });
+  const mode = typeof layout === "boolean" ? layout ? "parallel" : "inline" : modeOf(layout);
+  const header = mode === "parallel" ? " (running side by side; each reports back here)" : mode === "mixed" ? " (partly side by side; each agent reports back here)" : "";
+  return [
+    `**Plan \u2014 ${plan.tasks.length} task${plan.tasks.length === 1 ? "" : "s"}**${header}`,
+    typeof layout === "boolean" ? "" : splitLayoutLine(layout),
+    plan.summary,
+    lines.join("\n")
+  ].filter(Boolean).join("\n\n");
+}
+function isFailed2(out) {
+  if (out == null) return true;
+  if (typeof out !== "object") return false;
+  const o = out;
+  return o.ok === false || typeof o.error === "string" && o.error.length > 0;
+}
+async function call(ports, name, args) {
+  const now = ports.now ?? (() => Date.now());
+  const start = now();
+  let out;
+  try {
+    out = await ports.runTool(name, args);
+  } catch (e) {
+    out = { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+  ports.step?.(name, { ...args, auto: true, reason: "hand_off" }, out, now() - start);
+  return out;
+}
+function filedTicketRef(record2, local) {
+  const { localId, syncId } = entityIdsOf(record2);
+  if (!local) return syncId ?? void 0;
+  if (localId) return localId;
+  if (syncId != null) return syncId;
+  const opaque = record2?.id;
+  return typeof opaque === "string" && opaque.trim() ? opaque : void 0;
+}
+async function fileTickets(plan, ports) {
+  const vocabulary = ticketToolVocabulary(ports.toolNames);
+  const createTool = vocabulary.createTool;
+  if (ports.projectId == null || !createTool) return plan.tasks.map(() => void 0);
+  const ids = [];
+  for (const task of plan.tasks) {
+    const out = await call(ports, createTool, {
+      // The local tool takes its project as text; the account's takes the number.
+      projectId: vocabulary.local ? String(ports.projectId) : ports.projectId,
+      title: task.title,
+      description: ticketDescription(task, plan.summary),
+      taskType: "task"
+    });
+    const record2 = toolResultRecord(out);
+    const failed4 = isFailed2(record2 ?? out);
+    ids.push(failed4 ? void 0 : filedTicketRef(record2, vocabulary.local));
+    if (!failed4) await ports.afterCreate?.(createTool, out).catch(() => void 0);
+  }
+  return ids;
+}
+async function startTickets(ids, ports) {
+  const vocabulary = ticketToolVocabulary(ports.toolNames);
+  for (const id of ids) {
+    if (id == null) continue;
+    const move = ticketStatusMove(id, "in_progress", vocabulary);
+    if (!move || !ports.toolNames.has(move.tool)) continue;
+    await call(ports, move.tool, { ...move.args });
+  }
+}
+async function executeHandOff(plan, ports) {
+  const ids = await fileTickets(plan, ports);
+  await startTickets(ids, ports);
+  const tickets = plan.tasks.map((t, i) => ({ title: t.title, ...ids[i] != null ? { id: ids[i] } : {} }));
+  const all = plan.tasks.map((_, i) => i);
+  const canFanOut = ports.toolNames.has(FAN_OUT_TOOL);
+  const split = canFanOut ? splitForParallel(plan.tasks, ports.isPackageDir) : { parallel: [], inline: all, clash: null };
+  const briefContext = { summary: plan.summary, request: ports.request, knowledge: ports.knowledge };
+  const brief = (i) => childTaskBrief(plan.tasks[i], briefContext, ids[i]);
+  await ports.postPlan?.(planMessage(plan, ids, split)).catch(() => void 0);
+  const decide = (mode, parallel, inline) => ports.decided?.({
+    mode,
+    parallelTasks: parallel.map((i) => plan.tasks[i].title),
+    inlineTasks: inline.map((i) => plan.tasks[i].title),
+    clash: split.clash
+  });
+  const clash = split.clash ? { clash: split.clash } : {};
+  const ran = split.parallel.length ? await fanOut(plan, split.parallel, ids, brief, (name, args) => call(ports, name, args)) : null;
+  if (ran) {
+    const mode = modeOf(split);
+    decide(mode, split.parallel, split.inline);
+    return {
+      ok: true,
+      mode,
+      tickets,
+      workstreams: ran.workstreams,
+      ...ran.changedFiles.length ? { changedFiles: ran.changedFiles } : {},
+      ...ran.placeholders.length ? { placeholders: ran.placeholders } : {},
+      ...mode === "mixed" ? clash : {},
+      next: mode === "parallel" ? ran.background ? BACKGROUND_NEXT : PARALLEL_NEXT : `${ran.background ? MIXED_BACKGROUND_NEXT : MIXED_PARALLEL_NEXT}
+
+${inlineTaskList(plan, split.inline, ids, brief)}`
+    };
+  }
+  decide("inline", [], all);
+  return {
+    ok: true,
+    mode: "inline",
+    tickets,
+    ...clash,
+    next: `${INLINE_NEXT}
+
+${inlineTaskList(plan, all, ids, brief)}`
+  };
+}
+
 // ../packages/agent-skills/src/spec.ts
 var SPEC_FIELDS = ["name", "description", "license", "compatibility", "metadata", "allowed-tools"];
 var SKILL_BINARY_FILE_MAX_BYTES = 5 * 1024 * 1024;
@@ -17984,27 +17901,19 @@ function turnOptimizationDirective() {
 }
 
 // src/selfReviewShip.ts
-function selfReviewShipDirective(chatId) {
-  const trackingTicket = chatId != null ? "builtin_chats_list_tickets with chatId=" + chatId + " lists it" : "the one builtin_tickets_from_delta returned for it";
-  return `SHIP YOUR OWN CHANGE \u2014 in this session YOU are its reviewer. This is a local editor session: no other agent or reviewer can ever reach a change you leave in the working tree, so a ticket you leave "in_review" sits at 75% on the board forever. When your turn changes code, finish it in this order:
-1. VERIFY \u2014 ${VERIFY_STEP}
-2. SELF-REVIEW \u2014 read your own diff with \`git_diff\` against what the ticket and the user asked for: bugs, leftover debug code, edits unrelated to the task, missing tests or localisation. If you find a problem, FIX it and review again. Then record the pass with builtin_reviews_record (taskId = the ticket tracking this change \u2014 ` + trackingTicket + '; verdict "complete"; a one-paragraph summary of what you checked).\n3. SHIP \u2014 `git_commit` with allowBaseBranch:true and exactly the `paths` you changed (never a catch-all: the tree may hold the human\'s own work), then `git_push` with allowBaseBranch:true. Both are shown to the human for approval \u2014 that approval is their review of your review, so do not ask for it in prose as well.\n4. CLOSE \u2014 the push reports the branch it landed on. Once it lands on the base branch with nothing left to push, the in_review ticket this chat opened for the change moves to done automatically, and the host records its review if you have not. Never defer the close-out to a later run or ask the user to continue for it. Move any OTHER linked ticket this change fully delivers to done yourself with builtin_tasks_update. Report the commit hash and the push result.\nExceptions, and only these: if the user asked for a pull request or a ticket branch, commit on a `branch` and `open_pull_request` instead (the ticket then closes when that PR merges); if the user said not to commit or push, leave the change uncommitted and say so. If a commit or push is refused or fails, report the exact error \u2014 never claim a change shipped when it did not.';
-}
-var RAW_PUBLISH = gitCommandPattern("commit|push");
 function attemptedPublish(events) {
-  return events.some(
-    (e) => e.category === "tool" && (PUBLISH_TOOLS.has(e.label) || RAW_PUBLISH.test(commandOf(e)))
-  );
+  return events.some((e) => {
+    if (e.category !== "tool") return false;
+    const verb = publishVerbOf(e.label, e.args);
+    return verb != null && verb !== "cleanup";
+  });
 }
 var DECLINES_SHIPPING = /\b(?:don'?t|do not|never|without)\s+(?:commit|push|ship|merg)\w*|\b(?:no|skip)\s+(?:commit|push)\w*|\b(?:leave|keep)\s+(?:it|them|this|the\s+(?:change|changes|edits?))\s+(?:uncommitted|unstaged|local(?:ly)?)\b/i;
 function declinesShipping(text2) {
   return DECLINES_SHIPPING.test(text2 ?? "");
 }
 function leftChangeUnshipped(input) {
-  return input.codeChanged && canShipHere(input.toolNames) && asksForChange(input.requestText) && !declinesShipping(input.requestText) && !attemptedPublish(input.events);
-}
-function unshippedChangeNudge() {
-  return "You changed code in this run and ended the turn without shipping it. In this local session you are the reviewer \u2014 no one else can pick the change up, so leaving it uncommitted parks its ticket in review forever. Finish it now: verify it \u2014 " + VERIFY_STEP + ' Then self-review your diff with `git_diff` and record builtin_reviews_record (verdict "complete") on the ticket tracking it, then `git_commit` (allowBaseBranch:true, exactly the paths you changed) and `git_push` (allowBaseBranch:true). If the user asked for a pull request, commit on a `branch` and `open_pull_request` instead. If you genuinely cannot ship \u2014 the change is unfinished, or verification fails and you cannot fix it \u2014 say so plainly at the TOP of your answer and name exactly what is left.';
+  return input.codeChanged && canShipHere(input.toolNames) && asksForChange(input.requestText) && shipNudge(input.policy) != null && !attemptedPublish(input.events);
 }
 
 // src/runStore/convoText.ts
@@ -18098,14 +18007,6 @@ function asksToShip(text2, priorAssistant) {
   if (priorAssistant && BARE_AFFIRMATIVE.test(turn) && ASSISTANT_ASKS_TO_SHIP.test(priorAssistant)) return true;
   return turn.split(/[.!?;:\n,]+/).some((clause) => SHIP_ORDER.test(clause.trim()));
 }
-var RAW_PUBLISH2 = gitCommandPattern("commit|push");
-function isPublishCall(name, args) {
-  if (PUBLISH_TOOLS.has(name)) return true;
-  if (name !== "run_command") return false;
-  const a = args;
-  const command = typeof a?.command === "string" ? a.command : typeof a?.cmd === "string" ? a.cmd : "";
-  return RAW_PUBLISH2.test(command);
-}
 function publishHoldFromPersonTurns(personTurns2) {
   let hold = null;
   personTurns2.forEach((turn, index) => {
@@ -18132,7 +18033,7 @@ function publishHold(convo) {
 }
 function attemptedPublishWhileHeld(hold, events) {
   if (!hold) return false;
-  return events.some((e) => e.category === "tool" && isPublishCall(e.label, e.args));
+  return events.some((e) => e.category === "tool" && publishVerbOf(e.label, e.args) != null);
 }
 function recordPublishRefusal(runKey, name, args, events) {
   for (const e of events) {
@@ -18141,16 +18042,13 @@ function recordPublishRefusal(runKey, name, args, events) {
       return { runKey, tool: e.label };
     }
   }
-  return isPublishCall(name, args) ? { runKey, tool: name } : null;
+  return publishVerbOf(name, args) != null ? { runKey, tool: name } : null;
 }
-function publishHoldDirective() {
-  return "PUBLISH HOLD \u2014 the user is holding all commits, pushes and pull requests until they have validated the changes. Do NOT run git_commit, git_push or open_pull_request, and do not publish through a raw `git commit`/`git push` shell command \u2014 the tool gate will refuse them. Leave every change uncommitted. Finish your turn with a list of the changed paths and what still needs validation, so the user can review.";
-}
-function publishHoldRefusal(hold) {
-  return {
-    ok: false,
-    error: "Publish hold is ON for this chat (set by user message #" + hold.messageNumber + ': "' + hold.text + '"). The user is holding all commits/pushes until they validate the changes. Leave the changes uncommitted; finish with a list of changed paths for review. The hold is lifted only when the user explicitly asks to commit, push or ship.'
-  };
+
+// src/runStore/runShipPolicy.ts
+function runShipPolicy(req, hold) {
+  const base = req.lineage ? shipPolicyOf("leave_uncommitted", "subagent") : req.shipPolicy ?? DEFAULT_SHIP_POLICY;
+  return narrowByHold(base, hold);
 }
 
 // src/restatedReply.ts
@@ -18411,17 +18309,14 @@ function budgeted(run) {
 function progressed(run) {
   return run.c.codeChanged || run.usedTools.has(HAND_OFF_TOOL);
 }
+function endPlanning(run, step, why) {
+  reportToPolicy(run, { type: "plan_budget_spent" });
+  pushTrace(run.c, { ts: nowIso(), category: "message", label: "loop.plan_budget_spent", args: { step, planTurns: run.policy.planTurns }, result: why });
+}
 function planBudgetTurn(run, step) {
   if (!handOffDue(run.policy) || !budgeted(run)) return null;
   if (run.policy.handOffForced || !run.canAskUser) {
-    reportToPolicy(run, { type: "plan_budget_spent" });
-    pushTrace(run.c, {
-      ts: nowIso(),
-      category: "message",
-      label: "loop.plan_budget_spent",
-      args: { step, planTurns: run.policy.planTurns },
-      result: run.canAskUser ? "The forced hand-off turn did not hand off \u2014 analysis ends here and the coding role takes the next turn." : "Analysis budget spent where hand_off cannot be offered \u2014 analysis ends here and the coding role takes the next turn."
-    });
+    endPlanning(run, step, run.canAskUser ? "The forced hand-off turn did not hand off \u2014 analysis ends here and the coding role takes the next turn." : "Analysis budget spent where hand_off cannot be offered \u2014 analysis ends here and the coding role takes the next turn.");
     return null;
   }
   reportToPolicy(run, { type: "hand_off_forced" });
@@ -18434,21 +18329,25 @@ function planBudgetTurn(run, step) {
   });
   return { tools: [HAND_OFF_TOOL_SPEC], toolChoice: "required", brief: { role: "user", content: HAND_OFF_DUE_BRIEF } };
 }
-function changeToolsOf(run, selected) {
-  const tools = selected.filter((t) => isCodeChangeTool(t.function.name) || run.canAskUser && t.function.name === ASK_USER_TOOL);
+function changeToolsOf(run, selected, canAsk = run.canAskUser) {
+  const tools = selected.filter((t) => isCodeChangeTool(t.function.name) || canAsk && t.function.name === ASK_USER_TOOL);
   return tools.some((t) => isCodeChangeTool(t.function.name)) ? tools : null;
 }
-function forcedProgressTurn(run, selected, reason) {
-  if (offersHandOff(run.policy) && run.canAskUser && !run.policy.handOffForced) {
+function forcedProgressTurn(run, selected, reason, opts = {}) {
+  if (!opts.changeOnly && offersHandOff(run.policy) && run.canAskUser && !run.policy.handOffForced) {
     reportToPolicy(run, { type: "hand_off_forced" });
     return { forced: "hand_off", turn: { tools: [HAND_OFF_TOOL_SPEC], toolChoice: "required", brief: { role: "user", content: handOffBrief(reason) } } };
   }
   if (run.c.codeChanged) return null;
-  const tools = changeToolsOf(run, selected.filter((t) => t.function.name !== HAND_OFF_TOOL));
+  const canAsk = run.canAskUser && !opts.noAsk;
+  const tools = changeToolsOf(run, selected.filter((t) => t.function.name !== HAND_OFF_TOOL), canAsk);
   if (!tools) return null;
-  if (offersHandOff(run.policy)) reportToPolicy(run, { type: "plan_budget_spent" });
+  if (offersHandOff(run.policy)) {
+    if (opts.endPlanning) endPlanning(run, opts.endPlanning.step, opts.endPlanning.why);
+    else reportToPolicy(run, { type: "plan_budget_spent" });
+  }
   reportToPolicy(run, { type: "change_forced" });
-  return { forced: "change", turn: { tools, toolChoice: "required", brief: { role: "user", content: changeBrief(reason, run.canAskUser) } } };
+  return { forced: "change", turn: { tools, toolChoice: "required", brief: { role: "user", content: changeBrief(reason, canAsk) } } };
 }
 function changeBudgetTurn(run, step, selected) {
   const budget2 = skipsVerifyStage(run.pipeline) ? QUICK_CHANGE_TURN_BUDGET : PLAN_TURN_BUDGET;
@@ -18473,13 +18372,15 @@ function isReadOnlyCall(tool, args) {
 var RunProgressGuard = class {
   /** Null when the lever is off: every method is then a no-op. */
   detector;
-  /** An escalate / pause a later turn's menu acts on — kept until one takes it, so a
+  /** An escalate / finish a later turn's menu acts on — kept until one takes it, so a
    *  budget that forces the next turn first never drops it. */
   due = null;
   /** The note the next turn opens with, when the host shows it in place of an escalation. */
   steer;
   /** The B1 / B4 advisory the last turn produced, waiting to be traced. */
   advisory = null;
+  /** An unverified finish was deferred once for a forced change turn (`progressGuardTurn`). */
+  stalledDeferred = false;
   /**
    * @param on the A3 lever.
    * @param expectsChange the run was asked for a CHANGE (`asksForChange` over its request).
@@ -18501,6 +18402,10 @@ var RunProgressGuard = class {
   observe(tool, args, result) {
     this.detector?.observe(tool, args, result);
   }
+  /** A child's report reached the run through its inbox (not a `wait_agents` result): its files are the run's writes. */
+  observeChildReport(report) {
+    this.detector?.observeChildReport(report);
+  }
   /** The turn's calls all ran. The trip it caused, if any — or the B1 readiness
    *  advisory ({@link readinessAdvisory}) on the FIRST unkept claim, which is never a
    *  trip and must not be queued like one. */
@@ -18514,7 +18419,7 @@ var RunProgressGuard = class {
       return null;
     }
     if (action.kind === "escalate" || action.kind === "finish") this.detector?.setSteer(void 0);
-    if (action.kind === "escalate" || action.kind === "pause" || action.kind === "finish") this.due = action;
+    if (action.kind === "escalate" || action.kind === "finish") this.due = action;
     return action;
   }
   /** The note the next turn opens with ("" when none) — a trip steer, or the B1 advisory. */
@@ -18527,11 +18432,19 @@ var RunProgressGuard = class {
     this.advisory = null;
     return advisory;
   }
-  /** The escalation or pause waiting for this turn, taken once. */
+  /** The escalation or finish waiting for this turn, taken once. */
   takeDue() {
     const due = this.due;
     this.due = null;
     return due;
+  }
+  /** Whether an unverified finish may still be deferred — once per run, for one forced change turn. */
+  get canDeferStalledFinish() {
+    return !this.stalledDeferred;
+  }
+  /** The one deferral is spent: the next unverified finish really ends the run. */
+  stalledFinishDeferred() {
+    this.stalledDeferred = true;
   }
   /** The escalation could not be forced here: show its note on this turn instead. */
   steerInstead(note) {
@@ -18554,25 +18467,13 @@ function progressGuardTurn(run, step, selected) {
   const due = run.progress.takeDue();
   if (!due) return null;
   if (due.kind === "finish") {
+    const deferred = due.verified ? null : deferredFinishTurn(run, step, selected, due);
+    if (deferred === "steered") return null;
+    if (deferred) return deferred;
     trace2(run, step, due, "finish");
     return { tools: [], brief: { role: "user", content: due.note } };
   }
   const advice = `PROGRESS CHECK ${due.trip}: ${progressAdvice(due.signal)}`;
-  if (due.kind === "pause") {
-    if (!run.canAskUser) {
-      run.progress.steerInstead(advice);
-      return null;
-    }
-    trace2(run, step, due, "ask_user");
-    return {
-      tools: [ASK_USER_TOOL_SPEC],
-      toolChoice: "required",
-      brief: {
-        role: "user",
-        content: `${advice} Call ${ASK_USER_TOOL} now. question: "${due.question}" options: [{ "label": "Continue with guidance" }, { "label": "Stop the run" }]`
-      }
-    };
-  }
   const out = budgeted(run) ? forcedProgressTurn(run, selected, advice) : null;
   if (!out) {
     run.progress.steerInstead(advice);
@@ -18581,8 +18482,27 @@ function progressGuardTurn(run, step, selected) {
   trace2(run, step, due, out.forced);
   return out.turn;
 }
+function deferredFinishTurn(run, step, selected, due) {
+  if (!budgeted(run) || progressed(run) || !run.progress.canDeferStalledFinish) return null;
+  const advice = `PROGRESS CHECK ${due.trip}: ${progressAdvice(due.signal)}`;
+  const planning = offersHandOff(run.policy);
+  const out = forcedProgressTurn(run, selected, advice, {
+    changeOnly: true,
+    noAsk: true,
+    endPlanning: { step, why: "The run kept reading through its progress checks without handing off \u2014 analysis ends here and the coding role makes the change." }
+  });
+  if (out) {
+    run.progress.stalledFinishDeferred();
+    trace2(run, step, due, out.forced);
+    return out.turn;
+  }
+  if (!planning) return null;
+  endPlanning(run, step, "The run kept reading through its progress checks without handing off \u2014 analysis ends here and the coding role takes the next turn.");
+  run.progress.stalledFinishDeferred();
+  run.progress.steerInstead(advice);
+  return "steered";
+}
 var FORCED_MENU = {
-  ask_user: "ask_user alone",
   hand_off: "hand_off alone",
   change: "the change tools alone"
 };
@@ -18592,7 +18512,7 @@ function trace2(run, step, due, forced) {
     category: "message",
     label: "loop.progress_forced",
     args: { step, trip: due.trip, signal: due.signal.kind, forced },
-    result: forced === "finish" ? `progress check ${due.trip} (${due.signal.kind}) \u2014 the change is made and verified: this turn offers no tools and the run writes its final report.` : `progress check ${due.trip} (${due.signal.kind}) \u2014 this turn offers ${FORCED_MENU[forced]} and requires a call.`
+    result: forced === "finish" ? `progress check ${due.trip} (${due.signal.kind}) \u2014 ${due.kind === "finish" && due.verified ? "the change is made and verified" : "the run is not converging"}: this turn offers no tools and the run writes its final report.` : `progress check ${due.trip} (${due.signal.kind}) \u2014 this turn offers ${FORCED_MENU[forced]} and requires a call.`
   });
 }
 
@@ -19345,6 +19265,16 @@ ${turnOptimizationDirective()}`;
   const canShip = canShipHere(catalogToolNames);
   const hold = publishHold(convo);
   c.publishHold = hold;
+  c.shipPolicy = runShipPolicy(req, hold);
+  if (canShip) {
+    pushTrace(c, {
+      ts: nowIso(),
+      category: "message",
+      label: "run.ship_policy",
+      args: { mode: c.shipPolicy.mode, source: c.shipPolicy.source, merge: c.shipPolicy.merge, review: c.shipPolicy.review, ...hold ? { setByMessage: hold.messageNumber } : {} },
+      result: `Ship policy: ${c.shipPolicy.mode} (${shipSourceLabel(c.shipPolicy)}).`
+    });
+  }
   if (hold && attemptedPublishWhileHeld(hold, c.trace)) {
     pushTrace(c, {
       ts: nowIso(),
@@ -19357,7 +19287,7 @@ ${turnOptimizationDirective()}`;
   if (canShip) {
     systemPrompt = `${systemPrompt}
 
-${hold ? publishHoldDirective() : selfReviewShipDirective(serverChatId)}`;
+${shipDirective(c.shipPolicy, { chatId: serverChatId })}`;
   }
   const previewReview = canReviewInPreview(catalogToolNames) ? previewReviewDirective(serverChatId, ticketToolVocabulary(catalogToolNames)) : null;
   if (previewReview) systemPrompt = `${systemPrompt}
@@ -19428,6 +19358,7 @@ ${c.priorResearch}`;
     memoryReplay,
     userRequest,
     publishHold: hold,
+    shipPolicy: c.shipPolicy,
     // The goal a hand-off states to coders who see none of this chat: the latest
     // message, and for a change request the chat's earlier change asks (`chatAsks.ts`).
     goal: reading.goal,
@@ -19579,17 +19510,17 @@ function earlyDelegationAdvisory(run, name, args, isReadTool, step) {
 function deliveryGates(run) {
   const { c, catalogToolNames, userRequest, priorReply } = run;
   const facts = () => ({ codeChanged: c.codeChanged, toolNames: catalogToolNames, requestText: userRequest, events: runTrace(c) });
-  const held = () => run.publishHold != null;
   const files = () => ({ files: c.touchedFiles.slice(0, 20) });
   return [
     {
       // The turn CHANGED code and is ending without having even tried to ship it. In a local session that change has no other
-      // reviewer. Quiet when the user said not to commit, when a commit/push/PR was attempted, and on a host that cannot commit.
+      // reviewer. Quiet when the ship policy ships nothing (`shipNudge` null: `leave_uncommitted`, which a chat hold and a
+      // sub-agent land on), when a commit/push/PR was attempted, and on a host that cannot commit.
       id: "brain.ship",
       entersVerify: true,
-      applies: () => !run.shipRecoveryUsed && !held() && leftChangeUnshipped(facts()),
-      nudge: unshippedChangeNudge,
-      trace: { label: "loop.recover_unshipped_change", args: files, result: "Run changed code and ended without committing or pushing it \u2014 re-prompted to verify, self-review and ship (this local session is the change's only reviewer)." },
+      applies: () => !run.shipRecoveryUsed && leftChangeUnshipped({ ...facts(), policy: run.shipPolicy }),
+      nudge: () => shipNudge(run.shipPolicy) ?? "",
+      trace: { label: "loop.recover_unshipped_change", args: files, result: "Run changed code and ended without shipping it under its ship policy \u2014 re-prompted to verify, self-review and ship as the policy says." },
       spend: () => {
         run.shipRecoveryUsed = true;
       }
@@ -19861,17 +19792,22 @@ function callPreflight(run) {
     const args = call2.args;
     attachDeltaToRunTicket(call2.name, args, c.deltaTicketId);
     stampRunChat(call2.name, args, run.serverChatId);
-    if (c.publishHold && isPublishCall(call2.name, args)) {
-      const refusal2 = publishHoldRefusal(c.publishHold);
-      pushTrace(c, { ts: nowIso(), category: "tool", label: call2.name, args, result: { publishHold: c.publishHold.messageNumber, note: refusal2.error } });
-      return { result: { data: refusal2 } };
+    const allowed = publishAllowed(run.shipPolicy, call2.name, args);
+    if (!allowed.ok) {
+      const hold = run.shipPolicy.hold;
+      pushTrace(c, { ts: nowIso(), category: "tool", label: call2.name, args, result: { shipPolicy: run.shipPolicy.mode, source: run.shipPolicy.source, ...hold ? { publishHold: hold.messageNumber } : {}, note: allowed.error } });
+      return { result: { data: allowed } };
     }
     const ship = await shipGatePreflight(run, call2.name, args);
     if ("refusal" in ship) {
       pushTrace(c, { ts: nowIso(), category: "tool", label: call2.name, args, result: ship.refusal, isError: true });
       return { result: { data: ship.refusal } };
     }
-    if (needsConfirm && needsConfirm({ name: call2.name, args })) {
+    const confirm = !!needsConfirm && needsConfirm({ name: call2.name, args, shipPolicy: run.shipPolicy });
+    if (!confirm && ship.evidence) {
+      pushTrace(c, { ts: nowIso(), category: "message", label: "ship.gate_evidence", args: { step: iter, tool: call2.name }, result: ship.evidence });
+    }
+    if (confirm) {
       const ok = await requestRunConfirm(runKey, { name: call2.name, args, ...ship.evidence ? { evidence: ship.evidence } : {} }, { step: iter });
       if (!ok) {
         const declined = { cancelled: true, reason: "User declined this action." };
@@ -19977,11 +19913,11 @@ ${revisit}` : covered.note;
 // src/runStore/postEditDiagnostics.ts
 var EDIT_TOOLS2 = /* @__PURE__ */ new Set(["edit_file", "write_file"]);
 var NOTE_ERRORS2 = 5;
-function succeeded5(data) {
+function succeeded4(data) {
   return !(data && typeof data === "object" && data.ok === false);
 }
 async function postEditDiagnostics(call2, verifier) {
-  if (!verifier || !EDIT_TOOLS2.has(call2.name) || !succeeded5(call2.result)) return null;
+  if (!verifier || !EDIT_TOOLS2.has(call2.name) || !succeeded4(call2.result)) return null;
   const paths = editedPathsOf(call2.name, call2.args);
   if (!paths.length) return null;
   let record2;
@@ -20003,11 +19939,11 @@ ${lines.join("\n")}${more}`;
 
 // src/runStore/postEditStructure.ts
 var BALANCE_TOOLS = /* @__PURE__ */ new Set(["edit_file"]);
-function succeeded6(data) {
+function succeeded5(data) {
   return !(data && typeof data === "object" && data.ok === false);
 }
 function bracketBalanceNote(call2) {
-  if (!BALANCE_TOOLS.has(call2.name) || !succeeded6(call2.result)) return null;
+  if (!BALANCE_TOOLS.has(call2.name) || !succeeded5(call2.result)) return null;
   const lines = [];
   for (const e of editedFilesOf(call2.name, call2.args)) {
     if (e.before === void 0 || e.after === void 0) continue;
@@ -20750,13 +20686,16 @@ function brainCompaction(run) {
 }
 
 // src/run/brainFinish.ts
-function brainFinishHook(req) {
-  const ports = req.liveChildren ? {
-    // The run IS a delegation owner as soon as the host can say who its live children are: an owner, not only a child
-    // (`parentRunId`), holds its end for them.
-    delegated: true,
-    liveChildren: req.liveChildren
-  } : {};
+function brainFinishHook(req, openWork) {
+  const ports = {
+    ...req.liveChildren ? {
+      // The run IS a delegation owner as soon as the host can say who its live children are: an owner, not only a child
+      // (`parentRunId`), holds its end for them.
+      delegated: true,
+      liveChildren: req.liveChildren
+    } : {},
+    ...openWork ? { openWork } : {}
+  };
   return createFinishHook(ports);
 }
 
@@ -21018,6 +20957,7 @@ function brainSteeringSource(run, people) {
         const parts = imagePartsOf(content);
         const text2 = typeof content === "string" ? content : content.map((p) => "text" in p && typeof p.text === "string" ? p.text : "").join("");
         if (steer.fromPerson) people.note(text2);
+        if (steer.childReport) run.progress.observeChildReport(steer.childReport);
         out.push({
           text: text2,
           ...parts.length > 0 ? { parts } : {},
@@ -21295,6 +21235,104 @@ function brainEventSink(c, outcome, on = {}) {
 function withHostContext(row, c) {
   const tokens = turnContextTokens(c);
   return tokens > 0 ? { ...row, contextPackTokens: (row.contextPackTokens ?? 0) + tokens } : row;
+}
+
+// src/runStore/openLinkedWorkHold.ts
+var MAX_OPEN_WORK_HOLDS = 6;
+var MAX_LISTED_TICKETS = 15;
+var UNMOVED_LOCAL_STATUS = "backlog";
+var ACTIVE_STATUS = "in_progress";
+var WORK_ITEM_TOOL = /^(builtin_(tasks|tickets|kanban)_|ticket[-_.])/i;
+function isProgressStep(ev) {
+  if (ev.category !== "tool" || ev.isError || isFailedToolResult(ev.result)) return false;
+  if (ev.args?.auto === true) return false;
+  const name = ev.label;
+  if (isCodeChangeTool(name) || isRepoPublishTool(name) || name === "git_commit") return true;
+  if (name === "run_command") return !isReadOnlyShellCall(name, ev.args);
+  return WORK_ITEM_TOOL.test(name) && !isReadOnlyPlatformTool(name) && !/^ticket[-_.](list|get|search|read)/i.test(name);
+}
+function latestProgress(trace4) {
+  for (let i = trace4.length - 1; i >= 0; i--) if (isProgressStep(trace4[i])) return trace4[i];
+  return null;
+}
+function localOpenTickets(trace4, listedRefs) {
+  const moves = ticketMovesInRun(trace4);
+  return ticketsCreatedInRun(trace4).filter((f) => f.local && (f.syncRef == null || !listedRefs.has(f.syncRef))).map((f) => ({
+    ref: f.ref,
+    kind: typeof f.args.taskType === "string" ? f.args.taskType : "task",
+    title: typeof f.args.title === "string" ? f.args.title : "",
+    status: (latestStatus(moves, f.ids) ?? UNMOVED_LOCAL_STATUS).toLowerCase()
+  })).filter((r) => isOpenLinkedStatus(r.status));
+}
+function ticketLine(t) {
+  return `#${t.ref} ${t.kind}${t.title ? ` "${t.title}"` : ""} (${t.status})`;
+}
+function ticketList(open2) {
+  const shown = open2.slice(0, MAX_LISTED_TICKETS).map((t) => `- ${ticketLine(t)}`);
+  if (open2.length > MAX_LISTED_TICKETS) shown.push(`- +${open2.length - MAX_LISTED_TICKETS} more`);
+  return shown.join("\n");
+}
+function openWorkBlock(open2) {
+  return `You may not end this run while work open on this chat is still unfinished:
+${ticketList(open2)}
+
+Review each open ticket against its acceptance criteria and the spec it implements, then CONTINUE EXECUTING the remaining work now \u2014 do not summarise what is left. For an EPIC, file a child task under it (parentTaskId / parentTicketId = the epic's ref) for each remaining slice that has no ticket yet, and move each finished child task to done so the epic's progress reflects reality. Move a ticket to done ONLY when its acceptance is met. The only ways to end with a ticket open: hand it off for review or merge (move it to "in_review"); set it to "blocked" with builtin_tasks_update and state the reason when it genuinely needs credentials, a live environment, or a decision only the person can make; or ask the person.`;
+}
+function asksThePerson(content) {
+  return !!content && parseAskUser(liftProseAskUser(content)) != null;
+}
+function openLinkedWorkHold(run) {
+  let holds = 0;
+  let released = false;
+  let markAtLastHold = null;
+  const noteOf2 = (ev) => pushTrace(run.c, ev);
+  const note = (label, result, args) => {
+    noteOf2({ ts: nowIso(), category: "message", label, ...args ? { args } : {}, result });
+  };
+  const openTickets = async (trace4, executing) => {
+    if (run.serverChatId == null || !canListChatTickets(run.req.tools)) return localOpenTickets(trace4, /* @__PURE__ */ new Set());
+    const listed = await listChatTickets(run.req, run.serverChatId, {
+      note: noteOf2,
+      label: "finish.open_work_unreadable",
+      consequence: "the run is not held for them.",
+      // A hung listing must not hang the run's end: it is waited for no longer than the settle's own ticket bookkeeping.
+      timeoutMs: continuationLimits.settleMs
+    }, listingScopeOf(run.c));
+    if (listed == null) return null;
+    const rows = linkedTaskRows(listed);
+    const owned = runOwnedTicketRefs(trace4, run.c.deltaTicketId);
+    const linkedOpen = rows.filter((t) => isOpenLinkedStatus(t.status) && (owned.has(t.ref) || executing && t.status === ACTIVE_STATUS));
+    return [...linkedOpen, ...localOpenTickets(trace4, new Set(rows.map((t) => t.ref)))];
+  };
+  const release = (open2, reason) => {
+    released = true;
+    const why = reason === "budget" ? `it was already held ${holds} times` : "it made no change after the last hold";
+    note("finish.open_work_released", `The run ends with linked work still open (${open2.map(ticketLine).join("; ")}): released because ${why}.`, { reason, holds, open: open2.map((t) => t.ref) });
+    return null;
+  };
+  const progressedSinceHold = (trace4, latest) => {
+    if (latest == null) return false;
+    if (markAtLastHold == null) return true;
+    return latest !== markAtLastHold && trace4.includes(markAtLastHold);
+  };
+  return async (ctx) => {
+    const { req } = run;
+    if (released || !req.runTool) return null;
+    if (req.lineage || ctx.task.dispatch.parentRunId !== void 0) return null;
+    if (normalizeChatMode(req.chatMode ?? "work") !== "work") return null;
+    if (run.c.abort?.signal.aborted || ctx.signal?.aborted) return null;
+    if (asksThePerson(ctx.content)) return null;
+    const trace4 = runTrace(run.c);
+    const latest = latestProgress(trace4);
+    const open2 = await openTickets(trace4, budgeted(run) || latest != null);
+    if (!open2 || open2.length === 0) return null;
+    if (holds >= MAX_OPEN_WORK_HOLDS) return release(open2, "budget");
+    if (holds > 0 && !progressedSinceHold(trace4, latest)) return release(open2, "no_progress");
+    holds += 1;
+    markAtLastHold = latest;
+    note("finish.open_work_held", `The run was held for its open linked work (${holds}/${MAX_OPEN_WORK_HOLDS}).`, { open: open2.map((t) => t.ref) });
+    return openWorkBlock(open2);
+  };
 }
 
 // src/runStore/modelDowngrade.ts
@@ -21739,7 +21777,9 @@ function brainRunPolicy(b) {
     stallExhausted: "settle",
     // The Brain's delegation gate (`earlyDelegation.ts` on the read result, the delivery ledger's rung at the end) is the run's ONE
     // gate: the agent's own early nudge and backstop stay off, or each read and each prose answer would be judged twice.
-    delegation: { requested: false, readsBeforeNudge: 0 }
+    delegation: { requested: false, readsBeforeNudge: 0 },
+    // What the run does with finished work — the preamble's narrowed policy; its prompt states it and `callPreflight` enforces it.
+    ...b.ship ? { ship: b.ship } : {}
   };
 }
 
@@ -21769,6 +21809,7 @@ async function runPrepared(run) {
       recorded: /* @__PURE__ */ new Set(["llm.model_downgrade", "steer.applied"])
     }),
     start: pipelinePolicyOptions(req, run.pipeline),
+    ship: run.shipPolicy,
     // From here the model policy is the AGENT's: the Brain's guards read `run.policy` and report to it through the view.
     attach: (view) => {
       run.view = view;
@@ -21803,7 +21844,7 @@ async function runPrepared(run) {
     // ... and the preamble ran the host's model preflight already (`hostRunContext.ts`): the agent's own would ask the host again and warn
     // about a model the loop never warned about (a QUICK run's quick model), so the Brain's says the verdict and nothing more.
     // ... and the finish module carries the host's engine ports (`brainFinish.ts`): an owner never ends with its sub-agents still working.
-    modules: { compaction: compaction.hook, model: recordedModelHook(c, req.model), finish: withDeterministicFinish(run, brainFinishHook(req)) },
+    modules: { compaction: compaction.hook, model: recordedModelHook(c, req.model), finish: withDeterministicFinish(run, brainFinishHook(req, openLinkedWorkHold(run))) },
     // The Brain's read-coverage owns the no-progress counter (`callPreflight`/`callPostStep`
     // feed it); hand the kernel that ONE instance to persist, so a circling run keeps its count
     // across the step yield it is steered into — not a kernel-built twin the Brain never feeds.
@@ -21935,7 +21976,7 @@ async function startRun(runKey, request, claim) {
       const closeOut = { serverChatId, view, req, needsTicket, shipped, reviewedInPreview, openPlaceholders: openPh, trace: trace4, evidence, verified: verification.verified, hasTicket };
       c.finishClosedOut = true;
       await within(left(), async () => {
-        if (!closeOut.hasTicket && finishConditionMet({ ...closeOut, hasTicket: true })) closeOut.hasTicket = await holdsLinkedTicket(trace4, serverChatId, req);
+        if (!closeOut.hasTicket && finishConditionMet({ ...closeOut, hasTicket: true })) closeOut.hasTicket = await holdsLinkedTicket(trace4, serverChatId, req, { deltaTicketId: view.deltaTicketId, note: view.note, listing: view.listing });
         await deterministicFinish(closeOut, { c, req, serverChatId, recalled: null });
       }, () => view.note?.({
         ts: nowIso(),
@@ -21951,6 +21992,7 @@ async function startRun(runKey, request, claim) {
         result: "The run's ticket bookkeeping failed; the run is settled without it."
       }));
       c.finishClosedOut = true;
+      forgetChatTicketListing(c);
       const finished = finishConditionMet(closeOut);
       if (req.continuationProgress) noteContinuationProgress(runKey, changed2 || verification.verified);
       const finalTrace = runTrace(c);
@@ -24402,8 +24444,12 @@ function formatChatDiagnostics(d) {
   }
   lines.push(`- Chat: ${d.chatTitle?.trim() ? `"${d.chatTitle.trim()}"` : "Untitled"}${d.chatId != null ? ` (#${d.chatId})` : ""}${d.chatVisibility ? ` \xB7 ${d.chatVisibility}` : ""}`);
   if (d.mode) lines.push(`- Mode: ${d.mode}`);
-  if (d.publishHold) {
-    lines.push(`- Publish hold: ON (set by user message #${d.publishHold.messageNumber}: "${d.publishHold.text.slice(0, 120)}") \u2014 commit/push/PR calls are refused until the user explicitly asks to ship`);
+  if (d.shipPolicy) {
+    const sp = d.shipPolicy;
+    lines.push(`- Ship policy: ${sp.mode} (source: ${sp.source})${sp.mode === "leave_uncommitted" ? " \u2014 commit/push/PR calls are refused by policy, so uncommitted changes are expected" : ""}`);
+    if (sp.hold) {
+      lines.push(`  - Publish hold: ON (set by user message #${sp.hold.messageNumber}: "${sp.hold.text.slice(0, 120)}") \u2014 lifted only when the user explicitly asks to ship`);
+    }
   }
   if (d.pendingQuestions != null) {
     if (d.pendingQuestions.length === 0) {
@@ -24563,6 +24609,21 @@ function formatSubagentDiagnostics(children, capturedAtMs) {
 }
 
 // src/gatherChatDiagnostics.ts
+var SHIP_SOURCES = /* @__PURE__ */ new Set(["project_settings", "chat_hold", "subagent", "person_grant", "default"]);
+function shipPolicyOfTrace(events, hold) {
+  let recorded = null;
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i];
+    if (e?.label === "run.ship_policy" && e.args && typeof e.args === "object") {
+      recorded = e.args;
+      break;
+    }
+  }
+  const base = recorded && isShipMode(recorded.mode) && typeof recorded.source === "string" && SHIP_SOURCES.has(recorded.source) ? shipPolicyOf(recorded.mode, recorded.source) : null;
+  if (!base && !hold) return null;
+  const p = narrowByHold(base ?? shipPolicyOf("commit", "default"), hold);
+  return { mode: p.mode, source: p.source, ...p.hold ? { hold: p.hold } : {} };
+}
 function accountsAcrossTurns(events) {
   const seen = /* @__PURE__ */ new Set();
   for (const ev of events) {
@@ -24618,6 +24679,7 @@ async function gatherChatDiagnostics(src) {
   const publishHold2 = publishHoldFromPersonTurns(
     msgs.filter((m) => m.role === "user" && typeof m.content === "string" && m.content.trim()).map((m) => ({ text: m.content.trim() }))
   );
+  const shipPolicy = shipPolicyOfTrace(merged, publishHold2);
   const pendingAsk = selectPendingAskUser(
     msgs.filter((m) => (m.role === "assistant" || m.role === "user") && typeof m.content === "string").map((m) => ({ id: 0, role: m.role === "assistant" ? "assistant" : "user", content: m.content }))
   );
@@ -24662,7 +24724,7 @@ async function gatherChatDiagnostics(src) {
     role: src.role ?? null,
     evermind: toEvermind(head),
     lastLearn,
-    publishHold: publishHold2,
+    shipPolicy,
     pendingQuestions,
     agents: agents.map((a) => ({
       agentRef: a.agentRef,
@@ -25648,6 +25710,7 @@ export {
   FailureTally,
   HAND_OFF_TOOL,
   HAND_OFF_TOOL_SPEC,
+  HELP_COMMAND_ID,
   HISTORY_TOKEN_BUDGET3 as HISTORY_TOKEN_BUDGET,
   INFERENCE_MODES,
   JUDGEMENT_SCHEMAS,
@@ -25788,6 +25851,7 @@ export {
   createBfiWorkerEngine,
   createBrainRestPersistence,
   createBrowserEngineProber,
+  createComposerCommandRegistry,
   createComposerDraftStore,
   createComposingActivity,
   createDraftBinding,
@@ -25811,6 +25875,7 @@ export {
   defaultInferenceMode,
   deferredLocalModelStore,
   deriveChatTitle,
+  describeComposerProblem,
   describeLiveStep,
   describeNetworkError,
   describeStreamFailure,
@@ -25894,7 +25959,6 @@ export {
   isMutationTool,
   isPageEngineReply,
   isPageEngineRequest,
-  isPublishCall,
   isReadOnlyShellCall,
   isRepoPublishTool,
   isRouterTool,
@@ -25960,6 +26024,7 @@ export {
   parseAskUser,
   parseByoUnresolved,
   parseChatActivity,
+  parseComposerInput,
   parseDirectedRecipients,
   parseGitShortStatus,
   parseHandOff,
@@ -26001,9 +26066,7 @@ export {
   providerFailureEvent,
   providerFailureTrace,
   publishHold,
-  publishHoldDirective,
   publishHoldFromPersonTurns,
-  publishHoldRefusal,
   queueRunSteering2 as queueRunSteering,
   ratedTurnContext,
   ratedTurnTool,
@@ -26038,7 +26101,6 @@ export {
   savedChatOf,
   scopeToConsolidation3 as scopeToConsolidation,
   selectPendingAskUser,
-  selfReviewShipDirective,
   serializeAskUser,
   serveEngineWorker,
   servePageEngines,
@@ -26101,7 +26163,6 @@ export {
   turnInterruption,
   turnOptimizationDirective,
   unreviewedChangeNudge,
-  unshippedChangeNudge,
   usageRowsSince,
   useArmedNewChat,
   useBrainActions,

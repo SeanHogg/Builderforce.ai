@@ -20,6 +20,7 @@
  */
 import type { ArcStage } from '@builderforce/workload';
 import type { RunTally } from '@builderforce/agent-run';
+import type { ShipPolicy } from '@builderforce/run-guards';
 import {
   CURRENT_ENGINE_ID, type AgentEngine, type AgentExecParams, type AgentRunInput, type AgentRunResult, type CapabilityProvider,
 } from '@builderforce/agent-tools';
@@ -89,6 +90,8 @@ export interface CloudEngineContext {
   surface?: CloudEngineSurface;
   /** Its place in a delegation tree (durable surface only) — see {@link CloudRunDelegation}. */
   delegation?: CloudRunDelegation;
+  /** The run's ship policy (PRD 48), mapped at prep from the project's settings — see `CloudLoopOpts.shipPolicy`. */
+  shipPolicy?: ShipPolicy;
 }
 
 /**
@@ -140,6 +143,7 @@ export class CloudLimbicEngine implements AgentEngine {
         ...(directive ? { dynamicSystem: directive } : {}),
         ...(input.policy?.gates ? { policyGates: [...input.policy.gates] } : {}),
         ...(rc.execParams ? { execParams: rc.execParams } : {}),
+        ...(rc.shipPolicy ? { shipPolicy: rc.shipPolicy } : {}),
         ...(input.genParams ? { genParams: { ...input.genParams } } : {}),
         ...(input.resume ? { resume: input.resume as CloudLoopState } : {}),
         ...(surface.kind === 'durable' ? { maxSteps: surface.maxSteps, deferFinalize: true, ...(surface.sandbox ? { sandbox: surface.sandbox } : {}) } : {}),

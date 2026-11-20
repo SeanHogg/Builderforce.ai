@@ -47,6 +47,8 @@ import {
   AGENT_REASSIGN_IDLE_HOURS_RANGE, AGENT_REASSIGN_MAX_PER_SESSION_RANGE,
 } from '../../application/manager/managerPolicy';
 import { resolveManagerTypesForTenant, normalizeManagerType } from '../../application/manager/managerTypes';
+import { shipPoliciesOf } from '../../application/manager/shipPolicyOf';
+import { SHIP_MODES, type ShipMode } from '@builderforce/run-guards';
 import {
   addManagerDirective, listManagerDirectives, setManagerDirectiveStatus,
   type ManagerDirectiveStatus,
@@ -65,6 +67,9 @@ import { publishProjectStaffingChanged } from '../../application/swimlane/boardC
 // inherit the tier above, absent = leave whatever is stored alone.
 const zTriBool = z.boolean().nullable().optional();
 const zTriNumber = z.number().nullable().optional();
+// PRD 48 ship mode (1356): one of the four modes, null = inherit, absent = leave alone.
+// An unknown string is REJECTED (400), never coerced — a typo must not pick a mode.
+const zTriShipMode = z.enum(SHIP_MODES as [ShipMode, ...ShipMode[]]).nullable().optional();
 
 const DefaultsBody = z.object({
   enabled: zTriBool,
@@ -82,6 +87,7 @@ const DefaultsBody = z.object({
   allowAutoStaffLanes: zTriBool,
   // Workspace-only (1153): deliberately absent from ConfigBody — no project may set it.
   managerMayCloseReviewedTickets: zTriBool,
+  shipMode: zTriShipMode,
 });
 
 const ConfigBody = z.object({
@@ -106,6 +112,8 @@ const ConfigBody = z.object({
   coordinationRequiresManager: z.boolean().optional(),
   // PRD 23 canary mode (1312) — NOT NULL, project-only, so a plain boolean.
   canary: z.boolean().optional(),
+  // PRD 48 (1356) — tri-state: null = inherit the workspace default.
+  shipMode: zTriShipMode,
 });
 
 const ClosePrsBody = z.object({
@@ -243,6 +251,7 @@ export function createManagerRoutes(
         ? null
         : normalizePrMergePolicy(body.prMergePolicy);
     }
+    if (body.shipMode !== undefined) patch.shipMode = body.shipMode;
 
     const defaults = await upsertTenantManagerDefaults(db, tenantId, patch, {
       updatedBy: userId ?? null,
@@ -257,7 +266,7 @@ export function createManagerRoutes(
       actor: await resolveActorFromContext(c.env as Env, db, c),
       verb: 'manager.defaults.update',
       targetType: 'tenant', targetId: tenantId,
-      summary: `Updated the workspace AI Manager defaults (merge authority: ${payload.policy.allowAutoMerge ? 'granted' : 'withheld'}; review-and-close: ${payload.policy.managerMayCloseReviewedTickets ? 'granted' : 'withheld'}).`,
+      summary: `Updated the workspace AI Manager defaults (merge authority: ${payload.policy.allowAutoMerge ? 'granted' : 'withheld'}; review-and-close: ${payload.policy.managerMayCloseReviewedTickets ? 'granted' : 'withheld'}; ship mode: ${payload.policy.shipMode}${payload.policy.shipModeSource === 'default' ? ' (built-in default)' : ''}).`,
       metadata: { patch },
     }).catch((error) => { /* the timeline is best-effort — never fail the write */ 
       reportCaughtError(error, { source: "presentation/routes/managerRoutes.ts", operation: "createManagerRoutes" });
@@ -480,9 +489,18 @@ export function createManagerRoutes(
       .limit(20)
       .catch(() => []);
 
+    // The sweep's own opt-in predicate — `managed` below and the ship policy's merge both read it.
+    const managed = isProjectManaged({ tenant: tenantDefaults, project: config ?? null });
     return c.json({
       config: config ?? null,
       policy,
+      /**
+       * WHAT A RUN ON THIS PROJECT DOES WITH FINISHED WORK (PRD 48) — derived from `policy`
+       * by the one mapper, so an agent (or the VS Code host) reads exactly what a run would
+       * follow: `local` for a VS Code run (`shipMode`), `cloud` for a cloud or agent-host run
+       * (always a pull request; the merge sweep decides the merge).
+       */
+      shipPolicy: shipPoliciesOf(policy, managed),
       /**
        * The manager's own pass history, newest first (migration 1082).
        *
@@ -519,7 +537,7 @@ export function createManagerRoutes(
        * manager over a project the sweep skips. A report that states health it has not
        * verified is the exact failure four diagnostics captures were spent on.
        */
-      managed: isProjectManaged({ tenant: tenantDefaults, project: config ?? null }),
+      managed,
       /** Raw workspace opinions. Keep NULL distinct from a resolved built-in `false` so
        * diagnostics never present "the default is off" as "the workspace vetoed it". */
       tenantConfig: tenantDefaults ?? null,
@@ -605,6 +623,8 @@ export function createManagerRoutes(
       // below it, so there is no "inherit" state for a null to mean.
       ...(body.coordinationRequiresManager !== undefined ? { coordinationRequiresManager: !!body.coordinationRequiresManager } : {}),
       ...(body.canary !== undefined ? { canary: !!body.canary } : {}),
+      // PRD 48 (1356) — tri-state, validated by the schema: null = inherit the workspace.
+      ...(body.shipMode !== undefined ? { shipMode: body.shipMode } : {}),
       // NOT coerced with `!!` — null must survive as "inherit the workspace tier", which
       // `!!null === false` would silently turn into "this project refuses merge authority".
       ...(triStateBool(body.allowAutoMerge) !== undefined ? { allowAutoMerge: triStateBool(body.allowAutoMerge) } : {}),
@@ -644,8 +664,24 @@ export function createManagerRoutes(
     });
 
     const policy = await getEffectiveManagerPolicy(db, tenantId, projectId, c.env as Env);
-    const tenantPolicy = resolveTenantManagerDefaults(await getTenantManagerDefaults(db, tenantId, c.env as Env));
-    return c.json({ config, policy, tenantPolicy });
+    const tenantDefaults = await getTenantManagerDefaults(db, tenantId, c.env as Env);
+    const tenantPolicy = resolveTenantManagerDefaults(tenantDefaults);
+    const managed = isProjectManaged({ tenant: tenantDefaults, project: config });
+
+    // Merge authority and the ship mode are governance: record WHO changed them on the
+    // shared audit timeline, exactly as the workspace-defaults PATCH does.
+    await recordActivity(c.env as Env, db, {
+      tenantId,
+      actor: await resolveActorFromContext(c.env as Env, db, c),
+      verb: 'manager.config.update',
+      targetType: 'project', targetId: projectId,
+      summary: `Updated the AI Manager settings for project ${projectId} (merge authority: ${policy.allowAutoMerge ? 'granted' : 'withheld'}; ship mode: ${policy.shipMode}${policy.shipModeSource === 'project' ? '' : policy.shipModeSource === 'workspace' ? ' (workspace default)' : ' (built-in default)'}).`,
+      metadata: { patch: body },
+    }).catch((error) => { /* the timeline is best-effort — never fail the write */
+      reportCaughtError(error, { source: 'presentation/routes/managerRoutes.ts', operation: 'recordConfigActivity' });
+    });
+
+    return c.json({ config, policy, tenantPolicy, shipPolicy: shipPoliciesOf(policy, managed) });
   });
 
   // POST /api/manager/:projectId/run — run the manager pass now (managers only).

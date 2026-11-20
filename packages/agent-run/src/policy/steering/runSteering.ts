@@ -15,6 +15,7 @@
  * No `node:*` imports, no DOM.
  */
 
+import type { ChildReportLike } from "@builderforce/agent-tools";
 import type { SteerInput, SteeringSource } from "../../contract.js";
 
 /** A queued direction for a run. */
@@ -42,6 +43,12 @@ export interface RunSteerMessage {
    * retried, after a timeout or a requeue, therefore never makes a second row.
    */
   eventKey?: string;
+  /**
+   * The structured report behind a child's report text (`childReportText`), when the host
+   * delivers one: the owner's progress detector reads its state and changed files when the run
+   * drains it, instead of re-parsing the words (VS Code chat #157440).
+   */
+  childReport?: Pick<ChildReportLike, "state" | "changedFiles">;
 }
 
 const inboxes = new Map<number, RunSteerMessage[]>();
@@ -62,11 +69,11 @@ export function newSteerKey(): string {
  * saved, timed out and saved again from a requeue is the same row. A caller that already has the key
  * (a requeue) passes it. Returns the message as queued - its key included - or undefined for blank text.
  */
-export function queueRunSteering(runKey: number, text: string, opts?: { interrupt?: boolean; attachments?: unknown; fromPerson?: boolean; persist?: boolean; saved?: boolean; eventKey?: string }): RunSteerMessage | undefined {
+export function queueRunSteering(runKey: number, text: string, opts?: { interrupt?: boolean; attachments?: unknown; fromPerson?: boolean; persist?: boolean; saved?: boolean; eventKey?: string; childReport?: RunSteerMessage["childReport"] }): RunSteerMessage | undefined {
   const trimmed = text.trim();
   if (!trimmed) return undefined;
   const eventKey = opts?.eventKey ?? (opts?.persist ? newSteerKey() : undefined);
-  const message: RunSteerMessage = { text: trimmed, attachments: opts?.attachments, ...(opts?.fromPerson ? { fromPerson: true } : {}), ...(opts?.persist ? { persist: true } : {}), ...(opts?.saved ? { saved: true } : {}), ...(eventKey ? { eventKey } : {}) };
+  const message: RunSteerMessage = { text: trimmed, attachments: opts?.attachments, ...(opts?.fromPerson ? { fromPerson: true } : {}), ...(opts?.persist ? { persist: true } : {}), ...(opts?.saved ? { saved: true } : {}), ...(eventKey ? { eventKey } : {}), ...(opts?.childReport ? { childReport: opts.childReport } : {}) };
   const queue = inboxes.get(runKey) ?? [];
   queue.push(message);
   inboxes.set(runKey, queue);

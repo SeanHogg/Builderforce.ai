@@ -80,6 +80,9 @@ importers:
       '@seanhogg/builderforce-voice':
         specifier: link:../../voice
         version: link:../../voice
+      '@seanhogg/builderforce-webcontainers':
+        specifier: link:../../../builderforce-webcontainers/packages/browser
+        version: link:../../../builderforce-webcontainers/packages/browser
       '@types/mocha':
         specifier: ^10.0.10
         version: 10.0.10

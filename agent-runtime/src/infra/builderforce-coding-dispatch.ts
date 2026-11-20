@@ -14,6 +14,7 @@
  * the concrete adapters in builderforce-coding-dispatch-adapters.ts.
  */
 
+import type { ShipPolicy } from "@builderforce/run-guards";
 import { createGitRepoSync, type RepoSyncGitOps, type RepoSyncStrategy } from "./repo-sync.js";
 
 export interface DispatchRepoDetail {
@@ -60,6 +61,14 @@ export interface DispatchDetail {
   repo: DispatchRepoDetail | null;
   /** Present only when `repo` is null — the fallback working tree. */
   workspace?: DispatchWorkspaceDetail | null;
+  /**
+   * The project's ship policy (PRD 48 §4.4), resolved server-side. Absent on an
+   * API older than PRD 48. Informational here: this host always commits, pushes
+   * and opens the PR itself; merging is the server's `prMergeSweep`, never this host.
+   */
+  shipPolicy?: ShipPolicy | null;
+  /** `shipDirective(policy, { host: 'cloud' })` — the ship instruction for the agent prompt. */
+  shipDirective?: string | null;
 }
 
 /** One workspace file, as carried between the host API and the local working tree. */
@@ -153,13 +162,22 @@ export function codingBranchSlug(text: string): string {
   );
 }
 
+/**
+ * Pre-PRD-48 fallback ship instruction, used ONLY when the API sent no
+ * `shipDirective` (an API older than PRD 48). The server's directive is the
+ * source of truth; this is the single remaining local copy of that meaning.
+ */
+const LEGACY_SHIP_INSTRUCTION =
+  "Do NOT run git commit/push — that is handled for you after you finish. Just make the code changes.";
+
 /** The instruction sent to the embedded agent for a repo-targeted dispatch. */
 export function buildCodingPrompt(detail: DispatchDetail, dir: string): string {
+  const ship = detail.shipDirective?.trim() || LEGACY_SHIP_INSTRUCTION;
   return [
     `You are the "${detail.role}" coding agent. A git repository is checked out at:`,
     `  ${dir}`,
     `It is already on a fresh working branch. Implement the task below by editing files in that directory.`,
-    `Do NOT run git commit/push — that is handled for you after you finish. Just make the code changes.`,
+    ship,
     "",
     "TASK:",
     (detail.input ?? "").trim() || "No task description was provided.",

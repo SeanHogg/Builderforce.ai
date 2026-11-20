@@ -53,6 +53,11 @@
       "types": "./dist/runFindings.d.ts",
       "import": "./dist/runFindings.mjs",
       "require": "./dist/runFindings.cjs"
+    },
+    "./composerCommands": {
+      "types": "./dist/composerCommands.d.ts",
+      "import": "./dist/composerCommands.mjs",
+      "require": "./dist/composerCommands.cjs"
     }
   },
   "files": [

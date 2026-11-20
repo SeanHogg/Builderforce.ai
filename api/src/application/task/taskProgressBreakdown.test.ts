@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { CLAIMED_COMPLETE_PROGRESS_CAP } from '@builderforce/agent-loop';
 import { buildTaskProgressBreakdown } from './taskProgressBreakdown';
 
 describe('buildTaskProgressBreakdown', () => {
@@ -23,9 +24,17 @@ describe('buildTaskProgressBreakdown', () => {
       .toMatchObject({ basis: 'status', progressPct: 75, codeDelivered: false, prState: 'merged' });
   });
 
-  it('can report delivered merged code as complete before the lane catches up', () => {
+  it('regression: delivered merged code on an OPEN lane reads the claimed-complete rung, not 100', () => {
+    // Only a closed lane may emit 100: the agent task tools must agree with the chip.
     expect(buildTaskProgressBreakdown({ status: 'in_review', prStatus: 'merged', codeDelivered: true, buildStatus: 'success' }))
-      .toEqual({ basis: 'pr', progressPct: 100, subtasksDone: 0, subtasksTotal: 0, codeDelivered: true, testsPassing: true, prState: 'merged' });
+      .toEqual({ basis: 'pr', progressPct: CLAIMED_COMPLETE_PROGRESS_CAP, subtasksDone: 0, subtasksTotal: 0, codeDelivered: true, testsPassing: true, prState: 'merged' });
+  });
+
+  it('regression: an open epic whose subtasks are all closed reads the claimed-complete rung, not 100', () => {
+    expect(buildTaskProgressBreakdown({ status: 'in_progress', childStatuses: ['done', 'cancelled'] }))
+      .toMatchObject({ basis: 'subtasks', progressPct: CLAIMED_COMPLETE_PROGRESS_CAP, subtasksDone: 2, subtasksTotal: 2 });
+    // Closing the lane is what emits 100.
+    expect(buildTaskProgressBreakdown({ status: 'done', childStatuses: ['done', 'todo'] }).progressPct).toBe(100);
   });
 
   it('reports failing and unknown CI honestly', () => {

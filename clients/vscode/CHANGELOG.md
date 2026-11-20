@@ -2,6 +2,11 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.194] — 3D labels render again, and closing a panel no longer throws errors
+
+- **Fixed: text in the 3D views was blank or failed.** Labels on the stage, the knowledge graph and the world views now lay out again. Every text layout used to fail with "init did not return a callable function".
+- **Fixed: closing the Visualization panel while a knowledge review was running raised a "Webview is disposed" error.** Work that finishes after a panel or the chat view closes is now dropped quietly. A message sent to the chat view while it was still loading now reaches the next chat view you open, even if you closed the first one. If the chat can't load its board, it says so instead of failing silently.
+
 ## [2026.10.193] — Sub-agents start from what you know and bring back what they found
 
 - **Fixed: a sub-agent re-did work its owner had already done, and its findings were lost.** A delegated agent now starts with a short "already established" brief: what its owner read, the lookups it made, and any facts it states. Its report comes back with what it covered and a link to a file of everything it read, so the owner builds on it instead of fetching the same pages again. Every delegation names its kind of work (review, explore, plan, code). An audit or comparison goes to a strong model, not the cheapest coder. A sub-agent stays on one model instead of switching every turn.

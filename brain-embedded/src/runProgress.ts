@@ -34,7 +34,8 @@ import { isCodeChangeTool } from './localWorkspaceTools';
 import type { BrainTraceEvent } from './brainTriage';
 import { isFailedToolResult } from './toolFailure';
 import { visitTarget } from './runActivity';
-import { BACK_TO_BACK_AT, callFingerprint } from '@builderforce/run-guards';
+import { BACK_TO_BACK_AT, WaitCeiling, callFingerprint, delegatedChangedPathsOf, delegationReportedOf, isDelegationTool, waitDigestOf } from '@builderforce/run-guards';
+import { codeChangesOf } from './codeChanges';
 import type { BrainMessage } from './types';
 import { splitRuns } from './runSlices';
 
@@ -145,7 +146,12 @@ function isPagedDataCall(ev: BrainTraceEvent): boolean {
 /** What a call was aimed at, one spelling per file: `./src/a.ts`, `src\a.ts` and
  *  `src/a.ts` are the same target, so an edit of one resets reads of the others. */
 function subjectOf(ev: BrainTraceEvent): string | undefined {
-  return visitTarget(ev.args)?.replace(/\\/g, '/').replace(/^\.\//, '');
+  const target = visitTarget(ev.args);
+  return target ? oneSpelling(target) : undefined;
+}
+
+function oneSpelling(path: string): string {
+  return path.replace(/\\/g, '/').replace(/^\.\//, '');
 }
 
 /**
@@ -299,16 +305,39 @@ function progressOf(events: BrainTraceEvent[], editIntent: boolean): Omit<RunPro
   let longestStreak: RepeatStreak | null = null;
   let current: { sig: string; streak: RepeatStreak } | null = null;
 
+  // The ceiling on waiting on an unchanged state, shared with the live detector.
+  const waits = new WaitCeiling();
+
+  // The target changed: its earlier reads and calls describe bytes that are gone.
+  const changed = (subject: string): void => {
+    for (const key of sinceEdit.keys()) if (key.endsWith(`:${subject}`)) sinceEdit.set(key, 0);
+    for (const [s, t] of seenCalls) if (t === subject) seenCalls.delete(s);
+  };
+
   for (const ev of tools) {
     const sig = callSignature(ev);
     const subject = subjectOf(ev);
-    if (seenCalls.has(sig)) duplicateCalls += 1;
-    else seenCalls.set(sig, subject);
+    // Waiting on children or a background job that are STILL RUNNING (`wait_agents`, `command_status`) is not a
+    // loop: the same poll repeated while the work runs elsewhere is neither an exact duplicate nor a back-to-back
+    // streak (chat #157440 — "`wait_agents` ×3 BACK-TO-BACK"). A wait that returns `running: []` is not exempt, and
+    // neither is one past the ceiling on an unchanged state (a hung child) — the detector's own rule (`WaitCeiling`).
+    const digest = ev.isError ? null : waitDigestOf(ev.label, ev.result);
+    // The ceiling counts consecutive waits with nothing delivered, whatever they wait on: any other call, or a wait that
+    // brought a report or changed files back, starts it over.
+    if (digest === null || delegationReportedOf(ev.label, ev.result) || delegatedChangedPathsOf(ev.label, ev.result).length > 0) waits.reset();
+    const waiting = digest !== null && waits.waited(digest);
+    if (!waiting) {
+      if (seenCalls.has(sig)) duplicateCalls += 1;
+      else seenCalls.set(sig, subject);
+    }
     const cached = isCacheAnswered(ev);
     if (cached) cacheAnswered += 1;
 
     const failed = Boolean(ev.isError) || isFailedToolResult(ev.result);
-    if (current && current.sig === sig) {
+    if (waiting) {
+      // A wait closes the current streak and never starts one.
+      current = null;
+    } else if (current && current.sig === sig) {
       current.streak.count += 1;
       if (failed) current.streak.failed += 1;
       if (current.streak.count === 2) streaks += 1;
@@ -329,15 +358,19 @@ function progressOf(events: BrainTraceEvent[], editIntent: boolean): Omit<RunPro
       sinceEdit.set(target, seen + 1);
     }
 
+    // A delegation whose children changed files changed the tree (`codeChangesOf`, the one reading of it).
+    const delegated = isDelegationTool(ev.label) ? codeChangesOf(ev.label, ev.args, ev.result) ?? [] : [];
+    if (delegated.length > 0 && !isMutationTool(ev.label)) {
+      mutationsAttempted += 1;
+      mutationsSucceeded += 1;
+      for (const file of delegated) changed(oneSpelling(file));
+    }
+
     if (isMutationTool(ev.label)) {
       mutationsAttempted += 1;
       if (!cached && !ev.isError && !isFailedToolResult(ev.result)) {
         mutationsSucceeded += 1;
-        // The target changed: its earlier reads and calls describe bytes that are gone.
-        if (subject) {
-          for (const key of sinceEdit.keys()) if (key.endsWith(`:${subject}`)) sinceEdit.set(key, 0);
-          for (const [s, t] of seenCalls) if (t === subject) seenCalls.delete(s);
-        }
+        if (subject) changed(subject);
       }
     }
   }

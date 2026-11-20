@@ -43,6 +43,7 @@
       "@builderforce/score-math": ["../packages/score-math/src/index.ts"],
       "@builderforce/canvas-widget-protocol": ["../packages/canvas-widget-protocol/src/index.ts"],
       "@builderforce/ide-templates": ["../packages/ide-templates/src/index.ts"],
+      "@builderforce/app-detect": ["../packages/app-detect/src/index.ts"],
       "@builderforce/ide-file-contract": ["../packages/ide-file-contract/src/index.ts"],
       "@builderforce/kimi-oauth": ["../packages/kimi-oauth/src/index.ts"],
       "@builderforce/hs256-jwt": ["../packages/hs256-jwt/src/index.ts"],

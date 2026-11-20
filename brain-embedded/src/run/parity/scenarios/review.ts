@@ -10,7 +10,7 @@ import { queueRunSteering } from '../../../runSteering';
 import { childReportText } from '@builderforce/agent-tools';
 import { gatewayModelWindows } from '../../../gatewayModels';
 import { StreamInterruptedError } from '../../../streamChatCompletion';
-import { bulk, call, calls, completion, decide, fails, reply, PINNED } from '../script';
+import { bulk, call, calls, completion, decide, fails, reply, PINNED, SHIPS_TO_MAIN } from '../script';
 import type { Scenario, ScenarioHost } from '../types';
 
 const FLASH = 'direct/minimax/MiniMax-M3.1-Flash-Preview';
@@ -82,7 +82,7 @@ export const childReportAndShipGate: Scenario = {
       calls([call('git_push', { allowBaseBranch: true }, 'g2')]),
       reply('Shipped to main.'),
     ]);
-    await h.start({ ...PINNED, projectId: 11, userTurn: 'fix the deep link' });
+    await h.start({ ...PINNED, ...SHIPS_TO_MAIN, projectId: 11, userTurn: 'fix the deep link' });
   },
 };
 

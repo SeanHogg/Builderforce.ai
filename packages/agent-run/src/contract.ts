@@ -32,6 +32,7 @@ import type {
 import type { CostLeverId } from "@builderforce/cost-levers";
 import type { RunPolicyEvent, RunPolicyOptions, RunPolicyState } from "@builderforce/run-policy";
 import type { EntryPoint } from "@builderforce/learned-routing";
+import type { ShipPolicy } from "@builderforce/run-guards";
 import type { DeliveryLedger, PlatformTools } from "./surface.js";
 import type { RunEvent } from "./runEvents.js";
 import type { RunState } from "./runStateTypes.js";
@@ -141,6 +142,11 @@ export interface RunPolicy {
     /** The phase a PLAIN start begins in: a delegated slice or a quick run starts coding, everything else plans. Absent ⇒ the policy's own. */
     startPhase?: RunPolicyOptions["startPhase"];
   };
+  /**
+   * What the run does with finished work (PRD 48): the project's ship policy (a project setting, read through the API on the
+   * VSIX and at dispatch in the cloud) — narrowed for a sub-agent or a chat hold. Descriptive: the host's prompt states it and its publish gate enforces it.
+   */
+  ship?: ShipPolicy;
 }
 
 // ── The ports ─────────────────────────────────────────────────────────────────

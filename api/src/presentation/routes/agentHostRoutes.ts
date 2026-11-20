@@ -68,6 +68,7 @@ import { invalidateOnlineAgentHost } from '../../application/llm/hostEgress';
 import { requestApproval } from '../../application/approval/requestApproval';
 import { legacyAliasNotice } from '../middleware/legacyAlias';
 import type { HonoEnv, Env } from '../../env';
+import { runShipPayloadForTask } from '../../application/manager/taskShipPolicy';
 import { invalidateProjectGovernance } from '../../application/runtime/runContextSource';
 import type { Db } from '../../infrastructure/database/connection';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
@@ -1619,6 +1620,9 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     const workspace = repo || d.taskId == null
       ? null
       : await resolveTaskWorkspaceTarget(db, agentHost.tenantId, d.taskId).catch(() => null);
+    // The run's SHIP POLICY (PRD 48 §4.4): the project's settings through the same mapper the cloud
+    // prompt uses, plus the ONE directive text — the host puts it in its system prompt verbatim.
+    const ship = d.taskId == null ? null : await runShipPayloadForTask(db, agentHost.tenantId, d.taskId, c.env as Env);
     return c.json({
       dispatch: {
         dispatchId: d.id,
@@ -1637,6 +1641,8 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
               filesPath: `/api/agent-hosts/${agentHostId}/workspace/${workspace.projectId}/files`,
             }
           : null,
+        shipPolicy: ship?.shipPolicy ?? null,
+        shipDirective: ship?.shipDirective ?? null,
       },
     });
   });
@@ -1818,7 +1824,9 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
 
     const result = await openTaskPullRequest(db, secret, agentHost.tenantId, taskId, body, c.env);
     if (!result.ok) return statusResponse(c, { error: result.error }, result.status, { source: 'presentation/routes/agentHostRoutes.ts', operation: 'openTaskPullRequest' });
-    return c.json({ ok: true, url: result.url, number: result.number, merged: result.merged, mergeError: result.mergeError });
+    // `merged: false` stays on the wire for hosts that read it: a PR this route opens never
+    // merges here — the project's merge sweep decides that (PRD 48 §4.3).
+    return c.json({ ok: true, url: result.url, number: result.number, merged: false });
   });
 
   // -------------------------------------------------------------------------

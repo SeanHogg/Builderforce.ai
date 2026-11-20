@@ -135,6 +135,8 @@ export interface InitData {
   /** The host's local file tools, forwarded so the model can call them over the bridge. */
   /** Localized UI strings (see {@link LabelBundle}). */
   labels: LabelBundle;
+  /** The composer commands' `/help` model (PRD 31 §W11), drawn as the `/` menu's Actions tab. Absent from an older host. */
+  composerCommands?: import('../../src/composerCommands/reply').ComposerCommandsInit;
   /** The editor's display language (`vscode.env.language`, e.g. `de`, `zh-cn`) — how
    *  numbers, money and relative times are formatted in the shared components. */
   locale?: string;

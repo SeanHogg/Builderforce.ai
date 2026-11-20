@@ -5,10 +5,9 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * action a human triggers in-product (the in-product replacement for clicking
  * "Merge" on GitHub).
  *
- * Distinct from {@link mergeBranchToBase}: that does a raw branch merge (POST
- * /merges) used by the legacy auto-merge path; this closes the actual PR with a
- * chosen merge method (squash | merge | rebase), so the PR shows as merged and the
- * branch history reflects the operator's choice.
+ * It closes the actual PR with a chosen merge method (squash | merge | rebase), so
+ * the PR shows as merged and the branch history reflects the operator's choice. (The
+ * raw branch merge the retired run auto-merge used is gone — PRD 48 §4.3.)
  *
  * GitHub, GitLab, Bitbucket Cloud and Bitbucket Server (self-hosted) are
  * implemented; other providers return a typed `unsupported` result so callers

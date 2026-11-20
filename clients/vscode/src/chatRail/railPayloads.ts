@@ -56,6 +56,15 @@ export interface RailTicketProgress {
 }
 
 /**
+ * The ONE resolver of a ticket record's kind — what the rail labels it, and whose status
+ * vocabulary decides its progress: the platform's `railKind`, else a locally authored
+ * record's `taskType` (task / epic / gap), else `task`.
+ */
+export function railProgressKind(payload: Partial<Pick<RailTicketPayload, "railKind" | "taskType">>): string {
+  return payload.railKind ?? payload.taskType ?? "task";
+}
+
+/**
  * The ONE mapping from a ticket record to its progress. A ticket the platform listed carries the
  * rail's progress; a locally authored one carries none, so its status stands in (done = 100).
  *
@@ -64,21 +73,23 @@ export interface RailTicketProgress {
  * it) is drawn as `backlog` — the not-started lane the board shows — so the rail never renders an
  * empty or undefined status chip.
  */
-export function railTicketProgress(payload: TicketValue & Partial<Pick<RailTicketPayload, "progressPct" | "done" | "total" | "exists">>): RailTicketProgress {
+export function railTicketProgress(payload: TicketValue & Partial<Pick<RailTicketPayload, "progressPct" | "done" | "total" | "exists" | "railKind">>): RailTicketProgress {
   // An empty or whitespace-only status is the same "not started yet" as undefined: the record has
   // not been assigned a lane. Only a real lane (a non-blank string) is drawn verbatim.
   const status = typeof payload.status === "string" && payload.status.trim() !== "" ? payload.status : "backlog";
-  // Delegate to the shared closed-lane rule (agent-loop `effectiveTicketProgress`):
-  // a closed (done) lane always reads 100 — never demoted by a stale progressPct
-  // still on the record from an earlier open-lane snapshot — and the
-  // unsupported-delivery cap applies only pre-close. Same rule as the server's
-  // taskTierTicketHealth and the shared rollup; no local copy.
-  if (effectiveTicketProgress(status, payload.progressPct, undefined, "complete") >= 100) {
+  // Delegate to the shared rule (agent-loop `effectiveTicketProgress`), keyed on the
+  // record's kind so each tier closes on its own status words (a spec at "complete", a
+  // roadmap item at "shipped", an initiative at "completed"): a closed ticket always reads
+  // 100 — never demoted by a stale progressPct from an earlier open snapshot — and an open
+  // one still carrying a 100 reads the claimed-complete rung. Same rule as the server's
+  // ticket health; no local copy.
+  const pct = effectiveTicketProgress(status, payload.progressPct, railProgressKind(payload));
+  if (pct >= 100) {
     return { status, progressPct: 100, done: 1, total: 1, exists: payload.exists };
   }
   return {
     status,
-    progressPct: payload.progressPct ?? 0,
+    progressPct: pct,
     done: payload.done ?? 0,
     total: payload.total ?? 0,
     exists: payload.exists,

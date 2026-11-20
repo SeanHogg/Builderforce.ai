@@ -23,7 +23,7 @@ describe("ProgressDetector", () => {
     }
   });
 
-  it("trips no_progress after the idle window, then steers → escalates → pauses on later trips", () => {
+  it("trips no_progress after the idle window, then steers → escalates → finishes on later trips", () => {
     const d = new ProgressDetector({}, ports);
     d.observe("read_file", { path: "a.ts" }, okData);
     expect(d.endTurn()).toBeNull();
@@ -32,7 +32,7 @@ describe("ProgressDetector", () => {
       for (let i = 0; i < NO_PROGRESS_TURNS - 1; i++) expect(d.endTurn()).toBeNull();
       actions.push(d.endTurn());
     }
-    expect(actions.map((a) => a?.kind)).toEqual(["steer", "escalate", "pause"]);
+    expect(actions.map((a) => a?.kind)).toEqual(["steer", "escalate", "finish"]);
     expect(trip(actions[0] ?? null)?.kind).toBe("no_progress");
   });
 
@@ -212,7 +212,7 @@ describe("ProgressDetector: read_only_streak", () => {
     expect(trip(readTurn(d))?.kind).toBe("read_only_streak");
   });
 
-  it("a trip resets the streak; the second stretch escalates, the third pauses", () => {
+  it("a trip resets the streak; the second stretch escalates, the third finishes", () => {
     const d = new ProgressDetector({}, changePorts);
     const kinds: string[] = [];
     for (let stretch = 0; stretch < 3; stretch++) {
@@ -221,7 +221,7 @@ describe("ProgressDetector: read_only_streak", () => {
       expect(trip(a)?.kind).toBe("read_only_streak");
       kinds.push(a!.kind);
     }
-    expect(kinds).toEqual(["steer", "escalate", "pause"]);
+    expect(kinds).toEqual(["steer", "escalate", "finish"]);
     expect(d.snapshot().tripsBySignal).toEqual({ read_only_streak: 3 });
   });
 

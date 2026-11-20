@@ -74,6 +74,14 @@ export interface PromptOptionsLabels extends ModelChoiceLabels, LocalModelLabels
   accountSettings: string;
   /** Tab heading for account / usage / Evermind details. Hosts may omit it — the merge fills English "Status". */
   status?: string;
+  /** Tab heading for the composer commands (`/starter-kit`, `/help` …). */
+  actionsTab: string;
+  /** The Actions tab when the host registered no command. */
+  actionsEmpty: string;
+  /** Badge on a command the current host or plan cannot run (its reason is shown beside it). */
+  commandUnavailable: string;
+  /** Heads a `/help` answer to an unknown command; `{name}` is filled with what was typed. */
+  noSuchCommand: string;
 }
 
 export const DEFAULT_PROMPT_OPTIONS_LABELS: PromptOptionsLabels = {
@@ -110,6 +118,10 @@ export const DEFAULT_PROMPT_OPTIONS_LABELS: PromptOptionsLabels = {
   modelLocked: 'Model choice needs a paid plan or a connected provider account.',
   accountSettings: 'Account settings',
   status: 'Status',
+  actionsTab: 'Actions',
+  actionsEmpty: 'No commands are available here',
+  commandUnavailable: 'Unavailable',
+  noSuchCommand: 'No such command: /{name}',
 };
 
 /** Merge a host's partial overrides over the English defaults. */

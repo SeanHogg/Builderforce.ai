@@ -590,6 +590,50 @@ export const executions = pgTable('executions', {
 });
 
 /**
+ * A person's "merge into main" grant for ONE cloud run (PRD 48 §4.6, migration 1357).
+ *
+ * A pre-approved human merge: the PR merge sweep merges the run's pull request once its
+ * security verdict passes and CI is green, overriding the project's merge settings, and
+ * stamps `consumedAt`. `grantedBy` is always a person (never a run or an agent) holding the
+ * in-product merge role; `reason` is required. See `application/runtime/mergeGrants.ts`.
+ */
+export const mergeGrants = pgTable('merge_grants', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  executionId: integer('execution_id').notNull().references(() => executions.id, { onDelete: 'cascade' }),
+  grantedBy:   varchar('granted_by', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  reason:      text('reason').notNull(),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  consumedAt:  timestamp('consumed_at'),
+  /** Set when the grant can no longer apply: the run ended without a PR or was cancelled, or
+   *  the bound PR's head moved past the pinned commit. `voidReason` is a code the UI words. */
+  voidedAt:    timestamp('voided_at'),
+  voidReason:  varchar('void_reason', { length: 40 }),
+}, (t) => [
+  uniqueIndex('uq_merge_grants_execution').on(t.executionId),
+  index('idx_merge_grants_open').on(t.tenantId, t.executionId).where(sql`${t.consumedAt} IS NULL AND ${t.voidedAt} IS NULL`),
+]);
+
+/**
+ * The pull request(s) a GRANTED run itself opened, pinned to the head commit its finalize saw
+ * (PRD 48 §4.6, 1357). The sweep merges only a bound PR, at that commit — never another run's PR
+ * on the same ticket, never commits pushed after it. `holdCode` is the sweep's CURRENT reason for
+ * holding it (null = not held).
+ */
+export const mergeGrantPullRequests = pgTable('merge_grant_pull_requests', {
+  id:            uuid('id').primaryKey().defaultRandom(),
+  tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  grantId:       uuid('grant_id').notNull().references(() => mergeGrants.id, { onDelete: 'cascade' }),
+  pullRequestId: uuid('pull_request_id').notNull().references(() => pullRequests.id, { onDelete: 'cascade' }),
+  headSha:       varchar('head_sha', { length: 64 }).notNull(),
+  holdCode:      varchar('hold_code', { length: 40 }),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_merge_grant_pull_requests_grant_pr').on(t.grantId, t.pullRequestId),
+  index('idx_merge_grant_pull_requests_pr').on(t.tenantId, t.pullRequestId),
+]);
+
+/**
  * A cloud run parked on `ask_human`, and everything resume needs to put it back
  * (migration 0945).
  *

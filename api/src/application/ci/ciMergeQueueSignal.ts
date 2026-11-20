@@ -24,16 +24,18 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { mergeQueueOptInOn } from '../repos/mergeQueueOptIn';
 import { cronGateIsBound, signalPendingWork, type CronSignalEnv } from '../runtime/cronWorkSignal';
 import type { IngestResult } from './ingestRepoCiEvent';
+import { taskHasBoundMergeGrant } from '../runtime/mergeGrants';
 
 /** Does this ingest result describe a verdict on a ticket's open PR? Returns whether it signalled. */
 export async function signalMergeQueueOnCiResult(
   env: CronSignalEnv,
   db: Db,
-  res: Pick<IngestResult, 'taskId' | 'tenantId' | 'buildStatus' | 'merged'>,
+  res: Pick<IngestResult, 'taskId' | 'tenantId' | 'buildStatus'>,
 ): Promise<boolean> {
-  // Not a ticket branch, an in-progress ping, or already merged by the ingest itself: nothing is waiting on a tick.
+  // Not a ticket branch, or an in-progress ping: nothing is waiting on a tick. (The ingest never
+  // merges — PRD 48 §4.3 — so every verdict on a queued PR is the sweep's to act on.)
   if (res.taskId == null || res.tenantId == null) return false;
-  if (res.buildStatus == null || res.buildStatus === 'pending' || res.merged) return false;
+  if (res.buildStatus == null || res.buildStatus === 'pending') return false;
   if (!cronGateIsBound(env)) return false;
   try {
     const [open] = await db
@@ -42,7 +44,9 @@ export async function signalMergeQueueOnCiResult(
       .innerJoin(projectManagerConfigs, mergeQueueOptInOn())
       .where(scopedToTenant(pullRequests, res.tenantId, and(eq(pullRequests.taskId, res.taskId), eq(pullRequests.status, 'open'))))
       .limit(1);
-    if (!open) return false;
+    // PRD 48 §4.6 — a PR a person granted a merge is in the sweep's GRANTED cohort whatever the
+    // project's opt-in, so its CI verdict wakes the tick too.
+    if (!open && !(await taskHasBoundMergeGrant(db, res.tenantId, res.taskId))) return false;
     await signalPendingWork(env);
     return true;
   } catch (error) {

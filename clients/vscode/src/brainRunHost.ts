@@ -43,6 +43,7 @@ import {
   type BrainStreamFn,
 } from "@seanhogg/builderforce-brain-embedded";
 import type { ToolDef } from "./fileTools";
+import type { ShipPolicy } from "@builderforce/run-guards";
 import { approvalRequestFor, argsRecord, createNativeRunTool, nativeNeedsConfirm, nativeToolSpecs } from "./nativeBrainRun";
 import { withRunPreamble } from "./runPreamble";
 import { chatLedgerRequest } from "./runUsageLedgerPorts";
@@ -276,8 +277,9 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
       return out;
     };
     // The gate reads the LIVE flag: `nativeNeedsConfirm` is the one predicate every
-    // host surface shares, re-bound per call so a mid-run switch is honoured.
-    const needsConfirm = (req: { name: string; args: unknown }): boolean =>
+    // host surface shares, re-bound per call so a mid-run switch is honoured. The run hands
+    // it its narrowed ship policy (PRD 48): a publish that policy allows needs no card.
+    const needsConfirm = (req: { name: string; args: unknown; shipPolicy?: ShipPolicy }): boolean =>
       nativeNeedsConfirm(defs, flag.autoApprove ? "acceptEdits" : "ask", gates)(req);
     approvals.describeWith(key, (name, args, evidence) => approvalRequestFor(defs, gates, name, args, evidence));
     // A sub-agent's turns are routed for ITS role (explore / code / verify), not its owner's.
@@ -297,7 +299,7 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     const surface = p.modelSurface ?? null;
     // Stage models, pipeline routing and the USD cap (`editorRunSettings.ts`); a sub-agent
     // takes only the cap — its model is `modelForChildRun`'s and it is never routed.
-    const settings = await ports.runSettings?.();
+    const settings = await ports.runSettings?.(projectId);
     const runSettings = runRequestFields(settings, { child: !!p.child });
     try {
       // Stopped during the setup above: the loop never starts (`settled` drops what waits).

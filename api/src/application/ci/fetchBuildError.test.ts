@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { fetchBuildError, LOG_TAIL_CHARS, MAX_LOG_JOBS } from './fetchBuildError';
-import { cloudAutofixOnBuildFailure, MAX_AUTOFIX_ATTEMPTS } from '../repos/mergeBranchToBase';
+import { cloudAutofixOnBuildFailure, MAX_AUTOFIX_ATTEMPTS } from './buildAutofixPolicy';
 
 afterEach(() => vi.unstubAllGlobals());
 

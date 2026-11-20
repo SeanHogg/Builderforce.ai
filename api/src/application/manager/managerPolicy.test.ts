@@ -7,6 +7,7 @@ import {
   resolveTenantManagerDefaults,
   resolveManagerKind,
   normalizePrMergePolicy,
+  normalizeShipMode,
   DEFAULT_MANAGER_POLICY,
   type ManagerConfigRow,
   type TenantManagerDefaultsRow,
@@ -45,6 +46,8 @@ const tenantRow = (o: Partial<TenantManagerDefaultsRow> = {}): TenantManagerDefa
   allowAutoStaffLanes: null,
   // Review-and-close authority (1153) — workspace-only, no opinion by default.
   managerMayCloseReviewedTickets: null,
+  // Ship mode (PRD 48, 1356) — a plain override, no opinion by default.
+  shipMode: null,
   ...o,
 });
 
@@ -471,5 +474,48 @@ describe('coordinationRequiresManager (1177)', () => {
       tenant: { coordinationRequiresManager: true },
       project: projectRow(),
     }).coordinationRequiresManager).toBe(false);
+  });
+});
+
+describe('shipMode — PRD 48 (1356), a plain override: project beats workspace beats the built-in commit', () => {
+  it('defaults to commit, with a `default` source, when no tier sets it', () => {
+    const p = resolveTieredManagerPolicy({ tenant: tenantRow(), project: projectRow() });
+    expect(p.shipMode).toBe('commit');
+    expect(p.shipModeSource).toBe('default');
+    expect(DEFAULT_MANAGER_POLICY.shipMode).toBe('commit');
+  });
+
+  it('the project value beats the workspace default', () => {
+    const p = resolveTieredManagerPolicy({
+      tenant: tenantRow({ shipMode: 'commit_push' }),
+      project: projectRow({ shipMode: 'leave_uncommitted' }),
+    });
+    expect(p.shipMode).toBe('leave_uncommitted');
+    expect(p.shipModeSource).toBe('project');
+  });
+
+  it('a null project value inherits the workspace default', () => {
+    const p = resolveTieredManagerPolicy({
+      tenant: tenantRow({ shipMode: 'commit_push' }),
+      project: projectRow({ shipMode: null }),
+    });
+    expect(p.shipMode).toBe('commit_push');
+    expect(p.shipModeSource).toBe('workspace');
+  });
+
+  it('a malformed stored value is "no opinion", never a mode nobody chose', () => {
+    expect(resolveTieredManagerPolicy({ project: projectRow({ shipMode: 'yolo' }) }).shipMode).toBe('commit');
+    expect(normalizeShipMode('pull_request')).toBe('pull_request');
+    expect(normalizeShipMode('push')).toBeNull();
+    expect(normalizeShipMode(null)).toBeNull();
+  });
+
+  it('the migration adds a nullable, constrained ship_mode to BOTH tiers', () => {
+    const sql = readFileSync(
+      fileURLToPath(new URL('../../../migrations/1356_prd48_ship_mode.sql', import.meta.url).href), 'utf8',
+    ).replace(/\s+/g, ' ');
+    expect(sql).toContain('ALTER TABLE project_manager_configs ADD COLUMN IF NOT EXISTS ship_mode varchar(20)');
+    expect(sql).toContain('ALTER TABLE tenant_manager_defaults ADD COLUMN IF NOT EXISTS ship_mode varchar(20)');
+    expect(sql).toContain("ship_mode IN ('leave_uncommitted', 'commit', 'commit_push', 'pull_request')");
   });
 });

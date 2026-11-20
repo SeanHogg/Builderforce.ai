@@ -190,7 +190,8 @@ export function childControls(host: ChildRunHost, owner: ChildOwner): ChildContr
     ledger.settled(key, report, undelivered ? "inbox" : "wait");
     host.changed(owner.rootChatId);
     if (!undelivered) return;
-    queueRunSteering(owner.key, reportText(report));
+    // The structured report rides with its words, so the owner's progress detector credits the child's files (chat #157440).
+    queueRunSteering(owner.key, reportText(report), { childReport: report });
     // A child someone asked to stop reports into the inbox (read with the owner's next turn) but never WAKES the owner:
     // its stop was a decision already made, and a wake would be a run with no ask of its own (chat #61651).
     if (stopped) return;

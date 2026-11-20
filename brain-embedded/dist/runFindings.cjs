@@ -5309,33 +5309,12 @@ function traceWithPersistedSteps(messages, trace) {
   return [...trace, ...fromMessages].sort((a, b) => a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0);
 }
 
-// src/localWorkspaceTools.ts
-var CODE_CHANGE_TOOLS = /* @__PURE__ */ new Set([
-  "write_file",
-  "edit_file",
-  "delete_file",
-  "canvas_write_build_file",
-  "canvas_edit_build_file",
-  "canvas_restore_build_file"
-]);
-function isCodeChangeTool(name) {
-  return CODE_CHANGE_TOOLS.has(name);
-}
+// ../packages/run-guards/src/noProgress.ts
+var JOB_POLL_TOOLS = /* @__PURE__ */ new Set(["command_status", "command_stop"]);
 
-// src/toolFailure.ts
-function isFailedToolResult(result) {
-  if (result == null) return false;
-  if (typeof result === "object") {
-    const r = result;
-    if (r.ok === false) return true;
-    if (typeof r.error === "string" && r.error) return true;
-    return false;
-  }
-  if (typeof result === "string") {
-    return /"ok"\s*:\s*false/.test(result) || /"error"\s*:\s*"[^"]/.test(result);
-  }
-  return false;
-}
+// ../packages/run-guards/src/delegatedChanges.ts
+var DELEGATION_TOOLS = /* @__PURE__ */ new Set(["spawn_agent", SPAWN_AGENTS_TOOL, SUBAGENT_CONTROL_TOOL_NAMES.wait, "hand_off"]);
+var WAIT_POLL_TOOLS = /* @__PURE__ */ new Set([SUBAGENT_CONTROL_TOOL_NAMES.wait, ...JOB_POLL_TOOLS]);
 
 // ../packages/run-guards/src/readinessClaim.ts
 var READY_PATTERNS = [
@@ -5373,9 +5352,139 @@ function claimsReady(text) {
   return ownWords(text).toLowerCase().split(/(?<=[.!?])\s+|\n+/).some(sentenceClaims);
 }
 
+// ../packages/run-guards/src/inRunVerify.ts
+var PUBLISH_TOOLS = /* @__PURE__ */ new Set(["git_commit", "git_push", "open_pull_request"]);
+
 // ../packages/run-guards/src/evidence/gitCommandPattern.ts
 function gitCommandPattern(verbs) {
   return new RegExp(`\\bgit\\s+(?:-[Cc]\\s+\\S+\\s+|-\\S+\\s+|--\\S+(?:=\\S+)?\\s+)*(?:${verbs})\\b`, "i");
+}
+
+// ../packages/run-guards/src/shipPolicy.ts
+var DEFAULT_SHIP_POLICY = Object.freeze({
+  mode: "commit",
+  merge: "never",
+  review: "none",
+  source: "default"
+});
+var REPO_PUBLISH_TOOLS = /* @__PURE__ */ new Set([...PUBLISH_TOOLS, "git_cleanup_merged"]);
+var RAW_COMMIT = gitCommandPattern("commit");
+var RAW_PUSH = gitCommandPattern("push");
+var ghPr = (sub) => new RegExp(`\\bgh\\s+(?:-{1,2}[\\w-]+(?:[=\\s]+[^-\\s]\\S*)?\\s+)*pr\\s+(?:${sub})\\b`, "i");
+var RAW_PR_CREATE = ghPr("create|new");
+var RAW_PR_MERGE = ghPr("merge");
+var REVIEW_CHECKLIST = 'against what the ticket and the user asked for: bugs, leftover debug code, edits unrelated to the task, missing tests or localisation. If you find a problem, FIX it and review again. Do NOT record builtin_reviews_record with verdict "complete" yourself: the author never records its own completion review \u2014 the independent review the ship gate runs over your diff records it.';
+var SELF_REVIEW = `SELF-REVIEW \u2014 read your own diff with \`git_diff\` ${REVIEW_CHECKLIST}`;
+var CLOUD_SELF_REVIEW = `SELF-REVIEW \u2014 re-read every file you changed ${REVIEW_CHECKLIST}`;
+
+// src/localWorkspaceTools.ts
+var CODE_CHANGE_TOOLS = /* @__PURE__ */ new Set([
+  "write_file",
+  "edit_file",
+  "delete_file",
+  "canvas_write_build_file",
+  "canvas_edit_build_file",
+  "canvas_restore_build_file"
+]);
+function isCodeChangeTool(name) {
+  return CODE_CHANGE_TOOLS.has(name);
+}
+
+// src/toolFailure.ts
+function isFailedToolResult(result) {
+  if (result == null) return false;
+  if (typeof result === "object") {
+    const r = result;
+    if (r.ok === false) return true;
+    if (typeof r.error === "string" && r.error) return true;
+    return false;
+  }
+  if (typeof result === "string") {
+    return /"ok"\s*:\s*false/.test(result) || /"error"\s*:\s*"[^"]/.test(result);
+  }
+  return false;
+}
+
+// ../packages/agent-loop/src/runNarration.ts
+var NARRATION_OPENER = new RegExp(
+  "^(?:(?:now|next|first|then|so|okay|ok|alright|actually|great|good|perfect|but|and|also|finally)[,!.]?\\s+)*(?:let me|let's|i(?:'ll| will| need to| should| want to| am going to|'m going to| think| see| can see| notice| ran)\\b|looking (?:at|back|for)\\b|checking\\b|now the\\b|that was expected\\b)",
+  "i"
+);
+
+// ../packages/agent-loop/src/taskClosedState.ts
+var TASK_CLOSED_STATUSES = ["done", "cancelled", "canceled", "completed", "archived"];
+var CLOSED = new Set(TASK_CLOSED_STATUSES);
+var TASK_CANCELLED_STATUSES = ["cancelled", "canceled"];
+var CANCELLED = new Set(TASK_CANCELLED_STATUSES);
+
+// ../packages/agent-loop/src/ticketClosedStates.ts
+var TASK_TABLE = { closed: TASK_CLOSED_STATUSES, cancelled: TASK_CANCELLED_STATUSES };
+var CEREMONY_SESSION_CLOSED_STATUSES = ["completed", "cancelled", "closed", "archived"];
+var CEREMONY_SESSION = { closed: CEREMONY_SESSION_CLOSED_STATUSES, cancelled: [] };
+var PORTFOLIO_STATUSES = ["active", "archived"];
+var INITIATIVE_STATUSES = ["proposed", "active", "completed", "archived"];
+var OBJECTIVE_STATUSES = ["active", "achieved", "missed", "archived"];
+var ROADMAP_STATUSES = ["planned", "in_progress", "shipped", "cancelled"];
+var ROADMAP_LEGACY_DELIVERED_STATUSES = ["done", "complete", "completed", "released"];
+function pick(_vocabulary, ...words) {
+  return words;
+}
+var TICKET_STATUS_VALUES = {
+  portfolio: PORTFOLIO_STATUSES,
+  initiative: INITIATIVE_STATUSES,
+  objective: OBJECTIVE_STATUSES,
+  roadmap: [...ROADMAP_STATUSES, ...ROADMAP_LEGACY_DELIVERED_STATUSES]
+};
+var TICKET_CLOSED_STATES = {
+  // agent-loop `taskClosedState.ts` TASK_CLOSED_STATUSES / TASK_CANCELLED_STATUSES.
+  task: TASK_TABLE,
+  gap: TASK_TABLE,
+  epic: TASK_TABLE,
+  portfolio: { closed: pick(PORTFOLIO_STATUSES, "archived"), cancelled: [] },
+  initiative: { closed: pick(INITIATIVE_STATUSES, "completed", "archived"), cancelled: [] },
+  // A MISSED objective is over without delivering, so it is skipped like a cancelled lane
+  // rather than counted done (its own ring still reads 100: it is closed).
+  objective: { closed: pick(OBJECTIVE_STATUSES, "achieved", "missed", "archived"), cancelled: pick(OBJECTIVE_STATUSES, "missed") },
+  roadmap: { closed: pick(TICKET_STATUS_VALUES.roadmap, "shipped", ...ROADMAP_LEGACY_DELIVERED_STATUSES), cancelled: [] },
+  // api schema/kernel.ts `specStatusEnum`: draft | ready | in_progress | complete (a pg
+  // enum, so the api test asserts this word is one of its values).
+  spec: { closed: ["complete"], cancelled: [] },
+  retro: CEREMONY_SESSION,
+  poker: CEREMONY_SESSION
+};
+var CLOSED_BY_KIND = new Map(
+  Object.entries(TICKET_CLOSED_STATES).map(([kind, v]) => [kind, { closed: new Set(v.closed), cancelled: new Set(v.cancelled) }])
+);
+
+// ../packages/agent-loop/src/reasoning.ts
+var REASONING_TAG = "think(?:ing)?|thought|antthinking|scratchpad|reasoning";
+var QUICK_TAG_RE = new RegExp(`<\\s*/?\\s*(?:${REASONING_TAG}|final)\\b`, "i");
+var REASONING_TAG_RE = new RegExp(`<\\s*(/?)\\s*(?:${REASONING_TAG})\\b[^<>]*>`, "gi");
+
+// src/ticketToolVocabulary.ts
+var SERVER_TICKET_CREATE_TOOL = "builtin_tasks_create";
+var LOCAL_TICKET_CREATE_LABEL = /ticket[-_.]create/i;
+var SERVER = Object.freeze({
+  createTool: SERVER_TICKET_CREATE_TOOL,
+  local: false,
+  kanbanScoping: true,
+  createName: SERVER_TICKET_CREATE_TOOL
+});
+function isLocalTicketCreateLabel(label) {
+  return LOCAL_TICKET_CREATE_LABEL.test(label);
+}
+
+// src/toolResultRecord.ts
+function toolResultRecord(result) {
+  if (typeof result === "string") {
+    try {
+      const parsed = JSON.parse(result);
+      return parsed && typeof parsed === "object" ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+  return result && typeof result === "object" ? result : null;
 }
 
 // src/runProgress.ts
@@ -5488,32 +5597,6 @@ function routingByRole(turns, events) {
     handOffModes: events.filter((e) => e.label === HAND_OFF_MODE_LABEL).map(decisionOf).filter((d) => d !== null),
     handOffClashesRefused: count(HAND_OFF_CLASH_LABEL)
   };
-}
-
-// src/ticketToolVocabulary.ts
-var SERVER_TICKET_CREATE_TOOL = "builtin_tasks_create";
-var LOCAL_TICKET_CREATE_LABEL = /ticket[-_.]create/i;
-var SERVER = Object.freeze({
-  createTool: SERVER_TICKET_CREATE_TOOL,
-  local: false,
-  kanbanScoping: true,
-  createName: SERVER_TICKET_CREATE_TOOL
-});
-function isLocalTicketCreateLabel(label) {
-  return LOCAL_TICKET_CREATE_LABEL.test(label);
-}
-
-// src/toolResultRecord.ts
-function toolResultRecord(result) {
-  if (typeof result === "string") {
-    try {
-      const parsed = JSON.parse(result);
-      return parsed && typeof parsed === "object" ? parsed : null;
-    } catch {
-      return null;
-    }
-  }
-  return result && typeof result === "object" ? result : null;
 }
 
 // src/staffingSummary.ts

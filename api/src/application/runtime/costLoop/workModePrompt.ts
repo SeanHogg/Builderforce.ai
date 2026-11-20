@@ -23,11 +23,8 @@ function shellLine(shell: boolean | undefined): string {
   return shell
     ? 'Call git_sync_latest FIRST, before editing: your branch may have been created earlier and fallen behind the base branch, so working without syncing builds on stale code and your PR could revert newer work. ' +
       'You also have git_status / git_diff / git_history to inspect the repo, and git_undo / git_redo to back out or reapply a commit. ' +
-      'You HAVE a real shell: use run_command to install dependencies and run the project build, type-check, lint, and tests in the checked-out repo BEFORE you finish. Fix anything that fails. Only claim a check passed if you actually ran it and saw it pass; CI on the PR re-verifies. ' +
-      // A human's explicit "merge/push to main" is their call: this surface has the clone
-      // and the push credential, so it does exactly that instead of substituting a PR.
-      "Your work normally ships as a pull request when you finish. If the human's directive EXPLICITLY asks you to merge into or push to the base branch (main), do exactly that with run_command — `git fetch origin`, merge your branch into the base branch, `git push origin <base>` — and report the resulting commit hash; do not substitute a pull request for an explicit instruction."
-    : 'You CANNOT run a local shell (there is NO run_command). After writing, call run_checks: it statically validates changed files AND polls CI (build/type-check/test) on this branch HEAD. If CI is red, fix before finishing. If CI is pending, wait and call run_checks again. Only claim a check passed when run_checks reported CI success. If no CI is configured yet (or it only runs after the PR opens), do not claim tests passed — the PR\'s CI is then the source of truth. If asked to merge or push to the base branch, say plainly that this executor cannot push it: your work ships as the pull request the human merges.';
+      'You HAVE a real shell: use run_command to install dependencies and run the project build, type-check, lint, and tests in the checked-out repo BEFORE you finish. Fix anything that fails. Only claim a check passed if you actually ran it and saw it pass; CI on the PR re-verifies.'
+    : 'You CANNOT run a local shell (there is NO run_command). After writing, call run_checks: it statically validates changed files AND polls CI (build/type-check/test) on this branch HEAD. If CI is red, fix before finishing. If CI is pending, wait and call run_checks again. Only claim a check passed when run_checks reported CI success. If no CI is configured yet (or it only runs after the PR opens), do not claim tests passed — the PR\'s CI is then the source of truth.';
 }
 
 export function workModeToolingPrompt(opts: WorkModePromptOptions): string {
@@ -47,7 +44,9 @@ export function workModeToolingPrompt(opts: WorkModePromptOptions): string {
     'Do NOT call finish while any deliverable file is still a stub/placeholder or any requirement in the task/PRD is unimplemented — keep listing, reading and writing files until the task is genuinely complete. ' +
     'Do not claim the task is completed merely because you investigated it or described a fix; completion requires the requested repository changes to be written and reconciled. ' +
     'Reconcile the branch against the task, do not just append: if a file already on this branch (see "Files already on this branch") is dead code — a stub, an unreferenced file, or something that should not ship in this PR — remove it with delete_file (confirm it is unused via search_code first). The PR should contain only the files the task genuinely needs. ' +
-    'When you finish, your committed changes are opened as a PULL REQUEST for human review (a person approves the merge in-product); they are NOT auto-deployed — so the PR must contain the COMPLETE, working change, not a partial scaffold. Call finish with a summary only once everything the task requires has been written. ' +
+    // WHAT HAPPENS TO THE CHANGE (PR, review, merge) is the project's ship policy, stated
+    // once by its own block (`shipDirective`, PRD 48) — never a second copy here.
+    'Your committed changes ship as ONE pull request, so it must contain the COMPLETE, working change, not a partial scaffold. Call finish with a summary only once everything the task requires has been written. ' +
     shellLine(opts.shell) + ' ' +
     // The PRD is handed to the run as context and is now WRITABLE. Without this line
     // the tool is advertised and never reached: a model told to "follow the PRD"

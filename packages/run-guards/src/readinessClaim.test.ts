@@ -131,14 +131,14 @@ describe("ProgressDetector: unkept_ready", () => {
     }
   });
 
-  it("escalates, then pauses, as every other signal does", () => {
+  it("escalates, then finishes, as every other signal does", () => {
     const d = detector();
     const actions = [];
     for (let i = 0; i < 6; i++) actions.push(turn(d, "Now I have everything I need.", [["read_file", { path: `f${i}.md` }]]));
     // B1 fires exactly one advisory (on the first unkept claim); the ladder itself is
-    // unchanged — steer → escalate → pause.
-    expect(actions.filter(Boolean).map((a) => a!.kind)).toEqual(["advisory", "steer", "escalate", "pause"]);
-    expect(actions[5]).toMatchObject({ kind: "pause", question: expect.stringContaining("keeps saying it has everything it needs") });
+    // unchanged — steer → escalate → finish (never a question for the human).
+    expect(actions.filter(Boolean).map((a) => a!.kind)).toEqual(["advisory", "steer", "escalate", "finish"]);
+    expect(actions[5]).toMatchObject({ kind: "finish", verified: false, note: expect.stringContaining("you said 2 times that you had what you needed") });
   });
 
   it("a claim kept by an edit clears the count", () => {

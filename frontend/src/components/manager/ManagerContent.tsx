@@ -113,6 +113,8 @@ function autonomyPatchToConfigPatch(patch: Partial<ManagerAutonomyValue>): Manag
   if (patch.allowAutoStaffLanes !== undefined) out.allowAutoStaffLanes = patch.allowAutoStaffLanes;
   if (patch.agentReassignIdleHours !== undefined) out.agentReassignIdleHours = patch.agentReassignIdleHours;
   if (patch.agentReassignMaxPerSession !== undefined) out.agentReassignMaxPerSession = patch.agentReassignMaxPerSession;
+  // Ship mode (PRD 48) — tri-state: `null` = inherit the workspace default, passed through.
+  if (patch.shipMode !== undefined) out.shipMode = patch.shipMode;
   return out;
 }
 
@@ -393,6 +395,8 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
     allowAutoStaffLanes: config ? config.allowAutoStaffLanes : null,
     agentReassignIdleHours: config ? config.agentReassignIdleHours : null,
     agentReassignMaxPerSession: config ? config.agentReassignMaxPerSession : null,
+    // Ship mode (PRD 48) — nullable at the project tier, so read off the row for the same reason.
+    shipMode: config?.shipMode ?? null,
   };
   const capWindow = autonomy?.reason === 'monthly_exhausted' ? 'monthly' : 'daily';
   const activeDirectives = directives.filter((d) => d.status === 'active');

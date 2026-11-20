@@ -17,7 +17,7 @@ import type { PendingTurn } from '../usePendingTurns';
 import type { PendingGateOutcome } from './prefetchGate';
 import type { RunClaim } from './runClaim';
 import type { PublishHold } from './publishHold';
-import type { ReviewVerdict } from '@builderforce/run-guards';
+import { DEFAULT_SHIP_POLICY, type ReviewVerdict, type ShipPolicy } from '@builderforce/run-guards';
 
 /** The completion streaming right now — and, once the gateway names it, the model serving it. */
 export interface LiveTurn {
@@ -245,6 +245,12 @@ export interface RunCell {
    */
   publishHold: PublishHold | null;
   /**
+   * The run's SHIP POLICY (PRD 48), resolved beside {@link publishHold} in the preamble: the
+   * request's policy (or the default), `leave_uncommitted` for a sub-agent, narrowed by the
+   * hold. `callPreflight` refuses every publish it does not allow, before the confirm gate.
+   */
+  shipPolicy: ShipPolicy;
+  /**
    * PRD 45 OD-1: the models that AUTHORED this run's code changes — the review gate
    * refuses a reviewer on an author model. Fed by the runner as edits land.
    */
@@ -331,6 +337,7 @@ export function makeCell(): RunCell {
     claim: null,
     stoppedTurn: null,
     publishHold: null,
+    shipPolicy: DEFAULT_SHIP_POLICY,
     authorModels: new Set<string>(),
     shipReviews: [],
     shipReviewRounds: [],

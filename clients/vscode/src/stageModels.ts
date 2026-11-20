@@ -13,6 +13,7 @@
  */
 
 import type { RunPipelineSettings, RunStageModels } from "@seanhogg/builderforce-brain-embedded";
+import type { ShipPolicy } from "@builderforce/run-guards";
 
 /** The stages a run's models are chosen for. */
 export interface StageModels {
@@ -64,6 +65,8 @@ export interface EditorRunSettings {
   maxRunBudgetUsd?: number;
   /** The sub-agent stage model — read by `modelForChildRun`. */
   subagentModel?: string;
+  /** The run's project's ship policy (PRD 48, `policyGates.resolveRunShipPolicy`). Absent ⇒ the run uses `DEFAULT_SHIP_POLICY`. */
+  shipPolicy?: ShipPolicy;
 }
 
 /** The run settings from the resolved stage models and the raw settings. */
@@ -95,15 +98,18 @@ export function editorRunSettingsFrom(stages: StageModels, raw: RunRoutingSettin
  *  owner's routing out (it is never routed) and takes its model from `modelForChildRun`,
  *  so only the cap reaches it — and the cap is the TREE's, not a fresh one: the child
  *  accrues into its owner's total (brain-embedded `runStore/runSpendBudget.ts`, keyed by the
- *  lineage), so an owner and all its sub-agents together stay under one cap. */
+ *  lineage), so an owner and all its sub-agents together stay under one cap. The ship
+ *  policy rides every request: the run narrows a child's to `leave_uncommitted` itself
+ *  (brain-embedded `runShipPolicy`, by its lineage). */
 export function runRequestFields(
   settings: EditorRunSettings | undefined,
   opts: { child: boolean },
-): Pick<EditorRunSettings, "phaseModels" | "pipeline" | "maxRunBudgetUsd"> {
+): Pick<EditorRunSettings, "phaseModels" | "pipeline" | "maxRunBudgetUsd" | "shipPolicy"> {
   if (!settings) return {};
   return {
     ...(!opts.child && settings.phaseModels ? { phaseModels: settings.phaseModels } : {}),
     ...(!opts.child && settings.pipeline ? { pipeline: settings.pipeline } : {}),
     ...(settings.maxRunBudgetUsd ? { maxRunBudgetUsd: settings.maxRunBudgetUsd } : {}),
+    ...(settings.shipPolicy ? { shipPolicy: settings.shipPolicy } : {}),
   };
 }

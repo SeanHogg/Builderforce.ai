@@ -14465,6 +14465,26 @@
         },
         "needsAuthority": "El momento solo importa cuando el manager tiene permiso para fusionar; ahora mismo las fusiones esperan a una persona."
       },
+      "shipMode": {
+        "label": "Qué hace una ejecución de VS Code con el trabajo terminado",
+        "help": "La regla fija que sigue un agente cuando termina su cambio, para que nunca se detenga a preguntar. También puedes decírselo al agente, por ejemplo «a partir de ahora haz commit y push». Las ejecuciones en la nube siempre abren una pull request, y los ajustes de arriba deciden si se fusiona.",
+        "leave_uncommitted": {
+          "label": "Dejar sin commit",
+          "help": "Hacer y verificar el cambio, y dejarlo sin commit para que lo revises."
+        },
+        "commit": {
+          "label": "Commit local",
+          "help": "Hacer commit del cambio en esta máquina sin enviarlo."
+        },
+        "commit_push": {
+          "label": "Commit y push",
+          "help": "Hacer commit del cambio y enviarlo a la rama base."
+        },
+        "pull_request": {
+          "label": "Abrir una pull request",
+          "help": "Enviar una rama y abrir una pull request. La ejecución nunca la fusiona."
+        }
+      },
       "allowAutoMerge": {
         "label": "Permitir que el manager fusione pull requests",
         "help": "Este es el permiso para fusionar, algo distinto del momento que elijas más abajo. Si está desactivado, el manager sigue preparándolo y comprobándolo todo, pero deja la fusión en manos de una persona."
@@ -14493,6 +14513,7 @@
         "mergeWithheld": "Las fusiones esperan a una persona",
         "signoffRequired": "Se exige aprobación para finalizar",
         "signoffOptional": "No se exige aprobación",
+        "shipMode": "Ejecuciones de VS Code: {mode}",
         "coordinationGated": "Los managers coordinan los tickets",
         "coordinationOpen": "Cualquiera del proyecto coordina",
         "ceremoniesUnattended": "Puede dirigir ceremonias sin nadie",
@@ -17843,6 +17864,36 @@
     "prLink": "PR n.º {number}",
     "writesNoPr": "{count, plural, one {# archivo escrito} other {# archivos escritos}}: aún sin pull request",
     "noWrites": "Sin cambios: sin pull request"
+  },
+  "mergeGrant": {
+    "label": "Fusionar en main al terminar",
+    "help": "Cuando la pull request de esta ejecución supere el análisis de seguridad y la CI, la plataforma la fusiona en main, independientemente de los ajustes de fusión del proyecto.",
+    "reasonLabel": "Por qué esta ejecución puede fusionarse en main",
+    "reasonPlaceholder": "Por ejemplo: corrección de seguridad para la omisión del inicio de sesión",
+    "reasonRequired": "Indica un motivo para autorizar la fusión.",
+    "statusTitle": "Fusión en main autorizada",
+    "status": {
+      "pending": "Esperando la CI y el análisis de seguridad",
+      "merged": "Fusionada",
+      "held": "Retenida",
+      "voided": "Ya no se aplica"
+    },
+    "grantedBy": "Autorizada por {name}",
+    "reasonShown": "Motivo: {reason}",
+    "cloudOnly": "Fusionar en main al terminar solo está disponible para ejecuciones de agentes en la nube. Elige un agente en la nube para autorizarlo.",
+    "recordFailed": "La ejecución comenzó, pero no se pudo registrar la fusión en main. Fusiona su pull request desde el producto cuando esté lista.",
+    "held": {
+      "ci_pending": "Esperando a que la CI pase en el commit que cubre la autorización.",
+      "ci_failed": "La CI falló en esta pull request. Se fusionará cuando la CI esté en verde.",
+      "security": "El análisis de seguridad aún no ha aprobado esta pull request.",
+      "merge_refused": "El repositorio rechazó la fusión. Abre la pull request para ver el motivo."
+    },
+    "voided": {
+      "cancelled": "La ejecución se canceló, así que no se fusiona nada.",
+      "no_pull_request": "La ejecución terminó sin su propia pull request, así que no se fusiona nada.",
+      "head_moved": "Alguien subió nuevos commits después de la ejecución, así que la autorización ya no cubre esta pull request.",
+      "no_head": "No se pudo leer el commit de la pull request al terminar la ejecución, así que no se fusiona nada."
+    }
   },
   "runAgentControl": {
     "agentTitle": "Agente",

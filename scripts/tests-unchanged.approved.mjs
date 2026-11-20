@@ -57,9 +57,9 @@ export const APPROVED_PERMANENT = [
   },
   {
     file: 'brain-embedded/src/run/brainCloseOut.test.ts',
-    blob: 'b6d6df92d116604a91c4ae1ccb7b01cc39448a69',
-    changed: "Four expectations: a close-out over a self-review now finishes with reviewRecorded false (was true) and records no review, while the ticket still moves to done.",
-    reason: "Intended change (5e1c0144c, chat #230): the ship close-out records a review only when an approved INDEPENDENT review of the shipped diff exists; a self-review the review gate refuses is no longer recorded as one. The old assertions pinned that bug.",
+    blob: 'dd0b5c60393809d25ca731135f88058075ce55ca',
+    changed: "Four expectations: a close-out over a self-review now finishes with reviewRecorded false (was true) and records no review, while the ticket still moves to done. (chat #276) The fixture request's `tools` now lists builtin_chats_list_tickets; no assertion changed.",
+    reason: "Intended change (5e1c0144c, chat #230): the ship close-out records a review only when an approved INDEPENDENT review of the shipped diff exists; a self-review the review gate refuses is no longer recorded as one. The old assertions pinned that bug. Intended change (chat #276, 2026-11-19): the ticket backstops read the chat's tickets only where the host's catalog carries the listing tool, so the fixture host must declare it.",
     approvedBy: APPROVED_BY,
   },
   {
@@ -86,9 +86,9 @@ export const APPROVED_PERMANENT = [
   },
   {
     file: 'packages/agent-run/test/guards/loopGuards.test.ts',
-    blob: 'b94c3122922927c62e86b2c2bfa8ffa5c5d5a2a4',
-    changed: "vi.hoisted telemetry, difficulty-gate and env-lever mocks replaced by GuardPorts and GuardLevers. All 12 source cases have a counterpart (one is split: its levers-off pass-through case is guards/leversOffPassThrough.test.ts); one case is new.",
-    reason: "The engine read levers from env strings and wrote telemetry through module imports; the policy takes them as ports.",
+    blob: 'cb5c12807871f4804e093933e96cb8304074a55f',
+    changed: "vi.hoisted telemetry, difficulty-gate and env-lever mocks replaced by GuardPorts and GuardLevers. All 12 source cases have a counterpart (one is split: its levers-off pass-through case is guards/leversOffPassThrough.test.ts); one case is new. (chat #276, 2026-11-19) One case appended — 'never escalates on a finish held for open linked work' — every existing line unchanged.",
+    reason: "The engine read levers from env strings and wrote telemetry through module imports; the policy takes them as ports. Re-approved 2026-11-19 for an append-only case: a linked_work_open finish hold is owed work, not a failed verifier, so it must not escalate the model.",
     approvedBy: APPROVED_BY,
   },
   {
@@ -121,6 +121,9 @@ export const APPROVED_PERMANENT = [
  * with a `blob`.
  * @type {{ file: string; changed: string; reason: string; approvedBy: string; cases?: number }[]}
  */
+/** The parity snapshots whose host call log apply-intended-snapshot-change-ticket-listing.mjs reconciled (see the last block). */
+const TICKET_LISTING_RECONCILED = new Set(['ship-gate', 'child-report-ship-gate', 'hand-off-execution']);
+
 export const APPROVED_THIS_PUSH = [
   ...[
     'brain-embedded/src/handOffExecution.e2e.test.ts',
@@ -162,13 +165,35 @@ export const APPROVED_THIS_PUSH = [
   })),
   {
     file: 'packages/agent-loop/src/chatTicketHealth.test.ts',
-    changed: "Three rollupChatTicketHealth toEqual expectations gain openTickets/completedTickets (3 done + 1 cancelled -> 0/3; all-cancelled -> 0/0; in_progress + canceled -> 1/0); pct/done/total are unchanged. Four cases are added.",
-    reason: "Intended change (0b42a0c29, open/completed ticket counts on every chat summary): ChatTicketHealth's shape extended with two ticket counts; every original pct/done/total value is asserted exactly as before.",
+    changed: "(0b42a0c29) Three rollupChatTicketHealth toEqual expectations gain openTickets/completedTickets (3 done + 1 cancelled -> 0/3; all-cancelled -> 0/0; in_progress + canceled -> 1/0). (chat #276) effectiveTicketProgress/closedLaneProgress lose their third (unsupportedDelivery) and fourth (whenClosed) arguments: the 'complete'/'passthrough' mode cases are folded into one closed-lane case; an open lane at raw 100 ('in_review', 100) now expects CLAIMED_COMPLETE_PROGRESS_CAP (was 100); a closed lane carrying a stale 75 ('done', 75) now expects 100 (was 75 under passthrough). Rollup fixtures pass the producer's output instead of the deleted flag. Regression cases added for chat #276. (per-kind follow-up) The 'closedLaneProgress (any tier) floors a closed lane and never caps an open one' case becomes 'each kind closes on its own vocabulary' (roadmap 'shipped' 100, spec 'complete' 100, task 'done' at 75 -> 100, spec 'in_progress' 40 stays 40) — closedLaneProgress is deleted; its import is removed. effectiveTicketProgress's `kind` became a required parameter, so every two-argument call gains an explicit 'task' (no expected value changed).",
+    reason: "Intended change (0b42a0c29): ChatTicketHealth gained two ticket counts, original pct/done/total kept. Intended change (chat #276, 2026-11-19): 'exact 100 is the only completion signal and only a CLOSED lane emits it' — an in_progress epic whose filed children were all done read 100% on the chat ring while the PRD was still open. A closed lane reads 100 on every surface (server = rail). unsupportedDelivery was fully subsumed by the open-lane cap and deleted; an independent Opus review confirmed the subsumption.",
+    approvedBy: APPROVED_BY,
+  },
+  {
+    file: 'api/src/application/brain/ceremonyTicketHealth.test.ts',
+    changed: "The unsupported-delivery cases (execution/file-change fixtures for the deleted epicsWithUnsupportedDelivery query) become lane-based cases; 'does not cap a pre-close claim when the live run left no file rows' now expects the claimed-complete cap (was 100); 'stays at 0/5 … parent is done' now expects 100 (closed lane); the docs-only-epic (#6550) and 'coder run changed a non-doc file' cases are dropped — they only exercised the deleted query and are covered by the closed-lane / open-lane cases. Leaf and closed-epic regression cases added. (per-kind follow-up) 'reaches 100% exactly when every story is estimated' (an ACTIVE poker session, 4/4) now expects CLAIMED_COMPLETE_PROGRESS_CAP, with a new case for the same session `completed` reading 100; in the batching case poker:p2 (active, 4/4) expects the cap (was 100).",
+    reason: "Intended change (chat #276, 2026-11-19): same rule as chatTicketHealth.test.ts; 'done' now means the lane is closed (completed_at alone no longer counts), so an epic's done/total agrees with its children's chips. Per-kind follow-up (same day): every chat-linked kind closes only on its own status words (TICKET_CLOSED_STATES); an active poker session with every story estimated is not closed, so it reads the claimed-complete rung, not 100.",
+    approvedBy: APPROVED_BY,
+  },
+  {
+    file: 'brain-embedded/src/runStore/startRun.lateBackstop.test.ts',
+    changed: "The codeRun fixture passes `tools` (builtin_chats_list_tickets) to startRun alongside runTool; every expectation is unchanged.",
+    reason: "Intended change (chat #276, 2026-11-19): the ticket backstops read the chat's tickets only where the host's catalog carries the listing tool; the Stop-during-settle case depends on that listing call being made, so the fixture host must declare the tool.",
+    approvedBy: APPROVED_BY,
+  },
+  {
+    file: 'api/src/application/task/taskProgressBreakdown.test.ts',
+    changed: "'can report delivered merged code as complete before the lane catches up' now expects CLAIMED_COMPLETE_PROGRESS_CAP (was 100). One regression case added (open epic whose subtasks are all closed).",
+    reason: "Intended change (chat #276, 2026-11-19): the agent's own task tools (builtinMcpService loadTaskProgress / single-task read) must not report 100 for an open lane while the chat chip reads 75 — the model read 'complete' from its own tool. Every return of buildTaskProgressBreakdown now goes through effectiveTicketProgress.",
     approvedBy: APPROVED_BY,
   },
   // The parity snapshots reconciled with the same intended change by
   // brain-embedded/scripts/apply-intended-snapshot-change-chat-link.mjs (its header names the three edits). In this range they ALSO
   // carry cb7d0f2be's operator regeneration to PRD 45 behaviour (see the chat-mode-tools / stop-during-fold entries above).
+  // The SAME 72 records also carry 47642b1d5's epic-parent directive bullet, inserted by
+  // brain-embedded/scripts/apply-intended-snapshot-change-epic-parent.mjs — one block covers both, since the last entry per file wins.
+  // Three of them (TICKET_LISTING_RECONCILED) also carry the host-call reconciliation of
+  // brain-embedded/scripts/apply-intended-snapshot-change-ticket-listing.mjs.
   ...[
     'ask-user-malformed', 'ask-user-terminal', 'big-read-paged', 'budget-warn-stop', 'child-own-transcript', 'child-report-exhausted-stall',
     'child-report-ship-gate', 'child-report-turn-end', 'confirm-approved', 'confirm-declined', 'effort-balanced-thinking', 'effort-quick',
@@ -183,8 +208,16 @@ export const APPROVED_THIS_PUSH = [
     'tools-without-runner', 'two-runs-one-fold', 'two-steers-turn-end', 'undelegated-request', 'unknown-tool', 'wait-interrupted', 'work-mode-tools',
   ].map((id) => ({
     file: `brain-embedded/src/run/parity/snapshots/${id}.json`,
-    changed: 'The work-linking prompt bullet (and the fold token arithmetic it moves by 8), the removed auto `builtin_chats_link_ticket` step/call, and the run chat stamped on `builtin_tasks_create`.',
-    reason: 'Intended change (chat-link-on-create): a created item links its chat in the create call, so the prompt no longer asks for a link step and the run fires none. Applied by brain-embedded/scripts/apply-intended-snapshot-change-chat-link.mjs, not regenerated from the agent.',
+    changed: 'The work-linking prompt bullet (and the fold token arithmetic it moves by 8), the removed auto `builtin_chats_link_ticket` step/call, and the run chat stamped on `builtin_tasks_create`. Plus (47642b1d5) the linked-chat EPIC-PARENT directive bullet ("When an open EPIC is linked to this chat… builtin_tickets_from_delta passing parentTaskId… file a child task with builtin_tasks_create (parentTaskId=…)") inserted after the STATUS bullet, and the fold token arithmetic it moves by 95 (estimatedTokens +95, non-zero trimmedTokens −95, the still-over-window notice +95).' +
+      (TICKET_LISTING_RECONCILED.has(id)
+        ? ' Plus host.toolCalls only: ' + (id === 'hand-off-execution'
+          ? 'the trailing builtin_chats_list_tickets is dropped (this host advertises no listing tool).'
+          : 'one builtin_chats_list_tickets before the first-edit from_delta (parent-epic lookup), and one before the settle from_delta (the open-work hold; the settle\'s parent-epic lookup reuses it); the trailing listing (the in_progress advance, read fresh) is unchanged.')
+        : ''),
+    reason: 'Intended change (chat-link-on-create): a created item links its chat in the create call, so the prompt no longer asks for a link step and the run fires none. Applied by brain-embedded/scripts/apply-intended-snapshot-change-chat-link.mjs, not regenerated from the agent. Intended change (47642b1d5, "fix(agent-run): hold a run\'s end while its linked tickets are open…"): chatWorkLinkingDirective gained the epic-parent bullet for a linked chat, so an open epic\'s remaining work is filed under it. Applied by brain-embedded/scripts/apply-intended-snapshot-change-epic-parent.mjs, not regenerated from the agent.' +
+      (TICKET_LISTING_RECONCILED.has(id)
+        ? ' Intended change (47642b1d5 + the per-run listing memo in runStore/chatTickets.ts): the ticket-list backstops are gated on the listing tool and act only on run-owned tickets, the parent-epic lookup lists once before a mint, and the read-only questions of one settle reuse one listing until an attempted ticket write or a model turn, while every ticket move reads the listing fresh. Applied by brain-embedded/scripts/apply-intended-snapshot-change-ticket-listing.mjs, not regenerated from the agent.'
+        : ''),
     approvedBy: APPROVED_BY,
   })),
 ];

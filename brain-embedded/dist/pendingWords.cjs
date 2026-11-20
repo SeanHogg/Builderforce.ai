@@ -69,6 +69,47 @@ var MID_TURN_META_KEY = "midTurn";
 // ../packages/agent-loop/src/taskClosedState.ts
 var TASK_CLOSED_STATUSES = ["done", "cancelled", "canceled", "completed", "archived"];
 var CLOSED = new Set(TASK_CLOSED_STATUSES);
+var TASK_CANCELLED_STATUSES = ["cancelled", "canceled"];
+var CANCELLED = new Set(TASK_CANCELLED_STATUSES);
+
+// ../packages/agent-loop/src/ticketClosedStates.ts
+var TASK_TABLE = { closed: TASK_CLOSED_STATUSES, cancelled: TASK_CANCELLED_STATUSES };
+var CEREMONY_SESSION_CLOSED_STATUSES = ["completed", "cancelled", "closed", "archived"];
+var CEREMONY_SESSION = { closed: CEREMONY_SESSION_CLOSED_STATUSES, cancelled: [] };
+var PORTFOLIO_STATUSES = ["active", "archived"];
+var INITIATIVE_STATUSES = ["proposed", "active", "completed", "archived"];
+var OBJECTIVE_STATUSES = ["active", "achieved", "missed", "archived"];
+var ROADMAP_STATUSES = ["planned", "in_progress", "shipped", "cancelled"];
+var ROADMAP_LEGACY_DELIVERED_STATUSES = ["done", "complete", "completed", "released"];
+function pick(_vocabulary, ...words) {
+  return words;
+}
+var TICKET_STATUS_VALUES = {
+  portfolio: PORTFOLIO_STATUSES,
+  initiative: INITIATIVE_STATUSES,
+  objective: OBJECTIVE_STATUSES,
+  roadmap: [...ROADMAP_STATUSES, ...ROADMAP_LEGACY_DELIVERED_STATUSES]
+};
+var TICKET_CLOSED_STATES = {
+  // agent-loop `taskClosedState.ts` TASK_CLOSED_STATUSES / TASK_CANCELLED_STATUSES.
+  task: TASK_TABLE,
+  gap: TASK_TABLE,
+  epic: TASK_TABLE,
+  portfolio: { closed: pick(PORTFOLIO_STATUSES, "archived"), cancelled: [] },
+  initiative: { closed: pick(INITIATIVE_STATUSES, "completed", "archived"), cancelled: [] },
+  // A MISSED objective is over without delivering, so it is skipped like a cancelled lane
+  // rather than counted done (its own ring still reads 100: it is closed).
+  objective: { closed: pick(OBJECTIVE_STATUSES, "achieved", "missed", "archived"), cancelled: pick(OBJECTIVE_STATUSES, "missed") },
+  roadmap: { closed: pick(TICKET_STATUS_VALUES.roadmap, "shipped", ...ROADMAP_LEGACY_DELIVERED_STATUSES), cancelled: [] },
+  // api schema/kernel.ts `specStatusEnum`: draft | ready | in_progress | complete (a pg
+  // enum, so the api test asserts this word is one of its values).
+  spec: { closed: ["complete"], cancelled: [] },
+  retro: CEREMONY_SESSION,
+  poker: CEREMONY_SESSION
+};
+var CLOSED_BY_KIND = new Map(
+  Object.entries(TICKET_CLOSED_STATES).map(([kind, v]) => [kind, { closed: new Set(v.closed), cancelled: new Set(v.cancelled) }])
+);
 
 // ../packages/agent-loop/src/reasoning.ts
 var REASONING_TAG = "think(?:ing)?|thought|antthinking|scratchpad|reasoning";

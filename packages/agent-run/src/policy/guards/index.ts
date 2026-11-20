@@ -18,15 +18,16 @@
  * Node.
  */
 
-import { ProgressDetector, progressPauseQuestion, progressTraceStep, type ProgressAction } from "@builderforce/run-guards";
+import { ProgressDetector, progressSteerNote, progressTraceStep, type ProgressAction } from "@builderforce/run-guards";
 import type { DifficultyFeatures } from "@builderforce/difficulty-router";
 import type { TierLadder } from "@builderforce/run-policy";
 import type { LoopGuardState, RunState } from "../../contract.js";
-import type { GuardControl, GuardsHook, PolicyContext, PolicyToolCall } from "../hooks.js";
+import type { GuardsHook, PolicyContext, PolicyToolCall } from "../hooks.js";
 import { CascadeSession } from "./cascade.js";
 import { verifyAfterEdit, withPostEditNote } from "./postEdit.js";
 import type { VerifyResult } from "./sourcePolicy.js";
 import { isReadOnlyCloudTool } from "./readOnly.js";
+import { LINKED_WORK_OPEN } from "../finish/index.js";
 import { guardLeversOf, type GuardLevers, type GuardPorts } from "./ports.js";
 
 export { guardLeversOf, type GuardLevers, type GuardPorts };
@@ -37,8 +38,7 @@ export class RunGuards {
   private readonly progress: ProgressDetector | null;
   private readonly postEdit: boolean;
   private readonly levers: GuardLevers;
-  private pendingPause: string | undefined;
-  /** A3's `finish`: the next turn offers no tools — the verified run's final report. */
+  /** A3's `finish`: the next turn offers no tools — the run's final report. */
   private finishDue: boolean;
   /** This turn's post-edit verdicts — the D1 code unit's verifier. */
   private turnEdits: VerifyResult[] = [];
@@ -64,7 +64,6 @@ export class RunGuards {
       ? new ProgressDetector(resume?.progress, { isReadOnly: (tool) => isReadOnlyCloudTool(tool) })
       : null;
     this.postEdit = !!levers.d7_deterministic_handlers;
-    this.pendingPause = resume?.pendingPause;
     this.finishDue = resume?.finishDue === true;
     this.checksNote = resume?.checksNote ?? "";
     this.escalations = resume?.escalations ?? 0;
@@ -91,7 +90,6 @@ export class RunGuards {
       ...(this.progress ? { progress: this.progress.snapshot() } : {}),
       // The cascade's seed facts serve A3's escalation too; with both levers off nothing persists.
       ...(this.cascade.on || this.progress ? { cascade: this.cascade.snapshot() } : {}),
-      ...(this.pendingPause ? { pendingPause: this.pendingPause } : {}),
       ...(this.finishDue ? { finishDue: true as const } : {}),
       ...(this.checksNote ? { checksNote: this.checksNote } : {}),
       ...(this.escalations ? { escalations: this.escalations } : {}),
@@ -122,7 +120,7 @@ export class RunGuards {
   async finish(verdict: { block: string | null; reason?: string }, step: number, ports: GuardPorts): Promise<string | null> {
     if (!this.cascade.on) return verdict.block;
     const v = verdict.block
-      ? { passed: false, verifier: `finish_gates:${verdict.reason ?? "blocked"}`, reason: verdict.block, inconclusive: verdict.reason === "branch_ci_pending" || verdict.reason === "children_running" }
+      ? { passed: false, verifier: `finish_gates:${verdict.reason ?? "blocked"}`, reason: verdict.block, inconclusive: verdict.reason === "branch_ci_pending" || verdict.reason === "children_running" || verdict.reason === LINKED_WORK_OPEN }
       : { passed: true, verifier: "finish_gates" };
     await this.judge("finish", v, step, ports);
     return verdict.block;
@@ -176,7 +174,7 @@ export class RunGuards {
   private async onTrip(action: ProgressAction, ports: GuardPorts): Promise<void> {
     let outcome: string = action.kind;
     if (action.kind === "advisory") {
-      // B1 readiness / B4 batching: a one-off steer, never a ladder trip — no pause, no
+      // B1 readiness / B4 batching: a one-off steer, never a ladder trip — no finish, no
       // escalation. The note rides the next turn's tail (the detector's steer, shown for
       // one turn and persisted across a durable tick), as the editor host does. Still a
       // row on the timeline (the one mapping every host traces through).
@@ -193,17 +191,16 @@ export class RunGuards {
         model.set(next);
         this.escalations += 1;
       } else {
-        // Nothing stronger to move to (or the run is pinned): the second trip pauses.
-        this.pendingPause = progressPauseQuestion(action.signal, action.trip);
-        this.progress?.setSteer(undefined);
-        outcome = "pause";
+        // Nothing stronger to move to (or the run is pinned): a second steer, on the same model —
+        // the run keeps its chance to finish the work; the third trip ends it on its own report.
+        // Never a question for the human (VS Code chat #157440).
+        this.progress?.setSteer(progressSteerNote(action.signal, action.trip, false));
+        outcome = "steer";
       }
-    } else if (action.kind === "pause") {
-      this.pendingPause = action.question;
     } else if (action.kind === "finish") {
-      // The change is made and verified: the next turn offers no tools (`finalTurn`) and its
-      // tail carries the detector's note (its steer), so the model reports and the run ends.
-      // Never an escalation, never a pause.
+      // The next turn offers no tools (`finalTurn`) and its tail carries the detector's note
+      // (its steer) — the verified wrap-up or the ladder's last rung — so the model reports
+      // and the run ends. Never an escalation, never a question for the human.
       this.finishDue = true;
     }
     // The same mapping as the advisory; this host records the outcome it took and the model.
@@ -214,7 +211,7 @@ export class RunGuards {
     await ports.onEvent?.({ tool: s.label, detail: s.args, result: s.result });
   }
 
-  /** A3's `finish`: whether the next turn is the verified run's final report (no tools). A peek — {@link finalTurnDone} spends it. */
+  /** A3's `finish`: whether the next turn is the run's final report (no tools). A peek — {@link finalTurnDone} spends it. */
   get finalTurnDue(): boolean {
     return this.finishDue;
   }
@@ -222,30 +219,6 @@ export class RunGuards {
   /** The final turn was answered: the finish is spent. */
   finalTurnDone(): void {
     this.finishDue = false;
-  }
-
-  /** A3: a pause parked the run — the next dispatched call returns it, once. */
-  consumePendingPause(): string | undefined {
-    const q = this.pendingPause;
-    this.pendingPause = undefined;
-    return q;
-  }
-
-  /**
-   * A pause A3 parked the run on: the skip the model reads, with the `ask_human` control
-   * so the kernel parks on the human answer (the same park the governance gate uses).
-   * The engine's park port names the approval when the surface has one; without it the
-   * run's HumanChannel is asked through the ask hook, with the two answers A3 offers.
-   * `undefined` when the run is not parked — the kernel dispatches the call normally.
-   */
-  async beforeDispatchPause(ports: GuardPorts): Promise<{ data: unknown; control: GuardControl } | undefined> {
-    const pending = this.consumePendingPause();
-    if (pending === undefined) return undefined;
-    const parked = ports.pause ? await ports.pause(pending) : undefined;
-    return {
-      data: { ok: false, error: `Paused for a human: ${pending}` },
-      control: { kind: "ask_human", ...(parked ? { approvalId: parked.approvalId } : {}), question: pending, options: PAUSE_OPTIONS },
-    };
   }
 
   /** A3: what the turn said, judged against what its calls did (WS8p). */
@@ -263,9 +236,6 @@ export class RunGuards {
 }
 
 // ── The composition's hook ───────────────────────────────────────────────────
-
-/** A3's pause offers the person these two answers (PRD 35 WS8p). */
-const PAUSE_OPTIONS: readonly string[] = ["Continue with guidance", "Stop the run"];
 
 /** Per-run guard sessions, keyed by the run the `PolicyContext` names. */
 const sessions = new WeakMap<object, RunGuards>();
@@ -295,9 +265,8 @@ export function guardsTurnNote(ctx: PolicyContext): string {
 }
 
 /**
- * The guards hook for a surface's engine couplings. `beforeDispatch` skips the call when
- * A3 has parked the run on a human question (the skip the model reads, with the
- * ask_human control so the kernel parks on the answer); `observe` runs the D7 post-edit
+ * The guards hook for a surface's engine couplings. It has no `beforeDispatch`: A3 never
+ * parks the run on a human question (its last rung is `finish`); `observe` runs the D7 post-edit
  * check on the result and feeds the D1 cascade + A3 progress detector; `endTurn` folds
  * the turn — the turn's text first, so an unkept readiness claim counts (WS8p);
  * `isReadOnly` is D8's port, which the composition hands the kernel.
@@ -308,13 +277,6 @@ export function guardsTurnNote(ctx: PolicyContext): string {
  */
 export function createGuardsHook(ports: GuardPorts = {}): GuardsHook {
   return {
-    async beforeDispatch(ctx: PolicyContext, _call: PolicyToolCall) {
-      const g = sessionOf(ctx, ports);
-      const paused = await g.beforeDispatchPause(ports);
-      if (!paused) return undefined;
-      ctx.state.guards = g.snapshot();
-      return { skip: { data: paused.data, isError: true, control: paused.control } };
-    },
     async observe(ctx: PolicyContext, call: PolicyToolCall, result: unknown) {
       const g = sessionOf(ctx, ports);
       const noted = await g.checkEdit(call, result, ports);

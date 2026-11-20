@@ -72,6 +72,12 @@ export function progressed(run: BrainRunContext): boolean {
   return run.c.codeChanged || run.usedTools.has(HAND_OFF_TOOL);
 }
 
+/** Planning ends HERE: the policy moves to the coding role (the next turn selects as `code`), and the run's record says why. */
+export function endPlanning(run: BrainRunContext, step: number, why: string): void {
+  reportToPolicy(run, { type: 'plan_budget_spent' });
+  pushTrace(run.c, { ts: nowIso(), category: 'message', label: 'loop.plan_budget_spent', args: { step, planTurns: run.policy.planTurns }, result: why });
+}
+
 /**
  * The analysis budget's turn, called BEFORE the turn's tools are selected so a planning
  * run that ends here selects as a coding run (no `hand_off` on the menu). Null for an
@@ -81,16 +87,9 @@ export function progressed(run: BrainRunContext): boolean {
 export function planBudgetTurn(run: BrainRunContext, step: number): ForcedTurn | null {
   if (!handOffDue(run.policy) || !budgeted(run)) return null;
   if (run.policy.handOffForced || !run.canAskUser) {
-    reportToPolicy(run, { type: 'plan_budget_spent' });
-    pushTrace(run.c, {
-      ts: nowIso(),
-      category: 'message',
-      label: 'loop.plan_budget_spent',
-      args: { step, planTurns: run.policy.planTurns },
-      result: run.canAskUser
-        ? 'The forced hand-off turn did not hand off — analysis ends here and the coding role takes the next turn.'
-        : 'Analysis budget spent where hand_off cannot be offered — analysis ends here and the coding role takes the next turn.',
-    });
+    endPlanning(run, step, run.canAskUser
+      ? 'The forced hand-off turn did not hand off — analysis ends here and the coding role takes the next turn.'
+      : 'Analysis budget spent where hand_off cannot be offered — analysis ends here and the coding role takes the next turn.');
     return null;
   }
   reportToPolicy(run, { type: 'hand_off_forced' });
@@ -106,8 +105,8 @@ export function planBudgetTurn(run: BrainRunContext, step: number): ForcedTurn |
 
 /** The menu of a forced change turn: the change tools this turn would offer, plus
  *  `ask_user` where it is advertised. Null when the turn offers no change tool to force. */
-export function changeToolsOf(run: BrainRunContext, selected: readonly BrainToolSpec[]): BrainToolSpec[] | null {
-  const tools = selected.filter((t) => isCodeChangeTool(t.function.name) || (run.canAskUser && t.function.name === ASK_USER_TOOL));
+export function changeToolsOf(run: BrainRunContext, selected: readonly BrainToolSpec[], canAsk: boolean = run.canAskUser): BrainToolSpec[] | null {
+  const tools = selected.filter((t) => isCodeChangeTool(t.function.name) || (canAsk && t.function.name === ASK_USER_TOOL));
   return tools.some((t) => isCodeChangeTool(t.function.name)) ? tools : null;
 }
 
@@ -125,8 +124,9 @@ export function forcedProgressTurn(
   run: BrainRunContext,
   selected: readonly BrainToolSpec[],
   reason: string,
+  opts: ForcedProgressOptions = {},
 ): { turn: ForcedTurn; forced: 'hand_off' | 'change' } | null {
-  if (offersHandOff(run.policy) && run.canAskUser && !run.policy.handOffForced) {
+  if (!opts.changeOnly && offersHandOff(run.policy) && run.canAskUser && !run.policy.handOffForced) {
     reportToPolicy(run, { type: 'hand_off_forced' });
     return { forced: 'hand_off', turn: { tools: [HAND_OFF_TOOL_SPEC], toolChoice: 'required', brief: { role: 'user', content: handOffBrief(reason) } } };
   }
@@ -134,12 +134,26 @@ export function forcedProgressTurn(
   // is still forced, so `progressed` is not the test.)
   if (run.c.codeChanged) return null;
   // No change tool on this turn's menu: nothing to force yet.
-  const tools = changeToolsOf(run, selected.filter((t) => t.function.name !== HAND_OFF_TOOL));
+  const canAsk = run.canAskUser && !opts.noAsk;
+  const tools = changeToolsOf(run, selected.filter((t) => t.function.name !== HAND_OFF_TOOL), canAsk);
   if (!tools) return null;
   // Planning whose forced hand-off already came and went ends here, as the budget's does.
-  if (offersHandOff(run.policy)) reportToPolicy(run, { type: 'plan_budget_spent' });
+  if (offersHandOff(run.policy)) {
+    if (opts.endPlanning) endPlanning(run, opts.endPlanning.step, opts.endPlanning.why);
+    else reportToPolicy(run, { type: 'plan_budget_spent' });
+  }
   reportToPolicy(run, { type: 'change_forced' });
-  return { forced: 'change', turn: { tools, toolChoice: 'required', brief: { role: 'user', content: changeBrief(reason, run.canAskUser) } } };
+  return { forced: 'change', turn: { tools, toolChoice: 'required', brief: { role: 'user', content: changeBrief(reason, canAsk) } } };
+}
+
+/** How {@link forcedProgressTurn} forces. Absent ⇒ its usual menu. */
+export interface ForcedProgressOptions {
+  /** Force the change tools only — never `hand_off`, even while planning. */
+  changeOnly?: boolean;
+  /** Leave `ask_user` off the menu (and out of the brief): the guard's own forced turn never offers a question. */
+  noAsk?: boolean;
+  /** Where planning ends on this turn, record it (`loop.plan_budget_spent`, with this reason) instead of only moving the policy. */
+  endPlanning?: { step: number; why: string };
 }
 
 /**

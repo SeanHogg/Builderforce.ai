@@ -13,7 +13,7 @@ import type { ToolSchema } from '@builderforce/agent-tools';
 import { brainPlatformTools, promptOnlyNamed } from './brainPlatformTools';
 import { chatModeDirective } from '../chatMode';
 import { turnOptimizationDirective } from '../turnOptimization';
-import { selfReviewShipDirective } from '../selfReviewShip';
+import { DEFAULT_SHIP_POLICY, shipDirective } from '@builderforce/run-guards';
 import { previewReviewDirective } from '../previewReview';
 import { ticketToolVocabulary } from '../ticketToolVocabulary';
 import { LOCAL_WORKSPACE_TOOLS, STUDIO_WORKSPACE_TOOLS, canChangeCodeHere, canReviewInPreview, localToolsIn, memoryToolsIn, studioToolsIn } from '../localWorkspaceTools';
@@ -43,7 +43,7 @@ const schema = (name: string): ToolSchema => ({ type: 'function', function: { na
 function promptFor(catalog: readonly string[]): { systemPrompt: string; previewReview: string | null } {
   const ticketTools = ticketToolVocabulary(catalog);
   const mode = chatModeDirective('work', CHAT_ID, { canEditHere: canChangeCodeHere(catalog), canDelegate: catalog.includes('spawn_agent'), canFanOut: catalog.includes('spawn_agents'), ticketTools });
-  const ship = catalog.includes('git_commit') && catalog.includes('git_push') ? `\n\n${selfReviewShipDirective(CHAT_ID)}` : '';
+  const ship = catalog.includes('git_commit') && catalog.includes('git_push') ? `\n\n${shipDirective(DEFAULT_SHIP_POLICY, { chatId: CHAT_ID })}` : '';
   const previewReview = canReviewInPreview(catalog) ? previewReviewDirective(CHAT_ID, ticketTools) : null;
   return { systemPrompt: `${PERSONA}\n\n${mode}\n\n${turnOptimizationDirective()}${ship}${previewReview ? `\n\n${previewReview}` : ''}`, previewReview };
 }

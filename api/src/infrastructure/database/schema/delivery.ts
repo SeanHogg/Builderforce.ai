@@ -578,6 +578,11 @@ export const projectManagerConfigs = pgTable('project_manager_configs', {
   /** PRD 23 canary mode (1312): auto-merge and auto-close are disabled while true; the
    *  sweeps log what they would have done. Project-only, default off. */
   canary: boolean('canary').notNull().default(false),
+  /** PRD 48 (1356): what a local (VS Code) run does with finished work —
+   *  'leave_uncommitted' | 'commit' | 'commit_push' | 'pull_request'. Nullable =
+   *  inherit the workspace tier (itself falling back to the built-in 'commit'). Cloud
+   *  runs always open a pull request; the PR merge sweep decides merges. */
+  shipMode: varchar('ship_mode', { length: 20 }),
   lastRunAt:         timestamp('last_run_at'),
   /**
    * WHAT THE LAST SCHEDULED SWEEP DECIDED about this project (migration 1083):

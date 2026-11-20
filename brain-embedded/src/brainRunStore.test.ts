@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import type { CheckRecord } from '@builderforce/run-guards';
+import { shipPolicyOf, type CheckRecord } from '@builderforce/run-guards';
 
 /**
  * The run's evidence ledger is fed only by the host verifier. A test stands in for it here: every ledger a run creates
@@ -882,6 +882,8 @@ describe('a run that ships its change closes its own ticket', () => {
 
 describe('a local run is its own reviewer: it ships its change instead of parking it at 75%', () => {
   const persistence = { sendMessages: async () => [] };
+  // The project's standing rule (PRD 48): these runs push the base branch, so their policy says so.
+  const shipPolicy = shipPolicyOf('commit_push', 'project_settings');
   const TICKET = [{ kind: 'task', ref: '2466', status: 'in_review', exists: true }];
   const IDE_TOOLS = ['edit_file', 'git_status', 'git_diff', 'git_commit', 'git_push', 'run_command'].map((name) => ({
     type: 'function' as const,
@@ -919,10 +921,11 @@ describe('a local run is its own reviewer: it ships its change instead of parkin
   beforeEach(() => { evidenceSeed.passing = ['/repo/src/a.ts', '/repo/src/b.ts']; });
   afterEach(() => { evidenceSeed.passing = []; });
 
-  it('tells a session that can commit and push that it IS the reviewer', async () => {
+  it('tells a session that can commit and push its ship policy (the default when the host sends none)', async () => {
     const { stream, runTool, systems } = scripted(['Nothing to change.']);
     await startRun(4801, { resolvedSystemPrompt: 'sys', projectId: 11, tools: IDE_TOOLS, runTool, stream, persistence, userTurn: 'fix the deep link' });
-    expect(systems[0]).toContain('SHIP YOUR OWN CHANGE');
+    expect(systems[0]).toContain('SHIP POLICY');
+    expect(systems[0]).toContain("The project's ship policy is unset");
   });
 
   it('sends back a turn that edited and stopped, and the verified push closes the ticket', async () => {
@@ -935,7 +938,7 @@ describe('a local run is its own reviewer: it ships its change instead of parkin
       { name: 'git_push', args: { allowBaseBranch: true } },
       'Shipped as abc123 — pushed to main.',
     ]);
-    await startRun(4802, { resolvedSystemPrompt: 'sys', projectId: 11, tools: IDE_TOOLS, runTool, stream, persistence, userTurn: 'fix the deep link' });
+    await startRun(4802, { resolvedSystemPrompt: 'sys', projectId: 11, tools: IDE_TOOLS, runTool, stream, persistence, userTurn: 'fix the deep link', shipPolicy });
     expect(getRunTrace(4802).some((e) => e.label === 'loop.recover_unshipped_change')).toBe(true);
     expect(calls.some((c) => c.name === 'git_push')).toBe(true);
     // The push's own status is the verification — no separate git_status was needed.
@@ -947,7 +950,7 @@ describe('a local run is its own reviewer: it ships its change instead of parkin
       { name: 'edit_file', args: { path: 'src/a.ts', old_string: 'x', new_string: 'y' } },
       'Edited src/a.ts; left uncommitted as asked.',
     ]);
-    await startRun(4803, { resolvedSystemPrompt: 'sys', projectId: 11, tools: IDE_TOOLS, runTool, stream, persistence, userTurn: "fix the deep link but don't commit" });
+    await startRun(4803, { resolvedSystemPrompt: 'sys', projectId: 11, tools: IDE_TOOLS, runTool, stream, persistence, userTurn: "fix the deep link but don't commit", shipPolicy });
     expect(getRunTrace(4803).some((e) => e.label === 'loop.recover_unshipped_change')).toBe(false);
     expect(doneUpdate(calls)).toBeUndefined();
   });
@@ -962,14 +965,14 @@ describe('a local run is its own reviewer: it ships its change instead of parkin
       { name: 'git_push', args: { allowBaseBranch: true } },
       'Shipped.',
     ]);
-    await startRun(4804, { resolvedSystemPrompt: 'sys', projectId: 11, tools: IDE_TOOLS, runTool: first.runTool, stream: first.stream, persistence, userTurn: 'fix a and push' });
+    await startRun(4804, { resolvedSystemPrompt: 'sys', projectId: 11, tools: IDE_TOOLS, runTool: first.runTool, stream: first.stream, persistence, userTurn: 'fix a and push', shipPolicy });
     expect(doneUpdate(first.calls)).toBeDefined();
 
     const second = scripted([
       { name: 'edit_file', args: { path: 'src/b.ts', old_string: 'x', new_string: 'y' } },
       'Edited src/b.ts; left uncommitted as asked.',
     ]);
-    await startRun(4804, { resolvedSystemPrompt: 'sys', projectId: 11, tools: IDE_TOOLS, runTool: second.runTool, stream: second.stream, persistence, userTurn: "now tweak b, don't commit" });
+    await startRun(4804, { resolvedSystemPrompt: 'sys', projectId: 11, tools: IDE_TOOLS, runTool: second.runTool, stream: second.stream, persistence, userTurn: "now tweak b, don't commit", shipPolicy });
     expect(doneUpdate(second.calls)).toBeUndefined();
   });
 });

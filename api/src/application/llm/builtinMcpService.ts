@@ -25,6 +25,7 @@ import { reportCaughtError, reportedFallback } from '../observability/caughtErro
 
 import { and, eq, desc, getTableColumns, inArray, isNotNull, sql, type SQL } from 'drizzle-orm';
 import { type ToolSchema } from '@builderforce/agent-tools';
+import { SHIP_MODES } from '@builderforce/run-guards';
 import { CREATIVE_CAPABILITIES, creativeOutputFormats, creativeOutputProfile } from '@builderforce/creation-canvas-contract';
 import { advertisedName, BUILTIN_EXTENSION_ID } from './toolNaming';
 import { CAREER_TOOLS } from './careerToolCatalog';
@@ -59,7 +60,7 @@ import { r2ProjectStoragePurge } from '../ide/projectStorage';
 import { TaskService } from '../task/TaskService';
 import { summarizeTaskActivity } from '../task/taskActivity';
 import { buildTaskProgressBreakdown, normalizeTaskPrState } from '../task/taskProgressBreakdown';
-import { parseTaskListScope, scopeNeedsArchived, taskInScope, TASK_LIST_SCOPES } from '@builderforce/agent-loop';
+import { parseTaskListScope, parseTicketStatus, scopeNeedsArchived, taskInScope, TASK_LIST_SCOPES, TICKET_STATUS_VALUES } from '@builderforce/agent-loop';
 import { addManagerDirective } from '../manager/managerDirectives';
 import { createManagerCoachingTask, getEffectiveManagerPolicy } from '../manager/ManagerService';
 import { salesRevenueForecast } from '../sales/salesPolicy';
@@ -263,6 +264,14 @@ const S = { type: 'string' } as const;
 const N = { type: 'number' } as const;
 const B = { type: 'boolean' } as const;
 const obj = (properties: Json, required: string[] = []): Json => ({ type: 'object', properties, required });
+
+/**
+ * PRD 48 §4.6 — a "merge into main" grant is a PERSON's explicit action in the web UI, never an
+ * agent tool's: a Brain run calls these tools with the person's own token, so a model (or a prompt
+ * injection) could otherwise grant a merge. The dispatch tools carry no grant field; this tells
+ * the model where the person grants one instead.
+ */
+const MERGE_GRANT_NOT_HERE = 'This tool never grants a merge into main. If the person asks for a run\'s pull request to merge into main when it is done, tell them to use "Merge into main when done" (with a reason) on the run control in the web app.';
 /** An agent's delivery roles, as the board's role catalog names them. */
 const ROLE_KEYS_PARAM = { type: 'array', items: { type: 'string', enum: BUILTIN_ROLES.map((r) => r.key) } } as const;
 const num = (v: unknown): number => Number(v);
@@ -1287,12 +1296,12 @@ const CATALOG: BuiltinTool[] = [
   // ---- Work-delta capture + Validator review (0270) ----
   {
     tool: 'tickets.from_delta', mutates: true,
-    description: 'Record a code CHANGE you just made as a classified work delta so it is visible on the board. If an existing ticket already tracks the work, pass taskId and the delta attaches to it without creating a duplicate; otherwise an associated ticket is opened. kind: improvement (new/better behaviour) | fix (repaired something) | bug (a defect you are logging). Pass files you touched — a new ticket is only opened for a delta that names at least one changed file, so call it AFTER the write — and, when working in a Brain chat, the chatId so the ticket is tied back to this conversation. A newly-created ticket opens in review and completes automatically when the change is merged + deployed.',
+    description: 'Record a code CHANGE you just made as a classified work delta so it is visible on the board. If an existing ticket already tracks the work, pass taskId and the delta attaches to it without creating a duplicate; otherwise an associated ticket is opened. kind: improvement (new/better behaviour) | fix (repaired something) | bug (a defect you are logging). Pass files you touched — a new ticket is only opened for a delta that names at least one changed file, so call it AFTER the write — and, when working in a Brain chat, the chatId so the ticket is tied back to this conversation; pass parentTaskId to file a newly-opened ticket under an open epic (ignored when the delta attaches to an existing ticket). A newly-created ticket opens in review and completes automatically when the change is merged + deployed.',
     parameters: obj({
       projectId: N, summary: S, detail: S,
       kind: { type: 'string', enum: ['improvement', 'fix', 'bug'] },
       files: { type: 'array', items: S }, modality: S, chatId: N, taskId: N,
-      createTicket: B,
+      parentTaskId: N, createTicket: B,
     }, ['projectId', 'summary']),
     run: async (ctx, a) => {
       if (!ctx.env) throw new Error('work-delta recording requires the worker env');
@@ -1309,6 +1318,7 @@ const CATALOG: BuiltinTool[] = [
         modality: a.modality != null ? str(a.modality) : 'mcp',
         chatId: deltaChatId,
         taskId: a.taskId != null ? idArg(a.taskId, 'taskId') : null,
+        parentTaskId: a.parentTaskId != null ? idArg(a.parentTaskId, 'parentTaskId') : null,
         createdBy: ctx.userId ?? null,
         createTicket: typeof a.createTicket === 'boolean' ? a.createTicket : true,
       });
@@ -1629,7 +1639,7 @@ const CATALOG: BuiltinTool[] = [
   {
     tool: 'roadmap.create', mutates: true,
     description: 'Create a product roadmap item. title is required; horizon = now|next|later (default now); status defaults to "planned" (set "shipped" to mark it delivered). Optionally attach to a project (projectId) and set theme / priority / targetDate (ISO) / notes.',
-    parameters: obj({ title: S, horizon: S, status: S, theme: S, priority: S, targetDate: S, notes: S, projectId: N }, ['title']),
+    parameters: obj({ title: S, horizon: S, status: { type: 'string', enum: [...TICKET_STATUS_VALUES.roadmap] }, theme: S, priority: S, targetDate: S, notes: S, projectId: N }, ['title']),
     run: async (ctx, a) => {
       const title = str(a.title).trim(); if (!title) throw new Error('title is required');
       const seg = await resolveSegment(ctx.db, ctx.tenantId);
@@ -1638,7 +1648,7 @@ const CATALOG: BuiltinTool[] = [
       const [row] = await ctx.db.insert(roadmapItems).values({
         tenantId: ctx.tenantId, segmentId: seg, projectId, title,
         ...(a.horizon != null ? { horizon: str(a.horizon) } : {}),
-        ...(a.status != null ? { status: str(a.status) } : {}),
+        ...(a.status != null ? { status: parseTicketStatus('roadmap', a.status) } : {}),
         theme: a.theme != null ? str(a.theme) : null,
         priority: a.priority != null ? str(a.priority) : null,
         targetDate: dt(a.targetDate) ?? null,
@@ -1651,13 +1661,13 @@ const CATALOG: BuiltinTool[] = [
   {
     tool: 'roadmap.update', mutates: true,
     description: 'Update a roadmap item (title / horizon / status / theme / priority / targetDate / notes / projectId). Set status="shipped" to mark it delivered.',
-    parameters: obj({ id: S, title: S, horizon: S, status: S, theme: S, priority: S, targetDate: S, notes: S, projectId: N }, ['id']),
+    parameters: obj({ id: S, title: S, horizon: S, status: { type: 'string', enum: [...TICKET_STATUS_VALUES.roadmap] }, theme: S, priority: S, targetDate: S, notes: S, projectId: N }, ['id']),
     run: async (ctx, a) => {
       const seg = await resolveSegment(ctx.db, ctx.tenantId);
       const patch: Json = { updatedAt: new Date() };
       if (a.title != null) patch.title = str(a.title);
       if (a.horizon != null) patch.horizon = str(a.horizon);
-      if (a.status != null) patch.status = str(a.status);
+      if (a.status != null) patch.status = parseTicketStatus('roadmap', a.status);
       if (a.theme != null) patch.theme = str(a.theme);
       if (a.priority != null) patch.priority = str(a.priority);
       if (a.targetDate != null) patch.targetDate = dt(a.targetDate) ?? null;
@@ -1732,11 +1742,11 @@ const CATALOG: BuiltinTool[] = [
   {
     tool: 'portfolios.create', mutates: true,
     description: 'Create a portfolio (a strategic grouping that initiatives and OKRs attach to).',
-    parameters: obj({ name: S, description: S, status: S, targetDate: S }, ['name']),
+    parameters: obj({ name: S, description: S, status: { type: 'string', enum: [...TICKET_STATUS_VALUES.portfolio] }, targetDate: S }, ['name']),
     run: async (ctx, a) => {
       const name = str(a.name).trim(); if (!name) throw new Error('name is required');
       const seg = await resolveSegment(ctx.db, ctx.tenantId);
-      const [row] = await ctx.db.insert(portfolios).values({ tenantId: ctx.tenantId, segmentId: seg, name, description: a.description != null ? str(a.description) : null, ...(a.status != null ? { status: str(a.status) } : {}), targetDate: dt(a.targetDate) }).returning();
+      const [row] = await ctx.db.insert(portfolios).values({ tenantId: ctx.tenantId, segmentId: seg, name, description: a.description != null ? str(a.description) : null, ...(a.status != null ? { status: parseTicketStatus('portfolio', a.status) } : {}), targetDate: dt(a.targetDate) }).returning();
       await bumpPmo(ctx);
       return row;
     },
@@ -1744,13 +1754,13 @@ const CATALOG: BuiltinTool[] = [
   {
     tool: 'portfolios.update', mutates: true,
     description: "Update a portfolio (name/description/status/targetDate).",
-    parameters: obj({ id: S, name: S, description: S, status: S, targetDate: S }, ['id']),
+    parameters: obj({ id: S, name: S, description: S, status: { type: 'string', enum: [...TICKET_STATUS_VALUES.portfolio] }, targetDate: S }, ['id']),
     run: async (ctx, a) => {
       const seg = await resolveSegment(ctx.db, ctx.tenantId);
       const patch: Json = { updatedAt: new Date() };
       if (a.name != null) patch.name = str(a.name);
       if (a.description != null) patch.description = str(a.description);
-      if (a.status != null) patch.status = str(a.status);
+      if (a.status != null) patch.status = parseTicketStatus('portfolio', a.status);
       if (a.targetDate != null) patch.targetDate = dt(a.targetDate);
       const [row] = await ctx.db.update(portfolios).set(patch).where(and(eq(portfolios.id, str(a.id)), eq(portfolios.tenantId, ctx.tenantId), eq(portfolios.segmentId, seg))).returning();
       if (!row) throw new Error('portfolio not found');
@@ -1764,7 +1774,7 @@ const CATALOG: BuiltinTool[] = [
   {
     tool: 'initiatives.create', mutates: true,
     description: 'Create an initiative under a portfolio (pass portfolioId). startDate and targetDate are REQUIRED (YYYY-MM-DD): an initiative with no window renders permanently unscoped on the planning spine, because a brand-new initiative has no children for its dates to be derived from.',
-    parameters: obj({ name: S, description: S, status: S, portfolioId: S, startDate: S, targetDate: S }, ['name', 'startDate', 'targetDate']),
+    parameters: obj({ name: S, description: S, status: { type: 'string', enum: [...TICKET_STATUS_VALUES.initiative] }, portfolioId: S, startDate: S, targetDate: S }, ['name', 'startDate', 'targetDate']),
     run: async (ctx, a) => {
       const name = str(a.name).trim(); if (!name) throw new Error('name is required');
       // Enforced in the RUNNER as well as the schema: a model can omit a "required"
@@ -1773,7 +1783,7 @@ const CATALOG: BuiltinTool[] = [
       const initStart = dt(a.startDate); const initTarget = dt(a.targetDate);
       if (!initStart || !initTarget) throw new Error('startDate and targetDate are required (YYYY-MM-DD)');
       const seg = await resolveSegment(ctx.db, ctx.tenantId);
-      const [row] = await ctx.db.insert(initiatives).values({ tenantId: ctx.tenantId, segmentId: seg, name, description: a.description != null ? str(a.description) : null, ...(a.status != null ? { status: str(a.status) } : {}), portfolioId: a.portfolioId != null ? str(a.portfolioId) : null, startDate: initStart, targetDate: initTarget }).returning();
+      const [row] = await ctx.db.insert(initiatives).values({ tenantId: ctx.tenantId, segmentId: seg, name, description: a.description != null ? str(a.description) : null, ...(a.status != null ? { status: parseTicketStatus('initiative', a.status) } : {}), portfolioId: a.portfolioId != null ? str(a.portfolioId) : null, startDate: initStart, targetDate: initTarget }).returning();
       await bumpPmo(ctx);
       return row;
     },
@@ -1781,13 +1791,13 @@ const CATALOG: BuiltinTool[] = [
   {
     tool: 'initiatives.update', mutates: true,
     description: 'Update an initiative (name/description/status/portfolioId/dates). Pass portfolioId to MOVE the initiative into that portfolio, or portfolioId=null to unassign it (make it a top-level initiative under no portfolio).',
-    parameters: obj({ id: S, name: S, description: S, status: S, portfolioId: { type: ['string', 'null'] }, startDate: S, targetDate: S }, ['id']),
+    parameters: obj({ id: S, name: S, description: S, status: { type: 'string', enum: [...TICKET_STATUS_VALUES.initiative] }, portfolioId: { type: ['string', 'null'] }, startDate: S, targetDate: S }, ['id']),
     run: async (ctx, a) => {
       const seg = await resolveSegment(ctx.db, ctx.tenantId);
       const patch: Json = { updatedAt: new Date() };
       if (a.name != null) patch.name = str(a.name);
       if (a.description != null) patch.description = str(a.description);
-      if (a.status != null) patch.status = str(a.status);
+      if (a.status != null) patch.status = parseTicketStatus('initiative', a.status);
       if ('portfolioId' in a) patch.portfolioId = a.portfolioId != null ? str(a.portfolioId) : null;
       if (a.startDate != null) patch.startDate = dt(a.startDate);
       if (a.targetDate != null) patch.targetDate = dt(a.targetDate);
@@ -1802,8 +1812,8 @@ const CATALOG: BuiltinTool[] = [
   { tool: 'objectives.list', mutates: false, description: 'List OKR objectives — the strategic goals on the Portfolio ▸ OKRs tab, NOT board Epics (compact: id/title/status/period/owner + snippet), capped by limit (default 50, max 200).', parameters: obj({ limit: N }), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const rows = await ctx.db.select().from(objectives).where(and(eq(objectives.tenantId, ctx.tenantId), eq(objectives.segmentId, seg))).orderBy(desc(objectives.updatedAt)).limit(LIST_MAX_LIMIT); return listEnvelope('objectives', rows.map((r) => compactRow(r as unknown as Record<string, unknown>, OBJECTIVE_LIST_FIELDS, 'description')), clampLimit(a.limit)); } },
   {
     tool: 'objectives.create', mutates: true,
-    description: 'Create an OKR Objective — a strategic, qualitative goal (e.g. "Unlock recurring revenue"). This populates the Portfolio ▸ OKRs tab. Do NOT model OKRs as board Epics. SCOPE the objective by passing exactly one of projectId (a goal FOR a specific project — this is what satisfies that project\'s "Direction" / "goal or OKR linked" health check), initiativeId, or portfolioId (omit all three for a workspace/org-level objective). Then add measurable targets with key_results.create and link the delivering epics/initiatives with objectives.add_link. status: active|achieved|missed|archived; period is an optional label like "2026-Q2". startDate and endDate are REQUIRED (YYYY-MM-DD) — an objective with no window renders permanently unscoped on the planning spine, because a brand-new objective has no key results or linked work for its dates to be derived from. Idempotent: an objective with the same title already in this workspace is returned ({ deduped: true, … }) instead of duplicated.',
-    parameters: obj({ title: S, description: S, period: S, status: { type: 'string', enum: ['active', 'achieved', 'missed', 'archived'] }, projectId: N, portfolioId: S, initiativeId: S, startDate: S, endDate: S }, ['title', 'startDate', 'endDate']),
+    description: 'Create an OKR Objective — a strategic, qualitative goal (e.g. "Unlock recurring revenue"). This populates the Portfolio ▸ OKRs tab. Do NOT model OKRs as board Epics. SCOPE the objective by passing exactly one of projectId (a goal FOR a specific project — this is what satisfies that project\'s "Direction" / "goal or OKR linked" health check), initiativeId, or portfolioId (omit all three for a workspace/org-level objective). Then add measurable targets with key_results.create and link the delivering epics/initiatives with objectives.add_link. status: ' + TICKET_STATUS_VALUES.objective.join('|') + '; period is an optional label like "2026-Q2". startDate and endDate are REQUIRED (YYYY-MM-DD) — an objective with no window renders permanently unscoped on the planning spine, because a brand-new objective has no key results or linked work for its dates to be derived from. Idempotent: an objective with the same title already in this workspace is returned ({ deduped: true, … }) instead of duplicated.',
+    parameters: obj({ title: S, description: S, period: S, status: { type: 'string', enum: [...TICKET_STATUS_VALUES.objective] }, projectId: N, portfolioId: S, initiativeId: S, startDate: S, endDate: S }, ['title', 'startDate', 'endDate']),
     run: async (ctx, a) => {
       const title = str(a.title).trim(); if (!title) throw new Error('title is required');
       // Enforced in the RUNNER as well as the schema — a model can omit a "required"
@@ -1811,6 +1821,7 @@ const CATALOG: BuiltinTool[] = [
       // REST tracker). Checked BEFORE the dedupe read so a bad call costs no query.
       const objStart = dt(a.startDate); const objEnd = dt(a.endDate);
       if (!objStart || !objEnd) throw new Error('startDate and endDate are required (YYYY-MM-DD)');
+      const objStatus = a.status != null ? parseTicketStatus('objective', a.status) : undefined;
       const seg = await resolveSegment(ctx.db, ctx.tenantId);
       // Idempotent create — a same-title objective in this tenant/segment is returned
       // rather than duplicated (guards roadmap-reconciliation reruns).
@@ -1821,7 +1832,7 @@ const CATALOG: BuiltinTool[] = [
         tenantId: ctx.tenantId, segmentId: seg, title,
         description: a.description != null ? str(a.description) : null,
         period: a.period != null ? str(a.period) : null,
-        ...(a.status != null ? { status: str(a.status) } : {}),
+        ...(objStatus != null ? { status: objStatus } : {}),
         projectId: a.projectId != null ? idArg(a.projectId, 'projectId') : null,
         portfolioId: a.portfolioId != null ? str(a.portfolioId) : null,
         initiativeId: a.initiativeId != null ? str(a.initiativeId) : null,
@@ -1834,14 +1845,14 @@ const CATALOG: BuiltinTool[] = [
   {
     tool: 'objectives.update', mutates: true,
     description: 'Update an OKR objective (title/description/status/period/OWNER/dates). REASSIGN the objective\'s owner (the parent scope shown on the Portfolio ▸ OKRs tab) by passing exactly ONE of portfolioId / initiativeId / projectId and setting the other two to null — e.g. { portfolioId: "pf_123", initiativeId: null, projectId: null } attaches it to that portfolio. Pass all three null to make it an org-level (workspace) objective owned by nothing. Omit a field entirely to leave it unchanged.',
-    parameters: obj({ id: S, title: S, description: S, period: S, status: { type: 'string', enum: ['active', 'achieved', 'missed', 'archived'] }, projectId: { type: ['number', 'null'] }, portfolioId: { type: ['string', 'null'] }, initiativeId: { type: ['string', 'null'] }, startDate: S, endDate: S }, ['id']),
+    parameters: obj({ id: S, title: S, description: S, period: S, status: { type: 'string', enum: [...TICKET_STATUS_VALUES.objective] }, projectId: { type: ['number', 'null'] }, portfolioId: { type: ['string', 'null'] }, initiativeId: { type: ['string', 'null'] }, startDate: S, endDate: S }, ['id']),
     run: async (ctx, a) => {
       const seg = await resolveSegment(ctx.db, ctx.tenantId);
       const patch: Json = { updatedAt: new Date() };
       if (a.title != null) patch.title = str(a.title);
       if (a.description != null) patch.description = str(a.description);
       if (a.period != null) patch.period = str(a.period);
-      if (a.status != null) patch.status = str(a.status);
+      if (a.status != null) patch.status = parseTicketStatus('objective', a.status);
       if ('projectId' in a) patch.projectId = a.projectId != null ? idArg(a.projectId, 'projectId') : null;
       if ('portfolioId' in a) patch.portfolioId = a.portfolioId != null ? str(a.portfolioId) : null;
       if ('initiativeId' in a) patch.initiativeId = a.initiativeId != null ? str(a.initiativeId) : null;
@@ -2190,7 +2201,7 @@ const CATALOG: BuiltinTool[] = [
   { tool: 'chats.invite_agent', mutates: true, description: 'Invite an agent into a Brain chat as a participant (agentRef = cloud agent id / workforce ref). Once invited it can be tagged to take action; use chats.dispatch_agent to have it execute a linked ticket.', parameters: obj({ chatId: N, agentRef: S, agentKind: S, role: S }, ['chatId', 'agentRef']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); const r = await svc.inviteAgent(ctx.tenantId, idArg(a.chatId, 'chatId'), ctx.userId ?? null, { agentRef: str(a.agentRef), agentKind: a.agentKind != null ? str(a.agentKind) : undefined, role: a.role != null ? str(a.role) : undefined }); if ('error' in r) throw new Error(r.error); return r; } },
   {
     tool: 'chats.dispatch_agent', mutates: true,
-    description: "Tag an invited agent to EXECUTE: assign it to a task/epic (typically one linked to the chat — see chats.list_tickets) and start a run immediately, joining it to this chat so it narrates here and can be steered mid-run with executions.post_message. Returns the started execution. Only task/epic tickets are runnable. Use this for work the CURRENT session cannot do itself — a long or repetitive job, or work that must run elsewhere; if you have the workspace file tools and could make the change in a few calls, make it instead of hiring an agent to make it. On a lifecycle-managed board the stage's authorized role decides who executes, so the agent that actually runs may differ from `agentRef` — the response says which one it is. The PERSON in this chat directing the dispatch is the authority: their dispatch overrides every governance gate (an unstaffed lane, a managed stage with no bound role, a human gate, a tripped failure breaker) — the run is recorded under their name (`overrode` names the gate) and cannot advance the lane on its own. Only a billing entitlement refusal (cloud-run or token allowance) stands: read it and report it, do not retry the identical dispatch.",
+    description: "Tag an invited agent to EXECUTE: assign it to a task/epic (typically one linked to the chat — see chats.list_tickets) and start a run immediately, joining it to this chat so it narrates here and can be steered mid-run with executions.post_message. Returns the started execution. Only task/epic tickets are runnable. Use this for work the CURRENT session cannot do itself — a long or repetitive job, or work that must run elsewhere; if you have the workspace file tools and could make the change in a few calls, make it instead of hiring an agent to make it. On a lifecycle-managed board the stage's authorized role decides who executes, so the agent that actually runs may differ from `agentRef` — the response says which one it is. The PERSON in this chat directing the dispatch is the authority: their dispatch overrides every governance gate (an unstaffed lane, a managed stage with no bound role, a human gate, a tripped failure breaker) — the run is recorded under their name (`overrode` names the gate) and cannot advance the lane on its own. Only a billing entitlement refusal (cloud-run or token allowance) stands: read it and report it, do not retry the identical dispatch. " + MERGE_GRANT_NOT_HERE,
     parameters: obj({ chatId: N, agentRef: S, taskId: N }, ['chatId', 'agentRef', 'taskId']),
     run: async (ctx, a) => {
       if (!ctx.env) throw new Error('dispatch unavailable in this context');
@@ -3745,7 +3756,7 @@ const CATALOG: BuiltinTool[] = [
   { tool: 'executions.task_file_changes', mutates: false, description: 'Files an agent created/modified/deleted for a task.', parameters: obj({ taskId: N }, ['taskId']), run: async (ctx, a) => (await ctx.db.execute(sql`SELECT path, change, agent, execution_id AS "executionId", created_at AS "createdAt" FROM task_file_changes WHERE task_id = ${idArg(a.taskId, 'taskId')} AND tenant_id = ${ctx.tenantId} ORDER BY created_at DESC LIMIT 500`)).rows },
   // ---- Executions (writes) — dispatch/steer live runs via route replay (reuses the
   //       runtime route's gating + dispatch logic; not a simple table op). ----
-  { tool: 'executions.submit', mutates: true, description: 'Submit a task for agent execution (dispatches to an agent host or the cloud).', parameters: obj({ taskId: N, agentHostId: N, sessionId: S, payload: S }, ['taskId']), run: (ctx, a) => replayRoute(ctx, 'POST', '/api/runtime/executions', { taskId: idArg(a.taskId, 'taskId'), ...(a.agentHostId != null ? { agentHostId: idArg(a.agentHostId, 'agentHostId') } : {}), ...(a.sessionId != null ? { sessionId: str(a.sessionId) } : {}), ...(a.payload != null ? { payload: str(a.payload) } : {}) }) },
+  { tool: 'executions.submit', mutates: true, description: `Submit a task for agent execution (dispatches to an agent host or the cloud). ${MERGE_GRANT_NOT_HERE}`, parameters: obj({ taskId: N, agentHostId: N, sessionId: S, payload: S }, ['taskId']), run: (ctx, a) => replayRoute(ctx, 'POST', '/api/runtime/executions', { taskId: idArg(a.taskId, 'taskId'), ...(a.agentHostId != null ? { agentHostId: idArg(a.agentHostId, 'agentHostId') } : {}), ...(a.sessionId != null ? { sessionId: str(a.sessionId) } : {}), ...(a.payload != null ? { payload: str(a.payload) } : {}) }) },
   { tool: 'executions.cancel', mutates: true, description: 'Cancel a running/queued execution.', parameters: obj({ id: N }, ['id']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/runtime/executions/${idArg(a.id, 'id')}/cancel`) },
   { tool: 'executions.post_message', mutates: true, description: 'Send a follow-up direction to a running execution (steer it mid-run).', parameters: obj({ id: N, text: S }, ['id', 'text']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/runtime/executions/${idArg(a.id, 'id')}/messages`, { text: str(a.text) }) },
 
@@ -4062,23 +4073,28 @@ const CATALOG: BuiltinTool[] = [
   },
   {
     tool: 'manager.policy', mutates: false,
-    description: 'WHAT THE AI MANAGER IS PERMITTED TO DO on one project, and whether its autonomy is running at all. Returns the effective three-tier policy (managing enabled? auto-score value / auto-rank / auto-schedule / auto-assign? PR merge policy and whether merge authority is GRANTED or WITHHELD? does completion require a human sign-off?), who is designated as the manager and its type, the standing coaching directives it must honor, and the workspace autonomy health (`tokenBlocked` = the cron sweeps and the autonomous executor are SKIPPING this workspace because its token budget is exhausted, so only a manual "Run manager now" does anything). Read this BEFORE explaining an outcome: the honest answer to "why did nothing merge / nothing get assigned / nothing run?" is very often a permission that was withheld or an autonomy that was paused, not a failure to try.',
+    description: 'WHAT THE AI MANAGER IS PERMITTED TO DO on one project, and whether its autonomy is running at all. Returns the effective three-tier policy (managing enabled? auto-score value / auto-rank / auto-schedule / auto-assign? PR merge policy and whether merge authority is GRANTED or WITHHELD? does completion require a human sign-off?), the project\'s SHIP POLICY (`shipPolicy.local` = what a VS Code run does with finished work, from shipMode; `shipPolicy.cloud` = a cloud run opens a PR and when the merge sweep merges it), who is designated as the manager and its type, the standing coaching directives it must honor, and the workspace autonomy health (`tokenBlocked` = the cron sweeps and the autonomous executor are SKIPPING this workspace because its token budget is exhausted, so only a manual "Run manager now" does anything). Read this BEFORE explaining an outcome: the honest answer to "why did nothing merge / nothing get assigned / nothing run?" is very often a permission that was withheld or an autonomy that was paused, not a failure to try.',
     parameters: obj({ projectId: N }, ['projectId']),
     run: async (ctx, a) => {
       if (!ctx.env) throw new Error('the manager policy needs the platform environment');
       const projectId = idArg(a.projectId, 'projectId');
       await assertProjectInTenant(ctx, projectId);
-      const { getEffectiveManagerPolicy: effective, getManagerConfigRow } = await import('../manager/ManagerService');
+      const { getProjectManagerState, getManagerConfigRow } = await import('../manager/ManagerService');
       const { listManagerDirectives } = await import('../manager/managerDirectives');
       const { getTenantTokenAvailability } = await import('./tenantTokenAvailability');
-      const [policy, config, directives, tokens] = await Promise.all([
-        effective(ctx.db, ctx.tenantId, projectId, ctx.env),
+      const { shipPoliciesOf } = await import('../manager/shipPolicyOf');
+      const [{ policy, managed }, config, directives, tokens] = await Promise.all([
+        getProjectManagerState(ctx.db, ctx.tenantId, projectId, ctx.env),
         getManagerConfigRow(ctx.db, ctx.tenantId, projectId).catch(() => null),
         listManagerDirectives(ctx.db, ctx.tenantId, projectId, 50).catch(() => []),
         getTenantTokenAvailability(ctx.db, ctx.tenantId, undefined, ctx.env).catch(() => null),
       ]);
       return {
         policy,
+        // PRD 48: what a run on this project does with finished work — `local` (VS Code, from
+        // shipMode) and `cloud` (always a PR; the merge sweep merges) — the SAME mapper the
+        // Manager tab and the cloud prompt use.
+        shipPolicy: shipPoliciesOf(policy, managed),
         lastRunAt: config?.lastRunAt ?? null,
         directives: directives.filter((d) => d.status === 'active'),
         autonomy: {
@@ -4115,6 +4131,9 @@ const CATALOG: BuiltinTool[] = [
       + 'allowAutoMerge, allowUnattendedCeremonies, allowAgentReassignment, allowAutoStaffLanes, agentReassignIdleHours and agentReassignMaxPerSession also accept null = inherit the workspace default. '
       + 'canary: PRD 23 canary mode (default false) - when true, auto-merge and auto-close are disabled for this project and the sweeps journal what they would have merged/closed. '
       + 'coordinationRequiresManager: whether kanban.coordinate / assess_resource / assign_participant / remove_participant / materialize_work_items need the manager role on this project (default false — any developer or agent may coordinate). '
+      + 'shipMode: the project\'s standing SHIP POLICY — what a VS Code agent run does with finished work: "leave_uncommitted" | "commit" | "commit_push" | "pull_request" (null = inherit the workspace default; built-in default "commit"). '
+      + 'When the person states a standing rule about shipping, set it ONCE here instead of asking every run: "from now on commit and push" → shipMode: "commit_push"; "just commit, don\'t push" → "commit"; "open a PR" → "pull_request"; "don\'t commit anything" → "leave_uncommitted". Every later run on the project follows it. '
+      + 'Cloud runs always open a pull request; whether it merges is allowAutoMerge + prMergePolicy + requireSignoffToComplete, merged by the project\'s merge sweep — never by the run. '
       + 'Read the current values with manager.policy first.',
     parameters: obj({
       projectId: N,
@@ -4135,6 +4154,7 @@ const CATALOG: BuiltinTool[] = [
       allowAutoStaffLanes: B,
       coordinationRequiresManager: B,
       canary: B,
+      shipMode: { type: 'string', enum: [...SHIP_MODES] },
     }, ['projectId']),
     run: (ctx, a) => {
       const { projectId, ...patch } = a;

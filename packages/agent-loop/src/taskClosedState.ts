@@ -22,10 +22,14 @@ export function isClosedTaskStatus(status: string | null | undefined): boolean {
   return status != null && CLOSED.has(status.trim().toLowerCase());
 }
 
+/** Lane keys that mean "cancelled" — closed without delivery (US `canceled` too). A subset of {@link TASK_CLOSED_STATUSES}. */
+export const TASK_CANCELLED_STATUSES: readonly string[] = ["cancelled", "canceled"];
+
+const CANCELLED = new Set(TASK_CANCELLED_STATUSES);
+
 /** True for a cancelled lane key (US `canceled` too). */
 export function isCancelledTaskStatus(status: string | null | undefined): boolean {
-  const s = (status ?? "").trim().toLowerCase();
-  return s === "cancelled" || s === "canceled";
+  return CANCELLED.has((status ?? "").trim().toLowerCase());
 }
 
 /** The fields the open/closed decision reads. */

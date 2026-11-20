@@ -34,6 +34,8 @@ import { workStatusLabels } from "./workStatusLabels";
 import { prefetchLabels } from "./prefetch/prefetchLabels";
 import { connectionsLabels } from "./connectionsLabels";
 import { knowledgeViewLabels } from "./knowledge/knowledgeLabels";
+import { composerCommandHost } from "./composerCommands/host";
+import { composerCommandWebviewLabels } from "./composerCommands/labels";
 import { platformPolicy } from "./platformPolicy";
 import { currentCapabilityInputs } from "./capabilityContext";
 import { networkDenied } from "./capabilityStates";
@@ -70,6 +72,8 @@ export async function buildWorkspaceInit(
   const fallbackRoute = pickedRoute();
   // Grounding starts with the rest (its own budget): not queued behind them.
   const groundingP = stableGroundingWithin(root, INIT_GROUNDING_BUDGET_MS, { onLate: budget.late });
+  // The `/` menu's Actions tab (PRD 31 §W11): local only (the registry + one read of `builderforce.json`).
+  const composerCommandsP = composerCommandHost(ctx).init();
   const [token, editorContext, projectNames, personalityBlock, modelChoice, localModels, pendingChanges] = await Promise.all([
     // Null while signed in is tolerated: the webview mints its own (`WorkspaceApp.mintToken`).
     budget.step("token", signedIn && online ? getTenantJwt(ctx.secrets).then(boundToken) : Promise.resolve(null), null, (t) => t !== null),
@@ -101,6 +105,7 @@ export async function buildWorkspaceInit(
     budget.step("pendingChanges", detectPendingChanges(), EMPTY_CHANGE_SET),
   ]);
   const grounding = await groundingP;
+  const composerCommands = await composerCommandsP;
   opts.onBuilt?.(budget.hadLate());
   return {
     type: "init",
@@ -166,7 +171,9 @@ export async function buildWorkspaceInit(
     personalityBlock,
     // BOTH label sets: one surface renders the chat AND the board, so both have to
     // be present whichever surface it opens at.
-    labels: { ...authLabels(), ...brainChatLabels(), ...canvasLabels(), ...subagentLabels(), ...localModelLabels(), ...inferenceModeLabels(), ...translationLabels(), ...chatTicketsLabels(), ...interruptedRunsLabels(), ...chatSurfaceLabels(), ...workStatusLabels(), ...connectionsLabels(), ...prefetchLabels(), ...knowledgeViewLabels() },
+    labels: { ...authLabels(), ...brainChatLabels(), ...canvasLabels(), ...subagentLabels(), ...localModelLabels(), ...inferenceModeLabels(), ...translationLabels(), ...chatTicketsLabels(), ...interruptedRunsLabels(), ...chatSurfaceLabels(), ...workStatusLabels(), ...connectionsLabels(), ...prefetchLabels(), ...knowledgeViewLabels(), ...composerCommandWebviewLabels() },
+    // The composer commands' `/help` model, drawn as the `/` menu's Actions tab.
+    composerCommands,
     // The editor's display language: how the shared components format numbers,
     // money and relative times (the strings themselves are already translated above).
     locale: vscode.env.language,

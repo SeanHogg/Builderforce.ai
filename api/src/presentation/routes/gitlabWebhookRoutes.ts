@@ -188,7 +188,7 @@ export function createGitLabWebhookRoutes(db: Db, runtimeService: RuntimeService
 
     // CI feedback: correlate a pipeline result back to the cloud execution that
     // pushed the `builderforce/task-<id>` branch — build.result telemetry, PR
-    // build_status, merge-on-green and build-failure auto-fix, identical to GitHub
+    // build_status, the merge-sweep wake-up and build-failure auto-fix, identical to GitHub
     // (the post-ingest half is the shared `handleCiEventOutcome`).
     if (event === 'Pipeline Hook') {
       const norm = gitlabNormalizeCiEvent(p);

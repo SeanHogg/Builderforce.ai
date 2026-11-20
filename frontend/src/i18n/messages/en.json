@@ -14436,6 +14436,26 @@
         },
         "needsAuthority": "Timing only matters once the manager is allowed to merge — right now merges wait for a person."
       },
+      "shipMode": {
+        "label": "What a VS Code run does with finished work",
+        "help": "The standing rule an agent follows when its change is done, so it never stops to ask. You can also tell the agent, for example \"from now on commit and push\". Cloud runs always open a pull request, and the settings above decide whether it merges.",
+        "leave_uncommitted": {
+          "label": "Leave uncommitted",
+          "help": "Make and verify the change, then leave it uncommitted for you to review."
+        },
+        "commit": {
+          "label": "Commit locally",
+          "help": "Commit the change on this machine without pushing it."
+        },
+        "commit_push": {
+          "label": "Commit and push",
+          "help": "Commit the change and push it to the base branch."
+        },
+        "pull_request": {
+          "label": "Open a pull request",
+          "help": "Push a branch and open a pull request. The run never merges it."
+        }
+      },
       "allowAutoMerge": {
         "label": "Let the manager merge pull requests",
         "help": "This is permission to merge at all — separate from the timing choice below. When off, the manager still prepares and checks everything, then leaves the merge to a person."
@@ -14464,6 +14484,7 @@
         "mergeWithheld": "Merges wait for a person",
         "signoffRequired": "Sign-off required to finish",
         "signoffOptional": "No sign-off required",
+        "shipMode": "VS Code runs: {mode}",
         "coordinationGated": "Managers coordinate tickets",
         "coordinationOpen": "Anyone on the project coordinates",
         "ceremoniesUnattended": "May run ceremonies unattended",
@@ -17818,6 +17839,36 @@
     "prLink": "PR #{number}",
     "writesNoPr": "{count, plural, one {# file written} other {# files written}} — no pull request yet",
     "noWrites": "No changes — no pull request"
+  },
+  "mergeGrant": {
+    "label": "Merge into main when done",
+    "help": "When this run's pull request passes its security scan and CI, the platform merges it into main, whatever the project's merge settings say.",
+    "reasonLabel": "Why this run may merge into main",
+    "reasonPlaceholder": "For example: security fix for the login bypass",
+    "reasonRequired": "Give a reason to grant the merge.",
+    "statusTitle": "Merge into main granted",
+    "status": {
+      "pending": "Waiting for CI and the security scan",
+      "merged": "Merged",
+      "held": "Held",
+      "voided": "No longer applies"
+    },
+    "grantedBy": "Granted by {name}",
+    "reasonShown": "Reason: {reason}",
+    "cloudOnly": "Merging into main when done is available for cloud agent runs only. Pick a cloud agent to grant it.",
+    "recordFailed": "The run started, but the merge into main could not be recorded. Merge its pull request in-product when it is ready.",
+    "held": {
+      "ci_pending": "Waiting for CI to pass on the commit the grant covers.",
+      "ci_failed": "CI failed on this pull request. It merges once CI is green.",
+      "security": "The security scan has not cleared this pull request yet.",
+      "merge_refused": "The repository refused the merge. Open the pull request to see why."
+    },
+    "voided": {
+      "cancelled": "The run was cancelled, so nothing merges.",
+      "no_pull_request": "The run ended without its own pull request, so nothing merges.",
+      "head_moved": "Someone pushed new commits after the run, so the grant no longer covers this pull request.",
+      "no_head": "The pull request's commit could not be read when the run finished, so nothing merges."
+    }
   },
   "runAgentControl": {
     "agentTitle": "Agent",

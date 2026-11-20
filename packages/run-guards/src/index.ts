@@ -3,13 +3,28 @@
  *
  * The read guard (exact repeat, circling, covered window), the repeated-failure and
  * repeated-write tallies, edit-revert detection, the no-progress window, and the
- * progress detector that composes them into one steer → escalate → pause judgement
- * (cost PRD A3). The browser Brain binds the read guard to its own tool vocabulary; the
- * cloud loop persists the detector's JSON state between durable ticks. Pure.
+ * progress detector that composes them into one steer → escalate → finish-with-report
+ * judgement (cost PRD A3) — never a question for the human. The browser Brain binds the
+ * read guard to its own tool vocabulary; the cloud loop persists the detector's JSON state
+ * between durable ticks. Pure.
  */
 
 export { callFingerprint, contentHash, pathArgOf } from "./fingerprint.js";
 export { callChangesOf, changedPathsOf, type CallChange } from "./callChanges.js";
+// What a delegation's RESULT says its children changed / reported (VS Code chat #157440).
+export {
+  DELEGATION_TOOLS,
+  WAIT_POLL_TOOLS,
+  childReportProgressOf,
+  delegatedChangedPathsOf,
+  delegationReportedOf,
+  isDelegationTool,
+  isStillWaiting,
+  isWaitPollTool,
+  waitDigestOf,
+} from "./delegatedChanges.js";
+// The ceiling on waiting on an unchanged state (chat #157440): one reading for the detector and the diagnostics.
+export { MAX_WAIT_TURNS, WaitCeiling, type WaitCeilingState } from "./waitCeiling.js";
 export { VerifiedWork, type VerifiedWorkState } from "./verifiedWork.js";
 export { executableTokensOf, fullSuiteKey, isVcsBookkeeping, runsCheck, shellCommandOf } from "./checkCommand.js";
 export { targetedReverifyNote, type SuiteRepeatState } from "./suiteRepeat.js";
@@ -53,6 +68,7 @@ export {
   isCheckCallDefault,
   isTestPath,
   type NoProgressObservation,
+  type NoProgressOutcome,
   type NoProgressPorts,
   type NoProgressState,
 } from "./noProgress.js";
@@ -63,7 +79,7 @@ export {
   progressAdvice,
   progressFinishNote,
   progressVerifiedSteerNote,
-  progressPauseQuestion,
+  progressStalledFinishNote,
   progressSteerNote,
   type ObservedResult,
   type ProgressAction,
@@ -143,3 +159,4 @@ export {
 } from "./evidence/gates.js";
 export { gitCommandPattern } from "./evidence/gitCommandPattern.js";
 export { isScratchScriptPath, SCRATCH_DIR_SEGMENT } from "./scratchScript.js";
+export { DEFAULT_SHIP_POLICY, REPO_PUBLISH_TOOLS, SHIP_MODES, isShipMode, narrowByHold, narrowShipPolicy, publishAllowed, publishVerbOf, shipDirective, shipNudge, shipPolicyOf, shipSourceLabel, type PublishVerb, type ShipHold, type ShipHost, type ShipMode, type ShipPolicy, type ShipPolicySource } from "./shipPolicy.js";

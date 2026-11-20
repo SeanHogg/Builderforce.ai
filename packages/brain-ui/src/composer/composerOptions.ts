@@ -16,7 +16,7 @@ import type {
 } from '../promptOptions/ModePane';
 import type { PromptOptionsModel } from '../promptOptions/ModelPane';
 import type { PromptOptionsInferenceMode } from '../inferenceMode/InferenceModeControl';
-import type { PromptOptionsMenuProps, PromptOptionsOpenRequest } from '../promptOptions/PromptOptionsMenu';
+import type { PromptOptionsCommands, PromptOptionsMenuProps, PromptOptionsOpenRequest } from '../promptOptions/PromptOptionsMenu';
 import type { ComposerLabels } from './labels';
 
 export interface ComposerOptions {
@@ -37,17 +37,19 @@ export interface ComposerOptions {
   openMenu?: PromptOptionsOpenRequest;
   autoMode?: { enabled: boolean; onChange: (on: boolean) => void };
   session?: PromptOptionsSession;
+  /** The host's composer commands (brain-embedded's `/help` model) — the menu's Actions tab. Absent ⇒ no tab. */
+  commands?: PromptOptionsCommands;
 }
 
 type OptionGroups = Pick<
   PromptOptionsMenuProps,
   'mode' | 'memory' | 'autoMode' | 'session' | 'effort' | 'onEffortChange' | 'describeEffort'
-  | 'thinking' | 'onThinkingChange' | 'describeThinking' | 'model' | 'inferenceMode' | 'openOn'
+  | 'thinking' | 'onThinkingChange' | 'describeThinking' | 'model' | 'inferenceMode' | 'openOn' | 'commands'
 >;
 
 /** Build the `/` menu's sections from the host's state. Pure. */
 export function composerOptionGroups(options: ComposerOptions, labels: ComposerLabels): OptionGroups {
-  const { mode, memory, effort, thinking, model, inferenceMode, openMenu, autoMode, session } = options;
+  const { mode, memory, effort, thinking, model, inferenceMode, openMenu, autoMode, session, commands } = options;
   const thinkingOn = thinking?.value ?? false;
   const modeGroup: PromptOptionsMode | undefined = mode
     ? {
@@ -97,5 +99,6 @@ export function composerOptionGroups(options: ComposerOptions, labels: ComposerL
     model,
     inferenceMode,
     openOn: openMenu,
+    ...(commands ? { commands } : {}),
   };
 }

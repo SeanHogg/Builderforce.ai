@@ -1,31 +1,16 @@
 /**
- * W2: Blueprint Detection Service
- *
- * The pure detection step (`detectBlueprint`) and the blueprint store. It reads no
- * repo itself: `readBlueprintSources` fetches the files, and `detectBlueprintForProject`
- * is the one use case that wires a project's repo + credential through both.
+ * W2: the blueprint store. Detection itself is pure and host-neutral
+ * (`detectApp` in `@builderforce/app-detect`); `readBlueprintSources` fetches a repo's
+ * files, and `detectBlueprintForProject` is the one use case that wires a project's
+ * repo + credential through both and stores the result here.
  */
 
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
 import { projectAppBlueprints } from '../../infrastructure/database/schema';
 import { eq, and, desc } from 'drizzle-orm';
-import { runDetectors } from './detectors';
-import { applyOverrides } from './blueprintOverrides';
 import type { AppBlueprint } from '@builderforce/creation-canvas-contract';
-import { SERVICE_KINDS } from '@builderforce/creation-canvas-contract';
 import type { Env } from '../../env';
 import { bumpCacheVersion, getCacheVersion, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
-
-/**
- * Detect a blueprint from a repo's source files — pure: run every detector, fill the
- * gaps with defaults, then lay `builderforce.json`'s overrides over the result.
- * Reading the files is `readBlueprintSources`; the use case that wires the two
- * together with a project's repo and credential is `detectBlueprintForProject`.
- */
-export function detectBlueprint(files: Map<string, string>, projectId: number, commitSha: string): AppBlueprint {
-  const detected = buildBlueprint(runDetectors(files), projectId, commitSha);
-  return applyOverrides(detected, detected.overrides);
-}
 
 /**
  * Get a stored blueprint for a project at a specific commit.
@@ -73,55 +58,6 @@ export async function getLatestBlueprint(env: Env, projectId: number): Promise<A
     return { blueprint: (row[0]?.blueprint ?? null) as unknown as AppBlueprint | null };
   }, { kvTtlSeconds: 60 * 60 });
   return boxed.blueprint;
-}
-
-/**
- * Build a complete AppBlueprint from partial detection results.
- */
-function buildBlueprint(partial: Partial<AppBlueprint>, projectId: number, commitSha: string): AppBlueprint {
-  return {
-    id: `${projectId}-${commitSha}`,
-    projectId,
-    commitSha,
-    detectedAt: new Date(),
-    services: partial.services || [{
-      id: 'main',
-      kind: SERVICE_KINDS.NODE,
-      rootDir: '.',
-      packageManager: 'npm',
-      installCommand: 'npm install',
-      devCommand: 'npm run dev',
-      buildCommand: 'npm run build',
-      startCommand: 'npm start',
-      verifyCommand: null,
-      outputDir: 'dist',
-      ports: [3000],
-      envVars: [],
-      isPrimary: true,
-    }],
-    bindings: partial.bindings || [],
-    database: partial.database || null,
-    secrets: partial.secrets || [],
-    vars: partial.vars || [],
-    domains: partial.domains || [],
-    sources: partial.sources || {
-      wranglerToml: false,
-      packageJson: false,
-      viteConfig: false,
-      nextConfig: false,
-      expoConfig: false,
-      capacitorConfig: false,
-      drizzleConfig: false,
-      prismaSchema: false,
-      dockerfile: false,
-      envExample: false,
-      githubWorkflows: false,
-      builderforceJson: false,
-    },
-    overrides: partial.overrides || null,
-    isMonorepo: partial.isMonorepo || false,
-    workspaces: partial.workspaces || [],
-  };
 }
 
 /**

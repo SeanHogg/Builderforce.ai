@@ -15,9 +15,9 @@ import { canChangeCodeHere, canShipHere, canReviewInPreview, localToolsIn, memor
 import { skillToolsIn } from '../skillLibraryTools';
 import { chatModeDirective, normalizeChatMode } from '../chatMode';
 import { routingQueryForTurn, turnOptimizationDirective } from '../turnOptimization';
-import { selfReviewShipDirective } from '../selfReviewShip';
-import { createEvidenceLedger } from '@builderforce/run-guards';
-import { publishHold, publishHoldDirective, attemptedPublishWhileHeld } from './publishHold';
+import { createEvidenceLedger, shipDirective, shipSourceLabel } from '@builderforce/run-guards';
+import { publishHold, attemptedPublishWhileHeld } from './publishHold';
+import { runShipPolicy } from './runShipPolicy';
 import { previewReviewDirective } from '../previewReview';
 import { ticketToolVocabulary } from '../ticketToolVocabulary';
 import { previousReplyText } from '../restatedReply';
@@ -222,8 +222,8 @@ export async function prepareBrainRun(chatId: number, c: RunCell, req: BrainRunR
   const canEditHere = canChangeCodeHere(catalogToolNames);
   systemPrompt = `${systemPrompt}\n\n${chatModeDirective(runMode, serverChatId, { canEditHere, canDelegate: catalogToolNames.includes('spawn_agent'), canFanOut: catalogToolNames.includes('spawn_agents'), roster: req.chatRoster, ticketTools: ticketToolVocabulary(catalogToolNames) })}\n\n${turnOptimizationDirective()}`;
   // A session that can commit AND push holds the only copy of its change — nobody else
-  // will review or land it — so it is told it IS the reviewer (see `selfReviewShip.ts`).
-  // Rides both modes: it only binds a turn that changes code.
+  // will review or land it — so it is told what to do with it: the run's SHIP POLICY
+  // (PRD 48). Rides both modes: it only binds a turn that changes code.
   const canShip = canShipHere(catalogToolNames);
   // The chat's PUBLISH HOLD (incident #56886): derived once per run from the transcript's
   // PERSON turns, so a hold the person set survives a follow-up turn that drops the
@@ -231,6 +231,19 @@ export async function prepareBrainRun(chatId: number, c: RunCell, req: BrainRunR
   // owner set — it can never lift it.
   const hold = publishHold(convo);
   c.publishHold = hold;
+  // The SHIP POLICY (`runShipPolicy.ts`): a sub-agent ships nothing, its owner ships once
+  // after verifying the fan-out; otherwise the host's policy (the project's setting) or the
+  // default. A chat hold narrows either to uncommitted.
+  c.shipPolicy = runShipPolicy(req, hold);
+  if (canShip) {
+    pushTrace(c, {
+      ts: nowIso(),
+      category: 'message',
+      label: 'run.ship_policy',
+      args: { mode: c.shipPolicy.mode, source: c.shipPolicy.source, merge: c.shipPolicy.merge, review: c.shipPolicy.review, ...(hold ? { setByMessage: hold.messageNumber } : {}) },
+      result: `Ship policy: ${c.shipPolicy.mode} (${shipSourceLabel(c.shipPolicy)}).`,
+    });
+  }
   if (hold && attemptedPublishWhileHeld(hold, c.trace)) {
     pushTrace(c, {
       ts: nowIso(),
@@ -241,7 +254,7 @@ export async function prepareBrainRun(chatId: number, c: RunCell, req: BrainRunR
     });
   }
   if (canShip) {
-    systemPrompt = `${systemPrompt}\n\n${hold ? publishHoldDirective() : selfReviewShipDirective(serverChatId)}`;
+    systemPrompt = `${systemPrompt}\n\n${shipDirective(c.shipPolicy, { chatId: serverChatId })}`;
   }
   // The Studio's twin: its change lives in a preview no one else can reach, so the
   // session reviews it there and the reviewed tickets close (see `previewReview.ts`).
@@ -341,6 +354,7 @@ export async function prepareBrainRun(chatId: number, c: RunCell, req: BrainRunR
     memoryReplay,
     userRequest,
     publishHold: hold,
+    shipPolicy: c.shipPolicy,
     // The goal a hand-off states to coders who see none of this chat: the latest
     // message, and for a change request the chat's earlier change asks (`chatAsks.ts`).
     goal: reading.goal,

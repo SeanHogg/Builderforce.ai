@@ -48,6 +48,8 @@ export function useTaskRunner({ task, onRan, onAwaitingApproval }: UseTaskRunner
   const [cloudAgents, setCloudAgents] = useState<PoolAgent[]>([]);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // PRD 48 §4.6 — the run started but its merge grant was NOT recorded (the server says so).
+  const [mergeGrantFailed, setMergeGrantFailed] = useState(false);
   const errorMessage = useErrorMessage();
   // The arc stage of the canvas this run is launched FROM, when it is launched from one.
   // The phase is per canvas now, so a run started anywhere else (the task drawer, the
@@ -65,11 +67,12 @@ export function useTaskRunner({ task, onRan, onAwaitingApproval }: UseTaskRunner
   }, []);
 
   const run = useCallback(
-    async (opts?: { target?: string; model?: string; repoId?: string }) => {
+    async (opts?: { target?: string; model?: string; repoId?: string; mergeGrant?: { reason: string } }) => {
       const target = opts?.target ?? defaultRunTarget(task);
       const model = opts?.model ?? '';
       setRunning(true);
       setError(null);
+      setMergeGrantFailed(false);
       try {
         // A host runs as an executor; a cloud agent runs AS its model (no host —
         // the gateway/fleet executes it). Forward the chosen/own model + the cloud
@@ -103,7 +106,10 @@ export function useTaskRunner({ task, onRan, onAwaitingApproval }: UseTaskRunner
           taskId: task.id,
           agentHostId,
           payload: Object.keys(payloadObj).length > 0 ? JSON.stringify(payloadObj) : undefined,
+          // PRD 48 §4.6 — a person's "merge into main when done" grant; the server re-checks the role.
+          ...(opts?.mergeGrant ? { mergeGrant: opts.mergeGrant } : {}),
         });
+        if (result.mergeGrant === 'failed') setMergeGrantFailed(true);
         // Audited engagement signal: dispatching a run is billable activity.
         trackActivity('agent_run', { ref: `task:${task.id}`, weight: 2, projectId: task.projectId ?? undefined });
         if (isAwaitingApprovalExecution(result)) {
@@ -120,5 +126,5 @@ export function useTaskRunner({ task, onRan, onAwaitingApproval }: UseTaskRunner
     [task, cloudAgents, onRan, onAwaitingApproval, errorMessage, arcStage],
   );
 
-  return { run, running, error, cloudAgents };
+  return { run, running, error, cloudAgents, mergeGrantFailed };
 }

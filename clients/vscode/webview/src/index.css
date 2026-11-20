@@ -135,6 +135,7 @@ body {
    spacing — their standalone margins would double it. */
 .bf-app .bf-surface__notices > .bf-error,
 .bf-app .bf-surface__notices > .bf-notice,
+.bf-app .bf-surface__notices > .bf-command-reply,
 .bf-app .bf-surface__footer > .bf-subagents,
 .bf-app .bf-surface__footer > .bf-composer {
   margin: 0;
@@ -208,6 +209,55 @@ select option {
   color: var(--bf-text);
   background: var(--bf-warning-bg);
   border-color: var(--bf-warning);
+}
+
+/* A composer `/` command's answer (`ComposerCommandReply`): a host message, not a model turn.
+   Theme tokens only, so it reads in light and dark; it wraps and scrolls inside a narrow sidebar. */
+.bf-command-reply {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 10px 6px;
+  padding: 6px 9px;
+  font-size: 12px;
+  border-radius: 6px;
+  color: var(--bf-text);
+  background: var(--bf-surface-2);
+  border: 1px solid var(--bf-border);
+  max-height: 45vh;
+  overflow-y: auto;
+}
+.bf-command-reply--error {
+  color: var(--bf-error-text);
+  background: var(--bf-error-bg);
+  border-color: var(--bf-error);
+}
+.bf-command-reply__body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.bf-command-reply__line {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.bf-command-reply__list {
+  display: flex;
+  flex-direction: column;
+}
+.bf-command-reply__link {
+  font-family: var(--bf-font-mono);
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+.bf-command-reply__action {
+  align-self: flex-start;
+}
+.bf-command-reply__dismiss {
+  flex: 0 0 auto;
 }
 
 /* The composer is the shared PromptPanel: one filled box, lit by the accent ring while

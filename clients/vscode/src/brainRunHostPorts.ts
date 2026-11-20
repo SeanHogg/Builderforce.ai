@@ -211,7 +211,7 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
       return { serverChatId: serverChatId ?? null, ...(clientChatId ? { clientChatId } : {}) };
     },
     // Stage models, pipeline routing and the USD cap — read per run (`editorRunSettings.ts`).
-    runSettings: () => editorRunSettings(secrets),
+    runSettings: (projectId) => editorRunSettings(secrets, projectId),
     // The chat's usage ledger on this device: every call, the outcome, an avoided call.
     ...deviceLedgerPorts(local.usage, hostLog),
     // Every sub-agent journaled WITH its parent run, so a run the editor dies inside resumes knowing its children.

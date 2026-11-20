@@ -68,33 +68,22 @@ describe('computeOutcomeScore (D3)', () => {
 });
 
 describe('finalizeLearnWeight (Evermind contribution weight by run quality)', () => {
-  const s = { merged: false, prOpened: false, autoMergeFailed: false, producedChanges: false };
+  const s = { prOpened: false, producedChanges: false };
 
-  it('ranks merged > opened > wrote-files > no-op', () => {
-    const merged = finalizeLearnWeight({ ...s, merged: true });
+  it('ranks opened > wrote-files > no-op (a run never merges — PRD 48)', () => {
     const opened = finalizeLearnWeight({ ...s, prOpened: true });
     const wrote = finalizeLearnWeight({ ...s, producedChanges: true });
     const noop = finalizeLearnWeight(s);
-    expect(merged).toBeGreaterThan(opened);
     expect(opened).toBeGreaterThan(wrote);
     expect(wrote).toBeGreaterThan(noop);
   });
 
-  it('a broken auto-merge weighs below an open PR', () => {
-    expect(finalizeLearnWeight({ ...s, prOpened: true, autoMergeFailed: true }))
-      .toBeLessThan(finalizeLearnWeight({ ...s, prOpened: true }));
-  });
-
   it('always clears the coordinator weight>0 gate and stays within (0,1]', () => {
-    for (const merged of [true, false]) {
-      for (const prOpened of [true, false]) {
-        for (const autoMergeFailed of [true, false]) {
-          for (const producedChanges of [true, false]) {
-            const w = finalizeLearnWeight({ merged, prOpened, autoMergeFailed, producedChanges });
-            expect(w).toBeGreaterThan(0);
-            expect(w).toBeLessThanOrEqual(1);
-          }
-        }
+    for (const prOpened of [true, false]) {
+      for (const producedChanges of [true, false]) {
+        const w = finalizeLearnWeight({ prOpened, producedChanges });
+        expect(w).toBeGreaterThan(0);
+        expect(w).toBeLessThanOrEqual(1);
       }
     }
   });
@@ -116,15 +105,14 @@ describe('finalizeLearnWeight (Evermind contribution weight by run quality)', ()
  */
 describe('runProducedOutput', () => {
   it('counts any artifact at all — deliberately generous', () => {
-    expect(runProducedOutput({ merged: true, prOpened: false, producedChanges: false })).toBe(true);
-    expect(runProducedOutput({ merged: false, prOpened: true, producedChanges: false })).toBe(true);
-    expect(runProducedOutput({ merged: false, prOpened: false, producedChanges: true })).toBe(true);
-    expect(runProducedOutput({ merged: false, prOpened: false, producedChanges: false, movedTicket: true })).toBe(true);
+    expect(runProducedOutput({ prOpened: true, producedChanges: false })).toBe(true);
+    expect(runProducedOutput({ prOpened: false, producedChanges: true })).toBe(true);
+    expect(runProducedOutput({ prOpened: false, producedChanges: false, movedTicket: true })).toBe(true);
   });
 
   it('is false ONLY for a run with nothing to show for itself', () => {
-    expect(runProducedOutput({ merged: false, prOpened: false, producedChanges: false })).toBe(false);
-    expect(runProducedOutput({ merged: false, prOpened: false, producedChanges: false, movedTicket: false })).toBe(false);
+    expect(runProducedOutput({ prOpened: false, producedChanges: false })).toBe(false);
+    expect(runProducedOutput({ prOpened: false, producedChanges: false, movedTicket: false })).toBe(false);
   });
 
   /**
@@ -133,11 +121,11 @@ describe('runProducedOutput', () => {
    * produced nothing" have to be the same set of runs, or one of them is lying.
    */
   it('agrees with the learn weight about which runs accomplished nothing', () => {
-    for (const merged of [true, false]) {
+    {
       for (const prOpened of [true, false]) {
         for (const producedChanges of [true, false]) {
-          const s = { merged, prOpened, producedChanges };
-          const weight = finalizeLearnWeight({ ...s, autoMergeFailed: false });
+          const s = { prOpened, producedChanges };
+          const weight = finalizeLearnWeight(s);
           expect(runProducedOutput(s), JSON.stringify(s)).toBe(weight > 0.2);
         }
       }

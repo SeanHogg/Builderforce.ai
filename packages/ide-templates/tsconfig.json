@@ -1,0 +1,17 @@
+// Source-only, no imports of other workspace packages, no install of its own: the API's
+// vitest runs its tests (api/vitest.config.ts collects every source-only package), and
+// its consumers (api, frontend, worker) compile it through their `paths`.
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "lib": ["ES2022"],
+    "skipLibCheck": true,
+    "noEmit": true
+  },
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts"]
+}

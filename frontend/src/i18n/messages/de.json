@@ -14465,6 +14465,26 @@
         },
         "needsAuthority": "Der Zeitpunkt spielt erst eine Rolle, wenn der Manager mergen darf – derzeit warten Merges auf einen Menschen."
       },
+      "shipMode": {
+        "label": "Was ein VS-Code-Lauf mit fertiger Arbeit macht",
+        "help": "Die feste Regel, der ein Agent folgt, wenn seine Änderung fertig ist – so muss er nie nachfragen. Sie können es dem Agenten auch sagen, zum Beispiel „ab jetzt committen und pushen“. Cloud-Läufe öffnen immer einen Pull Request; ob er gemergt wird, entscheiden die Einstellungen oben.",
+        "leave_uncommitted": {
+          "label": "Nicht committen",
+          "help": "Die Änderung umsetzen und prüfen, dann ohne Commit zur Durchsicht liegen lassen."
+        },
+        "commit": {
+          "label": "Lokal committen",
+          "help": "Die Änderung auf diesem Rechner committen, ohne sie zu pushen."
+        },
+        "commit_push": {
+          "label": "Committen und pushen",
+          "help": "Die Änderung committen und in den Basis-Branch pushen."
+        },
+        "pull_request": {
+          "label": "Pull Request öffnen",
+          "help": "Einen Branch pushen und einen Pull Request öffnen. Der Lauf mergt ihn nie."
+        }
+      },
       "allowAutoMerge": {
         "label": "Dem Manager das Mergen von Pull Requests erlauben",
         "help": "Das ist die Berechtigung zum Mergen – unabhängig vom Zeitpunkt weiter unten. Ist sie aus, bereitet der Manager weiterhin alles vor und prüft es, überlässt den Merge aber einem Menschen."
@@ -14493,6 +14513,7 @@
         "mergeWithheld": "Merges warten auf einen Menschen",
         "signoffRequired": "Freigabe zum Abschließen erforderlich",
         "signoffOptional": "Keine Freigabe erforderlich",
+        "shipMode": "VS-Code-Läufe: {mode}",
         "coordinationGated": "Manager koordinieren Tickets",
         "coordinationOpen": "Alle im Projekt koordinieren",
         "ceremoniesUnattended": "Darf Zeremonien ohne Personen führen",
@@ -17843,6 +17864,36 @@
     "prLink": "PR #{number}",
     "writesNoPr": "{count, plural, one {# Datei geschrieben} other {# Dateien geschrieben}} – noch kein Pull Request",
     "noWrites": "Keine Änderungen – kein Pull Request"
+  },
+  "mergeGrant": {
+    "label": "Nach Abschluss in main mergen",
+    "help": "Sobald der Pull Request dieses Laufs den Sicherheitsscan und die CI besteht, mergt die Plattform ihn in main – unabhängig von den Merge-Einstellungen des Projekts.",
+    "reasonLabel": "Warum dieser Lauf in main mergen darf",
+    "reasonPlaceholder": "Zum Beispiel: Sicherheitsfix für die Login-Umgehung",
+    "reasonRequired": "Geben Sie einen Grund an, um den Merge freizugeben.",
+    "statusTitle": "Merge in main freigegeben",
+    "status": {
+      "pending": "Wartet auf CI und Sicherheitsscan",
+      "merged": "Gemergt",
+      "held": "Zurückgehalten",
+      "voided": "Gilt nicht mehr"
+    },
+    "grantedBy": "Freigegeben von {name}",
+    "reasonShown": "Grund: {reason}",
+    "cloudOnly": "Das Mergen in main nach Abschluss ist nur für Cloud-Agent-Läufe verfügbar. Wählen Sie einen Cloud-Agenten, um es freizugeben.",
+    "recordFailed": "Der Lauf wurde gestartet, aber der Merge in main konnte nicht gespeichert werden. Mergen Sie den Pull Request im Produkt, sobald er bereit ist.",
+    "held": {
+      "ci_pending": "Wartet darauf, dass die CI auf dem freigegebenen Commit erfolgreich ist.",
+      "ci_failed": "Die CI ist bei diesem Pull Request fehlgeschlagen. Er wird gemergt, sobald die CI grün ist.",
+      "security": "Der Sicherheitsscan hat diesen Pull Request noch nicht freigegeben.",
+      "merge_refused": "Das Repository hat den Merge abgelehnt. Öffnen Sie den Pull Request, um den Grund zu sehen."
+    },
+    "voided": {
+      "cancelled": "Der Lauf wurde abgebrochen, daher wird nichts gemergt.",
+      "no_pull_request": "Der Lauf endete ohne eigenen Pull Request, daher wird nichts gemergt.",
+      "head_moved": "Nach dem Lauf wurden neue Commits gepusht, daher deckt die Freigabe diesen Pull Request nicht mehr ab.",
+      "no_head": "Der Commit des Pull Requests konnte beim Ende des Laufs nicht gelesen werden, daher wird nichts gemergt."
+    }
   },
   "runAgentControl": {
     "agentTitle": "Agent",

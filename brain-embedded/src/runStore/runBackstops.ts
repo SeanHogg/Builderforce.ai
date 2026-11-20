@@ -8,12 +8,12 @@
  */
 
 import { isFailedToolResult } from '../brainTriage';
-import { NOT_STARTED_TASK_STATUSES, type LinkedTicketToAdvance } from '../chatWorkLinking';
+import { NOT_STARTED_TASK_STATUSES, canListChatTickets, linkedTicketsStillOpen, type LinkedTicketToAdvance } from '../chatWorkLinking';
+import { latestStatus, listChatTickets, listingScopeOf, localTicketFilings, ticketMovesInRun, type ListingScope } from './chatTickets';
 import {
-  LOCAL_TICKET_CREATE_TOOL, SERVER_TICKET_TOOLS, isLocalTicketCreateLabel, ticketStatusMove, ticketToolVocabulary,
+  LOCAL_TICKET_CREATE_TOOL, SERVER_TICKET_TOOLS, ticketStatusMove, ticketToolVocabulary,
   type TicketStatusMove,
 } from '../ticketToolVocabulary';
-import { syncIdText } from '@builderforce/local-first';
 import { entityIdsOf } from '../toolResultRecord';
 import type { BrainTraceEvent } from '../brainTriage';
 import type { RunCell } from './runCell';
@@ -26,12 +26,22 @@ export type BackstopState = Pick<
   RunCell,
   'deltaRecordedFiles' | 'touchedFiles' | 'deltaTicketId' | 'ticketRecorded' | 'deltaCaptureRefused' | 'deltaTitleCount'
 >;
-export type BackstopRun = BackstopState & { note?: (ev: BrainTraceEvent) => void };
+export type BackstopRun = BackstopState & {
+  note?: (ev: BrainTraceEvent) => void;
+  /** The run the chat's ticket listing is memoised for ({@link listChatTickets}); used only while the cell is still that run's. */
+  listing?: ListingScope;
+};
+
+/** The listing scope of a live cell, or the one a settle snapshot carries. */
+function listingScopeOfRun(c: RunCell | BackstopRun): ListingScope | undefined {
+  return 'trace' in c ? listingScopeOf(c) : c.listing;
+}
 
 /** The run's state at the moment it settled, apart from the cell. Trace lines are written to the cell only while
  *  it is still THIS run's (`runId` unchanged); late work after the next run began writes nowhere. */
 export function settleView(c: RunCell, runId: string): BackstopRun {
   return {
+    listing: { cell: c, runId },
     touchedFiles: [...c.touchedFiles],
     deltaRecordedFiles: [...c.deltaRecordedFiles],
     deltaTicketId: c.deltaTicketId,
@@ -124,6 +134,8 @@ export async function recordCodeChangeTicket(
   const source = serverChatId != null ? `Brain chat #${serverChatId}` : 'a local editor chat';
   // Always names files here: a fileless capture returned above (mint) or before that (attach).
   const summary = `Code change (${files.length} file${files.length === 1 ? '' : 's'}) from ${source}`;
+  // A MINT in a bound chat files under the chat's one open epic, so the epic's progress counts it.
+  const parentTaskId = attachTo == null && serverChatId != null && canListChatTickets(req.tools) ? await soleOpenLinkedEpic(serverChatId, c, req) : null;
   const toolStart = nowMs();
   const args = {
     projectId: req.projectId,
@@ -137,12 +149,29 @@ export async function recordCodeChangeTicket(
     modality: 'ide',
     ...(serverChatId != null ? { chatId: serverChatId } : {}),
     ...(attachTo != null ? { taskId: attachTo } : {}),
+    ...(parentTaskId != null ? { parentTaskId } : {}),
   };
-  let out: unknown;
-  try {
-    out = await req.runTool('builtin_tickets_from_delta', args);
-  } catch (e) {
-    out = { ok: false, error: e instanceof Error ? e.message : String(e) };
+  /** The call's answer, and whether it THREW (a transport failure or timeout — the server may have minted anyway). */
+  const send = async (bag: Record<string, unknown>): Promise<{ out: unknown; thrown: boolean }> => {
+    try {
+      return { out: await req.runTool!('builtin_tickets_from_delta', bag), thrown: false };
+    } catch (e) {
+      return { out: { ok: false, error: e instanceof Error ? e.message : String(e) }, thrown: true };
+    }
+  };
+  const first = await send(args);
+  let out = first.out;
+  // Chat links are not project-scoped: the chat's one open epic can sit in another project, and the server REFUSES the
+  // parent. The change must still get its ticket — mint it once more, without the parent, and say why. Only on a refusal the
+  // server answered: a thrown or timed-out call may have minted already, and a retry would mint a duplicate.
+  if (parentTaskId != null && !first.thrown && isFailedToolResult(out) && !isRoleRefusal(out)) {
+    const why = (out as { error?: unknown } | null)?.error;
+    noteOf(c)({
+      ts: nowIso(), category: 'message', label: 'ticket.parent_epic_refused', args: { parentTaskId },
+      result: `The server refused to file the code-change ticket under epic #${parentTaskId}${typeof why === 'string' ? ` (${why})` : ''}: it is minted once more, without a parent.`,
+    });
+    delete (args as { parentTaskId?: number }).parentTaskId;
+    out = (await send(args)).out;
   }
   if (!isFailedToolResult(out)) {
     c.deltaRecordedFiles = [...c.deltaRecordedFiles, ...files];
@@ -176,6 +205,20 @@ export async function recordCodeChangeTicket(
 }
 
 /**
+ * The id of the ONE open epic linked to the chat, or null when there is none or more than one (which epic a change
+ * belongs to is then the model's call). A listing failure is noted on the run and the mint goes on without a parent.
+ */
+async function soleOpenLinkedEpic(serverChatId: number, c: RunCell | BackstopRun, req: BrainRunRequest): Promise<number | null> {
+  const listed = await listChatTickets(req, serverChatId, {
+    note: noteOf(c), label: 'ticket.parent_epic_unreadable', consequence: 'the code-change ticket is minted without a parent epic.',
+  }, listingScopeOfRun(c));
+  if (listed == null) return null;
+  const epics = linkedTicketsStillOpen(listed).filter((t) => t.kind === 'epic');
+  const id = epics.length === 1 ? Number(epics[0]!.ref) : NaN;
+  return Number.isFinite(id) ? id : null;
+}
+
+/**
  * The post-run backstops that move LINKED tickets — one pass, two reasons:
  *
  *  - ADVANCE (`in_progress`, `worked-ticket-off-backlog`): the "a ticket you WORKED
@@ -203,21 +246,20 @@ export async function recordCodeChangeTicket(
 export async function updateLinkedTickets(
   serverChatId: number | null,
   c: RunCell | BackstopRun,
-  req: Pick<BrainRunRequest, 'runTool'>,
+  req: Pick<BrainRunRequest, 'runTool' | 'tools'>,
   select: (listed: unknown) => LinkedTicketToAdvance[],
   status: 'in_progress' | 'done',
   reason: TicketMoveReason,
+  owned: ReadonlySet<string> | 'selected',
 ): Promise<number> {
-  // An unbound local chat has no linked tickets on the platform to move.
-  if (!req.runTool || serverChatId == null) return 0;
-  let listed: unknown;
-  try {
-    listed = await req.runTool('builtin_chats_list_tickets', { chatId: serverChatId });
-  } catch {
-    return 0; // can't read the links — nothing to move
-  }
+  // An unbound local chat, or a host whose catalog carries no listing, has no linked tickets on the platform to move.
+  if (!req.runTool || serverChatId == null || !canListChatTickets(req.tools)) return 0;
+  // A MOVE reads the board as it is now — never a memoised listing: a ticket someone moved since must not be moved again.
+  const listed = await listChatTickets(req, serverChatId, { note: noteOf(c), label: 'ticket.links_unreadable', consequence: `no linked ticket was moved to ${status}.` });
+  if (listed == null) return 0;
   let moved = 0;
-  for (const t of select(listed)) {
+  // Only the tickets THIS run owns (`runOwnedTicketRefs`) — or, for `selected`, exactly the ones `select` names (a preview review's ids).
+  for (const t of select(listed).filter((t) => owned === 'selected' || owned.has(t.ref))) {
     const move = ticketStatusMove(t.ref, status, SERVER_TICKET_TOOLS);
     if (move && (await moveTicket(c, req, move, reason))) moved += 1;
   }
@@ -261,41 +303,6 @@ export async function moveTicket(
 
 /** The editor's vocabulary: a ticket `ticket-create` filed moves with `ticket-move`. */
 const LOCAL_VOCABULARY = ticketToolVocabulary([LOCAL_TICKET_CREATE_TOOL]);
-/** A status change by either vocabulary: the editor's `ticket-move` or the account's `builtin_tasks_update`. */
-const MOVE_LABEL = /^(ticket[-_.]move|builtin_tasks_update)$/i;
-
-const succeeded = (ev: BrainTraceEvent): boolean => ev.category === 'tool' && !ev.isError && !isFailedToolResult(ev.result);
-
-/**
- * The device-local tickets THIS run's HAND-OFF filed (`ticket-create` steps recorded with
- * `reason: 'hand_off'`), in the order filed, once each — the tickets the run's own work stands
- * for. A follow-up or bug ticket the model files mid-run is NOT one: the close-out never moves it.
- * The account's chat listing cannot see a ticket that has not synced, so the run's own record is
- * the only place they can be read from.
- */
-export function localTicketsFiledInRun(trace: readonly BrainTraceEvent[]): string[] {
-  const ids: string[] = [];
-  for (const ev of trace) {
-    if (!succeeded(ev) || !isLocalTicketCreateLabel(ev.label)) continue;
-    if ((ev.args as { reason?: unknown } | undefined)?.reason !== 'hand_off') continue;
-    const { localId, syncId } = entityIdsOf(ev.result);
-    const ref = localId ?? (syncId != null ? syncIdText(syncId) : null);
-    if (ref && !ids.includes(ref)) ids.push(ref);
-  }
-  return ids;
-}
-
-/** The status each ticket was last moved to by a successful status move in this run, keyed by its id as text. */
-function statusesInRun(trace: readonly BrainTraceEvent[]): Map<string, string> {
-  const moved = new Map<string, string>();
-  for (const ev of trace) {
-    if (!succeeded(ev) || !MOVE_LABEL.test(ev.label)) continue;
-    const a = (ev.args ?? {}) as { id?: unknown; status?: unknown };
-    if ((typeof a.id === 'string' || typeof a.id === 'number') && typeof a.status === 'string') moved.set(String(a.id).trim(), a.status);
-  }
-  return moved;
-}
-
 /**
  * Whether the host may move a ticket last seen at `current` (undefined = not moved this run) to
  * `status`. Only forward out of a not-started lane, or from `in_progress` to `done`: a ticket the
@@ -324,14 +331,15 @@ export async function updateRunLocalTickets(
   deltaTicketId: number | null = null,
 ): Promise<number> {
   if (!req.runTool) return 0;
-  const already = statusesInRun(trace);
+  const already = ticketMovesInRun(trace);
   const moves: TicketStatusMove[] = [];
-  for (const ref of localTicketsFiledInRun(trace)) {
-    const move = mayMove(already.get(ref), status) ? ticketStatusMove(ref, status, LOCAL_VOCABULARY) : null;
+  for (const filing of localTicketFilings(trace)) {
+    // The latest move across BOTH its ids: a move may name its local id or, once synced, its account id.
+    const move = mayMove(latestStatus(already, filing.ids), status) ? ticketStatusMove(filing.ref, status, LOCAL_VOCABULARY) : null;
     if (move) moves.push(move);
   }
   // The delta ticket opens in review; only the finish moves it, and only to done.
-  if (status === 'done' && deltaTicketId != null && mayMove(already.get(String(deltaTicketId)), status)) {
+  if (status === 'done' && deltaTicketId != null && mayMove(latestStatus(already, [String(deltaTicketId)]), status)) {
     const move = ticketStatusMove(deltaTicketId, status, SERVER_TICKET_TOOLS);
     if (move) moves.push(move);
   }

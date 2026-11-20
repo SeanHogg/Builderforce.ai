@@ -10,9 +10,7 @@ import type { BlueprintDetector } from '@builderforce/creation-canvas-contract';
 import type { ListFilesResult, ReadFileResult, RepoReadContext } from '../repos/readRepoContents';
 import { BLUEPRINT_BROWSE_PAGES, blueprintSourcePaths, FOLLOW_READ_RESERVE, MAX_PROVIDER_CALLS, readBlueprintSources, type BlueprintSourceIo } from './blueprintSources';
 import type { FetchLike } from '../repos/sources/RepoSource';
-import { DETECTORS } from './detectors';
-import { detectDotnet } from './detectors/dotnetDetector';
-import { repoRelativePath } from './pathGlob';
+import { DETECTORS, detectDotnet, repoRelativePath } from '@builderforce/app-detect';
 
 const CTX: RepoReadContext = { provider: 'github', host: null, owner: 'acme', repo: 'app', token: 't', ref: 'abc' };
 

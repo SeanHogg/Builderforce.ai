@@ -12,7 +12,7 @@
  * Verified = at least one successful write this run, and a PASSING check observed after
  * the last successful write. A later write un-verifies it; a later failing check does too.
  * A finish is offered at most once per write: a run told to finish that goes idle again is
- * not finishing, and the ladder (escalate, then pause) takes over (`finishOffered`).
+ * not finishing, and the ladder (escalate, then the third-rung finish) takes over (`finishOffered`).
  *
  * Pure; the state is plain JSON (absent fields in an older snapshot read as "no work yet").
  */

@@ -26,6 +26,7 @@ import {
   type RunTask,
 } from '@builderforce/agent-run';
 import type { RunPolicyOptions } from '@builderforce/run-policy';
+import type { ShipPolicy } from '@builderforce/run-guards';
 import { CODE_CHANGE_TOOLS } from '../localWorkspaceTools';
 import { deviceLeverOn } from '../runStore/deviceLevers';
 import type { BrainRunRequest, RunEntryPoint } from '../runStore/runTypes';
@@ -50,6 +51,8 @@ export interface BrainRunBinding {
   extensions?: ToolExtension;
   /** How the run's model hand-off starts (`pipelinePolicyOptions`): the phase it begins in, the stage models, and the quick model a routed QUICK run seeds. */
   start?: Pick<RunPolicyOptions, 'startPhase' | 'phaseModels' | 'pinnedModel'>;
+  /** The run's narrowed ship policy (`BrainRunContext.shipPolicy`, PRD 48), mirrored into `RunPolicy.ship`. */
+  ship?: ShipPolicy;
   /** Where the run's events go (`eventSink.ts`; the surface reacts to some beyond rendering them, `brainTurn.ts`). */
   events: EventSink;
   /** Told the live run once, before turn 1: the surface reads the model policy from it. */
@@ -111,7 +114,7 @@ export function brainRunTask(b: Pick<BrainRunBinding, 'req' | 'request'>): RunTa
  * The policy DATA of one Brain run. Every field is read off the request or the device —
  * the same facts the Brain's preamble reads — and none selects behaviour by surface.
  */
-export function brainRunPolicy(b: Pick<BrainRunBinding, 'entryPoint' | 'req' | 'request' | 'start'>): RunPolicy {
+export function brainRunPolicy(b: Pick<BrainRunBinding, 'entryPoint' | 'req' | 'request' | 'start' | 'ship'>): RunPolicy {
   const { req } = b;
   const seed = b.start?.pinnedModel ?? req.model;
   return {
@@ -145,5 +148,7 @@ export function brainRunPolicy(b: Pick<BrainRunBinding, 'entryPoint' | 'req' | '
     // The Brain's delegation gate (`earlyDelegation.ts` on the read result, the delivery ledger's rung at the end) is the run's ONE
     // gate: the agent's own early nudge and backstop stay off, or each read and each prose answer would be judged twice.
     delegation: { requested: false, readsBeforeNudge: 0 },
+    // What the run does with finished work — the preamble's narrowed policy; its prompt states it and `callPreflight` enforces it.
+    ...(b.ship ? { ship: b.ship } : {}),
   };
 }

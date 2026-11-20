@@ -138,7 +138,10 @@ export type {
   PromptOptionsModeChoice,
   PromptOptionsModel,
   PromptOptionsSession,
+  PromptOptionsCommands,
 } from './promptOptions/PromptOptionsMenu';
+// The Actions tab's pane, also how a host renders a typed `/help` answer (incl. "no such command").
+export { ActionsPane, type ActionsPaneProps } from './promptOptions/ActionsPane';
 export { DEFAULT_PROMPT_OPTIONS_LABELS, promptOptionsLabels } from './promptOptions/types';
 // The on-device model list (PRD 34): the page engines' catalog rows a person downloads,
 // runs and removes — presentational row + list, the hook over a host's local model store,

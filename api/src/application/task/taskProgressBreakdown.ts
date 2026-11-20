@@ -1,4 +1,4 @@
-import { isClosedTaskStatus } from '@builderforce/agent-loop';
+import { effectiveTicketProgress, isClosedTaskStatus } from '@builderforce/agent-loop';
 
 export type TaskProgressBasis = 'subtasks' | 'pr' | 'status' | 'manual';
 export type TaskProgressPrState = 'none' | 'draft' | 'open' | 'merged' | 'closed';
@@ -44,18 +44,18 @@ export function buildTaskProgressBreakdown(input: {
   const testsPassing = input.buildStatus === 'success' ? true : input.buildStatus === 'failure' ? false : null;
   const shared = { subtasksDone, subtasksTotal, codeDelivered, testsPassing, prState };
 
-  // A closed ticket (done OR cancelled) is complete whatever its children say.
-  if (isClosedTaskStatus(input.status)) return { basis: 'status', progressPct: 100, ...shared };
-  if (subtasksTotal > 0) {
-    return { basis: 'subtasks', progressPct: Math.round((subtasksDone / subtasksTotal) * 100), ...shared };
-  }
-  if (codeDelivered && (prState === 'merged' || prState === 'closed')) {
-    return { basis: 'pr', progressPct: 100, ...shared };
-  }
-  if (codeDelivered && (prState === 'open' || prState === 'draft')) {
-    return { basis: 'pr', progressPct: 75, ...shared };
-  }
+  // Every figure passes through the shared task-tier rule (agent-loop
+  // `effectiveTicketProgress`): a closed lane (done OR cancelled) reads 100 whatever its
+  // children say, and an OPEN lane never reads 100 — all subtasks closed or a merged PR
+  // reads the claimed-complete rung until the lane itself closes.
+  const at = (basis: TaskProgressBasis, raw: number): TaskProgressBreakdown =>
+    ({ basis, progressPct: effectiveTicketProgress(input.status, raw, 'task'), ...shared });
+
+  if (isClosedTaskStatus(input.status)) return at('status', 100);
+  if (subtasksTotal > 0) return at('subtasks', Math.round((subtasksDone / subtasksTotal) * 100));
+  if (codeDelivered && (prState === 'merged' || prState === 'closed')) return at('pr', 100);
+  if (codeDelivered && (prState === 'open' || prState === 'draft')) return at('pr', 75);
 
   const known = STATUS_PROGRESS[input.status ?? ''];
-  return { basis: known == null ? 'manual' : 'status', progressPct: known ?? 0, ...shared };
+  return at(known == null ? 'manual' : 'status', known ?? 0);
 }

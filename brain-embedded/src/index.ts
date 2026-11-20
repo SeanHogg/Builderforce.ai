@@ -137,6 +137,10 @@ export type { Effort, EffortProfile, ReasoningLevel, ReasoningIntent } from './e
 // is actually given). See `composerDirectives.ts`.
 export { buildComposerDirectives, WEB_FETCH_TOOL_NAME } from './composerDirectives';
 export type { ComposerDirectiveOptions } from './composerDirectives';
+// Composer `/` COMMANDS (typed by the person, parsed deterministically, never sent to a model —
+// not the model's "actions" in BrainActionsContext): the registry, the parser and the `/help`
+// model. Pure TS; hosts inject the entries and the localized descriptions.
+export * from './composerCommands';
 
 // The human-in-the-loop approval gate. Shared because its central invariant — the
 // auto-approve flag must be read through a REF so an in-flight run honours a mid-run
@@ -512,28 +516,23 @@ export {
   studioToolsIn,
 } from './localWorkspaceTools';
 
-// SELF-REVIEW SHIP — in a local editor session the agent is its own change's reviewer:
-// verify, review, commit, push, and the in_review ticket closes. Directive + loop gate.
+// SELF-REVIEW SHIP — the loop gate for a code change left unshipped under the run's ship
+// policy (PRD 48: the directive and nudge themselves are `@builderforce/run-guards`'s).
 export {
-  selfReviewShipDirective,
   leftChangeUnshipped,
-  unshippedChangeNudge,
   attemptedPublish,
   declinesShipping,
 } from './selfReviewShip';
 export type { UnshippedChangeInput } from './selfReviewShip';
 
-// PUBLISH HOLD — a chat-scoped standing hold that refuses every commit/push/PR until
-// the person who set it explicitly asks to ship (incident #56886). Set and lifted ONLY
-// by person turns; the tool gate refuses a publish call BEFORE the confirm gate, so
+// PUBLISH HOLD — a chat-scoped standing hold that narrows the ship policy to uncommitted
+// until the person who set it explicitly asks to ship (incident #56886). Set and lifted
+// ONLY by person turns; the tool gate refuses a publish call BEFORE the confirm gate, so
 // neither `acceptEdits` nor a sub-agent's inherited context can waive it.
 export {
   asksToShip,
-  isPublishCall,
   publishHold,
   publishHoldFromPersonTurns,
-  publishHoldDirective,
-  publishHoldRefusal,
   recordPublishRefusal,
 } from './runStore/publishHold';
 export type { PublishHold } from './runStore/publishHold';

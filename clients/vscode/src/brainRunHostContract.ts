@@ -101,8 +101,9 @@ export interface BrainRunHostPorts {
   /** PRD 36: wrap the run's streamer so every call lands in the chat's usage ledger. */
   recordUsage?(stream: BrainStreamFn, run: { chatId: number; runKey: number; mode?: "chat" | "work" }): BrainStreamFn;
   /** The editor's per-run settings — stage models, pipeline routing, the USD cap
-   *  (`editorRunSettings.ts`). Read once per run; omitted ⇒ none apply. */
-  runSettings?(): Promise<EditorRunSettings>;
+   *  (`editorRunSettings.ts`) — and the run's project's ship policy (PRD 48). Read once
+   *  per run; omitted ⇒ none apply. */
+  runSettings?(projectId?: number): Promise<EditorRunSettings>;
   /** PRD 36 / WS-R: how a run ended, under the id its usage rows carry — beside the
    *  chat's usage ledger, for the pipeline route report — and, later, whether the run's
    *  PreFetch decision was accepted (the report's gate accuracy). */

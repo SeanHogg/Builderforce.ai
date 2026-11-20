@@ -12,10 +12,15 @@
  *
  * A turn that showed any of them is a TRIP, and trips escalate: the first is a steer
  * (a note the host shows the model on its next turn), the second asks the host to move
- * the run up one model tier, the third asks it to pause the run for a human. After a
- * trip the windows start over, so one stuck stretch is one trip, not one per turn.
+ * the run up one model tier, the third (and any later) ENDS the run autonomously — a
+ * `finish` whose next turn offers no tools and tells the model to write its final report:
+ * what it changed, how it was verified, what is NOT done and the one concrete blocker for
+ * each open item ({@link progressStalledFinishNote}). The ladder never asks the human
+ * whether to continue: `ask_user` is for business questions the model itself chooses to
+ * ask, never a guard's "should I go on?" (VS Code chat #157440). After a trip the windows
+ * start over, so one stuck stretch is one trip, not one per turn.
  * {@link LADDER_RESET_TURNS} ground-progress turns (new files, test or check movement; churn alone does not count) in a row clear the ladder, so unrelated
- * stretches far apart each start from a steer instead of adding up to a pause.
+ * stretches far apart each start from a steer instead of adding up to a finish.
  *
  * A FINISHED run is not a stuck one. Once the run has VERIFIED work — a successful write
  * and a passing check after its last write ({@link VerifiedWork}; a background check counts
@@ -27,15 +32,22 @@
  * `finish` instead of the ladder's rung: the host's next turn is the final report, with no
  * tools — never a forced edit, never a question for the human (VS Code chat #146477: a
  * finished, type-checked change was escalated, forced to invent an edit, then paused).
- * A finish is offered once per write: a run that goes idle AGAIN after one, with no new
- * write, climbs the normal ladder (escalate, then pause). `edit_revert`, `repeated_failure`
- * and `circling_read` keep the ladder. A `finish` is still a trip (counted in `trips` and
- * `tripsBySignal`). A check passes only when its runner is the command's executable
- * (`checkCommand.ts`), and VCS bookkeeping (`git add/commit/status/diff/log/push`) is not a write.
+ * The early (second-trip) finish is offered once per write: a run that goes idle AGAIN after
+ * one, with no new write, climbs the normal ladder (escalate, then the third-rung finish).
+ * `edit_revert`, `repeated_failure` and `circling_read` keep the ladder. A `finish` is still
+ * a trip (counted in `trips` and `tripsBySignal`). A check passes only when its runner is
+ * the command's executable (`checkCommand.ts`), and VCS bookkeeping
+ * (`git add/commit/status/diff/log/push`) is not a write.
  *
  * Every write is read through {@link changedPathsOf}, so a batched `edit_file({ edits })`
  * call counts as a write of each file it changes — for visits, read-backs, edit reverts
- * and the no-progress window alike.
+ * and the no-progress window alike. A DELEGATION's writes are read from its result
+ * (`delegatedChanges.ts`): the files `wait_agents` / `spawn_agent(s)` / `hand_off` report
+ * their children changed count as the run's own writes, and a returned child report is
+ * progress — so a pure orchestrator whose sub-agents did the writing can earn verified
+ * work with its own passing check (VS Code chat #157440). A report the host injects as a
+ * message instead reaches it through {@link ProgressDetector.observeChildReport}. A wait on
+ * children or a background job that are STILL RUNNING is neither idle nor a read.
  *
  * Pure and host-agnostic: the host says which calls only read and which mutate
  * unscoped. Its state is plain JSON, so the cloud durable loop — one model turn per
@@ -47,6 +59,8 @@ import { NO_PROGRESS_TURNS, NoProgressTracker, type NoProgressPorts, type NoProg
 import { REVISIT_HARD_AT, VisitTally, type VisitTallyState } from "./visitTally.js";
 import { pathArgOf } from "./fingerprint.js";
 import { changedPathsOf } from "./callChanges.js";
+import { childReportProgressOf, delegatedChangedPathsOf, delegationReportedOf, waitDigestOf } from "./delegatedChanges.js";
+import type { ChildReportLike } from "@builderforce/agent-tools";
 import { isReadOnlyShellCall } from "./readOnlyShell.js";
 import { isVcsBookkeeping, shellCommandOf } from "./checkCommand.js";
 import { VerifiedWork, type VerifiedWorkState } from "./verifiedWork.js";
@@ -58,7 +72,7 @@ import { SuiteRepeat, type SuiteRepeatState } from "./suiteRepeat.js";
 import { READ_ONLY_STREAK_CALLS, READ_ONLY_STREAK_TURNS, ReadOnlyStreak, type ReadOnlyStreakState } from "./readOnlyStreak.js";
 
 /** Ground-progress, signal-free turns in a row that clear the trip ladder: trips far apart are
- *  separate stuck stretches, and only back-to-back ones should end in a pause. */
+ *  separate stuck stretches, and only back-to-back ones should end the run. */
 export const LADDER_RESET_TURNS = 8;
 
 export type ProgressSignalKind = "edit_revert" | "repeated_failure" | "circling_read" | "reverifying" | "unkept_ready" | "read_only_streak" | "no_progress";
@@ -91,11 +105,12 @@ export interface ProgressSignal {
 export type ProgressAction =
   | { kind: "steer"; trip: number; signal: ProgressSignal; note: string }
   | { kind: "escalate"; trip: number; signal: ProgressSignal; note: string }
-  | { kind: "pause"; trip: number; signal: ProgressSignal; question: string }
-  /** The run's change is made and a check passed after it, so an idle-shaped trip is
-   *  wrap-up, not a stall: the host's next turn is the final report — no tools, never a
-   *  forced edit, never a question for the human ({@link FINISHABLE_SIGNALS}). */
-  | { kind: "finish"; trip: number; signal: ProgressSignal; note: string }
+  /** The run ends on its own report: the host's next turn offers NO tools and carries the
+   *  note — never a forced edit, never a question for the human. `verified`: the change is
+   *  made and a check passed after it, so an idle-shaped trip is wrap-up ({@link FINISHABLE_SIGNALS},
+   *  {@link progressFinishNote}); otherwise it is the ladder's third rung, an honest report
+   *  of what is done and what blocks the rest ({@link progressStalledFinishNote}). */
+  | { kind: "finish"; trip: number; signal: ProgressSignal; note: string; verified: boolean }
   /** B1: a one-off note on the next turn — the FIRST unkept readiness claim. Never a
    *  trip: it does not touch the ladder, the trip count or `tripsBySignal`. */
   | { kind: "advisory"; note: string };
@@ -222,13 +237,18 @@ export class ProgressDetector {
   /** One call of the current turn ran. */
   observe(tool: string, args: unknown, result: ObservedResult): void {
     this.turnCalls.push({ tool, args, result });
-    // Kept or not is about what the model CHOSE to do: a failed edit still acted.
-    // Without an `isReadOnly` port nothing is judged read-only, so no claim goes unkept.
-    const readOnly = this.ports.isReadOnly?.(tool, args) === true;
-    this.claims.observe(readOnly);
-    // Same rule for the streak: without the port no call is read-only, so it never fills.
-    this.readOnlyStreak.observe(readOnly);
     const ok = succeeded(result);
+    // A wait on children or a background job still running (chat #157440) is NEUTRAL for the claim and the streak:
+    // neither a read nor an act. The no-progress window judges it (with its ceiling, `waitCeiling.ts`).
+    const waitDigest = ok ? waitDigestOf(tool, result.data) : null;
+    if (waitDigest === null) {
+      // Kept or not is about what the model CHOSE to do: a failed edit still acted.
+      // Without an `isReadOnly` port nothing is judged read-only, so no claim goes unkept.
+      const readOnly = this.ports.isReadOnly?.(tool, args) === true;
+      this.claims.observe(readOnly);
+      // Same rule for the streak: without the port no call is read-only, so it never fills.
+      this.readOnlyStreak.observe(readOnly);
+    } else this.readOnlyStreak.observeNeutral();
     const unscoped = (this.ports.isUnscopedMutation ?? ((t) => t === "run_command"))(tool, args);
     if (tool === "run_command") this.suites.ranCommand(shellCommandOf(args));
     // Every file the call changes — one, or several in a batched `edits: [...]` call.
@@ -261,7 +281,19 @@ export class ProgressDetector {
       }
     }
 
-    const { checkChanged, check } = this.progress.observe(tool, args, { ok, wrote, result: result.data });
+    // A delegation's children wrote these files, and its RESULT names them (chat #157440):
+    // the run wrote them, for visits, read-backs, the no-progress window and verified work.
+    const delegated = ok ? delegatedChangedPathsOf(tool, result.data) : [];
+    this.creditDelegatedWrites(delegated);
+    const reported = ok && delegationReportedOf(tool, result.data);
+    const { checkChanged, check } = this.progress.observe(tool, args, {
+      ok,
+      wrote,
+      result: result.data,
+      ...(delegated.length > 0 ? { delegatedPaths: delegated } : {}),
+      ...(reported ? { delegationReported: true } : {}),
+      ...(waitDigest !== null ? { waitingOn: waitDigest } : {}),
+    });
     // Verified work: a write (a check command is not one, though the shell may run it as
     // an unscoped mutation, and neither is a shell command that provably only reads — a
     // host whose `isReadOnly` port knows only tool names still runs `git status` that way),
@@ -278,6 +310,26 @@ export class ProgressDetector {
       const reason = failureReason(result.data);
       if (attempts >= FAILURE_HARD_AT) this.raise({ kind: "repeated_failure", tool, count: attempts, ...(reason ? { reason } : {}) });
     }
+  }
+
+  /** Files a delegation's children changed are the run's own writes: visits, read-backs and verified work alike. */
+  private creditDelegatedWrites(paths: readonly string[]): void {
+    for (const path of paths) {
+      this.forgetVisitsOf(path);
+      this.reverify.wrote(path);
+    }
+    if (paths.length > 0) this.work.noteWrite();
+  }
+
+  /**
+   * A child's report that reached the run OUTSIDE a call — the host injected it as a message
+   * (`childReportText`), the default path. Read like a `wait_agents` result: its files are the
+   * run's writes, and a finished report is progress (chat #157440).
+   */
+  observeChildReport(report: Pick<ChildReportLike, "state" | "changedFiles">): void {
+    const { changedPaths, moved } = childReportProgressOf(report);
+    this.creditDelegatedWrites(changedPaths);
+    this.progress.noteChildReport(changedPaths, moved);
   }
 
   private forgetVisitsOf(path: string | null): void {
@@ -379,22 +431,24 @@ export class ProgressDetector {
         this.work.noteFinishOffered();
         const note = progressFinishNote(signal);
         this.steer = note;
-        return { kind: "finish", trip: this.trips, signal, note };
+        return { kind: "finish", trip: this.trips, signal, note, verified: true };
       }
     }
-    const note = progressSteerNote(signal, this.trips);
-    if (this.trips === 1) {
+    if (this.trips <= 2) {
+      const note = progressSteerNote(signal, this.trips);
       this.steer = note;
-      return { kind: "steer", trip: this.trips, signal, note };
+      return { kind: this.trips === 1 ? "steer" : "escalate", trip: this.trips, signal, note };
     }
-    if (this.trips === 2) {
-      this.steer = note;
-      return { kind: "escalate", trip: this.trips, signal, note };
-    }
-    return { kind: "pause", trip: this.trips, signal, question: progressPauseQuestion(signal, this.trips) };
+    // The third trip ends the run on its own report — never a question for the human
+    // (VS Code chat #157440). Verified idle wrap-up says the work is done; anything else
+    // reports honestly what is done, what is not, and what blocks it.
+    const verified = this.work.isVerified && FINISHABLE_SIGNALS.has(signal.kind);
+    const note = verified ? progressFinishNote(signal) : progressStalledFinishNote(signal);
+    this.steer = note;
+    return { kind: "finish", trip: this.trips, signal, note, verified };
   }
 
-  /** A host that could not escalate shows the steer instead (or after pausing, clears it). */
+  /** A host that could not escalate shows the steer instead (or clears it once a finish brief carries it). */
   setSteer(note: string | undefined): void {
     this.steer = note;
   }
@@ -457,12 +511,32 @@ export function progressFinishNote(signal: ProgressSignal): string {
     : signal.kind === "reverifying"
       ? "this turn only re-checked work you already verified"
       : "the last turns only looked around";
-  return `Progress check: your change is made and a check passed after your last edit — ${what}. The work is done. Write the final report NOW: what you changed (files), how it was verified, and anything left open. Make no more tool calls.`;
+  return `Progress check: your change is made and a check passed after your last edit — ${what}. The work is done. Write the final report NOW: what you changed (files), how it was verified, what is NOT done, and the single concrete blocker for each open item. Make no more tool calls, and do not ask the user whether to continue.`;
 }
 
-/** What the run is told on a trip: the diagnosis, the evidence, the moves that remain. */
-export function progressSteerNote(signal: ProgressSignal, trip: number): string {
-  const head = `Progress check (${trip === 1 ? "first warning" : "second warning — the run has been moved to a stronger model"}): `;
+/** What the stalled finish names: a concrete fault keeps its full advice (the report should name it);
+ *  an idle stall is stated as a fact, without "make the edit now" moves a no-tools turn cannot take. */
+function stalledDiagnosis(signal: ProgressSignal): string {
+  switch (signal.kind) {
+    case "edit_revert":
+    case "repeated_failure":
+    case "circling_read":
+      return progressAdvice(signal);
+    case "reverifying":
+      return "the last turns only re-checked files you already wrote instead of reporting.";
+    case "unkept_ready":
+      return `you said ${signal.count} times that you had what you needed, then only read.`;
+    case "read_only_streak":
+      return `you made ${signal.count} read-only calls in a row without changing anything.`;
+    case "no_progress":
+      return `the last ${signal.count ?? NO_PROGRESS_TURNS} turns touched no new file and changed nothing about the tests.`;
+  }
+}
+
+/** What the run is told on a trip: the diagnosis, the evidence, the moves that remain. `movedUp` = false for a
+ *  host whose second trip found no stronger model, so the note does not claim one. */
+export function progressSteerNote(signal: ProgressSignal, trip: number, movedUp = true): string {
+  const head = `Progress check (${trip === 1 ? "first warning" : movedUp ? "second warning — the run has been moved to a stronger model" : "second warning"}): `;
   return `${head}${progressAdvice(signal)}`;
 }
 
@@ -487,16 +561,8 @@ export function progressAdvice(signal: ProgressSignal): string {
   }
 }
 
-/** The human question a third trip parks the run on. */
-export function progressPauseQuestion(signal: ProgressSignal, trip: number): string {
-  const what: Record<ProgressSignalKind, string> = {
-    edit_revert: `keeps undoing its own change to ${signal.target ?? "a file"}`,
-    repeated_failure: `keeps repeating a failing \`${signal.tool ?? "tool"}\` call`,
-    circling_read: `keeps re-reading ${signal.target ?? "the same file"} without acting`,
-    reverifying: "keeps re-checking files it already wrote and verified instead of reporting the result",
-    unkept_ready: "keeps saying it has everything it needs, then reads more instead of acting",
-    read_only_streak: "keeps reading without making the requested change",
-    no_progress: "has stopped making progress (no new files, no test changes)",
-  };
-  return `This run ${what[signal.kind]} — progress check ${trip}, after earlier warnings. How should it proceed? Reply with guidance to continue, or stop the run.`;
+/** What a run WITHOUT verified work is told on its third trip: end now, on an honest report.
+ *  It must not claim the work is done or verified, and must not ask whether to continue. */
+export function progressStalledFinishNote(signal: ProgressSignal): string {
+  return `Progress check (final): ${stalledDiagnosis(signal)} This is the third warning, so the run ends now. Write the final report NOW and make no more tool calls: what you changed (files), how it was verified (or that it was not), what is NOT done, and the single concrete blocker for each open item. Do not claim unverified work is done, and do not ask the user whether to continue.`;
 }

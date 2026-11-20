@@ -44,6 +44,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * stale one — it is invisible.
  */
 import { and, eq, sql } from 'drizzle-orm';
+import { isClosedTaskStatus } from '@builderforce/agent-loop';
 import { workDeltas, tasks as tasksTable, projects as projectsTable } from '../../infrastructure/database/schema';
 import { resolveSegment } from '../../infrastructure/auth/segmentResolver';
 import { TaskService } from '../task/TaskService';
@@ -81,6 +82,11 @@ export interface RecordDeltaInput {
   chatAccessUserId?: string | null;
   /** Existing project ticket that already tracks this change. Reused, never duplicated. */
   taskId?: number | null;
+  /** Parent ticket (typically the chat's one open Epic) a NEWLY-minted ticket is filed
+   *  under, so the parent's progress rolls it up. Ignored when the delta attaches to an
+   *  existing ticket — an existing ticket is never re-parented. Must be an active ticket
+   *  in the same tenant and project. */
+  parentTaskId?: number | null;
   /** User id or agent ref that authored the turn. */
   createdBy?: string | null;
   /** Create+link a ticket for the delta (default true). When false, only the
@@ -131,12 +137,12 @@ async function existingTaskForDelta(
   projectId: number,
   summary: string,
   taskId?: number | null,
-): Promise<{ id: number; key: string } | null> {
+): Promise<{ id: number; key: string; status: string | null } | null> {
   // Task titles are capped at 500 characters when created below, so compare the
   // same representation. Whitespace/case normalization mirrors tasks.create.
   const title = normalizedTitle(summary.slice(0, 500));
   const [row] = await db
-    .select({ id: tasksTable.id, key: tasksTable.key })
+    .select({ id: tasksTable.id, key: tasksTable.key, status: tasksTable.status })
     .from(tasksTable)
     .innerJoin(projectsTable, eq(projectsTable.id, tasksTable.projectId))
     .where(and(
@@ -148,7 +154,7 @@ async function existingTaskForDelta(
         : sql`lower(regexp_replace(btrim(${tasksTable.title}), '[[:space:]]+', ' ', 'g')) = ${title}`,
     ))
     .limit(1);
-  return row ? { id: Number(row.id), key: row.key } : null;
+  return row ? { id: Number(row.id), key: row.key, status: row.status ?? null } : null;
 }
 
 /**
@@ -222,6 +228,19 @@ export class WorkDeltaService {
         // Nothing changed yet — never mint (and never write a provenance row for) an empty change.
         return { ok: false, recorded: false, reason: 'no_changed_files', error: NO_CHANGED_FILES_ERROR };
       } else {
+        // The parent must be an active ticket on THIS project in THIS tenant — the same
+        // id-scoped lookup that validates `taskId` above — and its lane must still be open:
+        // filing new work under a done/cancelled epic would silently reopen its progress.
+        const parentTaskId = input.parentTaskId ?? null;
+        if (parentTaskId != null) {
+          const parent = await existingTaskForDelta(this.db, tenantId, input.projectId, summary, parentTaskId);
+          if (!parent) {
+            throw new Error(`parentTaskId ${parentTaskId} is not an active ticket in project ${input.projectId}`);
+          }
+          if (isClosedTaskStatus(parent.status)) {
+            throw new Error(`parentTaskId ${parentTaskId} is closed (status ${parent.status}) in project ${input.projectId}`);
+          }
+        }
         const bodyParts: string[] = [];
         if (input.detail) bodyParts.push(input.detail);
         if (files && files.length) bodyParts.push(`\n\nFiles touched:\n${files.map((f) => `- ${f}`).join('\n')}`);
@@ -232,6 +251,7 @@ export class WorkDeltaService {
           title: summary.slice(0, 500),
           description: bodyParts.join(''),
           priority: priorityForKind(kind),
+          ...(parentTaskId != null ? { parentTaskId } : {}),
         }, tenantId);
         taskId = Number(created.id);
         taskKey = created.key;

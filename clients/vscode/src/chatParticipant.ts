@@ -316,7 +316,7 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
         modelStrict: modelChoice.modelStrict,
         ...(modelChoice.routingMode ? { routingMode: modelChoice.routingMode } : {}),
         // Stage models, pipeline routing and the USD cap — the same reader the panel's runs use.
-        runSettings: await editorRunSettings(ctx.secrets),
+        runSettings: await editorRunSettings(ctx.secrets, activeProject?.id),
         // How the run ended, beside its usage rows — the route report's misroute proxy.
         recordRunOutcome: (end) => local.usage.recordOutcome({ chatId: runChatId, ...end }),
         recordAvoidedCall: ({ source: _source, ...call }) => local.usage.recordAvoided({ chatId: runChatId, runKey: runChatId, ...call }),

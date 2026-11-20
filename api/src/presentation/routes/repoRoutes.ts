@@ -27,6 +27,7 @@ import { Hono } from 'hono';
 import { and, eq, desc, sql } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
+import { PR_MERGE_MIN_ROLE } from '../../application/repos/prMergeAuthority';
 import {
   projectRepositories,
   pullRequests,
@@ -677,7 +678,7 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
   // tenant member — including a VIEWER — could merge any PR in the tenant, while merely
   // *running* the AI Manager required MANAGER. The UI-only affordance was the sole
   // barrier, and an API caller walked straight past it.
-  router.post('/pull-requests/:id/merge', requireRole(TenantRole.DEVELOPER), async (c) => {
+  router.post('/pull-requests/:id/merge', requireRole(PR_MERGE_MIN_ROLE), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const userId = c.get('userId') as string | undefined;
     const id = c.req.param('id');

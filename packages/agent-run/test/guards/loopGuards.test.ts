@@ -34,7 +34,6 @@ function harness(levers: GuardLevers = ON, model = "weak") {
     model: { get: () => state, set: (next) => { state = { ...state, ...next }; } },
     resolvedModel: () => state.model,
     features: () => ({ actionType: "bugfix" }) as never,
-    pause: vi.fn(async () => ({ approvalId: "appr-1" })),
     onEvent: record,
     cascade: { recordOutcome: outcome, shouldSkipWeakAttempt: skip, weakPassRate: async () => undefined, ladder },
   };
@@ -91,6 +90,14 @@ describe("RunGuards — D1 cascade", () => {
     expect(guards.tailSections().join("\n")).toContain("stub code");
   });
 
+  it("never escalates on a finish held for open linked work: it is owed work, not a failed check", async () => {
+    const { guards, ports, model, outcome } = harness(ON);
+    await guards.seedModel(model(), { strict: false, ladder, features: feat("bugfix") }).then((s) => ports.model?.set(s));
+    expect(await guards.finish({ block: "Epic #6902 is still open", reason: "linked_work_open" }, 1, ports)).toBe("Epic #6902 is still open");
+    expect(model().model).toBe("weak");
+    expect(outcome).not.toHaveBeenCalledWith(expect.objectContaining({ passed: false }));
+  });
+
   it("starts a soft seed on the weakest tier, unless the difficulty router says skip", async () => {
     const a = harness(ON, "strong");
     const seeded = await a.guards.seedModel(a.model(), { strict: false, ladder, features: feat("bugfix") });
@@ -114,7 +121,7 @@ describe("RunGuards — A3 progress detector", () => {
     await guards.endTurn(step, ports);
   }
 
-  it("steers on the first trip, escalates on the second, pauses on the third", async () => {
+  it("steers on the first trip, escalates on the second, finishes on the third", async () => {
     const { guards, ports, model } = harness({ a3_progress_detector: true, d1_verifier_cascade: false });
     await guards.seedModel(model(), { strict: false, ladder, features: feat("bugfix") }).then((s) => ports.model?.set(s));
     await revertTurn(guards, ports, 1);
@@ -122,11 +129,10 @@ describe("RunGuards — A3 progress detector", () => {
     await revertTurn(guards, ports, 2);
     expect(model().model).toBe("mid");
     await revertTurn(guards, ports, 3);
-    const parked = await guards.beforeDispatchPause(ports);
-    expect(parked?.control).toMatchObject({ kind: "ask_human", approvalId: "appr-1" });
-    expect(ports.pause).toHaveBeenCalledTimes(1);
-    // The park is spent: the next call runs.
-    expect(await guards.beforeDispatchPause(ports)).toBeUndefined();
+    // The third trip ends the run on its own report: a no-tools final turn, never a human question.
+    expect(guards.finalTurnDue).toBe(true);
+    expect(guards.snapshot()).not.toHaveProperty("pendingPause");
+    expect(guards.tailSections().join(" ")).toMatch(/final report/i);
   });
 
   it("keeps its tallies across a durable tick", async () => {

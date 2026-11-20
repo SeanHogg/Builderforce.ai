@@ -89,6 +89,10 @@ export const CAPABILITIES = {
   // holds high/urgent tickets for sign-off in /api/approvals. Keeping both at
   // manager would collapse two distinct controls and make the approval queue moot.
   'runtime.execute':      'developer',
+  // PRD 48 §4.6 — grant ONE cloud run "merge into main when done". A pre-approved
+  // version of the in-product Merge button, so it needs exactly that route's role
+  // (`PR_MERGE_MIN_ROLE`, api `application/repos/prMergeAuthority.ts`).
+  'runtime.mergeGrant':   'developer',
   // Workspace-wide emergency execution override. Manager-only because it stops
   // every member's manual runs as well as all autonomous/scheduled dispatch.
   'runtime.control':      'manager',

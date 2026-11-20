@@ -9,6 +9,7 @@ import { resolveToolAlias } from "@builderforce/agent-tools";
 import { toolSpecsFor, type BrainAction, type BrainToolSpec } from "@seanhogg/builderforce-brain-embedded";
 import { describeTool, type ToolDef } from "./fileTools";
 import { evaluatePolicyGate, toolCallPaths, type PolicyGate } from "@builderforce/agent-tools";
+import { publishAllowed, publishVerbOf, type ShipPolicy } from "@builderforce/run-guards";
 import type { RunHooks } from "./hooks/runHooks";
 import type { NativeApprovalRequest, NativeRunEvents, NativeRunLabels } from "./nativeRunTypes";
 
@@ -80,6 +81,13 @@ function declaredOf(defs: readonly ToolDef[], name: string): { mutates: boolean 
  * verdict is non-blocking — the user's Auto preference overrides it. Only the local
  * agent reaches this host predicate; cloud agents are bound by governance regardless.
  *
+ * A publish (commit / push / pull request) the run's SHIP POLICY allows (PRD 48) is not
+ * confirmed in `ask` mode either: the project's ship policy IS the standing approval, and
+ * the run already refused every publish it does not allow before this predicate
+ * (`callPreflight`). A governance `require-approval` gate on the call still shows the card,
+ * and a `block` gate keeps the usual rule (the dispatcher refuses it) — tenant governance
+ * outranks the ship policy.
+ *
  * Pure, so the loop can consult it synchronously; the actual modal is resolved
  * asynchronously off the run's pending-confirm channel.
  */
@@ -87,10 +95,12 @@ export function nativeNeedsConfirm(
   defs: readonly ToolDef[],
   permissionMode: "ask" | "acceptEdits",
   gates: readonly PolicyGate[] | undefined,
-): (req: { name: string; args: unknown }) => boolean {
-  return ({ name, args }) => {
+): (req: { name: string; args: unknown; shipPolicy?: ShipPolicy }) => boolean {
+  return ({ name, args, shipPolicy }) => {
     if (permissionMode === "acceptEdits") return false;
-    if (evaluatePolicyGate(gates, name, toolCallPaths(argsRecord(args)), undefined, declaredOf(defs, name)).action === "require-approval") return true;
+    const gate = evaluatePolicyGate(gates, name, toolCallPaths(argsRecord(args)), undefined, declaredOf(defs, name)).action;
+    if (gate === "require-approval") return true;
+    if (gate !== "block" && shipPolicy && publishVerbOf(name, args) && publishAllowed(shipPolicy, name, args).ok) return false;
     const def = defs.find((candidate) => candidate.name === name);
     // Fail safe: a tool we don't recognise is treated as mutating.
     return def ? def.mutating : true;

@@ -48,7 +48,11 @@ export default defineConfig(libraryConfig({
   //
   // `runFindings` is a FIFTH (PRD 46): the pure run-findings detectors the VS Code extension host runs over a chat's
   // journal for the Visualizer's Agent-runs drawer. No React, so the host reads them without the hook layer.
-  entry: { index: 'src/index.ts', chatError: 'src/chatError.ts', bfi: 'src/pageEngines/bfiLoader.ts', pendingWords: 'src/pendingWords.ts', runFindings: 'src/runFindings/index.ts' },
+  //
+  // `composerCommands` is a SIXTH (PRD 31 §W11): the composer command registry, its deterministic parser and the `/help`
+  // model. The VS Code extension HOST parses and runs `/help`, `/starter-kit`, `/manifest init` and `/launch` itself, so
+  // it reads them without React.
+  entry: { index: 'src/index.ts', chatError: 'src/chatError.ts', bfi: 'src/pageEngines/bfiLoader.ts', pendingWords: 'src/pendingWords.ts', runFindings: 'src/runFindings/index.ts', composerCommands: 'src/composerCommands/index.ts' },
   // `resolve`, not a bare `true`. The JS bundles already inline
   // `@builderforce/agent-stall` (it is a devDependency, so tsup does not treat it
   // as external) — but `dts: true` left the DECLARATIONS re-exporting the bare

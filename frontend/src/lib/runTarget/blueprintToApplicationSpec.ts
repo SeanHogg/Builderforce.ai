@@ -26,12 +26,15 @@
  *   database, so they never receive `DATABASE_URL`. SSR frameworks (Next, Remix,
  *   SvelteKit, Astro) run server code, so they are backends and do.
  */
+import { runtimeRoot, safeId } from '@builderforce/app-detect';
 import type { AppBlueprint, AppService, ServiceKind } from '@builderforce/creation-canvas-contract';
 import type { ApplicationSpec, ReadinessSpec, ServiceRole, ServiceSpec } from '@seanhogg/builderforce-webcontainers/app';
 import { COMMAND_RUNTIMES, commandOf, commandRuntime, commandWords, ENV_PREFIX, PROCESS_RUNTIME, shellSegments } from './commandLine';
 import { allocatePorts, bindService, propagateMoves } from './servicePorts';
 
 export { commandOf, commandRuntime, commandWords } from './commandLine';
+// The ONE root and id rules, shared with `emitManifest` (the same blueprint, written as a manifest).
+export { runtimeRoot } from '@builderforce/app-detect';
 
 /** Which runtime provider runs each blueprint kind, and whether its code runs only in the browser. */
 export const KIND_RUNTIME: Readonly<Record<ServiceKind, { runtime: string; role: ServiceRole }>> = {
@@ -103,21 +106,6 @@ export function shellRuntimeProbes(service: ServiceSpec): ServiceSpec[] {
     const runtime = first ? commandRuntime(first) : PROCESS_RUNTIME;
     return runtime === PROCESS_RUNTIME ? [] : [{ ...service, runtime, command: first!, args: rest }];
   });
-}
-
-/** `.` → `/`, `frontend` → `/frontend`, `./api/` → `/api`. */
-export function runtimeRoot(rootDir: string | undefined): string {
-  const parts = (rootDir ?? '').replace(/\\/g, '/').split('/').filter((part) => part && part !== '.');
-  return `/${parts.join('/')}`;
-}
-
-/** A service id the runtime accepts (`^[A-Za-z][A-Za-z0-9_-]*$`), unique among `taken`. */
-function safeId(raw: string, taken: Set<string>): string {
-  const base = raw.replace(/^@[^/]+\//, '').replace(/[^A-Za-z0-9_-]+/g, '-').replace(/^[^A-Za-z]+/, '').replace(/-+$/, '') || 'service';
-  let id = base;
-  for (let n = 2; taken.has(id); n++) id = `${base}-${n}`;
-  taken.add(id);
-  return id;
 }
 
 function readinessFor(service: AppService, port: number | undefined): ReadinessSpec {

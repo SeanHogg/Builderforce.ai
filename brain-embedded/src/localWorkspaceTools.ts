@@ -31,6 +31,8 @@
  * Framework-free (plain Sets and predicates) so it is safe in every bundle.
  */
 
+import { REPO_PUBLISH_TOOLS } from '@builderforce/run-guards';
+
 /**
  * Every local workspace tool, by the name the host advertises. The run loop pins the
  * intersection of this set with the run's own catalog — a host that adds a tool must
@@ -210,21 +212,16 @@ export const PROJECT_MEMORY_TOOLS: ReadonlySet<string> = new Set(['recall_facts'
  * run that surveyed the board, pushed thirty branches and surveyed again would be served
  * the PRE-PUSH answer from the read cache — a stale picture presented as current, which
  * is worse than the re-read it saved.
- */
-export const REPO_PUBLISH_TOOLS: ReadonlySet<string> = new Set([
-  'git_commit',
-  'git_push',
-  'open_pull_request',
-  // Cleanup deletes the merged branch locally and on origin, so the branch inventory a
-  // platform read returns is different after it. It is ALSO an unscoped mutation (it
-  // checks out and fast-forwards the base), and that set already clears everything —
-  // listing it here states the second reason rather than relying on the first.
-  'git_cleanup_merged',
-]);
-
-/**
- * Does this local tool change repository state that a PLATFORM read observes (branches
- * ahead of base, open pull requests)? See {@link REPO_PUBLISH_TOOLS}.
+ *
+ * The set itself is `REPO_PUBLISH_TOOLS` in `@builderforce/run-guards` (`shipPolicy.ts`),
+ * the ONE list the ship-policy publish matcher reads too. It includes `git_cleanup_merged`:
+ * cleanup deletes the merged branch locally and on origin, so the branch inventory a
+ * platform read returns is different after it. It is ALSO an unscoped mutation (it checks
+ * out and fast-forwards the base), and that set already clears everything — listing it
+ * there states the second reason rather than relying on the first.
+ *
+ * So: does this local tool change repository state that a PLATFORM read observes
+ * (branches ahead of base, open pull requests)?
  */
 export function isRepoPublishTool(name: string): boolean {
   return REPO_PUBLISH_TOOLS.has(name);

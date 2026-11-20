@@ -27,6 +27,8 @@
       "@builderforce/creation-canvas-contract/creativeCapabilities": ["../../packages/creation-canvas-contract/src/creativeCapabilities.ts"],
       "@builderforce/device-auth": ["../../packages/device-auth/src/index.ts"],
       "@builderforce/ide-templates": ["../../packages/ide-templates/src/index.ts"],
+      "@builderforce/ide-templates/kits": ["../../packages/ide-templates/src/kits/index.ts"],
+      "@builderforce/app-detect": ["../../packages/app-detect/src/index.ts"],
       "@builderforce/run-context": ["../../packages/run-context/src/index.ts"],
       "@builderforce/run-delta": ["../../packages/run-delta/src/index.ts"],
       "@builderforce/run-delta/contract": ["../../packages/run-delta/src/contract.ts"],

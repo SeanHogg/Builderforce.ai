@@ -25,7 +25,9 @@ function codeRun(key: number, ticketCallMs: number | 'never') {
     await delay(ticketCallMs);
     return { id: 7 };
   };
-  return startRun(key, { resolvedSystemPrompt: 'sys', stream, persistence, userTurn: 'change it', projectId: 1, runTool });
+  // The catalog carries the linked-ticket listing, so the settle's ticket bookkeeping reads the chat's tickets through `runTool`.
+  const tools = [{ type: 'function' as const, function: { name: 'builtin_chats_list_tickets', description: '', parameters: { type: 'object' as const } } }];
+  return startRun(key, { resolvedSystemPrompt: 'sys', stream, persistence, userTurn: 'change it', projectId: 1, runTool, tools });
 }
 
 describe('backstops that outlive their deadline write nothing into the next run (MF1)', () => {

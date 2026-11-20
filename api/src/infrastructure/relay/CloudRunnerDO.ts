@@ -23,6 +23,7 @@ import { prepareCloudRun, resolveAgentEngine, markCloudExecutionRunning, initial
 import { loadPersonaSetpoints } from '../../application/artifact/capabilityContext';
 import { heartbeatExecution } from '../../application/runtime/cloudAgent/runContext';
 import type { AgentExecParams } from '@builderforce/agent-tools';
+import type { ShipPolicy } from '@builderforce/run-guards';
 import type { LimbicState } from '@seanhogg/builderforce-memory-engine/limbic';
 import { parseModel, parseExecutor, withRunSandbox } from '../../application/runtime/cloudDispatch';
 import { parseCloudTickPayload } from '../../application/runtime/cloudTickPayload';
@@ -80,6 +81,9 @@ interface Cursor extends StartBody {
   sandboxWaitSince?: number;
   /** The prep tick found the container pool full: when that began and how often it has been retried. */
   sandboxOpenWait?: SandboxOpenWait;
+  /** The run's ship policy (PRD 48), mapped from the project's settings on the prep tick and
+   *  enforced on every loop tick — plain JSON, so it survives cursor persistence. */
+  shipPolicy?: ShipPolicy;
 }
 
 const CURSOR_KEY = 'cursor';
@@ -243,7 +247,7 @@ export class CloudRunnerDO implements DurableObject {
         cursor.payload = withRunSandbox(cursor.payload, cursor.sandbox ?? 'none');
         await this.db.update(executions).set({ payload: cursor.payload }).where(and(eq(executions.id, cursor.executionId), eq(executions.tenantId, cursor.tenantId)))
           .catch((error) => this.reportError(error, { operation: 'alarm', context: { logMessage: '[cloud-runner] sandbox stamp failed', details: { executionId: cursor.executionId } } }));
-        const { systemPrompt, userContent, execParams, agentPsychometric } = await prepareCloudRun(
+        const { systemPrompt, userContent, execParams, agentPsychometric, shipPolicy } = await prepareCloudRun(
           this.env, this.db, cursor.executionId,
           { id: cursor.taskId, title: cursor.taskTitle, description: cursor.taskDescription },
           cursor.tenantId, cursor.projectId, cursor.agentLabel, cursor.model, cursor.artifacts, cursor.cloudAgentRef, cursor.payload,
@@ -251,6 +255,8 @@ export class CloudRunnerDO implements DurableObject {
         );
         cursor.systemPrompt = systemPrompt;
         cursor.userContent = userContent;
+        // The project's ship policy, read once here with the prompt that states it, enforced every tick.
+        cursor.shipPolicy = shipPolicy;
         // A sub-agent runs the same prompt as its owner with the sub-agent brief in front,
         // and its task as the first turn.
         const child = parseCloudChild(cursor.payload);
@@ -310,6 +316,7 @@ export class CloudRunnerDO implements DurableObject {
         ...(originatingChatId != null ? { originatingChatId } : {}),
         ...(requiredSignoff ? { requiredSignoff } : {}),
         ...(cursor.execParams ? { execParams: cursor.execParams } : {}),
+        ...(cursor.shipPolicy ? { shipPolicy: cursor.shipPolicy } : {}),
         // The board's dispatch provenance (source, the approval that unlocked the run) rides the payload (PRD 35 §6.9).
         ...(cursor.payload ? { dispatchPayload: cursor.payload } : {}),
         surface: {

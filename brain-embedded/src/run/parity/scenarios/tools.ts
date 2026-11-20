@@ -167,7 +167,9 @@ export const handOffExecution: Scenario = {
 };
 
 export const plannerIgnoresForcedTurn: Scenario = {
-  id: 'planner-ignores-forced-turn', rows: ['R11', 'T9'], loopShows: ['loop.plan_budget_spent', 'edit_file'], title: 'a planner that keeps reading through the forced hand_off turn ends planning; the coder takes the next turn',
+  // VS Code chat #157440: the third progress check never asks the person — a change request that changed nothing gets one forced
+  // change turn instead (planning ends there and the coder takes it); only the next trip finishes on the run's own report.
+  id: 'planner-ignores-forced-turn', rows: ['R11', 'T9'], loopShows: ['loop.plan_budget_spent', 'edit_file', 'loop.progress_forced'], title: 'a planner that keeps reading through the forced hand_off turn ends planning; the coder takes the next turn, never asked to continue',
   async run(h) {
     h.tools({ ...READ, edit_file: () => ({ ok: true }) });
     let reads = 0;

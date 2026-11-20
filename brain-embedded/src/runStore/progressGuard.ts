@@ -13,12 +13,14 @@
  *   • escalate — a forced turn through `progressBudget.ts`: `hand_off` alone while
  *     planning, the change tools alone once coding. A run asked a QUESTION is never
  *     forced to change anything, so it is steered again instead;
- *   • pause — `ask_user` alone with the detector's question. Where the run cannot ask
- *     (a sub-agent), it is steered again;
- *   • finish — the run's change is made and a check passed after it, so an idle-shaped
- *     trip is wrap-up: the next turn offers NO tools and carries the detector's note, so
- *     the model writes its final report and the run ends. Never a forced edit, never
- *     `ask_user` (VS Code chat #146477).
+ *   • finish — the next turn offers NO tools and carries the detector's note, so the
+ *     model writes its final report and the run ends: a verified run's idle-shaped trip
+ *     (its wrap-up, VS Code chat #146477), or any run's third trip, whose note asks for an
+ *     honest report of what is done and what blocks the rest. Never `ask_user` — the guard
+ *     never asks the person whether to continue (VS Code chat #157440). A change request
+ *     that has changed nothing still gets ONE more chance to finish the work: its first
+ *     unverified finish is deferred for a forced change turn (a planner's analysis ends and
+ *     the coding role takes it); the next trip really finishes.
  *
  * Escalation never forces the change tools on a run that already changed code
  * (`forcedProgressTurn` returns null once the run has changed code (`codeChanged`)): its note opens the turn instead.
@@ -28,7 +30,6 @@
  * advisory (not a trip), and `loop.progress_forced` for a forced turn.
  */
 
-import { ASK_USER_TOOL, ASK_USER_TOOL_SPEC } from '@builderforce/agent-loop';
 import { ProgressDetector, progressAdvice, progressTraceStep, type ProgressAction, type ProgressTraceStep } from '@builderforce/run-guards';
 import { isUnscopedMutation } from '../readCoverage';
 import { isReadOnlyShellCall } from '../readOnlyShell';
@@ -37,10 +38,11 @@ import type { BrainToolSpec } from '../streamChatCompletion';
 import { nowIso, pushTrace } from './runCells';
 import { isDedupableRead, type BrainRunContext } from './brainRunContext';
 import { isMutatingPlatformTool } from '../chatWorkLinking';
-import { budgeted, forcedProgressTurn, type ForcedTurn } from './progressBudget';
+import { budgeted, endPlanning, forcedProgressTurn, progressed, type ForcedTurn } from './progressBudget';
+import { offersHandOff } from '@builderforce/run-policy';
 import { deviceLeverOn } from './deviceLevers';
 
-/** A ladder trip (escalate / pause / steer) — everything except the B1 advisory, which
+/** A ladder trip (steer / escalate / finish) — everything except the B1 advisory, which
  *  carries no `trip`/`signal` and is consumed inside {@link RunProgressGuard.endTurn}. */
 type TripAction = Exclude<ProgressAction, { kind: 'advisory' }>;
 
@@ -52,13 +54,15 @@ export function isReadOnlyCall(tool: string, args: unknown): boolean {
 export class RunProgressGuard {
   /** Null when the lever is off: every method is then a no-op. */
   private readonly detector: ProgressDetector | null;
-  /** An escalate / pause a later turn's menu acts on — kept until one takes it, so a
+  /** An escalate / finish a later turn's menu acts on — kept until one takes it, so a
    *  budget that forces the next turn first never drops it. */
   private due: TripAction | null = null;
   /** The note the next turn opens with, when the host shows it in place of an escalation. */
   private steer: string | undefined;
   /** The B1 / B4 advisory the last turn produced, waiting to be traced. */
   private advisory: ProgressAction | null = null;
+  /** An unverified finish was deferred once for a forced change turn (`progressGuardTurn`). */
+  private stalledDeferred = false;
 
   /**
    * @param on the A3 lever.
@@ -86,6 +90,11 @@ export class RunProgressGuard {
     this.detector?.observe(tool, args, result);
   }
 
+  /** A child's report reached the run through its inbox (not a `wait_agents` result): its files are the run's writes. */
+  observeChildReport(report: Parameters<ProgressDetector['observeChildReport']>[0]): void {
+    this.detector?.observeChildReport(report);
+  }
+
   /** The turn's calls all ran. The trip it caused, if any — or the B1 readiness
    *  advisory ({@link readinessAdvisory}) on the FIRST unkept claim, which is never a
    *  trip and must not be queued like one. */
@@ -103,9 +112,9 @@ export class RunProgressGuard {
     // step is a forced turn, whose brief carries the advice instead.
     // A finish's note is its no-tools turn's brief, so it is not shown twice.
     if (action.kind === 'escalate' || action.kind === 'finish') this.detector?.setSteer(undefined);
-    // Only an escalation, pause or finish waits for a later turn's menu — a steer rides the
+    // Only an escalation or finish waits for a later turn's menu — a steer rides the
     // next turn's opening note, it is never forced.
-    if (action.kind === 'escalate' || action.kind === 'pause' || action.kind === 'finish') this.due = action;
+    if (action.kind === 'escalate' || action.kind === 'finish') this.due = action;
     return action;
   }
 
@@ -121,11 +130,21 @@ export class RunProgressGuard {
     return advisory;
   }
 
-  /** The escalation or pause waiting for this turn, taken once. */
+  /** The escalation or finish waiting for this turn, taken once. */
   takeDue(): TripAction | null {
     const due = this.due;
     this.due = null;
     return due;
+  }
+
+  /** Whether an unverified finish may still be deferred — once per run, for one forced change turn. */
+  get canDeferStalledFinish(): boolean {
+    return !this.stalledDeferred;
+  }
+
+  /** The one deferral is spent: the next unverified finish really ends the run. */
+  stalledFinishDeferred(): void {
+    this.stalledDeferred = true;
   }
 
   /** The escalation could not be forced here: show its note on this turn instead. */
@@ -151,35 +170,25 @@ function traceStep(run: BrainRunContext, step: number, s: ProgressTraceStep): vo
 }
 
 /**
- * The forced turn an escalation or pause decides, called after selection with this
+ * The forced turn an escalation or finish decides, called after selection with this
  * turn's tools. Null for an ordinary turn — and when the trip cannot be forced here,
  * in which case its note opens the turn instead.
  */
 export function progressGuardTurn(run: BrainRunContext, step: number, selected: readonly BrainToolSpec[]): ForcedTurn | null {
   const due = run.progress.takeDue();
   if (!due) return null;
-  // The change is made and verified: the next turn is the final report — no tools, so it
-  // can neither invent an edit nor ask the person; its answer ends the run.
+  // The next turn is the final report — no tools, so it can neither invent an edit nor ask
+  // the person whether to continue; its answer ends the run. Verified wrap-up and the
+  // ladder's last rung alike: the note says which.
   if (due.kind === 'finish') {
+    const deferred = due.verified ? null : deferredFinishTurn(run, step, selected, due);
+    // Steered instead: an ordinary turn, whose note carries the advice.
+    if (deferred === 'steered') return null;
+    if (deferred) return deferred;
     trace(run, step, due, 'finish');
     return { tools: [], brief: { role: 'user', content: due.note } };
   }
   const advice = `PROGRESS CHECK ${due.trip}: ${progressAdvice(due.signal)}`;
-  if (due.kind === 'pause') {
-    if (!run.canAskUser) {
-      run.progress.steerInstead(advice);
-      return null;
-    }
-    trace(run, step, due, 'ask_user');
-    return {
-      tools: [ASK_USER_TOOL_SPEC as BrainToolSpec],
-      toolChoice: 'required',
-      brief: {
-        role: 'user',
-        content: `${advice} Call ${ASK_USER_TOOL} now. question: "${due.question}" options: [{ "label": "Continue with guidance" }, { "label": "Stop the run" }]`,
-      },
-    };
-  }
   // A run asked a question is never forced to change anything.
   const out = budgeted(run) ? forcedProgressTurn(run, selected, advice) : null;
   if (!out) {
@@ -190,20 +199,49 @@ export function progressGuardTurn(run: BrainRunContext, step: number, selected: 
   return out.turn;
 }
 
-const FORCED_MENU: Readonly<Record<'hand_off' | 'change' | 'ask_user', string>> = {
-  ask_user: 'ask_user alone',
+/**
+ * A change request that has not changed anything is not ended while the run can still DO the work: once per run, the
+ * unverified finish becomes a forced change turn instead — the change tools alone, with NO `ask_user` (the guard's own
+ * forced turn never offers a question). A planner's analysis ends there (the coding role takes the turn, as the plan
+ * budget would have). When this turn's menu has no change tool to force while still planning, planning ends and the run
+ * is steered instead ('steered'), so the NEXT turn selects as `code` with the full menu. Null: the finish stands. The next
+ * trip after the deferral really finishes.
+ */
+function deferredFinishTurn(run: BrainRunContext, step: number, selected: readonly BrainToolSpec[], due: TripAction): ForcedTurn | 'steered' | null {
+  if (!budgeted(run) || progressed(run) || !run.progress.canDeferStalledFinish) return null;
+  const advice = `PROGRESS CHECK ${due.trip}: ${progressAdvice(due.signal)}`;
+  const planning = offersHandOff(run.policy);
+  const out = forcedProgressTurn(run, selected, advice, {
+    changeOnly: true,
+    noAsk: true,
+    endPlanning: { step, why: 'The run kept reading through its progress checks without handing off — analysis ends here and the coding role makes the change.' },
+  });
+  if (out) {
+    run.progress.stalledFinishDeferred();
+    trace(run, step, due, out.forced);
+    return out.turn;
+  }
+  // Not planning and nothing to force: the finish stands.
+  if (!planning) return null;
+  endPlanning(run, step, 'The run kept reading through its progress checks without handing off — analysis ends here and the coding role takes the next turn.');
+  run.progress.stalledFinishDeferred();
+  run.progress.steerInstead(advice);
+  return 'steered';
+}
+
+const FORCED_MENU: Readonly<Record<'hand_off' | 'change', string>> = {
   hand_off: 'hand_off alone',
   change: 'the change tools alone',
 };
 
-function trace(run: BrainRunContext, step: number, due: TripAction, forced: 'hand_off' | 'change' | 'ask_user' | 'finish'): void {
+function trace(run: BrainRunContext, step: number, due: TripAction, forced: 'hand_off' | 'change' | 'finish'): void {
   pushTrace(run.c, {
     ts: nowIso(),
     category: 'message',
     label: 'loop.progress_forced',
     args: { step, trip: due.trip, signal: due.signal.kind, forced },
     result: forced === 'finish'
-      ? `progress check ${due.trip} (${due.signal.kind}) — the change is made and verified: this turn offers no tools and the run writes its final report.`
+      ? `progress check ${due.trip} (${due.signal.kind}) — ${due.kind === 'finish' && due.verified ? 'the change is made and verified' : 'the run is not converging'}: this turn offers no tools and the run writes its final report.`
       : `progress check ${due.trip} (${due.signal.kind}) — this turn offers ${FORCED_MENU[forced]} and requires a call.`,
   });
 }

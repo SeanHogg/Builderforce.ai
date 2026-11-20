@@ -45,8 +45,6 @@ export interface GuardPorts {
     /** The run's role's tier ladder (D1's cascade moves along it). */
     ladder?: TierLadder;
   };
-  /** Park the run on a human question (A3's pause / the progress detector's last trip). */
-  pause?: (question: string) => Promise<{ approvalId: string }> | { approvalId: string };
   /** The model's state, read and replaced by A3's escalation / D1's cascade. */
   model?: {
     get(): RunState["model"];

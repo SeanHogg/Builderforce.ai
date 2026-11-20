@@ -15,6 +15,7 @@ import { DEFAULT_TOOL_FAILURE_STREAK, resetBrainRunStore, type EvermindRunHooks 
 import { fakeGateway, type GatewayScript } from "../harness/fakeGateway";
 import type { ToolDef } from "./fileTools";
 import type { PolicyGate } from "@builderforce/agent-tools";
+import { shipPolicyOf } from "@builderforce/run-guards";
 import { parseHooksFile } from "./hooks/hookConfig";
 import { createRunHooks, type RunDirectives } from "./hooks/runHooks";
 import {
@@ -620,6 +621,28 @@ describe("nativeNeedsConfirm", () => {
     ];
     expect(nativeNeedsConfirm(defs, "ask", gates)({ name: "write_file", args: { path: "src/secret/x.ts" } })).toBe(true);
     expect(nativeNeedsConfirm(defs, "ask", gates)({ name: "write_file", args: { path: "README.md" } })).toBe(true);
+  });
+
+  describe("a publish the run's ship policy allows (PRD 48)", () => {
+    const publish = [...defs, toolDef("git_commit", { mutating: true }), toolDef("git_push", { mutating: true }), toolDef("run_command", { mutating: true })];
+    const commitPush = shipPolicyOf("commit_push", "project_settings");
+
+    it("regression: chat #157440 — a push the ship policy allows is not held for approval", () => {
+      expect(nativeNeedsConfirm(publish, "ask", undefined)({ name: "git_commit", args: { paths: ["a.ts"], allowBaseBranch: true }, shipPolicy: commitPush })).toBe(false);
+      expect(nativeNeedsConfirm(publish, "ask", undefined)({ name: "git_push", args: { allowBaseBranch: true }, shipPolicy: commitPush })).toBe(false);
+    });
+
+    it("still shows the card when a governance gate requires approval", () => {
+      const gates: PolicyGate[] = [{ id: "push-review", tool: "git_push", effect: "require-approval", reason: "pushes need a reviewer" }];
+      expect(nativeNeedsConfirm(publish, "ask", gates)({ name: "git_push", args: { allowBaseBranch: true }, shipPolicy: commitPush })).toBe(true);
+    });
+
+    it("asks as before for a publish the policy does not allow, a non-publish, or no policy", () => {
+      const commitOnly = shipPolicyOf("commit", "project_settings");
+      expect(nativeNeedsConfirm(publish, "ask", undefined)({ name: "git_push", args: { allowBaseBranch: true }, shipPolicy: commitOnly })).toBe(true);
+      expect(nativeNeedsConfirm(publish, "ask", undefined)({ name: "run_command", args: { command: "pnpm test" }, shipPolicy: commitPush })).toBe(true);
+      expect(nativeNeedsConfirm(publish, "ask", undefined)({ name: "git_push", args: { allowBaseBranch: true } })).toBe(true);
+    });
   });
 });
 

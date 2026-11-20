@@ -16,8 +16,8 @@
  * Data, not branches: a read twin is a name in {@link LOCAL_TICKET_READS} plus its adapter.
  */
 
-import { TASK_CLOSED_STATUSES } from "@builderforce/agent-loop";
-import { railTicketProgress } from "./chatRail/railPayloads";
+import { isClosedTicketStatus } from "@builderforce/agent-loop";
+import { railProgressKind, railTicketProgress } from "./chatRail/railPayloads";
 import type { ToolDef } from "./fileTools";
 import { isLocalId } from "@builderforce/local-first";
 import type { ChatTicketScope, UnsyncedTicket } from "./localTicketScope";
@@ -26,13 +26,12 @@ type Args = Record<string, unknown>;
 type ReadAdapter = (args: Args, server: () => Promise<string>, scope: ChatTicketScope) => Promise<string>;
 
 const UNSYNCED_NOTE = "filed on this device; not synced to the account yet — use ticket-update / ticket-move with this local id";
-const CLOSED: ReadonlySet<string> = new Set(TASK_CLOSED_STATUSES);
 
 /** A local ticket in the shape the server's chat-ticket rows have (`ChatTicketLink`). */
 export function localTicketView(ticket: UnsyncedTicket) {
   const progress = railTicketProgress(ticket.payload);
   return {
-    kind: ticket.payload.taskType ?? "task",
+    kind: railProgressKind(ticket.payload),
     ref: ticket.id,
     label: ticket.payload.title,
     status: progress.status,
@@ -76,7 +75,8 @@ function filtered(rows: readonly LocalView[], args: Args): LocalView[] {
   return rows.filter((row) =>
     (!status || row.status.toLowerCase() === status)
     && (!kind || row.kind === kind)
-    && !(args.openOnly === true && CLOSED.has(row.status.toLowerCase())));
+    // Closed per the row's own kind — the same registry the server's openOnly filter reads.
+    && !(args.openOnly === true && isClosedTicketStatus(row.kind, row.status)));
 }
 
 const listTickets: ReadAdapter = async (args, server, scope) => {

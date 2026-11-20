@@ -56,6 +56,8 @@ import { loadProjectInTenant } from '../../application/project/projectOwnership'
 import { taskAssigneesCacheKey } from '../../application/task/taskAssigneeCache';
 import { getTaskCounts } from '../../application/task/taskCounts';
 import { parseBody, parseOptionalBody } from './requestBody';
+import { grantMergeFromRequest, refuseMergeGrant } from './mergeGrantRequest';
+import { mergeGrantTargetRefusal } from '../../application/runtime/mergeGrants';
 import {
   AddDependencyBody,
   ConvertTypeBody,
@@ -495,6 +497,11 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
   router.post('/:id/run-now', requireRole(TenantRole.DEVELOPER), requirePermission(PERMISSIONS.TASK_ASSIGN), async (c) => {
     const id = Number(c.req.param('id'));
     const body = await parseOptionalBody(c, RunNowBody);
+    // A merge grant is a person's, with the in-product merge role — refused before anything starts.
+    const grantRefused = refuseMergeGrant(c, body.mergeGrant);
+    if (grantRefused) return grantRefused;
+    // Recorded against whichever execution the dispatch below starts.
+    const grantFor = (executionId: number) => grantMergeFromRequest(c, db, body.mergeGrant, { executionId, projectId: row?.projectId ?? null });
     const chatId = typeof body.chatId === 'number' && Number.isSafeInteger(body.chatId) && body.chatId > 0
       ? body.chatId
       : undefined;
@@ -578,11 +585,12 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
         `Run now on a ticket autonomy would not dispatch (${evaln.reason}): a person with dispatch permission directed it.`,
       );
       if (overridden.executionId == null) return refused(overridden, evaln.reason);
+      const mergeGrant = await grantFor(overridden.executionId);
       // `agentRef: null` is the honest answer: nothing was pinned, so the dispatcher
       // resolved the default. `managedOverride` lets a caller say the run went ahead
       // WITHOUT stage attribution rather than implying it satisfied the stage; `overrode`
       // names the gate the person stepped past, so a chat can report it plainly.
-      return c.json({ ok: true, executionId: overridden.executionId, agentRef: null, managedOverride: true, overrode: evaln.reason }, 202);
+      return c.json({ ok: true, executionId: overridden.executionId, agentRef: null, managedOverride: true, overrode: evaln.reason, ...(mergeGrant ? { mergeGrant } : {}) }, 202);
     }
     const payloadObj: { cloudAgentRef: string; model?: string; laneKey: string; chatId?: number; runtime?: string } = {
       cloudAgentRef: evaln.candidate.agentRef,
@@ -597,6 +605,9 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     const runNowHostId = await resolveLaneAgentHostId(
       db, c.get('tenantId'), evaln.candidate.runtime, evaln.candidate.target,
     ).catch(() => null);
+    // PRD 48 §4.6 — a merge grant is for a CLOUD run only; a lane staffed to an on-prem host refuses it.
+    const notCloud = body.mergeGrant ? mergeGrantTargetRefusal(runNowHostId) : null;
+    if (notCloud) return c.json({ error: notCloud, code: 'merge_grant_not_cloud' }, 400);
     // -- A MANAGED BOARD REFUSES A ROLE-LESS PAYLOAD --------------------------------
     //
     // `authorizeManagedTaskExecution` declines any dispatch on a lifecycle-managed board
@@ -663,11 +674,14 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
           `Run now: the role-attributed dispatch was refused (${reason}${outcome.refusal ? `: ${outcome.refusal.message}` : ''}); the person directing the run overrides.`,
         );
         if (overridden.executionId == null) return refused(overridden, reason);
-        return c.json({ ok: true, executionId: overridden.executionId, agentRef: null, managedOverride: true, overrode: reason }, 202);
+        const mergeGrant = await grantFor(overridden.executionId);
+        return c.json({ ok: true, executionId: overridden.executionId, agentRef: null, managedOverride: true, overrode: reason, ...(mergeGrant ? { mergeGrant } : {}) }, 202);
       }
       return refused(outcome);
     }
-    return c.json({ ok: true, executionId: outcome.executionId, agentRef: evaln.candidate.agentRef }, 202);
+    // A failed grant write is reported and SAID (`mergeGrant: 'failed'`) — never a 500 on a run that started.
+    const mergeGrant = await grantFor(outcome.executionId);
+    return c.json({ ok: true, executionId: outcome.executionId, agentRef: evaln.candidate.agentRef, ...(mergeGrant ? { mergeGrant } : {}) }, 202);
   });
 
   // GET /api/tasks/:id/tree — an Epic and its direct child tasks (parent/child

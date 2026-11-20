@@ -18,7 +18,7 @@
  *      the run's own outgoing file fails the gate, and the ticket is never marked done.
  */
 
-import { calls, call, reply, PINNED } from '../script';
+import { calls, call, reply, PINNED, SHIPS_TO_MAIN } from '../script';
 import type { Scenario } from '../types';
 import { runOutgoingGate, shipGatePreflight, shipGateAdvisory, type ShipPreflight } from '../../../runStore/shipGates';
 import type { BrainRunContext } from '../../../runStore/brainRunContext';
@@ -88,6 +88,7 @@ export const gates: Scenario = {
     ]);
     await h.start({
       ...PINNED,
+      ...SHIPS_TO_MAIN,
       projectId: 11,
       userTurn: 'add the inbound handler and ship it',
       git: gitPort(),

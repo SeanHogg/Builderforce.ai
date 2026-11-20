@@ -329,13 +329,13 @@ export function createGitHubWebhookRoutes(db: Db, runtimeService: RuntimeService
 
     // CI/deploy feedback: correlate a build/deploy result back to the cloud
     // execution that pushed the `builderforce/task-<id>` branch and record it so
-    // the run's Logs/Timeline show the outcome (and optionally merge-on-green).
+    // the run's Logs/Timeline show the outcome (the PR merge sweep merges by project settings).
     if (event && CI_EVENTS.has(event)) {
       let p: Record<string, unknown>;
       try { p = JSON.parse(rawBody) as Record<string, unknown>; } catch { return c.json({ error: 'Invalid JSON body' }, 400); }
       const norm = normalizeCiEvent(event, p);
       if (!norm) return c.json({ received: true, processed: false, reason: `event '${event}' not normalized` });
-      // Post-ingest handling (dispatch, loop-guard telemetry, exhaustion, merge-on-green)
+      // Post-ingest handling (dispatch, loop-guard telemetry, exhaustion, the merge-sweep wake-up)
       // is provider-independent — GitHub/GitLab/Bitbucket all go through this one helper.
       const res = await handleCiEventOutcome(ciOutcomeDeps(c, db, runtimeService), norm, 'github');
       return c.json({ received: true, ...res, autoFix: res.autoFix ? { dispatched: res.autoFixDispatched, attempt: res.autoFix.attempt } : undefined });

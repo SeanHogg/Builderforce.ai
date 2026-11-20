@@ -8,6 +8,7 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
 
 import { Hono, type Context } from 'hono';
 import { and, eq } from 'drizzle-orm';
+import { checkTicketStatus, type TicketStatusKind } from '@builderforce/agent-loop';
 import { requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
 import type { Env, HonoEnv } from '../../env';
@@ -74,6 +75,13 @@ export interface TrackerOpts {
    * (a data subject request's private export key).
    */
   project?: (row: Record<string, unknown>) => Record<string, unknown>;
+  /**
+   * The ticket kind whose status vocabulary (agent-loop `TICKET_STATUS_VALUES`, the same
+   * lists the Brain's write tools accept and the closed-status registry reads) a written
+   * `status` must belong to. An unknown status is answered 400 naming the allowed values and
+   * nothing is written; a known one is stored lower-cased.
+   */
+  statusKind?: TicketStatusKind;
   guardMutation?: (op: 'create' | 'update' | 'delete', row: Record<string, unknown>, patch: Record<string, unknown> | null) => string | null;
 }
 
@@ -161,6 +169,19 @@ function pick(body: Record<string, unknown>, fields: string[]): Record<string, u
 }
 
 /**
+ * Hold a written `status` to the tracker's status vocabulary ({@link TrackerOpts.statusKind}):
+ * normalises it in place, or returns the refusal the route answers 400. No `statusKind`, or no
+ * `status` in the write, passes.
+ */
+function statusRefusal(opts: TrackerOpts, written: Record<string, unknown>): string | null {
+  if (!opts.statusKind || written.status === undefined) return null;
+  const checked = checkTicketStatus(opts.statusKind, written.status);
+  if (!checked.ok) return checked.error;
+  written.status = checked.value;
+  return null;
+}
+
+/**
  * Segment-scoped CRUD for a tracker table. The table MUST have id/tenantId/
  * segmentId columns; typed loosely because the factory is generic over many
  * tables (the field whitelist + DB constraints + tests are the contract).
@@ -198,6 +219,8 @@ function createTrackerRoutes(db: Db, table: any, opts: TrackerOpts): Hono<HonoEn
       }
     }
     const written = pick(body, writeFields);
+    const badStatus = statusRefusal(opts, written);
+    if (badStatus) return c.json({ error: badStatus }, 400);
     const createRefusal = opts.guardMutation?.('create', {}, written);
     if (createRefusal) return c.json({ error: createRefusal }, 403);
     const rows = (await db.insert(table)
@@ -214,6 +237,8 @@ function createTrackerRoutes(db: Db, table: any, opts: TrackerOpts): Hono<HonoEn
     const id = c.req.param('id');
     const patch = pick(await parseBody(c, zJsonObject), writeFields);
     if (Object.keys(patch).length === 0) return c.json({ error: 'nothing to update' }, 400);
+    const badStatus = statusRefusal(opts, patch);
+    if (badStatus) return c.json({ error: badStatus }, 400);
     patch.updatedAt = new Date();
     // The before-image only when the tracker is audited — one extra keyed read, not paid by the rest.
     const before = opts.auditEntity || opts.guardMutation

@@ -27,9 +27,8 @@ export interface LoopGuardState {
   progress?: ProgressDetectorState;
   /** D1: the cascade's units, the first tick's action type, the seed's softness. */
   cascade?: CascadeSessionState;
-  /** A3: a pause the next dispatched call parks the run on. */
-  pendingPause?: string;
-  /** A3: the run's change is made and verified — the next turn is its final report, with no tools. */
+  /** A3: the run's `finish` — the next turn is its final report, with no tools. (A `pendingPause` key in
+   *  older saved state is ignored: A3 no longer parks a run on a human question.) */
   finishDue?: true;
   /** D7: the sandbox checks' failures, for the NEXT turn's tail. */
   checksNote?: string;
@@ -101,7 +100,7 @@ export interface StallState {
 /** Plain JSON. Everything any policy needs across a step boundary. */
 export interface RunState {
   messages: unknown[]; step: number;
-  guards: LoopGuardState;          // progress, cascade, pendingPause, checksNote — WS1 names this type; the guards (`policy/guards`) snapshot into it
+  guards: LoopGuardState;          // progress, cascade, finishDue, checksNote — WS1 names this type; the guards (`policy/guards`) snapshot into it
   finish: FinishGateState;         // placeholder / CI-pending / no-deliverable counters, signoff recorded — reuse cloudAgent/finishGates.ts:55, do not redefine
   model: RunPolicyState;           // @builderforce/run-policy — pins, tried/broken/proven models, failovers, turnRetries
   memory: RunKnowledgeState;       // working memory + tool tally — reuse @builderforce/agent-tools run-knowledge.ts:96, do not redefine

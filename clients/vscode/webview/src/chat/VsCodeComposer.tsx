@@ -119,6 +119,8 @@ export interface VsCodeComposerProps {
   session?: ComposerOptions['session'];
   /** Offer the fixed next steps as chips — off while the empty state shows them as tiles. */
   suggest?: boolean;
+  /** The host's composer commands — the `/` menu's Actions tab (`useComposerCommands().commands`). */
+  commands?: ComposerOptions['commands'];
 }
 
 function VsCodeComposerInner(props: VsCodeComposerProps) {
@@ -127,7 +129,7 @@ function VsCodeComposerInner(props: VsCodeComposerProps) {
     onSubmit, onQueue, sendSteers, onStop, onPickStarter, focusToken, chatId, projectId, ensureChatId,
     chatTickets, linkTicket, participants, mentionable, hasLiveChildren,
     recipient, chooseRecipient, persona, onPersona, personaAgents, queue, onRemoveQueued,
-    mode, memory, shaping, models, servedModel, autoMode, session, suggest = true,
+    mode, memory, shaping, models, servedModel, autoMode, session, suggest = true, commands,
   } = props;
   const t = useMemo(() => makeT(init.labels), [init.labels]);
   const labels = useMemo(
@@ -183,7 +185,8 @@ function VsCodeComposerInner(props: VsCodeComposerProps) {
     ...(openMenu ? { openMenu } : {}),
     autoMode,
     session,
-  }), [mode, memory.enabled, memory.onChange, projectId, shaping, composerModels, modelSelection, chooseModel, servedModel, init, catalogLoaded, openMenu, autoMode, session]);
+    ...(commands ? { commands } : {}),
+  }), [mode, memory.enabled, memory.onChange, projectId, shaping, composerModels, modelSelection, chooseModel, servedModel, init, catalogLoaded, openMenu, autoMode, session, commands]);
 
   const suggestions = useMemo(() => (suggest ? {
     // Fixed next steps — a chip seeds the box; the person edits and sends it. The same

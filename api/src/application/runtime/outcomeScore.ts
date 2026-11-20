@@ -74,7 +74,7 @@ export function computeOutcomeScore(inputs: OutcomeScoreInputs): OutcomeScore {
 /**
  * Coarse learn-contribution weight (0..1) from what's known at run FINALIZE — before
  * CI/routing outcome is scored. This is the FedAvg sample weight for the run's Evermind
- * contribution: a clean auto-merge teaches the model most, a no-op/failed run barely
+ * contribution: an opened pull request teaches the model most, a no-op/failed run barely
  * teaches. It is DISTINCT from {@link computeOutcomeScore} (which scores a CI-known run
  * for model routing); it exists because the old learn path weighted by raw TEXT LENGTH,
  * so a long, failed run taught exactly as hard as a short, merged one. Floored at 0.2 so
@@ -82,13 +82,11 @@ export function computeOutcomeScore(inputs: OutcomeScoreInputs): OutcomeScore {
  * low-quality run instead of silently snapping it back to the default weight of 1.
  */
 export function finalizeLearnWeight(s: {
-  merged: boolean;
   prOpened: boolean;
-  autoMergeFailed: boolean;
   producedChanges: boolean;
 }): number {
-  if (s.merged) return 1;             // shipped clean — the strongest signal
-  if (s.autoMergeFailed) return 0.3;  // opened a PR but the auto-merge broke
+  // A run never merges (PRD 48 §4.3): an opened PR is the strongest thing it can leave.
+  // Whether it later merged is graded by `scoreRunOutcome` (`computeOutcomeScore.merged`).
   if (s.prOpened) return 0.7;         // real change, awaiting approval/CI
   if (s.producedChanges) return 0.4;  // wrote files but no PR opened
   return 0.2;                         // text-only / no-op
@@ -97,7 +95,6 @@ export function finalizeLearnWeight(s: {
 /** What a finished run left behind — the inputs both the learn weight and the
  *  productivity verdict are computed from, so the two can never disagree. */
 export interface RunProduct {
-  merged: boolean;
   prOpened: boolean;
   /** The run committed at least one file. */
   producedChanges: boolean;
@@ -134,5 +131,5 @@ export interface RunProduct {
  * productive. Only a run that ends with nothing to show for itself is not.
  */
 export function runProducedOutput(s: RunProduct): boolean {
-  return s.merged || s.prOpened || s.producedChanges || s.movedTicket === true;
+  return s.prOpened || s.producedChanges || s.movedTicket === true;
 }

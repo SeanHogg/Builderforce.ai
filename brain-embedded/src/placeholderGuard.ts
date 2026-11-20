@@ -26,7 +26,7 @@
  */
 
 import type { BrainTraceEvent } from './brainTriage';
-import { isDelegationTool } from './codeChanges';
+import { isDelegationTool } from '@builderforce/run-guards';
 
 /** The trace label a detected placeholder is recorded under. */
 export const PLACEHOLDER_GUARD_LABEL = 'tools.placeholder_guard';

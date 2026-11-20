@@ -9,7 +9,8 @@ import { undelegatedRequestNudge } from '@builderforce/agent-run';
 import { isRestatedReply, restatedReplyNudge } from '../restatedReply';
 import { ticketToolVocabulary } from '../ticketToolVocabulary';
 import { leftChangeUnreviewed, unreviewedChangeNudge } from '../previewReview';
-import { leftChangeUnshipped, unshippedChangeNudge } from '../selfReviewShip';
+import { shipNudge } from '@builderforce/run-guards';
+import { leftChangeUnshipped } from '../selfReviewShip';
 import { runLeftDelegationUndone } from './earlyDelegation';
 import { runTrace } from './runCells';
 import type { BrainRunContext } from './brainRunContext';
@@ -33,19 +34,17 @@ export interface DeliveryGate {
 export function deliveryGates(run: BrainRunContext): DeliveryGate[] {
   const { c, catalogToolNames, userRequest, priorReply } = run;
   const facts = () => ({ codeChanged: c.codeChanged, toolNames: catalogToolNames, requestText: userRequest, events: runTrace(c) });
-  // A held chat is told NOT to ship (`runPreamble`'s hold directive) — the unshipped gate
-  // stays quiet so a held run that made its edit and stopped is not re-prompted to ship.
-  const held = () => run.publishHold != null;
   const files = () => ({ files: c.touchedFiles.slice(0, 20) });
   return [
     {
       // The turn CHANGED code and is ending without having even tried to ship it. In a local session that change has no other
-      // reviewer. Quiet when the user said not to commit, when a commit/push/PR was attempted, and on a host that cannot commit.
+      // reviewer. Quiet when the ship policy ships nothing (`shipNudge` null: `leave_uncommitted`, which a chat hold and a
+      // sub-agent land on), when a commit/push/PR was attempted, and on a host that cannot commit.
       id: 'brain.ship',
       entersVerify: true,
-      applies: () => !run.shipRecoveryUsed && !held() && leftChangeUnshipped(facts()),
-      nudge: unshippedChangeNudge,
-      trace: { label: 'loop.recover_unshipped_change', args: files, result: "Run changed code and ended without committing or pushing it — re-prompted to verify, self-review and ship (this local session is the change's only reviewer)." },
+      applies: () => !run.shipRecoveryUsed && leftChangeUnshipped({ ...facts(), policy: run.shipPolicy }),
+      nudge: () => shipNudge(run.shipPolicy) ?? '',
+      trace: { label: 'loop.recover_unshipped_change', args: files, result: "Run changed code and ended without shipping it under its ship policy — re-prompted to verify, self-review and ship as the policy says." },
       spend: () => { run.shipRecoveryUsed = true; },
     },
     {

@@ -29,8 +29,7 @@
 import { listRepoTree, readRepoFile, type RepoReadContext } from '../repos/readRepoContents';
 import { makeRepoFetch, type FetchLike } from '../repos/sources/RepoSource';
 import { mapWithConcurrency } from '../runtime/boundedPool';
-import { DETECTORS } from './detectors';
-import { pathGlobRegExp, repoRelativePath } from './pathGlob';
+import { DETECTORS, pathGlobRegExp, repoRelativePath } from '@builderforce/app-detect';
 
 /** A `reads` entry with a wildcard: `dir` (itself a glob, `api/*`) and the name test of its files. */
 export interface BlueprintDirGlob {

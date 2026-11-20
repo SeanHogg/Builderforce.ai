@@ -9,6 +9,7 @@
  * in a `waitUntil`.
  */
 
+import { detectApp } from '@builderforce/app-detect';
 import type { AppBlueprint } from '@builderforce/creation-canvas-contract';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -17,7 +18,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { resolveRepoRefSha } from '../repos/commitFileToRepo';
 import { resolveDefaultRepoForProject } from '../repos/resolveDefaultRepo';
 import { isResolveError, resolveRepoCredential } from '../repos/resolveRepoCredential';
-import { detectBlueprint, storeBlueprint } from './blueprintDetection';
+import { storeBlueprint } from './blueprintDetection';
 import { readBlueprintSources } from './blueprintSources';
 
 export interface DetectBlueprintForProjectInput {
@@ -28,7 +29,8 @@ export interface DetectBlueprintForProjectInput {
 }
 
 export type DetectBlueprintForProjectResult =
-  | { ok: true; blueprint: AppBlueprint }
+  /** `warnings`: what detection could not use (an unreadable `builderforce.json`, an unsupported compose image …). */
+  | { ok: true; blueprint: AppBlueprint; warnings: string[] }
   | { ok: false; reason: string };
 
 /** The collaborators, injectable so the wiring is testable without a database. */
@@ -70,9 +72,18 @@ export async function detectBlueprintForProject(
     if (!sha) return { ok: false, reason: `could not resolve the head commit of ${branch}` };
 
     const files = await deps.readBlueprintSources({ ...coords, ref: sha });
-    const blueprint = detectBlueprint(files, projectId, sha);
+    const { blueprint, metadata } = detectApp(files, {
+      projectId,
+      commitSha: sha,
+      // One broken detector must not sink detection: it is a warning, and reported here.
+      onDetectorError: (error, detector) => reportCaughtError(error, {
+        source: 'application/blueprint/detectBlueprintForProject.ts',
+        operation: 'runDetectors',
+        context: { detector, projectId },
+      }),
+    });
     await deps.storeBlueprint(db, projectId, sha, blueprint, env);
-    return { ok: true, blueprint };
+    return { ok: true, blueprint, warnings: metadata.warnings };
   } catch (error) {
     reportCaughtError(error, {
       source: 'application/blueprint/detectBlueprintForProject.ts',

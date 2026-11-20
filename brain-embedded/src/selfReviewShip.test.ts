@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest';
+import { DEFAULT_SHIP_POLICY, narrowByHold, shipPolicyOf } from '@builderforce/run-guards';
 import {
   attemptedPublish,
   declinesShipping,
   leftChangeUnshipped,
-  selfReviewShipDirective,
-  unshippedChangeNudge,
 } from './selfReviewShip';
+import { publishHoldFromPersonTurns } from './runStore/publishHold';
 import type { BrainTraceEvent } from './brainTriage';
 
 let seq = 0;
@@ -22,6 +22,7 @@ const base = {
   toolNames: IDE_TOOLS,
   requestText: 'Fix the deep link so the ticket drawer opens',
   events: [EDIT],
+  policy: DEFAULT_SHIP_POLICY,
 };
 
 describe('leftChangeUnshipped', () => {
@@ -43,8 +44,19 @@ describe('leftChangeUnshipped', () => {
     expect(leftChangeUnshipped({ ...base, requestText: 'Why does the deep link show an empty board?' })).toBe(false);
   });
 
-  it('is quiet when the user said not to commit', () => {
-    expect(leftChangeUnshipped({ ...base, requestText: "Fix the deep link but don't commit it yet" })).toBe(false);
+  it('is quiet when the user said not to commit (the hold narrows the policy to leave_uncommitted)', () => {
+    const requestText = "Fix the deep link but don't commit it yet";
+    const policy = narrowByHold(DEFAULT_SHIP_POLICY, publishHoldFromPersonTurns([{ text: requestText }]));
+    expect(policy.mode).toBe('leave_uncommitted');
+    expect(leftChangeUnshipped({ ...base, requestText, policy })).toBe(false);
+  });
+
+  it('reads only the policy: quiet under leave_uncommitted (a setting or a sub-agent), firing under every shipping mode', () => {
+    expect(leftChangeUnshipped({ ...base, policy: shipPolicyOf('leave_uncommitted', 'project_settings') })).toBe(false);
+    expect(leftChangeUnshipped({ ...base, policy: shipPolicyOf('leave_uncommitted', 'subagent') })).toBe(false);
+    for (const mode of ['commit', 'commit_push', 'pull_request'] as const) {
+      expect(leftChangeUnshipped({ ...base, policy: shipPolicyOf(mode, 'project_settings') }), mode).toBe(true);
+    }
   });
 
   it('is quiet once a publish was ATTEMPTED — even one that failed or was declined', () => {
@@ -60,6 +72,11 @@ describe('attemptedPublish', () => {
     expect(attemptedPublish([step('git_push', { allowBaseBranch: true })])).toBe(true);
     expect(attemptedPublish([step('run_command', { command: 'git -C Builderforce.ai commit -m x' })])).toBe(true);
     expect(attemptedPublish([step('run_command', { command: 'git push origin main' })])).toBe(true);
+    expect(attemptedPublish([step('run_command', { command: 'gh pr create --fill' })])).toBe(true);
+  });
+
+  it('does not count a merged-branch cleanup as shipping', () => {
+    expect(attemptedPublish([step('git_cleanup_merged', { branch: 'feat/x' })])).toBe(false);
   });
 
   it('does not count reads, status, diff or a build', () => {
@@ -83,27 +100,5 @@ describe('declinesShipping', () => {
     for (const t of ['Fix the bug', 'rebase, merge to main and close the ticket', 'commit and push when done', null]) {
       expect(declinesShipping(t), String(t)).toBe(false);
     }
-  });
-});
-
-describe('the contract text', () => {
-  it('names the order and the tools, with the chat id baked in', () => {
-    const d = selfReviewShipDirective(103);
-    expect(d).toContain('YOU are its reviewer');
-    for (const name of ['git_diff', 'builtin_reviews_record', 'git_commit', 'git_push', 'allowBaseBranch:true', 'chatId=103', 'open_pull_request']) {
-      expect(d).toContain(name);
-    }
-    // Verify → review → ship → close, in that order.
-    const order = ['VERIFY', 'SELF-REVIEW', 'SHIP', 'CLOSE'].map((w) => d.indexOf(`${w} —`));
-    expect(order.every((i) => i >= 0)).toBe(true);
-    expect([...order].sort((a, b) => a - b)).toEqual(order);
-  });
-
-  it('the nudge names what is left rather than accusing the model of doing nothing', () => {
-    const n = unshippedChangeNudge();
-    expect(n).toMatch(/changed code/);
-    expect(n).toContain('git_commit');
-    expect(n).toContain('git_push');
-    expect(n).not.toMatch(/zero tool calls/);
   });
 });

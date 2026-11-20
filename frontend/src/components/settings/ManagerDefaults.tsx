@@ -117,6 +117,8 @@ function ManagerDefaultsInner() {
     managerMayCloseReviewedTickets: stored?.managerMayCloseReviewedTickets ?? null,
     agentReassignIdleHours: stored?.agentReassignIdleHours ?? null,
     agentReassignMaxPerSession: stored?.agentReassignMaxPerSession ?? null,
+    // Ship mode for VS Code runs (PRD 48) — null = the built-in default.
+    shipMode: stored?.shipMode ?? null,
   };
 
   return (

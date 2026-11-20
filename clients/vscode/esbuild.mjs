@@ -215,6 +215,31 @@ async function copyBfiWasm() {
   copyBfiNative();
   await copyTreeSitterWasm();
   installBundledAnalyzers();
+  copyLauncherAssets();
+}
+
+/**
+ * The local launcher's browser assets (PRD 31 §W11, `/launch`): `createLocalLauncher` is bundled into
+ * `extension.js`, but it SERVES files from the runtime package's `dist/` — the preview origin's
+ * `assets.js` (service worker, relay page, process Workers) and the launcher page
+ * (`launcher/{index.html,page.js,launcher.css}`). `node_modules/` never ships in the .vsix, so exactly
+ * those files are copied to `out/bfwc/` (`out/` ships), and `composerCommands/host.ts` passes that
+ * directory as `distDir`. The file list mirrors the launcher's `loadLauncherAssets` (`PAGE_FILES`).
+ */
+function copyLauncherAssets() {
+  const serverEntry = fileURLToPath(import.meta.resolve("@seanhogg/builderforce-webcontainers/launcher/server"));
+  const dist = path.resolve(path.dirname(serverEntry), "..", "..");
+  const target = path.join("out", "bfwc");
+  fs.rmSync(target, { recursive: true, force: true });
+  fs.mkdirSync(path.join(target, "launcher"), { recursive: true });
+  for (const file of ["assets.js", "launcher/index.html", "launcher/page.js", "launcher/launcher.css"]) {
+    const from = path.join(dist, ...file.split("/"));
+    if (!fs.existsSync(from)) throw new Error(`[esbuild] the local launcher's ${file} is missing from ${dist}: build @seanhogg/builderforce-webcontainers first`);
+    fs.copyFileSync(from, path.join(target, ...file.split("/")));
+  }
+  // `assets.js` is an ES module the launcher `import()`s; the extension's own manifest has no `"type"`, so
+  // this directory states its own, or Node would read it as CommonJS.
+  fs.writeFileSync(path.join(target, "package.json"), `${JSON.stringify({ type: "module" })}\n`);
 }
 
 /**

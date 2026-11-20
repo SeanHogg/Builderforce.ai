@@ -22,12 +22,14 @@
  */
 
 import type { PolicyContext } from '@builderforce/agent-run';
-import { linkedTicketsToComplete, linkedTicketsReviewedComplete, linkedTicketsToAdvance } from '../chatWorkLinking';
-import { localTicketsFiledInRun, recordCodeChangeTicket, retitleShippedDeltaTicket, settleView, updateLinkedTickets, updateRunLocalTickets } from './runBackstops';
+import { canListChatTickets, linkedTicketsToComplete, linkedTicketsReviewedComplete, linkedTicketsToAdvance } from '../chatWorkLinking';
+import { recordCodeChangeTicket, retitleShippedDeltaTicket, settleView, updateLinkedTickets, updateRunLocalTickets } from './runBackstops';
 import { recordShipReview, verificationOf, type CloseOutInput } from '../run/brainCloseOut';
 import type { BrainRunContext } from './brainRunContext';
 import type { BrainRunRequest } from './runTypes';
+import type { BrainTraceEvent } from '../brainTriage';
 import { nowIso, pushTrace, runTrace } from './runCells';
+import { listChatTickets, listingScopeOf, localTicketsFiledInRun, runOwnedTicketRefs, type ListingScope } from './chatTickets';
 import { errorMessage } from '../pageEngines/types';
 import { onBaseBranch, shippedToBaseBranch } from '../shipVerification';
 import { approvedReviewFor, runReviewGate } from './shipGates';
@@ -93,7 +95,7 @@ export async function deterministicFinish(
   // Keep the board honest about STATUS: advance any linked task still in a not-started lane to
   // in_progress — after the mint, so a freshly minted review-status ticket is never touched.
   if (needsTicket) {
-    await updateLinkedTickets(input.serverChatId, view, fullReq, linkedTicketsToAdvance, 'in_progress', 'worked-ticket-off-backlog');
+    await updateLinkedTickets(input.serverChatId, view, fullReq, linkedTicketsToAdvance, 'in_progress', 'worked-ticket-off-backlog', runOwnedTicketRefs(input.trace, view.deltaTicketId));
     // …and the tickets this run filed on the device, which the account's listing cannot see yet.
     await updateRunLocalTickets(input.trace, view, fullReq, 'in_progress', 'worked-ticket-off-backlog');
   }
@@ -142,7 +144,7 @@ export async function deterministicFinish(
   // An unbound chat (no server chat) has no listing to read: its tickets close in the pass below.
   // The tool receives only `{ id, status }`; the recorded step carries why (`auto`, the reason), so a
   // ticket that closed itself is never an unexplained status change in the board's history.
-  if (finishing && (await updateLinkedTickets(run.serverChatId, view, req, linkedTicketsToComplete, 'done', 'shipped-to-base-branch')) > 0) result.ticketClosed = true;
+  if (finishing && (await updateLinkedTickets(run.serverChatId, view, req, linkedTicketsToComplete, 'done', 'shipped-to-base-branch', runOwnedTicketRefs(input.trace, view.deltaTicketId))) > 0) result.ticketClosed = true;
   // The run's OWN tickets close on the same finish: the hand-off's local filings, read from its own
   // record — and its delta ticket when no server chat lists it.
   const unlistedDelta = run.serverChatId == null ? view.deltaTicketId : null;
@@ -152,7 +154,7 @@ export async function deterministicFinish(
   // inspection of THIS run's last change. Closes exactly the tickets that were reviewed — on its own
   // evidence, independent of the ship gate.
   if (reviewedInPreview.length && req.projectId != null) {
-    await updateLinkedTickets(input.serverChatId, view, fullReq, (l) => linkedTicketsReviewedComplete(l, reviewedInPreview), 'done', 'reviewed-in-preview');
+    await updateLinkedTickets(input.serverChatId, view, fullReq, (l) => linkedTicketsReviewedComplete(l, reviewedInPreview), 'done', 'reviewed-in-preview', 'selected');
   }
 
   // The learned fact is written by the host's learn reconcile alongside this close-out (host-side,
@@ -181,25 +183,28 @@ async function shippedOf(run: BrainRunContext): Promise<boolean> {
 
 /** Does the run hold a LINKED ticket to close out — one the chat carries, or one it filed on the device? */
 async function hasLinkedTicket(run: BrainRunContext): Promise<boolean> {
-  return holdsLinkedTicket(runTrace(run.c), run.serverChatId, run.req);
+  return holdsLinkedTicket(runTrace(run.c), run.serverChatId, run.req, { deltaTicketId: run.c.deltaTicketId, note: (ev) => pushTrace(run.c, ev), listing: listingScopeOf(run.c) });
 }
 
 /**
  * THE "holds a ticket to close" read, shared by the driver-run close-out and the `startRun` settle:
  * a ticket the run filed on the device, or one the account's chat listing still shows as completable
- * (a ticket the chat links whose delta id this run never read back counts — it is still the run's).
+ * that THIS run owns (`runOwnedTicketRefs`: a delta it recorded, a ticket it moved) — another
+ * conversation's review linked to the same chat is not the run's to close.
  */
 export async function holdsLinkedTicket(
   trace: Parameters<typeof localTicketsFiledInRun>[0],
   serverChatId: number | null,
-  req: Pick<BrainRunRequest, 'runTool'>,
+  req: Pick<BrainRunRequest, 'runTool' | 'tools'>,
+  opts: { deltaTicketId?: number | null; note?: (ev: BrainTraceEvent) => void; listing?: ListingScope } = {},
 ): Promise<boolean> {
   if (!req.runTool) return false;
   if (localTicketsFiledInRun(trace).length > 0) return true;
-  if (serverChatId == null) return false;
-  let listed: unknown;
-  try { listed = await req.runTool('builtin_chats_list_tickets', { chatId: serverChatId }); } catch { return false; }
-  return linkedTicketsToComplete(listed).length > 0;
+  if (serverChatId == null || !canListChatTickets(req.tools)) return false;
+  const listed = await listChatTickets(req, serverChatId, { note: opts.note, label: 'ticket.links_unreadable', consequence: 'the run holds no linked ticket to close.' }, opts.listing);
+  if (listed == null) return false;
+  const owned = runOwnedTicketRefs(trace, opts.deltaTicketId ?? null);
+  return linkedTicketsToComplete(listed).some((t) => owned.has(t.ref));
 }
 
 /**

@@ -26,9 +26,9 @@ export type InRunVerifySurface = "durable" | "sandbox" | "on-prem";
 
 /**
  * The local publish tools — the declared `git_*` / PR call names a run can make. Owned
- * HERE (run-guards is the single home for every deterministic run gate) so
- * `publishHold.ts` and `selfReviewShip.ts` read ONE set rather than two copies that can
- * drift apart.
+ * HERE (run-guards is the single home for every deterministic run gate); the ship
+ * policy's publish matcher (`shipPolicy.ts` `publishVerbOf`, `REPO_PUBLISH_TOOLS`) builds
+ * on it, so every publish gate reads ONE set rather than copies that can drift apart.
  */
 export const PUBLISH_TOOLS: ReadonlySet<string> = new Set(["git_commit", "git_push", "open_pull_request"]);
 

@@ -7,12 +7,7 @@ import { REFLECTION_SCORE_FLOOR, draftSkillFromRun, runEarnedReflection, skillRe
  * than with every run that happened to touch a file.
  */
 describe('runEarnedReflection', () => {
-  it('counts merged work on its own', () => {
-    expect(runEarnedReflection({ merged: true })).toBe(true);
-    expect(runEarnedReflection({ merged: true, score: 0 })).toBe(true);
-  });
-
-  it('counts an unmerged run only with BOTH real output and a graded score', () => {
+  it('counts a run only with BOTH real output and a graded score', () => {
     expect(runEarnedReflection({ producedChanges: true, score: REFLECTION_SCORE_FLOOR })).toBe(true);
     expect(runEarnedReflection({ prOpened: true, score: 0.9 })).toBe(true);
     // A good score with nothing to show for it is an opinion, not a procedure.
@@ -73,9 +68,9 @@ describe('draftSkillFromRun (E1 auto-propose)', () => {
   });
 
   it('is stamped with its origin for the reviewer, and never claims approval', () => {
-    const d = draftSkillFromRun({ ...run, verification: 'merged' });
+    const d = draftSkillFromRun(run);
     expect(d).toMatchObject({ originExecutionId: 900, originTaskId: 42, projectId: 7, authorLabel: 'Coder (auto-drafted)' });
     expect(d.description).toContain('Needs human review');
-    expect(d.evidence).toContain('the change was merged');
+    expect(d.evidence).toContain('branch CI went green');
   });
 });

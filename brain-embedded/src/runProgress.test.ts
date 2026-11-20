@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { MAX_WAIT_TURNS } from '@builderforce/run-guards';
 import { computeRunProgress, hasEditIntent, isMutationTool } from './runProgress';
 import { formatRunProgress, runProgressVerdict } from './runProgressReport';
 import { computeBrainDiagnostics, formatBrainDiagnostics, type BrainTraceEvent } from './brainTriage';
@@ -251,6 +252,60 @@ describe('back-to-back repeats', () => {
     expect(verdict).toContain('`git_status` ×3 BACK-TO-BACK (all 3 failed)');
     expect(verdict).toMatch(/ignoring the error it was given/);
     expect(verdict).not.toMatch(/Widen the read/);
+  });
+
+  it('regression: chat #157440 — back-to-back wait_agents while the children changed files is waiting, not NO PROGRESS', () => {
+    clock = 0;
+    const events = [
+      llm(), tool('spawn_agents', { workstreams: [{ task: 'a' }, { task: 'b' }] }, { result: { ok: true, running: ['a1', 'a2'] } }),
+      llm(), tool('wait_agents', {}, { result: { ok: true, reports: [], running: ['a1', 'a2'] } }),
+      llm(), tool('wait_agents', {}, { result: { ok: true, reports: [{ handle: 'a1' }], running: ['a2'], changedFiles: ['api/src/a.ts', 'api/src/b.ts'] } }),
+      llm(), tool('wait_agents', {}, { result: { ok: true, reports: [{ handle: 'a2' }], running: [], changedFiles: ['frontend/src/c.tsx'] } }),
+      llm(), tool('command_status', { id: 'job-1' }, { result: { ok: true, status: 'running' } }),
+      llm(), tool('command_status', { id: 'job-1' }, { result: { ok: true, status: 'running' } }),
+      llm(), tool('command_status', { id: 'job-1' }, { result: { ok: true, status: 'exited', exitCode: 0 } }),
+    ];
+    const messages = [msg('user', 'implement the full PRD')];
+    const p = computeRunProgress(events, messages);
+    expect(p.longestStreak).toBeNull();
+    expect(p.duplicateCalls).toBe(0);
+    expect(p.stuckOnCall).toBe(false);
+    expect(p.spinning).toBe(false);
+    // The children's files are the run's change: no "NOTHING WAS CHANGED".
+    expect(p.mutationsSucceeded).toBeGreaterThan(0);
+    expect(p.noEffect).toBe(false);
+    expect(runProgressVerdict(p)).toBeNull();
+    expect(formatRunProgress(p).join('\n')).not.toContain('BACK-TO-BACK');
+    const report = formatBrainDiagnostics(computeBrainDiagnostics(events, undefined, messages)).join('\n');
+    expect(report).not.toContain('NO PROGRESS');
+    expect(report).not.toContain('BACK-TO-BACK');
+  });
+
+  it('regression: chat #157440 — a hung child: identical waits past the wait ceiling show as a back-to-back loop', () => {
+    clock = 0;
+    const events = Array.from({ length: MAX_WAIT_TURNS + 3 }, () => [llm(), tool('wait_agents', {}, { result: { ok: true, reports: [], running: ['a1'] } })]).flat();
+    const p = computeRunProgress(events, [msg('user', 'implement the full PRD')]);
+    expect(p.longestStreak).toEqual({ label: 'wait_agents', count: 3, failed: 0 });
+    expect(p.stuckOnCall).toBe(true);
+  });
+
+  it('regression: chat #157440 — waits alternating between two children past the ceiling count as repeats again', () => {
+    clock = 0;
+    const events = Array.from({ length: MAX_WAIT_TURNS + 4 }, (_, t) => [
+      llm(),
+      tool('wait_agents', { agents: [`a${(t % 2) + 1}`] }, { result: { ok: true, reports: [], running: [`a${(t % 2) + 1}`] } }),
+    ]).flat();
+    const p = computeRunProgress(events, [msg('user', 'implement the full PRD')]);
+    // Within the ceiling both waits were exempt; past it each repeats an earlier call exactly.
+    expect(p.duplicateCalls).toBe(2);
+  });
+
+  it('regression: chat #157440 — a wait that returns running: [] is not exempt: polling nothing back-to-back is still a loop', () => {
+    clock = 0;
+    const events = [1, 2, 3].flatMap(() => [llm(), tool('wait_agents', {}, { result: { ok: true, reports: [], running: [] } })]);
+    const p = computeRunProgress(events, [msg('user', 'implement the full PRD')]);
+    expect(p.longestStreak).toEqual({ label: 'wait_agents', count: 3, failed: 0 });
+    expect(p.stuckOnCall).toBe(true);
   });
 
   it('outranks context exhaustion in the full diagnostics', () => {

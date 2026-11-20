@@ -14451,6 +14451,26 @@
         },
         "needsAuthority": "只有在允许经理合并之后，时机设置才会生效；目前合并仍需真人处理。"
       },
+      "shipMode": {
+        "label": "VS Code 运行如何处理已完成的工作",
+        "help": "代理在改动完成后遵循的固定规则，因此它从不停下来询问。你也可以直接告诉代理，例如“从现在起提交并推送”。云端运行始终会打开拉取请求，是否合并由上方的设置决定。",
+        "leave_uncommitted": {
+          "label": "不提交",
+          "help": "完成并验证改动，然后保持未提交状态，留给你审阅。"
+        },
+        "commit": {
+          "label": "本地提交",
+          "help": "在这台机器上提交改动，但不推送。"
+        },
+        "commit_push": {
+          "label": "提交并推送",
+          "help": "提交改动并推送到基础分支。"
+        },
+        "pull_request": {
+          "label": "打开拉取请求",
+          "help": "推送一个分支并打开拉取请求。运行本身从不合并它。"
+        }
+      },
       "allowAutoMerge": {
         "label": "允许经理合并拉取请求",
         "help": "这是“是否可以合并”的授权，与下面的合并时机是两回事。关闭时，经理仍会完成全部准备和检查工作，但把合并交给真人。"
@@ -14479,6 +14499,7 @@
         "mergeWithheld": "合并需等待真人处理",
         "signoffRequired": "完成前必须签核",
         "signoffOptional": "无需签核",
+        "shipMode": "VS Code 运行：{mode}",
         "coordinationGated": "由管理者协调工单",
         "coordinationOpen": "项目中任何人都可协调",
         "ceremoniesUnattended": "可在无人时举行仪式",
@@ -17843,6 +17864,36 @@
     "prLink": "PR #{number}",
     "writesNoPr": "{count, plural, other {已写入 # 个文件}}——尚未创建拉取请求",
     "noWrites": "无改动——没有拉取请求"
+  },
+  "mergeGrant": {
+    "label": "完成后合并到 main",
+    "help": "当此运行的拉取请求通过安全扫描和 CI 后，平台会将其合并到 main，不受项目合并设置的限制。",
+    "reasonLabel": "此运行可以合并到 main 的原因",
+    "reasonPlaceholder": "例如：修复登录绕过的安全问题",
+    "reasonRequired": "请填写授权合并的原因。",
+    "statusTitle": "已授权合并到 main",
+    "status": {
+      "pending": "正在等待 CI 和安全扫描",
+      "merged": "已合并",
+      "held": "已暂缓",
+      "voided": "已失效"
+    },
+    "grantedBy": "授权人：{name}",
+    "reasonShown": "原因：{reason}",
+    "cloudOnly": "“完成后合并到 main”仅适用于云端代理运行。请选择一个云端代理后再授权。",
+    "recordFailed": "运行已启动，但无法记录合并到 main 的授权。拉取请求就绪后，请在产品中手动合并。",
+    "held": {
+      "ci_pending": "正在等待授权所覆盖提交上的 CI 通过。",
+      "ci_failed": "此拉取请求的 CI 失败。CI 通过后才会合并。",
+      "security": "安全扫描尚未放行此拉取请求。",
+      "merge_refused": "代码仓库拒绝了合并。请打开拉取请求查看原因。"
+    },
+    "voided": {
+      "cancelled": "运行已取消，因此不会合并任何内容。",
+      "no_pull_request": "运行结束时没有生成自己的拉取请求，因此不会合并任何内容。",
+      "head_moved": "运行结束后有人推送了新的提交，授权不再覆盖此拉取请求。",
+      "no_head": "运行结束时无法读取拉取请求的提交，因此不会合并任何内容。"
+    }
   },
   "runAgentControl": {
     "agentTitle": "智能体",

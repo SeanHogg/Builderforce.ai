@@ -14,12 +14,9 @@ import { tasks } from '../../infrastructure/database/schema';
 import { resolveDefaultRepoForTask } from './resolveDefaultRepo';
 import { resolveRepoCredential, isResolveError } from './resolveRepoCredential';
 import { createPullRequest, type OpenPrInput, type OpenPrResult } from './createPullRequest';
-import { mergeBranchToBase, cloudAutoMergeRequiresGreen, cloudAutoMergeEnabled } from './mergeBranchToBase';
-import { recordPullRequestRow, markPullRequestMergedById } from './recordPullRequestRow';
+import { recordPullRequestRow } from './recordPullRequestRow';
 import { recordTaskPullRequest } from './recordTaskPullRequest';
 import { runPullRequestSecurityStep } from '../security/pullRequestSecurityStep';
-import { describeSecurityBlock } from '../security/prSecurityGate';
-import { gateReason, type PinnedVerdict } from '../security/securityMergeGate';
 import type { Env } from '../../env';
 import { listSpanningRepoWrites, recordBindingPullRequest } from './taskRepoSet';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
@@ -33,7 +30,7 @@ export interface OpenTaskPrInput {
 }
 
 export type OpenTaskPrResult =
-  | { ok: true; url: string; number: number; merged: boolean; mergeError?: string;
+  | { ok: true; url: string; number: number;
       /** Extra PRs opened in the OTHER repos of a spanning task's set (0956). */
       spanning?: SpanningPullRequest[] }
   /** Another finalize path already claimed (or completed) this task's PR — no PR
@@ -128,8 +125,8 @@ export async function openTaskPullRequest(
   tenantId: number,
   taskId: number,
   input: OpenTaskPrInput,
-  /** Pass the worker env so the "merge only on green CI" gate is honored. When
-   *  omitted, the default full-auto-merge policy applies (immediate merge). */
+  /** The worker env, which the post-PR security step needs. When omitted the PR still
+   *  opens; it is scanned later by the merge sweep's security gate. */
   env?: unknown,
 ): Promise<OpenTaskPrResult> {
   if (!input.branch || typeof input.branch !== 'string') {
@@ -165,18 +162,11 @@ export async function openTaskPullRequest(
     return { ok: false, status: pr.code === 'unsupported' ? 501 : 502, error: pr.reason };
   }
 
-  // Merge policy. DEFAULT (CLOUD_AUTOMERGE_ENABLED off): do NOT merge — leave the
-  // PR open for in-product human approval. When auto-merge is enabled: wait for
-  // green CI by default (`CLOUD_AUTOMERGE_REQUIRE_GREEN`, opt out with 0/false/off)
-  // rather than merging unverified code; the CI-success webhook ships it. Best-effort
-  // — a conflict/failure leaves the PR open for manual resolution rather than
-  // blocking the finalize.
+  // THIS NEVER MERGES (PRD 48 §4.3). It opens the PR and returns; the PR merge sweep
+  // (`prMergeSweep.ts`) is the single merge writer and decides by the project's settings.
   //
   // SECURITY (PRD 08 §10): the PR row is recorded 'open' FIRST so the post-PR security step has a
-  // row to link its scans to, and the SAME gate cloudFinalize / the CI-merge path / the merge sweep
-  // consult runs before `mergeBranchToBase`. Fails closed: no `env` (the step needs it) or a step
-  // that did not run means no immediate merge. A merged PR is stamped through
-  // `markPullRequestMergedById`, the one place a merge becomes a merge.
+  // row to link its scans to; the verdict it records is what the merge sweep reads.
   // The row AND the task's PR stamp, in one transaction (`recordTaskPullRequest`).
   const prRow = await recordTaskPullRequest(db, {
     tenantId,
@@ -200,9 +190,8 @@ export async function openTaskPullRequest(
     return null;
   });
 
-  let securityVerdict: PinnedVerdict = { allow: false, reasons: [gateReason('step_not_run', 'the security step has not run')], headSha: null };
   if (env && prRow?.id) {
-    const step = await runPullRequestSecurityStep(env as Env, db, {
+    await runPullRequestSecurityStep(env as Env, db, {
       tenantId, segmentId: resolved.repo.segmentId, pullRequestId: prRow.id, prNumber: pr.number, prUrl: pr.url,
       executionId: null, agentLabel: 'task Done',
       read: {
@@ -211,32 +200,6 @@ export async function openTaskPullRequest(
       },
       base,
     });
-    securityVerdict = step.verdict;
-  } else {
-    securityVerdict = { allow: false, reasons: [gateReason('step_unavailable', 'the security scan could not run for this PR (no runtime environment or PR row)')], headSha: null };
-  }
-
-  const merge = !cloudAutoMergeEnabled(env)
-    ? { ok: false as const, code: 'provider_error' as const, reason: 'deferred: awaiting in-product approval' }
-    : cloudAutoMergeRequiresGreen(env)
-    ? { ok: false as const, code: 'provider_error' as const, reason: 'deferred: merge on green CI' }
-    : !securityVerdict.allow
-    ? { ok: false as const, code: 'provider_error' as const, reason: `deferred: ${describeSecurityBlock(securityVerdict)}` }
-    : await mergeBranchToBase({
-        provider: resolved.repo.provider,
-        host: resolved.repo.host,
-        owner: resolved.repo.owner,
-        repo: resolved.repo.repo,
-        token: resolved.token,
-        base,
-        head: input.branch.trim(),
-        message: `${title} (BuilderForce auto-merge)`,
-        // Merge exactly the commit the gate verified; a head that moved since is a non-merge (`head_moved`).
-        expectedHeadSha: securityVerdict.headSha,
-      });
-  if (merge.ok && prRow?.id) {
-    await markPullRequestMergedById(db, prRow.id, tenantId, { mergeSha: merge.sha ?? null, env: env as Env | undefined })
-      .catch((error) => reportCaughtError(error, { source: 'application/repos/openTaskPullRequest.ts', operation: 'openTaskPullRequest' }));
   }
 
   // MULTI-REPO (0956): the primary PR is open; now open one per OTHER repo in the
@@ -249,8 +212,7 @@ export async function openTaskPullRequest(
   });
 
   return {
-    ok: true, url: pr.url, number: pr.number, merged: merge.ok,
-    mergeError: merge.ok ? undefined : merge.reason,
+    ok: true, url: pr.url, number: pr.number,
     ...(spanning.length ? { spanning } : {}),
   };
 }
@@ -271,7 +233,7 @@ export interface SpanningPullRequest {
  * set that received writes.
  *
  * The task's PRIMARY repo keeps the existing single-PR path above (atomic claim,
- * `tasks.github_pr_url`, auto-merge policy) — untouched. This is only the tail: a
+ * `tasks.github_pr_url`, the security step) — untouched. This is only the tail: a
  * task bound to 2+ repos gets one branch and one PR *per repo that got code*, and
  * a bound repo that received nothing gets nothing. Both finalize surfaces (the
  * inline cloud finalize and the human "Done" drag through {@link

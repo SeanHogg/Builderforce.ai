@@ -100,7 +100,8 @@ export async function dispatchTaskFinalize(
           toolName: 'pr_opened',
           category: 'tool',
           detail: { taskId, branch: task.gitBranch, source: 'done-finalize' },
-          result: `opened PR #${res.number}${res.merged ? ' (auto-merged)' : ' — awaiting review'}`.slice(0, 300),
+          // A run never merges (PRD 48): the project's merge sweep decides it from the project's settings.
+          result: `opened PR #${res.number} — merge follows the project's settings`.slice(0, 300),
         });
       }
     } catch (error) { /* best-effort — PR can be opened manually from the pushed branch */ 

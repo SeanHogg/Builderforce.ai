@@ -1,7 +1,7 @@
 /**
  * The guards hook as the run drives it: the levers come from `RunPolicy.levers`
  * (`guardLeversOf`), D7's note comes back as the replacement result, D8's read-only port
- * follows its lever, and A3's pause parks the run with an `ask_human` control.
+ * follows its lever, and A3 never parks the run on a person (it has no `beforeDispatch`).
  */
 import { describe, expect, it } from "vitest";
 import { createGuardsHook, guardLeversOf } from "../../src/policy/guards/index.js";
@@ -37,13 +37,13 @@ describe("createGuardsHook", () => {
     expect(hook.isReadOnly?.(policyCtx(), "read_file")).toBe(false);
   });
 
-  it("A3: a parked run skips the next call with an ask_human control, once", async () => {
-    const hook = createGuardsHook({ pause: async () => ({ approvalId: "appr-9" }) });
+  it("regression: chat #157440 — A3 never parks a run; an old saved pendingPause is ignored on resume", async () => {
+    const hook = createGuardsHook();
+    expect(hook.beforeDispatch).toBeUndefined();
     const ctx = policyCtx({ policy: { levers: ["a3_progress_detector"] } });
-    ctx.state.guards = { pendingPause: "Is this the right file?" };
-    const parked = await hook.beforeDispatch(ctx, { id: "x", name: "read_file", args: {} });
-    expect(parked?.skip?.control).toMatchObject({ kind: "ask_human", approvalId: "appr-9", question: "Is this the right file?" });
-    expect(parked?.skip?.control?.options?.length).toBe(2);
-    expect(await hook.beforeDispatch(ctx, { id: "y", name: "read_file", args: {} })).toBeUndefined();
+    // State saved before the pause rung was removed: the extra JSON key is simply dropped.
+    ctx.state.guards = { pendingPause: "Is this the right file?" } as unknown as typeof ctx.state.guards;
+    await hook.observe(ctx, { id: "x", name: "read_file", args: { path: "a.ts" } }, { ok: true });
+    expect((ctx.state.guards as Record<string, unknown>).pendingPause).toBeUndefined();
   });
 });

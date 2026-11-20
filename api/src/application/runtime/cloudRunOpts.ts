@@ -6,6 +6,7 @@
  */
 import type { CloudLoopState } from './cloudRunState';
 import type { RunTally } from '@builderforce/agent-run';
+import type { ShipPolicy } from '@builderforce/run-guards';
 import type { ArcStage } from '@builderforce/workload';
 import type { RunSandbox } from './sandbox/runSandbox';
 import { type CapabilityProvider, type PolicyGate, type AgentExecParams } from '@builderforce/agent-tools';
@@ -95,6 +96,15 @@ export interface CloudLoopOpts {
    *  git-API tools only, and no `shell` capability. A function holder, so like
    *  `decorateProvider` it is handed in per tick and never persisted. */
   sandbox?: RunSandbox;
+  /**
+   * The run's SHIP POLICY (PRD 48 §4.1), mapped at dispatch from the project's effective
+   * manager policy (`manager/shipPolicyOf.ts` → `cloud`): always `pull_request`, with the
+   * merge the PR merge sweep will apply. Mirrored into `RunPolicy.ship`; the system prompt
+   * states it and the tool gate refuses a push to the base branch. Plain data, persisted on
+   * the durable cursor so every tick enforces the same policy. Absent ⇒ no ship gate (a
+   * run prepared before PRD 48).
+   */
+  shipPolicy?: ShipPolicy;
 }
 export interface CloudLoopResult {
   ok: boolean;

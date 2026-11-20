@@ -19,7 +19,7 @@ import type { ServedRead } from './hostRunContext';
 import type { PackageDirProbe } from '../handOffParallelism';
 import type { PrefetchPort } from '@builderforce/prefetch';
 import type { ModelPreflightResult } from '@builderforce/agent-run';
-import type { CheckRecord, EvidencePolicy, OutgoingFile, ReviewVerdict } from '@builderforce/run-guards';
+import type { CheckRecord, EvidencePolicy, OutgoingFile, ReviewVerdict, ShipPolicy } from '@builderforce/run-guards';
 
 /** The verifier port every deterministic run gate reads (PRD 45 §4.4). */
 export interface VerifierPort {
@@ -161,8 +161,11 @@ export interface BrainRunRequest {
    * working, and each late report then woke it into a new run with no ask of its own (chats #60338, #61651).
    */
   liveChildren?: () => Promise<string | null>;
-  /** Pure predicate: true → pause the loop for an explicit user confirmation. */
-  needsConfirm?: (req: { name: string; args: unknown }) => boolean;
+  /**
+   * Pure predicate: true → pause the loop for an explicit user confirmation. Handed the run's
+   * narrowed ship policy (PRD 48), so a host can treat a publish the policy allows as approved.
+   */
+  needsConfirm?: (req: { name: string; args: unknown; shipPolicy?: ShipPolicy }) => boolean;
   /**
    * Auto-answer resolver for the conversational `ask_user` tool — the counterpart to
    * {@link needsConfirm}, which only gates DISPATCHED tool calls. `ask_user` is terminal:
@@ -369,6 +372,13 @@ export interface BrainRunRequest {
    * the root chat, attributed to the child. Absent for a top-level run.
    */
   lineage?: RunLineage;
+  /**
+   * What the run does with finished work (PRD 48): the host's resolved policy — the run's
+   * project's ship policy, a project setting read from the API. Absent ⇒
+   * `DEFAULT_SHIP_POLICY`. The preamble narrows it further: a sub-agent (`lineage`) ships
+   * nothing, and a chat's publish hold leaves the change uncommitted.
+   */
+  shipPolicy?: ShipPolicy;
   /**
    * The model each working phase asks for when the run holds no model of its own
    * (`@builderforce/run-policy` `phaseModels`): the host's stage models instead of one

@@ -24,6 +24,7 @@ import { hostAttachmentIngress } from "./hostIngress";
 import { testAccountFromEditor } from "./localAccountTest";
 import { handleRunDeltaRequest } from "./runDelta/runDeltaSurface";
 import type { AttachmentIngressRequest } from "./attachmentIngress";
+import { composerCommandHost } from "./composerCommands/host";
 
 /** Inbound messages unique to the workspace surface (the shared cases live in the bridge). */
 export interface BrainInbound extends WebviewInbound {
@@ -491,6 +492,14 @@ export class WorkspaceSurface implements vscode.Disposable {
       // editor selection) and hand its text back so the webview attaches it.
       case "context.pick":
         this.respond(msg.id, true, await pickWorkspaceContext());
+        break;
+      // A composer line that may be a `/` command, BEFORE any run starts: run here, never by a model (PRD 31 §W11).
+      case "composer.input":
+        try {
+          this.respond(msg.id, true, await composerCommandHost(this.ctx).handle(typeof msg.text === "string" ? msg.text : ""));
+        } catch (error) {
+          this.respond(msg.id, false, undefined, error instanceof Error ? error.message : String(error));
+        }
         break;
       // The panel's attachments, through the host so they reach the model: a text kept
       // for the turn's inlined block, a binary uploaded with the extension's credential.

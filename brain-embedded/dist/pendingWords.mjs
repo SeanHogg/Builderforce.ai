@@ -7,9 +7,10 @@ import {
   replayAllPendingWords,
   replayPendingWords,
   setPendingWordsOwner
-} from "./chunk-6LA2S4K3.mjs";
+} from "./chunk-EU2CIM43.mjs";
 import "./chunk-SFVLTQ7J.mjs";
 import "./chunk-SLI7C3HD.mjs";
+import "./chunk-PK5ZQFTV.mjs";
 export {
   clearPendingWords,
   forgetPendingWords,

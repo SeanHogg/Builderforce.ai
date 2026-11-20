@@ -4,7 +4,7 @@
  * Everything that keeps a connected repository's delivery state current and moves its
  * pull requests along: probing build verdicts and activity, reconciling dispatched
  * GitHub Actions runs, reconciling PRs against tickets, settling orphaned drafts, and
- * conducting / merging the PR queue (plus the merge-on-green security catch-up).
+ * conducting / merging the PR queue (the PR merge sweep — the single merge writer).
  *
  * Spread into `CRON_SWEEPS` (cronSweeps.ts), which stays the one registry both the
  * `scheduled()` handler and the superadmin force-run read. Position means nothing —
@@ -23,7 +23,6 @@ import { sweepOrphanedDraftPullRequests } from './application/repos/sweepOrphane
 import { runPrMergeSweep } from './application/repos/prMergeSweep';
 import { runPrConductSweep } from './application/repos/prConductSweep';
 import { runRepoActivitySweep } from './application/contributors/runRepoActivitySweep';
-import { runSecurityVerdictCatchup } from './application/security/securityVerdictCatchup';
 
 export const REPO_DELIVERY_SWEEPS: readonly CronSweepDef[] = [
   {
@@ -96,8 +95,8 @@ export const REPO_DELIVERY_SWEEPS: readonly CronSweepDef[] = [
       // sweep too — one control for "PR management is paused", not a third.
       if (!cronSweepEnabled(controls ?? {}, 'pr-ticket-reconciler')) return null;
       const r = await runPrMergeSweep(env, budget);
-      return r.worked > 0
-        ? `projects=${r.projects} worked=${r.worked} merged=${r.merged} dispatched=${r.dispatched} queued=${r.queued} retired=${r.retired} notReached=${r.notReached}`
+      return r.worked > 0 || (r.grantedMerged ?? 0) + (r.grantedHeld ?? 0) > 0
+        ? `projects=${r.projects} worked=${r.worked} merged=${r.merged} dispatched=${r.dispatched} queued=${r.queued} retired=${r.retired} notReached=${r.notReached} grantedMerged=${r.grantedMerged ?? 0} grantedHeld=${r.grantedHeld ?? 0}`
         : null;
     },
   },
@@ -130,16 +129,6 @@ export const REPO_DELIVERY_SWEEPS: readonly CronSweepDef[] = [
       return r.due > 0 || r.errors > 0
         ? `due=${r.due} synced=${r.synced} inserted=${r.inserted} errors=${r.errors}`
         : null;
-    },
-  },
-  {
-    key: 'security-verdict-catchup',
-    cadence: 'frequent',
-    description: 'Safety net for merge-on-green: scan open green PRs whose latest head has no complete security verdict, then merge those CI is green on.',
-    dispatches: false,
-    run: async ({ env, db }) => {
-      const r = await runSecurityVerdictCatchup(env, db);
-      return r.considered > 0 ? `considered=${r.considered} merged=${r.merged}${r.stoppedForBudget ? ' budget-stopped' : ''}` : null;
     },
   },
 ];
