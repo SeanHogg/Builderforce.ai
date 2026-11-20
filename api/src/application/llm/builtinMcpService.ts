@@ -59,7 +59,7 @@ import { r2ProjectStoragePurge } from '../ide/projectStorage';
 import { TaskService } from '../task/TaskService';
 import { summarizeTaskActivity } from '../task/taskActivity';
 import { buildTaskProgressBreakdown, normalizeTaskPrState } from '../task/taskProgressBreakdown';
-import { parseTaskListScope, scopeNeedsArchived, taskInScope, TASK_LIST_SCOPES } from '@builderforce/agent-loop';
+import { parseTaskListScope, parseTicketStatus, scopeNeedsArchived, taskInScope, TASK_LIST_SCOPES, TICKET_STATUS_VALUES } from '@builderforce/agent-loop';
 import { addManagerDirective } from '../manager/managerDirectives';
 import { createManagerCoachingTask, getEffectiveManagerPolicy } from '../manager/ManagerService';
 import { salesRevenueForecast } from '../sales/salesPolicy';
@@ -105,7 +105,9 @@ import { evaluateTaskAutoRun, AUTO_RUN_REASON_TEXT, type AutoRunReason } from '.
 import { invalidateProjectsList } from '../project/projectsListCache';
 import { recordActivity, resolveHumanActor, SYSTEM_ACTOR } from '../activity/activityLog';
 import { pmoVersionKey } from '../pmo/pmoCacheKeys';
-import { bumpCacheVersion, invalidateCached, trackerCacheKey, bumpTicketSearchVersion } from '../../infrastructure/cache/readThroughCache';
+import { bumpCacheVersion, bumpTicketSearchVersion } from '../../infrastructure/cache/readThroughCache';
+import { afterRoadmapWrite, type RoadmapWriteScope } from '../delivery/roadmapWrite';
+import { waitUntilOf } from '../shared/requestScope';
 import { convertWorkItemType, promoteOrphanOkrEpics, ConvertError, type WorkItemKind } from '../workitem/convertWorkItemType';
 import { buildRuntimeService } from '../../buildRuntimeService';
 import { ChatTicketService, ticketKindForTaskType } from '../brain/ChatTicketService';
@@ -239,23 +241,28 @@ function errorLogFilters(a: Json): ErrorLogFilters {
   };
 }
 
-/** Invalidate the roadmap tracker cache (the portfolio `:all` key + the row's project
- *  key) so a Brain-driven roadmap write is visible on the next /api/product/roadmap
- *  read — the SAME keys segmentTrackerRoutes caches (via trackerCacheKey). No-op when
- *  the caller didn't thread the Worker env. */
-async function invalidateRoadmap(ctx: BuiltinCtx, segmentId: string, projectId: number | null): Promise<void> {
-  if (!ctx.env) return;
-  await invalidateCached(ctx.env, trackerCacheKey('roadmap', ctx.tenantId, segmentId)).catch((error) => {
-    reportCaughtError(error, { source: "application/llm/builtinMcpService.ts", operation: "invalidateRoadmap" });
-  });
-  if (projectId != null) {
-    await invalidateCached(ctx.env, trackerCacheKey('roadmap', ctx.tenantId, segmentId, projectId)).catch((error) => {
-      reportCaughtError(error, { source: "application/llm/builtinMcpService.ts", operation: "invalidateRoadmap" });
-    });
-  }
-  // Roadmap items are a link-picker ticket kind — refresh its typeahead cache.
-  await bumpTicketSearchVersion(ctx.env, ctx.tenantId);
+/** A Brain roadmap write's post-write step — the ONE `afterRoadmapWrite` the REST roadmap
+ *  tracker runs too (cache keys + `roadmap.published` on a transition into shipped). */
+function roadmapWriteScope(ctx: BuiltinCtx, segmentId: string): RoadmapWriteScope {
+  return { db: ctx.db, env: ctx.env, tenantId: ctx.tenantId, segmentId, waitUntil: waitUntilOf(ctx.executionCtx) };
 }
+
+/** The stored row an update tool is about to change (tenant + segment scoped), or null — so a
+ *  status the write leaves as it was passes through untouched (`parseTicketStatus`'s `current`). */
+async function storedRow(
+  ctx: BuiltinCtx,
+  table: typeof roadmapItems | typeof portfolios | typeof initiatives | typeof objectives,
+  id: string,
+  segmentId: string,
+): Promise<Record<string, unknown> | null> {
+  const [row] = await ctx.db.select().from(table as typeof roadmapItems)
+    .where(and(eq((table as typeof roadmapItems).id, id), eq((table as typeof roadmapItems).tenantId, ctx.tenantId), eq((table as typeof roadmapItems).segmentId, segmentId)))
+    .limit(1);
+  return (row as Record<string, unknown> | undefined) ?? null;
+}
+
+/** The stored `status` of `row`, for `parseTicketStatus`'s unchanged-value rule. */
+const storedStatus = (row: Record<string, unknown> | null): string | null => (typeof row?.status === 'string' ? row.status : null);
 
 
 // --- tiny JSON-schema helpers ----------------------------------------------
@@ -1618,19 +1625,23 @@ const CATALOG: BuiltinTool[] = [
   // ---- Product roadmap (roadmap_items — a project/segment-scoped product artifact) ----
   // NOT a planning-spine node: its own uuid-keyed table. A chat can be tied to a roadmap
   // item (chats.link_ticket kind='roadmap'); these tools let the Brain read + create +
-  // maintain them. Writes invalidate the SAME tracker cache the /api/product/roadmap
-  // route serves (one key format via trackerCacheKey — no drift, no stale page reads).
+  // maintain them. Writes run the SAME post-write step as the /api/product/roadmap route
+  // (`afterRoadmapWrite`: its cache keys, and `roadmap.published` on a move into shipped).
   { tool: 'roadmap.list', mutates: false, description: 'List product roadmap items, optionally for one project (pass projectId). The UI groups them by horizon (now / next / later).', parameters: obj({ projectId: N }), run: async (ctx, a) => {
       const seg = await resolveSegment(ctx.db, ctx.tenantId);
       const conds = [eq(roadmapItems.tenantId, ctx.tenantId), eq(roadmapItems.segmentId, seg)];
       if (a.projectId != null) conds.push(eq(roadmapItems.projectId, idArg(a.projectId, 'projectId')));
       return ctx.db.select().from(roadmapItems).where(and(...conds)).orderBy(desc(roadmapItems.updatedAt)).limit(200);
     } },
-  { tool: 'roadmap.get', mutates: false, description: 'Get one roadmap item by id (uuid).', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => (await ctx.db.select().from(roadmapItems).where(and(eq(roadmapItems.id, str(a.id)), eq(roadmapItems.tenantId, ctx.tenantId))).limit(1))[0] ?? null },
+  { tool: 'roadmap.get', mutates: false, description: 'Get one roadmap item by id (uuid).', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => {
+      // Segment-scoped like every other roadmap read and write: a tenant's other segments are not this caller's.
+      const seg = await resolveSegment(ctx.db, ctx.tenantId);
+      return (await ctx.db.select().from(roadmapItems).where(and(eq(roadmapItems.id, str(a.id)), eq(roadmapItems.tenantId, ctx.tenantId), eq(roadmapItems.segmentId, seg))).limit(1))[0] ?? null;
+    } },
   {
     tool: 'roadmap.create', mutates: true,
     description: 'Create a product roadmap item. title is required; horizon = now|next|later (default now); status defaults to "planned" (set "shipped" to mark it delivered). Optionally attach to a project (projectId) and set theme / priority / targetDate (ISO) / notes.',
-    parameters: obj({ title: S, horizon: S, status: S, theme: S, priority: S, targetDate: S, notes: S, projectId: N }, ['title']),
+    parameters: obj({ title: S, horizon: S, status: { type: 'string', enum: [...TICKET_STATUS_VALUES.roadmap] }, theme: S, priority: S, targetDate: S, notes: S, projectId: N }, ['title']),
     run: async (ctx, a) => {
       const title = str(a.title).trim(); if (!title) throw new Error('title is required');
       const seg = await resolveSegment(ctx.db, ctx.tenantId);
@@ -1639,26 +1650,29 @@ const CATALOG: BuiltinTool[] = [
       const [row] = await ctx.db.insert(roadmapItems).values({
         tenantId: ctx.tenantId, segmentId: seg, projectId, title,
         ...(a.horizon != null ? { horizon: str(a.horizon) } : {}),
-        ...(a.status != null ? { status: str(a.status) } : {}),
+        ...(a.status !== undefined ? { status: parseTicketStatus('roadmap', a.status) } : {}),
         theme: a.theme != null ? str(a.theme) : null,
         priority: a.priority != null ? str(a.priority) : null,
         targetDate: dt(a.targetDate) ?? null,
         notes: a.notes != null ? str(a.notes) : null,
       }).returning();
-      await invalidateRoadmap(ctx, seg, projectId);
+      await afterRoadmapWrite(roadmapWriteScope(ctx, seg), null, (row as Record<string, unknown> | undefined) ?? null);
       return row;
     },
   },
   {
     tool: 'roadmap.update', mutates: true,
     description: 'Update a roadmap item (title / horizon / status / theme / priority / targetDate / notes / projectId). Set status="shipped" to mark it delivered.',
-    parameters: obj({ id: S, title: S, horizon: S, status: S, theme: S, priority: S, targetDate: S, notes: S, projectId: N }, ['id']),
+    parameters: obj({ id: S, title: S, horizon: S, status: { type: 'string', enum: [...TICKET_STATUS_VALUES.roadmap] }, theme: S, priority: S, targetDate: S, notes: S, projectId: N }, ['id']),
     run: async (ctx, a) => {
       const seg = await resolveSegment(ctx.db, ctx.tenantId);
+      // The before-image: an unchanged status passes through, and the post-write step needs it
+      // to tell a transition INTO shipped from a save of an already-shipped item.
+      const before = await storedRow(ctx, roadmapItems, str(a.id), seg);
       const patch: Json = { updatedAt: new Date() };
       if (a.title != null) patch.title = str(a.title);
       if (a.horizon != null) patch.horizon = str(a.horizon);
-      if (a.status != null) patch.status = str(a.status);
+      if (a.status !== undefined) patch.status = parseTicketStatus('roadmap', a.status, storedStatus(before));
       if (a.theme != null) patch.theme = str(a.theme);
       if (a.priority != null) patch.priority = str(a.priority);
       if (a.targetDate != null) patch.targetDate = dt(a.targetDate) ?? null;
@@ -1666,14 +1680,14 @@ const CATALOG: BuiltinTool[] = [
       if (a.projectId != null) patch.projectId = idArg(a.projectId, 'projectId');
       const [row] = await ctx.db.update(roadmapItems).set(patch).where(and(eq(roadmapItems.id, str(a.id)), eq(roadmapItems.tenantId, ctx.tenantId), eq(roadmapItems.segmentId, seg))).returning();
       if (!row) throw new Error('roadmap item not found');
-      await invalidateRoadmap(ctx, seg, (row as { projectId?: number | null }).projectId ?? null);
+      await afterRoadmapWrite(roadmapWriteScope(ctx, seg), before, row as Record<string, unknown>);
       return row;
     },
   },
   { tool: 'roadmap.delete', mutates: true, description: 'Delete a roadmap item by id.', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => {
       const seg = await resolveSegment(ctx.db, ctx.tenantId);
       const rows = await ctx.db.delete(roadmapItems).where(and(eq(roadmapItems.id, str(a.id)), eq(roadmapItems.tenantId, ctx.tenantId), eq(roadmapItems.segmentId, seg))).returning({ id: roadmapItems.id, projectId: roadmapItems.projectId });
-      if (rows[0]) await invalidateRoadmap(ctx, seg, rows[0].projectId ?? null);
+      if (rows[0]) await afterRoadmapWrite(roadmapWriteScope(ctx, seg), rows[0], null);
       return { deleted: rows.length > 0 ? str(a.id) : null };
     } },
 
@@ -1733,11 +1747,11 @@ const CATALOG: BuiltinTool[] = [
   {
     tool: 'portfolios.create', mutates: true,
     description: 'Create a portfolio (a strategic grouping that initiatives and OKRs attach to).',
-    parameters: obj({ name: S, description: S, status: S, targetDate: S }, ['name']),
+    parameters: obj({ name: S, description: S, status: { type: 'string', enum: [...TICKET_STATUS_VALUES.portfolio] }, targetDate: S }, ['name']),
     run: async (ctx, a) => {
       const name = str(a.name).trim(); if (!name) throw new Error('name is required');
       const seg = await resolveSegment(ctx.db, ctx.tenantId);
-      const [row] = await ctx.db.insert(portfolios).values({ tenantId: ctx.tenantId, segmentId: seg, name, description: a.description != null ? str(a.description) : null, ...(a.status != null ? { status: str(a.status) } : {}), targetDate: dt(a.targetDate) }).returning();
+      const [row] = await ctx.db.insert(portfolios).values({ tenantId: ctx.tenantId, segmentId: seg, name, description: a.description != null ? str(a.description) : null, ...(a.status !== undefined ? { status: parseTicketStatus('portfolio', a.status) } : {}), targetDate: dt(a.targetDate) }).returning();
       await bumpPmo(ctx);
       return row;
     },
@@ -1745,13 +1759,13 @@ const CATALOG: BuiltinTool[] = [
   {
     tool: 'portfolios.update', mutates: true,
     description: "Update a portfolio (name/description/status/targetDate).",
-    parameters: obj({ id: S, name: S, description: S, status: S, targetDate: S }, ['id']),
+    parameters: obj({ id: S, name: S, description: S, status: { type: 'string', enum: [...TICKET_STATUS_VALUES.portfolio] }, targetDate: S }, ['id']),
     run: async (ctx, a) => {
       const seg = await resolveSegment(ctx.db, ctx.tenantId);
       const patch: Json = { updatedAt: new Date() };
       if (a.name != null) patch.name = str(a.name);
       if (a.description != null) patch.description = str(a.description);
-      if (a.status != null) patch.status = str(a.status);
+      if (a.status !== undefined) patch.status = parseTicketStatus('portfolio', a.status, storedStatus(await storedRow(ctx, portfolios, str(a.id), seg)));
       if (a.targetDate != null) patch.targetDate = dt(a.targetDate);
       const [row] = await ctx.db.update(portfolios).set(patch).where(and(eq(portfolios.id, str(a.id)), eq(portfolios.tenantId, ctx.tenantId), eq(portfolios.segmentId, seg))).returning();
       if (!row) throw new Error('portfolio not found');
@@ -1765,7 +1779,7 @@ const CATALOG: BuiltinTool[] = [
   {
     tool: 'initiatives.create', mutates: true,
     description: 'Create an initiative under a portfolio (pass portfolioId). startDate and targetDate are REQUIRED (YYYY-MM-DD): an initiative with no window renders permanently unscoped on the planning spine, because a brand-new initiative has no children for its dates to be derived from.',
-    parameters: obj({ name: S, description: S, status: S, portfolioId: S, startDate: S, targetDate: S }, ['name', 'startDate', 'targetDate']),
+    parameters: obj({ name: S, description: S, status: { type: 'string', enum: [...TICKET_STATUS_VALUES.initiative] }, portfolioId: S, startDate: S, targetDate: S }, ['name', 'startDate', 'targetDate']),
     run: async (ctx, a) => {
       const name = str(a.name).trim(); if (!name) throw new Error('name is required');
       // Enforced in the RUNNER as well as the schema: a model can omit a "required"
@@ -1774,7 +1788,7 @@ const CATALOG: BuiltinTool[] = [
       const initStart = dt(a.startDate); const initTarget = dt(a.targetDate);
       if (!initStart || !initTarget) throw new Error('startDate and targetDate are required (YYYY-MM-DD)');
       const seg = await resolveSegment(ctx.db, ctx.tenantId);
-      const [row] = await ctx.db.insert(initiatives).values({ tenantId: ctx.tenantId, segmentId: seg, name, description: a.description != null ? str(a.description) : null, ...(a.status != null ? { status: str(a.status) } : {}), portfolioId: a.portfolioId != null ? str(a.portfolioId) : null, startDate: initStart, targetDate: initTarget }).returning();
+      const [row] = await ctx.db.insert(initiatives).values({ tenantId: ctx.tenantId, segmentId: seg, name, description: a.description != null ? str(a.description) : null, ...(a.status !== undefined ? { status: parseTicketStatus('initiative', a.status) } : {}), portfolioId: a.portfolioId != null ? str(a.portfolioId) : null, startDate: initStart, targetDate: initTarget }).returning();
       await bumpPmo(ctx);
       return row;
     },
@@ -1782,13 +1796,13 @@ const CATALOG: BuiltinTool[] = [
   {
     tool: 'initiatives.update', mutates: true,
     description: 'Update an initiative (name/description/status/portfolioId/dates). Pass portfolioId to MOVE the initiative into that portfolio, or portfolioId=null to unassign it (make it a top-level initiative under no portfolio).',
-    parameters: obj({ id: S, name: S, description: S, status: S, portfolioId: { type: ['string', 'null'] }, startDate: S, targetDate: S }, ['id']),
+    parameters: obj({ id: S, name: S, description: S, status: { type: 'string', enum: [...TICKET_STATUS_VALUES.initiative] }, portfolioId: { type: ['string', 'null'] }, startDate: S, targetDate: S }, ['id']),
     run: async (ctx, a) => {
       const seg = await resolveSegment(ctx.db, ctx.tenantId);
       const patch: Json = { updatedAt: new Date() };
       if (a.name != null) patch.name = str(a.name);
       if (a.description != null) patch.description = str(a.description);
-      if (a.status != null) patch.status = str(a.status);
+      if (a.status !== undefined) patch.status = parseTicketStatus('initiative', a.status, storedStatus(await storedRow(ctx, initiatives, str(a.id), seg)));
       if ('portfolioId' in a) patch.portfolioId = a.portfolioId != null ? str(a.portfolioId) : null;
       if (a.startDate != null) patch.startDate = dt(a.startDate);
       if (a.targetDate != null) patch.targetDate = dt(a.targetDate);
@@ -1803,8 +1817,8 @@ const CATALOG: BuiltinTool[] = [
   { tool: 'objectives.list', mutates: false, description: 'List OKR objectives — the strategic goals on the Portfolio ▸ OKRs tab, NOT board Epics (compact: id/title/status/period/owner + snippet), capped by limit (default 50, max 200).', parameters: obj({ limit: N }), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const rows = await ctx.db.select().from(objectives).where(and(eq(objectives.tenantId, ctx.tenantId), eq(objectives.segmentId, seg))).orderBy(desc(objectives.updatedAt)).limit(LIST_MAX_LIMIT); return listEnvelope('objectives', rows.map((r) => compactRow(r as unknown as Record<string, unknown>, OBJECTIVE_LIST_FIELDS, 'description')), clampLimit(a.limit)); } },
   {
     tool: 'objectives.create', mutates: true,
-    description: 'Create an OKR Objective — a strategic, qualitative goal (e.g. "Unlock recurring revenue"). This populates the Portfolio ▸ OKRs tab. Do NOT model OKRs as board Epics. SCOPE the objective by passing exactly one of projectId (a goal FOR a specific project — this is what satisfies that project\'s "Direction" / "goal or OKR linked" health check), initiativeId, or portfolioId (omit all three for a workspace/org-level objective). Then add measurable targets with key_results.create and link the delivering epics/initiatives with objectives.add_link. status: active|achieved|missed|archived; period is an optional label like "2026-Q2". startDate and endDate are REQUIRED (YYYY-MM-DD) — an objective with no window renders permanently unscoped on the planning spine, because a brand-new objective has no key results or linked work for its dates to be derived from. Idempotent: an objective with the same title already in this workspace is returned ({ deduped: true, … }) instead of duplicated.',
-    parameters: obj({ title: S, description: S, period: S, status: { type: 'string', enum: ['active', 'achieved', 'missed', 'archived'] }, projectId: N, portfolioId: S, initiativeId: S, startDate: S, endDate: S }, ['title', 'startDate', 'endDate']),
+    description: 'Create an OKR Objective — a strategic, qualitative goal (e.g. "Unlock recurring revenue"). This populates the Portfolio ▸ OKRs tab. Do NOT model OKRs as board Epics. SCOPE the objective by passing exactly one of projectId (a goal FOR a specific project — this is what satisfies that project\'s "Direction" / "goal or OKR linked" health check), initiativeId, or portfolioId (omit all three for a workspace/org-level objective). Then add measurable targets with key_results.create and link the delivering epics/initiatives with objectives.add_link. status: ' + TICKET_STATUS_VALUES.objective.join('|') + '; period is an optional label like "2026-Q2". startDate and endDate are REQUIRED (YYYY-MM-DD) — an objective with no window renders permanently unscoped on the planning spine, because a brand-new objective has no key results or linked work for its dates to be derived from. Idempotent: an objective with the same title already in this workspace is returned ({ deduped: true, … }) instead of duplicated.',
+    parameters: obj({ title: S, description: S, period: S, status: { type: 'string', enum: [...TICKET_STATUS_VALUES.objective] }, projectId: N, portfolioId: S, initiativeId: S, startDate: S, endDate: S }, ['title', 'startDate', 'endDate']),
     run: async (ctx, a) => {
       const title = str(a.title).trim(); if (!title) throw new Error('title is required');
       // Enforced in the RUNNER as well as the schema — a model can omit a "required"
@@ -1812,6 +1826,7 @@ const CATALOG: BuiltinTool[] = [
       // REST tracker). Checked BEFORE the dedupe read so a bad call costs no query.
       const objStart = dt(a.startDate); const objEnd = dt(a.endDate);
       if (!objStart || !objEnd) throw new Error('startDate and endDate are required (YYYY-MM-DD)');
+      const objStatus = a.status !== undefined ? parseTicketStatus('objective', a.status) : undefined;
       const seg = await resolveSegment(ctx.db, ctx.tenantId);
       // Idempotent create — a same-title objective in this tenant/segment is returned
       // rather than duplicated (guards roadmap-reconciliation reruns).
@@ -1822,7 +1837,7 @@ const CATALOG: BuiltinTool[] = [
         tenantId: ctx.tenantId, segmentId: seg, title,
         description: a.description != null ? str(a.description) : null,
         period: a.period != null ? str(a.period) : null,
-        ...(a.status != null ? { status: str(a.status) } : {}),
+        ...(objStatus != null ? { status: objStatus } : {}),
         projectId: a.projectId != null ? idArg(a.projectId, 'projectId') : null,
         portfolioId: a.portfolioId != null ? str(a.portfolioId) : null,
         initiativeId: a.initiativeId != null ? str(a.initiativeId) : null,
@@ -1835,14 +1850,14 @@ const CATALOG: BuiltinTool[] = [
   {
     tool: 'objectives.update', mutates: true,
     description: 'Update an OKR objective (title/description/status/period/OWNER/dates). REASSIGN the objective\'s owner (the parent scope shown on the Portfolio ▸ OKRs tab) by passing exactly ONE of portfolioId / initiativeId / projectId and setting the other two to null — e.g. { portfolioId: "pf_123", initiativeId: null, projectId: null } attaches it to that portfolio. Pass all three null to make it an org-level (workspace) objective owned by nothing. Omit a field entirely to leave it unchanged.',
-    parameters: obj({ id: S, title: S, description: S, period: S, status: { type: 'string', enum: ['active', 'achieved', 'missed', 'archived'] }, projectId: { type: ['number', 'null'] }, portfolioId: { type: ['string', 'null'] }, initiativeId: { type: ['string', 'null'] }, startDate: S, endDate: S }, ['id']),
+    parameters: obj({ id: S, title: S, description: S, period: S, status: { type: 'string', enum: [...TICKET_STATUS_VALUES.objective] }, projectId: { type: ['number', 'null'] }, portfolioId: { type: ['string', 'null'] }, initiativeId: { type: ['string', 'null'] }, startDate: S, endDate: S }, ['id']),
     run: async (ctx, a) => {
       const seg = await resolveSegment(ctx.db, ctx.tenantId);
       const patch: Json = { updatedAt: new Date() };
       if (a.title != null) patch.title = str(a.title);
       if (a.description != null) patch.description = str(a.description);
       if (a.period != null) patch.period = str(a.period);
-      if (a.status != null) patch.status = str(a.status);
+      if (a.status !== undefined) patch.status = parseTicketStatus('objective', a.status, storedStatus(await storedRow(ctx, objectives, str(a.id), seg)));
       if ('projectId' in a) patch.projectId = a.projectId != null ? idArg(a.projectId, 'projectId') : null;
       if ('portfolioId' in a) patch.portfolioId = a.portfolioId != null ? str(a.portfolioId) : null;
       if ('initiativeId' in a) patch.initiativeId = a.initiativeId != null ? str(a.initiativeId) : null;
@@ -4689,7 +4704,7 @@ export async function callBuiltinTool(
     });
     // task/spec/from-delta writes change what the chat↔ticket link picker can find but
     // (unlike the pmo/roadmap/project tools) don't route through invalidateProjectsList /
-    // bumpPmo / invalidateRoadmap — so orphan the typeahead cache here for those.
+    // bumpPmo / afterRoadmapWrite — so orphan the typeahead cache here for those.
     if (args.tool.startsWith('tasks.') || args.tool.startsWith('specs.') || args.tool === 'tickets.from_delta') {
       const bump = bumpTicketSearchVersion(args.env, args.tenantId);
       if (args.executionCtx?.waitUntil) args.executionCtx.waitUntil(bump); else await bump.catch((error) => {

@@ -17,7 +17,7 @@
 import { earliestMapping, parseSyncId, syncIdText, type ChatTicketLinkValue, type EntityScope, type LocalEntityType, type LocalRecord, type ServerMapping, type SyncId } from "@builderforce/local-first";
 import type { LocalFirstView } from "../localFirstView";
 import { presentRecordSyncStatus } from "../syncStatusPresenter";
-import { railTicketProgress, type RailRunPayload, type RailTicketPayload } from "./railPayloads";
+import { railProgressKind, railTicketProgress, type RailRunPayload, type RailTicketPayload } from "./railPayloads";
 import { ticketsOfChats } from "./ticketsOfChat";
 import type {
   ChatRef, RailFreshness, RailLink, RailRun, RailRunHistory, RailTicket,
@@ -117,7 +117,7 @@ export function readRailFromFacts(facts: RailFacts, ref: ChatRef, lastRefreshAt?
     railTickets.push({
       clientId: ticket.id,
       linkId,
-      kind: payload.railKind ?? payload.taskType ?? "task",
+      kind: railProgressKind(payload),
       ref: payload.railRef ?? (ticketSyncId !== undefined ? syncIdText(ticketSyncId) : ticket.id),
       label: payload.title,
       ...railTicketProgress(payload),

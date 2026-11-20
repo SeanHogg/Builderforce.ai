@@ -31,36 +31,47 @@
  *   counted it. An all-deleted list is 100% (nothing owed), like all-cancelled.
  * - `done`/`total` are still returned for the "4/6" counter beside the percent.
  *
- * EXACT 100 IS THE ONLY COMPLETION SIGNAL, AND ONLY A CLOSED LANE MAY EMIT IT
- * A task-table ticket (task, gap, epic) whose lane is not closed (`isClosedTaskStatus`
- * false) never reads 100, whatever its raw figure says: an open epic whose filed
- * children are all done, an open task stamped `completed_at`, or an open task whose PR
- * merged reads {@link CLAIMED_COMPLETE_PROGRESS_CAP} (75) — claimed complete, not
- * closed, the same rung as `in_review`. Real work (unfiled slices, review, the close
- * itself) can still remain while the lane is open, so the ring must not say "done"
- * before the lane does (chat #276: epic in_progress with two done children read 100).
- * The cap never raises a lower figure. Conversely a CLOSED lane always reads 100, even
- * an epic closed with only 3 of 5 children done — "done" means the lane is closed.
- * A custom board's terminal lane whose key is not in `TASK_CLOSED_STATUSES` is not
- * closed to this rule: it reads 75 until the ticket moves to a closed lane.
- * The rule is {@link effectiveTicketProgress}; its PRODUCERS apply it — the server's
- * task-tier health and the rail's mapping of a task-table record — because only they
- * know a ticket's tier. Other tiers (spec, roadmap, retro, objective …) speak their own status
- * vocabulary ("complete", "shipped"), which `isClosedTaskStatus` does not know, so the
- * rule is never applied to them; the rollup below therefore averages what each producer
- * emitted and only floors a closed lane to 100 ({@link closedLaneProgress}).
+ * EXACT 100 IS THE ONLY COMPLETION SIGNAL, AND ONLY A CLOSED TICKET MAY EMIT IT
+ * A ticket whose own status is not closed for its KIND never reads 100, whatever its
+ * raw figure says: an open epic whose filed children are all done, an open task whose
+ * PR merged, an initiative still `active` with every child task done, an objective
+ * `active` whose key results all hit target, a poker session `active` with every story
+ * estimated — each reads {@link CLAIMED_COMPLETE_PROGRESS_CAP} (75): claimed complete,
+ * not closed, the same rung as `in_review`. Real work (unfiled slices, review, the close
+ * itself) can still remain while the item is open, so the ring must not say "done"
+ * before the item does (chat #276: epic in_progress with two done children read 100).
+ * The cap never raises a lower figure. Conversely a CLOSED ticket always reads 100, even
+ * an epic closed with only 3 of 5 children done — "done" means the item is closed.
+ *
+ * "Closed" is per kind, from the ONE registry `TICKET_CLOSED_STATES`
+ * (`ticketClosedStates.ts`): task/gap/epic close at `TASK_CLOSED_STATUSES`, a spec at
+ * `complete`, a roadmap item at `shipped`, an initiative at `completed`, an objective at
+ * `achieved`, a ceremony at `completed` … A custom board's terminal lane whose key is not
+ * in the kind's list is not closed to this rule: it reads 75 until the ticket moves to a
+ * closed lane. A kind with NO declared vocabulary (or no kind at all) keeps the old
+ * behaviour: closed by the task lanes' words only, and never capped.
+ *
+ * The rule is {@link effectiveTicketProgress}, applied ONCE per surface: the server's
+ * ticket health (every kind), this rollup (each input's `kind`), and the rail's mapping
+ * of a record. It is idempotent, so a figure a producer already applied it to passes
+ * through unchanged.
  *
  * OPEN / COMPLETED TICKETS
  * `openTickets` / `completedTickets` count TICKETS (not sub-items) for the history
  * row's "3 open · 2 done" line. A ticket is completed when its effective progress is
- * at least 100, which for a task-table ticket means its lane is closed. Cancelled
- * tickets count as neither. open = counted − completed, so an empty or all-cancelled
- * list is 0 / 0.
+ * at least 100, which for a kind with a declared vocabulary means it is closed.
+ * Cancelled tickets (the kind's cancelled words — a missed objective too) count as
+ * neither. open = counted − completed, so an empty or all-cancelled list is 0 / 0.
  */
 
-import { isCancelledTaskStatus, isClosedTaskStatus } from "./taskClosedState.js";
+import { hasTicketStatusVocabulary, isCancelledTicketStatus, isClosedTicketStatus } from "./ticketClosedStates.js";
 
 export interface ChatTicketHealthInput {
+  /**
+   * The ticket kind (task, epic, spec, initiative …) whose status vocabulary decides
+   * "closed" and "cancelled". Absent: the task lanes' words, never capped.
+   */
+  kind?: string | null;
   /** Authoritative progress for this ticket, 0–100. */
   progressPct: number;
   /** Completed sub-items (a leaf task is 0 or 1). */
@@ -80,9 +91,9 @@ export interface ChatTicketHealthInput {
 }
 
 /**
- * Ceiling for a task-table ticket whose raw progress reads complete while its lane is
- * still open. Same rung as `in_review` on the status ladder: claimed complete, not
- * closed. Exact 100 is the only completion signal and only a closed lane may emit it.
+ * Ceiling for a ticket whose raw progress reads complete while its own status is still
+ * open for its kind. Same rung as `in_review` on the status ladder: claimed complete,
+ * not closed. Exact 100 is the only completion signal and only a closed ticket may emit it.
  */
 export const CLAIMED_COMPLETE_PROGRESS_CAP = 75;
 
@@ -99,51 +110,47 @@ export interface ChatTicketHealth {
   completedTickets: number;
 }
 
-/** True when this lane must not sit in the chat-health denominator. */
-export function isExcludedFromChatHealth(status?: string | null): boolean {
-  return isCancelledTaskStatus(status);
-}
-
 /**
- * The closed-lane half of the rule, for ANY tier: a closed lane IS complete by
- * definition — the status ladder is authoritative once closed — so a stale, partial or
- * demoted record percent never wins; the lane reads 100. This is the contract behind a
- * chip that shows DONE beside its ring: the badge (status) and the ring (percent) cannot
- * disagree, on the server, in the web panel and in the VS Code rail alike.
- *
- * An open lane passes its raw percent through: this half never caps, so it is safe for
- * a tier whose status vocabulary is not the task lanes'.
+ * True when this ticket must not sit in the chat-health denominator: cancelled for its
+ * kind (the shared cancelled spellings for every kind, plus the kind's own cancelled
+ * words from `TICKET_CLOSED_STATES`, e.g. a missed objective).
  */
-export function closedLaneProgress(
-  status: string | null | undefined,
-  progressPct: number | null | undefined,
-): number {
-  const raw = typeof progressPct === "number" && Number.isFinite(progressPct) ? progressPct : 0;
-  return isClosedTaskStatus(status) ? Math.max(raw, 100) : raw;
+export function isExcludedFromChatHealth(status?: string | null, kind?: string | null): boolean {
+  return isCancelledTicketStatus(kind, status);
 }
 
 /**
- * The ONE "what does a task-table ticket's progress read" rule, shared by the server's
- * task tier (`buildTaskProgressBreakdown`, `taskTierTicketHealth`) and the rail
- * (`railTicketProgress`, for task/gap/epic records).
+ * The ONE "what does a ticket's progress read" rule, shared by the server's ticket
+ * health (every kind, including the task status ladder `buildTaskProgressBreakdown`),
+ * the chat rollup below, and the rail (`railTicketProgress`).
  *
- * Exact 100 is the only completion signal, and only a closed lane may emit it: a closed
- * lane reads 100 ({@link closedLaneProgress}); an open lane whose raw progress is 100 or
- * more reads {@link CLAIMED_COMPLETE_PROGRESS_CAP}; the cap never raises a lower figure.
+ * Exact 100 is the only completion signal, and only a closed ticket may emit it:
+ * - closed for its `kind` (`isClosedTicketStatus`) → 100, whatever the raw figure: a
+ *   closed item IS complete, so a stale, partial or demoted record percent never wins
+ *   and a DONE badge can never sit beside a 75% ring;
+ * - open, raw ≥ 100, and the kind declares a status vocabulary →
+ *   {@link CLAIMED_COMPLETE_PROGRESS_CAP} (the cap never raises a lower figure);
+ * - otherwise the raw figure.
+ *
+ * `kind` is required (pass `'task'` for a task lane) so no caller can silently fall into
+ * the unknown-kind branch. A kind with no declared vocabulary — or `null`, "kind
+ * unknown" — is closed only by the task lanes' words and never capped.
+ * Idempotent: applying it to its own output changes nothing.
  */
 export function effectiveTicketProgress(
   status: string | null | undefined,
   progressPct: number | null | undefined,
+  kind: string | null,
 ): number {
-  const pct = closedLaneProgress(status, progressPct);
-  if (!isClosedTaskStatus(status) && pct >= 100) return CLAIMED_COMPLETE_PROGRESS_CAP;
-  return pct;
+  const raw = typeof progressPct === "number" && Number.isFinite(progressPct) ? progressPct : 0;
+  if (isClosedTicketStatus(kind, status)) return Math.max(raw, 100);
+  if (raw >= 100 && hasTicketStatusVocabulary(kind)) return CLAIMED_COMPLETE_PROGRESS_CAP;
+  return raw;
 }
 
 function effectiveProgressPct(t: ChatTicketHealthInput): number {
-  // The rollup sees every tier, so it applies only the closed-lane half (a closed lane is
-  // 100); each task-table producer has already applied the open-lane cap (module comment).
-  return closedLaneProgress(t.status, t.progressPct);
+  // An input with no kind keeps the kind-unknown behaviour (closed floor only).
+  return effectiveTicketProgress(t.status, t.progressPct, t.kind ?? null);
 }
 
 /** Roll a chat's linked tickets up into its one progress figure. */
@@ -158,7 +165,7 @@ export function rollupChatTicketHealth(tickets: readonly ChatTicketHealthInput[]
     // exactly like a cancelled lane. (The server's `(deleted)` placeholder reports
     // status 'unknown' / progressPct 0, which would otherwise count as an open 0% ticket.)
     if (tk.exists === false) continue;
-    if (isExcludedFromChatHealth(tk.status)) continue;
+    if (isExcludedFromChatHealth(tk.status, tk.kind)) continue;
     const pct = effectiveProgressPct(tk);
     const weight = Number.isFinite(tk.total) && tk.total > 0 ? tk.total : 1;
     done += Number.isFinite(tk.done) ? tk.done : 0;

@@ -19646,7 +19646,8 @@
     "themePlaceholder": "Optionale Gruppierung",
     "targetDateLabel": "Zieldatum",
     "saveChanges": "Änderungen speichern",
-    "create": "Erstellen"
+    "create": "Erstellen",
+    "statusUnknown": "Unbekannter Status: {value}"
   },
   "agentCapabilities": {
     "failedLoadAgents": "Agenten konnten nicht geladen werden",
@@ -34111,7 +34112,9 @@
     "in_review": "In Prüfung",
     "done": "Erledigt",
     "blocked": "Blockiert",
-    "shipped": "Ausgeliefert"
+    "shipped": "Ausgeliefert",
+    "planned": "Geplant",
+    "cancelled": "Abgebrochen"
   },
   "agentWorker": {
     "title": "Browser-Agent-Runner",

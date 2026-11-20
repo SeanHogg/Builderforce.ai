@@ -16,7 +16,7 @@
  *
  * Pure: no I/O, so the rules are testable without a database.
  */
-import { TASK_CLOSED_STATUSES } from '@builderforce/agent-loop';
+import { isClosedTicketStatus } from '@builderforce/agent-loop';
 import type { ChatTicketLink } from './ChatTicketService';
 
 /** One page of a chat's linked tickets. */
@@ -52,10 +52,6 @@ export interface ListChatTicketsOptions {
 /** Upper bound on `limit`, so one chat cannot ask for an unbounded payload. */
 export const MAX_CHAT_TICKET_PAGE = 500;
 
-/** The shared closed class — the same one health uses, so "open" never disagrees
- *  with what the progress chip reports. */
-const CLOSED_STATUS: ReadonlySet<string> = new Set(TASK_CLOSED_STATUSES);
-
 /**
  * Apply the list filters. `openOnly` is deliberately not `progressPct < 100`: an
  * in_progress item reads 50 and a backlog item 0, both open, and a container that
@@ -68,7 +64,9 @@ export function filterChatTickets(rows: readonly ChatTicketLink[], options: List
   return rows.filter((r) => {
     if (status && r.status.toLowerCase() !== status) return false;
     if (kind && r.kind.toLowerCase() !== kind) return false;
-    if (options.openOnly && r.exists && CLOSED_STATUS.has(r.status.toLowerCase())) return false;
+    // Closed per the ticket's OWN kind (a spec at 'complete', a roadmap item at 'shipped') — the
+    // same registry health uses, so "open" never disagrees with what the progress chip reports.
+    if (options.openOnly && r.exists && isClosedTicketStatus(r.kind, r.status)) return false;
     return true;
   });
 }

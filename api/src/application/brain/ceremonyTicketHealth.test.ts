@@ -96,9 +96,21 @@ describe('poker session health (container, over its stories)', () => {
     expect(h).toMatchObject({ kind: 'poker', done: 5, total: 8, progressPct: 63, exists: true });
   });
 
-  it('reaches 100% exactly when every story is estimated', async () => {
+  it('regression: an active poker session with every story estimated reads the claimed-complete rung, not 100', async () => {
+    // Only a CLOSED session emits 100: every story estimated while the session is still
+    // `active` is claimed complete, not finished (agent-loop TICKET_CLOSED_STATES).
     queue = [
       [{ id: 'p1', name: 'Sprint 5 estimation', status: 'active' }],
+      [{ sessionId: 'p1', total: 4, estimated: 4 }],
+    ];
+    const h = (await service().ticketHealthBatch(1, [{ kind: 'poker', ref: 'p1' }])).get('poker:p1')!;
+    expect(h.progressPct).toBe(CLAIMED_COMPLETE_PROGRESS_CAP);
+    expect(h.done).toBe(h.total);
+  });
+
+  it('reaches 100% once the fully estimated session is closed', async () => {
+    queue = [
+      [{ id: 'p1', name: 'Sprint 5 estimation', status: 'completed' }],
       [{ sessionId: 'p1', total: 4, estimated: 4 }],
     ];
     const h = (await service().ticketHealthBatch(1, [{ kind: 'poker', ref: 'p1' }])).get('poker:p1')!;
@@ -137,7 +149,7 @@ describe('batching', () => {
     expect(out.size).toBe(6);
     expect(selectCount).toBe(4); // 2 parents + 2 grouped child rollups — not 6+
     expect(out.get('retro:r2')!.progressPct).toBe(100);
-    expect(out.get('poker:p2')!.progressPct).toBe(100);
+    expect(out.get('poker:p2')!.progressPct).toBe(CLAIMED_COMPLETE_PROGRESS_CAP); // active, 4/4 estimated
     expect(out.get('poker:p3')!.progressPct).toBe(100); // closed, no stories
   });
 });

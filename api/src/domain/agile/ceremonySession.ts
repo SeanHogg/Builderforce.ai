@@ -19,6 +19,8 @@
  * never disagree about what a finished session looks like.
  */
 
+import { CEREMONY_SESSION_CLOSED_STATUSES } from '@builderforce/agent-loop';
+
 /**
  * Every status a ceremony session may hold.
  *
@@ -39,10 +41,11 @@ export type CeremonySessionStatus = (typeof CEREMONY_SESSION_STATUSES)[number];
  * vocabulary existed, or by an older client, may carry `closed`/`archived`, and a
  * reader must treat those as finished rather than as permanently in-flight. The WRITE
  * path is strict ({@link isCeremonySessionStatus}); the READ path is forgiving.
+ *
+ * The words live in agent-loop's per-kind closed-status registry (`retro` / `poker` in
+ * `TICKET_CLOSED_STATES`), so the chat progress rule and this module cannot disagree.
  */
-export const CEREMONY_SESSION_DONE: ReadonlySet<string> = new Set([
-  'completed', 'cancelled', 'closed', 'archived',
-]);
+export const CEREMONY_SESSION_DONE: ReadonlySet<string> = new Set(CEREMONY_SESSION_CLOSED_STATUSES);
 
 /** True for a status a client is allowed to SET. Case-insensitive; unknown → false,
  *  so a typo is a 400 rather than a row nothing can ever interpret. */

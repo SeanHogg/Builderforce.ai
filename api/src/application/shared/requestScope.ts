@@ -41,6 +41,16 @@ export function updateRequestScope(update: Pick<RequestScope, 'tenantId' | 'user
 }
 
 /**
+ * An execution context's `waitUntil`, bound so it can be handed on as a plain function, or
+ * undefined when there is no context (the caller then awaits the work inline). The ONE spelling
+ * of `ctx ? ctx.waitUntil.bind(ctx) : undefined` — lives here, not in the presentation layer,
+ * because application code (the Brain's tools) builds the same port from its own context.
+ */
+export function waitUntilOf(ctx: Pick<ExecutionContext, 'waitUntil'> | undefined | null): ((task: Promise<unknown>) => void) | undefined {
+  return ctx ? ctx.waitUntil.bind(ctx) : undefined;
+}
+
+/**
  * Let `task` finish after the response is sent. Returns false when there is no
  * invocation to attach it to (or the runtime refused it) — the caller then decides
  * whether to await it instead, because an unattached promise in a Worker can be

@@ -19646,7 +19646,8 @@
     "themePlaceholder": "Agrupación opcional",
     "targetDateLabel": "Fecha objetivo",
     "saveChanges": "Guardar cambios",
-    "create": "Crear"
+    "create": "Crear",
+    "statusUnknown": "Estado desconocido: {value}"
   },
   "agentCapabilities": {
     "failedLoadAgents": "Error al cargar los agentes",
@@ -34111,7 +34112,9 @@
     "in_review": "En revisión",
     "done": "Hecha",
     "blocked": "Bloqueada",
-    "shipped": "Entregado"
+    "shipped": "Entregado",
+    "planned": "Planificado",
+    "cancelled": "Cancelado"
   },
   "agentWorker": {
     "title": "Ejecutor de agentes en el navegador",

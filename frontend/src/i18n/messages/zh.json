@@ -19646,7 +19646,8 @@
     "themePlaceholder": "可选分组",
     "targetDateLabel": "目标日期",
     "saveChanges": "保存更改",
-    "create": "创建"
+    "create": "创建",
+    "statusUnknown": "未知状态：{value}"
   },
   "agentCapabilities": {
     "failedLoadAgents": "加载代理失败",
@@ -34111,7 +34112,9 @@
     "in_review": "审核中",
     "done": "已完成",
     "blocked": "受阻",
-    "shipped": "已发布"
+    "shipped": "已发布",
+    "planned": "已计划",
+    "cancelled": "已取消"
   },
   "agentWorker": {
     "title": "浏览器代理执行器",

@@ -71,32 +71,34 @@ export interface TicketHealth {
   /**
    * 0–100 completion percentage. Leaf task/gap = the status ladder
    * (`buildTaskProgressBreakdown`: backlog/todo 0, ready 10, in_progress 50,
-   * in_review 75, closed lane 100); epic = round(done/total) under the closed-lane rule
-   * below; initiative/portfolio = round(done/total); objective = rounded key-result
-   * rollup; roadmap/spec = 100 when its own status is terminal.
+   * in_review 75, closed lane 100); epic/initiative/portfolio = round(done/total);
+   * objective = rounded key-result rollup; poker = round(estimated/stories);
+   * roadmap/spec/retro = from their own status — every one under the closed-ticket
+   * rule below.
    *
    * `progressPct === 100` EMISSION RULE — the authoritative completion signal:
-   * - Emitted ONLY once the work item is fully complete. For task, gap and epic,
-   *   "done" means the LANE IS CLOSED (status ∈ `TASK_CLOSED_STATUSES`: done,
-   *   completed, cancelled, canceled, archived) — a stamped `completedAt` on an open
-   *   lane is not done, and a child counts toward its epic's `done` only when its own
-   *   lane is closed. For other containers, when EVERY child/target that counts is
-   *   complete (`done === total`). It is NEVER reported before completion — an item
-   *   that is in progress reports a value < 100 (e.g. 50), never 100.
+   * - Emitted ONLY once the work item is CLOSED, for EVERY kind, each closed by its
+   *   OWN status words (agent-loop `TICKET_CLOSED_STATES`): task/gap/epic at
+   *   `TASK_CLOSED_STATUSES` (done, completed, cancelled, canceled, archived);
+   *   portfolio at archived; initiative at completed/archived; objective at
+   *   achieved/missed/archived; roadmap at shipped (+ done/complete/completed/
+   *   released/cancelled); spec at complete; retro/poker at completed/cancelled/
+   *   closed/archived. The shared cancelled spellings close every kind. A stamped
+   *   `completedAt` on an open lane is not done, and a child counts toward its
+   *   epic's `done` only when its own lane is closed. It is NEVER reported before
+   *   completion — an item that is in progress reports a value < 100 (e.g. 50).
    * - Idempotent, not "fired once": health is derived live on every read (this
    *   value is deliberately uncached), so a completed item reports 100 on every
    *   subsequent read. Consumers must treat 100 as an idempotent terminal state,
    *   not a one-shot event, and must not assume it is delivered exactly once.
    * - Values approaching 100 (e.g. 99) are NOT completion. Only an exact 100 is the
    *   completion signal; do not treat a near-100 value as done.
-   * - `progressPct === 100` corresponds to `done === total` and, for a leaf, to a
-   *   terminal `status`. Both agree by construction — there is no state where
-   *   `progressPct` is 100 while the item is not complete, except the rule below.
-   * - ONLY A CLOSED LANE MAY EMIT 100, AND A CLOSED LANE ALWAYS DOES (task, gap,
-   *   epic). A task-table item whose lane is not closed never reads 100, even when
-   *   every filed child is done or its PR merged: it reads
-   *   `CLAIMED_COMPLETE_PROGRESS_CAP` (75, the `in_review` rung) until the lane closes
-   *   (agent-loop `effectiveTicketProgress`). So an open epic can report
+   * - ONLY A CLOSED TICKET MAY EMIT 100, AND A CLOSED TICKET ALWAYS DOES. An item
+   *   whose own status is still open never reads 100, even when every child is done,
+   *   its PR merged or every story is estimated: it reads
+   *   `CLAIMED_COMPLETE_PROGRESS_CAP` (75, the `in_review` rung) until it closes
+   *   (agent-loop `effectiveTicketProgress`, applied once per row by
+   *   `ticketHealthBatch`). So an open epic or an `active` initiative can report
    *   `done === total` with `progressPct` 75, and a closed epic reads 100 with
    *   `done < total` (closed with 3 of 5 children done).
    */

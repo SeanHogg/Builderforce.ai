@@ -49,7 +49,7 @@ export function buildTaskProgressBreakdown(input: {
   // children say, and an OPEN lane never reads 100 — all subtasks closed or a merged PR
   // reads the claimed-complete rung until the lane itself closes.
   const at = (basis: TaskProgressBasis, raw: number): TaskProgressBreakdown =>
-    ({ basis, progressPct: effectiveTicketProgress(input.status, raw), ...shared });
+    ({ basis, progressPct: effectiveTicketProgress(input.status, raw, 'task'), ...shared });
 
   if (isClosedTaskStatus(input.status)) return at('status', 100);
   if (subtasksTotal > 0) return at('subtasks', Math.round((subtasksDone / subtasksTotal) * 100));

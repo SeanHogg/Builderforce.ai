@@ -29,4 +29,22 @@ describe("railTicketProgress", () => {
     expect(railTicketProgress(row({ railKind: "spec", status: "complete", progressPct: 100 })).progressPct).toBe(100);
     expect(railTicketProgress(row({ railKind: "roadmap", status: "shipped", progressPct: 100 })).progressPct).toBe(100);
   });
+
+  it("regression: an active initiative / objective / portfolio / poker row at 100 reads the claimed-complete rung", () => {
+    for (const railKind of ["initiative", "objective", "portfolio", "poker"]) {
+      expect(railTicketProgress(row({ railKind, status: "active", progressPct: 100 })).progressPct)
+        .toBe(CLAIMED_COMPLETE_PROGRESS_CAP);
+    }
+  });
+
+  it("a non-task tier closed in its own vocabulary reads 100 whatever percent the record carries", () => {
+    expect(railTicketProgress(row({ railKind: "initiative", status: "completed", progressPct: 50 })))
+      .toMatchObject({ progressPct: 100, done: 1, total: 1 });
+    expect(railTicketProgress(row({ railKind: "spec", status: "complete", progressPct: 0 })).progressPct).toBe(100);
+    expect(railTicketProgress(row({ railKind: "objective", status: "achieved", progressPct: 60 })).progressPct).toBe(100);
+  });
+
+  it("a task-lane word does not close a spec: an open spec keeps its raw figure", () => {
+    expect(railTicketProgress(row({ railKind: "spec", status: "in_progress", progressPct: 50 })).progressPct).toBe(50);
+  });
 });

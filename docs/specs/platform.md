@@ -2090,9 +2090,10 @@ A chat's linked work items are read with `GET /api/brain/chats/:id/tickets` (`ap
 | Constraint | Explanation |
 |------------|-------------|
 | **Idempotent, not single emission** | Health is derived live on every read (deliberately uncached), so a completed item reports `progressPct: 100` on every subsequent read. Treat 100 as a terminal state, never as a one-shot event, and never assume it is delivered exactly once |
-| **Only after completion** | A task, gap or epic reads 100 only when its lane is closed (status ∈ {done, completed, cancelled, canceled, archived}; `completedAt` alone is not done); other containers only when every counted child is complete (`done === total`). An open leaf follows the status ladder (`buildTaskProgressBreakdown`): backlog/todo 0, ready 10, in progress 50, in review 75 |
-| **Agrees with `done`/`total`** | For other containers `progressPct === 100` corresponds to `done === total`. For an epic, a child counts toward `done` only when its own lane is closed, and the epic's own lane decides 100 (see the next row) |
-| **Only a closed lane emits 100** | A task, gap or epic whose lane is not closed never reads 100: an open epic whose filed children are all done, or an open task whose PR merged, reads `CLAIMED_COMPLETE_PROGRESS_CAP` (75, the `in_review` rung), so `done === total` can coexist with 75. A closed lane always reads 100, even an epic closed with 3 of 5 children done (`effectiveTicketProgress`) |
+| **Only after completion** | Every kind reads 100 only when its OWN status is closed, per kind (`TICKET_CLOSED_STATES`, `packages/agent-loop/src/ticketClosedStates.ts`; see the table below). `completedAt` alone is not done. An open task/gap follows the status ladder (`buildTaskProgressBreakdown`): backlog/todo 0, ready 10, in progress 50, in review 75 |
+| **`done`/`total` count children, not completion** | A container's `done`/`total` count its closed children (a child counts toward an epic's `done` only when its own lane is closed). Its own status decides 100 (see the next row), so `done === total` can coexist with 75 and a closed container can read 100 with `done < total` |
+| **Only a closed ticket emits 100** | A ticket whose own status is not closed for its kind never reads 100: an open epic whose filed children are all done, an open task whose PR merged, an `active` initiative or portfolio with every child task done, an `active` objective whose key results all hit target, or an `active` poker session with every story estimated reads `CLAIMED_COMPLETE_PROGRESS_CAP` (75, the `in_review` rung). A closed ticket always reads 100, even an epic closed with 3 of 5 children done (`effectiveTicketProgress(status, pct, kind)`, applied once per row by `ticketHealthBatch`, by the chat rollup and by the VS Code rail). A kind with no declared vocabulary is closed only by the task lanes' words and never capped |
+| **Cancelled is skipped** | The chat rollup skips a ticket cancelled for its kind (`cancelled`/`canceled` for every kind, plus a `missed` objective): removed work, not remaining work |
 
 > **⚠️ WARNING:** Do NOT Treat Intermediate Values as Completion
 >
@@ -2104,10 +2105,13 @@ While `progressPct: 100` is the authoritative signal for consumers of ticket hea
 
 | Work Item Type | Terminal Status Field | Notes |
 |----------------|----------------------|-------|
-| Task/Epic/Gap | `status: "done"` (also `completed`, `archived`) | May coexist with `progressPct: 100` |
-| Spec | `status: "complete"` | May coexist with `progressPct: 100` |
-| Roadmap Item | `status: "shipped"` (also `done`, `complete`, `completed`, `released` — `ticketHealth.ts:33`) | May coexist with `progressPct: 100` |
-| Strategy Tier | No dedicated status; rely on `progressPct` | Objectives (key-result rollup), Initiatives, Portfolios |
+| Task/Epic/Gap | `status: "done"` (also `completed`, `archived`; `cancelled`/`canceled` skipped by the rollup) | Closed ⇒ `progressPct: 100` |
+| Spec | `status: "complete"` (`specStatusEnum`) | Closed ⇒ `progressPct: 100` |
+| Roadmap Item | `status: "shipped"` (also `done`, `complete`, `completed`, `released`; `cancelled` skipped) | Closed ⇒ `progressPct: 100` |
+| Initiative | `status: "completed"` or `"archived"` | Closed ⇒ 100; `active` with every task done ⇒ 75 |
+| Portfolio | `status: "archived"` | Closed ⇒ 100; `active` with every task done ⇒ 75 |
+| Objective | `status: "achieved"` or `"archived"` (`"missed"` is closed and skipped by the rollup) | Closed ⇒ 100; `active` with every key result at target ⇒ 75 |
+| Retro / Poker session | `status: "completed"` (also `closed`, `archived`; `cancelled` skipped) | Closed ⇒ 100; an `active` poker session with every story estimated ⇒ 75 |
 
 **Best practice:** prefer `progressPct: 100` as the definitive completion signal. Use status fields for display purposes (e.g., human-readable text). `exists: false` (label `(deleted)`) means the referenced item is gone from the tenant.
 
@@ -2115,7 +2119,7 @@ While `progressPct: 100` is the authoritative signal for consumers of ticket hea
 
 #### 1. No Completion Signal
 
-There is no stream to time out. A consumer polls (or re-reads on its own trigger) and stops when it sees 100. If an item it expects to be finished still reads below 100, re-read the ticket itself and check its `status` — a task-tier item reading 75 with `done === total` is waiting for its lane to close, not stuck.
+There is no stream to time out. A consumer polls (or re-reads on its own trigger) and stops when it sees 100. If an item it expects to be finished still reads below 100, re-read the ticket itself and check its `status` — an item reading 75 with `done === total` is waiting for its own status to close, not stuck.
 
 #### 2. Out-of-Range Values
 
@@ -2127,7 +2131,7 @@ When displaying progress to users:
 
 1. **Do not show "Complete" for 99% (or 75%)** – treat it as "Almost done" / "in review"
 2. **Stop polling after 100%** – no further reads are needed
-3. **A closed lane reads 100** – the in-app ticket rail uses `effectiveTicketProgress(status, pct)` for task/gap/epic (and `closedLaneProgress` for other tiers), the same rule the server applies, so a DONE badge and its ring can never disagree
+3. **A closed ticket reads 100** – the in-app ticket rail uses `effectiveTicketProgress(status, pct, kind)` for every kind, the same rule the server applies, so a DONE badge and its ring can never disagree
 
 ### Summary Checklist
 

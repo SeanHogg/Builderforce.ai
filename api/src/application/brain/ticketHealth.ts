@@ -5,9 +5,12 @@
  * write path, so it is deliberately NOT cached — a stale ring would misreport
  * progress. Every read is a small, bounded aggregate, one query per tier, never N+1.
  * The task tier (task/gap/epic) lives in {@link addTaskTierHealth}; this module
- * orchestrates the batch and owns every other tier.
+ * orchestrates the batch and owns every other tier. Each tier reports its RAW figure;
+ * the batch then applies the shared "only a closed ticket emits 100" rule to every row
+ * once, each kind closed by its own status words (agent-loop `TICKET_CLOSED_STATES`).
  */
 import { and, eq, inArray, sql } from 'drizzle-orm';
+import { effectiveTicketProgress, isClosedTicketStatus } from '@builderforce/agent-loop';
 import {
   tasks,
   objectives,
@@ -28,9 +31,6 @@ import { keyResultProgress, objectiveProgress } from '../pmo/portfolioRollup';
 import type { Db } from '../../infrastructure/database/connection';
 import { isTicketKind, missingTicket, ticketKey as key, type TicketHealth } from './chatTicketTypes';
 import { addTaskTierHealth, SQL_COUNT_DONE } from './taskTierTicketHealth';
-
-/** Roadmap-item statuses that count as delivered ('shipped' is the publish marker). */
-const ROADMAP_DONE = new Set(['shipped', 'done', 'complete', 'completed', 'released']);
 
 /**
  * Batched health for a set of (kind, ref) targets — one aggregate query per
@@ -145,7 +145,7 @@ export async function ticketHealthBatch(db: Db, tenantId: number, targets: Array
       if (!r) { out.set(key('roadmap', id), missingTicket('roadmap', id)); continue; }
       // A roadmap item has no child rollup — derive progress from its own status.
       const s = (r.status ?? '').toLowerCase();
-      const done = ROADMAP_DONE.has(s) ? 1 : 0;
+      const done = isClosedTicketStatus('roadmap', s) ? 1 : 0;
       const progressPct = done ? 100 : (s === 'in_progress' || s === 'active' ? 50 : 0);
       out.set(key('roadmap', id), { kind: 'roadmap', ref: id, label: r.title, status: r.status, progressPct, done, total: 1, exists: true });
     }
@@ -161,7 +161,7 @@ export async function ticketHealthBatch(db: Db, tenantId: number, targets: Array
       if (!s) { out.set(key('spec', id), missingTicket('spec', id)); continue; }
       // A spec has no child rollup — derive progress from its own lifecycle status.
       const st = (s.status ?? '').toLowerCase();
-      const done = st === 'complete' ? 1 : 0;
+      const done = isClosedTicketStatus('spec', st) ? 1 : 0;
       const progressPct = done ? 100 : (st === 'in_progress' || st === 'ready' ? 50 : 0);
       out.set(key('spec', id), { kind: 'spec', ref: id, label: s.goal, status: s.status, progressPct, done, total: 1, exists: true });
     }
@@ -229,5 +229,11 @@ export async function ticketHealthBatch(db: Db, tenantId: number, targets: Array
     }
   }
 
+  // The ONE application point of "only a closed ticket emits 100" for every kind (agent-loop
+  // `effectiveTicketProgress`, each kind closed by its own status words): an initiative still
+  // `active` with every child done reads the claimed-complete rung, a closed one always 100.
+  for (const h of out.values()) {
+    if (h.exists) h.progressPct = effectiveTicketProgress(h.status, h.progressPct, h.kind);
+  }
   return out;
 }

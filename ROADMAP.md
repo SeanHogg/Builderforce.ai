@@ -422,7 +422,6 @@ Last measured 2026-07-26: 6 of 767 tickets fully autonomous; 69% of 6,195 runs f
 - **Duplicate label tables:** audit each host.
 - **`DEFAULT_CHAT_TITLE` has two homes.** Give the Brain chat contract one shared home.
 - **Project #11 still carries a placeholder key, so every ticket key reads `1-UNTITLED-1773010025035-N`** (found 2026-11-19, chats #273/#275). The key was stored before `buildProjectKey` stopped generating placeholders; `tickets.from_delta` and normal creation both build keys correctly from it. Fix: rename the project key, which re-keys every ticket on the board via `rekeyProject`. *Blocker: operator decision to re-key project #11's tickets.*
-- **Non-task containers can still read 100% while active** (found 2026-11-19, chat #276). The "only a closed lane emits 100" rule (`effectiveTicketProgress`, `packages/agent-loop/src/chatTicketHealth.ts`) covers task/gap/epic only; initiative, portfolio, objective and poker containers still pass a raw 100 through while their own status is active. Done-when: each kind declares its closed-status words and the rollup applies the same cap to them.
 
 ### Evermind / SSM `[agents]`
 

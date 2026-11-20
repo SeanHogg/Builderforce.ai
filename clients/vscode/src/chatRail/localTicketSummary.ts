@@ -22,7 +22,7 @@
 import { rollupChatTicketHealth, type ChatTicketHealthInput } from "@builderforce/agent-loop";
 import type { ChatTicketLinkValue, LocalFirstStore, LocalFirstTransaction, TicketValue } from "@builderforce/local-first";
 import type { BrainChat, BrainPersistenceAdapter } from "@seanhogg/builderforce-brain-embedded";
-import { railTicketProgress, type RailTicketPayload } from "./railPayloads";
+import { railProgressKind, railTicketProgress, type RailTicketPayload } from "./railPayloads";
 import { ticketsOfChats } from "./ticketsOfChat";
 
 type TicketSummary = Pick<BrainChat, "ticketCount" | "ticketProgressPct" | "ticketOpenCount" | "ticketDoneCount">;
@@ -48,7 +48,8 @@ export async function storeTicketsByChat(
   }
   const byChat = new Map<string, ChatTicketHealthInput[]>();
   for (const [chat, rows] of ticketsOfChats(links, (id) => tickets.get(id), chatClientIds)) {
-    byChat.set(chat, rows.map(({ ticket }) => railTicketProgress(ticket.payload)));
+    // The kind rides along so the rollup closes / skips each tier by its own status words.
+    byChat.set(chat, rows.map(({ ticket }) => ({ ...railTicketProgress(ticket.payload), kind: railProgressKind(ticket.payload) })));
   }
   return byChat;
 }

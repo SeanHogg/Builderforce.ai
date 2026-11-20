@@ -1,11 +1,12 @@
 /**
  * taskTierTicketHealth — health for the three kinds that live in the `tasks` table
- * (task, gap, epic): leaf status ladder, epic child rollup, the shared "only a closed
- * lane may emit 100" rule, and the parent epic each row hangs under. Batched: a
+ * (task, gap, epic): leaf status ladder, epic child rollup (raw — `ticketHealthBatch`
+ * applies the shared "only a closed lane may emit 100" rule to every kind), and the
+ * parent epic each row hangs under. Batched: a
  * constant handful of queries however many task-tier links a chat carries.
  */
 import { and, eq, inArray, sql } from 'drizzle-orm';
-import { effectiveTicketProgress, isClosedTaskStatus, TASK_CLOSED_STATUSES } from '@builderforce/agent-loop';
+import { isClosedTaskStatus, TASK_CLOSED_STATUSES } from '@builderforce/agent-loop';
 import { tasks, projects } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { buildTaskProgressBreakdown } from '../task/taskProgressBreakdown';
@@ -138,12 +139,12 @@ export async function addTaskTierHealth(
     const c = childByParent.get(id) ?? { total: 0, done: 0 };
     const total = c.total;
     const done = c.done;
-    const claimed = total > 0 ? Math.round((done / total) * 100) : 0;
-    // Delegate to the shared rule (agent-loop `effectiveTicketProgress`): only a closed
-    // lane may emit 100, and a closed lane always does — even with 3 of 5 children
-    // done. An open epic whose filed children are all done reads the claimed-complete
-    // rung (75): unfiled work can remain until the lane closes.
-    const progressPct = effectiveTicketProgress(r.status, claimed);
+    // The RAW child rollup. `ticketHealthBatch` applies the shared rule to every row once
+    // (agent-loop `effectiveTicketProgress`): only a closed lane may emit 100, and a closed
+    // lane always does — even with 3 of 5 children done. An open epic whose filed children
+    // are all done reads the claimed-complete rung (75): unfiled work can remain until the
+    // lane closes.
+    const progressPct = total > 0 ? Math.round((done / total) * 100) : 0;
     const parent = parentByChild.get(id);
     out.set(ticketKey('epic', String(id)), {
       kind: 'epic', ref: String(id), label: r.title, status: r.status, progressPct, done, total, exists: true,

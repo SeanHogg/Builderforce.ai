@@ -28,7 +28,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { ChatTicketService } from './ChatTicketService';
 import type { ChatTicketLink } from './ChatTicketService';
-import { pageChatTickets, type ChatTicketPage } from './chatTicketListing';
+import { filterChatTickets, pageChatTickets, type ChatTicketPage } from './chatTicketListing';
 
 // Strategy-tier health queries call resolveSegment(db, tenantId). Our fake DB
 // can't serve that query, so mock it to return a stable segment id.
@@ -323,5 +323,18 @@ describe('pageChatTickets guards non-finite paging', () => {
     expect(pageChatTickets(rows, 3, { limit: Number.POSITIVE_INFINITY }).tickets).toHaveLength(3);
     expect(pageChatTickets(rows, 3, { offset: Number.NaN, limit: 2 })).toMatchObject({ matched: 3, hasMore: true });
     expect(pageChatTickets(rows, 3, { offset: Number.NaN, limit: 2 }).tickets.map((t) => t.ref)).toEqual(['1', '2']);
+  });
+});
+
+describe('openOnly closes each kind by its own status words', () => {
+  const row = (kind: string, status: string) => ({ kind, ref: kind, status, exists: true }) as unknown as ChatTicketLink;
+
+  it('regression: a complete spec / shipped roadmap item / completed initiative are not open; an active initiative is', () => {
+    const rows = [row('spec', 'complete'), row('roadmap', 'shipped'), row('initiative', 'completed'), row('initiative', 'active'), row('task', 'done')];
+    expect(filterChatTickets(rows, { openOnly: true }).map((r) => `${r.kind}:${r.status}`)).toEqual(['initiative:active']);
+  });
+
+  it('a task-lane word does not close a spec', () => {
+    expect(filterChatTickets([row('spec', 'done')], { openOnly: true })).toHaveLength(1);
   });
 });
