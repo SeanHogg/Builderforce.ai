@@ -14,8 +14,8 @@ import {
   STALL_WINDOW_TAIL,
   type ManagerDiagnosticsInput,
 } from './managerDiagnostics';
+import type { ManagerDailyDigest } from './managerDigestClient';
 import type {
-  ManagerDailyDigest,
   ManagerAction,
   ManagerOverview,
   ManagerPassRecord,

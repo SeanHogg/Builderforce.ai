@@ -19061,6 +19061,11 @@
     "noExecutions": "Aún no hay ejecuciones. Usa Ejecutar arriba para poner esta tarea en cola a un agente.",
     "executionHeader": "Ejecución n.º {id}",
     "agentThatRan": "Agente que realizó esta ejecución",
+    "agentName": {
+      "host": "Agente {id}",
+      "defaultCloud": "Builderforce Cloud (predeterminado)",
+      "cloud": "Agente en la nube"
+    },
     "ranAs": " · ejecutado como {type}",
     "live": "en vivo",
     "polling": "sondeando",

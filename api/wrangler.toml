@@ -10,6 +10,11 @@ compatibility_flags = ["nodejs_compat"]
 # scripts/check-source-package-graph.mjs.
 tsconfig = "tsconfig.json"
 
+# Source maps are NOT uploaded: Cloudflare caps them at 15 MiB gzipped and this Worker's
+# maps (sourcesContent included) reached 15.0 MiB on 2026-11-20, so every deploy was refused
+# (code 10021). Restoring source-mapped stack traces needs slimmer maps — see the Gap Register.
+upload_source_maps = false
+
 # Run the Worker near its back end, not near the caller. Almost every request here
 # is a chain of Neon queries (auth, tenant, permissions, then the handler's own
 # reads), each an HTTPS round trip to ONE database region; from a far-away edge colo

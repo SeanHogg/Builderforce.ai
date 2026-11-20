@@ -39,7 +39,9 @@ vi.mock('../llm/builtinMcpService', () => ({
   cloudAgentPlatformToolSchemas: () => [{ type: 'function', function: { name: 'builtin_kanban_signoff', description: 'sign off', parameters: { type: 'object', properties: {} } } }],
   resolveCloudAgentPlatformTool: (name: string) => (name === 'builtin_kanban_signoff' ? 'kanban.signoff' : null),
 }));
-vi.mock('../llm/vendors/registry', () => ({ catalogEntry: () => null }));
+// Only `catalogEntry` is faked (no catalog entry for the fake model); the rest of the registry is the real one, which modules
+// on the import path read at load (modelTwins' getCatalog, modelPoolComposition's autoRoutableModelsByTier).
+vi.mock('../llm/vendors/registry', async (importOriginal) => ({ ...(await importOriginal<typeof import('../llm/vendors/registry')>()), catalogEntry: () => null }));
 // The metering / trace write of a served turn: the fake gateway's answer is already parsed.
 vi.mock('./cloudAgent/cloudLlmTurn', () => ({
   recordCloudLlmTurn: async (result: { script: { content: string; toolCalls?: Array<{ id: string; name: string; arguments: string }> } }) => ({

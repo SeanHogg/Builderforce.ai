@@ -19036,6 +19036,11 @@
     "noExecutions": "No executions yet. Use Run above to queue this task to an agent.",
     "executionHeader": "Execution #{id}",
     "agentThatRan": "Agent that ran this execution",
+    "agentName": {
+      "host": "Agent {id}",
+      "defaultCloud": "Builderforce Cloud (default)",
+      "cloud": "Cloud agent"
+    },
     "ranAs": " · ran as {type}",
     "live": "live",
     "polling": "polling",

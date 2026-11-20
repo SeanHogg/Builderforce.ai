@@ -18,7 +18,12 @@ vi.mock("vscode", () => ({
   ChatResponseTurn: class {},
 }));
 vi.mock("@seanhogg/builderforce-brain-embedded", () => ({ isRunning, runAbortSignal: vi.fn(), withRunUsage: vi.fn() }));
-vi.mock("@builderforce/agent-tools", () => ({ RunKnowledgeRecorder: class {} }));
+// run-guards' delegatedChanges builds its DELEGATION_TOOLS set from these at module load.
+vi.mock("@builderforce/agent-tools", () => ({
+  RunKnowledgeRecorder: class {},
+  SPAWN_AGENTS_TOOL: "spawn_agents",
+  SUBAGENT_CONTROL_TOOL_NAMES: { wait: "wait_agents", message: "message_agent", stop: "stop_agent" },
+}));
 
 vi.mock("./gateway", () => ({ SECRET_KEY: "secret", getLocalModelsConfig: vi.fn() }));
 vi.mock("./modelRouting", () => ({

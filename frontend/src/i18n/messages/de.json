@@ -19061,6 +19061,11 @@
     "noExecutions": "Noch keine Ausführungen. Verwenden Sie oben Ausführen, um diese Aufgabe an einen Agenten zu übergeben.",
     "executionHeader": "Ausführung #{id}",
     "agentThatRan": "Agent, der diese Ausführung ausgeführt hat",
+    "agentName": {
+      "host": "Agent {id}",
+      "defaultCloud": "Builderforce Cloud (Standard)",
+      "cloud": "Cloud-Agent"
+    },
     "ranAs": " · ausgeführt als {type}",
     "live": "live",
     "polling": "Abfrage",

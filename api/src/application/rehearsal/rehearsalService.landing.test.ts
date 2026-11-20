@@ -13,7 +13,7 @@ vi.mock('../observability/caughtErrorReporter', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../observability/caughtErrorReporter')>()),
   reportCaughtError: h.report,
 }));
-vi.mock('../prd/taskPrd', () => ({ findTaskPrimarySpec: async () => ({ prd: 'a prd' }) }));
+vi.mock('../prd/taskPrd', () => ({ findTaskPrimarySpec: async () => ({ prd: 'a prd' }), linkSpecToTask: async () => undefined }));
 vi.mock('../agentIdentity/agentRunIdentity', () => ({ freezeIdeAgentDefinition: async () => null }));
 vi.mock('../runtime/cloudAgentEngine', () => ({
   prepareCloudRun: async () => ({ systemPrompt: 's', userContent: 'u', execParams: undefined }),

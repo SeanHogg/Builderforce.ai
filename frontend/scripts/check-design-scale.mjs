@@ -307,8 +307,14 @@ const BASELINE = {
    * 3241 → 3240 (2026-11-17): `PullRequestPanel`'s gate-error alert (12) and
    * `DataList`'s empty row (13) had taken the tree to 3242 and turned the Release run
    * red. Both name `--font-size-small` now; the net is one lower than before.
+   *
+   * 3233 → 3221 (2026-11-20): the PRD 48 merge-grant and incident surfaces
+   * (`ImplicatedTicketsSection` 7, `managerDescriptors` 6, `MergeGrantToggle` 5,
+   * `MergeGrantStatus` 1) had taken the tree to 3240 and turned the Release run red.
+   * All nineteen name roles now (10 / 0.72rem = eyebrow, 12 / 13 / 0.75–0.82rem =
+   * small); the net is lower because other surfaces shrank too.
    */
-  offScaleFontSizes: 3233,
+  offScaleFontSizes: 3221,
   /**
    * Page-column literals on the PUBLIC surface — a `max-width` (or `width`)
    * typed as a number between 900px and 1500px on a marketing file.

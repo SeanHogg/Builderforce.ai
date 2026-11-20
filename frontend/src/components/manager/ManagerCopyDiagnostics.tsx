@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import { CopyButton } from '@/components/CopyButton';
 import { managerApi, type ManagerOverview } from '@/lib/builderforceApi';
+import { managerDigestApi } from '@/lib/managerDigestClient';
 import { buildManagerDiagnosticsReport } from '@/lib/managerDiagnostics';
 import { captureDiagnosticsContext } from '@/lib/diagnosticsCapture';
 
@@ -51,7 +52,7 @@ export function ManagerCopyDiagnostics({ projectId, overview }: ManagerCopyDiagn
     const [stalls, census, digest] = await Promise.all([
       managerApi.stalls(projectId).catch(() => null),
       managerApi.census(projectId).catch(() => null),
-      managerApi.digest(projectId).catch(() => null),
+      managerDigestApi.digest(projectId).catch(() => null),
     ]);
     return buildManagerDiagnosticsReport(
       {

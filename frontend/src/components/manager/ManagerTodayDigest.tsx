@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { BarChart, type BarDatum } from '@/components/charts/BarChart';
 import { InsightStat } from '@/components/dashboard/InsightStat';
 import { buildPeriodDelta } from '@/components/dashboard/metricFormat';
-import { managerApi, type ManagerDailyDigest, type DigestContributor } from '@/lib/builderforceApi';
+import { managerDigestApi, type ManagerDailyDigest, type DigestContributor } from '@/lib/managerDigestClient';
 import { isManagerActionType } from '@/lib/managerActions';
 import { ticketHref } from '@/lib/ticketHref';
 import { useFormat } from "@/i18n/useFormat";
@@ -80,7 +80,7 @@ export function ManagerTodayDigest({ projectId }: ManagerTodayDigestProps) {
   const load = useCallback(async () => {
     setError(null);
     try {
-      setData(await managerApi.digest(projectId));
+      setData(await managerDigestApi.digest(projectId));
     } catch (e) {
       setError(faultMessage(e, t('error')));
     } finally {

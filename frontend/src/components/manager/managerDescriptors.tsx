@@ -16,7 +16,7 @@ import { statusColor, type StatusToneMap } from '@/lib/statusTone';
  * as `labels`, per the descriptor contract.
  */
 
-const muted = { color: 'var(--text-muted)', fontSize: '0.8rem' } as const;
+const muted = { color: 'var(--text-muted)', fontSize: 'var(--font-size-small)' } as const;
 const dash = <span style={{ color: 'var(--text-muted)' }}>—</span>;
 
 // ── Backlog ────────────────────────────────────────────────────────────────
@@ -34,7 +34,7 @@ function BusinessValueBar({ value, rationale, noRationale }: { value: number | n
   const pct = Math.max(0, Math.min(100, value));
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 120 }} title={rationale || noRationale}>
-      <span style={{ fontWeight: 700, fontSize: '0.82rem', minWidth: 26, color: 'var(--text-primary)' }}>{value}</span>
+      <span style={{ fontWeight: 700, fontSize: 'var(--font-size-small)', minWidth: 26, color: 'var(--text-primary)' }}>{value}</span>
       <div style={{ position: 'relative', flex: 1, height: 8, minWidth: 40, background: 'var(--border-subtle)', borderRadius: 'var(--radius-sm)' }}>
         <div style={{ position: 'absolute', inset: 0, width: `${pct}%`, background: 'var(--accent)', borderRadius: 'var(--radius-sm)' }} />
       </div>
@@ -47,7 +47,7 @@ const isUnassigned = (i: ManagerBacklogItem) => i.assignedUserId == null && i.as
 
 export function managerBacklogDescriptor(l: BacklogLabels): CollectionDescriptor<ManagerBacklogItem> {
   const priorityBadge = (i: ManagerBacklogItem) => (
-    <span className={taskPriorityBadgeClass(i.priority)} style={{ fontSize: 10, padding: '2px 6px', borderRadius: 'var(--radius-sm)' }}>
+    <span className={taskPriorityBadgeClass(i.priority)} style={{ fontSize: 'var(--font-size-eyebrow)', padding: '2px 6px', borderRadius: 'var(--radius-sm)' }}>
       {l.priorityLabel(i.priority)}
     </span>
   );
@@ -121,7 +121,7 @@ function RunStatusPill({ status, label }: { status: string; label: string }) {
   const key = runTaskStatusKey(status);
   return (
     <span style={{
-      display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.75rem', fontWeight: 600,
+      display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 'var(--font-size-small)', fontWeight: 600,
       color: statusColor(RUN_TASK_TONE, key), border: `1px solid ${statusColor(RUN_TASK_TONE, key, 'border')}`,
       borderRadius: 'var(--radius-full)', padding: '2px 9px',
     }}>
@@ -171,7 +171,7 @@ export interface ActivityLabels {
 function TicketLink({ a }: { a: ManagerAction }): ReactNode {
   if (a.taskId == null) return null;
   return (
-    <Link href={ticketHref(a.taskId)} style={{ display: 'inline-block', marginBottom: 3, color: 'var(--accent)', fontSize: '0.78rem', fontWeight: 700, textDecoration: 'none' }}>
+    <Link href={ticketHref(a.taskId)} style={{ display: 'inline-block', marginBottom: 3, color: 'var(--accent)', fontSize: 'var(--font-size-small)', fontWeight: 700, textDecoration: 'none' }}>
       {a.ticketKey ?? `#${a.taskId}`}{a.ticketTitle ? ` · ${a.ticketTitle}` : ''}
     </Link>
   );
@@ -223,7 +223,7 @@ export interface StallLabels {
 function StallBadge({ label, escalated }: { label: string; escalated: boolean }) {
   return (
     <span style={{
-      display: 'inline-block', padding: '2px 8px', borderRadius: 'var(--radius-full)', fontSize: '0.72rem', fontWeight: 700,
+      display: 'inline-block', padding: '2px 8px', borderRadius: 'var(--radius-full)', fontSize: 'var(--font-size-eyebrow)', fontWeight: 700,
       color: escalated ? 'var(--warning-text)' : 'var(--text-muted)',
       background: escalated ? 'var(--warning-bg, rgba(180, 83, 9, 0.12))' : 'var(--bg-base)',
       border: '1px solid var(--border-subtle)', whiteSpace: 'nowrap',

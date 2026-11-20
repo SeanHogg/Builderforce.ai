@@ -99,6 +99,7 @@ async function runTurn(opts: {
   chatId?: number;
   prompt?: string;
   recovery?: NativeBrainRunOptions["recovery"];
+  runSettings?: NativeBrainRunOptions["runSettings"];
 }) {
   const gateway = fakeGateway(opts.script);
   const { events, log } = recorder();
@@ -114,6 +115,7 @@ async function runTurn(opts: {
     ...(opts.projectId != null ? { projectId: opts.projectId } : {}),
     ...(opts.evermind ? { evermind: opts.evermind } : {}),
     ...(opts.recovery ? { recovery: opts.recovery } : {}),
+    ...(opts.runSettings ? { runSettings: opts.runSettings } : {}),
     ...(opts.policyGates ? { policyGates: opts.policyGates } : {}),
     ...(opts.directives ? { directives: opts.directives } : {}),
     permissionMode: opts.permissionMode ?? "ask",
@@ -476,6 +478,9 @@ describe("workspace directives", () => {
     const { log } = await runTurn({
       tools: [push],
       permissionMode: "acceptEdits",
+      // A project whose ship policy allows the push (PRD 48): under the default (`commit`) the
+      // policy refuses git_push before any workspace hook runs, so the hook would never be reached.
+      runSettings: { shipPolicy: shipPolicyOf("commit_push", "project_settings") },
       directives: directives([{ on: "preTool", tool: "git_push", command: "npm test" }], "", async () => ({ ok: false, exitCode: 1, stdout: "1 test failed" })),
       script: (ctx) => (ctx.turn === 0 ? { toolCalls: [{ name: "git_push", args: {} }] } : { text: "Tests fail; not pushing." }),
     });
