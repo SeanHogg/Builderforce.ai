@@ -58,7 +58,7 @@ import {
   settledWithin,
   steerMetadata,
   within
-} from "./chunk-EU2CIM43.mjs";
+} from "./chunk-MNSRAAVJ.mjs";
 import {
   BrainRequestError,
   LOCAL_ENGINE_FAILURE_CODES,
@@ -177,6 +177,7 @@ import {
   createComposingActivity,
   createEvidenceLedger,
   createLinkedToChat,
+  declaresChatTicketListing,
   defaultInferenceMode,
   defineRecordIndex,
   describeBracketDelta,
@@ -257,6 +258,7 @@ import {
   linkedTicketsReviewedComplete,
   linkedTicketsStillOpen,
   linkedTicketsToAdvance,
+  linkedTicketsToAdvanceFor,
   linkedTicketsToComplete,
   localToolsIn,
   memoryReplayable,
@@ -362,7 +364,7 @@ import {
   withAdvisory,
   withProvenanceMetadata,
   workFiledNotStaffedVerdict
-} from "./chunk-GJZU3WFY.mjs";
+} from "./chunk-66I654IE.mjs";
 import {
   ASK_USER_TOOL,
   ASK_USER_TOOL_SPEC,
@@ -393,7 +395,7 @@ import {
   stripReasoningTagsFromText,
   thoughtTextOf,
   trimRepetitionLoop
-} from "./chunk-PK5ZQFTV.mjs";
+} from "./chunk-4M73IFQC.mjs";
 import {
   HELP_COMMAND_ID,
   createComposerCommandRegistry,
@@ -16745,7 +16747,7 @@ async function recordCodeChangeTicket(serverChatId, c, req, phase) {
   if (files.length === 0 && attachTo == null) return;
   const source = serverChatId != null ? `Brain chat #${serverChatId}` : "a local editor chat";
   const summary = `Code change (${files.length} file${files.length === 1 ? "" : "s"}) from ${source}`;
-  const parentTaskId = attachTo == null && serverChatId != null && canListChatTickets(req.tools) ? await soleOpenLinkedEpic(serverChatId, c, req) : null;
+  const parentTaskId = attachTo == null && serverChatId != null && declaresChatTicketListing(req.tools) ? await soleOpenLinkedEpic(serverChatId, c, req) : null;
   const toolStart = nowMs2();
   const args = {
     projectId: req.projectId,
@@ -17428,7 +17430,8 @@ async function deterministicFinish(input, run) {
     await recordCodeChangeTicket(input.serverChatId, view, fullReq, "settle");
   }
   if (needsTicket) {
-    await updateLinkedTickets(input.serverChatId, view, fullReq, linkedTicketsToAdvance, "in_progress", "worked-ticket-off-backlog", runOwnedTicketRefs(input.trace, view.deltaTicketId));
+    const owned = runOwnedTicketRefs(input.trace, view.deltaTicketId);
+    await updateLinkedTickets(input.serverChatId, view, fullReq, (l) => linkedTicketsToAdvanceFor(l, owned), "in_progress", "worked-ticket-off-backlog", "selected");
     await updateRunLocalTickets(input.trace, view, fullReq, "in_progress", "worked-ticket-off-backlog");
   }
   if (shipped && req.projectId != null) {
@@ -17461,7 +17464,7 @@ async function deterministicFinish(input, run) {
     }
   }
   if (finishing && await updateLinkedTickets(run.serverChatId, view, req, linkedTicketsToComplete, "done", "shipped-to-base-branch", runOwnedTicketRefs(input.trace, view.deltaTicketId)) > 0) result.ticketClosed = true;
-  const unlistedDelta = run.serverChatId == null ? view.deltaTicketId : null;
+  const unlistedDelta = run.serverChatId == null || !canListChatTickets(fullReq.tools) ? view.deltaTicketId : null;
   if (finishing && await updateRunLocalTickets(input.trace, view, fullReq, "done", "shipped-to-base-branch", unlistedDelta) > 0) result.ticketClosed = true;
   if (reviewedInPreview.length && req.projectId != null) {
     await updateLinkedTickets(input.serverChatId, view, fullReq, (l) => linkedTicketsReviewedComplete(l, reviewedInPreview), "done", "reviewed-in-preview", "selected");
@@ -17479,7 +17482,7 @@ async function hasLinkedTicket(run) {
 async function holdsLinkedTicket(trace4, serverChatId, req, opts = {}) {
   if (!req.runTool) return false;
   if (localTicketsFiledInRun(trace4).length > 0) return true;
-  if (serverChatId == null || !canListChatTickets(req.tools)) return false;
+  if (serverChatId == null || !canListChatTickets(req.tools)) return opts.deltaTicketId != null;
   const listed = await listChatTickets(req, serverChatId, { note: opts.note, label: "ticket.links_unreadable", consequence: "the run holds no linked ticket to close." }, opts.listing);
   if (listed == null) return false;
   const owned = runOwnedTicketRefs(trace4, opts.deltaTicketId ?? null);
@@ -21290,7 +21293,9 @@ function openLinkedWorkHold(run) {
     noteOf2({ ts: nowIso(), category: "message", label, ...args ? { args } : {}, result });
   };
   const openTickets = async (trace4, executing) => {
-    if (run.serverChatId == null || !canListChatTickets(run.req.tools)) return localOpenTickets(trace4, /* @__PURE__ */ new Set());
+    if (run.serverChatId == null || !declaresChatTicketListing(run.req.tools)) return localOpenTickets(trace4, /* @__PURE__ */ new Set());
+    const owned = runOwnedTicketRefs(trace4, run.c.deltaTicketId);
+    if (!executing && owned.size === 0) return [];
     const listed = await listChatTickets(run.req, run.serverChatId, {
       note: noteOf2,
       label: "finish.open_work_unreadable",
@@ -21300,7 +21305,6 @@ function openLinkedWorkHold(run) {
     }, listingScopeOf(run.c));
     if (listed == null) return null;
     const rows = linkedTaskRows(listed);
-    const owned = runOwnedTicketRefs(trace4, run.c.deltaTicketId);
     const linkedOpen = rows.filter((t) => isOpenLinkedStatus(t.status) && (owned.has(t.ref) || executing && t.status === ACTIVE_STATUS));
     return [...linkedOpen, ...localOpenTickets(trace4, new Set(rows.map((t) => t.ref)))];
   };

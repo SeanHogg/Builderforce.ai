@@ -85,19 +85,16 @@ function isCancelledTaskStatus(status) {
 var TASK_TABLE = { closed: TASK_CLOSED_STATUSES, cancelled: TASK_CANCELLED_STATUSES };
 var CEREMONY_SESSION_CLOSED_STATUSES = ["completed", "cancelled", "closed", "archived"];
 var CEREMONY_SESSION = { closed: CEREMONY_SESSION_CLOSED_STATUSES, cancelled: [] };
-var PORTFOLIO_STATUSES = ["active", "archived"];
-var INITIATIVE_STATUSES = ["proposed", "active", "completed", "archived"];
-var OBJECTIVE_STATUSES = ["active", "achieved", "missed", "archived"];
+var PORTFOLIO_STATUSES = ["active", "archived", "cancelled"];
+var INITIATIVE_STATUSES = ["proposed", "active", "completed", "archived", "cancelled"];
+var OBJECTIVE_STATUSES = ["active", "achieved", "missed", "archived", "cancelled"];
 var ROADMAP_STATUSES = ["planned", "in_progress", "shipped", "cancelled"];
 var ROADMAP_LEGACY_DELIVERED_STATUSES = ["done", "complete", "completed", "released"];
 function pick(_vocabulary, ...words) {
   return words;
 }
-var TICKET_STATUS_VALUES = {
-  portfolio: PORTFOLIO_STATUSES,
-  initiative: INITIATIVE_STATUSES,
-  objective: OBJECTIVE_STATUSES,
-  roadmap: [...ROADMAP_STATUSES, ...ROADMAP_LEGACY_DELIVERED_STATUSES]
+var TICKET_STATUS_ALIASES = {
+  roadmap: Object.fromEntries(ROADMAP_LEGACY_DELIVERED_STATUSES.map((word) => [word, "shipped"]))
 };
 var TICKET_CLOSED_STATES = {
   // agent-loop `taskClosedState.ts` TASK_CLOSED_STATUSES / TASK_CANCELLED_STATUSES.
@@ -109,7 +106,8 @@ var TICKET_CLOSED_STATES = {
   // A MISSED objective is over without delivering, so it is skipped like a cancelled lane
   // rather than counted done (its own ring still reads 100: it is closed).
   objective: { closed: pick(OBJECTIVE_STATUSES, "achieved", "missed", "archived"), cancelled: pick(OBJECTIVE_STATUSES, "missed") },
-  roadmap: { closed: pick(TICKET_STATUS_VALUES.roadmap, "shipped", ...ROADMAP_LEGACY_DELIVERED_STATUSES), cancelled: [] },
+  // Legacy delivered spellings are still read as closed: older rows carry them.
+  roadmap: { closed: [...pick(ROADMAP_STATUSES, "shipped"), ...ROADMAP_LEGACY_DELIVERED_STATUSES], cancelled: [] },
   // api schema/kernel.ts `specStatusEnum`: draft | ready | in_progress | complete (a pg
   // enum, so the api test asserts this word is one of its values).
   spec: { closed: ["complete"], cancelled: [] },

@@ -1,6 +1,6 @@
 import {
   isClosedTaskStatus
-} from "./chunk-PK5ZQFTV.mjs";
+} from "./chunk-4M73IFQC.mjs";
 
 // src/streamFailureDetail.ts
 function hostOf(url) {
@@ -9460,7 +9460,14 @@ function linkedTicketsStillOpen(listResult) {
 }
 var CHAT_TICKET_LIST_TOOL = "builtin_chats_list_tickets";
 function canListChatTickets(tools) {
+  return tools === void 0 || declaresChatTicketListing(tools);
+}
+function declaresChatTicketListing(tools) {
   return (tools ?? []).some((t) => t.function.name === CHAT_TICKET_LIST_TOOL);
+}
+function linkedTicketsToAdvanceFor(listResult, owned) {
+  const underOpenEpic = linkedTicketsStillOpen(listResult).some((t) => t.kind === "epic");
+  return linkedTicketsToAdvance(listResult).filter((t) => !underOpenEpic || owned.has(t.ref));
 }
 function isOpenLinkedStatus(status) {
   const lane = status.toLowerCase();
@@ -12285,6 +12292,8 @@ export {
   linkedTicketsStillOpen,
   CHAT_TICKET_LIST_TOOL,
   canListChatTickets,
+  declaresChatTicketListing,
+  linkedTicketsToAdvanceFor,
   isOpenLinkedStatus,
   linkedTicketsToComplete,
   linkedTicketsReviewedComplete,
@@ -12404,4 +12413,4 @@ export {
   toolCallArgBytes,
   createComposingActivity
 };
-//# sourceMappingURL=chunk-GJZU3WFY.mjs.map
+//# sourceMappingURL=chunk-66I654IE.mjs.map

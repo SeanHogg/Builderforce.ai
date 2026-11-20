@@ -1152,19 +1152,16 @@ var CANCELLED2 = new Set(TASK_CANCELLED_STATUSES);
 var TASK_TABLE = { closed: TASK_CLOSED_STATUSES, cancelled: TASK_CANCELLED_STATUSES };
 var CEREMONY_SESSION_CLOSED_STATUSES = ["completed", "cancelled", "closed", "archived"];
 var CEREMONY_SESSION = { closed: CEREMONY_SESSION_CLOSED_STATUSES, cancelled: [] };
-var PORTFOLIO_STATUSES = ["active", "archived"];
-var INITIATIVE_STATUSES = ["proposed", "active", "completed", "archived"];
-var OBJECTIVE_STATUSES = ["active", "achieved", "missed", "archived"];
+var PORTFOLIO_STATUSES = ["active", "archived", "cancelled"];
+var INITIATIVE_STATUSES = ["proposed", "active", "completed", "archived", "cancelled"];
+var OBJECTIVE_STATUSES = ["active", "achieved", "missed", "archived", "cancelled"];
 var ROADMAP_STATUSES = ["planned", "in_progress", "shipped", "cancelled"];
 var ROADMAP_LEGACY_DELIVERED_STATUSES = ["done", "complete", "completed", "released"];
 function pick(_vocabulary, ...words3) {
   return words3;
 }
-var TICKET_STATUS_VALUES = {
-  portfolio: PORTFOLIO_STATUSES,
-  initiative: INITIATIVE_STATUSES,
-  objective: OBJECTIVE_STATUSES,
-  roadmap: [...ROADMAP_STATUSES, ...ROADMAP_LEGACY_DELIVERED_STATUSES]
+var TICKET_STATUS_ALIASES = {
+  roadmap: Object.fromEntries(ROADMAP_LEGACY_DELIVERED_STATUSES.map((word) => [word, "shipped"]))
 };
 var TICKET_CLOSED_STATES = {
   // agent-loop `taskClosedState.ts` TASK_CLOSED_STATUSES / TASK_CANCELLED_STATUSES.
@@ -1176,7 +1173,8 @@ var TICKET_CLOSED_STATES = {
   // A MISSED objective is over without delivering, so it is skipped like a cancelled lane
   // rather than counted done (its own ring still reads 100: it is closed).
   objective: { closed: pick(OBJECTIVE_STATUSES, "achieved", "missed", "archived"), cancelled: pick(OBJECTIVE_STATUSES, "missed") },
-  roadmap: { closed: pick(TICKET_STATUS_VALUES.roadmap, "shipped", ...ROADMAP_LEGACY_DELIVERED_STATUSES), cancelled: [] },
+  // Legacy delivered spellings are still read as closed: older rows carry them.
+  roadmap: { closed: [...pick(ROADMAP_STATUSES, "shipped"), ...ROADMAP_LEGACY_DELIVERED_STATUSES], cancelled: [] },
   // api schema/kernel.ts `specStatusEnum`: draft | ready | in_progress | complete (a pg
   // enum, so the api test asserts this word is one of its values).
   spec: { closed: ["complete"], cancelled: [] },
@@ -22499,7 +22497,14 @@ function linkedTicketsStillOpen(listResult) {
 }
 var CHAT_TICKET_LIST_TOOL = "builtin_chats_list_tickets";
 function canListChatTickets(tools) {
+  return tools === void 0 || declaresChatTicketListing(tools);
+}
+function declaresChatTicketListing(tools) {
   return (tools ?? []).some((t) => t.function.name === CHAT_TICKET_LIST_TOOL);
+}
+function linkedTicketsToAdvanceFor(listResult, owned) {
+  const underOpenEpic = linkedTicketsStillOpen(listResult).some((t) => t.kind === "epic");
+  return linkedTicketsToAdvance(listResult).filter((t) => !underOpenEpic || owned.has(t.ref));
 }
 function isOpenLinkedStatus(status2) {
   const lane = status2.toLowerCase();
@@ -31573,7 +31578,7 @@ async function recordCodeChangeTicket(serverChatId, c, req, phase) {
   if (files.length === 0 && attachTo == null) return;
   const source = serverChatId != null ? `Brain chat #${serverChatId}` : "a local editor chat";
   const summary = `Code change (${files.length} file${files.length === 1 ? "" : "s"}) from ${source}`;
-  const parentTaskId = attachTo == null && serverChatId != null && canListChatTickets(req.tools) ? await soleOpenLinkedEpic(serverChatId, c, req) : null;
+  const parentTaskId = attachTo == null && serverChatId != null && declaresChatTicketListing(req.tools) ? await soleOpenLinkedEpic(serverChatId, c, req) : null;
   const toolStart = nowMs2();
   const args = {
     projectId: req.projectId,
@@ -32256,7 +32261,8 @@ async function deterministicFinish(input, run) {
     await recordCodeChangeTicket(input.serverChatId, view, fullReq, "settle");
   }
   if (needsTicket) {
-    await updateLinkedTickets(input.serverChatId, view, fullReq, linkedTicketsToAdvance, "in_progress", "worked-ticket-off-backlog", runOwnedTicketRefs(input.trace, view.deltaTicketId));
+    const owned = runOwnedTicketRefs(input.trace, view.deltaTicketId);
+    await updateLinkedTickets(input.serverChatId, view, fullReq, (l) => linkedTicketsToAdvanceFor(l, owned), "in_progress", "worked-ticket-off-backlog", "selected");
     await updateRunLocalTickets(input.trace, view, fullReq, "in_progress", "worked-ticket-off-backlog");
   }
   if (shipped && req.projectId != null) {
@@ -32289,7 +32295,7 @@ async function deterministicFinish(input, run) {
     }
   }
   if (finishing && await updateLinkedTickets(run.serverChatId, view, req, linkedTicketsToComplete, "done", "shipped-to-base-branch", runOwnedTicketRefs(input.trace, view.deltaTicketId)) > 0) result.ticketClosed = true;
-  const unlistedDelta = run.serverChatId == null ? view.deltaTicketId : null;
+  const unlistedDelta = run.serverChatId == null || !canListChatTickets(fullReq.tools) ? view.deltaTicketId : null;
   if (finishing && await updateRunLocalTickets(input.trace, view, fullReq, "done", "shipped-to-base-branch", unlistedDelta) > 0) result.ticketClosed = true;
   if (reviewedInPreview.length && req.projectId != null) {
     await updateLinkedTickets(input.serverChatId, view, fullReq, (l) => linkedTicketsReviewedComplete(l, reviewedInPreview), "done", "reviewed-in-preview", "selected");
@@ -32307,7 +32313,7 @@ async function hasLinkedTicket(run) {
 async function holdsLinkedTicket(trace4, serverChatId, req, opts = {}) {
   if (!req.runTool) return false;
   if (localTicketsFiledInRun(trace4).length > 0) return true;
-  if (serverChatId == null || !canListChatTickets(req.tools)) return false;
+  if (serverChatId == null || !canListChatTickets(req.tools)) return opts.deltaTicketId != null;
   const listed = await listChatTickets(req, serverChatId, { note: opts.note, label: "ticket.links_unreadable", consequence: "the run holds no linked ticket to close." }, opts.listing);
   if (listed == null) return false;
   const owned = runOwnedTicketRefs(trace4, opts.deltaTicketId ?? null);
@@ -36114,7 +36120,9 @@ function openLinkedWorkHold(run) {
     noteOf2({ ts: nowIso(), category: "message", label, ...args ? { args } : {}, result });
   };
   const openTickets = async (trace4, executing) => {
-    if (run.serverChatId == null || !canListChatTickets(run.req.tools)) return localOpenTickets(trace4, /* @__PURE__ */ new Set());
+    if (run.serverChatId == null || !declaresChatTicketListing(run.req.tools)) return localOpenTickets(trace4, /* @__PURE__ */ new Set());
+    const owned = runOwnedTicketRefs(trace4, run.c.deltaTicketId);
+    if (!executing && owned.size === 0) return [];
     const listed = await listChatTickets(run.req, run.serverChatId, {
       note: noteOf2,
       label: "finish.open_work_unreadable",
@@ -36124,7 +36132,6 @@ function openLinkedWorkHold(run) {
     }, listingScopeOf(run.c));
     if (listed == null) return null;
     const rows = linkedTaskRows(listed);
-    const owned = runOwnedTicketRefs(trace4, run.c.deltaTicketId);
     const linkedOpen = rows.filter((t) => isOpenLinkedStatus(t.status) && (owned.has(t.ref) || executing && t.status === ACTIVE_STATUS));
     return [...linkedOpen, ...localOpenTickets(trace4, new Set(rows.map((t) => t.ref)))];
   };
