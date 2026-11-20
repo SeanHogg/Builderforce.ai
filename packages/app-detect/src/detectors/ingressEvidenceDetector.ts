@@ -146,10 +146,10 @@ function braced(text: string, start: number): string {
 
 /** The proxy target a value names: a string literal, or an object's `target`; null when it is not a literal. */
 function targetOf(value: string): string | null {
-  const literal = /^(['"`])(.*?)\1/s.exec(value);
+  const literal = /^(['"`])([\s\S]*?)\1/.exec(value);
   if (literal) return literal[2]!;
   if (!value.startsWith('{')) return null;
-  const target = /(?:^|[^\w$])['"]?target['"]?\s*:\s*(?:(['"`])(.*?)\1|(\d+))/s.exec(value);
+  const target = /(?:^|[^\w$])['"]?target['"]?\s*:\s*(?:(['"`])([\s\S]*?)\1|(\d+))/.exec(value);
   return target ? (target[2] ?? target[3] ?? null) : null;
 }
 

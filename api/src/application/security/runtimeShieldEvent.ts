@@ -38,6 +38,7 @@ export const SHIELD_REASON_CODES = [
   'ingress.app_origin_mismatch',
   'ingress.app_origin_required',
   'ingress.shared_preview_origin',
+  'ingress.handoff_conflict',
   'egress.policy_invalid',
   'process.message_undeliverable',
 ] as const;
@@ -70,7 +71,9 @@ export interface ShieldReasonPolicy {
  *    the embedder-configuration refusals — a same-origin preview, an invalid or missing per-application
  *    preview origin, a malformed egress policy id (`ingress.same_origin_refused`,
  *    `ingress.preview_origin_invalid`, `ingress.app_origin_required`, `egress.policy_invalid`) — and a
- *    cross-origin message the runtime could not deliver (`process.message_undeliverable`): each is
+ *    cross-origin message the runtime could not deliver (`process.message_undeliverable`), and a second
+ *    application's attach refused because another one already holds the shared preview
+ *    (`ingress.handoff_conflict`, the runtime's own `medium`): each is
  *    Builderforce's own setup refused safely, not an attack.
  *  - LOW — a malformed filesystem operation (`fs.invalid_op`): the runtime refused bad input. And the
  *    one notice that refuses nothing (`ingress.shared_preview_origin`, action `monitor`).
@@ -96,6 +99,7 @@ export const SHIELD_REASON_POLICY: { readonly [C in ShieldReasonCode]: ShieldRea
   'ingress.app_origin_mismatch': { severity: 'high', ruleId: 'shield.ingress.app-origin-mismatch' },
   'ingress.app_origin_required': { severity: 'medium', ruleId: 'shield.ingress.app-origin-required' },
   'ingress.shared_preview_origin': { severity: 'low', ruleId: 'shield.ingress.shared-preview-origin' },
+  'ingress.handoff_conflict': { severity: 'medium', ruleId: 'shield.ingress.handoff-conflict' },
   'egress.policy_invalid': { severity: 'medium', ruleId: 'shield.egress.policy-invalid' },
   'process.message_undeliverable': { severity: 'medium', ruleId: 'shield.process.message-undeliverable' },
 };
