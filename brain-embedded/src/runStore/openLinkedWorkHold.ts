@@ -31,7 +31,7 @@ import { normalizeChatMode } from '../chatMode';
 import { canListChatTickets, isOpenLinkedStatus, isReadOnlyPlatformTool, linkedTaskRows, type LinkedTaskRow } from '../chatWorkLinking';
 import { isCodeChangeTool, isRepoPublishTool } from '../localWorkspaceTools';
 import type { BrainRunContext } from './brainRunContext';
-import { latestStatus, listChatTickets, runOwnedTicketRefs, ticketMovesInRun, ticketsCreatedInRun } from './chatTickets';
+import { latestStatus, listChatTickets, listingScopeOf, runOwnedTicketRefs, ticketMovesInRun, ticketsCreatedInRun } from './chatTickets';
 import { continuationLimits } from './deadline';
 import { budgeted } from './progressBudget';
 import { nowIso, pushTrace, runTrace } from './runCells';
@@ -141,7 +141,7 @@ export function openLinkedWorkHold(run: BrainRunContext): (ctx: PolicyContext) =
       note: noteOf, label: 'finish.open_work_unreadable', consequence: 'the run is not held for them.',
       // A hung listing must not hang the run's end: it is waited for no longer than the settle's own ticket bookkeeping.
       timeoutMs: continuationLimits.settleMs,
-    });
+    }, listingScopeOf(run.c));
     if (listed == null) return null;
     const rows = linkedTaskRows(listed);
     const owned = runOwnedTicketRefs(trace, run.c.deltaTicketId);

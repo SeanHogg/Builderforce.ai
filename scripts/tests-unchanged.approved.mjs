@@ -121,6 +121,9 @@ export const APPROVED_PERMANENT = [
  * with a `blob`.
  * @type {{ file: string; changed: string; reason: string; approvedBy: string; cases?: number }[]}
  */
+/** The parity snapshots whose host call log apply-intended-snapshot-change-ticket-listing.mjs reconciled (see the last block). */
+const TICKET_LISTING_RECONCILED = new Set(['ship-gate', 'child-report-ship-gate', 'hand-off-execution']);
+
 export const APPROVED_THIS_PUSH = [
   ...[
     'brain-embedded/src/handOffExecution.e2e.test.ts',
@@ -187,6 +190,10 @@ export const APPROVED_THIS_PUSH = [
   // The parity snapshots reconciled with the same intended change by
   // brain-embedded/scripts/apply-intended-snapshot-change-chat-link.mjs (its header names the three edits). In this range they ALSO
   // carry cb7d0f2be's operator regeneration to PRD 45 behaviour (see the chat-mode-tools / stop-during-fold entries above).
+  // The SAME 72 records also carry 47642b1d5's epic-parent directive bullet, inserted by
+  // brain-embedded/scripts/apply-intended-snapshot-change-epic-parent.mjs — one block covers both, since the last entry per file wins.
+  // Three of them (TICKET_LISTING_RECONCILED) also carry the host-call reconciliation of
+  // brain-embedded/scripts/apply-intended-snapshot-change-ticket-listing.mjs.
   ...[
     'ask-user-malformed', 'ask-user-terminal', 'big-read-paged', 'budget-warn-stop', 'child-own-transcript', 'child-report-exhausted-stall',
     'child-report-ship-gate', 'child-report-turn-end', 'confirm-approved', 'confirm-declined', 'effort-balanced-thinking', 'effort-quick',
@@ -201,8 +208,16 @@ export const APPROVED_THIS_PUSH = [
     'tools-without-runner', 'two-runs-one-fold', 'two-steers-turn-end', 'undelegated-request', 'unknown-tool', 'wait-interrupted', 'work-mode-tools',
   ].map((id) => ({
     file: `brain-embedded/src/run/parity/snapshots/${id}.json`,
-    changed: 'The work-linking prompt bullet (and the fold token arithmetic it moves by 8), the removed auto `builtin_chats_link_ticket` step/call, and the run chat stamped on `builtin_tasks_create`.',
-    reason: 'Intended change (chat-link-on-create): a created item links its chat in the create call, so the prompt no longer asks for a link step and the run fires none. Applied by brain-embedded/scripts/apply-intended-snapshot-change-chat-link.mjs, not regenerated from the agent.',
+    changed: 'The work-linking prompt bullet (and the fold token arithmetic it moves by 8), the removed auto `builtin_chats_link_ticket` step/call, and the run chat stamped on `builtin_tasks_create`. Plus (47642b1d5) the linked-chat EPIC-PARENT directive bullet ("When an open EPIC is linked to this chat… builtin_tickets_from_delta passing parentTaskId… file a child task with builtin_tasks_create (parentTaskId=…)") inserted after the STATUS bullet, and the fold token arithmetic it moves by 95 (estimatedTokens +95, non-zero trimmedTokens −95, the still-over-window notice +95).' +
+      (TICKET_LISTING_RECONCILED.has(id)
+        ? ' Plus host.toolCalls only: ' + (id === 'hand-off-execution'
+          ? 'the trailing builtin_chats_list_tickets is dropped (this host advertises no listing tool).'
+          : 'one builtin_chats_list_tickets before the first-edit from_delta (parent-epic lookup), and one before the settle from_delta (the open-work hold; the settle\'s parent-epic lookup reuses it); the trailing listing (the in_progress advance, read fresh) is unchanged.')
+        : ''),
+    reason: 'Intended change (chat-link-on-create): a created item links its chat in the create call, so the prompt no longer asks for a link step and the run fires none. Applied by brain-embedded/scripts/apply-intended-snapshot-change-chat-link.mjs, not regenerated from the agent. Intended change (47642b1d5, "fix(agent-run): hold a run\'s end while its linked tickets are open…"): chatWorkLinkingDirective gained the epic-parent bullet for a linked chat, so an open epic\'s remaining work is filed under it. Applied by brain-embedded/scripts/apply-intended-snapshot-change-epic-parent.mjs, not regenerated from the agent.' +
+      (TICKET_LISTING_RECONCILED.has(id)
+        ? ' Intended change (47642b1d5 + the per-run listing memo in runStore/chatTickets.ts): the ticket-list backstops are gated on the listing tool and act only on run-owned tickets, the parent-epic lookup lists once before a mint, and the read-only questions of one settle reuse one listing until an attempted ticket write or a model turn, while every ticket move reads the listing fresh. Applied by brain-embedded/scripts/apply-intended-snapshot-change-ticket-listing.mjs, not regenerated from the agent.'
+        : ''),
     approvedBy: APPROVED_BY,
   })),
 ];

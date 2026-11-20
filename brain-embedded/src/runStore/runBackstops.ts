@@ -9,7 +9,7 @@
 
 import { isFailedToolResult } from '../brainTriage';
 import { NOT_STARTED_TASK_STATUSES, canListChatTickets, linkedTicketsStillOpen, type LinkedTicketToAdvance } from '../chatWorkLinking';
-import { latestStatus, listChatTickets, localTicketFilings, ticketMovesInRun } from './chatTickets';
+import { latestStatus, listChatTickets, listingScopeOf, localTicketFilings, ticketMovesInRun, type ListingScope } from './chatTickets';
 import {
   LOCAL_TICKET_CREATE_TOOL, SERVER_TICKET_TOOLS, ticketStatusMove, ticketToolVocabulary,
   type TicketStatusMove,
@@ -26,12 +26,22 @@ export type BackstopState = Pick<
   RunCell,
   'deltaRecordedFiles' | 'touchedFiles' | 'deltaTicketId' | 'ticketRecorded' | 'deltaCaptureRefused' | 'deltaTitleCount'
 >;
-export type BackstopRun = BackstopState & { note?: (ev: BrainTraceEvent) => void };
+export type BackstopRun = BackstopState & {
+  note?: (ev: BrainTraceEvent) => void;
+  /** The run the chat's ticket listing is memoised for ({@link listChatTickets}); used only while the cell is still that run's. */
+  listing?: ListingScope;
+};
+
+/** The listing scope of a live cell, or the one a settle snapshot carries. */
+function listingScopeOfRun(c: RunCell | BackstopRun): ListingScope | undefined {
+  return 'trace' in c ? listingScopeOf(c) : c.listing;
+}
 
 /** The run's state at the moment it settled, apart from the cell. Trace lines are written to the cell only while
  *  it is still THIS run's (`runId` unchanged); late work after the next run began writes nowhere. */
 export function settleView(c: RunCell, runId: string): BackstopRun {
   return {
+    listing: { cell: c, runId },
     touchedFiles: [...c.touchedFiles],
     deltaRecordedFiles: [...c.deltaRecordedFiles],
     deltaTicketId: c.deltaTicketId,
@@ -201,7 +211,7 @@ export async function recordCodeChangeTicket(
 async function soleOpenLinkedEpic(serverChatId: number, c: RunCell | BackstopRun, req: BrainRunRequest): Promise<number | null> {
   const listed = await listChatTickets(req, serverChatId, {
     note: noteOf(c), label: 'ticket.parent_epic_unreadable', consequence: 'the code-change ticket is minted without a parent epic.',
-  });
+  }, listingScopeOfRun(c));
   if (listed == null) return null;
   const epics = linkedTicketsStillOpen(listed).filter((t) => t.kind === 'epic');
   const id = epics.length === 1 ? Number(epics[0]!.ref) : NaN;
@@ -244,6 +254,7 @@ export async function updateLinkedTickets(
 ): Promise<number> {
   // An unbound local chat, or a host whose catalog carries no listing, has no linked tickets on the platform to move.
   if (!req.runTool || serverChatId == null || !canListChatTickets(req.tools)) return 0;
+  // A MOVE reads the board as it is now — never a memoised listing: a ticket someone moved since must not be moved again.
   const listed = await listChatTickets(req, serverChatId, { note: noteOf(c), label: 'ticket.links_unreadable', consequence: `no linked ticket was moved to ${status}.` });
   if (listed == null) return 0;
   let moved = 0;

@@ -12,13 +12,14 @@
 
 import { syncIdText } from '@builderforce/local-first';
 import type { BrainTraceEvent } from '../brainTriage';
-import { CHAT_TICKET_LIST_TOOL } from '../chatWorkLinking';
+import { CHAT_TICKET_LIST_TOOL, isMutatingPlatformTool } from '../chatWorkLinking';
 import { errorMessage } from '../pageEngines/types';
 import { isLocalTicketCreateLabel, SERVER_TICKET_CREATE_TOOL } from '../ticketToolVocabulary';
 import { isFailedToolResult } from '../toolFailure';
 import { entityIdsOf } from '../toolResultRecord';
 import { bounded } from './deadline';
-import { nowIso } from './runCells';
+import type { RunCell } from './runCell';
+import { nowIso, runTrace } from './runCells';
 import type { BrainRunRequest } from './runTypes';
 
 /** A status change by either vocabulary: the editor's `ticket-move` or the account's `builtin_tasks_update`. */
@@ -129,11 +130,91 @@ export interface ListingReport {
 }
 
 /**
+ * The run a listing is read for: its chat's cell and the run's id. The cell outlives the run (it is the CHAT's), so a memoised
+ * listing is used only while `cell.runId` is still `runId` — a later run, or a settle's late work after the next run began,
+ * never reads it.
+ */
+export interface ListingScope {
+  cell: RunCell;
+  runId: string;
+}
+
+/** The listing scope of a live run cell. */
+export const listingScopeOf = (cell: RunCell): ListingScope => ({ cell, runId: cell.runId });
+
+/**
+ * One memoised listing: what was read, for which run and chat, and WHERE in the run's trace it was read — the last event
+ * then (one reference into the live trace, never a copy of it) and the trace's length then.
+ */
+interface MemoisedListing {
+  runId: string;
+  chatId: number;
+  listed: unknown;
+  /** The trace's last event when the listing was read — a listing read on an empty run trace is never memoised. */
+  mark: BrainTraceEvent;
+  /** The trace's length then: the mark can only move to a LOWER index (the window slides from the front), never past it. */
+  length: number;
+}
+
+/**
+ * The run's last successful listing, per cell. A WeakMap so a dropped cell takes its entry with it; the entry is keyed to
+ * the run by `runId`, so it never crosses into the chat's next run, and it is forgotten when the run settles
+ * ({@link forgetChatTicketListing}).
+ */
+const memoisedListings = new WeakMap<RunCell, MemoisedListing>();
+
+/** Drop the run's memoised listing — the run settled. */
+export function forgetChatTicketListing(cell: RunCell): void {
+  memoisedListings.delete(cell);
+}
+
+/**
+ * Whether a recorded step may have changed what the chat's listing shows: an ATTEMPTED ticket or board write by either
+ * vocabulary (`builtin_*` writes — `isMutatingPlatformTool` — and the device's `ticket-create` / `ticket-move`) — succeeded,
+ * failed, thrown or timed out alike, since a write that answered badly may still have landed — or a new model turn.
+ */
+const changesListing = (ev: BrainTraceEvent): boolean =>
+  ev.category === 'llm' || (ev.category === 'tool' && (isMutatingPlatformTool(ev.label) || isLocalTicketCreateLabel(ev.label) || MOVE_LABEL.test(ev.label)));
+
+/**
+ * The memoised listing of `scope`'s run for `chatId`, when nothing that could change it was recorded since it was read.
+ * The mark must still sit inside THIS run's slice of the trace, at or below where it was: a mark that slid out of the
+ * bounded window, or a trace replaced or reset under the same runId (a mirrored snapshot, an engine restart), re-lists.
+ */
+function memoisedListing(scope: ListingScope, chatId: number): unknown | undefined {
+  const { cell, runId } = scope;
+  const memo = memoisedListings.get(cell);
+  if (!memo || memo.runId !== runId || cell.runId !== runId || memo.chatId !== chatId) return undefined;
+  const at = cell.trace.lastIndexOf(memo.mark);
+  if (at < 0 || at < cell.runTraceFrom || at > memo.length - 1) return undefined;
+  for (let i = at + 1; i < cell.trace.length; i += 1) if (changesListing(cell.trace[i]!)) return undefined;
+  return memo.listed;
+}
+
+/**
  * List the tickets linked to a chat through the run's tool runner. A thrown call or a failed result is REPORTED on the run
  * (`report.note`) and answered with null — never a silent skip, never a throw.
+ *
+ * With a `scope`, the listing is memoised for that run: the read-only questions of one settle/finish pass (the open-work
+ * hold, "does the run hold a ticket", the parent-epic lookup before a mint) read the chat's tickets once, and again only
+ * after the run attempted a ticket write or started a model turn ({@link changesListing}). A path that MOVES a ticket passes
+ * no scope: it acts on the board as it is now. A failed listing is never memoised.
  */
-export async function listChatTickets(req: Pick<BrainRunRequest, 'runTool'>, chatId: number, report: ListingReport): Promise<unknown | null> {
+export async function listChatTickets(
+  req: Pick<BrainRunRequest, 'runTool'>,
+  chatId: number,
+  report: ListingReport,
+  scope?: ListingScope,
+): Promise<unknown | null> {
   if (!req.runTool) return null;
+  if (scope) {
+    const memo = memoisedListing(scope, chatId);
+    if (memo !== undefined) return memo;
+  }
+  // Read before the call: an event recorded while the listing is in flight is AFTER the mark, so it invalidates it.
+  const before = scope ? runTrace(scope.cell) : [];
+  const mark = before[before.length - 1];
+  const length = scope ? scope.cell.trace.length : 0;
   let listed: unknown;
   try {
     const call = req.runTool(CHAT_TICKET_LIST_TOOL, { chatId });
@@ -141,7 +222,11 @@ export async function listChatTickets(req: Pick<BrainRunRequest, 'runTool'>, cha
   } catch (e) {
     listed = { ok: false, error: errorMessage(e) };
   }
-  if (!isFailedToolResult(listed)) return listed;
+  if (!isFailedToolResult(listed)) {
+    if (scope && mark && scope.cell.runId === scope.runId) memoisedListings.set(scope.cell, { runId: scope.runId, chatId, listed, mark, length });
+    else if (scope) memoisedListings.delete(scope.cell);
+    return listed;
+  }
   const why = (listed as { error?: unknown } | null)?.error;
   report.note?.({
     ts: nowIso(), category: 'message', label: report.label, args: { chatId },

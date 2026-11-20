@@ -29,7 +29,7 @@ import type { BrainRunContext } from './brainRunContext';
 import type { BrainRunRequest } from './runTypes';
 import type { BrainTraceEvent } from '../brainTriage';
 import { nowIso, pushTrace, runTrace } from './runCells';
-import { listChatTickets, localTicketsFiledInRun, runOwnedTicketRefs } from './chatTickets';
+import { listChatTickets, listingScopeOf, localTicketsFiledInRun, runOwnedTicketRefs, type ListingScope } from './chatTickets';
 import { errorMessage } from '../pageEngines/types';
 import { onBaseBranch, shippedToBaseBranch } from '../shipVerification';
 import { approvedReviewFor, runReviewGate } from './shipGates';
@@ -183,7 +183,7 @@ async function shippedOf(run: BrainRunContext): Promise<boolean> {
 
 /** Does the run hold a LINKED ticket to close out — one the chat carries, or one it filed on the device? */
 async function hasLinkedTicket(run: BrainRunContext): Promise<boolean> {
-  return holdsLinkedTicket(runTrace(run.c), run.serverChatId, run.req, { deltaTicketId: run.c.deltaTicketId, note: (ev) => pushTrace(run.c, ev) });
+  return holdsLinkedTicket(runTrace(run.c), run.serverChatId, run.req, { deltaTicketId: run.c.deltaTicketId, note: (ev) => pushTrace(run.c, ev), listing: listingScopeOf(run.c) });
 }
 
 /**
@@ -196,12 +196,12 @@ export async function holdsLinkedTicket(
   trace: Parameters<typeof localTicketsFiledInRun>[0],
   serverChatId: number | null,
   req: Pick<BrainRunRequest, 'runTool' | 'tools'>,
-  opts: { deltaTicketId?: number | null; note?: (ev: BrainTraceEvent) => void } = {},
+  opts: { deltaTicketId?: number | null; note?: (ev: BrainTraceEvent) => void; listing?: ListingScope } = {},
 ): Promise<boolean> {
   if (!req.runTool) return false;
   if (localTicketsFiledInRun(trace).length > 0) return true;
   if (serverChatId == null || !canListChatTickets(req.tools)) return false;
-  const listed = await listChatTickets(req, serverChatId, { note: opts.note, label: 'ticket.links_unreadable', consequence: 'the run holds no linked ticket to close.' });
+  const listed = await listChatTickets(req, serverChatId, { note: opts.note, label: 'ticket.links_unreadable', consequence: 'the run holds no linked ticket to close.' }, opts.listing);
   if (listed == null) return false;
   const owned = runOwnedTicketRefs(trace, opts.deltaTicketId ?? null);
   return linkedTicketsToComplete(listed).some((t) => owned.has(t.ref));
