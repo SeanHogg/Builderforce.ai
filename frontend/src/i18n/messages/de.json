@@ -2062,6 +2062,12 @@
       "emptyAlertEvents": "Noch kein Alarm ausgelöst.",
       "emptyComplianceTools": "Keine geprüften Tool-Ereignisse in diesem Zeitraum.",
       "emptyComplianceAgents": "Keine geprüften Tool-Ereignisse in diesem Zeitraum.",
+      "emptyHumanRequests": "Keine Anfragen gefunden",
+      "emptyScorecards": "Keine Aktivität in diesem Zeitraum.",
+      "emptyEngagement": "Noch keine Mitglieder.",
+      "emptyEmpData": "Keine Daten in diesem Zeitraum",
+      "emptyContributors": "Noch keine Mitwirkenden. Verbinde eine Repository-Integration, um menschliche Aktivität zu erfassen, oder klicke auf KI-Agenten synchronisieren, um deine Agenten hinzuzufügen.",
+      "emptyAudit": "Noch keine Aktivität. Aktionen im Arbeitsbereich erscheinen hier, sobald sie geschehen.",
       "emptyPersonasMine": "No custom personas yet. Create one to get started.",
       "emptyPersonasMarketplace": "No personas found.",
       "emptyPromptsMine": "You haven't saved any prompts yet.",
@@ -2953,6 +2959,7 @@
       "period": "Monat",
       "spend": "Ausgaben",
       "spendOverTime": "Ausgaben im Zeitverlauf",
+      "verticalDashboard": "Ihr Branchen-Dashboard",
       "forecast": "Prognose",
       "forecastSub": "voraussichtl. Monatsende",
       "costPerPr": "Kosten / gemergter PR",
@@ -4589,9 +4596,8 @@
       "activitySub": "Aktivität des gesamten Teams – Menschen über git/PR, Agenten über Telemetrie.",
       "title": "Leistung",
       "scorecards": "Mitglieder-Scorecards",
-      "scorecardsSub": "· letzte {days} Tage · Zeile anklicken, um Fähigkeiten/Verfügbarkeit zu bearbeiten",
+      "scorecardsSub": "· letzte {days} Tage · Mitglied auswählen, um Fähigkeiten/Verfügbarkeit zu bearbeiten",
       "loading": "Wird geladen…",
-      "noActivity": "Keine Aktivität in diesem Zeitraum.",
       "colMember": "Mitglied",
       "colAssigned": "Zugewiesen",
       "colCompleted": "Erledigt",
@@ -4602,7 +4608,53 @@
       "colIdleDone": "Leerlauf→fertig",
       "colHygiene": "Board-Hygiene",
       "colEngage": "Engagement",
-      "colEffective": "Effektivität"
+      "colEffective": "Effektivität",
+      "daysShort": "{days} T",
+      "rollupCounts": "{members} · {completed}✓",
+      "editProfile": "Fähigkeiten und Verfügbarkeit bearbeiten",
+      "kind": {
+        "human": "Mensch",
+        "cloud_agent": "Cloud-Agent",
+        "host_agent": "Host-Agent"
+      },
+      "dora": {
+        "deployFreq": "Deployment-Frequenz",
+        "perDay": "{n}/Tag",
+        "deploysIn": "{count} in {days} T",
+        "leadTime": "Durchlaufzeit für Änderungen",
+        "leadTimeHint": "erstellt → erledigt",
+        "cfr": "Änderungsfehlerrate",
+        "cfrHint": "fehlgeschlagene Deployments",
+        "mttr": "MTTR",
+        "mttrHint": "Wiederherstellungszeit"
+      },
+      "engagement": {
+        "title": "Beteiligung",
+        "subtitle": "· letzte {days} Tage · alle Signale kombiniert",
+        "loading": "Wird geladen…",
+        "legend": {
+          "activity": "Entwicklungsaktivität",
+          "platform": "Plattformnutzung",
+          "vscode": "VS Code",
+          "delivery": "Lieferung"
+        },
+        "col": {
+          "member": "Mitglied",
+          "engagement": "Beteiligung",
+          "score": "Punktzahl",
+          "activity": "Aktivität",
+          "platform": "Plattform",
+          "vscode": "VS Code",
+          "completed": "Erledigt"
+        },
+        "level": {
+          "inactive": "Inaktiv",
+          "low": "Niedrig",
+          "moderate": "Mittel",
+          "high": "Hoch",
+          "very_high": "Sehr hoch"
+        }
+      }
     },
     "consolidate": {
       "title": "Personen zusammenführen",
@@ -4693,8 +4745,8 @@
         "scoringOffNote": "Die menschliche Bewertung ist für diesen Arbeitsbereich deaktiviert; es werden nur Agentenwerte angezeigt.",
         "noRoles": "Keine bewerteten Läufe in diesem Zeitraum.",
         "insufficientData": "Nicht genügend Daten — {count} final bewertete Läufe; 20 sind erforderlich, bevor ein Wert angezeigt wird.",
-        "colRole": "Rolle",
-        "colMeasure": "Messwert",
+        "colPerson": "Person",
+        "colKind": "Typ",
         "colRatio": "Standardverhältnis",
         "colRuns": "Läufe",
         "colInterval": "95 %-Intervall",
@@ -6501,7 +6553,8 @@
       "loading": "Wird geladen…",
       "exportCsv": "CSV exportieren",
       "exporting": "Exportiere…",
-      "focusMix": "Fokus"
+      "daysShort": "{days} T",
+      "allocSummary": "{hours} Std. · {count, plural, one {# Initiative} other {# Initiativen}}"
     },
     "desc": {
       "workforceHealth": "Wer überlastet ist, wer freie Kapazität hat und wer überhaupt keine offene Arbeit hält.",
@@ -17959,7 +18012,15 @@
     "title": "Aktivität & Audit-Verlauf",
     "subtitle": "Jede Änderung in Ihrem Team – wer hat was, woran und wann getan.",
     "loading": "Aktivität wird geladen…",
-    "empty": "Noch keine Aktivität. Aktionen im Arbeitsbereich erscheinen hier, sobald sie geschehen.",
+    "filterLabel": "Nach Akteur filtern",
+    "col": {
+      "when": "Wann",
+      "actor": "Akteur",
+      "type": "Typ",
+      "action": "Aktion",
+      "summary": "Zusammenfassung",
+      "model": "Modell"
+    },
     "loadMore": "Mehr laden",
     "filter": {
       "all": "Alle"
@@ -18078,7 +18139,7 @@
     "wholeTeam": "Gesamtes Team",
     "backToTeam": "← Zurück zum Team",
     "leaderboard": "Rangliste",
-    "empty": "Noch keine Mitwirkenden. Verbinde eine Repository-Integration, um menschliche Aktivität zu erfassen, oder klicke auf KI-Agenten synchronisieren, um deine Agenten hinzuzufügen.",
+    "showCalendar": "Aktivitätskalender dieses Mitwirkenden anzeigen",
     "calendarAria": "Beitragskalender",
     "tileTitle": "{date}: {count} Beiträge",
     "stat": {
@@ -21980,6 +22041,10 @@
       "noLeases": "Kein Agent hält eine Datei dieses Tickets.",
       "notesTitle": "Gemeinsamer Arbeitsbereich",
       "noNotes": "Kein Agent hat eine Notiz zu diesem Ticket hinterlassen.",
+      "noteKey": "Schlüssel",
+      "noteAuthor": "Autor",
+      "noteUpdated": "Aktualisiert",
+      "noteContent": "Notiz",
       "resource": "Datei",
       "holder": "Gehalten von",
       "mode": "Sperre",
@@ -22038,6 +22103,9 @@
       "historyTitle": "Frühere Probeläufe",
       "empty": "Noch keine Probeläufe. Führen Sie einen aus, bevor Sie einen Prompt, ein Policy-Pack oder ein festgelegtes Modell ändern.",
       "wouldWrite": "Hätte geschrieben",
+      "created": "Gestartet",
+      "step": "Schritt",
+      "target": "Ziel",
       "stepCount": "{count} Auswirkungen",
       "outcome": "Ergebnis",
       "finished": "Abgeschlossen",
@@ -36104,11 +36172,8 @@
     "allKinds": "Alle Arten",
     "allStatuses": "Alle Status",
     "allAgentHosts": "Alle Agent-Hosts",
-    "searchPlaceholder": "Aktion, Beschreibung, Antwort suchen",
     "refresh": "Aktualisieren",
     "refreshing": "Wird aktualisiert…",
-    "loading": "Anfragen werden geladen…",
-    "empty": "Keine Anfragen gefunden",
     "viewTicket": "Ticket ansehen",
     "noActions": "Keine Aktionen verfügbar",
     "human": "Mensch",

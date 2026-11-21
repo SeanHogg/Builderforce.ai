@@ -2062,6 +2062,12 @@
       "emptyAlertEvents": "Aún no se ha disparado ninguna alerta.",
       "emptyComplianceTools": "No hay eventos de herramientas auditados en esta ventana.",
       "emptyComplianceAgents": "No hay eventos de herramientas auditados en esta ventana.",
+      "emptyHumanRequests": "No se encontraron solicitudes",
+      "emptyScorecards": "Sin actividad en este periodo.",
+      "emptyEngagement": "Aún no hay miembros.",
+      "emptyEmpData": "Sin datos en esta ventana",
+      "emptyContributors": "Aún no hay colaboradores. Conecta una integración de repositorio para registrar la actividad humana, o pulsa Sincronizar agentes de IA para añadir tus agentes.",
+      "emptyAudit": "Aún no hay actividad. Las acciones en el espacio de trabajo aparecerán aquí a medida que ocurran.",
       "emptyPersonasMine": "No custom personas yet. Create one to get started.",
       "emptyPersonasMarketplace": "No personas found.",
       "emptyPromptsMine": "You haven't saved any prompts yet.",
@@ -2953,6 +2959,7 @@
       "period": "Mes",
       "spend": "Gasto",
       "spendOverTime": "Gasto a lo largo del tiempo",
+      "verticalDashboard": "Tu panel del sector",
       "forecast": "Previsión",
       "forecastSub": "fin de mes previsto",
       "costPerPr": "Coste / PR fusionado",
@@ -4589,9 +4596,8 @@
       "activitySub": "Actividad de todo el equipo: humanos vía git/PR, agentes vía telemetría.",
       "title": "Rendimiento",
       "scorecards": "Fichas de miembros",
-      "scorecardsSub": "· últimos {days} d · haz clic en una fila para editar capacidad/disponibilidad",
+      "scorecardsSub": "· últimos {days} d · selecciona un miembro para editar capacidad/disponibilidad",
       "loading": "Cargando…",
-      "noActivity": "Sin actividad en este periodo.",
       "colMember": "Miembro",
       "colAssigned": "Asignadas",
       "colCompleted": "Completadas",
@@ -4602,7 +4608,53 @@
       "colIdleDone": "Inactivo→hecho",
       "colHygiene": "Higiene",
       "colEngage": "Compromiso",
-      "colEffective": "Efectividad"
+      "colEffective": "Efectividad",
+      "daysShort": "{days} d",
+      "rollupCounts": "{members} · {completed}✓",
+      "editProfile": "Editar capacidad y disponibilidad",
+      "kind": {
+        "human": "Humano",
+        "cloud_agent": "Agente en la nube",
+        "host_agent": "Agente de host"
+      },
+      "dora": {
+        "deployFreq": "Frecuencia de despliegue",
+        "perDay": "{n}/día",
+        "deploysIn": "{count} en {days} d",
+        "leadTime": "Tiempo de entrega de cambios",
+        "leadTimeHint": "creado → hecho",
+        "cfr": "Tasa de fallos de cambios",
+        "cfrHint": "despliegues fallidos",
+        "mttr": "MTTR",
+        "mttrHint": "tiempo de restauración"
+      },
+      "engagement": {
+        "title": "Compromiso",
+        "subtitle": "· últimos {days} d · todas las señales combinadas",
+        "loading": "Cargando…",
+        "legend": {
+          "activity": "actividad de desarrollo",
+          "platform": "uso de la plataforma",
+          "vscode": "VS Code",
+          "delivery": "entrega"
+        },
+        "col": {
+          "member": "Miembro",
+          "engagement": "Compromiso",
+          "score": "Puntuación",
+          "activity": "Actividad",
+          "platform": "Plataforma",
+          "vscode": "VS Code",
+          "completed": "Completadas"
+        },
+        "level": {
+          "inactive": "Inactivo",
+          "low": "Bajo",
+          "moderate": "Moderado",
+          "high": "Alto",
+          "very_high": "Muy alto"
+        }
+      }
     },
     "consolidate": {
       "title": "Consolidar personas",
@@ -4693,8 +4745,8 @@
         "scoringOffNote": "La puntuación humana está desactivada para este espacio de trabajo; solo se muestran las puntuaciones de agentes.",
         "noRoles": "No hay ejecuciones con puntuación en esta ventana.",
         "insufficientData": "Datos insuficientes — {count} ejecuciones con etiqueta final; se necesitan 20 antes de mostrar una puntuación.",
-        "colRole": "Rol",
-        "colMeasure": "Medida",
+        "colPerson": "Persona",
+        "colKind": "Tipo",
         "colRatio": "Ratio estándar",
         "colRuns": "Ejecuciones",
         "colInterval": "Intervalo del 95 %",
@@ -6501,7 +6553,8 @@
       "loading": "Cargando…",
       "exportCsv": "Exportar CSV",
       "exporting": "Exportando…",
-      "focusMix": "Enfoque"
+      "daysShort": "{days} d",
+      "allocSummary": "{hours} h · {count, plural, one {# iniciativa} other {# iniciativas}}"
     },
     "desc": {
       "workforceHealth": "Quién está sobrecargado, quién tiene capacidad libre y quién no tiene ningún trabajo abierto.",
@@ -17959,7 +18012,15 @@
     "title": "Actividad y auditoría",
     "subtitle": "Cada cambio en tu equipo: quién hizo qué, sobre qué y cuándo.",
     "loading": "Cargando actividad…",
-    "empty": "Aún no hay actividad. Las acciones en el espacio de trabajo aparecerán aquí a medida que ocurran.",
+    "filterLabel": "Filtrar por actor",
+    "col": {
+      "when": "Cuándo",
+      "actor": "Actor",
+      "type": "Tipo",
+      "action": "Acción",
+      "summary": "Resumen",
+      "model": "Modelo"
+    },
     "loadMore": "Cargar más",
     "filter": {
       "all": "Todos"
@@ -18078,7 +18139,7 @@
     "wholeTeam": "Todo el equipo",
     "backToTeam": "← Volver al equipo",
     "leaderboard": "Clasificación",
-    "empty": "Aún no hay colaboradores. Conecta una integración de repositorio para registrar la actividad humana, o pulsa Sincronizar agentes de IA para añadir tus agentes.",
+    "showCalendar": "Ver el calendario de actividad de este colaborador",
     "calendarAria": "Calendario de contribuciones",
     "tileTitle": "{date}: {count} contribuciones",
     "stat": {
@@ -21980,6 +22041,10 @@
       "noLeases": "Ningún agente retiene un archivo en este ticket.",
       "notesTitle": "Espacio de trabajo compartido",
       "noNotes": "Ningún agente ha publicado una nota en este ticket.",
+      "noteKey": "Clave",
+      "noteAuthor": "Autor",
+      "noteUpdated": "Actualizado",
+      "noteContent": "Nota",
       "resource": "Archivo",
       "holder": "Retenido por",
       "mode": "Bloqueo",
@@ -22038,6 +22103,9 @@
       "historyTitle": "Ensayos anteriores",
       "empty": "Todavía no hay ensayos. Ejecuta uno antes de cambiar un prompt, un paquete de políticas o un modelo fijado.",
       "wouldWrite": "Habría escrito",
+      "created": "Iniciado",
+      "step": "Paso",
+      "target": "Destino",
       "stepCount": "{count} efectos",
       "outcome": "Resultado",
       "finished": "Terminó",
@@ -36104,11 +36172,8 @@
     "allKinds": "Todos los tipos",
     "allStatuses": "Todos los estados",
     "allAgentHosts": "Todos los hosts de agentes",
-    "searchPlaceholder": "Buscar acción, descripción, respuesta",
     "refresh": "Actualizar",
     "refreshing": "Actualizando…",
-    "loading": "Cargando solicitudes…",
-    "empty": "No se encontraron solicitudes",
     "viewTicket": "Ver ticket",
     "noActions": "No hay acciones disponibles",
     "human": "persona",

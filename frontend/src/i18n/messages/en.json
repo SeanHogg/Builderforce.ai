@@ -2062,6 +2062,12 @@
       "emptyAlertEvents": "No alerts have fired yet.",
       "emptyComplianceTools": "No audited tool events in this window.",
       "emptyComplianceAgents": "No audited tool events in this window.",
+      "emptyHumanRequests": "No requests found",
+      "emptyScorecards": "No activity in this window.",
+      "emptyEngagement": "No members yet.",
+      "emptyEmpData": "No data in this window",
+      "emptyContributors": "No contributors yet. Connect a repo integration to ingest human activity, or click Sync AI agents to add your agents.",
+      "emptyAudit": "No activity yet. Actions across the workspace will appear here as they happen.",
       "selectPage": "Select page",
       "selectRow": "Select {label}",
       "selected": "{count, plural, one {# selected} other {# selected}}",
@@ -2939,6 +2945,7 @@
       "period": "Month",
       "spend": "Spend",
       "spendOverTime": "Spend over time",
+      "verticalDashboard": "Your vertical dashboard",
       "forecast": "Forecast",
       "forecastSub": "projected month-end",
       "costPerPr": "Cost / merged PR",
@@ -4575,9 +4582,8 @@
       "activitySub": "Whole-team activity — humans via git/PR, agents via telemetry.",
       "title": "Performance",
       "scorecards": "Member scorecards",
-      "scorecardsSub": "· last {days}d · click a row to edit capability/availability",
+      "scorecardsSub": "· last {days}d · select a member to edit capability/availability",
       "loading": "Loading…",
-      "noActivity": "No activity in this window.",
       "colMember": "Member",
       "colAssigned": "Assigned",
       "colCompleted": "Completed",
@@ -4588,7 +4594,53 @@
       "colIdleDone": "Idle→done",
       "colHygiene": "Hygiene",
       "colEngage": "Engage",
-      "colEffective": "Effective"
+      "colEffective": "Effective",
+      "daysShort": "{days}d",
+      "rollupCounts": "{members} · {completed}✓",
+      "editProfile": "Edit capability and availability",
+      "kind": {
+        "human": "Human",
+        "cloud_agent": "Cloud agent",
+        "host_agent": "Host agent"
+      },
+      "dora": {
+        "deployFreq": "Deployment frequency",
+        "perDay": "{n}/day",
+        "deploysIn": "{count} in {days}d",
+        "leadTime": "Lead time for changes",
+        "leadTimeHint": "created → done",
+        "cfr": "Change failure rate",
+        "cfrHint": "failed deploys",
+        "mttr": "MTTR",
+        "mttrHint": "restore time"
+      },
+      "engagement": {
+        "title": "Engagement",
+        "subtitle": "· last {days}d · all signals combined",
+        "loading": "Loading…",
+        "legend": {
+          "activity": "dev activity",
+          "platform": "platform usage",
+          "vscode": "VS Code",
+          "delivery": "delivery"
+        },
+        "col": {
+          "member": "Member",
+          "engagement": "Engagement",
+          "score": "Score",
+          "activity": "Activity",
+          "platform": "Platform",
+          "vscode": "VS Code",
+          "completed": "Completed"
+        },
+        "level": {
+          "inactive": "Inactive",
+          "low": "Low",
+          "moderate": "Moderate",
+          "high": "High",
+          "very_high": "Very high"
+        }
+      }
     },
     "consolidate": {
       "title": "Consolidate people",
@@ -4679,8 +4731,8 @@
         "scoringOffNote": "Human scoring is off for this workspace; only agent scores are shown.",
         "noRoles": "No scored runs in this window.",
         "insufficientData": "Not enough data — {count} final-labelled runs; 20 are needed before a score is shown.",
-        "colRole": "Role",
-        "colMeasure": "Measure",
+        "colPerson": "Person",
+        "colKind": "Type",
         "colRatio": "Std. ratio",
         "colRuns": "Runs",
         "colInterval": "95% interval",
@@ -6472,7 +6524,8 @@
       "loading": "Loading…",
       "exportCsv": "Export CSV",
       "exporting": "Exporting…",
-      "focusMix": "Focus"
+      "daysShort": "{days}d",
+      "allocSummary": "{hours}h · {count, plural, one {# initiative} other {# initiatives}}"
     },
     "desc": {
       "workforceHealth": "Who is overloaded, who has spare capacity, and who is holding no open work at all.",
@@ -17934,7 +17987,15 @@
     "title": "Activity & audit trail",
     "subtitle": "Every change across your workforce — who did what, to what, and when.",
     "loading": "Loading activity…",
-    "empty": "No activity yet. Actions across the workspace will appear here as they happen.",
+    "filterLabel": "Filter by actor",
+    "col": {
+      "when": "When",
+      "actor": "Actor",
+      "type": "Type",
+      "action": "Action",
+      "summary": "Summary",
+      "model": "Model"
+    },
     "loadMore": "Load more",
     "filter": {
       "all": "All"
@@ -18053,7 +18114,7 @@
     "wholeTeam": "Whole team",
     "backToTeam": "← Back to team",
     "leaderboard": "Leaderboard",
-    "empty": "No contributors yet. Connect a repo integration to ingest human activity, or click Sync AI agents to add your agents.",
+    "showCalendar": "Show this contributor's activity calendar",
     "calendarAria": "Contribution calendar",
     "tileTitle": "{date}: {count} contributions",
     "stat": {
@@ -21955,6 +22016,10 @@
       "noLeases": "No agent is holding a file on this ticket.",
       "notesTitle": "Shared workspace",
       "noNotes": "No agent has posted a note on this ticket.",
+      "noteKey": "Key",
+      "noteAuthor": "Author",
+      "noteUpdated": "Updated",
+      "noteContent": "Note",
       "resource": "File",
       "holder": "Held by",
       "mode": "Lock",
@@ -22013,6 +22078,9 @@
       "historyTitle": "Past rehearsals",
       "empty": "No rehearsals yet. Run one before changing a prompt, a policy pack or a model pin.",
       "wouldWrite": "Would write",
+      "created": "Started",
+      "step": "Step",
+      "target": "Target",
       "stepCount": "{count} effects",
       "outcome": "Outcome",
       "finished": "Finished",
@@ -35362,11 +35430,8 @@
     "allKinds": "All kinds",
     "allStatuses": "All statuses",
     "allAgentHosts": "All agent hosts",
-    "searchPlaceholder": "Search action, description, answer",
     "refresh": "Refresh",
     "refreshing": "Refreshing…",
-    "loading": "Loading requests…",
-    "empty": "No requests found",
     "viewTicket": "View ticket",
     "noActions": "No actions available",
     "human": "human",

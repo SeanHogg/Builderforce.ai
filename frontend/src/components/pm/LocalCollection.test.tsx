@@ -31,6 +31,49 @@ describe('LocalCollection', () => {
     expect(screen.queryByText('Alpha')).toBeNull();
     expect(screen.getByText('Beta')).toBeTruthy();
   });
+
+  // Spend = index, and the descriptor's default sort is spend desc: P060 first, P001 last.
+  const makeRows = (n: number) => Array.from({ length: n }, (_, i) => ({
+    projectId: i + 1, projectName: `P${String(i + 1).padStart(3, '0')}`, completedCount: i, agentLlmCostUsd: i,
+  }));
+  const many = makeRows(60);
+  const nextPage = () => fireEvent.click(screen.getByRole('button', { name: 'common.pagination.next' }));
+
+  it('regression: pages the rows instead of rendering the whole set', () => {
+    render(<LocalCollection descriptor={descriptor} rows={many} searchText={(r) => r.projectName} />);
+    expect(screen.queryAllByText(/^P\d{3}$/)).toHaveLength(50);
+  });
+
+  it('regression: sort applies across pages (page 1 holds the globally-first rows)', () => {
+    render(<LocalCollection descriptor={descriptor} rows={many} searchText={(r) => r.projectName} />);
+    expect(screen.getByText('P060')).toBeTruthy();
+    expect(screen.queryByText('P001')).toBeNull();
+    fireEvent.click(screen.getByText('Project'));
+    expect(screen.getByText('P001')).toBeTruthy();
+    expect(screen.queryByText('P060')).toBeNull();
+  });
+
+  it('regression: a search change resets to page 1', () => {
+    render(<LocalCollection descriptor={descriptor} rows={many} searchText={(r) => r.projectName} />);
+    nextPage();
+    expect(screen.queryByText('P060')).toBeNull();
+    expect(screen.getByText('P001')).toBeTruthy();
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'p0' } });
+    expect(screen.getByText('P060')).toBeTruthy();
+    expect(screen.queryByText('P001')).toBeNull();
+  });
+
+  it('regression: rows shrinking under the current page clamp it and snap the pager back', () => {
+    const { rerender } = render(<LocalCollection descriptor={descriptor} rows={many} />);
+    nextPage();
+    expect(screen.getByText('P001')).toBeTruthy();
+    rerender(<LocalCollection descriptor={descriptor} rows={makeRows(10)} />);
+    expect(screen.queryAllByText(/^P\d{3}$/)).toHaveLength(10);
+    // The paging state snapped to page 1, so growing back shows page 1, not page 2.
+    rerender(<LocalCollection descriptor={descriptor} rows={many} />);
+    expect(screen.getByText('P060')).toBeTruthy();
+    expect(screen.queryByText('P001')).toBeNull();
+  });
 });
 
 describe('descriptors', () => {

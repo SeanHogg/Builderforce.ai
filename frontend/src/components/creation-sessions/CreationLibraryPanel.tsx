@@ -2,10 +2,7 @@ import { useCallback, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import { useSearchParams } from 'next/navigation';
 import { Collection } from '@/components/collection/Collection';
-import { useLocalSource } from '@/components/collection/sources';
-import { useCollectionPreferences } from '@/components/collection/collectionPreferences';
-import { useCollectionPaging } from '@/components/collection/useCollectionPaging';
-import { useCollectionSort } from '@/components/collection/useCollectionSort';
+import { useLocalCollection } from '@/components/collection/useLocalCollection';
 import { useFormat } from '@/i18n/useFormat';
 import type { CreationLibraryItem } from '@/domains/canvas/domain/creationLibrary';
 import { CreationFolderBar, UNFILED } from './CreationFolderBar';
@@ -192,20 +189,12 @@ interface LibraryCollectionProps {
 }
 
 /**
- * Binds the local source to the Collection's own sort + paging state.
- *
- * `Collection` owns sort and paging internally but a local source needs them as
- * inputs, so this mirrors them with the same hooks over the same preference key.
- * The source's `refetch` is the library reload, which is what a bulk mutation calls.
+ * Binds the local source to page-owned sort + paging (`useLocalCollection`),
+ * passed into `<Collection>`. The source's `refetch` is the library reload,
+ * which is what a bulk mutation calls.
  */
 function LibraryCollection({ descriptor, rows, loading, reload, ...rest }: LibraryCollectionProps) {
-  const prefs = useCollectionPreferences(descriptor.surfaceKey, descriptor.defaultView ?? 'table');
-  const paging = useCollectionPaging(prefs.pageSize);
-  const sort = useCollectionSort(descriptor, paging.reset);
-  const local = useLocalSource(rows, descriptor, { key: sort.key, dir: sort.dir }, {
-    page: paging.page,
-    pageSize: paging.pageSize,
-  });
+  const { source: local, sort, paging } = useLocalCollection(descriptor, rows);
   const source = useMemo(
     () => ({ ...local, loading, refetch: reload }),
     [local, loading, reload],

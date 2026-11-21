@@ -3,11 +3,11 @@ import { Select } from '@/components/Select';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { approvalsApi, agentHosts, type Approval, type ApprovalStatus, type RequestKind, type AgentHost } from '@/lib/builderforceApi';
-import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
-import { ApprovalResolveControl } from './ApprovalResolveControl';
+import { LocalCollection } from '@/components/pm/LocalCollection';
 import { TicketDetailsPanel } from '@/components/task/TicketDetailsPanel';
 import { useFormat } from "@/i18n/useFormat";
 import { useErrorMessage } from '@/i18n/useErrorMessage';
+import { humanRequestsDescriptor } from './humanRequestsDescriptor';
 /**
  * Human-in-the-loop request queue — the portal side of the agent's `ask_human`
  * tool. Lists every request an agent has bubbled up (approvals, questions,
@@ -19,6 +19,10 @@ import { useErrorMessage } from '@/i18n/useErrorMessage';
  * calls, takes no required props, and renders no page chrome — so it drops into
  * the Workforce tab, an agent-host detail panel, a dashboard widget, or a task
  * drawer. Layout-only; auth/tenant gating is the surrounding shell's job.
+ *
+ * The rows render through the ONE shared Collection (PRD 47): Card | List, sort,
+ * search and paging are its job; the kind / status / agent-host filters and Refresh
+ * sit in its header slot.
  */
 
 type KindFilter = '' | RequestKind;
@@ -28,23 +32,8 @@ type StatusFilter = '' | ApprovalStatus;
 const KIND_FILTERS: readonly RequestKind[] = ['approval', 'question', 'feedback'];
 const STATUS_FILTERS: readonly ApprovalStatus[] = ['pending', 'approved', 'rejected', 'answered', 'expired'];
 
-function statusClass(status: ApprovalStatus): string {
-  switch (status) {
-    case 'pending': return 'badge-yellow';
-    case 'approved': return 'badge-green';
-    case 'rejected': return 'badge-red';
-    case 'answered': return 'badge-blue';
-    default: return 'badge-muted'; // expired
-  }
-}
-
-function kindClass(kind: RequestKind): string {
-  switch (kind) {
-    case 'question': return 'badge-blue';
-    case 'feedback': return 'badge-gray';
-    default: return 'badge-muted'; // approval
-  }
-}
+const searchText = (r: Approval): string =>
+  [r.id, r.actionType, r.description, r.requestedBy, r.reviewedBy, r.responseText].filter(Boolean).join(' ');
 
 export interface HumanRequestsViewProps {
   /** Preselect (and hide) the kind filter — e.g. a Questions-only widget. */
@@ -53,7 +42,7 @@ export interface HumanRequestsViewProps {
   defaultStatus?: StatusFilter;
   /** Lock the queue to a single agent host and hide the host filter. */
   lockedAgentHostId?: number;
-  /** Denser layout for embedding in a panel/drawer (hides view toggle + search). */
+  /** Card-first layout for embedding in a panel/drawer. */
   compact?: boolean;
   /** Fired after each load with the number of pending requests in view. */
   onPendingCountChange?: (count: number) => void;
@@ -76,8 +65,6 @@ export function HumanRequestsView({
   const [kind, setKind] = useState<KindFilter>(defaultKind);
   const [status, setStatus] = useState<StatusFilter>(defaultStatus);
   const [agentHostId, setAgentHostId] = useState<string>(lockedAgentHostId != null ? String(lockedAgentHostId) : '');
-  const [query, setQuery] = useState<string>('');
-  const [viewMode, setViewMode] = useState<ViewMode>('table');
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
@@ -110,93 +97,31 @@ export function HumanRequestsView({
     return map;
   }, [agentHostList]);
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return rows.filter((r) => {
-      if (kind && r.kind !== kind) return false;
-      if (!q) return true;
-      return (
-        r.id.toLowerCase().includes(q) ||
-        r.actionType.toLowerCase().includes(q) ||
-        r.description.toLowerCase().includes(q) ||
-        (r.requestedBy ?? '').toLowerCase().includes(q) ||
-        (r.reviewedBy ?? '').toLowerCase().includes(q) ||
-        (r.responseText ?? '').toLowerCase().includes(q)
-      );
-    });
-  }, [rows, query, kind]);
+  const filtered = useMemo(() => (kind ? rows.filter((r) => r.kind === kind) : rows), [rows, kind]);
 
   // Report the pending count in view so a host page/widget can badge it.
   useEffect(() => {
     onPendingCountChange?.(filtered.filter((r) => r.status === 'pending').length);
   }, [filtered, onPendingCountChange]);
 
-  /** Resolution summary for a non-pending row. */
-  const resolutionText = (row: Approval): string => {
-    if (row.status === 'answered') {
-      return `${row.reviewedBy ?? t('human')}: ${row.responseText ?? ''}`;
-    }
-    if (row.reviewedBy) {
-      return `${row.reviewedBy}${row.reviewNote ? `: ${row.reviewNote}` : ''}`;
-    }
-    return '-';
-  };
-
-  const agentHostLabel = (row: Approval): string =>
-    row.agentHostId != null ? agentHostNameById.get(row.agentHostId) ?? `#${row.agentHostId}` : '-';
-
-  const emptyText = t('empty');
+  const descriptor = useMemo(() => {
+    const base = humanRequestsDescriptor({
+      t,
+      fmt,
+      compact,
+      agentHostLabel: (row) => (row.agentHostId != null ? agentHostNameById.get(row.agentHostId) ?? `#${row.agentHostId}` : '-'),
+      onViewTicket: setSelectedTaskId,
+      onResolved: () => void load(),
+    });
+    // While a (re)load is in flight an empty list reads "Loading…", not "No requests".
+    return loading ? { ...base, emptyKey: 'loading' } : base;
+  }, [t, fmt, compact, agentHostNameById, load, loading]);
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, marginBottom: 16 }}>
-        <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>
-          {t('intro')}
-        </p>
-        {!compact && <ViewToggle value={viewMode} onChange={setViewMode} />}
-      </div>
-
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
-        {!defaultKind && (
-          <Select className="admin-select" value={kind} onChange={(e) => setKind(e.target.value as KindFilter)}>
-            <option value="">{t('allKinds')}</option>
-            {KIND_FILTERS.map((value) => (
-              <option key={value} value={value}>{t(`kindPlural.${value}`)}</option>
-            ))}
-          </Select>
-        )}
-
-        <Select className="admin-select" value={status} onChange={(e) => setStatus(e.target.value as StatusFilter)}>
-          <option value="">{t('allStatuses')}</option>
-          {STATUS_FILTERS.map((value) => (
-            <option key={value} value={value}>{t(`status.${value}`)}</option>
-          ))}
-        </Select>
-
-        {lockedAgentHostId == null && (
-          <Select className="admin-select" value={agentHostId} onChange={(e) => setAgentHostId(e.target.value)}>
-            <option value="">{t('allAgentHosts')}</option>
-            {agentHostList.map((c) => (
-              <option key={c.id} value={String(c.id)}>{c.name}</option>
-            ))}
-          </Select>
-        )}
-
-        {!compact && (
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={t('searchPlaceholder')}
-            className="admin-select"
-            style={{ minWidth: 220 }}
-          />
-        )}
-
-        <button type="button" className="btn-ghost" onClick={() => void load()} disabled={loading}>
-          {loading ? t('refreshing') : t('refresh')}
-        </button>
-      </div>
+      <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 16px' }}>
+        {t('intro')}
+      </p>
 
       {error && (
         <div
@@ -210,121 +135,36 @@ export function HumanRequestsView({
         </div>
       )}
 
-      {viewMode === 'table' && !compact ? (
-        <div className="table-wrap">
-          <table className="data-table" style={{ fontSize: 13 }}>
-            <thead>
-              <tr>
-                <th>{t('column.kind')}</th>
-                <th>{t('column.status')}</th>
-                <th>{t('column.action')}</th>
-                <th>{t('column.description')}</th>
-                <th>{t('column.item')}</th>
-                <th>{t('column.agentHost')}</th>
-                <th>{t('column.requested')}</th>
-                <th>{t('column.resolution')}</th>
-                <th>{t('column.resolve')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr><td colSpan={9} className="text-muted">{t('loading')}</td></tr>
-              ) : filtered.length === 0 ? (
-                <tr><td colSpan={9} className="text-muted">{emptyText}</td></tr>
-              ) : (
-                filtered.map((row) => (
-                  <tr key={row.id}>
-                    <td><span className={kindClass(row.kind)}>{t(`kind.${row.kind}`)}</span></td>
-                    <td><span className={statusClass(row.status)}>{t(`status.${row.status}`)}</span></td>
-                    <td style={{ whiteSpace: 'nowrap' }}>{row.actionType}</td>
-                    <td title={row.description} style={{ maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.description}</td>
-                    <td style={{ whiteSpace: 'nowrap' }}>
-                      {row.taskId != null
-                        ? <button type="button" className="btn-ghost" onClick={() => setSelectedTaskId(row.taskId)}>{t('viewTicket')}</button>
-                        : <span className="text-muted">-</span>}
-                    </td>
-                    <td>{agentHostLabel(row)}</td>
-                    <td className="text-muted" style={{ whiteSpace: 'nowrap' }}>{fmt.dateTime(row.createdAt)}</td>
-                    <td className="text-muted" style={{ maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis' }} title={resolutionText(row)}>
-                      {row.status === 'pending' ? '-' : resolutionText(row)}
-                    </td>
-                    <td style={{ minWidth: 220 }}>
-                      {row.status === 'pending'
-                        ? <ApprovalResolveControl approval={row} compact={compact} onResolved={() => void load()} />
-                        : <span className="text-muted">-</span>}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        loading ? (
-          <div className="text-muted" style={{ fontSize: 13, padding: '16px 0' }}>{t('loading')}</div>
-        ) : filtered.length === 0 ? (
-          <div className="text-muted" style={{ fontSize: 13, padding: '16px 0' }}>{emptyText}</div>
-        ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: compact ? '1fr' : 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
-            {filtered.map((row) => (
-              <div
-                key={row.id}
-                style={{
-                  background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
-                  borderRadius: 'var(--radius-lg)', padding: 18, display: 'flex', flexDirection: 'column', gap: 10,
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                    <span className={kindClass(row.kind)} style={{ flexShrink: 0 }}>{t(`kind.${row.kind}`)}</span>
-                    <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {row.actionType}
-                    </span>
-                  </span>
-                  <span className={statusClass(row.status)} style={{ flexShrink: 0 }}>{t(`status.${row.status}`)}</span>
-                </div>
-
-                <div style={{ fontSize: 13, color: 'var(--text-secondary)', overflowWrap: 'anywhere' }}>{row.description}</div>
-
-                {row.taskId != null && (
-                  <button type="button" className="btn-ghost" style={{ alignSelf: 'flex-start' }} onClick={() => setSelectedTaskId(row.taskId)}>
-                    {t('viewTicket')}
-                  </button>
-                )}
-
-                {row.status !== 'pending' && row.status !== 'expired' && (
-                  <div style={{ fontSize: 12, color: 'var(--text-primary)', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '8px 10px', overflowWrap: 'anywhere' }}>
-                    <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>{row.status === 'answered' ? t('column.answer') : t('column.resolution')}</div>
-                    {resolutionText(row)}
-                  </div>
-                )}
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                  {[
-                    { key: 'agentHost', label: t('column.agentHost'), value: agentHostLabel(row) },
-                    { key: 'requestedBy', label: t('column.requestedBy'), value: row.requestedBy ?? '-' },
-                    { key: 'requested', label: t('column.requested'), value: fmt.dateTime(row.createdAt) },
-                    { key: 'expires', label: t('column.expires'), value: fmt.dateTime(row.expiresAt) },
-                  ].map(({ key, label, value }) => (
-                    <div key={key}>
-                      <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>{label}</div>
-                      <div style={{ fontSize: 12, color: 'var(--text-primary)', overflowWrap: 'anywhere' }}>{value}</div>
-                    </div>
-                  ))}
-                </div>
-
-                {row.status === 'pending' ? (
-                  <div style={{ marginTop: 2 }}>
-                    <ApprovalResolveControl approval={row} compact={compact} onResolved={() => void load()} />
-                  </div>
-                ) : (
-                  <span className="text-muted" style={{ fontSize: 12 }}>{t('noActions')}</span>
-                )}
-              </div>
+      <LocalCollection descriptor={descriptor} rows={filtered} searchText={searchText}>
+        {!defaultKind && (
+          <Select className="admin-select" aria-label={t('column.kind')} value={kind} onChange={(e) => setKind(e.target.value as KindFilter)}>
+            <option value="">{t('allKinds')}</option>
+            {KIND_FILTERS.map((value) => (
+              <option key={value} value={value}>{t(`kindPlural.${value}`)}</option>
             ))}
-          </div>
-        )
-      )}
+          </Select>
+        )}
+
+        <Select className="admin-select" aria-label={t('column.status')} value={status} onChange={(e) => setStatus(e.target.value as StatusFilter)}>
+          <option value="">{t('allStatuses')}</option>
+          {STATUS_FILTERS.map((value) => (
+            <option key={value} value={value}>{t(`status.${value}`)}</option>
+          ))}
+        </Select>
+
+        {lockedAgentHostId == null && (
+          <Select className="admin-select" aria-label={t('column.agentHost')} value={agentHostId} onChange={(e) => setAgentHostId(e.target.value)}>
+            <option value="">{t('allAgentHosts')}</option>
+            {agentHostList.map((c) => (
+              <option key={c.id} value={String(c.id)}>{c.name}</option>
+            ))}
+          </Select>
+        )}
+
+        <button type="button" className="btn-ghost" onClick={() => void load()} disabled={loading}>
+          {loading ? t('refreshing') : t('refresh')}
+        </button>
+      </LocalCollection>
       <TicketDetailsPanel taskId={selectedTaskId} onClose={() => setSelectedTaskId(null)} />
     </div>
   );

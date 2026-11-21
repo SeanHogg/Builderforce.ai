@@ -1,15 +1,17 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useTranslations } from 'next-intl';
 import type { CollectionDescriptor } from './descriptor';
 import type { CollectionSource } from './sources';
 import type { CollectionSelection } from './useCollectionSelection';
 import { useCollectionSelection } from './useCollectionSelection';
-import { useCollectionPaging, type CollectionPaging } from './useCollectionPaging';
-import { useCollectionSort, type CollectionSort } from './useCollectionSort';
-import { useCollectionPreferences, type CollectionView } from './collectionPreferences';
+import type { CollectionPaging } from './useCollectionPaging';
+import type { CollectionSort } from './useCollectionSort';
+import type { CollectionView } from './collectionPreferences';
+import { useCollectionState } from './useCollectionState';
 import { useBulkAction } from './useBulkAction';
+import { useCollectionFitHeight } from './useCollectionFitHeight';
 import { CollectionHeader } from './CollectionHeader';
 import { CollectionBulkBar } from './CollectionBulkBar';
 import { CollectionTable } from './CollectionTable';
@@ -24,8 +26,11 @@ import { CollectionFooter } from './CollectionFooter';
  *
  * Layout contract (§3.2): a flex column filling the parent with `min-height:0`
  * and the body `overflow:auto`, so only the rows/cards scroll while the header,
- * bulk bar, table `<thead>` and footer stay pinned. A parent that is NOT a flex
- * column gets a `max-height: calc(100dvh - var(--shell-topbar-height))` default.
+ * bulk bar, table `<thead>` and footer stay pinned. Inside a scrolling page
+ * (the shell's `.content`), `useCollectionFitHeight` caps the Collection to the
+ * room left under the page content, so the page does not scroll the header and
+ * footer away; `calc(100dvh - var(--shell-topbar-height))` is the SSR/first-paint
+ * fallback.
  *
  * `extraViews={{ board, calendar, gantt }}` adds those modes to the ViewToggle
  * in canonical order and renders the supplied component in the body slot; the
@@ -78,7 +83,7 @@ const rootStyle: React.CSSProperties = {
   flexDirection: 'column',
   minHeight: 0,
   flex: 1,
-  // A page that is not a flex column gets this default cap (§3.2).
+  // SSR / first-paint fallback; replaced by the measured fit height (§3.2).
   maxHeight: 'calc(100dvh - var(--shell-topbar-height))',
 };
 
@@ -104,11 +109,17 @@ export function Collection<Row>({
   paging: pagingProp,
 }: CollectionProps<Row>) {
   const t = useTranslations('common.collection');
-  const prefs = useCollectionPreferences(descriptor.surfaceKey, descriptor.defaultView ?? 'table');
-  const ownPaging = useCollectionPaging(prefs.pageSize);
-  const paging = pagingProp ?? ownPaging;
-  const ownSort = useCollectionSort(descriptor, paging.reset);
-  const sort = sortProp ?? ownSort;
+  const rootRef = useRef<HTMLDivElement>(null);
+  const fitHeight = useCollectionFitHeight(rootRef);
+  const style = useMemo<React.CSSProperties>(
+    () => (fitHeight === undefined ? rootStyle : { ...rootStyle, maxHeight: fitHeight }),
+    [fitHeight],
+  );
+  // Own chrome state is the fallback; page-owned sort/paging props win.
+  const own = useCollectionState(descriptor);
+  const prefs = own.prefs;
+  const paging = pagingProp ?? own.paging;
+  const sort = sortProp ?? own.sort;
 
   // Changing a filter or the search clears the selection (§3.2).
   const filterKey = useMemo(
@@ -130,6 +141,15 @@ export function Collection<Row>({
     if (prefs.pageSize !== paging.pageSize) paging.setPageSize(prefs.pageSize);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefs.pageSize]);
+
+  // A total that shrinks (search, delete, a smaller server result) must not
+  // strand the pager past the last page: snap back so footer and source agree.
+  useEffect(() => {
+    if (source.loading) return;
+    const last = paging.pageCount(source.total);
+    if (paging.page > last) paging.setPage(last);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [source.total, source.loading, paging.page, paging.pageSize]);
 
   const bulk = useBulkAction(descriptor.entity ?? 'project', {
     refetch: source.refetch,
@@ -168,7 +188,7 @@ export function Collection<Row>({
   const ExtraBody = extraViews?.[view as keyof CollectionExtraViews];
 
   return (
-    <div className={className} style={rootStyle} data-collection={descriptor.surfaceKey}>
+    <div ref={rootRef} className={className} style={style} data-collection={descriptor.surfaceKey}>
       <CollectionHeader
         descriptor={descriptor}
         view={view}

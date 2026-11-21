@@ -25,9 +25,7 @@ import { Collection } from '@/components/collection/Collection';
 import type { CollectionDescriptor } from '@/components/collection/descriptor';
 import type { Page, PageQuery } from '@/components/collection/collectionTypes';
 import { useServerSource } from '@/components/collection/sources';
-import { useCollectionSort } from '@/components/collection/useCollectionSort';
-import { useCollectionPaging } from '@/components/collection/useCollectionPaging';
-import { useCollectionPreferences } from '@/components/collection/collectionPreferences';
+import { useCollectionState } from '@/components/collection/useCollectionState';
 
 /**
  * Unified Knowledge home. SOPs, Processes and Documents are no longer separate
@@ -316,10 +314,8 @@ function Library({ projectId, t }: { projectId: number | null; t: ReturnType<typ
     [typeFilter, projectId, tagFilter, descriptor, errorMessage],
   );
 
-  // Collection owns the sort/paging chrome; mirror its state to key the server source.
-  const prefs = useCollectionPreferences(descriptor.surfaceKey, descriptor.defaultView ?? 'table');
-  const paging = useCollectionPaging(prefs.pageSize);
-  const sort = useCollectionSort(descriptor, paging.reset);
+  // Page-owned sort/paging keys the server source and goes to <Collection>.
+  const { paging, sort } = useCollectionState(descriptor);
   const source = useServerSource(fetchPage, {
     page: paging.page,
     pageSize: paging.pageSize,

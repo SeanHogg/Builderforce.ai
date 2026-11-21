@@ -98,6 +98,8 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
 import { bumpPublicCanvasVersion, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { isOutcomePhase, normalizeOutcomeAction, recordOutcomeEvent } from '../../application/outcomes/outcomeLedger';
 import { buildAttributedOutcomes } from '../../application/outcomes/attributedOutcomes';
+import { readDeliveryCostMillicents } from '../../application/outcomes/deliveryCost';
+import { DELIVERY_ACTIONS } from '../../application/outcomes/outcomeMetricContract';
 import { buildProofJourney } from '../../application/outcomes/proofJourney';
 import {
   NORTH_STAR_METRIC_KEY,
@@ -1171,6 +1173,13 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     const actorType = action === 'session.open' ? 'user' : body.actorType === 'agent' || body.actorType === 'brain' || body.actorType === 'system' ? body.actorType : 'user';
     const requestedProjectId = Number.isInteger(body.projectId) && Number(body.projectId) > 0 ? Number(body.projectId) : null;
     const projectId = requestedProjectId != null && await projectTiedToSession(access.session.id, requestedProjectId) ? requestedProjectId : null;
+    // A successful delivery carries the run's attributed LLM spend when the client sent none.
+    // Best-effort and never 0: the lookup resolves `undefined` when nothing is recorded (or on
+    // failure, which it reports itself), so the metric stays "Not measured" rather than free.
+    const isDelivery = body.phase === 'succeeded' && (DELIVERY_ACTIONS as readonly string[]).includes(action);
+    const attributedCost = isDelivery && body.costUsdMillicents == null
+      ? await readDeliveryCostMillicents(db, { tenantId: access.session.tenantId, projectId, correlationId })
+      : undefined;
     const recorded = await recordOutcomeEvent(db, {
       correlationId,
       sessionId: access.session.id,
@@ -1185,7 +1194,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       unit: body.unit ?? null,
       artifactId: body.artifactId ?? null,
       durationMs: body.durationMs ?? null,
-      costUsdMillicents: body.costUsdMillicents ?? null,
+      costUsdMillicents: body.costUsdMillicents ?? attributedCost ?? null,
       metadata: body.metadata,
     });
     return c.json({ recorded, duplicate: !recorded, projectAttributed: requestedProjectId == null || projectId != null }, recorded ? 201 : 200);

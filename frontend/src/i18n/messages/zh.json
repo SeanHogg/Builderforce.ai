@@ -2051,6 +2051,12 @@
       "emptyAlertEvents": "尚未触发任何告警。",
       "emptyComplianceTools": "此时间窗口内没有已审计的工具事件。",
       "emptyComplianceAgents": "此时间窗口内没有已审计的工具事件。",
+      "emptyHumanRequests": "未找到请求",
+      "emptyScorecards": "此时间段内没有活动。",
+      "emptyEngagement": "暂无成员。",
+      "emptyEmpData": "此时间段暂无数据",
+      "emptyContributors": "暂无贡献者。连接代码仓库集成以采集人员活动，或点击“同步 AI 智能体”以添加你的智能体。",
+      "emptyAudit": "暂无活动。工作区中的操作将在发生时显示在此处。",
       "emptyPersonasMine": "No custom personas yet. Create one to get started.",
       "emptyPersonasMarketplace": "No personas found.",
       "emptyPromptsMine": "You haven't saved any prompts yet.",
@@ -2939,6 +2945,7 @@
       "period": "月份",
       "spend": "支出",
       "spendOverTime": "支出趋势",
+      "verticalDashboard": "您的行业仪表板",
       "forecast": "预测",
       "forecastSub": "预计月末",
       "costPerPr": "每合并 PR 成本",
@@ -4575,9 +4582,8 @@
       "activitySub": "全团队活动——人类通过 git/PR，智能体通过遥测数据。",
       "title": "绩效",
       "scorecards": "成员记分卡",
-      "scorecardsSub": "· 最近 {days} 天 · 点击行可编辑能力/可用性",
+      "scorecardsSub": "· 最近 {days} 天 · 选择成员可编辑能力/可用性",
       "loading": "加载中…",
-      "noActivity": "此时间段内没有活动。",
       "colMember": "成员",
       "colAssigned": "已分配",
       "colCompleted": "已完成",
@@ -4588,7 +4594,53 @@
       "colIdleDone": "完成后闲置",
       "colHygiene": "看板规范",
       "colEngage": "参与度",
-      "colEffective": "效能"
+      "colEffective": "效能",
+      "daysShort": "{days} 天",
+      "rollupCounts": "{members} · {completed}✓",
+      "editProfile": "编辑能力与可用性",
+      "kind": {
+        "human": "人员",
+        "cloud_agent": "云端智能体",
+        "host_agent": "主机智能体"
+      },
+      "dora": {
+        "deployFreq": "部署频率",
+        "perDay": "{n}/天",
+        "deploysIn": "{days} 天内 {count} 次",
+        "leadTime": "变更前置时间",
+        "leadTimeHint": "创建 → 完成",
+        "cfr": "变更失败率",
+        "cfrHint": "失败的部署",
+        "mttr": "平均恢复时间",
+        "mttrHint": "恢复时间"
+      },
+      "engagement": {
+        "title": "参与度",
+        "subtitle": "· 最近 {days} 天 · 综合所有信号",
+        "loading": "加载中…",
+        "legend": {
+          "activity": "开发活动",
+          "platform": "平台使用",
+          "vscode": "VS Code",
+          "delivery": "交付"
+        },
+        "col": {
+          "member": "成员",
+          "engagement": "参与度",
+          "score": "得分",
+          "activity": "活动",
+          "platform": "平台",
+          "vscode": "VS Code",
+          "completed": "已完成"
+        },
+        "level": {
+          "inactive": "不活跃",
+          "low": "低",
+          "moderate": "中等",
+          "high": "高",
+          "very_high": "非常高"
+        }
+      }
     },
     "consolidate": {
       "title": "合并人员",
@@ -4679,8 +4731,8 @@
         "scoringOffNote": "该工作空间的人工评分已关闭；仅显示智能体评分。",
         "noRoles": "此时间窗口内没有带评分的运行。",
         "insufficientData": "数据不足——仅有 {count} 个最终标记的运行；显示评分需要 20 个。",
-        "colRole": "角色",
-        "colMeasure": "指标",
+        "colPerson": "人员",
+        "colKind": "类型",
         "colRatio": "标准比率",
         "colRuns": "运行次数",
         "colInterval": "95% 区间",
@@ -6487,7 +6539,8 @@
       "loading": "加载中…",
       "exportCsv": "导出 CSV",
       "exporting": "导出中…",
-      "focusMix": "专注度"
+      "daysShort": "{days} 天",
+      "allocSummary": "{hours} 小时 · {count} 个举措"
     },
     "desc": {
       "workforceHealth": "谁负荷过重、谁尚有余力、谁手上完全没有在办工作。",
@@ -17959,7 +18012,15 @@
     "title": "活动与审计记录",
     "subtitle": "团队中的每一次变更——谁在何时对什么做了什么。",
     "loading": "正在加载活动…",
-    "empty": "暂无活动。工作区中的操作将在发生时显示在此处。",
+    "filterLabel": "按执行者筛选",
+    "col": {
+      "when": "时间",
+      "actor": "执行者",
+      "type": "类型",
+      "action": "操作",
+      "summary": "摘要",
+      "model": "模型"
+    },
     "loadMore": "加载更多",
     "filter": {
       "all": "全部"
@@ -18078,7 +18139,7 @@
     "wholeTeam": "整个团队",
     "backToTeam": "← 返回团队",
     "leaderboard": "排行榜",
-    "empty": "暂无贡献者。连接代码仓库集成以采集人员活动，或点击“同步 AI 智能体”以添加你的智能体。",
+    "showCalendar": "查看此贡献者的活动日历",
     "calendarAria": "贡献日历",
     "tileTitle": "{date}：{count} 次贡献",
     "stat": {
@@ -21980,6 +22041,10 @@
       "noLeases": "该工单上没有智能体占用任何文件。",
       "notesTitle": "共享工作区",
       "noNotes": "该工单上没有智能体留下说明。",
+      "noteKey": "键",
+      "noteAuthor": "作者",
+      "noteUpdated": "更新时间",
+      "noteContent": "说明",
       "resource": "文件",
       "holder": "占用者",
       "mode": "锁类型",
@@ -22038,6 +22103,9 @@
       "historyTitle": "历史预演",
       "empty": "尚无预演。在修改提示词、策略包或模型固定之前先运行一次。",
       "wouldWrite": "本会写入",
+      "created": "开始时间",
+      "step": "步骤",
+      "target": "目标",
       "stepCount": "{count} 项副作用",
       "outcome": "结果",
       "finished": "已完成",
@@ -36104,11 +36172,8 @@
     "allKinds": "全部类型",
     "allStatuses": "全部状态",
     "allAgentHosts": "全部智能体主机",
-    "searchPlaceholder": "搜索操作、描述、回答",
     "refresh": "刷新",
     "refreshing": "正在刷新…",
-    "loading": "正在加载请求…",
-    "empty": "未找到请求",
     "viewTicket": "查看工单",
     "noActions": "无可用操作",
     "human": "人工",

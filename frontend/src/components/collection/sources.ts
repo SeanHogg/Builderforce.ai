@@ -49,8 +49,13 @@ export function useLocalSource<Row>(
     return copy;
   }, [rows, descriptor, sort.key, sort.dir]);
 
+  // Clamp ONCE here: rows that shrink (a search, a delete) must never leave the
+  // page past the end and render empty. `<Collection>` snaps the paging state to
+  // match so the footer agrees.
   const pageRows = useMemo(() => {
-    const start = (paging.page - 1) * paging.pageSize;
+    const lastPage = Math.max(1, Math.ceil(sorted.length / paging.pageSize));
+    const page = Math.min(Math.max(1, paging.page), lastPage);
+    const start = (page - 1) * paging.pageSize;
     return sorted.slice(start, start + paging.pageSize);
   }, [sorted, paging.page, paging.pageSize]);
 

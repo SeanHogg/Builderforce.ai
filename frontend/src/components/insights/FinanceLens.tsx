@@ -10,6 +10,7 @@ import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, t
 import { TrendChart } from '@/components/charts/TrendChart';
 import { BarChart } from '@/components/charts/BarChart';
 import { KpiGrid } from './LensShell';
+import { FinanceDashboardView } from '@/components/finance/FinanceDashboardView';
 import { useInsightFormat } from './format';
 import { useFormat } from "@/i18n/useFormat";
 import { statusColor, type StatusToneMap } from '@/lib/statusTone';
@@ -85,6 +86,14 @@ export function FinanceLens() {
         <StatCard label={t('fin.paidOverflow')} value={usd(data.totals.paidOverflowUsd)} sub={t('fin.paidOverflowSub')} />
         <StatCard label={t('fin.cacheRead')} value={fmt.number(data.totals.cacheReadTokens)} sub={t('fin.cacheReadSub')} />
       </KpiGrid>
+
+      {/* The tenant's installed vertical preset dashboard. Each tile carries the
+          widget pin control; with none installed it shows the Marketplace link. */}
+      <PmCard title={t('fin.verticalDashboard')}>
+        <div style={{ minWidth: 0, maxWidth: '100%' }}>
+          <FinanceDashboardView />
+        </div>
+      </PmCard>
 
       <PmCard title={t('fin.spendOverTime')}>
         {data.daily.length === 0 || data.daily.every((d) => d.usd === 0) ? (

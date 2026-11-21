@@ -1,9 +1,10 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { RoleGate } from '@/components/RoleGate';
 import { useConfirm } from '@/components/ConfirmProvider';
-import { getTicketCoordination, releaseLease, type TicketCoordination } from '@/lib/agentOpsApi';
-import { button, card, chip, emptyState, input, mono, muted, sectionTitle, table, tableScroll, td, th } from './agentOpsStyles';
+import { LocalCollection } from '@/components/pm/LocalCollection';
+import { getTicketCoordination, releaseLease, type Lease, type TicketCoordination } from '@/lib/agentOpsApi';
+import { button, card, emptyState, input, muted, sectionTitle } from './agentOpsStyles';
+import { leasesDescriptor, notesDescriptor } from './agentOpsDescriptors';
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
 /**
@@ -43,17 +44,20 @@ export function CoordinationPanel() {
     if (Number.isFinite(id) && id > 0) void load(id);
   };
 
-  const onRelease = async (resource: string, holder: string) => {
+  const onRelease = useCallback(async (lease: Lease) => {
     if (!state) return;
     const ok = await confirm({
       title: t('coordination.releaseTitle'),
-      message: t('coordination.releaseConfirm', { resource, holder }),
+      message: t('coordination.releaseConfirm', { resource: lease.resource, holder: lease.holder }),
       confirmLabel: t('coordination.release'),
     });
     if (!ok) return;
-    await releaseLease(state.taskId, resource);
+    await releaseLease(state.taskId, lease.resource);
     await load(state.taskId);
-  };
+  }, [state, confirm, t, load]);
+
+  const leases = useMemo(() => leasesDescriptor(t, (l) => void onRelease(l)), [t, onRelease]);
+  const notes = useMemo(() => notesDescriptor(t, fmt), [t, fmt]);
 
   return (
     <div style={{ display: 'grid', gap: 14 }}>
@@ -87,40 +91,7 @@ export function CoordinationPanel() {
             {state.leases.length === 0 ? (
               <p style={muted}>{t('coordination.noLeases')}</p>
             ) : (
-              <div style={tableScroll}>
-                <table style={table}>
-                  <thead>
-                    <tr>
-                      <th style={th}>{t('coordination.resource')}</th>
-                      <th style={th}>{t('coordination.holder')}</th>
-                      <th style={th}>{t('coordination.mode')}</th>
-                      <th style={th}>{t('coordination.reason')}</th>
-                      <th style={th} />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {state.leases.map((l) => (
-                      <tr key={l.resource}>
-                        <td style={{ ...td, ...mono }}>{l.resource}</td>
-                        <td style={td}>{l.holder}</td>
-                        <td style={td}>
-                          <span style={chip(l.mode === 'exclusive' ? 'warn' : 'neutral')}>
-                            {l.mode === 'exclusive' ? t('coordination.exclusive') : t('coordination.shared')}
-                          </span>
-                        </td>
-                        <td style={td}>{l.reason ?? '—'}</td>
-                        <td style={{ ...td, textAlign: 'right' }}>
-                          <RoleGate capability="agents.manage">
-                            <button type="button" style={button('danger')} onClick={() => void onRelease(l.resource, l.holder)}>
-                              {t('coordination.release')}
-                            </button>
-                          </RoleGate>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <LocalCollection descriptor={leases} rows={state.leases} searchText={(l) => `${l.resource} ${l.holder} ${l.reason ?? ''}`} />
             )}
           </div>
 
@@ -129,18 +100,7 @@ export function CoordinationPanel() {
             {state.notes.length === 0 ? (
               <p style={muted}>{t('coordination.noNotes')}</p>
             ) : (
-              <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 10 }}>
-                {state.notes.map((n) => (
-                  <li key={n.key} style={{ borderLeft: '3px solid var(--border)', paddingLeft: 10 }}>
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'baseline' }}>
-                      <strong style={{ fontSize: '0.85rem', color: 'var(--text-primary)' }}>{n.key}</strong>
-                      <span style={chip('accent')}>{n.author}</span>
-                      <span style={muted}>{fmt.dateTime(n.updatedAt)}</span>
-                    </div>
-                    <p style={{ ...muted, marginTop: 4, color: 'var(--text-primary)' }}>{n.content}</p>
-                  </li>
-                ))}
-              </ul>
+              <LocalCollection descriptor={notes} rows={state.notes} searchText={(n) => `${n.key} ${n.author} ${n.content}`} />
             )}
           </div>
         </>

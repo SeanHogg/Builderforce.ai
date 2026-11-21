@@ -30,6 +30,9 @@ export default [
   ['check:native-dialogs', 'check-native-dialogs.mjs'],
   // English catch fallbacks: zero — useErrorMessage() for a person, toolErrorMessage() for the model.
   ['check:error-fallbacks', 'check-error-fallbacks.mjs'],
+  // Hand-rolled collection surfaces (<table>, dataTableStyles, .data-table, card/table
+  // ViewToggle, Pagination) may only shrink — they render through <Collection> (PRD 47 §7).
+  ['check:collection-surfaces', 'check-collection-surfaces.mjs'],
   // The repo-wide silent-catch ratchet, narrowed to this package's tree so the
   // cost stays local. The full sweep runs in api's chain.
   ['check:silent-catches', '../../scripts/check-silent-catches.mjs', '--target', 'frontend/src'],

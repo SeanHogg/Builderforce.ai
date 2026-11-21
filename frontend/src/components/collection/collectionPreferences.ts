@@ -28,11 +28,17 @@ interface StoredPrefs {
 
 const prefsKey = (surfaceKey: string) => `collection.prefs.${surfaceKey}`;
 
-function readStored(surfaceKey: string): { view: CollectionView; pageSize: PageSize } {
+/**
+ * The stored preference. `view` is `undefined` when nothing (or garbage) is
+ * stored, so the hook falls back to the surface's own `defaultView` — a stored
+ * `'table'` must win over a `'card'` default, or the List toggle never sticks.
+ */
+function readStored(surfaceKey: string): { view: CollectionView | undefined; pageSize: PageSize } {
   const stored = readLocalJson<StoredPrefs>(prefsKey(surfaceKey));
   const rawView = stored?.view;
   // Legacy `list` → `table`: the old library stored 'list' for List/Table mode.
-  const view: CollectionView = rawView === 'card' ? 'card' : rawView === 'table' || rawView === 'list' ? 'table' : 'table';
+  const view: CollectionView | undefined =
+    rawView === 'card' ? 'card' : rawView === 'table' || rawView === 'list' ? 'table' : undefined;
   const rawSize = stored?.pageSize;
   const pageSize: PageSize = rawSize && (PAGE_SIZES as readonly number[]).includes(rawSize) ? (rawSize as PageSize) : DEFAULT_PAGE_SIZE;
   return { view, pageSize };
@@ -52,6 +58,12 @@ function getSnapshot(): number {
   return version;
 }
 
+/** Server render AND the hydrating client render: not hydrated yet. */
+const UNHYDRATED = -1;
+function getServerSnapshot(): number {
+  return UNHYDRATED;
+}
+
 function write(surfaceKey: string, next: StoredPrefs): void {
   const prev = readLocalJson<StoredPrefs>(prefsKey(surfaceKey)) ?? {};
   writeLocalJson(prefsKey(surfaceKey), { ...prev, ...next });
@@ -64,10 +76,16 @@ export function useCollectionPreferences(
   defaultView: CollectionView = 'table',
 ): CollectionPreferences {
   // useSyncExternalStore re-reads the stored value whenever `version` changes
-  // (a write anywhere) so cross-surface/cross-tab updates propagate.
-  useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
-  const stored = readStored(surfaceKey);
-  const view: CollectionView = stored.view === 'card' ? 'card' : defaultView;
+  // (a write anywhere) so cross-surface/cross-tab updates propagate. The server
+  // snapshot is UNHYDRATED, so the server render and the hydrating client render
+  // both use the defaults (no hydration mismatch); React then re-renders with the
+  // client snapshot and the stored preference applies. A plain client mount
+  // (navigation) reads the stored value on its first render.
+  const snapshot = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const stored = snapshot === UNHYDRATED
+    ? { view: undefined, pageSize: DEFAULT_PAGE_SIZE }
+    : readStored(surfaceKey);
+  const view: CollectionView = stored.view ?? defaultView;
 
   const setView = useCallback(
     (next: CollectionView) => write(surfaceKey, { view: next }),

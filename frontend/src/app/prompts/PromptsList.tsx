@@ -3,10 +3,7 @@ import { useTranslations } from 'next-intl';
 import { Icon } from '@/components/ui/Icon';
 import { Collection } from '@/components/collection/Collection';
 import type { CollectionDescriptor } from '@/components/collection/descriptor';
-import { useLocalSource } from '@/components/collection/sources';
-import { useCollectionSort } from '@/components/collection/useCollectionSort';
-import { useCollectionPaging } from '@/components/collection/useCollectionPaging';
-import { useCollectionPreferences } from '@/components/collection/collectionPreferences';
+import { useLocalCollection } from '@/components/collection/useLocalCollection';
 import type { PromptSummary } from '@/lib/builderforceApi';
 import { useFormat } from '@/i18n/useFormat';
 
@@ -117,10 +114,6 @@ export function PromptsList({ prompts, tab, search, onSearchChange, onOpen, onRe
     [tab, t, tCommon, fmt, onOpen],
   );
 
-  const prefs = useCollectionPreferences(descriptor.surfaceKey, descriptor.defaultView ?? 'table');
-  const paging = useCollectionPaging(prefs.pageSize);
-  const sort = useCollectionSort(descriptor, paging.reset);
-
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return prompts;
@@ -133,12 +126,7 @@ export function PromptsList({ prompts, tab, search, onSearchChange, onOpen, onRe
     );
   }, [prompts, search]);
 
-  const source = useLocalSource(
-    filtered,
-    descriptor,
-    { key: sort.key, dir: sort.dir },
-    { page: paging.page, pageSize: paging.pageSize },
-  );
+  const { source, sort, paging } = useLocalCollection(descriptor, filtered);
   // Bulk mutations on the owned tab refetch the real list through the page.
   const withReload = useMemo(() => ({ ...source, refetch: onReload }), [source, onReload]);
 

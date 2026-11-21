@@ -47,7 +47,7 @@ import { SECTION_CARD as card, SectionEmpty, SectionError, SectionLoading } from
 import { SEVERITIES, SEVERITY_BADGE } from '@/lib/reliability/severity';
 import { Badge } from '@/components/ui';
 import { Collection } from '@/components/collection/Collection';
-import { useLocalSource } from '@/components/collection/sources';
+import { useLocalCollection } from '@/components/collection/useLocalCollection';
 import type { CollectionDescriptor } from '@/components/collection/descriptor';
 import { statusTone, type StatusToneMap } from '@/lib/statusTone';
 
@@ -693,6 +693,9 @@ function WorkflowRunsSection({ t, tc, canManage, incidentId }: SectionProps & { 
 
 /* ─────────────────────────── On-call ─────────────────────────── */
 
+/** What the on-call search matches: name and description. */
+const rotationSearchText = (r: OnCallRotation): string => `${r.name} ${r.description ?? ''}`;
+
 function OnCallSection({ t, tc, canManage }: SectionProps) {
   const errorMessage = useErrorMessage();
   const confirm = useConfirm();
@@ -753,7 +756,6 @@ function OnCallSection({ t, tc, canManage }: SectionProps) {
   // The ONE Collection (PRD 47): rotations are an in-memory list → local source.
   // No rotation bulk port is registered in BULK_CAPABILITIES, so entity is null
   // (read-only: no selection / bulk bar); per-rotation delete stays in the row.
-  const [search, setSearch] = useState('');
   // The handlers are recreated every render; the memoized descriptor reaches them
   // through a ref so a click never runs a stale closure.
   const handlersRef = useRef({ removeRotation, removeMember, addMember });
@@ -828,11 +830,7 @@ function OnCallSection({ t, tc, canManage }: SectionProps) {
     },
   };
   }, [t, tc, canManage, memberDraft]);
-  const visibleRotations = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return q ? rotations.filter((r) => `${r.name} ${r.description ?? ''}`.toLowerCase().includes(q)) : rotations;
-  }, [rotations, search]);
-  const rotationsSource = useLocalSource(visibleRotations, rotationsDescriptor, { key: 'name', dir: 'asc' }, { page: 1, pageSize: 250 });
+  const { source: rotationsSource, sort, paging, search, setSearch } = useLocalCollection(rotationsDescriptor, rotations, rotationSearchText);
 
   return (
     <>
@@ -845,7 +843,7 @@ function OnCallSection({ t, tc, canManage }: SectionProps) {
       {loading && <SectionLoading label={tc('loading')} />}
       <SectionError error={error} />
       {!loading && !error && (
-        <Collection descriptor={rotationsDescriptor} source={rotationsSource} search={search} onSearchChange={setSearch} />
+        <Collection descriptor={rotationsDescriptor} source={rotationsSource} sort={sort} paging={paging} search={search} onSearchChange={setSearch} />
       )}
 
       <SlideOutPanel open={createOpen} onClose={() => setCreateOpen(false)} title={t('newRotation')} widthStorageKey="incidents-rotation">

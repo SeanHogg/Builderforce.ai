@@ -1,5 +1,5 @@
 import { Icon } from '@/components/ui/Icon';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
 import { useBrainDataRefresh } from '@/lib/brain/useBrainDataRefresh';
 import {
@@ -36,7 +36,7 @@ import { useConfirm } from '@/components/ConfirmProvider';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { InviteTeamMembers } from '@/components/InviteTeamMembers';
 import { Collection } from '@/components/collection/Collection';
-import { useLocalSource } from '@/components/collection/sources';
+import { useLocalCollection } from '@/components/collection/useLocalCollection';
 import type { CollectionDescriptor } from '@/components/collection/descriptor';
 import { isPlanLimitError, type PlanLimitError } from '@/lib/planLimitError';
 import { CloudAgentSlideOutPanel, type CloudAgentPanelTab } from './CloudAgentSlideOutPanel';
@@ -93,7 +93,6 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
 
   // Card | List view mode (session-only) — same shared toggle as every other
   // collection page. Defaults to the card grid.
-  const [dirSearch, setDirSearch] = useState('');
 
   // --- Consolidate people (relocated from the Contributors tab) ------------
   // Managers can checkbox-select human members in list view and merge their
@@ -558,11 +557,9 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
     ],
     card: dirCard,
   };
-  const visibleDirRows = (() => {
-    const q = dirSearch.trim().toLowerCase();
-    return q ? dirRows.filter((r) => dirName(r).toLowerCase().includes(q)) : dirRows;
-  })();
-  const directorySource = useLocalSource(visibleDirRows, directoryDescriptor, { key: 'type', dir: 'asc' }, { page: 1, pageSize: 250 });
+  const {
+    source: directorySource, sort: dirSort, paging: dirPaging, search: dirSearch, setSearch: setDirSearch,
+  } = useLocalCollection(directoryDescriptor, dirRows, dirName);
 
   return (
    <WorkforceMetricsProvider>
@@ -634,6 +631,8 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
         <Collection
           descriptor={directoryDescriptor}
           source={directorySource}
+          sort={dirSort}
+          paging={dirPaging}
           search={dirSearch}
           onSearchChange={setDirSearch}
         />

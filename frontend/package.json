@@ -41,6 +41,7 @@
     "check:primitives": "node scripts/check-primitive-duplication.mjs",
     "check:silent-catches": "node ../scripts/check-silent-catches.mjs --target frontend/src",
     "check:error-fallbacks": "node scripts/check-error-fallbacks.mjs",
+    "check:collection-surfaces": "node scripts/check-collection-surfaces.mjs",
     "check:react-hooks": "node scripts/check-react-hooks-ratchet.mjs --changed"
   },
   "dependencies": {

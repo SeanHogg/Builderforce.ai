@@ -17,6 +17,7 @@ import { capabilitySnippet, EMBEDDED_CAPABILITIES, unifiedEmbedSnippet, type Emb
 import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
 import { Collection } from '@/components/collection/Collection';
 import { useLocalSource } from '@/components/collection/sources';
+import { useCollectionState } from '@/components/collection/useCollectionState';
 import type { CollectionDescriptor } from '@/components/collection/descriptor';
 import { usePublishReferenceChrome, usePublishReferenceSelect, useReferenceRailActive } from '@/lib/referenceChrome';
 import styles from './EmbeddedCapabilities.module.css';
@@ -178,7 +179,14 @@ export function EmbeddedCapabilities() {
     ),
   };
   }, [t, config, canManage, saving, siteKey]);
-  const capabilitiesSource = useLocalSource(visible, capabilitiesDescriptor, { key: 'name', dir: 'asc' }, { page: 1, pageSize: 250 });
+  // The page pre-filters (category + translated search); sort, paging and the
+  // per-page preference come from the shared Collection state.
+  const { sort, paging } = useCollectionState(capabilitiesDescriptor);
+  const capabilitiesSource = useLocalSource(visible, capabilitiesDescriptor, { key: sort.key, dir: sort.dir }, {
+    page: paging.page,
+    pageSize: paging.pageSize,
+  });
+  const onSearchChange = (q: string) => { setSearch(q); paging.reset(); };
 
   return <div className={styles.page}>
     <section className={styles.hero}>
@@ -207,8 +215,8 @@ export function EmbeddedCapabilities() {
 
     {tab === 'features' && <>
       <EmbeddedStackValue activeCount={activeCount} onShowInstall={() => setTab('install')} />
-      <Collection descriptor={capabilitiesDescriptor} source={capabilitiesSource} search={search} onSearchChange={setSearch}>
-        {filters.map((item) => <button key={item} type="button" className={`${styles.filter} ${filter === item ? styles.filterActive : ''}`} onClick={() => setFilter(item)}>{t(`categories.${item}`)}</button>)}
+      <Collection descriptor={capabilitiesDescriptor} source={capabilitiesSource} sort={sort} paging={paging} search={search} onSearchChange={onSearchChange}>
+        {filters.map((item) => <button key={item} type="button" className={`${styles.filter} ${filter === item ? styles.filterActive : ''}`} onClick={() => { setFilter(item); paging.reset(); }}>{t(`categories.${item}`)}</button>)}
       </Collection>
     </>}
 

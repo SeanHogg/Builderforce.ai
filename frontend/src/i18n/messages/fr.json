@@ -2062,6 +2062,12 @@
       "emptyAlertEvents": "Aucune alerte déclenchée pour le moment.",
       "emptyComplianceTools": "Aucun événement d'outil audité dans cette période.",
       "emptyComplianceAgents": "Aucun événement d'outil audité dans cette période.",
+      "emptyHumanRequests": "Aucune demande trouvée",
+      "emptyScorecards": "Aucune activité sur cette période.",
+      "emptyEngagement": "Aucun membre pour l'instant.",
+      "emptyEmpData": "Aucune donnée sur cette période",
+      "emptyContributors": "Aucun contributeur pour l'instant. Connectez une intégration de dépôt pour collecter l'activité humaine, ou cliquez sur Synchroniser les agents IA pour ajouter vos agents.",
+      "emptyAudit": "Aucune activité pour l'instant. Les actions dans l'espace de travail apparaîtront ici au fur et à mesure.",
       "emptyPersonasMine": "No custom personas yet. Create one to get started.",
       "emptyPersonasMarketplace": "No personas found.",
       "emptyPromptsMine": "You haven't saved any prompts yet.",
@@ -2953,6 +2959,7 @@
       "period": "Mois",
       "spend": "Dépenses",
       "spendOverTime": "Dépenses au fil du temps",
+      "verticalDashboard": "Votre tableau de bord sectoriel",
       "forecast": "Prévision",
       "forecastSub": "fin de mois prévue",
       "costPerPr": "Coût / PR fusionnée",
@@ -4589,9 +4596,8 @@
       "activitySub": "Activité de toute l'équipe : humains via git/PR, agents via télémétrie.",
       "title": "Performance",
       "scorecards": "Fiches des membres",
-      "scorecardsSub": "· {days} derniers jours · cliquez sur une ligne pour modifier capacité/disponibilité",
+      "scorecardsSub": "· {days} derniers jours · sélectionnez un membre pour modifier capacité/disponibilité",
       "loading": "Chargement…",
-      "noActivity": "Aucune activité sur cette période.",
       "colMember": "Membre",
       "colAssigned": "Assignées",
       "colCompleted": "Terminées",
@@ -4602,7 +4608,53 @@
       "colIdleDone": "Inactif→terminé",
       "colHygiene": "Hygiène",
       "colEngage": "Engagement",
-      "colEffective": "Efficacité"
+      "colEffective": "Efficacité",
+      "daysShort": "{days} j",
+      "rollupCounts": "{members} · {completed}✓",
+      "editProfile": "Modifier capacité et disponibilité",
+      "kind": {
+        "human": "Humain",
+        "cloud_agent": "Agent cloud",
+        "host_agent": "Agent hôte"
+      },
+      "dora": {
+        "deployFreq": "Fréquence de déploiement",
+        "perDay": "{n}/jour",
+        "deploysIn": "{count} en {days} j",
+        "leadTime": "Délai de mise en production",
+        "leadTimeHint": "créé → terminé",
+        "cfr": "Taux d'échec des changements",
+        "cfrHint": "déploiements échoués",
+        "mttr": "MTTR",
+        "mttrHint": "temps de rétablissement"
+      },
+      "engagement": {
+        "title": "Implication",
+        "subtitle": "· {days} derniers jours · tous signaux combinés",
+        "loading": "Chargement…",
+        "legend": {
+          "activity": "activité de dev",
+          "platform": "utilisation de la plateforme",
+          "vscode": "VS Code",
+          "delivery": "livraison"
+        },
+        "col": {
+          "member": "Membre",
+          "engagement": "Implication",
+          "score": "Note",
+          "activity": "Activité",
+          "platform": "Plateforme",
+          "vscode": "VS Code",
+          "completed": "Terminées"
+        },
+        "level": {
+          "inactive": "Inactif",
+          "low": "Faible",
+          "moderate": "Modéré",
+          "high": "Élevé",
+          "very_high": "Très élevé"
+        }
+      }
     },
     "consolidate": {
       "title": "Regrouper les personnes",
@@ -4693,8 +4745,8 @@
         "scoringOffNote": "La notation humaine est désactivée pour cet espace de travail ; seuls les scores des agents sont affichés.",
         "noRoles": "Aucune exécution notée sur cette fenêtre.",
         "insufficientData": "Données insuffisantes — {count} exécutions étiquetées finales ; 20 sont nécessaires avant d’afficher un score.",
-        "colRole": "Rôle",
-        "colMeasure": "Mesure",
+        "colPerson": "Personne",
+        "colKind": "Type",
         "colRatio": "Ratio standard",
         "colRuns": "Exécutions",
         "colInterval": "Intervalle de 95 %",
@@ -6501,7 +6553,8 @@
       "loading": "Chargement…",
       "exportCsv": "Exporter CSV",
       "exporting": "Exportation…",
-      "focusMix": "Focalisation"
+      "daysShort": "{days} j",
+      "allocSummary": "{hours} h · {count, plural, one {# initiative} other {# initiatives}}"
     },
     "desc": {
       "workforceHealth": "Qui est surchargé, qui dispose de capacité, et qui n’a aucun travail en cours.",
@@ -17959,7 +18012,15 @@
     "title": "Activité et audit",
     "subtitle": "Chaque changement dans votre équipe : qui a fait quoi, sur quoi et quand.",
     "loading": "Chargement de l'activité…",
-    "empty": "Aucune activité pour l'instant. Les actions dans l'espace de travail apparaîtront ici au fur et à mesure.",
+    "filterLabel": "Filtrer par acteur",
+    "col": {
+      "when": "Quand",
+      "actor": "Acteur",
+      "type": "Catégorie",
+      "action": "Opération",
+      "summary": "Résumé",
+      "model": "Modèle"
+    },
     "loadMore": "Charger plus",
     "filter": {
       "all": "Tous"
@@ -18078,7 +18139,7 @@
     "wholeTeam": "Toute l'équipe",
     "backToTeam": "← Retour à l'équipe",
     "leaderboard": "Classement",
-    "empty": "Aucun contributeur pour l'instant. Connectez une intégration de dépôt pour collecter l'activité humaine, ou cliquez sur Synchroniser les agents IA pour ajouter vos agents.",
+    "showCalendar": "Afficher le calendrier d'activité de ce contributeur",
     "calendarAria": "Calendrier des contributions",
     "tileTitle": "{date} : {count} contributions",
     "stat": {
@@ -21980,6 +22041,10 @@
       "noLeases": "Aucun agent ne détient de fichier sur ce ticket.",
       "notesTitle": "Espace de travail partagé",
       "noNotes": "Aucun agent n’a laissé de note sur ce ticket.",
+      "noteKey": "Clé",
+      "noteAuthor": "Auteur",
+      "noteUpdated": "Mis à jour",
+      "noteContent": "Note",
       "resource": "Fichier",
       "holder": "Détenu par",
       "mode": "Verrou",
@@ -22038,6 +22103,9 @@
       "historyTitle": "Répétitions passées",
       "empty": "Aucune répétition pour l’instant. Lancez-en une avant de modifier un prompt, un pack de règles ou un modèle épinglé.",
       "wouldWrite": "Aurait écrit",
+      "created": "Démarrée",
+      "step": "Étape",
+      "target": "Cible",
       "stepCount": "{count} effets",
       "outcome": "Résultat",
       "finished": "Terminé",
@@ -36104,11 +36172,8 @@
     "allKinds": "Tous les types",
     "allStatuses": "Tous les statuts",
     "allAgentHosts": "Tous les hôtes d’agents",
-    "searchPlaceholder": "Rechercher une action, une description, une réponse",
     "refresh": "Actualiser",
     "refreshing": "Actualisation…",
-    "loading": "Chargement des demandes…",
-    "empty": "Aucune demande trouvée",
     "viewTicket": "Voir le ticket",
     "noActions": "Aucune action disponible",
     "human": "humain",

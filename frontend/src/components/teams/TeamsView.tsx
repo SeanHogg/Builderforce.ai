@@ -25,7 +25,7 @@ import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { TeamChatButton } from '@/components/brain/TeamChatButton';
 import { Collection } from '@/components/collection/Collection';
-import { useLocalSource } from '@/components/collection/sources';
+import { useLocalCollection } from '@/components/collection/useLocalCollection';
 import type { CollectionDescriptor } from '@/components/collection/descriptor';
 import { faultMessage } from '@/lib/apiClient';
 import { initialsOf } from '@/lib/initials';
@@ -105,6 +105,9 @@ function MemberPill({ kind }: { kind: TeamMemberKind }) {
   );
 }
 
+/** What the Teams search matches: name and description. */
+const teamSearchText = (x: TeamSummary): string => `${x.name} ${x.description ?? ''}`;
+
 export function TeamsView() {
   const { tenant, tenantToken } = useAuth();
   const t = useTranslations('workforce.teams');
@@ -113,7 +116,6 @@ export function TeamsView() {
   const [teams, setTeams] = useState<TeamSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
 
   // Create slide-out
   const [createOpen, setCreateOpen] = useState(false);
@@ -285,11 +287,7 @@ export function TeamsView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [t]);
 
-  const visibleTeams = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return q ? teams.filter((x) => `${x.name} ${x.description ?? ''}`.toLowerCase().includes(q)) : teams;
-  }, [teams, search]);
-  const teamsSource = useLocalSource(visibleTeams, teamsDescriptor, { key: 'name', dir: 'asc' }, { page: 1, pageSize: 250 });
+  const { source: teamsSource, sort, paging, search, setSearch } = useLocalCollection(teamsDescriptor, teams, teamSearchText);
 
   if (!tenant || !tenantToken) return null;
 
@@ -398,7 +396,7 @@ export function TeamsView() {
         {loading ? (
           <div style={{ color: 'var(--text-muted)', fontSize: 13, padding: '12px 0' }}>{t('loadingTeams')}</div>
         ) : (
-          <Collection descriptor={teamsDescriptor} source={teamsSource} search={search} onSearchChange={setSearch} />
+          <Collection descriptor={teamsDescriptor} source={teamsSource} sort={sort} paging={paging} search={search} onSearchChange={setSearch} />
         )}
       </section>
 

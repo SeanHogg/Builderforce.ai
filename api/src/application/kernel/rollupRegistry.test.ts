@@ -134,7 +134,7 @@ describe('the numbers refuse rather than guess', () => {
     'site_records', 'site_collections', 'project_sites', 'marketing_leads', 'site_users',
     'site_subscriptions', 'ad_insights', 'tasks', 'projects', 'executions',
     'job_applications', 'hiring_decisions', 'offer_letters', 'expenses', 'pay_runs', 'ledger_entries',
-    'invoice_line_items', 'metric_facts', 'deals', 'orders', 'tenant_members', 'auth_user_sessions',
+    'invoice_line_items', 'invoices', 'metric_facts', 'deals', 'orders', 'tenant_members', 'auth_user_sessions',
     'people_employees', 'pulse_responses', 'uptime_samples', 'uptime_checks', 'soc_controls',
     'vulnerability_findings', 'qa_findings', 'portfolio_companies', 'investment_opportunities',
     'support_tickets', 'feedback_sentiments', 'creation_sessions', 'artifacts',

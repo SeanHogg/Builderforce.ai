@@ -3,9 +3,11 @@ import { useTranslations } from 'next-intl';
 import { RoleGate } from '@/components/RoleGate';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { InlineConfirmButton } from '@/components/InlineConfirmButton';
+import { LocalCollection } from '@/components/pm/LocalCollection';
 import { useProjectScope } from '@/lib/ProjectScopeContext';
 import { forgetMemory, isMemoryLapsed, listMemories, purgeExpiredMemories, type GovernedMemory } from '@/lib/agentOpsApi';
-import { button, card, cardGrid, chip, emptyState, mono, muted, sectionTitle, table, tableScroll, td, th } from './agentOpsStyles';
+import { button, card, cardGrid, emptyState, muted, sectionTitle } from './agentOpsStyles';
+import { memoriesDescriptor } from './agentOpsDescriptors';
 import { useFormat } from "@/i18n/useFormat";
 
 /**
@@ -54,7 +56,7 @@ export function MemoryPanel() {
     };
   }, [rows, hasLapsed]);
 
-  const onForget = async (key: string) => {
+  const onForget = useCallback(async (key: string) => {
     const ok = await confirm({
       title: t('memory.forgetTitle'),
       message: t('memory.forgetConfirm', { key }),
@@ -63,7 +65,7 @@ export function MemoryPanel() {
     if (!ok) return;
     await forgetMemory(key, { projectId: currentProjectId });
     await load();
-  };
+  }, [confirm, t, currentProjectId, load]);
 
   // Only facts agents already stopped recalling are removed, so no run changes —
   // an inline two-step (InlineConfirmButton), not a destructive modal.
@@ -72,8 +74,10 @@ export function MemoryPanel() {
     await load();
   };
 
-  const scopeLabel = (r: GovernedMemory): string =>
-    r.scope === 'tenant' ? t('memory.scopeTenant') : r.scope === 'project' ? t('memory.scopeProject') : t('memory.scopeTicket', { id: r.scopeId });
+  const descriptor = useMemo(
+    () => memoriesDescriptor(t, fmt, hasLapsed, (m) => void onForget(m.key)),
+    [t, fmt, hasLapsed, onForget],
+  );
 
   return (
     <div style={{ display: 'grid', gap: 14 }}>
@@ -85,7 +89,7 @@ export function MemoryPanel() {
       </div>
 
       <div style={card}>
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
           <h2 style={{ ...sectionTitle, marginBottom: 0 }}>{t('memory.tableTitle')}</h2>
           <RoleGate capability="facts.manage">
             <InlineConfirmButton style={button()} onConfirm={onPurge} disabled={busy} hint={t('memory.purgeConfirm')}>
@@ -95,58 +99,11 @@ export function MemoryPanel() {
         </div>
 
         {rows == null ? (
-          <p style={{ ...muted, marginTop: 12 }}>{t('loading')}</p>
+          <p style={muted}>{t('loading')}</p>
         ) : rows.length === 0 ? (
-          <div style={{ ...emptyState, marginTop: 12 }}>{t('memory.empty')}</div>
+          <div style={emptyState}>{t('memory.empty')}</div>
         ) : (
-          <div style={{ ...tableScroll, marginTop: 12 }}>
-            <table style={table}>
-              <thead>
-                <tr>
-                  <th style={th}>{t('memory.key')}</th>
-                  <th style={th}>{t('memory.fact')}</th>
-                  <th style={th}>{t('memory.scope')}</th>
-                  <th style={th}>{t('memory.origin')}</th>
-                  <th style={th}>{t('memory.expiry')}</th>
-                  <th style={th} />
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => {
-                  const lapsed = hasLapsed(r);
-                  return (
-                    <tr key={`${r.scope}:${r.scopeId}:${r.key}`}>
-                      <td style={{ ...td, ...mono }}>{r.key}</td>
-                      <td style={{ ...td, minWidth: 220 }}>{r.content}</td>
-                      <td style={td}>
-                        <span style={chip(r.scope === 'tenant' ? 'neutral' : 'accent')}>{scopeLabel(r)}</span>
-                      </td>
-                      <td style={td}>
-                        <span style={chip()}>{r.origin}</span>
-                        {r.originExecutionId != null && <div style={muted}>{t('memory.fromRun', { id: r.originExecutionId })}</div>}
-                      </td>
-                      <td style={td}>
-                        {r.expiresAt == null ? (
-                          <span style={muted}>{t('memory.durable')}</span>
-                        ) : (
-                          <span style={chip(lapsed ? 'warn' : 'good')}>
-                            {lapsed ? t('memory.lapsed') : fmt.date(r.expiresAt)}
-                          </span>
-                        )}
-                      </td>
-                      <td style={{ ...td, textAlign: 'right' }}>
-                        <RoleGate capability="facts.manage">
-                          <button type="button" style={button('danger')} onClick={() => void onForget(r.key)}>
-                            {t('memory.forget')}
-                          </button>
-                        </RoleGate>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <LocalCollection descriptor={descriptor} rows={rows} searchText={(m) => `${m.key} ${m.content} ${m.origin}`} />
         )}
       </div>
     </div>

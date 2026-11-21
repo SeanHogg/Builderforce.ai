@@ -1,4 +1,4 @@
-import type { MemberKind, EngagementLevel } from '@/lib/builderforceApi';
+import type { EngagementLevel } from '@/lib/builderforceApi';
 
 /**
  * Shared presentation helpers for workforce performance/engagement surfaces.
@@ -27,11 +27,6 @@ export function scoreColor(n: number | null): string {
   if (n >= 50) return 'var(--warning)';
   return 'var(--danger)';
 }
-
-/** member_kind → fallback English label (callers localize where a catalog exists). */
-export const MEMBER_KIND_LABEL: Record<MemberKind, string> = {
-  human: 'Human', cloud_agent: 'Cloud agent', host_agent: 'Host agent',
-};
 
 export const ENGAGEMENT_LEVEL_COLOR: Record<EngagementLevel, string> = {
   inactive: 'var(--muted)',

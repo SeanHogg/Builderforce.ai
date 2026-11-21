@@ -3,8 +3,9 @@ import type { CSSProperties } from 'react';
 /**
  * Shared presentation tokens for the three Agent Ops panels.
  *
- * Extracted rather than repeated per panel: the same card, the same table, the same
- * empty state and the same chip appear in all three, and a copy in each would drift on
+ * Extracted rather than repeated per panel: the same card, the same empty state and the
+ * same chip appear in all three (their record lists render through the shared
+ * Collection — see agentOpsDescriptors), and a copy in each would drift on
  * the first theme change. Every value resolves a CSS variable, so light and dark are
  * both covered by construction; sizes are fluid (minmax / % / clamp) so nothing
  * overflows a 360px viewport.
@@ -40,32 +41,6 @@ export const mono: CSSProperties = {
   fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
   fontSize: '0.8rem',
   wordBreak: 'break-all',
-};
-
-/** Wide tables scroll INSIDE their own container — the page body never scrolls sideways. */
-export const tableScroll: CSSProperties = { overflowX: 'auto', width: '100%' };
-
-export const table: CSSProperties = {
-  width: '100%',
-  borderCollapse: 'collapse',
-  fontSize: '0.85rem',
-  minWidth: 520,
-};
-
-export const th: CSSProperties = {
-  textAlign: 'left',
-  padding: '8px 10px',
-  borderBottom: '1px solid var(--border)',
-  color: 'var(--text-secondary)',
-  fontWeight: 600,
-  whiteSpace: 'nowrap',
-};
-
-export const td: CSSProperties = {
-  padding: '8px 10px',
-  borderBottom: '1px solid var(--border-subtle, var(--border))',
-  color: 'var(--text-primary)',
-  verticalAlign: 'top',
 };
 
 /** Small status/scope pill. `tone` picks a semantic accent; all are theme variables. */

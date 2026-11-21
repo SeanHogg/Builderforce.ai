@@ -20,6 +20,7 @@
 
 import { sql } from 'drizzle-orm';
 import { fact, type DomainRollup } from '../metricRollup';
+import { REVENUE_ECONOMICS_METRICS } from './revenueEconomics';
 
 const WINDOW_MONTHS = 18;
 const since = sql`DATE_TRUNC('month', NOW()) - (${WINDOW_MONTHS} * INTERVAL '1 month')`;
@@ -113,5 +114,8 @@ export const REVENUE_ROLLUP: DomainRollup = {
         `,
       }),
     },
+    // Per-customer plan MRR roll-forward (mrr, new/expansion/contraction/churned,
+    // customers, customersLost) — see ./revenueEconomics.
+    ...REVENUE_ECONOMICS_METRICS,
   ],
 };

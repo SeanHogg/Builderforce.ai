@@ -6,25 +6,9 @@ import { contrastText } from '@/lib/contrastText';
 import ArtifactAssigner from '@/components/ArtifactAssigner';
 import { Collection } from '@/components/collection/Collection';
 import type { CollectionDescriptor } from '@/components/collection/descriptor';
-import { useLocalSource } from '@/components/collection/sources';
-import { useCollectionSort } from '@/components/collection/useCollectionSort';
-import { useCollectionPaging } from '@/components/collection/useCollectionPaging';
-import { useCollectionPreferences } from '@/components/collection/collectionPreferences';
+import { useLocalCollection } from '@/components/collection/useLocalCollection';
 import type { ArtifactStats } from '@/lib/builderforceApi';
 import type { Persona, UserPersona } from '@/lib/marketplaceData';
-
-/** Shared local-source wiring: `Collection` owns its sort/paging chrome, so the
- *  page mirrors the same state to slice the rows (same pattern as LocalCollection). */
-function useLocalList<Row>(descriptor: CollectionDescriptor<Row>, rows: Row[]) {
-  const prefs = useCollectionPreferences(descriptor.surfaceKey, descriptor.defaultView ?? 'table');
-  const paging = useCollectionPaging(prefs.pageSize);
-  const sort = useCollectionSort(descriptor, paging.reset);
-  const source = useLocalSource(rows, descriptor, { key: sort.key, dir: sort.dir }, {
-    page: paging.page,
-    pageSize: paging.pageSize,
-  });
-  return { source, paging, sort };
-}
 
 const imageStyle = (image: string): React.CSSProperties => ({
   width: '100%',
@@ -129,7 +113,7 @@ export function MyPersonasList({ personas, search, onSearchChange, publishingId,
     );
   }, [personas, search]);
 
-  const { source, paging, sort } = useLocalList(descriptor, filtered);
+  const { source, paging, sort } = useLocalCollection(descriptor, filtered);
   const withReload = useMemo(() => ({ ...source, refetch: onReload }), [source, onReload]);
 
   return (
@@ -331,7 +315,7 @@ export function MarketplaceList({
     );
   }, [personas, search]);
 
-  const { source, paging, sort } = useLocalList(descriptor, filtered);
+  const { source, paging, sort } = useLocalCollection(descriptor, filtered);
 
   return (
     <Collection descriptor={descriptor} source={source} sort={sort} paging={paging} search={search} onSearchChange={onSearchChange} />

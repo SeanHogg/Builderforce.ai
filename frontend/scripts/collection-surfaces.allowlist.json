@@ -1,0 +1,380 @@
+{
+  "$comment": [
+    "PRD 47 §7 check:collection-surfaces — SHRINK-ONLY allowlist of pre-Collection surfaces.",
+    "Each entry is a debt: migrate the surface onto <Collection> / LocalCollection, then run",
+    "\"node scripts/check-collection-surfaces.mjs --update\" to remove/lower it. --update never adds or raises an entry.",
+    "Permanent PRD 47 §2 exclusions live in scripts/check-collection-surfaces.mjs, not here.",
+    "Must be empty after W6."
+  ],
+  "entries": {
+    "app/admin/LlmTracesPanel.tsx": {
+      "table": 2,
+      "view-toggle": 1
+    },
+    "app/agents/integrations/IntegrationGrid.tsx": {
+      "table": 1,
+      "data-table-styles": 1
+    },
+    "app/agents/integrations/IntegrationsView.tsx": {
+      "view-toggle": 1
+    },
+    "app/agents/shoutouts/ShoutoutsView.tsx": {
+      "table": 1,
+      "data-table-styles": 1,
+      "view-toggle": 1
+    },
+    "app/agents/showcase/ShowcaseGrid.tsx": {
+      "table": 1,
+      "data-table-styles": 1,
+      "view-toggle": 1
+    },
+    "app/agents/skills/SkillsBrowser.tsx": {
+      "table": 1,
+      "data-table-styles": 1,
+      "view-toggle": 1
+    },
+    "app/blog/BlogPageClient.tsx": {
+      "pagination": 2
+    },
+    "app/evermind/page.tsx": {
+      "table": 1
+    },
+    "app/facts/FactsPageClient.tsx": {
+      "table": 1,
+      "data-table-styles": 1
+    },
+    "app/features/page.tsx": {
+      "table": 1
+    },
+    "app/knowledge/KnowledgeTraining.tsx": {
+      "table": 1
+    },
+    "app/legal/subprocessors/page.tsx": {
+      "table": 1
+    },
+    "app/marketplace/MarketplacePageClient.tsx": {
+      "table": 2,
+      "data-table-styles": 1,
+      "pagination": 4
+    },
+    "app/marketplace/ModelsExplorer.tsx": {
+      "table": 2,
+      "data-table-styles": 1
+    },
+    "app/pricing/PricingPageClient.tsx": {
+      "table": 1
+    },
+    "app/product/page.tsx": {
+      "table": 1
+    },
+    "app/projects/rfp/[id]/RfpDetailClient.tsx": {
+      "table": 1
+    },
+    "components/admin/panels/AuditLogPanel.tsx": {
+      "table": 1,
+      "data-table-class": 1
+    },
+    "components/admin/panels/BillingPanel.tsx": {
+      "table": 4,
+      "data-table-class": 4
+    },
+    "components/admin/panels/BroadcastsPanel.tsx": {
+      "table": 1,
+      "data-table-class": 1
+    },
+    "components/admin/panels/CreationSessionsPanel.tsx": {
+      "table": 1,
+      "data-table-class": 1
+    },
+    "components/admin/panels/CronPanel.tsx": {
+      "table": 1,
+      "data-table-class": 1
+    },
+    "components/admin/panels/EmailDeliveriesPanel.tsx": {
+      "table": 1,
+      "data-table-class": 1
+    },
+    "components/admin/panels/ErrorsPanel.tsx": {
+      "table": 2,
+      "data-table-class": 2
+    },
+    "components/admin/panels/GovernancePanel.tsx": {
+      "table": 1,
+      "data-table-class": 1
+    },
+    "components/admin/panels/HealthPanel.tsx": {
+      "table": 1,
+      "data-table-class": 1
+    },
+    "components/admin/panels/ImpersonationSessionsPanel.tsx": {
+      "table": 1,
+      "data-table-class": 1
+    },
+    "components/admin/panels/LlmRatingsPanel.tsx": {
+      "table": 1
+    },
+    "components/admin/panels/ModulesPanel.tsx": {
+      "table": 1,
+      "data-table-class": 1
+    },
+    "components/admin/panels/NewsletterPanel.tsx": {
+      "table": 3,
+      "data-table-class": 3
+    },
+    "components/admin/panels/OutcomeMetricsPanel.tsx": {
+      "table": 1,
+      "data-table-class": 1
+    },
+    "components/admin/panels/PersonasPanel.tsx": {
+      "table": 1,
+      "data-table-class": 1
+    },
+    "components/admin/panels/PrivacyPanel.tsx": {
+      "table": 1,
+      "data-table-class": 1
+    },
+    "components/admin/panels/ReleaseNotesPanel.tsx": {
+      "table": 1,
+      "data-table-class": 1
+    },
+    "components/admin/panels/SalesCommissionsPanel.tsx": {
+      "table": 1,
+      "data-table-class": 1
+    },
+    "components/admin/panels/SalesLeadsPanel.tsx": {
+      "table": 1,
+      "data-table-class": 1
+    },
+    "components/admin/panels/SecurityPanel.tsx": {
+      "table": 3,
+      "data-table-class": 3
+    },
+    "components/admin/panels/SuspectAccountsPanel.tsx": {
+      "table": 1,
+      "data-table-class": 1
+    },
+    "components/admin/panels/SystemHealthSection.tsx": {
+      "table": 1,
+      "data-table-class": 1
+    },
+    "components/admin/panels/TenantsPanel.tsx": {
+      "table": 3,
+      "data-table-class": 1,
+      "view-toggle": 1
+    },
+    "components/admin/panels/UsagePanel.tsx": {
+      "table": 2,
+      "data-table-class": 2
+    },
+    "components/admin/panels/UsersPanel.tsx": {
+      "table": 1,
+      "data-table-class": 1,
+      "view-toggle": 1
+    },
+    "components/admin/TenantApiKeysAdminTab.tsx": {
+      "table": 1,
+      "data-table-class": 1
+    },
+    "components/admin/visitors/LeadsView.tsx": {
+      "table": 1,
+      "data-table-class": 1
+    },
+    "components/agent-ops/CoordinationPanel.tsx": {
+      "table": 1
+    },
+    "components/agent-ops/MemoryPanel.tsx": {
+      "table": 1
+    },
+    "components/agent-ops/RehearsalPanel.tsx": {
+      "table": 2
+    },
+    "components/agent/RunCostBreakdownView.tsx": {
+      "table": 1,
+      "data-table-styles": 1
+    },
+    "components/billing/BillingClient.tsx": {
+      "table": 2
+    },
+    "components/builder/database/RecordsTable.tsx": {
+      "table": 1
+    },
+    "components/CatalogToolbar.tsx": {
+      "view-toggle": 1
+    },
+    "components/ceremony/CeremonySchedulesPanel.tsx": {
+      "table": 1,
+      "data-table-styles": 1,
+      "view-toggle": 1
+    },
+    "components/dataTable/DataList.tsx": {
+      "pagination": 2
+    },
+    "components/dataTable/DataTable.tsx": {
+      "table": 1,
+      "data-table-styles": 1,
+      "pagination": 2
+    },
+    "components/earnings/EarningsReport.tsx": {
+      "table": 1
+    },
+    "components/finance/CashflowView.tsx": {
+      "table": 1
+    },
+    "components/finance/RunwayView.tsx": {
+      "table": 1
+    },
+    "components/governance/RunScanPanel.tsx": {
+      "table": 1
+    },
+    "components/governance/Soc2AutomationPanel.tsx": {
+      "table": 2
+    },
+    "components/governance/TrackerSurface.tsx": {
+      "table": 1
+    },
+    "components/governance/VulnerabilityFindingsPanel.tsx": {
+      "table": 1
+    },
+    "components/hiring/HiringClient.tsx": {
+      "view-toggle": 1
+    },
+    "components/hiring/OffersPanel.tsx": {
+      "table": 1,
+      "data-table-styles": 1
+    },
+    "components/hiring/PipelineBoard.tsx": {
+      "table": 1,
+      "data-table-styles": 1
+    },
+    "components/humanRequests/HumanRequestsView.tsx": {
+      "table": 1,
+      "data-table-class": 1,
+      "view-toggle": 1
+    },
+    "components/integrations/MigrationWizard.tsx": {
+      "table": 1
+    },
+    "components/invoice/PublicInvoice.tsx": {
+      "table": 1
+    },
+    "components/kernel/EntityBrowser.tsx": {
+      "table": 1
+    },
+    "components/manager/ManagerBlockedPrs.tsx": {
+      "table": 1,
+      "data-table-styles": 1
+    },
+    "components/manager/ManagerContent.tsx": {
+      "data-table-styles": 1
+    },
+    "components/marketing/CompetitorMatrix.tsx": {
+      "table": 1,
+      "data-table-class": 1
+    },
+    "components/marketplace/landing/landingSections.tsx": {
+      "table": 1
+    },
+    "components/ModelRoutingAnalytics.tsx": {
+      "table": 1
+    },
+    "components/PermissionDebuggerPanel.tsx": {
+      "table": 1
+    },
+    "components/pm/EpicTreeView.tsx": {
+      "table": 1,
+      "data-table-styles": 1
+    },
+    "components/pm/PmoRollup.tsx": {
+      "table": 2,
+      "data-table-styles": 1
+    },
+    "components/PRDsContent.tsx": {
+      "table": 1,
+      "data-table-styles": 1,
+      "view-toggle": 1
+    },
+    "components/ProjectBackendPanel.tsx": {
+      "table": 1
+    },
+    "components/ProjectsContent.tsx": {
+      "view-toggle": 1
+    },
+    "components/ProjectTable.tsx": {
+      "table": 1,
+      "data-table-styles": 1
+    },
+    "components/prompts/PromptVersionDiff.tsx": {
+      "table": 2
+    },
+    "components/qa/QaPrimitives.tsx": {
+      "table": 1
+    },
+    "components/quality/QualityDashboard.tsx": {
+      "table": 1,
+      "data-table-styles": 1,
+      "view-toggle": 1
+    },
+    "components/replay/funnels/SmartEventsView.tsx": {
+      "table": 1,
+      "data-table-class": 1
+    },
+    "components/replay/heatmap/ElementTable.tsx": {
+      "table": 1,
+      "data-table-class": 1
+    },
+    "components/replay/RecordingsTable.tsx": {
+      "table": 1,
+      "data-table-class": 1
+    },
+    "components/salary/SalaryTables.tsx": {
+      "table": 2
+    },
+    "components/sales/SalesHubClient.tsx": {
+      "table": 2
+    },
+    "components/sales/SalesReportView.tsx": {
+      "table": 1
+    },
+    "components/security/WorkspaceAuditLogPanel.tsx": {
+      "table": 1
+    },
+    "components/sell/ProspectDealView.tsx": {
+      "table": 3
+    },
+    "components/settings/ApiKeysContent.tsx": {
+      "table": 1,
+      "data-table-styles": 1,
+      "view-toggle": 1
+    },
+    "components/startups/StartupDirectory.tsx": {
+      "pagination": 2
+    },
+    "components/task/AccountabilityTab.tsx": {
+      "table": 1,
+      "data-table-styles": 1
+    },
+    "components/TaskMgmtContent.tsx": {
+      "table": 1,
+      "view-toggle": 1
+    },
+    "components/tax/TaxReportPanel.tsx": {
+      "table": 1
+    },
+    "components/teams/TeamPeopleView.tsx": {
+      "table": 1,
+      "data-table-styles": 1
+    },
+    "components/TenantApiKeyUsageRow.tsx": {
+      "table": 1
+    },
+    "components/UserDetailSections.tsx": {
+      "table": 2,
+      "data-table-class": 2
+    },
+    "components/WorkflowsContent.tsx": {
+      "table": 1,
+      "data-table-styles": 1,
+      "view-toggle": 1
+    }
+  }
+}

@@ -6,6 +6,8 @@ import {
   GROWTH_METRICS,
   cacPaybackFromComponents,
   ltvFromComponents,
+  retentionFromRollForward,
+  type RevenueRollForward,
 } from './growthMetrics';
 
 /** A db whose every query resolves to no rows — nothing declared. */
@@ -42,6 +44,72 @@ describe('Slice B metric keys', () => {
     for (const key of required) {
       expect(await METRIC_REGISTRY[key]!.compute(db, 1, 30), key).toBeNull();
     }
+  });
+});
+
+/** A db whose select chain resolves to `rows` in order, one array per awaited query. */
+function sequencedDb(results: unknown[][]): Db {
+  let i = 0;
+  const self: unknown = new Proxy({}, {
+    get(_t, prop) {
+      if (prop === 'then') {
+        const rows = results[i++] ?? [];
+        return (resolve: (v: unknown) => void) => resolve(rows);
+      }
+      return () => self;
+    },
+  });
+  return self as Db;
+}
+
+describe('retention derived from revenue.* facts', () => {
+  // start = 1000 − 200(new) − 100(exp) + 50(contr) + 150(churn) = 900
+  const rf: RevenueRollForward = {
+    mrr: 1000, newMrr: 200, expansionMrr: 100, contractionMrr: 50, churnedMrr: 150,
+    customers: 9, customersLost: 1,
+  };
+
+  it('computes NRR, GRR and logo churn', () => {
+    const r = retentionFromRollForward(rf);
+    expect(r.startMrr).toBeCloseTo(900);
+    expect(r.nrr).toBeCloseTo(((900 + 100 - 50 - 150) / 900) * 100);
+    expect(r.grr).toBeCloseTo(((900 - 50 - 150) / 900) * 100);
+    expect(r.logoChurn).toBeCloseTo(10);
+  });
+
+  it('returns null — never 0 — on zero starting MRR, zero customers, or no roll-forward', () => {
+    const zeroStart = retentionFromRollForward({
+      mrr: 100, newMrr: 100, expansionMrr: 0, contractionMrr: 0, churnedMrr: 0, customers: 1, customersLost: 0,
+    });
+    expect(zeroStart.nrr).toBeNull();
+    expect(zeroStart.grr).toBeNull();
+    const noCustomers = retentionFromRollForward({ ...rf, customers: 0, customersLost: 0 });
+    expect(noCustomers.logoChurn).toBeNull();
+    expect(retentionFromRollForward(null)).toEqual({ startMrr: null, nrr: null, grr: null, logoChurn: null });
+  });
+
+  it('prefers a declared value over the derived one', async () => {
+    const db = sequencedDb([[{ target: '123.5' }]]);
+    expect(await GROWTH_METRICS['growth.nrr']!.compute(db, 1, 30)).toBe(123.5);
+  });
+
+  it('derives from the latest revenue.* facts when nothing is declared', async () => {
+    const at = new Date('2026-10-01');
+    const db = sequencedDb([
+      [], // no declaration
+      [{ at }], // latest revenue.mrr month
+      [
+        { metric: 'revenue.mrr', value: '1000' },
+        { metric: 'revenue.newMrr', value: '200' },
+        { metric: 'revenue.expansionMrr', value: '100' },
+        { metric: 'revenue.contractionMrr', value: '50' },
+        { metric: 'revenue.churnedMrr', value: '150' },
+        { metric: 'revenue.customers', value: '9' },
+        { metric: 'revenue.customersLost', value: '1' },
+      ],
+    ]);
+    const nrr = await GROWTH_METRICS['growth.nrr']!.compute(db, 1, 30);
+    expect(nrr).toBeCloseTo(((900 + 100 - 50 - 150) / 900) * 100);
   });
 });
 

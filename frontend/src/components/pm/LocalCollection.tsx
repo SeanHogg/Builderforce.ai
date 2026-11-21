@@ -1,25 +1,20 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React from 'react';
 import { Collection, type CollectionExtraViews } from '@/components/collection/Collection';
 import type { CollectionDescriptor } from '@/components/collection/descriptor';
-import type { CollectionSource } from '@/components/collection/sources';
+import { useLocalCollection } from '@/components/collection/useLocalCollection';
 
 /**
  * LocalCollection — renders an in-memory, READ-ONLY list through the one shared
  * `<Collection>` (PRD 47).
  *
- * `Collection` owns its sort + paging chrome state internally and exposes no
- * hook to drive a source from it, so a local source cannot be sliced by the
- * Collection's own page. These catalogs (manager backlog / run tasks / activity /
- * stalls, PM ROI tables, Portfolio Health cards) are bounded, client-side reads
- * with no bulk API (`entity: null`), so the adapter hands `Collection` the whole
- * filtered set: `total` equals the rows passed, so the footer reads as a plain
- * count and no pager that cannot page is offered. Search is applied here.
- *
- * Column sorting inside the table is applied by `Collection` through the
- * descriptor, so the adapter pre-sorts by the descriptor's default sort to give
- * the initial order; columns with `compare` re-sort via the header.
+ * These catalogs (manager backlog / run tasks / activity / stalls, PM ROI
+ * tables, Portfolio Health cards, alerts, compliance lenses) are bounded,
+ * client-side reads with no bulk API (`entity: null`). `useLocalCollection`
+ * owns the sort + paging state, filters by search and sorts + slices the rows;
+ * the SAME sort/paging state goes to `<Collection>` so a header click or pager
+ * change re-slices them. A search change resets to page 1.
  */
 export interface LocalCollectionProps<Row> {
   descriptor: CollectionDescriptor<Row>;
@@ -32,13 +27,7 @@ export interface LocalCollectionProps<Row> {
 }
 
 export function LocalCollection<Row>({ descriptor, rows, searchText, extraViews, children, className }: LocalCollectionProps<Row>) {
-  const [search, setSearch] = useState('');
-
-  const source = useMemo<CollectionSource<Row>>(() => {
-    const q = search.trim().toLowerCase();
-    const filtered = q && searchText ? rows.filter((r) => searchText(r).toLowerCase().includes(q)) : rows;
-    return { rows: filtered, total: filtered.length, loading: false, refetch: () => undefined };
-  }, [rows, search, searchText]);
+  const { source, sort, paging, search, setSearch } = useLocalCollection(descriptor, rows, searchText);
 
   return (
     <Collection
@@ -47,6 +36,8 @@ export function LocalCollection<Row>({ descriptor, rows, searchText, extraViews,
       extraViews={extraViews}
       search={search}
       onSearchChange={setSearch}
+      sort={sort}
+      paging={paging}
       className={className}
     >
       {children}

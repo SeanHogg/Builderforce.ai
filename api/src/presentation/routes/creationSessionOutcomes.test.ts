@@ -37,6 +37,11 @@ vi.mock('../../application/outcomes/outcomeLedger', async (orig) => ({
   recordOutcomeEvent: (...args: unknown[]) => recordOutcomeEvent(...args),
 }));
 
+const readDeliveryCostMillicents = vi.fn();
+vi.mock('../../application/outcomes/deliveryCost', () => ({
+  readDeliveryCostMillicents: (...args: unknown[]) => readDeliveryCostMillicents(...args),
+}));
+
 import { createCreationSessionRoutes } from './creationSessionRoutes';
 
 /** Db stub: each `select()` resolves to the next queued row set (link lookup, then card lookup). */
@@ -64,6 +69,8 @@ const post = (db: any, body: Record<string, unknown>) =>
 beforeEach(() => {
   recordOutcomeEvent.mockReset();
   recordOutcomeEvent.mockResolvedValue(true);
+  readDeliveryCostMillicents.mockReset();
+  readDeliveryCostMillicents.mockResolvedValue(undefined);
 });
 
 describe('recording a session outcome against a project', () => {
@@ -93,5 +100,35 @@ describe('recording a session outcome against a project', () => {
     expect(res.status).toBe(201);
     expect(await res.json()).toMatchObject({ projectAttributed: true });
     expect(recordOutcomeEvent.mock.calls[0]![1]).toMatchObject({ projectId: null });
+  });
+});
+
+describe('attaching the delivery cost to a succeeded delivery', () => {
+  it('attaches the attributed run cost to a succeeded delivery action', async () => {
+    readDeliveryCostMillicents.mockResolvedValue(4_200);
+    const res = await post(makeDb([]), { action: 'artifact.publish', phase: 'succeeded' });
+    expect(res.status).toBe(201);
+    expect(readDeliveryCostMillicents).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ tenantId: TENANT, correlationId: 'c-1' }));
+    expect(recordOutcomeEvent.mock.calls[0]![1]).toMatchObject({ costUsdMillicents: 4_200 });
+  });
+
+  it('leaves the cost null — never 0 — when none is recorded', async () => {
+    const res = await post(makeDb([]), { action: 'artifact.publish', phase: 'succeeded' });
+    expect(res.status).toBe(201);
+    expect(recordOutcomeEvent.mock.calls[0]![1].costUsdMillicents).toBeNull();
+  });
+
+  it('does not look a cost up for a started, failed or non-delivery event', async () => {
+    await post(makeDb([]), { action: 'artifact.publish', phase: 'started' });
+    await post(makeDb([]), { action: 'artifact.publish', phase: 'failed' });
+    await post(makeDb([]), { action: 'session.open', phase: 'succeeded' });
+    expect(readDeliveryCostMillicents).not.toHaveBeenCalled();
+  });
+
+  it('keeps a client-supplied cost without a lookup', async () => {
+    const res = await post(makeDb([]), { action: 'artifact.publish', phase: 'succeeded', costUsdMillicents: 99 });
+    expect(res.status).toBe(201);
+    expect(readDeliveryCostMillicents).not.toHaveBeenCalled();
+    expect(recordOutcomeEvent.mock.calls[0]![1]).toMatchObject({ costUsdMillicents: 99 });
   });
 });

@@ -23,10 +23,7 @@ import type { WorkspaceSkillStatus } from '@/lib/workspaceSkillsApi';
 import { SkillAssignmentsContent } from '@/components/SkillAssignmentsContent';
 import { Collection } from '@/components/collection/Collection';
 import type { CollectionDescriptor } from '@/components/collection/descriptor';
-import { useLocalSource } from '@/components/collection/sources';
-import { useCollectionSort } from '@/components/collection/useCollectionSort';
-import { useCollectionPaging } from '@/components/collection/useCollectionPaging';
-import { useCollectionPreferences } from '@/components/collection/collectionPreferences';
+import { useLocalCollection } from '@/components/collection/useLocalCollection';
 import { useErrorText } from '@/i18n/useErrorMessage';
 type SkillItem = { slug: string; name: string; description: string; category?: string; icon?: string; emoji?: string; author?: string };
 
@@ -238,12 +235,8 @@ export default function SkillsPage() {
     },
   };
 
-  // `Collection` owns its sort/paging chrome, so the local source mirrors the same state
-  // (same shape as components/pm/LocalCollection) and slices the page's filtered rows.
-  const prefs = useCollectionPreferences(descriptor.surfaceKey, descriptor.defaultView ?? 'table');
-  const paging = useCollectionPaging(prefs.pageSize);
-  const sort = useCollectionSort(descriptor, paging.reset);
-  const source = useLocalSource(marketplaceItems, descriptor, { key: sort.key, dir: sort.dir }, { page: paging.page, pageSize: paging.pageSize });
+  // The page-owned local source: sort + paging go to <Collection> so it slices the filtered rows.
+  const { source, sort, paging } = useLocalCollection(descriptor, marketplaceItems);
 
   return (
     <PageContainer width="readable">

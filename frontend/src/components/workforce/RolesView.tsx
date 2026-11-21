@@ -19,13 +19,16 @@ import { RoleAssigneePicker, useAssignableWorkforce } from './RoleAssigneePicker
 import { useConfirm } from '@/components/ConfirmProvider';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 import { Collection } from '@/components/collection/Collection';
-import { useLocalSource } from '@/components/collection/sources';
+import { useLocalCollection } from '@/components/collection/useLocalCollection';
 import type { CollectionDescriptor } from '@/components/collection/descriptor';
 const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 16 };
 const chip = (bg: string, fg: string): React.CSSProperties => ({
   display: 'inline-flex', alignItems: 'center', gap: 4, padding: '1px 8px', borderRadius: 'var(--radius-full)', fontSize: 11, fontWeight: 600, background: bg, color: fg,
 });
 const input: React.CSSProperties = { background: 'var(--surface-2)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '7px 10px', fontSize: 13, outline: 'none' };
+
+/** What the Roles search matches: name, description and the role key. */
+const roleSearchText = (r: JobRole): string => `${r.name} ${r.description ?? ''} ${r.key}`;
 
 export function RolesView() {
   const errorMessage = useErrorMessage();
@@ -134,7 +137,6 @@ export function RolesView() {
 
   // The ONE Collection (PRD 47): roles are an in-memory catalog → a local source.
   // Standard-for-template roles sort first by default (`standard` column), then position.
-  const [search, setSearch] = useState('');
   const rolesDescriptor = useMemo<CollectionDescriptor<JobRole>>(() => {
     const assigneeChips = (role: JobRole) => {
       const roleAssignments = assignmentsByRole.get(role.key) ?? [];
@@ -222,11 +224,8 @@ export function RolesView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assignmentsByRole, standardKeys, canManage, assigningRole, assignBusy, workforce, t, tk]);
 
-  const visibleRoles = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return q ? roles.filter((r) => `${r.name} ${r.description ?? ''} ${r.key}`.toLowerCase().includes(q)) : roles;
-  }, [roles, search]);
-  const rolesSource = useLocalSource(visibleRoles, rolesDescriptor, { key: 'standard', dir: 'asc' }, { page: 1, pageSize: 250 });
+  // Search, sort, paging and the per-page preference all drive the rows (PRD 47 §3.1).
+  const { source: rolesSource, sort, paging, search, setSearch } = useLocalCollection(rolesDescriptor, roles, roleSearchText);
 
   return (
     <section>
@@ -271,6 +270,8 @@ export function RolesView() {
         <Collection
           descriptor={rolesDescriptor}
           source={rolesSource}
+          sort={sort}
+          paging={paging}
           search={search}
           onSearchChange={setSearch}
         />
