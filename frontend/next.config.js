@@ -109,10 +109,21 @@ const knowledgeWorkerFactoryServerAlias = {
  * `layout-router` from the re-keyed path and the app bootstrap from the original one:
  * TWO `app-router-context` modules, the root `LayoutRouterContext` provided by one and
  * read from the other, and every page crashed with "invariant expected layout router to
- * be mounted". Server and client must key modules identically; the browser bundle now
- * gets the same dedupe. `scripts/check-client-router-context.mjs` fails the build if
- * the browser bundle ever carries two copies again.
+ * be mounted". Server and client must key modules identically, and Next itself is never
+ * re-keyed at all (FRAMEWORK_PACKAGES below): re-keying it in the client split
+ * `SearchParamsContext` next.
  */
+/**
+ * NEVER re-keyed, in any compilation. Next wires its own runtime by absolute paths
+ * (entries, aliases, client-reference manifests) that this plugin cannot see all of: re-keying
+ * `next` split its router contexts across two module copies — first `LayoutRouterContext`
+ * (every page: "invariant expected layout router to be mounted"), then, once the client was
+ * re-keyed too, `SearchParamsContext` (`useSearchParams()` returned null in the root layout).
+ * React's packages carry module-level state the same way. These resolve exactly as webpack
+ * reaches them, as they did before the plugin existed.
+ */
+const FRAMEWORK_PACKAGES = new Set(['next', 'react', 'react-dom', 'scheduler', 'styled-jsx']);
+
 class CanonicalPackagePathsPlugin {
   constructor(root) {
     this.nodeModules = path.join(root, 'node_modules');
@@ -123,7 +134,7 @@ class CanonicalPackagePathsPlugin {
     if (this.canonicalByRoot.has(packageRoot)) return this.canonicalByRoot.get(packageRoot);
     const own = path.join(this.nodeModules, name);
     let canonical = null;
-    if (own !== packageRoot && fs.existsSync(own) && fs.existsSync(packageRoot)) {
+    if (!FRAMEWORK_PACKAGES.has(name) && own !== packageRoot && fs.existsSync(own) && fs.existsSync(packageRoot)) {
       canonical = fs.realpathSync(own) === fs.realpathSync(packageRoot) ? own : null;
     }
     this.canonicalByRoot.set(packageRoot, canonical);
