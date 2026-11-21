@@ -45,6 +45,10 @@ export const LARGE_LOSSY_RESULT_BYTES = 20_000;
  * OUR fault rather than the model's, and the remedy ("pick a different model") that
  * `tool-calls-not-emitted` prescribes is actively wrong for them.
  *
+ * `provider-failure` (the LATEST run ended on a failed completion it did not recover from) outranks both of those: the
+ * run ENDED on the provider, and a no-tools turn just before it is what a delivery gate's re-prompt looks like, not a
+ * selection fault (VS Code chat #128305 read "TOOL NOT ADVERTISED" over an xAI doom-loop failure).
+ *
  * `no-progress` sits above `context-exhaustion` and `model-degradation` for the same
  * reason: a run that re-read one file until its budget was gone will ALSO show a high
  * prompt peak and truncated tool results, so the context signals fire — but they are a
@@ -58,6 +62,7 @@ export const LARGE_LOSSY_RESULT_BYTES = 20_000;
 export type LikelyCause =
   | 'run-in-progress'
   | 'memory-answered'
+  | 'provider-failure'
   | 'no-tools-advertised'
   | 'tool-not-advertised'
   | 'tool-calls-not-emitted'
@@ -74,6 +79,8 @@ export type LikelyCause =
 export interface VerdictSignals {
   running: boolean;
   memoryOnlyRun: boolean;
+  /** The LATEST run ended on a failed completion it did not recover from (`providerFailureCause.ts`). */
+  providerFailure: boolean;
   noToolsAdvertised: boolean;
   narratedUnadvertised: boolean;
   announcedUnmadeToolCall: boolean;
@@ -91,6 +98,7 @@ export interface VerdictSignals {
 export function decideLikelyCause(s: VerdictSignals): LikelyCause {
   if (s.running) return 'run-in-progress';
   if (s.memoryOnlyRun) return 'memory-answered';
+  if (s.providerFailure) return 'provider-failure';
   if (s.noToolsAdvertised) return 'no-tools-advertised';
   if (s.narratedUnadvertised) return 'tool-not-advertised';
   if (s.announcedUnmadeToolCall) return 'tool-calls-not-emitted';

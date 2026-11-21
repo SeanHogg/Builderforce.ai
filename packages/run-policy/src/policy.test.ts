@@ -277,6 +277,37 @@ describe('transport failures', () => {
     expect(nextTurn(s, TOOLS)).toMatchObject({ model: undefined, excludeModels: ['grok'] });
   });
 
+  it('regression: an interrupted escalation target returns the run to the user pin it escalated from, with the pin\'s strictness', () => {
+    for (const strictPin of [true, false]) {
+      const s = run(
+        initialRunPolicy({ pinnedModel: 'opus', strictPin }),
+        { type: 'escalated', to: 'grok' },
+        { type: 'transport_failed', kind: 'interrupted', model: 'grok' },
+      );
+      expect(s.outcome).toEqual({ kind: 'retry_turn', broken: 'grok' });
+      expect(s.pin).toBe('opus');
+      expect(nextTurn(s, TOOLS)).toMatchObject({ model: 'opus', strict: strictPin, excludeModels: ['grok'] });
+    }
+  });
+
+  it('regression: a dropped run-chosen model never leaves its strictness to the next auto-lock', () => {
+    let s = run(
+      initialRunPolicy({ startPhase: 'code', lockAfterFirstSuccess: true }),
+      { type: 'escalated', to: 'grok' },
+      { type: 'transport_failed', kind: 'interrupted', model: 'grok' },
+    );
+    expect(s.strictPin).toBe(false);
+    s = run(s, { type: 'turn_succeeded', model: 'kimi' });
+    expect(nextTurn(s, TOOLS)).toMatchObject({ model: 'kimi', strict: false });
+  });
+
+  it('regression: escalation never re-selects a model the run already routes around', () => {
+    const broken = run(initialRunPolicy({ startPhase: 'code' }), { type: 'transport_failed', kind: 'interrupted', model: 'grok' });
+    const s = run(broken, { type: 'escalated', to: 'grok' });
+    expect(s.model).toBeUndefined();
+    expect(nextTurn(s, TOOLS)).toMatchObject({ model: undefined, strict: false, excludeModels: ['grok'] });
+  });
+
   it('regression: chat #128305 — an interrupted user pin (not releasable) still fails the turn', () => {
     const s = run(initialRunPolicy({ pinnedModel: 'grok' }), { type: 'transport_failed', kind: 'interrupted', model: 'grok' });
     expect(s.outcome).toEqual({ kind: 'fail_turn' });

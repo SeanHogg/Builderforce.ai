@@ -71,6 +71,8 @@ export class RunProgressGuard {
    * (file / update tickets) before the last one offers nothing. Null while the run is not finishing that way.
    */
   private recordTurnsLeft: number | null = null;
+  /** The run entered a finish (a record turn or its final no-tool turn): sticky for the rest of the run. */
+  private finished = false;
 
   /**
    * @param on the A3 lever.
@@ -166,6 +168,19 @@ export class RunProgressGuard {
   }
 
   /**
+   * The run is FINISHING: a finish turn was decided ("make no more code changes and run nothing … then write the final report").
+   * Set once by {@link finishTurn}; never cleared for the rest of the run, so no delivery gate sends its report back for more work.
+   */
+  get finishing(): boolean {
+    return this.finished;
+  }
+
+  /** A finish turn was decided (only {@link finishTurn} calls this). */
+  enterFinish(): void {
+    this.finished = true;
+  }
+
+  /**
    * The next turn of a finishing run, taken once per turn: 'record' (the obligation tools again), 'final' (no tools — the
    * report), or null when the run is not finishing that way. Finish means no more coding, whatever a later trip decides.
    */
@@ -226,7 +241,13 @@ export function finishingTurn(run: BrainRunContext): ForcedTurn | null {
   if (!finishing) return null;
   run.progress.takeDue();
   const tools = finishing === 'record' ? obligationToolsOf(run) : [];
-  return { tools, brief: { role: 'user', content: tools.length > 0 ? FINISH_RECORD_BRIEF : FINISH_FINAL_BRIEF }, finishing: true };
+  return finishTurn(run, tools, tools.length > 0 ? FINISH_RECORD_BRIEF : FINISH_FINAL_BRIEF);
+}
+
+/** THE one place a finish turn is made: the run is finishing from here on (`RunProgressGuard.finishing`, sticky). */
+function finishTurn(run: BrainRunContext, tools: BrainToolSpec[], brief: string): ForcedTurn {
+  run.progress.enterFinish();
+  return { tools, brief: { role: 'user', content: brief }, finishing: true };
 }
 
 /**
@@ -251,9 +272,9 @@ export function progressGuardTurn(run: BrainRunContext, step: number, selected: 
     if (deferred) return deferred;
     const tools = obligationToolsOf(run);
     trace(run, step, due, 'finish', tools.length);
-    if (tools.length === 0) return { tools: [], brief: { role: 'user', content: due.note }, finishing: true };
+    if (tools.length === 0) return finishTurn(run, [], due.note);
     run.progress.beginRecordingFinish(FINISH_RECORD_TURNS - 1);
-    return { tools, brief: { role: 'user', content: `${due.note}\n\n${FINISH_RECORD_BRIEF}` }, finishing: true };
+    return finishTurn(run, tools, `${due.note}\n\n${FINISH_RECORD_BRIEF}`);
   }
   const advice = `PROGRESS CHECK ${due.trip}: ${progressAdvice(due.signal)}`;
   // A run asked a question is never forced to change anything.

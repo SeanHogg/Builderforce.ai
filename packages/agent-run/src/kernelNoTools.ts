@@ -61,7 +61,8 @@ export function noToolCallsHook(run: KernelRun, deps: NoToolCallsDeps): NonNulla
     // A surface that judges a stall against the menu the turn advertised, not everything it could run, says so (`DeliveryLedger.stall.menu`).
     if (ports.delivery?.stall?.menu && run.selection?.tools) pctx.tools = [...run.selection.tools];
     // A3's final turn offered NO tools on purpose: it is judged against that empty menu, and never as a stall — a nudge or a forced
-    // tool choice would hand the tools back to a run whose work is done and verified.
+    // tool choice would hand the tools back to a run whose work is done and verified. A surface's own final menu (`TurnMenu.final`) is
+    // judged the same way: no delivery rung sends its report back to a turn that offered nothing to act with.
     const finalTurn = run.selection?.final === true;
     if (finalTurn) pctx.tools = [];
     // What the person (or a child) steered in while this turn was written comes first, before any judgement of the turn: a surface that
@@ -162,6 +163,8 @@ export function noToolCallsHook(run: KernelRun, deps: NoToolCallsDeps): NonNulla
       await sentBack(ctx.step, turn.content);
       return { action: "continue" };
     }
+    // A final turn the ladder never judged is the run's answer: the surface is told, so it can record what it did not ask.
+    if (finalTurn) await ports.delivery?.finalAccepted?.({ step: ctx.step, content: turn.content });
     return { action: "finish", output };
   };
 }

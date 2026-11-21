@@ -18,7 +18,7 @@ import {
   servePageEngines,
   webGpuSupport,
   withTimeout
-} from "./chunk-LTK4JHIW.mjs";
+} from "./chunk-PRXY4IDM.mjs";
 import {
   PageEngineError,
   abortReason,

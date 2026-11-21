@@ -24,7 +24,7 @@ import { LINKED_WORK_OPEN, lastFinishReason } from "./policy/finish/index.js";
 import { bumpMutations, tallyCall, tallyTurn, tallyVerify, type RunTally } from "./telemetry/runTally.js";
 import { isReadOnlyShellCall } from "@builderforce/run-guards";
 import type { ToolSchema } from "@builderforce/agent-tools";
-import type { TurnInterruption } from "./surface.js";
+import type { TurnInterruption, TurnMenu } from "./surface.js";
 
 /** A call that changed (or may have changed) the workspace: a write/edit/delete tool, or a `run_command` the read classifier cannot clear. */
 const MUTATING_TOOLS: ReadonlySet<string> = new Set(["write_file", "edit_file", "delete_file"]);
@@ -141,14 +141,17 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
       // A turn the SURFACE already forced (its own required call) wins this step: the finish is not dropped — it stays pending in the
       // guards' state and takes the next step. It is only spent in `afterTurn`, once the final turn was actually answered, so a run
       // evicted between the snapshot and the answer still owes it.
-      const platformForced = menu?.toolChoice === "required";
-      const finalTurn = !platformForced && hooks.guards.finalTurn?.(policyContext(input, state, base, ctx.step, ctx.stepInCall)) === true;
+      // The SURFACE may mark its own menu final (`TurnMenu.final`: a finishing run's last, empty menu): it is judged as A3's final turn
+      // is: it advertises no tools (the turn is judged against that empty menu) and takes no tool choice. It spends nothing of the
+      // guards' pending finish.
+      const finalBy = finalSource(menu, () => hooks.guards.finalTurn?.(policyContext(input, state, base, ctx.step, ctx.stepInCall)) === true);
+      const finalTurn = finalBy !== undefined;
       const advertised = finalTurn ? [] : (menu?.tools ?? (await selectNow()));
       run.selection = {
         tools: advertised,
         ...(menu?.toolChoice && !finalTurn ? { toolChoice: menu.toolChoice } : {}),
         ...(menu?.tail && menu.tail.length > 0 ? { tail: menu.tail } : {}),
-        ...(finalTurn ? { final: true as const } : {}),
+        ...(finalBy ? { final: true as const, finalBy } : {}),
       };
       const view = advertised ? { ...base, tools: [...advertised] } : base;
       const compacted = await hooks.compaction.compact(policyContext(input, state, view, ctx.step, ctx.stepInCall));
@@ -182,8 +185,8 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
       const usage = meta?.usage;
       run.facts.model = meta?.model;
       run.facts.interruption = meta?.interrupted;
-      // A3's final turn was answered: the finish it owed is spent (see `beforeTurn`).
-      if (run.selection?.final) hooks.guards.finalTurnDone?.(contextAt(ctx.step, ctx.stepInCall));
+      // A3's final turn was answered: the finish it owed is spent (see `beforeTurn`). A surface-final turn owes the guards nothing.
+      if (run.selection?.finalBy === "guards") hooks.guards.finalTurnDone?.(contextAt(ctx.step, ctx.stepInCall));
       tallyTurn(tally, model, usage);
       if (run.budget?.afterTurn(usage)) await emit(ports.events, { kind: "budget.unpriced", step: ctx.step, ...(model ? { model } : {}) });
       await emit(ports.events, { kind: "model.completed", step: ctx.step, ...(model ? { model } : {}), ...(usage ? { usage } : {}) });
@@ -353,6 +356,17 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
       return undefined;
     },
   };
+}
+
+/**
+ * Who makes this turn the run's final report, or undefined for an ordinary turn: the SURFACE's own final menu (`TurnMenu.final`)
+ * first; else A3's finish (the guards' `finalTurn`) — unless the surface forced the turn (its own required call wins this step and
+ * the guards' finish stays pending for the next).
+ */
+export function finalSource(menu: TurnMenu | void, guardsFinal: () => boolean): TurnSelection["finalBy"] {
+  if (menu?.final === true) return "surface";
+  if (menu?.toolChoice === "required") return undefined;
+  return guardsFinal() ? "guards" : undefined;
 }
 
 /** D8: the kernel's read-only port, from the guards policy (lever off ⇒ every call sequential). */

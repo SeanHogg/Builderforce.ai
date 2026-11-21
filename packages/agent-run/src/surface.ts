@@ -201,6 +201,12 @@ export interface TurnMenu {
   toolChoice?: "required";
   /** Sections for the request's volatile tail (the forced turn's brief, a steer). Never persisted. */
   tail?: readonly string[];
+  /**
+   * The SURFACE's own final turn: an empty menu the model answers with its report (a finishing run's last turn). The kernel
+   * treats it as it treats the guards' A3 finish: it advertises NO tools (whatever {@link tools} holds), takes no tool choice, is
+   * never judged as a stall and is never sent back by a delivery rung (`DeliveryLedger.finalAccepted` is told instead).
+   */
+  final?: true;
 }
 
 /** What the stall ladder judges a turn that ended without calling a tool. */
@@ -261,6 +267,11 @@ export interface ProviderFailureWording {
 export interface DeliveryLedger {
   /** The rungs this turn must clear, in order. Read live: the surface's own facts decide which hold. A surface that must ask something (a workspace's stop hook) answers with a promise. */
   rungs(turn: DeliveryTurn): readonly LadderRung[] | Promise<readonly LadderRung[]>;
+  /**
+   * The run's FINAL turn (A3's finish or the surface's own `TurnMenu.final`) was accepted as its answer. The ladder never judges a
+   * final turn, so {@link rungs} is not asked for it: this is where a surface records what that skipped. Absent ⇒ nothing is told.
+   */
+  finalAccepted?(turn: { step: number; content: string }): Promise<void> | void;
   /** Rungs whose counters survive a hand-off to another model (every other rung starts fresh). */
   sticky?: readonly string[];
   /**

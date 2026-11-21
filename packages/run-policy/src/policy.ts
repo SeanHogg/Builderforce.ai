@@ -408,7 +408,8 @@ export function reduceRunPolicy(state: RunPolicyState, event: RunPolicyEvent): R
       return transportFailed(s, event);
     case 'escalated': {
       const from = s.model;
-      if (!event.to || event.to === from) return s;
+      // A model this run already routes around is never escalated to: the request would ask for it strictly AND exclude it.
+      if (!event.to || event.to === from || s.broken.includes(event.to)) return s;
       return {
         ...s,
         model: event.to,
@@ -539,7 +540,9 @@ function latencyGuardFor(s: RunPolicyState, e: Extract<RunPolicyEvent, { type: '
  *    (`verify_started`), a stall-failover pick, a cascade `escalated` target, a releasable
  *    pin. The model is let go with the failure; `authorModel` stays, so a verify-phase
  *    retry still excludes the author (VS Code chat #128305: the review model's stream was
- *    interrupted and the turn failed with no failover).
+ *    interrupted and the turn failed with no failover). A run-chosen model that had moved
+ *    the run off the user's pin returns the run to that pin (with the pin's own strictness),
+ *    unless the pin itself broke; otherwise the run goes back to auto-routing, never strict.
  *  - The ONE exception is the user's standing pin that is not releasable: the user's
  *    choice, not routed around — its interruption fails the turn.
  *  - A failure where the gateway was reached but no model is named retries without an
@@ -566,13 +569,19 @@ function transportFailed(s: RunPolicyState, e: Extract<RunPolicyEvent, { type: '
     const brokenModel = e.model ?? s.model;
     // A releasable pin that broke is let go like a released one: the rest of the run never returns to it.
     const pinned = s.pin !== undefined && s.model === s.pin;
+    // The model the run ASKED for leaves with the one the stream named (they differ when the gateway resolved an alias).
+    const broken = [...new Set([...s.broken, brokenModel, s.model])];
+    // A model the RUN chose over the user's pin (an escalation, a failover) is let go back to that pin, as an exhausted stall
+    // failover returns to it — never to auto-routing, which would leave the user's choice for good. Strictness is the pin's own;
+    // a dropped run-chosen model never leaves its strictness behind for the next auto-lock.
+    const backToPin = !pinned && s.pin !== undefined && !broken.includes(s.pin) ? s.pin : undefined;
     return {
       ...s,
-      model: undefined,
+      model: backToPin,
       locked: false,
-      ...(pinned ? { pin: undefined, strictPin: false } : {}),
-      // The model the run ASKED for leaves with the one the stream named (they differ when the gateway resolved an alias).
-      broken: [...new Set([...s.broken, brokenModel, s.model])],
+      strictPin: backToPin !== undefined && s.options.pinStrict,
+      ...(pinned ? { pin: undefined } : {}),
+      broken,
       turnRetries: s.turnRetries + 1,
       outcome: { kind: 'retry_turn', broken: brokenModel, ...(s.locked || pinned ? { released: s.model } : {}) },
     };

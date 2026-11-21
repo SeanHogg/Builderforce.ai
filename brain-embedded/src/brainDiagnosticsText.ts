@@ -15,6 +15,7 @@ import { formatRoutingByRole } from './routingByRole';
 import { formatStaffingSummary, workFiledNotStaffedVerdict } from './staffingSummary';
 import { MAX_TOOL_RESULT_CHARS } from './toolResultBudget';
 import { formatBytes } from './runActivity';
+import { providerFailureVerdict } from './providerFailureCause';
 
 /** Human-readable KB. ONE formatter for the package — see `runActivity.ts`. */
 const kb = formatBytes;
@@ -72,6 +73,8 @@ function verdictText(d: BrainDiagnostics): string {
       return 'Run in progress — verdict pending. The capture was taken while the run was still executing, so no cause is named and no "nothing was changed" claim is made; copy the report again once the run settles.';
     case 'memory-answered':
       return `ANSWERED FROM MEMORY — no model ran this turn. The reply was served by the memory-first short-circuit (${(d.memoryAnswers ?? []).map((m) => m.source === 'evermind' ? `the project Evermind SSM${m.projectId != null ? ` of project #${m.projectId}` : ''}${m.version != null ? ` v${m.version}` : ''}` : m.source === 'symbol-index' ? 'the workspace symbol index' : m.source === 'deterministic' ? `the deterministic workspace action ${m.actionId ?? ''}`.trim() : 'the Q&A cache').join(', ')}), so zero turns, zero tokens and zero tool calls is EXPECTED, not a fault. ${evermindAnswers.length ? 'The Evermind SSM cannot call tools and answers only from what it has learned, so it can neither fetch live data nor do work — if the reply was wrong, garbled or stale, that is the cause. Turn Memory off for this chat, or disable inference on that head.' : (d.memoryAnswers ?? []).every((m) => m.source === 'symbol-index') ? 'The request was only "where is X defined?" and the symbol index resolved every name, so the definitions were listed without a model; ask for anything more to reach the model.' : (d.memoryAnswers ?? []).every((m) => m.source === 'symbol-index' || m.source === 'deterministic') ? 'A deterministic workspace action (the PreFetch gate) settled the request without a model; ask for anything more to reach the model.' : 'The reply is a replay of an earlier answer to the same question; ask a differently-worded question to reach the model.'} Switching models changes nothing here.`;
+    case 'provider-failure':
+      return d.providerFailure ? providerFailureVerdict(d.providerFailure) : 'PROVIDER FAILURE — the run\'s last completion failed and was not recovered.';
     case 'no-tools-advertised':
       return 'NO TOOLS ADVERTISED — at least one turn was handed ZERO tool definitions, so it could not have emitted a call whatever it wanted to do. This is a catalog/config failure on our side, not a model fault: the gateway MCP catalog (`/llm/v1/mcp/tools`) failed to load, or no actions were registered for this surface. See the "Tools available to the model" line in the Chat diagnostics block for the fetch error. Switching models will not help.';
     case 'tool-not-advertised':

@@ -43,7 +43,7 @@ import {
   servedIdentity,
   servedOnDevice,
   webGpuSupport
-} from "./chunk-LTK4JHIW.mjs";
+} from "./chunk-PRXY4IDM.mjs";
 import {
   bounded,
   budget,
@@ -373,7 +373,7 @@ import {
   withAdvisory,
   withProvenanceMetadata,
   workFiledNotStaffedVerdict
-} from "./chunk-CNR67FCZ.mjs";
+} from "./chunk-3YMBYHH5.mjs";
 import {
   ASK_USER_TOOL,
   ASK_USER_TOOL_SPEC,
@@ -5900,7 +5900,8 @@ function nextTurn(state, turn) {
   const verifying = state.phase === "verify";
   const review = reviewing(state);
   const author = state.authorModel;
-  const mapped = review ? configuredPhaseModel(state.options, "verify") : void 0;
+  const reviewModel = review ? configuredPhaseModel(state.options, "verify") : void 0;
+  const mapped = reviewModel && !state.broken.includes(reviewModel) ? reviewModel : void 0;
   let model = mapped ?? state.model ?? phaseDefaultModel(state);
   if (verifying && author && model === author) model = void 0;
   const excludeModels = [...state.broken];
@@ -5963,7 +5964,7 @@ function reduceRunPolicy(state, event) {
       return transportFailed(s, event);
     case "escalated": {
       const from = s.model;
-      if (!event.to || event.to === from) return s;
+      if (!event.to || event.to === from || s.broken.includes(event.to)) return s;
       return {
         ...s,
         model: event.to,
@@ -6055,15 +6056,20 @@ function transportFailed(s, e) {
     };
   }
   if (isRequestRefusalStatus(e.status)) return { ...s, outcome: { kind: "fail_turn" } };
-  if (s.model && s.locked && e.kind === "interrupted") {
+  if (s.model && e.kind === "interrupted" && !userPinHeld(s)) {
     const brokenModel = e.model ?? s.model;
+    const pinned = s.pin !== void 0 && s.model === s.pin;
+    const broken2 = [.../* @__PURE__ */ new Set([...s.broken, brokenModel, s.model])];
+    const backToPin = !pinned && s.pin !== void 0 && !broken2.includes(s.pin) ? s.pin : void 0;
     return {
       ...s,
-      model: void 0,
+      model: backToPin,
       locked: false,
-      broken: s.broken.includes(brokenModel) ? s.broken : [...s.broken, brokenModel],
+      strictPin: backToPin !== void 0 && s.options.pinStrict,
+      ...pinned ? { pin: void 0 } : {},
+      broken: broken2,
       turnRetries: s.turnRetries + 1,
-      outcome: { kind: "retry_turn", broken: brokenModel, released: s.model }
+      outcome: { kind: "retry_turn", broken: brokenModel, ...s.locked || pinned ? { released: s.model } : {} }
     };
   }
   if (s.model) return { ...s, outcome: { kind: "fail_turn" } };
@@ -6077,6 +6083,9 @@ function transportFailed(s, e) {
     turnRetries: s.turnRetries + 1,
     outcome: { kind: "retry_turn", ...e.kind === "interrupted" && e.model ? { broken: e.model } : {} }
   };
+}
+function userPinHeld(s) {
+  return s.pin !== void 0 && s.model === s.pin && !s.options.pinReleasable;
 }
 function releasesPin(s, model, status2) {
   return PIN_RELEASE_STATUSES.includes(status2) || status2 === DECLINE_STATUS && s.options.decliningModelPrefixes.some((prefix) => model.startsWith(prefix));
@@ -13831,7 +13840,7 @@ async function completeTurn(input, state, hooks, ctx, offered, transcript, pack,
     state.advertisedSignature = advertisedSet;
     await emit(input.ports.events, { kind: "context.tools", step: ctx.step, advertised: tools.length, catalog: offered.length, toolsTokens: toolsTokensOf(tools), loaded: state.loadedTools ?? [] });
   }
-  const mctx = { ...pctx, tools, ...made?.final ? { finalTurn: true } : {} };
+  const mctx = { ...pctx, tools, ...made?.finalBy === "guards" ? { finalTurn: true } : {} };
   const decision = await hooks.model.resolve(mctx);
   const model = decision ? decision.model : input.policy.pinnedModel;
   const brief = await hooks.memory.brief(pctx);
@@ -14255,6 +14264,7 @@ ${notice}` : notice };
       await sentBack(ctx.step, turn.content);
       return { action: "continue" };
     }
+    if (finalTurn) await ports.delivery?.finalAccepted?.({ step: ctx.step, content: turn.content });
     return { action: "finish", output };
   };
 }
@@ -14313,14 +14323,14 @@ function kernelHooks(run) {
         progress: { rungs: state.stall?.rungs ?? {} },
         cache: run.cache
       });
-      const platformForced = menu?.toolChoice === "required";
-      const finalTurn = !platformForced && hooks.guards.finalTurn?.(policyContext(input, state, base, ctx.step, ctx.stepInCall)) === true;
+      const finalBy = finalSource(menu, () => hooks.guards.finalTurn?.(policyContext(input, state, base, ctx.step, ctx.stepInCall)) === true);
+      const finalTurn = finalBy !== void 0;
       const advertised = finalTurn ? [] : menu?.tools ?? await selectNow();
       run.selection = {
         tools: advertised,
         ...menu?.toolChoice && !finalTurn ? { toolChoice: menu.toolChoice } : {},
         ...menu?.tail && menu.tail.length > 0 ? { tail: menu.tail } : {},
-        ...finalTurn ? { final: true } : {}
+        ...finalBy ? { final: true, finalBy } : {}
       };
       const view = advertised ? { ...base, tools: [...advertised] } : base;
       const compacted = await hooks.compaction.compact(policyContext(input, state, view, ctx.step, ctx.stepInCall));
@@ -14351,7 +14361,7 @@ function kernelHooks(run) {
       const usage = meta?.usage;
       run.facts.model = meta?.model;
       run.facts.interruption = meta?.interrupted;
-      if (run.selection?.final) hooks.guards.finalTurnDone?.(contextAt(ctx.step, ctx.stepInCall));
+      if (run.selection?.finalBy === "guards") hooks.guards.finalTurnDone?.(contextAt(ctx.step, ctx.stepInCall));
       tallyTurn(tally, model, usage);
       if (run.budget?.afterTurn(usage)) await emit(ports.events, { kind: "budget.unpriced", step: ctx.step, ...model ? { model } : {} });
       await emit(ports.events, { kind: "model.completed", step: ctx.step, ...model ? { model } : {}, ...usage ? { usage } : {} });
@@ -14473,6 +14483,11 @@ function kernelHooks(run) {
       return void 0;
     }
   };
+}
+function finalSource(menu, guardsFinal) {
+  if (menu?.final === true) return "surface";
+  if (menu?.toolChoice === "required") return void 0;
+  return guardsFinal() ? "guards" : void 0;
 }
 function readOnlyPort(run) {
   const guards = run.hooks.guards;
@@ -18458,6 +18473,8 @@ var RunProgressGuard = class {
    * (file / update tickets) before the last one offers nothing. Null while the run is not finishing that way.
    */
   recordTurnsLeft = null;
+  /** The run entered a finish (a record turn or its final no-tool turn): sticky for the rest of the run. */
+  finished = false;
   /**
    * @param on the A3 lever.
    * @param expectsChange the run was asked for a CHANGE (`asksForChange` over its request).
@@ -18532,6 +18549,17 @@ var RunProgressGuard = class {
     this.recordTurnsLeft = Math.max(0, turns);
   }
   /**
+   * The run is FINISHING: a finish turn was decided ("make no more code changes and run nothing … then write the final report").
+   * Set once by {@link finishTurn}; never cleared for the rest of the run, so no delivery gate sends its report back for more work.
+   */
+  get finishing() {
+    return this.finished;
+  }
+  /** A finish turn was decided (only {@link finishTurn} calls this). */
+  enterFinish() {
+    this.finished = true;
+  }
+  /**
    * The next turn of a finishing run, taken once per turn: 'record' (the obligation tools again), 'final' (no tools — the
    * report), or null when the run is not finishing that way. Finish means no more coding, whatever a later trip decides.
    */
@@ -18570,7 +18598,11 @@ function finishingTurn(run) {
   if (!finishing) return null;
   run.progress.takeDue();
   const tools = finishing === "record" ? obligationToolsOf(run) : [];
-  return { tools, brief: { role: "user", content: tools.length > 0 ? FINISH_RECORD_BRIEF : FINISH_FINAL_BRIEF }, finishing: true };
+  return finishTurn(run, tools, tools.length > 0 ? FINISH_RECORD_BRIEF : FINISH_FINAL_BRIEF);
+}
+function finishTurn(run, tools, brief) {
+  run.progress.enterFinish();
+  return { tools, brief: { role: "user", content: brief }, finishing: true };
 }
 function progressGuardTurn(run, step, selected) {
   const finishing = finishingTurn(run);
@@ -18583,11 +18615,11 @@ function progressGuardTurn(run, step, selected) {
     if (deferred) return deferred;
     const tools = obligationToolsOf(run);
     trace2(run, step, due, "finish", tools.length);
-    if (tools.length === 0) return { tools: [], brief: { role: "user", content: due.note }, finishing: true };
+    if (tools.length === 0) return finishTurn(run, [], due.note);
     run.progress.beginRecordingFinish(FINISH_RECORD_TURNS - 1);
-    return { tools, brief: { role: "user", content: `${due.note}
+    return finishTurn(run, tools, `${due.note}
 
-${FINISH_RECORD_BRIEF}` }, finishing: true };
+${FINISH_RECORD_BRIEF}`);
   }
   const advice = `PROGRESS CHECK ${due.trip}: ${progressAdvice(due.signal)}`;
   const out = budgeted(run) ? forcedProgressTurn(run, selected, advice) : null;
@@ -19608,6 +19640,8 @@ ${c.priorResearch}`;
     // One redirect per run for a narration turn that ended while a tool call was still running
     // (see `deliveryGates.ts`): the run is mid-task, not answering.
     pendingNarrationRecoveryUsed: false,
+    // A finishing run traces the delivery gates it skipped once (`run/finishSkipsGates.ts`).
+    finishSkipNoted: false,
     stopHookRounds: 0,
     redirectAskToDelegation: false,
     pending: new PendingCalls(),
@@ -19671,6 +19705,7 @@ function earlyDelegationAdvisory(run, name, args, isReadTool, step) {
 }
 
 // src/runStore/deliveryGates.ts
+var PENDING_NARRATION_GATE = "brain.pending_narration";
 function deliveryGates(run) {
   const { c, catalogToolNames, userRequest, priorReply } = run;
   const facts = () => ({ codeChanged: c.codeChanged, toolNames: catalogToolNames, requestText: userRequest, events: runTrace(c) });
@@ -19706,7 +19741,7 @@ function deliveryGates(run) {
       // has not returned. That narration is not the answer: the run is mid-task. Sent back once
       // to keep working; a run that still narrates after the recovery has read the contract twice
       // and its answer — whatever it is — is the answer.
-      id: "brain.pending_narration",
+      id: PENDING_NARRATION_GATE,
       entersVerify: false,
       applies: () => !run.pendingNarrationRecoveryUsed && run.pending.pendingCount() > 0,
       nudge: () => "A tool call you started is still running. Do not finish \u2014 continue the task until the pending step resolves and there is a concrete result to report.",
@@ -19741,6 +19776,25 @@ function deliveryGates(run) {
   ];
 }
 
+// src/run/finishSkipsGates.ts
+var FINISH_SKIPS_GATES_LABEL = "loop.finish_skips_delivery_gates";
+async function noteFinishSkipsGates(run, step, content, stopHook) {
+  if (run.finishSkipNoted) return;
+  const gates = [
+    ...await stopHook.applies() ? [stopHook.id] : [],
+    ...deliveryGates(run).filter((gate) => gate.applies(content)).map((gate) => gate.id)
+  ];
+  if (gates.length === 0) return;
+  run.finishSkipNoted = true;
+  pushTrace(run.c, {
+    ts: nowIso(),
+    category: "message",
+    label: FINISH_SKIPS_GATES_LABEL,
+    args: { step, gates, files: run.c.touchedFiles.slice(0, 20) },
+    result: "The run is finishing (no more changes, nothing run): the delivery gates that would have sent its report back were not asked \u2014 its change stays unshipped and the report says what is left."
+  });
+}
+
 // src/run/brainDelivery.ts
 var STOP_HOOK_RUNG = "brain.stop_hook";
 function brainDeliveryLedger(run, last) {
@@ -19756,6 +19810,8 @@ function brainDeliveryLedger(run, last) {
     const full = asWritten(content).trim();
     return (canAskUser ? liftProseAskUser(full) : full) || "No response.";
   };
+  const askStop = () => askStopHook(req.onStop, { codeChanged: c.codeChanged, touchedFiles: c.touchedFiles, requestText: userRequest, round: run.stopHookRounds });
+  const skippedByFinish = (content) => noteFinishSkipsGates(run, last.step, content, { id: STOP_HOOK_RUNG, applies: async () => await askStop() !== null });
   return {
     // The closing answer after a failure streak is the Brain's own (`runStore/failureClose.ts`, run by the adapter tail). A host that
     // cannot run a tool judges no stall at all (the rungs are none): the turn IS the answer.
@@ -19779,9 +19835,20 @@ function brainDeliveryLedger(run, last) {
       for (const write of held.splice(0)) write();
     },
     accept,
+    // The final turn the ladder never judges (`TurnMenu.final`): a FINISHING run records the gates it did not ask.
+    async finalAccepted({ content }) {
+      if (runTool && run.progress.finishing) await skippedByFinish(content);
+    },
     async rungs(turn) {
       if (!runTool) return [];
-      const stopNudge = await askStopHook(req.onStop, { codeChanged: c.codeChanged, touchedFiles: c.touchedFiles, requestText: userRequest, round: run.stopHookRounds });
+      if (run.progress.finishing) {
+        await skippedByFinish(turn.content);
+        return [];
+      }
+      const sentBackAnswer = () => {
+        last.sentBackAnswer = { step: last.step };
+      };
+      const stopNudge = await askStop();
       const verifiable = c.codeChanged && !skipsVerifyStage(run.pipeline);
       const stopHook = {
         id: STOP_HOOK_RUNG,
@@ -19792,6 +19859,7 @@ function brainDeliveryLedger(run, last) {
         spent: "fall",
         entersVerify: verifiable,
         onRestate: () => {
+          sentBackAnswer();
           run.stopHookRounds += 1;
           note("loop.stop_hook", `A workspace stop hook held the run for another turn: ${(stopNudge ?? "").slice(0, 200)}`, { round: run.stopHookRounds });
         }
@@ -19804,6 +19872,7 @@ function brainDeliveryLedger(run, last) {
         spent: "fall",
         entersVerify: gate.entersVerify && verifiable,
         onRestate: () => {
+          if (gate.id !== PENDING_NARRATION_GATE) sentBackAnswer();
           gate.spend();
           note(gate.trace.label, gate.trace.result, gate.trace.args());
         }
@@ -20575,7 +20644,7 @@ async function brainTurnMenu(run, env, catalogSize) {
   const forced = forcedTurnFor(run, env.step, selected, finishing, handOffTurn);
   const steer = forced?.finishing ? "" : run.progress.steerNote();
   const tail = [...forced ? [userTextOf(forced.brief)] : [], ...steer ? [steer] : []];
-  if (forced) return { tools: forced.tools, ...forced.toolChoice ? { toolChoice: forced.toolChoice } : {}, tail };
+  if (forced) return { tools: forced.tools, ...forced.toolChoice ? { toolChoice: forced.toolChoice } : {}, tail, ...forced.finishing && forced.tools.length === 0 ? { final: true } : {} };
   if (catalogSize > roleToolLimit(run.policy.phase)) {
     pushTrace(run.c, {
       ts: nowIso(),
@@ -21235,6 +21304,20 @@ async function closeAfterFailureStreak(run, streak, step) {
 }
 
 // src/run/brainSettle.ts
+function keptSentBackAnswer(run, last) {
+  const error = last.error;
+  if (!last.sentBackAnswer || error === void 0 || providerFailureEvent(error) === null) return false;
+  const model = error instanceof StreamInterruptedError && error.model || run.policy.model || "default";
+  const message = error instanceof Error ? error.message : String(error);
+  pushTrace(run.c, {
+    ts: nowIso(),
+    category: "message",
+    label: "loop.reprompt_failed_answer_kept",
+    args: { model, step: last.step, answerStep: last.sentBackAnswer.step },
+    result: `The re-prompt after the run's answer failed on ${model} (${message}) \u2014 the run keeps the answer it already gave instead of ending on the error.`
+  });
+  return true;
+}
 async function settleBrainRun(run, outcome, last) {
   const { c, chatId, req } = run;
   last.pending = void 0;
@@ -21243,6 +21326,11 @@ async function settleBrainRun(run, outcome, last) {
     if (outcome.reason === RUN_CANCELLED_REASON || c.abort?.signal.aborted) return;
     if (outcome.cause !== void 0) throw outcome.cause;
     if (last.keepFailed !== void 0) throw last.keepFailed;
+    if (keptSentBackAnswer(run, last)) {
+      emit2(c);
+      req.onActivity?.(chatId);
+      return;
+    }
     if (last.error !== void 0) throw last.error;
     if (outcome.exhausted) return closeAfterFailureStreak(run, outcome.failureStreak ?? DEFAULT_TOOL_FAILURE_STREAK, outcome.state.step);
     throw new Error(outcome.reason);
@@ -22022,6 +22110,7 @@ function brainTurnObserver(run, savedTokens = () => 0) {
   return { observer, last, keepAnswered };
 }
 async function keep(run, last, a) {
+  last.sentBackAnswer = void 0;
   const { result } = a;
   run.windowFit.served(result.resolvedModel ?? run.policy.model);
   const resolved = result.resolvedModel ?? run.policy.model ?? "default";

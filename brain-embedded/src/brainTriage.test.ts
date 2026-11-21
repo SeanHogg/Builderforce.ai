@@ -10,6 +10,7 @@ import {
   type BrainTraceEvent,
 } from './brainTriage';
 import type { BrainMessage } from './types';
+import { providerFailureVerdict } from './providerFailureCause';
 
 describe('isFailedToolResult', () => {
   it('flags { ok: false } and error fields', () => {
@@ -416,6 +417,40 @@ describe('tool exposure + stall handling signals', () => {
     const text = formatBrainDiagnostics(d).join('\n');
     expect(text).toContain('TOOL NOT ADVERTISED');
     expect(text).toContain('Narrated but never advertised: builtin_chats_list_tickets');
+  });
+
+  it('regression: chat #128305 — a run that ENDED on a provider failure after a gate re-prompt ranks provider-failure above tool-not-advertised', () => {
+    const failed: BrainTraceEvent = {
+      ts: '2026-06-13T00:00:05.000Z',
+      category: 'error',
+      label: 'llm.complete',
+      args: { model: 'xai-oauth/grok-4.7', step: 2, failure: { phase: 'body', destination: { kind: 'gateway', label: 'gw', host: 'gw' }, elapsedMs: 1, idleMs: 1, requestBytes: 384_000, messageCount: 88, toolCount: 0 } },
+      result: 'StreamInterruptedError: stream ended (xAI doom-loop check: tail_repetition:64@response)',
+      isError: true,
+    };
+    const d = computeBrainDiagnostics(
+      [
+        turn(0, { advertisedTools: 12, catalogTools: 317 }),
+        turn(1, { advertisedTools: 0, catalogTools: 317, narratedUnadvertised: ['git_commit'] }),
+        { ts: '2026-06-13T00:00:04.000Z', category: 'message', label: 'loop.recover_unshipped_change', args: { step: 1 }, result: 're-prompted' },
+        failed,
+      ],
+      undefined,
+      [{ id: 1, role: 'assistant', content: 'Final report. I will call git_commit next.', metadata: null, seq: 1, createdAt: '' }],
+    );
+    expect(d.narratedUnadvertisedTools).toEqual(['git_commit']);
+    expect(d.likelyCause).toBe('provider-failure');
+    expect(d.providerFailure).toMatchObject({ model: 'xai-oauth/grok-4.7', failoverTried: false, gateRepromptedNoTools: true });
+    const text = formatBrainDiagnostics(d).join('\n');
+    expect(text).toContain('PROVIDER FAILURE');
+    expect(text).toContain('xai-oauth/grok-4.7');
+    expect(text).toContain('No failover to another model was tried.');
+    expect(text).toContain('a delivery gate re-prompted a turn that offered no tools (the model was asked to act with nothing to act with)');
+    expect(text).not.toContain('TOOL NOT ADVERTISED');
+    // The run kept its answer: the headline says so, and never that the run ended on the error.
+    const kept = providerFailureVerdict({ ...d.providerFailure!, answerKept: true });
+    expect(kept.startsWith('PROVIDER FAILURE on the re-prompt — the run kept the answer it had already given')).toBe(true);
+    expect(kept).not.toContain('ended on the error');
   });
 
   it('flags a turn handed tools that answered in prose instead of calling them', () => {

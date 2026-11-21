@@ -30,6 +30,9 @@ export interface DeliveryGate {
   spend(): void;
 }
 
+/** The gate that sends back a narration while a call the run started is still running: never an answer the run could keep. */
+export const PENDING_NARRATION_GATE = 'brain.pending_narration';
+
 /** The ship, review, delegation and restated-reply gates, in the order they are asked. */
 export function deliveryGates(run: BrainRunContext): DeliveryGate[] {
   const { c, catalogToolNames, userRequest, priorReply } = run;
@@ -62,7 +65,7 @@ export function deliveryGates(run: BrainRunContext): DeliveryGate[] {
       // has not returned. That narration is not the answer: the run is mid-task. Sent back once
       // to keep working; a run that still narrates after the recovery has read the contract twice
       // and its answer — whatever it is — is the answer.
-      id: 'brain.pending_narration',
+      id: PENDING_NARRATION_GATE,
       entersVerify: false,
       applies: () => !run.pendingNarrationRecoveryUsed && run.pending.pendingCount() > 0,
       nudge: () => 'A tool call you started is still running. Do not finish — continue the task until the pending step resolves and there is a concrete result to report.',

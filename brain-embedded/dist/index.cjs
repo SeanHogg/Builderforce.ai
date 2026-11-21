@@ -6815,6 +6815,7 @@ function onnxBonsai(row) {
     requires: { minBufferBytes: WEBGPU_DEFAULT_BINDING_BYTES }
   };
 }
+var ONNX_BONSAI_CATALOG = ONNX_BONSAI.map(onnxBonsai);
 function webllm(entry) {
   const binding = entry.lowResource ? WEBGPU_DEFAULT_BINDING_BYTES : WEBLLM_FULL_BINDING_BYTES;
   return {
@@ -6845,7 +6846,6 @@ var LOCAL_MODEL_CATALOG = [
   bonsai("1.7B", 17e8, 248302272, 32768, 28, 2 * GIB),
   bonsai("4B", 4e9, 572270624, 32768, 36, 4 * GIB),
   bonsai("8B", 819e7, 1158654496, 65536, 36, 8 * GIB),
-  ...ONNX_BONSAI.map(onnxBonsai),
   ...WEBLLM_CATALOG.map(webllm)
 ];
 function isLocalChatModel(row) {
@@ -8801,7 +8801,8 @@ function nextTurn(state, turn) {
   const verifying = state.phase === "verify";
   const review = reviewing(state);
   const author = state.authorModel;
-  const mapped = review ? configuredPhaseModel(state.options, "verify") : void 0;
+  const reviewModel = review ? configuredPhaseModel(state.options, "verify") : void 0;
+  const mapped = reviewModel && !state.broken.includes(reviewModel) ? reviewModel : void 0;
   let model = mapped ?? state.model ?? phaseDefaultModel(state);
   if (verifying && author && model === author) model = void 0;
   const excludeModels = [...state.broken];
@@ -8864,7 +8865,7 @@ function reduceRunPolicy(state, event) {
       return transportFailed(s, event);
     case "escalated": {
       const from = s.model;
-      if (!event.to || event.to === from) return s;
+      if (!event.to || event.to === from || s.broken.includes(event.to)) return s;
       return {
         ...s,
         model: event.to,
@@ -8956,15 +8957,20 @@ function transportFailed(s, e) {
     };
   }
   if (isRequestRefusalStatus(e.status)) return { ...s, outcome: { kind: "fail_turn" } };
-  if (s.model && s.locked && e.kind === "interrupted") {
+  if (s.model && e.kind === "interrupted" && !userPinHeld(s)) {
     const brokenModel = e.model ?? s.model;
+    const pinned = s.pin !== void 0 && s.model === s.pin;
+    const broken2 = [.../* @__PURE__ */ new Set([...s.broken, brokenModel, s.model])];
+    const backToPin = !pinned && s.pin !== void 0 && !broken2.includes(s.pin) ? s.pin : void 0;
     return {
       ...s,
-      model: void 0,
+      model: backToPin,
       locked: false,
-      broken: s.broken.includes(brokenModel) ? s.broken : [...s.broken, brokenModel],
+      strictPin: backToPin !== void 0 && s.options.pinStrict,
+      ...pinned ? { pin: void 0 } : {},
+      broken: broken2,
       turnRetries: s.turnRetries + 1,
-      outcome: { kind: "retry_turn", broken: brokenModel, released: s.model }
+      outcome: { kind: "retry_turn", broken: brokenModel, ...s.locked || pinned ? { released: s.model } : {} }
     };
   }
   if (s.model) return { ...s, outcome: { kind: "fail_turn" } };
@@ -8978,6 +8984,9 @@ function transportFailed(s, e) {
     turnRetries: s.turnRetries + 1,
     outcome: { kind: "retry_turn", ...e.kind === "interrupted" && e.model ? { broken: e.model } : {} }
   };
+}
+function userPinHeld(s) {
+  return s.pin !== void 0 && s.model === s.pin && !s.options.pinReleasable;
 }
 function releasesPin(s, model, status2) {
   return PIN_RELEASE_STATUSES.includes(status2) || status2 === DECLINE_STATUS && s.options.decliningModelPrefixes.some((prefix) => model.startsWith(prefix));
@@ -27439,7 +27448,7 @@ async function completeTurn(input, state, hooks, ctx, offered, transcript, pack,
     state.advertisedSignature = advertisedSet;
     await emit(input.ports.events, { kind: "context.tools", step: ctx.step, advertised: tools.length, catalog: offered.length, toolsTokens: toolsTokensOf(tools), loaded: state.loadedTools ?? [] });
   }
-  const mctx = { ...pctx, tools, ...made?.final ? { finalTurn: true } : {} };
+  const mctx = { ...pctx, tools, ...made?.finalBy === "guards" ? { finalTurn: true } : {} };
   const decision = await hooks.model.resolve(mctx);
   const model = decision ? decision.model : input.policy.pinnedModel;
   const brief = await hooks.memory.brief(pctx);
@@ -27863,6 +27872,7 @@ ${notice}` : notice };
       await sentBack(ctx.step, turn.content);
       return { action: "continue" };
     }
+    if (finalTurn) await ports.delivery?.finalAccepted?.({ step: ctx.step, content: turn.content });
     return { action: "finish", output };
   };
 }
@@ -27921,14 +27931,14 @@ function kernelHooks(run) {
         progress: { rungs: state.stall?.rungs ?? {} },
         cache: run.cache
       });
-      const platformForced = menu?.toolChoice === "required";
-      const finalTurn = !platformForced && hooks.guards.finalTurn?.(policyContext(input, state, base, ctx.step, ctx.stepInCall)) === true;
+      const finalBy = finalSource(menu, () => hooks.guards.finalTurn?.(policyContext(input, state, base, ctx.step, ctx.stepInCall)) === true);
+      const finalTurn = finalBy !== void 0;
       const advertised = finalTurn ? [] : menu?.tools ?? await selectNow();
       run.selection = {
         tools: advertised,
         ...menu?.toolChoice && !finalTurn ? { toolChoice: menu.toolChoice } : {},
         ...menu?.tail && menu.tail.length > 0 ? { tail: menu.tail } : {},
-        ...finalTurn ? { final: true } : {}
+        ...finalBy ? { final: true, finalBy } : {}
       };
       const view = advertised ? { ...base, tools: [...advertised] } : base;
       const compacted = await hooks.compaction.compact(policyContext(input, state, view, ctx.step, ctx.stepInCall));
@@ -27959,7 +27969,7 @@ function kernelHooks(run) {
       const usage = meta?.usage;
       run.facts.model = meta?.model;
       run.facts.interruption = meta?.interrupted;
-      if (run.selection?.final) hooks.guards.finalTurnDone?.(contextAt(ctx.step, ctx.stepInCall));
+      if (run.selection?.finalBy === "guards") hooks.guards.finalTurnDone?.(contextAt(ctx.step, ctx.stepInCall));
       tallyTurn(tally, model, usage);
       if (run.budget?.afterTurn(usage)) await emit(ports.events, { kind: "budget.unpriced", step: ctx.step, ...model ? { model } : {} });
       await emit(ports.events, { kind: "model.completed", step: ctx.step, ...model ? { model } : {}, ...usage ? { usage } : {} });
@@ -28081,6 +28091,11 @@ function kernelHooks(run) {
       return void 0;
     }
   };
+}
+function finalSource(menu, guardsFinal) {
+  if (menu?.final === true) return "surface";
+  if (menu?.toolChoice === "required") return void 0;
+  return guardsFinal() ? "guards" : void 0;
 }
 function readOnlyPort(run) {
   const guards = run.hooks.guards;
@@ -31343,6 +31358,37 @@ function requestedReadWindow2(out, start, end) {
   return isReadFileResult(out) ? sliceReadFile(out, start, end) : out;
 }
 
+// src/providerFailureCause.ts
+var RETRY_LABELS = /* @__PURE__ */ new Set(["llm.stream_interrupted", "llm.transport_error", "loop.model_failover"]);
+var isFailedCompletion = (ev) => ev.label === "llm.complete" && (ev.isError === true || ev.category === "error");
+var argsOf3 = (ev) => ev.args && typeof ev.args === "object" ? ev.args : {};
+function providerFailureInTrace(events, messages = []) {
+  const slices = splitRuns(events, messages);
+  const run = slices[slices.length - 1]?.events ?? [];
+  const completions = run.map((ev, i) => ({ ev, i })).filter(({ ev }) => ev.label === "llm.complete");
+  const last = completions[completions.length - 1];
+  if (!last || !isFailedCompletion(last.ev)) return null;
+  const args = argsOf3(last.ev);
+  const failure = args.failure && typeof args.failure === "object" ? args.failure : void 0;
+  const previous = completions[completions.length - 2];
+  const since = run.slice(previous ? previous.i + 1 : 0, last.i);
+  const retried = since.some((ev) => RETRY_LABELS.has(ev.label));
+  const reprompted = since.some((ev) => ev.label.startsWith("loop.recover_"));
+  return {
+    model: typeof args.model === "string" && args.model ? args.model : "default",
+    message: typeof last.ev.result === "string" ? last.ev.result : String(last.ev.result ?? "unknown error"),
+    failoverTried: retried,
+    gateRepromptedNoTools: reprompted && failure?.toolCount === 0,
+    answerKept: run.slice(last.i + 1).some((ev) => ev.label === "loop.reprompt_failed_answer_kept")
+  };
+}
+function providerFailureVerdict(f) {
+  const failover = f.failoverTried ? "A failover to another model was tried and failed too." : "No failover to another model was tried.";
+  const gate = f.gateRepromptedNoTools ? " The request that failed came right after a delivery gate re-prompted the run: a delivery gate re-prompted a turn that offered no tools (the model was asked to act with nothing to act with)." : "";
+  const headline = f.answerKept ? `PROVIDER FAILURE on the re-prompt \u2014 the run kept the answer it had already given. The re-prompt's completion on ${f.model} failed (${f.message}) and was not recovered.` : `PROVIDER FAILURE \u2014 the run's last completion on ${f.model} failed (${f.message}) and was not recovered, and the run ended on the error.`;
+  return `${headline} ${failover}${gate} This is the provider's stream failing, not a tool the model was not offered: read the failed \`llm.complete\` step below.`;
+}
+
 // src/brainVerdict.ts
 var import_working10 = require("@seanhogg/builderforce-memory/working");
 var CONTEXT_PROMPT_PEAK = Math.round(import_working10.HISTORY_TOKEN_BUDGET * 1.5);
@@ -31350,6 +31396,7 @@ var LARGE_LOSSY_RESULT_BYTES = 2e4;
 function decideLikelyCause(s) {
   if (s.running) return "run-in-progress";
   if (s.memoryOnlyRun) return "memory-answered";
+  if (s.providerFailure) return "provider-failure";
   if (s.noToolsAdvertised) return "no-tools-advertised";
   if (s.narratedUnadvertised) return "tool-not-advertised";
   if (s.announcedUnmadeToolCall) return "tool-calls-not-emitted";
@@ -31410,6 +31457,8 @@ function verdictText(d) {
       return 'Run in progress \u2014 verdict pending. The capture was taken while the run was still executing, so no cause is named and no "nothing was changed" claim is made; copy the report again once the run settles.';
     case "memory-answered":
       return `ANSWERED FROM MEMORY \u2014 no model ran this turn. The reply was served by the memory-first short-circuit (${(d.memoryAnswers ?? []).map((m) => m.source === "evermind" ? `the project Evermind SSM${m.projectId != null ? ` of project #${m.projectId}` : ""}${m.version != null ? ` v${m.version}` : ""}` : m.source === "symbol-index" ? "the workspace symbol index" : m.source === "deterministic" ? `the deterministic workspace action ${m.actionId ?? ""}`.trim() : "the Q&A cache").join(", ")}), so zero turns, zero tokens and zero tool calls is EXPECTED, not a fault. ${evermindAnswers.length ? "The Evermind SSM cannot call tools and answers only from what it has learned, so it can neither fetch live data nor do work \u2014 if the reply was wrong, garbled or stale, that is the cause. Turn Memory off for this chat, or disable inference on that head." : (d.memoryAnswers ?? []).every((m) => m.source === "symbol-index") ? 'The request was only "where is X defined?" and the symbol index resolved every name, so the definitions were listed without a model; ask for anything more to reach the model.' : (d.memoryAnswers ?? []).every((m) => m.source === "symbol-index" || m.source === "deterministic") ? "A deterministic workspace action (the PreFetch gate) settled the request without a model; ask for anything more to reach the model." : "The reply is a replay of an earlier answer to the same question; ask a differently-worded question to reach the model."} Switching models changes nothing here.`;
+    case "provider-failure":
+      return d.providerFailure ? providerFailureVerdict(d.providerFailure) : "PROVIDER FAILURE \u2014 the run's last completion failed and was not recovered.";
     case "no-tools-advertised":
       return 'NO TOOLS ADVERTISED \u2014 at least one turn was handed ZERO tool definitions, so it could not have emitted a call whatever it wanted to do. This is a catalog/config failure on our side, not a model fault: the gateway MCP catalog (`/llm/v1/mcp/tools`) failed to load, or no actions were registered for this surface. See the "Tools available to the model" line in the Chat diagnostics block for the fetch error. Switching models will not help.';
     case "tool-not-advertised":
@@ -31886,9 +31935,11 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
   const workFiledNotStaffed = sessionShipped === 0 && (staffing.verdict === "filed-not-staffed" || staffing.verdict === "staffing-refused");
   const unresolvedAppFailures = unresolvedAppFailuresInTrace(events);
   const running = ctx.running === true;
+  const providerFailure = running ? null : providerFailureInTrace(events, messages);
   const likelyCause = decideLikelyCause({
     running,
     memoryOnlyRun,
+    providerFailure: providerFailure !== null,
     noToolsAdvertised,
     narratedUnadvertised: narratedUnadvertisedTools.length > 0,
     announcedUnmadeToolCall,
@@ -31953,6 +32004,7 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
     sessionShipped,
     memoryUsage,
     unresolvedAppFailures,
+    providerFailure,
     likelyCause
   };
 }
@@ -34010,6 +34062,8 @@ var RunProgressGuard = class {
    * (file / update tickets) before the last one offers nothing. Null while the run is not finishing that way.
    */
   recordTurnsLeft = null;
+  /** The run entered a finish (a record turn or its final no-tool turn): sticky for the rest of the run. */
+  finished = false;
   /**
    * @param on the A3 lever.
    * @param expectsChange the run was asked for a CHANGE (`asksForChange` over its request).
@@ -34084,6 +34138,17 @@ var RunProgressGuard = class {
     this.recordTurnsLeft = Math.max(0, turns);
   }
   /**
+   * The run is FINISHING: a finish turn was decided ("make no more code changes and run nothing … then write the final report").
+   * Set once by {@link finishTurn}; never cleared for the rest of the run, so no delivery gate sends its report back for more work.
+   */
+  get finishing() {
+    return this.finished;
+  }
+  /** A finish turn was decided (only {@link finishTurn} calls this). */
+  enterFinish() {
+    this.finished = true;
+  }
+  /**
    * The next turn of a finishing run, taken once per turn: 'record' (the obligation tools again), 'final' (no tools — the
    * report), or null when the run is not finishing that way. Finish means no more coding, whatever a later trip decides.
    */
@@ -34122,7 +34187,11 @@ function finishingTurn(run) {
   if (!finishing) return null;
   run.progress.takeDue();
   const tools = finishing === "record" ? obligationToolsOf(run) : [];
-  return { tools, brief: { role: "user", content: tools.length > 0 ? FINISH_RECORD_BRIEF : FINISH_FINAL_BRIEF }, finishing: true };
+  return finishTurn(run, tools, tools.length > 0 ? FINISH_RECORD_BRIEF : FINISH_FINAL_BRIEF);
+}
+function finishTurn(run, tools, brief) {
+  run.progress.enterFinish();
+  return { tools, brief: { role: "user", content: brief }, finishing: true };
 }
 function progressGuardTurn(run, step, selected) {
   const finishing = finishingTurn(run);
@@ -34135,11 +34204,11 @@ function progressGuardTurn(run, step, selected) {
     if (deferred) return deferred;
     const tools = obligationToolsOf(run);
     trace2(run, step, due, "finish", tools.length);
-    if (tools.length === 0) return { tools: [], brief: { role: "user", content: due.note }, finishing: true };
+    if (tools.length === 0) return finishTurn(run, [], due.note);
     run.progress.beginRecordingFinish(FINISH_RECORD_TURNS - 1);
-    return { tools, brief: { role: "user", content: `${due.note}
+    return finishTurn(run, tools, `${due.note}
 
-${FINISH_RECORD_BRIEF}` }, finishing: true };
+${FINISH_RECORD_BRIEF}`);
   }
   const advice = `PROGRESS CHECK ${due.trip}: ${progressAdvice(due.signal)}`;
   const out = budgeted(run) ? forcedProgressTurn(run, selected, advice) : null;
@@ -35156,6 +35225,8 @@ ${c.priorResearch}`;
     // One redirect per run for a narration turn that ended while a tool call was still running
     // (see `deliveryGates.ts`): the run is mid-task, not answering.
     pendingNarrationRecoveryUsed: false,
+    // A finishing run traces the delivery gates it skipped once (`run/finishSkipsGates.ts`).
+    finishSkipNoted: false,
     stopHookRounds: 0,
     redirectAskToDelegation: false,
     pending: new PendingCalls(),
@@ -35219,6 +35290,7 @@ function earlyDelegationAdvisory(run, name, args, isReadTool, step) {
 }
 
 // src/runStore/deliveryGates.ts
+var PENDING_NARRATION_GATE = "brain.pending_narration";
 function deliveryGates(run) {
   const { c, catalogToolNames, userRequest, priorReply } = run;
   const facts = () => ({ codeChanged: c.codeChanged, toolNames: catalogToolNames, requestText: userRequest, events: runTrace(c) });
@@ -35254,7 +35326,7 @@ function deliveryGates(run) {
       // has not returned. That narration is not the answer: the run is mid-task. Sent back once
       // to keep working; a run that still narrates after the recovery has read the contract twice
       // and its answer — whatever it is — is the answer.
-      id: "brain.pending_narration",
+      id: PENDING_NARRATION_GATE,
       entersVerify: false,
       applies: () => !run.pendingNarrationRecoveryUsed && run.pending.pendingCount() > 0,
       nudge: () => "A tool call you started is still running. Do not finish \u2014 continue the task until the pending step resolves and there is a concrete result to report.",
@@ -35289,6 +35361,25 @@ function deliveryGates(run) {
   ];
 }
 
+// src/run/finishSkipsGates.ts
+var FINISH_SKIPS_GATES_LABEL = "loop.finish_skips_delivery_gates";
+async function noteFinishSkipsGates(run, step, content, stopHook) {
+  if (run.finishSkipNoted) return;
+  const gates = [
+    ...await stopHook.applies() ? [stopHook.id] : [],
+    ...deliveryGates(run).filter((gate) => gate.applies(content)).map((gate) => gate.id)
+  ];
+  if (gates.length === 0) return;
+  run.finishSkipNoted = true;
+  pushTrace(run.c, {
+    ts: nowIso(),
+    category: "message",
+    label: FINISH_SKIPS_GATES_LABEL,
+    args: { step, gates, files: run.c.touchedFiles.slice(0, 20) },
+    result: "The run is finishing (no more changes, nothing run): the delivery gates that would have sent its report back were not asked \u2014 its change stays unshipped and the report says what is left."
+  });
+}
+
 // src/run/brainDelivery.ts
 var STOP_HOOK_RUNG = "brain.stop_hook";
 function brainDeliveryLedger(run, last) {
@@ -35304,6 +35395,8 @@ function brainDeliveryLedger(run, last) {
     const full = asWritten(content).trim();
     return (canAskUser ? liftProseAskUser(full) : full) || "No response.";
   };
+  const askStop = () => askStopHook(req.onStop, { codeChanged: c.codeChanged, touchedFiles: c.touchedFiles, requestText: userRequest, round: run.stopHookRounds });
+  const skippedByFinish = (content) => noteFinishSkipsGates(run, last.step, content, { id: STOP_HOOK_RUNG, applies: async () => await askStop() !== null });
   return {
     // The closing answer after a failure streak is the Brain's own (`runStore/failureClose.ts`, run by the adapter tail). A host that
     // cannot run a tool judges no stall at all (the rungs are none): the turn IS the answer.
@@ -35327,9 +35420,20 @@ function brainDeliveryLedger(run, last) {
       for (const write2 of held.splice(0)) write2();
     },
     accept,
+    // The final turn the ladder never judges (`TurnMenu.final`): a FINISHING run records the gates it did not ask.
+    async finalAccepted({ content }) {
+      if (runTool2 && run.progress.finishing) await skippedByFinish(content);
+    },
     async rungs(turn) {
       if (!runTool2) return [];
-      const stopNudge = await askStopHook(req.onStop, { codeChanged: c.codeChanged, touchedFiles: c.touchedFiles, requestText: userRequest, round: run.stopHookRounds });
+      if (run.progress.finishing) {
+        await skippedByFinish(turn.content);
+        return [];
+      }
+      const sentBackAnswer = () => {
+        last.sentBackAnswer = { step: last.step };
+      };
+      const stopNudge = await askStop();
       const verifiable = c.codeChanged && !skipsVerifyStage(run.pipeline);
       const stopHook = {
         id: STOP_HOOK_RUNG,
@@ -35340,6 +35444,7 @@ function brainDeliveryLedger(run, last) {
         spent: "fall",
         entersVerify: verifiable,
         onRestate: () => {
+          sentBackAnswer();
           run.stopHookRounds += 1;
           note("loop.stop_hook", `A workspace stop hook held the run for another turn: ${(stopNudge ?? "").slice(0, 200)}`, { round: run.stopHookRounds });
         }
@@ -35352,6 +35457,7 @@ function brainDeliveryLedger(run, last) {
         spent: "fall",
         entersVerify: gate.entersVerify && verifiable,
         onRestate: () => {
+          if (gate.id !== PENDING_NARRATION_GATE) sentBackAnswer();
           gate.spend();
           note(gate.trace.label, gate.trace.result, gate.trace.args());
         }
@@ -36123,7 +36229,7 @@ async function brainTurnMenu(run, env, catalogSize) {
   const forced = forcedTurnFor(run, env.step, selected, finishing, handOffTurn);
   const steer = forced?.finishing ? "" : run.progress.steerNote();
   const tail = [...forced ? [userTextOf(forced.brief)] : [], ...steer ? [steer] : []];
-  if (forced) return { tools: forced.tools, ...forced.toolChoice ? { toolChoice: forced.toolChoice } : {}, tail };
+  if (forced) return { tools: forced.tools, ...forced.toolChoice ? { toolChoice: forced.toolChoice } : {}, tail, ...forced.finishing && forced.tools.length === 0 ? { final: true } : {} };
   if (catalogSize > roleToolLimit(run.policy.phase)) {
     pushTrace(run.c, {
       ts: nowIso(),
@@ -36783,6 +36889,20 @@ async function closeAfterFailureStreak(run, streak, step) {
 }
 
 // src/run/brainSettle.ts
+function keptSentBackAnswer(run, last) {
+  const error = last.error;
+  if (!last.sentBackAnswer || error === void 0 || providerFailureEvent(error) === null) return false;
+  const model = error instanceof StreamInterruptedError && error.model || run.policy.model || "default";
+  const message2 = error instanceof Error ? error.message : String(error);
+  pushTrace(run.c, {
+    ts: nowIso(),
+    category: "message",
+    label: "loop.reprompt_failed_answer_kept",
+    args: { model, step: last.step, answerStep: last.sentBackAnswer.step },
+    result: `The re-prompt after the run's answer failed on ${model} (${message2}) \u2014 the run keeps the answer it already gave instead of ending on the error.`
+  });
+  return true;
+}
 async function settleBrainRun(run, outcome, last) {
   const { c, chatId, req } = run;
   last.pending = void 0;
@@ -36791,6 +36911,11 @@ async function settleBrainRun(run, outcome, last) {
     if (outcome.reason === RUN_CANCELLED_REASON || c.abort?.signal.aborted) return;
     if (outcome.cause !== void 0) throw outcome.cause;
     if (last.keepFailed !== void 0) throw last.keepFailed;
+    if (keptSentBackAnswer(run, last)) {
+      emit2(c);
+      req.onActivity?.(chatId);
+      return;
+    }
     if (last.error !== void 0) throw last.error;
     if (outcome.exhausted) return closeAfterFailureStreak(run, outcome.failureStreak ?? DEFAULT_TOOL_FAILURE_STREAK, outcome.state.step);
     throw new Error(outcome.reason);
@@ -37628,6 +37753,7 @@ function brainTurnObserver(run, savedTokens = () => 0) {
   return { observer, last, keepAnswered };
 }
 async function keep(run, last, a) {
+  last.sentBackAnswer = void 0;
   const { result } = a;
   run.windowFit.served(result.resolvedModel ?? run.policy.model);
   const resolved = result.resolvedModel ?? run.policy.model ?? "default";
