@@ -161,7 +161,7 @@ export {
   recordPayloadMarker,
 } from './recordPayloadMarker.js';
 export { sendablePayload } from './syncRound.js';
-export { CHAT_BIND_LEASE_MS, awaitsChatBind, claimChatBind, releaseChatBind } from './chatBindLease.js';
+export { BIND_PENDING_HOLDER, CHAT_BIND_LEASE_MS, awaitsChatBind, claimChatBind, liveChatBindHolder, releaseChatBind } from './chatBindLease.js';
 export { pruneSettledReceipts } from './receiptPruning.js';
 export {
   MARKER_WRITTEN_TYPES,

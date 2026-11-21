@@ -155,6 +155,27 @@ describe('chat bind vs. sync import (regression: chat local #165961)', () => {
     expect(await harness.identity.serverIdFor(chat.id)).toBe(hostChat);
   });
 
+  it("two windows sharing the journal: the second's bind waits for the first's binding and never POSTs", async () => {
+    const server = fakeServer();
+    let started!: () => void;
+    const startedPost = new Promise<void>((resolve) => { started = resolve; });
+    let finish!: (id: number) => void;
+    const harness = setup(() => { started(); return new Promise<number>((resolve) => { finish = resolve; }); }, server.transport);
+    const secondPort: ChatBindingPort = { destination: () => ACCOUNT, allowed: () => true, createServerChat: vi.fn(async () => server.mint()) };
+    const second = createLocalChatIdentity({ store: harness.store, deviceId: DEVICE, port: secondPort });
+    const chat = await harness.persistence.createChat({ title: 'x' });
+
+    const first = harness.identity.bind(chat.id);
+    await startedPost; // the first window's lease is claimed and its POST is in flight
+    const waiting = second.bind(chat.id);
+    finish(server.mint());
+
+    expect(await first).toBe(281);
+    expect(await waiting).toBe(281);
+    expect(secondPort.createServerChat).not.toHaveBeenCalled();
+    expect(server.chats).toEqual([281]);
+  });
+
   it('an import already sent binds the chat through its receipt; the bind never POSTs a second chat', async () => {
     const server = fakeServer();
     const harness = setup(async () => server.mint(), server.transport);

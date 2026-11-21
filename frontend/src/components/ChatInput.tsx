@@ -13,6 +13,7 @@ import { useComposerOptions } from './chat-input/useComposerOptions';
 import { useMentionPersonalityDetail } from '@/lib/useMentionPersonalityDetail';
 import type { ChatInputProps } from './chat-input/types';
 import type { ComposerAttachment } from '@seanhogg/builderforce-brain-ui';
+import { webAttachmentDownload } from '@/lib/brain/webAttachmentDownload';
 // The shell's own sheet — imported here so the composer renders right wherever it is
 // dropped, not only beside a Brain panel.
 import '@seanhogg/builderforce-brain-ui/styles.css';
@@ -108,6 +109,8 @@ export function ChatInput(props: ChatInputProps) {
     ? {
         // The chips as they are: thumbnail, upload state, the original on this device for the preview.
         items: pendingAttachments,
+        // An uploaded file needs the app's bearer token to read (`webAttachmentDownload`).
+        onDownload: webAttachmentDownload,
         onAdd: attachFiles,
         onRemove: onRemoveAttachment ?? noop,
         accept: ATTACH_ACCEPT,

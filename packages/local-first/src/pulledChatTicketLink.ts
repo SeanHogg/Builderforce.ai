@@ -99,12 +99,41 @@ export async function pulledLinkPayload(
   return link && chatTicketLinkId(link.chatClientId, link.ticketClientId) === id ? link : undefined;
 }
 
-/** Whether the row has a pending local event (the user's edit in flight: never the server's to touch). */
-async function hasPendingEvent(tx: LocalFirstTransaction, row: Pick<LocalRecord, 'id' | 'destination'>): Promise<boolean> {
+/**
+ * The id this device derives for a pulled link the pull REFUSED to store (its own pair, in its own
+ * ids), or undefined when its chat or ticket is not mapped here. The refused link's server mapping
+ * is written under it, never under the pulled id (another device's), so a later unlink naming that
+ * server key reaches this device's copy.
+ */
+export async function derivedIdOfPulledLink(
+  tx: LocalFirstTransaction,
+  payload: unknown,
+  existing: Pick<LocalRecord, 'payload'> | undefined,
+  destination: EntityDestination,
+): Promise<string | undefined> {
+  const link = await deviceForm(tx, payload, existing, destination);
+  return link ? chatTicketLinkId(link.chatClientId, link.ticketClientId) : undefined;
+}
+
+/**
+ * Whether a journal event is LIVE work (the user's edit in flight): dead letters are not. THE one
+ * definition every pending check of the link code shares (the pull's merge, the ingest, the retire step).
+ */
+export const isLivePendingEvent = (event: { deadLetter?: unknown }): boolean => !event.deadLetter;
+
+/** Whether row `id` has a live pending local event (never the server's to touch). */
+export async function hasLivePendingOfRow(tx: LocalFirstTransaction, id: string, destination?: EntityDestination): Promise<boolean> {
   let pending = false;
-  await scanPendingOfRow(tx, row.id, () => { pending = true; return SCAN_STOP; }, row.destination);
+  await scanPendingOfRow(tx, id, (event) => {
+    if (!isLivePendingEvent(event)) return undefined;
+    pending = true;
+    return SCAN_STOP;
+  }, destination);
   return pending;
 }
+
+const hasPendingEvent = (tx: LocalFirstTransaction, row: Pick<LocalRecord, 'id' | 'destination'>): Promise<boolean> =>
+  hasLivePendingOfRow(tx, row.id, row.destination);
 
 /**
  * THE ONE retire step for a MISFILED link: a live device-form link stored under an id that is not
@@ -115,25 +144,34 @@ async function hasPendingEvent(tx: LocalFirstTransaction, row: Pick<LocalRecord,
  *   - `D` is live: `F` is tombstoned.
  *   - `D` is missing: `D` is written from `F` (its payload, and `F`'s server mapping, so `D` is
  *     the link's mapping), then `F` is tombstoned.
- *   - `D` is a tombstone (this device unlinked the pair): `F` is tombstoned, `D` stays unlinked.
+ *   - `D` is a tombstone (this device unlinked the pair): `F` is tombstoned and `D` stays unlinked,
+ *     UNLESS `F` is newer than the unlink and `D` has no pending event: the pair was linked again
+ *     after the unlink, so `F` revives `D` (moved into it, as when `D` is missing).
  * A row with a pending local event is skipped. Used by the rail's ingest and the pull's repair.
- * Returns how many links were retired.
+ * `pairs` narrows the retire to the strays of those derived ids (the ingest checks only the pairs it
+ * wrote). Returns how many links were retired.
  */
-export async function retireMisfiledLinks(tx: LocalFirstTransaction, at: string): Promise<number> {
+export async function retireMisfiledLinks(tx: LocalFirstTransaction, at: string, pairs?: ReadonlySet<string>): Promise<number> {
+  if (pairs && pairs.size === 0) return 0;
   const misfiled: Array<LocalRecord<ChatTicketLinkValue>> = [];
   await tx.scan<ChatTicketLinkValue>('chat-ticket-link', (row) => {
     if (row.deletedAt || !isClientFormLink(row.payload)) return;
-    if (chatTicketLinkId(row.payload.chatClientId, row.payload.ticketClientId) === row.id) return;
+    const derivedId = chatTicketLinkId(row.payload.chatClientId, row.payload.ticketClientId);
+    if (derivedId === row.id || (pairs && !pairs.has(derivedId))) return;
     misfiled.push(clone(row) as LocalRecord<ChatTicketLinkValue>);
   });
   let retired = 0;
   for (const stray of misfiled) {
     if (await hasPendingEvent(tx, stray)) continue;
     const derived = chatTicketLinkId(stray.payload.chatClientId, stray.payload.ticketClientId);
-    if (!(await tx.get('chat-ticket-link', derived))) {
+    const held = await tx.get('chat-ticket-link', derived);
+    const revives = held !== undefined && typeof held.deletedAt === 'string'
+      && Date.parse(stray.updatedAt) > Date.parse(held.deletedAt)
+      && !(await hasPendingEvent(tx, held));
+    if (!held || revives) {
       const { baseVersion: _base, ...moved } = clone(stray);
       void _base;
-      await tx.put<ChatTicketLinkValue>({ ...moved, id: derived, version: 1, provenance: serverObservedProvenance() });
+      await tx.put<ChatTicketLinkValue>({ ...moved, id: derived, version: held ? held.version + 1 : 1, provenance: serverObservedProvenance() });
       const mapping = await tx.mapping('chat-ticket-link', stray.id, stray.destination);
       if (mapping && !(await tx.mapping('chat-ticket-link', derived, stray.destination))) {
         await tx.putMapping({
@@ -158,6 +196,12 @@ export async function retireMisfiledLinks(tx: LocalFirstTransaction, at: string)
  * and the derived id of the pair (a link another device authored lives here under it). Each live
  * one without a pending local event is tombstoned as the server's word. The caller deletes the
  * pulled id itself, as for any pulled tombstone.
+ *
+ * The record behind EVERY mapping of the account carrying the link's server key is reached (not only
+ * the earliest mapping: a refused pull of another device's id may have mapped that id first), and so
+ * is every live link of the same PAIR (a stray under another id): left live, the retire step would
+ * move it into the pair's just-deleted record and the unlinked pair would reappear. The pulled
+ * tombstone's payload is the server's `{ removed: true }`, so the pair is read off the records.
  */
 export async function applyPulledLinkTombstone(
   tx: LocalFirstTransaction,
@@ -166,45 +210,41 @@ export async function applyPulledLinkTombstone(
   at: string,
 ): Promise<void> {
   const ids = new Set<string>();
+  /** The pair ids (derived) the unlinked link stands for; the pulled id itself may be one. */
+  const pairs = new Set<string>([remote.id]);
+  const scopeText = JSON.stringify(accountScopeOf(destination) ?? null);
+  const live: Array<{ id: string; destination: EntityDestination; pair?: string }> = [];
+  await tx.scan<ChatTicketLinkValue>('chat-ticket-link', (row) => {
+    if (row.deletedAt) return;
+    live.push({
+      id: row.id,
+      destination: row.destination,
+      ...(isClientFormLink(row.payload) ? { pair: chatTicketLinkId(row.payload.chatClientId, row.payload.ticketClientId) } : {}),
+    });
+  });
   const serverKey = parseSyncId(remote.syncId) ?? parseSyncId(remote.serverId);
   if (serverKey !== null) {
-    const mapping = await tx.mappingByServerId('chat-ticket-link', serverKey, accountScopeOf(destination));
-    // A link's server key may be mapped as its SyncId or (a rail-ingested link) its id text only.
-    if (mapping && (parseSyncId(mapping.syncId) ?? parseSyncId(mapping.serverId)) === serverKey) ids.add(mapping.clientEntityId);
+    for (const row of live) {
+      if (JSON.stringify(accountScopeOf(row.destination) ?? null) !== scopeText) continue;
+      const mapping = await tx.mapping('chat-ticket-link', row.id, row.destination);
+      // A link's server key may be mapped as its SyncId or (a rail-ingested link) its id text only.
+      if (mapping && (parseSyncId(mapping.syncId) ?? parseSyncId(mapping.serverId)) === serverKey) {
+        ids.add(row.id);
+        pairs.add(row.pair ?? row.id);
+      }
+    }
   }
   const existing = await tx.get('chat-ticket-link', remote.id);
   const link = await deviceForm(tx, remote.payload, existing, destination);
-  if (link) ids.add(chatTicketLinkId(link.chatClientId, link.ticketClientId));
+  if (link) {
+    const pair = chatTicketLinkId(link.chatClientId, link.ticketClientId);
+    ids.add(pair);
+    pairs.add(pair);
+  }
+  for (const row of live) {
+    if (row.pair !== undefined && pairs.has(row.pair)) ids.add(row.id);
+  }
   ids.delete(remote.id);
   for (const id of ids) {
     const row = await tx.get('chat-ticket-link', id);
-    if (!row || row.deletedAt || await hasPendingEvent(tx, row)) continue;
-    await tx.put(serverObservedTombstone(row, at));
-  }
-}
-
-/**
- * Put back in the device's form every live link of `destination` an earlier pull stored in the
- * server's form, then retire the misfiled ones ({@link retireMisfiledLinks}). Idempotent. Left as
- * it is: a link with a pending local event (the user's edit in flight) and one whose parents this
- * device does not map. A link under its derived id keeps its version and provenance (the server's
- * state re-keyed, not a local edit, so no event). Returns how many links were repaired or retired.
- */
-export async function repairServerFormLinks(tx: LocalFirstTransaction, destination: EntityDestination, at: string): Promise<number> {
-  const key = destinationKey(destination);
-  const broken: LocalRecord[] = [];
-  await tx.scan('chat-ticket-link', (row) => {
-    if (row.deletedAt || isClientFormLink(row.payload) || destinationKey(row.destination) !== key) return;
-    broken.push(clone(row) as LocalRecord);
-  });
-  let repaired = 0;
-  for (const row of broken) {
-    if (await hasPendingEvent(tx, row)) continue;
-    const payload = await deviceForm(tx, row.payload, undefined, row.destination);
-    if (!payload) continue;
-    // Under another id (another device's): the retire step below moves it to its derived id.
-    await tx.put({ ...row, payload });
-    repaired += 1;
-  }
-  return repaired + await retireMisfiledLinks(tx, at);
-}
+    if (!row || row.deletedAt || await hasPendingEven

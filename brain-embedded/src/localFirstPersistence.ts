@@ -1,4 +1,5 @@
 import {
+  BIND_PENDING_HOLDER,
   claimChatBind,
   journalWrite,
   newLocalRecord,
@@ -243,7 +244,7 @@ export function createLocalBrainPersistence(options: LocalBrainPersistenceOption
         // The caller will `identity.adopt` a server chat: hold the chat's import back from THIS
         // commit on, so no sync round sends it before adopt's own claim. adopt re-stamps the same
         // lease and releases it; it expires on its own if adopt never runs (`CHAT_BIND_LEASE_MS`).
-        if (body.bindPending) await claimChatBind(tx, clientId, now());
+        if (body.bindPending) await claimChatBind(tx, clientId, now(), BIND_PENDING_HOLDER);
         return chat;
       });
     },

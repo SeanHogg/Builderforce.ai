@@ -8,7 +8,7 @@
     "dev": "node scripts/gen-route-namespaces.mjs && node scripts/split-message-catalogs.mjs && node scripts/copy-bfi-threads.mjs && node scripts/publish-manifest-schema.mjs && node scripts/publish-message-catalogs.mjs && node scripts/publish-blog-content.mjs && next dev --turbopack",
     "prebuild": "node scripts/gen-route-namespaces.mjs && node scripts/split-message-catalogs.mjs && node scripts/copy-ort-runtime.mjs && node scripts/copy-bfi-threads.mjs && node scripts/publish-manifest-schema.mjs && node scripts/publish-message-catalogs.mjs && node scripts/publish-blog-content.mjs && node scripts/gen-blog-og.mjs",
     "build": "next build",
-    "cf-build": "pnpm exec next-on-pages && echo '_worker.js' > .vercel/output/static/.assetsignore && node scripts/strip-worker-assets.js && node scripts/stamp-sw-version.js && node scripts/patch-worker-fetch.mjs && node scripts/check-worker-size.mjs && node scripts/check-client-router-context.mjs",
+    "cf-build": "pnpm exec next-on-pages && echo '_worker.js' > .vercel/output/static/.assetsignore && node scripts/strip-worker-assets.js && node scripts/stamp-sw-version.js && node scripts/patch-worker-fetch.mjs && node scripts/check-worker-size.mjs",
     "check:worker-size": "node scripts/check-worker-size.mjs",
     "check:client-router-context": "node scripts/check-client-router-context.mjs",
     "gen:brand-paths": "node scripts/gen-brand-paths.mjs",

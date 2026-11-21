@@ -17,7 +17,7 @@
  * already went up binds the chat through its receipt instead.
  */
 
-import { BOUND_ONLY_VERSION, SCAN_STOP, claimChatBind, parseSyncId, queueImport, releaseChatBind, syncIdText, type EntityDestination, type EntityScope, type LocalFirstStore, type LocalFirstTransaction } from '@builderforce/local-first';
+import { BIND_PENDING_HOLDER, BOUND_ONLY_VERSION, SCAN_STOP, claimChatBind, liveChatBindHolder, parseSyncId, queueImport, releaseChatBind, syncIdText, type EntityDestination, type EntityScope, type LocalFirstStore, type LocalFirstTransaction } from '@builderforce/local-first';
 import { chatRecordById, liveRecords, scanLive, type ChatValue } from './records';
 import type { ViewKey } from '../types';
 
@@ -68,8 +68,11 @@ export async function boundServerId(tx: LocalFirstTransaction, clientId: string,
   return (mapping ? parseSyncId(mapping.syncId ?? mapping.serverId) : null) ?? undefined;
 }
 
-export function createLocalChatIdentity(options: { store: LocalFirstStore; deviceId: string; port: ChatBindingPort }): LocalChatIdentity {
+export function createLocalChatIdentity(options: { store: LocalFirstStore; deviceId: string; port: ChatBindingPort; now?: () => Date }): LocalChatIdentity {
   const { store, deviceId, port } = options;
+  const now = options.now ?? (() => new Date());
+  /** This window's lease holder: a second window sharing the journal has its own. */
+  const windowHolder = `window:${crypto.randomUUID()}`;
   const inFlight = new Map<number, Promise<number | undefined>>();
 
   const read = (localId: number) => store.read(async (tx) => {
@@ -130,12 +133,19 @@ export function createLocalChatIdentity(options: { store: LocalFirstStore; devic
     clientId: string,
     destination: EntityDestination,
     serverChat: () => Promise<number | null>,
+    adopting = false,
   ): Promise<number | undefined> => {
     const claim = await store.transact(async (tx) => {
       const bound = await boundServerId(tx, clientId, destination);
-      return bound !== undefined ? { bound } : { claimed: await claimChatBind(tx, clientId, new Date()) };
+      if (bound !== undefined) return { bound };
+      const at = now();
+      // An adopt takes over the lease its chat's `createChat({ bindPending })` stamped; anything
+      // else claims as THIS window, so a second window's bind waits for the binding.
+      const holder = adopting && (await liveChatBindHolder(tx, clientId, at)) === BIND_PENDING_HOLDER ? BIND_PENDING_HOLDER : windowHolder;
+      return { holder, claimed: await claimChatBind(tx, clientId, at, holder) };
     });
     if ('bound' in claim) return claim.bound;
+    // Not claimed: the chat's import already went up, or another holder's bind is in flight.
     if (!claim.claimed) return awaitImportBinding(localId);
     let serverId: number | null = null;
     try {
@@ -144,7 +154,7 @@ export function createLocalChatIdentity(options: { store: LocalFirstStore; devic
       // The mapping and the release in ONE commit: no round sees the lease gone and no mapping.
       await store.transact(async (tx) => {
         if (serverId != null) await mapIn(tx, clientId, destination, serverId);
-        await releaseChatBind(tx, clientId);
+        await releaseChatBind(tx, clientId, claim.holder);
       });
     }
     if (serverId == null) return undefined;
@@ -198,13 +208,14 @@ export function createLocalChatIdentity(options: { store: LocalFirstStore; devic
       const found = await read(localId);
       // A chat created with `bindPending` already holds the lease; a failed adopt lets it go.
       const releaseHeld = async (): Promise<void> => {
-        if (found) await store.transact((tx) => releaseChatBind(tx, found.chat.id));
+        if (found) await store.transact((tx) => releaseChatBind(tx, found.chat.id, [BIND_PENDING_HOLDER, windowHolder]));
       };
       if (!found || !destination || destination.kind !== 'bound') { await releaseHeld(); return false; }
       // Through the same lease as a bind: an import already sent may have minted ANOTHER server
       // chat for this local chat; then this chat is not that one (false), whatever binds it.
-      // A lease the chat's own createChat (`bindPending`) took is this flow's: the claim re-stamps it.
-      const adopted = (await bindThroughLease(localId, found.chat.id, destination, async () => serverId)) === serverId;
+      // A lease the chat's own createChat (`bindPending`) took is this flow's: the claim re-stamps it
+      // as the same holder (`adopting`).
+      const adopted = (await bindThroughLease(localId, found.chat.id, destination, async () => serverId, true)) === serverId;
       if (!adopted) await releaseHeld();
       return adopted;
     },

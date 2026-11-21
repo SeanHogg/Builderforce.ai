@@ -18,6 +18,7 @@ import { BrainConversationHeader } from './BrainConversationHeader';
 import { renderBrainAssistantActions } from './BrainMessageActions';
 import { BrainNewProjectForm } from './BrainNewProjectForm';
 import { BrainProviderCapBanner } from './BrainProviderCapBanner';
+import { webAttachmentDownload } from '@/lib/brain/webAttachmentDownload';
 
 // Opened only from the composer's "Add context" — kept out of the panel's initial chunk.
 const RepoContextPicker = dynamic(
@@ -162,6 +163,7 @@ export function BrainConversation() {
           <div className="bs-messages" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
             <TranslationPickerScope openModelPicker={openModelMenu}>
             <BrainTimeline
+              onDownloadAttachment={webAttachmentDownload}
               conversationKey={chats.activeChatId}
               messages={conv.messages}
               trace={timelineTrace}

@@ -34,31 +34,67 @@ export const CHAT_BIND_LEASE_MS = 120_000;
 
 const leaseKey = (clientId: string): string => `chatBind:${clientId}`;
 
+/** The holder `createChat({ bindPending })` stamps; `adopt` of that chat takes the lease over as the same holder. */
+export const BIND_PENDING_HOLDER = 'bind-pending';
+
+const HOLDER_SEPARATOR = '#';
+
+/** A lease mark: the claim instant (ISO), then `#holder`. A legacy mark is the instant alone (no holder). */
+function parseLease(mark: string | undefined): { since: number; holder?: string } | undefined {
+  if (mark === undefined) return undefined;
+  const cut = mark.indexOf(HOLDER_SEPARATOR);
+  const since = Date.parse(cut === -1 ? mark : mark.slice(0, cut));
+  if (!Number.isFinite(since)) return undefined;
+  return cut === -1 ? { since } : { since, holder: mark.slice(cut + 1) };
+}
+
+// Either side of now: a lease stamped by a clock that later stepped back still expires.
+const isLive = (since: number, at: number): boolean => Math.abs(at - since) < CHAT_BIND_LEASE_MS;
+
 const isChatImport = (event: Pick<JournalEvent, 'entityType' | 'operation'>): boolean =>
   event.entityType === 'chat' && event.operation === 'import';
 
+/** The holder of chat `clientId`'s LIVE lease at `now`, or undefined (no lease, expired, or a legacy holderless one). */
+export async function liveChatBindHolder(tx: LocalFirstTransaction, clientId: string, now: Date): Promise<string | undefined> {
+  const lease = parseLease(await tx.readMark(leaseKey(clientId)));
+  return lease && isLive(lease.since, now.getTime()) ? lease.holder : undefined;
+}
+
 /**
- * Claim the bind of chat `clientId`: false when one of its imports is already materialized (it
- * may be on the server; the bind must not mint another chat), true once the lease is written.
+ * Claim the bind of chat `clientId` for `holder`: false when one of its imports is already
+ * materialized (it may be on the server; the bind must not mint another chat) OR when ANOTHER
+ * holder's lease is live (two windows sharing the journal must not both POST a bind: the caller
+ * waits for the holder's binding). True once the lease is written. A claim without a holder, or
+ * over a holderless (legacy) lease, takes it as before.
  */
-export async function claimChatBind(tx: LocalFirstTransaction, clientId: string, now: Date): Promise<boolean> {
+export async function claimChatBind(tx: LocalFirstTransaction, clientId: string, now: Date, holder?: string): Promise<boolean> {
   const sent = await selectPendingOf(tx, 'chat', clientId, (event) => isChatImport(event) && !isRecordPayloadMarker(event));
   if (sent.length > 0) return false;
-  await tx.setReadMark(leaseKey(clientId), now.toISOString());
+  const current = await liveChatBindHolder(tx, clientId, now);
+  if (current !== undefined && holder !== undefined && current !== holder) return false;
+  await tx.setReadMark(leaseKey(clientId), holder === undefined ? now.toISOString() : `${now.toISOString()}${HOLDER_SEPARATOR}${holder}`);
   return true;
 }
 
-/** Release the lease of chat `clientId` (its mapping is written, or the bind failed). */
-export async function releaseChatBind(tx: LocalFirstTransaction, clientId: string): Promise<void> {
-  if (await tx.readMark(leaseKey(clientId))) await tx.setReadMark(leaseKey(clientId), undefined);
+/**
+ * Release the lease of chat `clientId` (its mapping is written, or the bind failed). With `holders`,
+ * only a lease held by one of them (or a holderless one) is released: a lease another window took
+ * after ours expired is not ours to drop.
+ */
+export async function releaseChatBind(tx: LocalFirstTransaction, clientId: string, holders?: string | readonly string[]): Promise<void> {
+  const mark = await tx.readMark(leaseKey(clientId));
+  if (!mark) return;
+  if (holders !== undefined) {
+    const held = parseLease(mark)?.holder;
+    const mine = typeof holders === 'string' ? [holders] : holders;
+    if (held !== undefined && !mine.includes(held)) return;
+  }
+  await tx.setReadMark(leaseKey(clientId), undefined);
 }
 
 /** Whether `event` is a chat import whose chat has a live bind lease: not sendable now. */
 export async function awaitsChatBind(tx: LocalFirstTransaction, event: Pick<JournalEvent, 'entityType' | 'operation' | 'clientEntityId'>, at: number): Promise<boolean> {
   if (!isChatImport(event)) return false;
-  const claimed = await tx.readMark(leaseKey(event.clientEntityId));
-  if (claimed === undefined) return false;
-  const since = Date.parse(claimed);
-  // Either side of now: a lease stamped by a clock that later stepped back still expires.
-  return Number.isFinite(since) && Math.abs(at - since) < CHAT_BIND_LEASE_MS;
+  const lease = parseLease(await tx.readMark(leaseKey(event.clientEntityId)));
+  return lease !== undefined && isLive(lease.since, at);
 }

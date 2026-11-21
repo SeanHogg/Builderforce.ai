@@ -4,6 +4,7 @@ import {
   CHAT_BIND_LEASE_MS,
   claimChatBind,
   createMemoryLocalFirstStore,
+  liveChatBindHolder,
   newLocalRecord,
   queueImport,
   releaseChatBind,
@@ -74,6 +75,32 @@ describe('chat bind lease (regression: chat local #165961 — bind + import mint
     await round(store); // materialized and committed — it may be on the server now
     expect(await store.transact((tx) => claimChatBind(tx, CHAT, new Date()))).toBe(false);
     expect(await store.read((tx) => tx.readMark(`chatBind:${CHAT}`))).toBeUndefined();
+  });
+
+  it("a claim against another holder's live lease is refused; the same holder, an expired lease, and a holderless claim succeed", async () => {
+    const store = await queued();
+    const now = new Date();
+    expect(await store.transact((tx) => claimChatBind(tx, CHAT, now, 'window-a'))).toBe(true);
+    expect(await store.transact((tx) => claimChatBind(tx, CHAT, now, 'window-b'))).toBe(false);
+    expect(await store.transact((tx) => liveChatBindHolder(tx, CHAT, now))).toBe('window-a');
+    expect(await store.transact((tx) => claimChatBind(tx, CHAT, now, 'window-a'))).toBe(true);
+    // B releasing does not drop A's lease; A's release does.
+    await store.transact((tx) => releaseChatBind(tx, CHAT, 'window-b'));
+    expect(await store.transact((tx) => liveChatBindHolder(tx, CHAT, now))).toBe('window-a');
+    // The lease expired: another window may claim.
+    const later = new Date(now.getTime() + CHAT_BIND_LEASE_MS + 1);
+    expect(await store.transact((tx) => claimChatBind(tx, CHAT, later, 'window-b'))).toBe(true);
+    await store.transact((tx) => releaseChatBind(tx, CHAT, 'window-b'));
+    expect(await store.read((tx) => tx.readMark(`chatBind:${CHAT}`))).toBeUndefined();
+    // A holderless claim (legacy caller) takes a live lease as before.
+    await store.transact((tx) => claimChatBind(tx, CHAT, now, 'window-a'));
+    expect(await store.transact((tx) => claimChatBind(tx, CHAT, now))).toBe(true);
+  });
+
+  it('a holder-stamped lease still holds the import back', async () => {
+    const store = await queued();
+    await store.transact((tx) => claimChatBind(tx, CHAT, new Date(), 'window-a'));
+    expect((await pick(store)).batch).toEqual([]);
   });
 
   it('an expired lease (a window that died mid-bind) does not park the import', async () => {

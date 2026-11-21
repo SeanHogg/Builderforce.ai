@@ -393,7 +393,8 @@ export { AttachmentPreview, formatFileSize } from './attachments/AttachmentPrevi
 export type { AttachmentPreviewProps } from './attachments/AttachmentPreview';
 export { useAttachmentPreview } from './attachments/useAttachmentPreview';
 export type { AttachmentPreviewState } from './attachments/useAttachmentPreview';
-export { browserDownload } from './attachments/browserDownload';
+export { browserDownload, dataCopyOf, saveBlobAs } from './attachments/browserDownload';
+export { safeAttachmentUrl } from './attachments/safeUrl';
 export type { AttachmentDownload, AttachmentPreviewItem } from './attachments/types';
 export {
   DEFAULT_ATTACHMENT_PREVIEW_LABELS,

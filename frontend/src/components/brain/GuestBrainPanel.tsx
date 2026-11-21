@@ -35,6 +35,7 @@ import { GuestRoomMeeting } from '@/components/brain/GuestRoomMeeting';
 import { GuestCapWall, GuestDisabledCTA } from './GuestBrainWalls';
 import { useGuestBrainSession } from './useGuestBrainSession';
 import { useModelRemedies } from './useModelRemedies';
+import { webAttachmentDownload } from '@/lib/brain/webAttachmentDownload';
 
 /** `GuestAiUnavailableError`'s message — the guest transport's "no token to be had". */
 const GUEST_AI_UNAVAILABLE = 'guest-ai-unavailable';
@@ -134,6 +135,7 @@ export function GuestBrainPanel({ variant, initialPrompt, inviteCode, onClose }:
           <div className="gb-messages">
             <TranslationPickerScope openModelPicker={() => requestComposerMenu(composerId, 'model')}>
             <BrainTimeline
+              onDownloadAttachment={webAttachmentDownload}
               conversationKey={s.activeChatId}
               messages={conv.messages}
               trace={[]}

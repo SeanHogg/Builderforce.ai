@@ -18,6 +18,7 @@ import type { CreationFlowNode } from './CreationNode';
 import { useCanvasRunActivity } from './CanvasRunActivity';
 import type { BrainSurfaceCollaborator } from './brainSurfaceContext';
 import { useBrainSurfaceView } from './brainSurfaceView';
+import { webAttachmentDownload } from '@/lib/brain/webAttachmentDownload';
 
 /**
  * THE Brain surface on the Canvas — one body for all three placements: the edge dock
@@ -186,6 +187,7 @@ export function BrainSurface({
         ? <div className={styles.brainDockTimeline} role="log" aria-label={t('brainChatHistory')} tabIndex={0}>
           <TranslationPickerScope openModelPicker={() => { if (composerId) requestComposerMenu(composerId, 'model'); }}>
           <BrainTimeline
+            onDownloadAttachment={webAttachmentDownload}
             isOwnMessage={isOwnMessage}
             conversationKey={runKey ?? null}
             messages={messages}

@@ -120,6 +120,19 @@ describe('the composer chips', () => {
     expect(download.mock.calls[0]![0]).toMatchObject({ name: 'shot.png', downloadUrl: 'blob:local-1', size: 2048 });
   });
 
+  it('regression: a preview open on a chip follows its upload, and closes when the chip is removed or sent', () => {
+    const uploading: ComposerAttachment = { key: 'staged-1', name: 'shot.png', type: 'image/png', localUrl: 'blob:local-1', imageUrl: 'blob:local-1', status: 'uploading' };
+    const el = chips([uploading]);
+    act(() => el.querySelector<HTMLButtonElement>('.bf-cmp-chip__open')!.click());
+    expect(dialog()).not.toBeNull();
+    // The upload landed: a new key, the same file on this device — the preview stays.
+    act(() => root!.render(<AttachmentChips items={[{ ...uploading, key: 'up-1', status: undefined }]} onRemove={vi.fn()} labels={DEFAULT_COMPOSER_LABELS} previewLabels={L} />));
+    expect(dialog()).not.toBeNull();
+    // Sent (or removed): its object URL is gone — the preview closes.
+    act(() => root!.render(<AttachmentChips items={[]} onRemove={vi.fn()} labels={DEFAULT_COMPOSER_LABELS} previewLabels={L} />));
+    expect(dialog()).toBeNull();
+  });
+
   it('a failed chip shows the reason and stays removable', () => {
     const onRemove = vi.fn();
     const el = chips([{ key: 's2', name: 'big.mov', status: 'error', error: 'big.mov is too large to attach: the limit is 100 MB.' }], undefined, onRemove);
