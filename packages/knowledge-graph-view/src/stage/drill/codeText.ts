@@ -72,6 +72,16 @@ export function syntaxLight(lines: readonly string[]): Token[][] {
     });
 }
 
+/** The scrollTop (px) that puts source line `line` at the top of a panel whose first row is `firstLine`. */
+export function scrollTopForLine(line: number, firstLine: number, rowPx: number): number {
+    return Math.max(0, Math.floor(line - firstLine)) * rowPx;
+}
+
+/** The record ref of the method named `name` among `records` (first match), or null — a clicked name drills into it. */
+export function drillRefForName(name: string, records: readonly SymbolRecord[]): string | null {
+    return records.find((r) => r.name === name)?.ref ?? null;
+}
+
 /** Rendered as plain rows up to this many lines; past it the panel is virtualized. */
 export const VIRTUAL_AFTER = 200;
 const OVERSCAN = 8;
