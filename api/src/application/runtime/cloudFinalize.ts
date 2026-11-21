@@ -36,6 +36,13 @@ import { bindGrantToThisRunsPr, voidMergeGrant } from './mergeGrants';
 import { findOpenPullRequestByTask } from '../repos/recordPullRequestRow';
 
 /**
+ * The typed reason a run ends `pr_skipped` when no repository is bound to it (PRD 09 §4 GAP-D4,
+ * decision D4). A skip — never a failure and never `needs_host` — whether or not anything was
+ * written. Consumers branch on this value, not on free text.
+ */
+export const NO_REPOSITORY_REASON = 'no_repository';
+
+/**
  * Land a finished cloud run: open a PR (recording it for the in-product approval
  * flow and the merge sweep), run its security step, and emit the `pr_opened` timeline
  * event. The single finalize implementation, shared by the in-worker tool loop
@@ -154,11 +161,12 @@ export async function finalizeCloudRun(
         return null;
       });
     if (existing && existing.status !== 'closed') grantTarget = { prRowId: existing.id, headSha: null };
-  } else if (!repoCtx && writtenPaths.size > 0 && !cancelled) {
-    // The agent produced changes but there is no repo to open a PR against —
-    // record why (no linked repo / unusable credential) so it's visible in the
-    // Tools timeline + summary, not swallowed into an empty Pull Request tab.
-    noPrReason = repoMiss || 'no repository linked to this project';
+  } else if (!repoCtx && !cancelled) {
+    // No repository is bound to this run (none linked, or an unusable credential): the run ends
+    // `pr_skipped` with the TYPED reason, whether or not it wrote anything (PRD 09 §4 GAP-D4).
+    // File-write count does not gate the event. The free-text `repoMiss` is kept for diagnostics
+    // only (event detail), never as the reason.
+    noPrReason = NO_REPOSITORY_REASON;
   }
 
   // ── MULTI-REPO SPANNING (0956) ─────────────────────────────────────────────
@@ -248,7 +256,11 @@ ${ciVerified
     await recordCloudToolEvent(db, {
       tenantId, cloudAgentRef, executionId,
       toolName: 'pr_skipped', category: 'tool',
-      detail: { writtenFiles: writtenPaths.size, reason: noPrReason },
+      detail: {
+        writtenFiles: writtenPaths.size,
+        reason: noPrReason,
+        ...(!repoCtx && repoMiss ? { repoMiss } : {}),
+      },
       result: `No PR opened: ${noPrReason}`.slice(0, 300),
     });
   }
