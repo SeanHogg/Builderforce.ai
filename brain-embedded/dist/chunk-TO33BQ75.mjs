@@ -182,6 +182,10 @@ function fencedDependsOn(dependsOn) {
 function isRecordPayloadFence(event) {
   return event.idempotencyKey === RECORD_PAYLOAD_FENCE_KEY;
 }
+function isRecordPayloadMarker(event) {
+  if (event.payloadFrom === "record") return true;
+  return event.materializedAt === void 0 && event.destination?.kind === "bound" && event.operation !== "delete" && event.payload === null && event.payloadHash === NULL_PAYLOAD_HASH;
+}
 async function ensureRecordPayloadFence(tx, destination) {
   const key = destinationKey(destination);
   const lookup = tx.pendingLookup?.();
@@ -461,6 +465,25 @@ var HOLD_MAX_AGE_MS = 7 * DAY_MS;
 var DEPENDENCY_PENDING_MAX_AGE_MS = SYNC_EVENT_RETENTION_DAYS * DAY_MS;
 var HOLD_BACKOFF_CAP_MS = 60 * 60 * 1e3;
 
+// ../packages/local-first/src/chatBindLease.ts
+var leaseKey = (clientId) => `chatBind:${clientId}`;
+var isChatImport = (event) => event.entityType === "chat" && event.operation === "import";
+async function claimChatBind(tx, clientId, now) {
+  const sent = await selectPendingOf(tx, "chat", clientId, (event) => isChatImport(event) && !isRecordPayloadMarker(event));
+  if (sent.length > 0) return false;
+  await tx.setReadMark(leaseKey(clientId), now.toISOString());
+  return true;
+}
+async function releaseChatBind(tx, clientId) {
+  if (await tx.readMark(leaseKey(clientId))) await tx.setReadMark(leaseKey(clientId), void 0);
+}
+
+// ../packages/local-first/src/tombstone.ts
+var RESNAPSHOT = Object.freeze({ action: "resnapshot" });
+
+// ../packages/local-first/src/chatTicketLink.ts
+var TASK_TABLE_KINDS = /* @__PURE__ */ new Set(["task", "epic", "gap"]);
+
 // ../packages/local-first/src/syncLease.ts
 var DEFAULT_COORDINATOR_WORK_TIMEOUT_MS = 5 * 6e4;
 
@@ -477,12 +500,6 @@ var INDEXEDDB_REDACTION_RULE = `Only exportForUploadOrLog() output may be upload
 
 // ../packages/local-first/src/httpSyncTransport.ts
 var MAX_RETRY_AFTER_MS = 60 * 60 * 1e3;
-
-// ../packages/local-first/src/tombstone.ts
-var RESNAPSHOT = Object.freeze({ action: "resnapshot" });
-
-// ../packages/local-first/src/chatTicketLink.ts
-var TASK_TABLE_KINDS = /* @__PURE__ */ new Set(["task", "epic", "gap"]);
 
 // ../packages/local-first/src/applyServerCursor.ts
 var RESNAPSHOT2 = Object.freeze({ resnapshotRequired: true });
@@ -11292,8 +11309,12 @@ function memoryToolsIn(toolNames) {
 
 // src/workItemBookkeeping.ts
 var WORK_ITEM_TOOL = /^(builtin_(tasks|tickets|kanban)_|ticket[-_.])/i;
+var LOCAL_TICKET_READ = /^ticket[-_.](list|get|search|read)/i;
 function isWorkItemTool(name) {
-  return WORK_ITEM_TOOL.test(name);
+  return WORK_ITEM_TOOL.test(name) || name === SERVER_TICKET_LINK_TOOL;
+}
+function isWorkItemWrite(name) {
+  return isWorkItemTool(name) && !isReadOnlyPlatformTool(name) && !LOCAL_TICKET_READ.test(name);
 }
 var TICKETING_INTENTS = [
   /\b(?:create|file|raise|log)\s+(?:[\w'-]+\s+){0,3}?(?:tickets?|tasks?|issues?)\b/i,
@@ -11307,10 +11328,10 @@ function asksForWorkItems(text) {
 // src/runEffect.ts
 var MUTATION_TOOL = /(^|_)(write|edit|save|create|update|delete|apply|patch|publish|send|dispatch|run_command|assign|link|move|set)(_|$)/i;
 function isMutationTool(name) {
-  return isCodeChangeTool(name) || MUTATION_TOOL.test(name);
+  return isCodeChangeTool(name) || MUTATION_TOOL.test(name) || isWorkItemWrite(name);
 }
 function isBookkeepingWrite(name) {
-  return !isCodeChangeTool(name) && isWorkItemTool(name);
+  return !isCodeChangeTool(name) && isWorkItemWrite(name);
 }
 function hasEditIntent(messages) {
   return messages.some((m) => m.role === "user" && asksForChange(m.content));
@@ -11423,6 +11444,7 @@ function computeRunProgress(events, messages = []) {
     calls: s.events.filter((e) => e.category === "tool").length,
     cacheAnswered: p.cacheAnswered,
     mutationsSucceeded: p.mutationsSucceeded,
+    bookkeepingWrites: p.bookkeepingWrites,
     spinning: p.spinning,
     activeMs: Math.max(0, p.wallClockMs - p.idleMs)
   }));
@@ -11575,13 +11597,22 @@ function formatRuns(runs) {
   const named = runs.slice(first).map((r, i) => {
     const ask = r.ask.replace(/\s+/g, " ").trim();
     const label = ask.length > ASK_LABEL_CHARS ? `${ask.slice(0, ASK_LABEL_CHARS)}\u2026` : ask;
-    return `#${first + i + 1} "${label}" ${r.turns} turn(s) \xB7 ${r.calls} call(s)${r.cacheAnswered ? ` \xB7 ${r.cacheAnswered} cache-answered` : ""} \xB7 ${r.mutationsSucceeded} changed${r.spinning ? " \u26A0 SPUN" : ""}`;
+    return `#${first + i + 1} "${label}" ${r.turns} turn(s) \xB7 ${r.calls} call(s)${r.cacheAnswered ? ` \xB7 ${r.cacheAnswered} cache-answered` : ""} \xB7 ${changedOf(r)}${r.spinning ? " \u26A0 SPUN" : ""}`;
   });
   return `Runs (latest last; the "Latest run" figures are run #${runs.length}'s): ${first ? `(${first} earlier) ` : ""}${named.join(" | ")}`;
 }
 function formatChatTotals(runs) {
   const sum = (pick) => runs.reduce((n, r) => n + pick(r), 0);
-  return `Chat totals (${runs.length} runs): ${sum((r) => r.turns)} turn(s) \xB7 ${sum((r) => r.calls)} call(s) \xB7 ${sum((r) => r.mutationsSucceeded)} change(s) \xB7 ${progressDuration(sum((r) => r.activeMs ?? 0))} active`;
+  return `Chat totals (${runs.length} runs): ${sum((r) => r.turns)} turn(s) \xB7 ${sum((r) => r.calls)} call(s) \xB7 ${sum(changesOf)} change(s)${ticketWrites(sum((r) => r.bookkeepingWrites))} \xB7 ${progressDuration(sum((r) => r.activeMs ?? 0))} active`;
+}
+function changesOf(r) {
+  return r.mutationsSucceeded - r.bookkeepingWrites;
+}
+function ticketWrites(n) {
+  return n > 0 ? ` (+${n} ticket/task write(s))` : "";
+}
+function changedOf(r) {
+  return `${changesOf(r)} changed${ticketWrites(r.bookkeepingWrites)}`;
 }
 function formatRunProgress(p, opts = {}) {
   const lines = [];
@@ -11618,7 +11649,7 @@ function runProgressVerdict(p) {
     const earlier = spunEarlier(p);
     if (!earlier) return null;
     const { run, index } = earlier;
-    return `NO PROGRESS in run #${index + 1} of ${p.runs.length} ("${run.ask.replace(/\s+/g, " ").trim().slice(0, ASK_LABEL_CHARS)}"): it went back over ground it had already covered \u2014 ${run.turns} turn(s), ${run.calls} call(s)${run.cacheAnswered ? `, ${run.cacheAnswered} of them answered from the read cache` : ""}, ${run.mutationsSucceeded} change(s). The latest run did not spin; the figures above are its own. This is a LOOP in that run, not context pressure \u2014 see the Runs line.`;
+    return `NO PROGRESS in run #${index + 1} of ${p.runs.length} ("${run.ask.replace(/\s+/g, " ").trim().slice(0, ASK_LABEL_CHARS)}"): it went back over ground it had already covered \u2014 ${run.turns} turn(s), ${run.calls} call(s)${run.cacheAnswered ? `, ${run.cacheAnswered} of them answered from the read cache` : ""}, ${changesOf(run)} change(s)${ticketWrites(run.bookkeepingWrites)}. The latest run did not spin; the figures above are its own. This is a LOOP in that run, not context pressure \u2014 see the Runs line.`;
   }
   const worst = p.repeatedTargets[0];
   const streak = p.stuckOnCall && p.longestStreak ? `it made the same call ${p.longestStreak.count} times in a row \u2014 ${formatStreak(p.longestStreak)} \u2014 with nothing else attempted between them${p.longestStreak.failed === p.longestStreak.count ? ", re-asking a question it had already been answered the same way each time" : ""}` : null;
@@ -11648,6 +11679,10 @@ function gatewayRoutingArgs(routing) {
     ...routing.traceId ? { traceId: routing.traceId } : {}
   };
 }
+
+// src/runStore/progressFinishFacts.ts
+var PROGRESS_FORCED_LABEL = "loop.progress_forced";
+var FINISH_RECORD_TURNS = 3;
 
 // src/handOffParallelism.ts
 function taskPackageDir(task, isPackageDir) {
@@ -11780,7 +11815,7 @@ function routingByRole(turns, events) {
   const count = (label) => events.filter((e) => e.label === label).length;
   const roleHandoffs = events.filter((e) => e.label === "llm.role_handoff");
   const hasArg = (e, key) => !!e.args && typeof e.args === "object" && key in e.args;
-  const progressForced = events.filter((e) => e.label === "loop.progress_forced" && !!e.args && typeof e.args === "object").map((e) => e.args).filter((a) => a.forced === "hand_off");
+  const progressForced = events.filter((e) => e.label === PROGRESS_FORCED_LABEL && !!e.args && typeof e.args === "object").map((e) => e.args).filter((a) => a.forced === "hand_off");
   const progressForcedHandOffs = progressForced.length;
   const progressSignals = [...new Set(progressForced.map((a) => typeof a.signal === "string" ? a.signal : "").filter(Boolean))];
   return {
@@ -12208,19 +12243,21 @@ function formatBrainDiagnostics(d) {
 }
 
 // src/toolExposure.ts
-var PROGRESS_FORCED_LABEL = "loop.progress_forced";
 function toolExposureInTrace(events) {
   let lastTurn = null;
   let min = null;
   let catalog = null;
-  let finalReportDue = false;
+  let finishTurnsLeft = 0;
   for (const ev of events) {
-    if (ev.category === "message" && ev.label === PROGRESS_FORCED_LABEL && ev.args?.forced === "finish") finalReportDue = true;
+    if (ev.category === "message" && ev.label === PROGRESS_FORCED_LABEL) {
+      const f = ev.args;
+      if (f?.forced === "finish") finishTurnsLeft = typeof f.recordTools === "number" && f.recordTools > 0 ? FINISH_RECORD_TURNS + 1 : 1;
+    }
     if (ev.category !== "llm") continue;
     const a = ev.args;
-    if (typeof a?.advertisedTools === "number" && a.advertisedTools === 0 && finalReportDue) {
-      finalReportDue = false;
-    } else if (typeof a?.advertisedTools === "number") {
+    const finalReport = finishTurnsLeft > 0 && a?.advertisedTools === 0;
+    if (typeof a?.advertisedTools === "number") finishTurnsLeft = finalReport ? 0 : Math.max(0, finishTurnsLeft - 1);
+    if (!finalReport && typeof a?.advertisedTools === "number") {
       lastTurn = a.advertisedTools;
       min = min == null ? a.advertisedTools : Math.min(min, a.advertisedTools);
     }
@@ -12911,6 +12948,8 @@ export {
   dropPending,
   queueImport,
   journalWrite,
+  claimChatBind,
+  releaseChatBind,
   PROVENANCE_META_KEY,
   asProvenanceAccount,
   isConnectedAccountUnused,
@@ -13126,7 +13165,7 @@ export {
   canReviewInPreview,
   studioToolsIn,
   memoryToolsIn,
-  isWorkItemTool,
+  isWorkItemWrite,
   TICKETING_INTENTS,
   isMutationTool,
   hasEditIntent,
@@ -13138,6 +13177,8 @@ export {
   formatRunProgress,
   runProgressVerdict,
   gatewayRoutingArgs,
+  PROGRESS_FORCED_LABEL,
+  FINISH_RECORD_TURNS,
   planScopeClash,
   canRunInParallel,
   splitForParallel,
@@ -13194,4 +13235,4 @@ export {
   toolCallArgBytes,
   createComposingActivity
 };
-//# sourceMappingURL=chunk-XCTFOB44.mjs.map
+//# sourceMappingURL=chunk-TO33BQ75.mjs.map

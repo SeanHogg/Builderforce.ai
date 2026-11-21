@@ -91,6 +91,7 @@ import {
   DEFAULT_SHIP_POLICY,
   FAILURE_HARD_AT,
   FAILURE_NUDGE_AT,
+  FINISH_RECORD_TURNS,
   FailureTally,
   HAND_OFF_CLASH_LABEL,
   HAND_OFF_MODE_LABEL,
@@ -104,6 +105,7 @@ import {
   MAX_TOOL_RESULT_CHARS,
   NOT_STARTED_TASK_STATUSES,
   PREVIEW_REVIEW_TOOL,
+  PROGRESS_FORCED_LABEL,
   PROVENANCE_META_KEY,
   ProgressDetector,
   READS_BEFORE_DELEGATION_NUDGE,
@@ -169,6 +171,7 @@ import {
   chatWorkLinkingDirective,
   chatWorkObligationTools,
   chooseStallFailover,
+  claimChatBind,
   claimsMissingToolData,
   classifyTool,
   codeChangeFile,
@@ -254,7 +257,7 @@ import {
   isTicketWriteTool,
   isTruncatedTurn,
   isUnscopedMutationTool,
-  isWorkItemTool,
+  isWorkItemWrite,
   journalWrite,
   judgeWith,
   lastServedModel,
@@ -307,6 +310,7 @@ import {
   queueImport,
   rankLexically,
   recordShellFileRead,
+  releaseChatBind,
   renderPolicyDirectives,
   repeatedFailureAdvisory,
   repeatedWriteNote,
@@ -375,7 +379,7 @@ import {
   withAdvisory,
   withProvenanceMetadata,
   workFiledNotStaffedVerdict
-} from "./chunk-XCTFOB44.mjs";
+} from "./chunk-TO33BQ75.mjs";
 import {
   ASK_USER_TOOL,
   ASK_USER_TOOL_SPEC,
@@ -4421,6 +4425,7 @@ async function chatRecordById(tx, deviceId, id) {
 }
 
 // src/localChat/chatIdentity.ts
+var IMPORT_BIND_WAIT_MS = 5e3;
 async function boundServerId(tx, clientId, destination) {
   if (!destination || destination.kind !== "bound") return void 0;
   const mapping = await tx.mapping("chat", clientId, destination);
@@ -4433,22 +4438,58 @@ function createLocalChatIdentity(options) {
     const chat = await chatRecordById(tx, deviceId, localId);
     return chat ? { chat, serverId: await boundServerId(tx, chat.id, port.destination()) } : void 0;
   });
-  const map = async (clientId, destination, serverId) => {
+  const mapIn = async (tx, clientId, destination, serverId) => {
     const syncId = parseSyncId(serverId);
     if (syncId == null) return;
-    await store.transact(async (tx) => {
-      if (await tx.mapping("chat", clientId, destination)) return;
-      await tx.putMapping({ destination, entityType: "chat", clientEntityId: clientId, syncId, serverId: syncIdText(syncId), serverVersion: BOUND_ONLY_VERSION });
-      let queued = false;
-      await tx.scanPending((event) => {
-        if (event.entityType === "chat" && event.clientEntityId === clientId && event.operation === "import") {
-          queued = true;
-          return SCAN_STOP;
-        }
-      });
-      const record2 = queued ? (await liveRecords(tx, "chat", deviceId, (row) => row.id === clientId))[0] : void 0;
-      if (record2) await queueImport(tx, record2);
+    if (await tx.mapping("chat", clientId, destination)) return;
+    await tx.putMapping({ destination, entityType: "chat", clientEntityId: clientId, syncId, serverId: syncIdText(syncId), serverVersion: BOUND_ONLY_VERSION });
+    let queued = false;
+    await tx.scanPending((event) => {
+      if (event.entityType === "chat" && event.clientEntityId === clientId && event.operation === "import") {
+        queued = true;
+        return SCAN_STOP;
+      }
     });
+    const record2 = queued ? (await liveRecords(tx, "chat", deviceId, (row) => row.id === clientId))[0] : void 0;
+    if (record2) await queueImport(tx, record2);
+  };
+  const awaitImportBinding = (localId) => new Promise((resolve, reject) => {
+    let settled2 = false;
+    const settle2 = (done) => {
+      if (settled2) return;
+      settled2 = true;
+      clearTimeout(timer);
+      unsubscribe();
+      done();
+    };
+    const check = () => {
+      read(localId).then((found) => {
+        if (!found) settle2(() => resolve(void 0));
+        else if (found.serverId !== void 0) settle2(() => resolve(found.serverId));
+      }, (error) => settle2(() => reject(error)));
+    };
+    const timer = setTimeout(() => settle2(() => resolve(void 0)), IMPORT_BIND_WAIT_MS);
+    const unsubscribe = store.subscribe(check);
+    check();
+  });
+  const bindThroughLease = async (localId, clientId, destination, serverChat) => {
+    const claim = await store.transact(async (tx) => {
+      const bound = await boundServerId(tx, clientId, destination);
+      return bound !== void 0 ? { bound } : { claimed: await claimChatBind(tx, clientId, /* @__PURE__ */ new Date()) };
+    });
+    if ("bound" in claim) return claim.bound;
+    if (!claim.claimed) return awaitImportBinding(localId);
+    let serverId = null;
+    try {
+      serverId = await serverChat();
+    } finally {
+      await store.transact(async (tx) => {
+        if (serverId != null) await mapIn(tx, clientId, destination, serverId);
+        await releaseChatBind(tx, clientId);
+      });
+    }
+    if (serverId == null) return void 0;
+    return (await read(localId))?.serverId;
   };
   const bindOnce = async (localId) => {
     const found = await read(localId);
@@ -4457,10 +4498,12 @@ function createLocalChatIdentity(options) {
     const destination = port.destination();
     if (!destination || destination.kind !== "bound" || !port.allowed()) return void 0;
     const { chat } = found.chat.payload;
-    const serverId = await port.createServerChat({ title: chat.title, projectId: chat.projectId ?? null });
-    if (serverId == null) return void 0;
-    await map(found.chat.id, destination, serverId);
-    return (await read(localId))?.serverId;
+    return bindThroughLease(
+      localId,
+      found.chat.id,
+      destination,
+      () => port.createServerChat({ title: chat.title, projectId: chat.projectId ?? null })
+    );
   };
   return {
     serverIdFor: async (localId) => (await read(localId))?.serverId,
@@ -4495,8 +4538,7 @@ function createLocalChatIdentity(options) {
       const destination = port.destination();
       const found = await read(localId);
       if (!found || !destination || destination.kind !== "bound") return false;
-      await map(found.chat.id, destination, serverId);
-      return true;
+      return await bindThroughLease(localId, found.chat.id, destination, async () => serverId) === serverId;
     }
   };
 }
@@ -18575,7 +18617,6 @@ var RunProgressGuard = class {
     return "final";
   }
 };
-var FINISH_RECORD_TURNS = 3;
 var FINISH_RECORD_BRIEF = "You are FINISHING: make no more code changes and run nothing. Before your final report, file a ticket for EVERY item the person asked for that is still open (with the ticket tools offered on this turn), and update the status of the tickets you worked on. Then write the final report: what is done, and which ticket tracks each item that is not.";
 var FINISH_FINAL_BRIEF = "Write your final report now: what is done, and which ticket tracks each requested item that is still open.";
 function obligationToolsOf(run) {
@@ -18661,7 +18702,7 @@ function trace2(run, step, due, forced, recordTools = 0) {
   pushTrace(run.c, {
     ts: nowIso(),
     category: "message",
-    label: "loop.progress_forced",
+    label: PROGRESS_FORCED_LABEL,
     args: { step, trip: due.trip, signal: due.signal.kind, forced, ...recordTools > 0 ? { recordTools } : {} },
     result: forced !== "finish" ? `progress check ${due.trip} (${due.signal.kind}) \u2014 this turn offers ${FORCED_MENU[forced]} and requires a call.` : recordTools > 0 ? `progress check ${due.trip} (${due.signal.kind}) \u2014 ${why}: this turn offers only the ${recordTools} ticket tool(s) to record what is still open, and the run writes its final report.` : `progress check ${due.trip} (${due.signal.kind}) \u2014 ${why}: this turn offers no tools and the run writes its final report.`
   });
@@ -21524,7 +21565,7 @@ function isProgressStep(ev) {
   const name = ev.label;
   if (isCodeChangeTool(name) || isRepoPublishTool(name) || name === "git_commit") return true;
   if (name === "run_command") return !isReadOnlyShellCall(name, ev.args);
-  return isWorkItemTool(name) && !isReadOnlyPlatformTool(name) && !/^ticket[-_.](list|get|search|read)/i.test(name);
+  return isWorkItemWrite(name);
 }
 function latestProgress(trace4) {
   for (let i = trace4.length - 1; i >= 0; i--) if (isProgressStep(trace4[i])) return trace4[i];

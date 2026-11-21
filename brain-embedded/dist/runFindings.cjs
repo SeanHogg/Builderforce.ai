@@ -5447,6 +5447,9 @@ var HOLD_MAX_AGE_MS = 7 * DAY_MS;
 var DEPENDENCY_PENDING_MAX_AGE_MS = SYNC_EVENT_RETENTION_DAYS * DAY_MS;
 var HOLD_BACKOFF_CAP_MS = 60 * 60 * 1e3;
 
+// ../packages/local-first/src/tombstone.ts
+var RESNAPSHOT = Object.freeze({ action: "resnapshot" });
+
 // ../packages/local-first/src/syncLease.ts
 var DEFAULT_COORDINATOR_WORK_TIMEOUT_MS = 5 * 6e4;
 
@@ -5463,9 +5466,6 @@ var INDEXEDDB_REDACTION_RULE = `Only exportForUploadOrLog() output may be upload
 
 // ../packages/local-first/src/httpSyncTransport.ts
 var MAX_RETRY_AFTER_MS = 60 * 60 * 1e3;
-
-// ../packages/local-first/src/tombstone.ts
-var RESNAPSHOT = Object.freeze({ action: "resnapshot" });
 
 // ../packages/local-first/src/applyServerCursor.ts
 var RESNAPSHOT2 = Object.freeze({ resnapshotRequired: true });
@@ -5620,21 +5620,6 @@ function isCodeChangeTool(name) {
   return CODE_CHANGE_TOOLS.has(name);
 }
 
-// src/toolFailure.ts
-function isFailedToolResult(result) {
-  if (result == null) return false;
-  if (typeof result === "object") {
-    const r = result;
-    if (r.ok === false) return true;
-    if (typeof r.error === "string" && r.error) return true;
-    return false;
-  }
-  if (typeof result === "string") {
-    return /"ok"\s*:\s*false/.test(result) || /"error"\s*:\s*"[^"]/.test(result);
-  }
-  return false;
-}
-
 // ../packages/agent-loop/src/runNarration.ts
 var NARRATION_OPENER = new RegExp(
   "^(?:(?:now|next|first|then|so|okay|ok|alright|actually|great|good|perfect|but|and|also|finally)[,!.]?\\s+)*(?:let me|let's|i(?:'ll| will| need to| should| want to| am going to|'m going to| think| see| can see| notice| ran)\\b|looking (?:at|back|for)\\b|checking\\b|now the\\b|that was expected\\b)",
@@ -5716,6 +5701,21 @@ function toolResultRecord(result) {
   return result && typeof result === "object" ? result : null;
 }
 
+// src/toolFailure.ts
+function isFailedToolResult(result) {
+  if (result == null) return false;
+  if (typeof result === "object") {
+    const r = result;
+    if (r.ok === false) return true;
+    if (typeof r.error === "string" && r.error) return true;
+    return false;
+  }
+  if (typeof result === "string") {
+    return /"ok"\s*:\s*false/.test(result) || /"error"\s*:\s*"[^"]/.test(result);
+  }
+  return false;
+}
+
 // src/runProgress.ts
 function isCacheAnswered(ev) {
   const r = ev.result;
@@ -5778,6 +5778,9 @@ function modelTurnLog(events) {
 // src/runStore/gatewayRoutingTrace.ts
 var FAILOVER_SEPARATOR = ", ";
 
+// src/runStore/progressFinishFacts.ts
+var PROGRESS_FORCED_LABEL = "loop.progress_forced";
+
 // src/handOffParallelism.ts
 var HAND_OFF_MODE_LABEL = "hand_off.mode";
 var HAND_OFF_CLASH_LABEL = "hand_off.scope_clash";
@@ -5807,7 +5810,7 @@ function routingByRole(turns, events) {
   const count = (label) => events.filter((e) => e.label === label).length;
   const roleHandoffs = events.filter((e) => e.label === "llm.role_handoff");
   const hasArg = (e, key) => !!e.args && typeof e.args === "object" && key in e.args;
-  const progressForced = events.filter((e) => e.label === "loop.progress_forced" && !!e.args && typeof e.args === "object").map((e) => e.args).filter((a) => a.forced === "hand_off");
+  const progressForced = events.filter((e) => e.label === PROGRESS_FORCED_LABEL && !!e.args && typeof e.args === "object").map((e) => e.args).filter((a) => a.forced === "hand_off");
   const progressForcedHandOffs = progressForced.length;
   const progressSignals = [...new Set(progressForced.map((a) => typeof a.signal === "string" ? a.signal : "").filter(Boolean))];
   return {

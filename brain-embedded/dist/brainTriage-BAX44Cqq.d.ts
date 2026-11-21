@@ -386,6 +386,8 @@ interface RunSummary {
     calls: number;
     cacheAnswered: number;
     mutationsSucceeded: number;
+    /** Of {@link mutationsSucceeded}, the ticket / task bookkeeping — reported apart from the changes. */
+    bookkeepingWrites: number;
     spinning: boolean;
     /** Active wall clock of the run (span minus idle gaps), so a chat total can be summed. */
     activeMs: number;
