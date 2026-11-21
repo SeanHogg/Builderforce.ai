@@ -29,6 +29,8 @@ import { aimCamera } from './rig/aim';
 import { DepthControl } from './rig/DepthControl';
 import { NavControl, type NavLabels } from './rig/NavControl';
 import { StageCorner } from './rig/StageCorner';
+import { useStageLegend } from './rig/stageLegend';
+import { ShapeLegend } from '../surface/ShapeLegend';
 import { bindOrbitKeys, touchActionFor } from './rig/gestures';
 import type { RigController } from './rig/rig';
 import { bindRig } from './rig/rigOfBus';
@@ -184,6 +186,7 @@ export function Stage(p: StageProps) {
     const placement = p.placement && p.placement.generation === p.marks.generation ? p.placement : null;
     const height = stageHeight(placement?.rig.frame, placement?.bounds, width, p.height);
     const bus = useMemo(() => stageBus(renderer), [renderer]);
+    const legend = useStageLegend();
     const keys = useLiveKeys(renderer);
     const box = useRef<HTMLDivElement>(null);
     const captions = useRef<HTMLDivElement>(null);
@@ -251,6 +254,11 @@ export function Stage(p: StageProps) {
                 {placement && <StageInteraction bus={bus} renderer={renderer} keys={keys} placement={placement} tweening={tweening} selected={p.selected} description={p.description} onSelect={p.onSelect} onOut={p.onOut} />}
                 {placement && (
                     <StageCorner boxHeight={height}>
+                        {legend && legend.types.length > 0 && (
+                            <div data-testid="kg-stage-legend" style={{ pointerEvents: 'auto' }}>
+                                <ShapeLegend types={legend.types} labels={legend.labels} />
+                            </div>
+                        )}
                         {p.nav && <NavControl rig={rig} panZoom={panZoom} labels={p.nav} onSettle={settle} />}
                         {!placement.rig.view && tiltMax > tiltMin && <DepthControl label={p.depthLabel} value={depth} onChange={dragDepth} />}
                     </StageCorner>
