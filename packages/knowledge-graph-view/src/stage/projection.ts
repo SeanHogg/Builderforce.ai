@@ -28,6 +28,14 @@ export function documentHeight(bounds: Bounds, width: number): number {
     return Math.ceil(d * ((width - 2 * FIT_MARGIN) / w) + 2 * FIT_MARGIN);
 }
 
+/**
+ * The stage box height: a `document` frame is at least its fitted height and never shorter than the measured box
+ * (a wide panel left an empty band under a short strip, and `overflow: clip` cut the routes).
+ */
+export function stageHeight(frame: 'document' | 'fill' | undefined, bounds: Bounds | undefined, width: number, boxHeight: number): number {
+    return frame === 'document' && bounds ? Math.max(boxHeight, documentHeight(bounds, width)) : boxHeight;
+}
+
 /** Where a projection writes a screen point: a pair, or the scratch `Float64Array` the pick and anchor paths reuse. */
 export type Vec2Out = { 0: number; 1: number } | Float64Array;
 

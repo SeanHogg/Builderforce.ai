@@ -20,6 +20,7 @@ import type { StageModel } from '../stageModel';
 import { anchorHidden, draftFor, show } from './anchor';
 import { linkBatch, type LinkPath } from './links';
 import { mapDecorations } from './mapDecor';
+import { widenMapBounds } from './mapBounds';
 import { channelBindings, placementKeyOf, VIEWPORT_BANDS, type PlacementReq } from './request';
 
 const CASING_EXTRA = 4;
@@ -72,14 +73,16 @@ export function placeMap(model: StageModel, req: PlacementReq, g?: Pick<Knowledg
     const planes: PlaneSpec[] = layout.bands.map((b, i) => ({ kind: 'band', min: [0, -0.5, b.y], max: [layout.width, -0.5, b.y + b.h], tone: BAND_TONES[i % 2]! }));
     const captions: Caption[] = layout.bands.map((b) => ({ text: bandTitleIn(model.strings, b.layer), position: [8, 0, b.y + 14], anchor: 'start', tone: toneIndex('muted') }));
     const cx = layout.width / 2, cz = layout.height / 2;
+    const decor = g ? mapDecorations(g, stations, layout) : [];
+    const bounds = widenMapBounds(layout, widths, neutralWidth, CASING_EXTRA, top, decor);
     return {
         generation: marks.generation, cacheKey: placementKeyOf(marks, req), anchor: 'station',
         position: d.position, scale: d.scale, extrude: d.extrude,
         // Each route polyline (`group`) names its line, so a route pick selects the line (as the SVG map's hop does).
-        links: [{ ...linkBatch('route', paths, 0, { tone: BG_TONE, extra: CASING_EXTRA }), lineIds: layout.routes.map((r) => r.lineId) }, ...(g ? mapDecorations(g, stations, layout) : [])],
+        links: [{ ...linkBatch('route', paths, 0, { tone: BG_TONE, extra: CASING_EXTRA }), lineIds: layout.routes.map((r) => r.lineId) }, ...decor],
         planes, labels, captions, a11y,
         caption: { shown: layout.drawn.length, total: stations.stations.length, capped: layout.drawn.length < stations.stations.length },
-        bounds: { min: [0, 0, 0], max: [layout.width, top, layout.height] },
+        bounds,
         rig: {
             projection: 'orthographic', frame: 'document',
             home: { position: [cx, 1000, cz], target: [cx, 0, cz], up: [0, 0, -1] },

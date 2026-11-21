@@ -23,7 +23,7 @@ import { CaptionLayer } from './captions/CaptionLayer';
 import { applyCaptionTransform, groundAffine, type Affine2 } from './captions/transform';
 import { bindContextLoss } from './contextLoss';
 import { StageInteraction } from './overlay/StageInteraction';
-import { documentHeight } from './projection';
+import { stageHeight } from './projection';
 import type { StageRenderer, StageView } from './renderer';
 import { aimCamera } from './rig/aim';
 import { DepthControl } from './rig/DepthControl';
@@ -182,7 +182,7 @@ export function Stage(p: StageProps) {
     const { renderer, width } = p;
     // The generation gate: a placement for another MarkSet is no placement.
     const placement = p.placement && p.placement.generation === p.marks.generation ? p.placement : null;
-    const height = placement?.rig.frame === 'document' ? documentHeight(placement.bounds, width) : p.height;
+    const height = stageHeight(placement?.rig.frame, placement?.bounds, width, p.height);
     const bus = useMemo(() => stageBus(renderer), [renderer]);
     const keys = useLiveKeys(renderer);
     const box = useRef<HTMLDivElement>(null);
@@ -215,11 +215,17 @@ export function Stage(p: StageProps) {
 
     useEffect(() => { if (placement) bus.setPlacement(placement, keys); }, [bus, placement, keys]);
     useEffect(() => { bus.setTweening(tweening); }, [bus, tweening]);
-    // Labels the SDF font cannot draw become DOM captions; they are known once the placement has landed and settled.
-    useEffect(() => bus.onSettle(() => {
-        const next = renderer.labelCaptions;
-        setNames((cur) => (sameCaptions(cur, next) ? cur : next));
-    }), [bus, renderer]);
+    // Labels the SDF font cannot draw become DOM captions. They update when the view settles and when the renderer
+    // redraws (the font blob arriving after the first placement re-routes names off the DOM).
+    useEffect(() => {
+        const pull = (): void => {
+            const next = renderer.labelCaptions;
+            setNames((cur) => (sameCaptions(cur, next) ? cur : next));
+        };
+        const offSettle = bus.onSettle(pull);
+        const offRedraw = renderer.onRedraw(pull);
+        return () => { offSettle?.(); offRedraw(); };
+    }, [bus, renderer]);
     useEffect(() => (placement ? bus.onReveal((slot) => rig.centreOn(placement.position[slot * 3]!, placement.position[slot * 3 + 2]!)) : undefined), [bus, rig, placement]);
     useStageMotion(renderer, box, p.reducedMotion, bus);
     // An orbit placement (3D) holds the marks' extrude at full; a ground one gives the depth control back.

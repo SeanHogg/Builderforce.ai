@@ -8,6 +8,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L } from '../labels';
 import { layoutOf, sceneMinHeight, sceneRowFlex, SCENE_MIN_PX, SCENE_STACKED_VH } from '../layout';
 import { placeLabels } from './labels/runs';
+import { documentHeight, stageHeight } from './projection';
 import type { TextPort } from './labels/LabelLayer';
 import { createWebGLStage } from './renderer';
 import { wheelIntent } from './rig/gestures';
@@ -23,6 +24,18 @@ const ORBIT = {
 };
 
 describe('stage sizing', () => {
+    it('regression: a wide document placement in a tall box fills the box (empty band on Map / Sequence)', () => {
+        const bounds = { min: [0, 0, 0] as [number, number, number], max: [1000, 0, 200] as [number, number, number] };
+        // Fitted to a wide panel the document is a short strip; the measured box is taller.
+        expect(documentHeight(bounds, 1900)).toBeLessThan(900);
+        expect(stageHeight('document', bounds, 1900, 900)).toBe(900);
+        // A narrow panel whose fitted height exceeds the box still grows (the page scrolls).
+        expect(stageHeight('document', bounds, 400, 50)).toBe(documentHeight(bounds, 400));
+        expect(stageHeight('fill', bounds, 1900, 900)).toBe(900);
+        expect(stageHeight(undefined, undefined, 1900, 900)).toBe(900);
+    });
+
+
     it('regression: a stacked scene reserves the overlay on top of its drawing minimum (the 3D strip at ~700px)', () => {
         expect(sceneMinHeight(layoutOf(1400))).toBe(0);
         const stacked = sceneMinHeight(layoutOf(704));

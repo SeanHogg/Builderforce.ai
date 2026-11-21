@@ -118,7 +118,8 @@ export function createWebGLStage(options: WebGLStageOptions = {}): StageRenderer
     const planes = new PlaneLayer(stats, uniforms.uPalette);
     const redraw = new Set<() => void>();
     const notify = (): void => { options.onChange?.(); for (const cb of redraw) cb(); };
-    const labels = new LabelLayer((options.text ?? troikaTextPort)(notify), options.fonts ?? documentFontPort());
+    const fonts = options.fonts ?? documentFontPort();
+    const labels = new LabelLayer((options.text ?? troikaTextPort)(notify), fonts);
     const root = new Group();
     root.add(planes.group, links.group, marksLayer.group);
     if (labels.object) root.add(labels.object);
@@ -235,6 +236,12 @@ export function createWebGLStage(options: WebGLStageOptions = {}): StageRenderer
         },
         dispose() { marksLayer.dispose(); links.dispose(); planes.dispose(); labels.dispose(); overlay.dispose(); },
     };
+    // The font fetch finishes after the first placement. Until then names are DOM captions; once the blob: URL is
+    // ready (or the fetch failed and monoUrl stays null) re-place and ask for a frame so the SDF pass or the captions update.
+    void fonts.ready?.then(() => {
+        if (placement && !tween.active) labels.place(labelView());
+        notify();
+    });
     return r;
 }
 

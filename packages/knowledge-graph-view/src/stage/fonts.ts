@@ -17,6 +17,11 @@ export type MonoWeight = 400 | 500 | 700;
 export interface StageFontPort {
     /** An absolute URL of JetBrains Mono at `weight` (woff, ttf or otf: troika 0.52 cannot read woff2), or null when the host has none. */
     monoUrl(weight: MonoWeight): string | null;
+    /**
+     * Resolves once every face this port will hand to troika has been fetched (or the fetch has failed).
+     * Until then {@link monoUrl} is null, so names draw as DOM captions. Absent on a port whose URLs are already safe.
+     */
+    ready?: Promise<void>;
 }
 
 /** @fontsource's `latin` subset `unicode-range`, as code-point ranges: what the SDF mono font can draw. */
@@ -84,15 +89,43 @@ export function monoFaceUrl(faces: readonly FaceText[], weight: MonoWeight): str
     try { return new URL(face.url, face.base).href; } catch { return null; }
 }
 
-/** The default port: the host's own @fontsource faces, read from the document's stylesheets (once per weight). */
-export function documentFontPort(doc: Document | undefined = typeof document === 'undefined' ? undefined : document): StageFontPort {
-    const cache = new Map<MonoWeight, string | null>();
+const WEIGHTS: readonly MonoWeight[] = [400, 500, 700];
+
+/**
+ * Fetch `url` on this thread and return a same-origin `blob:` URL. Troika loads fonts from a `blob:` worker, which
+ * cannot XHR a `vscode-resource` URL (the worker's fetch is refused and troika never calls back). A failed fetch
+ * returns null — never the original URL — so the caller keeps DOM captions.
+ */
+export async function fontBlobUrl(url: string, fetchFn: typeof fetch, createUrl: (blob: Blob) => string): Promise<string | null> {
+    try {
+        const res = await fetchFn(url);
+        if (!res.ok) return null;
+        const blob = await res.blob();
+        if (blob.size === 0) return null;
+        return createUrl(blob);
+    } catch {
+        return null;
+    }
+}
+
+/** The default port: the host's own @fontsource faces, fetched here and handed to troika only as `blob:` URLs. */
+export function documentFontPort(
+    doc: Document | undefined = typeof document === 'undefined' ? undefined : document,
+    fetchFn: typeof fetch = globalThis.fetch.bind(globalThis),
+    createUrl: (blob: Blob) => string = (blob) => URL.createObjectURL(blob),
+): StageFontPort {
+    const faces = doc ? faceTexts(doc) : [];
+    const source = new Map<MonoWeight, string | null>(WEIGHTS.map((w) => [w, doc ? monoFaceUrl(faces, w) : null]));
+    const blobBySource = new Map<string, string | null>();
+    const unique = [...new Set([...source.values()].filter((u): u is string => u !== null))];
+    const ready = Promise.all(unique.map(async (url) => { blobBySource.set(url, await fontBlobUrl(url, fetchFn, createUrl)); })).then(() => undefined);
     return {
+        ready,
         monoUrl(weight) {
-            if (cache.has(weight)) return cache.get(weight)!;
-            const url = doc ? monoFaceUrl(faceTexts(doc), weight) : null;
-            cache.set(weight, url);
-            return url;
+            const url = source.get(weight);
+            if (!url) return null;
+            // Pending (absent) and failed (null) both stay null: never a URL troika has not already got as bytes.
+            return blobBySource.get(url) ?? null;
         },
     };
 }
