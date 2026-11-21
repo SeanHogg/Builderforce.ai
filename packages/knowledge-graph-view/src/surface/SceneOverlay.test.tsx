@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 /** The scene overlay: the View group, the zoom buttons, "Out to", the scale note and the sync banner. */
-import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L, fillTemplate } from '../labels';
