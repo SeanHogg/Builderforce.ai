@@ -15,6 +15,7 @@
 - [PRD 23 — Manager PR Review, Acceptance Evidence, and Ticket Recovery](#prd-23--manager-pr-review-acceptance-evidence-and-ticket-recovery)
 - [PRD 37 — Coordinated Role Participation & Execution Verification](#prd-37--coordinated-role-participation--execution-verification)
 - [PRD 45 — Deterministic run gates and loop economics](#prd-45--deterministic-run-gates-and-loop-economics)
+- [PRD 49 — Methodology personas and the `.builderforce/` workspace layout (TIP Code parity)](#prd-49--methodology-personas-and-the-builderforce-workspace-layout-tip-code-parity)
 - [Agent framework registrations — legacy table contract step](#agent-framework-registrations--legacy-table-contract-step)
 - [PRD 41 — Offline understanding and the run delta](#prd-41--offline-understanding-and-the-run-delta)
 - [Design — Local-first closure: G03, G21 + G23, G27](#design--local-first-closure-g03-g21--g23-g27)
@@ -217,6 +218,167 @@ A replay of the pre-gate journals re-derives the W0 baseline only; the targets a
 
 **Remaining (verified 2026-11-17):**
 - No chat-scoped telemetry trace reader exists (triage item 6596): only the local-journal replay `api/scripts/chat-replay-baseline.cjs`. Either build the reader or score W9 with the replay script against a fresh post-gate run (6595).
+
+---
+
+## PRD 49 — Methodology personas and the `.builderforce/` workspace layout (TIP Code parity)
+
+> Opened 2026-11-21 from a comparison brief against a competitor VS Code extension ("Universal Code" / TIP Code), the
+> second after the cost-lever parity audit (archived in DONE.md, 2026-11-18). The brief was checked against our code
+> the same day; this PRD holds only the behaviour we lack, mapped onto our own seams. TIP's file paths are not ours and
+> are not cited as targets. Not adopted: the brief's delivery rules (reload-window prompt, `vendor/tip-portal`, a patch
+> bump per change), which describe TIP's own development loop; PRD 48's ship policy governs delivery here.
+> Design the end state (contracts, codemap, done-checks) and review it before code.
+
+### §1 What already exists (build on it; do not duplicate)
+
+| Brief asks for | We already have |
+|---|---|
+| A persona picker in the prompt footer | `PersonaPicker` in `clients/vscode/webview/src/chat/VsCodeComposer.tsx` (`BrainPersonaChoice`, persona agents) |
+| A persona registry | `PersonaRegistry` in `agent-runtime/src/builderforce/personas.ts`: built-in, user-global, project-local (`.builderforce/personas/*.yaml`), marketplace and assigned layers |
+| Single answer vs full pipeline routing | `@builderforce/pipeline-route` (`scorePipeline`), stage models (`clients/vscode/src/editorRunSettings.ts`), `builderforce.pipelineRouteReport` |
+| A `.builderforce/` workspace folder | rules, `hooks.json`, `memory/<date>.md`, `symbols.json`, `cache/subagents/`, `delta.json` (`clients/vscode/src/codebaseScan.ts`, `grounding.ts`, `hooks/hookConfig.ts`) |
+| Compressed knowledge packs | BFKP packs built with `CompressionStream` (`clients/vscode/src/knowledge/packs/`) |
+| `read_compressed` | LLMLingua-2 *prose* compression (`packages/agent-tools`), not reading compressed *files* |
+| Local Bonsai models | Bonsai **GGUF** files provisioned through bfi (`clients/vscode/src/hostBfi/modelFiles.ts`, `provision.ts`) |
+
+### §2 Methodology personas
+
+The user picks a persona in the existing footer picker. The persona then drives the run, and the artifacts it writes
+become the project's memory and knowledge. A methodology role is a **built-in entry in the existing `PersonaRegistry`**,
+not a second registry and not a branch in the run code: adding a role means adding one entry.
+
+**§2.1 Entry contract.** The fields below are added to `PersonaPlugin` as optional, so existing personas are unaffected:
+- `colour`: the prompt area gets a `persona-<colour>` class, drawn from theme tokens in both themes.
+- `model`: `plan` | `pipeline` | `quick`. See §3.
+- `knowledge`: `context` (knowledge passages are added to the question) | `first` (answer from knowledge first, read-only).
+- `requires`: the artifacts that must exist before the role runs. This is the **gate**.
+- `produces`: the artifacts the role writes.
+- `recordsRun`: whether the run's result is written to the methodology folder.
+- `next`: the role the methodology continues with.
+- `work`: standing instructions appended to each stage's instructions.
+- `writeScope`: the folder the role may write under (§2.4).
+
+**§2.2 The four roles, in methodology order.**
+
+| Role | Model | Requires | Produces |
+|---|---|---|---|
+| **Analyst** | plan | nothing | `prd.md`: problem, goals, users, scope, functional and non-functional requirements, business rules, a mermaid context diagram and workflows, open questions. It starts from the README and code (`local_research`, `repo_map`), then the knowledge passages, and summarises attached files and `sources/`. |
+| **Designer** | plan | `prd.md` | `design/design.md` (architecture, data flow, and mermaid sequence, class/UML and state diagrams), at least one uncompressed `.drawio` file, and a high-fidelity, self-contained HTML mockup. The mockup is the exit-gate artifact. |
+| **Engineer** | pipeline | `prd.md` and the mockup | Implementation, CI/CD, infrastructure as code, security, quality and tests. Each change cites the PRD rule or design section it satisfies. `recordsRun` is on. |
+| **Support** | plan | nothing | Answers from the knowledge packs first and cites the pack or file. On request, or when the support folder is missing, it writes `README.md`, `architecture.md`, `operations.md`, `diagnostics.md` and `runbook.md` (symptom → check → fix). |
+
+**§2.3 Behaviours.**
+- **Gates.** Before a role runs, check its `requires` artifacts. If any are missing, post a chat message such as
+  "**Engineer** needs the PRD and mockup first. Run the role that writes them, or turn Role off." `producerOf(artifact)`
+  names the writer: the earliest role that doesn't require the artifact but whose successor does. Gate checks are
+  deterministic (file existence), with no model call.
+- **Offer the next role.** When a role's work opens the next role's gate, post "Gate passed. Continue as **<Next>** on
+  the same request?" with a button. Accepting replays the last request with a handoff prefix that names the new role.
+  This uses the ONE composer send path; it is not a separate flow.
+- **Per-chat state.** The active persona is stored on the conversation (the run store's chat record). The picker shows
+  each role with the artifacts it still needs, refreshed whenever the gates are re-checked. A failed gate check is
+  reported in the chat and the previous hints stay; it is never swallowed.
+- **Knowledge-first.** When a run answers purely from knowledge, the role is switched off for that chat.
+- **Prompt line.** The run's prompt and its chat line name the active role.
+- **No bypass.** A persona chooses the model and the instructions. It never bypasses preflight, slash actions, the
+  rule gates (PRD 45) or the ship policy (PRD 48).
+- All new strings go through `vscode.l10n` and the webview label modules (`chatLabels.ts`).
+
+**§2.4 Write scope.** Each role writes only under its `writeScope`. The Analyst and Designer write only under the
+methodology folder. Support writes only under the support folder, never under `docs/` or the source. Only the Engineer
+writes source. The scope is enforced by the tool layer (a write outside it is refused with a reason), not by prompt text.
+
+**§2.5 Artifacts become memory and knowledge.** The methodology folder is indexed into a **codebase knowledge pack**,
+so `prd.md`, `design/`, the run records and `support/` are recalled as knowledge by later runs and by other roles. That
+pack is active only while some live chat has a role on. The pack uses the existing BFKP pack pipeline; it is not a new
+format.
+
+### §3 Model routing for personas (both policies)
+
+- **Default: our role routing.** `plan` maps to the plan stage model, `pipeline` to the full plan → code → review
+  route through `@builderforce/pipeline-route` (forced full), and `quick` to the quick stage model. Order stays
+  server-owned (BYO routing by role: plan and review use the strongest model, code the best-value coder, build and
+  test the cheapest).
+- **Optional: TIP policy.** A setting (for example `builderforce.models.policy: "role" | "tip"`, default `"role"`)
+  selects TIP's fixed policy: Fable is swapped for Opus, Opus plans, implements and reviews, Sonnet runs builds and
+  tests, and Haiku and the local models search. It is one entry in the stage-model resolver (`stageModels`), not a
+  branch at each call site. The route report and the usage ledger record which policy a run used.
+
+### §4 Local models (both formats)
+
+- bfi keeps provisioning the Bonsai **GGUF** builds.
+- Add the **4-bit ONNX Bonsai builds** as a second local source: `Bonsai-8B-q4f16-ONNX`, `Bonsai-4B-q4f16-ONNX` and
+  `Bonsai-1.7B-q4-ONNX` (batched-prefill q4 graphs of the portal's 1-bit Bonsai models). They are registered in the
+  same local-model catalog and selected by the same routing as GGUF. The catalog records each entry's format, and the
+  engine is picked per format.
+- Routing guidance: use Bonsai 4B or 1.7B at 4 bits for free local research, and keep local questions small and
+  focused, because throughput on consumer hardware can drop below 1 token/s.
+
+### §5 Compressed knowledge packs, readable by the agent
+
+- Knowledge packs are written **gzip-compressed by default** (`.gz`), including the codebase pack in §2.5.
+- The agent can **read compressed files**: `read_file` (and `search_code` where practical) transparently decompresses
+  `.gz` input and reports that it did. This is separate from `read_compressed` (prose compression), which keeps its
+  name and meaning.
+- One decompression helper is shared by every reader; there is no per-tool copy.
+
+### §6 Workspace layout: `.builderforce/` is the standard
+
+- **Methodology folder.** `prd.md`, `design/`, `support/`, `sources/` and run records live in
+  `.builderforce/methodology/`, never at the project root.
+- **App manifest.** It lives at `.builderforce/builderforce.json`. Starters and `/preview` write and read it there.
+  Neither `builderforce.json` nor `bfwc.app.json` is written at the root. A root file left by an older version is
+  read as a fallback with a deprecation note, and is never written. This changes the manifest reader in
+  `@seanhogg/builderforce-webcontainers` (`./manifest`, `bfwc-launch`), which must ship first.
+- **Debug output and logs** default to one subfolder per kind: `.builderforce/logs/` (launcher and service logs),
+  `.builderforce/diagnostics/` (diagnostics reports, preview load reports, route reports). Model memory stays where it is.
+- **Overrides.** The manifest may set the folders: `{ "paths": { "methodology": "…", "logs": "…", "diagnostics": "…" } }`.
+  Each override must be a project-relative path. It is resolved against the workspace root, checked to stay inside it
+  (no `..`, no absolute paths) and created if missing. An invalid override is reported and falls back to the default.
+- **One resolver.** A single `workspacePaths(root, manifest)` resolver is used by every writer. No path is built at a
+  call site.
+- **Git.** `.builderforce/.gitignore` keeps machine-local logs, diagnostics and caches out of git. The manifest, rules,
+  hooks and methodology artifacts stay committable.
+
+### §7 Diagnostics
+
+- The diagnostics report, preview load reports and route reports are written to the §6 diagnostics folder, as well as
+  being copyable from the chat.
+- A **preview load report** is posted by the preview page (phase timings, requests by origin, CSP blocks, service
+  states). It consumes `runtime.diagnostics()` once that ships (builderforce-webcontainers ROADMAP item 27) and does not
+  build its own collector.
+
+### §8 Browser LLMs (`./ml` in builderforce-webcontainers): reference and scope
+
+The VSIX's own chat runs local models through bfi (§4). `./ml` only helps apps running inside `/preview`. Facts:
+- Inference only: `createInferenceClient`, `createModelCache` (IndexedDB `bfwc-inference-models`),
+  `probeRuntimeCapabilities`. Backends: `createOnnxBackend`, `createWllamaBackend` (GGUF via WASM),
+  `createWebLlmBackend` (needs WebGPU), `createMockBackend`. `createKnowledgeMemory` provides RAG (chunk, embed,
+  retrieve). `createLearner`/`ucb1` is a bandit that tunes execution settings and never changes weights.
+- It cannot create or train a model. Fine-tune or LoRA outside the container, export to GGUF or ONNX, host the file and
+  point `source.url` at it, or use RAG.
+- The default worker registers only the mock backend, so it emits fake tokens. Real output needs an app-shipped worker
+  that calls `runInferenceWorker([createWllamaBackend(...), createMockBackend()])`, with the backend runtime pinned.
+- `source` supports only `kind: 'url'`. About 1–3B parameters at q4 is realistic in a browser. The preview CSP may
+  block weight hosts such as huggingface.co.
+- **Open:** manifest v1 has no models section, so a generated app cannot declare a model. Adding one (model id, URL,
+  and the weight host added to preview egress) is a manifest v2 decision, made in builderforce-webcontainers.
+
+### §9 Done-checks
+
+1. Picking **Engineer** in a project with no `prd.md` posts the gate message naming the Analyst, and makes no model call.
+2. An Analyst run writes `.builderforce/methodology/prd.md`, then offers "Continue as **Designer**", and accepting
+   replays the request with the handoff prefix.
+3. An Analyst or Designer write outside the methodology folder is refused by the tool layer.
+4. A later run recalls a sentence from `prd.md` through the codebase knowledge pack.
+5. `builderforce.models.policy: "tip"` routes the code stage to Opus. The default routes it by role. The route report
+   shows both.
+6. An ONNX q4 Bonsai and a GGUF Bonsai both answer a local research question through the same routing.
+7. A new knowledge pack is written as `.gz`, and `read_file` reads a `.gz` file as text.
+8. The manifest is read from `.builderforce/builderforce.json`. A root manifest is read with a deprecation note and is
+   never written. Logs and diagnostics land in their default folders. A `"logs": "../x"` override is rejected,
+   reported and falls back.
 
 ---
 

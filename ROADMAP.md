@@ -455,6 +455,7 @@ Last measured 2026-07-26: 6 of 767 tickets fully autonomous; 69% of 6,195 runs f
 
 ### Agent runtime, desktop and VS Code `[agents]` `[platform]`
 
+- **[vscode] PRD 49: methodology personas and the `.builderforce/` layout** (TIP Code parity, opened 2026-11-21, `docs/specs/make.md` PRD 49). The four roles (Analyst, Designer, Engineer, Support) are built-in `PersonaRegistry` entries with gates, a next-role offer and tool-enforced write scope. Their artifacts are indexed as a codebase knowledge pack. Model routing offers role routing (default) and a TIP policy setting. Local models gain ONNX q4 Bonsai beside GGUF. Packs are written as `.gz` and `read_file` reads `.gz`. The manifest, methodology, logs and diagnostics move under `.builderforce/` through one resolver with checked overrides. Next step: publish the end-state design (contracts, codemap, done-checks §9) for review. The manifest move depends on builderforce-webcontainers ROADMAP item 28 shipping first.
 - **[vscode] Webview `platformPolicy` tests fail** (three time out, one mock is called three times). The rewrite in `325f4faaf` didn't update the older cases. agentic-7d is placing an owner.
 - **Local model context windows are still unknown on three paths (found 2026-11-17 while fixing chat #149169). VSIX 2026.10.189 fixed the Kimi Code CLI install.**
   - `clients/vscode/src/modelRouting.ts` `localWindowProbes()` returns `[]` unless `localModels.localFirst` is on, so a pinned Ollama, Synapse or FreeToken model gets only the shipped catalog window.

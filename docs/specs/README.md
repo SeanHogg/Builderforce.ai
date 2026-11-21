@@ -47,6 +47,7 @@ still open. If the section is missing there, it shipped, and you'll find it in D
 | 46 | Agent-run findings | — | Shipped (DONE.md) |
 | 47 | One Collection view | platform | Partly built (W0 landed) |
 | 48 | Ship policy: runs ship by rule, never by mid-run question | — | Shipped 2026-11-20 (DONE.md) |
+| 49 | Methodology personas and the `.builderforce/` workspace layout (TIP Code parity) | [make](./make.md#prd-49--methodology-personas-and-the-builderforce-workspace-layout-tip-code-parity) | Opened 2026-11-21; design first |
 | — | SOC 2 Type I checklist | run | Partly built |
 | — | Internet search subsystem | platform | Phases 1–2 shipped |
 | — | Blog capability gap register | reach | Open |
