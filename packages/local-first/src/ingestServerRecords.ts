@@ -148,6 +148,10 @@ export async function ingestServerRecords(
       // it would be one no unlink or re-link on this device ever reaches.
       const clientId = derivedLinkId(row) ?? mapping?.clientEntityId ?? mintLocalId();
       resolvedIds.push(clientId);
+      const derivedPair = derivedLinkId(row);
+      // Only the pairs this ingest wrote are checked for an older build's stray, and only until the
+      // destination's one-shot legacy repair has run (`repairLegacyLinksOnce`).
+      if (derivedPair !== undefined && !(await tx.readMark(linkFormRepairMark(row.destination)))) strayCheckPairs.add(derivedPair);
       if (row.entityType === 'ticket') incomingTickets.add(clientId);
       if (row.entityType === 'chat-ticket-link') {
         const link = row.payload as Partial<ChatTicketLinkValue> | null;

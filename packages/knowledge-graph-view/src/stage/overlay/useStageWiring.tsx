@@ -14,7 +14,7 @@ import { stageBus, StageBusContext } from '../anchor/stageBus';
 import { cssVar } from '../../scene/themeColors';
 import { TYPE } from '../../surface/ui/type';
 import { CodeLayer } from '../drill/CodeLayer';
-import { CodeDock, focusLine, recordsForCode, targetForMark } from './CodeDock';
+import { CodeDock, codeSubject, focusLine, recordsForCode, targetForMark } from './CodeDock';
 import { useSemanticZoom, type SemanticZoom } from '../drill/useSemanticZoom';
 import { useStageMap, type StageMap } from '../drill/useStageMap';
 import type { StageRenderer } from '../renderer';
@@ -119,8 +119,12 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
     // object each render, so keying on it re-walked the graph on every render of every stage view (the perf gate's mount reads).
     const drillSymbols = drill.symbols;
     const records = useMemo(() => codeOpen ? recordsForCode(graph, { symbols: drillSymbols }) : NO_RECORDS, [codeOpen, graph, drillSymbols]);
-    const markRef = selected?.startsWith('node:') ? selected.slice('node:'.length) : selected?.startsWith('st:') ? null : selected;
-    const codeTarget = codeOpen ? targetForMark(markRef, markRef ? index.get(markRef)?.label ?? markRef : '', records) : null;
+    // A station key is not a symbol. Resolve it to the station's first file so the dock has a source line and the station's name.
+    const stationPick = selected?.startsWith('st:') ? map.stationOfKey(selected) : null;
+    const subject = codeSubject(selected, stationPick);
+    const markRef = subject.ref;
+    const codeName = subject.name || (markRef ? index.get(markRef)?.label ?? markRef : '');
+    const codeTarget = codeOpen ? targetForMark(markRef, codeName, records) : null;
     const stopId = surface.path?.stops[surface.step]?.id ?? null;
     const scrollLine = codeOpen ? focusLine(records, markRef, stopId) : undefined;
     const drillTo = useCallback((ref: string) => {
@@ -143,7 +147,7 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
             )}
             {codeOpen && (
                 <CodeDock
-                    target={codeTarget} name={markRef ? index.get(markRef)?.label ?? markRef : ''} reader={surface.readSource}
+                    target={codeTarget} name={codeName} reader={surface.readSource}
                     labels={p.labels} records={records} scrollLine={scrollLine} onDrill={drillTo}
                     onOpenSource={p.onOpenSource} onClose={closeCode}
                 />

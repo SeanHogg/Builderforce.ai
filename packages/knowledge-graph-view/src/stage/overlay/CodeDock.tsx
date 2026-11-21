@@ -97,6 +97,18 @@ export function targetForMark(ref: string | null, name: string, records: readonl
 }
 
 /**
+ * The code-panel subject for a selected mark. A station key (`st:`) is not itself a symbol: it resolves to the
+ * station's first file ref (what `targetForMark` / `focusLine` scroll), and the dock is named with the station.
+ * A node key is the ref after `node:`. Anything else is used as-is.
+ */
+export function codeSubject(key: string | null, station: { name: string; refs: readonly string[] } | null): { ref: string | null; name: string } {
+    if (!key) return { ref: null, name: '' };
+    if (key.startsWith('node:')) return { ref: key.slice('node:'.length), name: '' };
+    if (key.startsWith('st:')) return { ref: station?.refs[0] ?? null, name: station?.name ?? '' };
+    return { ref: key, name: '' };
+}
+
+/**
  * The source line selection or the journey step should scroll to. Selection wins when both name a line;
  * pass `stopId` alone when the step is what just changed.
  */

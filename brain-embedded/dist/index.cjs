@@ -324,7 +324,7 @@ __export(src_exports, {
   isInferenceMode: () => isInferenceMode,
   isInjectedTurnMetadata: () => isInjectedTurnMetadata,
   isInvalidClientResult: () => isInvalidClientResult,
-  isLive: () => isLive,
+  isLive: () => isLive2,
   isLocalWorkspaceTool: () => isLocalWorkspaceTool,
   isMalformedToolCall: () => isMalformedToolCall,
   isManagerRole: () => isManagerRole,
@@ -3185,16 +3185,40 @@ var DEPENDENCY_PENDING_MAX_AGE_MS = SYNC_EVENT_RETENTION_DAYS * DAY_MS;
 var HOLD_BACKOFF_CAP_MS = 60 * 60 * 1e3;
 
 // ../packages/local-first/src/chatBindLease.ts
+var CHAT_BIND_LEASE_MS = 12e4;
 var leaseKey = (clientId) => `chatBind:${clientId}`;
+var BIND_PENDING_HOLDER = "bind-pending";
+var HOLDER_SEPARATOR = "#";
+function parseLease(mark) {
+  if (mark === void 0) return void 0;
+  const cut = mark.indexOf(HOLDER_SEPARATOR);
+  const since = Date.parse(cut === -1 ? mark : mark.slice(0, cut));
+  if (!Number.isFinite(since)) return void 0;
+  return cut === -1 ? { since } : { since, holder: mark.slice(cut + 1) };
+}
+var isLive = (since, at2) => Math.abs(at2 - since) < CHAT_BIND_LEASE_MS;
 var isChatImport = (event) => event.entityType === "chat" && event.operation === "import";
-async function claimChatBind(tx, clientId, now) {
+async function liveChatBindHolder(tx, clientId, now) {
+  const lease = parseLease(await tx.readMark(leaseKey(clientId)));
+  return lease && isLive(lease.since, now.getTime()) ? lease.holder : void 0;
+}
+async function claimChatBind(tx, clientId, now, holder) {
   const sent = await selectPendingOf(tx, "chat", clientId, (event) => isChatImport(event) && !isRecordPayloadMarker(event));
   if (sent.length > 0) return false;
-  await tx.setReadMark(leaseKey(clientId), now.toISOString());
+  const current = await liveChatBindHolder(tx, clientId, now);
+  if (current !== void 0 && holder !== void 0 && current !== holder) return false;
+  await tx.setReadMark(leaseKey(clientId), holder === void 0 ? now.toISOString() : `${now.toISOString()}${HOLDER_SEPARATOR}${holder}`);
   return true;
 }
-async function releaseChatBind(tx, clientId) {
-  if (await tx.readMark(leaseKey(clientId))) await tx.setReadMark(leaseKey(clientId), void 0);
+async function releaseChatBind(tx, clientId, holders) {
+  const mark = await tx.readMark(leaseKey(clientId));
+  if (!mark) return;
+  if (holders !== void 0) {
+    const held = parseLease(mark)?.holder;
+    const mine = typeof holders === "string" ? [holders] : holders;
+    if (held !== void 0 && !mine.includes(held)) return;
+  }
+  await tx.setReadMark(leaseKey(clientId), void 0);
 }
 
 // ../packages/local-first/src/tombstone.ts
@@ -6421,6 +6445,8 @@ async function boundServerId(tx, clientId, destination) {
 }
 function createLocalChatIdentity(options) {
   const { store, deviceId, port } = options;
+  const now = options.now ?? (() => /* @__PURE__ */ new Date());
+  const windowHolder = `window:${crypto.randomUUID()}`;
   const inFlight = /* @__PURE__ */ new Map();
   const read2 = (localId) => store.read(async (tx) => {
     const chat = await chatRecordById(tx, deviceId, localId);
@@ -6460,10 +6486,13 @@ function createLocalChatIdentity(options) {
     const unsubscribe = store.subscribe(check);
     check();
   });
-  const bindThroughLease = async (localId, clientId, destination, serverChat) => {
+  const bindThroughLease = async (localId, clientId, destination, serverChat, adopting = false) => {
     const claim = await store.transact(async (tx) => {
       const bound = await boundServerId(tx, clientId, destination);
-      return bound !== void 0 ? { bound } : { claimed: await claimChatBind(tx, clientId, /* @__PURE__ */ new Date()) };
+      if (bound !== void 0) return { bound };
+      const at2 = now();
+      const holder = adopting && await liveChatBindHolder(tx, clientId, at2) === BIND_PENDING_HOLDER ? BIND_PENDING_HOLDER : windowHolder;
+      return { holder, claimed: await claimChatBind(tx, clientId, at2, holder) };
     });
     if ("bound" in claim) return claim.bound;
     if (!claim.claimed) return awaitImportBinding(localId);
@@ -6473,7 +6502,7 @@ function createLocalChatIdentity(options) {
     } finally {
       await store.transact(async (tx) => {
         if (serverId != null) await mapIn(tx, clientId, destination, serverId);
-        await releaseChatBind(tx, clientId);
+        await releaseChatBind(tx, clientId, claim.holder);
       });
     }
     if (serverId == null) return void 0;
@@ -6526,13 +6555,13 @@ function createLocalChatIdentity(options) {
       const destination = port.destination();
       const found = await read2(localId);
       const releaseHeld = async () => {
-        if (found) await store.transact((tx) => releaseChatBind(tx, found.chat.id));
+        if (found) await store.transact((tx) => releaseChatBind(tx, found.chat.id, [BIND_PENDING_HOLDER, windowHolder]));
       };
       if (!found || !destination || destination.kind !== "bound") {
         await releaseHeld();
         return false;
       }
-      const adopted = await bindThroughLease(localId, found.chat.id, destination, async () => serverId) === serverId;
+      const adopted = await bindThroughLease(localId, found.chat.id, destination, async () => serverId, true) === serverId;
       if (!adopted) await releaseHeld();
       return adopted;
     }
@@ -7298,7 +7327,7 @@ function createLocalBrainPersistence(options) {
         });
         await tx.put(record3);
         await journalWrite(tx, record3, "create", { key: `chat:${clientId}` });
-        if (body.bindPending) await claimChatBind(tx, clientId, now());
+        if (body.bindPending) await claimChatBind(tx, clientId, now(), BIND_PENDING_HOLDER);
         return chat;
       });
     },
@@ -29023,7 +29052,7 @@ function getRunSnapshot(chatId) {
 function isRunning(chatId) {
   return chatId != null && (cells.get(chatId)?.running ?? false);
 }
-function isLive(chatId) {
+function isLive2(chatId) {
   const c = chatId == null ? void 0 : cells.get(chatId);
   return !!c && (c.running || c.claim !== null);
 }
@@ -38282,7 +38311,7 @@ function handToChat(chat, turns) {
     ...interrupt ? { interrupt: true } : {},
     ...turn.attachments?.length ? { attachments: [...turn.attachments] } : {}
   });
-  if (isLive(chat)) {
+  if (isLive2(chat)) {
     for (const turn of turns) inbox(turn, !!turn.interrupt);
     return;
   }
@@ -38306,7 +38335,7 @@ function forget(chat) {
 function pump(chat) {
   const w = waiting.get(chat);
   if (!w) return;
-  if (isLive(chat)) {
+  if (isLive2(chat)) {
     w.seenLive = true;
     const heard = w.turns.findIndex((turn) => !turn.steer);
     const now = w.turns.splice(0, heard < 0 ? w.turns.length : heard);
@@ -38333,7 +38362,7 @@ function deliverToChat(chat, turns) {
 function releaseChat(chat) {
   const w = waiting.get(chat);
   if (!w) return;
-  if (isLive(chat)) {
+  if (isLive2(chat)) {
     pump(chat);
     return;
   }
@@ -38940,7 +38969,7 @@ function unansweredTurnIndex(messages) {
 function useAutoReplyTrailingTurn({ chatId, loadingMessages, localSending, messages, repliedRef, reply }) {
   (0, import_react11.useEffect)(() => {
     if (chatId == null || loadingMessages || localSending || messages.length === 0) return;
-    if (isLive(chatId)) return;
+    if (isLive2(chatId)) return;
     const last = messages[messages.length - 1];
     if (last.role !== "user") return;
     if (isDirectedToParticipant(last)) return;
@@ -39396,7 +39425,7 @@ ${extraSystem}` : resolvedSystemPrompt;
   const send = (0, import_react15.useCallback)(
     async (text2, opts) => {
       const trimmed = text2.trim();
-      if (!trimmed || sendingRef.current.has(chatId) || isLive(chatId)) return false;
+      if (!trimmed || sendingRef.current.has(chatId) || isLive2(chatId)) return false;
       const addressedTo = opts?.addressedTo ?? null;
       const origin = chatId;
       markSending(origin, true);
@@ -39486,7 +39515,7 @@ ${extraSystem}` : resolvedSystemPrompt;
   }, [messages, buildRequest, launch]);
   useAutoReplyTrailingTurn({ chatId, loadingMessages, localSending, messages, repliedRef: autoRepliedChatIdRef, reply: replyToTrailingTurn });
   const retryLastTurn = (0, import_react15.useCallback)(() => {
-    if (chatId == null || sendingRef.current.has(chatId) || isLive(chatId)) return false;
+    if (chatId == null || sendingRef.current.has(chatId) || isLive2(chatId)) return false;
     const index = unansweredTurnIndex(messages);
     if (index < 0) return false;
     const turn = messages[index];
@@ -39542,8 +39571,8 @@ ${extraSystem}` : resolvedSystemPrompt;
     reloadMessages,
     // A turn that is only announced (its host's pre-send stage is running) already counts as in flight: the transcript shows
     // the same waiting row it shows between turns from the moment the person submits.
-    sending: localSending || isLive(chatId) || pending.pendingTurn != null,
-    runLive: isLive(chatId),
+    sending: localSending || isLive2(chatId) || pending.pendingTurn != null,
+    runLive: isLive2(chatId),
     error: localError || snapshot.error,
     /** What the user can DO about `error` (reconnect / upgrade / add a card), when
      *  the failure was actionable. Only meaningful for a RUN error — a local error

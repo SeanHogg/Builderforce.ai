@@ -16,7 +16,7 @@
  * Data, not branches: a read twin is a name in {@link LOCAL_TICKET_READS} plus its adapter.
  */
 
-import { isClosedTicketStatus } from "@builderforce/agent-loop";
+import { effectiveTaskStatus, isClosedTicketStatus } from "@builderforce/agent-loop";
 import { railProgressKind, railTicketProgress } from "./chatRail/railPayloads";
 import type { ToolDef } from "./fileTools";
 import { isLocalId } from "@builderforce/local-first";
@@ -41,6 +41,7 @@ export function localTicketView(ticket: UnsyncedTicket) {
     exists: true,
     linkType: "created",
     ...(ticket.payload.parentTicketId ? { parentRef: ticket.payload.parentTicketId } : {}),
+    ...(ticket.payload.archived === true ? { archived: true as const } : {}),
     local: true,
     note: UNSYNCED_NOTE,
   };
@@ -75,8 +76,9 @@ function filtered(rows: readonly LocalView[], args: Args): LocalView[] {
   return rows.filter((row) =>
     (!status || row.status.toLowerCase() === status)
     && (!kind || row.kind === kind)
-    // Closed per the row's own kind — the same registry the server's openOnly filter reads.
-    && !(args.openOnly === true && isClosedTicketStatus(row.kind, row.status)));
+    // Closed per the row's own kind — the same registry the server's openOnly filter reads — on the
+    // status the ticket READS as (`effectiveTaskStatus`: an archived ticket is closed whatever its lane).
+    && !(args.openOnly === true && isClosedTicketStatus(row.kind, effectiveTaskStatus(row))));
 }
 
 const listTickets: ReadAdapter = async (args, server, scope) => {

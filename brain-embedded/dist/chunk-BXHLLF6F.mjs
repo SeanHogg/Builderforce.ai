@@ -466,16 +466,40 @@ var DEPENDENCY_PENDING_MAX_AGE_MS = SYNC_EVENT_RETENTION_DAYS * DAY_MS;
 var HOLD_BACKOFF_CAP_MS = 60 * 60 * 1e3;
 
 // ../packages/local-first/src/chatBindLease.ts
+var CHAT_BIND_LEASE_MS = 12e4;
 var leaseKey = (clientId) => `chatBind:${clientId}`;
+var BIND_PENDING_HOLDER = "bind-pending";
+var HOLDER_SEPARATOR = "#";
+function parseLease(mark) {
+  if (mark === void 0) return void 0;
+  const cut = mark.indexOf(HOLDER_SEPARATOR);
+  const since = Date.parse(cut === -1 ? mark : mark.slice(0, cut));
+  if (!Number.isFinite(since)) return void 0;
+  return cut === -1 ? { since } : { since, holder: mark.slice(cut + 1) };
+}
+var isLive = (since, at2) => Math.abs(at2 - since) < CHAT_BIND_LEASE_MS;
 var isChatImport = (event) => event.entityType === "chat" && event.operation === "import";
-async function claimChatBind(tx, clientId, now) {
+async function liveChatBindHolder(tx, clientId, now) {
+  const lease = parseLease(await tx.readMark(leaseKey(clientId)));
+  return lease && isLive(lease.since, now.getTime()) ? lease.holder : void 0;
+}
+async function claimChatBind(tx, clientId, now, holder) {
   const sent = await selectPendingOf(tx, "chat", clientId, (event) => isChatImport(event) && !isRecordPayloadMarker(event));
   if (sent.length > 0) return false;
-  await tx.setReadMark(leaseKey(clientId), now.toISOString());
+  const current = await liveChatBindHolder(tx, clientId, now);
+  if (current !== void 0 && holder !== void 0 && current !== holder) return false;
+  await tx.setReadMark(leaseKey(clientId), holder === void 0 ? now.toISOString() : `${now.toISOString()}${HOLDER_SEPARATOR}${holder}`);
   return true;
 }
-async function releaseChatBind(tx, clientId) {
-  if (await tx.readMark(leaseKey(clientId))) await tx.setReadMark(leaseKey(clientId), void 0);
+async function releaseChatBind(tx, clientId, holders) {
+  const mark = await tx.readMark(leaseKey(clientId));
+  if (!mark) return;
+  if (holders !== void 0) {
+    const held = parseLease(mark)?.holder;
+    const mine = typeof holders === "string" ? [holders] : holders;
+    if (held !== void 0 && !mine.includes(held)) return;
+  }
+  await tx.setReadMark(leaseKey(clientId), void 0);
 }
 
 // ../packages/local-first/src/tombstone.ts
@@ -12948,6 +12972,8 @@ export {
   dropPending,
   queueImport,
   journalWrite,
+  BIND_PENDING_HOLDER,
+  liveChatBindHolder,
   claimChatBind,
   releaseChatBind,
   PROVENANCE_META_KEY,
@@ -13235,4 +13261,4 @@ export {
   toolCallArgBytes,
   createComposingActivity
 };
-//# sourceMappingURL=chunk-TO33BQ75.mjs.map
+//# sourceMappingURL=chunk-BXHLLF6F.mjs.map

@@ -81,6 +81,7 @@ import {
   ANNOUNCED_DELIVERABLE_STEER,
   BACK_TO_BACK_AT,
   BASE_BRANCHES,
+  BIND_PENDING_HOLDER,
   BOUND_ONLY_VERSION,
   CHAT_STAMPED_CREATE_TOOLS,
   CHAT_TICKET_LIST_TOOL,
@@ -269,6 +270,7 @@ import {
   linkedTicketsToAdvance,
   linkedTicketsToAdvanceFor,
   linkedTicketsToComplete,
+  liveChatBindHolder,
   localToolsIn,
   memoryReplayable,
   memoryToolsIn,
@@ -379,7 +381,7 @@ import {
   withAdvisory,
   withProvenanceMetadata,
   workFiledNotStaffedVerdict
-} from "./chunk-TO33BQ75.mjs";
+} from "./chunk-BXHLLF6F.mjs";
 import {
   ASK_USER_TOOL,
   ASK_USER_TOOL_SPEC,
@@ -4433,6 +4435,8 @@ async function boundServerId(tx, clientId, destination) {
 }
 function createLocalChatIdentity(options) {
   const { store, deviceId, port } = options;
+  const now = options.now ?? (() => /* @__PURE__ */ new Date());
+  const windowHolder = `window:${crypto.randomUUID()}`;
   const inFlight = /* @__PURE__ */ new Map();
   const read = (localId) => store.read(async (tx) => {
     const chat = await chatRecordById(tx, deviceId, localId);
@@ -4472,10 +4476,13 @@ function createLocalChatIdentity(options) {
     const unsubscribe = store.subscribe(check);
     check();
   });
-  const bindThroughLease = async (localId, clientId, destination, serverChat) => {
+  const bindThroughLease = async (localId, clientId, destination, serverChat, adopting = false) => {
     const claim = await store.transact(async (tx) => {
       const bound = await boundServerId(tx, clientId, destination);
-      return bound !== void 0 ? { bound } : { claimed: await claimChatBind(tx, clientId, /* @__PURE__ */ new Date()) };
+      if (bound !== void 0) return { bound };
+      const at = now();
+      const holder = adopting && await liveChatBindHolder(tx, clientId, at) === BIND_PENDING_HOLDER ? BIND_PENDING_HOLDER : windowHolder;
+      return { holder, claimed: await claimChatBind(tx, clientId, at, holder) };
     });
     if ("bound" in claim) return claim.bound;
     if (!claim.claimed) return awaitImportBinding(localId);
@@ -4485,7 +4492,7 @@ function createLocalChatIdentity(options) {
     } finally {
       await store.transact(async (tx) => {
         if (serverId != null) await mapIn(tx, clientId, destination, serverId);
-        await releaseChatBind(tx, clientId);
+        await releaseChatBind(tx, clientId, claim.holder);
       });
     }
     if (serverId == null) return void 0;
@@ -4538,13 +4545,13 @@ function createLocalChatIdentity(options) {
       const destination = port.destination();
       const found = await read(localId);
       const releaseHeld = async () => {
-        if (found) await store.transact((tx) => releaseChatBind(tx, found.chat.id));
+        if (found) await store.transact((tx) => releaseChatBind(tx, found.chat.id, [BIND_PENDING_HOLDER, windowHolder]));
       };
       if (!found || !destination || destination.kind !== "bound") {
         await releaseHeld();
         return false;
       }
-      const adopted = await bindThroughLease(localId, found.chat.id, destination, async () => serverId) === serverId;
+      const adopted = await bindThroughLease(localId, found.chat.id, destination, async () => serverId, true) === serverId;
       if (!adopted) await releaseHeld();
       return adopted;
     }
@@ -4779,7 +4786,7 @@ function createLocalBrainPersistence(options) {
         });
         await tx.put(record2);
         await journalWrite(tx, record2, "create", { key: `chat:${clientId}` });
-        if (body.bindPending) await claimChatBind(tx, clientId, now());
+        if (body.bindPending) await claimChatBind(tx, clientId, now(), BIND_PENDING_HOLDER);
         return chat;
       });
     },

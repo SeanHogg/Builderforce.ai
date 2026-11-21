@@ -106,7 +106,11 @@ vi.mock('next-intl', async (importOriginal) => {
   const makeT = (namespace?: string) => {
     const key = (k: string, values?: Record<string, unknown>) => {
       const base = namespace ? `${namespace}.${k}` : k;
-      const params = values ? Object.values(values).filter((v) => v != null) : [];
+      // A value that is exactly its own `{name}` placeholder is a literal pass-through (`useLabelLookup`
+      // hands shared components' placeholders back unformatted), not a figure: it is not appended.
+      const params = values
+        ? Object.entries(values).filter(([name, v]) => v != null && v !== `{${name}}`).map(([, v]) => v)
+        : [];
       return params.length > 0 ? `${base} ${params.join(' ')}` : base;
     };
     const t = (k: string, values?: Record<string, unknown>) => key(k, values);

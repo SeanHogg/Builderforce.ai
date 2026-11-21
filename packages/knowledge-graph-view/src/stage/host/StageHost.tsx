@@ -26,6 +26,7 @@ import { Segmented } from '../../surface/ui';
 import { TYPE } from '../../surface/ui/type';
 import { useStageWiring } from '../overlay/useStageWiring';
 import type { StageRenderer } from '../renderer';
+import { legendTypesOf } from '../rig/stageLegend';
 import { Stage } from '../Stage';
 import { useStageRenderer } from '../stageHooks';
 import { StageBusContext, stageBus } from '../anchor/stageBus';
@@ -130,7 +131,7 @@ function StageBody({ renderer, onLost, camera, ...p }: SceneProps & { camera: Pl
                 <Stage
                     renderer={renderer} marks={marks} paint={paint} placement={placement ?? null} colors={colors}
                     width={width} height={height} reducedMotion={p.reducedMotion} selected={selected} onSelect={wiring.onSelect}
-                    depthLabel={labels.surface.scene.depth} nav={nav} description={labels.regionLabel} {...(wiring.onOut ? { onOut: wiring.onOut } : {})}
+                    depthLabel={labels.surface.scene.depth} nav={nav} description={labels.regionLabel} legend={{ types: legendTypesOf(marks.type), labels }} {...(wiring.onOut ? { onOut: wiring.onOut } : {})}
                     {...(camera === 'map' ? { tilt: surface.towers ? 1 : 0, onTilt } : {})} onContextLost={onLost}
                 />
             )}
