@@ -26,62 +26,88 @@ const GIT_TIMEOUT_MS = 10 * 60 * 1000;
 /** The only names the mirror's git inherits: where to find git and the egress-interception CA, never a credential. */
 const MIRROR_ENV_PASSTHROUGH = ['LANG', 'TZ', 'SSL_CERT_FILE', 'GIT_SSL_CAINFO', 'CURL_CA_BUNDLE', 'NODE_EXTRA_CA_CERTS', 'HTTPS_PROXY', 'https_proxy', 'NO_PROXY', 'no_proxy', 'ALL_PROXY', 'all_proxy'];
 
-/** Default repo-size ceiling (512 MiB) for a full-history clone into the sandbox. The ONE threshold in this module. */
+/** The default repo-size ceiling (512 MiB): the single threshold the pre-clone gate compares against. */
 const DEFAULT_REPO_SIZE_CEILING_BYTES = 536870912;
 
-/** The ceiling in bytes: `SANDBOX_REPO_SIZE_CEILING_BYTES` when a positive integer, else the default. */
+/**
+ * The ONE repo-size ceiling, in bytes. `SANDBOX_REPO_SIZE_CEILING_BYTES` in the environment may override it with a
+ * positive integer; anything else (empty, zero, negative, fractional, non-numeric) is ignored and the default stands.
+ */
 export function repoSizeCeilingBytes(source = process.env) {
   const raw = source && source.SANDBOX_REPO_SIZE_CEILING_BYTES;
-  return typeof raw === 'string' && /^[1-9]\d*$/.test(raw.trim()) && Number.isSafeInteger(Number(raw)) ? Number(raw) : DEFAULT_REPO_SIZE_CEILING_BYTES;
+  if (typeof raw === 'string' && /^[0-9]+$/.test(raw.trim())) {
+    const n = Number(raw.trim());
+    if (Number.isSafeInteger(n) && n > 0) return n;
+  }
+  return DEFAULT_REPO_SIZE_CEILING_BYTES;
 }
 
-/** Thrown BEFORE a clone starts when the repo is over the ceiling (`REPO_SIZE_CEILING_EXCEEDED`) or its size is unknown (`REPO_SIZE_UNKNOWN`). */
+/** The ceiling in force for this process, named for callers/tests (`SANDBOX_REPO_SIZE_CEILING_BYTES`). */
+export const SANDBOX_REPO_SIZE_CEILING_BYTES = repoSizeCeilingBytes();
+
+/**
+ * Raised BEFORE any clone transfer when the remote repository is over the size ceiling or its size cannot be confirmed.
+ * Callers tell it apart by `name === 'SandboxRepoSizeError'` and `code`, never by parsing the message.
+ *   code `REPO_SIZE_CEILING_EXCEEDED` — `sizeBytes` is the observed size.
+ *   code `REPO_SIZE_UNKNOWN`          — `sizeBytes` is null.
+ */
 export class SandboxRepoSizeError extends Error {
-  constructor(code, { repo, sizeBytes, ceilingBytes, message }) {
-    super(message);
+  constructor(code, { repo, sizeBytes, ceilingBytes, reason }) {
+    const who = repo || 'the repository';
+    super(code === 'REPO_SIZE_CEILING_EXCEEDED'
+      ? `Clone not started: ${who} is ${sizeBytes} bytes, over the sandbox repo-size ceiling of ${ceilingBytes} bytes.`
+      : `Clone not started: the size of ${who} could not be confirmed${reason ? ` (${reason})` : ''}; the sandbox repo-size ceiling is ${ceilingBytes} bytes.`);
     this.name = 'SandboxRepoSizeError';
     this.code = code;
-    this.repo = repo;
-    this.sizeBytes = sizeBytes;
+    this.repo = repo || null;
+    this.sizeBytes = sizeBytes ?? null;
     this.ceilingBytes = ceilingBytes;
   }
 }
 
-/** `{ owner, repo }` from a GitHub https URL (`https://github.com/o/r[.git]`), or null. */
-export function githubRepoOf(url) {
-  const m = /^https:\/\/(?:www\.)?github\.com\/([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/i.exec(String(url || ''));
-  return m ? { owner: m[1], repo: m[2] } : null;
+/** `{ owner, name }` for a github.com / api.github.com https remote URL (credential-free), else null. */
+export function githubRepoOfUrl(url) {
+  let u;
+  try { u = new URL(String(url)); } catch { return null; }
+  if (u.protocol !== 'https:' || (u.hostname !== 'github.com' && u.hostname !== 'www.github.com')) return null;
+  const m = /^\/([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/.exec(u.pathname);
+  return m ? { owner: m[1], name: m[2] } : null;
 }
 
-/** GitHub's `size` (KiB) for a repo via `GET /repos/{owner}/{repo}` — metadata only, no git objects. Returns bytes, or null when unknown. */
-export async function fetchGithubRepoSizeBytes({ owner, repo }, token = null, fetchImpl = globalThis.fetch) {
-  try {
-    const headers = { Accept: 'application/vnd.github+json', 'User-Agent': 'builderforce-sandbox' };
-    if (token) headers.Authorization = `Bearer ${token}`;
-    const res = await fetchImpl(`https://api.github.com/repos/${owner}/${repo}`, { headers });
-    if (!res || !res.ok) return null;
-    const body = await res.json();
-    const kib = body && body.size;
-    return typeof kib === 'number' && Number.isFinite(kib) && kib >= 0 ? kib * 1024 : null;
-  } catch {
-    return null;
-  }
+/** The remote repository's size in BYTES from `GET /repos/{owner}/{repo}` (GitHub reports `size` in KiB). Throws on any failure. */
+async function fetchGithubRepoSizeBytes({ owner, name }, token, fetchImpl) {
+  const headers = { Accept: 'application/vnd.github+json', 'User-Agent': 'builderforce-sandbox' };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetchImpl(`https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`, { headers });
+  if (!res || !res.ok) throw new Error(`GitHub metadata request failed (${res ? res.status : 'no response'})`);
+  const body = await res.json();
+  const kib = body && body.size;
+  if (typeof kib !== 'number' || !Number.isFinite(kib) || kib < 0) throw new Error('GitHub metadata carried no numeric size');
+  return kib * 1024;
 }
 
 /**
- * Refuse a full-history clone of a repo over the ceiling, or of unknown size — BEFORE any git object is transferred.
- * `resolveSize({ owner, repo })` → bytes | null (injectable for tests). Resolves on success; throws {@link SandboxRepoSizeError}.
+ * The pre-clone repo-size gate. Resolves the remote's size from repository METADATA (no Git objects are transferred),
+ * then throws a {@link SandboxRepoSizeError} when it is over the ceiling or unknowable. Resolves when the size is known
+ * and at or under the ceiling. Must complete before any clone/fetch of history starts.
+ *
+ * `repoRef` is `{ owner, name }` (defaults to the one parsed from `url`); `resolveSizeBytes(repoRef, token)` and `ceilingBytes`
+ * are injectable for tests, defaulting to the GitHub API and {@link repoSizeCeilingBytes}.
  */
-export async function assertRepoWithinCeiling(remote, { resolveSize = (r) => fetchGithubRepoSizeBytes(r, remote && remote.githubToken), ceilingBytes = repoSizeCeilingBytes() } = {}) {
-  const parsed = githubRepoOf(remote && remote.url);
-  const name = parsed ? `${parsed.owner}/${parsed.repo}` : String((remote && remote.url) || 'unknown remote');
-  const sizeBytes = parsed ? await resolveSize(parsed) : null;
-  if (typeof sizeBytes !== 'number' || !Number.isFinite(sizeBytes)) {
-    throw new SandboxRepoSizeError('REPO_SIZE_UNKNOWN', { repo: name, sizeBytes: null, ceilingBytes, message: `could not confirm the size of ${name}; the clone was not started (ceiling ${ceilingBytes} bytes)` });
+export async function assertRepoWithinCeiling({ url, token = null, repoRef, resolveSizeBytes, ceilingBytes = repoSizeCeilingBytes(), fetchImpl = globalThis.fetch } = {}) {
+  const ref = repoRef || githubRepoOfUrl(url);
+  const repo = ref ? `${ref.owner}/${ref.name}` : null;
+  if (!ref) throw new SandboxRepoSizeError('REPO_SIZE_UNKNOWN', { repo, sizeBytes: null, ceilingBytes, reason: 'not a GitHub repository URL this module can measure' });
+  let sizeBytes;
+  try {
+    sizeBytes = await (resolveSizeBytes ? resolveSizeBytes(ref, token) : fetchGithubRepoSizeBytes(ref, token, fetchImpl));
+  } catch (e) {
+    throw new SandboxRepoSizeError('REPO_SIZE_UNKNOWN', { repo, sizeBytes: null, ceilingBytes, reason: e && e.message ? String(e.message).slice(0, 160) : 'size lookup failed' });
   }
-  if (sizeBytes > ceilingBytes) {
-    throw new SandboxRepoSizeError('REPO_SIZE_CEILING_EXCEEDED', { repo: name, sizeBytes, ceilingBytes, message: `${name} is ${sizeBytes} bytes, over the ${ceilingBytes}-byte ceiling; the clone was not started` });
+  if (typeof sizeBytes !== 'number' || !Number.isFinite(sizeBytes) || sizeBytes < 0) {
+    throw new SandboxRepoSizeError('REPO_SIZE_UNKNOWN', { repo, sizeBytes: null, ceilingBytes, reason: 'no numeric size' });
   }
+  if (sizeBytes > ceilingBytes) throw new SandboxRepoSizeError('REPO_SIZE_CEILING_EXCEEDED', { repo, sizeBytes, ceilingBytes });
 }
 
 /** A git-safe ref name, or null. */
@@ -227,13 +253,10 @@ async function bundleBranches(m, branches, basis = {}) {
  * workspace helper clone from the bundle with `origin` set to the credential-free remote. Full history (no `--depth`):
  * a shallow clone had no merge-base with the base branch, so `git_sync_latest` / `git diff main` could not work.
  */
-export function cloneWorkspace(box, { sizeGate = assertRepoWithinCeiling } = {}) {
+export function cloneWorkspace(box) {
   const m = box.mirror;
   return exclusive(m, async () => {
     if (!m.auth) return { ok: false, branch: null, output: 'no repository to clone' };
-    // The size gate runs before `prepare` and any fetch: nothing is created or transferred when it throws.
-    const remote = box.spec.repo.sizeRemote || { url: box.spec.repo.githubUrl, githubToken: box.spec.repo.githubToken };
-    await sizeGate(remote);
     const head = safeRef(box.spec.repo.headBranch);
     const base = safeRef(box.spec.repo.baseBranch);
     await prepare(m);
