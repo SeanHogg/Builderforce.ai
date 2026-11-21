@@ -68,6 +68,11 @@ export interface LastTurn {
   contained?: string;
   /** The reply a stall with nothing left to try already saved, before it said why (`brainDelivery.ts`): the run settles on it. */
   settled?: BrainMessage;
+  /**
+   * A delivery rung sent the run's would-be final answer back (`brainDelivery.ts`, its `onRestate`; the text is already saved as a
+   * block). Cleared when a later turn is kept. Should the re-prompt fail on the provider, the run keeps that answer (`brainSettle.ts`).
+   */
+  sentBackAnswer?: { step: number };
 }
 
 /** One kernel step across its attempts. */
@@ -177,6 +182,8 @@ export function brainTurnObserver(run: BrainRunContext, savedTokens: () => numbe
 
 /** Record a kept turn: what it left on the run, then what a turn that calls tools settles before any call dispatches. */
 async function keep(run: BrainRunContext, last: LastTurn, a: Answered): Promise<void> {
+  // A later turn was kept: an answer a rung sent back before it is no longer the run's last word.
+  last.sentBackAnswer = undefined;
   const { result } = a;
   run.windowFit.served(result.resolvedModel ?? run.policy.model);
   const resolved = result.resolvedModel ?? run.policy.model ?? 'default';

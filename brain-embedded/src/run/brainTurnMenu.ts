@@ -42,7 +42,9 @@ export async function brainTurnMenu(run: BrainRunContext, env: TurnEnv, catalogS
   const tail = [...(forced ? [userTextOf(forced.brief)] : []), ...(steer ? [steer] : [])];
   // A3's `finish` is a forced turn with only the obligation (ticket) tools, or NO tools: an empty menu is a decision (the kernel asks a
   // no-tool turn), never "not my concern".
-  if (forced) return { tools: forced.tools as unknown as ToolSchema[], ...(forced.toolChoice ? { toolChoice: forced.toolChoice } : {}), tail };
+  // A FINISHING run's no-tool turn is the run's own final report (`TurnMenu.final`): the kernel never judges it as a stall and no
+  // delivery rung sends it back to do work it has no tools for (VS Code chat #128305).
+  if (forced) return { tools: forced.tools as unknown as ToolSchema[], ...(forced.toolChoice ? { toolChoice: forced.toolChoice } : {}), tail, ...(forced.finishing && forced.tools.length === 0 ? { final: true as const } : {}) };
   // The ROUTER rides along whenever selection trimmed something, so the tools that missed the cut stay REACHABLE. A catalog at or under
   // the limit is never trimmed (the agent's `selectToolsForTurn`): `hand_off` leaving the menu is not a trim. The limit is the turn's role's
   // (a code or verify turn is capped far below the wide default), so the router rides every turn the cap trimmed.

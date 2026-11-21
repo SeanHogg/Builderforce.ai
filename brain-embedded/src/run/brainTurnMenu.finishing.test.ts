@@ -52,6 +52,22 @@ describe('regression: chat #157440 — a finishing run gets its record turn befo
     expect(tail).toContain(FINISH_RECORD_BRIEF.slice(0, 40));
   });
 
+  it('regression: chat #128305 — the finishing run\'s last (no-tool) turn is marked FINAL; its record turns are not, and finishing is sticky', async () => {
+    const run = stalledRun();
+    expect(run.progress.finishing).toBe(false);
+    run.progress.beginRecordingFinish(1);
+    const record = await brainTurnMenu(run, envAt(41), CATALOG.length);
+    expect(names(record?.tools).length).toBeGreaterThan(0);
+    expect(record && 'final' in record ? record.final : undefined).toBeUndefined();
+    expect(run.progress.finishing).toBe(true);
+    const last = await brainTurnMenu(run, envAt(42), CATALOG.length);
+    expect(last?.tools).toEqual([]);
+    expect(last?.final).toBe(true);
+    // The finish is spent, the run is not un-finished: a later ordinary menu leaves `finishing` set.
+    await brainTurnMenu(run, envAt(43), CATALOG.length);
+    expect(run.progress.finishing).toBe(true);
+  });
+
   it('a finish / record turn never carries the steer note', async () => {
     const run = stalledRun();
     run.progress.beginRecordingFinish(1);

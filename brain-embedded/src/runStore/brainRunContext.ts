@@ -155,6 +155,8 @@ export interface BrainRunContext {
   restateRecoveryUsed: boolean;
   /** One re-prompt per run for a narration turn that ended while a tool call was still running (`deliveryGates.ts`). */
   pendingNarrationRecoveryUsed: boolean;
+  /** A FINISHING run already traced the delivery gates it did not ask (`run/finishSkipsGates.ts`): once per run. */
+  finishSkipNoted: boolean;
   /** The planner was already told once that its `hand_off` tasks overlap (`handOffParallelism.ts`); the next plan is carried out as is. */
   handOffClashRefused?: boolean;
   /** Re-prompts this run has had from the host's stop hook (bounded in `stopHooks.ts`). */

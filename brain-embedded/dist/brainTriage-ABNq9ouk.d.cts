@@ -910,6 +910,31 @@ declare function describeLiveStep(step: BrainRunActivity, capturedAtMs: number):
 declare function midRunNotice(activity: BrainRunActivity | null | undefined, capturedAtMs: number): string;
 
 /**
+ * The `provider-failure` triage cause: the LATEST run ended on a failed `llm.complete` (a provider / stream failure the run did not
+ * recover from). VS Code chat #128305 ended on an xAI doom-loop StreamInterruptedError after a delivery gate re-prompted a turn that
+ * offered no tools — and triage named "TOOL NOT ADVERTISED", which sent the reader after the tool selection instead of the provider
+ * failure (and the gate that caused it). Split out of `brainTriage.ts` (already large): the finding is measured here, ranked in
+ * `brainVerdict.ts`, worded in `brainDiagnosticsText.ts`. Pure over the trace.
+ */
+
+/** What the run's last, unrecovered failed completion was. */
+interface ProviderFailureFinding {
+    /** The model the failed request was made to. */
+    model: string;
+    /** The error as recorded (`<name>: <message>`). */
+    message: string;
+    /** Whether the turn was retried on another model (`llm.stream_interrupted` / `llm.transport_error`) or the run failed over. */
+    failoverTried: boolean;
+    /**
+     * The failed request offered NO tools and the step before it was a delivery gate's re-prompt (`loop.recover_*`): the model was
+     * asked to act with nothing to act with.
+     */
+    gateRepromptedNoTools: boolean;
+    /** The run kept the answer the gate had sent back instead of ending on the error (`loop.reprompt_failed_answer_kept`). */
+    answerKept: boolean;
+}
+
+/**
  * The run VERDICT — the "Likely cause" a triager reads first — as one pure decision over
  * signals `computeBrainDiagnostics` has already measured. Split out of `brainTriage.ts` so
  * the ordering of causes (and the two states that are not causes at all: a run still in
@@ -934,6 +959,10 @@ declare function midRunNotice(activity: BrainRunActivity | null | undefined, cap
  * OUR fault rather than the model's, and the remedy ("pick a different model") that
  * `tool-calls-not-emitted` prescribes is actively wrong for them.
  *
+ * `provider-failure` (the LATEST run ended on a failed completion it did not recover from) outranks both of those: the
+ * run ENDED on the provider, and a no-tools turn just before it is what a delivery gate's re-prompt looks like, not a
+ * selection fault (VS Code chat #128305 read "TOOL NOT ADVERTISED" over an xAI doom-loop failure).
+ *
  * `no-progress` sits above `context-exhaustion` and `model-degradation` for the same
  * reason: a run that re-read one file until its budget was gone will ALSO show a high
  * prompt peak and truncated tool results, so the context signals fire — but they are a
@@ -944,7 +973,7 @@ declare function midRunNotice(activity: BrainRunActivity | null | undefined, cap
  * it is a verdict about the run's OUTCOME, not its mechanics, so any genuine exhaustion,
  * model fault or narrated-call failure explains the missing dispatch better and outranks it.
  */
-type LikelyCause = 'run-in-progress' | 'memory-answered' | 'no-tools-advertised' | 'tool-not-advertised' | 'tool-calls-not-emitted' | 'answered-in-prose' | 'no-progress' | 'context-exhaustion' | 'model-degradation' | 'app-errors-unresolved' | 'work-filed-not-staffed' | 'inconclusive' | 'healthy';
+type LikelyCause = 'run-in-progress' | 'memory-answered' | 'provider-failure' | 'no-tools-advertised' | 'tool-not-advertised' | 'tool-calls-not-emitted' | 'answered-in-prose' | 'no-progress' | 'context-exhaustion' | 'model-degradation' | 'app-errors-unresolved' | 'work-filed-not-staffed' | 'inconclusive' | 'healthy';
 
 /**
  * Brain execution triage — capture the Brain's run (LLM steps, tool chain,
@@ -1341,6 +1370,8 @@ interface BrainDiagnostics {
      * or a later read came back clean. See {@link unresolvedAppFailuresInTrace}.
      */
     unresolvedAppFailures: number;
+    /** The LATEST run's last completion failed and was not recovered (`providerFailureCause.ts`); null when it did not. */
+    providerFailure: ProviderFailureFinding | null;
     /** Best-effort verdict — the header a triager reads first. Ordering: `brainVerdict.ts`. */
     likelyCause: LikelyCause;
 }

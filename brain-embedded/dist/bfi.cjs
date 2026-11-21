@@ -371,6 +371,7 @@ function onnxBonsai(row) {
     requires: { minBufferBytes: WEBGPU_DEFAULT_BINDING_BYTES }
   };
 }
+var ONNX_BONSAI_CATALOG = ONNX_BONSAI.map(onnxBonsai);
 function webllm(entry) {
   const binding = entry.lowResource ? WEBGPU_DEFAULT_BINDING_BYTES : WEBLLM_FULL_BINDING_BYTES;
   return {
@@ -401,7 +402,6 @@ var LOCAL_MODEL_CATALOG = [
   bonsai("1.7B", 17e8, 248302272, 32768, 28, 2 * GIB),
   bonsai("4B", 4e9, 572270624, 32768, 36, 4 * GIB),
   bonsai("8B", 819e7, 1158654496, 65536, 36, 8 * GIB),
-  ...ONNX_BONSAI.map(onnxBonsai),
   ...WEBLLM_CATALOG.map(webllm)
 ];
 function isLocalChatModel(row) {

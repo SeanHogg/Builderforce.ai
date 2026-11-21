@@ -31,8 +31,13 @@ export interface TurnSelection {
   tools: readonly ToolSchema[] | void;
   toolChoice?: "required";
   tail?: readonly string[];
-  /** A3's `finish`: the verified run's final report — no tools, the run's own role, and never judged as a stall. */
+  /**
+   * The run's final report — no tools, and never judged as a stall: A3's `finish` (the guards', which also keeps the run's own
+   * role) or the surface's own final turn (`TurnMenu.final`, routed as any no-tool turn the surface asks).
+   */
   final?: true;
+  /** Who made the turn final: the guards' A3 finish (spent by `finalTurnDone` once answered) or the surface's menu. */
+  finalBy?: "guards" | "surface";
 }
 
 /** What a surface's own tool answered, for the no-progress count: from its read cache, or only conversational. */
@@ -119,7 +124,8 @@ export async function completeTurn(
   // The model policy is asked about the tools this turn will ADVERTISE: a turn with none
   // is conversation, and asks for the `chat` role.
   // A3's final turn has no tools but is NOT conversation: it keeps the run's role and model (`PolicyContext.finalTurn`).
-  const mctx = { ...pctx, tools, ...(made?.final ? { finalTurn: true as const } : {}) };
+  // A surface's own final turn (`TurnMenu.final`) routes as the surface always asked it (a no-tool turn): only its judgement changes.
+  const mctx = { ...pctx, tools, ...(made?.finalBy === "guards" ? { finalTurn: true as const } : {}) };
   const decision = await hooks.model.resolve(mctx);
   // The model ASKED for: the policy's pick - absent on purpose after a pin was released -
   // else, only when no policy spoke, the pin. Never the model a previous turn was served,

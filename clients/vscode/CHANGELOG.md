@@ -2,6 +2,12 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.203] — A run that wraps up keeps its final report
+
+- **Fixed: a run that stopped to report could end on "the model got stuck in a loop".** When a run stopped making changes and wrote its final report, it was then told to commit with no way to do so, and the model repeated itself until the stream was cut. The final report is now the answer: it says what is done and what is left, and the run ends there.
+- **Fixed: one bad answer from a model could end the run.** If a model breaks mid-answer, the run now retries on another model, and returns to your pinned model when it can. A good answer the run already gave is never replaced by the error.
+- **Clearer diagnostics.** When a run ends on a provider failure, the report says so first and names the model, the error and whether a retry was tried, instead of pointing at an unrelated cause.
+
 ## [2026.10.197] — `/manifest init` routes `/api` only where your app really serves it
 
 - **Fixed: a Vite app at the repo root with a backend folder got no `/api` routing.** It was counted as two frontends. It is now one, and the route is written when the dev proxy or the backend shows `/api`.

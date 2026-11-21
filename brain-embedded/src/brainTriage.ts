@@ -26,6 +26,7 @@ import { isCodeChangeTool } from './localWorkspaceTools';
 import { LOCAL_TICKET_CREATE_LABEL } from './ticketToolVocabulary';
 import { READ_FILE_TOOL } from './toolResultBudget';
 import { midRunNotice, type BrainRunActivity } from './runActivity';
+import { providerFailureInTrace, type ProviderFailureFinding } from './providerFailureCause';
 import {
   CONTEXT_PROMPT_PEAK,
   LARGE_LOSSY_RESULT_BYTES,
@@ -672,6 +673,8 @@ export interface BrainDiagnostics {
    * or a later read came back clean. See {@link unresolvedAppFailuresInTrace}.
    */
   unresolvedAppFailures: number;
+  /** The LATEST run's last completion failed and was not recovered (`providerFailureCause.ts`); null when it did not. */
+  providerFailure: ProviderFailureFinding | null;
   /** Best-effort verdict — the header a triager reads first. Ordering: `brainVerdict.ts`. */
   likelyCause: LikelyCause;
 }
@@ -1013,9 +1016,12 @@ export function computeBrainDiagnostics(
     && (staffing.verdict === 'filed-not-staffed' || staffing.verdict === 'staffing-refused');
   const unresolvedAppFailures = unresolvedAppFailuresInTrace(events);
   const running = ctx.running === true;
+  // The latest run ENDED on the provider (a failed completion it did not recover from) — never read as a tool-exposure fault.
+  const providerFailure = running ? null : providerFailureInTrace(events, messages);
   const likelyCause = decideLikelyCause({
     running,
     memoryOnlyRun,
+    providerFailure: providerFailure !== null,
     noToolsAdvertised,
     narratedUnadvertised: narratedUnadvertisedTools.length > 0,
     announcedUnmadeToolCall,
@@ -1081,6 +1087,7 @@ export function computeBrainDiagnostics(
     sessionShipped,
     memoryUsage,
     unresolvedAppFailures,
+    providerFailure,
     likelyCause,
   };
 }

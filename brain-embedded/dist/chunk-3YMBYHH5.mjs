@@ -11983,6 +11983,37 @@ function requestedReadWindow2(out, start, end) {
   return isReadFileResult(out) ? sliceReadFile(out, start, end) : out;
 }
 
+// src/providerFailureCause.ts
+var RETRY_LABELS = /* @__PURE__ */ new Set(["llm.stream_interrupted", "llm.transport_error", "loop.model_failover"]);
+var isFailedCompletion = (ev) => ev.label === "llm.complete" && (ev.isError === true || ev.category === "error");
+var argsOf2 = (ev) => ev.args && typeof ev.args === "object" ? ev.args : {};
+function providerFailureInTrace(events, messages = []) {
+  const slices = splitRuns(events, messages);
+  const run = slices[slices.length - 1]?.events ?? [];
+  const completions = run.map((ev, i) => ({ ev, i })).filter(({ ev }) => ev.label === "llm.complete");
+  const last = completions[completions.length - 1];
+  if (!last || !isFailedCompletion(last.ev)) return null;
+  const args = argsOf2(last.ev);
+  const failure = args.failure && typeof args.failure === "object" ? args.failure : void 0;
+  const previous = completions[completions.length - 2];
+  const since = run.slice(previous ? previous.i + 1 : 0, last.i);
+  const retried = since.some((ev) => RETRY_LABELS.has(ev.label));
+  const reprompted = since.some((ev) => ev.label.startsWith("loop.recover_"));
+  return {
+    model: typeof args.model === "string" && args.model ? args.model : "default",
+    message: typeof last.ev.result === "string" ? last.ev.result : String(last.ev.result ?? "unknown error"),
+    failoverTried: retried,
+    gateRepromptedNoTools: reprompted && failure?.toolCount === 0,
+    answerKept: run.slice(last.i + 1).some((ev) => ev.label === "loop.reprompt_failed_answer_kept")
+  };
+}
+function providerFailureVerdict(f) {
+  const failover = f.failoverTried ? "A failover to another model was tried and failed too." : "No failover to another model was tried.";
+  const gate = f.gateRepromptedNoTools ? " The request that failed came right after a delivery gate re-prompted the run: a delivery gate re-prompted a turn that offered no tools (the model was asked to act with nothing to act with)." : "";
+  const headline = f.answerKept ? `PROVIDER FAILURE on the re-prompt \u2014 the run kept the answer it had already given. The re-prompt's completion on ${f.model} failed (${f.message}) and was not recovered.` : `PROVIDER FAILURE \u2014 the run's last completion on ${f.model} failed (${f.message}) and was not recovered, and the run ended on the error.`;
+  return `${headline} ${failover}${gate} This is the provider's stream failing, not a tool the model was not offered: read the failed \`llm.complete\` step below.`;
+}
+
 // src/brainVerdict.ts
 import { HISTORY_TOKEN_BUDGET } from "@seanhogg/builderforce-memory/working";
 var CONTEXT_PROMPT_PEAK = Math.round(HISTORY_TOKEN_BUDGET * 1.5);
@@ -11990,6 +12021,7 @@ var LARGE_LOSSY_RESULT_BYTES = 2e4;
 function decideLikelyCause(s) {
   if (s.running) return "run-in-progress";
   if (s.memoryOnlyRun) return "memory-answered";
+  if (s.providerFailure) return "provider-failure";
   if (s.noToolsAdvertised) return "no-tools-advertised";
   if (s.narratedUnadvertised) return "tool-not-advertised";
   if (s.announcedUnmadeToolCall) return "tool-calls-not-emitted";
@@ -12050,6 +12082,8 @@ function verdictText(d) {
       return 'Run in progress \u2014 verdict pending. The capture was taken while the run was still executing, so no cause is named and no "nothing was changed" claim is made; copy the report again once the run settles.';
     case "memory-answered":
       return `ANSWERED FROM MEMORY \u2014 no model ran this turn. The reply was served by the memory-first short-circuit (${(d.memoryAnswers ?? []).map((m) => m.source === "evermind" ? `the project Evermind SSM${m.projectId != null ? ` of project #${m.projectId}` : ""}${m.version != null ? ` v${m.version}` : ""}` : m.source === "symbol-index" ? "the workspace symbol index" : m.source === "deterministic" ? `the deterministic workspace action ${m.actionId ?? ""}`.trim() : "the Q&A cache").join(", ")}), so zero turns, zero tokens and zero tool calls is EXPECTED, not a fault. ${evermindAnswers.length ? "The Evermind SSM cannot call tools and answers only from what it has learned, so it can neither fetch live data nor do work \u2014 if the reply was wrong, garbled or stale, that is the cause. Turn Memory off for this chat, or disable inference on that head." : (d.memoryAnswers ?? []).every((m) => m.source === "symbol-index") ? 'The request was only "where is X defined?" and the symbol index resolved every name, so the definitions were listed without a model; ask for anything more to reach the model.' : (d.memoryAnswers ?? []).every((m) => m.source === "symbol-index" || m.source === "deterministic") ? "A deterministic workspace action (the PreFetch gate) settled the request without a model; ask for anything more to reach the model." : "The reply is a replay of an earlier answer to the same question; ask a differently-worded question to reach the model."} Switching models changes nothing here.`;
+    case "provider-failure":
+      return d.providerFailure ? providerFailureVerdict(d.providerFailure) : "PROVIDER FAILURE \u2014 the run's last completion failed and was not recovered.";
     case "no-tools-advertised":
       return 'NO TOOLS ADVERTISED \u2014 at least one turn was handed ZERO tool definitions, so it could not have emitted a call whatever it wanted to do. This is a catalog/config failure on our side, not a model fault: the gateway MCP catalog (`/llm/v1/mcp/tools`) failed to load, or no actions were registered for this surface. See the "Tools available to the model" line in the Chat diagnostics block for the fetch error. Switching models will not help.';
     case "tool-not-advertised":
@@ -12526,9 +12560,11 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
   const workFiledNotStaffed = sessionShipped === 0 && (staffing.verdict === "filed-not-staffed" || staffing.verdict === "staffing-refused");
   const unresolvedAppFailures = unresolvedAppFailuresInTrace(events);
   const running = ctx.running === true;
+  const providerFailure = running ? null : providerFailureInTrace(events, messages);
   const likelyCause = decideLikelyCause({
     running,
     memoryOnlyRun,
+    providerFailure: providerFailure !== null,
     noToolsAdvertised,
     narratedUnadvertised: narratedUnadvertisedTools.length > 0,
     announcedUnmadeToolCall,
@@ -12593,6 +12629,7 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
     sessionShipped,
     memoryUsage,
     unresolvedAppFailures,
+    providerFailure,
     likelyCause
   };
 }
@@ -13121,4 +13158,4 @@ export {
   toolCallArgBytes,
   createComposingActivity
 };
-//# sourceMappingURL=chunk-CNR67FCZ.mjs.map
+//# sourceMappingURL=chunk-3YMBYHH5.mjs.map

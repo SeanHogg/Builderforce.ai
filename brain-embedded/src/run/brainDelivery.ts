@@ -9,12 +9,13 @@
 import { liftProseAskUser, replayTextOf } from '@builderforce/agent-loop';
 import type { DeliveryLedger, DeliveryTurn, LadderRung } from '@builderforce/agent-run';
 import { askStopHook, MAX_STOP_HOOK_ROUNDS } from '../stopHooks';
-import { deliveryGates } from '../runStore/deliveryGates';
+import { deliveryGates, PENDING_NARRATION_GATE } from '../runStore/deliveryGates';
 import { skipsVerifyStage } from '../runStore/pipelineRoute';
 import { emit, nowIso, pushTrace } from '../runStore/runCells';
 import { persistReply, type BrainRunContext } from '../runStore/brainRunContext';
 import { persistMidTurnText } from '../runStore/turnPersistence';
 import type { LastTurn } from './brainTurn';
+import { noteFinishSkipsGates } from './finishSkipsGates';
 
 /** The stop hook's counter key; the other rungs are `deliveryGates.ts`'s. */
 const STOP_HOOK_RUNG = 'brain.stop_hook';
@@ -36,6 +37,12 @@ export function brainDeliveryLedger(run: BrainRunContext, last: LastTurn): Deliv
     const full = asWritten(content).trim();
     return (canAskUser ? liftProseAskUser(full) : full) || 'No response.';
   };
+  /** The workspace stop hook's directive for this turn, or null. */
+  const askStop = (): Promise<string | null> =>
+    askStopHook(req.onStop, { codeChanged: c.codeChanged, touchedFiles: c.touchedFiles, requestText: userRequest, round: run.stopHookRounds });
+  /** A finishing run's answer was taken without asking the stop hook or any gate: say so, once (`finishSkipsGates.ts`). */
+  const skippedByFinish = (content: string): Promise<void> =>
+    noteFinishSkipsGates(run, last.step, content, { id: STOP_HOOK_RUNG, applies: async () => (await askStop()) !== null });
   return {
     // The closing answer after a failure streak is the Brain's own (`runStore/failureClose.ts`, run by the adapter tail). A host that
     // cannot run a tool judges no stall at all (the rungs are none): the turn IS the answer.
@@ -59,16 +66,28 @@ export function brainDeliveryLedger(run: BrainRunContext, last: LastTurn): Deliv
       for (const write of held.splice(0)) write();
     },
     accept,
+    // The final turn the ladder never judges (`TurnMenu.final`): a FINISHING run records the gates it did not ask.
+    async finalAccepted({ content }) {
+      if (runTool && run.progress.finishing) await skippedByFinish(content);
+    },
     async rungs(turn: DeliveryTurn): Promise<readonly LadderRung[]> {
       // A host that cannot run a tool owes nothing: the turn IS the answer.
       if (!runTool) return [];
+      // A FINISHING run ("make no more changes and run nothing") is never sent back for more work: no stop hook, no gate.
+      if (run.progress.finishing) {
+        await skippedByFinish(turn.content);
+        return [];
+      }
+      // A rung that sends a would-be final answer back: should the re-prompt then fail on the provider, the run keeps that answer (`brainSettle.ts`).
+      const sentBackAnswer = (): void => { last.sentBackAnswer = { step: last.step }; };
       // The WORKSPACE's end-of-run directives, asked before the ship gate so whatever they make the run do is part of the change that ships.
-      const stopNudge = await askStopHook(req.onStop, { codeChanged: c.codeChanged, touchedFiles: c.touchedFiles, requestText: userRequest, round: run.stopHookRounds });
+      const stopNudge = await askStop();
       // A blocked finish that already wrote files continues on the review model; a QUICK run has no verify stage.
       const verifiable = c.codeChanged && !skipsVerifyStage(run.pipeline);
       const stopHook: LadderRung = {
         id: STOP_HOOK_RUNG, applies: !!stopNudge, restate: Array<string>(MAX_STOP_HOOK_ROUNDS).fill(stopNudge ?? ''), free: MAX_STOP_HOOK_ROUNDS, quote: true, spent: 'fall', entersVerify: verifiable,
         onRestate: () => {
+          sentBackAnswer();
           run.stopHookRounds += 1;
           note('loop.stop_hook', `A workspace stop hook held the run for another turn: ${(stopNudge ?? '').slice(0, 200)}`, { round: run.stopHookRounds });
         },
@@ -81,6 +100,8 @@ export function brainDeliveryLedger(run: BrainRunContext, last: LastTurn): Deliv
         spent: 'fall',
         entersVerify: gate.entersVerify && verifiable,
         onRestate: () => {
+          // A narration while a call is still running is not an answer the run could settle on.
+          if (gate.id !== PENDING_NARRATION_GATE) sentBackAnswer();
           gate.spend();
           note(gate.trace.label, gate.trace.result, gate.trace.args());
         },

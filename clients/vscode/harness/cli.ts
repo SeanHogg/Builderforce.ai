@@ -155,9 +155,9 @@ async function main(): Promise<number> {
       } else {
         console.log(result.transcript);
       }
-      // A run that never emitted a tool call, or was handed none, is a failure worth a
-      // non-zero exit so CI and shell pipelines can gate on it.
-      const bad = new Set(['no-tools-advertised', 'tool-not-advertised', 'tool-calls-not-emitted']);
+      // A run that never emitted a tool call, was handed none, or ended on a provider failure
+      // it did not recover from is a failure worth a non-zero exit so CI and shell pipelines can gate on it.
+      const bad = new Set(['provider-failure', 'no-tools-advertised', 'tool-not-advertised', 'tool-calls-not-emitted']);
       return bad.has(result.diagnostics.likelyCause) ? 2 : 0;
     } catch (e) {
       console.error(`probe failed: ${e instanceof Error ? e.message : String(e)}`);
