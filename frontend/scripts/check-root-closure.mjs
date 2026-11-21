@@ -45,6 +45,15 @@
  * got easier; only the noise around it went away.
  *
  * Deliberate raises, so a name in the baseline always has an argument:
+ *   +1 / -8 files (2026-11-21, Worker size) — `components/legal/LazyLegalDocPreview.tsx`
+ *     (~5 lines of code: one `next/dynamic(..., { ssr: false })`). It REPLACES the static
+ *     edge `LegalDocModal`/`OnboardingGate` → `admin/LegalDocPreview` → `DocumentMarkdown` →
+ *     `markdownRender` → `markdownPipeline` (unified, remark/rehype, KaTeX, parse5), and the
+ *     same pass made `components/brain/McpExtensionsBridge.tsx` (→ `runtimeToolRoute.ts`)
+ *     async in ConditionalAppShell. Net: the closure LOST seven files. The edge build inlines
+ *     every `import()` (Next compiles edge entries with `asyncChunks: false`), so this file's
+ *     static edges are what every route function of the Cloudflare Worker carries — those
+ *     two cuts were most of the bundle's headroom (scripts/check-worker-size.mjs).
  *   +1 file (2026-11-18, Brain runtime tools route to the run target) —
  *     `lib/runTarget/runtimeTools/runtimeToolRoute.ts` (~30 lines, imports only the
  *     `@builderforce/creation-canvas-contract` package ROOT — not a leaf entry point — which

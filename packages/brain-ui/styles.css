@@ -2108,6 +2108,90 @@
 .bf-cmp-input::placeholder { color: var(--bf-text-muted, #8a8a8a); }
 .bf-cmp-input:disabled { cursor: not-allowed; opacity: 0.6; }
 
+/* The `@` / `#` / `/` typeahead (`useTriggerAutocomplete` → `TriggerPopup`): floats above
+   the prompt panel (position: relative). Web semantic tokens first, then the shared
+   `--bf-*` contract, then the editor's `--vscode-*` theme, then a literal — light AND dark
+   on every host. Never wider than the panel, so it fits a 300px editor sidebar. */
+.bf-cmp-typeahead {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  z-index: 60;
+  width: 360px;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.bf-cmp-typeahead__panel,
+.bf-cmp-typeahead__empty {
+  box-sizing: border-box;
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle, var(--bf-border, var(--vscode-panel-border, rgba(148, 163, 184, 0.3))));
+  background: var(--bg-elevated, var(--bf-surface, var(--vscode-editorWidget-background, #1e1e1e)));
+  color: var(--text-primary, var(--bf-text, var(--vscode-foreground, inherit)));
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.28);
+}
+.bf-cmp-typeahead__panel { padding: 4px; }
+.bf-cmp-typeahead__empty {
+  padding: 10px 12px;
+  font-size: 13px;
+  color: var(--text-muted, var(--bf-text-muted, var(--vscode-descriptionForeground, #6b7280)));
+}
+.bf-cmp-typeahead__heading {
+  padding: 4px 8px 5px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted, var(--bf-text-muted, var(--vscode-descriptionForeground, #6b7280)));
+}
+.bf-cmp-typeahead__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 264px;
+  overflow-y: auto;
+}
+.bf-cmp-typeahead__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 7px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.bf-cmp-typeahead__item.is-active {
+  background: var(--surface-coral-soft, var(--vscode-list-activeSelectionBackground, rgba(59, 130, 246, 0.18)));
+}
+.bf-cmp-typeahead__item.is-disabled { cursor: default; opacity: 0.6; }
+.bf-cmp-typeahead__col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.bf-cmp-typeahead__name,
+.bf-cmp-typeahead__title,
+.bf-cmp-typeahead__detail {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bf-cmp-typeahead__name { font-size: 13px; font-weight: 600; }
+.bf-cmp-typeahead__title { flex: 1; font-size: 13px; }
+.bf-cmp-typeahead__detail {
+  font-size: 11px;
+  color: var(--text-muted, var(--bf-text-muted, var(--vscode-descriptionForeground, #6b7280)));
+}
+.bf-cmp-typeahead__code {
+  font-family: var(--font-mono, var(--vscode-editor-font-family, monospace));
+  font-size: 12px;
+  font-weight: 600;
+}
+.bf-cmp-typeahead__tag {
+  flex-shrink: 0;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted, var(--bf-text-muted, var(--vscode-descriptionForeground, #6b7280)));
+}
+
 .bf-cmp-iconbtn {
   display: inline-flex;
   align-items: center;

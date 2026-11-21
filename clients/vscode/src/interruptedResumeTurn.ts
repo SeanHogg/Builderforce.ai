@@ -6,7 +6,9 @@
  * The turn carries the original ask verbatim, the plan as it stood, the files changed so far, the last steps and what
  * became of the sub-agents ({@link renderInterruptedChildren}), and scopes the run to THIS chat's task. Every word of it
  * is the panel's localized `ir.*` labels (`interruptedRunsLabels.ts`, read in the webview through `makeT`) - the turn is
- * sent as the person's own message, so it is in their language; the dynamic parts (ask, plan, files, steps, a child's
+ * sent in the person's chat, so it is in their language, but it is NOT their words: `useChatSend.continueChat` sends it
+ * marked injected (`brain-embedded/src/injectedTurn.ts`), so the run never reads it as a person turn and a quoted
+ * sub-agent brief ("Do not commit.") cannot set the chat's publish hold (VS Code chat #157440); the dynamic parts (ask, plan, files, steps, a child's
  * handle, label, owner, ticket, brief and report) are data, quoted as journaled. `{name}` placeholders in a label are
  * filled here. The ask also becomes the run's request text, so the run's recall is asked about THIS task.
  *

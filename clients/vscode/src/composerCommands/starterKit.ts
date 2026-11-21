@@ -3,8 +3,10 @@
  * `ide-templates` part registry, written into a workspace folder.
  *
  * - A kit with issues (a fragment conflict, a part that needs another) writes NOTHING.
- * - A folder holding anything besides `.git` / `.vscode` needs a modal approval first,
- *   which names every file that would be overwritten. Declined ⇒ nothing is written.
+ * - A folder holding anything besides `.git` / `.vscode` / `.builderforce` (the folder the
+ *   extension itself creates) needs a modal approval first, which names every file that would
+ *   be overwritten. Declined ⇒ nothing is written. Only the emptiness test ignores those
+ *   folders: a kit file already there is still a conflict.
  * - A path that is a symbolic link, or leads outside the folder, writes NOTHING and is
  *   named in the reply (`writeContainment.ts`). Every path is checked first; a write that
  *   still fails partway (the folder changed meanwhile) names the file and every file
@@ -16,9 +18,10 @@ import type { ComposerCommandExecutor } from "./dispatch";
 import type { ComposerCommandText } from "./labels";
 import { chooseFolder, inFolder, launchFollowUp, type ComposerWorkspacePort } from "./workspacePort";
 import { WriteRefusedError, writeRefusedReply } from "./writeContainment";
+import { DIRECTIVES_DIR } from "../hooks/hookConfig";
 
-/** Entries a fresh folder may already hold: version control and editor settings. */
-const IGNORED_ENTRIES = new Set([".git", ".vscode"]);
+/** Entries a fresh folder may already hold: version control, editor settings and the extension's own folder. */
+const IGNORED_ENTRIES = new Set([".git", ".vscode", DIRECTIVES_DIR]);
 /** How many conflicting paths the approval names before eliding the rest. */
 const MAX_LISTED_CONFLICTS = 20;
 
@@ -43,9 +46,10 @@ export function starterKitExecutor({ port, text }: StarterKitDeps): ComposerComm
     const refused = await port.checkWrites(paths.map((file) => inFolder(folder, file)));
     if (refused.length > 0) return writeRefusedReply(text, refused);
     const occupied = (await port.listDir(folder.path)).some((name) => !IGNORED_ENTRIES.has(name));
-    if (occupied) {
-      const conflicts: string[] = [];
-      for (const file of paths) if (await port.exists(inFolder(folder, file))) conflicts.push(file);
+    // Checked even in an "empty" folder: a kit file inside an ignored folder (`.builderforce/…`) is still a conflict.
+    const conflicts: string[] = [];
+    for (const file of paths) if (await port.exists(inFolder(folder, file))) conflicts.push(file);
+    if (occupied || conflicts.length > 0) {
       const listed = conflicts.length > MAX_LISTED_CONFLICTS
         ? [...conflicts.slice(0, MAX_LISTED_CONFLICTS), "…"]
         : conflicts;
@@ -76,7 +80,7 @@ export function starterKitExecutor({ port, text }: StarterKitDeps): ComposerComm
         text.resources(Object.keys(kit.manifest.resources ?? {})),
         next.line,
       ],
-      ...(next.action ? { action: next.action } : {}),
+      ...(next.actions ? { actions: next.actions } : {}),
     };
   };
 }

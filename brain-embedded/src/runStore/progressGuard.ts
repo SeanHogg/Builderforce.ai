@@ -13,8 +13,11 @@
  *   • escalate — a forced turn through `progressBudget.ts`: `hand_off` alone while
  *     planning, the change tools alone once coding. A run asked a QUESTION is never
  *     forced to change anything, so it is steered again instead;
- *   • finish — the next turn offers NO tools and carries the detector's note, so the
- *     model writes its final report and the run ends: a verified run's idle-shaped trip
+ *   • finish — the next turn offers no change, exec or ask tools and carries the detector's
+ *     note, so the model writes its final report and the run ends. It offers ONLY the
+ *     ticket tools the work-linking directive declares as obligations (`promptTools.obligation`),
+ *     for at most FINISH_RECORD_TURNS turns, so what is still open is filed before the report
+ *     (VS Code chat #157440); a run with none offers nothing. A verified run's idle-shaped trip
  *     (its wrap-up, VS Code chat #146477), or any run's third trip, whose note asks for an
  *     honest report of what is done and what blocks the rest. Never `ask_user` — the guard
  *     never asks the person whether to continue (VS Code chat #157440). A change request
@@ -63,6 +66,11 @@ export class RunProgressGuard {
   private advisory: ProgressAction | null = null;
   /** An unverified finish was deferred once for a forced change turn (`progressGuardTurn`). */
   private stalledDeferred = false;
+  /**
+   * The run is FINISHING with its obligation tools on offer (`progressGuardTurn`): how many more turns may still record work
+   * (file / update tickets) before the last one offers nothing. Null while the run is not finishing that way.
+   */
+  private recordTurnsLeft: number | null = null;
 
   /**
    * @param on the A3 lever.
@@ -151,6 +159,45 @@ export class RunProgressGuard {
   steerInstead(note: string): void {
     this.steer = note;
   }
+
+  /** A finish offered the obligation tools: `turns` more turns may still record work before the last one offers nothing. */
+  beginRecordingFinish(turns: number): void {
+    this.recordTurnsLeft = Math.max(0, turns);
+  }
+
+  /**
+   * The next turn of a finishing run, taken once per turn: 'record' (the obligation tools again), 'final' (no tools — the
+   * report), or null when the run is not finishing that way. Finish means no more coding, whatever a later trip decides.
+   */
+  takeFinishingTurn(): 'record' | 'final' | null {
+    if (this.recordTurnsLeft === null) return null;
+    if (this.recordTurnsLeft > 0) {
+      this.recordTurnsLeft -= 1;
+      return 'record';
+    }
+    this.recordTurnsLeft = null;
+    return 'final';
+  }
+}
+
+/** Turns a finishing run may spend recording its remaining work as tickets, the finish turn itself included. */
+export const FINISH_RECORD_TURNS = 3;
+
+/** What a finish turn that offers the obligation tools adds to the detector's note. */
+export const FINISH_RECORD_BRIEF =
+  'You are FINISHING: make no more code changes and run nothing. Before your final report, file a ticket for EVERY item the person asked for that is still open (with the ticket tools offered on this turn), and update the status of the tickets you worked on. Then write the final report: what is done, and which ticket tracks each item that is not.';
+
+/** What the last turn of a finishing run says. */
+const FINISH_FINAL_BRIEF = 'Write your final report now: what is done, and which ticket tracks each requested item that is still open.';
+
+/**
+ * The tools a finish turn offers: ONLY the obligations the work-linking directive declared (`promptTools.obligation`,
+ * `chatWorkObligationTools`) that the catalog holds — record the remaining work, update statuses. Never a write or exec tool.
+ */
+function obligationToolsOf(run: BrainRunContext): BrainToolSpec[] {
+  const names = new Set(run.promptTools?.obligation ?? []);
+  if (names.size === 0) return [];
+  return (run.allTools ?? []).filter((t) => names.has(t.function.name));
 }
 
 /** `afterToolCalls`: the turn is over — judge it. */
@@ -175,18 +222,30 @@ function traceStep(run: BrainRunContext, step: number, s: ProgressTraceStep): vo
  * in which case its note opens the turn instead.
  */
 export function progressGuardTurn(run: BrainRunContext, step: number, selected: readonly BrainToolSpec[]): ForcedTurn | null {
+  // A finishing run stays finishing: a later trip never reopens the full menu (finish means no more coding).
+  const finishing = run.progress.takeFinishingTurn();
+  if (finishing) {
+    run.progress.takeDue();
+    const tools = finishing === 'record' ? obligationToolsOf(run) : [];
+    return { tools, brief: { role: 'user', content: tools.length > 0 ? FINISH_RECORD_BRIEF : FINISH_FINAL_BRIEF } };
+  }
   const due = run.progress.takeDue();
   if (!due) return null;
-  // The next turn is the final report — no tools, so it can neither invent an edit nor ask
-  // the person whether to continue; its answer ends the run. Verified wrap-up and the
-  // ladder's last rung alike: the note says which.
+  // The next turn is the final report — no change, exec or ask tools, so it can neither invent an
+  // edit nor ask the person whether to continue. It offers ONLY the obligation tools (VS Code chat
+  // #157440: a run ended mid-task could not record what was still open), for a bounded number of
+  // turns; with none to offer, its answer ends the run. Verified wrap-up and the ladder's last rung
+  // alike: the note says which.
   if (due.kind === 'finish') {
     const deferred = due.verified ? null : deferredFinishTurn(run, step, selected, due);
     // Steered instead: an ordinary turn, whose note carries the advice.
     if (deferred === 'steered') return null;
     if (deferred) return deferred;
-    trace(run, step, due, 'finish');
-    return { tools: [], brief: { role: 'user', content: due.note } };
+    const tools = obligationToolsOf(run);
+    trace(run, step, due, 'finish', tools.length);
+    if (tools.length === 0) return { tools: [], brief: { role: 'user', content: due.note } };
+    run.progress.beginRecordingFinish(FINISH_RECORD_TURNS - 1);
+    return { tools, brief: { role: 'user', content: `${due.note}\n\n${FINISH_RECORD_BRIEF}` } };
   }
   const advice = `PROGRESS CHECK ${due.trip}: ${progressAdvice(due.signal)}`;
   // A run asked a question is never forced to change anything.
@@ -234,14 +293,17 @@ const FORCED_MENU: Readonly<Record<'hand_off' | 'change', string>> = {
   change: 'the change tools alone',
 };
 
-function trace(run: BrainRunContext, step: number, due: TripAction, forced: 'hand_off' | 'change' | 'finish'): void {
+function trace(run: BrainRunContext, step: number, due: TripAction, forced: 'hand_off' | 'change' | 'finish', recordTools = 0): void {
+  const why = due.kind === 'finish' && due.verified ? 'the change is made and verified' : 'the run is not converging';
   pushTrace(run.c, {
     ts: nowIso(),
     category: 'message',
     label: 'loop.progress_forced',
-    args: { step, trip: due.trip, signal: due.signal.kind, forced },
-    result: forced === 'finish'
-      ? `progress check ${due.trip} (${due.signal.kind}) — ${due.kind === 'finish' && due.verified ? 'the change is made and verified' : 'the run is not converging'}: this turn offers no tools and the run writes its final report.`
-      : `progress check ${due.trip} (${due.signal.kind}) — this turn offers ${FORCED_MENU[forced]} and requires a call.`,
+    args: { step, trip: due.trip, signal: due.signal.kind, forced, ...(recordTools > 0 ? { recordTools } : {}) },
+    result: forced !== 'finish'
+      ? `progress check ${due.trip} (${due.signal.kind}) — this turn offers ${FORCED_MENU[forced]} and requires a call.`
+      : recordTools > 0
+        ? `progress check ${due.trip} (${due.signal.kind}) — ${why}: this turn offers only the ${recordTools} ticket tool(s) to record what is still open, and the run writes its final report.`
+        : `progress check ${due.trip} (${due.signal.kind}) — ${why}: this turn offers no tools and the run writes its final report.`,
   });
 }

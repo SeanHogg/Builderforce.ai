@@ -55,11 +55,11 @@ export async function chooseFolder(port: ComposerWorkspacePort, placeHolder: str
  * How a reply that wrote an app ends: the `/launch` hint and action — or, in a remote
  * extension host where `/launch` cannot run, why not, and no action.
  */
-export function launchFollowUp(port: ComposerWorkspacePort, text: ComposerCommandText): { line: string; action?: ComposerReplyAction } {
+export function launchFollowUp(port: ComposerWorkspacePort, text: ComposerCommandText): { line: string; actions?: ComposerReplyAction[] } {
   const remote = port.remoteName();
   return remote
     ? { line: text.launchRemote(remote) }
-    : { line: text.launchHint, action: { label: `/${LAUNCH_COMMAND_ID}`, command: `/${LAUNCH_COMMAND_ID}` } };
+    : { line: text.launchHint, actions: [{ label: `/${LAUNCH_COMMAND_ID}`, command: `/${LAUNCH_COMMAND_ID}` }] };
 }
 
 /** A project-relative POSIX path (`web/package.json`) under a folder, on this platform. */

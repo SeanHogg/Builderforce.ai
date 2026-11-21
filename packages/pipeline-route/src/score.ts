@@ -43,6 +43,11 @@ export interface PipelineFeatures {
   actionType: string;
   /** The request says "full pipeline" — the user's own override. */
   forceFull: boolean;
+  /**
+   * The request is about TICKETS against a spec — file them, review a spec/PRD for what is done or open, reconcile open
+   * items ({@link TICKET_INTENT_PATTERNS}). That work starts with analysis (plan), never a quick coding pass. Absent ⇒ false.
+   */
+  ticketIntent?: boolean;
 }
 
 /** The weights of the logistic. Positive pulls toward `full`, negative toward `quick`. */
@@ -56,6 +61,8 @@ export interface RouteWeights {
   broadScope: number;
   questionOnly: number;
   followUp: number;
+  /** A ticket / spec-reconciliation request ({@link PipelineFeatures.ticketIntent}). Absent ⇒ 0. */
+  ticketIntent?: number;
   /** Per action type; a type not listed contributes 0. */
   actionType: Readonly<Record<string, number>>;
 }
@@ -81,6 +88,9 @@ export const ROUTE_WEIGHTS: RouteWeights = {
   broadScope: 1.0,
   questionOnly: -1.3,
   followUp: -0.3,
+  // Outweighs every quick-leaning feature together (bias, follow-up, docs, question-only: -2.6), so a ticket or spec
+  // reconciliation request always plans first (VS Code chat #157440 started "create tickets for every open item" in code).
+  ticketIntent: 3.0,
   actionType: {
     data_migration: 1.0,
     refactor: 0.9,
@@ -127,6 +137,7 @@ function contributions(f: PipelineFeatures, w: RouteWeights): Array<[string, num
     ['broad scope', f.broadScope ? w.broadScope : 0],
     ['question only', f.questionOnly ? w.questionOnly : 0],
     ['follow-up', f.followUp ? w.followUp : 0],
+    ['ticket intent', f.ticketIntent ? (w.ticketIntent ?? 0) : 0],
     [f.actionType, w.actionType[f.actionType] ?? 0],
   ];
 }
@@ -159,6 +170,21 @@ const CHANGE_VERB_RE = /\b(?:add|implement|create|build|fix|change|refactor|upda
 const FORCE_FULL_RE = /\bfull[- ]pipeline\b/i;
 
 /**
+ * The intents that make a request TICKET / SPEC reconciliation work — data, read by {@link pipelineFeaturesOf}. Any
+ * one matching sets `ticketIntent`:
+ *  - filing tickets ("create associated tickets", "why didn't you create tickets");
+ *  - reviewing a spec, PRD, roadmap or markdown plan ("review the Measure.md file", "review the PRD");
+ *  - marking a spec's items done / completed / open ("indicate items that are completed/done");
+ *  - the open / incomplete / outstanding items of a request ("open items", "items that are incomplete").
+ */
+export const TICKET_INTENT_PATTERNS: readonly RegExp[] = [
+  /\b(?:create|file|open|raise|make|add|log|write)\w*\b[^.?!\n]{0,40}\b(?:tickets?|tasks?|issues?|work\s+items?)\b/i,
+  /\breview\w*\b[^.?!\n]{0,40}\b(?:prds?|specs?|specifications?|roadmaps?|requirements|[\w-]+\.md)\b/i,
+  /\bitems?\b[^.?!\n]{0,30}\b(?:completed?|done|finished|open|incomplete|outstanding|remaining)\b/i,
+  /\b(?:open|incomplete|outstanding|remaining|unfinished)\s+(?:prd\s+)?items?\b/i,
+];
+
+/**
  * The request's features, read lexically. `actionType` is the caller's classification
  * (`classifyRunAction` in `@builderforce/workload`); `followUp` whether the request
  * continues earlier work in the conversation.
@@ -181,5 +207,6 @@ export function pipelineFeaturesOf(
     followUp: context.followUp === true,
     actionType: context.actionType ?? 'other',
     forceFull: FORCE_FULL_RE.test(text),
+    ticketIntent: TICKET_INTENT_PATTERNS.some((re) => re.test(text)),
   };
 }

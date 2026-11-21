@@ -11,7 +11,7 @@
  *   (a) its title or description contains the gap's id, or the gap's exact spec link
  *       (`docs/specs/make.md#anchor`, with or without the leading `./`); or
  *   (b) its title is the same work as the gap's summary under the ONE near-duplicate
- *       title rule (`domain/shared/nearDuplicateTitle.ts`) — the rule every idempotent
+ *       title rule (`@builderforce/agent-tools` `specs/nearDuplicateTitle.ts`) — the rule every idempotent
  *       `*.create` dedups with, so "matches a gap" and "would be deduped against it"
  *       cannot drift apart.
  * A link to a whole file (no anchor) never matches by itself: one spec file backs
@@ -25,11 +25,13 @@
  * Pure: no db, no env.
  */
 import {
+  areNearDuplicateTokens,
+  normalizeTitle,
   parseGapRegister,
   parseSpecAnchors,
+  titleTokens,
   type GapEntry,
-} from '../../domain/roadmap/gapRegister';
-import { areNearDuplicateTokens, normalizeTitle, titleTokens } from '../../domain/shared/nearDuplicateTitle';
+} from '@builderforce/agent-tools';
 
 export interface AlignTicket {
   id: number;
@@ -78,7 +80,8 @@ export interface AlignTicketsResult {
   specFilesMissing: CappedList<string>;
 }
 
-function capped<T>(all: T[], cap = ALIGN_LIST_CAP): CappedList<T> {
+/** THE capped-list shape of every `roadmap.align_tickets` output list (the spec-coverage mode's too). */
+export function capped<T>(all: T[], cap = ALIGN_LIST_CAP): CappedList<T> {
   return { items: all.slice(0, cap), total: all.length, truncated: all.length > cap };
 }
 

@@ -74,9 +74,16 @@ export interface TrustOutcome {
   lines: string[];
   /** The trust command failed: the reply is an error. */
   failed: boolean;
+  /**
+   * A browser will accept the launcher's certificate: it is trusted (or there is no TLS). False
+   * when declined, left to manual steps, or failed — VS Code's integrated browser cannot click
+   * through the warning, so the launch opens in the system browser.
+   */
+  trusted: boolean;
 }
 
-const quiet: TrustOutcome = { lines: [], failed: false };
+const quiet: TrustOutcome = { lines: [], failed: false, trusted: true };
+const untrusted = (lines: string[], failed = false): TrustOutcome => ({ lines, failed, trusted: false });
 
 /** The `execFile` options a trust step runs with. */
 export interface TrustExecOptions {
@@ -161,18 +168,18 @@ export async function ensureLauncherTrust(ca: LauncherCa | null | undefined, dep
   // A recorded "trusted" the platform now denies (removed from the store) is asked again.
   const stale = previous?.trusted === true && trusted === false;
   if (!force && !stale && previous?.fingerprint === fingerprint) {
-    return previous.trusted ? quiet : { lines: [text.trustUntrusted], failed: false };
+    return previous.trusted ? quiet : untrusted([text.trustUntrusted]);
   }
 
   const answer = await deps.ask(text.trustQuestion, text.trustApprove, text.trustSkip);
   if (answer !== "trust") {
     await deps.decision.set({ fingerprint, trusted: false });
-    return { lines: [text.trustUntrusted], failed: false };
+    return untrusted([text.trustUntrusted]);
   }
   const plan = deps.plan(ca);
   if (plan.kind === "manual") {
     await deps.decision.set({ fingerprint, trusted: false });
-    return { lines: [text.trustManual(ca.certPath), plan.instructions], failed: false };
+    return untrusted([text.trustManual(ca.certPath), plan.instructions]);
   }
   try {
     await deps.exec(plan.trust, "trust");
@@ -182,8 +189,8 @@ export async function ensureLauncherTrust(ca: LauncherCa | null | undefined, dep
     const line = error instanceof TrustCommandTimeoutError
       ? text.trustTimedOut(Math.round(error.timeoutMs / 1000))
       : text.trustFailed(error instanceof Error ? error.message : String(error));
-    return { lines: [line], failed: true };
+    return untrusted([line], true);
   }
   await deps.decision.set({ fingerprint, trusted: true });
-  return { lines: [text.trustDone], failed: false };
+  return { lines: [text.trustDone], failed: false, trusted: true };
 }

@@ -10,7 +10,7 @@ vi.mock("vscode", () => ({
 import { buildComposerCommands, starterKitChoices, starterKitExtraChoices } from "./entries";
 import { composerCommandText } from "./labels";
 
-const context = { hasWorkspace: true, noWorkspaceReason: "open a folder", stopLabel: "stop it", trustLabel: "trust it" };
+const context = { hasWorkspace: true, noWorkspaceReason: "open a folder", stopLabel: "stop it", trustLabel: "trust it", externalLabel: "open outside" };
 
 describe("composer command entries", () => {
   it("offers every named kit, every frontend × backend pair and each frontend alone, from the ide-templates registry", () => {
@@ -38,7 +38,7 @@ describe("composer command entries", () => {
   it("offers the manifest's environments and stop to /launch, and accepts any name without a manifest", () => {
     const withEnvs = buildComposerCommands({ ...context, environments: [{ value: "local" }, { value: "staging", label: "staging — declared by api" }] })
       .find((command) => command.id === "launch")!;
-    expect(withEnvs.args[0]!.choices?.map((choice) => choice.value)).toEqual(["local", "staging", "stop", "trust"]);
+    expect(withEnvs.args[0]!.choices?.map((choice) => choice.value)).toEqual(["local", "staging", "external", "stop", "trust"]);
     expect(withEnvs.args[0]!.choices?.[1]?.label).toBe("staging — declared by api");
     expect(withEnvs.example).toBe("/launch local");
     const without = buildComposerCommands(context).find((command) => command.id === "launch")!;

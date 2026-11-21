@@ -20,7 +20,14 @@
  *     On an editor surface the board tools ONLY the Brain's standing system prompt names (its
  *     ticket and close-out directives, ~19 names) are not handed as required: they compete on
  *     relevance, and a direct call to one still runs, because a closed surface is handed every
- *     name (`ownsCall`) and nothing on that path checks the menu. The surface's VOCABULARY (the host's workspace, memory and skill
+ *     name (`ownsCall`) and nothing on that path checks the menu. The exception is a directive's
+ *     declared OBLIGATIONS — the handful of ticket tools the work-linking directive tells EVERY
+ *     turn to use (create, record a delta, update a status, list and link the chat's tickets;
+ *     `brain-embedded/src/chatWorkLinking.ts` `chatWorkObligationTools`). The Brain hands those
+ *     as required, so the cap keeps them on top of its limit like any required tool: VS Code
+ *     chat #157440 told 527 capped code turns to file tickets they could not see. The wider
+ *     board family (assignees, the kanban scoping tools) still competes on relevance.
+ *     The surface's VOCABULARY (the host's workspace, memory and skill
  *     tools the prompt does NOT name) is not the surface's to require on a capped turn (the
  *     Brain splits it off, `brain-embedded/src/run/brainPlatformTools.ts`): the role set below keeps the part of it a code or verify
  *     turn needs, and the rest competes on relevance like any tool. Chat #61651 (VSIX

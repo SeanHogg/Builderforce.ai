@@ -7,6 +7,7 @@ const repo = vi.hoisted(() => ({
   resolveRepoCommitSha: vi.fn(),
   findPage: vi.fn(),
   getOrSetCached: vi.fn(),
+  listTicketsForChat: vi.fn(),
 }));
 
 vi.mock('../repos/resolveDefaultRepo', () => ({ resolveDefaultRepoForProject: repo.resolveDefaultRepoForProject }));
@@ -20,6 +21,9 @@ vi.mock('../../infrastructure/repositories/TaskRepository', () => ({
   TaskRepository: function () { return { findPage: repo.findPage }; },
 }));
 vi.mock('../../infrastructure/cache/readThroughCache', () => ({ getOrSetCached: repo.getOrSetCached }));
+vi.mock('../brain/ChatTicketService', () => ({
+  ChatTicketService: function () { return { listTicketsForChat: repo.listTicketsForChat }; },
+}));
 
 import { ROADMAP_ALIGNMENT_TOOLS } from './roadmapAlignmentToolCatalog';
 import type { BuiltinCtx } from './builtinToolContext';
@@ -156,5 +160,57 @@ describe('roadmap.align_tickets', () => {
   it('surfaces an unreadable roadmap as an error', async () => {
     const res = await tool.run(ctxFor(), { projectId: 11, roadmapPath: 'MISSING.md' }) as { error: string };
     expect(res.error).toMatch(/cannot read MISSING\.md/);
+  });
+});
+
+describe('roadmap.align_tickets — spec mode (specPath)', () => {
+  const SPEC = [
+    '## Features and tasks — status',
+    '| ID | Feature / task | Status |',
+    '|---|---|---|',
+    '| P25-01 | Presets | Complete |',
+    '| P25-09 | Slice D benchmark seeds | Incomplete |',
+    '| P33-01 | Event lake | Blocked — operator |',
+    '| OUT-02 | Sales brief export | Incomplete |',
+  ].join('\n');
+
+  beforeEach(() => {
+    FILES['docs/specs/measure.md'] = SPEC;
+  });
+
+  it('regression: chat #157440 — lists the chat\'s open spec rows no ticket covers; a backstop ticket covers nothing', async () => {
+    repo.listTicketsForChat.mockResolvedValue([
+      { kind: 'task', ref: '6926', label: 'P33-01 event lake', status: 'blocked' },
+      { kind: 'task', ref: '7001', label: 'Code change (4 files) from Brain chat #157440', status: 'in_review' },
+      { kind: 'epic', ref: '7002', label: 'Sales brief export', status: 'in_progress' },
+      { kind: 'spec', ref: '9', label: 'P25-09', status: 'draft' },
+    ]);
+    const res = await tool.run(ctxFor(), { projectId: 11, specPath: 'docs/specs/measure.md', chatId: 157440 }) as Record<string, any>;
+    expect(repo.findPage).not.toHaveBeenCalled();
+    expect(res.items).toBe(4);
+    expect(res.openItems).toBe(3);
+    expect(res.itemsByStatus).toEqual({ complete: 1, incomplete: 2, blocked: 1 });
+    expect(res.tickets).toBe(3);
+    expect(res.covered.items).toEqual([{ itemId: 'P33-01', ticketIds: [6926] }, { itemId: 'OUT-02', ticketIds: [7002] }]);
+    expect(res.missing).toEqual({
+      items: [{ itemId: 'P25-09', title: 'Slice D benchmark seeds', status: 'incomplete', section: 'Features and tasks — status', line: 5 }],
+      total: 1, truncated: false,
+    });
+    expect(res.source).toEqual({ repo: 'o/x@main', spec: 'docs/specs/measure.md', tickets: 'chat:157440' });
+    expect(res.cachedBy).toBe('commit-sha');
+    expect(repo.getOrSetCached.mock.calls[0]![1]).toBe(`roadmap-align:spec:v1:7:r1:${'a'.repeat(40)}:docs/specs/measure.md`);
+  });
+
+  it('joins the project\'s open tickets when no chat is given', async () => {
+    const res = await tool.run(ctxFor(), { projectId: 11, specPath: 'docs/specs/measure.md' }) as Record<string, any>;
+    expect(repo.findPage).toHaveBeenCalledTimes(1);
+    expect(res.missing.items.map((i: { itemId: string }) => i.itemId)).toEqual(['P25-09', 'P33-01', 'OUT-02']);
+    expect(res.missing.items[1].blocker).toBe('operator');
+    expect(res.source.tickets).toBe('project:11:open');
+  });
+
+  it('surfaces an unreadable spec as an error', async () => {
+    const res = await tool.run(ctxFor(), { projectId: 11, specPath: 'docs/specs/missing.md' }) as { error: string };
+    expect(res.error).toMatch(/cannot read docs\/specs\/missing\.md/);
   });
 });

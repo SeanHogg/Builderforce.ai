@@ -65,9 +65,17 @@ export interface ComposerCommandText extends ComposerCommandLabels {
   /** A `/launch` environment choice when several folders are open: which folders' manifests declare it. */
   launchEnvironmentIn(environment: string, folders: readonly string[]): string;
   launchDetected: string;
-  launchStarted(folder: string): string;
-  launchReopened(folder: string): string;
-  launchOpenAgain: string;
+  /** The launcher started and opened: in VS Code's integrated browser, or (`external`) the system browser. */
+  launchStarted(folder: string, external: boolean): string;
+  launchReopened(folder: string, external: boolean): string;
+  /** Why `/launch` opened the system browser instead of VS Code's integrated browser. */
+  launchEditorUnavailable: string;
+  launchEditorUntrusted: string;
+  launchEditorFailed(error: string): string;
+  /** The reply's actions: reopen in VS Code's integrated browser, or open in the system browser. */
+  launchOpenInEditor: string;
+  launchOpenExternal: string;
+  launchExternalChoice: string;
   launchStopped(folder: string): string;
   launchNotRunning(folder: string): string;
   launchStopChoice: string;
@@ -92,7 +100,7 @@ export function composerCommandText(): ComposerCommandText {
     help: t("List every command, or one command in full."),
     "starter-kit": t("Write a starter app (frontend, backend and extras) with its builderforce.json into this workspace folder."),
     manifest: t("Detect this app and write its builderforce.json after showing you the diff."),
-    launch: t("Run this workspace's app in your browser with the local launcher. /launch stop stops it."),
+    launch: t("Run this workspace's app with the local launcher in VS Code's built-in browser. /launch external opens it in your browser; /launch stop stops it."),
   };
   return {
     describe: (id) => descriptions[id] ?? id,
@@ -144,9 +152,18 @@ export function composerCommandText(): ComposerCommandText {
     launchRemote: (remoteName) => t("The local launcher opens your app in this computer's browser, but this window's extension host runs remotely ({0}). Open the folder in a local window to use /launch.", remoteName),
     launchEnvironmentIn: (environment, folders) => t("{0} — declared by {1}", environment, folders.join(", ")),
     launchDetected: t("This folder has no builderforce.json, so the launcher runs a detected manifest. Save it with /manifest init."),
-    launchStarted: (folder) => t("The launcher for {0} is running and opened in your browser.", folder),
-    launchReopened: (folder) => t("The launcher for {0} was already running; it was opened in your browser again.", folder),
-    launchOpenAgain: t("Open again"),
+    launchStarted: (folder, external) => (external
+      ? t("The launcher for {0} is running and opened in your browser.", folder)
+      : t("The launcher for {0} is running and opened in VS Code's built-in browser.", folder)),
+    launchReopened: (folder, external) => (external
+      ? t("The launcher for {0} was already running; it was opened in your browser again.", folder)
+      : t("The launcher for {0} was already running; it was opened in VS Code's built-in browser again.", folder)),
+    launchEditorUnavailable: t("VS Code's built-in browser isn't available in this version, so it opened in your browser."),
+    launchEditorUntrusted: t("The launcher's certificate isn't trusted, so it opened in your browser instead of VS Code's built-in browser."),
+    launchEditorFailed: (error) => t("VS Code's built-in browser could not open it ({0}), so it opened in your browser.", error),
+    launchOpenInEditor: t("Open in VS Code"),
+    launchOpenExternal: t("Open in external browser"),
+    launchExternalChoice: t("Open the launcher in your external browser"),
     launchStopped: (folder) => t("Stopped the launcher for {0}.", folder),
     launchNotRunning: (folder) => t("No launcher is running for {0}.", folder),
     launchStopChoice: t("Stop the running launcher"),

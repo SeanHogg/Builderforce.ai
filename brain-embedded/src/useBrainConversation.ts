@@ -28,6 +28,7 @@ import { useBrainConfig } from './config';
 import { useRunSnapshot } from './useRunSnapshot';
 import { type BrainMessage, type BrainModality, type ChatInputAttachment } from './types';
 import { transcriptSeedOf } from './transcriptSeed';
+import { injectedTurnIdsOf, isInjectedTurnMetadata, withInjectedMeta } from './injectedTurn';
 import { useChatTranscript } from './useChatTranscript';
 import { usePendingTurns, type PendingTurn } from './usePendingTurns';
 import type { RunServedBy } from './runStore/runSnapshotTypes';
@@ -251,7 +252,7 @@ export interface UseBrainConversation {
    * failure leaves them to the caller (`restoreAttachments`). `draft` is the token the turn door minted for a send from a
    * draft (`useChatTurns`' `send(turn, { draft })`): the chat this send creates belongs to it (`ensureChatId(draft)`).
    */
-  send(text: string, opts?: { addressedTo?: DirectedRecipient | DirectedGroup | readonly DirectedRecipient[] | null; attachments?: ChatInputAttachment[]; draft?: DraftToken }): Promise<boolean>;
+  send(text: string, opts?: { addressedTo?: DirectedRecipient | DirectedGroup | readonly DirectedRecipient[] | null; attachments?: ChatInputAttachment[]; draft?: DraftToken; /** The turn is not the person's words (a Resume continuation): saved marked and never a person turn (`injectedTurn.ts`). */ injected?: boolean }): Promise<boolean>;
   /**
    * Answer the active chat's REFUSED turn again — the trailing user message nothing
    * replied to (only step rows after it), e.g. a turn a `no_local_model` verdict stopped.
@@ -434,10 +435,12 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
 
   /** Assemble the BrainRunRequest from the current options (captured at run start). */
   const buildRequest = useCallback(
-    (history: BrainMessage[], researchFrom: BrainMessage[], userTurn: string | ContentPart[], userTurnMessageId?: number) => {
+    (history: BrainMessage[], researchFrom: BrainMessage[], userTurn: string | ContentPart[], userTurnMessageId?: number, turnInjected = false) => {
       // The seed and the persisted ids behind it (a fold records what its note covers),
       // and what the earlier turns READ (`priorResearch.ts`).
       const seed = transcriptSeedOf(history);
+      // The rows the person did not write (a Resume continuation, `injectedTurn.ts`): never person turns in the run.
+      const injectedTurnIds = [...injectedTurnIdsOf(history), ...(turnInjected && userTurnMessageId != null ? [userTurnMessageId] : [])];
       return {
       resolvedSystemPrompt: fullSystemPrompt,
       tools: toolSpecs && toolSpecs.length > 0 ? toolSpecs : undefined,
@@ -459,6 +462,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       augmentSystemPrompt,
       seed: seed.messages,
       seedIds: seed.ids,
+      ...(injectedTurnIds.length > 0 ? { injectedTurnIds } : {}),
       priorResearch: priorResearchDigest(scopeToConsolidation(researchFrom)),
       userTurn,
       ...(userTurnMessageId != null ? { userTurnMessageId } : {}),
@@ -505,7 +509,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
   }, [prepareRun, persistence, updateMessages, bindContinuation, endDraftSend]);
 
   const send = useCallback(
-    async (text: string, opts?: { addressedTo?: DirectedRecipient | DirectedGroup | readonly DirectedRecipient[] | null; attachments?: ChatInputAttachment[]; draft?: DraftToken }): Promise<boolean> => {
+    async (text: string, opts?: { addressedTo?: DirectedRecipient | DirectedGroup | readonly DirectedRecipient[] | null; attachments?: ChatInputAttachment[]; draft?: DraftToken; injected?: boolean }): Promise<boolean> => {
       const trimmed = text.trim();
       // Busy only for THIS chat: a run in flight elsewhere never blocks this one.
       if (!trimmed || sendingRef.current.has(chatId) || isLive(chatId)) return false;
@@ -573,7 +577,8 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
         composer.take(attachments);
         setLocalError('');
         const { displayContent, turn } = await composeUserTurn(trimmed, attachments, persistence);
-        const metadata = withDirectedMetadata(directedRecipientList(addressedTo), turn.meta);
+        // An injected turn (a Resume continuation) is saved marked, so no run ever reads it as the person's words (`injectedTurn.ts`).
+        const metadata = withDirectedMetadata(directedRecipientList(addressedTo), opts?.injected ? withInjectedMeta(turn.meta) : turn.meta);
         const [userMsg] = await persistence.sendMessages(id, [{ role: 'user', content: displayContent, metadata }]);
         // One batch: the saved row joins the transcript and the optimistic one leaves it.
         updateMessages(id, (prev) => [...prev, userMsg]);
@@ -622,7 +627,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
         // Stop pressed while this send got ready drops the launch.
         const runs = attachments.length > 0 || startsRun(trimmed);
         // The row IS saved: a run that fails to start/finish (a host's run.failed) shows its error - never restores the text, which would send a second row.
-        if (runs) await launch(id, buildRequest(messages, messages, turn.content, userMsg?.id), draftSend).catch((err: unknown) => { if (stillOpen()) setLocalError(err instanceof Error ? err.message : 'Run failed'); });
+        if (runs) await launch(id, buildRequest(messages, messages, turn.content, userMsg?.id, opts?.injected === true), draftSend).catch((err: unknown) => { if (stillOpen()) setLocalError(err instanceof Error ? err.message : 'Run failed'); });
         return true;
       } catch (e) {
         // Saving the turn failed (an expired token): NOT saved. Files go back to the SHOWING composer, like the text.
@@ -642,7 +647,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
 
   const replyToTrailingTurn = useCallback((id: number, last: BrainMessage) => {
     setLocalError('');
-    void launch(id, buildRequest(messages.slice(0, -1), messages, userTurnContentOf(last), last.id));
+    void launch(id, buildRequest(messages.slice(0, -1), messages, userTurnContentOf(last), last.id, isInjectedTurnMetadata(last.metadata)));
   }, [messages, buildRequest, launch]);
   useAutoReplyTrailingTurn({ chatId, loadingMessages, localSending, messages, repliedRef: autoRepliedChatIdRef, reply: replyToTrailingTurn });
 
@@ -656,7 +661,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     autoRepliedChatIdRef.current = chatId;
     setLocalError('');
     clearRunError(chatId);
-    void launch(chatId, buildRequest(messages.slice(0, index), messages, userTurnContentOf(turn), turn.id));
+    void launch(chatId, buildRequest(messages.slice(0, index), messages, userTurnContentOf(turn), turn.id, isInjectedTurnMetadata(turn.metadata)));
     return true;
   }, [chatId, messages, buildRequest, launch]);
 

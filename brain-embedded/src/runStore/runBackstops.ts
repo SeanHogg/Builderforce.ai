@@ -7,6 +7,7 @@
  * records a durable step, and never fails the run.
  */
 
+import { codeChangeTicketTitle } from '@builderforce/agent-tools';
 import { isFailedToolResult } from '../brainTriage';
 import { NOT_STARTED_TASK_STATUSES, canListChatTickets, declaresChatTicketListing, linkedTicketsStillOpen, type LinkedTicketToAdvance } from '../chatWorkLinking';
 import { latestStatus, listChatTickets, listingScopeOf, localTicketFilings, ticketMovesInRun, type ListingScope } from './chatTickets';
@@ -132,8 +133,9 @@ export async function recordCodeChangeTicket(
   // An unbound local chat (PRD 36) still gets its ticket — on the project, linked to no
   // chat, because it has none on the platform to link to.
   const source = serverChatId != null ? `Brain chat #${serverChatId}` : 'a local editor chat';
-  // Always names files here: a fileless capture returned above (mint) or before that (attach).
-  const summary = `Code change (${files.length} file${files.length === 1 ? '' : 's'}) from ${source}`;
+  // Always names files here: a fileless capture returned above (mint) or before that (attach). THE title builder, so the
+  // spec-coverage join can always tell this ticket from a spec item's (`isCodeChangeBackstopTitle`).
+  const summary = codeChangeTicketTitle(files.length, source);
   // A MINT in a bound chat files under the chat's one open epic, so the epic's progress counts it — read only from a listing the
   // host's catalog declares: on an undeclared catalog the mint goes on without a parent instead of spending a call on a guess.
   const parentTaskId = attachTo == null && serverChatId != null && declaresChatTicketListing(req.tools) ? await soleOpenLinkedEpic(serverChatId, c, req) : null;
@@ -371,7 +373,7 @@ export async function retitleShippedDeltaTicket(
   if (id == null || c.deltaTitleCount == null) return;
   const finalCount = c.touchedFiles.length;
   if (finalCount === 0 || finalCount === c.deltaTitleCount) return;
-  const title = `Code change (${finalCount} file${finalCount === 1 ? '' : 's'})`;
+  const title = codeChangeTicketTitle(finalCount);
   const toolStart = nowMs();
   let out: unknown;
   try {

@@ -61,7 +61,8 @@ function vocabularyOf(names: readonly string[]): string[] {
  * turn (see {@link surfaceRequired}).
  */
 export function unnamedVocabulary(run: NamingRun): Set<string> {
-  const named = new Set([...run.promptTools.system, ...run.promptTools.turn]);
+  // A directive's obligation tool is named by declaration (`promptTools.obligation`), whatever the prose scan caught.
+  const named = new Set([...run.promptTools.system, ...run.promptTools.turn, ...(run.promptTools.obligation ?? [])]);
   return new Set(vocabularyOf(run.catalogToolNames).filter((n) => !named.has(n)));
 }
 
@@ -71,13 +72,14 @@ export function unnamedVocabulary(run: NamingRun): Set<string> {
  * workspace file tools, `canChangeCodeHere`) a capped turn does not require them: they compete on relevance, and a direct call to one
  * still runs (the surface's catalog is closed, so the kernel hands every name to {@link brainPlatformTools}' preflight and execute, which
  * trace it as routed). A surface without the file tools (the web Brain) acts through those very tools, so nothing is demoted there. What
- * the turn names, what a contract the turn carries out names (the Studio's preview review), `ask_user` and `hand_off` are never in this
- * set. A role-set tool needs no exemption: the role cap (`roleCap.ts`) requires its own set whatever this says.
+ * the turn names, what a contract the turn carries out names (the Studio's preview review), the tools a directive declares as its
+ * OBLIGATIONS (`promptTools.obligation`, `chatWorkObligationTools`: the model is told to file tickets on every turn, so it must always see
+ * the tools — VS Code chat #157440), `ask_user` and `hand_off` are never in this set. A role-set tool needs no exemption: the role cap (`roleCap.ts`) requires its own set whatever this says.
  */
 export function promptOnlyNamed(run: NamingRun): Set<string> {
   if (!canChangeCodeHere(run.catalogToolNames)) return new Set();
-  const { system, turn, contract } = run.promptTools;
-  const kept = new Set([...turn, ...contract, ...vocabularyOf(run.catalogToolNames), ASK_USER_TOOL, HAND_OFF_TOOL]);
+  const { system, turn, contract, obligation = [] } = run.promptTools;
+  const kept = new Set([...turn, ...contract, ...obligation, ...vocabularyOf(run.catalogToolNames), ASK_USER_TOOL, HAND_OFF_TOOL]);
   return new Set(system.filter((n) => !kept.has(n)));
 }
 

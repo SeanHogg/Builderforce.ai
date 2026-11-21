@@ -56,6 +56,8 @@ export interface QueuedTurn {
   text: string;
   recipient: DirectedRecipient | null;
   attachments?: ChatInputAttachment[];
+  /** Not the person's words (a Resume continuation): saved marked injected, never a person turn of the run. */
+  injected?: true;
 }
 
 export interface VsCodeComposerProps {

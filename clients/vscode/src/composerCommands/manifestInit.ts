@@ -69,7 +69,7 @@ export function manifestInitExecutor({ port, text, readFiles, detect, show }: Ma
         ...text.noteLines(detected.notes),
         next.line,
       ],
-      ...(next.action ? { action: next.action } : {}),
+      ...(next.actions ? { actions: next.actions } : {}),
     };
   };
 }

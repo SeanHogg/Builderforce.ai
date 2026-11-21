@@ -26,7 +26,7 @@
  */
 import { isClosedTaskStatus } from '@builderforce/agent-loop';
 import { syncIdText } from '@builderforce/local-first';
-import { LOCAL_TICKET_CREATE_TOOL, SERVER_TICKET_LINK_TOOL, SERVER_TICKET_TOOLS, type TicketToolVocabulary } from './ticketToolVocabulary';
+import { LOCAL_TICKET_CREATE_TOOL, LOCAL_TICKET_MOVE_TOOL, SERVER_TICKET_LINK_TOOL, SERVER_TICKET_MOVE_TOOL, SERVER_TICKET_TOOLS, type TicketToolVocabulary } from './ticketToolVocabulary';
 import { entityIdsOf } from './toolResultRecord';
 
 /**
@@ -369,6 +369,36 @@ export function codeChangeFiles(args: unknown): string[] {
     }
   }
   return files;
+}
+
+/** The account's code-change recording tool the directive names. */
+export const TICKET_FROM_DELTA_TOOL = 'builtin_tickets_from_delta';
+
+/**
+ * The tools {@link chatWorkLinkingDirective} OBLIGES the model to use, as DATA — exactly the
+ * acts the directive says must happen before a turn ends: create the ticket (the surface's
+ * create tool), record a code change (`builtin_tickets_from_delta`), move a ticket's status,
+ * and on a linked chat list its linked tickets. Never the wider board family the directive also
+ * mentions (assignees, the link tool, the `builtin_kanban_*` scoping tools, epics' children):
+ * those are not obligations of a code turn and compete on relevance.
+ *
+ * The run carries this list as a REQUIRED set every role cap keeps (`runPreamble.ts` records it
+ * as `promptTools.obligation`; `run/brainPlatformTools.ts` never demotes it; the agent-run role
+ * cap keeps whatever is required), and the forced finish turn offers exactly these (VS Code chat
+ * #157440: told to file tickets on 527 capped code turns that could not see the tools).
+ */
+export function chatWorkObligationTools(chatId: number | null, tickets: TicketToolVocabulary = SERVER_TICKET_TOOLS): string[] {
+  const linked = chatId != null;
+  if (tickets.local) {
+    // The editor's create links locally and the directive forbids the link tool; its own move
+    // addresses a local ticket, the account's update one that exists only on the account.
+    return [LOCAL_TICKET_CREATE_TOOL, LOCAL_TICKET_MOVE_TOOL, SERVER_TICKET_MOVE_TOOL, TICKET_FROM_DELTA_TOOL, ...(linked ? [CHAT_TICKET_LIST_TOOL] : [])];
+  }
+  // `builtin_chats_link_ticket` is NOT an obligation: the create links the item it makes to this chat in the same call, so
+  // linking is only ever needed for a ticket that already existed. It competes on relevance like the rest of the board
+  // family, and a direct call to it still runs (a closed catalog hands every name to the surface; traced as routed —
+  // `run/brainPlatformTools.unadvertised.test.ts` pins exactly that, with this tool).
+  return [tickets.createName, SERVER_TICKET_MOVE_TOOL, TICKET_FROM_DELTA_TOOL, ...(linked ? [CHAT_TICKET_LIST_TOOL] : [])];
 }
 
 /**

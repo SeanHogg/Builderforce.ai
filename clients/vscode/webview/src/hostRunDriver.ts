@@ -89,6 +89,7 @@ function serialize(chatId: number, req: BrainRunRequest): Record<string, unknown
     priorResearch: req.priorResearch,
     userTurn: req.userTurn,
     seedIds: req.seedIds,
+    injectedTurnIds: req.injectedTurnIds,
     userTurnMessageId: req.userTurnMessageId,
     projectId: req.projectId ?? null,
     chatMode: req.chatMode,

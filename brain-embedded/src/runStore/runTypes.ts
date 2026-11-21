@@ -246,6 +246,12 @@ export interface BrainRunRequest {
   continuationProgress?: boolean;
   /** The persisted message id behind each {@link seed} entry, in order (`transcriptSeedOf`). */
   seedIds?: number[];
+  /**
+   * The persisted ids (of {@link seedIds} and {@link userTurnMessageId}) of user rows the PERSON did not write — the
+   * editor's Resume continuation (`injectedTurn.ts`). `startRun` never marks them person turns, so they cannot set the
+   * publish hold or become one of the chat's asks. Absent ⇒ every user row is the person's.
+   */
+  injectedTurnIds?: number[];
   /** The persisted message id of {@link userTurn}. With {@link seedIds} it lets a fold
    *  record which persisted messages its note covers (`runFoldMarker.ts`). */
   userTurnMessageId?: number;

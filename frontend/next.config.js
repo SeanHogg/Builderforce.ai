@@ -83,6 +83,69 @@ const knowledgeWorkerFactoryServerAlias = {
   '@builderforce/knowledge-browser/worker-factory$': knowledgeWorkerFactoryStub,
 };
 
+/**
+ * Server AND edge only: ONE module per physical package directory.
+ *
+ * `resolve.symlinks = false` (see the webpack hook below) keys every module by the path
+ * it was REACHED through, not the file it is. A linked package that is also a dependency
+ * of another linked package is therefore two modules: `@seanhogg/builderforce-brain-ui`'s
+ * dist reaches `@seanhogg/builderforce-brain-embedded` through its own
+ * `node_modules/@seanhogg/builderforce-brain-embedded` symlink, the frontend through
+ * `frontend/node_modules/...` — the SAME directory (`brain-embedded/`), bundled twice,
+ * and with it every package it resolves below that path (`@seanhogg/builderforce-memory`,
+ * `-memory-engine` and their WGSL kernels). Both sat in the root layout's server graph,
+ * so every route function of the Cloudflare Worker carried two copies.
+ *
+ * After resolution, a resource under `<somewhere>/node_modules/<pkg>/` whose package
+ * directory is the same real directory as `frontend/node_modules/<pkg>` is re-keyed to
+ * the frontend's path. Only identical real directories are merged — same files, same
+ * version — so no module changes what it runs; a package installed as a DIFFERENT copy
+ * (a separate pnpm store, another version) keeps its own path and is left alone.
+ */
+class CanonicalPackagePathsPlugin {
+  constructor(root) {
+    this.nodeModules = path.join(root, 'node_modules');
+    this.canonicalByRoot = new Map();
+  }
+
+  canonicalRoot(packageRoot, name) {
+    if (this.canonicalByRoot.has(packageRoot)) return this.canonicalByRoot.get(packageRoot);
+    const own = path.join(this.nodeModules, name);
+    let canonical = null;
+    if (own !== packageRoot && fs.existsSync(own) && fs.existsSync(packageRoot)) {
+      canonical = fs.realpathSync(own) === fs.realpathSync(packageRoot) ? own : null;
+    }
+    this.canonicalByRoot.set(packageRoot, canonical);
+    return canonical;
+  }
+
+  apply(compiler) {
+    const name = 'CanonicalPackagePathsPlugin';
+    compiler.hooks.normalModuleFactory.tap(name, (factory) => {
+      factory.hooks.afterResolve.tap(name, (resolveData) => {
+        const data = resolveData.createData;
+        const resource = data && data.resource;
+        if (typeof resource !== 'string') return;
+        // The LAST `node_modules/<pkg>` in the path is the package that owns the file.
+        const match = /^(.*[\\/]node_modules[\\/])((?:@[^\\/]+[\\/])?[^\\/]+)(?=[\\/])/.exec(resource);
+        if (!match) return;
+        const packageRoot = match[1] + match[2];
+        const canonical = this.canonicalRoot(packageRoot, match[2].split('\\').join('/'));
+        if (!canonical) return;
+        const rekey = (value) => (typeof value === 'string' ? value.split(packageRoot).join(canonical) : value);
+        data.resource = rekey(data.resource);
+        data.request = rekey(data.request);
+        data.userRequest = rekey(data.userRequest);
+        if (data.resourceResolveData) {
+          for (const key of ['path', 'descriptionFilePath', 'descriptionFileRoot']) {
+            data.resourceResolveData[key] = rekey(data.resourceResolveData[key]);
+          }
+        }
+      });
+    });
+  }
+}
+
 // next-intl: points the plugin at the per-request locale/message resolver.
 const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts');
 /**
@@ -301,6 +364,7 @@ const nextConfig = {
         test: /[\\/]src[\\/]i18n[\\/]messages[\\/]en\.json$/,
         layer: 'shared',
       });
+      config.plugins.push(new CanonicalPackagePathsPlugin(__dirname));
     }
     // Silence unactionable "Critical dependency" warnings emitted from inside
     // third-party deps we don't control: @huggingface/transformers uses a

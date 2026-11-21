@@ -71,8 +71,8 @@ export function isLocalTicketCreateLabel(label: string): boolean {
 }
 
 /** The account's status change (numeric id) and the editor's (local id, or the numeric id once synced). */
-const SERVER_TICKET_MOVE_TOOL = 'builtin_tasks_update';
-const LOCAL_TICKET_MOVE_TOOL = 'ticket-move';
+export const SERVER_TICKET_MOVE_TOOL = 'builtin_tasks_update';
+export const LOCAL_TICKET_MOVE_TOOL = 'ticket-move';
 
 /** The call that moves one ticket to a status. */
 export interface TicketStatusMove {

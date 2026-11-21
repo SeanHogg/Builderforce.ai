@@ -75,6 +75,7 @@ export async function workspaceRegistry(
     ...(remote ? { launchUnavailableReason: text.launchRemote(remote) } : {}),
     stopLabel: text.launchStopChoice,
     trustLabel: text.launchTrustChoice,
+    externalLabel: text.launchExternalChoice,
   });
   return createComposerCommandRegistry(entries, text);
 }

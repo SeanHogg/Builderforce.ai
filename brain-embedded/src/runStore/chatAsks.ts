@@ -39,6 +39,28 @@ export function markPersonTurn(m: ChatCompletionMessage): ChatCompletionMessage 
   return m;
 }
 
+/**
+ * A run's opening turns with the person marks set: every persisted seed row and the triggering turn is the person's,
+ * EXCEPT a row whose persisted id the request lists as injected (`BrainRunRequest.injectedTurnIds`, `injectedTurn.ts` —
+ * the editor's Resume continuation, which quotes sub-agent briefs verbatim). An injected row is never a person turn, so
+ * it can neither set nor lift the publish hold (`publishHold.ts`) nor become one of the chat's asks.
+ */
+export function personMarkedRunTurns(req: {
+  seed?: readonly ChatCompletionMessage[];
+  seedIds?: readonly number[];
+  userTurn?: ChatCompletionMessage['content'];
+  userTurnMessageId?: number;
+  injectedTurnIds?: readonly number[];
+}): { seed?: ChatCompletionMessage[]; turn?: ChatCompletionMessage } {
+  const injected = new Set(req.injectedTurnIds ?? []);
+  const injectedAt = (id: number | undefined): boolean => id !== undefined && injected.has(id);
+  const turn: ChatCompletionMessage | undefined = req.userTurn !== undefined ? { role: 'user', content: req.userTurn } : undefined;
+  return {
+    ...(req.seed ? { seed: req.seed.map((m, i) => (injectedAt(req.seedIds?.[i]) ? m : markPersonTurn(m))) } : {}),
+    ...(turn ? { turn: injectedAt(req.userTurnMessageId) ? turn : markPersonTurn(turn) } : {}),
+  };
+}
+
 /** Is this user turn one the PERSON wrote? (Sole owner of the `personTurns` mark.) */
 export function isPersonTurn(m: ChatCompletionMessage): boolean {
   return personTurns.has(m);

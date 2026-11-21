@@ -2,10 +2,10 @@
  * The host's answer to a composer `/` command (PRD 31 §W11), shown beside the transcript
  * as a HOST message — never a model turn. A `/help` answer (or an unknown command, or a
  * typo's syntax) is the SAME list the `/` menu's Actions tab draws (brain-ui `ActionsPane`);
- * an outcome is its lines, the launcher's link as selectable text, and a follow-up command.
+ * an outcome is its lines, the launcher's link as selectable text, and its follow-up commands.
  *
  * The link carries the launcher's per-launch token in its fragment, so it is shown for the
- * person to copy and reopened through the host (`/launch` again), never logged.
+ * person to copy and reopened through the host (`/launch` or `/launch external`), never logged.
  */
 
 import { useMemo } from 'react';
@@ -19,7 +19,7 @@ export function ComposerCommandReply({ reply, init, commands, onRun, onDismiss }
   init: InitData;
   /** The Actions tab's handlers — choosing an entry in a `/help` answer does what it does there. */
   commands: PromptOptionsCommands | undefined;
-  /** Run a follow-up command line (`/launch`). */
+  /** Run a follow-up command line (`/launch`, `/launch external`). */
   onRun: (line: string) => void;
   onDismiss: () => void;
 }) {
@@ -37,10 +37,14 @@ export function ComposerCommandReply({ reply, init, commands, onRun, onDismiss }
           </div>
         )}
         {reply.kind === 'text' && reply.link && <code className="bf-command-reply__link">{reply.link}</code>}
-        {reply.kind === 'text' && reply.action && (
-          <button type="button" className="bf-btn bf-command-reply__action" onClick={() => onRun(reply.action!.command)}>
-            {reply.action.label}
-          </button>
+        {reply.kind === 'text' && reply.actions && reply.actions.length > 0 && (
+          <div className="bf-command-reply__actions">
+            {reply.actions.map((action) => (
+              <button key={action.command} type="button" className="bf-btn bf-command-reply__action" onClick={() => onRun(action.command)}>
+                {action.label}
+              </button>
+            ))}
+          </div>
         )}
       </div>
       <button type="button" className="bf-btn bf-command-reply__dismiss" aria-label={t('app.dismiss', 'Dismiss')} title={t('app.dismiss', 'Dismiss')} onClick={onDismiss}>

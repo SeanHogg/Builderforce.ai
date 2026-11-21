@@ -25,7 +25,7 @@ describe("/starter-kit", () => {
     expect(port.asked).toEqual([]);
     for (const file of kitFiles) expect(port.files.has(at(file)), file).toBe(true);
     expect(port.files.has(at("builderforce.json"))).toBe(true);
-    expect(reply).toMatchObject({ kind: "text", tone: "info", action: { command: "/launch" } });
+    expect(reply).toMatchObject({ kind: "text", tone: "info", actions: [{ command: "/launch" }] });
     expect(reply.kind === "text" ? reply.lines[0] : "").toBe(`Wrote the react-node starter kit: ${kitFiles.length} files into app.`);
   });
 
@@ -36,6 +36,27 @@ describe("/starter-kit", () => {
     expect(port.asked[0]!.approve).toBe("Write files");
     expect(port.files.get(at("notes.txt"))).toBe("mine");
     expect(port.files.has(at("builderforce.json"))).toBe(true);
+  });
+
+  it("regression: writes without asking into a folder holding only .builderforce (with .git / .vscode)", async () => {
+    const port = fakeWorkspacePort([app], {
+      [at(".builderforce/symbols.json")]: "{}",
+      [at(".git/HEAD")]: "ref",
+      [at(".vscode/settings.json")]: "{}",
+    });
+    const reply = await run(port);
+    expect(port.asked).toEqual([]);
+    for (const file of kitFiles) expect(port.files.has(at(file)), file).toBe(true);
+    expect(reply).toMatchObject({ kind: "text", tone: "info" });
+  });
+
+  it("regression: still names a kit file already inside an ignored folder as a conflict", async () => {
+    const port = fakeWorkspacePort([app], { [at(".builderforce/symbols.json")]: "{}", [at(kitFiles[0]!)]: "mine" });
+    port.approve = false;
+    await run(port);
+    expect(port.asked).toHaveLength(1);
+    expect(port.asked[0]!.approve).toBe("Overwrite and write");
+    expect(port.files.get(at(kitFiles[0]!))).toBe("mine");
   });
 
   it("writes nothing when the approval is declined", async () => {
@@ -82,7 +103,7 @@ describe("/starter-kit", () => {
     const port = fakeWorkspacePort([app]);
     port.remote = "wsl";
     const reply = await run(port);
-    expect(reply.kind === "text" ? reply.action : "no reply").toBeUndefined();
+    expect(reply.kind === "text" ? reply.actions : "no reply").toBeUndefined();
     expect(reply.kind === "text" ? reply.lines : []).toContain(composerCommandText().launchRemote("wsl"));
     expect(reply.kind === "text" ? reply.lines : []).not.toContain(composerCommandText().launchHint);
   });

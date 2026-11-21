@@ -86,3 +86,9 @@ export * from "./symbolRepoMap.js";
 export * from "./delta/adapters/index.js";
 // The run delta's optional dynamic tier (PRD 41 C6.2, C8.4): benchmarks, related tests with coverage, StrykerJS.
 export * from "./delta/dynamic/index.js";
+// Specs as data: the ROADMAP gap register, a spec's open items (status tables, checklists), THE near-duplicate
+// title rule, and the "every open item has a ticket" coverage join (api `roadmap.align_tickets`, the Brain's finish gate).
+export * from "./specs/gapRegister.js";
+export * from "./specs/nearDuplicateTitle.js";
+export * from "./specs/specOpenItems.js";
+export * from "./specs/ticketCoverage.js";

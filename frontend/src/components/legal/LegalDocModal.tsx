@@ -1,6 +1,6 @@
 import { useTranslations } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
-import { LegalDocPreview } from '@/components/admin/LegalDocPreview';
+import { LazyLegalDocPreview as LegalDocPreview } from './LazyLegalDocPreview';
 import type { LegalCurrent, LegalDocType } from '@/lib/legalDocs';
 import { useFormat } from "@/i18n/useFormat";
 

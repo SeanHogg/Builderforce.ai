@@ -114,8 +114,9 @@ function openWorkBlock(open: readonly LinkedTaskRow[]): string {
   );
 }
 
-/** Does the turn end by asking the person (a canonical ask-user block, or a prose question with options the run lifts to one)? */
-function asksThePerson(content: string | undefined): boolean {
+/** Does the turn end by asking the person (a canonical ask-user block, or a prose question with options the run lifts to one)?
+ *  Shared with the spec-ticket coverage gate (`specTicketCoverageGate.ts`): asking is an allowed end for both. */
+export function asksThePerson(content: string | undefined): boolean {
   return !!content && parseAskUser(liftProseAskUser(content)) != null;
 }
 

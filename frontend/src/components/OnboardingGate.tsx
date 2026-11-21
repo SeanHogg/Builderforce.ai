@@ -17,19 +17,9 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useOnboardingState, type ActiveTermsDoc } from '@/lib/onboarding';
-import dynamic from 'next/dynamic';
+import { LazyLegalDocPreview as LegalDocPreview } from '@/components/legal/LazyLegalDocPreview';
 import RoleChoiceScreen from '@/components/account/RoleChoiceScreen';
 import { faultMessage } from '@/lib/apiClient';
-
-/**
- * Client-only, and that changes no markup: the terms screen renders only after the
- * terms status has been FETCHED in the browser, so the server never draws it. A static
- * import put the whole document-markdown pipeline (unified, remark/rehype, KaTeX, parse5)
- * in the root layout's server graph — every route function of the Cloudflare Worker
- * carried ~0.7 MB of it for a screen no server render reaches. See
- * scripts/check-worker-size.mjs.
- */
-const LegalDocPreview = dynamic(() => import('@/components/admin/LegalDocPreview').then((m) => m.LegalDocPreview), { ssr: false });
 interface OnboardingGateProps {
   children: React.ReactNode;
   /** Surrounding shell (AppShell). Only invoked once the gate is past terms. */

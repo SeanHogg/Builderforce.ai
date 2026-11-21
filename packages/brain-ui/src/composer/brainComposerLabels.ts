@@ -2,7 +2,7 @@
  * Everything `BrainComposer` renders — the box, the `/` menu, its Status tab, the spend
  * readouts and the @/# pickers — from ONE host lookup, through each part's own key
  * table. Canonical keys are scoped by part: `composer.<key>`, `options.<key>`,
- * `status.<key>`, `spend.<key>`, `connections.<key>`, `mention.<key>` and `ticket.<key>`, each `<key>` being
+ * `status.<key>`, `spend.<key>`, `connections.<key>`, `mention.<key>`, `ticket.<key>` and `command.<key>`, each `<key>` being
  * that part's own canonical key (see `composerLabelsFrom`, `promptOptionsLabelsFrom`,
  * `workStatusLabelsFrom`, `spendLabelsFrom`). Every host — the web (next-intl), the
  * editor webview (`vscode.l10n` bundle) and Rovr (`chrome.i18n`) — builds its composer
@@ -11,13 +11,14 @@
 import { stringsFrom, type LabelLookup } from '../labelCatalog';
 import { DEFAULT_MENTION_LABELS, type MentionLabels } from '../mention/MentionAutocomplete';
 import { DEFAULT_TICKET_TAG_LABELS, type TicketAutocompleteLabels } from '../mention/TicketAutocomplete';
+import { DEFAULT_COMMAND_LABELS, type CommandAutocompleteLabels } from '../mention/CommandAutocomplete';
 import { promptOptionsLabelsFrom, type PromptOptionsLabels } from '../promptOptions/types';
 import { spendLabelsFrom, type SpendLabels } from '../spend/labels';
 import { workStatusLabelsFrom, type WorkStatusLabels } from '../workStatus/labels';
 import { composerLabelsFrom, type ComposerLabels } from './labels';
 import { connectionsLabelsFrom, type ConnectionsLabels } from '../connections/types';
 
-export { DEFAULT_MENTION_LABELS, DEFAULT_TICKET_TAG_LABELS };
+export { DEFAULT_MENTION_LABELS, DEFAULT_TICKET_TAG_LABELS, DEFAULT_COMMAND_LABELS };
 
 /** The lookup one part reads: its own canonical keys, under `<part>.` in the host's. */
 export function scopedLookup(lookup: LabelLookup, part: string): LabelLookup {
@@ -32,6 +33,7 @@ export interface FullBrainComposerLabels {
   connections: ConnectionsLabels;
   mention: Required<MentionLabels>;
   ticket: Required<TicketAutocompleteLabels>;
+  command: Required<CommandAutocompleteLabels>;
 }
 
 /** `overrides`: copy a host words from another source on purpose (e.g. the web's
@@ -48,5 +50,6 @@ export function brainComposerLabelsFrom(
     connections: connectionsLabelsFrom(scopedLookup(lookup, 'connections')),
     mention: stringsFrom(DEFAULT_MENTION_LABELS, scopedLookup(lookup, 'mention')),
     ticket: stringsFrom(DEFAULT_TICKET_TAG_LABELS, scopedLookup(lookup, 'ticket')),
+    command: stringsFrom(DEFAULT_COMMAND_LABELS, scopedLookup(lookup, 'command')),
   };
 }

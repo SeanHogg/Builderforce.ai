@@ -35,7 +35,7 @@ import { continueLeftovers, takeContinueOnSettle } from './continueChat';
 import { holdClaim, releaseClaim, type RunClaim } from './runClaim';
 import { budget, continuationLimits, within } from './deadline';
 import { handTurnToLiveRun, type StartOutcome } from './refusedStart';
-import { markPersonTurn } from './chatAsks';
+import { personMarkedRunTurns } from './chatAsks';
 import type { BrainRunRequest } from './runTypes';
 import type { RunCell } from './runCell';
 
@@ -98,19 +98,22 @@ export async function startRun(runKey: number, request: BrainRunRequest, claim?:
   beginRun(c, chatId);
   // What the chat re-runs with when direction arrives after the run ended: the run's wiring, not the
   // turn it carried - the turn, its row and the history it was seeded from are this run's alone.
-  const { userTurn: _turn, userTurnMessageId: _row, seed: _seed, seedIds: _seedIds, priorResearch: _research, ...rerun } = request;
+  const { userTurn: _turn, userTurnMessageId: _row, seed: _seed, seedIds: _seedIds, injectedTurnIds: _injected, priorResearch: _research, ...rerun } = request;
   c.lastRequest = rerun;
 
   // Seed the rich transcript from prior persisted history the FIRST time we
   // touch this chat this session, then append the triggering user turn — done
   // here (inside the single-flight claim) so a racing send + auto-reply can't
   // both append the user turn to the transcript.
-  if (req.seed && c.transcript.length === 0) {
-    // The persisted history holds the person's own turns only — the run's nudges are never stored.
-    c.transcript = req.seed.map(markPersonTurn);
+  // The persisted rows the person did not write (the editor's Resume continuation, `injectedTurn.ts`) are never marked
+  // person turns, so a sub-agent brief one quotes can neither set the publish hold nor become one of the chat's asks.
+  const opening = personMarkedRunTurns(req);
+  if (opening.seed && c.transcript.length === 0) {
+    // The persisted history holds the person's own turns (and marked injected rows) only — the run's nudges are never stored.
+    c.transcript = opening.seed;
     c.priorResearch = req.priorResearch ?? null;
   }
-  if (req.userTurn !== undefined) c.transcript.push(markPersonTurn({ role: 'user', content: req.userTurn }));
+  if (opening.turn) c.transcript.push(opening.turn);
   emit(c);
 
   c.runUsage = emptyRunUsage();

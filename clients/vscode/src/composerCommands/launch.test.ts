@@ -22,23 +22,58 @@ function setup(files: Record<string, string> = {}, folders = [app]) {
     started.push({ request, launcher });
     return launcher;
   });
-  const openExternal = vi.fn(async () => undefined);
+  const openExternal = vi.fn(async (_url: string) => undefined);
+  const openInEditor = vi.fn(async (_url: string) => undefined);
   const detect = vi.fn(() => ({ text: "{\"detected\":true}", services: ["web"], resources: [] as string[], notes: [] as DetectionNote[] }));
   const readFiles = vi.fn(async () => new Map<string, string>());
-  const execute = launchExecutor({ port, text: composerCommandText(), launchers, start, openExternal, readFiles, detect });
-  return { port, launchers, start, started, openExternal, detect, launch: (environment?: string) => execute(environment ? { environment } : {}) };
+  const execute = launchExecutor({ port, text: composerCommandText(), launchers, start, openExternal, openInEditor, readFiles, detect });
+  return { port, launchers, start, started, openExternal, openInEditor, detect, launch: (environment?: string) => execute(environment ? { environment } : {}) };
 }
 
 const linesOf = (reply: Awaited<ReturnType<ReturnType<typeof setup>["launch"]>>) => (reply.kind === "text" ? reply.lines : []);
 
 describe("/launch", () => {
   it("runs a detected manifest in memory when the folder has no builderforce.json, and says so", async () => {
-    const { start, openExternal, launch } = setup();
+    const { start, launch } = setup();
     const reply = await launch();
     expect(start).toHaveBeenCalledWith({ projectDir: app.path, manifestText: "{\"detected\":true}" });
-    expect(openExternal).toHaveBeenCalledWith("http://localhost:4000/#token=secret");
-    expect(reply).toMatchObject({ kind: "text", tone: "info", link: "http://localhost:4000/#token=secret", action: { command: "/launch" } });
+    expect(reply).toMatchObject({ kind: "text", tone: "info", link: "http://localhost:4000/#token=secret" });
     expect(linesOf(reply).some((line) => line.includes("/manifest init"))).toBe(true);
+  });
+
+  it("opens in VS Code's browser, and offers both reopening there and the external browser", async () => {
+    const { openExternal, openInEditor, launch } = setup();
+    const reply = await launch();
+    const text = composerCommandText();
+    expect(openInEditor).toHaveBeenCalledExactlyOnceWith("http://localhost:4000/#token=secret");
+    expect(openExternal).not.toHaveBeenCalled();
+    expect(linesOf(reply)[0]).toBe(text.launchStarted("app", false));
+    expect(reply).toMatchObject({
+      actions: [
+        { label: text.launchOpenInEditor, command: "/launch" },
+        { label: text.launchOpenExternal, command: "/launch external" },
+      ],
+    });
+  });
+
+  it("/launch external opens the running launcher in the external browser without restarting it", async () => {
+    const { start, openExternal, openInEditor, launch } = setup();
+    await launch("staging");
+    const reply = await launch("external");
+    expect(start).toHaveBeenCalledOnce();
+    expect(openInEditor).toHaveBeenCalledOnce();
+    expect(openExternal).toHaveBeenCalledExactlyOnceWith("http://localhost:4000/#token=secret");
+    expect(linesOf(reply)[0]).toBe(composerCommandText().launchReopened("app", true));
+    expect(reply).toMatchObject({ actions: [{ command: "/launch" }, { command: "/launch external" }] });
+  });
+
+  it("/launch external starts the launcher when none is running, in the external browser", async () => {
+    const { start, openExternal, openInEditor, launch } = setup();
+    const reply = await launch("external");
+    expect(start).toHaveBeenCalledWith({ projectDir: app.path, manifestText: "{\"detected\":true}" });
+    expect(openExternal).toHaveBeenCalledOnce();
+    expect(openInEditor).not.toHaveBeenCalled();
+    expect(linesOf(reply)[0]).toBe(composerCommandText().launchStarted("app", true));
   });
 
   it("shows a detected manifest's notes, worded exactly as /manifest init words them", async () => {
@@ -48,7 +83,7 @@ describe("/launch", () => {
     const lines = linesOf(await launch());
     const text = composerCommandText();
     expect(lines).toEqual([
-      "The launcher for app is running and opened in your browser.",
+      "The launcher for app is running and opened in VS Code's browser.",
       text.launchDetected,
       ...text.noteLines(notes),
     ]);
@@ -64,11 +99,11 @@ describe("/launch", () => {
   });
 
   it("keeps ONE launcher per folder: a second /launch reopens it", async () => {
-    const { start, openExternal, launch } = setup();
+    const { start, openInEditor, launch } = setup();
     await launch();
     const reply = await launch();
     expect(start).toHaveBeenCalledOnce();
-    expect(openExternal).toHaveBeenCalledTimes(2);
+    expect(openInEditor).toHaveBeenCalledTimes(2);
     expect(linesOf(reply)[0]).toContain("already running");
   });
 

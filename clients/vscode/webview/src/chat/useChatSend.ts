@@ -53,7 +53,7 @@ export function useChatSend({ conv, chatId, drafts, draftStore, input, setInput,
   // bumps this nonce, and the effect runs the send on the NEXT render — where `conv`
   // already reflects the new system prompt. This is the webview's per-turn limbic seam.
   const pendingSendRef = useRef<{
-    text: string; recipient: DirectedRecipient | null; attachments?: ChatInputAttachment[];
+    text: string; recipient: DirectedRecipient | null; attachments?: ChatInputAttachment[]; injected?: true;
     /** How the door hears whether the send was kept, and where it was typed in (the chat, and the draft token of a send from a draft) - with the Stop's mark. */
     done: (kept: boolean) => void; stage: SendStage;
   } | null>(null);
@@ -84,7 +84,7 @@ export function useChatSend({ conv, chatId, drafts, draftStore, input, setInput,
     // when the turn queued), passed explicitly so the images survive the wait. Never into a chat the
     // person has since switched to: that is another chat's turn.
     const sending = chatIdRef.current === queued.stage.chat
-      ? conv.send(queued.text, { addressedTo: queued.recipient, ...(queued.attachments ? { attachments: queued.attachments } : {}), ...(queued.stage.draft !== undefined ? { draft: queued.stage.draft } : {}) })
+      ? conv.send(queued.text, { addressedTo: queued.recipient, ...(queued.attachments ? { attachments: queued.attachments } : {}), ...(queued.injected ? { injected: true } : {}), ...(queued.stage.draft !== undefined ? { draft: queued.stage.draft } : {}) })
       : Promise.resolve(false);
     // Cleared only now, in the same commit as `conv.sending`, so the turn door never sees
     // a gap between staging and sending (its queue would flush a held turn into it).
@@ -114,7 +114,7 @@ export function useChatSend({ conv, chatId, drafts, draftStore, input, setInput,
   // A turn that could not go goes back to the box: text, files and addressee - THE restore every host shares.
   const giveBack = useCallback((m: QueuedTurn) => restoreTurn(m, { draft: composer.draft, setInput: composer.setInput, restoreAttachments, chooseRecipient }), [composer, restoreAttachments, chooseRecipient]);
   const dispatchSend = useCallback(async (m: QueuedTurn, ctx?: SendContext): Promise<boolean> => {
-    const { text, recipient: to, attachments } = m;
+    const { text, recipient: to, attachments, injected } = m;
     setPreparing(true);
     const startedIn = chatIdRef.current;
     // On screen at SUBMIT: the bubble and the waiting row show now, not after the (up to 4 s) pre-send fetch below.
@@ -139,7 +139,7 @@ export function useChatSend({ conv, chatId, drafts, draftStore, input, setInput,
     }
     setTurnLimbic(staged.block);
     return new Promise<boolean>((done) => {
-      pendingSendRef.current = { text, recipient: to, attachments, done, stage };
+      pendingSendRef.current = { text, recipient: to, attachments, ...(injected ? { injected } : {}), done, stage };
       setSendNonce((n) => n + 1);
     });
   }, [setTurnLimbic, giveBack, announceTurn]);
@@ -178,7 +178,9 @@ export function useChatSend({ conv, chatId, drafts, draftStore, input, setInput,
     // the step in flight and reaches the next model call, instead of waiting behind a run
     // that may hold for minutes. A stop command ("STOP executing") stops it (the host
     // reads that). Holding it for after the run is the explicit alternative: `queueAfter`.
-    steer: ({ text, recipient: to, attachments }) => {
+    steer: ({ text, recipient: to, attachments, injected }) => {
+      // An injected turn (a Resume continuation) is never steered into a live run: a steer is read as the person's words.
+      if (injected) return false;
       const child = childTarget(text, to, liveChildren);
       // The door's own predicate - the one the Send label reads (a turn behind one held with Alt+Enter,
       // or carrying a file a steer would drop, waits its turn; nothing steers before the run is live) -
@@ -258,7 +260,7 @@ export function useChatSend({ conv, chatId, drafts, draftStore, input, setInput,
   // (explicit empty snapshot - `takeAttachments` is never called), to the Brain (recipient null, not the
   // selected sub-agent), and NEVER given back to the box when it is not kept: the text is not the person's.
   // Resolves the door's answer (see `useInterruptedResume`: a `true` arrives when the turn has finished).
-  const continueChat = useCallback((text: string): Promise<boolean> => submitTurn({ text, recipient: null, attachments: [] }), [submitTurn]);
+  const continueChat = useCallback((text: string): Promise<boolean> => submitTurn({ text, recipient: null, attachments: [], injected: true }), [submitTurn]);
 
   // "Send again" on any transcript message — queues behind a running turn like a typed one.
   const replayMessage = useCallback((message: BrainMessage) => {

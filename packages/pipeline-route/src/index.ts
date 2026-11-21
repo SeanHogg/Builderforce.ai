@@ -10,6 +10,7 @@ export {
   LENGTH_FLOOR_CHARS,
   MAX_FILE_MENTIONS,
   ROUTE_WEIGHTS,
+  TICKET_INTENT_PATTERNS,
   pipelineFeaturesOf,
   routeThreshold,
   scorePipeline,

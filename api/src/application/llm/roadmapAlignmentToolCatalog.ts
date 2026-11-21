@@ -19,6 +19,13 @@
  * unlinked spec cannot change the answer, and a recursive tree read of a large monorepo
  * is the most expensive call this tool could make.
  *
+ * ── SPEC MODE (`specPath`) ───────────────────────────────────────────────────────
+ * "Does every open item of THIS spec have a ticket?" for any markdown spec: the shared
+ * `parseSpecOpenItems` + `specTicketCoverage` (`@builderforce/agent-tools`, the pair the
+ * Brain's finish gate reads) over the chat's linked tickets (`chatId`) or the project's open
+ * ones, shaped by `application/roadmap/specTicketCoverageReport.ts`. Chat #157440 ended with
+ * seven spec rows and no ticket for any of them.
+ *
  * ── CACHE ────────────────────────────────────────────────────────────────────────
  * The parsed register and spec anchors are cached by the COMMIT sha the ref points at
  * (`resolveRepoCommitSha`): the reader returns no per-file blob sha, and a commit sha is
@@ -35,7 +42,10 @@ import { resolveDefaultRepoForProject } from '../repos/resolveDefaultRepo';
 import { normalizeRepoPath } from '../repos/repoPath';
 import { isResolveError, resolveRepoCredential } from '../repos/resolveRepoCredential';
 import { alignTicketsToRoadmap, specAnchorsOf, type AlignTicket } from '../roadmap/alignTicketsToRoadmap';
-import { parseGapRegister, type GapEntry } from '../../domain/roadmap/gapRegister';
+import { specTicketCoverageReport } from '../roadmap/specTicketCoverageReport';
+import { ChatTicketService } from '../brain/ChatTicketService';
+import { parseGapRegister, parseSpecOpenItems, type CoverageTicket, type GapEntry, type SpecOpenItem } from '@builderforce/agent-tools';
+import type { Env } from '../../env';
 import type { BuiltinCtx, BuiltinTool } from './builtinToolContext';
 import { maskSecurityTasks } from './builtinTaskVisibility';
 import { idArg } from './builtinToolIds';
@@ -184,6 +194,51 @@ async function loadOpenTickets(ctx: BuiltinCtx, projectId: number): Promise<{ ti
   };
 }
 
+/** Ticket kinds a spec item is filed as. */
+const TASK_TIER_KINDS: ReadonlySet<string> = new Set(['task', 'epic', 'gap']);
+
+/** The chat's linked task-tier tickets (any lane — the coverage join drops cancelled ones), as coverage rows. */
+async function loadChatTickets(ctx: BuiltinCtx, chatId: number): Promise<CoverageTicket<number | string>[] | { error: string }> {
+  const links = await new ChatTicketService(ctx.db, ctx.env as Env).listTicketsForChat(ctx.tenantId, chatId, ctx.userId ?? null);
+  if ('error' in links) return links;
+  return links
+    .filter((l) => TASK_TIER_KINDS.has(l.kind) && l.label !== '(deleted)')
+    .map((l) => ({ id: Number.isFinite(Number(l.ref)) ? Number(l.ref) : l.ref, title: l.label, status: l.status }));
+}
+
+/** The spec's open items, read from the repo (cached by commit sha) or from the attachment. */
+async function specItemsFrom(
+  ctx: BuiltinCtx,
+  specPath: string,
+  source: RoadmapRepoSource | null,
+  attachmentText: string | null,
+): Promise<{ items: SpecOpenItem[]; truncated: boolean; cachedBy: 'commit-sha' | null } | { error: string }> {
+  if (attachmentText != null) return { items: parseSpecOpenItems(attachmentText), truncated: false, cachedBy: null };
+  if (!source) return { error: 'no source to read the spec from' };
+  const load = async (): Promise<{ items: SpecOpenItem[]; truncated: boolean } | { error: string }> => {
+    const r = await source.read(specPath, MAX_ROADMAP_CHARS);
+    if (!r.ok) return { error: `cannot read ${specPath} from ${source.repoLabel}: ${r.reason}` };
+    return { items: parseSpecOpenItems(r.content), truncated: r.truncated };
+  };
+  const sha = await source.commitSha();
+  if (!sha) {
+    const r = await load();
+    return 'error' in r ? r : { ...r, cachedBy: null };
+  }
+  const r = await getOrSetCached(
+    ctx.env,
+    `roadmap-align:spec:v1:${ctx.tenantId}:${sha}:${specPath}`,
+    async () => {
+      const loaded = await load();
+      // An unreadable spec must not be pinned for the TTL.
+      if ('error' in loaded) throw new Error(loaded.error);
+      return loaded;
+    },
+    { kvTtlSeconds: CACHE_TTL_SECONDS },
+  ).catch((e: unknown) => ({ error: e instanceof Error ? e.message : String(e) }));
+  return 'error' in r ? r : { ...r, cachedBy: 'commit-sha' };
+}
+
 const strArg = (v: unknown): string | undefined => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
 
 export const ROADMAP_ALIGNMENT_TOOLS: BuiltinTool[] = [
@@ -198,13 +253,20 @@ export const ROADMAP_ALIGNMENT_TOOLS: BuiltinTool[] = [
       + 'Returns { gaps, tickets, gapsByStage, matched, and the three gap lists: gapsWithoutTicket (roadmap work no ticket covers), ticketsWithoutGap (tickets no gap backs), '
       + 'danglingSpecLinks (gap links to a spec heading that does not exist), plus specFilesMissing }; each list is { items, total, truncated }. '
       + 'Reads from the project\'s connected repo (roadmapPath default "ROADMAP.md", optional ref, optional extra specPaths); or pass roadmapAttachmentKey to use an uploaded roadmap '
-      + '(the key after /uploads/ in the attachment URL).',
+      + '(the key after /uploads/ in the attachment URL). '
+      + 'SPEC MODE — pass specPath (any markdown spec or PRD) to ask "does every open item of this spec have a ticket?": it parses the spec\'s status-table rows '
+      + '(ID + Status columns: Incomplete/Complete/Blocked/…), checklist items and gap-register bullets, and joins the incomplete and blocked ones with the chat\'s linked tickets '
+      + '(chatId) or else the project\'s open tickets. A ticket covers an item when it names the item id (P25-09, OUT-02, §6.6) or its title is the same work; an auto-captured '
+      + '"Code change (N files)" ticket never covers one. Returns { items, openItems, itemsByStatus, tickets, covered, missing } (missing rows carry id, title, status, section, line, blocker); '
+      + 'roadmapAttachmentKey then holds the spec instead of the repo file.',
     parameters: obj({
       projectId: N,
       roadmapPath: { ...S, description: 'Repo path of the roadmap (default "ROADMAP.md"). Spec links resolve relative to its directory.' },
       specPaths: { type: 'array', items: S, description: 'Extra spec files (repo paths) to read besides the ones the gaps link to.' },
       ref: { ...S, description: 'Branch or ref to read (default: the repo\'s default branch).' },
-      roadmapAttachmentKey: { ...S, description: 'A Brain upload holding the roadmap, instead of the repo file.' },
+      roadmapAttachmentKey: { ...S, description: 'A Brain upload holding the roadmap (or, with specPath, the spec), instead of the repo file.' },
+      specPath: { ...S, description: 'Spec mode: repo path of a markdown spec whose open items must each have a ticket.' },
+      chatId: { ...N, description: 'Spec mode: join with the tickets linked to this Brain chat instead of the project\'s open tickets.' },
     }, ['projectId']),
     run: async (ctx: BuiltinCtx, a: Json) => {
       const projectId = idArg(a.projectId, 'projectId');
@@ -212,6 +274,9 @@ export const ROADMAP_ALIGNMENT_TOOLS: BuiltinTool[] = [
       const ref = strArg(a.ref);
       const attachmentKey = strArg(a.roadmapAttachmentKey);
       const specPaths = Array.isArray(a.specPaths) ? a.specPaths.filter((p): p is string => typeof p === 'string' && p.trim() !== '') : [];
+      const specPathArg = strArg(a.specPath);
+      const specPath = specPathArg ? normalizeRepoPath(specPathArg) : null;
+      const chatId = a.chatId != null ? idArg(a.chatId, 'chatId') : null;
 
       let attachmentText: string | null = null;
       if (attachmentKey) {
@@ -233,6 +298,34 @@ export const ROADMAP_ALIGNMENT_TOOLS: BuiltinTool[] = [
         return {
           error: `Project ${projectId} has no connected repository and no roadmapAttachmentKey was given. `
             + 'Connect the project\'s GitHub repo (the roadmap is read from its ROADMAP.md), or attach the roadmap file in chat and pass its key as roadmapAttachmentKey.',
+        };
+      }
+
+      if (specPath) {
+        const spec = await specItemsFrom(ctx, specPath, source, attachmentText);
+        if ('error' in spec) return spec;
+        let tickets: CoverageTicket<number | string>[];
+        let ticketTotal: number;
+        if (chatId != null) {
+          const chat = await loadChatTickets(ctx, chatId);
+          if ('error' in chat) return chat;
+          tickets = chat;
+          ticketTotal = chat.length;
+        } else {
+          const open = await loadOpenTickets(ctx, projectId);
+          tickets = open.tickets;
+          ticketTotal = open.total;
+        }
+        return {
+          ...specTicketCoverageReport({ projectId, specPath, items: spec.items, tickets }),
+          source: {
+            ...(source ? { repo: source.repoLabel } : {}),
+            spec: attachmentText != null ? `attachment:${attachmentKey}` : specPath,
+            tickets: chatId != null ? `chat:${chatId}` : `project:${projectId}:open`,
+          },
+          ...(ticketTotal > tickets.length ? { ticketsTruncated: { loaded: tickets.length, total: ticketTotal } } : {}),
+          ...(spec.truncated ? { truncatedFiles: [specPath] } : {}),
+          cachedBy: spec.cachedBy,
         };
       }
 

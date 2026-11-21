@@ -49,14 +49,15 @@ const TAG = /\[([^\]\s][^\]]*)\]/g;
 const LINK = /\[[^\]]*\]\(([^)\s]+)\)/g;
 const MAX_SLUG = 80;
 
-/** Lowercase, alphanumerics joined by single hyphens, capped. */
-function slugify(text: string): string {
+/** Lowercase, alphanumerics joined by single hyphens, capped; `fallback` when nothing is left.
+ *  THE slug of a register gap and of a spec's open item (`specOpenItems.ts`). */
+export function slugify(text: string, fallback = 'gap'): string {
   const slug = text
     .toLowerCase()
     .replace(/[`*]/g, '')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
-  return slug.slice(0, MAX_SLUG).replace(/-+$/, '') || 'gap';
+  return slug.slice(0, MAX_SLUG).replace(/-+$/, '') || fallback;
 }
 
 function stageOf(heading: string): string {

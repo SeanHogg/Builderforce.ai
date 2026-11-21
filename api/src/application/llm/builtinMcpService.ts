@@ -24,7 +24,7 @@ import { reportCaughtError, reportedFallback } from '../observability/caughtErro
  */
 
 import { and, eq, desc, getTableColumns, inArray, isNotNull, sql, type SQL } from 'drizzle-orm';
-import { type ToolSchema } from '@builderforce/agent-tools';
+import { findNearDuplicateByTitle, type ToolSchema } from '@builderforce/agent-tools';
 import { SHIP_MODES } from '@builderforce/run-guards';
 import { CREATIVE_CAPABILITIES, creativeOutputFormats, creativeOutputProfile } from '@builderforce/creation-canvas-contract';
 import { advertisedName, BUILTIN_EXTENSION_ID } from './toolNaming';
@@ -80,7 +80,6 @@ import { ProjectRepository } from '../../infrastructure/repositories/ProjectRepo
 import { TaskRepository } from '../../infrastructure/repositories/TaskRepository';
 import { ProjectStatus, TaskPriority, TaskType, TenantRole } from '../../domain/shared/types';
 import { parseJsonObject } from '../../domain/shared/json';
-import { findNearDuplicateByTitle } from '../../domain/shared/nearDuplicateTitle';
 import { signJwt } from '../../infrastructure/auth/JwtService';
 import { invalidateHostCronJobs } from '../agentHost/hostCronCache';
 import { specStatusEnum, workflows, workflowDefinitions, specs, promptLibraryEntries, promptLibraryVersions, approvalRules, approvals, brainChats, agentRegistrations, alerts, alertEvents, activityLog, boards, cronJobs, portfolios, initiatives, objectives, objectiveLinks, keyResults, ideAgents, marketplaceSkills, artifactAssignments, socControls, socEvidence, pokerSessions, pokerStories, pokerVotes, retrospectives, retroItems, boardConnections, projectRepositories, pullRequests, taskFileChanges, tasks, chatSessions, chatMessages, swimlanes, tenants, executions, usageSnapshots, toolAuditEvents, executionMessages, agentHosts, agentHostProjects, errorGroups, roadmapItems, projectRoleAssignments, salesAssociateSettings, salesCampaigns, salesCoachingNotes, salesCommissionRules, salesContacts, salesReferrals, salesWeeklyGoals, users } from '../../infrastructure/database/schema';
@@ -185,6 +184,7 @@ import type { RouteReplay } from './routeReplay';
 import { assertMayRunBuiltinTool } from './builtinToolAuthority';
 import { maskSecurityTasks } from './builtinTaskVisibility';
 import { idArg, syncIdField, withTicketSyncIds } from './builtinToolIds';
+import { prepareBuiltinToolArgs } from './builtinToolArgs';
 import { taskCreatedHook } from '../task/taskCreationHook';
 import { publishProjectStaffingChanged } from '../swimlane/boardChangePublisher';
 import { deleteLaneAssignments, forLane, insertLaneAssignment, laneAgentAssignments } from '../swimlane/laneAgentAssignments';
@@ -1160,7 +1160,8 @@ const CATALOG: BuiltinTool[] = [
     }, ['projectId', 'summary']),
     run: async (ctx, a) => {
       if (!ctx.env) throw new Error('work-delta recording requires the worker env');
-      const files = Array.isArray(a.files) ? (a.files as unknown[]).map(str) : undefined;
+      // `files` arrives as an array — `prepareBuiltinToolArgs` reads JSON/list text into one.
+      const files = a.files != null ? (a.files as unknown[]).map(str) : undefined;
       const deltaChatId = a.chatId != null ? idArg(a.chatId, 'chatId') : null;
       const recorded = await new WorkDeltaService(ctx.db, ctx.env).record(ctx.tenantId, ctx.userId ?? null, {
         // The chat-access identity, decided from the trusted caller (a cloud agent reaches its own host chat).
@@ -4561,9 +4562,11 @@ export async function callBuiltinTool(
   if (!entry) throw new Error(`Unknown built-in tool '${args.tool}'`);
   // Direct-write rows never pass a route gate — refuse a sub-developer caller here.
   assertMayRunBuiltinTool(entry.tool, entry.mutates, args.role);
+  // Coerced to the declared schema; a missing required argument is a 400 the model can correct.
+  const toolArgs = prepareBuiltinToolArgs(entry.tool, entry.parameters, args.arguments);
   const ctx = buildCtx(db, args.tenantId, { env: args.env, userId: args.userId, agentRef: args.agentRef, hostChatId: args.hostChatId, role: args.role, authToken: args.authToken, executionCtx: args.executionCtx, executionId: args.executionId, origin: args.origin, replay: args.replay });
   // A mapped create links its item to the host-stamped chat in the same call (see createdWorkItemChatLink).
-  const result = await linkCreatedWorkItemToChat(db, args, await entry.run(ctx, (args.arguments ?? {}) as Json));
+  const result = await linkCreatedWorkItemToChat(db, args, await entry.run(ctx, toolArgs));
   // A dry run (tasks.archive_where by default) changed nothing: no audit, no invalidation.
   const dryRun = (result as { dryRun?: unknown } | null)?.dryRun === true;
   // Unified audit stream: record any mutating tool run (best-effort, off the result).

@@ -19,6 +19,7 @@ import { InferenceModeFirstRun } from '../inferenceMode/InferenceModeFirstRun';
 import { useInferenceModeGate, type InferenceModeGate } from '../inferenceMode/useInferenceModeGate';
 import type { UseMentionAutocompleteOptions } from '../mention/MentionAutocomplete';
 import type { UseTicketAutocompleteOptions } from '../mention/TicketAutocomplete';
+import type { CommandAutocompleteLabels } from '../mention/CommandAutocomplete';
 import { WorkStatusPanel } from '../workStatus/WorkStatusPanel';
 import { WorkSpendPanel } from '../workStatus/WorkSpendPanel';
 import { spendLabels } from '../spend/labels';
@@ -48,6 +49,7 @@ export interface BrainComposerLabels {
   connections?: Partial<ConnectionsLabels>;
   mention?: UseMentionAutocompleteOptions['labels'];
   ticket?: UseTicketAutocompleteOptions['labels'];
+  command?: CommandAutocompleteLabels;
 }
 
 /**
@@ -279,9 +281,12 @@ function BrainComposerInner(props: BrainComposerProps) {
             onBlur={onBlur}
             mentions={mentions}
             tickets={tickets}
+            // The `/` typeahead lists the same commands as the menu's Actions tab.
+            commands={options.commands}
             pickersDisabled={pickersDisabled}
             mentionLabels={labelBundle?.mention}
             ticketLabels={labelBundle?.ticket}
+            commandLabels={labelBundle?.command}
           />
         )}
         actions={(

@@ -36,6 +36,8 @@ export interface WebviewRunStart {
   userTurn?: string | ContentPart[];
   /** The persisted ids behind `seed` and `userTurn` — see `BrainRunRequest.seedIds`. */
   seedIds?: number[];
+  /** The persisted ids of user rows the person did not write (a Resume continuation) — see `BrainRunRequest.injectedTurnIds`. */
+  injectedTurnIds?: number[];
   userTurnMessageId?: number;
   projectId?: number | null;
   chatMode?: ChatMode;

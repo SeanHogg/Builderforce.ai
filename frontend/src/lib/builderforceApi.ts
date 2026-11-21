@@ -9,8 +9,8 @@ import type { EMBEDDED_CAPABILITY_KEYS } from './embeddedCapabilities';
 import type { TaskFileChange, TaskFileContent, TaskRepoStatus } from './taskWorkspaceTypes';
 import type { ImportedRepoFile } from './repoImportClient';
 import { createBrainRestPersistence, type ChatDiagnosticsReport } from '@seanhogg/builderforce-brain-embedded';
-import { gatewayErrorMessage, type VisionContentPart } from '@builderforce/agent-tools/knowledge';
-import { SIDE_EFFECT_GATES_WIRE_LEVEL } from '@builderforce/agent-tools';
+import { gatewayErrorMessage } from '@builderforce/agent-tools/gateway-error'; // leaf entries, not barrels: this is in every Worker route function
+import { SIDE_EFFECT_GATES_WIRE_LEVEL } from '@builderforce/agent-tools/gate-lowering';
 import { AUTH_API_URL, getStoredTenantToken } from './auth';
 import { apiSocketUrl } from './apiSocket';
 import { downloadBlob, filenameFromResponse } from './download';
@@ -638,7 +638,7 @@ export async function parseLlmError(res: Response): Promise<Error> {
 }
 
 /** An OpenAI-style content part: the gateway moves a request carrying an image onto a vision-capable model. */
-export type LlmContentPart = VisionContentPart;
+export type LlmContentPart = import('@builderforce/agent-tools/knowledge').VisionContentPart;
 
 /** OpenAI-compatible chat completion (uses tenant JWT for billing).
  *  Default model is `openai/gpt-4o-mini` — cheap and fast for ambient calls.

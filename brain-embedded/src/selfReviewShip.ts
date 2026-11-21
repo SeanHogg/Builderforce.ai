@@ -58,7 +58,15 @@ const DECLINES_SHIPPING =
   /\b(?:don'?t|do not|never|without)\s+(?:commit|push|ship|merg)\w*|\b(?:no|skip)\s+(?:commit|push)\w*|\b(?:leave|keep)\s+(?:it|them|this|the\s+(?:change|changes|edits?))\s+(?:uncommitted|unstaged|local(?:ly)?)\b/i;
 
 export function declinesShipping(text: string | null | undefined): boolean {
-  return DECLINES_SHIPPING.test(text ?? '');
+  return DECLINES_SHIPPING.test(unquotedText(text));
+}
+
+/**
+ * A turn's text without its QUOTED blocks (lines starting with `>`): quoted text is someone else's words being shown
+ * — a pasted brief, an earlier ask — never an instruction, so no ship-intent scan reads it (VS Code chat #157440).
+ */
+export function unquotedText(text: string | null | undefined): string {
+  return (text ?? '').split(/\r?\n/).filter((line) => !/^\s*>/.test(line)).join('\n');
 }
 
 /** What the loop knows when a turn ends without tool calls. */

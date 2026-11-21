@@ -253,8 +253,11 @@ select option {
   overflow-wrap: anywhere;
   user-select: all;
 }
-.bf-command-reply__action {
-  align-self: flex-start;
+/* The reply's follow-up commands (`/launch`, `/launch external`): one row, wrapping when narrow. */
+.bf-command-reply__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 .bf-command-reply__dismiss {
   flex: 0 0 auto;

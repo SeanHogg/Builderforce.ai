@@ -22,7 +22,7 @@ import { FolderLaunchers } from "./folderLaunchers";
 import { composerCommandText, type ComposerCommandText } from "./labels";
 import { launchExecutor } from "./launch";
 import { MANIFEST_FILE_NAME, manifestInitExecutor, type ReadFolderFiles } from "./manifestInit";
-import { openUrlVerbatim } from "./openExternal";
+import { integratedBrowser, openUrlVerbatim } from "./openExternal";
 import type { ComposerCommandsInit, ComposerInputResult } from "./reply";
 import { rootManifestWatchers } from "./rootManifestWatchers";
 import { starterKitExecutor } from "./starterKit";
@@ -117,6 +117,11 @@ export function composerCommandHost(ctx: vscode.ExtensionContext): ComposerComma
   const caDir = path.join(ctx.globalStorageUri.fsPath, LAUNCHER_CA_DIR);
   // The fallback when `deactivate` did not run first; a second close of a closed registry is a no-op.
   ctx.subscriptions.push({ dispose: () => void closeComposerLaunchers() });
+  // Detected once for the session (the first `/launch` asks VS Code), not per command.
+  const editorBrowser = integratedBrowser(
+    { getCommands: (filterInternal) => vscode.commands.getCommands(filterInternal), executeCommand: (command, url) => vscode.commands.executeCommand(command, url) },
+    (error) => logLine(`[composer] VS Code's integrated browser could not be detected: ${messageOf(error)}`),
+  );
 
   // Never fails the `init` frame it rides in: a registry that cannot be built is reported and the tab is empty.
   const init = async (): Promise<ComposerCommandsInit> => {
@@ -150,6 +155,7 @@ export function composerCommandHost(ctx: vscode.ExtensionContext): ComposerComma
             start: (request) => createLocalLauncher({ ...request, distDir, tls: { storeDir: caDir } }),
             trust: (ca, force) => ensureLauncherTrust(ca, launcherTrustDeps(ctx, text), force),
             openExternal: openUrlVerbatim((target) => vscode.env.openExternal(target)),
+            editorBrowser,
             readFiles: readFolderFiles,
             detect: detectWorkspaceManifest,
           }),

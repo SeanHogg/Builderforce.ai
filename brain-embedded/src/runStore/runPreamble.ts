@@ -20,6 +20,7 @@ import { publishHold, attemptedPublishWhileHeld } from './publishHold';
 import { runShipPolicy } from './runShipPolicy';
 import { previewReviewDirective } from '../previewReview';
 import { ticketToolVocabulary } from '../ticketToolVocabulary';
+import { chatWorkObligationTools } from '../chatWorkLinking';
 import { previousReplyText } from '../restatedReply';
 import { ReadCoverage } from '../readCoverage';
 import { CacheServedStreak } from '@builderforce/agent-run';
@@ -297,13 +298,19 @@ export async function prepareBrainRun(chatId: number, c: RunCell, req: BrainRunR
   // review contract name, while what only the standing system prompt names competes on relevance (`run/brainPlatformTools.ts`).
   const systemNamed = toolNamesMentionedIn(systemPrompt);
   const blockNamed = turnContext ? toolNamesMentionedIn(turnContext) : [];
+  // The work-linking directive's OBLIGATIONS, as the directive declares them (`chatWorkObligationTools`): required on every
+  // turn, the role cap's included, so a turn told to file a ticket can always see the tool (VS Code chat #157440).
+  const obligation = runMode === 'work'
+    ? chatWorkObligationTools(serverChatId, ticketToolVocabulary(catalogToolNames)).filter((n) => catalogToolNames.includes(n))
+    : [];
   const promptTools: PromptToolNames = {
     system: systemNamed,
     turn: [...new Set([...blockNamed, ...toolNamesMentionedIn([...turnPartsInPrompt, userRequest].join('\n\n'))])],
     contract: previewReview ? toolNamesMentionedIn(previewReview) : [],
+    ...(obligation.length > 0 ? { obligation } : {}),
   };
   const alwaysAdvertised = [
-    ...new Set([...systemNamed, ...blockNamed]),
+    ...new Set([...systemNamed, ...blockNamed, ...obligation]),
     ...localToolsIn(catalogToolNames),
     // The Studio's workspace vocabulary, including the preview review its contract
     // requires — empty everywhere but the Studio (see `studioToolsIn`).

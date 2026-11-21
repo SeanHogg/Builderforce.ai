@@ -40,6 +40,12 @@ export interface PromptToolNames {
   readonly turn: readonly string[];
   /** Named by a contract a capped turn carries out itself (the Studio's preview review, `previewReview.ts`). */
   readonly contract: readonly string[];
+  /**
+   * The tools a standing directive OBLIGES the model to use, declared as data by the directive itself (the work-linking
+   * directive's ticket tools, `chatWorkObligationTools`), filtered to the catalog. Required on EVERY turn, capped or not, and
+   * the only tools a forced finish turn offers. Absent ⇒ none (a chat-mode run, a host that records none).
+   */
+  readonly obligation?: readonly string[];
 }
 import type { OutcomeReport } from '../run/eventSink';
 

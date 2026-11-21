@@ -25,6 +25,17 @@ describe('the Brain finish module', () => {
     expect(await brainFinishHook({}).openWork?.(owner)).toBeNull();
   });
 
+  it('runs an open-work gate sequence in order: the first gate that holds wins, a later one is not consulted', async () => {
+    const asked: string[] = [];
+    const gate = (name: string, block: string | null) => async () => { asked.push(name); return block; };
+    expect(await brainFinishHook({}, [gate('open', null), gate('spec', 'P25-09 has no ticket.')]).openWork?.(owner)).toBe('P25-09 has no ticket.');
+    expect(asked).toEqual(['open', 'spec']);
+    asked.length = 0;
+    expect(await brainFinishHook({}, [gate('open', 'Epic #1 is open.'), gate('spec', 'x')]).openWork?.(owner)).toBe('Epic #1 is open.');
+    expect(asked).toEqual(['open']);
+    expect(await brainFinishHook({}, [gate('open', null), gate('spec', null)]).openWork?.(owner)).toBeNull();
+  });
+
   it('is the port-less default on a surface with no delegation', async () => {
     expect(await brainFinishHook({}).liveChildren?.(owner)).toBeNull();
   });

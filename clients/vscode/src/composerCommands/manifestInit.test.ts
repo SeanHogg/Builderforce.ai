@@ -78,11 +78,11 @@ describe("/manifest init", () => {
 
   it("offers /launch locally, and never in a remote extension host (it says why instead)", async () => {
     const local = await setup().execute();
-    expect(local).toMatchObject({ action: { command: "/launch" } });
+    expect(local).toMatchObject({ actions: [{ command: "/launch" }] });
     const { port, execute } = setup();
     port.remote = "ssh-remote";
     const remote = await execute();
-    expect(remote.kind === "text" ? remote.action : "no reply").toBeUndefined();
+    expect(remote.kind === "text" ? remote.actions : "no reply").toBeUndefined();
     expect(remote.kind === "text" ? remote.lines : []).toContain(composerCommandText().launchRemote("ssh-remote"));
     expect(remote.kind === "text" ? remote.lines : []).not.toContain(composerCommandText().launchHint);
   });

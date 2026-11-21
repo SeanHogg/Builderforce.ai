@@ -2,6 +2,8 @@ import { memo, type ClipboardEvent, type KeyboardEvent, type RefObject } from 'r
 import { useDraftText, type ComposerDraftStore } from '@seanhogg/builderforce-brain-embedded';
 import { useMentionAutocomplete, type UseMentionAutocompleteOptions } from '../mention/MentionAutocomplete';
 import { useTicketAutocomplete, type UseTicketAutocompleteOptions } from '../mention/TicketAutocomplete';
+import { useCommandAutocomplete, type CommandAutocompleteLabels } from '../mention/CommandAutocomplete';
+import type { PromptOptionsCommands } from '../promptOptions/ActionsPane';
 import { UNUSED_STORE } from './unusedDraftStore';
 
 /**
@@ -33,41 +35,50 @@ export type ComposerTextBoxProps = ComposerTextSource & {
   onBlur: () => void;
   mentions: Pick<UseMentionAutocompleteOptions, 'participants' | 'onPick' | 'detail'> | undefined;
   tickets: Pick<UseTicketAutocompleteOptions, 'tickets' | 'onPick'> | undefined;
+  /** The host's composer commands (the `/` menu's Actions tab) — the `/` typeahead. Absent ⇒ none. */
+  commands: PromptOptionsCommands | undefined;
+  /** Closes the @ and # pickers (the `/` one stays: a command is answered even mid-run). */
   pickersDisabled: boolean;
   mentionLabels: UseMentionAutocompleteOptions['labels'];
   ticketLabels: UseTicketAutocompleteOptions['labels'];
+  commandLabels: CommandAutocompleteLabels | undefined;
 };
 
 const NO_PARTICIPANTS: UseMentionAutocompleteOptions['participants'] = [];
 const NO_TICKETS: UseTicketAutocompleteOptions['tickets'] = [];
 
 /**
- * The textarea and its @-mention / #-ticket typeahead - the ONLY part of the composer that depends on the text, so
- * the only part that re-renders per key. Its popups are absolutely placed against the prompt panel, so they render
- * beside the textarea here instead of in a slot of the frame (which would re-render the frame per key to fill it).
+ * The textarea and its `/`-command, @-mention and #-ticket typeahead - the ONLY part of the composer that depends on
+ * the text, so the only part that re-renders per key. Its popups are absolutely placed against the prompt panel, so they
+ * render beside the textarea here instead of in a slot of the frame (which would re-render the frame per key to fill it).
+ * Each trigger is an adapter over ONE primitive (`useTriggerAutocomplete`); the open one shows its popup and has first
+ * refusal of every key.
  */
 function ComposerTextBoxInner(props: ComposerTextBoxProps) {
   const {
     textareaRef, rows, placeholder, ariaLabel, disabled, submitOnEnter, running, canQueue, onSubmit, onQueue, onPaste,
-    onFocus, onBlur, mentions, tickets, pickersDisabled, mentionLabels, ticketLabels, draftStore, onChange,
+    onFocus, onBlur, mentions, tickets, commands, pickersDisabled, mentionLabels, ticketLabels, commandLabels, draftStore, onChange,
   } = props;
   const storeText = useDraftText(draftStore ?? UNUSED_STORE);
   const value = draftStore ? storeText : props.value ?? '';
   const setValue = draftStore ? draftStore.set : onChange ?? noop;
 
+  const command = useCommandAutocomplete({ textareaRef, value, setValue, commands, labels: commandLabels, disabled });
   const mention = useMentionAutocomplete({
     textareaRef, value, setValue, participants: mentions?.participants ?? NO_PARTICIPANTS,
-    onPick: mentions?.onPick ?? noop, disabled: disabled || pickersDisabled, labels: mentionLabels,
+    onPick: mentions?.onPick ?? noop, disabled: disabled || pickersDisabled || !mentions, labels: mentionLabels,
     detail: mentions?.detail,
   });
   const ticket = useTicketAutocomplete({
     textareaRef, value, setValue, tickets: tickets?.tickets ?? NO_TICKETS,
-    onPick: tickets?.onPick ?? noop, disabled: disabled || pickersDisabled, labels: ticketLabels,
+    onPick: tickets?.onPick ?? noop, disabled: disabled || pickersDisabled || !tickets, labels: ticketLabels,
   });
+  // The tokens exclude each other (a trigger must start the text or follow whitespace), so at most one is open.
+  const active = command.open ? command : ticket.open ? ticket : mention.open ? mention : null;
+  const anyTrigger = !!commands || !!mentions || !!tickets;
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (mention.onKeyDown(e)) return;
-    if (ticket.onKeyDown(e)) return;
+    if (active?.onKeyDown(e)) return;
     if (submitOnEnter && e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       // Alt+Enter mid-run: hold it for after the run, where the host offers that.
@@ -78,7 +89,7 @@ function ComposerTextBoxInner(props: ComposerTextBoxProps) {
 
   return (
     <>
-      {ticket.open ? ticket.popup : mention.popup}
+      {active?.popup}
       <textarea
         ref={textareaRef}
         className="bf-cmp-input"
@@ -86,12 +97,14 @@ function ComposerTextBoxInner(props: ComposerTextBoxProps) {
         value={value}
         placeholder={placeholder}
         aria-label={ariaLabel}
+        aria-autocomplete={anyTrigger ? 'list' : undefined}
+        {...active?.inputAria}
         disabled={disabled}
         onChange={(e) => setValue(e.target.value)}
         onFocus={onFocus}
         onBlur={onBlur}
         onPaste={onPaste}
-        onSelect={() => { mention.onSelect(); ticket.onSelect(); }}
+        onSelect={() => { command.onSelect(); mention.onSelect(); ticket.onSelect(); }}
         onKeyDown={onKeyDown}
       />
     </>

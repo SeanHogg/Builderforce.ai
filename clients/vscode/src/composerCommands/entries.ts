@@ -19,6 +19,10 @@ export const LAUNCH_COMMAND_ID = "launch";
 export const MANIFEST_INIT_ACTION = "init";
 export const LAUNCH_STOP = "stop";
 export const LAUNCH_TRUST = "trust";
+/** `/launch external`: open the launcher in the system browser instead of VS Code's integrated browser. */
+export const LAUNCH_EXTERNAL = "external";
+/** `/launch`'s subcommands. They always mean the subcommand: an environment of the same name is never offered or run. */
+export const LAUNCH_SUBCOMMANDS: ReadonlySet<string> = new Set([LAUNCH_EXTERNAL, LAUNCH_STOP, LAUNCH_TRUST]);
 
 export interface ComposerCommandContext {
   /** A workspace folder is open. Every command here works on one. */
@@ -36,6 +40,8 @@ export interface ComposerCommandContext {
   stopLabel: string;
   /** The label of the `trust` choice (trust the launcher's local certificate again). */
   trustLabel: string;
+  /** The label of the `external` choice (open the launcher in the system browser). */
+  externalLabel: string;
 }
 
 /** The short name a kit id uses for a part: its first alias (`react-vite` → `react`), else its id. */
@@ -75,7 +81,8 @@ export function buildComposerCommands(context: ComposerCommandContext): Composer
     : availability;
   const kits = starterKitChoices();
   const extras = starterKitExtraChoices();
-  const environments = context.environments ?? [];
+  // An environment named like a subcommand is that subcommand (`launch.ts`): never listed twice.
+  const environments = (context.environments ?? []).filter((choice) => !LAUNCH_SUBCOMMANDS.has(choice.value));
   const exampleKit = kits[0]?.value ?? "react-node";
   const exampleExtra = extras[0]?.value;
   return [
@@ -96,7 +103,7 @@ export function buildComposerCommands(context: ComposerCommandContext): Composer
     },
     {
       id: LAUNCH_COMMAND_ID,
-      syntax: "/launch [environment | stop | trust]",
+      syntax: "/launch [environment | external | stop | trust]",
       args: [{
         name: "environment",
         required: false,
@@ -105,6 +112,7 @@ export function buildComposerCommands(context: ComposerCommandContext): Composer
           ? {
               choices: [
                 ...environments,
+                { value: LAUNCH_EXTERNAL, label: context.externalLabel },
                 { value: LAUNCH_STOP, label: context.stopLabel },
                 { value: LAUNCH_TRUST, label: context.trustLabel },
               ],

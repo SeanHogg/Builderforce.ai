@@ -51,6 +51,8 @@
       "@builderforce/agent-skills": ["../packages/agent-skills/src/index.ts"],
       "@builderforce/agent-tools/symbols": ["../packages/agent-tools/src/symbols.ts"],
       "@builderforce/agent-tools/knowledge": ["../packages/agent-tools/src/knowledge/index.ts"],
+      "@builderforce/agent-tools/gateway-error": ["../packages/agent-tools/src/knowledge/gatewayError.ts"],
+      "@builderforce/agent-tools/gate-lowering": ["../packages/agent-tools/src/gate-lowering.ts"],
       "@builderforce/knowledge-graph-view": ["../packages/knowledge-graph-view/src/index.ts"],
       "@builderforce/knowledge-graph-view/tokens.css": ["../packages/knowledge-graph-view/src/tokens.css"],
       "@builderforce/run-delta/contract": ["../packages/run-delta/src/contract.ts"],

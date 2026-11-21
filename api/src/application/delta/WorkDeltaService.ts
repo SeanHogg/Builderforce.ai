@@ -207,7 +207,8 @@ export class WorkDeltaService {
     const kind: DeltaKind = input.kind && DELTA_KINDS.includes(input.kind)
       ? input.kind
       : classifyDelta(summary, input.detail);
-    const files = Array.isArray(input.files) ? input.files.filter((f) => typeof f === 'string') : undefined;
+    // Typed `string[]`: the one caller (the `tickets.from_delta` tool) receives it schema-coerced.
+    const files = input.files;
     const createdBy = input.createdBy ?? userId ?? null;
     const modality = (input.modality ?? 'unknown').slice(0, 32);
     const seg = await resolveSegment(this.db, tenantId).catch(() => null);

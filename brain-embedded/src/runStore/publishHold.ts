@@ -39,7 +39,7 @@
  * Framework-free (strings, Maps, predicates) so it is safe in every bundle.
  */
 
-import { declinesShipping } from '../selfReviewShip';
+import { declinesShipping, unquotedText } from '../selfReviewShip';
 import { personTurns } from './chatAsks';
 import { userTextOf } from './convoText';
 import { publishVerbOf, type ShipHold } from '@builderforce/run-guards';
@@ -147,7 +147,8 @@ const BARE_AFFIRMATIVE =
  * answers (when known), so a bare "yes" to "Shall I commit?" lifts.
  */
 export function asksToShip(text: string | null | undefined, priorAssistant?: string | null): boolean {
-  const turn = (text ?? '').trim();
+  // A quoted block (`>` lines) is someone else's words shown, never an order (`unquotedText`).
+  const turn = unquotedText(text).trim();
   if (!turn || DEFERRAL.test(turn)) return false;
   if (priorAssistant && BARE_AFFIRMATIVE.test(turn) && ASSISTANT_ASKS_TO_SHIP.test(priorAssistant)) return true;
   return turn

@@ -80,10 +80,24 @@ export function gatewayModelWindows(
   surface: { byo?: { models?: ReadonlyArray<{ id?: string; contextWindow?: number }> } } | null | undefined,
 ): (ref: string) => number | undefined {
   const windows = new Map<string, number>();
+  // The same models by their BARE id (the vendor's own, without the route prefix): the gateway names the model that
+  // served a turn as the vendor answered it (`claude-…`, `kimi-…`), while the catalog row carries the route ref
+  // (`direct/<vendor>/<id>`, `googleai/<id>`). A bare id two rows disagree on answers nothing.
+  const bare = new Map<string, number | null>();
   for (const m of surface?.byo?.models ?? []) {
-    if (m.id && typeof m.contextWindow === 'number' && m.contextWindow > 0) windows.set(m.id, m.contextWindow);
+    if (!m.id || typeof m.contextWindow !== 'number' || m.contextWindow <= 0) continue;
+    windows.set(m.id, m.contextWindow);
+    const key = bareModelId(m.id);
+    const held = bare.get(key);
+    bare.set(key, held === undefined || held === m.contextWindow ? m.contextWindow : null);
   }
-  return (ref) => windows.get(ref);
+  return (ref) => windows.get(ref) ?? bare.get(bareModelId(ref)) ?? undefined;
+}
+
+/** A model ref's bare vendor id: the last path segment, lower-cased, without a `~` alias mark or a `:variant` suffix. */
+export function bareModelId(ref: string): string {
+  const last = ref.trim().toLowerCase().split('/').pop() ?? '';
+  return last.replace(/^~/, '').replace(/:.*$/, '');
 }
 
 /** An authenticated JSON GET against the gateway (`<T>(path) => Promise<T>`). */

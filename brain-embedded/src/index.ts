@@ -522,7 +522,10 @@ export {
   leftChangeUnshipped,
   attemptedPublish,
   declinesShipping,
+  unquotedText,
 } from './selfReviewShip';
+// INJECTED TURNS — a user row the person did not write (the editor's Resume continuation): never a person turn.
+export { INJECTED_TURN_META_KEY, injectedTurnIdsOf, isInjectedTurnMetadata, withInjectedMeta } from './injectedTurn';
 export type { UnshippedChangeInput } from './selfReviewShip';
 
 // PUBLISH HOLD — a chat-scoped standing hold that narrows the ship policy to uncommitted

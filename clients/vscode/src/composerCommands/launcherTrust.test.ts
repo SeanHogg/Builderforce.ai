@@ -197,7 +197,8 @@ describe("/launch with the trust step", () => {
       launchers: new FolderLaunchers(),
       // `createLocalLauncher`'s shape: the url, and the CA it serves from.
       start: async () => ({ url: "https://localhost:4000/#token=t", ca: CA, close: async () => undefined }),
-      openExternal: async () => { order.push("open"); },
+      openInEditor: async () => { order.push("open"); },
+      openExternal: async () => { order.push("open-external"); },
       readFiles: async () => new Map(),
       detect: () => ({ text: "{}", services: [], resources: [], notes: [] }),
       trust: trustStep,
@@ -219,5 +220,12 @@ describe("/launch with the trust step", () => {
     const reply = await execute({ environment: "trust" });
     expect(trustStep).toHaveBeenCalledWith(CA, true);
     expect(reply).toMatchObject({ kind: "text", tone: "error" });
+  });
+
+  it("/launch external asks about the certificate before the system browser opens", async () => {
+    const { execute, trustStep, order } = launchSetup({ lines: [], failed: false });
+    await execute({ environment: "external" });
+    expect(trustStep).toHaveBeenCalledWith(CA, false);
+    expect(order).toEqual(["trust", "open-external"]);
   });
 });

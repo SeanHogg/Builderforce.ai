@@ -37,7 +37,8 @@ export async function brainTurnMenu(run: BrainRunContext, env: TurnEnv, catalogS
   // A3's steer (or an escalation it could not force here) opens the turn.
   const steer = run.progress.steerNote();
   const tail = [...(forced ? [userTextOf(forced.brief)] : []), ...(steer ? [steer] : [])];
-  // A3's `finish` is a forced turn with NO tools: an empty menu is a decision (the kernel asks a no-tool turn), never "not my concern".
+  // A3's `finish` is a forced turn with only the obligation (ticket) tools, or NO tools: an empty menu is a decision (the kernel asks a
+  // no-tool turn), never "not my concern".
   if (forced) return { tools: forced.tools as unknown as ToolSchema[], ...(forced.toolChoice ? { toolChoice: forced.toolChoice } : {}), tail };
   // The ROUTER rides along whenever selection trimmed something, so the tools that missed the cut stay REACHABLE. A catalog at or under
   // the limit is never trimmed (the agent's `selectToolsForTurn`): `hand_off` leaving the menu is not a trim. The limit is the turn's role's
