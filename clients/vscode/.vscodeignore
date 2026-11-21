@@ -21,6 +21,9 @@ out/harness.cjs
 .env*
 # Stray local artefacts that must never ship in the VSIX.
 *.log
+# The workspace state the extension itself writes when this folder is open in a dev window
+# (code-analysis cache, manifests): nothing at runtime reads it from the extension's own folder.
+.builderforce/**
 pnpm-lock.yaml
 # The bundled analyzers (PRD 41 A3) ship whole: typescript needs its lib.*.d.ts at runtime, and the
 # rules above (**/*.ts, **/*.map, **/tsconfig.json) must not strip any package under out/analyzers.

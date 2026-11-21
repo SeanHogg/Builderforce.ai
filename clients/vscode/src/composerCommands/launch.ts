@@ -11,6 +11,9 @@
  *   (`LAUNCH_SUBCOMMANDS`; `entries.ts` leaves such environments out of the choices).
  *
  * - A legacy root manifest still runs; the reply says it is deprecated and offers `/manifest move`.
+ * - A `.builderforce/builderforce.json` that still carries the stale `$schema` older versions
+ *   wrote (`manifestSchema.ts`) runs too; the reply says why VS Code reports a problem in it and
+ *   offers its removal (`/manifest move`, `staleSchemaAction`).
  * - No manifest (`.builderforce/builderforce.json`, nor a legacy root file — `manifestLocation.ts`)
  *   ⇒ the app is detected and its manifest passed in memory
  *   (`manifestText`), and the reply says so (save it with `/manifest init`) with detection's
@@ -31,7 +34,8 @@ import { NO_TRUST_STEP, type LauncherCa, type TrustOutcome } from "./launcherTru
 import type { FolderLaunchers, RunningLauncher } from "./folderLaunchers";
 import type { DetectManifest, ReadFolderFiles } from "./manifestInit";
 import { findFolderManifest, MANIFEST_PATH } from "./manifestLocation";
-import { legacyManifestAction } from "./manifestMove";
+import { legacyManifestAction, staleSchemaAction } from "./manifestMove";
+import { APP_MANIFEST_SCHEMA_URL, hasStaleSchema } from "./manifestSchema";
 import { chooseFolder, type ComposerWorkspacePort } from "./workspacePort";
 import type { EditorBrowser } from "./openExternal";
 import type { ComposerReply, ComposerReplyAction } from "./reply";
@@ -157,8 +161,14 @@ export function launchExecutor(deps: LaunchDeps): ComposerCommandExecutor {
     // A legacy root manifest still runs (the launcher reads it); the reply says it is deprecated and offers the move.
     const legacyLines = found?.legacy ? [text.manifestLegacy(found.relative, MANIFEST_PATH)] : [];
     const legacyActions = found?.legacy ? [legacyManifestAction(text)] : [];
+    // The canonical file's stale `$schema` (a legacy file loses it when moved): said, and its removal offered.
+    // Read after the launcher started: a file that cannot be read now (EACCES) never loses the reply.
+    const stale = found && !found.legacy && hasStaleSchema(await port.readText(found.file).catch(() => undefined));
+    const staleLines = stale ? [text.manifestStaleSchema(MANIFEST_PATH, APP_MANIFEST_SCHEMA_URL)] : [];
+    const staleActions = stale ? [staleSchemaAction(text)] : [];
     return trustThenOpen(
-      launcher, (opened) => text.launchStarted(folder.name, opened), [...detectedLines, ...legacyLines], forceTrust, external, legacyActions,
+      launcher, (opened) => text.launchStarted(folder.name, opened), [...detectedLines, ...legacyLines, ...staleLines], forceTrust, external,
+      [...legacyActions, ...staleActions],
     );
   };
 }

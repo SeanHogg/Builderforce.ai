@@ -164,6 +164,25 @@ describe("/launch", () => {
     expect(reply.kind === "text" ? reply.actions : []).toContainEqual({ label: text.manifestMoveAction, command: "/manifest move" });
   });
 
+  it("runs a .builderforce/builderforce.json carrying the stale $schema, says why VS Code reports a problem and offers its removal", async () => {
+    const canonical = path.join(app.path, ".builderforce", "builderforce.json");
+    const { start, launch } = setup({ [canonical]: "{\n  \"$schema\": \"https://builderforce.ai/schema/app.v1.json\",\n  \"version\": 1\n}\n" });
+    const reply = await launch();
+    const text = composerCommandText();
+    expect(start).toHaveBeenCalledWith({ projectDir: app.path });
+    expect(linesOf(reply)).toContain(text.manifestStaleSchema(".builderforce/builderforce.json", "https://builderforce.ai/schema/app.v1.json"));
+    expect(reply.kind === "text" ? reply.actions : []).toContainEqual({ label: text.manifestSchemaRemoveAction, command: "/manifest move" });
+  });
+
+  it("says nothing about a $schema with any other value", async () => {
+    const canonical = path.join(app.path, ".builderforce", "builderforce.json");
+    const { launch } = setup({ [canonical]: "{\"$schema\":\"./my.schema.json\",\"version\":1}" });
+    const reply = await launch();
+    const text = composerCommandText();
+    expect(reply.kind === "text" ? reply.actions : []).not.toContainEqual({ label: text.manifestSchemaRemoveAction, command: "/manifest move" });
+    expect(linesOf(reply).some((line) => line.includes("$schema"))).toBe(false);
+  });
+
   it("keeps ONE launcher per folder: a second /launch reopens it", async () => {
     const { start, openInEditor, launch } = setup();
     await launch();
