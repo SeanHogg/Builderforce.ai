@@ -22,6 +22,10 @@ import type { MarkSet, Placement } from '../types';
 import { SlotIncident } from './incident';
 import { CallSiteCard } from './CallSiteCard';
 import { StageCard } from './StageCard';
+import type { SymbolRecord } from '../../types';
+
+/** The code dock's records while it is closed: none, and the same array every render. */
+const NO_RECORDS: readonly SymbolRecord[] = [];
 
 export interface StageWiring {
     map: StageMap;
@@ -111,7 +115,10 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
     const closeCard = useCallback(() => setCardKey(null), []);
     const openCode = useCallback(() => setCodeOpen(true), []);
     const closeCode = useCallback(() => setCodeOpen(false), []);
-    const records = useMemo(() => recordsForCode(graph, drill), [graph, drill]);
+    // Only while the code dock is open: the fallback walks every graph node on the main thread, and `drill` is a fresh
+    // object each render, so keying on it re-walked the graph on every render of every stage view (the perf gate's mount reads).
+    const drillSymbols = drill.symbols;
+    const records = useMemo(() => codeOpen ? recordsForCode(graph, { symbols: drillSymbols }) : NO_RECORDS, [codeOpen, graph, drillSymbols]);
     const markRef = selected?.startsWith('node:') ? selected.slice('node:'.length) : selected?.startsWith('st:') ? null : selected;
     const codeTarget = codeOpen ? targetForMark(markRef, markRef ? index.get(markRef)?.label ?? markRef : '', records) : null;
     const stopId = surface.path?.stops[surface.step]?.id ?? null;
