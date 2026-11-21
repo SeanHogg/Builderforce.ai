@@ -1,5 +1,9 @@
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
 import type React from 'react';
+import { attachmentPreviewLabels } from '../attachments/labels';
+import type { AttachmentDownload } from '../attachments/types';
+import type { TimelineFile } from '../timelineNodes';
+import { MessageAttachments } from './MessageAttachments';
 import {
   isStoppedBeforeStart,
   isStoppedTurn,
@@ -19,6 +23,8 @@ import type { BrainTimelineLabels } from './labels';
 import { MessageActions, type MessageRating } from './MessageActions';
 import { ProvenanceChip } from './ProvenanceChip';
 
+const NO_FILES: readonly TimelineFile[] = [];
+
 /** Renders one message's text — the host's renderer or the shared <Markdown>. */
 export type RenderMessageText = (msg: BrainMessage, role: 'user' | 'assistant', text: string) => React.ReactNode;
 
@@ -29,6 +35,7 @@ function UserRowInner({
   focusClass,
   renderMsg,
   onReplay,
+  onDownloadAttachment,
   pending = false,
 }: {
   node: Extract<TimelineNode, { kind: 'user' }>;
@@ -36,9 +43,12 @@ function UserRowInner({
   focusClass: string;
   renderMsg: RenderMessageText;
   onReplay?: (msg: BrainMessage, role: 'user' | 'assistant') => void;
+  /** Saves an attachment's original (the host's port; the browser's download when omitted). */
+  onDownloadAttachment?: AttachmentDownload;
   /** Sent, not saved yet: drawn exactly like the saved row it is about to become, with nothing to act on. */
   pending?: boolean;
 }) {
+  const previewLabels = useMemo(() => attachmentPreviewLabels(labels.attachmentPreview), [labels.attachmentPreview]);
   // A message addressed to participants (not the BRAIN) shows a "→ Name"
   // badge — several for a group turn — so the transcript makes clear who it
   // was spoken to.
@@ -54,13 +64,12 @@ function UserRowInner({
           <span>{author ? author.name : labels.you}</span>
           <RecipientsBadge recipients={to} />
         </div>
-        {node.images.length > 0 && (
-          <div className="bf-tl__images">
-            {node.images.map((im, i) => (
-              <img key={i} src={im.url} alt={im.name ?? ''} className="bf-tl__image" />
-            ))}
-          </div>
-        )}
+        <MessageAttachments
+          images={node.images}
+          files={node.files ?? NO_FILES}
+          labels={previewLabels}
+          download={onDownloadAttachment}
+        />
         {node.text && <div className="bf-tl__bubble bf-tl__bubble--user">{renderMsg(node.message, 'user', node.text)}</div>}
         {!pending && (
           <div className="bf-tl__actions bf-tl__actions--hover">

@@ -860,12 +860,28 @@
 }
 
 .bf-tl__image {
+  display: block;
   max-width: min(220px, 100%);
   max-height: 220px;
   border-radius: 8px;
   border: 1px solid var(--bf-border, rgba(128, 128, 128, 0.25));
   object-fit: contain;
 }
+
+/* A turn's picture / file opens the attachment preview. */
+.bf-tl__image-btn {
+  max-width: 100%; padding: 0; border: none; background: transparent; cursor: zoom-in; border-radius: 8px;
+}
+.bf-tl__image-btn:focus-visible, .bf-tl__file:focus-visible { outline: 2px solid var(--bf-border-strong, rgba(128, 128, 128, 0.5)); outline-offset: 2px; }
+.bf-tl__files { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.bf-tl__file {
+  display: inline-flex; align-items: center; max-width: min(240px, 100%); min-height: 32px; padding: 0 10px;
+  border-radius: 6px; cursor: pointer; font: inherit; font-size: 12px;
+  border: 1px solid var(--bf-border, rgba(128, 128, 128, 0.25));
+  background: var(--bf-surface-2, rgba(128, 128, 128, 0.12));
+  color: var(--bf-text, inherit);
+}
+.bf-tl__file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ---- tool step ---- */
 .bf-tl__tool {
@@ -2279,9 +2295,91 @@
   color: var(--bf-text, inherit);
   font-size: 11px;
 }
-.bf-cmp-chip__thumb { width: 18px; height: 18px; border-radius: 3px; object-fit: cover; }
+.bf-cmp-chip__thumb { width: 18px; height: 18px; border-radius: 3px; object-fit: cover; flex: none; }
 .bf-cmp-chip__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bf-cmp-chip__x { border: none; background: transparent; color: inherit; cursor: pointer; font-size: 13px; line-height: 1; padding: 0 2px; }
+.bf-cmp-chip__x {
+  border: none; background: transparent; color: inherit; cursor: pointer; font-size: 13px; line-height: 1;
+  min-width: 24px; min-height: 24px; padding: 0 2px; border-radius: 4px;
+}
+.bf-cmp-chip__x:focus-visible, .bf-cmp-chip__open:focus-visible { outline: 2px solid var(--bf-border-strong, rgba(128, 128, 128, 0.5)); outline-offset: 1px; }
+/* The chip opens its preview: the thumb + name are one button. */
+.bf-cmp-chip { flex-direction: column; align-items: stretch; }
+.bf-cmp-chip__row { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
+.bf-cmp-chip__open {
+  display: inline-flex; align-items: center; gap: 5px; min-width: 0; min-height: 24px;
+  border: none; background: transparent; color: inherit; font: inherit; padding: 0; cursor: pointer; border-radius: 4px;
+}
+.bf-cmp-chip--uploading .bf-cmp-chip__open { opacity: 0.7; }
+.bf-cmp-chip__spinner {
+  width: 10px; height: 10px; flex: none; border-radius: 50%;
+  border: 2px solid var(--bf-border, rgba(128, 128, 128, 0.35));
+  border-top-color: var(--bf-accent, #4f80ff);
+  animation: bf-cmp-chip-spin 0.8s linear infinite;
+}
+@keyframes bf-cmp-chip-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .bf-cmp-chip__spinner { animation: none; } }
+.bf-cmp-chip--error { max-width: min(320px, 100%); border-color: var(--bf-error, #e5534b); }
+.bf-cmp-chip__error { color: var(--bf-error, #e5534b); white-space: normal; overflow-wrap: anywhere; line-height: 1.35; padding-bottom: 2px; }
+.bf-cmp-upload-note { font-size: 11px; color: var(--bf-text-muted, inherit); margin-top: 4px; }
+.bf-cmp-upload-note--error { color: var(--bf-error, #e5534b); }
+@media (pointer: coarse) {
+  .bf-cmp-chip__x, .bf-cmp-chip__open { min-height: 32px; }
+  .bf-cmp-chip__x { min-width: 32px; }
+}
+
+/* ── Attachment preview (one panel for transcript + composer attachments) ── */
+.bf-attp {
+  position: fixed; inset: 0; z-index: 1000;
+  display: flex; justify-content: flex-end;
+  background: color-mix(in srgb, var(--bf-surface, #1b1b1b) 55%, transparent);
+}
+.bf-attp__panel {
+  display: flex; flex-direction: column;
+  width: min(520px, 100%); max-width: 100%; height: 100%;
+  background: var(--bf-surface, #1b1b1b);
+  color: var(--bf-text, inherit);
+  border-left: 1px solid var(--bf-border, rgba(128, 128, 128, 0.25));
+  box-shadow: -8px 0 24px color-mix(in srgb, var(--bf-text, #000) 18%, transparent);
+  box-sizing: border-box;
+  animation: bf-attp-in 160ms ease-out;
+}
+@keyframes bf-attp-in { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .bf-attp__panel { animation: none; } }
+.bf-attp__head {
+  display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 14px;
+  border-bottom: 1px solid var(--bf-border, rgba(128, 128, 128, 0.25));
+}
+.bf-attp__title { flex: 1; min-width: 0; font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bf-attp__close {
+  min-width: 32px; min-height: 32px; border: none; border-radius: 6px; cursor: pointer;
+  background: transparent; color: inherit; font-size: 18px; line-height: 1;
+}
+.bf-attp__close:hover { background: var(--bf-surface-2, rgba(128, 128, 128, 0.12)); }
+.bf-attp__body {
+  flex: 1; min-height: 0; overflow: auto; padding: 12px;
+  display: flex; align-items: center; justify-content: center;
+}
+.bf-attp__image { display: block; max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 6px; }
+.bf-attp__file { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; color: var(--bf-text-muted, inherit); max-width: 100%; }
+.bf-attp__filename { color: var(--bf-text, inherit); font-weight: 600; overflow-wrap: anywhere; }
+.bf-attp__hint { font-size: 12px; }
+.bf-attp__foot {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px;
+  border-top: 1px solid var(--bf-border, rgba(128, 128, 128, 0.25));
+}
+.bf-attp__info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
+.bf-attp__meta { color: var(--bf-text-muted, inherit); overflow-wrap: anywhere; }
+.bf-attp__note { color: var(--bf-text-muted, inherit); overflow-wrap: anywhere; }
+.bf-attp__note:empty { display: none; }
+.bf-attp__note--error { color: var(--bf-error, #e5534b); }
+.bf-attp__download {
+  min-height: 32px; padding: 0 14px; border-radius: 6px; cursor: pointer; font: inherit; font-size: 12px;
+  border: 1px solid transparent;
+  background: var(--bf-btn-primary-bg, var(--bf-accent, #4f80ff));
+  color: var(--bf-on-accent, #fff);
+}
+.bf-attp__download:disabled { opacity: 0.55; cursor: default; }
+.bf-attp__close:focus-visible, .bf-attp__download:focus-visible { outline: 2px solid var(--bf-border-strong, rgba(128, 128, 128, 0.5)); outline-offset: 2px; }
 
 /* ── Status tab: account + meters (shared by every surface) ────────────── */
 .bf-acct { display: flex; flex-direction: column; gap: 4px; }

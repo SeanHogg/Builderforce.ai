@@ -21,6 +21,14 @@ export interface ComposerLabels {
   on: string;
   off: string;
   remove: string;
+  /** A chip whose file is still uploading (its spinner's name). */
+  attachmentUploading: string;
+  /** A chip whose upload failed, when the host gave no reason. */
+  attachmentFailed: string;
+  /** Send pressed while a file is still uploading: the message goes as soon as it is up. */
+  sendWaitsForUploads: string;
+  /** Send refused while a chip shows a failed upload — never sent without the file. */
+  sendBlockedByFailedUpload: string;
   send: string;
   /** Send while a run streams speaks to the run now (it steers) - its name says so; the message
    *  reaches the run's next model call. A message that would be held reads {@link queueHold}; the
@@ -70,6 +78,10 @@ export const DEFAULT_COMPOSER_LABELS: ComposerLabels = {
   on: 'On',
   off: 'Off',
   remove: 'Remove',
+  attachmentUploading: 'Uploading',
+  attachmentFailed: 'Upload failed',
+  sendWaitsForUploads: 'Your message will send as soon as the attachments finish uploading.',
+  sendBlockedByFailedUpload: 'An attachment could not be uploaded. Remove it, or attach it again, before sending.',
   send: 'Send',
   queueSend: 'Send into the running turn now',
   queueHold: 'Queue message — sends when the current run finishes',

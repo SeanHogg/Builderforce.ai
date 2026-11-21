@@ -41,8 +41,23 @@ function answerChipsOf(raw: unknown): TimelineAnswerChip[] {
 }
 
 export interface TimelineImage {
+  /** The stored copy the transcript draws (a `data:` URL or a signed link). */
   url: string;
   name?: string;
+  /** The attachment's key and MIME type, when the turn recorded them. */
+  key?: string;
+  type?: string;
+  /** The turn's own link to the file (its `[Attached: …](href)` line) — the original, for a download. */
+  href?: string;
+}
+
+/** A non-picture attached to a turn — shown as a chip that opens the preview. */
+export interface TimelineFile {
+  name: string;
+  key?: string;
+  type?: string;
+  /** The turn's own link to the file, when it has one. */
+  href?: string;
 }
 
 /** Why a turn did not feed the project Evermind (mirrors the api's `BrainLearnSkipReason`). */
@@ -55,7 +70,7 @@ function isLearnSkipReason(v: unknown): v is BrainLearnSkipReason {
 }
 
 export type TimelineNode =
-  | { key: string; kind: 'user'; ts: number; order: number; message: BrainMessage; text: string; images: TimelineImage[] }
+  | { key: string; kind: 'user'; ts: number; order: number; message: BrainMessage; text: string; images: TimelineImage[]; files?: TimelineFile[] }
   | { key: string; kind: 'assistant'; ts: number; order: number; message: BrainMessage; text: string }
   // A run milestone / agent dispatch: the RUNTIME narrating itself, not the model
   // talking. Carries the structured facts so the renderer composes the sentence in the
@@ -157,22 +172,50 @@ export function attachmentsOf(message: BrainMessage): ChatInputAttachment[] {
   }
 }
 
+const ATTACHED_LINE = /^\[Attached:\s*(.+?)\]\((.*)\)\s*$/;
+
+/** The `[Attached: name](href)` lines a sent message carries, name → href (the first per name). */
+function attachedLinks(text: string): Map<string, string> {
+  const links = new Map<string, string>();
+  for (const line of text.split('\n')) {
+    const m = line.match(ATTACHED_LINE);
+    if (m && m[2] && !links.has(m[1].trim())) links.set(m[1].trim(), m[2].trim());
+  }
+  return links;
+}
+
 /**
- * Strip the trailing `[Attached: name](url)` markdown links a sent message
- * carries for its IMAGE attachments — those render as image bubbles instead, so
- * showing the link too is redundant. Non-image attachment links are kept.
+ * Strip the trailing `[Attached: name](url)` markdown links a sent message carries for
+ * the attachments it RECORDED — those render as image bubbles and file chips instead, so
+ * showing the link too is redundant. A link the turn did not record is kept.
  */
-function stripImageRefs(text: string, imageNames: Set<string>): string {
-  if (imageNames.size === 0) return text;
+function stripAttachmentRefs(text: string, names: Set<string>): string {
+  if (names.size === 0) return text;
   return text
     .split('\n')
     .filter((line) => {
-      const m = line.match(/^\[Attached:\s*(.+?)\]\((.*)\)\s*$/);
-      return !(m && imageNames.has(m[1].trim()));
+      const m = line.match(ATTACHED_LINE);
+      return !(m && names.has(m[1].trim()));
     })
     .join('\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+}
+
+/** A user turn's recorded attachments as the transcript shows them: pictures and other files. */
+function userAttachmentsOf(message: BrainMessage): { images: TimelineImage[]; files: TimelineFile[] } {
+  const recorded = attachmentsOf(message).filter((a) => a && typeof a.name === 'string');
+  if (recorded.length === 0) return { images: [], files: [] };
+  const links = attachedLinks(message.content);
+  const images: TimelineImage[] = [];
+  const files: TimelineFile[] = [];
+  for (const a of recorded) {
+    const href = links.get(a.name.trim());
+    const facts = { ...(a.key ? { key: a.key } : {}), ...(a.type ? { type: a.type } : {}), ...(href ? { href } : {}) };
+    if (a.imageUrl) images.push({ url: a.imageUrl, name: a.name, ...facts });
+    else files.push({ name: a.name, ...facts });
+  }
+  return { images, files };
 }
 
 /** Build the timeline node for a tool/memory step (shared by the trace and the
@@ -295,11 +338,10 @@ function deriveMessageNode(message: BrainMessage, index: number): MessageDerivat
   const key = `msg-${message.id}`;
   const ts = parseTs(message.createdAt, index);
   if (message.role === 'user') {
-    const images: TimelineImage[] = attachmentsOf(message)
-      .filter((a) => a.imageUrl)
-      .map((a) => ({ url: a.imageUrl as string, name: a.name }));
-    const imageNames = new Set(images.map((im) => im.name).filter((n): n is string => !!n));
-    return { node: { key, kind: 'user', ts, order: ORDER.user, message, text: stripImageRefs(message.content, imageNames), images } };
+    const { images, files } = userAttachmentsOf(message);
+    const names = new Set([...images.map((im) => im.name), ...files.map((f) => f.name)].filter((n): n is string => !!n).map((n) => n.trim()));
+    const text = stripAttachmentRefs(message.content, names);
+    return { node: { key, kind: 'user', ts, order: ORDER.user, message, text, images, ...(files.length > 0 ? { files } : {}) } };
   }
   if (isStepMessage(message)) {
     // A durable tool/memory STEP row — reconstruct its node so it survives a reload. When

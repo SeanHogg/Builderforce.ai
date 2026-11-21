@@ -61,7 +61,7 @@ export function ComposerAddMenu({ labels, disabled = false, onAttachFiles, uploa
       </button>
       {open && (
         <div className="bf-pmenu__pop" role="menu">
-          {onAttachFiles && row('upload', '💻', uploading ? labels.uploading : labels.upload, () => { close(); if (!uploading) fileRef.current?.click(); })}
+          {onAttachFiles && row('upload', '💻', uploading ? labels.uploading : labels.upload, () => { close(); fileRef.current?.click(); })}
           {onAddContext && row('context', '◧', labels.addContext, () => { close(); onAddContext(); })}
           {items?.map((item) => row(item.id, item.icon, item.label, () => { close(); item.onSelect(); }))}
           {webBrowsing && row('web', '🌐', labels.browseWeb, () => webBrowsing.onChange(!webBrowsing.on), webBrowsing.on ? labels.on : labels.off, webBrowsing.on)}

@@ -40,6 +40,9 @@ import { useDraftIsEmpty, type ContextUsage } from '@seanhogg/builderforce-brain
 import { ComposerTextBox, type ComposerTextSource } from './ComposerTextBox';
 import { composerLabels, type ComposerLabels } from './labels';
 import { UNUSED_STORE } from './unusedDraftStore';
+import { useUploadGate } from './useUploadGate';
+import { attachmentPreviewLabels, type AttachmentPreviewLabels } from '../attachments/labels';
+import type { AttachmentDownload } from '../attachments/types';
 
 export interface BrainComposerLabels {
   composer?: Partial<ComposerLabels>;
@@ -50,6 +53,8 @@ export interface BrainComposerLabels {
   mention?: UseMentionAutocompleteOptions['labels'];
   ticket?: UseTicketAutocompleteOptions['labels'];
   command?: CommandAutocompleteLabels;
+  /** The attachment preview a chip opens (the transcript reads the same copy). */
+  attachmentPreview?: Partial<AttachmentPreviewLabels>;
 }
 
 /**
@@ -101,6 +106,8 @@ export interface BrainComposerBaseProps {
     onRemove: (key: string) => void;
     uploading?: boolean;
     accept?: string;
+    /** Saves a chip's original from its preview; omitted ⇒ the browser's download. */
+    onDownload?: AttachmentDownload;
   };
   onAddContext?: () => void;
   webBrowsing?: { on: boolean; onChange: (on: boolean) => void };
@@ -182,16 +189,20 @@ function BrainComposerInner(props: BrainComposerProps) {
   const ownGate = useInferenceModeGate(options.inferenceMode);
   const gate = modeGate ?? ownGate;
   // The submit paths read their inputs at call time, so the textarea child keeps ONE identity for them.
-  const live = useRef({ onSubmit, onQueue, gate, disabled, getValue });
-  live.current = { onSubmit, onQueue, gate, disabled, getValue };
-  const submit = useCallback(() => {
-    const { onSubmit: send, gate: g, disabled: closed, getValue: read } = live.current;
+  // A send while a file is still uploading waits for it; one with a failed upload is refused.
+  const uploadGate = useUploadGate(attachments?.items);
+  const live = useRef({ onSubmit, onQueue, gate, disabled, getValue, uploadGate });
+  live.current = { onSubmit, onQueue, gate, disabled, getValue, uploadGate };
+  const submit = useCallback(function submitNow() {
+    const { onSubmit: send, gate: g, disabled: closed, getValue: read, uploadGate: uploads } = live.current;
     if (closed || !read().trim()) return;
+    if (uploads.intercept(submitNow)) return;
     g.request(() => send());
   }, []);
-  const queue = useCallback(() => {
-    const { onQueue: hold, gate: g, disabled: closed, getValue: read } = live.current;
+  const queue = useCallback(function queueNow() {
+    const { onQueue: hold, gate: g, disabled: closed, getValue: read, uploadGate: uploads } = live.current;
     if (closed || !hold || !read().trim()) return;
+    if (uploads.intercept(queueNow)) return;
     g.request(() => hold());
   }, []);
 
@@ -245,13 +256,32 @@ function BrainComposerInner(props: BrainComposerProps) {
     }
     : undefined;
 
-  const chips = attachments ? <AttachmentChips items={attachments.items} onRemove={attachments.onRemove} labels={labels} /> : null;
+  const previewLabels = useMemo(() => attachmentPreviewLabels(labelBundle?.attachmentPreview), [labelBundle?.attachmentPreview]);
+  const chips = attachments
+    ? (
+      <AttachmentChips
+        items={attachments.items}
+        onRemove={attachments.onRemove}
+        labels={labels}
+        previewLabels={previewLabels}
+        download={attachments.onDownload}
+        locale={account?.locale}
+      />
+    )
+    : null;
+  const uploadNote = uploadGate.notice
+    ? (
+      <div className={`bf-cmp-upload-note${uploadGate.notice === 'failed' ? ' bf-cmp-upload-note--error' : ''}`} role="status" aria-live="polite">
+        {uploadGate.notice === 'failed' ? labels.sendBlockedByFailedUpload : labels.sendWaitsForUploads}
+      </div>
+    )
+    : null;
   const showSuggestions = !!suggestions?.items.length && empty && !running;
   const modeQuestion = gate.asking
     ? <InferenceModeFirstRun labels={promptOptionsLabels(labelBundle?.options)} onChoose={gate.choose} />
     : null;
-  const aboveBox = modeQuestion || above || showSuggestions || (attachments && attachments.items.length > 0)
-    ? <>{modeQuestion}{above}{showSuggestions && <SuggestionRow items={suggestions!.items} ariaLabel={suggestions!.label} />}{chips}</>
+  const aboveBox = modeQuestion || above || showSuggestions || uploadNote || (attachments && attachments.items.length > 0)
+    ? <>{modeQuestion}{above}{showSuggestions && <SuggestionRow items={suggestions!.items} ariaLabel={suggestions!.label} />}{chips}{uploadNote}</>
     : undefined;
 
   // The `/` typeahead words its heading, its "no commands" row and its Unavailable tag as the Actions tab does.

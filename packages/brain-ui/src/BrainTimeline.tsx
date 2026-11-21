@@ -17,6 +17,7 @@ import { LiveActivity } from './LiveActivity';
 import { ModelMoveStep } from './ModelMoveStep';
 import { DEFAULT_TIMELINE_LABELS, type BrainTimelineLabels } from './timeline/labels';
 import type { MessageRating } from './timeline/MessageActions';
+import type { AttachmentDownload } from './attachments/types';
 import { useTranscriptScroll } from './timeline/useTranscriptScroll';
 import { TIMELINE_PAGE_SIZE, useRenderWindow } from './timeline/useRenderWindow';
 import { AssistantRow, UserRow } from './timeline/MessageRows';
@@ -125,6 +126,12 @@ export interface BrainTimelineProps {
    * stands in, which a host whose message list is a moving tail should not rely on.
    */
   conversationKey?: string | number | null;
+  /**
+   * Saves the original of a picture or file a turn carried, from its preview. A host that
+   * cannot download in place (a VS Code webview) routes it through itself; omitted ⇒ the
+   * browser's download (`browserDownload`).
+   */
+  onDownloadAttachment?: AttachmentDownload;
 }
 
 /**
@@ -164,6 +171,7 @@ function BrainTimelineInner({
   revealMessage = null,
   conversationKey,
   prefetch,
+  onDownloadAttachment,
 }: BrainTimelineProps) {
   // Stable across renders so the memoized <Markdown> children below keep their
   // identity and don't re-parse when only streaming text ticks over.
@@ -263,6 +271,7 @@ function BrainTimelineInner({
                   focusClass={focusClass(node.message.id)}
                   renderMsg={renderMsg}
                   onReplay={onReplayMessage}
+                  onDownloadAttachment={onDownloadAttachment}
                 />
               );
             case 'assistant':

@@ -4,6 +4,7 @@ import type { ToolStepLabels } from '../ToolStep';
 import { DEFAULT_LIVE_ACTIVITY_LABELS, type LiveActivityLabels } from '../LiveActivity';
 import { DEFAULT_MODEL_MOVE_LABELS, type ModelMoveLabels } from '../timelineModelMoves';
 import type { ChatErrorBannerLabels } from '../ChatErrorBanner';
+import { DEFAULT_ATTACHMENT_PREVIEW_LABELS, type AttachmentPreviewLabels } from '../attachments/labels';
 
 /**
  * Every string the transcript renders. It EXTENDS {@link ToolStepLabels} rather than
@@ -134,10 +135,16 @@ export interface BrainTimelineLabels extends ToolStepLabels, ModelMoveLabels {
    * `chatError.<field>`; omitted ⇒ the banner's English defaults.
    */
   chatError?: Partial<ChatErrorBannerLabels>;
+  /**
+   * The attachment preview a turn's picture or file opens — the SAME copy the composer's
+   * chips read. Catalog keys `attachmentPreview.<field>`; omitted ⇒ English defaults.
+   */
+  attachmentPreview?: Partial<AttachmentPreviewLabels>;
 }
 
 export const DEFAULT_TIMELINE_LABELS: BrainTimelineLabels = {
   thinking: 'Thinking…',
+  attachmentPreview: DEFAULT_ATTACHMENT_PREVIEW_LABELS,
   live: DEFAULT_LIVE_ACTIVITY_LABELS,
   thoughtFor: 'Thought for {duration}',
   thought: 'Thought',

@@ -295,7 +295,7 @@ export {
   attachmentsOf,
   formatDuration,
 } from './timelineModel';
-export type { TimelineNode, TimelineImage, BuildTimelineInput } from './timelineModel';
+export type { TimelineNode, TimelineImage, TimelineFile, BuildTimelineInput } from './timelineModel';
 export { modelMoveOf, modelMoveLine, DEFAULT_MODEL_MOVE_LABELS } from './timelineModelMoves';
 export type { ModelMove, ModelMoveLabels } from './timelineModelMoves';
 
@@ -385,6 +385,22 @@ export { BrainComposer } from './composer/BrainComposer';
 export type { BrainComposerLabels, BrainComposerProps } from './composer/BrainComposer';
 export type { ComposerAddMenuItem } from './composer/ComposerAddMenu';
 export type { ComposerAttachment } from './composer/AttachmentChips';
+export { chipPreviewItem } from './composer/AttachmentChips';
+export { useUploadGate } from './composer/useUploadGate';
+export type { UploadGate, UploadGateNotice } from './composer/useUploadGate';
+// THE attachment preview — a turn's pictures/files and the composer's chips open it.
+export { AttachmentPreview, formatFileSize } from './attachments/AttachmentPreview';
+export type { AttachmentPreviewProps } from './attachments/AttachmentPreview';
+export { useAttachmentPreview } from './attachments/useAttachmentPreview';
+export type { AttachmentPreviewState } from './attachments/useAttachmentPreview';
+export { browserDownload } from './attachments/browserDownload';
+export type { AttachmentDownload, AttachmentPreviewItem } from './attachments/types';
+export {
+  DEFAULT_ATTACHMENT_PREVIEW_LABELS,
+  attachmentPreviewLabels,
+  attachmentPreviewLabelsFrom,
+} from './attachments/labels';
+export type { AttachmentPreviewLabels } from './attachments/labels';
 export type { ComposerOptions } from './composer/composerOptions';
 export { DEFAULT_COMPOSER_LABELS, composerLabels } from './composer/labels';
 export type { ComposerLabels } from './composer/labels';

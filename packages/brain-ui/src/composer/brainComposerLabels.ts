@@ -2,7 +2,8 @@
  * Everything `BrainComposer` renders — the box, the `/` menu, its Status tab, the spend
  * readouts and the @/# pickers — from ONE host lookup, through each part's own key
  * table. Canonical keys are scoped by part: `composer.<key>`, `options.<key>`,
- * `status.<key>`, `spend.<key>`, `connections.<key>`, `mention.<key>`, `ticket.<key>` and `command.<key>`, each `<key>` being
+ * `status.<key>`, `spend.<key>`, `connections.<key>`, `mention.<key>`, `ticket.<key>`, `command.<key>` and
+ * `attachmentPreview.<key>` (the same keys the transcript reads), each `<key>` being
  * that part's own canonical key (see `composerLabelsFrom`, `promptOptionsLabelsFrom`,
  * `workStatusLabelsFrom`, `spendLabelsFrom`). Every host — the web (next-intl), the
  * editor webview (`vscode.l10n` bundle) and Rovr (`chrome.i18n`) — builds its composer
@@ -17,6 +18,7 @@ import { spendLabelsFrom, type SpendLabels } from '../spend/labels';
 import { workStatusLabelsFrom, type WorkStatusLabels } from '../workStatus/labels';
 import { composerLabelsFrom, type ComposerLabels } from './labels';
 import { connectionsLabelsFrom, type ConnectionsLabels } from '../connections/types';
+import { attachmentPreviewLabelsFrom, type AttachmentPreviewLabels } from '../attachments/labels';
 
 export { DEFAULT_MENTION_LABELS, DEFAULT_TICKET_TAG_LABELS };
 
@@ -34,6 +36,7 @@ export interface FullBrainComposerLabels {
   mention: Required<MentionLabels>;
   ticket: Required<TicketAutocompleteLabels>;
   command: Required<CommandAutocompleteLabels>;
+  attachmentPreview: AttachmentPreviewLabels;
 }
 
 /** `overrides`: copy a host words from another source on purpose (e.g. the web's
@@ -51,5 +54,6 @@ export function brainComposerLabelsFrom(
     mention: stringsFrom(DEFAULT_MENTION_LABELS, scopedLookup(lookup, 'mention')),
     ticket: stringsFrom(DEFAULT_TICKET_TAG_LABELS, scopedLookup(lookup, 'ticket')),
     command: stringsFrom(DEFAULT_COMMAND_LABELS, scopedLookup(lookup, 'command')),
+    attachmentPreview: attachmentPreviewLabelsFrom(scopedLookup(lookup, 'attachmentPreview')),
   };
 }

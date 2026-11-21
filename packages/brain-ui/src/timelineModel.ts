@@ -16,7 +16,7 @@ import { messageNode, ORDER, traceNode, TRACE_RANK, withoutCoveredFolds, type Ti
 
 // The node shapes live with their derivation (`timelineNodes.ts`); re-exported unchanged.
 export { attachmentsOf } from './timelineNodes';
-export type { BrainLearnSkipReason, TimelineImage, TimelineNode } from './timelineNodes';
+export type { BrainLearnSkipReason, TimelineFile, TimelineImage, TimelineNode } from './timelineNodes';
 
 export interface BuildTimelineInput {
   messages: BrainMessage[];
