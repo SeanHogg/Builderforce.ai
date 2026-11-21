@@ -199,6 +199,9 @@ export enum ExecutionStatus {
   /** Non-terminal: a cloud run that called `ask_human` is waiting on a person to
    *  answer its question (migration 0120). It resumes when the answer lands. */
   PAUSED    = 'paused',
+  /** Terminal: a run that finished NOT cancelled but wrote nothing (`writtenPaths.size === 0`),
+   *  so no PR opened. Distinct from `completed` and from the `produced` stamp (MK-09-W5). */
+  NO_CHANGES = 'no_changes',
 }
 
 // ---------------------------------------------------------------------------
