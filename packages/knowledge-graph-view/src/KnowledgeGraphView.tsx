@@ -288,6 +288,7 @@ export function KnowledgeGraphView({
                             <PathStrip
                                 path={surface.path} step={surface.step} labels={labels} onStep={surface.setStep} pathTitle={chrome.pathTitle}
                                 stations={surface.stations.byId} routeLabels={routeLabels} onOpenPanel={setPanel} onEnlarge={() => setMode('sequence')} narrow={layout.phone} transitions={transitions}
+                                trail={surface.drill.stack} systemName={titleOf(graph.scope.rootId)} onClimb={surface.drill.climb}
                             />
                         )}
                     </div>
@@ -295,7 +296,7 @@ export function KnowledgeGraphView({
                 {real && panels.visibility.right && <ActPanel
                     graph={graph} findings={findings} listedFindings={listedFindings} lensName={labels.lenses[lens.id]} labels={labels} station={surface.station} stations={surface.stations.stations} scopeName={chrome.scopeName}
                     compact={layout.actBelow} showFindings={mode !== 'list'} onClearScope={() => surface.selectLine(null)} onShow={show} onCompose={onCompose} onResolve={surface.resolve}
-                    evidence={evidenceOf} onOpenSource={onOpenSource} canApply={canApplyFor} resolved={resolvedFixes} onOpenPanel={setPanel} path={surface.path} pathTitle={chrome.pathTitle}
+                    evidence={evidenceOf} onOpenSource={onOpenSource} canApply={canApplyFor} resolved={resolvedFixes} onOpenPanel={setPanel} path={surface.path} step={surface.step} pathTitle={chrome.pathTitle}
                     model={surface.stations} copyFix={copyFix} onAskUntested={() => pickQuestion('untested')} changedPartners={changedPartners}
                 >
                     <InsightsPanel graph={graph} labels={labels} lenses={kg.lenses.map((l) => l.id)} onLens={pickLens} onShow={show} findingKinds={mode !== 'list'} />
