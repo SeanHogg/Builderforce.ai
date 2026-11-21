@@ -15,6 +15,7 @@ import { notSetUpText } from './notSetUpText';
 import { CHANNELS, METRICS, metricStatus, PRESET_ORDER, PRESETS, type ChannelId, type MetricId, type PresetId } from './overlays';
 import type { Station } from './stations';
 import { Menu, Pill, pillStyle } from './ui';
+import { iconButtonStyle } from './CameraBar';
 
 export interface OverlayMenuProps {
     labels: KnowledgeGraphLabels;
@@ -52,7 +53,10 @@ export function OverlayMenu({ labels, stations, bindings, preset, onPreset, onCh
     };
     const trigger = narrow ? `${s.presets[preset]} ▾` : `${fillTemplate(s.presetLabel, { preset: s.presets[preset] })} ▾`;
     return (
-        <Menu trigger={trigger} label={s.overlaysTitle} title={s.overlaysTitle} active variant={narrow ? 'pill' : 'accent'} anchor={narrow ? 'container' : 'trigger'} panelStyle={narrow ? NARROW : WIDE}>
+        <Menu
+            trigger={<span aria-hidden="true">◐</span>} triggerLabel={trigger} triggerStyle={iconButtonStyle} label={s.overlaysTitle} title={trigger} active
+            anchor={narrow ? 'container' : 'trigger'} panelStyle={narrow ? NARROW : WIDE}
+        >
             <div data-testid="kg-overlay-menu" style={{ display: 'grid', gap: 9 }}>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                     {PRESET_ORDER.map((id) => (
