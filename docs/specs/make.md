@@ -1671,6 +1671,132 @@ A VS Code webview cannot register the runtime's service worker, so the VSIX laun
 
 **Remaining (2026-11-19):** all of it. Design only.
 
+### §4 W12: Agent Environment and recoverable runtime
+
+*Added 2026-11-20. It reworks the external "RAR-001 Recursive Agent Runtime v1.2" spec, checked against builderforce-webcontainers (`main`, after 2026.11.7) and the Builderforce packages the same day.* The WebContainer must hold a whole system, and that includes systems made of agents. A user declares agents as code in their project, runs them **inside** their environment against its files, shell, services and database, watches them in the Room, and gets the whole environment back after the tab dies. Agents stay **optional**. A plain web app carries none of this.
+
+**Gaps it closes (verified 2026-11-20):**
+- An environment cannot be suspended and recovered. `VfsJournal`, `VfsSnapshots` and `createSnapshotStore` exist, but nothing restores manifest → files → databases → services in order after an abrupt stop. Only a database's own `DatabaseControl.export()` survives on purpose.
+- An app cannot declare agents, and the runtime has no capability concept: `manifest/capabilities.ts` is the per-*target* matrix, not installable features.
+- The ONE agent (`packages/agent-run`) has no WebContainer surface. Agents reach a project only through the IDE file contract or the cloud sandbox, never through a running browser environment's VFS, `run()` and preview.
+- A recovered agent run has no idempotency on mutating tool calls, so a crash after a side effect and before the checkpoint repeats it.
+- The Room shows creations, not the agents working in an environment.
+
+#### W12 decisions (re-mapping RAR-001, 2026-11-20)
+
+| RAR-001 proposal | Decision | Why |
+|---|---|---|
+| New `EnvironmentManifest` | **Rejected → manifest v1 grows `capabilities` and `agents`** | One manifest, one parser (W11 decision 3). |
+| Starter kits as composition presets | **Accepted as W11 kit parts.** The `agents` part is added to `ide-templates`. | `composeKit` already composes parts. |
+| Agent Runtime, Executor, task orchestrator | **Rejected as a runtime component → a `runAgent` surface** (codec + ports + hooks) | ONE agent, ONE kernel; `check:one-execution --enforce` stays green with an empty allowlist. |
+| Agent Factory | **Re-mapped**: agent declarations in the manifest + agent skills + sub-agent delegation (a child clones the parent's catalog) | These already exist. A "factory agent" is an ordinary agent with a skill. |
+| Model Gateway, `ModelProfile` | **Re-mapped to role routing** (`model-router`). An agent declares a role or workload, never a model id. | The server owns the model order. |
+| MCP Gateway | **Re-mapped** to the ONE MCP catalog ∩ the agent's allowlist, plus environment-local tools | One tool catalog. |
+| Model Factory (fine-tune, LoRA, distil) | **Out of scope** | The `training` service kind (W9 phase 7) owns browser training. |
+| Persistence owned by the subsystem; a coordinator orders recovery | **Accepted** | A file snapshot of a live database is not a backup. |
+| Leases, fencing, idempotency keys | **Accepted.** The Web Locks leadership in `databaseLeadership.ts` is **extracted** into `RuntimeLease`, and the database migrates onto it. | One lease implementation. |
+| Recursive child runtimes | **Accepted, last**, as a *logical* boundary on the same backend | No physical nesting; never claim OS isolation. |
+| Child policy inheritance | **Accepted: narrow only.** Widening is a typed issue and is refused, never clamped. | Same rule as W10's ingress narrowing. |
+| `room-agent-world` package | **Rejected → Room items** | The Room is the ONE spatial surface. |
+| Replicated runtimes, remote object-storage snapshots, a WASM sandbox backend | **Out of scope** | Durability beyond `local` follows W11 phase 9 (`DeploymentTarget`). |
+| Hard-coded model names | **Rejected** | Role routing. |
+
+#### Constraints (do not relax)
+
+1. **The runtime stays open.** builderforce-webcontainers (MIT) never imports a Builderforce private package (source-package-graph rule). Anything agent-shaped in the runtime is a **port plus a capability-registry entry**. Builderforce injects the implementation, and a third party can inject theirs.
+2. **ONE agent, ONE loop.** The WebContainer is a surface of `runAgent`. A behaviour difference is `RunPolicy` data or a port, never a branch on the entry point.
+3. **Persistence belongs to the state owner.** The environment owns the manifest and the VFS journal and snapshots. A database owns its native export. An agent owns run-state checkpoints in the ONE run store's shape (`AgentRunInput.resume`). The coordinator orders recovery; it never serialises another owner's internals. Call stacks, Workers, GPU contexts and sockets are recreated, never serialised, and in-flight model calls are reissued.
+4. **No repeated side effects.** Every mutating tool call carries an idempotency key (run id, step, tool-call id). Recovery replays recorded results instead of re-invoking. One owner per runtime is enforced by a lease with a fencing token.
+5. **Policies only narrow**: Shield policy, quotas, the MCP allowlist, the model budget, depth and child count.
+6. **No secrets in persisted state.** Credentials stay in the vault. Snapshots, checkpoints and events pass through `secret-redaction`.
+7. **No SharedArrayBuffer or cross-origin isolation requirement.** Own vocabulary (never StackBlitz names).
+
+#### Contract
+
+In webcontainers `core` unless noted:
+
+- **`CapabilityDefinition` / `CapabilityRegistry`** contains:
+  - `id` and `version`;
+  - `dependsOn` (other capabilities);
+  - `requires` (target capabilities from `capabilities.ts`);
+  - a config JSON Schema;
+  - hooks: `install`, `activate`, `deactivate`, `checkpoint`, `recover`.
+
+  The registry is data, so adding a capability never edits a switch. An environment without a capability never loads its code.
+- **Manifest v1 additions** (optional fields, with typed issues for every invalid shape):
+  - `capabilities: { [id]: config }`;
+  - `agents: { [id]: AgentDeclaration }`.
+
+  `AgentDeclaration` holds:
+  - the role or workload;
+  - the instructions file path;
+  - skills;
+  - the tool allowlist (catalog keys plus environment-local tools);
+  - the memory namespace;
+  - triggers (`manual`, a cron job through the W11 scheduler, or a service event);
+  - a budget.
+
+  A model id is an issue. The JSON Schema is updated with the same fixtures.
+- **`RuntimeLease`** is a Web Locks lease with a monotonic fencing token kept in IndexedDB. It is extracted from `databaseLeadership.ts`, which migrates onto it. A second tab gets a typed `owned-elsewhere` state.
+- **`EnvironmentRecovery`** is the coordinator. Recovery order comes from the service graph plus capability `dependsOn`:
+  1. VFS;
+  2. resources (database health);
+  3. services;
+  4. capabilities (agents last).
+
+  Each participant reports a typed result. Durability is `ephemeral` or `local` per environment, and `local` is documented as subject to browser eviction.
+- **`EnvironmentToolPort`** (browser) provides:
+  - VFS `read`, `write` and `list`;
+  - `run()` with captured output and a timeout;
+  - preview HTTP fetch;
+  - service status.
+
+  It advertises `mutates` like the MCP catalog. Every call is checked against the agent's allowlist and the Shield policy, and a refusal emits a `securityEvent`.
+- **`AgentHostPort`** (browser) is what a host supplies to run an agent against the environment: `start`, `steer`, `cancel` and a run-event stream. **Builderforce** implements it with a `runAgent` surface adapter in a new source-only package, `packages/agent-env`:
+  - a codec;
+  - a model port on role routing;
+  - a capabilities port (the MCP catalog ∩ the allowlist, plus `EnvironmentToolPort`);
+  - a store port (the ONE run store).
+- **Events**: agent-run `runEvents` plus runtime `serviceLogs` and `securityEvent`. Only the missing correlation fields are added: `environmentId`, `runtimeId`, `agentId` and `correlationId`. There is no second event bus.
+- **Child runtimes** (phase 6): the `child-runtimes` capability and `createChildRuntime(parentId, manifestFragment)`. A child has its own id, VFS namespace, lease, persistence key and inherited, narrowed policy. The hierarchy is persisted so the parent can rediscover children.
+
+#### Codemap
+
+| Where | What |
+|---|---|
+| webcontainers `core/src/capabilities/` (new) | `CapabilityDefinition`, the registry, dependency ordering |
+| webcontainers `core/src/manifest/` | `capabilities` and `agents` fields, validation issues, schema |
+| webcontainers `browser/src/shared/` | `runtimeLease.ts`, extracted from `database/databaseLeadership.ts`; the database migrates onto it |
+| webcontainers `browser/src/recovery/` (new) | `EnvironmentRecovery`, the VFS participant (journal + snapshots through `snapshotStore.ts`), the database participant (`DatabaseControl`), the service participant (`startApplicationRuntime` re-entry) |
+| webcontainers `browser/src/agents/` (new) | `EnvironmentToolPort`, `AgentHostPort` contract, the capability entry |
+| Builderforce `packages/agent-env` (new, source-only) | the `runAgent` surface adapter, idempotency keys, checkpoint/resume mapping |
+| Builderforce `packages/ide-templates` | the `agents` kit part (an `agents/` folder + declarations + capability entry) |
+| Builderforce `packages/creation-canvas-contract` | consumes the manifest types; no copy |
+| Builderforce `frontend` | an agent Room item kind + its SlideOutPanel; `roomAgents.*` in all five catalogs |
+| Builderforce `api/src/application/llm/builtinMcpService.ts` | the `runtime.agents.*` group (§4.7) |
+
+#### Phases (each ships on its own, with an automated exit test)
+
+| Phase | Contents | Exit test |
+|---|---|---|
+| 1 | **Capabilities on manifest v1**: the registry, `capabilities` and `agents` fields, issues, schema | Fixtures parse with zero issues. Unknown capability, missing dependency, widening policy and model-id-instead-of-role each give their typed issue. Existing manifests and kits parse unchanged, with existing tests run **unchanged**. |
+| 2 | **Suspend → recover for every app**: `RuntimeLease` extraction, `EnvironmentRecovery`, the VFS, database and service participants | Headless: `react-node --with postgres` is started and files and rows are written. The runtime is killed with no clean stop, and a new runtime is started from persisted state. The file hashes match, the rows are intact (restored by the database, not the VFS), and services are `ready`. Two tabs give one lease holder. An app with no `agents` capability touches no agent persistence. |
+| 3 | **Agent Environment**: `EnvironmentToolPort`, `AgentHostPort`, `packages/agent-env`, the `agents` kit part, `/starter-kit react-node --with agents` | Declared Coordinator, Developer and Tester agents edit a file, run the tests through `run()` and report inside the environment. `check:one-execution --enforce` is green. A tool outside an agent's allowlist is refused with a typed error and a Shield event. A seeded credential appears in no persisted state. |
+| 4 | **Checkpoint, resume, no repeats**: checkpoints at tool-result boundaries, idempotency keys, resume through `AgentRunInput.resume` | The runtime is killed after a mutating call completes and before the next step. The side effect happened exactly once (counter fixture), the run continues from the next step, and the run store shows one run with a `recovered` event. |
+| 5 | **Agents in the Room**: an agent item kind (registry data). State (idle, thinking, executing, waiting, failed, recovering) is derived from run events through the run-snapshot hook, never from decorative animation. A SlideOutPanel shows status, declaration, tools, role, history, steer and cancel; chat routes into the ONE composer. | A component test drives avatar states from a scripted event stream. After a phase-4 recovery, the Room rebuilds from restored state. The five catalogs are complete, and the panel works in dark and light mode and at 360 px. |
+| 6 | **Child runtimes**: the `child-runtimes` capability, `createChildRuntime`, the persisted hierarchy, inherited limits | A stricter child is accepted. A child with a wider allowlist or depth gets a typed refusal. When both are killed and the parent recovers, it rediscovers the child by id, and the child recovers independently. A child's failure does not fail the parent. |
+
+Phases 3 and 5 are new capabilities, so each ships a `release_notes` row and an Idea-to-Real blog post.
+
+#### Risks
+
+- **Browser eviction.** `local` durability is not permanent. The badge states the level, and `exportZip` stays the user's backup. Durable recovery waits for `DeploymentTarget` (W11 phase 9).
+- **Checkpoint cost.** Writing at every tool-result boundary competes with the IndexedDB flushes of PGlite (§6). Checkpoints are batched per step, and the cost is measured in phase 4.
+- **Non-idempotent external APIs.** Keys protect our tools. An external write without idempotency support is marked `unsafe-to-replay`, and recovery asks the human before re-running it (`ask_human`).
+- **Logical isolation mistaken for a security boundary.** Child runtimes share the backend. The Shield (W10) carries the security boundary, and the docs say so.
+
+**Remaining (2026-11-20):** all of it. Design only. It needs an Opus design review (cross-package architecture and storage formats) before phase 1 code.
+
 ### §4.7 MCP tool surface (spans W1–W10)
 
 Each tool is added to the `builtinMcpService.ts` catalogs, grouped as data:
@@ -1685,6 +1811,7 @@ Each tool is added to the `builtinMcpService.ts` catalogs, grouped as data:
 | `domains.*` | `claim`, `verify`, `status` |
 | `marketplace.*` | `publish_project`, `publish_mobile`, `unpublish` |
 | `projects.create` | + `companyId` |
+| `runtime.agents.*` (W12) | `list`, `start`, `steer`, `cancel`, `status` — agents declared in a running environment's manifest |
 
 **Remaining (verified 2026-11-17):**
 - Only `app_blueprint.detect` / `app_blueprint.get` exist (`api/src/application/llm/appBlueprintToolCatalog.ts:78,105`). Every other group above is absent.
@@ -1704,6 +1831,7 @@ Each tool is added to the `builtinMcpService.ts` catalogs, grouped as data:
 | 5 | W3/W4 GCP, Azure, AWS | Test accounts per cloud |
 | 1f | W11 phases 1–8 (manifest → init → kits → diagnostics → jobs → Redis → storage/mail/scale → Lua), in the webcontainers repo and Builderforce packages | None. It is code. |
 | 2b | W11 phase 9 (`DeploymentTarget` = W4) | Same as phase 2: a test Cloudflare account |
+| 1g | W12 phases 1–6 (capabilities → suspend/recover → Agent Environment → checkpoint/resume → Room → child runtimes), after W11 phases 1 and 3 (manifest v1, kits) | The W12 Opus design review |
 
 **Program acceptance (against a hired.video fork, never production):**
 1. Create a company, then a project under it, then connect the fork.
