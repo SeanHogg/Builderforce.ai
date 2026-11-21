@@ -32,8 +32,6 @@ export interface CameraBarProps {
     stacked?: boolean | undefined;
     /** The panel show/hide toggles, before the zoom buttons. */
     panelToggles?: ReactNode;
-    /** The Legend button: next to the panel toggles, outside the sideways scroller so its popover is not clipped. */
-    legend?: ReactNode;
 }
 
 export const zoomButton: CSSProperties = {
@@ -53,7 +51,7 @@ function ZoomButtons({ labels, zoom }: { labels: KnowledgeGraphLabels; zoom: Zoo
     );
 }
 
-export function CameraBar({ labels, cameras, mode, onMode, outTo, onOut, zoom, tools, stacked = false, panelToggles, legend }: CameraBarProps) {
+export function CameraBar({ labels, cameras, mode, onMode, outTo, onOut, zoom, tools, stacked = false, panelToggles }: CameraBarProps) {
     // The row WRAPS: the right cluster (Legend, panel toggles, +, −, Fit) never shrinks or scrolls away — on a narrow
     // container it drops to a second line, end-aligned. The scene sits below the MEASURED controls block
     // (`SceneOverlay`, `--kg-scene-top`), so a wrapped bar only moves the scene down. One line that never wrapped
@@ -75,7 +73,6 @@ export function CameraBar({ labels, cameras, mode, onMode, outTo, onOut, zoom, t
                 {mode === 'sequence' && <button type="button" data-back-to-map style={zoomButton} onClick={() => onMode('transit')}>{labels.surface.sequence.backToMap}</button>}
                 {/* The right cluster: one unit that wraps whole and is pushed to the row's end; it never scrolls or clips. */}
                 <div data-testid="kg-camera-right" style={{ display: 'inline-flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 8, alignItems: 'center', flex: 'none', maxWidth: '100%', marginInlineStart: 'auto', pointerEvents: 'auto' }}>
-                    {legend && <div data-testid="kg-legend-slot" style={{ display: 'inline-flex', flex: 'none' }}>{legend}</div>}
                     {outTo && onOut && (
                         <button type="button" data-out title={fillTemplate(labels.surface.overlay.outTo, { name: outTo })} style={{ ...zoomButton, whiteSpace: 'nowrap', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis' }} onClick={onOut}>{fillTemplate(labels.surface.overlay.outTo, { name: outTo })}</button>
                     )}
