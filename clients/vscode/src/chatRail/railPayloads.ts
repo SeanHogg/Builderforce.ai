@@ -77,9 +77,9 @@ export function railTicketProgress(payload: TicketValue & Partial<Pick<RailTicke
   // An empty or whitespace-only status is the same "not started yet" as undefined: the record has
   // not been assigned a lane. Only a real lane (a non-blank string) is drawn verbatim.
   const laneStatus = typeof payload.status === "string" && payload.status.trim() !== "" ? payload.status : "backlog";
-  // An archived ticket is closed whatever lane it was archived from (`archived` is a device field,
-  // not rail-owned, so a record can read `backlog` + `archived: true` until a refresh lands): read
-  // it as the closed `archived` lane so the chip, the header and Hide done all agree.
+  // An ARCHIVED ticket is off the board: it reads as the closed `archived` status even while the
+  // local record still carries its stale open lane (`archived` is a device field, so a rail refresh
+  // does not overwrite it). The chip and "Hide done" then agree without waiting on ingest.
   const status = payload.archived === true ? "archived" : laneStatus;
   // Delegate to the shared rule (agent-loop `effectiveTicketProgress`), keyed on the
   // record's kind so each tier closes on its own status words (a spec at "complete", a
