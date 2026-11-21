@@ -104,6 +104,12 @@ export {
   type DeviceStoreCoordinatorLease,
 } from './syncLease.js';
 export {
+  createSyncCoordinatorHost,
+  type CreateSyncCoordinatorHostOptions,
+  type SyncCoordinatorHost,
+  type SyncCoordinatorLease,
+} from './syncCoordinatorHost.js';
+export {
   INDEXEDDB_REDACTED_KEYS,
   INDEXEDDB_REDACTION_RULE,
   redactSnapshotForUploadOrLog,
