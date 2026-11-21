@@ -227,10 +227,13 @@ async function bundleBranches(m, branches, basis = {}) {
  * workspace helper clone from the bundle with `origin` set to the credential-free remote. Full history (no `--depth`):
  * a shallow clone had no merge-base with the base branch, so `git_sync_latest` / `git diff main` could not work.
  */
-export function cloneWorkspace(box) {
+export function cloneWorkspace(box, { sizeGate = assertRepoWithinCeiling } = {}) {
   const m = box.mirror;
   return exclusive(m, async () => {
     if (!m.auth) return { ok: false, branch: null, output: 'no repository to clone' };
+    // The size gate runs before `prepare` and any fetch: nothing is created or transferred when it throws.
+    const remote = box.spec.repo.sizeRemote || { url: box.spec.repo.githubUrl, githubToken: box.spec.repo.githubToken };
+    await sizeGate(remote);
     const head = safeRef(box.spec.repo.headBranch);
     const base = safeRef(box.spec.repo.baseBranch);
     await prepare(m);
