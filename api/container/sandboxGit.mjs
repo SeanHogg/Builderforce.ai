@@ -257,6 +257,13 @@ export function cloneWorkspace(box) {
   const m = box.mirror;
   return exclusive(m, async () => {
     if (!m.auth) return { ok: false, branch: null, output: 'no repository to clone' };
+    // Size gate FIRST: strictly before the mirror is created or any history is fetched. Throws SandboxRepoSizeError.
+    const gh = box.spec.repo.github;
+    await assertRepoWithinCeiling({
+      url: m.auth.url,
+      token: typeof box.spec.githubToken === 'string' && box.spec.githubToken ? box.spec.githubToken : null,
+      repoRef: gh && typeof gh.owner === 'string' && typeof gh.name === 'string' ? { owner: gh.owner, name: gh.name } : undefined,
+    });
     const head = safeRef(box.spec.repo.headBranch);
     const base = safeRef(box.spec.repo.baseBranch);
     await prepare(m);
