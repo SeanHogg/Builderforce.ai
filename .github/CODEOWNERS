@@ -37,3 +37,11 @@
 # Documentation and process docs.
 *.md                    @SeanHogg
 /docs/                  @SeanHogg
+
+# Company Type I policy set (task 3254). Required by the change-management
+# policy: policy edits need a code-owner review. The only verified owner in
+# this repo is @SeanHogg; no Security Lead / Legal-compliance team handle is
+# documented, so none is invented here. Gap recorded in
+# docs/compliance/policies/change-management.md.
+/docs/compliance/policies/            @SeanHogg
+/Builderforce.ai/docs/compliance/policies/  @SeanHogg
