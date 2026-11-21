@@ -40,7 +40,7 @@
     "fflate": "^0.8.2",
     "tree-sitter-wasms": "^0.1.11",
     "unpdf": "^1.9.1",
-    "web-tree-sitter": "^0.22.6"
+    "web-tree-sitter": "^0.27.2"
   },
   "devDependencies": {
     "@types/node": "^24.19.2",
