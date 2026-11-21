@@ -13,6 +13,7 @@
  */
 
 import { createHash } from "node:crypto";
+import { WORKSPACE_DIR } from "@seanhogg/builderforce-webcontainers/manifest";
 
 /** Where in a run a hook fires. */
 export type HookEvent = "stop" | "preTool" | "postTool" | "runEnd";
@@ -22,8 +23,11 @@ export type HookWhen = "always" | "codeChanged";
 
 export const HOOK_EVENTS: readonly HookEvent[] = ["stop", "preTool", "postTool", "runEnd"];
 
-/** The workspace folder (relative to the root) that holds the committed directives. */
-export const DIRECTIVES_DIR = ".builderforce";
+/**
+ * The workspace folder (relative to the root) that holds the committed directives: the
+ * runtime's ONE `.builderforce/` (`WORKSPACE_DIR`, where the app manifest lives too).
+ */
+export const DIRECTIVES_DIR = WORKSPACE_DIR;
 export const HOOKS_FILE = "hooks.json";
 export const RULES_FILE = "rules.md";
 

@@ -9,7 +9,7 @@ import * as vscode from "vscode";
 import type { ShowManifest } from "./manifestInit";
 import { MANIFEST_FILE } from "./manifestLocation";
 import { isMissingPath, refusedWrites, WriteRefusedError } from "./writeContainment";
-import type { ComposerWorkspacePort, WorkspaceFolderRef } from "./workspacePort";
+import { TargetExistsError, type ComposerWorkspacePort, type WorkspaceFolderRef } from "./workspacePort";
 
 const refOf = (folder: vscode.WorkspaceFolder): WorkspaceFolderRef => ({ name: folder.name, path: folder.uri.fsPath });
 
@@ -64,7 +64,12 @@ export function vscodeWorkspacePort(): ComposerWorkspacePort {
       if (refused.length > 0) throw new WriteRefusedError(refused);
       await fs.createDirectory(vscode.Uri.file(path.dirname(to)));
       // `overwrite: false`: an existing target rejects (FileExists), never replaced.
-      await fs.rename(vscode.Uri.file(from), vscode.Uri.file(to), { overwrite: false });
+      try {
+        await fs.rename(vscode.Uri.file(from), vscode.Uri.file(to), { overwrite: false });
+      } catch (error) {
+        if (error instanceof vscode.FileSystemError && error.code === "FileExists") throw new TargetExistsError(to);
+        throw error;
+      }
     },
     confirm: async (message, approve) => (await vscode.window.showWarningMessage(message, { modal: true }, approve)) === approve,
   };

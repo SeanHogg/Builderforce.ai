@@ -13,7 +13,7 @@ import { MANIFEST_COMMAND_ID, MANIFEST_MOVE_ACTION } from "./entries";
 import type { ComposerCommandText } from "./labels";
 import { findFolderManifest, LEGACY_MANIFEST_FILES, MANIFEST_PATH } from "./manifestLocation";
 import type { ComposerReplyAction } from "./reply";
-import { chooseFolder, inFolder, type ComposerWorkspacePort } from "./workspacePort";
+import { chooseFolder, inFolder, TargetExistsError, type ComposerWorkspacePort } from "./workspacePort";
 import { writeRefusedReply } from "./writeContainment";
 
 /** The reply action that runs `/manifest move`. */
@@ -39,7 +39,13 @@ export function manifestMoveExecutor({ port, text }: ManifestMoveDeps): Composer
     if (refused.length > 0) return writeRefusedReply(text, refused);
     const approved = await port.confirm(text.manifestMoveQuestion(source.relative, MANIFEST_PATH, folder.name), text.manifestMove);
     if (!approved) return { kind: "text", tone: "info", lines: [text.manifestMoveDeclined] };
-    await port.move(source.file, target);
+    try {
+      await port.move(source.file, target);
+    } catch (error) {
+      // The target appeared after the check (another window, a sync): refused exactly as up front, nothing replaced.
+      if (error instanceof TargetExistsError) return { kind: "text", tone: "error", lines: [text.manifestMoveExists(source.relative, MANIFEST_PATH)] };
+      throw error;
+    }
     return { kind: "text", tone: "info", lines: [text.manifestMoved(source.relative, MANIFEST_PATH)] };
   };
 }

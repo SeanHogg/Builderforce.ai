@@ -11,6 +11,9 @@
  *   named in the reply (`writeContainment.ts`). Every path is checked first; a write that
  *   still fails partway (the folder changed meanwhile) names the file and every file
  *   already written.
+ * - A legacy root manifest (`builderforce.json` / `bfwc.app.json`) is named in the approval and
+ *   the reply: the kit's `.builderforce/builderforce.json` supersedes it (delete it, or cancel and
+ *   `/manifest move` it to keep it).
  * - In a remote extension host the reply offers no `/launch` (it cannot run there).
  */
 import { composeKit } from "@builderforce/ide-templates/kits";
@@ -18,7 +21,7 @@ import type { ComposerCommandExecutor } from "./dispatch";
 import type { ComposerCommandText } from "./labels";
 import { chooseFolder, inFolder, launchFollowUp, type ComposerWorkspacePort } from "./workspacePort";
 import { WriteRefusedError, writeRefusedReply } from "./writeContainment";
-import { WORKSPACE_DIR } from "./manifestLocation";
+import { findFolderManifest, LEGACY_MANIFEST_FILES, MANIFEST_PATH, WORKSPACE_DIR } from "./manifestLocation";
 
 /**
  * Entries a fresh folder may already hold: version control, editor settings and the extension's
@@ -52,13 +55,17 @@ export function starterKitExecutor({ port, text }: StarterKitDeps): ComposerComm
     // Checked even in an "empty" folder: a kit file inside an ignored folder (`.builderforce/builderforce.json`) is still a conflict.
     const conflicts: string[] = [];
     for (const file of paths) if (await port.exists(inFolder(folder, file))) conflicts.push(file);
+    // A legacy root manifest stops being read once the kit's `.builderforce/builderforce.json` exists: said before and after.
+    const legacy = await findFolderManifest(port, folder, LEGACY_MANIFEST_FILES);
+    const superseded = legacy ? [text.kitSupersedesLegacy(legacy.relative, MANIFEST_PATH)] : [];
     if (occupied || conflicts.length > 0) {
       const listed = conflicts.length > MAX_LISTED_CONFLICTS
         ? [...conflicts.slice(0, MAX_LISTED_CONFLICTS), "…"]
         : conflicts;
-      const approved = conflicts.length > 0
-        ? await port.confirm(text.kitConflicts(folder.name, paths.length, listed), text.kitOverwrite)
-        : await port.confirm(text.kitNonEmpty(folder.name, paths.length), text.kitWrite);
+      const [question, approve] = conflicts.length > 0
+        ? [text.kitConflicts(folder.name, paths.length, listed), text.kitOverwrite]
+        : [text.kitNonEmpty(folder.name, paths.length), text.kitWrite];
+      const approved = await port.confirm([question, ...superseded].join(" "), approve);
       if (!approved) return { kind: "text", tone: "info", lines: [text.kitDeclined(folder.name)] };
     }
 
@@ -81,6 +88,7 @@ export function starterKitExecutor({ port, text }: StarterKitDeps): ComposerComm
         text.kitWritten(kitId, paths.length, folder.name),
         text.services(Object.keys(kit.manifest.services)),
         text.resources(Object.keys(kit.manifest.resources ?? {})),
+        ...superseded,
         next.line,
       ],
       ...(next.actions ? { actions: next.actions } : {}),

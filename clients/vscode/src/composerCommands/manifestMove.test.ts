@@ -52,6 +52,19 @@ describe("/manifest move", () => {
     expect(reply).toEqual({ kind: "text", tone: "error", lines: [text.manifestMoveExists("builderforce.json", ".builderforce/builderforce.json")] });
   });
 
+  it("refuses, naming the canonical file, when it appears after the approval: nothing is moved or replaced", async () => {
+    const { port, execute } = setup({ [root]: "{\"old\":true}" });
+    // The person approves; meanwhile another window writes the canonical file.
+    port.confirm = async () => {
+      port.files.set(canonical, "{\"new\":true}");
+      return true;
+    };
+    const reply = await execute();
+    expect(port.files.get(canonical)).toBe("{\"new\":true}");
+    expect(port.files.get(root)).toBe("{\"old\":true}");
+    expect(reply).toEqual({ kind: "text", tone: "error", lines: [text.manifestMoveExists("builderforce.json", ".builderforce/builderforce.json")] });
+  });
+
   it("says there is nothing to move when the folder has no root manifest", async () => {
     const reply = await setup({ [canonical]: "{}" }).execute();
     expect(reply).toEqual({ kind: "text", tone: "info", lines: [text.manifestMoveNone("app", ["builderforce.json", "bfwc.app.json"])] });

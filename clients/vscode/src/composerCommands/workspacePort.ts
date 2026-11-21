@@ -42,12 +42,20 @@ export interface ComposerWorkspacePort {
   writeText(file: string, text: string): Promise<void>;
   /**
    * Move a file, creating the target's parent directories. Never replaces a file: an existing
-   * `to` rejects. A path `checkWrites` refuses (either one) is never moved: it rejects with a
-   * `WriteRefusedError`.
+   * `to` rejects with a {@link TargetExistsError}. A path `checkWrites` refuses (either one) is
+   * never moved: it rejects with a `WriteRefusedError`.
    */
   move(from: string, to: string): Promise<void>;
   /** A MODAL warning with one approving button. True only when that button was chosen. */
   confirm(message: string, approve: string): Promise<boolean>;
+}
+
+/** `move` found its target already there (it appeared after the command checked): nothing was moved or replaced. */
+export class TargetExistsError extends Error {
+  constructor(readonly file: string) {
+    super(`${file} already exists`);
+    this.name = "TargetExistsError";
+  }
 }
 
 /** The folder a command works on: the only one, or the one the person picks. */

@@ -7,9 +7,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const editor = vi.hoisted(() => ({ folders: [] as Array<{ name: string; uri: { fsPath: string } }>, remoteName: undefined as string | undefined }));
 vi.mock("vscode", async () => {
   const fs = await import("node:fs/promises");
+  class FileSystemError extends Error {
+    constructor(message: string, readonly code = "Unknown") { super(message); }
+  }
   return {
     Uri: { file: (fsPath: string) => ({ fsPath }) },
-    FileSystemError: class FileSystemError extends Error {},
+    FileSystemError,
     env: { get remoteName() { return editor.remoteName; } },
     window: {},
     workspace: {
@@ -19,7 +22,7 @@ vi.mock("vscode", async () => {
         writeFile: vi.fn(async (uri: { fsPath: string }, bytes: Uint8Array) => { await fs.writeFile(uri.fsPath, bytes); }),
         // As VS Code's: `overwrite: false` refuses an existing target.
         rename: vi.fn(async (from: { fsPath: string }, to: { fsPath: string }, options: { overwrite: boolean }) => {
-          if (!options.overwrite && await fs.lstat(to.fsPath).then(() => true, () => false)) throw new Error("FileExists");
+          if (!options.overwrite && await fs.lstat(to.fsPath).then(() => true, () => false)) throw new FileSystemError(to.fsPath, "FileExists");
           await fs.rename(from.fsPath, to.fsPath);
         }),
       },
@@ -30,6 +33,7 @@ vi.mock("vscode", async () => {
 import * as vscode from "vscode";
 import { vscodeWorkspacePort } from "./vscodeWorkspacePort";
 import { WriteRefusedError } from "./writeContainment";
+import { TargetExistsError } from "./workspacePort";
 
 describe("the editor's workspace port: writes stay inside the folder", () => {
   let root: string;
@@ -94,7 +98,7 @@ describe("the editor's workspace port: writes stay inside the folder", () => {
     expect(await port.exists(from)).toBe(false);
 
     await writeFile(from, "{\"other\":true}");
-    await expect(port.move(from, to)).rejects.toThrow();
+    await expect(port.move(from, to)).rejects.toBeInstanceOf(TargetExistsError);
     expect(await readFile(to, "utf8")).toBe("{\"version\":1}");
     expect(await readFile(from, "utf8")).toBe("{\"other\":true}");
   });

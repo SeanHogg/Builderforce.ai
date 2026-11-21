@@ -13,7 +13,7 @@ import type {
   ComposedKit, KitDefinition, KitIssue, KitIssueCode, KitIssueParams, KitManifest, KitPart,
 } from './types';
 import {
-  BACKEND_INGRESS_PATH, MANIFEST_PATH, MANIFEST_SCHEMA_URL,
+  BACKEND_INGRESS_PATH, MANIFEST_PATH,
   type EmittedIngressRoute, type EmittedResource, type EmittedService,
 } from '@builderforce/app-detect/manifest';
 
@@ -149,7 +149,6 @@ export function composeParts(name: string, parts: readonly KitPart[]): ComposedK
     .sort((a, b) => b.path.length - a.path.length);
 
   const manifest: KitManifest = {
-    $schema: MANIFEST_SCHEMA_URL,
     version: 1,
     name,
     ...(Object.keys(resources).length > 0 ? { resources } : {}),

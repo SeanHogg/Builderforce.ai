@@ -4,7 +4,7 @@
  */
 import * as path from "node:path";
 import { WriteRefusedError, type WriteRefusal } from "./writeContainment";
-import type { ComposerWorkspacePort, WorkspaceFolderRef } from "./workspacePort";
+import { TargetExistsError, type ComposerWorkspacePort, type WorkspaceFolderRef } from "./workspacePort";
 
 export interface FakeWorkspacePort extends ComposerWorkspacePort {
   files: Map<string, string>;
@@ -48,7 +48,7 @@ export function fakeWorkspacePort(folders: WorkspaceFolderRef[], files: Record<s
     move: async (from, to) => {
       const refused = await checkWrites([from, to]);
       if (refused.length > 0) throw new WriteRefusedError(refused);
-      if (port.files.has(to)) throw new Error(`${to} exists`);
+      if (port.files.has(to)) throw new TargetExistsError(to);
       const text = port.files.get(from);
       if (text === undefined) throw new Error(`${from} does not exist`);
       port.files.delete(from);

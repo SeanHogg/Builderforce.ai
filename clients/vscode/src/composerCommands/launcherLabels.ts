@@ -68,6 +68,12 @@ export function launcherPageLabels(): LauncherPageLabels {
     severityInfo: t("Info"),
     noManifest: t("This project has no builderforce.json. Run /manifest init to create one."),
     legacyManifest: t("This builderforce.json is an older format; run /manifest init."),
+    legacyManifestLocation: template(
+      "The manifest at {path} is in the old location. Move it to .builderforce/builderforce.json (/manifest move); the root file is still read for now, never written.",
+      "path",
+    ),
+    manifestOutsideProject: template("The manifest at {path} resolves outside the project (a link), so it was not read.", "path"),
+    manifestUnreadable: template("The manifest at {path} could not be read: {reason}", "path", "reason"),
     invalidManifest: t("builderforce.json has errors, so nothing was started."),
     declinedServices: t("Some services cannot run in the browser, so nothing was started."),
     dotnetDeclined: template("The .NET runtime bundle is not available: {reason}", "reason"),
