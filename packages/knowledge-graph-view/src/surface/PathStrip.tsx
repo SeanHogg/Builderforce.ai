@@ -18,6 +18,8 @@ import { Action, LikelyWalk, StepControls } from './StepControls';
 import type { PathModel } from './path';
 import { hopProbabilityText, hopTransition, likelyWalk, type TransitionTable } from './transitionTable';
 import { stationNote } from './pathNotes';
+import { DepthTrail } from './DepthTrail';
+import type { DrillFrame } from './transit/drillView';
 import { SequenceView } from './SequenceDiagram';
 import { hopText, pathMermaid } from './sequenceText';
 import type { Station } from './stations';
@@ -44,11 +46,17 @@ export interface PathStripProps {
     narrow?: boolean | undefined;
     /** The station transition table (`transitionTableOf`): each hop shows P(next) and "Run to end" the most likely walk. Absent ⇒ neither. */
     transitions?: TransitionTable | null | undefined;
+    /** The drill stack, shown as a depth trail above the stops (system › module › class › method). Absent or empty ⇒ no trail. */
+    trail?: readonly DrillFrame[] | undefined;
+    /** The root's title: the first crumb of the trail. */
+    systemName?: string | undefined;
+    /** Climbs back to a depth (0 = system); earlier crumbs are buttons only with it. */
+    onClimb?: ((depth: number) => void) | undefined;
 }
 
 const chipStyle = (on: boolean) => ({ ...pillStyle(on), ...TYPE.mono, fontWeight: on ? TYPE.pillOn.fontWeight : TYPE.monoName.fontWeight });
 
-export function PathStrip({ path, step, labels, onStep, pathTitle, onEnlarge, stations, onOpenPanel, routeLabels, narrow = false, transitions }: PathStripProps) {
+export function PathStrip({ path, step, labels, onStep, pathTitle, onEnlarge, stations, onOpenPanel, routeLabels, narrow = false, transitions, trail, systemName, onClimb }: PathStripProps) {
     const s = labels.surface;
     const [sequence, setSequence] = useState(false);
     /** The stop "Run to end" ran from, for this path only (another path drops it). */
@@ -71,6 +79,7 @@ export function PathStrip({ path, step, labels, onStep, pathTitle, onEnlarge, st
                 alignContent: 'start', minWidth: 0, ...(narrow ? null : { height: PATH_STRIP_HEIGHT, flex: 'none', overflow: 'auto' }),
             }}
         >
+            {trail && onClimb && <DepthTrail trail={trail} systemName={systemName ?? ''} onClimb={onClimb} />}
             {path.stops.length === 0 ? <p style={{ ...muted, margin: 0 }}>{s.pathEmpty}</p> : (
                 <>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
