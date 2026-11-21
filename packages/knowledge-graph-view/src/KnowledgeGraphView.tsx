@@ -238,7 +238,6 @@ export function KnowledgeGraphView({
             {...chrome.overlayProps}
             tools={real ? <SceneTools graph={graph} env={surfaceEnv} labels={labels} surface={surface} panel={panel} onPanel={setPanel} panelsMenu={layout.panelsMenu} narrow={layout.phone} /> : undefined}
             panelToggles={<PanelVisibilityToggles labels={labels} visibility={panels.visibility} onToggle={panels.toggle} available={{ left: hasLines && !layout.phone, bottom: hasLines, right: !!real }} />}
-            legend={real ? <LegendButton labels={labels} present={legendExtras.types} preset={surface.preset} /> : undefined}
             time={<TimeSlider commits={history.commits} capped={history.total} picked={picked} labels={labels} changedStations={changedStations} onPick={(sha) => { setPicked(sha); if (sha) pickQuestion('changed'); }} />}
         />
     );
