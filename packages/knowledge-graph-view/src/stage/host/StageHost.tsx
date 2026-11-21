@@ -29,6 +29,8 @@ import type { StageRenderer } from '../renderer';
 import { Stage } from '../Stage';
 import { useStageRenderer } from '../stageHooks';
 import { StageBusContext, stageBus } from '../anchor/stageBus';
+import { StageLegendProvider } from '../rig/stageLegend';
+import { typesPresent } from '../../shapes';
 import type { PlacementCamera } from '../types';
 import { StageFactoryContext } from './StageFactoryContext';
 import { StagePins } from './StagePins';
@@ -114,8 +116,10 @@ function StageBody({ renderer, onLost, camera, ...p }: SceneProps & { camera: Pl
     const levelNote = camera !== 'map' ? null
         : drill.notice ? fillTemplate(labels.surface.map.drillReset, { name: drill.notice }) : drill.view?.noSymbols ? labels.surface.map.noSymbolsNote : null;
     const caption = ready ? placement.caption : null;
+    const types = useMemo(() => typesPresent(surface.types.values()), [surface.types]);
 
     return (
+        <StageLegendProvider types={types} labels={labels}>
         <div ref={box} style={BOX} data-stage-host data-stage-camera={camera}>
             {/* Over the stage's top-left corner, so the stage box (and every projection into it) starts at the host's origin. */}
             {(camera === 'sequence' || levelNote) && (
@@ -144,5 +148,6 @@ function StageBody({ renderer, onLost, camera, ...p }: SceneProps & { camera: Pl
             {(drill.loading && camera === 'map') && <LayingOut labels={labels} corner />}
             <EdgesCapped caption={caption} labels={labels} />
         </div>
+        </StageLegendProvider>
     );
 }
