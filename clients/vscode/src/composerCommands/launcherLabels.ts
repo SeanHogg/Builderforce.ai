@@ -5,28 +5,18 @@
  * The page fills `{name}` placeholders itself (`formatLabel`), so each one is handed to
  * `vscode.l10n.t` as a named argument that maps to itself: it survives translation untouched.
  *
- * The copy-diagnostics keys ship in a newer runtime than the one installed; they are typed here
- * so this compiles against both, and an older runtime ignores keys it does not know.
+ * Typed as the installed runtime's full `LauncherLabels`, so a key a runtime bump adds fails to
+ * compile here until it is localized.
  */
 import * as vscode from "vscode";
 import type { LauncherLabels } from "@seanhogg/builderforce-webcontainers/launcher/server";
-
-/** Keys a newer runtime's `LauncherLabels` adds (already part of it there; ignored by an older one). */
-interface NewerLauncherLabels {
-  copyDiagnostics: string;
-  copyDiagnosticsDone: string;
-  copyDiagnosticsFailed: string;
-}
-
-/** The full set: every key of the installed runtime's labels, plus the newer ones. */
-export type LauncherPageLabels = LauncherLabels & NewerLauncherLabels;
 
 /** `t` for a page template: each `{name}` placeholder is passed as itself, so the page still fills it. */
 function template(message: string, ...names: string[]): string {
   return vscode.l10n.t(message, Object.fromEntries(names.map((name) => [name, `{${name}}`])));
 }
 
-export function launcherPageLabels(): LauncherPageLabels {
+export function launcherPageLabels(): LauncherLabels {
   const t = vscode.l10n.t;
   return {
     title: t("Builderforce launcher"),
@@ -43,6 +33,17 @@ export function launcherPageLabels(): LauncherPageLabels {
     tierNonProduction: t("Non-production"),
     services: t("Services"),
     noServices: t("No services."),
+    servicesFilter: t("Show services"),
+    servicesFilterRunning: t("Running"),
+    servicesFilterAll: template("All ({count})", "count"),
+    servicesHidden: template("{count} hidden: finished setup steps or stopped services.", "count"),
+    servicesShowAll: t("Show all"),
+    noRunningServices: t("No service is running."),
+    previewAction: t("Preview"),
+    previewing: t("In preview"),
+    previewService: template("Show {service} in the preview", "service"),
+    previewSelectionLost: template("{service} is no longer serving, so the preview went back to the default service.", "service"),
+    previewSelectionWaiting: template("{service} is not serving right now; the preview returns to it when it is.", "service"),
     port: template("Port {port}", "port"),
     restarts: template("Restarts: {count}", "count"),
     restart: t("Restart"),
