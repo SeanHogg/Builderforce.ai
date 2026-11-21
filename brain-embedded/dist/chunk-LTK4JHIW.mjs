@@ -274,9 +274,9 @@ var ONNX_BONSAI = [
 function onnxBonsai(row) {
   const model = row.file;
   return {
-    ref: formatLocalModelRef("onnx", model),
+    ref: formatLocalModelRef("webllm", model),
     format: "onnx",
-    runtime: "onnx",
+    runtime: "webllm",
     model,
     label: `Bonsai ${row.size} (ONNX q4)`,
     family: "bonsai",
@@ -1416,4 +1416,4 @@ export {
   createHfModelStore,
   catalogProbe
 };
-//# sourceMappingURL=chunk-JSRALGOH.mjs.map
+//# sourceMappingURL=chunk-LTK4JHIW.mjs.map

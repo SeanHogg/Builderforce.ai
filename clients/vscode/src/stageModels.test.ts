@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ROLE_MODEL_DEFAULT_ENV, ROLE_MODELS_ENV } from "@builderforce/learned-routing";
-import { editorRunSettingsFrom, runRequestFields, stageModels } from "./stageModels";
+import { editorRunSettingsFrom, runRequestFields, stageModels, TIP_MODELS } from "./stageModels";
 import { explicitRoleModelPin, modelForChildRun } from "./roleModelPin";
 
 describe("stageModels", () => {
@@ -14,6 +14,12 @@ describe("stageModels", () => {
 
   it("is empty when nothing is configured — the gateway orders by role", () => {
     expect(stageModels({ plan: "", code: "   " }, {})).toEqual({});
+  });
+
+  it("tip routes code to Opus, and an env pin still wins", () => {
+    expect(stageModels({ policy: "tip" }).code).toBe(TIP_MODELS.opus);
+    expect(stageModels({ policy: "tip" }, { code: "pinned-coder" }).code).toBe("pinned-coder");
+    expect(stageModels({ code: "role-coder" }).code).toBe("role-coder");
   });
 });
 

@@ -6799,9 +6799,9 @@ var ONNX_BONSAI = [
 function onnxBonsai(row) {
   const model = row.file;
   return {
-    ref: formatLocalModelRef("onnx", model),
+    ref: formatLocalModelRef("webllm", model),
     format: "onnx",
-    runtime: "onnx",
+    runtime: "webllm",
     model,
     label: `Bonsai ${row.size} (ONNX q4)`,
     family: "bonsai",
@@ -7512,6 +7512,7 @@ function runAttribution(input) {
   return {
     ...input.role ? { role: input.role } : {},
     ...input.pipelineRoute === "full" || input.pipelineRoute === "quick" ? { pipelineRoute: input.pipelineRoute } : {},
+    ...input.policy === "role" || input.policy === "tip" ? { policy: input.policy } : {},
     ...input.gateRoute === "prefetch" || input.gateRoute === "llm" ? { gateRoute: input.gateRoute } : {},
     ...typeof input.routeScore === "number" && Number.isFinite(input.routeScore) ? { routeScore: input.routeScore } : {},
     ...input.runId ? { runId: input.runId } : {}

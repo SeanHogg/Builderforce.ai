@@ -43,7 +43,7 @@ import {
   servedIdentity,
   servedOnDevice,
   webGpuSupport
-} from "./chunk-JSRALGOH.mjs";
+} from "./chunk-LTK4JHIW.mjs";
 import {
   bounded,
   budget,
@@ -373,7 +373,7 @@ import {
   withAdvisory,
   withProvenanceMetadata,
   workFiledNotStaffedVerdict
-} from "./chunk-QRXD6NHP.mjs";
+} from "./chunk-CNR67FCZ.mjs";
 import {
   ASK_USER_TOOL,
   ASK_USER_TOOL_SPEC,
@@ -5005,6 +5005,7 @@ function runAttribution(input) {
   return {
     ...input.role ? { role: input.role } : {},
     ...input.pipelineRoute === "full" || input.pipelineRoute === "quick" ? { pipelineRoute: input.pipelineRoute } : {},
+    ...input.policy === "role" || input.policy === "tip" ? { policy: input.policy } : {},
     ...input.gateRoute === "prefetch" || input.gateRoute === "llm" ? { gateRoute: input.gateRoute } : {},
     ...typeof input.routeScore === "number" && Number.isFinite(input.routeScore) ? { routeScore: input.routeScore } : {},
     ...input.runId ? { runId: input.runId } : {}

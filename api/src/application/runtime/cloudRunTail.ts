@@ -172,7 +172,7 @@ async function land(host: CloudRunHost, state: RunState, output: string, cancell
     tenantId: refs.tenantId, cloudAgentRef: refs.cloudAgentRef, executionId: refs.executionId, taskRow, agentLabel: refs.agentLabel,
     repoCtx: host.repoCtx, repoMiss: host.repoMiss, writtenPaths: host.writtenPaths, finalOutput: output, cancelled, ciVerified: state.finish.ciVerified,
   });
-  return { ok: fin.ok, output: fin.output, cancelled, finished: true };
+  return { ok: fin.ok, noChanges: fin.noChanges, output: fin.output, cancelled, finished: true };
 }
 
 /**

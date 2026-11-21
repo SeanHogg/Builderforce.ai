@@ -393,7 +393,11 @@ export class CloudRunnerDO implements DurableObject {
         await this.runtimeService.update(
           cursor.executionId,
           result.ok
-            ? { status: ExecutionStatus.COMPLETED, result: result.output, ...(result.telemetry ? { telemetry: result.telemetry } : {}) }
+            ? {
+                status: result.noChanges ? ExecutionStatus.NO_CHANGES : ExecutionStatus.COMPLETED,
+                result: result.output,
+                ...(result.telemetry ? { telemetry: result.telemetry } : {}),
+              }
             : { status: ExecutionStatus.FAILED, errorMessage: result.output, ...(result.telemetry ? { telemetry: result.telemetry } : {}) },
         ).catch((error) => this.reportError(error, { operation: "alarm", level: 'warning', context: { logMessage: '[cloud-runner] terminal transition was rejected', details: {
           executionId: cursor.executionId,

@@ -635,6 +635,8 @@ export interface RepoReadResult {
   offset?: number;
   /** Human/model-facing guidance, e.g. how to read the next chunk of a large file. */
   note?: string;
+  /** Set when `read_file` inflated a `.gz` body before returning it. */
+  decompressed?: boolean;
   error?: string;
 }
 export interface RepoSearchResult {

@@ -64,11 +64,18 @@ export function renderPolicyGroups(rows: ReadonlyArray<{ policy?: string }>, t: 
 
 /** Where the route report is written: the diagnostics folder, never a call-site literal. */
 export function routeReportFile(diagnosticsDir: string): string {
-  return `${diagnosticsDir.replace(/[/\\\\]+$/, "")}/pipeline-route-report.md`;
+  const root = diagnosticsDir.replace(/[/\\]+$/, "");
+  return `${root}/pipeline-route-report.md`;
 }
 
 /** The report as Markdown. `gate` adds the PreFetch gate column. */
-export function renderRouteReport(report: RouteReport, days: number, t: Translate, gate?: GateReport): string {
+export function renderRouteReport(
+  report: RouteReport,
+  days: number,
+  t: Translate,
+  gate?: GateReport,
+  policyRows?: ReadonlyArray<{ policy?: string }>,
+): string {
   const lines: string[] = [`# ${t("Pipeline route report — last {0} days", days)}`, ""];
   if (report.runs === 0) {
     lines.push(t("No routed runs in this window. Runs are routed when builderforce.pipeline.routing is auto or always."));
@@ -106,7 +113,7 @@ export function renderRouteReport(report: RouteReport, days: number, t: Translat
     suggestionLine(report, t),
   );
   if (gate) lines.push("", ...renderGateColumn(gate, t));
-  if (report.policyRows) lines.push("", ...renderPolicyGroups(report.policyRows, t));
+  if (policyRows && policyRows.length > 0) lines.push("", ...renderPolicyGroups(policyRows, t));
   return `${lines.join("\n")}\n`;
 }
 
@@ -162,7 +169,8 @@ async function showRouteReport(ctx: vscode.ExtensionContext): Promise<void> {
   const threshold = vscode.workspace.getConfiguration("builderforce").get<number>("pipeline.routeThreshold") ?? DEFAULT_ROUTE_THRESHOLD;
   // A quick run recorded as failed counts as misrouted, as does one re-run on the full pipeline.
   const report = summarizeRouteRuns(routeRunRecords(rows, undefined, outcomes), { threshold });
-  const doc = await vscode.workspace.openTextDocument({ content: renderRouteReport(report, REPORT_DAYS, vscode.l10n.t, summarizeGateRuns(rows, gateAccepted)), language: "markdown" });
+  const content = renderRouteReport(report, REPORT_DAYS, vscode.l10n.t, summarizeGateRuns(rows, gateAccepted), rows);
+  const doc = await vscode.workspace.openTextDocument({ content, language: "markdown" });
   await vscode.commands.executeCommand("markdown.showPreview", doc.uri);
 }
 

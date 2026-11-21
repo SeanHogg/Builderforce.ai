@@ -33,6 +33,59 @@ const MIRROR_ENV_PASSTHROUGH = ['LANG', 'TZ', 'SSL_CERT_FILE', 'GIT_SSL_CAINFO',
 export const WORKSPACE_INSIDE_CHECKOUT = 'workspace_inside_checkout';
 
 /**
+ * GAP-W9: full history stays, but a repo over this ceiling is refused before the clone.
+ * GitHub reports repository size in KB. 1 GiB default; override with SANDBOX_REPO_SIZE_CEILING_KB.
+ */
+export const REPO_TOO_LARGE = 'repo_too_large';
+export const DEFAULT_REPO_SIZE_CEILING_KB = 1_048_576;
+
+export function repoSizeCeilingKb(env = process.env) {
+  const raw = env && env.SANDBOX_REPO_SIZE_CEILING_KB;
+  if (raw == null || raw === '') return DEFAULT_REPO_SIZE_CEILING_KB;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : DEFAULT_REPO_SIZE_CEILING_KB;
+}
+
+/** `{ code, error }` when `sizeKb` is over the ceiling. Unknown size is not a refusal. */
+export function repoSizeRefusal(sizeKb, ceilingKb = DEFAULT_REPO_SIZE_CEILING_KB) {
+  if (typeof sizeKb !== 'number' || !Number.isFinite(sizeKb) || sizeKb < 0) return null;
+  if (sizeKb <= ceilingKb) return null;
+  return {
+    ok: false,
+    code: REPO_TOO_LARGE,
+    error: `repository size ${sizeKb}KB exceeds the sandbox ceiling ${ceilingKb}KB; refusing to clone full history`,
+  };
+}
+
+/** `owner` / `repo` from a github.com clone URL, or null when it is not GitHub. */
+export function githubRepoCoords(cloneUrl) {
+  if (typeof cloneUrl !== 'string') return null;
+  const m = cloneUrl.match(/github\.com[:/]([^/]+)\/([^/#?\s]+?)(?:\.git)?\/?$/i);
+  if (!m) return null;
+  return { owner: m[1], repo: m[2] };
+}
+
+/**
+ * GitHub repository `size` (KB), or null when the remote is not GitHub or the probe fails.
+ * A failed probe does not invent a size — the caller refuses only a known over-ceiling repo.
+ */
+export async function probeGithubRepoSizeKb(cloneUrl, token) {
+  const coords = githubRepoCoords(cloneUrl);
+  if (!coords) return null;
+  const headers = { Accept: 'application/vnd.github+json', 'User-Agent': 'builderforce-sandbox' };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  try {
+    const res = await fetch(`https://api.github.com/repos/${coords.owner}/${coords.repo}`, { headers });
+    if (!res.ok) return null;
+    const body = await res.json();
+    const size = Number(body && body.size);
+    return Number.isFinite(size) ? size : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * True when `workspace` is the checkout or a path inside it (so a commit from that
  * checkout can include the sandbox workspace).
  */
@@ -225,6 +278,11 @@ export function cloneWorkspace(box) {
     if (!m.auth) return { ok: false, branch: null, output: 'no repository to clone' };
     const outside = await assertWorkdirOutsideParentCheckout(box.workdir);
     if (!outside.ok) return { ok: false, branch: null, output: outside.error, code: outside.code };
+    // GAP-W9: measure before any full-history fetch. A declared size wins; otherwise probe GitHub.
+    const declared = box.spec && box.spec.repo ? box.spec.repo.sizeKb : undefined;
+    const sizeKb = typeof declared === 'number' ? declared : await probeGithubRepoSizeKb(m.auth.url, m.auth.token);
+    const over = repoSizeRefusal(sizeKb, repoSizeCeilingKb());
+    if (over) return { ok: false, branch: null, output: over.error, code: over.code };
     const head = safeRef(box.spec.repo.headBranch);
     const base = safeRef(box.spec.repo.baseBranch);
     await prepare(m);

@@ -13,3 +13,9 @@ export function emptyDiffTerminalStatus(args: {
   if (args.cancelled || args.writtenCount > 0) return null;
   return ExecutionStatus.NO_CHANGES;
 }
+
+/** The status a landed run is settled to. An empty diff is never `completed`. */
+export function landedRunStatus(args: { ok: boolean; noChanges?: boolean }): ExecutionStatus {
+  if (args.ok && args.noChanges) return ExecutionStatus.NO_CHANGES;
+  return args.ok ? ExecutionStatus.COMPLETED : ExecutionStatus.FAILED;
+}
