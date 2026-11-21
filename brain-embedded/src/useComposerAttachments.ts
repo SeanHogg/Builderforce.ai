@@ -102,9 +102,15 @@ export function useComposerAttachments(
     locals.current.delete(key);
   }, []);
 
-  useEffect(() => () => {
-    for (const l of locals.current.values()) revoke(l.url);
-    locals.current.clear();
+  // An upload that lands after unmount must not keep (or re-register) an object URL.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      for (const l of locals.current.values()) revoke(l.url);
+      locals.current.clear();
+    };
   }, []);
 
   const attach = useCallback(async (file: File) => {
@@ -119,16 +125,18 @@ export function useComposerAttachments(
       if (dropped.current.delete(key)) return;
       const local = locals.current.get(key);
       locals.current.delete(key);
+      if (!mounted.current) { revoke(local?.url); return; }
       if (local) locals.current.set(attachment.key, local);
       setStaged((prev) => prev.filter((s) => s.key !== key));
       setPending((prev) => [...prev, attachment]);
     } catch (e) {
       if (dropped.current.delete(key)) return;
+      if (!mounted.current) { forgetLocal(key); return; }
       // The chip carries the reason (the host's sentence, e.g. a Local-only refusal).
       const error = e instanceof Error && e.message ? e.message : '';
       setStaged((prev) => prev.map((s) => (s.key === key ? { ...s, status: 'error', error } : s)));
     }
-  }, [persistence, imagePrep]);
+  }, [persistence, imagePrep, forgetLocal]);
 
   const remove = useCallback((key: string) => {
     forgetLocal(key);

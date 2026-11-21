@@ -193,8 +193,14 @@ export async function prepareBrainRun(chatId: number, c: RunCell, req: BrainRunR
         if (stablePrefix) turnParts.push(extra);
         else intoPrompt(extra);
       }
-    } catch {
-      // ignore — proceed without the augmentation
+    } catch (error) {
+      // The augmentation is optional, but preserve the cause on the run trace.
+      pushTrace(c, {
+        ts: nowIso(),
+        category: 'message',
+        label: 'system_prompt.augmentation_failed',
+        result: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 

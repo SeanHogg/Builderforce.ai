@@ -100,14 +100,92 @@ describe('regression: a pulled chat-ticket-link is stored in the device form', (
     expect(await store.read((tx) => tx.mapping('chat-ticket-link', LINK, BOUND))).toMatchObject({ serverId: '900' });
   });
 
-  it('the repair re-keys a server-form link under its derived id, and leaves a foreign-id one inert', async () => {
+  it('the repair puts a server-form link back in the device form, and retires a foreign-id copy of the pair', async () => {
     const store = createMemoryLocalFirstStore();
     await parents(store, { ticketMapped: true });
     await putLink(store, LINK, SERVER_FORM);
     await putLink(store, FOREIGN_LINK, SERVER_FORM);
     await pull(store, undefined);
     expect((await linkOf(store))?.payload).toMatchObject({ chatClientId: CHAT, ticketClientId: TICKET, linkType: 'created' });
-    expect((await linkOf(store, FOREIGN_LINK))?.payload).toEqual(SERVER_FORM);
+    expect((await linkOf(store, FOREIGN_LINK))?.deletedAt).toBeTruthy();
+  });
+
+  describe("an older build's foreign-id link in the DEVICE form (mapped F -> 900)", () => {
+    const deviceForm = { chatClientId: CHAT, ticketClientId: TICKET, linkType: 'created' };
+    async function seeded(): Promise<LocalFirstStore> {
+      const store = createMemoryLocalFirstStore();
+      await parents(store, { ticketMapped: true });
+      await putLink(store, FOREIGN_LINK, deviceForm);
+      await store.transact((tx) => tx.putMapping({ destination: BOUND, entityType: 'chat-ticket-link', clientEntityId: FOREIGN_LINK, serverId: '900', serverVersion: 1 }));
+      return store;
+    }
+    const liveLinks = async (store: LocalFirstStore) =>
+      (await store.export()).records.filter((r) => r.entityType === 'chat-ticket-link' && !r.deletedAt).map((r) => r.id);
+    const railRow = { entityType: 'chat-ticket-link' as const, serverId: '900', updatedAt: AT, destination: BOUND, payload: deviceForm };
+
+    it("the rail's ingest leaves ONE live link, under the derived id; a second ingest writes nothing", async () => {
+      const store = await seeded();
+      await ingestServerRecords(store, [railRow], { completeListFor: { chatClientId: CHAT, total: 1 } });
+      expect(await liveLinks(store)).toEqual([LINK]);
+      const second = await ingestServerRecords(store, [railRow], { completeListFor: { chatClientId: CHAT, total: 1 } });
+      expect(second).toMatchObject({ written: 0, tombstoned: 0 });
+      expect(await liveLinks(store)).toEqual([LINK]);
+    });
+
+    it('the pull moves it to the derived id (with its server mapping) and retires the stray', async () => {
+      const store = await seeded();
+      await pull(store, undefined);
+      expect(await liveLinks(store)).toEqual([LINK]);
+      expect((await linkOf(store))?.payload).toEqual(deviceForm);
+      expect(await store.read((tx) => tx.mapping('chat-ticket-link', LINK, BOUND))).toMatchObject({ serverId: '900' });
+      const stray = await linkOf(store, FOREIGN_LINK);
+      expect(stray?.deletedAt).toBeTruthy();
+      expect(stray?.provenance).toMatchObject({ evidence: 'server-observed' });
+      // The server's word: no journal event.
+      expect((await store.export()).events.filter((e) => e.entityType === 'chat-ticket-link')).toEqual([]);
+    });
+  });
+
+  it("a pulled unlink of another device's link (its id) tombstones the pair where this device holds it", async () => {
+    const store = createMemoryLocalFirstStore();
+    await parents(store, { ticketMapped: true });
+    await putLink(store, LINK, { chatClientId: CHAT, ticketClientId: TICKET, linkType: 'created' });
+    await store.transact((tx) => tx.putMapping({ destination: BOUND, entityType: 'chat-ticket-link', clientEntityId: LINK, syncId: 900 as never, serverId: '900', serverVersion: 1 }));
+    const policy = createPlatformPolicy();
+    policy.set({ synchronize: true });
+    await createSyncCoordinator({
+      store, policy, deviceId: 'd', lease: { run: (_owner, work) => work() },
+      transport: {
+        push: async () => [],
+        pull: async () => ({
+          records: [{
+            id: FOREIGN_LINK, entityType: 'chat-ticket-link', schemaVersion: 1, version: 2, destination: BOUND,
+            occurredAt: AT, updatedAt: AT, deletedAt: AT, payload: SERVER_FORM, syncId: 900, serverId: '900',
+          }] as never[],
+        }),
+      },
+    }).synchronize(BOUND);
+    expect((await linkOf(store))?.deletedAt).toBeTruthy();
+  });
+
+  it('a link pulled before its ticket in the same page is stored (links merge after the page\'s other rows)', async () => {
+    const store = createMemoryLocalFirstStore();
+    await parents(store, { ticketMapped: false });
+    const policy = createPlatformPolicy();
+    policy.set({ synchronize: true });
+    await createSyncCoordinator({
+      store, policy, deviceId: 'd', lease: { run: (_owner, work) => work() },
+      transport: {
+        push: async () => [],
+        pull: async () => ({
+          records: [
+            { id: LINK, entityType: 'chat-ticket-link', schemaVersion: 1, version: 1, destination: BOUND, occurredAt: AT, updatedAt: AT, payload: SERVER_FORM, syncId: 900, serverId: '900' },
+            { id: TICKET, entityType: 'ticket', schemaVersion: 1, version: 1, destination: BOUND, occurredAt: AT, updatedAt: AT, payload: { title: 'T', status: 'backlog' }, syncId: 6980, serverId: '6980' },
+          ] as never[],
+        }),
+      },
+    }).synchronize(BOUND);
+    expect((await linkOf(store))?.payload).toMatchObject({ chatClientId: CHAT, ticketClientId: TICKET, linkType: 'created' });
   });
 
   it('the repair skips a link with a pending local event', async () => {

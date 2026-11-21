@@ -7,6 +7,8 @@ export interface AttachmentPreviewState {
   /** Open `item`; focus returns to `trigger` when the preview closes. */
   open(item: AttachmentPreviewItem, trigger?: HTMLElement | null): void;
   close(): void;
+  /** Show `item` in place of the open one (it changed under the preview), keeping where focus returns. */
+  replace(item: AttachmentPreviewItem): void;
 }
 
 /**
@@ -28,5 +30,6 @@ export function useAttachmentPreview(): AttachmentPreviewState {
     // The trigger may have gone (a chip removed meanwhile): focus only one still in the page.
     if (el && el.isConnected) el.focus();
   }, []);
-  return useMemo(() => ({ item, open, close }), [item, open, close]);
+  const replace = useCallback((next: AttachmentPreviewItem) => setItem(next), []);
+  return useMemo(() => ({ item, open, close, replace }), [item, open, close, replace]);
 }

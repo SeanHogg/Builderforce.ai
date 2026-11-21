@@ -4537,8 +4537,16 @@ function createLocalChatIdentity(options) {
     async adopt(localId, serverId) {
       const destination = port.destination();
       const found = await read(localId);
-      if (!found || !destination || destination.kind !== "bound") return false;
-      return await bindThroughLease(localId, found.chat.id, destination, async () => serverId) === serverId;
+      const releaseHeld = async () => {
+        if (found) await store.transact((tx) => releaseChatBind(tx, found.chat.id));
+      };
+      if (!found || !destination || destination.kind !== "bound") {
+        await releaseHeld();
+        return false;
+      }
+      const adopted = await bindThroughLease(localId, found.chat.id, destination, async () => serverId) === serverId;
+      if (!adopted) await releaseHeld();
+      return adopted;
     }
   };
 }
@@ -4771,6 +4779,7 @@ function createLocalBrainPersistence(options) {
         });
         await tx.put(record2);
         await journalWrite(tx, record2, "create", { key: `chat:${clientId}` });
+        if (body.bindPending) await claimChatBind(tx, clientId, now());
         return chat;
       });
     },
@@ -19486,7 +19495,13 @@ ${part}`;
         if (stablePrefix) turnParts.push(extra);
         else intoPrompt(extra);
       }
-    } catch {
+    } catch (error) {
+      pushTrace(c, {
+        ts: nowIso(),
+        category: "message",
+        label: "system_prompt.augmentation_failed",
+        result: error instanceof Error ? error.message : String(error)
+      });
     }
   }
   const catalogToolNames = (req.tools ?? []).map((t) => t.function.name);
@@ -23255,9 +23270,14 @@ function useComposerAttachments(persistence, imagePrep) {
     revoke(locals.current.get(key)?.url);
     locals.current.delete(key);
   }, []);
-  useEffect9(() => () => {
-    for (const l of locals.current.values()) revoke(l.url);
-    locals.current.clear();
+  const mounted = useRef8(true);
+  useEffect9(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      for (const l of locals.current.values()) revoke(l.url);
+      locals.current.clear();
+    };
   }, []);
   const attach = useCallback9(async (file) => {
     stagedSeq += 1;
@@ -23269,15 +23289,23 @@ function useComposerAttachments(persistence, imagePrep) {
       if (dropped.current.delete(key)) return;
       const local = locals.current.get(key);
       locals.current.delete(key);
+      if (!mounted.current) {
+        revoke(local?.url);
+        return;
+      }
       if (local) locals.current.set(attachment.key, local);
       setStaged((prev) => prev.filter((s) => s.key !== key));
       setPending((prev) => [...prev, attachment]);
     } catch (e) {
       if (dropped.current.delete(key)) return;
+      if (!mounted.current) {
+        forgetLocal(key);
+        return;
+      }
       const error = e instanceof Error && e.message ? e.message : "";
       setStaged((prev) => prev.map((s) => s.key === key ? { ...s, status: "error", error } : s));
     }
-  }, [persistence, imagePrep]);
+  }, [persistence, imagePrep, forgetLocal]);
   const remove = useCallback9((key) => {
     forgetLocal(key);
     setStaged((prev) => {

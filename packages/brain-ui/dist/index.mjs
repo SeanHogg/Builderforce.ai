@@ -947,6 +947,21 @@ function modelMoveLine(move, labels) {
   return move.fits ? line2 : `${line2}. ${labels.modelMoveOverWindow}`;
 }
 
+// src/attachments/safeUrl.ts
+var ALLOWED = /* @__PURE__ */ new Set(["https:", "http:", "data:", "blob:"]);
+function safeAttachmentUrl(url) {
+  if (!url) return void 0;
+  const trimmed = url.trim();
+  if (!trimmed) return void 0;
+  let protocol;
+  try {
+    protocol = new URL(trimmed, "https://relative.invalid/").protocol.toLowerCase();
+  } catch {
+    return void 0;
+  }
+  return ALLOWED.has(protocol) ? trimmed : void 0;
+}
+
 // src/timelineNodes.ts
 import {
   consolidationMarkerOf,
@@ -1003,12 +1018,28 @@ function attachmentsOf(message) {
 }
 var ATTACHED_LINE = /^\[Attached:\s*(.+?)\]\((.*)\)\s*$/;
 function attachedLinks(text) {
-  const links = /* @__PURE__ */ new Map();
+  const links = [];
   for (const line2 of text.split("\n")) {
     const m = line2.match(ATTACHED_LINE);
-    if (m && m[2] && !links.has(m[1].trim())) links.set(m[1].trim(), m[2].trim());
+    const href = m ? safeAttachmentUrl(m[2]) : void 0;
+    if (m && href) links.push({ name: m[1].trim(), href });
   }
   return links;
+}
+function keyTail(href) {
+  const path = href.split(/[?#]/)[0] ?? "";
+  try {
+    return decodeURIComponent(path);
+  } catch {
+    return path;
+  }
+}
+function linkFor(a, links, claimed) {
+  const byKey = a.key ? links.findIndex((l, i) => !claimed.has(i) && keyTail(l.href).endsWith(`/${a.key}`)) : -1;
+  const index = byKey >= 0 ? byKey : links.findIndex((l, i) => !claimed.has(i) && l.name === a.name.trim());
+  if (index < 0) return void 0;
+  claimed.add(index);
+  return links[index].href;
 }
 function stripAttachmentRefs(text, names) {
   if (names.size === 0) return text;
@@ -1021,12 +1052,14 @@ function userAttachmentsOf(message) {
   const recorded = attachmentsOf(message).filter((a) => a && typeof a.name === "string");
   if (recorded.length === 0) return { images: [], files: [] };
   const links = attachedLinks(message.content);
+  const claimed = /* @__PURE__ */ new Set();
   const images = [];
   const files = [];
   for (const a of recorded) {
-    const href = links.get(a.name.trim());
+    const href = linkFor(a, links, claimed);
     const facts = { ...a.key ? { key: a.key } : {}, ...a.type ? { type: a.type } : {}, ...href ? { href } : {} };
-    if (a.imageUrl) images.push({ url: a.imageUrl, name: a.name, ...facts });
+    const imageUrl = safeAttachmentUrl(a.imageUrl);
+    if (imageUrl) images.push({ url: imageUrl, name: a.name, ...facts });
     else files.push({ name: a.name, ...facts });
   }
   return { images, files };
@@ -1646,28 +1679,40 @@ function clickLink(href, name, newTab = false) {
   a.click();
   a.remove();
 }
+function saveBlobAs(blob, name) {
+  const objectUrl = URL.createObjectURL(blob);
+  try {
+    clickLink(objectUrl, name);
+  } finally {
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+  }
+}
+function dataCopyOf(item) {
+  const copy = safeAttachmentUrl(item.previewUrl);
+  return copy?.startsWith("data:") ? copy : void 0;
+}
 async function browserDownload(item) {
-  const url = item.downloadUrl;
-  if (!url) throw new Error("no download URL");
+  const url = safeAttachmentUrl(item.downloadUrl);
+  if (!url) throw new Error("");
   if (url.startsWith("blob:") || url.startsWith("data:")) {
     clickLink(url, item.name);
     return true;
   }
-  let blob;
+  let res;
   try {
-    const res = await fetch(url, { credentials: "include" });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    blob = await res.blob();
+    res = await fetch(url, { credentials: "include" });
   } catch {
-    clickLink(url, item.name, true);
+    const copy = dataCopyOf(item);
+    clickLink(copy ?? url, item.name, !copy);
     return true;
   }
-  const objectUrl = URL.createObjectURL(blob);
-  try {
-    clickLink(objectUrl, item.name);
-  } finally {
-    setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+  if (!res.ok) {
+    const copy = dataCopyOf(item);
+    if (!copy) throw new Error("");
+    clickLink(copy, item.name);
+    return true;
   }
+  saveBlobAs(await res.blob(), item.name);
   return true;
 }
 
@@ -1733,7 +1778,7 @@ function PreviewPanel({ item, onClose, labels, download, locale }) {
       if (alive.current) setStatus({ kind: "error", message });
     }
   }, [download, item, labels.downloadFailed]);
-  const imageSrc = item.previewUrl ?? (item.type?.startsWith("image/") ? item.downloadUrl : void 0);
+  const imageSrc = safeAttachmentUrl(item.previewUrl ?? (item.type?.startsWith("image/") ? item.downloadUrl : void 0));
   const showImage = isImageItem(item) && !!imageSrc && !broken;
   const meta = [item.type, item.size != null ? formatFileSize(item.size, locale) : null].filter(Boolean).join(" \xB7 ");
   const canDownload = !!item.downloadUrl;
@@ -1815,20 +1860,23 @@ function useAttachmentPreview() {
     trigger.current = null;
     if (el && el.isConnected) el.focus();
   }, []);
-  return useMemo5(() => ({ item, open, close }), [item, open, close]);
+  const replace = useCallback3((next) => setItem(next), []);
+  return useMemo5(() => ({ item, open, close, replace }), [item, open, close, replace]);
 }
 
 // src/timeline/MessageAttachments.tsx
 import { Fragment as Fragment3, jsx as jsx8, jsxs as jsxs7 } from "react/jsx-runtime";
 var durableUrl = (url) => url && !url.startsWith("blob:") ? url : void 0;
 function attachmentDownloadUrl(href, preview) {
-  return durableUrl(href) ?? durableUrl(preview) ?? href ?? preview;
+  const link = safeAttachmentUrl(href);
+  const copy = safeAttachmentUrl(preview);
+  return durableUrl(link) ?? durableUrl(copy) ?? link ?? copy;
 }
 var imageItem = (im, fallbackName) => ({
   name: im.name || fallbackName,
   ...im.type ? { type: im.type } : {},
   ...im.key ? { key: im.key } : {},
-  previewUrl: im.url,
+  ...safeAttachmentUrl(im.url) ? { previewUrl: im.url } : {},
   downloadUrl: attachmentDownloadUrl(im.href, im.url)
 });
 var fileItem = (f) => {
@@ -1856,7 +1904,7 @@ function MessageAttachmentsInner({ images, files, labels, download }) {
           "aria-label": `${labels.open}: ${item.name}`,
           title: item.name,
           onClick: (e) => preview.open(item, e.currentTarget),
-          children: /* @__PURE__ */ jsx8("img", { src: im.url, alt: "", className: "bf-tl__image" })
+          children: /* @__PURE__ */ jsx8("img", { src: safeAttachmentUrl(im.url), alt: "", className: "bf-tl__image" })
         },
         i
       );
@@ -9968,7 +10016,7 @@ function Row2({ item, onAction }) {
 }
 
 // src/composer/BrainComposer.tsx
-import { memo as memo15, useCallback as useCallback30, useEffect as useEffect30, useMemo as useMemo22, useRef as useRef28, useState as useState43 } from "react";
+import { memo as memo15, useCallback as useCallback30, useEffect as useEffect31, useMemo as useMemo22, useRef as useRef28, useState as useState43 } from "react";
 
 // src/workStatus/consumptionSnapshot.ts
 var TTL_MS = 6e4;
@@ -10676,12 +10724,14 @@ function ComposerTrailingButton({ labels, canSubmit, running, disabled = false, 
 }
 
 // src/composer/AttachmentChips.tsx
-import { memo as memo13 } from "react";
+import { memo as memo13, useEffect as useEffect29 } from "react";
 import { jsx as jsx84, jsxs as jsxs78 } from "react/jsx-runtime";
 function chipPreviewItem(a) {
   const image = !!a.imageUrl || !!a.type?.startsWith("image/");
-  const previewUrl = image ? a.localUrl ?? a.imageUrl : void 0;
-  const downloadUrl = a.localUrl ?? (image ? a.imageUrl : void 0);
+  const local = safeAttachmentUrl(a.localUrl);
+  const stored = safeAttachmentUrl(a.imageUrl);
+  const previewUrl = image ? local ?? stored : void 0;
+  const downloadUrl = local ?? (image ? stored : void 0);
   return {
     key: a.key,
     name: a.name,
@@ -10693,10 +10743,20 @@ function chipPreviewItem(a) {
 }
 function AttachmentChipsInner({ items, onRemove, labels, previewLabels, download, locale }) {
   const preview = useAttachmentPreview();
+  const openKey = preview.item?.key;
+  const openLocal = preview.item?.downloadUrl;
+  const { close, replace } = preview;
+  useEffect29(() => {
+    if (openKey == null) return;
+    if (items.some((a) => a.key === openKey)) return;
+    const swapped = openLocal ? items.find((a) => a.localUrl && a.localUrl === openLocal) : void 0;
+    if (swapped) replace(chipPreviewItem(swapped));
+    else close();
+  }, [items, openKey, openLocal, close, replace]);
   if (items.length === 0) return null;
   return /* @__PURE__ */ jsxs78("div", { className: "bf-cmp-attachments", children: [
     items.map((a) => {
-      const thumb = a.imageUrl ?? (a.type?.startsWith("image/") ? a.localUrl : void 0);
+      const thumb = safeAttachmentUrl(a.imageUrl ?? (a.type?.startsWith("image/") ? a.localUrl : void 0));
       const failed = a.status === "error";
       return /* @__PURE__ */ jsxs78(
         "span",
@@ -11078,7 +11138,7 @@ function composerLabelsFrom(lookup, overrides) {
 }
 
 // src/composer/useUploadGate.ts
-import { useCallback as useCallback29, useEffect as useEffect29, useRef as useRef27, useState as useState42 } from "react";
+import { useCallback as useCallback29, useEffect as useEffect30, useRef as useRef27, useState as useState42 } from "react";
 function useUploadGate(items) {
   const uploading = !!items?.some((a) => a.status === "uploading");
   const failed = !!items?.some((a) => a.status === "error");
@@ -11099,13 +11159,13 @@ function useUploadGate(items) {
     }
     return false;
   }, []);
-  useEffect29(() => {
+  useEffect30(() => {
     if (!held || uploading) return;
     setHeld(null);
     if (failed) setRefused(true);
     else held();
   }, [held, uploading, failed]);
-  useEffect29(() => {
+  useEffect30(() => {
     if (refused && !failed) setRefused(false);
   }, [refused, failed]);
   const notice = held ? "waiting" : refused && failed ? "failed" : null;
@@ -11169,7 +11229,7 @@ function BrainComposerInner(props) {
       onChangeRef.current?.(next);
     }
   }, [draftStore]);
-  useEffect30(() => {
+  useEffect31(() => {
     if (focusToken == null) return;
     const el = textareaRef.current;
     if (!el) return;
@@ -11367,11 +11427,11 @@ function BrainComposerInner(props) {
 var BrainComposer = memo15(BrainComposerInner);
 
 // src/composer/useChatMemorySwitch.ts
-import { useCallback as useCallback31, useEffect as useEffect31, useState as useState44 } from "react";
+import { useCallback as useCallback31, useEffect as useEffect32, useState as useState44 } from "react";
 function useChatMemorySwitch(opts) {
   const { chatId, serverValue, persist } = opts;
   const [enabled, setLocal] = useState44(serverValue ?? true);
-  useEffect31(() => {
+  useEffect32(() => {
     setLocal(serverValue ?? true);
   }, [chatId, serverValue]);
   const setEnabled = useCallback31((on) => {

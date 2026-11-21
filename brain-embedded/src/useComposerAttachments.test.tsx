@@ -78,6 +78,20 @@ describe('useComposerAttachments — a chip before the upload', () => {
     expect(revoked).toEqual(['blob:local-1']);
   });
 
+  it('regression: an upload that lands after unmount keeps no object URL', async () => {
+    const c = controlledPersistence();
+    const { result, unmount } = renderHook(() => useComposerAttachments(c.persistence, undefined));
+    let done!: Promise<void>;
+    act(() => { done = result.current.attach(pdf()); });
+    unmount();
+    expect(revoked).toEqual(['blob:local-1']);
+    await c.resolve({ key: 'up-1', name: 'spec.pdf', type: 'application/pdf' });
+    await done;
+    // Revoked once on unmount; nothing re-registered by the late upload.
+    expect(revoked).toEqual(['blob:local-1']);
+    expect(created).toEqual(['blob:local-1']);
+  });
+
   it('revokes the local originals when a send takes the files, and on unmount', async () => {
     const c = controlledPersistence();
     const { result, unmount } = renderHook(() => useComposerAttachments(c.persistence, undefined));

@@ -14,6 +14,7 @@
 import { memo, useCallback, useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { browserDownload } from './browserDownload';
+import { safeAttachmentUrl } from './safeUrl';
 import { attachmentPreviewLabels, type AttachmentPreviewLabels } from './labels';
 import { isImageItem, type AttachmentDownload, type AttachmentPreviewItem } from './types';
 

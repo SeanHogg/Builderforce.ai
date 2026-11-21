@@ -20,7 +20,7 @@ import { isRecordPayloadMarker } from './recordPayloadMarker.js';
 import { addSyncSummary, countReceipt, emptySyncSummary, type SyncSummary } from './syncSummary.js';
 import { parseSyncId, type SyncId } from './entityId.js';
 import { isAlreadySatisfiedDelete, isPermanentRefusal } from './permanentRefusals.js';
-import { pulledLinkPayload, repairServerFormLinks } from './pulledChatTicketLink.js';
+import { applyPulledLinkTombstone, pulledLinkPayload, repairServerFormLinks } from './pulledChatTicketLink.js';
 
 export const SYNC_PROTOCOL_VERSION = 1;
 

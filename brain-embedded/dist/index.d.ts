@@ -2236,6 +2236,7 @@ interface BrainPersistenceAdapter {
         projectId?: number | null;
         capability?: string | null;
         mode?: string | null;
+        bindPending?: boolean;
     }): Promise<BrainChat>;
     updateChat(id: number, body: {
         title?: string;
