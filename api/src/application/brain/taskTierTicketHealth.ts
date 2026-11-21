@@ -6,8 +6,9 @@
  * constant handful of queries however many task-tier links a chat carries.
  */
 import { and, eq, inArray, sql } from 'drizzle-orm';
-import { isClosedTaskStatus, TASK_CLOSED_STATUSES } from '@builderforce/agent-loop';
+import { effectiveTaskStatus, isClosedTaskStatus } from '@builderforce/agent-loop';
 import { tasks, projects } from '../../infrastructure/database/schema';
+import { closedTaskSql } from '../../infrastructure/database/taskClosedSql';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { buildTaskProgressBreakdown } from '../task/taskProgressBreakdown';
 import type { Db } from '../../infrastructure/database/connection';
@@ -18,9 +19,11 @@ import { missingTicket, ticketKey, ticketKindForTaskType, type TicketHealth, typ
  * closed (the shared closed class, so a cancelled child is owed nothing). "Done" means
  * the lane is closed: a stamped `completed_at` on an open lane is not done, so an
  * epic's done/total and its children's chips always agree. (`count(completed_at)` alone
- * once reported 0/N for children that were Done by status only.)
+ * once reported 0/N for children that were Done by status only.) An ARCHIVED child
+ * counts done too, whatever its stale lane — the same rule as the self-row rewrite below
+ * (`effectiveTaskStatus`), read through the ONE closed-task SQL fragment.
  */
-export const SQL_COUNT_DONE = sql<number>`coalesce(sum(CASE WHEN ${inArray(tasks.status, [...TASK_CLOSED_STATUSES])} THEN 1 ELSE 0 END), 0)`;
+export const SQL_COUNT_DONE = sql<number>`coalesce(sum(CASE WHEN ${closedTaskSql()} THEN 1 ELSE 0 END), 0)`;
 
 /**
  * Name the PARENT of every task-tier row that has one — child task ⇒ its epic,
@@ -99,9 +102,9 @@ export async function addTaskTierHealth(
     .innerJoin(projects, eq(projects.id, tasks.projectId))
     .where(and(inArray(tasks.id, allTaskLike), eq(projects.tenantId, tenantId)));
   // An ARCHIVED ticket is off the board — it reads as the closed `archived` status
-  // (in TASK_CLOSED_STATUSES), never as its stale open lane, so the rail counts it
+  // (agent-loop `effectiveTaskStatus`), never as its stale open lane, so the rail counts it
   // complete and "Hide done" hides it.
-  const selfById = new Map(rows.map((r) => [r.id, r.archived ? { ...r, status: 'archived' } : r]));
+  const selfById = new Map(rows.map((r) => [r.id, { ...r, status: effectiveTaskStatus(r) }]));
   // ONE extra batched query at most — the parents not already among these rows.
   const parentByChild = await resolveTaskParents(db, tenantId, rows);
 

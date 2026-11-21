@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isClosedTask, isClosedTaskStatus, parseTaskListScope, scopeNeedsArchived, taskInScope } from "./taskClosedState";
+import { effectiveTaskStatus, isClosedTask, isClosedTaskStatus, parseTaskListScope, scopeNeedsArchived, taskInScope } from "./taskClosedState";
 
 describe("taskClosedState", () => {
   it("treats done and cancelled (both spellings) as closed", () => {
@@ -10,6 +10,14 @@ describe("taskClosedState", () => {
   it("treats an archived ticket as closed whatever its lane", () => {
     expect(isClosedTask({ status: "in_progress", archived: true })).toBe(true);
     expect(isClosedTask({ status: "in_progress", archived: false })).toBe(false);
+  });
+
+  it("regression: #6975 an archived ticket READS as the closed `archived` status whatever its lane", () => {
+    expect(effectiveTaskStatus({ status: "backlog", archived: true })).toBe("archived");
+    expect(isClosedTaskStatus(effectiveTaskStatus({ status: "backlog", archived: true }))).toBe(true);
+    expect(effectiveTaskStatus({ status: "backlog", archived: false })).toBe("backlog");
+    expect(effectiveTaskStatus({ status: "in_progress" })).toBe("in_progress");
+    expect(effectiveTaskStatus({ status: undefined, archived: null })).toBeUndefined();
   });
 
   it("splits a list into open and closed scopes", () => {

@@ -42,9 +42,11 @@ export {
 export {
   TASK_CLOSED_STATUSES,
   TASK_LIST_SCOPES,
+  ARCHIVED_TASK_STATUS,
   isClosedTaskStatus,
   isCancelledTaskStatus,
   isClosedTask,
+  effectiveTaskStatus,
   parseTaskListScope,
   taskInScope,
   scopeNeedsArchived,

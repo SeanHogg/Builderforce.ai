@@ -1,6 +1,5 @@
-import { eq, inArray, and, sql, asc, count, exists, gt, ilike, isNull, lt, not, or, type SQL } from 'drizzle-orm';
+import { eq, inArray, and, sql, asc, count, exists, gt, ilike, isNull, lt, not, type SQL } from 'drizzle-orm';
 import { QueryBuilder } from 'drizzle-orm/pg-core';
-import { TASK_CLOSED_STATUSES } from '@builderforce/agent-loop';
 import { ITaskRepository, TaskListOptions, type TaskListFilter, type TaskQueryState } from '../../domain/task/ITaskRepository';
 import { Task } from '../../domain/task/Task';
 import {
@@ -11,6 +10,7 @@ import { tasks as tasksTable, ticketParticipants } from '../database/schema';
 import type { Db } from '../database/connection';
 import { scopedToTenant } from '../database/tenantScope';
 import { escapeLikePattern } from '../database/likePattern';
+import { closedTaskSql, closedTaskStatusSql } from '../database/taskClosedSql';
 
 /** The light columns a bulk survey/write reads — never the description blob. */
 export type TaskIndexRow = {
@@ -29,15 +29,6 @@ export interface TaskPage {
   offset?: number;
 }
 
-/** Leading/trailing whitespace, as JS `String.prototype.trim` strips it (btrim strips spaces only). */
-const EDGE_WHITESPACE = '^[[:space:]]+|[[:space:]]+$';
-
-/** `lower(trim(status)) IN (TASK_CLOSED_STATUSES)` — the SQL form of agent-loop's
- *  `isClosedTaskStatus` (`status.trim().toLowerCase()`), built from the SAME list so the
- *  two can never disagree. */
-const closedStatusSql = (): SQL =>
-  sql`lower(regexp_replace(${tasksTable.status}, ${EDGE_WHITESPACE}, '', 'g')) in (${sql.join(TASK_CLOSED_STATUSES.map((s) => sql`${s}`), sql`, `)})`;
-
 /** No owner of any kind: no human, no cloud agent, no host (empty strings count as none). */
 const unassignedSql = (): SQL =>
   sql`(nullif(${tasksTable.assignedUserId}, '') is null and nullif(${tasksTable.assignedAgentRef}, '') is null and ${tasksTable.assignedAgentHostId} is null)`;
@@ -51,11 +42,11 @@ const subquery = new QueryBuilder();
  * a closed lane; open = neither. Exported for the SQL render test.
  */
 export function taskFilterWhere(tenantId: number, f: TaskListFilter, state: TaskQueryState = {}): SQL {
-  const closed = or(eq(tasksTable.archived, true), closedStatusSql());
+  const closed = closedTaskSql();
   const conditions: Array<SQL | undefined> = [
     state.archived !== undefined ? eq(tasksTable.archived, state.archived) : undefined,
     state.excludeTaskTypes?.length ? sql`${tasksTable.taskType}::text not in (${sql.join(state.excludeTaskTypes.map((t) => sql`${t}`), sql`, `)})` : undefined,
-    f.scope === 'closed' ? closed : f.scope === 'open' ? and(eq(tasksTable.archived, false), not(closedStatusSql())) : undefined,
+    f.scope === 'closed' ? closed : f.scope === 'open' ? and(eq(tasksTable.archived, false), not(closedTaskStatusSql())) : undefined,
     f.projectId !== undefined ? eq(tasksTable.projectId, f.projectId) : undefined,
     f.status !== undefined ? eq(tasksTable.status, f.status) : undefined,
     f.parentTaskId !== undefined ? eq(tasksTable.parentTaskId, f.parentTaskId) : undefined,

@@ -44,6 +44,19 @@ describe("railTicketProgress", () => {
     expect(railTicketProgress(row({ railKind: "objective", status: "achieved", progressPct: 60 })).progressPct).toBe(100);
   });
 
+  it("regression: #6975 an archived backlog ticket reads archived and 100 without waiting on a refresh", () => {
+    expect(railTicketProgress(row({ railKind: "task", status: "backlog", archived: true, progressPct: 0 })))
+      .toMatchObject({ status: "archived", progressPct: 100, done: 1, total: 1 });
+    // A locally authored record (no railKind) too.
+    expect(railTicketProgress(row({ status: "backlog", archived: true }))).toMatchObject({ status: "archived", progressPct: 100 });
+  });
+
+  it("an unarchived ticket keeps its own lane and progress", () => {
+    expect(railTicketProgress(row({ railKind: "task", status: "backlog", archived: false, progressPct: 0 })))
+      .toMatchObject({ status: "backlog", progressPct: 0 });
+    expect(railTicketProgress(row({ status: "in_progress", progressPct: 40 }))).toMatchObject({ status: "in_progress", progressPct: 40 });
+  });
+
   it("a task-lane word does not close a spec: an open spec keeps its raw figure", () => {
     expect(railTicketProgress(row({ railKind: "spec", status: "in_progress", progressPct: 50 })).progressPct).toBe(50);
   });

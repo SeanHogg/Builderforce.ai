@@ -7,7 +7,9 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
  * done used to read 100 while the initiative itself was open.
  */
 
-import { CLAIMED_COMPLETE_PROGRESS_CAP, TICKET_CLOSED_STATES } from '@builderforce/agent-loop';
+import { PgDialect } from 'drizzle-orm/pg-core';
+import { CLAIMED_COMPLETE_PROGRESS_CAP, TASK_CLOSED_STATUSES, TICKET_CLOSED_STATES } from '@builderforce/agent-loop';
+import { SQL_COUNT_DONE } from './taskTierTicketHealth';
 import { specStatusEnum } from '../../infrastructure/database/schema';
 import { CEREMONY_SESSION_STATUSES, isCeremonySessionDone } from '../../domain/agile/ceremonySession';
 import { ChatTicketService } from './ChatTicketService';
@@ -94,6 +96,34 @@ describe('roadmap / spec (leaves, by their own status)', () => {
     expect((await health('spec', 's1')).progressPct).toBe(50);
     queue = [[{ id: 'r1', title: 'Billing', status: 'in_progress' }]];
     expect((await health('roadmap', 'r1')).progressPct).toBe(50);
+  });
+});
+
+describe('archived task-tier tickets read closed (#6975)', () => {
+  it('regression: an archived task whose lane is still backlog reads archived / 100 / done', async () => {
+    queue = [[{ id: 6767, title: 'Archived ticket', status: 'backlog', taskType: 'task', parentTaskId: null, archived: true }]];
+    expect(await health('task', '6767')).toMatchObject({ status: 'archived', progressPct: 100, done: 1, total: 1 });
+  });
+
+  it('an unarchived backlog task keeps its lane and progress', async () => {
+    queue = [[{ id: 6768, title: 'Open ticket', status: 'backlog', taskType: 'task', parentTaskId: null, archived: false }]];
+    const h = await health('task', '6768');
+    expect(h).toMatchObject({ status: 'backlog', done: 0, total: 1 });
+    expect(h.progressPct).toBeLessThan(100);
+  });
+
+  it('regression: an archived epic reads archived / 100 whatever its child rollup', async () => {
+    queue = [
+      [{ id: 6700, title: 'Archived epic', status: 'in_progress', taskType: 'epic', parentTaskId: null, archived: true }],
+      [{ parentId: 6700, total: 3, done: 1 }],
+    ];
+    expect(await health('epic', '6700')).toMatchObject({ status: 'archived', progressPct: 100 });
+  });
+
+  it('regression: the child rollup counts an archived child done (archived OR a closed lane)', () => {
+    const q = new PgDialect().sqlToQuery(SQL_COUNT_DONE);
+    expect(q.sql).toMatch(/CASE WHEN \("tasks"\."archived" = \$1 or lower\(regexp_replace\("tasks"\."status"/);
+    expect(q.params).toEqual(expect.arrayContaining([true, ...TASK_CLOSED_STATUSES]));
   });
 });
 

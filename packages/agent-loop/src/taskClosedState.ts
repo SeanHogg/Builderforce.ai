@@ -12,8 +12,11 @@
  * keys, so it holds the keys that mean "closed" on every board.
  */
 
+/** The status an ARCHIVED ticket reads as, whatever its stale lane (see {@link effectiveTaskStatus}). */
+export const ARCHIVED_TASK_STATUS = "archived";
+
 /** Lane keys that mean "closed" on every board, including tracker spellings. */
-export const TASK_CLOSED_STATUSES: readonly string[] = ["done", "cancelled", "canceled", "completed", "archived"];
+export const TASK_CLOSED_STATUSES: readonly string[] = ["done", "cancelled", "canceled", "completed", ARCHIVED_TASK_STATUS];
 
 const CLOSED = new Set(TASK_CLOSED_STATUSES);
 
@@ -41,6 +44,19 @@ export interface TaskClosedFacts {
 /** Closed = a closed lane OR archived. */
 export function isClosedTask(task: TaskClosedFacts): boolean {
   return task.archived === true || isClosedTaskStatus(task.status);
+}
+
+/**
+ * The status a ticket READS as on every surface (chip, progress, rollups, Hide done): an
+ * archived ticket is off the board, so it reads {@link ARCHIVED_TASK_STATUS} (a closed
+ * status) even when its lane still says `backlog`; any other ticket reads its own lane.
+ * The status-only readers (`isClosedTicketStatus`, `effectiveTicketProgress`) then agree
+ * with {@link isClosedTask} without each learning the archived flag.
+ */
+export function effectiveTaskStatus<S extends string | null | undefined>(
+  task: { status: S; archived?: boolean | null },
+): S | typeof ARCHIVED_TASK_STATUS {
+  return task.archived === true ? ARCHIVED_TASK_STATUS : task.status;
 }
 
 /** Which tickets a list returns: open work (the default view), closed, or both. */

@@ -11,7 +11,7 @@
  * never disagree about what names a ticket.
  */
 
-import { effectiveTicketProgress } from "@builderforce/agent-loop";
+import { effectiveTaskStatus, effectiveTicketProgress } from "@builderforce/agent-loop";
 import { TASK_TABLE_KINDS, tierRefText, type EntityScope, type LocalFirstTransaction, type ServerMapping, type TicketValue } from "@builderforce/local-first";
 import type { RailRun, RailTicketParent } from "./railProtocol";
 
@@ -74,9 +74,13 @@ export function railProgressKind(payload: Partial<Pick<RailTicketPayload, "railK
  * empty or undefined status chip.
  */
 export function railTicketProgress(payload: TicketValue & Partial<Pick<RailTicketPayload, "progressPct" | "done" | "total" | "exists" | "railKind">>): RailTicketProgress {
+  // An ARCHIVED ticket reads as the closed `archived` status whatever its stale lane (agent-loop
+  // `effectiveTaskStatus`, the rule the server's ticket health applies too), so the chip, the
+  // header count and Hide done all read it closed without waiting for a refresh to rewrite it.
+  const lane = effectiveTaskStatus(payload);
   // An empty or whitespace-only status is the same "not started yet" as undefined: the record has
   // not been assigned a lane. Only a real lane (a non-blank string) is drawn verbatim.
-  const status = typeof payload.status === "string" && payload.status.trim() !== "" ? payload.status : "backlog";
+  const status = typeof lane === "string" && lane.trim() !== "" ? lane : "backlog";
   // Delegate to the shared rule (agent-loop `effectiveTicketProgress`), keyed on the
   // record's kind so each tier closes on its own status words (a spec at "complete", a
   // roadmap item at "shipped", an initiative at "completed"): a closed ticket always reads
