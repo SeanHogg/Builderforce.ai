@@ -132,6 +132,7 @@ export class MarkLayer {
             }
             uploadRange(this.stats, b.extrude, 0, count, bi);
         });
+        for (const w of writeSets) this.setFloor(w, p.minMarkPx ?? 0);
         this.placed = true;
         this.target = into;
         // uFlip = 0 tweens A → B (target B); 1 tweens B → A (target A).
@@ -156,8 +157,16 @@ export class MarkLayer {
             uploadRange(this.stats, b.place[to], 0, count, bi);
             uploadRange(this.stats, b.extrude, 0, count, bi);
         });
+        // The floor bakes like the sets: the stale set's becomes the blend reached at `t`, the target takes `p`'s. (One
+        // value per set: a mark only one of the old sets showed bakes with the blended floor, not its own partial one.)
+        const floors = this.uniforms.uMinMarkPx.value, fa = floors.getComponent(from), fz = floors.getComponent(to);
+        this.setFloor(from, fa + (fz - fa) * t);
+        this.setFloor(to, p.minMarkPx ?? 0);
         return to === 1 ? 0 : 1;
     }
+
+    /** Set `w`'s drawn floor (CSS px across): the shader's `uMinMarkPx`, A in x, B in y. */
+    private setFloor(w: 0 | 1, px: number): void { this.uniforms.uMinMarkPx.value.setComponent(w, px); }
 
     /**
      * Appends a placement's run of slots into the batches' headroom (B1a rule 1: a drill appends, ranged; no mesh is

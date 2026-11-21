@@ -49,6 +49,16 @@ export function sceneMinHeight(l: SurfaceLayout): number | string {
     return l.phone ? draw : `calc(${draw} + var(--kg-scene-top, ${SCENE_TOP_FALLBACK}))`;
 }
 
+/**
+ * The flex of the scene's row (the Lines rail, the scene and the path strip) inside the surface. Side by side it shares
+ * the row with the Act rail. Stacked, it never shrinks under {@link sceneMinHeight} (the column scrolls when the Act
+ * section under it is tall) but GROWS into the height left over: sized to its minimum alone, the panel showed an empty
+ * band under the scene whenever the Act section was short or hidden.
+ */
+export function sceneRowFlex(l: SurfaceLayout): { flex: string | number; minHeight?: number } {
+    return l.actBelow ? { flex: '1 0 auto' } : { flex: 1, minHeight: 0 };
+}
+
 /** `width` 0 (not measured yet) reads as the full layout. */
 export function layoutOf(width: number): SurfaceLayout {
     const known = width > 0;

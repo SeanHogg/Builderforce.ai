@@ -8,6 +8,7 @@
  */
 
 import { ZOOM_BANDS, ZOOM_OVERSHOOT, type ZoomBand } from '../labels/lod';
+import { drawnHalfPx } from '../markSize';
 import type { Projector } from '../pick';
 import type { Placement } from '../types';
 
@@ -24,8 +25,12 @@ export function stepBand(current: number, focusPx: number, parentPx: number, las
 /** The Sequence's `req.lod` for a band (0 systems, 1 classes, 2 methods; the code band reads the method band). */
 export const sequenceLodOf = (band: number): number => Math.max(0, Math.min(2, band));
 
-/** A slot's drawn diameter in CSS px under `pxPerWorld` (scale is the mark's half-size). */
-export const drawnPx = (p: Pick<Placement, 'scale'>, slot: number, pxPerWorld: number): number => 2 * (p.scale[slot] ?? 0) * pxPerWorld;
+/**
+ * A slot's drawn diameter in CSS px under `pxPerWorld` (scale is the mark's half-size), by the ONE drawn-size formula
+ * (`markSize.ts`) with no floor: the bands measure the mark's own world size as the user zooms it, and the placements
+ * that drill (Map, Sequence) declare none.
+ */
+export const drawnPx = (p: Pick<Placement, 'scale'>, slot: number, pxPerWorld: number): number => 2 * drawnHalfPx(p.scale[slot] ?? 0, pxPerWorld);
 
 export interface Focus { slot: number; px: number }
 

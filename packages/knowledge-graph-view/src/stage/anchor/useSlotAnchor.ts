@@ -12,6 +12,7 @@
 
 import { useLayoutEffect, useState, type RefObject } from 'react';
 import { CARD_HEIGHT, CARD_WIDTH, placeCard, type Rect } from '../../surface/transit/cardPlacement';
+import { slotHalfPx } from '../markSize';
 import type { Projector } from '../pick';
 import { useStageBus, type StageBus } from './stageBus';
 
@@ -30,7 +31,7 @@ export function anchorOf(bus: StageBus, slot: number, projector: Projector, size
     if (!p || slot < 0 || !(p.scale[slot]! > 0)) return null;
     const x = p.position[slot * 3]!, y = p.position[slot * 3 + 1]! + (p.extrude[slot] ?? 0) * bus.extrudeScale(), z = p.position[slot * 3 + 2]!;
     if (!projector.project(x, y, z, scratch)) return null;
-    const half = Math.max(MIN_BOX, p.scale[slot]! * projector.pxPerWorld);
+    const half = Math.max(MIN_BOX, slotHalfPx(p, slot, projector.pxPerWorld));
     const box: Rect = { left: scratch[0]! - half, top: scratch[1]! - half, width: half * 2, height: half * 2 };
     return placeCard(box, { width: projector.width, height: projector.height }, size, avoid);
 }

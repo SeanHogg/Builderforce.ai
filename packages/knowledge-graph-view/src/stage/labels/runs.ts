@@ -2,7 +2,8 @@
  * Label runs → where each one is drawn (PRD 43 B1a rule 4, B3 Labels). A placement's `LabelRun`s are SLOT-RELATIVE: a
  * run names its slot, and is placed at that slot's position in the placement plus its pixel offset. `world` runs
  * (Transit, Tower) are sized in world units once; `screen` runs are re-placed when the zoom settles, sized in CSS px.
- * The label LOD (`lod.ts`) drops runs whose mark is too small for their priority, and keeps the top `maxLabels`.
+ * The label LOD (`lod.ts`) drops runs whose mark is too small for their priority (a run's own `minMarkPx` replaces that
+ * step: 0 when its placement chose it by room), and keeps the top `maxLabels`.
  *
  * A run goes to the SDF pass only when the host gave a mono font AND the font's subset covers every glyph of its text;
  * otherwise it becomes a mono DOM caption, which gets the browser's glyph fallback (and troika never asks a CDN). Pure.
@@ -53,7 +54,7 @@ export function placeLabels(
         .filter((r) => {
             if (r.zoomPx && (px < r.zoomPx[0] || px >= r.zoomPx[1])) return false;
             const scale = p.scale[r.slot] ?? 0;
-            return scale > 0 && 2 * scale * px >= minMarkPxFor(r.priority, lod);
+            return scale > 0 && 2 * scale * px >= (r.minMarkPx ?? minMarkPxFor(r.priority, lod));
         })
         .sort((a, b) => b.priority - a.priority || a.slot - b.slot)
         .slice(0, lod.maxLabels);

@@ -12,6 +12,8 @@ import type { MapBranch, MapKind, MindMap, PlacedBranch } from './mindTypes';
 export const RING = 14;
 /** A branch's mark radius by kind, in layout units (the SVG mind map and the stage's Mind map placement read the same). */
 export const BRANCH_RADIUS: Readonly<Record<MapKind, number>> = { root: 1.8, folder: 1.2, file: 0.7, more: 0.7 };
+/** The least a branch's mark is drawn, as a radius in CSS px, however far the map is zoomed out (the SVG and the stage read it). */
+export const MIN_BRANCH_RADIUS_PX = 3;
 /** The longest branch name drawn in full; a longer one is clipped with an ellipsis (its full name stays in the tooltip / aria). */
 export const MAX_BRANCH_LABEL = 24;
 export const clipBranchName = (s: string): string => (s.length > MAX_BRANCH_LABEL ? `${s.slice(0, MAX_BRANCH_LABEL - 1)}…` : s);

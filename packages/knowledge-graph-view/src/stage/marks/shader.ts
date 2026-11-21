@@ -46,13 +46,17 @@ in vec4 placeA;      // posA.xyz, scaleA
 in vec4 placeB;      // posB.xyz, scaleB
 in vec2 extrudeAB;   // extrudeA, extrudeB
 in vec4 paint;       // tone, tone2, fill, flags
-uniform float uT; uniform float uFlip; uniform float uPxPerWorld; uniform float uDpr; uniform float uDepth;
+uniform float uT; uniform float uFlip; uniform float uPxPerWorld; uniform float uDpr; uniform float uDepth; uniform vec2 uMinMarkPx;
 uniform vec3 uPalette[${PALETTE_SIZE}];
 out vec2 vUv; out float vPart; out vec3 vColor; out vec3 vColor2; out float vFill; out float vFlags; out float vPx;
 void main() {
     vec4 from = mix(placeA, placeB, uFlip), to = mix(placeB, placeA, uFlip);
     float s = mix(from.w, to.w, uT);
     if (s <= 0.0) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
+    // Each placement SET carries its own drawn floor (markSize.ts drawnHalfPx; A in x, B in y), applied only where that
+    // set shows the mark and blended with uT: a mark shrinking to hidden or growing from it never pops to the floor.
+    float floorFrom = mix(uMinMarkPx.x, uMinMarkPx.y, uFlip) * step(1e-9, from.w), floorTo = mix(uMinMarkPx.y, uMinMarkPx.x, uFlip) * step(1e-9, to.w);
+    s = max(s, mix(floorFrom, floorTo, uT) * 0.5 / max(uPxPerWorld, 1e-6));
     vec3 p = mix(from.xyz, to.xyz, uT);
     float e = mix(mix(extrudeAB.x, extrudeAB.y, uFlip), mix(extrudeAB.y, extrudeAB.x, uFlip), uT) * uDepth;
     float tone = paint.x, tone2 = paint.y, fillv = paint.z, flags = paint.w;
@@ -181,6 +185,8 @@ export interface SharedMarkUniforms {
     uChangedTone: IUniform<number>;
     /** An extruded mark's side walls: the `towerSide` token. */
     uWallTone: IUniform<number>;
+    /** The least drawn mark size, CSS px across, per placement set (`Placement.minMarkPx`; set A in x, B in y; 0 = world size). */
+    uMinMarkPx: IUniform<Vector2>;
 }
 
 export function sharedMarkUniforms(): SharedMarkUniforms {
@@ -188,7 +194,7 @@ export function sharedMarkUniforms(): SharedMarkUniforms {
         uT: { value: 1 }, uFlip: { value: 0 }, uPxPerWorld: { value: 1 }, uDpr: { value: 1 },
         uPalette: { value: Array.from({ length: PALETTE_SIZE }, () => new Vector3(0.5, 0.5, 0.5)) },
         uBg: { value: new Vector3(1, 1, 1) },
-        uDepth: { value: 0 }, uTime: { value: 0 }, uMotion: { value: 1 },
+        uDepth: { value: 0 }, uTime: { value: 0 }, uMotion: { value: 1 }, uMinMarkPx: { value: new Vector2(0, 0) },
         uTextTone: { value: toneIndex('text') }, uViolationTone: { value: toneIndex('violation') }, uChangedTone: { value: toneIndex('changed') }, uWallTone: { value: toneIndex('towerSide') },
     };
 }

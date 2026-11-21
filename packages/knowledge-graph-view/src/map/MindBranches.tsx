@@ -12,7 +12,7 @@ import { cssVar } from '../scene/themeColors';
 import { labelFitsAt } from './labelBudget';
 import { DASHED_SHAPES, SHAPE_PATHS } from '../shapes';
 import type { MindMap as MindMapModel, PlacedBranch } from './mindMapModel';
-import { BRANCH_RADIUS, clipBranchName as clip } from './mindLayout';
+import { BRANCH_RADIUS, clipBranchName as clip, MIN_BRANCH_RADIUS_PX } from './mindLayout';
 
 /** The branch radii (ONE table in `mindLayout`, read by the stage's Mind map placement too). */
 export const RADIUS = BRANCH_RADIUS;
@@ -71,7 +71,7 @@ export const Branches = memo(function Branches(p: LayerProps) {
             {map.branches.map((b) => {
                 const w = wording(b, p);
                 const root = b.kind === 'root';
-                const r = Math.max(RADIUS[b.kind], 3 * perPx);
+                const r = Math.max(RADIUS[b.kind], MIN_BRANCH_RADIUS_PX * perPx);
                 const active = b.ref !== undefined && b.ref === selected;
                 const labelled = root || active || b.id === reveal || labelFitsAt({ radius: b.radius, span: b.span, angle: b.angle, room: b.room, chars: w.text.length, font });
                 return (

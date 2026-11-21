@@ -50,7 +50,8 @@ export interface MindOptions {
 type Tone = MapBranch['tone'];
 /** Severity → tone, as data. Folders and files with nothing found keep their quiet tone. */
 const SEVERITY_TONE: Record<Severity, Tone> = { error: 'violation', warn: 'cycle', info: 'nodeSection' };
-const toneOf = (severity: Severity | undefined, quiet: Tone): Tone => (severity ? SEVERITY_TONE[severity] : quiet);
+/** A branch's tone: its worst finding's, or `quiet` with none (the stage's folder paint, `folderPaint.ts`, reads the same). */
+export const severityTone = (severity: Severity | undefined, quiet: Tone): Tone => (severity ? SEVERITY_TONE[severity] : quiet);
 
 /** A folder's type tally (its files and every folder beneath), memoised per tree: a folder is an aggregate and takes its members' dominant type. */
 const TALLY = new WeakMap<Dir, Map<MarkType, number>>();
@@ -85,7 +86,7 @@ function fileBranches(dir: Dir, severities: ReadonlyMap<string, Severity>, start
         const severity = severities.get(n.ref);
         return {
             id: n.ref, kind: 'file', name: pathOf(n.ref)?.split('/').pop() ?? n.label, count: 1, refs: [n.ref], ref: n.ref,
-            ...(severity ? { severity } : {}), tone: toneOf(severity, 'nodeFile'), shape: nodeShape(n), children: [],
+            ...(severity ? { severity } : {}), tone: severityTone(severity, 'nodeFile'), shape: nodeShape(n), children: [],
         };
     });
     const rest = dir.files.slice(start + FILES_PER_FOLDER);
@@ -94,7 +95,7 @@ function fileBranches(dir: Dir, severities: ReadonlyMap<string, Severity>, start
         shown.push({
             id: `${dir.path}\u0000more`, kind: 'more', name: '', count: rest.length, refs: rest.map((n) => n.ref),
             page: { parent: dir.path, next: start + FILES_PER_FOLDER, of: 'files' },
-            ...(severity ? { severity } : {}), tone: toneOf(severity, 'edge'), shape: typeShape(dominantType(rest.map((n) => markTypeOf(n)))), children: [],
+            ...(severity ? { severity } : {}), tone: severityTone(severity, 'edge'), shape: typeShape(dominantType(rest.map((n) => markTypeOf(n)))), children: [],
         });
     }
     return shown;
@@ -108,7 +109,7 @@ function toBranch(dir: Dir, kind: 'root' | 'folder', ctx: Ctx): MapBranch {
     ];
     return {
         id: dir.path || '\u0000root', kind, name: dir.name, count: dir.count, refs: refsOf(dir),
-        ...(dir.severity ? { severity: dir.severity } : {}), tone: toneOf(dir.severity, 'edge'), shape: dirShape(dir, kind), children,
+        ...(dir.severity ? { severity: dir.severity } : {}), tone: severityTone(dir.severity, 'edge'), shape: dirShape(dir, kind), children,
     };
 }
 
@@ -143,7 +144,7 @@ function fold(b: MapBranch, keep: ReadonlySet<string>, win: Window | null): MapB
             id: `${b.id}\u0000folders`, kind: 'more', name: '', count: dropped.reduce((n, c) => n + c.count, 0), refs: dropped.flatMap((c) => c.refs),
             folders: dropped.length, page: { parent, next: start + kept.filter((c) => c.kind === 'folder').length },
             // The folded folders' leaf takes the first (largest) folder's shape: a type, never a neutral dot.
-            ...(severity ? { severity } : {}), tone: toneOf(severity, 'edge'), shape: dropped[0]!.shape, children: [],
+            ...(severity ? { severity } : {}), tone: severityTone(severity, 'edge'), shape: dropped[0]!.shape, children: [],
         });
     }
     return { ...b, children };

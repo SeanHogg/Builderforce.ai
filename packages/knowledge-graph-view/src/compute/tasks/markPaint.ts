@@ -8,7 +8,8 @@
  * Lit / DIM: an explicit `lit` (the main thread's answer when a chosen line, the selection or a search decides it)
  * wins; otherwise `questionId` (+ `family`, the patterns narrowing) is answered here exactly as the surface answers it
  * with no line chosen and nothing selected (`useSurface`: `line` = the first line, `selected` = null). A station is lit
- * when it answers; a node when it or its station is named; a folder when any node in it is lit.
+ * when it answers; a node when it or its station is named; a folder when a lit node or lit station member is in it.
+ * A folder's tone is the worst finding beneath it (`folderPaint.ts`).
  */
 
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
@@ -18,8 +19,9 @@ import { MARK_TYPE_ORDER } from '../../shapes';
 import { makeOverlay, type Bindings } from '../../surface/overlays';
 import { litStations, QUESTIONS, type QuestionId } from '../../surface/questions';
 import { BG_TONE, toneIndex } from '../../stage/tones';
-import { FLAG, SLOT_FOLDER, SLOT_NODE, type MarkPaint, type MarkSet } from '../../stage/types';
+import { FLAG, SLOT_NODE, type MarkPaint, type MarkSet } from '../../stage/types';
 import type { LensId } from '../../types';
+import { lightFolders, paintFolders } from './folderPaint';
 import type { StageModel } from './stageModel';
 
 export interface PaintInput {
@@ -36,7 +38,6 @@ export interface PaintInput {
 }
 
 const DOC_TYPE = MARK_TYPE_ORDER.indexOf('doc');
-const AREA_TONE = toneIndex('nodeArea');
 const QUESTION_IDS: ReadonlySet<string> = new Set(QUESTIONS.map((q) => q.id));
 
 export function paintMarks(g: KnowledgeGraph, model: StageModel, input: PaintInput): MarkPaint {
@@ -64,10 +65,10 @@ export function paintMarks(g: KnowledgeGraph, model: StageModel, input: PaintInp
             | ((stopsAt.get(s.id) ?? 0) > 1 ? FLAG.INTERCHANGE : 0) | (marks.type[slot] === DOC_TYPE ? FLAG.DOC : 0);
     });
 
-    for (let i = 0; i < n; i++) if (marks.slotKind[i] === SLOT_FOLDER) { tone[i] = AREA_TONE; flags[i] = FLAG.SELECTABLE; }
+    paintFolders(g, marks, tone, flags);
 
     const lit = input.lit ?? questionLit(model, input.questionId ?? null, input.family ?? null);
-    if (lit) dimExcept(new Set(lit), marks, flags);
+    if (lit) dimExcept(new Set(lit), marks, stations, model.stationSlot, flags);
     if (input.roles) {
         const role = new Map(input.roles);
         for (let i = 0; i < n; i++) {
@@ -93,9 +94,13 @@ export function questionLit(model: Pick<StageModel, 'stations' | 'lines'>, quest
 
 /**
  * A slot is lit when its key or its bare id (`node:<ref>` → `<ref>`, `st:<id>` → `<id>`) is in `lit`; a node also when
- * its station is lit; a folder when any node in it is lit. Every other slot dims.
+ * its station is lit; a folder when a lit node or a lit station's member file is in it (`lightFolders`). Every other
+ * slot dims.
  */
-function dimExcept(lit: ReadonlySet<string>, marks: Pick<MarkSet, 'keys' | 'slotKind' | 'parentStation' | 'parentFolder'>, flags: Uint8Array): void {
+function dimExcept(
+    lit: ReadonlySet<string>, marks: Pick<MarkSet, 'keys' | 'slotKind' | 'parentStation' | 'parentFolder'>,
+    stations: StageModel['stations'], stationSlot: StageModel['stationSlot'], flags: Uint8Array,
+): void {
     const { keys } = marks;
     const on = new Uint8Array(keys.length);
     for (let i = 0; i < keys.length; i++) {
@@ -106,8 +111,7 @@ function dimExcept(lit: ReadonlySet<string>, marks: Pick<MarkSet, 'keys' | 'slot
         if (marks.slotKind[i] !== SLOT_NODE) continue;
         const st = marks.parentStation[i]!;
         if (!on[i] && st >= 0 && on[st]) on[i] = 1;
-        // A folder lights with its lit nodes (and their ancestors).
-        if (on[i]) for (let f = marks.parentFolder[i]!; f >= 0 && !on[f]; f = marks.parentFolder[f]!) on[f] = 1;
     }
+    lightFolders(on, marks, stations, stationSlot);
     for (let i = 0; i < keys.length; i++) if (!on[i]) flags[i] = flags[i]! | FLAG.DIM;
 }

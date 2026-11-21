@@ -115,6 +115,12 @@ export interface LabelRun {
      * that picks collision-free captions per zoom band (`CAPTION_ZOOM_BANDS`) emits one run per band span. Absent = every zoom.
      */
     zoomPx?: [number, number];
+    /**
+     * The mark size (CSS px across) this run needs before it shows, in place of the label LOD's step for its priority.
+     * 0 = the placement chose the run by room (`zoomPx`), whatever its mark's size: the Mind map's dots are far smaller
+     * than their names on a big tree, so a mark-size gate dropped every name. Absent = the LOD decides.
+     */
+    minMarkPx?: number;
 }
 
 /**
@@ -168,6 +174,12 @@ export interface Placement {
     caption: { shown: number; total: number; capped: boolean; edges?: { shown: number; total: number; capped: boolean } };
     bounds: { min: Vec3; max: Vec3 };
     rig: CameraRig;
+    /**
+     * The least a shown mark is drawn across, CSS px, whatever the zoom (`stage/markSize.ts`; the shader's `uMinMarkPx`).
+     * The Mind map sets it (the SVG mind map's 3px least dot radius): fitted into one viewport band, a big tree's dots are
+     * otherwise under a pixel or two. Absent = 0, a mark is its world size.
+     */
+    minMarkPx?: number;
     /**
      * Slots this placement brings that the MarkSet does not hold (a drilled level's loaded symbols, B7 drill enter),
      * numbered from `base` (= the MarkSet's slot count) in order; `position` / `scale` / `extrude` cover them too.

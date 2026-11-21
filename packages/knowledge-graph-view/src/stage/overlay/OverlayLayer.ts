@@ -11,6 +11,7 @@
 import { Color, DoubleSide, Group, Mesh, MeshBasicMaterial, RingGeometry, SRGBColorSpace } from 'three';
 import { linkBatch, type LinkPath } from '../../compute/tasks/placement/links';
 import { LinkLayer } from '../links/LinkLayer';
+import { slotHalfPx } from '../markSize';
 import type { LinkUniforms } from '../links/shader';
 import type { StageStats } from '../stats';
 import { toneIndex } from '../tones';
@@ -93,6 +94,15 @@ export class OverlayLayer {
 
     setDepth(depth: number): void { if (depth !== this.depth) { this.depth = depth; this.draw(); } }
 
+    /** CSS px per world unit at the settled zoom: a ring rings the mark as DRAWN, which a placement's `minMarkPx` floors. */
+    private pxPerWorld = 1;
+
+    setPxPerWorld(px: number): void {
+        if (px === this.pxPerWorld) return;
+        this.pxPerWorld = px;
+        if (this.placement?.minMarkPx) this.placeRings();
+    }
+
     constructor(stats: StageStats, uniforms: LinkUniforms) {
         // Only the `edge` family: the overlay's lines are one px batch (LinkLayer preallocates what it is told to).
         this.lines = new LinkLayer(stats, uniforms, ['edge']);
@@ -123,10 +133,16 @@ export class OverlayLayer {
         const p = this.placement, s = this.state;
         this.group.visible = !!p;
         if (!p) return;
-        place(this.selectRing, p, s.selected, this.depth);
-        place(this.hoverRing, p, s.hover === s.selected ? -1 : s.hover, this.depth);
+        this.placeRings();
         const batch = overlayLinks(p, s);
         this.lines.set(batch ? [batch] : []);
+    }
+
+    private placeRings(): void {
+        const p = this.placement, s = this.state;
+        if (!p) return;
+        place(this.selectRing, p, s.selected, this.depth, this.pxPerWorld);
+        place(this.hoverRing, p, s.hover === s.selected ? -1 : s.hover, this.depth, this.pxPerWorld);
     }
 
     dispose(): void {
@@ -135,10 +151,10 @@ export class OverlayLayer {
     }
 }
 
-function place(m: Mesh, p: Placement, s: number, depth: number): void {
+function place(m: Mesh, p: Placement, s: number, depth: number, pxPerWorld: number): void {
     m.visible = shown(p, s);
     if (!m.visible) return;
-    const r = Math.max(RING_MIN, p.scale[s]! * RING_GROW);
+    const r = Math.max(RING_MIN, (slotHalfPx(p, s, pxPerWorld) / Math.max(pxPerWorld, 1e-6)) * RING_GROW);
     m.position.set(p.position[s * 3]!, p.position[s * 3 + 1]! + (p.extrude[s] ?? 0) * depth + LIFT, p.position[s * 3 + 2]!);
     m.scale.set(r, 1, r);
 }

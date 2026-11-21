@@ -29,7 +29,7 @@ import { isSmall } from './compute/size';
 import type { VisibleGraph } from './graphModel';
 import { useStableGraph } from './stableGraph';
 import { useContainerWidth, useRenderEnvironment } from './environment';
-import { layoutOf, sceneMinHeight, SCENE_TOP_FALLBACK } from './layout';
+import { layoutOf, sceneMinHeight, sceneRowFlex, SCENE_TOP_FALLBACK } from './layout';
 import type { Revision } from './revision';
 import { useReviewTargets } from './ReviewLauncher';
 import { ViewSurface } from './ViewSurface';
@@ -258,7 +258,7 @@ export function KnowledgeGraphView({
             />
             {noHits !== null && <p role="status" style={{ ...muted, margin: 0, padding: '4px 12px' }}>{fillTemplate(labels.searchNoHits, { query: noHits })}</p>}
             <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: layout.actBelow ? 'column' : 'row', overflow: layout.actBelow ? 'auto' : 'hidden' }}>
-                <div style={{ display: 'flex', minWidth: 0, ...(layout.actBelow ? { flex: 'none' } : { flex: 1, minHeight: 0 }) }}>
+                <div style={{ display: 'flex', minWidth: 0, ...sceneRowFlex(layout) }}>
                     {showLeft && !layout.linesStacked && linesPanel(true)}
                     <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
                         {layout.phone && overlay}

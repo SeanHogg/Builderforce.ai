@@ -39,9 +39,21 @@ export interface LabelSpot {
     font: number;
 }
 
+/**
+ * The largest font (same units) at which the label fits where this branch sits, by the direction it runs in (see the
+ * module comment): a side label must clear a line of arc and its width the radial room; a top or bottom one must hold its
+ * width in the arc. Infinity when nothing limits it. A host whose font is screen-constant reads it as the zoom a name
+ * needs (the stage's Mind map placement).
+ */
+export function maxLabelFont(s: Omit<LabelSpot, 'font'>): number {
+    const arc = arcLength(s.radius, s.span);
+    const perFont = textWidth(s.chars, 1);
+    const width = (limit: number) => (perFont > 0 ? limit / perFont : Infinity);
+    if (Math.abs(Math.cos(s.angle)) > SIDE_COS) return Math.min(arc / LINE_EM, width(s.room));
+    return width(arc);
+}
+
 /** True when the label fits where this branch sits, by the direction it runs in (see the module comment). */
 export function labelFitsAt(s: LabelSpot): boolean {
-    const arc = arcLength(s.radius, s.span);
-    if (Math.abs(Math.cos(s.angle)) > SIDE_COS) return arc >= s.font * LINE_EM && textWidth(s.chars, s.font) <= s.room;
-    return arc >= textWidth(s.chars, s.font);
+    return s.font <= maxLabelFont(s);
 }

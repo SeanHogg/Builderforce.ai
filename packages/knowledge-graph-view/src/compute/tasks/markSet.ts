@@ -42,6 +42,27 @@ export function stringsDigest(strings: Readonly<Record<string, string>>): string
 /** The key of a folder slot. */
 export const dirKey = (path: string): string => `dir:${path}`;
 
+/** Folder path → its slot, read back from a MarkSet's `dir:` keys. */
+export function dirSlotsOf(keys: readonly string[]): Map<string, number> {
+    const out = new Map<string, number>();
+    keys.forEach((k, i) => { if (k.startsWith('dir:')) out.set(k.slice(4), i); });
+    return out;
+}
+
+/**
+ * The folder slot a FILE ref sits in (`dirParts`, cut at the depth cap), or -1 for a pathless ref. A file the folder
+ * tree never saw (a station member that is not a graph node) sits in its nearest folder that exists.
+ */
+export function fileFolderSlot(fileRef: string, dirAt: ReadonlyMap<string, number>): number {
+    const parts = dirParts(fileRef);
+    if (!parts) return -1;
+    for (let n = parts.length; n >= 0; n--) {
+        const at = dirAt.get(parts.slice(0, n).join('/'));
+        if (at !== undefined) return at;
+    }
+    return -1;
+}
+
 export function buildMarkSet(g: KnowledgeGraph, stations: StationModel, generation: number, strings: Readonly<Record<string, string>> = {}): MarkSet {
     const nodes = g.nodes;
     const dirs = [...walkDirs(buildDirs(nodes, NO_SEVERITIES))];
@@ -117,8 +138,7 @@ function folderSlotOf(node: KNode, nodeAt: ReadonlyMap<string, number>, nodes: r
     let file: KNode | undefined = node;
     if (node.kind !== 'file') { const at = nodeAt.get(fileRefOf(node.ref)); file = at === undefined ? undefined : nodes[at]; }
     if (!file || file.kind !== 'file') return -1;
-    const parts = dirParts(file.ref);
-    return parts ? dirAt.get(parts.join('/')) ?? -1 : -1;
+    return fileFolderSlot(file.ref, dirAt);
 }
 
 /**

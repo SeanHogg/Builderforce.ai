@@ -6,7 +6,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L } from '../labels';
-import { layoutOf, sceneMinHeight, SCENE_MIN_PX, SCENE_STACKED_VH } from '../layout';
+import { layoutOf, sceneMinHeight, sceneRowFlex, SCENE_MIN_PX, SCENE_STACKED_VH } from '../layout';
 import { placeLabels } from './labels/runs';
 import type { TextPort } from './labels/LabelLayer';
 import { createWebGLStage } from './renderer';
@@ -29,6 +29,16 @@ describe('stage sizing', () => {
         expect(stacked).toBe(`calc(max(${SCENE_MIN_PX}px, ${SCENE_STACKED_VH}vh) + var(--kg-scene-top, 88px))`);
         // A phone stacks the overlay in flow above the region: nothing to reserve.
         expect(sceneMinHeight(layoutOf(400))).toBe(`max(${SCENE_MIN_PX}px, ${SCENE_STACKED_VH}vh)`);
+    });
+
+    it('regression: a stacked scene GROWS into the height left under it (an empty band filled the ~890px panel\'s bottom)', () => {
+        // Below the Act breakpoint the scene row was `flex: none` — exactly its minimum — so with a short or hidden Act
+        // section nothing claimed the rest of the column. It grows now, never shrinking under its minimum (the column scrolls).
+        const stacked = sceneRowFlex(layoutOf(890));
+        expect(stacked.flex).toBe('1 0 auto');
+        expect(stacked.minHeight).toBeUndefined();
+        // Side by side the row's flex still gives it the height.
+        expect(sceneRowFlex(layoutOf(1400))).toEqual({ flex: 1, minHeight: 0 });
     });
 
     it('regression: a world label never draws under its nominal CSS px when zoomed out (Map / Mind map names)', () => {

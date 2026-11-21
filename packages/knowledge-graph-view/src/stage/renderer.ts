@@ -193,7 +193,7 @@ export function createWebGLStage(options: WebGLStageOptions = {}): StageRenderer
             tween.begin(now, tweenMs);
         },
         setView(next) { view = next; uniforms.uPxPerWorld.value = next.pxPerWorld; uniforms.uDpr.value = next.dpr; },
-        settleView(next) { r.setView(next); if (!tween.active) labels.place(labelView()); },
+        settleView(next) { r.setView(next); overlay.setPxPerWorld(next.pxPerWorld); if (!tween.active) labels.place(labelView()); },
         get depth() { return uniforms.uDepth.value; },
         setDepth(depth, settled = true) {
             uniforms.uDepth.value = depth;
