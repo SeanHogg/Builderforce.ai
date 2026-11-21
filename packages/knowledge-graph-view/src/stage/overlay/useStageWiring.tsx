@@ -14,7 +14,7 @@ import { stageBus, StageBusContext } from '../anchor/stageBus';
 import { cssVar } from '../../scene/themeColors';
 import { TYPE } from '../../surface/ui/type';
 import { CodeLayer } from '../drill/CodeLayer';
-import { CodeDock, codeSubject, focusLine, recordsForCode, targetForMark } from './CodeDock';
+import { CodeDock, codeRefForStop, codeSubject, focusLine, recordsForCode, targetForMark } from './CodeDock';
 import { useSemanticZoom, type SemanticZoom } from '../drill/useSemanticZoom';
 import { useStageMap, type StageMap } from '../drill/useStageMap';
 import type { StageRenderer } from '../renderer';
@@ -123,10 +123,14 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
     const stationPick = selected?.startsWith('st:') ? map.stationOfKey(selected) : null;
     const subject = codeSubject(selected, stationPick);
     const markRef = subject.ref;
-    const codeName = subject.name || (markRef ? index.get(markRef)?.label ?? markRef : '');
-    const codeTarget = codeOpen ? targetForMark(markRef, codeName, records) : null;
-    const stopId = surface.path?.stops[surface.step]?.id ?? null;
-    const scrollLine = codeOpen ? focusLine(records, markRef, stopId) : undefined;
+    // A journey stop id is a station id. Resolve it the same way; selection still wins when both name a line.
+    const stop = surface.path?.stops[surface.step];
+    const stopStation = stop ? surface.stations.byId.get(stop.id) ?? map.stations.byId.get(stop.id) ?? null : null;
+    const stopRef = codeRefForStop(stop?.id ?? null, stopStation);
+    const dockRef = markRef ?? stopRef;
+    const codeName = subject.name || (dockRef === stopRef && stopStation ? stopStation.name : '') || (dockRef ? index.get(dockRef)?.label ?? dockRef : '');
+    const codeTarget = codeOpen ? targetForMark(dockRef, codeName, records) : null;
+    const scrollLine = codeOpen ? focusLine(records, markRef, stopRef) : undefined;
     const drillTo = useCallback((ref: string) => {
         setSelected(`node:${ref}`);
         p.onSelect(ref);

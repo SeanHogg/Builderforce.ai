@@ -109,6 +109,17 @@ export function codeSubject(key: string | null, station: { name: string; refs: r
 }
 
 /**
+ * A journey stop id is a station id, not a symbol. The station's first file is what `focusLine` /
+ * `targetForMark` can scroll; a stop that is already a symbol or file ref is used as-is.
+ * A station with no files has no source line.
+ */
+export function codeRefForStop(stopId: string | null, station: { refs: readonly string[] } | null | undefined): string | null {
+    if (!stopId) return null;
+    if (station) return station.refs[0] ?? null;
+    return stopId;
+}
+
+/**
  * The source line selection or the journey step should scroll to. Selection wins when both name a line;
  * pass `stopId` alone when the step is what just changed.
  */
