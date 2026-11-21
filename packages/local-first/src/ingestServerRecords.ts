@@ -26,10 +26,11 @@ import { chatTicketLinkId, linkServerIds } from './chatTicketLink.js';
 import { clone } from './clone.js';
 import { mintLocalId, parseEntityRef, parseSyncId, tierRefText } from './entityId.js';
 import { canonicalPayloadHash } from './payloadHash.js';
-import type { ChatTicketLinkValue, EntityDestination, EntityScope, LocalEntityType, LocalRecord, ServerMapping } from './records.js';
+import { accountScopeOf, type ChatTicketLinkValue, type EntityDestination, type LocalEntityType, type LocalRecord, type ServerMapping } from './records.js';
 import type { LocalFirstTransaction } from './storeContract.js';
 import type { LocalFirstStore } from './store.js';
-import { tombstoneRecord } from './tombstone.js';
+import { retireMisfiledLinks } from './pulledChatTicketLink.js';
+import { serverObservedProvenance, serverObservedTombstone } from './tombstone.js';
 
 export interface ServerRecordRow {
   entityType: LocalEntityType;
@@ -70,21 +71,17 @@ export interface IngestServerRecordsResult {
   clientIds: Array<string | undefined>;
 }
 
-/** Device id stamped on a record the server reported: not any device, so it is never "own". */
-const SERVER_DEVICE = 'server';
-
 /**
- * The client id of a row the device has no mapping for: minted, except a chat-ticket link,
- * whose id is DERIVED from its two client ids so it lands on the link the device may already hold.
+ * A chat-ticket link's id, DERIVED from its two client ids so it lands on the link the device may
+ * already hold (and the one `unlinkChatTicket` / `linkChatTicketInTx` look up). Undefined for any
+ * other row.
  */
-function newClientId(row: ServerRecordRow): string {
-  if (row.entityType === 'chat-ticket-link') {
-    const link = row.payload as Partial<ChatTicketLinkValue> | null;
-    if (typeof link?.chatClientId === 'string' && typeof link.ticketClientId === 'string') {
-      return chatTicketLinkId(link.chatClientId, link.ticketClientId);
-    }
-  }
-  return mintLocalId();
+function derivedLinkId(row: ServerRecordRow): string | undefined {
+  if (row.entityType !== 'chat-ticket-link') return undefined;
+  const link = row.payload as Partial<ChatTicketLinkValue> | null;
+  return typeof link?.chatClientId === 'string' && typeof link.ticketClientId === 'string'
+    ? chatTicketLinkId(link.chatClientId, link.ticketClientId)
+    : undefined;
 }
 
 /**
@@ -110,20 +107,12 @@ function sameServerKey(mapping: ServerMapping, serverId: string): boolean {
 }
 
 /**
- * Where a server row's existing mapping may be: its own ACCOUNT (the row's tenant's destinations
- * plus unbound) — a server key is only unique per tenant, so another tenant's ticket 40 is never
- * this row. A row with no tenant (unbound) has nothing to narrow to and looks everywhere (legacy).
- */
-const rowScope = (destination: EntityDestination): EntityScope | undefined =>
-  destination.kind === 'bound' && destination.tenantId ? { tenantId: destination.tenantId } : undefined;
-
-/**
  * The mapping a server row already has, in its account (earliest wins): a tier ticket's
  * `kind:ref` is its `externalRef`; anything else is its server key (`syncId`, or legacy text).
  */
 function mappingOfRow(tx: LocalFirstTransaction, row: ServerRecordRow): ReturnType<LocalFirstTransaction['mappingByServerId']> {
   const ref = parseEntityRef(row.serverId);
-  const scope = rowScope(row.destination);
+  const scope = accountScopeOf(row.destination);
   return ref && 'tier' in ref
     ? tx.mappingByExternalRef(row.entityType, tierRefText(ref.tier), scope)
     : tx.mappingByServerId(row.entityType, row.serverId, scope);
@@ -154,7 +143,10 @@ export async function ingestServerRecords(
       }
       const row: ServerRecordRow & { payload: unknown } = { ...source, payload };
       const mapping = await mappingOfRow(tx, row);
-      const clientId = mapping?.clientEntityId ?? newClientId(row);
+      // A link is always its derived id, even when its server id is mapped under another (a link
+      // another device authored, whose id derives from that device's chat/ticket ids): stored there
+      // it would be one no unlink or re-link on this device ever reaches.
+      const clientId = derivedLinkId(row) ?? mapping?.clientEntityId ?? mintLocalId();
       resolvedIds.push(clientId);
       if (row.entityType === 'ticket') incomingTickets.add(clientId);
       if (row.entityType === 'chat-ticket-link') {
@@ -183,7 +175,7 @@ export async function ingestServerRecords(
           destination: row.destination,
           provenance: keepsProvenance
             ? { ...existing!.provenance! }
-            : { deviceId: SERVER_DEVICE, source: 'imported', evidence: 'server-observed' },
+            : serverObservedProvenance(),
         },
         existing,
       );
@@ -207,7 +199,7 @@ export async function ingestServerRecords(
         await tx.put(record);
         result.written += 1;
       }
-      if (!mapping) {
+      if (!mapping || mapping.clientEntityId !== clientId) {
         // A derived link id may already be mapped (this device linked it and the server imported
         // it): keep that mapping's version, only learn the server id; never reset it to 1.
         const known = await tx.mapping(row.entityType, clientId, row.destination);
@@ -234,14 +226,12 @@ export async function ingestServerRecords(
         dropped.push(clone(link) as LocalRecord<ChatTicketLinkValue>);
       });
       for (const link of dropped) {
-        const gone = tombstoneRecord(link, at);
-        await tx.put({
-          ...gone,
-          provenance: { deviceId: SERVER_DEVICE, source: 'imported', evidence: 'server-observed' },
-        });
+        await tx.put(serverObservedTombstone(link, at));
         result.tombstoned += 1;
       }
     }
+    // A link an older build stored under another device's id, beside (or instead of) its derived one.
+    result.tombstoned += await retireMisfiledLinks(tx, at);
     if (options.markRead !== undefined && (await tx.readMark(options.markRead)) !== at) {
       await tx.setReadMark(options.markRead, at);
     }

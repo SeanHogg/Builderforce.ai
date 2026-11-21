@@ -1,6 +1,12 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { createMemoryLocalFirstStore, type ExecutionValue, type LocalFirstStore } from "@builderforce/local-first";
+import {
+  createMemoryLocalFirstStore,
+  ingestServerRecords,
+  type EntityDestination,
+  type ExecutionValue,
+  type LocalFirstStore,
+} from "@builderforce/local-first";
 import {
   installRunRecovery,
   type RunRecoveryHostContext,
@@ -24,6 +30,35 @@ function ctx(): RunRecoveryHostContext {
 
 function ports(store: LocalFirstStore) {
   return { store, deviceId: "device-1", now: () => at };
+}
+
+const ACCOUNT: EntityDestination = { kind: "bound", platformInstance: "https://builderforce.ai", tenantId: "7" };
+
+/** A cloud durable execution as the chat rail ingests it (`railRows.runRows`): server-observed, mapped to its server id. */
+async function ingestCloudRun(store: LocalFirstStore): Promise<Array<string | undefined>> {
+  const payload = {
+    chatClientId: "a72b0925-chat",
+    executionId: 32615,
+    taskId: 6973,
+    taskTitle: "Cloud task",
+    agentRef: null,
+    agentName: "John Coder",
+    status: "running",
+    submittedBy: "system:auto-exec",
+    source: "agent",
+    executor: "durable",
+    hostId: null,
+    hostName: null,
+    produced: null,
+    errorMessage: null,
+    startedAt: "2026-11-20T00:00:00.000Z",
+    completedAt: null,
+    createdAt: "2026-11-20T00:00:00.000Z",
+  };
+  const { clientIds } = await ingestServerRecords(store, [
+    { entityType: "execution", serverId: "32615", payload, updatedAt: "2026-11-20T00:00:00.000Z", destination: ACCOUNT },
+  ]);
+  return clientIds;
 }
 
 async function statusOf(store: LocalFirstStore, id: string): Promise<string | undefined> {
@@ -176,12 +211,64 @@ describe("installRunRecovery", () => {
 
     await first.recordAcknowledged("dismissed");
     expect(await statusOf(store, "dismissed")).toBe("cancelled");
-    expect((await listInterruptedRuns(store)).map((run) => run.runId)).toEqual(["kept"]);
+    expect((await listInterruptedRuns(store, deps)).map((run) => run.runId)).toEqual(["kept"]);
 
     // The next activation: the dismissed run is neither recovered nor listed again.
     const second = installRunRecovery(ctx(), ports(store));
     expect(await second.recovered).toEqual([]);
     expect((await second.interrupted()).map((run) => run.runId)).toEqual(["kept"]);
+  });
+
+  it("regression: an ingested cloud execution is never recovered, journaled or listed as interrupted", async () => {
+    const store = createMemoryLocalFirstStore();
+    const [cloudId] = await ingestCloudRun(store);
+    await recordRunStarted(store, deps, { runId: "host-run", chatId: "chat-1" });
+    const before = await store.read((tx) => tx.get<ExecutionValue>("execution", cloudId!));
+    const eventsBefore = (await store.export()).events.length;
+
+    const installed = installRunRecovery(ctx(), ports(store));
+    expect((await installed.recovered).map((run) => run.runId)).toEqual(["host-run"]);
+    expect((await installed.interrupted()).map((run) => run.runId)).toEqual(["host-run"]);
+
+    const after = await store.read((tx) => tx.get<ExecutionValue>("execution", cloudId!));
+    expect(after?.payload.status).toBe("running");
+    expect(after?.version).toBe(before?.version);
+    const events = (await store.export()).events;
+    expect(events.some((event) => event.clientEntityId === cloudId)).toBe(false);
+    expect(events.length).toBe(eventsBefore + 1);
+  });
+
+  it("regression: an ingested execution an earlier recovery mis-marked is not listed, and its queued interruption is dropped", async () => {
+    const store = createMemoryLocalFirstStore();
+    const [cloudId] = await ingestCloudRun(store);
+    // What the unguarded recovery left behind: the row rewritten and an `interrupted` update queued for the server.
+    await store.transact(async (tx) => {
+      const run = (await tx.get<ExecutionValue>("execution", cloudId!))!;
+      await tx.put<ExecutionValue>({ ...run, version: run.version + 1, payload: { ...run.payload, status: "interrupted" } }, run.version);
+      await tx.append({
+        idempotencyKey: `execution:interrupted:${run.id}:2026-11-20T00:00:00.000Z`,
+        clientEntityId: run.id,
+        entityType: "execution",
+        operation: "update",
+        schemaVersion: run.schemaVersion,
+        occurredAt: "2026-11-20T00:00:00.000Z",
+        dependsOn: [],
+        destination: run.destination,
+        payload: { status: "interrupted" },
+      });
+    });
+    await recordRunStarted(store, deps, { runId: "host-run", chatId: "chat-1" });
+
+    const installed = installRunRecovery(ctx(), ports(store));
+    expect((await installed.recovered).map((run) => run.runId)).toEqual(["host-run"]);
+    expect((await installed.interrupted()).map((run) => run.runId)).toEqual(["host-run"]);
+    expect((await listInterruptedRuns(store, deps)).map((run) => run.runId)).toEqual(["host-run"]);
+    const pending = await store.read((tx) => tx.pending());
+    expect(pending.some((event) => event.clientEntityId === cloudId)).toBe(false);
+
+    // Nothing pins it now: the next rail read restores the server's own status.
+    await ingestCloudRun(store);
+    expect(await statusOf(store, cloudId!)).toBe("running");
   });
 
   it("acknowledges only an interrupted run", async () => {

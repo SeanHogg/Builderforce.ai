@@ -1,6 +1,6 @@
 import type { ChatModeVocabulary } from '@/lib/brain/useChatModeCopy';
 import type { ReactNode } from 'react';
-import type { ChatModelOptions, ChatModelSelection, ComposerSuggestion, InferenceModeGate, ModelIdentityContext, QueuedTurns } from '@seanhogg/builderforce-brain-ui';
+import type { ChatModelOptions, ChatModelSelection, ComposerAttachment, ComposerSuggestion, InferenceModeGate, ModelIdentityContext, QueuedTurns } from '@seanhogg/builderforce-brain-ui';
 import type { ContextUsage, DirectedRecipient, TicketTag } from '@seanhogg/builderforce-brain-embedded';
 import type { BrainEffort, ChatMode } from '@/lib/brain';
 import type { TemplateEntry } from '@/lib/templates/contract';
@@ -159,8 +159,9 @@ export interface ChatInputProps {
   showBrainIcon?: boolean;
   /** Show voice (dictate) button. Uses browser Speech Recognition when available. */
   showVoice?: boolean;
-  /** Pending attachments to display (e.g. before send). */
-  pendingAttachments?: ChatInputAttachment[];
+  /** The composer's attachment chips (`conv.attachmentChips`): shown the moment a file is
+   *  attached, uploading behind the chip, or failed with the reason. Send waits for them. */
+  pendingAttachments?: readonly ComposerAttachment[];
   onRemoveAttachment?: (key: string) => void;
   /** Optional content rendered right-aligned below the input row (e.g. agent-connection status). */
   secondaryContent?: ReactNode;

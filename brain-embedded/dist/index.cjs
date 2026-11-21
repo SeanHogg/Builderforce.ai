@@ -1145,7 +1145,8 @@ function stepRow(step) {
 }
 
 // ../packages/agent-loop/src/taskClosedState.ts
-var TASK_CLOSED_STATUSES = ["done", "cancelled", "canceled", "completed", "archived"];
+var ARCHIVED_TASK_STATUS = "archived";
+var TASK_CLOSED_STATUSES = ["done", "cancelled", "canceled", "completed", ARCHIVED_TASK_STATUS];
 var CLOSED = new Set(TASK_CLOSED_STATUSES);
 function isClosedTaskStatus(status2) {
   return status2 != null && CLOSED.has(status2.trim().toLowerCase());
@@ -21334,8 +21335,8 @@ var ProgressDetector = class {
       ...reported ? { delegationReported: true } : {},
       ...waitDigest !== null ? { waitingOn: waitDigest } : {}
     });
-    const bookkeeping = tool === "run_command" && isVcsBookkeeping(shellCommandOf(args));
-    const workWrite = wrote && !isReadOnlyShellCall(tool, args) && !bookkeeping || ok && isDelete;
+    const bookkeeping2 = tool === "run_command" && isVcsBookkeeping(shellCommandOf(args));
+    const workWrite = wrote && !isReadOnlyShellCall(tool, args) && !bookkeeping2 || ok && isDelete;
     if (workWrite && check === void 0) this.work.noteWrite();
     if (check === "passed" || check === "failed") this.work.noteCheck(check === "passed");
     if (ok || checkChanged) this.failures.clear(tool, args);
@@ -30728,6 +30729,35 @@ function memoryToolsIn(toolNames) {
   return toolNames.filter(isProjectMemoryTool);
 }
 
+// src/workItemBookkeeping.ts
+var WORK_ITEM_TOOL = /^(builtin_(tasks|tickets|kanban)_|ticket[-_.])/i;
+function isWorkItemTool(name) {
+  return WORK_ITEM_TOOL.test(name);
+}
+var TICKETING_INTENTS = [
+  /\b(?:create|file|raise|log)\s+(?:[\w'-]+\s+){0,3}?(?:tickets?|tasks?|issues?)\b/i,
+  /\bopen\s+(?:an?|one|new|separate|individual)\s+(?:[\w'-]+\s+){0,2}?(?:tickets?|tasks?|issues?)\b/i
+];
+function asksForWorkItems(text2) {
+  const t = text2 ?? "";
+  return TICKETING_INTENTS.some((p) => p.test(t));
+}
+
+// src/runEffect.ts
+var MUTATION_TOOL = /(^|_)(write|edit|save|create|update|delete|apply|patch|publish|send|dispatch|run_command|assign|link|move|set)(_|$)/i;
+function isMutationTool(name) {
+  return isCodeChangeTool(name) || MUTATION_TOOL.test(name);
+}
+function isBookkeepingWrite(name) {
+  return !isCodeChangeTool(name) && isWorkItemTool(name);
+}
+function hasEditIntent(messages) {
+  return messages.some((m) => m.role === "user" && asksForChange(m.content));
+}
+function asksForWorkItemsIn(messages) {
+  return messages.some((m) => m.role === "user" && asksForWorkItems(m.content));
+}
+
 // src/toolFailure.ts
 function isFailedToolResult(result) {
   if (result == null) return false;
@@ -30803,13 +30833,6 @@ function splitRuns(events, messages) {
 }
 
 // src/runProgress.ts
-var MUTATION_TOOL = /(^|_)(write|edit|save|create|update|delete|apply|patch|publish|send|dispatch|run_command|assign|link|move|set)(_|$)/i;
-function isMutationTool(name) {
-  return isCodeChangeTool(name) || MUTATION_TOOL.test(name);
-}
-function hasEditIntent(messages) {
-  return messages.some((m) => m.role === "user" && asksForChange(m.content));
-}
 function callSignature(ev) {
   return callFingerprint(ev.label, ev.args);
 }
@@ -30843,9 +30866,9 @@ function isCacheAnswered(ev) {
 var IDLE_GAP_MS = 12e4;
 function computeRunProgress(events, messages = []) {
   const slices = splitRuns(events, messages);
-  if (slices.length === 1) return { ...progressOf(events, hasEditIntent(messages)), runs: [] };
-  const intentOf = (ask2, own2) => hasEditIntent(own2) || isContinuationDirective(ask2) && hasEditIntent(messages);
-  const each = slices.map((s) => ({ s, p: progressOf(s.events, intentOf(s.ask, s.messages)) }));
+  if (slices.length === 1) return { ...progressOf(events, hasEditIntent(messages), asksForWorkItemsIn(messages)), runs: [] };
+  const askedIn = (ask2, own2, asked) => asked(own2) || isContinuationDirective(ask2) && asked(messages);
+  const each = slices.map((s) => ({ s, p: progressOf(s.events, askedIn(s.ask, s.messages, hasEditIntent), askedIn(s.ask, s.messages, asksForWorkItemsIn)) }));
   const runs = each.map(({ s, p }) => ({
     ask: s.ask,
     turns: s.events.filter((e) => e.label === "llm.complete").length,
@@ -30857,7 +30880,7 @@ function computeRunProgress(events, messages = []) {
   }));
   return { ...each[each.length - 1].p, runs };
 }
-function progressOf(events, editIntent) {
+function progressOf(events, editIntent, workItemsAsked) {
   const tools = events.filter((e) => e.category === "tool");
   const seenCalls = /* @__PURE__ */ new Map();
   let duplicateCalls = 0;
@@ -30869,6 +30892,7 @@ function progressOf(events, editIntent) {
   let targetedCalls = 0;
   let mutationsAttempted = 0;
   let mutationsSucceeded = 0;
+  let bookkeepingWrites = 0;
   let streaks2 = 0;
   let longestStreak = null;
   let current = null;
@@ -30921,6 +30945,7 @@ function progressOf(events, editIntent) {
       mutationsAttempted += 1;
       if (!cached2 && !ev.isError && !isFailedToolResult(ev.result)) {
         mutationsSucceeded += 1;
+        if (isBookkeepingWrite(ev.label)) bookkeepingWrites += 1;
         if (subject) changed2(subject);
       }
     }
@@ -30948,7 +30973,8 @@ function progressOf(events, editIntent) {
   }
   const wallClockMs = timed.length > 1 ? timed[timed.length - 1].t - timed[0].t : 0;
   const didWork = tools.length > 0;
-  const noEffect = editIntent && didWork && mutationsSucceeded === 0;
+  const effects = mutationsSucceeded - (workItemsAsked ? 0 : bookkeepingWrites);
+  const noEffect = editIntent && didWork && effects === 0;
   const stuckOnCall = longestStreak !== null && longestStreak.count >= BACK_TO_BACK_AT;
   const spinning = targetedCalls >= 6 && revisitRatio >= 0.4 || stuckOnCall;
   return {
@@ -30963,6 +30989,7 @@ function progressOf(events, editIntent) {
     revisitRatio,
     mutationsAttempted,
     mutationsSucceeded,
+    bookkeepingWrites,
     editIntent,
     noEffect,
     spinning,
@@ -31025,7 +31052,7 @@ function formatRunProgress(p, opts = {}) {
   const pending = opts.running ? " \xB7 run in progress \u2014 no effect verdict yet" : "";
   if (p.editIntent) {
     lines.push(
-      `${scope}Effect: the request asked for a CHANGE \xB7 ${p.mutationsAttempted} mutating call(s) attempted, ${p.mutationsSucceeded} succeeded${opts.running ? pending : p.noEffect ? " \xB7 \u26A0 NOTHING WAS CHANGED" : ""}`
+      `${scope}Effect: the request asked for a CHANGE \xB7 ${p.mutationsAttempted} mutating call(s) attempted, ${p.mutationsSucceeded} succeeded${bookkeeping(p)}${opts.running ? pending : p.noEffect ? " \xB7 \u26A0 NOTHING WAS CHANGED" : ""}`
     );
   } else if (p.mutationsAttempted > 0) {
     lines.push(`${scope}Effect: ${p.mutationsAttempted} mutating call(s) attempted, ${p.mutationsSucceeded} succeeded${pending}.`);
@@ -31049,9 +31076,12 @@ function runProgressVerdict(p) {
   const streak = p.stuckOnCall && p.longestStreak ? `it made the same call ${p.longestStreak.count} times in a row \u2014 ${formatStreak(p.longestStreak)} \u2014 with nothing else attempted between them${p.longestStreak.failed === p.longestStreak.count ? ", re-asking a question it had already been answered the same way each time" : ""}` : null;
   const revisit = p.repeatedTargets.length ? `${Math.round(p.revisitRatio * 100)}% of its targeted calls revisited a target it had already read${worst ? `, worst \`${worst.label}\` \xD7${worst.count}` : ""}` : null;
   const loop = p.spinning ? `NO PROGRESS \u2014 ${streak ? `${streak}${revisit ? `; ${revisit}` : ""}` : `the run kept going back over ground it had already covered: ${revisit}`}${p.duplicateCalls ? `, and ${p.duplicateCalls} call(s) repeated earlier arguments EXACTLY` : ""}. ` : "NO EFFECT \u2014 ";
-  const effect = p.noEffect ? `The request asked for a change and the run finished with ZERO successful mutating calls${p.mutationsAttempted ? ` (${p.mutationsAttempted} attempted, all failed)` : " \u2014 it never attempted one"}, so nothing was actually modified. ` : "";
+  const effect = p.noEffect ? p.bookkeepingWrites > 0 && p.bookkeepingWrites === p.mutationsSucceeded ? `change requested, no code changed: the run's only successful writes were ${p.bookkeepingWrites} ticket/task bookkeeping call(s); filing or moving a ticket is not the change, so nothing the person asked for was modified. ` : `The request asked for a change and the run finished with ZERO successful mutating calls${p.mutationsAttempted ? ` (${p.mutationsAttempted} attempted, all failed)` : " \u2014 it never attempted one"}, so nothing was actually modified. ` : "";
   const remedy = p.spinning ? `This is a LOOP, not context pressure and not a model that "won't call tools" \u2014 the numbers on those signals are a consequence of the repetition, not its cause. ${streak && p.longestStreak && p.longestStreak.failed > 0 ? "A call repeated back-to-back after FAILING is the model ignoring the error it was given: the failure text usually names the exact change to make (a `repo`, a path, a missing argument). Check that the tool result reached the model un-truncated, and that the repeated-failure advisory fired; if it did and the model still repeated the call, the model is not reading tool results \u2014 switch models for this run." : streak ? "A call repeated back-to-back after SUCCEEDING is the model not retaining the answer it already has: the result was truncated, or too large to keep in the transcript. Check the truncated-results count above, and shrink or page that result rather than the transcript." : "Look at the repeated targets above: the agent is not retaining what it already read (the result was truncated, or the read was too narrow to answer the question). Widen the read, or cache the file in the transcript, rather than shrinking context or switching models."}` : 'Check the "Answered from memory" line first \u2014 a turn served from the Q&A cache or an Evermind head does NO work by construction, so a run made largely of those has no mutating call to find. Otherwise check whether the agent was ever offered a mutating tool this run (see the tools-advertised line) before concluding the model refused to act.';
   return `${loop}${effect}${remedy}`;
+}
+function bookkeeping(p) {
+  return p.bookkeepingWrites > 0 ? ` (${p.bookkeepingWrites} of them ticket/task bookkeeping \u2014 not a change)` : "";
 }
 
 // src/runStore/gatewayRoutingTrace.ts
@@ -31554,14 +31584,19 @@ function formatBrainDiagnostics(d) {
 }
 
 // src/toolExposure.ts
+var PROGRESS_FORCED_LABEL = "loop.progress_forced";
 function toolExposureInTrace(events) {
   let lastTurn = null;
   let min = null;
   let catalog = null;
+  let finalReportDue = false;
   for (const ev of events) {
+    if (ev.category === "message" && ev.label === PROGRESS_FORCED_LABEL && ev.args?.forced === "finish") finalReportDue = true;
     if (ev.category !== "llm") continue;
     const a = ev.args;
-    if (typeof a?.advertisedTools === "number") {
+    if (typeof a?.advertisedTools === "number" && a.advertisedTools === 0 && finalReportDue) {
+      finalReportDue = false;
+    } else if (typeof a?.advertisedTools === "number") {
       lastTurn = a.advertisedTools;
       min = min == null ? a.advertisedTools : Math.min(min, a.advertisedTools);
     }
@@ -33983,7 +34018,7 @@ function budgeted(run) {
   return isChangeRequest(run.metadata.mode, run.userRequest);
 }
 function progressed(run) {
-  return run.c.codeChanged || run.usedTools.has(HAND_OFF_TOOL);
+  return run.c.codeChanged || run.usedTools.has(HAND_OFF_TOOL) && run.handOffInline !== true;
 }
 function endPlanning(run, step, why) {
   reportToPolicy(run, { type: "plan_budget_spent" });
@@ -35604,6 +35639,7 @@ function callPreflight(run) {
         for (const f of changed2) if (!c.touchedFiles.includes(f)) c.touchedFiles.push(f);
       }
       usedTools.add(HAND_OFF_TOOL);
+      run.handOffInline = outcome.mode === "inline";
       placeholderLedger.add(delegationPlaceholders(outcome));
       return { result: { data: outcome } };
     }
@@ -37100,14 +37136,13 @@ var MAX_OPEN_WORK_HOLDS = 6;
 var MAX_LISTED_TICKETS = 15;
 var UNMOVED_LOCAL_STATUS = "backlog";
 var ACTIVE_STATUS = "in_progress";
-var WORK_ITEM_TOOL = /^(builtin_(tasks|tickets|kanban)_|ticket[-_.])/i;
 function isProgressStep(ev) {
   if (ev.category !== "tool" || ev.isError || isFailedToolResult(ev.result)) return false;
   if (ev.args?.auto === true) return false;
   const name = ev.label;
   if (isCodeChangeTool(name) || isRepoPublishTool(name) || name === "git_commit") return true;
   if (name === "run_command") return !isReadOnlyShellCall(name, ev.args);
-  return WORK_ITEM_TOOL.test(name) && !isReadOnlyPlatformTool(name) && !/^ticket[-_.](list|get|search|read)/i.test(name);
+  return isWorkItemTool(name) && !isReadOnlyPlatformTool(name) && !/^ticket[-_.](list|get|search|read)/i.test(name);
 }
 function latestProgress(trace4) {
   for (let i = trace4.length - 1; i >= 0; i--) if (isProgressStep(trace4[i])) return trace4[i];
@@ -37195,10 +37230,6 @@ function openLinkedWorkHold(run) {
 }
 
 // src/runStore/specTicketCoverageGate.ts
-var TICKETING_INTENTS = [
-  /\b(?:create|file|raise|log)\s+(?:[\w'-]+\s+){0,3}?(?:tickets?|tasks?|issues?)\b/i,
-  /\bopen\s+(?:an?|one|new|separate|individual)\s+(?:[\w'-]+\s+){0,2}?(?:tickets?|tasks?|issues?)\b/i
-];
 var SPEC_LANGUAGE = [
   /\bspecs?\b/i,
   /\bspecification\b/i,
@@ -38834,28 +38865,70 @@ function useAutoReplyTrailingTurn({ chatId, loadingMessages, localSending, messa
 
 // src/useComposerAttachments.ts
 var import_react12 = require("react");
-function useComposerAttachments(persistence, imagePrep, onError) {
+function objectUrlOf(file) {
+  try {
+    return typeof URL !== "undefined" && typeof URL.createObjectURL === "function" ? URL.createObjectURL(file) : void 0;
+  } catch {
+    return void 0;
+  }
+}
+function revoke(url) {
+  if (!url) return;
+  try {
+    URL.revokeObjectURL(url);
+  } catch {
+  }
+}
+var isImage = (type) => !!type?.startsWith("image/");
+var stagedSeq = 0;
+function useComposerAttachments(persistence, imagePrep) {
   const [pending, setPending] = (0, import_react12.useState)([]);
-  const [uploading, setUploading] = (0, import_react12.useState)(false);
+  const [staged, setStaged] = (0, import_react12.useState)([]);
+  const locals = (0, import_react12.useRef)(/* @__PURE__ */ new Map());
+  const dropped = (0, import_react12.useRef)(/* @__PURE__ */ new Set());
+  const forgetLocal = (0, import_react12.useCallback)((key) => {
+    revoke(locals.current.get(key)?.url);
+    locals.current.delete(key);
+  }, []);
+  (0, import_react12.useEffect)(() => () => {
+    for (const l of locals.current.values()) revoke(l.url);
+    locals.current.clear();
+  }, []);
   const attach2 = (0, import_react12.useCallback)(async (file) => {
-    setUploading(true);
+    stagedSeq += 1;
+    const key = `staged-${Date.now().toString(36)}-${stagedSeq}`;
+    locals.current.set(key, { url: objectUrlOf(file), type: file.type, size: file.size });
+    setStaged((prev) => [...prev, { key, name: file.name, type: file.type, size: file.size, status: "uploading" }]);
     try {
       const attachment = await prepareAttachment(file, persistence, imagePrep);
+      if (dropped.current.delete(key)) return;
+      const local = locals.current.get(key);
+      locals.current.delete(key);
+      if (local) locals.current.set(attachment.key, local);
+      setStaged((prev) => prev.filter((s) => s.key !== key));
       setPending((prev) => [...prev, attachment]);
     } catch (e) {
-      onError(e instanceof Error ? e.message : "Upload failed");
-    } finally {
-      setUploading(false);
+      if (dropped.current.delete(key)) return;
+      const error = e instanceof Error && e.message ? e.message : "";
+      setStaged((prev) => prev.map((s) => s.key === key ? { ...s, status: "error", error } : s));
     }
-  }, [persistence, imagePrep, onError]);
+  }, [persistence, imagePrep]);
   const remove = (0, import_react12.useCallback)((key) => {
+    forgetLocal(key);
+    setStaged((prev) => {
+      const hit = prev.find((s) => s.key === key);
+      if (!hit) return prev;
+      if (hit.status === "uploading") dropped.current.add(key);
+      return prev.filter((s) => s.key !== key);
+    });
     setPending((prev) => prev.filter((a) => a.key !== key));
-  }, []);
+  }, [forgetLocal]);
   const take = (0, import_react12.useCallback)((files) => {
     if (files.length === 0) return;
     const keys = new Set(files.map((a) => a.key));
+    for (const k of keys) forgetLocal(k);
     setPending((prev) => prev.some((a) => keys.has(a.key)) ? prev.filter((a) => !keys.has(a.key)) : prev);
-  }, []);
+  }, [forgetLocal]);
   const restore = (0, import_react12.useCallback)((files) => {
     if (files.length === 0) return;
     setPending((prev) => {
@@ -38864,7 +38937,35 @@ function useComposerAttachments(persistence, imagePrep, onError) {
       return back.length > 0 ? [...back, ...prev] : prev;
     });
   }, []);
-  return { pending, uploading, attach: attach2, remove, take, restore };
+  const chips = (0, import_react12.useMemo)(() => [
+    ...pending.map((a) => {
+      const local = locals.current.get(a.key);
+      const type = a.type || local?.type;
+      return {
+        key: a.key,
+        name: a.name,
+        ...type ? { type } : {},
+        ...local ? { size: local.size } : {},
+        ...a.imageUrl || local?.url && isImage(type) ? { imageUrl: local?.url && isImage(type) ? local.url : a.imageUrl } : {},
+        ...local?.url ? { localUrl: local.url } : {}
+      };
+    }),
+    ...staged.map((s) => {
+      const url = locals.current.get(s.key)?.url;
+      return {
+        key: s.key,
+        name: s.name,
+        ...s.type ? { type: s.type } : {},
+        size: s.size,
+        ...url && isImage(s.type) ? { imageUrl: url } : {},
+        ...url ? { localUrl: url } : {},
+        status: s.status,
+        ...s.error ? { error: s.error } : {}
+      };
+    })
+  ], [pending, staged]);
+  const uploading = staged.some((s) => s.status === "uploading");
+  return { pending, chips, uploading, attach: attach2, remove, take, restore };
 }
 
 // src/useContinuation.ts
@@ -39097,8 +39198,8 @@ function useBrainConversation(options) {
   chatIdRef.current = chatId;
   const [localError, setLocalError] = (0, import_react15.useState)("");
   const [ratings, setRatings] = (0, import_react15.useState)({});
-  const composer = useComposerAttachments(persistence, imagePrep, setLocalError);
-  const { pending: pendingAttachments, uploading } = composer;
+  const composer = useComposerAttachments(persistence, imagePrep);
+  const { pending: pendingAttachments, chips: attachmentChips, uploading } = composer;
   const autoRepliedChatIdRef = (0, import_react15.useRef)(null);
   const snapshot = useRunSnapshot(chatId);
   const { messages, updateMessages, loadingMessages, reloadMessages } = useChatTranscript(persistence, chatId, snapshot, {
@@ -39350,6 +39451,7 @@ ${extraSystem}` : resolvedSystemPrompt;
     activity: snapshot.activity,
     ratings,
     pendingAttachments,
+    attachmentChips,
     uploading,
     send,
     retryLastTurn,

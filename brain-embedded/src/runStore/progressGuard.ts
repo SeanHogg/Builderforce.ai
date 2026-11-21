@@ -44,6 +44,7 @@ import { isMutatingPlatformTool } from '../chatWorkLinking';
 import { budgeted, endPlanning, forcedProgressTurn, progressed, type ForcedTurn } from './progressBudget';
 import { offersHandOff } from '@builderforce/run-policy';
 import { deviceLeverOn } from './deviceLevers';
+import { FINISH_RECORD_TURNS, PROGRESS_FORCED_LABEL } from './progressFinishFacts';
 
 /** A ladder trip (steer / escalate / finish) — everything except the B1 advisory, which
  *  carries no `trip`/`signal` and is consumed inside {@link RunProgressGuard.endTurn}. */
@@ -195,8 +196,8 @@ export class RunProgressGuard {
   }
 }
 
-/** Turns a finishing run may spend recording its remaining work as tickets, the finish turn itself included. */
-export const FINISH_RECORD_TURNS = 3;
+// How many turns a finish may record for, and the forced-turn label: data the diagnostics read too (`progressFinishFacts.ts`).
+export { FINISH_RECORD_TURNS };
 
 /** What a finish turn that offers the obligation tools adds to the detector's note. */
 export const FINISH_RECORD_BRIEF =
@@ -327,7 +328,7 @@ function trace(run: BrainRunContext, step: number, due: TripAction, forced: 'han
   pushTrace(run.c, {
     ts: nowIso(),
     category: 'message',
-    label: 'loop.progress_forced',
+    label: PROGRESS_FORCED_LABEL,
     args: { step, trip: due.trip, signal: due.signal.kind, forced, ...(recordTools > 0 ? { recordTools } : {}) },
     result: forced !== 'finish'
       ? `progress check ${due.trip} (${due.signal.kind}) — this turn offers ${FORCED_MENU[forced]} and requires a call.`

@@ -20,6 +20,7 @@ import { isRecordPayloadMarker } from './recordPayloadMarker.js';
 import { addSyncSummary, countReceipt, emptySyncSummary, type SyncSummary } from './syncSummary.js';
 import { parseSyncId, type SyncId } from './entityId.js';
 import { isAlreadySatisfiedDelete, isPermanentRefusal } from './permanentRefusals.js';
+import { pulledLinkPayload, repairServerFormLinks } from './pulledChatTicketLink.js';
 
 export const SYNC_PROTOCOL_VERSION = 1;
 
@@ -116,12 +117,15 @@ export interface SnapshottedSyncInput {
 export type { SyncSummary } from './syncSummary.js';
 export { wireDependencies } from './syncBatch.js';
 
+/** What merging one pulled row did: a conflict recorded, the row stored, or (a link) not stored. */
+type PulledOutcome = 'conflict' | 'stored' | 'not-stored';
+
 async function mergePulled(
   tx: LocalFirstTransaction,
   remote: LocalRecord,
   destination: EntityDestination,
   now: Date,
-): Promise<boolean> {
+): Promise<PulledOutcome> {
   const local = await tx.get(remote.entityType, remote.id);
   let hasPending = false;
   // The row's own events (per-row index): a pull of 500 rows must not walk the journal 500 times.
@@ -137,16 +141,25 @@ async function mergePulled(
       createdAt: now.toISOString(),
     };
     await tx.putConflict(conflict);
-    return true;
+    return 'conflict';
   }
   // The wire row's server keys belong to the MAPPING only, never to the stored record.
   const { syncId: _wireSyncId, serverId: _wireServerId, ...record } = remote as LocalRecord & { syncId?: unknown; serverId?: unknown };
-  await tx.put({
-    ...record,
-    destination,
-    baseVersion: remote.version,
-    provenance: { ...remote.provenance, deviceId: remote.provenance?.deviceId ?? 'remote', source: 'imported' },
-  });
+  // A link is served in the server's form: it lands in the device's (`pulledChatTicketLink.ts`), or
+  // not at all (its parents are not mapped here, or its id is another device's derived one). Its
+  // mapping is written either way; the rail's ingest stores such a link under its derived id.
+  const payload = remote.entityType === 'chat-ticket-link'
+    ? await pulledLinkPayload(tx, remote.id, remote.payload, local, destination)
+    : remote.payload;
+  if (payload !== undefined) {
+    await tx.put({
+      ...record,
+      payload,
+      destination,
+      baseVersion: remote.version,
+      provenance: { ...remote.provenance, deviceId: remote.provenance?.deviceId ?? 'remote', source: 'imported' },
+    });
+  }
   // A pulled server row MAY name its own server id alongside the client id
   // (`serverId` is not part of `LocalRecord`; the wire row carries it when the
   // server knows it). Record the mapping so a caller handed the numeric server
@@ -166,7 +179,7 @@ async function mergePulled(
       serverVersion: remote.version,
     });
   }
-  return false;
+  return payload === undefined ? 'not-stored' : 'stored';
 }
 
 
@@ -193,8 +206,9 @@ export function createSyncCoordinator(options: SyncCoordinatorOptions) {
       result = await options.transport.pull({ destination, limit: maxPullRecords }, init);
     }
     assertFenceHolds(fence);
-    const conflicts = await options.store.transact(async (tx) => {
+    const { conflicts, notStored } = await options.store.transact(async (tx) => {
       let count = 0;
+      let skipped = 0;
       for (const record of result.records) {
         // G18: a tombstone is a deletion, not a row to merge. Writing it back
         // with `mergePulled` would resurrect the entity the server deleted.
@@ -204,12 +218,17 @@ export function createSyncCoordinator(options: SyncCoordinatorOptions) {
           await tx.delete(record.entityType, record.id);
           continue;
         }
-        if (await mergePulled(tx, record, destination, now())) count += 1;
+        const outcome = await mergePulled(tx, record, destination, now());
+        if (outcome === 'conflict') count += 1;
+        else if (outcome === 'not-stored') skipped += 1;
       }
+      // Links an earlier build's pull stored in the server's form are put back in the device's.
+      await repairServerFormLinks(tx, destination);
       await tx.setCursor(destination, result.cursor, now().toISOString());
-      return count;
+      return { conflicts: count, notStored: skipped };
     });
-    return { count: result.records.length, conflicts };
+    // A pulled link the device did not store (`pulledChatTicketLink.ts`) is not counted as pulled.
+    return { count: result.records.length - notStored, conflicts };
   };
 
   const syncPartition = async (

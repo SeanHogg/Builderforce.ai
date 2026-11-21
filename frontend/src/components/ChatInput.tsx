@@ -11,7 +11,8 @@ import { useBrainComposerLabels } from './chat-input/useBrainComposerLabels';
 import { useComposerAccount } from './chat-input/useComposerAccount';
 import { useComposerOptions } from './chat-input/useComposerOptions';
 import { useMentionPersonalityDetail } from '@/lib/useMentionPersonalityDetail';
-import type { ChatInputAttachment, ChatInputProps } from './chat-input/types';
+import type { ChatInputProps } from './chat-input/types';
+import type { ComposerAttachment } from '@seanhogg/builderforce-brain-ui';
 // The shell's own sheet — imported here so the composer renders right wherever it is
 // dropped, not only beside a Brain panel.
 import '@seanhogg/builderforce-brain-ui/styles.css';
@@ -19,7 +20,7 @@ export type { ChatModelOptions, ChatModelSelection } from '@seanhogg/builderforc
 export type { ChatInputAttachment, ChatInputProps, ComposerAddMenuItem, ComposerStarters, ComposerSuggestion } from './chat-input/types';
 
 /** One stable empty list, so an omitted `pendingAttachments` never looks like a change. */
-const NO_ATTACHMENTS: ChatInputAttachment[] = [];
+const NO_ATTACHMENTS: readonly ComposerAttachment[] = [];
 /** What the `+` menu's file picker offers: originals, not pre-trimmed conversions. */
 const ATTACH_ACCEPT = 'image/*,.pdf,.txt,.md,.csv,.tsv,.json,.docx,.rtf,.xlsx,.pptx';
 const noop = () => {};
@@ -105,7 +106,8 @@ export function ChatInput(props: ChatInputProps) {
   }, [onAttach]);
   const attachments = useMemo(() => (onAttach
     ? {
-        items: pendingAttachments.map((a) => ({ key: a.key, name: a.name })),
+        // The chips as they are: thumbnail, upload state, the original on this device for the preview.
+        items: pendingAttachments,
         onAdd: attachFiles,
         onRemove: onRemoveAttachment ?? noop,
         accept: ATTACH_ACCEPT,

@@ -79,6 +79,19 @@ export interface ComposerCommandText extends ComposerCommandLabels {
   manifestMove: string;
   manifestMoveDeclined: string;
   manifestMoved(file: string, canonical: string): string;
+  // The stale `$schema` older versions wrote (`manifestSchema.ts`), removed by /manifest move.
+  /** `/launch`: the manifest `file` carries `"$schema": url`, which does not load, so VS Code reports a problem. */
+  manifestStaleSchema(file: string, url: string): string;
+  /** The reply action that removes it (`/manifest move`). */
+  manifestSchemaRemoveAction: string;
+  /** Appended to the move question when the moved file loses it. */
+  manifestSchemaDropNote(url: string): string;
+  manifestSchemaRemoveQuestion(file: string, url: string, folder: string): string;
+  manifestSchemaRemove: string;
+  manifestSchemaKept: string;
+  /** Not removed: `file` changed after it was read, and that edit is never overwritten. */
+  manifestSchemaChanged(file: string): string;
+  manifestSchemaRemoved(file: string): string;
 
   // /launch
   /** Why `/launch` is unavailable in a remote extension host (`vscode.env.remoteName`). */
@@ -187,6 +200,16 @@ export function composerCommandText(): ComposerCommandText {
     manifestMove: t("Move"),
     manifestMoveDeclined: t("The manifest was not moved."),
     manifestMoved: (file, canonical) => t("Moved {0} to {1}.", file, canonical),
+    manifestStaleSchema: (file, url) =>
+      t("{0} sets $schema to {1}, which does not load yet, so VS Code reports a problem in it. The extension validates the manifest without it: type /manifest move to remove it.", file, url),
+    manifestSchemaRemoveAction: t("Remove its $schema"),
+    manifestSchemaDropNote: (url) => t("Its $schema ({0}) is removed: the extension validates the manifest without it.", url),
+    manifestSchemaRemoveQuestion: (file, url, folder) =>
+      t("Remove $schema ({1}) from {0} in {2}? That URL does not load yet; the extension validates the manifest without it. Nothing else in the file changes.", file, url, folder),
+    manifestSchemaRemove: t("Remove"),
+    manifestSchemaKept: t("The manifest was not changed."),
+    manifestSchemaChanged: (file) => t("{0} was edited while you were asked, so $schema was not removed and the edit was kept. Run /manifest move again.", file),
+    manifestSchemaRemoved: (file) => t("Removed $schema from {0}.", file),
 
     launchRemote: (remoteName) => t("The local launcher opens your app in this computer's browser, but this window's extension host runs remotely ({0}). Open the folder in a local window to use /launch.", remoteName),
     launchEnvironmentIn: (environment, folders) => t("{0} — declared by {1}", environment, folders.join(", ")),

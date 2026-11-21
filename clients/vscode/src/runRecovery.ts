@@ -18,6 +18,7 @@
  */
 
 import {
+  isOwnRecord,
   isTerminalExecutionStatus,
   newLocalRecord,
   selectRecords,
@@ -25,6 +26,7 @@ import {
   type EntityDestination,
   type ExecutionValue,
   type LocalFirstStore,
+  type LocalFirstTransaction,
   type LocalRecord,
   type RunHold,
   type RunWaiver,
@@ -252,14 +254,53 @@ export function leftInFlight(record: LocalRecord<ExecutionValue>): boolean {
 }
 
 /**
- * Restart recovery: every run the dead host left in flight ({@link leftInFlight}) is marked `interrupted` — truthfully unfinished, never falsely
- * completed — and returned so the caller can surface it. Nothing is replayed here:
- * resuming is a separate, explicit, checkpoint-gated decision.
+ * Did THIS editor host journal this run ({@link recordRunStarted}: `source: "local"`, this device)? The store also holds
+ * execution rows it never started: cloud runs the chat rail INGESTS from the server (`server-observed`, device `server`)
+ * and other devices' runs a pull brings back (`imported`, their device). Those are alive (or ended) elsewhere — a dead
+ * editor host interrupted nothing of theirs — so recovery never rewrites them and the interrupted list never shows them.
+ */
+export function isHostJournaledRun(record: LocalRecord<ExecutionValue>, deviceId: string): boolean {
+  return record.provenance?.evidence !== "server-observed" && isOwnRecord(record, deviceId);
+}
+
+const INTERRUPTED_KEY_PREFIX = "execution:interrupted:";
+
+/**
+ * Drop the `interrupted` events an earlier recovery journaled for a run this host never started (before
+ * {@link isHostJournaledRun} gated it). They were never this device's write: the server refuses them
+ * (`entity_not_imported`: it never imported that client id), which only HOLDS an event, so each would be retried
+ * forever and would keep the rail's ingest from refreshing the run's real status (a row with a pending event is skipped).
+ * Nothing is sent in their place; the next rail read restores the server's status.
+ */
+async function dropForeignInterruptions(tx: LocalFirstTransaction, deviceId: string): Promise<void> {
+  const candidates: Array<{ eventId: string; runId: string }> = [];
+  await tx.scanPending((event) => {
+    if (event.entityType === "execution" && event.idempotencyKey?.startsWith(INTERRUPTED_KEY_PREFIX)) {
+      candidates.push({ eventId: event.eventId, runId: event.clientEntityId });
+    }
+  });
+  const foreign: string[] = [];
+  for (const candidate of candidates) {
+    const run = await tx.get<ExecutionValue>("execution", candidate.runId);
+    if (run && !isHostJournaledRun(run, deviceId)) foreign.push(candidate.eventId);
+  }
+  if (foreign.length) await tx.acknowledge(foreign);
+}
+
+/**
+ * Restart recovery: every run THIS host journaled ({@link isHostJournaledRun}) and left in flight ({@link leftInFlight})
+ * is marked `interrupted` — truthfully unfinished, never falsely completed — and returned so the caller can surface it.
+ * Nothing is replayed here: resuming is a separate, explicit, checkpoint-gated decision.
  */
 export async function recoverInterruptedRuns(store: LocalFirstStore, deps: RunLifecycleDeps): Promise<InterruptedRun[]> {
   const at = (deps.now?.() ?? new Date()).toISOString();
   const recovered = await store.transact(async (tx) => {
-    const stale = await selectRecords<ExecutionValue>(tx, "execution", leftInFlight);
+    await dropForeignInterruptions(tx, deps.deviceId);
+    const stale = await selectRecords<ExecutionValue>(
+      tx,
+      "execution",
+      (record) => isHostJournaledRun(record, deps.deviceId) && leftInFlight(record),
+    );
     for (const run of stale) {
       await tx.put<ExecutionValue>(
         {
@@ -276,7 +317,7 @@ export async function recoverInterruptedRuns(store: LocalFirstStore, deps: RunLi
         run.version,
       );
       await tx.append({
-        idempotencyKey: `execution:interrupted:${run.id}:${at}`,
+        idempotencyKey: `${INTERRUPTED_KEY_PREFIX}${run.id}:${at}`,
         clientEntityId: run.id,
         entityType: "execution",
         operation: "update",
@@ -306,14 +347,18 @@ export function safeToResume(run: InterruptedRun): boolean {
  * Every run still `interrupted` and not yet acknowledged. A run recovered at an earlier
  * activation stays here until a person resumes or dismisses it: recovery itself only
  * marks `running`/`queued`/`awaiting_input` rows, so without this read an interrupted run
- * would be listed once and lost on the next restart.
+ * would be listed once and lost on the next restart. Only runs this host journaled
+ * ({@link isHostJournaledRun}): an ingested cloud run an earlier recovery mis-marked is never listed.
  */
-export async function listInterruptedRuns(store: LocalFirstStore): Promise<InterruptedRun[]> {
+export async function listInterruptedRuns(store: LocalFirstStore, deps: Pick<RunLifecycleDeps, "deviceId">): Promise<InterruptedRun[]> {
   return store.read(async (tx) =>
-    (await selectRecords<ExecutionValue>(tx, "execution", (record) => record.payload.status === "interrupted")).map((record) => ({
-      runId: record.id,
-      record,
-    })),
+    (
+      await selectRecords<ExecutionValue>(
+        tx,
+        "execution",
+        (record) => record.payload.status === "interrupted" && isHostJournaledRun(record, deps.deviceId),
+      )
+    ).map((record) => ({ runId: record.id, record })),
   );
 }
 

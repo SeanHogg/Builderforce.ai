@@ -58,7 +58,7 @@ import {
   settledWithin,
   steerMetadata,
   within
-} from "./chunk-MNSRAAVJ.mjs";
+} from "./chunk-LWCQCBBJ.mjs";
 import {
   BrainRequestError,
   LOCAL_ENGINE_FAILURE_CODES,
@@ -125,6 +125,7 @@ import {
   STOPPED_TURN_STEP,
   STUDIO_WORKSPACE_TOOLS,
   SUBAGENT_TOOLS,
+  TICKETING_INTENTS,
   TICKET_FROM_DELTA_TOOL,
   TICKET_RECORDING_TOOLS,
   TOOL_SEARCH_SCHEMA,
@@ -253,6 +254,7 @@ import {
   isTicketWriteTool,
   isTruncatedTurn,
   isUnscopedMutationTool,
+  isWorkItemTool,
   journalWrite,
   judgeWith,
   lastServedModel,
@@ -373,7 +375,7 @@ import {
   withAdvisory,
   withProvenanceMetadata,
   workFiledNotStaffedVerdict
-} from "./chunk-3YMBYHH5.mjs";
+} from "./chunk-XCTFOB44.mjs";
 import {
   ASK_USER_TOOL,
   ASK_USER_TOOL_SPEC,
@@ -404,7 +406,7 @@ import {
   stripReasoningTagsFromText,
   thoughtTextOf,
   trimRepetitionLoop
-} from "./chunk-4M73IFQC.mjs";
+} from "./chunk-ERQ2V7E5.mjs";
 import {
   HELP_COMMAND_ID,
   createComposerCommandRegistry,
@@ -18394,7 +18396,7 @@ function budgeted(run) {
   return isChangeRequest(run.metadata.mode, run.userRequest);
 }
 function progressed(run) {
-  return run.c.codeChanged || run.usedTools.has(HAND_OFF_TOOL);
+  return run.c.codeChanged || run.usedTools.has(HAND_OFF_TOOL) && run.handOffInline !== true;
 }
 function endPlanning(run, step, why) {
   reportToPolicy(run, { type: "plan_budget_spent" });
@@ -20019,6 +20021,7 @@ function callPreflight(run) {
         for (const f of changed2) if (!c.touchedFiles.includes(f)) c.touchedFiles.push(f);
       }
       usedTools.add(HAND_OFF_TOOL);
+      run.handOffInline = outcome.mode === "inline";
       placeholderLedger.add(delegationPlaceholders(outcome));
       return { result: { data: outcome } };
     }
@@ -21515,14 +21518,13 @@ var MAX_OPEN_WORK_HOLDS = 6;
 var MAX_LISTED_TICKETS = 15;
 var UNMOVED_LOCAL_STATUS = "backlog";
 var ACTIVE_STATUS = "in_progress";
-var WORK_ITEM_TOOL = /^(builtin_(tasks|tickets|kanban)_|ticket[-_.])/i;
 function isProgressStep(ev) {
   if (ev.category !== "tool" || ev.isError || isFailedToolResult(ev.result)) return false;
   if (ev.args?.auto === true) return false;
   const name = ev.label;
   if (isCodeChangeTool(name) || isRepoPublishTool(name) || name === "git_commit") return true;
   if (name === "run_command") return !isReadOnlyShellCall(name, ev.args);
-  return WORK_ITEM_TOOL.test(name) && !isReadOnlyPlatformTool(name) && !/^ticket[-_.](list|get|search|read)/i.test(name);
+  return isWorkItemTool(name) && !isReadOnlyPlatformTool(name) && !/^ticket[-_.](list|get|search|read)/i.test(name);
 }
 function latestProgress(trace4) {
   for (let i = trace4.length - 1; i >= 0; i--) if (isProgressStep(trace4[i])) return trace4[i];
@@ -21610,10 +21612,6 @@ function openLinkedWorkHold(run) {
 }
 
 // src/runStore/specTicketCoverageGate.ts
-var TICKETING_INTENTS = [
-  /\b(?:create|file|raise|log)\s+(?:[\w'-]+\s+){0,3}?(?:tickets?|tasks?|issues?)\b/i,
-  /\bopen\s+(?:an?|one|new|separate|individual)\s+(?:[\w'-]+\s+){0,2}?(?:tickets?|tasks?|issues?)\b/i
-];
 var SPEC_LANGUAGE = [
   /\bspecs?\b/i,
   /\bspecification\b/i,
@@ -22920,7 +22918,7 @@ function useArmedNewChat(chats) {
 }
 
 // src/useBrainConversation.ts
-import { useCallback as useCallback12, useEffect as useEffect10, useMemo as useMemo7, useRef as useRef10, useState as useState10 } from "react";
+import { useCallback as useCallback12, useEffect as useEffect11, useMemo as useMemo8, useRef as useRef11, useState as useState10 } from "react";
 
 // src/useRunSnapshot.ts
 import { useCallback as useCallback6, useSyncExternalStore } from "react";
@@ -23190,29 +23188,71 @@ function useAutoReplyTrailingTurn({ chatId, loadingMessages, localSending, messa
 }
 
 // src/useComposerAttachments.ts
-import { useCallback as useCallback9, useState as useState9 } from "react";
-function useComposerAttachments(persistence, imagePrep, onError) {
+import { useCallback as useCallback9, useEffect as useEffect9, useMemo as useMemo7, useRef as useRef8, useState as useState9 } from "react";
+function objectUrlOf(file) {
+  try {
+    return typeof URL !== "undefined" && typeof URL.createObjectURL === "function" ? URL.createObjectURL(file) : void 0;
+  } catch {
+    return void 0;
+  }
+}
+function revoke(url) {
+  if (!url) return;
+  try {
+    URL.revokeObjectURL(url);
+  } catch {
+  }
+}
+var isImage = (type) => !!type?.startsWith("image/");
+var stagedSeq = 0;
+function useComposerAttachments(persistence, imagePrep) {
   const [pending, setPending] = useState9([]);
-  const [uploading, setUploading] = useState9(false);
+  const [staged, setStaged] = useState9([]);
+  const locals = useRef8(/* @__PURE__ */ new Map());
+  const dropped = useRef8(/* @__PURE__ */ new Set());
+  const forgetLocal = useCallback9((key) => {
+    revoke(locals.current.get(key)?.url);
+    locals.current.delete(key);
+  }, []);
+  useEffect9(() => () => {
+    for (const l of locals.current.values()) revoke(l.url);
+    locals.current.clear();
+  }, []);
   const attach = useCallback9(async (file) => {
-    setUploading(true);
+    stagedSeq += 1;
+    const key = `staged-${Date.now().toString(36)}-${stagedSeq}`;
+    locals.current.set(key, { url: objectUrlOf(file), type: file.type, size: file.size });
+    setStaged((prev) => [...prev, { key, name: file.name, type: file.type, size: file.size, status: "uploading" }]);
     try {
       const attachment = await prepareAttachment(file, persistence, imagePrep);
+      if (dropped.current.delete(key)) return;
+      const local = locals.current.get(key);
+      locals.current.delete(key);
+      if (local) locals.current.set(attachment.key, local);
+      setStaged((prev) => prev.filter((s) => s.key !== key));
       setPending((prev) => [...prev, attachment]);
     } catch (e) {
-      onError(e instanceof Error ? e.message : "Upload failed");
-    } finally {
-      setUploading(false);
+      if (dropped.current.delete(key)) return;
+      const error = e instanceof Error && e.message ? e.message : "";
+      setStaged((prev) => prev.map((s) => s.key === key ? { ...s, status: "error", error } : s));
     }
-  }, [persistence, imagePrep, onError]);
+  }, [persistence, imagePrep]);
   const remove = useCallback9((key) => {
+    forgetLocal(key);
+    setStaged((prev) => {
+      const hit = prev.find((s) => s.key === key);
+      if (!hit) return prev;
+      if (hit.status === "uploading") dropped.current.add(key);
+      return prev.filter((s) => s.key !== key);
+    });
     setPending((prev) => prev.filter((a) => a.key !== key));
-  }, []);
+  }, [forgetLocal]);
   const take = useCallback9((files) => {
     if (files.length === 0) return;
     const keys = new Set(files.map((a) => a.key));
+    for (const k of keys) forgetLocal(k);
     setPending((prev) => prev.some((a) => keys.has(a.key)) ? prev.filter((a) => !keys.has(a.key)) : prev);
-  }, []);
+  }, [forgetLocal]);
   const restore = useCallback9((files) => {
     if (files.length === 0) return;
     setPending((prev) => {
@@ -23221,16 +23261,44 @@ function useComposerAttachments(persistence, imagePrep, onError) {
       return back.length > 0 ? [...back, ...prev] : prev;
     });
   }, []);
-  return { pending, uploading, attach, remove, take, restore };
+  const chips = useMemo7(() => [
+    ...pending.map((a) => {
+      const local = locals.current.get(a.key);
+      const type = a.type || local?.type;
+      return {
+        key: a.key,
+        name: a.name,
+        ...type ? { type } : {},
+        ...local ? { size: local.size } : {},
+        ...a.imageUrl || local?.url && isImage(type) ? { imageUrl: local?.url && isImage(type) ? local.url : a.imageUrl } : {},
+        ...local?.url ? { localUrl: local.url } : {}
+      };
+    }),
+    ...staged.map((s) => {
+      const url = locals.current.get(s.key)?.url;
+      return {
+        key: s.key,
+        name: s.name,
+        ...s.type ? { type: s.type } : {},
+        size: s.size,
+        ...url && isImage(s.type) ? { imageUrl: url } : {},
+        ...url ? { localUrl: url } : {},
+        status: s.status,
+        ...s.error ? { error: s.error } : {}
+      };
+    })
+  ], [pending, staged]);
+  const uploading = staged.some((s) => s.status === "uploading");
+  return { pending, chips, uploading, attach, remove, take, restore };
 }
 
 // src/useContinuation.ts
-import { useCallback as useCallback10, useEffect as useEffect9, useRef as useRef8 } from "react";
+import { useCallback as useCallback10, useEffect as useEffect10, useRef as useRef9 } from "react";
 function useContinuation(persistence, prepareRun) {
-  const latest = useRef8({ persistence, prepareRun });
+  const latest = useRef9({ persistence, prepareRun });
   latest.current = { persistence, prepareRun };
-  const bound = useRef8(/* @__PURE__ */ new Map());
-  useEffect9(() => {
+  const bound = useRef9(/* @__PURE__ */ new Map());
+  useEffect10(() => {
     const mine = bound.current;
     return () => {
       for (const [chatId, binding] of mine) releaseContinuation(chatId, binding);
@@ -23371,11 +23439,11 @@ function withRating(ratings, messageId, rating) {
 }
 
 // src/launchCancel.ts
-import { useCallback as useCallback11, useRef as useRef9 } from "react";
+import { useCallback as useCallback11, useRef as useRef10 } from "react";
 function useLaunchCancel(sendingRef) {
-  const cancelledLaunchRef = useRef9(/* @__PURE__ */ new Set());
-  const launchingRef = useRef9(/* @__PURE__ */ new Set());
-  const draftMadeRef = useRef9(/* @__PURE__ */ new Map());
+  const cancelledLaunchRef = useRef10(/* @__PURE__ */ new Set());
+  const launchingRef = useRef10(/* @__PURE__ */ new Set());
+  const draftMadeRef = useRef10(/* @__PURE__ */ new Map());
   const beginDraftSend = useCallback11((token) => {
     const send = { token, chat: null, cancelled: false };
     const sends = draftMadeRef.current.get(token);
@@ -23439,7 +23507,7 @@ function useBrainConversation(options) {
     chatRoster,
     prepareRun
   } = options;
-  const sendingRef = useRef10(/* @__PURE__ */ new Set());
+  const sendingRef = useRef11(/* @__PURE__ */ new Set());
   const [sendingChats, setSendingChats] = useState10(sendingRef.current);
   const { cancelledLaunchRef, launchingRef, beginDraftSend, endDraftSend, stopConversation } = useLaunchCancel(sendingRef);
   const markSending = useCallback12((key, on) => {
@@ -23450,26 +23518,26 @@ function useBrainConversation(options) {
     setSendingChats(next);
   }, []);
   const localSending = sendingChats.has(chatId);
-  const chatIdRef = useRef10(chatId);
+  const chatIdRef = useRef11(chatId);
   chatIdRef.current = chatId;
   const [localError, setLocalError] = useState10("");
   const [ratings, setRatings] = useState10({});
-  const composer = useComposerAttachments(persistence, imagePrep, setLocalError);
-  const { pending: pendingAttachments, uploading } = composer;
-  const autoRepliedChatIdRef = useRef10(null);
+  const composer = useComposerAttachments(persistence, imagePrep);
+  const { pending: pendingAttachments, chips: attachmentChips, uploading } = composer;
+  const autoRepliedChatIdRef = useRef11(null);
   const snapshot = useRunSnapshot(chatId);
   const { messages, updateMessages, loadingMessages, reloadMessages } = useChatTranscript(persistence, chatId, snapshot, {
     onLoadStart: () => setLocalError(""),
     onLoadError: setLocalError
   });
-  const messagesRef = useRef10(messages);
+  const messagesRef = useRef11(messages);
   messagesRef.current = messages;
   const pending = usePendingTurns(chatId, messages, {
     currentChat: () => chatIdRef.current,
     servedBy: snapshot.servedBy
   });
   const { open: openPending, close: closePending, rekey: rekeyPending, announceTurn } = pending;
-  useEffect10(() => {
+  useEffect11(() => {
     const map = {};
     for (const msg of messages) {
       if (!msg.metadata) continue;
@@ -23686,7 +23754,7 @@ ${extraSystem}` : resolvedSystemPrompt;
     }),
     [chatId, messages, localError, snapshot.error, model]
   );
-  const contextUsage = useMemo7(() => contextUsageOf(messages, snapshot.trace), [messages, snapshot.trace]);
+  const contextUsage = useMemo8(() => contextUsageOf(messages, snapshot.trace), [messages, snapshot.trace]);
   return {
     messages,
     pendingTurn: pending.pendingTurn,
@@ -23707,6 +23775,7 @@ ${extraSystem}` : resolvedSystemPrompt;
     activity: snapshot.activity,
     ratings,
     pendingAttachments,
+    attachmentChips,
     uploading,
     send,
     retryLastTurn,
@@ -25533,22 +25602,22 @@ function withUsageSurface(fetchImpl, surface2) {
 }
 
 // src/useChatTurns.ts
-import { useCallback as useCallback16, useEffect as useEffect13, useRef as useRef14 } from "react";
+import { useCallback as useCallback16, useEffect as useEffect14, useRef as useRef15 } from "react";
 
 // src/doorStop.ts
-import { useCallback as useCallback13, useEffect as useEffect11, useMemo as useMemo8, useRef as useRef11, useState as useState12 } from "react";
+import { useCallback as useCallback13, useEffect as useEffect12, useMemo as useMemo9, useRef as useRef12, useState as useState12 } from "react";
 function useDoorStopMarks(running) {
-  const stoppingRef = useRef11(false);
+  const stoppingRef = useRef12(false);
   const [, repaint] = useState12(false);
   const markStopping = useCallback13((on) => {
     stoppingRef.current = on;
     repaint(on);
   }, []);
-  useEffect11(() => {
+  useEffect12(() => {
     if (!running && stoppingRef.current) markStopping(false);
   }, [running, markStopping]);
-  const stopEpochs = useRef11(/* @__PURE__ */ new Map());
-  return useMemo8(() => ({ stoppingRef, markStopping, stopEpochs }), [markStopping]);
+  const stopEpochs = useRef12(/* @__PURE__ */ new Map());
+  return useMemo9(() => ({ stoppingRef, markStopping, stopEpochs }), [markStopping]);
 }
 var stopEpochKey = (runKey, draftToken) => runKey === null && typeof draftToken === "number" ? `draft:${draftToken}` : runKey;
 var sendEpochKey = (ports) => stopEpochKey(ports.runKey, ports.runKey === null ? ports.drafts?.adopt() : void 0);
@@ -25568,10 +25637,10 @@ function stopDoorTurns(ports, marks, clear) {
 }
 
 // src/turnLanding.ts
-import { useCallback as useCallback15, useRef as useRef13 } from "react";
+import { useCallback as useCallback15, useRef as useRef14 } from "react";
 
 // src/useQueuedTurns.ts
-import { useCallback as useCallback14, useEffect as useEffect12, useMemo as useMemo9, useRef as useRef12, useState as useState13, useSyncExternalStore as useSyncExternalStore2 } from "react";
+import { useCallback as useCallback14, useEffect as useEffect13, useMemo as useMemo10, useRef as useRef13, useState as useState13, useSyncExternalStore as useSyncExternalStore2 } from "react";
 
 // src/draftBinding.ts
 function createDraftBinding() {
@@ -25658,29 +25727,29 @@ function turnBody(turn, textOf2) {
 }
 function useQueuedTurns({ running, send, resetKey = null, textOf: textOf2, mayFlush, handOff: handOff2, drafts = NO_DRAFTS, landDraft }) {
   const [queued, setQueued] = useState13([]);
-  const queueRef = useRef12([]);
+  const queueRef = useRef13([]);
   const update = useCallback14((change) => {
     const next = change(queueRef.current);
     if (next === queueRef.current) return;
     queueRef.current = next;
     setQueued(next);
   }, []);
-  const nextId = useRef12(0);
-  const sendRef = useRef12(send);
+  const nextId = useRef13(0);
+  const sendRef = useRef13(send);
   sendRef.current = send;
-  const textOfRef = useRef12(textOf2);
+  const textOfRef = useRef13(textOf2);
   textOfRef.current = textOf2;
-  const handOffRef = useRef12(handOff2);
+  const handOffRef = useRef13(handOff2);
   handOffRef.current = handOff2;
-  const mayFlushRef = useRef12(mayFlush);
+  const mayFlushRef = useRef13(mayFlush);
   mayFlushRef.current = mayFlush;
-  const landDraftRef = useRef12(landDraft);
+  const landDraftRef = useRef13(landDraft);
   landDraftRef.current = landDraft;
   const draftOnScreen = useSyncExternalStore2(drafts.subscribe, drafts.current, drafts.current);
   const shown = resetKey === null ? draftOnScreen : null;
-  const shownRef = useRef12(shown);
+  const shownRef = useRef13(shown);
   shownRef.current = shown;
-  const runningRef = useRef12(running);
+  const runningRef = useRef13(running);
   const submit = useCallback14((value, opts) => {
     const text2 = turnBody(value, textOfRef.current);
     if (!text2) return false;
@@ -25708,13 +25777,13 @@ function useQueuedTurns({ running, send, resetKey = null, textOf: textOf2, mayFl
     update((current) => current.filter((item) => item !== first));
     return first.value;
   }, [update]);
-  useEffect12(() => drafts.onOutcome((token, outcome) => {
+  useEffect13(() => drafts.onOutcome((token, outcome) => {
     const mine = queueRef.current.filter((item) => item.draft?.token === token);
     if (mine.length > 0) update((current) => current.filter((item) => item.draft?.token !== token));
     landDraftRef.current?.(mine.map((item) => ({ value: item.value, followUp: item.draft.followUp })), outcome, token);
   }), [drafts, update]);
-  const prev = useRef12({ key: resetKey, running });
-  useEffect12(() => {
+  const prev = useRef13({ key: resetKey, running });
+  useEffect13(() => {
     const was = prev.current;
     prev.current = { key: resetKey, running };
     if (was.key !== resetKey || !was.running || running) return;
@@ -25722,8 +25791,8 @@ function useQueuedTurns({ running, send, resetKey = null, textOf: textOf2, mayFl
     const next = takeFront();
     if (next !== void 0) sendRef.current(next);
   }, [running, resetKey, takeFront]);
-  const heldIn = useRef12(resetKey);
-  useEffect12(() => {
+  const heldIn = useRef13(resetKey);
+  useEffect13(() => {
     const from = heldIn.current;
     if (from === resetKey) return;
     heldIn.current = resetKey;
@@ -25732,13 +25801,13 @@ function useQueuedTurns({ running, send, resetKey = null, textOf: textOf2, mayFl
     update((current) => current.filter((item) => item.draft));
     handOffRef.current?.(held, from);
   }, [resetKey, update]);
-  const items = useMemo9(() => queued.filter((item) => !item.draft || item.draft.token === shown), [queued, shown]);
+  const items = useMemo10(() => queued.filter((item) => !item.draft || item.draft.token === shown), [queued, shown]);
   return { items, count: items.length, submit, remove, requeue: requeue2, pushBack, takeFront, clear };
 }
 
 // src/turnLanding.ts
 function useTurnLanding(ports) {
-  const flights = useRef13(/* @__PURE__ */ new Map());
+  const flights = useRef14(/* @__PURE__ */ new Map());
   const giveBackAll = useCallback15((turns) => {
     const { restore: giveBack, join } = ports.current;
     if (!giveBack || turns.length === 0) return;
@@ -25847,13 +25916,13 @@ function chatDoorLiveness(conv, extraInFlight = false) {
   return { running: conv.sending || extraInFlight, steerable: conv.runLive };
 }
 function useChatTurns({ running, steerable = running, runKey, drafts, send, steer, stop, restore, join, textOf: textOf2, isDirected, attachmentsOf }) {
-  const ports = useRef14({ send, steer, stop, restore, join, textOf: textOf2, isDirected, attachmentsOf, runKey, running, steerable, drafts });
+  const ports = useRef15({ send, steer, stop, restore, join, textOf: textOf2, isDirected, attachmentsOf, runKey, running, steerable, drafts });
   ports.current = { send, steer, stop, restore, join, textOf: textOf2, isDirected, attachmentsOf, runKey, running, steerable, drafts };
   const marks = useDoorStopMarks(running);
   const { stoppingRef } = marks;
-  const requeueRef = useRef14(() => void 0);
-  const takeFrontRef = useRef14(() => void 0);
-  const flushing = useRef14(/* @__PURE__ */ new Map());
+  const requeueRef = useRef15(() => void 0);
+  const takeFrontRef = useRef15(() => void 0);
+  const flushing = useRef15(/* @__PURE__ */ new Map());
   const flushingIn = (key) => flushing.current.get(key) ?? 0;
   const { handOff: handOff2, landDraft, sendOnce } = useTurnLanding(ports);
   const flush = useCallback16(async (first) => {
@@ -25918,11 +25987,11 @@ function useChatTurns({ running, steerable = running, runKey, drafts, send, stee
   }, [hold, landDraft]);
   requeueRef.current = queued.requeue;
   takeFrontRef.current = takeFront;
-  const itemsRef = useRef14(shown.items);
+  const itemsRef = useRef15(shown.items);
   itemsRef.current = shown.items;
-  const carriedIds = useRef14(/* @__PURE__ */ new Set());
-  const wasRunning = useRef14(false);
-  const wasSteerable = useRef14(false);
+  const carriedIds = useRef15(/* @__PURE__ */ new Set());
+  const wasRunning = useRef15(false);
+  const wasSteerable = useRef15(false);
   if (running !== wasRunning.current || steerable !== wasSteerable.current) {
     if (running && !wasRunning.current || steerable && !wasSteerable.current) carriedIds.current = new Set(shown.items.map((item) => item.id));
     wasRunning.current = running;
@@ -25931,7 +26000,7 @@ function useChatTurns({ running, steerable = running, runKey, drafts, send, stee
   const heldThisRun = useCallback16(() => itemsRef.current.filter((item) => !carriedIds.current.has(item.id)).length, []);
   const steers = useCallback16((preview) => ports.current.steerable && typeof ports.current.runKey === "number" && !stoppingRef.current && steersByDefault({ ...preview, held: heldThisRun() }), [heldThisRun]);
   const { remove } = queued;
-  useEffect13(() => {
+  useEffect14(() => {
     if (!running || !steerable) return;
     const { steer: route, runKey: key, textOf: text2, isDirected: directed, attachmentsOf: attached2 } = ports.current;
     if (typeof key !== "number" || stoppingRef.current) return;
@@ -26019,14 +26088,14 @@ function restoreTurn(turn, composer) {
 }
 
 // src/useComposerDraft.ts
-import { useMemo as useMemo10, useRef as useRef15 } from "react";
+import { useMemo as useMemo11, useRef as useRef16 } from "react";
 function useComposerDraft(inputOrStore, setInput) {
   const store = typeof inputOrStore === "string" ? null : inputOrStore;
-  const ref = useRef15(typeof inputOrStore === "string" ? inputOrStore : "");
+  const ref = useRef16(typeof inputOrStore === "string" ? inputOrStore : "");
   if (typeof inputOrStore === "string") {
     ref.current = inputOrStore;
   }
-  return useMemo10(() => {
+  return useMemo11(() => {
     if (store) return { draft: store.get, setInput: store.set };
     return {
       draft: () => ref.current,
@@ -26074,12 +26143,12 @@ function useDraftIsEmpty(store) {
 }
 
 // src/useRunRefreshTick.ts
-import { useEffect as useEffect14, useRef as useRef16, useState as useState15 } from "react";
+import { useEffect as useEffect15, useRef as useRef17, useState as useState15 } from "react";
 var RUN_REFRESH_MS = 3e4;
 function useRunRefreshTick(running, intervalMs = RUN_REFRESH_MS) {
   const [tick, setTick] = useState15(0);
-  const wasRunning = useRef16(running);
-  useEffect14(() => {
+  const wasRunning = useRef17(running);
+  useEffect15(() => {
     if (wasRunning.current && !running) setTick((n2) => n2 + 1);
     wasRunning.current = running;
     if (!running) return;
@@ -26090,26 +26159,26 @@ function useRunRefreshTick(running, intervalMs = RUN_REFRESH_MS) {
 }
 
 // src/useChatCreation.ts
-import { useCallback as useCallback17, useEffect as useEffect15, useRef as useRef17, useState as useState16 } from "react";
+import { useCallback as useCallback17, useEffect as useEffect16, useRef as useRef18, useState as useState16 } from "react";
 function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }) {
-  const chatIdRef = useRef17(chatId);
+  const chatIdRef = useRef18(chatId);
   chatIdRef.current = chatId;
-  const createRef = useRef17(create);
+  const createRef = useRef18(create);
   createRef.current = create;
-  const autoTitleRef = useRef17(autoTitle);
+  const autoTitleRef = useRef18(autoTitle);
   autoTitleRef.current = autoTitle;
-  const captureRef = useRef17(onCaptureOriginalRequest);
+  const captureRef = useRef18(onCaptureOriginalRequest);
   captureRef.current = onCaptureOriginalRequest;
   const [drafts] = useState16(createDraftBinding);
-  const creations = useRef17(/* @__PURE__ */ new Map());
-  const resolved = useRef17(/* @__PURE__ */ new Set());
-  useEffect15(() => {
+  const creations = useRef18(/* @__PURE__ */ new Map());
+  const resolved = useRef18(/* @__PURE__ */ new Set());
+  useEffect16(() => {
     if (chatId == null) return;
     for (const token of resolved.current) creations.current.delete(token);
     resolved.current.clear();
     drafts.leave();
   }, [chatId, drafts]);
-  useEffect15(() => onChatDeleted((chat) => {
+  useEffect16(() => onChatDeleted((chat) => {
     for (const token of drafts.forgetChat(chat)) {
       creations.current.delete(token);
       resolved.current.delete(token);

@@ -30,6 +30,7 @@ import {
   RecipientPicker,
   composerModel,
   useComposerMenuRequest,
+  type ComposerAttachment,
   type ComposerOptions,
   type QueuedItem,
   type RecipientPickerProps,
@@ -43,6 +44,7 @@ import { makeT, personaModalityOptions, personaPickerLabels, queuedTurnLabels, r
 import { brainComposerLabels } from './composerLabels';
 import { editorStarters } from './editorStarters';
 import { steerRun } from './chatChildren';
+import { useHostAttachmentDownload } from './attachmentDownload';
 import type { useComposerModels } from './useComposerModels';
 import type { useRunShaping } from './useRunShaping';
 import type { TypeaheadTicket } from './useTicketRail';
@@ -73,8 +75,9 @@ export interface VsCodeComposerProps {
    */
   /** A turn is in flight: Send steers it, an empty box offers Stop. */
   running: boolean;
-  /** The files the next turn will carry, and the ports that add / remove them. */
-  pendingAttachments: readonly ChatInputAttachment[];
+  /** The composer's chips (`conv.attachmentChips`): shown the moment a file is attached, from
+   *  the file on this device, while it uploads behind them — and the ports that add / remove them. */
+  attachmentChips: readonly ComposerAttachment[];
   uploading: boolean;
   onAttach: (file: File) => Promise<void>;
   onRemoveAttachment: (key: string) => void;
@@ -127,7 +130,7 @@ export interface VsCodeComposerProps {
 
 function VsCodeComposerInner(props: VsCodeComposerProps) {
   const {
-    composerId, init, apiReq, draftStore, running, pendingAttachments, uploading, onAttach, onRemoveAttachment, contextUsage,
+    composerId, init, apiReq, draftStore, running, attachmentChips, uploading, onAttach, onRemoveAttachment, contextUsage,
     onSubmit, onQueue, sendSteers, onStop, onPickStarter, focusToken, chatId, projectId, ensureChatId,
     chatTickets, linkTicket, participants, mentionable, hasLiveChildren,
     recipient, chooseRecipient, persona, onPersona, personaAgents, queue, onRemoveQueued,
@@ -207,9 +210,11 @@ function VsCodeComposerInner(props: VsCodeComposerProps) {
     () => ({ request: apiReq, projectId, locale: init.locale, onUpgrade: openUpgrade, connections }),
     [apiReq, projectId, init.locale, connections],
   );
+  const downloadAttachment = useHostAttachmentDownload(init.labels);
   const attachments = useMemo(
-    () => ({ items: pendingAttachments, onAdd: attachFiles, onRemove: onRemoveAttachment, uploading }),
-    [pendingAttachments, attachFiles, onRemoveAttachment, uploading],
+    // Each file uploads behind its chip (`attachFiles` never waits); Send waits for them.
+    () => ({ items: attachmentChips, onAdd: attachFiles, onRemove: onRemoveAttachment, uploading, onDownload: downloadAttachment }),
+    [attachmentChips, attachFiles, onRemoveAttachment, uploading, downloadAttachment],
   );
   const webBrowsing = useMemo(
     () => ({ on: shaping.webBrowsing, onChange: shaping.setWebBrowsing }),

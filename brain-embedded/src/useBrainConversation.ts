@@ -39,7 +39,7 @@ import type { EvermindRunHooks } from './evermindMemory';
 import type { ReasoningIntent } from './effort';
 import type { RunWindowSources } from './windowFit/modelWindow';
 import type { OnDeviceTasks } from './onDevice/onDeviceTasks';
-import { useComposerAttachments } from './useComposerAttachments';
+import { useComposerAttachments, type ComposerAttachmentChip } from './useComposerAttachments';
 import { useContinuation } from './useContinuation';
 import { composeUserTurn, userTurnContentOf } from './attachmentTranscript';
 import { scopeToConsolidation } from '@seanhogg/builderforce-memory/working';
@@ -241,6 +241,10 @@ export interface UseBrainConversation {
    *  shared transcript's `ratings` prop. */
   ratings: Record<number, 1 | -1>;
   pendingAttachments: ChatInputAttachment[];
+  /** The composer's chips: the uploaded attachments, then those still uploading or failed
+   *  (with the reason) — shown at once, from the file on this device. Hand to the composer. */
+  attachmentChips: ComposerAttachmentChip[];
+  /** A chip is still uploading: a send waits for it (the composer holds it). */
   uploading: boolean;
   /**
    * Persist + answer a user turn. Resolves `true` once the turn is safely
@@ -389,8 +393,9 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
   chatIdRef.current = chatId;
   const [localError, setLocalError] = useState('');
   const [ratings, setRatings] = useState<Record<number, 1 | -1>>({});
-  const composer = useComposerAttachments(persistence, imagePrep, setLocalError);
-  const { pending: pendingAttachments, uploading } = composer;
+  // An attachment's failure is shown on its own chip (`attachmentChips`), not as the chat's error.
+  const composer = useComposerAttachments(persistence, imagePrep);
+  const { pending: pendingAttachments, chips: attachmentChips, uploading } = composer;
   const autoRepliedChatIdRef = useRef<number | null>(null);
 
   // Live view of the chat's run (owned by the module-level store) — always THIS chat's
@@ -735,6 +740,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     activity: snapshot.activity,
     ratings,
     pendingAttachments,
+    attachmentChips,
     uploading,
     send,
     retryLastTurn,

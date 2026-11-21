@@ -12,6 +12,7 @@
 import type { BrainTraceEvent } from './brainTriage';
 import type { ModelTurn } from './modelScorecard';
 import { FAILOVER_SEPARATOR } from './runStore/gatewayRoutingTrace';
+import { PROGRESS_FORCED_LABEL } from './runStore/progressFinishFacts';
 import { HAND_OFF_CLASH_LABEL, HAND_OFF_MODE_LABEL, describeClash, type HandOffDecision } from './handOffParallelism';
 
 export interface RoleRouting {
@@ -83,7 +84,7 @@ export function routingByRole(turns: readonly ModelTurn[], events: readonly Brai
   const hasArg = (e: BrainTraceEvent, key: string): boolean => !!e.args && typeof e.args === 'object' && key in (e.args as Record<string, unknown>);
   // A3's escalation forces the same single-tool hand_off turn the budget does (`progressBudget.ts` `forcedProgressTurn`).
   const progressForced = events
-    .filter((e) => e.label === 'loop.progress_forced' && !!e.args && typeof e.args === 'object')
+    .filter((e) => e.label === PROGRESS_FORCED_LABEL && !!e.args && typeof e.args === 'object')
     .map((e) => e.args as Record<string, unknown>)
     .filter((a) => a.forced === 'hand_off');
   const progressForcedHandOffs = progressForced.length;

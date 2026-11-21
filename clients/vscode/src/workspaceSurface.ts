@@ -21,6 +21,8 @@ import { createLateRepushLimit } from "./initBudget";
 import { LocalFetchProxy } from "./localFetchProxy";
 import { pickWorkspaceContext } from "./contextPicker";
 import { hostAttachmentIngress } from "./hostIngress";
+import { hostAttachmentDownload } from "./hostAttachmentDownload";
+import type { AttachmentDownloadRequest } from "./attachmentDownload";
 import { testAccountFromEditor } from "./localAccountTest";
 import { handleRunDeltaRequest } from "./runDelta/runDeltaSurface";
 import type { AttachmentIngressRequest } from "./attachmentIngress";
@@ -515,6 +517,15 @@ export class WorkspaceSurface implements vscode.Disposable {
       case "attachment.ingress":
         try {
           this.respond(msg.id, true, await hostAttachmentIngress(this.ctx.secrets).handle(msg as AttachmentIngressRequest));
+        } catch (error) {
+          this.respond(msg.id, false, undefined, error instanceof Error ? error.message : String(error));
+        }
+        break;
+      // An attachment's preview → Download: the host fetches the original (with the
+      // extension's credential) and saves it where the person chooses.
+      case "attachment.download":
+        try {
+          this.respond(msg.id, true, await hostAttachmentDownload(this.ctx.secrets, msg as AttachmentDownloadRequest));
         } catch (error) {
           this.respond(msg.id, false, undefined, error instanceof Error ? error.message : String(error));
         }

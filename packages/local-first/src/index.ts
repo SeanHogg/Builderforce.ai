@@ -18,7 +18,7 @@ export {
   type SyncId,
 } from './entityId.js';
 export { entityIdResolver, type EntityIdResolver, type SyncEntityType } from './entityIdResolver.js';
-export { TERMINAL_EXECUTION_STATUSES, UNBOUND_DESTINATION, compareMappingAge, destinationKey, earliestMapping, inEntityScope, isTerminalExecutionStatus, normalizeServerMapping } from './records.js';
+export { TERMINAL_EXECUTION_STATUSES, UNBOUND_DESTINATION, accountScopeOf, compareMappingAge, destinationKey, earliestMapping, inEntityScope, isTerminalExecutionStatus, normalizeServerMapping } from './records.js';
 export type {
   AuditFindingValue,
   ChatTicketLinkType,
@@ -161,6 +161,7 @@ export {
   recordPayloadMarker,
 } from './recordPayloadMarker.js';
 export { sendablePayload } from './syncRound.js';
+export { CHAT_BIND_LEASE_MS, awaitsChatBind, claimChatBind, releaseChatBind } from './chatBindLease.js';
 export { pruneSettledReceipts } from './receiptPruning.js';
 export {
   MARKER_WRITTEN_TYPES,

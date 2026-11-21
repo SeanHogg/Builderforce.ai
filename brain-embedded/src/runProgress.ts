@@ -29,8 +29,8 @@
  * so every copy surface computes the identical block.
  */
 
-import { asksForChange, isContinuationDirective } from '@builderforce/agent-stall';
-import { isCodeChangeTool } from './localWorkspaceTools';
+import { isContinuationDirective } from '@builderforce/agent-stall';
+import { asksForWorkItemsIn, hasEditIntent, isBookkeepingWrite, isMutationTool } from './runEffect';
 import type { BrainTraceEvent } from './brainTriage';
 import { isFailedToolResult } from './toolFailure';
 import { visitTarget } from './runActivity';
@@ -67,30 +67,8 @@ export interface RepeatStreak {
  *  the shared `@builderforce/run-guards` threshold the live guards use too. */
 export { BACK_TO_BACK_AT };
 
-/** Tools that MUTATE something — the run's "did it have an effect" evidence.
- *  Covers the IDE workspace writers (`isCodeChangeTool`) plus the gateway's
- *  builtin create/update/write/save/delete family, matched structurally so a new
- *  create tool counts without an edit here. Read-only `*_list` / `*_get` /
- *  `*_search` names can't match. */
-const MUTATION_TOOL = /(^|_)(write|edit|save|create|update|delete|apply|patch|publish|send|dispatch|run_command|assign|link|move|set)(_|$)/i;
-
-export function isMutationTool(name: string): boolean {
-  return isCodeChangeTool(name) || MUTATION_TOOL.test(name);
-}
-
-/**
- * Whether the run was asked to CHANGE something. Reads the user turns only — the
- * assistant's own restatement of the task would make this trivially self-fulfilling.
- * Uses the first user turn (the request) plus any later one, since a follow-up can
- * turn a question into a task.
- *
- * The per-message predicate is `asksForChange` from `@builderforce/agent-stall`: the
- * SERVER needs the identical judgement to decide whether an answer may be replayed
- * from cache (a change request must never be), so it cannot live here.
- */
-export function hasEditIntent(messages: BrainMessage[]): boolean {
-  return messages.some((m) => m.role === 'user' && asksForChange(m.content));
-}
+// The effect vocabulary (what was asked, which calls change something) is `runEffect.ts`'s.
+export { hasEditIntent, isMutationTool };
 
 /**
  * The structural signature of a call — what makes two calls "the same call". Same
@@ -178,6 +156,8 @@ export interface RunSummary {
   calls: number;
   cacheAnswered: number;
   mutationsSucceeded: number;
+  /** Of {@link mutationsSucceeded}, the ticket / task bookkeeping — reported apart from the changes. */
+  bookkeepingWrites: number;
   spinning: boolean;
   /** Active wall clock of the run (span minus idle gaps), so a chat total can be summed. */
   activeMs: number;
@@ -220,12 +200,15 @@ export interface RunProgress {
   /** Mutation-tool calls attempted, and how many returned a success. */
   mutationsAttempted: number;
   mutationsSucceeded: number;
+  /** Of {@link mutationsSucceeded}, the board bookkeeping (ticket / task / kanban writes, `runEffect.ts`): never a change on its own. */
+  bookkeepingWrites: number;
   /** True when the user asked for a CHANGE (see {@link hasEditIntent}). */
   editIntent: boolean;
   /**
    * The headline finding: an edit-shaped request, real work performed, and NOT ONE
    * successful mutation to show for it. This is the verdict the pasted report was
-   * missing — the run was not starved of context, it never acted.
+   * missing — the run was not starved of context, it never acted. Board bookkeeping does
+   * not count unless the person asked for board work (VS Code chat #165961).
    */
   noEffect: boolean;
   /**
@@ -265,23 +248,25 @@ const IDLE_GAP_MS = 120_000;
  */
 export function computeRunProgress(events: BrainTraceEvent[], messages: BrainMessage[] = []): RunProgress {
   const slices = splitRuns(events, messages);
-  if (slices.length === 1) return { ...progressOf(events, hasEditIntent(messages)), runs: [] };
-  const intentOf = (ask: string, own: BrainMessage[]) =>
-    hasEditIntent(own) || (isContinuationDirective(ask) && hasEditIntent(messages));
-  const each = slices.map((s) => ({ s, p: progressOf(s.events, intentOf(s.ask, s.messages)) }));
+  if (slices.length === 1) return { ...progressOf(events, hasEditIntent(messages), asksForWorkItemsIn(messages)), runs: [] };
+  // A continuation ("carry on") inherits what the chat asked before it.
+  const askedIn = (ask: string, own: BrainMessage[], asked: (m: BrainMessage[]) => boolean) =>
+    asked(own) || (isContinuationDirective(ask) && asked(messages));
+  const each = slices.map((s) => ({ s, p: progressOf(s.events, askedIn(s.ask, s.messages, hasEditIntent), askedIn(s.ask, s.messages, asksForWorkItemsIn)) }));
   const runs = each.map(({ s, p }) => ({
     ask: s.ask,
     turns: s.events.filter((e) => e.label === 'llm.complete').length,
     calls: s.events.filter((e) => e.category === 'tool').length,
     cacheAnswered: p.cacheAnswered,
     mutationsSucceeded: p.mutationsSucceeded,
+    bookkeepingWrites: p.bookkeepingWrites,
     spinning: p.spinning,
     activeMs: Math.max(0, p.wallClockMs - p.idleMs),
   }));
   return { ...each[each.length - 1]!.p, runs };
 }
 
-function progressOf(events: BrainTraceEvent[], editIntent: boolean): Omit<RunProgress, 'runs'> {
+function progressOf(events: BrainTraceEvent[], editIntent: boolean, workItemsAsked: boolean): Omit<RunProgress, 'runs'> {
   const tools = events.filter((e) => e.category === 'tool');
 
   const seenCalls = new Map<string, string | undefined>();
@@ -298,6 +283,7 @@ function progressOf(events: BrainTraceEvent[], editIntent: boolean): Omit<RunPro
   let targetedCalls = 0;
   let mutationsAttempted = 0;
   let mutationsSucceeded = 0;
+  let bookkeepingWrites = 0;
 
   // Back-to-back repeats: the current streak of identical calls, and the longest
   // one seen. A streak closes the moment a DIFFERENT call is made.
@@ -370,6 +356,7 @@ function progressOf(events: BrainTraceEvent[], editIntent: boolean): Omit<RunPro
       mutationsAttempted += 1;
       if (!cached && !ev.isError && !isFailedToolResult(ev.result)) {
         mutationsSucceeded += 1;
+        if (isBookkeepingWrite(ev.label)) bookkeepingWrites += 1;
         if (subject) changed(subject);
       }
     }
@@ -410,7 +397,9 @@ function progressOf(events: BrainTraceEvent[], editIntent: boolean): Omit<RunPro
   const wallClockMs = timed.length > 1 ? timed[timed.length - 1]!.t - timed[0]!.t : 0;
 
   const didWork = tools.length > 0;
-  const noEffect = editIntent && didWork && mutationsSucceeded === 0;
+  // A change request's effect is a change: board bookkeeping alone is none, unless the board work was what was asked (chat #165961).
+  const effects = mutationsSucceeded - (workItemsAsked ? 0 : bookkeepingWrites);
+  const noEffect = editIntent && didWork && effects === 0;
   // Enough calls to have a shape, and most of them retreading. 6 is the smallest
   // run where "went back over old ground four times" is a pattern and not a
   // coincidence; 0.4 means revisits outnumber every second call.
@@ -430,6 +419,7 @@ function progressOf(events: BrainTraceEvent[], editIntent: boolean): Omit<RunPro
     revisitRatio,
     mutationsAttempted,
     mutationsSucceeded,
+    bookkeepingWrites,
     editIntent,
     noEffect,
     spinning,

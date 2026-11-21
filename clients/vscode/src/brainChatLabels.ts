@@ -206,6 +206,25 @@ export function brainChatLabels(): Record<string, string> {
     "app.modeWorkHint": t("Turn what we agree into tracked work — open the ticket, staff it, and dispatch an agent to run it"),
     "app.uploadFile": t("Upload from computer"),
     "app.uploading": t("Uploading…"),
+    // A composer chip uploads behind itself; Send waits for it, and refuses while one failed.
+    "app.attachmentUploading": t("Uploading"),
+    "app.attachmentFailed": t("Upload failed"),
+    "app.sendWaitsForUploads": t("Your message will send as soon as the attachments finish uploading."),
+    "app.sendBlockedByFailedUpload": t("An attachment could not be uploaded. Remove it, or attach it again, before sending."),
+    // The attachment preview (a turn's picture/file and a composer chip open the same one).
+    "att.open": t("Open preview"),
+    "att.dialog": t("Attachment preview"),
+    "att.close": t("Close preview"),
+    "att.download": t("Download"),
+    "att.downloading": t("Downloading…"),
+    "att.downloaded": t("Saved"),
+    "att.downloadFailed": t("Download failed"),
+    "att.noPreview": t("No preview for this kind of file"),
+    "att.image": t("Image"),
+    "att.unavailable": t("This file is no longer available to download"),
+    // The webview refuses an oversized file before its bytes cross to the host; `{name}` /
+    // `{limit}` are filled by the webview (the same sentence the host uses).
+    "att.tooLarge": t("{0} is too large to download here: the limit is {1} MB.", "{name}", "{limit}"),
     "app.addContext": t("Add context"),
     "app.browseWeb": t("Browse the web"),
     "app.on": t("On"),

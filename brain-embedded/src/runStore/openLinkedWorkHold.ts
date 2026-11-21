@@ -28,8 +28,9 @@ import type { PolicyContext } from '@builderforce/agent-run';
 import { isReadOnlyShellCall } from '@builderforce/run-guards';
 import { isFailedToolResult, type BrainTraceEvent } from '../brainTriage';
 import { normalizeChatMode } from '../chatMode';
-import { declaresChatTicketListing, isOpenLinkedStatus, isReadOnlyPlatformTool, linkedTaskRows, type LinkedTaskRow } from '../chatWorkLinking';
+import { declaresChatTicketListing, isOpenLinkedStatus, linkedTaskRows, type LinkedTaskRow } from '../chatWorkLinking';
 import { isCodeChangeTool, isRepoPublishTool } from '../localWorkspaceTools';
+import { isWorkItemWrite } from '../workItemBookkeeping';
 import type { BrainRunContext } from './brainRunContext';
 import { latestStatus, listChatTickets, listingScopeOf, runOwnedTicketRefs, ticketMovesInRun, ticketsCreatedInRun } from './chatTickets';
 import { continuationLimits } from './deadline';
@@ -48,9 +49,6 @@ const UNMOVED_LOCAL_STATUS = 'backlog';
 /** A linked ticket's lane that holds an EXECUTING run whoever touched it: work already under way. */
 const ACTIVE_STATUS = 'in_progress';
 
-/** Work-item tools (account and device): ticket, task and kanban writes. */
-const WORK_ITEM_TOOL = /^(builtin_(tasks|tickets|kanban)_|ticket[-_.])/i;
-
 /**
  * A step that counts as PROGRESS toward the open work: a successful call the MODEL made (not a host step) that writes or edits a
  * file, changes a ticket/task, commits or pushes, or runs a command that is not a read. Bookkeeping (remembering a fact, posting
@@ -62,7 +60,7 @@ function isProgressStep(ev: BrainTraceEvent): boolean {
   const name = ev.label;
   if (isCodeChangeTool(name) || isRepoPublishTool(name) || name === 'git_commit') return true;
   if (name === 'run_command') return !isReadOnlyShellCall(name, ev.args);
-  return WORK_ITEM_TOOL.test(name) && !isReadOnlyPlatformTool(name) && !/^ticket[-_.](list|get|search|read)/i.test(name);
+  return isWorkItemWrite(name);
 }
 
 /** The run's latest progress step, by identity — robust to the trace's bounded window dropping older steps. */

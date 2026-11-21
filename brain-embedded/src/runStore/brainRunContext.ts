@@ -159,6 +159,13 @@ export interface BrainRunContext {
   finishSkipNoted: boolean;
   /** The planner was already told once that its `hand_off` tasks overlap (`handOffParallelism.ts`); the next plan is carried out as is. */
   handOffClashRefused?: boolean;
+  /**
+   * The run's `hand_off` started NO coder (mode `inline`): the run itself takes every task, so it still owes the change
+   * (`progressBudget.progressed`). False for `parallel` and `mixed`: once coders were started the hand-off is progress, and in
+   * `mixed` the run's inline share is deliberately exempt from the change budget / stalled-finish deferral — the started coders'
+   * reports drive the run, and forcing the change tools on the owner while they work would race their edits.
+   */
+  handOffInline?: boolean;
   /** Re-prompts this run has had from the host's stop hook (bounded in `stopHooks.ts`). */
   stopHookRounds: number;
   /** Carries the undelegated-request decision from `beforeToolCalls` to the `ask_user`

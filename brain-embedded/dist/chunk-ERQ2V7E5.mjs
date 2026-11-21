@@ -356,7 +356,8 @@ function isMidTurnMetadata(metadata) {
 }
 
 // ../packages/agent-loop/src/taskClosedState.ts
-var TASK_CLOSED_STATUSES = ["done", "cancelled", "canceled", "completed", "archived"];
+var ARCHIVED_TASK_STATUS = "archived";
+var TASK_CLOSED_STATUSES = ["done", "cancelled", "canceled", "completed", ARCHIVED_TASK_STATUS];
 var CLOSED = new Set(TASK_CLOSED_STATUSES);
 function isClosedTaskStatus(status) {
   return status != null && CLOSED.has(status.trim().toLowerCase());
@@ -830,4 +831,4 @@ export {
   askUserAnchorId,
   selectPendingAskUser
 };
-//# sourceMappingURL=chunk-4M73IFQC.mjs.map
+//# sourceMappingURL=chunk-ERQ2V7E5.mjs.map

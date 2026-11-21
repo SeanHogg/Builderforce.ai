@@ -349,7 +349,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
               apiReq={apiReq}
               draftStore={draftStore}
               running={conv.sending}
-              pendingAttachments={conv.pendingAttachments}
+              attachmentChips={conv.attachmentChips}
               uploading={conv.uploading}
               onAttach={conv.attach}
               onRemoveAttachment={conv.removeAttachment}

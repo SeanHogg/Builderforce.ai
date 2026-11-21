@@ -2,6 +2,8 @@ import type * as vscode from "vscode";
 import { getApiKey, getBaseUrl } from "./gateway";
 import { GATEWAY_WORKSPACE_HEADER, gatewayAuthHeaders, gatewayWorkspaceHeaders, observeGatewayResponse } from "./gatewayAuth";
 import type { ToolDef } from "./fileTools";
+import { hostLog } from "./hostLog";
+import { namesRunChat } from "./localTicketScope";
 import { toolMutating } from "./toolMutating";
 import { ttlCache } from "./ttlCache";
 import { describeNetworkError, retryOnConnectFailure } from "@seanhogg/builderforce-brain-embedded";
@@ -68,28 +70,65 @@ export interface PlatformChatIdentity {
    * chat to the ticket (`localDomainToolRouting.ts`).
    */
   clientChatId?: string;
+  /**
+   * The chat's bound server id NOW, read at call time. `serverChatId` is what the run's start
+   * bound; a sync receipt can rebind the chat while the run goes (bind made chat #281, the
+   * chat's import landed as #282: the model kept passing 281 and read an empty chat). Absent:
+   * `serverChatId` stands.
+   */
+  serverChatIdNow?: () => Promise<number | undefined>;
+}
+
+/**
+ * `identity` reading its chat's bound server id live from the local chat identity (the chat's
+ * mapping in the current account). A run whose local id is not a chat view key keeps its start's.
+ */
+export function liveChatIdentity(
+  identity: PlatformChatIdentity,
+  chats: { serverIdFor(localId: number): Promise<number | undefined> },
+): PlatformChatIdentity {
+  const localId = Number(identity.localChatId);
+  if (!Number.isSafeInteger(localId) || localId <= 0) return identity;
+  return { ...identity, serverChatIdNow: () => chats.serverIdFor(localId) };
+}
+
+/**
+ * The run's chat's bound server id: the live binding when the host can read it, else the run's
+ * start. A failed live read is REPORTED (`report`, the host log by default) and the start's id
+ * stands, so one store read failing never breaks every chat-scoped tool.
+ */
+export async function runServerChatId(
+  identity: PlatformChatIdentity,
+  report: (line: string) => void = hostLog,
+): Promise<number | null> {
+  if (!identity.serverChatIdNow) return identity.serverChatId;
+  try {
+    return (await identity.serverChatIdNow()) ?? identity.serverChatId;
+  } catch (error) {
+    report(`[platform tools] reading the live server chat of local chat ${String(identity.localChatId)} failed; using the run's start binding (${String(identity.serverChatId)}): ${error instanceof Error ? error.message : String(error)}`);
+    return identity.serverChatId;
+  }
 }
 
 /**
  * The `chatId` to send the platform for one tool call's args. The model may pass the
- * LOCAL chat id (it sees only local ids): when it matches this run's known local id
- * AND the run's local chat is bound, the bound server id goes instead. An UNBOUND
- * chat is a named error rather than a 502 round trip; an args chatId that is not this
- * chat's (another chat's, or no identity supplied) passes through untouched.
+ * LOCAL chat id (it sees only local ids) or the server id the run bound at its start:
+ * either names this run's chat ({@link namesRunChat}), and the chat's CURRENT bound
+ * server id goes instead ({@link runServerChatId}). An UNBOUND chat is a named error
+ * rather than a 502 round trip; an args chatId that is not this chat's (another chat's,
+ * or no identity supplied) passes through untouched.
  */
-function chatIdForServer(
+async function chatIdForServer(
   identity: PlatformChatIdentity | undefined,
   args: Record<string, unknown>,
-): { args: Record<string, unknown> } | { error: string } {
+): Promise<{ args: Record<string, unknown> } | { error: string }> {
   const argChatId = args.chatId;
-  if (identity == null || argChatId === undefined) return { args };
-  // The model's args arrive as JSON: the same chat id may be the run host's number or
-  // its string form. Anything else is a different chat's id and passes through.
-  if (String(argChatId) !== String(identity.localChatId)) return { args };
-  if (identity.serverChatId == null) {
+  if (identity == null || !namesRunChat(identity, argChatId)) return { args };
+  const serverChatId = await runServerChatId(identity);
+  if (serverChatId == null) {
     return { error: `chat_not_synced: chat ${String(argChatId)} has no server binding yet` };
   }
-  return { args: argChatId === identity.serverChatId ? args : { ...args, chatId: identity.serverChatId } };
+  return { args: argChatId === serverChatId ? args : { ...args, chatId: serverChatId } };
 }
 
 /** Drop the cached catalog (call on sign-out / workspace change). */
@@ -145,9 +184,9 @@ export async function listPlatformTools(
     // write-confirm gate; anything else (incl. external tools that omit it) asks.
     mutating: toolMutating(e.name, { mutates: e.mutates }),
     remote: true,
-    execute: (args) => {
-      const translated = chatIdForServer(identity, args);
-      if ("error" in translated) return Promise.resolve(translated.error);
+    execute: async (args) => {
+      const translated = await chatIdForServer(identity, args);
+      if ("error" in translated) return translated.error;
       return callPlatformTool(secrets, e.extensionId, e.tool, translated.args);
     },
   }));

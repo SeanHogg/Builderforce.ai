@@ -69,9 +69,13 @@ export function budgeted(run: BrainRunContext): boolean {
   return isChangeRequest(run.metadata.mode, run.userRequest);
 }
 
-/** Has the run made its change — edited code itself or handed it to coders? */
+/**
+ * Has the run made its change — edited code itself or handed it to coders? An INLINE hand-off started no coder: the run itself
+ * takes every task, so it has made no progress until it edits (VS Code chat #165961: the coder after an inline hand-off read for
+ * nine turns, was exempt from the change budget and the stalled-finish deferral, and finished with no edit).
+ */
 export function progressed(run: BrainRunContext): boolean {
-  return run.c.codeChanged || run.usedTools.has(HAND_OFF_TOOL);
+  return run.c.codeChanged || (run.usedTools.has(HAND_OFF_TOOL) && run.handOffInline !== true);
 }
 
 /** Planning ends HERE: the policy moves to the coding role (the next turn selects as `code`), and the run's record says why. */

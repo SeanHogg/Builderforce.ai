@@ -75,6 +75,15 @@ export function inEntityScope(destination: EntityDestination, scope: EntityScope
     && (scope.platformInstance === undefined || destination.platformInstance === scope.platformInstance);
 }
 
+/**
+ * The ACCOUNT a server row's ids are unique in: its tenant (that tenant's destinations plus
+ * unbound) — a server key is only unique per tenant, so another tenant's ticket 40 is never
+ * this row. A row with no tenant (unbound) has nothing to narrow to: undefined, every scope.
+ */
+export function accountScopeOf(destination: EntityDestination): EntityScope | undefined {
+  return destination.kind === 'bound' && destination.tenantId ? { tenantId: destination.tenantId } : undefined;
+}
+
 export function destinationKey(destination: EntityDestination): string {
   if (destination.kind === 'unbound') return 'unbound';
   const parts = [

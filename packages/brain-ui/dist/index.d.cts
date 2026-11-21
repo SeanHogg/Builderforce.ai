@@ -311,6 +311,57 @@ interface ChatErrorBannerProps {
 }
 declare function ChatErrorBanner({ error, action, onDismiss, onReconnect, onUpgrade, onValidateCard, onSignIn, onSwitchToHybrid, onDownloadLocalModel, onPickModel, onProviderSignIn, labels: labelOverrides, style, className, role, }: ChatErrorBannerProps): react__default.JSX.Element | null;
 
+/** Figures a parameterised label is rendered with. */
+type LabelValues = Readonly<Record<string, string | number>>;
+/** A host's string for a canonical label key, or undefined when its catalog has none. */
+type LabelLookup = (key: string, values?: LabelValues) => string | undefined;
+/**
+ * Every string field of `defaults`, read at `prefix + field`. Functions and nested
+ * objects are carried over untouched; an empty string counts as "none".
+ */
+declare function stringsFrom<T extends object>(defaults: T, lookup: LabelLookup, prefix?: string): T;
+/**
+ * A lookup over a FLAT host bundle (`key → text`, `{name}` placeholders) — the shape the
+ * VS Code extension posts. `keyOf` maps a canonical key to the bundle's key (return
+ * undefined to leave it to the default); `format` renders a numeric figure for the
+ * host's locale before it is substituted.
+ */
+declare function bundleLookup(bundle: Readonly<Record<string, string>>, keyOf: (key: string) => string | undefined, format?: (value: number) => string): LabelLookup;
+
+/**
+ * The copy of the attachment preview (`AttachmentPreview`) — the same strings wherever a
+ * picture or file is opened: a transcript turn's attachments and the composer's chips.
+ *
+ * Hosts supply it through their ONE catalog lookup under the `attachmentPreview.` scope —
+ * the composer's (`brainComposerLabelsFrom`) and the transcript's (`timelineLabelsFrom`)
+ * both read the same keys, so each host keeps one copy of these strings.
+ * No placeholders: an accessible name is composed as `<label>: <file name>`.
+ */
+
+interface AttachmentPreviewLabels {
+    /** The trigger's accessible name, before the file name ("Open preview: shot.png"). */
+    open: string;
+    /** The preview panel's accessible name, before the file name. */
+    dialog: string;
+    close: string;
+    download: string;
+    downloading: string;
+    /** After the host saved the file. */
+    downloaded: string;
+    /** Shown when the download failed and the host gave no reason. */
+    downloadFailed: string;
+    /** In place of a picture for a file the preview cannot show. */
+    noPreview: string;
+    /** The name of a picture stored without one. */
+    image: string;
+    /** When no copy of the file is reachable to download (e.g. a link that expired). */
+    unavailable: string;
+}
+declare const DEFAULT_ATTACHMENT_PREVIEW_LABELS: AttachmentPreviewLabels;
+declare function attachmentPreviewLabels(overrides?: Partial<AttachmentPreviewLabels>): AttachmentPreviewLabels;
+/** The preview's copy from a host lookup over its canonical keys (the field names). */
+declare function attachmentPreviewLabelsFrom(lookup: LabelLookup): AttachmentPreviewLabels;
+
 /**
  * Every string the transcript renders. It EXTENDS {@link ToolStepLabels} rather than
  * restating those five: the tool step is its own component with its own narrow
@@ -444,11 +495,38 @@ interface BrainTimelineLabels extends ToolStepLabels, ModelMoveLabels {
      * `chatError.<field>`; omitted ⇒ the banner's English defaults.
      */
     chatError?: Partial<ChatErrorBannerLabels>;
+    /**
+     * The attachment preview a turn's picture or file opens — the SAME copy the composer's
+     * chips read. Catalog keys `attachmentPreview.<field>`; omitted ⇒ English defaults.
+     */
+    attachmentPreview?: Partial<AttachmentPreviewLabels>;
 }
 declare const DEFAULT_TIMELINE_LABELS: BrainTimelineLabels;
 
 /** +1 up, -1 down, 0 = cleared. Mirrors the `llm_action_ratings.rating` domain. */
 type MessageRating = 1 | -1 | 0;
+
+/** What the attachment preview shows and saves — shared by the transcript and the composer. */
+interface AttachmentPreviewItem {
+    name: string;
+    /** MIME type, when known. */
+    type?: string;
+    /** Size in bytes, when known. */
+    size?: number;
+    /** What the panel draws for a picture (may be a reduced copy). */
+    previewUrl?: string;
+    /** The ORIGINAL file — what Download saves. Omitted when no copy is reachable. */
+    downloadUrl?: string;
+    /** The attachment's key, for a host that resolves the original by it. */
+    key?: string;
+}
+/**
+ * Saves an attachment for the person. Resolves `false` when they cancelled (no message),
+ * anything else when it was saved; throws an Error whose message is the person's sentence.
+ * Injected by the host: a VS Code webview routes it through the extension, the web app
+ * uses `browserDownload`.
+ */
+type AttachmentDownload = (item: AttachmentPreviewItem) => Promise<boolean | void>;
 
 /**
  * The transcript's NODES — what each durable message or trace step becomes on the
@@ -468,8 +546,22 @@ interface TimelineAnswerChip {
     args?: Record<string, unknown>;
 }
 interface TimelineImage {
+    /** The stored copy the transcript draws (a `data:` URL or a signed link). */
     url: string;
     name?: string;
+    /** The attachment's key and MIME type, when the turn recorded them. */
+    key?: string;
+    type?: string;
+    /** The turn's own link to the file (its `[Attached: …](href)` line) — the original, for a download. */
+    href?: string;
+}
+/** A non-picture attached to a turn — shown as a chip that opens the preview. */
+interface TimelineFile {
+    name: string;
+    key?: string;
+    type?: string;
+    /** The turn's own link to the file, when it has one. */
+    href?: string;
 }
 /** Why a turn did not feed the project Evermind (mirrors the api's `BrainLearnSkipReason`). */
 type BrainLearnSkipReason = 'not-attached' | 'not-seeded' | 'frozen';
@@ -481,6 +573,7 @@ type TimelineNode = {
     message: BrainMessage;
     text: string;
     images: TimelineImage[];
+    files?: TimelineFile[];
 } | {
     key: string;
     kind: 'assistant';
@@ -646,23 +739,6 @@ declare function strandedReplyKey(nodes: readonly TimelineNode[], isRunning: boo
 declare function streamingNode(streamingText: string, isRunning: boolean): TimelineNode | null;
 /** Compact human duration for a "Thought for …" label (e.g. 0s, 2s, 12s). */
 declare function formatDuration(ms: number | undefined): string;
-
-/** Figures a parameterised label is rendered with. */
-type LabelValues = Readonly<Record<string, string | number>>;
-/** A host's string for a canonical label key, or undefined when its catalog has none. */
-type LabelLookup = (key: string, values?: LabelValues) => string | undefined;
-/**
- * Every string field of `defaults`, read at `prefix + field`. Functions and nested
- * objects are carried over untouched; an empty string counts as "none".
- */
-declare function stringsFrom<T extends object>(defaults: T, lookup: LabelLookup, prefix?: string): T;
-/**
- * A lookup over a FLAT host bundle (`key → text`, `{name}` placeholders) — the shape the
- * VS Code extension posts. `keyOf` maps a canonical key to the bundle's key (return
- * undefined to leave it to the default); `format` renders a numeric figure for the
- * host's locale before it is substituted.
- */
-declare function bundleLookup(bundle: Readonly<Record<string, string>>, keyOf: (key: string) => string | undefined, format?: (value: number) => string): LabelLookup;
 
 /**
  * The PreFetch chips (DONE.md, deterministic-first PreFetch archive) — ONE component family every
@@ -830,6 +906,12 @@ interface BrainTimelineProps {
      * stands in, which a host whose message list is a moving tail should not rely on.
      */
     conversationKey?: string | number | null;
+    /**
+     * Saves the original of a picture or file a turn carried, from its preview. A host that
+     * cannot download in place (a VS Code webview) routes it through itself; omitted ⇒ the
+     * browser's download (`browserDownload`).
+     */
+    onDownloadAttachment?: AttachmentDownload;
 }
 /**
  * The unified Brain chat transcript: a vertical lineage of gutter dots (joined by
@@ -838,7 +920,7 @@ interface BrainTimelineProps {
  * Input/Output, or an error. Presentational and theme-driven (CSS variables), so
  * it renders identically in the web app and a VS Code webview.
  */
-declare function BrainTimelineInner({ messages, trace, streamingText, isRunning, activity, pendingUserText, liveModel, liveAccount, loading, labels: labelOverrides, modelIdentity, assistantName, emptyState, renderMessage, isOwnMessage, renderStreaming, renderAssistantActions, renderAfterMessage, onReplayMessage, onRateMessage, ratings, onInternalLink, onApplyCode, onCreateFile, onAnswerQuestion, autoScroll, revealMessage, conversationKey, prefetch, }: BrainTimelineProps): react__default.JSX.Element;
+declare function BrainTimelineInner({ messages, trace, streamingText, isRunning, activity, pendingUserText, liveModel, liveAccount, loading, labels: labelOverrides, modelIdentity, assistantName, emptyState, renderMessage, isOwnMessage, renderStreaming, renderAssistantActions, renderAfterMessage, onReplayMessage, onRateMessage, ratings, onInternalLink, onApplyCode, onCreateFile, onAnswerQuestion, autoScroll, revealMessage, conversationKey, prefetch, onDownloadAttachment, }: BrainTimelineProps): react__default.JSX.Element;
 /**
  * Memoized so an unrelated re-render of the host (e.g. every keystroke in the
  * composer, which lives in the same component tree) does not re-render the whole
@@ -4916,6 +4998,14 @@ interface ComposerLabels {
     on: string;
     off: string;
     remove: string;
+    /** A chip whose file is still uploading (its spinner's name). */
+    attachmentUploading: string;
+    /** A chip whose upload failed, when the host gave no reason. */
+    attachmentFailed: string;
+    /** Send pressed while a file is still uploading: the message goes as soon as it is up. */
+    sendWaitsForUploads: string;
+    /** Send refused while a chip shows a failed upload — never sent without the file. */
+    sendBlockedByFailedUpload: string;
     send: string;
     /** Send while a run streams speaks to the run now (it steers) - its name says so; the message
      *  reaches the run's next model call. A message that would be held reads {@link queueHold}; the
@@ -4976,7 +5066,17 @@ interface ComposerAttachment {
     name: string;
     /** A thumbnail for an image. */
     imageUrl?: string;
+    /** MIME type and size in bytes, when known. */
+    type?: string;
+    size?: number;
+    /** The ORIGINAL file on this device (an object URL) — the preview's picture and download. */
+    localUrl?: string;
+    /** Still uploading, or the upload failed (`error` says why). Absent ⇒ ready to send. */
+    status?: 'uploading' | 'error';
+    error?: string;
 }
+/** What the preview shows and saves for a chip: the original on this device first. */
+declare function chipPreviewItem(a: ComposerAttachment): AttachmentPreviewItem;
 
 /**
  * The composer's run-shaping state, as ONE contract every host fills — and the ONE
@@ -5050,6 +5150,8 @@ interface BrainComposerLabels {
     mention?: UseMentionAutocompleteOptions['labels'];
     ticket?: UseTicketAutocompleteOptions['labels'];
     command?: CommandAutocompleteLabels;
+    /** The attachment preview a chip opens (the transcript reads the same copy). */
+    attachmentPreview?: Partial<AttachmentPreviewLabels>;
 }
 /**
  * The text comes from exactly ONE of:
@@ -5099,6 +5201,8 @@ interface BrainComposerBaseProps {
         onRemove: (key: string) => void;
         uploading?: boolean;
         accept?: string;
+        /** Saves a chip's original from its preview; omitted ⇒ the browser's download. */
+        onDownload?: AttachmentDownload;
     };
     onAddContext?: () => void;
     webBrowsing?: {
@@ -5145,6 +5249,58 @@ declare function BrainComposerInner(props: BrainComposerProps): react.JSX.Elemen
  * state change in the host's tree does not re-render the prompt area at all.
  */
 declare const BrainComposer: react.MemoExoticComponent<typeof BrainComposerInner>;
+
+type UploadGateNotice = 'waiting' | 'failed' | null;
+interface UploadGate {
+    /** What the person is told under the chips: their send is waiting, or refused. */
+    notice: UploadGateNotice;
+    /**
+     * Called by a send path BEFORE it sends: true ⇒ it must not send now. While a chip is
+     * still uploading the send is HELD and fires itself (through `resend`) the moment the
+     * last upload finishes; while a chip shows a failed upload it is refused — a message
+     * never goes without a file the person attached.
+     */
+    intercept(resend: () => void): boolean;
+}
+/** The composer's guard between Send and its attachments' uploads (see {@link UploadGate.intercept}). */
+declare function useUploadGate(items: readonly ComposerAttachment[] | undefined): UploadGate;
+
+interface AttachmentPreviewProps {
+    /** The open attachment; null renders nothing. */
+    item: AttachmentPreviewItem | null;
+    onClose: () => void;
+    labels?: Partial<AttachmentPreviewLabels>;
+    /** Saves the original; defaults to {@link browserDownload}. */
+    download?: AttachmentDownload;
+    /** For the file size's units. */
+    locale?: string;
+}
+/** The file's size for the person, in their locale's units. */
+declare function formatFileSize(bytes: number, locale?: string): string;
+declare function AttachmentPreviewInner({ item, onClose, labels, download, locale }: AttachmentPreviewProps): react.JSX.Element | null;
+declare const AttachmentPreview: react.MemoExoticComponent<typeof AttachmentPreviewInner>;
+
+interface AttachmentPreviewState {
+    /** The attachment open in the preview, or null. */
+    item: AttachmentPreviewItem | null;
+    /** Open `item`; focus returns to `trigger` when the preview closes. */
+    open(item: AttachmentPreviewItem, trigger?: HTMLElement | null): void;
+    close(): void;
+}
+/**
+ * Which attachment is open in the preview, and where focus goes back to when it closes.
+ * One per list of attachments (a turn's, the composer's) — the preview itself is
+ * `AttachmentPreview`.
+ */
+declare function useAttachmentPreview(): AttachmentPreviewState;
+
+/**
+ * The default download, for a browser host (the web app): the ORIGINAL file saved under
+ * its own name. A `blob:` / `data:` URL is saved directly; any other URL is fetched (with
+ * the session's cookies) into a blob first, because `download` is ignored across origins.
+ * When that fetch is refused (CORS), the link opens in a new tab so the browser can save it.
+ */
+declare function browserDownload(item: AttachmentPreviewItem): Promise<boolean>;
 
 /**
  * The per-chat Memory switch, as a property of the CONVERSATION (`brain_chats.
@@ -5261,7 +5417,8 @@ declare function formatTokens(tokens: number, locale?: string): string;
  * Everything `BrainComposer` renders — the box, the `/` menu, its Status tab, the spend
  * readouts and the @/# pickers — from ONE host lookup, through each part's own key
  * table. Canonical keys are scoped by part: `composer.<key>`, `options.<key>`,
- * `status.<key>`, `spend.<key>`, `connections.<key>`, `mention.<key>`, `ticket.<key>` and `command.<key>`, each `<key>` being
+ * `status.<key>`, `spend.<key>`, `connections.<key>`, `mention.<key>`, `ticket.<key>`, `command.<key>` and
+ * `attachmentPreview.<key>` (the same keys the transcript reads), each `<key>` being
  * that part's own canonical key (see `composerLabelsFrom`, `promptOptionsLabelsFrom`,
  * `workStatusLabelsFrom`, `spendLabelsFrom`). Every host — the web (next-intl), the
  * editor webview (`vscode.l10n` bundle) and Rovr (`chrome.i18n`) — builds its composer
@@ -5277,6 +5434,7 @@ interface FullBrainComposerLabels {
     mention: Required<MentionLabels>;
     ticket: Required<TicketAutocompleteLabels>;
     command: Required<CommandAutocompleteLabels>;
+    attachmentPreview: AttachmentPreviewLabels;
 }
 /** `overrides`: copy a host words from another source on purpose (e.g. the web's
  *  chat-mode vocabulary for `composer.modeLabel`). */
@@ -5521,4 +5679,4 @@ type CloudTranslateRequest = (body: CloudTranslateBody) => Promise<{
 }>;
 declare function createCloudTranslate(request: CloudTranslateRequest): CloudTranslate;
 
-export { ActionsPane, type ActionsPaneProps, type AgentOptionVM, AiSurface, type AiSurfaceProps, type AskUserLabels, Avatar, type AvatarProps, BrainComposer, type BrainComposerLabels, type BrainComposerProps, BrainMark, type BrainMarkProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, type ChatDiagnosticsChatReads, type ChatDiagnosticsReadAdapter, ChatErrorBanner, type ChatErrorBannerLabels, type ChatErrorBannerProps, type ChatHistoryChat, type ChatHistoryLabels, ChatHistoryList, type ChatHistoryListProps, ChatHistoryRow, type ChatHistoryRowProps, type ChatOptionVM, type ChatQuestionVM, type ChatRowActionProps, type ChatRowActions, type ChatRowRef, type ChatRunHistoryVM, type ChatRunVM, type ChatSubagentVM, ChatTicketStats, type ChatTicketStatsInput, type ChatTicketStatsLabels, type ChatTicketStatsText, type ChatTicketsAdapter, type ChatTicketsExtension, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, type ChatTicketsRequest, type ChatTicketsRestOptions, type CloudTranslate, type CloudTranslateBody, type CloudTranslateRequest, type CommandRun, type ComposerAddMenuItem, type ComposerAttachment, type ComposerConnections, type ComposerLabels, type ComposerModelCatalog, type ComposerModelInput, type ComposerOptions, type ComposerSuggestion, type ConnectionHealth, type ConnectionsLabels, ConnectionsPanel, type ConnectionsPanelProps, type ConsumptionSnapshot, ContextChip, type ContextChipOption, type ContextChipProps, CopyButton, type CopyLabels, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_ERROR_LABELS, DEFAULT_CHAT_HISTORY_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_COMPOSER_LABELS, DEFAULT_CONNECTIONS_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_INFERENCE_MODE_LABELS, DEFAULT_INLINE_CHAT_TITLE_LABELS, DEFAULT_LIVE_ACTIVITY_LABELS, DEFAULT_LOCAL_MODEL_LABELS, DEFAULT_LOCAL_RAIL_LABELS, DEFAULT_MENTION_LABELS, DEFAULT_MODEL_FALLBACK_LABELS, DEFAULT_MODEL_MOVE_LABELS, DEFAULT_PENDING_CHANGES_LABELS, DEFAULT_PERSONA_PICKER_LABELS, DEFAULT_PREFETCH_CHIP_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_PROMPT_OPTIONS_LABELS, DEFAULT_QUEUED_TURN_LABELS, DEFAULT_RECIPIENT_PICKER_LABELS, DEFAULT_SPEND_LABELS, DEFAULT_SURFACE_HEADER_LABELS, DEFAULT_TICKET_TAG_LABELS, DEFAULT_TIMELINE_LABELS, DEFAULT_TOOL_CONFIRM_LABELS, DEFAULT_TRANSLATION_LABELS, DEFAULT_WORK_STATUS_LABELS, type DetectedForeign, EXPAND_ICON_PATH, type EngineResult, type EvermindActionGuideInput, type EvermindActionId, type EvermindBuild, type EvermindCleanupResult, type EvermindCodingGateView, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindContributionState, type EvermindContributionStatus, type EvermindEvalPoint, type EvermindHost, type EvermindHostPowers, type EvermindKnowledgeAnalysis, type EvermindKnowledgeFinding, type EvermindKnowledgeRepair, type EvermindKnowledgeVerdict, type EvermindLearnedStatus, type EvermindMode, type EvermindNextAction, type EvermindProbeResult, type EvermindProbeSample, type EvermindRecentEntry, type EvermindReindexResult, type EvermindRequest, type EvermindRestOptions, type EvermindSeedModel, type EvermindTarget, type EvermindTeachResult, type EvermindTeacherOptions, type EvermindTeacherSkipReason, type EvermindValidateMatch, type EvermindValidateResult, type FullBrainComposerLabels, HeaderIcon, HealthRing, type HealthRingProps, type HealthTier, INFERENCE_MODE_LABEL_FIELDS, InferenceModeControl, type InferenceModeControlProps, InferenceModeFirstRun, type InferenceModeFirstRunProps, type InferenceModeGate, type InferenceModeLabels, InlineChatTitle, type InlineChatTitleLabels, type InlineChatTitleProps, type InterruptedChatState, InterruptedRunRow, type JsonRequest, LOCAL_BACKEND_LABEL, LOCAL_MODEL_LABEL_FIELDS, LOCAL_UNSUPPORTED_LABEL, type LabelLookup, type LabelValues, type LearnedStatusInput, type LineageVM, type LinkType, LiveActivity, type LiveActivityLabels, type LiveActivityProps, type LocalModelLabelLookup, type LocalModelLabels, LocalModelList, type LocalModelListProps, LocalModelRow, type LocalModelRowProps, type LocalModelsState, type LocalRailLabels, MIN_DETECT_CONFIDENCE, Markdown, type MarkdownLabels, type MarkdownProps, type MemoryCompactRequest, type MentionLabels, type MessageRating, ModelFallbackNotice, type ModelFallbackNoticeLabels, type ModelFallbackNoticeProps, type ModelMove, type ModelMoveLabels, type ModelRemedies, type ModelRemedyPorts, OriginalRequest, type PendingChangeKind, type PendingChangeVM, type PendingChangesLabels, PendingChangesList, type PendingChangesListProps, PendingQuestionBanner, type PersonaModalityOption, PersonaPicker, type PersonaPickerLabels, type PersonaPickerProps, type PickedMemory, type PlanTier, type PrefetchAnswerChip, PrefetchAnswerChips, type PrefetchAnswerChipsProps, type PrefetchChipLabels, PrefetchConfirmChip, type PrefetchConfirmChipProps, type PrefetchLabelOf, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, type PromptOptionsAutoMode, type PromptOptionsCommands, type PromptOptionsInferenceMode, type PromptOptionsLabels, type PromptOptionsMemory, PromptOptionsMenu, type PromptOptionsMenuProps, type PromptOptionsMode, type PromptOptionsModeChoice, type PromptOptionsModel, type PromptOptionsOpenRequest, type PromptOptionsSession, type PromptOptionsTab, PromptPanel, type PromptPanelProps, type PromptTrailingAction, type PromptTrailingState, type ProviderConnectStart, type ProviderConnection, type ProviderConnectionsPort, type ProviderReconnect, QuestionCard, QueuedTurnChips, type QueuedTurnChipsLabels, type QueuedTurnChipsProps, RUNNABLE_KINDS, RailFreshnessLine, type RailFreshnessVM, type RailSyncStatus, RailSyncSummary, type RailSyncSummaryVM, RecipientPicker, type RecipientPickerLabels, type RecipientPickerProps, RecipientsBadge, type ReconnectFailure, type ReconnectFailureReason, type ReconnectPhase, type RovingRadioItemProps, SLOW_AFTER_MS, SpendBreakdown, type SpendLabels, SpendPill, StarterGroup, StarterTile, type StarterTileProps, SuggestionRow, Sunburst, type SunburstProps, SurfaceEmptyState, type SurfaceEmptyStateProps, SurfaceFooter, type SurfaceFooterProps, SurfaceHeader, type SurfaceHeaderHistory, type SurfaceHeaderLabels, type SurfaceHeaderProps, SurfaceLauncher, type SurfaceLauncherBadge, type SurfaceLauncherProps, type SurfaceTab, SurfaceTabs, type SurfaceTabsProps, SyncStatusBadge, TICKET_KINDS, TRANSLATE_BATCH_MAX, TRANSLATION_LABEL_FIELDS, type TeacherModelsPayload, type TenantModelRow, type TicketAutocompleteLabels, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TicketParentVM, type TimelineCatalogLookup, type TimelineImage, type TimelineNode, type TimelinePrefetch, ToolConfirmBar, type ToolConfirmBarLabels, type ToolConfirmBarProps, type ToolPreview, ToolStep, type ToolStepLabels, type ToolStepNode, type ToolStepView, TranslatableText, type TranslatableTextProps, type TranslateSend, type TranslatedTextState, type TranslationCache, type TranslationContextValue, type TranslationEntry, type TranslationLabels, TranslationPickerScope, TranslationProvider, type TranslationProviderProps, type UpgradeTarget, type UseChatRowActionsOptions, type UseMentionAutocompleteOptions, type UseTicketAutocompleteOptions, WorkSpendPanel, type WorkSpendPanelProps, type WorkStatusLabels, WorkStatusPanel, type WorkStatusPanelProps, attachmentsOf, avatarColor, brainComposerLabelsFrom, buildSettledTimeline, buildTimeline, bundleLookup, cachedConsumptionSnapshot, chatActivityLabelsFrom, chatDiagnosticsReads, chatErrorMessage, chatHistoryLabelsFrom, chatQuestionsReader, chatSwitcherLabel, chatTicketStatsText, chatTicketsLabelsFrom, chatTicketsLabelsFromBundle, commandOf, composerCatalogLoaded, composerLabels, composerLabelsFrom, composerModel, connectionsLabelsFrom, createChatTicketsRestAdapter, createCloudTranslate, createEvermindRestAdapter, createTranslateBatcher, defaultTranslationCache, detectForeignLanguage, evermindLabelsFromBundle, evermindLearnedStatus, evermindNextAction, fetchConsumptionSnapshot, formatContextTokens, formatDownloadSize, formatDuration, formatElapsed, formatParams, formatTokens, formatUsd, groupAbsorbed, healthRingColor, indexedDbTranslationCache, inferenceModeCopy, inferenceModeOption, initialsOf, invalidateConsumptionSnapshot, languageDisplayName, liveActivityLabelsFrom, loadEvermindBuilds, localModelLabelsFrom, localRailLabelsFrom, localRailLabelsFromBundle, memoryTranslationCache, modelMoveLine, modelMoveOf, modelRemedies, modelSelectionFrom, ownMessageOf, pendingChangesSummary, planIsPaid, preferredEvermindBuild, prefetchChipLabelsFrom, prefetchLabelText, promptOptionsLabels, promptOptionsLabelsFrom, promptTrailingAction, publishedEvermindModels, railTicketLabel, requestComposerMenu, resolvePendingChangesLabels, resolveTeacherOptions, rovingRadioNextIndex, shellOutcomeOf, spendLabels, spendLabelsFrom, strandedReplyKey, streamingNode, stringsFrom, subscribeConsumptionSnapshot, timelineCatalogLookup, timelineLabelsFrom, toolConfirmLabelsFrom, toolConfirmPreview, toolPreview, toolStepView, translateWithEngines, translationCacheKey, translationLabelsFrom, useChatActivitySignal, useChatMemorySwitch, useChatParticipants, useChatRowActions, useComposerMenuRequest, useConsumptionSnapshot, useDismissibleNotice, useHideDoneTickets, useInferenceModeGate, useLocalModels, useMentionAutocomplete, useModelFallback, usePickerOpener, usePopover, useProviderReconnect, useRecipientChoice, useRovingRadioGroup, useTicketAutocomplete, useTranslatedText, useTranslationContext, useVoiceDictation, withLocalModels, workStatusLabels, workStatusLabelsFrom };
+export { ActionsPane, type ActionsPaneProps, type AgentOptionVM, AiSurface, type AiSurfaceProps, type AskUserLabels, type AttachmentDownload, AttachmentPreview, type AttachmentPreviewItem, type AttachmentPreviewLabels, type AttachmentPreviewProps, type AttachmentPreviewState, Avatar, type AvatarProps, BrainComposer, type BrainComposerLabels, type BrainComposerProps, BrainMark, type BrainMarkProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, type ChatDiagnosticsChatReads, type ChatDiagnosticsReadAdapter, ChatErrorBanner, type ChatErrorBannerLabels, type ChatErrorBannerProps, type ChatHistoryChat, type ChatHistoryLabels, ChatHistoryList, type ChatHistoryListProps, ChatHistoryRow, type ChatHistoryRowProps, type ChatOptionVM, type ChatQuestionVM, type ChatRowActionProps, type ChatRowActions, type ChatRowRef, type ChatRunHistoryVM, type ChatRunVM, type ChatSubagentVM, ChatTicketStats, type ChatTicketStatsInput, type ChatTicketStatsLabels, type ChatTicketStatsText, type ChatTicketsAdapter, type ChatTicketsExtension, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, type ChatTicketsRequest, type ChatTicketsRestOptions, type CloudTranslate, type CloudTranslateBody, type CloudTranslateRequest, type CommandRun, type ComposerAddMenuItem, type ComposerAttachment, type ComposerConnections, type ComposerLabels, type ComposerModelCatalog, type ComposerModelInput, type ComposerOptions, type ComposerSuggestion, type ConnectionHealth, type ConnectionsLabels, ConnectionsPanel, type ConnectionsPanelProps, type ConsumptionSnapshot, ContextChip, type ContextChipOption, type ContextChipProps, CopyButton, type CopyLabels, DEFAULT_ASK_USER_LABELS, DEFAULT_ATTACHMENT_PREVIEW_LABELS, DEFAULT_CHAT_ERROR_LABELS, DEFAULT_CHAT_HISTORY_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_COMPOSER_LABELS, DEFAULT_CONNECTIONS_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_INFERENCE_MODE_LABELS, DEFAULT_INLINE_CHAT_TITLE_LABELS, DEFAULT_LIVE_ACTIVITY_LABELS, DEFAULT_LOCAL_MODEL_LABELS, DEFAULT_LOCAL_RAIL_LABELS, DEFAULT_MENTION_LABELS, DEFAULT_MODEL_FALLBACK_LABELS, DEFAULT_MODEL_MOVE_LABELS, DEFAULT_PENDING_CHANGES_LABELS, DEFAULT_PERSONA_PICKER_LABELS, DEFAULT_PREFETCH_CHIP_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_PROMPT_OPTIONS_LABELS, DEFAULT_QUEUED_TURN_LABELS, DEFAULT_RECIPIENT_PICKER_LABELS, DEFAULT_SPEND_LABELS, DEFAULT_SURFACE_HEADER_LABELS, DEFAULT_TICKET_TAG_LABELS, DEFAULT_TIMELINE_LABELS, DEFAULT_TOOL_CONFIRM_LABELS, DEFAULT_TRANSLATION_LABELS, DEFAULT_WORK_STATUS_LABELS, type DetectedForeign, EXPAND_ICON_PATH, type EngineResult, type EvermindActionGuideInput, type EvermindActionId, type EvermindBuild, type EvermindCleanupResult, type EvermindCodingGateView, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindContributionState, type EvermindContributionStatus, type EvermindEvalPoint, type EvermindHost, type EvermindHostPowers, type EvermindKnowledgeAnalysis, type EvermindKnowledgeFinding, type EvermindKnowledgeRepair, type EvermindKnowledgeVerdict, type EvermindLearnedStatus, type EvermindMode, type EvermindNextAction, type EvermindProbeResult, type EvermindProbeSample, type EvermindRecentEntry, type EvermindReindexResult, type EvermindRequest, type EvermindRestOptions, type EvermindSeedModel, type EvermindTarget, type EvermindTeachResult, type EvermindTeacherOptions, type EvermindTeacherSkipReason, type EvermindValidateMatch, type EvermindValidateResult, type FullBrainComposerLabels, HeaderIcon, HealthRing, type HealthRingProps, type HealthTier, INFERENCE_MODE_LABEL_FIELDS, InferenceModeControl, type InferenceModeControlProps, InferenceModeFirstRun, type InferenceModeFirstRunProps, type InferenceModeGate, type InferenceModeLabels, InlineChatTitle, type InlineChatTitleLabels, type InlineChatTitleProps, type InterruptedChatState, InterruptedRunRow, type JsonRequest, LOCAL_BACKEND_LABEL, LOCAL_MODEL_LABEL_FIELDS, LOCAL_UNSUPPORTED_LABEL, type LabelLookup, type LabelValues, type LearnedStatusInput, type LineageVM, type LinkType, LiveActivity, type LiveActivityLabels, type LiveActivityProps, type LocalModelLabelLookup, type LocalModelLabels, LocalModelList, type LocalModelListProps, LocalModelRow, type LocalModelRowProps, type LocalModelsState, type LocalRailLabels, MIN_DETECT_CONFIDENCE, Markdown, type MarkdownLabels, type MarkdownProps, type MemoryCompactRequest, type MentionLabels, type MessageRating, ModelFallbackNotice, type ModelFallbackNoticeLabels, type ModelFallbackNoticeProps, type ModelMove, type ModelMoveLabels, type ModelRemedies, type ModelRemedyPorts, OriginalRequest, type PendingChangeKind, type PendingChangeVM, type PendingChangesLabels, PendingChangesList, type PendingChangesListProps, PendingQuestionBanner, type PersonaModalityOption, PersonaPicker, type PersonaPickerLabels, type PersonaPickerProps, type PickedMemory, type PlanTier, type PrefetchAnswerChip, PrefetchAnswerChips, type PrefetchAnswerChipsProps, type PrefetchChipLabels, PrefetchConfirmChip, type PrefetchConfirmChipProps, type PrefetchLabelOf, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, type PromptOptionsAutoMode, type PromptOptionsCommands, type PromptOptionsInferenceMode, type PromptOptionsLabels, type PromptOptionsMemory, PromptOptionsMenu, type PromptOptionsMenuProps, type PromptOptionsMode, type PromptOptionsModeChoice, type PromptOptionsModel, type PromptOptionsOpenRequest, type PromptOptionsSession, type PromptOptionsTab, PromptPanel, type PromptPanelProps, type PromptTrailingAction, type PromptTrailingState, type ProviderConnectStart, type ProviderConnection, type ProviderConnectionsPort, type ProviderReconnect, QuestionCard, QueuedTurnChips, type QueuedTurnChipsLabels, type QueuedTurnChipsProps, RUNNABLE_KINDS, RailFreshnessLine, type RailFreshnessVM, type RailSyncStatus, RailSyncSummary, type RailSyncSummaryVM, RecipientPicker, type RecipientPickerLabels, type RecipientPickerProps, RecipientsBadge, type ReconnectFailure, type ReconnectFailureReason, type ReconnectPhase, type RovingRadioItemProps, SLOW_AFTER_MS, SpendBreakdown, type SpendLabels, SpendPill, StarterGroup, StarterTile, type StarterTileProps, SuggestionRow, Sunburst, type SunburstProps, SurfaceEmptyState, type SurfaceEmptyStateProps, SurfaceFooter, type SurfaceFooterProps, SurfaceHeader, type SurfaceHeaderHistory, type SurfaceHeaderLabels, type SurfaceHeaderProps, SurfaceLauncher, type SurfaceLauncherBadge, type SurfaceLauncherProps, type SurfaceTab, SurfaceTabs, type SurfaceTabsProps, SyncStatusBadge, TICKET_KINDS, TRANSLATE_BATCH_MAX, TRANSLATION_LABEL_FIELDS, type TeacherModelsPayload, type TenantModelRow, type TicketAutocompleteLabels, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TicketParentVM, type TimelineCatalogLookup, type TimelineFile, type TimelineImage, type TimelineNode, type TimelinePrefetch, ToolConfirmBar, type ToolConfirmBarLabels, type ToolConfirmBarProps, type ToolPreview, ToolStep, type ToolStepLabels, type ToolStepNode, type ToolStepView, TranslatableText, type TranslatableTextProps, type TranslateSend, type TranslatedTextState, type TranslationCache, type TranslationContextValue, type TranslationEntry, type TranslationLabels, TranslationPickerScope, TranslationProvider, type TranslationProviderProps, type UpgradeTarget, type UploadGate, type UploadGateNotice, type UseChatRowActionsOptions, type UseMentionAutocompleteOptions, type UseTicketAutocompleteOptions, WorkSpendPanel, type WorkSpendPanelProps, type WorkStatusLabels, WorkStatusPanel, type WorkStatusPanelProps, attachmentPreviewLabels, attachmentPreviewLabelsFrom, attachmentsOf, avatarColor, brainComposerLabelsFrom, browserDownload, buildSettledTimeline, buildTimeline, bundleLookup, cachedConsumptionSnapshot, chatActivityLabelsFrom, chatDiagnosticsReads, chatErrorMessage, chatHistoryLabelsFrom, chatQuestionsReader, chatSwitcherLabel, chatTicketStatsText, chatTicketsLabelsFrom, chatTicketsLabelsFromBundle, chipPreviewItem, commandOf, composerCatalogLoaded, composerLabels, composerLabelsFrom, composerModel, connectionsLabelsFrom, createChatTicketsRestAdapter, createCloudTranslate, createEvermindRestAdapter, createTranslateBatcher, defaultTranslationCache, detectForeignLanguage, evermindLabelsFromBundle, evermindLearnedStatus, evermindNextAction, fetchConsumptionSnapshot, formatContextTokens, formatDownloadSize, formatDuration, formatElapsed, formatFileSize, formatParams, formatTokens, formatUsd, groupAbsorbed, healthRingColor, indexedDbTranslationCache, inferenceModeCopy, inferenceModeOption, initialsOf, invalidateConsumptionSnapshot, languageDisplayName, liveActivityLabelsFrom, loadEvermindBuilds, localModelLabelsFrom, localRailLabelsFrom, localRailLabelsFromBundle, memoryTranslationCache, modelMoveLine, modelMoveOf, modelRemedies, modelSelectionFrom, ownMessageOf, pendingChangesSummary, planIsPaid, preferredEvermindBuild, prefetchChipLabelsFrom, prefetchLabelText, promptOptionsLabels, promptOptionsLabelsFrom, promptTrailingAction, publishedEvermindModels, railTicketLabel, requestComposerMenu, resolvePendingChangesLabels, resolveTeacherOptions, rovingRadioNextIndex, shellOutcomeOf, spendLabels, spendLabelsFrom, strandedReplyKey, streamingNode, stringsFrom, subscribeConsumptionSnapshot, timelineCatalogLookup, timelineLabelsFrom, toolConfirmLabelsFrom, toolConfirmPreview, toolPreview, toolStepView, translateWithEngines, translationCacheKey, translationLabelsFrom, useAttachmentPreview, useChatActivitySignal, useChatMemorySwitch, useChatParticipants, useChatRowActions, useComposerMenuRequest, useConsumptionSnapshot, useDismissibleNotice, useHideDoneTickets, useInferenceModeGate, useLocalModels, useMentionAutocomplete, useModelFallback, usePickerOpener, usePopover, useProviderReconnect, useRecipientChoice, useRovingRadioGroup, useTicketAutocomplete, useTranslatedText, useTranslationContext, useUploadGate, useVoiceDictation, withLocalModels, workStatusLabels, workStatusLabelsFrom };

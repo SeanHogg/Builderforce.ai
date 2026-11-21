@@ -9,6 +9,7 @@ import type { useBrainConversation } from '@seanhogg/builderforce-brain-embedded
 import { BrainTimeline, ownMessageOf } from '@seanhogg/builderforce-brain-ui';
 import type { InitData } from '../vscodeBridge';
 import { useViewerId } from './useViewerId';
+import { useHostAttachmentDownload } from './attachmentDownload';
 import { VsCodeTranslationProvider } from './VsCodeTranslationProvider';
 import { RunDeltaFootersProvider, renderRunDeltaAfter, useRunDeltaCards } from './runDelta/useRunDeltaCards';
 
@@ -38,6 +39,7 @@ export function VsCodeChatThread({ init, conv, chatId, labels, modelIdentity, on
   const isOwnMessage = useMemo(() => ownMessageOf(viewerId), [viewerId]);
   // The run delta card at the end of each run, and its details panel (PRD 41 §C11).
   const runDelta = useRunDeltaCards(chatId, conv.messages, { onResolve: onResolveDelta });
+  const downloadAttachment = useHostAttachmentDownload(init.labels);
   return (
     <VsCodeTranslationProvider init={init}>
       <RunDeltaFootersProvider value={runDelta.footers}>
@@ -65,6 +67,8 @@ export function VsCodeChatThread({ init, conv, chatId, labels, modelIdentity, on
         conversationKey={chatId}
         prefetch={prefetch}
         renderAfterMessage={renderRunDeltaAfter}
+        // A webview cannot download: the preview's Download goes through the host.
+        onDownloadAttachment={downloadAttachment}
       />
       </RunDeltaFootersProvider>
       {runDelta.panel}

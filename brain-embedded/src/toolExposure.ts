@@ -14,6 +14,7 @@
  * actually handed said otherwise. Everything reads the trace now.
  */
 import type { BrainTraceEvent } from './brainTriage';
+import { FINISH_RECORD_TURNS, PROGRESS_FORCED_LABEL } from './runStore/progressFinishFacts';
 
 /** Tool-catalog exposure for a run, read off the `llm` turns the loop records. */
 export interface ToolExposure {
@@ -37,10 +38,22 @@ export function toolExposureInTrace(events: readonly BrainTraceEvent[]): ToolExp
   let lastTurn: number | null = null;
   let min: number | null = null;
   let catalog: number | null = null;
+  // The progress guard decided a FINISH (`loop.progress_forced`, `forced: 'finish'`): its final report offers nothing ON PURPOSE
+  // (`runStore/progressGuard.ts`) — not a turn starved of tools (VS Code chat #165961). That report is the finish turn itself, or,
+  // when the finish offered ticket tools (`recordTools`), comes after at most FINISH_RECORD_TURNS record turns. Only the first
+  // no-tool turn inside that window is excused; the window closes on it or when it runs out.
+  let finishTurnsLeft = 0;
   for (const ev of events) {
+    if (ev.category === 'message' && ev.label === PROGRESS_FORCED_LABEL) {
+      const f = ev.args as { forced?: unknown; recordTools?: unknown } | undefined;
+      if (f?.forced === 'finish') finishTurnsLeft = typeof f.recordTools === 'number' && f.recordTools > 0 ? FINISH_RECORD_TURNS + 1 : 1;
+    }
     if (ev.category !== 'llm') continue;
     const a = ev.args as { advertisedTools?: unknown; catalogTools?: unknown } | undefined;
-    if (typeof a?.advertisedTools === 'number') {
+    const finalReport = finishTurnsLeft > 0 && a?.advertisedTools === 0;
+    if (typeof a?.advertisedTools === 'number') finishTurnsLeft = finalReport ? 0 : Math.max(0, finishTurnsLeft - 1);
+    // The excused final report is not measured.
+    if (!finalReport && typeof a?.advertisedTools === 'number') {
       lastTurn = a.advertisedTools;
       min = min == null ? a.advertisedTools : Math.min(min, a.advertisedTools);
     }

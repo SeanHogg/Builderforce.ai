@@ -36,6 +36,7 @@ import { partitionUnboundPending, type UnboundSyncRefusal } from './creationDest
 import { importPayload } from './journalRules.js';
 import { isRecordPayloadMarker, materializedEvent } from './recordPayloadMarker.js';
 import { clone } from './clone.js';
+import { awaitsChatBind } from './chatBindLease.js';
 
 export interface RoundLimits {
   readonly maxEvents: number;
@@ -109,6 +110,9 @@ async function walk(
   for (const event of syncable) {
     if (batch.length >= limits.maxEvents) { full = true; break; }
     if (backingOff(event, limits.at)) continue;
+    // A chat import whose bind is in flight goes up after the bind mapping, naming its chat
+    // (`chatBindLease.ts`); its dependents wait with it (the `pendingHere` rule below).
+    if (await awaitsChatBind(tx, event, limits.at)) continue;
     // Blocked behind a dead letter, waiting on an entity the next pass binds, or behind a HELD
     // write (the server would only hold it too): not sendable now.
     if (await stuck(event)) continue;
@@ -187,13 +191,21 @@ export interface MaterializedRound {
  * since the pick) are left out, and so is everything after the first one left out, so a
  * dependent never goes up without what it depends on.
  */
-export async function materializeRound(tx: LocalFirstTransaction, picked: readonly JournalEvent[], maxBytes: number): Promise<MaterializedRound> {
+export async function materializeRound(
+  tx: LocalFirstTransaction,
+  picked: readonly JournalEvent[],
+  maxBytes: number,
+  at: number = Date.now(),
+): Promise<MaterializedRound> {
   const out: JournalEvent[] = [];
   const gone: string[] = [];
   let bytes = 0;
   for (const wired of picked) {
     const current = tx.pendingLookup ? tx.pendingLookup().byId(wired.eventId) : (await tx.pending()).find((event) => event.eventId === wired.eventId);
     if (!current) break;
+    // A bind claimed since the pick: this commit is the one that orders the two
+    // (`chatBindLease.ts`), so the import is left for a round after the bind mapping.
+    if (await awaitsChatBind(tx, current, at)) break;
     // As it is NOW (another commit may have filled it since the pick), with the wired dependencies.
     let wire: JournalEvent = { ...current, dependsOn: wired.dependsOn };
     if (isRecordPayloadMarker(current)) {

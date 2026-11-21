@@ -147,7 +147,7 @@ export function BrainComposer() {
       onConsolidate={consolidation.consolidate}
       onFork={consolidation.fork}
       showVoice
-      pendingAttachments={conv.pendingAttachments}
+      pendingAttachments={conv.attachmentChips}
       onRemoveAttachment={conv.removeAttachment}
       mentionables={participants}
       onMention={chooseRecipient}

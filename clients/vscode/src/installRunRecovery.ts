@@ -176,8 +176,8 @@ function bindHandle(
       return recordRunReleased(store, deps, args);
     },
     async interrupted() {
-      const { store } = await afterRecovery();
-      return listInterruptedRuns(store);
+      const { store, deps } = await afterRecovery();
+      return listInterruptedRuns(store, deps);
     },
     async recordAcknowledged(runId) {
       const { store, deps } = await afterRecovery();

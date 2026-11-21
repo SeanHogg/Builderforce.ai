@@ -18,6 +18,19 @@ function isTombstone(record: LocalRecord): boolean {
   return typeof record.deletedAt === 'string' && record.deletedAt.trim() !== '';
 }
 
+/**
+ * The provenance of a record the SERVER reported: device `server` (not any device, so it is never
+ * "own"), imported, server-observed. A fresh object per call: a record never shares it.
+ */
+export function serverObservedProvenance(): NonNullable<LocalRecord['provenance']> {
+  return { deviceId: 'server', source: 'imported', evidence: 'server-observed' };
+}
+
+/** `tombstoneRecord`, as the server's word: server-observed provenance, and no journal event is written for it. */
+export function serverObservedTombstone<T>(record: LocalRecord<T>, at: string): LocalRecord<T> {
+  return { ...tombstoneRecord(record, at), provenance: serverObservedProvenance() };
+}
+
 /** Mark `record` deleted at `at`, bump its version, and keep id and destination. */
 export function tombstoneRecord<T>(record: LocalRecord<T>, at: string): LocalRecord<T> {
   if (typeof at !== 'string' || at.trim() === '') {

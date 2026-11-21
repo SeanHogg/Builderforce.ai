@@ -40,6 +40,18 @@ export interface RunChat {
   clientChatId?: string;
 }
 
+/**
+ * Whether a tool call's `chatId` names the RUN's chat: its local id, or the server id the run bound
+ * at its start (which a sync receipt may since have moved: `PlatformChatIdentity.serverChatIdNow`).
+ * The ONE check the platform-tool translation and the read union share. The model's args arrive as
+ * JSON, so the same id may be a number or its text.
+ */
+export function namesRunChat(chat: Pick<RunChat, "localChatId" | "serverChatId">, chatId: unknown): boolean {
+  if (chatId === undefined || chatId === null || chatId === "") return false;
+  return (chat.localChatId !== undefined && String(chatId) === String(chat.localChatId))
+    || (chat.serverChatId != null && String(chatId) === String(chat.serverChatId));
+}
+
 /** What the read union and the guard ask of this device. */
 export interface ChatTicketScope {
   readonly current?: RunChat;
@@ -97,11 +109,7 @@ export function localChatTicketScope(
     current,
     async clientChatIdFor(chatId) {
       if (chatId === undefined || chatId === null || chatId === "") return undefined;
-      if (current?.clientChatId) {
-        const sameLocal = current.localChatId !== undefined && String(chatId) === String(current.localChatId);
-        const sameServer = current.serverChatId != null && String(chatId) === String(current.serverChatId);
-        if (sameLocal || sameServer) return current.clientChatId;
-      }
+      if (current?.clientChatId && namesRunChat(current, chatId)) return current.clientChatId;
       // Another chat: the model names chats by their SERVER id (the account's tools list those).
       const serverId = parseSyncId(typeof chatId === "string" ? chatId.trim() : chatId);
       if (serverId === null) return undefined;

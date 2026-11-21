@@ -46,7 +46,7 @@ import { routeToLocalDomainTools } from "./localDomainToolRouting";
 import { ticketServerIdLookup } from "./localTicketIdBridge";
 import { localChatTicketScope } from "./localTicketScope";
 import { platformCapabilityAllows } from "./platformPolicy";
-import type { PlatformChatIdentity } from "./platformTools";
+import { liveChatIdentity, type PlatformChatIdentity } from "./platformTools";
 import type { ToolDef } from "./fileTools";
 import { changeTouches, type LocalFirstStore } from "@builderforce/local-first";
 import type { LocalModelsConfig } from "./localModels";
@@ -184,9 +184,12 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
   const runWrites = new Map<number, string[]>();
   const host = createBrainRunHost({
     tools: async (projectId, children, signal, opts) => {
-      const tools = await brainToolCatalog(secrets, workspaceRoot() || undefined, projectId, children, signal, opts);
+      // The run's chat names its CURRENT server chat at call time: a sync receipt can rebind it mid-run.
+      const chatIdentity = opts.chatIdentity ? liveChatIdentity(opts.chatIdentity, local.identity) : undefined;
+      const withChat = { ...opts, ...(chatIdentity ? { chatIdentity } : {}) };
+      const tools = await brainToolCatalog(secrets, workspaceRoot() || undefined, projectId, children, signal, withChat);
       const catalog = opts.audit && projectId != null ? auditToolCatalog(secrets, tools, projectId, opts.audit) : tools;
-      return routeDomainToolsLocal(ctx, local.store, local.identity, local.persistence, catalog, opts.chatIdentity);
+      return routeDomainToolsLocal(ctx, local.store, local.identity, local.persistence, catalog, chatIdentity);
     },
     workspaceRoot,
     stream: streamForRoute,

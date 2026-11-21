@@ -38,16 +38,8 @@ import { isCodeChangeTool } from '../localWorkspaceTools';
 import { latestStatus, listChatTickets, listingScopeOf, stepSucceeded, ticketMovesInRun, ticketsCreatedInRun } from './chatTickets';
 import { bounded, continuationLimits } from './deadline';
 import { asksThePerson } from './openLinkedWorkHold';
+import { TICKETING_INTENTS } from '../workItemBookkeeping';
 import { nowIso, pushTrace, runTrace } from './runCells';
-
-/**
- * TICKETING language — a filing verb with a ticket noun ("create associated tickets", "file one task per row", "open a separate
- * issue for each"). Data, not logic. `open` counts only with a determiner, so "the open issues" / "open items" never do.
- */
-export const TICKETING_INTENTS: readonly RegExp[] = [
-  /\b(?:create|file|raise|log)\s+(?:[\w'-]+\s+){0,3}?(?:tickets?|tasks?|issues?)\b/i,
-  /\bopen\s+(?:an?|one|new|separate|individual)\s+(?:[\w'-]+\s+){0,2}?(?:tickets?|tasks?|issues?)\b/i,
-];
 
 /** SPEC language — the request is about a spec document (a named `.md` spec path counts too, {@link namedSpecPaths}). */
 export const SPEC_LANGUAGE: readonly RegExp[] = [

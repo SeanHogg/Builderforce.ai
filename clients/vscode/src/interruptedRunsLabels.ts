@@ -15,6 +15,7 @@ export function interruptedRunsLabels(): Record<string, string> {
   const t = vscode.l10n.t;
   return {
     "ir.title": t("Interrupted runs"),
+    "ir.interrupted": t("Interrupted"),
     "ir.at": t("Interrupted {when}"),
     "ir.openChat": t("Open chat"),
     "ir.resume": t("Resume"),

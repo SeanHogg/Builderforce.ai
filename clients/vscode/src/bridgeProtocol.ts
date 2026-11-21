@@ -150,6 +150,11 @@ export const BRAIN_HOST_MESSAGES = [
   /** The panel's attachments through the host (`attachmentIngress.ts`): store a text,
    *  upload a binary to the account, sign a large picture, inline a turn's texts. */
   'attachment.ingress',
+  /** Save an attachment's ORIGINAL from its preview (`attachmentDownload.ts`): request
+   *  `{ name, mime?, url? | data? }` — an account URL the host fetches with its credential,
+   *  a `data:` URL, or the bytes (base64) of a webview `blob:` — → `{ saved: boolean }`
+   *  after the save dialog (false: cancelled), or the person's sentence as the error. */
+  'attachment.download',
   'copy',
   'diagnose',
   /** Open (or reveal) the visualization panel — the board and the run's changes — beside the chat. */

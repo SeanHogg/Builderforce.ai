@@ -224,6 +224,7 @@ export { subscribeToChatMessages } from './chatMessageSubscription';
 export { createBrainRestPersistence } from './brainRestPersistence';
 export type { BrainRestInit, BrainRestOptions, BrainRestPersistence, BrainRestRequest } from './brainRestPersistence';
 export type { UseBrainConversation, UseBrainConversationOptions } from './useBrainConversation';
+export type { ComposerAttachmentChip } from './useComposerAttachments';
 export type { PendingTurn } from './usePendingTurns';
 export { servedModelLabel, type ServedModelLabel } from './servedModelLabel';
 

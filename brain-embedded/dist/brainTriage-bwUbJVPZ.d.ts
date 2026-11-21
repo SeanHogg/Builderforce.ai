@@ -379,18 +379,6 @@ interface RepeatStreak {
     failed: number;
 }
 
-declare function isMutationTool(name: string): boolean;
-/**
- * Whether the run was asked to CHANGE something. Reads the user turns only — the
- * assistant's own restatement of the task would make this trivially self-fulfilling.
- * Uses the first user turn (the request) plus any later one, since a follow-up can
- * turn a question into a task.
- *
- * The per-message predicate is `asksForChange` from `@builderforce/agent-stall`: the
- * SERVER needs the identical judgement to decide whether an answer may be replayed
- * from cache (a change request must never be), so it cannot live here.
- */
-declare function hasEditIntent(messages: BrainMessage[]): boolean;
 /** One run of a multi-run chat, in the per-run line (`runProgressReport.ts`). */
 interface RunSummary {
     ask: string;
@@ -439,12 +427,15 @@ interface RunProgress {
     /** Mutation-tool calls attempted, and how many returned a success. */
     mutationsAttempted: number;
     mutationsSucceeded: number;
+    /** Of {@link mutationsSucceeded}, the board bookkeeping (ticket / task / kanban writes, `runEffect.ts`): never a change on its own. */
+    bookkeepingWrites: number;
     /** True when the user asked for a CHANGE (see {@link hasEditIntent}). */
     editIntent: boolean;
     /**
      * The headline finding: an edit-shaped request, real work performed, and NOT ONE
      * successful mutation to show for it. This is the verdict the pasted report was
-     * missing — the run was not starved of context, it never acted.
+     * missing — the run was not starved of context, it never acted. Board bookkeeping does
+     * not count unless the person asked for board work (VS Code chat #165961).
      */
     noEffect: boolean;
     /**
@@ -1445,4 +1436,4 @@ interface BuildBrainTriageOptions {
  */
 declare function buildBrainTriageReport(opts: BuildBrainTriageOptions): string;
 
-export { describeStreamFailure as $, UNBACKED_TICKET_CLAIM_NOTICE as A, type BrainMessage as B, type ChatInputAttachment as C, type DispatchRefusal as D, type EvermindLearnOutcome as E, UNBACKED_WRITE_CLAIM_NOTICE as F, USAGE_SURFACES as G, type HandOffMode as H, USAGE_SURFACE_HEADER as I, accountUsedInTrace as J, activityTarget as K, answeredInProseInTrace as L, type ModelScore as M, attachEvermindLearn as N, buildBrainTriageReport as O, type PackageDirProbe as P, byoReasonHint as Q, type RoutingByRole as R, type StaffingSummary as S, byoUnresolvedInTrace as T, type UsageSurface as U, type ViewKey as V, byoUnresolvedSummary as W, canRunInParallel as X, computeBrainDiagnostics as Y, computeRunProgress as Z, describeLiveStep as _, type BrainTraceEvent as a, detectAnnouncedButUnmadeToolCall as a0, detectUnbackedTicketClaim as a1, detectUnbackedWriteClaim as a2, formatBrainProvenance as a3, formatBytes as a4, formatDispatchRefusals as a5, formatEvermindLearnStep as a6, formatModelScorecard as a7, formatModelTurnLog as a8, formatStaffingSummary as a9, hasEditIntent as aa, isDispatchTool as ab, isEvermindModel as ac, isMutationTool as ad, isStepMessage as ae, isTicketWriteTool as af, isUsageSurface as ag, midRunNotice as ah, modelFailoversInTrace as ai, modelScorecard as aj, modelTurnLog as ak, modelsUsedInTrace as al, narratedUnadvertisedInTrace as am, parseByoUnresolved as an, parseRoleGateRefusal as ao, serverChatIdOf as ap, shortenTarget as aq, staffingSummaryInTrace as ar, stallRecoveriesInTrace as as, stallUnrecoveredInTrace as at, toolActivity as au, workFiledNotStaffedVerdict as av, type BrainDiagnostics as b, type StreamFailureDetail as c, type BrainRunActivity as d, type BrainChat as e, type SpendSavingsSummary as f, type BrainModality as g, type ScopeClash as h, type HandOffDecision as i, type ParallelSplit as j, type RunProgress as k, type BrainDiagnosticsContext as l, type BrainRunPhase as m, type BuildBrainTriageOptions as n, type ByoUnresolvedEntry as o, type EvermindLearnTarget as p, type ModelTurn as q, type PersonaSubagent as r, ROLE_GATE_REMEDIATION as s, type RepeatStreak as t, type RepeatedTarget as u, STEP_MESSAGE_ROLE as v, type SavingsBreakdown as w, type SavingsBySource as x, type SavingsSourceKey as y, type SpendBreakdown as z };
+export { describeStreamFailure as $, UNBACKED_TICKET_CLAIM_NOTICE as A, type BrainMessage as B, type ChatInputAttachment as C, type DispatchRefusal as D, type EvermindLearnOutcome as E, UNBACKED_WRITE_CLAIM_NOTICE as F, USAGE_SURFACES as G, type HandOffMode as H, USAGE_SURFACE_HEADER as I, accountUsedInTrace as J, activityTarget as K, answeredInProseInTrace as L, type ModelScore as M, attachEvermindLearn as N, buildBrainTriageReport as O, type PackageDirProbe as P, byoReasonHint as Q, type RoutingByRole as R, type StaffingSummary as S, byoUnresolvedInTrace as T, type UsageSurface as U, type ViewKey as V, byoUnresolvedSummary as W, canRunInParallel as X, computeBrainDiagnostics as Y, computeRunProgress as Z, describeLiveStep as _, type BrainTraceEvent as a, detectAnnouncedButUnmadeToolCall as a0, detectUnbackedTicketClaim as a1, detectUnbackedWriteClaim as a2, formatBrainProvenance as a3, formatBytes as a4, formatDispatchRefusals as a5, formatEvermindLearnStep as a6, formatModelScorecard as a7, formatModelTurnLog as a8, formatStaffingSummary as a9, isDispatchTool as aa, isEvermindModel as ab, isStepMessage as ac, isTicketWriteTool as ad, isUsageSurface as ae, midRunNotice as af, modelFailoversInTrace as ag, modelScorecard as ah, modelTurnLog as ai, modelsUsedInTrace as aj, narratedUnadvertisedInTrace as ak, parseByoUnresolved as al, parseRoleGateRefusal as am, serverChatIdOf as an, shortenTarget as ao, staffingSummaryInTrace as ap, stallRecoveriesInTrace as aq, stallUnrecoveredInTrace as ar, toolActivity as as, workFiledNotStaffedVerdict as at, type BrainDiagnostics as b, type StreamFailureDetail as c, type BrainRunActivity as d, type BrainChat as e, type SpendSavingsSummary as f, type BrainModality as g, type ScopeClash as h, type HandOffDecision as i, type ParallelSplit as j, type RunProgress as k, type BrainDiagnosticsContext as l, type BrainRunPhase as m, type BuildBrainTriageOptions as n, type ByoUnresolvedEntry as o, type EvermindLearnTarget as p, type ModelTurn as q, type PersonaSubagent as r, ROLE_GATE_REMEDIATION as s, type RepeatStreak as t, type RepeatedTarget as u, STEP_MESSAGE_ROLE as v, type SavingsBreakdown as w, type SavingsBySource as x, type SavingsSourceKey as y, type SpendBreakdown as z };

@@ -67,7 +67,8 @@ var NARRATION_OPENER = new RegExp(
 var MID_TURN_META_KEY = "midTurn";
 
 // ../packages/agent-loop/src/taskClosedState.ts
-var TASK_CLOSED_STATUSES = ["done", "cancelled", "canceled", "completed", "archived"];
+var ARCHIVED_TASK_STATUS = "archived";
+var TASK_CLOSED_STATUSES = ["done", "cancelled", "canceled", "completed", ARCHIVED_TASK_STATUS];
 var CLOSED = new Set(TASK_CLOSED_STATUSES);
 var TASK_CANCELLED_STATUSES = ["cancelled", "canceled"];
 var CANCELLED = new Set(TASK_CANCELLED_STATUSES);

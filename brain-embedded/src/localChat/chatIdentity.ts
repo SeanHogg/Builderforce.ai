@@ -11,11 +11,18 @@
  *
  * The destination is the ACCOUNT the chat binds into (platform + workspace), read live
  * from the host, so a chat bound in workspace A is not named in workspace B.
+ *
+ * The bind and the chat's sync import never both mint a server chat: the bind claims the
+ * chat's bind lease before its POST (`chatBindLease.ts` in local-first), and an import that
+ * already went up binds the chat through its receipt instead.
  */
 
-import { BOUND_ONLY_VERSION, SCAN_STOP, parseSyncId, queueImport, syncIdText, type EntityDestination, type EntityScope, type LocalFirstStore, type LocalFirstTransaction } from '@builderforce/local-first';
+import { BOUND_ONLY_VERSION, SCAN_STOP, claimChatBind, parseSyncId, queueImport, releaseChatBind, syncIdText, type EntityDestination, type EntityScope, type LocalFirstStore, type LocalFirstTransaction } from '@builderforce/local-first';
 import { chatRecordById, liveRecords, scanLive, type ChatValue } from './records';
 import type { ViewKey } from '../types';
+
+/** How long a bind waits for an already-sent import's receipt to bind the chat instead. */
+const IMPORT_BIND_WAIT_MS = 5_000;
 
 /** What a host supplies so a local chat can be bound. */
 export interface ChatBindingPort {
@@ -69,24 +76,46 @@ export function createLocalChatIdentity(options: { store: LocalFirstStore; devic
     return chat ? { chat, serverId: await boundServerId(tx, chat.id, port.destination()) } : undefined;
   });
 
-  const map = async (clientId: string, destination: EntityDestination, serverId: number): Promise<void> => {
+  const mapIn = async (tx: LocalFirstTransaction, clientId: string, destination: EntityDestination, serverId: number): Promise<void> => {
     const syncId = parseSyncId(serverId);
     if (syncId == null) return; // not a server chat id — nothing to bind to
-    await store.transact(async (tx) => {
-      // An existing binding wins — a sync receipt may have mapped it meanwhile.
-      if (await tx.mapping('chat', clientId, destination)) return;
-      // Both fields for one release: older windows sharing the journal read `serverId` text.
-      await tx.putMapping({ destination, entityType: 'chat', clientEntityId: clientId, syncId, serverId: syncIdText(syncId), serverVersion: BOUND_ONLY_VERSION });
-      // A sync pass may have queued the chat's import before this binding existed: re-queue
-      // it so it names the server chat (and the server adopts it, not mints a second one).
-      let queued = false;
-      await tx.scanPending((event) => {
-        if (event.entityType === 'chat' && event.clientEntityId === clientId && event.operation === 'import') { queued = true; return SCAN_STOP; }
-      });
-      const record = queued ? (await liveRecords<ChatValue>(tx, 'chat', deviceId, (row) => row.id === clientId))[0] : undefined;
-      if (record) await queueImport(tx, record);
+    // An existing binding wins — a sync receipt may have mapped it meanwhile.
+    if (await tx.mapping('chat', clientId, destination)) return;
+    // Both fields for one release: older windows sharing the journal read `serverId` text.
+    await tx.putMapping({ destination, entityType: 'chat', clientEntityId: clientId, syncId, serverId: syncIdText(syncId), serverVersion: BOUND_ONLY_VERSION });
+    // A sync pass may have queued the chat's import before this binding existed: re-queue
+    // it so it names the server chat (and the server adopts it, not mints a second one).
+    let queued = false;
+    await tx.scanPending((event) => {
+      if (event.entityType === 'chat' && event.clientEntityId === clientId && event.operation === 'import') { queued = true; return SCAN_STOP; }
     });
+    const record = queued ? (await liveRecords<ChatValue>(tx, 'chat', deviceId, (row) => row.id === clientId))[0] : undefined;
+    if (record) await queueImport(tx, record);
   };
+
+  /**
+   * The chat's import is already materialized — it may be on the server, so it, not a POST, makes
+   * the server chat: wait (bounded) for its receipt to bind the chat. Undefined when none lands.
+   */
+  const awaitImportBinding = (localId: number): Promise<number | undefined> => new Promise((resolve, reject) => {
+    let settled = false;
+    const settle = (done: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      unsubscribe();
+      done();
+    };
+    const check = () => {
+      read(localId).then((found) => {
+        if (!found) settle(() => resolve(undefined));
+        else if (found.serverId !== undefined) settle(() => resolve(found.serverId));
+      }, (error: unknown) => settle(() => reject(error)));
+    };
+    const timer = setTimeout(() => settle(() => resolve(undefined)), IMPORT_BIND_WAIT_MS);
+    const unsubscribe = store.subscribe(check);
+    check();
+  });
 
   const bindOnce = async (localId: number): Promise<number | undefined> => {
     const found = await read(localId);
@@ -94,10 +123,28 @@ export function createLocalChatIdentity(options: { store: LocalFirstStore; devic
     if (found.serverId !== undefined) return found.serverId;
     const destination = port.destination();
     if (!destination || destination.kind !== 'bound' || !port.allowed()) return undefined;
+    const clientId = found.chat.id;
+    // The lease keeps the chat's import back until the mapping below exists, so the import
+    // names this chat; refused when the import already went up (`chatBindLease.ts`). Decided in
+    // the commit that re-reads the binding: a receipt that landed since the read above wins.
+    const claim = await store.transact(async (tx) => {
+      const bound = await boundServerId(tx, clientId, destination);
+      return bound !== undefined ? { bound } : { claimed: await claimChatBind(tx, clientId, new Date()) };
+    });
+    if ('bound' in claim) return claim.bound;
+    if (!claim.claimed) return awaitImportBinding(localId);
     const { chat } = found.chat.payload;
-    const serverId = await port.createServerChat({ title: chat.title, projectId: chat.projectId ?? null });
+    let serverId: number | null = null;
+    try {
+      serverId = await port.createServerChat({ title: chat.title, projectId: chat.projectId ?? null });
+    } finally {
+      // The mapping and the release in ONE commit: no round sees the lease gone and no mapping.
+      await store.transact(async (tx) => {
+        if (serverId != null) await mapIn(tx, clientId, destination, serverId);
+        await releaseChatBind(tx, clientId);
+      });
+    }
     if (serverId == null) return undefined;
-    await map(found.chat.id, destination, serverId);
     return (await read(localId))?.serverId;
   };
 
@@ -136,7 +183,7 @@ export function createLocalChatIdentity(options: { store: LocalFirstStore; devic
       const destination = port.destination();
       const found = await read(localId);
       if (!found || !destination || destination.kind !== 'bound') return false;
-      await map(found.chat.id, destination, serverId);
+      await store.transact((tx) => mapIn(tx, found.chat.id, destination, serverId));
       return true;
     },
   };

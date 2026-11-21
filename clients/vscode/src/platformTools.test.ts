@@ -25,6 +25,8 @@ vi.mock("./gateway", () => ({
 import {
   clearPlatformToolsCache,
   listPlatformTools,
+  liveChatIdentity,
+  runServerChatId,
   type PlatformChatIdentity,
 } from "./platformTools";
 
@@ -122,6 +124,37 @@ describe("platformTools chatId translation", () => {
     await tool.execute({ chatId: 46169 }, "");
     expect(posts).toHaveLength(1);
     expect((posts[0].body as { arguments: unknown }).arguments).toEqual({ chatId: 46169 });
+  });
+
+  it("regression: the run's start server id and its local id both reach the chat's CURRENT server chat (chat #282, 2026-11-21)", async () => {
+    // Bind made server chat 281 at the run's start; the chat's import then landed as 282. The model
+    // kept passing 281 to builtin_chats_list_tickets and read an empty chat.
+    const tool = await toolFor({ localChatId: 165961, serverChatId: 281, serverChatIdNow: async () => 282 });
+    await tool.execute({ chatId: 281 }, "");
+    await tool.execute({ chatId: "165961" }, "");
+    await tool.execute({ chatId: 282 }, "");
+    expect(posts.map((p) => (p.body as { arguments: unknown }).arguments)).toEqual([{ chatId: 282 }, { chatId: 282 }, { chatId: 282 }]);
+  });
+
+  it("liveChatIdentity reads the chat's binding at call time from the local chat identity", async () => {
+    const bound = new Map<number, number>([[165961, 281]]);
+    const identity = liveChatIdentity({ localChatId: 165961, serverChatId: 281 }, { serverIdFor: async (id) => bound.get(id) });
+    const tool = await toolFor(identity);
+    bound.set(165961, 282);
+    await tool.execute({ chatId: 165961 }, "");
+    expect((posts[0].body as { arguments: unknown }).arguments).toEqual({ chatId: 282 });
+  });
+
+  it("a failed live binding read is reported and the run's start binding stands", async () => {
+    const lines: string[] = [];
+    const identity: PlatformChatIdentity = { localChatId: 165961, serverChatId: 281, serverChatIdNow: async () => { throw new Error("store read failed"); } };
+    await expect(runServerChatId(identity, (line) => lines.push(line))).resolves.toBe(281);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain("store read failed");
+    // Through the tool: the call still reaches the platform with the start's id.
+    const tool = await toolFor(identity);
+    await tool.execute({ chatId: 165961 }, "");
+    expect((posts[0].body as { arguments: unknown }).arguments).toEqual({ chatId: 281 });
   });
 
   it("adapts per-identity within one catalog TTL (two chats cannot share an execute closure)", async () => {

@@ -47,7 +47,7 @@ function formatRuns(runs: readonly RunSummary[]): string {
     const ask = r.ask.replace(/\s+/g, ' ').trim();
     const label = ask.length > ASK_LABEL_CHARS ? `${ask.slice(0, ASK_LABEL_CHARS)}…` : ask;
     return `#${first + i + 1} "${label}" ${r.turns} turn(s) · ${r.calls} call(s)`
-      + `${r.cacheAnswered ? ` · ${r.cacheAnswered} cache-answered` : ''} · ${r.mutationsSucceeded} changed${r.spinning ? ' ⚠ SPUN' : ''}`;
+      + `${r.cacheAnswered ? ` · ${r.cacheAnswered} cache-answered` : ''} · ${changedOf(r)}${r.spinning ? ' ⚠ SPUN' : ''}`;
   });
   return `Runs (latest last; the "Latest run" figures are run #${runs.length}'s): ${first ? `(${first} earlier) ` : ''}${named.join(' | ')}`;
 }
@@ -65,7 +65,22 @@ function formatRuns(runs: readonly RunSummary[]): string {
 function formatChatTotals(runs: readonly RunSummary[]): string {
   const sum = (pick: (r: RunSummary) => number) => runs.reduce((n, r) => n + pick(r), 0);
   return `Chat totals (${runs.length} runs): ${sum((r) => r.turns)} turn(s) · ${sum((r) => r.calls)} call(s)`
-    + ` · ${sum((r) => r.mutationsSucceeded)} change(s) · ${progressDuration(sum((r) => r.activeMs ?? 0))} active`;
+    + ` · ${sum(changesOf)} change(s)${ticketWrites(sum((r) => r.bookkeepingWrites))} · ${progressDuration(sum((r) => r.activeMs ?? 0))} active`;
+}
+
+/** A run's real changes: its successful writes less the ticket / task bookkeeping, which is never the change (chat #165961). */
+function changesOf(r: Pick<RunSummary, 'mutationsSucceeded' | 'bookkeepingWrites'>): number {
+  return r.mutationsSucceeded - r.bookkeepingWrites;
+}
+
+/** The bookkeeping writes, labelled apart from the changes ("" when none). */
+function ticketWrites(n: number): string {
+  return n > 0 ? ` (+${n} ticket/task write(s))` : '';
+}
+
+/** `N changed (+K ticket/task write(s))` for one run. */
+function changedOf(r: RunSummary): string {
+  return `${changesOf(r)} changed${ticketWrites(r.bookkeepingWrites)}`;
 }
 
 /** Options for {@link formatRunProgress}. */
@@ -103,7 +118,7 @@ export function formatRunProgress(p: RunProgress, opts: FormatRunProgressOptions
   const pending = opts.running ? ' · run in progress — no effect verdict yet' : '';
   if (p.editIntent) {
     lines.push(
-      `${scope}Effect: the request asked for a CHANGE · ${p.mutationsAttempted} mutating call(s) attempted, ${p.mutationsSucceeded} succeeded`
+      `${scope}Effect: the request asked for a CHANGE · ${p.mutationsAttempted} mutating call(s) attempted, ${p.mutationsSucceeded} succeeded${bookkeeping(p)}`
       + `${opts.running ? pending : p.noEffect ? ' · ⚠ NOTHING WAS CHANGED' : ''}`,
     );
   } else if (p.mutationsAttempted > 0) {
@@ -134,7 +149,7 @@ export function runProgressVerdict(p: RunProgress): string | null {
     if (!earlier) return null;
     const { run, index } = earlier;
     return `NO PROGRESS in run #${index + 1} of ${p.runs.length} ("${run.ask.replace(/\s+/g, ' ').trim().slice(0, ASK_LABEL_CHARS)}"): it went back over ground it had already covered — ${run.turns} turn(s), ${run.calls} call(s)`
-      + `${run.cacheAnswered ? `, ${run.cacheAnswered} of them answered from the read cache` : ''}, ${run.mutationsSucceeded} change(s). `
+      + `${run.cacheAnswered ? `, ${run.cacheAnswered} of them answered from the read cache` : ''}, ${changesOf(run)} change(s)${ticketWrites(run.bookkeepingWrites)}. `
       + 'The latest run did not spin; the figures above are its own. This is a LOOP in that run, not context pressure — see the Runs line.';
   }
 
@@ -152,7 +167,9 @@ export function runProgressVerdict(p: RunProgress): string | null {
     ? `NO PROGRESS — ${streak ? `${streak}${revisit ? `; ${revisit}` : ''}` : `the run kept going back over ground it had already covered: ${revisit}`}${p.duplicateCalls ? `, and ${p.duplicateCalls} call(s) repeated earlier arguments EXACTLY` : ''}. `
     : 'NO EFFECT — ';
   const effect = p.noEffect
-    ? `The request asked for a change and the run finished with ZERO successful mutating calls${p.mutationsAttempted ? ` (${p.mutationsAttempted} attempted, all failed)` : ' — it never attempted one'}, so nothing was actually modified. `
+    ? p.bookkeepingWrites > 0 && p.bookkeepingWrites === p.mutationsSucceeded
+      ? `change requested, no code changed: the run's only successful writes were ${p.bookkeepingWrites} ticket/task bookkeeping call(s); filing or moving a ticket is not the change, so nothing the person asked for was modified. `
+      : `The request asked for a change and the run finished with ZERO successful mutating calls${p.mutationsAttempted ? ` (${p.mutationsAttempted} attempted, all failed)` : ' — it never attempted one'}, so nothing was actually modified. `
     : '';
   // The remedy differs from every other verdict's, which is the whole reason this
   // one has to outrank them: shrinking context or swapping models does nothing to
@@ -168,4 +185,9 @@ export function runProgressVerdict(p: RunProgress): string | null {
     : 'Check the "Answered from memory" line first — a turn served from the Q&A cache or an Evermind head does NO work by construction, so a run made largely of those has no mutating call to find. Otherwise check whether the agent was ever offered a mutating tool this run (see the tools-advertised line) before concluding the model refused to act.';
 
   return `${loop}${effect}${remedy}`;
+}
+
+/** The bookkeeping share of the successful writes, when there is one: ticket / task writes are never the change itself. */
+function bookkeeping(p: RunProgress): string {
+  return p.bookkeepingWrites > 0 ? ` (${p.bookkeepingWrites} of them ticket/task bookkeeping — not a change)` : '';
 }

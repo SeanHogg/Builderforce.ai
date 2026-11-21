@@ -179,6 +179,8 @@ export function callPreflight(run: BrainRunContext): NonNullable<LoopHooks<ChatC
         for (const f of changed) if (!c.touchedFiles.includes(f)) c.touchedFiles.push(f);
       }
       usedTools.add(HAND_OFF_TOOL);
+      // No coder was started: the run IS the coder, so the hand-off is not progress on the change (chat #165961).
+      run.handOffInline = outcome.mode === 'inline';
       placeholderLedger.add(delegationPlaceholders(outcome));
       return { result: { data: outcome as unknown as Record<string, unknown> } };
     }

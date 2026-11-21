@@ -86,6 +86,8 @@ function bundleKeyOf(scoped: string): string | undefined {
     case 'status': return statusKey(key);
     case 'spend': return spendKey(key);
     case 'connections': return `conn.${key}`;
+    // The attachment preview — the transcript reads the same `att.*` strings (`chatLabels.ts`).
+    case 'attachmentPreview': return `att.${key}`;
     default: return MENTION_KEY[scoped];
   }
 }

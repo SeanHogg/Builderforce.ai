@@ -61,6 +61,8 @@ export function makeT(labels: LabelBundle) {
 function timelineCatalogFromBundle(labels: LabelBundle): TimelineCatalogLookup {
   const bundleKey = (path: string): string => {
     if (path.startsWith('chatError.')) return `app.${path.slice('chatError.'.length)}`;
+    // The attachment preview: the composer's chips read the same `att.*` strings.
+    if (path.startsWith('attachmentPreview.')) return `att.${path.slice('attachmentPreview.'.length)}`;
     if (!path.startsWith('live.')) return `tl.${path}`;
     const field = path.slice('live.'.length);
     if (field === 'thinking') return 'tl.thinking';

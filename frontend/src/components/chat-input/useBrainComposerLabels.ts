@@ -71,6 +71,9 @@ function composerCatalogPath(scoped: string): string | undefined {
       return spendCatalogPath(key);
     case 'connections':
       return `providerConnections.${key}`;
+    case 'attachmentPreview':
+      // The one copy the transcript's attachment preview reads too (`brain.timeline`).
+      return `brain.timeline.attachmentPreview.${key}`;
     default:
       return PICKER_PATH[scoped];
   }

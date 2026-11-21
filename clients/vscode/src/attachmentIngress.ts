@@ -29,6 +29,7 @@ import { MAX_INLINE_TEXT_BYTES } from "@seanhogg/builderforce-brain-embedded";
 import type { InferenceMode } from "@builderforce/local-first";
 import { inlineMentions, mentionBudget, type MentionBudget } from "@builderforce/tool-output-policy";
 import { ingressBlock, type IngressDeps, type IngressText } from "./contextIngress";
+import { uploadMaxBytes } from "./attachmentLimits";
 
 /** Texts kept at once. A pending attachment that was never sent is forgotten oldest first. */
 export const MAX_STORED_ATTACHMENT_TEXTS = 64;
@@ -38,15 +39,10 @@ export const MAX_STORED_TEXT_CHARS = MAX_INLINE_TEXT_BYTES;
 export const MAX_STORED_TOTAL_CHARS = 8 * MAX_STORED_TEXT_CHARS;
 
 /**
- * The platform's upload ceiling for a MIME type — mirrors `assetMaxBytes` in
- * `api/src/application/assets/tenantAssetStore.ts` (held equal by `attachmentLimits.test.ts`).
+ * The platform's upload ceiling for a MIME type (`attachmentLimits.ts`, the one copy).
  * Checked here so a file the platform will refuse is never encoded, posted and sent.
  */
-export const UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
-export const UPLOAD_MAX_VIDEO_BYTES = 100 * 1024 * 1024;
-export function uploadMaxBytes(mime: string): number {
-  return mime.startsWith("video/") ? UPLOAD_MAX_VIDEO_BYTES : UPLOAD_MAX_BYTES;
-}
+export { UPLOAD_MAX_BYTES, UPLOAD_MAX_VIDEO_BYTES, uploadMaxBytes } from "./attachmentLimits";
 
 /** Why a file may not go to the account, or null when it may. */
 export type UploadRefusal = { reason: "local-only" } | { reason: "too-large"; maxBytes: number };

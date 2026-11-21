@@ -174,14 +174,37 @@ export function attachmentsOf(message: BrainMessage): ChatInputAttachment[] {
 
 const ATTACHED_LINE = /^\[Attached:\s*(.+?)\]\((.*)\)\s*$/;
 
-/** The `[Attached: name](href)` lines a sent message carries, name → href (the first per name). */
-function attachedLinks(text: string): Map<string, string> {
-  const links = new Map<string, string>();
+/** The `[Attached: name](href)` lines a sent message carries, in order. Only a safe href is kept (`safeAttachmentUrl`). */
+function attachedLinks(text: string): Array<{ name: string; href: string }> {
+  const links: Array<{ name: string; href: string }> = [];
   for (const line of text.split('\n')) {
     const m = line.match(ATTACHED_LINE);
-    if (m && m[2] && !links.has(m[1].trim())) links.set(m[1].trim(), m[2].trim());
+    const href = m ? safeAttachmentUrl(m[2]) : undefined;
+    if (m && href) links.push({ name: m[1].trim(), href });
   }
   return links;
+}
+
+/** The last path segment of a URL, decoded — an upload link ends in its key. */
+function keyTail(href: string): string {
+  const path = href.split(/[?#]/)[0] ?? '';
+  try {
+    return decodeURIComponent(path);
+  } catch {
+    return path;
+  }
+}
+
+/**
+ * An attachment's own link: the one that names its KEY (an upload URL ends in it), else the
+ * first unclaimed one with its name — two files with the same name never share one link.
+ */
+function linkFor(a: Pick<ChatInputAttachment, 'key' | 'name'>, links: Array<{ name: string; href: string }>, claimed: Set<number>): string | undefined {
+  const byKey = a.key ? links.findIndex((l, i) => !claimed.has(i) && keyTail(l.href).endsWith(`/${a.key}`)) : -1;
+  const index = byKey >= 0 ? byKey : links.findIndex((l, i) => !claimed.has(i) && l.name === a.name.trim());
+  if (index < 0) return undefined;
+  claimed.add(index);
+  return links[index]!.href;
 }
 
 /**

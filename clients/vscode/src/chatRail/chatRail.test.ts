@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  chatTicketLinkId,
   createMemoryLocalFirstStore,
+  createPlatformPolicy,
+  createSyncCoordinator,
   newLocalRecord,
   type EntityDestination,
   type LocalFirstStore,
@@ -361,5 +364,72 @@ describe("chat rail service", () => {
   it("refuses a link for a chat the store does not hold", async () => {
     const store = await seededStore();
     expect(await service(store, false).link(404, { kind: "task", ref: "1" }, "linked")).toEqual({ ok: false, error: "chat_not_found" });
+  });
+});
+
+describe("regression: a ticket filed in a chat stays on its rail after the sync pull (chat #282, local #165961, 2026-11-21)", () => {
+  // The panel's chat: local view key 165961, bound to server chat 282. The agent's `ticket-create`
+  // wrote the ticket and a 'created' link; sync imported both (ticket 6980, link row 900). The next
+  // pull served the link back in the SERVER's form `{ chatId, ticketId, linkType }`, which used to
+  // replace the device's `{ chatClientId, ticketClientId, ... }`: the rail selects a chat's links by
+  // its client id, so the header read "No tickets linked yet" and diagnostics "Linked tickets (0)".
+  const BOUND_CHAT = "730aabd3-7307-48c6-8300-0b82e466c961";
+  const TICKET = "ad27cd0a-ee7a-495e-aee7-e7272576b622";
+  const LINK = chatTicketLinkId(BOUND_CHAT, TICKET);
+  const AT = "2026-11-21T19:29:35.105Z";
+  const SERVER_FORM = { chatId: "282", linkType: "created", ticketId: "6980" };
+
+  async function filedStore(linkPayload: object): Promise<LocalFirstStore> {
+    const store = createMemoryLocalFirstStore();
+    await store.transact(async (tx) => {
+      await tx.put(newLocalRecord({
+        id: BOUND_CHAT, entityType: "chat", deviceId: "device-1", destination: DEST,
+        payload: { clientId: BOUND_CHAT, chat: { id: 165961, title: "Interrupted runs" } },
+      }));
+      await tx.putMapping({ destination: DEST, entityType: "chat", clientEntityId: BOUND_CHAT, syncId: 282 as never, serverId: "282", serverVersion: 2 });
+      await tx.put(newLocalRecord({
+        id: TICKET, entityType: "ticket", deviceId: "device-1", destination: DEST,
+        payload: { title: "Restore interrupted-run title", status: "backlog", projectId: "11", chatClientId: BOUND_CHAT },
+      }));
+      await tx.putMapping({ destination: DEST, entityType: "ticket", clientEntityId: TICKET, syncId: 6980 as never, serverId: "6980", serverVersion: 2 });
+      await tx.put(newLocalRecord({ id: LINK, entityType: "chat-ticket-link", deviceId: "device-1", destination: DEST, payload: linkPayload, occurredAt: AT }));
+      await tx.putMapping({ destination: DEST, entityType: "chat-ticket-link", clientEntityId: LINK, syncId: 900 as never, serverId: "900", serverVersion: 1 });
+    });
+    return store;
+  }
+
+  /** One sync round whose pull serves `records` (the server's stored rows). */
+  async function pull(store: LocalFirstStore, records: unknown[]): Promise<void> {
+    const policy = createPlatformPolicy();
+    policy.set({ synchronize: true });
+    await createSyncCoordinator({
+      store, policy, deviceId: "device-1", lease: { run: (_owner, work) => work() },
+      transport: { push: async () => [], pull: async () => ({ records: records as never[] }) },
+    }).synchronize(DEST);
+  }
+
+  const serverRow = {
+    id: LINK, entityType: "chat-ticket-link", schemaVersion: 1, version: 1, destination: DEST, occurredAt: AT, updatedAt: AT,
+    payload: SERVER_FORM, provenance: { source: "imported", evidence: "client-reported" }, syncId: 900, serverId: "900",
+  };
+
+  it("the pulled server-form link keeps the device's client ids, and the rail read by the server id shows the ticket", async () => {
+    const store = await filedStore({ chatClientId: BOUND_CHAT, ticketClientId: TICKET, chatServerId: "282", linkType: "created" });
+    await pull(store, [serverRow]);
+    const link = (await store.export()).records.find((r) => r.id === LINK);
+    expect(link?.payload).toMatchObject({ chatClientId: BOUND_CHAT, ticketClientId: TICKET, linkType: "created" });
+    const rail = await service(store, false).read(282);
+    expect(rail.found).toBe(true);
+    expect(rail.tickets.map((t) => t.clientId)).toEqual([TICKET]);
+    expect((await service(store, false).read(BOUND_CHAT)).tickets).toHaveLength(1);
+  });
+
+  it("a link an earlier pull already stored in the server's form is repaired on the next pull", async () => {
+    const store = await filedStore(SERVER_FORM);
+    expect((await service(store, false).read(282)).tickets).toHaveLength(0);
+    await pull(store, []);
+    const link = (await store.export()).records.find((r) => r.id === LINK);
+    expect(link?.payload).toEqual({ chatClientId: BOUND_CHAT, ticketClientId: TICKET, chatServerId: "282", ticketServerId: "6980", linkType: "created" });
+    expect((await service(store, false).read(282)).tickets.map((t) => t.clientId)).toEqual([TICKET]);
   });
 });
