@@ -282,6 +282,8 @@
     "mentionTitle": "Richten an",
     "mentionAgent": "Agent",
     "mentionHuman": "Person",
+    "mentionNoMatches": "Keine passenden Empfänger",
+    "commandNoMatches": "Keine passenden Befehle",
     "model": "Modell",
     "modelInUse": "Verwendetes Modell",
     "searchModels": "Modelle suchen…",

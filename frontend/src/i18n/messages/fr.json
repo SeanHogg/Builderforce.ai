@@ -282,6 +282,8 @@
     "mentionTitle": "Adresser à",
     "mentionAgent": "Agent",
     "mentionHuman": "Personne",
+    "mentionNoMatches": "Aucun destinataire correspondant",
+    "commandNoMatches": "Aucune commande correspondante",
     "model": "Modèle",
     "modelInUse": "Modèle utilisé",
     "searchModels": "Rechercher des modèles…",

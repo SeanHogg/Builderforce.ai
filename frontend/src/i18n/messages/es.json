@@ -282,6 +282,8 @@
     "mentionTitle": "Dirigir a",
     "mentionAgent": "Agente",
     "mentionHuman": "Persona",
+    "mentionNoMatches": "No hay destinatarios coincidentes",
+    "commandNoMatches": "No hay comandos coincidentes",
     "model": "Modelo",
     "modelInUse": "Modelo en uso",
     "searchModels": "Buscar modelos…",

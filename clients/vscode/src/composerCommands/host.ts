@@ -21,6 +21,7 @@ import { LAUNCH_COMMAND_ID, MANIFEST_COMMAND_ID, STARTER_KIT_COMMAND_ID } from "
 import { FolderLaunchers } from "./folderLaunchers";
 import { composerCommandText, type ComposerCommandText } from "./labels";
 import { launchExecutor } from "./launch";
+import { launcherPageLabels } from "./launcherLabels";
 import { MANIFEST_FILE_NAME, manifestInitExecutor, type ReadFolderFiles } from "./manifestInit";
 import { integratedBrowser, openUrlVerbatim } from "./openExternal";
 import type { ComposerCommandsInit, ComposerInputResult } from "./reply";
@@ -152,7 +153,8 @@ export function composerCommandHost(ctx: vscode.ExtensionContext): ComposerComma
             port,
             text,
             launchers,
-            start: (request) => createLocalLauncher({ ...request, distDir, tls: { storeDir: caDir } }),
+            // The page's own strings in the editor's language, worded when the launcher starts.
+            start: (request) => createLocalLauncher({ ...request, distDir, tls: { storeDir: caDir }, labels: launcherPageLabels() }),
             trust: (ca, force) => ensureLauncherTrust(ca, launcherTrustDeps(ctx, text), force),
             openExternal: openUrlVerbatim((target) => vscode.env.openExternal(target)),
             editorBrowser,

@@ -2,6 +2,12 @@ import * as path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { composeKit } from "@builderforce/ide-templates/kits";
 
+// The real kits, spied on so one test can add a file under an ignored folder.
+vi.mock("@builderforce/ide-templates/kits", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@builderforce/ide-templates/kits")>();
+  return { ...actual, composeKit: vi.fn(actual.composeKit) };
+});
+
 vi.mock("vscode", () => ({
   l10n: { t: (message: string, ...args: unknown[]) => message.replace(/\{(\d+)\}/g, (_, index: string) => String(args[Number(index)])) },
 }));
@@ -50,13 +56,21 @@ describe("/starter-kit", () => {
     expect(reply).toMatchObject({ kind: "text", tone: "info" });
   });
 
-  it("regression: still names a kit file already inside an ignored folder as a conflict", async () => {
-    const port = fakeWorkspacePort([app], { [at(".builderforce/symbols.json")]: "{}", [at(kitFiles[0]!)]: "mine" });
+  it("regression: asks before overwriting a kit file inside an ignored folder, though the folder looks empty", async () => {
+    // A kit that writes into an ignored folder (no shipped kit does yet): only ignored entries exist,
+    // so the folder counts as empty — the existing `.vscode/extensions.json` must still be a named conflict.
+    const real = composeKit("react-node", ["postgres"]);
+    vi.mocked(composeKit).mockReturnValueOnce({ ...real, files: { ...real.files, ".vscode/extensions.json": "{\"recommendations\":[]}" } });
+    const port = fakeWorkspacePort([app], {
+      [at(".builderforce/symbols.json")]: "{}",
+      [at(".vscode/extensions.json")]: "mine",
+    });
     port.approve = false;
     await run(port);
     expect(port.asked).toHaveLength(1);
     expect(port.asked[0]!.approve).toBe("Overwrite and write");
-    expect(port.files.get(at(kitFiles[0]!))).toBe("mine");
+    expect(port.asked[0]!.message).toContain(".vscode/extensions.json");
+    expect(port.files.get(at(".vscode/extensions.json"))).toBe("mine");
   });
 
   it("writes nothing when the approval is declined", async () => {

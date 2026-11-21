@@ -82,7 +82,8 @@ export interface TrustOutcome {
   trusted: boolean;
 }
 
-const quiet: TrustOutcome = { lines: [], failed: false, trusted: true };
+/** Nothing to say and nothing to stop a browser: a trusted CA, no TLS, or no trust step at all (`launch.ts`). */
+export const NO_TRUST_STEP: Readonly<TrustOutcome> = Object.freeze({ lines: [], failed: false, trusted: true });
 const untrusted = (lines: string[], failed = false): TrustOutcome => ({ lines, failed, trusted: false });
 
 /** The `execFile` options a trust step runs with. */
@@ -157,18 +158,18 @@ async function checkTrusted(ca: LauncherCa, deps: LauncherTrustDeps): Promise<bo
 /** Make sure the person was asked about this CA. `force` (`/launch trust`) asks again whatever was decided. */
 export async function ensureLauncherTrust(ca: LauncherCa | null | undefined, deps: LauncherTrustDeps, force = false): Promise<TrustOutcome> {
   const { text } = deps;
-  if (!ca) return quiet;
+  if (!ca) return NO_TRUST_STEP;
   const fingerprint = caFingerprint(ca);
   const trusted = await checkTrusted(ca, deps);
   if (trusted) {
     await deps.decision.set({ fingerprint, trusted: true });
-    return quiet;
+    return NO_TRUST_STEP;
   }
   const previous = deps.decision.get();
   // A recorded "trusted" the platform now denies (removed from the store) is asked again.
   const stale = previous?.trusted === true && trusted === false;
   if (!force && !stale && previous?.fingerprint === fingerprint) {
-    return previous.trusted ? quiet : untrusted([text.trustUntrusted]);
+    return previous.trusted ? NO_TRUST_STEP : untrusted([text.trustUntrusted]);
   }
 
   const answer = await deps.ask(text.trustQuestion, text.trustApprove, text.trustSkip);

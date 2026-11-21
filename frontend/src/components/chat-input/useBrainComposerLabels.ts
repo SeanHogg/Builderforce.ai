@@ -44,9 +44,11 @@ const PICKER_PATH: Readonly<Record<string, string>> = {
   'mention.title': 'chatInput.mentionTitle',
   'mention.agent': 'chatInput.mentionAgent',
   'mention.human': 'chatInput.mentionHuman',
+  'mention.noMatches': 'chatInput.mentionNoMatches',
   'ticket.title': 'chatInput.ticketTagTitle',
   'ticket.status': 'chatInput.ticketTagStatus',
   'ticket.noMatches': 'chatInput.ticketTagNoMatches',
+  'command.noMatches': 'chatInput.commandNoMatches',
 };
 
 /** Where one of brain-ui's scoped composer keys lives in the web catalog. */

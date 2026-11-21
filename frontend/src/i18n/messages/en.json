@@ -268,6 +268,8 @@
     "mentionTitle": "Direct to",
     "mentionAgent": "Agent",
     "mentionHuman": "Person",
+    "mentionNoMatches": "No one to direct to",
+    "commandNoMatches": "No matching commands",
     "model": "Model",
     "modelInUse": "Model in use",
     "searchModels": "Search models…",

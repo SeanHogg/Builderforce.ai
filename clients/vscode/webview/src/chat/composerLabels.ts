@@ -56,9 +56,11 @@ const MENTION_KEY: Readonly<Record<string, string>> = {
   'mention.title': 'app.mentionTitle',
   'mention.agent': 'app.mentionAgent',
   'mention.human': 'app.mentionHuman',
+  'mention.noMatches': 'app.mentionNoMatches',
   'ticket.title': 'app.ticketTagTitle',
   'ticket.status': 'app.ticketTagStatus',
   'ticket.noMatches': 'app.ticketTagNoMatches',
+  'command.noMatches': 'app.commandNoMatches',
 };
 
 function statusKey(key: string): string {

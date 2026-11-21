@@ -2162,7 +2162,11 @@
 }
 .bf-cmp-typeahead__item.is-active {
   background: var(--surface-coral-soft, var(--vscode-list-activeSelectionBackground, rgba(59, 130, 246, 0.18)));
+  /* The foreground that belongs with that background, so high-contrast themes stay readable. */
+  color: var(--text-primary, var(--vscode-list-activeSelectionForeground, var(--bf-text, inherit)));
 }
+.bf-cmp-typeahead__item.is-active .bf-cmp-typeahead__detail,
+.bf-cmp-typeahead__item.is-active .bf-cmp-typeahead__tag { color: inherit; opacity: 0.8; }
 .bf-cmp-typeahead__item.is-disabled { cursor: default; opacity: 0.6; }
 .bf-cmp-typeahead__col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .bf-cmp-typeahead__name,

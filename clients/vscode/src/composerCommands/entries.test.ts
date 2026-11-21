@@ -45,6 +45,13 @@ describe("composer command entries", () => {
     expect(without.args[0]!.choices).toBeUndefined();
   });
 
+  it("never lists an environment named like a /launch subcommand: the subcommand is listed once", () => {
+    const environments = [{ value: "external" }, { value: "local" }, { value: "stop" }, { value: "trust" }];
+    const launch = buildComposerCommands({ ...context, environments }).find((command) => command.id === "launch")!;
+    expect(launch.args[0]!.choices?.map((choice) => choice.value)).toEqual(["local", "external", "stop", "trust"]);
+    expect(launch.example).toBe("/launch local");
+  });
+
   it("disables only /launch, with its reason, when the host cannot launch (a remote extension host)", () => {
     const commands = buildComposerCommands({ ...context, launchUnavailableReason: "remote host" });
     expect(commands.find((command) => command.id === "launch")!.availability).toEqual({ ok: false, reason: "remote host" });

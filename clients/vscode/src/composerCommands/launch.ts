@@ -25,7 +25,7 @@
 import type { ComposerCommandExecutor } from "./dispatch";
 import type { ComposerCommandText } from "./labels";
 import { LAUNCH_COMMAND_ID, LAUNCH_EXTERNAL, LAUNCH_STOP, LAUNCH_TRUST } from "./entries";
-import type { LauncherCa, TrustOutcome } from "./launcherTrust";
+import { NO_TRUST_STEP, type LauncherCa, type TrustOutcome } from "./launcherTrust";
 import type { FolderLaunchers, RunningLauncher } from "./folderLaunchers";
 import { MANIFEST_FILE_NAME, type DetectManifest, type ReadFolderFiles } from "./manifestInit";
 import { chooseFolder, inFolder, type ComposerWorkspacePort } from "./workspacePort";
@@ -85,14 +85,20 @@ export function launchExecutor(deps: LaunchDeps): ComposerCommandExecutor {
     force: boolean,
     askedExternal: boolean,
   ): Promise<ComposerReply> => {
-    const trust: TrustOutcome = deps.trust ? await deps.trust(launcher.ca, force) : { lines: [], failed: false, trusted: true };
+    const trust: TrustOutcome = deps.trust ? await deps.trust(launcher.ca, force) : NO_TRUST_STEP;
     const available = await deps.editorBrowser.available();
     const where: { external: boolean; why?: string } = askedExternal
       ? { external: true }
       : await openInEditor(launcher.url, available, trust.trusted);
     if (where.external) await deps.openExternal(launcher.url);
+    // In VS Code only on a trusted certificate; an untrusted one is offered `/launch trust` (which asks again, then opens there).
+    const inEditor: ComposerReplyAction[] = !available
+      ? []
+      : trust.trusted
+        ? [{ label: text.launchOpenInEditor, command: `/${LAUNCH_COMMAND_ID}` }]
+        : [{ label: text.launchTrustAndOpenInEditor, command: `/${LAUNCH_COMMAND_ID} ${LAUNCH_TRUST}` }];
     const actions: ComposerReplyAction[] = [
-      ...(available ? [{ label: text.launchOpenInEditor, command: `/${LAUNCH_COMMAND_ID}` }] : []),
+      ...inEditor,
       { label: text.launchOpenExternal, command: `/${LAUNCH_COMMAND_ID} ${LAUNCH_EXTERNAL}` },
     ];
     return {

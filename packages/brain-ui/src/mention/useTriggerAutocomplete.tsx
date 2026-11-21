@@ -14,7 +14,7 @@
  * submitting. With no rows (nothing matches) only Escape is the picker's: Enter still
  * submits, so a line that merely starts with a trigger character is never trapped.
  */
-import { useCallback, useEffect, useId, useMemo, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
 import { TriggerPopup } from './TriggerPopup';
 
 /** The trigger fragment being typed at the caret: `[start, end)` is what a pick replaces. */
@@ -60,8 +60,15 @@ export interface UseTriggerAutocompleteOptions<T> {
   listLabel: string;
   /** A visible heading above the rows; omitted ⇒ none. */
   heading?: string;
-  /** The row shown when nothing matches, so the person sees the trigger was recognised. */
+  /** The row shown when candidates exist but none matches, so the person sees the trigger was recognised. */
   emptyLabel: string;
+  /** Open (on the empty row) even with no candidates at all. Default false: nothing to offer ⇒ stay closed. */
+  openWithoutCandidates?: boolean;
+  /**
+   * Enter on a row `isDisabled` refuses: the text to submit instead of what was typed (e.g. the full `/<id>`, so the
+   * host can say why it cannot run). The box's own submit then runs. Omitted ⇒ the typed text is submitted.
+   */
+  disabledEnterEdit?: (item: T, token: TriggerToken, text: string) => TriggerEdit | null;
 }
 
 /** ARIA for the textarea while a trigger owns it (textbox + listbox popup). */
@@ -89,26 +96,35 @@ const sameToken = (a: TriggerToken | null, b: TriggerToken | null) =>
 export function useTriggerAutocomplete<T>(opts: UseTriggerAutocompleteOptions<T>): TriggerAutocomplete {
   const {
     textareaRef, value, setValue, enabled, detect, candidates, filter, itemKey, renderItem, isDisabled, edit, onPick,
-    listLabel, heading, emptyLabel,
+    listLabel, heading, emptyLabel, openWithoutCandidates = false, disabledEnterEdit,
   } = opts;
   const [token, setToken] = useState<TriggerToken | null>(null);
   const [index, setIndex] = useState(0);
   const baseId = useId();
   const listId = `${baseId}-list`;
   const optionId = useCallback((i: number) => `${baseId}-opt-${i}`, [baseId]);
+  // The text a pick just wrote (and where it put the caret): re-detecting on it would re-open the popup on the
+  // reference the pick inserted (`#9`), so it is skipped until the person changes the text or moves the caret.
+  // `settling` covers the frame between the new value and the caret the pick sets.
+  const lastPick = useRef<(TriggerEdit & { settling: boolean }) | null>(null);
 
   const matches = useMemo(
     () => (token && enabled ? filter(candidates, token.query) : []),
     [token, enabled, filter, candidates],
   );
-  const open = enabled && token != null;
+  // No candidates at all ⇒ closed (nothing here to offer), unless the trigger says its empty row is still news.
+  const open = enabled && token != null && (candidates.length > 0 || openWithoutCandidates);
   const active = matches.length ? Math.min(index, matches.length - 1) : 0;
 
   // Re-detect the token from the live caret. Cheap; safe to call often.
   const recompute = useCallback(() => {
     const el = textareaRef.current;
     if (!el || !enabled) { setToken(null); return; }
-    const next = detect(el.value, el.selectionStart ?? el.value.length);
+    const caret = el.selectionStart ?? el.value.length;
+    const pick = lastPick.current;
+    if (pick && el.value === pick.text && (pick.settling || caret === pick.caret)) { setToken(null); return; }
+    lastPick.current = null;
+    const next = detect(el.value, caret);
     setToken((prev) => (sameToken(prev, next) ? prev : next));
     setIndex(0);
   }, [textareaRef, enabled, detect]);
@@ -116,23 +132,34 @@ export function useTriggerAutocomplete<T>(opts: UseTriggerAutocompleteOptions<T>
   // The value change commits the caret too, so recompute after every edit.
   useEffect(() => { recompute(); }, [value, recompute]);
 
-  const choose = useCallback((item: T) => {
+  /** Write an edit into the box and put the caret where it says, after React commits the value. */
+  const apply = useCallback((next: TriggerEdit) => {
+    const pick = { ...next, settling: true };
+    lastPick.current = pick;
+    setValue(next.text);
+    requestAnimationFrame(() => {
+      const node = textareaRef.current;
+      if (node) { node.focus(); try { node.setSelectionRange(next.caret, next.caret); } catch { /* noop */ } }
+      pick.settling = false;
+    });
+  }, [setValue, textareaRef]);
+
+  const tokenNow = useCallback(() => {
     const el = textareaRef.current;
-    const tk = token ?? (el ? detect(el.value, el.selectionStart ?? 0) : null);
+    return token ?? (el ? detect(el.value, el.selectionStart ?? 0) : null);
+  }, [token, detect, textareaRef]);
+
+  const choose = useCallback((item: T) => {
+    const tk = tokenNow();
     const next = tk ? edit(item, tk, value) : null;
-    if (next) {
-      setValue(next.text);
-      // Put the caret where the pick says, after React commits the new value.
-      requestAnimationFrame(() => {
-        const node = textareaRef.current;
-        if (node) { node.focus(); try { node.setSelectionRange(next.caret, next.caret); } catch { /* noop */ } }
-      });
-    }
+    if (next) apply(next);
     setToken(null);
     onPick(item);
-  }, [token, detect, edit, value, setValue, onPick, textareaRef]);
+  }, [tokenNow, edit, value, apply, onPick]);
 
   const onKeyDown = useCallback((e: KeyboardEvent<HTMLTextAreaElement>): boolean => {
+    // An IME is composing: every key is the input method's.
+    if (e.nativeEvent.isComposing || e.keyCode === 229) return false;
     if (!open) return false;
     if (e.key === 'Escape') { e.preventDefault(); setToken(null); return true; }
     // Nothing to pick: the keys stay the box's (Enter submits, arrows move the caret).
@@ -142,17 +169,25 @@ export function useTriggerAutocomplete<T>(opts: UseTriggerAutocompleteOptions<T>
       case 'ArrowUp': e.preventDefault(); setIndex((active - 1 + matches.length) % matches.length); return true;
       case 'Enter':
       case 'Tab': {
-        if (e.nativeEvent.isComposing) return false;
+        // Shift+Enter is a newline, never a pick.
+        if (e.key === 'Enter' && e.shiftKey) return false;
         const item = matches[active];
-        // A row that cannot be picked: Enter submits the line, and the host says why.
-        if (isDisabled?.(item)) return false;
+        if (isDisabled?.(item)) {
+          // A row that cannot be picked: Enter submits it as typed in full (the host says why), Tab does nothing.
+          if (e.key === 'Enter') {
+            const tk = tokenNow();
+            const next = tk && disabledEnterEdit ? disabledEnterEdit(item, tk, value) : null;
+            if (next) { lastPick.current = { ...next, settling: true }; setValue(next.text); setToken(null); }
+          }
+          return false;
+        }
         e.preventDefault();
         choose(item);
         return true;
       }
       default: return false;
     }
-  }, [open, matches, active, isDisabled, choose]);
+  }, [open, matches, active, isDisabled, disabledEnterEdit, tokenNow, value, setValue, choose]);
 
   const popup = open
     ? (

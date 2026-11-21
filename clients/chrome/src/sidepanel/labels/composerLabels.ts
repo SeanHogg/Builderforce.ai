@@ -154,9 +154,11 @@ const PICKER_KEY: Readonly<Record<string, MessageKey>> = {
   'mention.title': 'mnTitle',
   'mention.agent': 'mnAgent',
   'mention.human': 'mnHuman',
+  'mention.noMatches': 'mnNoMatches',
   'ticket.title': 'mnTicketTitle',
   'ticket.status': 'mnTicketStatus',
   'ticket.noMatches': 'mnTicketNoMatches',
+  'command.noMatches': 'mnCommandNoMatches',
 };
 
 const isLocalModelField = (key: string): key is keyof LocalModelLabels =>

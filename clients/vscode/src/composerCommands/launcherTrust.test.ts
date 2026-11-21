@@ -22,6 +22,7 @@ import {
 } from "./launcherTrust";
 import { FolderLaunchers } from "./folderLaunchers";
 import { launchExecutor } from "./launch";
+import type { TrustOutcome } from "./launcherTrust";
 import { fakeWorkspacePort, folderRef } from "./testWorkspacePort";
 
 const text = composerCommandText();
@@ -72,14 +73,14 @@ function setup(options: SetupOptions = {}) {
 describe("the launcher's certificate trust", () => {
   it("asks once per CA, runs the runtime's command (absolute tool, CA store as cwd), and remembers it", async () => {
     const { deps, stored } = setup();
-    expect(await ensureLauncherTrust(CA, deps)).toEqual({ lines: [text.trustDone], failed: false });
+    expect(await ensureLauncherTrust(CA, deps)).toEqual({ lines: [text.trustDone], failed: false, trusted: true });
     expect(deps.plan).toHaveBeenCalledWith(CA);
     expect(deps.exec).toHaveBeenCalledWith(ADD, "trust");
     const ran = deps.exec.mock.calls[0]![0];
     expect(path.win32.isAbsolute(ran.command)).toBe(true);
     expect(ran.cwd).toBe(CA_DIR);
     expect(stored()).toEqual({ fingerprint: caFingerprint(CA), trusted: true });
-    expect(await ensureLauncherTrust(CA, deps)).toEqual({ lines: [], failed: false });
+    expect(await ensureLauncherTrust(CA, deps)).toEqual({ lines: [], failed: false, trusted: true });
     expect(deps.ask).toHaveBeenCalledOnce();
   });
 
@@ -93,22 +94,22 @@ describe("the launcher's certificate trust", () => {
 
   it("declined: runs nothing and warns, on this launch and the next, without asking again", async () => {
     const { deps } = setup({ answer: "skip" });
-    expect(await ensureLauncherTrust(CA, deps)).toEqual({ lines: [text.trustUntrusted], failed: false });
-    expect(await ensureLauncherTrust(CA, deps)).toEqual({ lines: [text.trustUntrusted], failed: false });
+    expect(await ensureLauncherTrust(CA, deps)).toEqual({ lines: [text.trustUntrusted], failed: false, trusted: false });
+    expect(await ensureLauncherTrust(CA, deps)).toEqual({ lines: [text.trustUntrusted], failed: false, trusted: false });
     expect(deps.exec).not.toHaveBeenCalled();
     expect(deps.ask).toHaveBeenCalledOnce();
   });
 
   it("where the platform has no command (Linux), shows the instructions and the certificate path instead", async () => {
     const { deps } = setup({ plan: { kind: "manual", instructions: "Import ca.pem into your browser." } });
-    expect(await ensureLauncherTrust(CA, deps)).toEqual({ lines: [text.trustManual(CA.certPath), "Import ca.pem into your browser."], failed: false });
+    expect(await ensureLauncherTrust(CA, deps)).toEqual({ lines: [text.trustManual(CA.certPath), "Import ca.pem into your browser."], failed: false, trusted: false });
     expect(deps.exec).not.toHaveBeenCalled();
   });
 
   it("reports a failed trust command", async () => {
     const { deps, stored } = setup();
     deps.exec.mockRejectedValueOnce(new Error("certutil exited with 2"));
-    expect(await ensureLauncherTrust(CA, deps)).toEqual({ lines: [text.trustFailed("certutil exited with 2")], failed: true });
+    expect(await ensureLauncherTrust(CA, deps)).toEqual({ lines: [text.trustFailed("certutil exited with 2")], failed: true, trusted: false });
     expect(stored()?.trusted).toBe(false);
     expect(deps.report).toHaveBeenCalledWith(expect.objectContaining({ message: "certutil exited with 2" }), "trust");
   });
@@ -117,7 +118,7 @@ describe("the launcher's certificate trust", () => {
     const { deps, stored } = setup();
     const timeout = new TrustCommandTimeoutError("trust", TRUST_COMMAND_TIMEOUT_MS, ADD.display);
     deps.exec.mockRejectedValueOnce(timeout);
-    expect(await ensureLauncherTrust(CA, deps)).toEqual({ lines: [text.trustTimedOut(120)], failed: true });
+    expect(await ensureLauncherTrust(CA, deps)).toEqual({ lines: [text.trustTimedOut(120)], failed: true, trusted: false });
     expect(deps.report).toHaveBeenCalledWith(timeout, "trust");
     expect(stored()?.trusted).toBe(false);
   });
@@ -125,14 +126,14 @@ describe("the launcher's certificate trust", () => {
   it("a check that times out is reported as 'could not check', and the recorded decision answers", async () => {
     const { deps, store } = setup({ check: CHECK, checkResult: "timed-out" });
     store({ fingerprint: caFingerprint(CA), trusted: true });
-    expect(await ensureLauncherTrust(CA, deps)).toEqual({ lines: [], failed: false });
+    expect(await ensureLauncherTrust(CA, deps)).toEqual({ lines: [], failed: false, trusted: true });
     expect(deps.report).toHaveBeenCalledWith(expect.any(TrustCommandTimeoutError), "check");
     expect(deps.ask).not.toHaveBeenCalled();
   });
 
   it("skips the question when the platform check exits 0 (already trusted), running it in the CA store", async () => {
     const { deps, stored } = setup({ check: CHECK, checkResult: "trusted" });
-    expect(await ensureLauncherTrust(CA, deps)).toEqual({ lines: [], failed: false });
+    expect(await ensureLauncherTrust(CA, deps)).toEqual({ lines: [], failed: false, trusted: true });
     expect(deps.checkCommand).toHaveBeenCalledWith(CA);
     expect(deps.exec).toHaveBeenCalledWith(CHECK, "check");
     expect(deps.exec.mock.calls[0]![0].cwd).toBe(CA_DIR);
@@ -150,7 +151,7 @@ describe("the launcher's certificate trust", () => {
   it("a check that cannot run is reported, and the recorded decision answers", async () => {
     const { deps, store } = setup({ check: CHECK, checkResult: "cannot-run" });
     store({ fingerprint: caFingerprint(CA), trusted: true });
-    expect(await ensureLauncherTrust(CA, deps)).toEqual({ lines: [], failed: false });
+    expect(await ensureLauncherTrust(CA, deps)).toEqual({ lines: [], failed: false, trusted: true });
     expect(deps.report).toHaveBeenCalledOnce();
     expect(deps.report).toHaveBeenCalledWith(expect.objectContaining({ code: "ENOENT" }), "check");
     expect(deps.ask).not.toHaveBeenCalled();
@@ -179,7 +180,7 @@ describe("the launcher's certificate trust", () => {
 
   it("does nothing for a launcher without TLS", async () => {
     const { deps } = setup();
-    expect(await ensureLauncherTrust(null, deps)).toEqual({ lines: [], failed: false });
+    expect(await ensureLauncherTrust(null, deps)).toEqual({ lines: [], failed: false, trusted: true });
     expect(deps.ask).not.toHaveBeenCalled();
   });
 });
@@ -187,7 +188,7 @@ describe("the launcher's certificate trust", () => {
 describe("/launch with the trust step", () => {
   const app = folderRef("app");
 
-  function launchSetup(trust: { lines: string[]; failed: boolean }) {
+  function launchSetup(trust: TrustOutcome) {
     const order: string[] = [];
     const port = fakeWorkspacePort([app], { [path.join(app.path, "builderforce.json")]: "{}" });
     const trustStep = vi.fn(async () => { order.push("trust"); return trust; });
@@ -197,7 +198,7 @@ describe("/launch with the trust step", () => {
       launchers: new FolderLaunchers(),
       // `createLocalLauncher`'s shape: the url, and the CA it serves from.
       start: async () => ({ url: "https://localhost:4000/#token=t", ca: CA, close: async () => undefined }),
-      openInEditor: async () => { order.push("open"); },
+      editorBrowser: { available: async () => true, open: async () => { order.push("open"); } },
       openExternal: async () => { order.push("open-external"); },
       readFiles: async () => new Map(),
       detect: () => ({ text: "{}", services: [], resources: [], notes: [] }),
@@ -206,24 +207,31 @@ describe("/launch with the trust step", () => {
     return { execute, trustStep, order };
   }
 
-  it("asks about the certificate before the browser opens, and still launches when declined", async () => {
-    const { execute, trustStep, order } = launchSetup({ lines: [text.trustUntrusted], failed: false });
-    const reply = await execute({});
+  it("asks about the certificate before VS Code's browser opens on a trusted launcher", async () => {
+    const { execute, trustStep, order } = launchSetup({ lines: [text.trustDone], failed: false, trusted: true });
+    await execute({});
     expect(trustStep).toHaveBeenCalledWith(CA, false);
     expect(order).toEqual(["trust", "open"]);
+  });
+
+  it("asks about the certificate first, and still launches (in the system browser) when declined", async () => {
+    const { execute, trustStep, order } = launchSetup({ lines: [text.trustUntrusted], failed: false, trusted: false });
+    const reply = await execute({});
+    expect(trustStep).toHaveBeenCalledWith(CA, false);
+    expect(order).toEqual(["trust", "open-external"]);
     expect(reply).toMatchObject({ kind: "text", tone: "info", link: "https://localhost:4000/#token=t" });
     expect(reply.kind === "text" ? reply.lines : []).toContain(text.trustUntrusted);
   });
 
   it("/launch trust asks again; a failure makes the reply an error", async () => {
-    const { execute, trustStep } = launchSetup({ lines: [text.trustFailed("denied")], failed: true });
+    const { execute, trustStep } = launchSetup({ lines: [text.trustFailed("denied")], failed: true, trusted: false });
     const reply = await execute({ environment: "trust" });
     expect(trustStep).toHaveBeenCalledWith(CA, true);
     expect(reply).toMatchObject({ kind: "text", tone: "error" });
   });
 
   it("/launch external asks about the certificate before the system browser opens", async () => {
-    const { execute, trustStep, order } = launchSetup({ lines: [], failed: false });
+    const { execute, trustStep, order } = launchSetup({ lines: [], failed: false, trusted: true });
     await execute({ environment: "external" });
     expect(trustStep).toHaveBeenCalledWith(CA, false);
     expect(order).toEqual(["trust", "open-external"]);

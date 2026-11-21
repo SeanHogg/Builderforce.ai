@@ -41,18 +41,17 @@ export interface UseTicketAutocompleteOptions {
   disabled?: boolean;
 }
 
-export type TicketAutocomplete = TriggerAutocomplete;
-
 const ticketRef = (t: TicketTag) => t.key ?? String(t.id);
 const ticketFilter = (all: readonly TicketTag[], query: string) => filterTicketCandidates(all as TicketTag[], query);
 
-/** A pick replaces "#query" with "#ref"; the caret lands just after it. */
+/** A pick replaces "#query" with "#ref" and a space (unless whitespace already follows); the caret lands after them. */
 export function ticketPickEdit(t: TicketTag, token: TriggerToken, text: string): TriggerEdit {
-  const tag = `#${ticketRef(t)}`;
-  return { text: text.slice(0, token.start) + tag + text.slice(token.end), caret: token.start + tag.length };
+  const after = text.slice(token.end);
+  const tag = `#${ticketRef(t)}${/^\s/.test(after) ? '' : ' '}`;
+  return { text: text.slice(0, token.start) + tag + after, caret: token.start + tag.length };
 }
 
-export function useTicketAutocomplete(opts: UseTicketAutocompleteOptions): TicketAutocomplete {
+export function useTicketAutocomplete(opts: UseTicketAutocompleteOptions): TriggerAutocomplete {
   const { textareaRef, value, setValue, tickets, onPick, labels, disabled } = opts;
   const statusLabel = labels?.status ?? DEFAULT_TICKET_TAG_LABELS.status;
   const renderItem = useCallback((t: TicketTag): ReactNode => (

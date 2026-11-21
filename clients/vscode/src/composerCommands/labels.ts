@@ -75,6 +75,8 @@ export interface ComposerCommandText extends ComposerCommandLabels {
   /** The reply's actions: reopen in VS Code's integrated browser, or open in the system browser. */
   launchOpenInEditor: string;
   launchOpenExternal: string;
+  /** The integrated browser is there but the certificate is untrusted: `/launch trust`, then open in VS Code. */
+  launchTrustAndOpenInEditor: string;
   launchExternalChoice: string;
   launchStopped(folder: string): string;
   launchNotRunning(folder: string): string;
@@ -163,6 +165,7 @@ export function composerCommandText(): ComposerCommandText {
     launchEditorFailed: (error) => t("VS Code's built-in browser could not open it ({0}), so it opened in your browser.", error),
     launchOpenInEditor: t("Open in VS Code"),
     launchOpenExternal: t("Open in external browser"),
+    launchTrustAndOpenInEditor: t("Trust certificate and open in VS Code"),
     launchExternalChoice: t("Open the launcher in your external browser"),
     launchStopped: (folder) => t("Stopped the launcher for {0}.", folder),
     launchNotRunning: (folder) => t("No launcher is running for {0}.", folder),

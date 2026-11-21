@@ -164,6 +164,10 @@ export function brainChatLabels(): Record<string, string> {
     "app.ticketTagTitle": t("Tag ticket"),
     "app.ticketTagStatus": t("Status"),
     "app.ticketTagNoMatches": t("No tickets found"),
+    // The empty-state rows of the `@` and `/` typeahead (the `/` one's heading and
+    // Unavailable tag are the `/` menu's Actions-tab words, already in this bundle).
+    "app.mentionNoMatches": t("No one to direct to"),
+    "app.commandNoMatches": t("No matching commands"),
     "app.actingAs": t("Acting as"),
     "app.personaTitle": t("Brain agent or persona"),
     "app.defaultBrain": t("Default Brain"),

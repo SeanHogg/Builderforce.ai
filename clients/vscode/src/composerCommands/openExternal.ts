@@ -35,13 +35,20 @@ export interface EditorBrowser {
   open(url: string): Promise<void>;
 }
 
-/** A detection that cannot run is reported and answers "not available" — the launch falls back to the system browser. */
+/**
+ * A detection that cannot run is reported and answers "not available" for THAT launch (the system
+ * browser opens) — only a detection that succeeded is kept, so the next `/launch` asks again.
+ */
 export function integratedBrowser(commands: EditorCommands, report: (error: unknown) => void): EditorBrowser {
   let detected: Promise<boolean> | undefined;
   return {
     available: () => (detected ??= Promise.resolve(commands.getCommands(true)).then(
       (ids) => ids.includes(INTEGRATED_BROWSER_OPEN),
-      (error: unknown) => { report(error); return false; },
+      (error: unknown) => {
+        detected = undefined;
+        report(error);
+        return false;
+      },
     )),
     open: async (url) => {
       await commands.executeCommand(INTEGRATED_BROWSER_OPEN, url);

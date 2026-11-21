@@ -16,23 +16,23 @@
 import { useCallback, type ReactNode, type RefObject } from 'react';
 import type { ComposerHelpEntry } from '@seanhogg/builderforce-brain-embedded';
 import type { PromptOptionsCommands } from '../promptOptions/ActionsPane';
+import { DEFAULT_PROMPT_OPTIONS_LABELS, type PromptOptionsLabels } from '../promptOptions/types';
 import { useTriggerAutocomplete, type TriggerAutocomplete, type TriggerEdit, type TriggerToken } from './useTriggerAutocomplete';
 
+/** The `/` typeahead's OWN copy (`command.<key>`); the rest is the Actions tab's, which it mirrors. */
 export interface CommandAutocompleteLabels {
-  /** Heading above the list, e.g. "Commands". */
-  title?: string;
   /** The row shown when no command matches what was typed. */
   noMatches?: string;
-  /** The tag on a command this surface or plan cannot run (its reason shows beside it). */
-  unavailable?: string;
 }
 
 /** English defaults for a host catalog's missing fields. */
 export const DEFAULT_COMMAND_LABELS: Required<CommandAutocompleteLabels> = {
-  title: 'Commands',
   noMatches: 'No matching commands',
-  unavailable: 'Unavailable',
 };
+
+/** Everything the `/` popup reads: its own copy plus the `/` menu's Actions-tab words for the same things. */
+export type CommandTypeaheadLabels = CommandAutocompleteLabels
+  & Partial<Pick<PromptOptionsLabels, 'actionsTab' | 'actionsEmpty' | 'commandUnavailable'>>;
 
 /**
  * The `/name` being typed in the command position, or null. `end` runs to the end of the
@@ -52,15 +52,19 @@ export function activeCommandToken(text: string, caret: number): TriggerToken | 
   return { query: text.slice(slash + 1, caret), start: slash, end };
 }
 
-/** Commands for a typed name: id prefix first, then id substring, then the usage line; registry order within each. */
+/**
+ * Commands for a typed name: the exact id first, then id prefix, then id substring, then the usage line;
+ * registry order within each.
+ */
 export function filterCommandEntries(entries: readonly ComposerHelpEntry[], query: string): readonly ComposerHelpEntry[] {
   const q = query.trim().toLowerCase();
   if (!q) return entries;
   const rank = (e: ComposerHelpEntry) => {
     const id = e.id.toLowerCase();
-    if (id.startsWith(q)) return 0;
-    if (id.includes(q)) return 1;
-    return e.syntax.toLowerCase().includes(q) ? 2 : -1;
+    if (id === q) return 0;
+    if (id.startsWith(q)) return 1;
+    if (id.includes(q)) return 2;
+    return e.syntax.toLowerCase().includes(q) ? 3 : -1;
   };
   return entries
     .map((e) => ({ e, r: rank(e) }))
@@ -85,13 +89,23 @@ export function commandPickEdit(entry: ComposerHelpEntry, token: TriggerToken, t
   return { text: before + insert + after, caret: before.length + insert.length };
 }
 
+/**
+ * Enter on a command this surface cannot run: the line becomes the full `/<id>` (not the partial name typed) and is
+ * submitted, so the host answers with why it is unavailable.
+ */
+export function commandDisabledEnterEdit(entry: ComposerHelpEntry, token: TriggerToken, text: string): TriggerEdit {
+  const before = text.slice(0, token.start).trimStart();
+  const line = `/${entry.id}`;
+  return { text: before + line + text.slice(token.end), caret: before.length + line.length };
+}
+
 export interface UseCommandAutocompleteOptions {
   textareaRef: RefObject<HTMLTextAreaElement | null>;
   value: string;
   setValue: (v: string) => void;
   /** The host's composer commands; absent ⇒ no `/` typeahead on this surface. */
   commands: PromptOptionsCommands | undefined;
-  labels?: CommandAutocompleteLabels;
+  labels?: CommandTypeaheadLabels;
   disabled?: boolean;
 }
 
@@ -101,7 +115,13 @@ const commandUnavailable = (e: ComposerHelpEntry) => !e.availability.ok;
 
 export function useCommandAutocomplete(opts: UseCommandAutocompleteOptions): TriggerAutocomplete {
   const { textareaRef, value, setValue, commands, labels, disabled } = opts;
-  const unavailable = labels?.unavailable ?? DEFAULT_COMMAND_LABELS.unavailable;
+  const unavailable = labels?.commandUnavailable ?? DEFAULT_PROMPT_OPTIONS_LABELS.commandUnavailable;
+  const title = labels?.actionsTab ?? DEFAULT_PROMPT_OPTIONS_LABELS.actionsTab;
+  const candidates = commands?.help.entries ?? NO_ENTRIES;
+  // No command registered at all says so; a name that matches none says that instead.
+  const emptyLabel = candidates.length === 0
+    ? labels?.actionsEmpty ?? DEFAULT_PROMPT_OPTIONS_LABELS.actionsEmpty
+    : labels?.noMatches ?? DEFAULT_COMMAND_LABELS.noMatches;
   const onChoose = commands?.onChoose;
   // The text edit already happened; only a runnable entry has anything left to do.
   const onPick = useCallback((entry: ComposerHelpEntry) => {
@@ -124,15 +144,18 @@ export function useCommandAutocomplete(opts: UseCommandAutocompleteOptions): Tri
     textareaRef, value, setValue,
     enabled: !!commands && !disabled,
     detect: activeCommandToken,
-    candidates: commands?.help.entries ?? NO_ENTRIES,
+    candidates,
     filter: filterCommandEntries,
     itemKey: commandKey,
     renderItem,
     isDisabled: commandUnavailable,
     edit: commandPickEdit,
     onPick,
-    listLabel: labels?.title ?? DEFAULT_COMMAND_LABELS.title,
-    heading: labels?.title,
-    emptyLabel: labels?.noMatches ?? DEFAULT_COMMAND_LABELS.noMatches,
+    listLabel: title,
+    heading: title,
+    emptyLabel,
+    // `/` was typed in the command position: even "no commands here" is worth saying.
+    openWithoutCandidates: true,
+    disabledEnterEdit: commandDisabledEnterEdit,
   });
 }

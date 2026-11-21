@@ -389,6 +389,8 @@ export const MESSAGE_KEYS = [
   'mnTitle',
   'mnAgent',
   'mnHuman',
+  'mnNoMatches',
+  'mnCommandNoMatches',
   'mnTicketTitle',
   'mnTicketStatus',
   'mnTicketNoMatches',

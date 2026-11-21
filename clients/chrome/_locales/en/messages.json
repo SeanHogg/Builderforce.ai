@@ -1375,6 +1375,14 @@
     "message": "Person",
     "description": "@-mention row: person"
   },
+  "mnNoMatches": {
+    "message": "No one to direct to",
+    "description": "@-mention typeahead: shown when nobody matches or nobody is addressable"
+  },
+  "mnCommandNoMatches": {
+    "message": "No matching commands",
+    "description": "/ command typeahead: shown when no command matches the typed name"
+  },
   "mnTicketTitle": {
     "message": "Tag ticket",
     "description": "#-ticket picker heading"

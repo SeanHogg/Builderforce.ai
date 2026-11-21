@@ -1249,6 +1249,14 @@
     "message": "Personne",
     "description": "@-mention row: person"
   },
+  "mnNoMatches": {
+    "message": "Aucun destinataire correspondant",
+    "description": "@-mention typeahead: shown when nobody matches or nobody is addressable"
+  },
+  "mnCommandNoMatches": {
+    "message": "Aucune commande correspondante",
+    "description": "/ command typeahead: shown when no command matches the typed name"
+  },
   "mnTicketTitle": {
     "message": "Étiqueter un ticket",
     "description": "#-ticket picker heading"

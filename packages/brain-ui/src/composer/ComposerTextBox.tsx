@@ -2,7 +2,7 @@ import { memo, type ClipboardEvent, type KeyboardEvent, type RefObject } from 'r
 import { useDraftText, type ComposerDraftStore } from '@seanhogg/builderforce-brain-embedded';
 import { useMentionAutocomplete, type UseMentionAutocompleteOptions } from '../mention/MentionAutocomplete';
 import { useTicketAutocomplete, type UseTicketAutocompleteOptions } from '../mention/TicketAutocomplete';
-import { useCommandAutocomplete, type CommandAutocompleteLabels } from '../mention/CommandAutocomplete';
+import { useCommandAutocomplete, type CommandTypeaheadLabels } from '../mention/CommandAutocomplete';
 import type { PromptOptionsCommands } from '../promptOptions/ActionsPane';
 import { UNUSED_STORE } from './unusedDraftStore';
 
@@ -41,7 +41,7 @@ export type ComposerTextBoxProps = ComposerTextSource & {
   pickersDisabled: boolean;
   mentionLabels: UseMentionAutocompleteOptions['labels'];
   ticketLabels: UseTicketAutocompleteOptions['labels'];
-  commandLabels: CommandAutocompleteLabels | undefined;
+  commandLabels: CommandTypeaheadLabels | undefined;
 };
 
 const NO_PARTICIPANTS: UseMentionAutocompleteOptions['participants'] = [];
@@ -79,7 +79,8 @@ function ComposerTextBoxInner(props: ComposerTextBoxProps) {
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (active?.onKeyDown(e)) return;
-    if (submitOnEnter && e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+    // 229: the key an IME is still composing with (some engines leave `isComposing` false on it).
+    if (submitOnEnter && e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229) {
       e.preventDefault();
       // Alt+Enter mid-run: hold it for after the run, where the host offers that.
       if (e.altKey && running && canQueue) onQueue();

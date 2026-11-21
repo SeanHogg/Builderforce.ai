@@ -56,8 +56,6 @@ export interface UseMentionAutocompleteOptions {
   disabled?: boolean;
 }
 
-export type MentionAutocomplete = TriggerAutocomplete;
-
 const mentionFilter = (all: readonly DirectedRecipient[], query: string) => filterMentionCandidates(all as DirectedRecipient[], query);
 const mentionKey = (r: DirectedRecipient) => `${r.kind}:${r.ref}`;
 
@@ -68,7 +66,7 @@ export function mentionPickEdit(_r: DirectedRecipient, token: TriggerToken, text
   return { text: text.slice(0, token.start) + after, caret: token.start };
 }
 
-export function useMentionAutocomplete(opts: UseMentionAutocompleteOptions): MentionAutocomplete {
+export function useMentionAutocomplete(opts: UseMentionAutocompleteOptions): TriggerAutocomplete {
   const { textareaRef, value, setValue, participants, onPick, labels, disabled, detail } = opts;
   const renderItem = useCallback((m: DirectedRecipient): ReactNode => {
     const sub = detail?.(m);

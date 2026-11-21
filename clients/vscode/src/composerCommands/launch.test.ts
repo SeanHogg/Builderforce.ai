@@ -9,11 +9,19 @@ vi.mock("vscode", () => ({
 import { FolderLaunchers, type RunningLauncher } from "./folderLaunchers";
 import { composerCommandText } from "./labels";
 import { launchExecutor, type LaunchRequest } from "./launch";
+import type { TrustOutcome } from "./launcherTrust";
 import { fakeWorkspacePort, folderRef } from "./testWorkspacePort";
 
 const app = folderRef("app");
 
-function setup(files: Record<string, string> = {}, folders = [app]) {
+interface EditorSetup {
+  /** This VS Code has the integrated browser (default: yes). */
+  available?: boolean;
+  /** The certificate step's outcome (default: no trust step). */
+  trust?: TrustOutcome;
+}
+
+function setup(files: Record<string, string> = {}, folders = [app], editor: EditorSetup = {}) {
   const port = fakeWorkspacePort(folders, files);
   const launchers = new FolderLaunchers();
   const started: Array<{ request: LaunchRequest; launcher: RunningLauncher & { close: ReturnType<typeof vi.fn> } }> = [];
@@ -26,7 +34,10 @@ function setup(files: Record<string, string> = {}, folders = [app]) {
   const openInEditor = vi.fn(async (_url: string) => undefined);
   const detect = vi.fn(() => ({ text: "{\"detected\":true}", services: ["web"], resources: [] as string[], notes: [] as DetectionNote[] }));
   const readFiles = vi.fn(async () => new Map<string, string>());
-  const execute = launchExecutor({ port, text: composerCommandText(), launchers, start, openExternal, openInEditor, readFiles, detect });
+  const available = vi.fn(async () => editor.available ?? true);
+  const editorBrowser = { available, open: openInEditor };
+  const trust = editor.trust ? { trust: async () => editor.trust! } : {};
+  const execute = launchExecutor({ port, text: composerCommandText(), launchers, start, openExternal, editorBrowser, readFiles, detect, ...trust });
   return { port, launchers, start, started, openExternal, openInEditor, detect, launch: (environment?: string) => execute(environment ? { environment } : {}) };
 }
 
@@ -41,7 +52,7 @@ describe("/launch", () => {
     expect(linesOf(reply).some((line) => line.includes("/manifest init"))).toBe(true);
   });
 
-  it("opens in VS Code's browser, and offers both reopening there and the external browser", async () => {
+  it("opens in VS Code's integrated browser, and offers both reopening there and the external browser", async () => {
     const { openExternal, openInEditor, launch } = setup();
     const reply = await launch();
     const text = composerCommandText();
@@ -67,6 +78,51 @@ describe("/launch", () => {
     expect(reply).toMatchObject({ actions: [{ command: "/launch" }, { command: "/launch external" }] });
   });
 
+  it("opens the system browser, says why, and offers no \"Open in VS Code\" when this VS Code has no integrated browser", async () => {
+    const { openExternal, openInEditor, launch } = setup({}, [app], { available: false });
+    const reply = await launch();
+    const text = composerCommandText();
+    expect(openInEditor).not.toHaveBeenCalled();
+    expect(openExternal).toHaveBeenCalledExactlyOnceWith("http://localhost:4000/#token=secret");
+    expect(linesOf(reply).slice(0, 2)).toEqual([text.launchStarted("app", true), text.launchEditorUnavailable]);
+    expect(reply.kind === "text" ? reply.actions : []).toEqual([{ label: text.launchOpenExternal, command: "/launch external" }]);
+  });
+
+  it("opens the system browser, and says why, when the launcher's certificate is not trusted", async () => {
+    const text = composerCommandText();
+    const { openExternal, openInEditor, launch } = setup({}, [app], { trust: { lines: [text.trustUntrusted], failed: false, trusted: false } });
+    const reply = await launch();
+    expect(openInEditor).not.toHaveBeenCalled();
+    expect(openExternal).toHaveBeenCalledOnce();
+    expect(linesOf(reply)[0]).toBe(text.launchStarted("app", true));
+    expect(linesOf(reply)).toContain(text.launchEditorUntrusted);
+    expect(linesOf(reply)).toContain(text.trustUntrusted);
+    // Not "Open in VS Code" (it would fall back again): trust first, then open there.
+    expect(reply.kind === "text" ? reply.actions : []).toEqual([
+      { label: text.launchTrustAndOpenInEditor, command: "/launch trust" },
+      { label: text.launchOpenExternal, command: "/launch external" },
+    ]);
+  });
+
+  it("opens the system browser, and names the error, when the integrated browser fails to open", async () => {
+    const { openExternal, openInEditor, launch } = setup();
+    openInEditor.mockRejectedValueOnce(new Error("no editor group"));
+    const reply = await launch();
+    const text = composerCommandText();
+    expect(openExternal).toHaveBeenCalledOnce();
+    expect(linesOf(reply).slice(0, 2)).toEqual([text.launchStarted("app", true), text.launchEditorFailed("no editor group")]);
+    expect(reply).toMatchObject({ tone: "info" });
+  });
+
+  it("treats a manifest environment named like a subcommand as the subcommand", async () => {
+    const { start, openExternal, started, launch } = setup({ [path.join(app.path, "builderforce.json")]: "{}" });
+    await launch("external");
+    expect(start).toHaveBeenCalledExactlyOnceWith({ projectDir: app.path });
+    expect(openExternal).toHaveBeenCalledOnce();
+    expect(linesOf(await launch("stop"))).toEqual(["Stopped the launcher for app."]);
+    expect(started[0]!.launcher.close).toHaveBeenCalledOnce();
+  });
+
   it("/launch external starts the launcher when none is running, in the external browser", async () => {
     const { start, openExternal, openInEditor, launch } = setup();
     const reply = await launch("external");
@@ -83,7 +139,7 @@ describe("/launch", () => {
     const lines = linesOf(await launch());
     const text = composerCommandText();
     expect(lines).toEqual([
-      "The launcher for app is running and opened in VS Code's browser.",
+      "The launcher for app is running and opened in VS Code's built-in browser.",
       text.launchDetected,
       ...text.noteLines(notes),
     ]);

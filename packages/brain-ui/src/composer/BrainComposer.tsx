@@ -11,7 +11,7 @@
  * control (who answers, who is addressed) arrives as `context`; anything shown above
  * the text (queued turns, starters) as `status`.
  */
-import { memo, useCallback, useEffect, useRef, useState, type ClipboardEvent, type DragEvent, type ReactNode } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ClipboardEvent, type DragEvent, type ReactNode } from 'react';
 import { PromptPanel } from '../PromptPanel';
 import { PromptOptionsMenu } from '../promptOptions/PromptOptionsMenu';
 import { promptOptionsLabels, type PromptOptionsLabels } from '../promptOptions/types';
@@ -19,7 +19,7 @@ import { InferenceModeFirstRun } from '../inferenceMode/InferenceModeFirstRun';
 import { useInferenceModeGate, type InferenceModeGate } from '../inferenceMode/useInferenceModeGate';
 import type { UseMentionAutocompleteOptions } from '../mention/MentionAutocomplete';
 import type { UseTicketAutocompleteOptions } from '../mention/TicketAutocomplete';
-import type { CommandAutocompleteLabels } from '../mention/CommandAutocomplete';
+import type { CommandAutocompleteLabels, CommandTypeaheadLabels } from '../mention/CommandAutocomplete';
 import { WorkStatusPanel } from '../workStatus/WorkStatusPanel';
 import { WorkSpendPanel } from '../workStatus/WorkSpendPanel';
 import { spendLabels } from '../spend/labels';
@@ -160,7 +160,11 @@ function BrainComposerInner(props: BrainComposerProps) {
   onChangeRef.current = onChange;
   const setValue = useCallback((next: string) => {
     if (draftStore) draftStore.set(next);
-    else onChangeRef.current?.(next);
+    else {
+      // A submit in the same key press (a typeahead rewrote the line, then Enter submits it) reads the new text.
+      valueRef.current = next;
+      onChangeRef.current?.(next);
+    }
   }, [draftStore]);
 
   useEffect(() => {
@@ -250,6 +254,16 @@ function BrainComposerInner(props: BrainComposerProps) {
     ? <>{modeQuestion}{above}{showSuggestions && <SuggestionRow items={suggestions!.items} ariaLabel={suggestions!.label} />}{chips}</>
     : undefined;
 
+  // The `/` typeahead words its heading, its "no commands" row and its Unavailable tag as the Actions tab does.
+  const optionCopy = labelBundle?.options;
+  const commandCopy = labelBundle?.command;
+  const commandLabels = useMemo<CommandTypeaheadLabels>(() => ({
+    actionsTab: optionCopy?.actionsTab,
+    actionsEmpty: optionCopy?.actionsEmpty,
+    commandUnavailable: optionCopy?.commandUnavailable,
+    ...commandCopy,
+  }), [optionCopy, commandCopy]);
+
   const source: ComposerTextSource = draftStore ? { draftStore } : { value: value ?? '', onChange: setValue };
   const resolvedPlaceholder = placeholder ?? labels.placeholder;
 
@@ -286,7 +300,7 @@ function BrainComposerInner(props: BrainComposerProps) {
             pickersDisabled={pickersDisabled}
             mentionLabels={labelBundle?.mention}
             ticketLabels={labelBundle?.ticket}
-            commandLabels={labelBundle?.command}
+            commandLabels={commandLabels}
           />
         )}
         actions={(

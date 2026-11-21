@@ -18,7 +18,7 @@ import { workStatusLabelsFrom, type WorkStatusLabels } from '../workStatus/label
 import { composerLabelsFrom, type ComposerLabels } from './labels';
 import { connectionsLabelsFrom, type ConnectionsLabels } from '../connections/types';
 
-export { DEFAULT_MENTION_LABELS, DEFAULT_TICKET_TAG_LABELS, DEFAULT_COMMAND_LABELS };
+export { DEFAULT_MENTION_LABELS, DEFAULT_TICKET_TAG_LABELS };
 
 /** The lookup one part reads: its own canonical keys, under `<part>.` in the host's. */
 export function scopedLookup(lookup: LabelLookup, part: string): LabelLookup {
