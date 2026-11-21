@@ -30,6 +30,12 @@ export interface RepoReadContext {
   fetch?: FetchLike;
   /** Bitbucket Server: at most this many `/browse` pages per file (default: the source's own limit). */
   browsePageLimit?: number;
+  /**
+   * Cap on one `readRepoFile` result (default {@link MAX_FILE_CHARS}). The default
+   * protects a MODEL's context; a server-side parser that never hands the text to a
+   * model (the roadmap register — ROADMAP.md is ~107k chars) raises it.
+   */
+  maxFileChars?: number;
 }
 
 /** The repo source of `ctx` (GitLab / Bitbucket), its calls through `ctx.fetch` when given. */
@@ -54,8 +60,8 @@ export type ReadFileResult =
   | { ok: false; reason: string };
 
 /** A whole or partial read as a ReadFileResult, held to MAX_FILE_CHARS (`capContent`). */
-function fileResult(path: string, read: RepoFileRead): ReadFileResult {
-  return { ok: true, path, ...capContent(read, MAX_FILE_CHARS) };
+function fileResult(path: string, read: RepoFileRead, cap = MAX_FILE_CHARS): ReadFileResult {
+  return { ok: true, path, ...capContent(read, cap) };
 }
 
 export type ListFilesResult =
@@ -92,7 +98,7 @@ export async function readRepoFile(ctx: RepoReadContext, path: string): Promise<
       // A paged source says when its read stopped short (`readFile`); that is truncation too.
       const file = await readSourceFile(sourceOf(ctx), path, ctx.ref);
       if (file == null) return { ok: false, reason: `file not found on ${ctx.ref}: ${path}` };
-      return fileResult(path, file);
+      return fileResult(path, file, ctx.maxFileChars);
     } catch (e) {
       return { ok: false, reason: e instanceof Error ? e.message : `read not implemented for provider '${ctx.provider}'` };
     }
@@ -107,7 +113,10 @@ export async function readRepoFile(ctx: RepoReadContext, path: string): Promise<
   if (!json || json.type !== 'file' || typeof json.content !== 'string') {
     return { ok: false, reason: `not a readable file: ${path}` };
   }
-  return fileResult(path, { content: json.encoding === 'base64' ? fromBase64Utf8(json.content) : json.content, truncated: false });
+  // Over 1 MB the contents API returns `content: ""` with `encoding: "none"` — an empty
+  // string here would read as an empty FILE, not as a file this endpoint cannot serve.
+  if (json.encoding === 'none') return { ok: false, reason: 'file too large for the contents API' };
+  return fileResult(path, { content: json.encoding === 'base64' ? fromBase64Utf8(json.content) : json.content, truncated: false }, ctx.maxFileChars);
 }
 
 /**

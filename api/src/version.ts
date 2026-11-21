@@ -13,3 +13,13 @@
 import { version } from '../package.json';
 
 export const API_VERSION: string = version;
+
+/**
+ * The commit this Worker was deployed from, or null when unstamped (local dev, or a
+ * deploy that did not pass `--var GIT_SHA:<sha>`). Read by GET /health and the
+ * `deploy.status` tool so both report the same value.
+ */
+export function deployedCommit(env: { GIT_SHA?: string } | undefined): string | null {
+  const sha = env?.GIT_SHA?.trim();
+  return sha ? sha : null;
+}

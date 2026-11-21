@@ -131,6 +131,43 @@ async function verifyPaths(
 
 // ── Outgoing gate (push / PR / commit) ──────────────────────────────────────
 
+type OutgoingChange = Awaited<ReturnType<NonNullable<BrainRunContext['req']['git']>['outgoing']>>;
+
+type UpToDate = NonNullable<OutgoingChange['upToDate']>;
+
+/**
+ * THE "already on the upstream" reading of an outgoing result: the port COMPUTED an empty set
+ * because `ref` (the tool's `branch`, else "HEAD") is already on the comparison ref. Null
+ * otherwise — a real "cannot compute" (no upstream, git error), or an `upToDate` computed for a
+ * DIFFERENT ref (never pass a publish on another branch's emptiness). The push gate and the
+ * ticket-done check share it.
+ */
+export function outgoingUpToDate(out: OutgoingChange, ref = 'HEAD'): UpToDate | null {
+  return out.upToDate?.head && out.upToDate.ref === ref ? out.upToDate : null;
+}
+
+/**
+ * What the model reads for a publish whose ref is already on the upstream. A pull request has
+ * nothing to open, and touched files still uncommitted mean nothing was committed to push —
+ * both REFUSE so the model acts (commit first). Otherwise the push is a no-op pass, and only a
+ * clean working tree is called "shipped".
+ */
+function upToDateOutcome(run: BrainRunContext, tool: string, landed: UpToDate): { refusal: string } | { note: string } {
+  const sha = landed.head.slice(0, 7);
+  const on = landed.upstream || 'the upstream';
+  if (tool === 'open_pull_request') {
+    return { refusal: `${tool} refused: HEAD ${sha} is already in ${on}; there is nothing to open a PR for. Commit the change on the ticket branch (git_commit with a \`branch\`) first.` };
+  }
+  const mine = landed.uncommitted.filter((p) => wroteThisRun(p, run.c.touchedFiles ?? []));
+  if (mine.length) {
+    const shown = mine.slice(0, 5).join(', ') + (mine.length > 5 ? ', …' : '');
+    return { refusal: `${tool} refused: nothing committed to push — ${mine.length} touched file${mine.length === 1 ? ' is' : 's are'} uncommitted (${shown}); HEAD ${sha} is already on ${on}. Commit them (git_commit), then push.` };
+  }
+  return landed.uncommitted.length
+    ? { note: `${tool}: nothing to push — HEAD ${sha} is already on ${on}, so the push is a no-op (the working tree has ${landed.uncommitted.length} uncommitted change${landed.uncommitted.length === 1 ? '' : 's'} this run did not make). Do not retry.` }
+    : { note: `${tool}: nothing to publish — HEAD ${sha} is already on ${on}, so the push is a no-op. The change has shipped; do not retry.` };
+}
+
 /**
  * The push / pull-request gate — the real done gate (PRD §4.5). Reads the host's real
  * commits (`GitPort.outgoing`), hashes the bytes, runs the full verifier tier on any
@@ -153,15 +190,22 @@ export async function runOutgoingGate(
   repo: string,
   tool = 'git_push',
   args?: unknown,
-): Promise<{ verdict: GateVerdict; diffHash: string | null; gated: boolean; advisories?: readonly string[] }> {
+): Promise<{ verdict: GateVerdict; diffHash: string | null; gated: boolean; advisories?: readonly string[]; upToDate?: string }> {
   const git = run.req.git;
   if (!git) return { verdict: { ok: true, unavailable: [] }, diffHash: null, gated: false };
   const pullRequest = tool === 'open_pull_request';
-  const base = (args as { base?: unknown } | null | undefined)?.base;
-  const out = await git.outgoing(repo, pullRequest ? { pullRequest: typeof base === 'string' && base.trim() ? { base: base.trim() } : {} } : undefined);
+  const { base, branch } = (args ?? {}) as { base?: unknown; branch?: unknown };
+  // The TARGET ref: a `branch` arg publishes that branch by ref, whatever the checkout is —
+  // so its outgoing change (and whether it is the base branch) is computed for IT, never HEAD.
+  const ref = typeof branch === 'string' && branch.trim() ? branch.trim() : undefined;
+  const opts = {
+    ...(pullRequest ? { pullRequest: typeof base === 'string' && base.trim() ? { base: base.trim() } : {} } : {}),
+    ...(ref ? { ref } : {}),
+  };
+  const out = await git.outgoing(repo, Object.keys(opts).length ? opts : undefined);
   const { files, diffHash, baseBranch, diff } = out;
   // A push to a non-base branch is not gated — it cannot land on main without a pull
-  // request, and the PR itself is gated (PRD §4.5).
+  // request, and the PR itself is gated (PRD §4.5). `baseBranch` describes the TARGET ref.
   if (!baseBranch && !pullRequest) return { verdict: { ok: true, unavailable: [] }, diffHash, gated: false };
   // EMPTY vs UNCOMPUTABLE are different outcomes and must not share a refusal:
   //   · uncomputable (`out.unavailable` — no upstream, no PR base) → refuse, never a pass (OD-3);
@@ -171,6 +215,16 @@ export async function runOutgoingGate(
   //     session (or a retry after a successful push) settle instead of dead-ending on a
   //     stale "no outgoing change" refusal (#6632). A still-ahead branch never hits this:
   //     the port returns its real files/diff, so the full evidence + review gate runs below.
+  //   · already on the upstream (`outgoingUpToDate` for THIS ref; the port also sets
+  //     `unavailable` for it) → checked FIRST so the model is told exactly why there is nothing
+  //     to publish ({@link upToDateOutcome}) instead of a "not verified" refusal it retries.
+  const landed = outgoingUpToDate(out, ref ?? 'HEAD');
+  if (landed) {
+    const outcome = upToDateOutcome(run, tool, landed);
+    return 'refusal' in outcome
+      ? { verdict: { ok: false, reason: outcome.refusal }, diffHash, gated: true }
+      : { verdict: { ok: true, unavailable: [] }, diffHash, gated: true, upToDate: outcome.note };
+  }
   if (out.unavailable) {
     return { verdict: { ok: false, reason: `${tool} refused: not verified — ${out.unavailable}. Commit the change on a branch with an upstream (or name the pull request base) and retry.` }, diffHash, gated: true };
   }
@@ -360,8 +414,9 @@ export async function shipGatePreflight(run: BrainRunContext, name: string, args
   try {
     if (publish) {
       // git_push (base branch) and open_pull_request: the outgoing + review gates hold.
-      const { verdict, diffHash, gated, advisories } = await runOutgoingGate(run, repoArgOf(args), name, args);
+      const { verdict, diffHash, gated, advisories, upToDate } = await runOutgoingGate(run, repoArgOf(args), name, args);
       if (!verdict.ok) return { refusal: { ok: false, error: verdict.reason } };
+      if (upToDate) return { evidence: upToDate };
       return gated ? { evidence: approvalEvidence(run, verdict.unavailable, diffHash, advisories) } : {};
     }
     // builtin_reviews_record complete: refused unless a reviewGate-approved review exists
@@ -454,6 +509,11 @@ async function completionGateRefusal(run: BrainRunContext): Promise<Refusal | nu
   const check = async (): Promise<Outcome> => {
     try {
       const out = await git.outgoing('');
+      // Outcome-wise redundant with the base-branch clause below (the port sets `unavailable`
+      // alongside `upToDate`); it only makes the trace name the sha and upstream instead of
+      // "no outgoing commits".
+      const landed = outgoingUpToDate(out);
+      if (landed && out.baseBranch) return { kind: 'clear', why: `HEAD ${landed.head.slice(0, 7)} is already on ${landed.upstream}` };
       if (out.unavailable) {
         // Fails closed EXCEPT on the base branch (the run's work already landed — done means
         // exactly that) or when the run touched only files no check could ever fail (above).

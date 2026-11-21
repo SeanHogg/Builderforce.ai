@@ -538,6 +538,10 @@ export interface Env {
    */
   SEMANTIC_CACHE_KV?: KVNamespace;
 
+  /** The commit this Worker was deployed from — stamped by release.yml's deploy-api
+   *  (`wrangler deploy --var GIT_SHA:<sha>`). Unset in local dev; read via `deployedCommit`. */
+  GIT_SHA?: string;
+
   // ---------------------------------------------------------------------------
   // Payments — Stripe is the only provider (see infrastructure/payment/index.ts).
   // Absent secrets do NOT break boot; billing routes return 503 until they are set.

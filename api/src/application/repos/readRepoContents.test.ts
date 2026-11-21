@@ -21,6 +21,19 @@ describe('readRepoFile — non-GitHub via RepoSource [1248]', () => {
     expect(r.ok && r.content).toBe('hello world');
   });
 
+  it('reports a GitHub file over the contents API limit (encoding "none") as too large, not empty', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ type: 'file', content: '', encoding: 'none' })));
+    const r = await readRepoFile({ ...ctx, provider: 'github' }, 'docs/huge.md');
+    expect(r).toEqual({ ok: false, reason: 'file too large for the contents API' });
+  });
+
+  it('honours a caller-raised maxFileChars cap', async () => {
+    const content = 'x'.repeat(70_000);
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ type: 'file', content, encoding: 'utf-8' })));
+    const r = await readRepoFile({ ...ctx, provider: 'github', maxFileChars: 100_000 }, 'docs/big.md');
+    expect(r).toMatchObject({ ok: true, content, truncated: false });
+  });
+
   it('returns a typed reason for an unknown provider (no throw)', async () => {
     const r = await readRepoFile({ ...ctx, provider: 'gitea' }, 'x');
     expect(r.ok).toBe(false);

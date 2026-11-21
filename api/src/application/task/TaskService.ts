@@ -271,6 +271,16 @@ export class TaskService {
     return this.tasks.findByProjectIds(projectIds, { includeArchived });
   }
 
+  /**
+   * Archive (or restore) many of the tenant's tickets in ONE tenant-scoped statement —
+   * the ONE bulk archive path (the bulk MCP tools and the decomposition-cleanup route).
+   * Returns the rows actually written with their project; ids not in the tenant are
+   * absent. Callers run `afterTaskBulkWrite` over the returned projects.
+   */
+  async archiveMany(callerTenantId: number, ids: readonly number[], archived: boolean): Promise<Array<{ id: number; projectId: number }>> {
+    return this.tasks.setArchived(callerTenantId, ids, archived);
+  }
+
   async getTask(id: number): Promise<Task> {
     const task = await this.tasks.findById(asTaskId(id));
     if (!task) throw new NotFoundError('Task', id);

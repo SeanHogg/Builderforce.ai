@@ -23,6 +23,7 @@
  * copy with no invalidation hook of its own.
  */
 
+import { resolveAdvertisedToolName, toolNameSet } from '@builderforce/agent-tools';
 import { callConnectorTool, CONNECTOR_EXTENSION_ID, listConnectorTools } from '../connectors/connectorTools';
 import { BUILTIN_EXTENSION_ID, callBuiltinTool, listBuiltinTools } from './builtinMcpService';
 import { entitledBuiltinTools } from './builtinToolEntitlements';
@@ -144,7 +145,10 @@ export async function listGatewayMcpTools(ctx: GatewayMcpContext): Promise<McpTo
  * advertised, so a rename can never desync the advertise and call sides.
  */
 export function resolveGatewayMcpTool(tools: McpToolEntry[], name: string): McpToolEntry | null {
-  return tools.find((t) => t.name === name) ?? null;
+  // A catalog id (`tasks.archive_many`) or the unprefixed form reaches the advertised tool too
+  // (`resolveAdvertisedToolName`, the one resolver every surface shares).
+  const resolved = resolveAdvertisedToolName(name, toolNameSet(tools, (t) => t.name));
+  return resolved === null ? null : tools.find((t) => t.name === resolved) ?? null;
 }
 
 /** Identity of the caller a tool runs as. Absent for pure machine (API-key) callers. */

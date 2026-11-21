@@ -3,7 +3,7 @@ import { Hono, type Context } from 'hono';
 import { and, count, eq, inArray } from 'drizzle-orm';
 import { TaskService } from '../../application/task/TaskService';
 import { TaskStatus, TaskType } from '../../domain/shared/types';
-import { ConflictError } from '../../domain/shared/errors';
+import { ConflictError, NotFoundError } from '../../domain/shared/errors';
 import type { Env, HonoEnv } from '../../env';
 import { authMiddleware, requestActor, requireRole } from '../middleware/authMiddleware';
 import { idempotentReplay } from '../middleware/idempotentReplay';
@@ -13,7 +13,6 @@ import { TenantRole } from '../../domain/shared/types';
 import { projects, taskSpecs, tasks, tenantMembers, users } from '../../infrastructure/database/schema';
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { addDependency, deleteDependency, listProjectDependencies, isDepType } from '../../application/task/taskDependencies';
-import { invalidateCompletedByAssignee } from '../../application/reports/reportCache';
 import { invalidateProjectsList } from '../../application/project/projectsListCache';
 import { convertWorkItemType, ConvertError } from '../../application/workitem/convertWorkItemType';
 import type { Db } from '../../infrastructure/database/connection';
@@ -55,6 +54,7 @@ import { broadcastProjectChanged } from '../../infrastructure/relay/broadcastRoo
 import { loadProjectInTenant } from '../../application/project/projectOwnership';
 import { taskAssigneesCacheKey } from '../../application/task/taskAssigneeCache';
 import { getTaskCounts } from '../../application/task/taskCounts';
+import { afterTaskBulkWrite, bumpTaskTreeVersion, invalidateTaskRollups, taskTreeVersionKey } from '../../application/task/afterTaskBulkWrite';
 import { parseBody, parseOptionalBody } from './requestBody';
 import { grantMergeFromRequest, refuseMergeGrant, refuseMergeGrantDispatch } from './mergeGrantRequest';
 import {
@@ -198,11 +198,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
   // Any task write (create/update/decompose/move/delete) can reshape a tree, so
   // every mutation calls this. Best-effort — a stale tree self-heals on the KV TTL.
   const bumpTreeVersion = (env: Env, projectId: number | null | undefined): Promise<void> =>
-    projectId == null
-      ? Promise.resolve()
-      : bumpCacheVersion(env, `task-tree-version:project:${projectId}`).catch((error) => {
-        reportCaughtError(error, { source: "presentation/routes/taskRoutes.ts", operation: "bumpTreeVersion" });
-      });
+    bumpTaskTreeVersion(env, projectId, "presentation/routes/taskRoutes.ts");
 
   // Parse a positive-int ?project= param, else undefined.
   const parseProjectId = (raw: string | undefined): number | undefined => {
@@ -347,8 +343,11 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
   //
   // Two routes on purpose. The GET produces candidates with their evidence and
   // never changes anything; the POST touches only the ids the reviewer sent back.
-  // There is deliberately no "archive everything matching" endpoint — the rule
-  // that flags these rows reads TITLES, and a title is a signal, not a proof.
+  // The rule that flags these rows reads TITLES, and a title is a signal, not a
+  // proof, so this pair never archives by match. (Archive-by-filter exists only as
+  // the agent tool `tasks.archive_where`, which demands a selective filter and is a
+  // dry run by default.) Both write through the ONE bulk archive path,
+  // `TaskService.archiveMany`, followed by `afterTaskBulkWrite`.
   //
   // Mounted above `/:id` so `decomposition-cleanup` is not parsed as a task id.
 
@@ -375,27 +374,21 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
       db,
       tenantId,
       selections,
-      // The EXISTING archive path — `TaskService.updateTask({ archived: true })`.
-      // A second archive implementation is exactly how the board and the backlog
-      // end up disagreeing about what is archived.
+      // The ONE bulk archive path — `TaskService.archiveMany` (tenant-scoped, one
+      // statement), shared with the bulk archive tools. A second archive
+      // implementation is exactly how the board and the backlog end up disagreeing
+      // about what is archived.
       async (taskId) => {
-        const archived = await taskService.updateTask(taskId, { archived: true });
-        touchedProjects.add(archived.toPlain().projectId);
+        const [archived] = await taskService.archiveMany(tenantId, [taskId], true);
+        if (!archived) throw new NotFoundError('Task', taskId);
+        touchedProjects.add(archived.projectId);
       },
       { projectId },
     );
 
-    const env = c.env as Env;
-    for (const pid of touchedProjects) {
-      await bumpTreeVersion(env, pid);
-    }
-    // Archiving children changes task counts and the spine's shape.
-    await invalidateProjectsList(env, tenantId).catch((error) => {
-      reportCaughtError(error, { source: "presentation/routes/taskRoutes.ts", operation: "decompositionCleanupApply" });
-    });
-    await bumpCacheVersion(env, pmoVersionKey(tenantId)).catch((error) => {
-      reportCaughtError(error, { source: "presentation/routes/taskRoutes.ts", operation: "decompositionCleanupApply" });
-    });
+    // Tree + live board per touched project, projects list + PMO once — the ONE
+    // post-bulk-write invalidation the MCP bulk archive tools share.
+    await afterTaskBulkWrite(c.env as Env, tenantId, touchedProjects);
     return c.json(result);
   });
 
@@ -706,7 +699,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     // join to projects.tenantId also prevents reading another tenant's Epic by id.
     const row = await loadTenantTask(id, c.get('tenantId'));
     if (!row) return c.json({ error: 'not found' }, 404);
-    const ver = await getCacheVersion(env, `task-tree-version:project:${row.projectId}`);
+    const ver = await getCacheVersion(env, taskTreeVersionKey(row.projectId));
     const payload = await getOrSetCached(
       env,
       `task-tree:project:${row.projectId}:epic:${id}:v:${ver}`,
@@ -738,7 +731,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     // to serve are exactly the ones /pmo shows for the same viewer.
     const segmentId = (c as { get(k: 'segmentId'): string | undefined }).get('segmentId') ?? null;
     const [treeVer, signoffVer, pmoVer] = await Promise.all([
-      getCacheVersion(env, `task-tree-version:project:${row.projectId}`),
+      getCacheVersion(env, taskTreeVersionKey(row.projectId)),
       getCacheVersion(env, `participants:task:${id}`),
       getCacheVersion(env, pmoVersionKey(tenantId)),
     ]);
@@ -892,17 +885,11 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     // the freshly-assigned agent appears pending the moment its run row is created.
     c.executionCtx.waitUntil(broadcastProjectChanged(c.env, c.get('tenantId'), task.toPlain().projectId));
 
-    // Any status write can change which tasks fall in the completed-by-assignee
-    // window (moved into OR out of a done-class lane), so bust that rollup's
-    // per-tenant cache token. Best-effort — a stale rollup self-heals on the KV TTL.
-    if (body.status !== undefined) {
-      await invalidateCompletedByAssignee(c.env as Env, c.get('tenantId')).catch((error) => {
-        reportCaughtError(error, { source: "presentation/routes/taskRoutes.ts", operation: "createTaskRoutes" });
-      });
-      // ROI time metrics (completed count, cycle time, throughput) move with status.
-      await bumpCacheVersion(c.env as Env, `roi-version:tenant:${c.get('tenantId')}`).catch((error) => {
-        reportCaughtError(error, { source: "presentation/routes/taskRoutes.ts", operation: "createTaskRoutes" });
-      });
+    // Any status OR archived write can change which tasks fall in the completed-by-
+    // assignee window and the ROI time metrics, so bust both per-tenant tokens — the
+    // SAME rollup bust the bulk archive path runs (afterTaskBulkWrite). Best-effort.
+    if (body.status !== undefined || body.archived !== undefined) {
+      await invalidateTaskRollups(c.env as Env, c.get('tenantId'), "presentation/routes/taskRoutes.ts");
     }
 
     // Record the lane move + fold it into the task's lifecycle counters

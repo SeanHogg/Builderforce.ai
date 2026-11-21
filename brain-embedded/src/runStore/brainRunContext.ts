@@ -92,6 +92,11 @@ export interface BrainRunContext {
   promptTools: PromptToolNames;
   /** Tools this run has actually called — pinned into every later turn's selection. */
   usedTools: Set<string>;
+  /**
+   * Tools an EARLIER turn of this conversation called or named, newest first (`conversationPins.ts`) — pinned after
+   * {@link usedTools}, so a follow-up keeps the tool the last reply used or promised. Absent ⇒ none.
+   */
+  conversationPinnedTools?: readonly string[];
   /** The run's system prompt, every directive folded in. */
   systemPrompt: string;
   /** Caller provenance for the gateway's audit emit, shared by every model-facing turn. */

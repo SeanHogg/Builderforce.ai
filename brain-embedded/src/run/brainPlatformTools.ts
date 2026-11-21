@@ -12,8 +12,8 @@
  */
 
 import { ASK_USER_TOOL, ASK_USER_TOOL_SPEC, type ParsedToolCall, type TurnContext } from '@builderforce/agent-loop';
-import { resolveToolAlias, type ToolSchema } from '@builderforce/agent-tools';
-import { DEFAULT_TOOL_LIMIT, isCappedToolRole, type PlatformTools, type PlatformToolResult } from '@builderforce/agent-run';
+import { resolveCallName, toolNameSet, type ToolSchema } from '@builderforce/agent-tools';
+import { DEFAULT_TOOL_LIMIT, isCappedToolRole, roleCappedSelection, type PlatformTools, type PlatformToolResult } from '@builderforce/agent-run';
 import { offersHandOff } from '@builderforce/run-policy';
 import type { BrainToolSpec, ChatCompletionMessage } from '../streamChatCompletion';
 import { HAND_OFF_TOOL } from '../planHandoff';
@@ -101,6 +101,29 @@ export function surfaceRequired(run: Pick<BrainRunContext, 'alwaysAdvertised' | 
   return new Set(offersHandOff(run.policy) && run.canAskUser ? [...base, HAND_OFF_TOOL] : base);
 }
 
+/**
+ * The turn's pins, in an order that only ever GROWS AT ITS END across a run's steps (the selector appends pins after the fixed set, so
+ * the advertised tools block - and the vendor's cached prompt prefix - stays stable):
+ *  1. the tools the conversation's EARLIER turns called or named (`conversationPins.ts`, read once by the preamble, a routed call pinning
+ *     its target, newest first, capped below PINNED_OVERFLOW so the run's own calls are never squeezed out). On a capped role (code/verify)
+ *     only the ones the role cap keeps (`roleCappedSelection`'s kept set) survive: an earlier turn's tool must not bypass the cap;
+ *  2. the tools THIS run called (`callPostStep`): a tool reached through the router is the tool it reached and a fold does not forget one.
+ *     These keep their pin whatever the role, as they always have.
+ */
+export function selectionPins(
+  run: Pick<BrainRunContext, 'policy' | 'catalogToolNames' | 'usedTools' | 'conversationPinnedTools'>,
+  roleKeep: Iterable<string>,
+  required: Iterable<string>,
+): string[] {
+  const role = run.policy.phase;
+  const conversation = run.conversationPinnedTools ?? [];
+  const capKeeps = isCappedToolRole(role) && conversation.length > 0
+    ? new Set(roleCappedSelection(role, run.catalogToolNames, roleKeep, required).required)
+    : undefined;
+  const kept = capKeeps ? conversation.filter((n) => capKeeps.has(n)) : conversation;
+  return [...new Set([...kept, ...run.usedTools])];
+}
+
 export function brainPlatformTools(run: BrainRunContext): BrainPlatform {
   // The names are the preamble's record (`promptTools`), fixed for the run: derived once.
   let naming: PromptNaming | undefined;
@@ -109,7 +132,7 @@ export function brainPlatformTools(run: BrainRunContext): BrainPlatform {
   // routed (it runs as the router's `invoke` would - the surface's catalog is closed, so the kernel hands it to the preflight and execute).
   let cappedMenu: { step: number; names: ReadonlySet<string> } | undefined;
   const traceUnadvertised = (raw: string, step: number): void => {
-    const name = resolveToolAlias(raw);
+    const name = resolveCallName(raw, toolNameSet(run.catalogToolNames, (n) => n));
     if (!cappedMenu || cappedMenu.step !== step || cappedMenu.names.has(name) || isRouterTool(name) || !run.catalogToolNames.includes(name)) return;
     traceRouted(run.c, step, 'direct', name);
   };
@@ -143,12 +166,13 @@ export function brainPlatformTools(run: BrainRunContext): BrainPlatform {
         return [...catalog, ...conversational.filter((t) => !names.has(t.function.name))];
       },
       get selection() {
-        // The pins are the tools THIS run called (`callPostStep`): a tool reached through the router is the tool it reached, a fold does not
-        // forget one, and an earlier run's calls pin nothing - the transcript the agent would read them off holds all three wrongly.
+        // The pins (`selectionPins`): the conversation's earlier tools first, then the tools THIS run called - the list only grows at its end.
         // The ranking stays the Brain's own (`selectTools.ts`), not the shared scorer the cloud and the canvas keep, and the required tools are held to the cap as the Brain's loop always held them.
         // A code or verify turn is capped to what the prompt names, its role's tools and what matches the request (`@builderforce/agent-run`
         // `roleCap.ts`, {@link surfaceRequired}); a Studio keeps its build vocabulary through it. The router rides every trimmed turn (`brainTurnMenu.ts`).
-        return { query: run.requestQuery, limit: DEFAULT_TOOL_LIMIT, capRequired: true, role: run.policy.phase, roleKeep: studioToolsIn(run.catalogToolNames), rank: (tools: readonly ToolSchema[], query: string) => relevantTools(tools as unknown as BrainToolSpec[], query) as unknown as ToolSchema[], pinned: [...run.usedTools], required: surfaceRequired(run, named) };
+        const required = surfaceRequired(run, named);
+        const roleKeep = studioToolsIn(run.catalogToolNames);
+        return { query: run.requestQuery, limit: DEFAULT_TOOL_LIMIT, capRequired: true, role: run.policy.phase, roleKeep, rank: (tools: readonly ToolSchema[], query: string) => relevantTools(tools as unknown as BrainToolSpec[], query) as unknown as ToolSchema[], pinned: selectionPins(run, roleKeep, required), required };
       },
       // ONE cap on a result: the Brain's own, applied inside `callRunner` (`trimToolResult`, by LINE, sized to the serving
       // model's window). The agent's per-tool cap would cut the already budgeted text a second time and drop its paging fields.

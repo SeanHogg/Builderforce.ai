@@ -17,6 +17,7 @@
  */
 
 import { callWriteEntriesOf } from "./callShape.js";
+import { countNewlines, dominantEol, matchEdit, withEol, type MatchTier } from "./edit-match.js";
 
 /** Result of {@link applyStringEdit}. `content` is the new file text when `ok`. */
 export interface StringEditResult {
@@ -39,28 +40,13 @@ export interface StringEditResult {
    *  from the NEW content, as `n: text` — capped at {@link EDIT_EXCERPT_MAX_LINES}.
    *  The agent sees what the file now says, so it does not re-read it to check. */
   excerpt?: string;
+  /** Only on success: which matcher tier found `oldString` (`edit-match.ts`) — `exact`,
+   *  `crlf` (line endings differed), `unescaped` (the model over-escaped `\"`/`\n`) or
+   *  `whitespace` (indentation / trailing whitespace differed). */
+  matchedBy?: MatchTier;
 }
 
-const toLF = (s: string): string => s.replace(/\r\n/g, "\n");
-const countNewlines = (s: string): number => s.split("\n").length - 1;
-
-/** A file's line-ending style: the one most of its lines use, or `null` for a file with none. */
-export type Eol = "\r\n" | "\n";
-
-/** The dominant EOL of `content` — CRLF wins a tie; `null` when it has no newline at all. */
-export function dominantEol(content: string): Eol | null {
-  const all = countNewlines(content);
-  if (all === 0) return null;
-  const crlf = content.split("\r\n").length - 1;
-  return crlf >= all - crlf ? "\r\n" : "\n";
-}
-
-/** `text` with every line ending (CRLF or LF) rewritten to `eol`; untouched when `eol` is null. */
-export function withEol(text: string, eol: Eol | null): string {
-  if (!eol) return text;
-  const lf = toLF(text);
-  return eol === "\n" ? lf : lf.replace(/\n/g, "\r\n");
-}
+export { dominantEol, withEol, type Eol, type MatchTier } from "./edit-match.js";
 
 /**
  * Whole-file write that keeps the file's line endings: `next` rewritten to the EOL style
@@ -69,34 +55,6 @@ export function withEol(text: string, eol: Eol | null): string {
  */
 export function conformToExistingEol(existing: string | null | undefined, next: string): string {
   return existing == null ? next : withEol(next, dominantEol(existing));
-}
-
-/**
- * `content` with its CRLFs folded to LF, plus `at[i]` = the offset in `content` of the
- * character that produced `lf[i]` (a folded CRLF maps to its `\r`). `at[lf.length]` is
- * `content.length`, so an LF span `[s, e)` is `[at[s], at[e])` in the original.
- */
-function foldToLF(content: string): { lf: string; at: Int32Array } {
-  const lf = toLF(content);
-  const at = new Int32Array(lf.length + 1);
-  let j = 0;
-  for (let i = 0; i < content.length; i += 1) {
-    at[j] = i;
-    if (content.charCodeAt(i) === 13 && content.charCodeAt(i + 1) === 10) i += 1;
-    j += 1;
-  }
-  at[j] = content.length;
-  return { lf, at };
-}
-
-/** The non-overlapping `[start, end)` spans of `needle` in `hay`, in order — all of them, or at most two (enough to tell "not unique"). */
-function spansOf(hay: string, needle: string, all: boolean): Array<[number, number]> {
-  const spans: Array<[number, number]> = [];
-  for (let at = hay.indexOf(needle); at !== -1; at = hay.indexOf(needle, at + needle.length)) {
-    spans.push([at, at + needle.length]);
-    if (!all && spans.length === 2) break;
-  }
-  return spans;
 }
 
 /** Shortest needle the "contains" fallback of {@link findNearest} will try — shorter
@@ -165,6 +123,10 @@ function findNearest(content: string, oldString: string): { line: number; excerp
  * `oldString` is an error (the caller must add context) — identical to the native edit
  * tool semantics the other providers use.
  *
+ * When the EOL-normalised text misses, tolerant tiers follow (`edit-match.ts`): an
+ * over-escaped `oldString` (`\"` for `"`), then a whitespace-tolerant line match — each
+ * still unique-or-refused; `matchedBy` names the tier that hit.
+ *
  * A success carries `region` (where the first replacement landed); a miss carries
  * `nearest` (the most similar line and its neighbourhood) when one exists — the hint an
  * agent needs to stop re-sending the same wrong `oldString`.
@@ -178,29 +140,25 @@ export function applyStringEdit(
   if (typeof oldString !== "string" || oldString.length === 0) {
     return { ok: false, error: "oldString is required" };
   }
-  const newS = withEol(newString, dominantEol(content));
-  // Spans in ORIGINAL offsets: the EOL-normalised match, then (only for an oldString whose
-  // lone `\r` the fold cannot see) the literal one.
-  const { lf, at } = foldToLF(content);
-  let spans = spansOf(lf, toLF(oldString), replaceAll).map(([s, e]): [number, number] => [at[s]!, at[e]!]);
-  if (spans.length === 0) spans = spansOf(content, oldString, replaceAll);
-  if (spans.length > 1 && !replaceAll) {
+  const match = matchEdit(content, oldString, newString, replaceAll, dominantEol(content));
+  if (match && "ambiguous" in match) {
     return {
       ok: false,
       error: "oldString is not unique; add more surrounding context or set replaceAll",
     };
   }
-  if (spans.length > 0) {
+  if (match) {
     const parts: string[] = [];
     let from = 0;
-    for (const [s, e] of spans) {
-      parts.push(content.slice(from, s), newS);
-      from = e;
+    for (const { start, end, text } of match.splices) {
+      parts.push(content.slice(from, start), text);
+      from = end;
     }
     parts.push(content.slice(from));
     const next = parts.join("");
-    const region = regionAt(content, spans[0]![0], newS);
-    return { ok: true, content: next, replaced: spans.length, region, excerpt: excerptAfterEdit(next, region) };
+    const first = match.splices[0]!;
+    const region = regionAt(content, first.start, first.text);
+    return { ok: true, content: next, replaced: match.splices.length, region, excerpt: excerptAfterEdit(next, region), matchedBy: match.tier };
   }
   const nearest = findNearest(content, oldString);
   return {
@@ -217,6 +175,8 @@ export interface EditFacts {
   excerpt?: string;
   error?: string;
   nearest?: { line: number; excerpt: string };
+  /** Present only when a tolerant tier (not `exact`) matched — tells the model its text was off. */
+  matchedBy?: MatchTier;
 }
 
 /**
@@ -293,6 +253,8 @@ export interface BatchEditFileOutcome {
   excerpt?: string;
   error?: string;
   nearest?: { line: number; excerpt: string };
+  /** As {@link EditFacts.matchedBy}: present only when a tolerant tier matched. */
+  matchedBy?: MatchTier;
 }
 
 export interface BatchEditPlan {
@@ -365,6 +327,7 @@ export async function applyBatchEdits(
       ...(r.replaced != null ? { replaced: r.replaced } : {}),
       ...(r.region ? { region: r.region } : {}),
       ...(r.excerpt ? { excerpt: r.excerpt } : {}),
+      ...(r.matchedBy && r.matchedBy !== "exact" ? { matchedBy: r.matchedBy } : {}),
     });
   }
   // Phase 2 — every edit matched; persist the touched files exactly once, in batch order.
@@ -392,5 +355,6 @@ export function editFacts(edit: StringEditResult): EditFacts {
     ...(edit.excerpt ? { excerpt: edit.excerpt } : {}),
     ...(edit.error ? { error: edit.error } : {}),
     ...(edit.nearest ? { nearest: edit.nearest } : {}),
+    ...(edit.matchedBy && edit.matchedBy !== "exact" ? { matchedBy: edit.matchedBy } : {}),
   };
 }

@@ -42,8 +42,12 @@ export interface GitPort {
    */
   outgoing(
     repo: string,
-    /** `pullRequest` ⇒ compare against the PR's base (merge-base with it), not `@{u}`. */
-    opts?: { pullRequest?: { base?: string } },
+    /**
+     * `pullRequest` ⇒ compare against the PR's base (merge-base with it), not `@{u}`.
+     * `ref` ⇒ compute for that branch (the tool's `branch` arg) instead of the checkout's HEAD;
+     * `baseBranch` then describes that TARGET branch, not the checkout.
+     */
+    opts?: { pullRequest?: { base?: string }; ref?: string },
   ): Promise<{
     files: OutgoingFile[];
     diffHash: string;
@@ -51,6 +55,16 @@ export interface GitPort {
     diff?: string;
     /** Why the outgoing change could not be computed (no upstream, empty set): reported "unavailable", never a pass, never reviewed. */
     unavailable?: string;
+    /**
+     * Set when the set WAS computed and is empty because the ref is already contained in the
+     * comparison ref (merge-base == its commit): nothing to push. `head` is the ref's sha,
+     * `upstream` the ref compared against (`origin/main`), `ref` what was computed (`opts.ref`,
+     * else "HEAD"), `uncommitted` the working tree's changed paths (absolute) when that ref is
+     * the checkout. `unavailable` still carries the "no outgoing commits" reason so readers
+     * that only skip on it (the settle review) still skip an empty diff; the gates read
+     * `upToDate` first (`shipGates` `outgoingUpToDate`).
+     */
+    upToDate?: { head: string; upstream: string; ref: string; uncommitted: readonly string[] };
   }>;
   /**
    * Is the working tree's content for these paths ALREADY on the base branch — i.e. HEAD

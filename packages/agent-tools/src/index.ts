@@ -21,6 +21,8 @@ export * from "./glob.js";
 export * from "./tool.js";
 export * from "./registry.js";
 export * from "./toolAliases.js";
+// THE catalog id ⇄ advertised name translation (`tasks.archive_many` ⇄ `builtin_tasks_archive_many`).
+export * from "./toolNaming.js";
 export * from "./engine.js";
 export * from "./spec.js";
 export * from "./tool-side-effect.js";

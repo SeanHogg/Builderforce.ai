@@ -1,3 +1,4 @@
+import type { TaskListScope } from '@builderforce/agent-loop';
 import { Task } from './Task';
 import { TaskId, ProjectId } from '../shared/types';
 
@@ -11,7 +12,48 @@ export interface TaskListOptions {
   includeArchived?: boolean;
 }
 
+/** Which tickets a list returns — agent-loop's ONE scope type, not a copy. */
+export type TaskFilterScope = TaskListScope;
+
+/**
+ * The ONE ticket filter contract (parsed by `application/task/taskListFilter.ts`, applied
+ * in SQL by the task repository). Every field but `scope` is optional and narrows.
+ */
+export interface TaskListFilter {
+  scope: TaskFilterScope;
+  projectId?: number;
+  status?: string;
+  /** Children of this parent only. */
+  parentTaskId?: number;
+  /** Top-level tickets only (no parent). Never set together with `parentTaskId`. */
+  topLevelOnly?: boolean;
+  /** Case-insensitive starts-with on the title. */
+  titlePrefix?: string;
+  /** Case-insensitive substring of the title. */
+  titleMatch?: string;
+  createdBefore?: Date;
+  createdAfter?: Date;
+  assigned?: 'none' | 'any';
+  /** true = only persona fan-out copies (a `ticket_participants.child_task_id` points at
+   *  the ticket); false = only tickets that are NOT fan-out copies. */
+  isFanoutCopy?: boolean;
+  taskType?: string;
+}
+
+/** Constraints a SERVICE adds on top of a caller's filter — never caller input. */
+export interface TaskQueryState {
+  /** Pin the archived flag (a bulk archive reads only the rows its write would change). */
+  archived?: boolean;
+  /** Ticket types the caller may not see (e.g. `security` without clearance). */
+  excludeTaskTypes?: readonly string[];
+}
+
 export interface ITaskRepository {
+  /**
+   * Archive (or restore) many of the tenant's tickets in ONE statement. Ids outside the
+   * tenant, or unknown, are not updated; the rows that were come back with their project.
+   */
+  setArchived(tenantId: number, ids: readonly number[], archived: boolean): Promise<Array<{ id: number; projectId: number }>>;
   findAll(projectId?: ProjectId, opts?: TaskListOptions): Promise<Task[]>;
   findByProjectIds(ids: ProjectId[], opts?: TaskListOptions): Promise<Task[]>;
   findById(id: TaskId): Promise<Task | null>;

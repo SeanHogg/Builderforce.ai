@@ -855,7 +855,7 @@
        "properties": {
         "name": {
          "type": "string",
-         "description": "Exact tool name to call."
+         "description": "Exact tool name to call; a catalog id such as \"tasks.archive_many\" is accepted too."
         },
         "args": {
          "type": "object",
@@ -1747,7 +1747,7 @@
        "properties": {
         "name": {
          "type": "string",
-         "description": "Exact tool name to call."
+         "description": "Exact tool name to call; a catalog id such as \"tasks.archive_many\" is accepted too."
         },
         "args": {
          "type": "object",
@@ -2658,7 +2658,7 @@
        "properties": {
         "name": {
          "type": "string",
-         "description": "Exact tool name to call."
+         "description": "Exact tool name to call; a catalog id such as \"tasks.archive_many\" is accepted too."
         },
         "args": {
          "type": "object",
@@ -3592,7 +3592,7 @@
        "properties": {
         "name": {
          "type": "string",
-         "description": "Exact tool name to call."
+         "description": "Exact tool name to call; a catalog id such as \"tasks.archive_many\" is accepted too."
         },
         "args": {
          "type": "object",

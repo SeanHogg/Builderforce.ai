@@ -326,7 +326,7 @@ import { createReplayTicketEffectRoutes } from './presentation/routes/replayTick
 import { createReplayMethodSeedRoutes } from './presentation/routes/replayMethodSeedRoutes';
 import { createWebSearchRoutes } from './presentation/routes/webSearchRoutes';
 
-import { API_VERSION } from './version';
+import { API_VERSION, deployedCommit } from './version';
 import {
   OPENAPI_VERSION,
   OPENAPI_TITLE,
@@ -596,7 +596,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
 
   // Liveness only, deliberately with NO I/O so an uptime check never wakes a database.
   // Every deeper probe is a section of application/health/platformHealth.
-  app.get('/health', (c) => c.json({ status: 'ok', worker: 'api.builderforce.ai', version: API_VERSION }));
+  app.get('/health', (c) => c.json({ status: 'ok', worker: 'api.builderforce.ai', version: API_VERSION, commit: deployedCommit(c.env) }));
 
   // OpenAPI 3.1 document — BuilderForce Agents-facing endpoints (P4-4)
   app.get('/api/openapi.json', (c) => {

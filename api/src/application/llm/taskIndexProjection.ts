@@ -13,6 +13,7 @@
  * envelope keys come BEFORE `lines`, so even a cut result keeps its paging fields.
  */
 import { INDEX_RESULT_CHARS, TASK_INDEX_FORMAT } from '@builderforce/tool-output-policy';
+import { clampCount } from './listProjection';
 
 type Row = Record<string, unknown>;
 
@@ -36,17 +37,25 @@ function indexLine(row: Row): string {
   return `${row.id}|${row.status ?? ''}|${row.taskType ?? ''}|${row.parentTaskId ?? ''}|${titleOf(row.title)}`;
 }
 
-/** Clamp a caller-supplied index `limit` into `[1, TASK_INDEX_MAX_LIMIT]`. */
+/** Clamp a caller-supplied index `limit` into `[1, TASK_INDEX_MAX_LIMIT]` (the ONE count clamp). */
 export function clampIndexLimit(v: unknown): number {
-  const n = v != null ? Number(v) : TASK_INDEX_DEFAULT_LIMIT;
-  return Math.max(1, Math.min(Number.isFinite(n) ? Math.floor(n) : TASK_INDEX_DEFAULT_LIMIT, TASK_INDEX_MAX_LIMIT));
+  return clampCount(v, TASK_INDEX_DEFAULT_LIMIT, TASK_INDEX_MAX_LIMIT);
 }
 
-/** The index page over `rows` (already scoped, masked and sorted). Pure. */
-export function projectTaskIndex(rows: readonly Row[], offset: number, limit: number, scope: string, budget = INDEX_RESULT_CHARS - ENVELOPE_CHARS) {
+/** One index line per row, for callers that only need the lines (a dry-run sample). */
+export function taskIndexLines(rows: readonly Row[]): string[] {
+  return rows.map(indexLine);
+}
+
+/**
+ * The index envelope over ONE page already cut by the database (`pageRows` start at
+ * `offset`; `total` is the full match count). The page stops at the char budget and
+ * `nextOffset` resumes at the first row that did not fit. Pure.
+ */
+export function projectTaskIndexPage(pageRows: readonly Row[], offset: number, total: number, scope: string, budget = INDEX_RESULT_CHARS - ENVELOPE_CHARS) {
   const lines: string[] = [];
   let used = 0;
-  for (const row of rows.slice(offset, offset + limit)) {
+  for (const row of pageRows) {
     const line = indexLine(row);
     // Serialized cost: JSON escaping plus the `\n` separator.
     const cost = JSON.stringify(line).length;
@@ -55,10 +64,10 @@ export function projectTaskIndex(rows: readonly Row[], offset: number, limit: nu
     used += cost;
   }
   const end = offset + lines.length;
-  const truncated = rows.length > end;
+  const truncated = total > end;
   return {
     format: TASK_INDEX_FORMAT,
-    total: rows.length,
+    total,
     returned: lines.length,
     offset,
     truncated,

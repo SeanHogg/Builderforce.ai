@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { INDEX_RESULT_CHARS, isIndexResult, shapeToolResult } from '@builderforce/tool-output-policy';
-import { clampIndexLimit, projectTaskIndex, TASK_INDEX_MAX_LIMIT } from './taskIndexProjection';
+import { clampIndexLimit, projectTaskIndexPage, TASK_INDEX_MAX_LIMIT } from './taskIndexProjection';
+
+/** The page a database cut at `offset`/`limit` hands the projection, over the full set. */
+const projectTaskIndex = (all: ReadonlyArray<Record<string, unknown>>, offset: number, limit: number, scope: string) =>
+  projectTaskIndexPage(all.slice(offset, offset + limit), offset, all.length, scope);
 
 const rows = (n: number, title = 'A ticket title of a typical length for this board') =>
   Array.from({ length: n }, (_, i) => ({ id: 6000 + i, status: 'backlog', taskType: 'task', parentTaskId: i % 3 ? 5000 : null, title }));
@@ -44,5 +48,7 @@ describe('tasks.list index projection', () => {
     expect(clampIndexLimit(5000)).toBe(TASK_INDEX_MAX_LIMIT);
     expect(clampIndexLimit(0)).toBe(1);
     expect(clampIndexLimit('abc')).toBe(TASK_INDEX_MAX_LIMIT);
+    // A fraction never reaches SQL as a LIMIT.
+    expect(clampIndexLimit(2.7)).toBe(2);
   });
 });

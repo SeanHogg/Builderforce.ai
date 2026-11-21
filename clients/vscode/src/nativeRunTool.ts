@@ -5,7 +5,7 @@
  * `nativeBrainRun.ts`, which re-exports every name here. No `vscode` import.
  */
 
-import { resolveToolAlias } from "@builderforce/agent-tools";
+import { resolveCallName, toolNameSet } from "@builderforce/agent-tools";
 import { toolSpecsFor, type BrainAction, type BrainToolSpec } from "@seanhogg/builderforce-brain-embedded";
 import { describeTool, type ToolDef } from "./fileTools";
 import { evaluatePolicyGate, toolCallPaths, type PolicyGate } from "@builderforce/agent-tools";
@@ -165,7 +165,9 @@ export function createNativeRunTool(opts: {
   runKey?: number;
 }): (name: string, args: unknown, signal?: AbortSignal) => Promise<unknown> {
   return async (name, args, signal) => {
-    const resolved = resolveToolAlias(name);
+    // A synonym remapped, then a catalog id written as the name (`tasks.archive_many`) resolved to the advertised tool — the same
+    // `resolveCallName` the Brain's preflight uses. Unresolved ⇒ the alias, so an unknown name keeps its error below.
+    const resolved = resolveCallName(name, toolNameSet(opts.defs, (d) => d.name));
     const record = argsRecord(args);
     const label = toolLabel(opts.defs, resolved, record);
     const decision = evaluatePolicyGate(opts.gates, resolved, toolCallPaths(record), undefined, declaredOf(opts.defs, resolved));

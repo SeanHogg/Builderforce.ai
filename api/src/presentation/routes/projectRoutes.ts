@@ -9,6 +9,7 @@ import { invalidateProjectsList, projectsListVersionKey } from '../../applicatio
 import type { HonoEnv } from '../../env';
 import type { Env } from '../../env';
 import { getCacheVersion, getOrSetCached, bumpCacheVersion, bumpTicketSearchVersion } from '../../infrastructure/cache/readThroughCache';
+import { bumpTaskTreeVersion } from '../../application/task/afterTaskBulkWrite';
 import { buildProjectConnections, projectConnectionsKey } from '../../application/repos/projectConnectionStatus';
 import { computeProject360, type Project360Aggregate } from '../../application/project/computeProject360';
 import { computeProjectDeliverySignals } from '../../application/insights/projectDeliverySignals';
@@ -830,9 +831,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
     // updateProject; bust the cached Epic trees for this project so they don't
     // serve stale keys. Task-list reads are uncached, so they reflect it already.
     if (project.key !== existing.key) {
-      await bumpCacheVersion(c.env as Env, `task-tree-version:project:${existing.id}`).catch((error) => {
-        reportCaughtError(error, { source: "presentation/routes/projectRoutes.ts", operation: "createProjectRoutes" });
-      });
+      await bumpTaskTreeVersion(c.env as Env, existing.id, "presentation/routes/projectRoutes.ts");
     }
     return c.json(project.toPlain());
   });

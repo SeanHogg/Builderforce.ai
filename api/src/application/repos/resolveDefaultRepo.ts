@@ -14,7 +14,7 @@
  * Returns the non-secret coordinates only; the git token is resolved separately,
  * server-side, via resolveRepoCredential at the moment of a git/PR operation.
  */
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import { tasks, projectRepositories } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Db } from '../../infrastructure/database/connection';
@@ -78,6 +78,39 @@ export async function resolveDefaultRepoForProject(
   const repos = await loadProjectRepos(db, tenantId, projectId);
   const chosen = repos.find((r) => r.isDefault) ?? repos[0];
   return chosen ? toRef(chosen) : null;
+}
+
+/**
+ * The repo a tenant links under a known `owner/repo` slug on one provider, in ANY of
+ * its projects — newest link first. Slugs compare case-insensitively, as GitHub,
+ * GitLab and Bitbucket treat them. Used where the repo is named by the platform
+ * rather than chosen by a project (`deploy.status` reading the platform's own CI).
+ */
+export async function resolveTenantRepoBySlug(
+  db: Db,
+  tenantId: number,
+  slug: { provider: string; owner: string; repo: string },
+): Promise<DefaultRepoRef | null> {
+  const [row] = await db
+    .select({
+      id: projectRepositories.id,
+      isDefault: projectRepositories.isDefault,
+      provider: projectRepositories.provider,
+      owner: projectRepositories.owner,
+      repo: projectRepositories.repo,
+      defaultBranch: projectRepositories.defaultBranch,
+      matchHints: projectRepositories.matchHints,
+    })
+    .from(projectRepositories)
+    .where(and(
+      eq(projectRepositories.tenantId, tenantId),
+      eq(projectRepositories.provider, slug.provider),
+      sql`lower(${projectRepositories.owner}) = ${slug.owner.toLowerCase()}`,
+      sql`lower(${projectRepositories.repo}) = ${slug.repo.toLowerCase()}`,
+    ))
+    .orderBy(desc(projectRepositories.createdAt))
+    .limit(1);
+  return row ? toRef(row) : null;
 }
 
 export async function resolveDefaultRepoForTask(

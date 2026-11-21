@@ -42,7 +42,10 @@ import type { Db } from '../../infrastructure/database/connection';
 import { repoDeliveryStatus } from '../../infrastructure/database/schema';
 import { loadSweepStamps } from '../../infrastructure/cache/sweepStampLedger';
 import type { CacheEnv } from '../../infrastructure/cache/readThroughCache';
-import { githubRequest, repoPath, resolveRepoAuth, type ResolvedRepoAuth } from './githubClient';
+import {
+  githubRequest, repoPath, resolveRepoAuth,
+  type GitHubCoords, type GitHubResponse, type ResolvedRepoAuth,
+} from './githubClient';
 import { makeRepoFetch } from './sources/RepoSource';
 import { resolveRepoCredential, isResolveError } from './resolveRepoCredential';
 import type { Env } from '../../env';
@@ -98,12 +101,38 @@ interface ProbeContext {
 // GitHub
 // ---------------------------------------------------------------------------
 
-interface GithubRun {
+export interface GithubRun {
   status: string | null;
   conclusion: string | null;
   html_url: string | null;
   head_branch: string | null;
   updated_at: string | null;
+  /** Present on every run GitHub returns; optional so older fixtures still type. */
+  name?: string | null;
+  head_sha?: string | null;
+  created_at?: string | null;
+}
+
+/** A GitHub credential as {@link githubRequest} takes it: a resolved repo auth, or a bare token. */
+export type GithubCredential =
+  | { auth: ResolvedRepoAuth; coords?: undefined; token?: undefined }
+  | { coords: GitHubCoords; token: string; auth?: undefined };
+
+/**
+ * The latest GitHub Actions run on a repo — THE Actions reader. The delivery probe
+ * asks for any workflow on the default branch; `deploy.status` narrows it to one
+ * workflow file (`release.yml`). Pull-request runs are excluded either way.
+ */
+export async function readLatestActionsRun(
+  credential: GithubCredential,
+  coords: GitHubCoords,
+  opts: { branch?: string | null; workflow?: string } = {},
+): Promise<GitHubResponse<{ workflow_runs?: GithubRun[] }>> {
+  const base = opts.workflow ? `/actions/workflows/${encodeURIComponent(opts.workflow)}/runs` : '/actions/runs';
+  return githubRequest<{ workflow_runs?: GithubRun[] }>({
+    ...credential,
+    path: repoPath(coords, `${base}?per_page=1&exclude_pull_requests=true${opts.branch ? `&branch=${encodeURIComponent(opts.branch)}` : ''}`),
+  });
 }
 
 /**
@@ -143,13 +172,10 @@ export function totalFromLinkHeader(headers: Headers, itemsOnPage: number): numb
 
 async function probeGithub(ctx: ProbeContext): Promise<RepoDeliveryProbe> {
   const coords = { host: ctx.host, owner: ctx.owner, repo: ctx.repo };
-  const credential = ctx.auth ? { auth: ctx.auth } : { coords, token: ctx.token };
+  const credential: GithubCredential = ctx.auth ? { auth: ctx.auth } : { coords, token: ctx.token };
   const [pulls, runs] = await Promise.all([
     githubRequest<Array<unknown>>({ ...credential, path: repoPath(coords, '/pulls?state=open&per_page=1') }),
-    githubRequest<{ workflow_runs?: GithubRun[] }>({
-      ...credential,
-      path: repoPath(coords, `/actions/runs?per_page=1&exclude_pull_requests=true${ctx.branch ? `&branch=${encodeURIComponent(ctx.branch)}` : ''}`),
-    }),
+    readLatestActionsRun(credential, coords, { branch: ctx.branch }),
   ]);
   if (!pulls.ok) return unreachable(pulls.code === 'unsupported' ? 'provider_error' : pulls.code);
 

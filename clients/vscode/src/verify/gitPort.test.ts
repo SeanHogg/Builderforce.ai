@@ -57,6 +57,55 @@ describe("createGitPort", () => {
     expect(out.unavailable).toMatch(/no outgoing commits/);
   });
 
+  it("an empty set because HEAD is already on @{u} (merge-base == HEAD) is upToDate, naming HEAD and the upstream", async () => {
+    const { git } = fakeGit((args) => (args.join(" ") === "rev-parse HEAD" ? { stdout: "headitself\n", exitCode: 0 } : undefined));
+    const out = await createGitPort(git).outgoing("/r");
+    expect(out.files).toEqual([]);
+    expect(out.upToDate).toEqual({ head: "headitself", upstream: "origin/feature", ref: "HEAD", uncommitted: [] });
+  });
+
+  it("an upToDate checkout reports its uncommitted paths (absolute)", async () => {
+    const { git } = fakeGit((args) => {
+      const a = args.join(" ");
+      if (a === "rev-parse HEAD") return { stdout: "headitself\n", exitCode: 0 };
+      if (a.startsWith("status --porcelain")) return { stdout: " M src/a.ts\0?? new.ts\0R  b.ts\0old-b.ts\0", exitCode: 0 };
+      return undefined;
+    });
+    const out = await createGitPort(git).outgoing("/r");
+    expect(out.upToDate?.uncommitted).toEqual(["/r/src/a.ts", "/r/new.ts", "/r/b.ts"]);
+  });
+
+  it("regression: a named ref is read in place of HEAD — merge-base, log, diff and blob ids", async () => {
+    const { git, calls } = fakeGit((args) => {
+      const a = args.join(" ");
+      if (a === "merge-base origin/main feat/x") return { stdout: "prbase\n", exitCode: 0 };
+      if (a.startsWith("log prbase..feat/x")) return { stdout: "c0ffee0c0ffee0c0ffee0c0ffee0c0ffee0c0ffe\nsrc/a.ts\n", exitCode: 0 };
+      if (a === "diff --binary prbase..feat/x") return { stdout: "FEATDIFF", exitCode: 0 };
+      if (a.startsWith("rev-parse --verify --quiet feat/x:")) return { stdout: `blob-${args[3]}\n`, exitCode: 0 };
+      if (a.startsWith("log prbase..HEAD")) throw new Error("read HEAD instead of the named ref");
+      return undefined;
+    });
+    const out = await createGitPort(git).outgoing("/r", { pullRequest: {}, ref: "feat/x" });
+    expect(out.diff).toBe("FEATDIFF");
+    expect(out.files.map((f) => f.hash)).toEqual(["blob-feat/x:src/a.ts"]);
+    expect(out.upToDate).toBeUndefined();
+    expect(calls.map((c) => c.join(" "))).toContain("diff --name-only feat/x --");
+  });
+
+  it("regression: baseBranch describes the TARGET ref, not the checkout", async () => {
+    const { git } = fakeGit((args) => (args.join(" ") === "rev-parse --abbrev-ref main@{u}" ? { stdout: "origin/main\n", exitCode: 0 } : undefined));
+    // The checkout is `feature`; pushing `main` by ref is a base-branch push.
+    const out = await createGitPort(git).outgoing("/r", { ref: "main" });
+    expect(out.baseBranch).toBe(true);
+  });
+
+  it("an empty set whose merge-base is NOT HEAD is not upToDate", async () => {
+    const { git } = fakeGit((args) => (args.join(" ") === "rev-parse HEAD" ? { stdout: "other\n", exitCode: 0 } : undefined));
+    const out = await createGitPort(git).outgoing("/r");
+    expect(out.upToDate).toBeUndefined();
+    expect(out.unavailable).toMatch(/no outgoing commits/);
+  });
+
   it("regression: no upstream is unavailable, never an empty pass", async () => {
     const { git } = fakeGit((args) => (args.includes("@{u}") ? { stdout: "", exitCode: 128 } : undefined));
     const out = await createGitPort(git).outgoing("/r");

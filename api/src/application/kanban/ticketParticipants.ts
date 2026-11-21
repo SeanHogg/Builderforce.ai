@@ -18,6 +18,7 @@
  * append-only, so this record is immutable history.
  */
 import { and, asc, eq, inArray, isNull, or } from 'drizzle-orm';
+import { TaskRepository } from '../../infrastructure/repositories/TaskRepository';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
@@ -209,6 +210,16 @@ export type CreateChildTask = (input: {
   assignedAgentRef?: string | null;
   assignedUserId?: string | null;
 }) => Promise<{ id: number }>;
+
+/** What one materialize pass did. */
+export interface MaterializeWorkItemsResult {
+  /** Child tasks newly created (at most one per role). */
+  created: number;
+  /** Participant rows newly linked to a child (new or reused). */
+  linked: number;
+  /** Set when nothing was materialized on purpose: the ticket is itself a fan-out child. */
+  skipped?: 'fanout_child';
+}
 
 /**
  * A refusal from this service, carrying the status it answers with: 400 for a
@@ -609,39 +620,135 @@ export class TicketParticipantsService {
   }
 
   /**
-   * Materialize child work-item tasks for every not-yet-materialized participant that
-   * has a resolved assignee — one child task per resource, linked back via childTaskId,
-   * so the parent ticket's %-complete rolls up from real board tasks.
+   * Materialize child work-item tasks for the not-yet-materialized participants that
+   * have a resolved assignee, linked back via childTaskId, so the parent ticket's
+   * %-complete rolls up from real board tasks.
+   *
+   * AT MOST ONE CHILD PER ROLE. A manifest slot is (stage, role, responsibility, source),
+   * so one role required in three stages is three rows — and used to be three
+   * `[Role] <title>` copies of the same work (~700 of 984 archived tickets in one tenant
+   * were these copies). Rows are grouped by role. A role's child is, in order:
+   *   1. the child some row of the role already links to — if that child is still LIVE
+   *      (a non-archived child of this ticket); an archived or moved link does not count;
+   *   2. a live child of this ticket titled exactly `[Role] <title>`;
+   *   3. a new child.
+   * Every pending row of the role (unlinked, or linked to a dead child) links to it.
+   *
+   * WHO COORDINATES A ROLE'S CHILD. When one role is staffed by different people across
+   * stages, the role still gets ONE child, assigned to the FIRST-STAFFED participant:
+   * pending rows ordered by their stage's lane position on the canonical board (the
+   * ticket-wide stage first, unknown stages last), then by participant id. Deterministic,
+   * so a replay never flips the owner.
+   *
+   * RACE-SAFE LINKS. Each link is a compare-and-set (`… WHERE child_task_id IS NOT
+   * DISTINCT FROM <what we read>`). If a concurrent materialize linked every row first,
+   * the child created here is surplus: it is archived and the conflict REPORTED.
+   *
+   * A ticket that is ITSELF a fan-out child materializes nothing (`skipped:
+   * 'fanout_child'`) — otherwise a replay fans children out into grandchildren.
    */
-  async materializeChildTasks(env: Env, tenantId: number, taskId: number, createChild: CreateChildTask): Promise<number> {
-    const [[parent], rows] = await Promise.all([
-      this.db.select({ title: tasks.title }).from(tasks).where(scopedToTenant(tasks, tenantId, eq(tasks.id, taskId))).limit(1),
+  async materializeWorkItems(env: Env, tenantId: number, taskId: number, createChild: CreateChildTask): Promise<MaterializeWorkItemsResult> {
+    // ONE read per table: the ticket + its live children, and the ticket's manifest
+    // + any row that names the ticket as somebody's fan-out child.
+    const [taskRows, participantRows] = await Promise.all([
+      this.db
+        .select({ id: tasks.id, projectId: tasks.projectId, title: tasks.title, parentTaskId: tasks.parentTaskId, archived: tasks.archived })
+        .from(tasks)
+        .where(scopedToTenant(tasks, tenantId, or(eq(tasks.id, taskId), and(eq(tasks.parentTaskId, taskId), eq(tasks.archived, false))))),
       this.db
         .select()
         .from(ticketParticipants)
-        .where(and(eq(ticketParticipants.tenantId, tenantId), eq(ticketParticipants.taskId, taskId))),
+        .where(and(
+          eq(ticketParticipants.tenantId, tenantId),
+          or(eq(ticketParticipants.taskId, taskId), eq(ticketParticipants.childTaskId, taskId)),
+        )),
     ]);
+    if (participantRows.some((r) => r.childTaskId === taskId)) return { created: 0, linked: 0, skipped: 'fanout_child' };
+
+    const parent = taskRows.find((r) => r.id === taskId);
+    const parentTitle = parent?.title ?? `Ticket #${taskId}`;
+    const liveChildIds = new Set<number>();
+    const liveChildByTitle = new Map<string, number>();
+    for (const r of taskRows) {
+      if (r.id === taskId || r.parentTaskId !== taskId || r.archived === true) continue;
+      liveChildIds.add(r.id);
+      if (!liveChildByTitle.has(r.title)) liveChildByTitle.set(r.title, r.id);
+    }
+    const isLive = (childTaskId: number | null): childTaskId is number => childTaskId != null && liveChildIds.has(childTaskId);
+
+    const byRole = new Map<string, typeof participantRows>();
+    for (const r of participantRows) {
+      if (r.taskId !== taskId) continue;
+      const group = byRole.get(r.roleKey) ?? [];
+      group.push(r);
+      byRole.set(r.roleKey, group);
+    }
+    const pendingByRole = new Map([...byRole].map(([roleKey, group]) => [roleKey, group.filter((r) => !isLive(r.childTaskId) && r.assigneeRef)]));
+    // Lane order is only needed to pick a coordinator among DIFFERENT assignees.
+    const mixed = [...pendingByRole.values()].some((p) => new Set(p.map((r) => `${r.assigneeKind}:${r.assigneeRef}`)).size > 1);
+    const stageRank = mixed && parent ? await this.stageRanks(parent.projectId, tenantId) : new Map<string, number>();
+    const rankOf = (stageKey: string | null): number => (stageKey == null ? -1 : stageRank.get(stageKey) ?? Number.MAX_SAFE_INTEGER);
+
     // Children are still created one at a time (task creation allocates per-board
     // state); the participant links they produce are written in ONE batch after.
-    const links: Array<{ participantId: string; childTaskId: number }> = [];
-    for (const r of rows) {
-      if (r.childTaskId != null || !r.assigneeRef) continue;
-      const title = `[${roleName(r.roleKey)}] ${parent?.title ?? `Ticket #${taskId}`}`;
-      const child = await createChild({
-        title,
-        parentTaskId: taskId,
-        assignedAgentRef: r.assigneeKind === 'agent' ? r.assigneeRef : null,
-        assignedUserId: r.assigneeKind === 'human' ? r.assigneeRef : null,
-      }).catch(() => null);
-      if (!child) continue;
-      links.push({ participantId: r.id, childTaskId: child.id });
+    const links: Array<{ participantId: string; childTaskId: number; previous: number | null; createdHere: boolean }> = [];
+    for (const [roleKey, group] of byRole) {
+      const pending = (pendingByRole.get(roleKey) ?? [])
+        .sort((x, y) => rankOf(x.stageKey) - rankOf(y.stageKey) || (x.id < y.id ? -1 : x.id > y.id ? 1 : 0));
+      const first = pending[0];
+      if (!first) continue;
+      const title = `[${roleName(roleKey)}] ${parentTitle}`;
+      let childId: number | null = group.map((r) => r.childTaskId).find(isLive) ?? liveChildByTitle.get(title) ?? null;
+      let createdHere = false;
+      if (childId == null) {
+        const child = await createChild({
+          title,
+          parentTaskId: taskId,
+          assignedAgentRef: first.assigneeKind === 'agent' ? first.assigneeRef : null,
+          assignedUserId: first.assigneeKind === 'human' ? first.assigneeRef : null,
+        }).catch((error) => {
+          reportCaughtError(error, { source: 'application/kanban/ticketParticipants.ts', operation: 'materializeWorkItems createChild' });
+          return null;
+        });
+        if (!child) continue;
+        childId = child.id;
+        createdHere = true;
+      }
+      for (const r of pending) links.push({ participantId: r.id, childTaskId: childId, previous: r.childTaskId, createdHere });
     }
+
+    let linked = 0;
+    const linkedChildren = new Set<number>();
     if (links.length) {
-      await this.db.batch(links.map((l) => this.db.update(ticketParticipants)
+      // Compare-and-set: link only a row still holding what we read.
+      const results = await this.db.batch(links.map((l) => this.db.update(ticketParticipants)
         .set({ childTaskId: l.childTaskId, updatedAt: new Date() })
-        .where(scopedToTenant(ticketParticipants, tenantId, eq(ticketParticipants.id, l.participantId)))) as unknown as Parameters<typeof this.db.batch>[0]);
+        .where(scopedToTenant(
+          ticketParticipants, tenantId, eq(ticketParticipants.id, l.participantId),
+          l.previous == null ? isNull(ticketParticipants.childTaskId) : eq(ticketParticipants.childTaskId, l.previous),
+        ))
+        .returning({ id: ticketParticipants.id })) as unknown as Parameters<typeof this.db.batch>[0]) as unknown as unknown[];
+      links.forEach((l, i) => {
+        const rows = results[i];
+        if (Array.isArray(rows) && rows.length > 0) {
+          linked += 1;
+          linkedChildren.add(l.childTaskId);
+        }
+      });
     }
-    const created = links.length;
+    // A child created here that no row ended up pointing at lost a race with a concurrent
+    // materialize: archive it (the repository write behind TaskService.archiveMany — this
+    // service holds a Db, not a TaskService) and report the conflict.
+    const createdIds = [...new Set(links.filter((l) => l.createdHere).map((l) => l.childTaskId))];
+    const surplus = createdIds.filter((id) => !linkedChildren.has(id));
+    if (surplus.length) {
+      reportCaughtError(new Error(`materialize race: ${surplus.length} surplus child task(s) archived`), {
+        source: 'application/kanban/ticketParticipants.ts', operation: 'materializeWorkItems link conflict',
+        context: { taskId, tenantId, surplus },
+      });
+      await new TaskRepository(this.db).setArchived(tenantId, surplus, true);
+    }
+    const created = createdIds.length - surplus.length;
     // The child ROWS and the count are the contract and stay inline above.
     //
     // The cache `bump` is INLINE, right after the child rows: the materialize route
@@ -655,15 +762,27 @@ export class TicketParticipantsService {
     // re-derived states are not hidden behind the cache the first bump refreshed.
     // Where there is no invocation to attach to (a unit test, a non-Worker caller)
     // it is awaited inline, so those callers behave exactly as before.
-    if (created) {
+    if (linked) {
       await this.bump(env, taskId);
       await this.rollupPastResponse(env, tenantId, taskId);
     }
-    return created;
+    return { created, linked };
+  }
+
+  /** Lane position of each stage key on the project's canonical board (the stage order). */
+  private async stageRanks(projectId: number, tenantId: number): Promise<Map<string, number>> {
+    const board = await findCanonicalBoard(this.db, projectId, tenantId);
+    if (!board) return new Map();
+    const lanes = await this.db
+      .select({ key: swimlanes.key, position: swimlanes.position })
+      .from(swimlanes)
+      .where(eq(swimlanes.boardId, board.id))
+      .orderBy(asc(swimlanes.position));
+    return new Map(lanes.map((l, i) => [l.key, Number.isFinite(Number(l.position)) ? Number(l.position) : i]));
   }
 
   /**
-   * The deferred half of {@link materializeChildTasks}' bookkeeping: recompute participant
+   * The deferred half of {@link materializeWorkItems}' bookkeeping: recompute participant
    * states, then invalidate the ticket and project caches a second time (the first bump
    * already ran inline). Runs after the response when the invocation has a `waitUntil`;
    * awaited inline when it does not.

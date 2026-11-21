@@ -1,3 +1,5 @@
+import { advertisedToolName } from '@builderforce/agent-tools';
+
 /**
  * toolNaming — the ONE translation from a catalog tool id to the name a model sees.
  *
@@ -33,7 +35,9 @@
  * `agentReplyPrompt.test.ts` asserts every catalog entry satisfies it.
  */
 export function advertisedName(tool: string): string {
-  return `builtin_${tool.replace(/[^a-zA-Z0-9]+/g, '_')}`;
+  // The translation itself lives in `@builderforce/agent-tools` (`advertisedToolName`), beside the
+  // resolver every surface uses to read a model-emitted name back — one rule, both directions.
+  return advertisedToolName(tool);
 }
 
 /**

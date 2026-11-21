@@ -40,7 +40,11 @@ import { invalidateSkillAssignmentCaches } from '../skills/skillAssignmentCache'
 import { assertSkillAssignable } from '../marketplace/skillEntitlement';
 import { AGENT_ASSIGNMENT_TOOLS } from './agentAssignmentToolCatalog';
 import { TASK_CENSUS_TOOLS } from './taskCensusToolCatalog';
-import { clampIndexLimit, projectTaskIndex } from './taskIndexProjection';
+import { DEPLOY_STATUS_TOOLS } from './deployStatusToolCatalog';
+import { TASK_BULK_TOOLS, TASK_TOOLS_WITH_OWN_INVALIDATION } from './taskBulkToolCatalog';
+import { bumpTaskTreeVersion } from '../task/afterTaskBulkWrite';
+import { ROADMAP_ALIGNMENT_TOOLS } from './roadmapAlignmentToolCatalog';
+import { clampLimit, LIST_MAX_LIMIT, snippet } from './listProjection';
 import { readTicketPendingChanges } from '../task/ticketPendingChangesPort';
 import { decideTicketPendingChanges } from '../task/ticketPendingChanges';
 import { buildTransactionalDatabase, type Db } from '../../infrastructure/database/connection';
@@ -60,7 +64,7 @@ import { r2ProjectStoragePurge } from '../ide/projectStorage';
 import { TaskService } from '../task/TaskService';
 import { summarizeTaskActivity } from '../task/taskActivity';
 import { buildTaskProgressBreakdown, normalizeTaskPrState } from '../task/taskProgressBreakdown';
-import { parseTaskListScope, parseTicketStatus, scopeNeedsArchived, taskInScope, TASK_LIST_SCOPES, TICKET_STATUS_VALUES } from '@builderforce/agent-loop';
+import { parseTicketStatus, TICKET_STATUS_VALUES } from '@builderforce/agent-loop';
 import { addManagerDirective } from '../manager/managerDirectives';
 import { createManagerCoachingTask, getEffectiveManagerPolicy } from '../manager/ManagerService';
 import { salesRevenueForecast } from '../sales/salesPolicy';
@@ -82,7 +86,6 @@ import { invalidateHostCronJobs } from '../agentHost/hostCronCache';
 import { specStatusEnum, workflows, workflowDefinitions, specs, promptLibraryEntries, promptLibraryVersions, approvalRules, approvals, brainChats, agentRegistrations, alerts, alertEvents, activityLog, boards, cronJobs, portfolios, initiatives, objectives, objectiveLinks, keyResults, ideAgents, marketplaceSkills, artifactAssignments, socControls, socEvidence, pokerSessions, pokerStories, pokerVotes, retrospectives, retroItems, boardConnections, projectRepositories, pullRequests, taskFileChanges, tasks, chatSessions, chatMessages, swimlanes, tenants, executions, usageSnapshots, toolAuditEvents, executionMessages, agentHosts, agentHostProjects, errorGroups, roadmapItems, projectRoleAssignments, salesAssociateSettings, salesCampaigns, salesCoachingNotes, salesCommissionRules, salesContacts, salesReferrals, salesWeeklyGoals, users } from '../../infrastructure/database/schema';
 import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { listAgentHostUsageSnapshots } from '../agentHost/agentHostUsage';
-import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { publicAgentScope } from '../marketplace/publicAgentScope';
 import { resolveSegment } from '../../infrastructure/auth/segmentResolver';
 import { addDashboardWidget, createSavedDashboard, deleteSavedDashboard, listSavedDashboards, removeDashboardWidget, updateDashboardWidget, updateSavedDashboard } from '../dashboards/savedDashboards';
@@ -302,105 +305,8 @@ const dt = (v: unknown): Date | undefined => {
 const parseTenantSettings = (raw: string | null | undefined): Json => parseJsonObject<Json>(raw);
 
 
-/** True when an uploads R2 key belongs to this tenant. Upload keys are minted as
- *  `${tenantId}/${userId}/${file}` (see brainRoutes `/uploads`), so the leading path
- *  segment is the owning tenant; also rejects traversal. Mirrors the route's own
- *  `isKeyOwnedByTenant` so the attachment tools can't read/write across tenants. */
-const keyOwnedByTenant = (key: string, tenantId: number): boolean =>
-  typeof key === 'string' && key.length > 0 && !key.includes('..') && key.split('/')[0] === String(tenantId)
-  // `<tenant>/private/...` holds objects the platform keeps about people (a data subject request's
-  // export). They are not attachments: the model must not read them, and must not overwrite one.
-  // The ONE private-key predicate lives with the asset store; this does not restate it.
-  && !isPrivateAssetKey(key);
-
-// ---------------------------------------------------------------------------
-// List projections — keep the Brain's context window bounded
-// ---------------------------------------------------------------------------
-//
-// The Brain re-sends its whole transcript to the model every turn, so an
-// unbounded `*.list` result (e.g. `tasks.list` returning 352 full rows, every
-// column, tens of KB) accumulates across tool calls and eventually exhausts the
-// model's context window — the run "dies after several executions". These tools
-// therefore return a COMPACT projection + a `total`/`truncated` envelope so the
-// model knows to narrow its query; full per-record detail stays available via
-// the matching `*.get` tool.
-
-/** Default page size for a list tool, and the hard ceiling a caller can request. */
-const LIST_DEFAULT_LIMIT = 50;
-const LIST_MAX_LIMIT = 200;
-/** Clamp a caller-supplied `limit` into `[1, LIST_MAX_LIMIT]`, defaulting when absent. */
-const clampLimit = (v: unknown): number =>
-  Math.max(1, Math.min(v != null ? num(v) : LIST_DEFAULT_LIMIT, LIST_MAX_LIMIT));
-
-/** A bounded, single-line description hint — never the full (often huge) blob. */
-const snippet = (d: unknown, n = 160): string | undefined => {
-  if (typeof d !== 'string' || !d) return undefined;
-  const one = d.replace(/\s+/g, ' ').trim();
-  return one.length > n ? `${one.slice(0, n)}…` : one;
-};
-
-/**
- * Project a full task row to the fields an orchestrator actually needs to plan
- * and route work. Drops the heavy/rarely-needed columns (full description,
- * git branch/PR, review + business-value metadata, timestamps) — fetch those
- * per-task with `tasks.get`.
- */
-const TASK_LIST_FIELDS = [
-  'id', 'projectId', 'key', 'title', 'status', 'priority', 'taskType',
-  'parentTaskId', 'assignedUserId', 'assignedAgentRef', 'assignedAgentHostId',
-  'storyPoints', 'dueDate', 'archived',
-  // Present + true on a SECURITY ticket masked for a viewer without clearance.
-  'restricted',
-] as const;
-function compactTask(plain: Record<string, unknown>): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const f of TASK_LIST_FIELDS) if (plain[f] !== undefined) out[f] = plain[f];
-  const s = snippet(plain.description);
-  if (s) out.descriptionSnippet = s;
-  return out;
-}
-
-/** Bulk-load the compact progress contract without turning tasks.list into N+1 queries. */
-async function loadTaskProgress(ctx: BuiltinCtx, rows: Record<string, unknown>[]): Promise<Map<number, ReturnType<typeof buildTaskProgressBreakdown>>> {
-  const ids = rows.map((row) => Number(row.id)).filter(Number.isFinite);
-  if (!ids.length) return new Map();
-  const [children, prs, codeRows] = await Promise.all([
-    ctx.db.select({ parentTaskId: tasks.parentTaskId, status: tasks.status })
-      .from(tasks).where(scopedToTenant(tasks, ctx.tenantId, inArray(tasks.parentTaskId, ids))),
-    ctx.db.select({ taskId: pullRequests.taskId, status: pullRequests.status, buildStatus: pullRequests.buildStatus })
-      .from(pullRequests)
-      .where(and(eq(pullRequests.tenantId, ctx.tenantId), inArray(pullRequests.taskId, ids)))
-      .orderBy(desc(pullRequests.updatedAt)),
-    ctx.db.select({ taskId: taskFileChanges.taskId })
-      .from(taskFileChanges)
-      .where(and(
-        eq(taskFileChanges.tenantId, ctx.tenantId),
-        inArray(taskFileChanges.taskId, ids),
-        sql`not (${taskFileChanges.path} ~* ${'(^|/)(prd\\.md|readme\\.md|roadmap\\.md|done\\.md)$|(^|/)(specs|docs)(/|$)|\\.mdx?$'})`,
-      )),
-  ]);
-  const childStatuses = new Map<number, string[]>();
-  for (const child of children) {
-    if (child.parentTaskId == null) continue;
-    const statuses = childStatuses.get(child.parentTaskId) ?? [];
-    statuses.push(child.status);
-    childStatuses.set(child.parentTaskId, statuses);
-  }
-  const latestPr = new Map<number, { status: string; buildStatus: string | null }>();
-  for (const pr of prs) if (pr.taskId != null && !latestPr.has(pr.taskId)) latestPr.set(pr.taskId, pr);
-  const codeTaskIds = new Set(codeRows.map((row) => row.taskId));
-  return new Map(rows.map((row) => {
-    const id = Number(row.id);
-    const pr = latestPr.get(id);
-    return [id, buildTaskProgressBreakdown({
-      status: typeof row.status === 'string' ? row.status : null,
-      childStatuses: childStatuses.get(id),
-      codeDelivered: codeTaskIds.has(id),
-      prStatus: pr?.status,
-      buildStatus: pr?.buildStatus,
-    })];
-  }));
-}
+// List projections (page size, snippet) live in listProjection.ts; the task list's own
+// projection + progress loader moved with tasks.list into taskBulkToolCatalog.ts.
 
 /** Project a full project row to the identity + status fields a planner needs. */
 const PROJECT_LIST_FIELDS = ['id', 'key', 'name', 'status', 'modality', 'template'] as const;
@@ -992,7 +898,7 @@ const CATALOG: BuiltinTool[] = [
       const uploads = ctx.env?.UPLOADS;
       if (!uploads) throw new Error('file storage unavailable in this context');
       const key = str(a.key);
-      if (!keyOwnedByTenant(key, ctx.tenantId)) throw new Error('attachment not found');
+      if (!isAttachmentKeyOwnedByTenant(key, ctx.tenantId)) throw new Error('attachment not found');
       const object = await uploads.get(key);
       if (!object) throw new Error('attachment not found');
       const full = await object.text();
@@ -1010,7 +916,7 @@ const CATALOG: BuiltinTool[] = [
       const uploads = ctx.env?.UPLOADS;
       if (!uploads) throw new Error('file storage unavailable in this context');
       const key = str(a.key);
-      if (!keyOwnedByTenant(key, ctx.tenantId)) throw new Error('attachment not found');
+      if (!isAttachmentKeyOwnedByTenant(key, ctx.tenantId)) throw new Error('attachment not found');
       // head() both proves the object exists (no create-by-write of a foreign key)
       // and lets us preserve its content-type + custom metadata across the overwrite.
       const head = await uploads.head(key);
@@ -1025,43 +931,8 @@ const CATALOG: BuiltinTool[] = [
   },
 
   // ---- Tasks ----
-  {
-    tool: 'tasks.list', mutates: false,
-    description: 'List tasks as a COMPACT projection (id/key/title/status/priority/type/parent/assignee/points/dueDate/archived + a short description snippet + progress). scope picks which tickets: "open" (default — work still owed), "closed" (done, cancelled or archived — a cancelled ticket counts as done and reads 100%), or "all". Filter further by projectId and/or status; capped by limit (default 50, max 200). Tickets are ordered by id; PAGE through ALL of them with `offset` (the result carries `nextOffset` while truncated — repeat until it is absent). Pass fields:"slim" for a bulk read (no progress breakdown, 300-char description snippet), or fields:\"index\" to survey many tickets at once (one `id|status|type|parent|title` line each in a `lines` string and nothing else; up to 300 per page). The result is { tasks, total, returned, offset, truncated, nextOffset?, scope } (index mode returns { format, total, returned, offset, truncated, nextOffset?, scope, lines }). For COUNTS (how many tickets, the status/type breakdown) call tasks.census once instead of listing or guessing statuses. Use tasks.get for one task\'s full detail; change status or archive with tasks.update; tasks.delete is permanent.',
-    parameters: obj({ projectId: N, status: S, scope: { type: 'string', enum: [...TASK_LIST_SCOPES] }, limit: N, offset: N, fields: { type: 'string', enum: ['compact', 'slim', 'index'] } }),
-    run: async (ctx, a) => {
-      const status = a.status != null ? str(a.status) : undefined;
-      // An explicit status ("done") is its own scope — defaulting to open would empty it.
-      const scope = parseTaskListScope(a.scope, status ? 'all' : 'open');
-      const all = await ctx.tasks.listTasks(ctx.tenantId, a.projectId != null ? idArg(a.projectId, 'projectId') : undefined, scopeNeedsArchived(scope));
-      let rows = all
-        .map((t) => t.toPlain() as unknown as Record<string, unknown>)
-        .filter((r) => taskInScope({ status: r.status as string | undefined, archived: r.archived as boolean | undefined }, scope));
-      if (status) rows = rows.filter((r) => r.status === status);
-      // SECURITY tickets are included but MASKED for a caller without clearance
-      // (surfaced-not-hidden; governed by security_ticket_access).
-      rows = await maskSecurityTasks(ctx, rows);
-      // Stable order so offset paging never skips or repeats a ticket between pages.
-      rows.sort((x, y) => Number(x.id) - Number(y.id));
-      const offset = a.offset != null ? Math.max(0, Math.floor(num(a.offset))) : 0;
-      // One line per ticket, paged to the tool-output policy's index budget (taskIndexProjection.ts).
-      if (a.fields === 'index') return projectTaskIndex(rows, offset, clampIndexLimit(a.limit), scope);
-      const limit = clampLimit(a.limit);
-      const page = rows.slice(offset, offset + limit);
-      const slim = a.fields === 'slim';
-      // `slim` drops the progress breakdown (3 extra queries) and keeps a 300-char
-      // snippet — built for bulk-reading every open ticket (e.g. roadmap alignment).
-      const progress = slim ? new Map<number, unknown>() : await loadTaskProgress(ctx, page.filter((row) => row.restricted !== true));
-      const projected = page.map((row) => ({
-        ...compactTask(row),
-        ...(slim && snippet(row.description, 300) ? { descriptionSnippet: snippet(row.description, 300) } : {}),
-        ...(slim || row.restricted === true ? {} : { progress: progress.get(Number(row.id)) }),
-      }));
-      const end = offset + projected.length;
-      const truncated = rows.length > end;
-      return { tasks: projected, total: rows.length, returned: projected.length, offset, truncated, ...(truncated ? { nextOffset: end } : {}), scope };
-    },
-  },
+  // tasks.list (SQL-filtered), tasks.archive_many and tasks.archive_where (taskBulkToolCatalog.ts)
+  ...TASK_BULK_TOOLS,
   { tool: 'tasks.get', mutates: false, description: 'Get a task by id, including implementer activity and stale-delivery evidence. If the numeric id is missing, a ticket whose title starts with `#<id>:` (or `#<id> `) in this workspace is returned instead.', parameters: obj({ id: N }, ['id']), run: async (ctx, a) => {
     const resolved = await resolveTenantTask(ctx, idArg(a.id, 'id'));
     const plain = resolved.toPlain() as unknown as Record<string, unknown>;
@@ -1275,29 +1146,6 @@ const CATALOG: BuiltinTool[] = [
     },
   },
   { tool: 'tasks.delete', mutates: true, description: 'Permanently delete a task — it cannot be recovered. Only when the user explicitly asked to delete; otherwise archive it with tasks.update { archived: true }.', parameters: obj({ id: N }, ['id']), run: async (ctx, a) => { await getTenantTask(ctx, idArg(a.id, 'id')); await ctx.tasks.deleteTask(idArg(a.id, 'id')); return { deleted: idArg(a.id, 'id') }; } },
-  {
-    tool: 'tasks.archive_many', mutates: true,
-    description: 'Archive (or restore with archived:false) MANY tasks in one call — up to 200 ids. Archiving is recoverable and is the way to clear backlog noise (fan-out copies, duplicates, stale records). Each id is tenant-checked individually; ids that fail are reported in `failed` and do not abort the rest. Returns { archived|restored:[ids], failed:[{id,error}], count }.',
-    parameters: obj({ ids: { type: 'array', items: N }, archived: B }, ['ids']),
-    run: async (ctx, a) => {
-      if (!Array.isArray(a.ids) || a.ids.length === 0) throw new Error('ids must be a non-empty array');
-      if (a.ids.length > 200) throw new Error('ids is capped at 200 per call');
-      const flag = typeof a.archived === 'boolean' ? a.archived : true;
-      const done: number[] = [];
-      const failed: Array<{ id: unknown; error: string }> = [];
-      for (const raw of a.ids as unknown[]) {
-        try {
-          const id = idArg(raw, 'id');
-          await getTenantTask(ctx, id);
-          await ctx.tasks.updateTask(id, { archived: flag });
-          done.push(id);
-        } catch (e) {
-          failed.push({ id: raw, error: e instanceof Error ? e.message : String(e) });
-        }
-      }
-      return { [flag ? 'archived' : 'restored']: done, failed, count: done.length };
-    },
-  },
   { tool: 'tasks.move', mutates: true, description: 'Move a task to another project board (re-keys it).', parameters: obj({ id: N, projectId: N }, ['id', 'projectId']), run: (ctx, a) => ctx.tasks.moveTask(idArg(a.id, 'id'), idArg(a.projectId, 'projectId'), ctx.tenantId).then((t) => t.toPlain()) },
 
   // ---- Work-delta capture + Validator review (0270) ----
@@ -3958,7 +3806,7 @@ const CATALOG: BuiltinTool[] = [
   { tool: 'kanban.assign_participant', mutates: true, description: 'Assign or reassign an agent/user to an EXISTING ticket Participation Manifest role. Replaces the current assignee rather than creating a duplicate participant, and resets the role to assigned so the new assignee must provide fresh evidence.', parameters: obj({ taskId: N, roleKey: S, assigneeRef: S, assigneeKind: { type: 'string', enum: ['agent', 'user'] } }, ['taskId', 'roleKey', 'assigneeRef', 'assigneeKind']), run: (ctx, a) => replayRoute(ctx, 'PATCH', `/api/kanban/tasks/${idArg(a.taskId, 'taskId')}/participants/assign`, { roleKey: str(a.roleKey), assigneeRef: str(a.assigneeRef), assigneeKind: str(a.assigneeKind) }) },
   { tool: 'kanban.remove_participant', mutates: true, description: 'Remove one specific Participation Manifest slot by participant id. Required-role safeguards reject removal when it would leave the ticket without its sole required responsibility.', parameters: obj({ taskId: N, participantId: S }, ['taskId', 'participantId']), run: (ctx, a) => replayRoute(ctx, 'DELETE', `/api/kanban/tasks/${idArg(a.taskId, 'taskId')}/participants/${encodeURIComponent(str(a.participantId))}`) },
   { tool: 'kanban.coordinate', mutates: true, description: 'Run the ticket Coordinator now: ensure its template manifest exists and dispatch the next required role-capable participant. The ticket assignee coordinates; producers do the scoped work.', parameters: obj({ taskId: N }, ['taskId']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/kanban/tasks/${idArg(a.taskId, 'taskId')}/coordinate`, {}) },
-  { tool: 'kanban.materialize_work_items', mutates: true, description: 'Create one assigned child task per required participant in the ticket manifest. Call after resource assessment so delivery scope rolls up to the parent ticket and every required resource has explicit work.', parameters: obj({ taskId: N }, ['taskId']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/kanban/tasks/${idArg(a.taskId, 'taskId')}/participants/materialize`, {}) },
+  { tool: 'kanban.materialize_work_items', mutates: true, description: 'Create one assigned child task per staffed ROLE in the ticket manifest (a role required in several stages still gets ONE child; an existing child is reused, never duplicated). Call after resource assessment so delivery scope rolls up to the parent ticket and every required resource has explicit work. Call it on the parent ticket: on a ticket that is itself a fan-out child it creates nothing and returns { created: 0, skipped: "fanout_child", reason }.', parameters: obj({ taskId: N }, ['taskId']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/kanban/tasks/${idArg(a.taskId, 'taskId')}/participants/materialize`, {}) },
 
   // ---- AUTONOMY DIAGNOSTICS (read-only) ----
   //
@@ -4358,6 +4206,8 @@ const CATALOG: BuiltinTool[] = [
   ...AGENT_ASSIGNMENT_TOOLS,
   // ---- Ticket census: counts by status/type/group in one call (taskCensusToolCatalog.ts) ----
   ...TASK_CENSUS_TOOLS,
+  ...DEPLOY_STATUS_TOOLS,
+  ...ROADMAP_ALIGNMENT_TOOLS,
 ];
 
 
@@ -4589,7 +4439,7 @@ export { CLOUD_AGENT_PLATFORM_TOOLS, CHAT_SCOPED_AGENT_TOOLS } from './cloudAgen
 import { CLOUD_AGENT_PLATFORM_TOOLS } from './cloudAgentToolset';
 import { invalidateBoardLaneOrdinals } from '../swimlane/laneOrdinals';
 import { deleteBoardRow, updateBoardRow } from '../swimlane/boardWrites';
-import { isPrivateAssetKey } from '../assets/tenantAssetStore';
+import { isAttachmentKeyOwnedByTenant } from '../assets/tenantAssetStore';
 
 const CLOUD_AGENT_PLATFORM_SET: ReadonlySet<string> = new Set(CLOUD_AGENT_PLATFORM_TOOLS);
 const ORIGINATING_CHAT_TOOL = 'chats.post_to_brain';
@@ -4714,8 +4564,10 @@ export async function callBuiltinTool(
   const ctx = buildCtx(db, args.tenantId, { env: args.env, userId: args.userId, agentRef: args.agentRef, hostChatId: args.hostChatId, role: args.role, authToken: args.authToken, executionCtx: args.executionCtx, executionId: args.executionId, origin: args.origin, replay: args.replay });
   // A mapped create links its item to the host-stamped chat in the same call (see createdWorkItemChatLink).
   const result = await linkCreatedWorkItemToChat(db, args, await entry.run(ctx, (args.arguments ?? {}) as Json));
+  // A dry run (tasks.archive_where by default) changed nothing: no audit, no invalidation.
+  const dryRun = (result as { dryRun?: unknown } | null)?.dryRun === true;
   // Unified audit stream: record any mutating tool run (best-effort, off the result).
-  if (entry.mutates && args.env) {
+  if (entry.mutates && args.env && !dryRun) {
     const emit = emitBuiltinToolActivity(args.env, db, args.tenantId, args.userId, args.tool, result);
     if (args.executionCtx?.waitUntil) args.executionCtx.waitUntil(emit); else await emit.catch((error) => {
       reportCaughtError(error, { source: "application/llm/builtinMcpService.ts", operation: "callBuiltinTool" });
@@ -4731,17 +4583,15 @@ export async function callBuiltinTool(
     }
     // A tasks.* write also changes the board task-tree + projects-list reads, which the
     // HTTP task routes invalidate (bumpTreeVersion + invalidateProjectsList). Mirror that
-    // here so an MCP task write doesn't leave those caches on their KV TTL. The tree key
-    // matches taskRoutes' `bumpTreeVersion` (kept in sync by string). Best-effort.
-    if (args.tool.startsWith('tasks.')) {
+    // here so an MCP task write doesn't leave those caches on their KV TTL. Best-effort.
+    // The bulk archive tools run the fuller `afterTaskBulkWrite` themselves.
+    if (args.tool.startsWith('tasks.') && !TASK_TOOLS_WITH_OWN_INVALIDATION.has(args.tool)) {
       const projectId = typeof (result as { projectId?: unknown } | null)?.projectId === 'number'
         ? (result as { projectId: number }).projectId : null;
       const jobs: Promise<unknown>[] = [invalidateProjectsList(args.env, args.tenantId).catch((error) => {
         reportCaughtError(error, { source: "application/llm/builtinMcpService.ts", operation: "jobs" });
       })];
-      if (projectId != null) jobs.push(bumpCacheVersion(args.env, `task-tree-version:project:${projectId}`).catch((error) => {
-        reportCaughtError(error, { source: "application/llm/builtinMcpService.ts", operation: "callBuiltinTool" });
-      }));
+      if (projectId != null) jobs.push(bumpTaskTreeVersion(args.env, projectId, "application/llm/builtinMcpService.ts"));
       const all = Promise.all(jobs);
       if (args.executionCtx?.waitUntil) args.executionCtx.waitUntil(all); else await all;
     }

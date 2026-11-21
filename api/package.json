@@ -1,9 +1,10 @@
 {
   "name": "builderforce-api",
-  "version": "2026.10.103",
+  "version": "2026.10.104",
   "private": true,
   "scripts": {
     "dev": "wrangler dev",
+    "prepare": "node -e \"require('fs').existsSync('../scripts/install-git-hooks.mjs') && require('child_process').execFileSync(process.execPath, ['../scripts/install-git-hooks.mjs'], { stdio: 'inherit' })\"",
     "db:bootstrap": "node scripts/bootstrap-db.mjs && node scripts/migrate.mjs --transactional",
     "db:migrate": "node scripts/migrate.mjs && node scripts/migrate.mjs --transactional && node scripts/migrate.mjs --apps",
     "db:copy-run-telemetry": "node scripts/copy-run-telemetry.mjs",

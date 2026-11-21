@@ -38,10 +38,15 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  *     completes) — and completes it only when the ticket is a delta ticket still in
  *     `in_review`
  *     (`completeDeltaTicketsOnMerge`, called from `githubWebhookRoutes`).
+ *   - A DIRECT PUSH TO THE DEFAULT BRANCH SHIPPED IT (a person, another session, a later
+ *     run — no PR at all). The push webhook closes the ticket when a commit message names
+ *     it, or when the pushed commits cover EVERY file the delta recorded and no other
+ *     candidate records the identical set (`completeDeltaTicketsOnPush`).
  *
- * Deliberately never by matching the delta's `files[]` against the PR's: overlapping
- * files are the norm on an active repo, and a wrongly-closed ticket is worse than a
- * stale one — it is invisible.
+ * The merge path deliberately never matches the delta's `files[]` against the PR's:
+ * overlapping files are the norm on an active repo, and a wrongly-closed ticket is worse
+ * than a stale one — it is invisible. The push path admits files only as FULL coverage,
+ * disambiguated, after the delta was recorded (see its module header).
  */
 import { and, eq, sql } from 'drizzle-orm';
 import { isClosedTaskStatus } from '@builderforce/agent-loop';

@@ -1,5 +1,5 @@
 /**
- * `materializeChildTasks` must not put its post-create rollup in front of the caller.
+ * `materializeWorkItems` must not put its post-create rollup in front of the caller.
  *
  * The child rows and the `created` count are the contract and stay inline: `created` is
  * what the parent ticket's %-complete rollup is built on, and the HTTP response is
@@ -67,7 +67,8 @@ function dbStub(opts: { holdParticipants?: Promise<void> } = {}) {
   let participantReads = 0;
   return {
     participantReads: () => participantReads,
-    batch: vi.fn(async () => []),
+    // Every compare-and-set link lands (one returned row per write).
+    batch: vi.fn(async (writes: unknown[]) => writes.map(() => [{ id: 'linked' }])),
     select: vi.fn(() => ({
       ...chain([]),
       from: (table: unknown) => {
@@ -82,7 +83,7 @@ function dbStub(opts: { holdParticipants?: Promise<void> } = {}) {
         return base;
       },
     })),
-    update: vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn(async () => []) })) })),
+    update: vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn(() => Object.assign(Promise.resolve([]), { returning: async () => [] })) })) })),
   } as unknown as Db & { participantReads: () => number };
 }
 
@@ -108,7 +109,7 @@ async function runWithScope<T>(scope: RequestScope, work: () => Promise<T>): Pro
   }
 }
 
-describe('materializeChildTasks: the syncStates + bump rollup is off the call', () => {
+describe('materializeWorkItems: the syncStates + bump rollup is off the call', () => {
   it('returns created while the rollup is still pending, and hands the rollup to waitUntil', async () => {
     let release!: () => void;
     const gate = new Promise<void>((resolve) => { release = resolve; });
@@ -117,7 +118,7 @@ describe('materializeChildTasks: the syncStates + bump rollup is off the call', 
 
     const { result } = await runWithScope(
       { env: {}, waitUntil: (task) => { waited.push(task); } },
-      () => new TicketParticipantsService(db).materializeChildTasks({} as never, TENANT_ID, TASK_ID, createChild),
+      () => new TicketParticipantsService(db).materializeWorkItems({} as never, TENANT_ID, TASK_ID, createChild).then((r) => r.created),
     );
 
     // The count came back before the rollup's first read settled.
@@ -143,7 +144,7 @@ describe('materializeChildTasks: the syncStates + bump rollup is off the call', 
 
     const { result } = await runWithScope(
       { env: {}, waitUntil: (task) => { waited.push(task); } },
-      () => new TicketParticipantsService(db).materializeChildTasks({} as never, TENANT_ID, TASK_ID, createChild),
+      () => new TicketParticipantsService(db).materializeWorkItems({} as never, TENANT_ID, TASK_ID, createChild).then((r) => r.created),
     );
 
     expect(result).toBe(1);
@@ -157,7 +158,7 @@ describe('materializeChildTasks: the syncStates + bump rollup is off the call', 
     const db = dbStub();
 
     const created = await new TicketParticipantsService(db)
-      .materializeChildTasks({} as never, TENANT_ID, TASK_ID, createChild);
+      .materializeWorkItems({} as never, TENANT_ID, TASK_ID, createChild).then((r) => r.created);
 
     expect(created).toBe(1);
     // The inline rollup re-read the manifest (the link write is the first read, the
@@ -198,7 +199,7 @@ describe('materializeChildTasks: the syncStates + bump rollup is off the call', 
     const waited: Array<Promise<unknown>> = [];
     const { result, unhandled } = await runWithScope(
       { env: {}, waitUntil: (task) => { waited.push(task); } },
-      () => new TicketParticipantsService(db).materializeChildTasks({} as never, TENANT_ID, TASK_ID, createChild),
+      () => new TicketParticipantsService(db).materializeWorkItems({} as never, TENANT_ID, TASK_ID, createChild).then((r) => r.created),
     );
 
     // The count came back regardless, and nothing escaped as an unhandled rejection.
@@ -225,7 +226,7 @@ describe('materializeChildTasks: the syncStates + bump rollup is off the call', 
     const none = async () => { throw new Error('create failed'); };
 
     const created = await new TicketParticipantsService(db)
-      .materializeChildTasks({} as never, TENANT_ID, TASK_ID, none);
+      .materializeWorkItems({} as never, TENANT_ID, TASK_ID, none).then((r) => r.created);
 
     expect(created).toBe(0);
     // One participants read (the roster), and no second one — the rollup never started.

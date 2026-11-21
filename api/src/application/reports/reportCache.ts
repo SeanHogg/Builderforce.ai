@@ -41,6 +41,9 @@ async function readReportVersion(env: Env, tenantId: number): Promise<number> {
   return getOrSetCached(env, versionTokenKey(tenantId), async () => 0, { kvTtlSeconds: 86_400 });
 }
 
+/** The per-tenant ROI version token (time metrics: completed count, cycle time, throughput). */
+export const roiVersionKey = (tenantId: number | string): string => `roi-version:tenant:${tenantId}`;
+
 /**
  * Bump the per-tenant version token so every window-keyed report entry ages out.
  * Call from the task status-write path. Cheap: one KV write of a small integer.

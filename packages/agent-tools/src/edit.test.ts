@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyStringEdit, conformToExistingEol, dominantEol, editedFilesOf, editedPathsOf, editFacts, EDIT_EXCERPT_MAX_LINES } from "./edit.js";
+import { applyBatchEdits, applyStringEdit, conformToExistingEol, planBatchEdits, dominantEol, editedFilesOf, editedPathsOf, editFacts, EDIT_EXCERPT_MAX_LINES } from "./edit.js";
 
 const LF = "const a = 1;\nconst b = 2;\nconst c = 3;\n";
 const CRLF = LF.replace(/\n/g, "\r\n");
@@ -186,6 +186,135 @@ describe("editFacts — one mapping for every provider", () => {
     const facts = editFacts(applyStringEdit(LF, "  const b = 2;\n  const c = 4;", "x"));
     expect(facts.error).toMatch(/not found/);
     expect(facts.nearest?.line).toBe(2);
+  });
+});
+
+describe("applyStringEdit — tolerant tiers after exact/CRLF", () => {
+  it("names the tier: exact on a literal hit, crlf when only line endings differed", () => {
+    expect(applyStringEdit(LF, "const b = 2;", "x").matchedBy).toBe("exact");
+    expect(applyStringEdit(CRLF, "const a = 1;\nconst b = 2;", "x").matchedBy).toBe("crlf");
+  });
+
+  it("unescaped: repairs an over-escaped oldString and unescapes newString the same way", () => {
+    const r = applyStringEdit('const s = "hi";\nconst t = 1;\n', 'const s = \\"hi\\";\\nconst t', 'const s = \\"bye\\";\\nconst u = 2;\\nconst t');
+    expect(r.ok).toBe(true);
+    expect(r.matchedBy).toBe("unescaped");
+    expect(r.content).toBe('const s = "bye";\nconst u = 2;\nconst t = 1;\n');
+  });
+
+  it("unescaped: skipped when the file itself uses the escape sequence", () => {
+    const r = applyStringEdit('a = "x\\"y";\nb = "q";\n', 'b = \\"q\\";', "b = 1;");
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/not found/);
+  });
+
+  it("unescaped: newString keeps every escape kind oldString did not over-use", () => {
+    // oldString over-escaped only quotes; the `\n` inside the new log string is real source text.
+    const r = applyStringEdit('say("hi");\n', 'say(\\"hi\\");', 'say(\\"hi\\");\nlog(\\"x\\n\\");');
+    expect(r.matchedBy).toBe("unescaped");
+    expect(r.content).toBe('say("hi");\nlog("x\\n");\n');
+  });
+
+  it("unescaped: a kind the file writes escaped is left escaped, the other kinds are repaired", () => {
+    // The file writes `\n` escaped (real text) but never `\"`: only the quotes are repaired.
+    const r = applyStringEdit('a = "x\\n";\nb = "q";\n', 'a = \\"x\\n\\";', 'a = \\"y\\n\\";');
+    expect(r.matchedBy).toBe("unescaped");
+    expect(r.content).toBe('a = "y\\n";\nb = "q";\n');
+  });
+
+  it("whitespace: refuses a Python match whose nesting differs from oldString's", () => {
+    const file = "def f():\n    if x:\n        a()\n    b()\n";
+    const r = applyStringEdit(file, "if x:\na()\nb()", "if x:\nc()\nb()");
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/not found/);
+  });
+
+  it("whitespace: refuses a YAML match whose indent order is inverted", () => {
+    const file = "a:\n  b: 1\nc: 2\n";
+    const r = applyStringEdit(file, "  a:\nb: 1\n  c: 2", "  a:\nb: 9\n  c: 2");
+    expect(r.ok).toBe(false);
+  });
+
+  it("whitespace: a partial edge never lands mid-token", () => {
+    expect(applyStringEdit("  const value = compute(1);\n  next();\n", "lue = compute(1);\n    next();", "x").ok).toBe(false);
+    expect(applyStringEdit("  foo();\n  barbaz();\n", "    foo();\n  bar", "x").ok).toBe(false);
+  });
+
+  it("whitespace: two partial edges with no whole line between them are no match", () => {
+    expect(applyStringEdit("  const x = 1;\n  yield z;\n", "x = 1;\n    yield", "x").ok).toBe(false);
+  });
+
+  it("whitespace: mixed tab+space file indent maps, and a line shallower than any mapped indent is left as written", () => {
+    const r = applyStringEdit("{\n\t    x();\n}\n", "        x();", "        y();\n    z();");
+    expect(r.matchedBy).toBe("whitespace");
+    expect(r.content).toBe("{\n\t    y();\n    z();\n}\n");
+  });
+
+  it("whitespace: ignores trailing whitespace on file lines", () => {
+    const r = applyStringEdit("function f() {  \n  return 1;\n}\n", "function f() {\n  return 1;", "function f() {\n  return 2;");
+    expect(r.ok).toBe(true);
+    expect(r.matchedBy).toBe("whitespace");
+    expect(r.content).toBe("function f() {\n  return 2;\n}\n");
+  });
+
+  it("whitespace: matches spaces against tabs and writes newString in the file's tabs", () => {
+    const file = "class A {\n\tgo() {\n\t\treturn 1;\n\t}\n}\n";
+    const r = applyStringEdit(file, "    go() {\n        return 1;\n    }", "    go() {\n        return 2;\n    }");
+    expect(r.ok).toBe(true);
+    expect(r.matchedBy).toBe("whitespace");
+    expect(r.content).toBe("class A {\n\tgo() {\n\t\treturn 2;\n\t}\n}\n");
+  });
+
+  it("whitespace: re-indents newString by the file's indentation delta", () => {
+    const r = applyStringEdit("  if (x) {\n    y();\n  }\n", "if (x) {\n  y();\n}", "if (x) {\n  z();\n  w();\n}");
+    expect(r.content).toBe("  if (x) {\n    z();\n    w();\n  }\n");
+    expect(r.region).toEqual({ startLine: 1, endLine: 4 });
+  });
+
+  it("whitespace: a partial first line matches by trimmed content and keeps the line's prefix", () => {
+    const r = applyStringEdit("  const v = compute(1);\n  next();\n", "v = compute(1);\n    next();", "v = compute(2);\n    next();");
+    expect(r.matchedBy).toBe("whitespace");
+    expect(r.content).toBe("  const v = compute(2);\n  next();\n");
+  });
+
+  it("whitespace: an oldString trailing newline matches a last line with none, and adds none", () => {
+    const r = applyStringEdit("x();\n\ty();", "x();\n  y();\n", "x();\n  z();\n");
+    expect(r.ok).toBe(true);
+    expect(r.content).toBe("x();\n\tz();");
+  });
+
+  it("whitespace: refuses an ambiguous fuzzy match, replaces every one under replaceAll", () => {
+    const file = "\tfoo();\n\tfoo();\n";
+    const amb = applyStringEdit(file, "  foo();", "  bar();");
+    expect(amb.ok).toBe(false);
+    expect(amb.error).toMatch(/not unique/);
+    const all = applyStringEdit(file, "  foo();", "  bar();", true);
+    expect(all.replaced).toBe(2);
+    expect(all.content).toBe("\tbar();\n\tbar();\n");
+  });
+
+  it("whitespace: a CRLF file stays pure CRLF", () => {
+    const r = applyStringEdit("a {\r\n\tb();\r\n}\r\n", "a {\n    b();\n}", "a {\n    c();\n    d();\n}");
+    expect(r.ok).toBe(true);
+    expect(r.content).toBe("a {\r\n\tc();\r\n\td();\r\n}\r\n");
+  });
+
+  it("editFacts carries matchedBy only for a tolerant tier", () => {
+    expect(editFacts(applyStringEdit("\tfoo();\n", "  foo();", "  bar();")).matchedBy).toBe("whitespace");
+    expect(editFacts(applyStringEdit(LF, "const b = 2;", "x"))).not.toHaveProperty("matchedBy");
+  });
+
+  it("a batch edit lands through a tolerant tier", async () => {
+    const files = new Map<string, string>([["a.ts", "\tfoo();\n"], ["b.ts", 'say("hi");\n']]);
+    const io = { read: async (p: string) => files.get(p) ?? null, write: async (p: string, c: string) => void files.set(p, c) };
+    const r = await applyBatchEdits(planBatchEdits([
+      { path: "a.ts", old_string: "  foo();", new_string: "  bar();" },
+      { path: "b.ts", old_string: 'say(\\"hi\\");', new_string: 'say(\\"bye\\");' },
+    ]), io);
+    expect(r.ok).toBe(true);
+    expect(r.files.map((f) => f.matchedBy)).toEqual(["whitespace", "unescaped"]);
+    expect(files.get("a.ts")).toBe("\tbar();\n");
+    expect(files.get("b.ts")).toBe('say("bye");\n');
   });
 });
 

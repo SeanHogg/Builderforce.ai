@@ -1,0 +1,51 @@
+#!/bin/sh
+# Repo pre-commit hook — wired by `scripts/install-git-hooks.mjs` (api's `prepare`),
+# which sets `core.hooksPath .githooks`.
+#
+# Regenerates the Cloudflare Container's compiled shared module when its source is in
+# the commit, so `check:container-shared` (api/scripts/gen-container-shared.mjs --check)
+# can never fail a build over a stale `api/container/toolOutputPolicy.mjs`.
+#
+# Inputs mirror the BUNDLES table in api/scripts/gen-container-shared.mjs: the source
+# dir it compiles and the generator itself. Both sides of a rename are checked, so a
+# file moved OUT of the source dir triggers it too. Any other staged path is a fast
+# no-op — this hook never blocks an unrelated commit.
+#
+# The generator reads the WORKING TREE source, not the index: a partially staged
+# source file is compiled as it sits on disk.
+
+set -eu
+
+ROOT="$(git rev-parse --show-toplevel)"
+OUT=api/container/toolOutputPolicy.mjs
+
+# --name-status prints `R<score>\told\tnew` for a rename; fields 2 and 3 are both paths.
+if ! git diff --cached --name-status --diff-filter=ACMRD \
+  | awk -F '\t' '{ print $2; if (NF > 2) print $3 }' \
+  | grep -Eq '^(packages/tool-output-policy/src/|api/scripts/gen-container-shared\.mjs$)'; then
+  exit 0
+fi
+
+echo "pre-commit: container shared source staged — regenerating $OUT"
+if ! (cd "$ROOT/api" && node scripts/gen-container-shared.mjs); then
+  echo "pre-commit: gen-container-shared failed (is 'typescript' installed in api/? run pnpm install there)." >&2
+  exit 1
+fi
+
+# `git commit <paths>` (--only) commits a TEMPORARY index (GIT_INDEX_FILE =
+# .git/next-index-*.lock). A `git add` here would land in that temp index in a way git
+# does not carry back reliably, so instead of risking a stale or half-recorded file,
+# refuse unless the regenerated module is already part of this commit as it is on disk.
+case "$(basename "${GIT_INDEX_FILE:-index}")" in
+  index | index.lock) ;;
+  *)
+    if ! git -C "$ROOT" diff --quiet -- "$OUT"; then
+      echo "pre-commit: $OUT was regenerated but is not part of this 'git commit <paths>'." >&2
+      echo "pre-commit: add it to the paths (git commit <paths> $OUT) or stage it (git add $OUT) and commit again." >&2
+      exit 1
+    fi
+    exit 0
+    ;;
+esac
+
+git -C "$ROOT" add -- "$OUT"

@@ -26,6 +26,7 @@
  */
 
 import { asToolArgs } from '@builderforce/agent-loop';
+import { resolveAdvertisedToolName, toolNameSet } from '@builderforce/agent-tools';
 import type { BrainToolSpec } from './streamChatCompletion';
 
 /** Advertised names of the three router tools. Stable — the model learns them. */
@@ -95,7 +96,7 @@ export function routerToolSpecs(catalogSize: number): BrainToolSpec[] {
         parameters: {
           type: 'object',
           properties: {
-            name: { type: 'string', description: 'Exact tool name to call.' },
+            name: { type: 'string', description: 'Exact tool name to call; a catalog id such as "tasks.archive_many" is accepted too.' },
             args: { type: 'object', description: 'Arguments object for that tool.' },
           },
           required: ['name'],
@@ -144,9 +145,14 @@ export function findTools(catalog: BrainToolSpec[], query: string, limit = FIND_
     .map((e) => e.m);
 }
 
-/** The exact spec for one catalog tool, or null when the name is unknown. */
+/**
+ * The spec for one catalog tool, or null when the name is unknown. The name resolves through
+ * the shared `resolveAdvertisedToolName`, so a catalog id (`tasks.archive_many`) or the unprefixed
+ * form reaches `builtin_tasks_archive_many`; the returned spec carries the ADVERTISED name.
+ */
 export function describeTool(catalog: BrainToolSpec[], name: string): BrainToolSpec | null {
-  return catalog.find((t) => t.function?.name === name) ?? null;
+  const resolved = resolveAdvertisedToolName(name, toolNameSet(catalog, (t) => t.function?.name));
+  return resolved === null ? null : catalog.find((t) => t.function?.name === resolved) ?? null;
 }
 
 /**
@@ -178,7 +184,7 @@ export function handleRouterCall(
     const spec = describeTool(catalog, target);
     return {
       result: spec
-        ? { name: target, description: spec.function?.description ?? '', parameters: spec.function?.parameters ?? {} }
+        ? { name: spec.function?.name ?? target, description: spec.function?.description ?? '', parameters: spec.function?.parameters ?? {} }
         : { error: `Unknown tool "${target}". Use ${TOOL_ROUTER_FIND} to look up the exact name.` },
     };
   }
@@ -188,11 +194,18 @@ export function handleRouterCall(
   if (isRouterTool(target)) {
     return { result: { error: `${target} cannot be invoked through the router.` } };
   }
-  if (!describeTool(catalog, target)) {
+  const spec = describeTool(catalog, target);
+  const resolved = spec?.function?.name;
+  if (!resolved) {
     return { result: { error: `Unknown tool "${target}". Use ${TOOL_ROUTER_FIND} to look up the exact name.` } };
+  }
+  // A router tool named by its catalog id (`tools.invoke`) is refused like the advertised name.
+  if (isRouterTool(resolved)) {
+    return { result: { error: `${target} cannot be invoked through the router.` } };
   }
   // The nested `args` came from model JSON, so it can be anything. The kernel's own
   // rule decides what counts as a bag — a routed call must not reach a tool with a
   // scalar or an array where every direct call would have had `{}`.
-  return { dispatch: { name: target, args: asToolArgs(a.args) ?? {} } };
+  // The dispatch carries the RESOLVED advertised name, never the catalog id the model wrote.
+  return { dispatch: { name: resolved, args: asToolArgs(a.args) ?? {} } };
 }

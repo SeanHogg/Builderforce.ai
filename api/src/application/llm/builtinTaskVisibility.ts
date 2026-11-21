@@ -32,6 +32,22 @@ export async function maskSecurityTasks<T extends Record<string, unknown>>(
   rows: T[],
 ): Promise<T[]> {
   if (!rows.some((r) => r.taskType === TaskType.SECURITY)) return rows;
-  const viewer = { userId: ctx.userId ?? null, role: ctx.role, isAgent: false };
-  return new SecurityTicketAccessService(ctx.db, ctx.env).applyVisibilityForViewer(ctx.tenantId, viewer, rows);
+  return new SecurityTicketAccessService(ctx.db, ctx.env).applyVisibilityForViewer(ctx.tenantId, viewerOf(ctx), rows);
+}
+
+/**
+ * True when the MCP caller may see SECURITY tickets unmasked — the SAME clearance rule
+ * {@link maskSecurityTasks} applies (`SecurityTicketAccessService.canView` over the same
+ * viewer), for queries that must exclude hidden tickets IN SQL rather than mask rows
+ * after the fact: a filter on a masked field (title, assignee) or a bulk write would
+ * otherwise reveal or touch them through counts.
+ */
+export async function hasSecurityClearance(ctx: BuiltinCtx): Promise<boolean> {
+  const cfg = await new SecurityTicketAccessService(ctx.db, ctx.env).getConfig(ctx.tenantId);
+  return SecurityTicketAccessService.canView(viewerOf(ctx), cfg);
+}
+
+/** The ticket viewer an MCP caller is — one shape for the mask and the clearance check. */
+function viewerOf(ctx: BuiltinCtx) {
+  return { userId: ctx.userId ?? null, role: ctx.role, isAgent: false };
 }

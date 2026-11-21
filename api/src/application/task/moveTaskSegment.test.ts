@@ -47,6 +47,7 @@ function makeTask(): Task {
 class RecordingTaskRepo implements ITaskRepository {
   readonly updates: Array<{ projectId: number; key: string; isolation?: { segmentId: string | null } }> = [];
   constructor(private readonly task: Task) {}
+  async setArchived(): Promise<Array<{ id: number; projectId: number }>> { return []; }
   async findAll(): Promise<Task[]> { return [this.task]; }
   async findByProjectIds(): Promise<Task[]> { return [this.task]; }
   async findById(id: TaskId): Promise<Task | null> { return (id as number) === 7 ? this.task : null; }

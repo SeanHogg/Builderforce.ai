@@ -9,7 +9,7 @@
 
 import { ASK_USER_TOOL, MID_TURN_META_KEY, type LoopHooks } from '@builderforce/agent-loop';
 import { offersHandOff } from '@builderforce/run-policy';
-import { resolveToolAlias } from '@builderforce/agent-tools';
+import { resolveCallName, toolNameSet } from '@builderforce/agent-tools';
 import type { ChatCompletionMessage } from '../streamChatCompletion';
 import { isFailedToolResult } from '../brainTriage';
 import { isRouterTool, handleRouterCall } from '../toolRouter';
@@ -64,7 +64,8 @@ export function callPreflight(run: BrainRunContext): NonNullable<LoopHooks<ChatC
     // host's runTool sees the catalog name — confirm, dedupe, activity and dispatch
     // all agree.
     {
-      const aliased = resolveToolAlias(call.name);
+      // …and a catalog id written as the call name (`tasks.archive_many`) reaches its advertised tool (`resolveCallName`).
+      const aliased = resolveCallName(call.name, toolNameSet(catalogToolNames, (n) => n));
       if (aliased !== call.name) call = { ...call, name: aliased };
     }
     if (isRouterTool(call.name)) {

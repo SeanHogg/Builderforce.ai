@@ -15,6 +15,7 @@ import {
 // ---------------------------------------------------------------------------
 class ArchiveAwareTaskRepo implements ITaskRepository {
   constructor(private readonly tasks: Task[]) {}
+  async setArchived(): Promise<Array<{ id: number; projectId: number }>> { return []; }
   private visible(rows: Task[], opts?: TaskListOptions): Task[] {
     return opts?.includeArchived ? rows : rows.filter(t => !t.toPlain().archived);
   }

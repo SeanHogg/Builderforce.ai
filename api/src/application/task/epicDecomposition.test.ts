@@ -17,6 +17,7 @@ import {
 class InMemoryTaskRepo implements ITaskRepository {
   private seq = 1;
   readonly store = new Map<number, Task>();
+  async setArchived(): Promise<Array<{ id: number; projectId: number }>> { return []; }
 
   private put(task: Task): Task {
     const plain = task.toPlain();

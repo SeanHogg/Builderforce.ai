@@ -122,6 +122,18 @@ export const isPrivateMediaKey = (key: string | null | undefined): boolean => !!
 const PRIVATE_KEY = /^\d+\/private\//;
 export const isPrivateAssetKey = (key: string | null | undefined): boolean => !!key && PRIVATE_KEY.test(key);
 
+/**
+ * True when a Brain-upload key is an ATTACHMENT this tenant may read or overwrite. Upload
+ * keys are minted as `${tenantId}/${userId}/${file}` (see brainRoutes `/uploads`), so the
+ * leading path segment is the owning tenant; traversal is rejected. `<tenant>/private/...`
+ * holds objects the platform keeps about people (a data subject request's export) — not
+ * attachments: a model must not read them, and must not overwrite one. The one predicate
+ * every tool that takes an attachment key checks (`attachments.*`, `roadmap.align_tickets`).
+ */
+export const isAttachmentKeyOwnedByTenant = (key: string, tenantId: number): boolean =>
+  typeof key === 'string' && key.length > 0 && !key.includes('..') && key.split('/')[0] === String(tenantId)
+  && !isPrivateAssetKey(key);
+
 /** Store a private object under `<tenantId>/private/<kind>/<uuid>.<ext>`; returns its key (never a public handle). */
 export async function storePrivateObject(
   bucket: R2Bucket | undefined, tenantId: number, kind: string, fileName: string, body: string, contentType: string,

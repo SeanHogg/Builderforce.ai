@@ -45,6 +45,7 @@ import { attachTurnContext, restoreTurnContext, turnContextBlock, turnContextCar
 import { resolveServerChatId } from './serverChat';
 import { decideRunPipeline, pipelineMetadata, pipelinePolicyOptions } from './pipelineRoute';
 import { PendingCalls } from './pendingCalls';
+import { conversationPinnedTools } from './conversationPins';
 
 /** B1 (`b1_stable_prefix`): per-turn blocks ride AFTER the history instead of in the
  *  system prompt (`COST_LEVER_B1_STABLE_PREFIX=off` turns it off). */
@@ -347,6 +348,9 @@ export async function prepareBrainRun(chatId: number, c: RunCell, req: BrainRunR
     // Tools this run has actually called — pinned into every later turn's selection
     // so a multi-step task never loses a tool it is mid-way through using.
     usedTools: new Set<string>(),
+    // Tools an earlier turn of THIS conversation called or named — a follow-up ("yes, do it") keeps the tool the
+    // last reply used or promised, instead of losing it to the relevance cut (`conversationPins.ts`).
+    conversationPinnedTools: conversationPinnedTools(convo, catalogToolNames),
     systemPrompt,
     metadata,
     recalled,

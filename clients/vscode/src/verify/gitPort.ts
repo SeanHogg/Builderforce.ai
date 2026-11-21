@@ -15,8 +15,15 @@
  * - `unavailable`: why the outgoing set could not be computed (no upstream, no PR base,
  *   no outgoing commits). The gate then reports "unavailable", never "checks passed",
  *   and no review is spent on an empty diff.
- * - `baseBranch`: whether the current branch IS the upstream's branch (pushing to the
- *   base branch itself) — a push to a non-base branch is not gated.
+ * - `upToDate`: the empty set was COMPUTED — the ref is already on the comparison ref
+ *   (merge-base == the ref's commit). Names the ref it was computed for, and — when that ref
+ *   is the checkout — the working tree's uncommitted paths (so "nothing to push" is never
+ *   mistaken for "shipped" while the change sits uncommitted).
+ * - `baseBranch`: whether the TARGET branch (the named `ref`, else the checkout) IS its
+ *   upstream's branch (pushing to the base branch itself) — a push to a non-base branch is
+ *   not gated.
+ * - `ref`: the branch to compute for (a ticket branch pushed / PR'd by ref); default HEAD.
+ *   Every read (`merge-base`, `log`, `diff`, blob ids) uses it in place of HEAD.
  *
  * Every git read goes through `gitRunner` (argument arrays, no shell) so tests substitute a fake git.
  */
@@ -32,6 +39,8 @@ export interface GitRunner {
 export interface OutgoingOptions {
   /** Present for `open_pull_request`: compare against the PR's base (default: origin's default branch). */
   pullRequest?: { base?: string };
+  /** The branch whose outgoing change is computed (the tool's `branch` arg); default the checkout (HEAD). */
+  ref?: string;
 }
 
 export interface OutgoingChange {
@@ -41,6 +50,11 @@ export interface OutgoingChange {
   diff: string;
   /** Why nothing could be checked; set ⇒ the gate reports "unavailable" and skips the review. */
   unavailable?: string;
+  /** The ref is already contained in the comparison ref (merge-base == its commit): computed, empty,
+   *  nothing to push. `unavailable` is set alongside (its "no outgoing commits" reason); the gates
+   *  read this first. `ref` is what was computed (`opts.ref`, else "HEAD"); `uncommitted` the
+   *  working tree's changed paths (absolute) when that ref is the checkout, else empty. */
+  upToDate?: { head: string; upstream: string; ref: string; uncommitted: string[] };
 }
 
 /** The host-side git the port shells out to; a failed call yields empty, never a guess. */
@@ -63,9 +77,9 @@ async function pullRequestBaseRef(runner: GitRunner, cwd: string, base: string |
   return null;
 }
 
-/** Files in commits since `base`: `git log <base>..HEAD --name-only --format=%H`. */
-async function outgoingPaths(runner: GitRunner, cwd: string, base: string): Promise<readonly string[]> {
-  const out = await gitExec(runner, cwd, ["log", `${base}..HEAD`, "--name-only", "--format=%H"]);
+/** Files in commits since `base`: `git log <base>..<head> --name-only --format=%H`. */
+async function outgoingPaths(runner: GitRunner, cwd: string, base: string, head: string): Promise<readonly string[]> {
+  const out = await gitExec(runner, cwd, ["log", `${base}..${head}`, "--name-only", "--format=%H"]);
   const paths = new Set<string>();
   for (const line of out.split("\n")) {
     const p = line.trim();
@@ -83,25 +97,40 @@ async function isNew(runner: GitRunner, cwd: string, rel: string, base: string):
   return r.exitCode !== 0;
 }
 
-/** The blob id of the path AT HEAD (a hash of exactly the pushed bytes), or null when HEAD has no such file. */
-async function headHash(runner: GitRunner, cwd: string, rel: string): Promise<string | null> {
-  const r = await runner(["rev-parse", "--verify", "--quiet", `HEAD:${rel}`], { cwd });
+/** The blob id of the path AT `head` (a hash of exactly the pushed bytes), or null when it has no such file. */
+async function headHash(runner: GitRunner, cwd: string, rel: string, head: string): Promise<string | null> {
+  const r = await runner(["rev-parse", "--verify", "--quiet", `${head}:${rel}`], { cwd });
   const id = r.stdout.trim();
   return r.exitCode === 0 && id ? id : null;
 }
 
-/** Paths whose working-tree bytes differ from HEAD (one read for the whole set). */
-async function dirtyPaths(runner: GitRunner, cwd: string): Promise<ReadonlySet<string>> {
-  const out = await gitExec(runner, cwd, ["diff", "--name-only", "HEAD", "--"]);
+/** Paths whose working-tree bytes differ from `head` (one read for the whole set). */
+async function dirtyPaths(runner: GitRunner, cwd: string, head: string): Promise<ReadonlySet<string>> {
+  const out = await gitExec(runner, cwd, ["diff", "--name-only", head, "--"]);
   return new Set(out.split("\n").map((l) => l.trim()).filter(Boolean));
+}
+
+/** Every uncommitted path in the working tree (modified, staged, untracked), repo-relative. */
+async function uncommittedPaths(runner: GitRunner, cwd: string): Promise<string[]> {
+  const out = await gitExec(runner, cwd, ["status", "--porcelain=v1", "-z", "--untracked-files=all"]);
+  const tokens = out.split("\0");
+  const paths: string[] = [];
+  for (let i = 0; i < tokens.length; i += 1) {
+    const t = tokens[i]!;
+    if (t.length < 4) continue;
+    paths.push(t.slice(3));
+    // A rename/copy entry is followed by its source path.
+    if (t[0] === "R" || t[0] === "C") i += 1;
+  }
+  return paths;
 }
 
 const TEST_FILE = /\.(test|spec)\.[cm]?[jt]sx?$/i;
 const RELATIVE_IMPORT = /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+|\brequire\s*\(\s*|\bvi\.mock\s*\(\s*|\bjest\.mock\s*\(\s*)["'](\.{1,2}\/[^"']+)["']/g;
 
-/** The paths a test file's relative imports resolve to, read from its bytes at HEAD. */
-async function testImports(runner: GitRunner, cwd: string, rel: string, absPath: string): Promise<string[]> {
-  const content = await gitExec(runner, cwd, ["cat-file", "blob", `HEAD:${rel}`]);
+/** The paths a test file's relative imports resolve to, read from its bytes at `head`. */
+async function testImports(runner: GitRunner, cwd: string, rel: string, absPath: string, head: string): Promise<string[]> {
+  const content = await gitExec(runner, cwd, ["cat-file", "blob", `${head}:${rel}`]);
   const dir = path.posix.dirname(absPath);
   const out = new Set<string>();
   for (const m of content.matchAll(RELATIVE_IMPORT)) {
@@ -114,9 +143,14 @@ async function testImports(runner: GitRunner, cwd: string, rel: string, absPath:
 export function createGitPort(runner: GitRunner) {
   return {
     async outgoing(repo: string, opts?: OutgoingOptions): Promise<OutgoingChange> {
-      const upstream = (await gitExec(runner, repo, ["rev-parse", "--abbrev-ref", "@{u}"])).trim();
       const current = (await gitExec(runner, repo, ["rev-parse", "--abbrev-ref", "HEAD"])).trim();
-      const baseBranch = upstream !== "" && current === upstream.split("/").pop();
+      // The TARGET ref: the named branch (pushed / PR'd by ref), else the checkout. A named ref
+      // that IS the checkout reads as HEAD, so its working tree still counts.
+      const asked = opts?.ref?.trim() || "HEAD";
+      const head = asked === "HEAD" || asked === current ? "HEAD" : asked;
+      const target = head === "HEAD" ? current : head;
+      const upstream = (await gitExec(runner, repo, ["rev-parse", "--abbrev-ref", head === "HEAD" ? "@{u}" : `${head}@{u}`])).trim();
+      const baseBranch = upstream !== "" && target === upstream.split("/").pop();
       const none = (unavailable: string): OutgoingChange => ({ files: [], diffHash: sha256(""), baseBranch, diff: "", unavailable });
 
       let against: string;
@@ -126,26 +160,33 @@ export function createGitPort(runner: GitRunner) {
         against = ref;
       } else {
         if (!upstream) return none("the branch has no upstream, so the outgoing change could not be computed");
-        against = "@{u}";
+        against = head === "HEAD" ? "@{u}" : `${head}@{u}`;
       }
-      const base = (await gitExec(runner, repo, ["merge-base", against, "HEAD"])).trim();
+      const base = (await gitExec(runner, repo, ["merge-base", against, head])).trim();
       if (!base) return none(`no merge-base with ${against}, so the outgoing change could not be computed`);
 
-      const rels = await outgoingPaths(runner, repo, base);
-      if (!rels.length) return none(`no outgoing commits against ${against}`);
-      const diffText = await gitExec(runner, repo, ["diff", "--binary", `${base}..HEAD`]);
-      const dirty = await dirtyPaths(runner, repo);
+      const rels = await outgoingPaths(runner, repo, base, head);
+      if (!rels.length) {
+        const empty = none(`no outgoing commits against ${against}`);
+        // merge-base == the ref's commit ⇒ it is already on `against`: computable and empty, not "cannot compute".
+        const sha = (await gitExec(runner, repo, ["rev-parse", head])).trim();
+        if (!sha || sha !== base) return empty;
+        const uncommitted = head === "HEAD" ? (await uncommittedPaths(runner, repo)).map((rel) => `${repo}/${rel}`.replace(/\\/g, "/")) : [];
+        return { ...empty, upToDate: { head: sha, upstream: opts?.pullRequest ? against : upstream, ref: asked, uncommitted } };
+      }
+      const diffText = await gitExec(runner, repo, ["diff", "--binary", `${base}..${head}`]);
+      const dirty = await dirtyPaths(runner, repo, head);
 
       const files: OutgoingFile[] = [];
       for (const rel of rels) {
         const absPath = `${repo}/${rel}`.replace(/\\/g, "/");
-        const hash = await headHash(runner, repo, rel);
+        const hash = await headHash(runner, repo, rel, head);
         const file: OutgoingFile = { absPath, hash: hash ?? "", isNew: await isNew(runner, repo, rel, base), deleted: hash === null };
         if (hash !== null && dirty.has(rel)) {
           file.unavailable = "also modified in the working tree, so the pushed bytes could not be checked (commit or stash the edit)";
         }
         if (hash !== null && TEST_FILE.test(rel)) {
-          const imports = await testImports(runner, repo, rel, absPath);
+          const imports = await testImports(runner, repo, rel, absPath, head);
           if (imports.length) file.imports = imports;
         }
         files.push(file);

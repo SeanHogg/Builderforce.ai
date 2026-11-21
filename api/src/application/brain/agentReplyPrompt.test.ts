@@ -106,4 +106,12 @@ describe('advertisedName', () => {
     // tools the model does not have — the same class of failure, one level down.
     for (const t of listBuiltinTools()) expect(t.name).toBe(advertisedName(t.tool));
   });
+
+  it('maps no two catalog ids to the same advertised name', () => {
+    // The transform is lossy (`a.b_c` and `a_b.c` both flatten to `builtin_a_b_c`), and the shared
+    // resolver reads a catalog id back through it: a collision would route one tool's call to another.
+    const byName = new Map<string, string[]>();
+    for (const t of listBuiltinTools()) byName.set(advertisedName(t.tool), [...(byName.get(advertisedName(t.tool)) ?? []), t.tool]);
+    expect([...byName.values()].filter((ids) => new Set(ids).size > 1)).toEqual([]);
+  });
 });

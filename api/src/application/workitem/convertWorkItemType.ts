@@ -33,6 +33,7 @@ import type { TaskService } from '../task/TaskService';
 import { bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { invalidateProjectsList } from '../project/projectsListCache';
 import { pmoVersionKey } from '../pmo/pmoCacheKeys';
+import { bumpTaskTreeVersion } from '../task/afterTaskBulkWrite';
 
 
 export type WorkItemKind = 'task' | 'epic' | 'objective';
@@ -75,9 +76,7 @@ export class ConvertError extends ValidationError {}
 async function invalidateCaches(env: Env | undefined, tenantId: number, projectId: number | null): Promise<void> {
   if (!env) return;
   await Promise.all([
-    projectId != null ? bumpCacheVersion(env, `task-tree-version:project:${projectId}`).catch((error) => {
-      reportCaughtError(error, { source: "application/workitem/convertWorkItemType.ts", operation: "invalidateCaches" });
-    }) : Promise.resolve(),
+    bumpTaskTreeVersion(env, projectId, "application/workitem/convertWorkItemType.ts"),
     invalidateProjectsList(env, tenantId).catch((error) => {
       reportCaughtError(error, { source: "application/workitem/convertWorkItemType.ts", operation: "invalidateCaches" });
     }),

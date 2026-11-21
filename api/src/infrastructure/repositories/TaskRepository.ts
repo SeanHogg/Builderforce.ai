@@ -1,12 +1,83 @@
-import { eq, inArray, and, sql, asc } from 'drizzle-orm';
-import { ITaskRepository, TaskListOptions } from '../../domain/task/ITaskRepository';
+import { eq, inArray, and, sql, asc, count, exists, gt, ilike, isNull, lt, not, or, type SQL } from 'drizzle-orm';
+import { QueryBuilder } from 'drizzle-orm/pg-core';
+import { TASK_CLOSED_STATUSES } from '@builderforce/agent-loop';
+import { ITaskRepository, TaskListOptions, type TaskListFilter, type TaskQueryState } from '../../domain/task/ITaskRepository';
 import { Task } from '../../domain/task/Task';
 import {
   TaskId, ProjectId, TaskStatus, TaskPriority, TaskType, AgentType,
   asTaskId, asProjectId, asAgentHostId,
 } from '../../domain/shared/types';
-import { tasks as tasksTable } from '../database/schema';
+import { tasks as tasksTable, ticketParticipants } from '../database/schema';
 import type { Db } from '../database/connection';
+import { scopedToTenant } from '../database/tenantScope';
+import { escapeLikePattern } from '../database/likePattern';
+
+/** The light columns a bulk survey/write reads — never the description blob. */
+export type TaskIndexRow = {
+  id: number;
+  projectId: number;
+  status: string;
+  taskType: string;
+  parentTaskId: number | null;
+  title: string;
+  archived: boolean;
+};
+
+/** The page of a filtered read: `limit` rows from `offset` (default 0), ordered by id. */
+export interface TaskPage {
+  limit: number;
+  offset?: number;
+}
+
+/** Leading/trailing whitespace, as JS `String.prototype.trim` strips it (btrim strips spaces only). */
+const EDGE_WHITESPACE = '^[[:space:]]+|[[:space:]]+$';
+
+/** `lower(trim(status)) IN (TASK_CLOSED_STATUSES)` — the SQL form of agent-loop's
+ *  `isClosedTaskStatus` (`status.trim().toLowerCase()`), built from the SAME list so the
+ *  two can never disagree. */
+const closedStatusSql = (): SQL =>
+  sql`lower(regexp_replace(${tasksTable.status}, ${EDGE_WHITESPACE}, '', 'g')) in (${sql.join(TASK_CLOSED_STATUSES.map((s) => sql`${s}`), sql`, `)})`;
+
+/** No owner of any kind: no human, no cloud agent, no host (empty strings count as none). */
+const unassignedSql = (): SQL =>
+  sql`(nullif(${tasksTable.assignedUserId}, '') is null and nullif(${tasksTable.assignedAgentRef}, '') is null and ${tasksTable.assignedAgentHostId} is null)`;
+
+/** Builds the EXISTS sub-select without a connection (it is only ever embedded). */
+const subquery = new QueryBuilder();
+
+/**
+ * The tenant-scoped WHERE for a {@link TaskListFilter} plus the service's
+ * {@link TaskQueryState}. Scope mirrors agent-loop's `taskInScope`: closed = archived OR
+ * a closed lane; open = neither. Exported for the SQL render test.
+ */
+export function taskFilterWhere(tenantId: number, f: TaskListFilter, state: TaskQueryState = {}): SQL {
+  const closed = or(eq(tasksTable.archived, true), closedStatusSql());
+  const conditions: Array<SQL | undefined> = [
+    state.archived !== undefined ? eq(tasksTable.archived, state.archived) : undefined,
+    state.excludeTaskTypes?.length ? sql`${tasksTable.taskType}::text not in (${sql.join(state.excludeTaskTypes.map((t) => sql`${t}`), sql`, `)})` : undefined,
+    f.scope === 'closed' ? closed : f.scope === 'open' ? and(eq(tasksTable.archived, false), not(closedStatusSql())) : undefined,
+    f.projectId !== undefined ? eq(tasksTable.projectId, f.projectId) : undefined,
+    f.status !== undefined ? eq(tasksTable.status, f.status) : undefined,
+    f.parentTaskId !== undefined ? eq(tasksTable.parentTaskId, f.parentTaskId) : undefined,
+    f.topLevelOnly === true ? isNull(tasksTable.parentTaskId) : undefined,
+    f.titlePrefix !== undefined ? ilike(tasksTable.title, `${escapeLikePattern(f.titlePrefix)}%`) : undefined,
+    f.titleMatch !== undefined ? ilike(tasksTable.title, `%${escapeLikePattern(f.titleMatch)}%`) : undefined,
+    f.createdBefore !== undefined ? lt(tasksTable.createdAt, f.createdBefore) : undefined,
+    f.createdAfter !== undefined ? gt(tasksTable.createdAt, f.createdAfter) : undefined,
+    f.assigned === 'none' ? unassignedSql() : f.assigned === 'any' ? not(unassignedSql()) : undefined,
+    f.taskType !== undefined ? sql`${tasksTable.taskType}::text = ${f.taskType}` : undefined,
+  ];
+  if (f.isFanoutCopy !== undefined) {
+    // A fan-out copy is recognised ONLY by a participant row pointing at it.
+    const fanout = exists(subquery.select({ one: sql`1` }).from(ticketParticipants)
+      .where(scopedToTenant(ticketParticipants, tenantId, eq(ticketParticipants.childTaskId, tasksTable.id))));
+    conditions.push(f.isFanoutCopy ? fanout : not(fanout));
+  }
+  return scopedToTenant(tasksTable, tenantId, ...conditions);
+}
+
+/** `count(*) over()` rides on every row of a page, so rows + total are ONE statement. */
+const totalOver = sql<number>`count(*) over()`.mapWith(Number);
 
 export class TaskRepository implements ITaskRepository {
   constructor(private readonly db: Db) {}
@@ -29,6 +100,70 @@ export class TaskRepository implements ITaskRepository {
       .from(tasksTable)
       .where(and(inArray(tasksTable.projectId, ids), notArchived));
     return rows.map(toDomain);
+  }
+
+  /**
+   * One page of the tenant's tickets matching `filter` (+ the service's `state`),
+   * filtered, ordered by id and paged IN SQL, with the total match count riding on the
+   * same statement (so offset paging stays stable).
+   */
+  async findPage(tenantId: number, filter: TaskListFilter, page: TaskPage, state: TaskQueryState = {}): Promise<{ tasks: Task[]; total: number }> {
+    const where = taskFilterWhere(tenantId, filter, state);
+    const offset = page.offset ?? 0;
+    const rows = await this.db.select({ task: tasksTable, total: totalOver })
+      .from(tasksTable).where(where).orderBy(asc(tasksTable.id)).limit(page.limit).offset(offset);
+    return { tasks: rows.map((r) => toDomain(r.task)), total: await this.totalOf(rows, where, offset) };
+  }
+
+  /**
+   * A page of matching tickets as light index rows (ordered by id) — never the
+   * description blob — plus the total match count.
+   */
+  async findIndexRows(tenantId: number, filter: TaskListFilter, page: TaskPage, state: TaskQueryState = {}): Promise<{ rows: TaskIndexRow[]; total: number }> {
+    const where = taskFilterWhere(tenantId, filter, state);
+    const offset = page.offset ?? 0;
+    const rows = await this.db.select({
+      id: tasksTable.id, projectId: tasksTable.projectId, status: tasksTable.status, taskType: tasksTable.taskType,
+      parentTaskId: tasksTable.parentTaskId, title: tasksTable.title, archived: tasksTable.archived, total: totalOver,
+    }).from(tasksTable).where(where).orderBy(asc(tasksTable.id)).limit(page.limit).offset(offset);
+    const total = await this.totalOf(rows, where, offset);
+    return { rows: rows.map(({ total: _total, ...row }) => row), total };
+  }
+
+  /** How many of the tenant's tickets match. */
+  async countMatching(tenantId: number, filter: TaskListFilter, state: TaskQueryState = {}): Promise<number> {
+    const [row] = await this.db.select({ n: count() }).from(tasksTable).where(taskFilterWhere(tenantId, filter, state));
+    return Number(row?.n ?? 0);
+  }
+
+  /** `{ id, projectId, taskType }` of the tenant's tickets among `ids` (unknown / foreign ids are absent). */
+  async findTypesByIds(tenantId: number, ids: readonly number[]): Promise<Array<{ id: number; projectId: number; taskType: string }>> {
+    if (ids.length === 0) return [];
+    return this.db.select({ id: tasksTable.id, projectId: tasksTable.projectId, taskType: tasksTable.taskType })
+      .from(tasksTable).where(scopedToTenant(tasksTable, tenantId, inArray(tasksTable.id, [...ids])));
+  }
+
+  /** The window total from a page; only an empty page past the end needs its own count. */
+  private async totalOf(rows: ReadonlyArray<{ total: number }>, where: SQL, offset: number): Promise<number> {
+    if (rows.length > 0) return Number(rows[0]?.total ?? 0);
+    if (offset === 0) return 0;
+    const [row] = await this.db.select({ n: count() }).from(tasksTable).where(where);
+    return Number(row?.n ?? 0);
+  }
+
+  /**
+   * Archive (or restore) many of the tenant's tickets in ONE statement. Ids outside the
+   * tenant, or unknown, are simply not updated; the rows that were are returned with
+   * their project so the caller can invalidate per board (afterTaskBulkWrite). Callers
+   * go through `TaskService.archiveMany` — the ONE bulk archive path.
+   */
+  async setArchived(tenantId: number, ids: readonly number[], archived: boolean): Promise<Array<{ id: number; projectId: number }>> {
+    if (ids.length === 0) return [];
+    return this.db
+      .update(tasksTable)
+      .set({ archived, updatedAt: new Date() })
+      .where(scopedToTenant(tasksTable, tenantId, inArray(tasksTable.id, [...ids])))
+      .returning({ id: tasksTable.id, projectId: tasksTable.projectId });
   }
 
   async findById(id: TaskId): Promise<Task | null> {

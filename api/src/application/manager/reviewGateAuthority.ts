@@ -142,6 +142,7 @@ export type AutoCloseSource =
   | 'ci_merge'         // green-CI auto-merge (ingestRepoCiEvent, pre-merge)
   | 'deploy_success'   // a successful post-merge deploy (ingestRepoCiEvent, post-merge)
   | 'delta_merge'      // the merge webhook closing a delta ticket
+  | 'delta_push'       // the push webhook closing a delta ticket a default-branch push shipped
   | 'stage_advance'    // lifecycle-managed sign-off advance into the terminal lane
   | 'security_rescan'; // a deterministic re-scan closing a resolved finding
 
@@ -153,7 +154,7 @@ export type CloseInitiator = 'human' | 'automation';
 
 /** The merge-family sources share one "merged, waiting for a person" journal state, so a
  *  merge followed by its deploy says it once rather than once per webhook. */
-const MERGE_FAMILY: ReadonlySet<AutoCloseSource> = new Set(['pr_merge', 'ci_merge', 'deploy_success', 'delta_merge']);
+const MERGE_FAMILY: ReadonlySet<AutoCloseSource> = new Set(['pr_merge', 'ci_merge', 'deploy_success', 'delta_merge', 'delta_push']);
 
 const HELD_OPENING: Record<AutoCloseSource, string> = {
   manager_review: 'The manager reviewed it and it passes',
@@ -161,6 +162,7 @@ const HELD_OPENING: Record<AutoCloseSource, string> = {
   ci_merge: 'Its pull request merged on green CI (the merge is recorded)',
   deploy_success: 'Its merged change deployed successfully (the merge is recorded)',
   delta_merge: 'The pull request carrying its change is merged (the merge is recorded)',
+  delta_push: 'A push to the default branch carries its change (the push is recorded)',
   stage_advance: 'Every required role has signed off',
   security_rescan: 'A re-scan no longer raises its finding',
 };

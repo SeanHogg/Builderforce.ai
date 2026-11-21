@@ -603,10 +603,18 @@ export function createKanbanRoutes(db: Db, createChild?: CreateChildTaskPort): H
     const taskId = Number(c.req.param('taskId'));
     const projectId = await projectIdOf(tenantId, taskId);
     if (projectId == null) return c.json({ error: 'task not found' }, 404);
-    const created = await runInRequestScope(bulkCreateScope((task) => c.executionCtx.waitUntil(task)), () =>
-      participantsService.materializeChildTasks(env(c), tenantId, taskId, (input) =>
+    const result = await runInRequestScope(bulkCreateScope((task) => c.executionCtx.waitUntil(task)), () =>
+      participantsService.materializeWorkItems(env(c), tenantId, taskId, (input) =>
         createChild({ projectId, tenantId, title: input.title, parentTaskId: input.parentTaskId, assignedAgentRef: input.assignedAgentRef, assignedUserId: input.assignedUserId })));
-    return c.json({ created });
+    // A fan-out child never fans out again: say why nothing was created rather than a bare 0.
+    if (result.skipped === 'fanout_child') {
+      return c.json({
+        created: 0,
+        skipped: result.skipped,
+        reason: `Ticket #${taskId} is itself a fan-out work item of another ticket; materialize on the parent ticket instead.`,
+      });
+    }
+    return c.json({ created: result.created });
   });
 
   return router;

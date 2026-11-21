@@ -3,7 +3,33 @@
  * assert the exact IngestEvent shape the producer feeds into activity_events.
  */
 import { describe, it, expect } from 'vitest';
-import { commitEvents, mergedPullRequestRef, pullRequestActionSignalsSweep, pullRequestEvents, reviewEvents, issueEvents } from './githubWebhookRoutes';
+import { commitEvents, defaultBranchPushRef, mergedPullRequestRef, pullRequestActionSignalsSweep, pullRequestEvents, reviewEvents, issueEvents } from './githubWebhookRoutes';
+
+describe('defaultBranchPushRef', () => {
+  it('extracts ref, default branch and per-commit file lists; a commit missing a list gets files: null', () => {
+    const ref = defaultBranchPushRef({
+      ref: 'refs/heads/main',
+      after: 'sha2',
+      repository: { full_name: 'acme/api', default_branch: 'main' },
+      commits: [
+        { id: 'sha1', message: 'task-4', timestamp: '2026-06-20T10:00:00Z', added: ['a.ts'], modified: ['b.ts'], removed: ['c.ts'] },
+        { id: 'sha2', message: 'huge', timestamp: '2026-06-20T11:00:00Z', added: ['d.ts'] },
+      ],
+    });
+    expect(ref).toEqual({
+      repoFullName: 'acme/api', ref: 'refs/heads/main', defaultBranch: 'main', after: 'sha2',
+      commits: [
+        { id: 'sha1', message: 'task-4', timestamp: '2026-06-20T10:00:00Z', files: ['a.ts', 'b.ts', 'c.ts'] },
+        { id: 'sha2', message: 'huge', timestamp: '2026-06-20T11:00:00Z', files: null },
+      ],
+    });
+  });
+
+  it('is null without a repo or ref', () => {
+    expect(defaultBranchPushRef({ ref: 'refs/heads/main', repository: {} })).toBeNull();
+    expect(defaultBranchPushRef({ repository: { full_name: 'acme/api' } })).toBeNull();
+  });
+});
 
 describe('commitEvents', () => {
   it('maps each commit on a branch push, preferring login then email', () => {

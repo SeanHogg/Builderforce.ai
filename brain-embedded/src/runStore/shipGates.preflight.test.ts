@@ -153,6 +153,82 @@ describe('shipGatePreflight', () => {
     expect(gate).toEqual({ evidence: 'checks passed' });
   });
 
+  const upToDate = (over: { ref?: string; uncommitted?: string[] } = {}) =>
+    ({ head: 'abc1234def5678', upstream: 'origin/main', ref: 'HEAD', uncommitted: [] as string[], ...over });
+
+  it('regression: a push of a HEAD already on its upstream is NOT refused — the evidence line names the no-op and the sha', async () => {
+    const reviewer = approving();
+    const landed = git({ files: [], diff: '', unavailable: 'no outgoing commits against @{u}', upToDate: upToDate() });
+    const gate = await shipGatePreflight(runWith({ git: landed, verifier: verifier('fail'), reviewer }), 'git_push', PUSH);
+    expect('refusal' in gate).toBe(false);
+    expect('evidence' in gate && gate.evidence).toMatch(/HEAD abc1234 is already on origin\/main, so the push is a no-op\. The change has shipped/);
+    expect(reviewer.review).not.toHaveBeenCalled();
+  });
+
+  it('an up-to-date HEAD with this run\'s touched files still uncommitted REFUSES — nothing was committed to push', async () => {
+    const landed = git({ files: [], diff: '', unavailable: 'no outgoing commits against @{u}', upToDate: upToDate({ uncommitted: [FILE, '/repo/other.txt'] }) });
+    const run = { req: { git: landed, verifier: verifier('pass') }, evidence: createEvidenceLedger(), c: cell({ touchedFiles: ['src/a.ts'] }) } as unknown as BrainRunContext;
+    const gate = await shipGatePreflight(run, 'git_push', PUSH);
+    expect('refusal' in gate && gate.refusal.error).toMatch(/nothing committed to push — 1 touched file is uncommitted \(\/repo\/src\/a\.ts\)/);
+    // Someone else's dirt does not block, but the note no longer claims "shipped".
+    const theirs = git({ files: [], diff: '', unavailable: 'x', upToDate: upToDate({ uncommitted: ['/repo/other.txt'] }) });
+    const passed = await shipGatePreflight({ ...run, req: { git: theirs, verifier: verifier('pass') } } as unknown as BrainRunContext, 'git_push', PUSH);
+    expect('evidence' in passed && passed.evidence).toMatch(/no-op \(the working tree has 1 uncommitted change this run did not make\)/);
+    expect('evidence' in passed && passed.evidence).not.toMatch(/shipped/);
+  });
+
+  it('regression: open_pull_request {branch} computes the outgoing change for THAT branch — HEAD level with origin is never taken as up to date', async () => {
+    const asked: unknown[] = [];
+    const reviewer = approving();
+    // The checkout (HEAD) is level with origin; feat/x has a real, failing change.
+    const port: GitPort = {
+      outgoing: async (_repo, opts) => {
+        asked.push(opts);
+        return opts?.ref === 'feat/x'
+          ? { files: [{ absPath: FILE, hash: 'h1', isNew: false, deleted: false }], diffHash: 'diff-1', baseBranch: false, diff: 'DIFF TEXT' }
+          : { files: [], diffHash: 'e', baseBranch: false, diff: '', unavailable: 'no outgoing commits', upToDate: upToDate() };
+      },
+    };
+    const gate = await shipGatePreflight(runWith({ git: port, verifier: verifier('fail'), reviewer }), 'open_pull_request', { title: 't', body: 'b', branch: 'feat/x' });
+    expect(asked).toEqual([{ pullRequest: {}, ref: 'feat/x' }]);
+    expect('refusal' in gate && gate.refusal.error).not.toMatch(/already/);
+    expect('refusal' in gate).toBe(true);
+    expect(reviewer.review).not.toHaveBeenCalled();
+  });
+
+  it('an upToDate computed for a different ref is never the pass', async () => {
+    const port = git({ files: [], diff: '', unavailable: 'no outgoing commits against origin/main', upToDate: upToDate({ ref: 'HEAD' }) });
+    const gate = await shipGatePreflight(runWith({ git: port, verifier: verifier('pass') }), 'git_push', { allowBaseBranch: true, branch: 'main' });
+    expect('refusal' in gate && gate.refusal.error).toMatch(/not verified — no outgoing commits/);
+  });
+
+  it('open_pull_request whose branch is already in the base REFUSES: nothing to open a PR for', async () => {
+    const port = git({ files: [], diff: '', baseBranch: false, unavailable: 'no outgoing commits against origin/main', upToDate: upToDate({ ref: 'feat/x' }) });
+    const gate = await shipGatePreflight(runWith({ git: port, verifier: verifier('pass') }), 'open_pull_request', { title: 't', body: 'b', branch: 'feat/x' });
+    expect('refusal' in gate && gate.refusal.error).toMatch(/HEAD abc1234 is already in origin\/main; there is nothing to open a PR for/);
+  });
+
+  it('regression: git_push {branch:"main", allowBaseBranch} from a feature checkout is GATED — baseBranch comes from the target ref', async () => {
+    const asked: unknown[] = [];
+    // The port answers for the ref it is asked about: main is the base branch, the checkout is not.
+    const port: GitPort = {
+      outgoing: async (_repo, opts) => (asked.push(opts), { files: [{ absPath: FILE, hash: 'h1', isNew: false, deleted: false }], diffHash: 'diff-1', baseBranch: opts?.ref === 'main', diff: 'DIFF TEXT' }),
+    };
+    const gate = await shipGatePreflight(runWith({ git: port, verifier: verifier('fail') }), 'git_push', { allowBaseBranch: true, branch: 'main' });
+    expect(asked).toEqual([{ ref: 'main' }]);
+    expect('refusal' in gate).toBe(true);
+  });
+
+  it('regression: "unavailable" without upToDate (no upstream / git error) still refuses the push', async () => {
+    const gate = await shipGatePreflight(runWith({ git: git({ files: [], diff: '', unavailable: 'no outgoing commits against @{u}' }), verifier: verifier('pass') }), 'git_push', PUSH);
+    expect('refusal' in gate && gate.refusal.error).toMatch(/^git_push refused: not verified — no outgoing commits/);
+  });
+
+  it('ticket done on the base branch is clear when the port reports HEAD up to date (the shared predicate)', async () => {
+    const run = { req: { git: git({ files: [], diff: '', baseBranch: true, upToDate: upToDate() }), verifier: verifier('fail') }, evidence: createEvidenceLedger(), c: cell({ codeChanged: true, touchedFiles: [FILE] }) } as unknown as BrainRunContext;
+    expect(await shipGatePreflight(run, 'builtin_tasks_update', { id: 1, status: 'done' })).toEqual({});
+  });
+
   it('regression: ticket done is refused BEFORE it runs, only for this run\'s own failing outgoing files', async () => {
     const DONE = { id: 1, status: 'done' };
     const files = [{ absPath: FILE, hash: 'h1', isNew: false, deleted: false }];

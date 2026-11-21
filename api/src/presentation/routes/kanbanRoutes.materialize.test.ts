@@ -41,8 +41,9 @@ const PARTICIPANTS = [
   { id: 'p1', taskId: TASK_ID, roleKey: 'developer', assigneeKind: 'agent', assigneeRef: 'ada', childTaskId: null },
   { id: 'p2', taskId: TASK_ID, roleKey: 'qa-tester', assigneeKind: 'agent', assigneeRef: 'qa', childTaskId: null },
   { id: 'p3', taskId: TASK_ID, roleKey: 'manager', assigneeKind: 'human', assigneeRef: 'u-9', childTaskId: null },
-  // Already materialized, and unstaffed: neither may be created again.
-  { id: 'p4', taskId: TASK_ID, roleKey: 'developer', assigneeKind: 'agent', assigneeRef: 'ada', childTaskId: 777 },
+  // Already materialized, and unstaffed: neither may be created again. (p4 is its own
+  // role: a role that already has a child links its other rows to it — one child per role.)
+  { id: 'p4', taskId: TASK_ID, roleKey: 'architect', assigneeKind: 'agent', assigneeRef: 'ada', childTaskId: 777 },
   { id: 'p5', taskId: TASK_ID, roleKey: 'owner', assigneeKind: null, assigneeRef: null, childTaskId: null },
 ];
 
@@ -58,19 +59,24 @@ function dbStub() {
     value.then = (resolve: (result: unknown) => unknown) => Promise.resolve(rows).then(resolve);
     return value;
   };
-  const batch = vi.fn(async () => []);
+  // Every compare-and-set link lands (one returned row per write).
+  const batch = vi.fn(async (writes: unknown[]) => writes.map(() => [{ id: 'linked' }]));
   // Table-aware, because the handler reads three different tables: the parent task
   // (project id + title), the participant rows, and — in the rollup — child statuses.
   const rowsFor = (table: unknown): unknown[] => {
     if (table === ticketParticipants) return PARTICIPANTS;
     if (table === ticketRoleSignoffs) return [];
-    if (table === tasks) return [{ id: TASK_ID, projectId: PROJECT_ID, title: PARENT_TITLE, status: 'todo' }];
+    // The parent first (the project lookup reads one row), then p4's live child.
+    if (table === tasks) return [
+      { id: TASK_ID, projectId: PROJECT_ID, title: PARENT_TITLE, status: 'todo' },
+      { id: 777, projectId: PROJECT_ID, title: `[Architect] ${PARENT_TITLE}`, status: 'todo', parentTaskId: TASK_ID, archived: false },
+    ];
     return [];
   };
   return {
     batch,
     select: vi.fn(() => ({ ...chain([]), from: (table: unknown) => chain(rowsFor(table)) })),
-    update: vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn(async () => []) })) })),
+    update: vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn(() => Object.assign(Promise.resolve([]), { returning: async () => [] })) })) })),
   } as unknown as Db;
 }
 

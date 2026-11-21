@@ -872,8 +872,10 @@ jobs:
           pnpm --dir ../packages/agent-run install --frozen-lockfile
           npm run db:migrate
 
+          # GIT_SHA stamps the deployed commit: GET /health `commit` and the
+          # `deploy.status` tool read it to prove which build is live.
           for attempt in 1 2 3; do
-            npm run deploy:worker && break
+            npm run deploy:worker -- --var "GIT_SHA:${{ github.sha }}" && break
             if [ "$attempt" -eq 3 ]; then exit 1; fi
             sleep 30
           done
@@ -1178,7 +1180,8 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
-        run: wrangler deploy --no-bundle
+        # GIT_SHA → the frontend's GET /health `commit` (see deploy-api).
+        run: wrangler deploy --no-bundle --var "GIT_SHA:${{ github.sha }}"
 
   deploy-help:
     name: Deploy help

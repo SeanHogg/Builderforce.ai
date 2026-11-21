@@ -28,6 +28,9 @@
  * A candidate failing any one of them is left alone and the reason is returned, so a
  * webhook that decided to do nothing says why rather than looking like it did not fire.
  *
+ * (A DIRECT push to the default branch has no PR to join on; `completeDeltaOnPush` handles
+ * that case under its own, stricter file-coverage rules.)
+ *
  * Completion itself goes through {@link completeTaskOnMerge} — the single shared path the
  * human "Approve & Merge" route, the manager sweep and the green-CI webhook already use,
  * so this cannot drift from them on lane ordinals, DORA metrics or actor attribution.
@@ -39,7 +42,7 @@ import type { Env } from '../../env';
 import { projectRepositories, pullRequests, tasks, workDeltas } from '../../infrastructure/database/schema';
 import { TaskStatus } from '../../domain/shared/types';
 import { resolveRepoLink } from '../contributors/activityIngest';
-import { closeTicketAutomatically } from '../manager/reviewGateAuthority';
+import { closeDeltaTickets } from './closeDeltaTickets';
 import { ticketIdsOnBranch } from './deltaBranchMatch';
 
 /** The merged pull request, in the shape a provider webhook can supply. */
@@ -236,16 +239,10 @@ export async function completeDeltaTicketsOnMerge(
     return { completed: [], reason: 'no delta ticket awaiting review matched the merged pull request' };
   }
 
-  const completed: number[] = [];
-  const heldForReview: number[] = [];
-  for (const taskId of eligible) {
-    // No actor: a merge webhook has no user, and the completion path falls back to the
-    // agent whose run produced the work rather than stamping it anonymous. THROUGH THE
-    // REVIEW GATE (1153): a merge is automation, so a human-gated review lane holds unless
-    // the workspace lets the manager close reviewed tickets.
-    const close = await closeTicketAutomatically(env, db, { tenantId: link.tenantId, taskId, source: 'delta_merge' });
-    (close.closed ? completed : heldForReview).push(taskId);
-  }
+  // Through the review gate, with no actor — see closeDeltaTickets.
+  const { completed, heldForReview } = await closeDeltaTickets(
+    env, db, 'delta_merge', eligible.map((taskId) => ({ tenantId: link.tenantId, taskId })),
+  );
   if (heldForReview.length === 0) return { completed };
   return {
     completed,

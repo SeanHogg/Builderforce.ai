@@ -58,6 +58,10 @@ import {
   type DeltaMergeOutcome,
   type MergedPullRequestRef,
 } from '../../application/delta/completeDeltaOnMerge';
+import {
+  completeDeltaTicketsOnPush,
+  type DefaultBranchPushRef,
+} from '../../application/delta/completeDeltaOnPush';
 
 /** Labels that trigger auto-dispatch. Lower-cased for comparison. */
 const DISPATCH_LABELS = new Set(['coderclaw', 'ai-task', 'host', 'ai']);
@@ -128,6 +132,38 @@ export function mergedPullRequestRef(p: Record<string, unknown>): MergedPullRequ
     provider: 'github',
     ...(defaultBranch ? { defaultBranch } : {}),
   };
+}
+
+/**
+ * The push facts the delta closer needs, or null when the payload names no repo/ref.
+ * The use case itself ignores any ref that is not the default branch.
+ *
+ * File lists: GitHub sends `added` / `modified` / `removed` per commit, but the payload
+ * carries a bounded number of commits and a huge commit's lists can be truncated or absent.
+ * A commit without all three arrays gets `files: null`, so it can only match a ticket by an
+ * explicit reference in its message (rule a), never by file coverage (rule b). PURE.
+ */
+export function defaultBranchPushRef(p: Record<string, unknown>): DefaultBranchPushRef | null {
+  const { full } = repoNames(p);
+  const ref = gs(p, 'ref');
+  if (!full || !ref) return null;
+  const raw = Array.isArray(g(p, 'commits')) ? (g(p, 'commits') as unknown[]) : [];
+  const strings = (v: unknown): string[] | null =>
+    Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : null;
+  const commits = raw.flatMap((ci) => {
+    const id = gs(ci, 'id');
+    if (!id) return [];
+    const added = strings(g(ci, 'added'));
+    const modified = strings(g(ci, 'modified'));
+    const removed = strings(g(ci, 'removed'));
+    return [{
+      id,
+      timestamp: gs(ci, 'timestamp'),
+      message: gs(ci, 'message') ?? '',
+      files: added && modified && removed ? [...added, ...modified, ...removed] : null,
+    }];
+  });
+  return { repoFullName: full, ref, defaultBranch: gs(g(p, 'repository'), 'default_branch'), after: gs(p, 'after'), commits };
 }
 
 /**
@@ -387,6 +423,32 @@ export function createGitHubWebhookRoutes(db: Db, runtimeService: RuntimeService
                 });
               }
             })()
+          );
+        }
+
+        // A direct push to the DEFAULT branch (a person, another session, a later run) is
+        // the third way a delta ticket's change ships — no PR, so the merge closer never
+        // sees it. Off the response path; the use case ignores non-default refs itself.
+        const pushed = defaultBranchPushRef(p);
+        if (pushed && pushed.commits.length > 0) {
+          c.executionCtx.waitUntil(
+            completeDeltaTicketsOnPush(c.env as Env, db, pushed).then(
+              (outcome) => {
+                if (outcome.closed.length || outcome.heldForReview.length || outcome.ambiguous.length) {
+                  console.info('[delta-push]', JSON.stringify({
+                    repo: full, ref: pushed.ref, after: pushed.after ?? null,
+                    closed: outcome.closed, heldForReview: outcome.heldForReview, ambiguous: outcome.ambiguous,
+                  }));
+                }
+              },
+              (error) => {
+                reportCaughtError(error, {
+                  source: 'presentation/routes/githubWebhookRoutes.ts',
+                  operation: 'completeDeltaTicketsOnPush',
+                  context: { repoFullName: full, ref: pushed.ref },
+                });
+              },
+            ),
           );
         }
       }

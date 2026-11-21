@@ -16,6 +16,7 @@ const taskSvc = vi.hoisted(() => ({
   updateTask: vi.fn(),
   deleteTask: vi.fn(),
   moveTask: vi.fn(),
+  archiveMany: vi.fn(),
 }));
 
 // Constructable mocks: a `function` returning an object yields it from `new`.
@@ -34,7 +35,9 @@ vi.mock('../brain/chatTicketLinking', async (importOriginal) => ({
 vi.mock('../project/ProjectService', () => ({ ProjectService: function () { return projectSvc; } }));
 vi.mock('../task/TaskService', () => ({ TaskService: function () { return taskSvc; } }));
 vi.mock('../../infrastructure/repositories/ProjectRepository', () => ({ ProjectRepository: function () { /* stub */ } }));
-vi.mock('../../infrastructure/repositories/TaskRepository', () => ({ TaskRepository: function () { /* stub */ } }));
+// The SQL-filtered list + bulk archive read/write through the repository (taskBulkToolCatalog.ts).
+const taskRepo = vi.hoisted(() => ({ findPage: vi.fn(), findIndexRows: vi.fn(), findTypesByIds: vi.fn(), countMatching: vi.fn() }));
+vi.mock('../../infrastructure/repositories/TaskRepository', () => ({ TaskRepository: function () { return taskRepo; } }));
 vi.mock('../project/ensureProjectCodingTarget', () => ({
   afterBrainProjectCreate: codingTarget.afterBrainProjectCreate,
   ensureProjectCodingTarget: codingTarget.ensureProjectCodingTarget,
@@ -47,6 +50,7 @@ import {
 } from './builtinMcpService';
 import { TenantRole } from '../../domain/shared/types';
 import { agentRegistrations, ideAgents } from '../../infrastructure/database/schema';
+import { taskInScope, type TaskListScope } from '@builderforce/agent-loop';
 
 const db = {} as never;
 const TENANT = 7;
@@ -448,7 +452,19 @@ describe('callBuiltinTool', () => {
       { id: 3, title: 'Done', status: 'done' },
       { id: 4, title: 'Archived', status: 'in_progress', archived: true },
     ];
-    taskSvc.listTasks.mockResolvedValue(rows.map((r) => ({ toPlain: () => r })));
+    // The database's side of the filter contract: scope + status, ordered by id, paged.
+    const matching = (filter: { scope: TaskListScope; status?: string }) => rows
+      .filter((r) => taskInScope(r, filter.scope) && (filter.status === undefined || r.status === filter.status))
+      .sort((x, y) => x.id - y.id);
+    taskRepo.findPage.mockImplementation(async (_tenant: number, filter: { scope: TaskListScope; status?: string }, page: { limit: number; offset: number }) => {
+      const matched = matching(filter);
+      return { tasks: matched.slice(page.offset, page.offset + page.limit).map((r) => ({ toPlain: () => r })), total: matched.length };
+    });
+    // Index mode reads light rows through the same filter.
+    taskRepo.findIndexRows.mockImplementation(async (_tenant: number, filter: { scope: TaskListScope; status?: string }, page: { limit: number; offset: number }) => {
+      const matched = matching(filter);
+      return { rows: matched.slice(page.offset, page.offset + page.limit), total: matched.length };
+    });
     const emptyDb = {
       select: vi.fn(() => {
         const chain: Record<string, unknown> = {};
@@ -468,11 +484,11 @@ describe('callBuiltinTool', () => {
 
     const open = await callBuiltinTool(emptyDb, { tenantId: TENANT, tool: 'tasks.list', arguments: { projectId: 3 } });
     expect(ids(open)).toEqual([1]);
-    expect(taskSvc.listTasks).toHaveBeenLastCalledWith(TENANT, 3, false);
+    expect(taskRepo.findPage).toHaveBeenLastCalledWith(TENANT, expect.objectContaining({ projectId: 3, scope: 'open' }), { limit: 50, offset: 0 }, {});
 
     const closed = await callBuiltinTool(emptyDb, { tenantId: TENANT, tool: 'tasks.list', arguments: { projectId: 3, scope: 'closed' } });
     expect(ids(closed)).toEqual([2, 3, 4]);
-    expect(taskSvc.listTasks).toHaveBeenLastCalledWith(TENANT, 3, true);
+    expect(taskRepo.findPage).toHaveBeenLastCalledWith(TENANT, expect.objectContaining({ projectId: 3, scope: 'closed' }), { limit: 50, offset: 0 }, {});
 
     // An explicit status is its own scope, so "done" is not emptied by the open default.
     const done = await callBuiltinTool(emptyDb, { tenantId: TENANT, tool: 'tasks.list', arguments: { projectId: 3, status: 'done' } });
@@ -507,24 +523,20 @@ describe('callBuiltinTool', () => {
   });
 
   it('tasks.archive_many archives each tenant-owned id, restores on archived:false, and reports per-id failures without aborting', async () => {
-    taskSvc.getTask.mockReset();
-    taskSvc.updateTask.mockReset();
-    taskSvc.getTask.mockImplementation(async (id: number) => {
-      if (id === 8) throw new Error('Task not found');
-      return { projectId: 4, toPlain: () => ({ id }) };
-    });
-    projectSvc.getProject.mockResolvedValue({ id: 4 });
-    taskSvc.updateTask.mockResolvedValue({ toPlain: () => ({}) });
+    // One tenant-scoped UPDATE; id 8 is not in this workspace, so it is not returned.
+    // Id 8 is not in this workspace; the rest are written by ONE tenant-scoped UPDATE.
+    taskRepo.findTypesByIds.mockImplementation(async (_tenant: number, ids: number[]) => ids.filter((id) => id !== 8).map((id) => ({ id, projectId: 4, taskType: 'task' })));
+    taskSvc.archiveMany.mockImplementation(async (_tenant: number, ids: number[]) => ids.map((id) => ({ id, projectId: 4 })));
 
     const res = await callBuiltinTool(db, { tenantId: TENANT, tool: 'tasks.archive_many', arguments: { ids: [7, 8, 9] } });
     expect(res).toMatchObject({ archived: [7, 9], count: 2 });
     expect((res as { failed: Array<{ id: unknown; error: string }> }).failed).toEqual([{ id: 8, error: 'Task not found' }]);
-    expect(taskSvc.updateTask).toHaveBeenCalledTimes(2);
-    expect(taskSvc.updateTask).toHaveBeenCalledWith(7, { archived: true });
+    expect(taskSvc.archiveMany).toHaveBeenCalledTimes(1);
+    expect(taskSvc.archiveMany).toHaveBeenCalledWith(TENANT, [7, 9], true);
 
     const back = await callBuiltinTool(db, { tenantId: TENANT, tool: 'tasks.archive_many', arguments: { ids: [7], archived: false } });
     expect(back).toMatchObject({ restored: [7], count: 1 });
-    expect(taskSvc.updateTask).toHaveBeenLastCalledWith(7, { archived: false });
+    expect(taskSvc.archiveMany).toHaveBeenLastCalledWith(TENANT, [7], false);
 
     await expect(callBuiltinTool(db, { tenantId: TENANT, tool: 'tasks.archive_many', arguments: { ids: [] } })).rejects.toThrow(/non-empty/);
     await expect(callBuiltinTool(db, { tenantId: TENANT, tool: 'tasks.archive_many', arguments: { ids: Array.from({ length: 201 }, (_, i) => i + 1) } })).rejects.toThrow(/capped at 200/);
