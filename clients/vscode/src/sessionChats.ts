@@ -61,7 +61,12 @@ async function resolveLocalChat(ctx: vscode.ExtensionContext, serverId: number, 
   if (!userId || !chat.ownerId || chat.ownerId !== userId) return undefined;
   const local = localBrainApplication(ctx);
   const created = await local.persistence.createChat({ title: chat.title, projectId: chat.projectId, bindPending: true });
-  if (!(await local.identity.adopt(created.id, serverId))) {
+  // An adopt that throws leaves the `bindPending` lease on the new chat: deleting it releases it.
+  const adopted = await local.identity.adopt(created.id, serverId).catch(async (error: unknown) => {
+    await local.persistence.deleteChat(created.id);
+    throw error;
+  });
+  if (!adopted) {
     // Signed out between the tree's read and now, or the new local chat's sync import already
     // went up as a chat of its own (`chatBindLease.ts`): nothing to continue it on.
     await local.persistence.deleteChat(created.id);

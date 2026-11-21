@@ -3,6 +3,7 @@ import {
   claimChatBind,
   journalWrite,
   newLocalRecord,
+  releaseChatBind,
   UNBOUND_DESTINATION,
   type EntityDestination,
   type LocalFirstChange,
@@ -272,6 +273,9 @@ export function createLocalBrainPersistence(options: LocalBrainPersistenceOption
         const chatDeleteKey = `chat:${chat.id}:delete:v${deleted.version}`;
         await tx.put(deleted, chat.version);
         await journalWrite(tx, deleted, 'delete', { key: chatDeleteKey });
+        // A deleted chat is never bound: a `createChat({ bindPending })` lease its caller abandoned
+        // (its server create or adopt failed) must not hold the chat's journal back for its 120 s.
+        await releaseChatBind(tx, chat.id, BIND_PENDING_HOLDER);
         const rows = await chatMessageRecords(tx, options.deviceId, id);
         for (const row of rows) {
           const tombstone = { ...row, version: row.version + 1, baseVersion: row.version, deletedAt: stamp, updatedAt: stamp };

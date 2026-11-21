@@ -8,7 +8,9 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import {
+  BIND_PENDING_HOLDER,
   createMemoryLocalFirstStore,
+  liveChatBindHolder,
   createSyncCoordinator,
   type EntityDestination,
   type LocalFirstStore,
@@ -153,6 +155,18 @@ describe('chat bind vs. sync import (regression: chat local #165961)', () => {
     const clientId = (await harness.identity.clientIdFor(chat.id))!;
     expect(await chatMapping(harness.store, clientId)).toMatchObject({ syncId: hostChat, serverVersion: 1 });
     expect(await harness.identity.serverIdFor(chat.id)).toBe(hostChat);
+  });
+
+  it('deleting a chat whose createChat({ bindPending }) caller gave up releases the bind lease at once', async () => {
+    const server = fakeServer();
+    const harness = setup(async () => server.mint(), server.transport);
+    const chat = await harness.persistence.createChat({ title: 'x', bindPending: true });
+    const clientId = (await harness.identity.clientIdFor(chat.id))!;
+    expect(await harness.store.read((tx) => liveChatBindHolder(tx, clientId, new Date()))).toBe(BIND_PENDING_HOLDER);
+
+    await harness.persistence.deleteChat(chat.id);
+
+    expect(await harness.store.read((tx) => liveChatBindHolder(tx, clientId, new Date()))).toBeUndefined();
   });
 
   it("two windows sharing the journal: the second's bind waits for the first's binding and never POSTs", async () => {

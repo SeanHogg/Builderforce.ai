@@ -26,10 +26,10 @@ import { chatTicketLinkId, linkServerIds } from './chatTicketLink.js';
 import { clone } from './clone.js';
 import { mintLocalId, parseEntityRef, parseSyncId, tierRefText } from './entityId.js';
 import { canonicalPayloadHash } from './payloadHash.js';
-import { accountScopeOf, type ChatTicketLinkValue, type EntityDestination, type LocalEntityType, type LocalRecord, type ServerMapping } from './records.js';
+import { accountScopeOf, destinationKey, type ChatTicketLinkValue, type EntityDestination, type LocalEntityType, type LocalRecord, type ServerMapping } from './records.js';
 import type { LocalFirstTransaction } from './storeContract.js';
 import type { LocalFirstStore } from './store.js';
-import { retireMisfiledLinks } from './pulledChatTicketLink.js';
+import { isLivePendingEvent, linkFormRepairMark, retireMisfiledLinks } from './pulledChatTicketLink.js';
 import { serverObservedProvenance, serverObservedTombstone } from './tombstone.js';
 
 export interface ServerRecordRow {
@@ -128,10 +128,22 @@ export async function ingestServerRecords(
     const result: IngestServerRecordsResult = { written: 0, unchanged: 0, skippedPending: 0, tombstoned: 0, clientIds: [] };
     const hasPending = new Set<string>();
     await tx.scanPending((event) => {
-      if (!event.deadLetter) hasPending.add(pendingKey(event.entityType, event.clientEntityId));
+      if (isLivePendingEvent(event)) hasPending.add(pendingKey(event.entityType, event.clientEntityId));
     });
 
     const incomingTickets = new Set<string>();
+    const strayCheckPairs = new Set<string>();
+    /** Whether each destination's one-shot legacy repair has run: read once per destination, not per link row. */
+    const repairMarked = new Map<string, boolean>();
+    const isRepairMarked = async (destination: EntityDestination): Promise<boolean> => {
+      const key = destinationKey(destination);
+      let marked = repairMarked.get(key);
+      if (marked === undefined) {
+        marked = Boolean(await tx.readMark(linkFormRepairMark(destination)));
+        repairMarked.set(key, marked);
+      }
+      return marked;
+    };
     /** The client id each row resolved to, skipped rows included: what a later row's payload may name. */
     const resolvedIds: Array<string | undefined> = [];
     for (const source of rows) {
@@ -151,7 +163,7 @@ export async function ingestServerRecords(
       const derivedPair = derivedLinkId(row);
       // Only the pairs this ingest wrote are checked for an older build's stray, and only until the
       // destination's one-shot legacy repair has run (`repairLegacyLinksOnce`).
-      if (derivedPair !== undefined && !(await tx.readMark(linkFormRepairMark(row.destination)))) strayCheckPairs.add(derivedPair);
+      if (derivedPair !== undefined && !(await isRepairMarked(row.destination))) strayCheckPairs.add(derivedPair);
       if (row.entityType === 'ticket') incomingTickets.add(clientId);
       if (row.entityType === 'chat-ticket-link') {
         const link = row.payload as Partial<ChatTicketLinkValue> | null;
@@ -235,7 +247,7 @@ export async function ingestServerRecords(
       }
     }
     // A link an older build stored under another device's id, beside (or instead of) its derived one.
-    result.tombstoned += await retireMisfiledLinks(tx, at);
+    result.tombstoned += await retireMisfiledLinks(tx, at, strayCheckPairs);
     if (options.markRead !== undefined && (await tx.readMark(options.markRead)) !== at) {
       await tx.setReadMark(options.markRead, at);
     }

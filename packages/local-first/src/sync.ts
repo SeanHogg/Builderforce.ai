@@ -9,8 +9,7 @@ import {
 } from './records.js';
 import { partitionUnboundPending, type UnboundSyncRefusal } from './creationDestination.js';
 import { destinationsForSync, readOfflineDestinations } from './destinationRebind.js';
-import { SCAN_STOP, type LocalFirstStore, type LocalFirstTransaction } from './store.js';
-import { scanPendingOfRow } from './pendingQueries.js';
+import type { LocalFirstStore, LocalFirstTransaction } from './store.js';
 import type { CoordinatorLeaseFence } from './syncLease.js';
 import { rebaseImportsOntoMapping, rebaseNewerWrites } from './journalRules.js';
 import { nextHoldTransition, type HoldStatus } from './holdLimits.js';
@@ -20,7 +19,7 @@ import { isRecordPayloadMarker } from './recordPayloadMarker.js';
 import { addSyncSummary, countReceipt, emptySyncSummary, type SyncSummary } from './syncSummary.js';
 import { parseSyncId, type SyncId } from './entityId.js';
 import { isAlreadySatisfiedDelete, isPermanentRefusal } from './permanentRefusals.js';
-import { applyPulledLinkTombstone, pulledLinkPayload, repairServerFormLinks } from './pulledChatTicketLink.js';
+import { applyPulledLinkTombstone, derivedIdOfPulledLink, hasLivePendingOfRow, mappingCarriesServerKey, PulledLinkIndex, pulledLinkPayload, repairLegacyLinksOnce } from './pulledChatTicketLink.js';
 
 export const SYNC_PROTOCOL_VERSION = 1;
 
@@ -127,9 +126,8 @@ async function mergePulled(
   now: Date,
 ): Promise<PulledOutcome> {
   const local = await tx.get(remote.entityType, remote.id);
-  let hasPending = false;
-  // The row's own events (per-row index): a pull of 500 rows must not walk the journal 500 times.
-  await scanPendingOfRow(tx, remote.id, () => { hasPending = true; return SCAN_STOP; }, destination);
+  // The row's own live events (per-row index): a pull of 500 rows must not walk the journal 500 times.
+  const hasPending = await hasLivePendingOfRow(tx, remote.id, destination);
   if (local && hasPending) {
     const conflict: SyncConflict = {
       id: `${remote.entityType}:${remote.id}:${local.version}:${remote.version}`,
@@ -169,14 +167,27 @@ async function mergePulled(
   const wire = remote as { syncId?: unknown; serverId?: unknown };
   const syncId = wireSyncId(wire);
   const serverId = typeof wire.serverId === 'string' && wire.serverId.trim() !== '' ? wire.serverId : undefined;
-  if (syncId !== null || serverId !== undefined) {
+  // A link the pull refused (another device's id) is mapped under THIS device's derived id of the
+  // pair, never under the pulled id: a later unlink names the server key, and the earliest mapping
+  // of that key must be the one that reaches this device's record. Unresolvable here: no mapping.
+  // The derived id's own mapping is kept only when it already names this server key; one naming an
+  // OLDER key (the pair was unlinked, then linked again elsewhere) is replaced, at the larger version.
+  let mappedId: string | undefined = remote.id;
+  let serverVersion = remote.version;
+  if (remote.entityType === 'chat-ticket-link' && payload === undefined) {
+    mappedId = await derivedIdOfPulledLink(tx, remote.payload, local, destination);
+    const known = mappedId !== undefined ? await tx.mapping('chat-ticket-link', mappedId, destination) : undefined;
+    if (known && mappingCarriesServerKey(known, syncId, serverId)) mappedId = undefined;
+    else if (known) serverVersion = Math.max(serverVersion, known.serverVersion);
+  }
+  if (mappedId !== undefined && (syncId !== null || serverId !== undefined)) {
     await tx.putMapping({
       destination,
       entityType: remote.entityType,
-      clientEntityId: remote.id,
+      clientEntityId: mappedId,
       syncId,
       ...(serverId !== undefined ? { serverId } : {}),
-      serverVersion: remote.version,
+      serverVersion,
     });
   }
   return payload === undefined ? 'not-stored' : 'stored';
@@ -213,6 +224,8 @@ export function createSyncCoordinator(options: SyncCoordinatorOptions) {
       // Links last: a link resolves its chat and ticket through their mappings, which a row of the
       // same page may be what writes.
       const isLink = (record: LocalRecord) => record.entityType === 'chat-ticket-link';
+      // The live-link index of the page's tombstones: built once, dropped when a link is merged.
+      const linkIndex = new PulledLinkIndex();
       for (const record of [...result.records.filter((r) => !isLink(r)), ...result.records.filter(isLink)]) {
         // G18: a tombstone is a deletion, not a row to merge. Writing it back
         // with `mergePulled` would resurrect the entity the server deleted.
@@ -220,16 +233,17 @@ export function createSyncCoordinator(options: SyncCoordinatorOptions) {
         // The row is removed, and its body is never stored.
         if (typeof record.deletedAt === 'string' && record.deletedAt.trim() !== '') {
           // An unlink also reaches the pair where this device holds it under another id.
-          if (isLink(record)) await applyPulledLinkTombstone(tx, record, destination, at);
+          if (isLink(record)) await applyPulledLinkTombstone(tx, record, destination, at, linkIndex);
           await tx.delete(record.entityType, record.id);
           continue;
         }
         const outcome = await mergePulled(tx, record, destination, now());
+        if (isLink(record)) linkIndex.invalidate();
         if (outcome === 'conflict') count += 1;
         else if (outcome === 'not-stored') skipped += 1;
       }
-      // Links an earlier build's pull stored in the server's form are put back in the device's.
-      await repairServerFormLinks(tx, destination, at);
+      // Links an earlier build's pull stored in the server's form are put back in the device's (once).
+      await repairLegacyLinksOnce(tx, destination, at);
       await tx.setCursor(destination, result.cursor, at);
       return { conflicts: count, notStored: skipped };
     });
