@@ -33,6 +33,7 @@ import {
 import {
   resetWebNetworkDenialSelfCheckForTests,
   runWebNetworkDenialSelfCheck,
+  selfCheckProbeUrl,
   webNetworkDenialSelfCheckLastRun,
 } from './webNetworkDenialSelfCheck';
 
@@ -83,7 +84,7 @@ describe('G27 boot-time web network-denial self-check', () => {
     // not touch the journal.
     expect(webPlatformRequestAccount()).toMatchObject({ attempted: 0, blocked: 1 });
     expect(native).toHaveBeenCalledTimes(1);
-    expect(native.mock.calls[0]?.[0]).toBe('https://example.com/health');
+    expect(native.mock.calls[0]?.[0]).toBe(selfCheckProbeUrl());
     // The boot itself must not have routed the push through the page fetch.
     expect(native.mock.calls.some(([input]) => String(input).includes('/api/sync'))).toBe(false);
   });
@@ -115,7 +116,7 @@ describe('G27 boot-time web network-denial self-check', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
-        if (url === 'https://example.com/health') throw new PlatformAccessDenied('connected-feature');
+        if (url === selfCheckProbeUrl()) throw new PlatformAccessDenied('connected-feature');
         return new Response('{}', { status: 200 });
       }),
     );

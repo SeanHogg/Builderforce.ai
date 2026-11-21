@@ -39,7 +39,15 @@ import { ApiTransportError, fetchWithTransportReport } from '../errors/transport
 
 /** Default probe URLs — overridable in tests. */
 export const SELF_CHECK_PUSH_URL = `${API_ORIGIN}/api/sync/v1/push`;
-export const SELF_CHECK_PROBE_URL = 'https://example.com/health';
+/**
+ * The non-platform control probe: this site's own `/health` route. Same-origin and not the
+ * platform API origin, so it takes the page's real non-platform fetch path without a cross-origin
+ * request — it was `https://example.com/health`, which put a CORS error in every visitor's
+ * console on every boot and sent each visitor's IP to a third party.
+ */
+export function selfCheckProbeUrl(): string {
+  return new URL('/health', window.location.origin).toString();
+}
 
 export interface WebNetworkDenialSelfCheckReport {
   /** True when the check ran against the live guard (false only on an unexpected crash). */
@@ -79,7 +87,7 @@ export async function runWebNetworkDenialSelfCheck(
   urls: { pushUrl?: string; probeUrl?: string } = {},
 ): Promise<WebNetworkDenialSelfCheckReport> {
   const pushUrl = urls.pushUrl ?? SELF_CHECK_PUSH_URL;
-  const probeUrl = urls.probeUrl ?? SELF_CHECK_PROBE_URL;
+  const probeUrl = urls.probeUrl ?? selfCheckProbeUrl();
   // Loaded here, not at the top: `./platformPolicy` boots this check, and a static import
   // back would be a module-evaluation cycle (the architecture guard's no-cycles rule).
   const { webPlatformFetch, webPlatformPolicy, webPlatformRequestAccount } = await import('./platformPolicy');

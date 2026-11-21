@@ -109,10 +109,21 @@ const knowledgeWorkerFactoryServerAlias = {
  * `layout-router` from the re-keyed path and the app bootstrap from the original one:
  * TWO `app-router-context` modules, the root `LayoutRouterContext` provided by one and
  * read from the other, and every page crashed with "invariant expected layout router to
- * be mounted". Server and client must key modules identically; the browser bundle now
- * gets the same dedupe. `scripts/check-client-router-context.mjs` fails the build if
- * the browser bundle ever carries two copies again.
+ * be mounted". Server and client must key modules identically, and Next itself is never
+ * re-keyed at all (FRAMEWORK_PACKAGES below): re-keying it in the client split
+ * `SearchParamsContext` next.
  */
+/**
+ * NEVER re-keyed, in any compilation. Next wires its own runtime by absolute paths
+ * (entries, aliases, client-reference manifests) that this plugin cannot see all of: re-keying
+ * `next` split its router contexts across two module copies — first `LayoutRouterContext`
+ * (every page: "invariant expected layout router to be mounted"), then, once the client was
+ * re-keyed too, `SearchParamsContext` (`useSearchParams()` returned null in the root layout).
+ * React's packages carry module-level state the same way. These resolve exactly as webpack
+ * reaches them, as they did before the plugin existed.
+ */
+const FRAMEWORK_PACKAGES = new Set(['next', 'react', 'react-dom', 'scheduler', 'styled-jsx']);
+
 class CanonicalPackagePathsPlugin {
   constructor(root) {
     this.nodeModules = path.join(root, 'node_modules');
@@ -123,7 +134,7 @@ class CanonicalPackagePathsPlugin {
     if (this.canonicalByRoot.has(packageRoot)) return this.canonicalByRoot.get(packageRoot);
     const own = path.join(this.nodeModules, name);
     let canonical = null;
-    if (own !== packageRoot && fs.existsSync(own) && fs.existsSync(packageRoot)) {
+    if (!FRAMEWORK_PACKAGES.has(name) && own !== packageRoot && fs.existsSync(own) && fs.existsSync(packageRoot)) {
       canonical = fs.realpathSync(own) === fs.realpathSync(packageRoot) ? own : null;
     }
     this.canonicalByRoot.set(packageRoot, canonical);
@@ -152,6 +163,20 @@ class CanonicalPackagePathsPlugin {
             data.resourceResolveData[key] = rekey(data.resourceResolveData[key]);
           }
         }
+        if (!this.collapseAppRouterContext) return;
+        const collapsed = data.resource;
+        if (typeof collapsed !== 'string' || !/[\\/]app-router-context\.shared-runtime\.js(?:\?|$)/.test(collapsed)) return;
+        if (collapsed !== canonicalAppRouterContext) {
+          data.resource = canonicalAppRouterContext;
+          if (typeof data.request === 'string') data.request = canonicalAppRouterContext;
+          if (typeof data.userRequest === 'string') data.userRequest = canonicalAppRouterContext;
+          if (data.resourceResolveData) data.resourceResolveData.path = canonicalAppRouterContext;
+        }
+        // One layer: webpack's module key is layer + resource. `app-pages-browser` is the
+        // client-component layer, so this factory and the components that read it share
+        // one React. `shared` would resolve React again and bring a second copy.
+        data.layer = 'app-pages-browser';
+        resolveData.layer = 'app-pages-browser';
       });
     });
   }
@@ -248,6 +273,12 @@ const nextConfig = {
       '@seanhogg/builderforce-memory/stats': './node_modules/@seanhogg/builderforce-memory/dist/stats/index.js',
       'react-markdown': './node_modules/react-markdown/index.js',
       'remark-gfm': './node_modules/remark-gfm/index.js',
+      // Dev (Turbopack) has no per-layer module key, but it does resolve the ESM twin.
+      // One file, so the router and layout-router share one LayoutRouterContext.
+      'next/dist/esm/shared/lib/app-router-context.shared-runtime':
+        './node_modules/next/dist/shared/lib/app-router-context.shared-runtime.js',
+      'next/dist/shared/lib/app-router-context.shared-runtime':
+        './node_modules/next/dist/shared/lib/app-router-context.shared-runtime.js',
       sharp: './src/lib/turbopackEmptyModule.ts',
     },
   },
@@ -307,7 +338,14 @@ const nextConfig = {
       // bundle, matching the Turbopack alias above.
       // Client only: the server stubs every onnxruntime-web import below, and webpack
       // takes the FIRST matching alias, so this exact-match key must not exist there.
-      ...(isServer ? {} : { 'onnxruntime-web$': path.resolve(__dirname, 'node_modules/onnxruntime-web/dist/ort.bundle.min.mjs'), 'onnxruntime-web/webgpu$': path.resolve(__dirname, 'node_modules/onnxruntime-web/dist/ort.webgpu.bundle.min.mjs') }),
+      ...(isServer ? {} : {
+        'onnxruntime-web$': path.resolve(__dirname, 'node_modules/onnxruntime-web/dist/ort.bundle.min.mjs'),
+        'onnxruntime-web/webgpu$': path.resolve(__dirname, 'node_modules/onnxruntime-web/dist/ort.webgpu.bundle.min.mjs'),
+        // Bare specifiers. Relative and absolute requests are collapsed below — an alias
+        // does not see those, and the client-reference manifest carries absolute paths.
+        'next/dist/esm/shared/lib/app-router-context.shared-runtime$': canonicalAppRouterContext,
+        'next/dist/shared/lib/app-router-context.shared-runtime$': canonicalAppRouterContext,
+      }),
       sharp$: false,
       // Server AND edge only: the browser build of this package touches the DOM
       // at module scope and cannot be evaluated in either. The client bundle is
@@ -377,8 +415,21 @@ const nextConfig = {
       });
     }
     // EVERY compilation — client included. See the class comment for why it may never
-    // be server-only again.
-    config.plugins.push(new CanonicalPackagePathsPlugin(__dirname));
+    // be server-only again. The context collapse is client-only: the server compiler
+    // rewrites `.shared-runtime` onto Next's vendored context before this runs.
+    config.plugins.push(new CanonicalPackagePathsPlugin(__dirname, { collapseAppRouterContext: !isServer }));
+    if (!isServer) {
+      // beforeResolve, so a request that already names the ESM file or a `.pnpm` path
+      // never becomes its own module. Matches the filename with or without `.js`.
+      config.plugins.push(new webpack.NormalModuleReplacementPlugin(
+        /app-router-context\.shared-runtime(?:\.js)?$/,
+        canonicalAppRouterContext,
+      ));
+      config.module.rules.push({
+        test: /[\\/]app-router-context\.shared-runtime\.js$/,
+        layer: 'app-pages-browser',
+      });
+    }
     // Silence unactionable "Critical dependency" warnings emitted from inside
     // third-party deps we don't control: @huggingface/transformers uses a
     // dynamic `require(expr)` and reads `import.meta` directly, and

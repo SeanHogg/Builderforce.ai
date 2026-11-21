@@ -31,9 +31,12 @@ export function useLabelLookup(pathOf: (key: string) => string | undefined): Lab
   return useMemo<LabelLookup>(() => (key, values) => {
     const path = pathOf(key);
     if (!path) return undefined;
-    // A translator without `has` (a bare test double) echoes a missing key's path.
-    if (typeof t.has === 'function' && !t.has(path)) return undefined;
+    const canAsk = typeof t.has === 'function';
+    if (canAsk && !t.has(path)) return undefined;
     const text = t(path, values ?? PASSTHROUGH);
+    // The catalog said it has the key: its text is the answer. Only a translator without `has`
+    // (a bare test double) is judged by its echo — it answers a missing key with the path itself.
+    if (canAsk) return text || undefined;
     return text && text !== path ? text : undefined;
   }, [t, pathOf]);
 }

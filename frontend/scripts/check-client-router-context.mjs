@@ -69,7 +69,8 @@ if (copies.length > 1) {
   console.error(
     'The router provides one LayoutRouterContext and layout-router reads another, so every page crashes with '
       + '"invariant expected layout router to be mounted". A webpack plugin or alias is resolving `next` through '
-      + 'two paths in different compilations — see CanonicalPackagePathsPlugin in next.config.js.',
+      + 'two paths, or the same file is instantiated once per webpack layer — see CanonicalPackagePathsPlugin '
+      + 'in next.config.js.',
   );
   process.exit(1);
 }
