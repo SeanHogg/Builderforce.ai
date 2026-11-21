@@ -20,7 +20,7 @@ import { missingTicket, ticketKey, ticketKindForTaskType, type TicketHealth, typ
  * epic's done/total and its children's chips always agree. (`count(completed_at)` alone
  * once reported 0/N for children that were Done by status only.)
  */
-export const SQL_COUNT_DONE = sql<number>`coalesce(sum(CASE WHEN ${inArray(tasks.status, [...TASK_CLOSED_STATUSES])} THEN 1 ELSE 0 END), 0)`;
+export const SQL_COUNT_DONE = sql<number>`coalesce(sum(CASE WHEN ${inArray(tasks.status, [...TASK_CLOSED_STATUSES])} OR ${tasks.archived} = true THEN 1 ELSE 0 END), 0)`;
 
 /**
  * Name the PARENT of every task-tier row that has one — child task ⇒ its epic,
@@ -90,14 +90,19 @@ export async function addTaskTierHealth(
   if (allTaskLike.length === 0) return;
   const rows = await db
     .select({
-      id: tasks.id, title: tasks.title, status: tasks.status,
+      id: tasks.id, title: tasks.title, status: tasks.status, archived: tasks.archived,
       // Named so the rail can say which epic a chip belongs to (see resolveTaskParents).
       taskType: tasks.taskType, parentTaskId: tasks.parentTaskId,
     })
     .from(tasks)
     .innerJoin(projects, eq(projects.id, tasks.projectId))
     .where(and(inArray(tasks.id, allTaskLike), eq(projects.tenantId, tenantId)));
-  const selfById = new Map(rows.map((r) => [r.id, r]));
+  // An archived ticket is closed whatever lane it was archived from (a backlog task archived
+  // in place keeps status `backlog`): rewrite its status to the closed `archived` lane before
+  // any progress or epic self-status is derived, so it emits 100 and is never incomplete.
+  const selfById = new Map(
+    rows.map((r) => [r.id, r.archived ? { ...r, status: 'archived' } : r] as const),
+  );
   // ONE extra batched query at most — the parents not already among these rows.
   const parentByChild = await resolveTaskParents(db, tenantId, rows);
 
