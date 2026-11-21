@@ -96,6 +96,8 @@ export {
   createSyncLease,
   createDeviceStoreCoordinatorLease,
   DEFAULT_COORDINATOR_WORK_TIMEOUT_MS,
+  readSyncLeaseHolder,
+  type ReadSyncLeaseHolderOptions,
   type CoordinatorLeaseFence,
   type SyncLeaseOptions,
   type SyncLeaseHandle,
