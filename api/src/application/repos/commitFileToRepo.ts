@@ -83,6 +83,37 @@ export async function resolveRepoRefSha(input: Pick<CommitFileInput, 'provider' 
 }
 
 /**
+ * Does a branch of exactly this name exist on the remote? Tri-state on purpose:
+ * `exists` / `absent` / `unknown`. Collision handling must never treat a failed
+ * lookup (network, 5xx, 401) as "free" — that would let a commit land on a branch
+ * we could not prove we own — so anything other than a clean answer is `unknown`.
+ */
+export async function checkRepoBranchExists(
+  input: Pick<CommitFileInput, 'provider' | 'host' | 'owner' | 'repo' | 'token'>,
+  branch: string,
+): Promise<'exists' | 'absent' | 'unknown'> {
+  try {
+    const api = resolveRepoApiTarget(input);
+    const headers = { Authorization: `Bearer ${input.token}`, Accept: 'application/json', 'User-Agent': 'BuilderForce-Agent/1.0' };
+    if (api.flavor === 'bitbucket-server') {
+      const res = await fetch(`${api.branches()}?filterText=${encodeURIComponent(branch)}&limit=100`, { headers });
+      if (!res.ok) return 'unknown';
+      const body = (await res.json()) as { values?: Array<{ displayId?: string; id?: string }> };
+      const hit = (body.values ?? []).some((b) => b.displayId === branch || b.id === `refs/heads/${branch}`);
+      return hit ? 'exists' : 'absent';
+    }
+    const url = api.flavor === 'github'
+      ? `${api.repoBase}/git/ref/heads/${branch.split('/').map(encodeURIComponent).join('/')}`
+      : `${api.branches()}/${encodeURIComponent(branch)}`;
+    const res = await fetch(url, { headers });
+    if (res.ok) return 'exists';
+    return res.status === 404 ? 'absent' : 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
+
+/**
  * Bitbucket Server has no "get branch by name" resource — `/branches` is a SEARCH,
  * and `filterText` is a substring match, so `main` also returns `maintenance`.
  * The exact `displayId` must therefore be picked out of the page rather than
