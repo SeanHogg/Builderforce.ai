@@ -1,4 +1,5 @@
 import {
+  claimChatBind,
   journalWrite,
   newLocalRecord,
   UNBOUND_DESTINATION,
@@ -239,6 +240,10 @@ export function createLocalBrainPersistence(options: LocalBrainPersistenceOption
         });
         await tx.put(record);
         await journalWrite(tx, record, 'create', { key: `chat:${clientId}` });
+        // The caller will `identity.adopt` a server chat: hold the chat's import back from THIS
+        // commit on, so no sync round sends it before adopt's own claim. adopt re-stamps the same
+        // lease and releases it; it expires on its own if adopt never runs (`CHAT_BIND_LEASE_MS`).
+        if (body.bindPending) await claimChatBind(tx, clientId, now());
         return chat;
       });
     },

@@ -94,7 +94,7 @@ function PreviewPanel({ item, onClose, labels, download, locale }: {
     }
   }, [download, item, labels.downloadFailed]);
 
-  const imageSrc = item.previewUrl ?? (item.type?.startsWith('image/') ? item.downloadUrl : undefined);
+  const imageSrc = safeAttachmentUrl(item.previewUrl ?? (item.type?.startsWith('image/') ? item.downloadUrl : undefined));
   const showImage = isImageItem(item) && !!imageSrc && !broken;
   const meta = [item.type, item.size != null ? formatFileSize(item.size, locale) : null].filter(Boolean).join(' · ');
   const canDownload = !!item.downloadUrl;

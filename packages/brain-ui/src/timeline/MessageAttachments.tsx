@@ -8,6 +8,7 @@ import { AttachmentPreview } from '../attachments/AttachmentPreview';
 import type { AttachmentPreviewLabels } from '../attachments/labels';
 import type { AttachmentDownload, AttachmentPreviewItem } from '../attachments/types';
 import { useAttachmentPreview } from '../attachments/useAttachmentPreview';
+import { safeAttachmentUrl } from '../attachments/safeUrl';
 import type { TimelineFile, TimelineImage } from '../timelineNodes';
 
 /** A `blob:` URL dies with the page; a data URL or an account link is what a later open can still save. */
@@ -18,7 +19,10 @@ const durableUrl = (url: string | undefined): string | undefined => (url && !url
  * reload. A `blob:` preview is only the fallback while that page still holds the file.
  */
 export function attachmentDownloadUrl(href: string | undefined, preview: string | undefined): string | undefined {
-  return durableUrl(href) ?? durableUrl(preview) ?? href ?? preview;
+  // Only an attachment's own schemes ever become a download target (`safeAttachmentUrl`).
+  const link = safeAttachmentUrl(href);
+  const copy = safeAttachmentUrl(preview);
+  return durableUrl(link) ?? durableUrl(copy) ?? link ?? copy;
 }
 
 /** A picture: drawn from its stored copy, saved from its original link when there is one. */
@@ -26,7 +30,7 @@ const imageItem = (im: TimelineImage, fallbackName: string): AttachmentPreviewIt
   name: im.name || fallbackName,
   ...(im.type ? { type: im.type } : {}),
   ...(im.key ? { key: im.key } : {}),
-  previewUrl: im.url,
+  ...(safeAttachmentUrl(im.url) ? { previewUrl: im.url } : {}),
   downloadUrl: attachmentDownloadUrl(im.href, im.url),
 });
 
@@ -65,7 +69,7 @@ function MessageAttachmentsInner({ images, files, labels, download }: {
                 title={item.name}
                 onClick={(e) => preview.open(item, e.currentTarget)}
               >
-                <img src={im.url} alt="" className="bf-tl__image" />
+                <img src={safeAttachmentUrl(im.url)} alt="" className="bf-tl__image" />
               </button>
             );
           })}

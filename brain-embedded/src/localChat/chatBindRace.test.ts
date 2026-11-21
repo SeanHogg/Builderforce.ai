@@ -93,6 +93,68 @@ describe('chat bind vs. sync import (regression: chat local #165961)', () => {
     expect(await harness.identity.serverIdFor(chat.id)).toBe(281);
   });
 
+  it('adopt (the host made the server chat first) holds a racing sync round back too; the import adopts that chat', async () => {
+    const server = fakeServer();
+    const harness = setup(async () => server.mint(), server.transport);
+    const hostChat = server.mint(); // e.g. the Sessions tree opening an existing server chat
+    const chat = await harness.persistence.createChat({ title: 'x' });
+    await bindChatHistoryForSync(harness.store, DEVICE, ACCOUNT);
+    // A sync round lands between the lease claim and the mapping commit (the adopt's window).
+    const transact = harness.store.transact.bind(harness.store);
+    let raced = false;
+    harness.store.transact = (async (work: Parameters<LocalFirstStore['transact']>[0]) => {
+      const result = await transact(work);
+      if (!raced) { raced = true; await harness.sync(); }
+      return result;
+    }) as LocalFirstStore['transact'];
+
+    expect(await harness.identity.adopt(chat.id, hostChat)).toBe(true);
+    harness.store.transact = transact;
+    await harness.sync();
+
+    expect(raced).toBe(true);
+    expect(server.chats).toEqual([hostChat]);
+    expect(harness.port.createServerChat).not.toHaveBeenCalled();
+    const clientId = (await harness.identity.clientIdFor(chat.id))!;
+    expect(await chatMapping(harness.store, clientId)).toMatchObject({ syncId: hostChat, serverVersion: 1 });
+  });
+
+  it('adopt after the import already went up does not claim the chat: it reports false, never a mapping the receipt overwrites', async () => {
+    const server = fakeServer();
+    const harness = setup(async () => server.mint(), server.transport);
+    const hostChat = server.mint();
+    const chat = await harness.persistence.createChat({ title: 'x' });
+    await bindChatHistoryForSync(harness.store, DEVICE, ACCOUNT);
+    server.goOffline(true);
+    await expect(harness.sync()).rejects.toThrow('network down'); // the import minted 282; answer lost
+    server.goOffline(false);
+
+    const adopted = harness.identity.adopt(chat.id, hostChat);
+    await harness.sync(); // the resend's receipt
+    expect(await adopted).toBe(false);
+    expect(await harness.identity.serverIdFor(chat.id)).toBe(282);
+    expect(harness.port.createServerChat).not.toHaveBeenCalled();
+  });
+
+  it('createChat({ bindPending }) holds the import back before adopt runs: a sync round between them sends nothing; adopt binds the one server chat', async () => {
+    const server = fakeServer();
+    const harness = setup(async () => server.mint(), server.transport);
+    const hostChat = server.mint();
+    const chat = await harness.persistence.createChat({ title: 'x', bindPending: true });
+    await bindChatHistoryForSync(harness.store, DEVICE, ACCOUNT);
+    await harness.sync(); // between createChat's commit and adopt's claim
+
+    expect(server.chats).toEqual([hostChat]);
+    expect(await harness.identity.adopt(chat.id, hostChat)).toBe(true);
+    await harness.sync();
+
+    expect(server.chats).toEqual([hostChat]);
+    expect(harness.port.createServerChat).not.toHaveBeenCalled();
+    const clientId = (await harness.identity.clientIdFor(chat.id))!;
+    expect(await chatMapping(harness.store, clientId)).toMatchObject({ syncId: hostChat, serverVersion: 1 });
+    expect(await harness.identity.serverIdFor(chat.id)).toBe(hostChat);
+  });
+
   it('an import already sent binds the chat through its receipt; the bind never POSTs a second chat', async () => {
     const server = fakeServer();
     const harness = setup(async () => server.mint(), server.transport);

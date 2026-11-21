@@ -2,6 +2,12 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.206] — Attach images instantly, open any attachment, and archived tickets count as done
+
+- **Attaching an image no longer makes you wait.** Its thumbnail appears right away while the upload finishes in the background. If you press Send mid-upload, the message goes as soon as the upload lands. A failed upload shows on its chip with the reason.
+- **Click any attachment to see it.** Pictures and files in the chat, and the chips in the composer, open a larger preview with a Download button that saves the file where you choose.
+- **Fixed: archived tickets showed as unfinished on the chat's ticket list.** An archived ticket now counts as done, "Hide done" hides it, and its epic's progress counts it too.
+
 ## [2026.10.203] — A run that wraps up keeps its final report
 
 - **Fixed: a run that stopped to report could end on "the model got stuck in a loop".** When a run stopped making changes and wrote its final report, it was then told to commit with no way to do so, and the model repeated itself until the stream was cut. The final report is now the answer: it says what is done and what is left, and the run ends there.

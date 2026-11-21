@@ -54,7 +54,8 @@ export interface LocalChatIdentity {
   bind(localId: ViewKey): Promise<number | undefined>;
   /**
    * Record that a local chat IS an existing server chat (the host created it first).
-   * False when it could not be: signed out, or the local chat is gone.
+   * False when it could not be: signed out, the local chat is gone, or it is bound to another
+   * server chat (its sync import already went up and the server minted one for it).
    */
   adopt(localId: ViewKey, serverId: number): Promise<boolean>;
 }
@@ -117,26 +118,28 @@ export function createLocalChatIdentity(options: { store: LocalFirstStore; devic
     check();
   });
 
-  const bindOnce = async (localId: number): Promise<number | undefined> => {
-    const found = await read(localId);
-    if (!found) return undefined;
-    if (found.serverId !== undefined) return found.serverId;
-    const destination = port.destination();
-    if (!destination || destination.kind !== 'bound' || !port.allowed()) return undefined;
-    const clientId = found.chat.id;
-    // The lease keeps the chat's import back until the mapping below exists, so the import
-    // names this chat; refused when the import already went up (`chatBindLease.ts`). Decided in
-    // the commit that re-reads the binding: a receipt that landed since the read above wins.
+  /**
+   * THE one way a local chat gets its server chat — a bind's POST or an adopted id alike
+   * (`serverChat`). The lease keeps the chat's import back until the mapping exists, so the
+   * import names this chat; refused when the import already went up (`chatBindLease.ts`), and
+   * then that import's receipt binds the chat. Decided in the commit that re-reads the binding:
+   * a receipt that landed since the caller's read wins. The bound server chat, or undefined.
+   */
+  const bindThroughLease = async (
+    localId: number,
+    clientId: string,
+    destination: EntityDestination,
+    serverChat: () => Promise<number | null>,
+  ): Promise<number | undefined> => {
     const claim = await store.transact(async (tx) => {
       const bound = await boundServerId(tx, clientId, destination);
       return bound !== undefined ? { bound } : { claimed: await claimChatBind(tx, clientId, new Date()) };
     });
     if ('bound' in claim) return claim.bound;
     if (!claim.claimed) return awaitImportBinding(localId);
-    const { chat } = found.chat.payload;
     let serverId: number | null = null;
     try {
-      serverId = await port.createServerChat({ title: chat.title, projectId: chat.projectId ?? null });
+      serverId = await serverChat();
     } finally {
       // The mapping and the release in ONE commit: no round sees the lease gone and no mapping.
       await store.transact(async (tx) => {
@@ -146,6 +149,17 @@ export function createLocalChatIdentity(options: { store: LocalFirstStore; devic
     }
     if (serverId == null) return undefined;
     return (await read(localId))?.serverId;
+  };
+
+  const bindOnce = async (localId: number): Promise<number | undefined> => {
+    const found = await read(localId);
+    if (!found) return undefined;
+    if (found.serverId !== undefined) return found.serverId;
+    const destination = port.destination();
+    if (!destination || destination.kind !== 'bound' || !port.allowed()) return undefined;
+    const { chat } = found.chat.payload;
+    return bindThroughLease(localId, found.chat.id, destination,
+      () => port.createServerChat({ title: chat.title, projectId: chat.projectId ?? null }));
   };
 
   return {
@@ -182,9 +196,17 @@ export function createLocalChatIdentity(options: { store: LocalFirstStore; devic
     async adopt(localId, serverId) {
       const destination = port.destination();
       const found = await read(localId);
-      if (!found || !destination || destination.kind !== 'bound') return false;
-      await store.transact((tx) => mapIn(tx, found.chat.id, destination, serverId));
-      return true;
+      // A chat created with `bindPending` already holds the lease; a failed adopt lets it go.
+      const releaseHeld = async (): Promise<void> => {
+        if (found) await store.transact((tx) => releaseChatBind(tx, found.chat.id));
+      };
+      if (!found || !destination || destination.kind !== 'bound') { await releaseHeld(); return false; }
+      // Through the same lease as a bind: an import already sent may have minted ANOTHER server
+      // chat for this local chat; then this chat is not that one (false), whatever binds it.
+      // A lease the chat's own createChat (`bindPending`) took is this flow's: the claim re-stamps it.
+      const adopted = (await bindThroughLease(localId, found.chat.id, destination, async () => serverId)) === serverId;
+      if (!adopted) await releaseHeld();
+      return adopted;
     },
   };
 }

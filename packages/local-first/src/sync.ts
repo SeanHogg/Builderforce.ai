@@ -209,12 +209,18 @@ export function createSyncCoordinator(options: SyncCoordinatorOptions) {
     const { conflicts, notStored } = await options.store.transact(async (tx) => {
       let count = 0;
       let skipped = 0;
-      for (const record of result.records) {
+      const at = now().toISOString();
+      // Links last: a link resolves its chat and ticket through their mappings, which a row of the
+      // same page may be what writes.
+      const isLink = (record: LocalRecord) => record.entityType === 'chat-ticket-link';
+      for (const record of [...result.records.filter((r) => !isLink(r)), ...result.records.filter(isLink)]) {
         // G18: a tombstone is a deletion, not a row to merge. Writing it back
         // with `mergePulled` would resurrect the entity the server deleted.
         // A non-blank `deletedAt` is the same signal `applyServerCursor` uses.
         // The row is removed, and its body is never stored.
         if (typeof record.deletedAt === 'string' && record.deletedAt.trim() !== '') {
+          // An unlink also reaches the pair where this device holds it under another id.
+          if (isLink(record)) await applyPulledLinkTombstone(tx, record, destination, at);
           await tx.delete(record.entityType, record.id);
           continue;
         }
@@ -223,8 +229,8 @@ export function createSyncCoordinator(options: SyncCoordinatorOptions) {
         else if (outcome === 'not-stored') skipped += 1;
       }
       // Links an earlier build's pull stored in the server's form are put back in the device's.
-      await repairServerFormLinks(tx, destination);
-      await tx.setCursor(destination, result.cursor, now().toISOString());
+      await repairServerFormLinks(tx, destination, at);
+      await tx.setCursor(destination, result.cursor, at);
       return { conflicts: count, notStored: skipped };
     });
     // A pulled link the device did not store (`pulledChatTicketLink.ts`) is not counted as pulled.
@@ -245,7 +251,7 @@ export function createSyncCoordinator(options: SyncCoordinatorOptions) {
     if (picked.batch.length === 0) return summary;
     assertFenceHolds(fence);
     const { batch, bytes } = picked.batch.some(isRecordPayloadMarker)
-      ? await options.store.transact((tx) => materializeRound(tx, picked.batch, maxBytes))
+      ? await options.store.transact((tx) => materializeRound(tx, picked.batch, maxBytes, now().getTime()))
       : { batch: picked.batch, bytes: picked.batch.reduce((total, event) => total + jsonBytes(event), 0) };
     summary.bytes = bytes;
     if (batch.length === 0) return summary;

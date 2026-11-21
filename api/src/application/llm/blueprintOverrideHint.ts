@@ -9,6 +9,7 @@
  * holds it to the runtime's parser (`blueprintOverrideHint.test.ts`).
  */
 import { MANIFEST_PATH } from '@builderforce/app-detect';
+import { advertisedName } from './toolNaming';
 
 export const OVERRIDE_EXAMPLE = {
   version: 1,
@@ -19,5 +20,5 @@ export const OVERRIDE_EXAMPLE = {
 
 export const OVERRIDE_HINT =
   `To override detection, write ${MANIFEST_PATH} in the repo (never a root builderforce.json): an app manifest v1, ` +
-  `e.g. ${JSON.stringify(OVERRIDE_EXAMPLE)}, with write_file, then run app_blueprint.detect again. ` +
+  `e.g. ${JSON.stringify(OVERRIDE_EXAMPLE)}, with write_file, then run ${advertisedName('app_blueprint.detect')} again. ` +
   'Detection lays its services, resources and env over what it found.';

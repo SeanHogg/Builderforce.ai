@@ -35,7 +35,7 @@ export interface BrainPersistenceAdapter {
    */
   listArchivedChats?(params?: { projectId?: string; limit?: number; offset?: number }): Promise<BrainChat[]>;
   getChat(id: number): Promise<BrainChat>;
-  createChat(body: { title?: string; originalRequest?: string | null; projectId?: number | null; capability?: string | null; mode?: string | null }): Promise<BrainChat>;
+  createChat(body: { title?: string; originalRequest?: string | null; projectId?: number | null; capability?: string | null; mode?: string | null; bindPending?: boolean }): Promise<BrainChat>;
   updateChat(id: number, body: { title?: string; originalRequest?: string | null; projectId?: number | null; visibility?: 'shared' | 'locked'; capability?: string | null; mode?: string | null; memoryEnabled?: boolean; isArchived?: boolean }): Promise<BrainChat>;
   deleteChat(id: number): Promise<unknown>;
   /**

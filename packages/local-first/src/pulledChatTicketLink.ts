@@ -19,13 +19,19 @@
  *   and the rail's ingest would hold the same pair twice. Such a link (and one whose chat or ticket
  *   this device does not map) is not stored by the pull: the rail's refresh ingests it under its
  *   derived id (`ingestServerRecords`).
+ * - A link an OLDER build already stored under another device's id is moved to its derived id and
+ *   the stray retired ({@link retireMisfiledLinks}, the one retire step the rail's ingest and the
+ *   pull's repair share); a pulled unlink reaches the pair under every id it lives at here
+ *   ({@link applyPulledLinkTombstone}).
  */
 
 import { chatTicketLinkId } from './chatTicketLink.js';
+import { clone } from './clone.js';
 import { parseSyncId, syncIdText } from './entityId.js';
 import { scanPendingOfRow } from './pendingQueries.js';
 import { accountScopeOf, destinationKey, type ChatTicketLinkType, type ChatTicketLinkValue, type EntityDestination, type EntityScope, type LocalRecord } from './records.js';
 import { SCAN_STOP, type LocalFirstTransaction } from './storeContract.js';
+import { serverObservedProvenance, serverObservedTombstone } from './tombstone.js';
 
 type Fields = Record<string, unknown>;
 
@@ -125,7 +131,9 @@ export async function retireMisfiledLinks(tx: LocalFirstTransaction, at: string)
     if (await hasPendingEvent(tx, stray)) continue;
     const derived = chatTicketLinkId(stray.payload.chatClientId, stray.payload.ticketClientId);
     if (!(await tx.get('chat-ticket-link', derived))) {
-      await tx.put({ ...clone(stray), id: derived, version: 1, provenance: serverObservedProvenance() } as LocalRecord<ChatTicketLinkValue>);
+      const { baseVersion: _base, ...moved } = clone(stray);
+      void _base;
+      await tx.put<ChatTicketLinkValue>({ ...moved, id: derived, version: 1, provenance: serverObservedProvenance() });
       const mapping = await tx.mapping('chat-ticket-link', stray.id, stray.destination);
       if (mapping && !(await tx.mapping('chat-ticket-link', derived, stray.destination))) {
         await tx.putMapping({
@@ -161,7 +169,8 @@ export async function applyPulledLinkTombstone(
   const serverKey = parseSyncId(remote.syncId) ?? parseSyncId(remote.serverId);
   if (serverKey !== null) {
     const mapping = await tx.mappingByServerId('chat-ticket-link', serverKey, accountScopeOf(destination));
-    if (mapping && parseSyncId(mapping.syncId) === serverKey) ids.add(mapping.clientEntityId);
+    // A link's server key may be mapped as its SyncId or (a rail-ingested link) its id text only.
+    if (mapping && (parseSyncId(mapping.syncId) ?? parseSyncId(mapping.serverId)) === serverKey) ids.add(mapping.clientEntityId);
   }
   const existing = await tx.get('chat-ticket-link', remote.id);
   const link = await deviceForm(tx, remote.payload, existing, destination);
@@ -176,29 +185,26 @@ export async function applyPulledLinkTombstone(
 
 /**
  * Put back in the device's form every live link of `destination` an earlier pull stored in the
- * server's form. Idempotent. Left as it is: a link with a pending local event (the user's edit in
- * flight), one whose parents this device does not map, and one stored under an id that is not its
- * derived one (another device's link: the rail's ingest supplies it under the derived id). Returns
- * how many links were repaired. The record keeps its version and provenance: this is the server's
- * state re-keyed, not a local edit, so no event.
+ * server's form, then retire the misfiled ones ({@link retireMisfiledLinks}). Idempotent. Left as
+ * it is: a link with a pending local event (the user's edit in flight) and one whose parents this
+ * device does not map. A link under its derived id keeps its version and provenance (the server's
+ * state re-keyed, not a local edit, so no event). Returns how many links were repaired or retired.
  */
-export async function repairServerFormLinks(tx: LocalFirstTransaction, destination: EntityDestination): Promise<number> {
+export async function repairServerFormLinks(tx: LocalFirstTransaction, destination: EntityDestination, at: string): Promise<number> {
   const key = destinationKey(destination);
   const broken: LocalRecord[] = [];
   await tx.scan('chat-ticket-link', (row) => {
     if (row.deletedAt || isClientFormLink(row.payload) || destinationKey(row.destination) !== key) return;
-    // The scan hands the store's own row: keep a copy.
-    broken.push({ ...row });
+    broken.push(clone(row) as LocalRecord);
   });
   let repaired = 0;
   for (const row of broken) {
-    let pending = false;
-    await scanPendingOfRow(tx, row.id, () => { pending = true; return SCAN_STOP; }, row.destination);
-    if (pending) continue;
-    const payload = await pulledLinkPayload(tx, row.id, row.payload, undefined, row.destination);
+    if (await hasPendingEvent(tx, row)) continue;
+    const payload = await deviceForm(tx, row.payload, undefined, row.destination);
     if (!payload) continue;
+    // Under another id (another device's): the retire step below moves it to its derived id.
     await tx.put({ ...row, payload });
     repaired += 1;
   }
-  return repaired;
+  return repaired + await retireMisfiledLinks(tx, at);
 }

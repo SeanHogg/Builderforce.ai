@@ -9,6 +9,7 @@
  * Pure: no React, no DOM.
  */
 
+import { safeAttachmentUrl } from './attachments/safeUrl';
 import {
   consolidationMarkerOf,
   CONSOLIDATION_MARKER_PREFIX,
@@ -230,12 +231,14 @@ function userAttachmentsOf(message: BrainMessage): { images: TimelineImage[]; fi
   const recorded = attachmentsOf(message).filter((a) => a && typeof a.name === 'string');
   if (recorded.length === 0) return { images: [], files: [] };
   const links = attachedLinks(message.content);
+  const claimed = new Set<number>();
   const images: TimelineImage[] = [];
   const files: TimelineFile[] = [];
   for (const a of recorded) {
-    const href = links.get(a.name.trim());
+    const href = linkFor(a, links, claimed);
     const facts = { ...(a.key ? { key: a.key } : {}), ...(a.type ? { type: a.type } : {}), ...(href ? { href } : {}) };
-    if (a.imageUrl) images.push({ url: a.imageUrl, name: a.name, ...facts });
+    const imageUrl = safeAttachmentUrl(a.imageUrl);
+    if (imageUrl) images.push({ url: imageUrl, name: a.name, ...facts });
     else files.push({ name: a.name, ...facts });
   }
   return { images, files };

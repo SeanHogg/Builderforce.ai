@@ -60,9 +60,10 @@ async function resolveLocalChat(ctx: vscode.ExtensionContext, serverId: number, 
   const userId = await getCurrentUserId(ctx.secrets);
   if (!userId || !chat.ownerId || chat.ownerId !== userId) return undefined;
   const local = localBrainApplication(ctx);
-  const created = await local.persistence.createChat({ title: chat.title, projectId: chat.projectId });
+  const created = await local.persistence.createChat({ title: chat.title, projectId: chat.projectId, bindPending: true });
   if (!(await local.identity.adopt(created.id, serverId))) {
-    // Signed out between the tree's read and now: nothing to continue it on.
+    // Signed out between the tree's read and now, or the new local chat's sync import already
+    // went up as a chat of its own (`chatBindLease.ts`): nothing to continue it on.
     await local.persistence.deleteChat(created.id);
     return undefined;
   }
