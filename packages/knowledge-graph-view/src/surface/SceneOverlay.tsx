@@ -1,17 +1,18 @@
 /**
  * The controls that float over the scene (mockup B-Surface): the
- * *View* group with "↑ Out to …", + , − and Fit, the question pills with the *More questions*
- * menu and the "{family} only ✕" chip, and the scale note in the bottom-left corner. The overlay
- * takes the scene's whole box but lets pointer events through: only its controls take them.
+ * *View* group with "↑ Out to …", the question pills with the *More questions*
+ * menu and the "{family} only ✕" chip, and the scale note in the bottom-left corner. Zoom, Fit and the
+ * shape key live on the stage (nav + docked legend), not in this bar. The overlay takes the scene's
+ * whole box but lets pointer events through: only its controls take them.
  *
  * `narrow` (a phone) stops floating: the same parts stack in flow ABOVE the scene, the View and
  * question rows become horizontal scrollers, and the scale note follows them.
  *
- * Three slots come from the root: `tools` (Panels + Risk overlays, right after the View group), `panelToggles`
- * (the show/hide glyphs before the zoom buttons) and `time` (the commit scrubber, at the end of the question row).
+ * Two slots come from the root: `tools` (Panels + Risk overlays, right after the View group) and
+ * `time` (the commit scrubber, at the end of the question row).
  *
  * Pure presentation. Every datum comes in by prop; the pieces it composes are `CameraBar`
- * (View + zoom), `QuestionBar` and `ScaleLine`.
+ * (View), `QuestionBar` and `ScaleLine`.
  */
 
 import { useLayoutEffect, useRef, type CSSProperties, type ReactNode, type RefObject } from 'react';
@@ -27,7 +28,6 @@ import type { QuestionId } from './questions';
 import type { CameraDef } from './registry';
 import type { Station } from './stations';
 import { Card } from './ui';
-import type { ZoomApi } from './zoom';
 
 export interface SceneOverlayProps {
     labels: KnowledgeGraphLabels;
@@ -35,8 +35,6 @@ export interface SceneOverlayProps {
     cameras: readonly CameraDef[];
     mode: ViewMode;
     onMode(mode: ViewMode): void;
-    /** The active camera's api from `useZoomHost().api`; null disables +, − and Fit. */
-    zoom: ZoomApi | null;
     /** The level above the open station or drill ("the line"); null ⇒ no "↑ Out to" button. */
     outTo?: string | null | undefined;
     onOut?: (() => void) | undefined;
@@ -65,10 +63,6 @@ export interface SceneOverlayProps {
     narrow?: boolean | undefined;
     /** The canvas tools (Panels, Risk overlays): `CameraBar` puts them right after the View group. */
     tools?: ReactNode;
-    /** The panel show/hide toggles, in the camera bar's right cluster. */
-    panelToggles?: ReactNode;
-    /** The Legend button, beside the panel toggles. */
-    legend?: ReactNode;
     /** The commit scrubber, at the trailing end of the question row. */
     time?: ReactNode;
 }
@@ -112,8 +106,8 @@ export function SceneOverlay(p: SceneOverlayProps) {
             {/* The controls block: what the scene must sit below. Its height is measured, never assumed. */}
             <div ref={controls} data-testid="kg-scene-controls" style={{ display: 'grid', gap: narrow ? 6 : 0, minWidth: 0 }}>
             <CameraBar
-                labels={labels} cameras={p.cameras} mode={p.mode} onMode={p.onMode} zoom={p.zoom} outTo={p.outTo} onOut={p.onOut}
-                tools={p.tools} stacked={narrow} panelToggles={p.panelToggles} legend={p.legend}
+                labels={labels} cameras={p.cameras} mode={p.mode} onMode={p.onMode} outTo={p.outTo} onOut={p.onOut}
+                tools={p.tools} stacked={narrow}
             />
             <div style={{ padding: '0 12px 8px', pointerEvents: 'none', minWidth: 0, display: 'flex', gap: 8, alignItems: 'center', flexWrap: narrow ? 'nowrap' : 'wrap' }}>
                 <div style={{ pointerEvents: 'auto', width: narrow ? '100%' : 'fit-content', maxWidth: '100%' }}>
