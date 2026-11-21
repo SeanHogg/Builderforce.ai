@@ -107,9 +107,9 @@ export const APPROVED_PERMANENT = [
   },
   {
     file: 'brain-embedded/src/run/areaR/menu.test.ts',
-    blob: '8e189ba2a71edda213462f1dadf82a53e7575b6a',
-    changed: "'once planning closes…' expects the code-turn menu (edit_file, ask_user and the three router tools) instead of the 64-tool menu minus hand_off; 'a catalog the limit holds whole…' builds a 20+2 tool fixture (was 62+2). Its assertions are unchanged.",
-    reason: "Stale premise since cda0c33e9: the turn after planning closes is a CODE turn, capped by roleCap.ts (22 tools, no catalog-order backfill), so a 64-tool menu can no longer appear there. The fixture shrinks so that 'a catalog the limit holds whole is never trimmed' still holds under the code cap.",
+    blob: '0825f151e67525a8da55e31fc744e9338c6fa38e',
+    changed: "'once planning closes…' expects the code-turn menu (edit_file, ask_user and the three router tools) instead of the 64-tool menu minus hand_off; 'a catalog the limit holds whole…' builds a 20+2 tool fixture (was 62+2). Its assertions are unchanged. Re-approved 2026-11-21: R7 'a tool an EARLIER run called pins nothing in the next one' becomes 'stays pinned in the next one' (not.toContain → toContain).",
+    reason: "Stale premise since cda0c33e9: the turn after planning closes is a CODE turn, capped by roleCap.ts (22 tools, no catalog-order backfill), so a 64-tool menu can no longer appear there. The fixture shrinks so that 'a catalog the limit holds whole is never trimmed' still holds under the code cap. Re-approved 2026-11-21 (operator, agent-execution-efficiency review): a tool the conversation already called stays advertised in the next run (runStore/conversationPins.ts, capped at 8 and by the role cap); the old rule dropped it and a run called a tool missing from its menu.",
     approvedBy: APPROVED_BY,
   },
 ];
