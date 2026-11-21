@@ -34,6 +34,8 @@ export interface DrillModel {
     canEnter(id: string): EnterCheck;
     enter(id: string): void;
     out(): void;
+    /** Climbs back to `depth` frames deep in one step (0 = the world map, an empty stack); `out()` stays a single-frame pop. */
+    climb(depth: number): void;
     /** Definitions are being read: a file without symbols may only be one that has not arrived yet. */
     loading: boolean;
     /** The name of a level the map no longer has (the view went back out of it); null once the person moves on. */
@@ -122,8 +124,12 @@ export function useDrill(graph: KnowledgeGraph | null, world: StationModel, load
     }, [canEnter, view, world, load]);
 
     const out = useCallback(() => { setStack((s) => s.slice(0, -1)); setSelected(null); setNotice(null); }, []);
+    const climb = useCallback((depth: number) => {
+        setStack((s) => s.slice(0, Math.max(0, Math.floor(depth))));
+        setSelected(null); setNotice(null);
+    }, []);
     return {
-        stack, view, canOut: stack.length > 0, parent: stack[stack.length - 2] ?? null, selected, select: setSelected, canEnter, enter, out,
+        stack, view, canOut: stack.length > 0, parent: stack[stack.length - 2] ?? null, selected, select: setSelected, canEnter, enter, out, climb,
         loading: pending > 0, notice, symbols: records,
     };
 }
