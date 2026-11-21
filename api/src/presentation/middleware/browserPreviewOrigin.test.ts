@@ -104,6 +104,10 @@ describe.each([['the shared host', 'preview.builderforce.ai'], ['an app host', A
     ['a mode other than relay', { mode: 'same-origin' }],
     ['no report endpoint', { report: '' }],
     ['a report endpoint on a preview host', { report: 'https://preview.builderforce.ai/api/runtime/csp-report' }],
+    // Preview code can re-register sw.js with any query: report-only would switch its own CSP off.
+    ['csp=report-only', { csp: 'report-only' }],
+    ['csp=enforce (no csp key is ever granted)', { csp: 'enforce' }],
+    ['a query key the gate does not know', { future: '1' }],
   ])('refuses sw.js with %s (403, document headers)', async (_case, params) => {
     const res = await get(`https://${host}/__bfwc/sw.js?${new URLSearchParams({ ...RELAY_SW, ...params })}`);
     expect(res.status).toBe(403);

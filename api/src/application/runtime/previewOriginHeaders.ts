@@ -65,7 +65,17 @@ export interface ServiceWorkerQuery {
   policy: string | null;
   egress: string[];
   report: string | null;
+  /** Query keys outside {@link SERVICE_WORKER_KEYS} (`csp`, anything newer): any one refuses the script. */
+  unknownKeys: string[];
 }
+
+/**
+ * The only query keys a `sw.js` URL may carry here. An allowlist, not a denylist: preview code
+ * is same-origin with `sw.js` and can re-register it with any query, so a key the runtime reads
+ * that is not checked here (`csp=report-only` turns the whole preview CSP report-only) would be
+ * the preview's to set. Builderforce never runs report-only, so `csp` is always refused.
+ */
+const SERVICE_WORKER_KEYS: ReadonlySet<string> = new Set(['mode', 'policy', 'egress', 'report']);
 
 /** An egress source as the runtime writes one: an https/wss origin, optionally `*.`-wildcarded, no path. */
 const EGRESS_SOURCE = /^(?:https|wss):\/\/(?:\*\.)?[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*(?::\d{1,5})?$/i;
@@ -73,7 +83,8 @@ const EGRESS_SOURCE = /^(?:https|wss):\/\/(?:\*\.)?[a-z0-9](?:[a-z0-9-]*[a-z0-9]
 /** Read a `sw.js` URL's configuration. Egress entries are lowercased, as the runtime writes them. */
 export function serviceWorkerQueryOf(url: URL): ServiceWorkerQuery {
   const egress = (url.searchParams.get('egress') ?? '').split(' ').filter(Boolean).map((s) => s.toLowerCase());
-  return { mode: url.searchParams.get('mode'), policy: url.searchParams.get('policy'), egress, report: url.searchParams.get('report') };
+  const unknownKeys = [...new Set(url.searchParams.keys())].filter((key) => !SERVICE_WORKER_KEYS.has(key));
+  return { mode: url.searchParams.get('mode'), policy: url.searchParams.get('policy'), egress, report: url.searchParams.get('report'), unknownKeys };
 }
 
 /**
@@ -93,6 +104,7 @@ export function cspReportUrls(extraHosts: string | undefined): string[] {
  *
  * The worker stamps its egress and report endpoint into every response it serves, and takes
  * both from its own URL — so this is the only place they are checked:
+ * - no key outside {@link SERVICE_WORKER_KEYS} (so never `csp=report-only`);
  * - `mode` must be `relay`: any other mode takes attaches from any top-level page on the
  *   origin, which a relay origin never allows;
  * - a `policy` is present: it must verify for THIS host (`resolved.id` is it), else refused;
@@ -109,6 +121,7 @@ export function serviceWorkerAllowed(
   resolved: WorkerEgressPolicy,
   reportUrls: readonly string[] = [CSP_REPORT_URL],
 ): boolean {
+  if (query.unknownKeys.length > 0) return false;
   if (query.mode !== 'relay') return false;
   if (query.policy !== null && resolved.id !== query.policy) return false;
   if (query.report === null || !reportUrls.includes(query.report)) return false;
