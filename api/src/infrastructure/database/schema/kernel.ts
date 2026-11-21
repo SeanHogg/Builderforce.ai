@@ -1571,6 +1571,9 @@ export const executionStatusEnum = pgEnum('execution_status', [
   // (migration 0120). Not spending, not terminal — resumes once the question is
   // answered. The reaper's running/pending/submitted sweeps deliberately skip it.
   'paused',
+  // Terminal: the run finished and wrote nothing (GAP-W5). Distinct from
+  // `completed`, which means the run delivered a change.
+  'no_changes',
 ]);
 
 

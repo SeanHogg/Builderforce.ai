@@ -196,6 +196,9 @@ export enum ExecutionStatus {
   COMPLETED = 'completed',
   FAILED    = 'failed',
   CANCELLED = 'cancelled',
+  /** Terminal: the run finished and wrote nothing. Not a success that delivered,
+   *  and not a failure — an empty diff must not be stamped `completed` (GAP-W5). */
+  NO_CHANGES = 'no_changes',
   /** Non-terminal: a cloud run that called `ask_human` is waiting on a person to
    *  answer its question (migration 0120). It resumes when the answer lands. */
   PAUSED    = 'paused',

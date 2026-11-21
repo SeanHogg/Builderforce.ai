@@ -75,6 +75,8 @@ export async function finalizeCloudRun(
   let mergeNote = '';
   // When files were produced but no PR ends up open, capture WHY so the run's
   // summary / timeline explains it instead of silently showing no Pull Request tab.
+  /** GAP-D4: the typed pr_skipped reason for a run with no bound repository. */
+  const PR_SKIPPED_NO_REPOSITORY = 'no_repository';
   let noPrReason = '';
   // A person's merge grant on this run (PRD 48 §4.6): the PR it would bind, and whether it was
   // bound (or already settled — a void here is final, so the "no PR" void below must not repeat it).
@@ -154,11 +156,11 @@ export async function finalizeCloudRun(
         return null;
       });
     if (existing && existing.status !== 'closed') grantTarget = { prRowId: existing.id, headSha: null };
-  } else if (!repoCtx && writtenPaths.size > 0 && !cancelled) {
-    // The agent produced changes but there is no repo to open a PR against —
-    // record why (no linked repo / unusable credential) so it's visible in the
-    // Tools timeline + summary, not swallowed into an empty Pull Request tab.
-    noPrReason = repoMiss || 'no repository linked to this project';
+  } else if (!repoCtx && !cancelled) {
+    // GAP-D4: every no-repo run ends pr_skipped: no_repository — including a run
+    // that wrote nothing. Never a failure and never needs_host. The event reason
+    // is the typed token; repoMiss stays operator detail, not the reason.
+    noPrReason = PR_SKIPPED_NO_REPOSITORY;
   }
 
   // ── MULTI-REPO SPANNING (0956) ─────────────────────────────────────────────

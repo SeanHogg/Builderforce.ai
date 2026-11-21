@@ -11,6 +11,7 @@
 
 ## Contents
 
+- [Tasks / Deliverables — review 2026-11-21](#tasks--deliverables--review-2026-11-21)
 - [PRD 09 — Cloud Agent Validation & Hardening](#prd-09--cloud-agent-validation--hardening)
 - [PRD 23 — Manager PR Review, Acceptance Evidence, and Ticket Recovery](#prd-23--manager-pr-review-acceptance-evidence-and-ticket-recovery)
 - [PRD 37 — Coordinated Role Participation & Execution Verification](#prd-37--coordinated-role-participation--execution-verification)
@@ -26,6 +27,80 @@
 - [PRD 43 — One 3D stage for every knowledge camera](#prd-43--one-3d-stage-for-every-knowledge-camera)
 - [PRD 31 — Build, run and ship a real app on Builderforce](#prd-31--build-run-and-ship-a-real-app-on-builderforce)
 - [PRD 18 — hired.video → Builderforce.ai port (Canvas runtimes and the Studio → Canvas port)](#prd-18--hiredvideo--builderforceai-port-canvas-runtimes-and-the-studio--canvas-port)
+
+---
+
+## Tasks / Deliverables — review 2026-11-21
+
+> Work order after reviewing this file against the code it cites. Each row is a ticket on Brain chat #278, filed under the epic **Make — deliverables after 2026-11-21 review**.
+> Spot-checks the same day confirmed the four PRD 09 claims below. Every other row carries the verification date already written on its section; it was not re-audited file by file this pass.
+> A row marked **operator** or **other repo** is filed here and cannot be finished from this workspace alone. Do not mark it done from a code change.
+
+### Re-verified this pass
+
+| Claim | Result |
+|---|---|
+| Empty-diff finalize skips the PR | Confirmed. `cloudFinalize.ts` opens a PR only when `writtenPaths.size > 0`. |
+| Execution marked `no_changes` | **Open (MK-09-W5).** `ExecutionStatus` and `execution_status` are `pending` / `submitted` / `running` / `completed` / `failed` / `cancelled` / `paused`. No `no_changes`. A no-output run is stamped `produced: false` via `runProducedOutput` and otherwise completes. |
+| `pr_skipped: no_repository` on every no-repo run | **Open (MK-09-D4).** `pr_skipped` carries free text, and only when files were written and `repoCtx` is null. A no-repo run that writes nothing emits no event. `no_repository` has 0 hits under `api/src/application/runtime`. The run is already not failed (`prFailed` requires `repoCtx`) and there is no `needs_host` status. |
+| Start-timeout for a recorded-but-never-ticked handoff | **Open (MK-09-D2).** The only deadline is `QUEUED_DEADLINE_MS` (15 min) in `staleExecutionReaper.ts`. |
+| Typed `provider_auth_failed` | **Open (MK-09-W7).** 0 hits under `api/src/application/runtime`. |
+
+### Deliverables
+
+| Id | Pri | Deliverable | Acceptance | Kind |
+|---|---|---|---|---|
+| MK-09-D2 | P0 | Start-timeout plus a test for the dispatch → `CloudRunnerDO` drop between "recorded" and "first tick" (PRD 09 §4 GAP-D2, §5 step 2). | A recorded run that never ticks fails closed inside the start-timeout, with a test that drives the race. The 15-min reaper deadline is not that test. | code |
+| MK-09-W5 | P1 | Empty-diff finalize marks the execution `no_changes` and still opens no PR (PRD 09 §4 GAP-W5, §5 step 6). | `writtenPaths.size === 0` and not cancelled → no PR, status `no_changes`, not `completed`. | code |
+| MK-09-W6 | P1 | Surface mergeability on the execution when a PR is opened or updated (PRD 09 §4 GAP-W6). | The execution records whether the PR merges cleanly against its base. Nothing in `api/src/application/runtime` reads mergeability today. | code |
+| MK-09-W7 | P1 | A revoked or expired provider token becomes typed `provider_auth_failed` with a re-auth prompt (PRD 09 §4 GAP-W7). | 401/403 from `repos/githubClient.ts` maps to that outcome, not a raw provider error. | code |
+| MK-09-W9 | P2 | Repo-size ceiling checked before the clone (PRD 09 §4 GAP-W9, decision W9). | `api/container/sandboxGit.mjs` refuses an over-ceiling repo with a typed error before cloning full history. | code |
+| MK-09-W10 | P1 | `builderforce/task-<taskId>` collision handling (PRD 09 §4 GAP-W10). | A human-created branch of that name is detected and suffixed, or refused with a clear message. | code |
+| MK-09-W12 | P2 | Assert the sandbox workspace lives outside the checkout (PRD 09 §4 GAP-W12). | A test fails if the per-execution workspace (`api/container/server.mjs`) can be committed. | code |
+| MK-09-D4 | P1 | Every no-repository run ends `pr_skipped: no_repository`, never a failure and never `needs_host` (PRD 09 §4 GAP-D4, decision D4). | The event's reason is the typed `no_repository` even when nothing was written. A test covers the terminal path. | code |
+| MK-09-E6 | P1 | Pre-flight model-entitlement check (PRD 09 §4 GAP-E6). | Dispatch refuses an unentitled model before the run starts. `ENTITLEMENT_REFUSALS` has no model entitlement today. | code |
+| MK-09-B1 | P0 | Cumulative per-cloud-agent budget ceiling (PRD 09 §4 GAP-B1). | A cloud agent stops being dispatched when its own ceiling is spent, independent of the tenant plan and the per-run cap. | code |
+| MK-09-G1 | P0 | Operator-facing isolation model plus a red-team checklist (PRD 09 §4 GAP-G1, decision E2). | The non-root container, egress allowlist and Worker-held credentials are documented as the boundary. Turning `SANDBOX_EGRESS_ENFORCE` on, and running the checklist against a deployed sandbox, is **operator**. | docs + operator |
+| MK-09-V1 | P0 | §5 golden-path E2E under `qa-e2e/`, and `pnpm qa:cloud-agents` green three times (PRD 09 §3–§5 GAP-V1). | Scripted throwaway ticket, dispatch, clone, file change, mid-run steer, PR or `no_changes`, telemetry reconstructable, teardown. **Operator** — needs a live sandbox. No cloud-agent spec exists under `qa-e2e/tests`. | operator |
+| MK-23-DOCS | P1 | A PRD-only run opens no PR; completion evidence distinguishes source, test, config, migration and documentation (PRD 23 §5.3, §8). | Finalize routes written paths through `classifyDeliverablePaths` before opening a PR. The classifier grows source/test/config/migration. | code |
+| MK-23-RECON | P1 | Reconciliation creates work, not labels (PRD 23 §5.4). | A shared infrastructure failure opens one incident and groups the affected PRs. `queue_infrastructure` / `quarantine_investigate` are not the end state. | code |
+| MK-23-CRED | P1 | Credential and rate-limit recovery (PRD 23 §5.5). | HTTP 401/403 opens or updates one credential incident and enters the existing cooldown. The breaker exposes `blocked_reason`, `next_retry_at` and the operator action. | code |
+| MK-23-CANARY | P1 | Manager canary: one green PR lifecycle before project-wide enablement (PRD 23 §7 steps 4–10, §8). | Reviewer dispatch → signoff → acceptance → merge → ticket close, with auto-merge and auto-close off. **Operator** go-live. The flag exists and is off. | operator |
+| MK-37-AGG | P2 | Cross-incident accountability aggregation (PRD 37 §5.10). | A read model answers which stage's sign-offs correlate with incidents, and durable findings can enter project memory. Per-ticket gaps already exist. | code |
+| MK-37-HANDOFF | P2 | MCP `kanban.handoff` (PRD 37 §8). | The tool records a hand-off. Today hand-offs are emitted only by `manager/coordinateTicket.ts`. | code |
+| MK-37-CONV | P2 | Manifest is the single source of truth for task-status flow (PRD 37 §13). | `SwimlaneCoordinator` / `ticket_runs` is no longer a second engine beside the lifecycle-managed path. | code |
+| MK-45-SHIP | P1 | Ship-directive wording matches PRD 48 (PRD 45 §4.5). | `brain-embedded/src/selfReviewShip.ts` no longer tells the author it is the reviewer or to record `builtin_reviews_record` `complete` itself. `shipGates.ts` already refuses that. | code |
+| MK-45-W9 | P2 | Score the §8 targets on a fresh post-gate run (PRD 45 §7–§8). | Either a chat-scoped telemetry reader, or the existing `api/scripts/chat-replay-baseline.cjs` run against a fresh post-gate journal, with the four targets recorded. | code |
+| MK-49-PERSONA | P1 | Methodology persona entries, gates and next-role offer (PRD 49 §2, done-checks 1–3). | Engineer with no `prd.md` posts the gate and makes no model call. Analyst writes `.builderforce/methodology/prd.md` and offers Designer. A write outside the role's `writeScope` is refused by the tool layer. | code |
+| MK-49-ROUTE | P2 | Persona model routing, including the optional TIP policy (PRD 49 §3, done-check 5). | Default stays role routing. `builderforce.models.policy: "tip"` routes the code stage to Opus. The route report shows which policy ran. | code |
+| MK-49-ONNX | P2 | 4-bit ONNX Bonsai builds beside GGUF (PRD 49 §4, done-check 6). | Both formats answer a local research question through the same routing. bfi keeps provisioning GGUF. | code |
+| MK-49-GZ | P1 | Knowledge packs gzip by default; `read_file` decompresses `.gz` (PRD 49 §5, done-check 7). | One shared decompression helper. `read_compressed` keeps its prose-compression meaning. | code |
+| MK-49-LAYOUT | P1 | `.builderforce/` is the standard layout (PRD 49 §6–§7, done-check 8). | Manifest read/write is `.builderforce/builderforce.json` (webcontainers package ships first). A root manifest is read with a deprecation note and never written. `logs: "../x"` is rejected. One `workspacePaths` resolver. | code |
+| MK-49-PACK | P2 | Methodology artifacts are recalled as a codebase knowledge pack (PRD 49 §2.5, done-check 4). | A later run recalls a sentence from `prd.md` through the existing BFKP pipeline. The pack is active only while some live chat has a role on. | code |
+| MK-REG-DROP | P2 | Drop legacy `agents` / `skills` foreign keys (agent framework registrations). | **Blocked** until production has no execution/dispatch row lacking `agent_registration_id` and released clients use `/api/agent-registrations`. Sunset header is already `Wed, 31 Dec 2026`. Do not write the drop migration before that. | blocked |
+| MK-41-WS | P1 | PRD 41 open workstreams WS4, WS5, WS8, WS9, L3, WS13, WS17, WS21, WS22 and the §8 done-checks still open. | Each workstream's remaining note in §7 is closed, then the ship row (typecheck, split `RD/contract.ts`, release note). WS18 stays blocked on ≥500 labels. | code |
+| MK-41-MEASURE | P2 | Emit `offline.session`, `delta.card_opened`, `delta.finding_action` (PRD 41 §10). | Use and Value metrics and the 8-week kill condition can be evaluated. | code |
+| MK-G27 | P0 | One network-denial scenario, three packaged drivers, CI gate (local-first closure §3, sequencing step 4). | VSIX, Rovr and Web drivers pass, and each fails on an injected platform request. `publish-extension` and `deploy-frontend` need the job. Do not keep a second VSIX harness beside the one scenario. | code |
+| MK-LF-G02 | P0 | Shared platform transport policy before any platform request (local-first G02). | Host, webview, streams and sockets honour it, including custom base URLs and redirects. | code |
+| MK-LF-G04 | P0 | Stable client entity UUIDs and durable client-to-server mappings (local-first G04). | A live run key does not change when its record receives a server ID. | code |
+| MK-LF-G05 | P0 | Durable local project/ticket repositories (local-first G05). | Signed-out VSIX can create a project and bind it later. Task CRUD is not a remote-only operation. | code |
+| MK-LF-G20 | P1 | Versioned offline snapshots for project memory, model pins and insights (local-first G20). | Offline recall and fact operations work from the snapshot. Learning is deduped by completed run, not by historical turn ingestion. | code |
+| MK-MEM | P1 | Memory-repo gaps M07, M08, M10, M11 (shared offline memory scope). | **Other repo** (`builderforce-memory`). L1 semantic cache is not an in-process list with a remote L2; an offline asset resolver exists; the package does not carry its own agent/bridges. | other repo |
+| MK-LF-CHATTER | P1 | Residual API chatter, delivery step 6, and the still-open acceptance gates. | The inventory's open rows are closed and the acceptance gates in that design section pass. | code |
+| MK-LEANN | P2 | Deterministic knowledge-index done-checks still open, plus open decision 2. | The remaining done-checks under that design section pass. | code |
+| MK-PREFETCH | P2 | Deterministic-first PreFetch done-checks still open. | The remaining done-checks under that design section pass. | code |
+| MK-38 | P1 | PRD 38 acceptance still open: workspace knowledge review, visualizer Option B+, predicted-measure badges, data pack, §7 measure. | Each remaining note under PRD 38 is closed. | code |
+| MK-43 | P1 | PRD 43 remaining: Part A, renderer, worker long tasks, retired-on-parity, test migration, done-checks, re-extraction. | Each remaining note under PRD 43 is closed. Editing stays deferred. | code |
+| MK-31-W9 | P1 | PRD 31 W9 browser-run exit tests and the ^2026.11.4 runtime bump (Python/PHP/FastAPI/Slim, .NET/Rust workers, training boot). | The open phase notes under W9 are closed. Do not market free-tier browser runs as protected until W10 phase 4's exit holds. | code |
+| MK-31-W10 | P0 | Security Shield W10 phases 0–4 in builderforce-webcontainers, then the Builderforce ingest route, index migration, finding-kind seam and `runtime-shield` detection source. | **Other repo** for the runtime phases. Nothing of W10 exists in the runtime yet (verified 2026-11-18). | other repo + code |
+| MK-31-W11 | P1 | Manifest v1 phases 1–8, then phase 9 `DeploymentTarget` (PRD 31 W11). | Each phase ships with its automated exit test. Phase 9 needs a test Cloudflare account (**operator**). | code + operator |
+| MK-31-W12 | P1 | Agent Environment W12 phases 1–6 (PRD 31 W12). | **Blocked** on the Opus design review named in the section, and on W11 phases 1 and 3. Do not start phase 1 code before that review. | blocked |
+| MK-31-REST | P1 | PRD 31 W1–W8 remaining notes and the §5 sequencing blockers still open. | Each remaining note under those workstreams is closed. Decisions still owed in §2 stay decisions, not code. | code |
+| MK-18 | P1 | PRD 18 canvas-runtime and Studio-port rows still marked remaining (verified 2026-11-17). | The open rows under §1.3, T4 and §8.4–§8.10 are closed or explicitly deferred in this file. | code |
+
+### This session
+
+Started here, because the review confirmed them and they do not depend on an operator or another repo: **MK-09-D4**, **MK-09-W5**, **MK-45-SHIP**, **MK-09-W10**, **MK-09-W9**, **MK-37-HANDOFF**. The rest are filed and sequenced; a row marked operator, other repo, or blocked is not claimed in progress as code.
 
 ---
 

@@ -34,6 +34,32 @@ export function ticketBranchName(taskId: number): string {
   return `builderforce/task-${taskId}`;
 }
 
+/** How many suffixed names to try before refusing a collision (GAP-W10). */
+export const TICKET_BRANCH_SUFFIX_LIMIT = 20;
+
+/**
+ * Pick a ticket branch that is not already taken.
+ *
+ * A human (or another tool) may have created `builderforce/task-<id>`. Reusing
+ * that name would commit onto their branch. The canonical name is used when it
+ * is free; otherwise `builderforce/task-<id>-2`, `-3`, … A pinned `tasks.gitBranch`
+ * is never renamed here — pass only the unpinned default through this function.
+ *
+ * Throws a clear error when every suffix is taken. Never silently reuses a
+ * branch that `taken` reports as existing.
+ */
+export function ticketBranchNameAvoiding(taskId: number, taken: ReadonlySet<string>): string {
+  const base = ticketBranchName(taskId);
+  if (!taken.has(base)) return base;
+  for (let n = 2; n <= TICKET_BRANCH_SUFFIX_LIMIT; n++) {
+    const candidate = `${base}-${n}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+  throw new Error(
+    `ticket branch '${base}' already exists and suffixes 2–${TICKET_BRANCH_SUFFIX_LIMIT} are taken; refusing to commit onto an existing branch`,
+  );
+}
+
 /** Everything needed to commit files to a ticket's branch, resolved once per run. */
 export interface TicketRepoContext {
   provider: string;
