@@ -1088,7 +1088,7 @@ function changedPathsOf(args) {
   return [...new Set(callChangesOf(args).map((c) => c.path))];
 }
 
-// ../packages/agent-tools/src/edit.ts
+// ../packages/agent-tools/src/edit-match.ts
 var toLF = (s) => s.replace(/\r\n/g, "\n");
 var countNewlines = (s) => s.split("\n").length - 1;
 function dominantEol(content) {
@@ -1122,6 +1122,144 @@ function spansOf(hay, needle, all) {
   }
   return spans;
 }
+function exactSpans(content, needle, all) {
+  const { lf, at: at2 } = foldToLF(content);
+  const folded = spansOf(lf, toLF(needle), all).map(([s, e]) => [at2[s], at2[e]]);
+  if (folded.length > 0) return { tier: content.slice(folded[0][0], folded[0][1]) === needle ? "exact" : "crlf", spans: folded };
+  return { tier: "exact", spans: spansOf(content, needle, all) };
+}
+var ESCAPE = /\\(["'nt\\])/g;
+var UNESCAPED = { '"': '"', "'": "'", n: "\n", t: "	", "\\": "\\" };
+var unescape = (s, kinds) => s.replace(ESCAPE, (seq, c) => kinds.has(c) ? UNESCAPED[c] : seq);
+function overEscapedKinds(content, oldString) {
+  const kinds = /* @__PURE__ */ new Set();
+  for (const m of oldString.matchAll(ESCAPE)) {
+    if (!content.includes(m[0])) kinds.add(m[1]);
+  }
+  return kinds.size ? kinds : null;
+}
+function fileLines(content) {
+  const out = [];
+  let start = 0;
+  while (start <= content.length) {
+    const nl = content.indexOf("\n", start);
+    const lineEnd = nl === -1 ? content.length : nl;
+    const end = lineEnd > start && content.charCodeAt(lineEnd - 1) === 13 ? lineEnd - 1 : lineEnd;
+    out.push({ start, end, next: nl === -1 ? content.length : nl + 1, text: content.slice(start, end) });
+    if (nl === -1) break;
+    start = nl + 1;
+  }
+  return out;
+}
+var indentOf = (line) => /^[ \t]*/.exec(line)[0];
+var isWord = (ch) => ch !== void 0 && /\w/.test(ch);
+var boundary = (a, b) => !isWord(a) || !isWord(b);
+function fitLine(file, old, k, n, lastMustBeFull) {
+  const f = file.trim();
+  const o = old.trim();
+  if (f === o) return "full";
+  if (n === 1 || o === "") return null;
+  if (k === 0 && f.endsWith(o) && boundary(f[f.length - o.length - 1], o[0])) return "suffix";
+  if (k === n - 1 && !lastMustBeFull && f.startsWith(o) && boundary(o[o.length - 1], f[o.length])) return "prefix";
+  return null;
+}
+var widthOf = (indent) => [...indent].reduce((w, ch) => w + (ch === "	" ? 4 : 1), 0);
+function indentMap(lines, i, old, fits) {
+  const map = [];
+  for (let k = 0; k < old.length; k += 1) {
+    if (fits[k] !== "full" || old[k].trim() === "") continue;
+    const from = indentOf(old[k]);
+    const to = indentOf(lines[i + k].text);
+    const seen = map.find(([o]) => o === from);
+    if (seen && seen[1] !== to) return null;
+    if (!seen) map.push([from, to]);
+  }
+  for (const [oa, fa] of map) {
+    for (const [ob, fb] of map) {
+      const dOld = widthOf(oa) - widthOf(ob);
+      const dFile = widthOf(fa) - widthOf(fb);
+      if (Math.sign(dOld) !== Math.sign(dFile)) return null;
+    }
+  }
+  return map;
+}
+function reindent(line, map) {
+  if (line.trim() === "") return "";
+  const ind = indentOf(line);
+  let best;
+  for (const pair of map) {
+    if (ind.startsWith(pair[0]) && (!best || pair[0].length > best[0].length)) best = pair;
+  }
+  return best ? best[1] + line.slice(best[0].length) : line;
+}
+function whitespaceSplices(content, oldString, newString, all, eol) {
+  const oldLF = toLF(oldString);
+  const endsWithNewline = oldLF.endsWith("\n");
+  const old = (endsWithNewline ? oldLF.slice(0, -1) : oldLF).split("\n");
+  if (old.every((l) => l.trim() === "")) return [];
+  const lines = fileLines(content);
+  const n = old.length;
+  const splices = [];
+  for (let i = 0; i + n <= lines.length; ) {
+    const fits = [];
+    for (let k = 0; k < n; k += 1) {
+      const fit = fitLine(lines[i + k].text, old[k], k, n, endsWithNewline);
+      if (!fit) break;
+      fits.push(fit);
+    }
+    const anchored = fits.length === n && fits.some((fit, k) => fit === "full" && old[k].trim() !== "");
+    const map = anchored ? indentMap(lines, i, old, fits) : null;
+    if (!map) {
+      i += 1;
+      continue;
+    }
+    splices.push(whitespaceSplice(content, lines, i, old, fits, map, newString, endsWithNewline, eol));
+    if (!all && splices.length === 2) break;
+    i += n;
+  }
+  return splices;
+}
+function whitespaceSplice(content, lines, i, old, fits, map, newString, endsWithNewline, eol) {
+  const n = old.length;
+  const first = lines[i];
+  const last = lines[i + n - 1];
+  const start = fits[0] === "suffix" ? first.start + first.text.trimEnd().length - old[0].trim().length : first.start;
+  let end;
+  let newLF = toLF(newString);
+  if (fits[n - 1] === "prefix") end = last.start + indentOf(last.text).length + old[n - 1].trim().length;
+  else if (!endsWithNewline) end = last.end;
+  else if (last.next > last.end) end = last.next;
+  else {
+    end = content.length;
+    if (newLF.endsWith("\n")) newLF = newLF.slice(0, -1);
+  }
+  const out = newLF.split("\n").map((l, k) => k === 0 && fits[0] === "suffix" ? l.trimStart() : reindent(l, map));
+  return { start, end, text: out.join(eol) };
+}
+function matchEdit(content, oldString, newString, replaceAll, eol) {
+  const decide = (tier, splices) => {
+    if (splices.length === 0) return null;
+    if (splices.length > 1 && !replaceAll) return { ambiguous: true };
+    return { tier, splices };
+  };
+  const spliced = (spans, text) => spans.map(([start, end]) => ({ start, end, text }));
+  const exact = exactSpans(content, oldString, replaceAll);
+  const t1 = decide(exact.tier, spliced(exact.spans, withEol(newString, eol)));
+  if (t1) return t1;
+  const kinds = overEscapedKinds(content, oldString);
+  const repaired = kinds ? unescape(oldString, kinds) : null;
+  const newRepaired = kinds ? unescape(newString, kinds) : newString;
+  if (repaired !== null) {
+    const t2 = decide("unescaped", spliced(exactSpans(content, repaired, replaceAll).spans, withEol(newRepaired, eol)));
+    if (t2) return t2;
+  }
+  const writeEol = eol ?? "\n";
+  const t3 = decide("whitespace", whitespaceSplices(content, oldString, newString, replaceAll, writeEol));
+  if (t3 || repaired === null) return t3;
+  return decide("whitespace", whitespaceSplices(content, repaired, newRepaired, replaceAll, writeEol));
+}
+
+// ../packages/agent-tools/src/edit.ts
 var MIN_CONTAINS_NEEDLE = 8;
 var EXCERPT_RADIUS = 3;
 var EDIT_EXCERPT_CONTEXT = 2;
@@ -1158,27 +1296,25 @@ function applyStringEdit(content, oldString, newString, replaceAll = false) {
   if (typeof oldString !== "string" || oldString.length === 0) {
     return { ok: false, error: "oldString is required" };
   }
-  const newS = withEol(newString, dominantEol(content));
-  const { lf, at: at2 } = foldToLF(content);
-  let spans = spansOf(lf, toLF(oldString), replaceAll).map(([s, e]) => [at2[s], at2[e]]);
-  if (spans.length === 0) spans = spansOf(content, oldString, replaceAll);
-  if (spans.length > 1 && !replaceAll) {
+  const match = matchEdit(content, oldString, newString, replaceAll, dominantEol(content));
+  if (match && "ambiguous" in match) {
     return {
       ok: false,
       error: "oldString is not unique; add more surrounding context or set replaceAll"
     };
   }
-  if (spans.length > 0) {
+  if (match) {
     const parts = [];
     let from = 0;
-    for (const [s, e] of spans) {
-      parts.push(content.slice(from, s), newS);
-      from = e;
+    for (const { start, end, text } of match.splices) {
+      parts.push(content.slice(from, start), text);
+      from = end;
     }
     parts.push(content.slice(from));
     const next = parts.join("");
-    const region = regionAt(content, spans[0][0], newS);
-    return { ok: true, content: next, replaced: spans.length, region, excerpt: excerptAfterEdit(next, region) };
+    const first = match.splices[0];
+    const region = regionAt(content, first.start, first.text);
+    return { ok: true, content: next, replaced: match.splices.length, region, excerpt: excerptAfterEdit(next, region), matchedBy: match.tier };
   }
   const nearest = findNearest(content, oldString);
   return {
@@ -1252,7 +1388,8 @@ async function applyBatchEdits(plan, io) {
       content: r.content,
       ...r.replaced != null ? { replaced: r.replaced } : {},
       ...r.region ? { region: r.region } : {},
-      ...r.excerpt ? { excerpt: r.excerpt } : {}
+      ...r.excerpt ? { excerpt: r.excerpt } : {},
+      ...r.matchedBy && r.matchedBy !== "exact" ? { matchedBy: r.matchedBy } : {}
     });
   }
   const written = /* @__PURE__ */ new Set();
@@ -1758,6 +1895,38 @@ var ToolRegistry = class {
     return def.execute(args, ctx);
   }
 };
+
+// ../packages/agent-tools/src/toolNaming.ts
+var BUILTIN_TOOL_PREFIX = "builtin_";
+var NAMESPACE_SEPARATOR = "__";
+var NON_IDENT = /[^a-zA-Z0-9]+/g;
+function advertisedToolName(id) {
+  return `${BUILTIN_TOOL_PREFIX}${id.replace(NON_IDENT, "_")}`;
+}
+function resolveAdvertisedToolName(requested, knownNames) {
+  const name = requested.trim();
+  if (!name) return null;
+  const known = knownNames instanceof Set ? knownNames : new Set(knownNames);
+  if (known.has(name)) return name;
+  if (name.includes(NAMESPACE_SEPARATOR)) return null;
+  const flat = name.replace(NON_IDENT, "_").replace(/^_+|_+$/g, "");
+  if (!flat) return null;
+  const candidate = flat.toLowerCase().startsWith(BUILTIN_TOOL_PREFIX) ? `${BUILTIN_TOOL_PREFIX}${flat.slice(BUILTIN_TOOL_PREFIX.length)}` : advertisedToolName(flat);
+  return known.has(candidate) ? candidate : null;
+}
+function resolveCallName(raw, knownNames) {
+  const alias = resolveToolAlias(raw);
+  return resolveAdvertisedToolName(alias, knownNames) ?? alias;
+}
+var nameSets = /* @__PURE__ */ new WeakMap();
+function toolNameSet(tools, nameOf) {
+  let set = nameSets.get(tools);
+  if (!set) {
+    set = new Set(tools.map(nameOf).filter((n) => !!n));
+    nameSets.set(tools, set);
+  }
+  return set;
+}
 
 // ../packages/agent-tools/src/gatePaths.ts
 var PATCH_MARKERS = {
@@ -12187,6 +12356,9 @@ export {
   describeBracketDelta,
   normalizeToolName,
   resolveToolAlias,
+  resolveAdvertisedToolName,
+  resolveCallName,
+  toolNameSet,
   toolCallPaths,
   toolSideEffect,
   classifyTool,
@@ -12413,4 +12585,4 @@ export {
   toolCallArgBytes,
   createComposingActivity
 };
-//# sourceMappingURL=chunk-66I654IE.mjs.map
+//# sourceMappingURL=chunk-25VGJCVD.mjs.map

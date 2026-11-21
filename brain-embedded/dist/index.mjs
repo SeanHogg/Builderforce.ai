@@ -304,6 +304,8 @@ import {
   repeatedFailureAdvisory,
   repeatedWriteNote,
   requestedReadWindow,
+  resolveAdvertisedToolName,
+  resolveCallName,
   resolveToolAlias,
   resultTableCap,
   reviewGate,
@@ -350,6 +352,7 @@ import {
   toolCallArgBytes,
   toolCallPaths,
   toolExposureInTrace,
+  toolNameSet,
   toolNamesMentionedIn,
   toolResultRecord,
   toolSideEffect,
@@ -364,7 +367,7 @@ import {
   withAdvisory,
   withProvenanceMetadata,
   workFiledNotStaffedVerdict
-} from "./chunk-66I654IE.mjs";
+} from "./chunk-25VGJCVD.mjs";
 import {
   ASK_USER_TOOL,
   ASK_USER_TOOL_SPEC,
@@ -1469,12 +1472,12 @@ var PRICE_SNAPSHOT = {
   "~anthropic/claude-haiku-latest": [1e-7, 5e-7],
   "~anthropic/claude-opus-latest": [4e-6, 2e-5],
   "~anthropic/claude-sonnet-latest": [2e-6, 1e-5],
-  "~deepseek/deepseek-flash-latest": [35e-9, 15e-8],
+  "~deepseek/deepseek-flash-latest": [36e-9, 5e-7],
   "~deepseek/deepseek-pro-latest": [999e-10, 8e-6],
-  "~deepseek/deepseek-v4-flash-latest": [6e-8, 18e-8],
+  "~deepseek/deepseek-v4-flash-latest": [44e-9, 132e-9],
   "~google/gemini-flash-latest": [15e-7, 75e-7],
   "~google/gemini-pro-latest": [2e-6, 1e-5],
-  "~moonshotai/kimi-latest": [1824e-10, 110055e-10],
+  "~moonshotai/kimi-latest": [1805e-10, 110055e-10],
   "~openai/gpt-astra-latest": [8e-6, 4e-5],
   "~openai/gpt-luna-latest": [1e-7, 5e-7],
   "~openai/gpt-mini-latest": [75e-8, 45e-7],
@@ -1540,25 +1543,23 @@ var PRICE_SNAPSHOT = {
   "cohere/command-r-08-2024": [15e-8, 6e-7],
   "cohere/command-r-plus-08-2024": [25e-7, 1e-5],
   "cohere/command-r7b-12-2024": [375e-10, 15e-8],
-  "cohere/north-mini-code:free": [0, 0],
   "deepseek/deepseek-chat": [2574e-10, 10287e-10],
-  "deepseek/deepseek-chat-v3-0324": [29e-8, 114e-8],
+  "deepseek/deepseek-chat-v3-0324": [25e-8, 1e-6],
   "deepseek/deepseek-chat-v3.1": [25e-8, 95e-8],
   "deepseek/deepseek-r1-0528": [571e-9, 2286e-9],
   "deepseek/deepseek-v3.1-terminus": [27e-8, 1e-6],
   "deepseek/deepseek-v3.2": [26e-8, 38e-8],
   "deepseek/deepseek-v3.2-exp": [27e-8, 41e-8],
   "deepseek/deepseek-v4-flash": [9e-8, 18e-8],
-  "deepseek/deepseek-v4-flash-0731": [62e-9, 3e-7],
+  "deepseek/deepseek-v4-flash-0731": [443e-10, 3e-7],
   "deepseek/deepseek-v4-flash-0731:batch": [48e-9, 144e-9],
-  "deepseek/deepseek-v4-flash-vision-exp": [44e-8, 132e-8],
+  "deepseek/deepseek-v4-flash-vision-exp": [2156e-10, 6468e-10],
   "deepseek/deepseek-v4-pro": [9e-7, 15e-7],
-  "deepseek/deepseek-v4-pro-0813": [111e-9, 444e-8],
-  "deepseek/deepseek-v4.1-flash": [3e-7, 12e-7],
+  "deepseek/deepseek-v4-pro-0813": [132e-8, 396e-8],
+  "deepseek/deepseek-v4.1-flash": [498e-10, 1992e-10],
   "deepseek/deepseek-v4.1-flash-1017": [15e-8, 6e-7],
-  "deepseek/deepseek-v4.1-flash-1017:batch": [36e-9, 15e-8],
-  "deepseek/deepseek-v4.1-flash:batch": [112e-9, 336e-9],
-  "dots-studio/dots-3-note-preview:free": [0, 0],
+  "deepseek/deepseek-v4.1-flash-1017:batch": [35e-9, 149e-9],
+  "deepseek/deepseek-v4.1-flash:batch": [5e-8, 15e-8],
   "elorian/glimpse": [6e-7, 3e-6],
   "fireworks/ember-1": [3e-6, 15e-6],
   "google/gemini-2.5-flash": [3e-7, 25e-7],
@@ -1602,9 +1603,9 @@ var PRICE_SNAPSHOT = {
   "google/gemini-omni-1.2-flash": [15e-7, 9e-6],
   "google/gemma-2-27b-it": [65e-8, 65e-8],
   "google/gemma-3-12b-it": [5e-8, 15e-8],
-  "google/gemma-3-27b-it": [8e-8, 16e-8],
+  "google/gemma-3-27b-it": [8e-8, 45e-8],
   "google/gemma-3-4b-it": [5e-8, 1e-7],
-  "google/gemma-4-26b-a4b-it": [9e-8, 3e-7],
+  "google/gemma-4-26b-a4b-it": [675e-10, 225e-9],
   "google/gemma-4-26b-a4b-it:free": [0, 0],
   "google/gemma-4-31b-it": [2e-7, 4e-7],
   "google/gemma-4-31b-it:free": [0, 0],
@@ -1615,7 +1616,7 @@ var PRICE_SNAPSHOT = {
   "inclusionai/ling-3.0-flash": [21e-9, 63e-9],
   "inclusionai/ling-3.0-flash-vl": [6e-8, 18e-8],
   "inclusionai/ling-3.0-tiny": [15e-9, 45e-9],
-  "inclusionai/ling-3.1-flash": [45e-9, 135e-9],
+  "inclusionai/ling-3.1-flash": [6e-8, 18e-8],
   "inclusionai/ling-3.2-flash:free": [0, 0],
   "inference-net/schematron-v2-small": [5e-8, 23e-8],
   "inference-net/schematron-v2-turbo": [3e-8, 15e-8],
@@ -1624,11 +1625,9 @@ var PRICE_SNAPSHOT = {
   "liquid/lfm-3-1.7b": [8e-8, 2e-7],
   "liquid/lfm-3-1.7b:free": [0, 0],
   "mancer/weaver": [3e-7, 5e-7],
-  "meituan/longcat-2.0": [3e-7, 12e-7],
   "meta-llama/llama-3.1-70b-instruct": [72e-8, 72e-8],
   "meta-llama/llama-3.1-8b-instruct": [2e-8, 4e-8],
-  "meta-llama/llama-3.2-1b-instruct": [27e-9, 201e-9],
-  "meta-llama/llama-3.2-3b-instruct": [509e-10, 335e-9],
+  "meta-llama/llama-3.2-3b-instruct": [5e-8, 33e-8],
   "meta-llama/llama-3.3-70b-instruct": [71e-8, 71e-8],
   "meta-llama/llama-4-maverick": [35e-8, 1e-6],
   "meta-llama/llama-4-scout": [1e-7, 3e-7],
@@ -1644,8 +1643,8 @@ var PRICE_SNAPSHOT = {
   "meta/muse-spark-open": [125e-8, 425e-8],
   "meta/muse-wonder": [4e-6, 2e-5],
   "microsoft/phi-4": [7e-8, 14e-8],
-  "minimax/minimax-m2.5": [295e-9, 12e-7],
-  "minimax/minimax-m2.7": [21e-8, 84e-8],
+  "minimax/minimax-m2.5": [27e-8, 95e-8],
+  "minimax/minimax-m2.7": [6e-7, 18e-7],
   "minimax/minimax-m3": [3e-7, 12e-7],
   "minimax/minimax-m3:batch": [224e-9, 88e-8],
   "minimax/minimax-m3.1-flash": [15e-8, 6e-7],
@@ -1669,6 +1668,7 @@ var PRICE_SNAPSHOT = {
   "mistralai/mistral-small-3.1-24b-instruct": [351e-9, 555e-9],
   "mistralai/mistral-small-3.2-24b-instruct": [75e-9, 2e-7],
   "mistralai/mixtral-8x22b-instruct": [2e-6, 6e-6],
+  "mistralai/pixtral-large-2502": [2e-6, 6e-6],
   "mistralai/voxtral-small-24b-2507": [1e-7, 3e-7],
   "moondream/moondream3-preview": [3e-7, 25e-7],
   "moondream/moondream3.1-9b-a2b": [3e-7, 25e-7],
@@ -1677,7 +1677,7 @@ var PRICE_SNAPSHOT = {
   "moonshotai/kimi-k2-thinking": [6e-7, 25e-7],
   "moonshotai/kimi-k2.5": [5e-7, 25e-7],
   "moonshotai/kimi-k2.6": [65e-8, 341e-8],
-  "moonshotai/kimi-k2.7-code": [66e-8, 35e-7],
+  "moonshotai/kimi-k2.7-code": [6e-7, 3e-6],
   "moonshotai/kimi-k3": [192e-9, 16e-6],
   "moonshotai/kimi-k3:batch": [228e-8, 114e-7],
   "moonshotai/kimi-k3.1-pro": [253e-9, 88e-7],
@@ -1699,7 +1699,7 @@ var PRICE_SNAPSHOT = {
   "nvidia/nemotron-3.5-content-safety": [2e-7, 2e-7],
   "nvidia/nemotron-3.5-lightning": [7e-8, 2e-7],
   "nvidia/nemotron-3.5-lightning:free": [0, 0],
-  "nvidia/nemotron-3.5-super-vl": [15e-8, 5e-7],
+  "nvidia/nemotron-3.5-super-vl": [15e-8, 47e-8],
   "nvidia/nemotron-3.5-super-vl:free": [0, 0],
   "nvidia/switchyard": [0, 0],
   "openai/gpt-3.5-turbo-0613": [1e-6, 2e-6],
@@ -1798,9 +1798,9 @@ var PRICE_SNAPSHOT = {
   "openai/gpt-audio": [25e-7, 1e-5],
   "openai/gpt-audio-mini": [6e-7, 24e-7],
   "openai/gpt-chat-latest": [5e-6, 3e-5],
-  "openai/gpt-oss-120b": [15e-8, 6e-7],
+  "openai/gpt-oss-120b": [9e-8, 36e-8],
   "openai/gpt-oss-120b:batch": [296e-10, 136e-9],
-  "openai/gpt-oss-20b": [18e-9, 9e-8],
+  "openai/gpt-oss-20b": [17e-9, 85e-9],
   "openai/gpt-oss-20b:batch": [24e-9, 112e-9],
   "openai/gpt-oss-safeguard-20b": [75e-9, 3e-7],
   "openai/o3": [2e-6, 8e-6],
@@ -1815,7 +1815,7 @@ var PRICE_SNAPSHOT = {
   "openrouter/free": [0, 0],
   "openrouter/fusion": [0, 0],
   "openrouter/pareto-code": [0, 0],
-  "particle-ai/particle-1": [6e-8, 5e-7],
+  "particle-ai/particle-1": [7e-8, 5e-7],
   "particle-ai/particle-1:free": [0, 0],
   "perceptron/perceptron-mk1": [15e-8, 15e-7],
   "perceptron/perceptron-mk1.5": [15e-8, 15e-7],
@@ -1837,7 +1837,7 @@ var PRICE_SNAPSHOT = {
   "qwen/qwen3-30b-a3b-instruct-2507": [1e-7, 3e-7],
   "qwen/qwen3-32b": [8e-8, 28e-8],
   "qwen/qwen3-coder": [3e-7, 1e-6],
-  "qwen/qwen3-coder-30b-a3b-instruct": [15e-8, 6e-7],
+  "qwen/qwen3-coder-30b-a3b-instruct": [7e-8, 28e-8],
   "qwen/qwen3-coder-flash": [195e-9, 975e-9],
   "qwen/qwen3-coder-next": [12e-8, 8e-7],
   "qwen/qwen3-next-80b-a3b-instruct": [1e-7, 11e-7],
@@ -1848,7 +1848,7 @@ var PRICE_SNAPSHOT = {
   "qwen/qwen3.5-27b": [195e-9, 156e-8],
   "qwen/qwen3.5-35b-a3b": [14e-8, 1e-6],
   "qwen/qwen3.5-397b-a17b": [45e-8, 3e-6],
-  "qwen/qwen3.5-9b": [142e-9, 208e-9],
+  "qwen/qwen3.5-9b": [17e-8, 25e-8],
   "qwen/qwen3.5-flash-02-23": [65e-9, 26e-8],
   "qwen/qwen3.5-plus-02-15": [26e-8, 156e-8],
   "qwen/qwen3.5-plus-20260420": [3e-7, 18e-7],
@@ -1861,7 +1861,7 @@ var PRICE_SNAPSHOT = {
   "qwen/qwen3.7-plus": [32e-8, 128e-8],
   "qwen/qwen3.7-plus:batch": [23e-8, 92e-8],
   "qwen/qwen3.8-2.4t-a95b": [2e-6, 6e-6],
-  "qwen/qwen3.8-27b": [6e-8, 22e-7],
+  "qwen/qwen3.8-27b": [6e-8, 196e-8],
   "qwen/qwen3.8-27b:batch": [16e-8, 2e-6],
   "qwen/qwen3.8-flash": [15e-8, 47e-8],
   "qwen/qwen3.8-max-0902": [2e-6, 6e-6],
@@ -1869,6 +1869,7 @@ var PRICE_SNAPSHOT = {
   "qwen/qwen3.8-max-prime": [4e-6, 12e-6],
   "qwen/qwen3.8-omni-flash": [15e-8, 47e-8],
   "qwen/qwen4-max": [1425e-9, 4275e-9],
+  "radixark/daisyrose-27b": [15e-8, 1875e-9],
   "recursive/flint-v1.0:free": [0, 0],
   "reflection/beam-1.0-501b-a23b": [25e-8, 1e-6],
   "rekaai/reka-edge": [1e-7, 1e-7],
@@ -1890,7 +1891,6 @@ var PRICE_SNAPSHOT = {
   "tencent/hy-mt2-30b-a3b": [74e-9, 295e-9],
   "tencent/hy-mt2-7b": [74e-9, 295e-9],
   "tencent/hy3": [132e-9, 528e-9],
-  "tencent/hy3-preview": [18e-8, 6e-7],
   "tencent/hy4": [417e-9, 12505e-10],
   "tencent/hy4-flash": [35e-9, 1405e-10],
   "tencent/hy4-preview": [834e-9, 2501e-9],
@@ -1898,8 +1898,8 @@ var PRICE_SNAPSHOT = {
   "thedrummer/skyfall-36b-v2": [55e-8, 8e-7],
   "thedrummer/unslopnemo-12b": [4e-7, 4e-7],
   "thinkingmachines/inkling": [1e-6, 405e-8],
+  "thinkingmachines/inkling-2-mini": [1e-7, 4e-7],
   "thinkingmachines/inkling-2-small": [3e-7, 1e-6],
-  "thinkingmachines/inkling-2-small:free": [0, 0],
   "thinkingmachines/inkling-small": [45e-8, 12e-7],
   "thinkingmachines/inkling-small:batch": [36e-8, 96e-8],
   "typesafe/jev-router": [0, 0],
@@ -1919,7 +1919,6 @@ var PRICE_SNAPSHOT = {
   "x-ai/grok-4.6:batch": [16e-7, 48e-7],
   "x-ai/grok-4.7": [2e-6, 6e-6],
   "x-ai/grok-4.7:batch": [16e-7, 48e-7],
-  "x-ai/grok-build-0.1": [1e-6, 2e-6],
   "xiaomi/mimo-v2.5": [4e-7, 2e-6],
   "xiaomi/mimo-v2.5-pro": [48e-8, 18e-7],
   "xiaomi/mimo-v2.6-flash": [14e-8, 28e-8],
@@ -1938,12 +1937,12 @@ var PRICE_SNAPSHOT = {
   "z-ai/glm-5.2": [62e-8, 242e-8],
   "z-ai/glm-5.2:batch": [322e-9, 989e-9],
   "z-ai/glm-5.3": [699e-10, 14e-7],
-  "z-ai/glm-5.3-flash": [15e-8, 5e-7],
-  "z-ai/glm-5.3-flash:batch": [24e-9, 69e-9],
+  "z-ai/glm-5.3-flash": [399e-10, 784e-10],
+  "z-ai/glm-5.3-flash:batch": [23e-9, 68e-9],
   "z-ai/glm-5.3-flashx": [37e-8, 125e-8],
   "z-ai/glm-5.3-flashx-legal": [37e-8, 125e-8],
   "z-ai/glm-5.3-prime": [168e-8, 528e-8],
-  "z-ai/glm-5.3:batch": [281e-9, 125e-8],
+  "z-ai/glm-5.3:batch": [28e-8, 1249e-9],
   "z-ai/glm-5v-turbo": [12e-7, 4e-6]
 };
 
@@ -17134,14 +17133,40 @@ async function verifyPaths(run, files, opts) {
     }
   }
 }
+function outgoingUpToDate(out, ref = "HEAD") {
+  return out.upToDate?.head && out.upToDate.ref === ref ? out.upToDate : null;
+}
+function upToDateOutcome(run, tool, landed) {
+  const sha = landed.head.slice(0, 7);
+  const on = landed.upstream || "the upstream";
+  if (tool === "open_pull_request") {
+    return { refusal: `${tool} refused: HEAD ${sha} is already in ${on}; there is nothing to open a PR for. Commit the change on the ticket branch (git_commit with a \`branch\`) first.` };
+  }
+  const mine = landed.uncommitted.filter((p) => wroteThisRun(p, run.c.touchedFiles ?? []));
+  if (mine.length) {
+    const shown = mine.slice(0, 5).join(", ") + (mine.length > 5 ? ", \u2026" : "");
+    return { refusal: `${tool} refused: nothing committed to push \u2014 ${mine.length} touched file${mine.length === 1 ? " is" : "s are"} uncommitted (${shown}); HEAD ${sha} is already on ${on}. Commit them (git_commit), then push.` };
+  }
+  return landed.uncommitted.length ? { note: `${tool}: nothing to push \u2014 HEAD ${sha} is already on ${on}, so the push is a no-op (the working tree has ${landed.uncommitted.length} uncommitted change${landed.uncommitted.length === 1 ? "" : "s"} this run did not make). Do not retry.` } : { note: `${tool}: nothing to publish \u2014 HEAD ${sha} is already on ${on}, so the push is a no-op. The change has shipped; do not retry.` };
+}
 async function runOutgoingGate(run, repo, tool = "git_push", args) {
   const git = run.req.git;
   if (!git) return { verdict: { ok: true, unavailable: [] }, diffHash: null, gated: false };
   const pullRequest = tool === "open_pull_request";
-  const base = args?.base;
-  const out = await git.outgoing(repo, pullRequest ? { pullRequest: typeof base === "string" && base.trim() ? { base: base.trim() } : {} } : void 0);
+  const { base, branch } = args ?? {};
+  const ref = typeof branch === "string" && branch.trim() ? branch.trim() : void 0;
+  const opts = {
+    ...pullRequest ? { pullRequest: typeof base === "string" && base.trim() ? { base: base.trim() } : {} } : {},
+    ...ref ? { ref } : {}
+  };
+  const out = await git.outgoing(repo, Object.keys(opts).length ? opts : void 0);
   const { files, diffHash, baseBranch, diff } = out;
   if (!baseBranch && !pullRequest) return { verdict: { ok: true, unavailable: [] }, diffHash, gated: false };
+  const landed = outgoingUpToDate(out, ref ?? "HEAD");
+  if (landed) {
+    const outcome = upToDateOutcome(run, tool, landed);
+    return "refusal" in outcome ? { verdict: { ok: false, reason: outcome.refusal }, diffHash, gated: true } : { verdict: { ok: true, unavailable: [] }, diffHash, gated: true, upToDate: outcome.note };
+  }
   if (out.unavailable) {
     return { verdict: { ok: false, reason: `${tool} refused: not verified \u2014 ${out.unavailable}. Commit the change on a branch with an upstream (or name the pull request base) and retry.` }, diffHash, gated: true };
   }
@@ -17254,8 +17279,9 @@ async function shipGatePreflight(run, name, args) {
   if (!publish && !isCompleteReviewRecord(name, args)) return {};
   try {
     if (publish) {
-      const { verdict, diffHash, gated, advisories } = await runOutgoingGate(run, repoArgOf(args), name, args);
+      const { verdict, diffHash, gated, advisories, upToDate } = await runOutgoingGate(run, repoArgOf(args), name, args);
       if (!verdict.ok) return { refusal: { ok: false, error: verdict.reason } };
+      if (upToDate) return { evidence: upToDate };
       return gated ? { evidence: approvalEvidence(run, verdict.unavailable, diffHash, advisories) } : {};
     }
     const repo = repoArgOf(args);
@@ -17308,6 +17334,8 @@ async function completionGateRefusal(run) {
   const check = async () => {
     try {
       const out = await git.outgoing("");
+      const landed = outgoingUpToDate(out);
+      if (landed && out.baseBranch) return { kind: "clear", why: `HEAD ${landed.head.slice(0, 7)} is already on ${landed.upstream}` };
       if (out.unavailable) {
         return out.baseBranch ? { kind: "clear", why: out.unavailable } : { kind: "unavailable", why: out.unavailable };
       }
@@ -18167,7 +18195,7 @@ function routerToolSpecs(catalogSize) {
         parameters: {
           type: "object",
           properties: {
-            name: { type: "string", description: "Exact tool name to call." },
+            name: { type: "string", description: 'Exact tool name to call; a catalog id such as "tasks.archive_many" is accepted too.' },
             args: { type: "object", description: "Arguments object for that tool." }
           },
           required: ["name"]
@@ -18199,7 +18227,8 @@ function findTools(catalog, query, limit = FIND_LIMIT) {
   return scored.sort((a, b) => b.score - a.score || a.index - b.index).slice(0, limit).map((e) => e.m);
 }
 function describeTool(catalog, name) {
-  return catalog.find((t) => t.function?.name === name) ?? null;
+  const resolved = resolveAdvertisedToolName(name, toolNameSet(catalog, (t) => t.function?.name));
+  return resolved === null ? null : catalog.find((t) => t.function?.name === resolved) ?? null;
 }
 function handleRouterCall(catalog, name, args) {
   const a = args ?? {};
@@ -18212,9 +18241,9 @@ function handleRouterCall(catalog, name, args) {
   }
   if (name === TOOL_ROUTER_DESCRIBE) {
     const target3 = typeof a.name === "string" ? a.name : "";
-    const spec = describeTool(catalog, target3);
+    const spec2 = describeTool(catalog, target3);
     return {
-      result: spec ? { name: target3, description: spec.function?.description ?? "", parameters: spec.function?.parameters ?? {} } : { error: `Unknown tool "${target3}". Use ${TOOL_ROUTER_FIND} to look up the exact name.` }
+      result: spec2 ? { name: spec2.function?.name ?? target3, description: spec2.function?.description ?? "", parameters: spec2.function?.parameters ?? {} } : { error: `Unknown tool "${target3}". Use ${TOOL_ROUTER_FIND} to look up the exact name.` }
     };
   }
   const target2 = typeof a.name === "string" ? a.name : "";
@@ -18222,10 +18251,15 @@ function handleRouterCall(catalog, name, args) {
   if (isRouterTool(target2)) {
     return { result: { error: `${target2} cannot be invoked through the router.` } };
   }
-  if (!describeTool(catalog, target2)) {
+  const spec = describeTool(catalog, target2);
+  const resolved = spec?.function?.name;
+  if (!resolved) {
     return { result: { error: `Unknown tool "${target2}". Use ${TOOL_ROUTER_FIND} to look up the exact name.` } };
   }
-  return { dispatch: { name: target2, args: asToolArgs(a.args) ?? {} } };
+  if (isRouterTool(resolved)) {
+    return { result: { error: `${target2} cannot be invoked through the router.` } };
+  }
+  return { dispatch: { name: resolved, args: asToolArgs(a.args) ?? {} } };
 }
 
 // src/runStore/brainRunContext.ts
@@ -19185,6 +19219,48 @@ var PendingCalls = class {
   }
 };
 
+// src/runStore/conversationPins.ts
+var CONVERSATION_PIN_WINDOW = 20;
+var CONVERSATION_PIN_LIMIT = 8;
+var DOTTED_ID = /\b[a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*\b/g;
+function namedIn(text2) {
+  return [.../* @__PURE__ */ new Set([...toolNamesMentionedIn(text2), ...text2.match(DOTTED_ID) ?? []])];
+}
+function calledName(call2) {
+  if (call2.function.name !== TOOL_ROUTER_INVOKE) return call2.function.name;
+  try {
+    const args = JSON.parse(call2.function.arguments || "{}");
+    return typeof args.name === "string" ? args.name : "";
+  } catch {
+    return "";
+  }
+}
+function conversationPinnedTools(convo, catalogToolNames, limit = CONVERSATION_PIN_LIMIT) {
+  let current = convo.length;
+  for (let i = convo.length - 1; i >= 0; i -= 1) {
+    if (convo[i].role === "user") {
+      current = i;
+      break;
+    }
+  }
+  const known = new Set(catalogToolNames);
+  const out = [];
+  const add = (raw) => {
+    if (out.length >= limit || !raw) return;
+    const name = resolveAdvertisedToolName(raw, known);
+    if (!name || isRouterTool(name) || out.includes(name)) return;
+    out.push(name);
+  };
+  const start = Math.max(0, current - CONVERSATION_PIN_WINDOW);
+  for (let i = current - 1; i >= start && out.length < limit; i -= 1) {
+    const m = convo[i];
+    if (m.role !== "user" && m.role !== "assistant") continue;
+    for (const call2 of [...m.tool_calls ?? []].reverse()) add(calledName(call2));
+    for (const named of namedIn(userTextOf(m)).reverse()) add(named);
+  }
+  return out;
+}
+
 // src/runStore/runPreamble.ts
 function stablePrefixOn() {
   return deviceLeverOn("b1_stable_prefix");
@@ -19354,6 +19430,9 @@ ${c.priorResearch}`;
     // Tools this run has actually called — pinned into every later turn's selection
     // so a multi-step task never loses a tool it is mid-way through using.
     usedTools: /* @__PURE__ */ new Set(),
+    // Tools an earlier turn of THIS conversation called or named — a follow-up ("yes, do it") keeps the tool the
+    // last reply used or promised, instead of losing it to the relevance cut (`conversationPins.ts`).
+    conversationPinnedTools: conversationPinnedTools(convo, catalogToolNames),
     systemPrompt,
     metadata,
     recalled,
@@ -19693,7 +19772,7 @@ function callPreflight(run) {
     run.pending.forget(rawCall.id);
     let call2 = rawCall;
     {
-      const aliased = resolveToolAlias(call2.name);
+      const aliased = resolveCallName(call2.name, toolNameSet(catalogToolNames, (n2) => n2));
       if (aliased !== call2.name) call2 = { ...call2, name: aliased };
     }
     if (isRouterTool(call2.name)) {
@@ -20449,12 +20528,19 @@ function surfaceRequired(run, naming) {
   const base = isCappedToolRole(run.policy.phase) ? run.alwaysAdvertised.filter((n2) => !naming().unnamed.has(n2) && !naming().promptOnly.has(n2)) : run.alwaysAdvertised;
   return new Set(offersHandOff(run.policy) && run.canAskUser ? [...base, HAND_OFF_TOOL] : base);
 }
+function selectionPins(run, roleKeep, required) {
+  const role = run.policy.phase;
+  const conversation = run.conversationPinnedTools ?? [];
+  const capKeeps = isCappedToolRole(role) && conversation.length > 0 ? new Set(roleCappedSelection(role, run.catalogToolNames, roleKeep, required).required) : void 0;
+  const kept = capKeeps ? conversation.filter((n2) => capKeeps.has(n2)) : conversation;
+  return [.../* @__PURE__ */ new Set([...kept, ...run.usedTools])];
+}
 function brainPlatformTools(run) {
   let naming;
   const named = () => naming ??= { unnamed: unnamedVocabulary(run), promptOnly: promptOnlyNamed(run) };
   let cappedMenu;
   const traceUnadvertised = (raw, step) => {
-    const name = resolveToolAlias(raw);
+    const name = resolveCallName(raw, toolNameSet(run.catalogToolNames, (n2) => n2));
     if (!cappedMenu || cappedMenu.step !== step || cappedMenu.names.has(name) || isRouterTool(name) || !run.catalogToolNames.includes(name)) return;
     traceRouted(run.c, step, "direct", name);
   };
@@ -20484,7 +20570,9 @@ function brainPlatformTools(run) {
         return [...catalog, ...conversational.filter((t) => !names.has(t.function.name))];
       },
       get selection() {
-        return { query: run.requestQuery, limit: DEFAULT_TOOL_LIMIT, capRequired: true, role: run.policy.phase, roleKeep: studioToolsIn(run.catalogToolNames), rank: (tools, query) => relevantTools(tools, query), pinned: [...run.usedTools], required: surfaceRequired(run, named) };
+        const required = surfaceRequired(run, named);
+        const roleKeep = studioToolsIn(run.catalogToolNames);
+        return { query: run.requestQuery, limit: DEFAULT_TOOL_LIMIT, capRequired: true, role: run.policy.phase, roleKeep, rank: (tools, query) => relevantTools(tools, query), pinned: selectionPins(run, roleKeep, required), required };
       },
       // ONE cap on a result: the Brain's own, applied inside `callRunner` (`trimToolResult`, by LINE, sized to the serving
       // model's window). The agent's per-tool cap would cut the already budgeted text a second time and drop its paging fields.
