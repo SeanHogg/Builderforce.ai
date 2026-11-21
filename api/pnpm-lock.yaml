@@ -30,8 +30,8 @@ importers:
         specifier: ^2026.8.0
         version: 2026.8.0
       '@seanhogg/builderforce-webcontainers':
-        specifier: ^2026.11.7
-        version: 2026.11.7(@typescript/typescript6@6.0.2)
+        specifier: ^2026.11.9
+        version: 2026.11.9(@typescript/typescript6@6.0.2)
       drizzle-orm:
         specifier: ^0.45.4
         version: 0.45.4(@cloudflare/workers-types@4.20260313.1)(@electric-sql/pglite@0.5.15)(@neondatabase/serverless@0.10.4)(@types/pg@8.11.6)(gel@2.2.0)
@@ -644,8 +644,8 @@ packages:
     resolution: {integrity: sha512-ZTFmbtt3baa8nHP7SwtkhayOH3Ls13jNSvAzOYPso9Gz6Non5EVmUYmS29c8LQwoOMmJjJmCSH/P5juv+xLMlQ==}
     engines: {node: '>=18'}
 
-  '@seanhogg/builderforce-webcontainers-core@2026.11.7':
-    resolution: {integrity: sha512-0/opTisQni9znXdbwi5NC88dQiHsDZBfUOLhhIBKYr+hGPoLftikyuPVtNfo6oS5zGo2N0nDH/Q4lawFMpUGRA==}
+  '@seanhogg/builderforce-webcontainers-core@2026.11.9':
+    resolution: {integrity: sha512-NoAYkMxuO3Hk5fxsmNMgXlDcNrdVRtsCIHcQcjHAcqd65x/6SjVf4NEIUDb9bblJiIlc8QOJiS4ii4gGGhgi+A==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
       typescript: '>=5.0.0 <7'
@@ -653,8 +653,8 @@ packages:
       typescript:
         optional: true
 
-  '@seanhogg/builderforce-webcontainers@2026.11.7':
-    resolution: {integrity: sha512-K05DtPeIZp3T2a4TLlJ5PuzVdVMHPgO+6YYSiOl+7dFyie6uPMKkrtPQzH12xJGeZu5lq7oUlGn+LwUCJdKpdQ==}
+  '@seanhogg/builderforce-webcontainers@2026.11.9':
+    resolution: {integrity: sha512-vb/Q+HZVutrWBr9TVbVU8LHmBpNbUKp3+uzr+xqIWNXDPIC3VQotmOZR3pAt/KKQQA85RyYAVj1nA00jIav0QQ==}
     engines: {node: '>=18.0.0'}
     hasBin: true
 
@@ -1864,16 +1864,16 @@ snapshots:
 
   '@seanhogg/builderforce-quality@2026.8.0': {}
 
-  '@seanhogg/builderforce-webcontainers-core@2026.11.7(@typescript/typescript6@6.0.2)':
+  '@seanhogg/builderforce-webcontainers-core@2026.11.9(@typescript/typescript6@6.0.2)':
     dependencies:
       es-module-lexer: 1.7.0
       fflate: 0.8.3
     optionalDependencies:
       typescript: '@typescript/typescript6@6.0.2'
 
-  '@seanhogg/builderforce-webcontainers@2026.11.7(@typescript/typescript6@6.0.2)':
+  '@seanhogg/builderforce-webcontainers@2026.11.9(@typescript/typescript6@6.0.2)':
     dependencies:
-      '@seanhogg/builderforce-webcontainers-core': 2026.11.7(@typescript/typescript6@6.0.2)
+      '@seanhogg/builderforce-webcontainers-core': 2026.11.9(@typescript/typescript6@6.0.2)
       esbuild-wasm: 0.24.2
       node-forge: 1.4.3
     transitivePeerDependencies:
