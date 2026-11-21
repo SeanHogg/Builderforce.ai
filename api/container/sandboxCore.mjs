@@ -29,7 +29,7 @@ import { bootJobIdPrefix, createJobTable, isolationProbe, killTree, provisionShe
 import { createWorkspaceClient } from './workspaceClient.mjs';
 import { SandboxRepoSizeError, absorbHead, assertRepoWithinCeiling, bundleCreateArgs, cloneWorkspace, createMirror, disposeMirror, gitAuthOf, importBundle, mirrorGitCommand, publishHead, safeRef, scrubCheckoutCredentials, syncWorkspace } from './sandboxGit.mjs';
 
-export { absorbHead, bundleCreateArgs, cloneWorkspace, gitAuthOf, importBundle, mirrorGitCommand, provisionShellUser, releaseShellWorkspace, scrubCheckoutCredentials, shellEnv, shellInvocation, shellUser, spawnShell, sweepShellProcesses, teardownShellSync, isolationProbe, TRUSTED_PATH, trustedBinary, verifyShellIsolation };
+export { SandboxRepoSizeError, absorbHead, assertRepoWithinCeiling, bundleCreateArgs, cloneWorkspace, gitAuthOf, importBundle, mirrorGitCommand, provisionShellUser, releaseShellWorkspace, scrubCheckoutCredentials, shellEnv, shellInvocation, shellUser, spawnShell, sweepShellProcesses, teardownShellSync, isolationProbe, TRUSTED_PATH, trustedBinary, verifyShellIsolation };
 
 const COMMAND_TIMEOUT_MS = 10 * 60 * 1000; // a build/test step may legitimately take minutes
 
