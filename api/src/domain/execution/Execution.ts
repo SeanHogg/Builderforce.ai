@@ -1,5 +1,6 @@
 import { ExecutionId, TaskId, AgentId, TenantId, AgentHostId, ExecutionStatus } from '../shared/types';
 import { ValidationError } from '../shared/errors';
+import { EXECUTION_TERMINAL_STATUSES } from '../shared/terminalStatus';
 
 export interface ExecutionProps {
   id:           ExecutionId;
@@ -39,11 +40,7 @@ export interface ExecutionProps {
  * transition guards, `cancel()` and callers deciding whether a run is already
  * concluded all agree on what "terminal" means.
  */
-export const TERMINAL_EXECUTION_STATUSES: readonly ExecutionStatus[] = [
-  ExecutionStatus.COMPLETED,
-  ExecutionStatus.FAILED,
-  ExecutionStatus.CANCELLED,
-];
+export const TERMINAL_EXECUTION_STATUSES: readonly ExecutionStatus[] = EXECUTION_TERMINAL_STATUSES;
 
 /**
  * Execution aggregate root.

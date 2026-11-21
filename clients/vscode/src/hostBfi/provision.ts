@@ -75,7 +75,7 @@ export function createModelProvisioner(deps: ProvisionDeps): ModelProvisioner {
 
   const run = async (): Promise<void> => {
     if (!deps.available()) return;
-    const rows = localCatalogFor("bfi").filter((row) => row.source.kind === "hf-file");
+    const rows = localCatalogFor("bfi").filter((row) => row.format === "gguf" && row.source.kind === "hf-file");
     const states = await Promise.all(rows.map((row) => deps.store.status(row.ref)));
     // Anything already cached (a picker download) is the user's choice: nothing to do.
     if (states.includes("ready")) return;

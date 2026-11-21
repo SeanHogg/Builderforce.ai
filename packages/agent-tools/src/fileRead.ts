@@ -9,6 +9,7 @@
  */
 
 import type { CapabilityProvider, RepoReadResult } from "./capabilities.js";
+import { isGzipPath, latin1Bytes, readGzipText } from "./gzipText.js";
 import { readJsonKey } from "./jsonKeyRead.js";
 import { fileWindowNote, windowFileContent } from "./fileWindow.js";
 import { extractSymbols } from "./symbols.js";
@@ -104,7 +105,9 @@ export async function readOneFile(
 ): Promise<Record<string, unknown>> {
   const r = (await caps.repoRead!.readFile(path)) as RepoReadResult;
   if (!r.ok) return r as unknown as Record<string, unknown>;
-  if (opts.key) return readFileKey(r.path ?? path, r, opts.key);
+  const gzip = isGzipPath(r.path ?? path) && typeof r.content === "string" && r.content.length > 0;
+  if (gzip) r.content = await readGzipText(latin1Bytes(r.content!));
+  if (opts.key) return { ...readFileKey(r.path ?? path, r, opts.key), ...(gzip ? { decompressed: true } : {}) };
   const content = r.content ?? "";
 
   // B2 — outline-first: a FIRST whole-file read (no offset/limit) of a large file answers
@@ -171,6 +174,7 @@ export async function readOneFile(
     }
   }
   if (note) data.note = note;
+  if (gzip) data.decompressed = true;
   return data as unknown as Record<string, unknown>;
 }
 

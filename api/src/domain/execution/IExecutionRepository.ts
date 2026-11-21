@@ -27,7 +27,7 @@ export interface IExecutionRepository {
 }
 
 /** The terminal execution statuses: reachable only through {@link IExecutionRepository.land}. */
-export type TerminalStatus = ExecutionStatus.COMPLETED | ExecutionStatus.FAILED | ExecutionStatus.CANCELLED;
+export type TerminalStatus = ExecutionStatus.COMPLETED | ExecutionStatus.FAILED | ExecutionStatus.CANCELLED | ExecutionStatus.NO_CHANGES;
 
 /** The statuses a run can still LAND from - the complement of {@link TerminalStatus}, so a `from` list can never name a terminal one. */
 export type NonTerminalStatus = Exclude<ExecutionStatus, TerminalStatus>;

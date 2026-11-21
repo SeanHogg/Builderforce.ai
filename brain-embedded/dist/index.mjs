@@ -43,7 +43,7 @@ import {
   servedIdentity,
   servedOnDevice,
   webGpuSupport
-} from "./chunk-W4TM6V42.mjs";
+} from "./chunk-JSRALGOH.mjs";
 import {
   bounded,
   budget,
@@ -373,7 +373,7 @@ import {
   withAdvisory,
   withProvenanceMetadata,
   workFiledNotStaffedVerdict
-} from "./chunk-R53BPZVW.mjs";
+} from "./chunk-QRXD6NHP.mjs";
 import {
   ASK_USER_TOOL,
   ASK_USER_TOOL_SPEC,
@@ -22898,14 +22898,16 @@ function isInjectedTurnMetadata(metadata) {
   let meta = metadata;
   if (typeof meta === "string") {
     if (!meta.includes(INJECTED_TURN_META_KEY)) return false;
-    try {
-      meta = JSON.parse(meta);
-    } catch (e) {
-      console.warn(`BuilderForce injected turn: row metadata is not JSON (${errorMessage(e)}) \u2014 read as the person's own turn`);
-      return false;
-    }
+    meta = parseMetadataJson(meta);
   }
   return typeof meta === "object" && meta !== null && meta[INJECTED_TURN_META_KEY] === true;
+}
+function parseMetadataJson(text2) {
+  try {
+    return JSON.parse(text2);
+  } catch {
+    return null;
+  }
 }
 
 // src/useChatTranscript.ts

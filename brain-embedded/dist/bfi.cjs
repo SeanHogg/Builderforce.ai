@@ -347,6 +347,30 @@ function bonsai(size, params, bytes, contextTokens, layers, cpuMinMemory) {
     requires: { minBufferBytes: WEBGPU_DEFAULT_BINDING_BYTES, cpu: { minDeviceMemoryBytes: cpuMinMemory } }
   };
 }
+var ONNX_BONSAI = [
+  { size: "1.7B", params: 17e8, bytes: 9e8, file: "Bonsai-1.7B-q4-ONNX" },
+  { size: "4B", params: 4e9, bytes: 22e8, file: "Bonsai-4B-q4f16-ONNX" },
+  { size: "8B", params: 819e7, bytes: 44e8, file: "Bonsai-8B-q4f16-ONNX" }
+];
+function onnxBonsai(row) {
+  const model = row.file;
+  return {
+    ref: formatLocalModelRef("onnx", model),
+    format: "onnx",
+    runtime: "onnx",
+    model,
+    label: `Bonsai ${row.size} (ONNX q4)`,
+    family: "bonsai",
+    params: row.params,
+    bytes: row.bytes,
+    contextTokens: 32768,
+    tools: false,
+    uses: ["chat"],
+    recommended: false,
+    source: { kind: "hf-file", repo: "prism-ml/Bonsai-ONNX", file: row.file },
+    requires: { minBufferBytes: WEBGPU_DEFAULT_BINDING_BYTES }
+  };
+}
 function webllm(entry) {
   const binding = entry.lowResource ? WEBGPU_DEFAULT_BINDING_BYTES : WEBLLM_FULL_BINDING_BYTES;
   return {
@@ -377,6 +401,7 @@ var LOCAL_MODEL_CATALOG = [
   bonsai("1.7B", 17e8, 248302272, 32768, 28, 2 * GIB),
   bonsai("4B", 4e9, 572270624, 32768, 36, 4 * GIB),
   bonsai("8B", 819e7, 1158654496, 65536, 36, 8 * GIB),
+  ...ONNX_BONSAI.map(onnxBonsai),
   ...WEBLLM_CATALOG.map(webllm)
 ];
 function isLocalChatModel(row) {

@@ -139,6 +139,38 @@ function bonsai(
 /** A WebLLM prebuilt, from its generated entry (`webllmCatalog.generated.ts`). A row not
  *  `low_resource_required` asks for WebLLM's full 1 GiB binding; a build stating its own
  *  buffer need (`buffer_size_required_bytes`) asks for at least that. */
+/** 4-bit ONNX Bonsai builds. The engine is {@link ENGINE_BY_FORMAT}, not the GGUF provisioner. */
+const ONNX_BONSAI: ReadonlyArray<{ size: string; params: number; bytes: number; file: string }> = [
+  { size: '1.7B', params: 1_700_000_000, bytes: 900_000_000, file: 'Bonsai-1.7B-q4-ONNX' },
+  { size: '4B', params: 4_000_000_000, bytes: 2_200_000_000, file: 'Bonsai-4B-q4f16-ONNX' },
+  { size: '8B', params: 8_190_000_000, bytes: 4_400_000_000, file: 'Bonsai-8B-q4f16-ONNX' },
+];
+
+function onnxBonsai(row: (typeof ONNX_BONSAI)[number]): LocalCatalogModel {
+  const model = row.file;
+  return {
+    ref: formatLocalModelRef('webllm', model),
+    format: 'onnx',
+    runtime: 'webllm',
+    model,
+    label: `Bonsai ${row.size} (ONNX q4)`,
+    family: 'bonsai',
+    params: row.params,
+    bytes: row.bytes,
+    contextTokens: 32_768,
+    tools: false,
+    uses: ['chat'],
+    recommended: false,
+    source: { kind: 'hf-file', repo: 'prism-ml/Bonsai-ONNX', file: row.file },
+    requires: { minBufferBytes: WEBGPU_DEFAULT_BINDING_BYTES },
+  };
+}
+
+/** The engine a catalog row runs on. GGUF stays on bfi. ONNX does not. */
+export function localEngineFor(row: { format?: LocalModelFormat; runtime: string }): 'bfi' | 'onnx' | string {
+  return row.format ? ENGINE_BY_FORMAT[row.format] : row.runtime;
+}
+
 function webllm(entry: WebLlmCatalogEntry): LocalCatalogModel {
   const binding = entry.lowResource ? WEBGPU_DEFAULT_BINDING_BYTES : WEBLLM_FULL_BINDING_BYTES;
   return {
@@ -171,6 +203,7 @@ export const LOCAL_MODEL_CATALOG: readonly LocalCatalogModel[] = [
   bonsai('1.7B', 1_700_000_000, 248_302_272, 32_768, 28, 2 * GIB),
   bonsai('4B', 4_000_000_000, 572_270_624, 32_768, 36, 4 * GIB),
   bonsai('8B', 8_190_000_000, 1_158_654_496, 65_536, 36, 8 * GIB),
+  ...ONNX_BONSAI.map(onnxBonsai),
   ...WEBLLM_CATALOG.map(webllm),
 ];
 

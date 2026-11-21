@@ -6791,6 +6791,30 @@ function bonsai(size, params, bytes, contextTokens, layers, cpuMinMemory) {
     requires: { minBufferBytes: WEBGPU_DEFAULT_BINDING_BYTES, cpu: { minDeviceMemoryBytes: cpuMinMemory } }
   };
 }
+var ONNX_BONSAI = [
+  { size: "1.7B", params: 17e8, bytes: 9e8, file: "Bonsai-1.7B-q4-ONNX" },
+  { size: "4B", params: 4e9, bytes: 22e8, file: "Bonsai-4B-q4f16-ONNX" },
+  { size: "8B", params: 819e7, bytes: 44e8, file: "Bonsai-8B-q4f16-ONNX" }
+];
+function onnxBonsai(row) {
+  const model = row.file;
+  return {
+    ref: formatLocalModelRef("onnx", model),
+    format: "onnx",
+    runtime: "onnx",
+    model,
+    label: `Bonsai ${row.size} (ONNX q4)`,
+    family: "bonsai",
+    params: row.params,
+    bytes: row.bytes,
+    contextTokens: 32768,
+    tools: false,
+    uses: ["chat"],
+    recommended: false,
+    source: { kind: "hf-file", repo: "prism-ml/Bonsai-ONNX", file: row.file },
+    requires: { minBufferBytes: WEBGPU_DEFAULT_BINDING_BYTES }
+  };
+}
 function webllm(entry) {
   const binding = entry.lowResource ? WEBGPU_DEFAULT_BINDING_BYTES : WEBLLM_FULL_BINDING_BYTES;
   return {
@@ -6821,6 +6845,7 @@ var LOCAL_MODEL_CATALOG = [
   bonsai("1.7B", 17e8, 248302272, 32768, 28, 2 * GIB),
   bonsai("4B", 4e9, 572270624, 32768, 36, 4 * GIB),
   bonsai("8B", 819e7, 1158654496, 65536, 36, 8 * GIB),
+  ...ONNX_BONSAI.map(onnxBonsai),
   ...WEBLLM_CATALOG.map(webllm)
 ];
 function isLocalChatModel(row) {
@@ -10258,6 +10283,24 @@ function writeAllowed(scope, paths, target2, roleName) {
   return { allowed: false, reason: `${roleName} may only write under ${where}` };
 }
 
+// ../packages/agent-tools/src/gzipText.ts
+async function readGzipText(bytes) {
+  const stream = new DecompressionStream("gzip");
+  const writer = stream.writable.getWriter();
+  await writer.write(bytes);
+  await writer.close();
+  const decoded = await new Response(stream.readable).arrayBuffer();
+  return new TextDecoder().decode(decoded);
+}
+function latin1Bytes(content) {
+  const bytes = new Uint8Array(content.length);
+  for (let i = 0; i < content.length; i++) bytes[i] = content.charCodeAt(i) & 255;
+  return bytes;
+}
+function isGzipPath(path) {
+  return path.toLowerCase().endsWith(".gz");
+}
+
 // ../packages/agent-tools/src/jsonKeyRead.ts
 var JSON_KEY_READ_MAX_CHARS = 12e3;
 var MAX_LISTED_KEYS = 60;
@@ -11432,7 +11475,9 @@ var isMarkdown = (path) => /\.mdx?$/i.test(path);
 async function readOneFile(path, opts, caps, leverOn2) {
   const r = await caps.repoRead.readFile(path);
   if (!r.ok) return r;
-  if (opts.key) return readFileKey(r.path ?? path, r, opts.key);
+  const gzip = isGzipPath(r.path ?? path) && typeof r.content === "string" && r.content.length > 0;
+  if (gzip) r.content = await readGzipText(latin1Bytes(r.content));
+  if (opts.key) return { ...readFileKey(r.path ?? path, r, opts.key), ...gzip ? { decompressed: true } : {} };
   const content = r.content ?? "";
   if (opts.offset === void 0 && opts.limit === void 0 && outlineFirstApplies(content, leverOn2) && r.truncated !== true) {
     const symbols = extractSymbols(path, content).slice(0, 150).map((s) => `L${s.line} ${s.kind} ${s.name}${s.exported && s.kind !== "heading" ? " (export)" : ""}`);
@@ -11476,6 +11521,7 @@ async function readOneFile(path, opts, caps, leverOn2) {
     }
   }
   if (note) data.note = note;
+  if (gzip) data.decompressed = true;
   return data;
 }
 async function readManyFiles(paths, opts, caps, leverOn2) {
@@ -38458,14 +38504,16 @@ function isInjectedTurnMetadata(metadata) {
   let meta = metadata;
   if (typeof meta === "string") {
     if (!meta.includes(INJECTED_TURN_META_KEY)) return false;
-    try {
-      meta = JSON.parse(meta);
-    } catch (e) {
-      console.warn(`BuilderForce injected turn: row metadata is not JSON (${errorMessage(e)}) \u2014 read as the person's own turn`);
-      return false;
-    }
+    meta = parseMetadataJson(meta);
   }
   return typeof meta === "object" && meta !== null && meta[INJECTED_TURN_META_KEY] === true;
+}
+function parseMetadataJson(text2) {
+  try {
+    return JSON.parse(text2);
+  } catch {
+    return null;
+  }
 }
 
 // src/useChatTranscript.ts

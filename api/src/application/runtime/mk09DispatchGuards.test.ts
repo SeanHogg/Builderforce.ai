@@ -13,6 +13,8 @@ import {
 } from './handoffStartTimeout';
 import { gitHubErrorCode, providerAuthFromText, providerAuthOutcome, PROVIDER_AUTH_FAILED } from './providerAuthFailure';
 import { mergeabilityRecord, parsePrMergeability, withPrMergeability } from './prMergeability';
+import { emptyDiffTerminalStatus } from './emptyDiffFinalize';
+import { ExecutionStatus } from '../../domain/shared/types';
 import {
   AGENT_BUDGET_EXHAUSTED,
   DEFAULT_CLOUD_AGENT_BUDGET_MILLICENTS,
@@ -49,6 +51,14 @@ describe('MK-09-D2 dropped CloudRunner handoff', () => {
       nowMs: T + HANDOFF_START_TIMEOUT_MS + 5_000,
       updatedAtMs: T + 30_000,
     })).toEqual({ fail: false });
+  });
+});
+
+describe('MK-09-W5 empty-diff finalize', () => {
+  it('marks an empty, non-cancelled run no_changes and leaves a write or a cancel alone', () => {
+    expect(emptyDiffTerminalStatus({ writtenCount: 0, cancelled: false })).toBe(ExecutionStatus.NO_CHANGES);
+    expect(emptyDiffTerminalStatus({ writtenCount: 0, cancelled: true })).toBeNull();
+    expect(emptyDiffTerminalStatus({ writtenCount: 2, cancelled: false })).toBeNull();
   });
 });
 

@@ -1734,6 +1734,24 @@ function writeAllowed(scope, paths, target, roleName) {
   return { allowed: false, reason: `${roleName} may only write under ${where}` };
 }
 
+// ../packages/agent-tools/src/gzipText.ts
+async function readGzipText(bytes) {
+  const stream = new DecompressionStream("gzip");
+  const writer = stream.writable.getWriter();
+  await writer.write(bytes);
+  await writer.close();
+  const decoded = await new Response(stream.readable).arrayBuffer();
+  return new TextDecoder().decode(decoded);
+}
+function latin1Bytes(content) {
+  const bytes = new Uint8Array(content.length);
+  for (let i = 0; i < content.length; i++) bytes[i] = content.charCodeAt(i) & 255;
+  return bytes;
+}
+function isGzipPath(path) {
+  return path.toLowerCase().endsWith(".gz");
+}
+
 // ../packages/agent-tools/src/jsonKeyRead.ts
 var JSON_KEY_READ_MAX_CHARS = 12e3;
 var MAX_LISTED_KEYS = 60;
@@ -2890,7 +2908,9 @@ var isMarkdown = (path) => /\.mdx?$/i.test(path);
 async function readOneFile(path, opts, caps, leverOn) {
   const r = await caps.repoRead.readFile(path);
   if (!r.ok) return r;
-  if (opts.key) return readFileKey(r.path ?? path, r, opts.key);
+  const gzip = isGzipPath(r.path ?? path) && typeof r.content === "string" && r.content.length > 0;
+  if (gzip) r.content = await readGzipText(latin1Bytes(r.content));
+  if (opts.key) return { ...readFileKey(r.path ?? path, r, opts.key), ...gzip ? { decompressed: true } : {} };
   const content = r.content ?? "";
   if (opts.offset === void 0 && opts.limit === void 0 && outlineFirstApplies(content, leverOn) && r.truncated !== true) {
     const symbols = extractSymbols(path, content).slice(0, 150).map((s) => `L${s.line} ${s.kind} ${s.name}${s.exported && s.kind !== "heading" ? " (export)" : ""}`);
@@ -2934,6 +2954,7 @@ async function readOneFile(path, opts, caps, leverOn) {
     }
   }
   if (note) data.note = note;
+  if (gzip) data.decompressed = true;
   return data;
 }
 async function readManyFiles(paths, opts, caps, leverOn) {
@@ -13100,4 +13121,4 @@ export {
   toolCallArgBytes,
   createComposingActivity
 };
-//# sourceMappingURL=chunk-R53BPZVW.mjs.map
+//# sourceMappingURL=chunk-QRXD6NHP.mjs.map

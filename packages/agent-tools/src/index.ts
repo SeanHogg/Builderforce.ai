@@ -17,6 +17,7 @@ export * from "./editBalance.js";
 // by side in one working tree.
 export * from "./workstreamScope.js";
 export * from "./writeScope.js";
+export * from "./gzipText.js";
 export * from "./jsonKeyRead.js";
 export * from "./glob.js";
 export * from "./tool.js";

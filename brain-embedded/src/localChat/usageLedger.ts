@@ -57,6 +57,8 @@ export interface RunUsageValue {
   role?: string;
   /** The run's pipeline route and the router's score, when the run was routed. */
   pipelineRoute?: UsagePipelineRoute;
+  /** Which stage-model policy the run used (`role` or `tip`). */
+  policy?: 'role' | 'tip';
   routeScore?: number;
   /** How the PreFetch gate left the run's turn (`metadata.gateRoute`) — the route
    *  report's gate column. An ANSWERED turn is its `deterministic` row instead. */
@@ -109,6 +111,7 @@ export interface RecordRunUsageInput {
   mode?: 'chat' | 'work';
   role?: string;
   pipelineRoute?: UsagePipelineRoute;
+  policy?: 'role' | 'tip';
   routeScore?: number;
   gateRoute?: 'prefetch' | 'llm';
   runId?: string;
@@ -138,10 +141,11 @@ export interface RunUsageLedger {
 }
 
 /** The call's role, pipeline route, score and run id — only the fields that are set and valid. */
-function runAttribution(input: Pick<RecordRunUsageInput, 'role' | 'pipelineRoute' | 'routeScore' | 'gateRoute' | 'runId'>): Pick<RunUsageValue, 'role' | 'pipelineRoute' | 'routeScore' | 'gateRoute' | 'runId'> {
+function runAttribution(input: Pick<RecordRunUsageInput, 'role' | 'pipelineRoute' | 'policy' | 'routeScore' | 'gateRoute' | 'runId'>): Pick<RunUsageValue, 'role' | 'pipelineRoute' | 'policy' | 'routeScore' | 'gateRoute' | 'runId'> {
   return {
     ...(input.role ? { role: input.role } : {}),
     ...(input.pipelineRoute === 'full' || input.pipelineRoute === 'quick' ? { pipelineRoute: input.pipelineRoute } : {}),
+    ...(input.policy === 'role' || input.policy === 'tip' ? { policy: input.policy } : {}),
     ...(input.gateRoute === 'prefetch' || input.gateRoute === 'llm' ? { gateRoute: input.gateRoute } : {}),
     ...(typeof input.routeScore === 'number' && Number.isFinite(input.routeScore) ? { routeScore: input.routeScore } : {}),
     ...(input.runId ? { runId: input.runId } : {}),

@@ -46,6 +46,8 @@ import {
 import {
   clientPinOf,
   isServableLocalModel,
+  localCatalogModel,
+  localEngineFor,
   localRuntime,
   formatLocalModelRef,
   type ByoOrderQuery,
@@ -79,6 +81,17 @@ import { unauthorizedError, type ModelRoute, type RouteRequest } from "./modelRo
 import { createOnDeviceTasks } from "./onDeviceTasks";
 
 export type { ModelRoute, RouteRequest } from "./modelRoute";
+
+/**
+ * The engine for a catalog ref. GGUF and ONNX both go through this one function
+ * (`ENGINE_BY_FORMAT`). bfi provisioning stays on GGUF rows only.
+ */
+export function routeCatalogEngine(ref: string): "bfi" | "onnx" | null {
+  const row = localCatalogModel(ref);
+  if (!row?.format) return null;
+  const engine = localEngineFor(row);
+  return engine === "bfi" || engine === "onnx" ? engine : null;
+}
 export { onDeviceModelAvailable } from "./onDeviceTasks";
 
 /**

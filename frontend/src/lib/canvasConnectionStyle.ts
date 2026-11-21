@@ -25,7 +25,10 @@
  * degradation `STENCIL_SHAPES` is a single list to prevent.
  */
 
-import { MarkerType, type Edge, type EdgeMarker } from '@xyflow/react';
+// Types only: this module is reached from the root layout (Sidebar → SessionList → canvasBoard),
+// and the `MarkerType` VALUE import put all of React Flow + d3 in every Worker route function.
+// `EdgeMarker['type']` accepts React Flow's own marker strings, so the values below are its.
+import type { Edge, EdgeMarker } from '@xyflow/react';
 
 /** How the stroke is drawn. */
 export const CONNECTION_LINES = ['solid', 'dashed', 'dotted'] as const;
@@ -85,8 +88,8 @@ const DASH: Record<ConnectionLine, string | undefined> = {
   dotted: '1 5',
 };
 
-const closed: EdgeMarker = { type: MarkerType.ArrowClosed, width: 16, height: 16 };
-const open: EdgeMarker = { type: MarkerType.Arrow, width: 18, height: 18 };
+const closed: EdgeMarker = { type: 'arrowclosed', width: 16, height: 16 };
+const open: EdgeMarker = { type: 'arrow', width: 18, height: 18 };
 
 /**
  * The React Flow props one style produces.

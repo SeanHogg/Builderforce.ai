@@ -48,6 +48,25 @@ function costCell(totals: RouteTotals, t: Translate): string {
   return t("{0} + {1} unpriced", usd(totals.costMc), unpriced);
 }
 
+/** Ledger rows grouped by the stage-model policy the run recorded. */
+export function renderPolicyGroups(rows: ReadonlyArray<{ policy?: string }>, t: Translate): string[] {
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    const policy = row.policy === "tip" || row.policy === "role" ? row.policy : "unset";
+    counts.set(policy, (counts.get(policy) ?? 0) + 1);
+  }
+  const lines = [`## ${t("Model policy")}`, "", `| ${t("Policy")} | ${t("Runs")} |`, "| --- | ---: |"];
+  for (const policy of ["role", "tip", "unset"]) {
+    if (counts.has(policy)) lines.push(`| ${policy} | ${counts.get(policy)} |`);
+  }
+  return lines;
+}
+
+/** Where the route report is written: the diagnostics folder, never a call-site literal. */
+export function routeReportFile(diagnosticsDir: string): string {
+  return `${diagnosticsDir.replace(/[/\\\\]+$/, "")}/pipeline-route-report.md`;
+}
+
 /** The report as Markdown. `gate` adds the PreFetch gate column. */
 export function renderRouteReport(report: RouteReport, days: number, t: Translate, gate?: GateReport): string {
   const lines: string[] = [`# ${t("Pipeline route report — last {0} days", days)}`, ""];
@@ -87,6 +106,7 @@ export function renderRouteReport(report: RouteReport, days: number, t: Translat
     suggestionLine(report, t),
   );
   if (gate) lines.push("", ...renderGateColumn(gate, t));
+  if (report.policyRows) lines.push("", ...renderPolicyGroups(report.policyRows, t));
   return `${lines.join("\n")}\n`;
 }
 

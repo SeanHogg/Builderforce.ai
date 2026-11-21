@@ -19,7 +19,7 @@ import {
   type TaskRepoStatus,
 } from '@/lib/builderforceApi';
 import { unifiedDiff } from '@/lib/unifiedDiff';
-import { LivePreviewPanel } from '@/components/preview/LivePreviewPanel';
+import { LazyLivePreviewPanel as LivePreviewPanel } from '@/components/preview/LazyLivePreviewPanel';
 import { RoleGate } from '@/components/RoleGate';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { RunAgentControl } from '../task/RunAgentControl';

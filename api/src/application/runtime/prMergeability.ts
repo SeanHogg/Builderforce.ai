@@ -2,6 +2,8 @@
  * MK-09-W6 — whether an opened pull request merges cleanly against its base.
  * Recorded on the execution payload (`prMergeability`) when finalize opens or adopts a PR.
  */
+import { reportCaughtError } from '../observability/caughtErrorReporter';
+
 export interface PrMergeabilityRecord {
   mergeable: boolean | null;
   mergeableState: string | null;
@@ -26,7 +28,10 @@ export function withPrMergeability(payload: string | null | undefined, record: P
     try {
       const parsed = JSON.parse(payload) as unknown;
       if (parsed && typeof parsed === 'object') obj = parsed as Record<string, unknown>;
-    } catch { /* a non-JSON payload is replaced by the stamp */ }
+    } catch (error) {
+      // A non-JSON payload is replaced by the stamp — reported, since it means the run's payload was already corrupt.
+      reportCaughtError(error, { source: 'application/runtime/prMergeability.ts', operation: 'withPrMergeability', level: 'warning' });
+    }
   }
   obj.prMergeability = record;
   return JSON.stringify(obj);

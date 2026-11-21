@@ -6,7 +6,7 @@
  * Container executor's `container-op` endpoint.
  */
 import { integrationCredentialSecret } from '../integrations/integrationCredentialSecret';
-import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { reportCaughtError, reportedFallback } from '../observability/caughtErrorReporter';
 import { and, eq } from 'drizzle-orm';
 import { recordRunReflection } from '../skills/skillReflection';
 import { type TicketRepoContext } from '../repos/commitFileAsPendingChange';
@@ -16,6 +16,8 @@ import { postRepoPrComment } from '../repos/postPrComment';
 import { openTaskRepoSetPullRequests } from '../repos/openTaskPullRequest';
 import { RUN_CANCELLED_NOTICE } from '@builderforce/agent-run';
 import { contributeTextToProjectEverminds } from '../llm/projectEvermind';
+import { emptyDiffTerminalStatus } from './emptyDiffFinalize';
+import { ExecutionStatus } from '../../domain/shared/types';
 import { finalizeLearnWeight, runProducedOutput } from './outcomeScore';
 import { recordCloudToolEvent } from './cloudToolEvents';
 import { openOrAdoptRunPr } from './openOrAdoptRunPr';
@@ -66,7 +68,7 @@ export async function finalizeCloudRun(
     /** True when in-run branch CI reported success before finish (ticket #3092). */
     ciVerified?: boolean;
   },
-): Promise<{ ok: boolean; output: string }> {
+): Promise<{ ok: boolean; output: string; noChanges: boolean }> {
   const { tenantId, cloudAgentRef, executionId, taskRow, agentLabel, repoCtx, repoMiss, writtenPaths, finalOutput, cancelled } = args;
   const ciVerified = !!args.ciVerified;
   // A steer that arrived after the loop's last step is NOT released here: the row is
@@ -132,13 +134,17 @@ export async function finalizeCloudRun(
         const detail = await getPullRequestDetail(env, prRowId, new Date().toISOString(), {
           provider: repoCtx.provider, host: repoCtx.host, owner: repoCtx.owner, repo: repoCtx.repo,
           token: repoCtx.token, number: pr.number,
-        }).catch(() => null);
+        }).catch(reportedFallback(null, { source: 'application/runtime/cloudFinalize.ts', operation: 'finalizeCloudRun.pullRequestDetail', context: { tenantId, executionId } }));
         if (detail) {
           const record = mergeabilityRecord(detail);
-          const [payloadRow] = await db.select({ payload: executions.payload }).from(executions).where(eq(executions.id, executionId)).limit(1);
-          await db.update(executions).set({ payload: withPrMergeability(payloadRow?.payload ?? null, record) })
-            .where(eq(executions.id, executionId))
-            .catch((error) => reportCaughtError(error, { source: 'application/runtime/cloudFinalize.ts', operation: 'finalizeCloudRun.mergeability', context: { tenantId, executionId } }));
+          // The stamp is advisory: a failed read or write is reported and finalize carries on to the security step.
+          try {
+            const [payloadRow] = await db.select({ payload: executions.payload }).from(executions).where(eq(executions.id, executionId)).limit(1);
+            await db.update(executions).set({ payload: withPrMergeability(payloadRow?.payload ?? null, record) })
+              .where(eq(executions.id, executionId));
+          } catch (error) {
+            reportCaughtError(error, { source: 'application/runtime/cloudFinalize.ts', operation: 'finalizeCloudRun.mergeability', context: { tenantId, executionId } });
+          }
           await recordCloudToolEvent(db, {
             tenantId, cloudAgentRef, executionId,
             toolName: 'pr_mergeability', category: 'tool',
@@ -392,9 +398,16 @@ ${ciVerified
   // A CANCELLED run is deliberately left UNJUDGED (null): a person stopped it, which
   // says nothing about whether the ticket can succeed — the same reading the breaker
   // already takes of a cancellation, and of a platform eviction.
+  // MK-09-W5: nothing written and not cancelled is `no_changes`, not `completed`.
+  // The PR was already skipped (`open` requires writtenPaths.size > 0). Callers that
+  // settle the row must honour `noChanges` and must not overwrite this status.
+  const noChanges = emptyDiffTerminalStatus({ writtenCount: writtenPaths.size, cancelled }) != null;
   if (!cancelled) {
     await db.update(executions)
-      .set({ produced: runProducedOutput({ prOpened, producedChanges: writtenPaths.size > 0 }) })
+      .set({
+        produced: runProducedOutput({ prOpened, producedChanges: writtenPaths.size > 0 }),
+        ...(noChanges ? { status: ExecutionStatus.NO_CHANGES } : {}),
+      })
       .where(eq(executions.id, executionId))
       .catch((error) => reportCaughtError(error, { source: 'application/runtime/cloudFinalize.ts', operation: 'finalizeCloudRun', context: { logMessage: '[cloud-finalize] produced-stamp failed — this run will not count toward the autonomy breaker', details: { tenantId, executionId, taskId: taskRow.id, error } } }));
   }
@@ -416,5 +429,5 @@ ${ciVerified
 
   // The run opens its PR and ends: an unmerged PR is the designed outcome, never a failure — but
   // a PR that did not open after the run wrote code is (`prFailed`, reason in the output).
-  return { ok: !prFailed, output: output + unverifiedNote + prFailedNote };
+  return { ok: !prFailed, noChanges, output: output + unverifiedNote + prFailedNote };
 }

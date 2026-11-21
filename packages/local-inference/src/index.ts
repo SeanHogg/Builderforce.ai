@@ -71,12 +71,16 @@ export {
 export { localCatalogView } from './catalogView.js';
 export { BFI_CPU_LIMITS } from './bfiLimits.generated.js';
 export {
+  ENGINE_BY_FORMAT,
   LOCAL_MODEL_CATALOG,
   LOCAL_MODEL_USES,
   isLocalChatModel,
   localCatalogFor,
   localCatalogModel,
+  localEngineFor,
   type LocalCatalogModel,
+  type LocalModelEntry,
+  type LocalModelFormat,
   type LocalModelSource,
   type LocalModelUse,
 } from './catalog.js';

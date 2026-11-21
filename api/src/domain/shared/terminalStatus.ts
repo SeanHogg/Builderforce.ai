@@ -22,6 +22,8 @@ export const EXECUTION_TERMINAL_STATUSES: readonly ExecutionStatus[] = [
   ExecutionStatus.COMPLETED,
   ExecutionStatus.FAILED,
   ExecutionStatus.CANCELLED,
+  // MK-09 / GAP-W5: the run finished and wrote nothing — concluded, never resumed.
+  ExecutionStatus.NO_CHANGES,
 ];
 
 export const EXECUTION_TERMINAL_SET: ReadonlySet<string> = new Set<string>(EXECUTION_TERMINAL_STATUSES);
