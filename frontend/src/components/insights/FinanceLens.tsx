@@ -10,7 +10,14 @@ import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, t
 import { TrendChart } from '@/components/charts/TrendChart';
 import { BarChart } from '@/components/charts/BarChart';
 import { KpiGrid } from './LensShell';
-import { FinanceDashboardView } from '@/components/finance/FinanceDashboardView';
+import dynamic from 'next/dynamic';
+
+// Lazy: FinanceDashboardView -> WidgetCard -> useComponentDrill -> FinancePanelProvider
+// -> financePanels -> FinanceLens is an import cycle, so it must not load eagerly.
+const FinanceDashboardView = dynamic(
+  () => import('@/components/finance/FinanceDashboardView').then((m) => m.FinanceDashboardView),
+  { ssr: false },
+);
 import { useInsightFormat } from './format';
 import { useFormat } from "@/i18n/useFormat";
 import { statusColor, type StatusToneMap } from '@/lib/statusTone';

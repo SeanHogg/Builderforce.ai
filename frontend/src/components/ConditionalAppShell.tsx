@@ -21,7 +21,6 @@ import { DevexPanelBrainBridge } from './insights/DevexPanelBrainBridge';
 import { CanvasPanelBrainBridge } from './canvas/CanvasPanelBrainBridge';
 import ActivityTracker from './ActivityTracker';
 import { WebTranslationProvider } from './translation/WebTranslationProvider';
-import { McpExtensionsBridge } from './brain/McpExtensionsBridge';
 import { PlatformActionsBridge } from './brain/PlatformActionsBridge';
 import { ProjectScopeProvider } from '@/lib/ProjectScopeContext';
 import { CartProvider } from '@/lib/CartContext';
@@ -74,6 +73,15 @@ const FeedbackTab = dynamic(() => import('./feedback/FeedbackTab').then((m) => m
  * is on screen.
  */
 const WidgetBrainBridge = dynamic(() => import('./widgets/WidgetBrainBridge').then((m) => m.WidgetBrainBridge), { ssr: false });
+/**
+ * The MCP catalog bridge renders null, so `ssr: false` changes no markup. It is async
+ * because of what the EDGE build does with it: Next compiles edge entries with
+ * `asyncChunks: false`, so the `import()` behind its `runtime.*` tool router is
+ * inlined into the server bundle — the WebContainers runtime, esbuild-wasm and the
+ * app-detect contract rode in every route function of the Worker (~0.9 MB raw), for
+ * a bridge that only ever runs in the browser. See scripts/check-worker-size.mjs.
+ */
+const McpExtensionsBridge = dynamic(() => import('./brain/McpExtensionsBridge').then((m) => m.McpExtensionsBridge), { ssr: false });
 const ResumeWorkBridge = dynamic(() => import('./workspace/ResumeWorkBridge').then((m) => m.ResumeWorkBridge), { ssr: false });
 const LastBoardBridge = dynamic(() => import('./workspace/LastBoardBridge').then((m) => m.LastBoardBridge), { ssr: false });
 const PlatformAnnouncements = dynamic(() => import('./announcements/PlatformAnnouncements').then((m) => m.PlatformAnnouncements), { ssr: false });
