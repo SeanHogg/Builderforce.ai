@@ -9,6 +9,8 @@
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import type { KnowledgeGraphLabels } from '../labels';
 import { Panel } from '../Sheet';
+import { cssVar } from '../scene/themeColors';
+import { iconButtonStyle } from './CameraBar';
 import type { KnowledgeGraphSource, KnowledgePanelRenderer, ViewMode } from '../types';
 import { HEADER_PANELS, PANELS, type PanelId } from './panels';
 import type { PanelDef, PanelProps, SurfaceEnv } from './registry';
@@ -45,7 +47,9 @@ export function PanelToggle({ graph, env, labels, panel, onPanel, panels = PANEL
     if (collapsed) {
         return (
             <Menu
-                label={labels.surface.panelsLabel} active={items.some((i) => i.id === panel)} trigger={<>{labels.surface.panelsLabel}<span aria-hidden="true"> ▾</span></>}
+                label={labels.surface.panelsLabel} active={items.some((i) => i.id === panel)} title={labels.surface.panelsLabel} triggerLabel={labels.surface.panelsLabel}
+                triggerStyle={{ ...iconButtonStyle, ...(items.some((i) => i.id === panel) ? { background: cssVar('accent'), color: cssVar('onAccent') } : null) }}
+                trigger={<span aria-hidden="true">▤</span>}
                 items={items.map((i) => ({ ...i, selected: i.id === panel }))} onSelect={(id) => onPanel(id === panel ? null : (id as PanelId))}
             />
         );
