@@ -114,6 +114,20 @@ describe.each([['the shared host', 'preview.builderforce.ai'], ['an app host', A
     expectDocumentHeaders(res, host);
   });
 
+  // The gate reads the first value of a key; the worker must never see a second one it did not check.
+  it.each([
+    ['a repeated egress', '&egress=https%3A%2F%2Fevil.example'],
+    ['a repeated egress equal to the first', '&egress=https%3A%2F%2Fesm.sh'],
+    ['a repeated mode', '&mode=relay'],
+    ['a repeated report', `&report=${encodeURIComponent(CSP_REPORT_URL)}`],
+  ])('regression: refuses sw.js with %s (403, document headers)', async (_case, repeat) => {
+    const query = new URLSearchParams({ mode: 'relay', egress: 'https://esm.sh', report: CSP_REPORT_URL });
+    expect((await get(`https://${host}/__bfwc/sw.js?${query}`)).status).toBe(200);
+    const res = await get(`https://${host}/__bfwc/sw.js?${query}${repeat}`);
+    expect(res.status).toBe(403);
+    expectDocumentHeaders(res, host);
+  });
+
   it.each(WORKERS)('serves %s with the contract worker CSP and its reporting endpoint', async (name) => {
     const res = await get(`https://${host}/__bfwc/${name}`);
     expect(res.status).toBe(200);
