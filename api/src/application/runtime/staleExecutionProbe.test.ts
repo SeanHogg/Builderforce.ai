@@ -10,7 +10,7 @@ import { LIVE_RUN_MAX_AGE_MS, LIVE_RUN_STATUSES, stalePredicates } from './stale
 const CUTOFF = '2026-10-31T00:00:00.000Z';
 const render = () => {
   const predicates = stalePredicates({
-    running: 'r', cloudRunning: 'c', queued: 'q', paused: 'p', parkAge: 'a', liveRunsStartedAfter: CUTOFF,
+    running: 'r', cloudRunning: 'c', queued: 'q', handoff: 'h', paused: 'p', parkAge: 'a', liveRunsStartedAfter: CUTOFF,
   });
   return new PgDialect().sqlToQuery(predicates.liveRuns);
 };

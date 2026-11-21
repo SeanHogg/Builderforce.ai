@@ -143,7 +143,7 @@ export async function reapStaleExecutions(
   const empty: ReapResult = { failedRunning: 0, failedQueued: 0, failedPaused: 0, requeuedCloud: 0, redispatchedHost: 0, parkAge: { stale: 0, unparked: 0 } };
   // MK-09-D2: this arm is not part of anyStale, so a recorded handoff that never
   // ticked is failed here even when the 15-minute queued probe is empty.
-  const droppedHandoffs = probe.droppedHandoff ? await reapDroppedHandoffs(db, executionRepo, nowMs) : [];
+  const droppedHandoffs = probe.droppedHandoff ? await reapDroppedHandoffs(db, executionRepo, stale.droppedHandoff, nowMs) : [];
   if (!anyStale(probe) && droppedHandoffs.length === 0) return empty;
 
   // Hung HOST runs: a real long-lived process that went silent (crash / dropped
@@ -403,8 +403,8 @@ export async function reapStaleExecutions(
  * MK-09-D2. A recorded CloudRunner handoff with no first tick, past the start-timeout,
  * fails closed. A later write (a tick) is not a drop — {@link droppedHandoff} is the rule.
  */
-async function reapDroppedHandoffs(db: Db, executionRepo: ExecutionRepository, nowMs: number): Promise<ReapedRow[]> {
-  const cutoff = new Date(nowMs - HANDOFF_START_TIMEOUT_MS).toISOString();
+async function reapDroppedHandoffs(db: Db, executionRepo: ExecutionRepository, droppedPredicate: SQL, nowMs: number): Promise<ReapedRow[]> {
+  // The probe's own `droppedHandoff` predicate, so the probe and this read test exactly the same condition.
   const rows = await db
     .select({
       id: executions.id,
@@ -413,12 +413,7 @@ async function reapDroppedHandoffs(db: Db, executionRepo: ExecutionRepository, n
       updated_at: executions.updatedAt,
     })
     .from(executions)
-    .where(and(
-      inArray(executions.status, ['pending', 'submitted', 'running']),
-      sql`coalesce(${executions.payload}, '') like '%"handoffRecordedAt":%'`,
-      sql`coalesce(${executions.payload}, '') not like '%"firstTickAt":%'`,
-      sql`coalesce(${executions.updatedAt}, ${executions.createdAt}) < ${cutoff}`,
-    ))
+    .where(acrossTenants(executions, 'scheduled_sweep', droppedPredicate))
     .limit(REAP_BATCH_LIMIT)
     .catch((error): { id: number; payload: string | null; status: string; updated_at: Date | null }[] => {
       // The drop sweep is one pass of the reaper: a failed read is reported and the other passes still run.

@@ -74,6 +74,7 @@ export {
   ENGINE_BY_FORMAT,
   LOCAL_MODEL_CATALOG,
   LOCAL_MODEL_USES,
+  ONNX_BONSAI_CATALOG,
   isLocalChatModel,
   localCatalogFor,
   localCatalogModel,

@@ -19,12 +19,13 @@ const dto = (taskId: number | null, buildPreview: ReplayPrescriptionDto['buildPr
   ({ id: `rx-${taskId}`, buildPreview, refs: { taskId } }) as unknown as ReplayPrescriptionDto;
 
 describe('unfinishedRunsOf', () => {
-  it('is this workspace\'s runs of these tickets that are not completed, failed or cancelled', () => {
+  // MK-09 made `no_changes` terminal (EXECUTION_TERMINAL_STATUSES): a run that wrote nothing is finished too.
+  it('is this workspace\'s runs of these tickets that are not completed, failed, cancelled or no_changes', () => {
     const { sql, params } = dialect.sqlToQuery(unfinishedRunsOf(7, [77, 78]));
     expect(sql).toContain('"tenant_id" = $1');
     expect(sql).toContain('"task_id" in ($2, $3)');
-    expect(sql).toContain('"status" not in ($4, $5, $6)');
-    expect(params).toEqual([7, 77, 78, 'completed', 'failed', 'cancelled']);
+    expect(sql).toContain('"status" not in ($4, $5, $6, $7)');
+    expect(params).toEqual([7, 77, 78, 'completed', 'failed', 'cancelled', 'no_changes']);
   });
 });
 
@@ -43,7 +44,7 @@ describe('holdBuildPreviewWhileRunning', () => {
     const { db, selectDistinct, where } = fakeDb([]);
     await holdBuildPreviewWhileRunning(db, 7, [dto(77, offer), dto(78, offer), dto(79, null), dto(null, offer)]);
     expect(selectDistinct).toHaveBeenCalledTimes(1);
-    expect(dialect.sqlToQuery(where.mock.calls[0]![0] as never).params).toEqual([7, 77, 78, 'completed', 'failed', 'cancelled']);
+    expect(dialect.sqlToQuery(where.mock.calls[0]![0] as never).params).toEqual([7, 77, 78, 'completed', 'failed', 'cancelled', 'no_changes']);
   });
 
   it('reads nothing when no row offers a preview', async () => {

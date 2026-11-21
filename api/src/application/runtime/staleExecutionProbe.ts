@@ -62,8 +62,11 @@ export interface StalePredicates {
   liveRuns: SQL;
 }
 
-/** The stale categories: every predicate except the gate-keeping `liveRuns` arm. */
-type StaleCategory = Exclude<keyof StalePredicates, 'liveRuns'>;
+/**
+ * The stale categories: every predicate except the gate-keeping `liveRuns` arm and the MK-09-D2
+ * `droppedHandoff` arm (reaped on its own pass, so it never wakes the other sweeps — see {@link StaleWorkProbe}).
+ */
+type StaleCategory = Exclude<keyof StalePredicates, 'liveRuns' | 'droppedHandoff'>;
 
 export function stalePredicates(c: StaleCutoffs): StalePredicates {
   return {

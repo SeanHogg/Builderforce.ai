@@ -33,6 +33,7 @@ import type { SandboxOpenWait } from '../../application/runtime/sandbox/sandboxO
 import { dispatchGithubActionsRun } from '../../application/runtime/githubActionsDispatch';
 import { scoreRunOutcome } from '../../application/runtime/scoreRunOutcome';
 import { isInfrastructureEviction } from '../../application/runtime/orphanReasons';
+import { landedRunStatus } from '../../application/runtime/emptyDiffFinalize';
 import { settleLateSteersSafely } from '../../application/runtime/lateSteerFollowUp';
 import { childBrief, parseCloudChild, settleCloudChildLineage } from '../../application/runtime/cloudChildRuns';
 import type { CloudRunDelegation } from '../../application/runtime/cloudRunDelegation';
@@ -394,7 +395,7 @@ export class CloudRunnerDO implements DurableObject {
           cursor.executionId,
           result.ok
             ? {
-                status: result.noChanges ? ExecutionStatus.NO_CHANGES : ExecutionStatus.COMPLETED,
+                status: landedRunStatus({ ok: true, noChanges: result.noChanges }),
                 result: result.output,
                 ...(result.telemetry ? { telemetry: result.telemetry } : {}),
               }

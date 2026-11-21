@@ -121,4 +121,6 @@ export interface CloudLoopResult {
   awaitingInput?: { approvalId: string; question: string };
   /** A TERMINAL result carries the run's final tally (`RunState.telemetry`): the terminal transition hands it to the one outcome-row writer. Absent otherwise. */
   telemetry?: RunTally;
+  /** MK-09-W5: a terminal, uncancelled run that wrote nothing — the settling surface lands it `no_changes`, never `completed`. */
+  noChanges?: boolean;
 }
