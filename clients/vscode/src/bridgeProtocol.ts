@@ -261,7 +261,7 @@ export type HostMessageType = (typeof HOST_MESSAGES)[number];
 
 /**
  * HOST → WEBVIEW: the composer commands' `/help` model, recomputed after `init` (a
- * workspace folder was added/removed, a root `builderforce.json` changed —
+ * workspace folder was added/removed, a folder's manifest (`.builderforce/builderforce.json`) changed —
  * `composerCommands/helpRefresh.ts`). The webview replaces the model it took from
  * `init.composerCommands` (`webview/src/chat/useComposerCommands.ts`).
  */

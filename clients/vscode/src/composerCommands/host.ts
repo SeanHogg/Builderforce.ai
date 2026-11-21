@@ -16,16 +16,18 @@ import { watchComposerHelp } from "./helpRefresh";
 import { ensureLauncherTrust, trustCommandRunner, type CaTrustDecision, type LauncherTrustDeps } from "./launcherTrust";
 import { logLine } from "../errorReporter";
 import { detectWorkspaceManifest } from "./detectManifest";
-import { handleComposerInput } from "./dispatch";
-import { LAUNCH_COMMAND_ID, MANIFEST_COMMAND_ID, STARTER_KIT_COMMAND_ID } from "./entries";
+import { actionExecutor, handleComposerInput } from "./dispatch";
+import { LAUNCH_COMMAND_ID, MANIFEST_COMMAND_ID, MANIFEST_INIT_ACTION, MANIFEST_MOVE_ACTION, STARTER_KIT_COMMAND_ID } from "./entries";
 import { FolderLaunchers } from "./folderLaunchers";
 import { composerCommandText, type ComposerCommandText } from "./labels";
 import { launchExecutor } from "./launch";
 import { launcherPageLabels } from "./launcherLabels";
-import { MANIFEST_FILE_NAME, manifestInitExecutor, type ReadFolderFiles } from "./manifestInit";
+import { manifestInitExecutor, type ReadFolderFiles } from "./manifestInit";
+import { MANIFEST_READ_ORDER } from "./manifestLocation";
+import { manifestMoveExecutor } from "./manifestMove";
 import { integratedBrowser, openUrlVerbatim } from "./openExternal";
 import type { ComposerCommandsInit, ComposerInputResult } from "./reply";
-import { rootManifestWatchers } from "./rootManifestWatchers";
+import { folderManifestWatchers } from "./folderManifestWatchers";
 import { starterKitExecutor } from "./starterKit";
 import { registerManifestPreview, vscodeWorkspacePort } from "./vscodeWorkspacePort";
 import { readWorkspaceFiles } from "./workspaceFiles";
@@ -37,8 +39,8 @@ export interface ComposerCommandHost {
   /** Answer a composer line: not a command, or the reply to show. Never reaches a model. */
   handle(text: string): Promise<ComposerInputResult>;
   /**
-   * The help model, recomputed: a workspace folder was added/removed or a root
-   * `builderforce.json` was created/changed/deleted (`helpRefresh.ts`).
+   * The help model, recomputed: a workspace folder was added/removed or a folder's
+   * manifest was created/changed/deleted (`helpRefresh.ts`).
    */
   readonly onDidChangeHelp: vscode.Event<ComposerCommandsInit>;
 }
@@ -80,11 +82,11 @@ function launcherTrustDeps(ctx: vscode.ExtensionContext, text: ComposerCommandTe
   };
 }
 
-/** Recompute the help model when a folder or a root `builderforce.json` changes; dispose with the extension. */
+/** Recompute the help model when a folder or a folder's manifest changes; dispose with the extension. */
 function watchHelp(ctx: vscode.ExtensionContext, init: () => Promise<ComposerCommandsInit>, publish: (help: ComposerCommandsInit) => void): void {
   ctx.subscriptions.push(watchComposerHelp({
     onFoldersChanged: (listener) => vscode.workspace.onDidChangeWorkspaceFolders(listener),
-    manifestEvents: rootManifestWatchers(MANIFEST_FILE_NAME),
+    manifestEvents: folderManifestWatchers(MANIFEST_READ_ORDER),
     folderRoots: () => (vscode.workspace.workspaceFolders ?? []).map((folder) => folder.uri.fsPath),
     recompute: init,
     publish,
@@ -148,7 +150,10 @@ export function composerCommandHost(ctx: vscode.ExtensionContext): ComposerComma
         text,
         executors: {
           [STARTER_KIT_COMMAND_ID]: starterKitExecutor({ port, text }),
-          [MANIFEST_COMMAND_ID]: manifestInitExecutor({ port, text, readFiles: readFolderFiles, detect: detectWorkspaceManifest, show }),
+          [MANIFEST_COMMAND_ID]: actionExecutor({
+            [MANIFEST_INIT_ACTION]: manifestInitExecutor({ port, text, readFiles: readFolderFiles, detect: detectWorkspaceManifest, show }),
+            [MANIFEST_MOVE_ACTION]: manifestMoveExecutor({ port, text }),
+          }),
           [LAUNCH_COMMAND_ID]: launchExecutor({
             port,
             text,

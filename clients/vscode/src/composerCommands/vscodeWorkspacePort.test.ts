@@ -17,6 +17,11 @@ vi.mock("vscode", async () => {
       fs: {
         createDirectory: vi.fn(async (uri: { fsPath: string }) => { await fs.mkdir(uri.fsPath, { recursive: true }); }),
         writeFile: vi.fn(async (uri: { fsPath: string }, bytes: Uint8Array) => { await fs.writeFile(uri.fsPath, bytes); }),
+        // As VS Code's: `overwrite: false` refuses an existing target.
+        rename: vi.fn(async (from: { fsPath: string }, to: { fsPath: string }, options: { overwrite: boolean }) => {
+          if (!options.overwrite && await fs.lstat(to.fsPath).then(() => true, () => false)) throw new Error("FileExists");
+          await fs.rename(from.fsPath, to.fsPath);
+        }),
       },
     },
   };
@@ -77,6 +82,29 @@ describe("the editor's workspace port: writes stay inside the folder", () => {
     const port = vscodeWorkspacePort();
     expect(await port.exists(path.join(root, "real.txt"))).toBe(true);
     expect(await port.exists(path.join(root, "absent.txt"))).toBe(false);
+  });
+
+  it("moves a root manifest into .builderforce/, creating it, and never over an existing file", async () => {
+    const from = path.join(root, "builderforce.json");
+    const to = path.join(root, ".builderforce", "builderforce.json");
+    await writeFile(from, "{\"version\":1}");
+    const port = vscodeWorkspacePort();
+    await port.move(from, to);
+    expect(await readFile(to, "utf8")).toBe("{\"version\":1}");
+    expect(await port.exists(from)).toBe(false);
+
+    await writeFile(from, "{\"other\":true}");
+    await expect(port.move(from, to)).rejects.toThrow();
+    expect(await readFile(to, "utf8")).toBe("{\"version\":1}");
+    expect(await readFile(from, "utf8")).toBe("{\"other\":true}");
+  });
+
+  it("refuses a move whose target leads outside the folder, and moves nothing", async () => {
+    const from = path.join(root, "builderforce.json");
+    await writeFile(from, "{}");
+    const stray = path.join(outside, "builderforce.json");
+    await expect(vscodeWorkspacePort().move(from, stray)).rejects.toMatchObject({ refusals: [{ file: stray, reason: "outside-folder" }] });
+    expect(await readFile(from, "utf8")).toBe("{}");
   });
 
   it("passes the extension host's remote name through", () => {

@@ -14,7 +14,8 @@ const text = composerCommandText();
 const app = folderRef("app");
 const api = folderRef("api");
 const manifest = (...environments: string[]) => JSON.stringify({ version: 1, environments: Object.fromEntries(environments.map((name) => [name, {}])) });
-const at = (folder: typeof app) => path.join(folder.path, "builderforce.json");
+const at = (folder: typeof app) => path.join(folder.path, ".builderforce", "builderforce.json");
+const atRoot = (folder: typeof app) => path.join(folder.path, "builderforce.json");
 
 describe("the workspace's composer command registry", () => {
   it("makes /launch unavailable, with the localized reason, in a remote extension host", async () => {
@@ -37,6 +38,13 @@ describe("the workspace's composer command registry", () => {
     expect(await launchEnvironmentChoices(port, text, vi.fn())).toEqual([{ value: "local" }, { value: "staging" }]);
   });
 
+  it("reads a legacy root builderforce.json when there is no .builderforce/builderforce.json, which wins when both exist", async () => {
+    const legacy = fakeWorkspacePort([app], { [atRoot(app)]: manifest("old") });
+    expect(await launchEnvironmentChoices(legacy, text, vi.fn())).toEqual([{ value: "old" }]);
+    const both = fakeWorkspacePort([app], { [atRoot(app)]: manifest("old"), [at(app)]: manifest("local") });
+    expect(await launchEnvironmentChoices(both, text, vi.fn())).toEqual([{ value: "local" }]);
+  });
+
   it("offers EVERY folder's environments when several are open, each labelled with the folders declaring it", async () => {
     const port = fakeWorkspacePort([app, api], { [at(app)]: manifest("local", "staging"), [at(api)]: manifest("local", "production") });
     expect(await launchEnvironmentChoices(port, text, vi.fn())).toEqual([
@@ -55,7 +63,7 @@ describe("the workspace's composer command registry", () => {
     expect(report).toHaveBeenCalledOnce();
     expect(report.mock.calls[0]![0]).toContain(at(app));
 
-    const unreadable = fakeWorkspacePort([app]);
+    const unreadable = fakeWorkspacePort([app], { [at(app)]: manifest("local") });
     unreadable.readText = async () => { throw new Error("EACCES"); };
     const reported = vi.fn();
     expect(await launchEnvironmentChoices(unreadable, text, reported)).toEqual([]);

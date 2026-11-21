@@ -40,6 +40,12 @@ export interface ComposerWorkspacePort {
    * written: it rejects with a `WriteRefusedError`.
    */
   writeText(file: string, text: string): Promise<void>;
+  /**
+   * Move a file, creating the target's parent directories. Never replaces a file: an existing
+   * `to` rejects. A path `checkWrites` refuses (either one) is never moved: it rejects with a
+   * `WriteRefusedError`.
+   */
+  move(from: string, to: string): Promise<void>;
   /** A MODAL warning with one approving button. True only when that button was chosen. */
   confirm(message: string, approve: string): Promise<boolean>;
 }

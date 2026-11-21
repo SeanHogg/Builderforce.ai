@@ -115,7 +115,7 @@ describe("/launch", () => {
   });
 
   it("treats a manifest environment named like a subcommand as the subcommand", async () => {
-    const { start, openExternal, started, launch } = setup({ [path.join(app.path, "builderforce.json")]: "{}" });
+    const { start, openExternal, started, launch } = setup({ [path.join(app.path, ".builderforce", "builderforce.json")]: "{}" });
     await launch("external");
     expect(start).toHaveBeenCalledExactlyOnceWith({ projectDir: app.path });
     expect(openExternal).toHaveBeenCalledOnce();
@@ -146,12 +146,22 @@ describe("/launch", () => {
     expect(text.noteLines(notes)).toEqual(["Notes:", ...noteMessages(notes)]);
   });
 
-  it("runs the folder's own builderforce.json, in the environment asked for", async () => {
-    const { start, detect, launch } = setup({ [path.join(app.path, "builderforce.json")]: "{}" });
+  it("runs the folder's own .builderforce/builderforce.json, in the environment asked for", async () => {
+    const { start, detect, launch } = setup({ [path.join(app.path, ".builderforce", "builderforce.json")]: "{}" });
     const reply = await launch("staging");
     expect(start).toHaveBeenCalledWith({ projectDir: app.path, environment: "staging" });
     expect(detect).not.toHaveBeenCalled();
-    expect(linesOf(reply).some((line) => line.includes("/manifest init"))).toBe(false);
+    expect(linesOf(reply).some((line) => line.includes("/manifest init") || line.includes("/manifest move"))).toBe(false);
+  });
+
+  it("runs a legacy root builderforce.json, says it is deprecated and offers /manifest move", async () => {
+    const { start, detect, launch } = setup({ [path.join(app.path, "builderforce.json")]: "{}" });
+    const reply = await launch();
+    const text = composerCommandText();
+    expect(start).toHaveBeenCalledWith({ projectDir: app.path });
+    expect(detect).not.toHaveBeenCalled();
+    expect(linesOf(reply)).toContain(text.manifestLegacy("builderforce.json", ".builderforce/builderforce.json"));
+    expect(reply.kind === "text" ? reply.actions : []).toContainEqual({ label: text.manifestMoveAction, command: "/manifest move" });
   });
 
   it("keeps ONE launcher per folder: a second /launch reopens it", async () => {

@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { MANIFEST_FILE_NAME as MANIFEST_FILE, MANIFEST_SCHEMA_URL } from '@builderforce/app-detect/manifest';
+import { MANIFEST_SCHEMA_URL } from '@builderforce/app-detect/manifest';
 import { composeKit, composeParts, resolveKit } from './compose';
 import { KIT_PARTS, NAMED_KITS, listKitOptions } from './registry';
 import type { KitPart } from './types';
 
+/** Where a kit's manifest lives: inside `.builderforce/`, never at the project root (PRD 49). */
+const MANIFEST_FILE = '.builderforce/builderforce.json';
 const KIT_ROOT_FILES = new Set([MANIFEST_FILE, 'README.md']);
 
 describe('composeKit — the W11 kit matrix (steps 1–2 inputs)', () => {
@@ -35,6 +37,8 @@ describe('composeKit — the W11 kit matrix (steps 1–2 inputs)', () => {
           if (!KIT_ROOT_FILES.has(path)) expect(path).toMatch(/^(web|api)\//);
         }
         expect(kit.files[MANIFEST_FILE]).toBe(kit.manifestText);
+        expect(kit.files['builderforce.json']).toBeUndefined();
+        expect(kit.files['README.md']).toContain(`\`${MANIFEST_FILE}\``);
         expect(JSON.parse(kit.manifestText)).toEqual(manifest);
         expect(kit.files['README.md']).toContain('/launch');
 

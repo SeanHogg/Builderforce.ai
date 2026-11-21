@@ -3,6 +3,7 @@ import type { ComposerCommandLabels, ComposerCommandProblem } from "@seanhogg/bu
 import type { DetectionNote } from "@builderforce/app-detect";
 import type { KitIssue } from "@builderforce/ide-templates/kits";
 import { detectionNoteText, kitIssueText } from "./noteLabels";
+import { MANIFEST_PATH, WORKSPACE_DIR } from "./manifestLocation";
 
 /**
  * Every sentence the composer commands show, in the editor's language (`vscode.l10n`).
@@ -58,6 +59,24 @@ export interface ComposerCommandText extends ComposerCommandLabels {
   manifestWriteQuestion: string;
   manifestDeclined: string;
   manifestWritten(services: number, resources: number): string;
+  /** `/manifest init` stops: the folder's manifest is a legacy root `file`; move it to `canonical` first. */
+  manifestInitMoveFirst(file: string, canonical: string): string;
+
+  // /manifest move (`manifestMove.ts`)
+  /** The `/help` label of the `move` choice. */
+  manifestMoveChoice: string;
+  /** The reply action that runs `/manifest move`. */
+  manifestMoveAction: string;
+  /** The folder's manifest is a legacy root `file`: deprecated, it belongs at `canonical`. */
+  manifestLegacy(file: string, canonical: string): string;
+  /** Nothing to move: none of these root files exists in the folder. */
+  manifestMoveNone(folder: string, files: readonly string[]): string;
+  /** Refused: `canonical` already exists, so the root `file` is not moved over it. */
+  manifestMoveExists(file: string, canonical: string): string;
+  manifestMoveQuestion(file: string, canonical: string, folder: string): string;
+  manifestMove: string;
+  manifestMoveDeclined: string;
+  manifestMoved(file: string, canonical: string): string;
 
   // /launch
   /** Why `/launch` is unavailable in a remote extension host (`vscode.env.remoteName`). */
@@ -100,8 +119,8 @@ export function composerCommandText(): ComposerCommandText {
   const t = vscode.l10n.t;
   const descriptions: Record<string, string> = {
     help: t("List every command, or one command in full."),
-    "starter-kit": t("Write a starter app (frontend, backend and extras) with its builderforce.json into this workspace folder."),
-    manifest: t("Detect this app and write its builderforce.json after showing you the diff."),
+    "starter-kit": t("Write a starter app (frontend, backend and extras) and its manifest, {0}, into this workspace folder.", MANIFEST_PATH),
+    manifest: t("Detect this app and write its manifest, {0}, after showing you the diff. /manifest move moves a root builderforce.json there.", MANIFEST_PATH),
     launch: t("Run this workspace's app with the local launcher in VS Code's built-in browser. /launch external opens it in your browser; /launch stop stops it."),
   };
   return {
@@ -150,6 +169,20 @@ export function composerCommandText(): ComposerCommandText {
     manifestWriteQuestion: t("Write the detected builderforce.json shown in the preview?"),
     manifestDeclined: t("builderforce.json was not written."),
     manifestWritten: (services, resources) => t("Wrote builderforce.json ({0} services, {1} resources).", services, resources),
+    manifestInitMoveFirst: (file, canonical) =>
+      t("This folder's manifest is {0} at the folder root, so nothing was detected or written. Move it to {1} with /manifest move, then run /manifest init again.", file, canonical),
+
+    manifestMoveChoice: t("Move a root manifest into {0}/", WORKSPACE_DIR),
+    manifestMoveAction: t("Move it into {0}/", WORKSPACE_DIR),
+    manifestLegacy: (file, canonical) =>
+      t("This folder's manifest is {0} at the folder root, which is deprecated: it belongs at {1}. Type /manifest move to move it.", file, canonical),
+    manifestMoveNone: (folder, files) => t("{0} has no root manifest to move ({1}).", folder, files.join(", ")),
+    manifestMoveExists: (file, canonical) =>
+      t("{0} already exists, so {1} was not moved and nothing was overwritten. Compare the two and delete the one you don't need.", canonical, file),
+    manifestMoveQuestion: (file, canonical, folder) => t("Move {0} to {1} in {2}? No file is overwritten.", file, canonical, folder),
+    manifestMove: t("Move"),
+    manifestMoveDeclined: t("The manifest was not moved."),
+    manifestMoved: (file, canonical) => t("Moved {0} to {1}.", file, canonical),
 
     launchRemote: (remoteName) => t("The local launcher opens your app in this computer's browser, but this window's extension host runs remotely ({0}). Open the folder in a local window to use /launch.", remoteName),
     launchEnvironmentIn: (environment, folders) => t("{0} — declared by {1}", environment, folders.join(", ")),

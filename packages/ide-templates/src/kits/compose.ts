@@ -1,7 +1,8 @@
 /**
  * `composeKit` — kit id + extras → the files and the ONE `builderforce.json` v1 manifest
  * (PRD 31 §W11 "Starter kits"). Pure: no I/O; hosts write the result through their
- * `ScaffoldSink`.
+ * `ScaffoldSink`. The manifest is written at `.builderforce/builderforce.json`
+ * (app-detect's `MANIFEST_PATH`), never at the project root.
  *
  * Parts merge by key, never by overwrite: two parts writing one path, declaring one
  * service id or one resource id are issues, and the first part's entry is kept. An
@@ -12,7 +13,7 @@ import type {
   ComposedKit, KitDefinition, KitIssue, KitIssueCode, KitIssueParams, KitManifest, KitPart,
 } from './types';
 import {
-  BACKEND_INGRESS_PATH, MANIFEST_FILE_NAME, MANIFEST_SCHEMA_URL,
+  BACKEND_INGRESS_PATH, MANIFEST_PATH, MANIFEST_SCHEMA_URL,
   type EmittedIngressRoute, type EmittedResource, type EmittedService,
 } from '@builderforce/app-detect/manifest';
 
@@ -80,7 +81,7 @@ A Builderforce starter kit composed from:
 
 ${lines.join('\n')}
 
-\`${MANIFEST_FILE_NAME}\` declares every service, resource and environment. To run the whole app:
+\`${MANIFEST_PATH}\` declares every service, resource and environment. To run the whole app:
 
 - in Builderforce or the VS Code extension, type \`/launch\` in the composer (or choose **Run in browser**);
 - \`/launch prod\` runs the production environment's settings.
@@ -157,7 +158,7 @@ export function composeParts(name: string, parts: readonly KitPart[]): ComposedK
     environments: kitEnvironments(),
   };
   const manifestText = `${JSON.stringify(manifest, null, 2)}\n`;
-  for (const [path, content] of [[KIT_README_FILE, kitReadme(name, parts)], [MANIFEST_FILE_NAME, manifestText]] as const) {
+  for (const [path, content] of [[KIT_README_FILE, kitReadme(name, parts)], [MANIFEST_PATH, manifestText]] as const) {
     if (claim('path-conflict', path, 'kit')) files[path] = content;
   }
   return { files, manifest, manifestText, issues };

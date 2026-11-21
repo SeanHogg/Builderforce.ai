@@ -6,10 +6,12 @@
  * - Detect the project's blueprint (run detection)
  * - Get the current blueprint
  *
- * There is deliberately no "write override" tool: the designed override path is a
- * repo-root `builderforce.json` (a partial AppBlueprint), which detection reads and
- * lays over what it found — so an override lives in the repo, versioned with the code.
+ * There is deliberately no "write override" tool: the designed override path is the
+ * repo's `.builderforce/builderforce.json` (`MANIFEST_PATH`; a root `builderforce.json` from an
+ * older version is still read), which detection reads and lays over what it found — so an
+ * override lives in the repo, versioned with the code.
  */
+import { MANIFEST_PATH } from '@builderforce/app-detect';
 import { getLatestBlueprint } from '../blueprint/blueprintDetection';
 import { detectBlueprintForProject } from '../blueprint/detectBlueprintForProject';
 import { type AppBlueprint } from '@builderforce/creation-canvas-contract';
@@ -31,7 +33,7 @@ function blueprintError(message: string, details?: Json): Json {
 
 /** How an agent overrides detection — the one designed path, quoted by both tools. */
 const OVERRIDE_HINT =
-  'To override detection, write builderforce.json at the repo root (a partial AppBlueprint, ' +
+  `To override detection, write ${MANIFEST_PATH} in the repo, not a root builderforce.json (a partial AppBlueprint, ` +
   'e.g. { "services": [...] } or { "database": {...} }) with write_file, then run ' +
   'app_blueprint.detect again.';
 
@@ -81,8 +83,8 @@ export const APP_BLUEPRINT_TOOLS: BuiltinTool[] = [
     description:
       "Run blueprint detection for a project. This reads the project's default repository and " +
       'detects: package manager, framework, databases, services, environment variables, ' +
-      'bindings, and deployment configuration, then applies any repo-root builderforce.json ' +
-      "overrides. commitSha is optional and defaults to the head of the repo's default branch.",
+      `bindings, and deployment configuration, then applies the overrides in ${MANIFEST_PATH} ` +
+      "(or an older root builderforce.json). commitSha is optional and defaults to the head of the repo's default branch.",
     parameters: obj({ projectId: N, commitSha: S }, ['projectId']),
     run: async (ctx, a) => {
       if (!ctx.env) return blueprintError('detection needs the worker environment');

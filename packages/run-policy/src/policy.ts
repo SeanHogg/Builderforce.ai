@@ -301,7 +301,9 @@ export function nextTurn(state: RunPolicyState, turn: { hasTools: boolean }): Tu
   // The review model overrides the run's model; plan / code only stand in when the run
   // holds none (see `RunPolicyOptions.phaseModels`) — a per-phase code model must not undo
   // a stall failover that already moved the run off the original coder.
-  const mapped = review ? configuredPhaseModel(state.options, 'verify') : undefined;
+  // A review model that broke in this run is never asked again (`transportFailed`), exactly as a broken phase model is not.
+  const reviewModel = review ? configuredPhaseModel(state.options, 'verify') : undefined;
+  const mapped = reviewModel && !state.broken.includes(reviewModel) ? reviewModel : undefined;
   let model = mapped ?? state.model ?? phaseDefaultModel(state);
   if (verifying && author && model === author) model = undefined;
   const excludeModels = [...state.broken];
@@ -530,14 +532,20 @@ function latencyGuardFor(s: RunPolicyState, e: Extract<RunPolicyEvent, { type: '
  *    that declines ({@link RunPolicyOptions.decliningModelPrefixes}).
  *  - Any other 4xx refused the REQUEST, not the model: another model handed the same
  *    request gets the same answer, so the turn fails.
- *  - A model that broke after the gateway committed to it, under auto-routing or a
- *    LOCK, is left out of EVERY later turn, not just the retry — excluding it for the
- *    retry alone sent the next turn straight back to it (chat #105: the same model,
- *    eighteen turns). A lock is the run's own choice, so it is let go with the model.
+ *  - A model that broke after the gateway committed to it (`interrupted`) is left out of
+ *    EVERY later turn, not just the retry — excluding it for the retry alone sent the next
+ *    turn straight back to it (chat #105: the same model, eighteen turns). That holds for
+ *    auto-routing AND for every model the RUN set: a lock, the verify phase's review model
+ *    (`verify_started`), a stall-failover pick, a cascade `escalated` target, a releasable
+ *    pin. The model is let go with the failure; `authorModel` stays, so a verify-phase
+ *    retry still excludes the author (VS Code chat #128305: the review model's stream was
+ *    interrupted and the turn failed with no failover).
+ *  - The ONE exception is the user's standing pin that is not releasable: the user's
+ *    choice, not routed around — its interruption fails the turn.
  *  - A failure where the gateway was reached but no model is named retries without an
- *    exclusion; one where the gateway was never reached was already retried by the
- *    transport, and another model cannot help.
- *  - A pinned model that is not releasable is the user's choice: not routed around.
+ *    exclusion under auto-routing; a set model's reset or 5xx fails the turn. One where
+ *    the gateway was never reached was already retried by the transport, and another
+ *    model cannot help.
  */
 function transportFailed(s: RunPolicyState, e: Extract<RunPolicyEvent, { type: 'transport_failed' }>): RunPolicyState {
   if (s.turnRetries >= 1 || e.kind === 'unreachable') return { ...s, outcome: { kind: 'fail_turn' } };
@@ -554,15 +562,19 @@ function transportFailed(s: RunPolicyState, e: Extract<RunPolicyEvent, { type: '
     };
   }
   if (isRequestRefusalStatus(e.status)) return { ...s, outcome: { kind: 'fail_turn' } };
-  if (s.model && s.locked && e.kind === 'interrupted') {
+  if (s.model && e.kind === 'interrupted' && !userPinHeld(s)) {
     const brokenModel = e.model ?? s.model;
+    // A releasable pin that broke is let go like a released one: the rest of the run never returns to it.
+    const pinned = s.pin !== undefined && s.model === s.pin;
     return {
       ...s,
       model: undefined,
       locked: false,
-      broken: s.broken.includes(brokenModel) ? s.broken : [...s.broken, brokenModel],
+      ...(pinned ? { pin: undefined, strictPin: false } : {}),
+      // The model the run ASKED for leaves with the one the stream named (they differ when the gateway resolved an alias).
+      broken: [...new Set([...s.broken, brokenModel, s.model])],
       turnRetries: s.turnRetries + 1,
-      outcome: { kind: 'retry_turn', broken: brokenModel, released: s.model },
+      outcome: { kind: 'retry_turn', broken: brokenModel, ...(s.locked || pinned ? { released: s.model } : {}) },
     };
   }
   if (s.model) return { ...s, outcome: { kind: 'fail_turn' } };
@@ -578,6 +590,11 @@ function transportFailed(s: RunPolicyState, e: Extract<RunPolicyEvent, { type: '
     turnRetries: s.turnRetries + 1,
     outcome: { kind: 'retry_turn', ...(e.kind === 'interrupted' && e.model ? { broken: e.model } : {}) },
   };
+}
+
+/** The run's model is the user's standing pin and the run may not drop it: the user's choice, never routed around. */
+function userPinHeld(s: RunPolicyState): boolean {
+  return s.pin !== undefined && s.model === s.pin && !s.options.pinReleasable;
 }
 
 /** A release status, or a decline from a backend that declines. */

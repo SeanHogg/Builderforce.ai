@@ -17,7 +17,8 @@ import { manifestInitExecutor, type DetectedManifest } from "./manifestInit";
 import { fakeWorkspacePort, folderRef } from "./testWorkspacePort";
 
 const app = folderRef("app");
-const manifestPath = path.join(app.path, "builderforce.json");
+const manifestPath = path.join(app.path, ".builderforce", "builderforce.json");
+const rootManifestPath = path.join(app.path, "builderforce.json");
 const detected: DetectedManifest = {
   text: "{\"version\":1}\n",
   services: ["web", "api"],
@@ -46,6 +47,7 @@ describe("/manifest init", () => {
     expect(show).toHaveBeenCalledWith(detected.text, "builderforce.json (detected)");
     expect(port.asked[0]!.approve).toBe("Write");
     expect(port.files.get(manifestPath)).toBe(detected.text);
+    expect(port.files.has(rootManifestPath)).toBe(false);
     expect(reply.kind === "text" ? reply.lines : []).toEqual(expect.arrayContaining([
       "Wrote builderforce.json (2 services, 1 resources).",
       "Notes:",
@@ -85,6 +87,21 @@ describe("/manifest init", () => {
     expect(remote.kind === "text" ? remote.actions : "no reply").toBeUndefined();
     expect(remote.kind === "text" ? remote.lines : []).toContain(composerCommandText().launchRemote("ssh-remote"));
     expect(remote.kind === "text" ? remote.lines : []).not.toContain(composerCommandText().launchHint);
+  });
+
+  it("with only a legacy root builderforce.json: detects and writes nothing, and offers /manifest move", async () => {
+    const { port, show, detect, execute } = setup({ [rootManifestPath]: "{\"old\":true}" });
+    const reply = await execute();
+    expect(detect).not.toHaveBeenCalled();
+    expect(show).not.toHaveBeenCalled();
+    expect(port.asked).toEqual([]);
+    expect([...port.files.keys()]).toEqual([rootManifestPath]);
+    expect(reply).toEqual({
+      kind: "text",
+      tone: "info",
+      lines: [composerCommandText().manifestInitMoveFirst("builderforce.json", ".builderforce/builderforce.json")],
+      actions: [{ label: composerCommandText().manifestMoveAction, command: "/manifest move" }],
+    });
   });
 
   it("with a builderforce.json: shows the diff against it and replaces it only on approval", async () => {

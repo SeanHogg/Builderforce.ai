@@ -19,6 +19,8 @@ import { fakeWorkspacePort, folderRef } from "./testWorkspacePort";
 const app = folderRef("app");
 const kitFiles = Object.keys(composeKit("react-node", ["postgres"]).files);
 const at = (relative: string) => path.join(app.path, ...relative.split("/"));
+/** A kit's manifest lives in `.builderforce/`, never at the folder root. */
+const MANIFEST = ".builderforce/builderforce.json";
 
 function run(port: ReturnType<typeof fakeWorkspacePort>, args: Record<string, string | string[]> = { kit: "react-node", with: ["postgres"] }) {
   return starterKitExecutor({ port, text: composerCommandText() })(args);
@@ -30,7 +32,8 @@ describe("/starter-kit", () => {
     const reply = await run(port);
     expect(port.asked).toEqual([]);
     for (const file of kitFiles) expect(port.files.has(at(file)), file).toBe(true);
-    expect(port.files.has(at("builderforce.json"))).toBe(true);
+    expect(port.files.has(at(MANIFEST))).toBe(true);
+    expect(port.files.has(at("builderforce.json"))).toBe(false);
     expect(reply).toMatchObject({ kind: "text", tone: "info", actions: [{ command: "/launch" }] });
     expect(reply.kind === "text" ? reply.lines[0] : "").toBe(`Wrote the react-node starter kit: ${kitFiles.length} files into app.`);
   });
@@ -41,7 +44,7 @@ describe("/starter-kit", () => {
     expect(port.asked).toHaveLength(1);
     expect(port.asked[0]!.approve).toBe("Write files");
     expect(port.files.get(at("notes.txt"))).toBe("mine");
-    expect(port.files.has(at("builderforce.json"))).toBe(true);
+    expect(port.files.has(at(MANIFEST))).toBe(true);
   });
 
   it("regression: writes without asking into a folder holding only .builderforce (with .git / .vscode)", async () => {
@@ -81,23 +84,23 @@ describe("/starter-kit", () => {
     expect(reply.kind === "text" ? reply.lines[0] : "").toContain("was not approved");
   });
 
-  it("names the files it would overwrite, and keeps them when declined", async () => {
-    const port = fakeWorkspacePort([app], { [at("builderforce.json")]: "{\"mine\":true}" });
+  it("names the files it would overwrite, and keeps them when declined — an existing .builderforce/builderforce.json included, though .builderforce/ alone looks empty", async () => {
+    const port = fakeWorkspacePort([app], { [at(MANIFEST)]: "{\"mine\":true}" });
     port.approve = false;
     await run(port);
     expect(port.asked[0]!.approve).toBe("Overwrite and write");
-    expect(port.asked[0]!.message).toContain("builderforce.json");
-    expect(port.files.get(at("builderforce.json"))).toBe("{\"mine\":true}");
+    expect(port.asked[0]!.message).toContain(MANIFEST);
+    expect(port.files.get(at(MANIFEST))).toBe("{\"mine\":true}");
   });
 
   it("writes NOTHING, and names the path, when one kit path is refused (a symbolic link)", async () => {
     const port = fakeWorkspacePort([app]);
-    port.refused.add(at("builderforce.json"));
+    port.refused.add(at(MANIFEST));
     const reply = await run(port);
     expect(port.files.size).toBe(0);
     expect(port.asked).toEqual([]);
     expect(reply).toMatchObject({ kind: "text", tone: "error" });
-    expect(reply.kind === "text" ? reply.lines : []).toEqual([composerCommandText().writeRefused([at("builderforce.json")])]);
+    expect(reply.kind === "text" ? reply.lines : []).toEqual([composerCommandText().writeRefused([at(MANIFEST)])]);
   });
 
   it("names the file and every file already written when a write is refused partway", async () => {
@@ -138,6 +141,6 @@ describe("/starter-kit", () => {
     expect(reply.kind === "text" ? reply.lines[0] : "").toContain("No folder was chosen");
     port.picked = app;
     await run(port);
-    expect(port.files.has(at("builderforce.json"))).toBe(true);
+    expect(port.files.has(at(MANIFEST))).toBe(true);
   });
 });

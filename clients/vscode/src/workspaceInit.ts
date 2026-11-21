@@ -72,7 +72,7 @@ export async function buildWorkspaceInit(
   const fallbackRoute = pickedRoute();
   // Grounding starts with the rest (its own budget): not queued behind them.
   const groundingP = stableGroundingWithin(root, INIT_GROUNDING_BUDGET_MS, { onLate: budget.late });
-  // The `/` menu's Actions tab (PRD 31 §W11): local only (the registry + one read of `builderforce.json`).
+  // The `/` menu's Actions tab (PRD 31 §W11): local only (the registry + one read of each folder's manifest).
   const composerCommandsP = composerCommandHost(ctx).init();
   const [token, editorContext, projectNames, personalityBlock, modelChoice, localModels, pendingChanges] = await Promise.all([
     // Null while signed in is tolerated: the webview mints its own (`WorkspaceApp.mintToken`).

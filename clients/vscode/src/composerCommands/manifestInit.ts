@@ -1,16 +1,18 @@
 /**
  * `/manifest init` (PRD 31 §W11): detect the app in a workspace folder with the shared
  * `app-detect` pipeline, emit its `builderforce.json` v1, SHOW it (a diff against the
- * current file, or a preview when there is none), and write it only on a modal approval.
+ * current file, or a preview when there is none), and write it only on a modal approval —
+ * always at `.builderforce/builderforce.json` (`MANIFEST_PATH`), never at the folder root.
+ * A folder whose manifest is still a legacy root file is offered `/manifest move` first
+ * (`manifestMove.ts`), so it never ends up with two manifests.
  */
 import type { DetectionNote } from "@builderforce/app-detect";
 import type { ComposerCommandExecutor } from "./dispatch";
 import type { ComposerCommandText } from "./labels";
+import { findFolderManifest, MANIFEST_PATH } from "./manifestLocation";
+import { legacyManifestAction } from "./manifestMove";
 import { chooseFolder, inFolder, launchFollowUp, type ComposerWorkspacePort } from "./workspacePort";
 import { writeRefusedReply } from "./writeContainment";
-
-import { MANIFEST_FILE_NAME } from "@builderforce/app-detect/manifest";
-export { MANIFEST_FILE_NAME };
 
 /** A detected manifest: its text, the ids it declares, and what detection could not express. */
 export interface DetectedManifest {
@@ -42,8 +44,12 @@ export function manifestInitExecutor({ port, text, readFiles, detect, show }: Ma
   return async () => {
     const folder = await chooseFolder(port, text.pickFolder);
     if (!folder) return { kind: "text", tone: "info", lines: [text.noFolderChosen] };
+    const found = await findFolderManifest(port, folder);
+    if (found?.legacy) {
+      return { kind: "text", tone: "info", lines: [text.manifestInitMoveFirst(found.relative, MANIFEST_PATH)], actions: [legacyManifestAction(text)] };
+    }
     const detected = detect(await readFiles(folder.path));
-    const file = inFolder(folder, MANIFEST_FILE_NAME);
+    const file = inFolder(folder, MANIFEST_PATH);
     // Refused before the preview and the question: a builderforce.json that is a symbolic link is never written through.
     const refused = await port.checkWrites([file]);
     if (refused.length > 0) return writeRefusedReply(text, refused);

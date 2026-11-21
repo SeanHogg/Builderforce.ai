@@ -22,8 +22,30 @@
 /** The canonical `$schema` URL of a v1 manifest. */
 export const MANIFEST_SCHEMA_URL = 'https://builderforce.ai/schema/app.v1.json';
 
-/** The manifest's file name, at the project root. */
+/*
+ * WHERE the manifest lives (PRD 49): `.builderforce/builderforce.json`. A root
+ * `builderforce.json` / `bfwc.app.json` left by an older version is read as a fallback and
+ * never written. The runtime owns this contract (`@seanhogg/builderforce-webcontainers/manifest`:
+ * `MANIFEST_FILE`, `WORKSPACE_DIR`, `LEGACY_MANIFEST_FILES`), but that module is Node-only (it
+ * reads the filesystem) and this package is dependency-free and bundled into Workers and the
+ * browser, so the path is stated ONCE here for every pure consumer (the detectors, the starter
+ * kits). The VS Code extension's manifest contract test pins these equal to the runtime's.
+ */
+
+/** The manifest's file name. */
 export const MANIFEST_FILE_NAME = 'builderforce.json';
+
+/** The project folder the manifest lives in. */
+export const MANIFEST_DIR = '.builderforce';
+
+/** The manifest's project-relative POSIX path: the ONLY path a writer uses. */
+export const MANIFEST_PATH = `${MANIFEST_DIR}/${MANIFEST_FILE_NAME}`;
+
+/** Root manifests an older version wrote, in read order: read as a fallback, never written. */
+export const LEGACY_MANIFEST_PATHS = [MANIFEST_FILE_NAME, 'bfwc.app.json'] as const;
+
+/** Every path a reader tries, canonical first. */
+export const MANIFEST_READ_PATHS: readonly string[] = [MANIFEST_PATH, ...LEGACY_MANIFEST_PATHS];
 
 /** The ingress path the one HTTP backend is served under (`emitManifest`'s ingress, the kits' backend parts). */
 export const BACKEND_INGRESS_PATH = '/api';

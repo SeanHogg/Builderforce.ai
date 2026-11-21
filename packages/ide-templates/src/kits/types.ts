@@ -100,7 +100,7 @@ export type KitIssue = {
 }[KitIssueCode];
 
 export interface ComposedKit {
-  /** File contents keyed by project-relative path (`web/package.json`, `builderforce.json`). */
+  /** File contents keyed by project-relative path (`web/package.json`, `.builderforce/builderforce.json`). */
   files: Record<string, string>;
   manifest: KitManifest;
   manifestText: string;

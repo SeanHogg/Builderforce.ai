@@ -369,7 +369,7 @@ export function activate(context: vscode.ExtensionContext): void {
     onSelectProject: (projectId) => void selectProjectById(context, projects, projectId),
     openBoard: (sessionId) => void openWorkspace(context, undefined, { surface: "graph", sessionId }),
   });
-  // The `/` menu's help model follows the workspace (folders, root builderforce.json): re-pushed to every surface.
+  // The `/` menu's help model follows the workspace (folders, each folder's .builderforce/builderforce.json): re-pushed to every surface.
   context.subscriptions.push(composerCommandHost(context).onDidChangeHelp(notifyComposerCommands));
   // BuilderForce in the editor's agent chat area (secondary sidebar), beside Chat /
   // Claude Code / Codex — the same workspace surface as the editor tab.

@@ -51,33 +51,44 @@ vi.mock("vscode", () => ({
   },
 }));
 
-import { rootManifestWatchers } from "./rootManifestWatchers";
+import { folderManifestWatchers } from "./folderManifestWatchers";
+import { MANIFEST_READ_ORDER } from "./manifestLocation";
 
 const folder = (name: string) => ({ name, uri: { fsPath: `/work/${name}` } });
 
-describe("the root builderforce.json watchers", () => {
-  it("watches ONE RelativePattern per folder, re-created when folders change, and disposes them all", () => {
+describe("the folder manifest watchers", () => {
+  it("watch .builderforce/builderforce.json first, then each legacy root file", () => {
+    expect(MANIFEST_READ_ORDER).toEqual([".builderforce/builderforce.json", "builderforce.json", "bfwc.app.json"]);
+    editor.watchers.length = 0;
+    const app = folder("app");
+    editor.folders = [app];
+    const source = folderManifestWatchers(MANIFEST_READ_ORDER);
+    expect(editor.watchers.map((watcher) => watcher.pattern)).toEqual(MANIFEST_READ_ORDER.map((pattern) => ({ base: app, pattern })));
+    source.dispose();
+  });
+
+  it("watch ONE RelativePattern per folder and path, re-created when folders change, and dispose them all", () => {
     editor.watchers.length = 0;
     const app = folder("app");
     const api = folder("api");
     editor.folders = [app];
-    const source = rootManifestWatchers("builderforce.json");
-    expect(editor.watchers.map((watcher) => watcher.pattern)).toEqual([{ base: app, pattern: "builderforce.json" }]);
+    const source = folderManifestWatchers([".builderforce/builderforce.json"]);
+    expect(editor.watchers.map((watcher) => watcher.pattern)).toEqual([{ base: app, pattern: ".builderforce/builderforce.json" }]);
 
     const created = vi.fn();
     source.onCreate(created);
-    editor.watchers[0]!.create.fire({ fsPath: "/work/app/builderforce.json" });
-    expect(created).toHaveBeenCalledWith("/work/app/builderforce.json");
+    editor.watchers[0]!.create.fire({ fsPath: "/work/app/.builderforce/builderforce.json" });
+    expect(created).toHaveBeenCalledWith("/work/app/.builderforce/builderforce.json");
 
     editor.folders = [app, api];
     editor.foldersChanged.fire({ added: [api], removed: [] });
     expect(editor.watchers[0]!.disposed).toBe(true);
     expect(editor.watchers.slice(1).map((watcher) => watcher.pattern.base)).toEqual([app, api]);
     // The old watcher's events no longer reach the listener; the new ones do.
-    editor.watchers[0]!.create.fire({ fsPath: "/work/app/builderforce.json" });
+    editor.watchers[0]!.create.fire({ fsPath: "/work/app/.builderforce/builderforce.json" });
     expect(created).toHaveBeenCalledOnce();
-    editor.watchers[2]!.create.fire({ fsPath: "/work/api/builderforce.json" });
-    expect(created).toHaveBeenLastCalledWith("/work/api/builderforce.json");
+    editor.watchers[2]!.create.fire({ fsPath: "/work/api/.builderforce/builderforce.json" });
+    expect(created).toHaveBeenLastCalledWith("/work/api/.builderforce/builderforce.json");
 
     source.dispose();
     expect(editor.watchers.every((watcher) => watcher.disposed)).toBe(true);

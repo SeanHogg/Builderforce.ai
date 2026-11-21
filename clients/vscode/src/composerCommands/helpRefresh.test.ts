@@ -1,6 +1,7 @@
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { isRootManifest, watchComposerHelp } from "./helpRefresh";
+import { watchComposerHelp } from "./helpRefresh";
+import { isFolderManifest } from "./manifestLocation";
 import type { ComposerCommandsInit } from "./reply";
 
 /** One event source: `fire` reaches every listener; `dispose` unsubscribes. */
@@ -54,6 +55,16 @@ describe("the / menu's help refresh", () => {
     await vi.advanceTimersByTimeAsync(100);
     expect(recompute).toHaveBeenCalledOnce();
     expect(publish).toHaveBeenCalledWith(help(1));
+  });
+
+  it("recomputes when a folder's .builderforce/builderforce.json changes, as for a legacy root one", async () => {
+    const { changed, recompute } = setup();
+    changed.fire(path.join(root, ".builderforce", "builderforce.json"));
+    await vi.advanceTimersByTimeAsync(100);
+    expect(recompute).toHaveBeenCalledOnce();
+    changed.fire(path.join(root, "bfwc.app.json"));
+    await vi.advanceTimersByTimeAsync(100);
+    expect(recompute).toHaveBeenCalledTimes(2);
   });
 
   it("recomputes when a ROOT builderforce.json is created, changed or deleted — debounced into one", async () => {
@@ -124,8 +135,11 @@ describe("the / menu's help refresh", () => {
   });
 
   it("matches roots case-insensitively on Windows only", () => {
-    expect(isRootManifest(path.join(root, "builderforce.json"), [root])).toBe(true);
-    expect(isRootManifest(path.join(root, "package.json"), [root])).toBe(false);
-    expect(isRootManifest(path.join(root.toUpperCase(), "builderforce.json"), [root])).toBe(process.platform === "win32" || root === root.toUpperCase());
+    expect(isFolderManifest(path.join(root, "builderforce.json"), [root])).toBe(true);
+    expect(isFolderManifest(path.join(root, "package.json"), [root])).toBe(false);
+    expect(isFolderManifest(path.join(root, ".builderforce", "builderforce.json"), [root])).toBe(true);
+    expect(isFolderManifest(path.join(root, ".builderforce", "hooks.json"), [root])).toBe(false);
+    expect(isFolderManifest(path.join(root, "web", ".builderforce", "builderforce.json"), [root])).toBe(false);
+    expect(isFolderManifest(path.join(root.toUpperCase(), "builderforce.json"), [root])).toBe(process.platform === "win32" || root === root.toUpperCase());
   });
 });

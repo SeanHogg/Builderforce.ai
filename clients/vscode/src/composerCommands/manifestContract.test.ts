@@ -7,8 +7,33 @@
 import { describe, expect, it } from "vitest";
 import { parseManifest, validateManifest } from "@seanhogg/builderforce-webcontainers-core/manifest";
 import { composeKit, NAMED_KITS } from "@builderforce/ide-templates/kits";
-import { MANIFEST_FILE_NAME as MANIFEST_FILE } from "@builderforce/app-detect/manifest";
+import {
+  LEGACY_MANIFEST_PATHS, MANIFEST_DIR, MANIFEST_FILE_NAME, MANIFEST_PATH as KIT_MANIFEST_PATH, MANIFEST_READ_PATHS,
+} from "@builderforce/app-detect/manifest";
 import { detectWorkspaceManifest } from "./detectManifest";
+import { LEGACY_MANIFEST_FILES, MANIFEST_FILE, MANIFEST_PATH, MANIFEST_READ_ORDER, WORKSPACE_DIR } from "./manifestLocation";
+
+/**
+ * ONE place for the manifest: the pure packages (app-detect, the starter kits) state it once
+ * because the runtime's `/manifest` module is Node-only; this pins that statement to the
+ * runtime's, so the kits write and the detectors read exactly where the launcher looks.
+ */
+describe("where the manifest lives: app-detect agrees with the runtime", () => {
+  it("names the same file, folder, canonical path and legacy fallbacks", () => {
+    expect(MANIFEST_FILE_NAME).toBe(MANIFEST_FILE);
+    expect(MANIFEST_DIR).toBe(WORKSPACE_DIR);
+    expect(KIT_MANIFEST_PATH).toBe(MANIFEST_PATH);
+    expect(MANIFEST_PATH).toBe(".builderforce/builderforce.json");
+    expect([...LEGACY_MANIFEST_PATHS]).toEqual([...LEGACY_MANIFEST_FILES]);
+    expect([...MANIFEST_READ_PATHS]).toEqual([...MANIFEST_READ_ORDER]);
+  });
+
+  it.each([...NAMED_KITS])("starter kit %s writes its manifest at .builderforce/builderforce.json, never at the root", (kitId) => {
+    const { files } = composeKit(kitId);
+    expect(files[MANIFEST_PATH]).toBeDefined();
+    for (const legacy of LEGACY_MANIFEST_FILES) expect(files[legacy]).toBeUndefined();
+  });
+});
 
 /** Parse with the runtime's ONE reader, validate again explicitly; every issue found. */
 function runtimeIssues(text: string) {
@@ -68,7 +93,7 @@ describe("manifests the extension writes parse cleanly in the runtime", () => {
   it.each([...NAMED_KITS])("starter kit %s: builderforce.json parses and validates with zero issues", (kitId) => {
     const kit = composeKit(kitId);
     expect(kit.issues).toEqual([]);
-    const text = kit.files[MANIFEST_FILE];
+    const text = kit.files[MANIFEST_PATH];
     expect(text).toBeDefined();
     const { manifest, issues } = runtimeIssues(text!);
     expect(manifest).not.toBeNull();
@@ -91,7 +116,7 @@ describe("manifests the extension writes parse cleanly in the runtime", () => {
 
   it.each([...NAMED_KITS])("starter kit %s, re-detected from its own files: zero issues", (kitId) => {
     const files = { ...composeKit(kitId).files };
-    delete files[MANIFEST_FILE]; // detected from the code, as `/launch` does in a folder with no manifest
+    delete files[MANIFEST_PATH]; // detected from the code, as `/launch` does in a folder with no manifest
     const { manifest, issues } = runtimeIssues(detectWorkspaceManifest(new Map(Object.entries(files))).text);
     expect(manifest).not.toBeNull();
     expect(issues).toEqual([]);

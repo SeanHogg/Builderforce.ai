@@ -60,6 +60,14 @@
       {
         "fileMatch": "**/.builderforce/hooks.json",
         "url": "./schemas/hooks.schema.json"
+      },
+      {
+        "fileMatch": [
+          "**/.builderforce/builderforce.json",
+          "**/builderforce.json",
+          "**/bfwc.app.json"
+        ],
+        "url": "./out/schemas/app.v1.schema.json"
       }
     ],
     "viewsContainers": {

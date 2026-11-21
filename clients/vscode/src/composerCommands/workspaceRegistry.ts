@@ -1,10 +1,9 @@
 /**
  * The composer command registry for the workspace as it is NOW (PRD 31 §W11): which
- * folders are open, what each folder's `builderforce.json` declares, and whether this
+ * folders are open, what each folder's manifest declares, and whether this
  * extension host is remote. Rebuilt per `/` menu refresh and per composer line
  * (`host.ts`); over the {@link ComposerWorkspacePort}, so it is tested against a fake.
  */
-import * as path from "node:path";
 import {
   createComposerCommandRegistry,
   type ComposerCommandChoice,
@@ -12,7 +11,7 @@ import {
 } from "@seanhogg/builderforce-brain-embedded/composerCommands";
 import { buildComposerCommands } from "./entries";
 import type { ComposerCommandText } from "./labels";
-import { MANIFEST_FILE_NAME } from "./manifestInit";
+import { findFolderManifest } from "./manifestLocation";
 import type { ComposerWorkspacePort, WorkspaceFolderRef } from "./workspacePort";
 
 /** Where a failure the registry survives goes (the output channel, `logLine`). */
@@ -20,11 +19,17 @@ export type RegistryReport = (message: string) => void;
 
 const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
-/** The environment names one folder's `builderforce.json` declares; empty when it has none or cannot be read (reported). */
+/**
+ * The environment names one folder's manifest declares (`.builderforce/builderforce.json`, else
+ * a legacy root file); empty when it has none or it cannot be read (reported).
+ */
 async function folderEnvironments(port: ComposerWorkspacePort, folder: WorkspaceFolderRef, report: RegistryReport): Promise<string[]> {
-  const file = path.join(folder.path, MANIFEST_FILE_NAME);
+  let file = folder.path;
   let text: string | undefined;
   try {
+    const found = await findFolderManifest(port, folder);
+    if (!found) return [];
+    file = found.file;
     text = await port.readText(file);
   } catch (error) {
     report(`[composer] could not read ${file}: ${messageOf(error)}`);
@@ -76,6 +81,7 @@ export async function workspaceRegistry(
     stopLabel: text.launchStopChoice,
     trustLabel: text.launchTrustChoice,
     externalLabel: text.launchExternalChoice,
+    manifestMoveLabel: text.manifestMoveChoice,
   });
   return createComposerCommandRegistry(entries, text);
 }

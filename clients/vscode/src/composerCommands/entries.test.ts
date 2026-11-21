@@ -10,7 +10,9 @@ vi.mock("vscode", () => ({
 import { buildComposerCommands, starterKitChoices, starterKitExtraChoices } from "./entries";
 import { composerCommandText } from "./labels";
 
-const context = { hasWorkspace: true, noWorkspaceReason: "open a folder", stopLabel: "stop it", trustLabel: "trust it", externalLabel: "open outside" };
+const context = {
+  hasWorkspace: true, noWorkspaceReason: "open a folder", stopLabel: "stop it", trustLabel: "trust it", externalLabel: "open outside", manifestMoveLabel: "move it",
+};
 
 describe("composer command entries", () => {
   it("offers every named kit, every frontend × backend pair and each frontend alone, from the ide-templates registry", () => {
@@ -60,6 +62,13 @@ describe("composer command entries", () => {
     for (const command of buildComposerCommands({ ...context, hasWorkspace: false, launchUnavailableReason: "remote host" })) {
       expect(command.availability).toEqual({ ok: false, reason: "open a folder" });
     }
+  });
+
+  it("offers /manifest init and /manifest move, and both parse", () => {
+    const manifest = buildComposerCommands(context).find((command) => command.id === "manifest")!;
+    expect(manifest.args?.[0]?.choices).toEqual([{ value: "init" }, { value: "move", label: "move it" }]);
+    const registry = createComposerCommandRegistry(buildComposerCommands(context), composerCommandText());
+    expect(parseComposerInput("/manifest move", registry)).toMatchObject({ kind: "command", id: "manifest", args: { action: "move" } });
   });
 
   it("registers cleanly and parses each command's own example", () => {

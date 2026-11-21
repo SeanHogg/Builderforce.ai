@@ -48,6 +48,19 @@ describe("reading a workspace folder for detection", () => {
     expect(report).not.toHaveBeenCalled();
   });
 
+  it("reads .builderforce/builderforce.json first, and nothing else of .builderforce/", async () => {
+    await mkdir(path.join(root, ".builderforce", "logs"), { recursive: true });
+    await writeFile(path.join(root, ".builderforce", "builderforce.json"), "{\"version\":1}");
+    await writeFile(path.join(root, ".builderforce", "hooks.json"), "{}");
+    await writeFile(path.join(root, ".builderforce", "logs", "run.log"), "log");
+    const report = vi.fn();
+    const files = await readWorkspaceFiles(root, report, { maxFiles: 1, maxFileBytes: 1024, maxTotalBytes: 4096 });
+    expect([...files.keys()]).toEqual([".builderforce/builderforce.json"]);
+    expect(report).not.toHaveBeenCalled();
+    const all = await readWorkspaceFiles(root, report);
+    expect([...all.keys()].filter((key) => key.startsWith(".builderforce/"))).toEqual([".builderforce/builderforce.json"]);
+  });
+
   it("rejects when the folder itself cannot be read", async () => {
     unreadable.add(path.resolve(root));
     await expect(readWorkspaceFiles(root, vi.fn())).rejects.toMatchObject({ code: "EACCES" });

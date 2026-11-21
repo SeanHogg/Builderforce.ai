@@ -1,22 +1,23 @@
 /**
- * The `builderforce.json` watchers the `/` menu's help refresh listens to (`helpRefresh.ts`):
- * ONE `RelativePattern(folder, "builderforce.json")` watcher per workspace folder — only a
- * folder's ROOT manifest, never a whole-tree `**` glob (every `node_modules` copy) — re-created
- * when a folder is added or removed, and every one disposed with the returned source.
+ * The manifest watchers the `/` menu's help refresh listens to (`helpRefresh.ts`): per
+ * workspace folder, ONE `RelativePattern(folder, path)` watcher for each place its manifest
+ * may be (`MANIFEST_READ_ORDER`: `.builderforce/builderforce.json`, then the legacy root files)
+ * — only those exact paths, never a whole-tree `**` glob (every `node_modules` copy) —
+ * re-created when a folder is added or removed, and every one disposed with the returned source.
  */
 import * as vscode from "vscode";
 import type { HelpRefreshDeps } from "./helpRefresh";
 
 type ManifestEvents = HelpRefreshDeps["manifestEvents"];
 
-export function rootManifestWatchers(fileName: string): ManifestEvents {
+export function folderManifestWatchers(relativePaths: readonly string[]): ManifestEvents {
   const created = new vscode.EventEmitter<string>();
   const changed = new vscode.EventEmitter<string>();
   const deleted = new vscode.EventEmitter<string>();
   let watchers: vscode.Disposable[] = [];
 
-  const watch = (folder: vscode.WorkspaceFolder): vscode.Disposable => {
-    const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(folder, fileName));
+  const watch = (folder: vscode.WorkspaceFolder, relative: string): vscode.Disposable => {
+    const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(folder, relative));
     const forwards = [
       watcher.onDidCreate((uri) => created.fire(uri.fsPath)),
       watcher.onDidChange((uri) => changed.fire(uri.fsPath)),
@@ -30,7 +31,7 @@ export function rootManifestWatchers(fileName: string): ManifestEvents {
   };
   const rebuild = (): void => {
     disposeWatchers();
-    watchers = (vscode.workspace.workspaceFolders ?? []).map(watch);
+    watchers = (vscode.workspace.workspaceFolders ?? []).flatMap((folder) => relativePaths.map((relative) => watch(folder, relative)));
   };
 
   rebuild();

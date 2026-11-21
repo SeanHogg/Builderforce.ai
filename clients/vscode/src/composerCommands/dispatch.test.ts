@@ -16,7 +16,7 @@ const done: ComposerReply = { kind: "text", tone: "info", lines: ["done"] };
 function setup(hasWorkspace = true) {
   const text = composerCommandText();
   const registry = createComposerCommandRegistry(
-    buildComposerCommands({ hasWorkspace, noWorkspaceReason: text.noWorkspace, stopLabel: text.launchStopChoice, trustLabel: text.launchTrustChoice, externalLabel: text.launchExternalChoice }),
+    buildComposerCommands({ hasWorkspace, noWorkspaceReason: text.noWorkspace, stopLabel: text.launchStopChoice, trustLabel: text.launchTrustChoice, externalLabel: text.launchExternalChoice, manifestMoveLabel: text.manifestMoveChoice }),
     text,
   );
   const executors = {

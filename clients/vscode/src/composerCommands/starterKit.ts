@@ -18,10 +18,13 @@ import type { ComposerCommandExecutor } from "./dispatch";
 import type { ComposerCommandText } from "./labels";
 import { chooseFolder, inFolder, launchFollowUp, type ComposerWorkspacePort } from "./workspacePort";
 import { WriteRefusedError, writeRefusedReply } from "./writeContainment";
-import { DIRECTIVES_DIR } from "../hooks/hookConfig";
+import { WORKSPACE_DIR } from "./manifestLocation";
 
-/** Entries a fresh folder may already hold: version control, editor settings and the extension's own folder. */
-const IGNORED_ENTRIES = new Set([".git", ".vscode", DIRECTIVES_DIR]);
+/**
+ * Entries a fresh folder may already hold: version control, editor settings and the extension's
+ * own folder (`.builderforce/`: its hooks and directives — and the kit's manifest goes there too).
+ */
+const IGNORED_ENTRIES = new Set([".git", ".vscode", WORKSPACE_DIR]);
 /** How many conflicting paths the approval names before eliding the rest. */
 const MAX_LISTED_CONFLICTS = 20;
 
@@ -46,7 +49,7 @@ export function starterKitExecutor({ port, text }: StarterKitDeps): ComposerComm
     const refused = await port.checkWrites(paths.map((file) => inFolder(folder, file)));
     if (refused.length > 0) return writeRefusedReply(text, refused);
     const occupied = (await port.listDir(folder.path)).some((name) => !IGNORED_ENTRIES.has(name));
-    // Checked even in an "empty" folder: a kit file inside an ignored folder (`.builderforce/…`) is still a conflict.
+    // Checked even in an "empty" folder: a kit file inside an ignored folder (`.builderforce/builderforce.json`) is still a conflict.
     const conflicts: string[] = [];
     for (const file of paths) if (await port.exists(inFolder(folder, file))) conflicts.push(file);
     if (occupied || conflicts.length > 0) {

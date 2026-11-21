@@ -17,6 +17,8 @@ export const STARTER_KIT_COMMAND_ID = "starter-kit";
 export const MANIFEST_COMMAND_ID = "manifest";
 export const LAUNCH_COMMAND_ID = "launch";
 export const MANIFEST_INIT_ACTION = "init";
+/** `/manifest move`: move a legacy root manifest into `.builderforce/` (`manifestMove.ts`). */
+export const MANIFEST_MOVE_ACTION = "move";
 export const LAUNCH_STOP = "stop";
 export const LAUNCH_TRUST = "trust";
 /** `/launch external`: open the launcher in the system browser instead of VS Code's integrated browser. */
@@ -30,10 +32,13 @@ export interface ComposerCommandContext {
   /** Why not, in the person's language (shown disabled with this reason, never hidden). */
   noWorkspaceReason: string;
   /**
-   * `/launch`'s environment choices: those the open folders' `builderforce.json` files
-   * declare, when readable (several folders ⇒ each labelled with the folders declaring it).
+   * `/launch`'s environment choices: those the open folders' manifests
+   * (`.builderforce/builderforce.json`, else a legacy root file) declare, when readable
+   * (several folders ⇒ each labelled with the folders declaring it).
    */
   environments?: readonly ComposerCommandChoice[];
+  /** The label of `/manifest`'s `move` choice. */
+  manifestMoveLabel: string;
   /** Why `/launch` cannot run in this host even with a folder open (a remote extension host). */
   launchUnavailableReason?: string;
   /** The label of the `stop` choice. */
@@ -96,8 +101,12 @@ export function buildComposerCommands(context: ComposerCommandContext): Composer
     },
     {
       id: MANIFEST_COMMAND_ID,
-      syntax: "/manifest init",
-      args: [{ name: "action", required: true, choices: [{ value: MANIFEST_INIT_ACTION }] }],
+      syntax: "/manifest init | move",
+      args: [{
+        name: "action",
+        required: true,
+        choices: [{ value: MANIFEST_INIT_ACTION }, { value: MANIFEST_MOVE_ACTION, label: context.manifestMoveLabel }],
+      }],
       example: "/manifest init",
       availability,
     },

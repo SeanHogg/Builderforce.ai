@@ -6,8 +6,8 @@
 import { lstat } from "node:fs/promises";
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { MANIFEST_FILE_NAME } from "@builderforce/app-detect/manifest";
 import type { ShowManifest } from "./manifestInit";
+import { MANIFEST_FILE } from "./manifestLocation";
 import { isMissingPath, refusedWrites, WriteRefusedError } from "./writeContainment";
 import type { ComposerWorkspacePort, WorkspaceFolderRef } from "./workspacePort";
 
@@ -59,6 +59,13 @@ export function vscodeWorkspacePort(): ComposerWorkspacePort {
       await fs.createDirectory(vscode.Uri.file(path.dirname(file)));
       await fs.writeFile(vscode.Uri.file(file), new TextEncoder().encode(text));
     },
+    move: async (from, to) => {
+      const refused = await checkWrites([from, to]);
+      if (refused.length > 0) throw new WriteRefusedError(refused);
+      await fs.createDirectory(vscode.Uri.file(path.dirname(to)));
+      // `overwrite: false`: an existing target rejects (FileExists), never replaced.
+      await fs.rename(vscode.Uri.file(from), vscode.Uri.file(to), { overwrite: false });
+    },
     confirm: async (message, approve) => (await vscode.window.showWarningMessage(message, { modal: true }, approve)) === approve,
   };
 }
@@ -81,7 +88,7 @@ export function registerManifestPreview(subscriptions: vscode.Disposable[]): Sho
     }),
   );
   return async (proposed, title, currentFile) => {
-    const uri = vscode.Uri.from({ scheme: PREVIEW_SCHEME, path: `/${encodeURIComponent(currentFile ?? "detected")}/${MANIFEST_FILE_NAME}` });
+    const uri = vscode.Uri.from({ scheme: PREVIEW_SCHEME, path: `/${encodeURIComponent(currentFile ?? "detected")}/${MANIFEST_FILE}` });
     proposals.set(uri.toString(), proposed);
     changed.fire(uri);
     if (currentFile) {

@@ -253,6 +253,37 @@ describe('transport failures', () => {
     expect(s.model).toBe('opus');
   });
 
+  it('regression: chat #128305 — an interrupted verify-phase review model is routed around, and the author stays excluded', () => {
+    const s = run(
+      initialRunPolicy({ startPhase: 'code', phaseModels: { code: 'opus', verify: 'grok' } }),
+      { type: 'verify_started' },
+      { type: 'transport_failed', kind: 'interrupted', model: 'grok' },
+    );
+    expect(s.outcome).toEqual({ kind: 'retry_turn', broken: 'grok' });
+    expect(s.model).toBeUndefined();
+    expect(s.authorModel).toBe('opus');
+    expect(nextTurn(s, TOOLS)).toMatchObject({ role: 'review', model: undefined, excludeModels: ['grok', 'opus'] });
+    // The retry failing too still ends the turn.
+    expect(run(s, { type: 'transport_failed', kind: 'interrupted', model: 'kimi' }).outcome).toEqual({ kind: 'fail_turn' });
+  });
+
+  it('regression: chat #128305 — an interrupted failover / escalation target is routed around', () => {
+    const s = run(
+      initialRunPolicy({ startPhase: 'code' }),
+      { type: 'escalated', to: 'grok' },
+      { type: 'transport_failed', kind: 'interrupted', model: 'grok' },
+    );
+    expect(s.outcome).toEqual({ kind: 'retry_turn', broken: 'grok' });
+    expect(nextTurn(s, TOOLS)).toMatchObject({ model: undefined, excludeModels: ['grok'] });
+  });
+
+  it('regression: chat #128305 — an interrupted user pin (not releasable) still fails the turn', () => {
+    const s = run(initialRunPolicy({ pinnedModel: 'grok' }), { type: 'transport_failed', kind: 'interrupted', model: 'grok' });
+    expect(s.outcome).toEqual({ kind: 'fail_turn' });
+    expect(s.model).toBe('grok');
+    expect(s.broken).toEqual([]);
+  });
+
   it('releases a releasable pin on 429/413/503 for the rest of the run', () => {
     for (const status of PIN_RELEASE_STATUSES) {
       const s = run(initialRunPolicy({ pinnedModel: 'opus', strictPin: true, pinReleasable: true }), { type: 'transport_failed', kind: 'transport', status });

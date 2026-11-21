@@ -34,6 +34,29 @@ describe('builderforceJsonDetector — reporting', () => {
   });
 });
 
+describe('builderforceJsonDetector — where the manifest lives', () => {
+  it('reads .builderforce/builderforce.json, and it wins over a legacy root file', () => {
+    expect(builderforceJsonDetector.reads).toEqual(['.builderforce/builderforce.json', 'builderforce.json', 'bfwc.app.json']);
+    const result = builderforceJsonDetector.detect(new Map([
+      ['.builderforce/builderforce.json', '{"isMonorepo":true}'],
+      ['builderforce.json', '{nope'],
+    ]));
+    expect(result.overrides).toEqual({ isMonorepo: true });
+    expect(result.warnings).toBeUndefined();
+  });
+
+  it('names the canonical path in its notes', () => {
+    const result = builderforceJsonDetector.detect(new Map([['.builderforce/builderforce.json', '[1]']]));
+    expect(noteMessages(result.warnings!)).toEqual(['.builderforce/builderforce.json is not a JSON object and was ignored']);
+  });
+
+  it('falls back to a root bfwc.app.json an older version left', () => {
+    const result = builderforceJsonDetector.detect(new Map([['bfwc.app.json', '{"isMonorepo":true}']]));
+    expect(result.sources?.builderforceJson).toBe(true);
+    expect(result.overrides).toEqual({ isMonorepo: true });
+  });
+});
+
 describe('builderforceJsonDetector — manifest v1', () => {
   const V1 = JSON.stringify({
     $schema: 'https://builderforce.ai/schema/app.v1.json',

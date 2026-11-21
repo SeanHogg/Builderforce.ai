@@ -10,7 +10,9 @@
  * - `external` / `stop` / `trust` are always the subcommand, never an environment of that name
  *   (`LAUNCH_SUBCOMMANDS`; `entries.ts` leaves such environments out of the choices).
  *
- * - No `builderforce.json` ⇒ the app is detected and its manifest passed in memory
+ * - A legacy root manifest still runs; the reply says it is deprecated and offers `/manifest move`.
+ * - No manifest (`.builderforce/builderforce.json`, nor a legacy root file — `manifestLocation.ts`)
+ *   ⇒ the app is detected and its manifest passed in memory
  *   (`manifestText`), and the reply says so (save it with `/manifest init`) with detection's
  *   notes, worded as `/manifest init` words them.
  * - Unavailable in a remote extension host (`entries.ts`): the launcher binds loopback on
@@ -27,8 +29,10 @@ import type { ComposerCommandText } from "./labels";
 import { LAUNCH_COMMAND_ID, LAUNCH_EXTERNAL, LAUNCH_STOP, LAUNCH_TRUST } from "./entries";
 import { NO_TRUST_STEP, type LauncherCa, type TrustOutcome } from "./launcherTrust";
 import type { FolderLaunchers, RunningLauncher } from "./folderLaunchers";
-import { MANIFEST_FILE_NAME, type DetectManifest, type ReadFolderFiles } from "./manifestInit";
-import { chooseFolder, inFolder, type ComposerWorkspacePort } from "./workspacePort";
+import type { DetectManifest, ReadFolderFiles } from "./manifestInit";
+import { findFolderManifest, MANIFEST_PATH } from "./manifestLocation";
+import { legacyManifestAction } from "./manifestMove";
+import { chooseFolder, type ComposerWorkspacePort } from "./workspacePort";
 import type { EditorBrowser } from "./openExternal";
 import type { ComposerReply, ComposerReplyAction } from "./reply";
 
@@ -84,6 +88,7 @@ export function launchExecutor(deps: LaunchDeps): ComposerCommandExecutor {
     more: string[],
     force: boolean,
     askedExternal: boolean,
+    moreActions: ComposerReplyAction[] = [],
   ): Promise<ComposerReply> => {
     const trust: TrustOutcome = deps.trust ? await deps.trust(launcher.ca, force) : NO_TRUST_STEP;
     const available = await deps.editorBrowser.available();
@@ -100,6 +105,7 @@ export function launchExecutor(deps: LaunchDeps): ComposerCommandExecutor {
     const actions: ComposerReplyAction[] = [
       ...inEditor,
       { label: text.launchOpenExternal, command: `/${LAUNCH_COMMAND_ID} ${LAUNCH_EXTERNAL}` },
+      ...moreActions,
     ];
     return {
       kind: "text",
@@ -133,8 +139,8 @@ export function launchExecutor(deps: LaunchDeps): ComposerCommandExecutor {
     // Another environment: the folder's one launcher is restarted for it.
     if (running) await launchers.stop(folder.path);
 
-    const hasManifest = await port.exists(inFolder(folder, MANIFEST_FILE_NAME));
-    const detected = hasManifest ? undefined : deps.detect(await deps.readFiles(folder.path));
+    const found = await findFolderManifest(port, folder);
+    const detected = found ? undefined : deps.detect(await deps.readFiles(folder.path));
     const manifestText = detected?.text;
     let launcher: RunningLauncher;
     try {
@@ -148,6 +154,11 @@ export function launchExecutor(deps: LaunchDeps): ComposerCommandExecutor {
     }
     // A detected manifest's notes are shown exactly as `/manifest init` shows them: what detection could not express is never dropped.
     const detectedLines = detected ? [text.launchDetected, ...text.noteLines(detected.notes)] : [];
-    return trustThenOpen(launcher, (opened) => text.launchStarted(folder.name, opened), detectedLines, forceTrust, external);
+    // A legacy root manifest still runs (the launcher reads it); the reply says it is deprecated and offers the move.
+    const legacyLines = found?.legacy ? [text.manifestLegacy(found.relative, MANIFEST_PATH)] : [];
+    const legacyActions = found?.legacy ? [legacyManifestAction(text)] : [];
+    return trustThenOpen(
+      launcher, (opened) => text.launchStarted(folder.name, opened), [...detectedLines, ...legacyLines], forceTrust, external, legacyActions,
+    );
   };
 }

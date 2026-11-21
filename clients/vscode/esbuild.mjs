@@ -216,6 +216,19 @@ async function copyBfiWasm() {
   await copyTreeSitterWasm();
   installBundledAnalyzers();
   copyLauncherAssets();
+  await writeManifestSchema();
+}
+
+/**
+ * The app manifest's JSON schema for VS Code's JSON validation (`contributes.jsonValidation` →
+ * `./out/schemas/app.v1.schema.json`, matching `.builderforce/builderforce.json` and the legacy
+ * root files): written from the runtime's own `APP_MANIFEST_SCHEMA_V1`, never a copy kept here.
+ */
+async function writeManifestSchema() {
+  const { APP_MANIFEST_SCHEMA_V1 } = await import("@seanhogg/builderforce-webcontainers-core/manifest");
+  const target = path.join("out", "schemas");
+  fs.mkdirSync(target, { recursive: true });
+  fs.writeFileSync(path.join(target, "app.v1.schema.json"), `${JSON.stringify(APP_MANIFEST_SCHEMA_V1, null, 2)}\n`);
 }
 
 /**

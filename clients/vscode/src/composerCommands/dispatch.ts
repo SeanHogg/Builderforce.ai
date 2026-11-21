@@ -23,6 +23,20 @@ import { WriteRefusedError, writeRefusedReply } from "./writeContainment";
 /** Runs one parsed command. `args` are the parser's canonical values. */
 export type ComposerCommandExecutor = (args: Record<string, string | string[]>) => Promise<ComposerReply>;
 
+/**
+ * One executor per value of a command's `action` argument (`/manifest init | move`). The parser
+ * has already refused any value not in the command's choices, so a missing executor is a host
+ * wiring error: it throws, and `handleComposerInput` reports it.
+ */
+export function actionExecutor(actions: Readonly<Record<string, ComposerCommandExecutor>>): ComposerCommandExecutor {
+  return async (args) => {
+    const action = String(args.action);
+    const run = actions[action];
+    if (!run) throw new Error(`no executor for the "${action}" action`);
+    return run(args);
+  };
+}
+
 export interface ComposerDispatchDeps {
   registry: ComposerCommandRegistry;
   text: ComposerCommandText;

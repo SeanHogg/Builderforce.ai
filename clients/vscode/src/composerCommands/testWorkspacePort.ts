@@ -45,6 +45,15 @@ export function fakeWorkspacePort(folders: WorkspaceFolderRef[], files: Record<s
       if (refused.length > 0) throw new WriteRefusedError(refused);
       port.files.set(file, text);
     },
+    move: async (from, to) => {
+      const refused = await checkWrites([from, to]);
+      if (refused.length > 0) throw new WriteRefusedError(refused);
+      if (port.files.has(to)) throw new Error(`${to} exists`);
+      const text = port.files.get(from);
+      if (text === undefined) throw new Error(`${from} does not exist`);
+      port.files.delete(from);
+      port.files.set(to, text);
+    },
     confirm: async (message, approve) => {
       port.asked.push({ message, approve });
       return port.approve;

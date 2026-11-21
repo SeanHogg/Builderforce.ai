@@ -47,7 +47,11 @@ export {
 export { manifestToBlueprintOverrides, type ManifestOverridesResult } from './manifest/manifestToBlueprintOverrides';
 export {
   BACKEND_INGRESS_PATH,
+  LEGACY_MANIFEST_PATHS,
+  MANIFEST_DIR,
   MANIFEST_FILE_NAME,
+  MANIFEST_PATH,
+  MANIFEST_READ_PATHS,
   MANIFEST_SCHEMA_URL,
   type EmittedIngressRoute,
   type EmittedManifest,

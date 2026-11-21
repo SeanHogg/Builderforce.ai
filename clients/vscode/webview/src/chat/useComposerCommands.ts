@@ -82,7 +82,7 @@ export function useComposerCommands({ init, draftStore, submit, seed }: {
     else queueAfter();
   }, [draftStore, submitLine]);
 
-  // The host recomputes the model when the workspace changes (a folder, a root builderforce.json) and
+  // The host recomputes the model when the workspace changes (a folder, a folder's manifest) and
   // pushes it; that replaces the one `init` carried until the next `init` brings its own.
   const [pushed, setPushed] = useState<{ from: InitData; model: ComposerCommandsInit } | null>(null);
   useEffect(() => onHostMessage<ComposerCommandsFrame>(COMPOSER_COMMANDS_FRAME, (frame) => {

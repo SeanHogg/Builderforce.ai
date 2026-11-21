@@ -42,3 +42,7 @@ next-env.d.ts
 # The threaded bfi-web artifact, published by scripts/copy-bfi-threads.mjs (prebuild/dev)
 # from packages/bfi-web/threads — never committed.
 /public/bfi-threads/
+
+# The app manifest's JSON schema (the `$schema` URL every builderforce.json carries), published by
+# scripts/publish-manifest-schema.mjs (prebuild/dev) from the pinned runtime — never committed.
+/public/schema/

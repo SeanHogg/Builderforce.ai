@@ -136,9 +136,6 @@ function bonsai(
   };
 }
 
-/** A WebLLM prebuilt, from its generated entry (`webllmCatalog.generated.ts`). A row not
- *  `low_resource_required` asks for WebLLM's full 1 GiB binding; a build stating its own
- *  buffer need (`buffer_size_required_bytes`) asks for at least that. */
 /** 4-bit ONNX Bonsai builds. The engine is {@link ENGINE_BY_FORMAT}, not the GGUF provisioner. */
 const ONNX_BONSAI: ReadonlyArray<{ size: string; params: number; bytes: number; file: string }> = [
   { size: '1.7B', params: 1_700_000_000, bytes: 900_000_000, file: 'Bonsai-1.7B-q4-ONNX' },
@@ -171,6 +168,17 @@ export function localEngineFor(row: { format?: LocalModelFormat; runtime: string
   return row.format ? ENGINE_BY_FORMAT[row.format] : row.runtime;
 }
 
+/**
+ * MK-49-ONNX: the ONNX Bonsai rows, held OUT of {@link LOCAL_MODEL_CATALOG} until the ONNX engine
+ * is a registered page runtime. No runtime in `LOCAL_RUNTIMES` loads an ONNX graph today — WebLLM
+ * serves only its MLC prebuilts and `bfi` only GGUF — so offering these to the picker would hand
+ * a download no engine can run. The routing work (`localEngineFor`) reads them from here.
+ */
+export const ONNX_BONSAI_CATALOG: readonly LocalCatalogModel[] = ONNX_BONSAI.map(onnxBonsai);
+
+/** A WebLLM prebuilt, from its generated entry (`webllmCatalog.generated.ts`). A row not
+ *  `low_resource_required` asks for WebLLM's full 1 GiB binding; a build stating its own
+ *  buffer need (`buffer_size_required_bytes`) asks for at least that. */
 function webllm(entry: WebLlmCatalogEntry): LocalCatalogModel {
   const binding = entry.lowResource ? WEBGPU_DEFAULT_BINDING_BYTES : WEBLLM_FULL_BINDING_BYTES;
   return {
@@ -203,7 +211,6 @@ export const LOCAL_MODEL_CATALOG: readonly LocalCatalogModel[] = [
   bonsai('1.7B', 1_700_000_000, 248_302_272, 32_768, 28, 2 * GIB),
   bonsai('4B', 4_000_000_000, 572_270_624, 32_768, 36, 4 * GIB),
   bonsai('8B', 8_190_000_000, 1_158_654_496, 65_536, 36, 8 * GIB),
-  ...ONNX_BONSAI.map(onnxBonsai),
   ...WEBLLM_CATALOG.map(webllm),
 ];
 

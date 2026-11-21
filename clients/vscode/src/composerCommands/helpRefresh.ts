@@ -1,16 +1,16 @@
 /**
  * Keeps the `/` menu's help model current (PRD 31 §W11). The model is built from the open
- * workspace folders (no folder ⇒ every command disabled) and each folder's
- * `builderforce.json` (their environments are `/launch`'s choices), so it goes stale when a
- * folder is added or removed, or a ROOT `builderforce.json` is created, changed or deleted.
+ * workspace folders (no folder ⇒ every command disabled) and each folder's manifest (its
+ * environments are `/launch`'s choices), so it goes stale when a folder is added or removed,
+ * or a folder's manifest — `.builderforce/builderforce.json` or a legacy root file
+ * (`manifestLocation.ts`) — is created, changed or deleted.
  * Each of those recomputes it — debounced, so a burst (a kit writing many files, a
  * multi-root change) recomputes once — and publishes the new model to the webviews.
  *
  * Pure over its event sources: the host wires `vscode.workspace` in (`host.ts`), tests
  * drive fakes.
  */
-import * as path from "node:path";
-import { MANIFEST_FILE_NAME } from "@builderforce/app-detect/manifest";
+import { isFolderManifest } from "./manifestLocation";
 import type { ComposerCommandsInit } from "./reply";
 
 /** A subscription that can be undone (`vscode.Disposable`). */
@@ -23,7 +23,7 @@ type Subscribe<T> = (listener: (value: T) => void) => HelpRefreshDisposable;
 export interface HelpRefreshDeps {
   /** `vscode.workspace.onDidChangeWorkspaceFolders`. */
   onFoldersChanged: Subscribe<unknown>;
-  /** The root `builderforce.json` watchers (`rootManifestWatchers.ts`): create/change/delete events carry the file's path. */
+  /** The folder manifest watchers (`folderManifestWatchers.ts`): create/change/delete events carry the file's path. */
   manifestEvents: { onCreate: Subscribe<string>; onChange: Subscribe<string>; onDelete: Subscribe<string> } & HelpRefreshDisposable;
   /** The open workspace folders' paths, now. */
   folderRoots: () => readonly string[];
@@ -37,16 +37,6 @@ export interface HelpRefreshDeps {
 }
 
 export const HELP_REFRESH_DEBOUNCE_MS = 250;
-
-const sameDir = (a: string, b: string): boolean => {
-  const norm = (p: string) => path.resolve(p).replace(/[\\/]+$/, "");
-  return process.platform === "win32" ? norm(a).toLowerCase() === norm(b).toLowerCase() : norm(a) === norm(b);
-};
-
-/** Is this `builderforce.json` at a workspace folder's root (not one nested in node_modules or a sub-app)? */
-export function isRootManifest(file: string, roots: readonly string[]): boolean {
-  return path.basename(file) === MANIFEST_FILE_NAME && roots.some((root) => sameDir(path.dirname(file), root));
-}
 
 /** Start watching. The returned disposable stops the watcher and any pending recompute. */
 export function watchComposerHelp(deps: HelpRefreshDeps): HelpRefreshDisposable {
@@ -70,7 +60,7 @@ export function watchComposerHelp(deps: HelpRefreshDeps): HelpRefreshDisposable 
     }, delay);
   };
   const onManifest = (file: string): void => {
-    if (isRootManifest(file, deps.folderRoots())) schedule();
+    if (isFolderManifest(file, deps.folderRoots())) schedule();
   };
 
   const subscriptions: HelpRefreshDisposable[] = [
