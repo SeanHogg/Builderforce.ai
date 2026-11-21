@@ -247,4 +247,50 @@ export async function applyPulledLinkTombstone(
   ids.delete(remote.id);
   for (const id of ids) {
     const row = await tx.get('chat-ticket-link', id);
-    if (!row || row.deletedAt || await hasPendingEven
+    if (!row || row.deletedAt || await hasPendingEvent(tx, row)) continue;
+    await tx.put(serverObservedTombstone(row, at));
+  }
+}
+
+/**
+ * Put back in the device's form every live link of `destination` an earlier pull stored in the
+ * server's form, then retire the misfiled ones ({@link retireMisfiledLinks}). Idempotent. Left as
+ * it is: a link with a pending local event (the user's edit in flight) and one whose parents this
+ * device does not map. A link under its derived id keeps its version and provenance (the server's
+ * state re-keyed, not a local edit, so no event). Returns how many links were repaired or retired.
+ */
+export async function repairServerFormLinks(tx: LocalFirstTransaction, destination: EntityDestination, at: string): Promise<number> {
+  const key = destinationKey(destination);
+  const broken: LocalRecord[] = [];
+  await tx.scan('chat-ticket-link', (row) => {
+    if (row.deletedAt || isClientFormLink(row.payload) || destinationKey(row.destination) !== key) return;
+    broken.push(clone(row) as LocalRecord);
+  });
+  let repaired = 0;
+  for (const row of broken) {
+    if (await hasPendingEvent(tx, row)) continue;
+    const payload = await deviceForm(tx, row.payload, undefined, row.destination);
+    if (!payload) continue;
+    // Under another id (another device's): the retire step below moves it to its derived id.
+    await tx.put({ ...row, payload });
+    repaired += 1;
+  }
+  return repaired + await retireMisfiledLinks(tx, at);
+}
+
+/** The one-shot mark of {@link repairLegacyLinksOnce}, per destination. */
+export const linkFormRepairMark = (destination: EntityDestination): string => `linkFormRepair:v1:${destinationKey(destination)}`;
+
+/**
+ * The LEGACY link repair ({@link repairServerFormLinks}, which full-scans every link) for an older
+ * build's leftovers, run ONCE per destination: no current code stores a link in the server's form
+ * or under another device's id, so after the first pull nothing is left to find. Marked in the same
+ * transaction. Returns how many links were repaired or retired (0 once marked).
+ */
+export async function repairLegacyLinksOnce(tx: LocalFirstTransaction, destination: EntityDestination, at: string): Promise<number> {
+  const mark = linkFormRepairMark(destination);
+  if (await tx.readMark(mark)) return 0;
+  const repaired = await repairServerFormLinks(tx, destination, at);
+  await tx.setReadMark(mark, at);
+  return repaired;
+}

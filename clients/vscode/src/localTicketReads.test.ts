@@ -23,13 +23,18 @@ function serverTool(name: string, answer: (args: Record<string, unknown>) => str
   };
 }
 
-async function setup(current: RunChat = { localChatId: LOCAL_CHAT, serverChatId: SERVER_CHAT, clientChatId: CHAT }, listAnswer?: (args: Record<string, unknown>) => string) {
+async function setup(
+  current: RunChat = { localChatId: LOCAL_CHAT, serverChatId: SERVER_CHAT, clientChatId: CHAT },
+  listAnswer?: (args: Record<string, unknown>) => string,
+  archivedId?: string,
+) {
   const store = createMemoryLocalFirstStore();
   await store.transact(async (tx) => {
-    const put = (id: string, title: string, chatClientId: string) =>
-      tx.put(newLocalRecord<TicketValue>({ id, entityType: "ticket", payload: { projectId: "7", title, status: "backlog", taskType: "task", chatClientId }, deviceId: "d" }));
+    const put = (id: string, title: string, chatClientId: string, archived = false) =>
+      tx.put(newLocalRecord<TicketValue>({ id, entityType: "ticket", payload: { projectId: "7", title, status: "backlog", taskType: "task", chatClientId, ...(archived ? { archived: true } : {}) }, deviceId: "d" }));
     await put(UNSYNCED, "Filed here", CHAT);
     await put(SYNCED, "Synced", CHAT);
+    if (archivedId) await put(archivedId, "Archived here", CHAT, true);
     await tx.putMapping({ destination: UNBOUND_DESTINATION, entityType: "ticket", clientEntityId: SYNCED, serverId: "500", serverVersion: 1 });
   });
   const identity = {
@@ -83,6 +88,14 @@ describe("ticket reads union this device's unsynced tickets", () => {
     expect(refs(done)).toEqual(["500"]);
     const second = await tool("builtin_chats_list_tickets").execute({ chatId: SERVER_CHAT, offset: 50 }, "");
     expect(refs(second)).toEqual(["500"]);
+  });
+
+  it("regression: openOnly drops an ARCHIVED unsynced ticket whose lane still reads backlog (it reads closed, as on the server)", async () => {
+    const ARCHIVED = randomUUID();
+    const { tool } = await setup(undefined, undefined, ARCHIVED);
+    expect(refs(await tool("builtin_chats_list_tickets").execute({ chatId: SERVER_CHAT }, ""))).toContain(ARCHIVED);
+    const open = await tool("builtin_chats_list_tickets").execute({ chatId: SERVER_CHAT, openOnly: true }, "");
+    expect(refs(open)).toEqual(["500", UNSYNCED]);
   });
 
   it("answers from this device when the chat is not bound on the account yet", async () => {
