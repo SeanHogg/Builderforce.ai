@@ -152,6 +152,33 @@ describe('finalizeCloudRun — the security step on the run\'s pull request', ()
   });
 });
 
+describe('finalizeCloudRun — no bound repository ends pr_skipped: no_repository (PRD 09 §4 GAP-D4)', () => {
+  const noRepo = { ...args, repoCtx: null };
+
+  for (const [label, writtenPaths] of [['wrote nothing', new Set<string>()], ['wrote files', new Set(['a.ts'])]] as const) {
+    it(`a run with no repository that ${label} ends pr_skipped with the typed reason, not failed`, async () => {
+      const out = await finalizeCloudRun({} as never, db, { ...noRepo, writtenPaths, repoMiss: 'no repository linked to this project' });
+      expect(h.toolEvent).toHaveBeenCalledWith(db, expect.objectContaining({
+        toolName: 'pr_skipped',
+        detail: expect.objectContaining({ reason: 'no_repository', writtenFiles: writtenPaths.size }),
+      }));
+      // The free-text miss is never the reason.
+      expect(h.toolEvent).not.toHaveBeenCalledWith(db, expect.objectContaining({
+        toolName: 'pr_skipped', detail: expect.objectContaining({ reason: 'no repository linked to this project' }),
+      }));
+      // A skip, not a failure: the run succeeds and is not handed back as needs_host.
+      expect(out.ok).toBe(true);
+      expect(out.output).not.toContain('needs_host');
+      expect(h.openPr).not.toHaveBeenCalled();
+    });
+  }
+
+  it('a cancelled run with no repository is not reported as pr_skipped', async () => {
+    await finalizeCloudRun({} as never, db, { ...noRepo, cancelled: true });
+    expect(h.toolEvent).not.toHaveBeenCalledWith(db, expect.objectContaining({ toolName: 'pr_skipped' }));
+  });
+});
+
 describe('finalizeCloudRun — a run opens its PR and ends; it never merges (PRD 48 §4.3)', () => {
   for (const env of ENVS) {
     for (const allow of [true, false]) {
