@@ -59,6 +59,22 @@ describe("railTicketProgress", () => {
       .toMatchObject({ status: "backlog", progressPct: 0, done: 0, total: 1 });
   });
 
+  it("regression: an archived record still on an open lane reads closed (archived, 100, 1/1)", () => {
+    for (const railKind of ["task", "epic", "gap"]) {
+      expect(railTicketProgress(row({ railKind, status: "backlog", archived: true, progressPct: 0 })))
+        .toMatchObject({ status: "archived", progressPct: 100, done: 1, total: 1 });
+    }
+    // A locally authored record (no railKind, no progress) is closed the same way.
+    expect(railTicketProgress(row({ status: "backlog", archived: true })))
+      .toMatchObject({ status: "archived", progressPct: 100, done: 1, total: 1 });
+  });
+
+  it("an open, unarchived record is unchanged (archived false / absent keeps its lane)", () => {
+    expect(railTicketProgress(row({ status: "backlog", archived: false })))
+      .toMatchObject({ status: "backlog", progressPct: 0 });
+    expect(railTicketProgress(row({ status: "backlog" }))).toMatchObject({ status: "backlog" });
+  });
+
   it("a task-lane word does not close a spec: an open spec keeps its raw figure", () => {
     expect(railTicketProgress(row({ railKind: "spec", status: "in_progress", progressPct: 50 })).progressPct).toBe(50);
   });
