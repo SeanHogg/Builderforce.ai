@@ -9,6 +9,8 @@
     "./symbols": "./src/symbols.ts",
     "./knowledge": "./src/knowledge/index.ts",
     "./code-mask": "./src/knowledge/codeMask.ts",
+    "./gateway-error": "./src/knowledge/gatewayError.ts",
+    "./gate-lowering": "./src/gate-lowering.ts",
     "./glob": "./src/glob.ts",
     "./sampling": "./src/sampling.ts",
     "./documents": "./src/documents.ts",

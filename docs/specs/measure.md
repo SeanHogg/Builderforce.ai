@@ -19,7 +19,9 @@
 
 ## Features and tasks — status
 
-Verified against the code 2026-11-20. This replaces the per-section `Remaining (verified …)` notes, which were stale: each now points at a row ID below. **Status** is `Complete`, `Incomplete`, or `Blocked — operator` (needs a credential, a provisioned resource or a business relationship, not code). The prose in the sections that follow is unchanged and remains the spec.
+Verified against the code 2026-11-21. This replaces the per-section `Remaining (verified …)` notes, which were stale: each now points at a row ID below. **Status** is `Complete`, `Incomplete`, `Blocked` (needs a producer that does not exist yet), or `Blocked — operator` (needs a credential, a provisioned resource or a business relationship, not code). The prose in the sections that follow is unchanged and remains the spec.
+
+**As of 2026-11-21: 20 rows — 15 Complete, 4 Blocked — operator (P25-14, P33-01, P33-02, P33-03), 1 Blocked on a missing producer (OUT-03). No row is Incomplete. Every code-buildable row is Complete.**
 
 ### PRD 25 — Vertical KPI Dashboards
 
@@ -38,15 +40,15 @@ Verified against the code 2026-11-20. This replaces the per-section `Remaining (
 | P25-11 | `toPublicProfile` carries the benchmark rating (elite/high/medium/low, never numbers) | §6.6 | Complete | `api/src/application/investor/startupDirectory.ts`, `frontend/src/lib/startupDirectory.ts` |
 | P25-12 | `companies.sector` validated through `isStartupSector` | §8 | Complete | `api/src/application/investor/companyWorkspace.ts` (`createCompany` uses `sectorFromInput`) |
 | P25-13 | Release notes (category `new`) for slices B, C and D | §7 ship rule, §25a.0 | Complete | Evidence: `migrations/1360_release_note_measure_saas_ai_dashboards.sql`, `1361_release_note_exit_waterfall_market_size.sql`, `1362_release_note_vertical_milestone_dashboards.sql` |
-| P25-14 | Slice D design-partner proof: two design-partner tenants per vertical run the dashboard for a month | §7 D, §25a.7 | Blocked — operator | Business relationship, not code |
+| P25-14 | Slice D design-partner proof: two design-partner tenants per vertical run the dashboard for a month | §7 D, §25a.7 | Blocked — operator | Ticket #6925 (this chat). Business relationship, not code |
 
 ### PRD 33 — Insights
 
 | ID | Feature / task | Spec § | Status | Evidence (file paths) |
 |---|---|---|---|---|
-| P33-01 | D18 event lake (exact funnels, flow, segments) | §2 | Blocked — operator | Operator provisions the pipeline; a Pipelines binding fails deploy when the pipeline does not exist |
-| P33-02 | `NEXT_PUBLIC_REPLAY_SITE_KEY` set for builderforce.ai | §11 | Blocked — operator | Read by `frontend/src/components/ReplayLoader.tsx`; set only in `frontend/.env.local.example` |
-| P33-03 | Stripe secrets and webhook (session-replay pack checkout answers 503 until set) | §11 | Blocked — operator | Credentials; see Reach › Billing |
+| P33-01 | D18 event lake (exact funnels, flow, segments) | §2 | Blocked — operator | Ticket #6926 (this chat). Operator provisions the pipeline; a Pipelines binding fails deploy when the pipeline does not exist |
+| P33-02 | `NEXT_PUBLIC_REPLAY_SITE_KEY` set for builderforce.ai | §11 | Blocked — operator | Ticket #6927 (this chat). Read by `frontend/src/components/ReplayLoader.tsx`; set only in `frontend/.env.local.example` |
+| P33-03 | Stripe secrets and webhook (session-replay pack checkout answers 503 until set) | §11 | Blocked — operator | Ticket #6928 (this chat). Credentials; see Reach › Billing |
 
 ### Creation outcome metrics
 
@@ -54,13 +56,13 @@ Verified against the code 2026-11-20. This replaces the per-section `Remaining (
 |---|---|---|---|---|
 | OUT-01 | `costPerDelivery` producer: attach the authoritative run cost (`llm_usage_log.cost_usd_millicents`) to delivery outcomes | Metric definitions — Cost per delivered outcome | Complete | Evidence: `POST /:id/outcomes` in `creationSessionRoutes.ts` attaches `readDeliveryCostMillicents` on succeeded delivery actions; `proof.build` already did; `prescription.verify` has no run to attribute |
 | OUT-02 | Presentation export of the sales brief (slides / PDF) | Instrumentation rollout | Complete | Evidence: `frontend/src/lib/outcomeSalesBriefExport.ts` renders a self-contained 16:9 HTML deck with `@page` rules; `OutcomeMetricsPanel.tsx` offers Markdown, HTML and Print (browser Save as PDF) exports, each content-free with definition version, denominator, window, freshness and suppressed-segment stamps |
-| OUT-03 | Bind live experiment traffic (`experiment` in `CONNECTED_CANVAS_ACTIONS`) | Instrumentation rollout | Blocked | Blocker (verified 2026-11-21): `experiment` kind exists in `creation-canvas-contract` but has no `CONNECTED_CANVAS_ACTIONS` entry or adapter, and no live-traffic split measurement source exists; an authored table is not a measured split, so the producer must come first |
+| OUT-03 | Bind live experiment traffic (`experiment` in `CONNECTED_CANVAS_ACTIONS`) | Instrumentation rollout | Blocked | Ticket #6929 (this chat). Blocker (verified 2026-11-21): `experiment` kind exists in `creation-canvas-contract` but has no `CONNECTED_CANVAS_ACTIONS` entry or adapter, and no live-traffic split measurement source exists; an authored table is not a measured split, so the producer must come first |
 
 ---
 
 ## PRD 25 — Vertical KPI Dashboards
 
-> Consolidated 2026-11-17 from `docs/specs/25-prd-vertical-kpi-dashboards.md` and its hand-off `docs/specs/25a-vertical-kpi-dashboards-implementation.md` (25a sections appear here as §25a.N). Verified against code 2026-11-17: Partly built — Slice A shipped; Slices B, C, D not started.
+> Consolidated 2026-11-17 from `docs/specs/25-prd-vertical-kpi-dashboards.md` and its hand-off `docs/specs/25a-vertical-kpi-dashboards-implementation.md` (25a sections appear here as §25a.N). Verified against code 2026-11-21: Slices A, B, C and D are built ([P25-01](#features-and-tasks--status) through [P25-13](#features-and-tasks--status) Complete); only the Slice D design-partner proof ([P25-14](#features-and-tasks--status)) remains, and it is operator work.
 > Finished sections are archived in DONE.md ("PRD 25: finished sections archived on consolidation");
 > section numbers are kept, so a gap in numbering is a shipped section.
 
@@ -227,7 +229,7 @@ Every metric a preset names must be a `MetricDef` in `metricRegistry.ts`, which 
 
 Widgets: one `*_COMPONENTS` module per vertical under `frontend/src/components/insights/widgets/` (`saasWidgets.tsx`, …), spread into `allComponents.ts`, ids added to `COMPOSABLE_WIDGET_IDS`; `askWidgetIds.test.ts` enforces the three-way contract. Each tile: value, benchmark band, delta, next action. Titles under `widgets.title.*` in all five catalogs.
 
-**Status:** keys — [P25-04](#features-and-tasks--status) (Complete); widgets — [P25-05](#features-and-tasks--status) (Complete); MRR-economics producer — [P25-07](#features-and-tasks--status) (Incomplete).
+**Status:** keys — [P25-04](#features-and-tasks--status) (Complete); widgets — [P25-05](#features-and-tasks--status) (Complete); MRR-economics producer — [P25-07](#features-and-tasks--status) (Complete).
 
 ### §6.3 Exit waterfall and market size
 
@@ -241,14 +243,14 @@ Canvas kind `marketSize` in `FOUNDER_OBJECT_SPECS`: fields `method`, `potentialC
 
 Add `industry_benchmarks` rows for the §5.3 metrics per vertical and size band, each with a `source` naming the public report and quarter; a seed row with no source is rejected. Carta's own reports are a legitimate source for round-size, valuation and dilution bands. Compensation bands stay out until there is a licensed source.
 
-**Status:** `saas` / `ai_ml` seeds — [P25-08](#features-and-tasks--status) (Incomplete); the other eight verticals — [P25-09](#features-and-tasks--status) (Incomplete). Seeds need migration numbers after the latest existing one (1177/1178 named in 25a were used by unrelated migrations).
+**Status:** `saas` / `ai_ml` seeds — [P25-08](#features-and-tasks--status) (Complete, migration 1359); the other eight verticals — [P25-09](#features-and-tasks--status) (Complete). Cybersecurity `nrr_pct` and `burn_multiple` are seeded (migration 1363). fintech, healthtech, medtech, biotech, climate_energy, hardware_robotics and marketplace have no sourced band, so they have no rows.
 
 ### §6.6 Where it appears
 
 - **Insights hub:** the same dashboard under the Finance lens, pinnable per user through `dashboard_pins`.
 - **Marketplace company profile:** benchmark position only (elite/high/medium/low), never the numbers, extending `toPublicProfile()`.
 
-**Status:** FinanceLens — [P25-10](#features-and-tasks--status) (Incomplete); `toPublicProfile` benchmark rating — [P25-11](#features-and-tasks--status) (Complete).
+**Status:** FinanceLens — [P25-10](#features-and-tasks--status) (Complete); `toPublicProfile` benchmark rating — [P25-11](#features-and-tasks--status) (Complete).
 
 ### §7 Sequencing (open slices)
 
@@ -260,10 +262,14 @@ Add `industry_benchmarks` rows for the §5.3 metrics per vertical and size band,
 
 Ship rule for each slice: it is a new capability, so it carries a `release_notes` row (category `new`) and a methodology-framed blog post per the platform's feature-shipping rule.
 
+**Status:** slice B, C and D code — [P25-01](#features-and-tasks--status) through [P25-13](#features-and-tasks--status) (Complete), including the release notes ([P25-13](#features-and-tasks--status)). Design-partner proof — [P25-14](#features-and-tasks--status) (Blocked — operator).
+
 ### §8 Open items
 
-- `companies.sector` is still written free-form. The practiceOps/founderNetwork sites originally named no longer write it; the live writer is `createCompany` (`api/src/application/investor/companyWorkspace.ts:368`, `input.sector?.trim() || null`, reached from `investorRoutes.ts`). Route it through `validateListingPatch` / `isStartupSector`.
-- The seven verticals with no cohort get theirs with slices B and D (§6.5); until then the lens reports `cohortSeeded: false` and says so.
+**Status:** both items below are closed in code.
+
+- `companies.sector` validation — [P25-12](#features-and-tasks--status) (Complete). `createCompany` routes the sector through `sectorFromInput` / `isStartupSector`.
+- Cohort seeds — [P25-08](#features-and-tasks--status) and [P25-09](#features-and-tasks--status) (Complete). `saas` and `ai_ml` are seeded (migration 1359); cybersecurity `nrr_pct` and `burn_multiple` are seeded (migration 1363). fintech, healthtech, medtech, biotech, climate_energy, hardware_robotics and marketplace have no sourced band, so they have no rows and the lens reports `cohortSeeded: false`. That is the intended end state, not an open slice.
 
 ### §25a.0 Ground rules (apply to every remaining slice)
 
@@ -356,7 +362,7 @@ Prerequisites: Stripe secrets and webhook; `CLOUDFLARE_API_TOKEN` with R2/DNS/Ro
 
 ## Design — Creation outcome metrics
 
-> Consolidated 2026-11-18 from `docs/design/creation-canvas/OUTCOME-METRICS.md`. Verified against code 2026-11-18: built. This is the north-star metric contract, kept as reference; it has three open gaps (cost is never sent, no presentation export of the sales brief, no live experiment-traffic binding).
+> Consolidated 2026-11-18 from `docs/design/creation-canvas/OUTCOME-METRICS.md`. Verified against code 2026-11-21: built. This is the north-star metric contract, kept as reference. Two of the three gaps are closed (delivery cost is attached — [OUT-01](#features-and-tasks--status); the sales brief exports to Markdown, HTML and Print/PDF — [OUT-02](#features-and-tasks--status)). Live experiment-traffic binding ([OUT-03](#features-and-tasks--status)) remains Blocked: no live-traffic split measurement exists.
 > The whole document was also archived word for word in DONE.md on 2026-11-17 ("Design: Creation outcome metrics — finished sections archived on consolidation"). The text below is the living contract.
 
 ### Purpose
@@ -438,7 +444,7 @@ The north-star metric is **ideas reaching a graded proof**. Metrics are grouped 
 |---|---|---:|---:|---|
 | Cost per delivered outcome | Efficiency | attributed cost / successful deliveries | same ratio over cohort | Lower |
 
-**Status:** see [OUT-01](#features-and-tasks--status) (Incomplete). The metric is defined (`outcomeMetricContract.ts`, key `costPerDelivery`) and the ledger accepts `costUsdMillicents`, but no producer sends it, so it reads "Not measured"; the cost source is `llm_usage_log.cost_usd_millicents` via `costMetricsStore.ts`.
+**Status:** see [OUT-01](#features-and-tasks--status) (Complete). `POST /:id/outcomes` attaches `readDeliveryCostMillicents` on succeeded delivery actions. An unknown cost stays unset, never 0. `prescription.verify` has no run to attribute.
 
 ### Diagnostics that are not value
 
@@ -451,14 +457,14 @@ GitHub stars, package downloads, workflow counts, MCP connections, and active-ag
 - Tenant comparisons expose aggregates, sample size, scope, and time window—not peer session titles, prompts, artifacts, or users.
 - The session scorecard's baseline is a cohort aggregate over the workspace's most recently active boards (`OUTCOME_BASELINE_COHORT`), computed with the same expressions the rollups use, and excludes the session being scored.
 - Platform sales-deck figures use minimum cohort thresholds, suppress small segments, and include denominator, time window, and data freshness.
-- Cost and latency remain `Not measured` until authoritative telemetry is attached. The UI never substitutes zero for missing data.
+- Cost and latency remain `Not measured` until authoritative telemetry is attached. Delivery cost is attached when the run recorded one ([OUT-01](#features-and-tasks--status), Complete); an unknown cost stays unset, never 0. The UI never substitutes zero for missing data.
 - Historical definitions are versioned. A deck states the definition version so a changing qualification rule cannot silently rewrite prior claims.
 
 ### Instrumentation rollout
 
-The outcome ledger and scorecard are the foundation. Session open, prompt evaluation, validation, delivery, output reuse, and the full proof lifecycle (read, choose, build, grade) are correlated actions today. The superadmin Value outcomes dashboard supplies platform, tenant, and project cohorts; equal-period comparisons; trends including graded proofs; and a content-free sales brief guarded by a ten-session external-use threshold and stamped with its definition version. Canvas card acts share that contract through `packages/creation-canvas-contract/src/canvasActionOutcomes.ts`: the runner (and the poll / gate paths that are not card acts) emit `started` then one terminal with the same `correlationId`. `idea.explore`/`test`/`reveal` map onto `idea.read` / `proof.choose` / `proof.grade`; `form.publish` and `poll.publish` map onto `artifact.publish` + `proof.build` with `metadata.reachable` derived from the join URL (`/f/{slug}`, `/p/{slug}`). Unmapped connected acts still record as `{kind}.{action}` so coverage never depends on remembering a case. Notice-only refusals (no questions, unpublished, nothing to grade) do not start a correlation. Binding live experiment traffic is a different ticket — an authored table is not a measured split. A rendered presentation export remains follow-up work.
+The outcome ledger and scorecard are the foundation. Session open, prompt evaluation, validation, delivery, output reuse, and the full proof lifecycle (read, choose, build, grade) are correlated actions today. The superadmin Value outcomes dashboard supplies platform, tenant, and project cohorts; equal-period comparisons; trends including graded proofs; and a content-free sales brief guarded by a ten-session external-use threshold and stamped with its definition version. Canvas card acts share that contract through `packages/creation-canvas-contract/src/canvasActionOutcomes.ts`: the runner (and the poll / gate paths that are not card acts) emit `started` then one terminal with the same `correlationId`. `idea.explore`/`test`/`reveal` map onto `idea.read` / `proof.choose` / `proof.grade`; `form.publish` and `poll.publish` map onto `artifact.publish` + `proof.build` with `metadata.reachable` derived from the join URL (`/f/{slug}`, `/p/{slug}`). Unmapped connected acts still record as `{kind}.{action}` so coverage never depends on remembering a case. Notice-only refusals (no questions, unpublished, nothing to grade) do not start a correlation. The sales brief exports to Markdown, HTML and Print/PDF ([OUT-02](#features-and-tasks--status), Complete). Binding live experiment traffic remains blocked — an authored table is not a measured split, and no live-traffic producer exists ([OUT-03](#features-and-tasks--status)).
 
-**Status:** presentation export — [OUT-02](#features-and-tasks--status) (Incomplete); live experiment traffic — [OUT-03](#features-and-tasks--status) (Incomplete; also tracked in ROADMAP Measure, "`experiment` cards are never measured").
+**Status:** presentation export — [OUT-02](#features-and-tasks--status) (Complete); live experiment traffic — [OUT-03](#features-and-tasks--status) (Blocked; also tracked in ROADMAP Measure, "`experiment` cards are never measured").
 
 *Verified 2026-11-18:* `OUTCOME_DEFINITION_VERSION` (`outcomeMetricContract.ts:65`, currently `2026.10-prescription-verify`); `OUTCOME_BASELINE_COHORT` (`:72`, 500 boards); the metric registry (`:264-467`; its families are `read-prove`, `build`, `measure`, `collaboration`, `compounding`, `efficiency`, `integrity`, in the table's order); proof actions (`api/src/application/realization/proofOutcomes.ts:53`); `resolveOutcomeSession` (`outcomeLedger.ts:129`, used by `api/src/presentation/routes/realizationRoutes.ts:53`); latency comes from the recorded `durationMs`. No drift in the contract text. The registry's labels are worded slightly differently from the table: "Successful agent synthesis", "Sessions resumed within 7 days" and "within 30 days" (two keys), "Created outputs reused as inputs", "Human interventions per delivery" and "Actions with a correlated outcome". The table names the concepts; `outcomeMetrics.ts` owns the labels on screen.
 
