@@ -118,6 +118,27 @@ function deleteSlot(deviceId: string, journal: string): void {
   if (journals.size === 0) byDevice.delete(deviceId);
 }
 
+export interface ReadSyncLeaseHolderOptions {
+  readonly now: () => number;
+  /** Device store the lease belongs to. Omit for the shared default device. */
+  readonly deviceId?: string;
+  /** Journal the lease guards. Omit for the shared default journal. */
+  readonly journal?: string;
+}
+
+/**
+ * Who holds the sync lease right now? Read-only: never acquires, renews, or
+ * releases, and works from any handle or process-local caller — not only the
+ * one that took the lease. Returns the holding owner while the slot is live,
+ * and `null` when nobody holds it (empty or expired). Age never steals: a live
+ * slot reports its owner until it is released or its expiry has passed.
+ */
+export function readSyncLeaseHolder(options: ReadSyncLeaseHolderOptions): string | null {
+  const now = requireClock(options.now);
+  const slot = readSlot(requireDevice(options.deviceId), requireJournal(options.journal));
+  return isLive(slot, readClock(now)) ? slot.owner : null;
+}
+
 export function createSyncLease(options: SyncLeaseOptions): SyncLeaseHandle {
   const owner = requireOwner(options.owner);
   const now = requireClock(options.now);
