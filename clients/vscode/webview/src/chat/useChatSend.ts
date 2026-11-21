@@ -6,7 +6,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import { chatDoorLiveness, joinRestorableTurns, restoreTurn, useChatTurns, useComposerDraft, useRunRefreshTick, type BrainMessage, type ChatTurns, type ChatInputAttachment, type ComposerDraftStore, type DirectedRecipient, type DraftBinding, type SendContext, type UseBrainConversation } from '@seanhogg/builderforce-brain-embedded';
+import { chatDoorLiveness, isInjectedTurnMetadata, joinRestorableTurns, restoreTurn, useChatTurns, useComposerDraft, useRunRefreshTick, type BrainMessage, type ChatTurns, type ChatInputAttachment, type ComposerDraftStore, type DirectedRecipient, type DraftBinding, type SendContext, type UseBrainConversation } from '@seanhogg/builderforce-brain-embedded';
 import { request } from '../vscodeBridge';
 import { stageSend, stopReaches, type SendStage } from './stageSend';
 import { childTarget, steerRun, type useChatChildren } from './chatChildren';
@@ -75,7 +75,7 @@ export function useChatSend({ conv, chatId, drafts, draftStore, input, setInput,
       announceTurn?.(null, { chat: queued.stage.chat }); // nothing was sent: the announced bubble goes (the words go back to the box)
       // A send from a draft is put back by the door (its token fails: nothing was created) - one restore with whatever was
       // held behind it; any other is put back here and reported kept.
-      if (queued.stage.draft === undefined) giveBack({ text: queued.text, recipient: queued.recipient, attachments: queued.attachments });
+      if (queued.stage.draft === undefined) giveBack({ text: queued.text, recipient: queued.recipient, attachments: queued.attachments, ...(queued.injected ? { injected: true } : {}) });
       queued.done(queued.stage.draft === undefined);
       return;
     }
@@ -111,8 +111,12 @@ export function useChatSend({ conv, chatId, drafts, draftStore, input, setInput,
   const [preparing, setPreparing] = useState(false);
   // The sends getting ready, each with its own mark: a Stop sets it only on the sends it reaches (`stopReaches`).
   const stagesRef = useRef(new Set<SendStage>());
-  // A turn that could not go goes back to the box: text, files and addressee - THE restore every host shares.
-  const giveBack = useCallback((m: QueuedTurn) => restoreTurn(m, { draft: composer.draft, setInput: composer.setInput, restoreAttachments, chooseRecipient }), [composer, restoreAttachments, chooseRecipient]);
+  // A turn that could not go goes back to the box: text, files and addressee - THE restore every host shares. Never an
+  // INJECTED turn (a Resume continuation): its text is not the person's, so it is never handed to them as their draft.
+  const giveBack = useCallback((m: QueuedTurn) => {
+    if (m.injected) return;
+    restoreTurn(m, { draft: composer.draft, setInput: composer.setInput, restoreAttachments, chooseRecipient });
+  }, [composer, restoreAttachments, chooseRecipient]);
   const dispatchSend = useCallback(async (m: QueuedTurn, ctx?: SendContext): Promise<boolean> => {
     const { text, recipient: to, attachments, injected } = m;
     setPreparing(true);
@@ -155,9 +159,13 @@ export function useChatSend({ conv, chatId, drafts, draftStore, input, setInput,
     // A turn not kept after the chat changed (addressed, or any - the run executes in the host, so the
     // webview's inbox is read by nobody) returns to the box with its addressee.
     restore: giveBack,
-    // Everything held when the person moved to another chat comes back as ONE turn (the box holds one draft).
+    // Everything held when the person moved to another chat comes back as ONE turn (the box holds one draft) - the
+    // person's turns only: an injected turn is never joined into their draft. Held turns that were ALL injected come back
+    // as one injected turn, which `giveBack` leaves out of the box.
     join: (held) => {
-      const one = joinRestorableTurns(held);
+      const own = held.filter((t) => !t.injected);
+      if (own.length === 0) return { text: '', recipient: null, injected: true };
+      const one = joinRestorableTurns(own);
       return { text: one.text, recipient: one.recipient, ...(one.attachments?.length ? { attachments: [...one.attachments] } : {}) };
     },
     runKey: chatId,
@@ -262,10 +270,15 @@ export function useChatSend({ conv, chatId, drafts, draftStore, input, setInput,
   // Resolves the door's answer (see `useInterruptedResume`: a `true` arrives when the turn has finished).
   const continueChat = useCallback((text: string): Promise<boolean> => submitTurn({ text, recipient: null, attachments: [], injected: true }), [submitTurn]);
 
-  // "Send again" on any transcript message — queues behind a running turn like a typed one.
+  // "Send again" on any transcript message — queues behind a running turn like a typed one. An INJECTED row (a Resume
+  // continuation) goes again as what it was: injected, to the Brain, with no composer files, never given back to the box.
   const replayMessage = useCallback((message: BrainMessage) => {
+    if (isInjectedTurnMetadata(message.metadata)) {
+      void continueChat(message.content);
+      return;
+    }
     sendOrQueue(message.content, recipient);
-  }, [recipient, sendOrQueue]);
+  }, [recipient, sendOrQueue, continueChat]);
 
   // `stop` clears the held turns AND stops the chat's run — the composer's Stop.
   // Send's verb: whether a message typed now would steer the run or be held (the door's own predicate).

@@ -79,25 +79,25 @@ export function gatewayPlanModels(surface: GatewayModelSurface): string[] {
 export function gatewayModelWindows(
   surface: { byo?: { models?: ReadonlyArray<{ id?: string; contextWindow?: number }> } } | null | undefined,
 ): (ref: string) => number | undefined {
-  const windows = new Map<string, number>();
-  // The same models by their BARE id (the vendor's own, without the route prefix): the gateway names the model that
-  // served a turn as the vendor answered it (`claude-…`, `kimi-…`), while the catalog row carries the route ref
-  // (`direct/<vendor>/<id>`, `googleai/<id>`). A bare id two rows disagree on answers nothing.
-  const bare = new Map<string, number | null>();
+  // Every catalog row answers its route ref AND each PATH SUFFIX of it (case-insensitive): the gateway names the model that
+  // served a turn as the vendor answered it (`claude-…`, `moonshot/kimi-…`), while the row carries the route ref
+  // (`direct/<vendor>/<id>`, `googleai/<id>`). A served ref matches a row only when it IS the row's ref or ends it after a `/`
+  // — never by a shared last segment alone (`openrouter/moonshotai/kimi-k2` is not `direct/moonshot/kimi-k2`), and a
+  // `:variant` stays part of the id (`:free` is its own row). Every matching row votes, a row with no window included: two
+  // votes that disagree, or a windowless one, answer nothing (the run keeps its own budget).
+  const votes = new Map<string, number | null>();
   for (const m of surface?.byo?.models ?? []) {
-    if (!m.id || typeof m.contextWindow !== 'number' || m.contextWindow <= 0) continue;
-    windows.set(m.id, m.contextWindow);
-    const key = bareModelId(m.id);
-    const held = bare.get(key);
-    bare.set(key, held === undefined || held === m.contextWindow ? m.contextWindow : null);
+    if (!m.id) continue;
+    const vote = typeof m.contextWindow === 'number' && m.contextWindow > 0 ? m.contextWindow : null;
+    const parts = m.id.trim().toLowerCase().split('/');
+    for (let i = 0; i < parts.length; i++) {
+      const key = parts.slice(i).join('/');
+      if (!key) continue;
+      const held = votes.get(key);
+      votes.set(key, held === undefined || held === vote ? vote : null);
+    }
   }
-  return (ref) => windows.get(ref) ?? bare.get(bareModelId(ref)) ?? undefined;
-}
-
-/** A model ref's bare vendor id: the last path segment, lower-cased, without a `~` alias mark or a `:variant` suffix. */
-export function bareModelId(ref: string): string {
-  const last = ref.trim().toLowerCase().split('/').pop() ?? '';
-  return last.replace(/^~/, '').replace(/:.*$/, '');
+  return (ref) => votes.get(ref.trim().toLowerCase()) ?? undefined;
 }
 
 /** An authenticated JSON GET against the gateway (`<T>(path) => Promise<T>`). */

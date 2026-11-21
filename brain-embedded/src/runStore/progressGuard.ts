@@ -217,18 +217,26 @@ function traceStep(run: BrainRunContext, step: number, s: ProgressTraceStep): vo
 }
 
 /**
+ * The next turn of a FINISHING run (a record turn with the obligation tools, then the final no-tool report), taken once per
+ * turn — or null when the run is not finishing. A finishing run stays finishing: no hand-off, change-budget, no-progress or
+ * later trip reopens the menu (finish means no more coding), so the turn menu asks this FIRST (`brainTurnMenu.ts`).
+ */
+export function finishingTurn(run: BrainRunContext): ForcedTurn | null {
+  const finishing = run.progress.takeFinishingTurn();
+  if (!finishing) return null;
+  run.progress.takeDue();
+  const tools = finishing === 'record' ? obligationToolsOf(run) : [];
+  return { tools, brief: { role: 'user', content: tools.length > 0 ? FINISH_RECORD_BRIEF : FINISH_FINAL_BRIEF }, finishing: true };
+}
+
+/**
  * The forced turn an escalation or finish decides, called after selection with this
  * turn's tools. Null for an ordinary turn — and when the trip cannot be forced here,
  * in which case its note opens the turn instead.
  */
 export function progressGuardTurn(run: BrainRunContext, step: number, selected: readonly BrainToolSpec[]): ForcedTurn | null {
-  // A finishing run stays finishing: a later trip never reopens the full menu (finish means no more coding).
-  const finishing = run.progress.takeFinishingTurn();
-  if (finishing) {
-    run.progress.takeDue();
-    const tools = finishing === 'record' ? obligationToolsOf(run) : [];
-    return { tools, brief: { role: 'user', content: tools.length > 0 ? FINISH_RECORD_BRIEF : FINISH_FINAL_BRIEF } };
-  }
+  const finishing = finishingTurn(run);
+  if (finishing) return finishing;
   const due = run.progress.takeDue();
   if (!due) return null;
   // The next turn is the final report — no change, exec or ask tools, so it can neither invent an
@@ -243,9 +251,9 @@ export function progressGuardTurn(run: BrainRunContext, step: number, selected: 
     if (deferred) return deferred;
     const tools = obligationToolsOf(run);
     trace(run, step, due, 'finish', tools.length);
-    if (tools.length === 0) return { tools: [], brief: { role: 'user', content: due.note } };
+    if (tools.length === 0) return { tools: [], brief: { role: 'user', content: due.note }, finishing: true };
     run.progress.beginRecordingFinish(FINISH_RECORD_TURNS - 1);
-    return { tools, brief: { role: 'user', content: `${due.note}\n\n${FINISH_RECORD_BRIEF}` } };
+    return { tools, brief: { role: 'user', content: `${due.note}\n\n${FINISH_RECORD_BRIEF}` }, finishing: true };
   }
   const advice = `PROGRESS CHECK ${due.trip}: ${progressAdvice(due.signal)}`;
   // A run asked a question is never forced to change anything.

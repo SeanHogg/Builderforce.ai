@@ -12,7 +12,7 @@ import { isFailedToolResult } from '../brainTriage';
 import { NOT_STARTED_TASK_STATUSES, canListChatTickets, declaresChatTicketListing, linkedTicketsStillOpen, type LinkedTicketToAdvance } from '../chatWorkLinking';
 import { latestStatus, listChatTickets, listingScopeOf, localTicketFilings, ticketMovesInRun, type ListingScope } from './chatTickets';
 import {
-  LOCAL_TICKET_CREATE_TOOL, SERVER_TICKET_TOOLS, ticketStatusMove, ticketToolVocabulary,
+  LOCAL_TICKET_CREATE_TOOL, SERVER_TICKET_TOOLS, TICKET_FROM_DELTA_TOOL, ticketStatusMove, ticketToolVocabulary,
   type TicketStatusMove,
 } from '../ticketToolVocabulary';
 import { entityIdsOf } from '../toolResultRecord';
@@ -86,7 +86,7 @@ function noteOf(c: RunCell | BackstopRun): (ev: BrainTraceEvent) => void {
  * A no-op for every other tool.
  */
 export function attachDeltaToRunTicket(toolName: string, args: unknown, deltaTicketId: number | null): void {
-  if (toolName !== 'builtin_tickets_from_delta' || deltaTicketId == null) return;
+  if (toolName !== TICKET_FROM_DELTA_TOOL || deltaTicketId == null) return;
   if (!args || typeof args !== 'object' || Array.isArray(args)) return;
   const bag = args as Record<string, unknown>;
   if (bag.taskId == null) bag.taskId = deltaTicketId;
@@ -157,7 +157,7 @@ export async function recordCodeChangeTicket(
   /** The call's answer, and whether it THREW (a transport failure or timeout — the server may have minted anyway). */
   const send = async (bag: Record<string, unknown>): Promise<{ out: unknown; thrown: boolean }> => {
     try {
-      return { out: await req.runTool!('builtin_tickets_from_delta', bag), thrown: false };
+      return { out: await req.runTool!(TICKET_FROM_DELTA_TOOL, bag), thrown: false };
     } catch (e) {
       return { out: { ok: false, error: e instanceof Error ? e.message : String(e) }, thrown: true };
     }
@@ -199,7 +199,7 @@ export async function recordCodeChangeTicket(
   noteOf(c)({
     ts: nowIso(),
     category: 'tool',
-    label: 'builtin_tickets_from_delta',
+    label: TICKET_FROM_DELTA_TOOL,
     durationMs: nowMs() - toolStart,
     args: { ...args, auto: true, phase },
     result: out ?? null,

@@ -30,6 +30,7 @@ import { sessionShippedInTrace } from './staffingSummary';
 import { traceWithPersistedSteps } from './persistedSteps';
 import type { BrainMessage } from './types';
 import { publishHoldFromPersonTurns, type PublishHold } from './runStore/publishHold';
+import { isInjectedTurnMetadata } from './injectedTurn';
 import { isShipMode, narrowByHold, shipPolicyOf, type ShipPolicySource } from '@builderforce/run-guards';
 import { isStepMessage } from './types';
 import { selectPendingAskUser } from '@builderforce/agent-loop';
@@ -74,6 +75,8 @@ export interface ChatDiagnosticsMessageLike {
   /** The turn's text — read to re-derive the publish hold from the PERSON's own words.
    *  Optional: a surface that cannot supply it simply reports no hold line. */
   content?: string | null;
+  /** The persisted row's metadata (JSON string or object) — an injected user turn (`injectedTurn.ts`) is not the person's. */
+  metadata?: unknown;
 }
 
 /**
@@ -275,13 +278,13 @@ export async function gatherChatDiagnostics(src: ChatDiagnosticsSources): Promis
 
   // The publish hold, re-derived from the PERSON's own user turns in the durable
   // transcript. The person-turn mark (`chatAsks.personTurns`) lives on the run's working
-  // transcript, not the durable message rows, so here — where only role + text survive —
-  // every `role: 'user'` turn is read as the person's own words. That is CONSERVATIVE in
-  // the safe direction: it may report a hold a loop-injected turn set, never miss one the
-  // person set. The runtime's `publishHold(convo)` (person-marked only) stays the
-  // authority for actually refusing calls.
+  // transcript, not the durable message rows, so here every `role: 'user'` turn is read as
+  // the person's own words — EXCEPT a row whose metadata marks it injected (the editor's
+  // Resume continuation, `injectedTurn.ts`), which the runtime never marks a person turn
+  // either, so the report and the runtime agree. The runtime's `publishHold(convo)`
+  // (person-marked only) stays the authority for actually refusing calls.
   const publishHold = publishHoldFromPersonTurns(
-    msgs.filter((m) => m.role === 'user' && typeof m.content === 'string' && m.content.trim())
+    msgs.filter((m) => m.role === 'user' && typeof m.content === 'string' && m.content.trim() && !isInjectedTurnMetadata(m.metadata))
         .map((m) => ({ text: m.content!.trim() })),
   );
   // The SHIP POLICY (PRD 48), read from the run record: the newest `run.ship_policy` step the

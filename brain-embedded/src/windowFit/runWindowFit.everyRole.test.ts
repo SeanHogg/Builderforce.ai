@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { BrainTraceEvent } from '../brainTriage';
-import { bareModelId, gatewayModelWindows } from '../gatewayModels';
+import { gatewayModelWindows } from '../gatewayModels';
 import { windowFitTranscript as transcript } from '../test/windowFitTranscript';
 import { createRunWindowFit } from './runWindowFit';
 
@@ -53,6 +53,25 @@ describe('gatewayModelWindows — bare vendor ids', () => {
     expect(windows('gemini-pro')).toBe(1_000_000);
     expect(windows('direct/a/shared')).toBe(100);
     expect(windows('shared')).toBeUndefined();
-    expect(bareModelId('~Anthropic/Claude-Opus:thinking')).toBe('claude-opus');
+  });
+
+  it('matches only a path suffix of a catalog ref: another route to the same last segment never lends its window', () => {
+    const windows = gatewayModelWindows({ byo: { models: [
+      { id: 'direct/moonshot/kimi-k2', contextWindow: 256_000 },
+      { id: 'openrouter/moonshotai/kimi-k2' },
+    ] } });
+    expect(windows('openrouter/moonshotai/kimi-k2')).toBeUndefined();
+    expect(windows('moonshotai/kimi-k2')).toBeUndefined();
+    expect(windows('moonshot/kimi-k2')).toBe(256_000);
+    expect(windows('Direct/Moonshot/Kimi-K2')).toBe(256_000);
+    // The bare id is claimed by both rows, one with no window: ambiguous, so no window.
+    expect(windows('kimi-k2')).toBeUndefined();
+  });
+
+  it('keeps a :variant as part of the id', () => {
+    const windows = gatewayModelWindows({ byo: { models: [{ id: 'openrouter/meta/llama-4:free', contextWindow: 8_192 }, { id: 'openrouter/meta/llama-4', contextWindow: 1_000_000 }] } });
+    expect(windows('llama-4:free')).toBe(8_192);
+    expect(windows('meta/llama-4')).toBe(1_000_000);
+    expect(windows('llama-4:thinking')).toBeUndefined();
   });
 });

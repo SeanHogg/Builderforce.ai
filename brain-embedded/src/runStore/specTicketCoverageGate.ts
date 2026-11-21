@@ -8,10 +8,12 @@
  * with the chat's tickets — the open-work hold (`openLinkedWorkHold.ts`) only reads tickets that already exist — and the run's
  * auto-captured "Code change (N files) from Brain chat #N" ticket made the work LOOK linked.
  *
- * WHEN it is active: the request asks to ticket a spec's open items ({@link SPEC_TICKETING_INTENTS}) AND names a markdown spec
- * (or the run read one). It then reads the spec through the run's own `read_file` (the host's repo read), parses its open items
- * and joins them with the chat's linked tickets (`listChatTickets`, the listing the open-work hold reads) plus the tickets this
- * run filed — the shared `parseSpecOpenItems` + `specTicketCoverage` (`@builderforce/agent-tools`, the pair the api's
+ * WHEN it is active: the request has BOTH ticketing language ({@link TICKETING_INTENTS}) AND spec language ({@link SPEC_LANGUAGE})
+ * or a named `.md` spec; the spec is the one it names, else (only when it speaks of a spec) one the run read. It then reads the
+ * spec through the run's own `read_file` (the host's repo read; the parse is cached per run until the run writes that path),
+ * parses its open items and joins them with the chat's linked tickets (`listChatTickets`, the listing the open-work hold reads)
+ * plus the tickets this run filed (a filed ticket the listing already shows counts by BOTH its listed title and its filed
+ * title/description) — the shared `parseSpecOpenItems` + `specTicketCoverage` (`@builderforce/agent-tools`, the pair the api's
  * `roadmap.align_tickets` spec mode reads). The run's delta ticket and every "Code change (N files)" ticket never cover an item.
  *
  * Bounded, per DISTINCT missing set: the first time it is seen the run is held with the list and told to file one ticket per
@@ -22,7 +24,7 @@
  */
 
 import type { PolicyContext } from '@builderforce/agent-run';
-import { parseSpecOpenItems, specTicketCoverage, type CoverageTicket, type SpecOpenItem } from '@builderforce/agent-tools';
+import { editedPathsOf, isMatchableSpecItemId, parseSpecOpenItems, specTicketCoverage, type CoverageTicket, type SpecOpenItem } from '@builderforce/agent-tools';
 import { normalizeChatMode } from '../chatMode';
 import { declaresChatTicketListing, linkedTaskRows } from '../chatWorkLinking';
 import { errorMessage } from '../pageEngines/types';
@@ -32,23 +34,29 @@ import { toolResultRecord } from '../toolResultRecord';
 import type { BrainTraceEvent } from '../brainTriage';
 import { readFileAnchors } from './answerAnchors';
 import type { BrainRunContext } from './brainRunContext';
-import { latestStatus, listChatTickets, listingScopeOf, ticketMovesInRun, ticketsCreatedInRun } from './chatTickets';
+import { isCodeChangeTool } from '../localWorkspaceTools';
+import { latestStatus, listChatTickets, listingScopeOf, stepSucceeded, ticketMovesInRun, ticketsCreatedInRun } from './chatTickets';
 import { bounded, continuationLimits } from './deadline';
 import { asksThePerson } from './openLinkedWorkHold';
 import { nowIso, pushTrace, runTrace } from './runCells';
 
 /**
- * Requests that ask to ticket a spec's open items — data, not logic. The first three are chat #157440's own words; the rest are
- * the common phrasings of the same ask.
+ * TICKETING language — a filing verb with a ticket noun ("create associated tickets", "file one task per row", "open a separate
+ * issue for each"). Data, not logic. `open` counts only with a determiner, so "the open issues" / "open items" never do.
  */
-export const SPEC_TICKETING_INTENTS: readonly RegExp[] = [
-  /\bsection that outlines the features and tasks\b/i,
-  /\bupdate (?:that|the) section with the current status\b/i,
-  /\bitems that are incomplete,? create (?:the )?associated tickets\b/i,
-  /\bcreate (?:the |associated |linked |separate )?tickets? for\b/i,
-  /\bcreate (?:the )?associated tickets\b/i,
-  /\bopen items\b/i,
-  /\bincomplete items\b/i,
+export const TICKETING_INTENTS: readonly RegExp[] = [
+  /\b(?:create|file|raise|log)\s+(?:[\w'-]+\s+){0,3}?(?:tickets?|tasks?|issues?)\b/i,
+  /\bopen\s+(?:an?|one|new|separate|individual)\s+(?:[\w'-]+\s+){0,2}?(?:tickets?|tasks?|issues?)\b/i,
+];
+
+/** SPEC language — the request is about a spec document (a named `.md` spec path counts too, {@link namedSpecPaths}). */
+export const SPEC_LANGUAGE: readonly RegExp[] = [
+  /\bspecs?\b/i,
+  /\bspecification\b/i,
+  /\bprds?\b/i,
+  /\broadmap\b/i,
+  /\bgap register\b/i,
+  /\brequirements? doc(?:ument)?s?\b/i,
 ];
 
 /** The most times one run is held for unticketed spec items. */
@@ -65,20 +73,35 @@ const MAX_LISTED_ITEMS = 25;
 const NOT_A_SPEC = /(^|\/)(readme|changelog|license|contributing|claude|agents|memory|code_of_conduct|security)\.md$/i;
 /** A markdown path as written in a request (`docs/specs/measure.md`, `[docs\specs\measure.md]`). */
 const MD_PATH = /[\w.@-]+(?:[\\/][\w.@-]+)*\.md\b/gi;
-/** A read markdown file that looks like a spec: under a docs/spec/prd folder, or named for one. */
-const SPEC_LIKE = /(^|\/)(docs?|specs?|prds?)\/|spec|prd|roadmap/i;
-
-/** Does the request ask to ticket a spec's open items? */
-export function isSpecTicketingRequest(request: string): boolean {
-  return SPEC_TICKETING_INTENTS.some((p) => p.test(request));
-}
+/**
+ * A read markdown file that looks like a spec: under `docs/specs/`, or with `spec` / `prd` / `roadmap` / `requirements` as a WORD
+ * of its path (`measure-spec.md`, `PRD-25.md`, `ROADMAP.md`) — never inside one (`inspect.md`).
+ */
+const SPEC_LIKE = /(?:^|\/)docs\/specs?\/|(?:^|[^a-z])(?:specs?|prds?|roadmap|requirements)(?=[^a-z]|$)/i;
 
 const normalizePath = (p: string): string => p.trim().replace(/\\/g, '/').replace(/^\.\/+/, '');
 
-/** The specs the run is about: the ones the request names, else the spec-like markdown the run read (latest first). */
+/** The markdown specs the request names by path (never a README, CHANGELOG …). */
+function namedSpecPaths(request: string): string[] {
+  return [...new Set((request.match(MD_PATH) ?? []).map(normalizePath))].filter((p) => !NOT_A_SPEC.test(p));
+}
+
+/** Does the request speak of a spec (spec / PRD / roadmap / gap register / requirements doc)? */
+const speaksOfSpec = (request: string): boolean => SPEC_LANGUAGE.some((p) => p.test(request));
+
+/** Does the request ask to ticket a spec's open items? BOTH ticketing language AND spec language (or a named `.md` spec). */
+export function isSpecTicketingRequest(request: string): boolean {
+  return TICKETING_INTENTS.some((p) => p.test(request)) && (speaksOfSpec(request) || namedSpecPaths(request).length > 0);
+}
+
+/**
+ * The specs the run is about: the ones the request names, else — only when the request speaks of a spec — the spec-like markdown
+ * the run read (latest first).
+ */
 export function specPathsFor(request: string, trace: readonly BrainTraceEvent[]): string[] {
-  const named = [...new Set((request.match(MD_PATH) ?? []).map(normalizePath))].filter((p) => !NOT_A_SPEC.test(p));
+  const named = namedSpecPaths(request);
   if (named.length) return named.slice(0, MAX_SPECS);
+  if (!speaksOfSpec(request)) return [];
   return readFileAnchors(trace)
     .map((a) => normalizePath(a.path))
     .filter((p) => /\.md$/i.test(p) && !NOT_A_SPEC.test(p) && SPEC_LIKE.test(p))
@@ -91,9 +114,11 @@ interface MissingItem extends SpecOpenItem {
   spec: string;
 }
 
+/** An item listed by its id when it has one; a title-only item (a derived slug id) is listed by its title alone. */
 function itemLine(i: MissingItem): string {
   const blocker = i.status === 'blocked' ? `, blocker: ${i.blocker ?? 'not stated'}` : '';
-  return `- ${i.id} "${i.title}" (${i.status}${blocker}; ${i.spec}:${i.line})`;
+  const id = isMatchableSpecItemId(i.id) ? `${i.id} ` : '';
+  return `- ${id}"${i.title}" (${i.status}${blocker}; ${i.spec}:${i.line})`;
 }
 
 function itemList(missing: readonly MissingItem[]): string {
@@ -104,9 +129,12 @@ function itemList(missing: readonly MissingItem[]): string {
 
 /** The block that holds the run: the unticketed items, and how to ticket them. */
 function fileTicketsBlock(missing: readonly MissingItem[]): string {
+  const withId = missing.find((i) => isMatchableSpecItemId(i.id));
+  const example = withId ? ` (e.g. "${withId.id}: ${withId.title}")` : '';
   return (
     `You were asked to create a ticket for each open item of the spec, and these open items have NO ticket linked to this chat:\n${itemList(missing)}\n\n` +
-    `File ONE ticket per item now (${SERVER_TICKET_CREATE_TOOL}), linked to this chat, with the item id in the title (e.g. "${missing[0]!.id}: ${missing[0]!.title}"). ` +
+    `File ONE ticket per item now (${SERVER_TICKET_CREATE_TOOL}), linked to this chat. Start each ticket title with the item's id when the item has one${example}; ` +
+    'for an item listed without an id, copy the item title verbatim as the ticket title. ' +
     'File a BLOCKED item with status "blocked" and name its blocker in the description. ' +
     'An auto-captured "Code change (N files)" ticket records a diff, not a spec item: it does not count. Then continue with the remaining work.'
   );
@@ -154,8 +182,9 @@ async function readSpec(run: BrainRunContext, path: string, note: (label: string
 }
 
 /**
- * The tickets the coverage join reads: the chat's linked task-tier tickets plus the ones this run filed that the listing does not
- * carry yet. The run's delta ticket is a backstop. Null when the listing cannot be read.
+ * The tickets the coverage join reads: the chat's linked task-tier tickets UNION the ones this run filed. A filed ticket the
+ * listing already carries is a second row under the LISTED ref and lane, so its filed title/description (where the model wrote the
+ * item id) counts as well as the listed title. The run's delta ticket is a backstop. Null when the listing cannot be read.
  */
 async function coverageTickets(run: BrainRunContext, trace: readonly BrainTraceEvent[], noteEv: (ev: BrainTraceEvent) => void): Promise<CoverageTicket<string>[] | null> {
   const delta = run.c.deltaTicketId != null ? String(run.c.deltaTicketId) : null;
@@ -168,28 +197,37 @@ async function coverageTickets(run: BrainRunContext, trace: readonly BrainTraceE
     if (listed == null) return null;
     for (const t of linkedTaskRows(listed)) listedRows.push({ id: t.ref, title: t.title, status: t.status, isBackstop: t.ref === delta });
   }
-  const listedRefs = new Set(listedRows.map((t) => t.id));
+  const listedByRef = new Map(listedRows.map((t) => [t.id, t]));
   const moves = ticketMovesInRun(trace);
-  const filed = ticketsCreatedInRun(trace)
-    .filter((f) => f.syncRef == null || !listedRefs.has(f.syncRef))
-    .map((f): CoverageTicket<string> => {
-      const text = (k: string) => (typeof f.args[k] === 'string' ? (f.args[k] as string) : '');
-      return {
-        id: f.ref,
-        title: text('title') || text('summary'),
-        description: text('description') || text('detail'),
-        status: latestStatus(moves, f.ids) ?? (text('status') || 'backlog'),
-      };
-    });
+  const filed = ticketsCreatedInRun(trace).map((f): CoverageTicket<string> => {
+    const text = (k: string) => (typeof f.args[k] === 'string' ? (f.args[k] as string) : '');
+    const listed = f.syncRef != null ? listedByRef.get(f.syncRef) : undefined;
+    return {
+      id: listed ? listed.id : f.ref,
+      title: text('title') || text('summary'),
+      description: text('description') || text('detail'),
+      status: listed ? listed.status : (latestStatus(moves, f.ids) ?? (text('status') || 'backlog')),
+      ...(listed?.isBackstop ? { isBackstop: true } : {}),
+    };
+  });
   return [...listedRows, ...filed];
 }
 
+const samePath = (a: string, b: string): boolean => a === b || a.endsWith(`/${b}`) || b.endsWith(`/${a}`);
+
+/** Did one of these steps write or edit `path` (the run's own workspace writers)? */
+function writesPath(events: readonly BrainTraceEvent[], path: string): boolean {
+  return events.some((ev) => stepSucceeded(ev) && isCodeChangeTool(ev.label) && editedPathsOf(ev.label, ev.args).some((p) => samePath(normalizePath(p), path)));
+}
+
 /**
- * The spec-coverage finish port for one Brain run, registered beside the open-work hold (`run/runPrepared.ts`). Its counts live
- * with the port, which the run builds once.
+ * The spec-coverage finish port for one Brain run, registered beside the open-work hold (`run/runPrepared.ts`). Its counts, and
+ * the parsed specs (one read per spec until the run writes that path), live with the port, which the run builds once.
  */
 export function specTicketCoverageGate(run: BrainRunContext): (ctx: PolicyContext) => Promise<string | null> {
   const seen = new Map<string, number>();
+  /** Parsed spec items by path, with the run-trace length at the read: a later write/edit to the path re-reads it. */
+  const parsedSpecs = new Map<string, { items: SpecOpenItem[]; at: number }>();
   let holds = 0;
   let released = false;
 
@@ -201,6 +239,18 @@ export function specTicketCoverageGate(run: BrainRunContext): (ctx: PolicyContex
     released = true;
     note('finish.spec_tickets_released', `The run ends with spec items still unticketed (${missing.map((i) => i.id).join(', ')}): released because ${why}.`, { missing: missing.map((i) => i.id) });
     return null;
+  };
+  const specItems = async (spec: string, trace: readonly BrainTraceEvent[]): Promise<SpecOpenItem[] | null> => {
+    const cached = parsedSpecs.get(spec);
+    if (cached && cached.at <= trace.length && !writesPath(trace.slice(cached.at), spec)) return cached.items;
+    const text = await readSpec(run, spec, note);
+    if (text == null) {
+      parsedSpecs.delete(spec);
+      return null;
+    }
+    const items = parseSpecOpenItems(text);
+    parsedSpecs.set(spec, { items, at: trace.length });
+    return items;
   };
 
   return async (ctx) => {
@@ -219,8 +269,8 @@ export function specTicketCoverageGate(run: BrainRunContext): (ctx: PolicyContex
     if (!specs.length) return null;
     const items: Array<{ spec: string; items: SpecOpenItem[] }> = [];
     for (const spec of specs) {
-      const text = await readSpec(run, spec, note);
-      if (text != null) items.push({ spec, items: parseSpecOpenItems(text) });
+      const list = await specItems(spec, trace);
+      if (list != null) items.push({ spec, items: list });
     }
     if (!items.length) return null;
     const tickets = await coverageTickets(run, trace, noteEv);

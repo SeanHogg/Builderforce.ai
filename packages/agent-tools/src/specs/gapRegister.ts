@@ -51,7 +51,7 @@ const MAX_SLUG = 80;
 
 /** Lowercase, alphanumerics joined by single hyphens, capped; `fallback` when nothing is left.
  *  THE slug of a register gap and of a spec's open item (`specOpenItems.ts`). */
-export function slugify(text: string, fallback = 'gap'): string {
+export function specSlug(text: string, fallback = 'gap'): string {
   const slug = text
     .toLowerCase()
     .replace(/[`*]/g, '')
@@ -216,7 +216,7 @@ export function parseGapRegister(markdown: string): GapEntry[] {
   return entries
     .filter((e) => e.summary !== '')
     .map((e) => {
-      const base = `${e.stage}/${slugify(e.summary)}`;
+      const base = `${e.stage}/${specSlug(e.summary)}`;
       const n = (used.get(base) ?? 0) + 1;
       used.set(base, n);
       return { id: n === 1 ? base : `${base}-${n}`, ...e };

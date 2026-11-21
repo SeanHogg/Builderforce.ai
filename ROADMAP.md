@@ -503,16 +503,6 @@ RESOLVED 2026-11-01 (commit 67f461953): the pending-turn wiring and `servedBy` a
 - **Portal channel config flows up only;** `channel.configure` doesn't exist. *Blocker: a running on-prem host.*
 - **`@builderforce` participant forgets tool work after restart;** native sessions tab needs the proposed API; sign-in untested (*blocker: a test tenant + `BF_EDITOR_KEY`*).
 
-### PRD → tickets reliability (chat #157440 review, 2026-11-21) `[agents]` `[delivery]`
-
-"Review the PRD and create tickets for all incomplete items" left P25-09, OUT-02, OUT-03 and four Blocked items unticketed; the PRD had to be reviewed again.
-- **Ticket tools are capped off code turns.** The chat-work-linking directive names them, but `roleCap.ts` drops system-prompt-only names on code/verify turns (`brainPlatformTools.ts` `surfaceRequired`), and quick/follow-up requests route to code from step 0 (`pipelineRoute.ts`). Done when the directive's obligation tools survive every role cap and ticket-filing requests start in plan.
-- **No open-items coverage check.** Nothing compares a spec's Incomplete/Blocked rows with the chat's tickets; `finish.open_work_held` only checks existing tickets, and backstop "Code change (N files)" tickets mask the gap. Done when one shared spec open-items parser feeds a finish gate that holds a run asked to ticket a spec until every open row has a ticket (backstop tickets don't count).
-- **Forced finish turns offer zero tools,** so a run cut short can't record remaining work. Done when the forced-finish menu carries the ticket-recording tools.
-- **Builtin tool arg errors surface as HTTP 502:** `callBuiltinTool` never validates required args or coerces string-encoded ids/arrays (`tickets.from_delta` without `summary` → plain Error → 502; string `files` silently dropped). Done when schema validation answers 400 with the missing/invalid field and coerces JSON-encoded arrays and numeric strings.
-- **An injected resume turn sets the publish hold:** the "Continue the task…" message quotes a sub-agent brief ("Do not commit") and `publishHold` folds it as a person turn (`chatAsks.ts`, `selfReviewShip.ts`). Done when injected turns never count as person turns.
-- **Plan-role turns get no `contextWindow`,** so reads fall back to the 16K per-result cap and a PRD arrives in slices. Done when every role's model call carries the window.
-
 ### Data model — PRD 20 `[platform]`
 
 - **LinkedIn rows retired by 1102** need a reconciler or a drop.

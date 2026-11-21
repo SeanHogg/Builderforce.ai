@@ -27,6 +27,35 @@ describe('regression: chat #157440 — ticket / spec reconciliation intent route
     expect((ROUTE_WEIGHTS.ticketIntent ?? 0) + quickest).toBeGreaterThan(0);
   });
 
+  it('everyday code requests that mention tasks, issues, items or a .md file carry no ticket intent', () => {
+    const NEGATIVE = [
+      'make sure the task runner exits cleanly',
+      'fix the login page issues',
+      'logout issue on Safari',
+      'add retry to the background task queue',
+      'make the issues page responsive',
+      'update the files that list tasks',
+      'open tasks.ts and rename foo',
+      'write a unit test for this issue',
+      'create a Task model in prisma',
+      'make it work, no issues please',
+      'review the changes in CHANGELOG.md',
+      'items should be hidden once completed',
+      'the menu item stays open after click',
+      'show remaining items count in the cart',
+      'fix the open items dropdown',
+    ];
+    for (const request of NEGATIVE) {
+      expect({ request, ticketIntent: pipelineFeaturesOf(request).ticketIntent }).toEqual({ request, ticketIntent: false });
+    }
+  });
+
+  it('spec words or a .md path with item status still carry ticket intent', () => {
+    for (const request of ['review the PRD and create tickets', 'mark the open items in the roadmap', 'list the remaining items in plan.md']) {
+      expect({ request, ticketIntent: pipelineFeaturesOf(request).ticketIntent }).toEqual({ request, ticketIntent: true });
+    }
+  });
+
   it('an ordinary small edit has no ticket intent and stays quick', () => {
     const f = pipelineFeaturesOf('Fix the typo in the README heading', { actionType: 'docs' });
     expect(f.ticketIntent).toBe(false);

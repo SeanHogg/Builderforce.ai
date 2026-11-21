@@ -19,6 +19,9 @@ import { contributeTextToProjectEverminds } from '../llm/projectEvermind';
 import { finalizeLearnWeight, runProducedOutput } from './outcomeScore';
 import { recordCloudToolEvent } from './cloudToolEvents';
 import { openOrAdoptRunPr } from './openOrAdoptRunPr';
+import { getPullRequestDetail } from '../repos/getPullRequestDetail';
+import { mergeabilityRecord, withPrMergeability } from './prMergeability';
+import { providerAuthFromText, PROVIDER_AUTH_FAILED, PROVIDER_REAUTH_PROMPT } from './providerAuthFailure';
 import { runPullRequestText } from './runPullRequestText';
 import { recordRunRollbackSnapshot } from './runRollback';
 import { teardownRunBranch } from './runBranchTeardown';
@@ -100,7 +103,10 @@ export async function finalizeCloudRun(
   if (repoCtx && opened && !('claimLost' in opened)) {
     const pr = opened;
     prOpened = pr.ok;
-    if (!pr.ok) noPrReason = pr.reason;
+    if (!pr.ok) {
+      const auth = providerAuthFromText(pr.reason);
+      noPrReason = auth ? `${PROVIDER_AUTH_FAILED}: ${PROVIDER_REAUTH_PROMPT}` : pr.reason;
+    }
 
     // Record the PR row so the in-product Pull Request tab / approval flow can act on it. It is
     // ALWAYS recorded 'open': 'merged' is stamped only once a merge has actually happened. Keep the
@@ -120,6 +126,29 @@ export async function finalizeCloudRun(
       }).catch(() => null);
       prRowId = prRow?.id ?? null;
       openedPrRowId = prRowId;
+      // MK-09-W6: record whether this PR merges cleanly against its base. Unknown
+      // (provider still computing) is recorded as not clean, never omitted.
+      if (prRowId) {
+        const detail = await getPullRequestDetail(env, prRowId, new Date().toISOString(), {
+          provider: repoCtx.provider, host: repoCtx.host, owner: repoCtx.owner, repo: repoCtx.repo,
+          token: repoCtx.token, number: pr.number,
+        }).catch(() => null);
+        if (detail) {
+          const record = mergeabilityRecord(detail);
+          const [payloadRow] = await db.select({ payload: executions.payload }).from(executions).where(eq(executions.id, executionId)).limit(1);
+          await db.update(executions).set({ payload: withPrMergeability(payloadRow?.payload ?? null, record) })
+            .where(eq(executions.id, executionId))
+            .catch((error) => reportCaughtError(error, { source: 'application/runtime/cloudFinalize.ts', operation: 'finalizeCloudRun.mergeability', context: { tenantId, executionId } }));
+          await recordCloudToolEvent(db, {
+            tenantId, cloudAgentRef, executionId,
+            toolName: 'pr_mergeability', category: 'tool',
+            detail: { ...record, number: pr.number },
+            result: record.mergesCleanly
+              ? `PR #${pr.number} merges cleanly against its base`
+              : `PR #${pr.number} mergeability: ${record.mergeableState ?? 'unknown'}`,
+          });
+        }
+      }
     }
 
     if (!pr.ok || !prRowId) await db.update(tasks) // no PR / no row for it: the branch (and any PR that did open) is still stamped

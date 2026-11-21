@@ -1,5 +1,22 @@
 [
   {
+    "slug": "a-blank-preview-now-tells-you-why",
+    "title": "A blank preview now tells you why, and a Laravel API comes up in the tab",
+    "date": "2026-11-21",
+    "description": "BuilderForce WebContainers 2026.11.9 reports what a preview load spent its time on and which origin its security policy blocked, in one call. A custom package CDN joins the preview policy by itself. And a Vite frontend, a Laravel API and Postgres now start together in the browser tab, with php artisan serve included.",
+    "tags": [
+      "webcontainers",
+      "open-source",
+      "runtime",
+      "browser",
+      "preview",
+      "developer-tools",
+      "idea-to-real",
+      "product"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
     "slug": "train-a-lora-adapter-in-python-in-your-browser-tab",
     "title": "Train a LoRA adapter in Python, in the browser tab you built it in",
     "date": "2026-11-18",

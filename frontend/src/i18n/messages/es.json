@@ -13377,6 +13377,10 @@
       "your-full-stack-app-now-runs-in-your-browser-tab": {
         "title": "Tu app full-stack ahora se ejecuta en la pestaña del navegador donde la creaste",
         "description": "Un frontend, una API y una base de datos Postgres necesitaban un contenedor en la nube antes de verlos funcionar juntos. Ahora Run inicia los tres dentro de tu pestaña del navegador —servicios Node, Python y PHP (FastAPI, Flask, Django, Laravel, Slim) con Postgres, sin contenedor que arrancar ni aprovisionar y sin cómputo en la nube— y el Brain lee sus logs, la reinicia y captura su vista previa igual que con un contenedor."
+      },
+      "a-blank-preview-now-tells-you-why": {
+        "title": "Una vista previa en blanco ahora te dice por qué, y una API de Laravel arranca en la pestaña",
+        "description": "BuilderForce WebContainers 2026.11.9 informa, con una sola llamada, en qué gastó el tiempo la carga de una vista previa y qué origen bloqueó su política de seguridad. Un CDN de paquetes personalizado entra solo en la política de la vista previa. Y un frontend de Vite, una API de Laravel y Postgres ahora arrancan juntos en la pestaña del navegador, php artisan serve incluido."
       }
     }
   },

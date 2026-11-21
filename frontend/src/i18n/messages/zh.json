@@ -13363,6 +13363,10 @@
       "train-a-lora-adapter-in-python-in-your-browser-tab": {
         "title": "在你构建它的浏览器标签页里，用 Python 训练 LoRA 适配器",
         "description": "你项目中的 Python 训练脚本现在可以在浏览器标签页内运行，import torch 和 import peft 通过 WebGPU 在你的 GPU 上工作。它会在完成时保存适配器，或在你停止它时保存检查点；在训练面板中加载该适配器，并将其发布为可调用的模型。专为小模型和 LoRA 适配器打造。"
+      },
+      "a-blank-preview-now-tells-you-why": {
+        "title": "空白的预览现在会告诉你原因，Laravel API 也能在标签页里启动了",
+        "description": "BuilderForce WebContainers 2026.11.9 只需一次调用，就能报告预览加载把时间花在了哪里，以及安全策略拦截了哪个来源。自定义包 CDN 会自动加入预览策略。Vite 前端、Laravel API 和 Postgres 现在也能在浏览器标签页里一起启动，php artisan serve 同样可用。"
       }
     }
   },

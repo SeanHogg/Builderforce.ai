@@ -23,7 +23,7 @@ import {
   byoVendorIdFor,
   type ProviderKeySummary,
 } from '../../../application/llm/tenantProviderKeyService';
-import { connectionModelRefs, listOpenRouterConnections } from '../../../application/llm/openRouterConnectionService';
+import { connectionModelRefs, connectionModelWindows, listOpenRouterConnections } from '../../../application/llm/openRouterConnectionService';
 import { byoModelsFor } from '../../../application/llm/byoModelRouting';
 import { listProviderModelSelections } from '../../../application/llm/providerModelSelection';
 import { evaluateFrontierAccess, evaluatePremiumModelAccess } from '../../../domain/tenant/planFeatures';
@@ -91,6 +91,11 @@ export function mountModelsRoutes(router: Hono<HonoEnv>): void {
     // Appending every OpenRouter registration after every direct provider made the
     // prompt order disagree with the priority drawer whenever a connection was #1.
     const providerModels = byoModelsFor(byoProviderRows, modelSelections);
+    // A connection's models carry the OpenRouter catalog's window (the client's window-fit gate reads it); the
+    // catalog is read only when a connection exists, and an id it does not know carries none.
+    const connectionWindowOf = openRouterConnections.length > 0
+      ? connectionModelWindows(await getCatalogCached(c.env))
+      : () => undefined;
     const groups = [
       ...byoProviderRows.map((row) => ({
         priority: row.priority,
@@ -103,7 +108,10 @@ export function mountModelsRoutes(router: Hono<HonoEnv>): void {
       ...openRouterConnections.map((connection) => ({
         priority: connection.priority,
         tie: `openrouter:${connection.id}`,
-        models: connectionModelRefs([connection]).map((id) => ({ id, vendor: 'openrouter', tier: 'REGISTERED' })),
+        models: connectionModelRefs([connection]).map((id) => {
+          const contextWindow = connectionWindowOf(id);
+          return { id, vendor: 'openrouter', tier: 'REGISTERED', ...(contextWindow ? { contextWindow } : {}) };
+        }),
       })),
     ].sort((a, b) => {
       const ar = a.priority ?? Number.POSITIVE_INFINITY;

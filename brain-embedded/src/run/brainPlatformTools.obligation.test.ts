@@ -2,18 +2,23 @@
  * VS Code chat #157440: the work-linking directive told 527 capped code turns to file tickets, and the role cap had dropped
  * the ticket tools (they were "only named by the system prompt"). The directive now DECLARES its obligation tools as data
  * (`chatWorkObligationTools`), the preamble records them (`promptTools.obligation`), and every role cap keeps them — while
- * the rest of the board family (assignees, the kanban scoping tools) still competes on relevance.
+ * the rest of the board family (assignees, the link tool, the kanban scoping tools) still competes on relevance.
+ *
+ * The run is resolved by the REAL preamble (`prepareBrainRun`), not rebuilt here, so a change to how the preamble records
+ * its obligations is caught by this test.
  */
 import { describe, expect, it } from 'vitest';
-import { toolNamesMentionedIn } from '@builderforce/agent-stall';
 import { selectPlatformCatalog, type PolicyContext } from '@builderforce/agent-run';
-import type { ToolSchema } from '@builderforce/agent-tools';
 import { brainPlatformTools, promptOnlyNamed, unnamedVocabulary } from './brainPlatformTools';
 import { chatModeDirective } from '../chatMode';
 import { chatWorkObligationTools } from '../chatWorkLinking';
 import { ticketToolVocabulary } from '../ticketToolVocabulary';
-import { LOCAL_WORKSPACE_TOOLS, canChangeCodeHere, localToolsIn } from '../localWorkspaceTools';
-import type { BrainRunContext, PromptToolNames } from '../runStore/brainRunContext';
+import { LOCAL_WORKSPACE_TOOLS } from '../localWorkspaceTools';
+import { makeCell } from '../runStore/runCell';
+import { prepareBrainRun } from '../runStore/runPreamble';
+import type { BrainRunContext } from '../runStore/brainRunContext';
+import type { BrainRunRequest } from '../runStore/runTypes';
+import type { BrainToolSpec } from '../streamChatCompletion';
 
 const CHAT_ID = 157440;
 const BOARD = [
@@ -25,19 +30,23 @@ const PLATFORM = [...BOARD, ...Array.from({ length: 400 }, (_, i) => `builtin_pl
 const VSIX = [...LOCAL_WORKSPACE_TOOLS, ...PLATFORM];
 const VSIX_LOCAL = [...VSIX, 'ticket-create', 'ticket-move'];
 
-const schema = (name: string): ToolSchema => ({ type: 'function', function: { name, description: name.replace(/_/g, ' '), parameters: { type: 'object', properties: {} } } });
+const schema = (name: string): BrainToolSpec => ({ type: 'function', function: { name, description: name.replace(/_/g, ' '), parameters: { type: 'object', properties: {} } } }) as BrainToolSpec;
 
-/** The run the preamble resolves for a work-mode chat: obligations recorded as it records them. */
-function runFor(phase: string, catalog: readonly string[]): BrainRunContext {
-  const ticketTools = ticketToolVocabulary(catalog);
-  const systemPrompt = chatModeDirective('work', CHAT_ID, { canEditHere: canChangeCodeHere(catalog), ticketTools });
-  const obligation = chatWorkObligationTools(CHAT_ID, ticketTools).filter((n) => catalog.includes(n));
-  const promptTools: PromptToolNames = { system: toolNamesMentionedIn(systemPrompt), turn: [], contract: [], obligation };
-  const alwaysAdvertised = [...new Set([...promptTools.system, ...obligation]), ...localToolsIn(catalog), 'ask_user'];
-  return {
-    c: {}, req: {}, policy: { phase }, canAskUser: true, allTools: [...catalog, 'ask_user', 'hand_off'].map(schema), catalogToolNames: [...catalog],
-    alwaysAdvertised, promptTools, usedTools: new Set<string>(), systemPrompt, requestQuery: 'fix the null check in the parser',
-  } as unknown as BrainRunContext;
+/** The run the PRODUCTION preamble resolves for a work-mode chat over `catalog`, moved to `phase`. */
+async function runFor(phase: 'code' | 'verify', catalog: readonly string[]): Promise<BrainRunContext> {
+  const c = makeCell();
+  c.transcript = [{ role: 'user', content: 'fix the null check in the parser' }];
+  const req = {
+    resolvedSystemPrompt: 'You are the editor agent.',
+    tools: catalog.map(schema),
+    runTool: async () => ({ ok: true }),
+    stream: async () => { throw new Error('the preamble makes no model call'); },
+    chatMode: 'work',
+  } as unknown as BrainRunRequest;
+  const run = await prepareBrainRun(CHAT_ID, c, req, 1);
+  if (!run) throw new Error('the preamble answered the turn itself');
+  run.policy = { ...run.policy, phase };
+  return run;
 }
 
 function advertised(run: BrainRunContext): string[] {
@@ -71,9 +80,14 @@ describe('chatWorkObligationTools — the directive declares its obligations as 
   });
 });
 
-describe('regression: chat #157440 — a capped code turn keeps the obligation tools', () => {
-  it('a VSIX code turn advertises the ticket obligations, not the kanban scoping tools', () => {
-    const run = runFor('code', VSIX);
+describe('regression: chat #157440 — the preamble records the obligations and a capped turn keeps them', () => {
+  it('the preamble records the obligations the catalog holds as promptTools.obligation', async () => {
+    const run = await runFor('code', VSIX);
+    expect(run.promptTools?.obligation).toEqual(['builtin_tasks_create', 'builtin_tasks_update', 'builtin_tickets_from_delta', 'builtin_chats_list_tickets']);
+  });
+
+  it('a VSIX code turn advertises the ticket obligations, not the kanban scoping tools', async () => {
+    const run = await runFor('code', VSIX);
     const names = advertised(run);
     for (const name of ['builtin_tasks_create', 'builtin_tasks_update', 'builtin_tickets_from_delta', 'builtin_chats_list_tickets']) {
       expect(names).toContain(name);
@@ -85,12 +99,12 @@ describe('regression: chat #157440 — a capped code turn keeps the obligation t
     expect(promptOnlyNamed(run).has('builtin_kanban_participants')).toBe(true);
   });
 
-  it('a verify turn keeps them too', () => {
-    expect(advertised(runFor('verify', VSIX))).toEqual(expect.arrayContaining(['builtin_tasks_create', 'builtin_tickets_from_delta']));
+  it('a verify turn keeps them too', async () => {
+    expect(advertised(await runFor('verify', VSIX))).toEqual(expect.arrayContaining(['builtin_tasks_create', 'builtin_tickets_from_delta']));
   });
 
-  it('the editor vocabulary keeps ticket-create and ticket-move on a capped turn', () => {
-    const run = runFor('code', VSIX_LOCAL);
+  it('the editor vocabulary keeps ticket-create and ticket-move on a capped turn', async () => {
+    const run = await runFor('code', VSIX_LOCAL);
     expect(unnamedVocabulary(run).has('ticket-create')).toBe(false);
     expect(advertised(run)).toEqual(expect.arrayContaining(['ticket-create', 'ticket-move', 'builtin_tickets_from_delta']));
   });

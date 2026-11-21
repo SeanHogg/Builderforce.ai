@@ -7,8 +7,10 @@
  * (`runStore/publishHold.ts`) nor become one of the chat's asks. VS Code chat #157440: a resumed sub-agent brief
  * ending "Do not commit." set the hold on the person's chat.
  *
- * A leaf (no imports) so the send path, the seed builder and the run share ONE spelling.
+ * One module so the send path, the seed builder and the run share ONE spelling.
  */
+
+import { errorMessage } from './pageEngines/types';
 
 /** The metadata key that marks a persisted user row as injected, not the person's words. */
 export const INJECTED_TURN_META_KEY = 'injected';
@@ -23,14 +25,19 @@ export function injectedTurnIdsOf(history: ReadonlyArray<{ id: number; role: str
   return history.filter((m) => m.role === 'user' && isInjectedTurnMetadata(m.metadata)).map((m) => m.id);
 }
 
-/** Is this persisted row's metadata (its JSON string, or the parsed object) marked injected? */
+/**
+ * Is this persisted row's metadata (its JSON string, or the parsed object) marked injected? An object is read as is; a
+ * string is parsed only when it could carry the mark at all. Unparseable metadata is reported and read as NOT injected —
+ * the person's own turn, the conservative side (its words may hold, never lift, the publish hold).
+ */
 export function isInjectedTurnMetadata(metadata: unknown): boolean {
   let meta = metadata;
   if (typeof meta === 'string') {
     if (!meta.includes(INJECTED_TURN_META_KEY)) return false;
     try {
       meta = JSON.parse(meta) as unknown;
-    } catch {
+    } catch (e) {
+      console.warn(`BuilderForce injected turn: row metadata is not JSON (${errorMessage(e)}) — read as the person's own turn`);
       return false;
     }
   }

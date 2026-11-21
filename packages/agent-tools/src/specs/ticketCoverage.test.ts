@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { SpecOpenItem } from './specOpenItems';
-import { codeChangeTicketTitle, isCodeChangeBackstopTitle, specTicketCoverage } from './ticketCoverage';
+import { codeChangeTicketTitle, isCodeChangeBackstopTitle, isMatchableSpecItemId, specTicketCoverage } from './ticketCoverage';
 
 const item = (id: string, title: string, status: SpecOpenItem['status'] = 'incomplete'): SpecOpenItem =>
   ({ id, title, status, section: 'Features and tasks — status', line: 1 });
@@ -49,6 +49,36 @@ describe('specTicketCoverage', () => {
   it('a cancelled ticket covers nothing', () => {
     const out = specTicketCoverage([item('OUT-03', 'Bind traffic', 'blocked')], [{ id: 1, title: 'OUT-03', status: 'cancelled' }]);
     expect(out.missing.map((i) => i.id)).toEqual(['OUT-03']);
+  });
+});
+
+describe('specTicketCoverage — id matching rules', () => {
+  it('matches a short token case-sensitively, a long token case-insensitively', () => {
+    const out = specTicketCoverage(
+      [item('S3', 'Lifecycle'), item('B4', 'Seeds'), item('OUT-02', 'Export')],
+      [{ id: 1, title: 'move the s3 bucket', status: 'todo' },
+        { id: 2, title: 'B4: seeds', status: 'todo' },
+        { id: 3, title: 'out-02 export work', status: 'todo' }],
+    );
+    expect(out.covered).toEqual([{ itemId: 'B4', ticketIds: [2] }, { itemId: 'OUT-02', ticketIds: [3] }]);
+    expect(out.missing.map((i) => i.id)).toEqual(['S3']);
+  });
+
+  it('never matches a derived slug id by name', () => {
+    expect(isMatchableSpecItemId('a1-first-2')).toBe(false);
+    expect(isMatchableSpecItemId('make/the-gap')).toBe(true);
+    expect(isMatchableSpecItemId('P25-09')).toBe(true);
+    const out = specTicketCoverage([item('wire-the-probe', 'Wire the PreFetch probe')], [{ id: 1, title: 'Unrelated', description: 'wire-the-probe', status: 'todo' }]);
+    expect(out.missing.map((i) => i.id)).toEqual(['wire-the-probe']);
+  });
+
+  it('lists a ticket once when it arrives as two rows (listing + filing)', () => {
+    const out = specTicketCoverage([item('P25-09', 'Seeds')], [
+      { id: 7, title: 'Seed the verticals', status: 'todo' },
+      { id: 7, title: 'P25-09: Seeds', status: 'todo' },
+      { id: 8, title: 'P25-09 follow-up', status: 'todo' },
+    ]);
+    expect(out.covered).toEqual([{ itemId: 'P25-09', ticketIds: [7, 8] }]);
   });
 });
 

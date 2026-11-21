@@ -74,9 +74,74 @@ describe('parseSpecOpenItems — checklists', () => {
     ]);
   });
 
-  it('suffixes a repeated id', () => {
-    const items = parseSpecOpenItems('- [ ] A1 first\n- [ ] A1 again');
-    expect(items.map((i) => i.id)).toEqual(['A1', 'A1-2']);
+  it('suffixes a repeated slug id (a short token with no separator is not an id)', () => {
+    const items = parseSpecOpenItems('- [ ] A1 first\n- [ ] A1 first');
+    expect(items.map((i) => i.id)).toEqual(['a1-first', 'a1-first-2']);
+  });
+});
+
+describe('parseSpecOpenItems — a repeated token is ONE item', () => {
+  it('merges a summary table and a detail table: most-open status, longer title, first line, any blocker', () => {
+    const items = parseSpecOpenItems([
+      '## Summary',
+      '| ID | Item | Status |', '|---|---|---|',
+      '| P25-09 | Seeds | Complete |',
+      '## Detail',
+      '| ID | Item | Status |', '|---|---|---|',
+      '| P25-09 | Slice D benchmark seeds for the other verticals | Blocked — operator |',
+    ].join('\n'));
+    expect(items).toEqual([{
+      id: 'P25-09', title: 'Slice D benchmark seeds for the other verticals', status: 'blocked', section: 'Summary', line: 4, blocker: 'operator',
+    }]);
+  });
+
+  it('merges a checklist token listed twice instead of suffixing it', () => {
+    const items = parseSpecOpenItems('- [x] P1: Fix login\n- [ ] P1: Fix signup flow');
+    expect(items).toEqual([{ id: 'P1', title: 'P1: Fix signup flow', status: 'incomplete', section: '', line: 1 }]);
+  });
+
+  it('keeps the most-open status in the order blocked > incomplete > unknown > complete', () => {
+    const one = (a: string, b: string) => parseSpecOpenItems(['| ID | Item | Status |', '|---|---|---|', `| X-1 | t | ${a} |`, `| X-1 | t | ${b} |`].join('\n'))[0]!.status;
+    expect(one('Done', 'Someday')).toBe('unknown');
+    expect(one('Someday', 'Open')).toBe('incomplete');
+    expect(one('Open', 'Blocked')).toBe('blocked');
+    expect(one('Blocked', 'Done')).toBe('blocked');
+  });
+});
+
+describe('parseSpecOpenItems — leading tokens in checklists and bullets', () => {
+  it('a short token is an id only when a separator follows it', () => {
+    const ids = parseSpecOpenItems([
+      '- [ ] S3 bucket lifecycle policy',
+      '- [ ] B4: benchmark seeds',
+      '- [ ] C2 — exit waterfall',
+      '- [ ] D5 - market size',
+      '- [ ] E6) heatmaps',
+      '- [ ] F7. replay',
+      '- [ ] **G8**: bold id',
+      '- [ ] OUT-02 sales brief export',
+      '- [ ] §6.6 FinanceLens',
+    ].join('\n')).map((i) => i.id);
+    expect(ids).toEqual(['s3-bucket-lifecycle-policy', 'B4', 'C2', 'D5', 'E6', 'F7', 'G8', 'OUT-02', '§6.6']);
+  });
+
+  it('a table title column still reads a leading short token', () => {
+    expect(parseSpecOpenItems('| Item | State |\n|---|---|\n| B4 benchmark seeds | Open |')[0]!.id).toBe('B4');
+  });
+});
+
+describe('parseSpecOpenItems — gap register sub-items', () => {
+  it('a checklist nested under a gap bullet belongs to the gap, not counted again', () => {
+    const items = parseSpecOpenItems([
+      '## Work',
+      '- [ ] A real checklist item',
+      '## Consolidated Gap Register',
+      '## 🔨 Make — Build',
+      '- **The PreFetch cache-hit is unmeasured.** Add the probe.',
+      '  - [ ] Wire the probe',
+      '  - [ ] Chart the hit rate',
+    ].join('\n'));
+    expect(items.map((i) => i.title)).toEqual(['A real checklist item', 'The PreFetch cache-hit is unmeasured']);
   });
 });
 
@@ -100,6 +165,28 @@ describe('status and token helpers', () => {
     expect(classifySpecStatus('**Done**').status).toBe('complete');
     expect(classifySpecStatus('Not done').status).toBe('incomplete');
     expect(classifySpecStatus('🚫 waiting').status).toBe('blocked');
+  });
+
+  it('classifies from the LEADING word or mark first, and reads negated blocked phrasings', () => {
+    expect(classifySpecStatus('Complete (was blocked on infra)')).toEqual({ status: 'complete' });
+    expect(classifySpecStatus('not blocked anymore')).toEqual({ status: 'incomplete' });
+    expect(classifySpecStatus('No longer blocked — in review')).toEqual({ status: 'incomplete' });
+    expect(classifySpecStatus('Unblocked')).toEqual({ status: 'incomplete' });
+    expect(classifySpecStatus('Done — no open issues')).toEqual({ status: 'complete' });
+    expect(classifySpecStatus('🟡')).toEqual({ status: 'incomplete' });
+    expect(classifySpecStatus('🟡 partial rollout')).toEqual({ status: 'incomplete' });
+    expect(classifySpecStatus('⚠️ needs review')).toEqual({ status: 'incomplete' });
+    expect(classifySpecStatus('Not ported: the importer still lives in the old repo')).toEqual({ status: 'incomplete' });
+    expect(classifySpecStatus('Shipped')).toEqual({ status: 'complete' });
+    expect(classifySpecStatus('WIP')).toEqual({ status: 'incomplete' });
+    expect(classifySpecStatus('Remaining')).toEqual({ status: 'incomplete' });
+    expect(classifySpecStatus('TODO')).toEqual({ status: 'incomplete' });
+    expect(classifySpecStatus('Blocked by credentials')).toEqual({ status: 'blocked', blocker: 'credentials' });
+    expect(classifySpecStatus('Waiting — blocked on the vendor')).toEqual({ status: 'blocked', blocker: 'the vendor' });
+  });
+
+  it('a checklist item that says it is no longer blocked is not blocked', () => {
+    expect(parseSpecOpenItems('- [ ] Stripe webhook, no longer blocked')[0]!.status).toBe('incomplete');
   });
 
   it('knows a token from a slug', () => {

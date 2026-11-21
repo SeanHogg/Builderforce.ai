@@ -52,6 +52,7 @@ import { dispatchToAgentHost, type DispatchMessage } from './hostDelivery';
 import { parseWriteAheadSupport } from './writeAheadAllowlist';
 import { assessWriteAheadRunState, loadWriteAheadRunState } from './writeAheadIntents';
 import { HOST_FAILOVER_REDISPATCH_REASON, hostFailoverUnsafeReason } from './orphanReasons';
+import { droppedHandoff, DROPPED_HANDOFF_REASON, HANDOFF_START_TIMEOUT_MS } from './handoffStartTimeout';
 
 /** A self-hosted host run executing longer than this is treated as hung. */
 export const RUNNING_DEADLINE_MS = 30 * 60_000; // 30 min
@@ -123,6 +124,7 @@ export async function reapStaleExecutions(
     running: new Date(nowMs - RUNNING_DEADLINE_MS).toISOString(),
     cloudRunning: new Date(nowMs - CLOUD_RUNNING_DEADLINE_MS).toISOString(),
     queued: new Date(nowMs - QUEUED_DEADLINE_MS).toISOString(),
+    handoff: new Date(nowMs - HANDOFF_START_TIMEOUT_MS).toISOString(),
     paused: new Date(nowMs - PAUSED_DEADLINE_MS).toISOString(),
     parkAge: new Date(nowMs - resolveParkAgeTimeoutMs(env)).toISOString(),
     liveRunsStartedAfter: new Date(nowMs - LIVE_RUN_MAX_AGE_MS).toISOString(),
@@ -139,7 +141,10 @@ export async function reapStaleExecutions(
   // LIVE_RUN_MAX_AGE_MS from its start, so it cannot hold the gate open indefinitely.
   if (probe.liveRuns) await signalPendingWork(env);
   const empty: ReapResult = { failedRunning: 0, failedQueued: 0, failedPaused: 0, requeuedCloud: 0, redispatchedHost: 0, parkAge: { stale: 0, unparked: 0 } };
-  if (!anyStale(probe)) return empty;
+  // MK-09-D2: this arm is not part of anyStale, so a recorded handoff that never
+  // ticked is failed here even when the 15-minute queued probe is empty.
+  const droppedHandoffs = probe.droppedHandoff ? await reapDroppedHandoffs(db, executionRepo, nowMs) : [];
+  if (!anyStale(probe) && droppedHandoffs.length === 0) return empty;
 
   // Hung HOST runs: a real long-lived process that went silent (crash / dropped
   // connection). Cloud runs (agent_host_id IS NULL) are handled below on a much
@@ -283,7 +288,7 @@ export async function reapStaleExecutions(
 
   // A full batch means a backlog remains: keep the next tick's gate open so it drains
   // promptly instead of waiting for the floor sweep.
-  if ([hostFailedWithReason, queued, paused, cloudCandidates].some((rows) => rows.length >= REAP_BATCH_LIMIT)) {
+  if ([hostFailedWithReason, queued, paused, cloudCandidates, droppedHandoffs].some((rows) => rows.length >= REAP_BATCH_LIMIT)) {
     await signalPendingWork(env);
   }
 
@@ -313,6 +318,7 @@ export async function reapStaleExecutions(
   const reaped: { row: ReapedRow; toolName: string }[] = [
     ...cloudRunning.map((row) => ({ row, toolName: 'run.failed' })),
     ...queued.map((row) => ({ row, toolName: 'run.failed' })),
+    ...droppedHandoffs.map((row) => ({ row, toolName: 'run.failed' })),
     ...hostFailedWithReason.map((row) => ({ row, toolName: 'run.failed' })),
     ...paused.map((row) => ({ row, toolName: 'run.paused_timeout' })),
   ];
@@ -379,7 +385,7 @@ export async function reapStaleExecutions(
 
   return {
     failedRunning: hostFailedWithReason.length + cloudRunning.length,
-    failedQueued: queued.length,
+    failedQueued: queued.length + droppedHandoffs.length,
     failedPaused: paused.length,
     requeuedCloud,
     redispatchedHost,
@@ -393,6 +399,40 @@ export async function reapStaleExecutions(
  * that completed between the subquery's read and the update is left alone, exactly as
  * the old unbounded UPDATE behaved.
  */
+/**
+ * MK-09-D2. A recorded CloudRunner handoff with no first tick, past the start-timeout,
+ * fails closed. A later write (a tick) is not a drop — {@link droppedHandoff} is the rule.
+ */
+async function reapDroppedHandoffs(db: Db, executionRepo: ExecutionRepository, nowMs: number): Promise<ReapedRow[]> {
+  const cutoff = new Date(nowMs - HANDOFF_START_TIMEOUT_MS).toISOString();
+  const rows = await db
+    .select({
+      id: executions.id,
+      payload: executions.payload,
+      status: executions.status,
+      updated_at: executions.updatedAt,
+    })
+    .from(executions)
+    .where(and(
+      inArray(executions.status, ['pending', 'submitted', 'running']),
+      sql`coalesce(${executions.payload}, '') like '%"handoffRecordedAt":%'`,
+      sql`coalesce(${executions.payload}, '') not like '%"firstTickAt":%'`,
+      sql`coalesce(${executions.updatedAt}, ${executions.createdAt}) < ${cutoff}`,
+    ))
+    .limit(REAP_BATCH_LIMIT)
+    .catch(() => [] as { id: number; payload: string | null; status: string; updated_at: Date | null }[]);
+  const ids: number[] = [];
+  for (const row of rows) {
+    const updatedAtMs = row.updated_at instanceof Date ? row.updated_at.getTime() : row.updated_at ? Date.parse(String(row.updated_at)) : null;
+    if (droppedHandoff({ payload: row.payload, status: row.status, nowMs, updatedAtMs }).fail) ids.push(row.id);
+  }
+  if (ids.length === 0) return [];
+  return executionRepo.failWhere(
+    and(inArray(executions.id, ids), inArray(executions.status, ['pending', 'submitted', 'running']))!,
+    DROPPED_HANDOFF_REASON,
+  );
+}
+
 function failStaleBatch(executionRepo: ExecutionRepository, stalePredicate: SQL, errorMessage: string): Promise<ReapedRow[]> {
   return executionRepo.failWhere(stalePredicate, errorMessage, REAP_BATCH_LIMIT); // outcome rows recorded per batch by the repository
 }

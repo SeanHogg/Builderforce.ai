@@ -454,6 +454,36 @@ export type PersonaPluginMetadata = {
  * A persona plugin — an `AgentRole` enriched with plugin lifecycle metadata.
  * Installed from the Builderforce.ai Marketplace or assigned to a agentNode via builderforce.ai.
  */
+/**
+ * PRD 49 methodology fields. Nested so they cannot collide with `AgentRole.model`,
+ * which is a model id. Absent means the persona has no gate and may write anywhere.
+ */
+export type PersonaColour = "analyst" | "designer" | "engineer" | "support";
+export type PersonaRoute = "plan" | "pipeline" | "quick";
+export type PersonaKnowledge = "context" | "first";
+export type ArtifactId = "prd" | "design" | "mockup" | "diagram" | "support";
+export type MethodologyScopeKey = "logs" | "diagnostics" | "methodology";
+
+/** Resolved through workspace paths. `root` is the workspace root, not `.builderforce`. */
+export type MethodologyWriteScope =
+  | { key: "root" }
+  | { key: MethodologyScopeKey; sub?: string };
+
+export type PersonaMethodology = {
+  colour?: PersonaColour;
+  /** Route kind. Not `AgentRole.model`. */
+  route?: PersonaRoute;
+  knowledge?: PersonaKnowledge;
+  requires?: ArtifactId[];
+  produces?: ArtifactId[];
+  recordsRun?: boolean;
+  /** Registry `name` of the next role. Successor means this field, not sort order. */
+  next?: string;
+  /** Appended by `buildPersonaSystemBlock` after the Role line. */
+  work?: string;
+  writeScope?: MethodologyWriteScope[];
+};
+
 export type PersonaPlugin = AgentRole & {
   /** Where this persona was loaded from */
   source: PersonaSource;
@@ -463,6 +493,8 @@ export type PersonaPlugin = AgentRole & {
   filePath?: string;
   /** Whether this persona is currently active on this agentNode */
   active?: boolean;
+  /** PRD 49. Omitted means no gate and every write is allowed. */
+  methodology?: PersonaMethodology;
 };
 
 /**

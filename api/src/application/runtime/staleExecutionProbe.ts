@@ -33,6 +33,8 @@ export interface StaleCutoffs {
   running: string;
   cloudRunning: string;
   queued: string;
+  /** MK-09-D2: recorded CloudRunner handoff with no first tick. */
+  handoff: string;
   paused: string;
   /** `ticket_runs.updated_at` cutoff for the park-age sibling sweep. */
   parkAge: string;
@@ -47,6 +49,8 @@ export interface StalePredicates {
   cloudRunning: SQL;
   /** Submitted/pending runs no agent ever picked up. */
   queued: SQL;
+  /** Recorded CloudRunner handoff past the start-timeout, with no first tick. Not a 15-min queued row. */
+  droppedHandoff: SQL;
   /** Runs paused on an `ask_human` question nobody answered. */
   paused: SQL;
   /** Tickets parked on a run_workflow past the park-age cap. */
@@ -66,6 +70,12 @@ export function stalePredicates(c: StaleCutoffs): StalePredicates {
     hostRunning: and(eq(executions.status, 'running'), isNotNull(executions.agentHostId), sql`coalesce(${executions.startedAt}, ${executions.createdAt}) < ${c.running}`) as SQL,
     cloudRunning: and(eq(executions.status, 'running'), isNull(executions.agentHostId), sql`coalesce(${executions.updatedAt}, ${executions.createdAt}) < ${c.cloudRunning}`) as SQL,
     queued: and(inArray(executions.status, ['pending', 'submitted']), sql`${executions.createdAt} < ${c.queued}`) as SQL,
+    droppedHandoff: and(
+      inArray(executions.status, ['pending', 'submitted', 'running']),
+      sql`coalesce(${executions.payload}, '') like '%"handoffRecordedAt":%'`,
+      sql`coalesce(${executions.payload}, '') not like '%"firstTickAt":%'`,
+      sql`coalesce(${executions.updatedAt}, ${executions.createdAt}) < ${c.handoff}`,
+    ) as SQL,
     paused: and(eq(executions.status, 'paused'), sql`coalesce(${executions.updatedAt}, ${executions.startedAt}, ${executions.createdAt}) < ${c.paused}`) as SQL,
     parkAge: and(eq(ticketRuns.lifecycle, 'awaiting_workflow'), isNotNull(ticketRuns.awaitingWorkflowId), sql`${ticketRuns.updatedAt} < ${c.parkAge}`) as SQL,
     liveRuns: and(inArray(executions.status, [...LIVE_RUN_STATUSES]), sql`coalesce(${executions.startedAt}, ${executions.createdAt}) > ${c.liveRunsStartedAfter}`) as SQL,
@@ -87,6 +97,8 @@ export type StaleProbe = Record<StaleCategory, boolean>;
  */
 export interface StaleWorkProbe extends StaleProbe {
   liveRuns: boolean;
+  /** MK-09-D2. Not a stale category: it must not wake the other sweeps, but it must not be skipped by the idle return. */
+  droppedHandoff: boolean;
 }
 
 /** Statuses of an execution still in flight and so still subject to a reaper deadline. `paused` is
@@ -127,6 +139,7 @@ export async function probeStaleWork(db: Db, p: StalePredicates): Promise<StaleW
       ${ex(executions, p.hostRunning)} as host_running,
       ${ex(executions, p.cloudRunning)} as cloud_running,
       ${ex(executions, p.queued)} as queued,
+      ${ex(executions, p.droppedHandoff)} as dropped_handoff,
       ${ex(executions, p.paused)} as paused,
       ${ex(ticketRuns, p.parkAge)} as park_age,
       ${ex(executions, p.liveRuns)} as live_runs`);
@@ -138,11 +151,12 @@ export async function probeStaleWork(db: Db, p: StalePredicates): Promise<StaleW
       paused: truthy(row.paused),
       parkAge: truthy(row.park_age),
       liveRuns: truthy(row.live_runs),
+      droppedHandoff: truthy(row.dropped_handoff),
     };
   } catch (error) {
     reportCaughtError(error, { source: 'application/runtime/staleExecutionProbe.ts', operation: 'probeStaleWork', context: { logMessage: '[execution-reaper] stale probe failed; running every sweep fail-open', details: { error: error instanceof Error ? `${error.name}: ${error.message}` : String(error) } } });
     // Fail open on the sweeps; say nothing about live runs, so a broken probe cannot pin the gate open.
-    return { ...ALL_STALE, liveRuns: false };
+    return { ...ALL_STALE, liveRuns: false, droppedHandoff: true };
   }
 }
 

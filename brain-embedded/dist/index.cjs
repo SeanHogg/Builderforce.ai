@@ -83,6 +83,7 @@ __export(src_exports, {
   HELP_COMMAND_ID: () => HELP_COMMAND_ID,
   HISTORY_TOKEN_BUDGET: () => import_working21.HISTORY_TOKEN_BUDGET,
   INFERENCE_MODES: () => INFERENCE_MODES,
+  INJECTED_TURN_META_KEY: () => INJECTED_TURN_META_KEY,
   JUDGEMENT_SCHEMAS: () => JUDGEMENT_SCHEMAS,
   LOCAL_ENGINE_FAILURE_CODES: () => LOCAL_ENGINE_FAILURE_CODES,
   LOCAL_PICKER_GROUPS: () => LOCAL_PICKER_GROUPS,
@@ -301,6 +302,7 @@ __export(src_exports, {
   hasPromptApi: () => hasPromptApi,
   hasWebGPU: () => hasWebGPU,
   inferenceModeForModelPick: () => inferenceModeForModelPick,
+  injectedTurnIdsOf: () => injectedTurnIdsOf,
   installIndexedDbStepDurability: () => installIndexedDbStepDurability,
   installRunDriver: () => installRunDriver,
   installStepDurability: () => installStepDurability,
@@ -320,6 +322,7 @@ __export(src_exports, {
   isFailedToolResult: () => isFailedToolResult,
   isFallbackFailure: () => isFallbackFailure,
   isInferenceMode: () => isInferenceMode,
+  isInjectedTurnMetadata: () => isInjectedTurnMetadata,
   isInvalidClientResult: () => isInvalidClientResult,
   isLive: () => isLive,
   isLocalWorkspaceTool: () => isLocalWorkspaceTool,
@@ -532,6 +535,7 @@ __export(src_exports, {
   turnAffectBlock: () => turnAffectBlock,
   turnInterruption: () => turnInterruption,
   turnOptimizationDirective: () => turnOptimizationDirective,
+  unquotedText: () => unquotedText,
   unreviewedChangeNudge: () => unreviewedChangeNudge,
   usageRowsSince: () => usageRowsSince,
   useArmedNewChat: () => useArmedNewChat,
@@ -560,6 +564,7 @@ __export(src_exports, {
   withAdvisory: () => withAdvisory,
   withClientResult: () => withClientResult,
   withDirectedMetadata: () => withDirectedMetadata,
+  withInjectedMeta: () => withInjectedMeta,
   withObservedModel: () => withObservedModel,
   withProvenanceMetadata: () => withProvenanceMetadata,
   withRating: () => withRating,
@@ -3193,6 +3198,9 @@ var MAX_RETRY_AFTER_MS = 60 * 60 * 1e3;
 
 // ../packages/local-first/src/tombstone.ts
 var RESNAPSHOT = Object.freeze({ action: "resnapshot" });
+
+// ../packages/local-first/src/chatTicketLink.ts
+var TASK_TABLE_KINDS = /* @__PURE__ */ new Set(["task", "epic", "gap"]);
 
 // ../packages/local-first/src/applyServerCursor.ts
 var RESNAPSHOT2 = Object.freeze({ resnapshotRequired: true });
@@ -6767,6 +6775,7 @@ function bonsai(size, params, bytes, contextTokens, layers, cpuMinMemory) {
   const model = `bonsai-${size.toLowerCase()}-q1_0`;
   return {
     ref: formatLocalModelRef("bfi", model),
+    format: "gguf",
     runtime: "bfi",
     model,
     label: `Bonsai ${size} (1-bit)`,
@@ -7667,6 +7676,9 @@ var ROUTE_WEIGHTS = {
   broadScope: 1,
   questionOnly: -1.3,
   followUp: -0.3,
+  // Outweighs every quick-leaning feature together (bias, follow-up, docs, question-only: -2.6), so a ticket or spec
+  // reconciliation request always plans first (VS Code chat #157440 started "create tickets for every open item" in code).
+  ticketIntent: 3,
   actionType: {
     data_migration: 1,
     refactor: 0.9,
@@ -7692,6 +7704,7 @@ function contributions(f, w) {
     ["broad scope", f.broadScope ? w.broadScope : 0],
     ["question only", f.questionOnly ? w.questionOnly : 0],
     ["follow-up", f.followUp ? w.followUp : 0],
+    ["ticket intent", f.ticketIntent ? w.ticketIntent ?? 0 : 0],
     [f.actionType, w.actionType[f.actionType] ?? 0]
   ];
 }
@@ -7713,6 +7726,17 @@ var BROAD_RE = /\b(?:every|each|across|throughout|entire|whole|codebase|repo-?wi
 var QUESTION_LEAD_RE = /^(?:what|why|how|where|when|which|who|is|are|does|do|did|can|could|should|would|explain|describe|summari[sz]e|show me|tell me)\b/i;
 var CHANGE_VERB_RE = /\b(?:add|implement|create|build|fix|change|refactor|update|remove|delete|rename|write|migrate|make|move|replace|convert|upgrade|bump|wire|port)\b/i;
 var FORCE_FULL_RE = /\bfull[- ]pipeline\b/i;
+var TICKET_INTENT_PATTERNS = [
+  // Filing: an exact verb, then only TICKET nouns — tasks / issues are everyday code words ("the task runner", "login issues").
+  /\b(?:create|file|open|raise|make|add|log|write)\b[^.?!\n]{0,40}\b(?:tickets?|work\s+items?)\b/i,
+  // Reviewing a spec by name.
+  /\breview(?:s|ed|ing)?\b[^.?!\n]{0,40}\b(?:prds?|specs?|specifications?|roadmaps?|requirements|gap\s+register)\b/i,
+  // Reviewing a markdown file only when ticket language follows it ("review the changes in CHANGELOG.md" is not this).
+  /\breview(?:s|ed|ing)?\b[^?!\n]{0,40}\b[\w-]+\.md\b[^?!\n]{0,80}\b(?:tickets?|work\s+items?|items?\b[^.?!\n]{0,30}\b(?:completed?|done|finished|open|incomplete|outstanding|remaining))\b/i,
+  // A spec's items and their status — only with a spec word or a .md path in the request ("remaining items in the cart" is not this).
+  /^(?=[\s\S]*(?:\b(?:prds?|specs?|specifications?|roadmaps?|requirements|gap\s+register)\b|\b[\w-]+\.md\b))[\s\S]*?\bitems?\b[^.?!\n]{0,30}\b(?:completed?|done|finished|open|incomplete|outstanding|remaining)\b/i,
+  /^(?=[\s\S]*(?:\b(?:prds?|specs?|specifications?|roadmaps?|requirements|gap\s+register)\b|\b[\w-]+\.md\b))[\s\S]*?\b(?:open|incomplete|outstanding|remaining|unfinished)\s+(?:prd\s+)?items?\b/i
+];
 function pipelineFeaturesOf(request, context = {}) {
   const text2 = request.trim();
   const files = new Set((text2.match(FILE_RE) ?? []).map((m) => m.toLowerCase()));
@@ -7727,7 +7751,8 @@ function pipelineFeaturesOf(request, context = {}) {
     questionOnly: asks && !CHANGE_VERB_RE.test(text2),
     followUp: context.followUp === true,
     actionType: context.actionType ?? "other",
-    forceFull: FORCE_FULL_RE.test(text2)
+    forceFull: FORCE_FULL_RE.test(text2),
+    ticketIntent: TICKET_INTENT_PATTERNS.some((re) => re.test(text2))
   };
 }
 
@@ -10183,6 +10208,54 @@ function overlappingScopes(scopes) {
     }
   }
   return null;
+}
+
+// ../packages/agent-tools/src/writeScope.ts
+function norm(path) {
+  return path.replace(/\\/g, "/").replace(/\/+$/, "");
+}
+function isAbs(path) {
+  return path.startsWith("/") || /^[A-Za-z]:\//.test(norm(path));
+}
+function hasParent(path) {
+  return norm(path).split("/").includes("..");
+}
+function join(root, rel2) {
+  const base = norm(root);
+  const rest = norm(rel2).replace(/^\.\//, "");
+  return rest ? `${base}/${rest}` : base;
+}
+function resolveScope(entry, paths) {
+  if (entry.key === "root") return norm(paths.root);
+  const base = norm(paths[entry.key]);
+  const sub = entry.sub?.replace(/^[/\\]+|[/\\]+$/g, "");
+  if (!sub || hasParent(sub)) return base;
+  return `${base}/${norm(sub)}`;
+}
+function within2(folder, target2, workspaceRoot) {
+  const folderNorm = norm(folder);
+  const root = norm(workspaceRoot);
+  const raw = norm(target2).replace(/^\.\//, "");
+  const abs = isAbs(raw) ? raw : join(root, raw);
+  if (abs === folderNorm || abs.startsWith(`${folderNorm}/`)) return true;
+  const folderRel = folderNorm.startsWith(`${root}/`) ? folderNorm.slice(root.length + 1) : folderNorm;
+  if (raw === folderRel || raw.startsWith(`${folderRel}/`)) return true;
+  const withoutDot = folderRel.replace(/^\.builderforce\//, "");
+  return raw === withoutDot || raw.startsWith(`${withoutDot}/`);
+}
+function describe(entry) {
+  if (entry.key === "root") return "the workspace root";
+  return entry.sub ? `${entry.key}/${entry.sub}` : entry.key;
+}
+function writeAllowed(scope, paths, target2, roleName) {
+  if (scope === void 0) return { allowed: true };
+  if (!target2.trim() || hasParent(target2)) {
+    return { allowed: false, reason: `${roleName} may not write a path that leaves its scope` };
+  }
+  const folders = scope.map((entry) => resolveScope(entry, paths));
+  if (folders.some((folder) => within2(folder, target2, paths.root))) return { allowed: true };
+  const where = scope.map(describe).join(" or ");
+  return { allowed: false, reason: `${roleName} may only write under ${where}` };
 }
 
 // ../packages/agent-tools/src/jsonKeyRead.ts
@@ -13223,7 +13296,7 @@ function createShaCache(opts = {}) {
   const max = opts.max ?? 8;
   const now = opts.now ?? Date.now;
   const entries = /* @__PURE__ */ new Map();
-  const join = (key, entry, signal) => {
+  const join2 = (key, entry, signal) => {
     entry.waiting += 1;
     if (!signal) return;
     const stop = () => {
@@ -13240,7 +13313,7 @@ function createShaCache(opts = {}) {
       if (key === null) return work(signal);
       const hit = entries.get(key);
       if (hit && !runOpts?.fresh && (hit.expires === void 0 || hit.expires > now())) {
-        join(key, hit, signal);
+        join2(key, hit, signal);
         return hit.run;
       }
       if (hit) entries.delete(key);
@@ -13248,7 +13321,7 @@ function createShaCache(opts = {}) {
       const entry = { run: void 0, waiting: 0, stopped: 0, controller, settled: false };
       entries.set(key, entry);
       while (entries.size > max) entries.delete(entries.keys().next().value);
-      join(key, entry, signal);
+      join2(key, entry, signal);
       entry.run = work(controller.signal);
       const drop = () => {
         if (entries.get(key) === entry) entries.delete(key);
@@ -13548,6 +13621,12 @@ function refuseWriteOverwrite(probe, incoming) {
 }
 
 // ../packages/agent-tools/src/core-tools.ts
+function refuseWriteScope(path, ctx) {
+  const gate = ctx.writeScope;
+  if (!gate) return null;
+  const decision = writeAllowed(gate.scope, gate.paths, path, gate.roleName);
+  return decision.allowed ? null : decision.reason ?? "write refused";
+}
 var listFilesTool = defineTool({
   name: "list_files",
   description: "List repo files (recursively) on the ticket branch so you can discover the existing codebase before editing. Optionally pass `path` to scope to a subdirectory. To FIND A FILE BY NAME, pass `glob` \u2014 e.g. `ROADMAP.md` (matches that filename at any depth, case-insensitive) or `src/**/*.test.ts`. Use `glob` instead of concluding a file is missing: a large repo's unfiltered listing is summarized to directories, but a `glob` always returns the matching files in full.",
@@ -13649,6 +13728,8 @@ var writeFileTool = defineTool({
     const content = typeof args.content === "string" ? args.content : "";
     const summary = typeof args.summary === "string" ? args.summary : void 0;
     if (!path || !content) return { data: { ok: false, error: "path and content are both required" } };
+    const scopeRefusal = refuseWriteScope(path, ctx);
+    if (scopeRefusal) return { data: { ok: false, error: scopeRefusal } };
     if (ctx.caps.repoRead) {
       let existing;
       try {
@@ -13684,6 +13765,8 @@ var deleteFileTool = defineTool({
   async execute(args, ctx) {
     const path = typeof args.path === "string" ? args.path : "";
     if (!path) return { data: { ok: false, error: "path is required" } };
+    const scopeRefusal = refuseWriteScope(path, ctx);
+    if (scopeRefusal) return { data: { ok: false, error: scopeRefusal } };
     const reason = typeof args.reason === "string" ? args.reason : void 0;
     const r = await ctx.caps.repoWrite.deleteFile(path, reason);
     if (r.ok && r.deleted === false) return { data: { ok: true, deleted: false, note: r.note } };
@@ -13721,6 +13804,12 @@ var editFileTool = defineTool({
   requires: ["repo.edit"],
   async execute(args, ctx) {
     if (Array.isArray(args.edits)) {
+      for (const edit of args.edits) {
+        if (edit && typeof edit === "object" && typeof edit.path === "string") {
+          const refusal2 = refuseWriteScope(edit.path, ctx);
+          if (refusal2) return { data: { ok: false, error: refusal2 } };
+        }
+      }
       const plan = planBatchEdits(args.edits);
       if (plan.error) return { data: { ok: false, error: plan.error } };
       const read2 = async (p) => {
@@ -13757,6 +13846,8 @@ var editFileTool = defineTool({
     const newString = typeof args.new_string === "string" ? args.new_string : "";
     const replaceAll = args.replace_all === true;
     if (!path || !oldString) return { data: { ok: false, error: "path and old_string are required" } };
+    const scopeRefusal = refuseWriteScope(path, ctx);
+    if (scopeRefusal) return { data: { ok: false, error: scopeRefusal } };
     const r = await ctx.caps.repoWrite.editFile(path, oldString, newString, replaceAll);
     return {
       data: r.ok ? {
@@ -15189,6 +15280,439 @@ var TYPESCRIPT_VERSION2 = TYPESCRIPT_PIN.slice(TYPESCRIPT_PIN.lastIndexOf("@") +
 
 // ../packages/agent-tools/src/delta/dynamic/host.ts
 var DYNAMIC_STEP_CAP_MS = 30 * 6e4;
+
+// ../packages/agent-tools/src/specs/gapRegister.ts
+var REGISTER_HEADING = /^##\s+Consolidated Gap Register\b/i;
+var FENCE = /^\s*(```|~~~)/;
+var TAG = /\[([^\]\s][^\]]*)\]/g;
+var LINK = /\[[^\]]*\]\(([^)\s]+)\)/g;
+var MAX_SLUG = 80;
+function specSlug(text2, fallback = "gap") {
+  const slug = text2.toLowerCase().replace(/[`*]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return slug.slice(0, MAX_SLUG).replace(/-+$/, "") || fallback;
+}
+function stageOf(heading) {
+  const word = heading.replace(/^#+\s*/, "").match(/[A-Za-z][A-Za-z0-9]*/);
+  return word ? word[0].toLowerCase() : "unknown";
+}
+function tagsIn(text2) {
+  return [...text2.matchAll(TAG)].map((m) => m[1].trim()).filter(Boolean);
+}
+function decodeAnchor(raw) {
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+function specLinksIn(text2) {
+  const out = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const m of text2.matchAll(LINK)) {
+    const href = m[1];
+    if (/^[a-z][a-z0-9+.-]*:/i.test(href) || href.startsWith("#")) continue;
+    const hash = href.indexOf("#");
+    const path = (hash >= 0 ? href.slice(0, hash) : href).replace(/^\.\//, "");
+    if (!/\.md$/i.test(path)) continue;
+    const anchor = hash >= 0 ? decodeAnchor(href.slice(hash + 1)) || null : null;
+    const key = `${path}#${anchor ?? ""}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ file: path, anchor });
+  }
+  return out;
+}
+function toEntry(open2) {
+  const bold = open2.head.match(/^\*\*(.+?)\*\*(.*)$/);
+  let summarySource;
+  let bodyHead;
+  if (bold) {
+    summarySource = bold[1];
+    bodyHead = bold[2];
+  } else {
+    const sentence = open2.head.match(/^(.+?[.!?])(\s+.*)?$/);
+    summarySource = sentence ? sentence[1] : open2.head;
+    bodyHead = sentence?.[2] ?? "";
+  }
+  const leadTags = [];
+  let summary = summarySource.trim();
+  for (let m = summary.match(/^\[([^\]]+)\]\s*/); m; m = summary.match(/^\[([^\]]+)\]\s*/)) {
+    leadTags.push(m[1].trim());
+    summary = summary.slice(m[0].length);
+  }
+  summary = summary.replace(/[\s,.;:]+$/, "").trim();
+  const body = [bodyHead.trim(), ...open2.rest].join("\n").trim();
+  const all = `${open2.head}
+${open2.rest.join("\n")}`;
+  const blocker = all.match(/\*Blocker:\s*(.+?)\*(?=\s|$)/im);
+  return {
+    stage: open2.stage,
+    group: open2.group,
+    tags: [.../* @__PURE__ */ new Set([...leadTags, ...open2.groupTags])],
+    summary,
+    body,
+    blocker: blocker ? blocker[1].replace(/[.\s]+$/, "") : null,
+    specLinks: specLinksIn(all),
+    line: open2.line
+  };
+}
+function parseGapRegister(markdown) {
+  const lines = markdown.split(/\r?\n/);
+  const start = lines.findIndex((l) => REGISTER_HEADING.test(l));
+  if (start < 0) return [];
+  const entries = [];
+  let stage = null;
+  let group2 = null;
+  let groupTags = [];
+  let open2 = null;
+  let afterBlank = false;
+  let inFence = false;
+  const close = () => {
+    if (open2) entries.push(toEntry(open2));
+    open2 = null;
+  };
+  for (let i = start + 1; i < lines.length; i++) {
+    const line = lines[i];
+    const fence = FENCE.test(line);
+    if (fence) inFence = !inFence;
+    if (fence || inFence) {
+      if (open2) open2.rest.push(line);
+      continue;
+    }
+    if (/^##\s/.test(line)) {
+      close();
+      stage = stageOf(line);
+      group2 = null;
+      groupTags = [];
+      continue;
+    }
+    if (/^###\s/.test(line)) {
+      close();
+      const text2 = line.replace(/^###\s+/, "");
+      groupTags = tagsIn(text2.match(/`[^`]*`/g)?.join(" ") ?? "");
+      group2 = text2.replace(/`\[[^\]]*\]`/g, "").replace(/\s+/g, " ").trim() || null;
+      continue;
+    }
+    if (/^#{4,}\s/.test(line) || /^(-{3,}|\*{3,})\s*$/.test(line)) {
+      close();
+      continue;
+    }
+    if (line.trim() === "") {
+      afterBlank = true;
+      continue;
+    }
+    const bullet = line.match(/^[-*+]\s+(.*)$/);
+    if (bullet && stage) {
+      close();
+      open2 = { line: i + 1, head: bullet[1].trim(), rest: [], stage, group: group2, groupTags };
+      afterBlank = false;
+      continue;
+    }
+    if (open2 && (/^\s/.test(line) || !afterBlank)) {
+      open2.rest.push(line.trim());
+    } else {
+      close();
+    }
+    afterBlank = false;
+  }
+  close();
+  const used = /* @__PURE__ */ new Map();
+  return entries.filter((e) => e.summary !== "").map((e) => {
+    const base = `${e.stage}/${specSlug(e.summary)}`;
+    const n2 = (used.get(base) ?? 0) + 1;
+    used.set(base, n2);
+    return { id: n2 === 1 ? base : `${base}-${n2}`, ...e };
+  });
+}
+
+// ../packages/agent-tools/src/specs/nearDuplicateTitle.ts
+var FILLER = /* @__PURE__ */ new Set([
+  "a",
+  "an",
+  "the",
+  "and",
+  "or",
+  "to",
+  "of",
+  "in",
+  "on",
+  "for",
+  "with",
+  "is",
+  "are",
+  "be",
+  "as",
+  "at",
+  "by",
+  "it",
+  "this",
+  "that",
+  "from",
+  "we",
+  "i",
+  "our",
+  "its",
+  "should",
+  "must",
+  "need",
+  "needs",
+  "needed",
+  "when",
+  "then",
+  "so",
+  "but",
+  "if",
+  "via",
+  "into",
+  "onto",
+  "per",
+  "up",
+  "out",
+  "over",
+  "do",
+  "does",
+  "not",
+  "no"
+]);
+function stem(word) {
+  const cut = (suffix, replacement = "") => {
+    if (!word.endsWith(suffix) || word.length - suffix.length + replacement.length < 3) return null;
+    return word.slice(0, -suffix.length) + replacement;
+  };
+  const stemmed = cut("ies", "y") ?? cut("ing") ?? cut("ed") ?? cut("es") ?? cut("s") ?? word;
+  return /([bdfglmnprt])\1$/.test(stemmed) ? stemmed.slice(0, -1) : stemmed;
+}
+function titleTokens(title) {
+  const words3 = (title.toLowerCase().match(/[a-z0-9]+/g) ?? []).filter((w) => w.length >= 2 && !FILLER.has(w)).map(stem);
+  return new Set(words3);
+}
+var MIN_JACCARD = 0.8;
+var MIN_CONTAINED_TOKENS = 3;
+var MAX_CONTAINMENT_SURPLUS = 2;
+function normalizeTitle(value) {
+  return String(value ?? "").replace(/\s+/g, " ").trim().toLowerCase();
+}
+function areNearDuplicateTokens(a, b) {
+  if (a.size === 0 || b.size === 0) return false;
+  const [small, big] = a.size <= b.size ? [a, b] : [b, a];
+  let shared = 0;
+  for (const token of small) if (big.has(token)) shared += 1;
+  const union = a.size + b.size - shared;
+  if (union > 0 && shared / union >= MIN_JACCARD) return true;
+  return shared === small.size && small.size >= MIN_CONTAINED_TOKENS && big.size - small.size <= MAX_CONTAINMENT_SURPLUS;
+}
+
+// ../packages/agent-tools/src/specs/specOpenItems.ts
+var FENCE2 = /^\s*(```|~~~)/;
+var HEADING = /^ {0,3}#{1,6}\s+(.*?)(?:\s+#+\s*)?$/;
+var TABLE_ROW = /^\s*\|.*\|\s*$/;
+var TABLE_SEPARATOR = /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$/;
+var CHECKLIST = /^\s*[-*+]\s+\[([ xX])\]\s+(.*)$/;
+var MAX_BLOCKER = 300;
+var ITEM_TOKEN = String.raw`(?:§\s?\d+[a-z]?(?:\.\d+[a-z]?)*|[A-Z][A-Z0-9]*-\d+[A-Za-z0-9]*(?:\.\d+)*|[A-Z]{1,3}\d+(?:\.\d+)*[a-z]?)`;
+var WHOLE_TOKEN = new RegExp(`^${ITEM_TOKEN}$`);
+var LEADING_TOKEN = new RegExp(`^(${ITEM_TOKEN})(?=$|[\\s:.,;)\\]*_\`\u2014\u2013]|-\\s)`);
+var LONG_TOKEN = /^(?:§|[A-Z][A-Z0-9]*-\d)/;
+var SEPARATED_TOKEN = new RegExp(`^${ITEM_TOKEN}[*_\`\\]]*(?=$|\\s*[:\u2014\u2013)]|\\s+-\\s|\\.(?:\\s|$))`);
+function isSpecItemToken(id) {
+  return WHOLE_TOKEN.test(id.trim());
+}
+function plain2(text2) {
+  return text2.replace(/\*\*|__|~~/g, "").replace(/\s+/g, " ").trim();
+}
+function leadingToken(text2, separated = false) {
+  const head = text2.replace(/^[\s*_`~[(]+/, "");
+  const m = head.match(LEADING_TOKEN);
+  if (!m) return null;
+  if (separated && !LONG_TOKEN.test(m[1]) && !SEPARATED_TOKEN.test(head)) return null;
+  return m[1].replace(/\s+/g, "");
+}
+var NEGATED_BLOCKED = /\b(?:no longer blocked|not blocked|unblocked)\b/gi;
+var LEADING_STATUS = [
+  [/^(?:no longer blocked|not blocked|unblocked)\b/i, "incomplete"],
+  [/^(?:[🚫⛔]|blocked\b)/iu, "blocked"],
+  [/^(?:[❌✗✖⬜🔲🟡🟠⚠⏳🚧]|(?:incomplete|not (?:started|done|ported|complete|completed|implemented|shipped|yet)|partial(?:ly)?|in[ -]progress|wip|to ?do|open|remaining|pending|missing|planned|outstanding)\b)/iu, "incomplete"],
+  [/^(?:[✅✔☑🟢]|(?:complete|completed|done|shipped|resolved|closed|finished|verified)\b)/iu, "complete"]
+];
+function mentionsBlocked(text2) {
+  const affirmed = text2.replace(NEGATED_BLOCKED, " ");
+  return /[🚫⛔]/u.test(affirmed) || /\bblocked\b/i.test(affirmed);
+}
+function blockerAfter(text2) {
+  const affirmed = text2.replace(NEGATED_BLOCKED, " ");
+  const at2 = affirmed.search(/[🚫⛔]|\bblocked\b/iu);
+  const rest = at2 < 0 ? affirmed : affirmed.slice(at2);
+  return rest.replace(/^(?:[🚫⛔]️?\s*)?(?:blocked\b)?\s*(?:[—–:-]|on\b|by\b)?\s*/iu, "").trim();
+}
+function blockedStatus(text2) {
+  const rest = blockerAfter(text2);
+  return rest ? { status: "blocked", blocker: rest.slice(0, MAX_BLOCKER) } : { status: "blocked" };
+}
+function classifySpecStatus(raw) {
+  const text2 = plain2(raw);
+  const head = text2.replace(/^[\s*_`~[(]+/, "");
+  const leading = LEADING_STATUS.find(([pattern]) => pattern.test(head));
+  if (leading) return leading[1] === "blocked" ? blockedStatus(head) : { status: leading[1] };
+  if (mentionsBlocked(text2)) return blockedStatus(text2);
+  if (/[❌✗✖⬜🔲🟡🟠⚠⏳🚧]/u.test(text2)) return { status: "incomplete" };
+  if (/\b(incomplete|not started|not done|not ported|to ?do|open|partial(ly)?|in[ -]progress|wip|pending|missing|planned|outstanding|remaining)\b/i.test(text2)) return { status: "incomplete" };
+  if (/[✅✔☑🟢]/u.test(text2) || /\b(complete|completed|done|shipped|resolved|closed|finished|verified)\b/i.test(text2)) return { status: "complete" };
+  return { status: "unknown" };
+}
+function statedBlocker(text2) {
+  const m = plain2(text2).match(/\bBlocker\b(?:\s*\([^)]*\))?\s*:\s*(.+?)\*?$/i);
+  return m ? m[1].trim().slice(0, MAX_BLOCKER) : null;
+}
+function cellsOf(row) {
+  const body = row.trim().replace(/^\|/, "").replace(/\|$/, "");
+  return body.split(/(?<!\\)\|/).map((c) => c.replace(/\\\|/g, "|").trim());
+}
+function statusTableColumns(header) {
+  const names = header.map((h) => plain2(h).replace(/`/g, "").toLowerCase());
+  const status2 = names.findIndex((n2) => /\b(status|state)\b/.test(n2));
+  if (status2 < 0) return null;
+  const id = names.findIndex((n2, i) => i !== status2 && /^(id|#|ref|key|no\.?|item id|row)$/.test(n2));
+  const title = names.findIndex((n2, i) => i !== status2 && i !== id && /\b(feature|task|item|title|name|requirement|work|deliverable|gap|description|summary|capability)\b/.test(n2));
+  if (id < 0 && title < 0) return null;
+  return { id, title, status: status2 };
+}
+function parseSpecOpenItems(markdown) {
+  const lines = markdown.split(/\r?\n/);
+  const raw = [];
+  const gapLines = /* @__PURE__ */ new Set();
+  for (const gap of parseGapRegister(markdown)) {
+    gapLines.add(gap.line);
+    raw.push({
+      token: leadingToken(gap.summary, true) ?? gap.id,
+      title: gap.summary,
+      status: "incomplete",
+      section: [gap.stage, gap.group].filter(Boolean).join(" \u203A "),
+      line: gap.line,
+      ...gap.blocker ? { blocker: gap.blocker } : {}
+    });
+  }
+  let section = "";
+  let inFence = false;
+  let inGap = false;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (FENCE2.test(line)) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence) continue;
+    const heading = line.match(HEADING);
+    if (heading) {
+      section = plain2(heading[1]).replace(/`/g, "");
+      inGap = false;
+      continue;
+    }
+    if (gapLines.has(i + 1)) {
+      inGap = true;
+      continue;
+    }
+    if (/^\S/.test(line)) inGap = false;
+    if (TABLE_ROW.test(line) && TABLE_SEPARATOR.test(lines[i + 1] ?? "")) {
+      const columns = statusTableColumns(cellsOf(line));
+      let j = i + 2;
+      for (; j < lines.length && TABLE_ROW.test(lines[j]); j++) {
+        if (!columns) continue;
+        const cells2 = cellsOf(lines[j]);
+        if (cells2.every((c) => c === "")) continue;
+        const idCell = columns.id >= 0 ? plain2(cells2[columns.id] ?? "").replace(/`/g, "") : "";
+        const titleCell = plain2(cells2[columns.title >= 0 ? columns.title : columns.id] ?? "");
+        const title = titleCell || idCell;
+        if (!title) continue;
+        const { status: status2, blocker } = classifySpecStatus(cells2[columns.status] ?? "");
+        const stated = cells2.map(statedBlocker).find((b) => b != null) ?? null;
+        const token = columns.id >= 0 ? leadingToken(idCell) ?? (idCell && idCell.length <= 40 && !/\s/.test(idCell) ? idCell : null) : leadingToken(titleCell);
+        const why = stated ?? blocker;
+        raw.push({ token, title, status: status2, section, line: j + 1, ...why && status2 === "blocked" ? { blocker: why } : {} });
+      }
+      i = j - 1;
+      continue;
+    }
+    const check = line.match(CHECKLIST);
+    if (check && !inGap) {
+      const text2 = plain2(check[2]);
+      const stated = statedBlocker(text2);
+      const done = check[1].toLowerCase() === "x";
+      const blocked = !done && (stated != null || mentionsBlocked(text2));
+      raw.push({
+        token: leadingToken(text2, true),
+        title: text2,
+        status: done ? "complete" : blocked ? "blocked" : "incomplete",
+        section,
+        line: i + 1,
+        ...blocked && stated ? { blocker: stated } : {}
+      });
+    }
+  }
+  raw.sort((a, b) => a.line - b.line);
+  const out = [];
+  const byToken = /* @__PURE__ */ new Map();
+  const usedSlugs = /* @__PURE__ */ new Map();
+  for (const { token, ...item } of raw) {
+    if (token) {
+      const first = byToken.get(token);
+      if (first) mergeRepeat(first, item);
+      else {
+        const entry = { id: token, ...item };
+        byToken.set(token, entry);
+        out.push(entry);
+      }
+      continue;
+    }
+    const base = specSlug(item.title, "item");
+    const n2 = (usedSlugs.get(base) ?? 0) + 1;
+    usedSlugs.set(base, n2);
+    out.push({ id: n2 === 1 ? base : `${base}-${n2}`, ...item });
+  }
+  return out;
+}
+var OPENNESS = { blocked: 3, incomplete: 2, unknown: 1, complete: 0 };
+function mergeRepeat(first, repeat) {
+  if (OPENNESS[repeat.status] > OPENNESS[first.status]) first.status = repeat.status;
+  if (repeat.title.length > first.title.length) first.title = repeat.title;
+  if (!first.blocker && repeat.blocker) first.blocker = repeat.blocker;
+}
+function specItemsOwingTickets(items) {
+  return items.filter((i) => i.status === "incomplete" || i.status === "blocked");
+}
+
+// ../packages/agent-tools/src/specs/ticketCoverage.ts
+var DEAD_STATUSES = /* @__PURE__ */ new Set(["cancelled", "canceled", "archived", "deleted", "wont_do", "won't do", "duplicate"]);
+var CODE_CHANGE_TITLE = /^code change \(\d+ files?\)(?: from .+)?$/i;
+function codeChangeTicketTitle(fileCount, source) {
+  const base = `Code change (${fileCount} file${fileCount === 1 ? "" : "s"})`;
+  return source ? `${base} from ${source}` : base;
+}
+function isCodeChangeBackstopTitle(title) {
+  return CODE_CHANGE_TITLE.test(title.trim());
+}
+var escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+function isMatchableSpecItemId(id) {
+  return isSpecItemToken(id) || /^[a-z]+\/[a-z0-9-]+$/.test(id);
+}
+var SHORT_TOKEN = /^[A-Z]{1,3}\d+(?:\.\d+)*[a-z]?$/;
+function idPattern(id) {
+  return new RegExp(`(?<![A-Za-z0-9\xA7/.-])${escapeRegExp(id)}(?![A-Za-z0-9]|[.-][A-Za-z0-9])`, SHORT_TOKEN.test(id) ? "" : "i");
+}
+function specTicketCoverage(openItems, tickets) {
+  const live2 = tickets.filter((t) => !t.isBackstop && !isCodeChangeBackstopTitle(t.title) && !DEAD_STATUSES.has(t.status.trim().toLowerCase())).map((t) => ({ id: t.id, text: `${t.title}
+${t.description ?? ""}`, normalized: normalizeTitle(t.title), tokens: titleTokens(t.title) }));
+  const covered = [];
+  const missing = [];
+  for (const item of specItemsOwingTickets(openItems)) {
+    const byId = isMatchableSpecItemId(item.id) ? idPattern(item.id) : null;
+    const normalized = normalizeTitle(item.title);
+    const tokens = titleTokens(item.title);
+    const ticketIds = [...new Set(live2.filter((t) => byId?.test(t.text) || t.normalized === normalized || areNearDuplicateTokens(tokens, t.tokens)).map((t) => t.id))];
+    if (ticketIds.length) covered.push({ itemId: item.id, ticketIds });
+    else missing.push(item);
+  }
+  return { covered, missing };
+}
 
 // ../packages/workload/src/profile.ts
 var TYPICAL_OUTPUT_TOKENS = {
@@ -18620,7 +19144,7 @@ function createLocalModelStore(options) {
     if (!row) throw new Error(`unknown_model: ${ref}`);
     return row;
   };
-  async function describe2(row, supports) {
+  async function describe3(row, supports) {
     const pending = inFlight.get(row.ref);
     if (pending) return { ...row, state: "downloading", progress: pending.progress };
     const backend = backendFor(row, options);
@@ -18662,7 +19186,7 @@ function createLocalModelStore(options) {
       );
       const supports = new Map(answers);
       const [rows, builtIn] = await Promise.all([
-        Promise.all(catalog.map((row) => describe2(row, supports))),
+        Promise.all(catalog.map((row) => describe3(row, supports))),
         describeBuiltIn()
       ]);
       return [...rows, ...builtIn];
@@ -21374,11 +21898,11 @@ function outgoingGate(files, ledger, policy) {
       }
     }
     if (needsTest(file, policy)) {
-      const stem = stemOf(file.absPath);
+      const stem2 = stemOf(file.absPath);
       const hasTest = files.some((t) => t !== file && !t.deleted && isTestPath(t.absPath) && covers(t, file, policy));
       if (!hasTest) {
         return refuse(
-          `git_push refused: ${file.absPath} is new and has no test in this push. Add ${stem}.test.ts covering it, commit, and push again \u2014 the host runs the checks.`
+          `git_push refused: ${file.absPath} is new and has no test in this push. Add ${stem2}.test.ts covering it, commit, and push again \u2014 the host runs the checks.`
         );
       }
     }
@@ -22472,6 +22996,7 @@ function isLocalTicketCreateLabel(label) {
 }
 var SERVER_TICKET_MOVE_TOOL = "builtin_tasks_update";
 var LOCAL_TICKET_MOVE_TOOL = "ticket-move";
+var TICKET_FROM_DELTA_TOOL = "builtin_tickets_from_delta";
 function ticketStatusMove(ref, status2, vocabulary) {
   const text2 = typeof ref === "string" ? ref.trim() : null;
   const parsed = parseEntityRef(text2 ?? ref);
@@ -22506,7 +23031,7 @@ function entityIdsOf(result) {
 
 // src/chatWorkLinking.ts
 var TICKET_RECORDING_TOOLS = /* @__PURE__ */ new Set([
-  "builtin_tickets_from_delta",
+  TICKET_FROM_DELTA_TOOL,
   "builtin_chats_link_ticket",
   "builtin_reviews_record",
   // The editor's device-local create: it IS the recording — it links its chat LOCALLY in
@@ -22617,7 +23142,6 @@ function isMutatingPlatformTool(name) {
   return name.startsWith("builtin_") && !isReadOnlyPlatformTool(name);
 }
 var NOT_STARTED_TASK_STATUSES = /* @__PURE__ */ new Set(["backlog", "todo", "ready"]);
-var TASK_TIER_KINDS = /* @__PURE__ */ new Set(["task", "epic", "gap"]);
 function linkedTicketsToAdvance(listResult) {
   return refsOf(selectLinkedTasks(listResult, inLane(NOT_STARTED_TASK_STATUSES)));
 }
@@ -22640,7 +23164,7 @@ function selectLinkedTasks(listResult, keep2) {
   for (const r of listedRows(listResult)) {
     if (!r || typeof r !== "object") continue;
     const row = r;
-    if (typeof row.kind !== "string" || !TASK_TIER_KINDS.has(row.kind)) continue;
+    if (typeof row.kind !== "string" || !TASK_TABLE_KINDS.has(row.kind)) continue;
     if (row.exists === false) continue;
     const { syncId } = entityIdsOf({ syncId: row.syncId, id: row.ref });
     if (syncId == null) continue;
@@ -22704,6 +23228,13 @@ function codeChangeFiles(args) {
   }
   return files;
 }
+function chatWorkObligationTools(chatId, tickets = SERVER_TICKET_TOOLS) {
+  const linked = chatId != null;
+  if (tickets.local) {
+    return [LOCAL_TICKET_CREATE_TOOL, LOCAL_TICKET_MOVE_TOOL, SERVER_TICKET_MOVE_TOOL, TICKET_FROM_DELTA_TOOL, ...linked ? [CHAT_TICKET_LIST_TOOL] : []];
+  }
+  return [tickets.createName, SERVER_TICKET_MOVE_TOOL, TICKET_FROM_DELTA_TOOL, ...linked ? [CHAT_TICKET_LIST_TOOL] : []];
+}
 function chatWorkLinkingDirective(chatId, tickets = SERVER_TICKET_TOOLS) {
   const linked = chatId != null;
   const createBullet = tickets.local ? `\u2022 When your investigation concludes that something needs to be DONE \u2014 a bug to fix, a missing capability, a follow-up, or a gap you identified \u2014 do not merely describe it. Create the work item with ${tickets.createName} (projectId, title, description, taskType "task", "epic", or "gap"; file an epic first, then its tasks with parentTicketId=<the epic's returned id>; or the matching builtin_*_create for an objective, spec, or roadmap item). It is saved on this device, syncs to the account in the background and is linked to this chat automatically \u2014 do NOT call builtin_chats_link_ticket, and do not create tickets with builtin_tasks_create. The id it returns is a LOCAL id: use it with the ticket-* tools.
@@ -22715,10 +23246,10 @@ function chatWorkLinkingDirective(chatId, tickets = SERVER_TICKET_TOOLS) {
   const statusTool = tickets.local ? `ticket-move (id=<its local id>, status="in_progress") for a ticket filed here, or builtin_tasks_update (id=<the ticket's ref>, status="in_progress") for one that exists only on the account` : `builtin_tasks_update (id=<the ticket's ref>, status="in_progress")`;
   return (linked ? `You are working inside Brain chat #${chatId}. Tie the work of this conversation back to it:
 ` : `This conversation lives only on this machine \u2014 it has no platform chat to link work to, so never pass a chatId and do not call builtin_chats_link_ticket or builtin_chats_list_tickets. Still make the work visible on the board:
-`) + createBullet + scopingBullet + (linked ? `\u2022 When your turn ADDS or CHANGES code, record it with builtin_tickets_from_delta (chatId=${chatId}, the current projectId, the files you touched, kind improvement|fix|bug, modality "ide"). If builtin_chats_list_tickets shows a ticket already tracking this work, pass its numeric ref as taskId so the delta attaches to it instead of creating a duplicate; otherwise the delta creates a linked ticket that completes when it ships.
-` : `\u2022 When your turn ADDS or CHANGES code, record it with builtin_tickets_from_delta (the current projectId, the files you touched, kind improvement|fix|bug, modality "ide"; no chatId). If a ticket you already know of tracks this work, pass its numeric ref as taskId so the delta attaches to it instead of creating a duplicate.
+`) + createBullet + scopingBullet + (linked ? `\u2022 When your turn ADDS or CHANGES code, record it with ${TICKET_FROM_DELTA_TOOL} (chatId=${chatId}, the current projectId, the files you touched, kind improvement|fix|bug, modality "ide"). If builtin_chats_list_tickets shows a ticket already tracking this work, pass its numeric ref as taskId so the delta attaches to it instead of creating a duplicate; otherwise the delta creates a linked ticket that completes when it ships.
+` : `\u2022 When your turn ADDS or CHANGES code, record it with ${TICKET_FROM_DELTA_TOOL} (the current projectId, the files you touched, kind improvement|fix|bug, modality "ide"; no chatId). If a ticket you already know of tracks this work, pass its numeric ref as taskId so the delta attaches to it instead of creating a duplicate.
 `) + `\u2022 Keep the board honest about STATUS. The MOMENT you start actively working an existing ${linked ? "linked " : ""}task/epic/gap \u2014 investigating its fix, editing code for it, or driving it \u2014 move it out of the backlog with ${statusTool}. When the work is finished: if this session can commit and push (it has git_commit and git_push), self-review it and ship it as the SHIP POLICY contract says (it names when the ticket moves to "done"); otherwise advance it to "in_review" for someone who can (or "done" if it needs no review). Never leave a ticket you are actively working sitting in backlog.` + (linked ? `
-\u2022 When an open EPIC is linked to this chat, its remaining work belongs under it: record a code change for it with builtin_tickets_from_delta passing parentTaskId=<the epic's numeric ref> (so a newly minted ticket is filed under the epic), and file a child task with ${tickets.createName} (${tickets.local ? "parentTicketId" : "parentTaskId"}=<the epic's ref>) for each remaining slice of the epic that has no ticket yet.` : "") + (linked ? `
+\u2022 When an open EPIC is linked to this chat, its remaining work belongs under it: record a code change for it with ${TICKET_FROM_DELTA_TOOL} passing parentTaskId=<the epic's numeric ref> (so a newly minted ticket is filed under the epic), and file a child task with ${tickets.createName} (${tickets.local ? "parentTicketId" : "parentTaskId"}=<the epic's ref>) for each remaining slice of the epic that has no ticket yet.` : "") + (linked ? `
 \u2022 Call builtin_chats_list_tickets (chatId=${chatId}) to see what is already linked \u2014 both to AVOID creating a duplicate and to know which linked tickets need their status advanced. Never end a turn having identified actionable work or changed code without it being a ticket linked to this chat whose status reflects the work you did.` : `
 \u2022 Never end a turn having identified actionable work or changed code without it being a ticket whose status reflects the work you did.`);
 }
@@ -25336,13 +25867,13 @@ var SYNONYMS = (() => {
   }
   return map;
 })();
-function synonymsFor(stem) {
-  return SYNONYMS.get(stem) ?? [];
+function synonymsFor(stem2) {
+  return SYNONYMS.get(stem2) ?? [];
 }
 function expandWithSynonyms(stems) {
   const expanded = /* @__PURE__ */ new Set();
-  for (const stem of stems) {
-    for (const synonym of synonymsFor(stem)) {
+  for (const stem2 of stems) {
+    for (const synonym of synonymsFor(stem2)) {
       if (!stems.has(synonym)) expanded.add(synonym);
     }
   }
@@ -25854,7 +26385,7 @@ var STEPS = [
   { depth: 2, arrayItems: 1, stringChars: 80 },
   { depth: 1, arrayItems: 1, stringChars: 60 }
 ];
-function describe(value) {
+function describe2(value) {
   if (Array.isArray(value)) return `[array: ${value.length} items]`;
   if (value && typeof value === "object") return `{object: ${Object.keys(value).length} keys}`;
   return String(value);
@@ -25864,7 +26395,7 @@ function projectValue(value, step, depth2) {
     return value.length > step.stringChars ? `${value.slice(0, step.stringChars)}\u2026(+${value.length - step.stringChars} chars)` : value;
   }
   if (value === null || typeof value !== "object") return value;
-  if (depth2 >= step.depth) return describe(value);
+  if (depth2 >= step.depth) return describe2(value);
   if (Array.isArray(value)) {
     const head = value.slice(0, step.arrayItems).map((v) => projectValue(v, step, depth2 + 1));
     if (value.length > step.arrayItems) head.push(`\u2026(+${value.length - step.arrayItems} more of ${value.length} items)`);
@@ -31483,9 +32014,9 @@ function dirtyPathsOf(output) {
   return out;
 }
 function touchedStillDirty(touched, dirty) {
-  const norm = (p) => p.replace(/\\/g, "/").replace(/^\.\//, "");
-  const d = dirty.map(norm);
-  return touched.map(norm).some((t) => d.some((p) => t === p || t.endsWith(`/${p}`)));
+  const norm2 = (p) => p.replace(/\\/g, "/").replace(/^\.\//, "");
+  const d = dirty.map(norm2);
+  return touched.map(norm2).some((t) => d.some((p) => t === p || t.endsWith(`/${p}`)));
 }
 var DEFAULT_BRANCH_CMD = gitCommandPattern("remote|symbolic-ref|branch");
 function defaultBranchFromTrace(steps) {
@@ -31644,7 +32175,7 @@ function runOwnedTicketRefs(trace4, deltaTicketId = null) {
   const owned = /* @__PURE__ */ new Set();
   if (deltaTicketId != null) owned.add(String(deltaTicketId));
   for (const ev of trace4) {
-    if (ev.label !== "builtin_tickets_from_delta" || !stepSucceeded(ev)) continue;
+    if (ev.label !== TICKET_FROM_DELTA_TOOL || !stepSucceeded(ev)) continue;
     const taskId = ev.args?.taskId;
     if (typeof taskId === "number" || typeof taskId === "string") owned.add(String(taskId).trim());
     const { syncId } = entityIdsOf(ev.result);
@@ -31728,7 +32259,7 @@ function noteOf(c) {
   return "note" in c && c.note ? c.note : (ev) => pushTrace(c, ev);
 }
 function attachDeltaToRunTicket(toolName, args, deltaTicketId) {
-  if (toolName !== "builtin_tickets_from_delta" || deltaTicketId == null) return;
+  if (toolName !== TICKET_FROM_DELTA_TOOL || deltaTicketId == null) return;
   if (!args || typeof args !== "object" || Array.isArray(args)) return;
   const bag = args;
   if (bag.taskId == null) bag.taskId = deltaTicketId;
@@ -31742,7 +32273,7 @@ async function recordCodeChangeTicket(serverChatId, c, req, phase) {
   const attachTo = c.deltaTicketId;
   if (files.length === 0 && attachTo == null) return;
   const source = serverChatId != null ? `Brain chat #${serverChatId}` : "a local editor chat";
-  const summary = `Code change (${files.length} file${files.length === 1 ? "" : "s"}) from ${source}`;
+  const summary = codeChangeTicketTitle(files.length, source);
   const parentTaskId = attachTo == null && serverChatId != null && declaresChatTicketListing(req.tools) ? await soleOpenLinkedEpic(serverChatId, c, req) : null;
   const toolStart = nowMs2();
   const args = {
@@ -31758,7 +32289,7 @@ async function recordCodeChangeTicket(serverChatId, c, req, phase) {
   };
   const send = async (bag) => {
     try {
-      return { out: await req.runTool("builtin_tickets_from_delta", bag), thrown: false };
+      return { out: await req.runTool(TICKET_FROM_DELTA_TOOL, bag), thrown: false };
     } catch (e) {
       return { out: { ok: false, error: e instanceof Error ? e.message : String(e) }, thrown: true };
     }
@@ -31789,7 +32320,7 @@ async function recordCodeChangeTicket(serverChatId, c, req, phase) {
   noteOf(c)({
     ts: nowIso(),
     category: "tool",
-    label: "builtin_tickets_from_delta",
+    label: TICKET_FROM_DELTA_TOOL,
     durationMs: nowMs2() - toolStart,
     args: { ...args, auto: true, phase },
     result: out ?? null,
@@ -31866,7 +32397,7 @@ async function retitleShippedDeltaTicket(c, req) {
   if (id == null || c.deltaTitleCount == null) return;
   const finalCount = c.touchedFiles.length;
   if (finalCount === 0 || finalCount === c.deltaTitleCount) return;
-  const title = `Code change (${finalCount} file${finalCount === 1 ? "" : "s"})`;
+  const title = codeChangeTicketTitle(finalCount);
   const toolStart = nowMs2();
   let out;
   try {
@@ -32312,10 +32843,10 @@ async function shipGatePreflight(run, name, args) {
 }
 var COMPLETION_GATE_BUDGET_MS = 2e4;
 function wroteThisRun(absPath, touched) {
-  const norm = (p) => p.replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
-  const target2 = norm(absPath);
+  const norm2 = (p) => p.replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
+  const target2 = norm2(absPath);
   return touched.some((t) => {
-    const p = norm(t);
+    const p = norm2(t);
     return !!p && (target2 === p || target2.endsWith(`/${p}`));
   });
 }
@@ -32938,7 +33469,10 @@ function attemptedPublish(events) {
 }
 var DECLINES_SHIPPING = /\b(?:don'?t|do not|never|without)\s+(?:commit|push|ship|merg)\w*|\b(?:no|skip)\s+(?:commit|push)\w*|\b(?:leave|keep)\s+(?:it|them|this|the\s+(?:change|changes|edits?))\s+(?:uncommitted|unstaged|local(?:ly)?)\b/i;
 function declinesShipping(text2) {
-  return DECLINES_SHIPPING.test(text2 ?? "");
+  return DECLINES_SHIPPING.test(unquotedText(text2));
+}
+function unquotedText(text2) {
+  return (text2 ?? "").split(/\r?\n/).filter((line) => !/^\s*>/.test(line)).join("\n");
 }
 function leftChangeUnshipped(input) {
   return input.codeChanged && canShipHere(input.toolNames) && asksForChange(input.requestText) && shipNudge(input.policy) != null && !attemptedPublish(input.events);
@@ -32980,6 +33514,15 @@ var personTurns = /* @__PURE__ */ new WeakSet();
 function markPersonTurn(m) {
   if (m.role === "user") personTurns.add(m);
   return m;
+}
+function personMarkedRunTurns(req) {
+  const injected = new Set(req.injectedTurnIds ?? []);
+  const injectedAt = (id) => id !== void 0 && injected.has(id);
+  const turn = req.userTurn !== void 0 ? { role: "user", content: req.userTurn } : void 0;
+  return {
+    ...req.seed ? { seed: req.seed.map((m, i) => injectedAt(req.seedIds?.[i]) ? m : markPersonTurn(m)) } : {},
+    ...turn ? { turn: injectedAt(req.userTurnMessageId) ? turn : markPersonTurn(turn) } : {}
+  };
 }
 var MAX_ASKS = 4;
 var MAX_ASK_CHARS = 300;
@@ -33030,7 +33573,7 @@ var DEFERRAL = /\b(?:not\s+yet|after|when|once|later|tomorrow|tonight|next|until
 var ASSISTANT_ASKS_TO_SHIP = /\b(?:shall|should|can|may)\s+I\s+(?:go\s+ahead\s+and\s+)?(?:now\s+)?(?:commit|push|ship|merge|land|publish|open\s+(?:a|the)\s+(?:pr|pull\s+request))\b[^?]*\?|\b(?:do\s+you\s+want|want|would\s+you\s+like)\s+me\s+to\s+(?:go\s+ahead\s+and\s+)?(?:commit|push|ship|merge|land|publish|open\s+(?:a|the)\s+(?:pr|pull\s+request))\b[^?]*\?/i;
 var BARE_AFFIRMATIVE = /^(?:(?:yes|yep|yeah|yup|sure|ok(?:ay)?|go\s+ahead|go\s+for\s+it|do\s+it|please\s+do|please|sounds\s+good|lgtm|approved|absolutely|definitely|thanks|thank\s+you)[\s,.!]*)+$/i;
 function asksToShip(text2, priorAssistant) {
-  const turn = (text2 ?? "").trim();
+  const turn = unquotedText(text2).trim();
   if (!turn || DEFERRAL.test(turn)) return false;
   if (priorAssistant && BARE_AFFIRMATIVE.test(turn) && ASSISTANT_ASKS_TO_SHIP.test(priorAssistant)) return true;
   return turn.split(/[.!?;:\n,]+/).some((clause) => SHIP_ORDER.test(clause.trim()));
@@ -33416,6 +33959,11 @@ var RunProgressGuard = class {
   /** An unverified finish was deferred once for a forced change turn (`progressGuardTurn`). */
   stalledDeferred = false;
   /**
+   * The run is FINISHING with its obligation tools on offer (`progressGuardTurn`): how many more turns may still record work
+   * (file / update tickets) before the last one offers nothing. Null while the run is not finishing that way.
+   */
+  recordTurnsLeft = null;
+  /**
    * @param on the A3 lever.
    * @param expectsChange the run was asked for a CHANGE (`asksForChange` over its request).
    *   Only then does a read-only streak trip — a review reads and answers.
@@ -33484,7 +34032,32 @@ var RunProgressGuard = class {
   steerInstead(note) {
     this.steer = note;
   }
+  /** A finish offered the obligation tools: `turns` more turns may still record work before the last one offers nothing. */
+  beginRecordingFinish(turns) {
+    this.recordTurnsLeft = Math.max(0, turns);
+  }
+  /**
+   * The next turn of a finishing run, taken once per turn: 'record' (the obligation tools again), 'final' (no tools — the
+   * report), or null when the run is not finishing that way. Finish means no more coding, whatever a later trip decides.
+   */
+  takeFinishingTurn() {
+    if (this.recordTurnsLeft === null) return null;
+    if (this.recordTurnsLeft > 0) {
+      this.recordTurnsLeft -= 1;
+      return "record";
+    }
+    this.recordTurnsLeft = null;
+    return "final";
+  }
 };
+var FINISH_RECORD_TURNS = 3;
+var FINISH_RECORD_BRIEF = "You are FINISHING: make no more code changes and run nothing. Before your final report, file a ticket for EVERY item the person asked for that is still open (with the ticket tools offered on this turn), and update the status of the tickets you worked on. Then write the final report: what is done, and which ticket tracks each item that is not.";
+var FINISH_FINAL_BRIEF = "Write your final report now: what is done, and which ticket tracks each requested item that is still open.";
+function obligationToolsOf(run) {
+  const names = new Set(run.promptTools?.obligation ?? []);
+  if (names.size === 0) return [];
+  return (run.allTools ?? []).filter((t) => names.has(t.function.name));
+}
 function progressAfterToolCalls(run) {
   return (ctx) => {
     const action = run.progress.endTurn();
@@ -33497,15 +34070,29 @@ function progressAfterToolCalls(run) {
 function traceStep(run, step, s) {
   pushTrace(run.c, { ts: nowIso(), category: "message", label: s.label, args: { step, ...s.args }, result: s.result });
 }
+function finishingTurn(run) {
+  const finishing = run.progress.takeFinishingTurn();
+  if (!finishing) return null;
+  run.progress.takeDue();
+  const tools = finishing === "record" ? obligationToolsOf(run) : [];
+  return { tools, brief: { role: "user", content: tools.length > 0 ? FINISH_RECORD_BRIEF : FINISH_FINAL_BRIEF }, finishing: true };
+}
 function progressGuardTurn(run, step, selected) {
+  const finishing = finishingTurn(run);
+  if (finishing) return finishing;
   const due = run.progress.takeDue();
   if (!due) return null;
   if (due.kind === "finish") {
     const deferred = due.verified ? null : deferredFinishTurn(run, step, selected, due);
     if (deferred === "steered") return null;
     if (deferred) return deferred;
-    trace2(run, step, due, "finish");
-    return { tools: [], brief: { role: "user", content: due.note } };
+    const tools = obligationToolsOf(run);
+    trace2(run, step, due, "finish", tools.length);
+    if (tools.length === 0) return { tools: [], brief: { role: "user", content: due.note }, finishing: true };
+    run.progress.beginRecordingFinish(FINISH_RECORD_TURNS - 1);
+    return { tools, brief: { role: "user", content: `${due.note}
+
+${FINISH_RECORD_BRIEF}` }, finishing: true };
   }
   const advice = `PROGRESS CHECK ${due.trip}: ${progressAdvice(due.signal)}`;
   const out = budgeted(run) ? forcedProgressTurn(run, selected, advice) : null;
@@ -33540,13 +34127,14 @@ var FORCED_MENU = {
   hand_off: "hand_off alone",
   change: "the change tools alone"
 };
-function trace2(run, step, due, forced) {
+function trace2(run, step, due, forced, recordTools = 0) {
+  const why = due.kind === "finish" && due.verified ? "the change is made and verified" : "the run is not converging";
   pushTrace(run.c, {
     ts: nowIso(),
     category: "message",
     label: "loop.progress_forced",
-    args: { step, trip: due.trip, signal: due.signal.kind, forced },
-    result: forced === "finish" ? `progress check ${due.trip} (${due.signal.kind}) \u2014 ${due.kind === "finish" && due.verified ? "the change is made and verified" : "the run is not converging"}: this turn offers no tools and the run writes its final report.` : `progress check ${due.trip} (${due.signal.kind}) \u2014 this turn offers ${FORCED_MENU[forced]} and requires a call.`
+    args: { step, trip: due.trip, signal: due.signal.kind, forced, ...recordTools > 0 ? { recordTools } : {} },
+    result: forced !== "finish" ? `progress check ${due.trip} (${due.signal.kind}) \u2014 this turn offers ${FORCED_MENU[forced]} and requires a call.` : recordTools > 0 ? `progress check ${due.trip} (${due.signal.kind}) \u2014 ${why}: this turn offers only the ${recordTools} ticket tool(s) to record what is still open, and the run writes its final report.` : `progress check ${due.trip} (${due.signal.kind}) \u2014 ${why}: this turn offers no tools and the run writes its final report.`
   });
 }
 
@@ -34377,13 +34965,15 @@ ${c.priorResearch}`;
   const turnContext = turnContextBlock2(turnParts);
   const systemNamed = toolNamesMentionedIn(systemPrompt);
   const blockNamed = turnContext ? toolNamesMentionedIn(turnContext) : [];
+  const obligation = runMode === "work" ? chatWorkObligationTools(serverChatId, ticketToolVocabulary(catalogToolNames)).filter((n2) => catalogToolNames.includes(n2)) : [];
   const promptTools = {
     system: systemNamed,
     turn: [.../* @__PURE__ */ new Set([...blockNamed, ...toolNamesMentionedIn([...turnPartsInPrompt, userRequest].join("\n\n"))])],
-    contract: previewReview ? toolNamesMentionedIn(previewReview) : []
+    contract: previewReview ? toolNamesMentionedIn(previewReview) : [],
+    ...obligation.length > 0 ? { obligation } : {}
   };
   const alwaysAdvertised = [
-    .../* @__PURE__ */ new Set([...systemNamed, ...blockNamed]),
+    .../* @__PURE__ */ new Set([...systemNamed, ...blockNamed, ...obligation]),
     ...localToolsIn(catalogToolNames),
     // The Studio's workspace vocabulary, including the preview review its contract
     // requires — empty everywhere but the Studio (see `studioToolsIn`).
@@ -35475,15 +36065,16 @@ function trace3(run, step, streak, forced) {
 }
 
 // src/run/brainTurnMenu.ts
-function forcedTurnFor(run, step, selected, handOffTurn) {
-  return handOffTurn ?? changeBudgetTurn(run, step, selected) ?? noProgressTurn(run, step, selected) ?? progressGuardTurn(run, step, selected);
+function forcedTurnFor(run, step, selected, finishing, handOffTurn) {
+  return finishing ?? handOffTurn ?? changeBudgetTurn(run, step, selected) ?? noProgressTurn(run, step, selected) ?? progressGuardTurn(run, step, selected);
 }
 async function brainTurnMenu(run, env, catalogSize) {
-  const handOffTurn = planBudgetTurn(run, env.step);
+  const finishing = finishingTurn(run);
+  const handOffTurn = finishing ? null : planBudgetTurn(run, env.step);
   const ranked2 = await env.select();
   const selected = offersHandOff(run.policy) ? ranked2 : ranked2.filter((t) => t.function.name !== HAND_OFF_TOOL);
-  const forced = forcedTurnFor(run, env.step, selected, handOffTurn);
-  const steer = run.progress.steerNote();
+  const forced = forcedTurnFor(run, env.step, selected, finishing, handOffTurn);
+  const steer = forced?.finishing ? "" : run.progress.steerNote();
   const tail = [...forced ? [userTextOf(forced.brief)] : [], ...steer ? [steer] : []];
   if (forced) return { tools: forced.tools, ...forced.toolChoice ? { toolChoice: forced.toolChoice } : {}, tail };
   if (catalogSize > roleToolLimit(run.policy.phase)) {
@@ -35508,13 +36099,13 @@ function vocabularyOf(names) {
   return [...localToolsIn(names), ...studioToolsIn(names), ...memoryToolsIn(names), ...skillToolsIn(names)];
 }
 function unnamedVocabulary(run) {
-  const named = /* @__PURE__ */ new Set([...run.promptTools.system, ...run.promptTools.turn]);
+  const named = /* @__PURE__ */ new Set([...run.promptTools.system, ...run.promptTools.turn, ...run.promptTools.obligation ?? []]);
   return new Set(vocabularyOf(run.catalogToolNames).filter((n2) => !named.has(n2)));
 }
 function promptOnlyNamed(run) {
   if (!canChangeCodeHere(run.catalogToolNames)) return /* @__PURE__ */ new Set();
-  const { system, turn, contract } = run.promptTools;
-  const kept = /* @__PURE__ */ new Set([...turn, ...contract, ...vocabularyOf(run.catalogToolNames), ASK_USER_TOOL, HAND_OFF_TOOL]);
+  const { system, turn, contract, obligation = [] } = run.promptTools;
+  const kept = /* @__PURE__ */ new Set([...turn, ...contract, ...obligation, ...vocabularyOf(run.catalogToolNames), ASK_USER_TOOL, HAND_OFF_TOOL]);
   return new Set(system.filter((n2) => !kept.has(n2)));
 }
 function surfaceRequired(run, naming) {
@@ -35639,10 +36230,10 @@ function compactionSavedTokens(full, working, historyBudgetTokens = import_worki
   const withoutCompaction = Math.min((0, import_working16.transcriptTokens)(full), historyBudgetTokens);
   return Math.max(0, withoutCompaction - (0, import_working16.transcriptTokens)(working));
 }
-function stampOncePerCall(stamped2, plain2) {
+function stampOncePerCall(stamped2, plain3) {
   let used = false;
   return () => {
-    if (used) return plain2;
+    if (used) return plain3;
     used = true;
     return stamped2;
   };
@@ -35770,7 +36361,18 @@ function brainCompaction(run) {
 }
 
 // src/run/brainFinish.ts
+function inSequence(gates) {
+  if (gates.length <= 1) return gates[0];
+  return async (ctx) => {
+    for (const gate of gates) {
+      const block = await gate(ctx);
+      if (block) return block;
+    }
+    return null;
+  };
+}
 function brainFinishHook(req, openWork) {
+  const work = typeof openWork === "function" ? openWork : inSequence(openWork ?? []);
   const ports = {
     ...req.liveChildren ? {
       // The run IS a delegation owner as soon as the host can say who its live children are: an owner, not only a child
@@ -35778,7 +36380,7 @@ function brainFinishHook(req, openWork) {
       delegated: true,
       liveChildren: req.liveChildren
     } : {},
-    ...openWork ? { openWork } : {}
+    ...work ? { openWork: work } : {}
   };
   return createFinishHook(ports);
 }
@@ -36420,6 +37022,189 @@ function openLinkedWorkHold(run) {
   };
 }
 
+// src/runStore/specTicketCoverageGate.ts
+var TICKETING_INTENTS = [
+  /\b(?:create|file|raise|log)\s+(?:[\w'-]+\s+){0,3}?(?:tickets?|tasks?|issues?)\b/i,
+  /\bopen\s+(?:an?|one|new|separate|individual)\s+(?:[\w'-]+\s+){0,2}?(?:tickets?|tasks?|issues?)\b/i
+];
+var SPEC_LANGUAGE = [
+  /\bspecs?\b/i,
+  /\bspecification\b/i,
+  /\bprds?\b/i,
+  /\broadmap\b/i,
+  /\bgap register\b/i,
+  /\brequirements? doc(?:ument)?s?\b/i
+];
+var MAX_SPEC_COVERAGE_HOLDS = 4;
+var MAX_SPECS = 3;
+var PAGE_LINES = 2e3;
+var MAX_PAGES = 10;
+var MAX_LISTED_ITEMS = 25;
+var NOT_A_SPEC = /(^|\/)(readme|changelog|license|contributing|claude|agents|memory|code_of_conduct|security)\.md$/i;
+var MD_PATH = /[\w.@-]+(?:[\\/][\w.@-]+)*\.md\b/gi;
+var SPEC_LIKE = /(?:^|\/)docs\/specs?\/|(?:^|[^a-z])(?:specs?|prds?|roadmap|requirements)(?=[^a-z]|$)/i;
+var normalizePath4 = (p) => p.trim().replace(/\\/g, "/").replace(/^\.\/+/, "");
+function namedSpecPaths(request) {
+  return [...new Set((request.match(MD_PATH) ?? []).map(normalizePath4))].filter((p) => !NOT_A_SPEC.test(p));
+}
+var speaksOfSpec = (request) => SPEC_LANGUAGE.some((p) => p.test(request));
+function isSpecTicketingRequest(request) {
+  return TICKETING_INTENTS.some((p) => p.test(request)) && (speaksOfSpec(request) || namedSpecPaths(request).length > 0);
+}
+function specPathsFor(request, trace4) {
+  const named = namedSpecPaths(request);
+  if (named.length) return named.slice(0, MAX_SPECS);
+  if (!speaksOfSpec(request)) return [];
+  return readFileAnchors(trace4).map((a) => normalizePath4(a.path)).filter((p) => /\.md$/i.test(p) && !NOT_A_SPEC.test(p) && SPEC_LIKE.test(p)).reverse().slice(0, MAX_SPECS);
+}
+function itemLine(i) {
+  const blocker = i.status === "blocked" ? `, blocker: ${i.blocker ?? "not stated"}` : "";
+  const id = isMatchableSpecItemId(i.id) ? `${i.id} ` : "";
+  return `- ${id}"${i.title}" (${i.status}${blocker}; ${i.spec}:${i.line})`;
+}
+function itemList(missing) {
+  const shown = missing.slice(0, MAX_LISTED_ITEMS).map(itemLine);
+  if (missing.length > MAX_LISTED_ITEMS) shown.push(`- +${missing.length - MAX_LISTED_ITEMS} more`);
+  return shown.join("\n");
+}
+function fileTicketsBlock(missing) {
+  const withId = missing.find((i) => isMatchableSpecItemId(i.id));
+  const example = withId ? ` (e.g. "${withId.id}: ${withId.title}")` : "";
+  return `You were asked to create a ticket for each open item of the spec, and these open items have NO ticket linked to this chat:
+${itemList(missing)}
+
+File ONE ticket per item now (${SERVER_TICKET_CREATE_TOOL}), linked to this chat. Start each ticket title with the item's id when the item has one${example}; for an item listed without an id, copy the item title verbatim as the ticket title. File a BLOCKED item with status "blocked" and name its blocker in the description. An auto-captured "Code change (N files)" ticket records a diff, not a spec item: it does not count. Then continue with the remaining work.`;
+}
+function reportBlock(missing) {
+  return `These spec items still have no ticket:
+${itemList(missing)}
+
+If you cannot file them, end the run now \u2014 and your final report MUST list each of these unticketed items (id, title, status, line) and why it has no ticket.`;
+}
+function listsAll(content, missing) {
+  const text2 = (content ?? "").toLowerCase();
+  return missing.every((i) => text2.includes(i.id.toLowerCase()) || text2.includes(i.title.toLowerCase()));
+}
+async function readSpec(run, path, note) {
+  const runTool2 = run.req.runTool;
+  const parts = [];
+  let offset = 1;
+  for (let page = 0; page < MAX_PAGES; page++) {
+    let out;
+    try {
+      out = await bounded(continuationLimits.settleMs, runTool2("read_file", { path, offset, limit: PAGE_LINES }));
+    } catch (e) {
+      out = { ok: false, error: errorMessage(e) };
+    }
+    const rec = toolResultRecord(out);
+    if (isFailedToolResult(out) || !rec || typeof rec.content !== "string") {
+      const why = typeof rec?.error === "string" ? ` (${rec.error})` : "";
+      note("finish.spec_tickets_unreadable", `The spec ${path} could not be read${why}: the run is not held for its open items.`, { path });
+      return null;
+    }
+    parts.push(rec.content);
+    const returned = rec.content.split("\n").length;
+    const total = typeof rec.totalLines === "number" ? rec.totalLines : 0;
+    offset += returned;
+    if (rec.truncated !== true || offset > total) break;
+  }
+  return parts.join("\n");
+}
+async function coverageTickets(run, trace4, noteEv) {
+  const delta = run.c.deltaTicketId != null ? String(run.c.deltaTicketId) : null;
+  const listedRows2 = [];
+  if (run.serverChatId != null) {
+    const listed = await listChatTickets(run.req, run.serverChatId, {
+      note: noteEv,
+      label: "finish.spec_tickets_unreadable",
+      consequence: "the run is not held for the spec's open items.",
+      timeoutMs: continuationLimits.settleMs
+    }, listingScopeOf(run.c));
+    if (listed == null) return null;
+    for (const t of linkedTaskRows(listed)) listedRows2.push({ id: t.ref, title: t.title, status: t.status, isBackstop: t.ref === delta });
+  }
+  const listedByRef = new Map(listedRows2.map((t) => [t.id, t]));
+  const moves = ticketMovesInRun(trace4);
+  const filed = ticketsCreatedInRun(trace4).map((f) => {
+    const text2 = (k) => typeof f.args[k] === "string" ? f.args[k] : "";
+    const listed = f.syncRef != null ? listedByRef.get(f.syncRef) : void 0;
+    return {
+      id: listed ? listed.id : f.ref,
+      title: text2("title") || text2("summary"),
+      description: text2("description") || text2("detail"),
+      status: listed ? listed.status : latestStatus(moves, f.ids) ?? (text2("status") || "backlog"),
+      ...listed?.isBackstop ? { isBackstop: true } : {}
+    };
+  });
+  return [...listedRows2, ...filed];
+}
+var samePath = (a, b) => a === b || a.endsWith(`/${b}`) || b.endsWith(`/${a}`);
+function writesPath(events, path) {
+  return events.some((ev) => stepSucceeded(ev) && isCodeChangeTool(ev.label) && editedPathsOf(ev.label, ev.args).some((p) => samePath(normalizePath4(p), path)));
+}
+function specTicketCoverageGate(run) {
+  const seen = /* @__PURE__ */ new Map();
+  const parsedSpecs = /* @__PURE__ */ new Map();
+  let holds = 0;
+  let released = false;
+  const noteEv = (ev) => pushTrace(run.c, ev);
+  const note = (label, result, args) => {
+    noteEv({ ts: nowIso(), category: "message", label, ...args ? { args } : {}, result });
+  };
+  const release = (missing, why) => {
+    released = true;
+    note("finish.spec_tickets_released", `The run ends with spec items still unticketed (${missing.map((i) => i.id).join(", ")}): released because ${why}.`, { missing: missing.map((i) => i.id) });
+    return null;
+  };
+  const specItems = async (spec2, trace4) => {
+    const cached2 = parsedSpecs.get(spec2);
+    if (cached2 && cached2.at <= trace4.length && !writesPath(trace4.slice(cached2.at), spec2)) return cached2.items;
+    const text2 = await readSpec(run, spec2, note);
+    if (text2 == null) {
+      parsedSpecs.delete(spec2);
+      return null;
+    }
+    const items = parseSpecOpenItems(text2);
+    parsedSpecs.set(spec2, { items, at: trace4.length });
+    return items;
+  };
+  return async (ctx) => {
+    const { req } = run;
+    if (released || !req.runTool) return null;
+    if (req.lineage || ctx.task.dispatch.parentRunId !== void 0) return null;
+    if (normalizeChatMode(req.chatMode ?? "work") !== "work") return null;
+    if (run.c.abort?.signal.aborted || ctx.signal?.aborted) return null;
+    if (asksThePerson(ctx.content)) return null;
+    if (!isSpecTicketingRequest(run.userRequest)) return null;
+    if (run.serverChatId != null && !declaresChatTicketListing(req.tools)) return null;
+    const trace4 = runTrace(run.c);
+    const specs = specPathsFor(run.userRequest, trace4);
+    if (!specs.length) return null;
+    const items = [];
+    for (const spec2 of specs) {
+      const list2 = await specItems(spec2, trace4);
+      if (list2 != null) items.push({ spec: spec2, items: list2 });
+    }
+    if (!items.length) return null;
+    const tickets = await coverageTickets(run, trace4, noteEv);
+    if (!tickets) return null;
+    const missing = items.flatMap(({ spec: spec2, items: list2 }) => specTicketCoverage(list2, tickets).missing.map((i) => ({ ...i, spec: spec2 })));
+    if (!missing.length) return null;
+    const key = missing.map((i) => `${i.spec}#${i.id}`).sort().join("|");
+    const times = (seen.get(key) ?? 0) + 1;
+    seen.set(key, times);
+    if (times >= 3) return release(missing, "the same items stayed unticketed after two holds");
+    if (times === 2 && listsAll(ctx.content, missing)) return release(missing, "the final report lists them");
+    if (holds >= MAX_SPEC_COVERAGE_HOLDS) return release(missing, `it was already held ${holds} times`);
+    holds += 1;
+    note("finish.spec_tickets_held", `The run was held for ${missing.length} unticketed spec item(s) (${holds}/${MAX_SPEC_COVERAGE_HOLDS}).`, {
+      missing: missing.map((i) => ({ id: i.id, status: i.status, spec: i.spec, line: i.line })),
+      repeat: times > 1
+    });
+    return times === 1 ? fileTicketsBlock(missing) : reportBlock(missing);
+  };
+}
+
 // src/composingActivity.ts
 function utf8ByteLength2(text2) {
   if (!text2) return 0;
@@ -36987,7 +37772,8 @@ async function runPrepared(run) {
     // ... and the preamble ran the host's model preflight already (`hostRunContext.ts`): the agent's own would ask the host again and warn
     // about a model the loop never warned about (a QUICK run's quick model), so the Brain's says the verdict and nothing more.
     // ... and the finish module carries the host's engine ports (`brainFinish.ts`): an owner never ends with its sub-agents still working.
-    modules: { compaction: compaction.hook, model: recordedModelHook(c, req.model), finish: withDeterministicFinish(run, brainFinishHook(req, openLinkedWorkHold(run))) },
+    // ... and the open-work gate sequence: the run's open linked tickets, then the spec items a ticketing request still owes.
+    modules: { compaction: compaction.hook, model: recordedModelHook(c, req.model), finish: withDeterministicFinish(run, brainFinishHook(req, [openLinkedWorkHold(run), specTicketCoverageGate(run)])) },
     // The Brain's read-coverage owns the no-progress counter (`callPreflight`/`callPostStep`
     // feed it); hand the kernel that ONE instance to persist, so a circling run keeps its count
     // across the step yield it is steered into — not a kernel-built twin the Brain never feeds.
@@ -37065,13 +37851,14 @@ async function startRun(runKey, request, claim) {
   const req = { ...request, persistence: runPersistence };
   c.persistStep = (ev) => persistStep(chatId, runPersistence, ev);
   beginRun(c, chatId);
-  const { userTurn: _turn, userTurnMessageId: _row, seed: _seed, seedIds: _seedIds, priorResearch: _research, ...rerun } = request;
+  const { userTurn: _turn, userTurnMessageId: _row, seed: _seed, seedIds: _seedIds, injectedTurnIds: _injected, priorResearch: _research, ...rerun } = request;
   c.lastRequest = rerun;
-  if (req.seed && c.transcript.length === 0) {
-    c.transcript = req.seed.map(markPersonTurn);
+  const opening = personMarkedRunTurns(req);
+  if (opening.seed && c.transcript.length === 0) {
+    c.transcript = opening.seed;
     c.priorResearch = req.priorResearch ?? null;
   }
-  if (req.userTurn !== void 0) c.transcript.push(markPersonTurn({ role: "user", content: req.userTurn }));
+  if (opening.turn) c.transcript.push(opening.turn);
   emit2(c);
   c.runUsage = emptyRunUsage();
   let openPlaceholders = () => 0;
@@ -37659,6 +38446,28 @@ function useRunSnapshot(key) {
   return (0, import_react8.useSyncExternalStore)(subscribe, read2, read2);
 }
 
+// src/injectedTurn.ts
+var INJECTED_TURN_META_KEY = "injected";
+function withInjectedMeta(base) {
+  return { ...base ?? {}, [INJECTED_TURN_META_KEY]: true };
+}
+function injectedTurnIdsOf(history) {
+  return history.filter((m) => m.role === "user" && isInjectedTurnMetadata(m.metadata)).map((m) => m.id);
+}
+function isInjectedTurnMetadata(metadata) {
+  let meta = metadata;
+  if (typeof meta === "string") {
+    if (!meta.includes(INJECTED_TURN_META_KEY)) return false;
+    try {
+      meta = JSON.parse(meta);
+    } catch (e) {
+      console.warn(`BuilderForce injected turn: row metadata is not JSON (${errorMessage(e)}) \u2014 read as the person's own turn`);
+      return false;
+    }
+  }
+  return typeof meta === "object" && meta !== null && meta[INJECTED_TURN_META_KEY] === true;
+}
+
 // src/useChatTranscript.ts
 var import_react9 = require("react");
 
@@ -38145,8 +38954,9 @@ function useBrainConversation(options) {
   const fullSystemPrompt = extraSystem ? `${resolvedSystemPrompt}
 ${extraSystem}` : resolvedSystemPrompt;
   const buildRequest = (0, import_react15.useCallback)(
-    (history, researchFrom, userTurn, userTurnMessageId) => {
+    (history, researchFrom, userTurn, userTurnMessageId, turnInjected = false) => {
       const seed = transcriptSeedOf(history);
+      const injectedTurnIds = [...injectedTurnIdsOf(history), ...turnInjected && userTurnMessageId != null ? [userTurnMessageId] : []];
       return {
         resolvedSystemPrompt: fullSystemPrompt,
         tools: toolSpecs && toolSpecs.length > 0 ? toolSpecs : void 0,
@@ -38168,6 +38978,7 @@ ${extraSystem}` : resolvedSystemPrompt;
         augmentSystemPrompt,
         seed: seed.messages,
         seedIds: seed.ids,
+        ...injectedTurnIds.length > 0 ? { injectedTurnIds } : {},
         priorResearch: priorResearchDigest((0, import_working20.scopeToConsolidation)(researchFrom)),
         userTurn,
         ...userTurnMessageId != null ? { userTurnMessageId } : {},
@@ -38245,7 +39056,7 @@ ${extraSystem}` : resolvedSystemPrompt;
         composer.take(attachments);
         setLocalError("");
         const { displayContent, turn } = await composeUserTurn(trimmed, attachments, persistence);
-        const metadata = withDirectedMetadata(directedRecipientList(addressedTo), turn.meta);
+        const metadata = withDirectedMetadata(directedRecipientList(addressedTo), opts?.injected ? withInjectedMeta(turn.meta) : turn.meta);
         const [userMsg] = await persistence.sendMessages(id, [{ role: "user", content: displayContent, metadata }]);
         updateMessages(id, (prev) => [...prev, userMsg]);
         closePending(id);
@@ -38273,7 +39084,7 @@ ${extraSystem}` : resolvedSystemPrompt;
           return true;
         }
         const runs = attachments.length > 0 || startsRun(trimmed);
-        if (runs) await launch(id, buildRequest(messages, messages, turn.content, userMsg?.id), draftSend).catch((err) => {
+        if (runs) await launch(id, buildRequest(messages, messages, turn.content, userMsg?.id, opts?.injected === true), draftSend).catch((err) => {
           if (stillOpen()) setLocalError(err instanceof Error ? err.message : "Run failed");
         });
         return true;
@@ -38293,7 +39104,7 @@ ${extraSystem}` : resolvedSystemPrompt;
   );
   const replyToTrailingTurn = (0, import_react15.useCallback)((id, last) => {
     setLocalError("");
-    void launch(id, buildRequest(messages.slice(0, -1), messages, userTurnContentOf(last), last.id));
+    void launch(id, buildRequest(messages.slice(0, -1), messages, userTurnContentOf(last), last.id, isInjectedTurnMetadata(last.metadata)));
   }, [messages, buildRequest, launch]);
   useAutoReplyTrailingTurn({ chatId, loadingMessages, localSending, messages, repliedRef: autoRepliedChatIdRef, reply: replyToTrailingTurn });
   const retryLastTurn = (0, import_react15.useCallback)(() => {
@@ -38305,7 +39116,7 @@ ${extraSystem}` : resolvedSystemPrompt;
     autoRepliedChatIdRef.current = chatId;
     setLocalError("");
     clearRunError(chatId);
-    void launch(chatId, buildRequest(messages.slice(0, index), messages, userTurnContentOf(turn), turn.id));
+    void launch(chatId, buildRequest(messages.slice(0, index), messages, userTurnContentOf(turn), turn.id, isInjectedTurnMetadata(turn.metadata)));
     return true;
   }, [chatId, messages, buildRequest, launch]);
   const rateMessage = (0, import_react15.useCallback)(async (msg, rating) => {
@@ -38781,8 +39592,8 @@ function safeSuffix2(s, n2) {
   return s.slice(start);
 }
 function cutMiddleToFit(head, timeline, tail, ceiling) {
-  const join = (...parts) => parts.filter((s) => s.length > 0).join("\n");
-  const whole = join(head, timeline, tail);
+  const join2 = (...parts) => parts.filter((s) => s.length > 0).join("\n");
+  const whole = join2(head, timeline, tail);
   if (whole.length <= ceiling) return whole;
   const marker = (omitted2) => `\u2026(${formatCount(omitted2)} chars of the middle of the timeline omitted to keep this report under the ${formatCount(PASTE_LIMIT_CHARS)}-character paste limit)`;
   const markerMax = marker(timeline.length).length;
@@ -38794,7 +39605,7 @@ function cutMiddleToFit(head, timeline, tail, ceiling) {
     let h = safePrefix2(head, headRoom);
     const nl = h.lastIndexOf("\n");
     if (nl > 0 && h.length < head.length) h = h.slice(0, nl);
-    const out = join(h, headNote, marker(timeline.length), tail);
+    const out = join2(h, headNote, marker(timeline.length), tail);
     return out.length <= ceiling ? out : safeSuffix2(out, ceiling);
   }
   const front = Math.floor(room / 3);
@@ -38806,7 +39617,7 @@ function cutMiddleToFit(head, timeline, tail, ceiling) {
   const endNl = end.indexOf("\n");
   if (endNl >= 0 && endNl < end.length - 1) end = end.slice(endNl + 1);
   const omitted = Math.max(0, timeline.length - start.length - end.length);
-  return join(head, join(start, marker(omitted), end), tail);
+  return join2(head, join2(start, marker(omitted), end), tail);
 }
 function ordinalWord(n2) {
   const rem100 = n2 % 100;
@@ -39811,7 +40622,7 @@ async function gatherChatDiagnostics(src) {
   const sessionShipped = merged.length ? sessionShippedInTrace(merged) : null;
   const servedBy = accountsAcrossTurns(merged);
   const publishHold2 = publishHoldFromPersonTurns(
-    msgs.filter((m) => m.role === "user" && typeof m.content === "string" && m.content.trim()).map((m) => ({ text: m.content.trim() }))
+    msgs.filter((m) => m.role === "user" && typeof m.content === "string" && m.content.trim() && !isInjectedTurnMetadata(m.metadata)).map((m) => ({ text: m.content.trim() }))
   );
   const shipPolicy = shipPolicyOfTrace(merged, publishHold2);
   const pendingAsk = selectPendingAskUser(
@@ -39967,11 +40778,19 @@ function gatewayPlanModels(surface2) {
   return (surface2.data ?? []).map((row) => row.model ?? row.id).filter((id) => !!id);
 }
 function gatewayModelWindows(surface2) {
-  const windows = /* @__PURE__ */ new Map();
+  const votes = /* @__PURE__ */ new Map();
   for (const m of surface2?.byo?.models ?? []) {
-    if (m.id && typeof m.contextWindow === "number" && m.contextWindow > 0) windows.set(m.id, m.contextWindow);
+    if (!m.id) continue;
+    const vote = typeof m.contextWindow === "number" && m.contextWindow > 0 ? m.contextWindow : null;
+    const parts = m.id.trim().toLowerCase().split("/");
+    for (let i = 0; i < parts.length; i++) {
+      const key = parts.slice(i).join("/");
+      if (!key) continue;
+      const held = votes.get(key);
+      votes.set(key, held === void 0 || held === vote ? vote : null);
+    }
   }
-  return (ref) => windows.get(ref);
+  return (ref) => votes.get(ref.trim().toLowerCase()) ?? void 0;
 }
 var EMPTY_GATEWAY_MODEL_OPTIONS = {
   surface: {},
@@ -40380,9 +41199,9 @@ function useQueuedTurns({ running, send, resetKey = null, textOf: textOf2, mayFl
 function useTurnLanding(ports) {
   const flights = (0, import_react19.useRef)(/* @__PURE__ */ new Map());
   const giveBackAll = (0, import_react19.useCallback)((turns) => {
-    const { restore: giveBack, join } = ports.current;
+    const { restore: giveBack, join: join2 } = ports.current;
     if (!giveBack || turns.length === 0) return;
-    if (join && turns.length > 1) giveBack(join(turns));
+    if (join2 && turns.length > 1) giveBack(join2(turns));
     else for (const turn of turns) giveBack(turn);
   }, [ports]);
   const handOff2 = (0, import_react19.useCallback)((held, from) => {
@@ -40486,9 +41305,9 @@ function steersByDefault(turn) {
 function chatDoorLiveness(conv, extraInFlight = false) {
   return { running: conv.sending || extraInFlight, steerable: conv.runLive };
 }
-function useChatTurns({ running, steerable = running, runKey, drafts, send, steer, stop, restore, join, textOf: textOf2, isDirected, attachmentsOf }) {
-  const ports = (0, import_react21.useRef)({ send, steer, stop, restore, join, textOf: textOf2, isDirected, attachmentsOf, runKey, running, steerable, drafts });
-  ports.current = { send, steer, stop, restore, join, textOf: textOf2, isDirected, attachmentsOf, runKey, running, steerable, drafts };
+function useChatTurns({ running, steerable = running, runKey, drafts, send, steer, stop, restore, join: join2, textOf: textOf2, isDirected, attachmentsOf }) {
+  const ports = (0, import_react21.useRef)({ send, steer, stop, restore, join: join2, textOf: textOf2, isDirected, attachmentsOf, runKey, running, steerable, drafts });
+  ports.current = { send, steer, stop, restore, join: join2, textOf: textOf2, isDirected, attachmentsOf, runKey, running, steerable, drafts };
   const marks = useDoorStopMarks(running);
   const { stoppingRef } = marks;
   const requeueRef = (0, import_react21.useRef)(() => void 0);
@@ -40848,6 +41667,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   HELP_COMMAND_ID,
   HISTORY_TOKEN_BUDGET,
   INFERENCE_MODES,
+  INJECTED_TURN_META_KEY,
   JUDGEMENT_SCHEMAS,
   LOCAL_ENGINE_FAILURE_CODES,
   LOCAL_PICKER_GROUPS,
@@ -41066,6 +41886,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   hasPromptApi,
   hasWebGPU,
   inferenceModeForModelPick,
+  injectedTurnIdsOf,
   installIndexedDbStepDurability,
   installRunDriver,
   installStepDurability,
@@ -41085,6 +41906,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   isFailedToolResult,
   isFallbackFailure,
   isInferenceMode,
+  isInjectedTurnMetadata,
   isInvalidClientResult,
   isLive,
   isLocalWorkspaceTool,
@@ -41297,6 +42119,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   turnAffectBlock,
   turnInterruption,
   turnOptimizationDirective,
+  unquotedText,
   unreviewedChangeNudge,
   usageRowsSince,
   useArmedNewChat,
@@ -41325,6 +42148,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   withAdvisory,
   withClientResult,
   withDirectedMetadata,
+  withInjectedMeta,
   withObservedModel,
   withProvenanceMetadata,
   withRating,

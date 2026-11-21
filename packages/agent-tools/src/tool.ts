@@ -40,6 +40,19 @@ export interface ToolContext {
    *  shell out to `git`/`rg` against the checked-out repo) that are registered only
    *  on a filesystem-backed surface and would otherwise have no path to operate on. */
   readonly workspaceRoot?: string;
+  /**
+   * PRD 49 write scope. Absent means every write is allowed, so a surface that
+   * has no methodology persona keeps today's behaviour. This package does not
+   * import persona types: the surface passes the resolved scope entries.
+   */
+  readonly writeScope?: {
+    scope?: ReadonlyArray<
+      | { key: "root" }
+      | { key: "logs" | "diagnostics" | "methodology"; sub?: string }
+    >;
+    paths: { root: string; methodology: string; logs: string; diagnostics: string };
+    roleName: string;
+  };
   /** Optional structured logging/telemetry sink (a no-op when unset). */
   readonly emit?: (event: { level?: "debug" | "info" | "warn"; message: string; detail?: unknown }) => void;
   /**

@@ -65,7 +65,7 @@ export class PersonaRegistry {
    * Register one or more built-in roles as personas.
    * These form the lowest-priority layer and are always available.
    */
-  registerBuiltins(roles: AgentRole[]): void {
+  registerBuiltins(roles: ReadonlyArray<AgentRole & { methodology?: import("./types.js").PersonaMethodology }>): void {
     for (const role of roles) {
       const plugin: PersonaPlugin = { ...role, source: "builtin", active: false };
       this.builtins.push(plugin);
@@ -308,21 +308,24 @@ export async function loadPersonasFromDir(
  * produce (outputFormat).  Returns an empty string when the role has no
  * persona or output-format metadata worth surfacing.
  */
-export function buildPersonaSystemBlock(role: AgentRole): string {
+export function buildPersonaSystemBlock(role: AgentRole & { methodology?: { work?: string } }): string {
   const lines: string[] = [];
+  const work = role.methodology?.work?.trim();
 
   const hasPersona = Boolean(role.persona);
   const hasFormat = Boolean(
     role.outputFormat?.requiredSections?.length || role.outputFormat?.outputPrefix,
   );
   const hasConstraints = Boolean(role.constraints?.length);
+  const hasWork = Boolean(work);
 
-  if (!hasPersona && !hasFormat && !hasConstraints) {
+  if (!hasPersona && !hasFormat && !hasConstraints && !hasWork) {
     return "";
   }
 
   lines.push("--- Agent Persona ---");
   lines.push(`Role: ${role.name}`);
+  if (work) lines.push(work);
 
   if (role.persona) {
     lines.push(`Voice: ${role.persona.voice}`);

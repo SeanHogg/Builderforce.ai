@@ -74,6 +74,9 @@ export function isLocalTicketCreateLabel(label: string): boolean {
 export const SERVER_TICKET_MOVE_TOOL = 'builtin_tasks_update';
 export const LOCAL_TICKET_MOVE_TOOL = 'ticket-move';
 
+/** The account's code-change recording tool: a delta becomes a ticket tied to the chat (both vocabularies record through it). */
+export const TICKET_FROM_DELTA_TOOL = 'builtin_tickets_from_delta';
+
 /** The call that moves one ticket to a status. */
 export interface TicketStatusMove {
   readonly tool: string;

@@ -49,6 +49,7 @@ import type { Env } from '../../env';
 import type { BuiltinCtx, BuiltinTool } from './builtinToolContext';
 import { maskSecurityTasks } from './builtinTaskVisibility';
 import { idArg } from './builtinToolIds';
+import { TASK_TABLE_KINDS } from '../../domain/sync/syncProtocol';
 
 type Json = Record<string, unknown>;
 
@@ -194,15 +195,15 @@ async function loadOpenTickets(ctx: BuiltinCtx, projectId: number): Promise<{ ti
   };
 }
 
-/** Ticket kinds a spec item is filed as. */
-const TASK_TIER_KINDS: ReadonlySet<string> = new Set(['task', 'epic', 'gap']);
-
-/** The chat's linked task-tier tickets (any lane — the coverage join drops cancelled ones), as coverage rows. */
+/**
+ * The chat's linked task-tier tickets (any lane — the coverage join drops cancelled ones), as coverage rows. A spec item is
+ * filed as a task-table kind ({@link TASK_TABLE_KINDS}, THE list the device and the importer share).
+ */
 async function loadChatTickets(ctx: BuiltinCtx, chatId: number): Promise<CoverageTicket<number | string>[] | { error: string }> {
   const links = await new ChatTicketService(ctx.db, ctx.env as Env).listTicketsForChat(ctx.tenantId, chatId, ctx.userId ?? null);
   if ('error' in links) return links;
   return links
-    .filter((l) => TASK_TIER_KINDS.has(l.kind) && l.label !== '(deleted)')
+    .filter((l) => TASK_TABLE_KINDS.has(l.kind) && l.label !== '(deleted)')
     .map((l) => ({ id: Number.isFinite(Number(l.ref)) ? Number(l.ref) : l.ref, title: l.label, status: l.status }));
 }
 

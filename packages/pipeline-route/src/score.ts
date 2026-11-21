@@ -173,15 +173,20 @@ const FORCE_FULL_RE = /\bfull[- ]pipeline\b/i;
  * The intents that make a request TICKET / SPEC reconciliation work — data, read by {@link pipelineFeaturesOf}. Any
  * one matching sets `ticketIntent`:
  *  - filing tickets ("create associated tickets", "why didn't you create tickets");
- *  - reviewing a spec, PRD, roadmap or markdown plan ("review the Measure.md file", "review the PRD");
- *  - marking a spec's items done / completed / open ("indicate items that are completed/done");
- *  - the open / incomplete / outstanding items of a request ("open items", "items that are incomplete").
+ *  - reviewing a spec, PRD or roadmap ("review the PRD"), or a markdown file followed by ticket language
+ *    ("review the Measure.md file … indicate items that are completed/done");
+ *  - a spec's open / incomplete / completed items — only when the request names a spec word or a `.md` path.
  */
 export const TICKET_INTENT_PATTERNS: readonly RegExp[] = [
-  /\b(?:create|file|open|raise|make|add|log|write)\w*\b[^.?!\n]{0,40}\b(?:tickets?|tasks?|issues?|work\s+items?)\b/i,
-  /\breview\w*\b[^.?!\n]{0,40}\b(?:prds?|specs?|specifications?|roadmaps?|requirements|[\w-]+\.md)\b/i,
-  /\bitems?\b[^.?!\n]{0,30}\b(?:completed?|done|finished|open|incomplete|outstanding|remaining)\b/i,
-  /\b(?:open|incomplete|outstanding|remaining|unfinished)\s+(?:prd\s+)?items?\b/i,
+  // Filing: an exact verb, then only TICKET nouns — tasks / issues are everyday code words ("the task runner", "login issues").
+  /\b(?:create|file|open|raise|make|add|log|write)\b[^.?!\n]{0,40}\b(?:tickets?|work\s+items?)\b/i,
+  // Reviewing a spec by name.
+  /\breview(?:s|ed|ing)?\b[^.?!\n]{0,40}\b(?:prds?|specs?|specifications?|roadmaps?|requirements|gap\s+register)\b/i,
+  // Reviewing a markdown file only when ticket language follows it ("review the changes in CHANGELOG.md" is not this).
+  /\breview(?:s|ed|ing)?\b[^?!\n]{0,40}\b[\w-]+\.md\b[^?!\n]{0,80}\b(?:tickets?|work\s+items?|items?\b[^.?!\n]{0,30}\b(?:completed?|done|finished|open|incomplete|outstanding|remaining))\b/i,
+  // A spec's items and their status — only with a spec word or a .md path in the request ("remaining items in the cart" is not this).
+  /^(?=[\s\S]*(?:\b(?:prds?|specs?|specifications?|roadmaps?|requirements|gap\s+register)\b|\b[\w-]+\.md\b))[\s\S]*?\bitems?\b[^.?!\n]{0,30}\b(?:completed?|done|finished|open|incomplete|outstanding|remaining)\b/i,
+  /^(?=[\s\S]*(?:\b(?:prds?|specs?|specifications?|roadmaps?|requirements|gap\s+register)\b|\b[\w-]+\.md\b))[\s\S]*?\b(?:open|incomplete|outstanding|remaining|unfinished)\s+(?:prd\s+)?items?\b/i,
 ];
 
 /**

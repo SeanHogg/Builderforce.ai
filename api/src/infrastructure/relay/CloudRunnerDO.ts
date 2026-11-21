@@ -26,6 +26,7 @@ import type { AgentExecParams } from '@builderforce/agent-tools';
 import type { ShipPolicy } from '@builderforce/run-guards';
 import type { LimbicState } from '@seanhogg/builderforce-memory-engine/limbic';
 import { parseModel, parseExecutor, withRunSandbox } from '../../application/runtime/cloudDispatch';
+import { withFirstTick, withHandoffRecorded } from '../../application/runtime/handoffStartTimeout';
 import { parseCloudTickPayload } from '../../application/runtime/cloudTickPayload';
 import { ACTIONS_RUNNER_WAIT_MS, RunSandboxHost, type RunSandboxKind } from '../../application/runtime/sandbox/runSandboxHost';
 import type { SandboxOpenWait } from '../../application/runtime/sandbox/sandboxOpenWait';
@@ -201,8 +202,16 @@ export class CloudRunnerDO implements DurableObject {
     this.notConcludedCheckedAt = 0;
     if (await this.isAlreadyConcluded(body, { fresh: true })) return;
 
-    const cursor: Cursor = { ...body, stage: 'prep', model };
+    // MK-09-D2: the handoff is recorded when the cursor and alarm exist. A run that
+    // never reaches its first tick fails closed at the start-timeout, not at 15 min.
+    const recordedAt = new Date().toISOString();
+    const payload = withHandoffRecorded(body.payload, recordedAt);
+    const cursor: Cursor = { ...body, payload, stage: 'prep', model };
     await this.state.storage.put(CURSOR_KEY, cursor);
+    await this.db.update(executions)
+      .set({ payload, updatedAt: new Date() })
+      .where(and(eq(executions.id, body.executionId), eq(executions.tenantId, body.tenantId)))
+      .catch((error) => this.reportError(error, { operation: 'start', context: { logMessage: '[cloud-runner] handoff stamp failed', details: { executionId: body.executionId } } }));
     await markCloudExecutionRunning(this.runtimeService, body.executionId);
     await this.state.storage.setAlarm(Date.now());
   }
@@ -214,6 +223,14 @@ export class CloudRunnerDO implements DurableObject {
   private async handleAlarm(): Promise<void> {
     const cursor = (await this.state.storage.get<Cursor>(CURSOR_KEY)) ?? null;
     if (!cursor) return;
+    // MK-09-D2: the first tick is the proof the recorded handoff was not dropped.
+    if (cursor.payload && !cursor.payload.includes('"firstTickAt"')) {
+      cursor.payload = withFirstTick(cursor.payload, new Date().toISOString());
+      await this.state.storage.put(CURSOR_KEY, cursor);
+      await this.db.update(executions).set({ payload: cursor.payload, updatedAt: new Date() })
+        .where(and(eq(executions.id, cursor.executionId), eq(executions.tenantId, cursor.tenantId)))
+        .catch((error) => this.reportError(error, { operation: 'alarm', context: { logMessage: '[cloud-runner] first-tick stamp failed', details: { executionId: cursor.executionId } } }));
+    }
 
     // Cross-tick conclusion: the /cancel endpoint flipped the row to CANCELLED, or
     // staleExecutionReaper failed it, from another isolate. Already terminal — just

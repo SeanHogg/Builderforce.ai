@@ -767,6 +767,54 @@ function describeBracketDelta(d, style = "name") {
   return ["curly", "paren", "square"].filter((k) => d[k] !== 0).map((k) => `${style === "glyph" ? glyph[k] : k} ${d[k] > 0 ? "+" : ""}${d[k]}`).join(style === "glyph" ? ", " : " \xB7 ");
 }
 
+// ../packages/agent-tools/src/writeScope.ts
+function norm(path) {
+  return path.replace(/\\/g, "/").replace(/\/+$/, "");
+}
+function isAbs(path) {
+  return path.startsWith("/") || /^[A-Za-z]:\//.test(norm(path));
+}
+function hasParent(path) {
+  return norm(path).split("/").includes("..");
+}
+function join(root, rel2) {
+  const base = norm(root);
+  const rest = norm(rel2).replace(/^\.\//, "");
+  return rest ? `${base}/${rest}` : base;
+}
+function resolveScope(entry, paths) {
+  if (entry.key === "root") return norm(paths.root);
+  const base = norm(paths[entry.key]);
+  const sub = entry.sub?.replace(/^[/\\]+|[/\\]+$/g, "");
+  if (!sub || hasParent(sub)) return base;
+  return `${base}/${norm(sub)}`;
+}
+function within(folder, target, workspaceRoot) {
+  const folderNorm = norm(folder);
+  const root = norm(workspaceRoot);
+  const raw = norm(target).replace(/^\.\//, "");
+  const abs = isAbs(raw) ? raw : join(root, raw);
+  if (abs === folderNorm || abs.startsWith(`${folderNorm}/`)) return true;
+  const folderRel = folderNorm.startsWith(`${root}/`) ? folderNorm.slice(root.length + 1) : folderNorm;
+  if (raw === folderRel || raw.startsWith(`${folderRel}/`)) return true;
+  const withoutDot = folderRel.replace(/^\.builderforce\//, "");
+  return raw === withoutDot || raw.startsWith(`${withoutDot}/`);
+}
+function describe(entry) {
+  if (entry.key === "root") return "the workspace root";
+  return entry.sub ? `${entry.key}/${entry.sub}` : entry.key;
+}
+function writeAllowed(scope, paths, target, roleName) {
+  if (scope === void 0) return { allowed: true };
+  if (!target.trim() || hasParent(target)) {
+    return { allowed: false, reason: `${roleName} may not write a path that leaves its scope` };
+  }
+  const folders = scope.map((entry) => resolveScope(entry, paths));
+  if (folders.some((folder) => within(folder, target, paths.root))) return { allowed: true };
+  const where = scope.map(describe).join(" or ");
+  return { allowed: false, reason: `${roleName} may only write under ${where}` };
+}
+
 // ../packages/agent-tools/src/jsonKeyRead.ts
 var JSON_KEY_READ_MAX_CHARS = 12e3;
 var MAX_LISTED_KEYS = 60;
@@ -3347,7 +3395,7 @@ function createShaCache(opts = {}) {
   const max = opts.max ?? 8;
   const now = opts.now ?? Date.now;
   const entries = /* @__PURE__ */ new Map();
-  const join = (key, entry, signal) => {
+  const join2 = (key, entry, signal) => {
     entry.waiting += 1;
     if (!signal) return;
     const stop = () => {
@@ -3364,7 +3412,7 @@ function createShaCache(opts = {}) {
       if (key === null) return work(signal);
       const hit = entries.get(key);
       if (hit && !runOpts?.fresh && (hit.expires === void 0 || hit.expires > now())) {
-        join(key, hit, signal);
+        join2(key, hit, signal);
         return hit.run;
       }
       if (hit) entries.delete(key);
@@ -3372,7 +3420,7 @@ function createShaCache(opts = {}) {
       const entry = { run: void 0, waiting: 0, stopped: 0, controller, settled: false };
       entries.set(key, entry);
       while (entries.size > max) entries.delete(entries.keys().next().value);
-      join(key, entry, signal);
+      join2(key, entry, signal);
       entry.run = work(controller.signal);
       const drop = () => {
         if (entries.get(key) === entry) entries.delete(key);
@@ -3672,6 +3720,12 @@ function refuseWriteOverwrite(probe, incoming) {
 }
 
 // ../packages/agent-tools/src/core-tools.ts
+function refuseWriteScope(path, ctx) {
+  const gate = ctx.writeScope;
+  if (!gate) return null;
+  const decision = writeAllowed(gate.scope, gate.paths, path, gate.roleName);
+  return decision.allowed ? null : decision.reason ?? "write refused";
+}
 var listFilesTool = defineTool({
   name: "list_files",
   description: "List repo files (recursively) on the ticket branch so you can discover the existing codebase before editing. Optionally pass `path` to scope to a subdirectory. To FIND A FILE BY NAME, pass `glob` \u2014 e.g. `ROADMAP.md` (matches that filename at any depth, case-insensitive) or `src/**/*.test.ts`. Use `glob` instead of concluding a file is missing: a large repo's unfiltered listing is summarized to directories, but a `glob` always returns the matching files in full.",
@@ -3773,6 +3827,8 @@ var writeFileTool = defineTool({
     const content = typeof args.content === "string" ? args.content : "";
     const summary = typeof args.summary === "string" ? args.summary : void 0;
     if (!path || !content) return { data: { ok: false, error: "path and content are both required" } };
+    const scopeRefusal = refuseWriteScope(path, ctx);
+    if (scopeRefusal) return { data: { ok: false, error: scopeRefusal } };
     if (ctx.caps.repoRead) {
       let existing;
       try {
@@ -3808,6 +3864,8 @@ var deleteFileTool = defineTool({
   async execute(args, ctx) {
     const path = typeof args.path === "string" ? args.path : "";
     if (!path) return { data: { ok: false, error: "path is required" } };
+    const scopeRefusal = refuseWriteScope(path, ctx);
+    if (scopeRefusal) return { data: { ok: false, error: scopeRefusal } };
     const reason = typeof args.reason === "string" ? args.reason : void 0;
     const r = await ctx.caps.repoWrite.deleteFile(path, reason);
     if (r.ok && r.deleted === false) return { data: { ok: true, deleted: false, note: r.note } };
@@ -3845,6 +3903,12 @@ var editFileTool = defineTool({
   requires: ["repo.edit"],
   async execute(args, ctx) {
     if (Array.isArray(args.edits)) {
+      for (const edit of args.edits) {
+        if (edit && typeof edit === "object" && typeof edit.path === "string") {
+          const refusal = refuseWriteScope(edit.path, ctx);
+          if (refusal) return { data: { ok: false, error: refusal } };
+        }
+      }
       const plan = planBatchEdits(args.edits);
       if (plan.error) return { data: { ok: false, error: plan.error } };
       const read = async (p) => {
@@ -3881,6 +3945,8 @@ var editFileTool = defineTool({
     const newString = typeof args.new_string === "string" ? args.new_string : "";
     const replaceAll = args.replace_all === true;
     if (!path || !oldString) return { data: { ok: false, error: "path and old_string are required" } };
+    const scopeRefusal = refuseWriteScope(path, ctx);
+    if (scopeRefusal) return { data: { ok: false, error: scopeRefusal } };
     const r = await ctx.caps.repoWrite.editFile(path, oldString, newString, replaceAll);
     return {
       data: r.ok ? {
@@ -4997,6 +5063,12 @@ var TYPESCRIPT_VERSION2 = TYPESCRIPT_PIN.slice(TYPESCRIPT_PIN.lastIndexOf("@") +
 
 // ../packages/agent-tools/src/delta/dynamic/host.ts
 var DYNAMIC_STEP_CAP_MS = 30 * 6e4;
+
+// ../packages/agent-tools/src/specs/specOpenItems.ts
+var ITEM_TOKEN = String.raw`(?:§\s?\d+[a-z]?(?:\.\d+[a-z]?)*|[A-Z][A-Z0-9]*-\d+[A-Za-z0-9]*(?:\.\d+)*|[A-Z]{1,3}\d+(?:\.\d+)*[a-z]?)`;
+var WHOLE_TOKEN = new RegExp(`^${ITEM_TOKEN}$`);
+var LEADING_TOKEN = new RegExp(`^(${ITEM_TOKEN})(?=$|[\\s:.,;)\\]*_\`\u2014\u2013]|-\\s)`);
+var SEPARATED_TOKEN = new RegExp(`^${ITEM_TOKEN}[*_\`\\]]*(?=$|\\s*[:\u2014\u2013)]|\\s+-\\s|\\.(?:\\s|$))`);
 
 // src/runFindings/detectors/bracketBreak.ts
 function bracketBreak(view) {

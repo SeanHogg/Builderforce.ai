@@ -3,6 +3,7 @@ import {
   attributeUsageToConnections,
   bareModelId,
   connectionModelRefs,
+  connectionModelWindows,
   keyedConnectionModelRefs,
   upsertOpenRouterConnection,
   type OpenRouterConnection,
@@ -96,5 +97,24 @@ describe('mixed BYO precedence refs', () => {
     expect(parsePrecedenceRef('openrouter')).toBeNull();
     expect(parsePrecedenceRef('openrouter:nope')).toBeNull();
     expect(parsePrecedenceRef('openrouter:0')).toBeNull();
+  });
+});
+
+describe('connection model windows (VS Code chat #157440)', () => {
+  const windowOf = connectionModelWindows([
+    { id: 'moonshotai/kimi-k2', contextLength: 131_072 },
+    { id: 'meta/llama-4:free', contextLength: 8_192 },
+    { id: 'someone/unknown-window', contextLength: 0 },
+  ]);
+
+  it('answers a connection ref by its bare OpenRouter id, :variant included', () => {
+    expect(windowOf('openrouter/moonshotai/kimi-k2')).toBe(131_072);
+    expect(windowOf('openrouter/meta/llama-4:free')).toBe(8_192);
+  });
+
+  it('answers nothing for an id the catalog lacks or carries no positive window for', () => {
+    expect(windowOf('openrouter/meta/llama-4')).toBeUndefined();
+    expect(windowOf('openrouter/someone/unknown-window')).toBeUndefined();
+    expect(windowOf('openrouter/long/tail')).toBeUndefined();
   });
 });

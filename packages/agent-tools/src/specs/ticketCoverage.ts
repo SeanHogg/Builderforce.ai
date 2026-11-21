@@ -9,7 +9,7 @@
  *
  * ── HOW A TICKET COVERS AN ITEM ──────────────────────────────────────────────────
  *   (a) the item's id (`P25-09`, `§6.6`, a gap id) appears as a WHOLE token in the
- *       ticket's title or description; or
+ *       ticket's title or description (a short `B4` / `S3` token case-sensitively); or
  *   (b) the ticket's title is the same work as the item's title under THE near-duplicate
  *       rule ({@link areNearDuplicateTokens}) every idempotent create dedups with.
  * A derived slug id is never matched by name — nobody writes one in a ticket.
@@ -61,12 +61,20 @@ export function isCodeChangeBackstopTitle(title: string): boolean {
 
 const escapeRegExp = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-/** Is the id matched by name — a spec token, or a gap register id (`make/foo`)? */
-const matchableId = (id: string): boolean => isSpecItemToken(id) || /^[a-z]+\/[a-z0-9-]+$/.test(id);
+/**
+ * Is the item's id matched by name — a spec token, or a gap register id (`make/foo`)? A slug
+ * derived from an item's title (`fix-login-redirect-loop`, `a1-first-2`) never is: nobody writes one.
+ */
+export function isMatchableSpecItemId(id: string): boolean {
+  return isSpecItemToken(id) || /^[a-z]+\/[a-z0-9-]+$/.test(id);
+}
+
+/** The short token form (`B4`, `S3`, `C6.2`): matched case-sensitively, so `b4` / `s3` in prose never cover it. */
+const SHORT_TOKEN = /^[A-Z]{1,3}\d+(?:\.\d+)*[a-z]?$/;
 
 /** The id as a whole token: `P25-09` must not match inside `P25-091`, `XP25-09` or `§6.61`. */
 function idPattern(id: string): RegExp {
-  return new RegExp(`(?<![A-Za-z0-9§/.-])${escapeRegExp(id)}(?![A-Za-z0-9]|[.-][A-Za-z0-9])`, 'i');
+  return new RegExp(`(?<![A-Za-z0-9§/.-])${escapeRegExp(id)}(?![A-Za-z0-9]|[.-][A-Za-z0-9])`, SHORT_TOKEN.test(id) ? '' : 'i');
 }
 
 /** Which tickets cover which open item, and the open items no ticket covers. */
@@ -80,12 +88,13 @@ export function specTicketCoverage<Id = string | number>(
   const covered: SpecTicketCoverage<Id>['covered'] = [];
   const missing: SpecOpenItem[] = [];
   for (const item of specItemsOwingTickets(openItems)) {
-    const byId = matchableId(item.id) ? idPattern(item.id) : null;
+    const byId = isMatchableSpecItemId(item.id) ? idPattern(item.id) : null;
     const normalized = normalizeTitle(item.title);
     const tokens = titleTokens(item.title);
-    const ticketIds = live
+    // One ticket may arrive as several rows (a listing row and the run's own filing): each id once.
+    const ticketIds = [...new Set(live
       .filter((t) => byId?.test(t.text) || t.normalized === normalized || areNearDuplicateTokens(tokens, t.tokens))
-      .map((t) => t.id);
+      .map((t) => t.id))];
     if (ticketIds.length) covered.push({ itemId: item.id, ticketIds });
     else missing.push(item);
   }

@@ -14,7 +14,7 @@ import { syncIdText } from '@builderforce/local-first';
 import type { BrainTraceEvent } from '../brainTriage';
 import { CHAT_TICKET_LIST_TOOL, isMutatingPlatformTool } from '../chatWorkLinking';
 import { errorMessage } from '../pageEngines/types';
-import { isLocalTicketCreateLabel, SERVER_TICKET_CREATE_TOOL } from '../ticketToolVocabulary';
+import { isLocalTicketCreateLabel, SERVER_TICKET_CREATE_TOOL, TICKET_FROM_DELTA_TOOL } from '../ticketToolVocabulary';
 import { isFailedToolResult } from '../toolFailure';
 import { entityIdsOf } from '../toolResultRecord';
 import { bounded } from './deadline';
@@ -108,7 +108,7 @@ export function runOwnedTicketRefs(trace: readonly BrainTraceEvent[], deltaTicke
   const owned = new Set<string>();
   if (deltaTicketId != null) owned.add(String(deltaTicketId));
   for (const ev of trace) {
-    if (ev.label !== 'builtin_tickets_from_delta' || !stepSucceeded(ev)) continue;
+    if (ev.label !== TICKET_FROM_DELTA_TOOL || !stepSucceeded(ev)) continue;
     const taskId = (ev.args as { taskId?: unknown } | undefined)?.taskId;
     if (typeof taskId === 'number' || typeof taskId === 'string') owned.add(String(taskId).trim());
     const { syncId } = entityIdsOf(ev.result);

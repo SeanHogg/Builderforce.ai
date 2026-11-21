@@ -481,6 +481,9 @@ var MAX_RETRY_AFTER_MS = 60 * 60 * 1e3;
 // ../packages/local-first/src/tombstone.ts
 var RESNAPSHOT = Object.freeze({ action: "resnapshot" });
 
+// ../packages/local-first/src/chatTicketLink.ts
+var TASK_TABLE_KINDS = /* @__PURE__ */ new Set(["task", "epic", "gap"]);
+
 // ../packages/local-first/src/applyServerCursor.ts
 var RESNAPSHOT2 = Object.freeze({ resnapshotRequired: true });
 
@@ -1681,6 +1684,54 @@ function overlappingScopes(scopes) {
     }
   }
   return null;
+}
+
+// ../packages/agent-tools/src/writeScope.ts
+function norm(path) {
+  return path.replace(/\\/g, "/").replace(/\/+$/, "");
+}
+function isAbs(path) {
+  return path.startsWith("/") || /^[A-Za-z]:\//.test(norm(path));
+}
+function hasParent(path) {
+  return norm(path).split("/").includes("..");
+}
+function join(root, rel2) {
+  const base = norm(root);
+  const rest = norm(rel2).replace(/^\.\//, "");
+  return rest ? `${base}/${rest}` : base;
+}
+function resolveScope(entry, paths) {
+  if (entry.key === "root") return norm(paths.root);
+  const base = norm(paths[entry.key]);
+  const sub = entry.sub?.replace(/^[/\\]+|[/\\]+$/g, "");
+  if (!sub || hasParent(sub)) return base;
+  return `${base}/${norm(sub)}`;
+}
+function within(folder, target, workspaceRoot) {
+  const folderNorm = norm(folder);
+  const root = norm(workspaceRoot);
+  const raw = norm(target).replace(/^\.\//, "");
+  const abs = isAbs(raw) ? raw : join(root, raw);
+  if (abs === folderNorm || abs.startsWith(`${folderNorm}/`)) return true;
+  const folderRel = folderNorm.startsWith(`${root}/`) ? folderNorm.slice(root.length + 1) : folderNorm;
+  if (raw === folderRel || raw.startsWith(`${folderRel}/`)) return true;
+  const withoutDot = folderRel.replace(/^\.builderforce\//, "");
+  return raw === withoutDot || raw.startsWith(`${withoutDot}/`);
+}
+function describe(entry) {
+  if (entry.key === "root") return "the workspace root";
+  return entry.sub ? `${entry.key}/${entry.sub}` : entry.key;
+}
+function writeAllowed(scope, paths, target, roleName) {
+  if (scope === void 0) return { allowed: true };
+  if (!target.trim() || hasParent(target)) {
+    return { allowed: false, reason: `${roleName} may not write a path that leaves its scope` };
+  }
+  const folders = scope.map((entry) => resolveScope(entry, paths));
+  if (folders.some((folder) => within(folder, target, paths.root))) return { allowed: true };
+  const where = scope.map(describe).join(" or ");
+  return { allowed: false, reason: `${roleName} may only write under ${where}` };
 }
 
 // ../packages/agent-tools/src/jsonKeyRead.ts
@@ -4711,7 +4762,7 @@ function createShaCache(opts = {}) {
   const max = opts.max ?? 8;
   const now = opts.now ?? Date.now;
   const entries = /* @__PURE__ */ new Map();
-  const join = (key, entry, signal) => {
+  const join2 = (key, entry, signal) => {
     entry.waiting += 1;
     if (!signal) return;
     const stop = () => {
@@ -4728,7 +4779,7 @@ function createShaCache(opts = {}) {
       if (key === null) return work(signal);
       const hit = entries.get(key);
       if (hit && !runOpts?.fresh && (hit.expires === void 0 || hit.expires > now())) {
-        join(key, hit, signal);
+        join2(key, hit, signal);
         return hit.run;
       }
       if (hit) entries.delete(key);
@@ -4736,7 +4787,7 @@ function createShaCache(opts = {}) {
       const entry = { run: void 0, waiting: 0, stopped: 0, controller, settled: false };
       entries.set(key, entry);
       while (entries.size > max) entries.delete(entries.keys().next().value);
-      join(key, entry, signal);
+      join2(key, entry, signal);
       entry.run = work(controller.signal);
       const drop = () => {
         if (entries.get(key) === entry) entries.delete(key);
@@ -5036,6 +5087,12 @@ function refuseWriteOverwrite(probe, incoming) {
 }
 
 // ../packages/agent-tools/src/core-tools.ts
+function refuseWriteScope(path, ctx) {
+  const gate = ctx.writeScope;
+  if (!gate) return null;
+  const decision = writeAllowed(gate.scope, gate.paths, path, gate.roleName);
+  return decision.allowed ? null : decision.reason ?? "write refused";
+}
 var listFilesTool = defineTool({
   name: "list_files",
   description: "List repo files (recursively) on the ticket branch so you can discover the existing codebase before editing. Optionally pass `path` to scope to a subdirectory. To FIND A FILE BY NAME, pass `glob` \u2014 e.g. `ROADMAP.md` (matches that filename at any depth, case-insensitive) or `src/**/*.test.ts`. Use `glob` instead of concluding a file is missing: a large repo's unfiltered listing is summarized to directories, but a `glob` always returns the matching files in full.",
@@ -5137,6 +5194,8 @@ var writeFileTool = defineTool({
     const content = typeof args.content === "string" ? args.content : "";
     const summary = typeof args.summary === "string" ? args.summary : void 0;
     if (!path || !content) return { data: { ok: false, error: "path and content are both required" } };
+    const scopeRefusal = refuseWriteScope(path, ctx);
+    if (scopeRefusal) return { data: { ok: false, error: scopeRefusal } };
     if (ctx.caps.repoRead) {
       let existing;
       try {
@@ -5172,6 +5231,8 @@ var deleteFileTool = defineTool({
   async execute(args, ctx) {
     const path = typeof args.path === "string" ? args.path : "";
     if (!path) return { data: { ok: false, error: "path is required" } };
+    const scopeRefusal = refuseWriteScope(path, ctx);
+    if (scopeRefusal) return { data: { ok: false, error: scopeRefusal } };
     const reason = typeof args.reason === "string" ? args.reason : void 0;
     const r = await ctx.caps.repoWrite.deleteFile(path, reason);
     if (r.ok && r.deleted === false) return { data: { ok: true, deleted: false, note: r.note } };
@@ -5209,6 +5270,12 @@ var editFileTool = defineTool({
   requires: ["repo.edit"],
   async execute(args, ctx) {
     if (Array.isArray(args.edits)) {
+      for (const edit of args.edits) {
+        if (edit && typeof edit === "object" && typeof edit.path === "string") {
+          const refusal = refuseWriteScope(edit.path, ctx);
+          if (refusal) return { data: { ok: false, error: refusal } };
+        }
+      }
       const plan = planBatchEdits(args.edits);
       if (plan.error) return { data: { ok: false, error: plan.error } };
       const read = async (p) => {
@@ -5245,6 +5312,8 @@ var editFileTool = defineTool({
     const newString = typeof args.new_string === "string" ? args.new_string : "";
     const replaceAll = args.replace_all === true;
     if (!path || !oldString) return { data: { ok: false, error: "path and old_string are required" } };
+    const scopeRefusal = refuseWriteScope(path, ctx);
+    if (scopeRefusal) return { data: { ok: false, error: scopeRefusal } };
     const r = await ctx.caps.repoWrite.editFile(path, oldString, newString, replaceAll);
     return {
       data: r.ok ? {
@@ -6746,6 +6815,439 @@ var TYPESCRIPT_VERSION2 = TYPESCRIPT_PIN.slice(TYPESCRIPT_PIN.lastIndexOf("@") +
 
 // ../packages/agent-tools/src/delta/dynamic/host.ts
 var DYNAMIC_STEP_CAP_MS = 30 * 6e4;
+
+// ../packages/agent-tools/src/specs/gapRegister.ts
+var REGISTER_HEADING = /^##\s+Consolidated Gap Register\b/i;
+var FENCE = /^\s*(```|~~~)/;
+var TAG = /\[([^\]\s][^\]]*)\]/g;
+var LINK = /\[[^\]]*\]\(([^)\s]+)\)/g;
+var MAX_SLUG = 80;
+function specSlug(text, fallback = "gap") {
+  const slug = text.toLowerCase().replace(/[`*]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return slug.slice(0, MAX_SLUG).replace(/-+$/, "") || fallback;
+}
+function stageOf(heading) {
+  const word = heading.replace(/^#+\s*/, "").match(/[A-Za-z][A-Za-z0-9]*/);
+  return word ? word[0].toLowerCase() : "unknown";
+}
+function tagsIn(text) {
+  return [...text.matchAll(TAG)].map((m) => m[1].trim()).filter(Boolean);
+}
+function decodeAnchor(raw) {
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+function specLinksIn(text) {
+  const out = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const m of text.matchAll(LINK)) {
+    const href = m[1];
+    if (/^[a-z][a-z0-9+.-]*:/i.test(href) || href.startsWith("#")) continue;
+    const hash = href.indexOf("#");
+    const path = (hash >= 0 ? href.slice(0, hash) : href).replace(/^\.\//, "");
+    if (!/\.md$/i.test(path)) continue;
+    const anchor = hash >= 0 ? decodeAnchor(href.slice(hash + 1)) || null : null;
+    const key = `${path}#${anchor ?? ""}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ file: path, anchor });
+  }
+  return out;
+}
+function toEntry(open) {
+  const bold = open.head.match(/^\*\*(.+?)\*\*(.*)$/);
+  let summarySource;
+  let bodyHead;
+  if (bold) {
+    summarySource = bold[1];
+    bodyHead = bold[2];
+  } else {
+    const sentence = open.head.match(/^(.+?[.!?])(\s+.*)?$/);
+    summarySource = sentence ? sentence[1] : open.head;
+    bodyHead = sentence?.[2] ?? "";
+  }
+  const leadTags = [];
+  let summary = summarySource.trim();
+  for (let m = summary.match(/^\[([^\]]+)\]\s*/); m; m = summary.match(/^\[([^\]]+)\]\s*/)) {
+    leadTags.push(m[1].trim());
+    summary = summary.slice(m[0].length);
+  }
+  summary = summary.replace(/[\s,.;:]+$/, "").trim();
+  const body = [bodyHead.trim(), ...open.rest].join("\n").trim();
+  const all = `${open.head}
+${open.rest.join("\n")}`;
+  const blocker = all.match(/\*Blocker:\s*(.+?)\*(?=\s|$)/im);
+  return {
+    stage: open.stage,
+    group: open.group,
+    tags: [.../* @__PURE__ */ new Set([...leadTags, ...open.groupTags])],
+    summary,
+    body,
+    blocker: blocker ? blocker[1].replace(/[.\s]+$/, "") : null,
+    specLinks: specLinksIn(all),
+    line: open.line
+  };
+}
+function parseGapRegister(markdown) {
+  const lines = markdown.split(/\r?\n/);
+  const start = lines.findIndex((l) => REGISTER_HEADING.test(l));
+  if (start < 0) return [];
+  const entries = [];
+  let stage = null;
+  let group2 = null;
+  let groupTags = [];
+  let open = null;
+  let afterBlank = false;
+  let inFence = false;
+  const close = () => {
+    if (open) entries.push(toEntry(open));
+    open = null;
+  };
+  for (let i = start + 1; i < lines.length; i++) {
+    const line = lines[i];
+    const fence = FENCE.test(line);
+    if (fence) inFence = !inFence;
+    if (fence || inFence) {
+      if (open) open.rest.push(line);
+      continue;
+    }
+    if (/^##\s/.test(line)) {
+      close();
+      stage = stageOf(line);
+      group2 = null;
+      groupTags = [];
+      continue;
+    }
+    if (/^###\s/.test(line)) {
+      close();
+      const text = line.replace(/^###\s+/, "");
+      groupTags = tagsIn(text.match(/`[^`]*`/g)?.join(" ") ?? "");
+      group2 = text.replace(/`\[[^\]]*\]`/g, "").replace(/\s+/g, " ").trim() || null;
+      continue;
+    }
+    if (/^#{4,}\s/.test(line) || /^(-{3,}|\*{3,})\s*$/.test(line)) {
+      close();
+      continue;
+    }
+    if (line.trim() === "") {
+      afterBlank = true;
+      continue;
+    }
+    const bullet = line.match(/^[-*+]\s+(.*)$/);
+    if (bullet && stage) {
+      close();
+      open = { line: i + 1, head: bullet[1].trim(), rest: [], stage, group: group2, groupTags };
+      afterBlank = false;
+      continue;
+    }
+    if (open && (/^\s/.test(line) || !afterBlank)) {
+      open.rest.push(line.trim());
+    } else {
+      close();
+    }
+    afterBlank = false;
+  }
+  close();
+  const used = /* @__PURE__ */ new Map();
+  return entries.filter((e) => e.summary !== "").map((e) => {
+    const base = `${e.stage}/${specSlug(e.summary)}`;
+    const n = (used.get(base) ?? 0) + 1;
+    used.set(base, n);
+    return { id: n === 1 ? base : `${base}-${n}`, ...e };
+  });
+}
+
+// ../packages/agent-tools/src/specs/nearDuplicateTitle.ts
+var FILLER = /* @__PURE__ */ new Set([
+  "a",
+  "an",
+  "the",
+  "and",
+  "or",
+  "to",
+  "of",
+  "in",
+  "on",
+  "for",
+  "with",
+  "is",
+  "are",
+  "be",
+  "as",
+  "at",
+  "by",
+  "it",
+  "this",
+  "that",
+  "from",
+  "we",
+  "i",
+  "our",
+  "its",
+  "should",
+  "must",
+  "need",
+  "needs",
+  "needed",
+  "when",
+  "then",
+  "so",
+  "but",
+  "if",
+  "via",
+  "into",
+  "onto",
+  "per",
+  "up",
+  "out",
+  "over",
+  "do",
+  "does",
+  "not",
+  "no"
+]);
+function stem(word) {
+  const cut = (suffix, replacement = "") => {
+    if (!word.endsWith(suffix) || word.length - suffix.length + replacement.length < 3) return null;
+    return word.slice(0, -suffix.length) + replacement;
+  };
+  const stemmed = cut("ies", "y") ?? cut("ing") ?? cut("ed") ?? cut("es") ?? cut("s") ?? word;
+  return /([bdfglmnprt])\1$/.test(stemmed) ? stemmed.slice(0, -1) : stemmed;
+}
+function titleTokens(title) {
+  const words2 = (title.toLowerCase().match(/[a-z0-9]+/g) ?? []).filter((w) => w.length >= 2 && !FILLER.has(w)).map(stem);
+  return new Set(words2);
+}
+var MIN_JACCARD = 0.8;
+var MIN_CONTAINED_TOKENS = 3;
+var MAX_CONTAINMENT_SURPLUS = 2;
+function normalizeTitle(value) {
+  return String(value ?? "").replace(/\s+/g, " ").trim().toLowerCase();
+}
+function areNearDuplicateTokens(a, b) {
+  if (a.size === 0 || b.size === 0) return false;
+  const [small, big] = a.size <= b.size ? [a, b] : [b, a];
+  let shared = 0;
+  for (const token of small) if (big.has(token)) shared += 1;
+  const union = a.size + b.size - shared;
+  if (union > 0 && shared / union >= MIN_JACCARD) return true;
+  return shared === small.size && small.size >= MIN_CONTAINED_TOKENS && big.size - small.size <= MAX_CONTAINMENT_SURPLUS;
+}
+
+// ../packages/agent-tools/src/specs/specOpenItems.ts
+var FENCE2 = /^\s*(```|~~~)/;
+var HEADING = /^ {0,3}#{1,6}\s+(.*?)(?:\s+#+\s*)?$/;
+var TABLE_ROW = /^\s*\|.*\|\s*$/;
+var TABLE_SEPARATOR = /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$/;
+var CHECKLIST = /^\s*[-*+]\s+\[([ xX])\]\s+(.*)$/;
+var MAX_BLOCKER = 300;
+var ITEM_TOKEN = String.raw`(?:§\s?\d+[a-z]?(?:\.\d+[a-z]?)*|[A-Z][A-Z0-9]*-\d+[A-Za-z0-9]*(?:\.\d+)*|[A-Z]{1,3}\d+(?:\.\d+)*[a-z]?)`;
+var WHOLE_TOKEN = new RegExp(`^${ITEM_TOKEN}$`);
+var LEADING_TOKEN = new RegExp(`^(${ITEM_TOKEN})(?=$|[\\s:.,;)\\]*_\`\u2014\u2013]|-\\s)`);
+var LONG_TOKEN = /^(?:§|[A-Z][A-Z0-9]*-\d)/;
+var SEPARATED_TOKEN = new RegExp(`^${ITEM_TOKEN}[*_\`\\]]*(?=$|\\s*[:\u2014\u2013)]|\\s+-\\s|\\.(?:\\s|$))`);
+function isSpecItemToken(id) {
+  return WHOLE_TOKEN.test(id.trim());
+}
+function plain(text) {
+  return text.replace(/\*\*|__|~~/g, "").replace(/\s+/g, " ").trim();
+}
+function leadingToken(text, separated = false) {
+  const head = text.replace(/^[\s*_`~[(]+/, "");
+  const m = head.match(LEADING_TOKEN);
+  if (!m) return null;
+  if (separated && !LONG_TOKEN.test(m[1]) && !SEPARATED_TOKEN.test(head)) return null;
+  return m[1].replace(/\s+/g, "");
+}
+var NEGATED_BLOCKED = /\b(?:no longer blocked|not blocked|unblocked)\b/gi;
+var LEADING_STATUS = [
+  [/^(?:no longer blocked|not blocked|unblocked)\b/i, "incomplete"],
+  [/^(?:[🚫⛔]|blocked\b)/iu, "blocked"],
+  [/^(?:[❌✗✖⬜🔲🟡🟠⚠⏳🚧]|(?:incomplete|not (?:started|done|ported|complete|completed|implemented|shipped|yet)|partial(?:ly)?|in[ -]progress|wip|to ?do|open|remaining|pending|missing|planned|outstanding)\b)/iu, "incomplete"],
+  [/^(?:[✅✔☑🟢]|(?:complete|completed|done|shipped|resolved|closed|finished|verified)\b)/iu, "complete"]
+];
+function mentionsBlocked(text) {
+  const affirmed = text.replace(NEGATED_BLOCKED, " ");
+  return /[🚫⛔]/u.test(affirmed) || /\bblocked\b/i.test(affirmed);
+}
+function blockerAfter(text) {
+  const affirmed = text.replace(NEGATED_BLOCKED, " ");
+  const at2 = affirmed.search(/[🚫⛔]|\bblocked\b/iu);
+  const rest = at2 < 0 ? affirmed : affirmed.slice(at2);
+  return rest.replace(/^(?:[🚫⛔]️?\s*)?(?:blocked\b)?\s*(?:[—–:-]|on\b|by\b)?\s*/iu, "").trim();
+}
+function blockedStatus(text) {
+  const rest = blockerAfter(text);
+  return rest ? { status: "blocked", blocker: rest.slice(0, MAX_BLOCKER) } : { status: "blocked" };
+}
+function classifySpecStatus(raw) {
+  const text = plain(raw);
+  const head = text.replace(/^[\s*_`~[(]+/, "");
+  const leading = LEADING_STATUS.find(([pattern]) => pattern.test(head));
+  if (leading) return leading[1] === "blocked" ? blockedStatus(head) : { status: leading[1] };
+  if (mentionsBlocked(text)) return blockedStatus(text);
+  if (/[❌✗✖⬜🔲🟡🟠⚠⏳🚧]/u.test(text)) return { status: "incomplete" };
+  if (/\b(incomplete|not started|not done|not ported|to ?do|open|partial(ly)?|in[ -]progress|wip|pending|missing|planned|outstanding|remaining)\b/i.test(text)) return { status: "incomplete" };
+  if (/[✅✔☑🟢]/u.test(text) || /\b(complete|completed|done|shipped|resolved|closed|finished|verified)\b/i.test(text)) return { status: "complete" };
+  return { status: "unknown" };
+}
+function statedBlocker(text) {
+  const m = plain(text).match(/\bBlocker\b(?:\s*\([^)]*\))?\s*:\s*(.+?)\*?$/i);
+  return m ? m[1].trim().slice(0, MAX_BLOCKER) : null;
+}
+function cellsOf(row) {
+  const body = row.trim().replace(/^\|/, "").replace(/\|$/, "");
+  return body.split(/(?<!\\)\|/).map((c) => c.replace(/\\\|/g, "|").trim());
+}
+function statusTableColumns(header) {
+  const names = header.map((h) => plain(h).replace(/`/g, "").toLowerCase());
+  const status = names.findIndex((n) => /\b(status|state)\b/.test(n));
+  if (status < 0) return null;
+  const id = names.findIndex((n, i) => i !== status && /^(id|#|ref|key|no\.?|item id|row)$/.test(n));
+  const title = names.findIndex((n, i) => i !== status && i !== id && /\b(feature|task|item|title|name|requirement|work|deliverable|gap|description|summary|capability)\b/.test(n));
+  if (id < 0 && title < 0) return null;
+  return { id, title, status };
+}
+function parseSpecOpenItems(markdown) {
+  const lines = markdown.split(/\r?\n/);
+  const raw = [];
+  const gapLines = /* @__PURE__ */ new Set();
+  for (const gap of parseGapRegister(markdown)) {
+    gapLines.add(gap.line);
+    raw.push({
+      token: leadingToken(gap.summary, true) ?? gap.id,
+      title: gap.summary,
+      status: "incomplete",
+      section: [gap.stage, gap.group].filter(Boolean).join(" \u203A "),
+      line: gap.line,
+      ...gap.blocker ? { blocker: gap.blocker } : {}
+    });
+  }
+  let section = "";
+  let inFence = false;
+  let inGap = false;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (FENCE2.test(line)) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence) continue;
+    const heading = line.match(HEADING);
+    if (heading) {
+      section = plain(heading[1]).replace(/`/g, "");
+      inGap = false;
+      continue;
+    }
+    if (gapLines.has(i + 1)) {
+      inGap = true;
+      continue;
+    }
+    if (/^\S/.test(line)) inGap = false;
+    if (TABLE_ROW.test(line) && TABLE_SEPARATOR.test(lines[i + 1] ?? "")) {
+      const columns = statusTableColumns(cellsOf(line));
+      let j = i + 2;
+      for (; j < lines.length && TABLE_ROW.test(lines[j]); j++) {
+        if (!columns) continue;
+        const cells = cellsOf(lines[j]);
+        if (cells.every((c) => c === "")) continue;
+        const idCell = columns.id >= 0 ? plain(cells[columns.id] ?? "").replace(/`/g, "") : "";
+        const titleCell = plain(cells[columns.title >= 0 ? columns.title : columns.id] ?? "");
+        const title = titleCell || idCell;
+        if (!title) continue;
+        const { status, blocker } = classifySpecStatus(cells[columns.status] ?? "");
+        const stated = cells.map(statedBlocker).find((b) => b != null) ?? null;
+        const token = columns.id >= 0 ? leadingToken(idCell) ?? (idCell && idCell.length <= 40 && !/\s/.test(idCell) ? idCell : null) : leadingToken(titleCell);
+        const why = stated ?? blocker;
+        raw.push({ token, title, status, section, line: j + 1, ...why && status === "blocked" ? { blocker: why } : {} });
+      }
+      i = j - 1;
+      continue;
+    }
+    const check = line.match(CHECKLIST);
+    if (check && !inGap) {
+      const text = plain(check[2]);
+      const stated = statedBlocker(text);
+      const done = check[1].toLowerCase() === "x";
+      const blocked = !done && (stated != null || mentionsBlocked(text));
+      raw.push({
+        token: leadingToken(text, true),
+        title: text,
+        status: done ? "complete" : blocked ? "blocked" : "incomplete",
+        section,
+        line: i + 1,
+        ...blocked && stated ? { blocker: stated } : {}
+      });
+    }
+  }
+  raw.sort((a, b) => a.line - b.line);
+  const out = [];
+  const byToken = /* @__PURE__ */ new Map();
+  const usedSlugs = /* @__PURE__ */ new Map();
+  for (const { token, ...item } of raw) {
+    if (token) {
+      const first = byToken.get(token);
+      if (first) mergeRepeat(first, item);
+      else {
+        const entry = { id: token, ...item };
+        byToken.set(token, entry);
+        out.push(entry);
+      }
+      continue;
+    }
+    const base = specSlug(item.title, "item");
+    const n = (usedSlugs.get(base) ?? 0) + 1;
+    usedSlugs.set(base, n);
+    out.push({ id: n === 1 ? base : `${base}-${n}`, ...item });
+  }
+  return out;
+}
+var OPENNESS = { blocked: 3, incomplete: 2, unknown: 1, complete: 0 };
+function mergeRepeat(first, repeat) {
+  if (OPENNESS[repeat.status] > OPENNESS[first.status]) first.status = repeat.status;
+  if (repeat.title.length > first.title.length) first.title = repeat.title;
+  if (!first.blocker && repeat.blocker) first.blocker = repeat.blocker;
+}
+function specItemsOwingTickets(items) {
+  return items.filter((i) => i.status === "incomplete" || i.status === "blocked");
+}
+
+// ../packages/agent-tools/src/specs/ticketCoverage.ts
+var DEAD_STATUSES = /* @__PURE__ */ new Set(["cancelled", "canceled", "archived", "deleted", "wont_do", "won't do", "duplicate"]);
+var CODE_CHANGE_TITLE = /^code change \(\d+ files?\)(?: from .+)?$/i;
+function codeChangeTicketTitle(fileCount, source) {
+  const base = `Code change (${fileCount} file${fileCount === 1 ? "" : "s"})`;
+  return source ? `${base} from ${source}` : base;
+}
+function isCodeChangeBackstopTitle(title) {
+  return CODE_CHANGE_TITLE.test(title.trim());
+}
+var escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+function isMatchableSpecItemId(id) {
+  return isSpecItemToken(id) || /^[a-z]+\/[a-z0-9-]+$/.test(id);
+}
+var SHORT_TOKEN = /^[A-Z]{1,3}\d+(?:\.\d+)*[a-z]?$/;
+function idPattern(id) {
+  return new RegExp(`(?<![A-Za-z0-9\xA7/.-])${escapeRegExp(id)}(?![A-Za-z0-9]|[.-][A-Za-z0-9])`, SHORT_TOKEN.test(id) ? "" : "i");
+}
+function specTicketCoverage(openItems, tickets) {
+  const live2 = tickets.filter((t) => !t.isBackstop && !isCodeChangeBackstopTitle(t.title) && !DEAD_STATUSES.has(t.status.trim().toLowerCase())).map((t) => ({ id: t.id, text: `${t.title}
+${t.description ?? ""}`, normalized: normalizeTitle(t.title), tokens: titleTokens(t.title) }));
+  const covered = [];
+  const missing = [];
+  for (const item of specItemsOwingTickets(openItems)) {
+    const byId = isMatchableSpecItemId(item.id) ? idPattern(item.id) : null;
+    const normalized = normalizeTitle(item.title);
+    const tokens = titleTokens(item.title);
+    const ticketIds = [...new Set(live2.filter((t) => byId?.test(t.text) || t.normalized === normalized || areNearDuplicateTokens(tokens, t.tokens)).map((t) => t.id))];
+    if (ticketIds.length) covered.push({ itemId: item.id, ticketIds });
+    else missing.push(item);
+  }
+  return { covered, missing };
+}
 
 // ../packages/run-guards/src/readOnlyShell.ts
 var READ_ONLY_PROGRAMS = /* @__PURE__ */ new Set([
@@ -9074,11 +9576,11 @@ function outgoingGate(files, ledger, policy) {
       }
     }
     if (needsTest(file, policy)) {
-      const stem = stemOf(file.absPath);
+      const stem2 = stemOf(file.absPath);
       const hasTest = files.some((t) => t !== file && !t.deleted && isTestPath(t.absPath) && covers(t, file, policy));
       if (!hasTest) {
         return refuse(
-          `git_push refused: ${file.absPath} is new and has no test in this push. Add ${stem}.test.ts covering it, commit, and push again \u2014 the host runs the checks.`
+          `git_push refused: ${file.absPath} is new and has no test in this push. Add ${stem2}.test.ts covering it, commit, and push again \u2014 the host runs the checks.`
         );
       }
     }
@@ -9439,6 +9941,7 @@ function isLocalTicketCreateLabel(label) {
 }
 var SERVER_TICKET_MOVE_TOOL = "builtin_tasks_update";
 var LOCAL_TICKET_MOVE_TOOL = "ticket-move";
+var TICKET_FROM_DELTA_TOOL = "builtin_tickets_from_delta";
 function ticketStatusMove(ref, status, vocabulary) {
   const text = typeof ref === "string" ? ref.trim() : null;
   const parsed = parseEntityRef(text ?? ref);
@@ -9473,7 +9976,7 @@ function entityIdsOf(result) {
 
 // src/chatWorkLinking.ts
 var TICKET_RECORDING_TOOLS = /* @__PURE__ */ new Set([
-  "builtin_tickets_from_delta",
+  TICKET_FROM_DELTA_TOOL,
   "builtin_chats_link_ticket",
   "builtin_reviews_record",
   // The editor's device-local create: it IS the recording — it links its chat LOCALLY in
@@ -9584,7 +10087,6 @@ function isMutatingPlatformTool(name) {
   return name.startsWith("builtin_") && !isReadOnlyPlatformTool(name);
 }
 var NOT_STARTED_TASK_STATUSES = /* @__PURE__ */ new Set(["backlog", "todo", "ready"]);
-var TASK_TIER_KINDS = /* @__PURE__ */ new Set(["task", "epic", "gap"]);
 function linkedTicketsToAdvance(listResult) {
   return refsOf(selectLinkedTasks(listResult, inLane(NOT_STARTED_TASK_STATUSES)));
 }
@@ -9607,7 +10109,7 @@ function selectLinkedTasks(listResult, keep) {
   for (const r of listedRows(listResult)) {
     if (!r || typeof r !== "object") continue;
     const row = r;
-    if (typeof row.kind !== "string" || !TASK_TIER_KINDS.has(row.kind)) continue;
+    if (typeof row.kind !== "string" || !TASK_TABLE_KINDS.has(row.kind)) continue;
     if (row.exists === false) continue;
     const { syncId } = entityIdsOf({ syncId: row.syncId, id: row.ref });
     if (syncId == null) continue;
@@ -9671,6 +10173,13 @@ function codeChangeFiles(args) {
   }
   return files;
 }
+function chatWorkObligationTools(chatId, tickets = SERVER_TICKET_TOOLS) {
+  const linked = chatId != null;
+  if (tickets.local) {
+    return [LOCAL_TICKET_CREATE_TOOL, LOCAL_TICKET_MOVE_TOOL, SERVER_TICKET_MOVE_TOOL, TICKET_FROM_DELTA_TOOL, ...linked ? [CHAT_TICKET_LIST_TOOL] : []];
+  }
+  return [tickets.createName, SERVER_TICKET_MOVE_TOOL, TICKET_FROM_DELTA_TOOL, ...linked ? [CHAT_TICKET_LIST_TOOL] : []];
+}
 function chatWorkLinkingDirective(chatId, tickets = SERVER_TICKET_TOOLS) {
   const linked = chatId != null;
   const createBullet = tickets.local ? `\u2022 When your investigation concludes that something needs to be DONE \u2014 a bug to fix, a missing capability, a follow-up, or a gap you identified \u2014 do not merely describe it. Create the work item with ${tickets.createName} (projectId, title, description, taskType "task", "epic", or "gap"; file an epic first, then its tasks with parentTicketId=<the epic's returned id>; or the matching builtin_*_create for an objective, spec, or roadmap item). It is saved on this device, syncs to the account in the background and is linked to this chat automatically \u2014 do NOT call builtin_chats_link_ticket, and do not create tickets with builtin_tasks_create. The id it returns is a LOCAL id: use it with the ticket-* tools.
@@ -9682,10 +10191,10 @@ function chatWorkLinkingDirective(chatId, tickets = SERVER_TICKET_TOOLS) {
   const statusTool = tickets.local ? `ticket-move (id=<its local id>, status="in_progress") for a ticket filed here, or builtin_tasks_update (id=<the ticket's ref>, status="in_progress") for one that exists only on the account` : `builtin_tasks_update (id=<the ticket's ref>, status="in_progress")`;
   return (linked ? `You are working inside Brain chat #${chatId}. Tie the work of this conversation back to it:
 ` : `This conversation lives only on this machine \u2014 it has no platform chat to link work to, so never pass a chatId and do not call builtin_chats_link_ticket or builtin_chats_list_tickets. Still make the work visible on the board:
-`) + createBullet + scopingBullet + (linked ? `\u2022 When your turn ADDS or CHANGES code, record it with builtin_tickets_from_delta (chatId=${chatId}, the current projectId, the files you touched, kind improvement|fix|bug, modality "ide"). If builtin_chats_list_tickets shows a ticket already tracking this work, pass its numeric ref as taskId so the delta attaches to it instead of creating a duplicate; otherwise the delta creates a linked ticket that completes when it ships.
-` : `\u2022 When your turn ADDS or CHANGES code, record it with builtin_tickets_from_delta (the current projectId, the files you touched, kind improvement|fix|bug, modality "ide"; no chatId). If a ticket you already know of tracks this work, pass its numeric ref as taskId so the delta attaches to it instead of creating a duplicate.
+`) + createBullet + scopingBullet + (linked ? `\u2022 When your turn ADDS or CHANGES code, record it with ${TICKET_FROM_DELTA_TOOL} (chatId=${chatId}, the current projectId, the files you touched, kind improvement|fix|bug, modality "ide"). If builtin_chats_list_tickets shows a ticket already tracking this work, pass its numeric ref as taskId so the delta attaches to it instead of creating a duplicate; otherwise the delta creates a linked ticket that completes when it ships.
+` : `\u2022 When your turn ADDS or CHANGES code, record it with ${TICKET_FROM_DELTA_TOOL} (the current projectId, the files you touched, kind improvement|fix|bug, modality "ide"; no chatId). If a ticket you already know of tracks this work, pass its numeric ref as taskId so the delta attaches to it instead of creating a duplicate.
 `) + `\u2022 Keep the board honest about STATUS. The MOMENT you start actively working an existing ${linked ? "linked " : ""}task/epic/gap \u2014 investigating its fix, editing code for it, or driving it \u2014 move it out of the backlog with ${statusTool}. When the work is finished: if this session can commit and push (it has git_commit and git_push), self-review it and ship it as the SHIP POLICY contract says (it names when the ticket moves to "done"); otherwise advance it to "in_review" for someone who can (or "done" if it needs no review). Never leave a ticket you are actively working sitting in backlog.` + (linked ? `
-\u2022 When an open EPIC is linked to this chat, its remaining work belongs under it: record a code change for it with builtin_tickets_from_delta passing parentTaskId=<the epic's numeric ref> (so a newly minted ticket is filed under the epic), and file a child task with ${tickets.createName} (${tickets.local ? "parentTicketId" : "parentTaskId"}=<the epic's ref>) for each remaining slice of the epic that has no ticket yet.` : "") + (linked ? `
+\u2022 When an open EPIC is linked to this chat, its remaining work belongs under it: record a code change for it with ${TICKET_FROM_DELTA_TOOL} passing parentTaskId=<the epic's numeric ref> (so a newly minted ticket is filed under the epic), and file a child task with ${tickets.createName} (${tickets.local ? "parentTicketId" : "parentTaskId"}=<the epic's ref>) for each remaining slice of the epic that has no ticket yet.` : "") + (linked ? `
 \u2022 Call builtin_chats_list_tickets (chatId=${chatId}) to see what is already linked \u2014 both to AVOID creating a duplicate and to know which linked tickets need their status advanced. Never end a turn having identified actionable work or changed code without it being a ticket linked to this chat whose status reflects the work you did.` : `
 \u2022 Never end a turn having identified actionable work or changed code without it being a ticket whose status reflects the work you did.`);
 }
@@ -9990,7 +10499,7 @@ var STEPS = [
   { depth: 2, arrayItems: 1, stringChars: 80 },
   { depth: 1, arrayItems: 1, stringChars: 60 }
 ];
-function describe(value) {
+function describe2(value) {
   if (Array.isArray(value)) return `[array: ${value.length} items]`;
   if (value && typeof value === "object") return `{object: ${Object.keys(value).length} keys}`;
   return String(value);
@@ -10000,7 +10509,7 @@ function projectValue(value, step, depth) {
     return value.length > step.stringChars ? `${value.slice(0, step.stringChars)}\u2026(+${value.length - step.stringChars} chars)` : value;
   }
   if (value === null || typeof value !== "object") return value;
-  if (depth >= step.depth) return describe(value);
+  if (depth >= step.depth) return describe2(value);
   if (Array.isArray(value)) {
     const head = value.slice(0, step.arrayItems).map((v) => projectValue(v, step, depth + 1));
     if (value.length > step.arrayItems) head.push(`\u2026(+${value.length - step.arrayItems} more of ${value.length} items)`);
@@ -12184,9 +12693,9 @@ function dirtyPathsOf(output) {
   return out;
 }
 function touchedStillDirty(touched, dirty) {
-  const norm = (p) => p.replace(/\\/g, "/").replace(/^\.\//, "");
-  const d = dirty.map(norm);
-  return touched.map(norm).some((t) => d.some((p) => t === p || t.endsWith(`/${p}`)));
+  const norm2 = (p) => p.replace(/\\/g, "/").replace(/^\.\//, "");
+  const d = dirty.map(norm2);
+  return touched.map(norm2).some((t) => d.some((p) => t === p || t.endsWith(`/${p}`)));
 }
 var DEFAULT_BRANCH_CMD = gitCommandPattern("remote|symbolic-ref|branch");
 function defaultBranchFromTrace(steps) {
@@ -12385,6 +12894,10 @@ export {
   searchToolSchemas,
   TOOL_SEARCH_TOOL,
   TOOL_SEARCH_SCHEMA,
+  parseSpecOpenItems,
+  codeChangeTicketTitle,
+  isMatchableSpecItemId,
+  specTicketCoverage,
   isCostLeverOn,
   isReadOnlyShellCall,
   isTestPath,
@@ -12448,6 +12961,7 @@ export {
   SERVER_TICKET_TOOLS,
   ticketToolVocabulary,
   isLocalTicketCreateLabel,
+  TICKET_FROM_DELTA_TOOL,
   ticketStatusMove,
   toolResultRecord,
   entityIdsOf,
@@ -12470,6 +12984,7 @@ export {
   linkedTicketsToComplete,
   linkedTicketsReviewedComplete,
   codeChangeFile,
+  chatWorkObligationTools,
   chatWorkLinkingDirective,
   resultTableCap,
   windowedCap,
@@ -12585,4 +13100,4 @@ export {
   toolCallArgBytes,
   createComposingActivity
 };
-//# sourceMappingURL=chunk-25VGJCVD.mjs.map
+//# sourceMappingURL=chunk-R53BPZVW.mjs.map

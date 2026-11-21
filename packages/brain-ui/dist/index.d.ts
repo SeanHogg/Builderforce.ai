@@ -1,5 +1,5 @@
 import * as react from 'react';
-import react__default, { ReactNode, HTMLAttributes, KeyboardEvent } from 'react';
+import react__default, { ReactNode, HTMLAttributes, KeyboardEvent, RefObject } from 'react';
 import { BrainRunActivity, ChatErrorAction, ChatActivityLabels, BrainMessage, ChatActivity, EvermindRecallItem, EvermindLearnTarget, ChatInputAttachment, BrainTraceEvent, PrefetchResult, PrefetchConfirm, ModelIdentityContext, AskUserPayload, ModelFallbackChannel, ModelFallbackEvent, QueuedItem, LocalModelRow as LocalModelRow$1, InferenceMode, ModelChoiceLabels, ChatModelSelection, ChatModelOptions, LocalModelStore, ComposerHelpModel, Effort, DirectedRecipient, RecipientChoice, ComposerDraftStore, BrainPersonaChoice, BrainPersonaAgent, SavingsSourceKey, SpendSavingsSummary, ChatTicket, ChatDiagnosticsSources, ChatDiagnosticsPlanSnapshot, ChatMode, ContextUsage, OnDeviceTasks } from '@seanhogg/builderforce-brain-embedded';
 export { AskUserMessageLike, AskUserOption, AskUserPayload, BUILDERFORCE_PRODUCT_NAME, ChatModelOptions, ChatModelSelection, DEFAULT_MODEL_IDENTITY, MODEL_CATEGORIES, ModelCategory, ModelChoiceLabels, ModelIdentityContext, ModelItem, PROJECT_EVERMIND_MODEL_PREFIX, PendingAskUser, QueuedItem, QueuedTurns, QueuedTurnsOptions, RoutedProduct, activeModelKey, askUserAnchorId, buildModelItems, byoVendorLabel, displayModelName, filterModelItems, isManagerRole, modelCategoryLabel, modelInUse, parseAskUser, perMillionUsd, premiumCostLabel, productForPlan, productModelName, revealsModelId, selectPendingAskUser, serializeAskUser, stripAskUser } from '@seanhogg/builderforce-brain-embedded';
 
@@ -3445,20 +3445,47 @@ declare function useChatActivitySignal(messages: ReadonlyArray<{
 declare function useHideDoneTickets(): [boolean, (hide: boolean) => void];
 
 /**
- * @-mention autocomplete — the shared composer typeahead that lets a user direct
- * the next chat turn at an invited participant (an agent OR a person) by typing
- * "@". The single source of truth for the interaction, rendered identically on the
- * web app's <ChatInput> and inside the VS Code webview's composer.
+ * THE composer trigger typeahead — the one machinery behind `@` (direct a message), `#`
+ * (tag a ticket) and `/` (run a composer command). Each trigger is a thin adapter over
+ * this hook: how its token is detected at the caret, its candidates and their filter,
+ * how a row reads, and how a pick edits the text. Everything else lives here once —
+ * re-detecting the token from the live caret, the highlighted row, Up/Down/Enter/Tab/
+ * Escape, the mouse pick that keeps the caret, the empty-state row and the listbox ARIA.
  *
- * Headless-ish: {@link useMentionAutocomplete} owns the token/selection state and
- * returns handlers you spread onto YOUR <textarea> plus a `popup` node you render
- * inside a `position: relative` composer container. Picking a participant strips
- * the "@query" fragment (the picked recipient is shown by the composer's "To:"
- * chip, so it need not linger in the body) and calls `onPick` — wire that to
- * `useRecipientChoice`'s `choose`, reusing the whole directed-message routing spine.
+ * Headless-ish: spread `onKeyDown` / `onSelect` onto YOUR <textarea> (`onKeyDown` FIRST —
+ * when it returns true the key was the picker's, so do not submit or insert a newline),
+ * put `inputAria` on it, and render `popup` inside a `position: relative` container.
  *
- * Theme-aware via the same CSS-var fallback chain the ChatTicketsPanel uses, so the
- * popup reads in BOTH the web app (light/dark) and the editor's active theme.
+ * While the popup is open with rows, Enter picks the highlighted row instead of
+ * submitting. With no rows (nothing matches) only Escape is the picker's: Enter still
+ * submits, so a line that merely starts with a trigger character is never trapped.
+ */
+
+/** ARIA for the textarea while a trigger owns it (textbox + listbox popup). */
+interface TriggerInputAria {
+    'aria-controls'?: string;
+    'aria-activedescendant'?: string;
+}
+interface TriggerAutocomplete {
+    /** Attach to the textarea's onKeyDown BEFORE your own logic; true ⇒ the key was consumed. */
+    onKeyDown: (e: KeyboardEvent<HTMLTextAreaElement>) => boolean;
+    /** Attach to the textarea's onSelect so a caret move re-detects the token. */
+    onSelect: () => void;
+    /** The popup element; render it inside a `position: relative` container. */
+    popup: ReactNode;
+    /** True while the popup shows (rows or the empty-state row). */
+    open: boolean;
+    /** Spread onto the textarea while this trigger is the open one. */
+    inputAria: TriggerInputAria;
+}
+
+/**
+ * @-mention autocomplete — the composer trigger that lets a user direct the next chat
+ * turn at an invited participant (an agent OR a person) by typing "@". A thin adapter
+ * over {@link useTriggerAutocomplete}: the token grammar and ranking are brain-embedded's
+ * (`activeMentionToken` / `filterMentionCandidates`), and a pick strips the "@query"
+ * fragment (the picked recipient shows in the composer's "To:" chip, so it need not
+ * linger in the body) and calls `onPick` — wire that to `useRecipientChoice`'s `choose`.
  */
 
 interface MentionLabels {
@@ -3468,12 +3495,14 @@ interface MentionLabels {
     agent?: string;
     /** Row sub-label for an invited person, e.g. "Person". */
     human?: string;
+    /** The row shown when nobody matches (or nobody is addressable here). */
+    noMatches?: string;
 }
 /** English defaults — the fallback for any field a host catalog lacks. */
 declare const DEFAULT_MENTION_LABELS: Required<MentionLabels>;
 interface UseMentionAutocompleteOptions {
     /** Ref to the composer's <textarea> — read for the live caret position. */
-    textareaRef: react__default.RefObject<HTMLTextAreaElement | null>;
+    textareaRef: RefObject<HTMLTextAreaElement | null>;
     /** Current composer text (controlled). */
     value: string;
     /** Setter for the composer text (same one the textarea's onChange calls). */
@@ -3489,49 +3518,32 @@ interface UseMentionAutocompleteOptions {
      * lookup into data the host already holds, never a fetch.
      */
     detail?: (r: DirectedRecipient) => string | undefined;
-    /** Suppress the picker entirely (e.g. while a run is streaming). */
+    /** Suppress the picker entirely (e.g. while a run is streaming, or no source here). */
     disabled?: boolean;
 }
-interface MentionAutocomplete {
-    /**
-     * Attach to the textarea's onKeyDown BEFORE your own logic. Returns true when it
-     * consumed the key (nav / select / escape) — when true you must NOT also submit
-     * or insert a newline for that key.
-     */
-    onKeyDown: (e: react__default.KeyboardEvent<HTMLTextAreaElement>) => boolean;
-    /** Attach to the textarea's onSelect so a caret move re-detects the token. */
-    onSelect: () => void;
-    /** The popup element; render it inside a `position: relative` container. */
-    popup: react__default.ReactNode;
-    /** True while the picker is open (its nav keys are being intercepted). */
-    open: boolean;
-}
-declare function useMentionAutocomplete(opts: UseMentionAutocompleteOptions): MentionAutocomplete;
+declare function useMentionAutocomplete(opts: UseMentionAutocompleteOptions): TriggerAutocomplete;
 
 /**
- * #ticket autocomplete — the shared composer typeahead that lets a user tag
- * a ticket in the chat by typing "#". Similar to @mention but for tickets.
- *
- * Headless-ish: {@link useTicketAutocomplete} owns the token/selection state and
- * returns handlers you spread onto YOUR <textarea> plus a `popup` node you render
- * inside a `position: relative` composer container. Picking a ticket replaces the
- * "#query" fragment with the ticket reference (e.g., "#123") and calls `onPick`.
+ * #ticket autocomplete — the composer trigger that lets a user tag a ticket in the chat
+ * by typing "#". A thin adapter over {@link useTriggerAutocomplete}: the token grammar
+ * and ranking are brain-embedded's (`activeTicketToken` / `filterTicketCandidates`), and
+ * a pick replaces the "#query" fragment with the ticket's reference ("#ABC-123" or
+ * "#123") and calls `onPick`.
  */
 
 interface TicketAutocompleteLabels {
     /** Heading above the list, e.g. "Tag ticket". */
     title?: string;
-    /** Row sub-label for ticket status, e.g. "In Progress". */
+    /** What a row's status tag is (its tooltip prefix), e.g. "Status". */
     status?: string;
     /** Text when no tickets match. */
     noMatches?: string;
 }
-/** English defaults for a host catalog's missing fields. The popup itself falls back to
- *  the ticket's own status when no `status` label is given. */
+/** English defaults for a host catalog's missing fields. */
 declare const DEFAULT_TICKET_TAG_LABELS: Required<TicketAutocompleteLabels>;
 interface UseTicketAutocompleteOptions {
     /** Ref to the composer's <textarea> — read for the live caret position. */
-    textareaRef: react__default.RefObject<HTMLTextAreaElement | null>;
+    textareaRef: RefObject<HTMLTextAreaElement | null>;
     /** Current composer text (controlled). */
     value: string;
     /** Setter for the composer text (same one the textarea's onChange calls). */
@@ -3541,24 +3553,10 @@ interface UseTicketAutocompleteOptions {
     /** Called with the ticket the user picked. */
     onPick: (t: ChatTicket) => void;
     labels?: TicketAutocompleteLabels;
-    /** Suppress the picker entirely (e.g. while a run is streaming). */
+    /** Suppress the picker entirely (e.g. while a run is streaming, or no source here). */
     disabled?: boolean;
 }
-interface TicketAutocomplete {
-    /**
-     * Attach to the textarea's onKeyDown BEFORE your own logic. Returns true when it
-     * consumed the key (nav / select / escape) — when true you must NOT also submit
-     * or insert a newline for that key.
-     */
-    onKeyDown: (e: react__default.KeyboardEvent<HTMLTextAreaElement>) => boolean;
-    /** Attach to the textarea's onSelect so a caret move re-detects the token. */
-    onSelect: () => void;
-    /** The popup element; render it inside a `position: relative` container. */
-    popup: react__default.ReactNode;
-    /** True while the picker is open (its nav keys are being intercepted). */
-    open: boolean;
-}
-declare function useTicketAutocomplete(opts: UseTicketAutocompleteOptions): TicketAutocomplete;
+declare function useTicketAutocomplete(opts: UseTicketAutocompleteOptions): TriggerAutocomplete;
 
 /**
  * The chat-tickets rail's labels from a host catalog — the ONE key table every host
@@ -4719,6 +4717,28 @@ interface ProjectListViewProps {
 declare function ProjectListView({ title, subtitle, data, loading, error, labels, onAction, onRefresh }: ProjectListViewProps): react.JSX.Element;
 
 /**
+ * `/` command autocomplete — the composer trigger that lists the host's composer
+ * commands (`/help`, `/starter-kit`, `/manifest init` …) the moment `/` is typed in the
+ * command position, and narrows them as the name is typed. A thin adapter over
+ * {@link useTriggerAutocomplete}, fed by the SAME `PromptOptionsCommands` the `/` menu's
+ * Actions tab renders (brain-embedded's `/help` model), so the two never disagree.
+ *
+ * The command position mirrors the host's rule (`^\s*\/`): a `/` that starts the text.
+ * A `//` escape, a path (`/api/users`) and a `/` mid-sentence never open it, and typing
+ * the space after the name closes it (the arguments are the person's to type).
+ *
+ * A pick of a runnable entry (no required argument) clears the typed name and hands the
+ * entry to the host's `onChoose`, which runs `/<id>`. Any other entry puts its
+ * `insertText` (`/starter-kit `) in the box with the caret after it, for the arguments.
+ */
+
+/** The `/` typeahead's OWN copy (`command.<key>`); the rest is the Actions tab's, which it mirrors. */
+interface CommandAutocompleteLabels {
+    /** The row shown when no command matches what was typed. */
+    noMatches?: string;
+}
+
+/**
  * The workspace's plan + month-to-date meters + 30-day spend & savings
  * (`GET /api/consumption`), read through ONE shared cache per page.
  *
@@ -5029,6 +5049,7 @@ interface BrainComposerLabels {
     connections?: Partial<ConnectionsLabels>;
     mention?: UseMentionAutocompleteOptions['labels'];
     ticket?: UseTicketAutocompleteOptions['labels'];
+    command?: CommandAutocompleteLabels;
 }
 /**
  * The text comes from exactly ONE of:
@@ -5240,7 +5261,7 @@ declare function formatTokens(tokens: number, locale?: string): string;
  * Everything `BrainComposer` renders — the box, the `/` menu, its Status tab, the spend
  * readouts and the @/# pickers — from ONE host lookup, through each part's own key
  * table. Canonical keys are scoped by part: `composer.<key>`, `options.<key>`,
- * `status.<key>`, `spend.<key>`, `connections.<key>`, `mention.<key>` and `ticket.<key>`, each `<key>` being
+ * `status.<key>`, `spend.<key>`, `connections.<key>`, `mention.<key>`, `ticket.<key>` and `command.<key>`, each `<key>` being
  * that part's own canonical key (see `composerLabelsFrom`, `promptOptionsLabelsFrom`,
  * `workStatusLabelsFrom`, `spendLabelsFrom`). Every host — the web (next-intl), the
  * editor webview (`vscode.l10n` bundle) and Rovr (`chrome.i18n`) — builds its composer
@@ -5255,6 +5276,7 @@ interface FullBrainComposerLabels {
     connections: ConnectionsLabels;
     mention: Required<MentionLabels>;
     ticket: Required<TicketAutocompleteLabels>;
+    command: Required<CommandAutocompleteLabels>;
 }
 /** `overrides`: copy a host words from another source on purpose (e.g. the web's
  *  chat-mode vocabulary for `composer.modeLabel`). */
@@ -5499,4 +5521,4 @@ type CloudTranslateRequest = (body: CloudTranslateBody) => Promise<{
 }>;
 declare function createCloudTranslate(request: CloudTranslateRequest): CloudTranslate;
 
-export { ActionsPane, type ActionsPaneProps, type AgentOptionVM, AiSurface, type AiSurfaceProps, type AskUserLabels, Avatar, type AvatarProps, BrainComposer, type BrainComposerLabels, type BrainComposerProps, BrainMark, type BrainMarkProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, type ChatDiagnosticsChatReads, type ChatDiagnosticsReadAdapter, ChatErrorBanner, type ChatErrorBannerLabels, type ChatErrorBannerProps, type ChatHistoryChat, type ChatHistoryLabels, ChatHistoryList, type ChatHistoryListProps, ChatHistoryRow, type ChatHistoryRowProps, type ChatOptionVM, type ChatQuestionVM, type ChatRowActionProps, type ChatRowActions, type ChatRowRef, type ChatRunHistoryVM, type ChatRunVM, type ChatSubagentVM, ChatTicketStats, type ChatTicketStatsInput, type ChatTicketStatsLabels, type ChatTicketStatsText, type ChatTicketsAdapter, type ChatTicketsExtension, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, type ChatTicketsRequest, type ChatTicketsRestOptions, type CloudTranslate, type CloudTranslateBody, type CloudTranslateRequest, type CommandRun, type ComposerAddMenuItem, type ComposerAttachment, type ComposerConnections, type ComposerLabels, type ComposerModelCatalog, type ComposerModelInput, type ComposerOptions, type ComposerSuggestion, type ConnectionHealth, type ConnectionsLabels, ConnectionsPanel, type ConnectionsPanelProps, type ConsumptionSnapshot, ContextChip, type ContextChipOption, type ContextChipProps, CopyButton, type CopyLabels, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_ERROR_LABELS, DEFAULT_CHAT_HISTORY_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_COMPOSER_LABELS, DEFAULT_CONNECTIONS_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_INFERENCE_MODE_LABELS, DEFAULT_INLINE_CHAT_TITLE_LABELS, DEFAULT_LIVE_ACTIVITY_LABELS, DEFAULT_LOCAL_MODEL_LABELS, DEFAULT_LOCAL_RAIL_LABELS, DEFAULT_MENTION_LABELS, DEFAULT_MODEL_FALLBACK_LABELS, DEFAULT_MODEL_MOVE_LABELS, DEFAULT_PENDING_CHANGES_LABELS, DEFAULT_PERSONA_PICKER_LABELS, DEFAULT_PREFETCH_CHIP_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_PROMPT_OPTIONS_LABELS, DEFAULT_QUEUED_TURN_LABELS, DEFAULT_RECIPIENT_PICKER_LABELS, DEFAULT_SPEND_LABELS, DEFAULT_SURFACE_HEADER_LABELS, DEFAULT_TICKET_TAG_LABELS, DEFAULT_TIMELINE_LABELS, DEFAULT_TOOL_CONFIRM_LABELS, DEFAULT_TRANSLATION_LABELS, DEFAULT_WORK_STATUS_LABELS, type DetectedForeign, EXPAND_ICON_PATH, type EngineResult, type EvermindActionGuideInput, type EvermindActionId, type EvermindBuild, type EvermindCleanupResult, type EvermindCodingGateView, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindContributionState, type EvermindContributionStatus, type EvermindEvalPoint, type EvermindHost, type EvermindHostPowers, type EvermindKnowledgeAnalysis, type EvermindKnowledgeFinding, type EvermindKnowledgeRepair, type EvermindKnowledgeVerdict, type EvermindLearnedStatus, type EvermindMode, type EvermindNextAction, type EvermindProbeResult, type EvermindProbeSample, type EvermindRecentEntry, type EvermindReindexResult, type EvermindRequest, type EvermindRestOptions, type EvermindSeedModel, type EvermindTarget, type EvermindTeachResult, type EvermindTeacherOptions, type EvermindTeacherSkipReason, type EvermindValidateMatch, type EvermindValidateResult, type FullBrainComposerLabels, HeaderIcon, HealthRing, type HealthRingProps, type HealthTier, INFERENCE_MODE_LABEL_FIELDS, InferenceModeControl, type InferenceModeControlProps, InferenceModeFirstRun, type InferenceModeFirstRunProps, type InferenceModeGate, type InferenceModeLabels, InlineChatTitle, type InlineChatTitleLabels, type InlineChatTitleProps, type InterruptedChatState, InterruptedRunRow, type JsonRequest, LOCAL_BACKEND_LABEL, LOCAL_MODEL_LABEL_FIELDS, LOCAL_UNSUPPORTED_LABEL, type LabelLookup, type LabelValues, type LearnedStatusInput, type LineageVM, type LinkType, LiveActivity, type LiveActivityLabels, type LiveActivityProps, type LocalModelLabelLookup, type LocalModelLabels, LocalModelList, type LocalModelListProps, LocalModelRow, type LocalModelRowProps, type LocalModelsState, type LocalRailLabels, MIN_DETECT_CONFIDENCE, Markdown, type MarkdownLabels, type MarkdownProps, type MemoryCompactRequest, type MentionAutocomplete, type MentionLabels, type MessageRating, ModelFallbackNotice, type ModelFallbackNoticeLabels, type ModelFallbackNoticeProps, type ModelMove, type ModelMoveLabels, type ModelRemedies, type ModelRemedyPorts, OriginalRequest, type PendingChangeKind, type PendingChangeVM, type PendingChangesLabels, PendingChangesList, type PendingChangesListProps, PendingQuestionBanner, type PersonaModalityOption, PersonaPicker, type PersonaPickerLabels, type PersonaPickerProps, type PickedMemory, type PlanTier, type PrefetchAnswerChip, PrefetchAnswerChips, type PrefetchAnswerChipsProps, type PrefetchChipLabels, PrefetchConfirmChip, type PrefetchConfirmChipProps, type PrefetchLabelOf, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, type PromptOptionsAutoMode, type PromptOptionsCommands, type PromptOptionsInferenceMode, type PromptOptionsLabels, type PromptOptionsMemory, PromptOptionsMenu, type PromptOptionsMenuProps, type PromptOptionsMode, type PromptOptionsModeChoice, type PromptOptionsModel, type PromptOptionsOpenRequest, type PromptOptionsSession, type PromptOptionsTab, PromptPanel, type PromptPanelProps, type PromptTrailingAction, type PromptTrailingState, type ProviderConnectStart, type ProviderConnection, type ProviderConnectionsPort, type ProviderReconnect, QuestionCard, QueuedTurnChips, type QueuedTurnChipsLabels, type QueuedTurnChipsProps, RUNNABLE_KINDS, RailFreshnessLine, type RailFreshnessVM, type RailSyncStatus, RailSyncSummary, type RailSyncSummaryVM, RecipientPicker, type RecipientPickerLabels, type RecipientPickerProps, RecipientsBadge, type ReconnectFailure, type ReconnectFailureReason, type ReconnectPhase, type RovingRadioItemProps, SLOW_AFTER_MS, SpendBreakdown, type SpendLabels, SpendPill, StarterGroup, StarterTile, type StarterTileProps, SuggestionRow, Sunburst, type SunburstProps, SurfaceEmptyState, type SurfaceEmptyStateProps, SurfaceFooter, type SurfaceFooterProps, SurfaceHeader, type SurfaceHeaderHistory, type SurfaceHeaderLabels, type SurfaceHeaderProps, SurfaceLauncher, type SurfaceLauncherBadge, type SurfaceLauncherProps, type SurfaceTab, SurfaceTabs, type SurfaceTabsProps, SyncStatusBadge, TICKET_KINDS, TRANSLATE_BATCH_MAX, TRANSLATION_LABEL_FIELDS, type TeacherModelsPayload, type TenantModelRow, type TicketAutocomplete, type TicketAutocompleteLabels, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TicketParentVM, type TimelineCatalogLookup, type TimelineImage, type TimelineNode, type TimelinePrefetch, ToolConfirmBar, type ToolConfirmBarLabels, type ToolConfirmBarProps, type ToolPreview, ToolStep, type ToolStepLabels, type ToolStepNode, type ToolStepView, TranslatableText, type TranslatableTextProps, type TranslateSend, type TranslatedTextState, type TranslationCache, type TranslationContextValue, type TranslationEntry, type TranslationLabels, TranslationPickerScope, TranslationProvider, type TranslationProviderProps, type UpgradeTarget, type UseChatRowActionsOptions, type UseMentionAutocompleteOptions, type UseTicketAutocompleteOptions, WorkSpendPanel, type WorkSpendPanelProps, type WorkStatusLabels, WorkStatusPanel, type WorkStatusPanelProps, attachmentsOf, avatarColor, brainComposerLabelsFrom, buildSettledTimeline, buildTimeline, bundleLookup, cachedConsumptionSnapshot, chatActivityLabelsFrom, chatDiagnosticsReads, chatErrorMessage, chatHistoryLabelsFrom, chatQuestionsReader, chatSwitcherLabel, chatTicketStatsText, chatTicketsLabelsFrom, chatTicketsLabelsFromBundle, commandOf, composerCatalogLoaded, composerLabels, composerLabelsFrom, composerModel, connectionsLabelsFrom, createChatTicketsRestAdapter, createCloudTranslate, createEvermindRestAdapter, createTranslateBatcher, defaultTranslationCache, detectForeignLanguage, evermindLabelsFromBundle, evermindLearnedStatus, evermindNextAction, fetchConsumptionSnapshot, formatContextTokens, formatDownloadSize, formatDuration, formatElapsed, formatParams, formatTokens, formatUsd, groupAbsorbed, healthRingColor, indexedDbTranslationCache, inferenceModeCopy, inferenceModeOption, initialsOf, invalidateConsumptionSnapshot, languageDisplayName, liveActivityLabelsFrom, loadEvermindBuilds, localModelLabelsFrom, localRailLabelsFrom, localRailLabelsFromBundle, memoryTranslationCache, modelMoveLine, modelMoveOf, modelRemedies, modelSelectionFrom, ownMessageOf, pendingChangesSummary, planIsPaid, preferredEvermindBuild, prefetchChipLabelsFrom, prefetchLabelText, promptOptionsLabels, promptOptionsLabelsFrom, promptTrailingAction, publishedEvermindModels, railTicketLabel, requestComposerMenu, resolvePendingChangesLabels, resolveTeacherOptions, rovingRadioNextIndex, shellOutcomeOf, spendLabels, spendLabelsFrom, strandedReplyKey, streamingNode, stringsFrom, subscribeConsumptionSnapshot, timelineCatalogLookup, timelineLabelsFrom, toolConfirmLabelsFrom, toolConfirmPreview, toolPreview, toolStepView, translateWithEngines, translationCacheKey, translationLabelsFrom, useChatActivitySignal, useChatMemorySwitch, useChatParticipants, useChatRowActions, useComposerMenuRequest, useConsumptionSnapshot, useDismissibleNotice, useHideDoneTickets, useInferenceModeGate, useLocalModels, useMentionAutocomplete, useModelFallback, usePickerOpener, usePopover, useProviderReconnect, useRecipientChoice, useRovingRadioGroup, useTicketAutocomplete, useTranslatedText, useTranslationContext, useVoiceDictation, withLocalModels, workStatusLabels, workStatusLabelsFrom };
+export { ActionsPane, type ActionsPaneProps, type AgentOptionVM, AiSurface, type AiSurfaceProps, type AskUserLabels, Avatar, type AvatarProps, BrainComposer, type BrainComposerLabels, type BrainComposerProps, BrainMark, type BrainMarkProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, type ChatDiagnosticsChatReads, type ChatDiagnosticsReadAdapter, ChatErrorBanner, type ChatErrorBannerLabels, type ChatErrorBannerProps, type ChatHistoryChat, type ChatHistoryLabels, ChatHistoryList, type ChatHistoryListProps, ChatHistoryRow, type ChatHistoryRowProps, type ChatOptionVM, type ChatQuestionVM, type ChatRowActionProps, type ChatRowActions, type ChatRowRef, type ChatRunHistoryVM, type ChatRunVM, type ChatSubagentVM, ChatTicketStats, type ChatTicketStatsInput, type ChatTicketStatsLabels, type ChatTicketStatsText, type ChatTicketsAdapter, type ChatTicketsExtension, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, type ChatTicketsRequest, type ChatTicketsRestOptions, type CloudTranslate, type CloudTranslateBody, type CloudTranslateRequest, type CommandRun, type ComposerAddMenuItem, type ComposerAttachment, type ComposerConnections, type ComposerLabels, type ComposerModelCatalog, type ComposerModelInput, type ComposerOptions, type ComposerSuggestion, type ConnectionHealth, type ConnectionsLabels, ConnectionsPanel, type ConnectionsPanelProps, type ConsumptionSnapshot, ContextChip, type ContextChipOption, type ContextChipProps, CopyButton, type CopyLabels, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_ERROR_LABELS, DEFAULT_CHAT_HISTORY_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_COMPOSER_LABELS, DEFAULT_CONNECTIONS_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_INFERENCE_MODE_LABELS, DEFAULT_INLINE_CHAT_TITLE_LABELS, DEFAULT_LIVE_ACTIVITY_LABELS, DEFAULT_LOCAL_MODEL_LABELS, DEFAULT_LOCAL_RAIL_LABELS, DEFAULT_MENTION_LABELS, DEFAULT_MODEL_FALLBACK_LABELS, DEFAULT_MODEL_MOVE_LABELS, DEFAULT_PENDING_CHANGES_LABELS, DEFAULT_PERSONA_PICKER_LABELS, DEFAULT_PREFETCH_CHIP_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_PROMPT_OPTIONS_LABELS, DEFAULT_QUEUED_TURN_LABELS, DEFAULT_RECIPIENT_PICKER_LABELS, DEFAULT_SPEND_LABELS, DEFAULT_SURFACE_HEADER_LABELS, DEFAULT_TICKET_TAG_LABELS, DEFAULT_TIMELINE_LABELS, DEFAULT_TOOL_CONFIRM_LABELS, DEFAULT_TRANSLATION_LABELS, DEFAULT_WORK_STATUS_LABELS, type DetectedForeign, EXPAND_ICON_PATH, type EngineResult, type EvermindActionGuideInput, type EvermindActionId, type EvermindBuild, type EvermindCleanupResult, type EvermindCodingGateView, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindContributionState, type EvermindContributionStatus, type EvermindEvalPoint, type EvermindHost, type EvermindHostPowers, type EvermindKnowledgeAnalysis, type EvermindKnowledgeFinding, type EvermindKnowledgeRepair, type EvermindKnowledgeVerdict, type EvermindLearnedStatus, type EvermindMode, type EvermindNextAction, type EvermindProbeResult, type EvermindProbeSample, type EvermindRecentEntry, type EvermindReindexResult, type EvermindRequest, type EvermindRestOptions, type EvermindSeedModel, type EvermindTarget, type EvermindTeachResult, type EvermindTeacherOptions, type EvermindTeacherSkipReason, type EvermindValidateMatch, type EvermindValidateResult, type FullBrainComposerLabels, HeaderIcon, HealthRing, type HealthRingProps, type HealthTier, INFERENCE_MODE_LABEL_FIELDS, InferenceModeControl, type InferenceModeControlProps, InferenceModeFirstRun, type InferenceModeFirstRunProps, type InferenceModeGate, type InferenceModeLabels, InlineChatTitle, type InlineChatTitleLabels, type InlineChatTitleProps, type InterruptedChatState, InterruptedRunRow, type JsonRequest, LOCAL_BACKEND_LABEL, LOCAL_MODEL_LABEL_FIELDS, LOCAL_UNSUPPORTED_LABEL, type LabelLookup, type LabelValues, type LearnedStatusInput, type LineageVM, type LinkType, LiveActivity, type LiveActivityLabels, type LiveActivityProps, type LocalModelLabelLookup, type LocalModelLabels, LocalModelList, type LocalModelListProps, LocalModelRow, type LocalModelRowProps, type LocalModelsState, type LocalRailLabels, MIN_DETECT_CONFIDENCE, Markdown, type MarkdownLabels, type MarkdownProps, type MemoryCompactRequest, type MentionLabels, type MessageRating, ModelFallbackNotice, type ModelFallbackNoticeLabels, type ModelFallbackNoticeProps, type ModelMove, type ModelMoveLabels, type ModelRemedies, type ModelRemedyPorts, OriginalRequest, type PendingChangeKind, type PendingChangeVM, type PendingChangesLabels, PendingChangesList, type PendingChangesListProps, PendingQuestionBanner, type PersonaModalityOption, PersonaPicker, type PersonaPickerLabels, type PersonaPickerProps, type PickedMemory, type PlanTier, type PrefetchAnswerChip, PrefetchAnswerChips, type PrefetchAnswerChipsProps, type PrefetchChipLabels, PrefetchConfirmChip, type PrefetchConfirmChipProps, type PrefetchLabelOf, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, type PromptOptionsAutoMode, type PromptOptionsCommands, type PromptOptionsInferenceMode, type PromptOptionsLabels, type PromptOptionsMemory, PromptOptionsMenu, type PromptOptionsMenuProps, type PromptOptionsMode, type PromptOptionsModeChoice, type PromptOptionsModel, type PromptOptionsOpenRequest, type PromptOptionsSession, type PromptOptionsTab, PromptPanel, type PromptPanelProps, type PromptTrailingAction, type PromptTrailingState, type ProviderConnectStart, type ProviderConnection, type ProviderConnectionsPort, type ProviderReconnect, QuestionCard, QueuedTurnChips, type QueuedTurnChipsLabels, type QueuedTurnChipsProps, RUNNABLE_KINDS, RailFreshnessLine, type RailFreshnessVM, type RailSyncStatus, RailSyncSummary, type RailSyncSummaryVM, RecipientPicker, type RecipientPickerLabels, type RecipientPickerProps, RecipientsBadge, type ReconnectFailure, type ReconnectFailureReason, type ReconnectPhase, type RovingRadioItemProps, SLOW_AFTER_MS, SpendBreakdown, type SpendLabels, SpendPill, StarterGroup, StarterTile, type StarterTileProps, SuggestionRow, Sunburst, type SunburstProps, SurfaceEmptyState, type SurfaceEmptyStateProps, SurfaceFooter, type SurfaceFooterProps, SurfaceHeader, type SurfaceHeaderHistory, type SurfaceHeaderLabels, type SurfaceHeaderProps, SurfaceLauncher, type SurfaceLauncherBadge, type SurfaceLauncherProps, type SurfaceTab, SurfaceTabs, type SurfaceTabsProps, SyncStatusBadge, TICKET_KINDS, TRANSLATE_BATCH_MAX, TRANSLATION_LABEL_FIELDS, type TeacherModelsPayload, type TenantModelRow, type TicketAutocompleteLabels, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TicketParentVM, type TimelineCatalogLookup, type TimelineImage, type TimelineNode, type TimelinePrefetch, ToolConfirmBar, type ToolConfirmBarLabels, type ToolConfirmBarProps, type ToolPreview, ToolStep, type ToolStepLabels, type ToolStepNode, type ToolStepView, TranslatableText, type TranslatableTextProps, type TranslateSend, type TranslatedTextState, type TranslationCache, type TranslationContextValue, type TranslationEntry, type TranslationLabels, TranslationPickerScope, TranslationProvider, type TranslationProviderProps, type UpgradeTarget, type UseChatRowActionsOptions, type UseMentionAutocompleteOptions, type UseTicketAutocompleteOptions, WorkSpendPanel, type WorkSpendPanelProps, type WorkStatusLabels, WorkStatusPanel, type WorkStatusPanelProps, attachmentsOf, avatarColor, brainComposerLabelsFrom, buildSettledTimeline, buildTimeline, bundleLookup, cachedConsumptionSnapshot, chatActivityLabelsFrom, chatDiagnosticsReads, chatErrorMessage, chatHistoryLabelsFrom, chatQuestionsReader, chatSwitcherLabel, chatTicketStatsText, chatTicketsLabelsFrom, chatTicketsLabelsFromBundle, commandOf, composerCatalogLoaded, composerLabels, composerLabelsFrom, composerModel, connectionsLabelsFrom, createChatTicketsRestAdapter, createCloudTranslate, createEvermindRestAdapter, createTranslateBatcher, defaultTranslationCache, detectForeignLanguage, evermindLabelsFromBundle, evermindLearnedStatus, evermindNextAction, fetchConsumptionSnapshot, formatContextTokens, formatDownloadSize, formatDuration, formatElapsed, formatParams, formatTokens, formatUsd, groupAbsorbed, healthRingColor, indexedDbTranslationCache, inferenceModeCopy, inferenceModeOption, initialsOf, invalidateConsumptionSnapshot, languageDisplayName, liveActivityLabelsFrom, loadEvermindBuilds, localModelLabelsFrom, localRailLabelsFrom, localRailLabelsFromBundle, memoryTranslationCache, modelMoveLine, modelMoveOf, modelRemedies, modelSelectionFrom, ownMessageOf, pendingChangesSummary, planIsPaid, preferredEvermindBuild, prefetchChipLabelsFrom, prefetchLabelText, promptOptionsLabels, promptOptionsLabelsFrom, promptTrailingAction, publishedEvermindModels, railTicketLabel, requestComposerMenu, resolvePendingChangesLabels, resolveTeacherOptions, rovingRadioNextIndex, shellOutcomeOf, spendLabels, spendLabelsFrom, strandedReplyKey, streamingNode, stringsFrom, subscribeConsumptionSnapshot, timelineCatalogLookup, timelineLabelsFrom, toolConfirmLabelsFrom, toolConfirmPreview, toolPreview, toolStepView, translateWithEngines, translationCacheKey, translationLabelsFrom, useChatActivitySignal, useChatMemorySwitch, useChatParticipants, useChatRowActions, useComposerMenuRequest, useConsumptionSnapshot, useDismissibleNotice, useHideDoneTickets, useInferenceModeGate, useLocalModels, useMentionAutocomplete, useModelFallback, usePickerOpener, usePopover, useProviderReconnect, useRecipientChoice, useRovingRadioGroup, useTicketAutocomplete, useTranslatedText, useTranslationContext, useVoiceDictation, withLocalModels, workStatusLabels, workStatusLabelsFrom };

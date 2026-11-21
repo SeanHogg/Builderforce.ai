@@ -13,6 +13,7 @@ import { type ChannelId, listChannelPlugins } from "../channels/plugins/index.js
 import { formatCliCommand } from "../cli/command-format.js";
 import { createDefaultDeps } from "../cli/deps.js";
 import { getBuiltInAgentRoles } from "../builderforce/agent-roles.js";
+import { METHODOLOGY_PERSONAS } from "../builderforce/methodologyPersonas.js";
 import { globalPersonaRegistry, USER_PERSONAS_DIR } from "../builderforce/personas.js";
 import {
   initializeBuilderForceAgentsProject,
@@ -271,6 +272,7 @@ export async function startGatewayServer(
   // Bootstrap PersonaRegistry: built-ins → user-global → project-local → assignments
   try {
     globalPersonaRegistry.registerBuiltins(getBuiltInAgentRoles());
+    globalPersonaRegistry.registerBuiltins(METHODOLOGY_PERSONAS);
 
     const userCount = await globalPersonaRegistry.loadFromDir(USER_PERSONAS_DIR, "user-global");
     if (userCount > 0) {

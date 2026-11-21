@@ -42,6 +42,7 @@ import { credentialSecret } from '../integrations/credentialCrypto';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { bumpRoutingInputsVersion } from './routingInputsVersion';
+import type { CatalogModel } from './modelCatalog';
 
 type Env = HonoEnv['Bindings'];
 
@@ -83,6 +84,17 @@ export function connectionModelRef(bareModelId: string): string {
 /** Strip the `openrouter/` prefix back off — the id OpenRouter itself expects. */
 export function bareModelId(ref: string): string {
   return ref.startsWith('openrouter/') ? ref.slice('openrouter/'.length) : ref;
+}
+
+/**
+ * The OpenRouter catalog's context window for a connection model ref, looked up by its bare OpenRouter id
+ * ({@link bareModelId}) — only a positive `contextLength` answers; an id the catalog does not carry (the long tail a
+ * connection reaches) answers `undefined`. The `/v1/models` picker sends it as the row's `contextWindow`. Pure.
+ */
+export function connectionModelWindows(catalog: readonly Pick<CatalogModel, 'id' | 'contextLength'>[]): (ref: string) => number | undefined {
+  const windows = new Map<string, number>();
+  for (const model of catalog) if (model.contextLength > 0) windows.set(model.id, model.contextLength);
+  return (ref) => windows.get(bareModelId(ref));
 }
 
 /**

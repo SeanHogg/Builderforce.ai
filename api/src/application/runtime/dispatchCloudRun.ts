@@ -35,6 +35,7 @@ import {
 import { resolveDefaultCloudAgentRef, UNATTRIBUTED_RUN_MESSAGE } from './defaultCloudAgent';
 import { recordAutoRunSkip, clearAutoRunSkip } from './autoRunSkipLedger';
 import { enforceCloudRunCap, type CloudRunCapResult } from './cloudRunLedger';
+import { preflightDispatchEntitlements } from './dispatchEntitlements';
 import { agentExecutionEnabledCached } from './agentExecutionGate';
 import { assessRerunBackoff, AUTO_RUN_REASON_TEXT, type AutoRunReason } from '../swimlane/evaluateAutoRun';
 import { resolveProjectInferenceModel } from '../llm/projectEvermind';
@@ -129,13 +130,13 @@ export function storedPayloadOf(execution: SubmittedExecution, fallback: string 
  * bare `null` has to invent a reason, and the one it invented (`no_agent`) sent a person
  * to staff a lane that was staffed. See {@link dispatchError}.
  */
-export type CloudDispatchRefusalReason = AutoRunReason | 'task_not_found' | 'dispatch_error' | 'concurrent_run_limit';
+export type CloudDispatchRefusalReason = AutoRunReason | 'task_not_found' | 'dispatch_error' | 'concurrent_run_limit' | 'model_not_entitled' | 'agent_budget_exhausted';
 
 /** The refusals a person directing a run may NOT override: billing entitlements, and the
  *  workspace's own execution switch — none of them is backpressure, so a human click
  *  cannot clear them either. */
 export const ENTITLEMENT_REFUSALS: ReadonlySet<CloudDispatchRefusalReason> = new Set<CloudDispatchRefusalReason>([
-  'cloud_run_limit', 'tenant_token_limit', 'execution_disabled',
+  'cloud_run_limit', 'tenant_token_limit', 'execution_disabled', 'model_not_entitled', 'agent_budget_exhausted',
 ]);
 
 export interface CloudDispatchRefusal {
@@ -166,7 +167,11 @@ function refuse(reason: CloudDispatchRefusalReason, detail?: string | null): Clo
       ? 'No run: the dispatcher failed before a run could be created. The error above is the reason; it is not a configuration or entitlement problem.'
       : reason === 'concurrent_run_limit'
         ? 'No run yet: the workspace is at its plan\'s concurrent cloud-run limit.' // built by `admissionOutcome`
-        : AUTO_RUN_REASON_TEXT[reason];
+        : reason === 'model_not_entitled'
+          ? 'No run: the pinned model is not entitled for this workspace.'
+          : reason === 'agent_budget_exhausted'
+            ? 'No run: this cloud agent has spent its own budget ceiling.'
+            : AUTO_RUN_REASON_TEXT[reason];
   return { executionId: null, refusal: { reason, message: detail?.trim() ? `${detail.trim()} ${base}` : base } };
 }
 
@@ -350,6 +355,18 @@ export async function dispatchCloudRunForTask(
     });
     return refuse('cloud_run_limit', `${cloudGate.used}/${cloudGate.limit} runs used on the ${cloudGate.effectivePlan} plan.`);
   }
+
+  // (1b) MODEL ENTITLEMENT + PER-AGENT BUDGET (MK-09-E6 / MK-09-B1). Billing
+  // entitlements, like the cloud-run cap: checked before a row exists, and a human
+  // click cannot override them. A plan-lookup or spend-table miss fails open inside
+  // the preflight (no refusal) so a blip does not halt every dispatch.
+  const entitlement = await preflightDispatchEntitlements(env, db, {
+    tenantId: params.tenantId,
+    submittedBy,
+    payload,
+    cloudAgentRef: parseCloudAgentRef(payload) ?? taskRow.assignedAgentRef,
+  });
+  if (entitlement) return { executionId: null, refusal: entitlement };
 
   // (2) FAILURE BREAKER + RE-RUN COOLDOWN — the same verdict `evaluateTaskAutoRun`
   // shows in triage, applied to EVERY autonomous dispatcher rather than only the lane

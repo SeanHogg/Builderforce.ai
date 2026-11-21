@@ -25,8 +25,8 @@
  * Kept framework-free (pure strings + Sets) so it is safe in every bundle.
  */
 import { isClosedTaskStatus } from '@builderforce/agent-loop';
-import { syncIdText } from '@builderforce/local-first';
-import { LOCAL_TICKET_CREATE_TOOL, LOCAL_TICKET_MOVE_TOOL, SERVER_TICKET_LINK_TOOL, SERVER_TICKET_MOVE_TOOL, SERVER_TICKET_TOOLS, type TicketToolVocabulary } from './ticketToolVocabulary';
+import { TASK_TABLE_KINDS, syncIdText } from '@builderforce/local-first';
+import { LOCAL_TICKET_CREATE_TOOL, LOCAL_TICKET_MOVE_TOOL, SERVER_TICKET_LINK_TOOL, SERVER_TICKET_MOVE_TOOL, SERVER_TICKET_TOOLS, TICKET_FROM_DELTA_TOOL, type TicketToolVocabulary } from './ticketToolVocabulary';
 import { entityIdsOf } from './toolResultRecord';
 
 /**
@@ -35,7 +35,7 @@ import { entityIdsOf } from './toolResultRecord';
  * already tied its work to a ticket and the deterministic backstop stays quiet.
  */
 export const TICKET_RECORDING_TOOLS: ReadonlySet<string> = new Set([
-  'builtin_tickets_from_delta',
+  TICKET_FROM_DELTA_TOOL,
   'builtin_chats_link_ticket',
   'builtin_reviews_record',
   // The editor's device-local create: it IS the recording — it links its chat LOCALLY in
@@ -167,9 +167,6 @@ export function isMutatingPlatformTool(name: string): boolean {
  */
 export const NOT_STARTED_TASK_STATUSES: ReadonlySet<string> = new Set(['backlog', 'todo', 'ready']);
 
-/** Ticket tiers whose status lives on the tasks table (settable via builtin_tasks_update). */
-const TASK_TIER_KINDS: ReadonlySet<string> = new Set(['task', 'epic', 'gap']);
-
 /** A linked ticket the deterministic backstop should advance to in_progress. */
 export interface LinkedTicketToAdvance {
   kind: string;
@@ -226,7 +223,8 @@ function selectLinkedTasks(listResult: unknown, keep: (status: string) => boolea
   for (const r of listedRows(listResult)) {
     if (!r || typeof r !== 'object') continue;
     const row = r as { kind?: unknown; ref?: unknown; syncId?: unknown; status?: unknown; exists?: unknown; label?: unknown; title?: unknown };
-    if (typeof row.kind !== 'string' || !TASK_TIER_KINDS.has(row.kind)) continue;
+    // Ticket tiers whose status lives on the tasks table (settable via builtin_tasks_update): THE list `local-first` owns.
+    if (typeof row.kind !== 'string' || !TASK_TABLE_KINDS.has(row.kind)) continue;
     if (row.exists === false) continue;
     // A task-tier row's ref IS its account id: the row's `syncId`, else its numeric `ref`.
     const { syncId } = entityIdsOf({ syncId: row.syncId, id: row.ref });
@@ -371,9 +369,6 @@ export function codeChangeFiles(args: unknown): string[] {
   return files;
 }
 
-/** The account's code-change recording tool the directive names. */
-export const TICKET_FROM_DELTA_TOOL = 'builtin_tickets_from_delta';
-
 /**
  * The tools {@link chatWorkLinkingDirective} OBLIGES the model to use, as DATA — exactly the
  * acts the directive says must happen before a turn ends: create the ticket (the surface's
@@ -429,11 +424,11 @@ export function chatWorkLinkingDirective(chatId: number | null, tickets: TicketT
     createBullet +
     scopingBullet +
     (linked
-      ? `• When your turn ADDS or CHANGES code, record it with builtin_tickets_from_delta (chatId=${chatId}, the current projectId, the files you touched, kind improvement|fix|bug, modality "ide"). If builtin_chats_list_tickets shows a ticket already tracking this work, pass its numeric ref as taskId so the delta attaches to it instead of creating a duplicate; otherwise the delta creates a linked ticket that completes when it ships.\n`
-      : `• When your turn ADDS or CHANGES code, record it with builtin_tickets_from_delta (the current projectId, the files you touched, kind improvement|fix|bug, modality "ide"; no chatId). If a ticket you already know of tracks this work, pass its numeric ref as taskId so the delta attaches to it instead of creating a duplicate.\n`) +
+      ? `• When your turn ADDS or CHANGES code, record it with ${TICKET_FROM_DELTA_TOOL} (chatId=${chatId}, the current projectId, the files you touched, kind improvement|fix|bug, modality "ide"). If builtin_chats_list_tickets shows a ticket already tracking this work, pass its numeric ref as taskId so the delta attaches to it instead of creating a duplicate; otherwise the delta creates a linked ticket that completes when it ships.\n`
+      : `• When your turn ADDS or CHANGES code, record it with ${TICKET_FROM_DELTA_TOOL} (the current projectId, the files you touched, kind improvement|fix|bug, modality "ide"; no chatId). If a ticket you already know of tracks this work, pass its numeric ref as taskId so the delta attaches to it instead of creating a duplicate.\n`) +
     `• Keep the board honest about STATUS. The MOMENT you start actively working an existing ${linked ? 'linked ' : ''}task/epic/gap — investigating its fix, editing code for it, or driving it — move it out of the backlog with ${statusTool}. When the work is finished: if this session can commit and push (it has git_commit and git_push), self-review it and ship it as the SHIP POLICY contract says (it names when the ticket moves to "done"); otherwise advance it to "in_review" for someone who can (or "done" if it needs no review). Never leave a ticket you are actively working sitting in backlog.` +
     (linked
-      ? `\n• When an open EPIC is linked to this chat, its remaining work belongs under it: record a code change for it with builtin_tickets_from_delta passing parentTaskId=<the epic's numeric ref> (so a newly minted ticket is filed under the epic), and file a child task with ${tickets.createName} (${tickets.local ? 'parentTicketId' : 'parentTaskId'}=<the epic's ref>) for each remaining slice of the epic that has no ticket yet.`
+      ? `\n• When an open EPIC is linked to this chat, its remaining work belongs under it: record a code change for it with ${TICKET_FROM_DELTA_TOOL} passing parentTaskId=<the epic's numeric ref> (so a newly minted ticket is filed under the epic), and file a child task with ${tickets.createName} (${tickets.local ? 'parentTicketId' : 'parentTaskId'}=<the epic's ref>) for each remaining slice of the epic that has no ticket yet.`
       : '') +
     (linked
       ? `\n• Call builtin_chats_list_tickets (chatId=${chatId}) to see what is already linked — both to AVOID creating a duplicate and to know which linked tickets need their status advanced. Never end a turn having identified actionable work or changed code without it being a ticket linked to this chat whose status reflects the work you did.`

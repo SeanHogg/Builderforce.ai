@@ -1,5 +1,5 @@
-import { a as BrainTraceEvent, U as UsageSurface, B as BrainMessage, P as PackageDirProbe } from './brainTriage-CFPoOyuj.js';
-import { L as LocalRuntimeId, b as LocalEndpoint, a as LocalRuntimeProbe, c as LocalModel } from './probe-DkPrGnWT.js';
+import { a as BrainTraceEvent, U as UsageSurface, B as BrainMessage, P as PackageDirProbe } from './brainTriage-CFPoOyuj.cjs';
+import { L as LocalRuntimeId, b as LocalEndpoint, a as LocalRuntimeProbe, c as LocalModel } from './probe-DkPrGnWT.cjs';
 import { EvermindRecallResult } from '@seanhogg/builderforce-memory/evermind';
 import { ConsolidateOptions, ConsolidatedMemory } from '@seanhogg/builderforce-memory/working';
 
@@ -2106,6 +2106,12 @@ interface BrainRunRequest {
     continuationProgress?: boolean;
     /** The persisted message id behind each {@link seed} entry, in order (`transcriptSeedOf`). */
     seedIds?: number[];
+    /**
+     * The persisted ids (of {@link seedIds} and {@link userTurnMessageId}) of user rows the PERSON did not write — the
+     * editor's Resume continuation (`injectedTurn.ts`). `startRun` never marks them person turns, so they cannot set the
+     * publish hold or become one of the chat's asks. Absent ⇒ every user row is the person's.
+     */
+    injectedTurnIds?: number[];
     /** The persisted message id of {@link userTurn}. With {@link seedIds} it lets a fold
      *  record which persisted messages its note covers (`runFoldMarker.ts`). */
     userTurnMessageId?: number;

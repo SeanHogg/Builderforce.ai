@@ -55,7 +55,17 @@ import { SEMANTIC_TOOLS } from "./semantic-tools.js";
 import { localResearchTool } from "./local-research-tool.js";
 import { analyzeCodebaseTool } from './codeAnalysisTool.js';
 import { probeFromRepoRead, refuseWriteOverwrite } from "./writeOverwriteGuard.js";
+import { writeAllowed } from "./writeScope.js";
+import type { ToolContext } from "./tool.js";
 import { emptyGlobListingNote } from "./glob.js";
+
+/** Absent writeScope allows the write. A refusal is returned before the file is touched. */
+function refuseWriteScope(path: string, ctx: ToolContext): string | null {
+  const gate = ctx.writeScope;
+  if (!gate) return null;
+  const decision = writeAllowed(gate.scope, gate.paths, path, gate.roleName);
+  return decision.allowed ? null : (decision.reason ?? "write refused");
+}
 // The B3 batch-edit helpers (PRD 45 §4.7): one `edit_file` call carrying several edits,
 // applied atomically through the same `applyStringEdit` a lone call uses.
 import { applyBatchEdits, planBatchEdits } from "./edit.js";
@@ -183,6 +193,8 @@ export const writeFileTool: ToolDefinition = defineTool({
     const content = typeof args.content === "string" ? args.content : "";
     const summary = typeof args.summary === "string" ? args.summary : undefined;
     if (!path || !content) return { data: { ok: false, error: "path and content are both required" } };
+    const scopeRefusal = refuseWriteScope(path, ctx);
+    if (scopeRefusal) return { data: { ok: false, error: scopeRefusal } };
     if (ctx.caps.repoRead) {
       let existing;
       try {
@@ -220,6 +232,8 @@ export const deleteFileTool: ToolDefinition = defineTool({
   async execute(args, ctx): Promise<ToolResult> {
     const path = typeof args.path === "string" ? args.path : "";
     if (!path) return { data: { ok: false, error: "path is required" } };
+    const scopeRefusal = refuseWriteScope(path, ctx);
+    if (scopeRefusal) return { data: { ok: false, error: scopeRefusal } };
     const reason = typeof args.reason === "string" ? args.reason : undefined;
     const r = (await ctx.caps.repoWrite!.deleteFile(path, reason)) as RepoDeleteResult;
     if (r.ok && r.deleted === false) return { data: { ok: true, deleted: false, note: r.note } };
@@ -264,6 +278,12 @@ export const editFileTool: ToolDefinition = defineTool({
   async execute(args, ctx): Promise<ToolResult> {
     // B3: the batch form rides alongside the single form; both go through the provider.
     if (Array.isArray(args.edits)) {
+      for (const edit of args.edits) {
+        if (edit && typeof edit === "object" && typeof (edit as { path?: unknown }).path === "string") {
+          const refusal = refuseWriteScope((edit as { path: string }).path, ctx);
+          if (refusal) return { data: { ok: false, error: refusal } };
+        }
+      }
       const plan = planBatchEdits(args.edits);
       if (plan.error) return { data: { ok: false, error: plan.error } };
       const read = async (p: string) => {
@@ -302,6 +322,8 @@ export const editFileTool: ToolDefinition = defineTool({
     const newString = typeof args.new_string === "string" ? args.new_string : "";
     const replaceAll = args.replace_all === true;
     if (!path || !oldString) return { data: { ok: false, error: "path and old_string are required" } };
+    const scopeRefusal = refuseWriteScope(path, ctx);
+    if (scopeRefusal) return { data: { ok: false, error: scopeRefusal } };
     const r = (await ctx.caps.repoWrite!.editFile(path, oldString, newString, replaceAll)) as RepoEditResult;
     // The provider computes WHERE the edit landed (and, on a miss, where the text most
     // likely is); forwarding only `replaced` / `error` left the model to re-read the

@@ -15,27 +15,30 @@ import { nowIso, pushTrace } from '../runStore/runCells';
 import { userTextOf } from '../runStore/convoText';
 import { changeBudgetTurn, planBudgetTurn, type ForcedTurn } from '../runStore/progressBudget';
 import { noProgressTurn } from '../runStore/cacheServedStreak';
-import { progressGuardTurn } from '../runStore/progressGuard';
+import { finishingTurn, progressGuardTurn } from '../runStore/progressGuard';
 import type { BrainRunContext } from '../runStore/brainRunContext';
 
 /**
- * The turn a progress rule decides, or null: the plan budget's hand-off turn (decided BEFORE selection, so a forced turn that did
- * not hand off already selects as code), else the change budget, else a run circling its read cache, else A3's escalation, pause
- * or finish (a verified run's final report, with no tools).
+ * The turn a progress rule decides, or null: a FINISHING run's record / final turn first (finish means no more coding, so no
+ * hand-off, change-only or read-cache turn pre-empts it), else the plan budget's hand-off turn (decided BEFORE selection, so a
+ * forced turn that did not hand off already selects as code), else the change budget, else a run circling its read cache, else
+ * A3's escalation, pause or finish (a verified run's final report, with no tools).
  */
-function forcedTurnFor(run: BrainRunContext, step: number, selected: BrainToolSpec[], handOffTurn: ForcedTurn | null): ForcedTurn | null {
-  return handOffTurn ?? changeBudgetTurn(run, step, selected) ?? noProgressTurn(run, step, selected) ?? progressGuardTurn(run, step, selected);
+function forcedTurnFor(run: BrainRunContext, step: number, selected: BrainToolSpec[], finishing: ForcedTurn | null, handOffTurn: ForcedTurn | null): ForcedTurn | null {
+  return finishing ?? handOffTurn ?? changeBudgetTurn(run, step, selected) ?? noProgressTurn(run, step, selected) ?? progressGuardTurn(run, step, selected);
 }
 
 export async function brainTurnMenu(run: BrainRunContext, env: TurnEnv, catalogSize: number): Promise<TurnMenu | void> {
+  // A finishing run's turn is taken FIRST — before the plan budget can force (or end) a hand-off.
+  const finishing = finishingTurn(run);
   // Analysis that has spent its budget ends HERE, BEFORE selection: the hand-off turn offers `hand_off` alone with a call required.
-  const handOffTurn = planBudgetTurn(run, env.step);
+  const handOffTurn = finishing ? null : planBudgetTurn(run, env.step);
   // Once the run is coding, the plan is handed off: `hand_off` is gone from the menu, so a coder can never re-plan the work it was just given.
   const ranked = (await env.select()) as unknown as BrainToolSpec[];
   const selected = offersHandOff(run.policy) ? ranked : ranked.filter((t) => t.function.name !== HAND_OFF_TOOL);
-  const forced = forcedTurnFor(run, env.step, selected, handOffTurn);
-  // A3's steer (or an escalation it could not force here) opens the turn.
-  const steer = run.progress.steerNote();
+  const forced = forcedTurnFor(run, env.step, selected, finishing, handOffTurn);
+  // A3's steer (or an escalation it could not force here) opens the turn — never a finish / record turn, whose brief is the whole say.
+  const steer = forced?.finishing ? '' : run.progress.steerNote();
   const tail = [...(forced ? [userTextOf(forced.brief)] : []), ...(steer ? [steer] : [])];
   // A3's `finish` is a forced turn with only the obligation (ticket) tools, or NO tools: an empty menu is a decision (the kernel asks a
   // no-tool turn), never "not my concern".

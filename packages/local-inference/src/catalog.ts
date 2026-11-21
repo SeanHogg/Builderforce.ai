@@ -24,6 +24,22 @@ import { WEBLLM_CATALOG } from './webllmCatalog.generated.js';
 
 export { LOCAL_MODEL_USES, type LocalModelUse } from './catalogEntry.js';
 
+/** Weight file format. The engine is not stored on the row — {@link ENGINE_BY_FORMAT} names it. */
+export type LocalModelFormat = 'gguf' | 'onnx';
+
+/** One file-backed catalog row: the id the picker and the router share, plus its format. */
+export interface LocalModelEntry {
+  id: string;
+  format: LocalModelFormat;
+  file: string;
+}
+
+/** gguf stays on bfi; onnx goes to the ONNX engine. One map, both formats. */
+export const ENGINE_BY_FORMAT: Record<LocalModelFormat, 'bfi' | 'onnx'> = {
+  gguf: 'bfi',
+  onnx: 'onnx',
+};
+
 /** Where a model's weights come from — the download manager's whole instruction. */
 export type LocalModelSource =
   /** One file the host streams from `https://huggingface.co/<repo>/resolve/main/<file>`
@@ -39,6 +55,8 @@ export type LocalModelSource =
 export interface LocalCatalogModel {
   /** The full `local/<runtime>/<model>` ref. */
   ref: string;
+  /** File format for a GGUF or ONNX row. Absent on WebLLM prebuilts. */
+  format?: LocalModelFormat;
   runtime: LocalRuntimeId;
   /** The bare id the engine knows. */
   model: string;
@@ -101,6 +119,7 @@ function bonsai(
   const model = `bonsai-${size.toLowerCase()}-q1_0`;
   return {
     ref: formatLocalModelRef('bfi', model),
+    format: 'gguf',
     runtime: 'bfi',
     model,
     label: `Bonsai ${size} (1-bit)`,

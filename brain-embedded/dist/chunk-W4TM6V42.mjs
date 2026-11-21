@@ -250,6 +250,7 @@ function bonsai(size, params, bytes, contextTokens, layers, cpuMinMemory) {
   const model = `bonsai-${size.toLowerCase()}-q1_0`;
   return {
     ref: formatLocalModelRef("bfi", model),
+    format: "gguf",
     runtime: "bfi",
     model,
     label: `Bonsai ${size} (1-bit)`,
@@ -1390,4 +1391,4 @@ export {
   createHfModelStore,
   catalogProbe
 };
-//# sourceMappingURL=chunk-FRBQT4HO.mjs.map
+//# sourceMappingURL=chunk-W4TM6V42.mjs.map

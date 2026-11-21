@@ -17,7 +17,7 @@
 import { execFile } from 'node:child_process';
 import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { TRUSTED_PATH, shellUser, trustedBinary } from './sandboxJobs.mjs';
 
 /** A clone or fetch of a large repository may legitimately take minutes. */
@@ -25,6 +25,56 @@ const GIT_TIMEOUT_MS = 10 * 60 * 1000;
 
 /** The only names the mirror's git inherits: where to find git and the egress-interception CA, never a credential. */
 const MIRROR_ENV_PASSTHROUGH = ['LANG', 'TZ', 'SSL_CERT_FILE', 'GIT_SSL_CAINFO', 'CURL_CA_BUNDLE', 'NODE_EXTRA_CA_CERTS', 'HTTPS_PROXY', 'https_proxy', 'NO_PROXY', 'no_proxy', 'ALL_PROXY', 'all_proxy'];
+
+/**
+ * GAP-W12: the per-execution workspace must not live inside a git checkout.
+ * A workspace nested in a checkout is visible to `git add` / `git commit` there.
+ */
+export const WORKSPACE_INSIDE_CHECKOUT = 'workspace_inside_checkout';
+
+/**
+ * True when `workspace` is the checkout or a path inside it (so a commit from that
+ * checkout can include the sandbox workspace).
+ */
+export function workspaceInsideCheckout(workspace, checkoutRoot) {
+  if (typeof workspace !== 'string' || typeof checkoutRoot !== 'string' || !workspace || !checkoutRoot) return false;
+  const w = resolve(workspace);
+  const c = resolve(checkoutRoot);
+  if (w === c) return true;
+  const rel = relative(c, w);
+  if (rel === '' || isAbsolute(rel)) return rel === '';
+  return rel !== '..' && !rel.startsWith(`..${sep}`);
+}
+
+/**
+ * Refuse a workspace that a checkout could commit. `{ ok: true }` when it lives outside.
+ * `code` is {@link WORKSPACE_INSIDE_CHECKOUT} when it does not.
+ */
+export function assertWorkspaceOutsideCheckout(workspace, checkoutRoot) {
+  if (!workspaceInsideCheckout(workspace, checkoutRoot)) return { ok: true };
+  return {
+    ok: false,
+    code: WORKSPACE_INSIDE_CHECKOUT,
+    error: `sandbox workspace is inside the checkout (${checkoutRoot}) and could be committed`,
+  };
+}
+
+/**
+ * The parent of `workdir` must not be a git checkout that contains it. No parent
+ * checkout (git rev-parse fails) is outside. Used before a clone so a mis-set
+ * workspace root cannot land inside a repo the shell can commit.
+ */
+export async function assertWorkdirOutsideParentCheckout(workdir) {
+  if (typeof workdir !== 'string' || !workdir) {
+    return { ok: false, code: WORKSPACE_INSIDE_CHECKOUT, error: 'sandbox workspace path is missing' };
+  }
+  const parent = dirname(resolve(workdir));
+  const top = await execGit(mirrorGitCommand(parent, ['rev-parse', '--show-toplevel']));
+  if (top.exitCode !== 0) return { ok: true };
+  const checkout = top.output.trim().split('\n')[0];
+  if (!checkout) return { ok: true };
+  return assertWorkspaceOutsideCheckout(workdir, checkout);
+}
 
 /** A git-safe ref name, or null. */
 export function safeRef(v) {
@@ -173,6 +223,8 @@ export function cloneWorkspace(box) {
   const m = box.mirror;
   return exclusive(m, async () => {
     if (!m.auth) return { ok: false, branch: null, output: 'no repository to clone' };
+    const outside = await assertWorkdirOutsideParentCheckout(box.workdir);
+    if (!outside.ok) return { ok: false, branch: null, output: outside.error, code: outside.code };
     const head = safeRef(box.spec.repo.headBranch);
     const base = safeRef(box.spec.repo.baseBranch);
     await prepare(m);

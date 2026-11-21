@@ -41,7 +41,9 @@ export interface GitHubCoords {
 
 export type GitHubErrorCode =
   | 'unsupported'
+  /** @deprecated MK-09-W7 — 401/403 now classify as `provider_auth_failed`. Kept so existing readers still compile. */
   | 'unauthorized'
+  | 'provider_auth_failed'
   | 'not_found'
   | 'rate_limited'
   | 'provider_error';
@@ -64,7 +66,8 @@ export function githubHeaders(token: string, extra?: Record<string, string>): Re
 }
 
 function classify(status: number): GitHubErrorCode {
-  if (status === 401 || status === 403) return 'unauthorized';
+  // MK-09-W7: a revoked or expired credential is the typed auth outcome, not a raw provider error.
+  if (status === 401 || status === 403) return 'provider_auth_failed';
   if (status === 404) return 'not_found';
   if (status === 429) return 'rate_limited';
   return 'provider_error';

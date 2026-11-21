@@ -63,6 +63,7 @@ import {
 } from './orphanReasons';
 import { parseExecutor } from './cloudDispatch';
 import { QUEUED_DEADLINE_MS } from './staleExecutionReaper';
+import { isProviderAuthFailure, PROVIDER_AUTH_FAILED, PROVIDER_REAUTH_PROMPT } from './providerAuthFailure';
 import type { Db } from '../../infrastructure/database/connection';
 import { executions } from '../../infrastructure/database/schema';
 import { ExecutionStatus } from '../../domain/shared/types';
@@ -167,8 +168,11 @@ export function classifyActionsDispatch(args: {
     // no longer on the default branch — the dispatch could not have produced a
     // run either. Anything else (rate limit, 5xx, a network blip) is OUR problem,
     // not the tenant's: waiting costs minutes, failing costs their run.
-    if (args.listError.code === 'unauthorized' || args.listError.code === 'not_found') {
-      return { action: 'fail', reason: githubActionsUnreachableReason(args.listError.reason) };
+    if (isProviderAuthFailure(args.listError.code) || args.listError.code === 'not_found') {
+      const reason = isProviderAuthFailure(args.listError.code)
+        ? `${PROVIDER_AUTH_FAILED}: ${PROVIDER_REAUTH_PROMPT} (${args.listError.reason})`
+        : githubActionsUnreachableReason(args.listError.reason);
+      return { action: 'fail', reason };
     }
     return { action: 'wait', why: `transient GitHub error: ${args.listError.code}` };
   }

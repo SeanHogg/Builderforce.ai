@@ -54,6 +54,8 @@ export interface ForcedTurn {
   tools: BrainToolSpec[];
   toolChoice?: 'required';
   brief: ChatCompletionMessage;
+  /** A finish / record turn: its brief is the whole say, so no steer note rides along. */
+  finishing?: true;
 }
 
 /** Is `text`, in a run of `mode`, a request to CHANGE something — the only kind any

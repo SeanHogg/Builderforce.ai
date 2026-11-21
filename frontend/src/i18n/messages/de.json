@@ -13377,6 +13377,10 @@
       "your-full-stack-app-now-runs-in-your-browser-tab": {
         "title": "Ihre Full-Stack-App läuft jetzt in dem Browser-Tab, in dem Sie sie gebaut haben",
         "description": "Ein Frontend, eine API und eine Postgres-Datenbank brauchten früher einen Cloud-Container, bevor man sie zusammenarbeiten sah. Jetzt startet Run alle drei in Ihrem Browser-Tab — Node-, Python- und PHP-Dienste (FastAPI, Flask, Django, Laravel, Slim) mit Postgres, ohne Container, der gestartet oder bereitgestellt werden muss, und ohne Cloud-Rechenleistung — und das Brain liest ihre Logs, startet sie neu und erfasst ihre Vorschau wie bei einem Container."
+      },
+      "a-blank-preview-now-tells-you-why": {
+        "title": "Eine leere Vorschau sagt Ihnen jetzt, warum, und eine Laravel-API startet im Tab",
+        "description": "BuilderForce WebContainers 2026.11.9 meldet mit einem Aufruf, wofür das Laden einer Vorschau seine Zeit gebraucht hat und welchen Origin ihre Sicherheitsrichtlinie blockiert hat. Ein eigenes Paket-CDN kommt von selbst in die Richtlinie der Vorschau. Und ein Vite-Frontend, eine Laravel-API und Postgres starten jetzt gemeinsam im Browser-Tab, php artisan serve eingeschlossen."
       }
     }
   },

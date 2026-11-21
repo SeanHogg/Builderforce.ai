@@ -126,6 +126,35 @@ describe('specTicketCoverageGate', () => {
     expect(labels(failedListing.c)).toContain('finish.spec_tickets_unreadable');
   });
 
+  it('a filed ticket the listing already shows counts by its filed title/description AND its listed title', async () => {
+    const { run, c } = fakeRun(page([ticket('7100', 'Seed the verticals'), ticket('6926', 'P33-01 event lake', 'blocked')]));
+    c.trace.push({ ts: 't', category: 'tool', label: 'builtin_tasks_create', args: { title: 'Seed the verticals', description: 'Covers P25-09.' }, result: { id: 7100 } });
+    expect(await specTicketCoverageGate(run)(ctx())).toBeNull();
+  });
+
+  it('tells the model to lead each title with the item id, or copy a title-only item verbatim', async () => {
+    const block = (await specTicketCoverageGate(fakeRun(page([])).run)(ctx()))!;
+    expect(block).toContain('Start each ticket title with the item\'s id when the item has one (e.g. "P25-09: Slice D benchmark seeds for the other eight verticals")');
+    expect(block).toContain('copy the item title verbatim');
+    const titleOnly = fakeRun(page([]), { files: { 'docs/specs/measure.md': '- [ ] Wire the PreFetch probe' } });
+    const titleBlock = (await specTicketCoverageGate(titleOnly.run)(ctx()))!;
+    expect(titleBlock).toContain('- "Wire the PreFetch probe" (incomplete; docs/specs/measure.md:1)');
+    expect(titleBlock).not.toContain('wire-the-prefetch-probe');
+  });
+
+  it('reads the spec once per run, and again only after the run writes that path', async () => {
+    const { run, c, calls } = fakeRun(page([]));
+    const gate = specTicketCoverageGate(run);
+    const reads = () => calls.filter((x) => x.name === 'read_file').length;
+    await gate(ctx());
+    c.trace.push({ ts: 't', category: 'tool', label: 'edit_file', args: { path: 'src/other.ts', old_string: 'a', new_string: 'b' }, result: { ok: true } });
+    await gate(ctx('Edited something else.'));
+    expect(reads()).toBe(1);
+    c.trace.push({ ts: 't', category: 'tool', label: 'edit_file', args: { path: 'docs/specs/measure.md', old_string: 'a', new_string: 'b' }, result: { ok: true } });
+    await gate(ctx('Edited the spec.'));
+    expect(reads()).toBe(2);
+  });
+
   it('stands down for a chat-mode run, a sub-agent and a turn that asks the person', async () => {
     expect(await specTicketCoverageGate(fakeRun(page([]), { req: { chatMode: 'chat' } }).run)(ctx())).toBeNull();
     expect(await specTicketCoverageGate(fakeRun(page([]), { req: { lineage: {} as never } }).run)(ctx())).toBeNull();
@@ -135,14 +164,28 @@ describe('specTicketCoverageGate', () => {
 });
 
 describe('the gate\'s request reading', () => {
-  it('recognises the three verbatim requests and the common phrasings', () => {
-    expect(isSpecTicketingRequest('restructure [docs/specs/measure.md] to have a section that outlines the features and tasks')).toBe(true);
-    expect(isSpecTicketingRequest('update that section with the current status (Incomplete or Complete)')).toBe(true);
-    expect(isSpecTicketingRequest('For all the items that are incomplete, create associated tickets to this chat')).toBe(true);
-    expect(isSpecTicketingRequest('create tickets for every row')).toBe(true);
-    expect(isSpecTicketingRequest('list the open items')).toBe(true);
-    expect(isSpecTicketingRequest('ticket the incomplete items')).toBe(true);
+  it('needs BOTH ticketing language and spec language (or a named .md spec)', () => {
+    expect(isSpecTicketingRequest(REQUEST)).toBe(true);
+    expect(isSpecTicketingRequest('For all the items in the spec that are incomplete, create associated tickets to this chat')).toBe(true);
+    expect(isSpecTicketingRequest('create tickets for every row of docs/specs/measure.md')).toBe(true);
+    expect(isSpecTicketingRequest('file one task per open item of the PRD')).toBe(true);
+    expect(isSpecTicketingRequest('raise an issue for each gap in the gap register')).toBe(true);
+    expect(isSpecTicketingRequest('open a separate ticket for each roadmap item')).toBe(true);
+    expect(isSpecTicketingRequest('log tasks for the requirements doc')).toBe(true);
+    // Ticketing without a spec, a spec without ticketing, and the bare "open items" phrasings.
+    expect(isSpecTicketingRequest('create tickets for every row')).toBe(false);
+    expect(isSpecTicketingRequest('restructure [docs/specs/measure.md] to have a section that outlines the features and tasks')).toBe(false);
+    expect(isSpecTicketingRequest('list the open items of the spec')).toBe(false);
+    expect(isSpecTicketingRequest('ticket the incomplete items')).toBe(false);
+    expect(isSpecTicketingRequest('fix the open issues in the roadmap page')).toBe(false);
     expect(isSpecTicketingRequest('fix the login redirect loop')).toBe(false);
+  });
+
+  it('reads the run\'s read_file trace only when the request speaks of a spec, and only spec-like paths', () => {
+    const trace: BrainTraceEvent[] = ['docs/inspect.md', 'notes/todo.md', 'docs/specs/measure.md', 'plans/PRD-25.md', 'ROADMAP.md']
+      .map((path) => ({ ts: 't', category: 'tool', label: 'read_file', args: { path }, result: { ok: true } }));
+    expect(specPathsFor('Create tickets for every open row of the spec.', trace)).toEqual(['ROADMAP.md', 'plans/PRD-25.md', 'docs/specs/measure.md']);
+    expect(specPathsFor('Create tickets for every open row in any docs/ file.', trace)).toEqual([]);
   });
 
   it('takes the specs the request names, never a README', () => {
