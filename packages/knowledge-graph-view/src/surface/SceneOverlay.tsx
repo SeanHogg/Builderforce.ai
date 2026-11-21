@@ -67,8 +67,6 @@ export interface SceneOverlayProps {
     tools?: ReactNode;
     /** The panel show/hide toggles, in the camera bar's right cluster. */
     panelToggles?: ReactNode;
-    /** The Legend button, beside the panel toggles. */
-    legend?: ReactNode;
     /** The commit scrubber, at the trailing end of the question row. */
     time?: ReactNode;
 }
@@ -113,7 +111,7 @@ export function SceneOverlay(p: SceneOverlayProps) {
             <div ref={controls} data-testid="kg-scene-controls" style={{ display: 'grid', gap: narrow ? 6 : 0, minWidth: 0 }}>
             <CameraBar
                 labels={labels} cameras={p.cameras} mode={p.mode} onMode={p.onMode} zoom={p.zoom} outTo={p.outTo} onOut={p.onOut}
-                tools={p.tools} stacked={narrow} panelToggles={p.panelToggles} legend={p.legend}
+                tools={p.tools} stacked={narrow} panelToggles={p.panelToggles}
             />
             <div style={{ padding: '0 12px 8px', pointerEvents: 'none', minWidth: 0, display: 'flex', gap: 8, alignItems: 'center', flexWrap: narrow ? 'nowrap' : 'wrap' }}>
                 <div style={{ pointerEvents: 'auto', width: narrow ? '100%' : 'fit-content', maxWidth: '100%' }}>
