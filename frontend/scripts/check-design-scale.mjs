@@ -117,8 +117,13 @@ const BASELINE = {
    * 164 -> 162 (2026-09-16) — TalentDetailClient hired/invited/booked banners named
    * `--success-bg` / `--success-border` / `--success-text` and the info family instead
    * of mixing `rgba(34,197,94,*)` / `rgba(59,130,246,*)` by hand.
+   *
+   * 154 -> 151 (2026-11-21) — the floor following the work down: `BuilderWorkspace` (4),
+   * `TalentDetailClient`, `ContributorsView` and `AgentExecutionControl` (2 each) and a
+   * handful of single sites stopped mixing colours by hand. Slack had turned the Release
+   * run red.
    */
-  themeLockedColours: 154,
+  themeLockedColours: 151,
   /**
    * ONE, and it is `UnreadBadge`'s `borderRadius: size` — a live expression, not a
    * literal, so there is no scale step to name. Came down from 6 when the résumé
@@ -313,8 +318,14 @@ const BASELINE = {
    * `MergeGrantStatus` 1) had taken the tree to 3240 and turned the Release run red.
    * All nineteen name roles now (10 / 0.72rem = eyebrow, 12 / 13 / 0.75–0.82rem =
    * small); the net is lower because other surfaces shrank too.
+   *
+   * 3221 → 3209 (2026-11-21): slack, not a raise — the collection/descriptor splits moved
+   * literals out of `BuilderWorkspace`, `personas/page`, `AgentHostSkillsContent`,
+   * `LoginPageClient`, `RegisterPageClient` and `EmpMetricsView` into their new modules
+   * (`PersonasLists`, `EmpPerformersPanel`, `auditTrailCollection`, …), net twelve fewer.
+   * Slack had turned the Release run red.
    */
-  offScaleFontSizes: 3221,
+  offScaleFontSizes: 3209,
   /**
    * Page-column literals on the PUBLIC surface — a `max-width` (or `width`)
    * typed as a number between 900px and 1500px on a marketing file.

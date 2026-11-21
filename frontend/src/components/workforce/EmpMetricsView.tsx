@@ -58,12 +58,12 @@ function PanelBody<T>({ data, err, children }: { data: T | null; err: string | n
 }
 
 /** One fetch per panel; `deps` re-run it (the window). */
-function useEmpFetch<T>(fetch: () => Promise<T>, deps: unknown[]): { data: T | null; err: string | null } {
+function useEmpFetch<T>(load: () => Promise<T>, deps: unknown[]): { data: T | null; err: string | null } {
   const errorMessage = useErrorMessage();
   const [data, setData] = useState<T | null>(null);
   const [err, setErr] = useState<string | null>(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { fetch().then(setData).catch((e: unknown) => setErr(errorMessage(e))); }, [...deps, errorMessage]);
+  useEffect(() => { load().then(setData).catch((e: unknown) => setErr(errorMessage(e))); }, [...deps, errorMessage]);
   return { data, err };
 }
 

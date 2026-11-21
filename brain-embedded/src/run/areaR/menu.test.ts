@@ -33,7 +33,10 @@ describe('R7: pins follow what the run called', () => {
     expect(run.wire[1]!.tools).toContain('tool_070');
   });
 
-  it('a tool an EARLIER run called pins nothing in the next one', async () => {
+  // Rule changed on purpose 2026-11-21 (operator, agent-execution-efficiency review): a tool the conversation already
+  // called stays advertised in the next run (`runStore/conversationPins.ts`, capped at CONVERSATION_PIN_LIMIT and by the
+  // role cap). The old rule dropped it, and a run that named the tool it had used a turn earlier called an unadvertised tool.
+  it('a tool an EARLIER run called stays pinned in the next one', async () => {
     const s: Scenario = {
       key: 9103,
       script: () => [invoke('tool_070'), say('Done.'), say('Again.')],
@@ -42,7 +45,7 @@ describe('R7: pins follow what the run called', () => {
     };
     const run = await runOn(s);
     const second = (cap: Capture) => cap.wire[cap.firstRunCalls!]!.tools;
-    expect(second(run)).not.toContain('tool_070');
+    expect(second(run)).toContain('tool_070');
   });
 });
 

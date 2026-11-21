@@ -9,18 +9,31 @@
  * FinancePanelProvider + FinancePanelBrainBridge), so there is exactly one place
  * that knows how to show a finance insight.
  *
- * Self-contained on purpose: it depends only on the stable lens components and
- * the shared SlideOutPanel primitive, NOT on the wider insights-registry that is
- * mid-consolidation — so the finance hub stays correct regardless of that churn.
+ * Self-contained on purpose: it depends only on the lens components (loaded on
+ * demand, below) and the shared SlideOutPanel primitive, NOT on the wider
+ * insights-registry — so the finance hub stays correct regardless of that churn.
  */
 
+import dynamic from 'next/dynamic';
 import type { ReactNode } from 'react';
 import type { Capability } from '@/lib/rbac';
-import { FinanceLens } from '@/components/insights/FinanceLens';
-import { AllocationLens } from '@/components/insights/AllocationLens';
-import { ForecastPanel } from '@/components/insights/ForecastPanel';
-import { RdReconciliationLens } from '@/components/insights/RdReconciliationLens';
-import { FinopsLens } from './FinopsLens';
+
+/**
+ * The lenses load ON DEMAND — the same reason, and the same cycle, as the AI and
+ * Delivery hubs' registries. `FinanceLens` embeds `FinanceDashboardView`, whose
+ * `WidgetCard` drills through `useComponentDrill` → `FinancePanelProvider` → THIS
+ * registry. Held statically that is an initialization loop ("Cannot read
+ * properties of undefined (reading 'map')" on `FINANCE_PANELS`), and the root
+ * layout mounts `FinancePanelProvider` on every page, so the widget registry
+ * behind the dashboard rode into every first paint. An async `dynamic()` edge
+ * takes no part in module-evaluation order, and a drawer-only lens has no
+ * business in the shared chunk of a page that never opens one.
+ */
+const FinanceLens = dynamic(() => import('@/components/insights/FinanceLens').then((module) => module.FinanceLens), { ssr: false });
+const AllocationLens = dynamic(() => import('@/components/insights/AllocationLens').then((module) => module.AllocationLens), { ssr: false });
+const ForecastPanel = dynamic(() => import('@/components/insights/ForecastPanel').then((module) => module.ForecastPanel), { ssr: false });
+const RdReconciliationLens = dynamic(() => import('@/components/insights/RdReconciliationLens').then((module) => module.RdReconciliationLens), { ssr: false });
+const FinopsLens = dynamic(() => import('./FinopsLens').then((module) => module.FinopsLens), { ssr: false });
 
 /** Stable, gateway-safe ids (also the `?drill=` deep-link + Brain enum values). */
 export type FinancePanelId = 'finance' | 'allocation' | 'devfinops' | 'forecast' | 'rdReconciliation';

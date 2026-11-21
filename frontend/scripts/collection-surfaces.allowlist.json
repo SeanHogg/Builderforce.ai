@@ -43,13 +43,7 @@
       "table": 1,
       "data-table-styles": 1
     },
-    "app/features/page.tsx": {
-      "table": 1
-    },
     "app/knowledge/KnowledgeTraining.tsx": {
-      "table": 1
-    },
-    "app/legal/subprocessors/page.tsx": {
       "table": 1
     },
     "app/marketplace/MarketplacePageClient.tsx": {
@@ -60,12 +54,6 @@
     "app/marketplace/ModelsExplorer.tsx": {
       "table": 2,
       "data-table-styles": 1
-    },
-    "app/pricing/PricingPageClient.tsx": {
-      "table": 1
-    },
-    "app/product/page.tsx": {
-      "table": 1
     },
     "app/projects/rfp/[id]/RfpDetailClient.tsx": {
       "table": 1
@@ -179,15 +167,6 @@
       "table": 1,
       "data-table-class": 1
     },
-    "components/agent-ops/CoordinationPanel.tsx": {
-      "table": 1
-    },
-    "components/agent-ops/MemoryPanel.tsx": {
-      "table": 1
-    },
-    "components/agent-ops/RehearsalPanel.tsx": {
-      "table": 2
-    },
     "components/agent/RunCostBreakdownView.tsx": {
       "table": 1,
       "data-table-styles": 1
@@ -246,17 +225,6 @@
       "table": 1,
       "data-table-styles": 1
     },
-    "components/humanRequests/HumanRequestsView.tsx": {
-      "table": 1,
-      "data-table-class": 1,
-      "view-toggle": 1
-    },
-    "components/integrations/MigrationWizard.tsx": {
-      "table": 1
-    },
-    "components/invoice/PublicInvoice.tsx": {
-      "table": 1
-    },
     "components/kernel/EntityBrowser.tsx": {
       "table": 1
     },
@@ -267,17 +235,7 @@
     "components/manager/ManagerContent.tsx": {
       "data-table-styles": 1
     },
-    "components/marketing/CompetitorMatrix.tsx": {
-      "table": 1,
-      "data-table-class": 1
-    },
-    "components/marketplace/landing/landingSections.tsx": {
-      "table": 1
-    },
     "components/ModelRoutingAnalytics.tsx": {
-      "table": 1
-    },
-    "components/PermissionDebuggerPanel.tsx": {
       "table": 1
     },
     "components/pm/EpicTreeView.tsx": {
@@ -303,9 +261,6 @@
       "table": 1,
       "data-table-styles": 1
     },
-    "components/prompts/PromptVersionDiff.tsx": {
-      "table": 2
-    },
     "components/qa/QaPrimitives.tsx": {
       "table": 1
     },
@@ -325,9 +280,6 @@
     "components/replay/RecordingsTable.tsx": {
       "table": 1,
       "data-table-class": 1
-    },
-    "components/salary/SalaryTables.tsx": {
-      "table": 2
     },
     "components/sales/SalesHubClient.tsx": {
       "table": 2
@@ -359,10 +311,6 @@
     },
     "components/tax/TaxReportPanel.tsx": {
       "table": 1
-    },
-    "components/teams/TeamPeopleView.tsx": {
-      "table": 1,
-      "data-table-styles": 1
     },
     "components/TenantApiKeyUsageRow.tsx": {
       "table": 1
