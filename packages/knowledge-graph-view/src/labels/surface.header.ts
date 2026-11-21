@@ -8,6 +8,8 @@ export interface HeaderLabels {
     panelsLabel: string;
     /** The three show/hide toggles of the side panels (lines, path strip, act panel). */
     panelToggles: Record<'label' | 'showLeft' | 'hideLeft' | 'showBottom' | 'hideBottom' | 'showRight' | 'hideRight', string>;
+    /** The dock-edge chevron of each side panel: its collapse / expand names. */
+    dockEdge: Record<'expandLeft' | 'collapseLeft' | 'expandBottom' | 'collapseBottom' | 'expandRight' | 'collapseRight', string>;
     overlaysButton: string;
     overlaysTitle: string;
     /** The overlay button's name: `{preset}`. */
@@ -61,6 +63,10 @@ export const HEADER_DEFAULTS: HeaderLabels = {
     panelToggles: {
         label: 'Panels shown', showLeft: 'Show lines panel', hideLeft: 'Hide lines panel', showBottom: 'Show path strip', hideBottom: 'Hide path strip',
         showRight: 'Show act panel', hideRight: 'Hide act panel',
+    },
+    dockEdge: {
+        expandLeft: 'Expand lines panel', collapseLeft: 'Collapse lines panel', expandBottom: 'Expand path strip', collapseBottom: 'Collapse path strip',
+        expandRight: 'Expand act panel', collapseRight: 'Collapse act panel',
     },
     overlaysButton: 'Overlays',
     overlaysTitle: 'What the map shows',
