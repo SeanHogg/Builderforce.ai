@@ -8,7 +8,6 @@ import { counted } from './plural';
 import { SCENE_TOP_VAR, SceneOverlay, type SceneOverlayProps } from './SceneOverlay';
 import { syncGap } from './drawers/syncModel';
 import { lenses, model } from './testFixtures';
-import { useZoomHost, ZoomProvider, type ZoomApi } from './zoom';
 
 function overlayProps(over: Partial<SceneOverlayProps> = {}): SceneOverlayProps {
     return {
