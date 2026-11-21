@@ -420,7 +420,11 @@ async function reapDroppedHandoffs(db: Db, executionRepo: ExecutionRepository, n
       sql`coalesce(${executions.updatedAt}, ${executions.createdAt}) < ${cutoff}`,
     ))
     .limit(REAP_BATCH_LIMIT)
-    .catch(() => [] as { id: number; payload: string | null; status: string; updated_at: Date | null }[]);
+    .catch((error): { id: number; payload: string | null; status: string; updated_at: Date | null }[] => {
+      // The drop sweep is one pass of the reaper: a failed read is reported and the other passes still run.
+      reportCaughtError(error, { source: 'application/runtime/staleExecutionReaper.ts', operation: 'reapDroppedHandoffs' });
+      return [];
+    });
   const ids: number[] = [];
   for (const row of rows) {
     const updatedAtMs = row.updated_at instanceof Date ? row.updated_at.getTime() : row.updated_at ? Date.parse(String(row.updated_at)) : null;
