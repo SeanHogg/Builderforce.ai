@@ -41,6 +41,9 @@ export const zoomButton: CSSProperties = {
     border: `1px solid ${cssVar('border')}`, background: cssVar('panel'), color: cssVar('text'), pointerEvents: 'auto',
 };
 
+/** The square icon-button look shared by the canvas bar's tool triggers (Panels menu, overlays): one CONTROL-sized glyph button. */
+export const iconButtonStyle: CSSProperties = { ...zoomButton, width: CONTROL, padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flex: 'none' };
+
 function ZoomButtons({ labels, zoom }: { labels: KnowledgeGraphLabels; zoom: ZoomApi | null | undefined }) {
     const off = !zoom;
     const style: CSSProperties = { ...zoomButton, ...(off ? { opacity: 0.5, cursor: 'default' } : null) };
