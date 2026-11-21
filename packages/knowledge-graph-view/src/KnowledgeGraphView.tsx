@@ -288,6 +288,7 @@ export function KnowledgeGraphView({
                             <PathStrip
                                 path={surface.path} step={surface.step} labels={labels} onStep={surface.setStep} pathTitle={chrome.pathTitle}
                                 stations={surface.stations.byId} routeLabels={routeLabels} onOpenPanel={setPanel} onEnlarge={() => setMode('sequence')} narrow={layout.phone} transitions={transitions}
+                                trail={surface.drill.stack} systemName={titleOf(graph.scope.rootId)} onClimb={surface.drill.climb}
                             />
                         )}
                     </div>
