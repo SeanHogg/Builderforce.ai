@@ -10,8 +10,6 @@
  * One module so the send path, the seed builder and the run share ONE spelling.
  */
 
-import { errorMessage } from './pageEngines/types';
-
 /** The metadata key that marks a persisted user row as injected, not the person's words. */
 export const INJECTED_TURN_META_KEY = 'injected';
 
@@ -27,19 +25,23 @@ export function injectedTurnIdsOf(history: ReadonlyArray<{ id: number; role: str
 
 /**
  * Is this persisted row's metadata (its JSON string, or the parsed object) marked injected? An object is read as is; a
- * string is parsed only when it could carry the mark at all. Unparseable metadata is reported and read as NOT injected —
+ * string is parsed only when it could carry the mark at all. Unparseable metadata reads as NOT injected —
  * the person's own turn, the conservative side (its words may hold, never lift, the publish hold).
  */
 export function isInjectedTurnMetadata(metadata: unknown): boolean {
   let meta = metadata;
   if (typeof meta === 'string') {
     if (!meta.includes(INJECTED_TURN_META_KEY)) return false;
-    try {
-      meta = JSON.parse(meta) as unknown;
-    } catch (e) {
-      console.warn(`BuilderForce injected turn: row metadata is not JSON (${errorMessage(e)}) — read as the person's own turn`);
-      return false;
-    }
+    meta = parseMetadataJson(meta);
   }
   return typeof meta === 'object' && meta !== null && (meta as Record<string, unknown>)[INJECTED_TURN_META_KEY] === true;
+}
+
+/** Row metadata as a value, or null when it isn't JSON — a value, not a failure: such a row reads as the person's own turn. */
+function parseMetadataJson(text: string): unknown {
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return null;
+  }
 }
