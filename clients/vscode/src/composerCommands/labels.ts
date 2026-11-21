@@ -46,6 +46,8 @@ export interface ComposerCommandText extends ComposerCommandLabels {
   kitOverwrite: string;
   kitDeclined(folder: string): string;
   kitWritten(kit: string, fileCount: number, folder: string): string;
+  /** The folder holds a legacy root manifest `file`: the kit's `canonical` supersedes it (delete it, or cancel and move it). */
+  kitSupersedesLegacy(file: string, canonical: string): string;
   services(names: readonly string[]): string;
   resources(names: readonly string[]): string;
   launchHint: string;
@@ -157,6 +159,8 @@ export function composerCommandText(): ComposerCommandText {
     kitOverwrite: t("Overwrite and write"),
     kitDeclined: (folder) => t("The starter kit was not written: writing into {0} was not approved.", folder),
     kitWritten: (kit, fileCount, folder) => t("Wrote the {0} starter kit: {1} files into {2}.", kit, fileCount, folder),
+    kitSupersedesLegacy: (file, canonical) =>
+      t("{0} at the folder root will no longer be read: the starter kit's {1} supersedes it. Delete it once the kit is written, or cancel and run /manifest move to keep it as the manifest.", file, canonical),
     services: (names) => t("Services: {0}", names.length > 0 ? names.join(", ") : t("none")),
     resources: (names) => t("Resources: {0}", names.length > 0 ? names.join(", ") : t("none")),
     launchHint: t("Type /launch to run it in your browser."),

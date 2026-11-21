@@ -19,8 +19,12 @@
  * detection pipeline.
  */
 
-/** The canonical `$schema` URL of a v1 manifest. */
-export const MANIFEST_SCHEMA_URL = 'https://builderforce.ai/schema/app.v1.json';
+/*
+ * No `$schema` is written. The runtime's schema requires only `version`, and a document's own
+ * `$schema` wins over an editor's association: while its URL did not resolve, every written
+ * manifest showed a schema-load problem. The VS Code extension associates the schema by path
+ * (`contributes.jsonValidation`), from the runtime's own `APP_MANIFEST_SCHEMA_V1`.
+ */
 
 /*
  * WHERE the manifest lives (PRD 49): `.builderforce/builderforce.json`. A root
@@ -137,7 +141,6 @@ export interface EmittedIngressRoute {
 }
 
 export interface EmittedManifest {
-  $schema: string;
   version: 1;
   name?: string;
   resources?: Record<string, EmittedResource>;

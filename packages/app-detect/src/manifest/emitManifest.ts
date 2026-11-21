@@ -33,7 +33,6 @@ import { detectionNote, type DetectionNote } from '../notes';
 import type { ComposeResource, IngressEvidence } from '../types';
 import {
   BACKEND_INGRESS_PATH,
-  MANIFEST_SCHEMA_URL,
   type EmittedIngressRoute,
   type EmittedJob,
   type EmittedManifest,
@@ -345,7 +344,6 @@ export function emitManifest(blueprint: AppBlueprint, extras: EmitManifestExtras
   const primary = blueprint.services.find((service) => service.isPrimary) ?? blueprint.services[0];
   const name = extras.name ?? (primary ? ids.get(primary.id) : undefined);
   const manifest: EmittedManifest = {
-    $schema: MANIFEST_SCHEMA_URL,
     version: 1,
     ...(name ? { name } : {}),
     ...(Object.keys(resources).length > 0 ? { resources } : {}),

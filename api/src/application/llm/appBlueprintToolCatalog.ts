@@ -12,6 +12,7 @@
  * override lives in the repo, versioned with the code.
  */
 import { MANIFEST_PATH } from '@builderforce/app-detect';
+import { OVERRIDE_HINT } from './blueprintOverrideHint';
 import { getLatestBlueprint } from '../blueprint/blueprintDetection';
 import { detectBlueprintForProject } from '../blueprint/detectBlueprintForProject';
 import { type AppBlueprint } from '@builderforce/creation-canvas-contract';
@@ -31,11 +32,6 @@ function blueprintError(message: string, details?: Json): Json {
   return { ok: false as const, error: message, ...details };
 }
 
-/** How an agent overrides detection — the one designed path, quoted by both tools. */
-const OVERRIDE_HINT =
-  `To override detection, write ${MANIFEST_PATH} in the repo, not a root builderforce.json (a partial AppBlueprint, ` +
-  'e.g. { "services": [...] } or { "database": {...} }) with write_file, then run ' +
-  'app_blueprint.detect again.';
 
 /**
  * The one shape both tools reply with, so `detect` and `get` cannot drift. The contract

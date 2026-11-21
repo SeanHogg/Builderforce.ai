@@ -76,6 +76,23 @@ describe("/starter-kit", () => {
     expect(port.files.get(at(".vscode/extensions.json"))).toBe("mine");
   });
 
+  it.each(["builderforce.json", "bfwc.app.json"])("names a legacy root %s in the approval and the reply: the kit's manifest supersedes it", async (legacy) => {
+    const port = fakeWorkspacePort([app], { [at(legacy)]: "{\"old\":true}" });
+    const text = composerCommandText();
+    const reply = await run(port);
+    const superseded = text.kitSupersedesLegacy(legacy, MANIFEST);
+    expect(port.asked).toHaveLength(1);
+    expect(port.asked[0]!.message).toBe(`${text.kitNonEmpty("app", kitFiles.length)} ${superseded}`);
+    expect(port.files.get(at(legacy))).toBe("{\"old\":true}");
+    expect(reply.kind === "text" ? reply.lines : []).toContain(superseded);
+  });
+
+  it("says nothing about a legacy manifest when the folder has none", async () => {
+    const port = fakeWorkspacePort([app], { [at("notes.txt")]: "mine" });
+    await run(port);
+    expect(port.asked[0]!.message).toBe(composerCommandText().kitNonEmpty("app", kitFiles.length));
+  });
+
   it("writes nothing when the approval is declined", async () => {
     const port = fakeWorkspacePort([app], { [at("notes.txt")]: "mine" });
     port.approve = false;

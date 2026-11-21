@@ -11,6 +11,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { computeBuildId } from "./buildId.mjs";
+import { manifestEditorSchema } from "./scripts/manifest-editor-schema.mjs";
 import { pinnedInstallResolve, sourcePackageAliasMap, sourcePackageRoots } from "../../scripts/sourcePackages.mjs";
 
 const watch = process.argv.includes("--watch");
@@ -222,13 +223,14 @@ async function copyBfiWasm() {
 /**
  * The app manifest's JSON schema for VS Code's JSON validation (`contributes.jsonValidation` →
  * `./out/schemas/app.v1.schema.json`, matching `.builderforce/builderforce.json` and the legacy
- * root files): written from the runtime's own `APP_MANIFEST_SCHEMA_V1`, never a copy kept here.
+ * root files): built from the runtime's own `APP_MANIFEST_SCHEMA_V1` (`scripts/manifest-editor-schema.mjs`
+ * says what it validates), never a copy kept here.
  */
 async function writeManifestSchema() {
   const { APP_MANIFEST_SCHEMA_V1 } = await import("@seanhogg/builderforce-webcontainers-core/manifest");
   const target = path.join("out", "schemas");
   fs.mkdirSync(target, { recursive: true });
-  fs.writeFileSync(path.join(target, "app.v1.schema.json"), `${JSON.stringify(APP_MANIFEST_SCHEMA_V1, null, 2)}\n`);
+  fs.writeFileSync(path.join(target, "app.v1.schema.json"), `${JSON.stringify(manifestEditorSchema(APP_MANIFEST_SCHEMA_V1), null, 2)}\n`);
 }
 
 /**

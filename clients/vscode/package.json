@@ -2,7 +2,7 @@
   "name": "builderforce-ai",
   "displayName": "BuilderForce.ai",
   "description": "%extension.description%",
-  "version": "2026.10.203",
+  "version": "2026.10.204",
   "publisher": "builderforce",
   "license": "MIT",
   "author": "Sean Hogg",
@@ -64,8 +64,14 @@
       {
         "fileMatch": [
           "**/.builderforce/builderforce.json",
-          "**/builderforce.json",
-          "**/bfwc.app.json"
+          "builderforce.json",
+          "bfwc.app.json",
+          "!**/Users/*/.builderforce/builderforce.json",
+          "!**/home/*/.builderforce/builderforce.json",
+          "!**/root/.builderforce/builderforce.json",
+          "!**/.builderforce/*/builderforce.json",
+          "!**/.builderforce-*/builderforce.json",
+          "!**/node_modules/**"
         ],
         "url": "./out/schemas/app.v1.schema.json"
       }
@@ -1345,8 +1351,8 @@
     "@seanhogg/builderforce-memory-mcp": "^2026.10.67",
     "@seanhogg/builderforce-studio": "link:../../studio",
     "@seanhogg/builderforce-voice": "link:../../voice",
-    "@seanhogg/builderforce-webcontainers": "^2026.11.9",
-    "@seanhogg/builderforce-webcontainers-core": "^2026.11.9",
+    "@seanhogg/builderforce-webcontainers": "^2026.11.11",
+    "@seanhogg/builderforce-webcontainers-core": "^2026.11.11",
     "@types/mocha": "^10.0.10",
     "@types/node": "^20.14.0",
     "@types/react": "^19.3.0",

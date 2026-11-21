@@ -9,7 +9,7 @@ import { noteMessages } from '../notes';
 import type { ComposeResource, IngressEvidence } from '../types';
 import { emitManifest } from './emitManifest';
 import { manifestToBlueprintOverrides } from './manifestToBlueprintOverrides';
-import { MANIFEST_SCHEMA_URL, type ManifestInput } from './manifestShape';
+import type { ManifestInput } from './manifestShape';
 import { runtimeRoot, safeId } from './serviceRuntime';
 
 function service(overrides: Partial<AppService> & Pick<AppService, 'id' | 'kind'>): AppService {
@@ -70,11 +70,12 @@ const PYTHON_AND_PHP = blueprint({
 });
 
 describe('emitManifest — structure', () => {
-  it('writes a v1 manifest: schema, version, keyed services on their runtimes, ports, the local environment', () => {
+  it('writes a v1 manifest: version, keyed services on their runtimes, ports, the local environment — and no $schema', () => {
     const { manifest, text } = emitManifest(CANVAS_APP);
     // No ingress: the blueprint alone is no evidence that the backend serves under /api (see "emitManifest — ingress").
-    expect(Object.keys(manifest)).toEqual(['$schema', 'version', 'name', 'resources', 'services', 'environments']);
-    expect(manifest.$schema).toBe(MANIFEST_SCHEMA_URL);
+    // No `$schema`: a document's own `$schema` wins over the editor's association (manifestShape.ts).
+    expect(Object.keys(manifest)).toEqual(['version', 'name', 'resources', 'services', 'environments']);
+    expect(text).not.toContain('$schema');
     expect(manifest.version).toBe(1);
     expect(manifest.environments).toEqual({ local: { target: 'browser', tier: 'non-production', debug: true } });
     expect(manifest.resources).toEqual({ db: { type: 'postgres', persistent: true } });

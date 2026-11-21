@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { MANIFEST_SCHEMA_URL } from '@builderforce/app-detect/manifest';
 import { composeKit, composeParts, resolveKit } from './compose';
 import { KIT_PARTS, NAMED_KITS, listKitOptions } from './registry';
 import type { KitPart } from './types';
@@ -16,7 +15,8 @@ describe('composeKit — the W11 kit matrix (steps 1–2 inputs)', () => {
         expect(kit.issues).toEqual([]);
 
         const { manifest } = kit;
-        expect(manifest.$schema).toBe(MANIFEST_SCHEMA_URL);
+        // No `$schema`: it would win over the editor's schema association (app-detect manifestShape.ts).
+        expect(kit.manifestText).not.toContain('$schema');
         expect(manifest.version).toBe(1);
         expect(manifest.services.web).toMatchObject({ root: '/web', role: 'frontend', port: 5173 });
         expect(manifest.services.web!.dependsOn).toContain('api');

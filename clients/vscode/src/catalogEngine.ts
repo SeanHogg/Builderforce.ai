@@ -4,11 +4,11 @@
  */
 import { formatLocalModelRef, LOCAL_MODEL_CATALOG, localCatalogModel, localEngineFor, ONNX_BONSAI_CATALOG } from "@builderforce/local-inference";
 
-/** ONNX rows are held out of the runnable catalog (MK-49-ONNX) but still route to their engine. */
-const ROUTABLE_CATALOG = [...LOCAL_MODEL_CATALOG, ...ONNX_BONSAI_CATALOG];
-
 export function routeCatalogEngine(ref: string): "bfi" | "onnx" | null {
-  const row = localCatalogModel(ref) ?? ROUTABLE_CATALOG.find((entry) => entry.model === ref || entry.ref === ref);
+  // ONNX rows are held out of the runnable catalog (MK-49-ONNX) but still route to their engine. Read at call time, so a
+  // module that mocks the package without the catalogs can still import this one.
+  const matches = (entry: { model: string; ref: string }) => entry.model === ref || entry.ref === ref;
+  const row = localCatalogModel(ref) ?? LOCAL_MODEL_CATALOG.find(matches) ?? ONNX_BONSAI_CATALOG.find(matches);
   if (!row?.format) return null;
   const engine = localEngineFor(row);
   return engine === "bfi" || engine === "onnx" ? engine : null;
