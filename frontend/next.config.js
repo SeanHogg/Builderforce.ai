@@ -84,7 +84,7 @@ const knowledgeWorkerFactoryServerAlias = {
 };
 
 /**
- * Server AND edge only: ONE module per physical package directory.
+ * Every compilation (client, server AND edge): ONE module per physical package directory.
  *
  * `resolve.symlinks = false` (see the webpack hook below) keys every module by the path
  * it was REACHED through, not the file it is. A linked package that is also a dependency
@@ -101,6 +101,17 @@ const knowledgeWorkerFactoryServerAlias = {
  * the frontend's path. Only identical real directories are merged — same files, same
  * version — so no module changes what it runs; a package installed as a DIFFERENT copy
  * (a separate pnpm store, another version) keeps its own path and is left alone.
+ *
+ * It MUST run in the client compilation too. The RSC client-reference manifest is keyed
+ * by the module paths the SERVER resolved, and the client compiler bundles those exact
+ * paths as the client entries. Registered server-only (2026-11-21), the server re-keyed
+ * `.pnpm/next@…/node_modules/next` to `frontend/node_modules/next`, so the browser got
+ * `layout-router` from the re-keyed path and the app bootstrap from the original one:
+ * TWO `app-router-context` modules, the root `LayoutRouterContext` provided by one and
+ * read from the other, and every page crashed with "invariant expected layout router to
+ * be mounted". Server and client must key modules identically; the browser bundle now
+ * gets the same dedupe. `scripts/check-client-router-context.mjs` fails the build if
+ * the browser bundle ever carries two copies again.
  */
 class CanonicalPackagePathsPlugin {
   constructor(root) {
@@ -364,8 +375,10 @@ const nextConfig = {
         test: /[\\/]src[\\/]i18n[\\/]messages[\\/]en\.json$/,
         layer: 'shared',
       });
-      config.plugins.push(new CanonicalPackagePathsPlugin(__dirname));
     }
+    // EVERY compilation — client included. See the class comment for why it may never
+    // be server-only again.
+    config.plugins.push(new CanonicalPackagePathsPlugin(__dirname));
     // Silence unactionable "Critical dependency" warnings emitted from inside
     // third-party deps we don't control: @huggingface/transformers uses a
     // dynamic `require(expr)` and reads `import.meta` directly, and

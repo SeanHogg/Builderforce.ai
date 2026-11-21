@@ -210,13 +210,24 @@ export function createWorkspace(workdir) {
   return { handle };
 }
 
-/** Serve a workspace over newline-delimited JSON: one request per line in, one reply per line out. */
+/**
+ * Serve a workspace over newline-delimited JSON: one request per line in, one reply per line out.
+ *
+ * Requests run ONE AT A TIME, in arrival order. A caller pipelines `init` then `write` without
+ * waiting for the first reply; handled concurrently, the write raced the init that creates the
+ * working tree and failed whenever it won. (`handle` never rejects: every op error is a reply.)
+ */
 export function serveWorkspace(workspace, input, output, onClose = () => {}) {
   const lines = createInterface({ input });
+  let queue = Promise.resolve();
   lines.on('line', (line) => {
     let req;
     try { req = JSON.parse(line); } catch (e) { console.error(`[workspace] unparseable request: ${e.message}`); return; }
-    void workspace.handle(req).then((reply) => output.write(`${JSON.stringify({ ...reply, id: req.id })}\n`));
+    queue = queue
+      .then(() => workspace.handle(req))
+      .then((reply) => { output.write(`${JSON.stringify({ ...reply, id: req.id })}\n`); })
+      // A failed reply write is reported, and the queue stays alive for the next request.
+      .catch((e) => { console.error(`[workspace] reply to request ${req.id} failed: ${e instanceof Error ? e.message : String(e)}`); });
   });
   lines.on('close', onClose);
 }
