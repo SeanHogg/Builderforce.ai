@@ -383,46 +383,33 @@ describe("local-first journal transaction", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it("recovers a corrupt snapshot to an empty store after preserving the file, and does not only throw", async () => {
+  it("fails closed on a corrupt snapshot: preserves a .corrupt- copy, keeps the original, and never opens an empty store", async () => {
+    // Deliberate product behaviour (see loadExistingSnapshot and
+    // localFirstStore.recovery.test.ts): a corrupt file is NOT opened as an empty
+    // store, because a file truncated mid-write would then silently present zero
+    // chats/projects/tickets. Open rejects, the bytes are copied aside, and the
+    // original stays in place so the next open fails closed again.
     const root = await directory();
     const snapshot = nodePath.join(root, "local-first-v1.json");
     await writeFile(snapshot, "{not json");
     const store = createVsCodeLocalFirstStore(host(root, new Map()));
-    await expect(store.read(async () => undefined)).resolves.toBeUndefined();
-    const names = await readdir(root);
-    const recovery = names.find((name) => name.includes("local-first-v1.json.corrupt-"));
-    expect(recovery).toBeDefined();
-    expect(existsSync(snapshot)).toBe(false);
-    expect(existsSync(nodePath.join(root, recovery!))).toBe(true);
-    expect(existsSync(store.journalFile)).toBe(false);
-    const exported = await store.export();
-    expect(exported.records).toEqual([]);
-    expect(exported.events).toEqual([]);
-    expect(exported.nextSequence).toBe(1);
-    expect(JSON.stringify(exported)).not.toContain("{not json");
+    await expect(store.read(async () => undefined)).rejects.toMatchObject({
+      name: "local_first_snapshot_corrupt",
+    });
 
-    const now = new Date().toISOString();
-    await store.transact(async (tx) => {
-      await tx.put({
-        id: "chat-after-recovery",
-        entityType: "chat",
-        schemaVersion: 1,
-        payload: { title: "recovered" },
-        version: 1,
-        occurredAt: now,
-        updatedAt: now,
-        destination: { kind: "unbound" },
-      });
-    });
-    await expect(store.read((tx) => tx.get("chat", "chat-after-recovery"))).resolves.toMatchObject({
-      id: "chat-after-recovery",
-    });
-    await store.flush();
+    const recovery = (await readdir(root)).find((name) => name.startsWith("local-first-v1.json.corrupt-"));
+    expect(recovery).toBeDefined();
+    expect(readFileSync(nodePath.join(root, recovery!), "utf8")).toBe("{not json");
+    // The original is left in place, untouched, and nothing was committed.
+    expect(existsSync(snapshot)).toBe(true);
+    expect(readFileSync(snapshot, "utf8")).toBe("{not json");
+    expect(existsSync(store.journalFile)).toBe(false);
+
+    // A later open still fails closed rather than succeeding with nothing.
     const again = createVsCodeLocalFirstStore(host(root, new Map()));
-    await expect(again.read((tx) => tx.get("chat", "chat-after-recovery"))).resolves.toMatchObject({
-      payload: { title: "recovered" },
+    await expect(again.read(async () => undefined)).rejects.toMatchObject({
+      name: "local_first_snapshot_corrupt",
     });
-    await again.flush();
   });
 
   it("ignores a corrupt snapshot cache when the journal already has the chat", async () => {
