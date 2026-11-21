@@ -42,16 +42,21 @@ export interface GitHubCoords {
 export type GitHubErrorCode =
   | 'unsupported'
   | 'unauthorized'
+  | 'provider_auth_failed'
   | 'not_found'
   | 'rate_limited'
   | 'provider_error';
+
+/** Operator-facing prompt attached to every `provider_auth_failed` result. */
+export const PROVIDER_AUTH_REAUTH_PROMPT =
+  'GitHub rejected the stored credential (revoked or expired). Reconnect GitHub for this repository to continue.';
 
 export type GitHubResponse<T> =
   /** `headers` is the live Response's headers — the only way to read GitHub's
    *  `Link` pagination header, which is how an exact result count is obtained
    *  without downloading every page (see projectConnectionStatus). */
   | { ok: true; status: number; data: T; headers: Headers }
-  | { ok: false; status: number; code: GitHubErrorCode; reason: string };
+  | { ok: false; status: number; code: GitHubErrorCode; reason: string; reauthPrompt?: string };
 
 export function githubHeaders(token: string, extra?: Record<string, string>): Record<string, string> {
   return {
@@ -64,7 +69,8 @@ export function githubHeaders(token: string, extra?: Record<string, string>): Re
 }
 
 function classify(status: number): GitHubErrorCode {
-  if (status === 401 || status === 403) return 'unauthorized';
+  if (status === 401) return 'provider_auth_failed';
+  if (status === 403) return 'unauthorized';
   if (status === 404) return 'not_found';
   if (status === 429) return 'rate_limited';
   return 'provider_error';
@@ -146,11 +152,19 @@ export async function githubRequest<T>(args: GithubRequestArgs): Promise<GitHubR
       .json()
       .then((b) => (b as { message?: string } | null)?.message)
       .catch(() => null);
+    const code = classify(res.status);
+    // A 403 is ambiguous (rate limit, missing scope, or a revoked token). Only
+    // GitHub's explicit credential messages are promoted to the typed re-auth
+    // outcome; other 403s keep their `unauthorized` verdict for the caller.
+    const credentialRejected =
+      code === 'provider_auth_failed' ||
+      (res.status === 403 && /bad credentials|token (has )?(expired|been revoked)|requires authentication/i.test(detail ?? ''));
     return {
       ok: false,
       status: res.status,
-      code: classify(res.status),
+      code: credentialRejected ? 'provider_auth_failed' : code,
       reason: detail ? `${res.status}: ${detail}` : `GitHub returned ${res.status}`,
+      ...(credentialRejected ? { reauthPrompt: PROVIDER_AUTH_REAUTH_PROMPT } : {}),
     };
   }
 
