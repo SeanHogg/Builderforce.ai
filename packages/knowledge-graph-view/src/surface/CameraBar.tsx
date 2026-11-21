@@ -1,9 +1,9 @@
 /**
  * The camera bar: the segmented *View* group (the cameras from the registry, minus those marked
- * `switcher: false` such as Sequence, which the path strip owns) and, at the far end, "↑ Out to …"
- * (while a station is open), the panel show/hide toggles, + , − and Fit. Right after the View group sits the `tools` slot
- * (the Panels group and Risk overlays; on a phone its own scrolling line). The zoom buttons call the api the ACTIVE camera
- * registered (`zoom.tsx`); with none registered (the 3D tower) they are disabled.
+ * `switcher: false` such as Sequence, which the path strip owns) and, at the far end, an icon for
+ * "Out to …" (while a station is open) and the panel show/hide toggles. Right after the View group sits the `tools` slot
+ * (the Panels and overlay icons; on a phone their own scrolling line). Zoom and Fit live only on the stage nav
+ * (`stage/rig/NavControl`); the shape key is docked on the stage corner, not here.
  */
 
 import type { CSSProperties, ReactNode } from 'react';
@@ -14,26 +14,21 @@ import type { ViewMode } from '../types';
 import type { CameraDef } from './registry';
 import { Segmented } from './ui';
 import { TYPE } from './ui/type';
-import type { ZoomApi } from './zoom';
 
 export interface CameraBarProps {
     labels: KnowledgeGraphLabels;
     cameras: readonly CameraDef[];
     mode: ViewMode;
     onMode(mode: ViewMode): void;
-    /** The level above the open station ("the line"); present ⇒ the "↑ Out to …" button shows. */
+    /** The level above the open station ("the line"); present ⇒ the Out icon shows. */
     outTo?: string | null | undefined;
     onOut?: (() => void) | undefined;
-    /** The active camera's zoom; null/absent ⇒ +, − and Fit are disabled. */
-    zoom?: ZoomApi | null | undefined;
-    /** The canvas tools (Panels, Risk overlays), right after the View group and outside its scroller so a popover is not clipped. */
+    /** The canvas tools (Panels, overlays), right after the View group and outside its scroller so a popover is not clipped. */
     tools?: ReactNode;
     /** On a phone the tools take their own sideways-scrolling line instead of sharing the View row. */
     stacked?: boolean | undefined;
-    /** The panel show/hide toggles, before the zoom buttons. */
+    /** The panel show/hide toggles. */
     panelToggles?: ReactNode;
-    /** The Legend button: next to the panel toggles, outside the sideways scroller so its popover is not clipped. */
-    legend?: ReactNode;
 }
 
 export const zoomButton: CSSProperties = {
@@ -41,24 +36,35 @@ export const zoomButton: CSSProperties = {
     border: `1px solid ${cssVar('border')}`, background: cssVar('panel'), color: cssVar('text'), pointerEvents: 'auto',
 };
 
-function ZoomButtons({ labels, zoom }: { labels: KnowledgeGraphLabels; zoom: ZoomApi | null | undefined }) {
-    const off = !zoom;
-    const style: CSSProperties = { ...zoomButton, ...(off ? { opacity: 0.5, cursor: 'default' } : null) };
+/** A square icon button: the glyph is decorative, the accessible name and the tooltip are the same localized label. */
+export const iconButtonStyle: CSSProperties = {
+    ...zoomButton, width: CONTROL, padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+};
+
+function IconButton({ label, onClick, testId, children }: { label: string; onClick(): void; testId?: string; children: ReactNode }) {
     return (
-        <div role="group" aria-label={labels.zoomLabel} style={{ display: 'inline-flex', gap: 4 }}>
-            <button type="button" disabled={off} aria-label={labels.zoomIn} title={labels.zoomIn} style={style} onClick={() => zoom?.zoomIn()}>+</button>
-            <button type="button" disabled={off} aria-label={labels.zoomOut} title={labels.zoomOut} style={style} onClick={() => zoom?.zoomOut()}>−</button>
-            <button type="button" disabled={off} aria-label={labels.zoomReset} title={labels.zoomReset} style={style} onClick={() => zoom?.fit()}>{labels.surface.overlay.fit}</button>
-        </div>
+        <button type="button" aria-label={label} title={label} data-testid={testId} style={iconButtonStyle} onClick={onClick}>
+            {children}
+        </button>
     );
 }
 
-export function CameraBar({ labels, cameras, mode, onMode, outTo, onOut, zoom, tools, stacked = false, panelToggles, legend }: CameraBarProps) {
-    // The row WRAPS: the right cluster (Legend, panel toggles, +, −, Fit) never shrinks or scrolls away — on a narrow
+function Glyph({ children }: { children: ReactNode }) {
+    return (
+        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" style={{ display: 'block', fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round' }}>
+            {children}
+        </svg>
+    );
+}
+
+export function CameraBar({ labels, cameras, mode, onMode, outTo, onOut, tools, stacked = false, panelToggles }: CameraBarProps) {
+    // The row WRAPS: the right cluster (Out, panel toggles) never shrinks or scrolls away — on a narrow
     // container it drops to a second line, end-aligned. The scene sits below the MEASURED controls block
     // (`SceneOverlay`, `--kg-scene-top`), so a wrapped bar only moves the scene down. One line that never wrapped
     // pushed the cluster off-screen at ~700px and made the whole overlay wider than the scene (a sideways scrollbar).
-    // Only the View group scrolls sideways, when it alone is wider than the row.
+    // Only the View group scrolls sideways, when it alone is wider than the row. Zoom and Fit are the stage nav's.
+    const backLabel = labels.surface.sequence.backToMap;
+    const outLabel = outTo ? fillTemplate(labels.surface.overlay.outTo, { name: outTo }) : '';
     return (
         <div style={{ display: 'grid', gap: 6, padding: '8px 12px', pointerEvents: 'none', minWidth: 0 }}>
             <div data-testid="kg-camera-row" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', minWidth: 0 }}>
@@ -72,15 +78,21 @@ export function CameraBar({ labels, cameras, mode, onMode, outTo, onOut, zoom, t
                 </div>
                 {tools && !stacked && <div data-testid="kg-scene-tools" style={{ display: 'inline-flex', gap: 8, alignItems: 'center', flex: 'none', pointerEvents: 'auto' }}>{tools}</div>}
                 {/* The Sequence camera has no button in the View group (the path strip's Enlarge opens it): this is its way back. */}
-                {mode === 'sequence' && <button type="button" data-back-to-map style={zoomButton} onClick={() => onMode('transit')}>{labels.surface.sequence.backToMap}</button>}
+                {mode === 'sequence' && (
+                    <IconButton label={backLabel} testId="kg-back-to-map" onClick={() => onMode('transit')}>
+                        <span data-back-to-map style={{ display: 'contents' }} />
+                        <Glyph><rect x="2.5" y="3" width="11" height="10" rx="1" /><path d="M2.5 7.5h11M6 3v10M10 3v10" /></Glyph>
+                    </IconButton>
+                )}
                 {/* The right cluster: one unit that wraps whole and is pushed to the row's end; it never scrolls or clips. */}
                 <div data-testid="kg-camera-right" style={{ display: 'inline-flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 8, alignItems: 'center', flex: 'none', maxWidth: '100%', marginInlineStart: 'auto', pointerEvents: 'auto' }}>
-                    {legend && <div data-testid="kg-legend-slot" style={{ display: 'inline-flex', flex: 'none' }}>{legend}</div>}
                     {outTo && onOut && (
-                        <button type="button" data-out title={fillTemplate(labels.surface.overlay.outTo, { name: outTo })} style={{ ...zoomButton, whiteSpace: 'nowrap', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis' }} onClick={onOut}>{fillTemplate(labels.surface.overlay.outTo, { name: outTo })}</button>
+                        <IconButton label={outLabel} testId="kg-out" onClick={onOut}>
+                            <span data-out style={{ display: 'contents' }} />
+                            <Glyph><path d="M8 13V3.5M4.5 7 8 3.5 11.5 7" /></Glyph>
+                        </IconButton>
                     )}
                     {panelToggles}
-                    <ZoomButtons labels={labels} zoom={zoom} />
                 </div>
             </div>
             {/* A phone: the tools scroll sideways on their own line (their popover is anchored to the overlay, so the scroller does not clip it). */}

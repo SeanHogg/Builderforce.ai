@@ -93,11 +93,15 @@ export async function addTaskTierHealth(
       id: tasks.id, title: tasks.title, status: tasks.status,
       // Named so the rail can say which epic a chip belongs to (see resolveTaskParents).
       taskType: tasks.taskType, parentTaskId: tasks.parentTaskId,
+      archived: tasks.archived,
     })
     .from(tasks)
     .innerJoin(projects, eq(projects.id, tasks.projectId))
     .where(and(inArray(tasks.id, allTaskLike), eq(projects.tenantId, tenantId)));
-  const selfById = new Map(rows.map((r) => [r.id, r]));
+  // An ARCHIVED ticket is off the board — it reads as the closed `archived` status
+  // (in TASK_CLOSED_STATUSES), never as its stale open lane, so the rail counts it
+  // complete and "Hide done" hides it.
+  const selfById = new Map(rows.map((r) => [r.id, r.archived ? { ...r, status: 'archived' } : r]));
   // ONE extra batched query at most — the parents not already among these rows.
   const parentByChild = await resolveTaskParents(db, tenantId, rows);
 

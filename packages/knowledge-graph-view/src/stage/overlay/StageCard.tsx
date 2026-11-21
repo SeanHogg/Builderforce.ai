@@ -38,12 +38,14 @@ export interface StageCardProps {
     onOpenPanel?: ((id: string) => void) | undefined;
     /** Go inside as the semantic zoom's shortcut (B1a rule 9: fly to the station, the zoom enters it); absent = drill directly. */
     onEnter?: ((stationId: string) => void) | undefined;
+    /** Opens the docked code panel on this mark. Absent ⇒ no Code button. */
+    onCode?: (() => void) | undefined;
 }
 
 const NO_ENTER = { can: false, reason: 'deepest' } as const;
 const SATELLITE_BOX = 14;
 
-export function StageCard({ cardKey, map, drill, graph, labels, compact, onClose, onQuestion, onOpenPanel, onEnter }: StageCardProps) {
+export function StageCard({ cardKey, map, drill, graph, labels, compact, onClose, onQuestion, onOpenPanel, onEnter, onCode }: StageCardProps) {
     const bus = useStageBus();
     const ref = useRef<HTMLDivElement | null>(null);
     const index = useMemo(() => nodeIndex(graph), [graph]);
@@ -90,6 +92,7 @@ export function StageCard({ cardKey, map, drill, graph, labels, compact, onClose
             onCallers={() => act(() => onQuestion?.('callers'))}
             onApi={() => act(() => onOpenPanel?.('api'))}
             onPatterns={() => act(() => onOpenPanel?.('patterns'))}
+            onCode={onCode ? () => { close(); onCode(); } : undefined}
         />
     );
 }

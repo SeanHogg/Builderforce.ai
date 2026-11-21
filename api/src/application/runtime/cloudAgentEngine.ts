@@ -110,7 +110,7 @@ export type CloudEngineSurface =
   | { kind: 'rehearsal'; maxSteps: number; decorateProvider: (provider: CapabilityProvider) => CapabilityProvider; frozenReadRef?: string };
 
 /** The engine's result: the generic one, plus the run's final tally on a TERMINAL result (`RunState.telemetry`) for the outcome-row writer. */
-export type CloudEngineResult = AgentRunResult & { readonly telemetry?: RunTally };
+export type CloudEngineResult = AgentRunResult & { readonly telemetry?: RunTally; readonly noChanges?: boolean };
 
 /**
  * The cloud agent engine behind the shared {@link AgentEngine} seam — THE current engine (V3).
@@ -154,7 +154,7 @@ export class CloudLimbicEngine implements AgentEngine {
           : {}),
       },
     );
-    return { ok: r.ok, output: r.output, cancelled: r.cancelled, finished: r.finished, awaitingInput: r.awaitingInput, state: r.state, ...(r.telemetry ? { telemetry: r.telemetry } : {}) };
+    return { ok: r.ok, output: r.output, cancelled: r.cancelled, finished: r.finished, awaitingInput: r.awaitingInput, state: r.state, ...(r.telemetry ? { telemetry: r.telemetry } : {}), ...(r.noChanges ? { noChanges: true } : {}) };
   }
 
   /** Personality = setpoints (from the assigned personas' psychometric profiles);

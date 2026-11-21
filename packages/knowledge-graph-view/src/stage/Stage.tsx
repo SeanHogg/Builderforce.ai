@@ -29,6 +29,7 @@ import { aimCamera } from './rig/aim';
 import { DepthControl } from './rig/DepthControl';
 import { NavControl, type NavLabels } from './rig/NavControl';
 import { StageCorner } from './rig/StageCorner';
+import { useStageLegend, type StageLegendValue } from './rig/stageLegend';
 import { bindOrbitKeys, touchActionFor } from './rig/gestures';
 import type { RigController } from './rig/rig';
 import { bindRig } from './rig/rigOfBus';
@@ -54,6 +55,8 @@ export interface StageProps {
     depthLabel: string;
     /** The nav control's names (localized by the host); absent ⇒ no nav control. */
     nav?: NavLabels;
+    /** The shape key above the nav. Absent ⇒ the `StageLegendProvider` above this stage, if any. */
+    legend?: StageLegendValue;
     /** What the view shows, read with the proxies' group. */
     description?: string;
     /** Escape / Backspace on a proxy: out of a drilled level. */
@@ -189,6 +192,8 @@ export function Stage(p: StageProps) {
     const captions = useRef<HTMLDivElement>(null);
     const tweening = useTweening(placement, p.reducedMotion);
     const [names, setNames] = useState<readonly Caption[]>([]);
+    const legendContext = useStageLegend();
+    const legend = p.legend ?? legendContext;
     const dpr = typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1;
     const rigRef = useRef<RigController | null>(null);
     const settle = useCallback(() => {
@@ -250,7 +255,7 @@ export function Stage(p: StageProps) {
                 {placement && <CaptionLayer ref={captions} captions={placement.captions} names={names} hidden={tweening} />}
                 {placement && <StageInteraction bus={bus} renderer={renderer} keys={keys} placement={placement} tweening={tweening} selected={p.selected} description={p.description} onSelect={p.onSelect} onOut={p.onOut} />}
                 {placement && (
-                    <StageCorner boxHeight={height}>
+                    <StageCorner boxHeight={height} legend={legend}>
                         {p.nav && <NavControl rig={rig} panZoom={panZoom} labels={p.nav} onSettle={settle} />}
                         {!placement.rig.view && tiltMax > tiltMin && <DepthControl label={p.depthLabel} value={depth} onChange={dragDepth} />}
                     </StageCorner>

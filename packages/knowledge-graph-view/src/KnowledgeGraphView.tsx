@@ -49,7 +49,8 @@ import { RetryUploadContext } from './surface/run/useRetryUpload';
 import { useZoomHost, ZoomProvider } from './surface/zoom';
 import { LinesPanel } from './surface/LinesPanel';
 import { foldCopyFindings } from './surface/systems';
-import { PanelDrawer } from './surface/PanelDock';
+import { DockEdge, PanelDrawer } from './surface/PanelDock';
+import { SimulatePanel } from './surface/SimulatePanel';
 import { canApplyKind } from './surface/codemods';
 import { showsTowers, useClearHighlightOutsideTower } from './surface/useShowInTower';
 import { TowerLegend } from './surface/TowerLegend';
@@ -64,10 +65,8 @@ import { hopRouteLabels } from './surface/sequenceText';
 import { SurfaceHeader } from './surface/SurfaceHeader';
 import { TimeSlider, useHistory } from './surface/TimeSlider';
 import { SceneTools } from './surface/SceneTools';
-import { PanelVisibilityToggles } from './surface/PanelVisibilityToggles';
-import { LegendButton } from './surface/LegendButton';
 import { usePanelVisibility } from './surface/usePanelVisibility';
-import { Pill } from './surface/ui';
+import { Pill, pillStyle } from './surface/ui';
 import { questionForLens } from './surface/questions';
 import { useSurfaceActions } from './surface/useSurfaceActions';
 import { useSurfaceChrome } from './surface/useSurfaceChrome';
@@ -121,6 +120,7 @@ export function KnowledgeGraphView({
     const env = useRenderEnvironment();
     const [chosen, setMode] = useState<ViewMode | null>(null);
     const [showAll, setShowAll] = useState(false), [tracing, setTracing] = useState(false), [linesOpen, setLinesOpen] = useState(false);
+    const [simulateMode, setSimulateMode] = useState(false);
     const [revision, setRevision] = useState<Revision>('after');
     const targets = useReviewTargets(source); // read ONCE: the empty state's launcher uses it
     const sync = useSyncStatus(source, kg.rootId, kg.graph); // read ONCE: the pill, the banner and the Sync drawer share it
@@ -237,13 +237,11 @@ export function KnowledgeGraphView({
         <SceneOverlay
             {...chrome.overlayProps}
             tools={real ? <SceneTools graph={graph} env={surfaceEnv} labels={labels} surface={surface} panel={panel} onPanel={setPanel} panelsMenu={layout.panelsMenu} narrow={layout.phone} /> : undefined}
-            panelToggles={<PanelVisibilityToggles labels={labels} visibility={panels.visibility} onToggle={panels.toggle} available={{ left: hasLines && !layout.phone, bottom: hasLines, right: !!real }} />}
-            legend={real ? <LegendButton labels={labels} present={legendExtras.types} preset={surface.preset} /> : undefined}
             time={<TimeSlider commits={history.commits} capped={history.total} picked={picked} labels={labels} changedStations={changedStations} onPick={(sha) => { setPicked(sha); if (sha) pickQuestion('changed'); }} />}
         />
     );
-    const showLeft = hasLines && panels.visibility.left;
-    const stackLines = showLeft && layout.linesStacked && !layout.phone;
+    const leftDock = hasLines && !layout.phone && !layout.linesStacked;
+    const stackLines = hasLines && layout.linesStacked && !layout.phone;
 
     return (
         <RetryUploadContext.Provider value={retryUpload}>
@@ -259,7 +257,11 @@ export function KnowledgeGraphView({
             {noHits !== null && <p role="status" style={{ ...muted, margin: 0, padding: '4px 12px' }}>{fillTemplate(labels.searchNoHits, { query: noHits })}</p>}
             <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: layout.actBelow ? 'column' : 'row', overflow: layout.actBelow ? 'auto' : 'hidden' }}>
                 <div style={{ display: 'flex', minWidth: 0, ...sceneRowFlex(layout) }}>
-                    {showLeft && !layout.linesStacked && linesPanel(true)}
+                    {leftDock && (
+                        <DockEdge slot="left" shown={panels.visibility.left} onToggle={panels.toggle} labels={labels}>
+                            {linesPanel(true)}
+                        </DockEdge>
+                    )}
                     <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
                         {layout.phone && overlay}
                         <div style={{ position: 'relative', flex: 1, minHeight: sceneMinHeight(layout) }}>
@@ -282,25 +284,52 @@ export function KnowledgeGraphView({
                             </div>
                             {!layout.phone && overlay}
                             {surface.highlight && showsTowers(mode, surface.towers) && <TowerLegend highlight={surface.highlight} labels={labels} compact={layout.compact} onClose={() => surface.setHighlight(null)} />}
+                            {real && (
+                                <button
+                                    type="button" data-simulate-toggle aria-pressed={simulateMode}
+                                    aria-label={fillTemplate(labels.surface.simulate.modeOpenAria, { name: selected ? index.get(selected)?.label ?? selected : labels.surface.simulate.modeEntry })}
+                                    onClick={() => setSimulateMode((v) => !v)}
+                                    style={{ position: 'absolute', zIndex: 5, top: 8, left: 8, ...pillStyle(simulateMode), minHeight: 28 }}
+                                >
+                                    {labels.surface.simulate.modeOpen}
+                                </button>
+                            )}
+                            {simulateMode && real && (
+                                <SimulatePanel
+                                    graph={graph} from={selected} fromName={selected ? index.get(selected)?.label : undefined}
+                                    path={surface.path} labels={labels} onClose={() => setSimulateMode(false)}
+                                />
+                            )}
                         </div>
-                        {stackLines && <div style={{ padding: 12, maxHeight: 260, overflow: 'auto', borderTop: `1px solid ${cssVar('border')}`, background: cssVar('panel') }}>{linesPanel(false)}</div>}
-                        {hasLines && panels.visibility.bottom && (
-                            <PathStrip
-                                path={surface.path} step={surface.step} labels={labels} onStep={surface.setStep} pathTitle={chrome.pathTitle}
-                                stations={surface.stations.byId} routeLabels={routeLabels} onOpenPanel={setPanel} onEnlarge={() => setMode('sequence')} narrow={layout.phone} transitions={transitions}
-                            />
+                        {stackLines && (
+                            <DockEdge slot="left" shown={panels.visibility.left} onToggle={panels.toggle} labels={labels} below>
+                                <div style={{ padding: 12, maxHeight: 260, overflow: 'auto', borderTop: `1px solid ${cssVar('border')}`, background: cssVar('panel') }}>{linesPanel(false)}</div>
+                            </DockEdge>
+                        )}
+                        {hasLines && (
+                            <DockEdge slot="bottom" shown={panels.visibility.bottom} onToggle={panels.toggle} labels={labels}>
+                                <PathStrip
+                                    path={surface.path} step={surface.step} labels={labels} onStep={surface.setStep} pathTitle={chrome.pathTitle}
+                                    stations={surface.stations.byId} routeLabels={routeLabels} onOpenPanel={setPanel} onEnlarge={() => setMode('sequence')} narrow={layout.phone} transitions={transitions}
+                                    trail={surface.drill.stack} systemName={titleOf(graph.scope.rootId)} onClimb={surface.drill.climb}
+                                />
+                            </DockEdge>
                         )}
                     </div>
                 </div>
-                {real && panels.visibility.right && <ActPanel
+                {real && (
+                    <DockEdge slot="right" shown={panels.visibility.right} onToggle={panels.toggle} labels={labels} below={layout.actBelow}>
+                    <ActPanel
                     graph={graph} findings={findings} listedFindings={listedFindings} lensName={labels.lenses[lens.id]} labels={labels} station={surface.station} stations={surface.stations.stations} scopeName={chrome.scopeName}
                     compact={layout.actBelow} showFindings={mode !== 'list'} onClearScope={() => surface.selectLine(null)} onShow={show} onCompose={onCompose} onResolve={surface.resolve}
-                    evidence={evidenceOf} onOpenSource={onOpenSource} canApply={canApplyFor} resolved={resolvedFixes} onOpenPanel={setPanel} path={surface.path} pathTitle={chrome.pathTitle}
+                    evidence={evidenceOf} onOpenSource={onOpenSource} canApply={canApplyFor} resolved={resolvedFixes} onOpenPanel={setPanel} path={surface.path} step={surface.step} pathTitle={chrome.pathTitle}
                     model={surface.stations} copyFix={copyFix} onAskUntested={() => pickQuestion('untested')} changedPartners={changedPartners}
                 >
                     <InsightsPanel graph={graph} labels={labels} lenses={kg.lenses.map((l) => l.id)} onLens={pickLens} onShow={show} findingKinds={mode !== 'list'} />
                     <LensPanel graph={graph} lens={lens} requested={kg.requested} baseline={kg.baseline} current={kg.graph} labels={labels} evidence={evidenceFor} onOpenSource={onOpenSource} />
-                </ActPanel>}
+                </ActPanel>
+                    </DockEdge>
+                )}
             </div>
             {layout.phone && hasLines && <Sheet open={linesOpen} compact title={s.linesTitle} closeLabel={labels.close} onClose={() => setLinesOpen(false)}>{linesPanel(false)}</Sheet>}
             <PanelDrawer

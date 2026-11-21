@@ -15,6 +15,27 @@ import type { SymbolRecord } from '../../types';
 /** Lines asked for when no later definition bounds a method (the host caps the read too). */
 export const MAX_SPAN = 400;
 
+/**
+ * Scroll offset (px) that brings `line` to the top of a panel whose first rendered line is `firstLine`.
+ * Selecting or stepping a mark scrolls the open code panel with this, so the panel and the stage stay on the same source.
+ */
+export function scrollTopForLine(line: number, firstLine: number, rowPx: number): number {
+    if (!(rowPx > 0) || !(line >= firstLine)) return 0;
+    return (line - firstLine) * rowPx;
+}
+
+/** The symbol a method name in the panel drills to: same file first, else the first loaded record of that name. Keywords never drill. */
+export function drillRefForName(name: string, records: readonly SymbolRecord[], path?: string): string | null {
+    if (!name || KEYWORDS.has(name)) return null;
+    let any: string | null = null;
+    for (const r of records) {
+        if (r.name !== name || !(r.line > 0)) continue;
+        if (path && pathOf(fileRefOf(r.ref) as Parameters<typeof pathOf>[0]) === path) return r.ref;
+        any ??= r.ref;
+    }
+    return any;
+}
+
 export interface CodeTarget { ref: string; name: string; path: string; startLine: number; endLine: number }
 
 /** The method `ref`'s code range, read off the loaded records; null when it is not a loaded record or has no path. */

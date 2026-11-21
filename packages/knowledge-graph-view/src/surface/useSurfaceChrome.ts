@@ -78,7 +78,7 @@ export function useSurfaceChrome(i: SurfaceChromeInput) {
 
     const drilled = surface.drill.canOut && i.mode === 'transit';
     const overlayProps: SceneOverlayProps = {
-        labels, cameras: i.cameras, mode: i.mode, onMode: i.setMode, zoom: i.zoom, narrow: layout.phone,
+        labels, cameras: i.cameras, mode: i.mode, onMode: i.setMode, narrow: layout.phone,
         // Inside a drilled level "Out" goes up one level; otherwise it leaves the picked station for the line.
         // The drill is the transit map's: other cameras keep the station-to-line "Out".
         outTo: drilled ? surface.drill.parent?.name ?? s.map.world : surface.station ? lineLabel : null,

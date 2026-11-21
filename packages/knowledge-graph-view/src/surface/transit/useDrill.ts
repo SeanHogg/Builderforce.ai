@@ -33,6 +33,8 @@ export interface DrillModel {
     select(id: string | null): void;
     canEnter(id: string): EnterCheck;
     enter(id: string): void;
+    /** Climb back to a depth. 0 is the system (the world map). A depth at or past the current one stays. */
+    climb(depth: number): void;
     out(): void;
     /** Definitions are being read: a file without symbols may only be one that has not arrived yet. */
     loading: boolean;
@@ -121,9 +123,16 @@ export function useDrill(graph: KnowledgeGraph | null, world: StationModel, load
         }
     }, [canEnter, view, world, load]);
 
+    const climb = useCallback((depth: number) => {
+        const n = Number.isFinite(depth) ? Math.max(0, Math.floor(depth)) : 0;
+        if (n >= stack.length) return;
+        setStack((s) => s.slice(0, n));
+        setSelected(null);
+        setNotice(null);
+    }, [stack.length]);
     const out = useCallback(() => { setStack((s) => s.slice(0, -1)); setSelected(null); setNotice(null); }, []);
     return {
-        stack, view, canOut: stack.length > 0, parent: stack[stack.length - 2] ?? null, selected, select: setSelected, canEnter, enter, out,
+        stack, view, canOut: stack.length > 0, parent: stack[stack.length - 2] ?? null, selected, select: setSelected, canEnter, enter, climb, out,
         loading: pending > 0, notice, symbols: records,
     };
 }

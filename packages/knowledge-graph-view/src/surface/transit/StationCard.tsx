@@ -22,6 +22,8 @@ export interface CardActions {
     onCallers(): void;
     onApi(): void;
     onPatterns(): void;
+    /** Opens the docked code panel for this mark. Absent ⇒ no Code button. */
+    onCode?(): void;
 }
 
 export interface StationCardProps extends CardActions {
@@ -42,7 +44,7 @@ const action: CSSProperties = {
 };
 const primary: CSSProperties = { ...action, background: cssVar('accent'), borderColor: cssVar('accent'), color: cssVar('onAccent') };
 
-function CardBody({ card, labels, loading, onEnter, onUnfold, onCallers, onApi, onPatterns, first }: StationCardProps & { first: RefObject<HTMLButtonElement | null> }) {
+function CardBody({ card, labels, loading, onEnter, onUnfold, onCallers, onApi, onPatterns, onCode, first }: StationCardProps & { first: RefObject<HTMLButtonElement | null> }) {
     const t = labels.surface.map.card;
     const noSymbols = !card.enter.can && card.enter.reason === 'noSymbols';
     return (
@@ -68,6 +70,7 @@ function CardBody({ card, labels, loading, onEnter, onUnfold, onCallers, onApi, 
                 <button type="button" data-action="callers" style={action} onClick={onCallers}>{t.whoCalls}</button>
                 {card.hasApi && <button type="button" data-action="api" style={action} onClick={onApi}>{t.apiContract}</button>}
                 {card.hasPatterns && <button type="button" data-action="patterns" style={action} onClick={onPatterns}>{t.patterns}</button>}
+                {onCode && <button type="button" data-action="code" aria-label={fillTemplate(labels.surface.code.buttonAria, { name: card.name })} style={action} onClick={onCode}>{labels.surface.code.button}</button>}
             </div>
             {noSymbols && <span data-card-reason role="status" style={TYPE.meta}>{loading ? t.loading : t.noSymbols}</span>}
         </div>

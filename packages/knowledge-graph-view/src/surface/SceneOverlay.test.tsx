@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-/** The scene overlay: the View group, the zoom buttons, "Out to", the scale note and the sync banner. */
+/** The scene overlay: the View group, "Out to", the scale note and the sync banner. Zoom and Fit live on the stage nav, not here. */
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
@@ -13,7 +13,7 @@ import { useZoomHost, ZoomProvider, type ZoomApi } from './zoom';
 
 function overlayProps(over: Partial<SceneOverlayProps> = {}): SceneOverlayProps {
     return {
-        labels: L, cameras: CAMERAS, mode: 'transit', onMode: vi.fn(), zoom: null, stations: model.stations, question: 'where', onQuestion: vi.fn(),
+        labels: L, cameras: CAMERAS, mode: 'transit', onMode: vi.fn(), stations: model.stations, question: 'where', onQuestion: vi.fn(),
         lenses, lens: 'structure', onLens: vi.fn(), stats: { nodes: 452, edges: 67, sources: 3 }, truncated: true, compact: false, showAll: false,
         drawn: 100, total: 452, onShowAll: vi.fn(), ...over,
     };
@@ -41,36 +41,16 @@ describe('SceneOverlay', () => {
         expect(screen.queryByRole('button', { name: L.surface.sequence.backToMap })).toBeNull();
     });
 
-    it('drives the active camera\'s zoom with +, − and Fit, and disables them when none is registered', () => {
-        const zoom: ZoomApi = { zoomIn: vi.fn(), zoomOut: vi.fn(), fit: vi.fn() };
-        const { rerender } = render(<SceneOverlay {...overlayProps({ zoom })} />);
-        fireEvent.click(screen.getByRole('button', { name: L.zoomIn }));
-        fireEvent.click(screen.getByRole('button', { name: L.zoomOut }));
-        fireEvent.click(screen.getByRole('button', { name: L.zoomReset }));
-        expect([zoom.zoomIn, zoom.zoomOut, zoom.fit].map((f) => (f as ReturnType<typeof vi.fn>).mock.calls.length)).toEqual([1, 1, 1]);
-        rerender(<SceneOverlay {...overlayProps({ zoom: null })} />);
-        for (const name of [L.zoomIn, L.zoomOut, L.zoomReset]) expect((screen.getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(true);
-    });
-
-    it('works against a real registry: a registered camera enables the buttons', () => {
-        function Host() {
-            const host = useZoomHost();
-            const [calls, setCalls] = useState(0);
-            return (
-                <>
-                    <ZoomProvider host={host}>
-                        <button type="button" onClick={() => host.register({ zoomIn: () => setCalls((n) => n + 1), zoomOut: () => undefined, fit: () => undefined })}>reg</button>
-                    </ZoomProvider>
-                    <SceneOverlay {...overlayProps({ zoom: host.api })} />
-                    <span data-testid="calls">{calls}</span>
-                </>
-            );
+    it('does not put zoom, Fit or the shape key in the top bar — those live on the stage', () => {
+        render(<SceneOverlay {...overlayProps()} />);
+        const bar = screen.getByTestId('kg-camera-row');
+        for (const name of [L.zoomIn, L.zoomOut, L.zoomReset, L.legend.keyButton ?? L.legendLabel]) {
+            expect(within(bar).queryByRole('button', { name })).toBeNull();
         }
-        render(<Host />);
-        expect((screen.getByRole('button', { name: L.zoomIn }) as HTMLButtonElement).disabled).toBe(true);
-        fireEvent.click(screen.getByText('reg'));
-        fireEvent.click(screen.getByRole('button', { name: L.zoomIn }));
-        expect(screen.getByTestId('calls').textContent).toBe('1');
+        expect(screen.queryByTestId('kg-shape-legend')).toBeNull();
+        expect(screen.queryByRole('button', { name: L.zoomIn })).toBeNull();
+        expect(screen.queryByRole('button', { name: L.zoomOut })).toBeNull();
+        expect(screen.queryByRole('button', { name: L.zoomReset })).toBeNull();
     });
 
     it('shows "Out to" only while there is a level above, and calls onOut', () => {

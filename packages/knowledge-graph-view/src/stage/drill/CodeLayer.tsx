@@ -14,9 +14,9 @@ import { fillTemplate, type KnowledgeGraphLabels } from '../../labels';
 import { cssVar, type ThemeTone } from '../../scene/themeColors';
 import { CONTROL } from '../../styles';
 import { TYPE } from '../../surface/ui/type';
-import type { SourceLocation, SourceReader, SourceText } from '../../types';
+import type { SourceLocation, SourceReader, SourceText, SymbolRecord } from '../../types';
 import { useSlotAnchor } from '../anchor/useSlotAnchor';
-import { syntaxLight, visibleWindow, VIRTUAL_AFTER, type CodeTarget, type TokenKind } from './codeText';
+import { drillRefForName, scrollTopForLine, syntaxLight, visibleWindow, VIRTUAL_AFTER, type CodeTarget, type TokenKind } from './codeText';
 
 export interface CodeLayerProps {
     /** The method's slot key (`node:<ref>`). */
@@ -26,6 +26,14 @@ export interface CodeLayerProps {
     labels: KnowledgeGraphLabels;
     onOpenSource?: ((location: SourceLocation) => void) | undefined;
     onClose(): void;
+    /** Fills its parent instead of anchoring to a slot (the docked code panel). */
+    docked?: boolean;
+    /** Scroll this source line to the top (`scrollTopForLine`). Selection and the journey step drive it. */
+    scrollLine?: number | undefined;
+    /** Loaded symbols: a method name in the text drills to one (`drillRefForName`). */
+    records?: readonly SymbolRecord[] | undefined;
+    /** A method name in the text was clicked. */
+    onDrill?: ((ref: string) => void) | undefined;
 }
 
 /** One code row's height (px) and how many rows the panel shows before it scrolls. */
@@ -33,6 +41,17 @@ export const ROW_PX = 18;
 const VIEW_ROWS = 16;
 
 const TOKEN_TONE: Readonly<Record<TokenKind, ThemeTone>> = { plain: 'text', comment: 'muted', string: 'line3', number: 'line5', keyword: 'accent' };
+
+/** A method name drills into that symbol (`drillRefForName`); keywords and unknown names stay text. */
+function CodeToken({ tok, path, records, onDrill, drillAria }: { tok: { text: string; kind: TokenKind }; path: string; records: readonly SymbolRecord[]; onDrill?: ((ref: string) => void) | undefined; drillAria: string }) {
+    const ref = tok.kind === 'plain' && onDrill ? drillRefForName(tok.text, records, path) : null;
+    if (!ref || !onDrill) return <span style={tok.kind === 'plain' ? undefined : { color: cssVar(TOKEN_TONE[tok.kind]) }}>{tok.text}</span>;
+    return (
+        <button type="button" data-code-drill={ref} aria-label={fillTemplate(drillAria, { name: tok.text })} onClick={() => onDrill(ref)} style={{ border: 0, padding: 0, font: 'inherit', color: 'inherit', background: 'transparent', cursor: 'pointer', textDecoration: 'underline' }}>
+            {tok.text}
+        </button>
+    );
+}
 
 type Read = { state: 'loading' } | { state: 'ready'; text: SourceText } | { state: 'none' };
 
@@ -57,15 +76,23 @@ const button: CSSProperties = {
     border: `1px solid ${cssVar('accent')}`, background: cssVar('accent'), color: cssVar('onAccent'),
 };
 
-export function CodeLayer({ slotKey, target, reader, labels, onOpenSource, onClose }: CodeLayerProps) {
+export function CodeLayer({ slotKey, target, reader, labels, onOpenSource, onClose, docked = false, scrollLine, records = [], onDrill }: CodeLayerProps) {
     const t = labels.surface.code, card = labels.surface.map.card;
     const ref = useRef<HTMLDivElement | null>(null);
-    useSlotAnchor(slotKey, ref);
+    const linesRef = useRef<HTMLDivElement | null>(null);
+    useSlotAnchor(docked ? null : slotKey, ref);
     const read = useSourceLines(reader, target);
     const lines = read.state === 'ready' ? read.text.lines : [];
     const first = read.state === 'ready' ? read.text.startLine : target.startLine;
     const tokens = useMemo(() => syntaxLight(lines), [lines]);
     const [scrollTop, setScrollTop] = useState(0);
+    // Selection and the journey step both hand a source line; the panel scrolls so that line is the one on show.
+    useEffect(() => {
+        if (scrollLine == null) return;
+        const top = scrollTopForLine(scrollLine, first, ROW_PX);
+        setScrollTop(top);
+        if (linesRef.current && linesRef.current.scrollTop !== top) linesRef.current.scrollTop = top;
+    }, [scrollLine, first]);
     const { from, to } = visibleWindow(lines.length, scrollTop, ROW_PX, VIEW_ROWS);
     const virtual = lines.length > VIRTUAL_AFTER;
     const last = first + Math.max(lines.length, 1) - 1;
@@ -76,10 +103,12 @@ export function CodeLayer({ slotKey, target, reader, labels, onOpenSource, onClo
         <div
             ref={ref as MutableRefObject<HTMLDivElement | null>} role="region" data-code-layer
             aria-label={fillTemplate(t.aria, { name: target.name, from: target.startLine, to: read.state === 'ready' ? last : target.endLine })}
+            data-code-docked={docked ? '' : undefined}
             style={{
-                position: 'absolute', left: 0, top: 0, zIndex: 3, width: 'min(560px, calc(100% - 16px))', boxSizing: 'border-box',
-                display: 'grid', gap: 6, padding: 10, borderRadius: 10, background: cssVar('bg'), color: cssVar('text'),
-                border: `1px solid ${cssVar('border')}`, boxShadow: '0 8px 28px color-mix(in srgb, currentColor 18%, transparent)',
+                position: docked ? 'relative' : 'absolute', left: docked ? undefined : 0, top: docked ? undefined : 0, zIndex: docked ? undefined : 3,
+                width: docked ? '100%' : 'min(560px, calc(100% - 16px))', height: docked ? '100%' : undefined, boxSizing: 'border-box',
+                display: 'grid', gridTemplateRows: docked ? 'auto auto 1fr auto auto' : undefined, gap: 6, padding: 10, borderRadius: 10, background: cssVar('bg'), color: cssVar('text'),
+                border: `1px solid ${cssVar('border')}`, boxShadow: '0 8px 28px color-mix(in srgb, currentColor 18%, transparent)', minHeight: 0,
             }}
         >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, minWidth: 0 }}>
@@ -90,8 +119,8 @@ export function CodeLayer({ slotKey, target, reader, labels, onOpenSource, onClo
             {read.state === 'none' && <div role="note" data-code-unavailable style={TYPE.monoMeta}>{t.unavailable}</div>}
             {read.state === 'ready' && (
                 <div
-                    data-code-lines tabIndex={0} onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
-                    style={{ ...TYPE.mono, maxHeight: VIEW_ROWS * ROW_PX, overflow: 'auto', background: cssVar('panel'), borderRadius: 6, padding: '4px 0' }}
+                    ref={linesRef} data-code-lines tabIndex={0} onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
+                    style={{ ...TYPE.mono, maxHeight: docked ? undefined : VIEW_ROWS * ROW_PX, minHeight: 0, overflow: 'auto', background: cssVar('panel'), borderRadius: 6, padding: '4px 0' }}
                 >
                     <div style={{ position: 'relative', height: virtual ? lines.length * ROW_PX : undefined, minWidth: 'max-content' }}>
                         {tokens.slice(from, to).map((row, i) => {
@@ -102,7 +131,7 @@ export function CodeLayer({ slotKey, target, reader, labels, onOpenSource, onClo
                                     style={{ display: 'flex', height: ROW_PX, lineHeight: `${ROW_PX}px`, whiteSpace: 'pre', ...(virtual ? { position: 'absolute', top: n * ROW_PX, left: 0, right: 0 } : {}) }}
                                 >
                                     <span aria-hidden="true" style={{ flex: `0 0 ${gutter}`, textAlign: 'right', paddingRight: 8, color: cssVar('muted') }}>{first + n}</span>
-                                    <span>{row.map((tok, k) => <span key={k} style={tok.kind === 'plain' ? undefined : { color: cssVar(TOKEN_TONE[tok.kind]) }}>{tok.text}</span>)}</span>
+                                    <span>{row.map((tok, k) => <CodeToken key={k} tok={tok} path={target.path} records={records} onDrill={onDrill} drillAria={t.drillAria} />)}</span>
                                 </div>
                             );
                         })}

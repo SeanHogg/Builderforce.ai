@@ -38,6 +38,49 @@ export interface ActLabels {
     >;
     /** The path strip. `{line}`, `{entry}`, `{count}`. */
     path: Record<'title' | 'reset' | 'step' | 'runToEnd' | 'simulate' | 'sequence' | 'noTests' | 'stops' | 'enlarge', string>;
+    /**
+     * Plain-language walkthrough of a journey. A door is an entry point or an endpoint, a hallway
+     * is a call between rooms, and a room is a module or a class.
+     * `{name}`, `{from}`, `{to}`, `{count}`, `{hallway}`, `{place}`.
+     */
+    walk: WalkLabels;
+    /** The depth trail (system › module › class › method). `{name}`. */
+    depth: DepthLabels;
+}
+
+/** The words of one journey step, filled by `walkthroughSentence`. */
+export interface WalkLabels {
+    /** Entry door: `{name}`. */
+    doorIn: string;
+    /** Endpoint door: `{name}`. */
+    doorOut: string;
+    /** A room along the way: `{name}`. */
+    room: string;
+    /** A hallway of several calls: `{from}`, `{to}`, `{count}`. */
+    hallway: string;
+    /** A hallway of one call: `{from}`, `{to}`. */
+    hallwayOne: string;
+    /** Nothing calls across: `{from}`, `{to}`. */
+    hallwayNone: string;
+    /** Hallway sentence plus where you arrive: `{hallway}`, `{place}`. */
+    arrived: string;
+    /** A journey of one room: `{name}`. */
+    only: string;
+    /** No journey to walk. */
+    empty: string;
+    /** The metaphor, said once beside the action cards. */
+    metaphor: string;
+}
+
+/** The words of the depth trail. */
+export interface DepthLabels {
+    aria: string;
+    system: string;
+    module: string;
+    class: string;
+    method: string;
+    /** Climb back to a crumb: `{name}`. */
+    climb: string;
 }
 
 export const ACT_DEFAULTS: ActLabels = {
@@ -94,5 +137,25 @@ export const ACT_DEFAULTS: ActLabels = {
         noTests: 'no tests',
         stops: 'Stops',
         enlarge: 'Enlarge',
+    },
+    walk: {
+        doorIn: 'Start at the door {name}, where this journey begins.',
+        doorOut: 'Leave through the door {name}.',
+        room: 'You are in the room {name}.',
+        hallway: 'Walk the hallway from {from} to {to} ({count} calls).',
+        hallwayOne: 'Walk the hallway from {from} to {to} (one call).',
+        hallwayNone: 'There is no hallway from {from} to {to}.',
+        arrived: '{hallway} {place}',
+        only: 'You are in the room {name}. There is no hallway yet.',
+        empty: 'Choose a journey to walk the doors, hallways and rooms.',
+        metaphor: 'Doors are where you enter and leave. Hallways are calls between rooms. Rooms are modules and classes.',
+    },
+    depth: {
+        aria: 'Depth',
+        system: 'System',
+        module: 'Module',
+        class: 'Class',
+        method: 'Method',
+        climb: 'Back to {name}',
     },
 };

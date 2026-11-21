@@ -17,7 +17,6 @@ import { openTaskRepoSetPullRequests } from '../repos/openTaskPullRequest';
 import { RUN_CANCELLED_NOTICE } from '@builderforce/agent-run';
 import { contributeTextToProjectEverminds } from '../llm/projectEvermind';
 import { emptyDiffTerminalStatus } from './emptyDiffFinalize';
-import { ExecutionStatus } from '../../domain/shared/types';
 import { finalizeLearnWeight, runProducedOutput } from './outcomeScore';
 import { recordCloudToolEvent } from './cloudToolEvents';
 import { openOrAdoptRunPr } from './openOrAdoptRunPr';
@@ -36,6 +35,7 @@ import { revokeRunPrincipal } from '../agentIdentity/agentRunIdentity';
 import { inspectOutboundContent } from '../trust/trustService';
 import { type Db } from '../../infrastructure/database/connection';
 import { executions, tasks } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { gateRunPullRequest } from './cloudFinalizeSecurity';
 import { bindGrantToThisRunsPr, voidMergeGrant } from './mergeGrants';
 import { findOpenPullRequestByTask } from '../repos/recordPullRequestRow';
@@ -139,9 +139,10 @@ export async function finalizeCloudRun(
           const record = mergeabilityRecord(detail);
           // The stamp is advisory: a failed read or write is reported and finalize carries on to the security step.
           try {
-            const [payloadRow] = await db.select({ payload: executions.payload }).from(executions).where(eq(executions.id, executionId)).limit(1);
+            const [payloadRow] = await db.select({ payload: executions.payload }).from(executions)
+              .where(scopedToTenant(executions, tenantId, eq(executions.id, executionId))).limit(1);
             await db.update(executions).set({ payload: withPrMergeability(payloadRow?.payload ?? null, record) })
-              .where(eq(executions.id, executionId));
+              .where(scopedToTenant(executions, tenantId, eq(executions.id, executionId)));
           } catch (error) {
             reportCaughtError(error, { source: 'application/runtime/cloudFinalize.ts', operation: 'finalizeCloudRun.mergeability', context: { tenantId, executionId } });
           }
@@ -399,15 +400,13 @@ ${ciVerified
   // says nothing about whether the ticket can succeed — the same reading the breaker
   // already takes of a cancellation, and of a platform eviction.
   // MK-09-W5: nothing written and not cancelled is `no_changes`, not `completed`.
-  // The PR was already skipped (`open` requires writtenPaths.size > 0). Callers that
-  // settle the row must honour `noChanges` and must not overwrite this status.
+  // The PR was already skipped (`open` requires writtenPaths.size > 0). The status is NOT
+  // written here: the surface that settles the row lands it through ExecutionRepository
+  // (the one status writer) from the `noChanges` this returns (`landedRunStatus`).
   const noChanges = emptyDiffTerminalStatus({ writtenCount: writtenPaths.size, cancelled }) != null;
   if (!cancelled) {
     await db.update(executions)
-      .set({
-        produced: runProducedOutput({ prOpened, producedChanges: writtenPaths.size > 0 }),
-        ...(noChanges ? { status: ExecutionStatus.NO_CHANGES } : {}),
-      })
+      .set({ produced: runProducedOutput({ prOpened, producedChanges: writtenPaths.size > 0 }) })
       .where(eq(executions.id, executionId))
       .catch((error) => reportCaughtError(error, { source: 'application/runtime/cloudFinalize.ts', operation: 'finalizeCloudRun', context: { logMessage: '[cloud-finalize] produced-stamp failed — this run will not count toward the autonomy breaker', details: { tenantId, executionId, taskId: taskRow.id, error } } }));
   }

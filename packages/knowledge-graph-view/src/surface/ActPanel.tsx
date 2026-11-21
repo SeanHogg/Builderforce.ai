@@ -22,7 +22,7 @@ import { counted } from './plural';
 import { cssVar } from '../scene/themeColors';
 import type { FindingEvidence, SourceLocation } from '../types';
 import { actionCards } from './actModel';
-import { Cards, EmptyCard, smallButton, SystemWideBlock } from './ActCards';
+import { Cards, EmptyCard, smallButton, SystemWideBlock, WalkthroughNote } from './ActCards';
 import { DoneWhen, hasHops, KeepTestCard } from './ActFooter';
 import { DuplicateCopyCards, type CopyFix } from './fix/DuplicateCopyCard';
 import { isDuplicateCopy } from './fix/duplicateCopy';
@@ -76,6 +76,8 @@ export interface ActPanelProps {
     onAskUntested?: (() => void) | undefined;
     /** The drawn line's or pinned path; with a hop it offers Keep-as-test and the done-when footer. */
     path?: PathModel | null | undefined;
+    /** The journey step the walkthrough sentence names. Absent ⇒ the entry door. */
+    step?: number | undefined;
     /** The path's name in the test request, e.g. "Web line · GET /users"; defaults to the stop names. */
     pathTitle?: string | null | undefined;
     /** Stray-copy cards' Exclude from review (`source.folders`); absent ⇒ the host cannot exclude a folder and those cards are drawn as ordinary ones. */
@@ -143,6 +145,8 @@ export function ActPanel(p: ActPanelProps) {
                 {wide.length > 0 && <SystemWideBlock findings={wide} labels={labels} onShow={p.onShow} />}
 
                 <DuplicateCopyCards findings={copies} labels={labels} fix={p.copyFix} graph={p.graph} onShow={p.onShow} />
+
+                {drawn && path && <WalkthroughNote path={path} step={p.step ?? 0} labels={labels} />}
 
                 {count === 0
                     ? <EmptyCard labels={labels} atStation={!!station} onAsk={() => p.onAskUntested?.()} onShow={() => p.onShow(emptyRefs())} />

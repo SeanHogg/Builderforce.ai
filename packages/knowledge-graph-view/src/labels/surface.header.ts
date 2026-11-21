@@ -6,7 +6,7 @@ import type { NoteKey, QuestionId } from '../surface/questions';
 export interface HeaderLabels {
     spineLabel: string;
     panelsLabel: string;
-    /** The three show/hide toggles of the side panels (lines, path strip, act panel). */
+    /** Collapse / expand names for the three docks (lines, path strip, act panel). The chevron on each dock edge uses these. */
     panelToggles: Record<'label' | 'showLeft' | 'hideLeft' | 'showBottom' | 'hideBottom' | 'showRight' | 'hideRight', string>;
     overlaysButton: string;
     overlaysTitle: string;

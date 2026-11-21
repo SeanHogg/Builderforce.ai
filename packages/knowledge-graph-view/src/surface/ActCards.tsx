@@ -11,6 +11,8 @@ import { fillTemplate, type KnowledgeGraphLabels } from '../labels';
 import { cssVar, type ThemeTone } from '../scene/themeColors';
 import { button } from '../styles';
 import type { ActionCard, FindingSource } from './actModel';
+import type { PathModel } from './path';
+import { walkthroughSentence } from './walkthrough';
 import { Card, Chip, Pin } from './ui';
 import { TYPE } from './ui/type';
 
@@ -107,5 +109,16 @@ export function SystemWideBlock({ findings, labels, onShow }: { findings: readon
             </ul>
             <p style={{ ...TYPE.meta, margin: 0 }}>{t.systemWideNote}</p>
         </Card>
+    );
+}
+
+/** The current step of the journey, said once beside the action cards, with the door / hallway / room metaphor. */
+export function WalkthroughNote({ path, step, labels }: { path: PathModel; step: number; labels: KnowledgeGraphLabels }) {
+    const w = labels.surface.walk;
+    return (
+        <div data-testid="kg-act-walkthrough" style={{ display: 'grid', gap: 4 }}>
+            <p data-testid="kg-act-walk-sentence" style={{ ...TYPE.body, margin: 0 }}>{walkthroughSentence(path, step, w)}</p>
+            <p style={{ ...TYPE.meta, margin: 0 }}>{w.metaphor}</p>
+        </div>
     );
 }

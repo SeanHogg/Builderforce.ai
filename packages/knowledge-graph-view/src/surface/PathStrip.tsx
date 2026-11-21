@@ -15,7 +15,9 @@ import { CONTROL, muted } from '../styles';
 import { Pill, pillStyle, QuietButton } from './ui';
 import { TYPE } from './ui/type';
 import { Action, LikelyWalk, StepControls } from './StepControls';
+import { DepthTrail, type DepthFrame } from './DepthTrail';
 import type { PathModel } from './path';
+import { walkthroughSentence } from './walkthrough';
 import { hopProbabilityText, hopTransition, likelyWalk, type TransitionTable } from './transitionTable';
 import { stationNote } from './pathNotes';
 import { SequenceView } from './SequenceDiagram';
@@ -44,11 +46,17 @@ export interface PathStripProps {
     narrow?: boolean | undefined;
     /** The station transition table (`transitionTableOf`): each hop shows P(next) and "Run to end" the most likely walk. Absent ⇒ neither. */
     transitions?: TransitionTable | null | undefined;
+    /** The drill stack, outermost first. Empty or absent ⇒ no depth trail. */
+    trail?: readonly DepthFrame[] | undefined;
+    /** The system crumb. Absent ⇒ the "System" word. */
+    systemName?: string | null | undefined;
+    /** Climb back to a depth. 0 is the system. Absent ⇒ the trail is not drawn. */
+    onClimb?: ((depth: number) => void) | undefined;
 }
 
 const chipStyle = (on: boolean) => ({ ...pillStyle(on), ...TYPE.mono, fontWeight: on ? TYPE.pillOn.fontWeight : TYPE.monoName.fontWeight });
 
-export function PathStrip({ path, step, labels, onStep, pathTitle, onEnlarge, stations, onOpenPanel, routeLabels, narrow = false, transitions }: PathStripProps) {
+export function PathStrip({ path, step, labels, onStep, pathTitle, onEnlarge, stations, onOpenPanel, routeLabels, narrow = false, transitions, trail, systemName, onClimb }: PathStripProps) {
     const s = labels.surface;
     const [sequence, setSequence] = useState(false);
     /** The stop "Run to end" ran from, for this path only (another path drops it). */
@@ -71,6 +79,7 @@ export function PathStrip({ path, step, labels, onStep, pathTitle, onEnlarge, st
                 alignContent: 'start', minWidth: 0, ...(narrow ? null : { height: PATH_STRIP_HEIGHT, flex: 'none', overflow: 'auto' }),
             }}
         >
+            {onClimb && <DepthTrail stack={trail ?? []} systemName={systemName} labels={labels} onClimb={onClimb} />}
             {path.stops.length === 0 ? <p style={{ ...muted, margin: 0 }}>{s.pathEmpty}</p> : (
                 <>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
@@ -83,6 +92,7 @@ export function PathStrip({ path, step, labels, onStep, pathTitle, onEnlarge, st
                         <CopiedNote status={copier.status} labels={labels} />
                         <span aria-live="polite" style={{ ...muted, ...TYPE.monoValue }}>{fillTemplate(s.pathStep, { n: at + 1, total: path.stops.length })}</span>
                     </div>
+                    <p data-testid="kg-step-narration" style={{ ...muted, margin: 0 }}>{walkthroughSentence(path, at, s.walk)}</p>
                     {walkFrom && transitions && <LikelyWalk from={walkFrom.name} hops={likelyWalk(transitions, walkFrom.id, stations ?? new Map(path.stops.map((x) => [x.id, x])), labels)} labels={labels} />}
                     {single && <p data-testid="kg-path-one-station" style={{ ...muted, margin: 0 }}>{s.explain.oneStation}</p>}
                     <CopyFallback status={copier.status} text={mermaid} label={labels.copyMermaid} labels={labels} />

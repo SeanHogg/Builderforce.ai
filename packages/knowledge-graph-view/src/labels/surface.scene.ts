@@ -15,7 +15,7 @@ export interface SceneLabels {
      * note when the host has no file contents (the panel then shows `path:line` and "Open at line"), and the note when
      * the host cut the range short (`{count}` lines shown).
      */
-    code: Record<'aria' | 'loading' | 'unavailable' | 'truncated', string>;
+    code: Record<'aria' | 'loading' | 'unavailable' | 'truncated' | 'button' | 'buttonAria' | 'drillAria', string>;
     /**
      * The stage's navigation control (bottom-right): its group name, the pan pad (on 3D, up / down move through the
      * plane stack) and the orbit buttons shown on the 3D camera. Zoom in / out and Fit reuse `zoomIn`, `zoomOut`, `zoomReset`.
@@ -52,6 +52,10 @@ export const SCENE_DEFAULTS: SceneLabels = {
         loading: 'Reading the code…',
         unavailable: 'The code is not available here.',
         truncated: 'Showing the first {count} lines',
+        /** The overlay button on a selected mark, its accessible name (`{name}`), and a method name's drill control (`{name}`). */
+        button: 'Code',
+        buttonAria: 'Show the code of {name}',
+        drillAria: 'Show {name} on the stage',
     },
     nav: {
         group: 'Move the view',

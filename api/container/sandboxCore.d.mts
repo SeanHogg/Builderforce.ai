@@ -76,6 +76,20 @@ export function mirrorGitCommand(
 /** Remove a persisted `actions/checkout` credential from the checkout's `.git/config` (an absent key is fine). */
 export function scrubCheckoutCredentials(workdir: string): Promise<{ ok: boolean; output?: string }>;
 
+/** GAP-W12: the typed refusal code for a sandbox workspace inside a git checkout. */
+export const WORKSPACE_INSIDE_CHECKOUT: 'workspace_inside_checkout';
+/** GAP-W12: the workspace is the checkout root or any path below it. */
+export function workspaceInsideCheckout(workspace: string, checkoutRoot: string): boolean;
+/** GAP-W12: `{ ok: true }` when the workspace lives outside the checkout, else the typed refusal. */
+export function assertWorkspaceOutsideCheckout(
+  workspace: string,
+  checkoutRoot: string,
+): { ok: true } | { ok: false; code: typeof WORKSPACE_INSIDE_CHECKOUT; error: string };
+/** GAP-W12: refuse a workdir whose parent directory sits in a git checkout. */
+export function assertWorkdirOutsideParentCheckout(
+  workdir: string,
+): Promise<{ ok: true } | { ok: false; code: typeof WORKSPACE_INSIDE_CHECKOUT; error: string }>;
+
 /** Open the workspace from the mirror (bundle in, clone as the shell user). */
 export function cloneWorkspace(box: SandboxBox): Promise<{ ok: boolean; branch: string | null; output: string }>;
 /** Fast-forward the workspace to the run branch as the remote holds it. */

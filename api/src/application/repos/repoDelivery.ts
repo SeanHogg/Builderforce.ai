@@ -44,7 +44,7 @@ import { loadSweepStamps } from '../../infrastructure/cache/sweepStampLedger';
 import type { CacheEnv } from '../../infrastructure/cache/readThroughCache';
 import {
   githubRequest, repoPath, resolveRepoAuth,
-  type GitHubCoords, type GitHubResponse, type ResolvedRepoAuth,
+  type GitHubCoords, type GitHubErrorCode, type GitHubResponse, type ResolvedRepoAuth,
 } from './githubClient';
 import { makeRepoFetch } from './sources/RepoSource';
 import { resolveRepoCredential, isResolveError } from './resolveRepoCredential';
@@ -177,7 +177,7 @@ async function probeGithub(ctx: ProbeContext): Promise<RepoDeliveryProbe> {
     githubRequest<Array<unknown>>({ ...credential, path: repoPath(coords, '/pulls?state=open&per_page=1') }),
     readLatestActionsRun(credential, coords, { branch: ctx.branch }),
   ]);
-  if (!pulls.ok) return unreachable(pulls.code === 'unsupported' ? 'provider_error' : pulls.code);
+  if (!pulls.ok) return unreachable(connectionReasonOf(pulls.code));
 
   const run = runs.ok ? runs.data.workflow_runs?.[0] : undefined;
   return {
@@ -215,6 +215,16 @@ export function pipelineToBuildStatus(status: string | undefined): ProjectBuildS
       // created / waiting_for_resource / preparing / pending / running / scheduled
       return 'pending';
   }
+}
+
+/**
+ * Map a GitHub client error onto the connection reason vocabulary (the frontend owns its wording).
+ * MK-09-W7's typed `provider_auth_failed` is a rejected credential — the strip's `unauthorized`.
+ */
+function connectionReasonOf(code: GitHubErrorCode): ProjectConnectionReason {
+  if (code === 'unsupported') return 'provider_error';
+  if (code === 'provider_auth_failed') return 'unauthorized';
+  return code;
 }
 
 /** Map an HTTP status onto the shared reason vocabulary. */

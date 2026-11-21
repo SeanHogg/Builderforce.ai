@@ -14,6 +14,7 @@ import { stageBus, StageBusContext } from '../anchor/stageBus';
 import { cssVar } from '../../scene/themeColors';
 import { TYPE } from '../../surface/ui/type';
 import { CodeLayer } from '../drill/CodeLayer';
+import { CodeDock, focusLine, recordsForCode, targetForMark } from './CodeDock';
 import { useSemanticZoom, type SemanticZoom } from '../drill/useSemanticZoom';
 import { useStageMap, type StageMap } from '../drill/useStageMap';
 import type { StageRenderer } from '../renderer';
@@ -49,6 +50,7 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
     const zoom = useSemanticZoom(bus, drill, map, p.reducedMotion);
     const [selected, setSelected] = useState<string | null>(null);
     const [cardKey, setCardKey] = useState<string | null>(null);
+    const [codeOpen, setCodeOpen] = useState(false);
 
     // The ranked incident index, once per graph; the selected line is the path the overlay highlights.
     const generation = marks?.generation ?? 0;
@@ -107,17 +109,36 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
     }, [patched, map, zoom]);
 
     const closeCard = useCallback(() => setCardKey(null), []);
+    const openCode = useCallback(() => setCodeOpen(true), []);
+    const closeCode = useCallback(() => setCodeOpen(false), []);
+    const records = useMemo(() => recordsForCode(graph, drill), [graph, drill]);
+    const markRef = selected?.startsWith('node:') ? selected.slice('node:'.length) : selected?.startsWith('st:') ? null : selected;
+    const codeTarget = codeOpen ? targetForMark(markRef, markRef ? index.get(markRef)?.label ?? markRef : '', records) : null;
+    const stopId = surface.path?.stops[surface.step]?.id ?? null;
+    const scrollLine = codeOpen ? focusLine(records, markRef, stopId) : undefined;
+    const drillTo = useCallback((ref: string) => {
+        setSelected(`node:${ref}`);
+        p.onSelect(ref);
+    }, [p]);
     const card = (
         <StageBusContext.Provider value={bus}>
             <StageCard
                 cardKey={cardKey} map={map} drill={drill} graph={graph} labels={p.labels} compact={width > 0 && width < COMPACT_WIDTH}
                 onClose={closeCard} onQuestion={surface.setQuestion} onOpenPanel={surface.openPanel} onEnter={zoom.zoomInto}
+                onCode={openCode}
             />
             {site && <CallSiteCard site={site.site} at={site.at} boxWidth={width} labels={p.labels} onOpenSource={p.onOpenSource} onClose={closeSite} />}
             {zoom.code && (
                 <CodeLayer
                     key={zoom.code.key} slotKey={zoom.code.key} target={zoom.code.target} reader={surface.readSource}
                     labels={p.labels} onOpenSource={p.onOpenSource} onClose={zoom.closeCode}
+                />
+            )}
+            {codeOpen && (
+                <CodeDock
+                    target={codeTarget} name={markRef ? index.get(markRef)?.label ?? markRef : ''} reader={surface.readSource}
+                    labels={p.labels} records={records} scrollLine={scrollLine} onDrill={drillTo}
+                    onOpenSource={p.onOpenSource} onClose={closeCode}
                 />
             )}
             {drill.loading && zoom.band !== 'system' && <ZoomLoading text={p.labels.surface.map.card.loading} />}

@@ -7,7 +7,8 @@ export interface ResolveLabels {
     simulate: Record<
         'pathTitle' | 'pathEmpty' | 'valuesLabel' | 'run' | 'requestText' | 'noValues' | 'sent' | 'noComposer' | 'note'
         | 'noRecorded' | 'presets' | 'presetRecorded' | 'colRecorded' | 'editAria' | 'stubsTitle' | 'stubsHint' | 'lineEnter' | 'lineCall' | 'lineReturn'
-        | 'unknownResult' | 'codeTitle' | 'noVars' | 'varsTitle' | 'resultTitle' | 'noResult' | 'stubbedNote' | 'simulatedBanner' | 'saveTest' | 'saveTestText' | 'noStubs' | 'startFrom' | 'startEntry' | 'startStop',
+        | 'unknownResult' | 'codeTitle' | 'noVars' | 'varsTitle' | 'resultTitle' | 'noResult' | 'stubbedNote' | 'simulatedBanner' | 'saveTest' | 'saveTestText' | 'noStubs' | 'startFrom' | 'startEntry' | 'startStop'
+        | 'modeOpen' | 'modeOpenAria' | 'modeTitle' | 'modeEntry' | 'modeName' | 'modeValue' | 'modeAdd' | 'modeRemove' | 'modeCarried' | 'modeHop' | 'modeEmpty' | 'modeNoHops' | 'modeClose' | 'modeStep' | 'modeBack' | 'modeNext' | 'modeUseSelected',
         string
     > & { origin: Record<'recorded' | 'edited', string> };
 }
@@ -58,5 +59,23 @@ export const RESOLVE_DEFAULTS: ResolveLabels = {
         startFrom: 'Start from',
         startEntry: 'The entry',
         startStop: 'This stop',
+        /** Simulate-with-values as a mode: `{name}` the entry, `{from}`/`{to}` a hop, `{n}`/`{total}` the step. */
+        modeOpen: 'Simulate',
+        modeOpenAria: 'Simulate {name} with values',
+        modeTitle: 'Simulate with values',
+        modeEntry: 'Entry point',
+        modeName: 'Name',
+        modeValue: 'Value',
+        modeAdd: 'Add value',
+        modeRemove: 'Remove {name}',
+        modeCarried: 'Carried along this hop',
+        modeHop: '{from} → {to}',
+        modeEmpty: 'Select an entry point. Its journey is stepped with the values you enter.',
+        modeNoHops: 'No journey leaves this entry point.',
+        modeClose: 'Close',
+        modeStep: 'Hop {n} of {total}',
+        modeBack: 'Previous hop',
+        modeNext: 'Next hop',
+        modeUseSelected: 'Use the selected mark',
     },
 };
