@@ -1,7 +1,7 @@
 /**
  * The camera bar: the segmented *View* group (the cameras from the registry, minus those marked
  * `switcher: false` such as Sequence, which the path strip owns) and, at the far end, an icon for
- * "Out to …" (while a station is open) and the panel show/hide toggles. Right after the View group sits the `tools` slot
+ * "Out to …" (while a station is open). Right after the View group sits the `tools` slot
  * (the Panels and overlay icons; on a phone their own scrolling line). Zoom and Fit live only on the stage nav
  * (`stage/rig/NavControl`); the shape key is docked on the stage corner, not here.
  */
@@ -27,8 +27,6 @@ export interface CameraBarProps {
     tools?: ReactNode;
     /** On a phone the tools take their own sideways-scrolling line instead of sharing the View row. */
     stacked?: boolean | undefined;
-    /** The panel show/hide toggles. */
-    panelToggles?: ReactNode;
 }
 
 export const zoomButton: CSSProperties = {
@@ -57,8 +55,8 @@ function Glyph({ children }: { children: ReactNode }) {
     );
 }
 
-export function CameraBar({ labels, cameras, mode, onMode, outTo, onOut, tools, stacked = false, panelToggles }: CameraBarProps) {
-    // The row WRAPS: the right cluster (Out, panel toggles) never shrinks or scrolls away — on a narrow
+export function CameraBar({ labels, cameras, mode, onMode, outTo, onOut, tools, stacked = false }: CameraBarProps) {
+    // The row WRAPS: the right cluster (Out) never shrinks or scrolls away — on a narrow
     // container it drops to a second line, end-aligned. The scene sits below the MEASURED controls block
     // (`SceneOverlay`, `--kg-scene-top`), so a wrapped bar only moves the scene down. One line that never wrapped
     // pushed the cluster off-screen at ~700px and made the whole overlay wider than the scene (a sideways scrollbar).
@@ -92,7 +90,6 @@ export function CameraBar({ labels, cameras, mode, onMode, outTo, onOut, tools, 
                             <Glyph><path d="M8 13V3.5M4.5 7 8 3.5 11.5 7" /></Glyph>
                         </IconButton>
                     )}
-                    {panelToggles}
                 </div>
             </div>
             {/* A phone: the tools scroll sideways on their own line (their popover is anchored to the overlay, so the scroller does not clip it). */}

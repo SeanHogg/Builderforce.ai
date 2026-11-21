@@ -167,11 +167,13 @@ describe('openReview with a graph on screen', () => {
 });
 
 describe('the Risk overlays trigger', () => {
-    it('is the 40px accent-soft button with an accent border on a wide container', async () => {
+    it('is an icon button named with the preset label on a wide container', async () => {
         await mount(sourceOf());
         const trigger = screen.getByRole('button', { name: `${fillTemplate(L.surface.presetLabel, { preset: L.surface.presets.risk })} ▾` });
-        expect(trigger.style.height).toBe('40px');
-        expect(trigger.style.border).toContain('var(--kg-accent');
+        expect(trigger.getAttribute('aria-label')).toBe(`${fillTemplate(L.surface.presetLabel, { preset: L.surface.presets.risk })} ▾`);
+        expect(trigger.getAttribute('title')).toBe(`${fillTemplate(L.surface.presetLabel, { preset: L.surface.presets.risk })} ▾`);
+        expect(trigger.querySelector('svg')).toBeTruthy();
+        expect(trigger.style.height).toBe('var(--kg-control, 40px)');
     });
 });
 

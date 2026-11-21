@@ -9,7 +9,7 @@
  * question rows become horizontal scrollers, and the scale note follows them.
  *
  * Two slots come from the root: `tools` (Panels + Risk overlays, right after the View group) and
- * `panelToggles` (the show/hide glyphs), plus `time` (the commit scrubber, at the end of the question row).
+ * `time` (the commit scrubber, at the end of the question row). Panel show/hide is the dock-edge chevron.
  *
  * Pure presentation. Every datum comes in by prop; the pieces it composes are `CameraBar`
  * (View), `QuestionBar` and `ScaleLine`.
@@ -63,8 +63,6 @@ export interface SceneOverlayProps {
     narrow?: boolean | undefined;
     /** The canvas tools (Panels, Risk overlays): `CameraBar` puts them right after the View group. */
     tools?: ReactNode;
-    /** The panel show/hide toggles, in the camera bar's right cluster. */
-    panelToggles?: ReactNode;
     /** The commit scrubber, at the trailing end of the question row. */
     time?: ReactNode;
 }
@@ -109,7 +107,7 @@ export function SceneOverlay(p: SceneOverlayProps) {
             <div ref={controls} data-testid="kg-scene-controls" style={{ display: 'grid', gap: narrow ? 6 : 0, minWidth: 0 }}>
             <CameraBar
                 labels={labels} cameras={p.cameras} mode={p.mode} onMode={p.onMode} outTo={p.outTo} onOut={p.onOut}
-                tools={p.tools} stacked={narrow} panelToggles={p.panelToggles}
+                tools={p.tools} stacked={narrow}
             />
             <div style={{ padding: '0 12px 8px', pointerEvents: 'none', minWidth: 0, display: 'flex', gap: 8, alignItems: 'center', flexWrap: narrow ? 'nowrap' : 'wrap' }}>
                 <div style={{ pointerEvents: 'auto', width: narrow ? '100%' : 'fit-content', maxWidth: '100%' }}>

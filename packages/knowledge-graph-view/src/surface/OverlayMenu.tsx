@@ -8,6 +8,7 @@
 
 import type { CSSProperties } from 'react';
 import { fillTemplate, type KnowledgeGraphLabels } from '../labels';
+import { iconButtonStyle } from './CameraBar';
 import { muted } from '../styles';
 import { TYPE } from './ui/type';
 import { gapOf, type DataCoverage } from './dataCoverage';
@@ -50,9 +51,13 @@ export function OverlayMenu({ labels, stations, bindings, preset, onPreset, onCh
             ? fillTemplate(s.explain.presetNeeds, { metrics: missing.map((m) => s.metricNames[m].toLocaleLowerCase()).join(', ') })
             : null;
     };
-    const trigger = narrow ? `${s.presets[preset]} ▾` : `${fillTemplate(s.presetLabel, { preset: s.presets[preset] })} ▾`;
+    const triggerName = narrow ? `${s.presets[preset]} ▾` : `${fillTemplate(s.presetLabel, { preset: s.presets[preset] })} ▾`;
     return (
-        <Menu trigger={trigger} label={s.overlaysTitle} title={s.overlaysTitle} active variant={narrow ? 'pill' : 'accent'} anchor={narrow ? 'container' : 'trigger'} panelStyle={narrow ? NARROW : WIDE}>
+        <Menu
+            trigger={<><OverlayGlyph /><span style={clipName}>{triggerName}</span></>}
+            triggerLabel={triggerName} triggerStyle={{ ...iconButtonStyle, position: 'relative' }} title={triggerName}
+            label={s.overlaysTitle} active variant={narrow ? 'pill' : 'accent'} anchor={narrow ? 'container' : 'trigger'} panelStyle={narrow ? NARROW : WIDE}
+        >
             <div data-testid="kg-overlay-menu" style={{ display: 'grid', gap: 9 }}>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                     {PRESET_ORDER.map((id) => (
@@ -92,5 +97,21 @@ export function OverlayMenu({ labels, stations, bindings, preset, onPreset, onCh
                 </div>
             </div>
         </Menu>
+    );
+}
+
+const clipName: CSSProperties = {
+    position: 'absolute', width: 1, height: 1, padding: 0, margin: -1, overflow: 'hidden', clip: 'rect(0, 0, 0, 0)', whiteSpace: 'nowrap', border: 0,
+};
+
+/** Sliders: the overlay trigger is an icon; its accessible name stays the preset label. */
+function OverlayGlyph() {
+    return (
+        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" style={{ display: 'block', fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round' }}>
+            <path d="M2.5 4h11M2.5 8h11M2.5 12h11" />
+            <circle cx="5" cy="4" r="1.2" fill="currentColor" stroke="none" />
+            <circle cx="11" cy="8" r="1.2" fill="currentColor" stroke="none" />
+            <circle cx="7" cy="12" r="1.2" fill="currentColor" stroke="none" />
+        </svg>
     );
 }

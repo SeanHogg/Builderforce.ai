@@ -4,7 +4,7 @@
  * (aria-pressed buttons, none may be selected, clicking the selected one clears it).
  */
 
-import { useRef, type CSSProperties, type KeyboardEvent } from 'react';
+import { useRef, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
 import { cssVar } from '../../scene/themeColors';
 import { CONTROL } from '../../styles';
 import { TYPE } from './type';
@@ -14,6 +14,8 @@ export interface SegmentedItem {
     label: string;
     title?: string;
     disabled?: boolean;
+    /** Decorative glyph. The accessible name stays `label` (also kept as clipped text so existing name queries match). */
+    glyph?: ReactNode;
 }
 
 interface SegmentedBase {
@@ -38,6 +40,15 @@ const segment = (on: boolean): CSSProperties => ({
     ...TYPE.pill, whiteSpace: 'nowrap',
     background: on ? cssVar('accent') : 'transparent', color: on ? cssVar('onAccent') : cssVar('text'),
 });
+
+/** Square icon button: the glyph is decorative, the label stays the accessible name and the tooltip. */
+const iconSegment = (on: boolean): CSSProperties => ({
+    ...segment(on), width: CONTROL, padding: 0, position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+});
+
+const clip: CSSProperties = {
+    position: 'absolute', width: 1, height: 1, padding: 0, margin: -1, overflow: 'hidden', clip: 'rect(0, 0, 0, 0)', whiteSpace: 'nowrap', border: 0,
+};
 
 export function Segmented(props: SegmentedProps) {
     const { label, items, style } = props;
@@ -66,15 +77,17 @@ export function Segmented(props: SegmentedProps) {
                 const on = item.id === props.value;
                 return (
                     <button
-                        key={item.id} type="button" data-seg={item.id} title={item.title} disabled={item.disabled}
+                        key={item.id} type="button" data-seg={item.id} title={item.title ?? (item.glyph ? item.label : undefined)} disabled={item.disabled}
+                        aria-label={item.glyph ? item.label : undefined}
                         {...(toggle ? { 'aria-pressed': on } : { role: 'radio', 'aria-checked': on, tabIndex: item.id === stop ? 0 : -1 })}
-                        style={{ ...segment(on), opacity: item.disabled ? 0.5 : 1 }}
+                        style={{ ...(item.glyph ? iconSegment(on) : segment(on)), opacity: item.disabled ? 0.5 : 1 }}
                         onClick={() => {
                             if (props.mode === 'toggle') props.onChange(on ? null : item.id);
                             else props.onChange(item.id);
                         }}
                     >
-                        {item.label}
+                        {item.glyph}
+                        {item.glyph ? <span style={clip}>{item.label}</span> : item.label}
                     </button>
                 );
             })}

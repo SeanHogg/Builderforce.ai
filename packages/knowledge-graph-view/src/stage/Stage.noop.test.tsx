@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
+import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L } from '../labels';
 import { buildStageModel } from '../compute/tasks/stageModel';
 import { PLACEMENTS } from '../compute/tasks/placement';
 import { surfaceFixture } from '../testing';
@@ -23,6 +24,12 @@ describe('the stage with the no-op renderer (jsdom)', () => {
         fireEvent.click(proxies[0]!);
         expect(onSelect).toHaveBeenCalledWith(model.marks.keys[first.slot]);
         expect(document.querySelector('canvas')).toBeNull();
+    });
+
+    it('docks the shape legend when on-screen types are passed', () => {
+        render(<Stage renderer={createNoopStage()} marks={model.marks} paint={null} placement={map} colors={null} width={800} height={500} reducedMotion selected={null} onSelect={vi.fn()} depthLabel="Depth" legend={{ types: ['class', 'function'], labels: L }} />);
+        const legend = screen.getByTestId('kg-shape-legend');
+        expect(legend.querySelectorAll('[data-type]')).toHaveLength(2);
     });
 
     it('picks the nearest shown slot from the placement alone, never a hidden one', () => {

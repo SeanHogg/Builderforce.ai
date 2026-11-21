@@ -7,6 +7,7 @@
  */
 
 import type { CSSProperties, ReactNode } from 'react';
+import { iconButtonStyle } from './CameraBar';
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import type { KnowledgeGraphLabels } from '../labels';
 import { Panel } from '../Sheet';
@@ -38,18 +39,44 @@ export interface PanelToggleProps {
     collapsed?: boolean;
 }
 
+function Glyph({ children }: { children: ReactNode }) {
+    return (
+        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" style={{ display: 'block', fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round' }}>
+            {children}
+        </svg>
+    );
+}
+
+/** One icon per header panel. The accessible name stays the localized label. */
+function panelGlyph(id: string): ReactNode {
+    if (id === 'coverage') return <Glyph><circle cx="8" cy="8" r="5" /><path d="M8 3v5h5" /></Glyph>;
+    if (id === 'patterns') return <Glyph><path d="M3 3h4v4H3zM9 3h4v4H9zM3 9h4v4H3zM9 9h4v4H9z" /></Glyph>;
+    if (id === 'api') return <Glyph><path d="M6 4 3 8l3 4M10 4l3 4-3 4" /></Glyph>;
+    if (id === 'agentRuns') return <Glyph><path d="M6 4.5v7l6-3.5-6-3.5z" /></Glyph>;
+    return <Glyph><path d="M3 3h4v4H3zM9 3h4v4H9zM3 9h10v4H3z" /></Glyph>;
+}
+
+const clipLabel: CSSProperties = {
+    position: 'absolute', width: 1, height: 1, padding: 0, margin: -1, overflow: 'hidden', clip: 'rect(0, 0, 0, 0)', whiteSpace: 'nowrap', border: 0,
+};
+
 export function PanelToggle({ graph, env, labels, panel, onPanel, panels = PANELS, ids = HEADER_PANELS, collapsed = false }: PanelToggleProps) {
     const available = availablePanels(graph, env, panels);
     const items = ids.flatMap((id) => {
         const def = available.find((p) => p.id === id);
-        return def ? [{ id: def.id, label: labels[def.labelKey] }] : [];
+        if (!def) return [];
+        const label = labels[def.labelKey];
+        return [{ id: def.id, label, title: label, glyph: panelGlyph(def.id) }];
     });
     if (items.length === 0) return null;
     if (collapsed) {
+        const name = labels.surface.panelsLabel;
         return (
             <Menu
-                label={labels.surface.panelsLabel} active={items.some((i) => i.id === panel)} trigger={<>{labels.surface.panelsLabel}<span aria-hidden="true"> ▾</span></>}
-                items={items.map((i) => ({ ...i, selected: i.id === panel }))} onSelect={(id) => onPanel(id === panel ? null : (id as PanelId))}
+                label={name} triggerLabel={name} title={name} active={items.some((i) => i.id === panel)}
+                triggerStyle={{ ...iconButtonStyle, position: 'relative' }}
+                trigger={<><Glyph><path d="M3 3h4v4H3zM9 3h4v4H9zM3 9h10v4H3z" /></Glyph><span style={clipLabel}>{name}</span></>}
+                items={items.map((i) => ({ id: i.id, label: i.label, selected: i.id === panel }))} onSelect={(id) => onPanel(id === panel ? null : (id as PanelId))}
             />
         );
     }
