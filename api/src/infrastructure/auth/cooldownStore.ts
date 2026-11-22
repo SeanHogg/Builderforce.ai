@@ -342,6 +342,13 @@ function kvBackend(kv: KVNamespace): CooldownBackend {
     },
     async writeModels(vendor, models, ttlSec) {
       const living = livingEntries(models, Date.now());
+      // Drop the read-through copy BEFORE the durable write lands, so a read that
+      // races the write cannot repopulate L1 with the pre-write blob and mask the
+      // record that was just written (the half-open tests require a write to be
+      // visible on the very next read).
+      await invalidateCached(env, vendorModelsKey(vendor)).catch((error) => {
+        reportCaughtError(error, { source: "infrastructure/auth/cooldownStore.ts", operation: "writeModels" });
+      });
       if (Object.keys(living).length === 0) {
         await kv.delete(vendorModelsKey(vendor)).catch((error) => { /* absorb */
           reportCaughtError(error, { source: "infrastructure/auth/cooldownStore.ts", operation: "writeModels" });
