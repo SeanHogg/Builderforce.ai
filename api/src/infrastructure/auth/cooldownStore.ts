@@ -314,24 +314,31 @@ const COOLDOWN_READ_L1_MS = 5_000;
 const COOLDOWN_READ_KV_TTL_SEC = 60;
 
 function kvBackend(kv: KVNamespace): CooldownBackend {
+  const env = { AUTH_CACHE_KV: kv };
   return {
     async readModels(vendor) {
-      const v = await kv.get(vendorModelsKey(vendor)).catch(() => null);
-      if (v == null) return {};
-      try {
-        const parsed = JSON.parse(v) as { models?: unknown };
-        const models = (parsed?.models ?? {}) as Record<string, unknown>;
-        const out: VendorModelCooldowns = {};
-        for (const [model, raw] of Object.entries(models)) {
-          const r = raw as { until?: unknown; trialAfter?: unknown; strikes?: unknown };
-          out[model] = {
-            until: typeof r?.until === 'number' ? r.until : 0,
-            ...(typeof r?.trialAfter === 'number' ? { trialAfter: r.trialAfter } : {}),
-            ...(typeof r?.strikes === 'number' ? { strikes: r.strikes } : {}),
-          };
-        }
-        return livingEntries(out, Date.now());
-      } catch { return {}; /* malformed blob — treat the vendor as uncooled */ }
+      // The loader is the raw read; the shared helper owns the L1 window and the
+      // cross-isolate copy. A miss (or a KV error inside the helper) falls through
+      // to exactly the read this function used to do inline.
+      const out = await getOrSetCached(env, vendorModelsKey(vendor), async () => {
+        const v = await kv.get(vendorModelsKey(vendor)).catch(() => null);
+        if (v == null) return {};
+        try {
+          const parsed = JSON.parse(v) as { models?: unknown };
+          const models = (parsed?.models ?? {}) as Record<string, unknown>;
+          const parsedOut: VendorModelCooldowns = {};
+          for (const [model, raw] of Object.entries(models)) {
+            const r = raw as { until?: unknown; trialAfter?: unknown; strikes?: unknown };
+            parsedOut[model] = {
+              until: typeof r?.until === 'number' ? r.until : 0,
+              ...(typeof r?.trialAfter === 'number' ? { trialAfter: r.trialAfter } : {}),
+              ...(typeof r?.strikes === 'number' ? { strikes: r.strikes } : {}),
+            };
+          }
+          return parsedOut;
+        } catch { return {}; /* malformed blob — treat the vendor as uncooled */ }
+      }, { kvTtlSeconds: COOLDOWN_READ_KV_TTL_SEC, l1TtlMs: COOLDOWN_READ_L1_MS }).catch(() => ({}));
+      return livingEntries(out, Date.now());
     },
     async writeModels(vendor, models, ttlSec) {
       const living = livingEntries(models, Date.now());
