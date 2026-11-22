@@ -373,16 +373,31 @@ export interface GatewayRouting {
 /** The chunk field the gateway's terminal diagnostics frame carries. */
 const GATEWAY_ROUTING_FIELD = '_builderforce';
 
+function readCooled(raw: unknown): GatewayCooldown[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((c): GatewayCooldown[] => {
+    const o = c as Partial<GatewayCooldown> | null;
+    return o && typeof o.model === 'string' && typeof o.until === 'number' && Number.isFinite(o.until) && typeof o.reason === 'string'
+      ? [{ model: o.model, until: o.until, reason: o.reason }]
+      : [];
+  });
+}
+
 function readGatewayRouting(frame: unknown): GatewayRouting | undefined {
   const raw = (frame as Record<string, unknown> | null)?.[GATEWAY_ROUTING_FIELD] as Record<string, unknown> | undefined;
-  if (!raw || !Array.isArray(raw.failovers)) return undefined;
-  const failovers = raw.failovers.flatMap((f): GatewayFailover[] => {
-    const o = f as Partial<GatewayFailover> | null;
-    return o && typeof o.model === 'string' ? [{ model: o.model, vendor: String(o.vendor ?? ''), code: Number.isFinite(Number(o.code)) ? Number(o.code) : 0, ...(o.kind ? { kind: String(o.kind) } : {}) }] : [];
-  });
+  // A cooled-only frame is still routing. Drop only a frame that carries neither list.
+  if (!raw || (!Array.isArray(raw.failovers) && !Array.isArray(raw.cooled))) return undefined;
+  const failovers = Array.isArray(raw.failovers)
+    ? raw.failovers.flatMap((f): GatewayFailover[] => {
+        const o = f as Partial<GatewayFailover> | null;
+        return o && typeof o.model === 'string' ? [{ model: o.model, vendor: String(o.vendor ?? ''), code: Number.isFinite(Number(o.code)) ? Number(o.code) : 0, ...(o.kind ? { kind: String(o.kind) } : {}) }] : [];
+      })
+    : [];
+  const cooled = readCooled(raw.cooled);
   const candidates = Array.isArray(raw.candidates) ? raw.candidates.filter((c): c is string => typeof c === 'string') : undefined;
   return {
     failovers,
+    ...(cooled.length > 0 ? { cooled } : {}),
     ...(candidates?.length ? { candidates } : {}),
     ...(typeof raw.traceId === 'string' ? { traceId: raw.traceId } : {}),
   };
