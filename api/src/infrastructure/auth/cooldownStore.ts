@@ -391,12 +391,14 @@ function kvBackend(kv: KVNamespace): CooldownBackend {
       });
     },
     async readVendorFailures(vendor) {
-      const v = await kv.get(vendorFailuresKey(vendor)).catch(() => null);
-      if (v == null) return [];
-      try {
-        const parsed = JSON.parse(v) as { ring?: unknown };
-        return Array.isArray(parsed?.ring) ? parsed.ring.filter((n): n is number => typeof n === 'number') : [];
-      } catch { return []; }
+      return getOrSetCached(env, vendorFailuresKey(vendor), async () => {
+        const v = await kv.get(vendorFailuresKey(vendor)).catch(() => null);
+        if (v == null) return [];
+        try {
+          const parsed = JSON.parse(v) as { ring?: unknown };
+          return Array.isArray(parsed?.ring) ? parsed.ring.filter((n): n is number => typeof n === 'number') : [];
+        } catch { return []; }
+      }, { kvTtlSeconds: COOLDOWN_READ_KV_TTL_SEC, l1TtlMs: COOLDOWN_READ_L1_MS }).catch(() => []);
     },
     async writeVendorFailures(vendor, ring) {
       if (ring.length === 0) {
