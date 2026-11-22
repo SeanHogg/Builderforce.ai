@@ -12,7 +12,7 @@ import * as path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { RunKnowledgeRecorder } from "@builderforce/agent-tools";
 import { commitLearnedFacts, memoryCommitPrompt, MIN_FACT_CHARS, parseLearnedFacts } from "../src/policy/memory/learnedFacts.js";
-import { commitRunKnowledge, commitRunKnowledgeIfAllowed } from "../src/policy/memory/runKnowledgeCommit.js";
+import { commitRunKnowledge, commitRunKnowledgeIfAllowed, finishedRun } from "../src/policy/memory/runKnowledgeCommit.js";
 
 const DECISION = "Refresh the map token from file mtime, not from names alone.";
 
@@ -147,6 +147,100 @@ describe("commitRunKnowledge", () => {
     const complete = vi.fn(async () => JSON.stringify([{ key: "k", kind: "convention", content: DECISION }]));
     await commitRunKnowledge(os.tmpdir(), ran([["edit_file", { path: "missing.ts" }]]), { complete, remember });
     expect(remember).toHaveBeenCalledWith("learned:k", DECISION);
+  });
+});
+
+describe("read-only investigations", () => {
+  const ANSWER = "The canvas is drawn by CanvasStage in web/src/a.tsx; b.tsx only feeds it layout.";
+  const files = ["web/src/a.tsx", "web/src/b.tsx", "web/src/c.tsx"];
+  const fact = JSON.stringify([{ key: "canvas-drawn-by", kind: "root_cause", content: DECISION }]);
+
+  it("completes and writes for >=3 distinct reads plus an answer", async () => {
+    const complete = vi.fn(async (_user: string) => fact);
+    const remember = vi.fn(async () => true);
+    const landed = await commitLearnedFacts({ changed: [], read: files, answer: ANSWER }, { complete, remember });
+    expect(complete).toHaveBeenCalledTimes(1);
+    expect(landed.map((f) => f.key)).toEqual(["learned:canvas-drawn-by"]);
+    const prompt = complete.mock.calls[0]![0];
+    expect(prompt).toContain("Files read:");
+    expect(prompt).toContain("- web/src/a.tsx");
+    expect(prompt).toContain(`Conclusion:\n${ANSWER}`);
+    expect(prompt).not.toContain("rather than guess");
+  });
+
+  it("does nothing under 3 distinct reads (duplicates do not count) or without an answer", async () => {
+    const complete = vi.fn(async () => fact);
+    const remember = vi.fn(async () => true);
+    const deps = { complete, remember };
+    await commitLearnedFacts({ changed: [], read: [files[0]!, files[0]!, files[1]!], answer: ANSWER }, deps);
+    await commitLearnedFacts({ changed: [], read: files }, deps);
+    await commitLearnedFacts({ changed: [], read: files, answer: "   " }, deps);
+    expect(complete).not.toHaveBeenCalled();
+    expect(remember).not.toHaveBeenCalled();
+  });
+
+  it("keeps the TAIL of a long conclusion, where the answer's verdict is", () => {
+    const prompt = memoryCommitPrompt({ changed: [], read: files, answer: `${"intro ".repeat(1_000)}FINAL VERDICT: canvas lives in a.tsx` });
+    expect(prompt).toContain("FINAL VERDICT: canvas lives in a.tsx");
+    expect(prompt).not.toContain("intro ".repeat(900));
+  });
+
+  it("counts the conclusion as evidence for a changed run that has no excerpt", () => {
+    const prompt = memoryCommitPrompt({ changed: ["src/a.ts"], answer: ANSWER });
+    expect(prompt).toContain("Conclusion:");
+    expect(prompt).not.toContain("rather than guess");
+  });
+
+  it("does not learn read-only when the run already saved its own fact (no double write)", async () => {
+    const complete = vi.fn(async () => fact);
+    const remember = vi.fn(async () => true);
+    const deps = { complete, remember };
+    await commitLearnedFacts({ changed: [], read: files, answer: ANSWER, tools: ["read_file", "builtin_remember_fact"] }, deps);
+    await commitLearnedFacts({ changed: [], read: files, answer: ANSWER, tools: ["remember_fact"] }, deps);
+    expect(complete).not.toHaveBeenCalled();
+    // A run that changed files still extracts.
+    await commitLearnedFacts({ changed: ["a.ts"], tools: ["remember_fact"], answer: ANSWER }, deps);
+    expect(complete).toHaveBeenCalledTimes(1);
+  });
+
+  it("learn:false (a failed or stopped run) writes the code map only", async () => {
+    const complete = vi.fn(async () => fact);
+    const remember = vi.fn(async (_key: string, _content: string) => true);
+    const run = finishedRun(ran(reads(...files)), ANSWER);
+    await commitRunKnowledge(os.tmpdir(), run, { complete, remember }, { learn: false });
+    expect(complete).not.toHaveBeenCalled();
+    expect(remember.mock.calls.map((c) => c[0])).toEqual(["codemap:web/src"]);
+    await commitRunKnowledgeIfAllowed(os.tmpdir(), run, { memory: true, learn: false }, async () => ({ complete, remember }));
+    expect(complete).not.toHaveBeenCalled();
+  });
+
+  it("bounds the conclusion", () => {
+    const prompt = memoryCommitPrompt({ changed: [], read: files, answer: "x".repeat(10_000) });
+    expect(prompt.length).toBeLessThan(3_500);
+  });
+
+  it("leaves the changed-files prompt unchanged in shape", () => {
+    const prompt = memoryCommitPrompt({ changed: ["src/a.ts"], excerpt: "diff" });
+    expect(prompt).toContain("Changed files:\n- src/a.ts");
+    expect(prompt).toContain("Evidence:\ndiff");
+    expect(prompt).not.toContain("Conclusion:");
+  });
+
+  it("finishedRun is a view over the recorder: carries the trimmed answer and does not mutate it", () => {
+    const rec = ran(reads(...files));
+    const run = finishedRun(rec, `  ${ANSWER}\n`);
+    expect(run.answer).toBe(ANSWER);
+    expect(run.activity.read).toEqual(files);
+    expect("answer" in rec).toBe(false);
+    expect("answer" in finishedRun(rec, "  ")).toBe(false);
+  });
+
+  it("commitRunKnowledge reads the answer off the finished run", async () => {
+    const complete = vi.fn(async () => fact);
+    const remember = vi.fn(async (_key: string, _content: string) => true);
+    const run = Object.assign(ran(reads(...files)), { answer: ANSWER });
+    await commitRunKnowledge(os.tmpdir(), run, { complete, remember });
+    expect(remember.mock.calls.map((c) => c[0])).toEqual(["codemap:web/src", "learned:canvas-drawn-by"]);
   });
 });
 

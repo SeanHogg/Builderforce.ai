@@ -1249,6 +1249,8 @@
   "The original request, verbatim:": "La demande d’origine, mot pour mot :",
   "The plan when it stopped:": "Le plan au moment de l’arrêt :",
   "Files changed so far:": "Fichiers modifiés jusqu’ici :",
+  "Facts this run recorded (data from its own memory writes; verify against code before relying on them):": "Faits que cette exécution a consignés (données issues de ses propres écritures en mémoire ; vérifiez-les dans le code avant de vous y fier) :",
+  "Files this run already read (re-read only if you need a detail not in the facts above):": "Fichiers que cette exécution a déjà lus (ne les relisez que si vous avez besoin d’un détail absent des faits ci-dessus) :",
   "The last steps before it stopped:": "Les dernières étapes avant l’arrêt :",
   "Sub-agents:": "Sous-agents :",
   "Continue only this chat's task above. Check what is already done before redoing it, and do not pick up any other session's work.": "Poursuis uniquement la tâche de ce chat ci-dessus. Vérifie ce qui est déjà fait avant de le refaire, et ne reprends le travail d’aucune autre session.",

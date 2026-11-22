@@ -100,6 +100,7 @@ async function runTurn(opts: {
   prompt?: string;
   recovery?: NativeBrainRunOptions["recovery"];
   runSettings?: NativeBrainRunOptions["runSettings"];
+  onSettled?: NativeBrainRunOptions["onSettled"];
 }) {
   const gateway = fakeGateway(opts.script);
   const { events, log } = recorder();
@@ -118,6 +119,7 @@ async function runTurn(opts: {
     ...(opts.runSettings ? { runSettings: opts.runSettings } : {}),
     ...(opts.policyGates ? { policyGates: opts.policyGates } : {}),
     ...(opts.directives ? { directives: opts.directives } : {}),
+    ...(opts.onSettled ? { onSettled: opts.onSettled } : {}),
     permissionMode: opts.permissionMode ?? "ask",
     approve: async (req) => {
       approvals.push(req);
@@ -549,6 +551,21 @@ describe("the memory-first short-circuit", () => {
   });
 });
 
+// A chat's run cell keeps its persisted rows across turns, and every turn gets a fresh persistence port: turn 2's answer
+// must be adopted as turn 2's own, and turn 1's must never be, with the store NOT reset between them.
+describe("consecutive turns on one chat", () => {
+  it("adopts each turn's own answer, never an earlier turn's", async () => {
+    const chatId = freshChatId();
+    const settled: Array<{ learn: boolean; answer?: string }> = [];
+    await runTurn({ chatId, script: [{ text: "First answer." }], onSettled: (run) => settled.push(run) });
+    await runTurn({ chatId, script: [{ text: "Second answer." }], onSettled: (run) => settled.push(run) });
+    expect(settled).toEqual([
+      { learn: true, answer: "First answer." },
+      { learn: true, answer: "Second answer." },
+    ]);
+  });
+});
+
 // ── §2.5 #7 — no tool budget; the failure breaker, and the dispatch hint when it trips ──
 describe("a run whose tool calls keep failing", () => {
   it("is stopped by the consecutive-failure breaker and appends the dispatch hint", async () => {
@@ -567,6 +584,18 @@ describe("a run whose tool calls keep failing", () => {
     expect(requests[DEFAULT_TOOL_FAILURE_STREAK]?.toolless).toBe(true);
     expect(log.text).toContain("Here is what I found so far.");
     expect(log.text).toContain(LABELS.dispatchHint);
+  });
+
+  it("settles with no answer: the forced closing reply is not what the run concluded", async () => {
+    const read = toolDef("read_file", { throws: "EACCES: permission denied" });
+    const settled: Array<{ learn: boolean; answer?: string }> = [];
+    await runTurn({
+      tools: [read],
+      permissionMode: "acceptEdits",
+      onSettled: (run) => settled.push(run),
+      script: (ctx) => (ctx.toolless ? { text: "Here is what I found so far." } : { toolCalls: [{ name: "read_file", args: { path: `f${ctx.turn}.ts` } }] }),
+    });
+    expect(settled).toEqual([{ learn: true }]);
   });
 
   it("never cuts off a long run of SUCCESSFUL calls — there is no step ceiling", async () => {

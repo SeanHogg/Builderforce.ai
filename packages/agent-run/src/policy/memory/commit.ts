@@ -15,6 +15,7 @@ export {
   MEMORY_OFF_NOTE,
   commitRunKnowledge,
   commitRunKnowledgeIfAllowed,
+  finishedRun,
   type FinishedRun,
   type MemoryCommitDeps,
 } from "./runKnowledgeCommit.js";

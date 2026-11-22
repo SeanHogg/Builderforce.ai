@@ -23,7 +23,8 @@ import type {
 import type { LocalModel, LocalRuntimeProbe } from "@builderforce/local-inference";
 import type { RunDeltaCardPayload, RunDeltaSummary } from "@builderforce/run-delta";
 import type { Prediction } from "@builderforce/run-delta/predict";
-import type { PolicyGate, RunKnowledgeLog } from "@builderforce/agent-tools";
+import type { PolicyGate } from "@builderforce/agent-tools";
+import type { FinishedRun } from "@builderforce/agent-run/memory";
 import type { ToolDef } from "./fileTools";
 import type { NativeRunLabels } from "./nativeBrainRun";
 import type { RunDirectives } from "./hooks/runHooks";
@@ -44,6 +45,11 @@ export const OWNER_NAME = "BuilderForce";
 export interface RunNoteOptions {
   memory: boolean;
   projectId?: number;
+  /**
+   * False when the run did not complete (failed, stopped): its note and code map still write, but nothing is LEARNED from it —
+   * the kernel path's rule. Absent means learn.
+   */
+  learn?: boolean;
 }
 
 export interface ToolRunInfo {
@@ -144,7 +150,7 @@ export interface BrainRunHostPorts {
    * chat's Memory switch is on (`memory`), what it learned and the code map of what it
    * found into the project's facts.
    */
-  sessionNote?(chatId: number, run: RunKnowledgeLog, opts: RunNoteOptions): Promise<void> | void;
+  sessionNote?(chatId: number, run: FinishedRun, opts: RunNoteOptions): Promise<void> | void;
   /**
    * What recent runs in this workspace did, read NOW. The panel builds its system
    * prompt once, when it opens; without this every later run in that panel started

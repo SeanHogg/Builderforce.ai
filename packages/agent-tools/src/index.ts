@@ -36,6 +36,7 @@ export * from "./writeOverwriteGuard.js";
 export * from "./psychometric-dims.js";
 export * from "./psychometrics.js";
 export * from "./knowledge-notes.js";
+export * from "./toolFailure.js";
 export * from "./run-knowledge.js";
 export * from "./skill-tools.js";
 export * from "./subagent-tools.js";

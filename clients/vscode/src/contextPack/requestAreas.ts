@@ -63,21 +63,68 @@ export interface RequestCodemapDeps {
   symbolLookupMs?: number;
 }
 
-/** The code maps for every area the request is about, most specific first, capped. */
+/** Remembered (non-codemap) facts a pack carries at most. */
+export const MAX_REMEMBERED_FACTS = 5;
+/** The workspace digest's key prefix — already covered by the workspace map. */
+const WORKSPACE_DIGEST_PREFIX = "workspace:";
+
+export interface RequestFacts {
+  /** The code maps for the areas the request is about. */
+  codemap: Array<{ key: string; content: string }>;
+  /** What earlier runs remembered (`remember_fact`, `learned:*`), in the server's rank order. */
+  remembered: Array<{ key: string; content: string }>;
+}
+
+/** The request's facts, the remembered ones already checked for stale references. */
+export interface MarkedRequestFacts {
+  codemap: RequestFacts["codemap"];
+  remembered: Array<{ key: string; content: string; possiblyStale?: string }>;
+}
+
+/**
+ * The remembered facts, each marked with its staleness note when `notes` finds one. ONLY this
+ * step is guarded: a throwing or slow check (past `ms`) leaves the facts unmarked and never
+ * costs the codemap facts that arrived with them.
+ */
+export async function markStaleRemembered(
+  found: RequestFacts,
+  notes: (texts: string[]) => Promise<Array<string | undefined>>,
+  ms: number,
+): Promise<MarkedRequestFacts> {
+  if (found.remembered.length === 0) return { codemap: found.codemap, remembered: [] };
+  const marks = await withinMs(
+    notes(found.remembered.map((f) => f.content)).catch(() => [] as Array<string | undefined>),
+    Math.max(0, ms),
+    [] as Array<string | undefined>,
+  );
+  return {
+    codemap: found.codemap,
+    remembered: found.remembered.map((f, i) => ({ key: f.key, content: f.content, ...(marks[i] ? { possiblyStale: marks[i] } : {}) })),
+  };
+}
+
+/** The pulled facts that are neither area maps nor the workspace digest, top N, rank order kept. */
+export function rememberedFactsOf(pulled: ReadonlyArray<{ key: string; content: string }>): Array<{ key: string; content: string }> {
+  return pulled
+    .filter((f) => consolidatedArea(f.key) === undefined && !f.key.startsWith(WORKSPACE_DIGEST_PREFIX))
+    .slice(0, MAX_REMEMBERED_FACTS);
+}
+
+/** The code maps for every area the request is about (most specific first, capped), plus what earlier runs remembered. */
 export async function codemapFactsForRequest(
   input: RequestCodemapInput,
   deps: RequestCodemapDeps,
-): Promise<Array<{ key: string; content: string }>> {
+): Promise<RequestFacts> {
   const request = input.request.trim();
   const pathAreas = areasNamed(input.focusPaths, input.focusContents);
   const idAreas = deps.symbols
     ? await areasOfIdentifiers(deps.symbols, extractIdentifiers(request), deps.symbolLookupMs ?? SYMBOL_LOOKUP_MS)
     : [];
   const known = [...new Set([...pathAreas, ...idAreas])];
-  if (known.length === 0 && !request) return [];
+  if (known.length === 0 && !request) return { codemap: [], remembered: [] };
   const query = [...known, request].join(" ").slice(0, MAX_QUERY_CHARS);
   const pulled = await deps.recall(query, FACTS_PULLED);
   const stored = pulled.map((f) => consolidatedArea(f.key)).filter((a): a is string => a !== undefined);
   const areas = [...new Set([...known, ...areasNamedIn(request, stored)])];
-  return codemapFactsFor(pulled, areas);
+  return { codemap: codemapFactsFor(pulled, areas), remembered: rememberedFactsOf(pulled) };
 }

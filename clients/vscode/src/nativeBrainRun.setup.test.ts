@@ -58,6 +58,22 @@ beforeEach(() => {
   resetBrainRunStore();
 });
 
+describe("the native participant's settled run (what it may learn)", () => {
+  it("tells the caller the run's own final answer, from the run's rows — never the dispatch hint or narration", async () => {
+    const settled: Array<{ learn: boolean; answer?: string }> = [];
+    await turn({ onSettled: (run) => settled.push(run) }, [{ text: "The canvas is drawn in a.ts." }]);
+    expect(settled).toEqual([{ learn: true, answer: "The canvas is drawn in a.ts." }]);
+  });
+
+  it("tells nothing for a run that was stopped before it settled", async () => {
+    const settled: unknown[] = [];
+    const abort = new AbortController();
+    abort.abort();
+    await turn({ onSettled: (run) => settled.push(run), signal: abort.signal });
+    expect(settled).toEqual([]);
+  });
+});
+
 describe("the native participant's run setup", () => {
   it("hands the model the context pack as the turn's context and says the preflight before turn 1", async () => {
     const { sent } = await turn({

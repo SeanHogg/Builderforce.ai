@@ -4319,6 +4319,21 @@ var CORE_TOOLS = [
 // ../packages/agent-tools/src/knowledge-notes.ts
 var import_working2 = require("@seanhogg/builderforce-memory/working");
 
+// ../packages/agent-tools/src/toolFailure.ts
+function isFailedToolResult(result) {
+  if (result == null) return false;
+  if (typeof result === "object") {
+    const r = result;
+    if (r.ok === false) return true;
+    if (typeof r.error === "string" && r.error) return true;
+    return false;
+  }
+  if (typeof result === "string") {
+    return /"ok"\s*:\s*false/.test(result) || /"error"\s*:\s*"[^"]/.test(result);
+  }
+  return false;
+}
+
 // ../packages/agent-tools/src/run-knowledge.ts
 var import_working3 = require("@seanhogg/builderforce-memory/working");
 
@@ -5703,21 +5718,6 @@ function toolResultRecord(result) {
     }
   }
   return result && typeof result === "object" ? result : null;
-}
-
-// src/toolFailure.ts
-function isFailedToolResult(result) {
-  if (result == null) return false;
-  if (typeof result === "object") {
-    const r = result;
-    if (r.ok === false) return true;
-    if (typeof r.error === "string" && r.error) return true;
-    return false;
-  }
-  if (typeof result === "string") {
-    return /"ok"\s*:\s*false/.test(result) || /"error"\s*:\s*"[^"]/.test(result);
-  }
-  return false;
 }
 
 // src/runProgress.ts

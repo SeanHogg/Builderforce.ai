@@ -9,13 +9,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { RunKnowledgeRecorder } from "@builderforce/agent-tools";
 
 const mocks = vi.hoisted(() => ({
-  rememberProjectFact: vi.fn(async () => true),
+  rememberProjectFact: vi.fn(async () => ({ ok: true })),
   noteRunStep: vi.fn(),
   appendSessionNote: vi.fn(async () => undefined),
+  routeStream: vi.fn(),
 }));
 vi.mock("./bfApi", () => ({ rememberProjectFact: mocks.rememberProjectFact }));
 vi.mock("./gateway", () => ({ getApiKey: vi.fn(async () => "k") }));
-vi.mock("./modelRouting", () => ({ resolveModelRoute: vi.fn(async () => ({})), routeStream: vi.fn() }));
+vi.mock("./modelRouting", () => ({ resolveModelRoute: vi.fn(async () => ({})), routeStream: mocks.routeStream }));
 vi.mock("./sessionNotes", () => ({ appendSessionNote: mocks.appendSessionNote }));
 vi.mock("@seanhogg/builderforce-brain-embedded", () => ({
   noteRunStep: mocks.noteRunStep,
@@ -23,7 +24,7 @@ vi.mock("@seanhogg/builderforce-brain-embedded", () => ({
 }));
 
 import { recordEditorRunEnd } from "./editorRunEnd";
-import { MEMORY_OFF_NOTE } from "@builderforce/agent-run/memory";
+import { finishedRun, MEMORY_OFF_NOTE } from "@builderforce/agent-run/memory";
 
 function readOnlyRun(): RunKnowledgeRecorder {
   const r = new RunKnowledgeRecorder();
@@ -58,6 +59,24 @@ describe("recordEditorRunEnd's code-map write", () => {
     await recordEditorRunEnd({} as never, os.tmpdir(), "s", readOnlyRun(), { memory: true, projectId: 12 }, usage(undefined));
     await vi.waitFor(() => expect(mocks.rememberProjectFact).toHaveBeenCalledTimes(1));
     expect((mocks.rememberProjectFact.mock.calls[0] as unknown as unknown[])[4]).toEqual({});
+  });
+
+  it("learns from a read-only run's final answer: the completion sees it and its fact is written", async () => {
+    const stream = vi.fn(async () => ({ text: JSON.stringify([{ key: "specs-live-in", kind: "root_cause", content: "The specs live in docs/specs and a.md owns the PRD index." }]) }));
+    mocks.routeStream.mockReturnValueOnce(stream);
+    await recordEditorRunEnd({} as never, os.tmpdir(), "s", finishedRun(readOnlyRun(), "The PRD index is owned by docs/specs/a.md."), { memory: true, projectId: 12 }, usage(4242));
+    await vi.waitFor(() => expect(mocks.rememberProjectFact).toHaveBeenCalledTimes(2));
+    const sent = (stream.mock.calls[0] as unknown as [{ messages: Array<{ content: string }> }])[0].messages[1]!.content;
+    expect(sent).toContain("Conclusion:\nThe PRD index is owned by docs/specs/a.md.");
+    expect(mocks.rememberProjectFact.mock.calls.map((c) => (c as unknown as unknown[])[2])).toContain("learned:specs-live-in");
+  });
+
+  it("a failed or stopped run (learn: false) still writes its code map but asks for no learned facts", async () => {
+    mocks.routeStream.mockClear();
+    await recordEditorRunEnd({} as never, os.tmpdir(), "s", finishedRun(readOnlyRun(), "An answer."), { memory: true, projectId: 12, learn: false }, usage(4242));
+    await vi.waitFor(() => expect(mocks.rememberProjectFact).toHaveBeenCalledTimes(1));
+    expect((mocks.rememberProjectFact.mock.calls[0] as unknown as unknown[])[2]).toBe("codemap:docs/specs");
+    expect(mocks.routeStream).not.toHaveBeenCalled();
   });
 
   it("with Memory off writes nothing and says so once on the run's trace", async () => {

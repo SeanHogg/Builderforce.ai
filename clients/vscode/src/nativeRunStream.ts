@@ -6,7 +6,7 @@
  * every name here. No `vscode` import.
  */
 
-import type { BrainRunPersistence, BrainRunSnapshot, BrainTraceEvent } from "@seanhogg/builderforce-brain-embedded";
+import { isForcedFinishStep, type BrainRunPersistence, type BrainRunSnapshot, type BrainTraceEvent } from "@seanhogg/builderforce-brain-embedded";
 import type { NativeRunEvents } from "./nativeRunTypes";
 
 /**
@@ -66,7 +66,7 @@ export function createStreamRelay(events: Pick<NativeRunEvents, "onText">): (sna
 export function exhaustedToolBudget(events: readonly BrainTraceEvent[]): boolean {
   return events.some(
     (e) =>
-      (e.label === "llm.complete" && (e.args as { forcedFinish?: unknown } | undefined)?.forcedFinish === true) ||
+      isForcedFinishStep(e) ||
       (e.category === "error" && e.label === "agent.loop"),
   );
 }
@@ -76,15 +76,18 @@ export function exhaustedToolBudget(events: readonly BrainTraceEvent[]): boolean
  * writes the WHOLE exchange ONCE after the run (that single write is also what triggers
  * the server-side Evermind learn gate), so the in-run writes must not reach the server
  * or the conversation would be stored twice. Ids are negative: nothing downstream can
- * mistake one for a real `brain_messages` row.
+ * mistake one for a real `brain_messages` row. UNIQUE PER PROCESS (one counter for every port): a chat's run cell keeps its
+ * persisted rows across turns, and a row id is how a run tells its own rows from an earlier turn's (`settledAnswerOf`) — a
+ * counter that restarted with each turn's port would hand turn 2 the ids turn 1 already used.
  */
+let nextTransientId = -1;
+
 export function transientRunPersistence(): BrainRunPersistence {
-  let nextId = -1;
   return {
     async sendMessages(_chatId, messages) {
       const at = new Date().toISOString();
       return messages.map((m) => ({
-        id: nextId--,
+        id: nextTransientId--,
         role: m.role,
         content: m.content,
         metadata: m.metadata ?? null,

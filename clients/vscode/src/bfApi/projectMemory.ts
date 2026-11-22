@@ -103,9 +103,9 @@ export async function rememberProjectFact(
   key: string,
   content: string,
   meta?: { chatId?: number; fileAnchors?: Array<{ path: string }> },
-): Promise<boolean> {
+): Promise<{ ok: boolean; reason?: string }> {
   try {
-    const r = await authed<{ ok?: boolean }>(secrets, `/api/projects/${projectId}/facts`, {
+    const r = await authed<{ ok?: boolean; reason?: string }>(secrets, `/api/projects/${projectId}/facts`, {
       method: 'POST',
       body: JSON.stringify({
         key,
@@ -115,9 +115,9 @@ export async function rememberProjectFact(
         ...(meta?.fileAnchors?.length ? { fileAnchors: meta.fileAnchors } : {}),
       }),
     });
-    return !!r?.ok;
+    return { ok: !!r?.ok, ...(r?.reason ? { reason: r.reason } : {}) };
   } catch {
-    return false;
+    return { ok: false };
   }
 }
 

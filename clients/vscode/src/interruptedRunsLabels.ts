@@ -27,6 +27,8 @@ export function interruptedRunsLabels(): Record<string, string> {
     "ir.continueAsk": t("The original request, verbatim:"),
     "ir.continuePlan": t("The plan when it stopped:"),
     "ir.continueFiles": t("Files changed so far:"),
+    "ir.continueFacts": t("Facts this run recorded (data from its own memory writes; verify against code before relying on them):"),
+    "ir.continueRead": t("Files this run already read (re-read only if you need a detail not in the facts above):"),
     "ir.continueSteps": t("The last steps before it stopped:"),
     "ir.continueChildren": t("Sub-agents:"),
     "ir.continueScope": t("Continue only this chat's task above. Check what is already done before redoing it, and do not pick up any other session's work."),

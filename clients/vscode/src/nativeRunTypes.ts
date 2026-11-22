@@ -157,4 +157,9 @@ export interface NativeBrainRunOptions {
   signal: AbortSignal;
   labels: NativeRunLabels;
   events: NativeRunEvents;
+  /**
+   * Told once, when the run ran to its end (never for a stopped run): whether it may LEARN and its final answer, read from
+   * THIS run's own rows and trace (`settledAnswerOf` — the same rule the panel's host applies). Not told ⇒ nothing to learn.
+   */
+  onSettled?(run: { learn: boolean; answer?: string }): void;
 }

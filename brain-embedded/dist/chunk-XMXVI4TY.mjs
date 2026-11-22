@@ -1119,6 +1119,21 @@ function stableStringify(value) {
   return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(record2[k])}`).join(",")}}`;
 }
 
+// ../packages/agent-tools/src/toolFailure.ts
+function isFailedToolResult(result) {
+  if (result == null) return false;
+  if (typeof result === "object") {
+    const r = result;
+    if (r.ok === false) return true;
+    if (typeof r.error === "string" && r.error) return true;
+    return false;
+  }
+  if (typeof result === "string") {
+    return /"ok"\s*:\s*false/.test(result) || /"error"\s*:\s*"[^"]/.test(result);
+  }
+  return false;
+}
+
 // ../packages/agent-tools/src/modelRoles.ts
 var MODEL_ROLES = ["plan", "code", "review", "verify", "explore", "chat", "utility"];
 var MODEL_ROLE_DESCRIPTIONS = {
@@ -5873,7 +5888,8 @@ var FILE_TOOL_KINDS = /* @__PURE__ */ new Map([
   ["read_file", "read"],
   ["read", "read"],
   ["view", "read"],
-  ["file_outline", "read"]
+  ["file_outline", "read"],
+  ["read_compressed", "read"]
 ]);
 function fileToolKind(name) {
   return FILE_TOOL_KINDS.get(name);
@@ -5905,9 +5921,23 @@ var OBSERVATION = {
   delete: "deleted",
   read: "read"
 };
+var REMEMBER_FACT_TOOLS = /* @__PURE__ */ new Set(["remember_fact", "builtin_remember_fact"]);
+var BRIEF_FACTS_MAX = 8;
+var BRIEF_FACT_CHARS = 200;
+var FACT_KEY_CHARS = 120;
+var FACT_CONTENT_CHARS = 600;
+var SAVED_FACTS_MAX = 24;
+function savedFactOf(args) {
+  if (!args || typeof args !== "object" || Array.isArray(args)) return void 0;
+  const rec = args;
+  const key = typeof rec.key === "string" ? rec.key.replace(/\s+/g, " ").trim().slice(0, FACT_KEY_CHARS) : "";
+  const content = typeof rec.content === "string" ? rec.content.trim() : "";
+  return key && content ? { key, content } : void 0;
+}
 var RunKnowledgeRecorder = class _RunKnowledgeRecorder {
   memory = new WorkingMemory();
   tools = [];
+  savedFacts = /* @__PURE__ */ new Map();
   /**
    * The recorder a resumed step continues with. A host that runs one step per process
    * (the cloud's Durable Object ticks) MUST carry this, or every step starts with an
@@ -5922,11 +5952,25 @@ var RunKnowledgeRecorder = class _RunKnowledgeRecorder {
     }
     for (const query of state.memory.searched ?? []) r.memory.observe({ kind: "searched", query });
     r.tools.push(...state.tools ?? []);
+    for (const raw of state.savedFacts ?? []) {
+      const f = savedFactOf(raw);
+      if (f) r.rememberFact(f);
+    }
     return r;
   }
   /** The state {@link restore} rebuilds this recorder from. */
   snapshot() {
-    return { memory: this.memory.snapshot, tools: [...this.tools] };
+    return {
+      memory: this.memory.snapshot,
+      tools: [...this.tools],
+      ...this.savedFacts.size > 0 ? { savedFacts: [...this.savedFacts].map(([key, content]) => ({ key, content })) } : {}
+    };
+  }
+  /** Same key replaces (re-inserted, so the newest lists last); content clamped, only the newest few kept. */
+  rememberFact(fact) {
+    this.savedFacts.delete(fact.key);
+    this.savedFacts.set(fact.key, fact.content.slice(0, FACT_CONTENT_CHARS));
+    while (this.savedFacts.size > SAVED_FACTS_MAX) this.savedFacts.delete(this.savedFacts.keys().next().value);
   }
   setPrompt(prompt) {
     this.memory.setTask(prompt);
@@ -5934,6 +5978,13 @@ var RunKnowledgeRecorder = class _RunKnowledgeRecorder {
   /** Record one successful tool call. Unknown tools still count toward `tools`. */
   record(name, args) {
     this.tools.push(name);
+    if (REMEMBER_FACT_TOOLS.has(name)) {
+      const fact = savedFactOf(args);
+      if (fact) {
+        this.rememberFact(fact);
+      }
+      return;
+    }
     const search = searchLabel(name, args);
     if (search) {
       this.memory.observe({ kind: "searched", query: search });
@@ -5966,7 +6017,17 @@ var RunKnowledgeRecorder = class _RunKnowledgeRecorder {
     };
   }
   brief() {
-    return this.memory.brief({ observations: this.tools.length });
+    const base = this.memory.brief({ observations: this.tools.length });
+    if (this.savedFacts.size === 0) return base;
+    const lines = [...this.savedFacts].slice(-BRIEF_FACTS_MAX).map(([key, content]) => {
+      const line = content.replace(/\s+/g, " ");
+      return `- ${key}: ${line.length > BRIEF_FACT_CHARS ? `${line.slice(0, BRIEF_FACT_CHARS - 1)}\u2026` : line}`;
+    });
+    const section = `Facts you saved this run:
+${lines.join("\n")}`;
+    return base ? `${base}
+
+${section}` : section;
   }
   consolidate(opts) {
     return consolidate(this.memory.snapshot, opts);
@@ -11425,21 +11486,6 @@ function asksForWorkItemsIn(messages) {
   return messages.some((m) => m.role === "user" && asksForWorkItems(m.content));
 }
 
-// src/toolFailure.ts
-function isFailedToolResult(result) {
-  if (result == null) return false;
-  if (typeof result === "object") {
-    const r = result;
-    if (r.ok === false) return true;
-    if (typeof r.error === "string" && r.error) return true;
-    return false;
-  }
-  if (typeof result === "string") {
-    return /"ok"\s*:\s*false/.test(result) || /"error"\s*:\s*"[^"]/.test(result);
-  }
-  return false;
-}
-
 // src/runSlices.ts
 var at = (iso) => {
   const t = Date.parse(iso);
@@ -12579,7 +12625,6 @@ function byteLen(v) {
   return s.length;
 }
 var MEMORY_READ_TOOLS = /* @__PURE__ */ new Set(["recall_facts", "builtin_recall_facts"]);
-var MEMORY_WRITE_TOOLS = /* @__PURE__ */ new Set(["remember_fact", "builtin_remember_fact"]);
 function memoryUsageInTrace(events) {
   const out = {
     evermindRecalls: 0,
@@ -12606,7 +12651,7 @@ function memoryUsageInTrace(events) {
       out.reconcileSteps += 1;
     } else if (ev.category === "tool" && !ev.isError && !isFailedToolResult(ev.result)) {
       if (MEMORY_READ_TOOLS.has(ev.label)) out.factsRead += 1;
-      if (MEMORY_WRITE_TOOLS.has(ev.label)) out.factsWritten += 1;
+      if (REMEMBER_FACT_TOOLS.has(ev.label)) out.factsWritten += 1;
     }
   }
   return out;
@@ -13100,6 +13145,10 @@ export {
   isNotARepo,
   buildCoreToolRegistry,
   limbicTraits,
+  isFailedToolResult,
+  fileToolKind,
+  REMEMBER_FACT_TOOLS,
+  savedFactOf,
   RunKnowledgeRecorder,
   SKILL_TOOLS,
   VERIFY_DELEGATION_STEP,
@@ -13258,7 +13307,6 @@ export {
   TICKETING_INTENTS,
   isMutationTool,
   hasEditIntent,
-  isFailedToolResult,
   codeChangesOf,
   isCacheAnswered,
   computeRunProgress,
@@ -13324,4 +13372,4 @@ export {
   toolCallArgBytes,
   createComposingActivity
 };
-//# sourceMappingURL=chunk-RPVICLIG.mjs.map
+//# sourceMappingURL=chunk-XMXVI4TY.mjs.map

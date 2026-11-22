@@ -16,7 +16,7 @@ import type * as vscode from "vscode";
 import { TOOL_DEFS, type ToolDef } from "./fileTools";
 import { cognitionToolDefs } from "./cognition";
 import type { PlatformChatIdentity } from "./platformTools";
-import { listPlatformTools } from "./platformTools";
+import { listPlatformTools, runServerChatId } from "./platformTools";
 import { subagentToolDef } from "./subagentTool";
 import { subagentFanOutToolDef } from "./subagentFanOutTool";
 import { subagentControlToolDefs } from "./subagentControlTools";
@@ -40,7 +40,10 @@ export async function brainToolCatalog(
    *  `remember_fact`, so the run neither reads nor writes project memory. Default on. */
   opts: { memory?: boolean; chatIdentity?: PlatformChatIdentity } = {},
 ): Promise<ToolDef[]> {
-  const cognitionTools = projectId != null && opts.memory !== false ? cognitionToolDefs(secrets, projectId) : [];
+  const identity = opts.chatIdentity;
+  const cognitionTools = projectId != null && opts.memory !== false
+    ? cognitionToolDefs(secrets, projectId, identity ? async () => (await runServerChatId(identity)) ?? undefined : undefined)
+    : [];
   // The identity this chat's platform calls translate through: a `chatId` argument equal
   // to `chatIdentity.localChatId` is sent as the bound server chat id, so the relay never
   // sees a local chat id (an unbound chat is a named error instead of a 502 round trip).

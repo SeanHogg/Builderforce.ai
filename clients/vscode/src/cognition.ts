@@ -34,7 +34,12 @@ const RECALL_MAX_LIMIT = 20;
  * (write-through, replace-on-write), and every surface sees it. Closes over the caller's
  * secrets + the active project (the ToolDef `execute` signature can't carry them).
  */
-export function cognitionToolDefs(secrets: vscode.SecretStorage, projectId: number | undefined): ToolDef[] {
+export function cognitionToolDefs(
+  secrets: vscode.SecretStorage,
+  projectId: number | undefined,
+  /** The run's bound SERVER chat id (`runServerChatId`), read at call time; undefined = unbound. */
+  serverChatId?: () => Promise<number | undefined>,
+): ToolDef[] {
   return [
     {
       name: "recall_facts",
@@ -86,11 +91,26 @@ export function cognitionToolDefs(secrets: vscode.SecretStorage, projectId: numb
       },
       mutating: toolMutating("remember_fact", { mutates: true }),
       execute: async (args) => {
-        if (!projectId) return "Select a project first — memory is scoped to the active project.";
-        const ok = await rememberProjectFact(secrets, projectId, String(args.key ?? ""), String(args.content ?? ""));
-        return ok
-          ? `Remembered '${String(args.key)}' for this project (shared with all agents).`
-          : "Project memory is unavailable right now.";
+        if (!projectId) return JSON.stringify({ ok: false, error: "Select a project first — memory is scoped to the active project." });
+        // The run's SERVER chat: its origin, and the chat's Memory gate (off ⇒ `memory-off`).
+        const chatId = await serverChatId?.().catch(() => undefined);
+        const result = await rememberProjectFact(
+          secrets,
+          projectId,
+          String(args.key ?? ""),
+          String(args.content ?? ""),
+          chatId != null ? { chatId } : undefined,
+        );
+        // A JSON envelope, so a refusal reads as a failed call (`isFailedToolResult`), never as "saved".
+        if (result.ok) {
+          return JSON.stringify({ ok: true, key: String(args.key), note: `Remembered '${String(args.key)}' for this project (shared with all agents).` });
+        }
+        return JSON.stringify({
+          ok: false,
+          error: result.reason === "memory-off"
+            ? "memory-off: Memory is OFF for this chat — nothing was remembered."
+            : "Project memory is unavailable right now.",
+        });
       },
     },
   ];

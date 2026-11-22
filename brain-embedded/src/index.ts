@@ -656,6 +656,7 @@ export { modelScorecard, formatModelScorecard, modelTurnLog, formatModelTurnLog 
 export type { ModelScore, ModelTurn } from './modelScorecard';
 
 // A reply the user stopped mid-stream — kept, attributed, and never replayed to a model
+export { BUDGET_CONTAINED_STEP, isForcedFinishStep, isUnsettledAnswer } from './unsettledAnswer';
 export { STOPPED_TURN_META_KEY, STOPPED_TURN_STEP, stoppedTurnMetadata, isStoppedTurn, isStoppedBeforeStart, stoppedBeforeStartRow } from './stoppedTurn';
 export type { StoppedTurnSource } from './stoppedTurn';
 

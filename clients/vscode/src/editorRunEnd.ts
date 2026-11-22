@@ -8,9 +8,11 @@
  *      grounding (`recentActivitySection`) reads it.
  *   2. The project facts (code map + learned decisions), gated on the Memory switch in
  *      `commitRunKnowledgeIfAllowed` — NOT awaited: it is a network write (and a model
- *      completion when files changed), and a caller holding a chat until it returns
- *      would drop a turn sent in the meantime. Its model call is one more call of the
- *      chat's run, so it lands in the chat's usage ledger like every other (PRD 36).
+ *      completion when the run learns), and a caller holding a chat until it returns
+ *      would drop a turn sent in the meantime. Its model call (made only for a COMPLETED run
+ *      that changed files, or read-only investigated and answered: `opts.learn`, `run.answer`)
+ *      is one more call of the chat's run, so it lands in the chat's usage ledger like every
+ *      other (PRD 36).
  */
 
 import type * as vscode from "vscode";
@@ -77,7 +79,7 @@ export async function recordEditorRunEnd(
             });
             return result.text;
           },
-          remember: async (key, content) => rememberProjectFact(secrets, projectId, key, content, await chatMeta()),
+          remember: async (key, content) => (await rememberProjectFact(secrets, projectId, key, content, await chatMeta())).ok,
           // The evidence the learned facts are extracted from: the editor reads the workspace, the agent may not.
           excerpt: readChangedExcerpt,
         },

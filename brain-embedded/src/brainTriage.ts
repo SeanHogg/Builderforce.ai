@@ -21,6 +21,7 @@ import { modelScorecard, modelTurnLog, type ModelScore, type ModelTurn } from '.
 import { routingByRole, type RoutingByRole } from './routingByRole';
 import { sessionShippedInTrace, staffingSummaryInTrace, type StaffingSummary } from './staffingSummary';
 import { parseMessageProvenance } from './provenance';
+import { REMEMBER_FACT_TOOLS } from '@builderforce/agent-tools';
 import { STOPPED_TURN_STEP } from './stoppedTurn';
 import { isCodeChangeTool } from './localWorkspaceTools';
 import { LOCAL_TICKET_CREATE_LABEL } from './ticketToolVocabulary';
@@ -778,7 +779,6 @@ export interface MemoryUsageSummary {
 }
 
 const MEMORY_READ_TOOLS = new Set(['recall_facts', 'builtin_recall_facts']);
-const MEMORY_WRITE_TOOLS = new Set(['remember_fact', 'builtin_remember_fact']);
 
 export function memoryUsageInTrace(events: BrainTraceEvent[]): MemoryUsageSummary {
   const out: MemoryUsageSummary = {
@@ -806,7 +806,7 @@ export function memoryUsageInTrace(events: BrainTraceEvent[]): MemoryUsageSummar
       out.reconcileSteps += 1;
     } else if (ev.category === 'tool' && !ev.isError && !isFailedToolResult(ev.result)) {
       if (MEMORY_READ_TOOLS.has(ev.label)) out.factsRead += 1;
-      if (MEMORY_WRITE_TOOLS.has(ev.label)) out.factsWritten += 1;
+      if (REMEMBER_FACT_TOOLS.has(ev.label)) out.factsWritten += 1;
     }
   }
   return out;

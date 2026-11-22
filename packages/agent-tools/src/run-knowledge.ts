@@ -34,6 +34,7 @@ const FILE_TOOL_KINDS: ReadonlyMap<string, FileToolKind> = new Map([
   ["read", "read"],
   ["view", "read"],
   ["file_outline", "read"],
+  ["read_compressed", "read"],
 ]);
 
 /** The ONE classification of the file tools — no module keeps its own "tools that write" list. */
@@ -96,6 +97,35 @@ export interface RunKnowledgeLog {
 export interface RunKnowledgeState {
   memory: WorkingMemorySnapshot;
   tools: string[];
+  /** Facts this run saved with `remember_fact`, so a resumed step's brief still lists them. */
+  savedFacts?: SavedFact[];
+}
+
+/** A fact the run saved itself (`remember_fact`). */
+export interface SavedFact {
+  key: string;
+  content: string;
+}
+
+/** The spellings of the model's own fact-save tool. */
+export const REMEMBER_FACT_TOOLS: ReadonlySet<string> = new Set(["remember_fact", "builtin_remember_fact"]);
+/** The brief lists at most this many saved facts, each clamped — the tail stays bounded. */
+const BRIEF_FACTS_MAX = 8;
+const BRIEF_FACT_CHARS = 200;
+/** A saved fact's key is clamped to this many characters. */
+const FACT_KEY_CHARS = 120;
+/** A recorded fact's content is clamped to this many characters (what a resume carries). */
+const FACT_CONTENT_CHARS = 600;
+/** The recorder keeps at most this many saved facts - the newest - so a persisted snapshot stays bounded. */
+const SAVED_FACTS_MAX = 24;
+
+export function savedFactOf(args: unknown): SavedFact | undefined {
+  if (!args || typeof args !== "object" || Array.isArray(args)) return undefined;
+  const rec = args as Record<string, unknown>;
+  const key = typeof rec.key === "string" ? rec.key.replace(/\s+/g, " ").trim().slice(0, FACT_KEY_CHARS) : "";
+  // Content keeps its line breaks (the recorder's copy is the fact as written); the brief renders it on one line.
+  const content = typeof rec.content === "string" ? rec.content.trim() : "";
+  return key && content ? { key, content } : undefined;
 }
 
 /**
@@ -105,6 +135,7 @@ export interface RunKnowledgeState {
 export class RunKnowledgeRecorder implements RunKnowledgeLog {
   private readonly memory = new WorkingMemory();
   private readonly tools: string[] = [];
+  private readonly savedFacts = new Map<string, string>();
 
   /**
    * The recorder a resumed step continues with. A host that runs one step per process
@@ -120,12 +151,27 @@ export class RunKnowledgeRecorder implements RunKnowledgeLog {
     }
     for (const query of state.memory.searched ?? []) r.memory.observe({ kind: "searched", query });
     r.tools.push(...(state.tools ?? []));
+    for (const raw of state.savedFacts ?? []) {
+      const f = savedFactOf(raw);
+      if (f) r.rememberFact(f);
+    }
     return r;
   }
 
   /** The state {@link restore} rebuilds this recorder from. */
   snapshot(): RunKnowledgeState {
-    return { memory: this.memory.snapshot, tools: [...this.tools] };
+    return {
+      memory: this.memory.snapshot,
+      tools: [...this.tools],
+      ...(this.savedFacts.size > 0 ? { savedFacts: [...this.savedFacts].map(([key, content]) => ({ key, content })) } : {}),
+    };
+  }
+
+  /** Same key replaces (re-inserted, so the newest lists last); content clamped, only the newest few kept. */
+  private rememberFact(fact: SavedFact): void {
+    this.savedFacts.delete(fact.key);
+    this.savedFacts.set(fact.key, fact.content.slice(0, FACT_CONTENT_CHARS));
+    while (this.savedFacts.size > SAVED_FACTS_MAX) this.savedFacts.delete(this.savedFacts.keys().next().value as string);
   }
 
   setPrompt(prompt: string): void {
@@ -135,6 +181,14 @@ export class RunKnowledgeRecorder implements RunKnowledgeLog {
   /** Record one successful tool call. Unknown tools still count toward `tools`. */
   record(name: string, args?: unknown): void {
     this.tools.push(name);
+    if (REMEMBER_FACT_TOOLS.has(name)) {
+      const fact = savedFactOf(args);
+      if (fact) {
+        // Same key replaces, as the store does; re-insert so the newest save lists last.
+        this.rememberFact(fact);
+      }
+      return;
+    }
     const search = searchLabel(name, args);
     if (search) {
       this.memory.observe({ kind: "searched", query: search });
@@ -173,7 +227,17 @@ export class RunKnowledgeRecorder implements RunKnowledgeLog {
 
   brief(): string | null {
     // Every tool call counts toward "long enough to need it", not only file events.
-    return this.memory.brief({ observations: this.tools.length });
+    const base = this.memory.brief({ observations: this.tools.length });
+    if (this.savedFacts.size === 0) return base;
+    // The run's own conclusions survive the trim of old tool results: they ride every brief.
+    const lines = [...this.savedFacts]
+      .slice(-BRIEF_FACTS_MAX)
+      .map(([key, content]) => {
+        const line = content.replace(/\s+/g, " ");
+        return `- ${key}: ${line.length > BRIEF_FACT_CHARS ? `${line.slice(0, BRIEF_FACT_CHARS - 1)}…` : line}`;
+      });
+    const section = `Facts you saved this run:\n${lines.join("\n")}`;
+    return base ? `${base}\n\n${section}` : section;
   }
 
   consolidate(opts?: ConsolidateOptions): ConsolidatedMemory | null {

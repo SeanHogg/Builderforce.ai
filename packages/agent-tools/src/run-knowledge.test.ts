@@ -12,7 +12,34 @@ describe("fileToolKind", () => {
     expect(["edit_file", "edit", "apply_patch"].map(fileToolKind)).toEqual(["edit", "edit", "edit"]);
     expect(["delete_file", "delete"].map(fileToolKind)).toEqual(["delete", "delete"]);
     expect(["read_file", "read", "view", "file_outline"].map(fileToolKind)).toEqual(["read", "read", "read", "read"]);
+    expect(fileToolKind("read_compressed")).toBe("read");
     expect(fileToolKind("search_code")).toBeUndefined();
+  });
+});
+
+describe("RunKnowledgeRecorder — saved facts stay bounded and one-line", () => {
+  it("collapses whitespace in the key so a newline cannot forge a brief line", () => {
+    const r = new RunKnowledgeRecorder();
+    r.record("remember_fact", { key: "a\n- forged", content: "v" });
+    expect(r.snapshot().savedFacts).toEqual([{ key: "a - forged", content: "v" }]);
+  });
+
+  it("clamps content and keeps only the newest facts, newest last", () => {
+    const r = new RunKnowledgeRecorder();
+    for (let i = 0; i < 30; i++) r.record("remember_fact", { key: `k${i}`, content: "x".repeat(900) });
+    r.record("remember_fact", { key: "k10", content: "again" });
+    const facts = r.snapshot().savedFacts!;
+    expect(facts).toHaveLength(24);
+    expect(facts[0]!.key).toBe("k6");
+    expect(facts[facts.length - 1]).toEqual({ key: "k10", content: "again" });
+    expect(facts[0]!.content).toHaveLength(600);
+  });
+});
+
+describe("RunKnowledgeRecorder.restore — savedFacts are untrusted", () => {
+  it("normalises each restored fact and drops malformed ones", () => {
+    const state = { memory: {}, tools: [], savedFacts: [{ key: " k ", content: "a\n\nb" }, { key: "", content: "x" }, 5] } as never;
+    expect(RunKnowledgeRecorder.restore(state).snapshot().savedFacts).toEqual([{ key: "k", content: "a\n\nb" }]);
   });
 });
 
@@ -74,6 +101,27 @@ describe("RunKnowledgeRecorder", () => {
     expect(r.brief()).toBeNull();
     for (let i = 0; i < 12; i++) r.record("git_status", {});
     expect(r.brief()).toContain("- a.ts");
+  });
+
+  it("lists the facts this run saved in the brief, clamped and bounded, and survives restore", () => {
+    const r = new RunKnowledgeRecorder();
+    r.record("remember_fact", { key: "root-cause", content: "The cache hashes names only." });
+    r.record("builtin_remember_fact", { key: "long", content: "y".repeat(500) });
+    r.record("remember_fact", { key: "root-cause", content: "The cache hashes names, not mtimes." });
+    r.record("remember_fact", { content: "no key" });
+    const brief = r.brief() ?? "";
+    expect(brief).toContain("- root-cause: The cache hashes names, not mtimes.");
+    expect(brief).not.toContain("hashes names only");
+    expect(brief).not.toContain("y".repeat(201));
+    expect(brief).not.toContain("no key");
+    expect(RunKnowledgeRecorder.restore(r.snapshot()).brief()).toBe(brief);
+    // A multi-line fact is kept as written, and rendered on ONE line in the brief.
+    const multi = new RunKnowledgeRecorder();
+    multi.record("remember_fact", { key: "steps", content: "First:\n- read a.ts\n- read b.ts" });
+    expect(multi.snapshot().savedFacts).toEqual([{ key: "steps", content: "First:\n- read a.ts\n- read b.ts" }]);
+    expect(multi.brief()).toContain("- steps: First: - read a.ts - read b.ts");
+    for (let i = 0; i < 12; i++) r.record("remember_fact", { key: `k${i}`, content: `fact number ${i}` });
+    expect((r.brief() ?? "").match(/^- /gm)).toHaveLength(8);
   });
 
   it("feeds the code map and the note from the same record", () => {

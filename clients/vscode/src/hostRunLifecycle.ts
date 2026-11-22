@@ -22,7 +22,8 @@
  * module was told about are. No `vscode` import; journal failures go to `log`.
  */
 
-import { resumeStateOf, STOPPED_TURN_STEP, type ResumeTraceEvent, type RunResumeState } from "@seanhogg/builderforce-brain-embedded";
+import { isMidTurnMetadata } from "@builderforce/agent-loop";
+import { isUnsettledAnswer, parseSubagentOrigin, resumeStateOf, STOPPED_TURN_STEP, type ResumeTraceEvent, type RunResumeState } from "@seanhogg/builderforce-brain-embedded";
 import type { RunHostMessage, RunSink } from "./brainRunHostProtocol";
 import type { InstalledRunRecovery } from "./installRunRecovery";
 import type { RunHold, RunTerminalStatus } from "./runRecovery";
@@ -67,6 +68,40 @@ export function terminalStatusOf(
   if (message.type === "run.failed") return "failed";
   if (snapshot.trace.some((event) => event.label === STOPPED_TURN_STEP && event.ts >= startedAt)) return "cancelled";
   return snapshot.error ? "failed" : "completed";
+}
+
+/** The slice of a run snapshot the run-end memory step reads: how it ended, and the assistant rows its cell persisted. */
+export interface RunAnswerSnapshot extends RunOutcomeSnapshot {
+  appended?: ReadonlyArray<{ id: number; role: string; content: string; metadata?: string | null }>;
+}
+
+/** The ids of the rows a cell had already persisted before a run began — they are not that run's answer. */
+export function appendedIdsOf(snapshot: Pick<RunAnswerSnapshot, "appended">): ReadonlySet<number> {
+  return new Set((snapshot.appended ?? []).map((m) => m.id));
+}
+
+/**
+ * What a run that just ended leaves for project memory: whether it may LEARN (a completed run only, as the kernel path does —
+ * the session note and code map are written on every outcome regardless) and its final answer. The answer is read from THIS
+ * run's own rows only (`seen` = the cell's rows before it began; the cell's buffer outlives runs), never a delegated child's
+ * mid-turn report, and never a reply the run was forced into (a USD-cap stop, the failure-streak closing answer: `isUnsettledAnswer`). Undefined when the
+ * run wrote none.
+ */
+export function settledAnswerOf(
+  chatId: number,
+  snapshot: RunAnswerSnapshot,
+  startedAt: string,
+  seen: ReadonlySet<number>,
+): { learn: boolean; answer?: string } {
+  const status = terminalStatusOf({ type: "run.settled", chatId }, snapshot, startedAt);
+  if (status !== "completed") return { learn: false };
+  // THIS run's slice of the cell's trace (which spans every turn of the chat): a cap stop, or a run the failure breaker ended.
+  const mine = snapshot.trace.filter((event) => event.ts >= startedAt);
+  if (isUnsettledAnswer(mine)) return { learn: true };
+  const row = [...(snapshot.appended ?? [])]
+    .reverse()
+    .find((m) => !seen.has(m.id) && m.role === "assistant" && m.content.trim() && !isMidTurnMetadata(m.metadata) && !parseSubagentOrigin(m));
+  return { learn: true, ...(row ? { answer: row.content } : {}) };
 }
 
 /** The resume state to journal, or undefined when the run has nothing to continue from yet (no ask, no step). */

@@ -18,6 +18,10 @@ export interface ResumeStateView {
   files?: string[];
   /** The run's last tool steps, oldest first. */
   steps?: string[];
+  /** Facts the run saved to project memory. */
+  facts?: Array<{ key: string; content: string }>;
+  /** Files the run already read. */
+  read?: string[];
 }
 
 /** A sub-agent's state as the journal kept it (`ChildState`). */

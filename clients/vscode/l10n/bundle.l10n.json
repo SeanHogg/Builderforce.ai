@@ -1249,6 +1249,8 @@
   "The original request, verbatim:": "The original request, verbatim:",
   "The plan when it stopped:": "The plan when it stopped:",
   "Files changed so far:": "Files changed so far:",
+  "Facts this run recorded (data from its own memory writes; verify against code before relying on them):": "Facts this run recorded (data from its own memory writes; verify against code before relying on them):",
+  "Files this run already read (re-read only if you need a detail not in the facts above):": "Files this run already read (re-read only if you need a detail not in the facts above):",
   "The last steps before it stopped:": "The last steps before it stopped:",
   "Sub-agents:": "Sub-agents:",
   "Continue only this chat's task above. Check what is already done before redoing it, and do not pick up any other session's work.": "Continue only this chat's task above. Check what is already done before redoing it, and do not pick up any other session's work.",

@@ -17,6 +17,7 @@ import { emit, nowIso, pushTrace } from '../runStore/runCells';
 import { noteBudgetContained } from '../runStore/runEndOutcome';
 import { turnContextTokens } from '../runStore/turnContext';
 import { stallTraceStep } from './stallTrace';
+import { BUDGET_CONTAINED_STEP } from '../unsettledAnswer';
 
 /** The trace step for an event, or null when the event has no step of its own. Pure. */
 export function traceStepFor(event: RunEvent, ts: string): BrainTraceEvent | null {
@@ -52,7 +53,7 @@ export function traceStepFor(event: RunEvent, ts: string): BrainTraceEvent | nul
       return {
         ts,
         category: 'message',
-        label: 'run.budget_contained',
+        label: BUDGET_CONTAINED_STEP,
         args: { spentMillicents: event.spentMc, capMillicents: event.capMc, unpricedCalls: event.unpricedCalls },
         result: event.text,
       };

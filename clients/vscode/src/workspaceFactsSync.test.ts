@@ -12,7 +12,7 @@ vi.mock("./projectState", () => ({
 }));
 
 vi.mock("./bfApi", () => ({
-  rememberProjectFact: vi.fn(async () => true),
+  rememberProjectFact: vi.fn(async () => ({ ok: true })),
   forgetProjectFact: vi.fn(async () => true),
 }));
 
@@ -35,7 +35,7 @@ describe("workspaceFactsSync destination snapshot", () => {
   afterEach(async () => {
     getSelectedProject.mockReset();
     vi.mocked(rememberProjectFact).mockReset();
-    vi.mocked(rememberProjectFact).mockResolvedValue(true);
+    vi.mocked(rememberProjectFact).mockResolvedValue({ ok: true });
     if (root) await rm(root, { recursive: true, force: true });
     root = "";
   });
@@ -91,7 +91,7 @@ describe("workspaceFactsSync destination snapshot", () => {
   });
 
   it("retains a failed fact publish until the platform acknowledges it", async () => {
-    vi.mocked(rememberProjectFact).mockResolvedValue(false);
+    vi.mocked(rememberProjectFact).mockResolvedValue({ ok: false });
     root = await mkdtemp(path.join(tmpdir(), "bf-facts-"));
     getSelectedProject.mockReturnValue({ id: 11, name: "Held" });
 
@@ -107,7 +107,7 @@ describe("workspaceFactsSync destination snapshot", () => {
     const published = JSON.parse(await readFile(path.join(root, ".builderforce", "facts-published.json"), "utf8")) as Record<string, Record<string, string>>;
     expect(published["11"] ?? {}).toEqual({});
 
-    vi.mocked(rememberProjectFact).mockResolvedValue(true);
+    vi.mocked(rememberProjectFact).mockResolvedValue({ ok: true });
     await syncWorkspaceFacts(secrets);
 
     await expect(readFile(path.join(root, ".builderforce", "facts-retained.json"), "utf8")).rejects.toThrow();

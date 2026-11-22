@@ -2,6 +2,13 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.208] — The agent remembers what it learned, across restarts and investigations
+
+- **Fixed: a resumed run forgot what it had already worked out.** When you resume an interrupted run, it is now told the facts it saved and the files it already read, so it picks up from its conclusions instead of re-reading everything.
+- **Fixed: facts the agent saved were not brought back on the next run.** Every new run now starts with the most relevant facts remembered about your project, not only the folder map.
+- **Investigations now leave something behind.** A question that took several file reads to answer now saves what it found, so the next run asked about the same area starts with the answer. Only finished runs save; a stopped or failed run does not.
+- **Fixed: a "saved" fact could be silently refused.** When a chat's Memory switch is off, the agent is now told nothing was remembered, instead of believing it was.
+
 ## [2026.10.207] — Regression coverage for the stale manifest `$schema` removal
 
 - **No user-facing change.** New regression tests lock in `/manifest move` and `/launch`'s stale `$schema` handling: files without a trailing newline, CRLF files with `$schema` last, URLs that merely contain the stale schema URL are left untouched, and `/launch` still replies normally when the manifest cannot be read for the advisory check.

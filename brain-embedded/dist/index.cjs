@@ -43,6 +43,7 @@ __export(src_exports, {
   BRAIN_AGENT_ASSIGNMENTS_PATH: () => BRAIN_AGENT_ASSIGNMENTS_PATH,
   BRAIN_UPLOAD_PATH: () => BRAIN_UPLOAD_PATH,
   BRAIN_UPLOAD_SIGN_PATH: () => BRAIN_UPLOAD_SIGN_PATH,
+  BUDGET_CONTAINED_STEP: () => BUDGET_CONTAINED_STEP,
   BUILDERFORCE_PRODUCT_NAME: () => BUILDERFORCE_PRODUCT_NAME,
   BUILT_IN_MODELS: () => BUILT_IN_MODELS,
   BUILT_IN_REQUIREMENT_KEY: () => BUILT_IN_REQUIREMENT_KEY,
@@ -321,6 +322,7 @@ __export(src_exports, {
   isEvermindModel: () => isEvermindModel,
   isFailedToolResult: () => isFailedToolResult,
   isFallbackFailure: () => isFallbackFailure,
+  isForcedFinishStep: () => isForcedFinishStep,
   isInferenceMode: () => isInferenceMode,
   isInjectedTurnMetadata: () => isInjectedTurnMetadata,
   isInvalidClientResult: () => isInvalidClientResult,
@@ -343,6 +345,7 @@ __export(src_exports, {
   isTicketWriteTool: () => isTicketWriteTool,
   isTruncatedTurn: () => isTruncatedTurn,
   isUnscopedMutationTool: () => isUnscopedMutationTool,
+  isUnsettledAnswer: () => isUnsettledAnswer,
   isUsageSurface: () => isUsageSurface,
   isUserConfiguredModelRef: () => isUserConfiguredModelRef,
   isWasmTrap: () => isWasmTrap,
@@ -14034,8 +14037,8 @@ var editFileTool = defineTool({
         }
       });
       if (!batch.ok) {
-        const failed5 = batch.files[batch.files.length - 1];
-        return { data: { ok: false, error: failed5.error ?? "batch failed", files: batch.files.map(({ content: _c, ...rest }) => rest) } };
+        const failed4 = batch.files[batch.files.length - 1];
+        return { data: { ok: false, error: failed4.error ?? "batch failed", files: batch.files.map(({ content: _c, ...rest }) => rest) } };
       }
       return {
         data: {
@@ -14481,6 +14484,21 @@ function limbicTraits(profile) {
 // ../packages/agent-tools/src/knowledge-notes.ts
 var import_working3 = require("@seanhogg/builderforce-memory/working");
 
+// ../packages/agent-tools/src/toolFailure.ts
+function isFailedToolResult(result) {
+  if (result == null) return false;
+  if (typeof result === "object") {
+    const r = result;
+    if (r.ok === false) return true;
+    if (typeof r.error === "string" && r.error) return true;
+    return false;
+  }
+  if (typeof result === "string") {
+    return /"ok"\s*:\s*false/.test(result) || /"error"\s*:\s*"[^"]/.test(result);
+  }
+  return false;
+}
+
 // ../packages/agent-tools/src/run-knowledge.ts
 var import_working4 = require("@seanhogg/builderforce-memory/working");
 var FILE_TOOL_KINDS = /* @__PURE__ */ new Map([
@@ -14495,7 +14513,8 @@ var FILE_TOOL_KINDS = /* @__PURE__ */ new Map([
   ["read_file", "read"],
   ["read", "read"],
   ["view", "read"],
-  ["file_outline", "read"]
+  ["file_outline", "read"],
+  ["read_compressed", "read"]
 ]);
 function fileToolKind(name) {
   return FILE_TOOL_KINDS.get(name);
@@ -14527,9 +14546,23 @@ var OBSERVATION = {
   delete: "deleted",
   read: "read"
 };
+var REMEMBER_FACT_TOOLS = /* @__PURE__ */ new Set(["remember_fact", "builtin_remember_fact"]);
+var BRIEF_FACTS_MAX = 8;
+var BRIEF_FACT_CHARS = 200;
+var FACT_KEY_CHARS = 120;
+var FACT_CONTENT_CHARS = 600;
+var SAVED_FACTS_MAX = 24;
+function savedFactOf(args) {
+  if (!args || typeof args !== "object" || Array.isArray(args)) return void 0;
+  const rec = args;
+  const key = typeof rec.key === "string" ? rec.key.replace(/\s+/g, " ").trim().slice(0, FACT_KEY_CHARS) : "";
+  const content = typeof rec.content === "string" ? rec.content.trim() : "";
+  return key && content ? { key, content } : void 0;
+}
 var RunKnowledgeRecorder = class _RunKnowledgeRecorder {
   memory = new import_working4.WorkingMemory();
   tools = [];
+  savedFacts = /* @__PURE__ */ new Map();
   /**
    * The recorder a resumed step continues with. A host that runs one step per process
    * (the cloud's Durable Object ticks) MUST carry this, or every step starts with an
@@ -14544,11 +14577,25 @@ var RunKnowledgeRecorder = class _RunKnowledgeRecorder {
     }
     for (const query of state.memory.searched ?? []) r.memory.observe({ kind: "searched", query });
     r.tools.push(...state.tools ?? []);
+    for (const raw of state.savedFacts ?? []) {
+      const f = savedFactOf(raw);
+      if (f) r.rememberFact(f);
+    }
     return r;
   }
   /** The state {@link restore} rebuilds this recorder from. */
   snapshot() {
-    return { memory: this.memory.snapshot, tools: [...this.tools] };
+    return {
+      memory: this.memory.snapshot,
+      tools: [...this.tools],
+      ...this.savedFacts.size > 0 ? { savedFacts: [...this.savedFacts].map(([key, content]) => ({ key, content })) } : {}
+    };
+  }
+  /** Same key replaces (re-inserted, so the newest lists last); content clamped, only the newest few kept. */
+  rememberFact(fact) {
+    this.savedFacts.delete(fact.key);
+    this.savedFacts.set(fact.key, fact.content.slice(0, FACT_CONTENT_CHARS));
+    while (this.savedFacts.size > SAVED_FACTS_MAX) this.savedFacts.delete(this.savedFacts.keys().next().value);
   }
   setPrompt(prompt) {
     this.memory.setTask(prompt);
@@ -14556,6 +14603,13 @@ var RunKnowledgeRecorder = class _RunKnowledgeRecorder {
   /** Record one successful tool call. Unknown tools still count toward `tools`. */
   record(name, args) {
     this.tools.push(name);
+    if (REMEMBER_FACT_TOOLS.has(name)) {
+      const fact = savedFactOf(args);
+      if (fact) {
+        this.rememberFact(fact);
+      }
+      return;
+    }
     const search = searchLabel(name, args);
     if (search) {
       this.memory.observe({ kind: "searched", query: search });
@@ -14588,7 +14642,17 @@ var RunKnowledgeRecorder = class _RunKnowledgeRecorder {
     };
   }
   brief() {
-    return this.memory.brief({ observations: this.tools.length });
+    const base = this.memory.brief({ observations: this.tools.length });
+    if (this.savedFacts.size === 0) return base;
+    const lines = [...this.savedFacts].slice(-BRIEF_FACTS_MAX).map(([key, content]) => {
+      const line = content.replace(/\s+/g, " ");
+      return `- ${key}: ${line.length > BRIEF_FACT_CHARS ? `${line.slice(0, BRIEF_FACT_CHARS - 1)}\u2026` : line}`;
+    });
+    const section = `Facts you saved this run:
+${lines.join("\n")}`;
+    return base ? `${base}
+
+${section}` : section;
   }
   consolidate(opts) {
     return (0, import_working4.consolidate)(this.memory.snapshot, opts);
@@ -16030,10 +16094,10 @@ function withModelRef(e, ref) {
   if (e instanceof StreamInterruptedError && e.cause !== void 0) out.cause = e.cause;
   return out;
 }
-function withFailedAccounts(e, failed5, trailed = []) {
-  if (!(e instanceof BrainRequestError) || failed5.length + trailed.length === 0) return e;
+function withFailedAccounts(e, failed4, trailed = []) {
+  if (!(e instanceof BrainRequestError) || failed4.length + trailed.length === 0) return e;
   const refOf = (r) => r.attempt.kind === "local" ? r.attempt.ref : "account";
-  const prefix = failed5.map((r) => `${refOf(r)} could not take this turn (${r.detail ?? r.outcome}). `).join("");
+  const prefix = failed4.map((r) => `${refOf(r)} could not take this turn (${r.detail ?? r.outcome}). `).join("");
   const trailing = trailed.map((r) => ` Then ${refOf(r)} was tried and also failed (${r.detail ?? r.outcome}).`).join("");
   const suffix = trailing && !/[.!?]$/.test(e.message) ? `.${trailing}` : trailing;
   const out = Object.create(Object.getPrototypeOf(e));
@@ -18876,14 +18940,14 @@ function createEngineWorker(options) {
   const now = options.now ?? (() => Date.now());
   let live2;
   const crashes = /* @__PURE__ */ new Map();
-  const failed5 = /* @__PURE__ */ new Set();
+  const failed4 = /* @__PURE__ */ new Set();
   const recordCrash = (key) => {
     const at2 = now();
     const recent = (crashes.get(key) ?? []).filter((t) => at2 - t < ENGINE_WORKER_CRASH_WINDOW_MS);
     recent.push(at2);
     crashes.set(key, recent);
-    if (recent.length >= ENGINE_WORKER_CRASH_LIMIT && !failed5.has(key)) {
-      failed5.add(key);
+    if (recent.length >= ENGINE_WORKER_CRASH_LIMIT && !failed4.has(key)) {
+      failed4.add(key);
       warn(`engine worker: ${key} crashed ${recent.length}\xD7 in ${ENGINE_WORKER_CRASH_WINDOW_MS / 6e4} min; not loading it again this session`);
     }
   };
@@ -18902,8 +18966,8 @@ function createEngineWorker(options) {
   };
   const withoutFailed = (message2) => {
     const probe = message2.probe;
-    if (!probe || failed5.size === 0) return message2;
-    const models = probe.models.filter((m) => !failed5.has(modelKey(probe.provider, m.model)));
+    if (!probe || failed4.size === 0) return message2;
+    const models = probe.models.filter((m) => !failed4.has(modelKey(probe.provider, m.model)));
     if (models.length === probe.models.length) return message2;
     return { ...message2, probe: models.length > 0 ? { ...probe, models } : null };
   };
@@ -18938,7 +19002,7 @@ function createEngineWorker(options) {
         const m = message2;
         if (m.type === "pageEngine.chat" && typeof m.id === "string") {
           const key = modelKey(m.runtime, m.body?.model);
-          if (failed5.has(key)) {
+          if (failed4.has(key)) {
             const id = m.id;
             queueMicrotask(
               () => options.onMessage({
@@ -19248,10 +19312,10 @@ function createBfiWorkerEngine(options) {
     ...options.idleMs !== void 0 ? { idleMs: options.idleMs } : {}
   });
   const anyDownloaded = () => options.store ? anyBfiModelDownloaded(options.store) : Promise.resolve(true);
-  const onceMore = async (ask2, failed5) => {
+  const onceMore = async (ask2, failed4) => {
     const before = threadRestarts;
     const value = await ask2();
-    return failed5(value) && threadRestarts !== before ? ask2() : value;
+    return failed4(value) && threadRestarts !== before ? ask2() : value;
   };
   const ownSupport = () => {
     const id = `s${++seq}`;
@@ -23724,12 +23788,12 @@ function resetRungs(state, keep2 = []) {
   if (!spent || Object.keys(spent).length === 0) return;
   save(state, { rungs: Object.fromEntries(Object.entries(spent).filter(([id]) => keep2.includes(id))) });
 }
-function handOffToProven(ctx, ledger, failed5, unavailable2 = false) {
-  const next = reduceRunPolicy(ctx.state.model, { type: "stalled", ...failed5 ? { resolvedModel: failed5 } : {}, ...unavailable2 ? { primaryUnavailable: true } : {} });
+function handOffToProven(ctx, ledger, failed4, unavailable2 = false) {
+  const next = reduceRunPolicy(ctx.state.model, { type: "stalled", ...failed4 ? { resolvedModel: failed4 } : {}, ...unavailable2 ? { primaryUnavailable: true } : {} });
   ctx.state.model = next;
   if (next.outcome.kind !== "failed_over") return void 0;
   resetRungs(ctx.state, ledger?.sticky);
-  ledger?.handedOff?.(failed5, next.outcome.to);
+  ledger?.handedOff?.(failed4, next.outcome.to);
   return next.outcome.to;
 }
 function restatement(ctx, rung, attempt, nudgeRole, quoteEmpty) {
@@ -25638,8 +25702,8 @@ function recordVerifyEvents(outcome) {
 function describeVerifyResult(outcome) {
   if (outcome.kind === "skipped") return `verify skipped (${outcome.reason})`;
   if (outcome.commands.length === 0) return `verify ${outcome.kind}, no commands`;
-  const failed5 = outcome.failedCommands.length;
-  return `verify ${outcome.kind}: ${outcome.commands.join("; ")}${failed5 > 0 ? ` \u2014 ${failed5} failed` : ""}`;
+  const failed4 = outcome.failedCommands.length;
+  return `verify ${outcome.kind}: ${outcome.commands.join("; ")}${failed4 > 0 ? ` \u2014 ${failed4} failed` : ""}`;
 }
 
 // ../packages/agent-run/src/policy/verify/index.ts
@@ -25764,14 +25828,23 @@ var MAX_FACTS = 6;
 var KEY_PREFIX = "learned:";
 var KINDS = /* @__PURE__ */ new Set(["decision", "root_cause", "convention"]);
 var MEMORY_COMMIT_SYSTEM = [
-  "You extract durable project facts from a finished coding run.",
+  "You extract durable project facts from a finished coding or investigation run.",
   "Return a JSON array and nothing else. Each item is {key, kind, content}.",
   "kind is one of decision, root_cause, convention.",
   "key is a short kebab-case slug that stays stable if the same fact is learned again.",
   "content is one or two sentences a later run can act on, at least a full sentence.",
-  "Only emit a fact the excerpt actually supports. Do not invent, and do not restate the file list.",
+  "For an investigation, facts are where a behaviour lives, a root cause, or how something works, taken from the Conclusion.",
+  "Only emit a fact the evidence (the excerpt, or the Conclusion of a read-only run) actually supports. Do not invent, and do not restate the file list.",
   "Return [] when the run learned nothing durable."
 ].join(" ");
+var MIN_READS_FOR_LEARNING = 3;
+var ANSWER_CHARS = 3e3;
+function readPaths(input) {
+  return [...new Set((input.read ?? []).map((p) => p.trim()).filter(Boolean))];
+}
+function isInvestigation(input) {
+  return readPaths(input).length >= MIN_READS_FOR_LEARNING && (input.answer ?? "").trim().length > 0 && !(input.tools ?? []).some((t) => REMEMBER_FACT_TOOLS.has(t));
+}
 function changedPaths(input) {
   return [...new Set(input.changed.map((p) => p.trim()).filter(Boolean))];
 }
@@ -25780,13 +25853,20 @@ function memoryCommitPrompt(input) {
   const asked = (input.prompt ?? "").replace(/\s+/g, " ").trim().slice(0, 400);
   const tools = [...new Set((input.tools ?? []).map((t) => t.trim()).filter(Boolean))].slice(0, 24);
   const excerpt2 = (input.excerpt ?? "").trim().slice(0, 6e3);
+  const read2 = readPaths(input).slice(0, 40);
+  const conclusion = (input.answer ?? "").trim().slice(-ANSWER_CHARS);
+  const evidence = excerpt2 ? `Evidence:
+${excerpt2}` : conclusion ? "Evidence: the Conclusion above." : "";
   return [
     asked ? `Asked: ${asked}` : "",
-    `Changed files:
-${changed2.map((p) => `- ${p}`).join("\n")}`,
+    changed2.length > 0 ? `Changed files:
+${changed2.map((p) => `- ${p}`).join("\n")}` : "",
+    read2.length > 0 ? `Files read:
+${read2.map((p) => `- ${p}`).join("\n")}` : "",
     tools.length ? `Tools: ${tools.join(", ")}` : "",
-    excerpt2 ? `Evidence:
-${excerpt2}` : "Evidence: (none recorded \u2014 return [] rather than guess)"
+    conclusion ? `Conclusion:
+${conclusion}` : "",
+    evidence || "Evidence: (none recorded \u2014 return [] rather than guess)"
   ].filter(Boolean).join("\n\n");
 }
 function kebab(raw) {
@@ -25826,7 +25906,7 @@ function parseLearnedFacts(raw) {
 }
 async function commitLearnedFacts(input, deps) {
   const changed2 = changedPaths(input);
-  if (changed2.length === 0) return [];
+  if (changed2.length === 0 && !isInvestigation(input)) return [];
   let raw = "";
   try {
     raw = await deps.complete(memoryCommitPrompt({ ...input, changed: changed2 }));
@@ -25847,6 +25927,8 @@ function learnedFactsRequest(evidence) {
   const changed2 = [...evidence.activity.created ?? [], ...evidence.activity.edited ?? []];
   return {
     changed: changed2,
+    ...evidence.activity.read?.length ? { read: evidence.activity.read } : {},
+    ...evidence.answer ? { answer: evidence.answer } : {},
     ...evidence.activity.tools ? { tools: evidence.activity.tools } : {},
     ...evidence.excerpt ? { excerpt: evidence.excerpt } : {},
     ...evidence.activity.prompt ? { prompt: evidence.activity.prompt } : {}
@@ -25861,8 +25943,15 @@ async function extractAndWriteLearnedFacts(evidence) {
 
 // ../packages/agent-run/src/policy/memory/index.ts
 var SECTION_BREAK = "\n\n";
-function failed2(result) {
-  return !!result && typeof result === "object" && result.ok === false;
+function finalAnswerOf(ctx) {
+  const rows = ctx.state.messages ?? [];
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const row = rows[i];
+    if (row?.role === "user") return void 0;
+    if (row?.role !== "assistant") continue;
+    return !row.toolCalls?.length && typeof row.content === "string" && row.content.trim() ? row.content : void 0;
+  }
+  return void 0;
 }
 function codeMapOf(ctx) {
   const recorder = recorderForState(ctx.state);
@@ -25873,7 +25962,7 @@ function codeMapOf(ctx) {
 var memoryHook = {
   /** Record one dispatched call into the run's memory — successful calls only. */
   observe(ctx, call2, result, isError) {
-    if (isError || failed2(result)) return;
+    if (isError || isFailedToolResult(result)) return;
     const recorder = recorderForState(ctx.state);
     recorder.record(call2.name, call2.args);
     ctx.state.memory = knowledgeState(recorder);
@@ -25897,7 +25986,7 @@ var memoryHook = {
    * The consolidated memory the run produced, written back through `store.commitMemory`.
    * The code map (the `codemap:` write-back fields) is returned for the store; the
    * learned-facts step runs behind the injected `learnedFacts` port when the run
-   * changed files. A read-only investigation still maps (PRD 35 E8): `consolidate`
+   * changed files, or investigated read-only and left a final answer. A read-only investigation still maps (PRD 35 E8): `consolidate`
    * maps ≥3 files READ as readily as ≥3 changed, so the next run asked about this area
    * starts warm. The map is written on EVERY terminal outcome (a failed or cancelled run
    * still read and changed what it did); the model-extracted learned facts are a judgement
@@ -25905,8 +25994,10 @@ var memoryHook = {
    */
   async consolidate(ctx, opts) {
     const map = codeMapOf(ctx);
+    const answer2 = finalAnswerOf(ctx);
     const facts = opts?.learn === false ? null : await extractAndWriteLearnedFacts({
-      activity: recorderForState(ctx.state).activity
+      activity: recorderForState(ctx.state).activity,
+      ...answer2 ? { answer: answer2 } : {}
     });
     if (map) return map;
     const chat = ctx.task.chatId !== void 0 ? { chatId: ctx.task.chatId } : {};
@@ -26914,7 +27005,7 @@ function servedSpan(served) {
   const start = typeof served.offset === "number" && served.offset > 0 ? Math.floor(served.offset) : 1;
   return { start, end: start + served.content.split("\n").length - 1 };
 }
-function failed3(result) {
+function failed2(result) {
   return !!result && typeof result === "object" && result.ok === false;
 }
 function cutToCap(result) {
@@ -26934,7 +27025,7 @@ function recordServedRead(ctx, call2, served, isError) {
   const coverage = coverageOf(ctx.state);
   const reads = ctx.state.reads;
   if (DEDUPABLE_READS.has(call2.name)) {
-    if (isError || failed3(served)) return;
+    if (isError || failed2(served)) return;
     coverage.record(call2.name, call2.args);
     const cached2 = { result: served, served, anchor: call2.id };
     coverage.cacheResult(call2.name, call2.args, cached2);
@@ -26949,7 +27040,7 @@ function recordServedRead(ctx, call2, served, isError) {
     if (read2 && coverage.isRepeat(read2.tool, read2.args)) kept[key] = entry;
   }
   ctx.state.reads = { ...reads, served: kept };
-  if (!isError && !failed3(served)) recordShellPrint(ctx, coverage, call2, served);
+  if (!isError && !failed2(served)) recordShellPrint(ctx, coverage, call2, served);
 }
 
 // ../packages/agent-run/src/policy/tools/gateToolNames.ts
@@ -27122,9 +27213,9 @@ function failedResult(data) {
   const error = data.error;
   return typeof error === "string" ? { error: error.slice(0, ERROR_CHARS) } : {};
 }
-function fittedText(text2, failed5, maxChars, originalChars) {
+function fittedText(text2, failed4, maxChars, originalChars) {
   const note = truncatedResultNote(originalChars, maxChars);
-  const head = failed5 ? { ok: false, ...failed5 } : {};
+  const head = failed4 ? { ok: false, ...failed4 } : {};
   let body = text2;
   for (; ; ) {
     const result = { ...head, truncated: true, note, output: body };
@@ -27136,17 +27227,17 @@ function fittedText(text2, failed5, maxChars, originalChars) {
 function capToolResult(tool, data, maxChars) {
   const shaped = shapeToolResult(tool, data, { maxChars });
   if (!shaped.truncated) return data;
-  const failed5 = failedResult(data);
+  const failed4 = failedResult(data);
   let parsed;
   try {
     parsed = JSON.parse(shaped.content);
   } catch {
-    return fittedText(shaped.content, failed5, maxChars, shaped.bytes);
+    return fittedText(shaped.content, failed4, maxChars, shaped.bytes);
   }
-  if (failed5 && parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+  if (failed4 && parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
     return { ...parsed, ok: false };
   }
-  return failed5 ? fittedText(shaped.content, failed5, maxChars, shaped.bytes) : parsed;
+  return failed4 ? fittedText(shaped.content, failed4, maxChars, shaped.bytes) : parsed;
 }
 
 // ../packages/agent-run/src/policy/tools/index.ts
@@ -27755,8 +27846,8 @@ async function dispatchCall(input, state, call2, watch, facts = { refused: false
     const data = own2 && platform?.watchesItself ? await exec(call2.name, call2.args) : await runToolWithWatch(exec, watch, signal, call2.name, call2.args, own2 ? platform?.interruptible : void 0);
     const surfaceCap = own2 ? platform?.resultCap?.(state.model.model) : void 0;
     const capped2 = capToolResult(call2.name, data, surfaceCap ?? resultCapFor(call2.name, ports.model, state.model.model, data));
-    const failed5 = box.failed === true || !own2 && !!capped2 && capped2.ok === false && capped2.skipped !== true;
-    const dispatched = { data: capped2, ...box.control ? { control: box.control } : {}, ...failed5 ? { isError: true } : {} };
+    const failed4 = box.failed === true || !own2 && !!capped2 && capped2.ok === false && capped2.skipped !== true;
+    const dispatched = { data: capped2, ...box.control ? { control: box.control } : {}, ...failed4 ? { isError: true } : {} };
     if (box.kind) callKinds.set(dispatched, box.kind);
     if (box.native) nativeResults.set(dispatched, box.native);
     if (box.killed) killedResults.add(dispatched);
@@ -30916,21 +31007,6 @@ function asksForWorkItemsIn(messages) {
   return messages.some((m) => m.role === "user" && asksForWorkItems(m.content));
 }
 
-// src/toolFailure.ts
-function isFailedToolResult(result) {
-  if (result == null) return false;
-  if (typeof result === "object") {
-    const r = result;
-    if (r.ok === false) return true;
-    if (typeof r.error === "string" && r.error) return true;
-    return false;
-  }
-  if (typeof result === "string") {
-    return /"ok"\s*:\s*false/.test(result) || /"error"\s*:\s*"[^"]/.test(result);
-  }
-  return false;
-}
-
 // src/codeChanges.ts
 function codeChangesOf(name, args, out) {
   if (isCodeChangeTool(name)) {
@@ -31072,16 +31148,16 @@ function progressOf(events, editIntent, workItemsAsked) {
     }
     const cached2 = isCacheAnswered(ev);
     if (cached2) cacheAnswered += 1;
-    const failed5 = Boolean(ev.isError) || isFailedToolResult(ev.result);
+    const failed4 = Boolean(ev.isError) || isFailedToolResult(ev.result);
     if (waiting2) {
       current = null;
     } else if (current && current.sig === sig2) {
       current.streak.count += 1;
-      if (failed5) current.streak.failed += 1;
+      if (failed4) current.streak.failed += 1;
       if (current.streak.count === 2) streaks2 += 1;
       if (!longestStreak || current.streak.count > longestStreak.count) longestStreak = current.streak;
     } else {
-      current = { sig: sig2, streak: { label: ev.label, count: 1, failed: failed5 ? 1 : 0 } };
+      current = { sig: sig2, streak: { label: ev.label, count: 1, failed: failed4 ? 1 : 0 } };
     }
     const target2 = targetSignature(ev);
     if (target2) {
@@ -32007,7 +32083,6 @@ function byteLen(v) {
   return s.length;
 }
 var MEMORY_READ_TOOLS = /* @__PURE__ */ new Set(["recall_facts", "builtin_recall_facts"]);
-var MEMORY_WRITE_TOOLS = /* @__PURE__ */ new Set(["remember_fact", "builtin_remember_fact"]);
 function memoryUsageInTrace(events) {
   const out = {
     evermindRecalls: 0,
@@ -32034,7 +32109,7 @@ function memoryUsageInTrace(events) {
       out.reconcileSteps += 1;
     } else if (ev.category === "tool" && !ev.isError && !isFailedToolResult(ev.result)) {
       if (MEMORY_READ_TOOLS.has(ev.label)) out.factsRead += 1;
-      if (MEMORY_WRITE_TOOLS.has(ev.label)) out.factsWritten += 1;
+      if (REMEMBER_FACT_TOOLS.has(ev.label)) out.factsWritten += 1;
     }
   }
   return out;
@@ -32666,7 +32741,7 @@ async function moveTicket(c, req, move, reason) {
   } catch (e) {
     out = { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
-  const failed5 = isFailedToolResult(out);
+  const failed4 = isFailedToolResult(out);
   noteOf(c)({
     ts: nowIso(),
     category: "tool",
@@ -32674,9 +32749,9 @@ async function moveTicket(c, req, move, reason) {
     durationMs: nowMs2() - toolStart,
     args: { ...move.args, auto: true, reason },
     result: out ?? null,
-    isError: failed5
+    isError: failed4
   });
-  return !failed5;
+  return !failed4;
 }
 var LOCAL_VOCABULARY = ticketToolVocabulary([LOCAL_TICKET_CREATE_TOOL]);
 function mayMove(current, status2) {
@@ -32729,8 +32804,8 @@ var REVIEW_RECORD_TOOL2 = "builtin_reviews_record";
 function verificationOf(evidence, touchedFiles) {
   const entries = evidence?.snapshot() ?? [];
   if (!entries.length) return { verified: false, reason: "no verification evidence was recorded for this run" };
-  const failed5 = entries.flatMap((e) => e.checks.filter((c) => c.outcome === "fail").map((c) => `${e.path} ${c.kind} "${c.name}"`));
-  if (failed5.length) return { verified: false, reason: `failing checks: ${failed5.slice(0, 5).join("; ")}` };
+  const failed4 = entries.flatMap((e) => e.checks.filter((c) => c.outcome === "fail").map((c) => `${e.path} ${c.kind} "${c.name}"`));
+  if (failed4.length) return { verified: false, reason: `failing checks: ${failed4.slice(0, 5).join("; ")}` };
   const passing = entries.filter((e) => e.checks.some((c) => c.outcome === "pass"));
   if (!passing.length) return { verified: false, reason: "no check passed (only unavailable checks were recorded)" };
   const covers2 = (file) => {
@@ -33631,9 +33706,9 @@ async function fileTickets(plan, ports) {
       taskType: "task"
     });
     const record3 = toolResultRecord(out);
-    const failed5 = isFailed2(record3 ?? out);
-    ids2.push(failed5 ? void 0 : filedTicketRef(record3, vocabulary.local));
-    if (!failed5) await ports.afterCreate?.(createTool, out).catch(() => void 0);
+    const failed4 = isFailed2(record3 ?? out);
+    ids2.push(failed4 ? void 0 : filedTicketRef(record3, vocabulary.local));
+    if (!failed4) await ports.afterCreate?.(createTool, out).catch(() => void 0);
   }
   return ids2;
 }
@@ -37238,6 +37313,15 @@ function stallTraceStep(event, ts) {
   }
 }
 
+// src/unsettledAnswer.ts
+var BUDGET_CONTAINED_STEP = "run.budget_contained";
+function isForcedFinishStep(event) {
+  return event.label === "llm.complete" && event.args?.forcedFinish === true;
+}
+function isUnsettledAnswer(trace4) {
+  return trace4.some((event) => event.label === BUDGET_CONTAINED_STEP || isForcedFinishStep(event));
+}
+
 // src/run/eventSink.ts
 function traceStepFor(event, ts) {
   switch (event.kind) {
@@ -37272,7 +37356,7 @@ function traceStepFor(event, ts) {
       return {
         ts,
         category: "message",
-        label: "run.budget_contained",
+        label: BUDGET_CONTAINED_STEP,
         args: { spentMillicents: event.spentMc, capMillicents: event.capMc, unpricedCalls: event.unpricedCalls },
         result: event.text
       };
@@ -39900,27 +39984,46 @@ function installIndexedDbStepDurability(opts) {
 // src/run/runResumeState.ts
 var RESUME_STEPS = 6;
 var RESUME_FILES = 40;
+var RESUME_FACTS = 12;
+var RESUME_READS = 40;
+var MAX_FACT = 600;
+var MAX_READ_PATH = 300;
 var MAX_ASK = 4e3;
 var TASK_STATE_TOOL = "update_task_state";
-function failed4(ev) {
-  return ev.isError === true || !!ev.result && typeof ev.result === "object" && ev.result.ok === false;
+function failed3(ev) {
+  return ev.isError === true || isFailedToolResult(ev.result);
 }
+function rememberNewest(facts, fact) {
+  facts.delete(fact.key);
+  facts.set(fact.key, fact.content.slice(0, MAX_FACT));
+}
+var newestFacts = (facts) => [...facts].slice(-RESUME_FACTS).map(([key, content]) => ({ key, content }));
 function resumeStateOf(ask2, events) {
   const tools = events.filter((ev) => ev.category === "tool");
   let task;
   const files = [];
+  const facts = /* @__PURE__ */ new Map();
+  const read2 = [];
   for (const ev of tools) {
     const args = ev.args && typeof ev.args === "object" ? ev.args : {};
-    if (ev.label === TASK_STATE_TOOL && !failed4(ev)) {
+    if (ev.label === TASK_STATE_TOOL && !failed3(ev)) {
       const next = applyTaskStateUpdate(task, args);
       if (next.ok) task = next.state;
       continue;
+    }
+    if (!failed3(ev)) {
+      if (REMEMBER_FACT_TOOLS.has(ev.label)) {
+        const fact = savedFactOf(args);
+        if (fact) rememberNewest(facts, fact);
+      } else if (fileToolKind(ev.label) === "read") {
+        for (const path of toolCallPaths(args)) if (!read2.includes(path)) read2.push(path);
+      }
     }
     for (const file of codeChangesOf(ev.label, args, ev.result) ?? []) if (!files.includes(file)) files.push(file);
   }
   const steps = tools.filter((ev) => ev.label !== TASK_STATE_TOOL).slice(-RESUME_STEPS).map((ev) => {
     const target2 = activityTarget(ev.args);
-    return `${ev.label}${target2 ? ` on ${target2}` : ""} \u2014 ${failed4(ev) ? "failed" : "ok"}`;
+    return `${ev.label}${target2 ? ` on ${target2}` : ""} \u2014 ${failed3(ev) ? "failed" : "ok"}`;
   });
   const plan = renderTaskState(task);
   const asked = ask2?.trim();
@@ -39928,23 +40031,43 @@ function resumeStateOf(ask2, events) {
     ...asked ? { ask: asked.slice(0, MAX_ASK) } : {},
     ...plan ? { plan } : {},
     ...files.length ? { files: files.slice(0, RESUME_FILES) } : {},
-    ...steps.length ? { steps } : {}
+    ...steps.length ? { steps } : {},
+    ...facts.size ? { facts: newestFacts(facts) } : {},
+    ...read2.length ? { read: read2.slice(0, RESUME_READS) } : {}
   };
 }
-var strings = (value) => {
+var strings = (value, cap2) => {
   if (!Array.isArray(value)) return void 0;
   const list2 = value.filter((v) => typeof v === "string" && v.trim() !== "");
-  return list2.length ? list2 : void 0;
+  return list2.length ? cap2 ? list2.slice(0, cap2) : list2 : void 0;
+};
+var factsOf = (value) => {
+  if (!Array.isArray(value)) return void 0;
+  const kept = /* @__PURE__ */ new Map();
+  for (const item of value) {
+    const fact = savedFactOf(item);
+    if (fact) rememberNewest(kept, fact);
+  }
+  return kept.size ? newestFacts(kept) : void 0;
 };
 function parseResumeState(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return void 0;
   const raw = value;
   const ask2 = typeof raw.ask === "string" && raw.ask.trim() ? raw.ask : void 0;
   const plan = typeof raw.plan === "string" && raw.plan.trim() ? raw.plan : void 0;
-  const files = strings(raw.files);
-  const steps = strings(raw.steps);
-  if (!ask2 && !plan && !files && !steps) return void 0;
-  return { ...ask2 ? { ask: ask2 } : {}, ...plan ? { plan } : {}, ...files ? { files } : {}, ...steps ? { steps } : {} };
+  const files = strings(raw.files, RESUME_FILES);
+  const steps = strings(raw.steps, RESUME_STEPS);
+  const facts = factsOf(raw.facts);
+  const read2 = strings(raw.read, RESUME_READS)?.map((p) => p.slice(0, MAX_READ_PATH));
+  if (!ask2 && !plan && !files && !steps && !facts && !read2) return void 0;
+  return {
+    ...ask2 ? { ask: ask2 } : {},
+    ...plan ? { plan } : {},
+    ...files ? { files } : {},
+    ...steps ? { steps } : {},
+    ...facts ? { facts } : {},
+    ...read2 ? { read: read2 } : {}
+  };
 }
 
 // src/payloadPriority.ts
@@ -40818,10 +40941,10 @@ function runHistoryLines(runs, sessionShipped) {
     const who = run.agentName?.trim() || run.agentRef || "no agent recorded";
     const ticket = `#${run.taskId}${run.taskTitle ? ` "${run.taskTitle}"` : ""}`;
     const produced = run.produced === true ? " \xB7 produced output" : run.produced === false ? " \xB7 produced NOTHING" : "";
-    const failed5 = run.errorMessage ? ` \xB7 ${run.errorMessage}` : "";
+    const failed4 = run.errorMessage ? ` \xB7 ${run.errorMessage}` : "";
     const where = run.hostName ? ` \xB7 on on-prem "${run.hostName}"` : run.executor ? ` \xB7 on ${run.executor}${run.sandbox ? ` (sandbox: ${run.sandbox})` : ""}` : " \xB7 on ? (executor not recorded)";
     out.push(
-      `  - run #${run.executionId} \xB7 ${who} \xB7 ${ticket} \xB7 ${run.status}${produced}${where} \xB7 by ${run.submittedBy}${run.source ? ` via ${run.source}` : ""} \xB7 ${shortTime(run.createdAt)}${run.completedAt ? ` \u2192 ${shortTime(run.completedAt)}` : ""}${failed5}`
+      `  - run #${run.executionId} \xB7 ${who} \xB7 ${ticket} \xB7 ${run.status}${produced}${where} \xB7 by ${run.submittedBy}${run.source ? ` via ${run.source}` : ""} \xB7 ${shortTime(run.createdAt)}${run.completedAt ? ` \u2192 ${shortTime(run.completedAt)}` : ""}${failed4}`
     );
   }
   if (runs.runs.length > MAX_RUNS_LISTED) {
@@ -42109,6 +42232,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   BRAIN_AGENT_ASSIGNMENTS_PATH,
   BRAIN_UPLOAD_PATH,
   BRAIN_UPLOAD_SIGN_PATH,
+  BUDGET_CONTAINED_STEP,
   BUILDERFORCE_PRODUCT_NAME,
   BUILT_IN_MODELS,
   BUILT_IN_REQUIREMENT_KEY,
@@ -42387,6 +42511,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   isEvermindModel,
   isFailedToolResult,
   isFallbackFailure,
+  isForcedFinishStep,
   isInferenceMode,
   isInjectedTurnMetadata,
   isInvalidClientResult,
@@ -42409,6 +42534,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   isTicketWriteTool,
   isTruncatedTurn,
   isUnscopedMutationTool,
+  isUnsettledAnswer,
   isUsageSurface,
   isUserConfiguredModelRef,
   isWasmTrap,

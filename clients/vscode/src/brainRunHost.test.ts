@@ -254,6 +254,22 @@ describe("tools", () => {
     // The chat's Memory switch rides to the port, which owns the facts write.
     expect(opts).toEqual(expect.objectContaining({ memory: expect.any(Boolean) }));
   });
+
+  it("hands the run's final assistant answer to the session note, so a read-only run can learn from it", async () => {
+    const chatId = freshChatId();
+    const sessionNote = vi.fn(async () => undefined);
+    const host = createBrainRunHost(
+      ports({
+        tools: [toolDef("read_file")],
+        sessionNote,
+        script: [{ toolCalls: [{ name: "read_file", args: { path: "a.ts" } }] }, { text: "The canvas is drawn in a.ts." }],
+      }),
+    );
+    await start(chatId, host);
+    const [, run, opts] = (sessionNote.mock.calls as unknown as Array<[number, { answer?: string }, { learn?: boolean }]>)[0]!;
+    expect(run.answer).toBe("The canvas is drawn in a.ts.");
+    expect(opts.learn).toBe(true);
+  });
 });
 
 /**

@@ -19,7 +19,7 @@
  * evidence hands it in as `excerpt`.
  */
 
-import type { RunActivity } from "@builderforce/agent-tools";
+import { REMEMBER_FACT_TOOLS, type RunActivity } from "@builderforce/agent-tools";
 
 /** What one learned fact looks like, once parsed. */
 export type LearnedFactKind = "decision" | "root_cause" | "convention";
@@ -41,12 +41,13 @@ const KINDS = new Set<LearnedFactKind>(["decision", "root_cause", "convention"])
 
 /** The system prompt the utility completion sees. */
 export const MEMORY_COMMIT_SYSTEM = [
-  "You extract durable project facts from a finished coding run.",
+  "You extract durable project facts from a finished coding or investigation run.",
   "Return a JSON array and nothing else. Each item is {key, kind, content}.",
   "kind is one of decision, root_cause, convention.",
   "key is a short kebab-case slug that stays stable if the same fact is learned again.",
   "content is one or two sentences a later run can act on, at least a full sentence.",
-  "Only emit a fact the excerpt actually supports. Do not invent, and do not restate the file list.",
+  "For an investigation, facts are where a behaviour lives, a root cause, or how something works, taken from the Conclusion.",
+  "Only emit a fact the evidence (the excerpt, or the Conclusion of a read-only run) actually supports. Do not invent, and do not restate the file list.",
   "Return [] when the run learned nothing durable.",
 ].join(" ");
 
@@ -54,11 +55,36 @@ export const MEMORY_COMMIT_SYSTEM = [
 export interface MemoryCommitRequest {
   /** What the run was asked, when the caller recorded it. */
   prompt?: string;
-  /** Paths the run created or edited. Empty means there is nothing to commit. */
+  /** Paths the run created or edited. Empty AND not an investigation (see `isInvestigation`) means there is nothing to commit. */
   changed: readonly string[];
+  /** Paths the run read (duplicates allowed). A read-only run needs {@link MIN_READS_FOR_LEARNING} distinct ones. */
+  read?: readonly string[];
   tools?: readonly string[];
   /** Bounded diff or file excerpt. The model extracts from this, not from paths alone. */
   excerpt?: string;
+  /** The run's final assistant answer: the evidence of a read-only investigation. */
+  answer?: string;
+}
+
+/** A read-only run must have read at least this many distinct files to be worth a learning pass. */
+export const MIN_READS_FOR_LEARNING = 3;
+/** How much of the final answer the extraction sees. */
+const ANSWER_CHARS = 3_000;
+
+function readPaths(input: MemoryCommitRequest): string[] {
+  return [...new Set((input.read ?? []).map((p) => p.trim()).filter(Boolean))];
+}
+
+/**
+ * A read-only investigation: enough files read, a written conclusion, and no fact the run already saved itself
+ * (a `remember_fact` call — a learning pass would write it twice).
+ */
+function isInvestigation(input: MemoryCommitRequest): boolean {
+  return (
+    readPaths(input).length >= MIN_READS_FOR_LEARNING &&
+    (input.answer ?? "").trim().length > 0 &&
+    !(input.tools ?? []).some((t) => REMEMBER_FACT_TOOLS.has(t))
+  );
 }
 
 /** The model route and the store, injected by the adapter. */
@@ -79,11 +105,18 @@ export function memoryCommitPrompt(input: MemoryCommitRequest): string {
   const asked = (input.prompt ?? "").replace(/\s+/g, " ").trim().slice(0, 400);
   const tools = [...new Set((input.tools ?? []).map((t) => t.trim()).filter(Boolean))].slice(0, 24);
   const excerpt = (input.excerpt ?? "").trim().slice(0, 6_000);
+  const read = readPaths(input).slice(0, 40);
+  // The TAIL: an answer that runs long ends in its conclusion, which is what the run learned.
+  const conclusion = (input.answer ?? "").trim().slice(-ANSWER_CHARS);
+  // The conclusion is evidence wherever it exists (a read-only run's only evidence); a changing run adds its excerpt.
+  const evidence = excerpt ? `Evidence:\n${excerpt}` : conclusion ? "Evidence: the Conclusion above." : "";
   return [
     asked ? `Asked: ${asked}` : "",
-    `Changed files:\n${changed.map((p) => `- ${p}`).join("\n")}`,
+    changed.length > 0 ? `Changed files:\n${changed.map((p) => `- ${p}`).join("\n")}` : "",
+    read.length > 0 ? `Files read:\n${read.map((p) => `- ${p}`).join("\n")}` : "",
     tools.length ? `Tools: ${tools.join(", ")}` : "",
-    excerpt ? `Evidence:\n${excerpt}` : "Evidence: (none recorded — return [] rather than guess)",
+    conclusion ? `Conclusion:\n${conclusion}` : "",
+    evidence || "Evidence: (none recorded — return [] rather than guess)",
   ]
     .filter(Boolean)
     .join("\n\n");
@@ -146,7 +179,7 @@ export async function commitLearnedFacts(
   deps: LearnedFactDeps,
 ): Promise<LearnedFact[]> {
   const changed = changedPaths(input);
-  if (changed.length === 0) return [];
+  if (changed.length === 0 && !isInvestigation(input)) return [];
   let raw = "";
   try {
     raw = await deps.complete(memoryCommitPrompt({ ...input, changed }));
@@ -170,6 +203,8 @@ export interface RunEvidence {
   activity: RunActivity;
   /** Bounded diff or file-head excerpt, when the host recorded one. */
   excerpt?: string;
+  /** The run's final assistant answer, when the caller has it (a read-only run learns from it). */
+  answer?: string;
 }
 
 /** What {@link extractAndWriteLearnedFacts} needs from the run, from its own record. */
@@ -177,6 +212,8 @@ export function learnedFactsRequest(evidence: RunEvidence): MemoryCommitRequest 
   const changed = [...(evidence.activity.created ?? []), ...(evidence.activity.edited ?? [])];
   return {
     changed,
+    ...(evidence.activity.read?.length ? { read: evidence.activity.read } : {}),
+    ...(evidence.answer ? { answer: evidence.answer } : {}),
     ...(evidence.activity.tools ? { tools: evidence.activity.tools } : {}),
     ...(evidence.excerpt ? { excerpt: evidence.excerpt } : {}),
     ...(evidence.activity.prompt ? { prompt: evidence.activity.prompt } : {}),
@@ -203,10 +240,11 @@ export function getLearnedFactDeps(): LearnedFactDeps | null {
 }
 
 /**
- * The learned-facts step of the run-end consolidation. Runs only when the run changed
- * files AND a surface opted in with {@link setLearnedFactDeps}; a read-only run writes
- * only its code map. Returns the facts that landed, or `null` when the step did not
- * run — so a caller can tell "nothing worth keeping" from "no provider".
+ * The learned-facts step of the run-end consolidation. Runs only when a surface opted in with
+ * {@link setLearnedFactDeps} AND the run changed files, or investigated read-only (at least
+ * {@link MIN_READS_FOR_LEARNING} distinct files read, a final answer, and no `remember_fact` of its own);
+ * any other read-only run writes only its code map. Returns the facts that landed, or `null` when the
+ * step did not run — so a caller can tell "nothing worth keeping" from "no provider".
  */
 export async function extractAndWriteLearnedFacts(evidence: RunEvidence): Promise<LearnedFact[] | null> {
   const deps = learnedFactDeps;

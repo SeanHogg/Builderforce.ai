@@ -170,7 +170,7 @@ async function publish(secrets: vscode.SecretStorage): Promise<void> {
   const unacked: RetainedFact[] = [];
   for (const fact of facts) {
     const hash = hashOf(fact.content);
-    if (previous[fact.key] === hash || (await rememberProjectFact(secrets, project.id, fact.key, fact.content))) {
+    if (previous[fact.key] === hash || (await rememberProjectFact(secrets, project.id, fact.key, fact.content)).ok) {
       next[fact.key] = hash;
     } else {
       unacked.push({ projectId: project.id, key: fact.key, hash, op: "remember", content: fact.content });
@@ -194,7 +194,7 @@ async function publish(secrets: vscode.SecretStorage): Promise<void> {
     if (covered.has(retainedId(item)) || (item.op === "remember" && current.has(item.key))) continue;
     const ok = item.op === "forget"
       ? await forgetProjectFact(secrets, item.projectId, item.key)
-      : await rememberProjectFact(secrets, item.projectId, item.key, item.content);
+      : (await rememberProjectFact(secrets, item.projectId, item.key, item.content)).ok;
     if (ok) {
       if (item.op === "remember") next[item.key] = item.hash;
     } else {

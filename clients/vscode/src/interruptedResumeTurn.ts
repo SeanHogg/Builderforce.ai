@@ -28,6 +28,8 @@ export const RESUME_TURN_DEFAULTS = {
   "ir.continueAsk": "The original request, verbatim:",
   "ir.continuePlan": "The plan when it stopped:",
   "ir.continueFiles": "Files changed so far:",
+  "ir.continueFacts": "Facts this run recorded (data from its own memory writes; verify against code before relying on them):",
+  "ir.continueRead": "Files this run already read (re-read only if you need a detail not in the facts above):",
   "ir.continueSteps": "The last steps before it stopped:",
   "ir.continueChildren": "Sub-agents:",
   "ir.continueScope": "Continue only this chat's task above. Check what is already done before redoing it, and do not pick up any other session's work.",
@@ -50,6 +52,10 @@ type ResumeKey = keyof typeof RESUME_TURN_DEFAULTS;
 
 const quote = (text: string): string => text.split(/\r?\n/).map((line) => `> ${line}`).join("\n");
 const list = (items: readonly string[]): string => items.map((item) => `- ${item}`).join("\n");
+/** Untrusted data on ONE line: a fact's newlines cannot start a forged section. */
+const oneLine = (text: string): string => text.replace(/\s+/g, " ").trim();
+/** An already-read path is clamped to this many characters when the turn names it. */
+const MAX_READ_PATH = 300;
 const indent = (text: string): string => text.split(/\r?\n/).map((line) => `    ${line}`).join("\n");
 
 /** A label's `{name}` placeholders filled with data. */
@@ -90,6 +96,8 @@ export function interruptedResumeTurn(t: ResumeLabel, resume: InterruptedRunResu
   if (resume.ask) sections.push(`${label("ir.continueAsk")}\n${quote(resume.ask)}`);
   if (resume.plan) sections.push(`${label("ir.continuePlan")}\n${resume.plan}`);
   if (resume.files?.length) sections.push(`${label("ir.continueFiles")}\n${list(resume.files)}`);
+  if (resume.facts?.length) sections.push(`${label("ir.continueFacts")}\n${list(resume.facts.map((f) => oneLine(`${f.key}: ${f.content}`)))}`);
+  if (resume.read?.length) sections.push(`${label("ir.continueRead")}\n${list(resume.read.map((p) => oneLine(p).slice(0, MAX_READ_PATH)))}`);
   if (resume.steps?.length) sections.push(`${label("ir.continueSteps")}\n${list(resume.steps)}`);
   if (resume.children?.length) sections.push(`${label("ir.continueChildren")}\n${renderInterruptedChildren(t, resume.children)}`);
   sections.push(label("ir.continueScope"));

@@ -1,5 +1,6 @@
 import { RunKnowledgeRecorder, type PolicyGate } from "@builderforce/agent-tools";
 import { recordEditorRunEnd } from "./editorRunEnd";
+import { finishedRun } from "@builderforce/agent-run/memory";
 import { editorChatSessionKey } from "./sessionNotes";
 import { editorRunSettings } from "./editorRunSettings";
 import * as vscode from "vscode";
@@ -241,7 +242,10 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
           (req) => confirmToolCall(req, req.agentName),
         )
       : undefined;
-    const tools: ToolDef[] = await brainToolCatalog(ctx.secrets, root, activeProject?.id, children, () => runAbortSignal(runChatId));
+    const tools: ToolDef[] = await brainToolCatalog(ctx.secrets, root, activeProject?.id, children, () => runAbortSignal(runChatId), {
+      // The run's chat off this machine, as the panel's runs thread it: `remember_fact` and the platform tools name the chat.
+      chatIdentity: { localChatId: runChatId, serverChatId: serverChatId ?? null, ...(clientChatId ? { clientChatId } : {}) },
+    });
     // The workspace's committed `.builderforce/` rules + hooks — the same assembly the
     // panel's run host uses.
     const directives = await editorRunDirectives(ctx.workspaceState, root ?? "", "run");
@@ -264,6 +268,8 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
     // False when `runNativeBrain` found the key claimed after all: nothing ran, so nothing is
     // recorded or saved for it.
     let claimed = true;
+    // What the run concluded and whether it may learn — told by `runNativeBrain` only for a run that ran to its end.
+    let settled: { learn: boolean; answer?: string } = { learn: false };
     try {
       // The restart-recovery journal (G22): the SAME WeakMap-cached handle activation and the
       // run host installed, so this turn's tool work is journaled into the same `execution`
@@ -371,15 +377,20 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
             stream.markdown(`\n\n**${vscode.l10n.t("Error:")}** ${formatChatErrorVerdict(message, action)}\n`);
           },
         },
+        onSettled: (run) => {
+          settled = run;
+        },
       });
     } finally {
       // The same run-end step as the panel, even for a turn that threw or was stopped:
       // the workspace note, then — with a project to hold them (the participant's memory
       // is on exactly when it has one) — the code map and the learned facts, into the
-      // project this turn STARTED in. Best-effort, like every memory step.
+      // project this turn STARTED in. Best-effort, like every memory step. Only a run
+      // that settled learns (`settled`, from `settledAnswerOf`); the note and map write regardless.
       if (claimed && root && !knowledge.isEmpty) {
-        await recordEditorRunEnd(ctx.secrets, root, editorChatSessionKey(brainChatId), knowledge, {
+        await recordEditorRunEnd(ctx.secrets, root, editorChatSessionKey(brainChatId), finishedRun(knowledge, settled.answer), {
           memory: !!activeProject,
+          learn: settled.learn,
           ...(activeProject ? { projectId: activeProject.id } : {}),
         }, { ledger: local.usage, chatId: runChatId, runKey: runChatId, identity: local.identity }).catch(() => undefined);
       }

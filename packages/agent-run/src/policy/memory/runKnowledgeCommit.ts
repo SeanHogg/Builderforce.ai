@@ -1,7 +1,8 @@
 /**
  * policy/memory/runKnowledgeCommit — everything a finished run leaves in project memory:
  * the code map of what it read and changed, then the model-extracted learned facts for a
- * run that changed files, behind the chat's Memory switch.
+ * completed run that changed files (or investigated read-only and answered), behind the chat's
+ * Memory switch.
  *
  * Ported from the editor's former `clients/vscode/src/memoryCommit.ts` (`commitRunKnowledge` /
  * `commitRunKnowledgeIfAllowed`, same signatures), which the editor now imports from here
@@ -18,7 +19,22 @@ import type { RunKnowledgeLog } from "@builderforce/agent-tools";
 import { commitLearnedFacts, type LearnedFactDeps } from "./learnedFacts.js";
 
 /** What a finished run hands its memory commit: the run record's note view and its code map. */
-export type FinishedRun = Pick<RunKnowledgeLog, "activity" | "consolidate">;
+export type FinishedRun = Pick<RunKnowledgeLog, "activity" | "consolidate"> & {
+  /** The run's final assistant answer — what a read-only investigation learns from. */
+  answer?: string;
+};
+
+/** A run's record plus its final answer, as a {@link FinishedRun} — a view, the recorder is not mutated. */
+export function finishedRun(log: Pick<RunKnowledgeLog, "activity" | "consolidate">, answer?: string): FinishedRun {
+  const text = answer?.trim();
+  return {
+    get activity() {
+      return log.activity;
+    },
+    consolidate: (opts) => log.consolidate(opts),
+    ...(text ? { answer: text } : {}),
+  };
+}
 
 /** The model route and the fact store, plus the surface's evidence reader when it has one. */
 export interface MemoryCommitDeps extends LearnedFactDeps {
@@ -37,7 +53,7 @@ export const MEMORY_OFF_NOTE =
 export async function commitRunKnowledgeIfAllowed(
   root: string,
   run: FinishedRun,
-  opts: { memory: boolean },
+  opts: { memory: boolean; learn?: boolean },
   resolveDeps: () => Promise<MemoryCommitDeps | undefined>,
   /** One line for the run's trace, told (synchronously) when Memory is off. */
   note?: (line: string) => void,
@@ -52,7 +68,7 @@ export async function commitRunKnowledgeIfAllowed(
   }
   try {
     const deps = await resolveDeps();
-    if (deps) await commitRunKnowledge(root, run, deps);
+    if (deps) await commitRunKnowledge(root, run, deps, opts.learn === undefined ? undefined : { learn: opts.learn });
   } catch {
     /* best-effort: a finished run never fails over its memory */
   }
@@ -60,10 +76,11 @@ export async function commitRunKnowledgeIfAllowed(
 
 /**
  * The code map of what the run read and changed (deterministic — a read-only
- * investigation counts, PRD 35 E8), then the learned facts for a run that changed files.
- * Never throws.
+ * investigation counts, PRD 35 E8), then the learned facts: for a run that changed files, or a read-only
+ * investigation that read enough files and left a final answer (`commitLearnedFacts` decides). `learn: false`
+ * (a failed or stopped run) writes the code map only. Never throws.
  */
-export async function commitRunKnowledge(root: string, run: FinishedRun, deps: MemoryCommitDeps): Promise<void> {
+export async function commitRunKnowledge(root: string, run: FinishedRun, deps: MemoryCommitDeps, opts?: { learn?: boolean }): Promise<void> {
   const activity = run.activity;
   // The root, so a tool call given an absolute path still maps as a repo file.
   const map = run.consolidate({ root });
@@ -74,17 +91,20 @@ export async function commitRunKnowledge(root: string, run: FinishedRun, deps: M
       /* the map is an accelerant; the learned facts below still get their chance */
     }
   }
+  if (opts?.learn === false) return;
   const changed = [...(activity.created ?? []), ...(activity.edited ?? [])];
-  if (changed.length === 0) return;
   let excerpt = "";
   try {
-    excerpt = deps.excerpt ? await deps.excerpt(root, changed) : "";
+    excerpt = deps.excerpt && changed.length > 0 ? await deps.excerpt(root, changed) : "";
   } catch {
     excerpt = "";
   }
+  // `commitLearnedFacts` decides eligibility: changed files, or a read-only run with reads + an answer.
   await commitLearnedFacts(
     {
       changed,
+      ...(activity.read?.length ? { read: activity.read } : {}),
+      ...(run.answer ? { answer: run.answer } : {}),
       ...(activity.tools ? { tools: activity.tools } : {}),
       ...(excerpt ? { excerpt } : {}),
       ...(activity.prompt ? { prompt: activity.prompt } : {}),

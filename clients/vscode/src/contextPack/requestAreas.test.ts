@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { extractIdentifiers } from "@builderforce/agent-tools";
 import { areasNamed } from "./codemapFacts";
-import { areasOfIdentifiers, codemapFactsForRequest } from "./requestAreas";
+import { areasOfIdentifiers, codemapFactsForRequest, markStaleRemembered } from "./requestAreas";
 import { requestSymbolLookup } from "./requestSymbols";
 import { withinMs } from "./withinMs";
 
@@ -109,7 +109,7 @@ describe("codemapFactsForRequest", () => {
       { request: "Make buildContextPack faster", focusPaths: [], focusContents: [] },
       { recall, symbols: symbolsOf([{ name: "buildContextPack", path: "clients/vscode/src/contextPack/buildContextPack.ts" }]) },
     );
-    expect(facts.map((f) => f.content)).toEqual(["context pack map"]);
+    expect(facts.codemap.map((f) => f.content)).toEqual(["context pack map"]);
     expect(recall).toHaveBeenCalledWith(expect.stringContaining("clients/vscode/src/contextPack"), 20);
   });
 
@@ -118,7 +118,7 @@ describe("codemapFactsForRequest", () => {
       { request: "the run store drops a steer", focusPaths: [], focusContents: [] },
       { recall: async () => FACTS },
     );
-    expect(facts.map((f) => f.content)).toEqual(["run store map"]);
+    expect(facts.codemap.map((f) => f.content)).toEqual(["run store map"]);
   });
 
   it("finds the root map for a root-level focus file", async () => {
@@ -127,12 +127,12 @@ describe("codemapFactsForRequest", () => {
       { request: "bump package.json", focusPaths: ["package.json"], focusContents: [] },
       { recall: async () => FACTS },
     );
-    expect(facts.map((f) => f.content)).toEqual(["root map"]);
+    expect(facts.codemap.map((f) => f.content)).toEqual(["root map"]);
   });
 
   it("returns nothing, and asks nothing, for an empty request with no focus", async () => {
     const recall = vi.fn(async () => FACTS);
-    expect(await codemapFactsForRequest({ request: "  ", focusPaths: [], focusContents: [] }, { recall })).toEqual([]);
+    expect(await codemapFactsForRequest({ request: "  ", focusPaths: [], focusContents: [] }, { recall })).toEqual({ codemap: [], remembered: [] });
     expect(recall).not.toHaveBeenCalled();
   });
 
@@ -141,6 +141,51 @@ describe("codemapFactsForRequest", () => {
       { request: "why is the canvas slow", focusPaths: [], focusContents: [] },
       { recall: async () => FACTS },
     );
-    expect(facts).toEqual([]);
+    expect(facts.codemap).toEqual([]);
+  });
+
+  it("keeps remembered facts from the same recall: not area maps, not workspace: digests, rank order, capped", async () => {
+    const pulled = [
+      { key: "workspace:overview", content: "digest" },
+      { key: "replicahost-gap-6644", content: "first" },
+      { key: "codemap:(root)", content: "root map" },
+      { key: "learned:run-1", content: "second" },
+      ...[3, 4, 5, 6, 7].map((n) => ({ key: `fact-${n}`, content: `c${n}` })),
+    ];
+    const recall = vi.fn(async () => pulled);
+    const facts = await codemapFactsForRequest(
+      { request: "bump package.json", focusPaths: ["package.json"], focusContents: [] },
+      { recall },
+    );
+    expect(recall).toHaveBeenCalledTimes(1);
+    expect(facts.codemap.map((f) => f.content)).toEqual(["root map"]);
+    expect(facts.remembered.map((f) => f.key)).toEqual(["replicahost-gap-6644", "learned:run-1", "fact-3", "fact-4", "fact-5"]);
+  });
+});
+
+describe("markStaleRemembered", () => {
+  const found = {
+    codemap: [{ key: "codemap:(root)", content: "root map" }],
+    remembered: [{ key: "a", content: "uses gone()" }, { key: "b", content: "fine" }],
+  };
+
+  it("marks the stale one and keeps the codemap", async () => {
+    const out = await markStaleRemembered(found, async () => ["STALE", undefined], 100);
+    expect(out.codemap).toEqual(found.codemap);
+    expect(out.remembered).toEqual([{ key: "a", content: "uses gone()", possiblyStale: "STALE" }, { key: "b", content: "fine" }]);
+  });
+
+  it("a rejecting check leaves facts unmarked and the codemap intact", async () => {
+    const out = await markStaleRemembered(found, async () => { throw new Error("boom"); }, 100);
+    expect(out.codemap).toEqual(found.codemap);
+    expect(out.remembered.map((f) => "possiblyStale" in f)).toEqual([false, false]);
+  });
+
+  it("a check slower than its bound leaves facts unmarked and the codemap intact", async () => {
+    const slow = async () => { await new Promise((r) => setTimeout(r, 200)); return ["STALE", "STALE"]; };
+    const out = await markStaleRemembered(found, slow, 10);
+    expect(out.codemap).toEqual(found.codemap);
+    expect(out.remembered).toHaveLength(2);
+    expect(out.remembered.some((f) => "possiblyStale" in f)).toBe(false);
   });
 });

@@ -43,6 +43,7 @@ import { createStreamRelay, exhaustedToolBudget, transientRunPersistence } from 
 import { approvalRequestFor, createNativeRunTool, nativeNeedsConfirm, nativeToolSpecs } from "./nativeRunTool";
 import type { NativeBrainRunOptions } from "./nativeRunTypes";
 import type { RunTerminalStatus } from "./runRecovery";
+import { appendedIdsOf, settledAnswerOf } from "./hostRunLifecycle";
 
 // The run's contract, its tool bridge and its stream relay live in their own modules
 // (`nativeRunTypes.ts`, `nativeRunTool.ts`, `nativeRunStream.ts`); every name is re-exported
@@ -207,6 +208,9 @@ export async function runNativeBrain(opts: NativeBrainRunOptions): Promise<boole
   // Only THIS run's steps decide whether the budget was exhausted — a cell's trace
   // spans every turn of the chat.
   const traceBefore = getRunTrace(chatId).length;
+  // …and likewise only THIS run's rows and trace decide what it concluded (`settledAnswerOf`).
+  const startedAt = new Date().toISOString();
+  const seenRows = appendedIdsOf(getRunSnapshot(chatId));
 
   try {
     await runBrainLoop(chatId, {
@@ -269,6 +273,8 @@ export async function runNativeBrain(opts: NativeBrainRunOptions): Promise<boole
   // The loop surfaces a failure on the run cell rather than throwing, so read it here
   // and clear it — otherwise the NEXT turn of this chat would re-report it.
   const settled = getRunSnapshot(chatId);
+  // Before the error is cleared below: a failed run learns nothing.
+  opts.onSettled?.(settledAnswerOf(chatId, settled, startedAt, seenRows));
   if (settled.error) {
     events.onError(settled.error, settled.errorAction);
     clearRunError(chatId);

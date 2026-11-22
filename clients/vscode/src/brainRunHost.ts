@@ -58,6 +58,8 @@ import { createChildRunHost, ownerOf, type RunSpec } from "./childRunHost";
 import { stickyChildStream } from "./childModelStickiness";
 import { createChildApprovalRelay } from "./childApprovalRelay";
 import { createRunWatches } from "./runWatches";
+import { finishedRun } from "@builderforce/agent-run/memory";
+import { appendedIdsOf, settledAnswerOf } from "./hostRunLifecycle";
 import { OWNER_NAME, type BrainRunHost, type BrainRunHostPorts, type RunNoteOptions, type ToolRunInfo } from "./brainRunHostContract";
 import type { PlatformChatIdentity } from "./platformTools";
 import { runContextFields, startRunRepo } from "./runSetup";
@@ -140,13 +142,16 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     return n;
   };
 
-  const flushNote = async (runKey: number, chatId: number, opts: RunNoteOptions): Promise<void> => {
+  const flushNote = async (runKey: number, chatId: number, opts: RunNoteOptions, since: { startedAt: string; seen: ReadonlySet<number> }): Promise<void> => {
     const n = notes.get(runKey);
     // Dropped even when empty: a recorder per key that never noted anything is still a recorder.
     notes.delete(runKey);
     if (!n || n.isEmpty) return;
     try {
-      await ports.sessionNote?.(chatId, n, opts);
+      // The note and the code map are written on every outcome; what the run LEARNED (and the final answer a read-only
+      // investigation learns from) belongs to a completed run, read from THIS run's rows only (`settledAnswerOf`).
+      const { learn, answer } = settledAnswerOf(chatId, getRunSnapshot(runKey), since.startedAt, since.seen);
+      await ports.sessionNote?.(chatId, finishedRun(n, answer), { ...opts, learn });
     } catch {
       /* a note is best-effort — never a run failure */
     }
@@ -211,6 +216,9 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     const chatId = chatOf(p);
     const flag = { autoApprove: p.autoApprove };
     flags.set(key, flag);
+    // Where THIS run begins in the cell's persisted-rows buffer (which outlives runs): its answer is read after this point.
+    const startedAt = new Date().toISOString();
+    const seenRows = appendedIdsOf(getRunSnapshot(key));
     const root = ports.workspaceRoot();
     const asked = askedText(p.userTurn);
     if (asked) notesFor(key).setPrompt(asked);
@@ -373,7 +381,7 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
       settingUp.delete(key);
       flags.delete(key);
       approvals.forget(key);
-      await flushNote(key, chatId, { memory: p.evermind, ...(projectId != null ? { projectId } : {}) });
+      await flushNote(key, chatId, { memory: p.evermind, ...(projectId != null ? { projectId } : {}) }, { startedAt, seen: seenRows });
       // The workspace's runEnd hooks — after the run, never holding its settle.
       void directives?.hooks.onRunEnd();
     }

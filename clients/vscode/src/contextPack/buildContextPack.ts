@@ -21,7 +21,8 @@ import { recallProjectFacts } from "../bfApi";
 import { readChatState } from "./chatStateReads";
 import { readCheckoutState } from "./checkoutState";
 import { workspaceSymbolIndex } from "../workspaceSymbols";
-import { codemapFactsForRequest } from "./requestAreas";
+import { codemapFactsForRequest, markStaleRemembered, type MarkedRequestFacts } from "./requestAreas";
+import { staleNote, staleReferences } from "../memoryStaleness";
 import { withinMs } from "./withinMs";
 import { workspaceMapFor } from "./workspaceMapScan";
 import { extractFocusPaths, isRelativePath, resolveUnderRoot, workspaceRelative } from "./focusPaths";
@@ -104,30 +105,44 @@ export async function buildContextPack(
   if (input.projectId == null && candidates.length === 0 && !input.root) return undefined;
   const focusLoad = Promise.all(candidates.map((c) => loadFocusFile(input.root, c))).then((all) => all.filter((f): f is NonNullable<typeof f> => !!f));
   const projectId = input.projectId;
-  const facts: Promise<Array<{ key: string; content: string }>> = projectId == null || !input.memory
-    ? Promise.resolve([])
-    : focusLoad.then((loaded) =>
-        // Areas from the focus paths, the request's identifiers and its words (requestAreas.ts).
-        codemapFactsForRequest(
-          { request: input.request, focusPaths: loaded.map((f) => f.focus.path), focusContents: loaded.map((f) => f.text) },
-          {
-            recall: (query, limit) => recallProjectFacts(secrets, projectId, query, limit),
-            ...(input.symbols ? { symbols: input.symbols } : input.root ? { symbols: workspaceSymbolIndex(input.root) } : {}),
-          },
-        ));
-  const [loaded, chat, repos, codemap, workspaceMap] = await Promise.all([
+  const startedAt = Date.now();
+  const noFacts: MarkedRequestFacts = { codemap: [], remembered: [] };
+  const facts: Promise<MarkedRequestFacts> = projectId == null || !input.memory
+    ? Promise.resolve(noFacts)
+    : focusLoad
+        .then((loaded) =>
+          // Areas from the focus paths, the request's identifiers and its words (requestAreas.ts).
+          codemapFactsForRequest(
+            { request: input.request, focusPaths: loaded.map((f) => f.focus.path), focusContents: loaded.map((f) => f.text) },
+            {
+              recall: (query, limit) => recallProjectFacts(secrets, projectId, query, limit),
+              ...(input.symbols ? { symbols: input.symbols } : input.root ? { symbols: workspaceSymbolIndex(input.root) } : {}),
+            },
+          ))
+        // The ONE staleness check `recall_facts` uses, inside the SAME deadline as the recall:
+        // a remembered fact naming gone code is marked, not obeyed.
+        // Guarded on its own, bounded by what is left of the deadline: it can cost the marks, never the codemap.
+        .then((found): Promise<MarkedRequestFacts> =>
+          markStaleRemembered(
+            found,
+            async (texts) => (await staleReferences(input.root || undefined, texts)).map((m) => (m.length ? staleNote(m) : undefined)),
+            deadlineMs - (Date.now() - startedAt) - 50,
+          ));
+  const [loaded, chat, repos, requestFacts, workspaceMap] = await Promise.all([
     withinMs(focusLoad, deadlineMs, []),
     input.serverChatId != null ? withinMs<ContextPackChat | undefined>(readChatState(secrets, input.serverChatId), deadlineMs, undefined) : Promise.resolve(undefined),
     withinMs<ContextPackRepo[]>(readCheckoutState(), deadlineMs, []),
-    withinMs<Array<{ key: string; content: string }>>(facts, deadlineMs, []),
+    withinMs<MarkedRequestFacts>(facts, deadlineMs, noFacts),
     withinMs(workspaceMapFor(input.root), deadlineMs, ""),
   ]);
+  const remembered = requestFacts.remembered;
   const parts: ContextPackParts = {
     focus: loaded.map((f) => f.focus),
     ...(chat ? { chat } : {}),
     ...(repos.length ? { repos } : {}),
     ...(workspaceMap ? { workspaceMap } : {}),
-    facts: codemap.map((f) => ({ key: f.key, content: f.content })),
+    facts: requestFacts.codemap.map((f) => ({ key: f.key, content: f.content })),
+    ...(remembered.length ? { remembered } : {}),
   };
   const rendered = renderContextPack(parts);
   const servedReads = parts.focus.flatMap((f) =>

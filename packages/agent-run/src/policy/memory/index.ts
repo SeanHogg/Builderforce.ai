@@ -15,7 +15,8 @@
  * - `consolidate` is the run-end memory: the `codemap:` write-back fields from
  *   `run.consolidate({ root })` (the one rule every runtime — on-prem `knowledge-loop.ts`,
  *   cloud `runEndMemory.ts`, the editor's run end through `commit.ts` — commits the same way),
- *   PLUS the model-extracted learned facts when the run changed files and the surface
+ *   PLUS the model-extracted learned facts when the run changed files (or investigated read-only
+ *   and answered) and the surface
  *   opted in with a `learnedFacts` port (`learnedFacts.ts`, the editor's addition on top
  *   of the shared code map; the editor reaches it through `commit.ts`).
  *
@@ -27,6 +28,8 @@
  * and Node.
  */
 
+import { isFailedToolResult } from "@builderforce/agent-tools";
+import type { RunMessage } from "../../contractModel.js";
 import type { MemoryHook, PolicyContext, PolicyToolCall } from "../hooks.js";
 import { guardsTurnNote } from "../guards/index.js";
 import { renderTaskState } from "../tools/taskState.js";
@@ -36,9 +39,22 @@ import { extractAndWriteLearnedFacts } from "./learnedFacts.js";
 /** Between the tail's sections. */
 const SECTION_BREAK = "\n\n";
 
-/** A dispatched result the tool reported as failed (`{ ok: false }`) — never recorded. */
-function failed(result: unknown): boolean {
-  return !!result && typeof result === "object" && (result as { ok?: unknown }).ok === false;
+/**
+ * The run's final assistant answer: the transcript's LAST assistant row, when it asked for no tool. `settle` sets
+ * `state.messages` to the finished transcript before it consolidates. Undefined when the run
+ * never wrote one (it then learns nothing from a read-only investigation).
+ */
+function finalAnswerOf(ctx: PolicyContext): string | undefined {
+  const rows = (ctx.state.messages ?? []) as Array<Partial<RunMessage> | null | undefined>;
+  // Only the transcript's END can be this run's answer: the first assistant row from the end is it or nothing, and a user
+  // row reached first means the run never answered it. Walking further would adopt an earlier run's (seeded history).
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const row = rows[i];
+    if (row?.role === "user") return undefined;
+    if (row?.role !== "assistant") continue;
+    return !row.toolCalls?.length && typeof row.content === "string" && row.content.trim() ? row.content : undefined;
+  }
+  return undefined;
 }
 
 /**
@@ -63,7 +79,8 @@ export const memoryHook: MemoryHook & {
 } = {
   /** Record one dispatched call into the run's memory — successful calls only. */
   observe(ctx: PolicyContext, call: PolicyToolCall, result: unknown, isError?: boolean) {
-    if (isError || failed(result)) return;
+    // The ONE failure rule (`@builderforce/agent-tools`): a failed call is never recorded — not even as a saved fact.
+    if (isError || isFailedToolResult(result)) return;
     const recorder = recorderForState(ctx.state);
     recorder.record(call.name, call.args);
     ctx.state.memory = knowledgeState(recorder);
@@ -92,7 +109,7 @@ export const memoryHook: MemoryHook & {
    * The consolidated memory the run produced, written back through `store.commitMemory`.
    * The code map (the `codemap:` write-back fields) is returned for the store; the
    * learned-facts step runs behind the injected `learnedFacts` port when the run
-   * changed files. A read-only investigation still maps (PRD 35 E8): `consolidate`
+   * changed files, or investigated read-only and left a final answer. A read-only investigation still maps (PRD 35 E8): `consolidate`
    * maps ≥3 files READ as readily as ≥3 changed, so the next run asked about this area
    * starts warm. The map is written on EVERY terminal outcome (a failed or cancelled run
    * still read and changed what it did); the model-extracted learned facts are a judgement
@@ -101,10 +118,12 @@ export const memoryHook: MemoryHook & {
   async consolidate(ctx: PolicyContext, opts?: { learn?: boolean }) {
     // The deterministic half — the code map, already carrying the chat it came from (WS8d) — is `codeMapOf`'s.
     const map = codeMapOf(ctx);
+    const answer = finalAnswerOf(ctx);
     const facts = opts?.learn === false
       ? null
       : await extractAndWriteLearnedFacts({
           activity: recorderForState(ctx.state).activity,
+          ...(answer ? { answer } : {}),
         });
     // `undefined` (no map) leaves the store's commitMemory alone; a map is always
     // committed even when no learned fact landed. The anchors are derived server-side.
@@ -118,6 +137,7 @@ export {
   MEMORY_OFF_NOTE,
   commitRunKnowledge,
   commitRunKnowledgeIfAllowed,
+  finishedRun,
   type FinishedRun,
   type MemoryCommitDeps,
 } from "./runKnowledgeCommit.js";
