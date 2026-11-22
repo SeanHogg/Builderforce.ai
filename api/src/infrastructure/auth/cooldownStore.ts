@@ -379,6 +379,9 @@ function kvBackend(kv: KVNamespace): CooldownBackend {
         .catch(() => undefined);
     },
     async writeVendor(vendor, until, ttlSec, cls, strikes) {
+      await invalidateCached(env, vendorCooldownKey(vendor)).catch((error) => {
+        reportCaughtError(error, { source: "infrastructure/auth/cooldownStore.ts", operation: "writeVendor" });
+      });
       await kv.put(
         vendorCooldownKey(vendor),
         JSON.stringify({ cls, until, strikes }),
