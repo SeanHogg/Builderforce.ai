@@ -16,7 +16,8 @@ query executions.
 - **Endpoint**: `https://api.builderforce.ai/mcp`
 - **Transport**: Streamable HTTP (JSON-RPC 2.0), **stateless** — no session ids,
   no server→client stream
-- **Auth**: `Authorization: Bearer bfk_…` (a tenant API key)
+- **Auth**: `Authorization: Bearer bfk_…` (a tenant API key) for tool calls.
+  Discovery (`initialize`, `ping`, `tools/list`) is **public** — no token needed.
 
 ## Get an API key
 
@@ -68,6 +69,13 @@ hint means "assume it writes".
 
 `initialize`, `notifications/initialized`, `ping`, `tools/list`, `tools/call`.
 
+`initialize`, `ping` and `tools/list` answer **without a token**, so registries
+and agents can see what the server does before sign-up. An anonymous
+`tools/list` shows the public platform catalog only — never your connectors,
+your registered MCP servers, or feature-gated tools. `tools/call` always
+requires the key, and a presented-but-invalid key is a `401` challenge even on
+discovery (it is never silently downgraded to the anonymous catalog).
+
 Because the server is stateless, `GET /mcp` and `DELETE /mcp` return `405`: there
 is no stream to open and no session to end. Send everything as `POST`.
 
@@ -80,8 +88,10 @@ curl -s https://api.builderforce.ai/mcp \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | head -c 400
 ```
 
-Without a key the same call answers `401` with a `WWW-Authenticate: Bearer`
-challenge — which is also the quickest way to confirm the endpoint is reachable.
+Without a key the same call answers `200` with the public platform catalog —
+the quickest way to confirm the endpoint is reachable. An unauthenticated
+`tools/call` answers `401` with a `WWW-Authenticate: Bearer` challenge: calls
+stay behind sign-in.
 
 ## Rate limits
 

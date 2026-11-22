@@ -15,7 +15,8 @@ OKR、派发云端编码代理，以及查询执行记录。
 - **端点**：`https://api.builderforce.ai/mcp`
 - **传输**：Streamable HTTP（JSON-RPC 2.0），**无状态** —— 没有会话 ID，也没有
   服务端到客户端的流
-- **认证**：`Authorization: Bearer bfk_…`（租户 API 密钥）
+- **认证**：工具调用需要 `Authorization: Bearer bfk_…`（租户 API 密钥）。
+  发现类方法（`initialize`、`ping`、`tools/list`）是**公开的**——无需令牌。
 
 ## 获取 API 密钥
 
@@ -66,6 +67,12 @@ claude mcp add --transport http builderforce https://api.builderforce.ai/mcp \
 
 `initialize`、`notifications/initialized`、`ping`、`tools/list`、`tools/call`。
 
+`initialize`、`ping` 与 `tools/list` **无需令牌**即可应答，注册目录和代理可以在
+注册之前了解服务器的能力。匿名的 `tools/list` 只展示公开的平台工具目录——绝不
+包含你的连接器、你注册的 MCP 服务器或按功能门控的工具。`tools/call` 始终需要
+密钥；提交了无效密钥时，即使是发现类方法也会返回 `401` 质询（绝不会静默降级为
+匿名目录）。
+
 由于服务器是无状态的，`GET /mcp` 与 `DELETE /mcp` 返回 `405`：没有可打开的流，也
 没有可结束的会话。请一律使用 `POST`。
 
@@ -78,8 +85,9 @@ curl -s https://api.builderforce.ai/mcp \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | head -c 400
 ```
 
-不带密钥时，同样的调用会返回 `401` 以及 `WWW-Authenticate: Bearer` 质询——这也是
-确认端点可达的最快方式。
+不带密钥时，同样的调用会返回 `200` 和公开的平台工具目录——这是确认端点可达的
+最快方式。未认证的 `tools/call` 会返回 `401` 以及 `WWW-Authenticate: Bearer`
+质询：工具调用始终需要登录。
 
 ## 速率限制
 

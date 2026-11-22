@@ -30,8 +30,10 @@ and need no manual step once their secret exists.
 | npm | the SDK packages | `NPM_TOKEN` | Publish fails |
 
 The MCP Registry job probes `https://api.builderforce.ai/mcp` and refuses to
-publish unless it answers `401` — a listing that points at a dead endpoint is
-worse than no listing, because every client that discovers it fails on connect.
+publish unless an anonymous `tools/list` answers `200` with a tool catalog AND
+an anonymous `tools/call` still answers `401` — discovery is public, calls stay
+behind sign-in. A listing that points at a dead endpoint is worse than no
+listing, because every client that discovers it fails on connect.
 
 The memory MCP server publishes from its own repo:
 [`builderforce-memory/packages/memory-mcp/server.json`](https://github.com/SeanHogg/builderforce-memory),

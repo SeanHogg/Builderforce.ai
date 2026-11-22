@@ -512,10 +512,12 @@ jobs:
           # listing: every client that discovers it fails on first connect.
           #
           # The probe is the shape a real client uses — an unauthenticated
-          # JSON-RPC POST — and 401 is the correct answer to it: it proves the
-          # route is mounted AND that the challenge a client must satisfy is the
-          # one server.json documents. Retried because the API deploy this job
-          # waits on has only just propagated.
+          # JSON-RPC POST. Discovery is PUBLIC: tools/list must answer 200 with
+          # a non-empty catalog (what registries and choosing agents see before
+          # sign-up), and an unauthenticated tools/call must STILL answer 401.
+          # Together they prove the route is mounted, discovery works, and tool
+          # calls stay behind the challenge server.json documents. Retried
+          # because the API deploy this job waits on has only just propagated.
           code=000
           : >body.txt; : >headers.txt; : >curl-error.txt
           for attempt in 1 2 3; do
@@ -523,17 +525,26 @@ jobs:
               -X POST https://api.builderforce.ai/mcp \
               -H 'content-type: application/json' \
               -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' 2>curl-error.txt || true)
-            if [ "$code" = "401" ]; then break; fi
+            if [ "$code" = "200" ]; then break; fi
             # Edge mitigation is a property of this runner's IP, not of timing.
             # Retrying it just burns 30s to reach the same verdict.
             if grep -qi '^cf-mitigated:' headers.txt; then break; fi
             if [ "$attempt" -lt 3 ]; then sleep 15; fi
           done
 
-          if [ "$code" = "401" ]; then
-            echo "POST /mcp answered 401 — the route is mounted and challenges as server.json documents."
-            echo "publish=true" >>"$GITHUB_OUTPUT"
-            exit 0
+          if [ "$code" = "200" ] && jq -e '(.result.tools | length) > 0' body.txt >/dev/null 2>&1; then
+            call_code=$(curl -sS -o call-body.txt -w '%{http_code}' --max-time 30 \
+              -X POST https://api.builderforce.ai/mcp \
+              -H 'content-type: application/json' \
+              -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"builtin_tasks_list","arguments":{}}}' 2>/dev/null || true)
+            if [ "$call_code" = "401" ]; then
+              echo "POST /mcp: anonymous tools/list answered 200 with a catalog; anonymous tools/call answered 401 — discovery is public, calls stay gated, as server.json documents."
+              echo "publish=true" >>"$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "::error::anonymous tools/call answered $call_code, expected 401 — tool calls must stay behind sign-in. Not publishing."
+            head -c 2000 call-body.txt || true
+            exit 1
           fi
           echo "publish=false" >>"$GITHUB_OUTPUT"
 
@@ -575,7 +586,7 @@ jobs:
               echo
               echo "\`POST https://api.builderforce.ai/mcp\` answered **$code** with a \`cf-mitigated\` managed challenge."
               echo
-              echo "**The Worker is fine.** Mitigation is scored on caller IP: the same request answers \`401\` from a"
+              echo "**The Worker is fine.** Mitigation is scored on caller IP: the same request answers \`200\` from a"
               echo "laptop and is challenged from this runner's datacenter ASN. That is precisely the audience of this"
               echo "listing — Anthropic connectors, hosted agents, AWS, every server-side MCP client — so publishing"
               echo "would advertise a URL that answers challenge HTML to everyone who discovers it."
@@ -603,7 +614,7 @@ jobs:
             exit 0
           fi
 
-          echo "::error::https://api.builderforce.ai/mcp answered $code, expected 401. Not publishing."
+          echo "::error::https://api.builderforce.ai/mcp answered $code, expected 200 with a tool catalog (public discovery). Not publishing."
           exit 1
 
       # The verify step now exits 0 on the blocked-by-zone path, so this gate is

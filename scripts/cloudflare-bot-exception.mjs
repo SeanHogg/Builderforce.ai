@@ -3,8 +3,8 @@
  * Zone-level bot-mitigation check for the API hostnames.
  *
  * ── WHY THIS EXISTS ──────────────────────────────────────────────────────────
- * `api.builderforce.ai/mcp` answers 401 to a laptop and a 403 managed challenge
- * to a GitHub Actions runner. Nothing is wrong with the Worker: Cloudflare bot
+ * `api.builderforce.ai/mcp` answers public discovery (200) to a laptop and a
+ * 403 managed challenge to a GitHub Actions runner. Nothing is wrong with the Worker: Cloudflare bot
  * mitigation scores requests from datacenter ASNs as automated and challenges
  * them at the EDGE, before the request reaches any of our code.
  *

@@ -26,7 +26,11 @@
 import { resolveAdvertisedToolName, toolNameSet } from '@builderforce/agent-tools';
 import { callConnectorTool, CONNECTOR_EXTENSION_ID, listConnectorTools } from '../connectors/connectorTools';
 import { BUILTIN_EXTENSION_ID, callBuiltinTool, listBuiltinTools } from './builtinMcpService';
-import { entitledBuiltinTools } from './builtinToolEntitlements';
+import {
+  BUILTIN_TOOL_FEATURE_GATES,
+  BUILTIN_TOOL_PLATFORM_OPERATOR_TOOLS,
+  entitledBuiltinTools,
+} from './builtinToolEntitlements';
 import { mayRunBuiltinTool } from './builtinToolAuthority';
 import { withSkillCatalog } from './skillLibraryToolCatalog';
 import { callMcpTool, listToolsForTenant, type McpToolEntry } from './mcpExtensionService';
@@ -79,9 +83,9 @@ export class UnknownToolSurfaceError extends Error {
   }
 }
 
-function surfaceFor(ctx: GatewayMcpContext): ToolSurfaceDefinition {
-  const surface = resolveToolSurface(ctx.surface);
-  if (!surface) throw new UnknownToolSurfaceError((ctx.surface ?? '').trim());
+function surfaceFor(surfaceId: string | null | undefined): ToolSurfaceDefinition {
+  const surface = resolveToolSurface(surfaceId);
+  if (!surface) throw new UnknownToolSurfaceError((surfaceId ?? '').trim());
   return surface;
 }
 
@@ -111,7 +115,7 @@ export function roleFilterBuiltinTools<T extends { tool: string; mutates?: boole
  * customer server, and serialising a cached DB read behind it is free latency.
  */
 export async function listGatewayMcpTools(ctx: GatewayMcpContext): Promise<McpToolEntry[]> {
-  const surface = surfaceFor(ctx);
+  const surface = surfaceFor(ctx.surface);
   const db = dbFor(ctx);
   // A source the surface excludes is not fetched at all. The extension leg calls
   // every customer MCP server, so skipping it is latency saved, not just bytes.
@@ -134,6 +138,31 @@ export async function listGatewayMcpTools(ctx: GatewayMcpContext): Promise<McpTo
       )
     : [];
   return applyToolSurface([...builtinTools, ...connectorTools, ...extensionTools], surface);
+}
+
+/** Built-in tools that must NEVER appear in the anonymous catalog: every
+ *  feature-gated row and every platform-operator row. The anonymous preview has
+ *  no tenant to check entitlements against, so the fail-safe is to hide them
+ *  all — a signed-in tenant still sees the ones it holds via the gateway. */
+const PRIVATE_BUILTIN_TOOL_IDS: ReadonlySet<string> = new Set([
+  ...BUILTIN_TOOL_FEATURE_GATES.flatMap((gate) => gate.tools),
+  ...BUILTIN_TOOL_PLATFORM_OPERATOR_TOOLS,
+]);
+
+/**
+ * The ANONYMOUS discovery catalog — what `tools/list` advertises with no token.
+ *
+ * Static first-party metadata only ({@link listBuiltinTools} is a no-DB map over
+ * the catalog): no tenant connectors, no external MCP servers, no skill-catalog
+ * enrichment, and no feature-gated or operator tools. Registries and choosing
+ * agents can see what the server does before sign-up; nothing tenant-specific
+ * is ever disclosed. `?surface=` still applies, so a preview can be narrowed
+ * the same way the signed-in catalog can.
+ */
+export function listPublicMcpTools(surface?: string | null): McpToolEntry[] {
+  const resolved = surfaceFor(surface);
+  if (!surfaceIncludesSource(resolved, 'builtin')) return [];
+  return applyToolSurface(listBuiltinTools().filter((t) => !PRIVATE_BUILTIN_TOOL_IDS.has(t.tool)), resolved);
 }
 
 /**

@@ -5,8 +5,11 @@ const TENANT = 42;
 let authOk = true;
 
 vi.mock('./llmRoutes', () => ({
-  requireTenantAccess: async () => {
-    if (!authOk) throw new Error('Missing or malformed Authorization header');
+  requireTenantAccess: async (c: { req: { header: (name: string) => string | undefined } }) => {
+    // Mirror the real resolver's first check: no Bearer header, no access.
+    if (!authOk || !(c.req.header('Authorization') ?? '').startsWith('Bearer ')) {
+      throw new Error('Missing or malformed Authorization header');
+    }
     return { tenantId: TENANT, userId: 'user-1', role: 'developer', agentHostId: null };
   },
 }));
@@ -21,15 +24,26 @@ const TOOLS = [
   { extensionId: 'builtin', tool: 'tasks.list', name: 'tasks_list', description: 'List tickets', parameters: { type: 'object', properties: {} }, mutates: false },
 ];
 
+const PUBLIC_TOOLS = [
+  { extensionId: 'builtin', tool: 'tasks.list', name: 'tasks_list', description: 'List tickets', parameters: { type: 'object', properties: {} }, mutates: false },
+];
+
 const calls: Array<{ extensionId: string; tool: string; arguments?: unknown }> = [];
 let toolThrows = false;
 
 let lastSurface: unknown;
+let lastPublicSurface: unknown;
+let gatewayListCalls = 0;
 
 vi.mock('../../application/llm/mcpGateway', () => ({
   listGatewayMcpTools: async (ctx: { surface?: unknown }) => {
+    gatewayListCalls += 1;
     lastSurface = ctx.surface;
     return TOOLS;
+  },
+  listPublicMcpTools: (surface?: string | null) => {
+    lastPublicSurface = surface;
+    return PUBLIC_TOOLS;
   },
   resolveGatewayMcpTool: (tools: typeof TOOLS, name: string) => tools.find((t) => t.name === name) ?? null,
   callGatewayMcpTool: async (_ctx: unknown, call: { extensionId: string; tool: string; arguments?: unknown }) => {
@@ -53,6 +67,13 @@ function rpc(body: unknown) {
 }
 
 const post = (body: unknown) => createMcpServerRoutes().request('/', rpc(body), ENV);
+
+/** The same POST with NO Authorization header — the anonymous discovery caller. */
+const anonPost = (body: unknown, url = '/') => createMcpServerRoutes().request(url, {
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify(body),
+}, ENV);
 
 describe('mcpServerRoutes — JSON-RPC 2.0 / Streamable HTTP', () => {
   it('initialize negotiates a version the client asked for', async () => {
@@ -171,13 +192,71 @@ describe('mcpServerRoutes — JSON-RPC 2.0 / Streamable HTTP', () => {
     expect(res.status).toBe(202);
   });
 
-  it('missing auth is 401 with a Bearer challenge, not the gateway error shape', async () => {
+  it('a PRESENTED but rejected credential is 401 with a Bearer challenge even on discovery — never a silent downgrade to the public catalog', async () => {
     authOk = false;
     const res = await post({ jsonrpc: '2.0', id: 1, method: 'tools/list' });
     authOk = true;
     expect(res.status).toBe(401);
     expect(res.headers.get('WWW-Authenticate')).toContain('Bearer');
     expect((await res.json() as any).error.code).toBe(-32600);
+  });
+
+  it('anonymous initialize is public and says how to sign in', async () => {
+    const res = await anonPost({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18' } });
+    expect(res.status).toBe(200);
+    const { result } = await res.json() as any;
+    expect(result.serverInfo.name).toBe('builderforce');
+    expect(result.instructions).toContain('not signed in');
+    expect(result.instructions).toContain('Bearer bfk_');
+  });
+
+  it('anonymous tools/list serves the PUBLIC catalog without touching the tenant gateway', async () => {
+    gatewayListCalls = 0;
+    const res = await anonPost({ jsonrpc: '2.0', id: 2, method: 'tools/list' });
+    expect(res.status).toBe(200);
+    const { result } = await res.json() as any;
+    expect(result.tools.map((t: any) => t.name)).toEqual(['tasks_list']);
+    expect(gatewayListCalls).toBe(0);
+  });
+
+  it('anonymous ?surface= narrows the public catalog through the same resolver', async () => {
+    lastPublicSurface = undefined;
+    const res = await anonPost({ jsonrpc: '2.0', id: 21, method: 'tools/list' }, '/?surface=readonly');
+    expect(res.status).toBe(200);
+    expect(lastPublicSurface).toBe('readonly');
+    const bad = await anonPost({ jsonrpc: '2.0', id: 22, method: 'tools/list' }, '/?surface=deliverey');
+    expect(bad.status).toBe(400);
+  });
+
+  it('anonymous tools/call is 401 with a Bearer challenge — calls stay behind sign-in', async () => {
+    calls.length = 0;
+    const res = await anonPost({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'tasks_list', arguments: {} } });
+    expect(res.status).toBe(401);
+    expect(res.headers.get('WWW-Authenticate')).toContain('Bearer');
+    expect(calls).toHaveLength(0);
+  });
+
+  it('an anonymous batch mixing discovery with tools/call is 401 as a WHOLE — no partial execution', async () => {
+    calls.length = 0;
+    const res = await anonPost([
+      { jsonrpc: '2.0', id: 'a', method: 'tools/list' },
+      { jsonrpc: '2.0', id: 'b', method: 'tools/call', params: { name: 'tasks_list' } },
+    ]);
+    expect(res.status).toBe(401);
+    expect(calls).toHaveLength(0);
+  });
+
+  it('an anonymous UNKNOWN method is 401, not method-not-found — only known discovery methods are public', async () => {
+    const res = await anonPost({ jsonrpc: '2.0', id: 6, method: 'resources/list' });
+    expect(res.status).toBe(401);
+  });
+
+  it('anonymous notifications and ping work without a token', async () => {
+    const note = await anonPost({ jsonrpc: '2.0', method: 'notifications/initialized' });
+    expect(note.status).toBe(202);
+    const ping = await anonPost({ jsonrpc: '2.0', id: 9, method: 'ping' });
+    expect(ping.status).toBe(200);
+    expect((await ping.json() as any).result).toEqual({});
   });
 
   it('the MCP Registry manifest describes the endpoint we actually serve', () => {

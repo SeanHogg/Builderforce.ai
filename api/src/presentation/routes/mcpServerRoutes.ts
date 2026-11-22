@@ -18,13 +18,21 @@
  * Auth: `Authorization: Bearer bfk_…` (a tenant API key from the portal). The
  * tenant scope of that key is the tenant scope of every tool call.
  *
+ * DISCOVERY IS PUBLIC (spec-permitted): `initialize`, `ping` and `tools/list`
+ * answer with NO token, advertising only the static first-party catalog
+ * (`listPublicMcpTools` — never tenant connectors, external servers, or
+ * feature-gated/operator tools). Registries and choosing agents can see what
+ * this server does before sign-up. `tools/call` always requires the key, and a
+ * PRESENTED-but-rejected credential is a 401 challenge even on discovery — an
+ * invalid key must never silently downgrade to the anonymous preview.
+ *
  * Spec: https://modelcontextprotocol.io/specification — methods implemented are
  * `initialize`, `notifications/initialized`, `ping`, `tools/list`, `tools/call`.
  */
 
 import { reportServerError } from '../middleware/errorResponse';
 import { Hono } from 'hono';
-import { listGatewayMcpTools, callGatewayMcpTool, resolveGatewayMcpTool } from '../../application/llm/mcpGateway';
+import { listGatewayMcpTools, listPublicMcpTools, callGatewayMcpTool, resolveGatewayMcpTool } from '../../application/llm/mcpGateway';
 import { describeToolSurfaces, resolveToolSurface, TOOL_SURFACES } from '../../application/llm/toolSurfaces';
 import { requireTenantAccess, type TenantAccess } from './llmRoutes';
 import type { Env, HonoEnv } from '../../env';
@@ -45,7 +53,7 @@ const LATEST_PROTOCOL_VERSION = SUPPORTED_PROTOCOL_VERSIONS[0];
  * worker's release — it is the version the MCP Registry listing carries, so the
  * two are pinned together by a test rather than bumped on every API deploy.
  */
-export const SERVER_INFO = { name: 'builderforce', title: 'Builderforce', version: '1.0.0' } as const;
+export const SERVER_INFO = { name: 'builderforce', title: 'Builderforce', version: '1.1.0' } as const;
 
 /** JSON-RPC 2.0 reserved error codes (https://www.jsonrpc.org/specification#error_object). */
 const JSON_RPC = {
@@ -74,6 +82,20 @@ const rpcError = (id: JsonRpcId, code: number, message: string, data?: unknown) 
 
 /** A notification has no `id` and MUST NOT be answered. */
 const isNotification = (req: JsonRpcRequest): boolean => req.id === undefined;
+
+/**
+ * Methods an ANONYMOUS caller may use. Everything else (notably `tools/call`,
+ * and any method we do not know) requires the tenant key — the fail-safe is
+ * that an unrecognised method is never treated as public.
+ */
+const PUBLIC_METHODS: ReadonlySet<string> = new Set(['initialize', 'ping', 'tools/list']);
+
+/** Whether one batch entry is public discovery (a notification always is). */
+function isPublicDiscovery(entry: unknown): boolean {
+  if (!entry || typeof entry !== 'object') return false;
+  const { method } = entry as { method?: unknown };
+  return typeof method === 'string' && (PUBLIC_METHODS.has(method) || method.startsWith('notifications/'));
+}
 
 /**
  * MCP `tools/call` results are content blocks, not raw JSON. Tool handlers here
@@ -116,7 +138,8 @@ async function handleRpc(
   req: JsonRpcRequest,
   ctx: {
     env: Env;
-    access: TenantAccess;
+    /** null = anonymous discovery (initialize/ping/tools/list only — the route gates the rest). */
+    access: TenantAccess | null;
     authToken: string | null;
     executionCtx?: ExecutionContext;
     /** `?surface=` off the endpoint URL — see application/llm/toolSurfaces. */
@@ -146,7 +169,12 @@ async function handleRpc(
         'Builderforce exposes this tenant\'s platform tools (projects, tickets, boards, OKRs, executions) '
         + 'plus every connector and external MCP server the tenant has connected. Call tools/list for the '
         + 'live catalog — it varies per tenant. The full catalog is large; append `?surface=<id>` to this '
-        + `endpoint URL to advertise a narrower subset instead (${TOOL_SURFACES.map((s) => s.id).join(', ')}).`,
+        + `endpoint URL to advertise a narrower subset instead (${TOOL_SURFACES.map((s) => s.id).join(', ')}).`
+        + (ctx.access === null
+          ? ' You are not signed in: tools/list shows the public platform catalog only. Send'
+            + ' `Authorization: Bearer bfk_…` (a tenant API key from https://builderforce.ai/settings/api-keys)'
+            + ' to see your workspace\'s full catalog and to call tools.'
+          : ''),
     });
   }
 
@@ -156,19 +184,21 @@ async function handleRpc(
 
   // No `db` here on purpose: a route must not reach into the infrastructure
   // layer (enforced by `scripts/check-layering.mjs`). The gateway module opens
-  // the connection it needs.
-  const gateway = {
+  // the connection it needs. Anonymous discovery never builds one: there is no
+  // tenant, and the public catalog is static metadata.
+  const access = ctx.access;
+  const gateway = access === null ? null : {
     env: ctx.env,
-    tenantId: ctx.access.tenantId,
+    tenantId: access.tenantId,
     keyMaterial: ctx.env.JWT_SECRET,
     surface: ctx.surface,
     // Keep tools/list on the same role contract as the REST transport: a
     // sub-developer caller is not advertised mutating tools it could only fail on.
-    role: ctx.access.role,
+    role: access.role,
   };
 
   if (method === 'tools/list') {
-    const tools = await listGatewayMcpTools(gateway);
+    const tools = gateway === null ? listPublicMcpTools(ctx.surface) : await listGatewayMcpTools(gateway);
     return rpcResult(id, {
       tools: tools.map((t) => ({
         name: t.name,
@@ -183,6 +213,11 @@ async function handleRpc(
   }
 
   if (method === 'tools/call') {
+    // The route already 401s an anonymous tools/call; this is the in-handler
+    // fail-safe so a future caller of handleRpc cannot dispatch without a tenant.
+    if (gateway === null || access === null) {
+      return rpcError(id, JSON_RPC.INVALID_REQUEST, 'Unauthorized: tools/call requires a Builderforce tenant API key');
+    }
     const name = params.name;
     if (typeof name !== 'string' || name.length === 0) {
       return rpcError(id, JSON_RPC.INVALID_PARAMS, 'tools/call requires a string `name`');
@@ -197,8 +232,8 @@ async function handleRpc(
         gateway,
         { extensionId: entry.extensionId, tool: entry.tool, arguments: params.arguments ?? {} },
         {
-          userId: ctx.access.userId,
-          role: ctx.access.role,
+          userId: access.userId,
+          role: access.role,
           authToken: ctx.authToken,
           executionCtx: ctx.executionCtx,
         },
@@ -217,22 +252,11 @@ export function createMcpServerRoutes(): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
 
   router.post('/', async (c) => {
-    let access: TenantAccess;
-    try {
-      access = await requireTenantAccess(c);
-    } catch {
-      // MCP clients drive their auth flow off a 401 + challenge, so this path
-      // must NOT reuse the gateway's generic access-error responder.
-      return c.json(
-        rpcError(null, JSON_RPC.INVALID_REQUEST, 'Unauthorized: send a Builderforce tenant API key as `Authorization: Bearer bfk_…`'),
-        401,
-        { 'WWW-Authenticate': 'Bearer realm="builderforce"' },
-      );
-    }
-
-    // Both refusals keep the protocol's envelope — an MCP client cannot read the
-    // API's `{ error, issues }` shape. Not JSON is -32700; JSON that is neither a
-    // request object nor a batch (a bare string, a number, null) is -32600.
+    // Body first: whether auth is required depends on the METHOD, and discovery
+    // (initialize/ping/tools/list) is public. Both refusals keep the protocol's
+    // envelope — an MCP client cannot read the API's `{ error, issues }` shape.
+    // Not JSON is -32700; JSON that is neither a request object nor a batch (a
+    // bare string, a number, null) is -32600.
     let body: z.infer<typeof JsonRpcBody>;
     try {
       body = await parseBody(c, JsonRpcBody);
@@ -247,7 +271,30 @@ export function createMcpServerRoutes(): Hono<HonoEnv> {
       );
     }
 
-    const authToken = (c.req.header('Authorization') ?? '').replace(/^Bearer\s+/i, '') || null;
+    const authHeader = c.req.header('Authorization') ?? '';
+    const entries = Array.isArray(body) ? body : [body];
+    const discoveryOnly = entries.every(isPublicDiscovery);
+
+    // Anonymous is allowed ONLY for a wholly-discovery request with NO credential
+    // presented. A presented-but-rejected key is a 401 challenge even on
+    // discovery — silently downgrading a bad key to the public preview would
+    // hide the client's misconfiguration and break its auth-retry flow.
+    let access: TenantAccess | null = null;
+    if (authHeader !== '' || !discoveryOnly) {
+      try {
+        access = await requireTenantAccess(c);
+      } catch {
+        // MCP clients drive their auth flow off a 401 + challenge, so this path
+        // must NOT reuse the gateway's generic access-error responder.
+        return c.json(
+          rpcError(null, JSON_RPC.INVALID_REQUEST, 'Unauthorized: send a Builderforce tenant API key as `Authorization: Bearer bfk_…`'),
+          401,
+          { 'WWW-Authenticate': 'Bearer realm="builderforce"' },
+        );
+      }
+    }
+
+    const authToken = authHeader.replace(/^Bearer\s+/i, '') || null;
     // The endpoint URL carries the catalog subset, because a remote MCP client
     // configures ONE url and has no other channel to say "just the delivery
     // tools" — `https://…/mcp?surface=delivery` is that channel.
