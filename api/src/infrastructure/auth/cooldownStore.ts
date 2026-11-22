@@ -302,6 +302,17 @@ const memBackend: CooldownBackend = {
   },
 };
 
+/**
+ * Read-through window for the composite blob. Short on purpose: a write invalidates
+ * it (see {@link kvBackend}), and the cross-isolate copy only exists so a second
+ * isolate does not re-read KV on every cascade. The durable blob itself keeps the
+ * store's own key scheme (`cooldowns:` / `vendor_cooldown:` / `vendor_failures:`) —
+ * the shared cache core prefixes ITS keys with `cache:` and floors KV TTL at 60s,
+ * neither of which the durable record can accept.
+ */
+const COOLDOWN_READ_L1_MS = 5_000;
+const COOLDOWN_READ_KV_TTL_SEC = 60;
+
 function kvBackend(kv: KVNamespace): CooldownBackend {
   return {
     async readModels(vendor) {
