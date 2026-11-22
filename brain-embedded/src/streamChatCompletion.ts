@@ -352,12 +352,25 @@ export interface GatewayFailover {
  * hundreds of `code` turns on MiniMax Flash with Grok and Kimi connected, and nothing
  * on the client could say why.
  */
+/** One model the gateway cooled, and until when. `until` is epoch milliseconds. */
+export interface GatewayCooled {
+  model: string;
+  until: number;
+  reason: string;
+}
+
 export interface GatewayRouting {
   /** Every model tried and left, in order. */
   failovers: GatewayFailover[];
   /** The head of the candidate chain the gateway walked. */
   candidates?: string[];
   traceId?: string;
+  /**
+   * Models the gateway put on cooldown this turn, from the non-streaming
+   * `_builderforce.cooled` envelope. The server owns model order; this is only
+   * what it already decided, so the client never fills `excludeModels` from it.
+   */
+  cooled?: GatewayCooled[];
 }
 
 /** The chunk field the gateway's terminal diagnostics frame carries. */
