@@ -17,12 +17,21 @@ export function formatFailovers(routing: GatewayRouting | undefined): string | u
   return failovers.map((f) => `${f.model}:${f.code}${f.kind ? ` ${f.kind}` : ''}`).join(FAILOVER_SEPARATOR);
 }
 
+/** `model until <ISO> (reason)` for each model the gateway cooled, joined like failovers. */
+export function formatCooled(routing: GatewayRouting | undefined): string | undefined {
+  const cooled = routing?.cooled ?? [];
+  if (cooled.length === 0) return undefined;
+  return cooled.map((c) => `${c.model} until ${new Date(c.until).toISOString()} (${c.reason})`).join(FAILOVER_SEPARATOR);
+}
+
 /** The `llm.complete` args that carry the routing — empty when the gateway sent none. */
 export function gatewayRoutingArgs(routing: GatewayRouting | undefined): Record<string, string> {
   if (!routing) return {};
   const failovers = formatFailovers(routing);
+  const cooled = formatCooled(routing);
   return {
     ...(failovers ? { failovers } : {}),
+    ...(cooled ? { cooled } : {}),
     ...(routing.candidates?.length ? { candidates: routing.candidates.join(' > ') } : {}),
     ...(routing.traceId ? { traceId: routing.traceId } : {}),
   };
