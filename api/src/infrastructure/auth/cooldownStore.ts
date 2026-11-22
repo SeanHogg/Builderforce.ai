@@ -401,6 +401,9 @@ function kvBackend(kv: KVNamespace): CooldownBackend {
       }, { kvTtlSeconds: COOLDOWN_READ_KV_TTL_SEC, l1TtlMs: COOLDOWN_READ_L1_MS }).catch(() => []);
     },
     async writeVendorFailures(vendor, ring) {
+      await invalidateCached(env, vendorFailuresKey(vendor)).catch((error) => {
+        reportCaughtError(error, { source: "infrastructure/auth/cooldownStore.ts", operation: "writeVendorFailures" });
+      });
       if (ring.length === 0) {
         await kv.delete(vendorFailuresKey(vendor)).catch((error) => { /* absorb */ 
           reportCaughtError(error, { source: "infrastructure/auth/cooldownStore.ts", operation: "writeVendorFailures" });
