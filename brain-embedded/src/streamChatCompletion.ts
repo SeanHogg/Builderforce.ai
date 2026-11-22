@@ -376,18 +376,33 @@ export interface GatewayRouting {
 /** The chunk field the gateway's terminal diagnostics frame carries. */
 const GATEWAY_ROUTING_FIELD = '_builderforce';
 
+/** Cooled entries that carry a string model, a numeric `until` and a string reason. */
+function readCooled(raw: unknown): GatewayCooled[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((entry): GatewayCooled[] => {
+    const o = entry as Partial<GatewayCooled> | null;
+    return o && typeof o.model === 'string' && typeof o.until === 'number' && Number.isFinite(o.until) && typeof o.reason === 'string'
+      ? [{ model: o.model, until: o.until, reason: o.reason }]
+      : [];
+  });
+}
+
 function readGatewayRouting(frame: unknown): GatewayRouting | undefined {
   const raw = (frame as Record<string, unknown> | null)?.[GATEWAY_ROUTING_FIELD] as Record<string, unknown> | undefined;
-  if (!raw || !Array.isArray(raw.failovers)) return undefined;
-  const failovers = raw.failovers.flatMap((f): GatewayFailover[] => {
+  // A cooled-only frame is still routing: the non-streaming envelope can carry
+  // `cooled` without `failovers` (the first model answered, then was cooled).
+  if (!raw || (!Array.isArray(raw.failovers) && !Array.isArray(raw.cooled))) return undefined;
+  const failovers = Array.isArray(raw.failovers) ? raw.failovers.flatMap((f): GatewayFailover[] => {
     const o = f as Partial<GatewayFailover> | null;
     return o && typeof o.model === 'string' ? [{ model: o.model, vendor: String(o.vendor ?? ''), code: Number.isFinite(Number(o.code)) ? Number(o.code) : 0, ...(o.kind ? { kind: String(o.kind) } : {}) }] : [];
-  });
+  }) : [];
   const candidates = Array.isArray(raw.candidates) ? raw.candidates.filter((c): c is string => typeof c === 'string') : undefined;
+  const cooled = readCooled(raw.cooled);
   return {
     failovers,
     ...(candidates?.length ? { candidates } : {}),
     ...(typeof raw.traceId === 'string' ? { traceId: raw.traceId } : {}),
+    ...(cooled.length ? { cooled } : {}),
   };
 }
 
