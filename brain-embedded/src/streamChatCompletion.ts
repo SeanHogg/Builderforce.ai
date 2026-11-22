@@ -352,9 +352,10 @@ export interface GatewayFailover {
  * hundreds of `code` turns on MiniMax Flash with Grok and Kimi connected, and nothing
  * on the client could say why.
  */
-/** One model the gateway cooled, and until when. `until` is epoch milliseconds. */
-export interface GatewayCooled {
+/** One model the gateway cooled for this turn, and when that cooldown lifts. */
+export interface GatewayCooldown {
   model: string;
+  /** Epoch milliseconds when the cooldown ends. */
   until: number;
   reason: string;
 }
@@ -362,47 +363,28 @@ export interface GatewayCooled {
 export interface GatewayRouting {
   /** Every model tried and left, in order. */
   failovers: GatewayFailover[];
+  /** Models cooled beside the cascade. Absent when the frame carried none. */
+  cooled?: GatewayCooldown[];
   /** The head of the candidate chain the gateway walked. */
   candidates?: string[];
   traceId?: string;
-  /**
-   * Models the gateway put on cooldown this turn, from the non-streaming
-   * `_builderforce.cooled` envelope. The server owns model order; this is only
-   * what it already decided, so the client never fills `excludeModels` from it.
-   */
-  cooled?: GatewayCooled[];
 }
 
 /** The chunk field the gateway's terminal diagnostics frame carries. */
 const GATEWAY_ROUTING_FIELD = '_builderforce';
 
-/** Cooled entries that carry a string model, a numeric `until` and a string reason. */
-function readCooled(raw: unknown): GatewayCooled[] {
-  if (!Array.isArray(raw)) return [];
-  return raw.flatMap((entry): GatewayCooled[] => {
-    const o = entry as Partial<GatewayCooled> | null;
-    return o && typeof o.model === 'string' && typeof o.until === 'number' && Number.isFinite(o.until) && typeof o.reason === 'string'
-      ? [{ model: o.model, until: o.until, reason: o.reason }]
-      : [];
-  });
-}
-
 function readGatewayRouting(frame: unknown): GatewayRouting | undefined {
   const raw = (frame as Record<string, unknown> | null)?.[GATEWAY_ROUTING_FIELD] as Record<string, unknown> | undefined;
-  // A cooled-only frame is still routing: the non-streaming envelope can carry
-  // `cooled` without `failovers` (the first model answered, then was cooled).
-  if (!raw || (!Array.isArray(raw.failovers) && !Array.isArray(raw.cooled))) return undefined;
-  const failovers = Array.isArray(raw.failovers) ? raw.failovers.flatMap((f): GatewayFailover[] => {
+  if (!raw || !Array.isArray(raw.failovers)) return undefined;
+  const failovers = raw.failovers.flatMap((f): GatewayFailover[] => {
     const o = f as Partial<GatewayFailover> | null;
     return o && typeof o.model === 'string' ? [{ model: o.model, vendor: String(o.vendor ?? ''), code: Number.isFinite(Number(o.code)) ? Number(o.code) : 0, ...(o.kind ? { kind: String(o.kind) } : {}) }] : [];
-  }) : [];
+  });
   const candidates = Array.isArray(raw.candidates) ? raw.candidates.filter((c): c is string => typeof c === 'string') : undefined;
-  const cooled = readCooled(raw.cooled);
   return {
     failovers,
     ...(candidates?.length ? { candidates } : {}),
     ...(typeof raw.traceId === 'string' ? { traceId: raw.traceId } : {}),
-    ...(cooled.length ? { cooled } : {}),
   };
 }
 
