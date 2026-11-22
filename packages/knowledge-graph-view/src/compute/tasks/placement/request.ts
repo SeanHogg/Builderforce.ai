@@ -28,7 +28,10 @@ export interface PlacementReq {
     pathId: string | null;
     viewportBand: number;
     lod: number;
-    /** 0 = the flat home view; 1 = fully tilted (Map: each station extruded into its tower, rule 7). */
+    /**
+     * 0 = flat; 1 = fully tilted (Map: each station extruded into its tower, rule 7). Omitted = the resting tilt
+     * (`RESTING_DEPTH`, `stage/depth.ts`); an explicit 0 still means flat.
+     */
     depth?: number;
     /**
      * The overlay's channel bindings, as data: the geometry channels read here — `size` (a station's mark radius and its

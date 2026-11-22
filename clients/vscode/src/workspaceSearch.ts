@@ -34,6 +34,7 @@
 import * as fs from "fs/promises";
 import * as path from "path";
 import { spawn } from "child_process";
+import { matchGlobInScope, normalizeScopeDir } from "@builderforce/agent-tools";
 import type { RepoSearchResult } from "@builderforce/agent-tools";
 
 /** Directories no local walk or search descends into — build output and dependencies. */
@@ -51,6 +52,9 @@ const WALK_MAX_FILES = 4_000;
 const SEARCH_MAX_FILE_BYTES = 2 * 1024 * 1024;
 /** Wall-clock bound on a ripgrep run; what it has found by then is returned as truncated. */
 const RIPGREP_TIMEOUT_MS = 20_000;
+/** ripgrep skips files over this (`--max-filesize 1M`): generated bundles and data dumps
+ *  are not source, and reading them is what made a whole-root scan take 15s (chat #168571). */
+const RG_MAX_FILESIZE = "1M";
 /** Characters of a matching line kept — enough to read, not enough to flood the window. */
 const MATCH_TEXT_MAX = 200;
 
@@ -176,14 +180,86 @@ export interface WorkspaceSearchOptions {
   ripgrep: string | null;
   /** The run's Stop: kills ripgrep and ends the walk. */
   signal?: AbortSignal;
+  /** The run's ripgrep concurrency gate ({@link rgGateFor}); absent = the shared default gate. */
+  gate?: RgSemaphore;
 }
 
-/** What a search run carries beyond its target: the run's Stop. */
+/** What a search run carries beyond its target: the run's Stop and its rg gate. */
 export interface SearchRunOptions {
   signal?: AbortSignal;
+  gate?: RgSemaphore;
 }
 
 const STOPPED = "search stopped";
+
+/** Concurrent ripgrep processes one run may have alive at once: a 3-wide read-only batch
+ *  of searches must not put three full-tree scans on the disk at the same time (W6). */
+export const RG_MAX_CONCURRENT = 2;
+
+/**
+ * A tiny counting semaphore for ripgrep children. `acquire` resolves with a release
+ * function once a slot is free; a Stop while queued rejects (the search reports
+ * "search stopped" instead of waiting for a slot it will never use).
+ */
+export class RgSemaphore {
+  private active = 0;
+  private readonly queue: Array<{ resolve: (release: () => void) => void; reject: (err: Error) => void; signal?: AbortSignal; abort?: () => void }> = [];
+
+  constructor(private readonly limit: number = RG_MAX_CONCURRENT) {}
+
+  acquire(signal?: AbortSignal): Promise<() => void> {
+    if (signal?.aborted) return Promise.reject(new Error(STOPPED));
+    if (this.active < this.limit && this.queue.length === 0) {
+      this.active += 1;
+      return Promise.resolve(this.releaseFn());
+    }
+    return new Promise<() => void>((resolve, reject) => {
+      const waiter: { resolve: (release: () => void) => void; reject: (err: Error) => void; signal?: AbortSignal; abort?: () => void } = { resolve, reject, signal };
+      if (signal) {
+        waiter.abort = () => {
+          const i = this.queue.indexOf(waiter);
+          if (i >= 0) this.queue.splice(i, 1);
+          reject(new Error(STOPPED));
+        };
+        signal.addEventListener("abort", waiter.abort, { once: true });
+      }
+      this.queue.push(waiter);
+    });
+  }
+
+  /** One-shot release: hands the slot to the next waiter, or frees it. */
+  private releaseFn(): () => void {
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      const next = this.queue.shift();
+      if (next) {
+        if (next.signal && next.abort) next.signal.removeEventListener("abort", next.abort);
+        next.resolve(this.releaseFn());
+      } else {
+        this.active -= 1;
+      }
+    };
+  }
+}
+
+// One gate per RUN, keyed by the run's Stop signal (the one object every call of a run
+// shares). A WeakMap so a settled run's gate is collected with its signal; calls with
+// no signal share one conservative default gate.
+const gatesByRun = new WeakMap<AbortSignal, RgSemaphore>();
+const defaultGate = new RgSemaphore(RG_MAX_CONCURRENT);
+
+/** The ripgrep gate for a run: at most {@link RG_MAX_CONCURRENT} rg children at once. */
+export function rgGateFor(signal?: AbortSignal): RgSemaphore {
+  if (!signal) return defaultGate;
+  let gate = gatesByRun.get(signal);
+  if (!gate) {
+    gate = new RgSemaphore(RG_MAX_CONCURRENT);
+    gatesByRun.set(signal, gate);
+  }
+  return gate;
+}
 
 /**
  * Search `start` for `query`. A file target is scanned directly; a directory goes to
@@ -192,20 +268,24 @@ const STOPPED = "search stopped";
  */
 export async function searchWorkspace(opts: WorkspaceSearchOptions): Promise<RepoSearchResult> {
   const { root, start, query } = opts;
+  const t0 = Date.now();
+  // W6: every result says which backend produced it and how long it took, so the run's
+  // step args carry `backend`/`ms` and a slow search is visible in the trace, not a guess.
+  const stamp = (r: RepoSearchResult, backend: "rg" | "walk"): RepoSearchResult => Object.assign(r, { backend, ms: Date.now() - t0 });
   const stat = await fs.stat(start).catch(() => null);
-  if (!stat) return { ok: false, query, error: `path not found: ${relPosix(root, start) || "."}` };
+  if (!stat) return stamp({ ok: false, query, error: `path not found: ${relPosix(root, start) || "."}` }, "walk");
   if (stat.isFile()) {
     // The file-scope case: search exactly that file. The walker's readdir threw here
     // and reported "not referenced" — the false negative that started this module.
     const matches = await searchOneFile(root, start, compileSearchPattern(query, smartCaseSensitive(query)), stat.size);
-    return { ok: true, query, total: matches.length, truncated: false, matches };
+    return stamp({ ok: true, query, total: matches.length, truncated: false, matches }, "walk");
   }
-  const run: SearchRunOptions = opts.signal ? { signal: opts.signal } : {};
+  const run: SearchRunOptions = { ...(opts.signal ? { signal: opts.signal } : {}), ...(opts.gate ? { gate: opts.gate } : {}) };
   if (opts.ripgrep) {
     const r = await ripgrepSearch(root, start, query, opts.ripgrep, run);
-    if (r) return r;
+    if (r) return stamp(r, "rg");
   }
-  return walkSearch(root, start, query, run);
+  return stamp(await walkSearch(root, start, query, run), "walk");
 }
 
 /** Scan one file's lines with the JS pattern, honouring the size and binary guards. */
@@ -230,7 +310,28 @@ async function searchOneFile(root: string, abs: string, re: RegExp, size: number
  * it failed to spawn, or rejected the pattern — so the caller falls back to the walk.
  * A timeout or the match cap hands back what was found, marked truncated.
  */
-export function ripgrepSearch(root: string, start: string, query: string, ripgrep: string, run: SearchRunOptions = {}): Promise<RepoSearchResult | null> {
+export async function ripgrepSearch(root: string, start: string, query: string, ripgrep: string, run: SearchRunOptions = {}): Promise<RepoSearchResult | null> {
+  if (run.signal?.aborted) return { ok: false, query, error: STOPPED };
+  // At most RG_MAX_CONCURRENT rg children per run: the third call of a 3-wide batch
+  // waits for a slot instead of thrashing the disk with a third full-tree scan.
+  const gate = run.gate ?? rgGateFor(run.signal);
+  let release: () => void;
+  try {
+    release = await gate.acquire(run.signal);
+  } catch {
+    return { ok: false, query, error: STOPPED };
+  }
+  try {
+    return await spawnRipgrepSearch(root, start, query, ripgrep, run);
+  } finally {
+    release();
+  }
+}
+
+/** The rg child itself, run under the caller's gate slot. */
+function spawnRipgrepSearch(root: string, start: string, query: string, ripgrep: string, run: SearchRunOptions): Promise<RepoSearchResult | null> {
+  // The resolved scope IS ripgrep's search path (`-- <target>` from cwd=root), never a
+  // post-filter over a whole-root scan — a scoped search only walks the subtree.
   const target = relPosix(root, start) || ".";
   if (run.signal?.aborted) return Promise.resolve({ ok: false, query, error: STOPPED });
   const args = [
@@ -238,7 +339,7 @@ export function ripgrepSearch(root: string, start: string, query: string, ripgre
     // drive letters and a directory search silently reported total:0 (chat #111).
     // The case rule (smart case) is decided HERE and passed explicitly, so ripgrep and
     // the walk always agree on what a query matches.
-    "--json", smartCaseSensitive(query) ? "--case-sensitive" : "--ignore-case", "--max-columns", "400", "--max-filesize", `${SEARCH_MAX_FILE_BYTES}`,
+    "--json", smartCaseSensitive(query) ? "--case-sensitive" : "--ignore-case", "--max-columns", "400", "--max-filesize", RG_MAX_FILESIZE,
     // Mirror the walker's skip list so the two backends agree on what "the repo" is.
     ...[...SKIP_DIRS].flatMap((dir) => ["--glob", `!**/${dir}/**`]),
     // The JS engine's escaping rule, expressed as ripgrep's own flag: a query that is not

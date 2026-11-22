@@ -2677,8 +2677,11 @@ declare function withRunUsage(stream: BrainStreamFn, ledger: RunUsageLedger, con
  * WOULD have done), and the words "full pipeline" in the request force it.
  *
  * PURE — no I/O, no env, no clock. The action type is the caller's (the shared lexical
- * classifier in `@builderforce/workload`); the only dependency is the ONE sigmoid in
- * builderforce-memory's `./stats` (PRD 41 D13).
+ * classifier in `@builderforce/workload`); the intent (question vs change) and the
+ * ask/pasted-context split come from the ONE classifier in `@builderforce/agent-stall`
+ * (`classifyRequest`, fix brief W2 — chat #168571: a paste's verbs routed a question
+ * `full`); the only other dependency is the ONE sigmoid in builderforce-memory's
+ * `./stats` (PRD 41 D13).
  */
 type PipelineRoute = 'full' | 'quick';
 /** The default threshold: a coin. */

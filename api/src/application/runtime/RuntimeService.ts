@@ -3,7 +3,7 @@ import { applyLandedLifecycle, landedRunOf, recordLandedAudit, settleLandedFailu
 import { IExecutionRepository } from '../../domain/execution/IExecutionRepository';
 import { persistTransition } from './executionLanding';
 import { stampProducedFromLaneMove } from './stampProducedFromLaneMove';
-import type { RunTally } from '@builderforce/agent-run';
+import { freshTally, type RunTally } from '@builderforce/agent-run';
 import { ITaskRepository } from '../../domain/task/ITaskRepository';
 import { IAuditRepository } from '../../domain/audit/IAuditRepository';
 import { Execution } from '../../domain/execution/Execution';
@@ -469,6 +469,11 @@ export class RuntimeService {
       case ExecutionStatus.COMPLETED:
         execution = execution.markCompleted(dto.result ?? '');
         break;
+      case ExecutionStatus.NO_CHANGES:
+        // A successful run that wrote nothing (MK-09-W5): lands terminal and owes the SAME
+        // fan-out below as COMPLETED — never a rejected transition that skips bookkeeping.
+        execution = execution.markNoChanges(dto.result ?? '');
+        break;
       case ExecutionStatus.FAILED:
         execution = execution.markFailed(dto.errorMessage ?? 'Unknown error');
         break;
@@ -476,10 +481,13 @@ export class RuntimeService {
         throw new ForbiddenError(`Cannot transition to status '${dto.status}' via this endpoint`);
     }
 
-    const landed = await persistTransition(this.executions, execution, dto.telemetry);
+    // A no_changes run's outcome row carries EXPLICIT zero counts, never null/missing: when the
+    // lander handed no tally, a fresh (all-zero) one stands in. A real tally is never overwritten.
+    const telemetry = dto.telemetry ?? (dto.status === ExecutionStatus.NO_CHANGES ? freshTally() : undefined);
+    const landed = await persistTransition(this.executions, execution, telemetry);
     if (!landed.won) return landed.execution; // another writer already landed it: its side effects stand
     let saved = landed.execution;
-    // The switch above admitted exactly these three.
+    // The switch above admitted exactly these four.
     const outcomeStatus = dto.status as LandedOutcome['status'];
     // The lifecycle fan-out (task-lane sync, ticket metrics, managed-board callback, manifest
     // attribution, next-lane trigger, chat milestone) is shared with every other writer that
@@ -490,8 +498,9 @@ export class RuntimeService {
       { status: outcomeStatus, result: dto.result, errorMessage: dto.errorMessage },
     );
 
-    // A lane advance is a durable product of the run (see `stampProducedFromLaneMove`).
-    if (dto.status === ExecutionStatus.COMPLETED && movedTicket) saved = await stampProducedFromLaneMove(this.executions, saved);
+    // A lane advance is a durable product of the run (see `stampProducedFromLaneMove`) —
+    // for a no_changes landing too: the lane move IS its product.
+    if ((dto.status === ExecutionStatus.COMPLETED || dto.status === ExecutionStatus.NO_CHANGES) && movedTicket) saved = await stampProducedFromLaneMove(this.executions, saved);
 
     await recordLandedAudit(this.audit, landedRunOf(saved), outcomeStatus, dto.result ? JSON.stringify({ result: dto.result }) : null);
 

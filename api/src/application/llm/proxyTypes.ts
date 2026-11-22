@@ -7,6 +7,7 @@
  */
 
 import type { DispatchAttempt, UpstreamDiagnostic, VendorEgress, VendorEnv, VendorId, VendorUsage } from './vendors';
+import type { CooledModelInfo } from './byoCooldown';
 import type { TenantVendorKeys } from './tenantProviderKeyService';
 import type { OpenRouterConnection } from './openRouterConnectionService';
 
@@ -150,6 +151,11 @@ export interface ProxyResult {
   /** How many failovers happened before success. */
   retries: number;
   failovers: FailoverEvent[];
+  /** Tenant-scoped BYO cooldowns observed while composing this request's chain —
+   *  models benched for THIS tenant's own account (429), demoted behind healthy
+   *  candidates (an explicit user pin is noted here, never demoted). Echoed to
+   *  callers as `_builderforce.cooled` beside `failovers`. */
+  cooled?: CooledModelInfo[];
   /** Token usage from non-streaming responses; undefined for streams (route intercepts). */
   usage?: LlmUsage;
   /** On a `response_cache_hit` only: the usage the ORIGINAL upstream call recorded,

@@ -26,7 +26,7 @@
  */
 
 import { asToolArgs } from '@builderforce/agent-loop';
-import { resolveAdvertisedToolName, toolNameSet } from '@builderforce/agent-tools';
+import { advertisedToolName, resolveAdvertisedToolName, toolNameSet } from '@builderforce/agent-tools';
 import type { BrainToolSpec } from './streamChatCompletion';
 
 /** Advertised names of the three router tools. Stable — the model learns them. */
@@ -118,13 +118,28 @@ function words(text: string): string[] {
 }
 
 /**
+ * App-manifest finder aliases (contract: `docs/specs/app-manifest-ai-resource.md` §8).
+ * Exactly these phrases resolve to BOTH app-manifest tools. Bare `service`, `schema`
+ * or `launch` must NOT surface them — those words belong to other tools — so the two
+ * tools are scored ONLY on an alias phrase or the word `manifest`, never on the
+ * generic words (`schema`, `validate`, `ai`, `resource`) in their names/descriptions.
+ */
+const APP_MANIFEST_ALIAS_PHRASES = ['app manifest', 'builderforce.json', 'ai resource'] as const;
+const APP_MANIFEST_TOOL_NAMES: ReadonlySet<string> = new Set([
+  advertisedToolName('app_manifest.schema'),
+  advertisedToolName('app_manifest.validate'),
+]);
+
+/**
  * Keyword search over the FULL catalog. Ranks a name match above a description match
  * (the same weighting `selectTools` uses — the model should see the tool whose NAME is
  * about tickets before one that merely mentions them).
  */
 export function findTools(catalog: BrainToolSpec[], query: string, limit = FIND_LIMIT): ToolCatalogMatch[] {
   const terms = words(query);
-  if (terms.length === 0) return [];
+  const lowered = query.toLowerCase();
+  const manifestAlias = APP_MANIFEST_ALIAS_PHRASES.some((p) => lowered.includes(p));
+  if (terms.length === 0 && !manifestAlias) return [];
   const scored: Array<{ m: ToolCatalogMatch; score: number; index: number }> = [];
   catalog.forEach((tool, index) => {
     const name = tool.function?.name ?? '';
@@ -132,6 +147,14 @@ export function findTools(catalog: BrainToolSpec[], query: string, limit = FIND_
     const description = tool.function?.description ?? '';
     const haystackName = name.toLowerCase();
     const haystackDesc = description.toLowerCase();
+    if (APP_MANIFEST_TOOL_NAMES.has(name)) {
+      // Alias-gated: an alias phrase surfaces BOTH tools above the keyword crowd;
+      // otherwise only the word `manifest` reaches them. Bare `schema`/`launch`/
+      // `service` never do (done-check, contract §8).
+      const score = (manifestAlias ? 20 : 0) + (terms.includes('manifest') ? 10 : 0);
+      if (score > 0) scored.push({ m: { name, description }, score, index });
+      return;
+    }
     let score = 0;
     for (const t of terms) {
       if (haystackName.includes(t)) score += 10;

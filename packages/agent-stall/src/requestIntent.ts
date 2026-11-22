@@ -28,78 +28,24 @@
  * agent that reads it in isolation asks "fix what?" while the answer sits one
  * message above. {@link isContinuationDirective}
  *
- * All three are pure string predicates: no clock, no I/O, no model.
+ * All three are pure string predicates: no clock, no I/O, no model. The intent
+ * decision itself lives in ONE classifier (`classifyRequest.ts`, fix brief W2):
+ * it splits the user's own ask from pasted context and judges the ask alone, so
+ * a paste full of change verbs can never turn a question into a work order.
  */
 
-/**
- * Verbs that demand an EFFECT on the world rather than an explanation of it.
- * Deliberately verb-led and narrow — every entry here is something that changes
- * state, so a false positive requires the user to have used an action verb about
- * a non-action.
- */
-const CHANGE_VERBS =
-  'add|change|fix|update|reduce|increase|remove|delete|rename|refactor|implement|create|build|make|move|set|wire|migrate|replace|adjust|enable|disable|improve|write|edit|apply|correct|resolve|shrink|expand|hide|show|bump|revert|restore|install|upgrade|downgrade|rewrite|extract|split|merge';
-const CHANGE_VERB = new RegExp(`\\b(${CHANGE_VERBS})\\b`, 'i');
-
-/**
- * "Complete / finish / finalize THE work" — a work order (chat #5739: "complete the
- * implementation" read as a question, bought no analysis budget, and ran 52 plan turns
- * with no edit). Only as an imperative with its object: the adjective ("a complete list",
- * "complete with paths") is not a change. Opens the request, or chains onto one.
- */
-const FINISH_OBJECT = '(complete|finish|finali[sz]e)\\s+(the|this|that|these|those|it|my|our|your|all|implementation|work|task|change)\\b';
-const FINISH_ORDER = new RegExp(`^\\s*(please\\s+)?(now\\s+)?${FINISH_OBJECT}`, 'i');
-const CHAINED_FINISH = new RegExp(`(\\band|\\bthen|[,.;])\\s+((also|then|please|now)\\s+)*${FINISH_OBJECT}`, 'i');
-
-/**
- * Shapes that ask a QUESTION rather than demand a change. Checked FIRST, because
- * an action verb inside a question ("why did you change X?", "how do I add a
- * column?") is a question about a change, not a request for one.
- */
-const QUESTION_SHAPE =
-  /^\s*(what|why|how|where|when|which|who|is|are|was|were|does|do|did|can|could|should|would|will)\b|\?\s*$/i;
-
-/**
- * Requests that open by asking to LOOK at something — read, explain, review, research.
- * On their own they are questions; "Review the PRD and implement WS1" and "Investigate
- * the crash, then fix it" are work orders that happen to start by looking, and reading
- * every one of them as a question exempted real change requests from every "asked for a
- * change, made none" check (chat #6: "Review … 35-prd …" ran 778 analysis turns).
- */
-const RESEARCH_LEAD =
-  /^\s*(explain|describe|summar\w*|tell me|show me|list|compare|review|analyse|analyze|research|investigate|find|locate|trace|audit|look into|search)\b/i;
-
-/** What a research request asks to be handed back — writing one is the answer, not a change. */
-const REPORT_OBJECTS = 'summary|report|findings|notes|overview|write-?up|answer|explanation|list|table|recommendations?';
-
-/**
- * A change verb CHAINED onto the look ("… and fix it", "…, then implement …", "Review the
- * PRD. Implement WS1.") — unless what it acts on is the report itself ("… and write a
- * summary with file paths") or the reader ("… and show me the gaps").
- */
-const CHAINED_CHANGE = new RegExp(
-  `(\\band|\\bthen|[,.;])\\s+((also|then|please|now)\\s+)*(${CHANGE_VERBS})\\b`
-    + `(?!\\s+(me|us)\\b|\\s+(up\\s+)?((a|an|the|your|me|us|my)\\s+)?(short\\s+|brief\\s+)?(${REPORT_OBJECTS})\\b)`,
-  'i',
-);
+import { classifyRequest, isContinuationText } from './classifyRequest.js';
 
 /**
  * Does this text ask for something to be CHANGED (as opposed to found, explained
- * or summarized)?
+ * or summarized)? A thin wrapper over the ONE classifier ({@link classifyRequest}).
  *
  * Used to decide whether an answer may be replayed from cache (it may not), and
  * whether "the run made no mutating call" is a finding or simply the shape of a
  * correct answer.
  */
 export function asksForChange(text: string | null | undefined): boolean {
-  const t = (text ?? '').trim();
-  if (!t) return false;
-  // Only the opening of a long message decides its shape; a question that happens
-  // to quote an action verb in paragraph nine does not make it a work order.
-  const head = t.slice(0, 600);
-  if (QUESTION_SHAPE.test(head)) return false;
-  if (RESEARCH_LEAD.test(head)) return CHAINED_CHANGE.test(head) || CHAINED_FINISH.test(head);
-  return CHANGE_VERB.test(head) || FINISH_ORDER.test(head) || CHAINED_FINISH.test(head);
+  return classifyRequest(text).intent === 'change';
 }
 
 /**
@@ -140,20 +86,8 @@ export function promisesUnfinishedWork(text: string | null | undefined): boolean
 }
 
 /**
- * Bare directives that carry no subject of their own. Anchored and whole-string:
- * "fix" is one, "fix the login redirect" is not — the latter says what to do.
- */
-const CONTINUATION =
-  /^\s*(?:ok(?:ay)?[,\s]*)?(?:please\s+)?(?:now\s+)?(?:just\s+)?(?:go\s+ahead|carry\s+on|keep\s+going|make\s+it\s+so|do\s+it|do\s+that|do\s+so|fix\s+it|fix\s+that|apply\s+it|apply\s+that|apply|fix|go|proceed|continue|yes|yep|yeah|y|sure|confirm(?:ed)?|approved?|ship\s+it|send\s+it|run\s+it|do\s+the\s+fix|make\s+the\s+change)\s*[.!]*\s*$/i;
-
-/**
- * Longest a turn can be and still be a pure "you know what I mean" directive. A
- * short message that says anything specific is above this and is read normally.
- */
-const MAX_CONTINUATION_CHARS = 40;
-
-/**
  * Is this user turn a bare "carry on with what you just proposed" directive?
+ * A thin wrapper over the ONE classifier's continuation vocabulary.
  *
  * The turn to watch for: the agent lays out a fix and stops, the user replies
  * "Fix", and the agent — reading that turn as a fresh, contextless request —
@@ -161,9 +95,7 @@ const MAX_CONTINUATION_CHARS = 40;
  * previous turn.
  */
 export function isContinuationDirective(text: string | null | undefined): boolean {
-  const t = (text ?? '').trim();
-  if (!t || t.length > MAX_CONTINUATION_CHARS) return false;
-  return CONTINUATION.test(t);
+  return isContinuationText(text ?? '');
 }
 
 /**

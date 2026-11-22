@@ -8,7 +8,7 @@
 import { ASK_USER_TOOL, ASK_USER_TOOL_SPEC } from '@builderforce/agent-loop';
 import { initialRunPolicy } from '@builderforce/run-policy';
 import { deviceLeverOn } from './deviceLevers';
-import { asksForChange, toolNamesMentionedIn, memoryReplayable } from '@builderforce/agent-stall';
+import { asksForChange, classifyRequest, toolNamesMentionedIn, memoryReplayable } from '@builderforce/agent-stall';
 import type { CompletionMetadata } from '../streamChatCompletion';
 import { HAND_OFF_TOOL_SPEC } from '../planHandoff';
 import { canChangeCodeHere, canShipHere, canReviewInPreview, localToolsIn, memoryToolsIn, studioToolsIn } from '../localWorkspaceTools';
@@ -244,12 +244,17 @@ export async function prepareBrainRun(chatId: number, c: RunCell, req: BrainRunR
   // default. A chat hold narrows either to uncommitted.
   c.shipPolicy = runShipPolicy(req, hold);
   if (canShip) {
+    // A QUESTION ships nothing (fix brief W2, chat #168571): the ONE classifier reads
+    // the user's own ask, so a paste full of change verbs never arms a commit policy
+    // on a question. The policy itself is untouched — it only binds a turn that
+    // changes code — but the trace says what this run will actually do.
+    const questionRun = classifyRequest(latestUserText(convo)).intent === 'question';
     pushTrace(c, {
       ts: nowIso(),
       category: 'message',
       label: 'run.ship_policy',
-      args: { mode: c.shipPolicy.mode, source: c.shipPolicy.source, merge: c.shipPolicy.merge, review: c.shipPolicy.review, ...(hold ? { setByMessage: hold.messageNumber } : {}) },
-      result: `Ship policy: ${c.shipPolicy.mode} (${shipSourceLabel(c.shipPolicy)}).`,
+      args: { mode: questionRun ? 'n/a' : c.shipPolicy.mode, source: c.shipPolicy.source, merge: c.shipPolicy.merge, review: c.shipPolicy.review, ...(hold ? { setByMessage: hold.messageNumber } : {}) },
+      result: questionRun ? 'Ship policy: n/a (question).' : `Ship policy: ${c.shipPolicy.mode} (${shipSourceLabel(c.shipPolicy)}).`,
     });
   }
   if (hold && attemptedPublishWhileHeld(hold, c.trace)) {

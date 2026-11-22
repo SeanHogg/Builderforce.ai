@@ -10,6 +10,7 @@ import {
   vendorRequiresLocalEgress,
 } from './vendors';
 import { loadCooldowns, loadCooledVendors } from '../../infrastructure/auth/cooldownStore';
+import { loadByoCooldown } from './byoCooldown';
 import type { ChatCompletionRequest, ProxyResult } from './proxyTypes';
 import type { ProxyRuntime } from './proxyConfig';
 
@@ -70,7 +71,18 @@ export async function dispatchStrict(
     }
   }
 
-  return dispatcher.dispatch([model], body, requestHeaders);
+  // An explicit pin is never gated or demoted by the TENANT bench (the owner's
+  // account gets its one attempt) — but the caller still deserves to SEE the
+  // bench: attach `cooled` metadata beside `failovers` so a throttled pin reads
+  // as "benched until …" in the trace, not an unexplained upstream 429.
+  const cooledRecord = funding.isOwnerServedModel(model) && cfg.tenantId != null
+    ? await loadByoCooldown(cfg.env, cfg.tenantId, vendor, model)
+    : null;
+
+  const result = await dispatcher.dispatch([model], body, requestHeaders);
+  return cooledRecord
+    ? { ...result, cooled: [{ model, until: cooledRecord.until, reason: cooledRecord.reason }] }
+    : result;
 }
 
 /**

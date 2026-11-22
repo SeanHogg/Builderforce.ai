@@ -27,6 +27,7 @@ import { composeFreeCappedCascade, buildCooldownPredicate } from './cascadeCompo
 import { loadCooldowns, loadCooledVendors } from '../../infrastructure/auth/cooldownStore';
 import { COOLDOWN_PREFETCH_LIMIT, explicitModelPreemptsByo, resolveStrictPin } from './modelPool';
 import { loadByoDemotedVendors, orderByoSeeds } from './byoSeedOrder';
+import { demoteTenantCooled, type CooledModelInfo } from './byoCooldown';
 import { registryCatalogView, type PriceBook } from './catalogView';
 import { fundedFloorHintDemoted, modelsFittingContext } from './requestFit';
 import { cheaperTwinsOf, orderFreeFirst, preferFreeTwins } from './freeTier';
@@ -83,6 +84,9 @@ export interface CompletionSeed {
   seed: readonly string[];
   /** The deliberately-seeded head (honoured caller pin and/or connected accounts). */
   seedHead: readonly string[];
+  /** Tenant-cooled BYO models seen while composing — surfaced as `cooled` routing
+   *  metadata beside `failovers` (see `byoCooldown.ts`). */
+  cooled: CooledModelInfo[];
 }
 
 type SeedRuntime = Pick<ProxyRuntime, 'cfg' | 'funding'>;
@@ -219,7 +223,7 @@ export async function composeCompletionSeed(
   // then ordered for the role: the model ladder for plan / review / code (the best coder
   // per cost leads a coding turn — or, once there is evidence, the one that has delivered
   // best in that role), cheapest-first for verify / explore, the tenant's order for chat.
-  const { merged: rankMerged, ordered: byoSeeds } = orderByoSeeds({
+  const { merged: rankMerged, ordered: rankedSeeds } = orderByoSeeds({
     connectedByo,
     vendorPriority: cfg.byoVendorPriority,
     providerPriorities: cfg.byoProviderPriorities,
@@ -233,6 +237,16 @@ export async function composeCompletionSeed(
     ...(opts?.roleStats ? { stats: opts.roleStats } : {}),
     ...(explore ? { explore } : {}),
   }, catalogView);
+  // TENANT-scoped BYO cooldowns (`byoCooldown.ts`): a model that 429'd on THIS
+  // tenant's own account is demoted behind its healthy peers AFTER the role ladder —
+  // never dropped (a cooled candidate stays a last resort), and an explicit user pin
+  // is never moved (its cooldown is noted in `cooled` metadata instead). This also
+  // reorders the AUTO-LADDER head: `seedHead[0]` / `pinnedHint` is taken below, after
+  // this pass, so a throttled flagship stops leading the very next request.
+  const { ordered: byoSeeds, cooled } = await demoteTenantCooled(
+    cfg.env, cfg.tenantId, rankedSeeds, vendorForModel,
+    callerLeads ? (callerModel as string) : undefined,
+  );
   // Structured single line — greppable in Workers logs as `gateway.byo_seed`. Why a
   // coding turn led with the model it did was unanswerable: demotions, the tenant's
   // ranking and the role order all happen here and left no trace (chat #6).
@@ -276,12 +290,13 @@ export async function composeCompletionSeed(
     return {
       seed: orderFreeFirst(pinHead, basePool, byoSeeds, (m) => funding.isOwnerServedModel(m)),
       seedHead: pinHead,
+      cooled,
     };
   }
   const seed: readonly string[] = seedHead.length > 0
     ? [...seedHead, ...basePool.filter((m) => !seedHead.includes(m))]
     : basePool;
-  return { seed, seedHead };
+  return { seed, seedHead, cooled };
 }
 
 /**

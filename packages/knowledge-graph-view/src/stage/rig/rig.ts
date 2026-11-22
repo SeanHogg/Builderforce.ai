@@ -16,6 +16,7 @@
  * renderer path and the tests drive it the same way. `projectInto` is the exact map the camera applies.
  */
 
+import { RESTING_DEPTH } from '../depth';
 import { Tween, TWEEN_MS } from '../tween';
 import type { Projector, ScreenFrame } from '../pick';
 import {
@@ -62,7 +63,8 @@ export class RigController {
     /** The screen point the last zoom was about (the semantic zoom's focus); null = the box centre. */
     focusPoint: readonly [number, number] | null = null;
     private readonly tween = new Tween();
-    private depthNow = 0;
+    /** Ground views rest tilted on first paint (no tween from flat); the depth control still spans 0..1. */
+    private depthNow = RESTING_DEPTH;
     private tiltRange: readonly [number, number] = [0, 0];
     private moved = false;
     private listeners = new Set<() => void>();
@@ -110,8 +112,9 @@ export class RigController {
         this.width = width; this.height = height;
         this.moved = false;
         this.depthFrom = this.depthUniform;
-        this.depthT = ms > 0 ? 0 : 1;
         const wasOrbit = this.kind === 'orbit';
+        // The FIRST ground home is already at the resting depth: no extrude tween from flat on first paint.
+        this.depthT = ms > 0 && !(!wasOrbit && !rig.view && this.depthFrom === RESTING_DEPTH) ? 0 : 1;
         const fromOrbit = this.liveOrbit(rig.view?.fov);
         this.tiltRange = rig.depth.tilt;
         this.home = home;

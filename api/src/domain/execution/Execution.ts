@@ -147,6 +147,19 @@ export class Execution {
     });
   }
 
+  /**
+   * Called when the run finished successfully but wrote nothing (MK-09-W5). Terminal like
+   * `markCompleted` — and owed the SAME post-run lifecycle (lane move, metrics, next-lane
+   * trigger, audit) via the shared fan-out, never a silent skip.
+   */
+  markNoChanges(result: string): Execution {
+    this.assertNotTerminal('complete');
+    return this.transition(ExecutionStatus.NO_CHANGES, {
+      result,
+      completedAt: new Date(),
+    });
+  }
+
   /** Called when the agent reports a failure. */
   markFailed(errorMessage: string): Execution {
     this.assertNotTerminal('fail');

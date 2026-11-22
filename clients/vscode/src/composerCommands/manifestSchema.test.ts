@@ -19,6 +19,9 @@ describe("the stale manifest $schema", () => {
     ["after a string with escaped quotes and braces", `{"name":"a\\"},\\\\","on":true,"x":null,"list":[1,{"a":"]"}],${member},"n":2}`, `{"name":"a\\"},\\\\","on":true,"x":null,"list":[1,{"a":"]"}],"n":2}`],
     ["after a number that ends the previous member", `{"version":1 , ${member}}`, `{"version":1 }`],
     ["with tabs and CRLF", `{\r\n\t${member},\r\n\t"version": 1\r\n}\r\n`, `{\r\n\t"version": 1\r\n}\r\n`],
+    ["first, with no trailing newline", `{\n  ${member},\n  "version": 1\n}`, `{\n  "version": 1\n}`],
+    ["last, with no trailing newline", `{\n  "version": 1,\n  ${member}\n}`, `{\n  "version": 1\n}`],
+    ["last, with CRLF", `{\r\n\t"version": 1,\r\n\t${member}\r\n}\r\n`, `{\r\n\t"version": 1\r\n}\r\n`],
   ])("removes it minimally when it is %s", (_case, before, after) => {
     expect(withoutStaleSchema(before)).toBe(after);
     expect(JSON.parse(withoutStaleSchema(before)!)).not.toHaveProperty("$schema");
@@ -31,6 +34,8 @@ describe("the stale manifest $schema", () => {
 
   it.each([
     ["another URL", `{"$schema":"https://builderforce.ai/schema/app.v2.json","version":1}`],
+    ["a URL that merely extends the stale one", `{"$schema":"${URL}.bak","version":1}`],
+    ["a URL that merely contains the stale one", `{"$schema":"https://evil.example/${URL}","version":1}`],
     ["a relative path", `{"$schema":"./schema.json"}`],
     ["only a nested one", `{"resources":{"x":{${member}}}}`],
     ["no $schema", `{"version":1}`],

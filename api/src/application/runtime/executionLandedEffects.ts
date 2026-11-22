@@ -35,9 +35,10 @@ export interface LandedRun {
   agentHostId: number | null;
 }
 
-/** The transition that landed. */
+/** The transition that landed. NO_CHANGES is a successful landing that wrote nothing (MK-09-W5):
+ *  it is owed exactly the COMPLETED fan-out — lane move, metrics, next-lane trigger, milestone. */
 export interface LandedOutcome {
-  status: ExecutionStatus.RUNNING | ExecutionStatus.COMPLETED | ExecutionStatus.FAILED;
+  status: ExecutionStatus.RUNNING | ExecutionStatus.COMPLETED | ExecutionStatus.NO_CHANGES | ExecutionStatus.FAILED;
   result?: string;
   errorMessage?: string;
 }
@@ -137,6 +138,9 @@ export async function applyLandedLifecycle(
   const runEffect = <T>(name: string, ctx: { tenantId: number; executionId: number; taskId?: number; projectId?: number }, effect: () => Promise<T>, fallback: T) =>
     runIsolatedEffect(audit, name, ctx, effect, fallback);
   let movedTicket = false;
+  // A no_changes landing IS a completed run for lifecycle purposes (it just wrote no files):
+  // normalize once so every effect below treats it exactly like COMPLETED — no second copy.
+  const completed = outcome.status === ExecutionStatus.COMPLETED || outcome.status === ExecutionStatus.NO_CHANGES;
 
   // sync task status based on execution state --------------------------------
   // Each lane move here is an AGENT moving a ticket - recorded into the ticket-
@@ -150,7 +154,7 @@ export async function applyLandedLifecycle(
       const projectId = task.toPlain().projectId;
       const tenantId = run.tenantId;
       let toStatus: string = fromStatus;
-      const terminal = outcome.status === ExecutionStatus.COMPLETED || outcome.status === ExecutionStatus.FAILED;
+      const terminal = completed || outcome.status === ExecutionStatus.FAILED;
       // A Validator acceptance review runs AGAINST an already-Done ticket and must
       // NOT move its lane - otherwise a completing review knocks the ticket back to
       // in_review and re-triggers a review (the completion loop). Record the terminal
@@ -201,7 +205,7 @@ export async function applyLandedLifecycle(
         && (outcome.status === ExecutionStatus.RUNNING || terminal)
         ? await runEffect('managed_run_status', effectContext, () => ports.onManagedRunStatus!({
             ...effectContext,
-            status: outcome.status === ExecutionStatus.RUNNING ? 'running' : outcome.status === ExecutionStatus.COMPLETED ? 'completed' : 'failed',
+            status: outcome.status === ExecutionStatus.RUNNING ? 'running' : completed ? 'completed' : 'failed',
             fromStatus, actAsRole: parseActAsRole(run.payload) ?? null,
             laneServed: parseLaneKey(run.payload) ?? fromStatus,
           }), { managed: false, toStatus: fromStatus })
@@ -234,7 +238,7 @@ export async function applyLandedLifecycle(
           );
         }
       }
-      if (!coordinatorOwnsTransition && !holdsLane && outcome.status === ExecutionStatus.COMPLETED) {
+      if (!coordinatorOwnsTransition && !holdsLane && completed) {
         const resultText = outcome.result ?? '';
         // Default advance is the board's NEXT swimlane by configured order - so a
         // custom board (renamed / re-ordered lanes) flows correctly instead of
@@ -286,7 +290,7 @@ export async function applyLandedLifecycle(
         if (ports.onRunFinalized) {
           await runEffect('run_finalized', effectContext, () => ports.onRunFinalized!({
             ...effectContext,
-            status: outcome.status === ExecutionStatus.COMPLETED ? 'completed' : 'failed',
+            status: completed ? 'completed' : 'failed',
             actAsRole: parseActAsRole(run.payload) ?? null,
             laneServed: parseLaneKey(run.payload) ?? fromStatus,
           }), undefined);
@@ -299,7 +303,7 @@ export async function applyLandedLifecycle(
       // A Done lane finalizes (PR/commit) instead of staffing a fresh agent, and
       // the RUNNING->in_progress move is the lane the CURRENT run already owns, so
       // both are excluded here (the trigger also dedupes/no-ops defensively).
-      if (!coordinatorOwnsTransition && !holdsLane && outcome.status === ExecutionStatus.COMPLETED && toStatus !== fromStatus && toStatus !== TaskStatus.DONE) {
+      if (!coordinatorOwnsTransition && !holdsLane && completed && toStatus !== fromStatus && toStatus !== TaskStatus.DONE) {
         if (ports.onLaneEntry) {
           await runEffect('lane_entry_dispatch', effectContext, () => ports.onLaneEntry!({
             tenantId, taskId: run.taskId, projectId, status: toStatus,
@@ -321,7 +325,7 @@ export async function applyLandedLifecycle(
         // lane both start silently otherwise. The per-execution+phase idempotency key
         // (run:{id}:started) collapses repeats (heartbeat re-marks, resume) to one post.
         const phase = outcome.status === ExecutionStatus.RUNNING ? 'started' as const
-          : outcome.status === ExecutionStatus.COMPLETED ? 'completed' as const
+          : completed ? 'completed' as const
           : outcome.status === ExecutionStatus.FAILED ? 'failed' as const : null;
         if (phase && ports.onRunMilestone) {
           await runEffect('run_milestone', effectContext, () => ports.onRunMilestone!({
@@ -332,7 +336,7 @@ export async function applyLandedLifecycle(
           }), undefined);
         }
       }
-      movedTicket = outcome.status === ExecutionStatus.COMPLETED && toStatus !== fromStatus;
+      movedTicket = completed && toStatus !== fromStatus;
     }
   } catch (error) {
     reportCaughtError(error, { source: "application/runtime/executionLandedEffects.ts", operation: "applyLandedLifecycle", context: { logMessage: '[runtime-update] lifecycle orchestration failed outside an isolated effect', details: {
@@ -355,16 +359,20 @@ export async function recordLandedAudit(
 ): Promise<void> {
   const eventType = status === ExecutionStatus.RUNNING
     ? AuditEventType.EXECUTION_STARTED
-    : status === ExecutionStatus.COMPLETED
+    : status === ExecutionStatus.COMPLETED || status === ExecutionStatus.NO_CHANGES
       ? AuditEventType.EXECUTION_COMPLETED
       : AuditEventType.EXECUTION_FAILED;
+  // A no_changes landing audits as a completion, with the empty-diff fact explicit in the metadata.
+  const auditMetadata = status === ExecutionStatus.NO_CHANGES
+    ? JSON.stringify({ ...(metadata ? JSON.parse(metadata) as Record<string, unknown> : {}), noChanges: true })
+    : metadata;
   await audit.save(AuditEvent.create({
     tenantId:     asTenantId(run.tenantId),
     userId:       null,
     eventType,
     resourceType: 'execution',
     resourceId:   String(run.id),
-    metadata,
+    metadata: auditMetadata,
   }));
 }
 

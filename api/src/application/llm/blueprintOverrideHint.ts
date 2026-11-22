@@ -21,4 +21,7 @@ export const OVERRIDE_EXAMPLE = {
 export const OVERRIDE_HINT =
   `To override detection, write ${MANIFEST_PATH} in the repo (never a root builderforce.json): an app manifest v1, ` +
   `e.g. ${JSON.stringify(OVERRIDE_EXAMPLE)}, with write_file, then run ${advertisedName('app_blueprint.detect')} again. ` +
-  'Detection lays its services, resources and env over what it found.';
+  'Detection lays its services, resources and env over what it found. ' +
+  `Before writing, call ${advertisedName('app_manifest.schema')} for the v1 JSON schema, field guide and per-target ` +
+  `capability matrix (including the ai resource), and check the manifest with ${advertisedName('app_manifest.validate')} ` +
+  '(content-only validation needs no projectId).';

@@ -174,6 +174,20 @@ describe("/launch", () => {
     expect(reply.kind === "text" ? reply.actions : []).toContainEqual({ label: text.manifestSchemaRemoveAction, command: "/manifest move" });
   });
 
+  it("still replies normally when the canonical manifest cannot be read for the stale-$schema check", async () => {
+    const canonical = path.join(app.path, ".builderforce", "builderforce.json");
+    const { port, start, launch } = setup({ [canonical]: "{}" });
+    // The advisory read fails (EACCES): the launch reply is never lost to it.
+    vi.spyOn(port, "readText").mockRejectedValueOnce(new Error("EACCES: permission denied"));
+    const reply = await launch();
+    const text = composerCommandText();
+    expect(start).toHaveBeenCalledWith({ projectDir: app.path });
+    expect(reply).toMatchObject({ kind: "text", tone: "info", link: "http://localhost:4000/#token=secret" });
+    expect(linesOf(reply)[0]).toBe(text.launchStarted("app", false));
+    expect(linesOf(reply).some((line) => line.includes("$schema"))).toBe(false);
+    expect(reply.kind === "text" ? reply.actions : []).not.toContainEqual({ label: text.manifestSchemaRemoveAction, command: "/manifest move" });
+  });
+
   it("says nothing about a $schema with any other value", async () => {
     const canonical = path.join(app.path, ".builderforce", "builderforce.json");
     const { launch } = setup({ [canonical]: "{\"$schema\":\"./my.schema.json\",\"version\":1}" });

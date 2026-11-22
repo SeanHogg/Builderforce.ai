@@ -13,6 +13,7 @@ import { bandTitleIn } from '../../../surface/bands';
 import { lineTone, makeOverlay, segmentUntested } from '../../../surface/overlays';
 import { towerHeight } from '../../../surface/transit/towerHeight';
 import { layoutTransit } from '../../../surface/transitLayout';
+import { RESTING_DEPTH } from '../../../stage/depth';
 import { BG_TONE, toneIndex } from '../../../stage/tones';
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { DASH_CYCLE, DASH_SOLID, DASH_UNTESTED, FLAG, type Caption, type LabelRun, type Placement, type PlaneSpec } from '../../../stage/types';
@@ -32,7 +33,7 @@ export function placeMap(model: StageModel, req: PlacementReq, g?: Pick<Knowledg
     const { stations, lines, marks } = model;
     const width = VIEWPORT_BANDS[req.viewportBand] ?? VIEWPORT_BANDS[2]!;
     const layout = layoutTransit(stations.stations, lines.lines, width, model.order ? { order: model.order } : {});
-    const depth = Math.max(0, Math.min(1, req.depth ?? 0));
+    const depth = Math.max(0, Math.min(1, req.depth ?? RESTING_DEPTH));
     const d = draftFor(marks.keys.length);
     const labels: LabelRun[] = [];
     const a11y: Placement['a11y'] = [];

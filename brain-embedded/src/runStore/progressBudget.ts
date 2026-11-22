@@ -21,7 +21,7 @@
  */
 
 import { ASK_USER_TOOL } from '@builderforce/agent-loop';
-import { asksForChange, isContinuationDirective } from '@builderforce/agent-stall';
+import { classifyRequest } from '@builderforce/agent-stall';
 import { PLAN_TURN_BUDGET, QUICK_CHANGE_TURN_BUDGET, changeDue, handOffDue, offersHandOff } from '@builderforce/run-policy';
 import { isCodeChangeTool } from '../localWorkspaceTools';
 import { HAND_OFF_TOOL, HAND_OFF_TOOL_SPEC } from '../planHandoff';
@@ -59,9 +59,11 @@ export interface ForcedTurn {
 }
 
 /** Is `text`, in a run of `mode`, a request to CHANGE something — the only kind any
- *  progress rule forces, and the only kind the chat's asks ledger carries. */
+ *  progress rule forces, and the only kind the chat's asks ledger carries. The ONE
+ *  classifier decides (`classifyRequest`): a question — even one whose paste is full
+ *  of change verbs — is never budgeted, and a bare continuation resumes change work. */
 export function isChangeRequest(mode: string | undefined, text: string): boolean {
-  return mode !== 'chat' && (asksForChange(text) || isContinuationDirective(text));
+  return mode !== 'chat' && classifyRequest(text).intent === 'change';
 }
 
 /** Is this run asked to CHANGE something (see {@link isChangeRequest}). */

@@ -60,7 +60,7 @@ function summarizeBlueprint(bp: AppBlueprint) {
  * blueprint store is keyed by project alone, so this is the tenant boundary: a
  * foreign or unknown id is refused before anything is read or written.
  */
-async function ownedProjectId(ctx: BuiltinCtx, raw: unknown): Promise<number | Json> {
+export async function ownedProjectId(ctx: BuiltinCtx, raw: unknown): Promise<number | Json> {
   const projectId = Number(raw);
   if (!Number.isFinite(projectId)) return blueprintError('Invalid projectId: must be a number');
   try {

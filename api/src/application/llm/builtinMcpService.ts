@@ -4192,6 +4192,8 @@ const CATALOG: BuiltinTool[] = [
   // Tools for detecting, reading, and overriding project blueprints. These enable
   // the agent to understand the project's structure (framework, databases, services).
   ...APP_BLUEPRINT_TOOLS,
+  // ---- App manifest v1: schema + validate (app-manifest-ai-resource.md §8) ----
+  ...APP_MANIFEST_TOOLS,
   // ---- Run loop: see the running app (PRD 31 §W1 item 8) ---------------------
   // `runtime.*` — status, URL, logs, restart, screenshot, verify. ONE definition per tool
   // (creation-canvas-contract `RUNTIME_TOOLS`); this is the container executor, the

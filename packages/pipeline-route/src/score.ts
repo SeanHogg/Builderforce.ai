@@ -16,10 +16,14 @@
  * WOULD have done), and the words "full pipeline" in the request force it.
  *
  * PURE — no I/O, no env, no clock. The action type is the caller's (the shared lexical
- * classifier in `@builderforce/workload`); the only dependency is the ONE sigmoid in
- * builderforce-memory's `./stats` (PRD 41 D13).
+ * classifier in `@builderforce/workload`); the intent (question vs change) and the
+ * ask/pasted-context split come from the ONE classifier in `@builderforce/agent-stall`
+ * (`classifyRequest`, fix brief W2 — chat #168571: a paste's verbs routed a question
+ * `full`); the only other dependency is the ONE sigmoid in builderforce-memory's
+ * `./stats` (PRD 41 D13).
  */
 
+import { classifyRequest } from '@builderforce/agent-stall';
 import { sigmoid } from '@seanhogg/builderforce-memory/stats';
 
 export type PipelineRoute = 'full' | 'quick';
@@ -165,8 +169,6 @@ const FILE_RE = /(?:[\w@.-]+\/)+[\w.-]+|\b[\w-]+\.(?:tsx?|jsx?|mjs|cjs|py|go|rs|
 const LIST_ITEM_RE = /^\s*(?:\d+[.)]|[-*•])\s+\S/gm;
 const CHAIN_RE = /\b(?:and then|then|after that|afterwards|next|also|finally|as well as)\b/gi;
 const BROAD_RE = /\b(?:every|each|across|throughout|entire|whole|codebase|repo-?wide|end[- ]to[- ]end|architecture|redesign|overhaul|migrate|migration|all (?:the )?(?:files|modules|services|packages|pages|endpoints|tests|callers|places))\b/i;
-const QUESTION_LEAD_RE = /^(?:what|why|how|where|when|which|who|is|are|does|do|did|can|could|should|would|explain|describe|summari[sz]e|show me|tell me)\b/i;
-const CHANGE_VERB_RE = /\b(?:add|implement|create|build|fix|change|refactor|update|remove|delete|rename|write|migrate|make|move|replace|convert|upgrade|bump|wire|port)\b/i;
 const FORCE_FULL_RE = /\bfull[- ]pipeline\b/i;
 
 /**
@@ -190,25 +192,26 @@ export const TICKET_INTENT_PATTERNS: readonly RegExp[] = [
 ];
 
 /**
- * The request's features, read lexically. `actionType` is the caller's classification
- * (`classifyRunAction` in `@builderforce/workload`); `followUp` whether the request
- * continues earlier work in the conversation.
+ * The request's features, read lexically on the ASK only — the user's own words, as
+ * the ONE classifier (`classifyRequest`) splits them from pasted context. A paste's
+ * length, files, lists and verbs add no route weight (chat #168571). `actionType` is
+ * the caller's classification (`classifyRunAction` in `@builderforce/workload`);
+ * `followUp` whether the request continues earlier work in the conversation.
  */
 export function pipelineFeaturesOf(
   request: string,
   context: { actionType?: string; followUp?: boolean } = {},
 ): PipelineFeatures {
-  const text = request.trim();
+  const { intent, ask: text } = classifyRequest(request);
   const files = new Set((text.match(FILE_RE) ?? []).map((m) => m.toLowerCase()));
   const listItems = (text.match(LIST_ITEM_RE) ?? []).length;
   const chained = (text.match(CHAIN_RE) ?? []).length;
-  const asks = text.endsWith('?') || QUESTION_LEAD_RE.test(text);
   return {
     requestChars: text.length,
     fileMentions: files.size,
     multiStep: listItems >= 2 || chained >= 2,
     broadScope: BROAD_RE.test(text),
-    questionOnly: asks && !CHANGE_VERB_RE.test(text),
+    questionOnly: intent === 'question',
     followUp: context.followUp === true,
     actionType: context.actionType ?? 'other',
     forceFull: FORCE_FULL_RE.test(text),

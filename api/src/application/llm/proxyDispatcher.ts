@@ -27,6 +27,7 @@ import { checkResponseFormatConformance } from './responseFormat';
 import { stripStandardFields } from './poolRouting';
 import { sanitizeRequestToolCalls, restoreResponseToolNames, restoreStreamToolNames } from './toolNameSanitizer';
 import { loadCooledModelsForVendor, recordFailures } from '../../infrastructure/auth/cooldownStore';
+import { isTenantCooled, parseRetryAfter, recordByoCooldown, resetByoCooldown } from './byoCooldown';
 import { resolveDispatchReasoningIntent } from './dispatchReasoningIntent';
 import { reasoningReplayStore } from '../../infrastructure/cache/reasoningReplayStore';
 import { recordVendorUpstreamFaults, recordVendorUpstreamSuccess } from './vendors/vendorHealth';
@@ -143,6 +144,17 @@ export class ProxyDispatcher {
     const vendorEnv = overrides?.vendorEnv ?? this.funding.vendorEnv();
     const cacheTtl = resolveCacheTtl(sanitizedBody as unknown as Record<string, unknown>);
     const observeHeadroom = createHeadroomObserver(this.cfg.env, this.cfg.tenantId, (model) => this.funding.isOwnerServedModel(model));
+    // Retry-After capture for the TENANT-scoped BYO cooldown: the provider's own
+    // backoff hint (`Retry-After` / `x-ratelimit-reset*`) observed on this dispatch's
+    // upstream responses, keyed by the candidate that drew them. Only owner-served
+    // models are recorded — the shared store keeps its own class-based TTLs.
+    const retryAfterByModel = new Map<string, number>();
+    const observeUpstreamHeaders = (model: string, vendor: VendorId, headers: Headers): void => {
+      observeHeadroom(model, vendor, headers);
+      if (!this.funding.isOwnerServedModel(model)) return;
+      const secs = parseRetryAfter(headers);
+      if (secs != null) retryAfterByModel.set(model, secs);
+    };
     const callParams = {
       messages,
       ...(liftedTools ? { tools: liftedTools } : {}),
@@ -175,7 +187,7 @@ export class ProxyDispatcher {
       ...(overrides?.ignoreCooldown ? {} : { isCooled: this.midCascadeCooldownCheck() }),
       // How much of each connected account is left, from the provider's own headers — a
       // nearly-spent account stops leading the next request (`providerHeadroom.ts`).
-      onUpstreamHeaders: observeHeadroom,
+      onUpstreamHeaders: observeUpstreamHeaders,
       // A connected vendor is ONE account and seeds several models (both flagships or the
       // tenant's selection): once it refuses at the account level this turn (401/402, a 429
       // on a subscription's shared quota, or a timeout/5xx streak — a 403, and a 429 on an
@@ -187,8 +199,8 @@ export class ProxyDispatcher {
     };
 
     return sanitizedBody.stream
-      ? this.dispatchStream(candidates, callParams, vendorEnv, requestHeaders)
-      : this.dispatchJson(candidates, callParams, vendorEnv, sanitizedBody);
+      ? this.dispatchStream(candidates, callParams, vendorEnv, retryAfterByModel, requestHeaders)
+      : this.dispatchJson(candidates, callParams, vendorEnv, sanitizedBody, retryAfterByModel);
   }
 
   /**
@@ -206,6 +218,7 @@ export class ProxyDispatcher {
     callParams: Omit<Parameters<typeof dispatchVendor>[0], 'env' | 'modelChain'>,
     vendorEnv: VendorEnv,
     body: ChatCompletionRequest,
+    retryAfterByModel: ReadonlyMap<string, number>,
   ): Promise<ProxyResult> {
     let chain = candidates;
     let totalAttempts = 0;
@@ -244,11 +257,11 @@ export class ProxyDispatcher {
           return requestErrorResponse([att], att.model, att.vendor, attemptsToFailovers([att]), schemaRetries);
         }
         const errAttempts = err instanceof CascadeExhaustedError ? err.attempts : [];
-        await this.applyCooldowns(errAttempts);
+        await this.applyCooldowns(errAttempts, retryAfterByModel);
         return exhaustedResponse(this.cfg.modelPool[0], candidates, schemaRetries, err, errAttempts);
       }
 
-      await this.applyCooldowns(result.attempts);
+      await this.applyCooldowns(result.attempts, retryAfterByModel);
       totalAttempts += result.attempts.length;
       totalFailovers.push(...attemptsToFailovers(result.attempts));
       lastResult = result;
@@ -289,6 +302,11 @@ export class ProxyDispatcher {
     // health TTL, on the exact request that proved it had recovered. One KV write on
     // the success path is a fair price for a promotion that actually happens.
     await this.clearVendorHealth(result.vendorUsed);
+    // A success on the tenant's OWN account clears its tenant-scoped bench AND
+    // strike ladder (`byoCooldown.ts`) — the account demonstrably recovered.
+    if (this.funding.isOwnerServedModel(result.modelUsed)) {
+      await resetByoCooldown(this.cfg.env, this.cfg.tenantId, result.vendorUsed, result.modelUsed);
+    }
     // Restore dotted tool names that the request-side sanitizer escaped, so
     // `tool_calls[*].function.name` round-trips to the caller's namespace.
     const restoredRaw = restoreResponseToolNames(result.raw);
@@ -312,6 +330,7 @@ export class ProxyDispatcher {
     candidates: string[],
     callParams: Omit<Parameters<typeof dispatchVendorStream>[0], 'env' | 'modelChain'>,
     vendorEnv: VendorEnv,
+    retryAfterByModel: ReadonlyMap<string, number>,
     _requestHeaders?: Record<string, string>,
   ): Promise<ProxyResult> {
     try {
@@ -324,7 +343,7 @@ export class ProxyDispatcher {
       // when the request lifecycle ends — and the streaming path is exactly where that
       // happens, because the response is returned the moment headers arrive. Left
       // floating, a streaming cascade's cooldowns were the ones most likely to be lost.
-      await this.applyCooldowns(result.attempts);
+      await this.applyCooldowns(result.attempts, retryAfterByModel);
       // Restore dotted tool names in the streamed SSE deltas — symmetric to the
       // non-streaming `restoreResponseToolNames` in successJsonResult. Names can
       // arrive in fragments, so a stateful restorer buffers per tool-call index.
@@ -340,6 +359,10 @@ export class ProxyDispatcher {
       // Streaming counterpart of the health clear in `successJsonResult` — headers
       // arrived, so this vendor is serving again.
       await this.clearVendorHealth(result.vendorUsed);
+      // Streaming counterpart of the tenant-bench reset in `successJsonResult`.
+      if (this.funding.isOwnerServedModel(result.modelUsed)) {
+        await resetByoCooldown(this.cfg.env, this.cfg.tenantId, result.vendorUsed, result.modelUsed);
+      }
       return {
         response,
         resolvedModel: result.modelUsed,
@@ -361,7 +384,7 @@ export class ProxyDispatcher {
         return requestErrorResponse([att], att.model, att.vendor, attemptsToFailovers([att]), 0);
       }
       const errAttempts = err instanceof CascadeExhaustedError ? err.attempts : [];
-      await this.applyCooldowns(errAttempts);
+      await this.applyCooldowns(errAttempts, retryAfterByModel);
       return exhaustedResponse(this.cfg.modelPool[0], candidates, 0, err, errAttempts);
     }
   }
@@ -375,7 +398,10 @@ export class ProxyDispatcher {
    * KV writes are ~50–200ms in parallel — only on the failure path — so the
    * extra latency is acceptable in exchange for cooldowns that actually stick.
    */
-  private async applyCooldowns(attempts: ReadonlyArray<DispatchAttempt>): Promise<void> {
+  private async applyCooldowns(
+    attempts: ReadonlyArray<DispatchAttempt>,
+    retryAfterByModel?: ReadonlyMap<string, number>,
+  ): Promise<void> {
     if (attempts.length === 0) return;
     // An attempt that rode the tenant's OWN credential writes NO cooldown: the keyspace is
     // global, so one owner's expired token would bench that model for our shared key and
@@ -383,6 +409,13 @@ export class ProxyDispatcher {
     // fault below (seed order) plus the per-tenant `providerAuthAlerts` record the gateway
     // route and the daily BYO probe both write.
     const coolable = attempts.filter((a) => !this.funding.isOwnerServedModel(a.model));
+    // The OTHER half of the keyspace: an owner-served 429 / rate-limit failure is
+    // recorded in the TENANT-scoped BYO store (`byoCooldown.ts`) — benched for THIS
+    // tenant's account only, never the shared pool. Without this write the exemption
+    // above left a BYO 429 recorded nowhere that outlives the request, so every turn
+    // rebuilt the same chain with the throttled model first (chat #168571).
+    const byoRateLimited = attempts.filter((a) =>
+      this.funding.isOwnerServedModel(a.model) && (a.status === 429 || a.kind === 'rate_limit'));
     // BOTH writes are now GROUPED BY VENDOR rather than issued per attempt. A failed
     // cascade used to fan out 2N parallel KV operations — one `recordFailure` (itself
     // a read + a write) and one vendor-fault read-modify-write per attempt — on a
@@ -398,6 +431,12 @@ export class ProxyDispatcher {
       // cooldown store's business. See `vendorHealth` for why the two signals are
       // deliberately separate.
       recordVendorUpstreamFaults(this.cfg.env, attempts.map((a) => ({ vendorId: a.vendor, status: a.status }))),
+      // Tenant-scoped benches, one per throttled owner-served model, honouring the
+      // provider's own Retry-After hint when it sent one. Never throws (advisory).
+      ...byoRateLimited.map((a) => recordByoCooldown(
+        this.cfg.env, this.cfg.tenantId, a.vendor, a.model,
+        retryAfterByModel?.get(a.model) ?? null,
+      )),
     ]);
   }
 
@@ -413,13 +452,19 @@ export class ProxyDispatcher {
    * vendor now (one composite blob per vendor), and each vendor is read at most once
    * per dispatch. So a 10-candidate cascade across two vendors costs two reads on the
    * failing path and zero on the happy path (the check never fires before the first
-   * failure). Skips owner-served models for the same reason `applyCooldowns` does —
-   * the keyspace is global and cannot speak for one tenant's own credential.
+   * failure). Owner-served models are re-checked against the TENANT-scoped BYO store
+   * instead (`isTenantCooled`) — the global keyspace cannot speak for one tenant's
+   * own credential.
    */
   private midCascadeCooldownCheck(): (vendor: VendorId, model: string) => Promise<boolean> {
     const seen = new Map<VendorId, Promise<Set<string>>>();
     return async (vendor, model) => {
-      if (this.funding.isOwnerServedModel(model)) return false;
+      // Owner-served models answer to the TENANT-scoped store, through the ONE
+      // `isTenantCooled` reader (the same one the seed demotion uses) — never the
+      // global keyspace, which cannot speak for one tenant's own credential.
+      if (this.funding.isOwnerServedModel(model)) {
+        return isTenantCooled(this.cfg.env, this.cfg.tenantId, vendor, model);
+      }
       let cooled = seen.get(vendor);
       if (!cooled) {
         // The whole vendor's cooled set in one read — the composite key scheme makes

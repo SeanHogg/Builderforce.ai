@@ -104,14 +104,13 @@ const clipName: CSSProperties = {
     position: 'absolute', width: 1, height: 1, padding: 0, margin: -1, overflow: 'hidden', clip: 'rect(0, 0, 0, 0)', whiteSpace: 'nowrap', border: 0,
 };
 
-/** Sliders: the overlay trigger is an icon; its accessible name stays the preset label. */
+/** Warning triangle: the overlay trigger is an icon; its accessible name stays the preset label. */
 function OverlayGlyph() {
     return (
-        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" style={{ display: 'block', fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round' }}>
-            <path d="M2.5 4h11M2.5 8h11M2.5 12h11" />
-            <circle cx="5" cy="4" r="1.2" fill="currentColor" stroke="none" />
-            <circle cx="11" cy="8" r="1.2" fill="currentColor" stroke="none" />
-            <circle cx="7" cy="12" r="1.2" fill="currentColor" stroke="none" />
+        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" style={{ display: 'block', fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round' }}>
+            <path d="M8 2.5 14 13H2L8 2.5z" />
+            <path d="M8 6.5v3" />
+            <circle cx="8" cy="11.2" r="0.5" fill="currentColor" stroke="none" />
         </svg>
     );
 }

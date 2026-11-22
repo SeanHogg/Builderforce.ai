@@ -702,6 +702,19 @@ export {
   memoryReplayable,
 } from './requestIntent.js';
 
+// THE one request-intent classifier (fix brief W2): the ask/pasted-context split and
+// the question/change decision every host scores on — pipeline-route's questionOnly,
+// workload's action classifier and the Brain run preamble all read this, never their
+// own verb lists.
+export {
+  classifyRequest,
+  splitAskAndContext,
+  isContinuationText,
+  type RequestIntent,
+  type RequestSignals,
+  type RequestClassification,
+} from './classifyRequest.js';
+
 // The HANDOFF shape — the turn that ends by assigning the user the commands it holds
 // the tools to run. Its own module (this file is already large) and re-exported so
 // consumers still have one import; `stallShape` above folds it into the shared gate.

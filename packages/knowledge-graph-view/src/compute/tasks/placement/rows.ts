@@ -12,6 +12,7 @@ import type { OverlayModel } from '../../../surface/overlays';
 import type { Station } from '../../../surface/stations';
 import { towerHeight } from '../../../surface/transit/towerHeight';
 import { fillTemplate } from '../../../template';
+import { RESTING_DEPTH } from '../../../stage/depth';
 import { BG_TONE, toneIndex } from '../../../stage/tones';
 import type { A11yItem, Caption, LabelRun, LinkBatch, Placement, PlaneSpec } from '../../../stage/types';
 import type { StageModel } from '../stageModel';
@@ -63,8 +64,8 @@ export function stationItem(model: StageModel, overlay: OverlayModel, depth: num
     return { slot, scale: size, extrude: depth * towerHeight(size, s.cx), label: s.name, a11y: s.path ?? s.name, priority: s.use };
 }
 
-/** The request's tilt, 0 (flat) to 1. */
-export const depthOf = (req: Pick<PlacementReq, 'depth'>): number => Math.max(0, Math.min(1, req.depth ?? 0));
+/** The request's tilt, 0 (flat) to 1; omitted = the resting tilt (`RESTING_DEPTH`), an explicit 0 stays flat. */
+export const depthOf = (req: Pick<PlacementReq, 'depth'>): number => Math.max(0, Math.min(1, req.depth ?? RESTING_DEPTH));
 
 const SECTION_HEAD = 24;
 const ROW_HEAD = 28;

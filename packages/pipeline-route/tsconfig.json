@@ -8,7 +8,10 @@
     "lib": ["ES2022", "DOM"],
     "declaration": true,
     "skipLibCheck": true,
-    "noEmit": true
+    "noEmit": true,
+    "paths": {
+      "@builderforce/agent-stall": ["../agent-stall/src/index.ts"]
+    }
   },
   "include": ["src/**/*.ts"],
   "exclude": ["node_modules", "dist"]

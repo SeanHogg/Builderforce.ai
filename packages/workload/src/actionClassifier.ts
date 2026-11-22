@@ -28,6 +28,7 @@
  * PURE — no I/O, no env, no clock. Every branch is unit-testable.
  */
 
+import { classifyRequest } from "@builderforce/agent-stall";
 import { DEFAULT_ACTION_TYPE, type ActionType } from "@builderforce/learned-routing";
 
 export interface ActionClassification {
@@ -223,13 +224,15 @@ export function classifyRunAction(prompt: string | undefined | null): ActionClas
   // An agent prompt is an instruction followed by pasted files, transcripts and tool
   // output whose vocabulary describes the CODEBASE, not the work being asked for. Read
   // flat, that bulk decides every label — a repository full of SQL makes every run
-  // `sql`. So the instruction is scored at full weight and the context tail at a
-  // discount: it still breaks a tie, and it can no longer win one outright.
-  const paragraphBreak = text.indexOf("\n\n");
+  // `sql`. The ask/paste boundary is the ONE classifier's (`classifyRequest`, fix brief
+  // W2): the ask is scored at full weight, everything pasted after it at a discount —
+  // domain hints that can break a tie but never win one outright.
+  const { ask, context: pasted } = classifyRequest(text);
+  const paragraphBreak = ask.indexOf("\n\n");
   const instructionEnd =
     paragraphBreak > 0 ? Math.min(paragraphBreak, INSTRUCTION_CHARS) : INSTRUCTION_CHARS;
-  const instruction = text.slice(0, instructionEnd);
-  const context = text.slice(instructionEnd, CONTEXT_CHARS);
+  const instruction = ask.slice(0, instructionEnd);
+  const context = (ask.slice(instructionEnd) + (pasted ? `\n${pasted}` : "")).slice(0, CONTEXT_CHARS);
 
   let total = 0;
   let best: { actionType: ActionType; score: number } | null = null;

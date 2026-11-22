@@ -2,6 +2,10 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.207] — Regression coverage for the stale manifest `$schema` removal
+
+- **No user-facing change.** New regression tests lock in `/manifest move` and `/launch`'s stale `$schema` handling: files without a trailing newline, CRLF files with `$schema` last, URLs that merely contain the stale schema URL are left untouched, and `/launch` still replies normally when the manifest cannot be read for the advisory check.
+
 ## [2026.10.206] — Attach images instantly, open any attachment, and archived tickets count as done
 
 - **Attaching an image no longer makes you wait.** Its thumbnail appears right away while the upload finishes in the background. If you press Send mid-upload, the message goes as soon as the upload lands. A failed upload shows on its chip with the reason.

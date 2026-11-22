@@ -135,7 +135,7 @@ async function dispatchUncached(
   }
 
   // Seed composition, cooldown prefetch and the candidate chain — see `proxyRoutePlan`.
-  const { seed, seedHead, pinnedHint, cooledSet, cooledVendors, candidates } = await planRoute(rt, body, callerModel, opts);
+  const { seed, seedHead, pinnedHint, cooledSet, cooledVendors, candidates, cooled } = await planRoute(rt, body, callerModel, opts);
   if (candidates.length === 0) {
     return resolveEmptyChain(rt, {
       body, requestHeaders, signal, traceId: tid, startedAt,
@@ -144,6 +144,10 @@ async function dispatchUncached(
   }
 
   let primary = await dispatcher.dispatch(candidates, body, requestHeaders, { signal });
+  // Tenant-cooled BYO models observed at seed time ride the result as routing
+  // metadata (`_builderforce.cooled`, beside `failovers`) so the client can render
+  // "moonshot/kimi-k3 cooled until 23:10 (429)" without re-deriving the decision.
+  if (cooled.length > 0) primary.cooled = cooled;
   if (primary.response.status < 400) {
     // Mark overflow when the primary cascade itself landed on an appended
     // premium-fallback model (vs a plan-pool model) so the route meters it —
@@ -187,6 +191,7 @@ async function dispatchUncached(
     retry.failovers = [...primary.failovers, ...retry.failovers];
     retry.attempts  = [...(primary.attempts ?? []), ...(retry.attempts ?? [])];
     retry.schemaDowngraded = true;
+    if (cooled.length > 0) retry.cooled = cooled;
     if (retry.response.status < 400) {
       retry.paidOverflow = isPaidOverflowModel(retry.resolvedModel) && !funding.isTenantFunded(retry);
       return finalize(retry, tid, startedAt, candidates, 'success');
@@ -208,6 +213,7 @@ async function dispatchUncached(
     backstop.retries   = primary.retries + backstop.retries;
     backstop.attempts  = [...(primary.attempts ?? []), ...(backstop.attempts ?? [])];
     backstop.paidOverflow = !funding.isTenantFunded(backstop);
+    if (cooled.length > 0) backstop.cooled = cooled;
     if (effectiveBody !== body) backstop.schemaDowngraded = true;
     return finalize(backstop, tid, startedAt, [...candidates, ...cfg.backstopModels], 'success');
   }

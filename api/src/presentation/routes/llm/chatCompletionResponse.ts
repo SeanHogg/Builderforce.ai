@@ -144,6 +144,7 @@ export function buildCompletionEnvelope(
       // Lets callers see which vendor recovered the request and detect
       // single-vendor concentration patterns over time.
       ...(result.failovers.length > 0 ? { failovers: result.failovers } : {}),
+      ...(result.cooled && result.cooled.length > 0 ? { cooled: result.cooled } : {}),
       pool:          modelPoolForPlan(access.effectivePlan, access.premiumOverride).length,
       product:       llmProduct,
       effectivePlan: access.effectivePlan,

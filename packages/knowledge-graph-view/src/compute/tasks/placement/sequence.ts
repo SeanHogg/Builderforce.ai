@@ -18,6 +18,7 @@ import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { LAYER_ORDER } from '../../../surface/layers';
 import { fileRefOf, stationOfRef } from '../../../surface/stations';
 import { isSymbol, withSymbolRecords } from '../../../surface/transit/symbols';
+import { RESTING_DEPTH } from '../../../stage/depth';
 import { BG_TONE, toneIndex } from '../../../stage/tones';
 import { DASH_DESCRIBES, DASH_SOLID, FLAG, type LabelRun, type Placement, type Vec3 } from '../../../stage/types';
 import { fillTemplate } from '../../../template';
@@ -66,7 +67,7 @@ export function placeSequence(g: KnowledgeGraph, model: StageModel, req: Placeme
     const messages = flow.messages.filter((m) => slotOf(m.from) !== undefined && slotOf(m.to) !== undefined);
     const width = VIEWPORT_BANDS[req.viewportBand] ?? VIEWPORT_BANDS[2]!;
     const col = Math.max(COLUMN.min, Math.min(COLUMN.max, (width - 2 * MARGIN) / Math.max(1, participants.length - 1)));
-    const sink = Math.max(0, Math.min(1, req.depth ?? 0)) * LAYER_STEP;
+    const sink = Math.max(0, Math.min(1, req.depth ?? RESTING_DEPTH)) * LAYER_STEP;
     const bottom = HEAD + ROW * (messages.length + 1);
     const column = new Map<string, Vec3>(participants.map((p, i) => [p, [MARGIN + i * col, -layerOf(p) * sink, HEAD]] as const));
     const rows: SequenceRows = { rowZ: (i) => HEAD + ROW * (i + 1), row: ROW, column, mark: MARK };

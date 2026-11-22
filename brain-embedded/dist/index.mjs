@@ -146,6 +146,7 @@ import {
   activityMessageCount,
   activityTarget,
   activityTone,
+  advertisedToolName,
   announcesDeliverable,
   announcesUntakenAction,
   answeredInProseInTrace,
@@ -174,6 +175,7 @@ import {
   chooseStallFailover,
   claimChatBind,
   claimsMissingToolData,
+  classifyRequest,
   classifyTool,
   codeChangeFile,
   codeChangeTicketTitle,
@@ -381,7 +383,7 @@ import {
   withAdvisory,
   withProvenanceMetadata,
   workFiledNotStaffedVerdict
-} from "./chunk-BXHLLF6F.mjs";
+} from "./chunk-RPVICLIG.mjs";
 import {
   ASK_USER_TOOL,
   ASK_USER_TOOL_SPEC,
@@ -4814,6 +4816,7 @@ function createLocalBrainPersistence(options) {
         const chatDeleteKey = `chat:${chat.id}:delete:v${deleted.version}`;
         await tx.put(deleted, chat.version);
         await journalWrite(tx, deleted, "delete", { key: chatDeleteKey });
+        await releaseChatBind(tx, chat.id, BIND_PENDING_HOLDER);
         const rows = await chatMessageRecords(tx, options.deviceId, id);
         for (const row of rows) {
           const tombstone = { ...row, version: row.version + 1, baseVersion: row.version, deletedAt: stamp, updatedAt: stamp };
@@ -5302,8 +5305,6 @@ var FILE_RE = /(?:[\w@.-]+\/)+[\w.-]+|\b[\w-]+\.(?:tsx?|jsx?|mjs|cjs|py|go|rs|ja
 var LIST_ITEM_RE = /^\s*(?:\d+[.)]|[-*•])\s+\S/gm;
 var CHAIN_RE = /\b(?:and then|then|after that|afterwards|next|also|finally|as well as)\b/gi;
 var BROAD_RE = /\b(?:every|each|across|throughout|entire|whole|codebase|repo-?wide|end[- ]to[- ]end|architecture|redesign|overhaul|migrate|migration|all (?:the )?(?:files|modules|services|packages|pages|endpoints|tests|callers|places))\b/i;
-var QUESTION_LEAD_RE = /^(?:what|why|how|where|when|which|who|is|are|does|do|did|can|could|should|would|explain|describe|summari[sz]e|show me|tell me)\b/i;
-var CHANGE_VERB_RE = /\b(?:add|implement|create|build|fix|change|refactor|update|remove|delete|rename|write|migrate|make|move|replace|convert|upgrade|bump|wire|port)\b/i;
 var FORCE_FULL_RE = /\bfull[- ]pipeline\b/i;
 var TICKET_INTENT_PATTERNS = [
   // Filing: an exact verb, then only TICKET nouns — tasks / issues are everyday code words ("the task runner", "login issues").
@@ -5317,17 +5318,16 @@ var TICKET_INTENT_PATTERNS = [
   /^(?=[\s\S]*(?:\b(?:prds?|specs?|specifications?|roadmaps?|requirements|gap\s+register)\b|\b[\w-]+\.md\b))[\s\S]*?\b(?:open|incomplete|outstanding|remaining|unfinished)\s+(?:prd\s+)?items?\b/i
 ];
 function pipelineFeaturesOf(request, context = {}) {
-  const text2 = request.trim();
+  const { intent, ask: text2 } = classifyRequest(request);
   const files = new Set((text2.match(FILE_RE) ?? []).map((m) => m.toLowerCase()));
   const listItems = (text2.match(LIST_ITEM_RE) ?? []).length;
   const chained = (text2.match(CHAIN_RE) ?? []).length;
-  const asks = text2.endsWith("?") || QUESTION_LEAD_RE.test(text2);
   return {
     requestChars: text2.length,
     fileMentions: files.size,
     multiStep: listItems >= 2 || chained >= 2,
     broadScope: BROAD_RE.test(text2),
-    questionOnly: asks && !CHANGE_VERB_RE.test(text2),
+    questionOnly: intent === "question",
     followUp: context.followUp === true,
     actionType: context.actionType ?? "other",
     forceFull: FORCE_FULL_RE.test(text2),
@@ -6698,10 +6698,12 @@ function classifyRunAction(prompt) {
   if (!text2) {
     return { actionType: DEFAULT_ACTION_TYPE, confidence: 0 };
   }
-  const paragraphBreak = text2.indexOf("\n\n");
+  const { ask: ask2, context: pasted } = classifyRequest(text2);
+  const paragraphBreak = ask2.indexOf("\n\n");
   const instructionEnd = paragraphBreak > 0 ? Math.min(paragraphBreak, INSTRUCTION_CHARS) : INSTRUCTION_CHARS;
-  const instruction = text2.slice(0, instructionEnd);
-  const context = text2.slice(instructionEnd, CONTEXT_CHARS);
+  const instruction = ask2.slice(0, instructionEnd);
+  const context = (ask2.slice(instructionEnd) + (pasted ? `
+${pasted}` : "")).slice(0, CONTEXT_CHARS);
   let total = 0;
   let best = null;
   for (const [actionType, signals] of SIGNALS) {
@@ -18317,9 +18319,16 @@ function routerToolSpecs(catalogSize) {
 function words(text2) {
   return text2.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 1);
 }
+var APP_MANIFEST_ALIAS_PHRASES = ["app manifest", "builderforce.json", "ai resource"];
+var APP_MANIFEST_TOOL_NAMES = /* @__PURE__ */ new Set([
+  advertisedToolName("app_manifest.schema"),
+  advertisedToolName("app_manifest.validate")
+]);
 function findTools(catalog, query, limit = FIND_LIMIT) {
   const terms = words(query);
-  if (terms.length === 0) return [];
+  const lowered = query.toLowerCase();
+  const manifestAlias = APP_MANIFEST_ALIAS_PHRASES.some((p) => lowered.includes(p));
+  if (terms.length === 0 && !manifestAlias) return [];
   const scored = [];
   catalog.forEach((tool, index) => {
     const name = tool.function?.name ?? "";
@@ -18327,6 +18336,11 @@ function findTools(catalog, query, limit = FIND_LIMIT) {
     const description = tool.function?.description ?? "";
     const haystackName = name.toLowerCase();
     const haystackDesc = description.toLowerCase();
+    if (APP_MANIFEST_TOOL_NAMES.has(name)) {
+      const score2 = (manifestAlias ? 20 : 0) + (terms.includes("manifest") ? 10 : 0);
+      if (score2 > 0) scored.push({ m: { name, description }, score: score2, index });
+      return;
+    }
     let score = 0;
     for (const t of terms) {
       if (haystackName.includes(t)) score += 10;
@@ -18448,7 +18462,7 @@ function changeBrief(reason, canAskUser) {
 }
 var HAND_OFF_DUE_BRIEF = handOffBrief(`ANALYSIS IS OVER. You have spent ${PLAN_TURN_BUDGET} turns analysing without changing anything.`);
 function isChangeRequest(mode, text2) {
-  return mode !== "chat" && (asksForChange(text2) || isContinuationDirective(text2));
+  return mode !== "chat" && classifyRequest(text2).intent === "change";
 }
 function budgeted(run) {
   return isChangeRequest(run.metadata.mode, run.userRequest);
@@ -19523,12 +19537,13 @@ ${turnOptimizationDirective()}`;
   c.publishHold = hold;
   c.shipPolicy = runShipPolicy(req, hold);
   if (canShip) {
+    const questionRun = classifyRequest(latestUserText(convo)).intent === "question";
     pushTrace(c, {
       ts: nowIso(),
       category: "message",
       label: "run.ship_policy",
-      args: { mode: c.shipPolicy.mode, source: c.shipPolicy.source, merge: c.shipPolicy.merge, review: c.shipPolicy.review, ...hold ? { setByMessage: hold.messageNumber } : {} },
-      result: `Ship policy: ${c.shipPolicy.mode} (${shipSourceLabel(c.shipPolicy)}).`
+      args: { mode: questionRun ? "n/a" : c.shipPolicy.mode, source: c.shipPolicy.source, merge: c.shipPolicy.merge, review: c.shipPolicy.review, ...hold ? { setByMessage: hold.messageNumber } : {} },
+      result: questionRun ? "Ship policy: n/a (question)." : `Ship policy: ${c.shipPolicy.mode} (${shipSourceLabel(c.shipPolicy)}).`
     });
   }
   if (hold && attemptedPublishWhileHeld(hold, c.trace)) {

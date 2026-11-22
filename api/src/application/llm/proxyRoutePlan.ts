@@ -11,6 +11,7 @@
 
 import { canonicalModelId, resolveStrictPin } from './modelPool';
 import { buildCandidateChain, composeCompletionSeed, loadSeedCooldowns } from './proxySeed';
+import type { CooledModelInfo } from './byoCooldown';
 import { applyExcludedModels } from './requestFit';
 import type { VendorId } from './vendors';
 import type { ProxyRuntime } from './proxyConfig';
@@ -36,6 +37,8 @@ export interface RoutePlan {
   cooledSet: Set<string>;
   cooledVendors: Set<VendorId>;
   candidates: string[];
+  /** Tenant-cooled BYO models observed at seed composition — response metadata. */
+  cooled: CooledModelInfo[];
 }
 
 export async function planRoute(
@@ -44,7 +47,7 @@ export async function planRoute(
   callerModel: unknown,
   opts?: CompleteOptions,
 ): Promise<RoutePlan> {
-  const { seed, seedHead } = await composeCompletionSeed(rt, body, callerModel, opts);
+  const { seed, seedHead, cooled } = await composeCompletionSeed(rt, body, callerModel, opts);
   const [cooledSet, cooledVendors] = await loadSeedCooldowns(rt, seed);
   // Pinned hint bypasses vendor-level cooldown so a caller-explicit paid model gets tried
   // even when the same vendor's free key has 429'd into vendor cooldown; per-model cooldown
@@ -55,7 +58,7 @@ export async function planRoute(
     buildCandidateChain(rt, seed, cooledSet, cooledVendors, pinnedHint, seedHead),
     body.excludeModels,
   );
-  return { seed, seedHead, pinnedHint, cooledSet, cooledVendors, candidates };
+  return { seed, seedHead, pinnedHint, cooledSet, cooledVendors, candidates, cooled };
 }
 
 /** The models `body` would try, first to last, without dispatching anything. */

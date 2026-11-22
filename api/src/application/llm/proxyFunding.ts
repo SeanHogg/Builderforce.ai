@@ -96,10 +96,13 @@ export class ProxyFunding {
    *   - WRITE: an owner's own 401 would bench that model for our shared key AND for every
    *     other tenant, so one expired token starves the pool for everybody.
    *
-   * So a vendor the tenant can serve themselves is exempt from the cooldown keyspace
-   * entirely. Its failure signal lives in two stores that ARE tenant-scoped:
-   * `vendorHealth` (governs BYO seed ORDER) and `providerAuthAlerts` (drives the
-   * "reconnect this account" prompt + the daily BYO credential probe's email). This is
+   * So a vendor the tenant can serve themselves is exempt from the SHARED cooldown
+   * keyspace entirely. Its failure signal lives elsewhere: `vendorHealth` (governs BYO
+   * seed ORDER — note it is GLOBAL, keyed `vhealth:${vendorId}`, and only counts 5xx
+   * streaks), `providerAuthAlerts` (tenant-scoped; drives the "reconnect this account"
+   * prompt + the daily BYO credential probe's email), and the TENANT-scoped BYO
+   * cooldown (`application/llm/byoCooldown.ts`, keyed `byo-cooldown:${tenantId}:…`)
+   * which benches an owner-served 429 for THIS tenant only. This is
    * the same rule the non-strict path already applied via its BYO probe backstop —
    * stated once, here, so strict dispatch, chain composition and cooldown writes agree.
    */

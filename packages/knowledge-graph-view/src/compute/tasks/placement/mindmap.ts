@@ -18,6 +18,7 @@ import { mindMap, type PlacedBranch } from '../../../map/mindMapModel';
 import { isOne } from '../../../surface/plural';
 import { fillTemplate } from '../../../template';
 import { CAPTION_FONT_PX } from '../../../stage/labels/lod';
+import { RESTING_DEPTH } from '../../../stage/depth';
 import { BG_TONE, toneIndex } from '../../../stage/tones';
 import { DASH_SOLID, type Caption, type LabelRun, type Placement } from '../../../stage/types';
 import { dirSlotsOf } from '../markSet';
@@ -63,7 +64,7 @@ export function placeMind(g: KnowledgeGraph, model: StageModel, req: PlacementRe
     const b = map.bounds;
     const k = (width - 2 * MARGIN) / Math.max(1, b.maxX - b.minX);
     const x = (v: number) => MARGIN + (v - b.minX) * k, z = (v: number) => MARGIN + (v - b.minY) * k;
-    const sink = Math.max(0, Math.min(1, req.depth ?? 0)) * CONE_STEP;
+    const sink = Math.max(0, Math.min(1, req.depth ?? RESTING_DEPTH)) * CONE_STEP;
     const at = (p: PlacedBranch): [number, number, number] => [x(p.x), -p.depth * sink, z(p.y)];
 
     const d = draftFor(marks.keys.length);

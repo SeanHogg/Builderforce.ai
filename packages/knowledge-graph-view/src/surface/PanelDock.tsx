@@ -49,10 +49,11 @@ function Glyph({ children }: { children: ReactNode }) {
 
 /** One icon per header panel. The accessible name stays the localized label. */
 function panelGlyph(id: string): ReactNode {
-    if (id === 'coverage') return <Glyph><circle cx="8" cy="8" r="5" /><path d="M8 3v5h5" /></Glyph>;
+    if (id === 'coverage') return <Glyph><path d="M8 2.5 13 4.5v4c0 3-2.2 4.6-5 5.5-2.8-.9-5-2.5-5-5.5v-4l5-2z" /></Glyph>;
     if (id === 'patterns') return <Glyph><path d="M3 3h4v4H3zM9 3h4v4H9zM3 9h4v4H3zM9 9h4v4H9z" /></Glyph>;
-    if (id === 'api') return <Glyph><path d="M6 4 3 8l3 4M10 4l3 4-3 4" /></Glyph>;
-    if (id === 'agentRuns') return <Glyph><path d="M6 4.5v7l6-3.5-6-3.5z" /></Glyph>;
+    if (id === 'api') return <Glyph><path d="M6 3c-1 0-1.5.5-1.5 1.5v2C4.5 7.5 4 8 3 8c1 0 1.5.5 1.5 1.5v2C4.5 12.5 5 13 6 13M10 3c1 0 1.5.5 1.5 1.5v2c0 1 .5 1.5 1.5 1.5-1 0-1.5.5-1.5 1.5v2c0 1-.5 1.5-1.5 1.5" /></Glyph>;
+    if (id === 'agentRuns') return <Glyph><rect x="3.5" y="5.5" width="9" height="7" rx="1.5" /><path d="M8 5.5V3.3M6 8.5v1M10 8.5v1" /><circle cx="8" cy="2.5" r="0.8" /></Glyph>;
+    if (id === 'run') return <Glyph><path d="M6 4.5v7l6-3.5-6-3.5z" /></Glyph>;
     return <Glyph><path d="M3 3h4v4H3zM9 3h4v4H9zM3 9h10v4H3z" /></Glyph>;
 }
 
