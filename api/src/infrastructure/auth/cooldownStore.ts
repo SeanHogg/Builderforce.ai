@@ -1,4 +1,5 @@
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
+import { getOrSetCached, invalidateCached } from '../cache/readThroughCache';
 /**
  * Persistent vendor-model cooldown store.
  *
