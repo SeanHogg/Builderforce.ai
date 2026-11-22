@@ -18,7 +18,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { sourcePackageAliases } from '../../scripts/sourcePackages.mjs';
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
+// Vitest's mocker keys a mock by `url.slice(config.root.length)` behind a CASE-SENSITIVE `startsWith(config.root)`
+// (@vitest/mocker `resolveMockPath`). On Windows this config can load through a lowercase drive letter (`c:/…` — whatever
+// case the shell's cwd has) while Vite's module URLs carry the volume's real case (`C:/…`): every relative `vi.mock` then
+// registers under a key the runtime never asks for and silently does nothing (the real module runs). Pin the root's drive
+// letter to uppercase so root and module URLs always agree, whatever case the runner was started from.
+const HERE = path.dirname(fileURLToPath(import.meta.url)).replace(/^[a-z]:/, (drive) => drive.toUpperCase());
 const FRONTEND = path.resolve(HERE, '../../frontend');
 /** Any path inside the frontend works as the importer: resolution starts from its directory. */
 const FRONTEND_IMPORTER = path.join(FRONTEND, 'package.json');
