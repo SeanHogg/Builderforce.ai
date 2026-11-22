@@ -364,15 +364,19 @@ function kvBackend(kv: KVNamespace): CooldownBackend {
       });
     },
     async readVendor(vendor) {
-      const v = await kv.get(vendorCooldownKey(vendor)).catch(() => null);
-      if (v == null) return undefined;
-      try {
-        const parsed = JSON.parse(v) as { until?: unknown; strikes?: unknown };
-        return {
-          until: typeof parsed?.until === 'number' ? parsed.until : 0,
-          strikes: typeof parsed?.strikes === 'number' ? parsed.strikes : undefined,
-        };
-      } catch { return { until: 0 }; }
+      return getOrSetCached(env, vendorCooldownKey(vendor), async () => {
+        const v = await kv.get(vendorCooldownKey(vendor)).catch(() => null);
+        if (v == null) return null;
+        try {
+          const parsed = JSON.parse(v) as { until?: unknown; strikes?: unknown };
+          return {
+            until: typeof parsed?.until === 'number' ? parsed.until : 0,
+            strikes: typeof parsed?.strikes === 'number' ? parsed.strikes : undefined,
+          };
+        } catch { return { until: 0 }; }
+      }, { kvTtlSeconds: COOLDOWN_READ_KV_TTL_SEC, l1TtlMs: COOLDOWN_READ_L1_MS })
+        .then((rec) => rec ?? undefined)
+        .catch(() => undefined);
     },
     async writeVendor(vendor, until, ttlSec, cls, strikes) {
       await kv.put(
