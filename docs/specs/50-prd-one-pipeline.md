@@ -1,6 +1,6 @@
 # PRD 50 — one pipeline above the kernel
 
-> Status: entry/spawn/policy slice implemented in this working tree on 2026-11-23; validation has remaining failures and dependency blockers. Source baseline: c56ce694e. The wider one-pipeline roadmap remains incomplete; see the review below.
+> Status on 2026-11-23: shared entry, child admission, Brain preflight and compaction, scoped ticket and spec evidence, routing feedback, and the on-prem execution entry are implemented. Brain owner wakes verify delegated ticket references through their scoped listing. Relay outcomes record confirmed PR evidence. Relay assignments at opening, durable child reconciliation, remaining capability and verify inputs, and cross-host wake and retry ownership are pending. The channel and cloud integration tests are dependency-blocked. See the [pipeline map](./_scratch-agent-pipeline-map.md) for current coverage.
 > Source: `docs/specs/_scratch-agent-pipeline-map.md` (the downloaded map). Gap Register: `ROADMAP.md` › Make › Cloud and IDE agent runs › "One pipeline for every modality".
 > This slice stops at the kernel. `runAgent` (`packages/agent-run/src/runAgent.ts:65`) calling `runAgentLoop` (`packages/agent-loop/src/loop.ts`) stays. Nothing inside that call is redesigned here.
 > Implementation of later stages (`routeRun`, `planWork`, `evaluateRun`, stall/continuation, the second on-prem adapter) follows a later review of those sections. This file is the contract for the slice that starts now: the forks **above** `runAgent`.
@@ -12,6 +12,8 @@ The entry slice has been extended. openRun and the Brain preamble share routing 
 planWork and evaluateRun now support host-scoped explicit assignments. The shared runtime keeps ids and criteria in run state, presents them on turns, checks evidence in one batch on finish, and emits counts in terminal diagnostics. Brain and in-process on-prem can bind this contract. Existing ticket and spec checks still operate. Assigning and resolving existing surface work through this contract, child evidence, downstream scoring, remaining gate and continuation consolidation, and the second on-prem adapter are still open.
 
 The follow-up fixes early VSIX admission before shared validation, cloud admission stamps overwritten by the rebuilt child payload, Brain calling removed progress and retry hooks, a missing Brain failure-synthesis marker, and prose finishes skipping close-out. The detailed current status lives in the pipeline map. Historical slice text below describes the initial contract.
+
+The next follow-up wires Brain's ticket and spec checks and cloud PR handoff into the ledger. Children now carry scoped assignments on all three hosts. The runtime excludes unresolved completed runs from routing feedback and takes queued follow-ups after finish-tool results. Brain defers native approval until the editor resolves the tool and workspace path, and it records the driver's sole closing synthesis. On-prem sessions, tickets and children now share an execution entry. The roadmap lists the remaining evidence, gate and wake ownership work.
 
 ## Implementation review (2026-11-23)
 

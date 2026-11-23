@@ -18,7 +18,7 @@ import {
   isFailoverAssistantError,
   isRateLimitAssistantError,
 } from "../agents/embedded-helpers.js";
-import { noReplyMessage } from "../run/channelAdapter.js";
+import { noReplyMessage } from "../run/channelRunPorts.js";
 import { approvalGate } from "./approval-gate.js";
 import { assistant, execTool, model, scripted, textOf, user } from "./host-policy-gates.testkit.js";
 

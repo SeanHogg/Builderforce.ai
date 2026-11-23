@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   conflict: false,
   /** True = a turn of the run recorded `weaker: true` on its `llm.complete` event (the scorer's filtered read finds a row). */
   weakerTurn: false,
+  terminalArgs: undefined as string | undefined,
   exec: { status: 'cancelled', errorMessage: null as string | null },
   applyOutcomeToRoutingTable: vi.fn(async (..._args: unknown[]) => undefined),
   bumpOutcomesVersion: vi.fn(async (..._args: unknown[]) => undefined),
@@ -35,7 +36,9 @@ function queryChain(rowsFor: (table: unknown) => unknown[]) {
 
 vi.mock('../shared/runTelemetryDatabase', () => ({
   runTelemetryDatabase: () => ({
-    select: () => queryChain(() => [mocks.weakerTurn ? { id: 5 } : {}]),
+    select: (columns: Record<string, unknown>) => queryChain(() => [
+      'terminalArgs' in columns ? { terminalArgs: mocks.terminalArgs } : (mocks.weakerTurn ? { id: 5 } : {}),
+    ]),
     update: () => ({ set: (values: Record<string, unknown>) => { mocks.updated.push(values); return queryChain(() => []); } }),
     insert: () => ({
       values: (row: Record<string, unknown>) => {
@@ -45,10 +48,10 @@ vi.mock('../shared/runTelemetryDatabase', () => ({
     }),
   }),
 }));
-vi.mock('../llm/usageLedger', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../llm/usageLedger')>()),
+vi.mock('../llm/usageLedger', () => ({
   resolveUsageDatabase: () => ({ select: () => queryChain(() => [{ model: 'vendor/model', n: 3, cost: 0 }]) }),
   usageDatabaseOf: (db: unknown) => db,
+  usageRequestCount: () => 3,
 }));
 vi.mock('../llm/routingTable', () => ({ applyOutcomeToRoutingTable: mocks.applyOutcomeToRoutingTable }));
 vi.mock('../tenant/tenantPlanSnapshot', () => ({ resolveTenantPlan: async () => ({ effectivePlan: 'pro' }) }));
@@ -80,6 +83,7 @@ beforeEach(() => {
   mocks.updated.length = 0;
   mocks.conflict = false;
   mocks.weakerTurn = false;
+  mocks.terminalArgs = undefined;
   mocks.applyOutcomeToRoutingTable.mockClear();
   mocks.bumpOutcomesVersion.mockClear();
 });
@@ -103,6 +107,13 @@ describe('the cloud scorer — a run the person stopped', () => {
     expect(mocks.inserted[0]).toMatchObject({ terminalStatus: 'cancelled', quotaExhausted: false });
     expect(mocks.applyOutcomeToRoutingTable).not.toHaveBeenCalled();
   });
+});
+
+it('records a completed cloud run with an open work item without teaching routing', async () => {
+  mocks.terminalArgs = JSON.stringify({ work: { assigned: 1, done: 0, blocked: 0, inReview: 0, open: 1 } });
+  await score('completed');
+  expect(mocks.inserted[0]).toMatchObject({ terminalStatus: 'completed', routingSignal: false });
+  expect(mocks.applyOutcomeToRoutingTable).not.toHaveBeenCalled();
 });
 
 describe('the cloud scorer — a run the tenant’s quota ended', () => {

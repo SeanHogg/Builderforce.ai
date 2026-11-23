@@ -125,6 +125,8 @@ export interface BrainRunPersistence {
 
 /** Everything a single run needs, captured at start time (survives navigation). */
 export interface BrainRunRequest {
+  /** The native host applies opening gates after it resolves the actual tool and workspace path. */
+  hostEnforcesGovernance?: true;
   /** Host-scoped work assignments and evidence. */
   work?: RunWorkPort;
   resolvedSystemPrompt: string;
@@ -403,6 +405,8 @@ export interface BrainRunRequest {
    * the root chat, attributed to the child. Absent for a top-level run.
    */
   lineage?: RunLineage;
+  /** Internal owner wake hints. Status is resolved from the host's scoped ticket listing. */
+  childWorkRefs?: readonly string[];
   /**
    * What the run does with finished work (PRD 48): the host's resolved policy — the run's
    * project's ship policy, a project setting read from the API. Absent ⇒

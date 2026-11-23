@@ -16,9 +16,10 @@
  *     eviction handling re-arms the run instead of failing it.
  */
 import {
-  ModelTransportError, RUN_CANCELLED_REASON, describeVerifyOutcome, runSandboxVerify, runVerifyPhase,
+  ModelTransportError, RUN_CANCELLED_REASON, describeVerifyOutcome, evaluateRunWork, recordWorkSnapshot, runSandboxVerify, runVerifyPhase,
   type RunOutcome, type RunState, type RunTally, type VerifySandbox,
 } from '@builderforce/agent-run';
+import { asksForChange } from '@builderforce/agent-stall';
 import type { RunSandbox } from './sandbox/runSandbox';
 import { buildRuntimeService } from '../../buildRuntimeService';
 import { releaseAllForExecution } from '../coordination/leaseService';
@@ -172,6 +173,12 @@ async function land(host: CloudRunHost, state: RunState, output: string, cancell
     tenantId: refs.tenantId, cloudAgentRef: refs.cloudAgentRef, executionId: refs.executionId, taskRow, agentLabel: refs.agentLabel,
     repoCtx: host.repoCtx, repoMiss: host.repoMiss, writtenPaths: host.writtenPaths, finalOutput: output, cancelled, ciVerified: state.finish.ciVerified,
   });
+  if (!cancelled && !opts.delegation?.spec && asksForChange([taskRow.title, taskRow.description].filter(Boolean).join('\n'))) {
+    const id = String(taskRow.id);
+    recordWorkSnapshot(state, 'cloud-ticket', [{ id, criteria: [taskRow.title] }], fin.prOpened
+      ? [{ id, status: 'in_review', detail: 'This execution opened a pull request for the ticket' }]
+      : []);
+  }
   return { ok: fin.ok, noChanges: fin.noChanges, output: fin.output, cancelled, finished: true };
 }
 
@@ -186,7 +193,17 @@ export async function settleCloudRun(host: CloudRunHost, outcome: RunOutcome, st
   const result = await mapOutcome(host, outcome, stash, model);
   // A steered stop's tally already rode `RuntimeService.cancel` (it IS that run's terminal transition): only a result the caller
   // lands itself carries it, so there is exactly one path from the tally to the outcome row.
-  return result.finished && !result.cancelled && outcome.state.telemetry ? { ...result, telemetry: outcome.state.telemetry } : result;
+  if (!result.finished || result.cancelled || !outcome.state.telemetry) return result;
+  const child = host.opts.delegation?.spec;
+  const taskId = String(host.taskRow.id);
+  if (Array.isArray(child?.workItemIds) && child.workItemIds.includes(taskId)) {
+    const wrote = outcome.kind === 'finished' && outcome.state.writtenPaths.length > 0;
+    recordWorkSnapshot(outcome.state, 'child-ticket', [{ id: taskId, criteria: [child.task] }], wrote
+      ? [{ id: taskId, status: 'in_review', detail: 'Child wrote changes for owner review' }]
+      : []);
+  }
+  const work = evaluateRunWork(outcome.state);
+  return { ...result, telemetry: { ...outcome.state.telemetry, ...(work ? { work } : {}) } };
 }
 
 async function mapOutcome(host: CloudRunHost, outcome: RunOutcome, stash: RunStash, model: CloudModelPort): Promise<CloudLoopResult> {

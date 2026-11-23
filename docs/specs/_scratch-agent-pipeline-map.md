@@ -19,7 +19,7 @@ flowchart TD
   Reply[Web reply: agentReplyRun] --> Open
   Canvas[Browser canvas: creationCanvasAi] --> Open
   Prem[On-prem: onPremAdapter] --> Open
-  Channel[On-prem sessions: channelAdapter] --> Open
+  Channel[On-prem sessions: channelRunPorts] --> Prem
   Prepared --> Open[openRun: require entryPoint, fold route, compose modules]
   Open --> Agent[runAgent: hooks, context, dispatch, settle]
   Agent --> Kernel[runAgentLoop]
@@ -35,7 +35,7 @@ The editor host is shared by panel and participant. `brainRunHostPorts.ts` binds
 
 | Stage | VSIX panel and participant | Cloud | Web reply | Canvas | On-prem |
 | --- | --- | --- | --- | --- | --- |
-| Entry | Brain runPrepared → openRun | cloudAdapter → openRun | agentReplyRun → openRun | creationCanvasAi → openRun | onPremAdapter and channelAdapter → openRun |
+| Entry | Brain runPrepared → openRun | cloudAdapter → openRun | agentReplyRun → openRun | creationCanvasAi → openRun | openOnPremRun → openRun |
 | Label | Explicit vscode from host | cloud | web | canvas | on-prem |
 | Start lifecycle | Editor gate, including children | Durable execution | Reply lifecycle | Browser lifecycle | Adapter/session lifecycle |
 | Pipeline route | Shared default or editor override, pre-decided once | Shared default with durable decision, pins and review models | Shared default | Shared default | Shared default and existing session model options |
@@ -70,13 +70,13 @@ The editor host is shared by panel and participant. `brainRunHostPorts.ts` binds
 
 5. **One runtime opening renderer.** openingRows renders governance and persona, then preserves prepared history and the task row. Brain and channel pass their compiled system text separately from history. Host-specific grounding and directives remain inputs.
 
-6. **Explicit assignments now use a shared work ledger.** planWork seeds assigned ids and criteria in RunState. A scoped host batch supplies done, blocked or review evidence. Shared finish holds open items, and evaluateRun contributes deterministic counts to the outcome row. Brain and in-process on-prem accept explicit host bindings. Existing linked-ticket/spec checks and cloud ticket lifecycle still need evidence adapters. Child reports do not yet update the ledger and downstream routing feedback does not consume the scorecard.
+6. **Work evidence reaches the shared ledger.** Brain reports linked-ticket and spec evidence from existing scoped reads. In-process on-prem has a scoped assignment port. Cloud and the self-hosted relay record review evidence after PR confirmation. Unresolved completed invocations are excluded from routing feedback. Brain owner wakes recheck child ticket references against the scoped listing. Durable child reconciliation and relay assignments at opening remain.
 
-7. **Brain progress uses the shared guard.** The production turn no longer calls the retired Brain detector or defines its own provider retry. Brain still binds stop, delivery and close-out ports. Host continuation and the channel-specific lifecycle remain separate.
+7. **Shared steering and closing turns.** Tool finishes take late steering and queued follow-ups after tool rows, preserving attachments. The shared driver owns the one closing synthesis. Surface-specific persistence and post-settlement wake queues remain.
 
-8. **Two on-prem adapters remain.** onPremAdapter and the session/channel path both reach openRun; session-specific compaction, recovery and governance remain.
+8. **One on-prem execution entry.** Tickets, sessions and children call openOnPremRun. The former channel adapter is a session port binding and retains its message bridge.
 
-9. **Brain's kernel gate feed remains incomplete.** runPrepared supplies an empty capability set; webAdapter supplies empty approval gates and verify: none. Host tool checks still carry authorization/governance and must survive consolidation.
+9. **Shared approval-gate inputs.** Brain now supplies its resolved snapshot. The editor still authorizes the resolved tool and workspace path in its host. Capability and verify inputs remain surface-specific.
 
 10. **The import guard does not establish callback ownership.** `scripts/check-one-execution.mjs --enforce` checks kernel/driver imports and policy reach-ins, not supplied hook bodies. The false enforcement claim has been removed from `SurfacePorts`. `surface.preflight` now accepts a data contract rather than a callback; factory and production-door regressions cover its ownership and single-check/no-duplicate-notice behavior. SurfacePorts.compaction also accepts only factory options now; the production-door regression checks native history ports and absence of a hook override. The import guard does not prove arbitrary port callback semantics.
 
@@ -108,7 +108,7 @@ The start contract must preserve local/durable identity and authorization. Backg
 ## 6. Implementation checkpoints
 
 - Entry/spawn/policy slice implemented. Finish validation in a fully provisioned checkout and repair the independently reproduced baseline failures; no complete cross-surface runtime pass is claimed.
-- Remaining for the full roadmap item: production ticket/evidence adapters across surfaces, child work ownership and evidence, scorecard feedback, common continuation and settlement ownership, capability/gate feeds, and retirement of the second on-prem adapter.
+- Remaining for the full roadmap item: self-hosted relay assignments at opening, durable child reconciliation in the owner ledger, capability and verify inputs, host wake and retry ownership, and full session and cloud integration validation.
 - Update this map, PRD status and the [Gap Register](../../ROADMAP.md) with each implementation. Record actual checks and blockers. Named tests are coverage references, not evidence of a pass in this checkout.
 
 ## 7. Follow-up implementation (2026-11-23)
@@ -119,7 +119,13 @@ Shared close-out runs on prose finishes as well as finish-tool calls. The Brain 
 
 The follow-up agent-run suite passed 848 tests. Eleven focused Brain suites passed 145 tests, including the run-store regressions, both conformance suites, turn and retry parity, linked-work holds and fold deadlines. Cloud child serialization passed 6 tests, VSIX child and host gate tests passed 14, and on-prem child tests passed 6. Agent-run typecheck and repository execution and package graph checks passed. Brain typecheck still needs the existing bfi-web and web-llm dependencies. The broader cloud child suite still needs @neondatabase/serverless.
 
-## 8. Earlier slice validation (2026-11-23)
+## 8. Work ledger and lifecycle follow-up
+
+The shared ledger reads host-scoped evidence. Spec coverage means a ticket was filed for the spec item. It does not mean the spec's implementation passed. A cloud PR is review evidence. It does not mean the change merged. Shared routing feedback excludes completed invocations that still have open or blocked work.
+
+The shared suite passed 851 tests. Focused Brain, editor child and start-gate, cloud serialization and scoring, and on-prem child and outbox tests passed. The channel outcome test requires `@sinclair/typebox`. The cloud tail test requires `@neondatabase/serverless`.
+
+## 9. Earlier slice validation (2026-11-23)
 
 Initial working-tree changes, including runStore/runTypes.ts, were confirmed before editing. Shared focused suites pass: **13 files / 88 tests**, covering spawn validation and native results, history memo/deadline/failure behavior, preflight, routing and conformance. Agent-run typecheck passes with TypeScript 6 and --ignoreDeprecations 6.0. The full earlier agent-run run had 821 passing tests and two failures; both forcedTurns trace-step and failureSynthesis extra-call failures reproduce at c56ce694e in a detached worktree.
 

@@ -1,7 +1,7 @@
 /**
  * What one run of the native agent (`agent-loop.ts`) is configured with — the contract
  * the entry point, its stateful {@link Agent} wrapper (`agent.ts`) and the channel adapter
- * (`run/channelAdapter.ts`) share.
+ * (`run/channelRunPorts.ts`) share.
  */
 
 import type { PolicyGate, RunKnowledgeLog } from "@builderforce/agent-tools";

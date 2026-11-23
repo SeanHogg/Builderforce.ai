@@ -21,13 +21,13 @@
  *   context      — the host's pack (empty when it builds none).
  *
  * Only the relay's ticket path calls {@link runOnPremAgent}. Channels, cron and the CLI
- * run on the same agent through `channelAdapter.ts` (their own ports: the embedded runner's
+ * run on the same agent through `channelRunPorts.ts` (their own ports: the embedded runner's
  * provider stream and tools, over the contract's native message blocks, closed tool catalog
  * and host-chosen failover); neither adapter has a loop or any policy.
  */
 
 import { randomUUID } from "node:crypto";
-import { RUN_CANCELLED_REASON, openRun } from "@builderforce/agent-run";
+import { RUN_CANCELLED_REASON } from "@builderforce/agent-run";
 import type { ContextSource, ModelTransport, RunOutcome, RunPolicy, RunPorts, RunState, RunStore, RunWorkPort } from "@builderforce/agent-run";
 import { RunKnowledgeRecorder, type CapabilityProvider, type PolicyGate, type RunKnowledgeLog } from "@builderforce/agent-tools";
 import type { QueuedSteer, SteeringChannel } from "../infra/relay-steering.js";
@@ -35,7 +35,7 @@ import { logWarn } from "../logger.js";
 import { gatewayModelTransport } from "./gatewayModelTransport.js";
 import { onPremHuman } from "./onPremHuman.js";
 import { acknowledgedSteering, observedModel, relayEventSink, type OnPremRunSinks } from "./onPremEvents.js";
-import { EMPTY_PACK, inMemoryStore, onPremPolicy } from "./onPremRunPorts.js";
+import { EMPTY_PACK, inMemoryStore, onPremPolicy, openOnPremRun } from "./onPremRunPorts.js";
 import { buildOnPremProvider } from "./onPremProvider.js";
 import { childRunner } from "./onPremSubagents.js";
 
@@ -192,7 +192,7 @@ export async function runOnPremAgent(params: OnPremRunParams, sinks: OnPremRunSi
       ...(steering ? { steering: steering.source } : {}),
       context: params.context ?? EMPTY_PACK,
     };
-    const outcome = await openRun({
+    const outcome = await openOnPremRun({
       task: {
         runId,
         prompt: params.prompt,

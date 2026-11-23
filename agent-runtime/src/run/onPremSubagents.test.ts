@@ -43,7 +43,7 @@ describe("childRunner", () => {
     const rows: RunOutcomeRow[] = [];
     const sinks: OnPremRunSinks = { ...quiet(), forChild: () => ({ ...quiet(), onOutcome: (row) => void rows.push(row) }) };
     const spawn = childRunner({
-      model: model(["Checked"], requests), capabilities: OWNER_CAPS, human: HUMAN, policy: POLICY,
+      model: model(["Checked", "Looked it up"], requests), capabilities: OWNER_CAPS, human: HUMAN, policy: POLICY,
       sinks, parentRunId: "42", work: { assigned: [{ id: "T1", criteria: ["Check it"] }, { id: "T2", criteria: ["Other work"] }], evidence },
     });
     await expect(spawn({ task: "Run the check", label: "Check", ticket: "T1" })).resolves.toMatchObject({ ok: true });

@@ -33,7 +33,7 @@ export { runAgent, type RunAgentInput } from "./runAgent.js";
 export { openRun, type OpenRunInput, type SurfacePorts, type PublishGatePort, type CloseOutMode, type CloseOutPort } from "./openRun.js";
 export { defaultPipelineRouting } from "./route/routeRun.js";
 export type { AssignedWork, WorkEvidence, RunWorkPort, RunWorkScorecard } from "./workPlan.js";
-export { childWorkPort, MAX_OPEN_WORK_HOLDS, recordWorkSnapshot, workSupportsRoutingSample } from "./workPlan.js";
+export { childWorkPort, evaluateRunWork, MAX_OPEN_WORK_HOLDS, recordWorkSnapshot, workSupportsRoutingSample } from "./workPlan.js";
 export { routeRun, type RouteDecision, type RouteInput, type RouteStart } from "./route/routeRun.js";
 
 // The §8.2 outcome row (WS6): the builder, the per-run tally, and the trace fold an
@@ -159,6 +159,7 @@ export {
 // The in-process steering queue as a `SteeringSource` port — what a surface that keeps
 // its composer queue in memory hands the agent (`queueRunSteering` posts to it).
 export { queueRunSteering, runSteeringSource } from "./policy/steering/index.js";
+export { childWorkRefs } from "./policy/steering/runSteering.js";
 
 // What an adapter needs to run a child (never to decide behaviour): what a child run is
 // derived from its owner's — its policy, its capabilities, its result.

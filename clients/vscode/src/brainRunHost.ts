@@ -321,6 +321,7 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
       await startRun(key, {
         // The surface this run came in through: the label its uniform outcome row carries (telemetry only; nothing branches on it).
         entryPoint: "vscode",
+        hostEnforcesGovernance: true,
         resolvedSystemPrompt: p.systemPrompt,
         opening: { ...p.opening, gates, ...(directives?.rules ? { rules: directives.rules } : {}), ...(grounding ? { grounding } : {}) },
         // Only this workspace's tools feed the run's record: a remote platform call acted
@@ -378,6 +379,7 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
         ...(ports.reportOutcome ? { reportOutcome: (o: BrainRunOutcome) => ports.reportOutcome!(o) } : {}),
         ...(ports.reportRunRecord ? { reportRunRecord: (record: Parameters<NonNullable<BrainRunHostPorts["reportRunRecord"]>>[0]) => ports.reportRunRecord!(record) } : {}),
         ...(p.child ? { lineage: p.child.lineage } : {}),
+        ...(p.childWorkRefs?.length ? { childWorkRefs: p.childWorkRefs } : {}),
         ...runSettings,
         ...chatLedgerRequest(ports, chatId),
         ...(directives ? { onStop: directives.hooks.onStop } : {}),

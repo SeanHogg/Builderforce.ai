@@ -50,7 +50,10 @@ export function brainSteeringSource(run: BrainRunContext, people: PersonSteers):
         if (steer.fromPerson) people.note(text);
         // A child's report delivered to the inbox (not through `wait_agents`): its files and outcome reach the agent's progress
         // detector as data, the same reading a `wait_agents` result gets (`brainProgressPorts.ts`, VS Code chat #157440).
-        if (steer.childReport) run.childReports.push(steer.childReport);
+        if (steer.childReport) {
+          run.childReports.push(steer.childReport);
+          if (steer.childReport.ticket) (run.childWorkRefs ??= new Set()).add(steer.childReport.ticket);
+        }
         out.push({
           text,
           ...(parts.length > 0 ? { parts } : {}),

@@ -134,12 +134,15 @@ export function openLinkedWorkHold(run: BrainRunContext): (ctx: PolicyContext) =
 
   /** The open tickets that hold the run, or null when the account's listing cannot be read (never a hold on an unreadable listing). */
   const scopedTickets = async (trace: readonly BrainTraceEvent[], executing: boolean): Promise<LinkedTaskRow[] | null> => {
+    const delegated = run.req.lineage?.ticket;
+    if (delegated && (run.serverChatId == null || !declaresChatTicketListing(run.req.tools))) return [];
     // An unbound chat, or a host whose catalog does not declare the listing, owns only what it filed on the device.
     if (run.serverChatId == null || !declaresChatTicketListing(run.req.tools)) return localTickets(trace, new Set());
     // A run that is not executing and owns no ticket can be held by none of the listing's rows: it is not asked for (a question
     // answered in a bound chat makes no ticket call of its own).
     const owned = runOwnedTicketRefs(trace, run.c.deltaTicketId);
-    if (!executing && owned.size === 0 && tracked.size === 0) return [];
+    for (const ref of run.childWorkRefs ?? []) owned.add(ref);
+    if (!delegated && !executing && owned.size === 0 && tracked.size === 0) return [];
     const listed = await listChatTickets(run.req, run.serverChatId, {
       note: noteOf, label: 'finish.open_work_unreadable', consequence: 'the run is not held for them.',
       // A hung listing must not hang the run's end: it is waited for no longer than the settle's own ticket bookkeeping.
@@ -147,6 +150,7 @@ export function openLinkedWorkHold(run: BrainRunContext): (ctx: PolicyContext) =
     }, listingScopeOf(run.c));
     if (listed == null) return null;
     const rows = linkedTaskRows(listed);
+    if (delegated) return rows.filter((ticket) => ticket.ref === delegated);
     const scoped = rows.filter((t) => owned.has(t.ref) || tracked.has(t.ref) || (executing && t.status === ACTIVE_STATUS));
     return [...scoped, ...localTickets(trace, new Set(rows.map((t) => t.ref)))];
   };
@@ -170,8 +174,9 @@ export function openLinkedWorkHold(run: BrainRunContext): (ctx: PolicyContext) =
   return async (ctx) => {
     const { req } = run;
     if (released || !req.runTool) return null;
-    // A sub-agent works one slice of its owner's tickets: the OWNER answers for them.
-    if (req.lineage || ctx.task.dispatch.parentRunId !== undefined) return null;
+    // The owner answers for outstanding work. A child can observe the one ticket it was assigned.
+    const child = !!req.lineage || ctx.task.dispatch.parentRunId !== undefined;
+    if (child && !req.lineage?.ticket) return null;
     // Only an EXECUTION is held to its tickets; a conversation answers and ends.
     if (normalizeChatMode(req.chatMode ?? 'work') !== 'work') return null;
     if (run.c.abort?.signal.aborted || ctx.signal?.aborted) return null;
@@ -192,6 +197,7 @@ export function openLinkedWorkHold(run: BrainRunContext): (ctx: PolicyContext) =
     if (ctx.state) {
       recordWorkSnapshot(ctx.state, 'linked-tickets', rows.map(({ ref, title }) => ({ id: ref, criteria: [title] })), evidence);
     }
+    if (child) return null;
     const open = rows.filter((ticket) => isOpenLinkedStatus(ticket.status));
     if (!open.length) return null;
     if (holds >= MAX_OPEN_WORK_HOLDS) return release(open, 'budget');

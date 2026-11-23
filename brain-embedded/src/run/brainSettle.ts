@@ -7,12 +7,10 @@
  * `chatErrorAction` reads what it always read. A run its USD cap stopped does not settle as a reply (`persistBudgetStop`).
  */
 
-import { DEFAULT_TOOL_FAILURE_STREAK } from '@builderforce/agent-loop';
 import { RUN_CANCELLED_REASON, type RunOutcome } from '@builderforce/agent-run';
 import { StreamInterruptedError, type StreamChatResult } from '../streamChatCompletion';
 import { providerFailureEvent } from '../providerFailure';
-import { emit, nowIso, pushTrace } from '../runStore/runCells';
-import { closeAfterFailureStreak } from '../runStore/failureClose';
+import { emit, nowIso, pushTrace, recordRunFailure } from '../runStore/runCells';
 import { emitEvermindLearnReconcile } from '../runStore/runMemory';
 import { settleReply, type BrainRunContext } from '../runStore/brainRunContext';
 import { persistBudgetStop } from '../runStore/runSpendBudget';
@@ -59,8 +57,15 @@ export async function settleBrainRun(run: BrainRunContext, outcome: RunOutcome, 
     }
     // The completion that failed the run: the error as the stream threw it, never a new one made from its message.
     if (last.error !== undefined) throw last.error;
-    // The breaker stopped the run: the forced tools-free closing answer is the Brain's own, shared with its loop (`failureClose.ts`).
-    if (outcome.exhausted) return closeAfterFailureStreak(run, outcome.failureStreak ?? DEFAULT_TOOL_FAILURE_STREAK, outcome.state.step);
+    // The shared driver already attempted the closing turn. Record the failure when it produced no answer.
+    if (outcome.failureStreak !== undefined) {
+      const streak = outcome.failureStreak;
+      c.streamingText = '';
+      recordRunFailure(c, 'agent.loop', `Stopped after ${streak} consecutive failed tool calls over ${outcome.state.step} steps`);
+      c.error = `The assistant's last ${streak} tool calls all failed and it gave no answer. Read the failing steps above, then try again with what they ask for.`;
+      emit(c);
+      return;
+    }
     throw new Error(outcome.reason);
   }
   const text = outcome.kind === 'paused' ? outcome.question : outcome.output;

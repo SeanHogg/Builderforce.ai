@@ -581,14 +581,29 @@ export class SsmMemoryService {
  */
 export class SsmMemoryRegistry {
   private instance: SsmMemoryService | null = null;
+  private initializing: Promise<SsmMemoryService | null> | null = null;
 
   /** Returns the current SSM memory service instance, or null if not initialised. */
   get(): SsmMemoryService | null {
     return this.instance;
   }
 
-  /** Called once at gateway startup to initialise the SSM memory service. */
-  async init(opts?: SsmMemoryServiceOptions): Promise<SsmMemoryService | null> {
+  /** Await startup before binding a run's memory capability. Unconfigured memory stays absent. */
+  async ready(): Promise<SsmMemoryService | null> {
+    return this.initializing ?? this.instance;
+  }
+
+  /** Concurrent startup callers share one initialization; a failed attempt can be retried. */
+  init(opts?: SsmMemoryServiceOptions): Promise<SsmMemoryService | null> {
+    if (this.initializing) return this.initializing;
+    if (this.instance) return Promise.resolve(this.instance);
+    this.initializing = this.create(opts).finally(() => {
+      this.initializing = null;
+    });
+    return this.initializing;
+  }
+
+  private async create(opts?: SsmMemoryServiceOptions): Promise<SsmMemoryService | null> {
     try {
       this.instance = await SsmMemoryService.create(opts ?? {});
       if (this.instance) {
@@ -610,6 +625,11 @@ export const ssmMemoryRegistry = new SsmMemoryRegistry();
 /** Returns the gateway-level SSM memory service singleton, or null if not initialised. */
 export function getSsmMemoryService(): SsmMemoryService | null {
   return ssmMemoryRegistry.get();
+}
+
+/** Run startup boundary: wait for configured memory initialization before selecting capabilities. */
+export function awaitSsmMemoryService(): Promise<SsmMemoryService | null> {
+  return ssmMemoryRegistry.ready();
 }
 
 /** Called once at gateway startup to initialise the SSM memory service. */

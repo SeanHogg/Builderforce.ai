@@ -1,7 +1,7 @@
 /**
- * channelAdapter — the ON-PREM entry point of the one agent for CHANNELS, cron and the embedded runner (PRD 35 WS5, §3.1).
+ * Session ports over the common on-prem entry for channels, cron, and the embedded runner.
  *
- * It BUILDS PORTS and calls `openRun`; it has no loop, no policy and no branch on behaviour. `RunPolicy.entryPoint` is the
+ * The binding builds ports and translates the outcome into the session protocol. `RunPolicy.entryPoint` is the
  * telemetry label `on-prem` and is never read. Every difference between a channel run and a ticket, a cloud run or the editor
  * arrives as a port:
  *
@@ -14,12 +14,12 @@
  *   steering     — the Agent's steering and follow-up queues;
  *   context      — the PreFetch gate (an ANSWER settles the run, PREFETCH facts ride the tail) and the run's ledger brief.
  *
- * The seam the embedded runner keeps: {@link runChannelAgent} returns the `EventStream<AgentEvent, AgentMessage[]>` that
+ * The seam the embedded runner keeps: the session binding exposes the `EventStream<AgentEvent, AgentMessage[]>` that
  * `agent-loop.ts`'s `agentLoop` always returned, so the Agent, the session and the runner are unchanged.
  */
 
-import { RUN_CANCELLED_REASON, openRun } from "@builderforce/agent-run";
-import type { ContextSource, RunEvent, RunMessage, RunPolicy, RunPorts, RunTask, SteeringSource, SteerInput } from "@builderforce/agent-run";
+import { RUN_CANCELLED_REASON } from "@builderforce/agent-run";
+import type { ContextSource, RunEvent, RunMessage, RunPolicy, RunPorts, RunTask, RunOutcome, SteeringSource, SteerInput } from "@builderforce/agent-run";
 import { RunKnowledgeRecorder, type CapabilityProvider } from "@builderforce/agent-tools";
 import { randomUUID } from "node:crypto";
 import type { AgentLoopConfig } from "../builderforce/agent-loop/agent-loop-config.js";
@@ -30,7 +30,6 @@ import type { StreamFn } from "../builderforce/agent-loop/stream.js";
 import type { AgentContext, AgentEvent, AgentMessage } from "../builderforce/model/agent-types.js";
 import { resolveContextWindowTokens } from "../agents/context-window.js";
 import { onDeviceCostLeverOn } from "../infra/cost-levers.js";
-import { logWarn } from "../logger.js";
 import { AgentEventBridge } from "./agentEventBridge.js";
 import { textOf, toRunRow } from "./channelMessages.js";
 import { ChannelModels, channelModelTransport } from "./channelModel.js";
@@ -134,7 +133,7 @@ function contextOf(config: AgentLoopConfig, prompts: readonly AgentMessage[], si
  * Run one channel prompt through the one agent. The stream settles on the run's new messages, exactly as the native loop's did.
  * Never throws: a run that crashes still ends its stream, with the messages it had.
  */
-export function runChannelAgent(input: ChannelRunInput): EventStream<AgentEvent, AgentMessage[]> {
+export function bindChannelRun(input: ChannelRunInput) {
   const { prompts, context, config, signal, streamFn } = input;
   const models = new ChannelModels(config.model);
   const bridge = new AgentEventBridge({
@@ -147,8 +146,10 @@ export function runChannelAgent(input: ChannelRunInput): EventStream<AgentEvent,
     },
   });
 
-  void (async () => {
-    try {
+  return {
+    stream: bridge.stream as EventStream<AgentEvent, AgentMessage[]>,
+    finish: () => bridge.finish(),
+    prepare() {
       bridge.start(prompts);
       const request = promptText(prompts);
       const knowledge = new RunKnowledgeRecorder();
@@ -205,22 +206,20 @@ export function runChannelAgent(input: ChannelRunInput): EventStream<AgentEvent,
       // The run's directory is the workspace root a path-scoped governance gate judges an absolute path against.
       const workspace = config.workspaceDir ? { workspace: { defaultRepo: config.workspaceDir } } : {};
       const task: RunTask = { runId: randomUUID(), prompt: request, request, dispatch: { source: "chat" }, persona: context.systemPrompt, transcript: rows, ...workspace };
-      const outcome = await openRun({ task, policy: policyOf(config, request), ports, ...(signal ? { signal } : {}) });
-      // A failure with no model turn behind it must still reach the runner as the errored message it reads (it fails over on it).
-      // A run stopped by a breaker or a budget ended as the runner always saw it: on its last tool result.
-      if (outcome.kind === "failed" && !outcome.exhausted) bridge.fail(outcome.reason, outcome.reason === RUN_CANCELLED_REASON ? "aborted" : "error");
-      // A run the budget or the failure breaker ended never reaches a closing reply (the channel owns its synthesis), and whatever it wrote
-      // before (narration beside a tool call) is not an account of why it stopped. So it ALWAYS ends on one: what stopped it, and which
-      // gate refused its calls. It is told as the run's REPLY, not as an errored turn (the runner regex-classifies an errored message's
-      // text, so a gate keyed like `forbidden-paths` would put a healthy profile in cooldown), and marked `runFailed` so the lifecycle
-      // still ends as a failure. A run that finished stays a clean reply.
-      else if (outcome.kind === "failed") bridge.failedReply(noReplyMessage(outcome.reason, refusedBy, replied));
-    } catch (err) {
-      logWarn(`[on-prem] channel run failed: ${err instanceof Error ? err.message : String(err)}`);
-    } finally {
-      bridge.finish();
-    }
-  })();
-
-  return bridge.stream;
+      return {
+        run: { task, policy: policyOf(config, request), ports, ...(signal ? { signal } : {}) },
+        report(outcome: RunOutcome) {
+          // A failure with no model turn behind it must still reach the runner as the errored message it reads (it fails over on it).
+          // A run stopped by a breaker or a budget ended as the runner always saw it: on its last tool result.
+          if (outcome.kind === "failed" && !outcome.exhausted) bridge.fail(outcome.reason, outcome.reason === RUN_CANCELLED_REASON ? "aborted" : "error");
+          // A run the budget or the failure breaker ended never reaches a closing reply (the channel owns its synthesis), and whatever it wrote
+          // before (narration beside a tool call) is not an account of why it stopped. So it ALWAYS ends on one: what stopped it, and which
+          // gate refused its calls. It is told as the run's REPLY, not as an errored turn (the runner regex-classifies an errored message's
+          // text, so a gate keyed like `forbidden-paths` would put a healthy profile in cooldown), and marked `runFailed` so the lifecycle
+          // still ends as a failure. A run that finished stays a clean reply.
+          else if (outcome.kind === "failed") bridge.failedReply(noReplyMessage(outcome.reason, refusedBy, replied));
+        },
+      };
+    },
+  };
 }

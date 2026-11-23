@@ -115,6 +115,8 @@ export interface PlatformTools {
    * registry does not, and the registry's catalog strategy applies.
    */
   closed?: boolean;
+  /** This closed catalog enforces the same gates after resolving native aliases and paths. */
+  governanceAfterRewrite?: true;
   /** The tools the surface can run right now. Read every turn: a rung may withdraw some. */
   schemas(progress: LadderProgress): readonly ToolSchema[];
   /**

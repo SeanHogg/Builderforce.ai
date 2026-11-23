@@ -12,14 +12,14 @@
  * Write-Through Cognition (`commitFact`), so a fact about the same key supersedes its
  * incumbent instead of piling up. Only an expiring (TTL) note is a raw keyed put.
  *
- * Self-gating: no memory service (not initialised) or no memory package ⇒ `undefined`,
+ * Await memory startup before binding: an unavailable service or package ⇒ `undefined`,
  * and the provider simply does not advertise the capability — never a dead tool.
  */
 
 import type { MemoryBackend, RememberInput } from "@seanhogg/builderforce-memory-mcp";
 import type { MemoryCapability, MemoryEntry } from "@builderforce/agent-tools";
 import { logDebug } from "../logger.js";
-import { getSsmMemoryService, type SsmMemoryService } from "../infra/ssm-memory-service.js";
+import { awaitSsmMemoryService, type SsmMemoryService } from "../infra/ssm-memory-service.js";
 
 type MemoryMcpModule = typeof import("@seanhogg/builderforce-memory-mcp");
 
@@ -69,7 +69,7 @@ export function memoryCapabilityOver(backend: MemoryBackend): MemoryCapability {
 
 /** The on-prem `memory` capability, or `undefined` when memory is unavailable. */
 export async function buildNodeMemory(): Promise<MemoryCapability | undefined> {
-  const svc = getSsmMemoryService();
+  const svc = await awaitSsmMemoryService();
   if (!svc) return undefined;
   try {
     const mod: MemoryMcpModule = await import("@seanhogg/builderforce-memory-mcp");

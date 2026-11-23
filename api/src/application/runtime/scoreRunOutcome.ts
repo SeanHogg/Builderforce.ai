@@ -1,4 +1,6 @@
 import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { workSupportsRoutingSample, type RunWorkScorecard } from '@builderforce/agent-run';
+import { parseJsonObject } from '../../domain/shared/json';
 /**
  * Learned Model Routing (PRD 13 §6.4) — the OUTCOME scorer.
  *
@@ -76,19 +78,21 @@ async function resolveTaskPrSignal(db: Db, tenantId: number, taskId: number): Pr
 /** Literal tool-use telemetry for a run: total tool calls (category='tool' audit rows
  *  whose result is a JSON tool payload) and how many returned an error (`ok:false`).
  *  ONE grouped query — no per-tool scan. */
-async function resolveToolCounts(db: Db, executionId: number): Promise<{ toolCalls: number; toolErrors: number }> {
+async function resolveToolCounts(db: Db, tenantId: number, executionId: number): Promise<{ toolCalls: number; toolErrors: number; work?: RunWorkScorecard }> {
   try {
     const [row] = await db
       .select({
         // Real tool executions stringify a JSON result (`{...}`); auxiliary 'tool'
         // events (policy.blocked / finish.blocked) write plain-text results, excluded.
-        calls: sql<number>`count(*) FILTER (WHERE ${toolAuditEvents.result} LIKE '{%')::int`,
-        errors: sql<number>`count(*) FILTER (WHERE ${toolAuditEvents.result} LIKE '%"ok":false%')::int`,
+        calls: sql<number>`count(*) FILTER (WHERE ${toolAuditEvents.category} = 'tool' AND ${toolAuditEvents.result} LIKE '{%')::int`,
+        errors: sql<number>`count(*) FILTER (WHERE ${toolAuditEvents.category} = 'tool' AND ${toolAuditEvents.result} LIKE '%"ok":false%')::int`,
+        terminalArgs: sql<string | null>`max(${toolAuditEvents.args}) FILTER (WHERE ${toolAuditEvents.toolName} = 'run.outcome')`,
       })
       .from(toolAuditEvents)
-      .where(and(eq(toolAuditEvents.executionId, executionId), eq(toolAuditEvents.category, 'tool')))
+      .where(scopedToTenant(toolAuditEvents, tenantId, eq(toolAuditEvents.executionId, executionId), sql`(${toolAuditEvents.category} = 'tool' OR ${toolAuditEvents.toolName} = 'run.outcome')`))
       .limit(1);
-    return { toolCalls: Number(row?.calls) || 0, toolErrors: Number(row?.errors) || 0 };
+    const { work } = parseJsonObject<{ work?: RunWorkScorecard }>(row?.terminalArgs);
+    return { toolCalls: Number(row?.calls) || 0, toolErrors: Number(row?.errors) || 0, ...(work ? { work } : {}) };
   } catch {
     return { toolCalls: 0, toolErrors: 0 };
   }
@@ -181,13 +185,14 @@ export async function scoreRunOutcome(env: Env, db: Db, args: { executionId: num
       resolveTaskPrSignal(db, exec.tenantId, exec.taskId),
       runWasDegraded(telemetryDb, args.executionId),
       resolveApprovalOutcome(db, args.executionId),
-      resolveToolCounts(telemetryDb, args.executionId),
+      resolveToolCounts(telemetryDb, exec.tenantId, args.executionId),
       resolveTenantPlan(env, exec.tenantId).then((p) => p.effectivePlan).catch(() => 'free' as const),
     ]);
     const approved = approval.approved;
     // Literal human-rejection: a bubbled-up approval was rejected OR the PR was closed
     // without merging. Consumed by trait reinforcement (was the cancelled-run proxy).
     const humanRejected = approval.rejected || pr.closedUnmerged;
+    const routingSignal = workSupportsRoutingSample(toolCounts.work, terminalStatus === 'completed');
 
     const { score } = computeOutcomeScore({
       terminalStatus,
@@ -233,7 +238,7 @@ export async function scoreRunOutcome(env: Env, db: Db, args: { executionId: num
       rateLimited,
       quotaExhausted,
       // A cloud run is coding-run evidence (`codingEvidence`): stated, not left to the column default.
-      routingSignal: true,
+      routingSignal,
       // The PRD 35 §8.2 telemetry label: a server-scored run is a cloud run.
       entryPoint: 'cloud',
       // Literal reinforcement signals (migration 0333).
@@ -259,7 +264,7 @@ export async function scoreRunOutcome(env: Env, db: Db, args: { executionId: num
       await telemetryDb
         .update(runModelOutcomes)
         .set({
-          score, merged: pr.merged, ciGreen: pr.ciGreen, degraded, steps, costUsdMillicents: costMc, resolvedModel, plan, rateLimited, quotaExhausted,
+          score, merged: pr.merged, ciGreen: pr.ciGreen, degraded, steps, costUsdMillicents: costMc, resolvedModel, plan, rateLimited, quotaExhausted, routingSignal,
           clientRunId: cloudRunId(args.executionId),
           // Refresh the literal signals on re-score too (a late PR-close / approval lands here).
           toolCalls: toolCounts.toolCalls, toolErrors: toolCounts.toolErrors, humanRejected,
@@ -287,7 +292,7 @@ export async function scoreRunOutcome(env: Env, db: Db, args: { executionId: num
     // learning from it would pollute the ranking.
     if (model) {
       // A run the person stopped, or one the tenant's quota ended, is stored but teaches routing nothing.
-      if (foldsIntoRouting({ terminalStatus, quotaExhausted })) {
+      if (foldsIntoRouting({ terminalStatus, quotaExhausted, routingSignal })) {
         await applyOutcomeToRoutingTable(env, db, {
           tenantId: exec.tenantId,
           projectId,

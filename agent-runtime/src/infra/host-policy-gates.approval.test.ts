@@ -4,7 +4,7 @@
  * (a memory flush), where the gate refuses at once. In every case the tool does not run and the model reads why.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CHANNEL_APPROVAL_WAIT_MS } from "../run/channelAdapter.js";
+import { CHANNEL_APPROVAL_WAIT_MS } from "../run/channelRunPorts.js";
 import { approvalGate } from "./approval-gate.js";
 import { forUnattendedRun, resetHostPolicyGates, resolveHostPolicyGates } from "./host-policy-gates.js";
 import { channelAgent, textOf, user } from "./host-policy-gates.testkit.js";

@@ -128,7 +128,7 @@ describe("channels and cron under the shared scripted task", () => {
 
     // FINDING (reported, pinned as it is): the ONE difference from the golden is that the channel's model port names a model
     // `<provider>/<id>` (`p/fake-model`), where the gateway and the cloud report the bare id. The run keys its pins and fallbacks on the
-    // ref, so the trace keeps it; the outcome row is normalised to the bare id (`channelAdapter.ts`, `channelOutcome.test.ts`).
+    // ref, so the trace keeps it; the outcome row is normalised to the bare id (`channelRunPorts.ts`, `channelOutcome.test.ts`).
     const expected = CONFORMANCE_TRACE.map((fact) => fact.replace("model.completed:fake-model", "model.completed:p/fake-model"));
     expect(conformanceTrace(seen.events)).toEqual(expected);
     // ...and the run ends the same way: the agent's own outcome, not just the reply the session recorded.

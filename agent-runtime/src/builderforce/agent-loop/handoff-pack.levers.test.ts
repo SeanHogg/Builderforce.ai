@@ -3,7 +3,7 @@ import { packForModelHandoff, runRowHandoff } from "@builderforce/agent-run";
 import { priceTierBoundary } from "@builderforce/model-catalog";
 import type { AgentMessage } from "../model/agent-types.js";
 import type { AssistantMessage, Model, ToolResultMessage } from "../model/types.js";
-import { policyOf } from "../../run/channelAdapter.js";
+import { policyOf } from "../../run/channelRunPorts.js";
 import { toRunRow } from "../../run/channelMessages.js";
 import type { AgentLoopConfig } from "./agent-loop-config.js";
 

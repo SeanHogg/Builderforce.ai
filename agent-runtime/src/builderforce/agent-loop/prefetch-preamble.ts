@@ -1,7 +1,7 @@
 /**
  * The deterministic-first PreFetch gate in the ON-PREM run preamble
  * (DONE.md, deterministic-first PreFetch archive). The channel path consults it from the run's CONTEXT port
- * (`run/channelAdapter.ts`), before turn 1, with the SAME pass the Brain runs use
+ * (`run/channelRunPorts.ts`), before turn 1, with the SAME pass the Brain runs use
  * (`@builderforce/prefetch` `runGate`):
  *
  *   - ANSWER → the run settles on the tool's reply (`ContextPack.answer`), no model call;

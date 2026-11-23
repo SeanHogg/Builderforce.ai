@@ -68,7 +68,7 @@ export async function finalizeCloudRun(
     /** True when in-run branch CI reported success before finish (ticket #3092). */
     ciVerified?: boolean;
   },
-): Promise<{ ok: boolean; output: string; noChanges: boolean }> {
+): Promise<{ ok: boolean; output: string; noChanges: boolean; prOpened: boolean }> {
   const { tenantId, cloudAgentRef, executionId, taskRow, agentLabel, repoCtx, repoMiss, writtenPaths, finalOutput, cancelled } = args;
   const ciVerified = !!args.ciVerified;
   // A steer that arrived after the loop's last step is NOT released here: the row is
@@ -428,5 +428,5 @@ ${ciVerified
 
   // The run opens its PR and ends: an unmerged PR is the designed outcome, never a failure — but
   // a PR that did not open after the run wrote code is (`prFailed`, reason in the output).
-  return { ok: !prFailed, noChanges, output: output + unverifiedNote + prFailedNote };
+  return { ok: !prFailed, noChanges, prOpened, output: output + unverifiedNote + prFailedNote };
 }

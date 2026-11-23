@@ -23,7 +23,7 @@ import type { RunMessage } from "../../contract.js";
 import type { FinishHook, PolicyContext } from "../hooks.js";
 import { evaluateFinishGates, matchesRequiredReviewSignoff, missingReviewVerdictMessage, type FinishGatePorts, type RequiredReviewSignoff } from "./gates.js";
 import { applyVerifyPhase } from "../verify/runEndMemory.js";
-import { applyWorkEvidence, MAX_OPEN_WORK_HOLDS, outstandingWork, type WorkEvidence } from "../../workPlan.js";
+import { applyWorkEvidence, MAX_OPEN_WORK_HOLDS, outstandingWork, type RunWorkPort, type WorkEvidence } from "../../workPlan.js";
 
 /** Why the last finish attempt was refused, per run (the D1 cascade needs the NAMED verdict, not just the text). */
 const lastReasons = new WeakMap<object, string | undefined>();
@@ -35,6 +35,8 @@ export function lastFinishReason(state: object): string | undefined {
 export interface FinishPorts extends FinishGatePorts {
   /** Read the scoped status of all assigned ids in one batch. */
   workEvidence?: (ids: readonly string[]) => Promise<readonly WorkEvidence[]>;
+  /** Work whose proof is produced by host settlement, after the in-run gates pass. */
+  settleWorkAfterRun?: true;
   /** The run belongs to a delegation tree (its owner or a child). Absent ⇒ only a child (`parentRunId`) is. */
   delegated?: boolean;
   /**
@@ -42,6 +44,10 @@ export interface FinishPorts extends FinishGatePorts {
    * passed, so it holds the `finish` tool exactly as it holds a prose answer. Absent ⇒ never held.
    */
   openWork?: (ctx: PolicyContext) => Promise<string | null>;
+}
+
+export function workFinishPorts(work: RunWorkPort): Pick<FinishPorts, "workEvidence" | "settleWorkAfterRun"> {
+  return work.settleAfterRun ? { settleWorkAfterRun: true } : { workEvidence: (ids) => work.evidence(ids) };
 }
 
 /** The named verdict a finish refused for open linked work carries (`lastFinishReason`, the `finish.blocked` event). */
@@ -120,7 +126,7 @@ export function signoffSettleBlock(ctx: PolicyContext): string | null {
 export function createFinishHook(ports: FinishPorts = {}): FinishHook {
   const delegated = (ctx: PolicyContext): boolean => ports.delegated ?? ctx.task.dispatch.parentRunId !== undefined;
   const openWork = async (ctx: PolicyContext): Promise<string | null> => {
-    if (ctx.state.work?.length) {
+    if (ctx.state.work?.length && !ports.settleWorkAfterRun) {
       if (ports.workEvidence) {
         const evidence = await ports.workEvidence(ctx.state.work.map((item) => item.id));
         ctx.state.work = applyWorkEvidence(ctx.state.work, evidence);

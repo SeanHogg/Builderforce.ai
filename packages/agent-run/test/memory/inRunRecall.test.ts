@@ -42,6 +42,34 @@ function ports(provider: CapabilityProvider, requests: ModelRequest[], script: A
 }
 
 describe("memory_recall and memory_remember inside a run", () => {
+  it.each(["vscode", "on-prem"] as const)("%s waits for recall and injects it before the first model call", async (entryPoint) => {
+    const mem = memory();
+    let finish!: () => void;
+    const ready = new Promise<void>((resolve) => { finish = resolve; });
+    let began!: () => void;
+    const recalling = new Promise<void>((resolve) => { began = resolve; });
+    const recall = mem.provider.memory!.recall;
+    mem.provider.memory!.recall = async (query, limit) => {
+      began();
+      await ready;
+      return recall(query, limit);
+    };
+    const requests: ModelRequest[] = [];
+    const running = runAgent({
+      task: { prompt: "How do we deploy?", dispatch: { source: "chat" } },
+      policy: { ...TEST_POLICY, entryPoint },
+      ports: ports(mem.provider, requests, [{
+        content: "",
+        toolCalls: [{ id: "f1", name: "finish", arguments: '{"summary":"pnpm run ship"}' }],
+      }]),
+    });
+    await recalling;
+    expect(requests).toHaveLength(0);
+    finish();
+    expect((await running).kind).toBe("finished");
+    expect(requests[0]!.messages.some((row) => row.content?.includes("deploy-command: pnpm run ship"))).toBe(true);
+  });
+
   it("recall reaches the capability with the model's arguments, and its entries are what the model reads next", async () => {
     const mem = memory();
     const requests: ModelRequest[] = [];

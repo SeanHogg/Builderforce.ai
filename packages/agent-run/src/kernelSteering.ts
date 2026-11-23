@@ -19,6 +19,11 @@ export function steeringTakers(run: KernelRun, contextAt: (step: number, turn: n
   // A surface whose Stop is its own control (`RunPolicy.stopWords: false`) never reads a steered word as a command.
   const stopsOn = (texts: readonly string[]): boolean => input.policy.stopWords !== false && isStopSteer(texts);
   const append = (...rows: RunMessage[]): void => appendRows(input, run.transcript, ...rows);
+  let afterFinish: ReturnType<typeof steerInput>[] = [];
+  const appendDirections = async (directions: ReturnType<typeof steerInput>[], step: number): Promise<void> => {
+    append(...directions.map((item): RunMessage => ({ role: "user", content: item.text, person: true, ...(item.parts?.length ? { parts: item.parts } : {}) })));
+    for (const _item of directions) await emit(ports.events, { kind: "steer.applied", step });
+  };
 
   /**
    * Take what the user steered in: a stop command ends the run (the model never gets
@@ -65,29 +70,30 @@ export function steeringTakers(run: KernelRun, contextAt: (step: number, turn: n
    */
   const lateSteerNote = async (ctx: { step: number }): Promise<{ note: string } | null> => {
     const steered = ((await ports.steering?.drain({ step: ctx.step })) ?? []).map(steerInput);
-    if (steered.length === 0) return null;
-    const texts = steered.map((s) => s.text);
-    if (stopsOn(texts)) {
+    if (stopsOn(steered.map((item) => item.text))) {
       run.stopped = true;
       return null;
     }
-    for (let i = 0; i < steered.length; i += 1) await emit(ports.events, { kind: "steer.applied", step: ctx.step });
-    const many = texts.length > 1;
-    return {
-      note:
-        `The user sent ${many ? "messages" : "a message"} while you were finishing, so do not finish yet:\n` +
-        `${texts.map((t) => `- ${t}`).join("\n")}\nAddress ${many ? "them" : "it"}, then finish.`,
-    };
+    const followUps = steered.length || afterFinish.length ? [] : ((await ports.steering?.followUp?.()) ?? []).map(steerInput);
+    afterFinish.push(...steered, ...followUps);
+    return afterFinish.length ? { note: "The user sent more direction while you were finishing. Address the upcoming user messages before finishing." } : null;
+  };
+
+  /** Append only after all tool rows, so tool calls remain contiguous even on a yielded tick. */
+  const flushFinishDirections = async (step: number): Promise<void> => {
+    if (!afterFinish.length || run.stopped) return;
+    const pending = afterFinish;
+    afterFinish = [];
+    await appendDirections(pending, step);
   };
 
   /** What the person queued to be taken once the run would stop: each becomes a user turn, and the run continues on them. */
   const takeFollowUps = async (ctx: { step: number }): Promise<boolean> => {
     const followUps = ((await ports.steering?.followUp?.()) ?? []).map(steerInput);
     if (followUps.length === 0) return false;
-    append(...followUps.map((f): RunMessage => ({ role: "user", content: f.text, person: true, ...(f.parts?.length ? { parts: f.parts } : {}) })));
-    for (let i = 0; i < followUps.length; i += 1) await emit(ports.events, { kind: "steer.applied", step: ctx.step });
+    await appendDirections(followUps, ctx.step);
     return true;
   };
 
-  return { takeSteers, takeJoined, lateSteerNote, takeFollowUps };
+  return { takeSteers, takeJoined, lateSteerNote, takeFollowUps, flushFinishDirections };
 }

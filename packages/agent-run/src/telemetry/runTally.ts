@@ -19,6 +19,8 @@ import { foldTurnCost } from "./costTally.js";
 
 /** What a run has spent and done so far — carried on `RunState.telemetry`. */
 export interface RunTally {
+  /** Terminal work score forwarded to durable landing sinks. */
+  work?: import("../workPlan.js").RunWorkScorecard;
   /** Tool calls dispatched (covered-read stubs never ran, so they are not calls). */
   toolCalls: number;
   /** Dispatched calls that errored. */

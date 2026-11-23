@@ -17,10 +17,11 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { childPolicy, childProvider, childResult, childWorkPort, openRun, spawnChild, type RunWorkPort } from "@builderforce/agent-run";
+import { childPolicy, childProvider, childResult, childWorkPort, spawnChild, type RunWorkPort } from "@builderforce/agent-run";
 import type { HumanChannel, ModelTransport, RunPolicy } from "@builderforce/agent-run";
 import type { CapabilityProvider, SubagentRequest, SubagentResult } from "@builderforce/agent-tools";
 import { observedModel, relayEventSink, type OnPremRunSinks } from "./onPremEvents.js";
+import { EMPTY_PACK, inMemoryStore, openOnPremRun } from "./onPremRunPorts.js";
 
 /** What a child inherits from the run that spawns it. */
 export interface ChildRunContext {
@@ -54,7 +55,7 @@ export function childRunner(owner: ChildRunContext): (request: SubagentRequest) 
       owner: "the main agent", task: request.task, role: request.role, basePrompt: owner.basePrompt,
       ...(work ? { workItemIds: work.assigned.map((item) => item.id) } : {}),
     }, {
-      openRun: (child) => openRun({
+      openRun: (child) => openOnPremRun({
         // Its own id: the row it writes is reported under it, and names the owner's as its parent.
         task: {
           runId: randomUUID(), prompt: child.prompt, persona: child.systemPrompt,
@@ -67,10 +68,10 @@ export function childRunner(owner: ChildRunContext): (request: SubagentRequest) 
           model: observedModel(owner.model, sinks),
           capabilities: childProvider(owner.capabilities),
           // A child is one invocation: nothing resumes it, so nothing is kept.
-          store: { load: () => undefined, save: () => undefined },
+          store: inMemoryStore(),
           events: relayEventSink(sinks, () => ""),
           human: owner.human,
-          context: { pack: () => ({ focus: [], facts: [], recall: [] }) },
+          context: EMPTY_PACK,
         },
         // A child is routed as a child: the owner's model pick and delegation are not its own to re-decide.
         route: { child: true, request: request.task },

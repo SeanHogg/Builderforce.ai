@@ -13,14 +13,14 @@ vi.mock("@builderforce/agent-run", async (importOriginal) => {
     ...actual,
     openRun: async (input: Record<string, unknown>) => {
       seen.calls.push(input);
-      return { kind: "finished", output: "child report" } as unknown as RunOutcome;
+      return { kind: "finished", output: "child report", state: { step: 1 } } as unknown as RunOutcome;
     },
   };
 });
 
 import { childRunner } from "./onPremSubagents.js";
 import { inMemoryStore, onPremPolicy } from "./onPremRunPorts.js";
-import { policyOf as channelPolicyOf } from "./channelAdapter.js";
+import { policyOf as channelPolicyOf } from "./channelRunPorts.js";
 
 describe("on-prem entry through openRun", () => {
   it("a child run calls openRun with route.child and its brief as the request", async () => {

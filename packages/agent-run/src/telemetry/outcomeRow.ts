@@ -28,7 +28,7 @@
 
 import { isRateLimitFailure, isTenantBudgetFailure } from "@builderforce/learned-routing";
 import { RUN_CANCELLED_REASON, type RunOutcomeKind, type RunOutcomeRow, type RunState } from "../contract.js";
-import { evaluateRun } from "../workPlan.js";
+import { evaluateRunWork } from "../workPlan.js";
 import { defaultEstimateTokens } from "../policy/compaction/pack.js";
 import { turnContextBlock } from "../turnContext.js";
 import { reportedRunCost } from "./costTally.js";
@@ -62,8 +62,7 @@ export function buildOutcomeRow(input: OutcomeRowInput): RunOutcomeRow {
   const preflight = state.preflight;
   // Known only when every turn was priced (a partly unpriced run has an unknown cost, never a partial sum).
   const runCost = reportedRunCost(tally.costMc);
-  const observed = Object.values(state.workObservations ?? {}).flat();
-  const work = evaluateRun([...new Map([...observed, ...(state.work ?? [])].map((item) => [item.id, item])).values()]);
+  const work = evaluateRunWork(state);
 
   return {
     entryPoint: input.entryPoint,
