@@ -34,12 +34,13 @@ function inSequence(gates: readonly OpenWorkPort[]): OpenWorkPort | undefined {
 }
 
 /** The finish ports for one Brain run: `openWork` is one port or the run's open-work gate sequence. */
-export function brainFinishPorts(req: Pick<BrainRunRequest, 'liveChildren'>, openWork?: OpenWorkPort | readonly OpenWorkPort[]): FinishPorts {
+export function brainFinishPorts(req: Pick<BrainRunRequest, 'liveChildren' | 'work'>, openWork?: OpenWorkPort | readonly OpenWorkPort[]): FinishPorts {
   const work = typeof openWork === 'function' ? openWork : inSequence(openWork ?? []);
   return {
     // The run IS a delegation owner as soon as the host can say who its live children are: an owner, not only a child
     // (`parentRunId`), holds its end for them.
     ...(req.liveChildren ? { delegated: true, liveChildren: req.liveChildren } : {}),
     ...(work ? { openWork: work } : {}),
+    ...(req.work ? { workEvidence: (ids: readonly string[]) => req.work!.evidence(ids) } : {}),
   };
 }

@@ -1,11 +1,72 @@
 # PRD 50 — one pipeline above the kernel
 
-> Status: design, copied from the Agent Pipeline Map (2026-11-22) before any consolidation.
+> Status: entry/spawn/policy slice implemented in this working tree on 2026-11-23; validation has remaining failures and dependency blockers. Source baseline: c56ce694e. The wider one-pipeline roadmap remains incomplete; see the review below.
 > Source: `docs/specs/_scratch-agent-pipeline-map.md` (the downloaded map). Gap Register: `ROADMAP.md` › Make › Cloud and IDE agent runs › "One pipeline for every modality".
 > This slice stops at the kernel. `runAgent` (`packages/agent-run/src/runAgent.ts:65`) calling `runAgentLoop` (`packages/agent-loop/src/loop.ts`) stays. Nothing inside that call is redesigned here.
 > Implementation of later stages (`routeRun`, `planWork`, `evaluateRun`, stall/continuation, the second on-prem adapter) follows a later review of those sections. This file is the contract for the slice that starts now: the forks **above** `runAgent`.
 
-## 0. Seams confirmed against the code (2026-11-22)
+## Full workflow follow-up
+
+The entry slice has been extended. openRun and the Brain preamble share routing defaults. The persisted run state carries the decision across durable ticks. Full routing is the default. Existing editor settings and explicit host configuration can opt into auto routing. Shared opening assembly renders governing instructions ahead of history. Brain and channel use that opening rather than assembling separate transcript prefixes.
+
+planWork and evaluateRun now support host-scoped explicit assignments. The shared runtime keeps ids and criteria in run state, presents them on turns, checks evidence in one batch on finish, and emits counts in terminal diagnostics. Brain and in-process on-prem can bind this contract. Existing ticket and spec checks still operate. Assigning and resolving existing surface work through this contract, child evidence, downstream scoring, remaining gate and continuation consolidation, and the second on-prem adapter are still open.
+
+The follow-up fixes early VSIX admission before shared validation, cloud admission stamps overwritten by the rebuilt child payload, Brain calling removed progress and retry hooks, a missing Brain failure-synthesis marker, and prose finishes skipping close-out. The detailed current status lives in the pipeline map. Historical slice text below describes the initial contract.
+
+## Implementation review (2026-11-23)
+
+The [pipeline map](./_scratch-agent-pipeline-map.md) now describes the inspected checkout. Sections 0–7 below retain the original slice contract and historical rationale; they must not be read as current-state findings. This review supersedes stale file names and implementation assumptions in those sections.
+
+| Contract | Inspected status | Remaining work |
+| --- | --- | --- |
+| Required entryPoint (§2.1) | Required on Brain request; runPrepared has no default; openRun rejects a missing policy label | RunEntryPoint aliases shared EntryPoint; Brain conformance execution fails on the existing tool-dispatch path (see validation) |
+| Participant through panel host (§2.2) | Implemented by participantRun.ts runViaHost → host.start; host labels vscode | Host gate tests pass; participant/host integration needs the built Brain package |
+| Factories own policy (§2.3) | openRun composes surface ports for every inspected adapter | Recorded preflight facts and native history ports enter shared factories; no compaction.hook escape hatch remains |
+| Shared spawnChild (§2.4) | Implemented by policy/subagents/child.ts; VSIX, durable cloud, in-process on-prem and all four legacy callers reach it | Authenticated host starts and native admission/completion semantics stay surface-owned |
+| Children pass editor gate | Implemented through startThrough → gated.start | Does not imply a common start lifecycle across all surfaces |
+| Kernel unchanged by this review | Entry, spawning, preflight and compaction changes stay above the kernel | Preserve runAgent → runAgentLoop |
+
+Adjacent work has also advanced beyond the baseline: shared routeRun now owns full/quick scoring, Brain openingSections owns editor opening assembly, and deterministic close-out runs through openRun instead of a duplicate direct call from startRun. These do not complete routing configuration parity, cross-surface opening, or continuation consolidation.
+
+### Implemented child-start contract (§2.4)
+
+The generic contract in §2.4 is now implemented. prepareChildStart validates registered entryPoint, nonempty owner/task/parent identity and integer child depth before host effects. spawnChild<Result> calls the scoped host start without interpreting its native result. The implementation preserves these requirements:
+
+- Carry the parent's EntryPoint explicitly; openRun requires it.
+- Define depth as the CHILD depth: allow integer depths 1 through MAX_SUBAGENT_DEPTH; reject deeper/invalid requests before start side effects. Existing checks on PARENT depth refuse spawning when the parent is already at the cap.
+- Carry the owner's display identity and optional persona/base prompt, so shared subagentSystemPrompt preserves existing child instructions and inherited context.
+- Separate background admission from eventual completion. VSIX spawn controls return a handle while observing the host completion promise separately; cloud admission returns a durable handle; on-prem childRunner returns a completed report. The generic start-result port preserves those behaviors. Do not await cloud completion inside a durable start request.
+- Keep authorization in each authenticated start port. Shared lineage/depth validation does not replace tenant scoping, session agent allow-lists, or host tool approvals.
+- Preserve all legacy callers. spawnSubagentDirect has FOUR production call sites: sessions-spawn-tool.ts, commands-subagents.ts, infra/local-agent-transport.ts and transport/local-adapter.ts. All four now reach shared spawnChild through that compatibility adapter; keep the adapter for gateway/session delivery, configured depth and agent allow-list authorization.
+- The old buildSubagentSystemPrompt name is absent. Current buildSubagentSessionPrompt already uses shared subagentSystemPrompt and MAX_SUBAGENT_DEPTH, with session-specific additions. Remove only after its live callers and necessary session behavior migrate.
+- openRun is the shared runtime entry; identity, editor journal/delta capture and durable execution creation still belong to host lifecycle ports. Passing openRun alone is not proof that a child passed the same host start as a user.
+
+### Policy and enforcement corrections
+
+The production composition owner is packages/agent-run/src/openRun.ts. Adapters supply surface ports instead of modules. SurfacePorts.preflight now accepts RecordedModelPreflight data, not a hook. The shared policy/model createModelHook factory constructs the event and verdict, preserving the host plan model and suppressing a second check or repeated notices. Brain preflightRecorded.ts only snapshots cell facts. SurfacePorts.compaction now accepts only CompactionHookOptions. Its history strategy lives in policy/compaction/history.ts: memo reuse, immutable source rows, summary deadline and fallback, one timeout attempt per run, row comparison and saved-token accounting. Brain brainFold.ts supplies storage, native-row conversion, summary transport, activity/diagnostic sinks and recordFold for durable markers; it defines no hook body. The existing compactionSavedTokens API re-exports the shared implementation.
+
+check-one-execution.mjs enforces imports, not the ownership of supplied hook bodies. The inaccurate enforcement comment was removed. The preflight data contract, shared-factory regressions and production-door single-check/no-duplicate-notice regression replace its callback exception. The compaction callback exception is also removed from the type contract; runPrepared.door.test.ts checks history ports and absence of the hook field. The import guard is not claimed to inspect arbitrary callback semantics.
+
+### Validation and upkeep
+
+Coverage to retain: agent-run test/entry/openRun.test.ts and test/conformance/, Brain crossAdapterConformance.test.ts and runStore/openingSections.test.ts, VSIX participantRun.test.ts, brainRunHost.entryPoint.test.ts and hostStartGate.test.ts, and runtime conformance/crossAdapter.test.ts and onPremSubagents.openRun.test.ts. Existing assertions remain acceptance requirements; this source review is not a test pass.
+
+The initial diff was verified before edits, including runStore/runTypes.ts; none of the prior reports were assumed applied. Added shared spawn coverage (18 cases), shared history strategy coverage (3 cases), durable prompt round-trip coverage, and an on-prem standing-instruction assertion. Existing preflight regressions remain. Repaired malformed newline literals in the participant regression fixture and runSetup turn-context join; typed existing test mocks/callback parameters so agent-run can typecheck.
+
+Validation on 2026-11-23:
+
+- Shared focused suites: **13 files / 88 tests pass**, covering spawning, history, openRun, recorded preflight, routing and conformance. Agent-run typecheck passes with the TypeScript 6 compiler and `--ignoreDeprecations 6.0`.
+- Brain: **4 files pass** (recorded preflight, saved-token accounting, fold deadline and production door). Its two conformance files fail: baseline c56ce694e also fails these files, with the same premature tool-dispatch failure and missing model-window request; added entry labels exercise that same failure. Brain typecheck reports existing TurnRetry/TurnSession.recover and missing BrainRunContext.progress errors, plus missing @seanhogg/bfi-web and @mlc-ai/web-llm.
+- Full agent-run suite: 821 pass / 2 fail before adding spawn/history cases. The forcedTurns trace-step and failureSynthesis extra-call failures both reproduce on a detached c56ce694e worktree. No assertions were loosened.
+- VSIX hostStartGate and childRunSpawner pass (13 tests); participant and host entry integration cannot load the built @seanhogg/builderforce-brain-embedded package. VSIX typecheck is blocked by missing vscode type definitions after the newline syntax repairs.
+- Runtime onPremSubagents passes (6 tests, including the standing-instruction assertion); runtime conformance cannot load @sinclair/typebox; legacy tests cannot load @aws-sdk/client-bedrock. Cloud child tests cannot load @neondatabase/serverless. Runtime typecheck reports unresolved dependencies including @sinclair/typebox, qrcode-terminal and @opentelemetry packages. API typecheck exhausted the default Node heap at about 4 GiB. Neither passed.
+- check-one-execution --enforce, the source-package graph check and git diff --check pass. TypeScript syntax parsing passes for all 34 changed/untracked source files. Syntax and repository guards do not establish runtime parity; no live run was traced.
+
+Validation tools were installed outside the repository manifests before the user requested no package installs. No further installs are performed. Remaining missing packages are reported as blockers.
+
+For every subsequent implementation, update the current pipeline map, this status table and ROADMAP.md together. Name which forks were removed, which behavior remains surface-specific, actual validation results and any blocker.
+
+## 0. Historical baseline: seams confirmed on 2026-11-22
 
 | Map said | Code actually has | Consequence for this slice |
 |---|---|---|
@@ -104,35 +165,47 @@ One function, in `packages/agent-run/src/policy/subagents/child.ts` (the file th
 
 ```ts
 export interface SpawnChildRequest {
-  /** The owner's run id. Required. */
   parentRunId: string;
-  /** Depth of the child. `spawnChild` refuses at `MAX_SUBAGENT_DEPTH`. */
+  entryPoint: EntryPoint;
+  /** CHILD depth: integer 1 through MAX_SUBAGENT_DEPTH inclusive. */
   depth: number;
+  owner: string;
   task: string;
   role?: string;
-  /** Work-item ids this child owns. Empty in this slice; `planWork` fills them later. */
+  persona?: SubagentPersona;
+  basePrompt?: string;
   workItemIds?: readonly string[];
 }
 
-export interface SpawnChildPorts {
-  /** The same start a user chat uses on this surface. Creates chat id, run id, and passes the start gate. */
-  openRun(request: { prompt: string; entryPoint: EntryPoint; lineage: { parentRunId: string; depth: number } }): Promise<{ runId: string; output: string }>;
+export interface ChildStartRequest {
+  prompt: string;
+  systemPrompt: string;
+  entryPoint: EntryPoint;
+  lineage: { parentRunId: string; depth: number };
+  workItemIds: readonly string[];
 }
 
-/** Refuses at MAX_SUBAGENT_DEPTH. Builds the child prompt with `subagentSystemPrompt` only. */
-export function spawnChild(request: SpawnChildRequest, ports: SpawnChildPorts): Promise<{ runId: string; output: string }>;
+export interface SpawnChildPorts<Result> {
+  /** Authenticated/scoped user-start port; returns its native admission handle OR completed result. */
+  openRun(request: ChildStartRequest): Promise<Result>;
+}
+
+/** Validate before invoking the port; build standing instructions with subagentSystemPrompt only. */
+export function spawnChild<Result>(request: SpawnChildRequest, ports: SpawnChildPorts<Result>): Promise<Result>;
 ```
 
 Each surface's spawn tool calls `spawnChild` and supplies `openRun` as the start it already uses for a user message:
 
 | Surface | `openRun` port | Deleted spawn path |
 |---|---|---|
-| VSIX | panel host start, which calls `gateStarts` then `startRun` | `childRunHost.startChild` inner start that skips `gateStarts` |
-| Cloud | the durable-execution **port** (create child execution) fed through `spawnChild`, not a second policy | policy inside `cloudChildRuns.ts` beyond "create the execution record" |
-| On-prem | `onPremAdapter`'s `runAgent` entry, with lineage | `onPremSubagents.ts` direct `runAgent` |
-| Legacy sessions | same on-prem `openRun` | `spawnSubagentDirect` and `buildSubagentSystemPrompt` — **deleted in this slice only if every caller is the spawn tool**. If a channel command still calls it, leave the file and name it as the blocker. Do not leave both live without a caller count. |
+| VSIX | childRunHost calls spawnChild then the already-gated host start | Separate standing-prompt assembly; existing asynchronous completion observation stays |
+| Cloud | spawnChild prepares standing instructions, persisted in CloudChildSpec before durable admission; childBrief appends the tick base prompt | Separate child-prompt policy; durable records and tenant scoping stay |
+| On-prem | spawnChild then openRun, childPolicy/childProvider, parent lineage and inherited persona | Missing shared standing instructions; completed childResult stays |
+| Legacy sessions | spawnSubagentDirect authorizes then calls spawnChild; gateway agent start reaches the existing session/channel runtime entry | Compatibility adapter retained for all four callers; session prompt adds session-specific context to prepared standing instructions |
 
-Children get a change set, a journal start, and delta capture because `openRun` is the user path. `entryPoint` is the parent's, not `'web'`.
+The generic result preserves background admission (VSIX/cloud) and completed reports (in-process on-prem). A durable start must persist the shared prompt inputs or prepared opening for its later tick; it must not wait for child completion or discard the shared opening. Keep session-specific delivery and authorization until every legacy caller is migrated. Validate depth and lineage before any start side effects.
+
+Editor children get a change set, a journal start, and delta capture through the gated host port. Other surfaces keep their own authenticated lifecycle ports. `entryPoint` is the parent's, not `'web'`.
 
 ## 3. Codemap — this slice only
 
@@ -157,7 +230,7 @@ Children get a change set, a journal start, and delta capture because `openRun` 
 | `capabilities: new Set()` / `approvalGates: []` in `runPrepared.ts:39` | Kernel gate feed. Separate defect; do not bundle it into the module-override edit. |
 | Stale `loop.ts` header | One-line fix, kernel file. Not this slice. |
 
-## 4. Sequence after this slice
+## 4. Target sequence after this slice (not current state)
 
 ```
 VSIX panel ──────────────┐
@@ -198,9 +271,9 @@ Run the existing suites unchanged: `packages/agent-run/test/conformance/`, `brai
 4. **Work-item gates stay VSIX ports** until `planWork`. Moving their bodies now would start the next slice.
 5. **Cloud keeps a durable execution as a port**, not as a policy. `spawnChild` does not know about Durable Objects.
 
-## 7. Done for this slice
+## 7. Acceptance criteria for this slice (not a completion report)
 
-- This file is the spec. The scratch copy remains as the source diagram until the Gap Register entry is rewritten to point here.
+- This file is the slice contract. The pipeline map is the current-state diagram; the Gap Register links both. Keep their implementation status synchronized.
 - `entryPoint` has no `'web'` default.
 - The participant starts through the panel host.
 - Spawn on every surface that has a spawn tool goes through `spawnChild` → the user start.

@@ -28,7 +28,7 @@
 
 import { randomUUID } from "node:crypto";
 import { RUN_CANCELLED_REASON, openRun } from "@builderforce/agent-run";
-import type { ContextSource, ModelTransport, RunOutcome, RunPolicy, RunPorts, RunState, RunStore } from "@builderforce/agent-run";
+import type { ContextSource, ModelTransport, RunOutcome, RunPolicy, RunPorts, RunState, RunStore, RunWorkPort } from "@builderforce/agent-run";
 import { RunKnowledgeRecorder, type CapabilityProvider, type PolicyGate, type RunKnowledgeLog } from "@builderforce/agent-tools";
 import type { QueuedSteer, SteeringChannel } from "../infra/relay-steering.js";
 import { logWarn } from "../logger.js";
@@ -43,6 +43,8 @@ export type { OnPremRunSinks } from "./onPremEvents.js";
 
 /** What a run is given. The names are the relay's: they predate the gateway wire change. */
 export interface OnPremRunParams {
+  /** Assigned by the authenticated host before the run opens. */
+  work?: RunWorkPort;
   prompt: string;
   model?: string;
   /** Working directory the agent operates in (the repo/workspace). */
@@ -176,6 +178,8 @@ export async function runOnPremAgent(params: OnPremRunParams, sinks: OnPremRunSi
       sinks,
       ...(signal ? { signal } : {}),
       parentRunId: runId,
+      basePrompt: params.appendSystemPrompt,
+      ...(params.work ? { work: params.work } : {}),
     });
     capabilities = params.capabilities ?? (await buildOnPremProvider({ workspaceRoot: params.cwd, spawn }));
 
@@ -192,11 +196,13 @@ export async function runOnPremAgent(params: OnPremRunParams, sinks: OnPremRunSi
       task: {
         runId,
         prompt: params.prompt,
+        ...(params.work ? { assignedWork: params.work.assigned } : {}),
         ...(params.appendSystemPrompt?.trim() ? { persona: params.appendSystemPrompt.trim() } : {}),
         dispatch: { source: "manual" },
         workspace: { defaultRepo: params.cwd },
       },
       policy,
+      ...(params.work ? { surface: { finish: { workEvidence: (ids: readonly string[]) => params.work!.evidence(ids) } } } : {}),
       ports,
       ...(params.maxSteps !== undefined ? { maxSteps: params.maxSteps } : {}),
       ...(signal ? { signal } : {}),

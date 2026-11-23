@@ -13,7 +13,7 @@ describe("recoverProviderFailure — wording is optional", () => {
   it("routes the failure around with no note for the model, and tells the surface's trace callbacks", () => {
     const rerouted: unknown[] = [];
     const abandoned: unknown[] = [];
-    const ctx = policyCtx({ ports: { delivery: { rungs: () => [], providerFailure: { rerouted: (f) => { rerouted.push(f); }, abandoned: (f) => { abandoned.push(f); } } } } as never });
+    const ctx = policyCtx({ ports: { delivery: { rungs: () => [], providerFailure: { rerouted: (f: unknown) => { rerouted.push(f); }, abandoned: (f: unknown) => { abandoned.push(f); } } } } as never });
     const route = recoverProviderFailure(ctx, FAILURE, "gpt-x", "503 Service Unavailable");
     expect(route).not.toHaveProperty("note");
     expect(route.kind === "retry" ? rerouted.length : abandoned.length).toBe(1);

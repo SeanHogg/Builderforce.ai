@@ -56,6 +56,7 @@ function initialModelState(policy: RunPolicy): RunPolicyState {
   return initialModelRunState({
     pick: { model, strict: start.strict ?? false },
     delegatedRole: start.delegatedRole,
+    ...(start.startPhase && !start.delegatedRole ? { startPhase: start.startPhase } : {}),
     ...(start.phaseModels ? { phaseModels: start.phaseModels } : {}),
   }).policy;
 }

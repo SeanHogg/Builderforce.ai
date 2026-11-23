@@ -4,11 +4,11 @@
  * This only builds that decision's INPUT from the Brain's request and maps its result onto the per-call metadata, so the
  * preamble (usage metadata), the settle (verify skip) and `openRun` (`run/runPrepared.ts`, handed `{ input, decided }` so it never routes again) all read one value.
  *
- * Only a host that sends {@link BrainRunRequest.pipeline} is routed; a sub-agent (`lineage`) never is — it is a slice its
+ * Hosts can override the shared default through {@link BrainRunRequest.pipeline}. A sub-agent (`lineage`) is a slice its
  * owner already planned, and keeps its `code` start.
  */
 
-import { routeRun, type RouteDecision, type RouteInput } from '@builderforce/agent-run';
+import { defaultPipelineRouting, routeRun, type RouteDecision, type RouteInput } from '@builderforce/agent-run';
 import type { CompletionMetadata } from '../streamChatCompletion';
 import type { BrainRunRequest } from './runTypes';
 
@@ -24,7 +24,9 @@ export function routeInputOf(
   return {
     request,
     followUp,
-    ...(req.pipeline ? { routing: { mode: req.pipeline.routing, ...(req.pipeline.threshold !== undefined ? { threshold: req.pipeline.threshold } : {}), ...(req.pipeline.quickModel !== undefined ? { quickModel: req.pipeline.quickModel } : {}) } } : {}),
+    routing: req.pipeline
+      ? { mode: req.pipeline.routing, threshold: req.pipeline.threshold, quickModel: req.pipeline.quickModel }
+      : defaultPipelineRouting(),
     ...(req.phaseModels ? { phaseModels: req.phaseModels } : {}),
     ...(req.modelStrict ? { modelStrict: true } : {}),
     ...(req.lineage ? { child: true } : {}),

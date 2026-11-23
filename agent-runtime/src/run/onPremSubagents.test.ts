@@ -37,6 +37,22 @@ function model(answers: string[], requests: ModelRequest[]): ModelTransport {
 }
 
 describe("childRunner", () => {
+  it("uses the owner's scoped evidence for its assigned ticket", async () => {
+    const evidence = vi.fn(async () => [{ id: "T1", status: "done" as const, detail: "Check passed" }]);
+    const requests: ModelRequest[] = [];
+    const rows: RunOutcomeRow[] = [];
+    const sinks: OnPremRunSinks = { ...quiet(), forChild: () => ({ ...quiet(), onOutcome: (row) => void rows.push(row) }) };
+    const spawn = childRunner({
+      model: model(["Checked"], requests), capabilities: OWNER_CAPS, human: HUMAN, policy: POLICY,
+      sinks, parentRunId: "42", work: { assigned: [{ id: "T1", criteria: ["Check it"] }, { id: "T2", criteria: ["Other work"] }], evidence },
+    });
+    await expect(spawn({ task: "Run the check", label: "Check", ticket: "T1" })).resolves.toMatchObject({ ok: true });
+    expect(evidence).toHaveBeenCalledExactlyOnceWith(["T1"]);
+    expect(rows).toMatchObject([{ work: { assigned: 1, done: 1 } }]);
+    await expect(spawn({ task: "Look it up", label: "Check", ticket: "foreign" })).resolves.toMatchObject({ ok: true });
+    expect(evidence).toHaveBeenCalledTimes(1);
+    expect(rows[1]?.work).toBeUndefined();
+  });
   it("runs the brief as its own run and returns the child's report", async () => {
     const requests: ModelRequest[] = [];
     const spawn = childRunner({ model: model(["found it in agent-loop.ts"], requests), capabilities: OWNER_CAPS, human: HUMAN, policy: POLICY, sinks: quiet(), parentRunId: "42" });
@@ -46,6 +62,7 @@ describe("childRunner", () => {
     expect(result).toMatchObject({ ok: true, output: "found it in agent-loop.ts" });
     // It sees none of the owner's conversation: its brief is its whole task.
     expect(requests[0]?.messages.find((m) => m.role === "user")?.content).toBe("where is the handler?");
+    expect(requests[0]?.messages.find((m) => m.role === "system")?.content).toContain("spawned by the main agent");
   });
 
   it("holds a clone of its owner's tools, minus delegation, asking a person and authoring skills", async () => {

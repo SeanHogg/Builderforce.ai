@@ -16,6 +16,8 @@ export function effectiveMaxSpawnDepth(configured: number | undefined): number {
 }
 
 export function buildSubagentSessionPrompt(params: {
+  /** Prepared by the shared child start; optional for standalone prompt consumers. */
+  standingPrompt?: string;
   requesterSessionKey?: string;
   requesterOrigin?: DeliveryContext;
   childSessionKey: string;
@@ -32,7 +34,7 @@ export function buildSubagentSessionPrompt(params: {
   const owner = childDepth >= 2 ? "the parent orchestrator" : "the main agent";
 
   const lines = [
-    subagentSystemPrompt(undefined, { owner }),
+    params.standingPrompt ?? subagentSystemPrompt(undefined, { owner }),
     "",
     `You were created to handle: ${taskText}`,
     "Trust push-based completion: descendant results are auto-announced back to you; do not busy-poll for status.",

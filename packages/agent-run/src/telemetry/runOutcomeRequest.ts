@@ -16,6 +16,7 @@ import {
   type TerminalStatus,
 } from "@builderforce/learned-routing";
 import type { RunOutcomeRow } from "./rowType.js";
+import { workSupportsRoutingSample } from "../workPlan.js";
 
 /** What a host knows about the run that the row does not. */
 export interface RunOutcomeScope {
@@ -76,6 +77,6 @@ export function runOutcomeRequestOf(row: RunOutcomeRow, scope: RunOutcomeScope):
     ...(scope.projectId != null ? { projectId: scope.projectId } : {}),
     ...(scope.taskId != null ? { taskId: scope.taskId } : {}),
     ...(scope.actionType ? { actionType: scope.actionType } : {}),
-    ...(scope.routingSignal === false ? { routingSignal: false } : {}),
+    ...(scope.routingSignal === false || !workSupportsRoutingSample(row.work, row.terminalStatus === "finished") ? { routingSignal: false } : {}),
   };
 }

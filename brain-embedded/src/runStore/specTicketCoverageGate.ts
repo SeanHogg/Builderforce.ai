@@ -23,7 +23,7 @@
  * listing that cannot be read (the failure is noted on the run, never a hold).
  */
 
-import type { PolicyContext } from '@builderforce/agent-run';
+import { recordWorkSnapshot, type PolicyContext, type WorkEvidence } from '@builderforce/agent-run';
 import { editedPathsOf, isMatchableSpecItemId, parseSpecOpenItems, specTicketCoverage, type CoverageTicket, type SpecOpenItem } from '@builderforce/agent-tools';
 import { normalizeChatMode } from '../chatMode';
 import { declaresChatTicketListing, linkedTaskRows } from '../chatWorkLinking';
@@ -267,7 +267,20 @@ export function specTicketCoverageGate(run: BrainRunContext): (ctx: PolicyContex
     if (!items.length) return null;
     const tickets = await coverageTickets(run, trace, noteEv);
     if (!tickets) return null;
-    const missing: MissingItem[] = items.flatMap(({ spec, items: list }) => specTicketCoverage(list, tickets).missing.map((i) => ({ ...i, spec })));
+    const coverage = items.map(({ spec, items: list }) => ({ spec, list, ...specTicketCoverage(list, tickets) }));
+    const missing: MissingItem[] = coverage.flatMap(({ spec, missing: list }) => list.map((i) => ({ ...i, spec })));
+    const covered = coverage.flatMap(({ spec, covered: matches, list }) => {
+      const byId = new Map(list.map((item) => [item.id, item]));
+      return matches.map(({ itemId, ticketIds }) => ({
+        id: `${spec}#${itemId}`,
+        criteria: [byId.get(itemId)?.title ?? itemId],
+        detail: `Linked ticket: ${ticketIds.join(', ')}`,
+      }));
+    });
+    if (ctx.state) recordWorkSnapshot(ctx.state, 'spec-ticket-coverage', [
+      ...missing.map((item) => ({ id: `${item.spec}#${item.id}`, criteria: [item.title] })),
+      ...covered,
+    ], covered.map(({ id, detail }): WorkEvidence => ({ id, detail, status: 'done' })));
     if (!missing.length) return null;
 
     const key = missing.map((i) => `${i.spec}#${i.id}`).sort().join('|');

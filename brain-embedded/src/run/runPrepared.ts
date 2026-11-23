@@ -10,6 +10,7 @@ import type { BrainRunContext } from '../runStore/brainRunContext';
 import { brainDeliveryLedger } from './brainDelivery';
 import { brainPlatformTools } from './brainPlatformTools';
 import { brainCompaction } from './brainFold';
+import { brainGuardPorts } from './brainProgressPorts';
 import { brainFinishPorts } from './brainFinish';
 import { recordedPreflight } from './preflightRecorded';
 import { brainRunStorePort } from './brainStore';
@@ -68,26 +69,27 @@ export async function runPrepared(run: BrainRunContext): Promise<void> {
     ...(spend ? { spend } : {}),
     store: brainRunStorePort(c, { toolRowAppended: platform.toolRowAppended, personSteer: people.take }),
   };
-  const transcript = [{ role: 'system' as const, content: run.systemPrompt }, ...run.convo.map(toRunMessage)];
+  const transcript = run.convo.map(toRunMessage);
   // The TASK is the person's request: compaction pins it, whatever conversation comes before it.
   const request = transcript.map((row) => row.role).lastIndexOf('user');
   if (request >= 0) transcript[request] = { ...transcript[request]!, task: true };
   const ports = buildBrainRunPorts(binding);
   const signal = c.abort?.signal;
   const outcome = await openRun({
-    task: { ...brainRunTask(binding), transcript },
+    task: { ...brainRunTask(binding), persona: run.systemPrompt, transcript },
     policy: brainRunPolicy(binding),
     ports: { ...ports, model: withoutUncallableTurns(ports.model, req) },
     // The run's route, decided ONCE in the preamble (`runStore/runRoute.ts`): handed over as decided, so `openRun` folds it and never routes again.
     route: { input: run.route.input, decided: decidedRoute(run.route) },
     surface: {
-      // The Brain's own fold (`brainFold.ts`), not the agent's compaction adapted to imitate it.
-      compaction: { hook: compaction.hook },
+      // Native history and transport ports; the shared factory owns folding policy.
+      compaction: compaction.options,
       // The preamble ran the host's model preflight already (`hostRunContext.ts`): the agent's own would ask the host again and warn
-      // about a model the loop never warned about (a QUICK run's quick model), so the Brain's says the verdict and nothing more.
+      // about a model the loop never warned about (a QUICK run's quick model). Supply facts; the shared model factory records the verdict.
       preflight: recordedPreflight(c, req.model),
       // The host's engine ports (`brainFinish.ts`): an owner never ends with its sub-agents still working, and the open-work gate
       // sequence holds the run's open linked tickets, then the spec items a ticketing request still owes.
+      guards: brainGuardPorts(run),
       finish: brainFinishPorts(req, [openLinkedWorkHold(run), specTicketCoverageGate(run)]),
       // The deterministic close-out (`runStore/deterministicFinish.ts`): the host's own ticket actions, ahead of the finish gate.
       closeOut: closeOutPort(run),

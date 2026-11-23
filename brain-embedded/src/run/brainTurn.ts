@@ -20,17 +20,18 @@ import type { BrainToolSpec, CompletionMetadata, StreamChatResult } from '../str
 import { StreamInterruptedError } from '../streamChatCompletion';
 import { turnMaxTokens } from '../effort';
 import { callMemoryEffect } from '../memorySavings';
-import { coderReaskTrace, providerFailureTrace, transportRetryTrace } from '../runPolicyTraces';
+import { coderReaskTrace, providerFailureTrace } from '../runPolicyTraces';
 import { emit, nowIso, nowMs, pushTrace } from '../runStore/runCells';
 import { stampOncePerCall } from '../runStore/compactionSaved';
-import { policyAsk, reportToPolicy, type BrainRunContext } from '../runStore/brainRunContext';
+import type { BrainRunContext } from '../runStore/brainRunContext';
 import { asLiveTurn } from '../runStore/turnPersistence';
 import { recordTurn } from '../runStore/turnRecorder';
 import { commitTurnNarration, terminalAskReply, type TurnCall } from '../runStore/turnToolCalls';
 import { openLiveTurn, type LiveTurn } from '../runStore/turnStream';
 import { providerFailureEvent } from '../providerFailure';
 import { runBrief } from './brainTurnTail';
-import type { TurnObserver, TurnRetry, TurnSession } from './modelTransport';
+import { BrainTransportFailure } from './transportFailure';
+import type { TurnObserver, TurnSession } from './modelTransport';
 
 /** A turn the model answered that the agent has not yet gone on with: what recording it needs. */
 interface Answered {
@@ -41,6 +42,7 @@ interface Answered {
   /** The role the turn's last request asked as (analysis, code, chat). */
   role: string;
   tools: BrainToolSpec[];
+  forcedFinish?: true;
 }
 
 /** What the tail of the run reads about its last turn: the result (for the reply's provenance) and the model asked for. */
@@ -58,6 +60,8 @@ export interface LastTurn {
    * intact). The settled outcome re-throws it, so `chatErrorAction` reads the original and never a message made from it.
    */
   error?: unknown;
+  /** Record a classified failure if the shared model policy cannot recover the turn. */
+  abandonedFailure?: () => void;
   /**
    * Recording a kept turn failed (its narration could not be saved). The agent's event stream swallows a sink's failure, so the
    * run is failed from the next place the agent asks the surface something (`terminalTurn`), so the run fails there.
@@ -135,32 +139,23 @@ export function brainTurnObserver(run: BrainRunContext, savedTokens: () => numbe
         call: { prompt_cache_key: `brain:${run.serverChatId ?? req.clientChatId ?? 'local'}`, conversationKey: run.chatId },
         fit: (messages, model) => run.windowFit.prepare({ messages, ...(model ? { model } : {}), ...(tools.length > 0 ? { tools } : {}), maxTokens, step: t.step }),
         around: (stream) => asLiveTurn(c, stream),
-        recover(error): TurnRetry | undefined {
-          // The re-ask is not retried: a failure there is the turn's (its error step is recorded like any failed turn).
-          if (reask) return undefined;
-          // The model broke AFTER the gateway committed to it, or the gateway was reached and the request reset, timed out or was answered
-          // with a status the run policy routes around: the policy decides whether the turn is retried ONCE on another connected model
-          // (and leaves the one that broke out of every later turn). Any other failure is not a transport failure at all.
-          const failure = providerFailureEvent(error);
-          const outcome = failure ? reportToPolicy(run, failure).outcome : null;
-          if (!outcome || outcome.kind !== 'retry_turn') return undefined;
-          pushTrace(c, transportRetryTrace(nowIso(), t.step, outcome, (error as Error).message));
-          t.live.restart();
-          // Re-read AFTER the event that caused the retry: the policy now asks for what it says.
-          const ask = policyAsk(run, tools.length > 0);
-          t.role = ask.role;
-          return { ...(ask.model ? { model: ask.model } : {}), strict: ask.strict, role: ask.role, excludeModels: ask.excludeModels };
-        },
         completed(result) {
           last.error = undefined;
-          last.pending = { result, step: t.step, llmStart: t.llmStart, live: t.live, role: t.role, tools };
+          last.abandonedFailure = undefined;
+          last.pending = { result, step: t.step, llmStart: t.llmStart, live: t.live, role: t.role, tools, ...(request.forcedFinish ? { forcedFinish: true } : {}) };
         },
         failed(error) {
           // A user Stop rejects the stream: that is not a failed turn, and it leaves no error step.
           if (!c.abort?.signal.aborted) {
             const broke = (error instanceof StreamInterruptedError && error.model) || run.policy.model;
-            pushTrace(c, providerFailureTrace(nowIso(), t.step, broke, error, nowMs() - t.llmStart));
             last.error = error;
+            const trace = providerFailureTrace(nowIso(), t.step, broke, error, nowMs() - t.llmStart);
+            const failure = reask ? null : providerFailureEvent(error);
+            if (failure) {
+              last.abandonedFailure = () => pushTrace(c, trace);
+              return new BrainTransportFailure(error, failure);
+            }
+            pushTrace(c, trace);
           }
           return error;
         },
@@ -190,13 +185,12 @@ async function keep(run: BrainRunContext, last: LastTurn, a: Answered): Promise<
   await recordTurn(run, {
     result, iter: a.step, llmStart: a.llmStart, live: a.live, role: a.role,
     resolved, requested, advertised: a.tools, advertisedNames: new Set(a.tools.map((t) => t.function.name)),
+    ...(a.forcedFinish ? { forcedFinish: true } : {}),
   });
   last.result = result;
   last.requested = requested;
   // A host that advertised tools but cannot run them gets the turn as a final answer (`brainModelRules.ts`): nothing dispatches.
   if (result.toolCalls.length === 0 || !run.req.runTool) return;
-  // What the turn SAID it would do, judged against what its calls do (`progressGuard.ts`).
-  run.progress.noteTurnText(result.text);
   const calls: TurnCall[] = result.toolCalls.map((tc) => ({ name: tc.name, ...parseToolArgs(tc.args) }));
   // A question ends the run as its reply; any other turn's narration is kept as its own block (`turnToolCalls.ts`).
   last.terminal = terminalAskReply(run, result, calls, a.step);

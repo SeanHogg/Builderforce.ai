@@ -20,7 +20,7 @@
 
 import { RUN_CANCELLED_REASON, openRun } from "@builderforce/agent-run";
 import type { ContextSource, RunEvent, RunMessage, RunPolicy, RunPorts, RunTask, SteeringSource, SteerInput } from "@builderforce/agent-run";
-import { RunKnowledgeRecorder, renderPolicyDirectives, type CapabilityProvider } from "@builderforce/agent-tools";
+import { RunKnowledgeRecorder, type CapabilityProvider } from "@builderforce/agent-tools";
 import { randomUUID } from "node:crypto";
 import type { AgentLoopConfig } from "../builderforce/agent-loop/agent-loop-config.js";
 import type { EventStream } from "../builderforce/agent-loop/event-stream.js";
@@ -195,12 +195,8 @@ export function runChannelAgent(input: ChannelRunInput): EventStream<AgentEvent,
         context: contextOf(config, prompts, signal, knowledge),
         platform: channelTools({ tools, bridge, knowledge: config.knowledge ?? knowledge, query: request, window: (ref) => resolveContextWindowTokens(models.resolve(ref)) }),
       };
-      // The opening rows are the conversation so far: the system prompt, the session's history, then the prompts (the last is the task).
-      // The transcript is handed over whole, so the kernel's own opening rows never render the governance directives: the system row carries
-      // them here, through the ONE renderer, or an `inject-directive` gate would never reach the model on a channel.
-      const system = [renderPolicyDirectives(config.policyGates), context.systemPrompt ?? ""].filter((part) => part.length > 0).join("\n\n");
+      // Preserve session history. Shared opening assembly renders governance and the current system prompt.
       const rows = [
-        ...(system ? [{ role: "system" as const, content: system }] : []),
         ...context.messages.map(toRunRow),
         ...prompts.map((prompt) => ({ ...toRunRow(prompt), person: true as const })),
       ];
@@ -208,7 +204,7 @@ export function runChannelAgent(input: ChannelRunInput): EventStream<AgentEvent,
       if (last) last.task = true;
       // The run's directory is the workspace root a path-scoped governance gate judges an absolute path against.
       const workspace = config.workspaceDir ? { workspace: { defaultRepo: config.workspaceDir } } : {};
-      const task: RunTask = { runId: randomUUID(), prompt: request, request, dispatch: { source: "chat" }, transcript: rows, ...workspace };
+      const task: RunTask = { runId: randomUUID(), prompt: request, request, dispatch: { source: "chat" }, persona: context.systemPrompt, transcript: rows, ...workspace };
       const outcome = await openRun({ task, policy: policyOf(config, request), ports, ...(signal ? { signal } : {}) });
       // A failure with no model turn behind it must still reach the runner as the errored message it reads (it fails over on it).
       // A run stopped by a breaker or a budget ended as the runner always saw it: on its last tool result.

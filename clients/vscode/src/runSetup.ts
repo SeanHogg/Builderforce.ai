@@ -96,9 +96,7 @@ export function runContextFields(ports: SetupPorts, input: RunContextInput): Run
           turnContext: async () => {
             const r = pack ? await pack : undefined;
             if (r && "error" in r) throw r.error;
-            return [r?.value?.block, attached].filter((part): part is string => !!part?.trim()).join("
-
-") || undefined;
+            return [r?.value?.block, attached].filter((part): part is string => !!part?.trim()).join("\n\n") || undefined;
           },
         }
       : {}),

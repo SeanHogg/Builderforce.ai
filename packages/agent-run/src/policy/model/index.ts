@@ -151,6 +151,7 @@ export function initialModelRunState(input: {
   pick: { model: string; strict: boolean };
   delegatedRole: string | null | undefined;
   phaseModels?: RunPolicyOptions["phaseModels"];
+  startPhase?: RunPolicyOptions["startPhase"];
   /** Stall re-prompts already spent on the current model (a resumed run). */
   stallRecoveries?: number;
   /** One-shot `tool_choice` a stall recovery forced on the next request. */
@@ -159,7 +160,10 @@ export function initialModelRunState(input: {
   preflightNotices?: readonly string[];
 }): ModelRunState {
   return {
-    policy: initialRunPolicy(startOptions(input.pick, input.delegatedRole, input.phaseModels)),
+    policy: initialRunPolicy({
+      ...startOptions(input.pick, input.delegatedRole, input.phaseModels),
+      ...(input.startPhase ? { startPhase: input.startPhase } : {}),
+    }),
     stallRecoveries: input.stallRecoveries ?? 0,
     ...(input.forceToolChoice ? { forceToolChoice: input.forceToolChoice } : {}),
     preflightNotices: [...(input.preflightNotices ?? [])],
@@ -315,7 +319,7 @@ export {
   type UnresolvedReasons,
 } from "./preflight.js";
 export { downgradeDecision, planModelWarning, type DowngradeInput, type DowngradeKind, type PlanModelWarning } from "./downgradeRule.js";
-import { modelDowngrade, runModelPreflight } from "./preflight.js";
+import { modelDowngrade, recordModelPreflight, runModelPreflight, type RecordedModelPreflight } from "./preflight.js";
 
 // ── The hook (what runAgent drives) ─────────────────────────────────────────
 
@@ -368,5 +372,13 @@ export const modelHook: ModelHook = {
 };
 
 export { recoverProviderFailure };
+
+/** Bind model facts through the shared factory; the default still checks the transport. */
+export function createModelHook(options: { recordedPreflight?: RecordedModelPreflight } = {}): ModelHook {
+  const recorded = options.recordedPreflight;
+  return recorded ? { ...modelHook, preflight: (ctx) => recordModelPreflight(ctx, recorded) } : modelHook;
+}
+
+export type { RecordedModelPreflight };
 
 export default modelHook;

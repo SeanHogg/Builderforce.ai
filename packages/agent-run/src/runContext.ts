@@ -18,6 +18,8 @@ export interface RunAgentInput {
   ports: RunPorts;
   /** The state a prior invocation saved, to resume from. */
   resume?: RunState;
+  /** Initial routing result supplied by openRun. */
+  pipeline?: RunState["pipeline"];
   /** Steps this invocation may take before yielding. `1` on a cloud tick; unbounded when omitted. */
   maxSteps?: number;
   /**

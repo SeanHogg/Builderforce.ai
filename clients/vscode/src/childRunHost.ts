@@ -12,7 +12,8 @@
  * this file is only the derivation.
  */
 
-import { MID_TURN_META_KEY, subagentSystemPrompt } from "@builderforce/agent-loop";
+import { spawnChild } from "@builderforce/agent-run";
+import { MID_TURN_META_KEY } from "@builderforce/agent-loop";
 import { briefWithHandoff, ownerHandoffBlock } from "@builderforce/agent-tools";
 import {
   appendRunMessage,
@@ -141,30 +142,36 @@ export function createChildRunHost(deps: ChildRunHostDeps): ChildRunHost & { aft
       const parent: RunSpec = subagentModel ? { ...spec, subagentModel } : spec;
       const base = parent.basePrompt ?? parent.systemPrompt;
       const model = modelForChildRun(parent, req.role);
-      return deps.start({
-        chatId: key,
-        systemPrompt: `${subagentSystemPrompt(req.persona, { owner: owner.name, role: req.role })}\n\n${base}`,
-        basePrompt: base,
-        // The owner's opening DATA (IDE persona, project, editor context …): the child's prompt is built from it the same way.
-        ...(parent.opening ? { opening: parent.opening } : {}),
-        ...(model ? { model } : {}),
-        ...(parent.modelStrict != null ? { modelStrict: parent.modelStrict } : {}),
-        ...(parent.routingMode ? { routingMode: parent.routingMode } : {}),
-        ...(parent.maxTokens ? { maxTokens: parent.maxTokens } : {}),
-        ...(parent.reasoning ? { reasoning: parent.reasoning } : {}),
-        // The brief plus what the owner already established (chat #273: the child re-derived it all).
-        userTurn: childBrief(req, owner.key),
-        projectId: parent.projectId ?? null,
-        chatMode: "work",
-        autoApprove: deps.autoApproveOf(owner.rootChatId),
-        // A child's turns are progress inside its owner's work, not lessons of their own.
-        evermind: false,
-        ...(parent.modelSurface ? { modelSurface: parent.modelSurface } : {}),
-        child: {
-          lineage,
-          role: req.role,
-          model: {},
-        },
+      return spawnChild({
+        parentRunId: String(owner.key), entryPoint: "vscode", depth: lineage.depth,
+        owner: owner.name, task: childBrief(req, owner.key), role: req.role,
+        persona: req.persona, basePrompt: base,
+      }, {
+        openRun: (child) => deps.start({
+          chatId: key,
+          systemPrompt: child.systemPrompt,
+          basePrompt: base,
+          // The owner's opening DATA (IDE persona, project, editor context …): the child's prompt is built from it the same way.
+          ...(parent.opening ? { opening: parent.opening } : {}),
+          ...(model ? { model } : {}),
+          ...(parent.modelStrict != null ? { modelStrict: parent.modelStrict } : {}),
+          ...(parent.routingMode ? { routingMode: parent.routingMode } : {}),
+          ...(parent.maxTokens ? { maxTokens: parent.maxTokens } : {}),
+          ...(parent.reasoning ? { reasoning: parent.reasoning } : {}),
+          // The brief plus what the owner already established (chat #273: the child re-derived it all).
+          userTurn: child.prompt,
+          projectId: parent.projectId ?? null,
+          chatMode: "work",
+          autoApprove: deps.autoApproveOf(owner.rootChatId),
+          // A child's turns are progress inside its owner's work, not lessons of their own.
+          evermind: false,
+          ...(parent.modelSurface ? { modelSurface: parent.modelSurface } : {}),
+          child: {
+            lineage,
+            role: req.role,
+            model: {},
+          },
+        }),
       });
     },
 

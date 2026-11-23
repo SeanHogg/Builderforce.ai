@@ -52,7 +52,8 @@ export type { LiveChildWork } from "@builderforce/agent-tools";
 export { delegationGate } from "./commandDedup.js";
 export type { DelegationGate, DelegationGateChildren } from "./commandDedup.js";
 // What a child is, derived from its owner's run (policy, capabilities, result).
-export { childPolicy, childProvider, childResult } from "./child.js";
+export { childPolicy, childProvider, childResult, prepareChildStart, spawnChild, validateChildStart } from "./child.js";
+export type { SpawnChildRequest, ChildStartRequest, SpawnChildPorts } from "./child.js";
 export type { DelegationTraceEvent, SubagentLiveOwner, SubagentPersona };
 
 /** The tool names the surface can run — what `canSpawnHere` and the nudges name. */

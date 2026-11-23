@@ -284,8 +284,7 @@ describe("a turn with #file references", () => {
     const asked: string[] = [];
     const { sent } = await runTurn({
       script: [{ text: "Done." }],
-      spec: { userTurn: "what does this file do?", turnContext: "### Referenced file `src/a.ts`
-export const A = 1;" },
+      spec: { userTurn: "what does this file do?", turnContext: "### Referenced file `src/a.ts`\nexport const A = 1;" },
       ports: {
         persistence: { sendMessages: async (_chatId: number, messages: Array<{ role: string; content: unknown }>) => {
           for (const m of messages) if (m.role === "user") persisted.push(String(m.content));
@@ -294,10 +293,8 @@ export const A = 1;" },
         prefetch: answerFunctionPort(async (q) => { asked.push(q); return undefined; }),
       },
     });
-    expect(persisted.join("
-")).toContain("what does this file do?");
-    expect(persisted.join("
-")).not.toContain("Referenced file");
+    expect(persisted.join("\n")).toContain("what does this file do?");
+    expect(persisted.join("\n")).not.toContain("Referenced file");
     expect(asked).toEqual(["what does this file do?"]);
     expect(JSON.stringify(sent[0])).toContain("Referenced file");
   });

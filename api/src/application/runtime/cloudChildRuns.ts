@@ -16,15 +16,14 @@
  */
 
 import { eq, inArray } from 'drizzle-orm';
-import { childReportText, clipChildOutput, type ChildReportLike, type ModelRole } from '@builderforce/agent-tools';
-import { parseSubagentReport, subagentSystemPrompt } from '@builderforce/agent-loop';
+import { childReportText, clipChildOutput, type ChildReportLike } from '@builderforce/agent-tools';
+import { parseSubagentReport } from '@builderforce/agent-loop';
 import { executions } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { TERMINAL_EXECUTION_STATUSES } from '../../domain/execution/Execution';
 import type { ExecutionStatus } from '../../domain/shared/types';
 import { EXECUTION_NON_TERMINAL_STATUSES } from '../../domain/shared/terminalStatus';
-import { parseJsonObject } from '../../domain/shared/json';
 import { listBranchDiff, readRepoFile } from '../repos/readRepoContents';
 import type { RepoFileReader } from '../repos/repoReadMemo';
 import type { TicketRepoContext } from '../repos/commitFileAsPendingChange';
@@ -35,70 +34,8 @@ import { rehashPaths, type WrittenFileHashes } from './cloudAgent/writtenFileHas
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import type { RuntimeService } from './RuntimeService';
 
-/** The payload key a child's spec rides under. */
-const SPEC_KEY = 'subagent';
-
-/** Everything a child execution needs to know about itself, carried on its payload. */
-export interface CloudChildSpec {
-  parentExecutionId: number;
-  /** The run at the top of its tree — the one its tokens bill to and that opens the PR. */
-  rootExecutionId: number;
-  /** 1 for a child, 2 for a grandchild … (spawning stops at `MAX_SUBAGENT_DEPTH`). */
-  depth: number;
-  /** How its owner addresses it (`message_agent`, `stop_agent`, reports). */
-  handle: string;
-  label: string;
-  task: string;
-  role?: ModelRole;
-  /** Who it runs as — resolved by the parent at spawn, so the child never re-resolves. */
-  persona?: { name: string; brief: string };
-  asAgent?: { ref: string; name: string };
-  staffing?: string;
-  ticket?: string;
-  /** Its owner's display name, for the brief and for direction it reads. */
-  owner: string;
-}
-
-/** A child's handle is its execution id — unique, stateless, and parseable back. */
-export const childHandle = (executionId: number): string => `a${executionId}`;
-export function childIdOf(handle: string): number | null {
-  const m = /^a(\d+)$/.exec(handle.trim());
-  return m ? Number(m[1]) : null;
-}
-
-export function parseCloudChild(payload: string | null | undefined): CloudChildSpec | null {
-  if (!payload) return null;
-  try {
-    const spec = (JSON.parse(payload) as Record<string, unknown>)[SPEC_KEY] as CloudChildSpec | undefined;
-    return spec && typeof spec.parentExecutionId === 'number' && typeof spec.task === 'string' ? spec : null;
-  } catch {
-    return null;
-  }
-}
-
-/** Whether a run is someone's sub-agent — a slice of its parent's run, never a run of its own. */
-export const isSubagentRun = (payload: string | null | undefined): boolean => parseCloudChild(payload) !== null;
-
-/** The child's payload: its owner's routing (chat, agent, model, gates) and its own spec. */
-export function childPayload(parentPayload: string | undefined, spec: CloudChildSpec): string {
-  // An unreadable parent payload just carries nothing forward.
-  const parent = parseJsonObject(parentPayload);
-  // Only what routes and governs the run is inherited. A parent's follow-up directive,
-  // role instruction or review sign-off is ITS job, not the child's.
-  const inherited = Object.fromEntries(
-    ['chatId', 'cloudAgentRef', 'model', 'policyGates', 'routingBias'].filter((k) => k in parent).map((k) => [k, parent[k]]),
-  );
-  // `lifecycleNeutral`: a child never moves the ticket or speaks for a managed stage.
-  return JSON.stringify({ ...inherited, executor: 'durable', lifecycleNeutral: true, [SPEC_KEY]: spec });
-}
-
-/** The child's prompt and first turn — the sub-agent brief in front of its owner's prompt. */
-export function childBrief(spec: CloudChildSpec, basePrompt: string): { systemPrompt: string; userContent: string } {
-  return {
-    systemPrompt: `${subagentSystemPrompt(spec.persona, { owner: spec.owner, ...(spec.role ? { role: spec.role } : {}) })}\n\n${basePrompt}`,
-    userContent: spec.task,
-  };
-}
+import { childHandle, childIdOf, parseCloudChild, type CloudChildSpec } from './cloudChildSpec';
+export { childBrief, childHandle, childIdOf, childPayload, isSubagentRun, parseCloudChild, withCloudChildHandle, type CloudChildSpec } from './cloudChildSpec';
 
 type ChildRow = { id: number; status: string; payload: string | null; result: string | null; errorMessage: string | null };
 

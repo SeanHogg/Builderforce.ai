@@ -102,6 +102,11 @@ export interface StallState {
 
 /** Plain JSON. Everything any policy needs across a step boundary. */
 export interface RunState {
+  /** The routing decision made at admission. Null represents a child or another unscored run. */
+  pipeline?: { route: "quick" | "full"; score: number } | null;
+  work?: import("./workPlan.js").WorkLedgerItem[];
+  workObservations?: Record<string, import("./workPlan.js").WorkLedgerItem[]>;
+  workHolds?: number;
   messages: unknown[]; step: number;
   guards: LoopGuardState;          // progress, cascade, finishDue, checksNote — WS1 names this type; the guards (`policy/guards`) snapshot into it
   finish: FinishGateState;         // placeholder / CI-pending / no-deliverable counters, signoff recorded — reuse cloudAgent/finishGates.ts:55, do not redefine

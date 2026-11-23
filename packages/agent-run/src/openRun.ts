@@ -4,21 +4,22 @@
  * (`check:one-execution` enforces it). openRun does four things, in this order:
  *
  *   1. refuses a run whose `policy.entryPoint` is missing (never defaults it);
- *   2. routes the run (`routeRun`) when the surface handed a {@link RouteInput}, and folds the start into the run's
- *      initial model policy — so a surface hands the request, never a pre-built start;
+ *   2. restores the admitted route on resume or decides it from the task and host settings, then seeds the model policy;
  *   3. composes ONE module set from the surface's ports through the existing factories — an absent port is the
  *      module's honest default;
  *   4. calls `runAgent`.
  */
+import { ALL_ENTRY_POINTS } from "@builderforce/learned-routing";
 import { RUN_CANCELLED_REASON, type RunOutcome, type RunPolicy } from "./contract.js";
 import { createCompactionHook, type CompactionHookOptions } from "./policy/compaction/index.js";
 import { createFinishHook, type FinishPorts } from "./policy/finish/index.js";
 import { createGuardsHook, type GuardPorts } from "./policy/guards/index.js";
 import { withShipGate, type PublishGatePort } from "./policy/guards/shipGate.js";
-import type { CompactionHook, FinishHook, ModelHook, PolicyContext } from "./policy/hooks.js";
-import { defaultPolicyModules, type PolicyModules } from "./policy/index.js";
+import type { FinishHook, PolicyContext } from "./policy/hooks.js";
+import type { PolicyModules } from "./policy/index.js";
+import { createModelHook, type RecordedModelPreflight } from "./policy/model/index.js";
 import { createVerifyHook, type VerifyPorts } from "./policy/verify/index.js";
-import { routeRun, type RouteDecision, type RouteInput } from "./route/routeRun.js";
+import { defaultPipelineRouting, routeRun, type RouteDecision, type RouteInput } from "./route/routeRun.js";
 import { currentView, emit, policyContext, type RunAgentInput } from "./runContext.js";
 import { runAgent } from "./runAgent.js";
 import { tapEvents } from "./tapEvents.js";
@@ -37,23 +38,16 @@ export interface SurfacePorts {
   closeOut?: CloseOutPort;
   guards?: GuardPorts;
   verify?: VerifyPorts;
-  /**
-   * Summarizer options for the agent's compaction, or a surface's own fold. TRANSITIONAL EXCEPTION (1 of 2): the `{ hook }` form is the
-   * Brain's own fold and only `brain-embedded/src/run/runPrepared.ts` may pass it (`check:one-execution` enforces it) — retire it once the
-   * fold is the agent's (ROADMAP 'One pipeline' item 6).
-   */
-  compaction?: CompactionHookOptions | { hook: CompactionHook };
-  /**
-   * The model preflight the run records before turn 1. TRANSITIONAL EXCEPTION (2 of 2): only `brain-embedded/src/run/runPrepared.ts` may
-   * pass it (`check:one-execution` enforces it) until the preflight is the agent's own.
-   */
-  preflight?: ModelHook["preflight"];
+  /** Shared compaction strategy inputs: transport, native history storage and observations. */
+  compaction?: CompactionHookOptions;
+  /** Facts from a host preflight that already emitted its notices; the shared factory owns the verdict and event. */
+  preflight?: RecordedModelPreflight;
   /** Refuse the model's raw publish calls under the run's ship policy (PRD 48 §4.2), reporting each refusal. */
   publishGate?: PublishGatePort;
 }
 
 /** What a surface hands openRun: the run's input minus the modules, plus its ports and the facts to route by. */
-export interface OpenRunInput extends Omit<RunAgentInput, "modules"> {
+export interface OpenRunInput extends Omit<RunAgentInput, "modules" | "pipeline"> {
   surface?: SurfacePorts;
   /**
    * The facts to route by, or a route a surface already DECIDED (`{ input, decided }`: the Brain decides once, up front, to size its
@@ -84,6 +78,11 @@ async function runCloseOut(closeOut: CloseOutPort, ctx: PolicyContext, mode: Clo
 function withCloseOut(finish: FinishHook, closeOut: CloseOutPort, ran: { value: boolean }): FinishHook {
   return {
     ...finish,
+    async openWork(ctx) {
+      ran.value = true;
+      await runCloseOut(closeOut, ctx, "finish");
+      return finish.openWork?.(ctx) ?? null;
+    },
     async gate(ctx) {
       ran.value = true;
       await runCloseOut(closeOut, ctx, "finish");
@@ -101,22 +100,28 @@ function composeModules(surface: SurfacePorts, ran: { value: boolean }): Partial
   }
   if (surface.guards || surface.publishGate) modules.guards = withShipGate(createGuardsHook(surface.guards), surface.publishGate);
   if (surface.verify) modules.verify = createVerifyHook(surface.verify);
-  if (surface.compaction) modules.compaction = "hook" in surface.compaction ? surface.compaction.hook : createCompactionHook(surface.compaction);
-  if (surface.preflight) modules.model = { ...defaultPolicyModules().model, preflight: surface.preflight };
+  if (surface.compaction) modules.compaction = createCompactionHook(surface.compaction);
+  if (surface.preflight) modules.model = createModelHook({ recordedPreflight: surface.preflight });
   return modules;
 }
 
 /**
- * The policy with the route's start folded into its initial model policy (`modelStart`) and pins, and the route's verdict on the verify
- * stage. Only an EXISTING `modelStart` is merged into — never created, and `plain` is never injected, so a surface keeps the model policy
- * it chose (the cloud's pick/strict/delegated-role seed is not flipped to the plain one). An unrouted run (no pipeline) folds nothing
- * but the host's stage models and a sub-agent's `code` start.
+ * Fold the route into the host's existing model policy. Hosts without a modelStart seed keep
+ * their model options, with the phase and pins supplied by the route. Unscored runs keep
+ * their selection, while a configured child seed starts in code.
  */
 export function routedPolicy(policy: RunPolicy, route: RouteInput, decision: RouteDecision): RunPolicy {
   const { pipeline, start, skipsVerify } = decision;
   const prior = policy.modelStart;
   const folded: RunPolicy = skipsVerify ? { ...policy, skipVerifyStage: true } : policy;
-  if (!prior) return folded;
+  if (!prior) {
+    if (!pipeline) return folded;
+    return {
+      ...folded,
+      ...(start.pinnedModel ? { pinnedModel: start.pinnedModel } : {}),
+      modelOptions: { ...policy.modelOptions, startPhase: start.startPhase, ...(start.phaseModels ? { phaseModels: start.phaseModels } : {}) },
+    };
+  }
   // An unrouted run still carries the host's stage models (they reach the run through the route input, the ONE path), and a sub-agent starts in `code`.
   if (!pipeline) {
     if (!route.child && !start.phaseModels) return folded;
@@ -129,7 +134,7 @@ export function routedPolicy(policy: RunPolicy, route: RouteInput, decision: Rou
       ...prior,
       ...(model ? { model } : {}),
       ...(route.modelStrict !== undefined ? { strict: route.modelStrict } : {}),
-      ...(start.startPhase ? { startPhase: start.startPhase } : {}),
+      ...(start.startPhase && !prior.delegatedRole ? { startPhase: start.startPhase } : {}),
       ...(start.phaseModels ? { phaseModels: start.phaseModels } : {}),
     },
   };
@@ -138,15 +143,26 @@ export function routedPolicy(policy: RunPolicy, route: RouteInput, decision: Rou
 /** Open one run through the one entry. See the file header. */
 export async function openRun(input: OpenRunInput): Promise<RunOutcome> {
   if (!input.policy?.entryPoint) throw new Error("openRun: policy.entryPoint is required");
-  const { surface = {}, route, ...rest } = input;
+  if (!ALL_ENTRY_POINTS.includes(input.policy.entryPoint)) throw new Error("openRun: policy.entryPoint must be registered");
+  const { surface = {}, route: requested, ...rest } = input;
+  const route = requested && "decided" in requested ? requested : {
+    request: rest.task.request ?? rest.task.prompt,
+    child: rest.task.dispatch.source === "subagent",
+    modelStrict: rest.policy.modelStart?.strict ?? rest.policy.modelOptions?.strictPin,
+    ...requested,
+    routing: requested?.routing ?? defaultPipelineRouting(),
+  };
   const closeOutRan = { value: false };
   let run: RunAgentInput = { ...rest, modules: composeModules(surface, closeOutRan) };
-  if (route) {
+  if (run.resume?.pipeline !== undefined) {
+    if (run.resume.pipeline?.route === "quick") run = { ...run, policy: { ...run.policy, skipVerifyStage: true } };
+  } else {
     const input: RouteInput = "decided" in route ? route.input : route;
     const decision: RouteDecision = "decided" in route ? route.decided : routeRun(route);
     run = { ...run, policy: routedPolicy(run.policy, input, decision) };
     // The route is traced once per run, right after `run.started`; a resumed tick is not a start.
     const { pipeline } = decision;
+    run.pipeline = pipeline ? { route: pipeline.route, score: pipeline.score } : null;
     if (pipeline && !run.resume) {
       let said = false;
       run = {

@@ -16,6 +16,7 @@ import { persistReply, type BrainRunContext } from '../runStore/brainRunContext'
 import { persistMidTurnText } from '../runStore/turnPersistence';
 import type { LastTurn } from './brainTurn';
 import { noteFinishSkipsGates } from './finishSkipsGates';
+import { transportRetryTrace } from '../runPolicyTraces';
 
 /** The stop hook's counter key; the other rungs are `deliveryGates.ts`'s. */
 const STOP_HOOK_RUNG = 'brain.stop_hook';
@@ -44,6 +45,16 @@ export function brainDeliveryLedger(run: BrainRunContext, last: LastTurn): Deliv
   const skippedByFinish = (content: string): Promise<void> =>
     noteFinishSkipsGates(run, last.step, content, { id: STOP_HOOK_RUNG, applies: async () => (await askStop()) !== null });
   return {
+    providerFailure: {
+      rerouted({ step, outcome, message }) {
+        last.abandonedFailure = undefined;
+        pushTrace(c, transportRetryTrace(nowIso(), step, outcome, message));
+      },
+      abandoned() {
+        last.abandonedFailure?.();
+        last.abandonedFailure = undefined;
+      },
+    },
     // A host that cannot run a tool judges no stall at all (the rungs are none): the turn IS the answer.
     owns: { settle: true, ...(runTool ? {} : { narration: true as const }) },
     // The Brain's stall order and wording (the stall policy's options below): a narrating turn is re-prompted before any rung, a model that

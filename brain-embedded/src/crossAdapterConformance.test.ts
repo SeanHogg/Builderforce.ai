@@ -13,6 +13,7 @@ import type { RunEvent, RunOutcomeRow } from '@builderforce/agent-run';
 import { runScenario } from './run/parity/harness';
 import { call, calls, reply } from './run/parity/script';
 import type { Scenario } from './run/parity/types';
+import { ALL_ENTRY_POINTS } from '@builderforce/learned-routing';
 import type { RunEntryPoint } from './runStore/runTypes';
 
 const seen = vi.hoisted(() => ({ events: [] as RunEvent[], rows: [] as RunOutcomeRow[] }));
@@ -40,7 +41,7 @@ vi.mock('@builderforce/agent-run', async (importOriginal) => {
 
 const { CONFORMANCE_ANSWER, CONFORMANCE_PROMPT, CONFORMANCE_TOOL, CONFORMANCE_TRACE, conformanceTrace } = await import('@builderforce/agent-run');
 
-const ENTRY_POINTS: readonly RunEntryPoint[] = ['vscode', 'web', 'rovr'];
+const ENTRY_POINTS: readonly RunEntryPoint[] = ALL_ENTRY_POINTS;
 
 const scenario = (entryPoint: RunEntryPoint): Scenario => ({
   id: `conformance-${entryPoint}`,
@@ -61,7 +62,9 @@ describe('the Brain under the shared scripted task, through startRun', () => {
       const record = await runScenario(scenario(entryPoint));
 
       expect(record.scenarioError).toBeUndefined();
-      expect(conformanceTrace(seen.events)).toEqual(CONFORMANCE_TRACE);
+      expect(conformanceTrace(seen.events)).toEqual([
+        CONFORMANCE_TRACE[0], 'run.routed', ...CONFORMANCE_TRACE.slice(1),
+      ]);
       expect(record.host.toolCalls.map((t) => t.name)).toEqual([CONFORMANCE_TOOL]);
       expect(record.persisted.filter((m) => m.role === 'assistant').at(-1)?.content).toBe(CONFORMANCE_ANSWER);
       // The outcome the run ended with is the uniform row: finished, and labelled with the surface the host declared.

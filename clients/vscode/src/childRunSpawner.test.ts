@@ -56,6 +56,14 @@ afterEach(() => {
 });
 
 describe("an owner never runs what its live child owns (chat #60338)", () => {
+  it("rejects an empty brief before registering the child or starting its host", () => {
+    const { host } = fakeHost();
+    const start = vi.spyOn(host, "startChild");
+    const invalid = childControls(host, OWNER).spawn({ label: "invalid", task: "  ", role: "verify" });
+    expect(invalid).toMatchObject({ ok: false });
+    expect(host.registry.liveOf(OWNER.key)).toEqual([]);
+    expect(start).not.toHaveBeenCalled();
+  });
   it("regression: chat #60338 — refuses a parent run_command that duplicates the live child's command, and runs it once the child settled", async () => {
     const { host, finish } = fakeHost();
     const controls = childControls(host, OWNER);

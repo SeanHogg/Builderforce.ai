@@ -24,6 +24,64 @@ import {
   type SubagentResult,
 } from "@builderforce/agent-tools";
 import type { RunOutcome, RunPolicy } from "../../contract.js";
+import { MAX_SUBAGENT_DEPTH, subagentSystemPrompt, type SubagentPersona } from "@builderforce/agent-loop";
+import { ALL_ENTRY_POINTS, type EntryPoint } from "@builderforce/learned-routing";
+
+export interface SpawnChildRequest {
+  parentRunId: string;
+  entryPoint: EntryPoint;
+  /** The child's depth, not the parent's. */
+  depth: number;
+  owner: string;
+  task: string;
+  role?: string;
+  persona?: SubagentPersona;
+  basePrompt?: string;
+  workItemIds?: readonly string[];
+}
+
+export interface ChildStartRequest {
+  prompt: string;
+  systemPrompt: string;
+  entryPoint: EntryPoint;
+  lineage: { parentRunId: string; depth: number };
+  workItemIds: readonly string[];
+}
+
+/** Validate before recording a child as admitted. */
+export function validateChildStart(request: Pick<SpawnChildRequest, "entryPoint" | "parentRunId" | "depth" | "owner" | "task">): void {
+  if (!ALL_ENTRY_POINTS.includes(request.entryPoint)) throw new Error("spawnChild: entryPoint is required and must be registered");
+  if (typeof request.parentRunId !== "string" || !request.parentRunId.trim()) throw new Error("spawnChild: parentRunId is required");
+  if (!Number.isInteger(request.depth) || request.depth < 1 || request.depth > MAX_SUBAGENT_DEPTH) {
+    throw new Error(`spawnChild: child depth must be an integer from 1 through ${MAX_SUBAGENT_DEPTH}`);
+  }
+  if (typeof request.owner !== "string" || !request.owner.trim() || typeof request.task !== "string" || !request.task.trim()) {
+    throw new Error("spawnChild: owner and task are required");
+  }
+}
+
+/** Prepare without starting: durable hosts can persist these inputs for their later tick. */
+export function prepareChildStart(request: SpawnChildRequest): ChildStartRequest {
+  validateChildStart(request);
+  const standing = subagentSystemPrompt(request.persona, { owner: request.owner, role: request.role });
+  return {
+    prompt: request.task,
+    systemPrompt: request.basePrompt ? `${standing}\n\n${request.basePrompt}` : standing,
+    entryPoint: request.entryPoint,
+    lineage: { parentRunId: request.parentRunId, depth: request.depth },
+    workItemIds: [...(request.workItemIds ?? [])],
+  };
+}
+
+export interface SpawnChildPorts<Result> {
+  /** Authenticated/scoped host start. Result is its native admission handle OR completed report. */
+  openRun(request: ChildStartRequest): Promise<Result>;
+}
+
+/** Validate before host side effects; never interpret an admission handle as a completed report. */
+export async function spawnChild<Result>(request: SpawnChildRequest, ports: SpawnChildPorts<Result>): Promise<Result> {
+  return ports.openRun(prepareChildStart(request));
+}
 
 /** The owner's policy, narrowed to one of its children. */
 export function childPolicy(parent: RunPolicy, request: Pick<SubagentRequest, "role">): RunPolicy {

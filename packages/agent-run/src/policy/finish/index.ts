@@ -23,6 +23,7 @@ import type { RunMessage } from "../../contract.js";
 import type { FinishHook, PolicyContext } from "../hooks.js";
 import { evaluateFinishGates, matchesRequiredReviewSignoff, missingReviewVerdictMessage, type FinishGatePorts, type RequiredReviewSignoff } from "./gates.js";
 import { applyVerifyPhase } from "../verify/runEndMemory.js";
+import { applyWorkEvidence, MAX_OPEN_WORK_HOLDS, outstandingWork, type WorkEvidence } from "../../workPlan.js";
 
 /** Why the last finish attempt was refused, per run (the D1 cascade needs the NAMED verdict, not just the text). */
 const lastReasons = new WeakMap<object, string | undefined>();
@@ -32,6 +33,8 @@ export function lastFinishReason(state: object): string | undefined {
 
 /** The optional engine ports a surface binds with {@link createFinishHook}. */
 export interface FinishPorts extends FinishGatePorts {
+  /** Read the scoped status of all assigned ids in one batch. */
+  workEvidence?: (ids: readonly string[]) => Promise<readonly WorkEvidence[]>;
   /** The run belongs to a delegation tree (its owner or a child). Absent ⇒ only a child (`parentRunId`) is. */
   delegated?: boolean;
   /**
@@ -116,7 +119,22 @@ export function signoffSettleBlock(ctx: PolicyContext): string | null {
  */
 export function createFinishHook(ports: FinishPorts = {}): FinishHook {
   const delegated = (ctx: PolicyContext): boolean => ports.delegated ?? ctx.task.dispatch.parentRunId !== undefined;
-  const openWork = async (ctx: PolicyContext): Promise<string | null> => (ports.openWork ? ports.openWork(ctx) : null);
+  const openWork = async (ctx: PolicyContext): Promise<string | null> => {
+    if (ctx.state.work?.length) {
+      if (ports.workEvidence) {
+        const evidence = await ports.workEvidence(ctx.state.work.map((item) => item.id));
+        ctx.state.work = applyWorkEvidence(ctx.state.work, evidence);
+      }
+      const unresolved = outstandingWork(ctx.state.work);
+      if (unresolved) {
+        const holds = (ctx.state.workHolds ?? 0) + 1;
+        ctx.state.workHolds = holds;
+        if (holds > MAX_OPEN_WORK_HOLDS) throw new Error(unresolved);
+        return unresolved;
+      }
+    }
+    return ports.openWork ? ports.openWork(ctx) : null;
+  };
   return {
     settleBlock: signoffSettleBlock,
     // An owner never ends with children still working — on `finish` (below) or in prose.

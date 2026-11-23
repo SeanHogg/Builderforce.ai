@@ -11,7 +11,7 @@ import { asksForChange } from '@builderforce/agent-stall';
 import { isChildReportText } from '@builderforce/agent-tools';
 import { contentText } from '../localSuccess/turnFeatures';
 import { askedModelOf, codeRunOutcome, completedTurns } from '../runOutcomeReport';
-import { attemptedDelegation, runOutcomeRequestOf, type RunOutcomeRow } from '@builderforce/agent-run';
+import { attemptedDelegation, runOutcomeRequestOf, workSupportsRoutingSample, type RunOutcomeRow } from '@builderforce/agent-run';
 import { parseRunOutcomeTelemetry } from '@builderforce/learned-routing';
 import { shippedToBaseBranch } from '../shipVerification';
 
@@ -194,7 +194,12 @@ export async function startRun(runKey: number, request: BrainRunRequest, claim?:
       // agent's §8.2 telemetry riding on it as optional fields. A run with no grade reports nothing there; its uniform record goes through its
       // own port, recorded but never taught to routing.
       if (outcome) {
-        void req.reportOutcome!(agentRow ? { ...parseRunOutcomeTelemetry({ ...agentRow }), ...outcome } : outcome).catch(() => undefined);
+        const routingSignal = workSupportsRoutingSample(agentRow?.work, outcome.terminalStatus === 'completed');
+        void req.reportOutcome!({
+          ...(agentRow ? parseRunOutcomeTelemetry({ ...agentRow }) : {}),
+          ...outcome,
+          ...(routingSignal ? {} : { routingSignal: false }),
+        }).catch(() => undefined);
       } else if (agentRow && req.reportRunRecord) {
         // A run that ended before any model completed (a refusal, a Stop before the first token, a pinned model that broke) has no model on
         // its row but still reports, once, naming the model it asked for.

@@ -31,6 +31,9 @@ export { runAgent, type RunAgentInput } from "./runAgent.js";
 
 // THE one entry into the runtime: surfaces hand ports + a RouteInput, never a module set (`check:one-execution`).
 export { openRun, type OpenRunInput, type SurfacePorts, type PublishGatePort, type CloseOutMode, type CloseOutPort } from "./openRun.js";
+export { defaultPipelineRouting } from "./route/routeRun.js";
+export type { AssignedWork, WorkEvidence, RunWorkPort, RunWorkScorecard } from "./workPlan.js";
+export { childWorkPort, MAX_OPEN_WORK_HOLDS, recordWorkSnapshot, workSupportsRoutingSample } from "./workPlan.js";
 export { routeRun, type RouteDecision, type RouteInput, type RouteStart } from "./route/routeRun.js";
 
 // The §8.2 outcome row (WS6): the builder, the per-run tally, and the trace fold an
@@ -95,6 +98,8 @@ export {
 } from "./policy/finish/gates.js";
 export { assertsUnrunVerification, hasNoCodeDeliverable } from "./policy/finish/finishTools.js";
 export {
+  createModelHook,
+  type RecordedModelPreflight,
   cascadeReason,
   initialModelRunState,
   policyRole,
@@ -127,6 +132,7 @@ export {
 } from "./policy/tools/taskState.js";
 export { openingRows } from "./turnContext.js";
 export { RUN_CANCELLED_NOTICE } from "./policy/steering/index.js";
+export { compactionSavedTokens, foldLimits, type HistoryCompactionPorts } from "./policy/compaction/history.js";
 export { createCompactionHook, type CompactionHookOptions } from "./policy/compaction/index.js";
 export {
   DEFAULT_PI_COMPACTION_RESERVE_TOKENS_FLOOR,
@@ -156,7 +162,8 @@ export { queueRunSteering, runSteeringSource } from "./policy/steering/index.js"
 
 // What an adapter needs to run a child (never to decide behaviour): what a child run is
 // derived from its owner's — its policy, its capabilities, its result.
-export { childPolicy, childProvider, childResult } from "./policy/subagents/index.js";
+export { childPolicy, childProvider, childResult, prepareChildStart, spawnChild, validateChildStart } from "./policy/subagents/index.js";
+export type { SpawnChildRequest, ChildStartRequest, SpawnChildPorts } from "./policy/subagents/index.js";
 
 // The tools a surface granting these capabilities is offered, before the tools policy narrows them.
 export { offeredSchemas } from "./runTurn.js";
