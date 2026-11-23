@@ -31,7 +31,7 @@ import type { BrainMessage } from './types';
  * must be able to tell it apart from a later shape without guessing from which keys are
  * present. Purely additive fields do not bump it.
  */
-export const CHAT_DIAGNOSTICS_SCHEMA_VERSION = 1;
+export const CHAT_DIAGNOSTICS_SCHEMA_VERSION = 2;
 
 /** Model/account provenance for the run, as data rather than the rendered header lines. */
 export interface ChatDiagnosticsProvenance {
@@ -45,7 +45,7 @@ export interface ChatDiagnosticsProvenance {
 
 /** One persisted diagnostics capture. The wire shape of `POST /api/brain/chats/:id/diagnostics`. */
 export interface ChatDiagnosticsReport {
-  schemaVersion: 1;
+  schemaVersion: typeof CHAT_DIAGNOSTICS_SCHEMA_VERSION;
   /** ISO capture time. */
   capturedAt: string;
   /** Where the capture was taken ('VS Code (VSIX)' | 'Web' | …). */

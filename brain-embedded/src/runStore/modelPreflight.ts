@@ -17,6 +17,7 @@
 
 import { planModelWarning, type ModelPreflightResult, type PlanModelWarning } from '@builderforce/agent-run';
 import { byoUnresolvedSummary, parseByoUnresolved, type BrainTraceEvent } from '../brainTriage';
+import { bounded, PREFLIGHT_PROBE_MS } from './deadline';
 import type { RunCell } from './runCell';
 import { accrueByoUnresolved, emit, nowIso, pushTrace } from './runCells';
 
@@ -59,7 +60,7 @@ export async function applyModelPreflight(
   if (!preflight) return;
   let result: ModelPreflightResult | undefined;
   try {
-    result = await preflight();
+    result = await bounded(PREFLIGHT_PROBE_MS, preflight());
   } catch {
     return;
   }

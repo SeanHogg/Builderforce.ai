@@ -9,6 +9,7 @@ import { CONTINUATION_TIMED_OUT } from '../chatError';
 /** How long a continuation waits on the host's run-time parts / the attachments it reads, and how long a
  *  settling run's ticket backstops may hold the chat. Mutable so tests can shorten them. */
 export const continuationLimits = { prepareMs: 15_000, settleMs: 30_000 };
+export const PREFLIGHT_PROBE_MS = 2_500;
 
 /** One overall allowance for a sequence of steps: each asks how much is LEFT (never below 1 ms), so stacked
  *  per-step bounds cannot add up to a long hold. */

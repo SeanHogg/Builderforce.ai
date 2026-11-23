@@ -14,12 +14,18 @@ const PASTE = [
 ].join('\n');
 
 describe('regression: chat #168571 — a question routes quick whatever the paste says', () => {
+  it('treats a question about the full pipeline as a question', () => {
+    expect(scorePipeline(pipelineFeaturesOf('How does the full pipeline work?'), { mode: 'always' }).route).toBe('quick');
+    expect(scorePipeline(pipelineFeaturesOf('Should we use the full pipeline?'), { mode: 'always' }).route).toBe('quick');
+    expect(scorePipeline(pipelineFeaturesOf('Could you run the full pipeline?')).route).toBe('full');
+  });
   it('the incident message verbatim is question-only and routes quick', () => {
     for (const actionType of ['other', 'backend_api', 'decision', 'analysis']) {
       const f = pipelineFeaturesOf(`${ASK}\n\n${PASTE}`, { actionType });
       expect(f.questionOnly).toBe(true);
       const scored = scorePipeline(f);
       expect(scored.route).toBe('quick');
+      expect(scorePipeline(f, { mode: 'always' }).route).toBe('quick');
     }
   });
 

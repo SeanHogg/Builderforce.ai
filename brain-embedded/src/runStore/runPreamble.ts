@@ -25,7 +25,8 @@ import type { RunCell } from './runCell';
 import { nowIso, pushTrace } from './runCells';
 import { seedConfigLog } from './configLog';
 import { isFollowUpTurn, latestUserText } from './convoText';
-import { answerFromMemory, recallForRun } from './runMemory';
+import { adoptMemoryAnswer, lookupMemoryAnswer, recallForRun } from './runMemory';
+import { budget, PREFLIGHT_PROBE_MS } from './deadline';
 import { answerDeterministically } from './prefetchGate';
 import { gatherHostRunContext, recordServedReads } from './hostRunContext';
 import type { BrainRunContext } from './brainRunContext';
@@ -113,8 +114,24 @@ export async function prepareBrainRun(chatId: number, c: RunCell, req: BrainRunR
   // What the host hands the run before turn 1, in one wait (see `hostRunContext.ts`): the
   // recall hint (its context pack's focus files + headings) widens the query past the
   // bare sentence; the model preflight (E7) is on the banner before the first turn.
-  const host = await gatherHostRunContext(c, req, !!evermind?.recall);
-  const { recalled, block: recallBlock, blockTokens: recallBlockTokens } = await recallForRun(c, convo, evermind, host.recallHint);
+  const preflightStarted = Date.now();
+  const remaining = budget(PREFLIGHT_PROBE_MS);
+  const memoryReplay = memoryReplayable(latestUserText(convo), { followUp: isFollowUpTurn(convo) });
+  const gatePending = answerDeterministically(chatId, c, req, metadata.guestTurnId, runKey);
+  const memoryAnswer = gatePending.then((gate) => gate.answered || remaining() <= 1
+    ? null : lookupMemoryAnswer(c, req, allTools, memoryReplay, remaining()));
+  const hostAndRecall = gatherHostRunContext(c, req, !!evermind?.recall).then(async (host) => ({
+    host, recall: await recallForRun(c, convo, evermind, host.recallHint, remaining()),
+  }));
+  const [{ host, recall }, memoryCandidate] = await Promise.all([hostAndRecall, memoryAnswer]);
+  const { recalled, block: recallBlock, blockTokens: recallBlockTokens } = recall;
+  if (evermind?.recall || evermind?.answer || req.modelPreflight || req.turnContext || req.servedReads) {
+    pushTrace(c, {
+      ts: nowIso(), category: 'message', label: 'run.preflight',
+      durationMs: Date.now() - preflightStarted,
+      args: { recalled: !!recallBlock, memoryAnswer: !!memoryCandidate },
+    });
+  }
   // The opening prompt, built ONCE from the request's data (`openingSections.ts`); everything below only appends per-run blocks.
   let systemPrompt = assembleOpening(resolvedSystemPrompt, req.opening);
   // The per-turn parts the lever folds into the system prompt instead (`stablePrefix` off): still THIS turn's text (`promptTools.turn`).
@@ -135,16 +152,15 @@ export async function prepareBrainRun(chatId: number, c: RunCell, req: BrainRunR
   // only answer a question that means the same thing everywhere — the opening turn of a
   // conversation, not "status?" three turns in (which replayed another chat's ticket
   // report). The same gate covers every tier: on-device, the Q&A cache and Evermind.
-  const memoryReplay = memoryReplayable(latestUserText(convo), { followUp: isFollowUpTurn(convo) });
   // The PreFetch gate first (`prefetchGate.ts`): a deterministic ANSWER ends the run here;
   // PREFETCH output joins the volatile tail below. Computed from the workspace NOW, so it
   // is not held to the memory replay gate.
-  const gate = await answerDeterministically(chatId, c, req, metadata.guestTurnId, runKey);
+  const gate = await gatePending;
   if (gate.answered) return null;
   // How the gate left the turn rides every model call it makes, so the device ledger's
   // rows (and the gateway's own) say whether the model started from prefetched facts.
   if (req.prefetch) metadata.gateRoute = gate.tail.length > 0 ? 'prefetch' : 'llm';
-  if (await answerFromMemory(chatId, c, req, allTools, memoryReplay)) return null;
+  if (await adoptMemoryAnswer(chatId, c, req, memoryCandidate)) return null;
 
   // The host's task context (its context pack, E2) is ALWAYS volatile: it changes every
   // run, so it rides after the history whatever the stable-prefix lever says. The gate's

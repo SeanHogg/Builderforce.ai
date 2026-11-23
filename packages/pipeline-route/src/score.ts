@@ -23,7 +23,7 @@
  * `./stats` (PRD 41 D13).
  */
 
-import { classifyRequest } from '@builderforce/agent-stall';
+import { classifyRequest, hasExplicitQuestionIntent } from '@builderforce/agent-stall';
 import { sigmoid } from '@seanhogg/builderforce-memory/stats';
 
 export type PipelineRoute = 'full' | 'quick';
@@ -41,6 +41,7 @@ export interface PipelineFeatures {
   broadScope: boolean;
   /** A question with no change verb — an answer, not a change. */
   questionOnly: boolean;
+  explicitQuestion?: boolean;
   /** A continuation of earlier work in the same conversation. */
   followUp: boolean;
   /** The request's action type (`@builderforce/learned-routing` taxonomy), or `other`. */
@@ -159,6 +160,7 @@ export function scorePipeline(f: PipelineFeatures, opts: PipelineScoreOptions = 
     .map(([name]) => name);
   const why = strongest.length ? ` (${strongest.join(', ')})` : '';
   if (f.forceFull) return { score, route: 'full', reason: `the request asks for the full pipeline; score ${score}${why}` };
+  if (f.explicitQuestion) return { score, route: 'quick', reason: `the user asks a question; score ${score}${why}` };
   if (opts.mode === 'always') return { score, route: 'full', reason: `routing is set to always; score ${score}${why}` };
   return score >= threshold
     ? { score, route: 'full', reason: `score ${score} ≥ ${threshold}${why}` }
@@ -169,7 +171,7 @@ const FILE_RE = /(?:[\w@.-]+\/)+[\w.-]+|\b[\w-]+\.(?:tsx?|jsx?|mjs|cjs|py|go|rs|
 const LIST_ITEM_RE = /^\s*(?:\d+[.)]|[-*•])\s+\S/gm;
 const CHAIN_RE = /\b(?:and then|then|after that|afterwards|next|also|finally|as well as)\b/gi;
 const BROAD_RE = /\b(?:every|each|across|throughout|entire|whole|codebase|repo-?wide|end[- ]to[- ]end|architecture|redesign|overhaul|migrate|migration|all (?:the )?(?:files|modules|services|packages|pages|endpoints|tests|callers|places))\b/i;
-const FORCE_FULL_RE = /\bfull[- ]pipeline\b/i;
+const FORCE_FULL_RE = /(?:^\s*full[- ]pipeline\s*[.!]?\s*$|(?:^|[.;!—–]|\s-\s)\s*(?:(?:can|could|would|will) you\s+)?(?:please\s+)?(?:run|use|force|take|prefer)\s+(?:the\s+)?full[- ]pipeline\b)/i;
 
 /**
  * The intents that make a request TICKET / SPEC reconciliation work — data, read by {@link pipelineFeaturesOf}. Any
@@ -202,7 +204,8 @@ export function pipelineFeaturesOf(
   request: string,
   context: { actionType?: string; followUp?: boolean } = {},
 ): PipelineFeatures {
-  const { intent, ask: text } = classifyRequest(request);
+  const classification = classifyRequest(request);
+  const { intent, ask: text } = classification;
   const files = new Set((text.match(FILE_RE) ?? []).map((m) => m.toLowerCase()));
   const listItems = (text.match(LIST_ITEM_RE) ?? []).length;
   const chained = (text.match(CHAIN_RE) ?? []).length;
@@ -212,6 +215,7 @@ export function pipelineFeaturesOf(
     multiStep: listItems >= 2 || chained >= 2,
     broadScope: BROAD_RE.test(text),
     questionOnly: intent === 'question',
+    ...(hasExplicitQuestionIntent(classification) ? { explicitQuestion: true } : {}),
     followUp: context.followUp === true,
     actionType: context.actionType ?? 'other',
     forceFull: FORCE_FULL_RE.test(text),

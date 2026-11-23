@@ -8,7 +8,8 @@
  * ticket/dispatch picture from {@link staffingSummaryInTrace} — no second copy of any of them. Pure.
  */
 import { editedPathsOf } from '@builderforce/agent-tools';
-import { isFailedToolResult, type BrainTraceEvent } from '../brainTriage';
+import type { BrainTraceEvent } from '../brainTriage';
+import { isFailedToolResult } from '../toolFailure';
 import { utf8ByteLength } from '../composingActivity';
 import { isCodeChangeTool } from '../localWorkspaceTools';
 import { modelTurnLog } from '../modelScorecard';

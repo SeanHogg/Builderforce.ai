@@ -24,6 +24,8 @@ import type { RunTally } from "./telemetry/runTally.js";
  * only definition rather than a copy of one.
  */
 export interface LoopGuardState {
+  /** Tool rounds spent gathering evidence for a question. */
+  answerTurns?: number;
   /** A3: the progress detector's tallies and trip count. */
   progress?: ProgressDetectorState;
   /** D1: the cascade's units, the first tick's action type, the seed's softness. */

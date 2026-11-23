@@ -5,7 +5,7 @@
  * leaves its own trace steps.
  */
 
-import { classifyRequest } from '@builderforce/agent-stall';
+import { classifyRequest, hasExplicitQuestionIntent } from '@builderforce/agent-stall';
 import { shipDirective, shipSourceLabel } from '@builderforce/run-guards';
 import { chatModeDirective, type ChatMode } from '../chatMode';
 import { turnOptimizationDirective } from '../turnOptimization';
@@ -73,13 +73,10 @@ export function foldRunDirectives(
   // The SHIP POLICY (`runShipPolicy.ts`): a sub-agent ships nothing, its owner ships once
   // after verifying the fan-out; otherwise the host's policy (the project's setting) or the
   // default. A chat hold narrows either to uncommitted.
-  c.shipPolicy = runShipPolicy(req, hold);
+  const questionRun = hasExplicitQuestionIntent(classifyRequest(latestUserText(convo)));
+  const resolvedShip = runShipPolicy(req, hold);
+  c.shipPolicy = questionRun ? { ...resolvedShip, mode: 'leave_uncommitted', merge: 'never' } : resolvedShip;
   if (canShip) {
-    // A QUESTION ships nothing (fix brief W2, chat #168571): the ONE classifier reads
-    // the user's own ask, so a paste full of change verbs never arms a commit policy
-    // on a question. The policy itself is untouched — it only binds a turn that
-    // changes code — but the trace says what this run will actually do.
-    const questionRun = classifyRequest(latestUserText(convo)).intent === 'question';
     pushTrace(c, {
       ts: nowIso(),
       category: 'message',

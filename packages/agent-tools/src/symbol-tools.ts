@@ -49,7 +49,7 @@ export const findSymbolTool: ToolDefinition = defineTool({
     const kind = asKind(args.kind);
     const requested = typeof args.limit === "number" && Number.isFinite(args.limit) ? Math.floor(args.limit) : FIND_DEFAULT_LIMIT;
     const limit = Math.min(FIND_MAX_LIMIT, Math.max(1, requested));
-    const r: SymbolFindResult = await ctx.caps.symbols!.find(query, { scope, kind, limit });
+    const r: SymbolFindResult = await ctx.caps.symbols!.find(query, { scope, kind, limit, staleOk: true });
     if (!r.ok) return { data: r as unknown as Record<string, unknown> };
     // One line per match: a JSON object per match would spend most of the result budget
     // on repeated keys, and these are read by a model, not parsed.
@@ -60,8 +60,11 @@ export const findSymbolTool: ToolDefinition = defineTool({
       truncated: r.truncated === true,
       matches: (r.matches ?? []).map((m) => `${m.path}:${m.line} ${m.kind} ${m.name}${m.exported && m.kind !== "heading" ? " (export)" : ""}`),
       indexedFiles: r.indexedFiles,
+      ...(r.staleIndex ? { staleIndex: true } : {}),
     };
-    if ((r.total ?? 0) === 0) {
+    if (r.staleIndex) {
+      data.note = "The symbol index is refreshing. Confirm these locations with read_file, or use search_code if a match is missing.";
+    } else if ((r.total ?? 0) === 0) {
       data.note = r.partialIndex
         ? `No definition named like "${query}" in the indexed files — but the index is PARTIAL (file cap reached), so this is not proof it does not exist. Try search_code${scope ? "" : " with a `path`"}.`
         : `No definition named like "${query}"${scope ? ` under "${scope}"` : ""}. It may be defined in a form the index does not recognise (a re-export, an object property, a generated file) — use search_code for the exact text.`;

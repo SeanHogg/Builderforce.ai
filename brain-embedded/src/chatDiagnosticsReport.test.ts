@@ -157,7 +157,7 @@ describe('formatChatDiagnosticsReportJson', () => {
     expect(json.length).toBeLessThanOrEqual(REPORT_JSON_MAX_CHARS);
     const parsed = JSON.parse(json) as Record<string, unknown>;
     expect(parsed._elided).toEqual(['*']);
-    expect(parsed.schemaVersion).toBe(1);
+    expect(parsed.schemaVersion).toBe(CHAT_DIAGNOSTICS_SCHEMA_VERSION);
     expect(parsed.capturedAt).toBe('2026-09-15T12:00:00.000Z');
     expect('chat' in parsed).toBe(false);
   });

@@ -14,6 +14,10 @@ The follow-up fixes early VSIX admission before shared validation, cloud admissi
 
 Children carry scoped assignments on all three hosts. The shared steering path takes queued follow-ups after finish-tool results. Brain defers native approval until the editor resolves the tool and workspace path, and it records the driver's sole closing synthesis. On-prem sessions, tickets, and children share an execution entry. Native catalogs supply the tools they can dispatch, and shared settlement records checks that actually ran. Hosts retain their own storage, approval presentation, and worktree lifecycle.
 
+Explicit questions use the ask-only classifier and take the quick route unless the ask requests the full pipeline. The shared guard carries their answer budget across ticks. Brain applies the classification to shipping policy and uses the latest run outcome and findings for diagnostics. The [pipeline map](./_scratch-agent-pipeline-map.md) records the preflight and execution details.
+
+The shared history policy uses Memory 2026.10.84 to fold growing narration restatements while retaining new evidence. Brain's repeated-narration finding uses the same fold.
+
 ## Initial implementation review (2026-11-23)
 
 The [pipeline map](./_scratch-agent-pipeline-map.md) now describes the inspected checkout. Sections 0–7 below retain the original slice contract and historical rationale; they must not be read as current-state findings. This review supersedes stale file names and implementation assumptions in those sections.

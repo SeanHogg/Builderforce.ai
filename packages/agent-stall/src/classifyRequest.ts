@@ -66,6 +66,11 @@ export interface RequestClassification {
   signals: RequestSignals;
 }
 
+/** A positive question signal, distinct from the conservative fallback for ambiguous text. */
+export function hasExplicitQuestionIntent({ intent, signals }: RequestClassification): boolean {
+  return intent === 'question' && (signals.questionLead || signals.questionMark || signals.researchLead);
+}
+
 /**
  * Verbs that demand an EFFECT on the world rather than an explanation of it — the
  * union of the lists agent-stall and pipeline-route each kept privately. Verb-led
@@ -109,6 +114,7 @@ const RESUMES_WORK =
  * you change X?", "how do I add a column?") is about a change, not a request for one.
  */
 const INTERROGATIVE = /^\s*(what|why|how|where|when|which|who|is|are|was|were|does|do|did|should|would|will)\b/i;
+const DO_WORK_ORDER = /^\s*(please\s+)?do\s+(?:(?:the|these|those|both|all)\s+)?(?:[\w-]+\s+){0,3}(?:work|tasks?|tickets?|changes?|items?|steps?|slices?)\s*[.!]?\s*$/i;
 
 /** Request modals: "Can you fix X?" is an imperative wearing a question mark. */
 const REQUEST_MODAL = /^\s*(can|could)\b/i;
@@ -215,6 +221,7 @@ export function classifyRequest(text: string | null | undefined): RequestClassif
   if (continuation) return verdict('change');
   // Resuming earlier work is change work, whatever else the sentence looks like.
   if (resumesWork) return verdict('change');
+  if (DO_WORK_ORDER.test(ask)) return verdict('change');
   // A work order chained onto a look wins over the question shape: the person asked
   // for the effect, and the looking is how it starts.
   if (researchLead) return verdict(chainedChange ? 'change' : 'question');

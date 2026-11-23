@@ -3,9 +3,8 @@
  * model narrating its loop instead of advancing it.
  *
  * The verdict is memory's B7 fold itself (`foldRepeatedNarration`, `@seanhogg/builderforce-memory/working`), run
- * over the turns' pre-call texts: a turn is a repeat exactly when the fold would replace its narration with a
- * progress note, and the narration it repeated is the one the fold kept. So the diagnostic reports what the fold
- * does — one similarity (Jaccard + containment over memory's tokenizer), never a second one here.
+ * over the turns' pre-call texts. A turn is a repeat when the fold shortens its narration, including when the fold
+ * keeps new sentences. The diagnostic points to the original narration the fold kept.
  */
 import { foldRepeatedNarration, type TranscriptMessage } from '@seanhogg/builderforce-memory/working';
 import { finding, turnEvidence } from '../findingParts';

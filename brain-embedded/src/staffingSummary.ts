@@ -21,7 +21,9 @@
  * VS Code transcript and the persisted JSON report all state the same thing.
  */
 
-import { isFailedToolResult, isTicketWriteTool, type BrainTraceEvent } from './brainTriage';
+import type { BrainTraceEvent } from './brainTriage';
+import { isFailedToolResult } from './toolFailure';
+import { isTicketWriteTool } from './ticketToolVocabulary';
 import { isCodeChangeTool } from './localWorkspaceTools';
 import { isLocalTicketCreateLabel } from './ticketToolVocabulary';
 import { toolResultRecord } from './toolResultRecord';

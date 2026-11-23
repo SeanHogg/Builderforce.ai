@@ -25,6 +25,8 @@ const CASES: readonly Case[] = [
   { name: 'incident ask alone', text: INCIDENT_ASK, intent: 'question', ask: INCIDENT_ASK },
   // The brief's change cases.
   { name: 'fix X', text: 'fix X', intent: 'change' },
+  { name: 'do the planned slices', text: 'Do the two slices', intent: 'change' },
+  { name: 'ask about the slices', text: 'Do the two slices overlap?', intent: 'question' },
   { name: 'implement Y', text: 'implement Y', intent: 'change' },
   { name: 'continue unfinished work', text: "continue this chat's unfinished work", intent: 'change' },
   { name: 'review + chained fix', text: 'review this PR and fix what you find', intent: 'change' },
