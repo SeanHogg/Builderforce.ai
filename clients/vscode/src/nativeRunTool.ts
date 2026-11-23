@@ -1,8 +1,7 @@
 /**
  * How the native participant runs a tool call: the one-line labels the approval modal and
  * the progress lines show, the tool defs advertised to the model, the confirm predicate, and
- * the dispatcher that enforces the governance gates at the tool seam. Split from
- * `nativeBrainRun.ts`, which re-exports every name here. No `vscode` import.
+ * the dispatcher that enforces the governance gates at the tool seam. No `vscode` import.
  */
 
 import { resolveCallName, toolNameSet } from "@builderforce/agent-tools";

@@ -37,6 +37,7 @@ async function handOffTwice(runKey: number, tasks: unknown[]) {
     return { text: 'Done.', toolCalls: [], finishReason: 'stop', resolvedModel: 'direct/m/coder' };
   };
   await startRun(runKey, {
+    entryPoint: 'vscode',
     resolvedSystemPrompt: 'sys',
     tools: TOOLS,
     projectId: 11,

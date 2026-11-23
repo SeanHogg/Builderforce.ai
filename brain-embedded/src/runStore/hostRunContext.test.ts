@@ -19,6 +19,7 @@ describe('the host task context', () => {
     let system = '';
     let user = '';
     await startRun(4801, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       persistence,
       userTurn: 'update docs/a.md',
@@ -38,6 +39,7 @@ describe('the host task context', () => {
     let turn = 0;
     let replyToRead = '';
     await startRun(4802, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       persistence,
       tools: TOOLS,
@@ -58,6 +60,7 @@ describe('the host task context', () => {
 
   it('a host part that throws costs that part, and says so on the trace', async () => {
     await startRun(4803, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       persistence,
       userTurn: 'go',

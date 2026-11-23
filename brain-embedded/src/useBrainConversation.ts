@@ -66,6 +66,8 @@ import {
 
 
 export interface UseBrainConversationOptions {
+  /** The surface this conversation's runs come in through (telemetry label on every run's outcome row). Required: no surface is assumed. */
+  entryPoint: BrainRunRequest['entryPoint'];
   chatId: number | null;
   modality?: BrainModality;
   /**
@@ -341,6 +343,7 @@ export { unansweredTurnIndex } from './userTurnRuns';
 export function useBrainConversation(options: UseBrainConversationOptions): UseBrainConversation {
   const { persistence, resolveSystemPrompt, stream, imagePrep } = useBrainConfig();
   const {
+    entryPoint,
     chatId,
     modality = 'designer',
     projectId,
@@ -447,6 +450,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       // The rows the person did not write (a Resume continuation, `injectedTurn.ts`): never person turns in the run.
       const injectedTurnIds = [...injectedTurnIdsOf(history), ...(turnInjected && userTurnMessageId != null ? [userTurnMessageId] : [])];
       return {
+      entryPoint,
       resolvedSystemPrompt: fullSystemPrompt,
       tools: toolSpecs && toolSpecs.length > 0 ? toolSpecs : undefined,
       model,
@@ -476,7 +480,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       chatRoster,
       };
     },
-    [fullSystemPrompt, toolSpecs, model, modelStrict, routingMode, pickFallbackModel, windowSources, onDeviceTasks, maxTokens, reasoning, runTool, needsConfirm, answerQuestion, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId, chatMode, chatRoster],
+    [entryPoint, fullSystemPrompt, toolSpecs, model, modelStrict, routingMode, pickFallbackModel, windowSources, onDeviceTasks, maxTokens, reasoning, runTool, needsConfirm, answerQuestion, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId, chatMode, chatRoster],
   );
 
   const bindContinuation = useContinuation(persistence, prepareRun);

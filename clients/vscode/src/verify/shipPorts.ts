@@ -1,7 +1,7 @@
 /**
  * The PRD 45 ship-gate ports as ONE editor run binds them (PRD 46 §3.6): `verifier`, `git` and
  * `reviewer`, spread onto the Brain host request next to `needsConfirm` by both editor surfaces
- * — the panel's run host (`brainRunHost.ts`) and the native participant (`nativeBrainRun.ts`).
+ * — the panel's run host (`brainRunHost.ts`) and the native participant (`participantRun.ts`, through the same host).
  *
  * The verifier and git ports are built ONCE per workspace root and reused by every run there,
  * so the verifier's in-process cache spans runs (a re-check of unchanged bytes costs nothing).

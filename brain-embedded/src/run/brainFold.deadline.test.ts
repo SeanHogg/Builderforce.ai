@@ -51,7 +51,7 @@ describe('the fold never holds a run\'s first model call past its deadline', () 
     };
 
     // The first run: stopped by the person while it is still folding.
-    const first = startRun(key, { resolvedSystemPrompt: 'sys', persistence: persistence(), stream: stream as never, seed: SEED, seedIds: SEED_IDS, userTurn: REQUEST });
+    const first = startRun(key, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', persistence: persistence(), stream: stream as never, seed: SEED, seedIds: SEED_IDS, userTurn: REQUEST });
     await vi.advanceTimersByTimeAsync(1_000);
     expect(summaries.length).toBeGreaterThan(0);
     stopRun(key);
@@ -61,7 +61,7 @@ describe('the fold never holds a run\'s first model call past its deadline', () 
     expect(getCell(key).compactMemo).toBeNull(); // a stopped fold leaves no memo: the next run folds again
 
     // The identical request, sent again: a new run starts and folds again.
-    const second = startRun(key, { resolvedSystemPrompt: 'sys', persistence: persistence(), stream: stream as never, userTurn: REQUEST });
+    const second = startRun(key, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', persistence: persistence(), stream: stream as never, userTurn: REQUEST });
     await vi.advanceTimersByTimeAsync(foldLimits.summaryMs - 1_000);
     expect(main).toHaveLength(0); // still inside the fold's allowance
     await vi.advanceTimersByTimeAsync(2_000);
@@ -79,6 +79,7 @@ describe('the fold never holds a run\'s first model call past its deadline', () 
   it('a summary that answers in time is used as before (no timeout step)', async () => {
     const key = 56655;
     const run = startRun(key, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       persistence: persistence(),
       stream: (async (opts: Opts) => (isSummary(opts) ? { ...done(), text: 'SUMMARY-TEXT' } : done())) as never,

@@ -117,6 +117,7 @@ describe('a change request goes from analysis to code that runs (end to end)', (
     const turns: Turn[] = [];
     const calls: Call[] = [];
     await startRun(6101, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       tools: TOOLS,
       projectId: 11,
@@ -170,6 +171,7 @@ describe('a change request goes from analysis to code that runs (end to end)', (
     const turns: Turn[] = [];
     const calls: Call[] = [];
     await startRun(6102, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       tools: TOOLS,
       runTool: host(calls),
@@ -201,8 +203,9 @@ describe('a change request goes from analysis to code that runs (end to end)', (
   it('starts a coding sub-agent in code, so it makes its change instead of re-analysing', async () => {
     const turns: Turn[] = [];
     const calls: Call[] = [];
-    await startRun(77, { resolvedSystemPrompt: 'sys', stream: async () => ({ text: 'Delegating.', toolCalls: [], finishReason: 'stop' }), persistence, userTurn: REQUEST });
+    await startRun(77, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', stream: async () => ({ text: 'Delegating.', toolCalls: [], finishReason: 'stop' }), persistence, userTurn: REQUEST });
     await startRun(-6103, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       tools: TOOLS,
       runTool: host(calls),
@@ -220,6 +223,7 @@ describe('a change request goes from analysis to code that runs (end to end)', (
     // The chat's first run edits, so the chat has "reached code".
     let first = 0;
     await startRun(6105, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       tools: TOOLS,
       runTool: host([]),
@@ -234,7 +238,7 @@ describe('a change request goes from analysis to code that runs (end to end)', (
     // Its next change request goes through the same chain a fresh chat's does.
     const turns: Turn[] = [];
     const calls: Call[] = [];
-    await startRun(6105, { resolvedSystemPrompt: 'sys', tools: TOOLS, projectId: 11, runTool: host(calls), stream: analysisParalysis(turns, 'hand_off'), persistence, userTurn: REQUEST });
+    await startRun(6105, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', tools: TOOLS, projectId: 11, runTool: host(calls), stream: analysisParalysis(turns, 'hand_off'), persistence, userTurn: REQUEST });
     expect(turns[0]!.role).toBe('plan');
     expect(turns.findIndex((t) => t.tools.length === 1 && t.tools[0] === 'hand_off')).toBe(STREAK_FORCED_AT);
     expect(calls.some((c) => c.name === 'spawn_agents')).toBe(true);
@@ -246,8 +250,9 @@ describe('a change request goes from analysis to code that runs (end to end)', (
     const calls: Call[] = [];
     let reads = 0;
     let edited = false;
-    await startRun(77, { resolvedSystemPrompt: 'sys', stream: async () => ({ text: 'Delegating.', toolCalls: [], finishReason: 'stop' }), persistence, userTurn: REQUEST });
+    await startRun(77, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', stream: async () => ({ text: 'Delegating.', toolCalls: [], finishReason: 'stop' }), persistence, userTurn: REQUEST });
     await startRun(-6106, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       tools: TOOLS,
       runTool: host(calls),
@@ -280,6 +285,7 @@ describe('a change request goes from analysis to code that runs (end to end)', (
     const turns: Turn[] = [];
     let reads = 0;
     await startRun(6104, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       tools: TOOLS,
       runTool: host([]),

@@ -65,6 +65,7 @@ async function runReadingPlanner(runId: number) {
     return { text: 'Done.', toolCalls: [], finishReason: 'stop', resolvedModel: 'direct/m/coder' };
   };
   await startRun(runId, {
+    entryPoint: 'vscode',
     resolvedSystemPrompt: 'sys',
     tools: TOOLS,
     projectId: 11,
@@ -129,6 +130,7 @@ describe('an overlapping hand_off on the FORCED turn', () => {
       return { text: 'Done.', toolCalls: [], finishReason: 'stop', resolvedModel: 'direct/m/coder' };
     };
     await startRun(7078, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       tools: TOOLS,
       projectId: 11,

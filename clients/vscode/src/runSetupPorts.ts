@@ -14,8 +14,6 @@
 
 import type * as vscode from "vscode";
 import type { BrainRunHostPorts } from "./brainRunHostContract";
-import type { NativeBrainRunOptions } from "./nativeRunTypes";
-import { runContextFields, startRunRepo } from "./runSetup";
 import { runGit } from "./gitApi";
 import { parseRemoteUrl } from "./gitContext";
 import { isCheckout, listCheckouts } from "./workspaceCheckouts";
@@ -68,37 +66,5 @@ export function editorRunSetupPorts(
     settleRun: (runKey) => {
       void killRunJobs(runKey).catch((e: unknown) => logLine(`[run ${runKey}] background jobs not all stopped: ${e instanceof Error ? e.message : String(e)}`));
     },
-  };
-}
-
-/**
- * The native chat participant's whole run SETUP in one call (PRD 35 E2 / E3 / E7): the
- * panel's run host's ports and functions - the task context pack with the pre-search hits in
- * it, the BYO preflight, the run's default checkout, the PreFetch gate (asked of the person's
- * own words, not the turn with its inlined references) and the run-settle release - shaped
- * as the fields `runNativeBrain` takes. Nothing here is the participant's own; it is the host's
- * setup, assembled for a headless run.
- */
-export function nativeRunSetup(
-  secrets: vscode.SecretStorage,
-  workspaceRoot: () => string,
-  globalState: CalibrationMemento,
-  localModels: (() => LocalModelsConfig) | undefined,
-  input: { projectId?: number; serverChatId: number | null; request: string; memory: boolean },
-): Pick<NativeBrainRunOptions, "runContext" | "defaultRepo" | "repoReady" | "settleRun" | "prefetch"> {
-  const setup = editorRunSetupPorts(secrets, workspaceRoot, globalState, localModels, input.request);
-  const repo = startRunRepo(setup, { ...(input.projectId != null ? { projectId: input.projectId } : {}), request: input.request });
-  const { turnContext, recallHint, servedReads, modelPreflight } = runContextFields(setup, { ...input, child: false });
-  return {
-    runContext: {
-      ...(turnContext ? { turnContext } : {}),
-      ...(recallHint ? { recallHint } : {}),
-      ...(servedReads ? { servedReads } : {}),
-      ...(modelPreflight ? { modelPreflight } : {}),
-    },
-    defaultRepo: repo.current,
-    repoReady: repo.ready,
-    settleRun: setup.settleRun,
-    prefetch: setup.prefetch,
   };
 }

@@ -48,8 +48,6 @@ export interface RunSpec extends WebviewRunStart {
   };
   /** The prompt every run in this tree is built on — the top-level owner's. */
   basePrompt?: string;
-  /** False for an owner this host cannot start a turn for (the native chat participant). */
-  wakeable?: boolean;
   /** The sub-agent stage model its children code on (see `modelForChildRun`). */
   subagentModel?: string;
 }
@@ -58,7 +56,7 @@ export interface ChildRunHostDeps {
   registry: ChildRuns;
   /** The spec a run key was last started with. */
   specOf(key: number): RunSpec | undefined;
-  /** The host's ONE run entry — owners and children alike. */
+  /** The ONE door every run opens through: the editor binds the gated start here (`BrainRunHostPorts.startThrough`), so a child, a resumed child and a wake get the change-set identity, journal start and delta capture their owner gets. */
   start(spec: RunSpec): Promise<void>;
   /** Whether a run key is being set up, running or unwinding in the host. */
   isBusy(key: number): boolean;

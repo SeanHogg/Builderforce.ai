@@ -6,7 +6,7 @@
  * drives a binding to its outcome. Test support only.
  */
 
-import { runAgent, runSteeringSource, type RunOutcome } from '@builderforce/agent-run';
+import { openRun, runSteeringSource, type RunOutcome } from '@builderforce/agent-run';
 import type { StreamChatResult } from '../streamChatCompletion';
 import { beginRun } from '../runStore/beginRun';
 import { applyModelPreflight } from '../runStore/modelPreflight';
@@ -15,7 +15,7 @@ import type { BrainRunRequest, RunEntryPoint } from '../runStore/runTypes';
 import { brainEventSink } from '../run/eventSink';
 import { brainRunStorePort } from '../run/brainStore';
 import type { TurnObserver } from '../run/modelTransport';
-import { recordedModelHook } from '../run/preflightRecorded';
+import { recordedModelHook, recordedPreflight } from '../run/preflightRecorded';
 import { brainRunPolicy, brainRunTask, buildBrainRunPorts, type BrainRunBinding } from '../run/webAdapter';
 
 /** A scripted completion in the stream's own result shape. */
@@ -50,7 +50,7 @@ export const persistence = { sendMessages: async () => [] } as BrainRunRequest['
 export function binding(runKey: number, stream: BrainRunRequest['stream'], entryPoint: RunEntryPoint = 'web', extra: Partial<BrainRunRequest> = {}) {
   const cell = getCell(runKey);
   beginRun(cell, runKey);
-  const req: BrainRunRequest = { resolvedSystemPrompt: 'sys', stream, persistence, ...extra };
+  const req: BrainRunRequest = { entryPoint, resolvedSystemPrompt: 'sys', stream, persistence, ...extra };
   const rows: unknown[] = [];
   const bound: BrainRunBinding = {
     entryPoint,
@@ -81,6 +81,13 @@ export async function preflightedModules(h: BoundRun): Promise<{ model: ReturnTy
 /** Drive a bound run to its outcome through the agent, over the Brain's ports. */
 export async function runBound(h: BoundRun): Promise<RunOutcome> {
   const signal = h.cell.abort?.signal;
-  const modules = await preflightedModules(h);
-  return runAgent({ task: brainRunTask(h.binding), policy: brainRunPolicy(h.binding), ports: buildBrainRunPorts(h.binding), modules, ...(signal ? { signal } : {}) });
+  const { req } = h.binding;
+  await applyModelPreflight(h.cell, req.modelPreflight, req.model);
+  return openRun({
+    task: brainRunTask(h.binding),
+    policy: brainRunPolicy(h.binding),
+    ports: buildBrainRunPorts(h.binding),
+    surface: { preflight: recordedPreflight(h.cell, req.model) },
+    ...(signal ? { signal } : {}),
+  });
 }

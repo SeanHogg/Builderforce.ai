@@ -28,6 +28,10 @@ export { READS_BEFORE_DELEGATION_NUDGE as DEFAULT_READS_BEFORE_NUDGE } from "@bu
 // The one agent. `RunAgentInput` is the single entry point.
 export { runAgent, type RunAgentInput } from "./runAgent.js";
 
+// THE one entry into the runtime: surfaces hand ports + a RouteInput, never a module set (`check:one-execution`).
+export { openRun, type OpenRunInput, type SurfacePorts, type PublishGatePort } from "./openRun.js";
+export { routeRun, type RouteInput, type RouteStart } from "./route/routeRun.js";
+
 // The §8.2 outcome row (WS6): the builder, the per-run tally, and the trace fold an
 // adapter uses to persist base counts for a run that died before it settled.
 export * from "./telemetry/index.js";

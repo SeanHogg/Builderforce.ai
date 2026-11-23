@@ -26,5 +26,7 @@ export type RunEvent =
   | { kind: 'budget.contained'; step: number; spentMc: number; capMc: number; unpricedCalls: number; text: string }  // the run reached its USD cap and stopped with this answer
   | { kind: 'budget.unpriced'; step: number; model?: string }  // a turn had no known price (said once per run)
   | { kind: 'loop.no_progress'; step: number; streak: number; forced: string }  // the run circled its own read cache: this turn is forced
+  | { kind: 'run.routed'; step: number; route: 'full' | 'quick'; score: number }  // the pipeline route the run was given, once, right after run.started (openRun)
+  | { kind: 'finish.close_out_error'; step: number; reason: string }  // the surface's close-out threw before the finish gate; the finish went on
   | { kind: 'turn.finished'; step: number }
   | { kind: 'run.finished'; step: number; outcome: RunOutcomeKind };

@@ -174,8 +174,9 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
   // A dynamic import: the bundler splits the agent (its policy suite and the shared tool
   // registry) into its own chunk, fetched when the first turn runs; opening a board does not
   // wait on it. Everything else this module takes from the agent is a type.
-  const { runAgent } = await import('@builderforce/agent-run');
-  const outcome = await runAgent({
+  const { openRun } = await import('@builderforce/agent-run');
+  // `canvasRunPolicy` names `entryPoint: 'canvas'` explicitly; `openRun` throws without one.
+  const outcome = await openRun({
     task: canvasRunTask(run),
     policy: canvasRunPolicy(options, webInferenceModeNow()),
     ports: canvasRunPorts(run),

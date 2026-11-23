@@ -17,6 +17,7 @@ import {
 import type { BrainRunRequest } from './brainRunStore';
 
 const req = (): BrainRunRequest => ({
+  entryPoint: 'vscode',
   resolvedSystemPrompt: 'sys',
   stream: async () => { throw new Error('must not stream locally'); },
   persistence: { sendMessages: async () => [] },

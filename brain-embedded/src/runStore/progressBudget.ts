@@ -28,7 +28,7 @@ import { HAND_OFF_TOOL, HAND_OFF_TOOL_SPEC } from '../planHandoff';
 import type { BrainToolSpec, ChatCompletionMessage } from '../streamChatCompletion';
 import { nowIso, pushTrace } from './runCells';
 import { reportToPolicy, type BrainRunContext } from './brainRunContext';
-import { skipsVerifyStage } from './pipelineRoute';
+
 
 /** A forced hand-off's brief: why it is forced, then the one hand-off instruction. */
 export function handOffBrief(reason: string): string {
@@ -172,7 +172,7 @@ export interface ForcedProgressOptions {
  */
 export function changeBudgetTurn(run: BrainRunContext, step: number, selected: readonly BrainToolSpec[]): ForcedTurn | null {
   // A QUICK pass is one small change with nothing to plan: its budget is a quick pass's.
-  const budget = skipsVerifyStage(run.pipeline) ? QUICK_CHANGE_TURN_BUDGET : PLAN_TURN_BUDGET;
+  const budget = run.route.skipsVerify ? QUICK_CHANGE_TURN_BUDGET : PLAN_TURN_BUDGET;
   if (!changeDue(run.policy, progressed(run), budget) || !budgeted(run)) return null;
   const tools = changeToolsOf(run, selected);
   if (!tools) return null;

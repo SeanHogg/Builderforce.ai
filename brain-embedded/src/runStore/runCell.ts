@@ -138,7 +138,7 @@ export interface RunCell {
   deltaTitleCount: number | null;
   /**
    * Set when `startRun`'s finally ran the deterministic close-out over the cell's final trace,
-   * so the finish-hook wrapper (`deterministicFinish.ts`) — the closer for a run `startRun`
+   * so the close-out port (`deterministicFinish.ts` `closeOutPort`) — the closer for a run `startRun`
    * never drives — stands down. Keeps the close-out single-writer across both paths.
    */
   finishClosedOut: boolean;

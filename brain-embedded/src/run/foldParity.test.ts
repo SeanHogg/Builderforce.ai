@@ -55,9 +55,9 @@ describe('T2 the fold is the Brain\'s own', () => {
     const persistence = { sendMessages: async (chatId: number, msgs: Array<{ role: string; content: string }>) => msgs.map((m) => ({ id: (id += 1), seq: id, chatId, createdAt: '', metadata: null, ...m })) } as never;
     let calls = 0;
     const stream = async (opts: StreamOpts): Promise<StreamChatResult> => { if (isSummary(opts)) { calls += 1; return summary(); } return answer('Done.')(); };
-    await startRun(key, { resolvedSystemPrompt: 'sys', persistence, stream, seed: SEED, seedIds: SEED_IDS, userTurn: 'carry on' });
+    await startRun(key, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', persistence, stream, seed: SEED, seedIds: SEED_IDS, userTurn: 'carry on' });
     const first = calls;
-    await startRun(key, { resolvedSystemPrompt: 'sys', persistence, stream, userTurn: 'and once more' });
+    await startRun(key, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', persistence, stream, userTurn: 'and once more' });
     const summaries = [first, calls - first];
     expect(getCell(key).compactMemo).not.toBeNull();
     expect(summaries[0]).toBeGreaterThan(0);

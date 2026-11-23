@@ -27,7 +27,7 @@ function codeRun(key: number, ticketCallMs: number | 'never') {
   };
   // The catalog carries the linked-ticket listing, so the settle's ticket bookkeeping reads the chat's tickets through `runTool`.
   const tools = [{ type: 'function' as const, function: { name: 'builtin_chats_list_tickets', description: '', parameters: { type: 'object' as const } } }];
-  return startRun(key, { resolvedSystemPrompt: 'sys', stream, persistence, userTurn: 'change it', projectId: 1, runTool, tools });
+  return startRun(key, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', stream, persistence, userTurn: 'change it', projectId: 1, runTool, tools });
 }
 
 describe('backstops that outlive their deadline write nothing into the next run (MF1)', () => {
@@ -39,6 +39,7 @@ describe('backstops that outlive their deadline write nothing into the next run 
       let release!: () => void;
       const hold = new Promise<void>((resolve) => { release = resolve; });
       const second = startRun(9360, {
+    entryPoint: 'vscode',
         resolvedSystemPrompt: 'sys', persistence, userTurn: 'next',
         stream: async () => { await hold; return answer('Next.'); },
       });
@@ -68,7 +69,7 @@ describe('a Stop during the settle does not take the chat from the settling run 
 
       stopRun(9361);
       expect(isLive(9361)).toBe(true); // the Stop did not free it
-      const outcome = await startRun(9361, { resolvedSystemPrompt: 'sys', stream: async () => answer('no'), persistence, userTurn: 'second', userTurnMessageId: 5 });
+      const outcome = await startRun(9361, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', stream: async () => answer('no'), persistence, userTurn: 'second', userTurnMessageId: 5 });
       expect(outcome).toBe('joined');
       expect(isRunning(9361)).toBe(false);
 

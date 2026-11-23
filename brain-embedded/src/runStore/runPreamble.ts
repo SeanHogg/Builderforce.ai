@@ -44,7 +44,7 @@ import type { OutcomeReport } from '../run/eventSink';
 import type { BrainRunRequest } from './runTypes';
 import { attachTurnContext, restoreTurnContext, turnContextBlock, turnContextCarrier } from './turnContext';
 import { resolveServerChatId } from './serverChat';
-import { decideRunPipeline, pipelineMetadata, pipelinePolicyOptions } from './pipelineRoute';
+import { decideRoute, routeMetadata } from './runRoute';
 import { PendingCalls } from './pendingCalls';
 import { conversationPinnedTools } from './conversationPins';
 
@@ -116,9 +116,10 @@ export async function prepareBrainRun(chatId: number, c: RunCell, req: BrainRunR
   // which named (and billed) whichever server chat happened to share it.
   const serverChatId = resolveServerChatId(chatId, req);
   // Full pipeline or a quick pass — decided ONCE, on the user's own request, before any
-  // turn (see `pipelineRoute.ts`). Every call carries the route, so the gateway's usage
+  // turn (see `runRoute.ts`). Every call carries the route, so the gateway's usage
   // row and the device's ledger row both say which pipeline spent the tokens.
-  const pipeline = decideRunPipeline(req, latestUserText(convo), { followUp: isFollowUpTurn(convo) });
+  const route = decideRoute(req, latestUserText(convo), isFollowUpTurn(convo));
+  const pipeline = route.pipeline;
   if (pipeline) {
     pushTrace(c, {
       ts: nowIso(),
@@ -135,7 +136,7 @@ export async function prepareBrainRun(chatId: number, c: RunCell, req: BrainRunR
     guestTurnInput: latestUserText(convo),
     mode: runMode,
     ...(req.projectId != null ? { projectId: req.projectId } : {}),
-    ...pipelineMetadata(pipeline),
+    ...routeMetadata(route),
   };
 
   // What the host hands the run before turn 1, in one wait (see `hostRunContext.ts`): the
@@ -445,11 +446,11 @@ export async function prepareBrainRun(chatId: number, c: RunCell, req: BrainRunR
       // #5739). The one exception is a ROLE, not history — a sub-agent is a delegated
       // SLICE its owner already planned; started in `plan` it was offered `hand_off` and
       // the analysis all over again, inside work it was handed to carry out. A QUICK
-      // run (`pipelineRoute.ts`) starts in `code` too, on the quick model. The host's
+      // run (`runRoute.ts`) starts in `code` too, on the quick model. The host's
       // stage models ride as `phaseModels`, never as one model pinned to the whole run.
-      ...pipelinePolicyOptions(req, pipeline),
+      ...route.start,
     }),
-    pipeline,
+    route,
     // One re-prompt per run for a code change left unshipped (see `selfReviewShip.ts`).
     // One, not a budget: the second time the model stops short it has read the contract
     // twice, and its answer — including "I cannot ship this because…" — is the answer.

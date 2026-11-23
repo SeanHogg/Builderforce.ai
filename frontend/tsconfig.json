@@ -42,6 +42,8 @@
       "@builderforce/ide-file-contract": ["../packages/ide-file-contract/src/index.ts"],
       "@builderforce/agent-loop": ["../packages/agent-loop/src/index.ts"],
       "@builderforce/agent-run": ["../packages/agent-run/src/index.ts"],
+      "@builderforce/pipeline-route": ["../packages/pipeline-route/src/index.ts"],
+      "@builderforce/workload": ["../packages/workload/src/index.ts"],
       "@builderforce/cost-levers": ["../packages/cost-levers/src/index.ts"],
       "@builderforce/difficulty-router": ["../packages/difficulty-router/src/index.ts"],
       "@builderforce/learned-routing": ["../packages/learned-routing/src/index.ts"],

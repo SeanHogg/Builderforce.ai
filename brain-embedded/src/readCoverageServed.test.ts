@@ -43,6 +43,7 @@ describe('read coverage records what the model was SERVED (PRD 35 E1)', () => {
     const toolMessages: string[] = [];
     let turn = 0;
     await startRun(3501, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       tools: TOOLS,
       runTool: readTool(executed),
@@ -73,6 +74,7 @@ describe('read coverage records what the model was SERVED (PRD 35 E1)', () => {
     let turn = 0;
     const lines = PRD_BODY.split('\n');
     await startRun(3503, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       tools: [...TOOLS, { type: 'function' as const, function: { name: 'run_command', description: 'shell', parameters: {} } }],
       runTool: async (name, args) => {
@@ -105,6 +107,7 @@ describe('read coverage records what the model was SERVED (PRD 35 E1)', () => {
     const handed: string[][] = [];
     let turn = 0;
     await startRun(3502, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       tools: TOOLS,
       runTool: readTool(executed),

@@ -167,6 +167,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
   const [chatRoster, setChatRoster] = useState<ChatRosterAgent[]>([]);
 
   const conv = useBrainConversation({
+    entryPoint: 'vscode',
     chatId,
     modality: 'ide',
     // The chat's project powers the run loop's "a code change is always tied to a ticket"

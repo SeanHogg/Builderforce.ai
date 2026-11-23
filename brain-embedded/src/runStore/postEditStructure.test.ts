@@ -56,6 +56,7 @@ async function scriptedEdit(chatId: number, verifier: VerifierPort | undefined, 
   const toolResults: string[] = [];
   let called = 0;
   await startRun(chatId, {
+    entryPoint: 'vscode',
     resolvedSystemPrompt: 'sys',
     tools: TOOLS,
     ...(verifier ? { verifier } : {}),

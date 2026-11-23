@@ -16,6 +16,7 @@ describe('a tool step ENDS when its result returns', () => {
     });
     let turn = 0;
     await startRun(4501, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       tools: [{ type: 'function', function: { name: 'remember_fact', description: 'r', parameters: {} } }],
       runTool: async () => ({ ok: true }),

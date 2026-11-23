@@ -33,8 +33,8 @@ vi.mock('@builderforce/agent-run', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@builderforce/agent-run')>();
   return {
     ...actual,
-    runAgent: async (input: Parameters<typeof actual.runAgent>[0]) => {
-      const outcome = await actual.runAgent({ ...input, ports: { ...input.ports, events: actual.teeEvents(input.ports.events, mocks.events) } });
+    openRun: async (input: Parameters<typeof actual.openRun>[0]) => {
+      const outcome = await actual.openRun({ ...input, ports: { ...input.ports, events: actual.teeEvents(input.ports.events, mocks.events) } });
       mocks.outcome = outcome;
       return outcome;
     },

@@ -1,7 +1,7 @@
 /**
  * channelAdapter — the ON-PREM entry point of the one agent for CHANNELS, cron and the embedded runner (PRD 35 WS5, §3.1).
  *
- * It BUILDS PORTS and calls `runAgent`; it has no loop, no policy and no branch on behaviour. `RunPolicy.entryPoint` is the
+ * It BUILDS PORTS and calls `openRun`; it has no loop, no policy and no branch on behaviour. `RunPolicy.entryPoint` is the
  * telemetry label `on-prem` and is never read. Every difference between a channel run and a ticket, a cloud run or the editor
  * arrives as a port:
  *
@@ -18,7 +18,7 @@
  * `agent-loop.ts`'s `agentLoop` always returned, so the Agent, the session and the runner are unchanged.
  */
 
-import { DEFAULT_READS_BEFORE_NUDGE, RUN_CANCELLED_REASON, asksForSubagents, runAgent } from "@builderforce/agent-run";
+import { RUN_CANCELLED_REASON, openRun } from "@builderforce/agent-run";
 import type { ContextSource, RunEvent, RunMessage, RunPolicy, RunPorts, RunTask, SteeringSource, SteerInput } from "@builderforce/agent-run";
 import { RunKnowledgeRecorder, renderPolicyDirectives, type CapabilityProvider } from "@builderforce/agent-tools";
 import { randomUUID } from "node:crypto";
@@ -37,6 +37,7 @@ import { ChannelModels, channelModelTransport } from "./channelModel.js";
 import { channelDeliveryRungs } from "./channelTruncatedReply.js";
 import { channelTools } from "./channelTools.js";
 import { onPremHuman } from "./onPremHuman.js";
+import { inMemoryStore, onPremPolicy } from "./onPremRunPorts.js";
 import { reportRunRow } from "./outcomeReporter.js";
 
 /**
@@ -88,25 +89,22 @@ export function noReplyMessage(reason: string, gateIds: ReadonlySet<string>, wro
 
 /** The policy DATA of a channel run. How the run behaves is the agent's. */
 export function policyOf(config: AgentLoopConfig, request: string): RunPolicy {
-  return {
-    entryPoint: "on-prem",
+  return onPremPolicy({
     toolScope: "chat-work",
-    role: "code",
-    // Cost lever C9 (compaction under a long-context price tier) is read the on-device way: a partial rollout buckets by install.
-    levers: onDeviceCostLeverOn("c9_price_tier_budget") ? ["c9_price_tier_budget"] : [],
-    // The session owns the folding of a long conversation (a provider's overflow reaches it): the agent only re-packs the context when a
-    // stall fails the run over onto another model, for that model's window, and the model is told it took over. Its reply reserve
-    // follows whichever model is serving, so a failover onto a small window keeps its history.
-    budgets: {},
-    modelHandoff: true,
+    request,
     pinnedModel: modelRef(config.model),
-    inference: "hybrid",
-    verify: "none",
-    approvalGates: [...(config.policyGates ?? [])],
-    delegation: { requested: asksForSubagents(request), readsBeforeNudge: DEFAULT_READS_BEFORE_NUDGE },
-    // A stall with nothing left to try ends the run, and the conversation says why it produced nothing.
-    stallExhausted: "note",
-  };
+    ...(config.policyGates ? { policyGates: config.policyGates } : {}),
+    extra: {
+      // Cost lever C9 (compaction under a long-context price tier) is read the on-device way: a partial rollout buckets by install.
+      levers: onDeviceCostLeverOn("c9_price_tier_budget") ? ["c9_price_tier_budget"] : [],
+      // The session owns the folding of a long conversation (a provider's overflow reaches it): the agent only re-packs the context when a
+      // stall fails the run over onto another model, for that model's window, and the model is told it took over. Its reply reserve
+      // follows whichever model is serving, so a failover onto a small window keeps its history.
+      modelHandoff: true,
+      // A stall with nothing left to try ends the run, and the conversation says why it produced nothing.
+      stallExhausted: "note",
+    },
+  });
 }
 
 /** The steering port: the Agent's own queues. */
@@ -162,14 +160,12 @@ export function runChannelAgent(input: ChannelRunInput): EventStream<AgentEvent,
       const ports: RunPorts = {
         model: channelModelTransport({ models, streamFn, config, tools, bridge }),
         capabilities,
-        store: {
-          load: () => undefined,
-          save: () => undefined,
+        store: inMemoryStore({
           appended: (row: RunMessage) => {
             if (row.role === "assistant" && row.content.trim().length > 0) replied = true;
             bridge.appended(row);
           },
-        },
+        }),
         // The run's uniform outcome row (§8.2), written once at its end. A channel run has no execution id: the row is keyed by the
         // run's own id (`task.runId`) and carries the model that served it; nothing else is claimed.
         events: {
@@ -213,7 +209,7 @@ export function runChannelAgent(input: ChannelRunInput): EventStream<AgentEvent,
       // The run's directory is the workspace root a path-scoped governance gate judges an absolute path against.
       const workspace = config.workspaceDir ? { workspace: { defaultRepo: config.workspaceDir } } : {};
       const task: RunTask = { runId: randomUUID(), prompt: request, request, dispatch: { source: "chat" }, transcript: rows, ...workspace };
-      const outcome = await runAgent({ task, policy: policyOf(config, request), ports, ...(signal ? { signal } : {}) });
+      const outcome = await openRun({ task, policy: policyOf(config, request), ports, ...(signal ? { signal } : {}) });
       // A failure with no model turn behind it must still reach the runner as the errored message it reads (it fails over on it).
       // A run stopped by a breaker or a budget ended as the runner always saw it: on its last tool result.
       if (outcome.kind === "failed" && !outcome.exhausted) bridge.fail(outcome.reason, outcome.reason === RUN_CANCELLED_REASON ? "aborted" : "error");

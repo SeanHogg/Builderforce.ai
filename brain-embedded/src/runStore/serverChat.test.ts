@@ -37,6 +37,7 @@ describe('PRD 36 — a local chat id never leaves the machine', () => {
   it('an unbound local chat sends no chat id: not in the metadata, the cache key, or the prompt', async () => {
     const { calls, stream, persistence } = capture();
     await startRun(LOCAL, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys', stream, persistence, userTurn: 'fix the bug',
       serverChatId: null, clientChatId: 'client-uuid', chatMode: 'work',
     });
@@ -52,6 +53,7 @@ describe('PRD 36 — a local chat id never leaves the machine', () => {
   it('a bound chat names its server chat — and only its server chat', async () => {
     const { calls, stream, persistence } = capture();
     await startRun(LOCAL, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys', stream, persistence, userTurn: 'fix the bug',
       serverChatId: 4242, clientChatId: 'client-uuid', chatMode: 'work',
     });
@@ -67,7 +69,7 @@ describe('PRD 36 — a local chat id never leaves the machine', () => {
 
   it('a host that names no server chat keeps its own id — its chats are server chats', async () => {
     const { calls, stream, persistence } = capture();
-    await startRun(77, { resolvedSystemPrompt: 'sys', stream, persistence, userTurn: 'hi', chatMode: 'work' });
+    await startRun(77, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', stream, persistence, userTurn: 'hi', chatMode: 'work' });
     expect(calls[0]?.metadata?.chatId).toBe(77);
     expect(calls[0]?.prompt_cache_key).toBe('brain:77');
   });

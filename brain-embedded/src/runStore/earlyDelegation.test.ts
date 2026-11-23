@@ -46,6 +46,7 @@ async function scripted(chatId: number, userTurn: string, script: Call[]) {
   let turn = 0;
   let lastRole: string | undefined;
   await startRun(chatId, {
+    entryPoint: 'vscode',
     resolvedSystemPrompt: 'sys',
     tools: TOOLS,
     runTool: async (name, args) => (name === 'read_file' ? { path: (args as { path?: string }).path, content: 'line one\nline two', totalLines: 2 } : { ok: true }),

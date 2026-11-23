@@ -22,7 +22,7 @@ describe('direction a run never read (PRD 35 E10)', () => {
     queueRunSteering(9302, 'for the other chat', { fromPerson: true });
     continueOnSettle(9301, binding);
 
-    await startRun(9301, { resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first ask' });
+    await startRun(9301, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first ask' });
     await until(() => c.asked.length >= 2 && !isRunning(9301));
 
     // It was saved as the chat's own next user turn, after the answer it missed...
@@ -40,7 +40,7 @@ describe('direction a run never read (PRD 35 E10)', () => {
   it('a run that did not opt in leaves its inbox alone (the editor\'s host wakes its own)', async () => {
     const c = chat(['Only answer.'], () => queueRunSteering(9303, 'late', { fromPerson: true }));
 
-    await startRun(9303, { resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'ask' });
+    await startRun(9303, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'ask' });
 
     expect(c.asked).toHaveLength(1);
     expect(drainRunSteering(9303).map((m) => m.text)).toEqual(['late']);
@@ -55,7 +55,7 @@ describe('direction a run never read (PRD 35 E10)', () => {
       return c.stream(opts, handlers);
     };
     continueOnSettle(9304, binding);
-    const run = startRun(9304, { resolvedSystemPrompt: 'sys', stream, persistence: c.persistence, userTurn: 'ask' });
+    const run = startRun(9304, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', stream, persistence: c.persistence, userTurn: 'ask' });
     await until(() => isRunning(9304));
     queueRunSteering(9304, 'typed before the stop', { fromPerson: true });
 
@@ -71,7 +71,7 @@ describe('direction a run never read (PRD 35 E10)', () => {
   it('hands a chat words it did not get as its next turn, when it has a request to run with', async () => {
     const c = chat(['Done.', 'Handled it.']);
     continueOnSettle(9305, binding);
-    await startRun(9305, { resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
+    await startRun(9305, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
 
     expect(wakeChat(9305, 'a turn the screen lost', undefined)).toBe(true);
     await until(() => c.asked.length >= 2 && !isRunning(9305));
@@ -87,7 +87,7 @@ describe('direction a run never read (PRD 35 E10)', () => {
   it('forgets its bindings on a store reset and when the conversation that bound them unmounts', async () => {
     const c = chat(['Done.', 'Done again.']);
     continueOnSettle(9313, binding);
-    await startRun(9313, { resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
+    await startRun(9313, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
     const other: ContinueBinding = { ports: () => ports };
     releaseContinuation(9313, other); // another conversation's binding: not this one's to release
     expect(wakeChat(9313, 'still bound', undefined)).toBe(true);
@@ -99,7 +99,7 @@ describe('direction a run never read (PRD 35 E10)', () => {
     continueOnSettle(9313, binding);
     resetBrainRunStore();
     const again = chat(['Ran again.']);
-    await startRun(9313, { resolvedSystemPrompt: 'sys', stream: again.stream, persistence: again.persistence, userTurn: 'again' });
+    await startRun(9313, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', stream: again.stream, persistence: again.persistence, userTurn: 'again' });
     expect(getCell(9313).lastRequest).not.toBeNull();
     expect(wakeChat(9313, 'the store was reset', undefined)).toBe(false);
   });
@@ -109,7 +109,7 @@ describe('a turn that cannot be made the chat\'s next turn (M2)', () => {
   it('a wake whose row cannot be saved puts the words back in the inbox with their flags - no unhandled rejection', async () => {
     const c = chat(['Done.']);
     continueOnSettle(9306, binding);
-    await startRun(9306, { resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
+    await startRun(9306, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
     c.gate.failUserRows = true;
 
     expect(wakeChat(9306, 'must not be lost', undefined)).toBe(true);
@@ -123,7 +123,7 @@ describe('a turn that cannot be made the chat\'s next turn (M2)', () => {
     const c = chat(['Done.'], times(1, () => { c.gate.failUserRows = true; queueRunSteering(9307, 'unflagged', { fromPerson: true, persist: true }); }));
     continueOnSettle(9307, binding);
 
-    await startRun(9307, { resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
+    await startRun(9307, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
 
     expect(drainRunSteering(9307)).toMatchObject([{ text: 'unflagged', fromPerson: true, persist: true }]);
   });
@@ -134,7 +134,7 @@ describe('words whose row is already saved are never saved twice (MUST-FIX 2)', 
     const c = chat(['First.', 'Second.'], times(1, () => queueRunSteering(9325, 'not saved yet', { fromPerson: true })));
     continueOnSettle(9325, binding);
 
-    await startRun(9325, { resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
+    await startRun(9325, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
     await until(() => c.asked.length >= 2 && !isRunning(9325));
 
     expect(userRows(c)).toEqual(['not saved yet']);
@@ -144,7 +144,7 @@ describe('words whose row is already saved are never saved twice (MUST-FIX 2)', 
     const c = chat(['First.', 'Second.'], times(1, () => queueRunSteering(9314, 'said already', { fromPerson: true, saved: true })));
     continueOnSettle(9314, binding);
 
-    await startRun(9314, { resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
+    await startRun(9314, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
     await until(() => c.asked.length >= 2 && !isRunning(9314));
 
     expect(userRows(c)).toEqual([]);
@@ -158,7 +158,7 @@ describe('words whose row is already saved are never saved twice (MUST-FIX 2)', 
     }));
     continueOnSettle(9315, binding);
 
-    await startRun(9315, { resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
+    await startRun(9315, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
     await until(() => c.asked.length >= 2 && !isRunning(9315));
 
     expect(userRows(c)).toEqual(['needs a row']);
@@ -171,7 +171,7 @@ describe('a Stop that lands while words are becoming the next turn (MUST-FIX 3)'
   it('on an IDLE chat: the row is kept and nothing starts', async () => {
     const c = chat(['Done.', 'must never run']);
     continueOnSettle(9316, binding);
-    await startRun(9316, { resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
+    await startRun(9316, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
 
     let releaseSave!: () => void;
     c.gate.holdUserRows = new Promise<void>((resolve) => { releaseSave = resolve; });
@@ -197,7 +197,7 @@ describe('the continuation prepares its run again (stale run-time parts)', () =>
   it('asks the host for fresh parts: the second run uses them, not the last run\'s', async () => {
     const c = chat(['Done.', 'Handled it.']);
     continueOnSettle(9318, { ports: () => ports, prepareRun: async () => ({ resolvedSystemPrompt: 'FRESH PROMPT' }) });
-    await startRun(9318, { resolvedSystemPrompt: 'OLD PROMPT', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
+    await startRun(9318, { entryPoint: 'vscode', resolvedSystemPrompt: 'OLD PROMPT', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
 
     expect(wakeChat(9318, 'again', undefined)).toBe(true);
     await until(() => c.asked.length >= 2 && !isRunning(9318));
@@ -210,7 +210,7 @@ describe('the continuation prepares its run again (stale run-time parts)', () =>
   it('a host that refuses leaves the (saved) words waiting in the inbox, said on the trace - no run', async () => {
     const c = chat(['Done.', 'must never run']);
     continueOnSettle(9319, { ports: () => ports, prepareRun: async () => { throw new Error('no tab'); } });
-    await startRun(9319, { resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
+    await startRun(9319, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
 
     expect(wakeChat(9319, 'try anyway', undefined)).toBe(true);
     await new Promise((r) => setTimeout(r, 60));
@@ -234,7 +234,7 @@ describe('a file steered into a run the run never read (M4)', () => {
     };
     const notes: ChatInputAttachment = { key: 'n1', name: 'notes.txt', type: 'text/plain' };
     continueOnSettle(9309, { ports: () => readable });
-    await startRun(9309, { resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
+    await startRun(9309, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
 
     expect(wakeChat(9309, 'read this', [notes])).toBe(true);
     await until(() => c.asked.length >= 2 && !isRunning(9309));
@@ -251,7 +251,7 @@ describe('a chat that keeps receiving direction cannot continue forever', () => 
     const c = chat(texts, () => queueRunSteering(9310, 'and another', { fromPerson: true, persist: true }));
     continueOnSettle(9310, binding);
 
-    await startRun(9310, { resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
+    await startRun(9310, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
     await until(() => !isRunning(9310) && c.asked.length >= MAX_CONTINUATIONS + 1);
     await new Promise((r) => setTimeout(r, 100));
 

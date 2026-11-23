@@ -13,7 +13,7 @@ import { isRunning, resetBrainRunStore, type BrainStreamFn } from "@seanhogg/bui
 import { fakeGateway, type FakeGateway, type TurnContext } from "../harness/fakeGateway";
 import type { ToolDef } from "./fileTools";
 import { createBrainRunHost, type BrainRunHostPorts } from "./brainRunHost";
-import { transientRunPersistence } from "./nativeBrainRun";
+import { transientRunPersistence } from "./nativeRunStream";
 
 function readTool(): ToolDef {
   return {

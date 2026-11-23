@@ -71,6 +71,7 @@ describe('the auto-continuation stops after 3 no-progress runs (end-to-end)', ()
     const c = chat(['Done.']);
     continueOnSettle(key, binding);
     await startRun(key, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       stream: c.stream,
       persistence: c.persistence,

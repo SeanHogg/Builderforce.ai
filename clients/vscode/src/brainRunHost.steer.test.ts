@@ -11,7 +11,7 @@ import { getRunTrace, isRunning, resetBrainRunStore, type BrainStreamFn } from "
 import { fakeGateway, type FakeGateway, type TurnContext } from "../harness/fakeGateway";
 import type { ToolDef, ToolRunOptions } from "./fileTools";
 import { createBrainRunHost, type BrainRunHostPorts } from "./brainRunHost";
-import { transientRunPersistence } from "./nativeBrainRun";
+import { transientRunPersistence } from "./nativeRunStream";
 
 /** A `run_command` that runs until its signal aborts — the 10-minute command. A safety
  *  bound (5s) keeps a broken signal path a failing assertion rather than a hung suite. */

@@ -68,7 +68,7 @@ import { editorAccounts } from "./providerConnect";
 import { logLine } from "./errorReporter";
 import { declaredLocalModels, probeLocalFirstRuntimes, probeOnDeviceRuntimes, type LocalModelsConfig } from "./localModels";
 import { resolveEffectiveModelChoice } from "./modelState";
-import { createNativeStream } from "./nativeBrainRun";
+import { createNativeStream } from "./nativeGatewayStream";
 import { gatewayWorkspaceHeaders } from "./gatewayAuth";
 import { hostModelProvisioner } from "./hostBfi/provision";
 import { hostPageEngines } from "./pageEngineBridge";

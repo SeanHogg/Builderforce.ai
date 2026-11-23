@@ -9,7 +9,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const isRunning = vi.hoisted(() => vi.fn((_chatId?: unknown) => false));
 const createChat = vi.hoisted(() => vi.fn(async () => ({ id: 77 })));
-const reachedTools = new Error("reached the tool catalog");
+const reachedRun = new Error("reached the host run");
 
 vi.mock("vscode", () => ({
   l10n: { t: (message: string) => message },
@@ -49,7 +49,9 @@ vi.mock("./localFirstStore", () => ({
 vi.mock("./grounding", () => ({ getGroundingWithHistory: async () => "" }));
 vi.mock("./prompt", () => ({ buildSystemMessages: () => [] }));
 vi.mock("./policyGates", () => ({ PolicyGatesUnavailableError: class extends Error {}, resolveRunPolicyGates: async () => [] }));
-vi.mock("./brainToolCatalog", () => ({ brainToolCatalog: async () => { throw reachedTools; } }));
+vi.mock("./participantRun", () => ({ runViaHost: async () => { throw reachedRun; } }));
+vi.mock("./installRunRecovery", () => ({ installRunRecovery: () => ({ recovered: Promise.resolve([]), safeToResume: () => false }) }));
+vi.mock("./hostLog", () => ({ hostLog: vi.fn() }));
 vi.mock("./brainRunHost", () => ({ OWNER_NAME: "owner" }));
 vi.mock("./chatReferences", () => ({ referencesTurnBlock: async () => "", workspaceReferenceReader: () => ({}) }));
 vi.mock("./hostIngress", () => ({ hostIngressDeps: () => ({}), routeMentionBudget: () => 0 }));
@@ -61,7 +63,6 @@ vi.mock("./noLocalModelPrompt", () => ({}));
 vi.mock("./upgradeAction", () => ({}));
 vi.mock("./hooks/editorDirectives", () => ({}));
 vi.mock("./memoryStaleness", () => ({}));
-vi.mock("./nativeBrainRun", () => ({}));
 vi.mock("./runSetupPorts", () => ({}));
 
 import { createBuilderForceHandler } from "./chatParticipant";
@@ -104,10 +105,10 @@ describe("the participant's busy check", () => {
     expect(markdown).toHaveBeenCalledWith(expect.stringContaining("still working on this chat"));
   });
 
-  it("lets an idle chat through to the tool catalog", async () => {
+  it("lets an idle chat through to the host run", async () => {
     const { markdown, run } = turn({ isBusy: () => false, childControls: () => undefined });
 
-    await expect(run()).rejects.toBe(reachedTools);
+    await expect(run()).rejects.toBe(reachedRun);
 
     expect(markdown).not.toHaveBeenCalled();
   });

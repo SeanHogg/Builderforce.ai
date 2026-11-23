@@ -232,6 +232,6 @@ export async function callPlatformTool(
 }
 
 // The human one-liner for a platform tool call (approval prompt / activity row) lives
-// with the rest of the run's labelling in `nativeBrainRun.toolLabel` — it needs the
+// with the rest of the run's labelling in `nativeRunTool.toolLabel` — it needs the
 // local/remote split to choose between the two phrasings, and having half of that
 // decision here is what let a second copy grow inside the old SDK adapter.

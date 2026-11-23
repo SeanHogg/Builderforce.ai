@@ -10,7 +10,7 @@ import { liftProseAskUser, replayTextOf } from '@builderforce/agent-loop';
 import type { DeliveryLedger, DeliveryTurn, LadderRung } from '@builderforce/agent-run';
 import { askStopHook, MAX_STOP_HOOK_ROUNDS } from '../stopHooks';
 import { deliveryGates, PENDING_NARRATION_GATE } from '../runStore/deliveryGates';
-import { skipsVerifyStage } from '../runStore/pipelineRoute';
+
 import { emit, nowIso, pushTrace } from '../runStore/runCells';
 import { persistReply, type BrainRunContext } from '../runStore/brainRunContext';
 import { persistMidTurnText } from '../runStore/turnPersistence';
@@ -83,7 +83,7 @@ export function brainDeliveryLedger(run: BrainRunContext, last: LastTurn): Deliv
       // The WORKSPACE's end-of-run directives, asked before the ship gate so whatever they make the run do is part of the change that ships.
       const stopNudge = await askStop();
       // A blocked finish that already wrote files continues on the review model; a QUICK run has no verify stage.
-      const verifiable = c.codeChanged && !skipsVerifyStage(run.pipeline);
+      const verifiable = c.codeChanged && !run.route.skipsVerify;
       const stopHook: LadderRung = {
         id: STOP_HOOK_RUNG, applies: !!stopNudge, restate: Array<string>(MAX_STOP_HOOK_ROUNDS).fill(stopNudge ?? ''), free: MAX_STOP_HOOK_ROUNDS, quote: true, spent: 'fall', entersVerify: verifiable,
         onRestate: () => {

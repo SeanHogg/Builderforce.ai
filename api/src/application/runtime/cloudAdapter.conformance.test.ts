@@ -8,7 +8,7 @@
  * continuously and one tick at a time must give the same trace, the same requests and the same outcome.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { runAgent, type RunEvent, type RunOutcome, type RunPolicy, type RunPorts, type RunState, type RunTask } from '@builderforce/agent-run';
+import { openRun, type RunEvent, type RunOutcome, type RunPolicy, type RunPorts, type RunState, type RunTask } from '@builderforce/agent-run';
 
 const h = vi.hoisted(() => ({
   rows: [] as Array<Record<string, unknown>>,
@@ -104,10 +104,10 @@ async function drive(maxSteps?: number): Promise<{ outcome: RunOutcome; trace: s
   const store: { saved?: RunState } = {};
   const requests: unknown[] = [];
   const step = maxSteps !== undefined ? { maxSteps } : {};
-  let outcome = await runAgent({ task: TASK, policy: POLICY, ports: ports(store, requests), ...step });
+  let outcome = await openRun({ task: TASK, policy: POLICY, ports: ports(store, requests), ...step });
   for (let tick = 0; outcome.kind === 'yielded'; tick += 1) {
     if (tick > 50) throw new Error('never finished');
-    outcome = await runAgent({ task: TASK, policy: POLICY, ports: ports(store, requests), resume: store.saved, ...step });
+    outcome = await openRun({ task: TASK, policy: POLICY, ports: ports(store, requests), resume: store.saved, ...step });
   }
   // The run LANDS through the repository's one terminal transition; its hook (wired in the composition root) is what records the outcome row.
   const landedRow = { id: 4, taskId: 3, agentId: null, agentRegistrationId: null, agentHostId: null, tenantId: 1, submittedBy: 'u', sessionId: null, status: 'completed', payload: null, source: 'agent', cloudAgentRef: null, result: null, errorMessage: null, produced: null, startedAt: null, completedAt: null, createdAt: new Date(0), updatedAt: new Date(0) };

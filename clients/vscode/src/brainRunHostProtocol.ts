@@ -45,6 +45,8 @@ export interface WebviewRunStart {
   autoApprove: boolean;
   /** Whether this chat's project memory is switched on (recall + learn). */
   evermind: boolean;
+  /** False for an owner this host must not wake with a child's report (the native chat participant: its turn belongs to the editor's chat view). */
+  wakeable?: boolean;
   /** The picker's model surface, so the stall failover keeps ONE ordering function. */
   modelSurface?: ModelFallbackSurface | null;
 }
@@ -78,6 +80,8 @@ export interface RunToolMessage {
   mutating: boolean;
   remote: boolean;
   ok: boolean;
+  /** The call in words ("edit src/app.ts") for a surface that renders a line per tool (the native chat). */
+  label?: string;
 }
 
 export type RunHostMessage =

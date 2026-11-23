@@ -25,7 +25,7 @@ import type { PendingCalls } from './pendingCalls';
 import { nowIso, pushTrace, recordAppended } from './runCells';
 import { canonicalTurnText, provenanceMetadata } from './turnPersistence';
 import type { BrainRunRequest } from './runTypes';
-import type { RunPipeline } from './pipelineRoute';
+import type { RunRoute } from './runRoute';
 import type { CacheServedStreak, RunView } from '@builderforce/agent-run';
 import type { RunProgressGuard } from './progressGuard';
 
@@ -141,8 +141,8 @@ export interface BrainRunContext {
    *  run's lifetime — a resumed run re-checks (the host verifier caches). */
   evidence: EvidenceLedger;
 
-  /** The run's pipeline route (`pipelineRoute.ts`), or null when the run was not routed. */
-  pipeline: RunPipeline | null;
+  /** The run's route (`runRoute.ts`, decided by `routeRun`): its pipeline (null when not routed), start options and verify skip. */
+  route: RunRoute;
 
   /** THE model hand-off policy's state — advanced only through {@link reportToPolicy}. */
   policy: RunPolicyState;

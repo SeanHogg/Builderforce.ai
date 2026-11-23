@@ -21,7 +21,7 @@ vi.mock("@seanhogg/builderforce-brain-embedded", async (importOriginal) => {
 const { resetBrainRunStore } = await import("@seanhogg/builderforce-brain-embedded");
 const { fakeGateway } = await import("../harness/fakeGateway");
 const { createBrainRunHost } = await import("./brainRunHost");
-const { transientRunPersistence } = await import("./nativeBrainRun");
+const { transientRunPersistence } = await import("./nativeRunStream");
 
 beforeEach(() => {
   resetBrainRunStore();

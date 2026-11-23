@@ -36,7 +36,7 @@ afterEach(() => setPendingWordsOwner(null));
 async function ran(key: number, texts: string[], extra: Partial<ContinueBinding> = {}) {
   const c = chat(texts);
   continueOnSettle(key, { ports: () => ports, ...extra });
-  await startRun(key, { resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
+  await startRun(key, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
   return c;
 }
 
@@ -181,7 +181,7 @@ describe('a steer with no key keeps the one it is given', () => {
       continueOnSettle(9720, binding);
       let land!: () => void;
       c.gate.holdUserRows = new Promise<void>((resolve) => { land = resolve; });
-      await startRun(9720, { resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
+      await startRun(9720, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
       await until(() => !isLive(9720), 1_000); // the allowance ended the wait; the save is still in flight
 
       const [kept] = drainRunSteering(9720);

@@ -30,7 +30,7 @@ describe('a settling run\'s backstops hold the chat (the claim) - but not foreve
       const persistence = { sendMessages: async (chatId: number, rows: Array<{ role: string; content: string }>) => rows.map((row) => ({ id: (id += 1), chatId, createdAt: '', metadata: null, seq: id, ...row })) as never };
 
       const outcome = await Promise.race([
-        startRun(9340, { resolvedSystemPrompt: 'sys', stream, persistence, userTurn: 'change it', projectId: 1, runTool: async () => '{}' }),
+        startRun(9340, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', stream, persistence, userTurn: 'change it', projectId: 1, runTool: async () => '{}' }),
         new Promise<string>((resolve) => setTimeout(() => resolve('hung'), 2_000)),
       ]);
 

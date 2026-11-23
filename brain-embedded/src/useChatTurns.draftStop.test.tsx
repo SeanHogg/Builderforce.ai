@@ -55,7 +55,7 @@ function streamsUntilStopped(): AbortSignal[] {
 /** The REAL stack a host mounts: creation -> conversation -> the turn door, the person staying on the DRAFT view. */
 function useDraftConversation(create: () => Promise<number | null>, prepareRun: (id: number) => Promise<Record<string, never>>, chatId: number | null = null) {
   const { ensureChatId, drafts } = useChatCreation({ chatId, create });
-  const conv = useBrainConversation({ chatId, toolSpecs: [], runTool: vi.fn(), ensureChatId, drafts, prepareRun });
+  const conv = useBrainConversation({ entryPoint: 'vscode', chatId, toolSpecs: [], runTool: vi.fn(), ensureChatId, drafts, prepareRun });
   const turns = useChatTurns<string>({
     ...chatDoorLiveness(conv),
     runKey: null,
@@ -224,7 +224,7 @@ describe('Stop on a draft whose first send has created its chat but is still pre
   it("a host with no binding: Stop with no token drops its one creation's launch", async () => {
     streamsUntilStopped();
     const creation = deferred<number | null>();
-    const { result } = renderHook(() => useBrainConversation({ chatId: null, toolSpecs: [], runTool: vi.fn(), ensureChatId: () => creation.promise }), { wrapper });
+    const { result } = renderHook(() => useBrainConversation({ entryPoint: 'vscode', chatId: null, toolSpecs: [], runTool: vi.fn(), ensureChatId: () => creation.promise }), { wrapper });
 
     let sent!: Promise<boolean>;
     act(() => { sent = result.current.send('x'); });

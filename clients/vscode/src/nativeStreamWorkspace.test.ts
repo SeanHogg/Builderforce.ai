@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { createNativeStream } from "./nativeBrainRun";
+import { createNativeStream } from "./nativeGatewayStream";
 import { GATEWAY_WORKSPACE_HEADER, gatewayWorkspaceHeaders } from "./gatewayAuth";
 import { setCurrentWorkspace } from "./workspaceSelection";
 

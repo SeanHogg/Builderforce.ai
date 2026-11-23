@@ -25,7 +25,7 @@ export interface Observed {
 }
 
 /** What a scenario hands the run: the host's request, minus what the kit owns. It is built fresh, for the run key it will use. */
-export type Scenario = (key: number) => Omit<BrainRunRequest, 'persistence' | 'resolvedSystemPrompt'> & { persistence?: BrainRunRequest['persistence']; resolvedSystemPrompt?: string };
+export type Scenario = (key: number) => Omit<BrainRunRequest, 'persistence' | 'resolvedSystemPrompt' | 'entryPoint'> & { entryPoint?: BrainRunRequest['entryPoint']; persistence?: BrainRunRequest['persistence']; resolvedSystemPrompt?: string };
 
 export async function runOn(key: number, scenario: Scenario): Promise<Observed> {
   resetBrainRunStore();
@@ -44,7 +44,7 @@ export async function runOn(key: number, scenario: Scenario): Promise<Observed> 
     asked.push(opts);
     return req.stream(opts, handlers);
   };
-  await startRun(key, { resolvedSystemPrompt: 'sys', ...req, persistence, stream });
+  await startRun(key, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', ...req, persistence, stream });
   return { asked, saved, trace: getRunTrace(key), cell: getCell(key) };
 }
 

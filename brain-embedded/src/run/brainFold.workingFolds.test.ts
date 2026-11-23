@@ -51,6 +51,7 @@ describe('the Brain folds the working transcript it sends the model (B6/B7)', ()
     };
 
     await startRun(key, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       tools: TOOLS,
       runTool: async (name: string) => (name === 'read_file' ? { ok: true, content: FILE_TEXT } : { ok: true, content: 'edited' }),

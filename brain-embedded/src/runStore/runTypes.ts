@@ -421,9 +421,9 @@ export interface BrainRunRequest {
   maxRunBudgetUsd?: number;
   /**
    * The surface the run came in through - the label its uniform outcome row carries. Telemetry only:
-   * nothing branches on it.
+   * nothing branches on it. Required: a missing label must fail the caller, never become `'web'`.
    */
-  entryPoint?: RunEntryPoint;
+  entryPoint: RunEntryPoint;
   /**
    * Told once, at run end, how the run ended and under which run id its calls were
    * recorded (`runEndOutcome.ts`) — the host stores it beside its usage ledger for the

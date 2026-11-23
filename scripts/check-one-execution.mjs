@@ -14,6 +14,11 @@
  * Test files are excluded (a test drives the loop directly), as is the kernel's own package. Inside `packages/agent-run` the rule is
  * tighter: only `src/runAgent.ts` reaches the kernel's loop; any other file there is a second driver.
  *
+ * A second rule closes the front door: outside `packages/agent-run`, a NON-test source file that imports the VALUE `runAgent` from
+ * `@builderforce/agent-run` (by name, namespace, dynamic import, `require()` or a relative walk into the package) is a violation - a
+ * surface calls `openRun`, which composes its ports into ONE module set and then calls `runAgent`. A type-only import of
+ * `RunAgentInput` or any other type is fine. Under `--enforce` (the manifest's mode) it fails.
+ *
  * It exits 1 on a kernel importer that is not in BASELINE, on any policy reach-in from outside the package, on a second kernel driver
  * inside `packages/agent-run`, and on a BASELINE entry whose file no longer imports the kernel (a slack entry would let a new
  * importer in at that path). BASELINE is empty (the Brain's old loop, its last importer, is deleted) and the checks manifest runs this guard with `--enforce`:
@@ -39,6 +44,7 @@ const AGENT_RUN = 'packages/agent-run/';
 const THE_DRIVER = 'packages/agent-run/src/runAgent.ts';
 const TEST_FILE = /\.(test|spec)\.[cm]?[jt]sx?$/;
 const KERNEL_NAME = 'runAgentLoop';
+const FRONT_DOOR_NAME = 'runAgent';
 
 /** Kernel importers allowed outside the one agent: none. */
 const BASELINE = [];
@@ -55,6 +61,12 @@ function isKernel(specifier, file) {
 function reachesPolicy(specifier, file) {
   if (/^@builderforce\/agent-run\/.*\bpolicy\b/.test(specifier)) return true;
   return /(^|\/)agent-run\/src\/policy(\/|$)/.test(resolveTarget(specifier, file));
+}
+
+/** Does it name the agent package's entry (by package name or by a relative walk into its `src` barrel / driver)? */
+function isAgentRunEntry(specifier, file) {
+  if (specifier === '@builderforce/agent-run') return true;
+  return /(^|\/)packages\/agent-run\/src\/(index|runAgent)(\.[cm]?[jt]s)?$/.test(resolveTarget(specifier, file));
 }
 
 /** A relative specifier made repo-relative, so `../../../packages/agent-loop/src/loop` and `@x/../packages/…` read the same. */
@@ -112,7 +124,10 @@ function moduleReaches(file, text) {
 /** Does this reach bring `runAgentLoop` with it? Taken by name, or the whole module. A type-only import brings nothing at run time. */
 const bringsKernel = (reach) => !reach.typeOnly && (reach.names === null || reach.names.includes(KERNEL_NAME));
 
-/** @type {{ file: string; kind: 'kernel-loop' | 'inner-loop' | 'policy'; specifier: string }[]} */
+/** Does this reach bring the VALUE `runAgent` with it? Taken by name, or the whole module. */
+const bringsFrontDoor = (reach) => !reach.typeOnly && (reach.names === null || reach.names.includes(FRONT_DOOR_NAME));
+
+/** @type {{ file: string; kind: 'kernel-loop' | 'inner-loop' | 'policy' | 'run-agent'; specifier: string }[]} */
 const findings = [];
 for (const root of ROOTS) {
   for (const absolute of collectSourceFiles(resolve(repoRoot, root))) {
@@ -131,6 +146,7 @@ for (const root of ROOTS) {
     if (OWN.some((own) => rel.startsWith(own))) continue;
     for (const reach of reaches) {
       if (isKernel(reach.specifier, rel) && bringsKernel(reach)) findings.push({ file: rel, kind: 'kernel-loop', specifier: reach.specifier });
+      else if (isAgentRunEntry(reach.specifier, rel) && bringsFrontDoor(reach)) findings.push({ file: rel, kind: 'run-agent', specifier: reach.specifier });
       else if (!reach.typeOnly && reachesPolicy(reach.specifier, rel)) findings.push({ file: rel, kind: 'policy', specifier: reach.specifier });
     }
   }
@@ -138,6 +154,7 @@ for (const root of ROOTS) {
 
 const loopImporters = [...new Set(findings.filter((f) => f.kind === 'kernel-loop').map((f) => f.file))].sort();
 const policyImporters = findings.filter((f) => f.kind === 'policy');
+const runAgentImporters = [...new Set(findings.filter((f) => f.kind === 'run-agent').map((f) => f.file))].sort();
 const innerImporters = [...new Set(findings.filter((f) => f.kind === 'inner-loop').map((f) => f.file))].sort();
 const extra = loopImporters.filter((file) => !BASELINE.includes(file));
 const gone = BASELINE.filter((file) => !loopImporters.includes(file));
@@ -153,6 +170,10 @@ if (innerImporters.length > 0) {
   console.log(`  Importers of runAgentLoop inside packages/agent-run other than ${THE_DRIVER} (${innerImporters.length}) - never allowed:`);
   for (const file of innerImporters) console.log(`    + ${file}`);
 }
+if (runAgentImporters.length > 0) {
+  console.log(`  Importers of the value runAgent outside packages/agent-run (${runAgentImporters.length}) - call openRun instead${ENFORCE ? '' : ' (reported; fails under --enforce)'}:`);
+  for (const file of runAgentImporters) console.log(`    + ${file}`);
+}
 if (gone.length > 0) {
   console.log(`  Baseline entries whose file no longer imports the kernel - drop them from BASELINE (${gone.length}):`);
   for (const file of gone) console.log(`    - ${file}`);
@@ -160,9 +181,10 @@ if (gone.length > 0) {
 console.log('  §3.3: the one execution path is runAgent (packages/agent-run/src/runAgent.ts).');
 
 const kernelViolations = ENFORCE ? loopImporters.length : extra.length;
-const violations = kernelViolations + policyImporters.length + innerImporters.length + gone.length;
+const frontDoorViolations = ENFORCE ? runAgentImporters.length : 0;
+const violations = kernelViolations + frontDoorViolations + policyImporters.length + innerImporters.length + gone.length;
 if (violations > 0) {
-  console.log(`  FAIL ${violations} problem(s): ${kernelViolations} kernel, ${policyImporters.length} policy reach-in, ${innerImporters.length} second driver in agent-run, ${gone.length} stale baseline entr${gone.length === 1 ? 'y' : 'ies'}.`);
+  console.log(`  FAIL ${violations} problem(s): ${kernelViolations} kernel, ${frontDoorViolations} runAgent importer(s) (call openRun), ${policyImporters.length} policy reach-in, ${innerImporters.length} second driver in agent-run, ${gone.length} stale baseline entr${gone.length === 1 ? 'y' : 'ies'}.`);
   process.exit(1);
 }
 console.log(`  PASS No importer outside the baseline (${loopImporters.length} of ${BASELINE.length} baseline file(s) remain).`);

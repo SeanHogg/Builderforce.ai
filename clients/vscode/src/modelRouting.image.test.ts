@@ -38,7 +38,7 @@ vi.mock("./providerConnect", () => ({ editorAccounts: () => ({ hybridAccounts: a
 vi.mock("./errorReporter", () => ({ logLine: vi.fn() }));
 vi.mock("./localModels", () => ({ probeLocalFirstRuntimes: async () => [], probeOnDeviceRuntimes: async () => [] }));
 vi.mock("./modelState", () => ({ resolveEffectiveModelChoice: async () => ({ model: "auto" }) }));
-vi.mock("./nativeBrainRun", () => ({ createNativeStream: vi.fn() }));
+vi.mock("./nativeGatewayStream", () => ({ createNativeStream: vi.fn() }));
 vi.mock("./hostBfi/provision", () => ({ hostModelProvisioner: { ensure: vi.fn() } }));
 vi.mock("./pageEngineBridge", () => ({ hostPageEngines: { connected: () => false, fetch: () => fetch } }));
 vi.mock("./localSuccessStorage", () => ({ localSuccessFederation: {}, localSuccessStore: {}, localSuccessTuning: {} }));

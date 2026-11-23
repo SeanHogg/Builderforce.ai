@@ -1,26 +1,9 @@
 /**
- * The native chat participant's run CONTRACT - what the participant hands `runNativeBrain`
- * (`NativeBrainRunOptions`), what it asks the person (`NativeApprovalRequest`), the prose
- * the host owns (`NativeRunLabels`) and how the run's output reaches the chat
- * (`NativeRunEvents`). Types only. Split from `nativeBrainRun.ts`, which re-exports every
- * name here, so importers are unchanged. No `vscode` import.
+ * The native chat participant's run CONTRACT - what it asks the person (`NativeApprovalRequest`), the prose the host owns
+ * (`NativeRunLabels`) and how the run's output reaches the chat (`NativeRunEvents`). Types only. No `vscode` import.
  */
 
-import type { PolicyGate, RunKnowledgeLog } from "@builderforce/agent-tools";
-import type {
-  ChatCompletionMessage,
-  BrainRunPersistence,
-  BrainRunRequest,
-  BrainStreamFn,
-  ChatErrorAction,
-  ChatMode,
-  EvermindRunHooks,
-} from "@seanhogg/builderforce-brain-embedded";
-import type { ToolDef } from "./fileTools";
-import type { EditorRunSettings } from "./stageModels";
-import type { ShipPorts, ShipPortsRun } from "./verify/shipPorts";
-import type { RunDirectives } from "./hooks/runHooks";
-import type { InstalledRunRecovery } from "./installRunRecovery";
+import type { ChatErrorAction } from "@seanhogg/builderforce-brain-embedded";
 
 /**
  * The native surface renders MARKDOWN, not the webview's `<BrainTimeline>`, so the
@@ -29,6 +12,7 @@ import type { InstalledRunRecovery } from "./installRunRecovery";
  */
 export interface NativeRunEvents {
   onText(delta: string): void;
+  /** A tool is RUNNING now (the run store's live step); `onToolResult` follows when it finishes. */
   onToolStart(label: string): void;
   onToolResult(label: string, ok: boolean): void;
   /**
@@ -67,99 +51,4 @@ export interface NativeRunLabels {
   /** Said when the chat already has a run in flight that another path started: this turn
    *  claimed nothing, so it neither runs nor settles. Omitted ⇒ it returns silently. */
   alreadyRunning?: string;
-}
-
-export interface NativeBrainRunOptions {
-  /**
-   * The Brain chat this turn belongs to. Also the run store's cell key, so a run
-   * survives anything that happens on the host side while it is in flight.
-   */
-  chatId: number;
-  /**
-   * The SERVER chat this turn's server-addressed work names (PRD 36): `chatId` is a
-   * local view key that never leaves the machine. `null` = an unbound local chat (no
-   * chat id is sent); omitted = `chatId` is itself a server chat.
-   */
-  serverChatId?: number | null;
-  /** The local chat's client id — diagnostics on the gateway metadata only. */
-  clientChatId?: string;
-  /** The whole system prompt, already assembled by the host (persona + grounding +
-   *  editor context + limbic + governance directives). */
-  systemPrompt: string;
-  /** Prior turns of this session, oldest first. */
-  seed: ChatCompletionMessage[];
-  /** The user turn that triggered this run. */
-  userTurn: string;
-  /** Local file tools + cognition + the gateway's platform catalog. */
-  tools: ToolDef[];
-  /** Workspace root; '' when no folder is open (the file tools are then absent). */
-  root: string;
-  /** The chat's project — enables the loop's code-change→ticket backstops. */
-  projectId?: number;
-  model?: string;
-  modelStrict?: boolean;
-  routingMode?: "auto" | "byo_pool";
-  /** Stage models, pipeline routing and the USD cap (`editorRunSettings.ts`). */
-  runSettings?: EditorRunSettings;
-  /** How the run ended, for the chat's usage ledger (the pipeline route report). */
-  recordRunOutcome?: BrainRunRequest["recordRunOutcome"];
-  /** A model call a PreFetch ANSWER avoided, for the chat's usage ledger. */
-  recordAvoidedCall?: BrainRunRequest["recordAvoidedCall"];
-  /** Conversation vs execution (0409). Defaults to `work` inside the loop. */
-  chatMode?: ChatMode;
-  permissionMode: "ask" | "acceptEdits";
-  /** Compiled governance gates, enforced at the tool seam exactly as the cloud does. */
-  policyGates?: PolicyGate[];
-  /** The workspace's committed rules + hooks (`.builderforce/`), when it has any. */
-  directives?: RunDirectives;
-  /** Ask the human. Resolves true to run the call, false to skip it. */
-  approve(request: NativeApprovalRequest): Promise<boolean>;
-  /** Transport-bound streaming completion fn. */
-  stream: BrainStreamFn;
-  /** PRD 45 ship-gate ports for this run, built from its root, stream and settings (`verify/shipPorts.ts`). */
-  shipPorts?: (run: ShipPortsRun) => ShipPorts;
-  /**
-   * Where the loop writes its intermediate turns. Defaults to
-   * {@link transientRunPersistence} — the native participant persists the WHOLE turn
-   * once, after the loop, so the loop's own writes must not double-post.
-   */
-  persistence?: BrainRunPersistence;
-  /** Project-Evermind hooks: recall, the memory-first answer, the answer cache. */
-  evermind?: EvermindRunHooks;
-  /**
-   * The task context pack's fields (PRD 35 E2 / E7) — the SAME fields the panel's run host
-   * builds (`runSetup.ts` `runContextFields`): the pack's block as the turn context, the recall
-   * hint, the files it served whole, and the BYO preflight.
-   */
-  runContext?: Pick<BrainRunRequest, "turnContext" | "recallHint" | "servedReads" | "modelPreflight">;
-  /** The run's default checkout, read per call, and the wait for it to resolve (PRD 35 E3). */
-  defaultRepo?: () => string | undefined;
-  repoReady?: Promise<void>;
-  /** The run SETTLED — finished, failed or stopped: release what it held outside the loop
-   *  (its background shell jobs, `localShellJobs.ts`). Called once, whatever the outcome. */
-  settleRun?: (runKey: number) => void;
-  /** Whether another path holds the chat's run - the run host, which also counts the window
-   *  while a run is still setting up. Asked with `isRunning` before this call claims the key. */
-  isBusy?: (chatId: number) => boolean;
-  /** The deterministic-first PreFetch port ("where is X defined?" answered with no model
-   *  call, and every registry row after it) — the same port the panel's run host passes. */
-  prefetch?: BrainRunRequest["prefetch"];
-  /** The run's record of what it did and read — the per-turn ledger, and what the caller
-   *  commits at run end (`recordEditorRunEnd`). Omitted ⇒ the loop keeps its own. */
-  knowledge?: RunKnowledgeLog;
-  /**
-   * The restart-recovery journal (G22): start, per-step checkpoints and the terminal
-   * status of THIS run, so a restart during the turn is recovered as `interrupted`
-   * (surfaced to the user) instead of silently forgotten. Omitted ⇒ the run is not
-   * journaled (legacy callers / tests).
-   */
-  recovery?: Pick<InstalledRunRecovery, "recordStarted" | "recordCheckpoint" | "recordFinished">;
-  signal: AbortSignal;
-  labels: NativeRunLabels;
-  events: NativeRunEvents;
-  /**
-   * Told once, when the run ran to its end (never for a stopped run): whether it may LEARN and its final answer, read from
-   * THIS run's own rows and trace (`settledAnswerOf` — the same rule the panel's host applies). Not told ⇒ nothing to learn.
-   */
-  onSettled?(run: { learn: boolean; answer?: string }): void;
 }

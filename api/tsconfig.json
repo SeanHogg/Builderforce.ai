@@ -26,6 +26,7 @@
       "@builderforce/model-catalog": ["../packages/model-catalog/src/index.ts"],
       "@builderforce/model-router": ["../packages/model-router/src/index.ts"],
       "@builderforce/workload": ["../packages/workload/src/index.ts"],
+      "@builderforce/pipeline-route": ["../packages/pipeline-route/src/index.ts"],
       "@builderforce/run-context": ["../packages/run-context/src/index.ts"],
       "@builderforce/spend-contract": ["../packages/spend-contract/src/index.ts"],
       "@builderforce/voice-provenance": ["../packages/voice-provenance/src/index.ts"],

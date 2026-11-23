@@ -88,7 +88,7 @@ const PARTICIPANT_ID = "builderforce.agent";
 export function registerChatSessions(
   ctx: vscode.ExtensionContext,
   participant: vscode.ChatParticipant,
-  runHost?: BrainRunHost,
+  runHost: BrainRunHost,
 ): vscode.Disposable | undefined {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const chatApi = vscode.chat as any;

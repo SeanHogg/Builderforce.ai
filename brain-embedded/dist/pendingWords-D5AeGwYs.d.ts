@@ -1,5 +1,5 @@
-import { a as BrainTraceEvent, U as UsageSurface, B as BrainMessage, P as PackageDirProbe } from './brainTriage-BAX44Cqq.cjs';
-import { L as LocalRuntimeId, b as LocalEndpoint, a as LocalRuntimeProbe, c as LocalModel } from './probe-DkPrGnWT.cjs';
+import { a as BrainTraceEvent, U as UsageSurface, B as BrainMessage, P as PackageDirProbe } from './brainTriage-BAX44Cqq.js';
+import { L as LocalRuntimeId, b as LocalEndpoint, a as LocalRuntimeProbe, c as LocalModel } from './probe-DkPrGnWT.js';
 import { EvermindRecallResult } from '@seanhogg/builderforce-memory/evermind';
 import { ConsolidateOptions, ConsolidatedMemory } from '@seanhogg/builderforce-memory/working';
 
@@ -2281,9 +2281,9 @@ interface BrainRunRequest {
     maxRunBudgetUsd?: number;
     /**
      * The surface the run came in through - the label its uniform outcome row carries. Telemetry only:
-     * nothing branches on it.
+     * nothing branches on it. Required: a missing label must fail the caller, never become `'web'`.
      */
-    entryPoint?: RunEntryPoint;
+    entryPoint: RunEntryPoint;
     /**
      * Told once, at run end, how the run ended and under which run id its calls were
      * recorded (`runEndOutcome.ts`) — the host stores it beside its usage ledger for the

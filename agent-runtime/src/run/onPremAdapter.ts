@@ -1,7 +1,7 @@
 /**
  * onPremAdapter — the ON-PREM entry point of the one agent for TICKETS (PRD 35 WS5, §3.1).
  *
- * It BUILDS PORTS and calls `runAgent`; it has no loop, no policy and no branch on
+ * It BUILDS PORTS and calls `openRun`; it has no loop, no policy and no branch on
  * behaviour. `RunPolicy.entryPoint` is the telemetry label `on-prem` and is never read
  * here. Every difference between this machine and the cloud or the editor arrives as a
  * port:
@@ -27,7 +27,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { DEFAULT_READS_BEFORE_NUDGE, RUN_CANCELLED_REASON, asksForSubagents, runAgent } from "@builderforce/agent-run";
+import { RUN_CANCELLED_REASON, openRun } from "@builderforce/agent-run";
 import type { ContextSource, ModelTransport, RunOutcome, RunPolicy, RunPorts, RunState, RunStore } from "@builderforce/agent-run";
 import { RunKnowledgeRecorder, type CapabilityProvider, type PolicyGate, type RunKnowledgeLog } from "@builderforce/agent-tools";
 import type { QueuedSteer, SteeringChannel } from "../infra/relay-steering.js";
@@ -35,6 +35,7 @@ import { logWarn } from "../logger.js";
 import { gatewayModelTransport } from "./gatewayModelTransport.js";
 import { onPremHuman } from "./onPremHuman.js";
 import { acknowledgedSteering, observedModel, relayEventSink, type OnPremRunSinks } from "./onPremEvents.js";
+import { EMPTY_PACK, inMemoryStore, onPremPolicy } from "./onPremRunPorts.js";
 import { buildOnPremProvider } from "./onPremProvider.js";
 import { childRunner } from "./onPremSubagents.js";
 
@@ -97,22 +98,9 @@ export interface OnPremRunResult {
   awaitingInput?: { approvalId: string; question: string };
 }
 
-const EMPTY_PACK: ContextSource = { pack: () => ({ focus: [], facts: [], recall: [] }) };
-
-/** The policy DATA of an on-prem ticket run. How the run behaves is the agent's. */
+/** The policy DATA of an on-prem ticket run (the shared on-prem base, `onPremRunPorts`). */
 function policyOf(params: OnPremRunParams): RunPolicy {
-  return {
-    entryPoint: "on-prem",
-    toolScope: "ticket",
-    role: "code",
-    levers: [],
-    budgets: {},
-    ...(params.model ? { pinnedModel: params.model } : {}),
-    inference: "hybrid",
-    verify: "none",
-    approvalGates: params.policyGates ?? [],
-    delegation: { requested: asksForSubagents(params.prompt), readsBeforeNudge: DEFAULT_READS_BEFORE_NUDGE },
-  };
+  return onPremPolicy({ toolScope: "ticket", request: params.prompt, ...(params.model ? { pinnedModel: params.model } : {}), ...(params.policyGates ? { policyGates: params.policyGates } : {}) });
 }
 
 /** A run's outcome as the result the relay reads: each real state is its own state. */
@@ -143,13 +131,12 @@ export async function runOnPremAgent(params: OnPremRunParams, sinks: OnPremRunSi
   const signal = params.abortController?.signal;
   const steering = params.steering ? acknowledgedSteering(params.steering) : undefined;
   let settled: RunState | undefined;
-  const store: RunStore = {
-    load: () => undefined,
+  const store: RunStore = inMemoryStore({
     save: (state) => {
       settled = state;
     },
     ...(params.commitMemory ? { commitMemory: params.commitMemory } : {}),
-  };
+  });
   /** The run has settled: refuse further steers and hand back the ones it never reached. */
   const settleSteering = (): void => {
     if (!params.steering) return;
@@ -201,7 +188,7 @@ export async function runOnPremAgent(params: OnPremRunParams, sinks: OnPremRunSi
       ...(steering ? { steering: steering.source } : {}),
       context: params.context ?? EMPTY_PACK,
     };
-    const outcome = await runAgent({
+    const outcome = await openRun({
       task: {
         runId,
         prompt: params.prompt,

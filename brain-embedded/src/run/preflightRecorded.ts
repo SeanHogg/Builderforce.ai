@@ -12,7 +12,7 @@
 import { defaultPolicyModules, planModelWarning, type ModelHook } from '@builderforce/agent-run';
 import type { RunCell } from '../runStore/runCell';
 
-function recordedPreflight(c: RunCell, pinnedModel: string | undefined): NonNullable<ModelHook['preflight']> {
+export function recordedPreflight(c: RunCell, pinnedModel: string | undefined): NonNullable<ModelHook['preflight']> {
   return (ctx) => {
     const byo = c.byoUnresolved.join(',');
     const plan = c.codeChanged ? null : planModelWarning(pinnedModel);
@@ -22,7 +22,7 @@ function recordedPreflight(c: RunCell, pinnedModel: string | undefined): NonNull
   };
 }
 
-/** The agent's model module with its preflight made the Brain's: the one `runPrepared` hands the run. */
+/** The agent's model module with its preflight made the Brain's (the test harness binds it by hand; `runPrepared` hands the same preflight to `openRun` as `surface.preflight`). */
 export function recordedModelHook(c: RunCell, pinnedModel: string | undefined): ModelHook {
   return { ...defaultPolicyModules().model, preflight: recordedPreflight(c, pinnedModel) };
 }

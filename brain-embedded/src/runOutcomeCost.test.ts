@@ -33,6 +33,7 @@ describe('the run\'s model trace carries the marker', () => {
   const run = async (key: number, result: Record<string, unknown>) => {
     let id = 0;
     await startRun(key, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       userTurn: 'hi',
       stream: async () => ({ text: 'ok', toolCalls: [], finishReason: 'stop', ...result }) as never,

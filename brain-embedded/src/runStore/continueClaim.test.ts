@@ -23,7 +23,7 @@ describe('a continuation holds the chat while it is made (the claim)', () => {
     let release!: () => void;
     const gate = new Promise<void>((resolve) => { release = resolve; });
     continueOnSettle(key, { ports: () => ports, prepareRun: async () => { await gate; return {}; }, ...extra });
-    await startRun(key, { resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
+    await startRun(key, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
     return { c, release };
   }
 
@@ -35,7 +35,7 @@ describe('a continuation holds the chat while it is made (the claim)', () => {
     expect(isLive(9308)).toBe(true);
     // A person's own launch (a send that already saved its row) is refused while the claim is held - and its
     // words are NOT dropped: they join the run being made, which reads them once.
-    const outcome = await startRun(9308, { resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'racing launch', userTurnMessageId: 4242 });
+    const outcome = await startRun(9308, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'racing launch', userTurnMessageId: 4242 });
     expect(outcome).toBe('joined');
     expect(isRunning(9308)).toBe(false);
     expect(c.asked).toHaveLength(1);
@@ -53,7 +53,7 @@ describe('a continuation holds the chat while it is made (the claim)', () => {
     const { c, release } = await waiting(9326, ['Done.', 'Continued.']);
 
     expect(wakeChat(9326, 'wake', undefined)).toBe(true);
-    expect(await startRun(9326, { resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'unsaved launch' })).toBe('joined');
+    expect(await startRun(9326, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'unsaved launch' })).toBe('joined');
     release();
     await until(() => c.asked.length >= 2 && !isLive(9326));
 
@@ -66,10 +66,10 @@ describe('a continuation holds the chat while it is made (the claim)', () => {
     let hold!: () => void;
     const gate = new Promise<void>((resolve) => { hold = resolve; });
     const stream: BrainRunRequest['stream'] = async (opts, handlers) => { await gate; return c.stream(opts, handlers); };
-    const first = startRun(9327, { resolvedSystemPrompt: 'sys', stream, persistence: c.persistence, userTurn: 'first' });
+    const first = startRun(9327, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', stream, persistence: c.persistence, userTurn: 'first' });
     await until(() => isRunning(9327));
 
-    expect(await startRun(9327, { resolvedSystemPrompt: 'sys', stream, persistence: c.persistence, userTurn: 'second', userTurnMessageId: 9 })).toBe('joined');
+    expect(await startRun(9327, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', stream, persistence: c.persistence, userTurn: 'second', userTurnMessageId: 9 })).toBe('joined');
     expect(hasRunInterrupt(9327)).toBe(true);
     expect(drainRunSteering(9327)).toMatchObject([{ text: 'second', fromPerson: true, saved: true }]);
     hold();
@@ -114,7 +114,7 @@ describe('a continuation holds the chat while it is made (the claim)', () => {
     const gate = new Promise<void>((_, reject) => { fail = () => reject(new Error('host gone')); });
     const c = chat(['Done.', 'must never run']);
     continueOnSettle(9331, { ports: () => ports, prepareRun: async () => { await gate; return {}; } });
-    await startRun(9331, { resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
+    await startRun(9331, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
 
     expect(wakeChat(9331, 'stopped words', undefined)).toBe(true);
     await until(() => userRows(c).length === 1);
@@ -149,7 +149,7 @@ describe('a continuation holds the chat while it is made (the claim)', () => {
     getCell(9323);
     const off = subscribeRun(9323, () => lives.push(isLive(9323)));
 
-    await startRun(9323, { resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
+    await startRun(9323, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
     await until(() => c.asked.length >= 2 && !isLive(9323));
     off();
 
@@ -179,7 +179,7 @@ describe('a claim cannot hold a chat forever', () => {
     try {
       const c = chat(['Done.', 'must never run']);
       continueOnSettle(9328, { ports: () => ports, prepareRun: () => new Promise<never>(() => {}) });
-      await startRun(9328, { resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
+      await startRun(9328, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
 
       expect(wakeChat(9328, 'host is stuck', undefined)).toBe(true);
       await until(() => !isLive(9328), 1_000);
@@ -200,7 +200,7 @@ describe('a claim cannot hold a chat forever', () => {
   it('a row that cannot be saved is said as the chat\'s error, with the failure\'s own message', async () => {
     const c = chat(['Done.']);
     continueOnSettle(9329, binding);
-    await startRun(9329, { resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
+    await startRun(9329, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
     c.gate.failUserRows = true;
 
     expect(wakeChat(9329, 'no session', undefined)).toBe(true);
@@ -215,7 +215,7 @@ describe('a claim cannot hold a chat forever', () => {
     const c = chat(['never']);
     const stream: BrainRunRequest['stream'] = async (opts, handlers) => { await gate; return c.stream(opts, handlers); };
     continueOnSettle(9330, binding);
-    const run = startRun(9330, { resolvedSystemPrompt: 'sys', stream, persistence: c.persistence, userTurn: 'ask' });
+    const run = startRun(9330, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', stream, persistence: c.persistence, userTurn: 'ask' });
     await until(() => isRunning(9330));
 
     stopRun(9330);
@@ -234,7 +234,7 @@ describe('idempotent saves: a row is never saved twice (M1)', () => {
     try {
       const c = chat(['Done.', 'Next.']);
       continueOnSettle(9370, binding);
-      await startRun(9370, { resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
+      await startRun(9370, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
       let land!: () => void;
       c.gate.holdUserRows = new Promise<void>((resolve) => { land = resolve; });
 
@@ -243,7 +243,7 @@ describe('idempotent saves: a row is never saved twice (M1)', () => {
       land(); // ...and now it lands
       await new Promise((r) => setTimeout(r, 30));
       // The requeued words carry the row's key; the next run drains and saves them (as steered words) under it.
-      await startRun(9370, { resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'next' });
+      await startRun(9370, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'next' });
 
       expect(JSON.stringify(c.asked[1])).toContain('late words');
       expect(userRows(c).filter((row) => row === 'late words')).toHaveLength(1);
@@ -263,7 +263,7 @@ describe('idempotent saves: a row is never saved twice (M1)', () => {
       continueOnSettle(9371, binding);
       let land!: () => void;
       c.gate.holdUserRows = new Promise<void>((resolve) => { land = resolve; });
-      await startRun(9371, { resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
+      await startRun(9371, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
       await until(() => !isLive(9371), 1_000); // the allowance ended the wait; the batch save is still in flight
 
       // Requeued as they were, in order, each with its OWN key (no combined key).
@@ -275,7 +275,7 @@ describe('idempotent saves: a row is never saved twice (M1)', () => {
 
       land(); // the late save lands
       await new Promise((r) => setTimeout(r, 30));
-      await startRun(9371, { resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'next' });
+      await startRun(9371, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'next' });
 
       // X once, Y once, in the order they were said - the retry hit the same keys.
       expect(userRows(c).filter((row) => row === 'X' || row === 'Y')).toEqual(['X', 'Y']);
@@ -290,7 +290,7 @@ describe('idempotent saves: a row is never saved twice (M1)', () => {
     try {
       const landed = chat(['Done.']);
       continueOnSettle(9372, binding);
-      await startRun(9372, { resolvedSystemPrompt: 'sys', stream: landed.stream, persistence: landed.persistence, userTurn: 'first' });
+      await startRun(9372, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', stream: landed.stream, persistence: landed.persistence, userTurn: 'first' });
       let land!: () => void;
       landed.gate.holdUserRows = new Promise<void>((resolve) => { land = resolve; });
 
@@ -309,7 +309,7 @@ describe('idempotent saves: a row is never saved twice (M1)', () => {
       // A save that NEVER lands leaves no orphan answer.
       const lost = chat(['Done.']);
       continueOnSettle(9373, binding);
-      await startRun(9373, { resolvedSystemPrompt: 'sys', stream: lost.stream, persistence: lost.persistence, userTurn: 'first' });
+      await startRun(9373, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', stream: lost.stream, persistence: lost.persistence, userTurn: 'first' });
       lost.gate.holdUserRows = new Promise<void>(() => {});
       expect(wakeChat(9373, 'never saved', undefined)).toBe(true);
       stopRun(9373);

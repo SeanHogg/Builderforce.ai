@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { SILENT_REPLY_TOKEN } from "../auto-reply/tokens.js";
-import { buildSubagentSystemPrompt } from "./subagent-announce.js";
+import { buildSubagentSessionPrompt as buildSubagentSystemPrompt } from "./subagent-prompt.js";
 import { buildAgentSystemPrompt, buildRuntimeLine } from "./system-prompt.js";
 
 describe("buildAgentSystemPrompt", () => {
@@ -568,7 +568,7 @@ describe("buildSubagentSystemPrompt", () => {
     });
 
     expect(prompt).toContain("spawned by the parent orchestrator");
-    expect(prompt).toContain("reported to the parent orchestrator");
+    expect(prompt).toContain("report to the parent orchestrator");
   });
 
   it("uses 'main agent' label for depth-1 agents", () => {
@@ -580,7 +580,7 @@ describe("buildSubagentSystemPrompt", () => {
     });
 
     expect(prompt).toContain("spawned by the main agent");
-    expect(prompt).toContain("reported to the main agent");
+    expect(prompt).toContain("report to the main agent");
   });
 
   it("includes recovery guidance for compacted/truncated tool output", () => {

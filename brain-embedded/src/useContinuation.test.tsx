@@ -14,6 +14,7 @@ const persistence = { uploadUrl: (key: string) => `/u/${key}` } as unknown as Br
 async function ran(chatId: number): Promise<void> {
   let id = 0;
   const run: BrainRunRequest = {
+    entryPoint: 'vscode',
     resolvedSystemPrompt: 'sys',
     userTurn: 'first',
     stream: async () => ({ text: 'ok', toolCalls: [], finishReason: 'stop', resolvedModel: 'm' }),

@@ -46,6 +46,7 @@ describe('the forced-turn brief is part of the tagged volatile tail', () => {
   it('sends ONE tagged tail, last, carrying the brief — and no untagged brief before it', async () => {
     const seen: Seen[] = [];
     await startRun(7301, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       tools: TOOLS,
       runTool: host,
@@ -69,6 +70,7 @@ describe('the forced-turn brief is part of the tagged volatile tail', () => {
   it('a normal turn sends the same single tail with no brief in it', async () => {
     const seen: Seen[] = [];
     await startRun(7302, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       tools: TOOLS,
       runTool: host,

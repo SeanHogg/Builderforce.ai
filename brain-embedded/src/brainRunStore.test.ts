@@ -94,7 +94,7 @@ describe('a user Stop keeps what it cut off', () => {
   it('persists the partial reply with the model that was streaming, and a durable step naming it', async () => {
     const { sent, persistence } = recorder();
     const { stream, started } = loopsUntilStopped('direct/minimax/MiniMax-M2.7', ['Checking linked tickets. ', 'Checking linked tickets again.']);
-    const run = startRun(4260, { resolvedSystemPrompt: 'sys', stream, persistence, userTurn: 'go' });
+    const run = startRun(4260, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', stream, persistence, userTurn: 'go' });
     await started;
     stopRun(4260);
     await run;
@@ -116,7 +116,7 @@ describe('a user Stop keeps what it cut off', () => {
   it('keeps the text even when the gateway never named the model', async () => {
     const { sent, persistence } = recorder();
     const { stream, started } = loopsUntilStopped(null, ['1. 2. 3. NOW. 1. 2. 3.']);
-    const run = startRun(4261, { resolvedSystemPrompt: 'sys', stream, persistence, userTurn: 'go' });
+    const run = startRun(4261, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', stream, persistence, userTurn: 'go' });
     await started;
     stopRun(4261);
     await run;
@@ -129,7 +129,7 @@ describe('a user Stop keeps what it cut off', () => {
   it('persists no reply when nothing had streamed yet, but still records the stop', async () => {
     const { sent, persistence } = recorder();
     const { stream, started } = loopsUntilStopped('xai-oauth/grok-4.6', []);
-    const run = startRun(4262, { resolvedSystemPrompt: 'sys', stream, persistence, userTurn: 'go' });
+    const run = startRun(4262, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', stream, persistence, userTurn: 'go' });
     await started;
     stopRun(4262);
     await run;
@@ -156,7 +156,7 @@ describe('a run that ends badly leaves a durable record', () => {
   it('persists the terminal error, so a reopened chat does not just stop', async () => {
     const { sent, persistence } = recorder();
     const stream: BrainStreamFn = () => Promise.reject(new Error('Could not save the turn — network unreachable'));
-    await startRun(4270, { resolvedSystemPrompt: 'sys', stream, persistence, userTurn: 'go' });
+    await startRun(4270, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', stream, persistence, userTurn: 'go' });
 
     // ONE durable error row per failure — the step that threw records it; the run's
     // unwind does not add a second copy of the same message under it.
@@ -175,7 +175,7 @@ describe('a run that ends badly leaves a durable record', () => {
       opts.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
       streaming();
     });
-    const run = startRun(4271, { resolvedSystemPrompt: 'sys', stream, persistence, userTurn: 'go' });
+    const run = startRun(4271, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', stream, persistence, userTurn: 'go' });
     await started;
     stopRun(4271);
     await run;
@@ -287,6 +287,7 @@ describe('cross-chat run state (the session-list / dropdown indicators)', () => 
     // Now run a real (trivial) run on chat 8 so `running` is set with no pending confirm.
     return p.then(() => {
       const done = startRun(8, {
+    entryPoint: 'vscode',
         resolvedSystemPrompt: 'sys',
         stream: async () => ({ text: 'ok', toolCalls: [], finishReason: 'stop' }),
         persistence: { sendMessages: async () => [] },
@@ -333,6 +334,7 @@ describe('a run has no tool-call limit — only the consecutive-failure breaker'
     };
     const digest = '## Already done earlier in this chat\n- read_file({"path":"a.ts"})\n  → body';
     await startRun(4250, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys', stream, persistence,
       seed: [{ role: 'user', content: 'look at a.ts' }, { role: 'assistant', content: 'a.ts renders the bubble.' }],
       priorResearch: digest,
@@ -340,7 +342,7 @@ describe('a run has no tool-call limit — only the consecutive-failure breaker'
     });
     // Same session: the transcript is still in memory, so the chat is not re-seeded —
     // but the tool rows the digest stands for never entered it, so the digest stays.
-    await startRun(4250, { resolvedSystemPrompt: 'sys', stream, persistence, seed: [], userTurn: 'and the tail?' });
+    await startRun(4250, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', stream, persistence, seed: [], userTurn: 'and the tail?' });
     expect(systems[0]).toContain(digest);
     expect(systems[systems.length - 1]).toContain(digest);
   });
@@ -351,7 +353,7 @@ describe('a run has no tool-call limit — only the consecutive-failure breaker'
       systems.push(String(opts.messages.find((m) => m.role === 'system')?.content ?? ''));
       return { text: 'Hello.', toolCalls: [], finishReason: 'stop' };
     };
-    await startRun(4251, { resolvedSystemPrompt: 'sys', stream, persistence, userTurn: 'hi' });
+    await startRun(4251, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', stream, persistence, userTurn: 'hi' });
     expect(systems.every((s) => !s.includes('Already done earlier in this chat'))).toBe(true);
   });
 
@@ -359,6 +361,7 @@ describe('a run has no tool-call limit — only the consecutive-failure breaker'
     const gateway = callsThenAnswers(60);
     let executed = 0;
     await startRun(4242, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       tools: READ_TOOL,
       runTool: async () => { executed += 1; return { ok: true, content: 'body' }; },
@@ -376,6 +379,7 @@ describe('a run has no tool-call limit — only the consecutive-failure breaker'
     const gateway = callsThenAnswers(100);
     const handed: string[] = [];
     await startRun(4243, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       tools: READ_TOOL,
       runTool: async () => ({ ok: false, error: 'EACCES: permission denied' }),
@@ -400,6 +404,7 @@ describe('a run has no tool-call limit — only the consecutive-failure breaker'
     const gateway = callsThenAnswers(20);
     let n = 0;
     await startRun(4244, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       tools: READ_TOOL,
       // Four failures, one success, four failures, one success, … — never five in a row.
@@ -424,6 +429,7 @@ describe('analysis first, then the strongest coder writes the code', () => {
     const roles: string[] = [];
     let turn = 0;
     await startRun(5101, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       tools: TOOLS,
       runTool: async () => ({ ok: true, content: 'ok' }),
@@ -448,6 +454,7 @@ describe('analysis first, then the strongest coder writes the code', () => {
     const reported: unknown[] = [];
     let turn = 0;
     await startRun(5103, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       tools: TOOLS,
       runTool: async () => ({ ok: true, content: 'ok' }),
@@ -469,6 +476,7 @@ describe('analysis first, then the strongest coder writes the code', () => {
     const briefs: string[] = [];
     let turn = 0;
     await startRun(5104, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       tools: TOOLS,
       runTool: async () => ({ ok: true, content: 'ok' }),
@@ -499,9 +507,9 @@ describe('analysis first, then the strongest coder writes the code', () => {
       if (opts.tools === undefined || turn !== 1) return { text: 'Done.', toolCalls: [], finishReason: 'stop' };
       return { text: '', toolCalls: [{ id: 'c1', name: 'edit_file', args: JSON.stringify({ path: 'a.ts', old: 'x', new: 'y' }) }], finishReason: 'tool_calls' };
     };
-    await startRun(5105, { resolvedSystemPrompt: 'sys', tools: TOOLS, runTool: async () => ({ ok: true, content: 'ok' }), stream, persistence, userTurn: 'fix a.ts' });
+    await startRun(5105, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', tools: TOOLS, runTool: async () => ({ ok: true, content: 'ok' }), stream, persistence, userTurn: 'fix a.ts' });
     roles.length = 0;
-    await startRun(5105, { resolvedSystemPrompt: 'sys', tools: TOOLS, runTool: async () => ({ ok: true, content: 'ok' }), stream, persistence, userTurn: 'continue' });
+    await startRun(5105, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', tools: TOOLS, runTool: async () => ({ ok: true, content: 'ok' }), stream, persistence, userTurn: 'continue' });
     expect(roles[0]).toBe('plan');
   });
 
@@ -509,6 +517,7 @@ describe('analysis first, then the strongest coder writes the code', () => {
     const roles: string[] = [];
     let turn = 0;
     await startRun(5102, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       tools: TOOLS,
       model: 'direct/qwen/qwen3.8-max',
@@ -535,6 +544,7 @@ describe('a model that breaks mid-answer (the "Grok starts and then stops" run)'
   it('retries the turn once on another connected model instead of ending the run', async () => {
     const excluded: Array<string[] | undefined> = [];
     await startRun(5201, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       tools: READ_TOOL,
       runTool: async () => ({ ok: true, content: 'ok' }),
@@ -556,6 +566,7 @@ describe('a model that breaks mid-answer (the "Grok starts and then stops" run)'
     // and was retried on eighteen separate turns of one run.
     const excluded: Array<string[] | undefined> = [];
     await startRun(5291, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       tools: READ_TOOL,
       runTool: async () => ({ ok: true, content: 'ok' }),
@@ -574,6 +585,7 @@ describe('a model that breaks mid-answer (the "Grok starts and then stops" run)'
   it('does not route around a model the user pinned', async () => {
     let calls = 0;
     await startRun(5202, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       tools: READ_TOOL,
       model: 'xai-oauth/grok-4.5',
@@ -621,6 +633,7 @@ describe('the re-read loop guard', () => {
     // catches — and so testing the wrong guard entirely.
     const model = rereadsOneFile('a.css');
     await startRun(4301, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       tools: READ_TOOL,
       runTool: async () => ({ ok: true, content: 'body' }),
@@ -641,6 +654,7 @@ describe('the re-read loop guard', () => {
     const seen: string[] = [];
     let turn = 0;
     await startRun(4302, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       tools: READ_TOOL,
       runTool: async () => ({ ok: true, content: 'body' }),
@@ -675,6 +689,7 @@ describe('live run activity (the animated in-flight indicator)', () => {
 
     let turn = 0;
     await startRun(4401, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       tools: [{ type: 'function', function: { name: 'search_code', description: 's', parameters: {} } }],
       runTool: async () => {
@@ -710,6 +725,7 @@ describe('live run activity (the animated in-flight indicator)', () => {
   it('flips to `writing` on the first streamed token', async () => {
     let sawWriting = false;
     await startRun(4402, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       stream: async (_opts, cb) => {
         cb?.onTextDelta?.('Hel');
@@ -744,6 +760,7 @@ describe('a bare "Fix" after an unfinished proposal', () => {
   it('tells the run to carry out the previous proposal instead of asking what to fix', async () => {
     const { stream, seen } = captureSystem();
     await startRun(4501, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       seed: [
         { role: 'user', content: 'reduce the height of the scrolling box on mobile' },
@@ -760,6 +777,7 @@ describe('a bare "Fix" after an unfinished proposal', () => {
   it('leaves a normal turn alone', async () => {
     const { stream, seen } = captureSystem();
     await startRun(4502, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       seed: [{ role: 'assistant', content: PROPOSAL }],
       stream,
@@ -774,6 +792,7 @@ describe('a bare "Fix" after an unfinished proposal', () => {
     // for it would be worse than the model asking.
     const { stream, seen } = captureSystem();
     await startRun(4503, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       seed: [{ role: 'assistant', content: 'Done — the cap is now min(56vh, 480px) and the tests pass.' }],
       stream,
@@ -826,6 +845,7 @@ describe('a run that ships its change closes its own ticket', () => {
     evidenceSeed.passing = ['/repo/a.css'];
     const { stream, runTool, calls } = shippingRun('## main...origin/main');
     await startRun(4601, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       projectId: 11,
       tools: SHIP_TOOLS,
@@ -849,6 +869,7 @@ describe('a run that ships its change closes its own ticket', () => {
   it('holds the shipped ticket in review when the run recorded no verification evidence', async () => {
     const { stream, runTool, calls } = shippingRun('## main...origin/main');
     await startRun(4603, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       projectId: 11,
       tools: SHIP_TOOLS,
@@ -868,6 +889,7 @@ describe('a run that ships its change closes its own ticket', () => {
     evidenceSeed.passing = ['/repo/a.css'];
     const { stream, runTool, calls } = shippingRun('## feature/x...origin/feature/x');
     await startRun(4602, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       projectId: 11,
       tools: SHIP_TOOLS,
@@ -923,7 +945,7 @@ describe('a local run is its own reviewer: it ships its change instead of parkin
 
   it('tells a session that can commit and push its ship policy (the default when the host sends none)', async () => {
     const { stream, runTool, systems } = scripted(['Nothing to change.']);
-    await startRun(4801, { resolvedSystemPrompt: 'sys', projectId: 11, tools: IDE_TOOLS, runTool, stream, persistence, userTurn: 'fix the deep link' });
+    await startRun(4801, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', projectId: 11, tools: IDE_TOOLS, runTool, stream, persistence, userTurn: 'fix the deep link' });
     expect(systems[0]).toContain('SHIP POLICY');
     expect(systems[0]).toContain("The project's ship policy is unset");
   });
@@ -938,7 +960,7 @@ describe('a local run is its own reviewer: it ships its change instead of parkin
       { name: 'git_push', args: { allowBaseBranch: true } },
       'Shipped as abc123 — pushed to main.',
     ]);
-    await startRun(4802, { resolvedSystemPrompt: 'sys', projectId: 11, tools: IDE_TOOLS, runTool, stream, persistence, userTurn: 'fix the deep link', shipPolicy });
+    await startRun(4802, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', projectId: 11, tools: IDE_TOOLS, runTool, stream, persistence, userTurn: 'fix the deep link', shipPolicy });
     expect(getRunTrace(4802).some((e) => e.label === 'loop.recover_unshipped_change')).toBe(true);
     expect(calls.some((c) => c.name === 'git_push')).toBe(true);
     // The push's own status is the verification — no separate git_status was needed.
@@ -950,7 +972,7 @@ describe('a local run is its own reviewer: it ships its change instead of parkin
       { name: 'edit_file', args: { path: 'src/a.ts', old_string: 'x', new_string: 'y' } },
       'Edited src/a.ts; left uncommitted as asked.',
     ]);
-    await startRun(4803, { resolvedSystemPrompt: 'sys', projectId: 11, tools: IDE_TOOLS, runTool, stream, persistence, userTurn: "fix the deep link but don't commit", shipPolicy });
+    await startRun(4803, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', projectId: 11, tools: IDE_TOOLS, runTool, stream, persistence, userTurn: "fix the deep link but don't commit", shipPolicy });
     expect(getRunTrace(4803).some((e) => e.label === 'loop.recover_unshipped_change')).toBe(false);
     expect(doneUpdate(calls)).toBeUndefined();
   });
@@ -965,14 +987,14 @@ describe('a local run is its own reviewer: it ships its change instead of parkin
       { name: 'git_push', args: { allowBaseBranch: true } },
       'Shipped.',
     ]);
-    await startRun(4804, { resolvedSystemPrompt: 'sys', projectId: 11, tools: IDE_TOOLS, runTool: first.runTool, stream: first.stream, persistence, userTurn: 'fix a and push', shipPolicy });
+    await startRun(4804, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', projectId: 11, tools: IDE_TOOLS, runTool: first.runTool, stream: first.stream, persistence, userTurn: 'fix a and push', shipPolicy });
     expect(doneUpdate(first.calls)).toBeDefined();
 
     const second = scripted([
       { name: 'edit_file', args: { path: 'src/b.ts', old_string: 'x', new_string: 'y' } },
       'Edited src/b.ts; left uncommitted as asked.',
     ]);
-    await startRun(4804, { resolvedSystemPrompt: 'sys', projectId: 11, tools: IDE_TOOLS, runTool: second.runTool, stream: second.stream, persistence, userTurn: "now tweak b, don't commit", shipPolicy });
+    await startRun(4804, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', projectId: 11, tools: IDE_TOOLS, runTool: second.runTool, stream: second.stream, persistence, userTurn: "now tweak b, don't commit", shipPolicy });
     expect(doneUpdate(second.calls)).toBeUndefined();
   });
 });
@@ -989,6 +1011,7 @@ describe('what the model is handed for a large read (chat #99, the loop that nev
     const seen: string[] = [];
     let turn = 0;
     await startRun(4701, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       tools: TOOLS,
       runTool: async () => ({ ok: true, path: 'api/src/ChatTicketService.ts', content: bigContent, truncated: false, totalLines: 800, offset: 1 }),
@@ -1021,6 +1044,7 @@ describe('what the model is handed for a large read (chat #99, the loop that nev
     let turn = 0;
     const readOf = (i: number) => JSON.stringify({ path: `f${i}.ts` });
     await startRun(4703, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       tools: TOOLS,
       runTool: async (_name, args) => {
@@ -1062,6 +1086,7 @@ describe('what the model is handed for a large read (chat #99, the loop that nev
     let turn = 0;
     const read = JSON.stringify({ path: 'a.css' });
     await startRun(4702, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       tools: TOOLS,
       runTool: async (name) => { executed.push(name); return { ok: true, content: 'body' }; },
@@ -1124,6 +1149,7 @@ describe('a turn that hands the user the commands it holds the tools for', () =>
   it('re-prompts it instead of accepting it as the final answer', async () => {
     const { stream, nudges } = editsThenHandsOff();
     await startRun(4801, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       tools: IDE_TOOLS,
       runTool: async () => ({ ok: true }),
@@ -1142,6 +1168,7 @@ describe('a turn that hands the user the commands it holds the tools for', () =>
     // then a limit being reported, and re-prompting would only produce an apology.
     const { stream, nudges } = editsThenHandsOff();
     await startRun(4802, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       tools: [{ type: 'function' as const, function: { name: 'builtin_tasks_create', description: 'create', parameters: {} } }],
       runTool: async () => ({ ok: true }),
@@ -1162,6 +1189,7 @@ describe('a turn that hands the user the commands it holds the tools for', () =>
   it('leaves a QUESTION alone — the commands are the answer to "how do I…"', async () => {
     const { stream, nudges } = editsThenHandsOff();
     await startRun(4803, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       tools: IDE_TOOLS,
       runTool: async () => ({ ok: true }),
@@ -1194,6 +1222,7 @@ describe('ask_user — a question is a REPLY, and the run ends on it', () => {
     const advertised: string[][] = [];
     const rec = recorder();
     await startRun(4401, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       tools: READ_TOOL,
       runTool: async () => ({ ok: true }),
@@ -1211,6 +1240,7 @@ describe('ask_user — a question is a REPLY, and the run ends on it', () => {
     const advertised: Array<string[] | undefined> = [];
     const rec = recorder();
     await startRun(4405, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       tools: [],
       runTool: async () => ({ ok: true }),
@@ -1230,6 +1260,7 @@ describe('ask_user — a question is a REPLY, and the run ends on it', () => {
     const advertised: Array<string[] | undefined> = [];
     const rec = recorder();
     await startRun(4402, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       tools: READ_TOOL,
       stream: async (opts) => {
@@ -1246,6 +1277,7 @@ describe('ask_user — a question is a REPLY, and the run ends on it', () => {
     const rec = recorder();
     let turns = 0;
     await startRun(4403, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       tools: READ_TOOL,
       runTool: async () => {
@@ -1281,6 +1313,7 @@ describe('ask_user — a question is a REPLY, and the run ends on it', () => {
     const toolResults: string[] = [];
     let turn = 0;
     await startRun(4404, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       tools: READ_TOOL,
       runTool: async () => ({ ok: true }),
@@ -1320,6 +1353,7 @@ describe('ask_user — a question is a REPLY, and the run ends on it', () => {
       const ran: string[] = [];
       let turn = 0;
       await startRun(4406, {
+    entryPoint: 'vscode',
         resolvedSystemPrompt: 'sys',
         tools: SPAWN_TOOLS,
         runTool: async (name) => { ran.push(name); return { ok: true }; },
@@ -1351,6 +1385,7 @@ describe('ask_user — a question is a REPLY, and the run ends on it', () => {
       const ran: string[] = [];
       let turn = 0;
       await startRun(4407, {
+    entryPoint: 'vscode',
         resolvedSystemPrompt: 'sys',
         tools: SPAWN_TOOLS,
         runTool: async (name) => { ran.push(name); return { ok: true }; },
@@ -1370,6 +1405,7 @@ describe('ask_user — a question is a REPLY, and the run ends on it', () => {
     it('still settles on the question when the user did not ask for sub-agents', async () => {
       const rec = recorder();
       await startRun(4408, {
+    entryPoint: 'vscode',
         resolvedSystemPrompt: 'sys',
         tools: SPAWN_TOOLS,
         runTool: async () => ({ ok: true }),
@@ -1397,6 +1433,7 @@ describe('ask_user — a question is a REPLY, and the run ends on it', () => {
       let turn = 0;
       const resolved: string[] = [];
       await startRun(4409, {
+    entryPoint: 'vscode',
         resolvedSystemPrompt: 'sys',
         tools: READ_TOOL,
         runTool: async () => ({ ok: true }),
@@ -1434,6 +1471,7 @@ describe('ask_user — a question is a REPLY, and the run ends on it', () => {
       const rec = recorder();
       let turn = 0;
       await startRun(4410, {
+    entryPoint: 'vscode',
         resolvedSystemPrompt: 'sys',
         tools: READ_TOOL,
         runTool: async () => ({ ok: true }),
@@ -1481,6 +1519,7 @@ describe('the reasoning channel a run persists', () => {
     // that recognises reasoning by its closing tag saw the scratchpad as the message.
     const rec = recorder();
     await startRun(4501, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       ...answers('<think>Both are archived. Close them or roadmap them?'),
       persistence: rec.persistence,
@@ -1496,6 +1535,7 @@ describe('the reasoning channel a run persists', () => {
   it('separates reasoning from the answer into one canonical block', async () => {
     const rec = recorder();
     await startRun(4502, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       ...answers('First.<thinking>weighing it up</thinking>Then the answer.'),
       persistence: rec.persistence,
@@ -1507,6 +1547,7 @@ describe('the reasoning channel a run persists', () => {
   it('leaves a plain reply exactly as written', async () => {
     const rec = recorder();
     await startRun(4503, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       ...answers('Patched the scroll lock.'),
       persistence: rec.persistence,
@@ -1519,6 +1560,7 @@ describe('the reasoning channel a run persists', () => {
     const text = ['Strip it like this:', '', '```', '<think>hidden</think>', '```', '', 'That is all.'].join('\n');
     const rec = recorder();
     await startRun(4504, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       ...answers(text),
       persistence: rec.persistence,
@@ -1550,6 +1592,7 @@ describe('mid-turn text is marked, so the Evermind learn gate never trains on it
       return { text: 'The hook was not imported; the import is now added and the file compiles.', toolCalls: [], finishReason: 'stop', ...served };
     };
     await startRun(4300, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       tools: READ_TOOL,
       runTool: async () => ({ ok: true, content: 'body' }),
@@ -1593,6 +1636,7 @@ describe('planning ends in tasks, and the tasks are the hand-off (chat #133)', (
     let nextId = 900;
     let turn = 0;
     await startRun(5301, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       tools: [spec('read_file'), spec('edit_file'), spec('builtin_tasks_create'), spec('builtin_chats_link_ticket'), spec('spawn_agents')],
       projectId: 11,
@@ -1642,6 +1686,7 @@ describe('planning ends in tasks, and the tasks are the hand-off (chat #133)', (
       { title: 'B', brief: 'b', paths: ['src/x/y.ts'] },
     ] };
     await startRun(5302, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       tools: [spec('read_file'), spec('spawn_agents')],
       runTool: async (name) => { calls.push(name); return { ok: true }; },
@@ -1685,7 +1730,7 @@ describe('a run can be steered while it runs, and a sub-agent is just a run with
       }
       return { text: 'Done with the API half.', toolCalls: [], finishReason: 'stop' };
     };
-    await startRun(4400, { resolvedSystemPrompt: 'sys', tools: READ_TOOL, runTool: async () => ({ ok: true }), stream, persistence: recording([]), userTurn: 'port it' });
+    await startRun(4400, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', tools: READ_TOOL, runTool: async () => ({ ok: true }), stream, persistence: recording([]), userTurn: 'port it' });
     expect(seen[1]).toContain('only the API half');
   });
 
@@ -1699,16 +1744,17 @@ describe('a run can be steered while it runs, and a sub-agent is just a run with
       }
       return { text: 'Edge case covered too.', toolCalls: [], finishReason: 'stop' };
     };
-    await startRun(4401, { resolvedSystemPrompt: 'sys', tools: READ_TOOL, runTool: async () => ({ ok: true }), stream, persistence: recording([]), userTurn: 'do it' });
+    await startRun(4401, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', tools: READ_TOOL, runTool: async () => ({ ok: true }), stream, persistence: recording([]), userTurn: 'do it' });
     expect(turn).toBe(2);
   });
 
   it('runs a child on its own key while everything it says lands in the owner chat, as the child', async () => {
     const sent: Array<Sent & { chatId: number }> = [];
     // The owner has run in this chat, so its live view exists to be spliced into.
-    await startRun(77, { resolvedSystemPrompt: 'sys', stream: async () => ({ text: 'Delegating.', toolCalls: [], finishReason: 'stop' }), persistence: recording([]), userTurn: 'find it' });
+    await startRun(77, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', stream: async () => ({ text: 'Delegating.', toolCalls: [], finishReason: 'stop' }), persistence: recording([]), userTurn: 'find it' });
     const stream: BrainStreamFn = async () => ({ text: 'Found it in src/auth.ts:12.', toolCalls: [], finishReason: 'stop' });
     await startRun(-9001, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       stream,
       persistence: recording(sent),
@@ -1745,6 +1791,7 @@ describe('a run has ONE durable store for its steps', () => {
       return { text: 'a.ts renders the bubble.', toolCalls: [], finishReason: 'stop' };
     };
     await startRun(4300, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       stream,
       persistence,
@@ -1776,6 +1823,7 @@ describe('the window fit and HTTP-status failures, wired through the run', () =>
     const sentLengths: number[] = [];
     const small = 'direct/cloudflare/@cf/meta/llama-3.3-70b';
     await startRun(5401, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       model: small,
       modelStrict: true,
@@ -1799,6 +1847,7 @@ describe('the window fit and HTTP-status failures, wired through the run', () =>
   it('retries a turn the gateway answered 429 instead of ending the run', async () => {
     let calls = 0;
     await startRun(5402, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       stream: async () => {
         calls += 1;
@@ -1816,6 +1865,7 @@ describe('the window fit and HTTP-status failures, wired through the run', () =>
   it('still surfaces a refused request (402) as the run error, with its action', async () => {
     let calls = 0;
     await startRun(5403, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       stream: async () => {
         calls += 1;

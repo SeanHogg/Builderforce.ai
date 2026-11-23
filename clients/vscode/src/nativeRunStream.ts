@@ -2,8 +2,7 @@
  * What the native chat participant needs around the shared loop's run cell: turning its
  * observable state into the linear markdown stream the native chat renders, spotting a run
  * the loop stopped itself, and the transient persistence the participant uses because it
- * writes the whole turn once, after the loop. Split from `nativeBrainRun.ts`, which re-exports
- * every name here. No `vscode` import.
+ * writes the whole turn once, after the loop. No `vscode` import.
  */
 
 import { isForcedFinishStep, type BrainRunPersistence, type BrainRunSnapshot, type BrainTraceEvent } from "@seanhogg/builderforce-brain-embedded";

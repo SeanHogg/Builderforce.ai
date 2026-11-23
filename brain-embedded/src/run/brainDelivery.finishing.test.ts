@@ -37,7 +37,7 @@ function changedRun(): BrainRunContext {
     finishSkipNoted: false,
     stopHookRounds: 0,
     pending: new PendingCalls(),
-    pipeline: null,
+    route: { input: { request: '' }, pipeline: null, start: { startPhase: 'plan' }, skipsVerify: false },
     progress: new RunProgressGuard(true, true),
   } as unknown as BrainRunContext;
 }

@@ -26,7 +26,7 @@ function stalledRun(): BrainRunContext {
     allTools: CATALOG,
     promptTools: { system: [], turn: [], contract: [], obligation: OBLIGATION },
     policy: { ...initialRunPolicy({ startPhase: 'code' }), codeTurns: 40 },
-    pipeline: null,
+    route: { input: { request: '' }, pipeline: null, start: { startPhase: 'plan' }, skipsVerify: false },
     progress: new RunProgressGuard(true, true),
   } as unknown as BrainRunContext;
 }

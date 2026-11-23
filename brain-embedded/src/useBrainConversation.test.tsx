@@ -90,7 +90,7 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
     const serverMessages: Array<{ id: number; role: string; content: string; metadata: string | null; seq: number; createdAt: string }> = [];
     vi.mocked(persistence.getMessages).mockImplementation(async () => [...serverMessages]);
     const { result: hook, unmount } = renderHook(
-      () => useBrainConversation({ chatId: 41, toolSpecs: [], runTool: vi.fn() }),
+      () => useBrainConversation({ entryPoint: 'vscode', chatId: 41, toolSpecs: [], runTool: vi.fn() }),
       { wrapper },
     );
 
@@ -117,7 +117,7 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
       { id: 9, role: 'assistant', content: '✅ finished', metadata: null, seq: 9, createdAt: '' },
     ]);
     const { unmount } = renderHook(
-      () => useBrainConversation({ chatId: 41, toolSpecs: [], runTool: vi.fn() }),
+      () => useBrainConversation({ entryPoint: 'vscode', chatId: 41, toolSpecs: [], runTool: vi.fn() }),
       { wrapper },
     );
     await waitFor(() => expect(persistence.markChatRead).toHaveBeenCalledWith(41, 9));
@@ -133,7 +133,7 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
     const server = [{ id: 3, role: 'assistant', content: 'a', metadata: null, seq: 3, createdAt: '' }];
     vi.mocked(persistence.getMessages).mockImplementation(async () => [...server]);
     const { unmount } = renderHook(
-      () => useBrainConversation({ chatId: 41, toolSpecs: [], runTool: vi.fn() }),
+      () => useBrainConversation({ entryPoint: 'vscode', chatId: 41, toolSpecs: [], runTool: vi.fn() }),
       { wrapper },
     );
     await waitFor(() => expect(persistence.markChatRead).toHaveBeenLastCalledWith(41, 3));
@@ -153,7 +153,7 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
 
   it('does not mark read when there is no open chat', async () => {
     const { unmount } = renderHook(
-      () => useBrainConversation({ chatId: null, toolSpecs: [], runTool: vi.fn() }),
+      () => useBrainConversation({ entryPoint: 'vscode', chatId: null, toolSpecs: [], runTool: vi.fn() }),
       { wrapper },
     );
     await new Promise((r) => setTimeout(r, 20));
@@ -165,7 +165,7 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
     mockStream.mockResolvedValueOnce(result({ text: 'hello there' }));
     const { rerender, result: hook } = renderHook(
       (props: { chatId: number }) =>
-        useBrainConversation({ chatId: props.chatId, toolSpecs: [], runTool: vi.fn() }),
+        useBrainConversation({ entryPoint: 'vscode', chatId: props.chatId, toolSpecs: [], runTool: vi.fn() }),
       { initialProps: { chatId: 1 }, wrapper },
     );
     rerender({ chatId: 1 });
@@ -193,7 +193,7 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
       .mockRejectedValueOnce(new Error('no_local_model'))
       .mockResolvedValueOnce(result({ text: 'hello there' }));
     const { result: hook } = renderHook(
-      () => useBrainConversation({ chatId: 1, toolSpecs: [], runTool: vi.fn() }),
+      () => useBrainConversation({ entryPoint: 'vscode', chatId: 1, toolSpecs: [], runTool: vi.fn() }),
       { wrapper },
     );
 
@@ -224,7 +224,7 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
       return { resolvedSystemPrompt: `You are Rovr, acting for chat ${id}.`, tools: [TOOL] };
     });
     const { result: hook } = renderHook(
-      () => useBrainConversation({ chatId: 7, toolSpecs: [], runTool: vi.fn(), prepareRun }),
+      () => useBrainConversation({ entryPoint: 'vscode', chatId: 7, toolSpecs: [], runTool: vi.fn(), prepareRun }),
       { wrapper },
     );
     await act(async () => { await hook.current.send('hi'); });
@@ -244,7 +244,7 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
       return {};
     });
     const { result: hook } = renderHook(
-      () => useBrainConversation({ chatId: 8, toolSpecs: [], runTool: vi.fn(), prepareRun }),
+      () => useBrainConversation({ entryPoint: 'vscode', chatId: 8, toolSpecs: [], runTool: vi.fn(), prepareRun }),
       { wrapper },
     );
     await act(async () => { await hook.current.send('hi'); });
@@ -264,7 +264,7 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
     const runTool = vi.fn(async () => ({ ok: true }));
 
     const { result: hook } = renderHook(
-      () => useBrainConversation({ chatId: 1, toolSpecs: [TOOL], runTool }),
+      () => useBrainConversation({ entryPoint: 'vscode', chatId: 1, toolSpecs: [TOOL], runTool }),
       { wrapper },
     );
 
@@ -304,7 +304,7 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
     const runTool = vi.fn(async () => ({ id: 123, name: 'A', url: 'a.com' }));
 
     const { result: hook } = renderHook(
-      () => useBrainConversation({ chatId: 1, toolSpecs: [TOOL], runTool }),
+      () => useBrainConversation({ entryPoint: 'vscode', chatId: 1, toolSpecs: [TOOL], runTool }),
       { wrapper },
     );
 
@@ -339,7 +339,7 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
     const runTool = vi.fn(async () => ({ ok: true }));
 
     const { result: hook } = renderHook(
-      () => useBrainConversation({ chatId: 3, toolSpecs: [TOOL], runTool }),
+      () => useBrainConversation({ entryPoint: 'vscode', chatId: 3, toolSpecs: [TOOL], runTool }),
       { wrapper },
     );
 
@@ -368,7 +368,7 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
     const runTool = vi.fn(async () => ({ ok: true }));
 
     const { result: hook } = renderHook(
-      () => useBrainConversation({ chatId: 9, toolSpecs: [TOOL], runTool }),
+      () => useBrainConversation({ entryPoint: 'vscode', chatId: 9, toolSpecs: [TOOL], runTool }),
       { wrapper },
     );
 
@@ -394,7 +394,7 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
     );
     const runTool = vi.fn(async () => { throw new Error('boom'); });
     const { result: hook } = renderHook(
-      () => useBrainConversation({ chatId: 1, toolSpecs: [TOOL], runTool }),
+      () => useBrainConversation({ entryPoint: 'vscode', chatId: 1, toolSpecs: [TOOL], runTool }),
       { wrapper },
     );
 
@@ -420,7 +420,7 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
     });
     const runTool = vi.fn(async () => ({ ok: true }));
     const { result: hook } = renderHook(
-      () => useBrainConversation({ chatId: 2, toolSpecs: [TOOL], runTool }),
+      () => useBrainConversation({ entryPoint: 'vscode', chatId: 2, toolSpecs: [TOOL], runTool }),
       { wrapper },
     );
 
@@ -441,7 +441,7 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
       .mockResolvedValueOnce(result({ text: 'done' }));
     const runTool = vi.fn(async () => ({ ok: true, content: 'file body' }));
     const { result: hook } = renderHook(
-      () => useBrainConversation({ chatId: 3, toolSpecs: [], runTool }),
+      () => useBrainConversation({ entryPoint: 'vscode', chatId: 3, toolSpecs: [], runTool }),
       { wrapper },
     );
 
@@ -461,7 +461,7 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
       .mockResolvedValueOnce(result({ text: 'done' }));
     const runTool = vi.fn(async () => ({ ok: true }));
     const { result: hook } = renderHook(
-      () => useBrainConversation({ chatId: 5, toolSpecs: [], runTool }),
+      () => useBrainConversation({ entryPoint: 'vscode', chatId: 5, toolSpecs: [], runTool }),
       { wrapper },
     );
 
@@ -488,7 +488,7 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
       return { ok: true };
     });
     const { result: hook } = renderHook(
-      () => useBrainConversation({ chatId: 7, projectId: 10, toolSpecs: [], runTool }),
+      () => useBrainConversation({ entryPoint: 'vscode', chatId: 7, projectId: 10, toolSpecs: [], runTool }),
       { wrapper },
     );
 
@@ -502,7 +502,7 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
   it('surfaces a connected-but-unresolved BYO provider on the hook (for the reconnect banner)', async () => {
     mockStream.mockResolvedValueOnce(result({ text: 'ok', byoUnresolved: 'anthropic' }));
     const { result: hook } = renderHook(
-      () => useBrainConversation({ chatId: 4, toolSpecs: [], runTool: vi.fn() }),
+      () => useBrainConversation({ entryPoint: 'vscode', chatId: 4, toolSpecs: [], runTool: vi.fn() }),
       { wrapper },
     );
 
@@ -528,7 +528,7 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
     mockStream.mockResolvedValueOnce(result({ text: 'a substantive answer that clears the teach floor with room to spare' }));
 
     const { result: hook } = renderHook(
-      () => useBrainConversation({ chatId: 11, toolSpecs: [], runTool: vi.fn() }),
+      () => useBrainConversation({ entryPoint: 'vscode', chatId: 11, toolSpecs: [], runTool: vi.fn() }),
       { wrapper },
     );
 
@@ -553,7 +553,7 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
     mockStream.mockResolvedValueOnce(result({ text: 'a plain answer on a non-project or unseeded chat' }));
 
     const { result: hook } = renderHook(
-      () => useBrainConversation({ chatId: 12, toolSpecs: [], runTool: vi.fn() }),
+      () => useBrainConversation({ entryPoint: 'vscode', chatId: 12, toolSpecs: [], runTool: vi.fn() }),
       { wrapper },
     );
 
@@ -569,7 +569,7 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
     const runTool = vi.fn(async () => { throw new Error('no repo bound'); });
 
     const { result: hook } = renderHook(
-      () => useBrainConversation({ chatId: 7, toolSpecs: [TOOL], runTool }),
+      () => useBrainConversation({ entryPoint: 'vscode', chatId: 7, toolSpecs: [TOOL], runTool }),
       { wrapper },
     );
 
@@ -609,7 +609,7 @@ describe('parallel chats on one hook instance (a panel that walks between chats)
     );
     mockStream.mockResolvedValue(result({ text: 'ok' }));
     const { rerender, result: hook } = renderHook(
-      (props: { chatId: number }) => useBrainConversation({ chatId: props.chatId, toolSpecs: [], runTool: vi.fn() }),
+      (props: { chatId: number }) => useBrainConversation({ entryPoint: 'vscode', chatId: props.chatId, toolSpecs: [], runTool: vi.fn() }),
       { initialProps: { chatId: 1 }, wrapper },
     );
 
@@ -642,7 +642,7 @@ describe('parallel chats on one hook instance (a panel that walks between chats)
       chatId === 1 ? new Promise(() => {}) : [],
     );
     const { rerender, result: hook } = renderHook(
-      (props: { chatId: number }) => useBrainConversation({ chatId: props.chatId, toolSpecs: [], runTool: vi.fn() }),
+      (props: { chatId: number }) => useBrainConversation({ entryPoint: 'vscode', chatId: props.chatId, toolSpecs: [], runTool: vi.fn() }),
       { initialProps: { chatId: 2 }, wrapper },
     );
     await waitFor(() => expect(persistence.getMessages).toHaveBeenCalledWith(2));
@@ -665,7 +665,7 @@ describe('parallel chats on one hook instance (a panel that walks between chats)
       { id: 3, role: 'user', content: 'only do analysis', metadata: JSON.stringify({ midTurn: true }), seq: 3, createdAt: '' },
     ]);
     const { result: hook, unmount } = renderHook(
-      () => useBrainConversation({ chatId: 6, toolSpecs: [], runTool: vi.fn() }),
+      () => useBrainConversation({ entryPoint: 'vscode', chatId: 6, toolSpecs: [], runTool: vi.fn() }),
       { wrapper },
     );
     await waitFor(() => expect(hook.current.messages).toHaveLength(3));
@@ -682,7 +682,7 @@ describe('useBrainConversation directed agent reply', () => {
 
   function hookForChat() {
     return renderHook(
-      () => useBrainConversation({ chatId: 1, toolSpecs: [], runTool: vi.fn() }),
+      () => useBrainConversation({ entryPoint: 'vscode', chatId: 1, toolSpecs: [], runTool: vi.fn() }),
       { wrapper },
     );
   }
@@ -763,7 +763,7 @@ describe('unansweredTurnIndex', () => {
 describe('a stop sent to an idle chat (the pause question answered "Stop the run")', () => {
   it('is kept as the answer and starts no run', async () => {
     const { result: hook } = renderHook(
-      () => useBrainConversation({ chatId: 31, toolSpecs: [], runTool: vi.fn() }),
+      () => useBrainConversation({ entryPoint: 'vscode', chatId: 31, toolSpecs: [], runTool: vi.fn() }),
       { wrapper },
     );
     await act(async () => { await hook.current.send('Stop the run'); });
@@ -777,7 +777,7 @@ describe('a stop sent to an idle chat (the pause question answered "Stop the run
       { id: 1, chatId: 32, role: 'user', content: 'Stop the run', metadata: null, seq: 1, createdAt: '' },
     ] as never);
     const { result: hook } = renderHook(
-      () => useBrainConversation({ chatId: 32, toolSpecs: [], runTool: vi.fn() }),
+      () => useBrainConversation({ entryPoint: 'vscode', chatId: 32, toolSpecs: [], runTool: vi.fn() }),
       { wrapper },
     );
     await waitFor(() => expect(hook.current.messages).toHaveLength(1));
@@ -788,7 +788,7 @@ describe('a stop sent to an idle chat (the pause question answered "Stop the run
   it('a stop with an attachment is work: it runs, as the reload would', async () => {
     mockStream.mockResolvedValueOnce(result({ text: 'looked' }));
     const { result: hook } = renderHook(
-      () => useBrainConversation({ chatId: 33, toolSpecs: [], runTool: vi.fn() }),
+      () => useBrainConversation({ entryPoint: 'vscode', chatId: 33, toolSpecs: [], runTool: vi.fn() }),
       { wrapper },
     );
     const attachment = { key: 'a1', name: 'shot.png', type: 'image/png', imageUrl: 'data:image/png;base64,AA==' };
@@ -807,7 +807,7 @@ describe('Stop while a send is still getting ready', () => {
         }),
     );
     const { result: hook } = renderHook(
-      () => useBrainConversation({ chatId: 34, toolSpecs: [], runTool: vi.fn() }),
+      () => useBrainConversation({ entryPoint: 'vscode', chatId: 34, toolSpecs: [], runTool: vi.fn() }),
       { wrapper },
     );
     let sent!: Promise<boolean>;
@@ -825,7 +825,7 @@ describe('a send given its own attachments (a held turn flushed) and the compose
 
   async function withPendingFile(chatId: number) {
     vi.mocked(persistence.upload).mockResolvedValueOnce({ key: 'pending-1', name: 'notes.txt', type: 'text/plain' } as never);
-    const { result: hook } = renderHook(() => useBrainConversation({ chatId, toolSpecs: [], runTool: vi.fn() }), { wrapper });
+    const { result: hook } = renderHook(() => useBrainConversation({ entryPoint: 'vscode', chatId, toolSpecs: [], runTool: vi.fn() }), { wrapper });
     await act(async () => { await hook.current.attach(new File(['x'], 'notes.txt', { type: 'text/plain' })); });
     expect(hook.current.pendingAttachments.map((a) => a.key)).toEqual(['pending-1']);
     return hook;

@@ -34,6 +34,7 @@ async function scripted(runKey: number, userTurn: string, script: Step[], child 
   let turn = 0;
   let lastRole: string | undefined;
   await startRun(runKey, {
+    entryPoint: 'vscode',
     resolvedSystemPrompt: 'sys',
     tools: TOOLS,
     runTool: async (name, args) => (name === 'read_file'

@@ -1,7 +1,7 @@
 /**
  * cloudAdapter — the CLOUD adapter of the one agent (PRD 35 WS3, §3.1 / §4).
  *
- * The ONE importer of `runAgent` on the cloud surface. It builds PORTS from the cloud host and
+ * The ONE caller of `openRun` on the cloud surface. It builds PORTS from the cloud host and
  * hands the run to the agent; it has NO loop, NO policy and NO branch on behaviour. Every
  * behaviour difference arrives through a port or through `RunPolicy` data the board compiled
  * (the sign-off, the approval gates, the dispatch provenance); `RunPolicy.entryPoint` is a
@@ -21,12 +21,12 @@
  * The finish gates, guards, verify and compaction are bound with the couplings this surface has
  * (`cloudAdapterHooks`); what they DO is the agent's.
  */
-import { DEFAULT_READS_BEFORE_NUDGE, asksForSubagents, renderTaskState, runAgent, type ContextPack, type RunPolicy, type RunPorts, type RunState, type RunTask } from '@builderforce/agent-run';
+import { DEFAULT_READS_BEFORE_NUDGE, asksForSubagents, openRun, renderTaskState, type ContextPack, type RunPolicy, type RunPorts, type RunState, type RunTask } from '@builderforce/agent-run';
 import { isCostLeverOn, type CostLeverId } from '@builderforce/cost-levers';
 import type { CloudEngineContext } from './cloudAgentEngine';
 import { parseRunDispatch } from './runDispatch';
 import { cloudModelPort } from './cloudAdapterModel';
-import { cloudPolicyModules } from './cloudAdapterHooks';
+import { cloudSurfacePorts } from './cloudAdapterHooks';
 import { isInfrastructureEviction } from './orphanReasons';
 import { cloudRunId } from '../../domain/execution/cloudRunId';
 import { trustedLegacyApprovals } from './cloudLegacyApprovals';
@@ -157,22 +157,29 @@ export async function runCloudAgent(
   };
 
   try {
-    const outcome = await runAgent({
+    const outcome = await openRun({
       task: taskOf(host, rc),
       policy: policyOf(host),
       ports,
       ...(resume ? { resume } : {}),
       ...(opts.maxSteps !== undefined ? { maxSteps: opts.maxSteps } : {}),
       signal: cancel.controller.signal,
-      modules: cloudPolicyModules({
+      surface: cloudSurfacePorts({
         env, db, run: refs, runRole: host.runRole, repoCtx: host.repoCtx, delegated: !!opts.delegation, writtenHashes: host.writtenHashes, writtenPaths: host.writtenPaths,
         ...(host.verify ? { sandbox: host.verify.sandbox } : {}),
         taskTitle: host.taskRow.title,
         ladder: host.ladder, features: host.features, resolvedModel: model.servedModel,
         ...(opts.execParams ? { execParams: opts.execParams } : {}),
         ...(opts.shipPolicy ? { ship: opts.shipPolicy } : {}),
-        onState: (state) => { live.state = state; },
+        live,
       }),
+      // The ticket's words and the board's model picks; a delegated child routes as a child (the owner's ladder is not its own).
+      route: {
+        request: host.userContent,
+        modelStrict: host.pick.strict,
+        ...(host.reviewPin ? { phaseModels: { review: host.reviewPin } } : {}),
+        ...(isChildDelegation(opts.delegation) ? { child: true } : {}),
+      },
     });
     return await settleCloudRun(host, outcome, stash, model);
   } catch (error) {

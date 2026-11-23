@@ -9,7 +9,7 @@
  * reopened while the run carries on.
  *
  * This module owns no `vscode` runtime import (types only, through the ports), for
- * the same reason `nativeBrainRun.ts` does not: everything between "the webview asked
+ * the same reason `participantRun.ts` does not: everything between "the webview asked
  * for a run" and "the webview was told what happened" is deterministic once the
  * gateway is scripted, and is tested that way in `brainRunHost.test.ts`.
  *
@@ -44,7 +44,7 @@ import {
 } from "@seanhogg/builderforce-brain-embedded";
 import type { ToolDef } from "./fileTools";
 import type { ShipPolicy } from "@builderforce/run-guards";
-import { approvalRequestFor, argsRecord, createNativeRunTool, nativeNeedsConfirm, nativeToolSpecs } from "./nativeBrainRun";
+import { approvalRequestFor, argsRecord, createNativeRunTool, nativeNeedsConfirm, nativeToolSpecs, toolLabel } from "./nativeRunTool";
 import { withRunPreamble } from "./runPreamble";
 import { chatLedgerRequest } from "./runUsageLedgerPorts";
 import { replaceWorkspaceMap } from "./idePersona";
@@ -240,7 +240,7 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
       // only), so the per-turn ledger and this run's note + code map are ONE record.
       const info: ToolRunInfo = { chatId, name, args: record, mutating: def.mutating, remote: !!def.remote, ok };
       ports.onToolRun?.(info);
-      broadcast({ type: "run.tool", chatId, name, mutating: def.mutating, remote: !!def.remote, ok });
+      broadcast({ type: "run.tool", chatId, name, mutating: def.mutating, remote: !!def.remote, ok, label: toolLabel(defs, name, record) });
     };
 
     // The run's chat OFF this machine (PRD 36) — bound now when signed in, bounded by
@@ -406,7 +406,7 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     specOf: (key) => specs.get(key),
     // `builderforce.models.subagent` — what a sub-agent codes on unless its owner's pick is strict.
     ...(ports.runSettings ? { subagentModel: async () => (await ports.runSettings!()).subagentModel } : {}),
-    start,
+    start: ports.startThrough ?? start,
     isBusy,
     autoApproveOf,
     persistence: ports.persistence,
@@ -438,6 +438,7 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     },
     // The person's words at a run — steer, stop, or its next turn (`runSteer.ts`); `steerTurns`: several, one continuation.
     steer: steering.steer, steerTurns: steering.steerTurns,
+    registerApprover: approvals.register,
     childControls(owner, base, approve) {
       // Registered so a child can derive from it; never woken — its turns are the editor's.
       specs.set(owner.key, { ...base, chatId: owner.key, wakeable: false });

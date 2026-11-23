@@ -10,7 +10,7 @@ import { normalizeDeliveryContext } from "../utils/delivery-context.js";
 import { resolveAgentConfig } from "./agent-scope.js";
 import { AGENT_LANE_SUBAGENT } from "./lanes.js";
 import { resolveSubagentSpawnModel } from "./model-routing.js";
-import { buildSubagentSystemPrompt } from "./subagent-announce.js";
+import { buildSubagentSessionPrompt, effectiveMaxSpawnDepth } from "./subagent-prompt.js";
 import { getSubagentDepthFromSessionStore } from "./subagent-depth.js";
 import { countActiveRunsForSession, registerSubagentRun } from "./subagent-registry.js";
 import { readStringParam } from "./tools/common.js";
@@ -115,7 +115,8 @@ export async function spawnSubagentDirect(
   });
 
   const callerDepth = getSubagentDepthFromSessionStore(requesterInternalKey, { cfg });
-  const maxSpawnDepth = cfg.agents?.defaults?.subagents?.maxSpawnDepth ?? 1;
+  // The one cap every surface's children share (`MAX_SUBAGENT_DEPTH`): config may lower it, never raise it.
+  const maxSpawnDepth = effectiveMaxSpawnDepth(cfg.agents?.defaults?.subagents?.maxSpawnDepth);
   if (callerDepth >= maxSpawnDepth) {
     return {
       status: "forbidden",
@@ -268,7 +269,7 @@ export async function spawnSubagentDirect(
       };
     }
   }
-  let childSystemPrompt = buildSubagentSystemPrompt({
+  let childSystemPrompt = buildSubagentSessionPrompt({
     requesterSessionKey,
     requesterOrigin,
     childSessionKey,

@@ -42,6 +42,7 @@ async function run(chatId: number, serverChatId: number | null | undefined) {
 async function runWith(chatId: number, serverChatId: number | null | undefined, lineage?: RunLineage) {
   const calls: Array<{ name: string; args: Record<string, unknown> }> = [];
   await startRun(chatId, {
+    entryPoint: 'vscode',
     ...(lineage ? { lineage } : {}),
     resolvedSystemPrompt: 'sys',
     tools: [spec('builtin_tasks_create'), spec('builtin_chats_link_ticket')],
@@ -116,6 +117,7 @@ describe('hand-off tickets carry the chat and count as recorded work', () => {
     let nextId = 900;
     let turn = 0;
     await startRun(5, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       tools: [spec('read_file'), spec('edit_file'), spec('builtin_tasks_create'), spec('spawn_agents')],
       projectId: 11,

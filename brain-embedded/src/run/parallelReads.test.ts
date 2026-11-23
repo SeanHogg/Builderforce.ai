@@ -46,6 +46,7 @@ async function runTurn(chatId: number, calls: Call[]) {
   const events: string[] = [];
   let turn = 0;
   await startRun(chatId, {
+    entryPoint: 'vscode',
     resolvedSystemPrompt: 'sys',
     tools: TOOLS,
     runTool: async (name: string) => {
@@ -120,6 +121,7 @@ describe('each call of a parallel read batch keeps its OWN state (D8)', () => {
       [read('a3', 'a.ts')],
     ];
     await startRun(4803, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       tools: TOOLS,
       runTool: async (_name: string, args: unknown) => {
@@ -174,6 +176,7 @@ describe('each call of a parallel read batch keeps its OWN state (D8)', () => {
     });
     let turn = 0;
     await startRun(4804, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       tools: TOOLS,
       runTool: async (_name: string, args: unknown) => {

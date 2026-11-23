@@ -39,6 +39,7 @@ describe('a run with a model preflight', () => {
     let seenAtTurn1: string[] | null = null;
     let preflightBeforeTurn = false;
     await startRun(4701, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       persistence,
       userTurn: 'plan the PRD update',
@@ -55,6 +56,7 @@ describe('a run with a model preflight', () => {
 
   it('a failing preflight costs the notice, never the run', async () => {
     await startRun(4702, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       persistence,
       userTurn: 'go',

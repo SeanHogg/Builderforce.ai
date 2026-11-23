@@ -55,7 +55,7 @@ describe("model routing is centralized", () => {
     // are the two sides of the branch. A second module reaching for either one is a
     // second router, which is how the surfaces diverged before.
     const owners: Record<string, readonly string[]> = {
-      createNativeStream: ["modelRouting.ts", "nativeBrainRun.ts"],
+      createNativeStream: ["modelRouting.ts", "nativeGatewayStream.ts"],
       // The local transports are brain-embedded's (shared with the Chrome extension);
       // in the editor only the seam reaches for them. `completeLocal` also matches
       // `completeLocalFirst` — local-first is a transport choice too. The streaming side

@@ -1,10 +1,11 @@
 /**
  * THE agent loop.
  *
- * Every BuilderForce surface — the cloud Durable Object, rehearsal, the server-side
- * Brain reply, the embedded browser Brain, the creation canvas, the on-prem runtime —
- * drives this ONE function. It owns the model→tools→model skeleton and nothing else;
- * see `types.ts` for the seams where each surface plugs in its own behaviour.
+ * Only `@builderforce/agent-run`'s `runAgent` drives this function. Every BuilderForce surface — the cloud
+ * Durable Object, rehearsal, the server-side Brain reply, the embedded browser Brain, the creation canvas,
+ * the on-prem runtime — reaches it through `openRun` (`@builderforce/agent-run`), which composes the run's
+ * policy and calls `runAgent`. It owns the model→tools→model skeleton and nothing else;
+ * see `types.ts` for the seams where the agent plugs in its own behaviour.
  *
  * Failure policy: the kernel does not catch. A throwing port aborts the run and the
  * surface's own try/finally records it, exactly as before consolidation. The single

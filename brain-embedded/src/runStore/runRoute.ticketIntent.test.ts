@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decideRunPipeline, pipelinePolicyOptions } from './pipelineRoute';
+import { decideRoute } from './runRoute';
 
 // VS Code chat #157440: a follow-up asking for tickets against a spec started in the code role from step 0.
 const VERBATIM = [
@@ -11,9 +11,9 @@ const VERBATIM = [
 describe('regression: chat #157440 — ticket / spec requests start in plan', () => {
   for (const request of VERBATIM) {
     it(`regression: "${request}" (a follow-up) routes full and starts in plan`, () => {
-      const route = decideRunPipeline({ pipeline: { routing: 'auto' } }, request, { followUp: true });
-      expect(route?.route).toBe('full');
-      expect(pipelinePolicyOptions({ pipeline: { routing: 'auto', quickModel: 'fast' } }, route).startPhase).toBe('plan');
+      const route = decideRoute({ pipeline: { routing: 'auto', quickModel: 'fast' } }, request, true);
+      expect(route.pipeline?.route).toBe('full');
+      expect(route.start.startPhase).toBe('plan');
     });
   }
 });

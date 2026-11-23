@@ -1,6 +1,6 @@
 /**
  * `childRunner` — how an on-prem run delegates: a sub-agent is the SAME agent (PRD 35 §6),
- * run through `runAgent` with its own transcript, the parent's model and the parent's
+ * run through `openRun` with its own transcript, the parent's model and the parent's
  * tools. It sees none of the parent's conversation; its brief is its whole task. This is
  * the backing of the shared `spawn_agent` tool (`OrchestrationCapability`) and the
  * replacement for the SDK's `Task` tool: the call BLOCKS until the child's report is in,
@@ -17,7 +17,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { childPolicy, childProvider, childResult, runAgent } from "@builderforce/agent-run";
+import { childPolicy, childProvider, childResult, openRun } from "@builderforce/agent-run";
 import type { HumanChannel, ModelTransport, RunPolicy } from "@builderforce/agent-run";
 import type { CapabilityProvider, SubagentRequest, SubagentResult } from "@builderforce/agent-tools";
 import { observedModel, relayEventSink, type OnPremRunSinks } from "./onPremEvents.js";
@@ -45,7 +45,7 @@ export function childRunner(owner: ChildRunContext): (request: SubagentRequest) 
     const own = owner.sinks.forChild?.(request.label);
     // A child with no observer of its own reports nothing live — it never borrows the owner's.
     const sinks: OnPremRunSinks = own ?? { onAssistantText: () => undefined, onToolUse: () => undefined, onResult: () => undefined };
-    const outcome = await runAgent({
+    const outcome = await openRun({
       // Its own id: the row it writes is reported under it, and names the owner's as its parent.
       task: { runId: randomUUID(), prompt: request.task, dispatch: { source: "subagent", parentRunId: owner.parentRunId } },
       policy: childPolicy(owner.policy, request),
@@ -58,6 +58,8 @@ export function childRunner(owner: ChildRunContext): (request: SubagentRequest) 
         human: owner.human,
         context: { pack: () => ({ focus: [], facts: [], recall: [] }) },
       },
+      // A child is routed as a child: the owner's model pick and delegation are not its own to re-decide.
+      route: { child: true, request: request.task },
       ...(owner.signal ? { signal: owner.signal } : {}),
     });
     return childResult(outcome, request);

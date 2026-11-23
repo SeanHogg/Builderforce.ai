@@ -5,20 +5,19 @@
  * adapter only builds ports (`webAdapter.ts`, `brainTurn.ts`, `brainPlatformTools.ts`, `brainSteering.ts`, `brainStore.ts`).
  */
 
-import { runAgent } from '@builderforce/agent-run';
+import { openRun } from '@builderforce/agent-run';
 import type { BrainRunContext } from '../runStore/brainRunContext';
-import { pipelinePolicyOptions } from '../runStore/pipelineRoute';
 import { brainDeliveryLedger } from './brainDelivery';
 import { brainPlatformTools } from './brainPlatformTools';
 import { brainCompaction } from './brainFold';
-import { brainFinishHook } from './brainFinish';
-import { recordedModelHook } from './preflightRecorded';
+import { brainFinishPorts } from './brainFinish';
+import { recordedPreflight } from './preflightRecorded';
 import { brainRunStorePort } from './brainStore';
 import { brainSpendMeter } from './brainSpend';
 import { brainSteeringSource, personSteers } from './brainSteering';
 import { settleBrainRun } from './brainSettle';
 import { brainEventSink } from './eventSink';
-import { withDeterministicFinish } from '../runStore/deterministicFinish';
+import { closeOutPort } from '../runStore/deterministicFinish';
 import { openLinkedWorkHold } from '../runStore/openLinkedWorkHold';
 import { specTicketCoverageGate } from '../runStore/specTicketCoverageGate';
 import { discardAnswered, brainTurnObserver } from './brainTurn';
@@ -35,7 +34,7 @@ export async function runPrepared(run: BrainRunContext): Promise<void> {
   const platform = brainPlatformTools(run);
   const spend = brainSpendMeter(run);
   const binding: BrainRunBinding = {
-    entryPoint: req.entryPoint ?? 'web',
+    entryPoint: req.entryPoint,
     req,
     capabilities: { capabilities: new Set() },
     request: run.userRequest,
@@ -49,7 +48,8 @@ export async function runPrepared(run: BrainRunContext): Promise<void> {
       // The turn recorder writes the model downgrade, and the steering port records each direction it drains.
       recorded: new Set(['llm.model_downgrade', 'steer.applied'] as const),
     }),
-    start: pipelinePolicyOptions(req, run.pipeline),
+    // The route's start (phase, stage models, a quick run's model) is folded in by `openRun` from `route`; this seeds the request's own model.
+    start: {},
     ship: run.shipPolicy,
     // From here the model policy is the AGENT's: the Brain's guards read `run.policy` and report to it through the view.
     attach: (view) => {
@@ -78,16 +78,24 @@ export async function runPrepared(run: BrainRunContext): Promise<void> {
   if (request >= 0) transcript[request] = { ...transcript[request]!, task: true };
   const ports = buildBrainRunPorts(binding);
   const signal = c.abort?.signal;
-  const outcome = await runAgent({
+  const outcome = await openRun({
     task: { ...brainRunTask(binding), transcript },
     policy: brainRunPolicy(binding),
     ports: { ...ports, model: withoutUncallableTurns(ports.model, req) },
-    // The Brain's own fold (`brainFold.ts`), not the agent's compaction adapted to imitate it.
-    // ... and the preamble ran the host's model preflight already (`hostRunContext.ts`): the agent's own would ask the host again and warn
-    // about a model the loop never warned about (a QUICK run's quick model), so the Brain's says the verdict and nothing more.
-    // ... and the finish module carries the host's engine ports (`brainFinish.ts`): an owner never ends with its sub-agents still working.
-    // ... and the open-work gate sequence: the run's open linked tickets, then the spec items a ticketing request still owes.
-    modules: { compaction: compaction.hook, model: recordedModelHook(c, req.model), finish: withDeterministicFinish(run, brainFinishHook(req, [openLinkedWorkHold(run), specTicketCoverageGate(run)])) },
+    // The run's route, decided once in the preamble (`runStore/runRoute.ts`): the agent's own `routeRun` over the same input.
+    route: run.route.input,
+    surface: {
+      // The Brain's own fold (`brainFold.ts`), not the agent's compaction adapted to imitate it.
+      compaction: { hook: compaction.hook },
+      // The preamble ran the host's model preflight already (`hostRunContext.ts`): the agent's own would ask the host again and warn
+      // about a model the loop never warned about (a QUICK run's quick model), so the Brain's says the verdict and nothing more.
+      preflight: recordedPreflight(c, req.model),
+      // The host's engine ports (`brainFinish.ts`): an owner never ends with its sub-agents still working, and the open-work gate
+      // sequence holds the run's open linked tickets, then the spec items a ticketing request still owes.
+      finish: brainFinishPorts(req, [openLinkedWorkHold(run), specTicketCoverageGate(run)]),
+      // The deterministic close-out (`runStore/deterministicFinish.ts`): the host's own ticket actions, ahead of the finish gate.
+      closeOut: closeOutPort(run),
+    },
     // The Brain's read-coverage owns the no-progress counter (`callPreflight`/`callPostStep`
     // feed it); hand the kernel that ONE instance to persist, so a circling run keeps its count
     // across the step yield it is steered into — not a kernel-built twin the Brain never feeds.

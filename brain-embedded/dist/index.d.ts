@@ -2,8 +2,8 @@ import * as react from 'react';
 import { ReactNode, SetStateAction, Dispatch } from 'react';
 import { B as BrainMessage, b as BrainDiagnostics, a as BrainTraceEvent, c as StreamFailureDetail, C as ChatInputAttachment, d as BrainRunActivity, e as BrainChat, f as SpendSavingsSummary, V as ViewKey, g as BrainModality, H as HandOffMode, h as ScopeClash, i as HandOffDecision, P as PackageDirProbe, j as ParallelSplit, k as RunProgress, S as StaffingSummary, U as UsageSurface } from './brainTriage-BAX44Cqq.js';
 export { l as BrainDiagnosticsContext, m as BrainRunPhase, n as BuildBrainTriageOptions, o as ByoUnresolvedEntry, D as DispatchRefusal, E as EvermindLearnOutcome, p as EvermindLearnTarget, M as ModelScore, q as ModelTurn, r as PersonaSubagent, s as ROLE_GATE_REMEDIATION, t as RepeatStreak, u as RepeatedTarget, v as STEP_MESSAGE_ROLE, w as SavingsBreakdown, x as SavingsBySource, y as SavingsSourceKey, z as SpendBreakdown, A as UNBACKED_TICKET_CLAIM_NOTICE, F as UNBACKED_WRITE_CLAIM_NOTICE, G as USAGE_SURFACES, I as USAGE_SURFACE_HEADER, J as accountUsedInTrace, K as activityTarget, L as answeredInProseInTrace, N as attachEvermindLearn, O as buildBrainTriageReport, Q as byoReasonHint, T as byoUnresolvedInTrace, W as byoUnresolvedSummary, X as canRunInParallel, Y as computeBrainDiagnostics, Z as computeRunProgress, _ as describeLiveStep, $ as describeStreamFailure, a0 as detectAnnouncedButUnmadeToolCall, a1 as detectUnbackedTicketClaim, a2 as detectUnbackedWriteClaim, a3 as formatBrainProvenance, a4 as formatBytes, a5 as formatDispatchRefusals, a6 as formatEvermindLearnStep, a7 as formatModelScorecard, a8 as formatModelTurnLog, a9 as formatStaffingSummary, aa as isDispatchTool, ab as isEvermindModel, ac as isStepMessage, ad as isTicketWriteTool, ae as isUsageSurface, af as midRunNotice, ag as modelFailoversInTrace, ah as modelScorecard, ai as modelTurnLog, aj as modelsUsedInTrace, ak as narratedUnadvertisedInTrace, al as parseByoUnresolved, am as parseRoleGateRefusal, an as serverChatIdOf, ao as shortenTarget, ap as staffingSummaryInTrace, aq as stallRecoveriesInTrace, ar as stallUnrecoveredInTrace, as as toolActivity, at as workFiledNotStaffedVerdict } from './brainTriage-BAX44Cqq.js';
-import { S as ShipHold, C as ChatCompletionMessage, R as RunKey, B as BrainRunPersistence, a as BrainRunRequest, b as BrainTransport, c as BrainStreamFn, d as RunEndOutcome, e as CompletionUsage, f as StreamChatOptions, g as StreamHandlers, h as StreamChatResult, L as LocalFirstAccount, i as LocalFirstAttemptRecord, j as LocalFirstAttempt, k as LocalFirstWorkload, P as ProjectMemoryRequest, l as ByoOrderQuery, m as LocalFirstAccounts, O as OnDeviceTasks, n as OnDeviceTaskKind, o as SummarizeOptions, p as RewriteOptions, W as WriteOptions, D as DetectedLanguage, T as TranslateOptions, J as JsonTaskOptions, q as OnDeviceObserver, r as ServedBy, s as JsonSchema, E as Effort, t as EvermindRunHooks, u as BrainToolSpec, v as ChatMode, w as RunWindowSources, x as ReasoningIntent, y as ChatRosterAgent, z as ContentPart, G as GitPort, A as TicketToolVocabulary, F as ShipPolicy, H as ShipMode, I as ShipPolicySource } from './pendingWords-CQJ_iu4Q.js';
-export { K as ASK_USER_TOOL, M as ASK_USER_TOOL_SPEC, N as AnswerOriginCost, Q as AskUserMessageLike, U as AskUserOption, V as AskUserPayload, X as AskUserToolSpec, Y as AssembledToolCall, Z as AvoidedRunCall, _ as BrainRunOutcome, $ as CHAT_MODES, a0 as CHAT_MODE_ICON, a1 as ChatWorkDirectiveOptions, a2 as CompletionMetadata, a3 as EffortProfile, a4 as ImageUrlContentPart, a5 as LOCAL_TICKET_CREATE_TOOL, a6 as LocalFirstAttemptSummary, a7 as MAX_STOP_HOOK_ROUNDS, a8 as MemoryAnswerOptions, a9 as MemoryFirstAnswer, aa as MemorySurface, ab as ModelPreflightResult, ac as ModelWindowSources, ad as NEW_CHAT_MODE, ae as OnDeviceEngine, af as OnDeviceTaskEvent, ag as PendingAskUser, ah as PrefetchResult, ai as RESTING_CHAT_MODE, aj as ReasoningLevel, ak as ReviewerPort, al as RunLineage, am as RunOutcomeReport, an as RunPipelineSettings, ao as RunStageModels, ap as RunStopHook, aq as RunStopInput, ar as SERVER_TICKET_CREATE_TOOL, as as SERVER_TICKET_TOOLS, at as SUBAGENT_OF_META_KEY, au as ServedOption, av as ServedRead, aw as SubagentOrigin, ax as TextContentPart, ay as UpstreamTurnEvidence, az as VerifierPort, aA as askStopHook, aB as askUserAnchorId, aC as askUserBlock, aD as chatConversationDirective, aE as chatModeDirective, aF as chatRosterFromParticipants, aG as chatWorkDirective, aH as clearPendingWords, aI as coerceAskUserPayload, aJ as contextWindowOf, aK as effortProfile, aL as isChatMode, aM as isEffort, aN as localFallbackTrace, aO as normalizeChatMode, aP as parseAskUser, aQ as parseSubagentOrigin, aR as projectMemoryHooks, aS as reasoningForRun, aT as resolveContextWindow, aU as savedChatOf, aV as selectPendingAskUser, aW as serializeAskUser, aX as setPendingWordsOwner, aY as streamChatCompletion, aZ as stripAskUser, a_ as summarizeLocalFirstAttempt, a$ as ticketToolVocabulary } from './pendingWords-CQJ_iu4Q.js';
+import { S as ShipHold, C as ChatCompletionMessage, R as RunKey, B as BrainRunPersistence, a as BrainRunRequest, b as BrainTransport, c as BrainStreamFn, d as RunEndOutcome, e as CompletionUsage, f as StreamChatOptions, g as StreamHandlers, h as StreamChatResult, L as LocalFirstAccount, i as LocalFirstAttemptRecord, j as LocalFirstAttempt, k as LocalFirstWorkload, P as ProjectMemoryRequest, l as ByoOrderQuery, m as LocalFirstAccounts, O as OnDeviceTasks, n as OnDeviceTaskKind, o as SummarizeOptions, p as RewriteOptions, W as WriteOptions, D as DetectedLanguage, T as TranslateOptions, J as JsonTaskOptions, q as OnDeviceObserver, r as ServedBy, s as JsonSchema, E as Effort, t as EvermindRunHooks, u as BrainToolSpec, v as ChatMode, w as RunWindowSources, x as ReasoningIntent, y as ChatRosterAgent, z as ContentPart, G as GitPort, A as TicketToolVocabulary, F as ShipPolicy, H as ShipMode, I as ShipPolicySource } from './pendingWords-D5AeGwYs.js';
+export { K as ASK_USER_TOOL, M as ASK_USER_TOOL_SPEC, N as AnswerOriginCost, Q as AskUserMessageLike, U as AskUserOption, V as AskUserPayload, X as AskUserToolSpec, Y as AssembledToolCall, Z as AvoidedRunCall, _ as BrainRunOutcome, $ as CHAT_MODES, a0 as CHAT_MODE_ICON, a1 as ChatWorkDirectiveOptions, a2 as CompletionMetadata, a3 as EffortProfile, a4 as ImageUrlContentPart, a5 as LOCAL_TICKET_CREATE_TOOL, a6 as LocalFirstAttemptSummary, a7 as MAX_STOP_HOOK_ROUNDS, a8 as MemoryAnswerOptions, a9 as MemoryFirstAnswer, aa as MemorySurface, ab as ModelPreflightResult, ac as ModelWindowSources, ad as NEW_CHAT_MODE, ae as OnDeviceEngine, af as OnDeviceTaskEvent, ag as PendingAskUser, ah as PrefetchResult, ai as RESTING_CHAT_MODE, aj as ReasoningLevel, ak as ReviewerPort, al as RunLineage, am as RunOutcomeReport, an as RunPipelineSettings, ao as RunStageModels, ap as RunStopHook, aq as RunStopInput, ar as SERVER_TICKET_CREATE_TOOL, as as SERVER_TICKET_TOOLS, at as SUBAGENT_OF_META_KEY, au as ServedOption, av as ServedRead, aw as SubagentOrigin, ax as TextContentPart, ay as UpstreamTurnEvidence, az as VerifierPort, aA as askStopHook, aB as askUserAnchorId, aC as askUserBlock, aD as chatConversationDirective, aE as chatModeDirective, aF as chatRosterFromParticipants, aG as chatWorkDirective, aH as clearPendingWords, aI as coerceAskUserPayload, aJ as contextWindowOf, aK as effortProfile, aL as isChatMode, aM as isEffort, aN as localFallbackTrace, aO as normalizeChatMode, aP as parseAskUser, aQ as parseSubagentOrigin, aR as projectMemoryHooks, aS as reasoningForRun, aT as resolveContextWindow, aU as savedChatOf, aV as selectPendingAskUser, aW as serializeAskUser, aX as setPendingWordsOwner, aY as streamChatCompletion, aZ as stripAskUser, a_ as summarizeLocalFirstAttempt, a$ as ticketToolVocabulary } from './pendingWords-D5AeGwYs.js';
 import { SummaryCompletion } from '@seanhogg/builderforce-memory/working';
 export { CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, ConsolidationMarkerMeta, HISTORY_TOKEN_BUDGET, consolidationMarkerContent, consolidationMarkerOf, consolidationMetadata, isConsolidationMarker, lastConsolidationIndex, scopeToConsolidation } from '@seanhogg/builderforce-memory/working';
 import { L as LocalRuntimeId, b as LocalEndpoint, a as LocalRuntimeProbe } from './probe-DkPrGnWT.js';
@@ -1844,6 +1844,95 @@ type RunPolicyEvent =
 declare function isCoderReask(role: string | undefined, previousRole: string | undefined): boolean;
 
 /**
+ * The pipeline router — does this request need the FULL pipeline (plan → code →
+ * verify), or will a QUICK single coding pass do?
+ *
+ * Every run used to take the full pipeline: an analysis phase that reads the code and
+ * hands off, a coding phase, and a verify stage that reviews the change on a different
+ * model. For "fix the typo in the README" that is three model tiers and two hand-offs
+ * spent on one edit. The router reads the request ONCE, before turn 1, and scores how
+ * likely it is to need the whole pipeline.
+ *
+ * The score is a logistic over a few lexical features, with the weights as data
+ * ({@link ROUTE_WEIGHTS}) so they can be tuned — or replaced by a fitted head — without
+ * touching a host. `score` is P(full pipeline needed); at or above the threshold the run
+ * goes `full`, below it `quick`. `mode: 'always'` keeps every run on the full pipeline
+ * (the score is still computed and recorded, so the route report can show what auto
+ * WOULD have done), and the words "full pipeline" in the request force it.
+ *
+ * PURE — no I/O, no env, no clock. The action type is the caller's (the shared lexical
+ * classifier in `@builderforce/workload`); the intent (question vs change) and the
+ * ask/pasted-context split come from the ONE classifier in `@builderforce/agent-stall`
+ * (`classifyRequest`, fix brief W2 — chat #168571: a paste's verbs routed a question
+ * `full`); the only other dependency is the ONE sigmoid in builderforce-memory's
+ * `./stats` (PRD 41 D13).
+ */
+type PipelineRoute = 'full' | 'quick';
+/** The default threshold: a coin. */
+declare const DEFAULT_ROUTE_THRESHOLD = 0.5;
+
+/**
+ * The route report's arithmetic — what the router did over a window of runs, and
+ * whether its threshold should move. Pure: a host folds its own ledger into
+ * {@link RouteRunRecord}s (one per run) and renders the {@link RouteReport}.
+ *
+ * MISROUTE PROXY. Nothing labels a quick run "should have been full", so the report
+ * uses what the person did next: a quick run followed, in the same conversation and
+ * within {@link RERUN_WINDOW_MS}, by a FULL run (they asked again, often with "full
+ * pipeline"), or a quick run the host recorded as failed. Both say the quick pass did
+ * not finish the job.
+ */
+
+/** One run, as the report reads it. */
+interface RouteRunRecord {
+    route: PipelineRoute;
+    /** The router's score; null for a run recorded without one. */
+    score: number | null;
+    /** What the run's calls cost, in millicents; null when any call's price is unknown (unknown, never a partial sum). */
+    costMc: number | null;
+    /** The conversation the run belongs to — what "re-run" is grouped by. */
+    conversation: string;
+    /** When the run's first call was made (ISO-8601). */
+    startedAt: string;
+    /** The host knows the run failed. Absent ⇒ unknown, and only the re-run proxy applies. */
+    failed?: boolean;
+}
+interface RouteTotals {
+    runs: number;
+    /** Millicents over the runs that have a known cost; the runs that do not are counted in `unpricedRuns`. */
+    costMc: number;
+    /** How many of `runs` have an unknown cost. Absent when every run is priced. */
+    unpricedRuns?: number;
+    /** Mean score over the runs that carry one; null when none does. */
+    avgScore: number | null;
+}
+interface ScoreBin {
+    /** Inclusive lower edge. */
+    from: number;
+    /** Exclusive upper edge (1 is inclusive for the last bin). */
+    to: number;
+    full: number;
+    quick: number;
+}
+interface RouteReport {
+    runs: number;
+    byRoute: Record<PipelineRoute, RouteTotals>;
+    histogram: ScoreBin[];
+    /** Quick runs the proxy calls misrouted, and their share of all quick runs. */
+    misroutes: number;
+    misrouteRate: number | null;
+    threshold: number;
+    /** The threshold the evidence points to, or null when it says keep the current one.
+     *  A number, never a sentence: each host words (and localizes) it itself. */
+    suggestedThreshold: number | null;
+}
+/** The whole report over `runs` at the current `threshold`. */
+declare function summarizeRouteRuns(runs: readonly RouteRunRecord[], opts?: {
+    threshold?: number;
+    rerunWindowMs?: number;
+}): RouteReport;
+
+/**
  * runSteering — direction for a run that is ALREADY running, keyed by run.
  *
  * Ported from `brain-embedded/src/runSteering.ts` (WS2c, PRD 35 §4 row 2c): the composer
@@ -2658,95 +2747,6 @@ declare function withRunUsage(stream: BrainStreamFn, ledger: RunUsageLedger, con
     runKey: number;
     mode?: 'chat' | 'work';
 }, onError?: (error: unknown) => void): BrainStreamFn;
-
-/**
- * The pipeline router — does this request need the FULL pipeline (plan → code →
- * verify), or will a QUICK single coding pass do?
- *
- * Every run used to take the full pipeline: an analysis phase that reads the code and
- * hands off, a coding phase, and a verify stage that reviews the change on a different
- * model. For "fix the typo in the README" that is three model tiers and two hand-offs
- * spent on one edit. The router reads the request ONCE, before turn 1, and scores how
- * likely it is to need the whole pipeline.
- *
- * The score is a logistic over a few lexical features, with the weights as data
- * ({@link ROUTE_WEIGHTS}) so they can be tuned — or replaced by a fitted head — without
- * touching a host. `score` is P(full pipeline needed); at or above the threshold the run
- * goes `full`, below it `quick`. `mode: 'always'` keeps every run on the full pipeline
- * (the score is still computed and recorded, so the route report can show what auto
- * WOULD have done), and the words "full pipeline" in the request force it.
- *
- * PURE — no I/O, no env, no clock. The action type is the caller's (the shared lexical
- * classifier in `@builderforce/workload`); the intent (question vs change) and the
- * ask/pasted-context split come from the ONE classifier in `@builderforce/agent-stall`
- * (`classifyRequest`, fix brief W2 — chat #168571: a paste's verbs routed a question
- * `full`); the only other dependency is the ONE sigmoid in builderforce-memory's
- * `./stats` (PRD 41 D13).
- */
-type PipelineRoute = 'full' | 'quick';
-/** The default threshold: a coin. */
-declare const DEFAULT_ROUTE_THRESHOLD = 0.5;
-
-/**
- * The route report's arithmetic — what the router did over a window of runs, and
- * whether its threshold should move. Pure: a host folds its own ledger into
- * {@link RouteRunRecord}s (one per run) and renders the {@link RouteReport}.
- *
- * MISROUTE PROXY. Nothing labels a quick run "should have been full", so the report
- * uses what the person did next: a quick run followed, in the same conversation and
- * within {@link RERUN_WINDOW_MS}, by a FULL run (they asked again, often with "full
- * pipeline"), or a quick run the host recorded as failed. Both say the quick pass did
- * not finish the job.
- */
-
-/** One run, as the report reads it. */
-interface RouteRunRecord {
-    route: PipelineRoute;
-    /** The router's score; null for a run recorded without one. */
-    score: number | null;
-    /** What the run's calls cost, in millicents; null when any call's price is unknown (unknown, never a partial sum). */
-    costMc: number | null;
-    /** The conversation the run belongs to — what "re-run" is grouped by. */
-    conversation: string;
-    /** When the run's first call was made (ISO-8601). */
-    startedAt: string;
-    /** The host knows the run failed. Absent ⇒ unknown, and only the re-run proxy applies. */
-    failed?: boolean;
-}
-interface RouteTotals {
-    runs: number;
-    /** Millicents over the runs that have a known cost; the runs that do not are counted in `unpricedRuns`. */
-    costMc: number;
-    /** How many of `runs` have an unknown cost. Absent when every run is priced. */
-    unpricedRuns?: number;
-    /** Mean score over the runs that carry one; null when none does. */
-    avgScore: number | null;
-}
-interface ScoreBin {
-    /** Inclusive lower edge. */
-    from: number;
-    /** Exclusive upper edge (1 is inclusive for the last bin). */
-    to: number;
-    full: number;
-    quick: number;
-}
-interface RouteReport {
-    runs: number;
-    byRoute: Record<PipelineRoute, RouteTotals>;
-    histogram: ScoreBin[];
-    /** Quick runs the proxy calls misrouted, and their share of all quick runs. */
-    misroutes: number;
-    misrouteRate: number | null;
-    threshold: number;
-    /** The threshold the evidence points to, or null when it says keep the current one.
-     *  A number, never a sentence: each host words (and localizes) it itself. */
-    suggestedThreshold: number | null;
-}
-/** The whole report over `runs` at the current `threshold`. */
-declare function summarizeRouteRuns(runs: readonly RouteRunRecord[], opts?: {
-    threshold?: number;
-    rerunWindowMs?: number;
-}): RouteReport;
 
 /**
  * The run usage ledger as the ROUTE REPORT reads it — this device's routed runs over a
@@ -5889,6 +5889,8 @@ declare function createDraftBinding(): DraftBinding;
 declare function startsRun(text: string): boolean;
 
 interface UseBrainConversationOptions {
+    /** The surface this conversation's runs come in through (telemetry label on every run's outcome row). Required: no surface is assumed. */
+    entryPoint: BrainRunRequest['entryPoint'];
     chatId: number | null;
     modality?: BrainModality;
     /**

@@ -146,6 +146,7 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
   // THE shared conversation over this chat: the transcript (the device record), the
   // turn, the run and its live view, Stop, the error and the refused turn's re-send.
   const conv = useBrainConversation({
+    entryPoint: 'rovr',
     chatId,
     ensureChatId,
     drafts,

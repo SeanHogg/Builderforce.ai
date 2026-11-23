@@ -22,7 +22,7 @@ import {
 import { fakeGateway, type GatewayScript } from "../harness/fakeGateway";
 import type { ToolDef } from "./fileTools";
 import { createBrainRunHost, syncMessageFor, type BrainRunHostPorts, type RunHostMessage, type SinkEntry } from "./brainRunHost";
-import { transientRunPersistence } from "./nativeBrainRun";
+import { transientRunPersistence } from "./nativeRunStream";
 import { subagentToolDef } from "./subagentTool";
 import { subagentControlToolDefs } from "./subagentControlTools";
 

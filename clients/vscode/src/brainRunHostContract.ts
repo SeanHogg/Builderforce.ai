@@ -26,7 +26,7 @@ import type { Prediction } from "@builderforce/run-delta/predict";
 import type { PolicyGate } from "@builderforce/agent-tools";
 import type { FinishedRun } from "@builderforce/agent-run/memory";
 import type { ToolDef } from "./fileTools";
-import type { NativeRunLabels } from "./nativeBrainRun";
+import type { NativeRunLabels } from "./nativeRunTypes";
 import type { RunDirectives } from "./hooks/runHooks";
 import type { RunSink, WebviewRunStart } from "./brainRunHostProtocol";
 import type { ChildControls, ChildOwner } from "./childRunSpawner";
@@ -72,6 +72,12 @@ export interface BrainRunHostPorts {
   tools(projectId: number | undefined, children: ChildControls, signal: () => AbortSignal | undefined, opts: { memory: boolean; audit?: { auditId: string; runId: string }; chatIdentity?: PlatformChatIdentity }): Promise<readonly ToolDef[]>;
   /** Workspace root the local tools resolve against; '' when no folder is open. */
   workspaceRoot(): string;
+  /**
+   * The DOOR every run this host starts after the first opens through - a sub-agent, a resumed child, an idle owner's wake. The
+   * editor binds the host's gated start here (`gateStarts`: change-set identity, the run journal's start, delta capture), so a
+   * child gets what its owner gets. Absent: the host's own inner start (a host with no gate, as in tests).
+   */
+  startThrough?(spec: WebviewRunStart): Promise<void>;
   /**
    * The transport-bound streamer for the CURRENT route (gateway or on-device).
    * `onFallback` is told when Hybrid's pick failed and the turn was answered with Auto.
@@ -265,6 +271,11 @@ export interface BrainRunHost {
    * render a run cell's confirm).
    */
   childControls(owner: ChildOwner, base: Omit<WebviewRunStart, "chatId">, approve?: ChildApprover): ChildControls;
+  /**
+   * Ask `approve` about every paused call of a chat's runs - the owner's own and its sub-agents' - where the surface cannot render
+   * a run cell's confirm (the native chat view). Whichever surface answers first wins.
+   */
+  registerApprover(rootChatId: number, approve: ChildApprover): void;
   /** Is the run key claimed - setting up, running or unwinding? Another path (the native chat
    *  participant) asks before it starts a run of its own on the same key. */
   isBusy(runKey: number): boolean;

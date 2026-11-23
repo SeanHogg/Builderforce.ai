@@ -192,6 +192,8 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
       return routeDomainToolsLocal(ctx, local.store, local.identity, local.persistence, catalog, chatIdentity);
     },
     workspaceRoot,
+    // A sub-agent, a resumed child and an idle owner's wake open through the SAME gated start as a panel turn (below).
+    startThrough: (spec) => gated.start(spec),
     stream: streamForRoute,
     localProbes: localWindowProbes,
     localModels: localWindowModels,
@@ -313,8 +315,53 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
   // the chat is already running is a no-op in the host — don't finalize that, or the
   // live run's edits would be claimed twice, and don't journal a start that will never
   // finish. No upload, no apply to another checkout.
-  // Sub-agents start through the host's internal start, not this wrapper. A Stop during the
+  // Every run opens through this wrapper, a sub-agent included (`startThrough`). A Stop during the
   // baseline capture is held until the host has claimed the chat (`hostStartGate.ts`).
+  const gated = gateStarts(host, async (payload, start) => {
+    const { runId, author } = changeSetIdentityForHostRun(payload, () => crypto.randomUUID());
+    // §12.5: an audit, or a turn started with Auto on (no human approves its writes), is autonomous; only a human-driven
+    // turn with approvals is interactive. A sub-agent is autonomous when its owner ran with Auto on, as its start carries that.
+    const mode = payload.audit || payload.autoApprove ? "autonomous" : "interactive";
+    const asked = askedText(payload.userTurn);
+    if (!isRunning(payload.chatId)) {
+      lifecycle.started(payload.chatId, runId, asked);
+      if (mode === "autonomous") delta.hold.expect(runId);
+      runWrites.delete(payload.chatId); // this turn's evidence only
+    }
+    const recorded = recordChangeSetAroundRun(
+      {
+        store: local.store,
+        deviceId,
+        runId,
+        author,
+        stillRunning: () => isRunning(payload.chatId),
+        onError: (error) => hostLog(`[change set] ${error instanceof Error ? error.message : String(error)}`),
+        capture: await delta.capture(runId),
+        onFinalized: delta.onFinalized({
+          chatId: payload.chatId,
+          mode,
+          writes: () => runWrites.get(payload.chatId),
+          // PRD 41 §C8.3: the task and the chat's linked tickets, local-first — their named paths are the run's plan.
+          plan: async () => runPlanTexts(local.store, asked, (await local.identity.clientIdFor(payload.chatId)) ?? undefined),
+          ...(workspaceRoot() ? { workspaceRoot: workspaceRoot() } : {}),
+          // PRD 41 §C14: the delta syncs with the chat's project, so the web lists it under that project.
+          ...(typeof payload.projectId === "number" ? { projectId: payload.projectId } : {}),
+        }),
+      },
+      start,
+    );
+    if (mode !== "autonomous") return void (await recorded);
+    try {
+      await recorded;
+    } catch (error) {
+      delta.hold.forget(runId); // nobody will read this run's verdict
+      throw error;
+    }
+    // An autonomous start resolves after the gate's verdict AND its journaling: whoever awaits it (an audit) reads the
+    // execution's hold and never reports a held run complete.
+    await delta.hold.verdict(runId);
+    await delta.hold.whenJournaled(runId, RELEASE_JOURNAL_WAIT_MS * 2);
+  });
   return {
     ...host,
     attach: (sink) => {
@@ -343,51 +390,7 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
         repost: delta.repost, log: (what, error) => hostLog(`[run delta] ${what}: ${String(error)}`),
       }, runId);
     },
-    ...gateStarts(host, async (payload, start) => {
-      const { runId, author } = changeSetIdentityForHostRun(payload, () => crypto.randomUUID());
-      // §12.5: an audit, or a turn started with Auto on (no human approves its writes), is autonomous; only a human-driven
-      // turn with approvals is interactive. Sub-agents start through the host's internal start, never through here.
-      const mode = payload.audit || payload.autoApprove ? "autonomous" : "interactive";
-      const asked = askedText(payload.userTurn);
-      if (!isRunning(payload.chatId)) {
-        lifecycle.started(payload.chatId, runId, asked);
-        if (mode === "autonomous") delta.hold.expect(runId);
-        runWrites.delete(payload.chatId); // this turn's evidence only
-      }
-      const recorded = recordChangeSetAroundRun(
-        {
-          store: local.store,
-          deviceId,
-          runId,
-          author,
-          stillRunning: () => isRunning(payload.chatId),
-          onError: (error) => hostLog(`[change set] ${error instanceof Error ? error.message : String(error)}`),
-          capture: await delta.capture(runId),
-          onFinalized: delta.onFinalized({
-            chatId: payload.chatId,
-            mode,
-            writes: () => runWrites.get(payload.chatId),
-            // PRD 41 §C8.3: the task and the chat's linked tickets, local-first — their named paths are the run's plan.
-            plan: async () => runPlanTexts(local.store, asked, (await local.identity.clientIdFor(payload.chatId)) ?? undefined),
-            ...(workspaceRoot() ? { workspaceRoot: workspaceRoot() } : {}),
-            // PRD 41 §C14: the delta syncs with the chat's project, so the web lists it under that project.
-            ...(typeof payload.projectId === "number" ? { projectId: payload.projectId } : {}),
-          }),
-        },
-        start,
-      );
-      if (mode !== "autonomous") return void (await recorded);
-      try {
-        await recorded;
-      } catch (error) {
-        delta.hold.forget(runId); // nobody will read this run's verdict
-        throw error;
-      }
-      // An autonomous start resolves after the gate's verdict AND its journaling: whoever awaits it (an audit) reads the
-      // execution's hold and never reports a held run complete.
-      await delta.hold.verdict(runId);
-      await delta.hold.whenJournaled(runId, RELEASE_JOURNAL_WAIT_MS * 2);
-    }),
+    ...gated,
     dispose() {
       offBindings();
       outcomes.dispose();

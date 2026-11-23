@@ -15,7 +15,7 @@
  */
 import { ASK_USER_TOOL, askUserBlock, readOpenAiToolCalls, type StepRowInput } from '@builderforce/agent-loop';
 import {
-  DEFAULT_READS_BEFORE_NUDGE, ModelTransportError, createCompactionHook, runAgent,
+  DEFAULT_READS_BEFORE_NUDGE, ModelTransportError, openRun,
   type ModelCompletion, type ModelTransport, type RunEvent, type RunPolicy, type ToolExtension,
 } from '@builderforce/agent-run';
 import { fileToolKind, type ToolSchema } from '@builderforce/agent-tools';
@@ -168,7 +168,7 @@ export async function runAgentReply(input: AgentReplyRunInput): Promise<ReplyTur
     // after the first success, no releasable pin, no decline list.
     modelStart: { plain: true, ...(pinnedModel ? { model: pinnedModel } : {}), ...(reviewPin && reviewPin !== pinnedModel ? { phaseModels: { review: reviewPin } } : {}) },
   };
-  const outcome = await runAgent({
+  const outcome = await openRun({
     // `request` is the newest user turn: the stall gate tells a change request from a question by IT, not by the whole transcript.
     task: { prompt: textOf(convo[1]), persona: textOf(convo[0]), request: userRequest, agentName: input.agentName, chatId: input.chatId, dispatch: { source: 'chat' } },
     policy,
@@ -203,7 +203,7 @@ export async function runAgentReply(input: AgentReplyRunInput): Promise<ReplyTur
       context: { pack: () => ({ focus: [], facts: [], recall: [] }) },
       extensions,
     },
-    modules: { compaction: createCompactionHook({ summarize: (text) => buildGatewaySummarizer(env)(text, { tenantId }) }) },
+    surface: { compaction: { summarize: (text) => buildGatewaySummarizer(env)(text, { tenantId }) } },
   });
 
   s.policy = outcome.state.model;

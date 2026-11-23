@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import type { PolicyContext } from '@builderforce/agent-run';
-import { brainFinishHook } from './brainFinish';
+import { createFinishHook, type PolicyContext } from '@builderforce/agent-run';
+import { brainFinishPorts } from './brainFinish';
+
+/** The finish module `openRun` builds from the Brain's ports (`surface.finish`). */
+const brainFinishHook = (...args: Parameters<typeof brainFinishPorts>) => createFinishHook(brainFinishPorts(...args));
 
 /** The slice of a policy context the live-children hold reads: a top-level owner (no parent run). */
 const owner = { task: { dispatch: {} } } as unknown as PolicyContext;
@@ -16,12 +19,9 @@ describe('the Brain finish module', () => {
     expect(await hook.liveChildren?.(owner)).toBeNull();
   });
 
-  it('binds the open-work port, and the deterministic-finish wrapper keeps it', async () => {
+  it('binds the open-work port', async () => {
     const hook = brainFinishHook({}, async () => 'Epic #6902 is still open.');
     expect(await hook.openWork?.(owner)).toBe('Epic #6902 is still open.');
-    const { withDeterministicFinish } = await import('../runStore/deterministicFinish');
-    const wrapped = withDeterministicFinish({} as never, hook);
-    expect(await wrapped.openWork?.(owner)).toBe('Epic #6902 is still open.');
     expect(await brainFinishHook({}).openWork?.(owner)).toBeNull();
   });
 

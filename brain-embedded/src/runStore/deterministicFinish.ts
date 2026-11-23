@@ -34,13 +34,6 @@ import { errorMessage } from '../pageEngines/types';
 import { onBaseBranch, shippedToBaseBranch } from '../shipVerification';
 import { approvedReviewFor, runReviewGate } from './shipGates';
 
-/** The narrow FinishHook the {@link withDeterministicFinish} wrapper composes around. */
-export interface InnerFinishHook {
-  gate(ctx: PolicyContext): Promise<string | null> | string | null;
-  settleBlock(ctx: PolicyContext): string | null;
-  liveChildren?(ctx: PolicyContext): Promise<string | null>;
-}
-
 /**
  * Whether the run's finish condition is met — the gate that stops an empty-ask continuation.
  * True only when the run SHIPPED, its change is verified, no placeholder is outstanding, AND it
@@ -268,25 +261,10 @@ async function finishCloseOut(run: BrainRunContext): Promise<void> {
 }
 
 /**
- * The deterministic-finish wrapper around a finish hook. `gate` runs the close-out (awaited, so
- * the actions complete before the run settles) and then delegates to the inner gate — the
- * close-out NEVER refuses a finish. `settleBlock` and `liveChildren` pass through untouched.
+ * The close-out as the surface's `closeOut` port (`SurfacePorts.closeOut`): the agent awaits it at the finish, before the
+ * finish gate decides, so the actions complete before the run settles. It NEVER refuses a finish: `openRun` reports a throw
+ * as the `finish.close_out_error` step and the finish goes on (the one trace - nothing here catches).
  */
-export function withDeterministicFinish<T extends InnerFinishHook>(run: BrainRunContext, inner: T): T {
-  return {
-    ...inner,
-    gate: async (ctx: PolicyContext) => {
-      // Best-effort: a close-out failure must not refuse the finish (the gate below is the
-      // authority), but the reason is traced on the run so a failed close-out is diagnosable, not silent.
-      await finishCloseOut(run).catch((reason: unknown) => {
-        pushTrace(run.c, {
-          ts: nowIso(),
-          category: 'message',
-          label: 'finish.close_out_error',
-          result: `The close-out failed: ${reason instanceof Error ? reason.message : String(reason)}. The finish goes on; its tickets were not moved.`,
-        });
-      });
-      return inner.gate(ctx);
-    },
-  };
+export function closeOutPort(run: BrainRunContext): (ctx: PolicyContext) => Promise<void> {
+  return () => finishCloseOut(run);
 }

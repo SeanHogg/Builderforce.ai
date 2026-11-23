@@ -1,18 +1,12 @@
-import { RunKnowledgeRecorder, type PolicyGate } from "@builderforce/agent-tools";
-import { recordEditorRunEnd } from "./editorRunEnd";
-import { finishedRun } from "@builderforce/agent-run/memory";
-import { editorChatSessionKey } from "./sessionNotes";
-import { editorRunSettings } from "./editorRunSettings";
 import * as vscode from "vscode";
-import { isRunning, runAbortSignal, withRunUsage } from "@seanhogg/builderforce-brain-embedded";
-import { ChatMessage, SECRET_KEY, getLocalModelsConfig } from "./gateway";
+import { isRunning } from "@seanhogg/builderforce-brain-embedded";
+import { ChatMessage, SECRET_KEY } from "./gateway";
 import { turnLimbicBlock } from "./personalityLimbic";
-import { resolveModelRoute, routeNeedsLocalModel, routeNeedsSpecificModel, routeRequiresSignIn, routeStream } from "./modelRouting";
-import { fallbackDetail } from "./modelFallbackDetail";
+import { resolveModelRoute, routeNeedsLocalModel, routeNeedsSpecificModel, routeRequiresSignIn } from "./modelRouting";
 import { streamNoLocalModel } from "./noLocalModelPrompt";
-import { OWNER_NAME, type BrainRunHost } from "./brainRunHost";
+import type { BrainRunHost } from "./brainRunHost";
 import { permissionMode as resolvePermissionMode } from "./permissionMode";
-import { getCurrentUserId, fetchRunContextSection, projectEvermindHooks, updateBrainChatProject } from "./bfApi";
+import { getCurrentUserId, fetchRunContextSection, updateBrainChatProject } from "./bfApi";
 import { createNativeProjectAdopter } from "./nativeChatProject";
 import { localBrainApplication } from "./localFirstStore";
 import { formatChatErrorVerdict } from "./upgradeAction";
@@ -21,18 +15,14 @@ import { getEditorContextLive } from "./editorContext";
 import { editorContextDirective } from "./idePersona";
 import { getSelectedProject } from "./projectState";
 import { PolicyGatesUnavailableError, resolveRunPolicyGates } from "./policyGates";
-import { editorRunDirectives } from "./hooks/editorDirectives";
 import { buildSystemMessages } from "./prompt";
-import type { ToolDef } from "./fileTools";
-import { brainToolCatalog } from "./brainToolCatalog";
-import { withWorkspaceStaleness } from "./memoryStaleness";
-import { runNativeBrain, type NativeApprovalRequest } from "./nativeBrainRun";
-import { editorShipPorts } from "./verify/editorShipPorts";
+import type { NativeApprovalRequest } from "./nativeRunTypes";
+import { runViaHost } from "./participantRun";
+import { hostLog } from "./hostLog";
 import { referencesTurnBlock, workspaceReferenceReader } from "./chatReferences";
 import { hostIngressDeps, routeMentionBudget } from "./hostIngress";
 import { whereDefinedOnce } from "./contextPack/preSearchSource";
 import { CONTEXT_PACK_DEADLINE_MS } from "./contextPack/deadline";
-import { nativeRunSetup } from "./runSetupPorts";
 import { priorBrainChatId, splitSystemPrompt } from "./participantSession";
 import { installRunRecovery } from "./installRunRecovery";
 
@@ -48,10 +38,10 @@ const ALREADY_RUNNING = (): string =>
  * dedicated chat-session tab (so there is one implementation).
  */
 /**
- * `runHost` is where this participant's sub-agents run: a child is an ordinary host run
+ * `runHost` is where this participant's turn runs - the ONE host start the panel uses (`participantRun.ts`) - and where its sub-agents run: a child is an ordinary host run
  * with this turn as its owner (`childRunHost.ts`) — there is no second child loop here.
  */
-export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?: BrainRunHost): vscode.ChatRequestHandler {
+export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost: BrainRunHost): vscode.ChatRequestHandler {
   const adoptSelectedProject = createNativeProjectAdopter();
   return async (request, context, stream, token) => {
     const key = await ctx.secrets.get(SECRET_KEY);
@@ -123,10 +113,7 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
       const title = request.prompt.trim().slice(0, 80) || vscode.l10n.t("VS Code chat");
       brainChatId = (await localPersistence.createChat({ title, projectId: activeProject?.id ?? null })).id;
     }
-    const [serverChatId, clientChatId] = await Promise.all([
-      local.identity.bind(brainChatId).catch(() => undefined),
-      local.identity.clientIdFor(brainChatId),
-    ]);
+    const serverChatId = await local.identity.bind(brainChatId).catch(() => undefined);
     // A chat with no project trains no Evermind: bind the IDE's selected project onto it
     // (once per chat, best-effort) so the NEXT turn does. No selection leaves it global.
     await adoptSelectedProject({
@@ -171,25 +158,10 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
     }
 
     const abort = new AbortController();
-    token.onCancellationRequested(() => abort.abort());
-
-    // Accumulate the assistant's reply so, after the run, we can feed this
-    // exchange back to the project's Evermind (the same learning loop cloud/on-prem
-    // runs — best-effort, gated by `builderforce.evermindLearning`).
-    let assistantText = "";
-
-    // The SAME brain as the web: local workspace tools (file edits) + Evermind's
-    // write-through `remember_fact` + the SHARED, server-side platform catalog
-    // (projects, tasks, OKRs, specs, …) fetched from the gateway MCP relay. File tools
-    // need a workspace; `remember_fact` needs only a project (works chat-only). Gate
-    // each on what it actually requires.
-    // The tenant's effective governance gates — the SAME compiled rows the cloud and
-    // on-prem loops enforce — so a block/approval gate holds in this editor too.
-    // Fail-closed like the server: an unreadable policy refuses the turn. Resolved
-    // BEFORE the catalog because a delegated child's write gate is built from them.
-    let policyGates: PolicyGate[];
+    // The tenant's governance gates are read here to FAIL CLOSED with a localized refusal before anything starts: an unreadable
+    // policy refuses the turn. The host reads them again for the run (`resolveRunPolicyGates`: the same cache window, no second round-trip).
     try {
-      policyGates = await resolveRunPolicyGates(ctx.secrets, activeProject?.id);
+      await resolveRunPolicyGates(ctx.secrets, activeProject?.id);
     } catch (e) {
       if (!(e instanceof PolicyGatesUnavailableError)) throw e;
       stream.markdown(
@@ -201,8 +173,8 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
     // The chat already has a run in flight (this participant's last turn, the panel's): say so
     // BEFORE anything is looked up or saved - right after the fail-closed policy, ahead of the tool
     // catalog, the workspace's rules, the sub-agent controls and the `#file` references: a refused turn
-    // reads nothing and leaves no user row behind. (`runNativeBrain` checks again at the claim.)
-    if (isRunning(brainChatId) || runHost?.isBusy(brainChatId)) {
+    // reads nothing and leaves no user row behind. (`runViaHost` checks again at the claim.)
+    if (isRunning(brainChatId) || runHost.isBusy(brainChatId)) {
       stream.markdown(`**${vscode.l10n.t("Error:")}** ${ALREADY_RUNNING()}`);
       return { metadata: { brainChatId } };
     }
@@ -223,188 +195,75 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
     }).catch(() => "");
     const runChatId = brainChatId;
     const { systemPrompt, seed } = splitSystemPrompt(messages);
-    // Sub-agents run in the editor's run host as ordinary runs owned by THIS turn, and
-    // live in its Brain chat. This view cannot render a run cell's confirm, so a child's
-    // write prompt is asked through the same modal as this turn's.
-    const children = runHost
-      ? runHost.childControls(
-          { key: runChatId, rootChatId: brainChatId, name: OWNER_NAME, depth: 0 },
-          {
-            systemPrompt,
-            ...(modelChoice.model ? { model: modelChoice.model } : {}),
-            modelStrict: modelChoice.modelStrict,
-            ...(modelChoice.routingMode ? { routingMode: modelChoice.routingMode } : {}),
-            projectId: activeProject?.id ?? null,
-            chatMode: "work",
-            autoApprove: permissionMode === "acceptEdits",
-            evermind: false,
-          },
-          (req) => confirmToolCall(req, req.agentName),
-        )
-      : undefined;
-    const tools: ToolDef[] = await brainToolCatalog(ctx.secrets, root, activeProject?.id, children, () => runAbortSignal(runChatId), {
-      // The run's chat off this machine, as the panel's runs thread it: `remember_fact` and the platform tools name the chat.
-      chatIdentity: { localChatId: runChatId, serverChatId: serverChatId ?? null, ...(clientChatId ? { clientChatId } : {}) },
-    });
-    // The workspace's committed `.builderforce/` rules + hooks — the same assembly the
-    // panel's run host uses.
-    const directives = await editorRunDirectives(ctx.workspaceState, root ?? "", "run");
-
-    // What this turn did and read: restated to the model each step by the shared loop,
-    // then the note + code map at the end — the same record the panel's runs keep.
-    const knowledge = new RunKnowledgeRecorder();
-    knowledge.setPrompt(request.prompt);
     const referenced = await referencedReady;
     if (token.isCancellationRequested) return {};
-    // The run's SETUP, from the same ports and functions the panel's run host uses (PRD 35 E2 /
-    // E3 / E7). Started only now - after the fail-closed policy and every cancellation return -
-    // so a refused or cancelled turn never reads the workspace or starts a checkout lookup.
-    const setup = nativeRunSetup(ctx.secrets, () => root ?? "", ctx.globalState, getLocalModelsConfig, {
-      ...(activeProject ? { projectId: activeProject.id } : {}),
-      serverChatId: serverChatId ?? null,
-      request: request.prompt,
-      memory: !!activeProject,
-    });
-    // False when `runNativeBrain` found the key claimed after all: nothing ran, so nothing is
-    // recorded or saved for it.
-    let claimed = true;
-    // What the run concluded and whether it may learn — told by `runNativeBrain` only for a run that ran to its end.
-    let settled: { learn: boolean; answer?: string } = { learn: false };
-    try {
-      // The restart-recovery journal (G22): the SAME WeakMap-cached handle activation and the
-      // run host installed, so this turn's tool work is journaled into the same `execution`
-      // records recovery reads on the next activation. `recordStarted` waits for activation
-      // recovery to commit first, so this start is never mis-marked interrupted.
-      const recovery = installRunRecovery(ctx);
-      // Surface a run of THIS chat the previous editor session left in flight (marked
-      // `interrupted` by activation recovery) — the turn that was working when VS Code
-      // restarted is reported, never silently forgotten. Only the chat's own run: another
-      // chat's interrupted work is not this turn's to announce.
-      const recoveredNotice = recovery.recovered
-        .then((runs) => {
-          const mine = runs.find((run) => String(run.record.payload.chatId ?? "") === String(runChatId));
-          if (!mine) return;
-          const safe = recovery.safeToResume(mine);
-          stream.markdown(
-            `\n\n_${vscode.l10n.t(
-              "A previous BuilderForce run in this chat was interrupted when VS Code restarted.{0}",
-              safe
-                ? vscode.l10n.t(" Its last step was safe to resume; ask again and the work continues.")
-                : vscode.l10n.t(" Re-ask and the work resumes from where it stopped."),
-            )}_\n`,
-          );
-        })
-        .catch(() => undefined); // Surfacing is best-effort; never fails the turn.
-      void recoveredNotice;
-      claimed = await runNativeBrain({
-        knowledge,
-        // The local chat's view key is the run's cell key; the server chat (bound above,
-        // or null) is what every server-addressed call of the run names (PRD 36).
+    // The restart-recovery journal (G22): surface a run of THIS chat the previous editor session left in flight (marked
+    // `interrupted` by activation recovery) - reported, never silently forgotten. Only the chat's own run is announced. The
+    // run's OWN journal (start, checkpoints, terminal status) is the host's (`hostRunLifecycle.ts`), written by its gated start.
+    const recovery = installRunRecovery(ctx);
+    void recovery.recovered
+      .then((runs) => {
+        const mine = runs.find((run) => String(run.record.payload.chatId ?? "") === String(runChatId));
+        if (!mine) return;
+        const safe = recovery.safeToResume(mine);
+        stream.markdown(
+          `\n\n_${vscode.l10n.t(
+            "A previous BuilderForce run in this chat was interrupted when VS Code restarted.{0}",
+            safe
+              ? vscode.l10n.t(" Its last step was safe to resume; ask again and the work continues.")
+              : vscode.l10n.t(" Re-ask and the work resumes from where it stopped."),
+          )}_\n`,
+        );
+      })
+      .catch((e: unknown) => hostLog(`[chat participant] the interrupted-run notice failed: ${String(e)}`)); // best-effort; never fails the turn
+    // The turn starts as every host run starts - `runHost.start` (the gated start; entry point "vscode"). The host builds the tools,
+    // the workspace's rules and hooks, the governance gates, the run setup, the ship ports and the stream from its own ports, and
+    // persists the turn through the chat's store; this view only renders it.
+    const claimed = await runViaHost({
+      host: runHost,
+      spec: {
         chatId: runChatId,
-        serverChatId: serverChatId ?? null,
-        ...(clientChatId ? { clientChatId } : {}),
         systemPrompt,
         seed,
         userTurn: referenced ? `${request.prompt}\n\n${referenced}` : request.prompt,
-        // The task context pack (the pre-search hits included), the preflight, the default
-        // checkout and the PreFetch gate - "where is X defined?" answered with no model call -
-        // exactly as the panel's runs have them.
-        ...setup,
-        ...(runHost ? { isBusy: (key: number) => runHost.isBusy(key) } : {}),
-        tools,
-        root: root ?? "",
-        // The code-change backstops need a project. An unbound chat still gets its ticket
-        // (on the project, linked to no chat); only the chat-link steps stand down.
-        ...(activeProject ? { projectId: activeProject.id } : {}),
-        // Memory is scoped to the PROJECT, tiered on the conversation once it is bound.
-        ...(activeProject ? { evermind: withWorkspaceStaleness(projectEvermindHooks(ctx.secrets, activeProject.id, serverChatId ?? null), root) } : {}),
+        projectId: activeProject?.id ?? null,
+        chatMode: "work",
+        autoApprove: permissionMode === "acceptEdits",
+        // Memory is scoped to the PROJECT: on exactly when the chat has one.
+        evermind: !!activeProject,
+        // Its turn belongs to this chat view: a sub-agent's report waits for the next turn instead of waking a run.
+        wakeable: false,
         ...(modelChoice.model ? { model: modelChoice.model } : {}),
         modelStrict: modelChoice.modelStrict,
         ...(modelChoice.routingMode ? { routingMode: modelChoice.routingMode } : {}),
-        // Stage models, pipeline routing and the USD cap — the same reader the panel's runs use.
-        runSettings: await editorRunSettings(ctx.secrets, activeProject?.id),
-        // How the run ended, beside its usage rows — the route report's misroute proxy.
-        recordRunOutcome: (end) => local.usage.recordOutcome({ chatId: runChatId, ...end }),
-        recordAvoidedCall: ({ source: _source, ...call }) => local.usage.recordAvoided({ chatId: runChatId, runKey: runChatId, ...call }),
-        permissionMode,
-        ...(policyGates.length ? { policyGates } : {}),
-        ...(directives ? { directives } : {}),
-        // The transport for this route — gateway or on-device — decided in `modelRouting`,
-        // never here. The sign-in gate above guarantees a key on the gateway branch.
-        // A Hybrid pick that failed (transport-class) and was answered with Auto says so in
-        // the response — the same one line the panel shows; never a silent swap.
-        // Every call lands in the chat's run usage ledger — its spend, offline (PRD 36).
-        stream: withRunUsage(
-          routeStream(modelChoice, key, (event) => {
-            const why = fallbackDetail(event);
-            stream.markdown(`_${vscode.l10n.t("Your pick {0} failed; answered with Auto.", event.from)}${why ? ` (${why})` : ""}_\n\n`);
-          }),
-          local.usage,
-          { chatId: runChatId, runKey: runChatId, mode: "work" },
+      },
+      approve: (req) => confirmToolCall(req, req.agentName),
+      onModelFallback: (from, reason) => stream.markdown(`_${vscode.l10n.t("Your pick {0} failed; answered with Auto.", from)}${reason ? ` (${reason})` : ""}_\n\n`),
+      signal: abort.signal,
+      labels: {
+        dispatchHint: vscode.l10n.t(
+          "_This turn was stopped because its last few tool calls all failed. Read what they answered and reply with what they ask for, or hand the work to a cloud agent from the board so it continues in its own runtime._",
         ),
-        // The PRD 45 ship-gate ports — the same editor binding the panel's runs get.
-        shipPorts: editorShipPorts,
-        // Journal this turn's tool work for restart recovery (G22): same handle as the
-        // panel's host, so a restart RESUMES a safe run or CLEANLY REPORTS it interrupted.
-        recovery,
-        signal: abort.signal,
-        approve: (req: NativeApprovalRequest) => confirmToolCall(req),
-        labels: {
-          dispatchHint: vscode.l10n.t(
-            "_This turn was stopped because its last few tool calls all failed. Read what they answered and reply with what they ask for, or hand the work to a cloud agent from the board so it continues in its own runtime._",
-          ),
-          blockedByPolicy: (reason: string) => vscode.l10n.t("Blocked by a governance gate: {0}", reason),
-          alreadyRunning: ALREADY_RUNNING(),
+        alreadyRunning: ALREADY_RUNNING(),
+      },
+      events: {
+        onText: (delta) => stream.markdown(delta),
+        onToolStart: (label) => stream.progress(label),
+        onToolResult: (label, ok) => stream.markdown(`\n\n${ok ? "✓" : "✗"} ${label}\n\n`),
+        // An entitlement failure gets the fix appended as a link (Upgrade / Add a card) - the verdict the webview banner renders as a button.
+        onError: (message, action) => {
+          // A turn nothing could take for a reason sign-in won't fix (`no_local_model`, `no_specific_model`) gets its remedies as buttons.
+          if (action?.kind === "no_local_model" || action?.kind === "no_specific_model") {
+            stream.markdown("\n\n");
+            streamNoLocalModel(stream, action.kind);
+            return;
+          }
+          stream.markdown(`\n\n**${vscode.l10n.t("Error:")}** ${formatChatErrorVerdict(message, action)}\n`);
         },
-        events: {
-          onText: (delta) => {
-            assistantText += delta;
-            stream.markdown(delta);
-          },
-          onToolStart: (label) => stream.progress(label),
-          onToolResult: (label, ok) => stream.markdown(`\n\n${ok ? "✓" : "✗"} ${label}\n\n`),
-          // An entitlement failure gets the fix appended as a link (Upgrade / Add a
-          // card) — same verdict the webview banner renders as a button, so the two
-          // chat surfaces never disagree about what a block means.
-          onError: (message, action) => {
-            // A turn nothing could take for a reason sign-in won't fix (`no_local_model`,
-            // `no_specific_model`) gets its remedies as buttons, not just the sentence.
-            if (action?.kind === "no_local_model" || action?.kind === "no_specific_model") {
-              stream.markdown("\n\n");
-              streamNoLocalModel(stream, action.kind);
-              return;
-            }
-            stream.markdown(`\n\n**${vscode.l10n.t("Error:")}** ${formatChatErrorVerdict(message, action)}\n`);
-          },
-        },
-        onSettled: (run) => {
-          settled = run;
-        },
-      });
-    } finally {
-      // The same run-end step as the panel, even for a turn that threw or was stopped:
-      // the workspace note, then — with a project to hold them (the participant's memory
-      // is on exactly when it has one) — the code map and the learned facts, into the
-      // project this turn STARTED in. Best-effort, like every memory step. Only a run
-      // that settled learns (`settled`, from `settledAnswerOf`); the note and map write regardless.
-      if (claimed && root && !knowledge.isEmpty) {
-        await recordEditorRunEnd(ctx.secrets, root, editorChatSessionKey(brainChatId), finishedRun(knowledge, settled.answer), {
-          memory: !!activeProject,
-          learn: settled.learn,
-          ...(activeProject ? { projectId: activeProject.id } : {}),
-        }, { ledger: local.usage, chatId: runChatId, runKey: runChatId, identity: local.identity }).catch(() => undefined);
-      }
-    }
-
+      },
+    });
+    // The host's run recorded and saved the turn itself (rows, the session note, what it learned): nothing here writes it again.
     if (!claimed) return { metadata: { brainChatId } };
-
-    // Persist into the host's local store first; optional account sync imports the
-    // completed history later without replaying its actions or learning side effects.
-    if (brainChatId != null) {
-      const turns: Array<{ role: string; content: string }> = [{ role: "user", content: request.prompt }];
-      if (assistantText.trim()) turns.push({ role: "assistant", content: assistantText });
-      await localPersistence.sendMessages(brainChatId, turns);
-    }
 
     // Return the chat id in the result metadata so the NEXT turn of this session
     // resolves the same conversation (see priorBrainChatId).
@@ -433,7 +292,7 @@ async function confirmToolCall(req: NativeApprovalRequest, agentName?: string): 
  * Registers BuilderForce in VS Code's native Chat view as `@builderforce` (stable Chat
  * Participant API). Returns the participant so the dedicated session tab can reuse it.
  */
-export function registerChatParticipant(ctx: vscode.ExtensionContext, runHost?: BrainRunHost): vscode.ChatParticipant {
+export function registerChatParticipant(ctx: vscode.ExtensionContext, runHost: BrainRunHost): vscode.ChatParticipant {
   const participant = vscode.chat.createChatParticipant(PARTICIPANT_ID, createBuilderForceHandler(ctx, runHost));
   participant.iconPath = vscode.Uri.joinPath(ctx.extensionUri, "media", "icon.png");
   return participant;

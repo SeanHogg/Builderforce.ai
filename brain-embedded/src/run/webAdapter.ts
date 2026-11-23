@@ -49,7 +49,7 @@ export interface BrainRunBinding {
   turn: TurnObserver;
   /** Tools the surface runs beside the registry's, and the turns that end the run before a call dispatches. */
   extensions?: ToolExtension;
-  /** How the run's model hand-off starts (`pipelinePolicyOptions`): the phase it begins in, the stage models, and the quick model a routed QUICK run seeds. */
+  /** How the run's model hand-off starts (the route's start is folded in by `openRun`; this seeds the request's model): the phase it begins in, the stage models, and the quick model a routed QUICK run seeds. */
   start?: Pick<RunPolicyOptions, 'startPhase' | 'phaseModels' | 'pinnedModel'>;
   /** The run's narrowed ship policy (`BrainRunContext.shipPolicy`, PRD 48), mirrored into `RunPolicy.ship`. */
   ship?: ShipPolicy;

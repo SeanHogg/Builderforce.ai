@@ -46,6 +46,7 @@ describe('a run pinned to a Flash-class model', () => {
   it('hears it before the first turn', async () => {
     let said = false;
     await startRun(4711, {
+    entryPoint: 'vscode',
       resolvedSystemPrompt: 'sys',
       persistence,
       model: '~google/gemini-flash-latest',

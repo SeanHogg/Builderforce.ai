@@ -89,6 +89,7 @@ export function useGuestBrainSession({ initialPrompt, inviteCode }: { initialPro
   // participant's hook resolves to the same transcript.
   const activeChatId = inRoom ? GUEST_ROOM_CHAT_ID : chats.activeChatId;
   const conv = useBrainConversation({
+    entryPoint: 'web',
     chatId: activeChatId,
     modality: 'llm',
     extraSystem: capabilityPrompt,

@@ -100,6 +100,7 @@ class Host implements ScenarioHost {
   private request(over: Partial<BrainRunRequest>): BrainRunRequest {
     const impl = this.impl;
     return {
+      entryPoint: 'vscode',
       resolvedSystemPrompt: 'You are the Brain.',
       stream: this.stream,
       persistence: this.rec.persistence,

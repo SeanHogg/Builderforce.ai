@@ -9,14 +9,14 @@
  * rather than applied to a question asked after it.
  */
 
-import type { NativeApprovalRequest } from "./nativeBrainRun";
+import type { NativeApprovalRequest } from "./nativeRunTypes";
 import type { ChildRuns } from "./childRuns";
 
 /** A paused call, as the store holds it. */
 type Pending = { name: string; args: unknown; evidence?: string };
 
 /** Asks a person about one child's paused call. */
-export type ChildApprover = (req: NativeApprovalRequest & { agentName: string }) => Promise<boolean>;
+export type ChildApprover = (req: NativeApprovalRequest & { agentName?: string }) => Promise<boolean>;
 
 export interface ChildApprovalRelayDeps {
   registry: Pick<ChildRuns, "lineageOf">;
@@ -44,15 +44,18 @@ export function createChildApprovalRelay(deps: ChildApprovalRelayDeps) {
       describers.delete(key);
       asking.delete(key);
     },
-    /** A run's cell changed — ask, if it is a child newly paused in a chat with an approver. */
+    /**
+     * A run's cell changed — ask, if it is newly paused in a chat with an approver: a child (named, so the prompt says whose
+     * call it is) or the chat's own owner run (the native view's turn, which has no cell to render a confirm on).
+     */
     changed(key: number): void {
       const lineage = deps.registry.lineageOf(key);
-      const approve = lineage ? approvers.get(lineage.rootChatId) : undefined;
+      const approve = approvers.get(lineage ? lineage.rootChatId : key);
       const describe = describers.get(key);
       const pending = deps.pendingOf(key);
-      if (!lineage || !approve || !describe || !pending || asking.get(key) === pending) return;
+      if (!approve || !describe || !pending || asking.get(key) === pending) return;
       asking.set(key, pending);
-      void approve({ ...describe(pending.name, pending.args, pending.evidence), agentName: lineage.agent.name })
+      void approve({ ...describe(pending.name, pending.args, pending.evidence), ...(lineage ? { agentName: lineage.agent.name } : {}) })
         .catch(() => false)
         .then((ok) => {
           if (asking.get(key) === pending) asking.delete(key);

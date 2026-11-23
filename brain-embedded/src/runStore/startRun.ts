@@ -199,7 +199,7 @@ export async function startRun(runKey: number, request: BrainRunRequest, claim?:
       // the host's review and the move to done, held by the same acceptance a model's `done` is held to. Skipped on a Stop.
       // FIX #6: entered through `runDeterministicFinish` — the named deterministic-finish module (`runStore/deterministicFinish.ts`).
       const closeOut: CloseOutInput & { verified: boolean; hasTicket: boolean } = { serverChatId, view, req, needsTicket, shipped, reviewedInPreview, openPlaceholders: openPh, trace, evidence, verified: verification.verified, hasTicket };
-      c.finishClosedOut = true; // this path is the closer; the finish-hook wrapper stands down
+      c.finishClosedOut = true; // this path is the closer; the close-out port stands down
       await within(left(), async () => {
         // A ticket the chat links (its delta id never read back, or linked by hand) is the run's ticket too:
         // read the listing only when it is the one thing the finish gate still lacks. Inside the bounded settle.
@@ -219,7 +219,7 @@ export async function startRun(runKey: number, request: BrainRunRequest, claim?:
         result: 'The run\'s ticket bookkeeping failed; the run is settled without it.',
       }));
       // Mark the cell: this run's close-out ran over its final trace. The deterministic-finish
-      // wrapper (`deterministicFinish.ts`) — which closes out a run `startRun` never drives —
+      // close-out port (`deterministicFinish.ts`) — which closes out a run `startRun` never drives —
       // stands down on this flag, so the close-out runs exactly once across the two paths.
       c.finishClosedOut = true;
       // The run's ticket reads are done: its memoised listing goes with it.

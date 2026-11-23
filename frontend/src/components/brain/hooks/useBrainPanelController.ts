@@ -206,6 +206,7 @@ export function useBrainPanelController({
     [prefetchRun],
   );
   const conv = useBrainConversation({
+    entryPoint: 'web',
     chatId: chats.activeChatId,
     prepareRun,
     modality,

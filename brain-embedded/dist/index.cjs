@@ -3386,7 +3386,7 @@ var PRICE_SNAPSHOT = {
   "~deepseek/deepseek-v4-flash-latest": [44e-9, 132e-9],
   "~google/gemini-flash-latest": [15e-7, 75e-7],
   "~google/gemini-pro-latest": [2e-6, 1e-5],
-  "~moonshotai/kimi-latest": [1805e-10, 110055e-10],
+  "~moonshotai/kimi-latest": [1824e-10, 110055e-10],
   "~openai/gpt-astra-latest": [8e-6, 4e-5],
   "~openai/gpt-luna-latest": [1e-7, 5e-7],
   "~openai/gpt-mini-latest": [75e-8, 45e-7],
@@ -3513,14 +3513,14 @@ var PRICE_SNAPSHOT = {
   "google/gemma-2-27b-it": [65e-8, 65e-8],
   "google/gemma-3-12b-it": [5e-8, 15e-8],
   "google/gemma-3-27b-it": [8e-8, 45e-8],
-  "google/gemma-3-4b-it": [5e-8, 1e-7],
+  "google/gemma-3-4b-it": [4e-8, 5e-8],
   "google/gemma-4-26b-a4b-it": [675e-10, 225e-9],
   "google/gemma-4-26b-a4b-it:free": [0, 0],
   "google/gemma-4-31b-it": [2e-7, 4e-7],
   "google/gemma-4-31b-it:free": [0, 0],
   "google/lyria-3-clip-preview": [0, 0],
   "google/lyria-3-pro-preview": [0, 0],
-  "gryphe/mythomax-l2-13b": [8e-8, 11e-8],
+  "gryphe/mythomax-l2-13b": [3e-7, 5e-7],
   "ibm-granite/granite-4.2-8b": [6e-8, 15e-8],
   "inclusionai/ling-3.0-flash": [21e-9, 63e-9],
   "inclusionai/ling-3.0-flash-vl": [6e-8, 18e-8],
@@ -3589,7 +3589,7 @@ var PRICE_SNAPSHOT = {
   "moonshotai/kimi-k2.7-code": [6e-7, 3e-6],
   "moonshotai/kimi-k3": [192e-9, 16e-6],
   "moonshotai/kimi-k3:batch": [228e-8, 114e-7],
-  "moonshotai/kimi-k3.1-pro": [253e-9, 88e-7],
+  "moonshotai/kimi-k3.1-pro": [2403e-10, 84023e-10],
   "moonshotai/kimi-k3.1-pro:batch": [372e-9, 5583e-9],
   "morph/morph-v3-fast": [8e-7, 12e-7],
   "morph/morph-v3-fast:batch": [4e-7, 6e-7],
@@ -3709,7 +3709,7 @@ var PRICE_SNAPSHOT = {
   "openai/gpt-chat-latest": [5e-6, 3e-5],
   "openai/gpt-oss-120b": [9e-8, 36e-8],
   "openai/gpt-oss-120b:batch": [296e-10, 136e-9],
-  "openai/gpt-oss-20b": [17e-9, 85e-9],
+  "openai/gpt-oss-20b": [75e-9, 3e-7],
   "openai/gpt-oss-20b:batch": [24e-9, 112e-9],
   "openai/gpt-oss-safeguard-20b": [75e-9, 3e-7],
   "openai/o3": [2e-6, 8e-6],
@@ -3754,7 +3754,7 @@ var PRICE_SNAPSHOT = {
   "qwen/qwen3-vl-30b-a3b-instruct": [15e-8, 6e-7],
   "qwen/qwen3-vl-8b-instruct": [25e-8, 75e-8],
   "qwen/qwen3.5-122b-a10b": [26e-8, 208e-8],
-  "qwen/qwen3.5-27b": [195e-9, 156e-8],
+  "qwen/qwen3.5-27b": [26e-8, 26e-7],
   "qwen/qwen3.5-35b-a3b": [14e-8, 1e-6],
   "qwen/qwen3.5-397b-a17b": [45e-8, 3e-6],
   "qwen/qwen3.5-9b": [17e-8, 25e-8],
@@ -3770,7 +3770,7 @@ var PRICE_SNAPSHOT = {
   "qwen/qwen3.7-plus": [32e-8, 128e-8],
   "qwen/qwen3.7-plus:batch": [23e-8, 92e-8],
   "qwen/qwen3.8-2.4t-a95b": [2e-6, 6e-6],
-  "qwen/qwen3.8-27b": [6e-8, 196e-8],
+  "qwen/qwen3.8-27b": [35e-9, 15e-7],
   "qwen/qwen3.8-27b:batch": [16e-8, 2e-6],
   "qwen/qwen3.8-flash": [15e-8, 47e-8],
   "qwen/qwen3.8-max-0902": [2e-6, 6e-6],
@@ -3799,7 +3799,7 @@ var PRICE_SNAPSHOT = {
   "tencent/hy-mt2-1.8b": [44e-9, 177e-9],
   "tencent/hy-mt2-30b-a3b": [74e-9, 295e-9],
   "tencent/hy-mt2-7b": [74e-9, 295e-9],
-  "tencent/hy3": [132e-9, 528e-9],
+  "tencent/hy3": [14e-8, 58e-8],
   "tencent/hy4": [417e-9, 12505e-10],
   "tencent/hy4-flash": [35e-9, 1405e-10],
   "tencent/hy4-preview": [834e-9, 2501e-9],
@@ -3807,7 +3807,7 @@ var PRICE_SNAPSHOT = {
   "thedrummer/skyfall-36b-v2": [55e-8, 8e-7],
   "thedrummer/unslopnemo-12b": [4e-7, 4e-7],
   "thinkingmachines/inkling": [1e-6, 405e-8],
-  "thinkingmachines/inkling-2-mini": [1e-7, 4e-7],
+  "thinkingmachines/inkling-2-mini": [75e-9, 3e-7],
   "thinkingmachines/inkling-2-small": [3e-7, 1e-6],
   "thinkingmachines/inkling-small": [45e-8, 12e-7],
   "thinkingmachines/inkling-small:batch": [36e-8, 96e-8],
@@ -3838,11 +3838,11 @@ var PRICE_SNAPSHOT = {
   "z-ai/glm-4.5v": [6e-7, 18e-7],
   "z-ai/glm-4.6": [5e-7, 2e-6],
   "z-ai/glm-4.6v": [3e-7, 9e-7],
-  "z-ai/glm-4.7": [4e-7, 175e-8],
+  "z-ai/glm-4.7": [6e-7, 22e-7],
   "z-ai/glm-4.7-flash": [605e-10, 4e-7],
   "z-ai/glm-5": [1e-6, 32e-7],
   "z-ai/glm-5-turbo": [12e-7, 4e-6],
-  "z-ai/glm-5.1": [119e-8, 374e-8],
+  "z-ai/glm-5.1": [14e-7, 44e-7],
   "z-ai/glm-5.2": [62e-8, 242e-8],
   "z-ai/glm-5.2:batch": [322e-9, 989e-9],
   "z-ai/glm-5.3": [699e-10, 14e-7],
@@ -28560,6 +28560,137 @@ async function runAgent(input) {
   return settle(input, hooks, state, transcript, "finished", { output: loopResult.output });
 }
 
+// ../packages/agent-run/src/policy/guards/shipGate.ts
+function withShipGate(guards, gate) {
+  if (!gate) return guards;
+  return {
+    ...guards,
+    beforeDispatch: async (ctx, call2) => {
+      const verdict = publishAllowed(gate.policy, call2.name, call2.args, gate.host ?? "cloud");
+      if (!verdict.ok) {
+        await gate.onRefused?.(call2.name, verdict.error);
+        return { skip: { data: { ok: false, error: verdict.error }, isError: true } };
+      }
+      return guards.beforeDispatch?.(ctx, call2);
+    }
+  };
+}
+
+// ../packages/agent-run/src/route/routeRun.ts
+function decideRunPipeline(route) {
+  if (!route.routing || route.child) return null;
+  const { actionType } = classifyRunAction(route.request);
+  return scorePipeline(pipelineFeaturesOf(route.request, { actionType, followUp: route.followUp === true }), {
+    mode: route.routing.mode,
+    ...route.routing.threshold !== void 0 ? { threshold: route.routing.threshold } : {}
+  });
+}
+function pipelinePolicyOptions(route, pipeline) {
+  const quick = pipeline?.route === "quick";
+  const startPhase = route.child || quick ? "code" : "plan";
+  const phaseModels = { ...route.phaseModels };
+  const quickModel = route.routing?.quickModel?.trim();
+  if (quick && quickModel) phaseModels.code = quickModel;
+  return {
+    startPhase,
+    ...Object.keys(phaseModels).length ? { phaseModels } : {},
+    ...quick && quickModel && !route.modelStrict ? { pinnedModel: quickModel } : {}
+  };
+}
+function skipsVerifyStage(pipeline) {
+  return pipeline?.route === "quick";
+}
+function routeRun(route) {
+  const pipeline = decideRunPipeline(route);
+  return { pipeline, start: pipelinePolicyOptions(route, pipeline), skipsVerify: skipsVerifyStage(pipeline) };
+}
+
+// ../packages/agent-run/src/openRun.ts
+function withStateBound(guards, onState) {
+  const bound = {};
+  for (const [key, member] of Object.entries(guards)) {
+    bound[key] = typeof member === "function" ? (ctx, ...rest) => {
+      onState(ctx.state);
+      return member.call(guards, ctx, ...rest);
+    } : member;
+  }
+  return bound;
+}
+function withCloseOut(finish, closeOut) {
+  return {
+    ...finish,
+    async gate(ctx) {
+      try {
+        await closeOut(ctx);
+      } catch (err) {
+        await emit(ctx.ports.events, { kind: "finish.close_out_error", step: ctx.step, reason: err instanceof Error ? err.message : String(err) });
+      }
+      return finish.gate(ctx);
+    }
+  };
+}
+function composeModules(surface2) {
+  const modules = {};
+  if (surface2.finish || surface2.closeOut) {
+    const finish = createFinishHook(surface2.finish);
+    modules.finish = surface2.closeOut ? withCloseOut(finish, surface2.closeOut) : finish;
+  }
+  if (surface2.guards || surface2.publishGate || surface2.onState) {
+    let guards = withShipGate(createGuardsHook(surface2.guards), surface2.publishGate);
+    if (surface2.onState) guards = withStateBound(guards, surface2.onState);
+    modules.guards = guards;
+  }
+  if (surface2.verify) modules.verify = createVerifyHook(surface2.verify);
+  if (surface2.compaction) modules.compaction = "hook" in surface2.compaction ? surface2.compaction.hook : createCompactionHook(surface2.compaction);
+  if (surface2.preflight) modules.model = { ...defaultPolicyModules().model, preflight: surface2.preflight };
+  return modules;
+}
+function routedPolicy(policy, route, start) {
+  const prior = policy.modelStart;
+  const model = start.pinnedModel ?? prior?.model;
+  return {
+    ...policy,
+    modelStart: {
+      plain: true,
+      ...prior,
+      ...model ? { model } : {},
+      ...route.modelStrict !== void 0 ? { strict: route.modelStrict } : {},
+      ...start.startPhase ? { startPhase: start.startPhase } : {},
+      ...start.phaseModels ? { phaseModels: start.phaseModels } : {}
+    }
+  };
+}
+async function openRun(input) {
+  if (!input.policy?.entryPoint) throw new Error("openRun: policy.entryPoint is required");
+  const { surface: surface2 = {}, route, ...rest } = input;
+  let run = { ...rest, modules: composeModules(surface2) };
+  if (route) {
+    const { pipeline, start } = routeRun(route);
+    run = { ...run, policy: routedPolicy(run.policy, route, start) };
+    if (pipeline && !run.resume) {
+      const events = run.ports.events;
+      let said = false;
+      run = {
+        ...run,
+        ports: {
+          ...run.ports,
+          events: {
+            ...events.outcome ? { outcome: (row) => events.outcome(row) } : {},
+            emit: async (event, meta) => {
+              await events.emit(event, meta);
+              if (!said && event.kind === "run.started") {
+                said = true;
+                await events.emit({ kind: "run.routed", step: event.step, route: pipeline.route, score: pipeline.score });
+              }
+            }
+          }
+        }
+      };
+    }
+  }
+  return runAgent(run);
+}
+
 // ../packages/agent-run/src/telemetry/runOutcomeRequest.ts
 function outcomeSourceOf(entryPoint2) {
   switch (entryPoint2) {
@@ -33481,21 +33612,8 @@ async function finishCloseOut(run) {
   const verified = verificationOf(run.evidence, view.touchedFiles).verified;
   await deterministicFinish({ ...input, verified, hasTicket: true }, run);
 }
-function withDeterministicFinish(run, inner) {
-  return {
-    ...inner,
-    gate: async (ctx) => {
-      await finishCloseOut(run).catch((reason) => {
-        pushTrace(run.c, {
-          ts: nowIso(),
-          category: "message",
-          label: "finish.close_out_error",
-          result: `The close-out failed: ${reason instanceof Error ? reason.message : String(reason)}. The finish goes on; its tickets were not moved.`
-        });
-      });
-      return inner.gate(ctx);
-    }
-  };
+function closeOutPort(run) {
+  return () => finishCloseOut(run);
 }
 
 // src/runStore/serverChat.ts
@@ -34236,34 +34354,6 @@ async function persistReply(run, rawText, result, requested) {
   return assistantMsg;
 }
 
-// src/runStore/pipelineRoute.ts
-function decideRunPipeline(req, request, context) {
-  if (!req.pipeline || req.lineage) return null;
-  const { actionType } = classifyRunAction(request);
-  return scorePipeline(pipelineFeaturesOf(request, { actionType, followUp: context.followUp }), {
-    mode: req.pipeline.routing,
-    ...req.pipeline.threshold !== void 0 ? { threshold: req.pipeline.threshold } : {}
-  });
-}
-function pipelinePolicyOptions(req, pipeline) {
-  const quick = pipeline?.route === "quick";
-  const startPhase = req.lineage || quick ? "code" : "plan";
-  const phaseModels = { ...req.phaseModels };
-  const quickModel = req.pipeline?.quickModel?.trim();
-  if (quick && quickModel) phaseModels.code = quickModel;
-  return {
-    startPhase,
-    ...Object.keys(phaseModels).length ? { phaseModels } : {},
-    ...quick && quickModel && !req.modelStrict ? { pinnedModel: quickModel } : {}
-  };
-}
-function pipelineMetadata(pipeline) {
-  return pipeline ? { pipelineRoute: pipeline.route, routeScore: pipeline.score } : {};
-}
-function skipsVerifyStage(pipeline) {
-  return pipeline?.route === "quick";
-}
-
 // src/runStore/progressBudget.ts
 function handOffBrief(reason) {
   return `${reason} Call hand_off NOW. summary = the research for the coders: everything you and any research sub-agents established that the change needs (files, functions, what they do today, decisions, traps). tasks = each one standalone: the files, the change, and how to know it is done. The coding agents start from exactly what you write here; they do not see this conversation.`;
@@ -34322,7 +34412,7 @@ function forcedProgressTurn(run, selected, reason, opts = {}) {
   return { forced: "change", turn: { tools, toolChoice: "required", brief: { role: "user", content: changeBrief(reason, canAsk) } } };
 }
 function changeBudgetTurn(run, step, selected) {
-  const budget2 = skipsVerifyStage(run.pipeline) ? QUICK_CHANGE_TURN_BUDGET : PLAN_TURN_BUDGET;
+  const budget2 = run.route.skipsVerify ? QUICK_CHANGE_TURN_BUDGET : PLAN_TURN_BUDGET;
   if (!changeDue(run.policy, progressed(run), budget2) || !budgeted(run)) return null;
   const tools = changeToolsOf(run, selected);
   if (!tools) return null;
@@ -35172,6 +35262,25 @@ function turnContextTokens(c) {
   return measured2.get(c) ?? 0;
 }
 
+// src/runStore/runRoute.ts
+function routeInputOf(req, request, followUp) {
+  return {
+    request,
+    followUp,
+    ...req.pipeline ? { routing: { mode: req.pipeline.routing, ...req.pipeline.threshold !== void 0 ? { threshold: req.pipeline.threshold } : {}, ...req.pipeline.quickModel !== void 0 ? { quickModel: req.pipeline.quickModel } : {} } } : {},
+    ...req.phaseModels ? { phaseModels: req.phaseModels } : {},
+    ...req.modelStrict ? { modelStrict: true } : {},
+    ...req.lineage ? { child: true } : {}
+  };
+}
+function decideRoute(req, request, followUp) {
+  const input = routeInputOf(req, request, followUp);
+  return { ...routeRun(input), input };
+}
+function routeMetadata(route) {
+  return route.pipeline ? { pipelineRoute: route.pipeline.route, routeScore: route.pipeline.score } : {};
+}
+
 // src/runStore/pendingCalls.ts
 var PendingCalls = class {
   byCall = /* @__PURE__ */ new Map();
@@ -35275,7 +35384,8 @@ async function prepareBrainRun(chatId, c, req, runKey, reportRunRow) {
   const runMode = normalizeChatMode(req.chatMode ?? "work");
   seedConfigLog(c, { model: req.model, modelStrict: req.modelStrict, routingMode: req.routingMode, runMode });
   const serverChatId = resolveServerChatId(chatId, req);
-  const pipeline = decideRunPipeline(req, latestUserText(convo), { followUp: isFollowUpTurn(convo) });
+  const route = decideRoute(req, latestUserText(convo), isFollowUpTurn(convo));
+  const pipeline = route.pipeline;
   if (pipeline) {
     pushTrace(c, {
       ts: nowIso(),
@@ -35292,7 +35402,7 @@ async function prepareBrainRun(chatId, c, req, runKey, reportRunRow) {
     guestTurnInput: latestUserText(convo),
     mode: runMode,
     ...req.projectId != null ? { projectId: req.projectId } : {},
-    ...pipelineMetadata(pipeline)
+    ...routeMetadata(route)
   };
   const host = await gatherHostRunContext(c, req, !!evermind?.recall);
   const { recalled, block: recallBlock2, blockTokens: recallBlockTokens } = await recallForRun(c, convo, evermind, host.recallHint);
@@ -35510,11 +35620,11 @@ ${c.priorResearch}`;
       // #5739). The one exception is a ROLE, not history — a sub-agent is a delegated
       // SLICE its owner already planned; started in `plan` it was offered `hand_off` and
       // the analysis all over again, inside work it was handed to carry out. A QUICK
-      // run (`pipelineRoute.ts`) starts in `code` too, on the quick model. The host's
+      // run (`runRoute.ts`) starts in `code` too, on the quick model. The host's
       // stage models ride as `phaseModels`, never as one model pinned to the whole run.
-      ...pipelinePolicyOptions(req, pipeline)
+      ...route.start
     }),
-    pipeline,
+    route,
     // One re-prompt per run for a code change left unshipped (see `selfReviewShip.ts`).
     // One, not a budget: the second time the model stops short it has read the contract
     // twice, and its answer — including "I cannot ship this because…" — is the answer.
@@ -35736,7 +35846,7 @@ function brainDeliveryLedger(run, last) {
         last.sentBackAnswer = { step: last.step };
       };
       const stopNudge = await askStop();
-      const verifiable = c.codeChanged && !skipsVerifyStage(run.pipeline);
+      const verifiable = c.codeChanged && !run.route.skipsVerify;
       const stopHook = {
         id: STOP_HOOK_RUNG,
         applies: !!stopNudge,
@@ -36827,18 +36937,14 @@ function inSequence(gates) {
     return null;
   };
 }
-function brainFinishHook(req, openWork) {
+function brainFinishPorts(req, openWork) {
   const work = typeof openWork === "function" ? openWork : inSequence(openWork ?? []);
-  const ports = {
-    ...req.liveChildren ? {
-      // The run IS a delegation owner as soon as the host can say who its live children are: an owner, not only a child
-      // (`parentRunId`), holds its end for them.
-      delegated: true,
-      liveChildren: req.liveChildren
-    } : {},
+  return {
+    // The run IS a delegation owner as soon as the host can say who its live children are: an owner, not only a child
+    // (`parentRunId`), holds its end for them.
+    ...req.liveChildren ? { delegated: true, liveChildren: req.liveChildren } : {},
     ...work ? { openWork: work } : {}
   };
-  return createFinishHook(ports);
 }
 
 // src/run/preflightRecorded.ts
@@ -36850,9 +36956,6 @@ function recordedPreflight(c, pinnedModel) {
     ctx.state.preflight = degraded ? `degraded:${byo || "plan_flash"}` : "ok";
     return { kind: "model.preflight", step: ctx.step, status: degraded ? "degraded" : "ok", notices: [] };
   };
-}
-function recordedModelHook(c, pinnedModel) {
-  return { ...defaultPolicyModules().model, preflight: recordedPreflight(c, pinnedModel) };
 }
 
 // src/run/modelTransport.ts
@@ -38200,7 +38303,7 @@ async function runPrepared(run) {
   const platform = brainPlatformTools(run);
   const spend = brainSpendMeter(run);
   const binding = {
-    entryPoint: req.entryPoint ?? "web",
+    entryPoint: req.entryPoint,
     req,
     capabilities: { capabilities: /* @__PURE__ */ new Set() },
     request: run.userRequest,
@@ -38216,7 +38319,8 @@ async function runPrepared(run) {
       // The turn recorder writes the model downgrade, and the steering port records each direction it drains.
       recorded: /* @__PURE__ */ new Set(["llm.model_downgrade", "steer.applied"])
     }),
-    start: pipelinePolicyOptions(req, run.pipeline),
+    // The route's start (phase, stage models, a quick run's model) is folded in by `openRun` from `route`; this seeds the request's own model.
+    start: {},
     ship: run.shipPolicy,
     // From here the model policy is the AGENT's: the Brain's guards read `run.policy` and report to it through the view.
     attach: (view) => {
@@ -38244,16 +38348,24 @@ async function runPrepared(run) {
   if (request >= 0) transcript[request] = { ...transcript[request], task: true };
   const ports = buildBrainRunPorts(binding);
   const signal = c.abort?.signal;
-  const outcome = await runAgent({
+  const outcome = await openRun({
     task: { ...brainRunTask(binding), transcript },
     policy: brainRunPolicy(binding),
     ports: { ...ports, model: withoutUncallableTurns(ports.model, req) },
-    // The Brain's own fold (`brainFold.ts`), not the agent's compaction adapted to imitate it.
-    // ... and the preamble ran the host's model preflight already (`hostRunContext.ts`): the agent's own would ask the host again and warn
-    // about a model the loop never warned about (a QUICK run's quick model), so the Brain's says the verdict and nothing more.
-    // ... and the finish module carries the host's engine ports (`brainFinish.ts`): an owner never ends with its sub-agents still working.
-    // ... and the open-work gate sequence: the run's open linked tickets, then the spec items a ticketing request still owes.
-    modules: { compaction: compaction.hook, model: recordedModelHook(c, req.model), finish: withDeterministicFinish(run, brainFinishHook(req, [openLinkedWorkHold(run), specTicketCoverageGate(run)])) },
+    // The run's route, decided once in the preamble (`runStore/runRoute.ts`): the agent's own `routeRun` over the same input.
+    route: run.route.input,
+    surface: {
+      // The Brain's own fold (`brainFold.ts`), not the agent's compaction adapted to imitate it.
+      compaction: { hook: compaction.hook },
+      // The preamble ran the host's model preflight already (`hostRunContext.ts`): the agent's own would ask the host again and warn
+      // about a model the loop never warned about (a QUICK run's quick model), so the Brain's says the verdict and nothing more.
+      preflight: recordedPreflight(c, req.model),
+      // The host's engine ports (`brainFinish.ts`): an owner never ends with its sub-agents still working, and the open-work gate
+      // sequence holds the run's open linked tickets, then the spec items a ticketing request still owes.
+      finish: brainFinishPorts(req, [openLinkedWorkHold(run), specTicketCoverageGate(run)]),
+      // The deterministic close-out (`runStore/deterministicFinish.ts`): the host's own ticket actions, ahead of the finish gate.
+      closeOut: closeOutPort(run)
+    },
     // The Brain's read-coverage owns the no-progress counter (`callPreflight`/`callPostStep`
     // feed it); hand the kernel that ONE instance to persist, so a circling run keeps its count
     // across the step yield it is steered into — not a kernel-built twin the Brain never feeds.
@@ -39445,6 +39557,7 @@ function useLaunchCancel(sendingRef) {
 function useBrainConversation(options) {
   const { persistence, resolveSystemPrompt, stream, imagePrep } = useBrainConfig();
   const {
+    entryPoint: entryPoint2,
     chatId,
     modality = "designer",
     projectId,
@@ -39523,6 +39636,7 @@ ${extraSystem}` : resolvedSystemPrompt;
       const seed = transcriptSeedOf(history);
       const injectedTurnIds = [...injectedTurnIdsOf(history), ...turnInjected && userTurnMessageId != null ? [userTurnMessageId] : []];
       return {
+        entryPoint: entryPoint2,
         resolvedSystemPrompt: fullSystemPrompt,
         tools: toolSpecs && toolSpecs.length > 0 ? toolSpecs : void 0,
         model,
@@ -39552,7 +39666,7 @@ ${extraSystem}` : resolvedSystemPrompt;
         chatRoster
       };
     },
-    [fullSystemPrompt, toolSpecs, model, modelStrict, routingMode, pickFallbackModel, windowSources, onDeviceTasks, maxTokens, reasoning, runTool2, needsConfirm, answerQuestion, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId, chatMode, chatRoster]
+    [entryPoint2, fullSystemPrompt, toolSpecs, model, modelStrict, routingMode, pickFallbackModel, windowSources, onDeviceTasks, maxTokens, reasoning, runTool2, needsConfirm, answerQuestion, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId, chatMode, chatRoster]
   );
   const bindContinuation = useContinuation(persistence, prepareRun);
   const launch = (0, import_react15.useCallback)(async (id, request, draftSend = null) => {
