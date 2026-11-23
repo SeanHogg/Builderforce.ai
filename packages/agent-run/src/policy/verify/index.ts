@@ -19,9 +19,14 @@ import { runSandboxVerify, type VerifySandbox, type VerifyShell } from "./sandbo
 import { runVerifyPhase, type RunVerifyInput } from "./runEndMemory.js";
 import { recordVerifyEvents } from "./recordVerifyEvents.js";
 import type { InRunVerifyOutcome } from "./inRunVerify.js";
+import { nativeChecks } from "./nativeChecks.js";
 
 /** The optional engine ports a surface binds with {@link createVerifyHook}. */
 export interface VerifyPorts {
+  /** Read an existing host verifier's verdict. Absent means there is no verdict to record. */
+  recorded?(ctx: PolicyContext): boolean | undefined;
+  /** Collect completed package checks from the native shell when it is already authorized to run. */
+  observeNativeChecks?: true;
   /** The sandbox's clone, when this surface has one (enables the declared-checks verify). */
   sandbox?: VerifySandbox;
   /** The shell the commands run through (heartbeat + cancel), when this surface has one. */
@@ -78,6 +83,8 @@ function writtenPathsOf(ctx: PolicyContext): readonly string[] {
  */
 export function createVerifyHook(ports: VerifyPorts = {}): VerifyHook {
   return {
+    ...(ports.observeNativeChecks ? nativeChecks : {}),
+    ...(ports.recorded ? { recorded: ports.recorded } : {}),
     async verify(ctx: PolicyContext): Promise<VerifyResult | void> {
       if (ctx.policy.verify === "none") return undefined;
       const writtenPaths = writtenPathsOf(ctx);

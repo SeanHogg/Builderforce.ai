@@ -45,7 +45,7 @@ export function ownsCall(ports: RunPorts, name: string): boolean {
 /** The dispatchable catalog before policy and relevance filtering. A closed provider replaces the registry. */
 export function offeredSchemas(ports: RunPorts, progress: LadderProgress = { rungs: {} }): ToolSchema[] {
   const seen = new Set<string>();
-  const registry = ports.platform?.closed ? [] : registryOf(ports).schemasFor(ports.capabilities);
+  const registry = ports.platform?.closed || !ports.capabilities ? [] : registryOf(ports).schemasFor(ports.capabilities);
   return [...registry, ...(ports.extensions?.schemas() ?? []), ...(ports.platform?.schemas(progress) ?? [])].filter((schema) => {
     const name = schema.function?.name;
     if (!name || seen.has(name)) return false;

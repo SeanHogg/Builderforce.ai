@@ -21,7 +21,7 @@
  * the tool runner's own failures.
  */
 
-import { tallyVerify, type CloseOutMode, type PolicyContext } from '@builderforce/agent-run';
+import type { CloseOutMode, PolicyContext } from '@builderforce/agent-run';
 import { canListChatTickets, linkedTicketsToComplete, linkedTicketsReviewedComplete, linkedTicketsToAdvanceFor } from '../chatWorkLinking';
 import { recordCodeChangeTicket, retitleShippedDeltaTicket, settleView, updateLinkedTickets, updateRunLocalTickets } from './runBackstops';
 import { recordShipReview, verificationOf, type CloseOutInput } from '../run/brainCloseOut';
@@ -295,12 +295,5 @@ async function finishCloseOut(run: BrainRunContext, mode: CloseOutMode): Promise
  * as the `finish.close_out_error` step and the finish goes on (the one trace - nothing here catches).
  */
 export function closeOutPort(run: BrainRunContext): (ctx: PolicyContext, mode: CloseOutMode) => Promise<void> {
-  return async (ctx, mode) => {
-    await finishCloseOut(run, mode);
-    const tally = ctx.state.telemetry;
-    if (mode !== 'finish' || !tally || !run.c.touchedFiles.length) return;
-    const verdict = verificationOf(run.evidence, run.c.touchedFiles);
-    if (verdict.verified || verdict.failed) tallyVerify(tally, verdict.verified);
-    else delete tally.verify;
-  };
+  return (_ctx, mode) => finishCloseOut(run, mode);
 }

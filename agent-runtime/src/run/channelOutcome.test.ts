@@ -2,7 +2,6 @@
  * The channel entry point writes the uniform outcome row (PRD 35 §3.3, §8.2): a run with no execution id is keyed by its own run
  * id, attributed to the model that served it, and reported once through the same reporter the ticket path uses.
  */
-import { Type } from "@sinclair/typebox";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Agent } from "../builderforce/agent-loop/agent.js";
 import { AssistantMessageEventStream } from "../builderforce/agent-loop/event-stream.js";
@@ -29,7 +28,11 @@ const model = {
 };
 const usage = { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
 const assistant = (content: AssistantMessage["content"], stopReason: AssistantMessage["stopReason"]): AssistantMessage => ({ role: "assistant", content, api: "openai-completions", provider: "p", model: "m", usage, stopReason, timestamp: 1 });
-const echo: AgentTool = { name: "echo", label: "echo", description: "e", parameters: Type.Object({}), execute: async () => ({ content: [{ type: "text", text: "ok" }], details: {} }) };
+const exec: AgentTool = {
+  name: "exec", label: "exec", description: "Run a command",
+  parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] } as AgentTool["parameters"],
+  execute: async () => ({ content: [{ type: "text", text: "ok" }], details: { status: "completed", exitCode: 0 } }),
+};
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -40,9 +43,9 @@ describe("a channel run's outcome row", () => {
       posts.push(JSON.parse(init.body) as Record<string, unknown>);
       return { ok: true, status: 200 };
     }));
-    const script = [assistant([{ type: "toolCall", id: "c1", name: "echo", arguments: {} }], "toolUse"), assistant([{ type: "text", text: "done" }], "stop")];
+    const script = [assistant([{ type: "toolCall", id: "c1", name: "exec", arguments: { command: "npm test" } }], "toolUse"), assistant([{ type: "text", text: "done" }], "stop")];
     let n = 0;
-    const agent = new Agent({ model, tools: [echo], systemPrompt: "sys" });
+    const agent = new Agent({ model, tools: [exec], systemPrompt: "sys" });
     agent.streamFn = () => {
       const stream = new AssistantMessageEventStream();
       const msg = script[n++]!;
@@ -57,7 +60,7 @@ describe("a channel run's outcome row", () => {
     await vi.waitFor(() => expect(posts).toHaveLength(1));
 
     // `steps` counts the turns that ACTED (a tool round); the turn that finishes the run is not a step. This is the one count every entry point's row carries.
-    expect(posts[0]).toMatchObject({ source: "onprem", model: "m", terminalStatus: "completed", steps: 1 });
+    expect(posts[0]).toMatchObject({ source: "onprem", model: "m", terminalStatus: "completed", steps: 1, verify: "passed" });
     expect(String(posts[0]!.clientRunId)).toMatch(/^onprem:.+/);
   });
 });

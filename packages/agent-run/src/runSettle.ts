@@ -3,12 +3,13 @@
  * event and return the outcome.
  */
 
-import type { RunMessage, RunOutcome, RunState } from "./contract.js";
+import { RUN_CANCELLED_REASON, type RunMessage, type RunOutcome, type RunState } from "./contract.js";
 import type { PolicyHooks } from "./policy/index.js";
 import { currentView, emit, policyContext, type RunAgentInput } from "./runContext.js";
 import { newApprovalId } from "./runState.js";
 import { isResumable } from "./runTurn.js";
 import { buildOutcomeRow } from "./telemetry/outcomeRow.js";
+import { tallyVerify } from "./telemetry/runTally.js";
 
 /** What a terminal outcome carries beyond the state. */
 interface SettleExtra {
@@ -71,6 +72,10 @@ export async function settle(
     }
   }
   const resumable = cause !== undefined;
+  if ((kind === "finished" || kind === "failed") && !resumable && extra.reason !== RUN_CANCELLED_REASON && state.telemetry) {
+    const recorded = hooks.verify.recorded?.(policyContext(input, state, currentView(transcript, []), state.step, 0));
+    if (recorded !== undefined) tallyVerify(state.telemetry, recorded);
+  }
 
   try {
     await input.ports.store.save(state);

@@ -1,8 +1,8 @@
 # Agent Pipeline Map
 
-Reviewed against checkout `c56ce694e` on 2026-11-23. Static source inspection; no live runs traced. Working-tree changes verified and extended: shared EntryPoint typing, recorded preflight facts, shared spawnChild across all spawn paths, and Brain history compaction through shared strategy ports. [PRD 50](./50-prd-one-pipeline.md) records the consolidation contract and status. Update both documents as implementation changes ownership or removes a fork.
+Implementation and runtime harnesses verified on 2026-11-23. [PRD 50](./50-prd-one-pipeline.md) records the consolidation contract and [DONE.md](../../DONE.md) records the completed roadmap item.
 
-All inspected production adapters now enter through `openRun → runAgent → runAgentLoop`. Sharing that entry does not yet give every surface the same start gate, routing inputs, prompt, finish ports, or child lifecycle.
+All inspected production adapters enter through `openRun → runAgent → runAgentLoop`. Each host supplies its authorization, tool capabilities, verified evidence, and storage through ports.
 
 ## 1. Current execution path
 
@@ -18,8 +18,9 @@ flowchart TD
   Cloud[Cloud tick: cloudAdapter] --> Open
   Reply[Web reply: agentReplyRun] --> Open
   Canvas[Browser canvas: creationCanvasAi] --> Open
-  Prem[On-prem: onPremAdapter] --> Open
+  Relay[Self-hosted relay: onPremAdapter] --> Prem[openOnPremRun]
   Channel[On-prem sessions: channelRunPorts] --> Prem
+  Prem --> Open
   Prepared --> Open[openRun: require entryPoint, fold route, compose modules]
   Open --> Agent[runAgent: hooks, context, dispatch, settle]
   Agent --> Kernel[runAgentLoop]
@@ -31,7 +32,7 @@ The Brain preamble renders opening data and per-run directives and decides its r
 
 The editor host is shared by panel and participant. `brainRunHostPorts.ts` binds `startThrough` to `gated.start`; `brainRunHost.ts` supplies it to `childRunHost`. Children therefore pass the editor start gate. Other surfaces retain their own lifecycle; `openRun` does not create editor journals or cloud execution records.
 
-## 2. Remaining surface differences
+## 2. Host bindings
 
 | Stage | VSIX panel and participant | Cloud | Web reply | Canvas | On-prem |
 | --- | --- | --- | --- | --- | --- |
@@ -58,13 +59,13 @@ The editor host is shared by panel and participant. `brainRunHostPorts.ts` binds
 | Legacy child standing instructions are independently implemented | `agent-runtime/src/agents/subagent-prompt.ts` calls shared subagentSystemPrompt and bounds configured depth by MAX_SUBAGENT_DEPTH. Session additions and separate spawning remain. |
 | Kernel header names the wrong caller | `packages/agent-loop/src/loop.ts` now names openRun → runAgent correctly. |
 
-## 4. Open forks and design gaps
+## 4. Consolidated policies and host responsibilities
 
 1. **Brain policy callbacks removed from the production door.** preflightRecorded.ts supplies data to createModelHook; brainFold.ts supplies native history, summary transport and trace/durable-marker sinks to createCompactionHook. policy/compaction/history.ts owns memo reuse, immutable source history, summary deadline/fallback, saved tokens and fold result construction. The compaction.hook escape hatch is removed. Brain progressGuard, tool pre/post-step policy and continuation remain separate, as excluded by this slice.
 
 2. **Shared spawnChild implemented.** policy/subagents/child.ts validates parent identity, registered entryPoint, nonempty owner/task and CHILD depth 1 through MAX_SUBAGENT_DEPTH. prepareChildStart builds the shared standing prompt with optional persona/base prompt and work references. spawnChild<Result> invokes a scoped host start and preserves its result: VSIX controls observe host completion separately from returning a handle; cloud returns durable admission; on-prem returns a completed report. CloudChildSpec persists prepared standing instructions for its later tick; old payloads use the shared preparer as a compatibility fallback.
 
-3. **Four legacy callers retained behind one adapter.** sessions-spawn-tool.ts, commands-subagents.ts, infra/local-agent-transport.ts and transport/local-adapter.ts still call spawnSubagentDirect. It now authorizes before shared spawnChild, then supplies gateway/session lifecycle ports. buildSubagentSessionPrompt adds session context to the prepared standing prompt. Configured lower depth caps, agent allow-lists, gateway identity, delivery and result registration remain. Retiring the second session runtime is later work, not an uncounted spawn fork.
+3. **Gateway child starts use the shared admission contract.** sessions-spawn-tool.ts, commands-subagents.ts, infra/local-agent-transport.ts and transport/local-adapter.ts call spawnSubagentDirect. It authorizes before shared spawnChild and supplies gateway/session lifecycle ports. buildSubagentSessionPrompt adds session context. The gateway owns its depth caps, agent allow-lists, identity, delivery and result registration.
 
 4. **Routing decision and default configuration are shared.** openRun defaults to the full pipeline. Brain uses the same default, and its editor settings can opt into auto scoring and a quick model. The decision is carried in RunState for resumes and outcome rows. Host model availability, quick-model overrides and gateway cascades still vary.
 
@@ -72,15 +73,15 @@ The editor host is shared by panel and participant. `brainRunHostPorts.ts` binds
 
 6. **Work evidence reaches the shared ledger.** Brain reports linked-ticket and spec evidence from existing scoped reads. Relay change tickets and cloud ticket assignments enter the plan before execution. Brain owner wakes recheck child ticket references against the scoped listing. Durable children record write evidence before terminal landing, and the owner reads it in one scoped query. Cloud and relay review evidence is added after PR confirmation. Unresolved completed invocations are excluded from routing feedback.
 
-7. **Shared steering and closing turns.** Tool finishes take late steering and queued follow-ups after tool rows, preserving attachments. The editor checks Stop before waking its inbox, and Brain picks up explicit directions received during successful close-out. Durable cloud and relay settle late steers through the same dispatcher. Recovery across host start failures and durable retries still needs end-to-end validation.
+7. **Shared steering and closing turns.** Tool finishes take late steering and queued follow-ups after tool rows, preserving attachments. The editor checks Stop before waking its inbox and requeues a wake that failed before admission. Brain picks up explicit directions received during successful close-out. Cloud and relay share the durable dispatcher, and the scheduled sweep retries explicitly requeued directions on terminal executions.
 
 8. **One on-prem execution entry.** Tickets, sessions and children call openOnPremRun. The former channel adapter is a session port binding and retains its message bridge.
 
-9. **Shared approval, catalog, and verification inputs.** Brain supplies its resolved gate snapshot and the editor authorizes the resolved tool and workspace path. Closed catalogs exclude unavailable registry tools from shared policy. Shared verification handles configured prose and tool finishes, records real cloud and Brain checks, and keeps skips ungraded. Native session hosts still differ in what they can execute or verify.
+9. **Shared approval, catalog, and verification inputs.** Brain supplies its resolved gate snapshot and the editor authorizes the resolved tool and workspace path. A closed native catalog is a complete capability source. Shared settlement records existing Brain verifier evidence and completed on-prem package checks from the authorized tool path. Subsequent mutations invalidate on-prem evidence. Configured prose and tool finishes use the same verifier, and skips stay ungraded.
 
 10. **The import guard does not establish callback ownership.** `scripts/check-one-execution.mjs --enforce` checks kernel/driver imports and policy reach-ins, not supplied hook bodies. The false enforcement claim has been removed from `SurfacePorts`. `surface.preflight` now accepts a data contract rather than a callback; factory and production-door regressions cover its ownership and single-check/no-duplicate-notice behavior. SurfacePorts.compaction also accepts only factory options now; the production-door regression checks native history ports and absence of a hook override. The import guard does not prove arbitrary port callback semantics.
 
-## 5. Target workflow (not implemented in full)
+## 5. Implemented workflow
 
 ```mermaid
 flowchart TD
@@ -88,7 +89,7 @@ flowchart TD
   Spawn[spawnChild: depth + shared child prompt] --> Start
   Start --> Route[routeRun: one decision and model intent]
   Route --> Work[planWork: assigned items and criteria]
-  Work --> Opening[buildOpening: one owner per section]
+  Work --> Opening[openingRows: governance, persona, and history]
   Opening --> Compose[openRun: shared factories, ports only]
   Compose --> Kernel[runAgent → runAgentLoop]
   Kernel --> Dispatch[Dispatch: capability + governance checks]
@@ -105,11 +106,11 @@ flowchart TD
 
 The start contract must preserve local/durable identity and authorization. Background admission and eventual settlement are separate events. Shared finish policy can only enforce evidence supplied through the host's available ports.
 
-## 6. Implementation checkpoints
+## 6. Integration verification (2026-11-23)
 
-- Entry/spawn/policy slice implemented. Finish validation in a fully provisioned checkout and repair the independently reproduced baseline failures; no complete cross-surface runtime pass is claimed.
-- Remaining for the full roadmap item: native session capability and verification parity, recovery after editor start failures and durable retries, and full editor session, on-prem session, and cloud integration validation.
-- Update this map, PRD status and the [Gap Register](../../ROADMAP.md) with each implementation. Record actual checks and blockers. Named tests are coverage references, not evidence of a pass in this checkout.
+- The full shared suite passed 857 tests. Focused Brain continuation, close-out, and gates passed 68 tests. Editor host steering, child spawn, and start gates passed 30 tests using the current Brain source. On-prem channel conformance, native outcome, child, and outbox suites passed 23 tests.
+- Cloud adapter conformance, terminal settlement, child evidence, late steering, and Durable Object recovery passed 39 tests. Tests use injected database and gateway fixtures.
+- Shared TypeScript checking and repository execution, source-package, tenant-scope, and whitespace checks passed. Full Brain and VSIX typechecks still require their missing build dependencies. No live deployment was exercised or packages installed.
 
 ## 7. Follow-up implementation (2026-11-23)
 
@@ -125,7 +126,13 @@ The shared ledger reads host-scoped evidence. Spec coverage means a ticket was f
 
 The shared suite passed 851 tests. Focused Brain, editor child and start-gate, cloud serialization and scoring, and on-prem child and outbox tests passed. The channel outcome test requires `@sinclair/typebox`. The cloud tail test requires `@neondatabase/serverless`.
 
-## 9. Earlier slice validation (2026-11-23)
+## 9. Assignment, verification, and retry validation (2026-11-23)
+
+- Runtime tests passed for the full shared package (856), focused Brain continuation and close-out (66), focused API child evidence, outcome, late steering, and Durable Object recovery (44), on-prem child and outbox (19), and VSIX child and start gate (15).
+- Shared TypeScript checking and the execution, package-graph, tenant-scope, and whitespace checks passed. VSIX typechecking is blocked by missing `vscode` type definitions. Brain typechecking is blocked by missing `@seanhogg/bfi-web` and `@mlc-ai/web-llm`.
+- The editor wake integration needs the built `@seanhogg/builderforce-brain-embedded` package. The on-prem channel outcome test needs `@sinclair/typebox`. Cloud adapter conformance and tail integration need `@neondatabase/serverless`. No packages were installed.
+
+## 10. Earlier slice validation (2026-11-23)
 
 Initial working-tree changes, including runStore/runTypes.ts, were confirmed before editing. Shared focused suites pass: **13 files / 88 tests**, covering spawn validation and native results, history memo/deadline/failure behavior, preflight, routing and conformance. Agent-run typecheck passes with TypeScript 6 and --ignoreDeprecations 6.0. The full earlier agent-run run had 821 passing tests and two failures; both forcedTurns trace-step and failureSynthesis extra-call failures reproduce at c56ce694e in a detached worktree.
 

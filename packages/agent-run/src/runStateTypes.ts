@@ -102,6 +102,8 @@ export interface StallState {
 
 /** Plain JSON. Everything any policy needs across a step boundary. */
 export interface RunState {
+  /** Latest completed native package checks for the current workspace revision. */
+  nativeChecks?: Partial<Record<"test" | "typecheck", number>>;
   /** The routing decision made at admission. Null represents a child or another unscored run. */
   pipeline?: { route: "quick" | "full"; score: number } | null;
   work?: import("./workPlan.js").WorkLedgerItem[];

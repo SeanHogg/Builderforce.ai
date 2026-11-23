@@ -20,7 +20,7 @@
 
 import { RUN_CANCELLED_REASON } from "@builderforce/agent-run";
 import type { ContextSource, RunEvent, RunMessage, RunPolicy, RunPorts, RunTask, RunOutcome, SteeringSource, SteerInput } from "@builderforce/agent-run";
-import { RunKnowledgeRecorder, type CapabilityProvider } from "@builderforce/agent-tools";
+import { RunKnowledgeRecorder } from "@builderforce/agent-tools";
 import { randomUUID } from "node:crypto";
 import type { AgentLoopConfig } from "../builderforce/agent-loop/agent-loop-config.js";
 import type { EventStream } from "../builderforce/agent-loop/event-stream.js";
@@ -157,10 +157,8 @@ export function bindChannelRun(input: ChannelRunInput) {
       let replied = false;
       const refusedBy = new Set<string>();
       const tools = context.tools ?? [];
-      const capabilities: CapabilityProvider = { capabilities: new Set() };
       const ports: RunPorts = {
         model: channelModelTransport({ models, streamFn, config, tools, bridge }),
-        capabilities,
         store: inMemoryStore({
           appended: (row: RunMessage) => {
             if (row.role === "assistant" && row.content.trim().length > 0) replied = true;
@@ -183,7 +181,7 @@ export function bindChannelRun(input: ChannelRunInput) {
         },
         // A governance gate's approval fails closed on every path (`onPremHuman`): with no approver to reach, the call is refused.
         // The wait is bounded and ends with the run (see CHANNEL_APPROVAL_WAIT_MS).
-        human: onPremHuman(() => capabilities, undefined, {
+        human: onPremHuman(undefined, undefined, {
           approvalTimeoutMs: CHANNEL_APPROVAL_WAIT_MS,
           ...(signal ? { signal } : {}),
         }),

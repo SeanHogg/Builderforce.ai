@@ -18,7 +18,11 @@ export const EMPTY_PACK: ContextSource = { pack: () => ({ focus: [], facts: [], 
 
 /** The on-prem entry for ticket, session and child bindings. The caller receives the shared terminal outcome. */
 export function openOnPremRun(input: OpenRunInput): Promise<RunOutcome> {
-  return openRun({ ...input, policy: { ...input.policy, entryPoint: "on-prem" } });
+  return openRun({
+    ...input,
+    policy: { ...input.policy, entryPoint: "on-prem" },
+    surface: { ...input.surface, verify: { observeNativeChecks: true, ...input.surface?.verify } },
+  });
 }
 
 /** Drive a session binding and close its presentation stream after the shared outcome is delivered. */

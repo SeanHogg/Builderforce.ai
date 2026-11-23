@@ -350,6 +350,7 @@ export async function dispatchCall(input: RunAgentInput, state: RunState, call: 
           }
           return result.data;
         }
+        if (!ports.capabilities) return { ok: false, error: "This run has no registry tool provider." };
         const result = await registryOf(ports).dispatch(name, args as Record<string, unknown>, { caps: ports.capabilities, ...(run ? { signal: run } : {}) });
         box.control = result.control;
         return extension?.shape ? extension.shape(name, result.data) : result.data;

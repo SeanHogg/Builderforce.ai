@@ -144,6 +144,9 @@ export function routedPolicy(policy: RunPolicy, route: RouteInput, decision: Rou
 export async function openRun(input: OpenRunInput): Promise<RunOutcome> {
   if (!input.policy?.entryPoint) throw new Error("openRun: policy.entryPoint is required");
   if (!ALL_ENTRY_POINTS.includes(input.policy.entryPoint)) throw new Error("openRun: policy.entryPoint must be registered");
+  if (!input.ports.capabilities && !input.ports.platform?.closed) {
+    throw new Error("openRun: a registry provider or a closed native catalog is required");
+  }
   const { surface = {}, route: requested, ...rest } = input;
   const route = requested && "decided" in requested ? requested : {
     request: rest.task.request ?? rest.task.prompt,

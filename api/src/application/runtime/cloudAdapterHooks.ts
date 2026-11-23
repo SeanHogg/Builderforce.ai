@@ -119,14 +119,17 @@ export function cloudSurfacePorts(d: CloudHookDeps): SurfacePorts {
     finish: {
       ...cloudFinishPorts({ db, evt: run, repoCtx, delegated: d.delegated, ...(noSandboxPr ? { noSandboxPr } : {}), ...(d.writtenHashes ? { writtenHashes: d.writtenHashes } : {}), ...(d.writtenPaths ? { writtenPaths: d.writtenPaths } : {}) }),
       ...(assignedWork ? workFinishPorts({ assigned: assignedWork, settleAfterRun: true }) : {}),
-      ...(d.delegated && assignedWork ? {
+      ...(d.delegated ? {
         openWork: async (ctx) => {
           const evidence = await readChildWork(db, run.tenantId, run.executionId, run.taskId)
             .catch(reportedFallback(null, {
               source: 'application/runtime/cloudAdapterHooks.ts', operation: 'readChildWork',
               context: { executionId: run.executionId, taskId: run.taskId },
             }));
-          if (evidence) recordWorkSnapshot(ctx.state, 'durable-children', assignedWork, evidence);
+          if (evidence && (evidence.length || assignedWork)) {
+            const scope = assignedWork ?? [{ id: String(run.taskId), criteria: d.taskTitle ? [d.taskTitle] : [] }];
+            recordWorkSnapshot(ctx.state, 'durable-children', scope, evidence);
+          }
           return null;
         },
       } : {}),

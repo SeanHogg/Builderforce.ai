@@ -15,6 +15,11 @@ const h = vi.hoisted(() => ({
   turn: 0,
   script: [] as Array<{ content: string; toolCalls?: Array<{ id: string; name: string; arguments: string }> }>,
 }));
+// The conformance harness supplies a Db to every port. No test should open a real connection.
+vi.mock('../../infrastructure/database/connection', () => ({
+  siblingDatabaseOf: (db: unknown) => db,
+  buildDatabase: () => { throw new Error('conformance harness must use its injected database'); },
+}));
 vi.mock('./cloudToolEvents', () => ({ recordCloudToolEvent: async (_db: unknown, row: Record<string, unknown>) => { h.rows.push(row); } }));
 // The outcome row is written by the ONE owner (`recordTerminalOutcome`) at the landing: its multi-row insert lands in the same timeline.
 vi.mock('../shared/runTelemetryDatabase', () => ({

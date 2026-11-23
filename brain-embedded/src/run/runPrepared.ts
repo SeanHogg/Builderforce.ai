@@ -19,6 +19,7 @@ import { brainSteeringSource, personSteers } from './brainSteering';
 import { settleBrainRun } from './brainSettle';
 import { brainEventSink } from './eventSink';
 import { closeOutPort } from '../runStore/deterministicFinish';
+import { verificationOf } from './brainCloseOut';
 import { openLinkedWorkHold } from '../runStore/openLinkedWorkHold';
 import { specTicketCoverageGate } from '../runStore/specTicketCoverageGate';
 import { discardAnswered, brainTurnObserver } from './brainTurn';
@@ -38,7 +39,6 @@ export async function runPrepared(run: BrainRunContext): Promise<void> {
   const binding: BrainRunBinding = {
     entryPoint: req.entryPoint,
     req,
-    capabilities: { capabilities: new Set() },
     request: run.userRequest,
     turn: observer,
     platform: platform.tools,
@@ -93,6 +93,13 @@ export async function runPrepared(run: BrainRunContext): Promise<void> {
       finish: brainFinishPorts(req, [openLinkedWorkHold(run), specTicketCoverageGate(run)]),
       // The deterministic close-out (`runStore/deterministicFinish.ts`): the host's own ticket actions, ahead of the finish gate.
       closeOut: closeOutPort(run),
+      verify: {
+        recorded: () => {
+          if (!c.touchedFiles.length) return undefined;
+          const result = verificationOf(run.evidence, c.touchedFiles);
+          return result.verified ? true : result.failed ? false : undefined;
+        },
+      },
     },
     // The Brain's read-coverage owns the no-progress counter (`callPreflight`/`callPostStep`
     // feed it); hand the kernel that ONE instance to persist, so a circling run keeps its count

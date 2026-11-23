@@ -4,7 +4,6 @@
  * tools as its closed catalog; and the native shapes the session persists come back exactly as they went in.
  */
 
-import { Type } from "@sinclair/typebox";
 import { describe, expect, it } from "vitest";
 import { runAgent } from "@builderforce/agent-run";
 import type { ModelCompletion, ModelRequest, RunPolicy } from "@builderforce/agent-run";
@@ -38,13 +37,34 @@ const echo: AgentTool = {
   name: "echo",
   label: "echo",
   description: "echoes",
-  parameters: Type.Object({ text: Type.String() }),
+  parameters: { type: "object", properties: { text: { type: "string" } }, required: ["text"] } as AgentTool["parameters"],
   execute: async (_id, params) => ({ content: [{ type: "text", text: `echoed:${(params as { text: string }).text}` }], details: {} }),
 };
 
 const textOf = (c: unknown): string => (typeof c === "string" ? c : Array.isArray(c) ? c.map((b: { text?: string }) => b.text ?? "").join("") : "");
 
 describe("the channel entry point — conformance", () => {
+  it("takes a follow-up queued during the closing turn before settling the native session", async () => {
+    const agent = new Agent({ model, systemPrompt: "sys" });
+    const seen: string[] = [];
+    agent.streamFn = (_model, context) => {
+      seen.push(JSON.stringify(context.messages));
+      const stream = new AssistantMessageEventStream();
+      const first = seen.length === 1;
+      queueMicrotask(() => {
+        if (first) agent.followUp({ role: "user", content: "Also explain the result", timestamp: 2 });
+        const message = assistant([{ type: "text", text: first ? "Initial response." : "Here is the explanation." }], "stop");
+        stream.push({ type: "done", reason: "stop", message });
+        stream.end();
+      });
+      return stream;
+    };
+    const produced = await agent.prompt([{ role: "user", content: "Go", timestamp: 0 }]);
+    expect(seen).toHaveLength(2);
+    expect(seen[1]).toContain("Also explain the result");
+    expect((produced.at(-1) as AssistantMessage).content).toEqual([{ type: "text", text: "Here is the explanation." }]);
+  });
+
   it("asks the model the same things, and reaches the same answer, as the agent driven directly", async () => {
     // through the channel: the Agent over a scripted provider stream
     const seen: Context[] = [];
