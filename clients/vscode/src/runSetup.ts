@@ -43,6 +43,8 @@ export interface RunContextInput {
   request: string;
   /** The chat's Memory switch: off ⇒ no project facts in the pack. */
   memory: boolean;
+  /** What the person attached to THIS turn (the native chat's inlined `#file` references): it rides the turn-context block, never the user's words. */
+  turnContext?: string;
   /** A sub-agent shares its owner's accounts, so it does not repeat the preflight. */
   child: boolean;
 }
@@ -84,16 +86,24 @@ export function runContextFields(ports: SetupPorts, input: RunContextInput): Run
     const r = await pack!;
     return "value" in r ? r.value : undefined;
   };
+  const attached = input.turnContext?.trim();
   const preflight = ports.modelPreflight && !input.child ? ports.modelPreflight : undefined;
   return {
     ...augmentFor(ports, projectId, serverChatId, input.chatId),
+    ...(pack || attached
+      ? {
+          // The pack's block, then what the person attached: ONE per-turn block the model reads as context, not as the ask.
+          turnContext: async () => {
+            const r = pack ? await pack : undefined;
+            if (r && "error" in r) throw r.error;
+            return [r?.value?.block, attached].filter((part): part is string => !!part?.trim()).join("
+
+") || undefined;
+          },
+        }
+      : {}),
     ...(pack
       ? {
-          turnContext: async () => {
-            const r = await pack;
-            if ("error" in r) throw r.error;
-            return r.value?.block;
-          },
           recallHint: async () => (await value())?.recallHint,
           servedReads: async () => (await value())?.servedReads,
         }

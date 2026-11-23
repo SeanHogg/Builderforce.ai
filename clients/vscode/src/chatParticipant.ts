@@ -1,21 +1,19 @@
 import * as vscode from "vscode";
-import { isRunning } from "@seanhogg/builderforce-brain-embedded";
-import { ChatMessage, SECRET_KEY } from "./gateway";
+import { isRunning, type BrainRunOpening, type ChatCompletionMessage } from "@seanhogg/builderforce-brain-embedded";
+import { SECRET_KEY } from "./gateway";
 import { turnLimbicBlock } from "./personalityLimbic";
 import { resolveModelRoute, routeNeedsLocalModel, routeNeedsSpecificModel, routeRequiresSignIn } from "./modelRouting";
 import { streamNoLocalModel } from "./noLocalModelPrompt";
 import type { BrainRunHost } from "./brainRunHost";
 import { permissionMode as resolvePermissionMode } from "./permissionMode";
-import { getCurrentUserId, fetchRunContextSection, updateBrainChatProject } from "./bfApi";
+import { getCurrentUserId, updateBrainChatProject } from "./bfApi";
 import { createNativeProjectAdopter } from "./nativeChatProject";
 import { localBrainApplication } from "./localFirstStore";
 import { formatChatErrorVerdict } from "./upgradeAction";
 import { getGroundingWithHistory } from "./grounding";
 import { getEditorContextLive } from "./editorContext";
-import { editorContextDirective } from "./idePersona";
 import { getSelectedProject } from "./projectState";
 import { PolicyGatesUnavailableError, resolveRunPolicyGates } from "./policyGates";
-import { buildSystemMessages } from "./prompt";
 import type { NativeApprovalRequest } from "./nativeRunTypes";
 import { runViaHost } from "./participantRun";
 import { hostLog } from "./hostLog";
@@ -23,7 +21,7 @@ import { referencesTurnBlock, workspaceReferenceReader } from "./chatReferences"
 import { hostIngressDeps, routeMentionBudget } from "./hostIngress";
 import { whereDefinedOnce } from "./contextPack/preSearchSource";
 import { CONTEXT_PACK_DEADLINE_MS } from "./contextPack/deadline";
-import { priorBrainChatId, splitSystemPrompt } from "./participantSession";
+import { priorBrainChatId } from "./participantSession";
 import { installRunRecovery } from "./installRunRecovery";
 
 const PARTICIPANT_ID = "builderforce.agent";
@@ -83,7 +81,7 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost:
     // workspace root and its git repo, so the agent resolves "this file" / "the
     // selection" to what's open and knows where the code lives instead of asking.
     // Read fresh each turn; awaited so git is resolved on the very first turn.
-    const editorCtx = editorContextDirective(await getEditorContextLive());
+    const editorCtx = await getEditorContextLive();
     // The PLATFORM context — strategy (OKRs), the ticket PRD, project + agent governance,
     // durable project memory and prior Evermind lessons — from the api's ONE
     // `ContextSource`. This is the block that brings the IDE agent up to the cloud
@@ -123,26 +121,21 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost:
       serverChatId,
       projectId: activeProject?.id,
     }).catch(() => undefined);
-    const platformContext = selectedProject
-      ? await fetchRunContextSection(ctx.secrets, selectedProject.id, {
-          ...(serverChatId != null ? { scope: `chat:${serverChatId}` } : {}),
-          query: request.prompt,
-        })
-      : "";
-    const messages: ChatMessage[] = [
-      ...buildSystemMessages(
-        root,
-        await getGroundingWithHistory(root),
-        editorCtx,
-        limbicBlock,
-        selectedProject,
-        platformContext,
-      ),
-    ];
+    // The opening prompt is built from DATA, exactly as the panel's is (`assembleOpening`): the host adds the gates, the rules and the
+    // run context (strategy / PRD / project memory) it owns; this turn sends only what it knows.
+    const grounding = await getGroundingWithHistory(root);
+    const opening: BrainRunOpening = {
+      hasWorkspace: !!root,
+      ...(grounding ? { grounding } : {}),
+      ...(editorCtx ? { editorContext: editorCtx } : {}),
+      ...(selectedProject ? { project: selectedProject } : {}),
+      ...(limbicBlock ? { limbic: limbicBlock } : {}),
+    };
     // Reconstruct prior turns from the native chat history.
+    const seed: ChatCompletionMessage[] = [];
     for (const turn of context.history) {
       if (turn instanceof vscode.ChatRequestTurn) {
-        messages.push({ role: "user", content: turn.prompt });
+        seed.push({ role: "user", content: turn.prompt });
       } else if (turn instanceof vscode.ChatResponseTurn) {
         let text = "";
         for (const part of turn.response) {
@@ -153,7 +146,7 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost:
             text += value;
           }
         }
-        if (text) messages.push({ role: "assistant", content: text });
+        if (text) seed.push({ role: "assistant", content: text });
       }
     }
 
@@ -194,7 +187,6 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost:
       cancelled: () => token.isCancellationRequested,
     }).catch(() => "");
     const runChatId = brainChatId;
-    const { systemPrompt, seed } = splitSystemPrompt(messages);
     const referenced = await referencedReady;
     if (token.isCancellationRequested) return {};
     // The restart-recovery journal (G22): surface a run of THIS chat the previous editor session left in flight (marked
@@ -223,9 +215,13 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost:
       host: runHost,
       spec: {
         chatId: runChatId,
-        systemPrompt,
+        // No prompt text: `assembleOpening` builds the opening from `opening` (the panel's path).
+        systemPrompt: "",
+        opening,
         seed,
-        userTurn: referenced ? `${request.prompt}\n\n${referenced}` : request.prompt,
+        // The person's own words: the persisted row, the route and PreFetch read these. The `#file` references ride the turn context.
+        userTurn: request.prompt,
+        ...(referenced ? { turnContext: referenced } : {}),
         projectId: activeProject?.id ?? null,
         chatMode: "work",
         autoApprove: permissionMode === "acceptEdits",

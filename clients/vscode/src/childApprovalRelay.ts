@@ -34,8 +34,12 @@ export function createChildApprovalRelay(deps: ChildApprovalRelayDeps) {
   const asking = new Map<number, Pending>();
 
   return {
-    register(rootChatId: number, approve: ChildApprover): void {
+    /** Returns the unregister: it removes this approver only (a newer one for the chat stays), so a finished turn's modal never answers a later run's pause. */
+    register(rootChatId: number, approve: ChildApprover): () => void {
       approvers.set(rootChatId, approve);
+      return () => {
+        if (approvers.get(rootChatId) === approve) approvers.delete(rootChatId);
+      };
     },
     describeWith(key: number, describe: (name: string, args: unknown, evidence?: string) => NativeApprovalRequest): void {
       describers.set(key, describe);

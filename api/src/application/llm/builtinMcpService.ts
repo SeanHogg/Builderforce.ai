@@ -34,6 +34,7 @@ import { CHAT_DIAGNOSTICS_TOOLS } from './chatDiagnosticsToolCatalog';
 import { REPLAY_TOOLS } from './replayToolCatalog';
 import { AGENT_PERSONA_TOOLS } from './agentPersonaToolCatalog';
 import { APP_BLUEPRINT_TOOLS } from './appBlueprintToolCatalog';
+import { APP_MANIFEST_TOOLS } from './appManifestToolCatalog';
 import { RUNTIME_PREVIEW_TOOLS } from './runtimeToolCatalog';
 import { SKILL_LIBRARY_TOOLS } from './skillLibraryToolCatalog';
 import { invalidateSkillAssignmentCaches } from '../skills/skillAssignmentCache';

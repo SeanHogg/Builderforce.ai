@@ -16,6 +16,7 @@ import type { RunWindowSources } from '../windowFit/modelWindow';
 import type { OnDeviceTasks } from '../onDevice/onDeviceTasks';
 import type { RunKnowledgeLog } from '@builderforce/agent-tools';
 import type { ServedRead } from './hostRunContext';
+import type { BrainRunOpening } from './openingSections';
 import type { PackageDirProbe } from '../handOffParallelism';
 import type { PrefetchPort } from '@builderforce/prefetch';
 import type { ModelPreflightResult } from '@builderforce/agent-run';
@@ -125,6 +126,14 @@ export interface BrainRunPersistence {
 /** Everything a single run needs, captured at start time (survives navigation). */
 export interface BrainRunRequest {
   resolvedSystemPrompt: string;
+  /**
+   * DATA the run's opening prompt is built from (`openingSections.ts`): the editor surface's
+   * persona / project / editor context / composer switches / limbic text, and the host's
+   * governance gates, workspace rules and grounding map. A host that sets this sends NO
+   * prompt text for them; `resolvedSystemPrompt` then holds only what it alone says
+   * (a sub-agent's role brief, an audit briefing). Absent ⇒ `resolvedSystemPrompt` is used as is.
+   */
+  opening?: BrainRunOpening;
   /**
    * The run's record of what it did and read (`@builderforce/agent-tools`
    * `run-knowledge`). A host that commits the run's code map at the end passes its own

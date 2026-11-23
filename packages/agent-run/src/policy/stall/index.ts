@@ -61,7 +61,7 @@ import { ANNOUNCED_DELIVERABLE_STEER, announcesDeliverable } from "@builderforce
 import type { StallState } from "../../contract.js";
 import type { DeliveryLedger } from "../../surface.js";
 import { walkLadder, walkLadderAsync } from "./ladder.js";
-import type { PolicyContext, StallDecision, StallHook } from "../hooks.js";
+import type { PolicyContext, StallDecision, StallHook, SynthesisWhy } from "../hooks.js";
 
 // ── The re-prompt budget (WS2b's slice of the run) ───────────────────────────
 //
@@ -116,6 +116,15 @@ export const FORCED_SYNTHESIS_PROMPT =
   "Now write your reply to the team AS the agent: plain prose, first person, no tool calls. " +
   "Summarise what you found or did.";
 
+/**
+ * The forced closing prompt of a run the consecutive-failure breaker stopped: its last `streak` tool calls all failed and it
+ * never wrote a final answer. The model MUST answer in prose from what it already gathered, so the person reads WHAT kept
+ * failing and what is needed instead of an error.
+ */
+export function failureStreakSynthesisPrompt(streak: number): string {
+  return `This turn was stopped because your last ${streak} tool calls all failed. Do NOT call any more tools. Answer the user now, in prose, using what you have already gathered — say what you completed, quote what the failing calls answered, and state plainly what is blocking you and what you need (a different argument, a permission, a decision) so the next turn can succeed.`;
+}
+
 // ── The hook ─────────────────────────────────────────────────────────────────
 
 /**
@@ -137,7 +146,7 @@ export const stallHook = {
       // an explained stop) is spent only once the rungs are clear.
       const first = narratesFirst(delivery) ? narrationRecover(ctx, "nudge") : undefined;
       if (first) return first;
-      const owed = walkLadder(ctx, delivery);
+      const owed = ctx.finishing ? undefined : walkLadder(ctx, delivery);
       if (owed || delivery.owns?.narration) return owed;
     }
     return narrationRecover(ctx) ?? deliverableRecover(ctx);
@@ -149,7 +158,7 @@ export const stallHook = {
     if (delivery) {
       const first = narratesFirst(delivery) ? narrationRecover(ctx, "nudge") : undefined;
       if (first) return first;
-      const owed = await walkLadderAsync(ctx, delivery);
+      const owed = ctx.finishing ? undefined : await walkLadderAsync(ctx, delivery);
       if (owed || delivery.owns?.narration) return owed;
     }
     return narrationRecover(ctx) ?? deliverableRecover(ctx);
@@ -179,7 +188,10 @@ export const stallHook = {
    * only called tools, a budget ran out, a breaker tripped) gets ONE bounded extra call
    * with this prompt and no tools, so the agent always answers (`brain/agentReplyLoop.ts`).
    */
-  synthesis(ctx: PolicyContext): string | null {
+  synthesis(ctx: PolicyContext, why?: SynthesisWhy): string | null {
+    // A surface whose closing turn is only for a run the failure breaker stopped (`StallStyle.failureSynthesis`): the prompt names
+    // the streak (what completed, what the failing calls answered, what blocks the run); any other ending forces no extra call.
+    if (ctx.ports?.delivery?.stall?.failureSynthesis) return why?.failureStreak !== undefined ? failureStreakSynthesisPrompt(why.failureStreak) : null;
     // The team-reply prompt is for an agent that speaks to a team. A surface with a ledger
     // composes its closing answer from what the board holds, so it forces no extra call.
     if (ctx.ports?.delivery?.owns?.synthesis) return null;

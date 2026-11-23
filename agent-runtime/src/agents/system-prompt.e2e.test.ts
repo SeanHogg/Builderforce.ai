@@ -559,6 +559,19 @@ describe("buildSubagentSystemPrompt", () => {
     expect(prompt).toContain("CANNOT spawn further sub-agents");
   });
 
+  it("regression: keeps the session child's channel-safety rules and output format", () => {
+    for (const [childDepth, owner] of [[1, "the main agent"], [2, "the parent orchestrator"]] as const) {
+      const prompt = buildSubagentSystemPrompt({ childSessionKey: "agent:main:subagent:abc", task: "t", childDepth, maxSpawnDepth: 2 });
+      expect(prompt).toContain("**Don't initiate** - No heartbeats, no proactive actions, no side quests");
+      expect(prompt).toContain("**Be ephemeral**");
+      expect(prompt).toContain(`NO user conversations (that's ${owner}'s job)`);
+      expect(prompt).toContain("NO cron jobs or persistent state");
+      expect(prompt).toContain(`NO pretending to be ${owner}`);
+      expect(prompt).toContain("## Output Format");
+      expect(prompt).toContain("What you accomplished or found");
+    }
+  });
+
   it("uses 'parent orchestrator' label for depth-2 agents", () => {
     const prompt = buildSubagentSystemPrompt({
       childSessionKey: "agent:main:subagent:abc:subagent:def",

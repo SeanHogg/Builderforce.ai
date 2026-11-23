@@ -57,6 +57,8 @@ interface Turn {
   host?: (host: ParticipantHost) => ParticipantHost;
   signal?: AbortSignal;
   chatId?: number;
+  /** Overrides of the run's spec (the turn's own words, what the person attached). */
+  spec?: Partial<Parameters<typeof runViaHost>[0]["spec"]>;
   alreadyRunning?: string;
   onModelFallback?: (from: string, reason?: string) => void;
 }
@@ -90,6 +92,7 @@ async function runTurn(t: Turn) {
       autoApprove: t.autoApprove ?? true,
       evermind: false,
       wakeable: false,
+      ...t.spec,
     },
     approve: async (req) => {
       approvals.push(req);
@@ -252,7 +255,7 @@ describe("the host's announcements for this chat", () => {
       stop: () => undefined,
       isBusy: () => false,
       attach: (s: never) => { sink = s; return () => { sink = undefined; }; },
-      registerApprover: () => undefined,
+      registerApprover: () => () => undefined,
       clearError: () => undefined,
     } as unknown as ParticipantHost;
   }
@@ -272,6 +275,49 @@ describe("the host's announcements for this chat", () => {
     expect(fallbacks).toEqual([["gpt-x", "rate limited"]]);
     expect(log.toolResults).toEqual([{ label: "edit a.ts", ok: false }]);
     expect(log.errors).toEqual(["could not start"]);
+  });
+});
+
+describe("a turn with #file references", () => {
+  it("regression: the persisted user row and the route's text are the person's words only; the references reach the model as turn context", async () => {
+    const persisted: string[] = [];
+    const asked: string[] = [];
+    const { sent } = await runTurn({
+      script: [{ text: "Done." }],
+      spec: { userTurn: "what does this file do?", turnContext: "### Referenced file `src/a.ts`
+export const A = 1;" },
+      ports: {
+        persistence: { sendMessages: async (_chatId: number, messages: Array<{ role: string; content: unknown }>) => {
+          for (const m of messages) if (m.role === "user") persisted.push(String(m.content));
+          return transientRunPersistence().sendMessages(_chatId, messages as never);
+        } } as never,
+        prefetch: answerFunctionPort(async (q) => { asked.push(q); return undefined; }),
+      },
+    });
+    expect(persisted.join("
+")).toContain("what does this file do?");
+    expect(persisted.join("
+")).not.toContain("Referenced file");
+    expect(asked).toEqual(["what does this file do?"]);
+    expect(JSON.stringify(sent[0])).toContain("Referenced file");
+  });
+});
+
+describe("the turn's approver", () => {
+  it("regression: is unregistered when the turn ends, so a later panel run on the chat does not pop the native modal", async () => {
+    const live = new Set<unknown>();
+    await runTurn({
+      script: [{ text: "Done." }],
+      host: (host) => ({
+        ...host,
+        registerApprover: (id: number, approve: Parameters<ParticipantHost["registerApprover"]>[1]) => {
+          const unregister = host.registerApprover(id, approve);
+          live.add(approve);
+          return () => { live.delete(approve); unregister(); };
+        },
+      }),
+    });
+    expect(live.size).toBe(0);
   });
 });
 

@@ -30,7 +30,7 @@ import type {
   ToolSchema,
 } from "@builderforce/agent-tools";
 import type { CostLeverId } from "@builderforce/cost-levers";
-import type { RunPolicyEvent, RunPolicyOptions, RunPolicyState } from "@builderforce/run-policy";
+import type { RunPolicyEvent, RunPolicyOptions, RunPolicyState, TurnRequest } from "@builderforce/run-policy";
 import type { EntryPoint } from "@builderforce/learned-routing";
 import type { ShipPolicy } from "@builderforce/run-guards";
 import type { DeliveryLedger, PlatformTools } from "./surface.js";
@@ -107,6 +107,11 @@ export interface RunPolicy {
   stopWords?: false;
   inference: 'local-only' | 'hybrid' | 'specific';
   verify: 'declared-checks' | 'branch-ci' | 'none';
+  /**
+   * The run has no verify STAGE: a finish the gates block, or a rung that sends the answer back, does not move the run to the review
+   * model / verify phase (a quick-routed run ends on its coding pass). `openRun` sets it from the route's `skipsVerify`.
+   */
+  skipVerifyStage?: true;
   signoff?: { roleKey: string; laneKey?: string };   // finish blocked until signed off
   approvalGates: PolicyGate[];                        // in-run acts needing an approver — reuse @builderforce/agent-tools spec.ts:118
   delegation: { requested: boolean; readsBeforeNudge: number };  // requested = asksForSubagents(prompt) unless declined; default nudge after 4 reads (`DEFAULT_READS_BEFORE_NUDGE`)
@@ -309,6 +314,11 @@ export interface RunView {
   policy(): RunPolicyState;
   /** Report an event to the model hand-off policy; the new state is the run's. */
   report(event: RunPolicyEvent): RunPolicyState;
+  /**
+   * What the model policy asks of the transport for a call the surface makes ITSELF (a retry inside a turn, a closing answer): the role, the model
+   * (absent after a released pin), strictness and the models routed around. The model policy's own `turnRouting`, so a surface never re-picks.
+   */
+  ask(hasTools: boolean): TurnRequest;
 }
 
 // ── The context pack ──────────────────────────────────────────────────────────

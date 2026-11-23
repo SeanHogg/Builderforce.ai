@@ -32,6 +32,7 @@ import { injectedTurnIdsOf, isInjectedTurnMetadata, withInjectedMeta } from './i
 import { useChatTranscript } from './useChatTranscript';
 import { usePendingTurns, type PendingTurn } from './usePendingTurns';
 import type { RunServedBy } from './runStore/runSnapshotTypes';
+import type { BrainRunOpening } from './runStore/openingSections';
 import { useAutoReplyTrailingTurn } from './useAutoReplyTrailingTurn';
 import { startsRun, unansweredTurnIndex } from './userTurnRuns';
 import type { BrainToolSpec, ContentPart } from './streamChatCompletion';
@@ -79,6 +80,8 @@ export interface UseBrainConversationOptions {
   projectId?: number | null;
   /** Extra system-prompt context (e.g. an IDE's open file + content). */
   extraSystem?: string;
+  /** The editor surface's data for the run's opening prompt — `BrainRunRequest.opening`. The surface sends no prompt text for these. */
+  opening?: BrainRunOpening;
   /** Override the system prompt entirely (e.g. a fixed Brain Storm persona). */
   systemPrompt?: string;
   /** Override the model (e.g. run the Brain as a specific assigned agent). */
@@ -348,6 +351,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     modality = 'designer',
     projectId,
     extraSystem,
+    opening,
     systemPrompt,
     model,
     modelStrict,
@@ -452,6 +456,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       return {
       entryPoint,
       resolvedSystemPrompt: fullSystemPrompt,
+      ...(opening ? { opening } : {}),
       tools: toolSpecs && toolSpecs.length > 0 ? toolSpecs : undefined,
       model,
       modelStrict,
@@ -480,7 +485,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       chatRoster,
       };
     },
-    [entryPoint, fullSystemPrompt, toolSpecs, model, modelStrict, routingMode, pickFallbackModel, windowSources, onDeviceTasks, maxTokens, reasoning, runTool, needsConfirm, answerQuestion, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId, chatMode, chatRoster],
+    [entryPoint, fullSystemPrompt, opening, toolSpecs, model, modelStrict, routingMode, pickFallbackModel, windowSources, onDeviceTasks, maxTokens, reasoning, runTool, needsConfirm, answerQuestion, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId, chatMode, chatRoster],
   );
 
   const bindContinuation = useContinuation(persistence, prepareRun);

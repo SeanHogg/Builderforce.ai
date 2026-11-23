@@ -67,7 +67,7 @@ import { authorizeLocalEndpoint } from "./localEndpointAuth";
 import { editorAccounts } from "./providerConnect";
 import { logLine } from "./errorReporter";
 import { declaredLocalModels, probeLocalFirstRuntimes, probeOnDeviceRuntimes, type LocalModelsConfig } from "./localModels";
-import { resolveEffectiveModelChoice } from "./modelState";
+import { resolveEffectiveModelChoice, type EffectiveModelChoice } from "./modelState";
 import { createNativeStream } from "./nativeGatewayStream";
 import { gatewayWorkspaceHeaders } from "./gatewayAuth";
 import { hostModelProvisioner } from "./hostBfi/provision";
@@ -83,13 +83,21 @@ export { routeCatalogEngine } from "./catalogEngine";
 export { onDeviceModelAvailable } from "./onDeviceTasks";
 
 /**
+ * The model a RUN asks for, decided once by the host (`modelState.resolveEffectiveModelChoice`, persona precedence included) and handed
+ * to both the run's request and its transport (`resolveModelRoute`'s `choice`).
+ */
+export function resolveRunModelChoice(secrets: vscode.SecretStorage, personaModel?: string): Promise<EffectiveModelChoice> {
+  return resolveEffectiveModelChoice(secrets, personaModel);
+}
+
+/**
  * Resolve the route for a turn. Safe to call signed out — every lookup underneath is
  * best-effort — which is what lets a caller ask BEFORE deciding whether sign-in is
  * required (see {@link routeRequiresSignIn}).
  */
 export async function resolveModelRoute(secrets: vscode.SecretStorage, request: RouteRequest = {}): Promise<ModelRoute> {
   const inferenceMode = currentInferenceMode();
-  const route = await resolveChoiceRoute(secrets, { ...(await resolveEffectiveModelChoice(secrets)), inferenceMode }, request);
+  const route = await resolveChoiceRoute(secrets, { ...(request.choice ?? (await resolveEffectiveModelChoice(secrets))), inferenceMode }, request);
   // The accounts this editor calls itself (Kimi), placed for the call's context (role, project, arc stage, agentic):
   // tried in Hybrid Auto, and for "use my connected accounts" (`byo_pool`) in Hybrid and Specific — never Local only.
   // The shared stream owns the rule; this only supplies them.

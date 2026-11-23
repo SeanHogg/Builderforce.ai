@@ -2,13 +2,13 @@
  * The run's ROUTE: held ONCE on the run context (`BrainRunContext.route`), decided by `routeRun` from `@builderforce/agent-run`
  * (the one place the pipeline route, the start phase and the quick model are decided — nothing here scores or classifies).
  * This only builds that decision's INPUT from the Brain's request and maps its result onto the per-call metadata, so the
- * preamble (policy start, usage metadata), the settle (verify skip) and `openRun` (`run/runPrepared.ts`) all read one value.
+ * preamble (usage metadata), the settle (verify skip) and `openRun` (`run/runPrepared.ts`, handed `{ input, decided }` so it never routes again) all read one value.
  *
  * Only a host that sends {@link BrainRunRequest.pipeline} is routed; a sub-agent (`lineage`) never is — it is a slice its
  * owner already planned, and keeps its `code` start.
  */
 
-import { routeRun, type RouteInput } from '@builderforce/agent-run';
+import { routeRun, type RouteDecision, type RouteInput } from '@builderforce/agent-run';
 import type { CompletionMetadata } from '../streamChatCompletion';
 import type { BrainRunRequest } from './runTypes';
 
@@ -35,6 +35,11 @@ export function routeInputOf(
 export function decideRoute(req: Parameters<typeof routeInputOf>[0], request: string, followUp: boolean): RunRoute {
   const input = routeInputOf(req, request, followUp);
   return { ...routeRun(input), input };
+}
+
+/** The decision alone (without the input it was decided from): what `openRun` takes as a route already decided. */
+export function decidedRoute(route: RunRoute): RouteDecision {
+  return { pipeline: route.pipeline, start: route.start, skipsVerify: route.skipsVerify };
 }
 
 /** The keys every call of a routed run carries — to the gateway's row and the device's. */

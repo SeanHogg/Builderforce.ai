@@ -8,8 +8,9 @@
  * it translates the agent's request into the stream's options, passes the streamed deltas to
  * the surface's live view, and translates the result back. It decides nothing about WHICH
  * model or WHAT to offer — those are the agent's (`policy/model`, `policy/tools`). WHEN a failed
- * request is retried is the run's model policy too; the transport only asks it, through the turn
- * session, and retries INSIDE the turn (a retry never spends a step).
+ * request is retried is the agent's model policy too (`recoverFailure`): the transport never re-asks. A failure it can classify
+ * reaches the agent as a `ModelTransportFailure` (`transportFailure.ts`, made by the turn session) and the agent decides whether the
+ * run retries on another model or the turn is lost.
  * The turn's `max_tokens` is the surface's Effort (`TurnSession.maxTokens`), not the policy's role cap.
  *
  * Also answers the one question the agent asks of a transport: `window(model)` — the model's context
@@ -33,14 +34,6 @@ import { heldContextWindow, type RunWindowSources } from '../windowFit/modelWind
 export type BrainCallDefaults = Partial<
   Pick<StreamChatOptions, 'routingMode' | 'modelStrict' | 'reasoning' | 'metadata' | 'role' | 'excludeModels' | 'prompt_cache_key' | 'conversationKey'>
 >;
-
-/** What a policy-routed retry of a failed attempt asks differently: the model the policy now names, and who it must not route to. */
-export interface TurnRetry {
-  model?: string;
-  strict?: boolean;
-  role?: string;
-  excludeModels?: readonly string[];
-}
 
 /**
  * One turn's session with the surface's live view and record: the stream's handlers, the call's extra metadata, the window
@@ -66,14 +59,12 @@ export interface TurnSession {
   call?: BrainCallDefaults;
   /** Run the stream inside the surface's live-turn window (the serving model is recorded while it is open). */
   around?<T>(stream: () => Promise<T>): Promise<T>;
-  /**
-   * An attempt failed: when the run's model policy routes around that failure, the retry to make INSIDE this turn - the same menu,
-   * the same brief, nothing forced spent; undefined when the failure ends the turn.
-   */
-  recover?(error: unknown): Promise<TurnRetry | undefined> | TurnRetry | undefined;
   /** The turn answered (it is kept - recorded - only once the agent goes on with it). */
   completed(result: StreamChatResult): Promise<void> | void;
-  /** The turn failed: record it and hand back the error to throw. */
+  /**
+   * The request failed: hand back the error to throw. A provider failure the run's model policy may route around comes back as a
+   * `ModelTransportFailure` the agent decides on (its record waits for that decision); any other failure is recorded now and rethrown as it is.
+   */
   failed(error: unknown): unknown;
 }
 
@@ -193,27 +184,17 @@ export function brainModelTransport(deps: BrainModelTransportDeps): ModelTranspo
         );
         return session.around ? session.around(ask) : ask();
       };
-      let asked = request;
       let result: StreamChatResult;
       try {
         result = await attempt(request);
       } catch (e) {
         // A Stop rejects the stream: that is the run's, not a failed turn.
         if (signal?.aborted) throw e;
-        // The run's model policy decides HERE whether the failure is routed around: ONE retry inside this turn, so the
-        // agent never sees the failure and spends no step (and no forced turn) on it.
-        const retry = await session.recover?.(e);
-        if (!retry) throw session.failed(e);
-        asked = { ...request, model: retry.model, strict: retry.strict, role: retry.role, excludeModels: retry.excludeModels };
-        try {
-          result = await attempt(asked);
-        } catch (retryError) {
-          if (signal?.aborted) throw retryError;
-          throw session.failed(retryError);
-        }
+        // Whether the failure is routed around is the agent's decision (`recoverFailure`), never the transport's: no re-ask here.
+        throw session.failed(e);
       }
       await session.completed(result);
-      return toCompletion(result, asked.model);
+      return toCompletion(result, request.model);
     },
     window: (model) => heldContextWindow(model, windows),
   };

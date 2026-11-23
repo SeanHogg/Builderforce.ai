@@ -1,14 +1,14 @@
 /**
  * Which models this tenant may run, which one is in force, and WHO PAYS for it —
  * everything the `/` menu needs to both SHOW and CHANGE the model without leaving the
- * panel — plus the stall-failover selector the run loop reads over the same surface.
+ * panel (the host's `nextFallbackModel` is the one stall-failover picker; this only supplies its surface).
  *
  * Lifted out of the chat surface: it is a pure function of `init` and the bearer
  * fetch, and the surface only consumes its results.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { loadGatewayModelOptions, nextFallbackModel, type GatewayModelOptions } from '@seanhogg/builderforce-brain-embedded';
+import { loadGatewayModelOptions, type GatewayModelOptions } from '@seanhogg/builderforce-brain-embedded';
 import {
   composerCatalogLoaded,
   modelSelectionFrom,
@@ -62,13 +62,6 @@ export function useComposerModels(
     post('model.set', selection.mode === 'model' ? { mode: 'model', model: selection.model } : { mode: selection.mode });
   }, []);
 
-  // Tool-call failover: the SHARED selector over the surface above, so "which model
-  // next" is decided in one place for every host.
-  const pickFallbackModel = useCallback(
-    (tried: readonly string[]) => nextFallbackModel(modelSurface, tried),
-    [modelSurface],
-  );
-
   // A failed read resolves to that same empty shape — entitlement is still UNKNOWN then,
   // so it counts as not loaded (the menu must not claim the plan forbids choosing): the
   // shared rule Rovr's options read too.
@@ -76,7 +69,7 @@ export function useComposerModels(
 
   // One identity until something moved: the composer is memoized on it.
   return useMemo(
-    () => ({ catalogLoaded, modelSurface, composerModels, modelSelection, chooseModel, pickFallbackModel }),
-    [catalogLoaded, modelSurface, composerModels, modelSelection, chooseModel, pickFallbackModel],
+    () => ({ catalogLoaded, modelSurface, composerModels, modelSelection, chooseModel }),
+    [catalogLoaded, modelSurface, composerModels, modelSelection, chooseModel],
   );
 }

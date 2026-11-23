@@ -16,7 +16,6 @@
 import type { BrainMessage } from '../types';
 import type { ModelRequest } from '@builderforce/agent-run';
 import { parseToolArgs } from '@builderforce/agent-loop';
-import { nextTurn } from '@builderforce/run-policy';
 import type { BrainToolSpec, CompletionMetadata, StreamChatResult } from '../streamChatCompletion';
 import { StreamInterruptedError } from '../streamChatCompletion';
 import { turnMaxTokens } from '../effort';
@@ -24,7 +23,7 @@ import { callMemoryEffect } from '../memorySavings';
 import { coderReaskTrace, providerFailureTrace, transportRetryTrace } from '../runPolicyTraces';
 import { emit, nowIso, nowMs, pushTrace } from '../runStore/runCells';
 import { stampOncePerCall } from '../runStore/compactionSaved';
-import { reportToPolicy, type BrainRunContext } from '../runStore/brainRunContext';
+import { policyAsk, reportToPolicy, type BrainRunContext } from '../runStore/brainRunContext';
 import { asLiveTurn } from '../runStore/turnPersistence';
 import { recordTurn } from '../runStore/turnRecorder';
 import { commitTurnNarration, terminalAskReply, type TurnCall } from '../runStore/turnToolCalls';
@@ -148,7 +147,7 @@ export function brainTurnObserver(run: BrainRunContext, savedTokens: () => numbe
           pushTrace(c, transportRetryTrace(nowIso(), t.step, outcome, (error as Error).message));
           t.live.restart();
           // Re-read AFTER the event that caused the retry: the policy now asks for what it says.
-          const ask = nextTurn(run.policy, { hasTools: tools.length > 0 });
+          const ask = policyAsk(run, tools.length > 0);
           t.role = ask.role;
           return { ...(ask.model ? { model: ask.model } : {}), strict: ask.strict, role: ask.role, excludeModels: ask.excludeModels };
         },

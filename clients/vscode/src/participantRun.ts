@@ -48,7 +48,7 @@ export async function runViaHost(opts: ParticipantRunOptions): Promise<boolean> 
   }
   if (signal.aborted) return false;
 
-  host.registerApprover(chatId, opts.approve);
+  const unregisterApprover = host.registerApprover(chatId, opts.approve);
   const relayText = createStreamRelay(events);
   // The in-progress tool line: the run store's LIVE step (`snapshot.activity`, what the panel's activity indicator renders), shown
   // once per step - the host itself only announces a tool when it has finished (`run.tool`).
@@ -84,6 +84,8 @@ export async function runViaHost(opts: ParticipantRunOptions): Promise<boolean> 
     relayText(getRunSnapshot(chatId));
     unsubscribe();
     detach();
+    // This turn's approver goes with it: the owner's key answers it now, and a later panel run on this chat must reach its own confirm.
+    unregisterApprover();
     signal.removeEventListener("abort", onAbort);
   }
   if (signal.aborted) return true;

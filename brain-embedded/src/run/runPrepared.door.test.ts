@@ -29,7 +29,9 @@ describe('runPrepared opens the run through openRun', () => {
 
     expect(seen.inputs).toHaveLength(1);
     const input = seen.inputs[0]!;
-    expect(input.route).toMatchObject({ request: expect.any(String), routing: { mode: 'auto' } });
+    // The route was decided once in the preamble: openRun takes it as `{ input, decided }` and never routes again.
+    expect(input.route.input).toMatchObject({ request: expect.any(String), routing: { mode: 'auto' } });
+    expect(input.route.decided).toHaveProperty('skipsVerify');
     expect(input.policy.entryPoint).toBeTruthy();
     expect(input.surface.finish.openWork).toBeTypeOf('function');
     expect(input.surface.closeOut).toBeTypeOf('function');

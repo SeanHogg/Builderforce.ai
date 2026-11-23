@@ -32,6 +32,9 @@ importers:
       '@seanhogg/builderforce-webcontainers':
         specifier: ^2026.11.11
         version: 2026.11.11(@typescript/typescript6@6.0.2)
+      '@seanhogg/builderforce-webcontainers-core':
+        specifier: ^2026.11.11
+        version: 2026.11.11(@typescript/typescript6@6.0.2)
       drizzle-orm:
         specifier: ^0.45.4
         version: 0.45.4(@cloudflare/workers-types@4.20260313.1)(@electric-sql/pglite@0.5.15)(@neondatabase/serverless@0.10.4)(@types/pg@8.11.6)(gel@2.2.0)

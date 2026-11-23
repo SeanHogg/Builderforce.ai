@@ -67,6 +67,22 @@ export function traceStepFor(event: RunEvent, ts: string): BrainTraceEvent | nul
       };
     case 'stall.recovered':
       return stallTraceStep(event, ts);
+    case 'run.routed':
+      return {
+        ts,
+        category: 'message',
+        label: 'run.routed',
+        args: { step: event.step, route: event.route, score: event.score },
+        result: `The run was routed ${event.route} (route score ${event.score}).`,
+      };
+    case 'finish.close_out_error':
+      return {
+        ts,
+        category: 'message',
+        label: 'finish.close_out_error',
+        args: { step: event.step, reason: event.reason },
+        result: `The run's close-out failed before the finish gate (${event.reason}); the finish went on without it.`,
+      };
     default:
       return null;
   }

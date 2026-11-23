@@ -32,13 +32,13 @@ export function recoverProviderFailure(
 
   // The provider BROKE (not a stall): the model is unavailable, so a slower proven model may take over.
   const to = handOffToProven(ctx, ledger, failedModel, true);
-  if (to) return { kind: "retry", ...(wording ? { note: wording.handoff(to) } : {}) };
+  if (to) return { kind: "retry", ...(wording?.handoff ? { note: wording.handoff(to) } : {}) };
 
   const next = reduceRunPolicy(ctx.state.model, failure);
   ctx.state.model = next;
   if (next.outcome.kind === "retry_turn") {
     wording?.rerouted?.({ ...(failedModel ? { model: failedModel } : {}), message, step: ctx.step, outcome: next.outcome });
-    return { kind: "retry", ...(wording ? { note: wording.reroute } : {}) };
+    return { kind: "retry", ...(wording?.reroute ? { note: wording.reroute } : {}) };
   }
   wording?.abandoned?.({ ...(failedModel ? { model: failedModel } : {}), message });
   return { kind: "fail" };

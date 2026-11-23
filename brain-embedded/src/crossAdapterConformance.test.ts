@@ -5,7 +5,7 @@
  *
  * The run goes through the PRODUCTION binding, not a harness of its own: `startRun` -> `prepareBrainRun` -> `runPrepared`,
  * started the way a host starts it (the parity harness, `run/parity/harness.ts`; the fake is the model stream,
- * the persistence and the host's tool port, the three things a host supplies). The trace is read by wrapping the one `runAgent` call.
+ * the persistence and the host's tool port, the three things a host supplies). The trace is read by wrapping the one `openRun` call.
  */
 
 import { describe, expect, it, vi } from 'vitest';
@@ -21,8 +21,8 @@ vi.mock('@builderforce/agent-run', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@builderforce/agent-run')>();
   return {
     ...actual,
-    runAgent: (input: Parameters<typeof actual.runAgent>[0]) =>
-      actual.runAgent({
+    openRun: (input: Parameters<typeof actual.openRun>[0]) =>
+      actual.openRun({
         ...input,
         ports: {
           ...input.ports,

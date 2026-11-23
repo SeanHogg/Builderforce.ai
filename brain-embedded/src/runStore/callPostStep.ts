@@ -17,9 +17,8 @@ type Hooks = LoopHooks<ChatCompletionMessage>;
  *  it, and the tool pinned for later turns. */
 export function callPostStep(run: BrainRunContext): NonNullable<Hooks['afterDispatch']> {
   const { c, readCoverage, usedTools } = run;
-  return (call, result, row) => {
-    // Every call the model made, cache-answered or run — the progress detector judges both.
-    run.progress.observe(call.name, call.args, result);
+  return (call, _result, row) => {
+    // (The agent's A3 detector sees every call the model made, cache-answered or run, through its guards hook.)
     // THIS call's entry only: the calls of a read-only batch ran concurrently, and a sibling's entry is the sibling's.
     const pending = run.pending.take(call.id);
     if (pending?.kind === 'replay') {

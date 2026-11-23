@@ -7,7 +7,7 @@
  * Import from `./vscodeBridge`, which re-exports everything here.
  */
 
-import type { EditorContext } from '../../src/idePersona';
+import type { EditorContext } from '@seanhogg/builderforce-brain-embedded';
 import type { PendingChangeSet } from '../../src/gitChangeModel';
 import type { BrainIntent, InitData } from './bridgeTypes';
 import { handleFrame, request, subscribe } from './bridgeTransport';

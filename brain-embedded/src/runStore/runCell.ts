@@ -137,11 +137,11 @@ export interface RunCell {
    */
   deltaTitleCount: number | null;
   /**
-   * Set when `startRun`'s finally ran the deterministic close-out over the cell's final trace,
-   * so the close-out port (`deterministicFinish.ts` `closeOutPort`) — the closer for a run `startRun`
-   * never drives — stands down. Keeps the close-out single-writer across both paths.
+   * The verdict the run's ONE close-out left (`deterministicFinish.ts` `closeOutPort`, run by the kernel's finish policy):
+   * whether the finish condition held (shipped, verified, no placeholder, a linked ticket). The settle reads it - an
+   * empty-ask continuation must not start when it is true - and never closes out itself. Reset as a run begins.
    */
-  finishClosedOut: boolean;
+  closeOutFinished: boolean;
   /**
    * Index in `trace` of the CURRENT run's first event. The trace is a per-CHAT sliding
    * window that spans every run in the session, so any question about "what did THIS run
@@ -341,7 +341,7 @@ export function makeCell(): RunCell {
     authorModels: new Set<string>(),
     shipReviews: [],
     shipReviewRounds: [],
-    finishClosedOut: false,
+    closeOutFinished: false,
     snapshot: EMPTY_SNAPSHOT,
   };
 }

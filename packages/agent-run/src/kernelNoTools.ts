@@ -65,6 +65,10 @@ export function noToolCallsHook(run: KernelRun, deps: NoToolCallsDeps): NonNulla
     // judged the same way: no delivery rung sends its report back to a turn that offered nothing to act with.
     const finalTurn = run.selection?.final === true;
     if (finalTurn) pctx.tools = [];
+    // A FINISHING run ("make no more changes and run nothing") is never sent back for more work by a delivery rung: its record turns
+    // and its final report alike are judged by narration alone, and the surface is told what the rungs skipped when it is accepted.
+    const finishing = hooks.guards.isFinishing?.(pctx) === true;
+    if (finishing) pctx.finishing = true;
     // What the person (or a child) steered in while this turn was written comes first, before any judgement of the turn: a surface that
     // says so (`stall.steersFirst`) never spends a gate or a re-prompt on a turn a steer has already outdated, nor strands the steer.
     const steersFirst = ports.delivery?.stall?.steersFirst === true;
@@ -164,7 +168,7 @@ export function noToolCallsHook(run: KernelRun, deps: NoToolCallsDeps): NonNulla
       return { action: "continue" };
     }
     // A final turn the ladder never judged is the run's answer: the surface is told, so it can record what it did not ask.
-    if (finalTurn) await ports.delivery?.finalAccepted?.({ step: ctx.step, content: turn.content });
+    if (finalTurn || finishing) await ports.delivery?.finalAccepted?.({ step: ctx.step, content: turn.content });
     return { action: "finish", output };
   };
 }

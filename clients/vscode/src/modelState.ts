@@ -98,12 +98,19 @@ export function pickedChoice(): EffectiveModelChoice {
   return choiceOfPick(selected) ?? {};
 }
 
-export async function resolveEffectiveModelChoice(secrets: vscode.SecretStorage): Promise<EffectiveModelChoice> {
+/**
+ * THE decider of which model a turn asks for, and the ONLY place a persona's own model takes part (the webview sends its raw pick and the
+ * persona's model as data, never a resolved model): an explicit "this model" pick is strict and wins outright; otherwise an agent persona
+ * runs on ITS model (over Auto, the BYO pool, the project's Evermind and the configured default); otherwise the rest of the chain.
+ */
+export async function resolveEffectiveModelChoice(secrets: vscode.SecretStorage, personaModel?: string): Promise<EffectiveModelChoice> {
   if (selected?.mode === "model" && selected.model) {
     const model = await entitled(secrets, selected.model);
     return (model ? choiceOfPick(selected, model) : undefined) ?? routingFor({ mode: "auto" });
   }
   const explicit = choiceOfPick(selected);
+  const persona = await entitled(secrets, personaModel);
+  if (persona) return { ...explicit, model: persona };
   if (explicit) return explicit;
   const project = getSelectedProject();
   if (project) {

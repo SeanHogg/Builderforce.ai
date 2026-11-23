@@ -7,6 +7,9 @@
 import type { DifficultyFeatures } from "@builderforce/difficulty-router";
 import type { TierLadder } from "@builderforce/run-policy";
 import type { RunState } from "../../contract.js";
+import type { ProgressBinding } from "./forced/types.js";
+
+export type { ProgressBinding };
 
 /** Which levers this run has on. The host resolves them through `@builderforce/cost-levers`. */
 export interface GuardLevers {
@@ -45,7 +48,10 @@ export interface GuardPorts {
     /** The run's role's tier ladder (D1's cascade moves along it). */
     ladder?: TierLadder;
   };
-  /** The model's state, read and replaced by A3's escalation / D1's cascade. */
+  /**
+   * The model's state, read and replaced by A3's escalation / D1's cascade. Absent ⇒ the hook binds the run's own
+   * `state.model` (when a tier ladder is bound), so a surface almost never supplies it.
+   */
   model?: {
     get(): RunState["model"];
     set(next: RunState["model"]): void;
@@ -54,14 +60,20 @@ export interface GuardPorts {
   resolvedModel?: () => string | undefined;
   /** The run's role's tier ladder (A3's escalation and D1's cascade move along it). */
   ladder?: () => TierLadder;
-  /** D2 features of the step about to be judged (the cascade keeps the action type). */
-  features?: (step: number) => DifficultyFeatures;
-  /** Record an escalation / progress-check event for the run's timeline. */
+  /** D2 features of the step about to be judged (the cascade keeps the action type). The hook hands the run's `state` (its transcript). */
+  features?: (step: number, state?: RunState) => DifficultyFeatures;
+  /** Record an escalation / progress-check event for the run's timeline; `at.step` is the kernel step the event belongs to (told only to a surface that binds {@link GuardPorts.progress}`.turns`). */
   onEvent?: (event: {
     tool: string;
     detail: Record<string, unknown>;
     result: string;
-  }) => Promise<void> | void;
+  }, at?: { step: number }) => Promise<void> | void;
+  /**
+   * A3's detector bound to the surface's own facts (which calls only read, which mutate, what counts as platform progress) and the
+   * forced-turn ladder's vocabulary. With `turns` set, a trip's escalation or finish becomes a FORCED TURN the guards decide
+   * (`GuardsHook.forcedTurn`), instead of a tier escalation / a tools-free final turn. Absent ⇒ the generic handling.
+   */
+  progress?: ProgressBinding;
 }
 
 /** The guard levers this run's policy switched on (`RunPolicy.levers`, `@builderforce/cost-levers` ids). */

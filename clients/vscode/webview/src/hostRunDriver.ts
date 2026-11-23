@@ -44,8 +44,10 @@ export interface HostRunContext {
   chatId: number | null;
   /** The Auto-mode switch — the host's confirm gate follows it live, for this chat. */
   autoApprove: boolean;
-  /** The picker's model surface, for the host's stall failover. */
+  /** The picker's model surface, for the host's stall failover (the host's `nextFallbackModel` is the ONE failover picker). */
   modelSurface: ModelFallbackSurface | null;
+  /** The agent persona's own model, as DATA: whether it applies is the HOST's decision (`modelState.resolveEffectiveModelChoice`). */
+  personaModel?: string;
 }
 
 let context: HostRunContext = { chatId: null, autoApprove: false, modelSurface: null };
@@ -80,6 +82,7 @@ function serialize(chatId: number, req: BrainRunRequest): Record<string, unknown
   return {
     chatId,
     systemPrompt: req.resolvedSystemPrompt,
+    opening: req.opening,
     model: req.model,
     modelStrict: req.modelStrict,
     routingMode: req.routingMode,
@@ -96,6 +99,7 @@ function serialize(chatId: number, req: BrainRunRequest): Record<string, unknown
     autoApprove: context.autoApprove,
     evermind: req.evermind != null,
     modelSurface: context.modelSurface,
+    personaModel: context.personaModel,
   };
 }
 

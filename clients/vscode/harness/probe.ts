@@ -41,7 +41,6 @@ import {
 import { TOOL_DEFS } from '../src/fileTools';
 import { authedFetch } from '../webview/src/authedFetch';
 import { fetchPlanSnapshot } from '../webview/src/planSnapshot';
-import { buildIdeSystemPrompt } from '../webview/src/systemPrompt';
 import { buildTranscript } from '../webview/src/transcript';
 
 export interface ProbeOptions {
@@ -205,7 +204,8 @@ export async function probe(opts: ProbeOptions): Promise<ProbeResult> {
 
   try {
     await startRun(chatId, {
-      resolvedSystemPrompt: buildIdeSystemPrompt({ hasWorkspace: true }),
+      resolvedSystemPrompt: '',
+      opening: { hasWorkspace: true },
       tools: toolSpecsFor(actions),
       ...(opts.model ? { model: opts.model } : {}),
       pickFallbackModel: (tried) => nextFallbackModel(modelSurface ?? null, tried),

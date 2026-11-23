@@ -83,7 +83,7 @@ export const RUN_GROUNDING_BUDGET_MS = 3_000;
  * carries on and `onLate` fires once it lands, so the caller can re-read the now-memoised
  * value. What a late caller gets meanwhile is `late`: the rescan's map alone (`"map"`, the
  * default), or `undefined` (`"nothing"`) for a caller that already holds a fuller map and
- * keeps it when handed nothing (the run port: `replaceWorkspaceMap(prompt, undefined)`).
+ * keeps it when handed nothing (the run port: the run's opening keeps the map the panel sent, `brainRunHost`).
  */
 export async function stableGroundingWithin(
   root: string | undefined,

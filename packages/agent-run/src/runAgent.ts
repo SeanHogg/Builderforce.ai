@@ -40,6 +40,7 @@ import { reduceRunPolicy } from "@builderforce/run-policy";
 
 import { RUN_CANCELLED_REASON, type ContextPack, type RunMessage, type RunOutcome } from "./contract.js";
 import { composePolicyHooks } from "./policy/index.js";
+import { turnRouting } from "./policy/model/index.js";
 import { portInterruptWatch } from "./policy/steering/index.js";
 import { announceRow, appendRows, currentView, emit, policyContext, type RunAgentInput } from "./runContext.js";
 import { asMessages, freshState, newApprovalId, resumeState } from "./runState.js";
@@ -91,6 +92,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunOutcome> {
   ports.attach?.({
     policy: () => state.model,
     report: (event) => (state.model = reduceRunPolicy(state.model, event)),
+    ask: (hasTools) => turnRouting(state.model, hasTools),
   });
 
   // The opening events of a run, emitted exactly once — when the run actually starts. A
@@ -176,7 +178,8 @@ export async function runAgent(input: RunAgentInput): Promise<RunOutcome> {
   if (loopResult.exhausted || (loopResult.finished && loopResult.ok && !loopResult.output.trim())) {
     let output: string | null;
     try {
-      output = await synthesizeFinal(input, state, hooks, transcript, pack, tally);
+      // A run the failure breaker stopped says so: the closing prompt names the streak (`StallStyle.failureSynthesis`).
+      output = await synthesizeFinal(input, state, hooks, transcript, pack, tally, loopResult.exhausted && loopResult.exhaustedBy === "failures" ? { failureStreak: loopResult.failureStreak } : {});
     } catch (err) {
       // Whatever escaped the synthesis turn settles the run the way any other port exception does: the cause rides only when the
       // surface says it is resumable (`synthesizeFinal` rethrows only those); anything else fails the run terminal.

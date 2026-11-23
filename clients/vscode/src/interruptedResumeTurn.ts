@@ -12,7 +12,7 @@
  * handle, label, owner, ticket, brief and report) are data, quoted as journaled. `{name}` placeholders in a label are
  * filled here. The ask also becomes the run's request text, so the run's recall is asked about THIS task.
  *
- * Pure (no `vscode`, no DOM, no host module): the webview imports it, as it imports `idePersona`.
+ * Pure (no `vscode`, no DOM, no host module): the webview imports it, as it imports `gitChangeModel`.
  */
 
 import type { InterruptedChildView, InterruptedRunResume } from "./interruptedRunTypes";

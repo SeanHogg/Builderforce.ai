@@ -10,19 +10,20 @@
  *      module's honest default;
  *   4. calls `runAgent`.
  */
-import type { RunOutcome, RunPolicy, RunState } from "./contract.js";
+import { RUN_CANCELLED_REASON, type RunOutcome, type RunPolicy } from "./contract.js";
 import { createCompactionHook, type CompactionHookOptions } from "./policy/compaction/index.js";
 import { createFinishHook, type FinishPorts } from "./policy/finish/index.js";
 import { createGuardsHook, type GuardPorts } from "./policy/guards/index.js";
 import { withShipGate, type PublishGatePort } from "./policy/guards/shipGate.js";
-import type { CompactionHook, FinishHook, GuardsHook, ModelHook, PolicyContext } from "./policy/hooks.js";
+import type { CompactionHook, FinishHook, ModelHook, PolicyContext } from "./policy/hooks.js";
 import { defaultPolicyModules, type PolicyModules } from "./policy/index.js";
 import { createVerifyHook, type VerifyPorts } from "./policy/verify/index.js";
-import { routeRun, type RouteInput } from "./route/routeRun.js";
-import { emit, type RunAgentInput } from "./runContext.js";
+import { routeRun, type RouteDecision, type RouteInput } from "./route/routeRun.js";
+import { currentView, emit, policyContext, type RunAgentInput } from "./runContext.js";
 import { runAgent } from "./runAgent.js";
+import { tapEvents } from "./tapEvents.js";
 
-export type { RouteInput } from "./route/routeRun.js";
+export type { RouteDecision, RouteInput } from "./route/routeRun.js";
 export type { PublishGatePort } from "./policy/guards/shipGate.js";
 
 /** What a surface supplies: ports only. Each is optional; absent ⇒ the module's honest default. */
@@ -33,77 +34,98 @@ export interface SurfacePorts {
    * Runs before the finish gate. A throw is traced (`finish.close_out_error`) and NEVER refuses the finish — the gate that
    * follows is the authority.
    */
-  closeOut?: (ctx: PolicyContext) => Promise<void>;
+  closeOut?: CloseOutPort;
   guards?: GuardPorts;
   verify?: VerifyPorts;
-  /** Summarizer options for the agent's compaction, or a surface's own fold. */
-  // TODO(ROADMAP 'One pipeline' item 6): the `{ hook }` form is transitional (the VSIX brainFold) — retire it once the fold is the agent's.
+  /**
+   * Summarizer options for the agent's compaction, or a surface's own fold. TRANSITIONAL EXCEPTION (1 of 2): the `{ hook }` form is the
+   * Brain's own fold and only `brain-embedded/src/run/runPrepared.ts` may pass it (`check:one-execution` enforces it) — retire it once the
+   * fold is the agent's (ROADMAP 'One pipeline' item 6).
+   */
   compaction?: CompactionHookOptions | { hook: CompactionHook };
-  /** The model preflight the run records before turn 1. */
+  /**
+   * The model preflight the run records before turn 1. TRANSITIONAL EXCEPTION (2 of 2): only `brain-embedded/src/run/runPrepared.ts` may
+   * pass it (`check:one-execution` enforces it) until the preflight is the agent's own.
+   */
   preflight?: ModelHook["preflight"];
   /** Refuse the model's raw publish calls under the run's ship policy (PRD 48 §4.2), reporting each refusal. */
   publishGate?: PublishGatePort;
-  /** Called with the run's live state whenever a guard hook runs, so the surface's guard ports can read it. */
-  onState?: (state: RunState) => void;
 }
 
 /** What a surface hands openRun: the run's input minus the modules, plus its ports and the facts to route by. */
 export interface OpenRunInput extends Omit<RunAgentInput, "modules"> {
   surface?: SurfacePorts;
-  route?: RouteInput;
+  /**
+   * The facts to route by, or a route a surface already DECIDED (`{ input, decided }`: the Brain decides once, up front, to size its
+   * turn budget by it). A decided route is used as handed — `routeRun` is not run again — and is traced as the same one `run.routed`.
+   */
+  route?: RouteInput | { input: RouteInput; decided: RouteDecision };
 }
 
-/** The guards hook that names the run's live state to the surface before every method runs. */
-function withStateBound(guards: GuardsHook, onState: (state: RunState) => void): GuardsHook {
-  const bound: Record<string, unknown> = {};
-  for (const [key, member] of Object.entries(guards)) {
-    bound[key] = typeof member === "function"
-      ? (ctx: PolicyContext, ...rest: unknown[]) => { onState(ctx.state); return (member as (...a: unknown[]) => unknown).call(guards, ctx, ...rest); }
-      : member;
+/**
+ * Which close-out this is. `finish`: the run reached the finish gate (upkeep AND the finish-only work: review, move to done).
+ * `settled`: the run ended WITHOUT passing the gate (failed, paused on a question, stopped by the breaker): the always-on upkeep
+ * only (attach/mint the ticket for late edits, advance in_progress) — never the finish-only work.
+ */
+export type CloseOutMode = "finish" | "settled";
+
+/** The run's close-out port: ONE per run, told which case it is. */
+export type CloseOutPort = (ctx: PolicyContext, mode: CloseOutMode) => Promise<void>;
+
+/** Run the port, tracing (never rethrowing) a failure: a close-out never refuses a finish or a settle. */
+async function runCloseOut(closeOut: CloseOutPort, ctx: PolicyContext, mode: CloseOutMode): Promise<void> {
+  try {
+    await closeOut(ctx, mode);
+  } catch (err) {
+    await emit(ctx.ports.events, { kind: "finish.close_out_error", step: ctx.step, reason: err instanceof Error ? err.message : String(err) });
   }
-  return bound as unknown as GuardsHook;
 }
 
-function withCloseOut(finish: FinishHook, closeOut: (ctx: PolicyContext) => Promise<void>): FinishHook {
+function withCloseOut(finish: FinishHook, closeOut: CloseOutPort, ran: { value: boolean }): FinishHook {
   return {
     ...finish,
     async gate(ctx) {
-      try {
-        await closeOut(ctx);
-      } catch (err) {
-        await emit(ctx.ports.events, { kind: "finish.close_out_error", step: ctx.step, reason: err instanceof Error ? err.message : String(err) });
-      }
+      ran.value = true;
+      await runCloseOut(closeOut, ctx, "finish");
       return finish.gate(ctx);
     },
   };
 }
 
 /** The ONE module set a surface's ports compose into. */
-function composeModules(surface: SurfacePorts): Partial<PolicyModules> {
+function composeModules(surface: SurfacePorts, ran: { value: boolean }): Partial<PolicyModules> {
   const modules: Partial<PolicyModules> = {};
   if (surface.finish || surface.closeOut) {
     const finish = createFinishHook(surface.finish);
-    modules.finish = surface.closeOut ? withCloseOut(finish, surface.closeOut) : finish;
+    modules.finish = surface.closeOut ? withCloseOut(finish, surface.closeOut, ran) : finish;
   }
-  if (surface.guards || surface.publishGate || surface.onState) {
-    let guards = withShipGate(createGuardsHook(surface.guards), surface.publishGate);
-    if (surface.onState) guards = withStateBound(guards, surface.onState);
-    modules.guards = guards;
-  }
+  if (surface.guards || surface.publishGate) modules.guards = withShipGate(createGuardsHook(surface.guards), surface.publishGate);
   if (surface.verify) modules.verify = createVerifyHook(surface.verify);
   if (surface.compaction) modules.compaction = "hook" in surface.compaction ? surface.compaction.hook : createCompactionHook(surface.compaction);
   if (surface.preflight) modules.model = { ...defaultPolicyModules().model, preflight: surface.preflight };
   return modules;
 }
 
-/** The policy with the route's start folded into its initial model policy (`modelStart`) and pins. */
-function routedPolicy(policy: RunPolicy, route: RouteInput, start: ReturnType<typeof routeRun>["start"]): RunPolicy {
+/**
+ * The policy with the route's start folded into its initial model policy (`modelStart`) and pins, and the route's verdict on the verify
+ * stage. Only an EXISTING `modelStart` is merged into — never created, and `plain` is never injected, so a surface keeps the model policy
+ * it chose (the cloud's pick/strict/delegated-role seed is not flipped to the plain one). An unrouted run (no pipeline) folds nothing
+ * but the host's stage models and a sub-agent's `code` start.
+ */
+export function routedPolicy(policy: RunPolicy, route: RouteInput, decision: RouteDecision): RunPolicy {
+  const { pipeline, start, skipsVerify } = decision;
   const prior = policy.modelStart;
-  const model = start.pinnedModel ?? prior?.model;
+  const folded: RunPolicy = skipsVerify ? { ...policy, skipVerifyStage: true } : policy;
+  if (!prior) return folded;
+  // An unrouted run still carries the host's stage models (they reach the run through the route input, the ONE path), and a sub-agent starts in `code`.
+  if (!pipeline) {
+    if (!route.child && !start.phaseModels) return folded;
+    return { ...folded, modelStart: { ...prior, ...(route.child ? { startPhase: "code" as const } : {}), ...(start.phaseModels ? { phaseModels: start.phaseModels } : {}) } };
+  }
+  const model = start.pinnedModel ?? prior.model;
   return {
-    ...policy,
+    ...folded,
     modelStart: {
-      plain: true,
       ...prior,
       ...(model ? { model } : {}),
       ...(route.modelStrict !== undefined ? { strict: route.modelStrict } : {}),
@@ -117,31 +139,39 @@ function routedPolicy(policy: RunPolicy, route: RouteInput, start: ReturnType<ty
 export async function openRun(input: OpenRunInput): Promise<RunOutcome> {
   if (!input.policy?.entryPoint) throw new Error("openRun: policy.entryPoint is required");
   const { surface = {}, route, ...rest } = input;
-  let run: RunAgentInput = { ...rest, modules: composeModules(surface) };
+  const closeOutRan = { value: false };
+  let run: RunAgentInput = { ...rest, modules: composeModules(surface, closeOutRan) };
   if (route) {
-    const { pipeline, start } = routeRun(route);
-    run = { ...run, policy: routedPolicy(run.policy, route, start) };
+    const input: RouteInput = "decided" in route ? route.input : route;
+    const decision: RouteDecision = "decided" in route ? route.decided : routeRun(route);
+    run = { ...run, policy: routedPolicy(run.policy, input, decision) };
     // The route is traced once per run, right after `run.started`; a resumed tick is not a start.
+    const { pipeline } = decision;
     if (pipeline && !run.resume) {
-      const events = run.ports.events;
       let said = false;
       run = {
         ...run,
         ports: {
           ...run.ports,
-          events: {
-            ...(events.outcome ? { outcome: (row) => events.outcome!(row) } : {}),
-            emit: async (event, meta) => {
-              await events.emit(event, meta);
-              if (!said && event.kind === "run.started") {
-                said = true;
-                await events.emit({ kind: "run.routed", step: event.step, route: pipeline.route, score: pipeline.score });
-              }
+          events: tapEvents(run.ports.events, {
+            after: async (event, sink) => {
+              if (said || event.kind !== "run.started") return;
+              said = true;
+              await sink?.emit({ kind: "run.routed", step: event.step, route: pipeline.route, score: pipeline.score });
             },
-          },
+          }),
         },
       };
     }
   }
-  return runAgent(run);
+  const outcome = await runAgent(run);
+  // A run that settled without passing the finish gate (failed, paused on a question, stopped by the breaker) still gets the
+  // always-on upkeep, once, in `settled` mode. A user Stop never had a close-out, and a yield resumes later (it has not settled).
+  const stoppedByUser = outcome.kind === "failed" && outcome.reason === RUN_CANCELLED_REASON;
+  const settledUnfinished = outcome.kind === "paused" || (outcome.kind === "failed" && !stoppedByUser);
+  if (surface.closeOut && settledUnfinished && !closeOutRan.value) {
+    closeOutRan.value = true;
+    await runCloseOut(surface.closeOut, policyContext(run, outcome.state, currentView([], []), outcome.state.step, 0), "settled");
+  }
+  return outcome;
 }

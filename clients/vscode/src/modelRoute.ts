@@ -14,6 +14,7 @@ import {
   type LocalRuntimeProbe,
 } from "@builderforce/local-inference";
 import type { InferenceMode } from "@builderforce/local-first";
+import type { EffectiveModelChoice } from "./modelState";
 
 /** Where one turn will run, and with which model. */
 export interface ModelRoute {
@@ -68,6 +69,8 @@ export interface RouteRequest {
   /** A chat turn is about to run on the answer — the one caller that may start
    *  provisioning a local model (a panel opening or a workspace scan never does). */
   turn?: boolean;
+  /** The model choice the caller already resolved (`resolveRunModelChoice`): the run decides it ONCE and hands the same one to its request and its transport. Absent ⇒ resolved here. */
+  choice?: EffectiveModelChoice;
 }
 
 /** The error a turn on an {@link ModelRoute.unauthorized} route fails with. */

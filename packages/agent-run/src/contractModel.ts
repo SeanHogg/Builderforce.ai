@@ -78,6 +78,13 @@ export interface ModelRequest {
   excludeModels?: readonly string[];
   /** Reasoning levers the guards raised for this turn (D1's escalation), merged over the surface's own. */
   reasoning?: { thinkLevel?: string };
+  /** The run's rendered task state (`RunState.taskState`), when it has one — a transport's progress line (additive). */
+  progress?: string;
+  /**
+   * This is the run's forced no-tools CLOSING turn after the consecutive-failure breaker stopped it (additive): the kernel asks
+   * once more, and a transport records the turn as the forced one. `failureStreak` is the number of failed calls in a row.
+   */
+  forcedFinish?: { failureStreak?: number };
 }
 
 /** A tool call as the model asked for it: the arguments are the RAW JSON string. */

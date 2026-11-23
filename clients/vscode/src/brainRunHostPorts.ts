@@ -17,7 +17,8 @@ import { editorRunSettings } from "./editorRunSettings";
 import { deviceLedgerPorts } from "./runUsageLedgerPorts";
 import { auditToolCatalog } from "./auditToolCatalog";
 import { brainToolCatalog } from "./brainToolCatalog";
-import { localWindowModels, localWindowProbes, onDeviceTasks, onDeviceTasksObserving, resolveModelRoute, routeStream } from "./modelRouting";
+import { localWindowModels, localWindowProbes, onDeviceTasks, onDeviceTasksObserving, resolveModelRoute, resolveRunModelChoice, routeStream } from "./modelRouting";
+import type { EffectiveModelChoice } from "./modelState";
 import { refreshPendingChanges } from "./gitChanges";
 import { editorRunSetupPorts } from "./runSetupPorts";
 import { recordEditorRunEnd } from "./editorRunEnd";
@@ -178,8 +179,8 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
   // (lazy on purpose: localBrainApplication mints the device id only after
   // globalState persists it, so an eager bind at construction would throw
   // local_device_id_required and crash the extension host on first activation).
-  const streamForRoute = async (onFallback?: (event: ModelFallbackEvent) => void): Promise<BrainStreamFn> =>
-    routeStream(await resolveModelRoute(secrets, { turn: true }), await getApiKey(secrets), onFallback);
+  const streamForRoute = async (onFallback?: (event: ModelFallbackEvent) => void, choice?: EffectiveModelChoice): Promise<BrainStreamFn> =>
+    routeStream(await resolveModelRoute(secrets, { turn: true, ...(choice ? { choice } : {}) }), await getApiKey(secrets), onFallback);
   /** Each chat's latest run's file-tool writes (paths as its tools named them), for the run delta. */
   const runWrites = new Map<number, string[]>();
   const host = createBrainRunHost({
@@ -195,6 +196,7 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
     // A sub-agent, a resumed child and an idle owner's wake open through the SAME gated start as a panel turn (below).
     startThrough: (spec) => gated.start(spec),
     stream: streamForRoute,
+    modelChoice: (personaModel) => resolveRunModelChoice(secrets, personaModel),
     localProbes: localWindowProbes,
     localModels: localWindowModels,
     onDeviceTasks,

@@ -24,7 +24,6 @@ import { skillToolsIn } from '../skillLibraryTools';
 import { callPreflight, traceRouted } from '../runStore/callPreflight';
 import { callRunner, declineMalformedCall } from '../runStore/callRunner';
 import { callPostStep } from '../runStore/callPostStep';
-import { progressAfterToolCalls } from '../runStore/progressGuard';
 import type { BrainRunContext } from '../runStore/brainRunContext';
 import { withRunBrief } from './brainTurnTail';
 import { brainTurnMenu } from './brainTurnMenu';
@@ -186,8 +185,7 @@ export function brainPlatformTools(run: BrainRunContext): BrainPlatform {
         cappedMenu = isCappedToolRole(run.policy.phase) && menu?.tools ? { step: env.step, names: new Set(menu.tools.map((t) => t.function.name)) } : undefined;
         return menu;
       },
-      // A3's detector is the Brain's own (`progressGuard.ts`): the turn is judged when its calls have all run, as the loop does.
-      turnEnded: progressAfterToolCalls(run),
+      // A3's detector is the agent's (`GuardPorts.progress`, `brainProgressPorts.ts`): it judges the turn when its calls have all run.
       // The turn's step, as the kernel numbers it: the router, the hand-off, the confirm gate, the guards, the activity line and the
       // no-progress streak (`CacheServedStreak` counts distinct TURNS) all stamp it, so it is not a per-call counter.
       // The runner is the Brain's own and watches the person's steers itself (`callRunner`'s `runToolInterruptibly`): a foreground command

@@ -84,7 +84,7 @@ function ports(store: { saved?: RunState }, requests: unknown[]): RunPorts {
     env: {} as never, db: {} as never, proxy: proxy as never, routing: { effectivePlan: 'free', premiumOverride: false } as never,
     run: { ...REFS, meterExecutionId: 4 }, runRole: 'code', pickedModel: 'fake-model', genParams: {},
     cost: { beforeTurn: async () => null, recordTurn: async () => undefined, turnFields: () => ({}) } as never,
-    declaredLimits: undefined, footprint: () => ({ files: 0, repositories: 0 }), progress: () => '', fallbackSurface: null, startStep: store.saved?.step ?? 0,
+    declaredLimits: undefined, footprint: () => ({ files: 0, repositories: 0 }), fallbackSurface: null, startStep: store.saved?.step ?? 0,
   });
   return {
     model,

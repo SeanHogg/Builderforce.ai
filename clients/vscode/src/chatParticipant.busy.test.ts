@@ -36,7 +36,6 @@ vi.mock("./modelRouting", () => ({
 vi.mock("./bfApi", () => ({ getCurrentUserId: async () => null, fetchRunContextSection: async () => "", projectEvermindHooks: vi.fn() }));
 vi.mock("./personalityLimbic", () => ({ turnLimbicBlock: async () => "" }));
 vi.mock("./editorContext", () => ({ getEditorContextLive: async () => ({}) }));
-vi.mock("./idePersona", () => ({ editorContextDirective: () => "" }));
 vi.mock("./projectState", () => ({ getSelectedProject: () => null }));
 vi.mock("./permissionMode", () => ({ permissionMode: () => "acceptEdits" }));
 vi.mock("./localFirstStore", () => ({
@@ -47,7 +46,6 @@ vi.mock("./localFirstStore", () => ({
   }),
 }));
 vi.mock("./grounding", () => ({ getGroundingWithHistory: async () => "" }));
-vi.mock("./prompt", () => ({ buildSystemMessages: () => [] }));
 vi.mock("./policyGates", () => ({ PolicyGatesUnavailableError: class extends Error {}, resolveRunPolicyGates: async () => [] }));
 vi.mock("./participantRun", () => ({ runViaHost: async () => { throw reachedRun; } }));
 vi.mock("./installRunRecovery", () => ({ installRunRecovery: () => ({ recovered: Promise.resolve([]), safeToResume: () => false }) }));

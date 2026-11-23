@@ -9,7 +9,7 @@
  * The run-end VERIFY is not a module here: the cloud verifies after the finish is accepted,
  * as a best-effort note (`cloudRunTail`), exactly as it always did.
  */
-import type { GuardPorts, RunState, SurfacePorts } from '@builderforce/agent-run';
+import type { GuardPorts, SurfacePorts } from '@builderforce/agent-run';
 import type { AgentExecParams } from '@builderforce/agent-tools';
 import type { DifficultyFeatures } from '@builderforce/difficulty-router';
 import type { TierLadder } from '@builderforce/run-policy';
@@ -53,8 +53,6 @@ export interface CloudHookDeps {
   resolvedModel: () => string | undefined;
   /** The personality's reasoning levers: D1 raises from the persona's level, else the role's default. */
   execParams?: AgentExecParams;
-  /** The run's live state holder: the agent names the state in it on every guard call (the guard ports read it). */
-  live: { state?: RunState };
   /** The run's ship policy (PRD 48): a publish it refuses never dispatches (`cloudShipGate`). */
   ship?: ShipPolicy;
 }
@@ -97,19 +95,13 @@ export function cloudSurfacePorts(d: CloudHookDeps): SurfacePorts {
   // The early draft PR, for a run whose branch CI is its only build (none for a run with a sandbox or a delegated child).
   const noSandboxPr = earlyDraftPrFor({ db, run, repoCtx, hasSandbox: !!d.sandbox, delegated: d.delegated, ...(d.taskTitle ? { taskTitle: d.taskTitle } : {}) });
 
-  // The live-state seam: the guards read and replace the run's model through the state the agent names (`d.live`).
-  const liveState = (): RunState => {
-    if (!d.live.state) throw new Error('the guards ran before the agent named the run state');
-    return d.live.state;
-  };
   const guardPorts: GuardPorts = {
     ...(readCommitted ? { read: readCommitted } : {}),
     bound: repoCtx !== null,
     ...(d.sandbox ? { checks: () => d.sandbox!.checks() } : {}),
-    model: { get: () => liveState().model, set: (next) => { liveState().model = next; } },
     resolvedModel: d.resolvedModel,
     ladder: () => d.ladder,
-    features: (step) => d.features(step, d.live.state?.messages ?? []),
+    features: (step, state) => d.features(step, state?.messages ?? []),
     cascade: cloudCascadePorts(d),
     onEvent: ({ tool, detail, result }) => recordCloudToolEvent(db, { ...evt(run), toolName: tool, category: 'llm', detail, result }),
   };
@@ -119,7 +111,6 @@ export function cloudSurfacePorts(d: CloudHookDeps): SurfacePorts {
     compaction: { summarize: (text) => buildGatewaySummarizer(env)(text, { tenantId: run.tenantId }) },
     guards: guardPorts,
     // The agent's publish refusal (PRD 48 §4.2): this surface supplies the policy + the refused-event sink.
-    onState: (state) => { d.live.state = state; },
     publishGate: cloudPublishGate(d.ship, async (tool, error) => { await recordCloudToolEvent(db, { ...evt(run), toolName: 'ship_policy.refused', category: 'tool', detail: { tool }, result: error.slice(0, 300) }); }),
     // The same couplings the cloud's `evaluateFinishGates` entry binds (one definition: `cloudAgent/finishGates`).
     finish: cloudFinishPorts({ db, evt: run, repoCtx, delegated: d.delegated, ...(noSandboxPr ? { noSandboxPr } : {}), ...(d.writtenHashes ? { writtenHashes: d.writtenHashes } : {}), ...(d.writtenPaths ? { writtenPaths: d.writtenPaths } : {}) }),

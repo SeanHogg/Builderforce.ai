@@ -1,30 +1,19 @@
 /**
- * Everything a run resolves ONCE, before its first turn — the catalog it advertises,
- * the recall and memory answer, the system prompt with every directive folded in, the
- * read/write/failure guards, and the run policy it starts from. Returns the run's
- * shared state ({@link BrainRunContext}), or null when memory answered and the run is over.
+ * Everything a run resolves ONCE, before its first turn — the catalog it advertises (`runPreambleCatalog.ts`), the recall and memory
+ * answer, the system prompt with every directive folded in (`runPreambleDirectives.ts`), the read/write/failure guards, and the run
+ * policy it starts from. Returns the run's shared state ({@link BrainRunContext}), or null when memory answered and the run is over.
  */
 
-import { ASK_USER_TOOL, ASK_USER_TOOL_SPEC } from '@builderforce/agent-loop';
-import { initialRunPolicy } from '@builderforce/run-policy';
+import type { RunPolicyState } from '@builderforce/run-policy';
 import { deviceLeverOn } from './deviceLevers';
-import { asksForChange, classifyRequest, toolNamesMentionedIn, memoryReplayable } from '@builderforce/agent-stall';
+import { memoryReplayable } from '@builderforce/agent-stall';
 import type { CompletionMetadata } from '../streamChatCompletion';
-import { HAND_OFF_TOOL_SPEC } from '../planHandoff';
-import { canChangeCodeHere, canShipHere, canReviewInPreview, localToolsIn, memoryToolsIn, studioToolsIn } from '../localWorkspaceTools';
-import { skillToolsIn } from '../skillLibraryTools';
-import { chatModeDirective, normalizeChatMode } from '../chatMode';
-import { routingQueryForTurn, turnOptimizationDirective } from '../turnOptimization';
-import { createEvidenceLedger, shipDirective, shipSourceLabel } from '@builderforce/run-guards';
-import { publishHold, attemptedPublishWhileHeld } from './publishHold';
-import { runShipPolicy } from './runShipPolicy';
-import { previewReviewDirective } from '../previewReview';
-import { ticketToolVocabulary } from '../ticketToolVocabulary';
-import { chatWorkObligationTools } from '../chatWorkLinking';
+import { normalizeChatMode } from '../chatMode';
+import { routingQueryForTurn } from '../turnOptimization';
+import { createEvidenceLedger } from '@builderforce/run-guards';
 import { previousReplyText } from '../restatedReply';
 import { ReadCoverage } from '../readCoverage';
 import { CacheServedStreak } from '@builderforce/agent-run';
-import { RunProgressGuard } from './progressGuard';
 import { readRequest } from './requestReading';
 import { RunKnowledgeRecorder, type RunKnowledgeLog } from '@builderforce/agent-tools';
 import { FailureTally, WriteLedger } from '@builderforce/run-guards';
@@ -39,7 +28,7 @@ import { isFollowUpTurn, latestUserText } from './convoText';
 import { answerFromMemory, recallForRun } from './runMemory';
 import { answerDeterministically } from './prefetchGate';
 import { gatherHostRunContext, recordServedReads } from './hostRunContext';
-import type { BrainRunContext, PromptToolNames } from './brainRunContext';
+import type { BrainRunContext } from './brainRunContext';
 import type { OutcomeReport } from '../run/eventSink';
 import type { BrainRunRequest } from './runTypes';
 import { attachTurnContext, restoreTurnContext, turnContextBlock, turnContextCarrier } from './turnContext';
@@ -47,6 +36,9 @@ import { resolveServerChatId } from './serverChat';
 import { decideRoute, routeMetadata } from './runRoute';
 import { PendingCalls } from './pendingCalls';
 import { conversationPinnedTools } from './conversationPins';
+import { assembleOpening } from './openingSections';
+import { advertisedTools, resolveCatalog } from './runPreambleCatalog';
+import { foldRunDirectives } from './runPreambleDirectives';
 
 /** B1 (`b1_stable_prefix`): per-turn blocks ride AFTER the history instead of in the
  *  system prompt (`COST_LEVER_B1_STABLE_PREFIX=off` turns it off). */
@@ -62,7 +54,7 @@ function recorderFor(userRequest: string, lent?: RunKnowledgeLog): RunKnowledgeL
 }
 
 export async function prepareBrainRun(chatId: number, c: RunCell, req: BrainRunRequest, runKey: number, reportRunRow?: OutcomeReport): Promise<BrainRunContext | null> {
-  const { resolvedSystemPrompt, tools: toolSpecs, model, modelStrict, runTool, stream, evermind } = req;
+  const { resolvedSystemPrompt, stream, evermind } = req;
   const convo = c.transcript;
   // The previous run's per-turn block goes back off its user message BEFORE anything
   // here reads the history (recall query, follow-up test, routing query) — see `turnContext`.
@@ -73,29 +65,8 @@ export async function prepareBrainRun(chatId: number, c: RunCell, req: BrainRunR
   // the prompt prefix is byte-identical across runs of a chat and caches.
   const stablePrefix = stablePrefixOn();
   const turnParts: string[] = [];
-  // The catalog the model is shown, PLUS the conversational `ask_user` tool.
-  //
-  // `ask_user` is injected here rather than registered as a host action because it is
-  // not an action: nothing executes it. It is a way for the run to END — the loop
-  // intercepts the call as terminal and replies with the question (see
-  // `beforeToolCalls`). Injected only where a tool call can be made at all, because on
-  // a surface with no tool runner an advertised tool is a trap: the model's call would
-  // be discarded and the question lost.
-  //
-  // Before this, only the server-side reply loop offered it, so a question asked in the
-  // editor's chat could only ever arrive as prose — while that very surface rendered
-  // `<QuestionCard>` / `<PendingQuestionBanner>` for a block nothing could produce.
-  //
-  // Gated on the host ALREADY having a catalog, not merely on having a runner. An
-  // empty catalog is a FAULT SIGNAL — "zero tools advertised" is how a failed tenant
-  // tool load is told apart from a model that simply declined to act — and injecting
-  // one tool into it would report a broken catalog as a working one.
-  const canAskUser = !!runTool && (toolSpecs?.length ?? 0) > 0;
-  // `hand_off` rides the same gate: it is how PLANNING ends (see `planHandoff.ts`) — the
-  // planner names the tasks, the run files them and hands them to the coding model(s).
-  // Advertised only while the run is still planning; see `run/brainPlatformTools.ts`.
-  const catalog = canAskUser ? [...(toolSpecs ?? []), ASK_USER_TOOL_SPEC, HAND_OFF_TOOL_SPEC] : toolSpecs;
-  const allTools = catalog && catalog.length > 0 ? catalog : undefined;
+  // The catalog the model is shown, PLUS the conversational `ask_user` / `hand_off` tools (`runPreambleCatalog.ts`).
+  const { canAskUser, allTools, catalogToolNames } = resolveCatalog(req);
   // Caller provenance for the gateway's audit emit — this is what makes the
   // DEFAULT agent's turn show WHICH MODEL served it in the activity log (the
   // server no-ops without a chat id). Built once and shared by every
@@ -144,7 +115,8 @@ export async function prepareBrainRun(chatId: number, c: RunCell, req: BrainRunR
   // bare sentence; the model preflight (E7) is on the banner before the first turn.
   const host = await gatherHostRunContext(c, req, !!evermind?.recall);
   const { recalled, block: recallBlock, blockTokens: recallBlockTokens } = await recallForRun(c, convo, evermind, host.recallHint);
-  let systemPrompt = resolvedSystemPrompt;
+  // The opening prompt, built ONCE from the request's data (`openingSections.ts`); everything below only appends per-run blocks.
+  let systemPrompt = assembleOpening(resolvedSystemPrompt, req.opening);
   // The per-turn parts the lever folds into the system prompt instead (`stablePrefix` off): still THIS turn's text (`promptTools.turn`).
   const turnPartsInPrompt: string[] = [];
   const intoPrompt = (part: string): void => {
@@ -205,78 +177,11 @@ export async function prepareBrainRun(chatId: number, c: RunCell, req: BrainRunR
     }
   }
 
-  // Bind this run to the conversation's MODE (migration 0409).
-  //
-  // WORK: tell the model its chatId, that work it identifies or code it changes must
-  // become a ticket LINKED to this chat, and that it must dispatch an agent to run it.
-  // This is the enabler the chat-scoped + from_delta tools need — without the id they
-  // are advertised but the model has no chatId to pass.
-  //
-  // CHAT: answer the question; do not mint board work as a side effect of answering.
-  //
-  // Injected here (with the guaranteed-resolved id) so it rides BOTH the web Brain and
-  // the VS Code webview Brain, mirroring the server-side @agent reply loop
-  // (BrainService.agentReply). `chatMode` is optional and defaults to WORK so any host
-  // that has not adopted the mode yet keeps the behaviour it shipped with.
-  // The tools this host advertised for the run, by name. Resolved once: it answers both
-  // "may this session change code itself" (below) and "which local tools must never be
-  // trimmed away" (the selection pin further down), and those two must see one catalog.
-  const catalogToolNames = (req.tools ?? []).map((t) => t.function.name);
-  // WORK mode's ordering depends on what THIS surface can do: an IDE run holding the
-  // workspace tools should make a small change itself rather than hire a cloud agent to
-  // make it, while a web run (no file tools) can only ever get code changed by
-  // dispatching. Derived from the run's own advertised tools, so no host declares its
-  // capability separately — and a host that gains or loses the file tools stays
-  // consistent with the post-run backstop, which reads the same set.
-  const canEditHere = canChangeCodeHere(catalogToolNames);
-  systemPrompt = `${systemPrompt}\n\n${chatModeDirective(runMode, serverChatId, { canEditHere, canDelegate: catalogToolNames.includes('spawn_agent'), canFanOut: catalogToolNames.includes('spawn_agents'), roster: req.chatRoster, ticketTools: ticketToolVocabulary(catalogToolNames) })}\n\n${turnOptimizationDirective()}`;
-  // A session that can commit AND push holds the only copy of its change — nobody else
-  // will review or land it — so it is told what to do with it: the run's SHIP POLICY
-  // (PRD 48). Rides both modes: it only binds a turn that changes code.
-  const canShip = canShipHere(catalogToolNames);
-  // The chat's PUBLISH HOLD (incident #56886): derived once per run from the transcript's
-  // PERSON turns, so a hold the person set survives a follow-up turn that drops the
-  // phrase, and a child run (seeded from the root's transcript) reads the SAME hold its
-  // owner set — it can never lift it.
-  const hold = publishHold(convo);
-  c.publishHold = hold;
-  // The SHIP POLICY (`runShipPolicy.ts`): a sub-agent ships nothing, its owner ships once
-  // after verifying the fan-out; otherwise the host's policy (the project's setting) or the
-  // default. A chat hold narrows either to uncommitted.
-  c.shipPolicy = runShipPolicy(req, hold);
-  if (canShip) {
-    // A QUESTION ships nothing (fix brief W2, chat #168571): the ONE classifier reads
-    // the user's own ask, so a paste full of change verbs never arms a commit policy
-    // on a question. The policy itself is untouched — it only binds a turn that
-    // changes code — but the trace says what this run will actually do.
-    const questionRun = classifyRequest(latestUserText(convo)).intent === 'question';
-    pushTrace(c, {
-      ts: nowIso(),
-      category: 'message',
-      label: 'run.ship_policy',
-      args: { mode: questionRun ? 'n/a' : c.shipPolicy.mode, source: c.shipPolicy.source, merge: c.shipPolicy.merge, review: c.shipPolicy.review, ...(hold ? { setByMessage: hold.messageNumber } : {}) },
-      result: questionRun ? 'Ship policy: n/a (question).' : `Ship policy: ${c.shipPolicy.mode} (${shipSourceLabel(c.shipPolicy)}).`,
-    });
-  }
-  if (hold && attemptedPublishWhileHeld(hold, c.trace)) {
-    pushTrace(c, {
-      ts: nowIso(),
-      category: 'message',
-      label: 'run.publish_hold_refused',
-      args: { setByMessage: hold.messageNumber },
-      result: `Publish hold is ON (set by user message #${hold.messageNumber}). A prior run still tried to commit/push — the tool gate now refuses these until the user explicitly asks to ship.`,
-    });
-  }
-  if (canShip) {
-    systemPrompt = `${systemPrompt}\n\n${shipDirective(c.shipPolicy, { chatId: serverChatId })}`;
-  }
-  // The Studio's twin: its change lives in a preview no one else can reach, so the
-  // session reviews it there and the reviewed tickets close (see `previewReview.ts`).
-  const previewReview = canReviewInPreview(catalogToolNames) ? previewReviewDirective(serverChatId, ticketToolVocabulary(catalogToolNames)) : null;
-  if (previewReview) systemPrompt = `${systemPrompt}\n\n${previewReview}`;
-  // The tool work of this chat's earlier turns, which a transcript seeded from history
-  // does not carry — so "continue" builds on what was read instead of reading it again.
-  if (c.priorResearch) systemPrompt = `${systemPrompt}\n\n${c.priorResearch}`;
+  // The directives this surface's capabilities imply — the conversation's mode, the ship policy and publish hold, the Studio's preview
+  // review and the earlier turns' tool work (`runPreambleDirectives.ts`).
+  const folded = foldRunDirectives(c, convo, req, runMode, serverChatId, catalogToolNames, systemPrompt);
+  systemPrompt = folded.systemPrompt;
+  const { previewReview, hold } = folded;
 
   // What the person's request means for this run: their own words, the directives
   // they imply (a bare continuation, the chat's change asks) and the hand-off goal
@@ -288,56 +193,14 @@ export async function prepareBrainRun(chatId: number, c: RunCell, req: BrainRunR
     else intoPrompt(directive);
   }
 
-  // Tool names the resolved system prompt tells the model to call. Always advertised.
-  //
-  // This only catches `builtin_*` / `mcp__*` identifiers, which is the right pattern
-  // for a catalog tool named in prose but blind to the LOCAL workspace tools —
-  // `run_command`, `read_file`, `edit_file` and the rest carry no such prefix. The IDE
-  // persona names every one of them ("use run_command for git … to commit, push, and
-  // open a PR") and pinned none, so on the turn that asked for a commit `run_command`
-  // scored zero against "commit the change and push to main", missed the 64-tool cut,
-  // and the agent reported that the tool its own prompt had promised did not exist —
-  // then burned 78 calls and 44 minutes looking for it.
-  //
-  // Those tools are not one domain among many that a query may be relevant to; they are
-  // what this surface IS. Every one the host advertised is pinned, so relevance can
-  // never decide whether the agent may touch the workspace it is sitting in. On a
-  // surface without them (the web Brain) the intersection is empty and nothing changes.
-  // The per-turn block is model-facing prose too: a tool it names is pinned exactly as
-  // one named in the system prompt was when the block lived there.
+  // The tools the prompt names, and the ones every turn must advertise (`runPreambleCatalog.ts`).
   const turnContext = turnContextBlock(turnParts);
-  // Recorded by source, here where each text is known (`promptTools`): a capped editor turn requires what the turn and the Studio's
-  // review contract name, while what only the standing system prompt names competes on relevance (`run/brainPlatformTools.ts`).
-  const systemNamed = toolNamesMentionedIn(systemPrompt);
-  const blockNamed = turnContext ? toolNamesMentionedIn(turnContext) : [];
-  // The work-linking directive's OBLIGATIONS, as the directive declares them (`chatWorkObligationTools`): required on every
-  // turn, the role cap's included, so a turn told to file a ticket can always see the tool (VS Code chat #157440).
-  const obligation = runMode === 'work'
-    ? chatWorkObligationTools(serverChatId, ticketToolVocabulary(catalogToolNames)).filter((n) => catalogToolNames.includes(n))
-    : [];
-  const promptTools: PromptToolNames = {
-    system: systemNamed,
-    turn: [...new Set([...blockNamed, ...toolNamesMentionedIn([...turnPartsInPrompt, userRequest].join('\n\n'))])],
-    contract: previewReview ? toolNamesMentionedIn(previewReview) : [],
-    ...(obligation.length > 0 ? { obligation } : {}),
-  };
-  const alwaysAdvertised = [
-    ...new Set([...systemNamed, ...blockNamed, ...obligation]),
-    ...localToolsIn(catalogToolNames),
-    // The Studio's workspace vocabulary, including the preview review its contract
-    // requires — empty everywhere but the Studio (see `studioToolsIn`).
-    ...studioToolsIn(catalogToolNames),
-    // The project-memory pair (recall before re-reading; remember what was learned) is
-    // the cheapest tool in the catalog and the first one relevance would drop.
-    ...memoryToolsIn(catalogToolNames),
-    // The workspace's Agent Skills — its description IS the skill catalog, so dropping
-    // it on relevance would hide every reviewed procedure the workspace has.
-    ...skillToolsIn(catalogToolNames),
-    // Asking the user is never off-topic: it is how the run stops when it cannot
-    // proceed, so relevance against the request must not be what decides whether the
-    // agent is allowed to ask. Its one schema is also the cheapest in the catalog.
-    ...(canAskUser ? [ASK_USER_TOOL] : []),
-  ];
+  const { promptTools, alwaysAdvertised } = advertisedTools(
+    { systemPrompt, turnContext, turnPartsInPrompt, userRequest, previewReview },
+    { runMode, serverChatId },
+    catalogToolNames,
+    canAskUser,
+  );
 
   // A request served by a different model than the last turn's — or by one whose known
   // window is under the working budget — is re-packed for that window (`windowFit/`).
@@ -401,10 +264,8 @@ export async function prepareBrainRun(chatId: number, c: RunCell, req: BrainRunR
     // boundary. The Brain builds its context fresh per invocation (no kernel-resume path), so
     // this starts empty; the kernel seeds the counter from saved state for callers that resume.
     cacheStreak: new CacheServedStreak(),
-    // The A3 progress detector — a run that says it is ready and keeps reading, circles,
-    // undoes its own edit or repeats a failure is steered, then forced, then asked
-    // about (`progressGuard.ts`, PRD 35 WS8p).
-    progress: new RunProgressGuard(undefined, asksForChange(userRequest)),
+    // Child reports the inbox delivered, for the agent's A3 detector to read (`run/brainProgressPorts.ts`).
+    childReports: [],
     // What the run did and read, restated in front of every turn (its `brief()`) —
     // the host's recorder when it keeps one, so the ledger and its code map agree.
     knowledge: recorderFor(userRequest, req.knowledge),
@@ -426,30 +287,14 @@ export async function prepareBrainRun(chatId: number, c: RunCell, req: BrainRunR
     // The evidence ledger the ship gates read (PRD 45 §4.2) — one per run, fed only by
     // the host's verifier; a host that binds no port leaves every gate inert.
     evidence: createEvidenceLedger(),
-    // THE model hand-off policy (`@builderforce/run-policy`), shared with every other agent
-    // loop. ANALYSIS first, then the CODE: under auto-routing each turn tells the gateway
-    // what kind of call it is. Until the run reaches its first code change the turns are
-    // analysis (`plan` — the tenant's own precedence decides who plans); from then on they
-    // are `code`, which the gateway leads with the strongest connected model. A run that
-    // already changed code (a resumed turn) starts as `code`. The policy also holds the
-    // model this run is CURRENTLY talking to, every model it has already tried, and the
-    // models that broke mid-turn: a model that burns its whole stall budget fails over to
-    // another one rather than handing the user a promise (see the final-answer hook),
-    // and one that breaks mid-stream is routed around for the rest of the run. A pinned
-    // model is the user's own choice and is never routed around.
-    policy: initialRunPolicy({
-      pinnedModel: model,
-      strictPin: modelStrict,
-      // Every run starts the same way, whatever the chat's history: a chat that coded
-      // before used to start every later run in `code`, which skipped the analysis
-      // budget and let an old chat read forever while a fresh one handed off (chat
-      // #5739). The one exception is a ROLE, not history — a sub-agent is a delegated
-      // SLICE its owner already planned; started in `plan` it was offered `hand_off` and
-      // the analysis all over again, inside work it was handed to carry out. A QUICK
-      // run (`runRoute.ts`) starts in `code` too, on the quick model. The host's
-      // stage models ride as `phaseModels`, never as one model pinned to the whole run.
-      ...route.start,
-    }),
+    // THE model hand-off policy is the AGENT's: `brainRunPolicy` (`run/webAdapter.ts`) seeds
+    // it (the request's model + strictness) and `openRun` folds the route's start into it
+    // (plan/code phase, the host's stage models, a quick run's model). It is read here only
+    // through the live view, so there is no second copy of the pin or the route.
+    get policy(): RunPolicyState {
+      if (!run.view) throw new Error('run.policy read before the agent opened the run');
+      return run.view.policy();
+    },
     route,
     // One re-prompt per run for a code change left unshipped (see `selfReviewShip.ts`).
     // One, not a budget: the second time the model stops short it has read the contract

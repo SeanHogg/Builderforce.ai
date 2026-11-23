@@ -29,7 +29,6 @@ import {
   type BrainMessage,
   type BrainTraceEvent,
 } from '@seanhogg/builderforce-brain-embedded';
-import { buildIdeSystemPrompt } from '../webview/src/systemPrompt';
 import { buildTranscript } from '../webview/src/transcript';
 import { fakeGateway, type GatewayScript, type RecordedRequest } from './fakeGateway';
 import { harnessTools, memoryPersistence, type ToolResponder } from './host';
@@ -99,7 +98,8 @@ export async function runScenario(scenario: Scenario): Promise<ScenarioRun> {
   await persistence.sendMessages(CHAT_ID, [{ role: 'user', content: scenario.prompt }]);
 
   await startRun(CHAT_ID, {
-    resolvedSystemPrompt: buildIdeSystemPrompt({ hasWorkspace: scenario.hasWorkspace ?? true }),
+    resolvedSystemPrompt: '',
+    opening: { hasWorkspace: scenario.hasWorkspace ?? true },
     tools: toolSpecsFor(tools.specs),
     ...(scenario.model ? { model: scenario.model } : {}),
     pickFallbackModel: (tried) => fallbacks.find((m) => !tried.includes(m)),

@@ -21,15 +21,17 @@
  * the tool runner's own failures.
  */
 
-import type { PolicyContext } from '@builderforce/agent-run';
+import type { CloseOutMode, PolicyContext } from '@builderforce/agent-run';
 import { canListChatTickets, linkedTicketsToComplete, linkedTicketsReviewedComplete, linkedTicketsToAdvanceFor } from '../chatWorkLinking';
 import { recordCodeChangeTicket, retitleShippedDeltaTicket, settleView, updateLinkedTickets, updateRunLocalTickets } from './runBackstops';
 import { recordShipReview, verificationOf, type CloseOutInput } from '../run/brainCloseOut';
 import type { BrainRunContext } from './brainRunContext';
 import type { BrainRunRequest } from './runTypes';
 import type { BrainTraceEvent } from '../brainTriage';
-import { nowIso, pushTrace, runTrace } from './runCells';
-import { listChatTickets, listingScopeOf, localTicketsFiledInRun, runOwnedTicketRefs, type ListingScope } from './chatTickets';
+import { emit, nowIso, pushTrace, runTrace } from './runCells';
+import { budget, continuationLimits, within } from './deadline';
+import { ticketsReviewedInPreview } from '../previewReview';
+import { forgetChatTicketListing, listChatTickets, localTicketsFiledInRun, runOwnedTicketRefs, type ListingScope } from './chatTickets';
 import { errorMessage } from '../pageEngines/types';
 import { onBaseBranch, shippedToBaseBranch } from '../shipVerification';
 import { approvedReviewFor, runReviewGate } from './shipGates';
@@ -57,7 +59,7 @@ export interface DeterministicFinishResult {
  * with ZERO model turns. Idempotent: a review the run already recorded is not re-recorded, and a
  * ticket the chat no longer lists as completable is not re-moved.
  *
- * Called on EVERY settle: the ticket upkeep (attach/mint, the in_progress advance), the hold notes
+ * Called once per run, by the kernel's finish policy (`closeOutPort`): the ticket upkeep (attach/mint, the in_progress advance), the hold notes
  * and the preview close run whatever the gate says; only the review and the move to done wait on
  * {@link finishConditionMet}, which is what `finished` reports.
  */
@@ -157,31 +159,17 @@ export async function deterministicFinish(
   return result;
 }
 
-/**
- * Run the deterministic finish via the named entry: the settle's ticket upkeep always runs; returns
- * true when {@link finishConditionMet} held and the close-out (review + move to done) ran.
- */
-export async function runDeterministicFinish(input: CloseOutInput & { verified: boolean; hasTicket: boolean }, run: BrainRunContext): Promise<boolean> {
-  return (await deterministicFinish(input, run)).finished;
-}
-
 /** Did this run SHIP its change (commit pushed to a base branch)? */
 async function shippedOf(run: BrainRunContext): Promise<boolean> {
-  if (run.c.codeChanged && run.c.touchedFiles.length > 0 &&
-    shippedToBaseBranch(runTrace(run.c), { touchedFiles: run.c.touchedFiles })) return true;
+  if (shippedToBaseBranch(runTrace(run.c), { touchedFiles: run.c.touchedFiles })) return true;
   // The change reached the base branch WITHOUT this run pushing it (another session's commit
   // swept it, a later run pushed it, the user pushed): the run's own push never counts it,
   // so read the live repo — the same GitPort the push gate uses, never a new git helper.
   return onBaseBranch(run.req.git, run.c.touchedFiles, run.c.deltaTicketId);
 }
 
-/** Does the run hold a LINKED ticket to close out — one the chat carries, or one it filed on the device? */
-async function hasLinkedTicket(run: BrainRunContext): Promise<boolean> {
-  return holdsLinkedTicket(runTrace(run.c), run.serverChatId, run.req, { deltaTicketId: run.c.deltaTicketId, note: (ev) => pushTrace(run.c, ev), listing: listingScopeOf(run.c) });
-}
-
 /**
- * THE "holds a ticket to close" read, shared by the driver-run close-out and the `startRun` settle:
+ * THE "holds a ticket to close" read, used by the close-out below:
  * a ticket the run filed on the device, or one the account's chat listing still shows as completable
  * that THIS run owns (`runOwnedTicketRefs`: a delta it recorded, a ticket it moved) — another
  * conversation's review linked to the same chat is not the run's to close.
@@ -204,16 +192,11 @@ export async function holdsLinkedTicket(
 }
 
 /**
- * Perform the deterministic close-out for a run `startRun` never drives (a driver-executed run),
- * as the kernel judges the finish. Stands down when `startRun` already closed the run out
- * (`c.finishClosedOut`), keeping the close-out single-writer across both paths.
+ * The review a change that landed WITHOUT this run's push still needs (W4), and the hash of the diff it was reviewed against
+ * (null when no diff can be computed). Returns the hash `approvedReviewFor` matches the run's remembered `shipReviews` to, so the
+ * close-out records its review only over a review that approved THESE bytes (chat #230).
  */
-async function finishCloseOut(run: BrainRunContext): Promise<void> {
-  const c = run.c;
-  if (c.finishClosedOut) return;
-  const { req } = run;
-  if (req.projectId == null || !req.runTool || c.abort?.signal.aborted || !c.codeChanged) return;
-  if (!(await shippedOf(run))) return;
+async function reviewLandedChange(run: BrainRunContext): Promise<string | null> {
   // W4: when the ship signal is "already on the base branch" (not this run's push), there is no
   // push — and the review sub-run has only ever been triggered by the push gate. Run it HERE, at
   // settle, over the same ports and the same reviewGate the push gate uses — a change that landed
@@ -240,24 +223,70 @@ async function finishCloseOut(run: BrainRunContext): Promise<void> {
       });
     }
   }
-  if (!(await hasLinkedTicket(run))) return;
-  const openPlaceholders = run.placeholderLedger.outstanding().length;
+  // Best-effort: an uncomputable diff simply means no review in hand.
+  return (await run.req.git?.outgoing('').catch((e: unknown) => {
+    pushTrace(run.c, { ts: nowIso(), category: 'message', label: 'finish.review_diff', result: `The reviewed diff could not be computed: ${errorMessage(e)}` });
+    return null;
+  }))?.diffHash ?? null;
+}
+
+/**
+ * THE run's close-out, run ONCE per run by the kernel's finish policy (the `closeOut` port below): the ticket's last attach,
+ * the backlog advance, and - when the run shipped - the host's review and the move to done, held by the same acceptance a
+ * model's `done` is held to. The settle (`run/brainSettle.ts`, `startRun`) never closes out: it reads the verdict this leaves on
+ * the cell (`c.closeOutFinished`). Skipped on a Stop and for a run that changed no code.
+ *
+ * Bounded by `settleMs`: the chat is held while the finish waits, so a hung ticket call must not leave it live forever. Late
+ * work finishes in the background on the snapshot, writing nothing into a later run; a failure is traced, never unhandled.
+ */
+async function finishCloseOut(run: BrainRunContext, mode: CloseOutMode): Promise<void> {
+  const { c, req } = run;
+  if (req.projectId == null || !req.runTool || c.abort?.signal.aborted || !c.codeChanged) return;
+  // Post-run work is still work: minting and advancing tickets are real calls that take real time, so the surface says so.
+  c.activity = { phase: 'finishing', startedAt: Date.now(), step: 0 };
+  emit(c);
+  const left = budget(continuationLimits.settleMs);
   const view = settleView(c, c.runId);
-  const input: CloseOutInput = {
-    serverChatId: run.serverChatId, view, req, needsTicket: true, shipped: true,
-    reviewedInPreview: [], openPlaceholders, trace: runTrace(c), evidence: run.evidence,
-    // The diff the change was reviewed against: `approvedReviewFor` matches the run's remembered
-    // `shipReviews` to it, so the close-out records its review only over a review that approved
-    // THESE bytes (chat #230). Best-effort: an uncomputable diff simply means no review in hand.
-    reviewedDiffHash: (await run.req.git?.outgoing('').catch((e: unknown) => {
-      pushTrace(run.c, { ts: nowIso(), category: 'message', label: 'finish.review_diff', result: `The reviewed diff could not be computed: ${errorMessage(e)}` });
-      return null;
-    }))?.diffHash ?? null,
-  };
-  // Verified from the run's own evidence, as the startRun settle does: a driver-run finish
-  // with no passing check must not move its tickets to done.
-  const verified = verificationOf(run.evidence, view.touchedFiles).verified;
-  await deterministicFinish({ ...input, verified, hasTicket: true }, run);
+  await within(left(), async () => {
+    const trace = runTrace(c);
+    // `settled`: the run ended without passing the finish gate, so ONLY the upkeep runs (attach/mint, the in_progress advance):
+    // no ship read, no review, no preview close, no move to done.
+    const settledOnly = mode === 'settled';
+    const shipped = settledOnly ? false : await shippedOf(run);
+    const reviewedDiffHash = shipped ? await reviewLandedChange(run) : null;
+    const openPlaceholders = run.placeholderLedger.outstanding().length;
+    // Verified from the run's own evidence: a finish with no passing check must not move its tickets to done.
+    const verified = verificationOf(run.evidence, view.touchedFiles).verified;
+    // The run's ticket: the delta it minted on the account, or one it filed on the device (`ticket-create`).
+    let hasTicket = view.deltaTicketId != null || localTicketsFiledInRun(trace).length > 0;
+    // A ticket the chat links (its delta id never read back, or linked by hand) is the run's ticket too: read the listing only
+    // when it is the one thing the finish gate still lacks.
+    if (!hasTicket && finishConditionMet({ shipped, verified, openPlaceholders, hasTicket: true })) {
+      hasTicket = await holdsLinkedTicket(trace, run.serverChatId, req, { deltaTicketId: view.deltaTicketId, note: view.note, listing: view.listing });
+    }
+    const input: CloseOutInput & { verified: boolean; hasTicket: boolean } = {
+      serverChatId: run.serverChatId, view, req, needsTicket: true, shipped,
+      reviewedInPreview: settledOnly ? [] : ticketsReviewedInPreview(trace), openPlaceholders, trace, evidence: run.evidence,
+      reviewedDiffHash, verified, hasTicket,
+    };
+    const result = await deterministicFinish(input, run);
+    // A settled (unfinished) run never reports a finish: only the finish-mode close-out sets the verdict.
+    if (!settledOnly) c.closeOutFinished = result.finished;
+  }, () => view.note?.({
+    ts: nowIso(),
+    category: 'message',
+    label: 'run.backstop_timeout',
+    args: { waitedMs: continuationLimits.settleMs },
+    result: 'The run\'s ticket bookkeeping did not finish in time; the run is settled without waiting for it.',
+  }), (e) => view.note?.({
+    ts: nowIso(),
+    category: 'message',
+    label: 'run.backstop_failed',
+    args: { error: errorMessage(e) },
+    result: 'The run\'s ticket bookkeeping failed; the run is settled without it.',
+  }));
+  // The run's ticket reads are done: its memoised listing goes with it.
+  forgetChatTicketListing(c);
 }
 
 /**
@@ -265,6 +294,6 @@ async function finishCloseOut(run: BrainRunContext): Promise<void> {
  * finish gate decides, so the actions complete before the run settles. It NEVER refuses a finish: `openRun` reports a throw
  * as the `finish.close_out_error` step and the finish goes on (the one trace - nothing here catches).
  */
-export function closeOutPort(run: BrainRunContext): (ctx: PolicyContext) => Promise<void> {
-  return () => finishCloseOut(run);
+export function closeOutPort(run: BrainRunContext): (ctx: PolicyContext, mode: CloseOutMode) => Promise<void> {
+  return (_ctx, mode) => finishCloseOut(run, mode);
 }

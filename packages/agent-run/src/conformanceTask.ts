@@ -16,6 +16,7 @@
 import type { Capability, CapabilityProvider } from "@builderforce/agent-tools";
 import type { EventSink, ModelCompletion } from "./contract.js";
 import type { RunEvent } from "./runEvents.js";
+import { tapEvents } from "./tapEvents.js";
 
 /** What the person asks. */
 export const CONFORMANCE_PROMPT = "List the files, then say hello.";
@@ -92,11 +93,5 @@ export function conformanceTrace(events: readonly RunEvent[]): string[] {
  * the ports for. It forwards to `sink` unchanged — it observes the adapter's own sink, it does not replace it.
  */
 export function teeEvents(sink: EventSink | undefined, into: RunEvent[]): EventSink {
-  return {
-    emit: (event, meta) => {
-      into.push(event);
-      return sink?.emit(event, meta);
-    },
-    ...(sink?.outcome ? { outcome: (row) => sink.outcome?.(row) } : {}),
-  };
+  return tapEvents(sink, { before: (event) => { into.push(event); } });
 }

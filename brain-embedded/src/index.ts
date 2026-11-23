@@ -639,6 +639,27 @@ export {
 } from './brainPersona';
 export type { PersonaModalityId, ModalityPersona, BrainPersonaAgent, BrainPersonaChoice } from './brainPersona';
 
+// The editor run's opening prompt: the IDE persona's text and the ONE assembly that
+// builds it from data (`runStore/openingSections.ts`, called by `prepareBrainRun`).
+export {
+  WORKSPACE_MAP_INTRO,
+  AUTONOMY_DIRECTIVE,
+  FOLLOW_THROUGH_DIRECTIVE,
+  DISCOVERY_DIRECTIVE,
+  CODE_NAVIGATION_DIRECTIVE,
+  DISPATCH_STRATEGY_DIRECTIVE,
+  SHIP_CLEANUP_DIRECTIVE,
+  NO_HANDOFF_DIRECTIVE,
+  SHELL_USE_DIRECTIVE,
+  PROJECT_MEMORY_DIRECTIVE,
+  ideSystemPromptBase,
+  withWorkspaceMap,
+  activeProjectDirective,
+  editorContextDirective,
+} from './ideSystemPrompt';
+export type { ActiveProject, GitContext, EditorContext } from './ideSystemPrompt';
+export type { BrainRunOpening } from './runStore/openingSections';
+
 // Per-reply model/account provenance (the "which LLM / whose account" chip)
 export {
   PROVENANCE_META_KEY,

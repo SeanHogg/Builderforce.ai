@@ -15,8 +15,7 @@
  *
  * ── WHY NOT A PACKAGE ───────────────────────────────────────────────────────
  * The host (`src/`) and the webview (`webview/src/`) are one project tree, and the
- * webview already imports host modules directly (`../../src/idePersona`,
- * `../../src/gitChangeModel`). A separate workspace package would buy nothing and
+ * webview already imports host modules directly (`../../src/gitChangeModel`, `../../src/editorContext`). A separate workspace package would buy nothing and
  * cost a tsconfig path, a vite alias, an esbuild external and a `sourcePackages`
  * entry — four more places for the wiring to be incomplete, which is the failure
  * mode `check-source-package-graph` exists for.

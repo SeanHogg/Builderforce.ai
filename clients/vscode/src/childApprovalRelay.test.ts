@@ -54,4 +54,23 @@ describe("childApprovalRelay", () => {
     relay.changed(5);
     expect(approve).not.toHaveBeenCalled();
   });
+
+  it("regression: an unregistered approver is never asked again, and a newer one for the chat survives the older's unregister", () => {
+    const { relay, pause } = setup();
+    const old = vi.fn(async (_req: { agentName?: string; label?: string }) => true);
+    const unregister = relay.register(7, old);
+    unregister();
+    pause({ name: "write_file", args: {} });
+    relay.changed(-1);
+    expect(old).not.toHaveBeenCalled();
+
+    const first = vi.fn(async (_req: { agentName?: string; label?: string }) => true);
+    const second = vi.fn(async (_req: { agentName?: string; label?: string }) => true);
+    const dropFirst = relay.register(7, first);
+    relay.register(7, second);
+    dropFirst();
+    relay.changed(-1);
+    expect(second).toHaveBeenCalledTimes(1);
+    expect(first).not.toHaveBeenCalled();
+  });
 });

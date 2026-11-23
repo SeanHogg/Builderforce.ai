@@ -10,6 +10,7 @@ import type { CascadeState, RunPolicyState } from "@builderforce/run-policy";
 import type { CoveredRead, ProgressDetectorState, ReadsWithoutSpawnState } from "@builderforce/run-guards";
 import type { ContextPack } from "./contract.js";
 import type { FinishGateState } from "./policy/finish/gates.js";
+import type { ForcedLadderState } from "./policy/guards/forced/types.js";
 import type { TaskState } from "./policy/tools/taskState.js";
 import type { ServedStreakState } from "./policy/tools/cacheServedStreak.js";
 import type { RunTally } from "./telemetry/runTally.js";
@@ -32,7 +33,9 @@ export interface LoopGuardState {
   finishDue?: true;
   /** D7: the sandbox checks' failures, for the NEXT turn's tail. */
   checksNote?: string;
-  escalations?: number;            // A3 + D1: moves up the tier ladder this run — §8.2 escalations
+  /** A3's forced-turn ladder (a surface that binds `GuardPorts.progress.turns`): the trip a later menu acts on, the deferral, the finish. */
+  forced?: ForcedLadderState;
+  escalations?: number;           // A3 + D1: moves up the tier ladder this run — §8.2 escalations
 }
 
 /** What the cascade persists across durable ticks (`policy/guards` `CascadeSession`). */

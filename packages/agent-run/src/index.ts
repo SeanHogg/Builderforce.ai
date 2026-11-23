@@ -21,6 +21,7 @@ export * from "./surface.js";
 
 // The ONE scripted task every entry point's conformance case runs (PRD 35 §3.3), and the trace fold it is compared by.
 export * from "./conformanceTask.js";
+export { tapEvents, type EventTap } from "./tapEvents.js";
 
 // The default `RunPolicy.delegation.readsBeforeNudge`: every adapter that lets the agent nudge says this, not its own number.
 export { READS_BEFORE_DELEGATION_NUDGE as DEFAULT_READS_BEFORE_NUDGE } from "@builderforce/run-guards";
@@ -29,8 +30,8 @@ export { READS_BEFORE_DELEGATION_NUDGE as DEFAULT_READS_BEFORE_NUDGE } from "@bu
 export { runAgent, type RunAgentInput } from "./runAgent.js";
 
 // THE one entry into the runtime: surfaces hand ports + a RouteInput, never a module set (`check:one-execution`).
-export { openRun, type OpenRunInput, type SurfacePorts, type PublishGatePort } from "./openRun.js";
-export { routeRun, type RouteInput, type RouteStart } from "./route/routeRun.js";
+export { openRun, type OpenRunInput, type SurfacePorts, type PublishGatePort, type CloseOutMode, type CloseOutPort } from "./openRun.js";
+export { routeRun, type RouteDecision, type RouteInput, type RouteStart } from "./route/routeRun.js";
 
 // The §8.2 outcome row (WS6): the builder, the per-run tally, and the trace fold an
 // adapter uses to persist base counts for a run that died before it settled.
@@ -70,7 +71,7 @@ export {
 // The ENGINE ports an adapter binds a module with (`composePolicyHooks({ finish: createFinishHook(ports) })`):
 // the module stays the policy's; the adapter only hands it the couplings its surface has.
 export { createFinishHook, type FinishPorts } from "./policy/finish/index.js";
-export { createGuardsHook, type GuardPorts } from "./policy/guards/index.js";
+export { createGuardsHook, FINISH_RECORD_BRIEF, FINISH_RECORD_TURNS, PROGRESS_FORCED_LABEL, type GuardPorts, type ProgressBinding, type ProgressFacts, type ProgressTurnOptions } from "./policy/guards/index.js";
 export { createVerifyHook, type VerifyPorts } from "./policy/verify/index.js";
 // The verify phase's PURE functions, for the surfaces that run it outside a hook (a cloud run's tail, an @-reply): one
 // definition, not a copy per surface. The DB-bound halves (the audit rows, the memory write) stay with the surface.

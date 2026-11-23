@@ -5,7 +5,7 @@
 
 import type { InferenceMode, PlatformPolicySnapshot } from '@builderforce/local-first';
 import type { ModelChoiceLabels } from '@seanhogg/builderforce-brain-embedded';
-import type { EditorContext } from '../../src/idePersona';
+import type { EditorContext } from '@seanhogg/builderforce-brain-embedded';
 import type { PendingChangeSet } from '../../src/gitChangeModel';
 
 /**

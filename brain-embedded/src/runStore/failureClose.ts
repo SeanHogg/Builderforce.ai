@@ -10,14 +10,13 @@
  */
 
 import { replayTextOf } from '@builderforce/agent-loop';
-import { nextTurn } from '@builderforce/run-policy';
 import { servedOnDevice } from '@builderforce/local-inference';
 import { windowed } from '@seanhogg/builderforce-memory/working';
 import { accrueByoUnresolved, accrueProviderCap, emit, emitStreaming, nowIso, nowMs, pushTrace, recordAppended, recordRunFailure } from './runCells';
 import { asLiveTurn, canonicalTurnText, connectRetryStep, liveTurnModel, provenanceMetadata } from './turnPersistence';
 import { emitEvermindLearnReconcile } from './runMemory';
 import type { ChatCompletionMessage } from '../streamChatCompletion';
-import type { BrainRunContext } from './brainRunContext';
+import { policyAsk, type BrainRunContext } from './brainRunContext';
 
 /** Force the tools-free closing answer for a run stopped after `streak` failed calls at `step`, and settle it on the chat. */
 export async function closeAfterFailureStreak(run: BrainRunContext, streak: number, step: number): Promise<void> {
@@ -37,7 +36,7 @@ export async function closeAfterFailureStreak(run: BrainRunContext, streak: numb
         },
       ];
       let closeFirstTokenAt: number | undefined;
-      const closeAsk = nextTurn(run.policy, { hasTools: false });
+      const closeAsk = policyAsk(run, false);
       const closing = await asLiveTurn(c, () => stream(
         // No `tools` → the model can't call another tool and must produce text.
         { messages: working, model: closeAsk.model, modelStrict: closeAsk.strict, routingMode, maxTokens, reasoning, metadata, signal: c.abort?.signal },

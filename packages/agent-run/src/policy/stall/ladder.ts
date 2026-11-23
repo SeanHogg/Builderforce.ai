@@ -131,7 +131,7 @@ function walkRungs(ctx: PolicyContext, ledger: DeliveryLedger, rungs: readonly L
       save(ctx.state, { rungs: counters, spent: 1 });
       rung.onRestate?.(used + 1);
       // The review model takes the run from here (a no-op when it already has it).
-      if (rung.entersVerify && ctx.state.model.phase !== "verify") ctx.state.model = reduceRunPolicy(ctx.state.model, { type: "verify_started" });
+      if (rung.entersVerify && !ctx.policy.skipVerifyStage && ctx.state.model.phase !== "verify") ctx.state.model = reduceRunPolicy(ctx.state.model, { type: "verify_started" });
       return { action: "steer", rows: restatement(ctx, rung, used + 1, ledger.stall?.nudgeAs ?? "system", ledger.stall?.quoteEmpty === true) };
     };
 

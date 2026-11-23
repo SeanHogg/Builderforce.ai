@@ -7,6 +7,7 @@
 import {
   getRunSnapshot,
   type BrainMessage,
+  type BrainRunOpening,
   type BrainRunSnapshot,
   type BrainTraceEvent,
   type ChatCompletionMessage,
@@ -25,15 +26,21 @@ export interface WebviewRunStart {
   chatId: number;
   audit?: { auditId: string; runId: string };
   systemPrompt: string;
+  /** The surface's half of the run's opening prompt, as DATA (persona, project, editor context, composer switches, limbic text); the host adds gates, rules and the workspace map. See `BrainRunRequest.opening`. */
+  opening?: BrainRunOpening;
   model?: string;
   modelStrict?: boolean;
   routingMode?: "auto" | "byo_pool";
+  /** The agent persona's own model, as DATA: the HOST decides whether it applies (`modelState.resolveEffectiveModelChoice`); `model` / `modelStrict` are the raw pick. */
+  personaModel?: string;
   maxTokens?: number;
   reasoning?: ReasoningIntent;
   seed?: ChatCompletionMessage[];
   /** Earlier turns' tool work, as a system-prompt block — see `BrainRunRequest.priorResearch`. */
   priorResearch?: string | null;
   userTurn?: string | ContentPart[];
+  /** What the person attached to this turn (the native chat's inlined `#file` / `#selection` references): the run's turn-context block, never part of `userTurn` (the persisted row, routing and PreFetch read the person's own words). */
+  turnContext?: string;
   /** The persisted ids behind `seed` and `userTurn` — see `BrainRunRequest.seedIds`. */
   seedIds?: number[];
   /** The persisted ids of user rows the person did not write (a Resume continuation) — see `BrainRunRequest.injectedTurnIds`. */

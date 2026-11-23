@@ -4,13 +4,13 @@
  * selection" without guessing a path. Reads `vscode.window` on demand and formats to
  * the shared, host-free {@link EditorContext} shape so both chat surfaces (the native
  * `@builderforce` participant and the React Brain webview) render it through the ONE
- * shared {@link editorContextDirective} (see `idePersona.ts`) — one reader, one
+ * shared {@link editorContextDirective} (see brain-embedded `ideSystemPrompt.ts`) — one reader, one
  * formatter, both surfaces.
  */
 
 import * as vscode from "vscode";
 import { detectGitContext, peekGitContext, watchGitContext } from "./gitContext";
-import type { EditorContext } from "./idePersona";
+import type { EditorContext } from "@seanhogg/builderforce-brain-embedded";
 
 /** Bound the selection text handed to the model (a whole-file select shouldn't blow the prompt). */
 const MAX_SELECTION_CHARS = 4000;

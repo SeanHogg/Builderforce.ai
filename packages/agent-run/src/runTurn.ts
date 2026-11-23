@@ -13,11 +13,14 @@ import { ownsCall, registryOf } from "./runCatalog.js";
 import { killedResults, nativeResults, type NativeResult } from "./runRows.js";
 import { isTransportFailure } from "./surface.js";
 import type { PolicyHooks } from "./policy/index.js";
+import type { SynthesisWhy } from "./policy/hooks.js";
+import type { ForcedTurnResult } from "./policy/guards/forced/types.js";
 import { routeAround, turnSucceeded, type TurnAsk } from "./policy/model/handoff.js";
 import { reaskAsCoder } from "./policy/model/reask.js";
 import { interruptedResult, runToolWithWatch, stoppedResult, type InterruptWatch } from "./policy/steering/index.js";
 import { toolsTokensOf } from "./policy/compaction/compact.js";
 import { capToolResult, resultCapFor } from "./policy/tools/index.js";
+import { renderTaskState } from "./policy/tools/taskState.js";
 import { appendRows, currentView, emit, policyContext, type RunAgentInput, type TurnFacts } from "./runContext.js";
 import { tallyTurn, type RunTally } from "./telemetry/runTally.js";
 import { measureTurnTail } from "./turnTail.js";
@@ -38,6 +41,13 @@ export interface TurnSelection {
   final?: true;
   /** Who made the turn final: the guards' A3 finish (spent by `finalTurnDone` once answered) or the surface's menu. */
   finalBy?: "guards" | "surface";
+  /** What the guards' forced-turn ladder decided for this step (`GuardsHook.forcedTurn`). */
+  forced?: ForcedTurnResult;
+  /**
+   * The provider failed and the model policy re-asks (`recoverFailure`): the next step takes the SAME forced turn instead of
+   * deciding a new one, so a retry never spends the forced turn (a hand-off or finish the ladder had already decided).
+   */
+  retried?: true;
 }
 
 /** What a surface's own tool answered, for the no-progress count: from its read cache, or only conversational. */
@@ -145,6 +155,7 @@ export async function completeTurn(
     ...(fields ?? {}),
   };
   // `extra` rides the request as untagged rows before the volatile tail (the coder's hand-off brief): never in the transcript.
+  const progressNote = renderTaskState(state.taskState);
   const requestFor = (askedModel: string | undefined, ask: Partial<TurnAsk> | undefined, extra: RunMessage[] = []): ModelRequest => ({
     messages: measureTurnTail(state, withVolatileTail(extra.length > 0 ? [...transcript, ...extra] : transcript, pack, brief ?? null, sections)),
     ...(askedModel ? { model: askedModel, strict: ask?.strict ?? false } : {}),
@@ -154,6 +165,7 @@ export async function completeTurn(
     ...withoutToolChoiceIf(tools.length === 0, askFields(ask)),
     ...(tools.length > 0 && made?.toolChoice && !ask?.toolChoice ? { toolChoice: made.toolChoice } : {}),
     ...(reasoning ? { reasoning } : {}),
+    ...(progressNote ? { progress: progressNote } : {}),
   });
 
   let asked = model;
@@ -172,6 +184,7 @@ export async function completeTurn(
       const route = hooks.model.recoverFailure(pctx, err.failure, err.failure.model ?? model, reason);
       if (route.kind === "retry") {
         if (route.note) appendRows(input, transcript, { role: "system", content: route.note });
+        if (made) made.retried = true;
         return { skip: true };
       }
       return { failed: `provider failed: ${reason}` };
@@ -236,10 +249,12 @@ export async function synthesizeFinal(
   transcript: RunMessage[],
   pack: ContextPack,
   tally: RunTally,
+  /** What stopped the run (a failure streak), so the closing prompt can name it. */
+  why: SynthesisWhy = {},
 ): Promise<string | null> {
   if (input.signal?.aborted) return null;
   const pctx = policyContext(input, state, currentView(transcript, []), state.step, 0);
-  const prompt = hooks.stall.synthesis?.(pctx);
+  const prompt = hooks.stall.synthesis?.(pctx, why);
   if (!prompt) return null;
 
   const decision = await hooks.model.resolve(pctx);
@@ -255,7 +270,10 @@ export async function synthesizeFinal(
         messages: [...withVolatileTail(transcript, pack, null, input.ports.context.turnSections?.() ?? []), ask],
         ...(model ? { model, strict: decision?.strict ?? false } : {}),
         maxTokens: SYNTHESIS_MAX_TOKENS,
+        // A transport records this turn as the run's forced closing one (and what stopped the run), never an ordinary turn.
+        ...(why.failureStreak !== undefined ? { forcedFinish: why } : {}),
         ...askFields(fields),
+        ...(renderTaskState(state.taskState) ? { progress: renderTaskState(state.taskState) } : {}),
       },
       input.signal,
     );

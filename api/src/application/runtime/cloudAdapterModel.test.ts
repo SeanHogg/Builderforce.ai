@@ -24,7 +24,7 @@ function build(over: { status?: number; contained?: string | null; capTokens?: n
     run: { tenantId: 1, projectId: 2, taskId: 3, executionId: 4, meterExecutionId: 4 },
     routing: { effectivePlan: 'free', premiumOverride: false } as never,
     runRole: 'code', pickedModel: 'seed', genParams: { maxTokens: 4000 }, cost: cost as never,
-    declaredLimits: undefined, footprint: () => ({ files: 0, repositories: 0 }), progress: () => '', fallbackSurface: null, startStep: 5,
+    declaredLimits: undefined, footprint: () => ({ files: 0, repositories: 0 }), fallbackSurface: null, startStep: 5,
   });
   return { port, complete, cost };
 }

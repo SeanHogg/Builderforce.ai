@@ -24,7 +24,6 @@ import { getToken, hostFetch, onHostMessage, post, refreshToken, type InitData }
 import { installCanvasHost } from './hostActions';
 import { createHostPersistence } from '../hostPersistence';
 import { installHostRunDriver } from '../hostRunDriver';
-import { buildIdeSystemPrompt } from '../systemPrompt';
 import { webviewLocalFetch } from '../pageEngines';
 
 const LOCALES = ['en', 'zh', 'es', 'fr', 'de'] as const;
@@ -125,11 +124,12 @@ function ChatRuntimeProvider({ init, children }: { init: InitData; children: Rea
         ? { ...localTransport({ baseUrl: init.localRoute.baseUrl }, webviewLocalFetch(hostFetch)), defaultModel: init.localRoute.model }
         : gatewayTransport,
       persistence,
-      resolveSystemPrompt: () => buildIdeSystemPrompt({ hasWorkspace: init.hasWorkspace, grounding: init.grounding }),
+      // No prompt text from this panel: the host run builds the opening prompt from the request's data (`BrainRunRequest.opening`).
+      resolveSystemPrompt: () => '',
       // `builderforce.images.*` — how an attached picture is scaled and re-encoded.
       ...(init.images ? { imagePrep: init.images } : {}),
     }),
-    [init.baseUrl, init.model, init.hasWorkspace, init.grounding, init.localRoute, init.images, gatewayTransport, persistence],
+    [init.baseUrl, init.model, init.localRoute, init.images, gatewayTransport, persistence],
   );
 
   return (

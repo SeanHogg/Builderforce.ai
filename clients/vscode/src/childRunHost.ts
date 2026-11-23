@@ -145,6 +145,8 @@ export function createChildRunHost(deps: ChildRunHostDeps): ChildRunHost & { aft
         chatId: key,
         systemPrompt: `${subagentSystemPrompt(req.persona, { owner: owner.name, role: req.role })}\n\n${base}`,
         basePrompt: base,
+        // The owner's opening DATA (IDE persona, project, editor context …): the child's prompt is built from it the same way.
+        ...(parent.opening ? { opening: parent.opening } : {}),
         ...(model ? { model } : {}),
         ...(parent.modelStrict != null ? { modelStrict: parent.modelStrict } : {}),
         ...(parent.routingMode ? { routingMode: parent.routingMode } : {}),

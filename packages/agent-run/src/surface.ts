@@ -191,6 +191,12 @@ export interface TurnEnv {
   progress: LadderProgress;
   /** The calls in a row the run's read cache answered (`policy/tools/cacheServedStreak`). */
   cache: CacheServedStreak;
+  /**
+   * The menu the guards' forced-turn ladder decided for this step (`GuardPorts.progress.turns`), when a rule forced one: the plan
+   * budget's hand-off turn, the change budget, a circling run, A3's escalation or finish. Absent ⇒ no rule forced the turn. The
+   * kernel advertises it as it is unless the surface answers with its own menu (it may add to it, never decide again).
+   */
+  forced?: TurnMenu;
 }
 
 /** How a surface shapes one turn. */
@@ -253,10 +259,10 @@ export interface LadderRung {
 
 /** How a provider failure is spoken to the model, in this surface's words. */
 export interface ProviderFailureWording {
-  /** Said when the turn moves to a model that already acted, naming it. */
-  handoff: (to: string) => string;
-  /** Said when the turn is re-asked of the gateway's pool. */
-  reroute: string;
+  /** Said when the turn moves to a model that already acted, naming it. Absent ⇒ the model reads nothing of it. */
+  handoff?: (to: string) => string;
+  /** Said when the turn is re-asked of the gateway's pool. Absent ⇒ the model reads nothing of it. */
+  reroute?: string;
   /** The turn is being re-asked; for the surface's trace. */
   rerouted?(failure: { model?: string; message: string; step: number; outcome: Extract<RunPolicyOutcome, { kind: "retry_turn" }> }): void;
   /** No model is left: the turn is abandoned. */
@@ -332,6 +338,12 @@ export interface StallStyle {
   runWideBudget?: true;
   /** A turn that said nothing is still the model's row: it is quoted before the correction, empty, so the next request reads what the model did. */
   quoteEmpty?: true;
+  /**
+   * The run's forced closing turn is asked ONLY for a run the consecutive-failure breaker stopped, with a prompt that names the
+   * failure streak (`stallPolicy.synthesis`); every other ending forces no extra call. The reply is the run's answer, and the
+   * request carries `ModelRequest.forcedFinish` so the surface records the turn as the forced one.
+   */
+  failureSynthesis?: true;
 }
 
 /**

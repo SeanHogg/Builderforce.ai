@@ -6,7 +6,7 @@
  * the preamble returns.
  */
 
-import { reduceRunPolicy, type RunPolicyEvent, type RunPolicyState } from '@builderforce/run-policy';
+import { reduceRunPolicy, type RunPolicyEvent, type RunPolicyState, type TurnRequest } from '@builderforce/run-policy';
 import { replayTextOf } from '@builderforce/agent-loop';
 import type { EvermindRecallResult } from '@seanhogg/builderforce-memory/evermind';
 import type { BrainMessage } from '../types';
@@ -26,8 +26,7 @@ import { nowIso, pushTrace, recordAppended } from './runCells';
 import { canonicalTurnText, provenanceMetadata } from './turnPersistence';
 import type { BrainRunRequest } from './runTypes';
 import type { RunRoute } from './runRoute';
-import type { CacheServedStreak, RunView } from '@builderforce/agent-run';
-import type { RunProgressGuard } from './progressGuard';
+import type { CacheServedStreak, RunSteerMessage, RunView } from '@builderforce/agent-run';
 
 /**
  * The tool names the run's prompt carries, by where they came from (`runPreamble.ts`). A capped turn on an editor surface requires
@@ -127,10 +126,13 @@ export interface BrainRunContext {
   /** The window-fit gate every request passes through. */
   windowFit: RunWindowFit;
   readCoverage: ReadCoverage;
-  /** Consecutive calls the read cache answered — the no-progress breaker (`cacheServedStreak.ts`). */
+  /** Consecutive calls the read cache answered — the no-progress breaker's counter (the agent's `policy/tools/cacheServedStreak`). */
   cacheStreak: CacheServedStreak;
-  /** The A3 progress detector, bound to this run (`progressGuard.ts`). */
-  progress: RunProgressGuard;
+  /**
+   * Child reports that reached the run through its inbox (not a `wait_agents` result), waiting for the agent's A3 detector to read them
+   * as data (`run/brainProgressPorts.ts`, `brainSteering.ts`): their files are the run's writes (VS Code chat #157440).
+   */
+  childReports: Array<NonNullable<RunSteerMessage['childReport']>>;
   /** The run's ONE record of what it did and read — the source of each turn's ledger. */
   knowledge: RunKnowledgeLog;
   failures: FailureTally;
@@ -144,7 +146,7 @@ export interface BrainRunContext {
   /** The run's route (`runRoute.ts`, decided by `routeRun`): its pipeline (null when not routed), start options and verify skip. */
   route: RunRoute;
 
-  /** THE model hand-off policy's state — advanced only through {@link reportToPolicy}. */
+  /** THE model hand-off policy's state — the AGENT's, read through its live {@link view} (the preamble holds no copy); advanced only through {@link reportToPolicy}. */
   policy: RunPolicyState;
   /** The agent's live run, when it drives this one (`run/runPrepared.ts`): the policy is ITS state, and events go to it. */
   view?: RunView;
@@ -161,7 +163,7 @@ export interface BrainRunContext {
   handOffClashRefused?: boolean;
   /**
    * The run's `hand_off` started NO coder (mode `inline`): the run itself takes every task, so it still owes the change
-   * (`progressBudget.progressed`). False for `parallel` and `mixed`: once coders were started the hand-off is progress, and in
+   * (`changeRequest.progressed`). False for `parallel` and `mixed`: once coders were started the hand-off is progress, and in
    * `mixed` the run's inline share is deliberately exempt from the change budget / stalled-finish deferral — the started coders'
    * reports drive the run, and forcing the change tools on the owner while they work would race their edits.
    */
@@ -186,6 +188,12 @@ export interface BrainRunContext {
    *  call is either the tail of a response that hit the output ceiling or JSON the model
    *  simply got wrong, and the advice for the two is opposite. */
   lastTurnInterruption: ReturnType<typeof turnInterruption>;
+}
+
+/** What the agent's model policy asks of the transport for a call the Brain makes itself (a retry inside a turn, the closing answer): never re-picked here. */
+export function policyAsk(run: BrainRunContext, hasTools: boolean): TurnRequest {
+  if (!run.view) throw new Error('policyAsk before the agent opened the run');
+  return run.view.ask(hasTools);
 }
 
 /** Report an event to the run policy; the new state is the run's. */

@@ -25,7 +25,6 @@ import {
   type SpendMeter,
   type RunTask,
 } from '@builderforce/agent-run';
-import type { RunPolicyOptions } from '@builderforce/run-policy';
 import type { ShipPolicy } from '@builderforce/run-guards';
 import { CODE_CHANGE_TOOLS } from '../localWorkspaceTools';
 import { deviceLeverOn } from '../runStore/deviceLevers';
@@ -49,8 +48,6 @@ export interface BrainRunBinding {
   turn: TurnObserver;
   /** Tools the surface runs beside the registry's, and the turns that end the run before a call dispatches. */
   extensions?: ToolExtension;
-  /** How the run's model hand-off starts (the route's start is folded in by `openRun`; this seeds the request's model): the phase it begins in, the stage models, and the quick model a routed QUICK run seeds. */
-  start?: Pick<RunPolicyOptions, 'startPhase' | 'phaseModels' | 'pinnedModel'>;
   /** The run's narrowed ship policy (`BrainRunContext.shipPolicy`, PRD 48), mirrored into `RunPolicy.ship`. */
   ship?: ShipPolicy;
   /** Where the run's events go (`eventSink.ts`; the surface reacts to some beyond rendering them, `brainTurn.ts`). */
@@ -114,9 +111,8 @@ export function brainRunTask(b: Pick<BrainRunBinding, 'req' | 'request'>): RunTa
  * The policy DATA of one Brain run. Every field is read off the request or the device —
  * the same facts the Brain's preamble reads — and none selects behaviour by surface.
  */
-export function brainRunPolicy(b: Pick<BrainRunBinding, 'entryPoint' | 'req' | 'request' | 'start' | 'ship'>): RunPolicy {
+export function brainRunPolicy(b: Pick<BrainRunBinding, 'entryPoint' | 'req' | 'request' | 'ship'>): RunPolicy {
   const { req } = b;
-  const seed = b.start?.pinnedModel ?? req.model;
   return {
     entryPoint: b.entryPoint,
     // Both modes offer the full catalog (`runPreamble.ts`): the mode changes the directive the model reads, never the menu.
@@ -130,12 +126,12 @@ export function brainRunPolicy(b: Pick<BrainRunBinding, 'entryPoint' | 'req' | '
     // is its only limit (`@builderforce/agent-loop`'s `DEFAULT_TOOL_FAILURE_STREAK`).
     budgets: req.maxRunBudgetUsd && req.maxRunBudgetUsd > 0 ? { usd: req.maxRunBudgetUsd } : {},
     codeChangeTools: [...CODE_CHANGE_TOOLS],
-    ...(req.model && req.modelStrict ? { pinnedModel: req.model } : {}),
     // The person's Stop is the composer's button: a steered "stop" is words to the model, never a command the run obeys.
     stopWords: false,
-    // The Brain's hand-off: a plain policy that starts in the phase the run's role and route say, on the stage models the host chose.
-    // The model a routed QUICK run seeds (its quick model, over a soft model) outranks the request's own, as the preamble's policy has it.
-    ...(b.start ? { modelStart: { plain: true, ...(seed ? { model: seed } : {}), strict: !!req.modelStrict, ...(b.start.startPhase ? { startPhase: b.start.startPhase } : {}), ...(b.start.phaseModels ? { phaseModels: b.start.phaseModels } : {}) } } : {}),
+    // The Brain's hand-off: a plain policy. The request's model is stated HERE and nowhere else (`modelStart.model`, strict when the person
+    // picked it); the start phase, the host's stage models and a routed QUICK run's model (over a soft one) are folded in by `openRun`'s
+    // `routedPolicy` from the route input, the ONE path they take.
+    modelStart: { plain: true, ...(req.model ? { model: req.model } : {}), strict: !!req.modelStrict },
     inference: 'hybrid',
     verify: 'none',
     // Governance gates are unbound on the Brain BY DECISION (parity ruling R10): its request carries none and no human channel approves one.

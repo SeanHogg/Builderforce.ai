@@ -36,6 +36,7 @@ import type { EditorRunSettings } from "./stageModels";
 import type { ShipPorts, ShipPortsRun } from "./verify/shipPorts";
 import type { RunOutcomeReport } from "@seanhogg/builderforce-brain-embedded";
 import type { PlatformChatIdentity } from "./platformTools";
+import type { EffectiveModelChoice as ModelChoice } from "./modelState";
 
 /** The top-level owner's name, as the chat shows it (a brand, not translated). */
 export const OWNER_NAME = "BuilderForce";
@@ -82,7 +83,12 @@ export interface BrainRunHostPorts {
    * The transport-bound streamer for the CURRENT route (gateway or on-device).
    * `onFallback` is told when Hybrid's pick failed and the turn was answered with Auto.
    */
-  stream(onFallback?: (event: ModelFallbackEvent) => void): Promise<BrainStreamFn>;
+  stream(onFallback?: (event: ModelFallbackEvent) => void, choice?: ModelChoice): Promise<BrainStreamFn>;
+  /**
+   * The model a top-level run asks for, decided ONCE here (the webview posts its raw pick and the persona's model as data): the run's
+   * request and its `stream` both take this one choice. Omitted ⇒ the request's own `model` / `modelStrict` / `routingMode` stand.
+   */
+  modelChoice?(personaModel?: string): Promise<ModelChoice>;
   /** The live on-device runtimes, asked only when a turn moves onto a local model so the
    *  window gate packs for that runtime's real window. Omitted ⇒ the catalog row. */
   localProbes?(): Promise<readonly LocalRuntimeProbe[]>;
@@ -273,9 +279,10 @@ export interface BrainRunHost {
   childControls(owner: ChildOwner, base: Omit<WebviewRunStart, "chatId">, approve?: ChildApprover): ChildControls;
   /**
    * Ask `approve` about every paused call of a chat's runs - the owner's own and its sub-agents' - where the surface cannot render
-   * a run cell's confirm (the native chat view). Whichever surface answers first wins.
+   * a run cell's confirm (the native chat view). Whichever surface answers first wins. Returns the UNREGISTER: the turn calls it when it
+   * ends, so a later run on the chat answers on its own surface instead of popping this one's modal.
    */
-  registerApprover(rootChatId: number, approve: ChildApprover): void;
+  registerApprover(rootChatId: number, approve: ChildApprover): () => void;
   /** Is the run key claimed - setting up, running or unwinding? Another path (the native chat
    *  participant) asks before it starts a run of its own on the same key. */
   isBusy(runKey: number): boolean;

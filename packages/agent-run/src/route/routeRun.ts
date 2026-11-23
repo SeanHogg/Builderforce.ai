@@ -60,8 +60,15 @@ export function skipsVerifyStage(pipeline: PipelineScore | null): boolean {
   return pipeline?.route === "quick";
 }
 
+/** What routing decided: the score (or null), where the run starts, and whether it skips the verify stage. */
+export interface RouteDecision {
+  pipeline: PipelineScore | null;
+  start: RouteStart;
+  skipsVerify: boolean;
+}
+
 /** Route one run: the score (or null), where it starts, and whether it skips the verify stage. */
-export function routeRun(route: RouteInput): { pipeline: PipelineScore | null; start: RouteStart; skipsVerify: boolean } {
+export function routeRun(route: RouteInput): RouteDecision {
   const pipeline = decideRunPipeline(route);
   return { pipeline, start: pipelinePolicyOptions(route, pipeline), skipsVerify: skipsVerifyStage(pipeline) };
 }

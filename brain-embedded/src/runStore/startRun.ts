@@ -14,18 +14,15 @@ import { askedModelOf, codeRunOutcome, completedTurns } from '../runOutcomeRepor
 import { attemptedDelegation, runOutcomeRequestOf, type RunOutcomeRow } from '@builderforce/agent-run';
 import { parseRunOutcomeTelemetry } from '@builderforce/learned-routing';
 import { shippedToBaseBranch } from '../shipVerification';
-import { ticketsReviewedInPreview } from '../previewReview';
+
 import { lineagePersistence, savedChatOf } from '../runLineage';
 import { emptyRunUsage } from '../memorySavings';
-import { emit, getCell, nowIso, recordRunFailure, runTrace } from './runCells';
+import { emit, getCell, recordRunFailure, runTrace } from './runCells';
 import { appendRunMessage } from './runControl';
 import { keepStoppedTurn, persistStep } from './turnPersistence';
-import { settleView } from './runBackstops';
-import { forgetChatTicketListing, localTicketsFiledInRun } from './chatTickets';
-import { verificationOf, type CloseOutInput } from '../run/brainCloseOut';
-import { deterministicFinish, finishConditionMet, holdsLinkedTicket } from './deterministicFinish';
-import type { BrainRunContext } from './brainRunContext';
-import { resolveServerChatId } from './serverChat';
+
+import { forgetChatTicketListing } from './chatTickets';
+import { verificationOf } from '../run/brainCloseOut';
 import { prepareBrainRun } from './runPreamble';
 import { runPrepared } from '../run/runPrepared';
 import { noteRunId, reportRunEnd, unrecorded } from './runEndOutcome';
@@ -78,8 +75,6 @@ export async function startRun(runKey: number, request: BrainRunRequest, claim?:
   // persists is attributed to the child and spliced into the owner's live view.
   const lineage = request.lineage;
   const chatId = savedChatOf(runKey, lineage);
-  // The SERVER chat its backstops link to (PRD 36) — null on an unbound local chat.
-  const serverChatId = resolveServerChatId(chatId, request);
   // Step rows are batched (see `stepOutbox.ts`) INSIDE the lineage wrap: a row is
   // attributed to the child before it is queued, so a queue replayed after a restart —
   // by the host's run-independent sender, with no run and no lineage in hand — still
@@ -117,15 +112,14 @@ export async function startRun(runKey: number, request: BrainRunRequest, claim?:
   emit(c);
 
   c.runUsage = emptyRunUsage();
-  // The placeholders this run wrote and has not removed, for the close-out's acceptance (none before a run is prepared).
-  let openPlaceholders = (): number => 0;
-  // The checks the host verifier ran for this run - the close-out's verification (none before a run is prepared).
-  let evidence: CloseOutInput['evidence'];
+  // This run's close-out verdict starts unknown: the run's one close-out (the kernel's finish policy) sets it.
+  c.closeOutFinished = false;
+  // The checks the host verifier ran for this run - what the continuation-progress verdict reads (none before a run is prepared).
+  let evidence: Parameters<typeof verificationOf>[0];
   try {
     const prepared = await prepareBrainRun(chatId, c, req, runKey, holdRunRow);
     // Memory answered: the run is over before a model was asked.
     if (prepared) {
-      openPlaceholders = () => prepared.placeholderLedger.outstanding().length;
       evidence = prepared.evidence;
       // The id this run's calls carry - what its end is reported under (`runEndOutcome.ts`).
       noteRunId(c, prepared.metadata.guestTurnId);
@@ -163,68 +157,19 @@ export async function startRun(runKey: number, request: BrainRunRequest, claim?:
       // A Stop keeps what it cut off — the partial reply and the model that was writing it.
       // Bounded: every await made while the claim is held is, so the chat can never stick.
       if (aborted) await within(left(), async () => { await keepStoppedTurn(chatId, c, req.persistence, () => c.runId === runId); }, () => undefined);
-      // Guarantee a code change is tied to a ticket: if this run CHANGED code (an IDE
-      // file tool succeeded) but never itself recorded/linked one, mint a ticket now
-      // via from_delta, tied to this chat — so an edit is never invisible or unlinked.
-      // Best-effort and IDE-only (the web Brain has no file tools → codeChanged stays
-      // false). Skipped on a user Stop. Runs before the final emit so the auto-recorded
-      // step is part of the settled run.
-      // Post-run work is still work: minting and advancing tickets are real calls that
-      // take real time. Announce the phase so the surface doesn't go blank-but-busy.
-      if (!aborted && c.codeChanged && req.projectId != null && req.runTool) {
-        c.activity = { phase: 'finishing', startedAt: Date.now(), step: 0 };
-        emit(c);
-      }
-      // What the backstops decide on is read NOW, synchronously, from THIS run - never later from a cell the
-      // next run may be using. Evaluated once: `shipped` gates ticket completion AND is the reported outcome's `merged`.
+      // The settle RECORDS the run's outcome; it closes nothing out. The close-out (ticket attach, backlog advance, the host's
+      // review and the move to done) ran once, in the run, as the kernel's finish policy's `closeOut` port
+      // (`runStore/deterministicFinish.ts`), and left its verdict on the cell.
+      // What the outcome report decides on is read NOW, synchronously, from THIS run - never later from a cell the
+      // next run may be using. Evaluated once: `shipped` is the reported outcome's `merged`.
       const changed = c.codeChanged;
       const trace = runTrace(c);
       const shipped = !aborted && changed && shippedToBaseBranch(trace, { touchedFiles: c.touchedFiles });
-      const reviewedInPreview = !aborted && changed ? ticketsReviewedInPreview(trace) : [];
-      const view = settleView(c, runId);
-      const needsTicket = !aborted && changed && req.projectId != null && !!req.runTool;
-      const openPh = openPlaceholders();
       const verification = verificationOf(evidence, c.touchedFiles);
-      // The run's ticket: the delta it minted on the account, or one it filed on the device (`ticket-create`).
-      const hasTicket = view.deltaTicketId != null || localTicketsFiledInRun(trace).length > 0;
-      // FIX #6 DETERMINISTIC FINISH: when shipped + verified + no placeholders + a linked ticket, the
-      // close-out is the run's FINISH — the host records the review, moves the ticket to done, and the
-      // learn write is host-side (`emitEvermindLearnReconcile`), all ZERO model turns. `finished` is the
-      // gate an empty-ask continuation suppressor reads: when true, an empty ask must NOT auto-continue.
-      // It is read once the close-out has run, because the linked ticket may only be known from the chat's listing.
-      // The backstops hold the chat (the claim) - so they wait at most `settleMs`: a hung ticket call must not
-      // leave the chat live forever. Late work finishes in the background on the snapshot, writing nothing
-      // into a later run; a failure of it is traced (while this run is current), never unhandled.
-      // The close-out (`run/brainCloseOut.ts`): the ticket's last attach, the backlog advance, and - when this run shipped -
-      // the host's review and the move to done, held by the same acceptance a model's `done` is held to. Skipped on a Stop.
-      // FIX #6: entered through `runDeterministicFinish` — the named deterministic-finish module (`runStore/deterministicFinish.ts`).
-      const closeOut: CloseOutInput & { verified: boolean; hasTicket: boolean } = { serverChatId, view, req, needsTicket, shipped, reviewedInPreview, openPlaceholders: openPh, trace, evidence, verified: verification.verified, hasTicket };
-      c.finishClosedOut = true; // this path is the closer; the close-out port stands down
-      await within(left(), async () => {
-        // A ticket the chat links (its delta id never read back, or linked by hand) is the run's ticket too:
-        // read the listing only when it is the one thing the finish gate still lacks. Inside the bounded settle.
-        if (!closeOut.hasTicket && finishConditionMet({ ...closeOut, hasTicket: true })) closeOut.hasTicket = await holdsLinkedTicket(trace, serverChatId, req, { deltaTicketId: view.deltaTicketId, note: view.note, listing: view.listing });
-        await deterministicFinish(closeOut, { c, req, serverChatId, recalled: null } as BrainRunContext);
-      }, () => view.note?.({
-        ts: nowIso(),
-        category: 'message',
-        label: 'run.backstop_timeout',
-        args: { waitedMs: continuationLimits.settleMs },
-        result: 'The run\'s ticket bookkeeping did not finish in time; the run is settled without waiting for it.',
-      }), (e) => view.note?.({
-        ts: nowIso(),
-        category: 'message',
-        label: 'run.backstop_failed',
-        args: { error: e instanceof Error ? e.message : String(e) },
-        result: 'The run\'s ticket bookkeeping failed; the run is settled without it.',
-      }));
-      // Mark the cell: this run's close-out ran over its final trace. The deterministic-finish
-      // close-out port (`deterministicFinish.ts`) — which closes out a run `startRun` never drives —
-      // stands down on this flag, so the close-out runs exactly once across the two paths.
-      c.finishClosedOut = true;
       // The run's ticket reads are done: its memoised listing goes with it.
       forgetChatTicketListing(c);
-      const finished = finishConditionMet(closeOut);
+      // The gate an empty-ask continuation suppressor reads: when true, an empty ask must NOT auto-continue.
+      const finished = c.closeOutFinished;
       // R4 — the auto-continuation's no-progress guard: a run the chat continued on its own
       // (flagged `continuationProgress` on its request, no person's words) records its verdict
       // from THIS run's own evidence — a file changed or a check passed — BEFORE the next

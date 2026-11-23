@@ -21,7 +21,7 @@
  * The finish gates, guards, verify and compaction are bound with the couplings this surface has
  * (`cloudAdapterHooks`); what they DO is the agent's.
  */
-import { DEFAULT_READS_BEFORE_NUDGE, asksForSubagents, openRun, renderTaskState, type ContextPack, type RunPolicy, type RunPorts, type RunState, type RunTask } from '@builderforce/agent-run';
+import { DEFAULT_READS_BEFORE_NUDGE, asksForSubagents, openRun, type ContextPack, type RunPolicy, type RunPorts, type RunState, type RunTask } from '@builderforce/agent-run';
 import { isCostLeverOn, type CostLeverId } from '@builderforce/cost-levers';
 import type { CloudEngineContext } from './cloudAgentEngine';
 import { parseRunDispatch } from './runDispatch';
@@ -119,8 +119,6 @@ export async function runCloudAgent(
   const { env, db, refs, cancel } = host;
 
   const resume: RunState | undefined = toRunState(opts.resume, await trustedLegacyApprovals(db, refs.tenantId, refs.executionId, opts.resume));
-  /** The run's live state, named by the guards on every hook call — the contained-run progress line reads its task state. */
-  const live: { state?: RunState } = {};
   const stash: RunStash = {};
   const model = cloudModelPort({
     env, db, proxy: host.proxy, routing: host.routing,
@@ -129,7 +127,6 @@ export async function runCloudAgent(
     ...(opts.execParams ? { execParams: opts.execParams } : {}),
     cost: host.cost, declaredLimits: host.declaredLimits,
     footprint: () => ({ files: host.writtenPaths.size, repositories: host.repoCtx ? 1 : 0 }),
-    progress: () => renderTaskState((live.state ?? resume)?.taskState),
     fallbackSurface: host.fallbackSurface,
     startStep: resume?.step ?? 0,
   });
@@ -171,7 +168,6 @@ export async function runCloudAgent(
         ladder: host.ladder, features: host.features, resolvedModel: model.servedModel,
         ...(opts.execParams ? { execParams: opts.execParams } : {}),
         ...(opts.shipPolicy ? { ship: opts.shipPolicy } : {}),
-        live,
       }),
       // The ticket's words and the board's model picks; a delegated child routes as a child (the owner's ladder is not its own).
       route: {

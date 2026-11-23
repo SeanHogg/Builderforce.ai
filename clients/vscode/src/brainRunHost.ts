@@ -45,9 +45,7 @@ import {
 import type { ToolDef } from "./fileTools";
 import type { ShipPolicy } from "@builderforce/run-guards";
 import { approvalRequestFor, argsRecord, createNativeRunTool, nativeNeedsConfirm, nativeToolSpecs, toolLabel } from "./nativeRunTool";
-import { withRunPreamble } from "./runPreamble";
 import { chatLedgerRequest } from "./runUsageLedgerPorts";
-import { replaceWorkspaceMap } from "./idePersona";
 import { RunKnowledgeRecorder, recordingOnly } from "@builderforce/agent-tools";
 import { createChildRuns } from "./childRuns";
 import { createRunRelay } from "./runRelay";
@@ -229,7 +227,8 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     // Governance FIRST: an unreadable policy throws here and the run never starts.
     const gates = (await ports.policyGates?.(projectId)) ?? [];
     const directives = await ports.directives?.(p.child ? "subagent" : "run");
-    const systemPrompt = ports.grounding ? replaceWorkspaceMap(p.systemPrompt, await ports.grounding()) : p.systemPrompt;
+    // The workspace as it is NOW, handed to the run as data: `prepareBrainRun` puts it in the prompt.
+    const grounding = await ports.grounding?.();
 
     // What a finished tool call means to this host — the knowledge loop, the Changes
     // view and the panel's feed. A sub-agent's calls are its own run's, read the same way.
@@ -294,7 +293,11 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     // A Hybrid pick that failed and was answered with Auto is announced to THIS chat's
     // panel, which shows the one-line notice — a fallback is never silent.
     // A sub-agent's stream stays silent: its parent run already told the person.
-    const transport = await ports.stream(p.child ? undefined : (event) => broadcast({ type: "run.modelFallback", chatId: key, from: event.from, reason: fallbackDetail(event) }));
+    // THE run's model choice, decided ONCE here (the panel posted its raw pick and the persona's model as data): the request below and
+    // the transport both take this one choice. A sub-agent keeps the pick its owner handed it (`modelForChildRun`).
+    const choice = !p.child ? await ports.modelChoice?.(p.personaModel) : undefined;
+    const pick: { model?: string; modelStrict?: boolean; routingMode?: "auto" | "byo_pool" } = choice ?? p;
+    const transport = await ports.stream(p.child ? undefined : (event) => broadcast({ type: "run.modelFallback", chatId: key, from: event.from, reason: fallbackDetail(event) }), choice);
     const role = p.child?.role;
     // …and keeps the model its first turn was routed to for its whole life (chat #273: it hopped models every turn).
     const routed: BrainStreamFn = role
@@ -312,20 +315,22 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     try {
       // Stopped during the setup above: the loop never starts (`settled` drops what waits).
       if (steering.stopped(key)) return void (await stopBeforeStart(key, chatId, ports.persistence));
-      // Gates render as binding directives ahead of the host prompt, then the workspace's
-      // rules — the one preamble the native participant shares.
+      // Gates, the workspace's rules and the grounding map go to the run as DATA; the brain
+      // assembles the one opening prompt (`openingSections.ts`). They are the host's: whatever
+      // the panel posted under these keys is overwritten.
       await startRun(key, {
         // The surface this run came in through: the label its uniform outcome row carries (telemetry only; nothing branches on it).
         entryPoint: "vscode",
-        resolvedSystemPrompt: withRunPreamble(systemPrompt, { gates, rules: directives?.rules }),
+        resolvedSystemPrompt: p.systemPrompt,
+        opening: { ...p.opening, gates, ...(directives?.rules ? { rules: directives.rules } : {}), ...(grounding ? { grounding } : {}) },
         // Only this workspace's tools feed the run's record: a remote platform call acted
         // elsewhere, and must not land in the workspace's note or code map.
         knowledge: recordingOnly(notesFor(key), (name) => !defs.find((d) => d.name === name)?.remote),
         tools: nativeToolSpecs(defs),
-        ...(p.model ? { model: p.model } : {}),
-        ...(p.modelStrict != null ? { modelStrict: p.modelStrict } : {}),
-        ...(p.routingMode ? { routingMode: p.routingMode } : {}),
-        ...(p.modelStrict ? {} : { pickFallbackModel: (tried: readonly string[]) => nextFallbackModel(surface, tried) }),
+        ...(pick.model ? { model: pick.model } : {}),
+        ...(pick.modelStrict != null ? { modelStrict: pick.modelStrict } : {}),
+        ...(pick.routingMode ? { routingMode: pick.routingMode } : {}),
+        ...(pick.modelStrict ? {} : { pickFallbackModel: (tried: readonly string[]) => nextFallbackModel(surface, tried) }),
         // The surface's connected-account windows and the live on-device runtimes: a
         // failover onto a smaller model (cloud or local) is packed for it.
         windowSources: {
@@ -360,6 +365,7 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
           request: asked ?? "",
           memory: p.evermind,
           child: !!p.child,
+          ...(p.turnContext ? { turnContext: p.turnContext } : {}),
         }),
         ...(p.seed ? { seed: p.seed } : {}),
         ...(p.priorResearch ? { priorResearch: p.priorResearch } : {}),

@@ -20,11 +20,11 @@
 import * as vscode from "vscode";
 import { collectRepoChanges, parsePorcelain } from "./gitChangeModel";
 import { findRepository, getGitApi, runGit, watchGitRepositories, type GitApiRepository } from "./gitApi";
-import type { GitContext } from "./idePersona";
+import type { GitContext } from "@seanhogg/builderforce-brain-embedded";
 import { syncedRepositoryIdentity } from "./repoIdentity";
 import { ttlCache } from "./ttlCache";
 
-// The SHAPE lives in `idePersona.ts` (host-free, so it can cross the webview
+// The SHAPE lives in brain-embedded's `ideSystemPrompt.ts` (host-free, so it can cross the webview
 // bridge); this module owns the DETECTION. Re-exported for host-side importers.
 export type { GitContext };
 

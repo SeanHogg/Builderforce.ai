@@ -129,13 +129,21 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
       // could run: a board with hundreds of tools advertises a fixed, ranked set.
       const base = currentView(transcript, offered);
       const selectNow = async (): Promise<readonly ToolSchema[] | void> => hooks.tools.select(policyContext(input, state, base, ctx.step, ctx.stepInCall), offered);
+      // The guards' forced-turn ladder (a surface that binds it) decides first, BEFORE the tools are selected: the plan budget's
+      // hand-off turn moves the policy to the coding role, which the selection then reads. A provider failure the model policy
+      // re-asks takes the SAME forced turn again: a retry never spends what the ladder had decided.
+      const forced = run.selection?.retried === true && run.selection.forced
+        ? run.selection.forced
+        : await hooks.guards.forcedTurn?.(policyContext(input, state, base, ctx.step, ctx.stepInCall), { select: async () => (await selectNow()) ?? offered, cache: run.cache });
       // The surface may shape the turn (force it, add to the menu); it is asked once per step, and the policy's selection is its input.
-      const menu = await ports.platform?.turn?.({
+      const surfaceMenu = await ports.platform?.turn?.({
         step: ctx.step,
-        select: async () => (await selectNow()) ?? offered,
+        select: async () => (forced ? forced.selected : (await selectNow()) ?? offered),
         progress: { rungs: state.stall?.rungs ?? {} },
         cache: run.cache,
+        ...(forced?.menu ? { forced: forced.menu } : {}),
       });
+      const menu = surfaceMenu ?? forced?.menu;
       // A3's `finish` (the guards' `finalTurn`): the run's change is made and verified, so this turn offers NO tools — the model writes
       // its final report and the run ends. An empty menu is a decision the turn honours, and a forced tool choice cannot apply to it.
       // A turn the SURFACE already forced (its own required call) wins this step: the finish is not dropped — it stays pending in the
@@ -146,9 +154,10 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
       // guards' pending finish.
       const finalBy = finalSource(menu, () => hooks.guards.finalTurn?.(policyContext(input, state, base, ctx.step, ctx.stepInCall)) === true);
       const finalTurn = finalBy !== undefined;
-      const advertised = finalTurn ? [] : (menu?.tools ?? (await selectNow()));
+      const advertised = finalTurn ? [] : (menu?.tools ?? forced?.selected ?? (await selectNow()));
       run.selection = {
         tools: advertised,
+        ...(forced ? { forced } : {}),
         ...(menu?.toolChoice && !finalTurn ? { toolChoice: menu.toolChoice } : {}),
         ...(menu?.tail && menu.tail.length > 0 ? { tail: menu.tail } : {}),
         ...(finalBy ? { final: true as const, finalBy } : {}),
@@ -317,7 +326,7 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
       // What the model reads on this call: D7's post-edit note, then the early delegation
       // nudge on the read that earned it. Applied to the row the kernel already pushed.
       let data = result.data;
-      const noted = await hooks.guards.observe(pctx, pcall, data);
+      const noted = await hooks.guards.observe(pctx, pcall, data, result.isError === true);
       if (noted) data = noted.data;
       const nudged = hooks.subagents.nudge(pctx, pcall, data);
       if (nudged) data = nudged.data;

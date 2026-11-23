@@ -44,13 +44,13 @@ export function brainDeliveryLedger(run: BrainRunContext, last: LastTurn): Deliv
   const skippedByFinish = (content: string): Promise<void> =>
     noteFinishSkipsGates(run, last.step, content, { id: STOP_HOOK_RUNG, applies: async () => (await askStop()) !== null });
   return {
-    // The closing answer after a failure streak is the Brain's own (`runStore/failureClose.ts`, run by the adapter tail). A host that
-    // cannot run a tool judges no stall at all (the rungs are none): the turn IS the answer.
-    owns: { settle: true, synthesis: true, ...(runTool ? {} : { narration: true as const }) },
+    // A host that cannot run a tool judges no stall at all (the rungs are none): the turn IS the answer.
+    owns: { settle: true, ...(runTool ? {} : { narration: true as const }) },
     // The Brain's stall order and wording (the stall policy's options below): a narrating turn is re-prompted before any rung, a model that
     // spent its budget is failed over (reading the nudge alone) or stopped only once every rung is clear, the rungs' directives are the
-    // person's rows, and the stall is judged against the menu the turn advertised.
-    stall: { narrationFirst: true, steersFirst: true, nudgeAs: 'user', failoverNudgeOnly: true, menu: true, quoteEmpty: true, runWideBudget: true },
+    // person's rows, and the stall is judged against the menu the turn advertised. The closing answer after a failure streak is the
+    // agent's own forced no-tools turn, with a prompt that names the streak (`failureSynthesis`); no other ending asks for one.
+    stall: { narrationFirst: true, steersFirst: true, nudgeAs: 'user', failoverNudgeOnly: true, menu: true, quoteEmpty: true, runWideBudget: true, failureSynthesis: true },
     // The stall judgement and the gates read the model's own words, reasoning included (`last.result.text`).
     judged: (content) => last.result?.text ?? content,
     // A turn sent back keeps what the person watched stream in: as its own block, or - a model that stalled out and was handed
@@ -66,18 +66,14 @@ export function brainDeliveryLedger(run: BrainRunContext, last: LastTurn): Deliv
       for (const write of held.splice(0)) write();
     },
     accept,
-    // The final turn the ladder never judges (`TurnMenu.final`): a FINISHING run records the gates it did not ask.
+    // A FINISHING run ("make no more changes and run nothing") is never sent back for more work: the agent asks no rung of its record
+    // turns or its final report (`PolicyContext.finishing`) and tells the ledger here what that skipped, once.
     async finalAccepted({ content }) {
-      if (runTool && run.progress.finishing) await skippedByFinish(content);
+      if (runTool) await skippedByFinish(content);
     },
     async rungs(turn: DeliveryTurn): Promise<readonly LadderRung[]> {
       // A host that cannot run a tool owes nothing: the turn IS the answer.
       if (!runTool) return [];
-      // A FINISHING run ("make no more changes and run nothing") is never sent back for more work: no stop hook, no gate.
-      if (run.progress.finishing) {
-        await skippedByFinish(turn.content);
-        return [];
-      }
       // A rung that sends a would-be final answer back: should the re-prompt then fail on the provider, the run keeps that answer (`brainSettle.ts`).
       const sentBackAnswer = (): void => { last.sentBackAnswer = { step: last.step }; };
       // The WORKSPACE's end-of-run directives, asked before the ship gate so whatever they make the run do is part of the change that ships.

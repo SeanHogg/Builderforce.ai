@@ -9,6 +9,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { selectPlatformCatalog, type PolicyContext } from '@builderforce/agent-run';
+import { initialRunPolicy, nextTurn } from '@builderforce/run-policy';
 import { brainPlatformTools, promptOnlyNamed, unnamedVocabulary } from './brainPlatformTools';
 import { chatModeDirective } from '../chatMode';
 import { chatWorkObligationTools } from '../chatWorkLinking';
@@ -45,7 +46,9 @@ async function runFor(phase: 'code' | 'verify', catalog: readonly string[]): Pro
   } as unknown as BrainRunRequest;
   const run = await prepareBrainRun(CHAT_ID, c, req, 1);
   if (!run) throw new Error('the preamble answered the turn itself');
-  run.policy = { ...run.policy, phase };
+  // The model policy is the AGENT's (`run.view`): this run has no agent, so a view over a policy already in `phase` stands in for it.
+  const policy = initialRunPolicy({ startPhase: phase });
+  run.view = { policy: () => policy, report: () => policy, ask: (hasTools) => nextTurn(policy, { hasTools }) };
   return run;
 }
 

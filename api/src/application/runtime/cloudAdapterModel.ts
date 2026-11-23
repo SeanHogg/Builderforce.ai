@@ -45,8 +45,6 @@ export interface CloudModelPortArgs {
   declaredLimits: Pick<RunLimits, 'maxFiles' | 'maxRepositories' | 'maxSpendMillicents'> | undefined;
   /** What the run has changed so far — the footprint the containment check reads. */
   footprint: () => { files: number; repositories: number };
-  /** The agent's task state, rendered — a contained run tells a follow-up where to resume. */
-  progress: () => string;
   /** The models a stalled run may fail over onto (the tenant's connected flagships, the coding pool). */
   fallbackSurface: ModelFallbackSurface | null;
   /** The first step this invocation runs (the kernel's absolute step on a resume). */
@@ -112,7 +110,7 @@ export function cloudModelPort(a: CloudModelPortArgs): CloudModelPort {
       // Containment first: a run over its declared limits (or its token cap) buys no further turn. Never routable —
       // the router must not re-ask, and no transport failure is recorded against the model.
       const { files, repositories } = a.footprint();
-      const contained = await a.cost.beforeTurn(step, a.declaredLimits, files, repositories, a.progress());
+      const contained = await a.cost.beforeTurn(step, a.declaredLimits, files, repositories, request.progress ?? '');
       if (contained) throw new ModelTransportError(contained, undefined, { routable: false });
 
       const messages = request.messages.map(toGatewayMessage);

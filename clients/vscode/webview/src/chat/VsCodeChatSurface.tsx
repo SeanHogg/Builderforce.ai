@@ -33,7 +33,7 @@
  * ── HOW IT IS BUILT ──────────────────────────────────────────────────────────────
  * The body is THE shared `AiSurface` (header · rail · thread or empty state · notices ·
  * footer), each slot a shared part bound here. This file is the container: the state
- * and its wiring live in sibling hooks (`useChatSystemPrompt`, `useChatMemory`,
+ * and its wiring live in sibling hooks (`useChatOpening`, `useChatMemory`,
  * `useTicketRail`, `useChatAudience`, `useChatSend`, `useCopyDiagnostics`,
  * `useSessionActions`, `useHostIntents`) and the presentational pieces beside them.
  *
@@ -71,7 +71,8 @@ import { useChatAudience } from './useChatAudience';
 import { useChatMemory } from './useChatMemory';
 import { useChatSend } from './useChatSend';
 import { useChatInterruptedResume } from './useChatInterruptedResume';
-import { useAssociatedProject, useChatSystemPrompt } from './useChatSystemPrompt';
+import { useAssociatedProject } from './useAssociatedProject';
+import { useChatOpening } from './useChatOpening';
 import { useComposerModels } from './useComposerModels';
 import { useCopyDiagnostics } from './useCopyDiagnostics';
 import { useHostIntents } from './useHostIntents';
@@ -135,7 +136,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
 
   const { chatVisibility, setChatVisibility, chatIsOwner } = useChatVisibility(chatId, persistence);
   const { associatedProjectId, associatedProject } = useAssociatedProject(init, activeChat);
-  const { extraSystem, setTurnLimbic, persona, setPersona, personaAgents, personaModelId } = useChatSystemPrompt({
+  const { opening, setTurnLimbic, persona, setPersona, personaAgents, personaModelId } = useChatOpening({
     init, apiReq, associatedProject, effort, webBrowsing,
   });
 
@@ -152,12 +153,13 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
     [init.labels, init.modelLabels],
   );
   const models = useComposerModels(init, apiReq, paidCostDetail);
-  const { modelSurface, composerModels, pickFallbackModel } = models;
+  const { modelSurface, composerModels } = models;
   // The host runs the loop, so it needs what only this panel knows: WHICH chat it shows,
-  // the Auto-mode switch, and the picker's surface (its stall failover ordering).
+  // the Auto-mode switch, the picker's surface (the host's stall failover ordering) and the
+  // persona's model (the host decides whether it applies).
   useEffect(() => {
-    setHostRunContext({ chatId, autoApprove, modelSurface });
-  }, [chatId, autoApprove, modelSurface]);
+    setHostRunContext({ chatId, autoApprove, modelSurface, ...(personaModelId ? { personaModel: personaModelId } : {}) });
+  }, [chatId, autoApprove, modelSurface, personaModelId]);
 
   const { memoryEnabled, setMemoryEnabled, evermind } = useChatMemory({
     init, chatId, activeChat, projectId: associatedProjectId, persistence, reloadChats, persistMemory, armMemory,
@@ -173,17 +175,15 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
     // The chat's project powers the run loop's "a code change is always tied to a ticket"
     // backstop (a from_delta ticket for this project, linked to the chat).
     projectId: associatedProjectId,
-    // A strict pin wins; otherwise an agent persona runs on the agent's own model.
-    model: init.modelStrict ? init.model : (personaModelId ?? init.model),
+    // The RAW pick: the host decides whether the persona's model applies (`personaModel` rides the host run context above).
+    model: init.model,
     modelStrict: init.modelStrict,
     // Absent = Auto: the gateway applies the account's `cloudOrder` (host `modelState`).
     routingMode: init.routingMode,
-    // A model that burns its stall budget describing tool calls it never makes is
-    // switched by the run itself, over the surface already loaded for the picker.
-    pickFallbackModel: init.modelStrict ? undefined : pickFallbackModel,
     maxTokens: effortMaxTokens,
     reasoning,
-    extraSystem,
+    // DATA for the run's opening prompt — the host run builds the prompt from it (`BrainRunRequest.opening`).
+    opening,
     ensureChatId,
     drafts,
     onActivity: reloadChats,

@@ -133,6 +133,7 @@ export function createFinishHook(ports: FinishPorts = {}): FinishHook {
         output: "",
         gates: ctx.state.finish,
         enterVerify: () => {
+          if (ctx.policy.skipVerifyStage) return;
           ctx.state.model = applyVerifyPhase(ctx.state.model);
         },
         ports,

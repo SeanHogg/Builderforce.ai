@@ -19,6 +19,8 @@
 import type { ToolSchema } from "@builderforce/agent-tools";
 import type { HumanAnswer, RunEvent, RunMessage, RunPolicy, RunPorts, RunState, RunTask } from "../contract.js";
 import type { TransportFailure, TurnInterruption } from "../surface.js";
+import type { ForcedTurnResult } from "./guards/forced/types.js";
+import type { CacheServedStreak } from "./tools/cacheServedStreak.js";
 
 /** What every policy hook sees: the run, its policy, its state and its ports. */
 export interface PolicyContext {
@@ -40,6 +42,11 @@ export interface PolicyContext {
   tools: readonly ToolSchema[];
   /** A3's final turn: it advertises no tools, yet it is the run's own turn — its role and model are the run's, not `chat`'s. */
   finalTurn?: true;
+  /**
+   * The run is FINISHING (the guards decided a finish turn, `GuardsHook.isFinishing`): its report is never sent back by a delivery
+   * rung, and the surface is told what that skipped (`DeliveryLedger.finalAccepted`).
+   */
+  finishing?: true;
   /** The turn's assistant content, when the hook runs after the model answered. */
   content?: string;
   /** The turn's text as the surface's stall judgement reads it (`DeliveryLedger.judged`); absent ⇒ {@link content}. */
@@ -105,9 +112,15 @@ export interface StallHook {
   /**
    * The prompt for ONE forced no-tools turn when the run ended without an answer (a
    * budget ran out, a breaker tripped, every turn only called tools). Absent or empty ⇒
-   * no synthesis.
+   * no synthesis. `why` says what stopped the run, so the prompt can name it (a failure streak).
    */
-  synthesis?(ctx: PolicyContext): string | null | void;
+  synthesis?(ctx: PolicyContext, why?: SynthesisWhy): string | null | void;
+}
+
+/** What stopped a run that gets a forced closing turn. */
+export interface SynthesisWhy {
+  /** The consecutive-failure breaker tripped after this many failed tool calls in a row. */
+  failureStreak?: number;
 }
 
 /** What a stall decision does: steer, escalate, pause, settle on an answer of its own, or fail the run. */
@@ -189,9 +202,18 @@ export interface GuardsHook {
    * After a call returned. Returns the replacement result when a guard has something the
    * model must read on it (D7's post-edit note), or nothing to let the result stand.
    */
-  observe(ctx: PolicyContext, call: PolicyToolCall, result: unknown): Promise<{ data: unknown } | void> | { data: unknown } | void;
+  observe(ctx: PolicyContext, call: PolicyToolCall, result: unknown, isError?: boolean): Promise<{ data: unknown } | void> | { data: unknown } | void;
   /** The turn's calls all ran; `content` is what the turn said (A3's readiness claims, WS8p). */
   endTurn?(ctx: PolicyContext, content: string): Promise<void> | void;
+  /**
+   * A surface that binds the forced-turn ladder (`GuardPorts.progress.turns`) asks it once per step, BEFORE its tools are
+   * selected: the plan budget, the change budget, a circling run and A3's due escalation or finish decide a turn that offers a
+   * narrower set of tools with a call required and a brief. `select` is the tools policy's selection; the answer's `selected`
+   * is what it chose (the hand-off tool left out once planning closed), `menu` the forced turn. Nothing ⇒ no ladder is bound.
+   */
+  forcedTurn?(ctx: PolicyContext, env: { select(): Promise<readonly ToolSchema[]>; cache: CacheServedStreak }): Promise<ForcedTurnResult | void>;
+  /** The run is FINISHING (a finish turn was decided): sticky; no delivery rung sends its report back for more work. */
+  isFinishing?(ctx: PolicyContext): boolean;
   /**
    * Before a turn's menu is built: true when this turn must offer NO tools — A3's `finish`
    * (the run's change is made and verified), so the model writes its final report and the

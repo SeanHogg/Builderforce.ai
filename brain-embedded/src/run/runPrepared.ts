@@ -24,6 +24,7 @@ import { discardAnswered, brainTurnObserver } from './brainTurn';
 import { toRunMessage } from './runMessages';
 import { withoutUncallableTurns } from './brainModelRules';
 import { brainRunPolicy, brainRunTask, buildBrainRunPorts, type BrainRunBinding } from './webAdapter';
+import { decidedRoute } from '../runStore/runRoute';
 
 /** Drive the prepared run to its outcome and settle it on the chat. */
 export async function runPrepared(run: BrainRunContext): Promise<void> {
@@ -48,14 +49,9 @@ export async function runPrepared(run: BrainRunContext): Promise<void> {
       // The turn recorder writes the model downgrade, and the steering port records each direction it drains.
       recorded: new Set(['llm.model_downgrade', 'steer.applied'] as const),
     }),
-    // The route's start (phase, stage models, a quick run's model) is folded in by `openRun` from `route`; this seeds the request's own model.
-    start: {},
     ship: run.shipPolicy,
-    // From here the model policy is the AGENT's: the Brain's guards read `run.policy` and report to it through the view.
-    attach: (view) => {
-      run.view = view;
-      Object.defineProperty(run, 'policy', { get: () => view.policy(), configurable: true });
-    },
+    // From here the model policy is the AGENT's: the Brain's guards read `run.policy` (the view's) and report to it through the view.
+    attach: (view) => { run.view = view; },
     // A question ends the run before any call dispatches (decided once per turn in `brainTurn.ts`).
     extensions: {
       schemas: () => [],
@@ -82,8 +78,8 @@ export async function runPrepared(run: BrainRunContext): Promise<void> {
     task: { ...brainRunTask(binding), transcript },
     policy: brainRunPolicy(binding),
     ports: { ...ports, model: withoutUncallableTurns(ports.model, req) },
-    // The run's route, decided once in the preamble (`runStore/runRoute.ts`): the agent's own `routeRun` over the same input.
-    route: run.route.input,
+    // The run's route, decided ONCE in the preamble (`runStore/runRoute.ts`): handed over as decided, so `openRun` folds it and never routes again.
+    route: { input: run.route.input, decided: decidedRoute(run.route) },
     surface: {
       // The Brain's own fold (`brainFold.ts`), not the agent's compaction adapted to imitate it.
       compaction: { hook: compaction.hook },

@@ -1,12 +1,11 @@
 /**
  * The ONE IDE coding-agent persona — the single source of truth for the system
- * prompt, shared by BOTH chat surfaces so they cannot drift:
- *   - the native `@builderforce` chat participant / session tab (`prompt.ts` →
- *     `ChatMessage[]`), and
- *   - the bundled React Brain webview (`webview/src/systemPrompt.ts` → string).
+ * prompt's TEXT. The editor run's prompt is assembled in ONE place
+ * (`runStore/openingSections.ts`, called by `prepareBrainRun`) from these pieces; the
+ * native chat participant (`prompt.ts`) reads the same pieces through the VS Code
+ * client's `idePersona.ts` re-export so the two cannot drift.
  *
- * Pure strings, no host/React/node imports, so both the esbuild (extension host)
- * and Vite (webview) bundles can import it directly.
+ * Pure strings, no host/React/node imports.
  */
 
 /** Standard preamble shown above the scanned workspace map. */
@@ -164,7 +163,7 @@ export const SHELL_USE_DIRECTIVE =
  */
 export function ideSystemPromptBase(hasWorkspace: boolean): string {
   const base = hasWorkspace
-    ? "You are BuilderForce, an AI coding agent embedded in VS Code, working in the user's open workspace folder. Use the file tools (read_file, list_files, write_file, edit_file, delete_file) to inspect and change the project, and search_code to find the right code before editing it. Read a file before editing it; use edit_file for precise changes to existing files and write_file for new ones. After making changes, VERIFY them (run the project's tests, build, lint, or typecheck) and fix anything that fails before reporting done. To SHIP: this session is local — no other agent or reviewer can reach the working tree. After verifying, self-review your diff (git_diff) and fix what you find, then ship exactly the `paths` you changed (repo-relative) the way the SHIP POLICY contract below says: it is the project's standing rule (commit, commit and push, a pull request, or leave it uncommitted), so never ask the person whether to commit or push. Report the commit hash and whether the push landed, or the exact error if it did not. If the open folder contains several checkouts rather than being one repo, pass `repo` to name the one you are working in. Make minimal, correct changes and briefly explain what you did. Be efficient with tool calls. When a Project map is provided below, use it to locate files and directories directly instead of calling list_files for structure it already shows — only read files when you need their actual contents. You also have the BuilderForce platform tools (tasks, projects, OKRs, executions, …) to manage and monitor work, not just edit files."
+    ? "You are BuilderForce, an AI coding agent embedded in VS Code, working in the user's open workspace folder. Use the file tools (read_file, list_files, write_file, edit_file, delete_file) to inspect and change the project, and search_code to find the right code before editing it. Read a file before editing it; use edit_file for precise changes to existing files and write_file for new ones. After making changes, VERIFY them (run the project's tests, build, lint, or typecheck) and fix anything that fails before reporting done. Shipping a change (commit, push, pull request) is governed by the SHIP POLICY contract that follows; this prompt does not restate it. If the open folder contains several checkouts rather than being one repo, pass `repo` to name the one you are working in. Make minimal, correct changes and briefly explain what you did. Be efficient with tool calls. When a Project map is provided below, use it to locate files and directories directly instead of calling list_files for structure it already shows — only read files when you need their actual contents. You also have the BuilderForce platform tools (tasks, projects, OKRs, executions, …) to manage and monitor work, not just edit files."
     : 'You are BuilderForce, an AI assistant embedded in VS Code. No workspace folder is open, so the file tools are unavailable — answer conversationally and use markdown when helpful. You still have the BuilderForce platform tools (tasks, projects, OKRs, …) to manage work.';
   // Discovery guidance only applies where the file tools exist; the dispatch-handoff
   // strategy rides both surfaces (platform tools are always available).
@@ -177,32 +176,12 @@ export function ideSystemPromptBase(hasWorkspace: boolean): string {
   return parts.join("\n\n");
 }
 
-/**
- * Closes the grounding block. Text the surface appends AFTER the map (the per-turn
- * project / editor / limbic directives) must survive {@link replaceWorkspaceMap}, so the
- * block needs an end the swap can find, not just a start.
- */
+/** Closes the grounding block, so the text that follows it reads as separate from the map. */
 const WORKSPACE_MAP_END = "(End of workspace map.)";
 
 /** Append the scanned workspace grounding map (when present) under the standard intro. */
 export function withWorkspaceMap(base: string, grounding?: string): string {
   return grounding ? `${base}\n\n${WORKSPACE_MAP_INTRO}\n\n${grounding}\n\n${WORKSPACE_MAP_END}` : base;
-}
-
-/**
- * The same prompt with its grounding block swapped for `grounding` — the run host's way
- * of giving a run the workspace as it is NOW rather than as it was when the panel built
- * the prompt. A prompt with no block gains one; an empty `grounding` keeps what is there
- * (a failed refresh must not strip the map the run already had).
- */
-export function replaceWorkspaceMap(prompt: string, grounding: string | undefined): string {
-  if (!grounding) return prompt;
-  const start = prompt.indexOf(WORKSPACE_MAP_INTRO);
-  if (start < 0) return withWorkspaceMap(prompt, grounding);
-  const endAt = prompt.indexOf(WORKSPACE_MAP_END, start);
-  const head = prompt.slice(0, start).replace(/\s+$/, "");
-  const tail = endAt < 0 ? "" : prompt.slice(endAt + WORKSPACE_MAP_END.length);
-  return `${withWorkspaceMap(head, grounding)}${tail}`;
 }
 
 /** The selected BuilderForce project (the sidebar's active project), if any. */
