@@ -27,7 +27,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { RUN_CANCELLED_REASON } from "@builderforce/agent-run";
+import { RUN_CANCELLED_REASON, workFinishPorts } from "@builderforce/agent-run";
 import type { ContextSource, ModelTransport, RunOutcome, RunPolicy, RunPorts, RunState, RunStore, RunWorkPort } from "@builderforce/agent-run";
 import { RunKnowledgeRecorder, type CapabilityProvider, type PolicyGate, type RunKnowledgeLog } from "@builderforce/agent-tools";
 import type { QueuedSteer, SteeringChannel } from "../infra/relay-steering.js";
@@ -202,7 +202,7 @@ export async function runOnPremAgent(params: OnPremRunParams, sinks: OnPremRunSi
         workspace: { defaultRepo: params.cwd },
       },
       policy,
-      ...(params.work ? { surface: { finish: { workEvidence: (ids: readonly string[]) => params.work!.evidence(ids) } } } : {}),
+      ...(params.work ? { surface: { finish: workFinishPorts(params.work) } } : {}),
       ports,
       ...(params.maxSteps !== undefined ? { maxSteps: params.maxSteps } : {}),
       ...(signal ? { signal } : {}),

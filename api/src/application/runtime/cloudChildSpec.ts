@@ -7,6 +7,9 @@ import { parseJsonObject } from '../../domain/shared/json';
 /** The payload key a child's spec rides under. */
 const SPEC_KEY = 'subagent';
 
+/** The spawn budget bounds ordinary fan-out. Row readers also cap unexpected fan-out. */
+export const MAX_CHILD_ROWS = 200;
+
 /** Everything a child execution needs to know about itself, carried on its payload. */
 export interface CloudChildSpec {
   /** Persisted at admission; optional only for executions admitted before shared spawning. */

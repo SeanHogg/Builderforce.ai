@@ -29,11 +29,12 @@ interface Row {
   lateDetail: string | null;
 }
 
-function world(opts: { status?: string; steers: Array<Partial<Row> & { id: number; text: string }>; followUp?: FollowUpRunOutcome }) {
+function world(opts: { status?: string; parentExecutionId?: number; steers: Array<Partial<Row> & { id: number; text: string }>; followUp?: FollowUpRunOutcome }) {
   const run = {
     id: 42, tenantId: 7, status: opts.status ?? 'completed', taskId: 11,
     payload: JSON.stringify({ cloudAgentRef: 'bob', model: 'm' }), agentHostId: 5, source: 'agent',
     cloudAgentRef: 'bob', submittedBy: 'system:lane-auto',
+    parentExecutionId: opts.parentExecutionId ?? null,
   };
   const rows: Row[] = opts.steers.map((s) => ({
     sentBy: null, consumedAt: null, lateClaimedAt: null, lateOutcome: null, followUpExecutionId: null, lateDetail: null, ...s,
@@ -83,6 +84,22 @@ function world(opts: { status?: string; steers: Array<Partial<Row> & { id: numbe
 }
 
 describe('dispatchLateSteerFollowUp — a steer that missed its run starts a follow-up', () => {
+  it('releases completed child directions through the same durable dispatcher', async () => {
+    const w = world({ parentExecutionId: 12, steers: [{ id: 1, text: 'Check another file' }] });
+    const out = await settleLateSteers(w.ports, { executionId: 42, tenantId: 7 });
+    expect(out).toEqual({ kind: 'released', count: 1 });
+    expect(w.startFollowUp).not.toHaveBeenCalled();
+    expect(w.rows[0]).toMatchObject({ lateOutcome: 'released' });
+  });
+
+  it('releases the claim on a failed ticket read before admission starts', async () => {
+    const w = world({ steers: [{ id: 1, text: 'Check another file' }] });
+    w.ports.loadTask = vi.fn().mockRejectedValue(new Error('read unavailable'));
+    w.ports.release = vi.fn().mockResolvedValue(undefined);
+    await expect(settleLateSteers(w.ports, { executionId: 42, tenantId: 7 })).rejects.toThrow('read unavailable');
+    expect(w.ports.release).toHaveBeenCalledWith(7, 42, [1]);
+    expect(w.startFollowUp).not.toHaveBeenCalled();
+  });
   it('a late steer starts exactly one follow-up, carrying the steer, under the person who sent it', async () => {
     // Relayed to the host (so already consumed), then refused because the run had closed its input.
     const w = world({ steers: [{ id: 1, text: 'also update the README', sentBy: 'user-ada', consumedAt: new Date() }] });

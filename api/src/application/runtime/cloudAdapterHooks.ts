@@ -9,7 +9,7 @@
  * The run-end VERIFY is not a module here: the cloud verifies after the finish is accepted,
  * as a best-effort note (`cloudRunTail`), exactly as it always did.
  */
-import type { GuardPorts, SurfacePorts } from '@builderforce/agent-run';
+import { recordWorkSnapshot, workFinishPorts, type AssignedWork, type GuardPorts, type SurfacePorts } from '@builderforce/agent-run';
 import type { AgentExecParams } from '@builderforce/agent-tools';
 import type { DifficultyFeatures } from '@builderforce/difficulty-router';
 import type { TierLadder } from '@builderforce/run-policy';
@@ -29,6 +29,8 @@ import { cloudPublishGate } from './cloudShipGate';
 import type { ShipPolicy } from '@builderforce/run-guards';
 import type { RunSandbox } from './sandbox/runSandbox';
 import type { CloudRunRefs } from './cloudAdapterPorts';
+import { readChildWork } from './cloudWork';
+import { reportedFallback } from '../observability/caughtErrorReporter';
 
 export interface CloudHookDeps {
   env: Env;
@@ -39,6 +41,7 @@ export interface CloudHookDeps {
   repoCtx: TicketRepoContext | null;
   /** Every run is a node of a delegation tree (it may spawn; a sub-agent carries its spec). */
   delegated: boolean;
+  assignedWork?: readonly AssignedWork[];
   /** The run's per-file content hashes (the provider records them; the finish gates re-hash a child's rewrites). */
   writtenHashes?: WrittenFileHashes;
   /** The run's live written set — the footprint the containment limits measure. */
@@ -84,7 +87,7 @@ export function cloudCascadePorts(d: Pick<CloudHookDeps, 'env' | 'db' | 'run' | 
  * the agent's defaults. The ship policy's publish refusal rides `publishGate` (the agent's policy, this surface's sink).
  */
 export function cloudSurfacePorts(d: CloudHookDeps): SurfacePorts {
-  const { env, db, run, repoCtx } = d;
+  const { env, db, run, repoCtx, assignedWork } = d;
   const readCommitted = repoCtx
     ? async (path: string): Promise<string | null> => {
       const read = await readRepoFile({ ...repoCtx, ref: repoCtx.branch }, path);
@@ -113,6 +116,20 @@ export function cloudSurfacePorts(d: CloudHookDeps): SurfacePorts {
     // The agent's publish refusal (PRD 48 §4.2): this surface supplies the policy + the refused-event sink.
     publishGate: cloudPublishGate(d.ship, async (tool, error) => { await recordCloudToolEvent(db, { ...evt(run), toolName: 'ship_policy.refused', category: 'tool', detail: { tool }, result: error.slice(0, 300) }); }),
     // The same couplings the cloud's `evaluateFinishGates` entry binds (one definition: `cloudAgent/finishGates`).
-    finish: cloudFinishPorts({ db, evt: run, repoCtx, delegated: d.delegated, ...(noSandboxPr ? { noSandboxPr } : {}), ...(d.writtenHashes ? { writtenHashes: d.writtenHashes } : {}), ...(d.writtenPaths ? { writtenPaths: d.writtenPaths } : {}) }),
+    finish: {
+      ...cloudFinishPorts({ db, evt: run, repoCtx, delegated: d.delegated, ...(noSandboxPr ? { noSandboxPr } : {}), ...(d.writtenHashes ? { writtenHashes: d.writtenHashes } : {}), ...(d.writtenPaths ? { writtenPaths: d.writtenPaths } : {}) }),
+      ...(assignedWork ? workFinishPorts({ assigned: assignedWork, settleAfterRun: true }) : {}),
+      ...(d.delegated && assignedWork ? {
+        openWork: async (ctx) => {
+          const evidence = await readChildWork(db, run.tenantId, run.executionId, run.taskId)
+            .catch(reportedFallback(null, {
+              source: 'application/runtime/cloudAdapterHooks.ts', operation: 'readChildWork',
+              context: { executionId: run.executionId, taskId: run.taskId },
+            }));
+          if (evidence) recordWorkSnapshot(ctx.state, 'durable-children', assignedWork, evidence);
+          return null;
+        },
+      } : {}),
+    },
   };
 }

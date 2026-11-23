@@ -9,7 +9,6 @@ import { currentView, emit, policyContext, type RunAgentInput } from "./runConte
 import { newApprovalId } from "./runState.js";
 import { isResumable } from "./runTurn.js";
 import { buildOutcomeRow } from "./telemetry/outcomeRow.js";
-import { outstandingWork } from "./workPlan.js";
 
 /** What a terminal outcome carries beyond the state. */
 interface SettleExtra {
@@ -45,7 +44,7 @@ export async function settle(
 ): Promise<RunOutcome> {
   state.messages = transcript;
   // Forced closing turns can bypass the interactive finish gate. They must still report outstanding assigned work.
-  const unfinished = kind === "finished" ? outstandingWork(state.work ?? []) : null;
+  const unfinished = kind === "finished" ? hooks.finish.unfinishedWork(state) : null;
   if (unfinished) {
     kind = "failed";
     extra = { ...extra, reason: unfinished };

@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import type { Capability, PolicyGate } from "@builderforce/agent-tools";
 import { runAgent, type ModelCompletion, type ModelRequest, type PlatformTools, type RunPorts } from "../../src/index.js";
 import { TEST_POLICY, TEST_TASK, schemas } from "../support/policyContext.js";
+import { offeredSchemas } from "../../src/runCatalog.js";
 
 function run(gates: PolicyGate[], over: Partial<PlatformTools> = {}) {
   const requests: ModelRequest[] = [];
@@ -35,6 +36,12 @@ function run(gates: PolicyGate[], over: Partial<PlatformTools> = {}) {
 const names = (request: ModelRequest | undefined): string[] => (request?.tools ?? []).map((t) => t.function.name);
 
 describe("a block gate on a closed catalog", () => {
+  it("exposes only the host catalog to shared policy even when the registry has a capability", () => {
+    const { ports } = run([]);
+    const capabilities = { capabilities: new Set<Capability>(["repo.read"]) };
+    const declared = offeredSchemas({ ...ports, capabilities });
+    expect(declared.map((schema) => schema.function.name)).toEqual(["exec", "read"]);
+  });
   it("withholds the tool from what the model is shown and refuses a call to it", async () => {
     const r = run([{ id: "no-shell", tool: "exec", effect: "block", reason: "shell is off" }]);
     await runAgent({ task: TEST_TASK, policy: r.policy, ports: r.ports });

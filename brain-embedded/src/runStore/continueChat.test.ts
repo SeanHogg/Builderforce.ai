@@ -46,6 +46,19 @@ describe('direction a run never read (PRD 35 E10)', () => {
     expect(drainRunSteering(9303).map((m) => m.text)).toEqual(['late']);
   });
 
+  it('continues a person\'s late direction after the prior work closed out', async () => {
+    const key = 9328;
+    const c = chat(['Completed.', 'Follow-up answered.'], times(1, () => {
+      getCell(key).closeOutFinished = true;
+      queueRunSteering(key, 'Check the related report', { fromPerson: true, persist: true });
+    }));
+    continueOnSettle(key, binding);
+    await startRun(key, { entryPoint: 'web', resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
+    await until(() => c.asked.length === 2 && !isLive(key));
+    expect(userRows(c)).toEqual(['Check the related report']);
+    expect(c.asked[1]).toBeDefined();
+  });
+
   it('a Stop ends the work, waiting words included: a stopped run continues nothing', async () => {
     let release!: () => void;
     const held = new Promise<void>((resolve) => { release = resolve; });

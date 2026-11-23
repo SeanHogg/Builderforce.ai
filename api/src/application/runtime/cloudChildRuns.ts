@@ -33,6 +33,7 @@ import { postSubagentChatReport } from './subagentChatReport';
 import { rehashPaths, type WrittenFileHashes } from './cloudAgent/writtenFileHashes';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import type { RuntimeService } from './RuntimeService';
+import { MAX_CHILD_ROWS } from './cloudChildSpec';
 
 import { childHandle, childIdOf, parseCloudChild, type CloudChildSpec } from './cloudChildSpec';
 export { childBrief, childHandle, childIdOf, childPayload, isSubagentRun, parseCloudChild, withCloudChildHandle, type CloudChildSpec } from './cloudChildSpec';
@@ -40,9 +41,6 @@ export { childBrief, childHandle, childIdOf, childPayload, isSubagentRun, parseC
 type ChildRow = { id: number; status: string; payload: string | null; result: string | null; errorMessage: string | null };
 
 const isTerminal = (status: string): boolean => TERMINAL_EXECUTION_STATUSES.includes(status as ExecutionStatus);
-
-/** A parent's children are bounded by its spawn budget; the cap only stops a runaway fan-out. */
-const MAX_CHILD_ROWS = 200;
 
 /** Children still working — ids only, filtered in SQL: liveness never needs the report blobs. */
 async function liveChildIds(db: Db, tenantId: number, parentExecutionId: number): Promise<number[]> {
@@ -149,9 +147,6 @@ export async function settleCloudChildLineage(db: Db, runtime: RuntimeService, e
     await stopLiveChildren(db, runtime, row.tenantId, executionId, `execution:${executionId}`);
     const spec = parseCloudChild(row.payload);
     if (!spec || row.parentExecutionId == null) return;
-    // Direction that reached a child after its last turn has nobody left to act on it —
-    // its owner, not a follow-up run, decides what happens next.
-    await releasePendingSteers(db, row.tenantId, executionId);
     const report = reportOf(row, spec);
     // The chat hears every child, as it does in the editor — whole: the owner's clipped
     // copy points here for the rest ("the full text is in the chat").

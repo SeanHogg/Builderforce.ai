@@ -16,10 +16,9 @@
  *     eviction handling re-arms the run instead of failing it.
  */
 import {
-  ModelTransportError, RUN_CANCELLED_REASON, describeVerifyOutcome, evaluateRunWork, recordWorkSnapshot, runSandboxVerify, runVerifyPhase,
+  ModelTransportError, RUN_CANCELLED_REASON, applyWorkEvidence, describeVerifyOutcome, evaluateRunWork, tallyVerify, verifyRunWork,
   type RunOutcome, type RunState, type RunTally, type VerifySandbox,
 } from '@builderforce/agent-run';
-import { asksForChange } from '@builderforce/agent-stall';
 import type { RunSandbox } from './sandbox/runSandbox';
 import { buildRuntimeService } from '../../buildRuntimeService';
 import { releaseAllForExecution } from '../coordination/leaseService';
@@ -30,6 +29,8 @@ import { commitRunMemory, recordRunVerifyEvents } from './cloudAgent/runEndMemor
 import { snapshotWrittenHashes } from './cloudAgent/writtenFileHashes';
 import { lastPersonSteerSender } from './executionSteering';
 import { finalizeCloudRun } from './cloudFinalize';
+import { recordCloudToolEvent } from './cloudToolEvents';
+import { CHILD_WORK_RECORDED, cloudAssignedWork } from './cloudWork';
 import type { CloudModelPort } from './cloudAdapterModel';
 import type { CloudRunHost } from './cloudRunHost';
 import type { CloudLoopResult } from './cloudRunOpts';
@@ -99,13 +100,16 @@ async function verifyThenRemember(host: CloudRunHost, state: RunState, output: s
   const where = { source: 'application/runtime/cloudRunTail.ts', context: { tenantId: refs.tenantId, executionId: refs.executionId } };
   // Only the I/O is best-effort (a sandbox that cannot run, a memory write that fails). The bookkeeping around it is not: a
   // programming error here (an unseeded host, a bad shape) must surface rather than silently skip the memory write.
-  const sandboxed = host.verify && host.writtenPaths.size > 0
-    ? await runSandboxVerify(verifySandboxOf(host.verify.sandbox), host.verify.shell).catch(reportedFallback(null, { ...where, operation: 'sandboxVerify' }))
-    : null;
-  const outcome = sandboxed
-    ? runVerifyPhase({ surface: 'sandbox', writtenPaths: host.writtenPaths, packageScripts: sandboxed.packageScripts, runner: sandboxed.runner, results: sandboxed.results })
-    : runVerifyPhase({ surface: 'durable', writtenPaths: host.writtenPaths, results: state.finish.ciVerified ? [{ command: 'branch-ci', exitCode: 0 }] : null });
-  recordRunVerifyEvents({ db, tenantId: refs.tenantId, executionId: refs.executionId, ...(refs.cloudAgentRef ? { cloudAgentRef: refs.cloudAgentRef } : {}) }, outcome);
+  const outcome = await verifyRunWork({
+    writtenPaths: host.writtenPaths, declaredChecks: !!host.verify, ciVerified: state.finish.ciVerified,
+  }, host.verify ? {
+    surface: 'sandbox',
+    sandbox: verifySandboxOf(host.verify.sandbox),
+    shell: host.verify.shell,
+    onShellError: (error) => reportCaughtError(error, { ...where, operation: 'sandboxVerify' }),
+  } : {});
+  if (state.telemetry && outcome.kind === 'ran') tallyVerify(state.telemetry, outcome.mayFinish);
+  await recordRunVerifyEvents({ db, tenantId: refs.tenantId, executionId: refs.executionId, ...(refs.cloudAgentRef ? { cloudAgentRef: refs.cloudAgentRef } : {}) }, outcome);
   const consolidated = stash.consolidated as { key?: unknown; content?: unknown } | undefined;
   const codeMap = typeof consolidated?.key === 'string' && typeof consolidated.content === 'string'
     ? { key: consolidated.key, content: consolidated.content }
@@ -173,11 +177,12 @@ async function land(host: CloudRunHost, state: RunState, output: string, cancell
     tenantId: refs.tenantId, cloudAgentRef: refs.cloudAgentRef, executionId: refs.executionId, taskRow, agentLabel: refs.agentLabel,
     repoCtx: host.repoCtx, repoMiss: host.repoMiss, writtenPaths: host.writtenPaths, finalOutput: output, cancelled, ciVerified: state.finish.ciVerified,
   });
-  if (!cancelled && !opts.delegation?.spec && asksForChange([taskRow.title, taskRow.description].filter(Boolean).join('\n'))) {
-    const id = String(taskRow.id);
-    recordWorkSnapshot(state, 'cloud-ticket', [{ id, criteria: [taskRow.title] }], fin.prOpened
-      ? [{ id, status: 'in_review', detail: 'This execution opened a pull request for the ticket' }]
-      : []);
+  const assignment = cloudAssignedWork(host);
+  if (!cancelled && assignment) {
+    const evidence = fin.prOpened
+      ? [{ id: assignment.id, status: 'in_review' as const, detail: 'This execution opened a pull request for the ticket' }]
+      : [];
+    state.work = applyWorkEvidence(state.work ?? [assignment], evidence);
   }
   return { ok: fin.ok, noChanges: fin.noChanges, output: fin.output, cancelled, finished: true };
 }
@@ -194,12 +199,18 @@ export async function settleCloudRun(host: CloudRunHost, outcome: RunOutcome, st
   // A steered stop's tally already rode `RuntimeService.cancel` (it IS that run's terminal transition): only a result the caller
   // lands itself carries it, so there is exactly one path from the tally to the outcome row.
   if (!result.finished || result.cancelled || !outcome.state.telemetry) return result;
-  const child = host.opts.delegation?.spec;
-  const taskId = String(host.taskRow.id);
-  if (Array.isArray(child?.workItemIds) && child.workItemIds.includes(taskId)) {
-    const wrote = outcome.kind === 'finished' && outcome.state.writtenPaths.length > 0;
-    recordWorkSnapshot(outcome.state, 'child-ticket', [{ id: taskId, criteria: [child.task] }], wrote
-      ? [{ id: taskId, status: 'in_review', detail: 'Child wrote changes for owner review' }]
+  const assignment = host.opts.delegation?.spec ? cloudAssignedWork(host) : undefined;
+  if (assignment) {
+    const wrote = result.ok && outcome.kind === 'finished' && host.writtenHashes.size > 0;
+    if (wrote) {
+      // Persist before the child's execution is marked completed, so the owner can read
+      // evidence as soon as the live-child hold clears, including after a runner restart.
+      await recordCloudToolEvent(host.db, {
+        ...host.refs, toolName: CHILD_WORK_RECORDED, category: 'run', detail: { taskId: assignment.id },
+      });
+    }
+    outcome.state.work = applyWorkEvidence(outcome.state.work ?? [assignment], wrote
+      ? [{ id: assignment.id, status: 'in_review', detail: 'Child wrote changes for owner review' }]
       : []);
   }
   const work = evaluateRunWork(outcome.state);

@@ -23,7 +23,7 @@ import type { CacheServedStreak } from "./policy/tools/cacheServedStreak.js";
 import { LINKED_WORK_OPEN, lastFinishReason } from "./policy/finish/index.js";
 import { bumpMutations, tallyCall, tallyTurn, tallyVerify, type RunTally } from "./telemetry/runTally.js";
 import { isReadOnlyShellCall } from "@builderforce/run-guards";
-import type { ToolSchema } from "@builderforce/agent-tools";
+import { resolveToolAlias, type ToolSchema } from "@builderforce/agent-tools";
 import type { TurnInterruption, TurnMenu } from "./surface.js";
 
 /** A call that changed (or may have changed) the workspace: a write/edit/delete tool, or a `run_command` the read classifier cannot clear. */
@@ -91,7 +91,7 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
   const verifyBlock = async (pctx: PolicyContext): Promise<string | null> => {
     if (policy.verify === "none") return null;
     const verdict = await hooks.verify.verify(pctx);
-    if (verdict) tallyVerify(tally, verdict.ok);
+    if (verdict && verdict.ran !== false) tallyVerify(tally, verdict.ok);
     return verdict && !verdict.ok ? verdict.note ?? "Verification failed: fix it before finishing." : null;
   };
 
@@ -201,7 +201,7 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
       await emit(ports.events, { kind: "model.completed", step: ctx.step, ...(model ? { model } : {}), ...(usage ? { usage } : {}) });
     },
 
-    onNoToolCalls: noToolCallsHook(run, { contextAt, append, takeSteers, takeJoined, takeFollowUps }),
+    onNoToolCalls: noToolCallsHook(run, { contextAt, append, takeSteers, takeJoined, takeFollowUps, verifyBlock }),
 
     onRepetitionLoop: async (ctx, loop) => {
       await emit(ports.events, { kind: "loop.repetition", step: ctx.step, copies: loop.copies, block: loop.block });
@@ -317,6 +317,12 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
         // while the count is unchanged): feed it from the SAME verdict and call the read
         // classifier trusts, so a cache entry never outlives the mutation that moves the key.
         if (ok && isMutationCall(call.name, call.args)) bumpMutations(tally);
+        const canonical = resolveToolAlias(call.name);
+        if (ok && (MUTATING_TOOLS.has(canonical)
+          || (canonical === "run_command" && !isReadOnlyShellCall(canonical, call.args)))) {
+          state.finish.ciVerified = false;
+          delete tally.verify;
+        }
         // `ctx.step` is the kernel's live step; `state.step` lags until the loop returns.
         await emit(ports.events, { kind: "tool.dispatched", step: ctx.step, tool: call.name, ok, callId: call.id, args: call.args, result: result.data }, { durationMs: Date.now() - (starts.get(call.id) ?? Date.now()) });
         starts.delete(call.id);

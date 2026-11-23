@@ -25,7 +25,7 @@ import type { Db } from '../../../infrastructure/database/connection';
 import type { Env } from '../../../env';
 import { reportCaughtError } from '../../observability/caughtErrorReporter';
 import { recordCloudToolEvent } from '../cloudToolEvents';
-import type { InRunVerifyOutcome } from '@builderforce/agent-run';
+import { recordVerifyEvents, type InRunVerifyOutcome } from '@builderforce/agent-run';
 
 /** Where a run's verify verdict is recorded. */
 export interface RunVerifyAudit {
@@ -43,28 +43,21 @@ export interface RunVerifyAudit {
  * and feeds it through `reduceRunPolicy` (only a host holding the state can move its
  * own phase), and `verify_started` carries no payload by declaration.
  */
-export function recordRunVerifyEvents(
+export async function recordRunVerifyEvents(
   audit: RunVerifyAudit,
   outcome: InRunVerifyOutcome,
-): { started: { type: 'verify_started' } } {
-  const detail = {
-    surface: outcome.surface,
-    kind: outcome.kind,
-    reason: outcome.reason,
-    commands: outcome.commands,
-    failedCommands: outcome.failedCommands,
-    mayFinish: outcome.mayFinish,
-  };
+): Promise<{ started: { type: 'verify_started' } }> {
+  const { started, completed } = recordVerifyEvents(outcome);
   // Start, then completion, in the order the run performed them. Best-effort: the
   // timeline is observability, and losing it must never cost the run its result.
   try {
-    void recordCloudToolEvent(audit.db, {
+    await recordCloudToolEvent(audit.db, {
       tenantId: audit.tenantId,
       cloudAgentRef: audit.cloudAgentRef,
       executionId: audit.executionId,
       toolName: 'run_policy',
       category: 'policy',
-      detail: { event: 'verify_started' },
+      detail: { event: started.type },
       result: `run entered the verify phase (surface ${outcome.surface})`,
     });
   } catch (error) {
@@ -74,13 +67,13 @@ export function recordRunVerifyEvents(
     });
   }
   try {
-    void recordCloudToolEvent(audit.db, {
+    await recordCloudToolEvent(audit.db, {
       tenantId: audit.tenantId,
       cloudAgentRef: audit.cloudAgentRef,
       executionId: audit.executionId,
-      toolName: 'in_run_verify',
-      category: 'tool',
-      detail,
+      toolName: completed.tool,
+      category: completed.category,
+      detail: completed.detail,
       result: outcome.note,
     });
   } catch (error) {
@@ -89,7 +82,7 @@ export function recordRunVerifyEvents(
       operation: 'recordVerifyCompleted',
     });
   }
-  return { started: { type: 'verify_started' } };
+  return { started };
 }
 
 export interface RunMemoryCommitInput {

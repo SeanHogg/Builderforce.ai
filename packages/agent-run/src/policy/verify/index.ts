@@ -16,7 +16,7 @@
 
 import type { PolicyContext, VerifyHook, VerifyResult } from "../hooks.js";
 import { runSandboxVerify, type VerifySandbox, type VerifyShell } from "./sandboxVerify.js";
-import { runVerifyPhase } from "./runEndMemory.js";
+import { runVerifyPhase, type RunVerifyInput } from "./runEndMemory.js";
 import { recordVerifyEvents } from "./recordVerifyEvents.js";
 import type { InRunVerifyOutcome } from "./inRunVerify.js";
 
@@ -33,6 +33,26 @@ export interface VerifyPorts {
    * `RunPolicy.entryPoint`. Absent ⇒ `durable` (no shell).
    */
   surface?: "durable" | "sandbox" | "on-prem";
+  /** A host may keep shell errors advisory and report the failure to run the checks. */
+  onShellError?(error: unknown): void;
+}
+
+export async function verifyRunWork(
+  input: Pick<RunVerifyInput, "writtenPaths" | "ciVerified"> & { declaredChecks: boolean },
+  ports: VerifyPorts = {},
+): Promise<InRunVerifyOutcome> {
+  const { surface = "durable", shell, sandbox } = ports;
+  const { writtenPaths, ciVerified } = input;
+  if (input.declaredChecks && shell && sandbox && surface !== "durable" && writtenPaths && [...writtenPaths].length) {
+    try {
+      const { packageScripts, runner, results } = await runSandboxVerify(sandbox, shell);
+      return runVerifyPhase({ surface, writtenPaths, packageScripts, runner, results });
+    } catch (error) {
+      if (!ports.onShellError) throw error;
+      ports.onShellError(error);
+    }
+  }
+  return runVerifyPhase({ surface: "durable", writtenPaths, ciVerified });
 }
 
 /** The ordered pair every surface records: `verify_started`, then the outcome. */
@@ -64,25 +84,9 @@ export function createVerifyHook(ports: VerifyPorts = {}): VerifyHook {
       // Nothing written ⇒ nothing to verify. The finish gate owns the no-deliverable decision.
       if (writtenPaths.length === 0) return undefined;
 
-      const surface = ports.surface ?? "durable";
-      if (ctx.policy.verify === "declared-checks" && ports.sandbox && ports.shell && surface !== "durable") {
-        const ran = await runSandboxVerify(ports.sandbox, ports.shell);
-        const outcome = runVerifyPhase({
-          surface: surface === "on-prem" ? "on-prem" : "sandbox",
-          writtenPaths,
-          packageScripts: ran.packageScripts,
-          runner: ran.runner,
-          results: ran.results,
-        });
-        await record(ports, outcome);
-        return { ok: outcome.mayFinish, note: outcome.note };
-      }
-
-      // Shell-less (or branch CI): the honest answer, never a claimed pass. The branch's
-      // CI gate (the finish hook's `pollBranchCi` port) is the in-run check here.
-      const outcome = runVerifyPhase({ surface: "durable", writtenPaths, results: null });
+      const outcome = await verifyRunWork({ writtenPaths, declaredChecks: ctx.policy.verify === "declared-checks" }, ports);
       await record(ports, outcome);
-      return { ok: outcome.mayFinish, note: outcome.note };
+      return { ok: outcome.mayFinish, note: outcome.note, ran: outcome.kind === "ran" };
     },
   };
 }

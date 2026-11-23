@@ -389,9 +389,10 @@ async function continueOrKeep(runKey: number, c: RunCell, steers: readonly RunSt
  * A settled run's leftover direction becomes the chat's next turn (or waits, kept, in its inbox).
  * `claim` was taken by the settling run at the moment it stopped running - the chat was never idle.
  */
-export async function continueLeftovers(runKey: number, c: RunCell, start: StartRun, claim: RunClaim): Promise<void> {
+export async function continueLeftovers(runKey: number, c: RunCell, start: StartRun, claim: RunClaim, closedOut = false): Promise<void> {
   const left = drainRunSteering(runKey);
-  if (left.length === 0) {
+  if (left.length === 0 || (closedOut && !left.some((message) => message.fromPerson || message.childReport))) {
+    if (left.length) requeueRunSteering(runKey, left);
     releaseClaim(c, claim);
     return;
   }

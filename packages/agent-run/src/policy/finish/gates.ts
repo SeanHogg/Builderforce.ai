@@ -212,7 +212,7 @@ export async function evaluateFinishGates(a: FinishGateArgs): Promise<FinishGate
     ciPending = ci.pendingBlocks > gates.ciPendingBlocks;
     gates.ciPendingBlocks = ci.pendingBlocks;
     gates.ciFailureBlocks = ci.failureBlocks;
-    if (ci.ciVerified) gates.ciVerified = true;
+    gates.ciVerified = ci.ciVerified;
   }
   // The run has just PERFORMED its verification action, so every turn a block below
   // forces is asked as `verify`. Idempotent, so a second blocked finish is a no-op.

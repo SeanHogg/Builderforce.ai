@@ -45,7 +45,7 @@ application/repos/recordPullRequestRow.ts:4
 application/runtime/cloudAgent/routing.ts:1
 application/runtime/cloudAgent/runContext.ts:3
 application/runtime/cloudSelfHeal.ts:1
-application/runtime/scoreRunOutcome.ts:4
+application/runtime/scoreRunOutcome.ts:3
 application/seams/webhookService.ts:5
 application/seams/workItemWebhook.ts:1
 application/security/findingMarkers.ts:1

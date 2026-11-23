@@ -18,6 +18,7 @@ import { briefWithHandoff, ownerHandoffBlock } from "@builderforce/agent-tools";
 import {
   appendRunMessage,
   drainRunSteering,
+  requeueRunSteering,
   getRunTrace,
   savedChatOf,
   stopRun,
@@ -33,6 +34,7 @@ import { establishedCalls } from "./childCoverage";
 import { writeChildDataFile } from "./childDataFile";
 import type { StickyModelState } from "./childModelStickiness";
 import { modelForChildRun } from "./roleModelPin";
+import { HostStartSetupError } from "./hostStartGate";
 
 /** A run as the host executes it: what the panel sends, plus what only the host knows. */
 export interface RunSpec extends WebviewRunStart {
@@ -61,6 +63,7 @@ export interface ChildRunHostDeps {
   specOf(key: number): RunSpec | undefined;
   /** The ONE door every run opens through: the editor binds the gated start here (`BrainRunHostPorts.startThrough`), so a child, a resumed child and a wake get the change-set identity, journal start and delta capture their owner gets. */
   start(spec: RunSpec): Promise<void>;
+  wakeFailed(key: number, error: unknown): void;
   /** Whether a run key is being set up, running or unwinding in the host. */
   isBusy(key: number): boolean;
   /** The Auto switch of the chat a tree lives in, right now. */
@@ -86,18 +89,12 @@ export function childBrief(req: Pick<ChildRequest, "task" | "context">, ownerKey
 }
 
 
-export function createChildRunHost(deps: ChildRunHostDeps): ChildRunHost & { afterRun(key: number): void } {
-  /** Owners asked to wake while still busy — woken again the moment their run settles,
-   *  so a report that arrives as a run is ending is never stranded in its inbox. */
-  const deferred = new Set<number>();
-
+export function createChildRunHost(deps: ChildRunHostDeps): ChildRunHost {
   const wake = (ownerKey: number): boolean => {
     const spec = deps.specOf(ownerKey);
     if (!spec || spec.wakeable === false) return false;
     if (deps.isBusy(ownerKey)) {
-      // A running owner reads its inbox before its next turn; one that is unwinding
-      // gets this wake replayed by `afterRun`.
-      deferred.add(ownerKey);
+      // The live run takes the inbox, or the host's settlement takes it once after Stop has been checked.
       return true;
     }
     const steered = drainRunSteering(ownerKey);
@@ -108,7 +105,10 @@ export function createChildRunHost(deps: ChildRunHostDeps): ChildRunHost & { aft
     const turn = imageAtts.length
       ? [{ type: 'text' as const, text: joinedText }, ...imageAtts.map((a) => ({ type: 'image_url' as const, image_url: { url: a.imageUrl! } }))]
       : joinedText;
-    void nextTurn(spec, turn, childWorkRefs(steered));
+    void nextTurn(spec, turn, childWorkRefs(steered)).catch((error: unknown) => {
+      if (error instanceof HostStartSetupError && !error.stopped) requeueRunSteering(ownerKey, steered);
+      deps.wakeFailed(ownerKey, error);
+    });
     return true;
   };
 
@@ -119,10 +119,6 @@ export function createChildRunHost(deps: ChildRunHostDeps): ChildRunHost & { aft
   };
 
   return {
-    afterRun(key) {
-      if (deferred.delete(key)) wake(key);
-    },
-
     registry: deps.registry,
     ...(deps.ledger ? { ledger: deps.ledger } : {}),
 

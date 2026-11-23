@@ -70,13 +70,13 @@ The editor host is shared by panel and participant. `brainRunHostPorts.ts` binds
 
 5. **One runtime opening renderer.** openingRows renders governance and persona, then preserves prepared history and the task row. Brain and channel pass their compiled system text separately from history. Host-specific grounding and directives remain inputs.
 
-6. **Work evidence reaches the shared ledger.** Brain reports linked-ticket and spec evidence from existing scoped reads. In-process on-prem has a scoped assignment port. Cloud and the self-hosted relay record review evidence after PR confirmation. Unresolved completed invocations are excluded from routing feedback. Brain owner wakes recheck child ticket references against the scoped listing. Durable child reconciliation and relay assignments at opening remain.
+6. **Work evidence reaches the shared ledger.** Brain reports linked-ticket and spec evidence from existing scoped reads. Relay change tickets and cloud ticket assignments enter the plan before execution. Brain owner wakes recheck child ticket references against the scoped listing. Durable children record write evidence before terminal landing, and the owner reads it in one scoped query. Cloud and relay review evidence is added after PR confirmation. Unresolved completed invocations are excluded from routing feedback.
 
-7. **Shared steering and closing turns.** Tool finishes take late steering and queued follow-ups after tool rows, preserving attachments. The shared driver owns the one closing synthesis. Surface-specific persistence and post-settlement wake queues remain.
+7. **Shared steering and closing turns.** Tool finishes take late steering and queued follow-ups after tool rows, preserving attachments. The editor checks Stop before waking its inbox, and Brain picks up explicit directions received during successful close-out. Durable cloud and relay settle late steers through the same dispatcher. Recovery across host start failures and durable retries still needs end-to-end validation.
 
 8. **One on-prem execution entry.** Tickets, sessions and children call openOnPremRun. The former channel adapter is a session port binding and retains its message bridge.
 
-9. **Shared approval-gate inputs.** Brain now supplies its resolved snapshot. The editor still authorizes the resolved tool and workspace path in its host. Capability and verify inputs remain surface-specific.
+9. **Shared approval, catalog, and verification inputs.** Brain supplies its resolved gate snapshot and the editor authorizes the resolved tool and workspace path. Closed catalogs exclude unavailable registry tools from shared policy. Shared verification handles configured prose and tool finishes, records real cloud and Brain checks, and keeps skips ungraded. Native session hosts still differ in what they can execute or verify.
 
 10. **The import guard does not establish callback ownership.** `scripts/check-one-execution.mjs --enforce` checks kernel/driver imports and policy reach-ins, not supplied hook bodies. The false enforcement claim has been removed from `SurfacePorts`. `surface.preflight` now accepts a data contract rather than a callback; factory and production-door regressions cover its ownership and single-check/no-duplicate-notice behavior. SurfacePorts.compaction also accepts only factory options now; the production-door regression checks native history ports and absence of a hook override. The import guard does not prove arbitrary port callback semantics.
 
@@ -108,7 +108,7 @@ The start contract must preserve local/durable identity and authorization. Backg
 ## 6. Implementation checkpoints
 
 - Entry/spawn/policy slice implemented. Finish validation in a fully provisioned checkout and repair the independently reproduced baseline failures; no complete cross-surface runtime pass is claimed.
-- Remaining for the full roadmap item: self-hosted relay assignments at opening, durable child reconciliation in the owner ledger, capability and verify inputs, host wake and retry ownership, and full session and cloud integration validation.
+- Remaining for the full roadmap item: native session capability and verification parity, recovery after editor start failures and durable retries, and full editor session, on-prem session, and cloud integration validation.
 - Update this map, PRD status and the [Gap Register](../../ROADMAP.md) with each implementation. Record actual checks and blockers. Named tests are coverage references, not evidence of a pass in this checkout.
 
 ## 7. Follow-up implementation (2026-11-23)

@@ -461,7 +461,7 @@ export class BuilderforceRelayService implements IRelayService {
         ? [{ id: ticket.id, status: "in_review", detail: "Relay confirmed the pull request" }]
         : []);
       try {
-        relaySinks.onOutcome?.({ ...row, work: row.work ?? evaluateRunWork(ledger) });
+        relaySinks.onOutcome?.({ ...row, work: evaluateRunWork(ledger) });
         await this.toolAudit.flush();
       } catch (error) {
         logWarn(`[builderforce] task ${ticket.id}: outcome reporting failed: ${String(error)}`);
@@ -504,6 +504,7 @@ export class BuilderforceRelayService implements IRelayService {
       abortController,
       steering,
       sinks,
+      ...(ticket ? { work: { assigned: [ticket], settleAfterRun: true } } : {}),
       // The run's code map, into the same shared facts store every runtime writes to
       // (paths are relative to the ticket workspace). Fire-and-forget.
       commitMemory: (consolidated) => getKnowledgeLoop()?.commitConsolidated?.(consolidated),

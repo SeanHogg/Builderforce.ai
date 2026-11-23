@@ -46,7 +46,7 @@ export interface CloseOutInput {
 }
 
 /** Whether the run's evidence verifies its change: the passing checks it holds, or why it does not. */
-export type Verification = { verified: true; checks: string[] } | { verified: false; reason: string };
+export type Verification = { verified: true; checks: string[] } | { verified: false; reason: string; failed?: true };
 
 /**
  * The run's verification, read from its evidence ledger: every file it changed has at least one PASSING check against its
@@ -56,7 +56,7 @@ export function verificationOf(evidence: CloseOutInput['evidence'], touchedFiles
   const entries = evidence?.snapshot() ?? [];
   if (!entries.length) return { verified: false, reason: 'no verification evidence was recorded for this run' };
   const failed = entries.flatMap((e) => e.checks.filter((c) => c.outcome === 'fail').map((c) => `${e.path} ${c.kind} "${c.name}"`));
-  if (failed.length) return { verified: false, reason: `failing checks: ${failed.slice(0, 5).join('; ')}` };
+  if (failed.length) return { verified: false, failed: true, reason: `failing checks: ${failed.slice(0, 5).join('; ')}` };
   const passing = entries.filter((e) => e.checks.some((c) => c.outcome === 'pass'));
   if (!passing.length) return { verified: false, reason: 'no check passed (only unavailable checks were recorded)' };
   // A ledger path may be absolute while the run names files repo-relative: matched on the path's tail.

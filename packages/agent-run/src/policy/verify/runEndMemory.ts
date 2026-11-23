@@ -47,6 +47,8 @@ export interface RunVerifyInput {
   /** A check already run by the caller (the shell's own exec); supplied instead of a
    *  runner so nothing runs twice. */
   results?: Parameters<typeof inRunVerifyOutcome>[0]["results"];
+  /** The host's branch CI gate already confirmed the current branch. */
+  ciVerified?: boolean;
 }
 
 /**
@@ -57,6 +59,12 @@ export interface RunVerifyInput {
  * keeps the durable (shell-less) surface honest.
  */
 export function runVerifyPhase(input: RunVerifyInput): InRunVerifyOutcome {
+  if (input.surface === "durable" && input.ciVerified) {
+    return {
+      surface: "durable", kind: "ran", reason: "verify_passed", commands: ["branch-ci"],
+      failedCommands: [], mayFinish: true, note: "Branch CI passed.",
+    };
+  }
   // A shell-less surface can only RECORD checks its caller already ran; handing it a
   // runner would let a chat reply claim a test run that never happened.
   if (!hasShell(input.surface)) {
@@ -67,7 +75,7 @@ export function runVerifyPhase(input: RunVerifyInput): InRunVerifyOutcome {
     });
   }
   return inRunVerifyOutcome({
-    surface: input.surface === "on-prem" ? "durable" : input.surface,
+    surface: input.surface,
     writtenPaths: input.writtenPaths ?? [],
     packageScripts: input.packageScripts ?? null,
     runner: input.runner,

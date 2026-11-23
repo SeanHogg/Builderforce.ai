@@ -1,3 +1,11 @@
+## RESOLVED 2026-11-23: Ticket admission, durable child evidence, and finish verification
+
+- Self-hosted change tickets and authenticated cloud assignments enter the shared ledger at opening. The shared finish and settlement policy lets the host produce PR evidence after the model finishes. Missing evidence stays open in the scorecard.
+- Completed durable children record evidence before their execution lands. Owners gather it in one tenant-, parent-, and ticket-scoped query. The owner's PR supplies its own review evidence.
+- The shared catalog excludes unavailable registry tools from closed surfaces. Prose and tool finishes use the same configured verification, and cloud branch CI and Brain's native checks reach the shared tally. Skipped checks stay unverified.
+- Editor settlement wakes its shared inbox once and checks Stop before waking. Brain can continue explicit direction received during close-out. Cloud and relay use the same durable dispatcher for late directions, including child release and retry after a failed pre-admission ticket read.
+- Validation passed for 855 shared tests, 36 focused API tests, and 19 on-prem child and outbox tests. See the [pipeline map](./docs/specs/_scratch-agent-pipeline-map.md) for the outstanding integration checks.
+
 ## RESOLVED 2026-11-23: Work evidence and the shared finish and on-prem entry paths
 
 - Brain records linked-ticket and spec coverage evidence from its existing scoped reads. Cloud records review evidence from the PR the execution opened. The self-hosted relay records review evidence after the PR API confirms it. Completed invocations with open or blocked work stay out of routing feedback.

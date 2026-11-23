@@ -200,10 +200,8 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
       watches.release(key);
       // What the run held outside the loop (its background jobs) dies with it.
       ports.settleRun?.(key);
-      // A child's report that arrived as this run was ending is heard now…
-      childHost.afterRun(key);
-      // …and so is what the person typed as it ended (unless they stopped it), then the turn
-      // submitted while it ran (a Stop already dropped the ones parked before it).
+      // Settle the shared inbox for child reports and a person's direction before parked turns.
+      // A Stop drops the inbox and any previously parked turns.
       steering.settled(key);
       turnQueue.settled(key);
     }
@@ -415,6 +413,9 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     // `builderforce.models.subagent` — what a sub-agent codes on unless its owner's pick is strict.
     ...(ports.runSettings ? { subagentModel: async () => (await ports.runSettings!()).subagentModel } : {}),
     start: ports.startThrough ?? start,
+    wakeFailed: (chatId, error) => {
+      broadcast({ type: "run.failed", chatId, error: error instanceof Error ? error.message : String(error) });
+    },
     isBusy,
     autoApproveOf,
     persistence: ports.persistence,

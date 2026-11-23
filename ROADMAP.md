@@ -77,7 +77,7 @@ Public copy states today's evidence. **Available** = shipped and repeatably veri
 
 ### Cloud and IDE agent runs `[agents]`
 
-- **One pipeline for every modality.** Bind self-hosted relay assignments before execution and reconcile durable child work with the owner's ledger. Unify remaining capability and verify inputs, and consolidate post-settlement wake and retry ownership across host queues. Verify the full session and durable cloud paths in a provisioned checkout. [Current map](./docs/specs/_scratch-agent-pipeline-map.md) and [PRD 50](./docs/specs/50-prd-one-pipeline.md).
+- **One pipeline for every modality.** Finish capability and verification parity for native session hosts, and reconcile editor start failures and durable retry recovery with their continuation queues. Verify the full editor session, on-prem session, and durable cloud paths in a provisioned checkout. [Current map](./docs/specs/_scratch-agent-pipeline-map.md) and [PRD 50](./docs/specs/50-prd-one-pipeline.md).
 
 - **Run diagnostics report `healthy` for an unanswered, wasteful run (chat #168571, found 2026-11-21).** `brainTriage`/`brainVerdict` never read `agent.stopped`, `llm.complete.args.failovers` or question intent, and the `runFindings` detectors are not wired into the verdict; 13 failovers counted as 0. Fix underway (chat #289 W0/W1): outcome-first triage, findings-driven precedence table, JSON schemaVersion 2.
 - **Pasted context misroutes a question to the full pipeline (chat #168571).** `pipeline-route` tests change verbs against the whole text including the paste, and a second classifier (`agent-stall/requestIntent.ts`) can disagree. Fix underway (W2): one `classifyRequest` scoring the ask only; questions route quick with no `commit` ship policy.
