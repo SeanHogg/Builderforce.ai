@@ -9,6 +9,7 @@ import { currentView, emit, policyContext, type RunAgentInput } from "./runConte
 import { newApprovalId } from "./runState.js";
 import { isResumable } from "./runTurn.js";
 import { buildOutcomeRow } from "./telemetry/outcomeRow.js";
+import { outstandingWork } from "./workPlan.js";
 
 /** What a terminal outcome carries beyond the state. */
 interface SettleExtra {
@@ -43,6 +44,12 @@ export async function settle(
   extra: SettleExtra,
 ): Promise<RunOutcome> {
   state.messages = transcript;
+  // Forced closing turns can bypass the interactive finish gate. They must still report outstanding assigned work.
+  const unfinished = kind === "finished" ? outstandingWork(state.work ?? []) : null;
+  if (unfinished) {
+    kind = "failed";
+    extra = { ...extra, reason: unfinished };
+  }
 
   // An exception the surface will re-throw (a platform eviction) is not the run's end: the run resumes, so nothing terminal is written.
   let cause = extra.cause;

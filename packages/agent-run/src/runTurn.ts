@@ -21,6 +21,7 @@ import { interruptedResult, runToolWithWatch, stoppedResult, type InterruptWatch
 import { toolsTokensOf } from "./policy/compaction/compact.js";
 import { capToolResult, resultCapFor } from "./policy/tools/index.js";
 import { renderTaskState } from "./policy/tools/taskState.js";
+import { assignedWorkSection } from "./workPlan.js";
 import { appendRows, currentView, emit, policyContext, type RunAgentInput, type TurnFacts } from "./runContext.js";
 import { tallyTurn, type RunTally } from "./telemetry/runTally.js";
 import { measureTurnTail } from "./turnTail.js";
@@ -142,7 +143,8 @@ export async function completeTurn(
   // which would read every later turn as a downgrade from it.
   const model = decision ? decision.model : input.policy.pinnedModel;
   const brief = await hooks.memory.brief(pctx);
-  const sections = [...(input.ports.context.turnSections?.() ?? []), ...(made?.tail ?? [])];
+  const work = assignedWorkSection(state.work ?? []);
+  const sections = [...(input.ports.context.turnSections?.() ?? []), ...(work ? [`### Assigned work\n${work}`] : []), ...(made?.tail ?? [])];
   const fields = hooks.model.turnFields?.(mctx);
   const reasoning = hooks.guards.reasoning?.(pctx);
 
@@ -357,8 +359,9 @@ export async function dispatchCall(input: RunAgentInput, state: RunState, call: 
       ? await exec(call.name, call.args)
       : await runToolWithWatch(exec, watch, signal, call.name, call.args, own ? platform?.interruptible : undefined);
     // A surface that guards its own context says its share; any other result is capped by the tool's table row, sized by the window.
-    const surfaceCap = own ? platform?.resultCap?.(state.model.model) : undefined;
-    const capped = capToolResult(call.name, data, surfaceCap ?? resultCapFor(call.name, ports.model, state.model.model, data));
+    const servingModel = facts.model && facts.model !== "default" ? facts.model : state.model.model;
+    const surfaceCap = own ? platform?.resultCap?.(servingModel) : undefined;
+    const capped = capToolResult(call.name, data, surfaceCap ?? resultCapFor(call.name, ports.model, servingModel, data));
     // A surface's own tool says for itself whether it failed; a registry tool says so with `ok: false`.
     // A call that never started (a steer was already waiting) did not fail: its dispatch is not an error, so the breaker does not count it.
     // Like any dispatch that did not fail, it clears the failure streak (as a kill does): the streak is reset to 0, not held.

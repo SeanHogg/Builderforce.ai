@@ -162,6 +162,21 @@ export function preflightVerdict(event: ModelPreflightEvent, result: ModelPrefli
   return `degraded:${reasons || "plan_flash"}`;
 }
 
+/** Facts from a host preflight that already recorded its notices. No policy callback crosses the surface boundary. */
+export interface RecordedModelPreflight {
+  readonly byoUnresolved: readonly string[];
+  /** The host's plan model, absent once that run has changed code. */
+  readonly planModel?: string;
+}
+
+/** Reuse a host's check without another transport call or another notice. */
+export function recordModelPreflight(ctx: PolicyContext, recorded: RecordedModelPreflight): ModelPreflightEvent {
+  const result = { byoUnresolved: [...recorded.byoUnresolved] };
+  const event = { ...modelPreflightEvent(ctx.step, result, recorded.planModel), notices: [] };
+  ctx.state.preflight = preflightVerdict(event, result);
+  return event;
+}
+
 /** The preflight half of the model hook: ask the transport once, before turn 1. Never throws. */
 export async function runModelPreflight(ctx: PolicyContext): Promise<ModelPreflightEvent> {
   const model = ctx.state.model.model ?? ctx.policy.pinnedModel;

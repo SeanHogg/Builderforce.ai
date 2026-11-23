@@ -1,3 +1,11 @@
+## ✅ RESOLVED 2026-11-23: Shared run entry, child admission, and explicit work tracking
+
+- **Run setup.** Production adapters enter through `openRun`. The shared opening renderer puts governance and persona instructions before prepared history. The runtime defaults to full routing, supports explicit automatic routing, and preserves the chosen route across resumed ticks.
+- **Child admission.** VSIX, cloud, in-process on-prem, and legacy session starts use shared child validation and prompt preparation. VSIX validates before recording a child. Cloud attaches the child handle to the admitted payload, preserving the tenant's current policy gates. Background starts return handles while in-process starts return completed reports.
+- **Brain policy and close-out.** Shared factories own the recorded preflight and history compaction policies. Brain uses the shared progress and provider recovery logic, sizes tool results against the serving model, and records when the failure breaker requests a closing turn. Prose finishes now run the same ticket close-out as finish-tool calls.
+- **Explicit assignments.** The runtime keeps assigned IDs and acceptance criteria in run state, checks host-supplied evidence in one batch at finish, and includes deterministic work counts in terminal diagnostics. Brain and in-process on-prem expose host bindings for explicit assignments.
+- **Verification.** The agent-run suite passed 848 tests, and the focused Brain suites passed 145. Cloud child serialization passed 6 tests, VSIX child and host gates passed 14, and on-prem child tests passed 6. Agent-run typechecking and the execution and package graph checks passed. Broader Brain typechecking and cloud integration checks remain dependency-blocked. [Implementation details](./docs/specs/_scratch-agent-pipeline-map.md)
+
 ## ✅ RESOLVED 2026-11-22: Project memory lost across restarts and read-only runs — chat #173444 (`remember_fact` / `recall_facts`)
 
 User report: the agent said it saved a fact, yet a restarted run did not recall it; and after reading files the run kept re-deriving the same conclusions (chat #173444: 40 reads, 0 facts written, the same hypothesis restated five times).

@@ -13,12 +13,13 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { runAgent, type RunEvent, type RunOutcome, type RunOutcomeRow, resetRunSteering } from '@builderforce/agent-run';
 import { resetBrainRunStore, stopRun } from '../runStore/runControl';
+import { ALL_ENTRY_POINTS } from '@builderforce/learned-routing';
 import type { RunEntryPoint } from '../runStore/runTypes';
 import { queueRunSteering } from '../runSteering';
 import { binding, preflightedModules, result, scripted } from '../test/brainRunHarness';
 import { brainRunPolicy, brainRunTask, buildBrainRunPorts } from './webAdapter';
 
-const ENTRY_POINTS: readonly RunEntryPoint[] = ['vscode', 'web', 'rovr'];
+const ENTRY_POINTS: readonly RunEntryPoint[] = ALL_ENTRY_POINTS;
 
 /** Drive one scripted run through the real ports, recording the trace and the outcome row. */
 async function drive(

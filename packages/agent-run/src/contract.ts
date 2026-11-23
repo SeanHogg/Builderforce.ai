@@ -68,6 +68,8 @@ export interface RunAttachment {
 export interface RunTask {
   runId?: string;                  // the adapter's id for this run (execution / client run id) — the §8.2 row's run id
   prompt: string;
+  /** Explicit assignments from the scoped host. Conversation text cannot assign work by itself. */
+  assignedWork?: readonly import("./workPlan.js").AssignedWork[];
   ticketId?: number; chatId?: number | string; projectId?: number;
   persona?: string;                // compiled persona brief
   request?: string;                // the user's own request, when `prompt` carries more than it (the stall gate reads this)
@@ -75,7 +77,7 @@ export interface RunTask {
   attachments?: RunAttachment[];
   dispatch: { source: 'board-sweep' | 'lane-entry' | 'chat' | 'manual' | 'ceremony' | 'subagent'; approvalId?: string; parentRunId?: string };
   workspace?: { defaultRepo?: string; focusPaths?: string[] };  // resolved by the adapter (§6.10); git + shell default to defaultRepo
-  /** The opening rows when the surface assembles its own prompt (system blocks, prior conversation, the user turn). Absent ⇒ one system row from the persona and prompt. */
+  /** Prepared history and task rows. Shared opening policy prepends governance and persona. */
   transcript?: RunMessage[];
 }
 
@@ -116,7 +118,7 @@ export interface RunPolicy {
   approvalGates: PolicyGate[];                        // in-run acts needing an approver — reuse @builderforce/agent-tools spec.ts:118
   delegation: { requested: boolean; readsBeforeNudge: number };  // requested = asksForSubagents(prompt) unless declined; default nudge after 4 reads (`DEFAULT_READS_BEFORE_NUDGE`)
   /** How the model policy hands a run between models, where the surface's session has a say (routed-around models, strict failover). Absent ⇒ the policy's defaults. */
-  modelOptions?: Pick<RunPolicyOptions, 'strictPin' | 'pinReleasable' | 'lockAfterFirstSuccess' | 'preferProvenFailover' | 'strictFailover' | 'excludeModels'>;
+  modelOptions?: Pick<RunPolicyOptions, 'strictPin' | 'pinReleasable' | 'lockAfterFirstSuccess' | 'preferProvenFailover' | 'strictFailover' | 'excludeModels' | 'startPhase' | 'phaseModels'>;
   /**
    * How the run's model hand-off starts (additive, optional): whether `pinnedModel` is an explicit
    * pin (asked strictly) or a soft seed, the delegated role the phase rule reads, and the per-phase

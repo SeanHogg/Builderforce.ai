@@ -19,6 +19,7 @@ import { attemptedDelegation } from '@builderforce/agent-run';
 import { modelScorecard } from './modelScorecard';
 
 export interface BrainRunOutcome extends RunOutcomeTelemetry {
+  routingSignal?: false;
   /** Idempotency key — one outcome per run. */
   clientRunId: string;
   /** The model that made this run's code changes. */

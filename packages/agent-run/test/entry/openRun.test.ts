@@ -1,7 +1,7 @@
 /** openRun — the one entry: refuses a missing entryPoint, folds the route in, and composes a surface's ports into the modules. */
 import { describe, expect, it, vi } from "vitest";
 import type { Capability } from "@builderforce/agent-tools";
-import { openRun, routeRun, type ModelCompletion, type RunEvent, type RunPorts } from "../../src/index.js";
+import { openRun, routeRun, type CloseOutPort, type ModelCompletion, type RunEvent, type RunOutcomeRow, type RunPorts, type WorkEvidence } from "../../src/index.js";
 import { routedPolicy } from "../../src/openRun.js";
 import { schemas, TEST_POLICY, TEST_TASK } from "../support/policyContext.js";
 
@@ -36,10 +36,59 @@ const WRITE_THEN_FINISH = (): ModelCompletion[] => [
 ];
 
 describe("openRun", () => {
+  it("holds prose finish for assigned work, reads evidence in a batch, and emits the terminal scorecard", async () => {
+    const { ports, events } = harness([{ content: "Done." }, { content: "One checked and one handed off." }]);
+    const rows: RunOutcomeRow[] = [];
+    ports.events.outcome = (row) => { rows.push(row); };
+    const evidence = vi.fn<(ids: readonly string[]) => Promise<readonly WorkEvidence[]>>()
+      .mockResolvedValueOnce([{ id: "A", status: "done", detail: "First check passed" }])
+      .mockResolvedValueOnce([
+        { id: "A", status: "done", detail: "First check passed" },
+        { id: "B", status: "in_review", detail: "Review requested" },
+      ]);
+    const outcome = await openRun({
+      task: { ...TEST_TASK, assignedWork: [{ id: "A", criteria: ["First check"] }, { id: "B", criteria: ["Second check"] }] },
+      policy: TEST_POLICY, ports, surface: { finish: { workEvidence: evidence } },
+    });
+    expect(events.find((event) => event.kind === "finish.blocked")).toMatchObject({ reason: "linked_work_open" });
+    expect(evidence.mock.calls).toEqual([[["A", "B"]], [["A", "B"]]]);
+    expect(outcome.kind).toBe("finished");
+    expect(rows).toMatchObject([{ work: { assigned: 2, done: 1, inReview: 1, blocked: 0, open: 0 } }]);
+  });
+
+  it("keeps governing instructions ahead of prepared history", async () => {
+    const { ports } = harness([{ content: "Done." }]);
+    const complete = vi.spyOn(ports.model, "complete");
+    const transcript = [{ role: "user" as const, content: "Earlier" }, { role: "assistant" as const, content: "Recorded" }, { role: "user" as const, content: "Now", task: true as const }];
+    await openRun({
+      task: { ...TEST_TASK, persona: "Host persona", transcript },
+      policy: TEST_POLICY, ports,
+    });
+    expect(complete.mock.calls[0]?.[0].messages.slice(0, 4)).toEqual([
+      { role: "system", content: "Host persona" }, ...transcript,
+    ]);
+  });
+
   it("regression: throws without policy.entryPoint, never defaulting it", async () => {
     const { ports } = harness([]);
     await expect(openRun({ task: TEST_TASK, policy: { ...TEST_POLICY, entryPoint: "" as never }, ports })).rejects.toThrow("openRun: policy.entryPoint is required");
     await expect(openRun({ task: TEST_TASK, policy: { ...TEST_POLICY, entryPoint: undefined as never }, ports })).rejects.toThrow("openRun: policy.entryPoint is required");
+  });
+
+  it("composes recorded preflight facts without checking the host or repeating its notices", async () => {
+    const { ports, events } = harness([{ content: "done" }]);
+    const preflight = vi.fn(() => ({ byoUnresolved: [] }));
+    ports.model.preflight = preflight;
+    const outcome = await openRun({
+      task: TEST_TASK, policy: TEST_POLICY, ports,
+      surface: { preflight: { byoUnresolved: ["anthropic:expired"] } },
+    });
+    expect(outcome.kind).toBe("finished");
+    expect(outcome.state.preflight).toBe("degraded:anthropic:expired");
+    expect(events.filter((event) => event.kind === "model.preflight")).toEqual([
+      { kind: "model.preflight", step: 0, status: "degraded", notices: [] },
+    ]);
+    expect(preflight).not.toHaveBeenCalled();
   });
 
   it("a surface's finish.openWork holds the finish until it returns null", async () => {
@@ -65,7 +114,7 @@ describe("openRun", () => {
   describe("close-out on every settle", () => {
     it("a finished run closes out once, in finish mode", async () => {
       const { ports } = harness([call("f1", "finish", { summary: "Implemented src/a.ts." }), { content: "Implemented src/a.ts." }], false);
-      const closeOut = vi.fn(async () => undefined);
+      const closeOut = vi.fn<CloseOutPort>(async () => undefined);
       const outcome = await openRun({ task: TEST_TASK, policy: TEST_POLICY, ports, surface: { closeOut } });
       expect(outcome.kind).toBe("finished");
       expect(closeOut).toHaveBeenCalledTimes(1);
@@ -75,7 +124,7 @@ describe("openRun", () => {
     it("regression: a failed run that never reached the finish gate closes out once, in settled (upkeep-only) mode", async () => {
       const { ports } = harness([]);
       ports.model = { complete: async () => { throw new Error("provider down"); } };
-      const closeOut = vi.fn(async () => undefined);
+      const closeOut = vi.fn<CloseOutPort>(async () => undefined);
       const outcome = await openRun({ task: TEST_TASK, policy: TEST_POLICY, ports, surface: { closeOut } });
       expect(outcome.kind).toBe("failed");
       expect(closeOut).toHaveBeenCalledTimes(1);
@@ -86,7 +135,7 @@ describe("openRun", () => {
       const { ports } = harness([{ content: "done" }]);
       const controller = new AbortController();
       controller.abort();
-      const closeOut = vi.fn(async () => undefined);
+      const closeOut = vi.fn<CloseOutPort>(async () => undefined);
       const outcome = await openRun({ task: TEST_TASK, policy: TEST_POLICY, ports, signal: controller.signal, surface: { closeOut } });
       expect(outcome).toMatchObject({ kind: "failed", reason: "cancelled" });
       expect(closeOut).not.toHaveBeenCalled();
@@ -109,10 +158,32 @@ describe("openRun", () => {
     expect(outcome.state.model.phase).toBe("code");
   });
 
-  it("an unrouted run (no routing) traces no route", async () => {
+  it("a child traces no independent route", async () => {
     const { ports, events } = harness([{ content: "done" }]);
-    await openRun({ task: TEST_TASK, policy: TEST_POLICY, ports, route: { request: "x" } });
+    await openRun({ task: TEST_TASK, policy: TEST_POLICY, ports, route: { request: "x", child: true } });
     expect(events.some((e) => e.kind === "run.routed")).toBe(false);
+  });
+
+  it("uses the shared default when the surface omits routing settings", async () => {
+    const { ports, events } = harness([{ content: "done" }]);
+    const outcome = await openRun({ task: { ...TEST_TASK, prompt: "Fix the typo in the README heading" }, policy: TEST_POLICY, ports });
+    expect(events.find((e) => e.kind === "run.routed")).toMatchObject({ route: "full" });
+    expect(outcome.state.pipeline?.route).toBe("full");
+  });
+
+  it("keeps the admitted route when resuming with different routing settings", async () => {
+    const { ports, events } = harness([call("w1", "write_file", { path: "a.ts", content: "fix" }), { content: "Done." }]);
+    const task = { ...TEST_TASK, prompt: "Fix the typo in the README heading" };
+    const first = await openRun({ task, policy: TEST_POLICY, ports, maxSteps: 1, route: { request: task.prompt, routing: { mode: "auto" } } });
+    expect(first.kind).toBe("yielded");
+    expect(first.state.pipeline?.route).toBe("quick");
+    const resumed = await openRun({
+      task, policy: TEST_POLICY, ports, resume: first.state,
+      route: { request: task.prompt, routing: { mode: "always" } },
+    });
+    expect(resumed.kind).toBe("finished");
+    expect(resumed.state.pipeline).toEqual(first.state.pipeline);
+    expect(events.filter((event) => event.kind === "run.routed")).toHaveLength(1);
   });
 
   it("a run whose route is already decided is not routed again, and is traced as the one run.routed", async () => {

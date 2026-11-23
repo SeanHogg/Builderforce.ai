@@ -62,7 +62,7 @@ export function openingRows(task: RunTask, gates?: RunPolicy["approvalGates"]): 
   if (task.persona && task.persona.trim()) system.push(task.persona.trim());
   return [
     ...(system.length > 0 ? [{ role: "system" as const, content: system.join("\n\n") }] : []),
-    { role: "user" as const, content: task.prompt },
+    ...(task.transcript?.length ? task.transcript : [{ role: "user" as const, content: task.prompt }]),
   ];
 }
 

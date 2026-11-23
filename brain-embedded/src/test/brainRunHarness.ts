@@ -6,7 +6,7 @@
  * drives a binding to its outcome. Test support only.
  */
 
-import { openRun, runSteeringSource, type RunOutcome } from '@builderforce/agent-run';
+import { createModelHook, openRun, runSteeringSource, type RunOutcome } from '@builderforce/agent-run';
 import type { StreamChatResult } from '../streamChatCompletion';
 import { beginRun } from '../runStore/beginRun';
 import { applyModelPreflight } from '../runStore/modelPreflight';
@@ -15,7 +15,7 @@ import type { BrainRunRequest, RunEntryPoint } from '../runStore/runTypes';
 import { brainEventSink } from '../run/eventSink';
 import { brainRunStorePort } from '../run/brainStore';
 import type { TurnObserver } from '../run/modelTransport';
-import { recordedModelHook, recordedPreflight } from '../run/preflightRecorded';
+import { recordedPreflight } from '../run/preflightRecorded';
 import { brainRunPolicy, brainRunTask, buildBrainRunPorts, type BrainRunBinding } from '../run/webAdapter';
 
 /** A scripted completion in the stream's own result shape. */
@@ -72,10 +72,10 @@ export type BoundRun = ReturnType<typeof binding>;
  * The agent's modules as production hands them (`run/runPrepared.ts`): the model preflight only SAYS the verdict the preamble left on
  * the cell, so the host's check (`req.modelPreflight`) runs here the way the preamble runs it (`runStore/hostRunContext.ts`).
  */
-export async function preflightedModules(h: BoundRun): Promise<{ model: ReturnType<typeof recordedModelHook> }> {
+export async function preflightedModules(h: BoundRun): Promise<{ model: ReturnType<typeof createModelHook> }> {
   const { req } = h.binding;
   await applyModelPreflight(h.cell, req.modelPreflight, req.model);
-  return { model: recordedModelHook(h.cell, req.model) };
+  return { model: createModelHook({ recordedPreflight: recordedPreflight(h.cell, req.model) }) };
 }
 
 /** Drive a bound run to its outcome through the agent, over the Brain's ports. */

@@ -7,7 +7,7 @@ import type { BrainMessage } from '../types';
 import type { BrainToolSpec, ChatCompletionMessage, ContentPart, StreamChatOptions, StreamHandlers, StreamChatResult } from '../streamChatCompletion';
 import type { ReasoningIntent } from '../effort';
 import type { BrainRunOutcome } from '../runOutcomeReport';
-import type { RunOutcomeRequest } from '@builderforce/learned-routing';
+import type { EntryPoint, RunOutcomeRequest } from '@builderforce/learned-routing';
 import type { RunStopHook } from '../stopHooks';
 import type { RunLineage } from '../runLineage';
 import type { ChatMode, ChatRosterAgent } from '../chatMode';
@@ -19,7 +19,7 @@ import type { ServedRead } from './hostRunContext';
 import type { BrainRunOpening } from './openingSections';
 import type { PackageDirProbe } from '../handOffParallelism';
 import type { PrefetchPort } from '@builderforce/prefetch';
-import type { ModelPreflightResult } from '@builderforce/agent-run';
+import type { ModelPreflightResult, RunWorkPort } from '@builderforce/agent-run';
 import type { CheckRecord, EvidencePolicy, OutgoingFile, ReviewVerdict, ShipPolicy } from '@builderforce/run-guards';
 
 /** The verifier port every deterministic run gate reads (PRD 45 §4.4). */
@@ -105,7 +105,7 @@ export interface ReviewerPort {
 export type RunKey = number | string;
 
 /** The surfaces a run comes in through - a telemetry label. */
-export type RunEntryPoint = 'vscode' | 'web' | 'rovr';
+export type RunEntryPoint = EntryPoint;
 
 /** Streaming fn shape (matches BrainRuntime.stream). */
 export type BrainStreamFn = (
@@ -125,6 +125,8 @@ export interface BrainRunPersistence {
 
 /** Everything a single run needs, captured at start time (survives navigation). */
 export interface BrainRunRequest {
+  /** Host-scoped work assignments and evidence. */
+  work?: RunWorkPort;
   resolvedSystemPrompt: string;
   /**
    * DATA the run's opening prompt is built from (`openingSections.ts`): the editor surface's

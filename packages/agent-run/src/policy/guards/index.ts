@@ -74,14 +74,12 @@ export class RunGuards {
     const bind = ports.progress;
     this.bind = bind;
     this.progress = levers.a3_progress_detector
-      ? new ProgressDetector(resume?.progress, bind
-        ? {
-            ...(bind.isReadOnly ? { isReadOnly: bind.isReadOnly } : {}),
-            ...(bind.isUnscopedMutation ? { isUnscopedMutation: bind.isUnscopedMutation } : {}),
-            ...(bind.isPlatformProgress ? { isPlatformProgress: bind.isPlatformProgress } : {}),
-            ...(bind.expectsChange ? { expectsChange: bind.expectsChange } : {}),
-          }
-        : { isReadOnly: (tool) => isReadOnlyCloudTool(tool) })
+      ? new ProgressDetector(resume?.progress, {
+          isReadOnly: bind?.isReadOnly ?? ((tool) => isReadOnlyCloudTool(tool)),
+          ...(bind?.isUnscopedMutation ? { isUnscopedMutation: bind.isUnscopedMutation } : {}),
+          ...(bind?.isPlatformProgress ? { isPlatformProgress: bind.isPlatformProgress } : {}),
+          ...(bind?.expectsChange ? { expectsChange: bind.expectsChange } : {}),
+        })
       : null;
     // The budgets (plan, change, circling) are the run policy's and hold whether or not A3's detector is on.
     this.forced = bind?.turns ? new ForcedLadder({ ...resume?.forced }, (note) => this.progress?.setSteer(note), bind, bind.turns) : null;

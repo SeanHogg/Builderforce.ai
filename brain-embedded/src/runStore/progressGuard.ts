@@ -210,14 +210,16 @@ const FINISH_FINAL_BRIEF = 'Write your final report now: what is done, and which
  * The tools a finish turn offers: ONLY the obligations the work-linking directive declared (`promptTools.obligation`,
  * `chatWorkObligationTools`) that the catalog holds — record the remaining work, update statuses. Never a write or exec tool.
  */
-function obligationToolsOf(run: BrainRunContext): BrainToolSpec[] {
+type LegacyProgressContext = BrainRunContext & { progress: RunProgressGuard };
+
+function obligationToolsOf(run: LegacyProgressContext): BrainToolSpec[] {
   const names = new Set(run.promptTools?.obligation ?? []);
   if (names.size === 0) return [];
   return (run.allTools ?? []).filter((t) => names.has(t.function.name));
 }
 
 /** `afterToolCalls`: the turn is over — judge it. */
-export function progressAfterToolCalls(run: BrainRunContext): (ctx: { step: number }) => void {
+export function progressAfterToolCalls(run: LegacyProgressContext): (ctx: { step: number }) => void {
   return (ctx) => {
     const action = run.progress.endTurn();
     // ONE mapping for trips and advisories alike (`progressTraceStep`), so every host's row matches.
@@ -228,7 +230,7 @@ export function progressAfterToolCalls(run: BrainRunContext): (ctx: { step: numb
   };
 }
 
-function traceStep(run: BrainRunContext, step: number, s: ProgressTraceStep): void {
+function traceStep(run: LegacyProgressContext, step: number, s: ProgressTraceStep): void {
   pushTrace(run.c, { ts: nowIso(), category: 'message', label: s.label, args: { step, ...s.args }, result: s.result });
 }
 
@@ -237,7 +239,7 @@ function traceStep(run: BrainRunContext, step: number, s: ProgressTraceStep): vo
  * turn — or null when the run is not finishing. A finishing run stays finishing: no hand-off, change-budget, no-progress or
  * later trip reopens the menu (finish means no more coding), so the turn menu asks this FIRST (`brainTurnMenu.ts`).
  */
-export function finishingTurn(run: BrainRunContext): ForcedTurn | null {
+export function finishingTurn(run: LegacyProgressContext): ForcedTurn | null {
   const finishing = run.progress.takeFinishingTurn();
   if (!finishing) return null;
   run.progress.takeDue();
@@ -246,7 +248,7 @@ export function finishingTurn(run: BrainRunContext): ForcedTurn | null {
 }
 
 /** THE one place a finish turn is made: the run is finishing from here on (`RunProgressGuard.finishing`, sticky). */
-function finishTurn(run: BrainRunContext, tools: BrainToolSpec[], brief: string): ForcedTurn {
+function finishTurn(run: LegacyProgressContext, tools: BrainToolSpec[], brief: string): ForcedTurn {
   run.progress.enterFinish();
   return { tools, brief: { role: 'user', content: brief }, finishing: true };
 }
@@ -256,7 +258,7 @@ function finishTurn(run: BrainRunContext, tools: BrainToolSpec[], brief: string)
  * turn's tools. Null for an ordinary turn — and when the trip cannot be forced here,
  * in which case its note opens the turn instead.
  */
-export function progressGuardTurn(run: BrainRunContext, step: number, selected: readonly BrainToolSpec[]): ForcedTurn | null {
+export function progressGuardTurn(run: LegacyProgressContext, step: number, selected: readonly BrainToolSpec[]): ForcedTurn | null {
   const finishing = finishingTurn(run);
   if (finishing) return finishing;
   const due = run.progress.takeDue();
@@ -296,7 +298,7 @@ export function progressGuardTurn(run: BrainRunContext, step: number, selected: 
  * is steered instead ('steered'), so the NEXT turn selects as `code` with the full menu. Null: the finish stands. The next
  * trip after the deferral really finishes.
  */
-function deferredFinishTurn(run: BrainRunContext, step: number, selected: readonly BrainToolSpec[], due: TripAction): ForcedTurn | 'steered' | null {
+function deferredFinishTurn(run: LegacyProgressContext, step: number, selected: readonly BrainToolSpec[], due: TripAction): ForcedTurn | 'steered' | null {
   if (!budgeted(run) || progressed(run) || !run.progress.canDeferStalledFinish) return null;
   const advice = `PROGRESS CHECK ${due.trip}: ${progressAdvice(due.signal)}`;
   const planning = offersHandOff(run.policy);
@@ -323,7 +325,7 @@ const FORCED_MENU: Readonly<Record<'hand_off' | 'change', string>> = {
   change: 'the change tools alone',
 };
 
-function trace(run: BrainRunContext, step: number, due: TripAction, forced: 'hand_off' | 'change' | 'finish', recordTools = 0): void {
+function trace(run: LegacyProgressContext, step: number, due: TripAction, forced: 'hand_off' | 'change' | 'finish', recordTools = 0): void {
   const why = due.kind === 'finish' && due.verified ? 'the change is made and verified' : 'the run is not converging';
   pushTrace(run.c, {
     ts: nowIso(),

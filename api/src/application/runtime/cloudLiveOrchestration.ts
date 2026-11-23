@@ -20,6 +20,7 @@ import {
   type SubagentRequest,
   type SubagentResult,
 } from '@builderforce/agent-tools';
+import { spawnChild } from '@builderforce/agent-run';
 import { MAX_SUBAGENT_DEPTH } from '@builderforce/agent-loop';
 import { eq } from 'drizzle-orm';
 import { executions } from '../../infrastructure/database/schema';
@@ -33,9 +34,11 @@ import { composeDispatcherLabel } from './dispatcherLabel';
 import { cloudRunnerStub } from './cloudRunnerStub';
 import { parseOriginatingChatId } from './cloudDispatch';
 import { resolveDelegatePersona, type PersonaBriefPort } from './cloudSubagent';
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 import {
   childHandle,
   childPayload,
+  withCloudChildHandle,
   childRowsByHandle,
   isTerminalExecutionStatus,
   liveChildHandles,
@@ -130,27 +133,45 @@ export function buildLiveOrchestration(deps: LiveOrchestrationDeps): Orchestrati
       ...(input.ticket ? { ticket: input.ticket } : {}),
       owner,
     });
+    let admittedId: number | undefined;
     try {
-      const execution = await runtime.submit({
-        taskId: parent.taskId,
-        tenantId: parent.tenantId,
-        submittedBy: composeDispatcherLabel(`execution:${parent.executionId}`, 'subagent'),
-        payload: childPayload(parent.payload, spec('')),
-        source: 'agent',
+      return await spawnChild({
+        parentRunId: String(parent.executionId), entryPoint: 'cloud', depth: tree.depth + 1,
+        owner, task: input.task, role: input.role, persona: who.persona,
+      }, {
+        openRun: async (child) => {
+          const preparedSpec = (handle: string): CloudChildSpec => ({ ...spec(handle), standingPrompt: child.systemPrompt, entryPoint: child.entryPoint });
+          const execution = await runtime.submit({
+            taskId: parent.taskId,
+            tenantId: parent.tenantId,
+            submittedBy: composeDispatcherLabel(`execution:${parent.executionId}`, 'subagent'),
+            payload: childPayload(parent.payload, preparedSpec('')),
+            source: 'agent',
+          });
+          const id = Number(execution.id);
+          admittedId = id;
+          const handle = childHandle(id);
+          const payload = withCloudChildHandle(execution.payload, handle);
+          // The owner pointer, set before the child takes its first step.
+          const [linked] = await db.update(executions)
+            .set({ parentExecutionId: parent.executionId, payload })
+            .where(scopedToTenant(executions, parent.tenantId, eq(executions.id, id)))
+            .returning({ id: executions.id });
+          if (!linked) throw new Error('Could not link the admitted child execution');
+          const refused = await startOnRunner(id, payload);
+          if (refused) throw new Error(refused);
+          const note = deps.afterChildCommits ? `${SPAWNED_NOTE} ${deps.afterChildCommits}` : SPAWNED_NOTE;
+          return { ok: true, running: true, handle, note, ...who.echo, ...(input.ticket ? { ticket: input.ticket } : {}) };
+        },
       });
-      const id = Number(execution.id);
-      const handle = childHandle(id);
-      const payload = childPayload(parent.payload, spec(handle));
-      // The owner pointer, set before the child takes its first step.
-      await db.update(executions).set({ parentExecutionId: parent.executionId, payload }).where(scopedToTenant(executions, parent.tenantId, eq(executions.id, id)));
-      const refused = await startOnRunner(id, payload);
-      if (refused) {
-        await runtime.cancel(id, `execution:${parent.executionId}`).catch(() => undefined);
-        return { ok: false, error: refused, ...who.echo };
-      }
-      const note = deps.afterChildCommits ? `${SPAWNED_NOTE} ${deps.afterChildCommits}` : SPAWNED_NOTE;
-      return { ok: true, running: true, handle, note, ...who.echo, ...(input.ticket ? { ticket: input.ticket } : {}) };
     } catch (e) {
+      if (admittedId !== undefined) {
+        try {
+          await runtime.cancel(admittedId, `execution:${parent.executionId}`);
+        } catch (error) {
+          reportCaughtError(error, { source: 'application/runtime/cloudLiveOrchestration.ts', operation: 'cancelFailedChildAdmission', context: { executionId: admittedId } });
+        }
+      }
       return { ok: false, error: e instanceof Error ? e.message : String(e), ...who.echo };
     }
   };

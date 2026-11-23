@@ -8,6 +8,8 @@
 /** The uniform outcome row (§8.2): ONE per run, every entry point, built by `telemetry/outcomeRow`
  *  when the run ends. `entryPoint` is a telemetry label — never a behaviour branch (§5 rule 3). */
 export interface RunOutcomeRow {
+  work?: import("../workPlan.js").RunWorkScorecard;
+  pipeline?: { route: "quick" | "full"; score: number };
   entryPoint: string;
   runId?: string;
   /** Set on a SUB-AGENT's row: the run that spawned it (`RunTask.dispatch.parentRunId`), so a child is never counted as a second run of its owner. */

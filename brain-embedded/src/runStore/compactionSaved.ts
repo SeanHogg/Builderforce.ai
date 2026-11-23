@@ -8,17 +8,7 @@
  * negative — a working set larger than the baseline saved nothing.
  */
 
-import type { ChatCompletionMessage } from '../streamChatCompletion';
-import { HISTORY_TOKEN_BUDGET, transcriptTokens } from '@seanhogg/builderforce-memory/working';
-
-export function compactionSavedTokens(
-  full: readonly ChatCompletionMessage[],
-  working: readonly ChatCompletionMessage[],
-  historyBudgetTokens: number = HISTORY_TOKEN_BUDGET,
-): number {
-  const withoutCompaction = Math.min(transcriptTokens(full), historyBudgetTokens);
-  return Math.max(0, withoutCompaction - transcriptTokens(working));
-}
+export { compactionSavedTokens } from '@builderforce/agent-run';
 
 /**
  * Hands out `stamped` to the FIRST request of a call and `plain` to every later one (a

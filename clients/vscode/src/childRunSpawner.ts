@@ -23,6 +23,7 @@ import {
   type RunLineage,
 } from "@seanhogg/builderforce-brain-embedded";
 import { parseSubagentReport } from "@builderforce/agent-loop";
+import { validateChildStart } from "@builderforce/agent-run";
 import {
   RUN_COMMAND_TOOL,
   SUBAGENT_REPORT_CHARS,
@@ -204,6 +205,12 @@ export function childControls(host: ChildRunHost, owner: ChildOwner): ChildContr
     canSpawn: owner.depth < MAX_CHILD_DEPTH,
 
     spawn(req) {
+      const depth = owner.depth + 1;
+      try {
+        validateChildStart({ parentRunId: String(owner.key), entryPoint: "vscode", depth, owner: owner.name, task: req.task });
+      } catch (error) {
+        return { ok: false, error: error instanceof Error ? error.message : String(error) };
+      }
       const name = req.asAgent?.name ?? req.persona?.name ?? req.label;
       const registered = host.registry.register({
         rootChatId: owner.rootChatId,
@@ -211,7 +218,7 @@ export function childControls(host: ChildRunHost, owner: ChildOwner): ChildContr
         ownerName: owner.name,
         label: req.label,
         agent: req.asAgent ?? { ref: `subagent:${req.label}`, name },
-        depth: owner.depth + 1,
+        depth,
         ...(req.ticket ? { ticket: req.ticket } : {}),
       });
       if ("error" in registered) return { ok: false, error: registered.error };

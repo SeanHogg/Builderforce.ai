@@ -24,7 +24,7 @@
  */
 
 import { liftProseAskUser, parseAskUser } from '@builderforce/agent-loop';
-import type { PolicyContext } from '@builderforce/agent-run';
+import { MAX_OPEN_WORK_HOLDS, recordWorkSnapshot, type PolicyContext, type WorkEvidence } from '@builderforce/agent-run';
 import { isReadOnlyShellCall } from '@builderforce/run-guards';
 import { isFailedToolResult, type BrainTraceEvent } from '../brainTriage';
 import { normalizeChatMode } from '../chatMode';
@@ -38,7 +38,7 @@ import { budgeted } from './progressBudget';
 import { nowIso, pushTrace, runTrace } from './runCells';
 
 /** The most times one run is held for its open tickets. */
-export const MAX_OPEN_WORK_HOLDS = 6;
+export { MAX_OPEN_WORK_HOLDS };
 
 /** The most tickets the block lists by name; the rest are counted. */
 const MAX_LISTED_TICKETS = 15;
@@ -74,7 +74,7 @@ function latestProgress(trace: readonly BrainTraceEvent[]): BrainTraceEvent | nu
  * move by trace position across both its ids (a move may name its local id or, once synced, its account id); a filing the
  * account's listing already carries (`listedRefs`) is left to the listing, which is authoritative.
  */
-function localOpenTickets(trace: readonly BrainTraceEvent[], listedRefs: ReadonlySet<string>): LinkedTaskRow[] {
+function localTickets(trace: readonly BrainTraceEvent[], listedRefs: ReadonlySet<string>): LinkedTaskRow[] {
   const moves = ticketMovesInRun(trace);
   return ticketsCreatedInRun(trace)
     .filter((f) => f.local && (f.syncRef == null || !listedRefs.has(f.syncRef)))
@@ -83,8 +83,7 @@ function localOpenTickets(trace: readonly BrainTraceEvent[], listedRefs: Readonl
       kind: typeof f.args.taskType === 'string' ? f.args.taskType : 'task',
       title: typeof f.args.title === 'string' ? f.args.title : '',
       status: (latestStatus(moves, f.ids) ?? UNMOVED_LOCAL_STATUS).toLowerCase(),
-    }))
-    .filter((r) => isOpenLinkedStatus(r.status));
+    }));
 }
 
 /** `#ref kind "title" (status)` — one open ticket, as the model and the trace read it. */
@@ -126,6 +125,7 @@ export function openLinkedWorkHold(run: BrainRunContext): (ctx: PolicyContext) =
   let holds = 0;
   let released = false;
   let markAtLastHold: BrainTraceEvent | null = null;
+  const tracked = new Set<string>();
 
   const noteOf = (ev: BrainTraceEvent): void => pushTrace(run.c, ev);
   const note = (label: string, result: string, args?: Record<string, unknown>): void => {
@@ -133,13 +133,13 @@ export function openLinkedWorkHold(run: BrainRunContext): (ctx: PolicyContext) =
   };
 
   /** The open tickets that hold the run, or null when the account's listing cannot be read (never a hold on an unreadable listing). */
-  const openTickets = async (trace: readonly BrainTraceEvent[], executing: boolean): Promise<LinkedTaskRow[] | null> => {
+  const scopedTickets = async (trace: readonly BrainTraceEvent[], executing: boolean): Promise<LinkedTaskRow[] | null> => {
     // An unbound chat, or a host whose catalog does not declare the listing, owns only what it filed on the device.
-    if (run.serverChatId == null || !declaresChatTicketListing(run.req.tools)) return localOpenTickets(trace, new Set());
+    if (run.serverChatId == null || !declaresChatTicketListing(run.req.tools)) return localTickets(trace, new Set());
     // A run that is not executing and owns no ticket can be held by none of the listing's rows: it is not asked for (a question
     // answered in a bound chat makes no ticket call of its own).
     const owned = runOwnedTicketRefs(trace, run.c.deltaTicketId);
-    if (!executing && owned.size === 0) return [];
+    if (!executing && owned.size === 0 && tracked.size === 0) return [];
     const listed = await listChatTickets(run.req, run.serverChatId, {
       note: noteOf, label: 'finish.open_work_unreadable', consequence: 'the run is not held for them.',
       // A hung listing must not hang the run's end: it is waited for no longer than the settle's own ticket bookkeeping.
@@ -147,8 +147,8 @@ export function openLinkedWorkHold(run: BrainRunContext): (ctx: PolicyContext) =
     }, listingScopeOf(run.c));
     if (listed == null) return null;
     const rows = linkedTaskRows(listed);
-    const linkedOpen = rows.filter((t) => isOpenLinkedStatus(t.status) && (owned.has(t.ref) || (executing && t.status === ACTIVE_STATUS)));
-    return [...linkedOpen, ...localOpenTickets(trace, new Set(rows.map((t) => t.ref)))];
+    const scoped = rows.filter((t) => owned.has(t.ref) || tracked.has(t.ref) || (executing && t.status === ACTIVE_STATUS));
+    return [...scoped, ...localTickets(trace, new Set(rows.map((t) => t.ref)))];
   };
 
   const release = (open: readonly LinkedTaskRow[], reason: 'budget' | 'no_progress'): null => {
@@ -180,8 +180,20 @@ export function openLinkedWorkHold(run: BrainRunContext): (ctx: PolicyContext) =
 
     const trace = runTrace(run.c);
     const latest = latestProgress(trace);
-    const open = await openTickets(trace, budgeted(run) || latest != null);
-    if (!open || open.length === 0) return null;
+    const rows = await scopedTickets(trace, budgeted(run) || latest != null);
+    if (!rows) return null;
+    const evidence = rows.flatMap((ticket): WorkEvidence[] => {
+      const { ref, status } = ticket;
+      if (status === 'done' || status === 'completed') return [{ id: ref, status: 'done', detail: 'Ticket is marked done' }];
+      if (status === 'in_review') return [{ id: ref, status, detail: 'Ticket is in review' }];
+      return [];
+    });
+    for (const { ref } of rows) tracked.add(ref);
+    if (ctx.state) {
+      recordWorkSnapshot(ctx.state, 'linked-tickets', rows.map(({ ref, title }) => ({ id: ref, criteria: [title] })), evidence);
+    }
+    const open = rows.filter((ticket) => isOpenLinkedStatus(ticket.status));
+    if (!open.length) return null;
     if (holds >= MAX_OPEN_WORK_HOLDS) return release(open, 'budget');
     if (holds > 0 && !progressedSinceHold(trace, latest)) return release(open, 'no_progress');
     holds += 1;

@@ -20,12 +20,17 @@ vi.mock('@builderforce/agent-run', async (importOriginal) => {
 
 describe('runPrepared opens the run through openRun', () => {
   it('regression: hands openRun the run route and the surface ports (finish.openWork, closeOut, compaction, preflight)', async () => {
+    seen.inputs.length = 0;
+    const modelPreflight = vi.fn(async () => ({ byoUnresolved: ['anthropic:expired'] }));
     const s: Scenario = {
       key: 9401,
       script: () => [say('Done.')],
-      request: () => ({ pipeline: { routing: 'auto' as const }, userTurn: 'fix the typo in a.ts' }),
+      request: () => ({ modelPreflight, pipeline: { routing: 'auto' as const }, userTurn: 'fix the typo in a.ts' }),
     };
-    await runOn(s);
+    const capture = await runOn(s);
+    expect(capture.threw).toBeUndefined();
+    expect(modelPreflight).toHaveBeenCalledTimes(1);
+    expect(capture.trace.filter((event) => event.label === 'model.preflight')).toHaveLength(1);
 
     expect(seen.inputs).toHaveLength(1);
     const input = seen.inputs[0]!;
@@ -35,8 +40,10 @@ describe('runPrepared opens the run through openRun', () => {
     expect(input.policy.entryPoint).toBeTruthy();
     expect(input.surface.finish.openWork).toBeTypeOf('function');
     expect(input.surface.closeOut).toBeTypeOf('function');
-    expect(input.surface.compaction.hook).toBeDefined();
-    expect(input.surface.preflight).toBeTypeOf('function');
+    expect(input.surface.compaction.history).toBeDefined();
+    expect(input.surface.compaction.hook).toBeUndefined();
+    expect(input.surface.preflight).toMatchObject({ byoUnresolved: ['anthropic:expired'] });
+    expect(input.surface.preflight).not.toBeTypeOf('function');
     expect(input.modules).toBeUndefined();
   });
 });

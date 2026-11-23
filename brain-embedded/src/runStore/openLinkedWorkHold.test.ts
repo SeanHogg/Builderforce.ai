@@ -30,6 +30,18 @@ const edit = (n: number): BrainTraceEvent => ({ ts: `t${n}`, category: 'tool', l
 const labels = (c: { trace: BrainTraceEvent[] }) => c.trace.map((e) => e.label);
 
 describe('openLinkedWorkHold', () => {
+  it('records owned ticket evidence without scoring unrelated work', async () => {
+    const { run, c } = fakeRun(page([
+      { ...EPIC, status: 'done' },
+      { ...EPIC, ref: '6999', status: 'done' },
+    ]));
+    c.trace.push({ ts: 't', category: 'tool', label: 'builtin_tasks_create', args: { title: 'Implement the PRD' }, result: { id: 6902 } });
+    const state = {} as PolicyContext['state'];
+    expect(await openLinkedWorkHold(run)(ctx({ state }))).toBeNull();
+    expect(state.workObservations?.['linked-tickets']).toMatchObject([
+      { id: '6902', evidence: { id: '6902', status: 'done' } },
+    ]);
+  });
   it('regression: chat #276 — an open linked epic holds a prose ending', async () => {
     const { run } = fakeRun(page([
       EPIC,

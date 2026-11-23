@@ -24,6 +24,11 @@ export interface RouteInput {
   child?: boolean;
 }
 
+/** Common defaults. Hosts can supply stage models and a quick-model preference. */
+export function defaultPipelineRouting(): NonNullable<RouteInput["routing"]> {
+  return { mode: "always" };
+}
+
 /** Where the run starts, as the initial model policy takes it. */
 export type RouteStart = Pick<RunPolicyOptions, "startPhase" | "phaseModels" | "pinnedModel">;
 

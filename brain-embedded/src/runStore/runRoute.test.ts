@@ -11,8 +11,8 @@ const BROAD = 'Refactor the auth module across all services, then add tests for 
 const route = (req: Parameters<typeof decideRoute>[0], request: string, followUp = false) => decideRoute(req, request, followUp);
 
 describe('decideRoute', () => {
-  it('routes only a host that asked for it, and never a sub-agent', () => {
-    expect(route({}, SMALL).pipeline).toBeNull();
+  it('routes by default and leaves sub-agents on their assigned slice', () => {
+    expect(route({}, SMALL).pipeline?.route).toBe('full');
     expect(route({ pipeline: { routing: 'auto' }, lineage }, SMALL).pipeline).toBeNull();
   });
 
@@ -70,11 +70,10 @@ describe('route.start — stage resolution', () => {
     expect(route({ phaseModels, pipeline: { routing: 'auto' } }, SMALL).start.phaseModels?.code).toBe('coder');
   });
 
-  it('a sub-agent keeps its code start; an unrouted run plans and sends no route', () => {
+  it('a sub-agent keeps its code start and sends no independent route', () => {
     expect(route({ lineage }, SMALL).start).toEqual({ startPhase: 'code' });
-    const plain = route({}, SMALL);
-    expect(plain.start).toEqual({ startPhase: 'plan' });
-    expect(routeMetadata(plain)).toEqual({});
-    expect(plain.skipsVerify).toBe(false);
+    const child = route({ lineage }, SMALL);
+    expect(routeMetadata(child)).toEqual({});
+    expect(child.skipsVerify).toBe(false);
   });
 });

@@ -74,7 +74,12 @@ describe('specTicketCoverageGate', () => {
       ticket('6925', 'P25-09: seed the other verticals'),
       ticket('6926', '[P33-01] Event lake — operator provisions the pipeline', 'blocked'),
     ]));
-    expect(await specTicketCoverageGate(run)(ctx())).toBeNull();
+    const state = {} as PolicyContext['state'];
+    expect(await specTicketCoverageGate(run)({ ...ctx(), state })).toBeNull();
+    expect(state.workObservations?.['spec-ticket-coverage']).toMatchObject([
+      { id: 'docs/specs/measure.md#P25-09', evidence: { status: 'done', detail: 'Linked ticket: 6925' } },
+      { id: 'docs/specs/measure.md#P33-01', evidence: { status: 'done', detail: 'Linked ticket: 6926' } },
+    ]);
   });
 
   it('a ticket the run filed this turn covers its item before the listing shows it', async () => {

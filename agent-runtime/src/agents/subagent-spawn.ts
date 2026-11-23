@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { spawnChild } from "@builderforce/agent-run";
 import { formatThinkingLevels, normalizeThinkLevel } from "../auto-reply/thinking.js";
 import { modelRoleForAgentRole } from "../builderforce/agent-roles.js";
 import { buildPersonaSystemBlock } from "../builderforce/personas.js";
@@ -155,207 +156,219 @@ export async function spawnSubagentDirect(
     }
   }
 
-  // Apply roleConfig overrides if provided
-  if (params.roleConfig) {
-    // Ensure the config has an agent entry with the role's skills and model
-    if (!cfg.agents) {
-      cfg.agents = { list: [] };
-    }
-    const agentsList = cfg.agents.list ?? (cfg.agents.list = []);
-    const existingIdx = agentsList.findIndex((e) => normalizeAgentId(e.id) === targetAgentId);
-    const role = params.roleConfig;
-    // A role without a model pin must not erase the agent's own configured model.
-    const newEntry = {
-      id: targetAgentId,
-      skills: role.tools,
-      ...(role.model ? { model: role.model } : {}),
-    };
-    if (existingIdx >= 0) {
-      agentsList[existingIdx] = { ...agentsList[existingIdx], ...newEntry };
-    } else {
-      agentsList.push(newEntry);
-    }
-
-    // Override model/thinking if not explicitly provided in params
-    if (!modelOverride && role.model) {
-      modelOverride = role.model;
-    }
-    if (!thinkingOverrideRaw && role.thinking) {
-      thinkingOverrideRaw = role.thinking;
-    }
-  }
-
-  const childSessionKey = `agent:${targetAgentId}:subagent:${crypto.randomUUID()}`;
-  const childDepth = callerDepth + 1;
-  const spawnedByKey = requesterInternalKey;
-  const targetAgentConfig = resolveAgentConfig(cfg, targetAgentId);
-  const resolvedModel = await resolveSubagentSpawnModel({
-    cfg,
-    agentId: targetAgentId,
-    modelOverride,
-    role: modelRoleForAgentRole(params.roleConfig?.name),
-    task,
-  });
-
-  const resolvedThinkingDefaultRaw =
-    readStringParam(targetAgentConfig?.subagents ?? {}, "thinking") ??
-    readStringParam(cfg.agents?.defaults?.subagents ?? {}, "thinking");
-
-  let thinkingOverride: string | undefined;
-  const thinkingCandidateRaw = thinkingOverrideRaw || resolvedThinkingDefaultRaw;
-  if (thinkingCandidateRaw) {
-    const normalized = normalizeThinkLevel(thinkingCandidateRaw);
-    if (!normalized) {
-      const { provider, model } = splitModelRef(resolvedModel);
-      const hint = formatThinkingLevels(provider, model);
-      return {
-        status: "error",
-        error: `Invalid thinking level "${thinkingCandidateRaw}". Use one of: ${hint}.`,
-      };
-    }
-    thinkingOverride = normalized;
-  }
   try {
-    await callGateway({
-      method: "sessions.patch",
-      params: { key: childSessionKey, spawnDepth: childDepth },
-      timeoutMs: 10_000,
-    });
-  } catch (err) {
-    const messageText =
-      err instanceof Error ? err.message : typeof err === "string" ? err : "error";
-    return {
-      status: "error",
-      error: messageText,
-      childSessionKey,
-    };
-  }
+    return await spawnChild({
+      parentRunId: requesterInternalKey, entryPoint: "on-prem", depth: callerDepth + 1,
+      owner: callerDepth >= 1 ? "the parent orchestrator" : "the main agent", task,
+    }, {
+      openRun: async (child) => {
+        // Apply roleConfig overrides if provided
+        if (params.roleConfig) {
+          // Ensure the config has an agent entry with the role's skills and model
+          if (!cfg.agents) {
+            cfg.agents = { list: [] };
+          }
+          const agentsList = cfg.agents.list ?? (cfg.agents.list = []);
+          const existingIdx = agentsList.findIndex((e) => normalizeAgentId(e.id) === targetAgentId);
+          const role = params.roleConfig;
+          // A role without a model pin must not erase the agent's own configured model.
+          const newEntry = {
+            id: targetAgentId,
+            skills: role.tools,
+            ...(role.model ? { model: role.model } : {}),
+          };
+          if (existingIdx >= 0) {
+            agentsList[existingIdx] = { ...agentsList[existingIdx], ...newEntry };
+          } else {
+            agentsList.push(newEntry);
+          }
 
-  if (resolvedModel) {
-    try {
-      await callGateway({
-        method: "sessions.patch",
-        params: { key: childSessionKey, model: resolvedModel },
-        timeoutMs: 10_000,
-      });
-      modelApplied = true;
-    } catch (err) {
-      const messageText =
-        err instanceof Error ? err.message : typeof err === "string" ? err : "error";
-      return {
-        status: "error",
-        error: messageText,
-        childSessionKey,
-      };
-    }
-  }
-  if (thinkingOverride !== undefined) {
-    try {
-      await callGateway({
-        method: "sessions.patch",
-        params: {
-          key: childSessionKey,
-          thinkingLevel: thinkingOverride === "off" ? null : thinkingOverride,
-        },
-        timeoutMs: 10_000,
-      });
-    } catch (err) {
-      const messageText =
-        err instanceof Error ? err.message : typeof err === "string" ? err : "error";
-      return {
-        status: "error",
-        error: messageText,
-        childSessionKey,
-      };
-    }
-  }
-  let childSystemPrompt = buildSubagentSessionPrompt({
-    requesterSessionKey,
-    requesterOrigin,
-    childSessionKey,
-    label: label || undefined,
-    task,
-    childDepth,
-    maxSpawnDepth,
-  });
+          // Override model/thinking if not explicitly provided in params
+          if (!modelOverride && role.model) {
+            modelOverride = role.model;
+          }
+          if (!thinkingOverrideRaw && role.thinking) {
+            thinkingOverrideRaw = role.thinking;
+          }
+        }
 
-  // Inject role-specific system prompt and persona identity block if provided.
-  // Both are encoded into childSystemPrompt so they are visible to all
-  // reasoning paths in the brain, including the builderForceAgentsLLM direct path.
-  if (params.roleConfig) {
-    if (params.roleConfig.systemPrompt) {
-      childSystemPrompt += "\n\n--- Role Guidance ---\n" + params.roleConfig.systemPrompt;
-    }
-    const personaBlock = buildPersonaSystemBlock(params.roleConfig);
-    if (personaBlock) {
-      childSystemPrompt += "\n\n" + personaBlock;
-    }
-  }
+        const childSessionKey = `agent:${targetAgentId}:subagent:${crypto.randomUUID()}`;
+        const childDepth = callerDepth + 1;
+        const spawnedByKey = requesterInternalKey;
+        const targetAgentConfig = resolveAgentConfig(cfg, targetAgentId);
+        const resolvedModel = await resolveSubagentSpawnModel({
+          cfg,
+          agentId: targetAgentId,
+          modelOverride,
+          role: modelRoleForAgentRole(params.roleConfig?.name),
+          task,
+        });
 
-  const childTaskMessage = [
-    `[Subagent Context] You are running as a subagent (depth ${childDepth}/${maxSpawnDepth}). Results auto-announce to your requester; do not busy-poll for status.`,
-    `[Subagent Task]: ${task}`,
-  ].join("\n\n");
+        const resolvedThinkingDefaultRaw =
+          readStringParam(targetAgentConfig?.subagents ?? {}, "thinking") ??
+          readStringParam(cfg.agents?.defaults?.subagents ?? {}, "thinking");
 
-  const childIdem = crypto.randomUUID();
-  let childRunId: string = childIdem;
-  try {
-    const response = await callGateway<{ runId: string }>({
-      method: "agent",
-      params: {
-        message: childTaskMessage,
-        sessionKey: childSessionKey,
-        channel: requesterOrigin?.channel,
-        to: requesterOrigin?.to ?? undefined,
-        accountId: requesterOrigin?.accountId ?? undefined,
-        threadId: requesterOrigin?.threadId != null ? String(requesterOrigin.threadId) : undefined,
-        idempotencyKey: childIdem,
-        deliver: false,
-        lane: AGENT_LANE_SUBAGENT,
-        extraSystemPrompt: childSystemPrompt,
-        thinking: thinkingOverride,
-        timeout: runTimeoutSeconds,
-        label: label || undefined,
-        spawnedBy: spawnedByKey,
-        groupId: ctx.agentGroupId ?? undefined,
-        groupChannel: ctx.agentGroupChannel ?? undefined,
-        groupSpace: ctx.agentGroupSpace ?? undefined,
+        let thinkingOverride: string | undefined;
+        const thinkingCandidateRaw = thinkingOverrideRaw || resolvedThinkingDefaultRaw;
+        if (thinkingCandidateRaw) {
+          const normalized = normalizeThinkLevel(thinkingCandidateRaw);
+          if (!normalized) {
+            const { provider, model } = splitModelRef(resolvedModel);
+            const hint = formatThinkingLevels(provider, model);
+            return {
+              status: "error",
+              error: `Invalid thinking level "${thinkingCandidateRaw}". Use one of: ${hint}.`,
+            };
+          }
+          thinkingOverride = normalized;
+        }
+        try {
+          await callGateway({
+            method: "sessions.patch",
+            params: { key: childSessionKey, spawnDepth: childDepth },
+            timeoutMs: 10_000,
+          });
+        } catch (err) {
+          const messageText =
+            err instanceof Error ? err.message : typeof err === "string" ? err : "error";
+          return {
+            status: "error",
+            error: messageText,
+            childSessionKey,
+          };
+        }
+
+        if (resolvedModel) {
+          try {
+            await callGateway({
+              method: "sessions.patch",
+              params: { key: childSessionKey, model: resolvedModel },
+              timeoutMs: 10_000,
+            });
+            modelApplied = true;
+          } catch (err) {
+            const messageText =
+              err instanceof Error ? err.message : typeof err === "string" ? err : "error";
+            return {
+              status: "error",
+              error: messageText,
+              childSessionKey,
+            };
+          }
+        }
+        if (thinkingOverride !== undefined) {
+          try {
+            await callGateway({
+              method: "sessions.patch",
+              params: {
+                key: childSessionKey,
+                thinkingLevel: thinkingOverride === "off" ? null : thinkingOverride,
+              },
+              timeoutMs: 10_000,
+            });
+          } catch (err) {
+            const messageText =
+              err instanceof Error ? err.message : typeof err === "string" ? err : "error";
+            return {
+              status: "error",
+              error: messageText,
+              childSessionKey,
+            };
+          }
+        }
+        let childSystemPrompt = buildSubagentSessionPrompt({
+          standingPrompt: child.systemPrompt,
+          requesterSessionKey,
+          requesterOrigin,
+          childSessionKey,
+          label: label || undefined,
+          task,
+          childDepth,
+          maxSpawnDepth,
+        });
+
+        // Inject role-specific system prompt and persona identity block if provided.
+        // Both are encoded into childSystemPrompt so they are visible to all
+        // reasoning paths in the brain, including the builderForceAgentsLLM direct path.
+        if (params.roleConfig) {
+          if (params.roleConfig.systemPrompt) {
+            childSystemPrompt += "\n\n--- Role Guidance ---\n" + params.roleConfig.systemPrompt;
+          }
+          const personaBlock = buildPersonaSystemBlock(params.roleConfig);
+          if (personaBlock) {
+            childSystemPrompt += "\n\n" + personaBlock;
+          }
+        }
+
+        const childTaskMessage = [
+          `[Subagent Context] You are running as a subagent (depth ${childDepth}/${maxSpawnDepth}). Results auto-announce to your requester; do not busy-poll for status.`,
+          `[Subagent Task]: ${task}`,
+        ].join("\n\n");
+
+        const childIdem = crypto.randomUUID();
+        let childRunId: string = childIdem;
+        try {
+          const response = await callGateway<{ runId: string }>({
+            method: "agent",
+            params: {
+              message: childTaskMessage,
+              sessionKey: childSessionKey,
+              channel: requesterOrigin?.channel,
+              to: requesterOrigin?.to ?? undefined,
+              accountId: requesterOrigin?.accountId ?? undefined,
+              threadId: requesterOrigin?.threadId != null ? String(requesterOrigin.threadId) : undefined,
+              idempotencyKey: childIdem,
+              deliver: false,
+              lane: AGENT_LANE_SUBAGENT,
+              extraSystemPrompt: childSystemPrompt,
+              thinking: thinkingOverride,
+              timeout: runTimeoutSeconds,
+              label: label || undefined,
+              spawnedBy: spawnedByKey,
+              groupId: ctx.agentGroupId ?? undefined,
+              groupChannel: ctx.agentGroupChannel ?? undefined,
+              groupSpace: ctx.agentGroupSpace ?? undefined,
+            },
+            timeoutMs: 10_000,
+          });
+          if (typeof response?.runId === "string" && response.runId) {
+            childRunId = response.runId;
+          }
+        } catch (err) {
+          const messageText =
+            err instanceof Error ? err.message : typeof err === "string" ? err : "error";
+          return {
+            status: "error",
+            error: messageText,
+            childSessionKey,
+            runId: childRunId,
+          };
+        }
+
+        registerSubagentRun({
+          runId: childRunId,
+          childSessionKey,
+          requesterSessionKey: requesterInternalKey,
+          requesterOrigin,
+          requesterDisplayKey,
+          task,
+          cleanup,
+          label: label || undefined,
+          model: resolvedModel,
+          runTimeoutSeconds,
+          expectsCompletionMessage: params.expectsCompletionMessage === true,
+        });
+
+        return {
+          status: "accepted",
+          childSessionKey,
+          runId: childRunId,
+          note: SUBAGENT_SPAWN_ACCEPTED_NOTE,
+          modelApplied: resolvedModel ? modelApplied : undefined,
+        };
       },
-      timeoutMs: 10_000,
     });
-    if (typeof response?.runId === "string" && response.runId) {
-      childRunId = response.runId;
-    }
-  } catch (err) {
-    const messageText =
-      err instanceof Error ? err.message : typeof err === "string" ? err : "error";
-    return {
-      status: "error",
-      error: messageText,
-      childSessionKey,
-      runId: childRunId,
-    };
+  } catch (error) {
+    return { status: "error", error: error instanceof Error ? error.message : String(error) };
   }
-
-  registerSubagentRun({
-    runId: childRunId,
-    childSessionKey,
-    requesterSessionKey: requesterInternalKey,
-    requesterOrigin,
-    requesterDisplayKey,
-    task,
-    cleanup,
-    label: label || undefined,
-    model: resolvedModel,
-    runTimeoutSeconds,
-    expectsCompletionMessage: params.expectsCompletionMessage === true,
-  });
-
-  return {
-    status: "accepted",
-    childSessionKey,
-    runId: childRunId,
-    note: SUBAGENT_SPAWN_ACCEPTED_NOTE,
-    modelApplied: resolvedModel ? modelApplied : undefined,
-  };
 }

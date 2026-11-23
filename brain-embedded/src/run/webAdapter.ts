@@ -101,6 +101,7 @@ export function brainRunTask(b: Pick<BrainRunBinding, 'req' | 'request'>): RunTa
   const { req } = b;
   return {
     prompt: b.request,
+    ...(req.work ? { assignedWork: req.work.assigned } : {}),
     ...(req.serverChatId != null ? { chatId: req.serverChatId } : {}),
     ...(req.projectId != null ? { projectId: req.projectId } : {}),
     dispatch: req.lineage ? { source: 'subagent', parentRunId: String(req.lineage.ownerKey) } : { source: 'chat' },
@@ -118,10 +119,11 @@ export function brainRunPolicy(b: Pick<BrainRunBinding, 'entryPoint' | 'req' | '
     // Both modes offer the full catalog (`runPreamble.ts`): the mode changes the directive the model reads, never the menu.
     toolScope: req.lineage ? 'subagent' : 'chat-work',
     role: 'general',
-    // A3's detector (and its device lever) is the Brain's `RunProgressGuard`, which the platform tools run, so the run has ONE
-    // detector (`brainPlatformTools.ts`) and the agent's A3 stays off. D8 is the one guard lever on: the independent read-only calls
-    // of one model turn (read_file, search_code, git_diff, ...) dispatch concurrently instead of one after another (chat #61651).
-    levers: deviceLeverOn('d8_parallel_tool_calls') ? ['d8_parallel_tool_calls'] : [],
+    // Shared guards own progress detection and independent tool-call batching.
+    levers: [
+      ...(deviceLeverOn('a3_progress_detector') ? ['a3_progress_detector' as const] : []),
+      ...(deviceLeverOn('d8_parallel_tool_calls') ? ['d8_parallel_tool_calls' as const] : []),
+    ],
     // A Brain run has NO tool-iteration ceiling: the kernel's consecutive-failure breaker
     // is its only limit (`@builderforce/agent-loop`'s `DEFAULT_TOOL_FAILURE_STREAK`).
     budgets: req.maxRunBudgetUsd && req.maxRunBudgetUsd > 0 ? { usd: req.maxRunBudgetUsd } : {},

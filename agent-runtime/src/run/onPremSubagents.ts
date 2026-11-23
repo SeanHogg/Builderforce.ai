@@ -17,7 +17,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { childPolicy, childProvider, childResult, openRun } from "@builderforce/agent-run";
+import { childPolicy, childProvider, childResult, childWorkPort, openRun, spawnChild, type RunWorkPort } from "@builderforce/agent-run";
 import type { HumanChannel, ModelTransport, RunPolicy } from "@builderforce/agent-run";
 import type { CapabilityProvider, SubagentRequest, SubagentResult } from "@builderforce/agent-tools";
 import { observedModel, relayEventSink, type OnPremRunSinks } from "./onPremEvents.js";
@@ -37,6 +37,9 @@ export interface ChildRunContext {
   signal?: AbortSignal;
   /** The owner's run id: stamped on the child's dispatch and outcome row. */
   parentRunId: string;
+  /** Compiled host persona/context, shared with the child without the parent's conversation. */
+  basePrompt?: string;
+  work?: RunWorkPort;
 }
 
 /** The `OrchestrationCapability.spawn` for one owner run. */
@@ -45,22 +48,34 @@ export function childRunner(owner: ChildRunContext): (request: SubagentRequest) 
     const own = owner.sinks.forChild?.(request.label);
     // A child with no observer of its own reports nothing live — it never borrows the owner's.
     const sinks: OnPremRunSinks = own ?? { onAssistantText: () => undefined, onToolUse: () => undefined, onResult: () => undefined };
-    const outcome = await openRun({
-      // Its own id: the row it writes is reported under it, and names the owner's as its parent.
-      task: { runId: randomUUID(), prompt: request.task, dispatch: { source: "subagent", parentRunId: owner.parentRunId } },
-      policy: childPolicy(owner.policy, request),
-      ports: {
-        model: observedModel(owner.model, sinks),
-        capabilities: childProvider(owner.capabilities),
-        // A child is one invocation: nothing resumes it, so nothing is kept.
-        store: { load: () => undefined, save: () => undefined },
-        events: relayEventSink(sinks, () => ""),
-        human: owner.human,
-        context: { pack: () => ({ focus: [], facts: [], recall: [] }) },
-      },
-      // A child is routed as a child: the owner's model pick and delegation are not its own to re-decide.
-      route: { child: true, request: request.task },
-      ...(owner.signal ? { signal: owner.signal } : {}),
+    const work = childWorkPort(owner.work, request.ticket);
+    const outcome = await spawnChild({
+      parentRunId: owner.parentRunId, entryPoint: owner.policy.entryPoint, depth: 1,
+      owner: "the main agent", task: request.task, role: request.role, basePrompt: owner.basePrompt,
+      ...(work ? { workItemIds: work.assigned.map((item) => item.id) } : {}),
+    }, {
+      openRun: (child) => openRun({
+        // Its own id: the row it writes is reported under it, and names the owner's as its parent.
+        task: {
+          runId: randomUUID(), prompt: child.prompt, persona: child.systemPrompt,
+          dispatch: { source: "subagent", parentRunId: child.lineage.parentRunId },
+          ...(work ? { assignedWork: work.assigned } : {}),
+        },
+        ...(work ? { surface: { finish: { workEvidence: (ids: readonly string[]) => work.evidence(ids) } } } : {}),
+        policy: childPolicy(owner.policy, request),
+        ports: {
+          model: observedModel(owner.model, sinks),
+          capabilities: childProvider(owner.capabilities),
+          // A child is one invocation: nothing resumes it, so nothing is kept.
+          store: { load: () => undefined, save: () => undefined },
+          events: relayEventSink(sinks, () => ""),
+          human: owner.human,
+          context: { pack: () => ({ focus: [], facts: [], recall: [] }) },
+        },
+        // A child is routed as a child: the owner's model pick and delegation are not its own to re-decide.
+        route: { child: true, request: request.task },
+        ...(owner.signal ? { signal: owner.signal } : {}),
+      }),
     });
     return childResult(outcome, request);
   };

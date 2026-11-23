@@ -39,6 +39,7 @@ export interface RecordedTurn {
   /** The tools the turn was OFFERED. */
   advertised: readonly BrainToolSpec[];
   advertisedNames: ReadonlySet<string>;
+  forcedFinish?: true;
 }
 
 /** Record turn `t` on the run's cell, trace and usage. */
@@ -146,6 +147,7 @@ export async function recordTurn(run: BrainRunContext, t: RecordedTurn): Promise
       // nothing to act with" — previously unanswerable from a copied report, which
       // only ever carried the registry-wide total.
       advertisedTools: advertised.length,
+      ...(t.forcedFinish ? { forcedFinish: true } : {}),
       catalogTools: allTools?.length ?? 0,
       ...(narratedUnadvertised.length ? { narratedUnadvertised } : {}),
       // A turn that WAS handed tools but answered IN PROSE with zero structured calls:

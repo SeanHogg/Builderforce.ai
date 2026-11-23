@@ -49,6 +49,7 @@ import { nativeOfTurn, toolRow } from "./runRows.js";
 import { settle } from "./runSettle.js";
 import { kernelHooks, readOnlyPort, type KernelRun } from "./kernelHooks.js";
 import { EMPTY_PACK, buildContextPack, openingRows } from "./turnContext.js";
+import { planWork } from "./workPlan.js";
 import { freshTally, type RunTally } from "./telemetry/runTally.js";
 import { localSpendMeter, usdBudget } from "./policy/budget/usd.js";
 import { CacheServedStreak } from "./policy/tools/cacheServedStreak.js";
@@ -68,6 +69,8 @@ export async function runAgent(input: RunAgentInput): Promise<RunOutcome> {
   const hooks = composePolicyHooks(input.modules);
   const state = input.resume ? resumeState(input.resume, policy, task) : freshState(policy, task);
   const resumed = Boolean(input.resume);
+  if (state.pipeline === undefined && input.pipeline !== undefined) state.pipeline = input.pipeline;
+  if (!state.work && task.assignedWork?.length) state.work = planWork(task.assignedWork);
 
   // The run's counters live on its state, so a resumed tick adds to what earlier ticks counted.
   const tally: RunTally = (state.telemetry ??= freshTally());
@@ -78,11 +81,8 @@ export async function runAgent(input: RunAgentInput): Promise<RunOutcome> {
   // renders the same per-turn context tail from it rather than rebuilding (or losing) it.
   let pack: ContextPack = state.context ?? EMPTY_PACK;
   if (!resumed) {
-    // The opening rows (governance + persona, then the task as the first user turn) open
-    // the transcript the kernel drives — the task reaches the model on turn 1, and every
-    // saved state carries it. A surface that assembles its own prompt (system blocks, the
-    // conversation so far, the user turn) hands the rows over instead.
-    transcript.splice(0, transcript.length, ...(task.transcript ?? openingRows(task, policy.approvalGates)));
+    // Render governing instructions before the host's prepared history or the fresh task.
+    transcript.splice(0, transcript.length, ...openingRows(task, policy.approvalGates));
     state.messages = transcript;
     pack = await buildContextPack(input, hooks, state, offered);
     state.context = pack;
@@ -101,7 +101,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunOutcome> {
   if (!resumed) {
     await emit(ports.events, { kind: "run.started", step: state.step });
     // A deterministic answer found before any model call (a PreFetch tool reply) settles the run: no model is asked.
-    if (pack.answer) {
+    if (pack.answer && !state.work?.length) {
       appendRows(input, transcript, { role: "assistant", content: pack.answer });
       state.messages = transcript;
       return settle(input, hooks, state, transcript, "finished", { output: pack.answer });

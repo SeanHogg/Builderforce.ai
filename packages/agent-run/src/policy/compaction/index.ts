@@ -43,6 +43,7 @@
  * and Node.
  */
 
+import { createHistoryCompactionHook, type HistoryCompactionPorts } from "./history.js";
 import type { CostLeverId, RunMessage } from "../../contract.js";
 import type { CompactionHook, CompactionResult, PolicyContext } from "../hooks.js";
 import {
@@ -70,6 +71,8 @@ type Row = RunMessage & Record<string, unknown>;
 
 /** The compaction options a hook decides for a run (so adapters can override). */
 export interface CompactionHookOptions {
+  /** Durable cell history strategy; otherwise compact the runtime transcript. */
+  history?: HistoryCompactionPorts;
   /** The token cost cap — the run's token budget or the cloud default. */
   maxTokens?: number;
   /** The serving model's long-context price-tier boundary, when cost lever C9 is on. */
@@ -184,6 +187,7 @@ function foldOf(before: readonly PackMessage[], after: readonly PackMessage[]): 
  * re-packs the context when the serving model changes (`./modelHandOff`).
  */
 export function createCompactionHook(hookOptions: CompactionHookOptions = {}): CompactionHook {
+  if (hookOptions.history) return createHistoryCompactionHook(hookOptions.history);
   return {
     async compact(ctx: PolicyContext): Promise<CompactionResult | void> {
       if (ctx.policy.modelHandoff) return handOff(ctx);

@@ -67,11 +67,12 @@ describe("the failure breaker's forced closing turn", () => {
     expect(lastUserRow(requests[DEFAULT_TOOL_FAILURE_STREAK]!)).toBe(FORCED_SYNTHESIS_PROMPT);
   });
 
-  it("a surface whose closing turn is only for a failure streak asks no extra call for any other ending", async () => {
+  it("ordinary empty-turn recovery does not request failure synthesis", async () => {
     const delivery: DeliveryLedger = { rungs: () => [], stall: { failureSynthesis: true } };
-    const { requests, outcome } = await runFailing(delivery, [{ content: "" }]);
-    expect(requests).toHaveLength(1);
-    expect(outcome.kind).not.toBe("failed");
+    const { requests, outcome } = await runFailing(delivery, [{ content: "" }, { content: "Done." }]);
+    expect(requests).toHaveLength(2);
+    expect(requests.every((request) => request.forcedFinish === undefined)).toBe(true);
+    expect(outcome).toMatchObject({ kind: "finished", output: "Done." });
   });
 
   it("when the closing turn also comes back empty the run fails as exhausted, carrying the streak (the surface words its own error)", async () => {
