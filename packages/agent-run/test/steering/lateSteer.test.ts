@@ -72,4 +72,23 @@ describe("a steer that lands during the last turn", () => {
     expect(outcome.kind === "failed" && outcome.reason).toBe("cancelled");
     expect(requests).toHaveLength(1);
   });
+
+  it("takes a queued follow-up after the finish tool row and preserves its attachment", async () => {
+    const finish: ModelCompletion = { content: "", toolCalls: [{ id: "f1", name: "finish", arguments: '{"summary":"first pass"}' }] };
+    const { ports, requests, events } = setup([finish, { content: "Reviewed attachment" }], "");
+    const parts = [{ type: "image" as const, url: "data:image/png;base64,AA==" }];
+    let given = false;
+    ports.steering = { drain: () => [], followUp: () => {
+      if (given) return [];
+      given = true;
+      return [{ text: "Review this image", parts }];
+    } };
+    const outcome = await runAgent({ task: TEST_TASK, policy: TEST_POLICY, ports });
+    expect(outcome).toMatchObject({ kind: "finished", output: "Reviewed attachment" });
+    const messages = requests[1]!.messages;
+    const tool = messages.findIndex((message) => message.role === "tool" && message.toolCallId === "f1");
+    expect(tool).toBeGreaterThanOrEqual(0);
+    expect(messages[tool + 1]).toMatchObject({ role: "user", content: "Review this image", parts });
+    expect(steerEvents(events)).toHaveLength(1);
+  });
 });

@@ -1,3 +1,11 @@
+## RESOLVED 2026-11-23: Work evidence and the shared finish and on-prem entry paths
+
+- Brain records linked-ticket and spec coverage evidence from its existing scoped reads. Cloud records review evidence from the PR the execution opened. The self-hosted relay records review evidence after the PR API confirms it. Completed invocations with open or blocked work stay out of routing feedback.
+- In-process children inherit only an exact ticket that the parent host assigned, with a restricted evidence reader. VSIX children read only their delegated ticket from their scoped chat listing. Brain owner continuations and editor wakes recheck the reference from child handoffs against that listing. Cloud children carry an explicit ticket reference limited to the parent's task.
+- Brain supplies the shared gate snapshot. The native editor still checks the actual tool and path after rewrite. Pending follow-ups and attachments enter the conversation after finish-tool results through the shared steering path. Brain no longer makes a second closing model call when the shared driver already attempted synthesis.
+- Tickets, sessions, and in-process children use one on-prem execution entry. Session-specific model streaming and reporting are bound as ports.
+- The full shared suite passed 851 tests. Focused Brain, VSIX, cloud serialization and scorer, and on-prem child and outbox suites passed. Shared typechecking and repository execution and source-package checks passed. The full channel suite needs `@sinclair/typebox`. Cloud tail integration needs `@neondatabase/serverless`.
+
 ## ✅ RESOLVED 2026-11-23: Shared run entry, child admission, and explicit work tracking
 
 - **Run setup.** Production adapters enter through `openRun`. The shared opening renderer puts governance and persona instructions before prepared history. The runtime defaults to full routing, supports explicit automatic routing, and preserves the chosen route across resumed ticks.

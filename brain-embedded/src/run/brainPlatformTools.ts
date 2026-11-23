@@ -154,6 +154,7 @@ export function brainPlatformTools(run: BrainRunContext): BrainPlatform {
     },
     tools: {
       closed: true,
+      ...(run.req.hostEnforcesGovernance ? { governanceAfterRewrite: true as const } : {}),
       // The Brain's read coverage (`callPreflight`'s exact-repeat, covered-window and replay answers, `callPostStep`'s cache) is
       // the run's one: the agent's own would answer a repeat first, in its own wording and shape.
       readsCovered: true,

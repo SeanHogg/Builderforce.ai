@@ -249,14 +249,14 @@ async function startPlugins(
 }
 
 /** Start the QMD memory backend and SSM hippocampus layer. */
-function startMemoryBackend(
+async function startMemoryBackend(
   params: Pick<SidecarParams, "cfg" | "defaultWorkspaceDir" | "log">,
-): void {
+): Promise<void> {
   void startGatewayMemoryBackend({ cfg: params.cfg, log: params.log }).catch((err) => {
     params.log.warn(`qmd memory startup initialization failed: ${String(err)}`);
   });
 
-  void initSsmMemoryService({
+  const memoryReady = initSsmMemoryService({
     checkpointPath: `${params.defaultWorkspaceDir}/.builderforce/model.bin`,
     modelSize: "small",
   })
@@ -282,6 +282,7 @@ function startMemoryBackend(
     .catch((err) => {
       params.log.warn(`[limbic] startup failed: ${String(err)}`);
     });
+  await memoryReady;
 }
 
 /**
@@ -549,12 +550,14 @@ async function startBuilderforceServices(
 
 export async function startGatewaySidecars(params: SidecarParams) {
   await cleanStaleSessions(params);
+  // Memory settles before the orchestrator, channels or relay accept runs. Run capability
+  // binding also awaits readiness; the shared agent then awaits recall before its first turn.
+  await startMemoryBackend(params);
   await startOrchestrator(params);
   const browserControl = await startBrowserControl(params);
   await startHooks(params);
   await startMessageChannels(params);
   const pluginServices = await startPlugins(params);
-  startMemoryBackend(params);
 
   if (shouldWakeFromRestartSentinel()) {
     void scheduleRestartSentinelWake({ deps: params.deps });

@@ -14,10 +14,10 @@ export interface WorkEvidence {
 }
 
 /** Bound to the authenticated run by its host. */
-export interface RunWorkPort {
-  assigned: readonly AssignedWork[];
-  evidence(ids: readonly string[]): Promise<readonly WorkEvidence[]>;
-}
+export type RunWorkPort = { assigned: readonly AssignedWork[] } & (
+  | { settleAfterRun: true; evidence?: never }
+  | { settleAfterRun?: false; evidence(ids: readonly string[]): Promise<readonly WorkEvidence[]> }
+);
 
 export interface WorkLedgerItem extends AssignedWork {
   evidence?: WorkEvidence;
@@ -42,6 +42,7 @@ export function childWorkPort(work: RunWorkPort | undefined, ticket: string | un
   const id = ticket.trim();
   const assigned = planWork(work.assigned.filter((item) => item.id.trim() === id));
   if (!assigned.length) return undefined;
+  if (work.settleAfterRun) return { assigned, settleAfterRun: true };
   return {
     assigned,
     async evidence(ids) {
@@ -110,4 +111,12 @@ export function evaluateRun(plan: readonly WorkLedgerItem[]): RunWorkScorecard |
     else score.open++;
   }
   return score;
+}
+
+export function evaluateRunWork(state: {
+  work?: WorkLedgerItem[];
+  workObservations?: Record<string, WorkLedgerItem[]>;
+}): RunWorkScorecard | undefined {
+  const observed = Object.values(state.workObservations ?? {}).flat();
+  return evaluateRun([...new Map([...observed, ...(state.work ?? [])].map((item) => [item.id, item])).values()]);
 }

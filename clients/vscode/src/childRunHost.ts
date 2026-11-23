@@ -12,7 +12,7 @@
  * this file is only the derivation.
  */
 
-import { spawnChild } from "@builderforce/agent-run";
+import { childWorkRefs, spawnChild } from "@builderforce/agent-run";
 import { MID_TURN_META_KEY } from "@builderforce/agent-loop";
 import { briefWithHandoff, ownerHandoffBlock } from "@builderforce/agent-tools";
 import {
@@ -51,6 +51,8 @@ export interface RunSpec extends WebviewRunStart {
   basePrompt?: string;
   /** The sub-agent stage model its children code on (see `modelForChildRun`). */
   subagentModel?: string;
+  /** Internal references carried into the owner wake. */
+  childWorkRefs?: readonly string[];
 }
 
 export interface ChildRunHostDeps {
@@ -106,14 +108,14 @@ export function createChildRunHost(deps: ChildRunHostDeps): ChildRunHost & { aft
     const turn = imageAtts.length
       ? [{ type: 'text' as const, text: joinedText }, ...imageAtts.map((a) => ({ type: 'image_url' as const, image_url: { url: a.imageUrl! } }))]
       : joinedText;
-    void nextTurn(spec, turn);
+    void nextTurn(spec, turn, childWorkRefs(steered));
     return true;
   };
 
   /** The next turn of a run the host already knows — the transcript is still in the store. */
-  const nextTurn = (spec: RunSpec, turn: RunSpec["userTurn"]): Promise<void> => {
+  const nextTurn = (spec: RunSpec, turn: RunSpec["userTurn"], refs: readonly string[] = []): Promise<void> => {
     const { seed: _seed, priorResearch: _prior, ...rest } = spec;
-    return deps.start({ ...rest, userTurn: turn, autoApprove: deps.autoApproveOf(savedChatOf(spec.chatId, spec.child?.lineage)) });
+    return deps.start({ ...rest, childWorkRefs: refs, userTurn: turn, autoApprove: deps.autoApproveOf(savedChatOf(spec.chatId, spec.child?.lineage)) });
   };
 
   return {
@@ -145,6 +147,7 @@ export function createChildRunHost(deps: ChildRunHostDeps): ChildRunHost & { aft
       return spawnChild({
         parentRunId: String(owner.key), entryPoint: "vscode", depth: lineage.depth,
         owner: owner.name, task: childBrief(req, owner.key), role: req.role,
+        ...(req.ticket ? { workItemIds: [req.ticket] } : {}),
         persona: req.persona, basePrompt: base,
       }, {
         openRun: (child) => deps.start({
@@ -167,7 +170,7 @@ export function createChildRunHost(deps: ChildRunHostDeps): ChildRunHost & { aft
           evermind: false,
           ...(parent.modelSurface ? { modelSurface: parent.modelSurface } : {}),
           child: {
-            lineage,
+            lineage: { ...lineage, ...(child.workItemIds[0] ? { ticket: child.workItemIds[0] } : {}) },
             role: req.role,
             model: {},
           },

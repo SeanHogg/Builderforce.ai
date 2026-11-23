@@ -138,9 +138,13 @@ export function buildLiveOrchestration(deps: LiveOrchestrationDeps): Orchestrati
       return await spawnChild({
         parentRunId: String(parent.executionId), entryPoint: 'cloud', depth: tree.depth + 1,
         owner, task: input.task, role: input.role, persona: who.persona,
+        ...(input.ticket === String(parent.taskId) ? { workItemIds: [String(parent.taskId)] } : {}),
       }, {
         openRun: async (child) => {
-          const preparedSpec = (handle: string): CloudChildSpec => ({ ...spec(handle), standingPrompt: child.systemPrompt, entryPoint: child.entryPoint });
+          const preparedSpec = (handle: string): CloudChildSpec => ({
+            ...spec(handle), standingPrompt: child.systemPrompt, entryPoint: child.entryPoint,
+            ...(child.workItemIds.length ? { workItemIds: child.workItemIds } : {}),
+          });
           const execution = await runtime.submit({
             taskId: parent.taskId,
             tenantId: parent.tenantId,

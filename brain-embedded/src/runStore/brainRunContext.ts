@@ -133,6 +133,8 @@ export interface BrainRunContext {
    * as data (`run/brainProgressPorts.ts`, `brainSteering.ts`): their files are the run's writes (VS Code chat #157440).
    */
   childReports: Array<NonNullable<RunSteerMessage['childReport']>>;
+  /** Child ticket hints become work evidence only through the owner's scoped ticket listing. */
+  childWorkRefs?: Set<string>;
   /** The run's ONE record of what it did and read — the source of each turn's ledger. */
   knowledge: RunKnowledgeLog;
   failures: FailureTally;

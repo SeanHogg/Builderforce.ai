@@ -58,8 +58,9 @@ export async function buildContextPack(input: RunAgentInput, hooks: PolicyHooks,
 export function openingRows(task: RunTask, gates?: RunPolicy["approvalGates"]): RunMessage[] {
   const system: string[] = [];
   const governance = renderPolicyDirectives(gates);
-  if (governance) system.push(governance);
-  if (task.persona && task.persona.trim()) system.push(task.persona.trim());
+  const persona = task.persona?.trim() ?? "";
+  if (governance && persona !== governance && !persona.startsWith(`${governance}\n\n`)) system.push(governance);
+  if (persona) system.push(persona);
   return [
     ...(system.length > 0 ? [{ role: "system" as const, content: system.join("\n\n") }] : []),
     ...(task.transcript?.length ? task.transcript : [{ role: "user" as const, content: task.prompt }]),

@@ -12,6 +12,8 @@ export interface CloudChildSpec {
   /** Persisted at admission; optional only for executions admitted before shared spawning. */
   standingPrompt?: string;
   entryPoint?: EntryPoint;
+  /** Ticket refs scoped by the parent before admission. */
+  workItemIds?: readonly string[];
   parentExecutionId: number;
   /** The run at the top of its tree — the one its tokens bill to and that opens the PR. */
   rootExecutionId: number;

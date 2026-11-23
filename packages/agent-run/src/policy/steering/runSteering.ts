@@ -48,7 +48,7 @@ export interface RunSteerMessage {
    * delivers one: the owner's progress detector reads its state and changed files when the run
    * drains it, instead of re-parsing the words (VS Code chat #157440).
    */
-  childReport?: Pick<ChildReportLike, "state" | "changedFiles">;
+  childReport?: Pick<ChildReportLike, "state" | "changedFiles" | "ticket">;
 }
 
 const inboxes = new Map<number, RunSteerMessage[]>();
@@ -90,6 +90,11 @@ export function queueRunSteering(runKey: number, text: string, opts?: { interrup
 export function requeueRunSteering(runKey: number, messages: readonly RunSteerMessage[]): void {
   if (messages.length === 0) return;
   inboxes.set(runKey, [...messages, ...(inboxes.get(runKey) ?? [])]);
+}
+
+/** References carried by child handoffs. Only a host-scoped read can verify their status. */
+export function childWorkRefs(messages: readonly RunSteerMessage[]): string[] {
+  return [...new Set(messages.flatMap(({ childReport }) => childReport?.ticket ? [childReport.ticket] : []))];
 }
 
 /** Take every message queued for a run, oldest first. Empty when none are waiting. */

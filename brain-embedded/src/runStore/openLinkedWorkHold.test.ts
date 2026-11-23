@@ -42,6 +42,20 @@ describe('openLinkedWorkHold', () => {
       { id: '6902', evidence: { id: '6902', status: 'done' } },
     ]);
   });
+
+  it('verifies child handoff references against the chat listing', async () => {
+    const { run, calls } = fakeRun(page([
+      { ...EPIC, ref: '6910', status: 'in_review' },
+      { ...EPIC, ref: '6999', status: 'done' },
+    ]), {}, 276, 'What happened?');
+    run.childWorkRefs = new Set(['6910', 'outside-this-chat']);
+    const state = {} as PolicyContext['state'];
+    expect(await openLinkedWorkHold(run)(ctx({ state }))).toBeNull();
+    expect(calls).toEqual(['builtin_chats_list_tickets']);
+    expect(state.workObservations?.['linked-tickets']).toEqual([
+      expect.objectContaining({ id: '6910', evidence: expect.objectContaining({ status: 'in_review' }) }),
+    ]);
+  });
   it('regression: chat #276 — an open linked epic holds a prose ending', async () => {
     const { run } = fakeRun(page([
       EPIC,

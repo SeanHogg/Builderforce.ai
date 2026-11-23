@@ -40,6 +40,7 @@ function countsOf(telemetry: object | undefined): Record<string, unknown> {
   if (!t || t.partial) return {};
   return {
     toolCalls: t.toolCalls, toolErrors: t.toolErrors, tokens: t.tokens, cacheReadTokens: t.cacheReadTokens,
+    ...(t.work ? { work: t.work } : {}),
     ...(typeof t.costMc === 'number' ? { cost: t.costMc } : {}), ...(t.model ? { model: t.model } : {}), ...(t.verify ? { verify: t.verify } : {}),
   };
 }

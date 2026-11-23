@@ -26,6 +26,8 @@ import type { ApprovalRefusal } from "../../contract.js";
 import type { GuardControl, PolicyContext, PolicyToolCall } from "../hooks.js";
 import { emit } from "../../runContext.js";
 import { candidateToolNames } from "./gateToolNames.js";
+import { TOOL_SEARCH_TOOL } from "./searchHelpers.js";
+import { UPDATE_TASK_STATE_TOOL } from "./taskState.js";
 
 export { policyGateCallKey };
 
@@ -180,6 +182,10 @@ export async function gateCall(
 ): Promise<{ data: unknown; isError: true; control?: GuardControl } | void> {
   const gates = ctx.policy.approvalGates;
   if (!gates || gates.length === 0) return undefined;
+  const platform = ctx.ports.platform;
+  const handledByPolicy = call.name === TOOL_SEARCH_TOOL
+    || (call.name === UPDATE_TASK_STATE_TOOL && ctx.policy.levers.includes("c3_task_state"));
+  if (platform?.closed && platform.governanceAfterRewrite && !handledByPolicy) return undefined;
   const decision = evaluatePolicyGateSeam(gates, call.name, call.args, ctx.task.workspace?.defaultRepo, declaredBy(ctx.ports, call.name));
   if (decision.action === "block") {
     await emit(ctx.ports.events, { kind: "policy.blocked", step: ctx.step, tool: call.name, gateId: decision.gateId, reason: decision.reason });

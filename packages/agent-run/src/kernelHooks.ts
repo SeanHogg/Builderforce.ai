@@ -104,7 +104,7 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
   /** When each call started, so a call's duration is MEASURED, not inferred from the events around it. */
   const starts = new Map<string, number>();
 
-  const { takeSteers, takeJoined, lateSteerNote, takeFollowUps } = steeringTakers(run, contextAt);
+  const { takeSteers, takeJoined, lateSteerNote, takeFollowUps, flushFinishDirections } = steeringTakers(run, contextAt);
 
   return {
     beforeTurn: async (ctx) => {
@@ -348,6 +348,7 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
     },
 
     afterToolCalls: async (ctx) => {
+      await flushFinishDirections(ctx.step);
       // The guards fold the turn: D1's cascade and A3's trips, readiness claims included.
       // A turn that acted was not a stall, so the re-prompt budget starts full again.
       const pctx = contextAt(ctx.step, ctx.stepInCall);

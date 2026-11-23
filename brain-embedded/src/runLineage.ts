@@ -35,6 +35,8 @@ export interface RunLineage {
   agent: { ref: string; name: string };
   /** 1 for a child of a top-level run, 2 for a grandchild, … */
   depth: number;
+  /** Ticket hint from the owner. The child may observe it only through its scoped chat listing. */
+  ticket?: string;
 }
 
 /** The server chat a run's rows are saved to: its owner's for a sub-agent, its own otherwise. THE one place that says so. */

@@ -25,6 +25,8 @@ import { WebSocket } from "ws";
 import { buildAssignedCapabilityAppend } from "../agents/assigned-capabilities.js";
 import { resolveRelayTaskModel } from "../agents/model-routing.js";
 import { type OnPremRunSinks } from "../run/onPremAdapter.js";
+import { evaluateRunWork, recordWorkSnapshot, type RunOutcomeRow } from "@builderforce/agent-run";
+import { asksForChange } from "@builderforce/agent-stall";
 import { loadProjectContext, updateProjectContextFields } from "../builderforce/project-context.js";
 import type { IRelayService } from "../builderforce/relay-service.js";
 import { GatewayClient, type GatewayClientOptions } from "../gateway/client.js";
@@ -365,9 +367,9 @@ export class BuilderforceRelayService implements IRelayService {
     repo: { repoId: string; defaultBranch: string | null },
     title: string,
     agentLabel: string,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const dir = taskWorkspaceDir(this.opts.workspaceDir ?? process.cwd(), taskId);
-    if (!(await isCloned(dir))) return;
+    if (!(await isCloned(dir))) return false;
     const git = makeCodingGit({ apiKey: this.opts.apiKey });
     const branch = taskBranchName(taskId);
     try {
@@ -375,11 +377,11 @@ export class BuilderforceRelayService implements IRelayService {
         dir,
         `BuilderForce: task ${taskId} — ${title} (by ${agentLabel})`.trim(),
       );
-      if (!changed) return; // nothing new to push
+      if (!changed) return false; // nothing new to push
       const base = normalizeBaseUrl(this.opts.baseUrl);
       await git.push(dir, buildTaskCloneUrl(base, this.opts.agentNodeId, repo.repoId), branch);
       // Open/keep a PR so the pending changes are reviewable (idempotent server-side).
-      await fetch(`${base}/api/agent-hosts/${this.opts.agentNodeId}/tasks/${taskId}/pull-request`, {
+      const response = await fetch(`${base}/api/agent-hosts/${this.opts.agentNodeId}/tasks/${taskId}/pull-request`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -387,12 +389,13 @@ export class BuilderforceRelayService implements IRelayService {
         },
         body: JSON.stringify({ branch, base: repo.defaultBranch ?? undefined, title }),
         signal: AbortSignal.timeout(30_000),
-      }).catch(() => {
-        /* branch pushed; PR can be opened manually */
       });
+      if (!response.ok) logWarn(`[builderforce] task ${taskId}: pull request request failed (${response.status})`);
       logWarn(`[builderforce] task ${taskId}: pushed pending changes to ${branch}`);
+      return response.ok;
     } catch (err) {
       logWarn(`[builderforce] task ${taskId} commit/push failed: ${String(err)}`);
+      return false;
     }
   }
 
@@ -437,7 +440,7 @@ export class BuilderforceRelayService implements IRelayService {
    */
   private async runV2Engine(payload: EngineDispatch, prompt: string): Promise<void> {
     const agentLabel = payload.agentLabel?.trim() || "BuilderForce-V2";
-    const sinks: OnPremRunSinks = relayRunSinks({
+    const relaySinks = relayRunSinks({
       executionId: payload.executionId,
       // The run's row is scoped to the project this host is linked to and the ticket it was dispatched for.
       outcomeScope: await this.outcomeScope(payload.taskId),
@@ -445,6 +448,25 @@ export class BuilderforceRelayService implements IRelayService {
       emitAudit: (event) => this.toolAudit.emit(event),
       persistAudit: (event) => this.persistToolAudit(event),
     });
+    const ticket = payload.taskId != null && asksForChange([payload.title, payload.description].filter(Boolean).join("\n"))
+      ? { id: String(payload.taskId), criteria: [payload.title ?? `Task ${payload.taskId}`] } : undefined;
+    let pendingOutcome: RunOutcomeRow | undefined;
+    const sinks: OnPremRunSinks = ticket ? { ...relaySinks, onOutcome(row) { pendingOutcome = row; } } : relaySinks;
+    const publishOutcome = async (reviewRequested = false): Promise<void> => {
+      if (!pendingOutcome || !ticket) return;
+      const row = pendingOutcome;
+      pendingOutcome = undefined;
+      const ledger = {};
+      recordWorkSnapshot(ledger, "relay-ticket", [ticket], reviewRequested
+        ? [{ id: ticket.id, status: "in_review", detail: "Relay confirmed the pull request" }]
+        : []);
+      try {
+        relaySinks.onOutcome?.({ ...row, work: row.work ?? evaluateRunWork(ledger) });
+        await this.toolAudit.flush();
+      } catch (error) {
+        logWarn(`[builderforce] task ${ticket.id}: outcome reporting failed: ${String(error)}`);
+      }
+    };
 
     // One shared ephemeral workspace per ticket — every agent on the task works
     // out of it (the ticket is the shared context). Clone happens once.
@@ -529,6 +551,7 @@ export class BuilderforceRelayService implements IRelayService {
       // still committed/pushed + released by the terminal hook below.
       if (abortController.signal.aborted) {
         await this.emitTaskChanges(cwd, agentLabel, payload.executionId, payload.taskId);
+        await publishOutcome();
         terminal = "cancelled";
         return;
       }
@@ -536,14 +559,16 @@ export class BuilderforceRelayService implements IRelayService {
       // Attribute the files this agent changed (traceability), then commit + push
       // them to the ticket branch as pending changes.
       await this.emitTaskChanges(cwd, agentLabel, payload.executionId, payload.taskId);
+      let reviewRequested = false;
       if (payload.taskId != null && payload.repo?.repoId) {
-        await this.commitAndPushTicketBranch(
+        reviewRequested = await this.commitAndPushTicketBranch(
           payload.taskId,
           payload.repo,
           payload.title ?? `Task ${payload.taskId}`,
           agentLabel,
         );
       }
+      await publishOutcome(reviewRequested);
 
       // A stop command steered in ends the run without a cancel frame, so the portal does not
       // know: it is reported cancelled here. A run that neither finished nor was stopped (it
@@ -567,6 +592,7 @@ export class BuilderforceRelayService implements IRelayService {
         await this.reportExecutionState(payload.executionId, "failed", { errorMessage: message });
       }
     } finally {
+      await publishOutcome();
       if (payload.taskId != null && terminal) {
         await this.releaseTaskWorkspace(terminal, {
           taskId: payload.taskId,

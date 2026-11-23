@@ -30,7 +30,7 @@ import { withDirectedMetadata } from '../directedMessage';
 import { forgetPendingWords, rememberPendingWords } from '../pendingWords';
 import { savedChatOf } from '../runLineage';
 import { drainRunSteering, requeueRunSteering, type RunSteerMessage } from '../runSteering';
-import { newSteerKey } from '@builderforce/agent-run';
+import { childWorkRefs, newSteerKey } from '@builderforce/agent-run';
 import { chatErrorAction } from '../chatError';
 import type { ContentPart } from '../streamChatCompletion';
 import type { BrainMessage, ChatInputAttachment } from '../types';
@@ -333,6 +333,7 @@ export async function continueChat(runKey: number, c: RunCell, steers: readonly 
   start(runKey, {
     ...request,
     ...fresher,
+    childWorkRefs: childWorkRefs(steers),
     userTurn,
     ...(recordProgress ? { continuationProgress: true } : {}),
     ...(row ? { userTurnMessageId: row.id } : {}),

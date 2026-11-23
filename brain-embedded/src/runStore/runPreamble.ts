@@ -266,6 +266,7 @@ export async function prepareBrainRun(chatId: number, c: RunCell, req: BrainRunR
     cacheStreak: new CacheServedStreak(),
     // Child reports the inbox delivered, for the agent's A3 detector to read (`run/brainProgressPorts.ts`).
     childReports: [],
+    childWorkRefs: new Set(req.childWorkRefs),
     // What the run did and read, restated in front of every turn (its `brief()`) —
     // the host's recorder when it keeps one, so the ledger and its code map agree.
     knowledge: recorderFor(userRequest, req.knowledge),
