@@ -41,7 +41,7 @@ export interface BrainRunBinding {
   /** The request the host handed the run. */
   req: BrainRunRequest;
   /** What the surface can physically do: its tool catalog as capabilities. */
-  capabilities: CapabilityProvider;
+  capabilities?: CapabilityProvider;
   /** The user's own words for this run. */
   request: string;
   /** The surface's live view and record of each turn (`brainTurn.ts`). */
@@ -82,7 +82,7 @@ export function buildBrainRunPorts(b: BrainRunBinding): RunPorts {
       // fit (`windowFit.prepare`, its `llm.handoff` step) loses nothing by saying it: the agent sizes a tool result from it.
       ...(req.windowSources ? { windows: req.windowSources } : {}),
     }), req),
-    capabilities: b.capabilities,
+    ...(b.capabilities ? { capabilities: b.capabilities } : {}),
     store: b.store,
     ...(b.platform ? { platform: b.platform } : {}),
     ...(b.delivery ? { delivery: b.delivery } : {}),

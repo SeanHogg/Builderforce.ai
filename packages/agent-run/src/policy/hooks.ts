@@ -255,6 +255,8 @@ export interface GuardDecision {
 export interface VerifyHook {
   /** Verify the run's work. Returns the verdict, or nothing when there is nothing to verify. */
   verify(ctx: PolicyContext): Promise<VerifyResult | void> | VerifyResult | void;
+  observe?(ctx: PolicyContext, call: PolicyToolCall, result: unknown, meta: RunMessage["meta"], succeeded: boolean): void;
+  recorded?(ctx: PolicyContext): boolean | undefined;
 }
 
 /** What a verify found. */

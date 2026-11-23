@@ -16,7 +16,7 @@
  *     eviction handling re-arms the run instead of failing it.
  */
 import {
-  ModelTransportError, RUN_CANCELLED_REASON, applyWorkEvidence, describeVerifyOutcome, evaluateRunWork, tallyVerify, verifyRunWork,
+  ModelTransportError, RUN_CANCELLED_REASON, applyWorkEvidence, describeVerifyOutcome, evaluateRunWork, missingReviewVerdictMessage, tallyVerify, verifyRunWork,
   type RunOutcome, type RunState, type RunTally, type VerifySandbox,
 } from '@builderforce/agent-run';
 import type { RunSandbox } from './sandbox/runSandbox';
@@ -24,7 +24,6 @@ import { buildRuntimeService } from '../../buildRuntimeService';
 import { releaseAllForExecution } from '../coordination/leaseService';
 import { coordinationScopeKey } from '../../domain/coordination/resourceKey';
 import { reportCaughtError, reportedFallback } from '../observability/caughtErrorReporter';
-import { missingReviewVerdictMessage } from './cloudAgent/finishGates';
 import { commitRunMemory, recordRunVerifyEvents } from './cloudAgent/runEndMemory';
 import { snapshotWrittenHashes } from './cloudAgent/writtenFileHashes';
 import { lastPersonSteerSender } from './executionSteering';
@@ -95,12 +94,12 @@ export function verifySandboxOf(sandbox: RunSandbox): VerifySandbox {
   };
 }
 
-async function verifyThenRemember(host: CloudRunHost, state: RunState, output: string, stash: RunStash): Promise<void> {
+async function verifyThenRemember(host: CloudRunHost, state: RunState, output: string, stash: RunStash, cancelled: boolean): Promise<void> {
   const { env, db, refs, taskRow } = host;
   const where = { source: 'application/runtime/cloudRunTail.ts', context: { tenantId: refs.tenantId, executionId: refs.executionId } };
   // Only the I/O is best-effort (a sandbox that cannot run, a memory write that fails). The bookkeeping around it is not: a
   // programming error here (an unseeded host, a bad shape) must surface rather than silently skip the memory write.
-  const outcome = await verifyRunWork({
+  const outcome = cancelled ? undefined : await verifyRunWork({
     writtenPaths: host.writtenPaths, declaredChecks: !!host.verify, ciVerified: state.finish.ciVerified,
   }, host.verify ? {
     surface: 'sandbox',
@@ -108,8 +107,10 @@ async function verifyThenRemember(host: CloudRunHost, state: RunState, output: s
     shell: host.verify.shell,
     onShellError: (error) => reportCaughtError(error, { ...where, operation: 'sandboxVerify' }),
   } : {});
-  if (state.telemetry && outcome.kind === 'ran') tallyVerify(state.telemetry, outcome.mayFinish);
-  await recordRunVerifyEvents({ db, tenantId: refs.tenantId, executionId: refs.executionId, ...(refs.cloudAgentRef ? { cloudAgentRef: refs.cloudAgentRef } : {}) }, outcome);
+  if (outcome) {
+    if (state.telemetry && outcome.kind === 'ran') tallyVerify(state.telemetry, outcome.mayFinish);
+    await recordRunVerifyEvents({ db, tenantId: refs.tenantId, executionId: refs.executionId, ...(refs.cloudAgentRef ? { cloudAgentRef: refs.cloudAgentRef } : {}) }, outcome);
+  }
   const consolidated = stash.consolidated as { key?: unknown; content?: unknown } | undefined;
   const codeMap = typeof consolidated?.key === 'string' && typeof consolidated.content === 'string'
     ? { key: consolidated.key, content: consolidated.content }
@@ -118,7 +119,7 @@ async function verifyThenRemember(host: CloudRunHost, state: RunState, output: s
     db, env, tenantId: refs.tenantId, projectId: refs.projectId, ticketId: taskRow.id, executionId: refs.executionId,
     ...(refs.cloudAgentRef ? { cloudAgentRef: refs.cloudAgentRef } : {}),
     summary: output.trim() || `${refs.agentLabel} finished ${taskRow.title}`,
-    verifyNote: describeVerifyOutcome(outcome),
+    ...(outcome ? { verifyNote: describeVerifyOutcome(outcome) } : {}),
     writtenPaths: [...host.writtenPaths],
     // Anchors the run's facts to what it wrote: recall can tell a fact has gone stale once the file changes.
     ...(host.writtenHashes.size ? { writtenFileHashes: snapshotWrittenHashes(host.writtenHashes) } : {}),
@@ -172,7 +173,7 @@ async function land(host: CloudRunHost, state: RunState, output: string, cancell
   // Rehearsal / a sub-agent: nothing may be shipped, closed or summarised onto the real ticket.
   if (opts.suppressFinalize) return { ok: true, output, cancelled, finished: true };
 
-  await verifyThenRemember(host, state, output, stash);
+  await verifyThenRemember(host, state, output, stash, cancelled);
   const fin = await finalizeCloudRun(env, db, {
     tenantId: refs.tenantId, cloudAgentRef: refs.cloudAgentRef, executionId: refs.executionId, taskRow, agentLabel: refs.agentLabel,
     repoCtx: host.repoCtx, repoMiss: host.repoMiss, writtenPaths: host.writtenPaths, finalOutput: output, cancelled, ciVerified: state.finish.ciVerified,

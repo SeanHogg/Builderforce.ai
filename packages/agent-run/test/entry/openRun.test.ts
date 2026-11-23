@@ -82,6 +82,36 @@ describe("openRun", () => {
     ]);
   });
 
+  it("settles a closed native run on completed check evidence and drops evidence made stale by an edit", async () => {
+    const check = (command: string, id: string) => call(id, "exec", { command });
+    for (const [trailing, verdict] of [
+      [[], "failed"],
+      [[call("write", "write", { path: "src/a.ts" })], undefined],
+      [[check("npm run typecheck || exit 0", "masked")], undefined],
+    ] as const) {
+      const { ports } = harness([
+        check("npm run typecheck", "t1"), check("pnpm test", "t2"), ...trailing, { content: "End of the run." },
+      ]);
+      delete ports.capabilities;
+      const execute = vi.fn(async (_name: string, args: Record<string, unknown>) => ({
+        data: "tool output",
+        ...(args.command ? { meta: { details: { exitCode: args.command === "npm run typecheck" ? 1 : 0 } } } : {}),
+      }));
+      ports.platform = { ...ports.platform!, schemas: () => schemas(["exec", "write"]), execute };
+      const rows: RunOutcomeRow[] = [];
+      ports.events.outcome = (row) => { rows.push(row); };
+      const outcome = await openRun({
+        task: { ...TEST_TASK, prompt: "Report the checks" },
+        policy: TEST_POLICY, ports, surface: { verify: { observeNativeChecks: true } },
+      });
+      // An unclassified shell call may have changed the workspace, so it clears prior proof.
+      expect(outcome.kind).toBe("finished");
+      expect(execute).toHaveBeenCalledTimes(2 + trailing.length);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.verify).toBe(verdict ?? "not-run");
+    }
+  });
+
   it("refuses a prose finish on a failed configured check and records the next passing result", async () => {
     const { ports, events } = harness([
       call("w1", "write_file", { path: "src/a.ts", content: "export const a = 1;" }),

@@ -339,6 +339,7 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
       if (data !== result.data) rewriteRow(message, data, message.parts !== undefined || ports.platform?.verbatimText === true);
       if (!stub) {
         hooks.tools.observe?.(pctx, pcall, data, result.isError === true);
+        if (!kind) hooks.verify.observe?.(pctx, pcall, result.data, message.meta, ok);
         // The run's memory is the WORKSPACE's (files read and written, searches made); a
         // call on the surface's own tools acted on its board, not on this work.
         if (!ownsCall(ports, call.name)) await hooks.memory.observe?.(pctx, pcall, result.data, result.isError);

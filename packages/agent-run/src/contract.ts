@@ -284,7 +284,8 @@ export interface RunRefusals {
 export interface RunPorts {
   refusals?: RunRefusals;          // an approval refused earlier in the SAME run, across attempts (see {@link RunRefusals})
   model: ModelTransport;           // complete(request, signal) → completion
-  capabilities: CapabilityProvider;// @builderforce/agent-tools contract (files, shell, git, platform, memory, human)
+  /** Registry capabilities, or omitted when a closed native catalog runs the tools itself. */
+  capabilities?: CapabilityProvider;
   store: RunStore;                 // load/save RunState; commitMemory(consolidated)
   events: EventSink;               // typed RunEvent stream + the uniform outcome row (§8.2)
   human: HumanChannel;             // ask(question, options) | approve(gate) → answer | 'paused'

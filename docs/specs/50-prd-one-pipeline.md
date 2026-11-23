@@ -1,21 +1,20 @@
 # PRD 50 — one pipeline above the kernel
 
-> Status on 2026-11-23: shared entry, child admission, Brain preflight and compaction, scoped ticket and spec evidence, routing feedback, and the on-prem execution entry are implemented. Relay and cloud assignments enter the ledger at opening, and cloud owners read durable child evidence before settlement. Shared verification records executed checks in the run tally. Native-session parity, continuation recovery, and provisioned editor, channel, and cloud validation remain open. See the [pipeline map](./_scratch-agent-pipeline-map.md) for current coverage.
-> Source: `docs/specs/_scratch-agent-pipeline-map.md` (the downloaded map). Gap Register: `ROADMAP.md` › Make › Cloud and IDE agent runs › "One pipeline for every modality".
+> Completed on 2026-11-23. Editor, on-prem, and durable cloud use the shared execution entry and policy. Hosts supply their authorized catalogs and actual verification evidence. The runtime harnesses cover editor wake recovery, on-prem continuation and settlement, and durable cloud resume and settlement. See the [pipeline map](./_scratch-agent-pipeline-map.md) and [DONE.md](../../DONE.md).
 > This slice stops at the kernel. `runAgent` (`packages/agent-run/src/runAgent.ts:65`) calling `runAgentLoop` (`packages/agent-loop/src/loop.ts`) stays. Nothing inside that call is redesigned here.
-> Implementation of later stages (`routeRun`, `planWork`, `evaluateRun`, stall/continuation, the second on-prem adapter) follows a later review of those sections. This file is the contract for the slice that starts now: the forks **above** `runAgent`.
+> The original design below describes the first slice above `runAgent`. The follow-up records the completed workflow.
 
 ## Full workflow follow-up
 
 The entry slice has been extended. openRun and the Brain preamble share routing defaults. The persisted run state carries the decision across durable ticks. Full routing is the default. Existing editor settings and explicit host configuration can opt into auto routing. Shared opening assembly renders governing instructions ahead of history. Brain and channel use that opening rather than assembling separate transcript prefixes.
 
-planWork and evaluateRun now support host-scoped explicit assignments. The shared runtime keeps ids and criteria in run state, presents them on turns, checks evidence in one batch on finish, and emits counts in terminal diagnostics. Brain and in-process on-prem can bind this contract. Existing ticket and spec checks still operate. Assigning and resolving existing surface work through this contract, child evidence, downstream scoring, remaining gate and continuation consolidation, and the second on-prem adapter are still open.
+planWork and evaluateRun support host-scoped assignments. The shared runtime keeps IDs and criteria in run state, presents them on turns, checks evidence in a batch on finish, and reports work counts. Brain records ticket and spec evidence. Cloud and relay bind assignments at opening, cloud owners reconcile durable child evidence, and PR confirmation supplies review evidence. Unresolved work stays out of successful routing samples.
 
 The follow-up fixes early VSIX admission before shared validation, cloud admission stamps overwritten by the rebuilt child payload, Brain calling removed progress and retry hooks, a missing Brain failure-synthesis marker, and prose finishes skipping close-out. The detailed current status lives in the pipeline map. Historical slice text below describes the initial contract.
 
-The next follow-up wires Brain's ticket and spec checks and cloud PR handoff into the ledger. Children now carry scoped assignments on all three hosts. The runtime excludes unresolved completed runs from routing feedback and takes queued follow-ups after finish-tool results. Brain defers native approval until the editor resolves the tool and workspace path, and it records the driver's sole closing synthesis. On-prem sessions, tickets and children now share an execution entry. The roadmap lists the remaining evidence, gate and wake ownership work.
+Children carry scoped assignments on all three hosts. The shared steering path takes queued follow-ups after finish-tool results. Brain defers native approval until the editor resolves the tool and workspace path, and it records the driver's sole closing synthesis. On-prem sessions, tickets, and children share an execution entry. Native catalogs supply the tools they can dispatch, and shared settlement records checks that actually ran. Hosts retain their own storage, approval presentation, and worktree lifecycle.
 
-## Implementation review (2026-11-23)
+## Initial implementation review (2026-11-23)
 
 The [pipeline map](./_scratch-agent-pipeline-map.md) now describes the inspected checkout. Sections 0–7 below retain the original slice contract and historical rationale; they must not be read as current-state findings. This review supersedes stale file names and implementation assumptions in those sections.
 

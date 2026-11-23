@@ -1,10 +1,16 @@
+## RESOLVED 2026-11-23: One pipeline for every modality
+
+- Editor, on-prem, and cloud run through shared entry, routing, child admission, work evidence, and settlement policy. The on-prem session port binds native tools and streaming to the same entry as tickets and children.
+- Closed native catalogs supply the actual tools they can execute. Shared settlement records the editor verifier's verdict and the on-prem host's completed package checks, with the latter invalidated by subsequent workspace changes. Durable cloud cancellation skips post-Stop verification.
+- Runtime validation passed for 857 shared tests, 68 focused Brain tests, 30 editor host and steering tests, 23 on-prem tests, and 39 focused cloud tests. The cloud harness injects its database and gateway boundaries. The editor harness resolves Brain to current workspace source. [Pipeline map](./docs/specs/_scratch-agent-pipeline-map.md) and [PRD 50](./docs/specs/50-prd-one-pipeline.md).
+
 ## RESOLVED 2026-11-23: Ticket admission, durable child evidence, and finish verification
 
 - Self-hosted change tickets and authenticated cloud assignments enter the shared ledger at opening. The shared finish and settlement policy lets the host produce PR evidence after the model finishes. Missing evidence stays open in the scorecard.
 - Completed durable children record evidence before their execution lands. Owners gather it in one tenant-, parent-, and ticket-scoped query. The owner's PR supplies its own review evidence.
 - The shared catalog excludes unavailable registry tools from closed surfaces. Prose and tool finishes use the same configured verification, and cloud branch CI and Brain's native checks reach the shared tally. Skipped checks stay unverified.
-- Editor settlement wakes its shared inbox once and checks Stop before waking. Brain can continue explicit direction received during close-out. Cloud and relay use the same durable dispatcher for late directions, including child release and retry after a failed pre-admission ticket read.
-- Validation passed for 855 shared tests, 36 focused API tests, and 19 on-prem child and outbox tests. See the [pipeline map](./docs/specs/_scratch-agent-pipeline-map.md) for the outstanding integration checks.
+- Editor settlement wakes its inbox once and requeues directions when startup fails before admission, unless stopped. Brain continues explicit directions received during close-out. Cloud and relay share durable late-steer admission, and the scheduled sweep retries explicitly requeued directions from terminal executions.
+- Validation passed for 856 shared tests, 66 focused Brain tests, 44 focused API tests, 19 on-prem child and outbox tests, and 15 VSIX child and start-gate tests. See the [pipeline map](./docs/specs/_scratch-agent-pipeline-map.md) for the outstanding integration checks.
 
 ## RESOLVED 2026-11-23: Work evidence and the shared finish and on-prem entry paths
 

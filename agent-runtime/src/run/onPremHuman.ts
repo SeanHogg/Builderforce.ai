@@ -27,15 +27,15 @@ export interface OnPremHumanOptions {
 
 /** The channel over a provider (read late: the provider is built after the ports that need it). */
 export function onPremHuman(
-  provider: () => CapabilityProvider,
+  provider: (() => CapabilityProvider) | undefined,
   requestHuman: (request: HumanInputRequest) => Promise<HumanInputResult> = requestHumanInput,
   options: OnPremHumanOptions = {},
 ): HumanChannel {
   return {
     async ask(question, options): Promise<HumanAnswer> {
-      const caps = provider();
-      if (!caps.human) return { kind: "paused" };
-      const result = await caps.human.ask(question, options?.length ? `Options: ${options.join(" | ")}` : undefined);
+      const human = provider?.().human;
+      if (!human) return { kind: "paused" };
+      const result = await human.ask(question, options?.length ? `Options: ${options.join(" | ")}` : undefined);
       if (result.paused) return { kind: "paused" };
       return { kind: "answered", answer: result.answer ?? result.note ?? result.error ?? "" };
     },

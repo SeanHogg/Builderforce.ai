@@ -43,7 +43,7 @@ import { resolveParkAgeTimeoutMs, runParkAgeTimeoutSweep, type ParkAgeTimeoutRes
 import { anyStale, LIVE_RUN_MAX_AGE_MS, probeStaleWork, REAP_BATCH_LIMIT, stalePredicates } from './staleExecutionProbe';
 import { signalPendingWork } from './cronWorkSignal';
 import { revokeRunPrincipalsForExecutions } from '../agentIdentity/agentRunIdentity';
-import { executionsWithPendingSteers } from './lateSteerStore';
+import { executionsWithPendingSteers, terminalExecutionsWithSteerRetries } from './lateSteerStore';
 import { settleLateSteersSafely } from './lateSteerFollowUp';
 import { agentHosts } from '../../infrastructure/database/schema';
 import { agentHostOnlineCondition } from '../../infrastructure/database/agentHostOnline';
@@ -144,7 +144,10 @@ export async function reapStaleExecutions(
   // MK-09-D2: this arm is not part of anyStale, so a recorded handoff that never
   // ticked is failed here even when the 15-minute queued probe is empty.
   const droppedHandoffs = probe.droppedHandoff ? await reapDroppedHandoffs(db, executionRepo, stale.droppedHandoff, nowMs) : [];
-  if (!anyStale(probe) && droppedHandoffs.length === 0) return empty;
+  if (!anyStale(probe) && droppedHandoffs.length === 0) {
+    await retryPendingSteers(env, db, []);
+    return empty;
+  }
 
   // Hung HOST runs: a real long-lived process that went silent (crash / dropped
   // connection). Cloud runs (agent_host_id IS NULL) are handled below on a much
@@ -371,6 +374,7 @@ export async function reapStaleExecutions(
       return [] as number[];
     });
   for (const executionId of withSteers) await settleLateSteersSafely({ env, db }, { executionId });
+  await retryPendingSteers(env, db, withSteers);
 
   // Same family of "reap a stuck state on the frequent tick": surface any ticket
   // parked on a run_workflow whose spawned workflow never settled past the
@@ -430,6 +434,18 @@ async function reapDroppedHandoffs(db: Db, executionRepo: ExecutionRepository, d
     and(inArray(executions.id, ids), inArray(executions.status, ['pending', 'submitted', 'running']))!,
     DROPPED_HANDOFF_REASON,
   );
+}
+
+async function retryPendingSteers(env: Env, db: Db, alreadyTried: readonly number[]): Promise<void> {
+  const pending = await terminalExecutionsWithSteerRetries(db, REAP_BATCH_LIMIT).catch((error) => {
+    reportCaughtError(error, { source: 'application/runtime/staleExecutionReaper.ts', operation: 'retryPendingSteers' });
+    return [];
+  });
+  const tried = new Set(alreadyTried);
+  for (const scope of pending) {
+    if (!tried.has(scope.executionId)) await settleLateSteersSafely({ env, db }, scope);
+  }
+  if (pending.length >= REAP_BATCH_LIMIT) await signalPendingWork(env);
 }
 
 function failStaleBatch(executionRepo: ExecutionRepository, stalePredicate: SQL, errorMessage: string): Promise<ReapedRow[]> {

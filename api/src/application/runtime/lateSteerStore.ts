@@ -12,9 +12,13 @@
  */
 import { and, asc, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
-import { executionMessages } from '../../infrastructure/database/schema';
+import { executionMessages, executions } from '../../infrastructure/database/schema';
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { LateSteerOutcomeKind } from './executionSteering';
+import { EXECUTION_TERMINAL_STATUSES } from '../../domain/shared/terminalStatus';
+
+/** Internal queue marker. The terminal disposition replaces it with its own detail. */
+const RETRY_PENDING = 'pending_retry';
 
 /** One late steer, as claimed. `sentBy` is the person the follow-up runs under. */
 export interface ClaimedSteer {
@@ -68,7 +72,7 @@ export async function repend(db: Db, tenantId: number, executionId: number, mess
 export async function releaseLateClaim(db: Db, tenantId: number, executionId: number, messageIds: readonly number[]): Promise<void> {
   if (messageIds.length === 0) return;
   await db.update(executionMessages)
-    .set({ lateClaimedAt: null, consumedAt: null })
+    .set({ lateClaimedAt: null, consumedAt: null, lateDetail: RETRY_PENDING })
     .where(scopedToTenant(
       executionMessages, tenantId,
       eq(executionMessages.executionId, executionId),
@@ -198,4 +202,19 @@ export async function executionsWithPendingSteers(db: Db, executionIds: readonly
     ))
     .orderBy(asc(executionMessages.executionId));
   return rows.map((r) => r.executionId);
+}
+
+/** The scheduled sweep retries only explicitly requeued work, including on normally settled runs. */
+export function terminalExecutionsWithSteerRetries(db: Db, limit: number) {
+  return db
+    .selectDistinct({ executionId: executionMessages.executionId, tenantId: executionMessages.tenantId })
+    .from(executionMessages)
+    .innerJoin(executions, and(eq(executions.id, executionMessages.executionId), eq(executions.tenantId, executionMessages.tenantId)))
+    .where(acrossTenants(executionMessages, 'scheduled_sweep',
+      inArray(executions.status, [...EXECUTION_TERMINAL_STATUSES]),
+      eq(executionMessages.role, 'user'), eq(executionMessages.lateDetail, RETRY_PENDING),
+      isNull(executionMessages.consumedAt), isNull(executionMessages.lateClaimedAt), isNull(executionMessages.lateOutcome),
+    ))
+    .orderBy(asc(executionMessages.executionId))
+    .limit(limit);
 }
