@@ -35,7 +35,7 @@ describe("find_symbol", () => {
       return { ok: true, query: q, total: 0, matches: [] };
     });
     await findSymbolTool.execute({ query: "x", path: "api/src", kind: "class", limit: 500 }, { caps });
-    expect(seen).toEqual({ scope: "api/src", kind: "class", limit: 50 });
+    expect(seen).toEqual({ scope: "api/src", kind: "class", limit: 50, staleOk: true });
   });
 
   it("explains a miss, and says so when the index is partial", async () => {

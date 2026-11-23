@@ -125,6 +125,7 @@ export class WorkspaceSymbolIndex implements RepoSymbolsCapability {
   private readonly dirty = new Set<string>();
   private lastFullRefresh = 0;
   private loadedSnapshot = false;
+  private snapshotLoad?: Promise<void>;
   private partial = false;
   private inflight: Promise<void> | null = null;
 
@@ -186,11 +187,15 @@ export class WorkspaceSymbolIndex implements RepoSymbolsCapability {
     return out;
   }
 
-  async find(query: string, opts: { scope?: string; kind?: SymbolKind; limit?: number } = {}): Promise<SymbolFindResult> {
+  async find(query: string, opts: { scope?: string; kind?: SymbolKind; limit?: number; staleOk?: boolean } = {}): Promise<SymbolFindResult> {
     const q = query.trim();
     if (!q) return { ok: false, error: "query is required" };
+    if (opts.staleOk && !this.loadedSnapshot) await this.ensureSnapshot();
+    const refresh = this.ensureFresh();
+    const staleIndex = opts.staleOk === true && this.inflight !== null && (this.lastFullRefresh > 0 || this.files.size > 0);
     try {
-      await this.ensureFresh();
+      if (staleIndex) void refresh.catch(() => undefined); // Retain the snapshot and retry on the next lookup.
+      else await refresh;
     } catch (e) {
       return { ok: false, query: q, error: `symbol index unavailable: ${e instanceof Error ? e.message : String(e)}` };
     }
@@ -221,6 +226,7 @@ export class WorkspaceSymbolIndex implements RepoSymbolsCapability {
       truncated: scored.length > limit,
       matches: scored.slice(0, limit).map((s) => s.match),
       indexedFiles: this.files.size,
+      ...(staleIndex ? { staleIndex: true } : {}),
       ...(this.partial ? { partialIndex: true } : {}),
     };
   }
@@ -245,10 +251,7 @@ export class WorkspaceSymbolIndex implements RepoSymbolsCapability {
   }
 
   private async fullRefresh(): Promise<void> {
-    if (!this.loadedSnapshot) {
-      await this.loadSnapshot();
-      this.loadedSnapshot = true;
-    }
+    await this.ensureSnapshot();
     const { paths, truncated } = await this.walk();
     this.partial = truncated;
     const seen = new Set(paths);
@@ -266,6 +269,10 @@ export class WorkspaceSymbolIndex implements RepoSymbolsCapability {
     this.dirty.clear();
     this.lastFullRefresh = Date.now();
     if (changed) void this.saveSnapshot();
+  }
+
+  private ensureSnapshot(): Promise<void> {
+    return this.snapshotLoad ??= this.loadSnapshot().then(() => { this.loadedSnapshot = true; });
   }
 
   private async refreshDirty(): Promise<void> {
@@ -339,6 +346,7 @@ export class WorkspaceSymbolIndex implements RepoSymbolsCapability {
       // Another extractor's symbols are not this one's: re-parse rather than serve them.
       if ((snap.extractor ?? REGEX_SYMBOL_EXTRACTOR.id) !== this.extractor.id) return;
       for (const [rel, mtime, size, symbols] of snap.files) {
+        if (typeof rel !== "string" || this.relative(rel) !== rel || this.skipped(rel) || !isSymbolIndexable(rel)) continue;
         this.files.set(rel, {
           mtime,
           size,

@@ -708,6 +708,7 @@ export {
 // own verb lists.
 export {
   classifyRequest,
+  hasExplicitQuestionIntent,
   splitAskAndContext,
   isContinuationText,
   type RequestIntent,

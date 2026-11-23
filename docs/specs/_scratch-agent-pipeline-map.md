@@ -30,6 +30,12 @@ flowchart TD
 
 The Brain preamble renders opening data and per-run directives and decides its route using shared `routeRun`. `runPrepared` passes `{ input, decided }` so `openRun` does not decide again. Other callers may supply route facts directly. Full/quick scoring requires `routing`; children are not scored.
 
+The request classifier separates the ask from pasted context. An explicit question uses the quick route unless it asks to run the full pipeline. Brain leaves work from a question run uncommitted. The shared guard preserves the question's tool-round count across continuation and offers a final answer after six rounds.
+
+Shared history compaction and Brain's repeated-narration finding use Memory's canonical fold. The published Memory 2026.10.84 build folds matching lead sentences in the model transcript, keeps new evidence, and preserves the stored history.
+
+Brain starts independent preflight probes alongside deterministic lookup, bounds the read-only probes, and records elapsed time in `run.preflight`. Symbol search can serve a stale workspace snapshot while refreshing it. Tool side-effect metadata supplies the read batching rule. Brain diagnostics v2 reports stopped and unanswered question runs, counts gateway failovers, and incorporates run findings.
+
 The editor host is shared by panel and participant. `brainRunHostPorts.ts` binds `startThrough` to `gated.start`; `brainRunHost.ts` supplies it to `childRunHost`. Children therefore pass the editor start gate. Other surfaces retain their own lifecycle; `openRun` does not create editor journals or cloud execution records.
 
 ## 2. Host bindings

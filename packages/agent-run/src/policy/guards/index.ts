@@ -18,7 +18,8 @@
  * Node.
  */
 
-import type { ToolSchema } from "@builderforce/agent-tools";
+import { isProgressBookkeeping, type ToolSchema } from "@builderforce/agent-tools";
+import { classifyRequest, hasExplicitQuestionIntent } from "@builderforce/agent-stall";
 import { ProgressDetector, progressSteerNote, progressTraceStep, type ProgressAction } from "@builderforce/run-guards";
 import type { DifficultyFeatures } from "@builderforce/difficulty-router";
 import type { TierLadder } from "@builderforce/run-policy";
@@ -38,8 +39,12 @@ export { guardLeversOf, type GuardLevers, type GuardPorts };
 export { FINISH_RECORD_BRIEF, FINISH_RECORD_TURNS, PROGRESS_FORCED_LABEL } from "./forced/briefs.js";
 export type { ForcedLadderState, ForcedTurn, ForcedTurnResult, ProgressBinding, ProgressFacts, ProgressTurnOptions } from "./forced/types.js";
 
+const QUESTION_TOOL_ROUNDS = 6;
+const ANSWER_DUE_NOTE = "Answer the question now using the evidence collected. State what could not be established. Do not call more tools.";
+
 /** A guards session for one run: the levers' state plus the turn's D7 edit verdicts. */
 export class RunGuards {
+  private answerTurns: number;
   readonly cascade: CascadeSession;
   private readonly progress: ProgressDetector | null;
   /** A surface's forced-turn ladder (`GuardPorts.progress.turns`); null ⇒ A3's trips keep their generic handling. */
@@ -58,8 +63,9 @@ export class RunGuards {
   /** Moves UP the tier ladder this run (D1's failed verdicts, A3's second trip) — §8.2. */
   private escalations: number;
 
-  constructor(levers: GuardLevers, resume?: LoopGuardState, ports: GuardPorts = {}) {
+  constructor(levers: GuardLevers, resume?: LoopGuardState, ports: GuardPorts = {}, private readonly question = false) {
     this.levers = levers;
+    this.answerTurns = resume?.answerTurns ?? 0;
     this.cascade = new CascadeSession(!!levers.d1_verifier_cascade, resume?.cascade, {
       shouldSkipWeakAttempt: ports.cascade?.shouldSkipWeakAttempt
         ? (f) => ports.cascade!.shouldSkipWeakAttempt!({ actionType: f.actionType, priorWeakPassRate: f.priorWeakPassRate } as DifficultyFeatures)
@@ -76,6 +82,7 @@ export class RunGuards {
     this.progress = levers.a3_progress_detector
       ? new ProgressDetector(resume?.progress, {
           isReadOnly: bind?.isReadOnly ?? ((tool) => isReadOnlyCloudTool(tool)),
+          isBookkeeping: isProgressBookkeeping,
           ...(bind?.isUnscopedMutation ? { isUnscopedMutation: bind.isUnscopedMutation } : {}),
           ...(bind?.isPlatformProgress ? { isPlatformProgress: bind.isPlatformProgress } : {}),
           ...(bind?.expectsChange ? { expectsChange: bind.expectsChange } : {}),
@@ -93,7 +100,8 @@ export class RunGuards {
   /** The volatile-tail sections this turn carries (empty strings drop out). */
   tailSections(): string[] {
     // A finishing run's brief is the whole say of its turns: no steer rides along.
-    return [this.finishing || this.resumedFinishing ? "" : this.progress?.steerNote() ?? "", this.cascade.steerNote(), this.checksNote];
+    return [this.finishDue && this.answerTurns >= QUESTION_TOOL_ROUNDS ? ANSWER_DUE_NOTE : "",
+      this.finishing || this.resumedFinishing ? "" : this.progress?.steerNote() ?? "", this.cascade.steerNote(), this.checksNote];
   }
 
   /** The forced-turn ladder's decision for this step, or nothing when none is bound. */
@@ -119,6 +127,7 @@ export class RunGuards {
   /** What the guards persist across a step boundary (the contract's `LoopGuardState`). */
   snapshot(): LoopGuardState {
     return {
+      ...(this.answerTurns ? { answerTurns: this.answerTurns } : {}),
       ...(this.progress ? { progress: this.progress.snapshot() } : {}),
       // The cascade's seed facts serve A3's escalation too; with both levers off nothing persists.
       ...(this.cascade.on || this.progress ? { cascade: this.cascade.snapshot() } : {}),
@@ -162,6 +171,11 @@ export class RunGuards {
   /** The turn ended: fold the turn's edits into the cascade and trip A3 if stuck. */
   async endTurn(step: number, ports: GuardPorts): Promise<void> {
     this.checksNote = "";
+    if (this.question && ++this.answerTurns >= QUESTION_TOOL_ROUNDS) {
+      this.finishDue = true;
+      await this.record(ports, { tool: "answer_due", detail: { turns: this.answerTurns }, result: ANSWER_DUE_NOTE }, step);
+      return;
+    }
     if (this.turnEdits.length > 0) {
       const errors = this.turnEdits.flatMap((v) => v.errors);
       this.turnEdits = [];
@@ -293,7 +307,8 @@ const sessions = new WeakMap<object, RunGuards>();
 function sessionOf(ctx: PolicyContext, ports: GuardPorts): RunGuards {
   let s = sessions.get(ctx.state);
   if (!s) {
-    s = new RunGuards(guardLeversOf(ctx.policy.levers), ctx.state.guards, ports);
+    const question = hasExplicitQuestionIntent(classifyRequest(ctx.task.request ?? ctx.task.prompt));
+    s = new RunGuards(guardLeversOf(ctx.policy.levers), ctx.state.guards, ports, question);
     sessions.set(ctx.state, s);
     ctx.state.guards = s.snapshot();
   }

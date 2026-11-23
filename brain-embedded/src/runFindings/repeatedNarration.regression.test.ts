@@ -26,6 +26,15 @@ describe('repeated_narration agrees with the B7 fold', () => {
     expect(narration(b)[0]).toMatchObject({ params: { turns: 2 } });
   });
 
+  it('reports a repeated lead finding even when the narration adds different detail', () => {
+    const lead = 'The refresh uses the cached workspace index.';
+    const b = new TraceBuilder()
+      .turn({ role: 'code', calls: [write('a.ts')], text: `${lead} Slow disk reads delayed initial discovery.` })
+      .turn({ role: 'code', calls: [write('b.ts')], text: `${lead} A dirty entry queues background work while callers receive earlier symbols.` });
+    const [found] = narration(b);
+    expect(found?.evidence.map((e) => e.turn)).toEqual([1, 2]);
+  });
+
   it('regression: a turn the fold ignores (no calls) never becomes the original a repeat names', () => {
     const b = new TraceBuilder()
       .turn({ role: 'code', calls: [write('a.ts')], text: 'Continuing with the wiring of the panel.' })

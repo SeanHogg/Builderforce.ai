@@ -100,6 +100,11 @@ export function toolSideEffect(name: string): ToolSideEffect | undefined {
     : undefined;
 }
 
+/** Memory writes record what the run learned. They do not advance its task. */
+export function isProgressBookkeeping(name: string): boolean {
+  return name === "remember_fact" || name === "memory_remember";
+}
+
 /** What a HOST says about a tool of its own that the shared catalog does not know (a page action, an MCP tool, a VS Code tool). */
 export interface DeclaredToolEffect {
   mutates?: boolean;

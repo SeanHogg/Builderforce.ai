@@ -23,8 +23,14 @@ import { sessionShippedInTrace, staffingSummaryInTrace, type StaffingSummary } f
 import { parseMessageProvenance } from './provenance';
 import { REMEMBER_FACT_TOOLS } from '@builderforce/agent-tools';
 import { STOPPED_TURN_STEP } from './stoppedTurn';
+import { FAILOVER_SEPARATOR } from './runStore/gatewayRoutingTrace';
+import { classifyRequest, hasExplicitQuestionIntent } from '@builderforce/agent-stall';
+import { splitRuns } from './runSlices';
+import { detectRunFindings } from './runFindings/detectRunFindings';
+import type { RunFindingKind } from './runFindings/types';
 import { isCodeChangeTool } from './localWorkspaceTools';
-import { LOCAL_TICKET_CREATE_LABEL } from './ticketToolVocabulary';
+import { isTicketWriteTool } from './ticketToolVocabulary';
+export { isTicketWriteTool } from './ticketToolVocabulary';
 import { READ_FILE_TOOL } from './toolResultBudget';
 import { midRunNotice, type BrainRunActivity } from './runActivity';
 import { providerFailureInTrace, type ProviderFailureFinding } from './providerFailureCause';
@@ -125,22 +131,8 @@ export const UNBACKED_TICKET_CLAIM_NOTICE =
 /** Assistant prose that CLAIMS a file/attachment was persisted. */
 const FILE_SAVE_CLAIM = /\b(saved|updated|wrote|written|edited|persisted|added)\b[^.!?\n]*\b(file|attachment|roadmap|document|upload|\.md|\.csv|\.txt|\.json)\b/i;
 
-/** Tool labels that CREATE or LINK a board work item. A "filed/created/linked the
- *  ticket" claim is only honest if one of these SUCCEEDED this run. Covers the create
- *  tools (tasks/objectives/specs/…) and the chat-link + from-delta tools. */
-const TICKET_WRITE_TOOL = new RegExp(
-  `(tasks|objectives|key_results|initiatives|portfolios|specs|roadmap)[._]create|chats[._]link_ticket|tickets[._]from_delta|${LOCAL_TICKET_CREATE_LABEL.source}`,
-  'i',
-);
-
 /** Assistant prose that CLAIMS a ticket/gap/task was created, filed, or linked. */
 const TICKET_CLAIM = /\b(created|filed|opened|logged|added|linked|tracked)\b[^.!?\n]*\b(ticket|task|gap|epic|issue|objective|bug|card|board)\b/i;
-
-/** Did this tool call FILE board work (create or link)? THE predicate — the honesty check
- *  below and `staffingSummary.ts` both read it, so "what counts as filing work" is one list. */
-export function isTicketWriteTool(label: string): boolean {
-  return TICKET_WRITE_TOOL.test(label);
-}
 
 /**
  * Structural honesty check for the "it said it updated the file but didn't" failure:
@@ -220,7 +212,12 @@ export function stallRecoveriesInTrace(events: BrainTraceEvent[]): number {
 
 /** How many times this run switched MODELS because one wouldn't emit tool calls. */
 export function modelFailoversInTrace(events: BrainTraceEvent[]): number {
-  return events.filter((e) => e.label === LOOP_STEP.failover).length;
+  return events.reduce((count, event) => {
+    if (event.label === LOOP_STEP.failover) return count + 1;
+    if (event.label !== 'llm.complete') return count;
+    const value = (event.args as { failovers?: unknown } | undefined)?.failovers;
+    return count + (typeof value === 'string' ? value.split(FAILOVER_SEPARATOR).filter((part) => part.trim()).length : 0);
+  }, 0);
 }
 
 /** True when the stall survived every recovery AND every failover this run. */
@@ -678,6 +675,8 @@ export interface BrainDiagnostics {
   providerFailure: ProviderFailureFinding | null;
   /** Best-effort verdict — the header a triager reads first. Ordering: `brainVerdict.ts`. */
   likelyCause: LikelyCause;
+  outcome?: 'stopped' | 'unanswered-question' | 'answered';
+  findingKinds?: RunFindingKind[];
 }
 
 /**
@@ -1018,6 +1017,15 @@ export function computeBrainDiagnostics(
   const running = ctx.running === true;
   // The latest run ENDED on the provider (a failed completion it did not recover from) — never read as a tool-exposure fault.
   const providerFailure = running ? null : providerFailureInTrace(events, messages);
+  const latest = splitRuns(events, messages).at(-1)!;
+  const stopped = latest.events.some((event) => event.label === STOPPED_TURN_STEP);
+  const answered = latest.messages.some((message) => message.role === 'assistant' && message.content.trim());
+  const outcome = running ? undefined : stopped ? 'stopped' as const
+    : answered ? 'answered' as const
+    : hasExplicitQuestionIntent(classifyRequest(latest.ask)) && latest.events.some((event) => event.label === 'llm.complete') ? 'unanswered-question' as const
+    : undefined;
+  const findingKinds = detectRunFindings(latest.events, latest.messages).findings
+    .filter((finding) => finding.severity !== 'info').map((finding) => finding.kind);
   const likelyCause = decideLikelyCause({
     running,
     memoryOnlyRun,
@@ -1027,6 +1035,8 @@ export function computeBrainDiagnostics(
     announcedUnmadeToolCall,
     answeredInProse,
     noProgress,
+    outcome,
+    findingKinds,
     contextSignal,
     degradationSignal,
     unresolvedAppFailures,
@@ -1046,6 +1056,8 @@ export function computeBrainDiagnostics(
   });
 
   return {
+    ...(outcome ? { outcome } : {}),
+    findingKinds,
     turns: llm.length,
     toolCalls: toolEvents.length,
     errors: errors.length,

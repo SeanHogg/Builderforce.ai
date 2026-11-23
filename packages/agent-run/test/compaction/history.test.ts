@@ -19,6 +19,28 @@ function history() {
 afterEach(() => vi.useRealTimers());
 
 describe("shared history compaction strategy", () => {
+  it("folds repeated lead findings in the model transcript while preserving new evidence", async () => {
+    const ports = history();
+    const lead = "The refresh uses the cached workspace index.";
+    const newEvidence = "A dirty entry queues background work while callers receive earlier symbols.";
+    const call = (id: string) => ({ id, function: { name: "read_file", arguments: "{}" } });
+    const latest = `${lead} ${newEvidence}`;
+    ports.state.transcript = [
+      { role: "user", content: "How does refresh work?" },
+      { role: "assistant", content: `${lead} Slow disk reads delayed initial discovery.`, tool_calls: [call("read-1")] },
+      { role: "tool", content: "First result", tool_call_id: "read-1" },
+      { role: "assistant", content: latest, tool_calls: [call("read-2")] },
+      { role: "tool", content: "Second result", tool_call_id: "read-2" },
+    ];
+
+    const working = await createCompactionHook({ history: ports }).compact(policyCtx());
+    const latestWorking = working?.messages.find((row) => row.content.includes(newEvidence));
+    expect(latestWorking?.content).toContain("(restates earlier finding)");
+    expect(latestWorking?.content).not.toContain(lead);
+    expect(ports.state.transcript[3]?.content).toBe(latest);
+    expect(ports.summarize).not.toHaveBeenCalled();
+  });
+
   it("preserves source history, reuses the memo, records only new folds and reports window savings", async () => {
     const ports = history();
     const original = [...ports.state.transcript];

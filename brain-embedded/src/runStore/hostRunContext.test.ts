@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getRunTrace, resetBrainRunStore, startRun } from '../brainRunStore';
+import { PREFLIGHT_PROBE_MS } from './deadline';
 
 /**
  * PRD 35 E2 ↔ E1: the host's task context pack ALWAYS rides the volatile per-turn block
@@ -15,6 +16,30 @@ const TOOLS = [{ type: 'function' as const, function: { name: 'read_file', descr
 const textOf = (content: unknown): string => (typeof content === 'string' ? content : JSON.stringify(content ?? ''));
 
 describe('the host task context', () => {
+  it('starts the memory probes concurrently and leaves a hung probe behind at the preflight deadline', async () => {
+    vi.useFakeTimers();
+    try {
+      const recall = vi.fn(() => new Promise<null>(() => undefined));
+      const answer = vi.fn(() => new Promise<null>(() => undefined));
+      const stream = vi.fn(async () => ({ text: 'It registers the route.', toolCalls: [], finishReason: 'stop' as const }));
+      const run = startRun(4890, {
+        entryPoint: 'vscode', resolvedSystemPrompt: 'sys', persistence,
+        userTurn: 'What is the purpose of the route registrar?', evermind: { recall, answer }, stream,
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(recall).toHaveBeenCalledOnce();
+      expect(answer).toHaveBeenCalledOnce();
+      expect(stream).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(PREFLIGHT_PROBE_MS + 1);
+      await run;
+      expect(stream).toHaveBeenCalledOnce();
+      expect(getRunTrace(4890)).toContainEqual(expect.objectContaining({
+        label: 'run.preflight', args: { recalled: false, memoryAnswer: false },
+      }));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
   it('rides after the history, never in the system prompt', async () => {
     let system = '';
     let user = '';

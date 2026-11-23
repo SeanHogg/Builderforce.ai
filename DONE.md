@@ -1,3 +1,12 @@
+## RESOLVED 2026-11-23: Question-run diagnosis, routing, budget, narration folding, and preflight
+
+- Diagnostics v2 prioritizes the latest run's stopped and unanswered-question outcomes. It counts gateway failover attempts from the completion trace and surfaces run findings in the verdict.
+- Explicit questions use the quick route unless the ask explicitly requests the full pipeline. Pasted context does not affect intent. Brain leaves question-run work uncommitted.
+- The shared runtime offers a final answer after six question tool rounds, including on resumed ticks. Memory bookkeeping does not reset the read-only streak.
+- Builderforce pins the published Memory 2026.10.84 build for chat #168571 (W5). The shared transcript fold drops repeated lead findings and keeps new sentences. Brain diagnostics use the same fold. The integrity-verified npm artifact passed 859 shared runtime tests and 109 focused Brain tests. [Memory release workflow](https://github.com/SeanHogg/builderforce-memory/actions/runs/45289192450).
+- Read-only preflight probes share a 2.5-second allowance and report a `run.preflight` step. Scoped ripgrep is already wired. Symbol queries can use an identified stale snapshot during refresh, and registry metadata determines which reads can batch.
+- Validation passed for 858 shared runtime tests, 147 focused Brain tests, 60 routing and tool tests, and 22 editor search tests. Shared runtime typechecking and the execution and source-package graph checks passed. The wider Brain run passed 593 tests and reproduced the existing late-backstop failure. [Pipeline map](./docs/specs/_scratch-agent-pipeline-map.md) and [PRD 50](./docs/specs/50-prd-one-pipeline.md).
+
 ## RESOLVED 2026-11-23: One pipeline for every modality
 
 - Editor, on-prem, and cloud run through shared entry, routing, child admission, work evidence, and settlement policy. The on-prem session port binds native tools and streaming to the same entry as tickets and children.

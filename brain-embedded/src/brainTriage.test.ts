@@ -12,6 +12,17 @@ import {
 import type { BrainMessage } from './types';
 import { providerFailureVerdict } from './providerFailureCause';
 
+it('records a stopped question and all 13 gateway failovers in its diagnostic verdict', () => {
+  const messages = [{ role: 'user', content: 'What should we do about this recommendation?', createdAt: '2026-11-21T00:00:00Z' }] as BrainMessage[];
+  const turns: BrainTraceEvent[] = Array.from({ length: 13 }, (_, i) => ({
+    ts: `2026-11-21T00:00:${String(i + 1).padStart(2, '0')}Z`,
+    category: 'llm', label: 'llm.complete', args: { step: i, failovers: 'direct/moonshot/kimi-k3:429 rate_limit' },
+  }));
+  expect(computeBrainDiagnostics(turns, undefined, messages).likelyCause).toBe('unanswered-question');
+  const result = computeBrainDiagnostics([...turns, { ts: '2026-11-21T00:00:14Z', category: 'message', label: 'agent.stopped' }], undefined, messages);
+  expect(result).toMatchObject({ outcome: 'stopped', likelyCause: 'stopped', modelFailovers: 13 });
+});
+
 describe('isFailedToolResult', () => {
   it('flags { ok: false } and error fields', () => {
     expect(isFailedToolResult({ ok: false, error: 'no repo bound' })).toBe(true);

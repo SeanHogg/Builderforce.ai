@@ -52,6 +52,17 @@ describe("WorkspaceSymbolIndex", () => {
     expect((await index.find("FreshlyAdded")).total).toBe(0);
   });
 
+  it("returns the warm snapshot while refreshing, then sees the new definition", async () => {
+    const index = new WorkspaceSymbolIndex(root);
+    await index.find("buildGitHelper");
+    const file = join(root, "api", "src", "other.ts");
+    await writeFile(file, "export class FreshChoice {}\n");
+    await utimes(file, new Date(), new Date(Date.now() + 5_000));
+    index.markDirty(file);
+    expect(await index.find("buildGitHelper", { staleOk: true })).toMatchObject({ staleIndex: true, total: 1 });
+    expect(await index.find("FreshChoice")).toMatchObject({ total: 1 });
+  });
+
   it("persists a snapshot and restores it on the next start", async () => {
     const cachePath = join(root, ".builderforce", "symbols.json");
     const first = new WorkspaceSymbolIndex(root, { cachePath });
@@ -65,7 +76,8 @@ describe("WorkspaceSymbolIndex", () => {
     expect(snapshot.v).toBe(1);
     expect(snapshot.files.length).toBe(3);
     const second = new WorkspaceSymbolIndex(root, { cachePath });
-    expect((await second.find("GIT_TOOLS")).total).toBe(1);
+    expect(await second.find("GIT_TOOLS", { staleOk: true })).toMatchObject({ staleIndex: true, total: 1 });
+    expect(await second.find("GIT_TOOLS")).toMatchObject({ total: 1 });
   });
 
   it("reports a partial index when the file cap is reached", async () => {

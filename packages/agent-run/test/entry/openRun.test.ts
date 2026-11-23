@@ -36,6 +36,18 @@ const WRITE_THEN_FINISH = (): ModelCompletion[] => [
 ];
 
 describe("openRun", () => {
+  it("gives questions a final answer turn after six tool rounds even with progress levers off", async () => {
+    const { ports } = harness([
+      ...Array.from({ length: 6 }, (_, i) => call(`read-${i}`, i % 2 ? "remember_fact" : "read_file", { path: `src/${i}.ts` })),
+      { content: "The handler calls the registry." },
+    ]);
+    const complete = vi.spyOn(ports.model, "complete");
+    const outcome = await openRun({ task: { ...TEST_TASK, prompt: "How does this handler work?" }, policy: TEST_POLICY, ports });
+    expect(outcome.kind).toBe("finished");
+    expect(complete).toHaveBeenCalledTimes(7);
+    expect(complete.mock.calls[6]?.[0].tools ?? []).toEqual([]);
+    expect(JSON.stringify(complete.mock.calls[6]?.[0].messages)).toContain("Answer the question now");
+  });
   it("holds prose finish for assigned work, reads evidence in a batch, and emits the terminal scorecard", async () => {
     const { ports, events } = harness([{ content: "Done." }, { content: "One checked and one handed off." }]);
     const rows: RunOutcomeRow[] = [];

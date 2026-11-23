@@ -16,6 +16,7 @@ import { latestUserText } from './convoText';
 import type { BrainRunRequest } from './runTypes';
 import type { BrainRunContext } from './brainRunContext';
 import { adoptAnswerWithoutModel } from './adoptAnswer';
+import { bounded, PREFLIGHT_PROBE_MS } from './deadline';
 
 /** The pre-turn recall, the memory block it adds to the prompt, and that block's cost. */
 export interface RunRecall {
@@ -55,13 +56,14 @@ export async function recallForRun(
   convo: ChatCompletionMessage[],
   evermind: EvermindRunHooks | undefined,
   hint?: string,
+  timeoutMs = PREFLIGHT_PROBE_MS,
 ): Promise<RunRecall> {
   let recalled: EvermindRecallResult | null = null;
   if (!evermind?.recall) return { recalled, block: null, blockTokens: 0 };
   const query = recallQuery(latestUserText(convo), hint);
   if (!query) return { recalled, block: null, blockTokens: 0 };
   try {
-    recalled = await evermind.recall(query);
+    recalled = await bounded(timeoutMs, evermind.recall(query));
   } catch {
     recalled = null;
   }
@@ -108,32 +110,40 @@ export async function recallForRun(
  *
  * Returns true when memory answered — the run is over.
  */
-export async function answerFromMemory(
-  chatId: number,
+export async function lookupMemoryAnswer(
   c: RunCell,
   req: BrainRunRequest,
   allTools: BrainToolSpec[] | undefined,
   memoryReplay: boolean,
-): Promise<boolean> {
+  timeoutMs = PREFLIGHT_PROBE_MS,
+): Promise<{ query: string; answer: MemoryFirstAnswer } | null> {
   const { evermind, model } = req;
   const convo = c.transcript;
-  if (!(evermind?.answer && memoryReplay && !c.abort?.signal.aborted)) return false;
+  if (!(evermind?.answer && memoryReplay && !c.abort?.signal.aborted)) return null;
   // Only attempted on the run's FIRST turn (no tool results yet) — and never when the ask
   // is an interrupted-run RESUME: the generic "Continue the task that was interrupted…" ask
   // is a near-exact repeat of the question the interrupted run already asked and answered,
   // so the Q&A cache would replay the OLD answer and the resumed run would act on a stale
   // plan instead of continuing. A resumed run always re-asks the model (chat #48534).
   const query = latestUserText(convo);
-  if (!query || query.startsWith('Continue the task that was interrupted when the editor closed')) return false;
+  if (!query || query.startsWith('Continue the task that was interrupted when the editor closed')) return null;
   let memAnswer: MemoryFirstAnswer | null = null;
   try {
-    memAnswer = await evermind.answer(query, {
+    memAnswer = await bounded(timeoutMs, evermind.answer(query, {
       toolsAvailable: !!allTools && allTools.length > 0,
       // What this turn would have run on — the saving a hit records is priced at it.
       model: model || c.lastServedModel || undefined,
-    });
+    }));
   } catch { memAnswer = null; }
-  if (!memAnswer) return false;
+  return memAnswer ? { query, answer: memAnswer } : null;
+}
+
+export async function adoptMemoryAnswer(
+  chatId: number, c: RunCell, req: BrainRunRequest,
+  candidate: { query: string; answer: MemoryFirstAnswer } | null,
+): Promise<boolean> {
+  if (!candidate || c.abort?.signal.aborted) return false;
+  const { query, answer: memAnswer } = candidate;
   // Visible on the timeline: memory answered, the LLM was skipped.
   return adoptAnswerWithoutModel(chatId, c, req, memAnswer.text ?? '', {
     label: memAnswer.source === 'evermind' ? 'evermind.answer' : 'memory.answer',

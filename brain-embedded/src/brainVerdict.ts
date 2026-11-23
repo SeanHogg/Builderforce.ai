@@ -10,6 +10,7 @@ import { HISTORY_TOKEN_BUDGET } from '@seanhogg/builderforce-memory/working';
 import type { BrainTraceEvent } from './brainTriage';
 import { isFailedToolResult } from './toolFailure';
 import { callTargetKey } from './runProgress';
+import type { RunFindingKind } from './runFindings/types';
 
 /**
  * A prompt at or past this many tokens is context PRESSURE.
@@ -68,6 +69,9 @@ export type LikelyCause =
   | 'tool-calls-not-emitted'
   | 'answered-in-prose'
   | 'no-progress'
+  | 'stopped'
+  | 'unanswered-question'
+  | 'run-findings'
   | 'context-exhaustion'
   | 'model-degradation'
   | 'app-errors-unresolved'
@@ -78,6 +82,8 @@ export type LikelyCause =
 /** Everything the decision reads — each already measured by `computeBrainDiagnostics`. */
 export interface VerdictSignals {
   running: boolean;
+  outcome?: 'stopped' | 'unanswered-question' | 'answered';
+  findingKinds?: readonly RunFindingKind[];
   memoryOnlyRun: boolean;
   /** The LATEST run ended on a failed completion it did not recover from (`providerFailureCause.ts`). */
   providerFailure: boolean;
@@ -94,21 +100,28 @@ export interface VerdictSignals {
   healthy: boolean;
 }
 
-/** The verdict, most-explanatory cause first. Pure. */
-export function decideLikelyCause(s: VerdictSignals): LikelyCause {
-  if (s.running) return 'run-in-progress';
-  if (s.memoryOnlyRun) return 'memory-answered';
-  if (s.providerFailure) return 'provider-failure';
-  if (s.noToolsAdvertised) return 'no-tools-advertised';
-  if (s.narratedUnadvertised) return 'tool-not-advertised';
-  if (s.announcedUnmadeToolCall) return 'tool-calls-not-emitted';
-  if (s.answeredInProse) return 'answered-in-prose';
-  if (s.noProgress) return 'no-progress';
-  if (s.contextSignal && !s.degradationSignal) return 'context-exhaustion';
-  if (s.degradationSignal && !s.contextSignal) return 'model-degradation';
-  if (s.unresolvedAppFailures > 0) return 'app-errors-unresolved';
-  if (s.workFiledNotStaffed) return 'work-filed-not-staffed';
-  return s.healthy ? 'healthy' : 'inconclusive';
+/** Outcomes first, then specific causes, then traced findings and the health fallback. */
+const VERDICT_RULES: ReadonlyArray<readonly [LikelyCause, (signals: VerdictSignals) => boolean]> = [
+  ['run-in-progress', (s) => s.running],
+  ['stopped', (s) => s.outcome === 'stopped'],
+  ['memory-answered', (s) => s.memoryOnlyRun],
+  ['provider-failure', (s) => s.providerFailure],
+  ['unanswered-question', (s) => s.outcome === 'unanswered-question'],
+  ['no-tools-advertised', (s) => s.noToolsAdvertised],
+  ['tool-not-advertised', (s) => s.narratedUnadvertised],
+  ['tool-calls-not-emitted', (s) => s.announcedUnmadeToolCall],
+  ['answered-in-prose', (s) => s.answeredInProse],
+  ['no-progress', (s) => s.noProgress],
+  ['context-exhaustion', (s) => s.contextSignal && !s.degradationSignal],
+  ['model-degradation', (s) => s.degradationSignal && !s.contextSignal],
+  ['app-errors-unresolved', (s) => s.unresolvedAppFailures > 0],
+  ['work-filed-not-staffed', (s) => s.workFiledNotStaffed],
+  ['run-findings', (s) => (s.findingKinds?.length ?? 0) > 0],
+  ['healthy', (s) => s.healthy],
+];
+
+export function decideLikelyCause(signals: VerdictSignals): LikelyCause {
+  return VERDICT_RULES.find(([, matches]) => matches(signals))?.[0] ?? 'inconclusive';
 }
 
 const succeeded = (ev: BrainTraceEvent): boolean =>

@@ -12,6 +12,7 @@ import type { RunCell } from './runCell';
 import { nowIso, pushTrace } from './runCells';
 import { applyModelPreflight } from './modelPreflight';
 import type { BrainRunRequest } from './runTypes';
+import { bounded, PREFLIGHT_PROBE_MS } from './deadline';
 
 /** A file the host showed the model WHOLE, before the run read anything. */
 export interface ServedRead {
@@ -32,7 +33,7 @@ export interface HostRunContext {
 async function hostPart<T>(c: RunCell, part: string, read: (() => Promise<T | undefined>) | undefined): Promise<T | undefined> {
   if (!read) return undefined;
   try {
-    return await read();
+    return await bounded(PREFLIGHT_PROBE_MS, read());
   } catch (e) {
     pushTrace(c, {
       ts: nowIso(),

@@ -139,6 +139,10 @@ describe("searchWorkspace on a workspace tree", () => {
     expect(viaRg).not.toBeNull();
     const viaWalk = await walkSearch(root, root, "BfBrainChat");
     expect(viaRg!.matches).toEqual(viaWalk.matches);
+    const scopedFile = await ripgrepSearch(root, path.join(root, "clients", "vscode", "src", "bfApi.ts"), "BfBrainChat", rg);
+    expect(scopedFile?.matches?.map((m) => m.path)).toEqual(["clients/vscode/src/bfApi.ts"]);
+    const scopedDirectory = await ripgrepSearch(root, path.join(root, "api"), "BfBrainChat", rg);
+    expect(scopedDirectory?.matches).toEqual([]);
     // A literal that is not a valid regex goes through as a fixed string, not an error.
     const literal = await ripgrepSearch(root, root, "listBrainChats(", rg);
     expect(literal?.matches?.map((m) => m.path)).toEqual(["clients/vscode/src/bfApi.ts"]);

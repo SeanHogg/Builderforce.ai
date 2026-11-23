@@ -180,7 +180,7 @@ export interface RepoReadCapability {
 export interface RepoSymbolsCapability {
   /** Definitions whose name matches `query` (case-insensitive; exact matches first).
    *  `scope` narrows to a repo-relative subdirectory, `kind` to one {@link SymbolKind}. */
-  find(query: string, opts?: { scope?: string; kind?: SymbolKind; limit?: number }): Promise<SymbolFindResult>;
+  find(query: string, opts?: { scope?: string; kind?: SymbolKind; limit?: number; staleOk?: boolean }): Promise<SymbolFindResult>;
 }
 
 /** Semantic code search and repo mapping (capability `repo.semantic`). Powered by a local
@@ -656,6 +656,8 @@ export interface SymbolMatch {
   exported: boolean;
 }
 export interface SymbolFindResult {
+  /** The result came from the current snapshot while a refresh runs. */
+  staleIndex?: boolean;
   ok: boolean;
   query?: string;
   /** Every definition that matched, before `limit`. */

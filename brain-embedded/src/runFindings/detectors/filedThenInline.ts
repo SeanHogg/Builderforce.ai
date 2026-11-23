@@ -3,7 +3,7 @@
  * tickets bought nothing but their own cost. Counts are `staffingSummaryInTrace`'s; the ticket predicate is
  * `isTicketWriteTool`, the one every triage check uses.
  */
-import { isTicketWriteTool } from '../../brainTriage';
+import { isTicketWriteTool } from '../../ticketToolVocabulary';
 import { callEvidence, finding } from '../findingParts';
 import type { RunFinding, RunView } from '../types';
 

@@ -28,6 +28,16 @@ export const LOCAL_TICKET_CREATE_TOOL = 'ticket-create';
 /** Tool LABELS (trace spellings, dotted or dashed) of the local create tool. */
 export const LOCAL_TICKET_CREATE_LABEL = /ticket[-_.]create/i;
 
+const TICKET_WRITE_TOOL = new RegExp(
+  `(tasks|objectives|key_results|initiatives|portfolios|specs|roadmap)[._]create|chats[._]link_ticket|tickets[._]from_delta|${LOCAL_TICKET_CREATE_LABEL.source}`,
+  'i',
+);
+
+/** Whether a successful call files or links board work. */
+export function isTicketWriteTool(label: string): boolean {
+  return TICKET_WRITE_TOOL.test(label);
+}
+
 export interface TicketToolVocabulary {
   /** The tool that creates a ticket here, or undefined when the catalog has none. */
   readonly createTool: string | undefined;

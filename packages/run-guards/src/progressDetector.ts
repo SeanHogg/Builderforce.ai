@@ -155,6 +155,7 @@ export interface ProgressDetectorPorts extends NoProgressPorts {
    *  or analysis run legitimately reads many files and answers. Default: none — the
    *  `read_only_streak` signal is off. */
   expectsChange?(): boolean;
+  isBookkeeping?(tool: string): boolean;
 }
 
 /** A dispatched call's result, as the detector reads it. */
@@ -236,6 +237,10 @@ export class ProgressDetector {
 
   /** One call of the current turn ran. */
   observe(tool: string, args: unknown, result: ObservedResult): void {
+    if (this.ports.isBookkeeping?.(tool)) {
+      this.readOnlyStreak.observeNeutral();
+      return;
+    }
     this.turnCalls.push({ tool, args, result });
     const ok = succeeded(result);
     // A wait on children or a background job still running (chat #157440) is NEUTRAL for the claim and the streak:

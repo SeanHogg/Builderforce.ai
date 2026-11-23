@@ -85,6 +85,12 @@ function verdictText(d: BrainDiagnostics): string {
       return 'ANSWERED IN PROSE — at least one turn was handed tool definitions but replied with text and ZERO tool calls, so nothing ran. The tools were advertised; the model described the work instead of doing it. This is a model/provider fault: try a different model, or pin one that emits structured calls.';
     case 'no-progress':
       return (d.progress && runProgressVerdict(d.progress)) ?? 'NO PROGRESS — the run repeated work without advancing.';
+    case 'stopped':
+      return 'The latest run stopped before normal settlement.';
+    case 'unanswered-question':
+      return 'The latest run ended without answering the question.';
+    case 'run-findings':
+      return `The trace recorded these findings: ${d.findingKinds?.join(', ')}.`;
     case 'context-exhaustion':
       return `Likely CONTEXT EXHAUSTION (case A) — ${contextEvidence(d)}.`;
     case 'model-degradation':
