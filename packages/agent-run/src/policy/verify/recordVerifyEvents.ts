@@ -16,6 +16,7 @@
  */
 
 import type { InRunVerifyOutcome } from "./inRunVerify.js";
+import { describeVerifyOutcome } from "./runEndMemory.js";
 
 /** The pair of events a verify action emits, in order. */
 export interface VerifyEvents {
@@ -36,7 +37,6 @@ export interface VerifyEvents {
     result: string;
   };
 }
-
 /**
  * Build the ordered event pair for one verify outcome. The caller emits these through
  * its event port; the `verify_started` half is what `applyVerifyPhase` already moved
@@ -56,14 +56,7 @@ export function recordVerifyEvents(outcome: InRunVerifyOutcome): VerifyEvents {
         failedCommands: outcome.failedCommands,
         mayFinish: outcome.mayFinish,
       },
-      result: describeVerifyResult(outcome),
+      result: describeVerifyOutcome(outcome),
     },
   };
-}
-
-function describeVerifyResult(outcome: InRunVerifyOutcome): string {
-  if (outcome.kind === "skipped") return `verify skipped (${outcome.reason})`;
-  if (outcome.commands.length === 0) return `verify ${outcome.kind}, no commands`;
-  const failed = outcome.failedCommands.length;
-  return `verify ${outcome.kind}: ${outcome.commands.join("; ")}${failed > 0 ? ` — ${failed} failed` : ""}`;
 }

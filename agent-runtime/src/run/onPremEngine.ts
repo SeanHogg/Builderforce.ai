@@ -17,6 +17,7 @@
 
 import type { AgentEngine, AgentRunInput, AgentRunResult } from "@builderforce/agent-tools";
 import { CURRENT_ENGINE_ID } from "@builderforce/agent-tools";
+import type { RunWorkPort } from "@builderforce/agent-run";
 import type { QueuedSteer, SteeringChannel } from "../infra/relay-steering.js";
 import { runOnPremAgent, type OnPremRunSinks } from "./onPremAdapter.js";
 
@@ -32,6 +33,7 @@ export interface OnPremEngineDeps {
   abortController: AbortController;
   /** Normalized event sinks (assistant text / tool use / result / outcome) the relay forwards. */
   sinks: OnPremRunSinks;
+  work?: RunWorkPort;
   /** Execution surface declared to the gateway (`on_prem` for the self-hosted relay,
    *  `cloud` for a cloud-hosted runner — the gateway's fail-closed BYO rule reads it). */
   surface?: string;
@@ -71,6 +73,7 @@ export class OnPremAgentEngine implements AgentEngine {
         ...(this.deps.surface ? { surface: this.deps.surface } : {}),
         ...(this.deps.executionId != null ? { executionId: this.deps.executionId } : {}),
         abortController: this.deps.abortController,
+        ...(this.deps.work ? { work: this.deps.work } : {}),
         ...(this.deps.steering ? { steering: this.deps.steering } : {}),
         ...(this.deps.commitMemory ? { commitMemory: this.deps.commitMemory } : {}),
         ...(this.deps.onLateSteers ? { onLateSteers: this.deps.onLateSteers } : {}),

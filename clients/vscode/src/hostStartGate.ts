@@ -14,6 +14,13 @@ import type { BrainRunHost } from "./brainRunHostContract";
 type Gated = Pick<BrainRunHost, "start" | "stop" | "steer" | "steerTurns">;
 type StartPayload = Parameters<BrainRunHost["start"]>[0];
 
+/** The gate failed before calling the host, so its queued direction has not been admitted. */
+export class HostStartSetupError extends Error {
+  constructor(cause: unknown, readonly stopped: boolean) {
+    super(cause instanceof Error ? cause.message : String(cause), { cause });
+  }
+}
+
 /**
  * `host` with its start routed through `around` (which must call `start` exactly once) and
  * a Stop asked meanwhile — the button or a typed stop — delivered once the host has the key.
@@ -27,16 +34,24 @@ export function gateStarts(host: Gated, around: (payload: StartPayload, start: (
     if (starting.has(key)) stopAsked.add(key);
   };
   return {
-    start(payload) {
+    async start(payload) {
       const key = payload.chatId;
       starting.add(key);
-      return around(payload, () => {
+      let enteredHost = false;
+      try {
+        await around(payload, () => {
+          enteredHost = true;
+          starting.delete(key);
+          // `host.start` claims the key before its first await, so the Stop is heard now.
+          const started = host.start(payload);
+          if (stopAsked.delete(key)) host.stop(key);
+          return started;
+        });
+      } catch (error) {
+        if (enteredHost) throw error;
         starting.delete(key);
-        // `host.start` claims the key before its first await, so the Stop is heard now.
-        const started = host.start(payload);
-        if (stopAsked.delete(key)) host.stop(key);
-        return started;
-      });
+        throw new HostStartSetupError(error, stopAsked.delete(key));
+      }
     },
     stop(key) {
       hold(key);

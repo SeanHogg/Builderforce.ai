@@ -39,6 +39,20 @@ describe("verify phase transition (finding 11)", () => {
 });
 
 describe("verify outcome note", () => {
+  it("records confirmed branch CI as a check and keeps missing CI unverified", () => {
+    const input = { surface: "durable", writtenPaths: ["src/a.ts"] } as const;
+    expect(runVerifyPhase(input)).toMatchObject({ kind: "skipped", reason: "no_shell" });
+    expect(runVerifyPhase({ ...input, ciVerified: true })).toMatchObject({
+      kind: "ran", reason: "verify_passed", commands: ["branch-ci"],
+    });
+  });
+
+  it("preserves a failing on-prem check from the declared shell", () => {
+    expect(runVerifyPhase({
+      surface: "on-prem", writtenPaths: ["src/a.ts"], packageScripts: { test: "vitest" },
+      results: [{ command: "npm run test", exitCode: 1 }],
+    })).toMatchObject({ surface: "on-prem", mayFinish: false, reason: "verify_failed" });
+  });
   it("describes a green run honestly", () => {
     const outcome = inRunVerifyOutcome({
       surface: "sandbox",

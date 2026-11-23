@@ -25,6 +25,7 @@ export interface NoToolCallsDeps {
   takeSteers(ctx: StepAt): Promise<"none" | "stop" | "applied">;
   takeJoined(ctx: { step: number }): Promise<"none" | "stop" | { text: string; parts: RunPart[] }>;
   takeFollowUps(ctx: { step: number }): Promise<boolean>;
+  verifyBlock(ctx: PolicyContext): Promise<string | null>;
 }
 
 export function noToolCallsHook(run: KernelRun, deps: NoToolCallsDeps): NonNullable<LoopHooks<RunMessage>["onNoToolCalls"]> {
@@ -133,6 +134,12 @@ export function noToolCallsHook(run: KernelRun, deps: NoToolCallsDeps): NonNulla
     const block = owed ?? hooks.subagents.backstop(pctx);
     if (block) {
       await requeue(pctx, ctx.step, turn.content, block);
+      return { action: "continue" };
+    }
+    const verification = finalTurn ? null : await deps.verifyBlock(pctx);
+    if (verification) {
+      await emit(ports.events, { kind: "finish.blocked", step: ctx.step, reason: "verify", block: verification });
+      await requeue(pctx, ctx.step, turn.content, verification);
       return { action: "continue" };
     }
     // …and so does work the run owns that is still open (its linked tickets): the model goes on executing instead of summarising

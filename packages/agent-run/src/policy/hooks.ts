@@ -182,6 +182,8 @@ export interface FinishHook {
    * held to a deliverable. Returns the block reason, or null to let it settle.
    */
   settleBlock(ctx: PolicyContext): string | null;
+  /** Unresolved assigned work still owed by this run when it settles. */
+  unfinishedWork(state: RunState): string | null;
   /**
    * The block on ANY end of a run while sub-agents the run started are still working — their
    * reports would strand. Null when none is live or the surface has no delegation.
@@ -257,6 +259,8 @@ export interface VerifyHook {
 
 /** What a verify found. */
 export interface VerifyResult {
+  /** Whether verification actually executed. A skip can allow finish without a passing verdict. */
+  ran?: boolean;
   ok: boolean;
   note?: string;
 }

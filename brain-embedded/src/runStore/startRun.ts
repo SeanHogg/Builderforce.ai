@@ -168,7 +168,7 @@ export async function startRun(runKey: number, request: BrainRunRequest, claim?:
       const verification = verificationOf(evidence, c.touchedFiles);
       // The run's ticket reads are done: its memoised listing goes with it.
       forgetChatTicketListing(c);
-      // The gate an empty-ask continuation suppressor reads: when true, an empty ask must NOT auto-continue.
+      // Closing the work suppresses automatic continuation, while late person and child directions can still be read.
       const finished = c.closeOutFinished;
       // R4 — the auto-continuation's no-progress guard: a run the chat continued on its own
       // (flagged `continuationProgress` on its request, no person's words) records its verdict
@@ -225,7 +225,7 @@ export async function startRun(runKey: number, request: BrainRunRequest, claim?:
       await within(left(), async () => { await steps.flush(); }, () => undefined);
       // Direction nobody read becomes THIS chat's next turn, whichever chat is on screen. A Stop
       // ends the conversation's work, waiting words included.
-      if (continues && !finished && !aborted) await continueLeftovers(runKey, c, startRun, settleClaim);
+      if (continues && !aborted) await continueLeftovers(runKey, c, startRun, settleClaim, finished);
     } finally {
       releaseClaim(c, settleClaim);
     }

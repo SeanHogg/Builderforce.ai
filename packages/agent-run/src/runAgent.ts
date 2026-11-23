@@ -74,7 +74,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunOutcome> {
 
   // The run's counters live on its state, so a resumed tick adds to what earlier ticks counted.
   const tally: RunTally = (state.telemetry ??= freshTally());
-  const offered = offeredSchemas(ports);
+  const offered = offeredSchemas(ports, { rungs: state.stall?.rungs ?? {} });
   const transcript = asMessages(state.messages);
 
   // The pack is built ONCE, before turn 1, and carried in the state: a resumed tick

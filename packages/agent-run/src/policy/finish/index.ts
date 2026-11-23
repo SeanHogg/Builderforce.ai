@@ -19,7 +19,7 @@
  * Node.
  */
 
-import type { RunMessage } from "../../contract.js";
+import type { RunMessage, RunState } from "../../contract.js";
 import type { FinishHook, PolicyContext } from "../hooks.js";
 import { evaluateFinishGates, matchesRequiredReviewSignoff, missingReviewVerdictMessage, type FinishGatePorts, type RequiredReviewSignoff } from "./gates.js";
 import { applyVerifyPhase } from "../verify/runEndMemory.js";
@@ -125,13 +125,15 @@ export function signoffSettleBlock(ctx: PolicyContext): string | null {
  */
 export function createFinishHook(ports: FinishPorts = {}): FinishHook {
   const delegated = (ctx: PolicyContext): boolean => ports.delegated ?? ctx.task.dispatch.parentRunId !== undefined;
+  const unfinishedWork = (state: RunState): string | null =>
+    ports.settleWorkAfterRun ? null : outstandingWork(state.work ?? []);
   const openWork = async (ctx: PolicyContext): Promise<string | null> => {
     if (ctx.state.work?.length && !ports.settleWorkAfterRun) {
       if (ports.workEvidence) {
         const evidence = await ports.workEvidence(ctx.state.work.map((item) => item.id));
         ctx.state.work = applyWorkEvidence(ctx.state.work, evidence);
       }
-      const unresolved = outstandingWork(ctx.state.work);
+      const unresolved = unfinishedWork(ctx.state);
       if (unresolved) {
         const holds = (ctx.state.workHolds ?? 0) + 1;
         ctx.state.workHolds = holds;
@@ -143,8 +145,19 @@ export function createFinishHook(ports: FinishPorts = {}): FinishHook {
   };
   return {
     settleBlock: signoffSettleBlock,
+    unfinishedWork,
     // An owner never ends with children still working — on `finish` (below) or in prose.
-    liveChildren: async (ctx: PolicyContext): Promise<string | null> => (delegated(ctx) && ports.liveChildren ? ports.liveChildren() : null),
+    liveChildren: async (ctx: PolicyContext): Promise<string | null> => {
+      if (!delegated(ctx) || !ports.liveChildren) return null;
+      const block = await ports.liveChildren();
+      if (!block && ports.absorbChildWrites) {
+        ports.beginAttempt?.();
+        const paths = new Set(writtenPathsOf(ctx));
+        await ports.absorbChildWrites(paths);
+        ctx.state.writtenPaths = [...paths];
+      }
+      return block;
+    },
     // A run never ends while the tickets it owns are open — on `finish` (below, after every other gate) or in prose (the kernel).
     openWork,
     async gate(ctx: PolicyContext): Promise<string | null> {

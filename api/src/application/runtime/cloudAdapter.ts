@@ -37,6 +37,7 @@ import { openCloudRunHost, type CloudRunHost } from './cloudRunHost';
 import type { CloudLoopOpts, CloudLoopResult } from './cloudRunOpts';
 import { toRunState } from './cloudRunState';
 import { isChildDelegation } from './cloudRunDelegation';
+import { cloudAssignedWork } from './cloudWork';
 
 /** The cost levers this surface honours, resolved through the one gate (`@builderforce/cost-levers`) — never by entry point. */
 const RUN_LEVERS: readonly CostLeverId[] = [
@@ -53,12 +54,14 @@ export function taskOf(host: CloudRunHost, rc: CloudEngineContext): RunTask {
   const { opts } = host;
   const stamped = parseRunDispatch(rc.dispatchPayload);
   const child = isChildDelegation(opts.delegation);
+  const work = cloudAssignedWork(host);
   const source = child ? 'subagent' : stamped.source ?? (opts.originatingChatId != null ? 'chat' : opts.requiredSignoff ? 'lane-entry' : 'manual');
   return {
     prompt: host.userContent,
     runId: cloudRunId(host.refs.executionId),
     persona: host.systemPrompt,
     ticketId: host.taskRow.id,
+    ...(work ? { assignedWork: [work] } : {}),
     projectId: host.refs.projectId,
     ...(opts.originatingChatId != null ? { chatId: opts.originatingChatId } : {}),
     dispatch: {
@@ -154,8 +157,9 @@ export async function runCloudAgent(
   };
 
   try {
+    const task = taskOf(host, rc);
     const outcome = await openRun({
-      task: taskOf(host, rc),
+      task,
       policy: policyOf(host),
       ports,
       ...(resume ? { resume } : {}),
@@ -168,6 +172,7 @@ export async function runCloudAgent(
         ladder: host.ladder, features: host.features, resolvedModel: model.servedModel,
         ...(opts.execParams ? { execParams: opts.execParams } : {}),
         ...(opts.shipPolicy ? { ship: opts.shipPolicy } : {}),
+        ...(task.assignedWork ? { assignedWork: task.assignedWork } : {}),
       }),
       // The ticket's words and the board's model picks; a delegated child routes as a child (the owner's ladder is not its own).
       route: {

@@ -1,7 +1,7 @@
 /** openRun — the one entry: refuses a missing entryPoint, folds the route in, and composes a surface's ports into the modules. */
 import { describe, expect, it, vi } from "vitest";
 import type { Capability } from "@builderforce/agent-tools";
-import { openRun, routeRun, type CloseOutPort, type ModelCompletion, type RunEvent, type RunOutcomeRow, type RunPorts, type WorkEvidence } from "../../src/index.js";
+import { openRun, routeRun, workFinishPorts, type CloseOutPort, type ModelCompletion, type RunEvent, type RunOutcomeRow, type RunPorts, type WorkEvidence } from "../../src/index.js";
 import { routedPolicy } from "../../src/openRun.js";
 import { schemas, TEST_POLICY, TEST_TASK } from "../support/policyContext.js";
 
@@ -56,6 +56,19 @@ describe("openRun", () => {
     expect(rows).toMatchObject([{ work: { assigned: 2, done: 1, inReview: 1, blocked: 0, open: 0 } }]);
   });
 
+  it("opens with host-settled work visible and keeps it unresolved until host evidence arrives", async () => {
+    const { ports } = harness([{ content: "Ready for review." }]);
+    const complete = vi.spyOn(ports.model, "complete");
+    const assigned = [{ id: "42", criteria: ["Fix the report"] }];
+    const outcome = await openRun({
+      task: { ...TEST_TASK, assignedWork: assigned }, policy: TEST_POLICY, ports,
+      surface: { finish: workFinishPorts({ assigned, settleAfterRun: true }) },
+    });
+    expect(outcome.kind).toBe("finished");
+    expect(outcome.state.work).toEqual(assigned);
+    expect(JSON.stringify(complete.mock.calls[0]?.[0].messages)).toContain("Fix the report");
+  });
+
   it("keeps governing instructions ahead of prepared history", async () => {
     const { ports } = harness([{ content: "Done." }]);
     const complete = vi.spyOn(ports.model, "complete");
@@ -67,6 +80,26 @@ describe("openRun", () => {
     expect(complete.mock.calls[0]?.[0].messages.slice(0, 4)).toEqual([
       { role: "system", content: "Host persona" }, ...transcript,
     ]);
+  });
+
+  it("refuses a prose finish on a failed configured check and records the next passing result", async () => {
+    const { ports, events } = harness([
+      call("w1", "write_file", { path: "src/a.ts", content: "export const a = 1;" }),
+      { content: "The file is updated." },
+      { content: "The updated file passes the check." },
+    ]);
+    const runFor = vi.fn().mockResolvedValueOnce({ exitCode: 1 }).mockResolvedValueOnce({ exitCode: 0 });
+    const outcome = await openRun({
+      task: TEST_TASK, policy: { ...TEST_POLICY, verify: "declared-checks" }, ports,
+      surface: { verify: {
+        surface: "on-prem", shell: { runFor },
+        sandbox: { read: async () => '{"scripts":{"test":"vitest"}}', list: async () => [] },
+      } },
+    });
+    expect(events).toContainEqual(expect.objectContaining({ kind: "finish.blocked", reason: "verify" }));
+    expect(runFor).toHaveBeenCalledTimes(2);
+    expect(outcome.kind).toBe("finished");
+    expect(outcome.state.telemetry?.verify).toBe("passed");
   });
 
   it("regression: throws without policy.entryPoint, never defaulting it", async () => {

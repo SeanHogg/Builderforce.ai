@@ -66,6 +66,13 @@ describe("runSteer.steerTurns - several turns said to a chat's run together", ()
     expect(drainRunSteering(23).map((m) => m.text)).toEqual(["a", "b"]);
   });
 
+  it("keeps image attachments with direction queued while the host settles", () => {
+    const { s } = steer(new Set([24]));
+    const attachments = [{ key: "sample", name: "sample.png", type: "image/png", imageUrl: "data:image/png;base64,AA==" }];
+    s.steer(24, "Check this", attachments);
+    expect(drainRunSteering(24)).toMatchObject([{ text: "Check this", attachments }]);
+  });
+
   it("a stop after turns for an IDLE chat drops what the batch queued and wakes nothing - as steering them one by one would stop the run they woke", () => {
     const { s, deps } = steer(new Set());
     s.steerTurns(25, [{ text: "a", eventKey: "k1" }, { text: "STOP executing", eventKey: "k2" }, { text: "never", eventKey: "k3" }]);

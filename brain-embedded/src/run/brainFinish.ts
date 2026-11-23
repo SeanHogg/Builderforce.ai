@@ -13,7 +13,7 @@
  * `chat`-mode run, a host with no tool runner).
  */
 
-import type { FinishPorts } from '@builderforce/agent-run';
+import { workFinishPorts, type FinishPorts } from '@builderforce/agent-run';
 import type { BrainRunRequest } from '../runStore/runTypes';
 
 type OpenWorkPort = NonNullable<FinishPorts['openWork']>;
@@ -41,6 +41,6 @@ export function brainFinishPorts(req: Pick<BrainRunRequest, 'liveChildren' | 'wo
     // (`parentRunId`), holds its end for them.
     ...(req.liveChildren ? { delegated: true, liveChildren: req.liveChildren } : {}),
     ...(work ? { openWork: work } : {}),
-    ...(req.work ? { workEvidence: (ids: readonly string[]) => req.work!.evidence(ids) } : {}),
+    ...(req.work ? workFinishPorts(req.work) : {}),
   };
 }

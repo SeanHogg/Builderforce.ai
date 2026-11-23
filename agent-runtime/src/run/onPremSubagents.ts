@@ -17,7 +17,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { childPolicy, childProvider, childResult, childWorkPort, spawnChild, type RunWorkPort } from "@builderforce/agent-run";
+import { childPolicy, childProvider, childResult, childWorkPort, spawnChild, workFinishPorts, type RunWorkPort } from "@builderforce/agent-run";
 import type { HumanChannel, ModelTransport, RunPolicy } from "@builderforce/agent-run";
 import type { CapabilityProvider, SubagentRequest, SubagentResult } from "@builderforce/agent-tools";
 import { observedModel, relayEventSink, type OnPremRunSinks } from "./onPremEvents.js";
@@ -62,7 +62,7 @@ export function childRunner(owner: ChildRunContext): (request: SubagentRequest) 
           dispatch: { source: "subagent", parentRunId: child.lineage.parentRunId },
           ...(work ? { assignedWork: work.assigned } : {}),
         },
-        ...(work ? { surface: { finish: { workEvidence: (ids: readonly string[]) => work.evidence(ids) } } } : {}),
+        ...(work ? { surface: { finish: workFinishPorts(work) } } : {}),
         policy: childPolicy(owner.policy, request),
         ports: {
           model: observedModel(owner.model, sinks),

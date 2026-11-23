@@ -33,7 +33,7 @@ export { runAgent, type RunAgentInput } from "./runAgent.js";
 export { openRun, type OpenRunInput, type SurfacePorts, type PublishGatePort, type CloseOutMode, type CloseOutPort } from "./openRun.js";
 export { defaultPipelineRouting } from "./route/routeRun.js";
 export type { AssignedWork, WorkEvidence, RunWorkPort, RunWorkScorecard } from "./workPlan.js";
-export { childWorkPort, evaluateRunWork, MAX_OPEN_WORK_HOLDS, recordWorkSnapshot, workSupportsRoutingSample } from "./workPlan.js";
+export { applyWorkEvidence, childWorkPort, evaluateRunWork, MAX_OPEN_WORK_HOLDS, recordWorkSnapshot, workSupportsRoutingSample } from "./workPlan.js";
 export { routeRun, type RouteDecision, type RouteInput, type RouteStart } from "./route/routeRun.js";
 
 // The §8.2 outcome row (WS6): the builder, the per-run tally, and the trace fold an
@@ -73,9 +73,10 @@ export {
 
 // The ENGINE ports an adapter binds a module with (`composePolicyHooks({ finish: createFinishHook(ports) })`):
 // the module stays the policy's; the adapter only hands it the couplings its surface has.
-export { createFinishHook, type FinishPorts } from "./policy/finish/index.js";
+export { createFinishHook, workFinishPorts, type FinishPorts } from "./policy/finish/index.js";
 export { createGuardsHook, FINISH_RECORD_BRIEF, FINISH_RECORD_TURNS, PROGRESS_FORCED_LABEL, type GuardPorts, type ProgressBinding, type ProgressFacts, type ProgressTurnOptions } from "./policy/guards/index.js";
-export { createVerifyHook, type VerifyPorts } from "./policy/verify/index.js";
+export { createVerifyHook, verifyRunWork, type VerifyPorts } from "./policy/verify/index.js";
+export { recordVerifyEvents } from "./policy/verify/recordVerifyEvents.js";
 // The verify phase's PURE functions, for the surfaces that run it outside a hook (a cloud run's tail, an @-reply): one
 // definition, not a copy per surface. The DB-bound halves (the audit rows, the memory write) stay with the surface.
 export { applyVerifyPhase, describeVerifyOutcome, runVerifyPhase, type RunVerifyInput, type RunVerifySurface } from "./policy/verify/runEndMemory.js";

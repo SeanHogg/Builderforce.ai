@@ -60,6 +60,7 @@ export interface LateSteerExecution extends FollowUpPriorRun {
   taskId: number;
   cloudAgentRef: string | null;
   submittedBy: string;
+  parentExecutionId?: number | null;
 }
 
 export type LateSteerOutcome =
@@ -147,8 +148,19 @@ export async function dispatchLateSteerFollowUp(
     await drop('released', 'run_cancelled', 'The run was cancelled before this message could be delivered, so no follow-up run was started.');
     return { kind: 'released', count: claimed.length };
   }
+  if (settled.parentExecutionId != null) {
+    await drop('released', 'child_settled', 'The sub-agent finished before this message could be delivered. Its owner can restart the work.');
+    return { kind: 'released', count: claimed.length };
+  }
 
-  const task = await ports.loadTask(settled.tenantId, settled.taskId);
+  let task: ExecutionTaskRow | null;
+  try {
+    task = await ports.loadTask(settled.tenantId, settled.taskId);
+  } catch (error) {
+    // Admission has not started. Return the original rows to the same durable queue for retry.
+    await ports.release?.(settled.tenantId, settled.id, claimedIds);
+    throw error;
+  }
   if (!task) {
     const message = 'This message arrived after the run finished, but its ticket no longer exists, so no follow-up run was started.';
     await drop('failed', 'task_not_found', message);
@@ -249,6 +261,7 @@ export function lateSteerPorts(deps: LateSteerDeps): LateSteerPorts {
           id: executions.id, tenantId: executions.tenantId, status: executions.status, taskId: executions.taskId,
           payload: executions.payload, agentHostId: executions.agentHostId, source: executions.source,
           cloudAgentRef: executions.cloudAgentRef, submittedBy: executions.submittedBy,
+          parentExecutionId: executions.parentExecutionId,
         })
         .from(executions)
         .where(tenantId != null ? and(eq(executions.id, executionId), eq(executions.tenantId, tenantId)) : eq(executions.id, executionId))

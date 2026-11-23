@@ -118,7 +118,7 @@ export function createRunSteer(deps: RunSteerDeps): RunSteer {
       say(runKey, text);
       return "done";
     }
-    queueRunSteering(runKey, direction, { fromPerson: true });
+    queueRunSteering(runKey, direction, { attachments, fromPerson: true });
     if (deps.isSettingUp(runKey)) {
       // Heard before the first turn as direction — shown now, as a steer always is.
       say(runKey, text);
