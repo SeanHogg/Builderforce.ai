@@ -6,7 +6,7 @@
 import { describe, expect, it } from "vitest";
 import { buildOutcomeRow, freshTally, resumeTally, tallyTurn, type RunState } from "../../src/index.js";
 import { freshState } from "../../src/runState.js";
-import { TEST_POLICY, TEST_TASK } from "../support/policyContext.js";
+import { TEST_POLICY } from "../support/policyContext.js";
 
 const usage = (costMc?: number) => ({ inputTokens: 10, outputTokens: 2, ...(costMc === undefined ? {} : { costMc }) });
 

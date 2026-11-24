@@ -21,6 +21,7 @@ import { volatileTail } from "./policy/compaction/pack.js";
 import type { UsdBudget } from "./policy/budget/usd.js";
 import type { CacheServedStreak } from "./policy/tools/cacheServedStreak.js";
 import { LINKED_WORK_OPEN, lastFinishReason } from "./policy/finish/index.js";
+import { blocksChildSpawn, CHILD_SPAWN_REFUSAL } from "./policy/subagents/child.js";
 import { observeSpecCheck, specValidationRetry } from "./policy/verify/specValidation.js";
 import { bumpMutations, tallyCall, tallyTurn, tallyVerify, type RunTally } from "./telemetry/runTally.js";
 import { measureWorkflow, workflowScope } from "./telemetry/workflowMetrics.js";
@@ -158,7 +159,8 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
       // guards' pending finish.
       const finalBy = finalSource(menu, () => hooks.guards.finalTurn?.(policyContext(input, state, base, ctx.step, ctx.stepInCall)) === true);
       const finalTurn = finalBy !== undefined;
-      const advertised = finalTurn ? [] : (menu?.tools ?? forced?.selected ?? (await selectNow()));
+      const advertised = finalTurn ? [] : (menu?.tools ?? forced?.selected ?? (await selectNow()))
+        ?.filter((schema) => !blocksChildSpawn(input.task.dispatch, schema.function.name));
       run.selection = {
         tools: advertised,
         ...(forced ? { forced } : {}),
@@ -219,6 +221,9 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
 
     beforeDispatch: async (call, ctx) => {
       starts.set(call.id, Date.now());
+      if (blocksChildSpawn(input.task.dispatch, call.name)) {
+        return { result: { data: { ok: false, error: CHILD_SPAWN_REFUSAL }, isError: true } };
+      }
       const pctx = contextAt(ctx.step, ctx.stepInCall);
       const pcall = toPolicyCall(call);
       // Governance gates (`RunPolicy.approvalGates`): a block refuses the call, an approval

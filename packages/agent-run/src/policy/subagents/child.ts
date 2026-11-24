@@ -47,7 +47,7 @@ export interface ChildStartRequest {
   workItemIds: readonly string[];
 }
 
-/** Validate before recording a child as admitted. */
+/** Validate the shape of a child start, including previously admitted lineage. */
 export function validateChildStart(request: Pick<SpawnChildRequest, "entryPoint" | "parentRunId" | "depth" | "owner" | "task">): void {
   if (!ALL_ENTRY_POINTS.includes(request.entryPoint)) throw new Error("spawnChild: entryPoint is required and must be registered");
   if (typeof request.parentRunId !== "string" || !request.parentRunId.trim()) throw new Error("spawnChild: parentRunId is required");
@@ -103,8 +103,9 @@ export function blocksChildSpawn(dispatch: RunTask["dispatch"], tool: string): b
 
 /** The owner's policy, narrowed to one of its children. */
 export function childPolicy(parent: RunPolicy, request: Pick<SubagentRequest, "role">): RunPolicy {
+  const { signoff: _ownerSignoff, ...policy } = parent;
   return {
-    ...parent,
+    ...policy,
     toolScope: "subagent",
     role: request.role ?? parent.role,
   };

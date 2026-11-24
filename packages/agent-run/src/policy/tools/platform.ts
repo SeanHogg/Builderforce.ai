@@ -17,6 +17,7 @@
 
 import type { ToolSchema } from "@builderforce/agent-tools";
 import type { PolicyContext } from "../hooks.js";
+import { blocksChildSpawn } from "../subagents/child.js";
 import { selectToolsForTurn } from "./selectTools.js";
 import { isCappedToolRole, roleCappedSelection } from "./roleCap.js";
 import { ensureWorkCoreSet } from "./workCore.js";
@@ -25,7 +26,8 @@ import { ensureWorkCoreSet } from "./workCore.js";
 export function selectPlatformCatalog(ctx: PolicyContext, pinned: readonly string[]): readonly ToolSchema[] | undefined {
   const platform = ctx.ports.platform;
   if (!platform?.closed) return undefined;
-  const catalog = platform.schemas({ rungs: ctx.state.stall?.rungs ?? {} });
+  const catalog = platform.schemas({ rungs: ctx.state.stall?.rungs ?? {} })
+    .filter((schema) => !blocksChildSpawn(ctx.task.dispatch, schema.function.name));
   const selection = platform.selection;
   const { query } = selection;
   // A code or verify turn is capped to the surface's required set (always kept), its role's tool set and what matches the request

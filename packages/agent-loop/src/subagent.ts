@@ -182,6 +182,7 @@ export function subagentSystemPrompt(persona: SubagentPersona | undefined, live:
     ...reportContract(live.role, live.owner),
     `${live.owner} (or the person it works for) may redirect you mid-task: a message beginning "[${live.owner}]" is direction from your owner — follow it over your original brief.`,
     "Use the tools available in this run to carry out your slice end to end. Do the work yourself and report back to your owner.",
+    "Do not spawn additional sub-agents.",
     "Answer with concrete findings: exact file paths, names and line references, and an explicit \"not found\" where that is the honest result.",
     "Never end with a promise to continue; finish the slice, then report.",
   ].join("\n");

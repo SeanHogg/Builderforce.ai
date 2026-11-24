@@ -28,7 +28,7 @@ flowchart TD
   Agent --> Outcome[RunOutcome to surface settlement]
 ```
 
-The Brain preamble renders opening data and per-run directives and decides its route using shared `routeRun`. `runPrepared` passes `{ input, decided }` so `openRun` does not decide again. Other callers may supply route facts directly. Full/quick scoring requires `routing`; children are not scored.
+The Brain preamble renders opening data and per-run directives and decides its route using shared `routeRun`. `runPrepared` passes `{ input, decided }` so `openRun` does not decide again. Other callers may supply route facts directly. A delegated brief goes through the same full/quick decision as any task, with the host's routing settings and stage models.
 
 The request classifier separates the ask from pasted context. An explicit question uses the quick route unless it asks to run the full pipeline. Brain leaves work from a question run uncommitted. The shared guard preserves the question's tool-round count across continuation and offers a final answer after six rounds.
 
@@ -62,14 +62,14 @@ The editor host is shared by panel and participant. `brainRunHostPorts.ts` binds
 | Full/quick algorithm exists only in Brain | It now lives in `packages/agent-run/src/route/routeRun.ts`; Brain runRoute.ts supplies facts and retains one decision. Configuration parity remains open. |
 | startRun directly duplicates deterministic finish | deterministicFinish.ts exposes closeOutPort; openRun invokes it before the finish gate or for unfinished-settlement upkeep. startRun records the outcome. A refused finish may cause another legitimate attempt. |
 | Four editor prompt assembly layers | `brain-embedded/src/runStore/openingSections.ts` renders opening data, followed by Brain directives. Former useChatSystemPrompt, host runPreamble, and participant prompt files are gone. |
-| Legacy child standing instructions are independently implemented | `agent-runtime/src/agents/subagent-prompt.ts` calls shared subagentSystemPrompt and bounds configured depth by MAX_SUBAGENT_DEPTH. Session additions and separate spawning remain. |
+| Legacy child standing instructions are independently implemented | `agent-runtime/src/agents/subagent-prompt.ts` calls shared subagentSystemPrompt and adds session context. The gateway validates the caller's session before invoking shared admission. |
 | Kernel header names the wrong caller | `packages/agent-loop/src/loop.ts` now names openRun → runAgent correctly. |
 
 ## 4. Consolidated policies and host responsibilities
 
 1. **Brain policy callbacks removed from the production door.** preflightRecorded.ts supplies data to createModelHook; brainFold.ts supplies native history, summary transport and trace/durable-marker sinks to createCompactionHook. policy/compaction/history.ts owns memo reuse, immutable source history, summary deadline/fallback, saved tokens and fold result construction. The compaction.hook escape hatch is removed. Brain progressGuard, tool pre/post-step policy and continuation remain separate, as excluded by this slice.
 
-2. **Shared spawnChild implemented.** policy/subagents/child.ts validates parent identity, registered entryPoint, nonempty owner/task and CHILD depth 1 through MAX_SUBAGENT_DEPTH. prepareChildStart builds the shared standing prompt with optional persona/base prompt and work references. spawnChild<Result> invokes a scoped host start and preserves its result: VSIX controls observe host completion separately from returning a handle; cloud returns durable admission; on-prem returns a completed report. CloudChildSpec persists prepared standing instructions for its later tick; old payloads use the shared preparer as a compatibility fallback.
+2. **Shared spawnChild implemented.** `spawnChild` admits direct children of root runs through a scoped host start. `prepareChildStart` validates identity and builds the standing prompt and work references. It accepts previously admitted deeper lineage so existing payloads can resume. VSIX and cloud return admission handles, and the in-process relay returns a completed report.
 
 3. **Gateway child starts use the shared admission contract.** sessions-spawn-tool.ts, commands-subagents.ts, infra/local-agent-transport.ts and transport/local-adapter.ts call spawnSubagentDirect. It authorizes before shared spawnChild and supplies gateway/session lifecycle ports. buildSubagentSessionPrompt adds session context. The gateway owns its depth caps, agent allow-lists, identity, delivery and result registration.
 
@@ -99,7 +99,7 @@ flowchart TD
   Opening --> Compose[openRun: shared factories, ports only]
   Compose --> Kernel[runAgent → runAgentLoop]
   Kernel --> Dispatch[Dispatch: capability + governance checks]
-  Dispatch --> Spawn
+  Dispatch -->|root spawn only| Spawn
   Dispatch --> Ledger[(Work ledger: status + evidence)]
   Kernel --> Finish{Work resolved and no live children?}
   Ledger --> Finish
@@ -111,6 +111,14 @@ flowchart TD
 ```
 
 The start contract must preserve local/durable identity and authorization. Background admission and eventual settlement are separate events. Shared finish policy can only enforce evidence supplied through the host's available ports.
+
+### Sub-agent execution
+
+Children use the shared routing, opening, tool dispatch, verification, finish gates and settlement. The editor supplies the same pipeline settings, phase models and model preflight to its children. The in-process relay carries the owner's workspace, context and verification policy. The cloud derives the outcome's parent ID from the persisted child spec. Child-specific prompt, lineage, scoped capabilities, and report delivery remain inputs and outputs of that workflow. The owner handles publication and sign-off for the combined changes.
+
+The shared driver removes spawn tools from a child's catalog and refuses direct dispatch of those names. Editor, cloud and gateway admission also reject a child acting as a spawner. Previously admitted child runs retain their saved state and route on resume.
+
+Local validation on 2026-11-24 passed the shared runtime suite (869 tests) and focused Brain (12), VSIX (52), cloud (23), relay and gateway admission (18), gateway catalog and prompt (60), and standing instruction (19) tests. Shared runtime, Brain, VSIX and relay typechecks passed. The execution import, source-package, and tenant-scope checks passed. Installed-host verification remains tracked in PRD 50.
 
 ### Workflow diagnostics metrics (2026-11-24)
 

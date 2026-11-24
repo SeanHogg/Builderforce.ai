@@ -6,13 +6,8 @@
  * true of the SESSION path alone: recovery of compacted output and session context.
  */
 
-import { MAX_SUBAGENT_DEPTH, subagentSystemPrompt } from "@builderforce/agent-loop";
+import { subagentSystemPrompt } from "@builderforce/agent-loop";
 import type { DeliveryContext } from "../utils/delivery-context.js";
-
-/** The deepest spawn depth a config may allow: the one cap every surface's children share. */
-export function effectiveMaxSpawnDepth(configured: number | undefined): number {
-  return Math.min(typeof configured === "number" ? configured : 1, MAX_SUBAGENT_DEPTH);
-}
 
 export function buildSubagentSessionPrompt(params: {
   /** Prepared by the shared child start; optional for standalone prompt consumers. */

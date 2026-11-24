@@ -46,6 +46,7 @@ The [pipeline map](./_scratch-agent-pipeline-map.md) now describes the inspected
 | Participant through panel host (§2.2) | Implemented by participantRun.ts runViaHost → host.start; host labels vscode | Host gate tests pass; participant/host integration needs the built Brain package |
 | Factories own policy (§2.3) | openRun composes surface ports for every inspected adapter | Recorded preflight facts and native history ports enter shared factories; no compaction.hook escape hatch remains |
 | Shared spawnChild (§2.4) | Implemented by policy/subagents/child.ts; VSIX, durable cloud, in-process on-prem and all four legacy callers reach it | Authenticated host starts and native admission/completion semantics stay surface-owned |
+| Sub-agent execution parity | The shared driver routes child tasks through the same stages and enforces root-only spawning. VSIX passes its routing settings to children, and the in-process relay carries its verification policy. | Validate against installed hosts |
 | Children pass editor gate | Implemented through startThrough → gated.start | Does not imply a common start lifecycle across all surfaces |
 | Kernel unchanged by this review | Entry, spawning, preflight and compaction changes stay above the kernel | Preserve runAgent → runAgentLoop |
 
@@ -56,7 +57,7 @@ Adjacent work has also advanced beyond the baseline: shared routeRun now owns fu
 The generic contract in §2.4 is now implemented. prepareChildStart validates registered entryPoint, nonempty owner/task/parent identity and integer child depth before host effects. spawnChild<Result> calls the scoped host start without interpreting its native result. The implementation preserves these requirements:
 
 - Carry the parent's EntryPoint explicitly; openRun requires it.
-- Define depth as the CHILD depth: allow integer depths 1 through MAX_SUBAGENT_DEPTH; reject deeper/invalid requests before start side effects. Existing checks on PARENT depth refuse spawning when the parent is already at the cap.
+- Define depth as the child depth. New admission requires depth 1. Preparing already admitted payloads accepts historical depth through `MAX_SUBAGENT_DEPTH`.
 - Carry the owner's display identity and optional persona/base prompt, so shared subagentSystemPrompt preserves existing child instructions and inherited context.
 - Separate background admission from eventual completion. VSIX spawn controls return a handle while observing the host completion promise separately; cloud admission returns a durable handle; on-prem childRunner returns a completed report. The generic start-result port preserves those behaviors. Do not await cloud completion inside a durable start request.
 - Keep authorization in each authenticated start port. Shared lineage/depth validation does not replace tenant scoping, session agent allow-lists, or host tool approvals.

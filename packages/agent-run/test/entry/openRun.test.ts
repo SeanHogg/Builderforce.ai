@@ -313,17 +313,18 @@ describe("openRun", () => {
     expect(outcome.state.model.phase).toBe("code");
   });
 
-  it("a child follows the default full route and cannot dispatch a native spawn tool", async () => {
+  it.each([false, true])("a child follows the default full route and cannot dispatch a native spawn tool (host menu %s)", async (hostMenu) => {
     const { ports, events } = harness([call("s1", "sessions_spawn", { task: "nested work" }), { content: "done" }]);
     const execute = vi.fn();
     const complete = vi.spyOn(ports.model, "complete");
     const task = { ...TEST_TASK, dispatch: { source: "subagent" as const, parentRunId: "parent" } };
-    const outcome = await openRun({ task, policy: TEST_POLICY, ports: {
-      ...ports, platform: { ...ports.platform!, schemas: () => schemas(["sessions_spawn", "read_file"]), execute },
-    } });
+    const native = schemas(["sessions_spawn", "read_file"]);
+    const platform = { ...ports.platform!, schemas: () => native, execute, ...(hostMenu ? { turn: () => ({ tools: native }) } : {}) };
+    const outcome = await openRun({ task, policy: TEST_POLICY, ports: { ...ports, platform } });
     expect(outcome.state.pipeline?.route).toBe("full");
     expect(events.find((event) => event.kind === "run.routed")).toMatchObject({ route: "full" });
-    const advertised = complete.mock.calls[0]?.[0].tools.map((tool) => tool.function.name);
+    expect(complete.mock.calls[0]?.[0].role).toBe("plan");
+    const advertised = complete.mock.calls[0]?.[0].tools?.map((tool) => tool.function.name);
     expect(advertised).toContain("read_file");
     expect(advertised).not.toContain("sessions_spawn");
     expect(JSON.stringify(outcome.state.messages)).toContain("Only root runs can spawn sub-agents");

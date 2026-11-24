@@ -6,7 +6,7 @@
 import { describe, expect, it } from "vitest";
 import { applyCompaction } from "../../src/runContext.js";
 import { freshState } from "../../src/runState.js";
-import { TEST_POLICY, TEST_TASK } from "../support/policyContext.js";
+import { TEST_POLICY } from "../support/policyContext.js";
 
 function applied(results: Array<{ dropped: number; noteOnly?: true; reused?: true }>) {
   const state = freshState(TEST_POLICY);
