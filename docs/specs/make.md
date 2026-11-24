@@ -169,6 +169,8 @@ The source was re-read claim by claim without relying on PRD 50's status table, 
 
 **Fixed 2026-11-24 (DONE.md):** MK-50-PERSIST, MK-50-TRACE, and the canvas, web-reply and cloud conformance tests that used the wrong golden trace. A re-run gave: agent-tools 93/93, api 27/27, VSIX 41/41, on-prem 12/12, agent-run 58/58, Brain 6/6, canvas 1/1. The open gates are **MK-50-DIAG** and **MK-50-SELFVAL**.
 
+**Diagnostic re-check 2026-11-24 (this run, chat #300):** `builtin_chats_diagnostics(chatId 300)` returned three stored captures (ids 200–202), all surface VS Code (VSIX), `likelyCause: "healthy"`, `running: false` — the earlier "empty capture list" observation is stale. The list view does not expose each capture's pressure fields, so whether these healthy verdicts coexist with `contextPressureOnly` could not be confirmed from the tool surface; MK-50-DIAG stays open until a capture body can be read against the pressure sentence. Fresh suite re-check on the current tree: packages/agent-run **98 files / 867 tests pass** (up from 859; new spawn/history cases) and brain-embedded `runPrepared.door.test.ts` **1/1 pass**; PRD 50 §7 acceptance criteria hold. No new failures; the prior independent re-validation table stands.
+
 ---
 
 ## PRD 09 — Cloud Agent Validation & Hardening
