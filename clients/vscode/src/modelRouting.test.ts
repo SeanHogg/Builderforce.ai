@@ -66,8 +66,9 @@ describe("model routing is centralized", () => {
       createLocalFirstStream: [],
       probeLocalFirstRuntimes: ["modelRouting.ts", "localModels.ts"],
     };
+    const sources = sourceFiles();
     for (const [symbol, allowed] of Object.entries(owners)) {
-      const offenders = sourceFiles()
+      const offenders = sources
         .filter(({ name }) => !allowed.includes(name))
         .filter(({ text }) => text.includes(symbol))
         .map(({ name }) => name);
@@ -179,7 +180,7 @@ describe("the platform stays on the gateway when the model does not", () => {
 
   it("keeps the run's transport free to be the local one", () => {
     // The whole point: the completion goes to the machine, the catalogue does not.
-    expect(ports).toMatch(/routeStream\(await resolveModelRoute\(secrets, \{ turn: true \}\)/);
+    expect(ports).toMatch(/routeStream\(await resolveModelRoute\(secrets, \{ turn: true, \.\.\.\(choice \? \{ choice \} : \{\}\) \}\)/);
   });
 
   it("starts provisioning a local model only from a turn — never from a panel opening or a scan", () => {
@@ -198,13 +199,15 @@ describe("the platform stays on the gateway when the model does not", () => {
     const routing = stripComments(fs.readFileSync(path.join(SRC, "modelRouting.ts"), "utf8"));
     const participant = stripComments(fs.readFileSync(path.join(SRC, "chatParticipant.ts"), "utf8"));
     const host = stripComments(fs.readFileSync(path.join(SRC, "brainRunHost.ts"), "utf8"));
+    const participantRun = stripComments(fs.readFileSync(path.join(SRC, "participantRun.ts"), "utf8"));
     // The seam hands the shared step the surface's handler…
     expect(routing).toContain("...(onFallback ? { onFallback } : {})");
     // …the panel's run host passes one that announces the notice to that chat's panel…
-    expect(ports).toMatch(/routeStream\(await resolveModelRoute\(secrets, \{ turn: true \}\), await getApiKey\(secrets\), onFallback\)/);
+    expect(ports).toMatch(/routeStream\(await resolveModelRoute\(secrets, \{ turn: true, [^\n]+\}\), await getApiKey\(secrets\), onFallback\)/);
     expect(host).toContain('type: "run.modelFallback"');
     // …and the participant writes the line into its own response.
-    expect(participant).toMatch(/routeStream\(modelChoice, key, \(event\) =>/);
+    expect(participantRun).toContain('message.type === "run.modelFallback") opts.onModelFallback(message.from, message.reason)');
+    expect(participant).toContain('onModelFallback: (from, reason) => stream.markdown');
     expect(participant).toContain('"Your pick {0} failed; answered with Auto."');
   });
 });
@@ -218,7 +221,8 @@ describe("the inference mode is decided by the seam", () => {
   const routing = stripComments(fs.readFileSync(path.join(SRC, "modelRouting.ts"), "utf8"));
 
   it("stamps the mode on every route from the one setting module", () => {
-    expect(routing).toContain("const inferenceMode = currentInferenceMode();");
+    expect(routing).toContain("const configuredMode = currentInferenceMode();");
+    expect(routing).toContain('request.exactModel && configuredMode !== "local-only"');
     expect(routing).toContain("inferenceMode }, request)");
     // Hybrid tries the connected accounts this editor calls itself (Kimi) before the gateway.
     // (the accounts lambda is now ONE const, shared with "use my connected accounts" below)

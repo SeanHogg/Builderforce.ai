@@ -27,7 +27,7 @@ async function dispatch(execute: (signal: AbortSignal | undefined) => Promise<Pl
       execute: (_n: string, _a: unknown, env: { signal?: AbortSignal }) => execute(env.signal),
     },
   } as unknown as RunPorts;
-  const state = freshState(TEST_POLICY, TEST_TASK);
+  const state = freshState(TEST_POLICY);
   const watch = { hasInterrupt: () => false, onInterrupt: () => () => undefined };
   const result = await dispatchCall({ task: TEST_TASK, policy: TEST_POLICY, ports, ...(signal ? { signal } : {}) }, state, call, watch);
   return { result, row: toolRow("c1", result, true) };

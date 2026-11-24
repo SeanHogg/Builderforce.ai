@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { DEFAULT_TIMELINE_LABELS } from '@seanhogg/builderforce-brain-ui';
 import { describe, it, expect } from 'vitest';
 import { createTranslator } from 'next-intl';
 import en from './messages/en.json';
@@ -657,5 +660,20 @@ describe('message catalogs', () => {
       if (out === path) broken.push(path);
     }
     expect(broken).toEqual([]);
+  });
+});
+
+
+describe('tool group summary catalogs', () => {
+  it('resolves every summary label in every supported web and VS Code locale', () => {
+    const catalogs = { en, de, es, fr, zh };
+    for (const locale of LOCALES) {
+      const suffix = locale === 'en' ? '' : `.${locale === 'zh' ? 'zh-cn' : locale}`;
+      const vscode = JSON.parse(readFileSync(resolve(process.cwd(), `../clients/vscode/l10n/bundle.l10n${suffix}.json`), 'utf8'));
+      for (const key of ['toolGroupCommands', 'toolGroupUsed', 'toolGroupFailed'] as const) {
+        expect(catalogs[locale].brain.timeline[key]).toBeTruthy();
+        expect(vscode[DEFAULT_TIMELINE_LABELS[key]]).toBeTruthy();
+      }
+    }
   });
 });

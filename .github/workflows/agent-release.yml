@@ -1,0 +1,114 @@
+name: Agent runtime
+
+on:
+  workflow_call:
+    inputs:
+      publish:
+        type: boolean
+        default: false
+    secrets:
+      NPM_TOKEN:
+        required: false
+
+env:
+  NPM_CONFIG_FETCH_RETRIES: "5"
+  NPM_CONFIG_FETCH_RETRY_MINTIMEOUT: "20000"
+  NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT: "120000"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  verify-agents:
+    name: Verify @seanhogg/builderforce-agents (${{ matrix.script }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        script: [typecheck, 'test:fast']
+    defaults:
+      run:
+        working-directory: agent-runtime
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.23.0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - uses: ./.github/actions/pnpm-store-cache
+        with:
+          scope: package-agents
+
+      - run: pnpm install --frozen-lockfile
+      # packages/agent-tools is compiled from source (tsconfig paths); its npm imports
+      # (@seanhogg/builderforce-memory/working) resolve from ITS node_modules.
+      - run: pnpm --dir ../packages/agent-tools install --frozen-lockfile
+      - run: pnpm run ${{ matrix.script }}
+
+  # The on-prem agent CLI every installer (install.sh / install.ps1 / install-cli.sh,
+  # the macOS app) fetches from npm. Its own job, not another package-npm leg: it is a
+  # pnpm workspace with its own script names and a control-UI build, and a failure here
+  # must not hold back the SDK packages above (or the reverse).
+  package-agents:
+    name: Package @seanhogg/builderforce-agents
+    runs-on: ubuntu-latest
+    needs: verify-agents
+    defaults:
+      run:
+        working-directory: agent-runtime
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.23.0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - uses: ./.github/actions/pnpm-store-cache
+        with:
+          scope: package-agents
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --dir ../packages/agent-tools install --frozen-lockfile
+
+      # agent-runtime/vendor/ is gitignored (Docker builds exclude it too), so a
+      # fresh checkout here has neither the A2UI renderer sources nor a prebuilt
+      # bundle (the A2UI app itself lives at apps/shared/BuilderforceKit/Tools/
+      # CanvasA2UI). bundle-a2ui.sh's own documented escape hatch for exactly this
+      # environment: skip bundling and ship the CLI without the canvas feature
+      # rather than failing the whole package.
+      - run: pnpm build && pnpm ui:build
+        env:
+          BUILDERFORCE_AGENTS_A2UI_SKIP_MISSING: "1"
+
+      # The tarball's entry point must actually start before it reaches every installer.
+      - name: Pack and smoke-test the CLI
+        id: package
+        run: |
+          scratch=$(mktemp -d)
+          archive="$scratch/$(npm pack --ignore-scripts --silent --pack-destination "$scratch")"
+          tar -xf "$archive" -C "$scratch"
+          ln -s "$PWD/node_modules" "$scratch/package/node_modules"
+          node "$scratch/package/builderforce.mjs" --version
+          echo "archive=$archive" >> "$GITHUB_OUTPUT"
+
+      # Built above, so skip `prepack` rather than build the same dist twice.
+      - uses: ./.github/actions/npm-publish-auth
+        if: inputs.publish
+        with:
+          npm-token: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish if the version is new
+        if: inputs.publish
+        env:
+          AGENT_TARBALL: ${{ steps.package.outputs.archive }}
+        run: bash "$GITHUB_WORKSPACE/.github/scripts/npm-publish-if-new.sh" @seanhogg/builderforce-agents "$AGENT_TARBALL" --ignore-scripts

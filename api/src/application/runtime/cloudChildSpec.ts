@@ -20,7 +20,7 @@ export interface CloudChildSpec {
   parentExecutionId: number;
   /** The run at the top of its tree — the one its tokens bill to and that opens the PR. */
   rootExecutionId: number;
-  /** 1 for a child, 2 for a grandchild … (spawning stops at `MAX_SUBAGENT_DEPTH`). */
+  /** New children have depth 1. Historical payloads may carry deeper lineage. */
   depth: number;
   /** How its owner addresses it (`message_agent`, `stop_agent`, reports). */
   handle: string;

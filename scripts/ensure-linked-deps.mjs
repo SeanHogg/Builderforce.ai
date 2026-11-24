@@ -20,9 +20,8 @@
  * have no `node_modules`, which is to say: only in CI.
  *
  * Wired as `postinstall` in every package that links local packages, so a fresh
- * `pnpm install` leaves the same on-disk shape a developer's machine has. Failures
- * are warnings, never errors — a linked package that cannot install must degrade
- * the build the way it does today, not break an install that used to succeed.
+ * `pnpm install` leaves the same on-disk shape a developer's machine has. CI
+ * requires the checked-in locks and reports dependency errors at install time.
  */
 import { spawnSync } from 'node:child_process';
 import { existsSync, realpathSync } from 'node:fs';
@@ -46,11 +45,13 @@ function depsPresent(dir, manifest) {
  */
 const VISITED_ENV = 'BF_ENSURE_LINKED_DEPS';
 const visited = new Set((process.env[VISITED_ENV] ?? '').split('|').filter(Boolean));
+const strict = Boolean(process.env.CI && process.env.CI !== 'false');
 
 function install(dir) {
   const frozen = existsSync(join(dir, 'pnpm-lock.yaml'));
   const env = { ...process.env, [VISITED_ENV]: [...visited].join('|') };
   const run = (a) => spawnSync('pnpm', a, { cwd: dir, stdio: 'inherit', shell: true, env }).status === 0;
+  if (strict) return run(['install', '--frozen-lockfile']);
   if (!frozen) return run(['install']);
   // The retry has to say `--no-frozen-lockfile` OUT LOUD. pnpm turns frozen-lockfile
   // ON by default whenever CI is set, so a bare `install` fallback re-runs the exact
@@ -110,7 +111,13 @@ if (!rootManifest) {
 
   if (installed.length) console.log(`[ensure-linked-deps] installed: ${installed.join(', ')}`);
   if (failed.length) {
-    console.warn(`::warning::[ensure-linked-deps] could not install: ${failed.join(', ')} — type-checking against these packages may degrade.`);
+    const message = `[ensure-linked-deps] could not install: ${failed.join(', ')}`;
+    if (strict) {
+      console.error(message);
+      process.exitCode = 1;
+    } else {
+      console.warn(message);
+    }
   }
   if (!installed.length && !failed.length) console.log('[ensure-linked-deps] linked packages already installed.');
 }

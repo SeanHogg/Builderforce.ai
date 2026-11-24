@@ -3,10 +3,10 @@
  * Fakes stand in for the editor, git and the disk; the composition under test is the real one.
  */
 import * as path from "path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { BrainStreamFn } from "@seanhogg/builderforce-brain-embedded";
 import { createShipPorts, parseReviewReply, catalogModelIds } from "./shipPorts";
-import { REVIEW_DIFF_BUDGET_CHARS, budgetReviewDiff } from "./reviewerPort";
+import { REVIEW_DIFF_BUDGET_CHARS, budgetReviewDiff, createReviewerPort } from "./reviewerPort";
 import type { VscodeLike } from "./pathDiagnostics";
 import type { GitRunner } from "./gitPort";
 import type { ModelChoices } from "../gateway";
@@ -103,7 +103,7 @@ describe("createShipPorts", () => {
       stream,
       settings: { phaseModels: { review: "reviewer-model", verify: "legacy-model", code: "author-model" } },
     });
-    const verdict = await ports.reviewer.review({ repo: ROOT, diff: "diff", evidence: "", authorModels: ["author-model"] });
+    const verdict = await ports.reviewer!.review({ repo: ROOT, diff: "diff", evidence: "", authorModels: ["author-model"] });
     expect(asked).toEqual([{ model: "reviewer-model", modelStrict: true, role: "review" }]);
     expect(verdict).toMatchObject({ reviewerModel: "reviewer-model", verdict: "approved" });
   });
@@ -119,7 +119,7 @@ describe("createShipPorts", () => {
       stream,
       settings: { phaseModels: { verify: "legacy-model", code: "author-model" } },
     });
-    await ports.reviewer.review({ repo: ROOT, diff: "diff", evidence: "", authorModels: ["author-model"] });
+    await ports.reviewer!.review({ repo: ROOT, diff: "diff", evidence: "", authorModels: ["author-model"] });
     expect(asked).toEqual([{ model: "legacy-model" }]);
   });
 
@@ -135,7 +135,7 @@ describe("createShipPorts", () => {
       git: async () => ({ stdout: "", exitCode: 0 }),
       getCatalog: async () => catalog,
     })({ root: ROOT, stream, settings: { phaseModels: { code: "author-model" } } });
-    const verdict = await ports.reviewer.review({ repo: ROOT, diff: "diff", evidence: "", authorModels: ["author-model"] });
+    const verdict = await ports.reviewer!.review({ repo: ROOT, diff: "diff", evidence: "", authorModels: ["author-model"] });
     expect(asked).toEqual([{ model: "pool-model" }]);
     expect(verdict).toMatchObject({ reviewerModel: "pool-model", verdict: "approved" });
     // The switch is named in the advisories so the user sees what happened (never in
@@ -159,7 +159,7 @@ describe("createShipPorts", () => {
       git: async () => ({ stdout: "", exitCode: 0 }),
       getCatalog: async () => catalog,
     })({ root: ROOT, stream, settings: { phaseModels: { code: "author-model" } } });
-    await ports.reviewer.review({ repo: ROOT, diff: "diff", evidence: "", authorModels: ["author-model"] });
+    await ports.reviewer!.review({ repo: ROOT, diff: "diff", evidence: "", authorModels: ["author-model"] });
     expect(asked).toEqual([{ model: "byo-model" }]);
   });
 
@@ -171,15 +171,110 @@ describe("createShipPorts", () => {
       git: async () => ({ stdout: "", exitCode: 0 }),
       getCatalog: async () => catalog,
     })({ root: ROOT, stream, settings: { phaseModels: { code: "author-model" } } });
-    const res = await ports.reviewer.review({ repo: ROOT, diff: "diff", evidence: "", authorModels: ["author-model"] });
+    const res = await ports.reviewer!.review({ repo: ROOT, diff: "diff", evidence: "", authorModels: ["author-model"] });
     expect("refused" in res).toBe(true);
     if ("refused" in res) {
       expect(res.refused).toContain("author-model");
       expect(res.refused).toContain("non-author");
       // The path forward: a pool/BYO model or adding a model.
       expect(res.refused).toMatch(/pool|BYO/i);
-      expect(res.refused).toMatch(/second model|add one/i);
+      expect(res.refused).toMatch(/another eligible model/i);
     }
+  });
+
+  it.each([
+    ["auto", true, false],
+    ["auto", false, true],
+    ["required", true, true],
+    ["off", false, false],
+  ] as const)("applies %s with specificModel=%s", (independentReview, specificModel, expected) => {
+    const ports = createShipPorts({ vscode: fakeVscode([]), git: async () => ({ stdout: "", exitCode: 0 }) })({
+      root: ROOT, stream: noStream, specificModel: specificModel ? "pinned" : undefined, settings: { independentReview },
+    });
+    expect(!!ports.reviewer).toBe(expected);
+    expect(ports.git.outgoing).toBeTypeOf("function");
+    expect(ports.verifier.full).toBeTypeOf("function");
+  });
+
+  it("retries invalid replies and author substitutions, then records the actual reviewer", async () => {
+    const getCatalog = vi.fn(async () => fakeCatalog({
+      models: ["direct/kimi-code/kimi-for-coding", "preferred", "substituted", "alternate", "unused"],
+    }));
+    const stream = vi.fn<BrainStreamFn>(async ({ model }) => ({
+      text: model === "preferred" ? "no verdict" : '{"blocking":[]}',
+      resolvedModel: model === "substituted" ? "local/kimi-code/kimi-for-coding" : "actual-reviewer",
+      toolCalls: [],
+      finishReason: "stop",
+    }));
+    const { reviewer } = createShipPorts({
+      vscode: fakeVscode([]), git: async () => ({ stdout: "", exitCode: 0 }), getCatalog,
+    })({ root: ROOT, stream, settings: { phaseModels: { review: "preferred" } } });
+    const review = await reviewer!.review({
+      repo: ROOT, diff: "diff", evidence: "", authorModels: ["local/kimi-code/kimi-for-coding"],
+    });
+    expect(getCatalog).toHaveBeenCalledTimes(1);
+    expect(stream.mock.calls.map(([opts]) => opts.model)).toEqual(["preferred", "substituted", "alternate"]);
+    expect(review).toMatchObject({ verdict: "approved", reviewerModel: "actual-reviewer" });
+  });
+
+  it("caps retry attempts and distinguishes invalid replies from missing candidates", async () => {
+    const stream = vi.fn(noStream);
+    const { reviewer } = createShipPorts({
+      vscode: fakeVscode([]),
+      git: async () => ({ stdout: "", exitCode: 0 }),
+      getCatalog: async () => fakeCatalog({ models: ["one", "two", "three", "four"] }),
+    })({ root: ROOT, stream });
+    const review = await reviewer!.review({ repo: ROOT, diff: "diff", evidence: "", authorModels: ["author"] });
+    expect(stream).toHaveBeenCalledTimes(3);
+    expect(review).toMatchObject({ refused: expect.stringContaining("No reviewer produced a verdict") });
+    expect(review).not.toMatchObject({ refused: expect.stringContaining("No independent reviewer is available") });
+  });
+
+  it("does not consult the catalog or retry when the preferred reviewer finds a blocker", async () => {
+    const getCatalog = vi.fn(async () => fakeCatalog());
+    const stream: BrainStreamFn = async () => ({ text: '{"blocking":["a.ts:1 build fails"]}', toolCalls: [], finishReason: "stop" });
+    const { reviewer } = createShipPorts({
+      vscode: fakeVscode([]), git: async () => ({ stdout: "", exitCode: 0 }), getCatalog,
+    })({ root: ROOT, stream, settings: { phaseModels: { review: "preferred" } } });
+    const review = await reviewer!.review({ repo: ROOT, diff: "diff", evidence: "", authorModels: ["author"] });
+    expect(review).toMatchObject({ verdict: "changes_requested", findings: ["a.ts:1 build fails"] });
+    expect(getCatalog).not.toHaveBeenCalled();
+  });
+
+  it("uses device models only in Local only mode", async () => {
+    const getCatalog = vi.fn(async () => fakeCatalog({ models: ["cloud-model"] }));
+    const stream = vi.fn<BrainStreamFn>(async () => ({ text: '{"blocking":[]}', toolCalls: [], finishReason: "stop" }));
+    const { reviewer } = createShipPorts({
+      vscode: fakeVscode([]), git: async () => ({ stdout: "", exitCode: 0 }), getCatalog,
+      getLocalCatalog: async () => ["local/ollama/author", "local/ollama/reviewer"],
+    })({ root: ROOT, stream, localOnly: true, specificModel: "saved-cloud-pick", settings: { phaseModels: { review: "cloud-model" } } });
+    const review = await reviewer!.review({
+      repo: ROOT, diff: "diff", evidence: "", authorModels: ["local/ollama/author"],
+    });
+    expect(review).toMatchObject({ verdict: "approved", reviewerModel: "local/ollama/reviewer" });
+    expect(getCatalog).not.toHaveBeenCalled();
+    expect(stream).toHaveBeenCalledTimes(1);
+  });
+
+  it("aborts a timed-out reviewer before trying the next one", async () => {
+    const aborted = vi.fn();
+    const reviewer = createReviewerPort({
+      availableModels: ["slow", "alternate"],
+      reviewTimeoutMs: 20,
+      hashDiff: () => "hash",
+      runReviewSubRun: async ({ model, signal }) => {
+        if (model === "slow") {
+          await new Promise<void>((resolve) => signal.addEventListener("abort", () => {
+            aborted();
+            resolve();
+          }, { once: true }));
+        }
+        return { verdict: "approved", findings: [] };
+      },
+    });
+    const review = await reviewer.review({ repo: ROOT, diff: "diff", evidence: "", authorModels: ["author"] });
+    expect(aborted).toHaveBeenCalledOnce();
+    expect(review).toMatchObject({ verdict: "approved", reviewerModel: "alternate" });
   });
 });
 
@@ -228,7 +323,7 @@ describe("review prompt (rounds, resolution, diff budget)", () => {
       prompt = String(opts.messages[0]?.content ?? "");
       return { text: '{"blocking":[]}', toolCalls: [], finishReason: "stop" };
     };
-    const review = await make(stream).reviewer.review({
+    const review = await make(stream).reviewer!.review({
       repo: ROOT,
       diff: "diff",
       evidence: "ev",
@@ -250,7 +345,7 @@ describe("review prompt (rounds, resolution, diff budget)", () => {
       prompt = String(opts.messages[0]?.content ?? "");
       return { text: '{"blocking":[]}', toolCalls: [], finishReason: "stop" };
     };
-    await make(stream).reviewer.review({
+    await make(stream).reviewer!.review({
       repo: ROOT,
       diff: "diff",
       evidence: "",
@@ -273,7 +368,7 @@ describe("review prompt (rounds, resolution, diff budget)", () => {
       file("b.ts", "+" + "b".repeat(30_000) + "\n") +
       file("c.ts", "+c\n");
     expect(big.length).toBeGreaterThan(REVIEW_DIFF_BUDGET_CHARS);
-    await make(stream).reviewer.review({ repo: ROOT, diff: big, evidence: "", authorModels: ["author-model"] });
+    await make(stream).reviewer!.review({ repo: ROOT, diff: big, evidence: "", authorModels: ["author-model"] });
     // Whole-file chunks: a.ts fits the budget alone; b.ts would overflow it, so it is
     // omitted by name; c.ts is omitted too.
     expect(prompt).toContain("[partial view:");

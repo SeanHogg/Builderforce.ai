@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { needsPosixShell, cmdCannotRun, findBash, bashCandidates, posixShellReport, posixShellStatus, resetBashCache, toBashNullDevice } from "./node-posix-shell.js";
-import { buildGitCommand } from "./git-tools.js";
+import { buildGitCommand, buildUnbornDiffCommands } from "./git-tools.js";
 
 beforeEach(resetBashCache);
 
@@ -17,6 +17,11 @@ describe("needsPosixShell", () => {
     for (const action of ["status", "diff", "history"] as const) {
       expect(needsPosixShell(buildGitCommand(action))).toBe(false);
     }
+  });
+
+  it("keeps the plain diff commands (HEAD and the unborn-HEAD pair) out of bash under PowerShell too", () => {
+    expect(needsPosixShell(buildGitCommand("diff", { path: "src/x.ts" }), "powershell")).toBe(false);
+    for (const cmd of buildUnbornDiffCommands({ path: "src/x.ts" })) expect(needsPosixShell(cmd, "powershell")).toBe(false);
   });
 
   it("does not misroute ordinary commands", () => {

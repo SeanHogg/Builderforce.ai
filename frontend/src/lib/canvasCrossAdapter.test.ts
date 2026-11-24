@@ -42,7 +42,7 @@ vi.mock('@builderforce/agent-run', async (importOriginal) => {
 });
 
 const { runCreationCanvasAi } = await import('./creationCanvasAi');
-const { CONFORMANCE_ANSWER, CONFORMANCE_PROMPT, CONFORMANCE_SCRIPT, CONFORMANCE_TOOL, CONFORMANCE_TRACE, conformanceTrace } = await import('@builderforce/agent-run');
+const { CONFORMANCE_ANSWER, CONFORMANCE_PROMPT, CONFORMANCE_SCRIPT, CONFORMANCE_TOOL, CONFORMANCE_ENTRY_TRACE, conformanceTrace } = await import('@builderforce/agent-run');
 
 const translateNotice = createTranslator({ locale: 'en', messages: en as never, namespace: 'creationCanvas.notice' as never });
 const NOTICES = canvasNoticesFrom(((key, values) => translateNotice(key as never, values as never)) as CanvasNoticeTranslator);
@@ -68,7 +68,7 @@ describe('the Creation Canvas under the shared scripted task', () => {
     const answer = await runCreationCanvasAi({ prompt: CONFORMANCE_PROMPT, canvasSnapshot: '{"objects":[]}', persistence: 'local', canvasActions: [listFiles], notices: NOTICES });
 
     expect(listFiles.run).toHaveBeenCalledTimes(1);
-    expect(conformanceTrace(mocks.events)).toEqual(CONFORMANCE_TRACE);
+    expect(conformanceTrace(mocks.events)).toEqual(CONFORMANCE_ENTRY_TRACE);
     expect(mocks.outcome).toMatchObject({ kind: 'finished', output: CONFORMANCE_ANSWER });
     expect(answer).toBe(CONFORMANCE_ANSWER);
   });

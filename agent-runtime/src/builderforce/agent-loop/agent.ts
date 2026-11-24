@@ -81,6 +81,7 @@ export class Agent {
   private policyGates?: readonly PolicyGate[];
   private governance?: RunGovernance;
   private workspaceDir?: string;
+  subagent = false;
 
   constructor(opts: AgentOptions) {
     this._state = {
@@ -185,6 +186,7 @@ export class Agent {
       ...(this.policyGates?.length ? { policyGates: this.policyGates } : {}),
       ...(this.governance ? { governance: this.governance } : {}),
       ...(this.workspaceDir ? { workspaceDir: this.workspaceDir } : {}),
+      ...(this.subagent ? { subagent: true } : {}),
       ...(this.knowledge ? { knowledge: this.knowledge } : {}),
       ...(this.prefetch ? { prefetch: this.prefetch } : {}),
     };

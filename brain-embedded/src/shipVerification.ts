@@ -28,7 +28,8 @@
  * Pure over the recorded trace — no clock, no shell, no I/O.
  */
 
-import { isFailedToolResult, type BrainTraceEvent } from './brainTriage';
+import type { BrainTraceEvent } from './brainTriage';
+import { isFailedToolResult } from './toolFailure';
 import { gitCommandPattern } from '@builderforce/run-guards';
 import type { GitPort } from './runStore/runTypes';
 

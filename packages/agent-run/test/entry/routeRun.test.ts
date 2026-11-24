@@ -30,11 +30,4 @@ describe("routeRun", () => {
     expect(r.skipsVerify).toBe(false);
   });
 
-  it("a child is never routed and starts in code", () => {
-    const r = routeRun({ request: REQUEST, routing: QUICK, child: true });
-    expect(r.pipeline).toBeNull();
-    expect(r.start.startPhase).toBe("code");
-    expect(r.start.pinnedModel).toBeUndefined();
-    expect(r.skipsVerify).toBe(false);
-  });
 });

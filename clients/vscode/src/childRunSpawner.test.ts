@@ -56,6 +56,15 @@ afterEach(() => {
 });
 
 describe("an owner never runs what its live child owns (chat #60338)", () => {
+  it("refuses nested spawning before registering or starting a child", () => {
+    const { host } = fakeHost();
+    const start = vi.spyOn(host, "startChild");
+    const controls = childControls(host, { ...OWNER, depth: 1 });
+    expect(controls.canSpawn).toBe(false);
+    expect(controls.spawn({ label: "verify", task: VERIFY_BRIEF, role: "verify" })).toEqual({ ok: false, error: "Only root runs can spawn sub-agents" });
+    expect(host.registry.liveOf(OWNER.key)).toEqual([]);
+    expect(start).not.toHaveBeenCalled();
+  });
   it("rejects an empty brief before registering the child or starting its host", () => {
     const { host } = fakeHost();
     const start = vi.spyOn(host, "startChild");

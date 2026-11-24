@@ -45,6 +45,7 @@ import {
   webGpuSupport
 } from "./chunk-PRXY4IDM.mjs";
 import {
+  PREFLIGHT_PROBE_MS,
   bounded,
   budget,
   clearPendingWords,
@@ -58,7 +59,7 @@ import {
   settledWithin,
   steerMetadata,
   within
-} from "./chunk-AN7ILW3X.mjs";
+} from "./chunk-P7CQYU5O.mjs";
 import {
   BrainRequestError,
   LOCAL_ENGINE_FAILURE_CODES,
@@ -78,7 +79,7 @@ import {
   reportPageEngineFailure
 } from "./chunk-SLI7C3HD.mjs";
 import {
-  ANNOUNCED_DELIVERABLE_STEER,
+  ANTHROPIC_RELEASES,
   BACK_TO_BACK_AT,
   BASE_BRANCHES,
   BIND_PENDING_HOLDER,
@@ -86,10 +87,13 @@ import {
   CHAT_STAMPED_CREATE_TOOLS,
   CHAT_TICKET_LIST_TOOL,
   CODE_CHANGE_TOOLS,
-  CONTROL_TOOL_NAMES,
+  CacheServedStreak,
+  DECLINE_STATUS,
   DEFAULT_CHAT_ACTIVITY_LABELS,
   DEFAULT_EVIDENCE_POLICY,
+  DEFAULT_ROUTE_THRESHOLD,
   DEFAULT_SHIP_POLICY,
+  DEFAULT_TOOL_LIMIT,
   FAILURE_HARD_AT,
   FAILURE_NUDGE_AT,
   FINISH_RECORD_TURNS,
@@ -102,13 +106,13 @@ import {
   LOCAL_WORKSPACE_TOOLS,
   MAX_ANNOUNCEMENT_RECOVERIES,
   MAX_BLOCKING_REVIEW_ROUNDS,
-  MAX_MODEL_FAILOVERS,
+  MAX_OPEN_WORK_HOLDS,
   MAX_TOOL_RESULT_CHARS,
+  MEDIAN_TURN_TOKENS,
   NOT_STARTED_TASK_STATUSES,
+  PLAN_TURN_BUDGET,
   PREVIEW_REVIEW_TOOL,
-  PROGRESS_FORCED_LABEL,
   PROVENANCE_META_KEY,
-  ProgressDetector,
   READS_BEFORE_DELEGATION_NUDGE,
   READ_FILE_RESULT_CHARS,
   REMEMBER_FACT_TOOLS,
@@ -116,6 +120,7 @@ import {
   REVISIT_HARD_AT,
   REVISIT_NUDGE_AT,
   ROLE_GATE_REMEDIATION,
+  RUN_CANCELLED_REASON,
   ReadCoverage,
   ReadsWithoutSpawn,
   RunKnowledgeRecorder,
@@ -123,21 +128,19 @@ import {
   SERVER_TICKET_CREATE_TOOL,
   SERVER_TICKET_LINK_TOOL,
   SERVER_TICKET_TOOLS,
-  SKILL_TOOLS,
   STEP_MESSAGE_ROLE,
   STOPPED_TURN_META_KEY,
   STOPPED_TURN_STEP,
   STUDIO_WORKSPACE_TOOLS,
-  SUBAGENT_TOOLS,
   TICKETING_INTENTS,
   TICKET_FROM_DELTA_TOOL,
   TICKET_RECORDING_TOOLS,
-  TOOL_SEARCH_SCHEMA,
-  TOOL_SEARCH_TOOL,
   UNBACKED_TICKET_CLAIM_NOTICE,
   UNBACKED_WRITE_CLAIM_NOTICE,
   UNBOUND_DESTINATION,
   UNSCOPED_MUTATION_TOOLS,
+  USAGE_SURFACES,
+  USAGE_SURFACE_HEADER,
   VERIFY_DELEGATION_STEP,
   VERIFY_STEP,
   VISIT_QUESTION_SEPARATOR,
@@ -152,13 +155,14 @@ import {
   announcesUntakenAction,
   answeredInProseInTrace,
   applyReviewRoundCap,
+  applyTaskStateUpdate,
   asProvenanceAccount,
   asksForChange,
   attachEvermindLearn,
+  attemptedDelegation,
   betweenTurnsActivity,
   bracketDelta,
   buildBrainTriageReport,
-  buildCoreToolRegistry,
   byoReasonHint,
   byoUnresolvedInTrace,
   byoUnresolvedSummary,
@@ -167,21 +171,21 @@ import {
   canReviewInPreview,
   canRunInParallel,
   canShipHere,
-  canonicalReadArgs,
   catalogToolNamesMentionedIn,
   changesBalance,
   chatActivityText,
   chatWorkLinkingDirective,
   chatWorkObligationTools,
-  chooseStallFailover,
+  childWorkRefs,
   claimChatBind,
   claimsMissingToolData,
   classifyRequest,
-  classifyTool,
   codeChangeFile,
   codeChangeTicketTitle,
   codeChangesOf,
+  combineSpendSavings,
   computeBrainDiagnostics,
+  computeCostMillicents,
   computeRunProgress,
   contextFoldActivity,
   continuationDirective,
@@ -190,6 +194,7 @@ import {
   createLinkedToChat,
   declaresChatTicketListing,
   defaultInferenceMode,
+  defaultPipelineRouting,
   defineRecordIndex,
   describeBracketDelta,
   describeLiveStep,
@@ -197,15 +202,21 @@ import {
   detectAnnouncedButUnmadeToolCall,
   detectUnbackedTicketClaim,
   detectUnbackedWriteClaim,
+  directCatalogId,
   dirtyPathsOf,
+  downgradeDecision,
+  drainRunSteering,
   dropPending,
+  earlyDelegationNudge,
   editedFilesOf,
   editedPathsOf,
   entityIdsOf,
-  evaluatePolicyGate,
+  estimateTokensFromChars,
+  expandWithSynonyms,
   failureReason,
   fileIsUnchecked,
   fileToolKind,
+  foldSpendSavings,
   formatAdvertised,
   formatAssistantTranscriptHeading,
   formatBrainDiagnostics,
@@ -219,19 +230,23 @@ import {
   formatStaffingSummary,
   gatewayRoutingArgs,
   handOffModeSentence,
+  handoffReserveTokens,
+  handoffTokenBudget,
   hasEditIntent,
+  hasExplicitQuestionIntent,
+  hasRunInterrupt,
   hostOf,
-  inRunVerifyOutcome,
   isActivityMessage,
+  isCappedToolRole,
   isChildReportText,
   isCodeChangeTool,
+  isCoderReask,
   isConnectedAccountUnused,
   isContinuationDirective,
   isCostLeverOn,
   isDelegationTool,
   isDispatchTool,
   isEvermindModel,
-  isExhaustedStall,
   isFailedToolResult,
   isImported,
   isInferenceMode,
@@ -240,32 +255,34 @@ import {
   isMalformedToolCall,
   isMatchableSpecItemId,
   isModelReply,
-  isModelRole,
   isMutatingPlatformTool,
-  isMutatingShellCall,
   isMutatingTool,
   isMutationTool,
-  isNotARepo,
   isOpenLinkedStatus,
   isOwnRecord,
-  isReadFileResult,
+  isRateLimitFailure,
   isReadOnlyPlatformTool,
   isReadOnlyShellCall,
   isRepoPublishTool,
   isRepoStateReadTool,
+  isRequestRefusalStatus,
   isShipMode,
+  isSpawnTool,
   isStepMessage,
   isStoppedBeforeStart,
   isStoppedTurn,
+  isTenantBudgetFailure,
   isTestPath,
   isTicketRecordingTool,
   isTicketWriteTool,
   isTruncatedTurn,
   isUnscopedMutationTool,
+  isUsageSurface,
   isWorkItemWrite,
   journalWrite,
   judgeWith,
   lastServedModel,
+  leftDelegationUndone,
   lexicalStems,
   limbicTraits,
   linkedTaskRows,
@@ -274,8 +291,11 @@ import {
   linkedTicketsToAdvance,
   linkedTicketsToAdvanceFor,
   linkedTicketsToComplete,
+  listPriceOf,
   liveChatBindHolder,
   localToolsIn,
+  measureWorkflow,
+  measureWorkflowSync,
   memoryReplayable,
   memoryToolsIn,
   midRunNotice,
@@ -288,55 +308,62 @@ import {
   narratedUnadvertisedInTrace,
   narrowByHold,
   newLocalRecord,
+  newSteerKey,
   nextFallbackModel,
   normalizeEvidencePath,
-  normalizeToolName,
+  offersHandOff,
   onBaseBranch,
+  openRun,
   outgoingGate,
   parseByoUnresolved,
   parseChatActivity,
   parseGitShortStatus,
   parseMessageProvenance,
   parseRoleGateRefusal,
-  parseShellFileRead,
+  parseRunOutcomeTelemetry,
   parseSpecOpenItems,
   parseStepMessage,
   parseSyncId,
   perFileResults,
-  planInRunVerify,
+  planModelWarning,
   planScopeClash,
-  policyGateCallKey,
-  progressAdvice,
+  priceTierBoundary,
+  profileWorkload,
   progressDuration,
-  progressSteerNote,
-  progressTraceStep,
   promisesUnfinishedWork,
   publishAllowed,
   publishVerbOf,
   queueImport,
+  queueRunSteering,
   rankLexically,
   recordShellFileRead,
+  recordWorkSnapshot,
+  reduceRunPolicy,
   releaseChatBind,
   renderPolicyDirectives,
+  renderTaskState,
   repeatedFailureAdvisory,
   repeatedWriteNote,
   requestedReadWindow,
+  requeueRunSteering,
   resolveAdvertisedToolName,
   resolveCallName,
-  resolveToolAlias,
-  resultTableCap,
   reviewGate,
   revisitAdvisory,
+  roleCappedSelection,
+  roleToolLimit,
+  routeRun,
+  runBudgetCapMillicents,
+  runOutcomeRequestOf,
   runProgressVerdict,
+  runSteeringSource,
+  runToolInterruptibly,
   savedFactOf,
   scanByIndex,
   scopeClashCorrective,
-  searchToolSchemas,
   selectRecords,
   serverChatIdOf,
   sessionShippedInTrace,
-  shapeToolResult,
-  shellPrintAsRead,
   shellPublishHint,
   shipDirective,
   shipNudge,
@@ -344,19 +371,14 @@ import {
   shipSourceLabel,
   shippedToBaseBranch,
   shortenTarget,
-  shouldRecoverStalledTurn,
   singleReadsOf,
-  sliceReadFile,
+  snapshotPriceBook,
   specTicketCoverage,
   splitForParallel,
   splitLayoutLine,
   stableStringify,
   staffingSummaryInTrace,
-  stallExhaustedNotice,
   stallRecoveriesInTrace,
-  stallRecoveryNudge,
-  stallRecoveryToolChoice,
-  stallShape,
   stallUnrecoveredInTrace,
   stampRunChat,
   stepSig,
@@ -364,6 +386,7 @@ import {
   stoppedBeforeStartRow,
   stoppedTurnMetadata,
   studioToolsIn,
+  summarizeRouteRuns,
   syncIdText,
   ticketStatusMove,
   ticketToolVocabulary,
@@ -374,19 +397,20 @@ import {
   toolNameSet,
   toolNamesMentionedIn,
   toolResultRecord,
-  toolSideEffect,
+  toolSchemaTokens,
   traceWithPersistedSteps,
   trimToolResult,
   truncateMiddle,
-  truncatedResultNote,
   turnInterruption,
+  undelegatedRequestNudge,
   utf8ByteLength,
   visitTarget,
-  windowedCap,
   withAdvisory,
   withProvenanceMetadata,
-  workFiledNotStaffedVerdict
-} from "./chunk-AXFC6L4D.mjs";
+  workFiledNotStaffedVerdict,
+  workFinishPorts,
+  workSupportsRoutingSample
+} from "./chunk-JYYDIZ5A.mjs";
 import {
   ASK_USER_TOOL,
   ASK_USER_TOOL_SPEC,
@@ -408,15 +432,13 @@ import {
   parseAskUser,
   parseToolArgs,
   replayTextOf,
-  runAgentLoop,
   selectPendingAskUser,
   serializeAskUser,
   splitVendorReasoning,
   stepRow,
   stripAskUser,
   stripReasoningTagsFromText,
-  thoughtTextOf,
-  trimRepetitionLoop
+  thoughtTextOf
 } from "./chunk-3DTCUCDH.mjs";
 import {
   HELP_COMMAND_ID,
@@ -682,12 +704,12 @@ var XmlToolCallFilter = class {
   /** Feed a content delta; returns clean (markup-free) text to emit now. */
   push(delta) {
     this.buf += delta;
-    let emit3 = "";
+    let emit2 = "";
     for (; ; ) {
       if (!this.inside) {
         const open2 = findOpen(this.buf);
         if (open2) {
-          emit3 += this.buf.slice(0, open2.index);
+          emit2 += this.buf.slice(0, open2.index);
           this.buf = this.buf.slice(open2.index + open2.length);
           this.inside = open2.dialect;
           this.insideName = open2.name;
@@ -695,7 +717,7 @@ var XmlToolCallFilter = class {
           continue;
         }
         const hold2 = holdLength(this.buf);
-        emit3 += this.buf.slice(0, this.buf.length - hold2);
+        emit2 += this.buf.slice(0, this.buf.length - hold2);
         this.buf = hold2 ? this.buf.slice(this.buf.length - hold2) : "";
         break;
       }
@@ -711,28 +733,28 @@ var XmlToolCallFilter = class {
       this.buf = hold ? this.buf.slice(this.buf.length - hold) : "";
       break;
     }
-    emit3 = stripControlTokens(emit3);
-    this.clean += emit3;
-    return emit3;
+    emit2 = stripControlTokens(emit2);
+    this.clean += emit2;
+    return emit2;
   }
   /** End of stream: flush held-back text and close any unterminated call. */
   flush() {
-    let emit3 = "";
+    let emit2 = "";
     if (this.inside && isSelfClosing(this.inside)) {
       const end = this.inside.closeAt(this.buf, true) ?? { at: this.buf.length, length: 0 };
       this.innerBuf += this.buf.slice(0, end.at);
-      emit3 = stripControlTokens(this.buf.slice(end.at + end.length));
+      emit2 = stripControlTokens(this.buf.slice(end.at + end.length));
       this.commit();
     } else if (this.inside) {
       this.innerBuf += this.buf;
       this.commit();
     } else {
-      emit3 = stripControlTokens(this.buf);
+      emit2 = stripControlTokens(this.buf);
     }
     this.buf = "";
     this.innerBuf = "";
-    this.clean += emit3;
-    return emit3;
+    this.clean += emit2;
+    return emit2;
   }
   /** The full clean text accumulated so far. */
   cleanText() {
@@ -1362,834 +1384,6 @@ function useBrainConfig() {
 
 // src/localFirstPersistence.ts
 import { summarizeTranscript } from "@seanhogg/builderforce-memory/working";
-
-// ../packages/spend-contract/src/cost.ts
-var MILLICENTS_PER_USD = 1e5;
-var MEDIAN_TURN_TOKENS = Object.freeze({ prompt: 6e3, completion: 400 });
-function millicentsToUsd(millicents) {
-  return Number(millicents ?? 0) / MILLICENTS_PER_USD;
-}
-var CACHE_READ_MULTIPLIER = 0.1;
-var CACHE_CREATION_MULTIPLIER = 1.25;
-function computeCostMillicents(pricing, usage) {
-  if (!pricing) return 0;
-  const cacheRead = usage.cacheReadTokens ?? 0;
-  const cacheCreation = usage.cacheCreationTokens ?? 0;
-  const fullPrompt = Math.max(0, usage.promptTokens - cacheRead - cacheCreation);
-  const usd3 = fullPrompt * pricing.prompt + cacheRead * pricing.prompt * CACHE_READ_MULTIPLIER + cacheCreation * pricing.prompt * CACHE_CREATION_MULTIPLIER + usage.completionTokens * pricing.completion;
-  return Math.round(usd3 * 1e5);
-}
-
-// ../packages/model-catalog/src/price.ts
-var TOKENS_PER_MILLION = 1e6;
-function perMillionToPerToken(usdPerMillion) {
-  return usdPerMillion / TOKENS_PER_MILLION;
-}
-function perTokenToPerMillion(usdPerToken) {
-  return usdPerToken * TOKENS_PER_MILLION;
-}
-var ZERO_PRICE = Object.freeze({ input: 0, output: 0 });
-
-// ../packages/model-catalog/src/tier.ts
-var UNKNOWN_TIER_RANK = 4;
-var STRONGEST_FIRST = {
-  ULTRA: 0,
-  PREMIUM: 1,
-  STANDARD: 2,
-  FREE: 3
-};
-function tierRank(tier2) {
-  return tier2 && tier2 in STRONGEST_FIRST ? STRONGEST_FIRST[tier2] : UNKNOWN_TIER_RANK;
-}
-var STANDARD_MAX_OUTPUT_PER_MILLION = 8;
-var PREMIUM_MAX_OUTPUT_PER_MILLION = 20;
-function tierForPrice(price) {
-  if (price.input === 0 && price.output === 0) return "FREE";
-  const outputPerMillion = perTokenToPerMillion(price.output);
-  if (outputPerMillion < STANDARD_MAX_OUTPUT_PER_MILLION) return "STANDARD";
-  return outputPerMillion < PREMIUM_MAX_OUTPUT_PER_MILLION ? "PREMIUM" : "ULTRA";
-}
-function resolveModelTier(known) {
-  if (known.catalogTier) return known.catalogTier;
-  return known.price ? tierForPrice(known.price) : void 0;
-}
-var AGENTIC_TIERS = /* @__PURE__ */ new Set(["PREMIUM", "ULTRA"]);
-function isAgenticTier(tier2) {
-  return tier2 ? AGENTIC_TIERS.has(tier2) : void 0;
-}
-
-// ../packages/model-catalog/src/priceTiers.ts
-var tier = (aboveInputTokens, inputPerMillion, outputPerMillion) => ({
-  aboveInputTokens,
-  input: perMillionToPerToken(inputPerMillion),
-  output: perMillionToPerToken(outputPerMillion)
-});
-var PRICE_TIERS = Object.freeze({
-  // Google AI Studio / Vertex list price: $1.25 / $10 per M up to 200K prompt tokens,
-  // $2.50 / $15 above (ai.google.dev/gemini-api/docs/pricing). Verify against vendor pricing page.
-  "gemini-2-5-pro": [tier(2e5, 2.5, 15)],
-  // Anthropic long-context pricing for the 1M-window Sonnet 4 / 4.5: $3 / $15 per M up
-  // to 200K input, $6 / $22.50 above (docs.claude.com pricing, "long context").
-  // Verify against vendor pricing page.
-  "claude-sonnet-4": [tier(2e5, 6, 22.5)],
-  "claude-sonnet-4-5": [tier(2e5, 6, 22.5)],
-  // Claude Haiku 5.5: $0.10 / $0.50 per M for prompts up to 100K, $0.50 / $2.50 beyond
-  // (Anthropic model pricing table, 2026-10). Verify against vendor pricing page.
-  "claude-haiku-5-5": [tier(1e5, 0.5, 2.5)]
-});
-function priceTierFamily(modelId) {
-  let id = (modelId ?? "").trim().toLowerCase();
-  id = id.slice(id.lastIndexOf("/") + 1);
-  id = id.replace(/^(?:[a-z]{2,3}\.)?anthropic\./, "");
-  id = id.replace(/:.*$/, "");
-  id = id.replace(/\./g, "-");
-  id = id.replace(/-\d{8}(?:-v\d+)?$/, "");
-  return id;
-}
-function priceTiersFor(modelId) {
-  return PRICE_TIERS[priceTierFamily(modelId)];
-}
-function priceTierBoundary(modelId) {
-  const tiers = priceTiersFor(modelId);
-  return tiers && tiers.length > 0 ? Math.min(...tiers.map((t) => t.aboveInputTokens)) : void 0;
-}
-function withPriceTiers(modelId, price) {
-  const tiers = price.priceTiers ?? priceTiersFor(modelId);
-  return tiers ? { ...price, priceTiers: tiers } : price;
-}
-
-// ../packages/model-catalog/src/priceBook.ts
-function directCatalogId(model) {
-  return model.startsWith("direct/") ? model.slice("direct/".length).toLowerCase() : void 0;
-}
-function catalogPriceId(model) {
-  return model.startsWith("openrouter/") ? model.slice("openrouter/".length) : model;
-}
-function listPriceOf(book2, model) {
-  return book2.listPriceOf ? book2.listPriceOf(model) : book2.priceOf(model);
-}
-function priceBookFromPrices(prices) {
-  const byId = /* @__PURE__ */ new Map();
-  const byLowerId = /* @__PURE__ */ new Map();
-  for (const [id, price] of prices) {
-    byId.set(id, price);
-    byLowerId.set(id.toLowerCase(), price);
-  }
-  const priceOf = (model) => byId.get(catalogPriceId(model));
-  return {
-    priceOf,
-    listPriceOf: (model) => {
-      const direct = directCatalogId(model);
-      return priceOf(model) ?? (direct ? byLowerId.get(direct) : void 0);
-    }
-  };
-}
-
-// ../packages/model-catalog/src/generated/priceSnapshot.ts
-var PRICE_SNAPSHOT = {
-  "~anthropic/claude-fable-latest": [8e-6, 4e-5],
-  "~anthropic/claude-haiku-latest": [1e-7, 5e-7],
-  "~anthropic/claude-opus-latest": [4e-6, 2e-5],
-  "~anthropic/claude-sonnet-latest": [2e-6, 1e-5],
-  "~deepseek/deepseek-flash-latest": [36e-9, 5e-7],
-  "~deepseek/deepseek-pro-latest": [999e-10, 8e-6],
-  "~deepseek/deepseek-v4-flash-latest": [44e-9, 132e-9],
-  "~google/gemini-flash-latest": [15e-7, 75e-7],
-  "~google/gemini-pro-latest": [2e-6, 1e-5],
-  "~moonshotai/kimi-latest": [1824e-10, 110055e-10],
-  "~openai/gpt-astra-latest": [8e-6, 4e-5],
-  "~openai/gpt-luna-latest": [1e-7, 5e-7],
-  "~openai/gpt-mini-latest": [75e-8, 45e-7],
-  "~openai/gpt-sol-latest": [2e-6, 1e-5],
-  "~openai/gpt-terra-latest": [1e-6, 5e-6],
-  "~unbiased/pareto-latest": [8e-7, 32e-7],
-  "~x-ai/grok-latest": [2e-6, 6e-6],
-  "~z-ai/glm-flash-latest": [399e-10, 784e-10],
-  "~z-ai/glm-latest": [699e-10, 14e-7],
-  "aion-labs/aion-2.0": [8e-7, 16e-7],
-  "aion-labs/aion-3.0": [3e-6, 6e-6],
-  "aion-labs/aion-3.0-mini": [7e-7, 14e-7],
-  "aion-labs/aion-3.5": [3e-6, 6e-6],
-  "aion-labs/aion-3.5-mini": [7e-7, 14e-7],
-  "aion-labs/aion-rp-llama-3.1-8b": [8e-7, 16e-7],
-  "amazon/nova-2-lite-v1": [3e-7, 25e-7],
-  "amazon/nova-lite-v1": [6e-8, 24e-8],
-  "amazon/nova-micro-v1": [35e-9, 14e-8],
-  "amazon/nova-premier-v1": [25e-7, 125e-7],
-  "amazon/nova-pro-v1": [8e-7, 32e-7],
-  "anthracite-org/magnum-v4-72b": [25e-7, 5e-6],
-  "anthropic/claude-fable-5": [1e-5, 5e-5],
-  "anthropic/claude-fable-5:batch": [5e-6, 25e-6],
-  "anthropic/claude-fable-5.1": [1e-5, 5e-5],
-  "anthropic/claude-fable-5.1:batch": [5e-6, 25e-6],
-  "anthropic/claude-fable-5.2": [8e-6, 4e-5],
-  "anthropic/claude-fable-5.2:batch": [4e-6, 2e-5],
-  "anthropic/claude-haiku-4.5": [1e-6, 5e-6],
-  "anthropic/claude-haiku-4.5:batch": [5e-7, 25e-7],
-  "anthropic/claude-haiku-5.5": [1e-7, 5e-7],
-  "anthropic/claude-haiku-5.5:batch": [5e-8, 25e-8],
-  "anthropic/claude-opus-4.1": [15e-6, 75e-6],
-  "anthropic/claude-opus-4.1:batch": [75e-7, 375e-7],
-  "anthropic/claude-opus-4.5": [5e-6, 25e-6],
-  "anthropic/claude-opus-4.5:batch": [25e-7, 125e-7],
-  "anthropic/claude-opus-4.6": [5e-6, 25e-6],
-  "anthropic/claude-opus-4.6:batch": [25e-7, 125e-7],
-  "anthropic/claude-opus-4.7": [5e-6, 25e-6],
-  "anthropic/claude-opus-4.7:batch": [25e-7, 125e-7],
-  "anthropic/claude-opus-4.8": [5e-6, 25e-6],
-  "anthropic/claude-opus-4.8:batch": [25e-7, 125e-7],
-  "anthropic/claude-opus-5": [5e-6, 25e-6],
-  "anthropic/claude-opus-5:batch": [25e-7, 125e-7],
-  "anthropic/claude-opus-5.5": [4e-6, 2e-5],
-  "anthropic/claude-opus-5.5:batch": [2e-6, 1e-5],
-  "anthropic/claude-sonnet-4.5": [3e-6, 15e-6],
-  "anthropic/claude-sonnet-4.5:batch": [15e-7, 75e-7],
-  "anthropic/claude-sonnet-4.6": [3e-6, 15e-6],
-  "anthropic/claude-sonnet-4.6:batch": [15e-7, 75e-7],
-  "anthropic/claude-sonnet-5": [2e-6, 1e-5],
-  "anthropic/claude-sonnet-5:batch": [1e-6, 5e-6],
-  "anthropic/claude-sonnet-5.5": [2e-6, 1e-5],
-  "anthropic/claude-sonnet-5.5:batch": [1e-6, 5e-6],
-  "baidu/ernie-5.5-flash-preview:free": [0, 0],
-  "baidu/ernie-light-dt-1.0-intl": [113e-8, 394e-8],
-  "bytedance-seed/seed-2-1-turbo": [5e-7, 25e-7],
-  "bytedance-seed/seed-2.0-lite": [25e-8, 2e-6],
-  "bytedance-seed/seed-2.0-mini": [1e-7, 4e-7],
-  "bytedance/ui-tars-1.5-7b": [1e-7, 2e-7],
-  "cognitivecomputations/dolphin-mistral-24b-venice-edition": [2e-7, 9e-7],
-  "cohere/command-a": [25e-7, 1e-5],
-  "cohere/command-a-plus": [3e-7, 15e-7],
-  "cohere/command-r-08-2024": [15e-8, 6e-7],
-  "cohere/command-r-plus-08-2024": [25e-7, 1e-5],
-  "cohere/command-r7b-12-2024": [375e-10, 15e-8],
-  "deepseek/deepseek-chat": [2574e-10, 10287e-10],
-  "deepseek/deepseek-chat-v3-0324": [25e-8, 1e-6],
-  "deepseek/deepseek-chat-v3.1": [25e-8, 95e-8],
-  "deepseek/deepseek-r1-0528": [571e-9, 2286e-9],
-  "deepseek/deepseek-v3.1-terminus": [27e-8, 1e-6],
-  "deepseek/deepseek-v3.2": [26e-8, 38e-8],
-  "deepseek/deepseek-v3.2-exp": [27e-8, 41e-8],
-  "deepseek/deepseek-v4-flash": [9e-8, 18e-8],
-  "deepseek/deepseek-v4-flash-0731": [443e-10, 3e-7],
-  "deepseek/deepseek-v4-flash-0731:batch": [48e-9, 144e-9],
-  "deepseek/deepseek-v4-flash-vision-exp": [2156e-10, 6468e-10],
-  "deepseek/deepseek-v4-pro": [9e-7, 15e-7],
-  "deepseek/deepseek-v4-pro-0813": [132e-8, 396e-8],
-  "deepseek/deepseek-v4.1-flash": [498e-10, 1992e-10],
-  "deepseek/deepseek-v4.1-flash-1017": [15e-8, 6e-7],
-  "deepseek/deepseek-v4.1-flash-1017:batch": [35e-9, 149e-9],
-  "deepseek/deepseek-v4.1-flash:batch": [5e-8, 15e-8],
-  "elorian/glimpse": [6e-7, 3e-6],
-  "fireworks/ember-1": [3e-6, 15e-6],
-  "google/gemini-2.5-flash": [3e-7, 25e-7],
-  "google/gemini-2.5-flash-image": [3e-7, 25e-7],
-  "google/gemini-2.5-flash-lite": [1e-7, 4e-7],
-  "google/gemini-2.5-pro": [125e-8, 1e-5],
-  "google/gemini-2.5-pro-preview": [125e-8, 1e-5],
-  "google/gemini-3-flash-preview": [5e-7, 3e-6],
-  "google/gemini-3-flash-preview:batch": [25e-8, 15e-7],
-  "google/gemini-3-pro-image": [2e-6, 12e-6],
-  "google/gemini-3-pro-image-preview": [2e-6, 12e-6],
-  "google/gemini-3.1-flash-image": [5e-7, 3e-6],
-  "google/gemini-3.1-flash-image-preview": [5e-7, 3e-6],
-  "google/gemini-3.1-flash-lite": [25e-8, 15e-7],
-  "google/gemini-3.1-flash-lite-image": [25e-8, 15e-7],
-  "google/gemini-3.1-flash-lite-preview": [25e-8, 15e-7],
-  "google/gemini-3.1-flash-lite:batch": [125e-9, 75e-8],
-  "google/gemini-3.1-pro-preview": [2e-6, 12e-6],
-  "google/gemini-3.1-pro-preview-customtools": [2e-6, 12e-6],
-  "google/gemini-3.1-pro-preview:batch": [1e-6, 6e-6],
-  "google/gemini-3.5-flash": [15e-7, 9e-6],
-  "google/gemini-3.5-flash-lite": [3e-7, 25e-7],
-  "google/gemini-3.5-flash-lite:batch": [15e-8, 125e-8],
-  "google/gemini-3.5-flash:batch": [75e-8, 45e-7],
-  "google/gemini-3.6-flash": [75e-8, 375e-8],
-  "google/gemini-3.6-flash:batch": [375e-9, 1875e-9],
-  "google/gemini-3.7-flash": [75e-8, 375e-8],
-  "google/gemini-3.7-flash:batch": [375e-9, 1875e-9],
-  "google/gemini-3.8-flash": [825e-9, 4125e-9],
-  "google/gemini-3.8-flash:batch": [375e-9, 1875e-9],
-  "google/gemini-4-argon": [2e-6, 1e-5],
-  "google/gemini-4-argon:batch": [1e-6, 5e-6],
-  "google/gemini-4-carbon": [2e-6, 1e-5],
-  "google/gemini-4-carbon:batch": [1e-6, 5e-6],
-  "google/gemini-4-hydrogen": [15e-7, 75e-7],
-  "google/gemini-4-hydrogen:batch": [75e-8, 375e-8],
-  "google/gemini-4-neon": [3e-6, 15e-6],
-  "google/gemini-4-neon:batch": [15e-7, 75e-7],
-  "google/gemini-nano-banana-2.1": [15e-7, 75e-7],
-  "google/gemini-omni-1.1-flash": [15e-7, 9e-6],
-  "google/gemini-omni-1.2-flash": [15e-7, 9e-6],
-  "google/gemma-2-27b-it": [65e-8, 65e-8],
-  "google/gemma-3-12b-it": [5e-8, 15e-8],
-  "google/gemma-3-27b-it": [8e-8, 45e-8],
-  "google/gemma-3-4b-it": [4e-8, 5e-8],
-  "google/gemma-4-26b-a4b-it": [675e-10, 225e-9],
-  "google/gemma-4-26b-a4b-it:free": [0, 0],
-  "google/gemma-4-31b-it": [2e-7, 4e-7],
-  "google/gemma-4-31b-it:free": [0, 0],
-  "google/lyria-3-clip-preview": [0, 0],
-  "google/lyria-3-pro-preview": [0, 0],
-  "gryphe/mythomax-l2-13b": [3e-7, 5e-7],
-  "ibm-granite/granite-4.2-8b": [6e-8, 15e-8],
-  "inclusionai/ling-3.0-flash": [21e-9, 63e-9],
-  "inclusionai/ling-3.0-flash-vl": [6e-8, 18e-8],
-  "inclusionai/ling-3.0-tiny": [15e-9, 45e-9],
-  "inclusionai/ling-3.1-flash": [6e-8, 18e-8],
-  "inclusionai/ling-3.2-flash:free": [0, 0],
-  "inference-net/schematron-v2-small": [5e-8, 23e-8],
-  "inference-net/schematron-v2-turbo": [3e-8, 15e-8],
-  "kt/midm-k-3.0-pro": [2e-7, 8e-7],
-  "liquid/lfm-2.5-24b-a2b": [5e-8, 7e-7],
-  "liquid/lfm-3-1.7b": [8e-8, 2e-7],
-  "liquid/lfm-3-1.7b:free": [0, 0],
-  "mancer/weaver": [3e-7, 5e-7],
-  "meta-llama/llama-3.1-70b-instruct": [72e-8, 72e-8],
-  "meta-llama/llama-3.1-8b-instruct": [2e-8, 4e-8],
-  "meta-llama/llama-3.2-3b-instruct": [5e-8, 33e-8],
-  "meta-llama/llama-3.3-70b-instruct": [71e-8, 71e-8],
-  "meta-llama/llama-4-maverick": [35e-8, 1e-6],
-  "meta-llama/llama-4-scout": [1e-7, 3e-7],
-  "meta-llama/llama-guard-4-12b": [18e-8, 18e-8],
-  "meta/muse-ember": [1e-7, 5e-7],
-  "meta/muse-glimmer-30b": [35e-8, 15e-7],
-  "meta/muse-glimmer-30b:batch": [24e-8, 96e-8],
-  "meta/muse-spark-1.1": [125e-8, 425e-8],
-  "meta/muse-spark-1.2": [125e-8, 425e-8],
-  "meta/muse-spark-1.2-contributor": [1e-7, 2e-7],
-  "meta/muse-spark-1.3": [125e-8, 425e-8],
-  "meta/muse-spark-1.3-contributor": [1e-7, 2e-7],
-  "meta/muse-spark-open": [125e-8, 425e-8],
-  "meta/muse-wonder": [4e-6, 2e-5],
-  "microsoft/phi-4": [7e-8, 14e-8],
-  "minimax/minimax-m2.5": [27e-8, 95e-8],
-  "minimax/minimax-m2.7": [6e-7, 18e-7],
-  "minimax/minimax-m3": [3e-7, 12e-7],
-  "minimax/minimax-m3:batch": [224e-9, 88e-8],
-  "minimax/minimax-m3.1-flash": [15e-8, 6e-7],
-  "mistralai/codestral-2508": [3e-7, 9e-7],
-  "mistralai/devstral-2512": [4e-7, 2e-6],
-  "mistralai/ministral-14b-2512": [2e-7, 2e-7],
-  "mistralai/ministral-3b-2512": [1e-7, 1e-7],
-  "mistralai/ministral-8b-2512": [15e-8, 15e-8],
-  "mistralai/mistral-large": [2e-6, 6e-6],
-  "mistralai/mistral-large-2407": [2e-6, 6e-6],
-  "mistralai/mistral-large-2512": [5e-7, 15e-7],
-  "mistralai/mistral-large-4-0": [7e-7, 21e-7],
-  "mistralai/mistral-medium-3": [44e-8, 22e-7],
-  "mistralai/mistral-medium-3-5": [15e-7, 75e-7],
-  "mistralai/mistral-medium-3-5:batch": [75e-8, 375e-8],
-  "mistralai/mistral-medium-3.1": [44e-8, 22e-7],
-  "mistralai/mistral-nemo": [29e-9, 3e-8],
-  "mistralai/mistral-saba": [2e-7, 6e-7],
-  "mistralai/mistral-small-24b-instruct-2501": [5e-8, 8e-8],
-  "mistralai/mistral-small-2603": [15e-8, 6e-7],
-  "mistralai/mistral-small-3.1-24b-instruct": [351e-9, 555e-9],
-  "mistralai/mistral-small-3.2-24b-instruct": [75e-9, 2e-7],
-  "mistralai/mixtral-8x22b-instruct": [2e-6, 6e-6],
-  "mistralai/pixtral-large-2502": [2e-6, 6e-6],
-  "mistralai/voxtral-small-24b-2507": [1e-7, 3e-7],
-  "moondream/moondream3-preview": [3e-7, 25e-7],
-  "moondream/moondream3.1-9b-a2b": [3e-7, 25e-7],
-  "moonshotai/kimi-k2": [57e-8, 23e-7],
-  "moonshotai/kimi-k2-0905": [6e-7, 25e-7],
-  "moonshotai/kimi-k2-thinking": [6e-7, 25e-7],
-  "moonshotai/kimi-k2.5": [5e-7, 25e-7],
-  "moonshotai/kimi-k2.6": [65e-8, 341e-8],
-  "moonshotai/kimi-k2.7-code": [6e-7, 3e-6],
-  "moonshotai/kimi-k3": [192e-9, 16e-6],
-  "moonshotai/kimi-k3:batch": [228e-8, 114e-7],
-  "moonshotai/kimi-k3.1-pro": [2403e-10, 84023e-10],
-  "moonshotai/kimi-k3.1-pro:batch": [372e-9, 5583e-9],
-  "morph/morph-v3-fast": [8e-7, 12e-7],
-  "morph/morph-v3-fast:batch": [4e-7, 6e-7],
-  "morph/morph-v3-large": [9e-7, 19e-7],
-  "morph/morph-v3-large:batch": [45e-8, 95e-8],
-  "motif-technologies/motif-3": [3e-7, 12e-7],
-  "nex-agi/nex-n2.5-mini": [25e-9, 1e-7],
-  "nex-agi/nex-n2.5-pro": [75e-9, 25e-8],
-  "nex-agi/nex-n2.6": [12e-8, 4e-7],
-  "nousresearch/hermes-4-405b": [1e-6, 3e-6],
-  "nvidia/nemotron-3-nano-30b-a3b": [6e-8, 24e-8],
-  "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free": [0, 0],
-  "nvidia/nemotron-3-super-120b-a12b": [75e-9, 4e-7],
-  "nvidia/nemotron-3-ultra-550b-a55b": [5e-7, 22e-7],
-  "nvidia/nemotron-3-ultra-550b-a55b:free": [0, 0],
-  "nvidia/nemotron-3.5-content-safety": [2e-7, 2e-7],
-  "nvidia/nemotron-3.5-lightning": [7e-8, 2e-7],
-  "nvidia/nemotron-3.5-lightning:free": [0, 0],
-  "nvidia/nemotron-3.5-super-vl": [15e-8, 47e-8],
-  "nvidia/nemotron-3.5-super-vl:free": [0, 0],
-  "nvidia/switchyard": [0, 0],
-  "openai/gpt-3.5-turbo-0613": [1e-6, 2e-6],
-  "openai/gpt-3.5-turbo-16k": [3e-6, 4e-6],
-  "openai/gpt-4": [3e-5, 6e-5],
-  "openai/gpt-4-turbo:batch": [5e-6, 15e-6],
-  "openai/gpt-4.1": [2e-6, 8e-6],
-  "openai/gpt-4.1-mini": [4e-7, 16e-7],
-  "openai/gpt-4.1-mini:batch": [2e-7, 8e-7],
-  "openai/gpt-4.1-nano": [1e-7, 4e-7],
-  "openai/gpt-4.1-nano:batch": [5e-8, 2e-7],
-  "openai/gpt-4.1:batch": [1e-6, 4e-6],
-  "openai/gpt-4o": [25e-7, 1e-5],
-  "openai/gpt-4o-2024-05-13": [5e-6, 15e-6],
-  "openai/gpt-4o-2024-08-06": [25e-7, 1e-5],
-  "openai/gpt-4o-2024-11-20": [25e-7, 1e-5],
-  "openai/gpt-4o-mini": [15e-8, 6e-7],
-  "openai/gpt-4o-mini-2024-07-18": [15e-8, 6e-7],
-  "openai/gpt-4o-mini:batch": [75e-9, 3e-7],
-  "openai/gpt-4o:batch": [125e-8, 5e-6],
-  "openai/gpt-5": [125e-8, 1e-5],
-  "openai/gpt-5-image": [1e-5, 1e-5],
-  "openai/gpt-5-image-mini": [25e-7, 2e-6],
-  "openai/gpt-5-mini": [25e-8, 2e-6],
-  "openai/gpt-5-mini:batch": [125e-9, 1e-6],
-  "openai/gpt-5-nano": [5e-8, 4e-7],
-  "openai/gpt-5-nano:batch": [25e-9, 2e-7],
-  "openai/gpt-5-pro": [15e-6, 12e-5],
-  "openai/gpt-5-pro:batch": [75e-7, 6e-5],
-  "openai/gpt-5:batch": [625e-9, 5e-6],
-  "openai/gpt-5.1": [125e-8, 1e-5],
-  "openai/gpt-5.1-codex": [125e-8, 1e-5],
-  "openai/gpt-5.1-codex-max": [125e-8, 1e-5],
-  "openai/gpt-5.1-codex-mini": [25e-8, 2e-6],
-  "openai/gpt-5.1:batch": [625e-9, 5e-6],
-  "openai/gpt-5.2": [175e-8, 14e-6],
-  "openai/gpt-5.2-chat": [175e-8, 14e-6],
-  "openai/gpt-5.2-codex": [175e-8, 14e-6],
-  "openai/gpt-5.2-pro": [21e-6, 168e-6],
-  "openai/gpt-5.2-pro:batch": [105e-7, 84e-6],
-  "openai/gpt-5.2:batch": [875e-9, 7e-6],
-  "openai/gpt-5.3-codex": [175e-8, 14e-6],
-  "openai/gpt-5.4": [25e-7, 15e-6],
-  "openai/gpt-5.4-image-2": [8e-6, 15e-6],
-  "openai/gpt-5.4-mini": [75e-8, 45e-7],
-  "openai/gpt-5.4-mini:batch": [375e-9, 225e-8],
-  "openai/gpt-5.4-nano": [2e-7, 125e-8],
-  "openai/gpt-5.4-nano:batch": [1e-7, 625e-9],
-  "openai/gpt-5.4-pro": [3e-5, 18e-5],
-  "openai/gpt-5.4-pro:batch": [15e-6, 9e-5],
-  "openai/gpt-5.4:batch": [125e-8, 75e-7],
-  "openai/gpt-5.5": [5e-6, 3e-5],
-  "openai/gpt-5.5-pro": [3e-5, 18e-5],
-  "openai/gpt-5.5-pro:batch": [15e-6, 9e-5],
-  "openai/gpt-5.5:batch": [25e-7, 15e-6],
-  "openai/gpt-5.6-luna": [2e-7, 12e-7],
-  "openai/gpt-5.6-luna-pro": [2e-7, 12e-7],
-  "openai/gpt-5.6-luna-pro:batch": [1e-7, 6e-7],
-  "openai/gpt-5.6-luna:batch": [1e-7, 6e-7],
-  "openai/gpt-5.6-sol": [4e-6, 2e-5],
-  "openai/gpt-5.6-sol-pro": [4e-6, 2e-5],
-  "openai/gpt-5.6-sol-pro:batch": [2e-6, 1e-5],
-  "openai/gpt-5.6-sol:batch": [2e-6, 1e-5],
-  "openai/gpt-5.6-terra": [2e-6, 12e-6],
-  "openai/gpt-5.6-terra-pro": [2e-6, 12e-6],
-  "openai/gpt-5.6-terra-pro:batch": [1e-6, 6e-6],
-  "openai/gpt-5.6-terra:batch": [1e-6, 6e-6],
-  "openai/gpt-6-astra": [1e-5, 5e-5],
-  "openai/gpt-6-astra-pro": [1e-5, 5e-5],
-  "openai/gpt-6-astra-pro:batch": [5e-6, 25e-6],
-  "openai/gpt-6-astra:batch": [5e-6, 25e-6],
-  "openai/gpt-6-luna": [1e-7, 5e-7],
-  "openai/gpt-6-luna-pro": [1e-7, 5e-7],
-  "openai/gpt-6-luna-pro:batch": [5e-8, 25e-8],
-  "openai/gpt-6-luna:batch": [5e-8, 25e-8],
-  "openai/gpt-6-sol": [2e-6, 1e-5],
-  "openai/gpt-6-sol-pro": [2e-6, 1e-5],
-  "openai/gpt-6-sol-pro:batch": [1e-6, 5e-6],
-  "openai/gpt-6-sol:batch": [1e-6, 5e-6],
-  "openai/gpt-6.1-sol": [2e-6, 1e-5],
-  "openai/gpt-6.1-sol-pro": [2e-6, 1e-5],
-  "openai/gpt-6.1-sol-pro:batch": [1e-6, 5e-6],
-  "openai/gpt-6.1-sol:batch": [1e-6, 5e-6],
-  "openai/gpt-6.1-terra": [1e-6, 5e-6],
-  "openai/gpt-6.1-terra-pro": [1e-6, 5e-6],
-  "openai/gpt-6.1-terra-pro:batch": [5e-7, 25e-7],
-  "openai/gpt-6.1-terra:batch": [5e-7, 25e-7],
-  "openai/gpt-6.2-astra": [8e-6, 4e-5],
-  "openai/gpt-6.2-astra-pro": [8e-6, 4e-5],
-  "openai/gpt-6.2-astra-pro:batch": [4e-6, 2e-5],
-  "openai/gpt-6.2-astra:batch": [4e-6, 2e-5],
-  "openai/gpt-6.2-sol": [2e-6, 1e-5],
-  "openai/gpt-6.2-sol-pro": [2e-6, 1e-5],
-  "openai/gpt-6.2-sol-pro:batch": [1e-6, 5e-6],
-  "openai/gpt-6.2-sol:batch": [1e-6, 5e-6],
-  "openai/gpt-audio": [25e-7, 1e-5],
-  "openai/gpt-audio-mini": [6e-7, 24e-7],
-  "openai/gpt-chat-latest": [5e-6, 3e-5],
-  "openai/gpt-oss-120b": [9e-8, 36e-8],
-  "openai/gpt-oss-120b:batch": [296e-10, 136e-9],
-  "openai/gpt-oss-20b": [75e-9, 3e-7],
-  "openai/gpt-oss-20b:batch": [24e-9, 112e-9],
-  "openai/gpt-oss-safeguard-20b": [75e-9, 3e-7],
-  "openai/o3": [2e-6, 8e-6],
-  "openai/o3-mini:batch": [55e-8, 22e-7],
-  "openai/o3-pro": [2e-5, 8e-5],
-  "openai/o3:batch": [1e-6, 4e-6],
-  "openai/o4-mini:batch": [55e-8, 22e-7],
-  "openrouter/auto": [0, 0],
-  "openrouter/auto-beta": [0, 0],
-  "openrouter/auto-code": [0, 0],
-  "openrouter/bodybuilder": [0, 0],
-  "openrouter/free": [0, 0],
-  "openrouter/fusion": [0, 0],
-  "openrouter/pareto-code": [0, 0],
-  "particle-ai/particle-1": [7e-8, 5e-7],
-  "particle-ai/particle-1:free": [0, 0],
-  "perceptron/perceptron-mk1": [15e-8, 15e-7],
-  "perceptron/perceptron-mk1.5": [15e-8, 15e-7],
-  "perplexity/sonar": [1e-6, 1e-6],
-  "perplexity/sonar-deep-research": [2e-6, 8e-6],
-  "perplexity/sonar-pro": [3e-6, 15e-6],
-  "perplexity/sonar-pro-search": [3e-6, 15e-6],
-  "perplexity/sonar-reasoning-pro": [2e-6, 8e-6],
-  "prism-ml/ternary-bonsai-2-27b": [75e-9, 5e-7],
-  "prism-ml/ternary-bonsai-2-9b": [8e-8, 13e-8],
-  "qwen/qwen-2.5-72b-instruct": [36e-8, 4e-7],
-  "qwen/qwen-2.5-coder-32b-instruct": [66e-8, 1e-6],
-  "qwen/qwen-plus": [26e-8, 78e-8],
-  "qwen/qwen2.5-vl-72b-instruct": [8e-7, 1e-6],
-  "qwen/qwen3-14b": [12e-8, 24e-8],
-  "qwen/qwen3-235b-a22b-2507": [14e-8, 8e-7],
-  "qwen/qwen3-235b-a22b-thinking-2507": [45e-8, 35e-7],
-  "qwen/qwen3-30b-a3b": [12e-8, 5e-7],
-  "qwen/qwen3-30b-a3b-instruct-2507": [1e-7, 3e-7],
-  "qwen/qwen3-32b": [8e-8, 28e-8],
-  "qwen/qwen3-coder": [3e-7, 1e-6],
-  "qwen/qwen3-coder-30b-a3b-instruct": [7e-8, 28e-8],
-  "qwen/qwen3-coder-flash": [195e-9, 975e-9],
-  "qwen/qwen3-coder-next": [12e-8, 8e-7],
-  "qwen/qwen3-next-80b-a3b-instruct": [1e-7, 11e-7],
-  "qwen/qwen3-vl-235b-a22b-instruct": [21e-8, 19e-7],
-  "qwen/qwen3-vl-30b-a3b-instruct": [15e-8, 6e-7],
-  "qwen/qwen3-vl-8b-instruct": [25e-8, 75e-8],
-  "qwen/qwen3.5-122b-a10b": [26e-8, 208e-8],
-  "qwen/qwen3.5-27b": [26e-8, 26e-7],
-  "qwen/qwen3.5-35b-a3b": [14e-8, 1e-6],
-  "qwen/qwen3.5-397b-a17b": [45e-8, 3e-6],
-  "qwen/qwen3.5-9b": [17e-8, 25e-8],
-  "qwen/qwen3.5-flash-02-23": [65e-9, 26e-8],
-  "qwen/qwen3.5-plus-02-15": [26e-8, 156e-8],
-  "qwen/qwen3.5-plus-20260420": [3e-7, 18e-7],
-  "qwen/qwen3.6-27b": [32e-8, 32e-7],
-  "qwen/qwen3.6-35b-a3b": [1e-7, 9e-7],
-  "qwen/qwen3.6-flash": [1875e-10, 1125e-9],
-  "qwen/qwen3.6-plus": [325e-9, 195e-8],
-  "qwen/qwen3.7-flash": [3e-8, 13e-8],
-  "qwen/qwen3.7-max": [1475e-9, 4425e-9],
-  "qwen/qwen3.7-plus": [32e-8, 128e-8],
-  "qwen/qwen3.7-plus:batch": [23e-8, 92e-8],
-  "qwen/qwen3.8-2.4t-a95b": [2e-6, 6e-6],
-  "qwen/qwen3.8-27b": [35e-9, 15e-7],
-  "qwen/qwen3.8-27b:batch": [16e-8, 2e-6],
-  "qwen/qwen3.8-flash": [15e-8, 47e-8],
-  "qwen/qwen3.8-max-0902": [2e-6, 6e-6],
-  "qwen/qwen3.8-max-0902:batch": [115e-8, 345e-8],
-  "qwen/qwen3.8-max-prime": [4e-6, 12e-6],
-  "qwen/qwen3.8-omni-flash": [15e-8, 47e-8],
-  "qwen/qwen4-max": [1425e-9, 4275e-9],
-  "radixark/daisyrose-27b": [15e-8, 1875e-9],
-  "recursive/flint-v1.0:free": [0, 0],
-  "reflection/beam-1.0-501b-a23b": [25e-8, 1e-6],
-  "rekaai/reka-edge": [1e-7, 1e-7],
-  "rekaai/reka-flash-3": [1e-7, 2e-7],
-  "relace/relace-apply-3": [85e-8, 125e-8],
-  "relace/relace-search": [1e-6, 3e-6],
-  "ricursiveai/ripple-65b-preview": [1e-7, 3e-7],
-  "sakana/fugu-max": [2e-6, 6e-6],
-  "sakana/fugu-ultra": [5e-6, 3e-5],
-  "sakana/fugu-ultra-v2": [5e-6, 3e-5],
-  "sakana/sakana-namazu": [95e-8, 4e-6],
-  "sao10k/l3-lunaris-8b": [4e-8, 5e-8],
-  "sao10k/l3.1-euryale-70b": [85e-8, 85e-8],
-  "scaledown/extract": [4e-8, 0],
-  "scaledown/summarize": [4e-8, 0],
-  "stepfun/step-3.7-flash": [2e-7, 115e-8],
-  "stepfun/step-5-preview": [1e-6, 27e-7],
-  "tencent/hy-mt2-1.8b": [44e-9, 177e-9],
-  "tencent/hy-mt2-30b-a3b": [74e-9, 295e-9],
-  "tencent/hy-mt2-7b": [74e-9, 295e-9],
-  "tencent/hy3": [14e-8, 58e-8],
-  "tencent/hy4": [417e-9, 12505e-10],
-  "tencent/hy4-flash": [35e-9, 1405e-10],
-  "tencent/hy4-preview": [834e-9, 2501e-9],
-  "thedrummer/cydonia-24b-v4.1": [3e-7, 5e-7],
-  "thedrummer/skyfall-36b-v2": [55e-8, 8e-7],
-  "thedrummer/unslopnemo-12b": [4e-7, 4e-7],
-  "thinkingmachines/inkling": [1e-6, 405e-8],
-  "thinkingmachines/inkling-2-mini": [75e-9, 3e-7],
-  "thinkingmachines/inkling-2-small": [3e-7, 1e-6],
-  "thinkingmachines/inkling-small": [45e-8, 12e-7],
-  "thinkingmachines/inkling-small:batch": [36e-8, 96e-8],
-  "typesafe/jev-router": [0, 0],
-  "unbiased/pareto-26.10": [8e-7, 32e-7],
-  "unbiased/pareto-26.10-preview": [8e-7, 32e-7],
-  "unbiased/pareto-26.9": [25e-7, 75e-7],
-  "undi95/remm-slerp-l2-13b": [3e-7, 5e-7],
-  "upstage/solar-mini4": [5e-8, 2e-7],
-  "upstage/solar-pro4": [15e-8, 6e-7],
-  "writer/palmyra-x5": [6e-7, 6e-6],
-  "x-ai/grok-4.20": [125e-8, 25e-7],
-  "x-ai/grok-4.20-multi-agent": [125e-8, 25e-7],
-  "x-ai/grok-4.3": [125e-8, 25e-7],
-  "x-ai/grok-4.3:batch": [1e-6, 2e-6],
-  "x-ai/grok-4.5": [2e-6, 6e-6],
-  "x-ai/grok-4.6": [2e-6, 6e-6],
-  "x-ai/grok-4.6:batch": [16e-7, 48e-7],
-  "x-ai/grok-4.7": [2e-6, 6e-6],
-  "x-ai/grok-4.7:batch": [16e-7, 48e-7],
-  "xiaomi/mimo-v2.5": [4e-7, 2e-6],
-  "xiaomi/mimo-v2.5-pro": [48e-8, 18e-7],
-  "xiaomi/mimo-v2.6-flash": [14e-8, 28e-8],
-  "xiaomi/mimo-v2.6-pro": [435e-9, 87e-8],
-  "xiaomi/mimo-v2.6-pro-ultraspeed": [435e-8, 87e-7],
-  "z-ai/glm-4.5": [6e-7, 22e-7],
-  "z-ai/glm-4.5-air": [13e-8, 85e-8],
-  "z-ai/glm-4.5v": [6e-7, 18e-7],
-  "z-ai/glm-4.6": [5e-7, 2e-6],
-  "z-ai/glm-4.6v": [3e-7, 9e-7],
-  "z-ai/glm-4.7": [6e-7, 22e-7],
-  "z-ai/glm-4.7-flash": [605e-10, 4e-7],
-  "z-ai/glm-5": [1e-6, 32e-7],
-  "z-ai/glm-5-turbo": [12e-7, 4e-6],
-  "z-ai/glm-5.1": [14e-7, 44e-7],
-  "z-ai/glm-5.2": [62e-8, 242e-8],
-  "z-ai/glm-5.2:batch": [322e-9, 989e-9],
-  "z-ai/glm-5.3": [699e-10, 14e-7],
-  "z-ai/glm-5.3-flash": [399e-10, 784e-10],
-  "z-ai/glm-5.3-flash:batch": [23e-9, 68e-9],
-  "z-ai/glm-5.3-flashx": [37e-8, 125e-8],
-  "z-ai/glm-5.3-flashx-legal": [37e-8, 125e-8],
-  "z-ai/glm-5.3-prime": [168e-8, 528e-8],
-  "z-ai/glm-5.3:batch": [28e-8, 1249e-9],
-  "z-ai/glm-5v-turbo": [12e-7, 4e-6]
-};
-
-// ../packages/model-catalog/src/snapshotPriceBook.ts
-var book;
-function snapshotPriceBook() {
-  book ??= priceBookFromPrices(
-    Object.entries(PRICE_SNAPSHOT).map(([id, [input, output]]) => [id, withPriceTiers(id, { input, output })])
-  );
-  return book;
-}
-
-// ../packages/model-catalog/src/anthropic.ts
-var ANTHROPIC_RELEASES = {
-  opus: ["5.5", "5", "4.8", "4.7", "4.6", "4.5", "4.1", "4.0"],
-  sonnet: ["5.5", "5", "4.6", "4.5", "4.0"],
-  haiku: ["5.5", "4.5"],
-  fable: ["5.1", "5"]
-};
-var CLAUDE_ID = /^claude-(opus|sonnet|haiku|fable)-(\d+)(?:([-.])(\d{1,2})(?=-|$))?(-.*)?$/;
-function parseAnthropicModelId(id) {
-  const match = CLAUDE_ID.exec(id.trim().toLowerCase());
-  if (!match) {
-    return void 0;
-  }
-  return {
-    family: match[1],
-    version: [Number(match[2]), Number(match[4] ?? 0)],
-    separator: match[3] === "." ? "." : "-",
-    suffix: match[5] ?? ""
-  };
-}
-
-// ../packages/model-catalog/src/weakerModel.ts
-function catalogIdCandidates(model) {
-  const ids = [model];
-  const claude = parseAnthropicModelId(model.slice(model.lastIndexOf("/") + 1));
-  if (claude) {
-    const [major, minor] = claude.version;
-    ids.push(`anthropic/claude-${claude.family}-${major}.${minor}`);
-    if (minor === 0) ids.push(`anthropic/claude-${claude.family}-${major}`);
-  }
-  return ids;
-}
-function tierOfModel(model, book2 = snapshotPriceBook()) {
-  if (!model || model === "default") return void 0;
-  for (const id of catalogIdCandidates(model)) {
-    const price = listPriceOf(book2, id);
-    if (price) return resolveModelTier({ price });
-  }
-  return void 0;
-}
-function isWeakerModel(requested, served, book2 = snapshotPriceBook()) {
-  const asked = tierOfModel(requested, book2);
-  const got = tierOfModel(served, book2);
-  return asked !== void 0 && got !== void 0 && tierRank(got) > tierRank(asked);
-}
-
-// ../packages/model-catalog/src/providers.ts
-var LLM_PROVIDER_INFO = [
-  { id: "anthropic", label: "Anthropic (Claude)", credential: "api_key", keyPlaceholder: "sk-ant-\u2026", subscription: "paste", signInDomains: ["claude.ai", "anthropic.com"] },
-  { id: "openai", label: "OpenAI", credential: "api_key", keyPlaceholder: "sk-\u2026", subscription: "paste", signInDomains: ["openai.com"] },
-  { id: "google", label: "Google (Gemini)", credential: "api_key", keyPlaceholder: "AIza\u2026", subscription: null },
-  { id: "meta", label: "Meta AI (MUSE)", credential: "api_key", keyPlaceholder: "meta-\u2026", subscription: null },
-  // A Kimi Code subscription issues no API key at all — its own config leaves `api_key`
-  // empty beside an OAuth record — so it connects by device-code redirect, never paste.
-  { id: "kimi", label: "Kimi", credential: "api_key", keyPlaceholder: "sk-\u2026", subscription: "device", signInDomains: ["kimi.ai", "kimi.com"] },
-  { id: "moonshot", label: "Moonshot AI", credential: "api_key", keyPlaceholder: "sk-\u2026", subscription: null },
-  { id: "qwen", label: "Qwen", credential: "api_key", keyPlaceholder: "sk-\u2026", subscription: null },
-  { id: "minimax", label: "MiniMax", credential: "api_key", keyPlaceholder: "sk-\u2026", subscription: null },
-  { id: "xai", label: "xAI (Grok)", credential: "api_key", keyPlaceholder: "xai-\u2026", subscription: "paste", signInDomains: ["x.ai"] },
-  { id: "ollama", label: "Ollama Cloud", credential: "api_key", keyPlaceholder: "sk-\u2026", subscription: null },
-  {
-    id: "ollama-local",
-    label: "Ollama",
-    credential: "local_runtime",
-    keyPlaceholder: "",
-    subscription: null,
-    localRuntime: { defaultBaseUrl: "http://127.0.0.1:11434", exampleModel: "llama3.1:8b" }
-  },
-  // FreeToken's engine default; it serves whatever model the tenant loaded, so no example.
-  {
-    id: "freetoken",
-    label: "FreeToken",
-    credential: "local_runtime",
-    keyPlaceholder: "",
-    subscription: null,
-    localRuntime: { defaultBaseUrl: "http://127.0.0.1:1919" }
-  }
-];
-var LLM_PROVIDERS = LLM_PROVIDER_INFO.map((p) => p.id);
-var INFO_BY_ID = new Map(LLM_PROVIDER_INFO.map((p) => [p.id, p]));
-
-// ../packages/spend-contract/src/fold.ts
-var AVOIDED_SOURCES = /* @__PURE__ */ new Set(["memory_answer", "evermind_answer", "response_cache", "deterministic"]);
-var LOCAL_MODEL_SOURCE = "local_model";
-function addSaving(acc, source, mc, tokens, events, estimated) {
-  if (tokens === 0 && mc === 0) return;
-  const key = `${source}:${estimated ? "e" : "m"}`;
-  const prev = acc.get(key) ?? { source, mc: 0, tokens: 0, events: 0, estimated };
-  acc.set(key, { ...prev, mc: prev.mc + mc, tokens: prev.tokens + tokens, events: prev.events + events });
-}
-function savedFrom(acc, spentUsd) {
-  let measuredMc = 0;
-  let estimatedMc = 0;
-  let tokensSaved = 0;
-  const bySource = [];
-  for (const v of acc.values()) {
-    if (v.estimated) estimatedMc += v.mc;
-    else measuredMc += v.mc;
-    tokensSaved += v.tokens;
-    bySource.push({ source: v.source, usd: millicentsToUsd(v.mc), tokens: v.tokens, events: v.events, estimated: v.estimated });
-  }
-  bySource.sort((a, b) => b.usd - a.usd);
-  const saved = {
-    measuredUsd: millicentsToUsd(measuredMc),
-    estimatedUsd: millicentsToUsd(estimatedMc),
-    netUsd: millicentsToUsd(measuredMc + estimatedMc),
-    tokensSaved: Math.max(0, tokensSaved),
-    bySource
-  };
-  const denom = spentUsd + Math.max(0, saved.netUsd);
-  return { saved, savedPct: denom > 0 ? Math.max(0, saved.netUsd) / denom : null };
-}
-function foldSpendSavings(slices, book2) {
-  const spend = {
-    platformUsd: 0,
-    yourKeyUsd: 0,
-    totalUsd: 0,
-    promptTokens: 0,
-    completionTokens: 0,
-    cacheReadTokens: 0,
-    totalTokens: 0,
-    unpricedTokens: 0,
-    requests: 0
-  };
-  let platformMc = 0;
-  let yourKeyMc = 0;
-  const acc = /* @__PURE__ */ new Map();
-  for (const g of slices) {
-    if (g.savingsSource && AVOIDED_SOURCES.has(g.savingsSource)) {
-      addSaving(acc, g.savingsSource, g.savedCostMc, g.savedPrompt + g.savedCompletion, g.rows, g.savingsEstimated);
-      continue;
-    }
-    spend.promptTokens += g.prompt;
-    spend.completionTokens += g.completion;
-    spend.cacheReadTokens += g.cacheRead;
-    spend.totalTokens += g.total;
-    spend.requests += g.calls;
-    if (g.savingsSource === LOCAL_MODEL_SOURCE) {
-      addSaving(acc, LOCAL_MODEL_SOURCE, g.savedCostMc, g.savedPrompt + g.savedCompletion, g.calls, true);
-      continue;
-    }
-    platformMc += g.costMc;
-    const price = listPriceOf(book2, g.model);
-    const pricing = price ? { prompt: price.input, completion: price.output } : void 0;
-    if (g.unpriced) spend.unpricedTokens += g.total;
-    else if (g.byo && pricing) {
-      yourKeyMc += computeCostMillicents(pricing, {
-        promptTokens: g.prompt,
-        completionTokens: g.completion,
-        totalTokens: g.total,
-        cacheReadTokens: g.cacheRead,
-        cacheCreationTokens: g.cacheCreation
-      });
-    }
-    if (pricing && !g.unpriced) {
-      addSaving(acc, "context_trim", Math.round(g.savedPrompt * pricing.prompt * 1e5), g.savedPrompt, g.trimCalls, true);
-      addSaving(acc, "recall_overhead", -Math.round(g.recallPrompt * pricing.prompt * 1e5), -g.recallPrompt, g.recallCalls, true);
-      const net = (g.cacheRead * (1 - CACHE_READ_MULTIPLIER) - g.cacheCreation * (CACHE_CREATION_MULTIPLIER - 1)) * pricing.prompt;
-      addSaving(acc, "prompt_cache", Math.round(net * 1e5), g.cacheRead, g.cacheCalls, false);
-    } else {
-      addSaving(acc, "context_trim", 0, g.savedPrompt, g.trimCalls, true);
-      addSaving(acc, "recall_overhead", 0, -g.recallPrompt, g.recallCalls, true);
-    }
-  }
-  spend.platformUsd = millicentsToUsd(platformMc);
-  spend.yourKeyUsd = millicentsToUsd(yourKeyMc);
-  spend.totalUsd = millicentsToUsd(platformMc + yourKeyMc);
-  return { spend, ...savedFrom(acc, spend.totalUsd) };
-}
-function combineSpendSavings(a, b) {
-  const sum = (k) => a.spend[k] + b.spend[k];
-  const spend = {
-    platformUsd: sum("platformUsd"),
-    yourKeyUsd: sum("yourKeyUsd"),
-    totalUsd: sum("totalUsd"),
-    promptTokens: sum("promptTokens"),
-    completionTokens: sum("completionTokens"),
-    cacheReadTokens: sum("cacheReadTokens"),
-    totalTokens: sum("totalTokens"),
-    unpricedTokens: sum("unpricedTokens"),
-    requests: sum("requests"),
-    ...a.spend.estimated || b.spend.estimated ? { estimated: true } : {}
-  };
-  const acc = /* @__PURE__ */ new Map();
-  for (const row of [...a.saved.bySource, ...b.saved.bySource]) {
-    addSaving(acc, row.source, Math.round(row.usd * 1e5), row.tokens, row.events, row.estimated);
-  }
-  return { spend, ...savedFrom(acc, spend.totalUsd) };
-}
-
-// ../packages/spend-contract/src/runBudget.ts
-var RUN_BUDGET_WARN_AT = 0.8;
-var capOf = (n2) => typeof n2 === "number" && Number.isFinite(n2) ? n2 : null;
-function runBudgetBreach(caps, usage) {
-  const spendCap = capOf(caps.maxSpendMillicents);
-  if (spendCap != null && usage.spendMillicents >= spendCap) return { kind: "spend", used: usage.spendMillicents, cap: spendCap };
-  const tokenCap = capOf(caps.maxTokens);
-  const tokens = usage.tokens ?? 0;
-  if (tokenCap != null && tokens >= tokenCap) return { kind: "tokens", used: tokens, cap: tokenCap };
-  return null;
-}
-function runBudgetUsedShare(caps, usage) {
-  const spend = caps.maxSpendMillicents ? usage.spendMillicents / caps.maxSpendMillicents : 0;
-  const tokens = caps.maxTokens ? (usage.tokens ?? 0) / caps.maxTokens : 0;
-  return Math.max(spend, tokens);
-}
-function runBudgetWarnDue(caps, usage) {
-  return runBudgetUsedShare(caps, usage) >= RUN_BUDGET_WARN_AT;
-}
-
-// ../packages/spend-contract/src/index.ts
-var USAGE_SURFACES = ["web", "vsix", "on_prem", "cloud", "sdk", "rovr"];
-function isUsageSurface(raw) {
-  return typeof raw === "string" && USAGE_SURFACES.includes(raw);
-}
-var USAGE_SURFACE_HEADER = "x-builderforce-surface";
 
 // src/keyedRows.ts
 function slotKeyedRows(rows, find) {
@@ -3127,12 +2321,12 @@ function readAdvisoryThreadState(metadata) {
     }
   }
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
-  const record2 = raw;
-  if (record2.marker !== ADVISORY_THREAD_MARKER) return null;
+  const record = raw;
+  if (record.marker !== ADVISORY_THREAD_MARKER) return null;
   return {
-    confidentiality: advisoryThreadConfidentiality(record2.confidentiality),
-    founderInvitedAdvisor: record2.founderInvitedAdvisor === true,
-    hostRef: typeof record2.hostRef === "string" && record2.hostRef ? record2.hostRef : void 0
+    confidentiality: advisoryThreadConfidentiality(record.confidentiality),
+    founderInvitedAdvisor: record.founderInvitedAdvisor === true,
+    hostRef: typeof record.hostRef === "string" && record.hostRef ? record.hostRef : void 0
   };
 }
 function advisoryThreadHistoryAdmitted(messages, boundary = "aiContext") {
@@ -4100,7 +3294,7 @@ var EXPERTISE_AREAS = [
 ];
 var DIRECTORY_SORTS = ["newest", "funding", "alphabetical", "runway"];
 var INQUIRY_STATUSES = ["new", "qualifying", "converted", "rejected"];
-var inList = (list2) => (v) => typeof v === "string" && list2.includes(v);
+var inList = (list) => (v) => typeof v === "string" && list.includes(v);
 var isFundingStage = inList(FUNDING_STAGES);
 var isBusinessStage = inList(BUSINESS_STAGES);
 var isStartupSector = inList(STARTUP_SECTORS);
@@ -4459,12 +3653,12 @@ function createLocalChatIdentity(options) {
         return SCAN_STOP;
       }
     });
-    const record2 = queued ? (await liveRecords(tx, "chat", deviceId, (row) => row.id === clientId))[0] : void 0;
-    if (record2) await queueImport(tx, record2);
+    const record = queued ? (await liveRecords(tx, "chat", deviceId, (row) => row.id === clientId))[0] : void 0;
+    if (record) await queueImport(tx, record);
   };
   const awaitImportBinding = (localId) => new Promise((resolve, reject) => {
     let settled2 = false;
-    const settle2 = (done) => {
+    const settle = (done) => {
       if (settled2) return;
       settled2 = true;
       clearTimeout(timer);
@@ -4473,11 +3667,11 @@ function createLocalChatIdentity(options) {
     };
     const check = () => {
       read(localId).then((found) => {
-        if (!found) settle2(() => resolve(void 0));
-        else if (found.serverId !== void 0) settle2(() => resolve(found.serverId));
-      }, (error) => settle2(() => reject(error)));
+        if (!found) settle(() => resolve(void 0));
+        else if (found.serverId !== void 0) settle(() => resolve(found.serverId));
+      }, (error) => settle(() => reject(error)));
     };
-    const timer = setTimeout(() => settle2(() => resolve(void 0)), IMPORT_BIND_WAIT_MS);
+    const timer = setTimeout(() => settle(() => resolve(void 0)), IMPORT_BIND_WAIT_MS);
     const unsubscribe = store.subscribe(check);
     check();
   });
@@ -4575,12 +3769,12 @@ function routeOfModel(model) {
 function isOwnKeySpend(route) {
   return route === "byo-direct";
 }
-function callCostOrUnknown(model, tokens, book2 = snapshotPriceBook(), route) {
+function callCostOrUnknown(model, tokens, book = snapshotPriceBook(), route) {
   if (!model) return void 0;
   const via = route ?? routeOfModel(model);
   if (via === "local") return 0;
   const priced = pricedId(model);
-  const price = isOwnKeySpend(via) ? listPriceOf(book2, priced) : book2.priceOf(priced);
+  const price = isOwnKeySpend(via) ? listPriceOf(book, priced) : book.priceOf(priced);
   if (!price) return void 0;
   const prompt = n(tokens.prompt);
   const completion = n(tokens.completion);
@@ -4594,7 +3788,7 @@ function callCostOrUnknown(model, tokens, book2 = snapshotPriceBook(), route) {
 }
 
 // src/localChat/ledgerSpend.ts
-function sliceOf(row, book2) {
+function sliceOf(row, book) {
   const total = row.promptTokens + row.completionTokens;
   const local = row.savingsSource === "local_model";
   const avoided = row.savingsSource === "deterministic";
@@ -4604,7 +3798,7 @@ function sliceOf(row, book2) {
     completion: row.completionTokens,
     cacheRead: row.cacheReadTokens,
     cacheCreation: row.cacheCreationTokens
-  }, book2, row.route);
+  }, book, row.route);
   const unpriced = !(local || avoided) && cost === void 0;
   const costMc = local || avoided || ownKey ? 0 : cost ?? 0;
   return {
@@ -4633,10 +3827,10 @@ function sliceOf(row, book2) {
   };
 }
 function ledgerSpend(rows, opts) {
-  const book2 = opts.book ?? snapshotPriceBook();
+  const book = opts.book ?? snapshotPriceBook();
   const kept = opts.excludeGateway ? rows.filter((row) => row.route !== "gateway" && !opts.imported?.has(row.clientEventId)) : rows;
   if (kept.length === 0) return null;
-  const summary = foldSpendSavings(kept.map((row) => sliceOf(row, book2)), book2);
+  const summary = foldSpendSavings(kept.map((row) => sliceOf(row, book)), book);
   return kept.some((row) => row.route === "gateway") ? { ...summary, spend: { ...summary.spend, estimated: true } } : summary;
 }
 async function importedUsageIds(tx, rows, destination) {
@@ -4649,16 +3843,16 @@ async function importedUsageIds(tx, rows, destination) {
 async function usageRowsByChat(tx, deviceId, clientIds) {
   const byChat2 = /* @__PURE__ */ new Map();
   const keep2 = (row) => {
-    const list2 = byChat2.get(row.payload.clientChatId) ?? [];
-    list2.push(structuredClone(row.payload));
-    byChat2.set(row.payload.clientChatId, list2);
+    const list = byChat2.get(row.payload.clientChatId) ?? [];
+    list.push(structuredClone(row.payload));
+    byChat2.set(row.payload.clientChatId, list);
   };
   if (clientIds) {
     for (const clientId of clientIds) await scanChatUsage(tx, deviceId, clientId, keep2);
   } else {
     await scanLive(tx, "usage", deviceId, keep2);
   }
-  for (const list2 of byChat2.values()) list2.sort((a, b) => a.at.localeCompare(b.at));
+  for (const list of byChat2.values()) list.sort((a, b) => a.at.localeCompare(b.at));
   return byChat2;
 }
 
@@ -4666,7 +3860,7 @@ async function usageRowsByChat(tx, deviceId, clientIds) {
 function reportServerSpendFailure(error) {
   console.warn(`BuilderForce chat spend: server spend read failed (${errorMessage(error)})`);
 }
-var chatValue = (record2) => record2.payload.chat;
+var chatValue = (record) => record.payload.chat;
 var MESSAGE_ID_CHECK_LIMIT = 64;
 function createLocalBrainPersistence(options) {
   const destination = options.destination ?? UNBOUND_DESTINATION;
@@ -4703,12 +3897,12 @@ function createLocalBrainPersistence(options) {
   };
   const projectionInputs = async (tx, rows) => {
     const account = options.accountDestination?.();
-    const usage = await usageRowsByChat(tx, options.deviceId, new Set(rows.map((record2) => record2.id)));
-    return Promise.all(rows.map(async (record2) => {
-      const serverId = await boundServerId(tx, record2.id, account);
-      const chatUsage = usage.get(record2.id) ?? [];
+    const usage = await usageRowsByChat(tx, options.deviceId, new Set(rows.map((record) => record.id)));
+    return Promise.all(rows.map(async (record) => {
+      const serverId = await boundServerId(tx, record.id, account);
+      const chatUsage = usage.get(record.id) ?? [];
       return {
-        record: record2,
+        record,
         serverId,
         usage: chatUsage,
         imported: serverId !== void 0 && account ? await importedUsageIds(tx, chatUsage, account) : /* @__PURE__ */ new Set()
@@ -4722,8 +3916,8 @@ function createLocalBrainPersistence(options) {
       server = options.serverSpendSync?.() ?? null;
       if (!server) void options.serverSpend(bound).catch(reportServerSpendFailure);
     }
-    return inputs.map(({ record: record2, serverId, usage, imported }) => {
-      const chat = chatValue(record2);
+    return inputs.map(({ record, serverId, usage, imported }) => {
+      const chat = chatValue(record);
       const fromServer = serverId !== void 0 ? server?.get(serverId) ?? null : null;
       const local = ledgerSpend(usage, {
         excludeGateway: fromServer !== null,
@@ -4733,7 +3927,7 @@ function createLocalBrainPersistence(options) {
       const spend = fromServer && local ? combineSpendSavings(fromServer, local) : fromServer ?? local;
       return {
         ...chat,
-        clientId: record2.id,
+        clientId: record.id,
         ...serverId !== void 0 ? { serverId } : {},
         ...spend ? { spend } : {}
       };
@@ -4781,7 +3975,7 @@ function createLocalBrainPersistence(options) {
           createdAt: stamp,
           updatedAt: stamp
         };
-        const record2 = newLocalRecord({
+        const record = newLocalRecord({
           id: clientId,
           entityType: "chat",
           payload: { clientId, chat },
@@ -4789,8 +3983,8 @@ function createLocalBrainPersistence(options) {
           destination,
           occurredAt: stamp
         });
-        await tx.put(record2);
-        await journalWrite(tx, record2, "create", { key: `chat:${clientId}` });
+        await tx.put(record);
+        await journalWrite(tx, record, "create", { key: `chat:${clientId}` });
         if (body.bindPending) await claimChatBind(tx, clientId, now(), BIND_PENDING_HOLDER);
         return chat;
       });
@@ -4918,7 +4112,7 @@ function createLocalBrainPersistence(options) {
         for (const [index, message] of added.entries()) {
           const eventKey = keys[index];
           const clientId = newId();
-          const record2 = newLocalRecord({
+          const record = newLocalRecord({
             id: clientId,
             entityType: "message",
             payload: { clientId, chatId, chatClientId: chat.id, eventKey, message },
@@ -4926,8 +4120,8 @@ function createLocalBrainPersistence(options) {
             destination: chat.destination,
             occurredAt: stamp
           });
-          await tx.put(record2);
-          await journalWrite(tx, record2, "create", { key: eventKey, dependsOn: [`chat:${chat.id}`], chatClientId: chat.id });
+          await tx.put(record);
+          await journalWrite(tx, record, "create", { key: eventKey, dependsOn: [`chat:${chat.id}`], chatClientId: chat.id });
         }
         if (added.length > 0) {
           const nextChat = { ...chat, version: chat.version + 1, updatedAt: stamp, payload: { ...chat.payload, chat: { ...chat.payload.chat, updatedAt: stamp } } };
@@ -4960,15 +4154,15 @@ function createLocalBrainPersistence(options) {
       const url = options.createObjectURL?.(file);
       if (url) blobs.set(key, url);
       await options.store.transact(async (tx) => {
-        const record2 = newLocalRecord({
+        const record = newLocalRecord({
           id: key,
           entityType: "attachment-manifest",
           payload: { key, name: file.name, type: file.type, size: file.size },
           deviceId: options.deviceId,
           destination
         });
-        await tx.put(record2);
-        await journalWrite(tx, record2, "create", { key: `attachment:${key}` });
+        await tx.put(record);
+        await journalWrite(tx, record, "create", { key: `attachment:${key}` });
       });
       return { key, name: file.name, type: file.type };
     },
@@ -4979,14 +4173,14 @@ function createLocalBrainPersistence(options) {
 // src/localChat/paidRoute.ts
 var DEFAULT_PAID_ROUTE = `anthropic/claude-sonnet-${ANTHROPIC_RELEASES.sonnet[0]}`;
 var ledgerCount = (n2) => typeof n2 === "number" && Number.isFinite(n2) && n2 > 0 ? Math.round(n2) : 0;
-function paidRouteOf(rows, book2) {
+function paidRouteOf(rows, book) {
   for (let i = rows.length - 1; i >= 0; i -= 1) {
     const row = rows[i];
     if (row.route === "local") continue;
-    const price = listPriceOf(book2, row.model);
+    const price = listPriceOf(book, row.model);
     if (price) return { prompt: price.input, completion: price.output };
   }
-  const fallback = listPriceOf(book2, DEFAULT_PAID_ROUTE);
+  const fallback = listPriceOf(book, DEFAULT_PAID_ROUTE);
   return fallback ? { prompt: fallback.input, completion: fallback.output } : void 0;
 }
 async function usageRowsOf(tx, deviceId, clientChatId) {
@@ -5119,7 +4313,7 @@ function createRunUsageLedger(options) {
             savedCostMc: computeCostMillicents(pricing, { promptTokens, completionTokens, totalTokens: promptTokens + completionTokens })
           };
         }
-        const record2 = newLocalRecord({
+        const record = newLocalRecord({
           id,
           entityType: "usage",
           payload: value,
@@ -5127,9 +4321,9 @@ function createRunUsageLedger(options) {
           destination: chat.destination,
           occurredAt: at
         });
-        await tx.put(record2);
+        await tx.put(record);
         if (syncsToPlatform(value)) {
-          await journalWrite(tx, record2, "create", { key: `usage:${id}`, dependsOn: [`chat:${chat.id}`], chatClientId: chat.id });
+          await journalWrite(tx, record, "create", { key: `usage:${id}`, dependsOn: [`chat:${chat.id}`], chatClientId: chat.id });
         }
       });
     },
@@ -5174,7 +4368,7 @@ async function runOutcomesSince(store, deviceId, since) {
     return out;
   });
 }
-function routeRunRecords(rows, book2, outcomes) {
+function routeRunRecords(rows, book, outcomes) {
   const runs = /* @__PURE__ */ new Map();
   for (const row of rows) {
     if (row.pipelineRoute !== "full" && row.pipelineRoute !== "quick") continue;
@@ -5184,7 +4378,7 @@ function routeRunRecords(rows, book2, outcomes) {
       completion: row.completionTokens,
       cacheRead: row.cacheReadTokens,
       cacheCreation: row.cacheCreationTokens
-    }, book2, row.route) ?? null;
+    }, book, row.route) ?? null;
     const seen = runs.get(key);
     if (seen) {
       seen.costMc = seen.costMc === null || costMc === null ? null : seen.costMc + costMc;
@@ -5246,184 +4440,6 @@ function summarizeGateRuns(rows, accepted = /* @__PURE__ */ new Map()) {
   }
   report.answeredBy = [...byAction].map(([actionId, n2]) => ({ actionId, runs: n2 })).sort((a, b) => b.runs - a.runs || a.actionId.localeCompare(b.actionId));
   return report;
-}
-
-// ../packages/pipeline-route/src/score.ts
-import { sigmoid } from "@seanhogg/builderforce-memory/stats";
-var LENGTH_FLOOR_CHARS = 80;
-var MAX_FILE_MENTIONS = 4;
-var DEFAULT_ROUTE_THRESHOLD = 0.5;
-var ROUTE_WEIGHTS = {
-  bias: -0.4,
-  length: 0.9,
-  fileMentions: 0.35,
-  multiStep: 1.2,
-  broadScope: 1,
-  questionOnly: -1.3,
-  followUp: -0.3,
-  // Outweighs every quick-leaning feature together (bias, follow-up, docs, question-only: -2.6), so a ticket or spec
-  // reconciliation request always plans first (VS Code chat #157440 started "create tickets for every open item" in code).
-  ticketIntent: 3,
-  actionType: {
-    data_migration: 1,
-    refactor: 0.9,
-    provisioning: 0.6,
-    backend_api: 0.4,
-    decision: 0.3,
-    devops_ci: 0.3,
-    frontend_ui: 0.2,
-    analysis: -0.4,
-    docs: -0.6
-  }
-};
-var round2 = (n2) => Math.round(n2 * 100) / 100;
-function routeThreshold(raw) {
-  return typeof raw === "number" && Number.isFinite(raw) ? Math.min(1, Math.max(0, raw)) : DEFAULT_ROUTE_THRESHOLD;
-}
-function contributions(f, w) {
-  const decades = f.requestChars > LENGTH_FLOOR_CHARS ? Math.min(2, Math.log10(f.requestChars / LENGTH_FLOOR_CHARS)) : 0;
-  return [
-    ["long request", w.length * decades],
-    ["files named", w.fileMentions * Math.min(MAX_FILE_MENTIONS, Math.max(0, f.fileMentions))],
-    ["multi-step", f.multiStep ? w.multiStep : 0],
-    ["broad scope", f.broadScope ? w.broadScope : 0],
-    ["question only", f.questionOnly ? w.questionOnly : 0],
-    ["follow-up", f.followUp ? w.followUp : 0],
-    ["ticket intent", f.ticketIntent ? w.ticketIntent ?? 0 : 0],
-    [f.actionType, w.actionType[f.actionType] ?? 0]
-  ];
-}
-function scorePipeline(f, opts = {}) {
-  const w = opts.weights ?? ROUTE_WEIGHTS;
-  const threshold = routeThreshold(opts.threshold);
-  const parts = contributions(f, w);
-  const score = round2(sigmoid(parts.reduce((z, [, c]) => z + c, w.bias)));
-  const strongest = parts.filter(([, c]) => c !== 0).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])).slice(0, 3).map(([name]) => name);
-  const why = strongest.length ? ` (${strongest.join(", ")})` : "";
-  if (f.forceFull) return { score, route: "full", reason: `the request asks for the full pipeline; score ${score}${why}` };
-  if (opts.mode === "always") return { score, route: "full", reason: `routing is set to always; score ${score}${why}` };
-  return score >= threshold ? { score, route: "full", reason: `score ${score} \u2265 ${threshold}${why}` } : { score, route: "quick", reason: `score ${score} < ${threshold}${why}` };
-}
-var FILE_RE = /(?:[\w@.-]+\/)+[\w.-]+|\b[\w-]+\.(?:tsx?|jsx?|mjs|cjs|py|go|rs|java|kt|cs|php|rb|swift|c|cc|cpp|h|hpp|md|json|ya?ml|toml|sql|css|scss|html|vue|svelte|sh)\b/gi;
-var LIST_ITEM_RE = /^\s*(?:\d+[.)]|[-*•])\s+\S/gm;
-var CHAIN_RE = /\b(?:and then|then|after that|afterwards|next|also|finally|as well as)\b/gi;
-var BROAD_RE = /\b(?:every|each|across|throughout|entire|whole|codebase|repo-?wide|end[- ]to[- ]end|architecture|redesign|overhaul|migrate|migration|all (?:the )?(?:files|modules|services|packages|pages|endpoints|tests|callers|places))\b/i;
-var FORCE_FULL_RE = /\bfull[- ]pipeline\b/i;
-var TICKET_INTENT_PATTERNS = [
-  // Filing: an exact verb, then only TICKET nouns — tasks / issues are everyday code words ("the task runner", "login issues").
-  /\b(?:create|file|open|raise|make|add|log|write)\b[^.?!\n]{0,40}\b(?:tickets?|work\s+items?)\b/i,
-  // Reviewing a spec by name.
-  /\breview(?:s|ed|ing)?\b[^.?!\n]{0,40}\b(?:prds?|specs?|specifications?|roadmaps?|requirements|gap\s+register)\b/i,
-  // Reviewing a markdown file only when ticket language follows it ("review the changes in CHANGELOG.md" is not this).
-  /\breview(?:s|ed|ing)?\b[^?!\n]{0,40}\b[\w-]+\.md\b[^?!\n]{0,80}\b(?:tickets?|work\s+items?|items?\b[^.?!\n]{0,30}\b(?:completed?|done|finished|open|incomplete|outstanding|remaining))\b/i,
-  // A spec's items and their status — only with a spec word or a .md path in the request ("remaining items in the cart" is not this).
-  /^(?=[\s\S]*(?:\b(?:prds?|specs?|specifications?|roadmaps?|requirements|gap\s+register)\b|\b[\w-]+\.md\b))[\s\S]*?\bitems?\b[^.?!\n]{0,30}\b(?:completed?|done|finished|open|incomplete|outstanding|remaining)\b/i,
-  /^(?=[\s\S]*(?:\b(?:prds?|specs?|specifications?|roadmaps?|requirements|gap\s+register)\b|\b[\w-]+\.md\b))[\s\S]*?\b(?:open|incomplete|outstanding|remaining|unfinished)\s+(?:prd\s+)?items?\b/i
-];
-function pipelineFeaturesOf(request, context = {}) {
-  const { intent, ask: text2 } = classifyRequest(request);
-  const files = new Set((text2.match(FILE_RE) ?? []).map((m) => m.toLowerCase()));
-  const listItems = (text2.match(LIST_ITEM_RE) ?? []).length;
-  const chained = (text2.match(CHAIN_RE) ?? []).length;
-  return {
-    requestChars: text2.length,
-    fileMentions: files.size,
-    multiStep: listItems >= 2 || chained >= 2,
-    broadScope: BROAD_RE.test(text2),
-    questionOnly: intent === "question",
-    followUp: context.followUp === true,
-    actionType: context.actionType ?? "other",
-    forceFull: FORCE_FULL_RE.test(text2),
-    ticketIntent: TICKET_INTENT_PATTERNS.some((re) => re.test(text2))
-  };
-}
-
-// ../packages/pipeline-route/src/report.ts
-var RERUN_WINDOW_MS = 30 * 6e4;
-var MIN_QUICK_RUNS_FOR_SUGGESTION = 10;
-var MISROUTE_HIGH = 0.15;
-var MISROUTE_LOW = 0.05;
-var HISTOGRAM_BINS = 10;
-var STEP = 0.05;
-var floorStep = (n2) => Math.floor(n2 / STEP + 1e-9) * STEP;
-var round22 = (n2) => Math.round(n2 * 100) / 100;
-function misroutedRuns(runs, windowMs = RERUN_WINDOW_MS) {
-  const out = /* @__PURE__ */ new Set();
-  const byConversation = /* @__PURE__ */ new Map();
-  runs.forEach((r, i) => {
-    const list2 = byConversation.get(r.conversation) ?? [];
-    list2.push(i);
-    byConversation.set(r.conversation, list2);
-  });
-  for (const indexes of byConversation.values()) {
-    indexes.sort((a, b) => runs[a].startedAt.localeCompare(runs[b].startedAt));
-    indexes.forEach((i, k) => {
-      const run = runs[i];
-      if (run.route !== "quick") return;
-      if (run.failed) {
-        out.add(i);
-        return;
-      }
-      const next = indexes[k + 1] !== void 0 ? runs[indexes[k + 1]] : void 0;
-      if (next?.route === "full" && Date.parse(next.startedAt) - Date.parse(run.startedAt) <= windowMs) out.add(i);
-    });
-  }
-  return out;
-}
-function totals(runs) {
-  const scored = runs.filter((r) => typeof r.score === "number");
-  const priced = runs.filter((r) => typeof r.costMc === "number" && Number.isFinite(r.costMc));
-  const unpricedRuns = runs.length - priced.length;
-  return {
-    runs: runs.length,
-    costMc: priced.reduce((sum, r) => sum + r.costMc, 0),
-    ...unpricedRuns > 0 ? { unpricedRuns } : {},
-    avgScore: scored.length ? round22(scored.reduce((s, r) => s + r.score, 0) / scored.length) : null
-  };
-}
-function histogramOf(runs) {
-  const bins = Array.from({ length: HISTOGRAM_BINS }, (_, i) => ({
-    from: round22(i / HISTOGRAM_BINS),
-    to: round22((i + 1) / HISTOGRAM_BINS),
-    full: 0,
-    quick: 0
-  }));
-  for (const r of runs) {
-    if (typeof r.score !== "number" || !Number.isFinite(r.score)) continue;
-    const i = Math.min(HISTOGRAM_BINS - 1, Math.max(0, Math.floor(r.score * HISTOGRAM_BINS)));
-    bins[i][r.route] += 1;
-  }
-  return bins;
-}
-function suggestThreshold(runs, threshold, misrouted = misroutedRuns(runs)) {
-  const quick = runs.filter((r) => r.route === "quick").length;
-  if (quick < MIN_QUICK_RUNS_FOR_SUGGESTION) return { suggestedThreshold: null };
-  const rate = misrouted.size / quick;
-  if (rate > MISROUTE_HIGH) {
-    const scores = [...misrouted].map((i) => runs[i].score).filter((s) => typeof s === "number").sort((a, b) => a - b);
-    const quartile = scores.length ? scores[Math.floor((scores.length - 1) / 4)] : threshold - STEP;
-    const next = round22(Math.max(STEP * 2, Math.min(threshold - STEP, floorStep(quartile))));
-    return { suggestedThreshold: next };
-  }
-  if (rate < MISROUTE_LOW && runs.some((r) => r.route === "full")) {
-    const next = round22(Math.min(0.9, threshold + STEP));
-    return { suggestedThreshold: next > threshold ? next : null };
-  }
-  return { suggestedThreshold: null };
-}
-function summarizeRouteRuns(runs, opts = {}) {
-  const threshold = opts.threshold ?? DEFAULT_ROUTE_THRESHOLD;
-  const misrouted = misroutedRuns(runs, opts.rerunWindowMs);
-  const quick = runs.filter((r) => r.route === "quick");
-  return {
-    runs: runs.length,
-    byRoute: { full: totals(runs.filter((r) => r.route === "full")), quick: totals(quick) },
-    histogram: histogramOf(runs),
-    misroutes: misrouted.size,
-    misrouteRate: quick.length ? round22(misrouted.size / quick.length) : null,
-    threshold,
-    ...suggestThreshold(runs, threshold, misrouted)
-  };
 }
 
 // ../packages/prefetch/src/registry.ts
@@ -5636,7 +4652,7 @@ async function classify(request, registry2, ports) {
   const tiersRun = [];
   const done = (route, actions, pNeedsLlm2) => ({
     route,
-    actions: actions.map(({ id, p, tier: tier2, features }) => ({ id, p, tier: tier2, features })),
+    actions: actions.map(({ id, p, tier, features }) => ({ id, p, tier, features })),
     pNeedsLlm: pNeedsLlm2,
     tiersRun,
     elapsedMs: Math.max(0, clock() - started)
@@ -5849,492 +4865,6 @@ async function bindInSlices(store, type, select, bind) {
   }
 }
 
-// ../packages/run-policy/src/latencyGuard.ts
-var LATENCY_SAMPLE_WINDOW = 9;
-var MAX_FAILOVER_LATENCY_RATIO = 3;
-function p50(samples) {
-  const valid = (samples ?? []).filter((n2) => Number.isFinite(n2) && n2 >= 0);
-  if (valid.length === 0) return void 0;
-  const sorted = [...valid].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
-}
-function recordLatency(samples, model, durationMs, window2 = LATENCY_SAMPLE_WINDOW) {
-  const base = samples ?? {};
-  if (!model || !Number.isFinite(durationMs) || durationMs < 0) return base;
-  const next = [...base[model] ?? [], durationMs].slice(-Math.max(1, window2));
-  return { ...base, [model]: next };
-}
-function withinLatencyBudget(candidate, input) {
-  const { primary } = input;
-  if (input.primaryUnavailable || !primary || candidate === primary) return true;
-  const base = p50(input.latency?.[primary]);
-  const theirs = p50(input.latency?.[candidate]);
-  if (base === void 0 || theirs === void 0 || base <= 0) return true;
-  return theirs <= base * (input.maxRatio ?? MAX_FAILOVER_LATENCY_RATIO);
-}
-function fastestCandidate(candidates, latency) {
-  let best;
-  let bestP50 = Number.POSITIVE_INFINITY;
-  for (const m of candidates) {
-    const t = p50(latency?.[m]) ?? 0;
-    if (best === void 0 || t < bestP50) {
-      best = m;
-      bestP50 = t;
-    }
-  }
-  return best;
-}
-var MAX_GUARDED_PICKS = 32;
-function guardedPick(pick, skip, input) {
-  const skipped = [...skip];
-  const slow = [];
-  for (let i = 0; i < MAX_GUARDED_PICKS; i++) {
-    const next = pick(skipped);
-    if (!next) break;
-    if (withinLatencyBudget(next, input)) return next;
-    slow.push(next);
-    skipped.push(next);
-  }
-  return fastestCandidate(slow, input.latency);
-}
-
-// ../packages/run-policy/src/phaseModels.ts
-function reviewPhaseModel(phaseModels, legacyReviewModel) {
-  for (const candidate of [phaseModels?.review, phaseModels?.verify, legacyReviewModel]) {
-    if (typeof candidate === "string" && candidate.trim()) return candidate.trim();
-  }
-  return void 0;
-}
-function configuredPhaseModel(options, phase) {
-  if (phase === "verify") return reviewPhaseModel(options.phaseModels, options.reviewModel);
-  const fromMap = options.phaseModels?.[phase];
-  return typeof fromMap === "string" && fromMap.trim() ? fromMap.trim() : void 0;
-}
-function reviewing(state) {
-  return state.phase === "verify" && state.options.fixedRole !== "verify";
-}
-function phaseDefaultModel(state) {
-  if (state.phase === "verify" || state.options.fixedRole) return void 0;
-  const model = configuredPhaseModel(state.options, state.phase);
-  return model && !state.broken.includes(model) ? model : void 0;
-}
-
-// ../packages/run-policy/src/policy.ts
-var PIN_RELEASE_STATUSES = [429, 413, 503];
-var DECLINE_STATUS = 400;
-var NONE = { kind: "none" };
-function initialRunPolicy(opts = {}) {
-  const model = opts.pinnedModel || void 0;
-  return {
-    phase: opts.startPhase ?? "plan",
-    model,
-    locked: false,
-    pin: model,
-    // Strictness belongs to a pin. With nothing pinned it would otherwise make the
-    // run's first LOCK strict, which no host asks for.
-    strictPin: !!opts.strictPin && !!model,
-    broken: [...new Set((opts.excludeModels ?? []).filter(Boolean))],
-    proven: [],
-    tried: [],
-    ...opts.latencySeed && Object.keys(opts.latencySeed).length > 0 ? { latency: opts.latencySeed } : {},
-    failovers: 0,
-    turnRetries: 0,
-    planTurns: 0,
-    handOffForced: false,
-    codeTurns: 0,
-    changeForced: false,
-    outcome: NONE,
-    options: {
-      pinReleasable: !!opts.pinReleasable,
-      lockAfterFirstSuccess: !!opts.lockAfterFirstSuccess,
-      maxFailovers: opts.maxFailovers ?? MAX_MODEL_FAILOVERS,
-      decliningModelPrefixes: [...opts.decliningModelPrefixes ?? []],
-      strictFailover: !!opts.strictFailover,
-      preferProvenFailover: !!opts.preferProvenFailover,
-      pinStrict: !!opts.strictPin && !!model,
-      ...opts.fixedRole ? { fixedRole: opts.fixedRole } : {},
-      ...opts.phaseModels ? { phaseModels: opts.phaseModels } : {},
-      ...opts.reviewModel !== void 0 ? { reviewModel: opts.reviewModel } : {}
-    }
-  };
-}
-function nextTurn(state, turn) {
-  const verifying = state.phase === "verify";
-  const review = reviewing(state);
-  const author = state.authorModel;
-  const reviewModel = review ? configuredPhaseModel(state.options, "verify") : void 0;
-  const mapped = reviewModel && !state.broken.includes(reviewModel) ? reviewModel : void 0;
-  let model = mapped ?? state.model ?? phaseDefaultModel(state);
-  if (verifying && author && model === author) model = void 0;
-  const excludeModels = [...state.broken];
-  if (verifying && author && !excludeModels.includes(author)) excludeModels.push(author);
-  return {
-    // A coding run's verify-phase turn reviews its change (the strongest models), whatever
-    // fixedRole the child had — except a child delegated the mechanical checks themselves.
-    role: turn.hasTools ? review ? "review" : state.options.fixedRole ?? state.phase : "chat",
-    model,
-    strict: !!model && state.strictPin,
-    excludeModels
-  };
-}
-function offersHandOff(state) {
-  return state.phase === "plan";
-}
-var PLAN_TURN_BUDGET = 20;
-function handOffDue(state) {
-  return state.phase === "plan" && state.planTurns >= PLAN_TURN_BUDGET;
-}
-function changeDue(state, progressed2, budget2 = PLAN_TURN_BUDGET) {
-  return state.phase === "code" && !progressed2 && !state.changeForced && state.codeTurns >= budget2;
-}
-var QUICK_CHANGE_TURN_BUDGET = 8;
-function reduceRunPolicy(state, event) {
-  const s = { ...state, outcome: NONE };
-  switch (event.type) {
-    case "turn_succeeded":
-      return succeeded(s, event.model, event.acted === true, event.durationMs);
-    case "code_change_attempted":
-      if (s.phase !== "plan") return s;
-      return { ...s, phase: "code", outcome: s.model ? NONE : { kind: "reask_as_coder" } };
-    case "plan_budget_spent":
-      return s.phase === "plan" ? { ...s, phase: "code" } : s;
-    case "hand_off_forced":
-      return { ...s, handOffForced: true };
-    case "change_forced":
-      return { ...s, changeForced: true };
-    case "hand_off":
-      return s.phase === "plan" ? { ...s, phase: "code", outcome: { kind: "handed_off" } } : { ...s, outcome: { kind: "hand_off_rejected" } };
-    case "verify_started": {
-      if (s.phase === "verify") return s;
-      const author = s.authorModel ?? s.model ?? phaseDefaultModel(s);
-      const review = s.options.fixedRole === "verify" ? void 0 : configuredPhaseModel(s.options, "verify");
-      const distinct = review && review !== author ? review : void 0;
-      return {
-        ...s,
-        phase: "verify",
-        ...author ? { authorModel: author } : {},
-        // No distinct review pin ⇒ drop the author pin so the gateway must pick
-        // someone else. The author stays in excludeModels either way.
-        model: distinct,
-        strictPin: distinct ? s.strictPin : false,
-        locked: distinct ? s.locked : false
-      };
-    }
-    case "stalled":
-      return stalled(s, event);
-    case "transport_failed":
-      return transportFailed(s, event);
-    case "escalated": {
-      const from = s.model;
-      if (!event.to || event.to === from || s.broken.includes(event.to)) return s;
-      return {
-        ...s,
-        model: event.to,
-        locked: false,
-        strictPin: true,
-        tried: from && !s.tried.includes(from) ? [...s.tried, from] : s.tried
-      };
-    }
-  }
-}
-function succeeded(s, resolved, acted, durationMs) {
-  const proven = acted && resolved && resolved !== "default" && !s.proven.includes(resolved) ? [...s.proven, resolved] : s.proven;
-  const served = resolved && resolved !== "default" ? resolved : void 0;
-  const timed = served ?? s.model;
-  const next = {
-    ...s,
-    ...acted && timed && durationMs !== void 0 ? { latency: recordLatency(s.latency, timed, durationMs) } : {},
-    ...acted && served && s.pin && s.model === s.pin && !s.pinResolved ? { pinResolved: served } : {},
-    turnRetries: 0,
-    proven,
-    planTurns: s.phase === "plan" ? s.planTurns + 1 : s.planTurns,
-    codeTurns: s.phase === "code" ? s.codeTurns + 1 : s.codeTurns
-  };
-  if (s.options.lockAfterFirstSuccess && !(s.model && s.strictPin) && resolved && resolved !== "default") {
-    return { ...next, model: resolved, locked: true };
-  }
-  return next;
-}
-function stalled(s, e) {
-  const tried = [...s.tried];
-  const to = chooseStallFailover({
-    activeModel: s.model,
-    resolvedModel: e.resolvedModel,
-    tried,
-    failoversUsed: s.failovers,
-    maxFailovers: s.options.maxFailovers,
-    surface: e.surface,
-    pick: failoverPicker(s, e)
-  });
-  if (!to) {
-    const returned = s.model !== s.pin ? { model: s.pin, locked: false, strictPin: !!s.pin && s.options.pinStrict } : {};
-    return { ...s, ...returned, tried, outcome: { kind: "failover_exhausted", tried } };
-  }
-  const failovers = s.failovers + 1;
-  return {
-    ...s,
-    tried,
-    failovers,
-    model: to,
-    locked: false,
-    ...s.options.strictFailover ? { strictPin: true } : {},
-    outcome: { kind: "failed_over", from: e.resolvedModel ?? s.model, to, attempt: failovers, of: s.options.maxFailovers }
-  };
-}
-function failoverPicker(s, e) {
-  const proven = s.options.preferProvenFailover ? [...s.proven].reverse() : [];
-  if (proven.length === 0 && !e.pick && !e.surface) return void 0;
-  const guard = latencyGuardFor(s, e);
-  if (proven.length === 0 && s.broken.length === 0 && !guard) return e.pick;
-  const source = (skip) => e.pick ? e.pick(skip) : nextFallbackModel(e.surface, skip);
-  return (tried) => {
-    const skip = [...tried, ...s.broken];
-    const open2 = proven.filter((m) => !skip.includes(m));
-    if (!guard) return open2[0] ?? source(skip);
-    const fastProven = open2.find((m) => withinLatencyBudget(m, guard));
-    if (fastProven) return fastProven;
-    const picked = guardedPick(source, skip, guard);
-    if (picked && withinLatencyBudget(picked, guard)) return picked;
-    return fastestCandidate([...open2, ...picked ? [picked] : []], guard.latency);
-  };
-}
-function latencyGuardFor(s, e) {
-  if (s.phase === "plan" || e.primaryUnavailable || !s.latency) return void 0;
-  const pinPrimary = s.pin ? s.pinResolved : void 0;
-  return { primary: pinPrimary ?? s.proven[0] ?? e.resolvedModel ?? s.model, latency: s.latency };
-}
-function transportFailed(s, e) {
-  if (s.turnRetries >= 1 || e.kind === "unreachable") return { ...s, outcome: { kind: "fail_turn" } };
-  const releasable = s.locked || s.options.pinReleasable;
-  if (s.model && releasable && e.status !== void 0 && releasesPin(s, s.model, e.status)) {
-    return {
-      ...s,
-      model: void 0,
-      locked: false,
-      pin: void 0,
-      strictPin: false,
-      turnRetries: s.turnRetries + 1,
-      outcome: { kind: "retry_turn", released: s.model, status: e.status }
-    };
-  }
-  if (isRequestRefusalStatus(e.status)) return { ...s, outcome: { kind: "fail_turn" } };
-  if (s.model && e.kind === "interrupted" && !userPinHeld(s)) {
-    const brokenModel = e.model ?? s.model;
-    const pinned = s.pin !== void 0 && s.model === s.pin;
-    const broken2 = [.../* @__PURE__ */ new Set([...s.broken, brokenModel, s.model])];
-    const backToPin = !pinned && s.pin !== void 0 && !broken2.includes(s.pin) ? s.pin : void 0;
-    return {
-      ...s,
-      model: backToPin,
-      locked: false,
-      strictPin: backToPin !== void 0 && s.options.pinStrict,
-      ...pinned ? { pin: void 0 } : {},
-      broken: broken2,
-      turnRetries: s.turnRetries + 1,
-      outcome: { kind: "retry_turn", broken: brokenModel, ...s.locked || pinned ? { released: s.model } : {} }
-    };
-  }
-  if (s.model) return { ...s, outcome: { kind: "fail_turn" } };
-  const phaseModel = phaseDefaultModel(s);
-  const releasedPhase = phaseModel && e.status !== void 0 && releasesPin(s, phaseModel, e.status) ? phaseModel : void 0;
-  const interrupted = e.kind === "interrupted" && e.model ? e.model : void 0;
-  const broken = [.../* @__PURE__ */ new Set([...s.broken, ...interrupted ? [interrupted] : [], ...releasedPhase ? [releasedPhase] : []])];
-  return {
-    ...s,
-    broken,
-    turnRetries: s.turnRetries + 1,
-    outcome: { kind: "retry_turn", ...e.kind === "interrupted" && e.model ? { broken: e.model } : {} }
-  };
-}
-function userPinHeld(s) {
-  return s.pin !== void 0 && s.model === s.pin && !s.options.pinReleasable;
-}
-function releasesPin(s, model, status2) {
-  return PIN_RELEASE_STATUSES.includes(status2) || status2 === DECLINE_STATUS && s.options.decliningModelPrefixes.some((prefix) => model.startsWith(prefix));
-}
-function isRequestRefusalStatus(status2) {
-  return status2 !== void 0 && status2 >= 400 && status2 < 500 && status2 !== 408 && !PIN_RELEASE_STATUSES.includes(status2);
-}
-
-// ../packages/run-policy/src/coderHandoff.ts
-function isCoderReask(role, previousRole) {
-  return role === "code" && previousRole === "plan";
-}
-var MAX_CALL_CHARS = 2e3;
-var MAX_BRIEF_CHARS = 6e3;
-function coderHandoffBrief(plannerText, calls) {
-  const findings = plannerText.trim();
-  const intended = calls.map((call2) => {
-    const args = call2.args.length > MAX_CALL_CHARS ? `${call2.args.slice(0, MAX_CALL_CHARS)}\u2026` : call2.args;
-    return `- ${call2.name} ${args}`;
-  });
-  const parts = [
-    "HAND-OFF: the analysis for this request is complete \u2014 you are the coding model taking it from here. Everything the planner read is in the conversation above; do not start the investigation over or re-read files already returned above.",
-    ...findings ? ["The planner concluded:", findings] : [],
-    "It was about to make this change:",
-    ...intended,
-    "Make that change now. Correct it if it is wrong \u2014 a file you have not seen, or text that does not match \u2014 but act on it rather than re-planning. Read only what the edit itself needs and is not already above."
-  ];
-  const brief = parts.join("\n");
-  return brief.length > MAX_BRIEF_CHARS ? `${brief.slice(0, MAX_BRIEF_CHARS)}\u2026` : brief;
-}
-
-// ../packages/run-policy/src/stallStep.ts
-function resolveStallStep(policy, turn, recoveriesUsed, source = {}) {
-  const input = {
-    text: turn.text,
-    toolCallCount: turn.toolCallCount,
-    availableToolCount: turn.availableToolNames.length,
-    recoveriesUsed,
-    availableToolNames: turn.availableToolNames,
-    ...turn.requestText !== void 0 ? { requestText: turn.requestText } : {}
-  };
-  const shape = stallShape(input);
-  const toolChoice = stallRecoveryToolChoice(input);
-  if (shouldRecoverStalledTurn(input)) {
-    const used = recoveriesUsed + 1;
-    return {
-      policy,
-      step: {
-        kind: "nudge",
-        nudge: stallRecoveryNudge(used >= MAX_ANNOUNCEMENT_RECOVERIES, shape, input),
-        ...toolChoice ? { toolChoice } : {},
-        recoveriesUsed: used,
-        shape
-      }
-    };
-  }
-  if (!isExhaustedStall(input)) return { policy, step: { kind: "none" } };
-  const next = reduceRunPolicy(policy, {
-    type: "stalled",
-    ...turn.resolvedModel ? { resolvedModel: turn.resolvedModel } : {},
-    ...source.surface !== void 0 ? { surface: source.surface } : {},
-    ...source.pick ? { pick: source.pick } : {}
-  });
-  const outcome = next.outcome;
-  if (outcome.kind === "failed_over") {
-    return {
-      policy: next,
-      step: {
-        kind: "failover",
-        // The incoming model gets the FIRST nudge, not the last-chance one: the outgoing
-        // model's failures say nothing about it.
-        nudge: stallRecoveryNudge(false, shape, input),
-        ...toolChoice ? { toolChoice } : {},
-        notice: modelFailoverNotice(outcome.from, outcome.to, shape),
-        from: outcome.from,
-        to: outcome.to,
-        attempt: outcome.attempt,
-        of: outcome.of,
-        recoveriesUsed: 0,
-        shape
-      }
-    };
-  }
-  const tried = outcome.kind === "failover_exhausted" ? outcome.tried : next.tried;
-  const spent = turn.resolvedModel ?? policy.model;
-  return { policy: next, step: { kind: "exhausted", notice: stallExhaustedNotice(spent, tried, shape), tried, shape } };
-}
-
-// ../packages/run-policy/src/handoffBudget.ts
-var DEFAULT_HANDOFF_RESERVE_TOKENS = 4096;
-function toolSchemaTokens(schemas, estimate) {
-  return schemas && schemas.length > 0 ? estimate(JSON.stringify(schemas)) : 0;
-}
-function handoffReserveTokens(maxTokens) {
-  return maxTokens && maxTokens > 0 ? maxTokens : DEFAULT_HANDOFF_RESERVE_TOKENS;
-}
-function handoffTokenBudget(input) {
-  const reserve = Math.max(0, input.reserveOutputTokens ?? 0);
-  const bounds = [];
-  if (input.costCapTokens && input.costCapTokens > 0) bounds.push(input.costCapTokens);
-  if (input.contextWindow && input.contextWindow > 0) bounds.push(input.contextWindow - reserve);
-  if (input.priceTierBoundary && input.priceTierBoundary > 0) bounds.push(input.priceTierBoundary);
-  if (bounds.length === 0) return void 0;
-  return Math.max(1, Math.min(...bounds));
-}
-
-// ../packages/run-policy/src/outputCaps.ts
-var ROLE_OUTPUT_CAPS = {
-  explore: 2048,
-  utility: 2048,
-  verify: 2048,
-  chat: 4096,
-  plan: 4096,
-  // A review writes a verdict and its findings — a plan's length, not a check's.
-  review: 4096,
-  code: 8192
-};
-function roleOutputCap(role) {
-  return role && role in ROLE_OUTPUT_CAPS ? ROLE_OUTPUT_CAPS[role] : void 0;
-}
-function cappedMaxTokens(role, callerMaxTokens) {
-  const cap = roleOutputCap(role);
-  if (cap === void 0) return callerMaxTokens;
-  return callerMaxTokens && callerMaxTokens > 0 ? Math.min(cap, callerMaxTokens) : cap;
-}
-
-// ../packages/run-policy/src/cascade.ts
-var MAX_UNIT_ESCALATIONS = 2;
-function initialCascadeState() {
-  return { escalations: 0, reasoningBoost: 0 };
-}
-function weakestTierModel(ladder, exclude = []) {
-  const usable = ladder.candidates.filter((m) => !exclude.includes(m));
-  if (usable.length === 0) return void 0;
-  const floor = Math.min(...usable.map((m) => ladder.rankOf(m)));
-  return usable.find((m) => ladder.rankOf(m) === floor);
-}
-function nextTierModel(ladder, current, exclude = []) {
-  const usable = ladder.candidates.filter((m) => !exclude.includes(m) && m !== current);
-  if (usable.length === 0) return void 0;
-  const known = current !== void 0 && ladder.candidates.includes(current);
-  const from = known ? ladder.rankOf(current) : Math.min(...ladder.candidates.map((m) => ladder.rankOf(m)));
-  const above = usable.map((m) => ladder.rankOf(m)).filter((r) => r > from);
-  if (above.length === 0) return void 0;
-  const next = Math.min(...above);
-  return usable.find((m) => ladder.rankOf(m) === next);
-}
-function cascadeVerdict(state, kind, verdict, ctx) {
-  if (verdict.inconclusive) return { state, action: { kind: "none" } };
-  const open2 = state.open && state.open.kind === kind ? state.open : void 0;
-  if (verdict.passed) {
-    if (!open2) return { state, action: { kind: "none" } };
-    const next = { ...state, open: void 0, reasoningBoost: 0 };
-    const base = open2.baseModel;
-    return { state: next, action: base && open2.escalations > 0 && base !== ctx.current ? { kind: "deescalate", to: base } : { kind: "none" } };
-  }
-  const unit = open2 ?? { kind, escalations: 0, ...ctx.current ? { baseModel: ctx.current } : {} };
-  if (unit.escalations >= MAX_UNIT_ESCALATIONS) {
-    return {
-      state: { ...state, open: unit },
-      action: { kind: "exhausted", steer: cascadeSteer(kind, verdict, ctx.current, void 0, true) }
-    };
-  }
-  const to = nextTierModel(ctx.ladder, ctx.current, ctx.exclude ?? []);
-  return {
-    state: {
-      ...state,
-      open: { ...unit, escalations: unit.escalations + 1 },
-      escalations: state.escalations + 1,
-      reasoningBoost: Math.min(state.reasoningBoost + 1, MAX_UNIT_ESCALATIONS)
-    },
-    action: { kind: "escalate", to, escalateReasoning: true, steer: cascadeSteer(kind, verdict, ctx.current, to, false) }
-  };
-}
-var UNIT_WORDS = {
-  code_edit: "your last code change",
-  finish: "your finish attempt",
-  structured_output: "your structured answer"
-};
-function cascadeSteer(kind, verdict, from, to, exhausted) {
-  const why = verdict.reason ? `: ${verdict.reason.trim().slice(0, 1200)}` : ".";
-  const who = exhausted ? "The run has already escalated this unit as far as it may \u2014 fix it on this model." : to ? `It has been handed one tier up${from ? ` from ${from}` : ""} to ${to}, with more reasoning.` : "No stronger model is available, so reasoning has been raised instead.";
-  return `Verifier check (${verdict.verifier}) failed on ${UNIT_WORDS[kind]}${why}
-${who} Read the failure above, correct exactly what it names, and verify again before moving on.`;
-}
-
 // src/providerFailure.ts
 function providerFailureEvent(error) {
   if (error instanceof StreamInterruptedError) {
@@ -6403,384 +4933,13 @@ function providerFailureTrace(ts, step, model, error, durationMs) {
 // src/localFirstTransport.ts
 import { isVolatileTail } from "@seanhogg/builderforce-memory/handoff";
 
-// ../packages/learned-routing/src/actionTypes.ts
-var ACTION_TYPES = [
-  "sql",
-  "frontend_ui",
-  "backend_api",
-  "refactor",
-  "bugfix",
-  "tests",
-  "docs",
-  "devops_ci",
-  "data_migration",
-  "analysis",
-  "provisioning",
-  "decision",
-  "other"
-];
-var DEFAULT_ACTION_TYPE = "other";
-var ACTION_TYPE_SET = new Set(ACTION_TYPES);
-
-// ../packages/learned-routing/src/exploration.ts
-import { betaMoments, normalDraw } from "@seanhogg/builderforce-memory/stats";
-
-// ../packages/learned-routing/src/recencyDecay.ts
-var ROUTING_HALF_LIFE_DAYS = 30;
-var DECAYED_WINDOW_DAYS = 4 * ROUTING_HALF_LIFE_DAYS;
-var DAY_MS2 = 24 * 60 * 60 * 1e3;
-
-// ../packages/learned-routing/src/runOutcomeTelemetry.ts
-var ALL_ENTRY_POINTS = ["vscode", "web", "rovr", "canvas", "on-prem", "cloud"];
-var CLIENT_ENTRY_POINTS = ALL_ENTRY_POINTS.filter(
-  (entryPoint2) => entryPoint2 !== "cloud"
-);
-var MODEL_PREFLIGHT_MAX = 32;
-var PROGRESS_SIGNALS_MAX = 8;
-var SIGNAL_NAME_MAX = 32;
-var COUNT_MAX = 1e7;
-var PARENT_RUN_ID_MAX = 128;
-var COUNTERS = [
-  "toolCalls",
-  "toolErrors",
-  "tokens",
-  "cacheReadTokens",
-  "compactions",
-  "stallRecoveries",
-  "escalations",
-  "coveredReadStubs",
-  "shellFileReads",
-  "repoErrors",
-  "contextPackTokens",
-  "unkeptReadyClaims"
-];
-function count(v) {
-  return typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= COUNT_MAX ? v : void 0;
-}
-function entryPoint(v) {
-  return typeof v === "string" && CLIENT_ENTRY_POINTS.includes(v) ? v : void 0;
-}
-function verify(v) {
-  return v === "passed" || v === "failed" || v === "not-run" ? v : void 0;
-}
-function modelPreflight(v) {
-  if (typeof v !== "string") return void 0;
-  const s = v.trim();
-  if (s !== "ok" && s !== "refreshed" && !s.startsWith("degraded")) return void 0;
-  return s.slice(0, MODEL_PREFLIGHT_MAX);
-}
-function parentRunId(v) {
-  if (typeof v !== "string") return void 0;
-  const s = v.trim();
-  return s.length > 0 && s.length <= PARENT_RUN_ID_MAX && /^[\w:.\-]+$/.test(s) ? s : void 0;
-}
-function progressTrips(v) {
-  if (!v || typeof v !== "object" || Array.isArray(v)) return void 0;
-  const entries = Object.entries(v);
-  if (entries.length > PROGRESS_SIGNALS_MAX) return void 0;
-  const out = {};
-  for (const [signal, n2] of entries) {
-    const c = count(n2);
-    if (!/^[a-z_]+$/.test(signal) || signal.length > SIGNAL_NAME_MAX || c === void 0) return void 0;
-    out[signal] = c;
-  }
-  return out;
-}
-function wireCost(row) {
-  const cost = row.cost;
-  return typeof cost === "number" && Number.isInteger(cost) && cost >= 0 && cost <= COUNT_MAX ? { costMc: cost } : {};
-}
-function parseRunOutcomeTelemetry(b) {
-  const out = {};
-  const ep = entryPoint(b.entryPoint);
-  if (ep) out.entryPoint = ep;
-  for (const key of COUNTERS) {
-    const c = count(b[key]);
-    if (c !== void 0) out[key] = c;
-  }
-  const v = verify(b.verify);
-  if (v) out.verify = v;
-  if (b.firstSpawnTurn === null) out.firstSpawnTurn = null;
-  else {
-    const turn = count(b.firstSpawnTurn);
-    if (turn !== void 0) out.firstSpawnTurn = turn;
-  }
-  const preflight = modelPreflight(b.modelPreflight);
-  if (preflight) out.modelPreflight = preflight;
-  const trips = progressTrips(b.progressTrips);
-  if (trips) out.progressTrips = trips;
-  const parent = parentRunId(b.parentRunId);
-  if (parent) out.parentRunId = parent;
-  return out;
-}
-
-// ../packages/learned-routing/src/rateLimitFailure.ts
-var AVAILABILITY = /\b429\b|\b529\b|rate.?limit|too many requests|over ?capacity|capacity limit|overloaded|resource has been exhausted|\bin cooldown\b|cooldown or unavailable/i;
-var GRPC_RESOURCE_EXHAUSTED = /\bRESOURCE_EXHAUSTED\b/;
-var AVAILABILITY_STATUSES = /* @__PURE__ */ new Set([429, 529]);
-var TENANT_BUDGET_CODES = [
-  "agent_host_token_limit_exceeded",
-  "plan_token_limit_exceeded",
-  "plan_monthly_token_limit_exceeded",
-  "member_spend_cap_exceeded",
-  "premium_daily_cap_exceeded",
-  "image_credit_limit_exceeded",
-  "video_credit_limit_exceeded",
-  "claw_token_limit_exceeded"
-];
-var BUDGET_CODE = new RegExp(`\\b(?:${TENANT_BUDGET_CODES.join("|")})\\b`);
-var BUDGET_WORDING = new RegExp(
-  [
-    /(?:plan|daily|monthly|agenthost)\b[^.]{0,30}\btoken limit reached/,
-    /generation limit reached/,
-    /allowance reached/,
-    /spend cap reached/,
-    /premium-model budget exhausted/
-  ].map((re) => re.source).join("|"),
-  "i"
-);
-function isTenantBudgetFailure(message) {
-  return !!message && (BUDGET_CODE.test(message) || BUDGET_WORDING.test(message));
-}
-function isRateLimitFailure(message, status2) {
-  if (isTenantBudgetFailure(message)) return false;
-  return status2 != null && AVAILABILITY_STATUSES.has(status2) || !!message && (AVAILABILITY.test(message) || GRPC_RESOURCE_EXHAUSTED.test(message));
-}
-
-// ../packages/workload/src/actionClassifier.ts
-var MIN_CONFIDENCE = 0.45;
-var INSTRUCTION_CHARS = 600;
-var CONTEXT_CHARS = 2e3;
-var CONTEXT_WEIGHT = 0.5;
-var sig = (source, weight = 1) => ({
-  re: new RegExp(source, "i"),
-  weight
-});
-var SIGNALS = [
-  [
-    "data_migration",
-    [
-      sig("\\bbackfill(ing|ed)?\\b", 2),
-      sig("\\bdata migration\\b", 2),
-      sig("\\bre-?index(ing)?\\b"),
-      sig("\\bmigrate .{0,20}\\bdata\\b", 2),
-      sig("\\bseed (the )?(database|table|data)\\b", 2),
-      sig("\\betl\\b", 2)
-    ]
-  ],
-  [
-    "sql",
-    [
-      sig("\\bsql\\b", 2),
-      sig("\\bquery\\b"),
-      sig("\\bschema\\b"),
-      sig("\\bmigration\\b"),
-      sig("\\bpostgres|postgresql|sqlite|mysql\\b", 2),
-      sig("\\bcreate table|alter table|drop table\\b", 2),
-      sig("\\bindex(es)? on\\b"),
-      sig("\\bforeign key|primary key\\b", 2)
-    ]
-  ],
-  [
-    "tests",
-    [
-      sig("\\bunit test|integration test|e2e test\\b", 2),
-      sig("\\btests?\\b"),
-      sig("\\bvitest|jest|pytest|playwright|mocha\\b", 2),
-      sig("\\btest coverage\\b", 2),
-      sig("\\bassert(ion)?s?\\b"),
-      sig("\\bspec file\\b", 2)
-    ]
-  ],
-  [
-    "docs",
-    [
-      sig("\\bdocument(ation)?\\b", 2),
-      sig("\\breadme\\b", 2),
-      sig("\\bchangelog\\b", 2),
-      sig("\\bdocstring|jsdoc|tsdoc\\b", 2),
-      sig("\\bwrite .{0,20}\\bguide\\b", 2),
-      sig("\\bcomment(s|ing)?\\b")
-    ]
-  ],
-  [
-    "devops_ci",
-    [
-      sig("\\bci\\b|\\bcd\\b", 2),
-      sig("\\bgithub actions?|gitlab ci|jenkins|circleci\\b", 2),
-      sig("\\bdocker(file)?|kubernetes|k8s|helm\\b", 2),
-      sig("\\bdeploy(ment|ing)?\\b"),
-      sig("\\bpipeline\\b"),
-      sig("\\bbuild (script|config|failure)\\b", 2),
-      sig("\\bterraform|ansible\\b", 2)
-    ]
-  ],
-  [
-    "provisioning",
-    [
-      sig("\\bprovision(ing|ed)?\\b", 2),
-      sig("\\bspin up\\b", 2),
-      sig("\\bcreate (a|an|the) (bucket|cluster|queue|instance|database|namespace)\\b", 2),
-      sig("\\bdns|certificate|tls cert\\b"),
-      sig("\\bconfigure .{0,20}\\b(account|tenant|workspace|environment)\\b")
-    ]
-  ],
-  [
-    "frontend_ui",
-    [
-      sig("\\bui\\b|\\bux\\b", 2),
-      sig("\\bcomponent\\b"),
-      sig("\\breact|vue|svelte|angular\\b", 2),
-      sig("\\bcss|tailwind|stylesheet|styling\\b", 2),
-      sig("\\bbutton|modal|dropdown|layout|page\\b"),
-      sig("\\bresponsive|dark mode|accessib(le|ility)\\b", 2),
-      sig("\\bfront-?end\\b", 2)
-    ]
-  ],
-  [
-    "backend_api",
-    [
-      sig("\\bapi\\b", 2),
-      sig("\\bendpoint|route handler\\b", 2),
-      sig("\\brest|graphql|grpc\\b", 2),
-      sig("\\bback-?end\\b", 2),
-      sig("\\bservice layer|controller|middleware\\b", 2),
-      sig("\\bserver\\b"),
-      sig("\\bauth(entication|orization)?\\b")
-    ]
-  ],
-  [
-    "refactor",
-    [
-      sig("\\brefactor(ing|ed)?\\b", 2),
-      sig("\\bclean ?up\\b", 2),
-      sig("\\bextract (a |the )?(function|method|component|module|helper)\\b", 2),
-      sig("\\brename\\b"),
-      sig("\\bdeduplicat|\\bdry\\b", 2),
-      sig("\\brestructure|reorganis|reorganiz\\b", 2),
-      sig("\\bsimplify\\b")
-    ]
-  ],
-  [
-    "bugfix",
-    [
-      sig("\\bbug\\b", 2),
-      sig("\\bfix(es|ed|ing)?\\b", 2),
-      sig("\\bbroken|crash(es|ing)?|regression\\b", 2),
-      sig("\\berror\\b"),
-      sig("\\bstack ?trace|exception\\b", 2),
-      sig("\\bnot working|fails? to\\b", 2),
-      sig("\\bdebug(ging)?\\b")
-    ]
-  ],
-  [
-    "analysis",
-    [
-      sig("\\banalys|analyz\\b", 2),
-      sig("\\binvestigate|investigation\\b", 2),
-      sig("\\bresearch\\b", 2),
-      sig("\\bexplain|summaris|summariz\\b"),
-      sig("\\bwhy (does|is|did|are)\\b", 2),
-      sig("\\baudit|assess(ment)?\\b", 2),
-      sig("\\bcompare\\b")
-    ]
-  ],
-  [
-    "decision",
-    [
-      sig("\\bapprove|approval\\b", 2),
-      sig("\\bshould we\\b", 2),
-      sig("\\bdecide|decision\\b", 2),
-      sig("\\bsign ?off\\b", 2),
-      sig("\\bchoose between\\b", 2)
-    ]
-  ]
-];
-function classifyRunAction(prompt) {
-  const text2 = (prompt ?? "").trim();
-  if (!text2) {
-    return { actionType: DEFAULT_ACTION_TYPE, confidence: 0 };
-  }
-  const { ask: ask2, context: pasted } = classifyRequest(text2);
-  const paragraphBreak = ask2.indexOf("\n\n");
-  const instructionEnd = paragraphBreak > 0 ? Math.min(paragraphBreak, INSTRUCTION_CHARS) : INSTRUCTION_CHARS;
-  const instruction = ask2.slice(0, instructionEnd);
-  const context = (ask2.slice(instructionEnd) + (pasted ? `
-${pasted}` : "")).slice(0, CONTEXT_CHARS);
-  let total = 0;
-  let best = null;
-  for (const [actionType, signals] of SIGNALS) {
-    let score = 0;
-    for (const s of signals) {
-      if (s.re.test(instruction)) {
-        score += s.weight;
-      } else if (context && s.re.test(context)) {
-        score += s.weight * CONTEXT_WEIGHT;
-      }
-    }
-    total += score;
-    if (score > 0 && (best === null || score > best.score)) {
-      best = { actionType, score };
-    }
-  }
-  if (!best || total === 0) {
-    return { actionType: DEFAULT_ACTION_TYPE, confidence: 0 };
-  }
-  const confidence = best.score / total;
-  if (confidence < MIN_CONFIDENCE) {
-    return { actionType: DEFAULT_ACTION_TYPE, confidence };
-  }
-  return { actionType: best.actionType, confidence };
-}
-
-// ../packages/workload/src/arcStage.ts
-var ARC_STAGES = ["idea", "make", "run", "measure", "reach"];
-var ARC_STAGE_SET = new Set(ARC_STAGES);
-function isArcStage(value) {
-  return typeof value === "string" && ARC_STAGE_SET.has(value);
-}
-
-// ../packages/workload/src/profile.ts
-var TYPICAL_OUTPUT_TOKENS = {
-  code: 4e3,
-  plan: 1500,
-  review: 1200,
-  verify: 800,
-  explore: 1e3,
-  chat: 800,
-  utility: 400
-};
-var DEFAULT_OUTPUT_TOKENS = 1e3;
-var nonNegative = (n2) => typeof n2 === "number" && Number.isFinite(n2) && n2 > 0 ? Math.ceil(n2) : void 0;
-function profileWorkload(input) {
-  const role = isModelRole(input.role) ? input.role : void 0;
-  const { actionType, confidence } = classifyRunAction(input.instruction);
-  const cap = nonNegative(input.maxOutputTokens);
-  const typical = role ? TYPICAL_OUTPUT_TOKENS[role] : DEFAULT_OUTPUT_TOKENS;
-  return {
-    role,
-    arcStage: isArcStage(input.arcStage) ? input.arcStage : void 0,
-    actionType,
-    actionConfidence: confidence,
-    inputTokens: nonNegative(input.inputTokens) ?? 0,
-    outputTokens: cap !== void 0 ? Math.min(cap, typical) : typical,
-    agentic: input.hasTools === true
-  };
-}
-
-// ../packages/workload/src/tokens.ts
-var CHARS_PER_TOKEN = 4;
-function estimateTokensFromChars(charCount) {
-  return Math.ceil(charCount / CHARS_PER_TOKEN);
-}
-
 // src/localFirstTraces.ts
-function summarizeLocalFirstAttempt(record2) {
-  const { attempt } = record2;
+function summarizeLocalFirstAttempt(record) {
+  const { attempt } = record;
   return {
     target: attempt.kind === "local" ? attempt.ref : attempt.model ?? GATEWAY_ATTEMPT_TARGET,
-    outcome: record2.outcome,
-    ...record2.detail ? { detail: record2.detail } : {}
+    outcome: record.outcome,
+    ...record.detail ? { detail: record.detail } : {}
   };
 }
 function localFallbackTrace(ts, step, attempts) {
@@ -6845,10 +5004,10 @@ function withModelRef(e, ref) {
   if (e instanceof StreamInterruptedError && e.cause !== void 0) out.cause = e.cause;
   return out;
 }
-function withFailedAccounts(e, failed3, trailed = []) {
-  if (!(e instanceof BrainRequestError) || failed3.length + trailed.length === 0) return e;
+function withFailedAccounts(e, failed2, trailed = []) {
+  if (!(e instanceof BrainRequestError) || failed2.length + trailed.length === 0) return e;
   const refOf = (r) => r.attempt.kind === "local" ? r.attempt.ref : "account";
-  const prefix = failed3.map((r) => `${refOf(r)} could not take this turn (${r.detail ?? r.outcome}). `).join("");
+  const prefix = failed2.map((r) => `${refOf(r)} could not take this turn (${r.detail ?? r.outcome}). `).join("");
   const trailing = trailed.map((r) => ` Then ${refOf(r)} was tried and also failed (${r.detail ?? r.outcome}).`).join("");
   const suffix = trailing && !/[.!?]$/.test(e.message) ? `.${trailing}` : trailing;
   const out = Object.create(Object.getPrototypeOf(e));
@@ -7096,11 +5255,11 @@ function createLocalFirstStream(input) {
     if (plan.length === 0) throw new Error(input.noModel ?? NOT_SIGNED_IN);
     const state = { cloudError: void 0, trailCommitted: false, servingCloud: false };
     const failedAccounts = { lead: [], trail: [] };
-    const onAttempt = (record2) => {
-      if (accountPool && record2.outcome !== "served" && record2.attempt.kind === "local") {
-        (state.cloudError ? failedAccounts.trail : failedAccounts.lead).push(record2);
+    const onAttempt = (record) => {
+      if (accountPool && record.outcome !== "served" && record.attempt.kind === "local") {
+        (state.cloudError ? failedAccounts.trail : failedAccounts.lead).push(record);
       }
-      input.onAttempt?.(record2);
+      input.onAttempt?.(record);
     };
     let ran;
     try {
@@ -7193,11 +5352,11 @@ import { formatEvermindMemoryBlock } from "@seanhogg/builderforce-memory/evermin
 import { summarizeTranscript as summarizeTranscript2 } from "@seanhogg/builderforce-memory/working";
 
 // src/onDevice/utilitySummary.ts
-var CONTEXT_CHARS2 = 800;
+var CONTEXT_CHARS = 800;
 function transcriptSummaryOptions(request, extra = {}) {
   return {
     kind: "transcript",
-    context: request.system.slice(0, CONTEXT_CHARS2),
+    context: request.system.slice(0, CONTEXT_CHARS),
     ...extra,
     ...request.signal ? { signal: request.signal } : {}
   };
@@ -7434,9 +5593,9 @@ var LOCAL_VERDICT_TIMEOUT_MS = 5 * 6e4;
 function verifiedLocalLabelOn() {
   return isCostLeverOn(void 0, "e5_verified_local_label", null);
 }
-function labelWithVerdict(outcome, leverOn2 = verifiedLocalLabelOn()) {
+function labelWithVerdict(outcome, leverOn = verifiedLocalLabelOn()) {
   const { verifier, ...engine } = outcome;
-  if (leverOn2 && verifier && !verifier.passed && engine.local === "succeeded") return { ...engine, local: "failed" };
+  if (leverOn && verifier && !verifier.passed && engine.local === "succeeded") return { ...engine, local: "failed" };
   return engine;
 }
 function requestOf(call2) {
@@ -7473,7 +5632,7 @@ function inferVerdict(pendingPrompt, next) {
 }
 function createDeferredLocalRecords(opts = {}) {
   const timeoutMs = opts.timeoutMs ?? LOCAL_VERDICT_TIMEOUT_MS;
-  const leverOn2 = opts.leverOn ?? verifiedLocalLabelOn;
+  const leverOn = opts.leverOn ?? verifiedLocalLabelOn;
   const byTurn = /* @__PURE__ */ new Map();
   const byConversation = /* @__PURE__ */ new Map();
   let seq = 0;
@@ -7481,7 +5640,7 @@ function createDeferredLocalRecords(opts = {}) {
     clearTimeout(p.timer);
     byTurn.delete(p.turnId);
     if (byConversation.get(p.conversation) === p.turnId) byConversation.delete(p.conversation);
-    const outcome = labelWithVerdict(verdict ? { ...p.outcome, verifier: verdict } : p.outcome, leverOn2());
+    const outcome = labelWithVerdict(verdict ? { ...p.outcome, verifier: verdict } : p.outcome, leverOn());
     p.record(p.ref, outcome).catch((e) => reportLocalSuccessFailure("record", e));
   }
   function resolveTurn(turnId, verdict) {
@@ -7550,8 +5709,8 @@ function hybridLocalSuccessTurn(router, probes, signal, deferred = deferredLocal
         return plan;
       }
     },
-    onAttempt(record2) {
-      records.push(record2);
+    onAttempt(record) {
+      records.push(record);
     },
     settle(error) {
       if (!assessed || signal?.aborted) return;
@@ -7949,9 +6108,9 @@ function createHostModelStream(input) {
         probes,
         call2.signal
       ) : null;
-      const onAttempt = learned || input.onAttempt ? (record2) => {
-        learned?.onAttempt(record2);
-        input.onAttempt?.(record2);
+      const onAttempt = learned || input.onAttempt ? (record) => {
+        learned?.onAttempt(record);
+        input.onAttempt?.(record);
       } : void 0;
       const stream = localFirst(probes, accounts, onAttempt, learned?.gate);
       if (!learned) return stream(call2, h);
@@ -8670,9 +6829,9 @@ function parseJsonReply(reply) {
 }
 
 // src/onDevice/chunkedSummary.ts
-var DEFAULT_OUTPUT_TOKENS2 = 512;
+var DEFAULT_OUTPUT_TOKENS = 512;
 function summaryReserveTokens(o) {
-  const expectedOutput = o.maxWords ? Math.ceil(o.maxWords * 1.5) : DEFAULT_OUTPUT_TOKENS2;
+  const expectedOutput = o.maxWords ? Math.ceil(o.maxWords * 1.5) : DEFAULT_OUTPUT_TOKENS;
   return approxTokens(summarizePrompt("", o).system) + expectedOutput;
 }
 function chunkedSummary(input) {
@@ -9167,10 +7326,10 @@ function isInvalidClientResult(error) {
   return marks.some((m) => typeof m === "string" && m.includes("invalid_client_result"));
 }
 function reportReplaced(payload) {
-  const trace4 = payload[TRACE];
-  if (!trace4?.observe) return;
+  const trace2 = payload[TRACE];
+  if (!trace2?.observe) return;
   try {
-    trace4.observe({ kind: trace4.by.kind, engine: trace4.by.engine, model: trace4.by.model, outcome: "replaced", ms: 0 });
+    trace2.observe({ kind: trace2.by.kind, engine: trace2.by.engine, model: trace2.by.model, outcome: "replaced", ms: 0 });
   } catch (e) {
     reportOnDeviceFailure("observe", e);
   }
@@ -9385,12 +7544,12 @@ function createLocalModelStore(options) {
   const catalog = options.catalog ?? LOCAL_MODEL_CATALOG;
   const listeners = /* @__PURE__ */ new Set();
   const inFlight = /* @__PURE__ */ new Map();
-  const emit3 = () => {
+  const emit2 = () => {
     for (const listener of listeners) listener();
   };
   const changed2 = () => {
     for (const engine of options.engines ?? []) engine.invalidate();
-    emit3();
+    emit2();
   };
   let builtInRow;
   let builtInPoll;
@@ -9458,7 +7617,7 @@ function createLocalModelStore(options) {
         (fraction) => {
           entry.progress = fraction;
           onProgress?.(fraction);
-          emit3();
+          emit2();
         },
         signal
       ).finally(() => {
@@ -9466,7 +7625,7 @@ function createLocalModelStore(options) {
         changed2();
       });
       inFlight.set(ref, entry);
-      emit3();
+      emit2();
       return entry.done;
     },
     async remove(ref) {
@@ -10341,4637 +8500,6 @@ function getRunDriver() {
   return installed;
 }
 
-// ../packages/agent-run/src/contractModel.ts
-var ModelTransportError = class extends Error {
-  status;
-  /** Whether the model policy may route around this failure. A containment stop is never routable. */
-  routable;
-  constructor(message, status2, opts = {}) {
-    super(message);
-    this.name = "ModelTransportError";
-    this.status = status2;
-    this.routable = opts.routable ?? (status2 !== void 0 && status2 >= 400);
-  }
-};
-
-// ../packages/agent-run/src/contract.ts
-var RUN_CANCELLED_REASON = "cancelled";
-
-// ../packages/agent-run/src/surface.ts
-function isTransportFailure(err) {
-  const failure = err?.failure;
-  return err instanceof Error && !!failure && typeof failure === "object" && failure.type === "transport_failed";
-}
-
-// ../packages/agent-run/src/policy/compaction/pack.ts
-import {
-  packHandoff as packHandoff2,
-  handoffBudget as handoffBudget2,
-  defaultEstimateTokens as defaultEstimateTokens3,
-  messageTokens,
-  tokensOf as tokensOf2,
-  isVolatileTail as isVolatileTail5,
-  isVolatileContent,
-  volatileTail,
-  VOLATILE_TAIL_TAG
-} from "@seanhogg/builderforce-memory/handoff";
-
-// ../packages/agent-run/src/policy/compaction/compact.ts
-var C9_TIER_LEVER = "c9_price_tier_budget";
-function taskRowIndex(rows) {
-  const marked = rows.findIndex((m) => m.task === true);
-  return marked >= 0 ? marked : rows.findIndex((m) => m.role === "user" && m.custom !== true);
-}
-var CLOUD_COMPACT_DEFAULTS = {
-  maxTokens: 4e4,
-  reserveOutputTokens: DEFAULT_HANDOFF_RESERVE_TOKENS,
-  timeoutMs: 3e4
-};
-var estimateTokens = defaultEstimateTokens3;
-function toolsTokensOf(tools) {
-  if (tools == null) return 0;
-  if (Array.isArray(tools) && tools.length === 0) return 0;
-  return estimateTokens(JSON.stringify(tools) ?? "");
-}
-function messagesTokens(messages) {
-  return tokensOf2(messages, estimateTokens);
-}
-var elisionNote = (chars) => ` \u2026[${chars} chars elided to fit the context budget]`;
-var ELIDE_CAPS = [4e3, 1e3, 200];
-function elideToFit(messages, budget2) {
-  const out = [...messages];
-  let latestUser = -1;
-  for (let i = out.length - 1; i >= 0; i--) if (out[i]?.role === "user") {
-    latestUser = i;
-    break;
-  }
-  const candidates = (toolsOnly) => out.map((m, i) => ({ m, i })).filter(({ m, i }) => i !== latestUser && m.role !== "system" && typeof m.content === "string" && (toolsOnly ? m.role === "tool" : m.role !== "tool")).sort((a, b) => b.m.content.length - a.m.content.length || a.i - b.i).map(({ i }) => i);
-  let total = messagesTokens(out);
-  for (const toolsOnly of [true, false]) {
-    for (const cap of ELIDE_CAPS) {
-      for (const i of candidates(toolsOnly)) {
-        if (total <= budget2) return out;
-        const msg = out[i];
-        const content = msg.content;
-        if (content.length <= cap) continue;
-        const next = { ...msg, content: content.slice(0, cap) + elisionNote(content.length - cap) };
-        total += messagesTokens([next]) - messagesTokens([msg]);
-        out[i] = next;
-      }
-    }
-  }
-  return out;
-}
-var OBSERVATION_MASK_TURNS = 6;
-var MASK_PREFIX = "[masked tool output";
-var MIN_MASK_CHARS = 400;
-function maskOldObservations(messages, turns = OBSERVATION_MASK_TURNS) {
-  const assistants = messages.reduce((n2, m) => n2 + (m.role === "assistant" ? 1 : 0), 0);
-  const boundary = Math.floor(assistants / turns) * turns - turns;
-  if (turns <= 0 || boundary <= 0) return { messages, masked: 0 };
-  const calls = /* @__PURE__ */ new Map();
-  let ordinal = 0;
-  let masked = 0;
-  const out = messages.map((m) => {
-    if (m.role === "assistant") {
-      ordinal += 1;
-      for (const tc of Array.isArray(m.tool_calls) ? m.tool_calls : []) {
-        if (tc.id) calls.set(tc.id, { name: tc.function?.name ?? "tool", args: tc.function?.arguments ?? "" });
-      }
-      return m;
-    }
-    if (m.role !== "tool" || ordinal > boundary || typeof m.content !== "string") return m;
-    const content = m.content;
-    if (content.length < MIN_MASK_CHARS || content.startsWith(MASK_PREFIX)) return m;
-    const call2 = calls.get(typeof m.tool_call_id === "string" ? m.tool_call_id : "");
-    const args = (call2?.args ?? "").replace(/\s+/g, " ").slice(0, 120);
-    masked += 1;
-    return { ...m, content: `${MASK_PREFIX}: ${call2?.name ?? "tool"}(${args}) \u2014 ${content.length} chars; re-run the tool to see it again]` };
-  });
-  return masked > 0 ? { messages: out, masked } : { messages, masked: 0 };
-}
-function renderForSummary(middle) {
-  const PER_MSG = 1500;
-  const TOTAL = 3e4;
-  const parts = [];
-  let total = 0;
-  for (const m of middle) {
-    const role = typeof m.role === "string" ? m.role : "unknown";
-    let body = typeof m.content === "string" ? m.content : JSON.stringify(m.content ?? "");
-    if (Array.isArray(m.tool_calls)) body += ` [called: ${m.tool_calls.map((t) => t.function?.name ?? "?").join(", ")}]`;
-    const line = `${role}: ${body.slice(0, PER_MSG)}`;
-    if (total + line.length > TOTAL) break;
-    parts.push(line);
-    total += line.length;
-  }
-  return parts.join("\n");
-}
-function compactionBudget(opts) {
-  const tierCap = opts.targetModel && opts.env !== void 0 && isCostLeverOn(opts.env, "c9_price_tier_budget", opts.tenantId);
-  const boundary = tierCap && opts.targetModel ? priceTierBoundary(opts.targetModel) : opts.priceTierBoundary;
-  return handoffTokenBudget({
-    costCapTokens: opts.maxTokens,
-    contextWindow: opts.contextWindow ?? (opts.targetModel ? opts.window?.(opts.targetModel) : void 0),
-    reserveOutputTokens: opts.reserveOutputTokens,
-    ...boundary !== void 0 ? { priceTierBoundary: boundary } : {}
-  }) ?? opts.maxTokens;
-}
-async function compactMessages(messages, opts = CLOUD_COMPACT_DEFAULTS, summarize) {
-  const toolsTokens = toolsTokensOf(opts.tools);
-  const beforeTokens = messagesTokens(messages) + toolsTokens;
-  const budget2 = compactionBudget(opts);
-  const untouched = () => ({ messages: [...messages], compacted: false, summarized: false, beforeTokens, afterTokens: beforeTokens, droppedMessages: 0 });
-  const mask = opts.maskObservationsAfterTurns ? maskOldObservations(messages, opts.maskObservationsAfterTurns) : { messages, masked: 0 };
-  const source = mask.messages;
-  const maskedTokens = mask.masked > 0 ? messagesTokens(source) + toolsTokens : beforeTokens;
-  if (source.length === 0 || maskedTokens <= budget2) {
-    return mask.masked > 0 ? { messages: [...source], compacted: true, summarized: false, beforeTokens, afterTokens: maskedTokens, droppedMessages: 0, maskedObservations: mask.masked } : untouched();
-  }
-  const briefIdx = opts.pinTaskBrief ? taskRowIndex(source) : -1;
-  const brief = briefIdx >= 0 ? source[briefIdx] : void 0;
-  const pack = await packHandoff2({
-    messages: source,
-    ...brief ? { pinned: (_m, i) => i === briefIdx } : {},
-    targetContextTokens: budget2,
-    reserveOutputTokens: 0,
-    toolsTokens,
-    estimateTokens,
-    ...summarize ? {
-      summarize: async (dropped) => {
-        const summary = await summarize(renderForSummary(dropped), { tenantId: opts.tenantId }).catch(() => null);
-        return summary && summary.trim() ? `[Compressed memory of ${dropped.length} earlier step(s) \u2014 the task and recent steps are retained verbatim]
-${summary.trim()}` : "";
-      }
-    } : {},
-    ...opts.recall ? { recall: opts.recall } : {},
-    ...opts.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}
-  });
-  const packed = pack.dropped > 0 ? pack.messages : [...source];
-  const messageBudget = Math.max(0, budget2 - toolsTokens);
-  const out = !pack.fits || messagesTokens(packed) > messageBudget ? elideToFit(packed, messageBudget) : packed;
-  const elided = out.some((m, i) => m !== packed[i]);
-  if (pack.dropped === 0 && !elided && mask.masked === 0) return untouched();
-  return {
-    messages: out,
-    compacted: true,
-    summarized: pack.summarized && pack.dropped > 0,
-    beforeTokens,
-    afterTokens: messagesTokens(out) + toolsTokens,
-    droppedMessages: pack.dropped,
-    ...mask.masked > 0 ? { maskedObservations: mask.masked } : {}
-  };
-}
-var COMPACTION_SUMMARY_SYSTEM = "You compress an in-progress coding agent transcript into a concise memory. Preserve, as terse bullet points: files read/edited and the key facts learned from them, decisions made, commands/checks run and their outcomes, and anything still TODO. Drop chatter and raw file dumps. Output ONLY the memory, no preamble.";
-function compactionSummaryRequest(conversationText) {
-  return {
-    messages: [
-      { role: "system", content: COMPACTION_SUMMARY_SYSTEM },
-      { role: "user", content: conversationText }
-    ],
-    max_tokens: 700
-  };
-}
-
-// ../packages/agent-run/src/policy/stall/ladder.ts
-function spentOf(state) {
-  return { ...state.stall?.rungs ?? {} };
-}
-function save(state, patch) {
-  const total = (state.stall?.recoveriesTotal ?? 0) + (patch.spent ?? 0);
-  state.stall = {
-    ...state.stall ?? { recoveriesUsed: 0 },
-    ...patch.rungs ? { rungs: patch.rungs } : {},
-    ...patch.said ? { said: patch.said } : {},
-    ...total > 0 ? { recoveriesTotal: total } : {}
-  };
-}
-function resetRungs(state, keep2 = []) {
-  const spent = state.stall?.rungs;
-  if (!spent || Object.keys(spent).length === 0) return;
-  save(state, { rungs: Object.fromEntries(Object.entries(spent).filter(([id]) => keep2.includes(id))) });
-}
-function handOffToProven(ctx, ledger, failed3, unavailable = false) {
-  const next = reduceRunPolicy(ctx.state.model, { type: "stalled", ...failed3 ? { resolvedModel: failed3 } : {}, ...unavailable ? { primaryUnavailable: true } : {} });
-  ctx.state.model = next;
-  if (next.outcome.kind !== "failed_over") return void 0;
-  resetRungs(ctx.state, ledger?.sticky);
-  ledger?.handedOff?.(failed3, next.outcome.to);
-  return next.outcome.to;
-}
-function restatement(ctx, rung, attempt, nudgeRole, quoteEmpty) {
-  const rows = [];
-  const said = ctx.content?.trim() ? ctx.content : "";
-  if (rung.quote && (said || quoteEmpty)) rows.push({ role: "assistant", content: said || (ctx.content ?? "") });
-  rows.push({ role: nudgeRole, content: rung.restate[attempt - 1] ?? "" });
-  const notes2 = ctx.state.stall?.said ?? [];
-  if (rung.once && !notes2.includes(rung.id)) {
-    rows.push({ role: "system", content: rung.once });
-    save(ctx.state, { said: [...notes2, rung.id] });
-  }
-  return rows;
-}
-function deliveryTurn(ctx) {
-  return {
-    content: ctx.judged ?? ctx.content ?? "",
-    ...ctx.served?.interruption ? { interruption: ctx.served.interruption } : {},
-    ...ctx.served?.model ? { model: ctx.served.model } : {}
-  };
-}
-function walkLadder(ctx, ledger) {
-  const rungs = ledger.rungs(deliveryTurn(ctx));
-  if (isPromise(rungs)) throw new Error("This ledger answers its rungs with a promise: walk it with walkLadderAsync.");
-  return walkRungs(ctx, ledger, rungs);
-}
-async function walkLadderAsync(ctx, ledger) {
-  return walkRungs(ctx, ledger, await ledger.rungs(deliveryTurn(ctx)));
-}
-function isPromise(value) {
-  return typeof value?.then === "function";
-}
-function walkRungs(ctx, ledger, rungs) {
-  for (const rung of rungs) {
-    rung.reached?.();
-    if (!rung.applies) continue;
-    const counters2 = spentOf(ctx.state);
-    const used = counters2[rung.id] ?? 0;
-    const max = rung.restate.length;
-    const restate = () => {
-      counters2[rung.id] = used + 1;
-      save(ctx.state, { rungs: counters2, spent: 1 });
-      rung.onRestate?.(used + 1);
-      if (rung.entersVerify && ctx.state.model.phase !== "verify") ctx.state.model = reduceRunPolicy(ctx.state.model, { type: "verify_started" });
-      return { action: "steer", rows: restatement(ctx, rung, used + 1, ledger.stall?.nudgeAs ?? "system", ledger.stall?.quoteEmpty === true) };
-    };
-    if (used < Math.min(rung.free ?? 1, max)) return restate();
-    if (rung.handoff) {
-      const to = handOffToProven(ctx, ledger, ctx.served?.model);
-      if (to) {
-        save(ctx.state, { spent: 1 });
-        return { action: "escalate", rows: [{ role: "system", content: rung.handoff(to) }] };
-      }
-    }
-    if (used < max) return restate();
-    if (rung.spent === "fall") continue;
-    if (rung.spent === "fail") return { action: "fail", note: rung.id };
-    return { action: "settle", note: rung.spent.settle };
-  }
-  return void 0;
-}
-
-// ../packages/agent-run/src/policy/model/failure.ts
-function recoverProviderFailure(ctx, failure, failedModel, message) {
-  const ledger = ctx.ports.delivery;
-  const wording = ledger?.providerFailure;
-  const to = handOffToProven(ctx, ledger, failedModel, true);
-  if (to) return { kind: "retry", ...wording ? { note: wording.handoff(to) } : {} };
-  const next = reduceRunPolicy(ctx.state.model, failure);
-  ctx.state.model = next;
-  if (next.outcome.kind === "retry_turn") {
-    wording?.rerouted?.({ ...failedModel ? { model: failedModel } : {}, message, step: ctx.step, outcome: next.outcome });
-    return { kind: "retry", ...wording ? { note: wording.reroute } : {} };
-  }
-  wording?.abandoned?.({ ...failedModel ? { model: failedModel } : {}, message });
-  return { kind: "fail" };
-}
-
-// ../packages/agent-run/src/policy/compaction/reserve.ts
-var compactReserveTokens = handoffReserveTokens;
-var DEFAULT_PI_COMPACTION_RESERVE_TOKENS_FLOOR = 2e4;
-function ensureCompactionReserveTokens(params) {
-  const minReserveTokens = params.minReserveTokens ?? DEFAULT_PI_COMPACTION_RESERVE_TOKENS_FLOOR;
-  const current = params.settingsManager.getCompactionReserveTokens();
-  if (current >= minReserveTokens) {
-    return { didOverride: false, reserveTokens: current };
-  }
-  params.settingsManager.applyOverrides({
-    compaction: { reserveTokens: minReserveTokens }
-  });
-  return { didOverride: true, reserveTokens: minReserveTokens };
-}
-function resolveCompactionReserveTokensFloor(cfg) {
-  const raw = cfg?.agents?.defaults?.compaction?.reserveTokensFloor;
-  if (typeof raw === "number" && Number.isFinite(raw) && raw >= 0) {
-    return Math.floor(raw);
-  }
-  return DEFAULT_PI_COMPACTION_RESERVE_TOKENS_FLOOR;
-}
-function compactionReserve(maxTokens, cfg) {
-  let reserveTokens = compactReserveTokens(maxTokens);
-  return ensureCompactionReserveTokens({
-    settingsManager: {
-      getCompactionReserveTokens: () => reserveTokens,
-      applyOverrides: (o) => {
-        reserveTokens = o.compaction.reserveTokens;
-      }
-    },
-    minReserveTokens: resolveCompactionReserveTokensFloor(cfg)
-  }).reserveTokens;
-}
-function servingModel(ctx) {
-  return ctx.state.model?.model ?? ctx.policy.pinnedModel ?? "";
-}
-function replyReserve(ctx) {
-  if (!ctx.policy.modelHandoff) return ctx.policy.budgets.reserveTokens ?? compactionReserve(void 0);
-  const window2 = ctx.ports.model.window?.(servingModel(ctx));
-  const floor = DEFAULT_PI_COMPACTION_RESERVE_TOKENS_FLOOR;
-  return window2 && window2 > 0 ? Math.max(1, Math.min(floor, Math.floor(window2 / 4))) : floor;
-}
-function replyAsk(ctx) {
-  const reserve = replyReserve(ctx);
-  return reserve < DEFAULT_PI_COMPACTION_RESERVE_TOKENS_FLOOR ? reserve : void 0;
-}
-
-// ../packages/agent-run/src/policy/model/downgradeRule.ts
-function planModelWarning(model, book2 = snapshotPriceBook()) {
-  if (!model || model === "default") return null;
-  const price = listPriceOf(book2, model);
-  const tier2 = price ? resolveModelTier({ price }) : void 0;
-  return tier2 && isAgenticTier(tier2) === false ? { model, tier: tier2 } : null;
-}
-function downgradeDecision(input) {
-  const { asked, served } = input;
-  if (!served || served === "default") return null;
-  if (asked !== void 0) return served === asked ? null : { kind: "failover" };
-  const byo = input.byo.trim();
-  const flash = !byo && input.planPhase ? planModelWarning(served, input.book) : null;
-  if (!byo && !flash) return null;
-  if (input.seen) return null;
-  return byo ? { kind: "byo" } : { kind: "plan_tier", tier: flash.tier };
-}
-
-// ../packages/agent-run/src/policy/model/preflight.ts
-function classifyPreflight(input) {
-  const notices = [];
-  let refreshExpired = false;
-  if (input.byoSelected) {
-    for (const [provider, reason] of Object.entries(input.unresolvedReasons)) {
-      if (!reason) continue;
-      if (reason === "expired") {
-        if (input.unresolvedAfterRefresh) {
-          notices.push(`${provider}: credential ${input.unresolvedAfterRefresh} \u2014 reconnect it in Settings \u25B8 Integrations.`);
-        } else {
-          refreshExpired = true;
-        }
-      } else {
-        notices.push(`${provider}: credential ${reason} \u2014 reconnect it in Settings \u25B8 Integrations.`);
-      }
-    }
-  }
-  if (input.planModelAgentic === false) {
-    notices.push("plan phase would land on a Flash-class model \u2014 routing around it for the run's quality.");
-  }
-  return { notices, refreshExpired };
-}
-function reasonsOf(entries) {
-  const out = {};
-  for (const entry of entries) {
-    const [provider = "", reason = ""] = entry.split(":").map((part) => part.trim());
-    if (provider) out[provider] = reason || "not_connected";
-  }
-  return out;
-}
-function modelPreflightEvent(step, result, planModel) {
-  const plan = planModelWarning(planModel);
-  const { notices } = classifyPreflight({
-    byoSelected: true,
-    unresolvedReasons: reasonsOf(result?.byoUnresolved ?? []),
-    ...plan ? { planModelAgentic: false } : {},
-    unresolvedAfterRefresh: "expired"
-  });
-  if (notices.length > 0 && result?.fallback && (result.byoUnresolved.length ?? 0) > 0) {
-    notices.push(`This run will use ${result.fallback} instead.`);
-  }
-  const status2 = notices.length > 0 ? "degraded" : (result?.refreshed?.length ?? 0) > 0 ? "refreshed" : "ok";
-  return { kind: "model.preflight", step, status: status2, notices };
-}
-function preflightVerdict(event, result) {
-  if (event.status !== "degraded") return event.status;
-  const reasons = (result?.byoUnresolved ?? []).join(",");
-  return `degraded:${reasons || "plan_flash"}`;
-}
-async function runModelPreflight(ctx) {
-  const model = ctx.state.model.model ?? ctx.policy.pinnedModel;
-  let result;
-  try {
-    result = await ctx.ports.model.preflight?.(model);
-  } catch {
-    result = void 0;
-  }
-  const event = modelPreflightEvent(ctx.step, result, ctx.state.writtenPaths.length === 0 ? model : void 0);
-  ctx.state.preflight = preflightVerdict(event, result);
-  return event;
-}
-function recordWeaker(ctx, served) {
-  const recorded = ctx.state.degradedBy ?? [];
-  if (!recorded.includes(served)) ctx.state.degradedBy = [...recorded, served];
-}
-function modelDowngrade(ctx, requested, served, book2 = snapshotPriceBook()) {
-  const asked = requested && requested !== "default" ? requested : void 0;
-  const degraded = ctx.state.preflight?.startsWith("degraded:") ? ctx.state.preflight.slice("degraded:".length) : "";
-  const decision = downgradeDecision({
-    asked,
-    served,
-    byo: degraded && degraded !== "plan_flash" ? degraded : "",
-    planPhase: ctx.state.writtenPaths.length === 0,
-    seen: !!served && (ctx.state.downgrades ?? []).includes(served)
-  });
-  if (!decision || !served) return void 0;
-  if (decision.kind === "failover") {
-    if (isWeakerModel(asked, served, book2)) recordWeaker(ctx, served);
-    return { kind: "llm.model_downgrade", step: ctx.step, requestedModel: asked, model: served, reason: "failover" };
-  }
-  ctx.state.downgrades = [...ctx.state.downgrades ?? [], served];
-  return { kind: "llm.model_downgrade", step: ctx.step, requestedModel: "default", model: served, reason: decision.kind === "byo" ? `byo_unresolved:${degraded}` : `plan_tier:${decision.tier}` };
-}
-
-// ../packages/agent-run/src/policy/model/index.ts
-var RUN_PHASES = /* @__PURE__ */ new Set(["plan", "code", "verify"]);
-function policyRole(delegatedRole) {
-  const role = typeof delegatedRole === "string" ? delegatedRole.trim() : "";
-  if (role === "verify") return { startPhase: "verify", fixedRole: "verify" };
-  if (RUN_PHASES.has(role)) return { startPhase: role };
-  if (isModelRole(role)) return { startPhase: "code", fixedRole: role };
-  return { startPhase: "code" };
-}
-var DECLINING_MODEL_PREFIXES = ["evermind/"];
-function startOptions(pick, delegatedRole, phaseModels) {
-  const reviewModel = reviewPhaseModel(phaseModels) ?? null;
-  return {
-    pinnedModel: pick.model,
-    strictPin: pick.strict,
-    pinReleasable: true,
-    lockAfterFirstSuccess: true,
-    decliningModelPrefixes: DECLINING_MODEL_PREFIXES,
-    ...policyRole(delegatedRole),
-    ...phaseModels ? { phaseModels } : {},
-    reviewModel
-  };
-}
-function initialModelRunState(input) {
-  return {
-    policy: initialRunPolicy(startOptions(input.pick, input.delegatedRole, input.phaseModels)),
-    stallRecoveries: input.stallRecoveries ?? 0,
-    ...input.forceToolChoice ? { forceToolChoice: input.forceToolChoice } : {},
-    preflightNotices: [...input.preflightNotices ?? []]
-  };
-}
-function requestForTurn(state, hasTools2) {
-  return { ...turnRouting(state.policy, hasTools2), ...state.forceToolChoice ? { toolChoice: state.forceToolChoice } : {} };
-}
-function routeAroundFailure(state, request, failure) {
-  const policy = reduceRunPolicy(state.policy, {
-    type: "transport_failed",
-    kind: failure.kind,
-    ...failure.status !== void 0 ? { status: failure.status } : {},
-    ...request.model ? { model: request.model } : {}
-  });
-  const next = { ...state, policy };
-  return policy.outcome.kind === "retry_turn" ? { state: next, retry: requestForTurn(next, true) } : { state: next, retry: null };
-}
-function retryOutcome(state) {
-  return state.policy.outcome.kind === "retry_turn" ? state.policy.outcome : null;
-}
-function recordSuccess(state, served) {
-  const policy = reduceRunPolicy(state.policy, {
-    type: "turn_succeeded",
-    ...served.model ? { model: served.model } : {},
-    ...served.acted ? { acted: true } : {},
-    ...served.durationMs !== void 0 ? { durationMs: served.durationMs } : {}
-  });
-  return { ...state, policy, forceToolChoice: void 0 };
-}
-function turnRouting(state, hasTools2) {
-  return nextTurn(state, { hasTools: hasTools2 });
-}
-var modelHook = {
-  resolve(ctx) {
-    const routing = turnRouting(ctx.state.model, ctx.tools.length > 0 || ctx.finalTurn === true);
-    const maxTokens = ctx.policy.modelHandoff ? replyAsk(ctx) : cappedMaxTokens(routing.role, void 0);
-    return {
-      role: routing.role,
-      strict: routing.strict,
-      excludeModels: routing.excludeModels,
-      ...routing.model ? { model: routing.model } : {},
-      ...maxTokens !== void 0 ? { maxTokens } : {}
-    };
-  },
-  turnFields(ctx) {
-    const ask2 = nextTurn(ctx.state.model, { hasTools: ctx.tools.length > 0 || ctx.finalTurn === true });
-    return {
-      role: ask2.role,
-      phase: ctx.state.model.phase,
-      ...ask2.strict ? { strict: true } : {},
-      ...ask2.excludeModels.length > 0 ? { excludeModels: ask2.excludeModels } : {},
-      // A stall recovery's one-shot forced tool call, spent by the next request.
-      ...ctx.state.forceToolChoice ? { toolChoice: ctx.state.forceToolChoice } : {}
-    };
-  },
-  preflight: runModelPreflight,
-  downgrade: modelDowngrade,
-  recoverFailure: recoverProviderFailure
-};
-
-// ../packages/agent-run/src/runContext.ts
-function policyContext(input, state, view, step, turn) {
-  return {
-    task: input.task,
-    policy: input.policy,
-    state,
-    ports: input.ports,
-    step,
-    turn,
-    messages: view.messages,
-    tools: view.tools,
-    signal: input.signal
-  };
-}
-function applyCompaction(state, view, result, step) {
-  view.messages.splice(0, view.messages.length, ...result.messages);
-  state.messages = view.messages;
-  if (result.noteOnly) return;
-  if (result.reused) return;
-  state.compaction = {
-    compactions: state.compaction.compactions + 1,
-    lastCompactedStep: step,
-    ...result.reserveTokens !== void 0 ? { reserveTokens: result.reserveTokens } : {},
-    droppedMessages: result.dropped
-  };
-}
-function currentView(transcript, offered) {
-  return { messages: transcript, tools: offered };
-}
-function toPolicyCall(call2) {
-  return { id: call2.id, name: call2.name, args: call2.args };
-}
-function appendRows(input, transcript, ...rows) {
-  for (const row of rows) {
-    transcript.push(row);
-    announceRow(input, row);
-  }
-}
-function announceRow(input, row) {
-  try {
-    input.ports.store.appended?.(row);
-  } catch {
-  }
-  return row;
-}
-async function emit(events, event, meta) {
-  try {
-    await events.emit(event, meta);
-  } catch {
-  }
-}
-
-// ../packages/agent-run/src/turnTail.ts
-var measured = /* @__PURE__ */ new WeakMap();
-function measureTurnTail(state, request) {
-  const last = request.at(-1);
-  measured.set(state, last !== void 0 && isVolatileTail5(last) ? messageTokens(last, defaultEstimateTokens3) : 0);
-  return request;
-}
-function turnTailTokens(state) {
-  return measured.get(state) ?? 0;
-}
-
-// ../packages/agent-run/src/policy/compaction/handoff.ts
-import { defaultEstimateTokens as defaultEstimateTokens4, elisionMarker, handoffLine, isVolatileTail as isVolatileTail6, messageTokens as messageTokens2, packHandoff as packHandoff3, tokensOf as tokensOf3 } from "@seanhogg/builderforce-memory/handoff";
-function packTargetTokens2(contextWindow, boundary, reserve) {
-  const budget2 = handoffTokenBudget({ contextWindow, reserveOutputTokens: reserve, priceTierBoundary: boundary });
-  return budget2 === void 0 ? contextWindow : Math.min(contextWindow, budget2 + reserve);
-}
-async function packForModelHandoff(input, access) {
-  const back = /* @__PURE__ */ new Map();
-  const system = { role: "system", content: input.systemPrompt };
-  const mapped = input.messages.map((row) => {
-    const view = access.toHandoff(row);
-    back.set(view, row);
-    return view;
-  });
-  const all = [system, ...mapped];
-  const beforeTokens = tokensOf3(all, defaultEstimateTokens4);
-  const reserve = handoffReserveTokens(input.maxTokens);
-  const pack = await packHandoff3({
-    messages: all,
-    targetContextTokens: packTargetTokens2(input.contextWindow, input.priceTierBoundary, reserve),
-    reserveOutputTokens: reserve,
-    toolsTokens: toolSchemaTokens(input.tools, defaultEstimateTokens4) + (input.extraTokens ?? 0),
-    from: input.from,
-    to: input.to,
-    ...input.pinned ? { pinned: (view) => {
-      const row = back.get(view);
-      return row !== void 0 && input.pinned(row);
-    } } : {}
-  });
-  if (pack.dropped === 0) return { messages: [...input.messages], dropped: 0, noted: false, fits: pack.fits, beforeTokens, afterTokens: beforeTokens };
-  const messages = [];
-  let noted = false;
-  for (const view of pack.messages) {
-    if (view === system) continue;
-    const original = back.get(view);
-    if (original) {
-      messages.push(original);
-      continue;
-    }
-    messages.push(access.summary(typeof view.content === "string" ? view.content : JSON.stringify(view.content), view.role));
-    noted = true;
-  }
-  return { messages, dropped: pack.dropped, noted, fits: pack.fits, beforeTokens, afterTokens: pack.estimatedTokens };
-}
-var WIDEST_DROPPED = 99999;
-function noteText(from, to, dropped) {
-  const line = handoffLine(from, to);
-  return line ? `${line}
-${dropped > 0 ? elisionMarker(dropped) : "Nothing was dropped."}` : "";
-}
-function handoffNoteTokens(from, to) {
-  const text2 = noteText(from, to, WIDEST_DROPPED);
-  return text2 ? messageTokens2({ role: "user", content: text2 }, defaultEstimateTokens4) : 0;
-}
-function withHandoffNote(rows, from, to, dropped, access) {
-  const text2 = noteText(from, to, dropped);
-  if (!text2) return [...rows];
-  const views = rows.map((row) => access.toHandoff(row));
-  let at = -1;
-  for (let i = views.length - 1; i >= 0; i -= 1) {
-    if (views[i].role === "user" && !isVolatileTail6(views[i])) {
-      at = i;
-      break;
-    }
-  }
-  if (at < 0) return [...rows, access.summary(text2, "user")];
-  const role = at === 0 || views[at - 1].role === "assistant" ? "user" : "assistant";
-  return [...rows.slice(0, at), access.summary(text2, role), ...rows.slice(at)];
-}
-
-// ../packages/agent-run/src/policy/compaction/rows.ts
-function toPackRow(m) {
-  const row = { role: m.role, content: m.content };
-  if (m.task) row.task = true;
-  if (m.parts && m.parts.length > 0) row.parts = m.parts;
-  if (m.meta) row.meta = m.meta;
-  if (m.toolCalls && m.toolCalls.length > 0) {
-    row.tool_calls = m.toolCalls.map((tc) => ({
-      id: tc.id,
-      type: "function",
-      function: { name: tc.name, arguments: tc.arguments }
-    }));
-  }
-  if (m.toolCallId != null) row.tool_call_id = m.toolCallId;
-  return row;
-}
-function toRunRow(m) {
-  const src = m;
-  const toolCalls = Array.isArray(src.tool_calls) ? src.tool_calls.map((tc) => ({
-    id: tc.id ?? "",
-    name: tc.function?.name ?? "",
-    arguments: tc.function?.arguments ?? ""
-  })) : void 0;
-  const out = {
-    role: src.role,
-    content: typeof src.content === "string" ? src.content : JSON.stringify(src.content ?? "")
-  };
-  if (toolCalls && toolCalls.length > 0) out.toolCalls = toolCalls;
-  if (src.tool_call_id != null) out.toolCallId = src.tool_call_id;
-  if (src.task === true) out.task = true;
-  if (Array.isArray(src.parts) && src.parts.length > 0) out.parts = src.parts;
-  if (src.meta) out.meta = src.meta;
-  return out;
-}
-var IMAGE_CHAR_ESTIMATE = 8e3;
-var IMAGE_STAND_IN = "#".repeat(IMAGE_CHAR_ESTIMATE);
-function toHandoffView(m) {
-  const view = toPackRow(m);
-  const role = m.custom ? "assistant" : view.role;
-  const blocks = (m.parts ?? []).filter((p) => p.type === "thinking" || p.type === "image").map((p) => p.type === "image" ? { type: "image", estimate: IMAGE_STAND_IN } : p);
-  if (blocks.length === 0) return role === view.role ? view : { ...view, role };
-  return { ...view, role, content: [...m.content ? [{ type: "text", text: m.content }] : [], ...blocks] };
-}
-function runRowHandoff() {
-  return { toHandoff: toHandoffView, summary: (text2, role) => ({ role, content: text2 }) };
-}
-
-// ../packages/agent-run/src/policy/compaction/modelHandOff.ts
-async function handOff(ctx) {
-  const to = servingModel(ctx);
-  const from = ctx.state.preparedFor;
-  ctx.state.preparedFor = to || void 0;
-  if (!from || !to || from === to) return void 0;
-  const lead = ctx.messages.findIndex((m) => m.role !== "system");
-  const split = lead < 0 ? ctx.messages.length : lead;
-  const system = ctx.messages.slice(0, split);
-  const access = runRowHandoff();
-  const contextWindow = ctx.ports.model.window?.(to);
-  if (!contextWindow) return { messages: [...system, ...withHandoffNote(ctx.messages.slice(split), from, to, 0, access)], dropped: 0, noteOnly: true, summarized: false };
-  const reserve = replyReserve(ctx);
-  const task = ctx.messages[taskRowIndex(ctx.messages)];
-  const packed = await packForModelHandoff(
-    {
-      messages: ctx.messages.slice(split),
-      systemPrompt: system.map((m) => m.content).join("\n\n"),
-      tools: ctx.tools.map((t) => ({ name: t.function.name, description: t.function.description, parameters: t.function.parameters })),
-      from,
-      to,
-      contextWindow,
-      maxTokens: reserve,
-      // The request also carries its volatile tail (about what the last one did) and the note.
-      extraTokens: turnTailTokens(ctx.state) + handoffNoteTokens(from, to),
-      pinned: (row) => row === task || row.person === true,
-      ...ctx.policy.levers.includes(C9_TIER_LEVER) ? { priceTierBoundary: priceTierBoundary(to) } : {}
-    },
-    access
-  );
-  if (!packed.fits) {
-    await emit(ctx.ports.events, {
-      kind: "model.preflight",
-      step: ctx.step,
-      status: "degraded",
-      notices: [`The context cannot be made to fit ${to} (${contextWindow} tokens): the system prompt and the request that must stay whole already need about ${packed.afterTokens}.`]
-    });
-  }
-  return {
-    messages: [...system, ...packed.noted ? packed.messages : withHandoffNote(packed.messages, from, to, packed.dropped, access)],
-    dropped: packed.dropped,
-    ...packed.dropped === 0 ? { noteOnly: true } : {},
-    reserveTokens: reserve,
-    beforeTokens: packed.beforeTokens,
-    afterTokens: packed.afterTokens,
-    summarized: false
-  };
-}
-
-// ../packages/agent-run/src/policy/compaction/index.ts
-var C2_MASK_LEVER = "c2_observation_masking";
-var RECALL_LIMIT = 8;
-function leverOn(ctx, id) {
-  return ctx.policy.levers.includes(id);
-}
-function transportSummarizer(ctx) {
-  return async (conversationText) => {
-    const request = compactionSummaryRequest(conversationText);
-    try {
-      const model = ctx.ports.model;
-      const routing = ctx.state.model ? turnRouting(ctx.state.model, false) : void 0;
-      const asked = {
-        messages: request.messages,
-        maxTokens: request.max_tokens,
-        ...routing?.model ? { model: routing.model, strict: routing.strict } : {},
-        ...routing && routing.excludeModels.length > 0 ? { excludeModels: routing.excludeModels } : {}
-      };
-      const completion = model.summarize ? await model.summarize(asked, ctx.signal) : await model.complete(asked, ctx.signal);
-      const text2 = completion.content?.trim();
-      return text2 ? text2 : null;
-    } catch {
-      return null;
-    }
-  };
-}
-function capabilityRecall(ctx) {
-  const memory = ctx.ports.capabilities.memory;
-  if (!memory) return void 0;
-  return async (query, budgetChars) => {
-    const result = await memory.recall(query, RECALL_LIMIT);
-    if (!result.ok || !result.entries?.length) return "";
-    return result.entries.map((e) => `- ${e.key}: ${e.content}`).join("\n").slice(0, budgetChars);
-  };
-}
-function compactionOptions(ctx, opts = {}) {
-  const model = servingModel(ctx);
-  const window2 = ctx.ports.model.window?.(model);
-  const recall = opts.recall ?? capabilityRecall(ctx);
-  const reserve = replyReserve(ctx);
-  return {
-    ...CLOUD_COMPACT_DEFAULTS,
-    maxTokens: opts.maxTokens ?? ctx.policy.budgets.tokens ?? CLOUD_COMPACT_DEFAULTS.maxTokens,
-    contextWindow: window2,
-    priceTierBoundary: leverOn(ctx, C9_TIER_LEVER) ? opts.priceTierBoundary ?? priceTierBoundary(model) : void 0,
-    reserveOutputTokens: reserve,
-    tools: ctx.tools,
-    ...leverOn(ctx, C2_MASK_LEVER) ? { maskObservationsAfterTurns: OBSERVATION_MASK_TURNS } : {},
-    summarize: opts.summarize ?? transportSummarizer(ctx),
-    ...recall ? { recall } : {},
-    pinTaskBrief: opts.pinTaskBrief ?? true,
-    timeoutMs: CLOUD_COMPACT_DEFAULTS.timeoutMs
-  };
-}
-function foldOf(before, after) {
-  const members = new Set(before);
-  const noteAt = after.findIndex((m) => !members.has(m) && m.role !== "tool" && !m.tool_calls && typeof m.content === "string");
-  if (noteAt < 0) return void 0;
-  let tail = 0;
-  while (tail < after.length - 1 - noteAt && tail < before.length && after[after.length - 1 - tail] === before[before.length - 1 - tail]) tail += 1;
-  for (let i = noteAt + 1; i < after.length - tail; i += 1) if (!members.has(after[i])) return void 0;
-  const lead = before.findIndex((m) => m.role !== "system");
-  const covered = before.length - tail - (lead < 0 ? 0 : lead);
-  return covered > 0 ? { note: after[noteAt].content, covered } : void 0;
-}
-function createCompactionHook(hookOptions = {}) {
-  return {
-    async compact(ctx) {
-      if (ctx.policy.modelHandoff) return handOff(ctx);
-      const options = compactionOptions(ctx, hookOptions);
-      const rows = ctx.messages.map(toPackRow);
-      const result = await compactMessages(rows, options, options.summarize);
-      if (!result.compacted) return void 0;
-      const fold = result.droppedMessages > 0 ? foldOf(rows, result.messages) : void 0;
-      return {
-        messages: result.messages.map(toRunRow),
-        dropped: result.droppedMessages,
-        reserveTokens: options.reserveOutputTokens,
-        beforeTokens: result.beforeTokens,
-        afterTokens: result.afterTokens,
-        summarized: result.summarized,
-        ...result.maskedObservations ? { masked: result.maskedObservations } : {},
-        ...fold ? { note: fold.note, covered: fold.covered } : {}
-      };
-    }
-  };
-}
-var compactionHook = createCompactionHook();
-
-// ../packages/agent-run/src/policy/stall/index.ts
-function currentModel(ctx) {
-  return ctx.state.model?.model ?? void 0;
-}
-function budgetOf(ctx) {
-  const slot = ctx.state.stall;
-  const model = currentModel(ctx);
-  if (slot && typeof slot.recoveriesUsed === "number" && (slot.model === model || ctx.ports?.delivery?.stall?.runWideBudget)) return { ...slot };
-  return model !== void 0 ? { model, recoveriesUsed: 0 } : { recoveriesUsed: 0 };
-}
-function saveBudget(ctx, budget2, spent = 0) {
-  const model = currentModel(ctx);
-  const total = (ctx.state.stall?.recoveriesTotal ?? 0) + spent;
-  const kept = { ...ctx.state.stall };
-  delete kept.model;
-  delete kept.recoveriesTotal;
-  ctx.state.stall = {
-    ...kept,
-    ...model !== void 0 ? { model } : {},
-    recoveriesUsed: budget2.recoveriesUsed,
-    ...total > 0 ? { recoveriesTotal: total } : {}
-  };
-}
-var FORCED_SYNTHESIS_PROMPT = "Now write your reply to the team AS the agent: plain prose, first person, no tool calls. Summarise what you found or did.";
-var stallHook = {
-  recover(ctx) {
-    const delivery = ctx.ports?.delivery;
-    if (delivery) {
-      const first = narratesFirst(delivery) ? narrationRecover(ctx, "nudge") : void 0;
-      if (first) return first;
-      const owed = walkLadder(ctx, delivery);
-      if (owed || delivery.owns?.narration) return owed;
-    }
-    return narrationRecover(ctx) ?? deliverableRecover(ctx);
-  },
-  /** {@link recover} for a ledger whose rungs need a promise to say which hold; the kernel calls this one. */
-  async recoverAsync(ctx) {
-    const delivery = ctx.ports?.delivery;
-    if (delivery) {
-      const first = narratesFirst(delivery) ? narrationRecover(ctx, "nudge") : void 0;
-      if (first) return first;
-      const owed = await walkLadderAsync(ctx, delivery);
-      if (owed || delivery.owns?.narration) return owed;
-    }
-    return narrationRecover(ctx) ?? deliverableRecover(ctx);
-  },
-  /**
-   * The settled answer, shaped the way every source shapes it: a reply stuck on one
-   * block posts that block once (`trimRepetitionLoop`, `brain/agentReplyLoop.ts`), and a
-   * prose question with options becomes the canonical ```ask-user block the surfaces
-   * render as a choice (`liftProseAskUser`).
-   */
-  settle(ctx, text2) {
-    const delivery = ctx.ports?.delivery;
-    if (delivery?.owns?.settle && delivery.accept) return delivery.accept(text2);
-    return liftProseAskUser(trimRepetitionLoop(text2.trim()));
-  },
-  /** A turn that called a tool is never a stall: the current model's budget starts full again. */
-  acted(ctx) {
-    if (ctx.state.stall && ctx.state.stall.recoveriesUsed > 0) saveBudget(ctx, { recoveriesUsed: 0 });
-  },
-  /**
-   * The forced no-tools final synthesis: a run that ended without speaking (every turn
-   * only called tools, a budget ran out, a breaker tripped) gets ONE bounded extra call
-   * with this prompt and no tools, so the agent always answers (`brain/agentReplyLoop.ts`).
-   */
-  synthesis(ctx) {
-    if (ctx.ports?.delivery?.owns?.synthesis) return null;
-    return ctx.task.agentName ? FORCED_SYNTHESIS_PROMPT.replace("AS the agent", `AS ${ctx.task.agentName}`) : FORCED_SYNTHESIS_PROMPT;
-  }
-};
-var ANNOUNCED_DELIVERABLE_ID = "announced_deliverable";
-function deliverableRecover(ctx) {
-  const text2 = ctx.judged ?? (typeof ctx.content === "string" ? ctx.content : "");
-  const said = ctx.state.stall?.said ?? [];
-  if (said.includes(ANNOUNCED_DELIVERABLE_ID) || !announcesDeliverable(text2)) return void 0;
-  ctx.state.stall = { ...ctx.state.stall ?? { recoveriesUsed: 0 }, said: [...said, ANNOUNCED_DELIVERABLE_ID] };
-  return { action: "steer", note: ANNOUNCED_DELIVERABLE_STEER, detail: { model: ctx.state.model.model ?? null, shape: "announced-deliverable" } };
-}
-function narratesFirst(delivery) {
-  return delivery.stall?.narrationFirst === true && !delivery.owns?.narration;
-}
-function narrationRecover(ctx, only) {
-  const text2 = ctx.judged ?? (typeof ctx.content === "string" ? ctx.content : "");
-  const toolNames = (ctx.tools ?? []).map((t) => t.function?.name ?? "").filter(Boolean);
-  const style = ctx.ports?.delivery?.stall;
-  const held = ctx.state.model.model && ctx.state.model.model !== "default" ? ctx.state.model.model : void 0;
-  const served = ctx.served?.model && ctx.served.model !== "default" ? ctx.served.model : void 0;
-  const resolvedModel = served ?? held;
-  const budget2 = budgetOf(ctx);
-  const { policy, step } = resolveStallStep(
-    ctx.state.model,
-    {
-      text: text2,
-      toolCallCount: 0,
-      availableToolNames: toolNames,
-      // Whether the user asked for a change decides what handing the work back means.
-      requestText: ctx.task.request ?? ctx.task.prompt,
-      ...resolvedModel ? { resolvedModel } : {}
-    },
-    budget2.recoveriesUsed,
-    // The failover source rides the run policy's proven/tried set; the transport names
-    // the models a failover may land on (the tenant's connected flagships, the coding
-    // pool). Without one the default never returns the model that just failed, never
-    // more than MAX_MODEL_FAILOVERS deep.
-    {
-      surface: ctx.ports.model?.fallbackSurface?.() ?? void 0,
-      // A host whose successor is a function of what was already tried (an operator's declared chain) names it here; it wins over the surface.
-      ...ctx.ports.model?.pickFallback ? { pick: (tried) => ctx.ports.model.pickFallback(tried) } : {}
-    }
-  );
-  if (only === "nudge" && step.kind !== "nudge") return void 0;
-  switch (step.kind) {
-    case "none":
-      return void 0;
-    case "nudge": {
-      budget2.recoveriesUsed = step.recoveriesUsed;
-      saveBudget(ctx, budget2, 1);
-      if (step.toolChoice) ctx.state.forceToolChoice = step.toolChoice;
-      return { action: "steer", note: step.nudge, detail: { model: ctx.state.model.model ?? null, attempt: step.recoveriesUsed, shape: step.shape ?? null, ...style?.menu ? { advertisedTools: toolNames.length } : {} } };
-    }
-    case "failover": {
-      budget2.recoveriesUsed = step.recoveriesUsed;
-      saveBudget(ctx, budget2, 1);
-      ctx.state.model = policy;
-      if (step.toolChoice) ctx.state.forceToolChoice = step.toolChoice;
-      return {
-        action: "escalate",
-        note: style?.failoverNudgeOnly ? step.nudge : `${step.notice}
-
-${step.nudge}`,
-        detail: { from: step.from ?? null, to: step.to, attempt: step.attempt, of: step.of, shape: step.shape ?? null, notice: step.notice }
-      };
-    }
-    case "exhausted": {
-      saveBudget(ctx, budget2);
-      return {
-        action: "pause",
-        note: step.notice,
-        detail: { model: resolvedModel ?? ctx.state.model.model ?? null, tried: step.tried, shape: step.shape ?? null, ...style?.menu ? { attempts: budget2.recoveriesUsed, advertisedTools: toolNames.length } : {} }
-      };
-    }
-  }
-}
-
-// ../packages/agent-run/src/policy/steering/runSteering.ts
-var inboxes = /* @__PURE__ */ new Map();
-var interrupting = /* @__PURE__ */ new Set();
-var interruptListeners = /* @__PURE__ */ new Map();
-function newSteerKey() {
-  return `steer:${crypto.randomUUID()}`;
-}
-function queueRunSteering(runKey, text2, opts) {
-  const trimmed = text2.trim();
-  if (!trimmed) return void 0;
-  const eventKey = opts?.eventKey ?? (opts?.persist ? newSteerKey() : void 0);
-  const message = { text: trimmed, attachments: opts?.attachments, ...opts?.fromPerson ? { fromPerson: true } : {}, ...opts?.persist ? { persist: true } : {}, ...opts?.saved ? { saved: true } : {}, ...eventKey ? { eventKey } : {}, ...opts?.childReport ? { childReport: opts.childReport } : {} };
-  const queue = inboxes.get(runKey) ?? [];
-  queue.push(message);
-  inboxes.set(runKey, queue);
-  if (!opts?.interrupt) return message;
-  interrupting.add(runKey);
-  for (const listener of [...interruptListeners.get(runKey) ?? []]) listener();
-  return message;
-}
-function requeueRunSteering(runKey, messages) {
-  if (messages.length === 0) return;
-  inboxes.set(runKey, [...messages, ...inboxes.get(runKey) ?? []]);
-}
-function drainRunSteering(runKey) {
-  interrupting.delete(runKey);
-  const queue = inboxes.get(runKey);
-  if (!queue?.length) return [];
-  inboxes.delete(runKey);
-  return queue;
-}
-function hasRunInterrupt(runKey) {
-  return interrupting.has(runKey);
-}
-function onRunInterrupt(runKey, listener) {
-  const set = interruptListeners.get(runKey) ?? /* @__PURE__ */ new Set();
-  set.add(listener);
-  interruptListeners.set(runKey, set);
-  return () => {
-    set.delete(listener);
-    if (set.size === 0) interruptListeners.delete(runKey);
-  };
-}
-function runSteeringSource(runKey) {
-  return {
-    drain: () => {
-      const interrupt = hasRunInterrupt(runKey);
-      return drainRunSteering(runKey).map((m) => ({
-        text: m.text,
-        ...m.attachments !== void 0 ? { attachments: m.attachments } : {},
-        ...interrupt ? { interrupt: true } : {}
-      }));
-    },
-    hasInterrupt: () => hasRunInterrupt(runKey),
-    onInterrupt: (listener) => onRunInterrupt(runKey, listener)
-  };
-}
-
-// ../packages/agent-run/src/policy/steering/steerInterrupt.ts
-function runInterruptWatch(runKey) {
-  return { hasInterrupt: () => hasRunInterrupt(runKey), onInterrupt: (listener) => onRunInterrupt(runKey, listener) };
-}
-var INTERRUPTED_BY_STEER = "Interrupted by the user's new message: the command did not run to completion (it was stopped, or it had not started when the message arrived). Read the message that follows and do what it asks; re-run the command only if it still applies.";
-var STOPPED_BY_USER = "Stopped by the user: the command was killed before it finished.";
-var WAIT_INTERRUPTED_BY_STEER = "Wait interrupted by the user's new message: the background job is STILL RUNNING. Read the message that follows and do what it asks; check the job later with command_status, or stop it with command_stop.";
-var SKIPPED_BY_STEER = "Not run: the user sent a new message while this turn was running. Read it and decide what to do next.";
-function argsOf(args) {
-  return args && typeof args === "object" && !Array.isArray(args) ? args : {};
-}
-function isWaitCall(name, a) {
-  if (name === "run_command") return a.background !== true && a.yieldMs != null;
-  return name === "command_status" && typeof a.waitMs === "number" && a.waitMs > 0;
-}
-function isInterruptibleCall(name, args) {
-  const a = argsOf(args);
-  if (isWaitCall(name, a)) return true;
-  return name === "run_command" && a.background !== true;
-}
-function interruptedResult(out) {
-  const base = out && typeof out === "object" && !Array.isArray(out) ? out : out === void 0 ? {} : { output: out };
-  return { ...base, ok: false, aborted: true, interrupted: true, error: INTERRUPTED_BY_STEER };
-}
-function notStartedResult() {
-  return { ...interruptedResult(void 0), skipped: true };
-}
-function stoppedResult(out) {
-  const base = out && typeof out === "object" && !Array.isArray(out) ? out : out === void 0 ? {} : { output: out };
-  return { ...base, ok: false, aborted: true, stopped: true, error: STOPPED_BY_USER };
-}
-function waitInterruptedResult(out) {
-  const base = out && typeof out === "object" && !Array.isArray(out) ? out : { output: out };
-  return { ...base, interrupted: true, note: WAIT_INTERRUPTED_BY_STEER };
-}
-function cameBackAborted(out) {
-  return !!out && typeof out === "object" && out.aborted === true;
-}
-async function runToolWithWatch(runTool, watch, runSignal, name, args, surfaceInterruptible) {
-  if (!isInterruptibleCall(name, args) && !surfaceInterruptible?.(name, argsOf(args))) return runTool(name, args);
-  if (watch.hasInterrupt()) return notStartedResult();
-  const wait = isWaitCall(name, argsOf(args));
-  const step = new AbortController();
-  let interrupted = false;
-  const onStop = () => step.abort();
-  if (runSignal?.aborted) step.abort();
-  runSignal?.addEventListener("abort", onStop, { once: true });
-  const off = watch.onInterrupt(() => {
-    interrupted = true;
-    step.abort();
-  });
-  try {
-    const out = await runTool(name, args, step.signal);
-    if (!interrupted) return out;
-    const restated = () => out.stopped === true ? out : interruptedResult(out);
-    if (wait) return cameBackAborted(out) ? restated() : waitInterruptedResult(out);
-    return cameBackAborted(out) ? restated() : out;
-  } finally {
-    off();
-    runSignal?.removeEventListener("abort", onStop);
-  }
-}
-function runToolInterruptibly(runTool, runKey, runSignal, name, args) {
-  return runToolWithWatch(runTool, runInterruptWatch(runKey), runSignal, name, args);
-}
-function steerSkip(watch) {
-  if (!watch.hasInterrupt()) return void 0;
-  return { skipRemaining: { data: { ok: false, skipped: true, error: SKIPPED_BY_STEER }, isError: false } };
-}
-
-// ../packages/agent-run/src/policy/steering/index.ts
-function steerInput(raw) {
-  return typeof raw === "string" ? { text: raw } : raw;
-}
-function portInterruptWatch(source) {
-  return {
-    hasInterrupt: () => source?.hasInterrupt?.() ?? false,
-    onInterrupt: (listener) => source?.onInterrupt?.(listener) ?? (() => void 0)
-  };
-}
-function isStopSteer(steered) {
-  return steered.some((text2) => stopIntent(text2));
-}
-var steeringHook = {
-  inject(_ctx, steered) {
-    if (steered.length === 0) return void 0;
-    return steered.map((text2) => ({ role: "user", content: text2 }));
-  }
-};
-
-// ../packages/agent-run/src/policy/ask/index.ts
-var askHook = {
-  async answer(ctx, question, options) {
-    if (!ctx.ports.human || typeof ctx.ports.human.ask !== "function") {
-      return { kind: "paused" };
-    }
-    return ctx.ports.human.ask(question, options);
-  }
-};
-
-// ../packages/agent-run/src/policy/guards/readOnly.ts
-var READ_ONLY_CLOUD_TOOLS = /* @__PURE__ */ new Set([
-  "read_file",
-  "list_files",
-  "search_code",
-  "find_symbol",
-  "file_outline",
-  "repo_map",
-  "semantic_search",
-  "git_status",
-  "git_diff",
-  "git_log",
-  "git_history",
-  "git_show",
-  "git_blame",
-  "tool_search",
-  "memory_recall",
-  "workspace_read",
-  "skill_list"
-]);
-function isReadOnlyCloudTool(name) {
-  return READ_ONLY_CLOUD_TOOLS.has(name);
-}
-
-// ../packages/agent-run/src/policy/subagents/delegationRequest.ts
-var SPAWN_TOOLS = /* @__PURE__ */ new Set(["spawn_agent", "spawn_agents"]);
-var SUBAGENT_NOUN = String.raw`(?:sub[- ]?agents?|(?:parallel|concurrent)\s+(?:agents?|workers?))`;
-var ASKS_FOR_SUBAGENTS = new RegExp(
-  String.raw`\b(?:use|using|with|via|through|delegate(?:\s+(?:it|this|them|the\s+\w+))?\s+to|run|launch|start|dispatch|employ)\s+` + String.raw`(?:(?:the|some|a|few|several|multiple|more|\d+)\s+){0,2}` + SUBAGENT_NOUN + String.raw`\b` + String.raw`|\bspawn(?:_agents?|\s+(?:agents?|workers?|children|sub[- ]?agents?))\b` + String.raw`|\bfan[- ]?out\s+(?:the|these|this|it|them|across|over|to)\b`,
-  "i"
-);
-var DECLINES_SUBAGENTS = /\b(?:no|without|don'?t\s+use|do\s+not\s+use|never\s+use|skip(?:\s+the)?)\s+(?:any\s+)?sub[- ]?agents?\b/i;
-function asksForSubagents(text2) {
-  const t = text2 ?? "";
-  return ASKS_FOR_SUBAGENTS.test(t) && !DECLINES_SUBAGENTS.test(t);
-}
-function canSpawnHere(toolNames) {
-  return toolNames.some((n2) => SPAWN_TOOLS.has(n2));
-}
-function isSpawnTool(name) {
-  return SPAWN_TOOLS.has(name);
-}
-function attemptedDelegation(events) {
-  return events.some((e) => e.category === "tool" && SPAWN_TOOLS.has(e.label));
-}
-function leftDelegationUndone(input) {
-  return canSpawnHere(input.toolNames) && asksForSubagents(input.requestText) && !attemptedDelegation(input.events);
-}
-function undelegatedRequestNudge(toolNames) {
-  const fanOut2 = toolNames.includes("spawn_agents");
-  const call2 = fanOut2 ? 'Call spawn_agents NOW: one workstream per open ticket whose files do not overlap \u2014 ticket=<id>, a complete standalone task brief, role "code". Each child is a clone of you and makes its change itself. It takes up to 4 per call and returns at once \u2014 the children run in the background, so start the next batch right away if there are more. Use spawn_agent for a slice that must run alone.' : 'Call spawn_agent NOW, one slice at a time, with a complete standalone task brief and role "code". The child is a clone of you and makes its change itself.';
-  return `The user asked for this work to be done by SUB-AGENTS, and none has been started. Do not ask how to proceed \u2014 the user already said. A sub-agent here is a LOCAL child run on this machine: it needs no cloud dispatch, no ticket assignment and no Developer on the roster. The workspace execution kill-switch and every \`autoRun: execution_disabled\` verdict stop CLOUD runs only \u2014 they do not apply to it. as_agent is optional: with no fitting teammate, OMIT it \u2014 the spawn tools staff the role on this project themselves (a capable teammate, or a Developer hired into the workspace and project, with the ticket assigned) and the child runs AS that agent. ${call2} ${delegationShape(fanOut2 ? "spawn_agents" : "spawn_agent")} Keep working while they run; when their reports are in (they arrive on their own, or call wait_agents), verify their changes and report what each child delivered, per ticket.`;
-}
-function delegationShape(spawnTool) {
-  return `The shape of this run: you read only the document the request names and the chat state already in your context \u2014 no source files. Research (reading code, searching, tracing callers) goes to children: ${spawnTool} with role "explore", one per question, each brief stating the question, the files or folders to start from, what is already known and ruled out, and the answer's shape (paths with line numbers, short excerpts, a word cap). When they report, write the deliverable the request names (the document or plan edit) yourself in that same turn \u2014 filing tickets is not the deliverable.`;
-}
-function earlyDelegationNudge(toolNames, reads) {
-  return `STOP READING AND DELEGATE. This run has made ${reads} read calls and started no sub-agent. ${undelegatedRequestNudge(toolNames)}`;
-}
-
-// ../packages/agent-run/src/policy/subagents/index.ts
-function toolNamesOf(ctx) {
-  return ctx.tools.map((tool) => tool.function?.name).filter((name) => !!name);
-}
-function delegationCallKind(name) {
-  if (isSpawnTool(name)) return "spawn";
-  return isReadOnlyCloudTool(name) ? "read" : "other";
-}
-function readsWithoutSpawnOf(ctx) {
-  const counter = new ReadsWithoutSpawn();
-  for (const message of ctx.messages) {
-    for (const call2 of message.toolCalls ?? []) counter.record(delegationCallKind(call2.name));
-  }
-  const counted = counter.snapshot();
-  const saved = ctx.state.reads.readsWithoutSpawn;
-  const spawned = saved.spawned || counted.spawned;
-  return { reads: Math.max(saved.reads, counted.reads), spawned, nudged: saved.nudged };
-}
-function delegationLeftUndone(ctx) {
-  return ctx.policy.delegation.requested && canSpawnHere(toolNamesOf(ctx)) && !readsWithoutSpawnOf(ctx).spawned;
-}
-function delegationNudge(ctx) {
-  const counted = readsWithoutSpawnOf(ctx);
-  ctx.state.reads = { ...ctx.state.reads, readsWithoutSpawn: counted };
-  const counter = new ReadsWithoutSpawn(counted);
-  if (!counter.due(ctx.policy.delegation.readsBeforeNudge) || !delegationLeftUndone(ctx)) return null;
-  counter.markNudged();
-  ctx.state.reads = { ...ctx.state.reads, readsWithoutSpawn: counter.snapshot() };
-  return earlyDelegationNudge(toolNamesOf(ctx), counted.reads);
-}
-function delegationBackstop(ctx) {
-  return delegationLeftUndone(ctx) ? undelegatedRequestNudge(toolNamesOf(ctx)) : null;
-}
-function withDelegationAdvisory(result, nudge) {
-  return result && typeof result === "object" && !Array.isArray(result) ? { ...result, advisory: nudge } : { output: result, advisory: nudge };
-}
-var subagentsHook = {
-  backstop: delegationBackstop,
-  nudge(ctx, call2, result) {
-    if (delegationCallKind(call2.name) !== "read") return void 0;
-    const nudge = delegationNudge(ctx);
-    return nudge ? { data: withDelegationAdvisory(result, nudge) } : void 0;
-  }
-};
-
-// ../packages/agent-run/src/policy/guards/sourcePolicy.ts
-var JSON_EXT = /\.json$/i;
-var YAML_EXT = /\.ya?ml$/i;
-var SOURCE_EXT = /\.[cm]?[jt]sx?$/i;
-function isVerifiablePath(path) {
-  return JSON_EXT.test(path) || YAML_EXT.test(path) || SOURCE_EXT.test(path);
-}
-var TS_SOURCE = /\.[cm]?[jt]sx?$/i;
-var CONDITIONAL_JSX_CALLBACK = /\b(on[A-Z][A-Za-z0-9_$]*)\s*=\s*\{[^{}]{0,300}\?\s*(?:async\s*)?\(\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*\)\s*=>/g;
-function lineAt(source, offset) {
-  let line = 1;
-  for (let i = 0; i < offset; i += 1) if (source.charCodeAt(i) === 10) line += 1;
-  return line;
-}
-function maskNonCode(source) {
-  const chars = [...source];
-  let state = "code";
-  for (let i = 0; i < chars.length; i += 1) {
-    const c = chars[i];
-    const next = chars[i + 1];
-    if (state === "code") {
-      if (c === "/" && next === "/") {
-        chars[i] = chars[i + 1] = " ";
-        state = "line-comment";
-        i += 1;
-      } else if (c === "/" && next === "*") {
-        chars[i] = chars[i + 1] = " ";
-        state = "block-comment";
-        i += 1;
-      } else if (c === "'") {
-        chars[i] = " ";
-        state = "single";
-      } else if (c === '"') {
-        chars[i] = " ";
-        state = "double";
-      } else if (c === "`") {
-        chars[i] = " ";
-        state = "template";
-      }
-      continue;
-    }
-    if (c === "\n" && state === "line-comment") {
-      state = "code";
-      continue;
-    }
-    if (c === "\n") continue;
-    const escaped = i > 0 && source[i - 1] === "\\";
-    if (state === "block-comment" && c === "*" && next === "/") {
-      chars[i] = chars[i + 1] = " ";
-      state = "code";
-      i += 1;
-      continue;
-    }
-    chars[i] = " ";
-    if (!escaped && (state === "single" && c === "'" || state === "double" && c === '"' || state === "template" && c === "`")) state = "code";
-  }
-  return chars.join("");
-}
-function inspectAgentSource(path, source) {
-  if (!TS_SOURCE.test(path)) return [];
-  const findings = [];
-  for (const match of maskNonCode(source).matchAll(CONDITIONAL_JSX_CALLBACK)) {
-    const prop = match[1];
-    const parameter = match[2];
-    findings.push({
-      ruleId: "typescript/explicit-conditional-jsx-callback",
-      line: lineAt(source, match.index ?? 0),
-      message: `Parameter '${parameter}' in conditional JSX callback '${prop}' needs an explicit type. Prefer a named callback typed from the component prop contract (for example, \`NonNullable<Props['onChange']>\`) so API changes are checked at the boundary.`
-    });
-  }
-  return findings;
-}
-var YAML_TAB_INDENT = /^\t+ /m;
-function yamlFlowUnbalanced(content) {
-  let depth2 = 0;
-  for (const ch of content) {
-    if (ch === "[" || ch === "{") depth2 += 1;
-    else if (ch === "]" || ch === "}") depth2 -= 1;
-    if (depth2 < 0) return true;
-  }
-  return depth2 !== 0;
-}
-function checkYamlContent(content) {
-  if (YAML_TAB_INDENT.test(content)) {
-    return "YAML uses tab characters for indentation, which YAML forbids \u2014 use spaces.";
-  }
-  if (yamlFlowUnbalanced(content)) {
-    return "YAML flow collection brackets ([ ] { }) are unbalanced \u2014 the document is malformed.";
-  }
-  return null;
-}
-function checkFileContent(path, content) {
-  if (!isVerifiablePath(path)) return { kind: "skipped" };
-  try {
-    if (JSON_EXT.test(path)) {
-      JSON.parse(content);
-    } else if (YAML_EXT.test(path)) {
-      const yamlError = checkYamlContent(content);
-      if (yamlError) return { kind: "errors", errors: [{ message: yamlError.slice(0, 240) }] };
-    } else {
-      const findings = inspectAgentSource(path, content);
-      if (findings.length) {
-        return { kind: "errors", errors: findings.map((f) => ({ message: f.message, line: f.line, ruleId: f.ruleId })) };
-      }
-    }
-    return { kind: "checked" };
-  } catch (e) {
-    return { kind: "errors", errors: [{ message: e.message.slice(0, 240) }] };
-  }
-}
-function foldVerifyOutcomes(outcomes) {
-  const checked = [];
-  const skipped = [];
-  const errors = [];
-  for (const o of outcomes) {
-    if (o.kind === "errors") errors.push(...o.errors.map((error) => ({ path: o.path, ...error })));
-    else if (o.kind === "checked") checked.push(o.path);
-    else skipped.push(o.path);
-  }
-  return { ok: errors.length === 0, checked, skipped, errors };
-}
-async function verifyWrittenFiles(read, paths) {
-  const list2 = [...paths];
-  const outcomes = await Promise.all(
-    list2.map(async (path) => {
-      if (!isVerifiablePath(path)) return { path, kind: "skipped" };
-      const content = await read(path).catch(() => null);
-      if (content === null) return { path, kind: "skipped" };
-      return { path, ...checkFileContent(path, content) };
-    })
-  );
-  return foldVerifyOutcomes(outcomes);
-}
-
-// ../packages/agent-run/src/policy/finish/finishTools.ts
-function assertsUnrunVerification(summary) {
-  const s = summary.toLowerCase();
-  const check = /(type[\s-]?check|typecheck|typescript|\btsc\b|lint|eslint|\btest(s|ing|ed)?\b|\bbuild(s|ing)?\b|compil)/;
-  const pass = /(pass(es|ed|ing)?|succeed(s|ed)?|success|green|no\s+errors?|error[\s-]?free|will\s+now\s+pass|are\s+resolved|is\s+resolved)/;
-  return check.test(s) && pass.test(s);
-}
-var DOCUMENT_EXTENSIONS = /* @__PURE__ */ new Set([
-  ".md",
-  ".mdx",
-  ".rst",
-  ".adoc",
-  ".asciidoc",
-  ".txt"
-]);
-function isDocumentationPath(path) {
-  const normalized = path.trim().replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
-  if (!normalized) return false;
-  if (normalized.startsWith("docs/") || normalized.startsWith("specs/")) return true;
-  const file = normalized.slice(normalized.lastIndexOf("/") + 1);
-  const dot = file.lastIndexOf(".");
-  return dot >= 0 && DOCUMENT_EXTENSIONS.has(file.slice(dot));
-}
-function hasNoCodeDeliverable(writtenPaths) {
-  for (const path of writtenPaths) {
-    if (!path.trim()) continue;
-    if (!isDocumentationPath(path)) return false;
-  }
-  return true;
-}
-var MAX_PLACEHOLDER_FINISH_BLOCKS = 2;
-
-// ../packages/agent-run/src/policy/finish/gates.ts
-function matchesRequiredReviewSignoff(required, toolName, args, succeeded6) {
-  if (!required || !succeeded6 || toolName !== "builtin_kanban_signoff") return false;
-  const roleKey = typeof args.roleKey === "string" ? args.roleKey.trim() : "";
-  const laneKey = typeof args.laneKey === "string" ? args.laneKey.trim() : void 0;
-  return roleKey === required.roleKey && laneKey === required.laneKey;
-}
-function missingReviewVerdictMessage(required) {
-  const lane = required.laneKey ? ` and laneKey='${required.laneKey}'` : "";
-  return `Cannot finish this reviewer assignment until you call builtin_kanban_signoff with roleKey='${required.roleKey}'${lane} and an explicit approved or changes_requested verdict. A narrative summary is not acceptance evidence.`;
-}
-function initialFinishGateState(resume, isChild) {
-  return {
-    noDeliverableBlocked: resume?.noDeliverableBlocked ?? isChild,
-    reviewVerdictRecorded: resume?.reviewVerdictRecorded ?? false,
-    placeholderBlocks: resume?.placeholderBlocks ?? 0,
-    ciPendingBlocks: resume?.ciPendingBlocks ?? 0,
-    ciFailureBlocks: resume?.ciFailureBlocks ?? 0,
-    ciVerified: false,
-    finishBlockedOnce: false
-  };
-}
-async function evaluateFinishGates(a) {
-  const { requiredSignoff, summary, gates } = a;
-  let writtenPaths = a.writtenPaths;
-  let absorbed;
-  a.ports?.beginAttempt?.();
-  const blocked = async (reason, block, detail, result) => {
-    await a.ports?.onBlocked?.(reason, block, detail, result);
-    return { block, reason, ...absorbed ? { writtenPaths: absorbed } : {} };
-  };
-  if (a.delegated && a.ports?.liveChildren) {
-    const childBlock = await a.ports.liveChildren();
-    if (childBlock) return { block: childBlock, reason: "children_running" };
-    if (a.ports.absorbChildWrites) {
-      const merged = new Set(writtenPaths);
-      await a.ports.absorbChildWrites(merged);
-      if (merged.size !== writtenPaths.length) {
-        writtenPaths = [...merged];
-        absorbed = writtenPaths;
-      }
-    }
-  }
-  const bound = a.ports?.bound !== false;
-  const wrote = bound && writtenPaths.length > 0;
-  const codeBound = bound && (wrote || a.ports?.read !== void 0 || a.ports?.verify !== void 0);
-  const verification = wrote && a.ports?.verify ? await a.ports.verify(writtenPaths) : wrote && a.ports?.read ? await verifyWrittenFiles(a.ports.read, writtenPaths) : null;
-  let ci = null;
-  let ciPending = false;
-  if (a.ports?.pollBranchCi && wrote && verification?.ok !== false) {
-    ci = await a.ports.pollBranchCi({ pendingBlocks: gates.ciPendingBlocks, failureBlocks: gates.ciFailureBlocks });
-    ciPending = ci.pendingBlocks > gates.ciPendingBlocks;
-    gates.ciPendingBlocks = ci.pendingBlocks;
-    gates.ciFailureBlocks = ci.failureBlocks;
-    if (ci.ciVerified) gates.ciVerified = true;
-  }
-  if (wrote) a.enterVerify();
-  if (requiredSignoff && !gates.reviewVerdictRecorded) {
-    const block = missingReviewVerdictMessage(requiredSignoff);
-    return blocked("review_verdict_missing", block, { ...requiredSignoff }, block);
-  }
-  if (codeBound && !gates.noDeliverableBlocked && hasNoCodeDeliverable(writtenPaths)) {
-    gates.noDeliverableBlocked = true;
-    return blocked(
-      "no_deliverable",
-      "Before finishing: you have not committed any code changes for this task \u2014 only the PRD (or nothing) is on the branch. Re-read the task requirements and verify EACH is actually implemented. If work remains, use search_code/read_file to find the right place and write_file to implement it, then finish. If \u2014 and only if \u2014 this task genuinely requires no code change, call finish again and state explicitly why no change was needed.",
-      {},
-      "Blocked finish: no code deliverable \u2014 self-review required"
-    );
-  }
-  if (verification && !verification.ok) {
-    const block = `Cannot finish \u2014 changed-file validation found ${verification.errors.length} issue(s). Repair every issue, then finish again. This is a shell-free source policy, not a claim that the full project type-check ran.
-` + verification.errors.map((e) => `- ${e.path}${e.line ? `:${e.line}` : ""}${e.ruleId ? ` [${e.ruleId}]` : ""}: ${e.message}`).join("\n");
-    return blocked("source_quality", block, { errors: verification.errors }, `Blocked finish: ${verification.errors.length} source/config quality issue(s)`);
-  }
-  if (ci?.block) {
-    const recorded = await blocked("branch_ci", ci.block, { pendingBlocks: gates.ciPendingBlocks, failureBlocks: gates.ciFailureBlocks }, ci.block.slice(0, 300));
-    return ciPending ? { ...recorded, reason: "branch_ci_pending" } : recorded;
-  }
-  if (summary && !gates.finishBlockedOnce && !gates.ciVerified && assertsUnrunVerification(summary)) {
-    gates.finishBlockedOnce = true;
-    return {
-      block: "You stated that a build/type-check/lint/test passed or is resolved, but this executor cannot run a local shell and in-run CI did not report success. Call run_checks (it polls branch CI) or finish again with a summary that does NOT claim a check passed.",
-      reason: "honesty",
-      ...absorbed ? { writtenPaths: absorbed } : {}
-    };
-  }
-  if (wrote && gates.placeholderBlocks < MAX_PLACEHOLDER_FINISH_BLOCKS && a.ports?.scanPlaceholders) {
-    const scan = await a.ports.scanPlaceholders(writtenPaths);
-    if (scan.flagged.length) {
-      gates.placeholderBlocks += 1;
-      return blocked(
-        "placeholders",
-        `Cannot finish \u2014 ${scan.flagged.length} committed file(s) still contain placeholder/stub code instead of a real implementation. Replace each stub with a working implementation that uses the existing infrastructure (search_code for it first), or if a file is dead code that should not ship in this PR, remove it with delete_file. Then call finish again.
-` + scan.flagged.map((f) => `- ${f.path}: ${f.markers.join("; ")}`).join("\n"),
-        { files: scan.flagged },
-        `Blocked finish: ${scan.flagged.map((f) => f.path).join(", ")}`
-      );
-    }
-  }
-  if (wrote && a.ports?.recordClaim) {
-    const claim = await a.ports.recordClaim(summary || a.output || `Completed changes to ${writtenPaths.join(", ")}`, writtenPaths);
-    if (!claim.ok) {
-      return {
-        block: `Cannot finish \u2014 no structural evidence record supports this completion claim (${claim.error ?? "no evidence"}). Retry the successful write or verification, then finish again.`,
-        reason: "claim_evidence",
-        ...absorbed ? { writtenPaths: absorbed } : {}
-      };
-    }
-  }
-  return absorbed ? { block: null, writtenPaths: absorbed } : { block: null };
-}
-
-// ../packages/agent-run/src/policy/verify/runEndMemory.ts
-var SHELL_SURFACES = /* @__PURE__ */ new Set(["sandbox", "on-prem"]);
-var hasShell = (surface2) => SHELL_SURFACES.has(surface2);
-function runVerifyPhase(input) {
-  if (!hasShell(input.surface)) {
-    return inRunVerifyOutcome({
-      surface: "durable",
-      writtenPaths: input.writtenPaths ?? [],
-      results: input.results ?? null
-    });
-  }
-  return inRunVerifyOutcome({
-    surface: input.surface === "on-prem" ? "durable" : input.surface,
-    writtenPaths: input.writtenPaths ?? [],
-    packageScripts: input.packageScripts ?? null,
-    runner: input.runner,
-    results: input.results ?? null
-  });
-}
-function applyVerifyPhase(state) {
-  return reduceRunPolicy(state, { type: "verify_started" });
-}
-
-// ../packages/agent-run/src/policy/finish/index.ts
-var lastReasons = /* @__PURE__ */ new WeakMap();
-function lastFinishReason(state) {
-  return lastReasons.get(state);
-}
-var LINKED_WORK_OPEN = "linked_work_open";
-function writtenPathsOf(ctx) {
-  return ctx.state.writtenPaths ?? [];
-}
-function succeeded2(row) {
-  if (!row) return false;
-  try {
-    const data = JSON.parse(row.content);
-    return !(data && typeof data === "object" && data.ok === false);
-  } catch {
-    return row.content.trim().length > 0;
-  }
-}
-function parseArgs(raw) {
-  try {
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-function signoffRecorded(messages, required) {
-  if (!required) return false;
-  const results = /* @__PURE__ */ new Map();
-  for (const row of messages) if (row.role === "tool" && row.toolCallId) results.set(row.toolCallId, row);
-  return messages.some(
-    (row) => row.role === "assistant" && (row.toolCalls ?? []).some(
-      (call2) => matchesRequiredReviewSignoff(required, call2.name, parseArgs(call2.arguments), succeeded2(results.get(call2.id)))
-    )
-  );
-}
-function noteSignoff(ctx) {
-  if (ctx.state.finish.reviewVerdictRecorded) return true;
-  if (!signoffRecorded(ctx.messages, ctx.policy.signoff)) return false;
-  ctx.state.finish = { ...ctx.state.finish, reviewVerdictRecorded: true };
-  return true;
-}
-function signoffSettleBlock(ctx) {
-  const required = ctx.policy.signoff;
-  if (!required || noteSignoff(ctx)) return null;
-  return missingReviewVerdictMessage(required);
-}
-function createFinishHook(ports = {}) {
-  const delegated = (ctx) => ports.delegated ?? ctx.task.dispatch.parentRunId !== void 0;
-  const openWork = async (ctx) => ports.openWork ? ports.openWork(ctx) : null;
-  return {
-    settleBlock: signoffSettleBlock,
-    // An owner never ends with children still working — on `finish` (below) or in prose.
-    liveChildren: async (ctx) => delegated(ctx) && ports.liveChildren ? ports.liveChildren() : null,
-    // A run never ends while the tickets it owns are open — on `finish` (below, after every other gate) or in prose (the kernel).
-    openWork,
-    async gate(ctx) {
-      noteSignoff(ctx);
-      const verdict = await evaluateFinishGates({
-        writtenPaths: writtenPathsOf(ctx),
-        requiredSignoff: ctx.policy.signoff,
-        delegated: delegated(ctx),
-        summary: typeof ctx.content === "string" ? ctx.content : "",
-        output: "",
-        gates: ctx.state.finish,
-        enterVerify: () => {
-          ctx.state.model = applyVerifyPhase(ctx.state.model);
-        },
-        ports
-      });
-      if (verdict.writtenPaths) ctx.state.writtenPaths = [...verdict.writtenPaths];
-      if (verdict.block) {
-        ctx.state.finish = { ...ctx.state.finish, finishBlockedOnce: true };
-        lastReasons.set(ctx.state, verdict.reason);
-        return verdict.block;
-      }
-      const owed = await openWork(ctx);
-      lastReasons.set(ctx.state, owed ? LINKED_WORK_OPEN : verdict.reason);
-      return owed;
-    }
-  };
-}
-var finishHook = createFinishHook();
-
-// ../packages/agent-run/src/policy/guards/cascade.ts
-var CascadeSession = class {
-  constructor(on, resume, ports = {}) {
-    this.ports = ports;
-    this.on = on;
-    this.cascade = resume?.cascade ?? initialCascadeState();
-    this.actionType = resume?.actionType;
-    this.soft = resume?.soft ?? false;
-    this.steer = resume?.steer;
-    this.priorWeakPassRate = resume?.priorWeakPassRate;
-    this.priorRead = resume?.priorRead ?? false;
-  }
-  ports;
-  /** Whether the D1 lever is on. Lever off ⇒ every method is inert. */
-  on;
-  cascade;
-  actionType;
-  soft;
-  steer;
-  steerShown = false;
-  priorWeakPassRate;
-  priorRead;
-  /**
-   * The step's features with the tenant's recent weak-pass rate for its action type —
-   * the D2 head's prior. Read at most once per run; a failed or empty read leaves the
-   * feature unset, which the head reads as 0.5.
-   */
-  async withPrior(f) {
-    if (typeof f.priorWeakPassRate === "number") return f;
-    if (!this.priorRead && this.ports.weakPassRate) {
-      this.priorRead = true;
-      try {
-        this.priorWeakPassRate = await this.ports.weakPassRate(this.featuresActionType(f.actionType));
-      } catch {
-      }
-    }
-    return typeof this.priorWeakPassRate === "number" ? { ...f, priorWeakPassRate: this.priorWeakPassRate } : f;
-  }
-  /** The run's action type for D2 features (the first tick's resolution, kept). */
-  featuresActionType(fallback) {
-    return this.actionType ?? fallback;
-  }
-  /**
-   * The first tick's starting model. A soft seed starts on the WEAKEST tier of the
-   * ladder — unless the router predicts the weak attempt would fail, in which case it
-   * keeps the seed (the stronger default). A strict pin is left alone.
-   */
-  async seed(state, a) {
-    this.actionType = a.features.actionType;
-    this.soft = !a.strict;
-    if (!this.on || !this.soft) return state;
-    if (this.ports.shouldSkipWeakAttempt && await this.ports.shouldSkipWeakAttempt(await this.withPrior(a.features))) return state;
-    const weak = weakestTierModel(a.ladder, state.broken);
-    if (!weak || weak === state.model) return state;
-    return { ...state, model: weak, pin: weak, locked: false };
-  }
-  /**
-   * Fold a verifier verdict on a unit of work. Returns the run's new policy state (the
-   * same object when nothing moved). Every conclusive verdict on a soft run becomes a D2
-   * training row through the `recordOutcome` port.
-   */
-  async verdict(state, kind, verdict, ctx) {
-    if (!this.on || !this.soft || verdict.inconclusive) return state;
-    const current = ctx.attemptModel && ctx.attemptModel !== "default" ? ctx.attemptModel : state.model;
-    if (current) {
-      const features = await this.withPrior(ctx.features);
-      await this.ports.recordOutcome?.({
-        actionType: this.featuresActionType(ctx.features.actionType),
-        weakModel: current,
-        passed: verdict.passed,
-        verifier: verdict.verifier,
-        features
-      });
-    }
-    const exclude = [...state.broken, ...state.authorModel && state.phase === "verify" ? [state.authorModel] : []];
-    const r = cascadeVerdict(this.cascade, kind, verdict, { current, ladder: ctx.ladder, exclude });
-    this.cascade = r.state;
-    switch (r.action.kind) {
-      case "escalate":
-        this.setSteer(r.action.steer);
-        return r.action.to ? { ...state, ...reduceRunPolicy(state, { type: "escalated", to: r.action.to }) } : state;
-      case "exhausted":
-        this.setSteer(r.action.steer);
-        return state;
-      case "deescalate":
-        return { ...state, ...reduceRunPolicy(state, { type: "escalated", to: r.action.to }) };
-      default:
-        return state;
-    }
-  }
-  /**
-   * Move the run one tier up for a reason that is not a verifier's (the progress
-   * detector's second trip). Null for a pinned run or when nothing is stronger — the
-   * caller pauses instead. Gated by the CALLER's lever, not the cascade's.
-   */
-  escalate(state, ladder, attemptModel) {
-    if (!this.soft) return null;
-    const current = attemptModel && attemptModel !== "default" ? attemptModel : state.model;
-    const to = nextTierModel(ladder, current, state.broken);
-    if (!to) return null;
-    this.cascade = { ...this.cascade, escalations: this.cascade.escalations + 1 };
-    return { ...state, ...reduceRunPolicy(state, { type: "escalated", to }) };
-  }
-  /**
-   * The reasoning levers for a turn: the caller's (persona / role default), raised one
-   * level per open escalation of the current unit. Inert with nothing escalated or no
-   * `escalateThinkLevel` port.
-   */
-  execParams(base) {
-    const boost = this.on ? this.cascade.reasoningBoost : 0;
-    if (boost <= 0 || !this.ports.escalateThinkLevel) return base;
-    let level = base?.thinkLevel ?? this.ports.defaultThinkLevel ?? "medium";
-    for (let i = 0; i < boost; i += 1) level = this.ports.escalateThinkLevel(level);
-    return { ...base, thinkLevel: level };
-  }
-  setSteer(note) {
-    this.steer = note;
-    this.steerShown = false;
-  }
-  /** The note the current turn's request carries ("" when none). */
-  steerNote() {
-    if (this.steer) this.steerShown = true;
-    return this.steer ?? "";
-  }
-  /** A turn ended: a steer that has been shown once is done. */
-  endTurn() {
-    if (this.steerShown) {
-      this.steer = void 0;
-      this.steerShown = false;
-    }
-  }
-  snapshot() {
-    return {
-      ...this.on ? { cascade: this.cascade } : {},
-      ...this.actionType ? { actionType: this.actionType } : {},
-      soft: this.soft,
-      ...this.steer ? { steer: this.steer } : {},
-      ...typeof this.priorWeakPassRate === "number" ? { priorWeakPassRate: this.priorWeakPassRate } : {},
-      ...this.priorRead ? { priorRead: true } : {}
-    };
-  }
-};
-
-// ../packages/agent-run/src/policy/guards/postEdit.ts
-var EDIT_TOOLS = /* @__PURE__ */ new Set(["write_file", "edit_file"]);
-var NOTE_ERRORS = 5;
-function succeeded3(data) {
-  return !(data && typeof data === "object" && data.ok === false);
-}
-function verifyAfterEdit(call2, data, opts = {}) {
-  if (opts.bound === false || !EDIT_TOOLS.has(call2.name) || !succeeded3(data)) return null;
-  const path = typeof call2.args.path === "string" ? call2.args.path.trim() : "";
-  if (!path || !isVerifiablePath(path)) return null;
-  const content = call2.name === "write_file" && typeof call2.args.content === "string" ? call2.args.content : null;
-  if (content !== null) {
-    const result = foldVerifyOutcomes([{ path, ...checkFileContent(path, content) }]);
-    return result.checked.length || result.errors.length ? result : null;
-  }
-  const read = opts.read;
-  if (!read) return null;
-  return (async () => {
-    const committed = await read(path).catch(() => null);
-    if (committed === null) return null;
-    const result = foldVerifyOutcomes([{ path, ...checkFileContent(path, committed) }]);
-    return result.checked.length || result.errors.length ? result : null;
-  })();
-}
-function postEditNote(v) {
-  const lines = v.errors.slice(0, NOTE_ERRORS).map((e) => `- ${e.path}${e.line ? `:${e.line}` : ""}${e.ruleId ? ` [${e.ruleId}]` : ""}: ${e.message}`);
-  const more = v.errors.length > NOTE_ERRORS ? `
-- \u2026and ${v.errors.length - NOTE_ERRORS} more` : "";
-  return `Post-edit check FAILED (shell-free source/config policy) \u2014 fix this before building on it:
-${lines.join("\n")}${more}`;
-}
-function withPostEditNote(data, v) {
-  return v && !v.ok ? withAdvisory(data, postEditNote(v)) : data;
-}
-
-// ../packages/agent-run/src/policy/guards/ports.ts
-function guardLeversOf(levers) {
-  const on = new Set(levers);
-  return {
-    a3_progress_detector: on.has("a3_progress_detector"),
-    d7_deterministic_handlers: on.has("d7_deterministic_handlers"),
-    d1_verifier_cascade: on.has("d1_verifier_cascade"),
-    d8_parallel_tool_calls: on.has("d8_parallel_tool_calls")
-  };
-}
-
-// ../packages/agent-run/src/policy/guards/index.ts
-var RunGuards = class {
-  cascade;
-  progress;
-  postEdit;
-  levers;
-  /** A3's `finish`: the next turn offers no tools — the run's final report. */
-  finishDue;
-  /** This turn's post-edit verdicts — the D1 code unit's verifier. */
-  turnEdits = [];
-  /** D7: the sandbox checks' failures from the last turn, for the next turn's tail. */
-  checksNote = "";
-  /** Moves UP the tier ladder this run (D1's failed verdicts, A3's second trip) — §8.2. */
-  escalations;
-  constructor(levers, resume, ports = {}) {
-    this.levers = levers;
-    this.cascade = new CascadeSession(!!levers.d1_verifier_cascade, resume?.cascade, {
-      shouldSkipWeakAttempt: ports.cascade?.shouldSkipWeakAttempt ? (f) => ports.cascade.shouldSkipWeakAttempt({ actionType: f.actionType, priorWeakPassRate: f.priorWeakPassRate }) : void 0,
-      weakPassRate: ports.cascade?.weakPassRate,
-      escalateThinkLevel: ports.cascade?.escalateThinkLevel,
-      defaultThinkLevel: ports.cascade?.defaultThinkLevel,
-      recordOutcome: ports.cascade?.recordOutcome ? (row) => ports.cascade.recordOutcome({ ...row, features: row.features }) : void 0
-    });
-    this.progress = levers.a3_progress_detector ? new ProgressDetector(resume?.progress, { isReadOnly: (tool) => isReadOnlyCloudTool(tool) }) : null;
-    this.postEdit = !!levers.d7_deterministic_handlers;
-    this.finishDue = resume?.finishDue === true;
-    this.checksNote = resume?.checksNote ?? "";
-    this.escalations = resume?.escalations ?? 0;
-  }
-  /** The volatile-tail sections this turn carries (empty strings drop out). */
-  tailSections() {
-    return [this.progress?.steerNote() ?? "", this.cascade.steerNote(), this.checksNote];
-  }
-  /** D1: the reasoning levers for a turn, raised while a unit is escalated. */
-  reasoning(base) {
-    return this.cascade.execParams(base);
-  }
-  /** D1 + D2: the first tick's starting model (weak-first unless the router says skip). */
-  seedModel(state, a) {
-    return this.cascade.seed(state, a);
-  }
-  /** What the guards persist across a step boundary (the contract's `LoopGuardState`). */
-  snapshot() {
-    return {
-      ...this.progress ? { progress: this.progress.snapshot() } : {},
-      // The cascade's seed facts serve A3's escalation too; with both levers off nothing persists.
-      ...this.cascade.on || this.progress ? { cascade: this.cascade.snapshot() } : {},
-      ...this.finishDue ? { finishDue: true } : {},
-      ...this.checksNote ? { checksNote: this.checksNote } : {},
-      ...this.escalations ? { escalations: this.escalations } : {}
-    };
-  }
-  /** Whether a call only reads (D8): the kernel's `isReadOnly` port. */
-  isReadOnly(name) {
-    return this.levers.d8_parallel_tool_calls ? isReadOnlyCloudTool(name) : false;
-  }
-  /**
-   * D7: check an edit the moment it lands; only a failure reaches the model, as one
-   * note on that tool result. The verdict also feeds the D1 code unit's verifier.
-   */
-  async checkEdit(call2, data, ports) {
-    if (!this.postEdit && !this.cascade.on) return data;
-    const verdict = await verifyAfterEdit(call2, data, { read: ports.read, bound: ports.bound });
-    if (!verdict) return data;
-    this.turnEdits.push(verdict);
-    return this.postEdit ? withPostEditNote(data, verdict) : data;
-  }
-  /**
-   * D1: fold a finish attempt's gate verdict into the cascade; returns the block the
-   * kernel reads. The finish hook calls this after its own gates.
-   */
-  async finish(verdict, step, ports) {
-    if (!this.cascade.on) return verdict.block;
-    const v = verdict.block ? { passed: false, verifier: `finish_gates:${verdict.reason ?? "blocked"}`, reason: verdict.block, inconclusive: verdict.reason === "branch_ci_pending" || verdict.reason === "children_running" || verdict.reason === LINKED_WORK_OPEN } : { passed: true, verifier: "finish_gates" };
-    await this.judge("finish", v, step, ports);
-    return verdict.block;
-  }
-  /** The turn ended: fold the turn's edits into the cascade and trip A3 if stuck. */
-  async endTurn(step, ports) {
-    this.checksNote = "";
-    if (this.turnEdits.length > 0) {
-      const errors = this.turnEdits.flatMap((v) => v.errors);
-      this.turnEdits = [];
-      const staticVerdict = errors.length ? { passed: false, verifier: "changed_files", reason: errors.slice(0, 5).map((e) => `${e.path}${e.line ? `:${e.line}` : ""} ${e.message}`).join("; ") } : { passed: true, verifier: "changed_files" };
-      const checks = ports.checks ? await ports.checks().catch(() => null) : null;
-      if (checks?.steer && this.postEdit) this.checksNote = checks.steer;
-      const verdict = checks && !checks.passed && staticVerdict.passed ? { passed: false, verifier: checks.verifier, ...checks.reason ? { reason: checks.reason } : {} } : staticVerdict;
-      await this.judge("code_edit", verdict, step, ports);
-    }
-    this.cascade.endTurn();
-    const action = this.progress?.endTurn();
-    if (action) await this.onTrip(action, ports);
-  }
-  async judge(kind, verdict, step, ports) {
-    const model = ports.model;
-    if (!model) return;
-    const before = model.get();
-    const features = ports.features?.(step) ?? { actionType: "other" };
-    const after = await this.cascade.verdict(before, kind, verdict, {
-      ladder: ports.ladder?.() ?? ports.cascade?.ladder ?? { candidates: [], rankOf: () => 1 },
-      attemptModel: ports.resolvedModel?.(),
-      features: { actionType: this.cascade.featuresActionType(features.actionType ?? "other") }
-    });
-    if (after === before) return;
-    model.set(after);
-    if (!verdict.passed) this.escalations += 1;
-    await ports.onEvent?.({
-      tool: "model.escalated",
-      detail: { step, unit: kind, verifier: verdict.verifier, passed: verdict.passed, from: before.model ?? ports.resolvedModel?.() ?? null, to: after.model ?? null },
-      result: verdict.passed ? `${kind} passed \u2014 back to ${after.model}` : `${kind} failed ${verdict.verifier} \u2014 escalated to ${after.model}`
-    });
-  }
-  async onTrip(action, ports) {
-    let outcome = action.kind;
-    if (action.kind === "advisory") {
-      this.progress?.setSteer(action.note);
-      const s2 = progressTraceStep(action);
-      await ports.onEvent?.({ tool: s2.label, detail: s2.args, result: s2.result });
-      return;
-    }
-    if (action.kind === "escalate") {
-      const model = ports.model;
-      const ladder = ports.ladder?.() ?? ports.cascade?.ladder;
-      const next = model && ladder ? this.cascade.escalate(model.get(), ladder, ports.resolvedModel?.()) : null;
-      if (next && model) {
-        model.set(next);
-        this.escalations += 1;
-      } else {
-        this.progress?.setSteer(progressSteerNote(action.signal, action.trip, false));
-        outcome = "steer";
-      }
-    } else if (action.kind === "finish") {
-      this.finishDue = true;
-    }
-    const s = progressTraceStep(action, {
-      outcome,
-      detail: { trip: action.trip, signal: action.signal, outcome, model: ports.model?.get().model ?? null }
-    });
-    await ports.onEvent?.({ tool: s.label, detail: s.args, result: s.result });
-  }
-  /** A3's `finish`: whether the next turn is the run's final report (no tools). A peek — {@link finalTurnDone} spends it. */
-  get finalTurnDue() {
-    return this.finishDue;
-  }
-  /** The final turn was answered: the finish is spent. */
-  finalTurnDone() {
-    this.finishDue = false;
-  }
-  /** A3: what the turn said, judged against what its calls did (WS8p). */
-  noteTurnText(text2) {
-    this.progress?.noteTurnText(text2);
-  }
-  /** A3: every dispatched call is observed by the progress detector (when on). */
-  observe(call2, result) {
-    if (!result || typeof result !== "object" || result.control) return;
-    this.progress?.observe(call2.name, call2.args, { data: result });
-  }
-};
-var sessions = /* @__PURE__ */ new WeakMap();
-function sessionOf(ctx, ports) {
-  let s = sessions.get(ctx.state);
-  if (!s) {
-    s = new RunGuards(guardLeversOf(ctx.policy.levers), ctx.state.guards, ports);
-    sessions.set(ctx.state, s);
-    ctx.state.guards = s.snapshot();
-  }
-  return s;
-}
-function guardsTurnNote(ctx) {
-  const s = sessions.get(ctx.state) ?? new RunGuards(guardLeversOf(ctx.policy.levers), ctx.state.guards);
-  return s.tailSections().filter((part) => part.trim().length > 0).join("\n\n");
-}
-function createGuardsHook(ports = {}) {
-  return {
-    async observe(ctx, call2, result) {
-      const g = sessionOf(ctx, ports);
-      const noted = await g.checkEdit(call2, result, ports);
-      g.observe(call2, result);
-      ctx.state.guards = g.snapshot();
-      return noted !== result ? { data: noted } : void 0;
-    },
-    async endTurn(ctx, content) {
-      const g = sessionOf(ctx, ports);
-      g.noteTurnText(content);
-      await g.endTurn(ctx.step, ports);
-      ctx.state.guards = g.snapshot();
-    },
-    isReadOnly(ctx, name) {
-      return sessionOf(ctx, ports).isReadOnly(name);
-    },
-    finalTurn(ctx) {
-      return sessionOf(ctx, ports).finalTurnDue;
-    },
-    finalTurnDone(ctx) {
-      const g = sessionOf(ctx, ports);
-      g.finalTurnDone();
-      ctx.state.guards = g.snapshot();
-    },
-    async seed(ctx) {
-      const ladder = ports.ladder?.() ?? ports.cascade?.ladder;
-      if (!ladder) return void 0;
-      const seeded = await sessionOf(ctx, ports).seedModel(ctx.state.model, {
-        strict: ctx.policy.modelStart?.strict === true,
-        ladder,
-        features: ports.features?.(0) ?? { actionType: "other", role: ctx.policy.role, promptTokens: 0, toolCount: ctx.tools.length, turnIndex: 0 }
-      });
-      ctx.state.guards = sessionOf(ctx, ports).snapshot();
-      return seeded;
-    },
-    reasoning(ctx) {
-      return sessionOf(ctx, ports).reasoning(void 0);
-    },
-    async finish(ctx, verdict) {
-      const g = sessionOf(ctx, ports);
-      const block = await g.finish(verdict, ctx.step, ports);
-      ctx.state.guards = g.snapshot();
-      return block;
-    }
-  };
-}
-var guardsHook = createGuardsHook();
-
-// ../packages/agent-run/src/policy/verify/sandboxVerify.ts
-var MAX_VERIFY_COMMANDS = 3;
-var VERIFY_BUDGET_MS = 9 * 6e4;
-var MIN_COMMAND_MS = 3e4;
-var DID_NOT_FINISH = 124;
-async function readPackageScripts(sandbox) {
-  const content = await sandbox.read("package.json").catch((error) => {
-    sandbox.onError?.("read", error);
-    return null;
-  });
-  if (content === null) return null;
-  try {
-    const scripts = JSON.parse(content).scripts;
-    if (!scripts || typeof scripts !== "object" || Array.isArray(scripts)) return null;
-    return Object.fromEntries(Object.entries(scripts).filter((e) => typeof e[1] === "string"));
-  } catch {
-    return null;
-  }
-}
-async function detectRunner(sandbox) {
-  const atRoot = async (name) => {
-    const listed = await sandbox.list(name).catch((error) => {
-      sandbox.onError?.("list", error);
-      return [];
-    });
-    return (listed ?? []).includes(name);
-  };
-  if (await atRoot("pnpm-lock.yaml")) return "pnpm";
-  if (await atRoot("yarn.lock")) return "yarn";
-  return "npm";
-}
-async function runSandboxVerify(sandbox, shell, now = Date.now) {
-  const [packageScripts, runner] = await Promise.all([readPackageScripts(sandbox), detectRunner(sandbox)]);
-  const plan = planInRunVerify({ surface: "sandbox", packageScripts, runner });
-  const results = [];
-  const deadline = now() + VERIFY_BUDGET_MS;
-  for (const command of plan.commands.slice(0, MAX_VERIFY_COMMANDS)) {
-    const left = deadline - now();
-    if (left < MIN_COMMAND_MS) {
-      results.push({ command, exitCode: DID_NOT_FINISH });
-      continue;
-    }
-    const r = await shell.runFor(command, left);
-    results.push({ command, exitCode: typeof r.exitCode === "number" ? r.exitCode : 1 });
-  }
-  return { packageScripts, runner, results };
-}
-
-// ../packages/agent-run/src/policy/verify/recordVerifyEvents.ts
-function recordVerifyEvents(outcome) {
-  return {
-    started: { type: "verify_started" },
-    completed: {
-      tool: "in_run_verify",
-      category: "tool",
-      detail: {
-        surface: outcome.surface,
-        kind: outcome.kind,
-        ...outcome.reason ? { reason: outcome.reason } : {},
-        commands: outcome.commands,
-        failedCommands: outcome.failedCommands,
-        mayFinish: outcome.mayFinish
-      },
-      result: describeVerifyResult(outcome)
-    }
-  };
-}
-function describeVerifyResult(outcome) {
-  if (outcome.kind === "skipped") return `verify skipped (${outcome.reason})`;
-  if (outcome.commands.length === 0) return `verify ${outcome.kind}, no commands`;
-  const failed3 = outcome.failedCommands.length;
-  return `verify ${outcome.kind}: ${outcome.commands.join("; ")}${failed3 > 0 ? ` \u2014 ${failed3} failed` : ""}`;
-}
-
-// ../packages/agent-run/src/policy/verify/index.ts
-async function record(ports, outcome) {
-  if (!ports.recordEvents) return;
-  const events = recordVerifyEvents(outcome);
-  await ports.recordEvents(events.started);
-  await ports.recordEvents(events.completed);
-}
-function writtenPathsOf2(ctx) {
-  return ctx.state.writtenPaths ?? [];
-}
-function createVerifyHook(ports = {}) {
-  return {
-    async verify(ctx) {
-      if (ctx.policy.verify === "none") return void 0;
-      const writtenPaths = writtenPathsOf2(ctx);
-      if (writtenPaths.length === 0) return void 0;
-      const surface2 = ports.surface ?? "durable";
-      if (ctx.policy.verify === "declared-checks" && ports.sandbox && ports.shell && surface2 !== "durable") {
-        const ran = await runSandboxVerify(ports.sandbox, ports.shell);
-        const outcome2 = runVerifyPhase({
-          surface: surface2 === "on-prem" ? "on-prem" : "sandbox",
-          writtenPaths,
-          packageScripts: ran.packageScripts,
-          runner: ran.runner,
-          results: ran.results
-        });
-        await record(ports, outcome2);
-        return { ok: outcome2.mayFinish, note: outcome2.note };
-      }
-      const outcome = runVerifyPhase({ surface: "durable", writtenPaths, results: null });
-      await record(ports, outcome);
-      return { ok: outcome.mayFinish, note: outcome.note };
-    }
-  };
-}
-var verifyHook = createVerifyHook();
-
-// ../packages/agent-run/src/policy/tools/taskState.ts
-var UPDATE_TASK_STATE_TOOL = "update_task_state";
-var TASK_STATE_MAX_TOKENS = 600;
-var LIST_FIELDS = ["constraints", "decisions", "filesTouched", "openQuestions"];
-var TEXT_FIELDS = ["goal", "nextStep"];
-var list = (description) => ({ type: "array", items: { type: "string" }, description });
-var UPDATE_TASK_STATE_SCHEMA = {
-  type: "function",
-  function: {
-    name: UPDATE_TASK_STATE_TOOL,
-    description: "Record your structured task state: the goal, constraints, decisions made, files touched, open questions and the next step. It is shown to you on every turn and survives context compaction, so keep it current after each meaningful step instead of re-deriving it. Fields you omit keep their previous value. Keep it under ~600 tokens.",
-    parameters: {
-      type: "object",
-      properties: {
-        goal: { type: "string", description: "The task goal in one or two sentences." },
-        constraints: list("Rules and limits the work must respect."),
-        decisions: list("Decisions already made, so they are not revisited."),
-        filesTouched: list("Repo paths you changed."),
-        openQuestions: list("What is still unknown."),
-        nextStep: { type: "string", description: "The very next action." }
-      }
-    }
-  }
-};
-var LABELS = {
-  goal: "Goal",
-  constraints: "Constraints",
-  decisions: "Decisions",
-  filesTouched: "Files touched",
-  openQuestions: "Open questions",
-  nextStep: "Next step"
-};
-function renderTaskState(state) {
-  if (!state) return "";
-  const lines = [];
-  for (const key of ["goal", ...LIST_FIELDS, "nextStep"]) {
-    const value = state[key];
-    if (typeof value === "string" && value.trim()) lines.push(`${LABELS[key]}: ${value.trim()}`);
-    else if (Array.isArray(value) && value.length) lines.push(`${LABELS[key]}:
-${value.map((v) => `- ${v}`).join("\n")}`);
-  }
-  return lines.length ? `### Task state
-${lines.join("\n")}` : "";
-}
-function applyTaskStateUpdate(current, args) {
-  const next = { ...current ?? {} };
-  for (const key of TEXT_FIELDS) {
-    if (typeof args[key] === "string") next[key] = args[key].trim();
-  }
-  for (const key of LIST_FIELDS) {
-    const value = args[key];
-    if (Array.isArray(value)) next[key] = value.filter((v) => typeof v === "string" && v.trim() !== "").map((v) => v.trim());
-  }
-  const tokens = defaultEstimateTokens3(renderTaskState(next));
-  if (tokens > TASK_STATE_MAX_TOKENS) {
-    return { ok: false, error: `task state would be ~${tokens} tokens (limit ${TASK_STATE_MAX_TOKENS}) \u2014 summarise it more tightly and retry` };
-  }
-  return { ok: true, state: next };
-}
-
-// ../packages/agent-run/src/policy/memory/knowledge.ts
-function knowledgeRecorderFor(memory) {
-  return RunKnowledgeRecorder.restore(memory ?? null);
-}
-function knowledgeState(recorder) {
-  const log = recorder;
-  return typeof log.snapshot === "function" ? log.snapshot() : recorder;
-}
-var recorders = /* @__PURE__ */ new WeakMap();
-function recorderForState(state) {
-  const key = state;
-  let recorder = recorders.get(key);
-  if (!recorder) {
-    recorder = knowledgeRecorderFor(state.memory);
-    recorders.set(key, recorder);
-  }
-  return recorder;
-}
-
-// ../packages/agent-run/src/policy/memory/learnedFacts.ts
-var MIN_FACT_CHARS = 24;
-var MAX_FACTS = 6;
-var KEY_PREFIX = "learned:";
-var KINDS = /* @__PURE__ */ new Set(["decision", "root_cause", "convention"]);
-var MEMORY_COMMIT_SYSTEM = [
-  "You extract durable project facts from a finished coding or investigation run.",
-  "Return a JSON array and nothing else. Each item is {key, kind, content}.",
-  "kind is one of decision, root_cause, convention.",
-  "key is a short kebab-case slug that stays stable if the same fact is learned again.",
-  "content is one or two sentences a later run can act on, at least a full sentence.",
-  "For an investigation, facts are where a behaviour lives, a root cause, or how something works, taken from the Conclusion.",
-  "Only emit a fact the evidence (the excerpt, or the Conclusion of a read-only run) actually supports. Do not invent, and do not restate the file list.",
-  "Return [] when the run learned nothing durable."
-].join(" ");
-var MIN_READS_FOR_LEARNING = 3;
-var ANSWER_CHARS = 3e3;
-function readPaths(input) {
-  return [...new Set((input.read ?? []).map((p) => p.trim()).filter(Boolean))];
-}
-function isInvestigation(input) {
-  return readPaths(input).length >= MIN_READS_FOR_LEARNING && (input.answer ?? "").trim().length > 0 && !(input.tools ?? []).some((t) => REMEMBER_FACT_TOOLS.has(t));
-}
-function changedPaths(input) {
-  return [...new Set(input.changed.map((p) => p.trim()).filter(Boolean))];
-}
-function memoryCommitPrompt(input) {
-  const changed2 = changedPaths(input);
-  const asked = (input.prompt ?? "").replace(/\s+/g, " ").trim().slice(0, 400);
-  const tools = [...new Set((input.tools ?? []).map((t) => t.trim()).filter(Boolean))].slice(0, 24);
-  const excerpt2 = (input.excerpt ?? "").trim().slice(0, 6e3);
-  const read = readPaths(input).slice(0, 40);
-  const conclusion = (input.answer ?? "").trim().slice(-ANSWER_CHARS);
-  const evidence = excerpt2 ? `Evidence:
-${excerpt2}` : conclusion ? "Evidence: the Conclusion above." : "";
-  return [
-    asked ? `Asked: ${asked}` : "",
-    changed2.length > 0 ? `Changed files:
-${changed2.map((p) => `- ${p}`).join("\n")}` : "",
-    read.length > 0 ? `Files read:
-${read.map((p) => `- ${p}`).join("\n")}` : "",
-    tools.length ? `Tools: ${tools.join(", ")}` : "",
-    conclusion ? `Conclusion:
-${conclusion}` : "",
-    evidence || "Evidence: (none recorded \u2014 return [] rather than guess)"
-  ].filter(Boolean).join("\n\n");
-}
-function kebab(raw) {
-  return raw.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 64);
-}
-function factKey(raw) {
-  const body = kebab(raw.replace(/^learned:/i, "").replace(/^workspace:/i, ""));
-  return body ? `${KEY_PREFIX}${body}` : "";
-}
-function parseLearnedFacts(raw) {
-  const start = raw.indexOf("[");
-  const end = raw.lastIndexOf("]");
-  if (start < 0 || end <= start) return [];
-  let parsed;
-  try {
-    parsed = JSON.parse(raw.slice(start, end + 1));
-  } catch {
-    return [];
-  }
-  if (!Array.isArray(parsed)) return [];
-  const out = [];
-  const seen = /* @__PURE__ */ new Set();
-  for (const item of parsed) {
-    if (out.length >= MAX_FACTS) break;
-    if (!item || typeof item !== "object") continue;
-    const row = item;
-    if (typeof row.kind !== "string" || !KINDS.has(row.kind)) continue;
-    if (typeof row.key !== "string" || typeof row.content !== "string") continue;
-    if (/^workspace:/i.test(row.key.trim())) continue;
-    const key = factKey(row.key);
-    const content = row.content.replace(/\s+/g, " ").trim();
-    if (!key || content.length < MIN_FACT_CHARS || seen.has(key)) continue;
-    seen.add(key);
-    out.push({ key, content, kind: row.kind });
-  }
-  return out;
-}
-async function commitLearnedFacts(input, deps) {
-  const changed2 = changedPaths(input);
-  if (changed2.length === 0 && !isInvestigation(input)) return [];
-  let raw = "";
-  try {
-    raw = await deps.complete(memoryCommitPrompt({ ...input, changed: changed2 }));
-  } catch {
-    return [];
-  }
-  const facts = parseLearnedFacts(raw);
-  const landed = [];
-  for (const fact of facts) {
-    try {
-      if (await deps.remember(fact.key, fact.content)) landed.push(fact);
-    } catch {
-    }
-  }
-  return landed;
-}
-function learnedFactsRequest(evidence) {
-  const changed2 = [...evidence.activity.created ?? [], ...evidence.activity.edited ?? []];
-  return {
-    changed: changed2,
-    ...evidence.activity.read?.length ? { read: evidence.activity.read } : {},
-    ...evidence.answer ? { answer: evidence.answer } : {},
-    ...evidence.activity.tools ? { tools: evidence.activity.tools } : {},
-    ...evidence.excerpt ? { excerpt: evidence.excerpt } : {},
-    ...evidence.activity.prompt ? { prompt: evidence.activity.prompt } : {}
-  };
-}
-var learnedFactDeps = null;
-async function extractAndWriteLearnedFacts(evidence) {
-  const deps = learnedFactDeps;
-  if (!deps) return null;
-  return commitLearnedFacts(learnedFactsRequest(evidence), deps);
-}
-
-// ../packages/agent-run/src/policy/memory/index.ts
-var SECTION_BREAK = "\n\n";
-function finalAnswerOf(ctx) {
-  const rows = ctx.state.messages ?? [];
-  for (let i = rows.length - 1; i >= 0; i--) {
-    const row = rows[i];
-    if (row?.role === "user") return void 0;
-    if (row?.role !== "assistant") continue;
-    return !row.toolCalls?.length && typeof row.content === "string" && row.content.trim() ? row.content : void 0;
-  }
-  return void 0;
-}
-function codeMapOf(ctx) {
-  const recorder = recorderForState(ctx.state);
-  ctx.state.memory = knowledgeState(recorder);
-  const map = recorder.consolidate({ root: ctx.task.workspace?.defaultRepo });
-  return map ? { ...map, ...ctx.task.chatId !== void 0 ? { chatId: ctx.task.chatId } : {} } : void 0;
-}
-var memoryHook = {
-  /** Record one dispatched call into the run's memory — successful calls only. */
-  observe(ctx, call2, result, isError) {
-    if (isError || isFailedToolResult(result)) return;
-    const recorder = recorderForState(ctx.state);
-    recorder.record(call2.name, call2.args);
-    ctx.state.memory = knowledgeState(recorder);
-  },
-  /**
-   * The volatile tail for this turn, or null when there is nothing worth saying: the
-   * run's own record (the recorder is restored from `state.memory` once per state object,
-   * so a resumed run's brief continues the SAME record a continuous run holds), then the
-   * guards' A3 / D1 / D7 notes — the sections `costLoop/volatileTail.ts` assembled, in
-   * front of THIS turn only. (The delegation nudge rides the read result that earns it.)
-   */
-  brief(ctx) {
-    const recorder = recorderForState(ctx.state);
-    if (!recorder.activity.prompt && ctx.task.prompt) recorder.setPrompt(ctx.task.prompt);
-    ctx.state.memory = knowledgeState(recorder);
-    const taskState = ctx.policy.levers.includes("c3_task_state") ? renderTaskState(ctx.state.taskState) : "";
-    const sections = [recorder.brief() ?? "", taskState, guardsTurnNote(ctx)].filter((part) => part.trim().length > 0);
-    return sections.length > 0 ? sections.join(SECTION_BREAK) : null;
-  },
-  /**
-   * The consolidated memory the run produced, written back through `store.commitMemory`.
-   * The code map (the `codemap:` write-back fields) is returned for the store; the
-   * learned-facts step runs behind the injected `learnedFacts` port when the run
-   * changed files, or investigated read-only and left a final answer. A read-only investigation still maps (PRD 35 E8): `consolidate`
-   * maps ≥3 files READ as readily as ≥3 changed, so the next run asked about this area
-   * starts warm. The map is written on EVERY terminal outcome (a failed or cancelled run
-   * still read and changed what it did); the model-extracted learned facts are a judgement
-   * of a completed run, so a caller that is settling a failure passes `learn: false`.
-   */
-  async consolidate(ctx, opts) {
-    const map = codeMapOf(ctx);
-    const answer2 = finalAnswerOf(ctx);
-    const facts = opts?.learn === false ? null : await extractAndWriteLearnedFacts({
-      activity: recorderForState(ctx.state).activity,
-      ...answer2 ? { answer: answer2 } : {}
-    });
-    if (map) return map;
-    const chat = ctx.task.chatId !== void 0 ? { chatId: ctx.task.chatId } : {};
-    return facts !== null && facts.length > 0 ? { facts, ...chat } : void 0;
-  }
-};
-
-// ../packages/agent-run/src/policy/context/recall.ts
-var MAX_RECALL_HINT_CHARS = 600;
-function recallQuery(userText, hint) {
-  const extra = (hint ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_RECALL_HINT_CHARS);
-  if (!extra || !userText.trim()) return userText;
-  return `${userText.trim()}
-
-${extra}`;
-}
-function focusTerms(entry) {
-  const path = entry.path;
-  const heads = (entry.outline ?? []).map((h) => h.heading).filter(Boolean);
-  return [path, ...heads].join(" ");
-}
-function focusHint(pack) {
-  return pack.focus.map(focusTerms).filter(Boolean).join("\n");
-}
-
-// ../packages/agent-run/src/policy/context/index.ts
-var RECALL_LIMIT2 = 8;
-var contextHook = {
-  /**
-   * The recall lines the run should carry: the entries the surface's memory
-   * (`CapabilityProvider.memory.recall`) returns for the prompt plus the focus terms, as
-   * `key: content` lines. Nothing when the surface has no memory, the recall fails, or
-   * there is no request to ground it on (a hint alone is not a question) — recall is
-   * best-effort and never fails a run.
-   */
-  async recall(ctx) {
-    const memory = ctx.ports.capabilities?.memory;
-    if (!memory || !ctx.task.prompt.trim()) return void 0;
-    let hint = "";
-    try {
-      hint = focusHint(await ctx.ports.context.pack(ctx.task));
-    } catch {
-      hint = "";
-    }
-    const query = recallQuery(ctx.task.prompt, hint);
-    try {
-      const recalled = await memory.recall(query, RECALL_LIMIT2);
-      const lines = (recalled.ok ? recalled.entries ?? [] : []).map((entry) => `${entry.key}: ${entry.content}`);
-      return lines.length > 0 ? lines : void 0;
-    } catch {
-      return void 0;
-    }
-  }
-};
-
-// ../packages/agent-run/src/policy/tools/searchHelpers.ts
-var TOOL_SEARCH_MAX = 15;
-var TOOL_SEARCH_DEFAULT_LIMIT = 8;
-function promptNamedTools(text2) {
-  const out = /* @__PURE__ */ new Set();
-  for (const match of text2.toLowerCase().matchAll(/\b[a-z][a-z0-9_]{2,}\b/g)) {
-    out.add(match[0]);
-  }
-  return [...out];
-}
-function runToolSearch(catalog, advertised, args) {
-  const query = typeof args.query === "string" ? args.query.trim() : "";
-  if (!query) return { data: { ok: false, error: "query is required" }, load: [] };
-  const limit = Math.max(1, Math.min(TOOL_SEARCH_MAX, typeof args.limit === "number" ? Math.trunc(args.limit) : TOOL_SEARCH_DEFAULT_LIMIT));
-  const matches = searchToolSchemas(catalog.filter((t) => !advertised.has(t.function.name)), query, limit);
-  return {
-    data: {
-      ok: true,
-      query,
-      matches: matches.map((t) => t.function),
-      note: matches.length ? "These tools are now loaded and callable for the rest of the run." : "No unloaded tool matched \u2014 try other keywords, or use the tools you already have."
-    },
-    load: matches.map((t) => t.function.name)
-  };
-}
-
-// ../packages/agent-run/src/policy/tools/catalog.ts
-var ALWAYS_CORE_TOOLS = [
-  "read_file",
-  "search_code",
-  "list_files",
-  "edit_file",
-  "run_checks",
-  "run_command",
-  "finish",
-  "ask_human",
-  "spawn_agent"
-];
-var ROLE_CORE_TOOLS = {
-  explore: ["repo_map", "memory_recall", "workspace_read", "web_search", "web_fetch"],
-  code: ["repo_map", "write_file", "delete_file", "update_prd", "memory_recall", "memory_remember", "claim_resource", "release_resource", "workspace_note"],
-  verify: ["memory_recall", "workspace_read"],
-  plan: ["spawn_agents", "wait_agents", "message_agent", "update_prd", "memory_recall", "memory_remember", "workspace_note", "workspace_read"]
-};
-function deferredToolRole(role) {
-  if (role === "review") return "verify";
-  return role === "explore" || role === "verify" || role === "plan" ? role : "code";
-}
-function coreToolNames(role) {
-  return [.../* @__PURE__ */ new Set([...ALWAYS_CORE_TOOLS, ...ROLE_CORE_TOOLS[deferredToolRole(role)]])].slice(0, 20);
-}
-function hasSymbolsCapability(caps) {
-  return caps.has("repo.symbols");
-}
-function selectCatalog(catalog, role, caps, opts = {}) {
-  const byName = /* @__PURE__ */ new Map();
-  for (const tool of catalog) {
-    const name = tool.function?.name;
-    if (name && !byName.has(name)) byName.set(name, tool);
-  }
-  const core = new Set(coreToolNames(role));
-  if (hasSymbolsCapability(caps)) core.add("find_symbol");
-  core.add(TOOL_SEARCH_TOOL);
-  for (const name of opts.pinned ?? []) core.add(name);
-  for (const name of opts.required ?? []) core.add(name);
-  for (const name of promptNamedTools(opts.prompt ?? "")) {
-    if (byName.has(name)) core.add(name);
-  }
-  const out = [];
-  for (const tool of catalog) {
-    const name = tool.function?.name;
-    if (name && core.has(name)) {
-      out.push(tool);
-      core.delete(name);
-    }
-  }
-  if (core.has(TOOL_SEARCH_TOOL)) {
-    out.push(TOOL_SEARCH_SCHEMA);
-    core.delete(TOOL_SEARCH_TOOL);
-  }
-  return out;
-}
-
-// ../packages/agent-run/src/policy/tools/toolVocabulary.ts
-var EQUIVALENCE_CLASSES = [
-  // The work item itself. `ticket` is the product's word and `task` is the catalog's;
-  // this one class is what makes every `tasks.*` tool reachable from a ticket question.
-  ["task", "ticket", "issue", "story", "backlog", "todo"],
-  // The board and its geography.
-  ["kanban", "board", "lane", "swimlane", "column", "card"],
-  // Source control.
-  ["repo", "repository", "codebase", "git"],
-  ["branch", "commit", "merge", "rebase"],
-  ["pr", "pull", "pullrequest"],
-  // People. `member` is the catalog's word; the rest are what users type.
-  ["member", "teammate", "colleague", "people", "person", "staff"],
-  // Conversations.
-  ["chat", "conversation", "thread"],
-  // Delivery planning. `epic` stays OUT of the objective class on purpose — objectives/
-  // OKRs and epics are different entities with different tools.
-  ["epic", "feature"],
-  ["objective", "okr", "keyresult"],
-  // Runs.
-  ["execution", "run", "dispatch"]
-];
-var SYNONYMS = (() => {
-  const map = /* @__PURE__ */ new Map();
-  for (const group of EQUIVALENCE_CLASSES) {
-    for (const term of group) {
-      const existing = map.get(term) ?? [];
-      for (const other of group) if (!existing.includes(other)) existing.push(other);
-      map.set(term, existing);
-    }
-  }
-  return map;
-})();
-function synonymsFor(stem) {
-  return SYNONYMS.get(stem) ?? [];
-}
-function expandWithSynonyms(stems) {
-  const expanded = /* @__PURE__ */ new Set();
-  for (const stem of stems) {
-    for (const synonym of synonymsFor(stem)) {
-      if (!stems.has(synonym)) expanded.add(synonym);
-    }
-  }
-  return expanded;
-}
-
-// ../packages/agent-run/src/policy/tools/selectTools.ts
-var DEFAULT_TOOL_LIMIT = 64;
-var PINNED_OVERFLOW = 16;
-var NAME_HIT = LEXICAL_WEIGHTS.name;
-var NAME_SYNONYM_HIT = 7;
-var DESCRIPTION_HIT = LEXICAL_WEIGHTS.description;
-function scoreTool(toolName, description, stems, synonyms) {
-  let score = 0;
-  for (const token of lexicalStems(toolName)) {
-    if (stems.has(token)) score += NAME_HIT;
-    else if (synonyms.has(token)) score += NAME_SYNONYM_HIT;
-  }
-  for (const token of lexicalStems(description)) {
-    if (stems.has(token)) score += DESCRIPTION_HIT;
-    else if (synonyms.has(token)) score += Math.ceil(DESCRIPTION_HIT / 2);
-  }
-  return score;
-}
-function selectToolsForTurn(tools, options = {}) {
-  const catalog = tools ?? [];
-  const available = catalog.length;
-  if (available === 0) return { tools: [], trimmed: false, available: 0 };
-  const limit = Math.max(1, Math.floor(options.limit ?? DEFAULT_TOOL_LIMIT));
-  if (available <= limit) {
-    return { tools: [...catalog], trimmed: false, available };
-  }
-  const byName = /* @__PURE__ */ new Map();
-  for (const tool of catalog) {
-    const name = tool.function?.name;
-    if (name && !byName.has(name)) byName.set(name, tool);
-  }
-  const query = (options.query ?? "").toLowerCase();
-  const stems = lexicalStems(query);
-  const synonyms = expandWithSynonyms(stems);
-  const wanted = [];
-  const seen = /* @__PURE__ */ new Set();
-  const push = (tool) => {
-    const name = tool?.function?.name;
-    if (!tool || !name || seen.has(name)) return;
-    seen.add(name);
-    wanted.push(tool);
-  };
-  if (options.capRequired) {
-    const required = new Set(options.required ?? []);
-    for (const tool of catalog) {
-      if (wanted.length >= limit) break;
-      if (required.has(tool.function?.name ?? "")) push(tool);
-    }
-  } else {
-    for (const name of options.required ?? []) push(byName.get(name));
-  }
-  const roomAfterRequired = Math.max(0, limit - wanted.length);
-  const rest = catalog.filter((t) => t.function?.name && !seen.has(t.function.name));
-  const ranked = options.rank ? options.rank(rest, options.query ?? "") : [...rest].map((tool) => ({
-    tool,
-    score: scoreTool(tool.function?.name ?? "", tool.function?.description ?? "", stems, synonyms)
-  })).filter((entry) => options.backfill !== false || entry.score > 0).sort((a, b) => b.score - a.score || (a.tool.function?.name ?? "").localeCompare(b.tool.function?.name ?? "")).map((entry) => entry.tool);
-  for (const tool of ranked.slice(0, roomAfterRequired)) push(tool);
-  const inFixed = new Set(wanted.map((t) => t.function?.name));
-  if (options.backfill !== false) {
-    for (const tool of catalog) {
-      const name = tool.function?.name;
-      if (name && !inFixed.has(name) && wanted.length < limit) push(tool);
-    }
-  }
-  const fixed = [];
-  const fixedNames = new Set(wanted.map((t) => t.function?.name));
-  for (const tool of catalog) {
-    const name = tool.function?.name;
-    if (name && fixedNames.has(name)) fixed.push(tool);
-  }
-  const overflowCap = limit + PINNED_OVERFLOW;
-  const pinnedOut = [];
-  for (const name of options.pinned ?? []) {
-    if (pinnedOut.length >= Math.max(0, overflowCap - fixed.length)) break;
-    const tool = byName.get(name);
-    const toolName = tool?.function?.name;
-    if (!tool || !toolName || fixedNames.has(toolName)) continue;
-    if (pinnedOut.some((t) => t.function?.name === toolName)) continue;
-    pinnedOut.push(tool);
-  }
-  return { tools: [...fixed, ...pinnedOut], trimmed: true, available };
-}
-
-// ../packages/agent-run/src/policy/tools/roleCap.ts
-var ROLE_TOOL_LIMIT = { code: 22, verify: 18 };
-var ROLE_COMPANION_TOOLS = {
-  code: [
-    "find_symbol",
-    "file_outline",
-    "command_status",
-    "command_stop",
-    "git_status",
-    "git_diff",
-    "recall_facts",
-    "ask_user"
-  ],
-  verify: [
-    "find_symbol",
-    "file_outline",
-    "command_status",
-    "command_stop",
-    "git_status",
-    "git_diff",
-    "git_history",
-    "recall_facts",
-    "ask_user"
-  ]
-};
-var ROLE_GUARANTEED_TOOLS = [
-  "git_commit",
-  "git_push",
-  "output_filter",
-  "wait_agents",
-  "hand_off"
-];
-var ROLE_MATCH_ROOM = { code: 6, verify: 4 };
-function isCappedToolRole(role) {
-  return role === "code" || role === "verify";
-}
-function roleToolLimit(role) {
-  return isCappedToolRole(role) ? ROLE_TOOL_LIMIT[role] : DEFAULT_TOOL_LIMIT;
-}
-function roleToolNames(role) {
-  return [.../* @__PURE__ */ new Set([...coreToolNames(role), ...ROLE_COMPANION_TOOLS[role], ...ROLE_GUARANTEED_TOOLS])];
-}
-function roleCappedSelection(role, catalogNames, keep2 = [], surfaceRequired2 = []) {
-  const present = new Set(catalogNames);
-  const required = [.../* @__PURE__ */ new Set([...surfaceRequired2, ...roleToolNames(role), ...keep2])].filter((n2) => present.has(n2));
-  return { limit: Math.max(ROLE_TOOL_LIMIT[role], required.length + ROLE_MATCH_ROOM[role]), required, backfill: false };
-}
-
-// ../packages/agent-run/src/policy/tools/workCore.ts
-function workCoreToolNames(role) {
-  return [
-    .../* @__PURE__ */ new Set([
-      ...coreToolNames(role),
-      // The companions follow the core row: `verify` and `review` read; every other role codes.
-      ...ROLE_COMPANION_TOOLS[deferredToolRole(role) === "verify" ? "verify" : "code"]
-    ])
-  ];
-}
-function ensureWorkCoreSet(selected, catalog, opts) {
-  if (opts.work === false) return [...selected];
-  const core = workCoreToolNames(opts.role ?? "code");
-  const byName = /* @__PURE__ */ new Map();
-  for (const tool of catalog) {
-    const name = tool.function?.name;
-    if (name && !byName.has(name)) byName.set(name, tool);
-  }
-  const have = new Set(selected.map((t) => t.function?.name ?? ""));
-  const capacity = opts.capacity ?? Number.POSITIVE_INFINITY;
-  const out = [...selected];
-  for (const name of core) {
-    const tool = byName.get(name);
-    if (!tool || have.has(name)) continue;
-    if (out.length >= capacity) {
-      opts.onDropped?.(name, `work-mode window could not fit the core tool set (${out.length} of ${out.length + 1} advertised)`);
-      continue;
-    }
-    out.push(tool);
-    have.add(name);
-  }
-  return out;
-}
-
-// ../packages/agent-run/src/policy/tools/platform.ts
-function selectPlatformCatalog(ctx, pinned) {
-  const platform = ctx.ports.platform;
-  if (!platform?.closed) return void 0;
-  const catalog = platform.schemas({ rungs: ctx.state.stall?.rungs ?? {} });
-  const selection = platform.selection;
-  const { query } = selection;
-  const capped = isCappedToolRole(selection.role) ? roleCappedSelection(selection.role, catalog.map((t) => t.function?.name ?? ""), selection.roleKeep ?? [], selection.required) : void 0;
-  const limit = capped?.limit ?? selection.limit;
-  const required = capped?.required ?? [...selection.required];
-  const selected = selectToolsForTurn(catalog, { query, limit, pinned: selection.pinned ? [...selection.pinned] : pinned, required, ...selection.rank ? { rank: selection.rank } : {}, ...selection.capRequired ? { capRequired: true } : {}, ...capped ? { backfill: false } : {} }).tools;
-  return ensureWorkCoreSet(selected, catalog, {
-    role: selection.role,
-    work: isCappedToolRole(selection.role),
-    onDropped: (name, reason) => ctx.ports.events.emit({ kind: "context.tools", step: ctx.state.step ?? 0, advertised: selected.length, catalog: catalog.length, toolsTokens: 0, loaded: [`${name}: ${reason}`] })
-  });
-}
-
-// ../packages/agent-run/src/policy/tools/toolset.ts
-var CHAT_REPLY_SCOPED_TOOLS = [
-  "chats.get_messages",
-  "chats.list_tickets",
-  "chats.link_ticket",
-  "chats.unlink_ticket",
-  "chats.ticket_lineage",
-  "chats.list_agents",
-  // Why the LAST run on this chat did not finish — read-only, consulted BEFORE the
-  // failed attempt is repeated.
-  "chats.diagnostics",
-  // What has already RUN on this chat's tickets and who started it.
-  "chats.runs",
-  // The addressed agent's hands: steer/resume the agent's OWN run on a linked ticket or
-  // start a follow-up on the same branch. NOT the unattended executions.post_message.
-  "chats.execute_as_agent"
-];
-function isChatReplyScope(toolScope) {
-  return toolScope === "chat-reply";
-}
-
-// ../packages/agent-run/src/policy/tools/readCoverage.ts
-var DEDUPABLE_READS = /* @__PURE__ */ new Set(["read_file", "list_files", "search_code", "find_symbol", "file_outline"]);
-var UNSCOPED_MUTATIONS = /* @__PURE__ */ new Set(["run_command", "git_checkout", "git_merge", "git_rebase", "git_reset", "git_stash", "git_pull", "apply_patch"]);
-var CODE_CHANGES = /* @__PURE__ */ new Set(["write_file", "edit_file", "delete_file", "create_file", "move_file"]);
-var PUBLISHES = /* @__PURE__ */ new Set(["git_commit", "git_push", "create_pull_request"]);
-var REPO_STATE_READS = /* @__PURE__ */ new Set(["git_status", "git_log", "git_branch"]);
-var SEPARATOR = " \u220B ";
-function pathOf(args) {
-  const a = args && typeof args === "object" ? args : {};
-  const path = typeof a.path === "string" ? a.path : typeof a.scope === "string" ? a.scope : void 0;
-  return path?.trim() || void 0;
-}
-var AGENT_READ_TRAITS = {
-  visitTarget: (args) => {
-    const path = pathOf(args) ?? "";
-    const query = args && typeof args === "object" ? args.query : void 0;
-    return typeof query === "string" && query.trim() ? `${path}${SEPARATOR}${query.trim()}` : path || void 0;
-  },
-  activityTarget: pathOf,
-  questionSeparator: SEPARATOR,
-  // A shell command that provably only reads changes no file: it forgets no read.
-  isUnscopedMutation: (tool, args) => UNSCOPED_MUTATIONS.has(tool) && !isReadOnlyShellCall(tool, args),
-  isCodeChangeTool: (tool) => CODE_CHANGES.has(tool),
-  isLocalWorkspaceTool: (tool) => DEDUPABLE_READS.has(tool) || CODE_CHANGES.has(tool) || UNSCOPED_MUTATIONS.has(tool) || tool.startsWith("git_"),
-  isRepoPublishTool: (tool) => PUBLISHES.has(tool),
-  isRepoStateReadTool: (tool) => REPO_STATE_READS.has(tool)
-};
-function servedKey(tool, args) {
-  return `${tool}\0${JSON.stringify(canonicalReadArgs(tool, args))}`;
-}
-function parseKey(key) {
-  const at = key.indexOf("\0");
-  if (at < 0) return null;
-  try {
-    return { tool: key.slice(0, at), args: JSON.parse(key.slice(at + 1)) };
-  } catch {
-    return null;
-  }
-}
-var sessions2 = /* @__PURE__ */ new WeakMap();
-function coverageOf(state) {
-  let coverage = sessions2.get(state);
-  if (coverage) return coverage;
-  coverage = new ReadCoverage(AGENT_READ_TRAITS);
-  for (const [key, entry] of Object.entries(state.reads.served)) {
-    const read = parseKey(key);
-    if (!read) continue;
-    coverage.record(read.tool, read.args);
-    if (entry.cached) coverage.cacheResult(read.tool, read.args, entry.cached);
-  }
-  sessions2.set(state, coverage);
-  return coverage;
-}
-function stillServed(ctx, anchor) {
-  return ctx.messages.some((m) => m.role === "tool" && m.toolCallId === anchor);
-}
-function coveredReadAnswer(ctx, call2) {
-  if (!DEDUPABLE_READS.has(call2.name)) return void 0;
-  const answer2 = coveredAnswer(ctx, call2);
-  if (answer2) ctx.state.reads = { ...ctx.state.reads, stubCount: (ctx.state.reads.stubCount ?? 0) + 1 };
-  return answer2;
-}
-function coveredAnswer(ctx, call2) {
-  const coverage = coverageOf(ctx.state);
-  if (coverage.isRepeat(call2.name, call2.args)) {
-    const cached2 = coverage.cachedResult(call2.name, call2.args);
-    if (cached2 && !stillServed(ctx, cached2.anchor)) {
-      const note = `Replayed from this run's read cache: this exact ${call2.name} call succeeded earlier in the run, but its result was compressed out of the working context, so here it is again \u2014 served from memory, not re-read. Act on it now; do not request it again.`;
-      return { data: withNote(cached2.served ?? cached2.result, note) };
-    }
-    return {
-      data: {
-        note: `Duplicate ${call2.name} call \u2014 identical arguments to an earlier call this run, whose result is already in the conversation above. Reuse that result instead of re-reading; do not repeat it.`
-      }
-    };
-  }
-  const covered = coverage.coveredRead(call2.name, call2.args);
-  if (!covered) return void 0;
-  coverage.record(call2.name, call2.args);
-  if (covered.cached && !stillServed(ctx, covered.cached.anchor)) {
-    const served = covered.cached.served ?? covered.cached.result;
-    const requested = isReadFileResult(served) ? sliceReadFile(served, covered.start, covered.end) : served;
-    return { data: withNote(requested, covered.note) };
-  }
-  return { data: { note: covered.note } };
-}
-function withNote(result, note) {
-  return result && typeof result === "object" && !Array.isArray(result) ? { ...result, note } : { output: result, note };
-}
-function servedSpan(served) {
-  if (!isReadFileResult(served)) return { start: 0, end: 0 };
-  const start = typeof served.offset === "number" && served.offset > 0 ? Math.floor(served.offset) : 1;
-  return { start, end: start + served.content.split("\n").length - 1 };
-}
-function failed(result) {
-  return !!result && typeof result === "object" && result.ok === false;
-}
-function cutToCap(result) {
-  return !!result && typeof result === "object" && result.truncated === true;
-}
-function recordShellPrint(ctx, coverage, call2, served) {
-  const read = shellPrintAsRead(call2.name, call2.args, served, !cutToCap(served));
-  if (!read) return;
-  coverage.record("read_file", read.args);
-  const cached2 = { result: read.result, served: read.result, anchor: call2.id };
-  coverage.cacheResult("read_file", read.args, cached2);
-  const entry = { ...servedSpan(read.result), cached: cached2, note: "" };
-  const reads = ctx.state.reads;
-  ctx.state.reads = { ...reads, served: { ...reads.served, [servedKey("read_file", read.args)]: entry } };
-}
-function recordServedRead(ctx, call2, served, isError) {
-  const coverage = coverageOf(ctx.state);
-  const reads = ctx.state.reads;
-  if (DEDUPABLE_READS.has(call2.name)) {
-    if (isError || failed(served)) return;
-    coverage.record(call2.name, call2.args);
-    const cached2 = { result: served, served, anchor: call2.id };
-    coverage.cacheResult(call2.name, call2.args, cached2);
-    const entry = { ...servedSpan(served), cached: cached2, note: "" };
-    ctx.state.reads = { ...reads, served: { ...reads.served, [servedKey(call2.name, call2.args)]: entry } };
-    return;
-  }
-  coverage.invalidate(call2.name, call2.args);
-  const kept = {};
-  for (const [key, entry] of Object.entries(reads.served)) {
-    const read = parseKey(key);
-    if (read && coverage.isRepeat(read.tool, read.args)) kept[key] = entry;
-  }
-  ctx.state.reads = { ...reads, served: kept };
-  if (!isError && !failed(served)) recordShellPrint(ctx, coverage, call2, served);
-}
-
-// ../packages/agent-run/src/policy/tools/gateToolNames.ts
-var TOOL_NAME_SYNONYMS = {
-  write: ["write_file", "Write"],
-  write_file: ["write", "Write"],
-  Write: ["write", "write_file"],
-  delete_file: ["write_file", "write", "Write"],
-  // A patch is a write and an edit at once: a gate authored on either covers it.
-  apply_patch: ["write_file", "write", "Write", "edit_file", "edit", "Edit"],
-  // A write gate covers an edit (an edit rewrites a file); an edit gate does not cover a plain write.
-  edit: ["edit_file", "Edit", "write", "write_file", "Write"],
-  edit_file: ["edit", "Edit", "write", "write_file", "Write"],
-  Edit: ["edit", "edit_file", "write", "write_file", "Write"],
-  exec: ["run_command", "Bash", "bash"],
-  Bash: ["run_command", "exec", "bash"],
-  bash: ["run_command", "exec", "Bash"],
-  run_command: ["exec", "Bash", "bash"],
-  read: ["read_file", "Read"],
-  Read: ["read", "read_file"],
-  read_file: ["read", "Read"],
-  Task: ["spawn_agent", "spawn_agents", "sessions_spawn"],
-  spawn_agent: ["Task", "spawn_agents", "sessions_spawn"],
-  spawn_agents: ["Task", "spawn_agent", "sessions_spawn"],
-  sessions_spawn: ["Task", "spawn_agent", "spawn_agents"],
-  Glob: ["list_files", "find", "ls"],
-  list_files: ["Glob", "find", "ls"],
-  find: ["list_files", "Glob"],
-  ls: ["list_files", "Glob"],
-  Grep: ["search_code", "grep"],
-  search_code: ["Grep", "grep"],
-  grep: ["search_code", "Grep"]
-};
-var ACTION_RULES = [
-  // `process` drives a running exec session: writing to it, submitting to it or killing it acts on a command (listing, polling and reading its log do not).
-  ...["write", "send-keys", "submit", "paste", "kill", "remove"].map((action) => ({ tool: "process", when: { action }, as: "exec" })),
-  { tool: "nodes", when: { action: "run" }, as: "exec" },
-  { tool: "nodes", when: { action: "invoke", invokeCommand: { startsWith: "system." } }, as: "exec" }
-];
-function ruleMatches(rule, args) {
-  return Object.entries(rule.when).every(([key, want]) => {
-    const have = typeof args?.[key] === "string" ? args[key].trim().toLowerCase() : "";
-    return typeof want === "string" ? have === want : have.startsWith(want.startsWith);
-  });
-}
-var SYNONYMS_BY_NAME = new Map(
-  Object.entries(TOOL_NAME_SYNONYMS).map(([name, same]) => [normalizeToolName(name), same])
-);
-function candidateToolNames(toolName, args) {
-  const called = normalizeToolName(toolName);
-  const families = ACTION_RULES.filter((r) => r.tool === called && ruleMatches(r, args)).map((r) => r.as);
-  const names = [toolName.trim(), resolveToolAlias(toolName), ...families].flatMap((n2) => [n2, ...SYNONYMS_BY_NAME.get(normalizeToolName(n2)) ?? []]);
-  return [...new Set(names.filter(Boolean))];
-}
-
-// ../packages/agent-run/src/policy/tools/gates.ts
-var INPUT_PATH_TOOLS = /* @__PURE__ */ new Set(["apply_patch"]);
-var CONTROL_TOOLS = new Set(CONTROL_TOOL_NAMES);
-function policyRefusalMessage(d) {
-  if (d.action === "block") {
-    return `Policy gate ${d.gateId} blocked this tool call: ${d.reason}`;
-  }
-  return `Policy gate ${d.gateId} requires human approval before this tool call (${d.reason}). No approver is available on this host (no approval pause), so the call was refused.`;
-}
-function declaredBy(ports, name) {
-  return name ? ports.platform?.declared?.(name) ?? ports.extensions?.declared?.(name) : void 0;
-}
-function gatesFor(gates, toolName) {
-  const all = gates ?? [];
-  return CONTROL_TOOLS.has(toolName) ? all.filter((g) => g.tool && g.tool !== "*") : all;
-}
-function callSideEffect(toolName, args, declared) {
-  const cataloged = candidateToolNames(toolName, args).find((n2) => toolSideEffect(n2) !== void 0);
-  return classifyTool(cataloged ?? toolName, declared, args);
-}
-function resolveSideEffectGates(gates, toolName, args, declared) {
-  if (!gates.some((g) => g.sideEffect)) return [...gates];
-  const effect = callSideEffect(toolName, args, declared);
-  return gates.filter((g) => !g.sideEffect || g.sideEffect === effect).map(({ sideEffect: _class, ...rest }) => rest);
-}
-function evaluatePolicyGateSeam(gates, toolName, args, workspaceRoot, declared) {
-  const paths = toolCallPaths(args);
-  const pathArg = paths.length ? paths : void 0;
-  const unreadable = INPUT_PATH_TOOLS.has(toolName) && typeof args?.input === "string" && args.input.trim().length > 0 && paths.length === 0;
-  const applicable = resolveSideEffectGates(gatesFor(gates, toolName), toolName, args, declared).map((g) => {
-    if (!unreadable || !g.paths) return g;
-    const { paths: _scope, ...unscoped } = g;
-    return unscoped;
-  });
-  let approval;
-  for (const name of candidateToolNames(toolName, args)) {
-    const d = evaluatePolicyGate(applicable, name, pathArg, workspaceRoot);
-    if (d.action === "block") return d;
-    if (d.action === "require-approval") approval = d;
-  }
-  return approval ?? { action: "allow" };
-}
-function isToolWithheld(gates, toolName, declared) {
-  const blocking = resolveSideEffectGates(gatesFor(gates, toolName), toolName, void 0, declared).filter((g) => g.effect === "block" && !(g.paths && g.paths.length));
-  if (blocking.length === 0) return false;
-  if (blocking.some((g) => !g.tool || g.tool === "*")) return true;
-  const blocked = new Set(blocking.map((g) => normalizeToolName(g.tool ?? "")));
-  return candidateToolNames(toolName).some((n2) => blocked.has(normalizeToolName(n2)));
-}
-var DO_NOT_RETRY = "Do not ask for this again \u2014 accomplish the task another way, or finish and explain why it cannot proceed.";
-function approvalRefusalMessage(refusal2, tool, gateId, answer2) {
-  if (refusal2 === "timed_out") return `No approver answered "${tool}" in time (governance gate ${gateId}), so it was not run. ${DO_NOT_RETRY}`;
-  if (refusal2 === "stopped") return `The run was stopped before "${tool}" was approved (governance gate ${gateId}), so it was not run.`;
-  if (refusal2 === "unreachable") return `No approver could be reached for "${tool}" (governance gate ${gateId}), so it was not run. ${DO_NOT_RETRY}`;
-  return `The approver declined "${tool}" (governance gate ${gateId}).${answer2 ? ` ${answer2}` : ""} ${DO_NOT_RETRY}`;
-}
-async function refuseApproval(ctx, call2, decision, key, error) {
-  ctx.state.refusedCalls = { ...ctx.state.refusedCalls ?? {}, [key]: error };
-  ctx.ports.refusals?.remember(key, error);
-  await emit(ctx.ports.events, { kind: "policy.blocked", step: ctx.step, tool: call2.name, gateId: decision.gateId, reason: error });
-  return { data: { ok: false, gate: decision.gateId, error }, isError: true };
-}
-async function gateCall(ctx, call2) {
-  const gates = ctx.policy.approvalGates;
-  if (!gates || gates.length === 0) return void 0;
-  const decision = evaluatePolicyGateSeam(gates, call2.name, call2.args, ctx.task.workspace?.defaultRepo, declaredBy(ctx.ports, call2.name));
-  if (decision.action === "block") {
-    await emit(ctx.ports.events, { kind: "policy.blocked", step: ctx.step, tool: call2.name, gateId: decision.gateId, reason: decision.reason });
-    return {
-      data: { ok: false, gate: decision.gateId, error: `Blocked by governance policy: ${decision.reason}. Do not retry this tool \u2014 accomplish the task another way, or finish and explain why it cannot proceed.` },
-      isError: true
-    };
-  }
-  if (decision.action !== "require-approval") return void 0;
-  const key = policyGateCallKey(decision.gateId, call2.name, call2.args);
-  if ((ctx.state.approvedCalls ?? []).includes(key)) return void 0;
-  const refusedBefore = ctx.state.refusedCalls?.[key] ?? ctx.ports.refusals?.recall(key);
-  if (refusedBefore) return { data: { ok: false, gate: decision.gateId, error: refusedBefore }, isError: true };
-  const gate = gates.find((g) => g.id === decision.gateId || g.baseGateId === decision.gateId) ?? { id: decision.gateId, effect: "require-approval", reason: decision.reason };
-  const question = `Approve the agent's use of "${call2.name}"? ${decision.reason}`;
-  const human = ctx.ports.human;
-  const parkedOn = ctx.state.parkedCalls?.[key];
-  const answer2 = human.approve ? await human.approve(gate, { tool: call2.name, args: call2.args, reason: decision.reason, ...parkedOn ? { approvalId: parkedOn } : {} }) : await human.ask(question);
-  if (!answer2) return refuseApproval(ctx, call2, decision, key, `${policyRefusalMessage(decision)} ${DO_NOT_RETRY}`);
-  if (answer2.kind === "answered") {
-    if (parkedOn) {
-      const { [key]: _settled, ...rest } = ctx.state.parkedCalls ?? {};
-      ctx.state.parkedCalls = rest;
-    }
-    if (answer2.approved === true) {
-      ctx.state.approvedCalls = [...ctx.state.approvedCalls ?? [], key];
-      return void 0;
-    }
-    return refuseApproval(ctx, call2, decision, key, approvalRefusalMessage(answer2.refusal ?? "declined", call2.name, decision.gateId, answer2.answer));
-  }
-  const approvalId = answer2.approvalId ?? parkedOn;
-  if (approvalId) ctx.state.parkedCalls = { ...ctx.state.parkedCalls ?? {}, [key]: approvalId };
-  else ctx.state.approvedCalls = [...ctx.state.approvedCalls ?? [], key];
-  return {
-    data: { ok: false, error: `Paused for human approval of "${call2.name}" (governance gate ${decision.gateId}).` },
-    isError: true,
-    // `parked`: the approver's channel already parked the run — the kernel settles `paused`, it never asks a second time.
-    control: { kind: "ask_human", question, parked: true, ...approvalId ? { approvalId } : {} }
-  };
-}
-
-// ../packages/agent-run/src/policy/tools/caps.ts
-function resultCapFor(tool, model, servingModel2, data) {
-  const window2 = servingModel2 && typeof model.window === "function" ? model.window(servingModel2) : void 0;
-  return windowedCap(tool, resultTableCap(tool, data), window2);
-}
-var ERROR_CHARS = 500;
-function failedResult(data) {
-  if (!data || typeof data !== "object" || data.ok !== false) return null;
-  const error = data.error;
-  return typeof error === "string" ? { error: error.slice(0, ERROR_CHARS) } : {};
-}
-function fittedText(text2, failed3, maxChars, originalChars) {
-  const note = truncatedResultNote(originalChars, maxChars);
-  const head = failed3 ? { ok: false, ...failed3 } : {};
-  let body = text2;
-  for (; ; ) {
-    const result = { ...head, truncated: true, note, output: body };
-    const over = JSON.stringify(result).length - maxChars;
-    if (over <= 0 || body.length === 0) return result;
-    body = body.slice(0, Math.max(0, body.length - over - 1));
-  }
-}
-function capToolResult(tool, data, maxChars) {
-  const shaped = shapeToolResult(tool, data, { maxChars });
-  if (!shaped.truncated) return data;
-  const failed3 = failedResult(data);
-  let parsed;
-  try {
-    parsed = JSON.parse(shaped.content);
-  } catch {
-    return fittedText(shaped.content, failed3, maxChars, shaped.bytes);
-  }
-  if (failed3 && parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-    return { ...parsed, ok: false };
-  }
-  return failed3 ? fittedText(shaped.content, failed3, maxChars, shaped.bytes) : parsed;
-}
-
-// ../packages/agent-run/src/policy/tools/index.ts
-var SIGNOFF_TOOL = "builtin_kanban_signoff";
-function selectedTools(ctx, offered) {
-  const { policy, task } = ctx;
-  const tools = offered.filter((t) => !isToolWithheld(policy.approvalGates, t.function?.name ?? "", declaredBy(ctx.ports, t.function?.name)));
-  if (isChatReplyScope(policy.toolScope)) {
-    const allowed = new Set(CHAT_REPLY_SCOPED_TOOLS);
-    const extension = ctx.ports.extensions;
-    return tools.filter((t) => {
-      const name = t.function?.name;
-      return name ? allowed.has(name) || Boolean(extension?.handles(name)) : false;
-    });
-  }
-  const required = policy.signoff ? [SIGNOFF_TOOL] : [];
-  const pinned = [...pinnedNames(ctx), ...required];
-  const own = selectPlatformCatalog(ctx, pinned);
-  if (own) return own.filter((t) => !isToolWithheld(policy.approvalGates, t.function?.name ?? "", declaredBy(ctx.ports, t.function?.name)));
-  const prompt = [task.persona, task.prompt].filter(Boolean).join("\n");
-  const catalog = selectCatalog(tools, policy.role, catalogCaps(ctx), { pinned, required, prompt });
-  const selected = selectToolsForTurn(catalog, { query: task.prompt, pinned });
-  return policy.levers.includes("c3_task_state") ? [...selected.tools, UPDATE_TASK_STATE_SCHEMA] : selected.tools;
-}
-function toolSearchAnswer(ctx, call2) {
-  if (call2.name === UPDATE_TASK_STATE_TOOL && ctx.policy.levers.includes("c3_task_state")) {
-    const updated = applyTaskStateUpdate(ctx.state.taskState, call2.args);
-    if (!updated.ok) return { data: { ok: false, error: updated.error } };
-    ctx.state.taskState = updated.state;
-    return { data: { ok: true, note: "Task state saved \u2014 it is shown to you every turn and kept through compaction." } };
-  }
-  if (call2.name !== TOOL_SEARCH_TOOL) return void 0;
-  const advertised = new Set(selectedTools(ctx, ctx.tools).map((t) => t.function.name));
-  const found = runToolSearch(ctx.tools, advertised, call2.args);
-  if (found.load.length > 0) ctx.state.loadedTools = [.../* @__PURE__ */ new Set([...ctx.state.loadedTools ?? [], ...found.load])];
-  return { data: found.data };
-}
-function loadCalledDeferredTool(ctx, call2) {
-  if (call2.name === TOOL_SEARCH_TOOL || call2.name === UPDATE_TASK_STATE_TOOL) return;
-  if ((ctx.state.loadedTools ?? []).includes(call2.name)) return;
-  if (!ctx.tools.some((t) => t.function?.name === call2.name)) return;
-  if (selectedTools(ctx, ctx.tools).some((t) => t.function?.name === call2.name)) return;
-  ctx.state.loadedTools = [...ctx.state.loadedTools ?? [], call2.name];
-}
-var toolsHook = {
-  select: selectedTools,
-  beforeDispatch: (ctx, call2) => {
-    loadCalledDeferredTool(ctx, call2);
-    return ctx.ports.platform?.readsCovered ? void 0 : coveredReadAnswer(ctx, call2);
-  },
-  meta: toolSearchAnswer,
-  observe: (ctx, call2, result, isError) => ctx.ports.platform?.readsCovered ? void 0 : recordServedRead(ctx, call2, result, isError),
-  gate: gateCall
-};
-function catalogCaps(ctx) {
-  return ctx.ports.capabilities?.capabilities ?? /* @__PURE__ */ new Set();
-}
-function pinnedNames(ctx) {
-  const names = new Set(ctx.state.loadedTools ?? []);
-  for (const message of ctx.messages) {
-    for (const call2 of message.toolCalls ?? []) if (call2.name) names.add(call2.name);
-  }
-  return [...names];
-}
-
-// ../packages/agent-run/src/policy/index.ts
-function defaultPolicyModules() {
-  return {
-    compaction: compactionHook,
-    stall: stallHook,
-    steering: steeringHook,
-    ask: askHook,
-    subagents: subagentsHook,
-    finish: finishHook,
-    guards: guardsHook,
-    verify: verifyHook,
-    memory: memoryHook,
-    context: contextHook,
-    tools: toolsHook,
-    model: modelHook
-  };
-}
-function composePolicyHooks(overrides = {}) {
-  const modules = { ...defaultPolicyModules(), ...overrides };
-  return {
-    compaction: modules.compaction,
-    stall: modules.stall,
-    steering: modules.steering,
-    ask: modules.ask,
-    subagents: modules.subagents,
-    finish: modules.finish,
-    guards: modules.guards,
-    verify: modules.verify,
-    memory: modules.memory,
-    context: modules.context,
-    tools: modules.tools,
-    model: modules.model
-  };
-}
-
-// ../packages/agent-run/src/telemetry/costTally.ts
-function foldTurnCost(running, turnCostMc) {
-  if (running === null || turnCostMc === void 0) return null;
-  return (running ?? 0) + turnCostMc;
-}
-function reportedRunCost(running) {
-  return running ?? void 0;
-}
-
-// ../packages/agent-run/src/telemetry/runTally.ts
-function freshTally() {
-  return { toolCalls: 0, toolErrors: 0, tokens: 0, cacheReadTokens: 0, shellFileReads: 0, repoErrors: 0, mutations: 0, costLatch: true };
-}
-function resumeTally(saved) {
-  const tally = { ...freshTally(), ...saved ?? {} };
-  const tookTurns = !!saved && (saved.costMc != null || (saved.tokens ?? 0) > 0 || saved.model !== void 0 || (saved.toolCalls ?? 0) > 0);
-  if (saved && saved.costLatch !== true && tookTurns) tally.costMc = null;
-  return tally;
-}
-function tallyTurn(tally, model, usage) {
-  if (model) tally.model = model;
-  tally.costMc = foldTurnCost(tally.costMc, usage?.costMc);
-  if (!usage) return;
-  tally.tokens += (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0);
-  tally.cacheReadTokens += usage.cacheReadTokens ?? 0;
-}
-function tallyCall(tally, step, name, args, data, ok) {
-  tally.toolCalls += 1;
-  if (!ok) tally.toolErrors += 1;
-  if (isSpawnTool(name) && tally.firstSpawnTurn === void 0) tally.firstSpawnTurn = step;
-  if (resolveToolAlias(name) === "run_command" && typeof args.command === "string" && parseShellFileRead(args.command)) {
-    tally.shellFileReads += 1;
-  }
-  if (!ok && isNotARepo(errorText(data))) tally.repoErrors += 1;
-}
-function tallyVerify(tally, ok) {
-  tally.verify = ok ? "passed" : "failed";
-}
-function bumpMutations(tally) {
-  tally.mutations += 1;
-}
-function errorText(data) {
-  if (typeof data === "string") return { error: data };
-  if (!data || typeof data !== "object") return {};
-  const d = data;
-  const str2 = (v) => typeof v === "string" ? v : "";
-  return { stdout: `${str2(d.stdout)} ${str2(d.stderr)}`, error: str2(d.error) };
-}
-
-// ../packages/agent-run/src/runState.ts
-function freshState(policy, task) {
-  return {
-    messages: [],
-    step: 0,
-    guards: {},
-    finish: initialFinishGateState(void 0, task.dispatch.parentRunId !== void 0),
-    model: initialModelState(policy),
-    memory: { memory: { created: [], edited: [], deleted: [], read: [], searched: [] }, tools: [] },
-    compaction: { compactions: 0 },
-    writtenPaths: [],
-    askedGates: [],
-    reads: freshReads(),
-    telemetry: freshTally()
-  };
-}
-function initialModelState(policy) {
-  const start = policy.modelStart;
-  if (!start) return initialRunPolicy({ pinnedModel: policy.pinnedModel, ...policy.modelOptions ?? {} });
-  const model = start.model ?? policy.pinnedModel ?? "";
-  if (start.plain) {
-    const review = reviewPhaseModel(start.phaseModels);
-    return initialRunPolicy({
-      pinnedModel: model,
-      ...start.strict ? { strictPin: true } : {},
-      ...start.startPhase ? { startPhase: start.startPhase } : {},
-      ...policy.modelOptions ?? {},
-      ...start.phaseModels ? { phaseModels: start.phaseModels, ...review ? { reviewModel: review } : {} } : {}
-    });
-  }
-  return initialModelRunState({
-    pick: { model, strict: start.strict ?? false },
-    delegatedRole: start.delegatedRole,
-    ...start.phaseModels ? { phaseModels: start.phaseModels } : {}
-  }).policy;
-}
-function freshReads() {
-  return { served: {}, readsWithoutSpawn: { reads: 0, spawned: false, nudged: false } };
-}
-function resumeState(saved, policy, task) {
-  const fresh = freshState(policy, task);
-  return {
-    ...fresh,
-    ...saved,
-    guards: saved.guards ?? fresh.guards,
-    finish: saved.finish ?? fresh.finish,
-    model: saved.model ?? fresh.model,
-    memory: saved.memory ?? fresh.memory,
-    compaction: saved.compaction ?? fresh.compaction,
-    writtenPaths: saved.writtenPaths ?? [],
-    askedGates: saved.askedGates ?? [],
-    reads: saved.reads ?? fresh.reads,
-    telemetry: resumeTally(saved.telemetry),
-    messages: Array.isArray(saved.messages) ? saved.messages : []
-  };
-}
-function asMessages(raw) {
-  const out = [];
-  for (const row of raw) {
-    if (!row || typeof row !== "object") continue;
-    const r = row;
-    if (r.role !== "system" && r.role !== "user" && r.role !== "assistant" && r.role !== "tool") continue;
-    out.push({
-      role: r.role,
-      content: typeof r.content === "string" ? r.content : "",
-      ...Array.isArray(r.toolCalls) ? { toolCalls: r.toolCalls } : {},
-      ...typeof r.toolCallId === "string" ? { toolCallId: r.toolCallId } : {},
-      ...Array.isArray(r.parts) ? { parts: r.parts } : {},
-      ...r.meta && typeof r.meta === "object" ? { meta: r.meta } : {},
-      ...r.isError ? { isError: true } : {}
-    });
-  }
-  return out;
-}
-function rememberWrite(state, call2, ok) {
-  if (!ok) return;
-  if (call2.name === "delete_file") {
-    const gone = typeof call2.args.path === "string" ? call2.args.path : void 0;
-    if (gone) state.writtenPaths = state.writtenPaths.filter((p) => p !== gone);
-    return;
-  }
-  if (call2.name !== "write_file" && call2.name !== "edit_file") return;
-  const path = typeof call2.args.path === "string" ? call2.args.path : void 0;
-  if (path && !state.writtenPaths.includes(path)) state.writtenPaths = [...state.writtenPaths, path];
-}
-function newApprovalId(state) {
-  return `approval-${state.askedGates.length + 1}`;
-}
-
-// ../packages/agent-run/src/runCatalog.ts
-var CORE_REGISTRY = buildCoreToolRegistry();
-for (const tool of [...SKILL_TOOLS, ...SUBAGENT_TOOLS]) CORE_REGISTRY.register(tool);
-var REGISTRIES = /* @__PURE__ */ new WeakMap();
-function registryOf(ports) {
-  const extra = ports.tools;
-  if (!extra || extra.length === 0) return CORE_REGISTRY;
-  let registry2 = REGISTRIES.get(extra);
-  if (!registry2) {
-    registry2 = buildCoreToolRegistry();
-    for (const tool of extra) registry2.register(tool);
-    REGISTRIES.set(extra, registry2);
-  }
-  return registry2;
-}
-function ownsCall(ports, name) {
-  const platform = ports.platform;
-  return platform !== void 0 && (platform.closed === true || !registryOf(ports).has(name));
-}
-function offeredSchemas(ports) {
-  const seen = /* @__PURE__ */ new Set();
-  return [...registryOf(ports).schemasFor(ports.capabilities), ...ports.extensions?.schemas() ?? [], ...ports.platform?.schemas({ rungs: {} }) ?? []].filter((schema) => {
-    const name = schema.function?.name;
-    if (!name || seen.has(name)) return false;
-    seen.add(name);
-    return true;
-  });
-}
-
-// ../packages/agent-run/src/runRows.ts
-var nativeResults = /* @__PURE__ */ new WeakMap();
-var killedResults = /* @__PURE__ */ new WeakSet();
-function nativeOfTurn(meta) {
-  const m = meta && typeof meta === "object" ? meta : void 0;
-  return { ...m?.parts ? { parts: m.parts } : {}, ...m?.native ? { meta: m.native } : {} };
-}
-function toolRow(callId, result, verbatim = false) {
-  const native = nativeResults.get(result);
-  const stopped = killedResults.has(result);
-  return {
-    role: "tool",
-    toolCallId: callId,
-    content: (native || verbatim) && typeof result.data === "string" ? result.data : JSON.stringify(result.data ?? null),
-    ...native?.parts && !stopped ? { parts: native.parts } : {},
-    ...native?.meta ? { meta: native.meta } : {},
-    // A call that did not run because the person steered, or that its signal killed, is answered as a failed one: the row says it
-    // did not do its work. The dispatch result itself is not an error, so neither is counted as a failure - and the kernel clears the
-    // failure streak on it, as on any call that did not fail (a kill resets the streak to 0).
-    ...result.isError || stopped || result.data?.skipped === true ? { isError: true } : {}
-  };
-}
-
-// ../packages/agent-run/src/policy/model/handoff.ts
-function asModelRunState(state) {
-  return { policy: state.model, stallRecoveries: 0, preflightNotices: [] };
-}
-function askOf(req, phase) {
-  return {
-    ...req.model ? { model: req.model } : {},
-    role: req.role,
-    phase,
-    ...req.strict ? { strict: true } : {},
-    ...req.excludeModels.length > 0 ? { excludeModels: req.excludeModels } : {},
-    ...req.toolChoice ? { toolChoice: req.toolChoice } : {}
-  };
-}
-function routeAround(state, status2) {
-  const request = nextTurn(state.model, { hasTools: true });
-  const routed = routeAroundFailure(asModelRunState(state), request, { kind: "transport", ...status2 !== void 0 ? { status: status2 } : {} });
-  state.model = routed.state.policy;
-  const outcome = retryOutcome(routed.state);
-  if (!routed.retry || !outcome) return null;
-  const released = outcome.released;
-  return {
-    retry: askOf(routed.retry, state.model.phase),
-    from: typeof released === "string" ? released : null,
-    released: Boolean(released)
-  };
-}
-function turnSucceeded(state, served) {
-  state.model = recordSuccess(asModelRunState(state), {
-    ...served.model ? { model: served.model } : {},
-    acted: served.acted,
-    ...served.durationMs !== void 0 ? { durationMs: served.durationMs } : {}
-  }).policy;
-  delete state.forceToolChoice;
-}
-
-// ../packages/agent-run/src/policy/model/reask.ts
-function parsedArgs(raw) {
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return void 0;
-  }
-}
-function changesCode(tools, call2) {
-  return tools.includes(call2.name) || isMutatingShellCall(call2.name, parsedArgs(call2.arguments));
-}
-function changedCode(policy, completion) {
-  const tools = policy.codeChangeTools;
-  return !!tools && tools.length > 0 && (completion.toolCalls ?? []).some((call2) => changesCode(tools, call2));
-}
-function reaskAsCoder(state, policy, completion, asked) {
-  if (asked.role !== "plan" || !changedCode(policy, completion)) return void 0;
-  state.model = reduceRunPolicy(state.model, { type: "code_change_attempted" });
-  if (state.model.outcome.kind !== "reask_as_coder") return void 0;
-  const next = nextTurn(state.model, { hasTools: asked.hasTools });
-  const calls = (completion.toolCalls ?? []).map((call2) => ({ name: call2.name, args: call2.arguments }));
-  return {
-    ask: {
-      ...next.model ? { model: next.model } : {},
-      role: next.role,
-      phase: state.model.phase,
-      ...next.strict ? { strict: true } : {},
-      ...next.excludeModels.length > 0 ? { excludeModels: next.excludeModels } : {}
-    },
-    brief: { role: "user", content: coderHandoffBrief(completion.content ?? "", calls) }
-  };
-}
-
-// ../packages/agent-run/src/turnContext.ts
-import { volatileTail as volatileTail2 } from "@seanhogg/builderforce-memory/handoff";
-var EMPTY_PACK = { focus: [], facts: [], recall: [] };
-async function buildContextPack(input, hooks, state, offered) {
-  let pack;
-  try {
-    pack = await input.ports.context.pack(input.task);
-  } catch {
-    pack = EMPTY_PACK;
-  }
-  const built = pack;
-  const once = { ...input, ports: { ...input.ports, context: { pack: () => built } } };
-  let recalled = void 0;
-  try {
-    recalled = await hooks.context.recall(policyContext(once, state, { messages: [], tools: offered }, state.step, 0));
-  } catch {
-    recalled = void 0;
-  }
-  return recalled && recalled.length > 0 ? { ...pack, recall: [...pack.recall, ...recalled] } : pack;
-}
-function openingRows(task, gates) {
-  const system = [];
-  const governance = renderPolicyDirectives(gates);
-  if (governance) system.push(governance);
-  if (task.persona && task.persona.trim()) system.push(task.persona.trim());
-  return [
-    ...system.length > 0 ? [{ role: "system", content: system.join("\n\n") }] : [],
-    { role: "user", content: task.prompt }
-  ];
-}
-function turnContextBlock(pack, brief, sections = []) {
-  const lines = [];
-  for (const file of pack.focus) {
-    if (file.content !== void 0) {
-      lines.push(`## ${file.path}`, file.content);
-    } else if (file.outline && file.outline.length > 0) {
-      lines.push(`## ${file.path} (outline)`);
-      for (const entry of file.outline) lines.push(`- ${entry.heading} (line ${entry.line})`);
-    }
-  }
-  if (pack.chat) {
-    lines.push(`## chat`, `${pack.chat.tickets.length} linked tickets, ${pack.chat.runs.length} runs`);
-  }
-  for (const repo of pack.repos ?? []) {
-    lines.push(`## repo ${repo.repo}`, `branch ${repo.branch}`, repo.dirty.length > 0 ? `dirty: ${repo.dirty.join(", ")}` : "clean");
-  }
-  for (const fact of pack.facts) lines.push(`## ${fact.key}`, fact.content);
-  if (pack.recall.length > 0) lines.push("## recall", ...pack.recall);
-  if (brief && brief.trim()) lines.push("## brief", brief.trim());
-  for (const section of sections) if (section.trim()) lines.push(section.trim());
-  if (lines.length === 0) return null;
-  return lines.join("\n");
-}
-function withVolatileTail(transcript, pack, brief, sections = []) {
-  const tail = volatileTail2([turnContextBlock(pack, brief, sections)]);
-  return tail ? [...transcript, tail] : [...transcript];
-}
-
-// ../packages/agent-run/src/runTurn.ts
-var callKinds = /* @__PURE__ */ new WeakMap();
-var causes = /* @__PURE__ */ new WeakMap();
-function isResumable(input, err) {
-  return !(err instanceof ModelTransportError) && input.ports.store.isResumable?.(err) === true;
-}
-function causeOf(state) {
-  return causes.get(state);
-}
-var SYNTHESIS_MAX_TOKENS = 1e3;
-function adoptServedModel(policy, state, served) {
-  if (policy.modelStart?.plain) return;
-  if (served && served !== "default" && !state.model.strictPin) state.model = { ...state.model, model: served };
-}
-function withoutToolChoiceIf(drop, fields) {
-  if (!drop || !("toolChoice" in fields)) return fields;
-  const { toolChoice: _dropped, ...rest } = fields;
-  return rest;
-}
-function askFields(ask2) {
-  if (!ask2) return {};
-  return {
-    ...ask2.role ? { role: ask2.role } : {},
-    ...ask2.phase ? { phase: ask2.phase } : {},
-    ...ask2.toolChoice ? { toolChoice: ask2.toolChoice } : {},
-    ...ask2.strict ? { strict: true } : {},
-    ...ask2.excludeModels && ask2.excludeModels.length > 0 ? { excludeModels: ask2.excludeModels } : {}
-  };
-}
-async function completeTurn(input, state, hooks, ctx, offered, transcript, pack, made) {
-  const view = currentView(transcript, offered);
-  const pctx = policyContext(input, state, view, ctx.step, ctx.stepInCall);
-  const selected = made ? made.tools : await hooks.tools.select(pctx, offered);
-  const tools = selected ? [...selected] : offered;
-  const advertisedSet = tools.map((t) => t.function?.name ?? "").join(",");
-  if (state.advertisedSignature !== advertisedSet) {
-    state.advertisedSignature = advertisedSet;
-    await emit(input.ports.events, { kind: "context.tools", step: ctx.step, advertised: tools.length, catalog: offered.length, toolsTokens: toolsTokensOf(tools), loaded: state.loadedTools ?? [] });
-  }
-  const mctx = { ...pctx, tools, ...made?.finalBy === "guards" ? { finalTurn: true } : {} };
-  const decision = await hooks.model.resolve(mctx);
-  const model = decision ? decision.model : input.policy.pinnedModel;
-  const brief = await hooks.memory.brief(pctx);
-  const sections = [...input.ports.context.turnSections?.() ?? [], ...made?.tail ?? []];
-  const fields = hooks.model.turnFields?.(mctx);
-  const reasoning = hooks.guards.reasoning?.(pctx);
-  const firstAsk = {
-    ...decision?.role ? { role: decision.role } : {},
-    ...decision?.strict ? { strict: true } : {},
-    ...decision?.excludeModels && decision.excludeModels.length > 0 ? { excludeModels: [...decision.excludeModels] } : {},
-    ...fields ?? {}
-  };
-  const requestFor = (askedModel, ask2, extra = []) => ({
-    messages: measureTurnTail(state, withVolatileTail(extra.length > 0 ? [...transcript, ...extra] : transcript, pack, brief ?? null, sections)),
-    ...askedModel ? { model: askedModel, strict: ask2?.strict ?? false } : {},
-    ...tools.length > 0 ? { tools } : {},
-    ...decision?.maxTokens !== void 0 ? { maxTokens: decision.maxTokens } : {},
-    // A tool choice means nothing without tools (and a provider may refuse it): a turn advertising none never sends one.
-    ...withoutToolChoiceIf(tools.length === 0, askFields(ask2)),
-    ...tools.length > 0 && made?.toolChoice && !ask2?.toolChoice ? { toolChoice: made.toolChoice } : {},
-    ...reasoning ? { reasoning } : {}
-  });
-  let asked = model;
-  let completion;
-  let startedAt = Date.now();
-  try {
-    completion = await input.ports.model.complete(requestFor(model, firstAsk), input.signal);
-  } catch (err) {
-    if (input.signal?.aborted) throw err;
-    const reason = err instanceof Error ? err.message : String(err);
-    if (isResumable(input, err)) causes.set(state, err);
-    if (isTransportFailure(err) && hooks.model.recoverFailure) {
-      const route = hooks.model.recoverFailure(pctx, err.failure, err.failure.model ?? model, reason);
-      if (route.kind === "retry") {
-        if (route.note) appendRows(input, transcript, { role: "system", content: route.note });
-        return { skip: true };
-      }
-      return { failed: `provider failed: ${reason}` };
-    }
-    const routed = err instanceof ModelTransportError && err.routable ? routeAround(state, err.status) : null;
-    if (!routed) return { failed: reason };
-    await emit(input.ports.events, { kind: "model.cascade", step: ctx.step, from: routed.from, status: err instanceof ModelTransportError ? err.status ?? null : null, released: routed.released });
-    asked = routed.retry.model;
-    startedAt = Date.now();
-    try {
-      completion = await input.ports.model.complete(requestFor(routed.retry.model, routed.retry), input.signal);
-    } catch (retryErr) {
-      if (input.signal?.aborted) throw retryErr;
-      if (isResumable(input, retryErr)) causes.set(state, retryErr);
-      return { failed: retryErr instanceof Error ? retryErr.message : String(retryErr) };
-    }
-  }
-  const reask = reaskAsCoder(state, input.policy, completion, { role: firstAsk.role, hasTools: tools.length > 0 });
-  if (reask) {
-    await emit(input.ports.events, { kind: "model.coder_reask", step: ctx.step, ...completion.model ? { model: completion.model } : {} });
-    asked = reask.ask.model;
-    startedAt = Date.now();
-    try {
-      completion = await input.ports.model.complete(requestFor(reask.ask.model, reask.ask, [reask.brief]), input.signal);
-    } catch (err) {
-      if (input.signal?.aborted) throw err;
-      if (isResumable(input, err)) causes.set(state, err);
-      return { failed: err instanceof Error ? err.message : String(err) };
-    }
-  }
-  turnSucceeded(state, { acted: (completion.toolCalls ?? []).length > 0, durationMs: Date.now() - startedAt, ...completion.model ? { model: completion.model } : {} });
-  adoptServedModel(input.policy, state, completion.model);
-  const downgrade = hooks.model.downgrade?.(pctx, asked, completion.model);
-  if (downgrade) await emit(input.ports.events, downgrade);
-  return {
-    content: completion.content ?? "",
-    toolCalls: (completion.toolCalls ?? []).map((call2) => ({ id: call2.id, name: call2.name, arguments: call2.arguments })),
-    meta: { model: completion.model, usage: completion.usage, interrupted: completion.interrupted, ...completion.parts ? { parts: completion.parts } : {}, ...completion.meta ? { native: completion.meta } : {} }
-  };
-}
-async function synthesizeFinal(input, state, hooks, transcript, pack, tally) {
-  if (input.signal?.aborted) return null;
-  const pctx = policyContext(input, state, currentView(transcript, []), state.step, 0);
-  const prompt = hooks.stall.synthesis?.(pctx);
-  if (!prompt) return null;
-  const decision = await hooks.model.resolve(pctx);
-  const model = decision ? decision.model : input.policy.pinnedModel;
-  const fields = hooks.model.turnFields?.(pctx);
-  const ask2 = { role: "user", content: prompt };
-  let completion;
-  try {
-    completion = await input.ports.model.complete(
-      {
-        messages: [...withVolatileTail(transcript, pack, null, input.ports.context.turnSections?.() ?? []), ask2],
-        ...model ? { model, strict: decision?.strict ?? false } : {},
-        maxTokens: SYNTHESIS_MAX_TOKENS,
-        ...askFields(fields)
-      },
-      input.signal
-    );
-  } catch (err) {
-    if (isResumable(input, err)) throw err;
-    return null;
-  }
-  adoptServedModel(input.policy, state, completion.model);
-  tallyTurn(tally, completion.model, completion.usage);
-  await emit(input.ports.events, {
-    kind: "model.completed",
-    step: state.step,
-    ...completion.model ? { model: completion.model } : {},
-    ...completion.usage ? { usage: completion.usage } : {}
-  });
-  const raw = completion.content ?? "";
-  const output = hooks.stall.settle ? hooks.stall.settle(pctx, raw) : raw.trim();
-  if (!output) return null;
-  appendRows(input, transcript, ask2, { role: "assistant", content: output });
-  return output;
-}
-async function dispatchCall(input, state, call2, watch, facts = { refused: false }, step = state.step) {
-  const { ports, signal } = input;
-  if (call2.malformed) return declineMalformedCall(ports, call2, facts, step);
-  const platform = ports.platform;
-  const own = ownsCall(ports, call2.name);
-  if (platform && own && platform.handsOff?.(call2.name) && state.model.phase === "plan") {
-    state.model = reduceRunPolicy(state.model, { type: "hand_off" });
-  }
-  try {
-    const box = {};
-    const exec = async (name, args, stepSignal) => {
-      const run = stepSignal ?? signal;
-      const extension = ports.extensions;
-      if (extension?.handles(name)) {
-        const ran = await extension.dispatch(name, args, run);
-        if (ran.isError) box.failed = true;
-        if (ran.control) box.control = ran.control;
-        return ran.data;
-      }
-      if (platform && own) {
-        const result2 = await platform.execute(name, args, { ...run ? { signal: run } : {}, progress: { rungs: state.stall?.rungs ?? {} }, callId: call2.id, step });
-        box.failed = result2.isError === true;
-        if (result2.parts || result2.meta) box.native = { ...result2.parts ? { parts: result2.parts } : {}, ...result2.meta ? { meta: result2.meta } : {} };
-        if (result2.cached) box.kind = "cached";
-        else if (result2.neutral) box.kind = "neutral";
-        if (result2.aborted) {
-          box.killed = true;
-          return signal?.aborted ? stoppedResult(result2.data) : interruptedResult(result2.data);
-        }
-        return result2.data;
-      }
-      const result = await registryOf(ports).dispatch(name, args, { caps: ports.capabilities, ...run ? { signal: run } : {} });
-      box.control = result.control;
-      return extension?.shape ? extension.shape(name, result.data) : result.data;
-    };
-    const data = own && platform?.watchesItself ? await exec(call2.name, call2.args) : await runToolWithWatch(exec, watch, signal, call2.name, call2.args, own ? platform?.interruptible : void 0);
-    const surfaceCap = own ? platform?.resultCap?.(state.model.model) : void 0;
-    const capped = capToolResult(call2.name, data, surfaceCap ?? resultCapFor(call2.name, ports.model, state.model.model, data));
-    const failed3 = box.failed === true || !own && !!capped && capped.ok === false && capped.skipped !== true;
-    const dispatched = { data: capped, ...box.control ? { control: box.control } : {}, ...failed3 ? { isError: true } : {} };
-    if (box.kind) callKinds.set(dispatched, box.kind);
-    if (box.native) nativeResults.set(dispatched, box.native);
-    if (box.killed) killedResults.add(dispatched);
-    return dispatched;
-  } catch (err) {
-    if (signal?.aborted || isResumable(input, err)) throw err;
-    const reason = err instanceof Error ? err.message : String(err);
-    return { data: { ok: false, error: reason }, isError: true };
-  }
-}
-async function declineMalformedCall(ports, call2, facts, step) {
-  const truncated = facts.interruption === "truncated";
-  const policy = ports.platform?.malformed;
-  const answered2 = await policy?.answer?.({ id: call2.id, name: call2.name, arguments: call2.raw.arguments }, { step, truncated });
-  if (answered2) {
-    facts.refused = true;
-    return { data: answered2.data, ...answered2.isError ? { isError: true } : {} };
-  }
-  const outcome = malformedCallOutcome(call2, truncated, truncated ? policy?.retryHint : void 0);
-  facts.refused = true;
-  policy?.refused?.({ name: call2.name, arguments: call2.raw.arguments }, truncated, outcome);
-  return { data: outcome, isError: true };
-}
-
-// ../packages/agent-run/src/telemetry/outcomeRow.ts
-function buildOutcomeRow(input) {
-  const { state } = input;
-  const tally = resumeTally(state.telemetry);
-  const progress = state.guards?.progress;
-  const preflight = state.preflight;
-  const runCost = reportedRunCost(tally.costMc);
-  return {
-    entryPoint: input.entryPoint,
-    ...input.runId ? { runId: input.runId } : {},
-    ...input.parentRunId ? { parentRunId: input.parentRunId } : {},
-    steps: state.step,
-    toolCalls: tally.toolCalls,
-    toolErrors: tally.toolErrors,
-    compactions: state.compaction?.compactions ?? 0,
-    stallRecoveries: state.stall?.recoveriesTotal ?? 0,
-    escalations: state.guards?.escalations ?? 0,
-    verify: tally.verify ?? "not-run",
-    terminalStatus: input.kind,
-    ...tally.model ? { model: tally.model } : {},
-    tokens: tally.tokens,
-    cacheReadTokens: tally.cacheReadTokens,
-    ...runCost !== void 0 ? { cost: runCost } : {},
-    firstSpawnTurn: tally.firstSpawnTurn ?? null,
-    coveredReadStubs: state.reads?.stubCount ?? 0,
-    shellFileReads: tally.shellFileReads,
-    repoErrors: tally.repoErrors,
-    contextPackTokens: contextPackTokens(state),
-    ...preflight ? { modelPreflight: preflight } : {},
-    unkeptReadyClaims: progress?.unkeptTurns ?? 0,
-    progressTrips: tripsBySignal(progress?.tripsBySignal),
-    ...input.reason === RUN_CANCELLED_REASON ? { cancelled: true } : {},
-    ...input.kind === "failed" && isRateLimitFailure(input.reason) ? { rateLimited: true } : {},
-    // The tenant spent its own allowance: stored, and never taught to routing. Classified HERE, once, so every reporter that sends the row carries it.
-    ...input.kind === "failed" && isTenantBudgetFailure(input.reason) ? { quotaExhausted: true } : {},
-    ...isDegraded(state) ? { degraded: true } : {}
-  };
-}
-function isDegraded(state) {
-  return (state.degradedBy?.length ?? 0) > 0;
-}
-function tripsBySignal(bySignal) {
-  const out = {};
-  for (const [signal, n2] of Object.entries(bySignal ?? {})) if (n2) out[signal] = n2;
-  return out;
-}
-function contextPackTokens(state) {
-  if (!state.context) return 0;
-  const block = turnContextBlock(state.context, null);
-  return block ? defaultEstimateTokens3(block) : 0;
-}
-
-// ../packages/agent-run/src/runSettle.ts
-async function settle(input, hooks, state, transcript, kind, extra) {
-  state.messages = transcript;
-  let cause = extra.cause;
-  if ((kind === "finished" || kind === "failed") && cause === void 0) {
-    try {
-      const consolidated = await hooks.memory.consolidate(
-        policyContext(input, state, currentView(transcript, []), state.step, 0),
-        { learn: kind === "finished" }
-      );
-      if (consolidated !== void 0) await input.ports.store.commitMemory?.(consolidated);
-    } catch (err) {
-      if (isResumable(input, err)) cause = err;
-    }
-  }
-  const resumable = cause !== void 0;
-  try {
-    await input.ports.store.save(state);
-  } catch {
-  }
-  if (kind === "yielded" || resumable) {
-    return kind === "failed" || cause !== void 0 ? { kind: "failed", reason: extra.reason ?? (cause instanceof Error ? cause.message : "failed"), state, cause } : { kind: "yielded", state };
-  }
-  if (kind === "finished" || kind === "failed") {
-    const row = buildOutcomeRow({ entryPoint: input.policy.entryPoint, runId: input.task.runId, parentRunId: input.task.dispatch.parentRunId, kind, ...extra.reason !== void 0 ? { reason: extra.reason } : {}, state });
-    try {
-      await input.ports.events.outcome?.(row);
-    } catch {
-    }
-    await emit(input.ports.events, { kind: "run.finished", step: state.step, outcome: kind });
-  }
-  if (kind === "finished") return { kind, output: extra.output ?? "", state };
-  if (kind === "paused") return { kind, question: extra.question ?? "", approvalId: extra.approvalId ?? newApprovalId(state), state };
-  return { kind, reason: extra.reason ?? "failed", state, ...extra.cause !== void 0 ? { cause: extra.cause } : {}, ...extra.exhausted ? { exhausted: true } : {}, ...extra.failureStreak !== void 0 ? { failureStreak: extra.failureStreak } : {} };
-}
-
-// ../packages/agent-run/src/kernelSteering.ts
-function steeringTakers(run, contextAt) {
-  const { input, hooks } = run;
-  const { ports } = input;
-  const stopsOn = (texts) => input.policy.stopWords !== false && isStopSteer(texts);
-  const append = (...rows) => appendRows(input, run.transcript, ...rows);
-  const takeSteers = async (ctx) => {
-    const steered = (await ports.steering?.drain({ step: ctx.step }) ?? []).map(steerInput);
-    if (steered.length === 0) return "none";
-    const texts = steered.map((s) => s.text);
-    if (stopsOn(texts)) {
-      run.stopped = true;
-      return "stop";
-    }
-    const injected = await hooks.steering.inject(contextAt(ctx.step, ctx.stepInCall), texts);
-    const rows = injected ?? texts.map((text2) => ({ role: "user", content: text2 }));
-    append(...rows.map((row, i) => ({ ...row, ...rows.length === steered.length && steered[i]?.parts?.length && !row.parts ? { parts: steered[i].parts } : {}, person: true })));
-    for (let i = 0; i < steered.length; i += 1) await emit(ports.events, { kind: "steer.applied", step: ctx.step });
-    return "applied";
-  };
-  const takeJoined = async (ctx) => {
-    const steered = (await ports.steering?.drain({ step: ctx.step }) ?? []).map(steerInput);
-    if (steered.length === 0) return "none";
-    const texts = steered.map((s) => s.text);
-    if (stopsOn(texts)) {
-      run.stopped = true;
-      return "stop";
-    }
-    for (let i = 0; i < steered.length; i += 1) await emit(ports.events, { kind: "steer.applied", step: ctx.step });
-    return { text: texts.join("\n\n"), parts: steered.flatMap((s) => s.parts ?? []) };
-  };
-  const lateSteerNote = async (ctx) => {
-    const steered = (await ports.steering?.drain({ step: ctx.step }) ?? []).map(steerInput);
-    if (steered.length === 0) return null;
-    const texts = steered.map((s) => s.text);
-    if (stopsOn(texts)) {
-      run.stopped = true;
-      return null;
-    }
-    for (let i = 0; i < steered.length; i += 1) await emit(ports.events, { kind: "steer.applied", step: ctx.step });
-    const many = texts.length > 1;
-    return {
-      note: `The user sent ${many ? "messages" : "a message"} while you were finishing, so do not finish yet:
-${texts.map((t) => `- ${t}`).join("\n")}
-Address ${many ? "them" : "it"}, then finish.`
-    };
-  };
-  const takeFollowUps = async (ctx) => {
-    const followUps = (await ports.steering?.followUp?.() ?? []).map(steerInput);
-    if (followUps.length === 0) return false;
-    append(...followUps.map((f) => ({ role: "user", content: f.text, person: true, ...f.parts?.length ? { parts: f.parts } : {} })));
-    for (let i = 0; i < followUps.length; i += 1) await emit(ports.events, { kind: "steer.applied", step: ctx.step });
-    return true;
-  };
-  return { takeSteers, takeJoined, lateSteerNote, takeFollowUps };
-}
-
-// ../packages/agent-run/src/kernelNoTools.ts
-function noToolCallsHook(run, deps) {
-  const { input, hooks } = run;
-  const { ports, policy } = input;
-  const { append } = deps;
-  const sentBack = async (step, content, kept = "block") => {
-    await ports.delivery?.sentBack?.({ step, content, kept });
-  };
-  const requeue2 = async (pctx, step, said, note, kept = "block", parts = [], tell = true) => {
-    if (tell) await sentBack(step, said, kept);
-    const quoted = kept === "reply" && ports.delivery?.owns?.settle && hooks.stall.settle ? hooks.stall.settle(pctx, said) : said;
-    if (quoted.trim() || ports.delivery?.stall?.quoteEmpty) append({ role: "assistant", content: quoted, ...run.turnNative });
-    append({ role: "user", content: note, ...parts.length > 0 ? { parts: [...parts] } : {} });
-  };
-  return async (ctx, turn) => {
-    const pctx = deps.contextAt(ctx.step, ctx.stepInCall);
-    pctx.content = turn.content;
-    pctx.served = { ...run.facts.model ? { model: run.facts.model } : {}, ...run.facts.interruption ? { interruption: run.facts.interruption } : {} };
-    const judged = ports.delivery?.judged?.(turn.content);
-    if (judged !== void 0) pctx.judged = judged;
-    if (ports.delivery?.stall?.menu && run.selection?.tools) pctx.tools = [...run.selection.tools];
-    const finalTurn = run.selection?.final === true;
-    if (finalTurn) pctx.tools = [];
-    const steersFirst = ports.delivery?.stall?.steersFirst === true;
-    if (steersFirst) {
-      const steered = await deps.takeJoined(ctx);
-      if (steered === "stop") return { action: "stop", ok: false, output: "cancelled", finished: true };
-      if (steered !== "none") {
-        await requeue2(pctx, ctx.step, turn.content, steered.text, "block", steered.parts);
-        return { action: "continue" };
-      }
-    }
-    const children = await hooks.finish.liveChildren?.(pctx);
-    if (children) {
-      await requeue2(pctx, ctx.step, turn.content, children);
-      return { action: "continue" };
-    }
-    const stalled2 = run.watch.hasInterrupt() || finalTurn ? void 0 : await (hooks.stall.recoverAsync ? hooks.stall.recoverAsync(pctx) : hooks.stall.recover(pctx));
-    if (stalled2?.action === "steer" || stalled2?.action === "escalate") await sentBack(ctx.step, turn.content, stalled2.action === "escalate" ? "reply" : "block");
-    else if (stalled2?.action === "pause" && policy.stallExhausted === "settle") await sentBack(ctx.step, turn.content, "settled");
-    if (stalled2) await emit(ports.events, { kind: "stall.recovered", step: ctx.step, action: stalled2.action, ...stalled2.note ? { note: stalled2.note } : {}, ...stalled2.detail ? { detail: stalled2.detail } : {} });
-    if (stalled2 && stalled2.action === "pause") {
-      const notice = stalled2.note ?? "paused";
-      if (policy.stallExhausted === "finish") return { action: "finish", output: turn.content.trim() ? `${turn.content}
-
-${notice}` : notice };
-      if (policy.stallExhausted === "settle") {
-        const settled2 = hooks.stall.settle ? hooks.stall.settle(pctx, turn.content) : turn.content;
-        if (settled2.trim()) append({ role: "assistant", content: settled2, ...run.turnNative });
-        return { action: "finish", output: settled2 };
-      }
-      if (policy.stallExhausted === "note") await requeue2(pctx, ctx.step, turn.content, notice);
-      return { action: "stop", ok: false, output: notice, finished: true };
-    }
-    if (stalled2 && stalled2.action === "fail") {
-      return { action: "stop", ok: false, output: stalled2.note ?? "failed", finished: true };
-    }
-    if (stalled2 && stalled2.action === "settle") {
-      const answer2 = stalled2.note ?? "";
-      if (answer2.trim()) append({ role: "assistant", content: answer2 });
-      return { action: "finish", output: answer2 };
-    }
-    if (stalled2) {
-      const kept = stalled2.action === "escalate" ? "reply" : "block";
-      if (stalled2.rows) append(...stalled2.rows);
-      else await requeue2(pctx, ctx.step, turn.content, stalled2.note ?? "Continue: do the work, do not describe it.", kept, [], false);
-      return { action: "continue" };
-    }
-    const owed = hooks.finish.settleBlock(pctx);
-    if (owed) await emit(ports.events, { kind: "finish.blocked", step: ctx.step, reason: "review_verdict_missing", block: owed, detail: { ...policy.signoff } });
-    const block = owed ?? hooks.subagents.backstop(pctx);
-    if (block) {
-      await requeue2(pctx, ctx.step, turn.content, block);
-      return { action: "continue" };
-    }
-    const open2 = finalTurn ? null : await hooks.finish.openWork?.(pctx);
-    if (open2) {
-      await emit(ports.events, { kind: "finish.blocked", step: ctx.step, reason: LINKED_WORK_OPEN, block: open2 });
-      await requeue2(pctx, ctx.step, turn.content, open2);
-      return { action: "continue" };
-    }
-    const output = hooks.stall.settle ? hooks.stall.settle(pctx, turn.content) : turn.content;
-    if (steersFirst) {
-      const late2 = await deps.takeJoined(ctx);
-      if (late2 === "stop") return { action: "stop", ok: false, output: "cancelled", finished: true };
-      if (late2 !== "none") {
-        await requeue2(pctx, ctx.step, turn.content, late2.text, "block", late2.parts);
-        return { action: "continue" };
-      }
-    }
-    if (output.trim()) append({ role: "assistant", content: output, ...run.turnNative });
-    const late = await deps.takeSteers(ctx);
-    if (late === "stop") return { action: "stop", ok: false, output: "cancelled", finished: true };
-    if (late === "applied") {
-      await sentBack(ctx.step, turn.content);
-      return { action: "continue" };
-    }
-    if (await deps.takeFollowUps(ctx)) {
-      await sentBack(ctx.step, turn.content);
-      return { action: "continue" };
-    }
-    if (finalTurn) await ports.delivery?.finalAccepted?.({ step: ctx.step, content: turn.content });
-    return { action: "finish", output };
-  };
-}
-
-// ../packages/agent-run/src/kernelHooks.ts
-var MUTATING_TOOLS = /* @__PURE__ */ new Set(["write_file", "edit_file", "delete_file"]);
-function isMutationCall(name, args) {
-  if (MUTATING_TOOLS.has(name)) return true;
-  return !isReadOnlyShellCall(name, args);
-}
-var ASK_TOOLS = /* @__PURE__ */ new Set(["ask_human", "ask_user"]);
-function asLoopControl(control) {
-  return control;
-}
-function optionsOf(control) {
-  const options = control.options;
-  return Array.isArray(options) ? options.filter((o) => typeof o === "string") : void 0;
-}
-function rewriteRow(row, data, verbatim) {
-  row.content = verbatim && typeof data === "string" ? data : JSON.stringify(data ?? null);
-}
-function kernelHooks(run) {
-  const { input, state, hooks, transcript, offered, tally } = run;
-  const { ports, policy } = input;
-  const contextAt = (step, turn) => policyContext(input, state, currentView(transcript, offered), step, turn);
-  const append = (...rows) => appendRows(input, transcript, ...rows);
-  const verifyBlock = async (pctx) => {
-    if (policy.verify === "none") return null;
-    const verdict = await hooks.verify.verify(pctx);
-    if (verdict) tallyVerify(tally, verdict.ok);
-    return verdict && !verdict.ok ? verdict.note ?? "Verification failed: fix it before finishing." : null;
-  };
-  const stubs = /* @__PURE__ */ new WeakSet();
-  const held = /* @__PURE__ */ new WeakSet();
-  const starts = /* @__PURE__ */ new Map();
-  const { takeSteers, takeJoined, lateSteerNote, takeFollowUps } = steeringTakers(run, contextAt);
-  return {
-    beforeTurn: async (ctx) => {
-      const verdict = run.budget?.beforeTurn();
-      if (verdict?.kind === "contain") {
-        append({ role: "assistant", content: verdict.text });
-        await emit(ports.events, { kind: "budget.contained", step: ctx.step, spentMc: verdict.spentMc, capMc: verdict.capMc, unpricedCalls: verdict.unpricedCalls, text: verdict.text });
-        return { action: "stop", ok: true, finished: true, output: verdict.text };
-      }
-      if (verdict?.kind === "warn") {
-        const tail = volatileTail([verdict.text]);
-        if (tail) append({ role: tail.role, content: String(tail.content) });
-        await emit(ports.events, { kind: "budget.warning", step: ctx.step, spentMc: verdict.spentMc, capMc: verdict.capMc, unpricedCalls: verdict.unpricedCalls, text: verdict.text });
-      }
-      if (await takeSteers(ctx) === "stop") return { action: "stop", ok: false, output: RUN_CANCELLED_REASON, finished: true };
-      const base = currentView(transcript, offered);
-      const selectNow = async () => hooks.tools.select(policyContext(input, state, base, ctx.step, ctx.stepInCall), offered);
-      const menu = await ports.platform?.turn?.({
-        step: ctx.step,
-        select: async () => await selectNow() ?? offered,
-        progress: { rungs: state.stall?.rungs ?? {} },
-        cache: run.cache
-      });
-      const finalBy = finalSource(menu, () => hooks.guards.finalTurn?.(policyContext(input, state, base, ctx.step, ctx.stepInCall)) === true);
-      const finalTurn = finalBy !== void 0;
-      const advertised = finalTurn ? [] : menu?.tools ?? await selectNow();
-      run.selection = {
-        tools: advertised,
-        ...menu?.toolChoice && !finalTurn ? { toolChoice: menu.toolChoice } : {},
-        ...menu?.tail && menu.tail.length > 0 ? { tail: menu.tail } : {},
-        ...finalBy ? { final: true, finalBy } : {}
-      };
-      const view = advertised ? { ...base, tools: [...advertised] } : base;
-      const compacted = await hooks.compaction.compact(policyContext(input, state, view, ctx.step, ctx.stepInCall));
-      if (compacted) {
-        applyCompaction(state, view, compacted, ctx.step);
-        await emit(ports.events, {
-          kind: "context.compacted",
-          step: ctx.step,
-          dropped: compacted.dropped,
-          ...compacted.beforeTokens !== void 0 ? { beforeTokens: compacted.beforeTokens } : {},
-          ...compacted.afterTokens !== void 0 ? { afterTokens: compacted.afterTokens } : {},
-          ...compacted.summarized !== void 0 ? { summarized: compacted.summarized } : {},
-          ...compacted.masked ? { masked: compacted.masked } : {},
-          ...compacted.note ? { note: compacted.note } : {},
-          ...compacted.covered !== void 0 ? { covered: compacted.covered } : {}
-        });
-      }
-      run.facts.model = void 0;
-      run.facts.interruption = void 0;
-      await emit(ports.events, { kind: "turn.started", step: ctx.step });
-      return void 0;
-    },
-    afterTurn: async (ctx, turn) => {
-      run.turnContent = turn.content ?? "";
-      run.turnNative = nativeOfTurn(turn.meta);
-      const meta = turn.meta && typeof turn.meta === "object" ? turn.meta : void 0;
-      const model = meta ? meta.model : tally.model;
-      const usage = meta?.usage;
-      run.facts.model = meta?.model;
-      run.facts.interruption = meta?.interrupted;
-      if (run.selection?.finalBy === "guards") hooks.guards.finalTurnDone?.(contextAt(ctx.step, ctx.stepInCall));
-      tallyTurn(tally, model, usage);
-      if (run.budget?.afterTurn(usage)) await emit(ports.events, { kind: "budget.unpriced", step: ctx.step, ...model ? { model } : {} });
-      await emit(ports.events, { kind: "model.completed", step: ctx.step, ...model ? { model } : {}, ...usage ? { usage } : {} });
-    },
-    onNoToolCalls: noToolCallsHook(run, { contextAt, append, takeSteers, takeJoined, takeFollowUps }),
-    onRepetitionLoop: async (ctx, loop) => {
-      await emit(ports.events, { kind: "loop.repetition", step: ctx.step, copies: loop.copies, block: loop.block });
-    },
-    beforeToolCalls: (_ctx, turn, calls) => {
-      const output = ports.extensions?.terminalTurn?.({ content: turn.content ?? "" }, calls.map((c) => ({ name: c.name, args: c.args, malformed: c.malformed })));
-      return output === void 0 ? void 0 : { action: "stop", ok: true, output, finished: true };
-    },
-    beforeDispatch: async (call2, ctx) => {
-      starts.set(call2.id, Date.now());
-      const pctx = contextAt(ctx.step, ctx.stepInCall);
-      const pcall = toPolicyCall(call2);
-      const gated = await hooks.tools.gate?.(pctx, pcall);
-      if (gated) {
-        const refused = { data: gated.data, isError: true, ...gated.control ? { control: asLoopControl(gated.control) } : {} };
-        if (gated.control) held.add(refused);
-        return { result: refused };
-      }
-      const decision = await hooks.guards.beforeDispatch?.(pctx, pcall);
-      if (decision?.skip) {
-        const { data, isError, control } = decision.skip;
-        const skipped = { data, isError: isError ?? true, ...control ? { control: asLoopControl(control) } : {} };
-        if (control) held.add(skipped);
-        return { result: skipped };
-      }
-      if (ASK_TOOLS.has(call2.name)) {
-        const note = hooks.subagents.backstop(pctx);
-        if (note) return { result: { data: { ok: false, error: note }, isError: true } };
-      }
-      const meta = hooks.tools.meta?.(pctx, pcall);
-      if (meta) return { result: { data: meta.data } };
-      const covered = hooks.tools.beforeDispatch?.(pctx, pcall);
-      if (covered) {
-        const stub = { data: covered.data };
-        stubs.add(stub);
-        run.cache.served(ctx.step);
-        return { result: stub };
-      }
-      const platform = ports.platform;
-      if (platform?.preflight && ownsCall(ports, call2.name)) {
-        const pre = await platform.preflight({ id: call2.id, name: call2.name, args: call2.args, arguments: call2.raw.arguments, malformed: call2.malformed }, { step: ctx.step });
-        if (pre && "result" in pre) return { result: { data: pre.result.data, ...pre.result.isError ? { isError: true } : {} } };
-        if (pre && "rewrite" in pre) {
-          const { name, args } = pre.rewrite;
-          return { rewrite: { ...call2, name, args, raw: { ...call2.raw, name, arguments: JSON.stringify(args) } } };
-        }
-      }
-      return void 0;
-    },
-    onFinish: async (ctx, summary, call2) => {
-      const pctx = contextAt(ctx.step, ctx.stepInCall);
-      pctx.content = summary;
-      pctx.toolCalls = [toPolicyCall(call2)];
-      const verifyRefused = await verifyBlock(pctx);
-      const gated = verifyRefused ?? await hooks.finish.gate(pctx);
-      const reason = verifyRefused ? "verify" : lastFinishReason(state);
-      const judged = hooks.guards.finish ? await hooks.guards.finish(pctx, { block: gated, reason }) : gated;
-      const block = judged ?? hooks.subagents.backstop(pctx);
-      if (block) {
-        const openWorkHold = gated != null && block === gated && reason === LINKED_WORK_OPEN;
-        if (!openWorkHold) state.finish = { ...state.finish, finishBlockedOnce: true };
-        return block;
-      }
-      return lateSteerNote(ctx);
-    },
-    onAskHuman: async (ctx, control) => {
-      if (control.parked) return void 0;
-      const answer2 = await hooks.ask.answer(contextAt(ctx.step, ctx.stepInCall), control.question, optionsOf(control));
-      if (answer2.kind === "answered") return { data: { ok: true, answer: answer2.answer } };
-      return void 0;
-    },
-    afterDispatch: async (call2, result, message, ctx) => {
-      const stub = stubs.has(result) || held.has(result);
-      const kind = callKinds.get(result);
-      if (!stub) {
-        if (kind === "cached") run.cache.served(ctx.step);
-        else if (kind !== "neutral") run.cache.ran();
-      }
-      const ok = !result.isError && !(result.data && typeof result.data === "object" && result.data.ok === false);
-      if (!stub) {
-        tallyCall(tally, ctx.step, call2.name, call2.args, result.data, ok);
-        if (ok && isMutationCall(call2.name, call2.args)) bumpMutations(tally);
-        await emit(ports.events, { kind: "tool.dispatched", step: ctx.step, tool: call2.name, ok, callId: call2.id, args: call2.args, result: result.data }, { durationMs: Date.now() - (starts.get(call2.id) ?? Date.now()) });
-        starts.delete(call2.id);
-      }
-      const pctx = contextAt(ctx.step, ctx.stepInCall);
-      const pcall = toPolicyCall(call2);
-      let data = result.data;
-      const noted = await hooks.guards.observe(pctx, pcall, data);
-      if (noted) data = noted.data;
-      const nudged = hooks.subagents.nudge(pctx, pcall, data);
-      if (nudged) data = nudged.data;
-      if (data !== result.data) rewriteRow(message, data, message.parts !== void 0 || ports.platform?.verbatimText === true);
-      if (!stub) {
-        hooks.tools.observe?.(pctx, pcall, data, result.isError === true);
-        if (!ownsCall(ports, call2.name)) await hooks.memory.observe?.(pctx, pcall, result.data, result.isError);
-        rememberWrite(state, call2, ok);
-      }
-      if (held.has(result) && result.control?.parked) {
-        return { skipRemaining: { data: { ok: false, skipped: true, error: "Not run: the run is parked on an approval." }, isError: false } };
-      }
-      return steerSkip(run.watch);
-    },
-    afterToolCalls: async (ctx) => {
-      const pctx = contextAt(ctx.step, ctx.stepInCall);
-      await hooks.guards.endTurn?.(pctx, run.turnContent);
-      hooks.stall.acted?.(pctx);
-      await ports.platform?.turnEnded?.({ step: ctx.step });
-      if (run.facts.refused) {
-        run.facts.refused = false;
-        const directive = ports.platform?.malformed?.roundDirective(run.facts.interruption === "truncated");
-        if (directive) append({ role: "system", content: directive });
-      }
-      await emit(ports.events, { kind: "turn.finished", step: ctx.step });
-      return void 0;
-    }
-  };
-}
-function finalSource(menu, guardsFinal) {
-  if (menu?.final === true) return "surface";
-  if (menu?.toolChoice === "required") return void 0;
-  return guardsFinal() ? "guards" : void 0;
-}
-function readOnlyPort(run) {
-  const guards = run.hooks.guards;
-  if (!guards.isReadOnly) return void 0;
-  return (call2) => guards.isReadOnly?.(policyContext(run.input, run.state, currentView(run.transcript, run.offered), run.state.step, 0), call2.name) ?? false;
-}
-
-// ../packages/agent-run/src/policy/budget/usd.ts
-var usd = (millicents) => `$${(millicents / MILLICENTS_PER_USD).toFixed(2)}`;
-function runBudgetCapMillicents(maxRunBudgetUsd) {
-  return typeof maxRunBudgetUsd === "number" && Number.isFinite(maxRunBudgetUsd) && maxRunBudgetUsd > 0 ? Math.round(maxRunBudgetUsd * MILLICENTS_PER_USD) : null;
-}
-function noPriceNote(unpricedCalls) {
-  return unpricedCalls > 0 ? `${unpricedCalls} ${unpricedCalls === 1 ? "call" : "calls"} had no known price` : null;
-}
-function budgetWarning(spentMc, capMc, unpricedCalls = 0) {
-  const note = noPriceNote(unpricedCalls);
-  const spent = note ? `at least ${usd(spentMc)} (${note})` : usd(spentMc);
-  return `[Run budget] This run has spent ${spent} of its ${usd(capMc)} budget \u2014 over 80%. Stop exploring and converge: finish the essential change now, then answer with what you did and exactly what is left.`;
-}
-function budgetContainedReply(spentMc, capMc, unpricedCalls = 0) {
-  const note = noPriceNote(unpricedCalls);
-  const spent = note ? `at least ${usd(spentMc)} spent \u2014 ${note}` : `${usd(spentMc)} spent`;
-  return `Run stopped: it reached its ${usd(capMc)} spend budget (${spent}). Nothing was rolled back \u2014 the changes made so far are in place. Ask to continue to resume from here, or raise the "builderforce.maxRunBudgetUsd" setting (0 turns the cap off).`;
-}
-function localSpendMeter() {
-  let spent = 0;
-  let unpriced = 0;
-  return {
-    spentMc: () => spent,
-    unpricedCalls: () => unpriced,
-    add: (pricedMc) => {
-      if (pricedMc === void 0) unpriced += 1;
-      else spent += pricedMc;
-    }
-  };
-}
-function usdBudget(usdCap, meter) {
-  const own = runBudgetCapMillicents(usdCap);
-  if (own == null) return void 0;
-  const inherited = meter.capMc?.();
-  const capMc = inherited !== void 0 ? Math.min(own, inherited) : own;
-  const caps = { maxSpendMillicents: capMc };
-  let warned = false;
-  let unpricedSaid = false;
-  return {
-    beforeTurn() {
-      const spentMc = meter.spentMc();
-      const unpricedCalls = meter.unpricedCalls();
-      const usage = { spendMillicents: spentMc };
-      if (runBudgetBreach(caps, usage)) return { kind: "contain", text: budgetContainedReply(spentMc, capMc, unpricedCalls), spentMc, capMc, unpricedCalls };
-      if (!warned && runBudgetWarnDue(caps, usage)) {
-        warned = true;
-        return { kind: "warn", text: budgetWarning(spentMc, capMc, unpricedCalls), spentMc, capMc, unpricedCalls };
-      }
-      return void 0;
-    },
-    afterTurn(usage) {
-      const priced = usage?.pricedMc;
-      meter.add(priced);
-      if (priced !== void 0 || unpricedSaid) return false;
-      unpricedSaid = true;
-      return true;
-    }
-  };
-}
-
-// ../packages/agent-run/src/policy/tools/cacheServedStreak.ts
-var CACHE_SERVED_STREAK = 6;
-var MIN_STREAK_TURNS = 2;
-var MAX_NO_PROGRESS_TURNS = 2;
-var CacheServedStreak = class {
-  streak;
-  turns;
-  fired;
-  constructor(saved) {
-    this.streak = saved?.streak ?? 0;
-    this.turns = new Set(saved?.turns ?? []);
-    this.fired = saved?.fired ?? 0;
-  }
-  /** A repeat the read cache answered (stub, covered window, replay, repeated write), on `step`. */
-  served(step) {
-    this.streak += 1;
-    this.turns.add(step);
-  }
-  /** A call the host actually ran - the run touched the world again. */
-  ran() {
-    this.streak = 0;
-    this.turns.clear();
-  }
-  get count() {
-    return this.streak;
-  }
-  /** Whether the streak is due a forced turn. */
-  due() {
-    return this.streak >= CACHE_SERVED_STREAK && this.turns.size >= MIN_STREAK_TURNS && this.fired < MAX_NO_PROGRESS_TURNS;
-  }
-  /** A forced turn was spent on the streak: the count starts over. */
-  consume() {
-    this.ran();
-    this.fired += 1;
-  }
-  /** The counter as plain data. */
-  state() {
-    return { streak: this.streak, turns: [...this.turns], fired: this.fired };
-  }
-};
-
-// ../packages/agent-run/src/runAgent.ts
-async function runAgent(input) {
-  const { task, policy, ports, signal } = input;
-  const hooks = composePolicyHooks(input.modules);
-  const state = input.resume ? resumeState(input.resume, policy, task) : freshState(policy, task);
-  const resumed = Boolean(input.resume);
-  const tally = state.telemetry ??= freshTally();
-  const offered = offeredSchemas(ports);
-  const transcript = asMessages(state.messages);
-  let pack = state.context ?? EMPTY_PACK;
-  if (!resumed) {
-    transcript.splice(0, transcript.length, ...task.transcript ?? openingRows(task, policy.approvalGates));
-    state.messages = transcript;
-    pack = await buildContextPack(input, hooks, state, offered);
-    state.context = pack;
-  }
-  ports.attach?.({
-    policy: () => state.model,
-    report: (event) => state.model = reduceRunPolicy(state.model, event)
-  });
-  if (!resumed) {
-    await emit(ports.events, { kind: "run.started", step: state.step });
-    if (pack.answer) {
-      appendRows(input, transcript, { role: "assistant", content: pack.answer });
-      state.messages = transcript;
-      return settle(input, hooks, state, transcript, "finished", { output: pack.answer });
-    }
-    const preflight = await hooks.model.preflight?.(policyContext(input, state, currentView(transcript, offered), state.step, 0));
-    if (preflight) await emit(ports.events, preflight);
-    const seeded = await hooks.guards.seed?.(policyContext(input, state, currentView(transcript, offered), state.step, 0));
-    if (seeded) state.model = seeded;
-  }
-  const budget2 = usdBudget(policy.budgets.usd, ports.spend ?? localSpendMeter());
-  const run = {
-    input,
-    state,
-    hooks,
-    transcript,
-    offered,
-    tally,
-    watch: portInterruptWatch(ports.steering),
-    turnContent: "",
-    stopped: false,
-    facts: { refused: false },
-    cache: input.cacheStreak ?? new CacheServedStreak(state.reads.servedStreak),
-    ...budget2 ? { budget: budget2 } : {}
-  };
-  const isReadOnly = readOnlyPort(run);
-  let loopResult;
-  try {
-    loopResult = await runAgentLoop({
-      messages: transcript,
-      // The kernel pushes rows in the agent's own shape — the SAME shape a requeue, an
-      // answered ask and a steer push — so a saved and resumed transcript reads exactly
-      // like a continuous one.
-      codec: {
-        assistant: (turn) => announceRow(input, {
-          role: "assistant",
-          content: turn.content ?? "",
-          toolCalls: turn.toolCalls.map((call2) => ({ id: call2.id, name: call2.name, arguments: call2.arguments })),
-          ...nativeOfTurn(turn.meta)
-        }),
-        tool: (call2, result) => announceRow(input, toolRow(call2.id, result, ports.platform?.verbatimText === true))
-      },
-      ports: {
-        complete: (ctx) => completeTurn(input, state, hooks, ctx, offered, transcript, pack, run.selection),
-        dispatch: (call2, ctx) => dispatchCall(input, state, call2, run.watch, run.facts, ctx.step),
-        ...isReadOnly ? { isReadOnly } : {}
-      },
-      hooks: kernelHooks(run),
-      budget: { startStep: state.step, ...input.maxSteps !== void 0 ? { maxSteps: input.maxSteps } : {}, ...policy.budgets.steps !== void 0 ? { stepCap: policy.budgets.steps } : {} },
-      ...signal ? { signal } : {}
-    });
-  } catch (err) {
-    const reason = err instanceof Error ? err.message : String(err);
-    return settle(input, hooks, state, transcript, "failed", { reason, ...signal?.aborted || !isResumable(input, err) ? {} : { cause: err } });
-  }
-  state.step = loopResult.step;
-  state.messages = transcript;
-  state.reads = { ...state.reads, servedStreak: run.cache.state() };
-  if (run.stopped || loopResult.cancelled || signal?.aborted) {
-    return settle(input, hooks, state, transcript, "failed", { reason: RUN_CANCELLED_REASON });
-  }
-  if (loopResult.awaitingInput) {
-    const approvalId = loopResult.awaitingInput.approvalId ?? newApprovalId(state);
-    state.askedGates = [...state.askedGates, approvalId];
-    return settle(input, hooks, state, transcript, "paused", { question: loopResult.awaitingInput.question, approvalId });
-  }
-  if (loopResult.exhausted || loopResult.finished && loopResult.ok && !loopResult.output.trim()) {
-    let output;
-    try {
-      output = await synthesizeFinal(input, state, hooks, transcript, pack, tally);
-    } catch (err) {
-      return settle(input, hooks, state, transcript, "failed", { reason: err instanceof Error ? err.message : String(err), ...isResumable(input, err) ? { cause: err } : {} });
-    }
-    if (output) return settle(input, hooks, state, transcript, "finished", { output });
-  }
-  if (loopResult.exhausted) {
-    return settle(input, hooks, state, transcript, "failed", { reason: loopResult.exhaustedBy === "failures" ? "tool calls kept failing" : "step budget spent", exhausted: true, ...loopResult.exhaustedBy === "failures" ? { failureStreak: loopResult.failureStreak } : {} });
-  }
-  if (!loopResult.finished) {
-    return settle(input, hooks, state, transcript, "yielded", {});
-  }
-  if (!loopResult.ok) {
-    const cause = causeOf(state);
-    return settle(input, hooks, state, transcript, "failed", { reason: loopResult.output || "the run stopped", ...cause !== void 0 ? { cause } : {} });
-  }
-  return settle(input, hooks, state, transcript, "finished", { output: loopResult.output });
-}
-
-// ../packages/agent-run/src/policy/guards/shipGate.ts
-function withShipGate(guards, gate) {
-  if (!gate) return guards;
-  return {
-    ...guards,
-    beforeDispatch: async (ctx, call2) => {
-      const verdict = publishAllowed(gate.policy, call2.name, call2.args, gate.host ?? "cloud");
-      if (!verdict.ok) {
-        await gate.onRefused?.(call2.name, verdict.error);
-        return { skip: { data: { ok: false, error: verdict.error }, isError: true } };
-      }
-      return guards.beforeDispatch?.(ctx, call2);
-    }
-  };
-}
-
-// ../packages/agent-run/src/route/routeRun.ts
-function decideRunPipeline(route) {
-  if (!route.routing || route.child) return null;
-  const { actionType } = classifyRunAction(route.request);
-  return scorePipeline(pipelineFeaturesOf(route.request, { actionType, followUp: route.followUp === true }), {
-    mode: route.routing.mode,
-    ...route.routing.threshold !== void 0 ? { threshold: route.routing.threshold } : {}
-  });
-}
-function pipelinePolicyOptions(route, pipeline) {
-  const quick = pipeline?.route === "quick";
-  const startPhase = route.child || quick ? "code" : "plan";
-  const phaseModels = { ...route.phaseModels };
-  const quickModel = route.routing?.quickModel?.trim();
-  if (quick && quickModel) phaseModels.code = quickModel;
-  return {
-    startPhase,
-    ...Object.keys(phaseModels).length ? { phaseModels } : {},
-    ...quick && quickModel && !route.modelStrict ? { pinnedModel: quickModel } : {}
-  };
-}
-function skipsVerifyStage(pipeline) {
-  return pipeline?.route === "quick";
-}
-function routeRun(route) {
-  const pipeline = decideRunPipeline(route);
-  return { pipeline, start: pipelinePolicyOptions(route, pipeline), skipsVerify: skipsVerifyStage(pipeline) };
-}
-
-// ../packages/agent-run/src/openRun.ts
-function withStateBound(guards, onState) {
-  const bound = {};
-  for (const [key, member] of Object.entries(guards)) {
-    bound[key] = typeof member === "function" ? (ctx, ...rest) => {
-      onState(ctx.state);
-      return member.call(guards, ctx, ...rest);
-    } : member;
-  }
-  return bound;
-}
-function withCloseOut(finish, closeOut) {
-  return {
-    ...finish,
-    async gate(ctx) {
-      try {
-        await closeOut(ctx);
-      } catch (err) {
-        await emit(ctx.ports.events, { kind: "finish.close_out_error", step: ctx.step, reason: err instanceof Error ? err.message : String(err) });
-      }
-      return finish.gate(ctx);
-    }
-  };
-}
-function composeModules(surface2) {
-  const modules = {};
-  if (surface2.finish || surface2.closeOut) {
-    const finish = createFinishHook(surface2.finish);
-    modules.finish = surface2.closeOut ? withCloseOut(finish, surface2.closeOut) : finish;
-  }
-  if (surface2.guards || surface2.publishGate || surface2.onState) {
-    let guards = withShipGate(createGuardsHook(surface2.guards), surface2.publishGate);
-    if (surface2.onState) guards = withStateBound(guards, surface2.onState);
-    modules.guards = guards;
-  }
-  if (surface2.verify) modules.verify = createVerifyHook(surface2.verify);
-  if (surface2.compaction) modules.compaction = "hook" in surface2.compaction ? surface2.compaction.hook : createCompactionHook(surface2.compaction);
-  if (surface2.preflight) modules.model = { ...defaultPolicyModules().model, preflight: surface2.preflight };
-  return modules;
-}
-function routedPolicy(policy, route, start) {
-  const prior = policy.modelStart;
-  const model = start.pinnedModel ?? prior?.model;
-  return {
-    ...policy,
-    modelStart: {
-      plain: true,
-      ...prior,
-      ...model ? { model } : {},
-      ...route.modelStrict !== void 0 ? { strict: route.modelStrict } : {},
-      ...start.startPhase ? { startPhase: start.startPhase } : {},
-      ...start.phaseModels ? { phaseModels: start.phaseModels } : {}
-    }
-  };
-}
-async function openRun(input) {
-  if (!input.policy?.entryPoint) throw new Error("openRun: policy.entryPoint is required");
-  const { surface: surface2 = {}, route, ...rest } = input;
-  let run = { ...rest, modules: composeModules(surface2) };
-  if (route) {
-    const { pipeline, start } = routeRun(route);
-    run = { ...run, policy: routedPolicy(run.policy, route, start) };
-    if (pipeline && !run.resume) {
-      const events = run.ports.events;
-      let said = false;
-      run = {
-        ...run,
-        ports: {
-          ...run.ports,
-          events: {
-            ...events.outcome ? { outcome: (row) => events.outcome(row) } : {},
-            emit: async (event, meta) => {
-              await events.emit(event, meta);
-              if (!said && event.kind === "run.started") {
-                said = true;
-                await events.emit({ kind: "run.routed", step: event.step, route: pipeline.route, score: pipeline.score });
-              }
-            }
-          }
-        }
-      };
-    }
-  }
-  return runAgent(run);
-}
-
-// ../packages/agent-run/src/telemetry/runOutcomeRequest.ts
-function outcomeSourceOf(entryPoint2) {
-  switch (entryPoint2) {
-    case "on-prem":
-      return "onprem";
-    case "vscode":
-      return "ide";
-    case "canvas":
-      return "canvas";
-    case "cloud":
-      return "cloud";
-    default:
-      return "external";
-  }
-}
-function outcomeTerminalStatus(row, stopped = false) {
-  if (stopped || row.cancelled) return "cancelled";
-  return row.terminalStatus === "finished" ? "completed" : "failed";
-}
-function runOutcomeRequestOf(row, scope) {
-  const model = row.model?.trim();
-  if (!model || !scope.clientRunId.trim()) return null;
-  return {
-    ...parseRunOutcomeTelemetry({ ...row, ...scope.parentClientRunId ? { parentRunId: scope.parentClientRunId } : {} }),
-    ...wireCost(row),
-    clientRunId: scope.clientRunId,
-    model,
-    source: outcomeSourceOf(row.entryPoint),
-    terminalStatus: outcomeTerminalStatus(row, scope.stopped),
-    steps: Math.max(0, Math.floor(row.steps)),
-    // The row says the TENANT ran out of quota (`buildOutcomeRow` classified it once): the door stores it and never teaches it.
-    ...row.quotaExhausted ? { quotaExhausted: true } : {},
-    // Availability and degradation are kept beside the score, never folded into it: a throttled model is demoted without being called
-    // bad, and a run served off its model does not earn full credit.
-    ...row.rateLimited ? { rateLimited: true } : {},
-    ...row.degraded ? { degraded: true } : {},
-    ...scope.projectId != null ? { projectId: scope.projectId } : {},
-    ...scope.taskId != null ? { taskId: scope.taskId } : {},
-    ...scope.actionType ? { actionType: scope.actionType } : {},
-    ...scope.routingSignal === false ? { routingSignal: false } : {}
-  };
-}
-
 // src/directedMessage.ts
 var ADDRESSED_TO_META_KEY = "addressedTo";
 var AUTHORED_BY_META_KEY = "authoredBy";
@@ -14992,9 +8520,9 @@ function parseMessageAuthor(msg) {
 }
 function withDirectedMetadata(recipient, base) {
   const meta = { ...base ?? {} };
-  const list2 = recipient == null ? [] : "kind" in recipient ? [recipient] : recipient;
-  if (list2.length === 1) meta[ADDRESSED_TO_META_KEY] = list2[0];
-  else if (list2.length > 1) meta[ADDRESSED_TO_META_KEY] = { kind: "group", members: [...list2] };
+  const list = recipient == null ? [] : "kind" in recipient ? [recipient] : recipient;
+  if (list.length === 1) meta[ADDRESSED_TO_META_KEY] = list[0];
+  else if (list.length > 1) meta[ADDRESSED_TO_META_KEY] = { kind: "group", members: [...list] };
   return Object.keys(meta).length > 0 ? JSON.stringify(meta) : void 0;
 }
 function parseDirectedRecipients(msg) {
@@ -15025,10 +8553,10 @@ function directedRecipientList(recipient) {
   return Array.isArray(recipient) ? recipient : one.kind === "group" ? one.members ?? [] : [one];
 }
 function directedAgentRecipients(recipient) {
-  const list2 = directedRecipientList(recipient);
+  const list = directedRecipientList(recipient);
   const seen = /* @__PURE__ */ new Set();
   const out = [];
-  for (const r of list2) {
+  for (const r of list) {
     if (!r || typeof r.ref !== "string" || !r.ref || r.kind === "human") continue;
     if (seen.has(r.ref)) continue;
     seen.add(r.ref);
@@ -15203,7 +8731,7 @@ function makeCell() {
     authorModels: /* @__PURE__ */ new Set(),
     shipReviews: [],
     shipReviewRounds: [],
-    finishClosedOut: false,
+    closeOutFinished: false,
     snapshot: EMPTY_SNAPSHOT
   };
 }
@@ -15246,10 +8774,10 @@ function emitStreaming(c) {
   if (c.emitTimer) return;
   c.emitTimer = setTimeout(() => {
     c.emitTimer = null;
-    emit2(c);
+    emit(c);
   }, STREAM_EMIT_MS);
 }
-function emit2(c) {
+function emit(c) {
   if (c.emitTimer) {
     clearTimeout(c.emitTimer);
     c.emitTimer = null;
@@ -15278,14 +8806,14 @@ function emit2(c) {
 }
 function setActivity(c, activity) {
   c.activity = activity;
-  emit2(c);
+  emit(c);
 }
 function pushTrace(c, ev) {
   const dropped = Math.max(0, c.trace.length + 1 - MAX_TRACE_EVENTS);
   c.trace = [...dropped ? c.trace.slice(dropped) : c.trace, ev];
   if (dropped) c.runTraceFrom = Math.max(0, c.runTraceFrom - dropped);
   c.persistStep?.(ev);
-  emit2(c);
+  emit(c);
 }
 function runTrace(c) {
   return c.trace.slice(c.runTraceFrom);
@@ -15441,7 +8969,7 @@ function liveTurnModel(c) {
   return (model, account) => {
     if (c.liveTurn) c.liveTurn = { model, account };
     c.servedBy = { model, ...account ? { account } : {} };
-    emit2(c);
+    emit(c);
   };
 }
 function connectRetryStep(c, step) {
@@ -15496,7 +9024,7 @@ function appendRunMessage(chatId, msg) {
   const c = cells.get(chatId);
   if (!c) return;
   recordAppended(c, msg);
-  emit2(c);
+  emit(c);
 }
 function getRunSnapshot(chatId) {
   if (chatId == null) return EMPTY_SNAPSHOT;
@@ -15522,7 +9050,7 @@ async function stopBeforeStart(runKey, chatId, persistence, still = () => true) 
     const row = rows[rows.length - 1];
     if (row && still()) {
       recordAppended(c, row);
-      emit2(c);
+      emit(c);
     }
     return row;
   } catch {
@@ -15545,7 +9073,7 @@ function stopRun(chatId) {
   const c = cells.get(chatId);
   if (c) {
     c.stopEpoch += 1;
-    if (c.claim) emit2(c);
+    if (c.claim) emit(c);
   }
   if (!c || !c.running || c.abort?.signal.aborted) return;
   const stopped = stoppedTurnOf(c);
@@ -15570,21 +9098,21 @@ function clearRunError(chatId) {
   if (!c || !c.error) return;
   c.error = "";
   c.errorAction = null;
-  emit2(c);
+  emit(c);
 }
 function setPendingRunTurn(chatId, turn) {
   if (chatId == null) return;
   const c = cells.get(chatId);
   if (!c) return;
   c.pendingTurn = turn;
-  emit2(c);
+  emit(c);
 }
 function setRunServedBy(chatId, served) {
   if (chatId == null) return;
   const c = cells.get(chatId);
   if (!c) return;
   c.servedBy = served ? { model: served.model, ...served.account ? { account: served.account } : {} } : null;
-  emit2(c);
+  emit(c);
 }
 function requestRunConfirm(chatId, req, opts) {
   if (driverFor(chatId)) return Promise.resolve(false);
@@ -15596,7 +9124,7 @@ function requestRunConfirm(chatId, req, opts) {
       ...toolActivity(req.name, req.args, opts?.step ?? c.activity?.step ?? 0, Date.now()),
       phase: "awaiting"
     };
-    emit2(c);
+    emit(c);
   });
 }
 function resolveRunConfirm(chatId, ok) {
@@ -15607,7 +9135,7 @@ function resolveRunConfirm(chatId, ok) {
   const resolve = c.confirmResolver;
   c.confirmResolver = null;
   c.pendingConfirm = null;
-  emit2(c);
+  emit(c);
   resolve(ok);
 }
 function applyRemoteRun(chatId, snapshot) {
@@ -15627,7 +9155,7 @@ function applyRemoteRun(chatId, snapshot) {
   c.providerCap = snapshot.providerCap;
   c.turn = snapshot.turn ?? null;
   c.servedBy = snapshot.servedBy ?? null;
-  emit2(c);
+  emit(c);
 }
 
 // src/runStore/runClaim.ts
@@ -15640,7 +9168,7 @@ function claimRun(runKey) {
   const c = getCell(runKey);
   if (c.running || c.claim) return null;
   const claim = holdClaim(c);
-  emit2(c);
+  emit(c);
   return claim;
 }
 function claimStopped(c, claim) {
@@ -15649,7 +9177,7 @@ function claimStopped(c, claim) {
 function releaseClaim(c, claim) {
   if (c.claim !== claim) return;
   c.claim = null;
-  emit2(c);
+  emit(c);
 }
 
 // src/runStore/autoContinueGuard.ts
@@ -15709,7 +9237,7 @@ ${recordedModelText(b)}`;
 function surface(c, e) {
   c.error = e instanceof Error ? e.message : String(e);
   c.errorAction = chatErrorAction(e);
-  emit2(c);
+  emit(c);
 }
 function keepAsSaid(runKey, text2, attachments) {
   const pictures = attachments.filter((a) => a.imageUrl);
@@ -15816,7 +9344,7 @@ async function continueChat(runKey, c, steers, start, claim, left, progress = { 
       throw e;
     }
     for (const row2 of rows) recordAppended(c, row2);
-    emit2(c);
+    emit(c);
     forgetPendingWords(runKey, fresh.map((t) => t.steer.eventKey));
     if (claimStopped(c, claim)) return endStopped(stopped, left(), null);
   }
@@ -15846,6 +9374,7 @@ async function continueChat(runKey, c, steers, start, claim, left, progress = { 
   start(runKey, {
     ...request,
     ...fresher,
+    childWorkRefs: childWorkRefs(steers),
     userTurn,
     ...recordProgress ? { continuationProgress: true } : {},
     ...row ? { userTurnMessageId: row.id } : {}
@@ -15887,9 +9416,10 @@ async function continueOrKeep(runKey, c, steers, start, claim) {
   requeue(runKey, keyed);
   return false;
 }
-async function continueLeftovers(runKey, c, start, claim) {
+async function continueLeftovers(runKey, c, start, claim, closedOut = false) {
   const left = drainRunSteering2(runKey);
-  if (left.length === 0) {
+  if (left.length === 0 || closedOut && !left.some((message) => message.fromPerson || message.childReport)) {
+    if (left.length) requeueRunSteering2(runKey, left);
     releaseClaim(c, claim);
     return;
   }
@@ -16751,12 +10281,12 @@ function batchStepPersistence(base, opts = {}) {
 }
 
 // src/runOutcomeReport.ts
-var completedTurns = (trace4) => trace4.filter((e) => e.label === "llm.complete" && !e.isError);
-function askedModelOf(requested, trace4) {
+var completedTurns = (trace2) => trace2.filter((e) => e.label === "llm.complete" && !e.isError);
+function askedModelOf(requested, trace2) {
   const asked = requested?.trim();
   if (asked) return asked;
-  for (let i = trace4.length - 1; i >= 0; i -= 1) {
-    const e = trace4[i];
+  for (let i = trace2.length - 1; i >= 0; i -= 1) {
+    const e = trace2[i];
     if (e.label !== "llm.complete" && e.label !== "agent.stopped") continue;
     const model = e.args?.model;
     if (typeof model === "string" && model.trim()) return model.trim();
@@ -16789,87 +10319,18 @@ function failureFlags(error) {
   if (isRateLimitFailure(error)) return { rateLimited: true };
   return {};
 }
-function busiestModel(trace4) {
+function busiestModel(trace2) {
   let best = null;
-  for (const s of modelScorecard([...trace4])) if (!best || s.turns > best.turns) best = s;
+  for (const s of modelScorecard([...trace2])) if (!best || s.turns > best.turns) best = s;
   return best && best.turns > 0 ? best.model : null;
-}
-
-// src/previewReview.ts
-var REVIEW_RECORD_TOOL = "builtin_reviews_record";
-function previewReviewDirective(chatId, tickets = SERVER_TICKET_TOOLS) {
-  const listed = chatId != null ? `builtin_chats_list_tickets with chatId=${chatId} lists it` : "the ticket you recorded the change against";
-  const linkFirst = chatId != null && !tickets.local ? ` If the ticket you reviewed is not linked yet, link it with ${SERVER_TICKET_LINK_TOOL} (chatId=${chatId}) first.` : "";
-  return `REVIEW YOUR OWN CHANGE \u2014 in this Studio session YOU are its reviewer. The app runs in a live preview in this browser that no other agent can reach, so a ticket you leave "in_review" sits at 75% on the board forever, and dispatching a QA or design agent to review it is not a substitute \u2014 even when agents are invited into this chat, the review of a change THIS session made is yours. When your turn changes the app, finish it in this order:
-1. VERIFY \u2014 \`canvas_read_build_diagnostics\` must show no current failures. Then call \`canvas_inspect_preview\` with the CSS selectors your change targets and the widths the request is about (a phone bug: include the widths it names, or [360, 390, 414]; a desktop layout: the desktop viewport). Read the numbers against what was ASKED, not only the pass/fail: a pill that must hug its label is a few dozen px tall, not the card's height; a mobile menu must not make the page wider than the screen; an image must not cover the headline (\`occludedBy\`). If a width fails, or the measurements show the change did not do what was asked, FIX it and inspect again.
-2. RECORD \u2014 when every width passes and the measurements match the request, record the review with builtin_reviews_record (taskId = the ticket tracking the change \u2014 ${listed}; verdict "complete"; a summary that QUOTES the measurements that prove it, e.g. ".character-tag 74\xD723px at 390px; page 390px wide at 390px"). One call per ticket the change delivers. If something the ticket asked for is genuinely not done, record verdict "gaps" with each gap instead of "complete".
-3. CLOSE \u2014 a ticket linked to this chat that has a "complete" review recorded after a passing inspection moves to done (100%) automatically when your turn ends.${linkFirst} Report each ticket's verdict with the key measurements.
-Never say a change works or a ticket is done without a passing \`canvas_inspect_preview\` AFTER your last edit. If the preview cannot be inspected (it is not running, or the probe times out), say so plainly and leave the ticket in review \u2014 do not record a "complete" review you could not verify.`;
-}
-function toolEvents(events) {
-  return events.filter((event) => event.category === "tool");
-}
-function lastChangeIndex(events) {
-  for (let index = events.length - 1; index >= 0; index -= 1) {
-    const event = events[index];
-    if (isCodeChangeTool(event.label) && !event.isError && !isFailedToolResult(event.result)) return index;
-  }
-  return -1;
-}
-function isPassingInspection(event) {
-  if (event.label !== PREVIEW_REVIEW_TOOL || event.isError || isFailedToolResult(event.result)) return false;
-  const result = event.result;
-  return result?.passed === true;
-}
-function completeReviewTaskId(event) {
-  if (event.label !== REVIEW_RECORD_TOOL || event.isError || isFailedToolResult(event.result)) return null;
-  const args = event.args ?? {};
-  const recorded = event.result?.verdict ?? args.verdict;
-  if (recorded !== "complete") return null;
-  return parseSyncId(args.taskId);
-}
-function ticketsReviewedInPreview(events) {
-  const tools = toolEvents(events);
-  const lastChange = lastChangeIndex(tools);
-  if (lastChange < 0) return [];
-  let inspected = false;
-  const reviewed = /* @__PURE__ */ new Set();
-  for (const event of tools.slice(lastChange + 1)) {
-    if (isPassingInspection(event)) inspected = true;
-    else if (inspected) {
-      const taskId = completeReviewTaskId(event);
-      if (taskId != null) reviewed.add(taskId);
-    }
-  }
-  return [...reviewed];
-}
-function inspectedAfterLastChange(events) {
-  const tools = toolEvents(events);
-  const lastChange = lastChangeIndex(tools);
-  return tools.slice(lastChange + 1).some((event) => event.label === PREVIEW_REVIEW_TOOL);
-}
-function recordedReviewAfterLastChange(events) {
-  const tools = toolEvents(events);
-  const lastChange = lastChangeIndex(tools);
-  return tools.slice(lastChange + 1).some((event) => event.label === REVIEW_RECORD_TOOL && !event.isError);
-}
-var DECLINES_REVIEW = /\b(?:don'?t|do not|never|without)\s+(?:review|verify|inspect|test|close|closing|mark)\w*|\b(?:leave|keep)\s+(?:it|them|the\s+tickets?)\s+(?:open|in\s+review)\b/i;
-function declinesReview(text2) {
-  return DECLINES_REVIEW.test(text2 ?? "");
-}
-function leftChangeUnreviewed(input) {
-  return input.codeChanged && canReviewInPreview(input.toolNames) && !declinesReview(input.requestText) && !(inspectedAfterLastChange(input.events) && recordedReviewAfterLastChange(input.events));
-}
-function unreviewedChangeNudge() {
-  return 'You changed the app in this run and ended the turn without reviewing it. In the Studio you are the reviewer \u2014 nobody else can see this preview, so an unreviewed change parks its ticket in review forever. Finish it now: call `canvas_inspect_preview` with the selectors your change targets and the widths the request is about, check the measurements against what was asked (fix and re-inspect if they fail), then record builtin_reviews_record on each ticket the change delivers \u2014 verdict "complete" quoting the measurements, or "gaps" naming what is missing. A complete review after a passing inspection closes the ticket when your turn ends. If you genuinely cannot verify \u2014 the preview is not running, or the change is unfinished \u2014 say so plainly at the TOP of your answer and name exactly what is left.';
 }
 
 // src/runStore/chatTickets.ts
 var MOVE_LABEL = /^(ticket[-_.]move|builtin_tasks_update)$/i;
 var stepSucceeded = (ev) => ev.category === "tool" && !ev.isError && !isFailedToolResult(ev.result);
-function ticketsCreatedInRun(trace4) {
+function ticketsCreatedInRun(trace2) {
   const filings = [];
-  for (const ev of trace4) {
+  for (const ev of trace2) {
     const local = isLocalTicketCreateLabel(ev.label);
     if (!stepSucceeded(ev) || !local && ev.label !== SERVER_TICKET_CREATE_TOOL) continue;
     const args = ev.args ?? {};
@@ -16881,15 +10342,15 @@ function ticketsCreatedInRun(trace4) {
   }
   return filings;
 }
-function localTicketFilings(trace4) {
-  return ticketsCreatedInRun(trace4).filter((f) => f.local && f.handOff);
+function localTicketFilings(trace2) {
+  return ticketsCreatedInRun(trace2).filter((f) => f.local && f.handOff);
 }
-function localTicketsFiledInRun(trace4) {
-  return localTicketFilings(trace4).map((f) => f.ref);
+function localTicketsFiledInRun(trace2) {
+  return localTicketFilings(trace2).map((f) => f.ref);
 }
-function ticketMovesInRun(trace4) {
+function ticketMovesInRun(trace2) {
   const moved = /* @__PURE__ */ new Map();
-  trace4.forEach((ev, at) => {
+  trace2.forEach((ev, at) => {
     if (!stepSucceeded(ev) || !MOVE_LABEL.test(ev.label)) return;
     const a = ev.args ?? {};
     if ((typeof a.id === "string" || typeof a.id === "number") && typeof a.status === "string") moved.set(String(a.id).trim(), { status: a.status, at });
@@ -16904,18 +10365,18 @@ function latestStatus(moves, ids) {
   }
   return latest?.status;
 }
-function runOwnedTicketRefs(trace4, deltaTicketId = null) {
+function runOwnedTicketRefs(trace2, deltaTicketId = null) {
   const owned = /* @__PURE__ */ new Set();
   if (deltaTicketId != null) owned.add(String(deltaTicketId));
-  for (const ev of trace4) {
+  for (const ev of trace2) {
     if (ev.label !== TICKET_FROM_DELTA_TOOL || !stepSucceeded(ev)) continue;
     const taskId = ev.args?.taskId;
     if (typeof taskId === "number" || typeof taskId === "string") owned.add(String(taskId).trim());
     const { syncId } = entityIdsOf(ev.result);
     if (syncId != null) owned.add(syncIdText(syncId));
   }
-  for (const id of ticketMovesInRun(trace4).keys()) owned.add(id);
-  for (const filing of ticketsCreatedInRun(trace4)) for (const id of filing.ids) owned.add(id);
+  for (const id of ticketMovesInRun(trace2).keys()) owned.add(id);
+  for (const filing of ticketsCreatedInRun(trace2)) for (const id of filing.ids) owned.add(id);
   return owned;
 }
 var listingScopeOf = (cell) => ({ cell, runId: cell.runId });
@@ -16965,197 +10426,13 @@ async function listChatTickets(req, chatId, report, scope) {
   return null;
 }
 
-// src/runStore/runBackstops.ts
-function listingScopeOfRun(c) {
-  return "trace" in c ? listingScopeOf(c) : c.listing;
-}
-function settleView(c, runId) {
-  return {
-    listing: { cell: c, runId },
-    touchedFiles: [...c.touchedFiles],
-    deltaRecordedFiles: [...c.deltaRecordedFiles],
-    deltaTicketId: c.deltaTicketId,
-    ticketRecorded: c.ticketRecorded,
-    deltaCaptureRefused: c.deltaCaptureRefused,
-    deltaTitleCount: c.deltaTitleCount,
-    note: (ev) => {
-      if (c.runId === runId) pushTrace(c, ev);
-    }
-  };
-}
-var ROLE_REFUSAL = "requires at least the";
-function isRoleRefusal(out) {
-  const error = out?.error;
-  return typeof error === "string" && error.includes(ROLE_REFUSAL);
-}
-function noteOf(c) {
-  return "note" in c && c.note ? c.note : (ev) => pushTrace(c, ev);
-}
-function attachDeltaToRunTicket(toolName, args, deltaTicketId) {
-  if (toolName !== TICKET_FROM_DELTA_TOOL || deltaTicketId == null) return;
-  if (!args || typeof args !== "object" || Array.isArray(args)) return;
-  const bag = args;
-  if (bag.taskId == null) bag.taskId = deltaTicketId;
-}
-async function recordCodeChangeTicket(serverChatId, c, req, phase) {
-  if (!req.runTool || req.projectId == null) return;
-  if (phase === "settle" && c.deltaCaptureRefused) return;
-  const known = new Set(c.deltaRecordedFiles);
-  const files = c.touchedFiles.filter((f) => !known.has(f)).slice(0, 50);
-  if (phase === "settle" && c.deltaTicketId != null && files.length === 0) return;
-  const attachTo = c.deltaTicketId;
-  if (files.length === 0 && attachTo == null) return;
-  const source = serverChatId != null ? `Brain chat #${serverChatId}` : "a local editor chat";
-  const summary = codeChangeTicketTitle(files.length, source);
-  const parentTaskId = attachTo == null && serverChatId != null && declaresChatTicketListing(req.tools) ? await soleOpenLinkedEpic(serverChatId, c, req) : null;
-  const toolStart = nowMs2();
-  const args = {
-    projectId: req.projectId,
-    summary,
-    detail: attachTo != null ? "Auto-captured: further files changed by the same chat, attached to the ticket this run opened." : "Auto-captured: this chat changed code without recording a ticket, so the platform minted one to keep the work visible on the board and linked to the conversation.",
-    files,
-    kind: "improvement",
-    modality: "ide",
-    ...serverChatId != null ? { chatId: serverChatId } : {},
-    ...attachTo != null ? { taskId: attachTo } : {},
-    ...parentTaskId != null ? { parentTaskId } : {}
-  };
-  const send = async (bag) => {
-    try {
-      return { out: await req.runTool(TICKET_FROM_DELTA_TOOL, bag), thrown: false };
-    } catch (e) {
-      return { out: { ok: false, error: e instanceof Error ? e.message : String(e) }, thrown: true };
-    }
-  };
-  const first = await send(args);
-  let out = first.out;
-  if (parentTaskId != null && !first.thrown && isFailedToolResult(out) && !isRoleRefusal(out)) {
-    const why = out?.error;
-    noteOf(c)({
-      ts: nowIso(),
-      category: "message",
-      label: "ticket.parent_epic_refused",
-      args: { parentTaskId },
-      result: `The server refused to file the code-change ticket under epic #${parentTaskId}${typeof why === "string" ? ` (${why})` : ""}: it is minted once more, without a parent.`
-    });
-    delete args.parentTaskId;
-    out = (await send(args)).out;
-  }
-  if (!isFailedToolResult(out)) {
-    c.deltaRecordedFiles = [...c.deltaRecordedFiles, ...files];
-    if (files.length) c.deltaTitleCount = files.length;
-    const id = entityIdsOf(out).syncId;
-    if (c.deltaTicketId == null && id != null) c.deltaTicketId = id;
-    c.ticketRecorded = true;
-  } else if (isRoleRefusal(out)) {
-    c.deltaCaptureRefused = true;
-  }
-  noteOf(c)({
-    ts: nowIso(),
-    category: "tool",
-    label: TICKET_FROM_DELTA_TOOL,
-    durationMs: nowMs2() - toolStart,
-    args: { ...args, auto: true, phase },
-    result: out ?? null,
-    isError: isFailedToolResult(out)
-  });
-}
-async function soleOpenLinkedEpic(serverChatId, c, req) {
-  const listed = await listChatTickets(req, serverChatId, {
-    note: noteOf(c),
-    label: "ticket.parent_epic_unreadable",
-    consequence: "the code-change ticket is minted without a parent epic."
-  }, listingScopeOfRun(c));
-  if (listed == null) return null;
-  const epics = linkedTicketsStillOpen(listed).filter((t) => t.kind === "epic");
-  const id = epics.length === 1 ? Number(epics[0].ref) : NaN;
-  return Number.isFinite(id) ? id : null;
-}
-async function updateLinkedTickets(serverChatId, c, req, select, status2, reason, owned) {
-  if (!req.runTool || serverChatId == null || !canListChatTickets(req.tools)) return 0;
-  const listed = await listChatTickets(req, serverChatId, { note: noteOf(c), label: "ticket.links_unreadable", consequence: `no linked ticket was moved to ${status2}.` });
-  if (listed == null) return 0;
-  let moved = 0;
-  for (const t of select(listed).filter((t2) => owned === "selected" || owned.has(t2.ref))) {
-    const move = ticketStatusMove(t.ref, status2, SERVER_TICKET_TOOLS);
-    if (move && await moveTicket(c, req, move, reason)) moved += 1;
-  }
-  return moved;
-}
-async function moveTicket(c, req, move, reason) {
-  if (!req.runTool) return false;
-  const toolStart = nowMs2();
-  let out;
-  try {
-    out = await req.runTool(move.tool, { ...move.args });
-  } catch (e) {
-    out = { ok: false, error: e instanceof Error ? e.message : String(e) };
-  }
-  const failed3 = isFailedToolResult(out);
-  noteOf(c)({
-    ts: nowIso(),
-    category: "tool",
-    label: move.tool,
-    durationMs: nowMs2() - toolStart,
-    args: { ...move.args, auto: true, reason },
-    result: out ?? null,
-    isError: failed3
-  });
-  return !failed3;
-}
-var LOCAL_VOCABULARY = ticketToolVocabulary([LOCAL_TICKET_CREATE_TOOL]);
-function mayMove(current, status2) {
-  if (current === void 0 || NOT_STARTED_TASK_STATUSES.has(current)) return true;
-  return status2 === "done" && current === "in_progress";
-}
-async function updateRunLocalTickets(trace4, c, req, status2, reason, deltaTicketId = null) {
-  if (!req.runTool) return 0;
-  const already = ticketMovesInRun(trace4);
-  const moves = [];
-  for (const filing of localTicketFilings(trace4)) {
-    const move = mayMove(latestStatus(already, filing.ids), status2) ? ticketStatusMove(filing.ref, status2, LOCAL_VOCABULARY) : null;
-    if (move) moves.push(move);
-  }
-  if (status2 === "done" && deltaTicketId != null && mayMove(latestStatus(already, [String(deltaTicketId)]), status2)) {
-    const move = ticketStatusMove(deltaTicketId, status2, SERVER_TICKET_TOOLS);
-    if (move) moves.push(move);
-  }
-  let moved = 0;
-  for (const move of moves) if (await moveTicket(c, req, move, reason)) moved += 1;
-  return moved;
-}
-async function retitleShippedDeltaTicket(c, req) {
-  if (!req.runTool) return;
-  const id = c.deltaTicketId;
-  if (id == null || c.deltaTitleCount == null) return;
-  const finalCount = c.touchedFiles.length;
-  if (finalCount === 0 || finalCount === c.deltaTitleCount) return;
-  const title = codeChangeTicketTitle(finalCount);
-  const toolStart = nowMs2();
-  let out;
-  try {
-    out = await req.runTool("builtin_tasks_update", { id, title });
-  } catch (e) {
-    out = { ok: false, error: e instanceof Error ? e.message : String(e) };
-  }
-  noteOf(c)({
-    ts: nowIso(),
-    category: "tool",
-    label: "builtin_tasks_update",
-    durationMs: nowMs2() - toolStart,
-    args: { id, title, auto: true, reason: "retitle-shipped-delta" },
-    result: out ?? null,
-    isError: isFailedToolResult(out)
-  });
-}
-
 // src/run/brainCloseOut.ts
-var REVIEW_RECORD_TOOL2 = "builtin_reviews_record";
+var REVIEW_RECORD_TOOL = "builtin_reviews_record";
 function verificationOf(evidence, touchedFiles) {
   const entries = evidence?.snapshot() ?? [];
   if (!entries.length) return { verified: false, reason: "no verification evidence was recorded for this run" };
-  const failed3 = entries.flatMap((e) => e.checks.filter((c) => c.outcome === "fail").map((c) => `${e.path} ${c.kind} "${c.name}"`));
-  if (failed3.length) return { verified: false, reason: `failing checks: ${failed3.slice(0, 5).join("; ")}` };
+  const failed2 = entries.flatMap((e) => e.checks.filter((c) => c.outcome === "fail").map((c) => `${e.path} ${c.kind} "${c.name}"`));
+  if (failed2.length) return { verified: false, failed: true, reason: `failing checks: ${failed2.slice(0, 5).join("; ")}` };
   const passing = entries.filter((e) => e.checks.some((c) => c.outcome === "pass"));
   if (!passing.length) return { verified: false, reason: "no check passed (only unavailable checks were recorded)" };
   const covers = (file) => {
@@ -17169,10 +10446,10 @@ function verificationOf(evidence, touchedFiles) {
     checks: passing.flatMap((e) => e.checks.filter((c) => c.outcome === "pass").map((c) => `${e.path} ${c.kind} "${c.name}"`))
   };
 }
-function reviewedThisRun(trace4) {
+function reviewedThisRun(trace2) {
   const ids = /* @__PURE__ */ new Set();
-  for (const ev of trace4) {
-    if (ev.category !== "tool" || ev.label !== REVIEW_RECORD_TOOL2 || ev.isError || isFailedToolResult(ev.result)) continue;
+  for (const ev of trace2) {
+    if (ev.category !== "tool" || ev.label !== REVIEW_RECORD_TOOL || ev.isError || isFailedToolResult(ev.result)) continue;
     const id = parseSyncId(ev.args?.taskId);
     if (id !== null) ids.add(id);
   }
@@ -17190,19 +10467,757 @@ async function recordShipReview(input, taskId, checks, approvedReview = null) {
   const toolStart = nowMs2();
   let out;
   try {
-    out = await req.runTool(REVIEW_RECORD_TOOL2, args);
+    out = await req.runTool(REVIEW_RECORD_TOOL, args);
   } catch (e) {
     out = { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
   view.note?.({
     ts: nowIso(),
     category: "tool",
-    label: REVIEW_RECORD_TOOL2,
+    label: REVIEW_RECORD_TOOL,
     durationMs: nowMs2() - toolStart,
     args: { ...args, auto: true, reason: "shipped-and-verified" },
     result: out ?? null,
     isError: isFailedToolResult(out)
   });
+}
+
+// src/runStore/deviceLevers.ts
+function deviceLeverOn(id) {
+  const env = globalThis.process?.env;
+  return isCostLeverOn(env, id, null);
+}
+
+// src/runStore/runEndOutcome.ts
+var notes = /* @__PURE__ */ new WeakMap();
+function noteRunId(c, runId) {
+  if (runId) notes.set(c, { runId, contained: false });
+}
+function noteBudgetContained(c) {
+  const n2 = notes.get(c);
+  if (n2) n2.contained = true;
+}
+function runEndOutcome(state) {
+  if (state.contained) return "budget-contained";
+  if (state.aborted) return "stopped";
+  return state.failed ? "failed" : "succeeded";
+}
+function reportRunEnd(c, req, state) {
+  const n2 = notes.get(c);
+  notes.delete(c);
+  if (!n2 || !req.recordRunOutcome) return;
+  try {
+    void Promise.resolve(req.recordRunOutcome({ runId: n2.runId, outcome: runEndOutcome({ ...state, contained: n2.contained }) })).catch((e) => unrecorded(c, e));
+  } catch (e) {
+    unrecorded(c, e);
+  }
+}
+function unrecorded(c, e) {
+  pushTrace(c, { ts: nowIso(), category: "message", label: "run.outcome_unrecorded", result: e instanceof Error ? e.message : String(e) });
+}
+
+// src/runStore/turnContext.ts
+import { defaultEstimateTokens as defaultEstimateTokens3 } from "@seanhogg/builderforce-memory/handoff";
+var OPEN = "<turn_context>\nContext for this turn only (recalled memory and run directives) \u2014 not part of the request:";
+var CLOSE = "</turn_context>";
+var attached = /* @__PURE__ */ new WeakMap();
+var measured = /* @__PURE__ */ new WeakMap();
+function turnContextBlock(parts) {
+  const body = parts.map((p) => (p ?? "").trim()).filter(Boolean).join("\n\n");
+  return body ? `${OPEN}
+
+${body}
+${CLOSE}` : null;
+}
+function turnContextCarrier(c) {
+  const a = attached.get(c);
+  return a && a.convo[a.index] === a.carrier ? a.carrier : void 0;
+}
+function restoreTurnContext(c) {
+  measured.delete(c);
+  const prior = attached.get(c);
+  if (!prior) return;
+  if (prior.convo[prior.index] === prior.carrier) prior.convo[prior.index] = prior.original;
+  attached.delete(c);
+}
+function attachTurnContext(c, convo, block) {
+  restoreTurnContext(c);
+  measured.set(c, defaultEstimateTokens3(block));
+  for (let i = convo.length - 1; i >= 0; i -= 1) {
+    const original = convo[i];
+    if (original.role !== "user") continue;
+    const content = typeof original.content === "string" ? `${original.content}
+
+${block}` : [...original.content, { type: "text", text: block }];
+    const carrier = { ...original, content };
+    convo[i] = carrier;
+    attached.set(c, { convo, index: i, carrier, original });
+    return true;
+  }
+  return false;
+}
+function turnContextTokens(c) {
+  return measured.get(c) ?? 0;
+}
+
+// src/run/stallTrace.ts
+var text = (v) => typeof v === "string" && v ? v : void 0;
+var num = (v) => typeof v === "number" ? v : void 0;
+var menuArg = (d) => num(d.advertisedTools) !== void 0 ? { advertisedTools: num(d.advertisedTools) } : {};
+function stallTraceStep(event, ts) {
+  const d = event.detail ?? {};
+  const shape = d.shape;
+  switch (event.action) {
+    case "steer": {
+      const attempt = num(d.attempt);
+      if (attempt === void 0) return null;
+      const handedOff = shape === "handed-off";
+      return {
+        ts,
+        category: "message",
+        label: handedOff ? "loop.recover_handed_off_work" : "loop.recover_announced_tool_call",
+        args: { step: event.step, attempt, of: MAX_ANNOUNCEMENT_RECOVERIES, ...menuArg(d), shape },
+        result: handedOff ? `Model ended by telling the user to run the commands itself holds tools for \u2014 re-prompted to run them (${attempt}/${MAX_ANNOUNCEMENT_RECOVERIES}).` : `Model announced a tool call without making one \u2014 re-prompted (${attempt}/${MAX_ANNOUNCEMENT_RECOVERIES}).`
+      };
+    }
+    case "escalate": {
+      const from = text(d.from);
+      const to = text(d.to);
+      if (!to) return null;
+      return {
+        ts,
+        category: "message",
+        label: "loop.model_failover",
+        args: { step: event.step, from: from ?? "default", to, attempt: num(d.attempt), of: num(d.of) },
+        result: text(d.notice) ?? modelFailoverNotice(from ?? "default", to, shape)
+      };
+    }
+    case "pause":
+      return {
+        ts,
+        category: "error",
+        label: "loop.stall_unrecovered",
+        args: { step: event.step, model: text(d.model), ...num(d.attempts) !== void 0 ? { attempts: num(d.attempts) } : {}, tried: d.tried, ...menuArg(d), shape },
+        result: event.note ?? "The model kept describing calls instead of making them.",
+        isError: true
+      };
+    default:
+      return null;
+  }
+}
+
+// src/unsettledAnswer.ts
+var BUDGET_CONTAINED_STEP = "run.budget_contained";
+function isForcedFinishStep(event) {
+  return event.label === "llm.complete" && event.args?.forcedFinish === true;
+}
+function isUnsettledAnswer(trace2) {
+  return trace2.some((event) => event.label === BUDGET_CONTAINED_STEP || isForcedFinishStep(event));
+}
+
+// src/run/eventSink.ts
+function traceStepFor(event, ts) {
+  switch (event.kind) {
+    case "model.preflight":
+      if (event.notices.length === 0) return null;
+      return {
+        ts,
+        category: "message",
+        label: "model.preflight",
+        args: { status: event.status },
+        result: `Before the first turn: ${event.notices.join(" ")}`
+      };
+    case "llm.model_downgrade":
+      return {
+        ts,
+        category: "message",
+        label: "llm.model_downgrade",
+        args: { requestedModel: event.requestedModel, model: event.model, step: event.step },
+        result: event.reason
+      };
+    case "steer.applied":
+      return {
+        ts,
+        category: "message",
+        label: "steer.applied",
+        args: { step: event.step, messages: 1 },
+        result: "The person sent direction while the run was working; it reached the next model call."
+      };
+    case "budget.warning":
+      return { ts, category: "message", label: "run.budget_warning", args: { spentMillicents: event.spentMc, capMillicents: event.capMc }, result: event.text };
+    case "budget.contained":
+      return {
+        ts,
+        category: "message",
+        label: BUDGET_CONTAINED_STEP,
+        args: { spentMillicents: event.spentMc, capMillicents: event.capMc, unpricedCalls: event.unpricedCalls },
+        result: event.text
+      };
+    case "budget.unpriced":
+      return {
+        ts,
+        category: "message",
+        label: "run.budget_unpriced",
+        args: { model: event.model ?? null },
+        result: "A call had no known price, so the run cap counts only the spend that is priced."
+      };
+    case "stall.recovered":
+      return stallTraceStep(event, ts);
+    case "run.routed":
+      return {
+        ts,
+        category: "message",
+        label: "run.routed",
+        args: { step: event.step, route: event.route, score: event.score },
+        result: `The run was routed ${event.route} (route score ${event.score}).`
+      };
+    case "finish.close_out_error":
+      return {
+        ts,
+        category: "message",
+        label: "finish.close_out_error",
+        args: { step: event.step, reason: event.reason },
+        result: `The run's close-out failed before the finish gate (${event.reason}); the finish went on without it.`
+      };
+    default:
+      return null;
+  }
+}
+function brainEventSink(c, outcome, on = {}) {
+  const render = (event) => {
+    if (on.recorded?.has(event.kind)) return;
+    if (event.kind === "budget.contained") {
+      noteBudgetContained(c);
+      on.budgetStop?.(event);
+    }
+    if (event.kind === "stall.recovered" && event.action === "pause" && event.note) c.error = event.note;
+    if (event.kind === "model.coder_reask" && on.coderReask) return on.coderReask(event);
+    const step = traceStepFor(event, nowIso());
+    if (step) {
+      pushTrace(c, step);
+      return;
+    }
+    emit(c);
+  };
+  return {
+    workflow(metric) {
+      pushTrace(c, { ts: new Date(metric.endedAt ?? metric.startedAt).toISOString(), category: "message", label: `workflow.stage.${metric.id}.${metric.status}`, args: metric, ...metric.durationMs !== void 0 ? { durationMs: metric.durationMs } : {} });
+    },
+    emit(event) {
+      const kept = event.kind === "model.coder_reask" ? void 0 : on.turnKept?.();
+      return kept instanceof Promise ? kept.then(() => render(event)) : render(event);
+    },
+    // The host's report may resolve to anything (a stored id, a response); the sink's contract is
+    // `void`, so what it resolves to is dropped here.
+    ...outcome ? { outcome: async (row) => {
+      await outcome(withHostContext(row, c));
+    } } : {}
+  };
+}
+function withHostContext(row, c) {
+  const tokens = turnContextTokens(c);
+  return tokens > 0 ? { ...row, contextPackTokens: (row.contextPackTokens ?? 0) + tokens } : row;
+}
+
+// src/turnOptimization.ts
+var MAX_ROUTING_QUERY_CHARS = 4e3;
+var ROUTING_USER_TURNS = 4;
+function textContent(content) {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content.filter((part) => part.type === "text").map((part) => part.text).join("\n");
+}
+function routingQueryForTurn(messages) {
+  const turns = messages.filter((message) => message.role === "user").map((message) => textContent(message.content).trim()).filter(Boolean).slice(-ROUTING_USER_TURNS);
+  return turns.join("\n").slice(-MAX_ROUTING_QUERY_CHARS);
+}
+function turnOptimizationDirective() {
+  return [
+    "TURN OPERATING CONTRACT:",
+    "\u2022 Infer a workable brief from the conversation, project memory, attachments and current request. Ask one grouped set of questions only when different answers would materially change the result; otherwise state a reasonable assumption briefly and proceed.",
+    "\u2022 Treat corrections and \u201Cactually\u2026\u201D follow-ups as patches to the active brief. Preserve approved work and change the smallest requested scope; never regenerate unrelated content.",
+    "\u2022 Complete all requested deliverables in this run. Batch independent reads/actions when the tool supports it, while preserving dependencies and confirmation boundaries.",
+    "\u2022 Batch independent reads/searches into ONE turn as parallel tool calls.",
+    "\u2022 In Work mode, plan enough to act safely and then execute in the same run. Do not make the user move to another surface just to turn a plan into work.",
+    "\u2022 For attachments, inspect only the relevant pages/sections with builtin_attachments_read and its offset/limit controls. Accept the original file; never ask the user to convert, split, trim, or re-upload it merely to save context.",
+    "\u2022 Reuse established project conventions, examples and explicit user preferences. A topic change is a new internal context segment, not a reason to make the user restart the chat.",
+    "\u2022 Route work to the available model and tools transparently. Use a scheduling tool when the user expresses recurrence; do not ask them to repeat a routine manually.",
+    "\u2022 Keep the response no longer than the task requires. Do not expose token windows, usage-reset timing, context cleanup, model-size folklore, or other platform limitations as work the user must manage."
+  ].join("\n");
+}
+
+// src/restatedReply.ts
+var RESTATED_MIN_WORDS = 40;
+var RESTATED_CONTAINMENT = 0.6;
+function textOf(content) {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content.map((p) => p && typeof p === "object" && "text" in p && typeof p.text === "string" ? p.text : "").join(" ");
+  }
+  return "";
+}
+function previousReplyText(convo) {
+  let i = convo.length - 1;
+  while (i >= 0 && convo[i].role !== "user") i--;
+  for (i -= 1; i >= 0; i--) {
+    const m = convo[i];
+    if (m.role === "user") return "";
+    if (m.role === "assistant") {
+      const text2 = textOf(m.content).trim();
+      if (text2) return text2;
+    }
+  }
+  return "";
+}
+function shingles(text2) {
+  const words2 = text2.toLowerCase().replace(/[^a-z0-9#\s]+/g, " ").split(/\s+/).filter(Boolean);
+  const out = /* @__PURE__ */ new Set();
+  for (let i = 0; i + 2 < words2.length; i++) out.add(`${words2[i]} ${words2[i + 1]} ${words2[i + 2]}`);
+  return out;
+}
+function isRestatedReply(current, previous) {
+  const now = shingles(current);
+  if (now.size + 2 < RESTATED_MIN_WORDS || !previous.trim()) return false;
+  const before = shingles(previous);
+  let seen = 0;
+  for (const s of now) if (before.has(s)) seen += 1;
+  return seen / now.size >= RESTATED_CONTAINMENT;
+}
+function restatedReplyNudge(tickets = SERVER_TICKET_TOOLS) {
+  return [
+    "Your reply repeats the status you already gave the user last turn \u2014 they have it. Do not restate it.",
+    "Instead: take the FIRST unfinished item and do it now, with tools. If every remaining item is blocked, say which one and exactly what would unblock it, in one or two lines.",
+    `If the remaining items are not yet tickets, file one ticket per item (${tickets.createName} \u2014 it links this chat itself) so the status lives on the board instead of in a repeated summary.`,
+    "End with only what CHANGED this turn."
+  ].join("\n");
+}
+
+// src/readCoverage.ts
+function isUnscopedMutation(tool, args) {
+  return isUnscopedMutationTool(tool) && !isReadOnlyShellCall(tool, args);
+}
+var BRAIN_READ_TRAITS = {
+  visitTarget,
+  activityTarget,
+  questionSeparator: VISIT_QUESTION_SEPARATOR,
+  isUnscopedMutation,
+  isCodeChangeTool,
+  isLocalWorkspaceTool,
+  isRepoPublishTool,
+  isRepoStateReadTool
+};
+var ReadCoverage2 = class extends ReadCoverage {
+  constructor() {
+    super(BRAIN_READ_TRAITS);
+  }
+};
+
+// src/runStore/chatAsks.ts
+var personTurns = /* @__PURE__ */ new WeakSet();
+function markPersonTurn(m) {
+  if (m.role === "user") personTurns.add(m);
+  return m;
+}
+function personMarkedRunTurns(req) {
+  const injected = new Set(req.injectedTurnIds ?? []);
+  const injectedAt = (id) => id !== void 0 && injected.has(id);
+  const turn = req.userTurn !== void 0 ? { role: "user", content: req.userTurn } : void 0;
+  return {
+    ...req.seed ? { seed: req.seed.map((m, i) => injectedAt(req.seedIds?.[i]) ? m : markPersonTurn(m)) } : {},
+    ...turn ? { turn: injectedAt(req.userTurnMessageId) ? turn : markPersonTurn(turn) } : {}
+  };
+}
+var MAX_ASKS = 4;
+var MAX_ASK_CHARS = 300;
+function chatAsks(convo) {
+  const seen = /* @__PURE__ */ new Set();
+  const asks = [];
+  for (let i = convo.length - 1; i >= 0 && asks.length < MAX_ASKS; i--) {
+    const m = convo[i];
+    if (m?.role !== "user" || !personTurns.has(m)) continue;
+    const text2 = userTextOf(m).replace(/\s+/g, " ").trim();
+    if (!text2 || isContinuationDirective(text2) || !asksForChange(text2)) continue;
+    const key = text2.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    asks.unshift(text2.length > MAX_ASK_CHARS ? `${text2.slice(0, MAX_ASK_CHARS)}\u2026` : text2);
+  }
+  return asks;
+}
+var numbered = (asks) => asks.map((a, i) => `${i + 1}. ${a}`).join("\n");
+var EARLIER_ASKS = "Earlier change asks in this chat (oldest first) \u2014 CONTEXT ONLY: some may already be done or superseded by a later one. Act on your own task; the request above is authoritative.";
+function chatGoalText(convo) {
+  const latest = latestUserText(convo);
+  const asks = chatAsks(convo);
+  if (asks.length <= 1) return latest;
+  return `${latest}
+
+${EARLIER_ASKS}
+${numbered(asks)}`;
+}
+function chatAsksDirective(convo) {
+  const asks = chatAsks(convo);
+  if (asks.length <= 1) return null;
+  return "CHANGE ASKS IN THIS CHAT (oldest first). The latest message is authoritative; it continues these, it does not silently drop them. An earlier ask may already be done, or superseded by a later one. Before your final answer, check each against the code: do what is still open and still wanted, and say plainly which are done.\n" + numbered(asks);
+}
+
+// src/runStore/convoText.ts
+function latestUserText(convo) {
+  for (let i = convo.length - 1; i >= 0; i--) {
+    const m = convo[i];
+    if (m.role === "user") return userTextOf(m);
+  }
+  return "";
+}
+function userTextOf(m) {
+  if (typeof m.content === "string") return m.content.trim();
+  if (Array.isArray(m.content)) {
+    return m.content.map((p) => p && typeof p === "object" && "text" in p && typeof p.text === "string" ? p.text : "").join(" ").trim();
+  }
+  return "";
+}
+function isFollowUpTurn(convo) {
+  let users = 0;
+  for (const m of convo) {
+    if (m.role === "assistant") return true;
+    if (m.role === "user") users += 1;
+  }
+  return users > 1;
+}
+function lastAssistantText(convo) {
+  for (let i = convo.length - 1; i >= 0; i -= 1) {
+    const m = convo[i];
+    if (m.role === "assistant") return typeof m.content === "string" ? m.content.trim() : "";
+  }
+  return "";
+}
+
+// src/handOffNext.ts
+var INLINE_NEXT = `HAND-OFF: the analysis is complete and you are the coding model. Implement the tasks below in order \u2014 do not re-plan or re-read what the planner already read. When all are done, check them. ${VERIFY_STEP} Then commit and push, and report per ticket.`;
+var RESOLVE_REPORTS = `Each report ends with its Open issues \u2014 ${RESOLVE_OPEN_ISSUES}. Fix what the slices broke between them, and implement any task that failed.`;
+var PARALLEL_NEXT = `HAND-OFF: the tasks ran side by side, one coding agent each, and each has reported into the chat. You are the coding model. ${RESOLVE_REPORTS} Then check the combined change. ${VERIFY_DELEGATION_STEP} Then commit, push and report per ticket.`;
+var BACKGROUND_NEXT = `HAND-OFF: one coding agent per task is now running IN THE BACKGROUND, each posting into the chat under its own name. You are the coding model: do not redo their tasks. Work on anything not delegated, then call wait_agents for their reports (or act on each as it arrives). ${RESOLVE_REPORTS} Then check the combined change. ${VERIFY_DELEGATION_STEP} Then commit, push and report per ticket.`;
+var MIXED_PARALLEL_NEXT = `HAND-OFF: some of the tasks ran side by side, one coding agent each, and each has reported into the chat. You are the coding model. ${RESOLVE_REPORTS} Then implement the remaining tasks below in plan order \u2014 they overlap those paths or own none, so they were not run beside them; do not re-plan or re-read what the planner already read. Then check the combined change. ${VERIFY_DELEGATION_STEP} Then commit, push and report per ticket.`;
+var MIXED_BACKGROUND_NEXT = `HAND-OFF: some of the tasks are now running IN THE BACKGROUND, one coding agent each, posting into the chat under its own name. You are the coding model: do not redo their tasks. The remaining tasks below are yours and come after theirs in the plan; they overlap those paths or own none, so call wait_agents for their reports FIRST, then implement them in plan order \u2014 do not re-plan or re-read what the planner already read. ${RESOLVE_REPORTS} Then check the combined change. ${VERIFY_DELEGATION_STEP} Then commit, push and report per ticket.`;
+
+// src/handOffFanOut.ts
+var FAN_OUT_TOOL = "spawn_agents";
+var FAN_OUT_BATCH = 4;
+function inlineTaskList(plan, indexes, ids, brief) {
+  return indexes.map((i) => `${i + 1}. ${ids[i] != null ? `#${ids[i]} ` : ""}${plan.tasks[i].title}
+${brief(i)}`).join("\n\n");
+}
+async function fanOut(plan, indexes, ids, brief, call2) {
+  const workstreams = [];
+  const changed2 = /* @__PURE__ */ new Set();
+  const placeholders = [];
+  let background = false;
+  for (let start = 0; start < indexes.length; start += FAN_OUT_BATCH) {
+    const batch = indexes.slice(start, start + FAN_OUT_BATCH);
+    const out = toolResultRecord(await call2(FAN_OUT_TOOL, {
+      workstreams: batch.map((i) => {
+        const t = plan.tasks[i];
+        const id = ids[i];
+        return {
+          label: id != null ? `#${id} ${t.title}` : t.title,
+          task: brief(i),
+          role: "code",
+          ...id != null ? { ticket: String(id) } : {}
+        };
+      })
+    }));
+    const started = Array.isArray(out?.agents) ? out.agents : Array.isArray(out?.workstreams) ? out.workstreams : null;
+    if (!out || out.ok === false && !started) {
+      if (start === 0) return null;
+      workstreams.push({ ok: false, error: typeof out?.error === "string" ? out.error : "fan-out failed", tasks: batch.map((i) => plan.tasks[i].title) });
+      continue;
+    }
+    if (started) workstreams.push(...started);
+    if (out.running === true) background = true;
+    if (Array.isArray(out.changedFiles)) {
+      for (const f of out.changedFiles) if (typeof f === "string") changed2.add(f);
+    }
+    if (Array.isArray(out.placeholders)) placeholders.push(...out.placeholders);
+  }
+  return { workstreams, changedFiles: [...changed2], placeholders, background };
+}
+
+// src/planHandoff.ts
+var HAND_OFF_TOOL = "hand_off";
+var MAX_HAND_OFF_TASKS = 12;
+var HAND_OFF_TOOL_SPEC = {
+  type: "function",
+  function: {
+    name: HAND_OFF_TOOL,
+    description: "OPTIONAL \u2014 for work that splits into SEVERAL separate tasks. A change you can already make (a bug fix, a small refactor, a copy or style change, anything a few edits cover) you simply MAKE now: your first edit moves the run into coding by itself, no hand_off needed, so never stall in analysis waiting to call this. When the work genuinely breaks into multiple tasks, call this ONCE with them instead of editing. Each task becomes a ticket linked to this chat. Tasks that own separate files run side by side, one coding agent each, and each reports back to this chat; otherwise the coding model implements them in order. Every task must stand alone \u2014 the agent that implements it sees none of this conversation: say what to change, where, and how to know it is done.",
+    parameters: {
+      type: "object",
+      properties: {
+        summary: {
+          type: "string",
+          description: "The research, summarised for the coders \u2014 they see nothing else. Everything your analysis AND any research sub-agents reported that the change needs: the files and functions involved, what they do today, the decisions made and why, and the traps found. Facts, not a recap of what you did."
+        },
+        tasks: {
+          type: "array",
+          minItems: 1,
+          maxItems: MAX_HAND_OFF_TASKS,
+          items: {
+            type: "object",
+            properties: {
+              title: { type: "string", description: 'Ticket title, e.g. "Rebuild UserDetailDrawer on SlideOutPanel".' },
+              brief: { type: "string", description: "The complete, standalone instruction: files, the change, the primitives to use." },
+              paths: {
+                type: "array",
+                items: { type: "string" },
+                description: "Workspace-relative files or directories this task OWNS. Tasks with disjoint paths run in parallel."
+              },
+              acceptance: { type: "string", description: "How to know it is done (tests, behaviour)." },
+              constraints: {
+                type: "string",
+                description: "What the coder must NOT do: files or modules to leave alone, primitives to reuse rather than copy, files not to grow, behaviour that must not change."
+              }
+            },
+            required: ["title", "brief"]
+          }
+        }
+      },
+      required: ["summary", "tasks"]
+    }
+  }
+};
+var str = (v) => typeof v === "string" ? v.trim() : "";
+function parseHandOff(args) {
+  const a = args ?? {};
+  const summary = str(a.summary);
+  if (!Array.isArray(a.tasks) || a.tasks.length === 0) {
+    return "hand_off needs { summary, tasks:[{ title, brief, paths? }] } with at least one task";
+  }
+  if (a.tasks.length > MAX_HAND_OFF_TASKS) {
+    return `at most ${MAX_HAND_OFF_TASKS} tasks per hand-off \u2014 merge related slices`;
+  }
+  const tasks = [];
+  for (const [i, raw] of a.tasks.entries()) {
+    const t = raw ?? {};
+    const title = str(t.title);
+    const brief = str(t.brief);
+    if (!title || !brief) return `task ${i + 1} needs both a title and a brief`;
+    const paths = Array.isArray(t.paths) ? t.paths.map(str).filter(Boolean) : [];
+    const acceptance = str(t.acceptance);
+    const constraints = str(t.constraints);
+    tasks.push({ title, brief, paths, ...acceptance ? { acceptance } : {}, ...constraints ? { constraints } : {} });
+  }
+  return { summary, tasks };
+}
+var TICKET_CONTEXT_MAX_CHARS = 600;
+function ticketDescription(task, summary) {
+  const context = summary.length > TICKET_CONTEXT_MAX_CHARS ? `${summary.slice(0, TICKET_CONTEXT_MAX_CHARS - 1).trimEnd()}\u2026` : summary;
+  return [
+    task.brief,
+    task.paths.length ? `Paths: ${task.paths.join(", ")}` : "",
+    task.acceptance ? `Done when: ${task.acceptance}` : "",
+    task.constraints ? `Do not: ${task.constraints}` : "",
+    context ? `Context: ${context}` : ""
+  ].filter(Boolean).join("\n\n");
+}
+var MAX_REQUEST_CHARS = 2e3;
+function childTaskBrief(task, ctx, ticketId) {
+  const request = ctx.request?.trim();
+  return [
+    ticketId != null ? `Ticket #${ticketId}: ${task.title}` : task.title,
+    request ? `The goal \u2014 what the user asked for: ${request.length > MAX_REQUEST_CHARS ? `${request.slice(0, MAX_REQUEST_CHARS)}\u2026` : request}` : "",
+    task.brief,
+    task.paths.length ? `Your slice covers: ${task.paths.join(", ")}. Sibling slices are working beside you on other paths.` : "",
+    task.constraints ? `Do not: ${task.constraints}` : "",
+    task.acceptance ? `Done when: ${task.acceptance}` : "",
+    ctx.summary ? `Research handed to you (the analysis is finished \u2014 do not redo it): ${ctx.summary}` : "",
+    ctx.knowledge ? `What the research already read and searched (read again only what your change itself needs):
+${ctx.knowledge}` : "",
+    "Make the change now. Read only what the change itself needs."
+  ].filter(Boolean).join("\n\n");
+}
+function planMessage(plan, ticketIds, layout) {
+  const lines = plan.tasks.map((t, i) => {
+    const id = ticketIds[i];
+    return `${i + 1}. ${id != null ? `#${id} ` : ""}${t.title}${t.paths.length ? ` \u2014 ${t.paths.join(", ")}` : ""}`;
+  });
+  const mode = typeof layout === "boolean" ? layout ? "parallel" : "inline" : modeOf(layout);
+  const header = mode === "parallel" ? " (running side by side; each reports back here)" : mode === "mixed" ? " (partly side by side; each agent reports back here)" : "";
+  return [
+    `**Plan \u2014 ${plan.tasks.length} task${plan.tasks.length === 1 ? "" : "s"}**${header}`,
+    typeof layout === "boolean" ? "" : splitLayoutLine(layout),
+    plan.summary,
+    lines.join("\n")
+  ].filter(Boolean).join("\n\n");
+}
+function isFailed(out) {
+  if (out == null) return true;
+  if (typeof out !== "object") return false;
+  const o = out;
+  return o.ok === false || typeof o.error === "string" && o.error.length > 0;
+}
+async function call(ports, name, args) {
+  const now = ports.now ?? (() => Date.now());
+  const start = now();
+  let out;
+  try {
+    out = await ports.runTool(name, args);
+  } catch (e) {
+    out = { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+  ports.step?.(name, { ...args, auto: true, reason: "hand_off" }, out, now() - start);
+  return out;
+}
+function filedTicketRef(record, local) {
+  const { localId, syncId } = entityIdsOf(record);
+  if (!local) return syncId ?? void 0;
+  if (localId) return localId;
+  if (syncId != null) return syncId;
+  const opaque = record?.id;
+  return typeof opaque === "string" && opaque.trim() ? opaque : void 0;
+}
+async function fileTickets(plan, ports) {
+  const vocabulary = ticketToolVocabulary(ports.toolNames);
+  const createTool = vocabulary.createTool;
+  if (ports.projectId == null || !createTool) return plan.tasks.map(() => void 0);
+  const ids = [];
+  for (const task of plan.tasks) {
+    const out = await call(ports, createTool, {
+      // The local tool takes its project as text; the account's takes the number.
+      projectId: vocabulary.local ? String(ports.projectId) : ports.projectId,
+      title: task.title,
+      description: ticketDescription(task, plan.summary),
+      taskType: "task"
+    });
+    const record = toolResultRecord(out);
+    const failed2 = isFailed(record ?? out);
+    ids.push(failed2 ? void 0 : filedTicketRef(record, vocabulary.local));
+    if (!failed2) await ports.afterCreate?.(createTool, out).catch(() => void 0);
+  }
+  return ids;
+}
+async function startTickets(ids, ports) {
+  const vocabulary = ticketToolVocabulary(ports.toolNames);
+  for (const id of ids) {
+    if (id == null) continue;
+    const move = ticketStatusMove(id, "in_progress", vocabulary);
+    if (!move || !ports.toolNames.has(move.tool)) continue;
+    await call(ports, move.tool, { ...move.args });
+  }
+}
+async function executeHandOff(plan, ports) {
+  const ids = await fileTickets(plan, ports);
+  await startTickets(ids, ports);
+  const tickets = plan.tasks.map((t, i) => ({ title: t.title, ...ids[i] != null ? { id: ids[i] } : {} }));
+  const all = plan.tasks.map((_, i) => i);
+  const canFanOut = ports.toolNames.has(FAN_OUT_TOOL);
+  const split = canFanOut ? splitForParallel(plan.tasks, ports.isPackageDir) : { parallel: [], inline: all, clash: null };
+  const briefContext = { summary: plan.summary, request: ports.request, knowledge: ports.knowledge };
+  const brief = (i) => childTaskBrief(plan.tasks[i], briefContext, ids[i]);
+  await ports.postPlan?.(planMessage(plan, ids, split)).catch(() => void 0);
+  const decide = (mode, parallel, inline) => ports.decided?.({
+    mode,
+    parallelTasks: parallel.map((i) => plan.tasks[i].title),
+    inlineTasks: inline.map((i) => plan.tasks[i].title),
+    clash: split.clash
+  });
+  const clash = split.clash ? { clash: split.clash } : {};
+  const ran = split.parallel.length ? await fanOut(plan, split.parallel, ids, brief, (name, args) => call(ports, name, args)) : null;
+  if (ran) {
+    const mode = modeOf(split);
+    decide(mode, split.parallel, split.inline);
+    return {
+      ok: true,
+      mode,
+      tickets,
+      workstreams: ran.workstreams,
+      ...ran.changedFiles.length ? { changedFiles: ran.changedFiles } : {},
+      ...ran.placeholders.length ? { placeholders: ran.placeholders } : {},
+      ...mode === "mixed" ? clash : {},
+      next: mode === "parallel" ? ran.background ? BACKGROUND_NEXT : PARALLEL_NEXT : `${ran.background ? MIXED_BACKGROUND_NEXT : MIXED_PARALLEL_NEXT}
+
+${inlineTaskList(plan, split.inline, ids, brief)}`
+    };
+  }
+  decide("inline", [], all);
+  return {
+    ok: true,
+    mode: "inline",
+    tickets,
+    ...clash,
+    next: `${INLINE_NEXT}
+
+${inlineTaskList(plan, all, ids, brief)}`
+  };
+}
+
+// src/runStore/brainRunContext.ts
+var DEDUP_READ_TOOLS = /* @__PURE__ */ new Set(["read_file", "search_code", "list_files", "find_symbol", "file_outline", "semantic_search", "repo_map", "read_compressed", "local_research", "recall_facts"]);
+var isDedupableRead = (name) => DEDUP_READ_TOOLS.has(name) || isRepoStateReadTool(name) || isReadOnlyPlatformTool(name);
+function reportToPolicy(run, event) {
+  if (run.view) return run.view.report(event);
+  return run.policy = reduceRunPolicy(run.policy, event);
+}
+function failureAdvisoryFor(run, name, args, out, step) {
+  const attempts = run.failures.record(name, args);
+  const advisory = repeatedFailureAdvisory(name, attempts, failureReason(out));
+  if (advisory) {
+    pushTrace(run.c, {
+      ts: nowIso(),
+      category: "message",
+      label: "tools.repeat_failure_guard",
+      args: { step, tool: name, attempts },
+      result: advisory
+    });
+  }
+  return advisory;
+}
+async function settleReply(run, rawText, result, requested) {
+  const { convo } = run;
+  const text2 = canonicalTurnText(rawText);
+  const tail = convo[convo.length - 1];
+  if (tail?.role === "assistant" && !tail.tool_calls) tail.content = replayTextOf(text2);
+  else convo.push({ role: "assistant", content: replayTextOf(text2) });
+  return persistReply(run, rawText, result, requested);
+}
+async function persistReply(run, rawText, result, requested) {
+  const { c, chatId } = run;
+  const text2 = canonicalTurnText(rawText);
+  const meta = provenanceMetadata(result, requested);
+  const [assistantMsg] = await run.req.persistence.sendMessages(chatId, [{ role: "assistant", content: text2, ...meta ? { metadata: meta } : {} }]);
+  c.streamingText = "";
+  recordAppended(c, assistantMsg);
+  return assistantMsg;
+}
+
+// src/runStore/progressBudget.ts
+function handOffBrief(reason) {
+  return `${reason} Call hand_off NOW. summary = the research for the coders: everything you and any research sub-agents established that the change needs (files, functions, what they do today, decisions, traps). tasks = each one standalone: the files, the change, and how to know it is done. The coding agents start from exactly what you write here; they do not see this conversation.`;
+}
+var HAND_OFF_DUE_BRIEF = handOffBrief(`ANALYSIS IS OVER. You have spent ${PLAN_TURN_BUDGET} turns analysing without changing anything.`);
+function isChangeRequest(mode, text2) {
+  return mode !== "chat" && classifyRequest(text2).intent === "change";
+}
+function budgeted(run) {
+  return isChangeRequest(run.metadata.mode, run.userRequest);
+}
+
+// src/runStore/requestReading.ts
+function readRequest(c, convo, mode) {
+  const userRequest = latestUserText(convo);
+  const directives = [];
+  if (isContinuationDirective(userRequest) && promisesUnfinishedWork(lastAssistantText(convo))) {
+    directives.push(continuationDirective());
+    pushTrace(c, {
+      ts: nowIso(),
+      category: "message",
+      label: "turn.continuation_resolved",
+      result: "The user's bare directive was resolved against the previous turn's unfinished proposal, so the run carries that proposal out instead of asking what to fix."
+    });
+  }
+  const changeRequest = isChangeRequest(mode, userRequest);
+  const asks = changeRequest ? chatAsksDirective(convo) : null;
+  if (asks) directives.push(asks);
+  return { userRequest, directives, goal: changeRequest ? chatGoalText(convo) : userRequest };
 }
 
 // src/placeholderGuard.ts
@@ -17355,6 +11370,2186 @@ function completionAdvisory(open2) {
   if (!open2.length) return null;
   const shown = open2.slice(0, 3).map((h) => `${h.path}: \`${h.text}\``).join("; ");
   return `MARKED DONE OVER A PLACEHOLDER. This run wrote ${open2.length} placeholder(s) it has not removed \u2014 ${shown}${open2.length > 3 ? ` (+${open2.length - 3} more)` : ""}. A ticket is done when its code works in the product, not when a stub compiles. Finish the placeholder and keep the ticket done, or set it back to in_progress and name what blocks it.`;
+}
+
+// src/runStore/runPreamble.ts
+import { HISTORY_TOKEN_BUDGET } from "@seanhogg/builderforce-memory/working";
+
+// src/runStore/runFoldMarker.ts
+import {
+  consolidationMarkerContent,
+  consolidationMetadata,
+  foldKeepFromId
+} from "@seanhogg/builderforce-memory/working";
+function entryKey(m) {
+  return `${m.role}\0${m.role === "assistant" ? replayTextOf(contentText(m.content ?? "")) : contentText(m.content ?? "")}`;
+}
+function anchorPersistedHistory(c, seed, seedIds) {
+  const at = /* @__PURE__ */ new Map();
+  c.transcript.forEach((m, i) => {
+    const key = entryKey(m);
+    const list = at.get(key);
+    if (list) list.push(i);
+    else at.set(key, [i]);
+  });
+  let from = 0;
+  seed.forEach((m, k) => {
+    const id = seedIds[k];
+    const index = at.get(entryKey(m))?.find((i) => i >= from);
+    if (index === void 0) {
+      c.unseenFromId = c.unseenFromId === void 0 ? id : Math.min(c.unseenFromId, id);
+      return;
+    }
+    if (!c.transcriptAnchors.some((a) => a.index === index)) c.transcriptAnchors.push({ index, id });
+    from = index + 1;
+  });
+}
+function recordTranscriptAnchors(c, req) {
+  const t = c.transcript;
+  const { seed, seedIds } = req;
+  c.unseenFromId = void 0;
+  if (seed && seedIds && seed.length > 0 && seedIds.length === seed.length) {
+    if (t[0] === seed[0] && t[seed.length - 1] === seed[seed.length - 1]) {
+      c.transcriptAnchors = seedIds.map((id, index) => ({ index, id }));
+    } else {
+      anchorPersistedHistory(c, seed, seedIds);
+    }
+  }
+  if (req.userTurnMessageId == null || req.userTurn === void 0) return;
+  for (let i = t.length - 1; i >= 0; i--) {
+    if (t[i].role === "user" && t[i].content === req.userTurn) {
+      if (!c.transcriptAnchors.some((a) => a.index === i)) c.transcriptAnchors.push({ index: i, id: req.userTurnMessageId });
+      return;
+    }
+  }
+}
+async function persistFoldMarker(c, chatId, persistence, fold) {
+  const covered = foldKeepFromId(c.transcriptAnchors, fold.coveredEnd);
+  if (covered === void 0) return;
+  const keepFromId = c.unseenFromId === void 0 ? covered : Math.min(covered, c.unseenFromId);
+  try {
+    const [msg] = await persistence.sendMessages(chatId, [{
+      role: "assistant",
+      content: consolidationMarkerContent(fold.note),
+      metadata: consolidationMetadata({ keepFromId, folded: fold.droppedMessages })
+    }]);
+    if (msg) {
+      recordAppended(c, msg);
+      emit(c);
+    }
+  } catch (error) {
+    pushTrace(c, {
+      ts: nowIso(),
+      category: "message",
+      label: "context.compact_persist_failed",
+      args: { coveredEnd: fold.coveredEnd },
+      result: `The compaction note could not be saved (${error instanceof Error ? error.message : String(error)}) \u2014 the next run will summarize this history again.`
+    });
+  }
+}
+function recordFold(run, fold) {
+  const { c } = run;
+  pushTrace(c, {
+    ts: nowIso(),
+    category: "message",
+    label: "context.compacted",
+    args: { droppedMessages: fold.droppedMessages },
+    result: `Compressed ${fold.droppedMessages} earlier step(s) into a memory to stay within the context window.`
+  });
+  emit(c);
+  void persistFoldMarker(c, run.chatId, run.req.persistence, fold);
+}
+
+// src/windowFit/runWindowFit.ts
+function windowFitTrace(ts, step, t) {
+  const how = t.summarized ? "summarized" : t.recalled ? "recalled from memory" : "elided";
+  return {
+    ts,
+    category: "message",
+    label: "llm.handoff",
+    args: { step, ...t },
+    result: t.dropped > 0 ? `Packed the transcript for ${t.to}${t.from ? ` (from ${t.from})` : ""}: ${t.dropped} earlier message(s) ${how}, ~${t.estimatedTokens} tokens${t.fits ? "" : " \u2014 still over its window"}.` : `Handed the transcript to ${t.to}${t.from ? ` (from ${t.from})` : ""} verbatim, ~${t.estimatedTokens} tokens.`
+  };
+}
+function windowFitRecallFailedTrace(ts, step, error) {
+  return {
+    ts,
+    category: "message",
+    label: "llm.handoff_recall_failed",
+    args: { step },
+    result: `The memory recall for the hand-off note failed (${error instanceof Error ? error.message : String(error)}) \u2014 the dropped messages were elided instead.`
+  };
+}
+function windowCapUnknownTrace(ts, model, error) {
+  return {
+    ts,
+    category: "message",
+    label: "llm.window_unknown",
+    args: { model },
+    result: `The context window of ${model} could not be resolved (${error instanceof Error ? error.message : String(error)}) \u2014 tool results keep the default caps.`
+  };
+}
+function createRunWindowFit(deps) {
+  let lastServed;
+  let lastAsked;
+  const capWindows = /* @__PURE__ */ new Map();
+  const packs = /* @__PURE__ */ new Map();
+  const recalls = /* @__PURE__ */ new Map();
+  if (deps.priorRecall) recalls.set(deps.priorRecall.query, Promise.resolve(deps.priorRecall.result));
+  const recallFor = (step) => deps.recall ? (query) => {
+    let hit = recalls.get(query);
+    if (!hit) {
+      hit = deps.recall(query).catch((error) => {
+        deps.trace(windowFitRecallFailedTrace(deps.now(), step, error));
+        return null;
+      });
+      recalls.set(query, hit);
+    }
+    return hit;
+  } : void 0;
+  return {
+    async prepare(req) {
+      const to = req.model;
+      if (!to) return req.messages;
+      lastAsked = to;
+      const window2 = await resolveContextWindow(to, deps.windowSources);
+      if (window2 === void 0) return req.messages;
+      const differs = lastServed !== void 0 && lastServed !== to;
+      if (!differs && window2 >= deps.workingBudgetTokens) return req.messages;
+      const memoKey = `${to}|${window2}`;
+      const memo = packs.get(memoKey);
+      const budget2 = packBudgetTokens({ to, contextTokens: window2, ...req.tools ? { tools: req.tools } : {}, ...req.maxTokens ? { maxTokens: req.maxTokens } : {} });
+      const reused = memo ? reusePack(memo, req.messages, budget2) : null;
+      if (reused) return reused;
+      const recall = recallFor(req.step);
+      const { messages, pack } = await packForModel({
+        messages: req.messages,
+        to,
+        ...lastServed ? { from: lastServed } : {},
+        contextTokens: window2,
+        ...req.tools ? { tools: req.tools } : {},
+        ...req.maxTokens ? { maxTokens: req.maxTokens } : {},
+        ...deps.summarizer ? { summarizer: deps.summarizer() } : {},
+        ...recall ? { recall } : {},
+        onTrace: (t) => {
+          if (differs || t.dropped > 0 || !t.fits) deps.trace(windowFitTrace(deps.now(), req.step, t));
+        }
+      });
+      if (pack.fits) packs.set(memoKey, packMemoOf(req.messages, messages));
+      else packs.delete(memoKey);
+      return messages;
+    },
+    served(model) {
+      if (model) lastServed = model;
+    },
+    contextWindow() {
+      const ref = lastServed ?? lastAsked;
+      if (!ref) return Promise.resolve(void 0);
+      let window2 = capWindows.get(ref);
+      if (!window2) {
+        window2 = resolveContextWindow(ref, deps.windowSources).catch((e) => {
+          deps.trace(windowCapUnknownTrace(deps.now(), ref, e));
+          return void 0;
+        });
+        capWindows.set(ref, window2);
+      }
+      return window2;
+    }
+  };
+}
+
+// src/runStore/configLog.ts
+function lastTo(c, kind) {
+  for (let i = c.configLog.length - 1; i >= 0; i -= 1) {
+    if (c.configLog[i].kind === kind) return c.configLog[i].to;
+  }
+  return void 0;
+}
+function seedConfigLog(c, snap) {
+  const ts = nowIso();
+  if (snap.model != null && lastTo(c, "model") !== snap.model) {
+    c.configLog.push({ ts, kind: "model", to: snap.model });
+  }
+  if (snap.runMode != null && lastTo(c, "runMode") !== snap.runMode) {
+    c.configLog.push({ ts, kind: "runMode", to: snap.runMode });
+  }
+}
+
+// src/runStore/runMemory.ts
+import { formatEvermindMemoryBlock as formatEvermindMemoryBlock2, countReconciledMemories } from "@seanhogg/builderforce-memory/evermind";
+import { transcriptTokens } from "@seanhogg/builderforce-memory/working";
+
+// src/runStore/answerAnchors.ts
+var FILE_READ_TOOLS = /* @__PURE__ */ new Set(["read_file", "view_file", "open_file", "read_files"]);
+var PATH_KEYS = ["path", "file", "filePath"];
+var MAX_ANSWER_ANCHORS = 16;
+function normalizePath(p) {
+  return p.trim().split("\\").join("/").replace(/^\.\/+/, "");
+}
+function readFileAnchors(trace2) {
+  const seen = /* @__PURE__ */ new Set();
+  const out = [];
+  for (const ev of trace2) {
+    if (ev.category !== "tool" || ev.isError || !FILE_READ_TOOLS.has(ev.label)) continue;
+    const args = ev.args ?? {};
+    const paths = Array.isArray(args.paths) ? args.paths : PATH_KEYS.map((k) => args[k]);
+    for (const raw of paths) {
+      if (typeof raw !== "string") continue;
+      const path = normalizePath(raw);
+      if (!path || seen.has(path)) continue;
+      seen.add(path);
+      out.push({ path });
+      if (out.length >= MAX_ANSWER_ANCHORS) return out;
+    }
+  }
+  return out;
+}
+
+// src/runStore/adoptAnswer.ts
+async function adoptAnswerWithoutModel(chatId, c, req, text2, step) {
+  const finalText = canonicalTurnText(text2);
+  if (!finalText) return false;
+  c.transcript.push({ role: "assistant", content: replayTextOf(finalText) });
+  const [assistantMsg] = await req.persistence.sendMessages(chatId, [{ role: "assistant", content: finalText }]);
+  c.streamingText = "";
+  recordAppended(c, assistantMsg);
+  pushTrace(c, { ts: nowIso(), category: "recall", label: step.label, args: step.args, result: { ...step.result, skippedLlm: true } });
+  emit(c);
+  req.onActivity?.(chatId);
+  return true;
+}
+
+// src/runStore/runMemory.ts
+var MAX_RECALL_HINT_CHARS = 600;
+function recallQuery(userText, hint) {
+  const extra = (hint ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_RECALL_HINT_CHARS);
+  if (!extra || !userText.trim()) return userText;
+  return `${userText.trim()}
+
+${extra}`;
+}
+async function recallForRun(c, convo, evermind, hint, timeoutMs = PREFLIGHT_PROBE_MS) {
+  let recalled = null;
+  if (!evermind?.recall) return { recalled, block: null, blockTokens: 0 };
+  const query = recallQuery(latestUserText(convo), hint);
+  if (!query) return { recalled, block: null, blockTokens: 0 };
+  try {
+    recalled = await bounded(timeoutMs, evermind.recall(query));
+  } catch {
+    recalled = null;
+  }
+  if (recalled?.seeded && recalled.items.length > 0) {
+    const block = formatEvermindMemoryBlock2(recalled.items);
+    if (block) {
+      const blockTokens = transcriptTokens([{ role: "system", content: block }]);
+      pushTrace(c, {
+        ts: nowIso(),
+        category: "recall",
+        label: "evermind.recall",
+        args: { query, version: recalled.version },
+        result: {
+          count: recalled.items.length,
+          version: recalled.version,
+          mode: recalled.mode,
+          blockTokens,
+          items: recalled.items
+        }
+      });
+      return { recalled, block, blockTokens };
+    }
+  }
+  return { recalled, block: null, blockTokens: 0 };
+}
+async function lookupMemoryAnswer(c, req, allTools, memoryReplay, timeoutMs = PREFLIGHT_PROBE_MS) {
+  const { evermind, model } = req;
+  const convo = c.transcript;
+  if (!(evermind?.answer && memoryReplay && !c.abort?.signal.aborted)) return null;
+  const query = latestUserText(convo);
+  if (!query || query.startsWith("Continue the task that was interrupted when the editor closed")) return null;
+  let memAnswer = null;
+  try {
+    memAnswer = await bounded(timeoutMs, evermind.answer(query, {
+      toolsAvailable: !!allTools && allTools.length > 0,
+      // What this turn would have run on — the saving a hit records is priced at it.
+      model: model || c.lastServedModel || void 0
+    }));
+  } catch {
+    memAnswer = null;
+  }
+  return memAnswer ? { query, answer: memAnswer } : null;
+}
+async function adoptMemoryAnswer(chatId, c, req, candidate) {
+  if (!candidate || c.abort?.signal.aborted) return false;
+  const { query, answer: memAnswer } = candidate;
+  return adoptAnswerWithoutModel(chatId, c, req, memAnswer.text ?? "", {
+    label: memAnswer.source === "evermind" ? "evermind.answer" : "memory.answer",
+    args: { query },
+    result: {
+      source: memAnswer.source,
+      ...memAnswer.evermindVersion != null ? { version: memAnswer.evermindVersion } : {},
+      // WHICH head served it — a project can target several, so without this a
+      // memory hit from a sibling IDE build's Evermind is indistinguishable from
+      // the chat project's own.
+      ...memAnswer.evermindProjectId != null ? { evermindProjectId: memAnswer.evermindProjectId } : {}
+    }
+  });
+}
+function emitEvermindLearnReconcile(run, assistantMsg, finalText) {
+  const { c, recalled } = run;
+  const evermind = run.req.evermind;
+  const learn = assistantMsg?.evermindLearn;
+  if (learn?.learned) {
+    pushTrace(c, {
+      ts: nowIso(),
+      category: "learn",
+      label: "evermind.learn",
+      // `targets` carries the per-Evermind breakdown (a project can fan out to many)
+      // so the timeline can name each by id; the renderer falls back to `version` alone.
+      result: { version: learn.version, queued: true, ...learn.targets ? { targets: learn.targets } : {} }
+    });
+    const reconciled = recalled?.items ? countReconciledMemories(recalled.items, finalText) : 0;
+    if (reconciled > 0) {
+      pushTrace(c, {
+        ts: nowIso(),
+        category: "reconcile",
+        label: "evermind.reconcile",
+        result: { count: reconciled, version: learn.version }
+      });
+    }
+  } else if (learn && learn.reason && learn.reason !== "too-short") {
+    pushTrace(c, {
+      ts: nowIso(),
+      category: "learn",
+      label: "evermind.learn",
+      result: { version: learn.version, skipped: true, reason: learn.reason, ...learn.targets ? { targets: learn.targets } : {} }
+    });
+  }
+  if (evermind?.cacheAnswer && run.memoryReplay) {
+    const q = run.userRequest;
+    const spent = c.runUsage;
+    const origin = spent.model && spent.promptTokens + spent.completionTokens > 0 ? { model: spent.model, promptTokens: spent.promptTokens, completionTokens: spent.completionTokens } : void 0;
+    if (q) {
+      const anchors = readFileAnchors(runTrace(c));
+      const cached2 = anchors.length ? evermind.cacheAnswer(q, finalText, origin, anchors) : origin ? evermind.cacheAnswer(q, finalText, origin) : evermind.cacheAnswer(q, finalText);
+      void Promise.resolve(cached2).catch(() => {
+      });
+    }
+  }
+}
+
+// src/runStore/prefetchGate.ts
+var NOTHING = { answered: false, tail: [] };
+function unrecorded2(c, what, e) {
+  pushTrace(c, { ts: nowIso(), category: "message", label: "prefetch.unrecorded", args: { what }, result: e instanceof Error ? e.message : String(e) });
+}
+function bestEffort(c, what, write) {
+  let pending;
+  try {
+    pending = write();
+  } catch (e) {
+    unrecorded2(c, what, e);
+    return;
+  }
+  void Promise.resolve(pending).then(void 0, (e) => unrecorded2(c, what, e));
+}
+function settlePending(c, port, req, request) {
+  const pending = c.pendingGate;
+  c.pendingGate = null;
+  if (!pending) return;
+  const accepted = !isReask(pending.request, request);
+  const { runId } = pending;
+  if (port.record) bestEffort(c, "calibration", () => port.record({ ...pending.outcome, accepted }));
+  if (runId && req.recordRunOutcome) bestEffort(c, "gate-outcome", () => req.recordRunOutcome({ runId, gateAccepted: accepted }));
+}
+function confirmVia(port, runKey, stop) {
+  return async (action, request, detail) => {
+    if (port.confirm) return port.confirm(action, request, detail);
+    if (stop?.aborted) return false;
+    const onAbort = () => resolveRunConfirm(runKey, false);
+    stop?.addEventListener("abort", onAbort, { once: true });
+    try {
+      return await requestRunConfirm(runKey, prefetchConfirmRequest(action, request, detail));
+    } finally {
+      stop?.removeEventListener("abort", onAbort);
+    }
+  };
+}
+function decisionTrace(c, pass) {
+  const { decision } = pass;
+  pushTrace(c, {
+    ts: nowIso(),
+    category: "message",
+    label: "prefetch.decision",
+    durationMs: pass.elapsedMs,
+    args: {
+      route: decision.route,
+      actions: decision.actions.map(({ id, p, tier }) => ({ id, p, tier })),
+      pNeedsLlm: decision.pNeedsLlm,
+      tiers: decision.tiersRun
+    },
+    result: {
+      settled: pass.settled,
+      classifyMs: decision.elapsedMs,
+      elapsedMs: pass.elapsedMs,
+      ran: pass.ran.map(({ action, result, confirmed }) => ({
+        id: action.id,
+        ok: !!result,
+        ...confirmed !== void 0 ? { confirmed } : {},
+        ...result?.data ? { data: result.data } : {}
+      }))
+    }
+  });
+}
+function routedModel(c, req) {
+  return req.model || c.lastServedModel || void 0;
+}
+async function answerDeterministically(chatId, c, req, runId, runKey = chatId) {
+  const port = req.prefetch;
+  if (!port || c.abort?.signal.aborted) return NOTHING;
+  const query = latestUserText(c.transcript);
+  if (!query) return NOTHING;
+  settlePending(c, port, req, query);
+  const stop = c.abort?.signal;
+  const pass = await runGate(query, port, {
+    ...stop ? { signal: stop } : {},
+    confirm: confirmVia(port, runKey, stop),
+    adopt: ({ action, candidate, result }) => adoptAnswerWithoutModel(chatId, c, req, result.text, {
+      label: action.id,
+      args: { query },
+      result: {
+        source: action.id,
+        p: candidate.p,
+        tier: candidate.tier,
+        route: "answer",
+        ...result.chips?.length ? { chips: result.chips } : {},
+        ...result.data ? { data: result.data } : {}
+      }
+    })
+  });
+  if (!pass) return NOTHING;
+  decisionTrace(c, pass);
+  const lead = pass.lead;
+  if (lead) {
+    c.pendingGate = {
+      request: query,
+      outcome: { actionId: lead.action.id, route: pass.settled === "answer" ? "answer" : "prefetch", p: lead.candidate.p, tier: lead.candidate.tier, features: lead.candidate.features },
+      ...runId ? { runId } : {}
+    };
+  }
+  if (pass.answer) {
+    recordAvoided(c, req, pass.answer.action.id, runId);
+    return { answered: true, tail: [] };
+  }
+  return { answered: false, tail: pass.tail };
+}
+function recordAvoided(c, req, actionId, runId) {
+  if (!req.recordAvoidedCall) return;
+  const model = routedModel(c, req);
+  const record = req.recordAvoidedCall;
+  bestEffort(c, "avoided-call", () => record({
+    source: "deterministic",
+    actionId,
+    ...runId ? { runId } : {},
+    ...model ? { model } : {},
+    promptTokens: MEDIAN_TURN_TOKENS.prompt,
+    completionTokens: MEDIAN_TURN_TOKENS.completion
+  }));
+}
+
+// src/runStore/modelPreflight.ts
+var MODEL_PREFLIGHT_LABEL = "model.preflight";
+function modelPreflightEvent(result, ts, plan) {
+  const entries = parseByoUnresolved((result?.byoUnresolved ?? []).filter((e) => e.trim()));
+  if (entries.length === 0 && !plan) return null;
+  const said = [];
+  if (entries.length > 0) {
+    const onto = result?.fallback ? ` This run will use ${result.fallback} instead.` : " This run will fall back to another model.";
+    said.push(`${entries.map(byoUnresolvedSummary).join("; ")}.${onto}`);
+  }
+  if (plan) {
+    said.push(`the plan phase will run on ${plan.model}, a ${plan.tier}-tier (Flash-class) model \u2014 weak at planning a multi-step change; pick a stronger model for planning if the result matters.`);
+  }
+  return {
+    ts,
+    category: "message",
+    label: MODEL_PREFLIGHT_LABEL,
+    args: {
+      ...entries.length ? { byoUnresolved: entries.map((e) => e.reason ? `${e.provider}:${e.reason}` : e.provider).join(",") } : {},
+      ...result?.fallback && entries.length ? { fallback: result.fallback } : {},
+      ...plan ? { planModel: plan.model, planTier: plan.tier } : {}
+    },
+    result: `Before the first turn: ${said.join(" Also: ")}`
+  };
+}
+async function applyModelPreflight(c, preflight, pinnedModel) {
+  if (!preflight) return;
+  let result;
+  try {
+    result = await bounded(PREFLIGHT_PROBE_MS, preflight());
+  } catch {
+    return;
+  }
+  const plan = c.codeChanged ? null : planModelWarning(pinnedModel);
+  const event = modelPreflightEvent(result, nowIso(), plan);
+  if (!event) return;
+  if (result?.byoUnresolved.length) accrueByoUnresolved(c, result.byoUnresolved.join(","));
+  pushTrace(c, event);
+  emit(c);
+}
+
+// src/runStore/hostRunContext.ts
+async function hostPart(c, part, read) {
+  if (!read) return void 0;
+  try {
+    return await bounded(PREFLIGHT_PROBE_MS, read());
+  } catch (e) {
+    pushTrace(c, {
+      ts: nowIso(),
+      category: "message",
+      label: "host.context_failed",
+      args: { part },
+      result: `The host's ${part} could not be read (${e instanceof Error ? e.message : String(e)}) \u2014 the run starts without it.`
+    });
+    return void 0;
+  }
+}
+async function gatherHostRunContext(c, req, recall) {
+  const [recallHint, turnContext, servedReads] = await Promise.all([
+    recall ? hostPart(c, "recall hint", req.recallHint) : Promise.resolve(void 0),
+    hostPart(c, "task context", req.turnContext),
+    hostPart(c, "served reads", req.servedReads),
+    // The model preflight (E7): an account that cannot serve this run is shown on the
+    // banner BEFORE the first turn, not after it.
+    applyModelPreflight(c, req.modelPreflight, req.model)
+  ]);
+  return {
+    ...recallHint ? { recallHint } : {},
+    ...turnContext?.trim() ? { turnContext } : {},
+    servedReads: servedReads ?? []
+  };
+}
+function recordServedReads(coverage, reads, anchor) {
+  for (const read of reads) {
+    if (!read.path) continue;
+    const args = { path: read.path };
+    coverage.record("read_file", args);
+    coverage.cacheResult("read_file", args, {
+      result: { ok: true, path: read.path, content: read.content, totalLines: read.totalLines, offset: 1, truncated: false },
+      anchor
+    });
+  }
+}
+
+// src/runStore/serverChat.ts
+function resolveServerChatId(chatId, req) {
+  return req.serverChatId === void 0 ? chatId : req.serverChatId;
+}
+
+// src/runStore/runRoute.ts
+function routeInputOf(req, request, followUp) {
+  return {
+    request,
+    followUp,
+    routing: req.pipeline ? { mode: req.pipeline.routing, threshold: req.pipeline.threshold, quickModel: req.pipeline.quickModel } : defaultPipelineRouting(),
+    ...req.phaseModels ? { phaseModels: req.phaseModels } : {},
+    ...req.modelStrict ? { modelStrict: true } : {},
+    ...req.lineage ? { child: true } : {}
+  };
+}
+function decideRoute(req, request, followUp) {
+  const input = routeInputOf(req, request, followUp);
+  return { ...routeRun(input), input };
+}
+function decidedRoute(route) {
+  return { pipeline: route.pipeline, start: route.start, skipsVerify: route.skipsVerify };
+}
+function routeMetadata(route) {
+  return route.pipeline ? { pipelineRoute: route.pipeline.route, routeScore: route.pipeline.score } : {};
+}
+
+// src/runStore/pendingCalls.ts
+var PendingCalls = class {
+  byCall = /* @__PURE__ */ new Map();
+  /** The live step of each call whose tool is running now, in the order they started. */
+  running = /* @__PURE__ */ new Map();
+  /** A call's preflight starts it clean: nothing a former call with the same id left behind can be read as its own. */
+  forget(callId) {
+    this.byCall.delete(callId);
+  }
+  replayed(callId, replay) {
+    this.byCall.set(callId, { kind: "replay", replay });
+  }
+  ran(callId, ran) {
+    this.byCall.set(callId, { kind: "ran", ran });
+  }
+  /** The call's entry, removed — read exactly once, by its post step. */
+  take(callId) {
+    const entry = this.byCall.get(callId);
+    this.byCall.delete(callId);
+    return entry;
+  }
+  /** The call's tool started running with `activity` as its live step. */
+  begin(callId, activity) {
+    this.running.delete(callId);
+    this.running.set(callId, activity);
+  }
+  /** How many calls' tools are still running — a narration turn that references pending work is sent back while any are. */
+  pendingCount() {
+    return this.running.size;
+  }
+  /** The call's tool returned. The live step of the most recently started sibling still running, or undefined when none is. */
+  end(callId) {
+    this.running.delete(callId);
+    let latest;
+    for (const activity of this.running.values()) latest = activity;
+    return latest;
+  }
+};
+
+// src/toolRouter.ts
+var TOOL_ROUTER_FIND = "builtin_tools_find";
+var TOOL_ROUTER_DESCRIBE = "builtin_tools_describe";
+var TOOL_ROUTER_INVOKE = "builtin_tools_invoke";
+function isRouterTool(name) {
+  return name === TOOL_ROUTER_FIND || name === TOOL_ROUTER_DESCRIBE || name === TOOL_ROUTER_INVOKE;
+}
+var FIND_LIMIT = 25;
+function routerToolSpecs(catalogSize) {
+  const preamble = `This conversation has ${catalogSize} platform tools available in total, but only the most relevant ones are listed directly on each turn.`;
+  return [
+    {
+      type: "function",
+      function: {
+        name: TOOL_ROUTER_FIND,
+        description: `${preamble} Search ALL of them by keyword and get back their names and descriptions. Use this FIRST whenever the tool you want is not in your visible list \u2014 do NOT assume a capability is missing, and never write a tool call as plain text.`,
+        parameters: {
+          type: "object",
+          properties: {
+            query: { type: "string", description: 'Keywords, e.g. "tickets backlog status" or "pull request".' }
+          },
+          required: ["query"]
+        }
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: TOOL_ROUTER_DESCRIBE,
+        description: `${preamble} Get the exact parameter schema for one tool by name, so you can build its arguments before calling it with ${TOOL_ROUTER_INVOKE}.`,
+        parameters: {
+          type: "object",
+          properties: {
+            name: { type: "string", description: `Exact tool name, e.g. "builtin_chats_list_tickets".` }
+          },
+          required: ["name"]
+        }
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: TOOL_ROUTER_INVOKE,
+        description: `${preamble} Call ANY of them by name, including ones not listed on this turn. This is a real call and it really executes \u2014 use it instead of describing what you would call.`,
+        parameters: {
+          type: "object",
+          properties: {
+            name: { type: "string", description: 'Exact tool name to call; a catalog id such as "tasks.archive_many" is accepted too.' },
+            args: { type: "object", description: "Arguments object for that tool." }
+          },
+          required: ["name"]
+        }
+      }
+    }
+  ];
+}
+function words(text2) {
+  return text2.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 1);
+}
+var APP_MANIFEST_ALIAS_PHRASES = ["app manifest", "builderforce.json", "ai resource"];
+var APP_MANIFEST_TOOL_NAMES = /* @__PURE__ */ new Set([
+  advertisedToolName("app_manifest.schema"),
+  advertisedToolName("app_manifest.validate")
+]);
+function findTools(catalog, query, limit = FIND_LIMIT) {
+  const terms = words(query);
+  const lowered = query.toLowerCase();
+  const manifestAlias = APP_MANIFEST_ALIAS_PHRASES.some((p) => lowered.includes(p));
+  if (terms.length === 0 && !manifestAlias) return [];
+  const scored = [];
+  catalog.forEach((tool, index) => {
+    const name = tool.function?.name ?? "";
+    if (!name) return;
+    const description = tool.function?.description ?? "";
+    const haystackName = name.toLowerCase();
+    const haystackDesc = description.toLowerCase();
+    if (APP_MANIFEST_TOOL_NAMES.has(name)) {
+      const score2 = (manifestAlias ? 20 : 0) + (terms.includes("manifest") ? 10 : 0);
+      if (score2 > 0) scored.push({ m: { name, description }, score: score2, index });
+      return;
+    }
+    let score = 0;
+    for (const t of terms) {
+      if (haystackName.includes(t)) score += 10;
+      else if (haystackDesc.includes(t)) score += 1;
+    }
+    if (score > 0) scored.push({ m: { name, description }, score, index });
+  });
+  return scored.sort((a, b) => b.score - a.score || a.index - b.index).slice(0, limit).map((e) => e.m);
+}
+function describeTool(catalog, name) {
+  const resolved = resolveAdvertisedToolName(name, toolNameSet(catalog, (t) => t.function?.name));
+  return resolved === null ? null : catalog.find((t) => t.function?.name === resolved) ?? null;
+}
+function handleRouterCall(catalog, name, args) {
+  const a = args ?? {};
+  if (name === TOOL_ROUTER_FIND) {
+    const query = typeof a.query === "string" ? a.query : "";
+    const matches = findTools(catalog, query);
+    return {
+      result: matches.length ? { matches, note: `Call one with ${TOOL_ROUTER_INVOKE}, or ${TOOL_ROUTER_DESCRIBE} first for its arguments.` } : { matches: [], note: `No tool matches "${query}". Try broader keywords; ${catalog.length} tools exist.` }
+    };
+  }
+  if (name === TOOL_ROUTER_DESCRIBE) {
+    const target3 = typeof a.name === "string" ? a.name : "";
+    const spec2 = describeTool(catalog, target3);
+    return {
+      result: spec2 ? { name: spec2.function?.name ?? target3, description: spec2.function?.description ?? "", parameters: spec2.function?.parameters ?? {} } : { error: `Unknown tool "${target3}". Use ${TOOL_ROUTER_FIND} to look up the exact name.` }
+    };
+  }
+  const target2 = typeof a.name === "string" ? a.name : "";
+  if (!target2) return { result: { error: `${TOOL_ROUTER_INVOKE} requires a "name".` } };
+  if (isRouterTool(target2)) {
+    return { result: { error: `${target2} cannot be invoked through the router.` } };
+  }
+  const spec = describeTool(catalog, target2);
+  const resolved = spec?.function?.name;
+  if (!resolved) {
+    return { result: { error: `Unknown tool "${target2}". Use ${TOOL_ROUTER_FIND} to look up the exact name.` } };
+  }
+  if (isRouterTool(resolved)) {
+    return { result: { error: `${target2} cannot be invoked through the router.` } };
+  }
+  return { dispatch: { name: resolved, args: asToolArgs(a.args) ?? {} } };
+}
+
+// src/runStore/conversationPins.ts
+var CONVERSATION_PIN_WINDOW = 20;
+var CONVERSATION_PIN_LIMIT = 8;
+var DOTTED_ID = /\b[a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*\b/g;
+function namedIn(text2) {
+  return [.../* @__PURE__ */ new Set([...toolNamesMentionedIn(text2), ...text2.match(DOTTED_ID) ?? []])];
+}
+function calledName(call2) {
+  if (call2.function.name !== TOOL_ROUTER_INVOKE) return call2.function.name;
+  try {
+    const args = JSON.parse(call2.function.arguments || "{}");
+    return typeof args.name === "string" ? args.name : "";
+  } catch {
+    return "";
+  }
+}
+function conversationPinnedTools(convo, catalogToolNames, limit = CONVERSATION_PIN_LIMIT) {
+  let current = convo.length;
+  for (let i = convo.length - 1; i >= 0; i -= 1) {
+    if (convo[i].role === "user") {
+      current = i;
+      break;
+    }
+  }
+  const known = new Set(catalogToolNames);
+  const out = [];
+  const add = (raw) => {
+    if (out.length >= limit || !raw) return;
+    const name = resolveAdvertisedToolName(raw, known);
+    if (!name || isRouterTool(name) || out.includes(name)) return;
+    out.push(name);
+  };
+  const start = Math.max(0, current - CONVERSATION_PIN_WINDOW);
+  for (let i = current - 1; i >= start && out.length < limit; i -= 1) {
+    const m = convo[i];
+    if (m.role !== "user" && m.role !== "assistant") continue;
+    for (const call2 of [...m.tool_calls ?? []].reverse()) add(calledName(call2));
+    for (const named of namedIn(userTextOf(m)).reverse()) add(named);
+  }
+  return out;
+}
+
+// src/agentPool.ts
+var DEFAULT_AGENT_MODEL_SENTINEL = "builderforce-default";
+var AGENT_POOL_PATHS = {
+  owned: "/api/workforce/agents/mine",
+  purchased: "/api/workforce/agents/purchased",
+  registered: "/api/agent-registrations"
+};
+function poolAgentsFrom(input) {
+  const wfById = /* @__PURE__ */ new Map();
+  for (const a of [...input.owned, ...input.purchased]) wfById.set(String(a.id), a);
+  const workforce = [...wfById.values()].map((a) => ({
+    kind: "workforce",
+    ref: String(a.id),
+    name: a.name,
+    meta: a.title || a.base_model || "",
+    baseModel: a.base_model && a.base_model !== DEFAULT_AGENT_MODEL_SENTINEL ? a.base_model : null
+  }));
+  const registered = input.registered.filter((a) => a.status === "active").map((a) => ({ kind: "registered", ref: String(a.id), name: a.name, meta: a.framework, baseModel: null }));
+  return [...workforce, ...registered];
+}
+async function loadAgentPoolVia(request) {
+  const [owned, purchased, registered] = await Promise.all([
+    request(AGENT_POOL_PATHS.owned).catch(() => []),
+    request(AGENT_POOL_PATHS.purchased).catch(() => []),
+    request(AGENT_POOL_PATHS.registered).catch(() => [])
+  ]);
+  return poolAgentsFrom({ owned: owned ?? [], purchased: purchased ?? [], registered: registered ?? [] });
+}
+
+// src/brainPersona.ts
+var PERSONA_MODALITY_IDS = ["designer", "mobile", "webmobile", "evermind", "finetune", "voice"];
+var STRATEGY_OKR_NOTE = 'Strategy and goals live as OKRs/Objectives (Objectives + Key Results) in their own tables \u2014 not as tasks on the Kanban board. When the user talks about goals, outcomes, or strategy, you can create and link Objectives and Key Results, and promote an epic titled like "OKR \u2026" into a real Objective, using the platform tools.';
+var FILE_DELIVERY_RULE = [
+  "DELIVER CODE BY WRITING IT. Every file you produce goes into the project through your file tools: create new files, and change existing ones in place with the edit tool rather than rewriting them. The user is looking at a live Preview that shows only what you have written.",
+  'NEVER hand the user code to copy, paste, add or apply by hand, and never answer with a code block in place of a file write \u2014 not for a stylesheet, not for "the rest of the file", not as a last resort after a failed write.',
+  "When a write fails, read its error, fix the call and issue it again. When a file is too long for one call, write a smaller working first version and extend it with further edits.",
+  "Only if you have NO tool that writes files at all, give each file as a code block whose language tag is its path (```src/App.jsx), and say that this surface cannot write files."
+].join("\n");
+var BASE_PERSONAS = {
+  designer: {
+    label: "Website",
+    icon: "\u{1F310}",
+    prompt: [
+      "You are an expert AI coding assistant built into Builderforce.ai, a browser-based Builder. Help users generate and build websites and web apps.",
+      "When the user describes an app to build, SCAFFOLD IT COMPLETELY in this turn: write every file the app needs to actually run \u2014 an index.html entry, a package.json with real dependencies and a `build` script, and all of the src/ components \u2014 so the live Preview renders a working app immediately, not a single snippet. Default to a Vite + React app unless the user asks for something else. List the project's files before writing, so you build on the starter rather than over it. When you have scaffolded the app, tell the user in one line what you built and that Preview is live and it is ready to Publish.",
+      "Use markdown for your prose: headings, lists and bold.",
+      FILE_DELIVERY_RULE
+    ].join("\n")
+  },
+  mobile: {
+    label: "Mobile",
+    icon: "\u{1F4F1}",
+    prompt: [
+      "You are an expert mobile app developer operating Builderforce.ai's Canvas Builder. The user is building a MOBILE app and previews it in a phone-sized device simulator.",
+      'The project is a React Native app rendered for the web through react-native-web, so it runs in the browser preview AND stays portable to Expo. Import components (View, Text, Pressable, ScrollView, StyleSheet, FlatList) from "react-native" \u2014 never use HTML elements like div, span or button, and never use CSS files or className.',
+      "Style with StyleSheet.create and flexbox. Remember there is no hover: design for touch, keep tap targets at least 44 points, and respect safe areas at the top and bottom of the screen.",
+      "Design for a narrow portrait viewport (roughly 390 x 850 points) first. Prefer native navigation patterns \u2014 tab bars, stack headers, bottom sheets \u2014 over desktop patterns like sidebars and hover menus.",
+      FILE_DELIVERY_RULE
+    ].join("\n")
+  },
+  webmobile: {
+    label: "Web + Mobile",
+    icon: "\u{1F5A5}\uFE0F",
+    prompt: [
+      "You are an expert full-stack app developer built into Builderforce.ai's browser Builder. The user is building ONE app that ships as BOTH a responsive web application AND a mobile app, from a single codebase.",
+      'The project is a React app rendered through react-native-web, so the SAME source runs full-width as a website AND inside a phone-sized device simulator, and stays portable to Expo for native iOS/Android. Import components (View, Text, Pressable, ScrollView, StyleSheet, FlatList) from "react-native" \u2014 never use HTML elements like div, span or button, and never use CSS files or className.',
+      "Style with StyleSheet.create and flexbox, and make layouts RESPONSIVE: use flex, percentage widths and useWindowDimensions to adapt between a wide desktop viewport and a narrow phone one. Keep tap targets at least 44 points and respect safe areas \u2014 there is no hover on mobile.",
+      FILE_DELIVERY_RULE
+    ].join("\n")
+  },
+  evermind: {
+    label: "Evermind",
+    icon: "\u{1F9E0}",
+    prompt: [
+      "You are assisting with growing an Evermind \u2014 Builderforce.ai's self-updating model that learns continuously (Write-Through Cognition) instead of being frozen after training.",
+      "Help the user teach it: draft facts, skills, and examples to feed it, reason about what it has learned, and interpret its Knowledge Map (neocortex / hippocampus / limbic regions).",
+      "This is NOT classic fine-tuning \u2014 the model updates in place as it learns. Keep guidance oriented around teaching and recall, not training runs or LoRA adapters."
+    ].join("\n")
+  },
+  finetune: {
+    label: "Fine-tune",
+    icon: "\u{1F527}",
+    prompt: [
+      "You are assisting with building and fine-tuning a custom LLM inside Builderforce.ai. This is the classic pipeline: design a dataset, train a LoRA adapter in-browser (WebGPU), benchmark it, then publish and export it.",
+      "Help the user draft instruction/response pairs, choose a base model and training hyperparameters, and reason about training runs and benchmark results."
+    ].join("\n")
+  },
+  voice: {
+    label: "Voice",
+    icon: "\u{1F399}",
+    prompt: [
+      "You are a voice director inside Builderforce.ai's Voice Studio.",
+      "The user enrolls a reference sample to clone a voice (SSM/WebGPU acoustic model) and then synthesizes speech from typed text.",
+      "Help them write natural, well-punctuated lines to synthesize, and advise on pacing, emphasis, and tone."
+    ].join("\n")
+  }
+};
+var MODALITY_PERSONAS = Object.fromEntries(
+  PERSONA_MODALITY_IDS.map((id) => [id, { ...BASE_PERSONAS[id], prompt: `${BASE_PERSONAS[id].prompt}
+${STRATEGY_OKR_NOTE}` }])
+);
+var DEFAULT_PERSONA = "default";
+function modalityPersonaChoice(id) {
+  return `modality:${id}`;
+}
+function agentPersonaChoice(agent) {
+  return `agent:${agent.kind}:${agent.ref}`;
+}
+function personaModalityOf(choice) {
+  if (!choice.startsWith("modality:")) return null;
+  const id = choice.slice("modality:".length);
+  return PERSONA_MODALITY_IDS.includes(id) ? id : null;
+}
+function personaAgentOf(choice, agents) {
+  return agents.find((a) => agentPersonaChoice(a) === choice) ?? null;
+}
+function agentPersonaPrompt(name) {
+  return `You are acting as the "${name}" agent for this workspace. Adopt its role, voice and duties when responding.`;
+}
+function personaSystemPrompt(choice, agents) {
+  const modality = personaModalityOf(choice);
+  if (modality) return MODALITY_PERSONAS[modality].prompt;
+  const agent = personaAgentOf(choice, agents);
+  return agent ? agentPersonaPrompt(agent.name) : void 0;
+}
+var PERSONA_OVERLAY_PREFACE = "Persona for this conversation \u2014 adopt the domain focus below. Where it describes an environment, preview, or tools that differ from the ones described above, the ones above are what you actually have: use those.";
+function personaOverlay(choice, agents) {
+  const modality = personaModalityOf(choice);
+  if (modality) return `${PERSONA_OVERLAY_PREFACE}
+${MODALITY_PERSONAS[modality].prompt}`;
+  const agent = personaAgentOf(choice, agents);
+  return agent ? agentPersonaPrompt(agent.name) : void 0;
+}
+function personaModel(choice, agents) {
+  return personaAgentOf(choice, agents)?.baseModel ?? void 0;
+}
+function brainPersonaAgents(assignments, pool) {
+  const seen = /* @__PURE__ */ new Set();
+  const out = [];
+  for (const a of assignments) {
+    const key = agentPersonaChoice({ kind: a.agentKind, ref: a.agentRef });
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const pooled = pool.find((p) => p.kind === a.agentKind && p.ref === a.agentRef);
+    out.push({ kind: a.agentKind, ref: a.agentRef, name: pooled?.name ?? `${a.agentKind}:${a.agentRef}`, baseModel: pooled?.baseModel ?? null });
+  }
+  return out;
+}
+var BRAIN_AGENT_ASSIGNMENTS_PATH = "/api/agent-assignments?scope=brain";
+async function loadBrainPersonaAgentsVia(request) {
+  const [assignments, pool] = await Promise.all([
+    request(BRAIN_AGENT_ASSIGNMENTS_PATH).then((r) => r?.assignments ?? []).catch(() => []),
+    loadAgentPoolVia(request).catch(() => [])
+  ]);
+  return brainPersonaAgents(assignments, pool);
+}
+
+// src/ideSystemPrompt.ts
+var WORKSPACE_MAP_INTRO = "The following map of the open workspace lists its top-level files and directory structure. Use it to orient yourself \u2014 but it is NOT an exhaustive file index (deeper files are summarized), so when a file is not named here, find it with `find_symbol` (where a name is defined), `list_files` (pass a `glob`) or `search_code` before concluding it does not exist:";
+var AUTONOMY_DIRECTIVE = `Act, don't ask. When the user gives you a goal or says to decide, DO the analysis and take the next concrete action yourself \u2014 do not narrate a plan and then ask permission to carry out work the user already requested. Infer reasonable values rather than asking the user to supply what you can determine (e.g. estimate story points from a task's description, draft a title/description yourself), and state the assumptions you made. Never end a turn with "would you like me to\u2026", "shall I\u2026", "let me know if you want me to\u2026" or a menu of options for work that was already requested \u2014 that turn costs the user a full round trip to answer "yes" to something they had already said. Finding that a job is bigger than you expected is not a reason to ask permission: a survey that turns up 35 items the user asked you to clear is a survey that found your work order, so start clearing them and report progress. Only pause when a choice is genuinely the user's AND no sensible default exists \u2014 and then call the \`ask_user\` tool with the options as labelled choices rather than asking in prose, because that puts them on screen as buttons instead of ending the run on a question. Do everything that does NOT depend on the answer before you ask. Mutating actions surface their own approval prompt, so you never need to ask for permission in prose.`;
+var FOLLOW_THROUGH_DIRECTIVE = `Finish the job in the turn you start it. If you have worked out the fix, APPLY it now with the tools \u2014 never end a turn having only described an edit you could have made, and never promise to do it on a later run: nothing carries over between runs, so that work would simply never happen. If you are running low on steps, spend the remaining ones on the edit itself rather than on more reading, and prefer the smallest correct change over further investigation. When the user replies with a bare directive \u2014 "fix", "do it", "go ahead", "yes", "apply it" \u2014 it refers to the proposal in YOUR previous message: carry out that exact proposal immediately, using the files and the change it already named. Do not ask what to fix, and do not re-derive analysis that is already in the conversation above you. The same holds for work the user asked ANOTHER participant in this chat to do: when a participant answered that it lacks the tools ("I don't have git commit/push tools", "send this to the Brain"), or the user tells you they already instructed that participant and the work is not done, the instruction now falls to YOU \u2014 read what was asked of them in the transcript and carry it out with your tools this turn (a requested commit-and-push included), rather than reporting on who is working on it.`;
+var DISCOVERY_DIRECTIVE = 'Finding files: to locate a file you cannot already see in the workspace map, call `list_files` with a `glob` \u2014 e.g. `{ "glob": "ROADMAP.md" }` finds that filename at ANY depth, case-insensitively (so `Roadmap.md` still matches `ROADMAP.md`); use patterns like `*.md` or `src/**/*.ts` too. You can also `search_code` for a distinctive string inside files, or scope `list_files` to a subdirectory with `path`. Do NOT dump `list_files` on the root of a large repo without a `glob` (it summarizes to directories); prefer a glob or a scoped path. Never claim a file is missing until a `glob` search for its name has come back with zero matches.';
+var CODE_NAVIGATION_DIRECTIVE = "Navigating code: to find where a function, class, method, type, constant, SQL table or Markdown section is DEFINED, call `find_symbol` first \u2014 one indexed call returns `path:line`, whereas `search_code` returns every line that merely mentions the name. Before paging through a large file, call `file_outline` to list its definitions with line numbers, then `read_file` with `offset` a few lines above the one you need and a small `limit` (e.g. 150) \u2014 do not read a large file window by window hunting for one function. Keep `search_code` for usages, string literals and config values. Before you IMPORT a name, confirm the module exports it \u2014 `file_outline` on that module, or `find_symbol` for the name \u2014 and never import a runtime global (`fetch`, `URL`, `crypto`, `setTimeout`): an import you guessed is a compile error you will spend the next three turns undoing. To see what a file already imports, read its import block once rather than searching for each name.";
+var DISPATCH_STRATEGY_DIRECTIVE = "DO THE WORK YOURSELF WHEN YOU CAN; hand off only what this session cannot do. If you have the workspace file tools and the change is something you could make in a handful of tool calls \u2014 a bug fix, a small refactor, a CSS or copy change, anything you have already located in the code \u2014 MAKE IT NOW. Do not open a ticket and dispatch a cloud agent to do a job you are already holding: a remote run costs more, knows less than you do right now, and leaves the user waiting for something you could have finished this turn. Record what you changed afterwards (that is what `tickets.from_delta` is for); recording is not a substitute for doing. Hand off ONLY when the job genuinely exceeds this session: a large, long-horizon, or repetitive batch \u2014 e.g. transitioning every outstanding item in a roadmap into OKRs/Epics/Tasks, a repo-wide refactor, or any goal needing many sequential create/edit steps \u2014 or work that must run somewhere you are not (another repo or machine, a long unattended run). For that kind of job: do the upfront analysis yourself (read the source document, produce the breakdown), then CREATE ONE TASK with `tasks.create` whose description holds the full, self-contained instructions, context, and acceptance criteria, and ASSIGN it to a cloud agent by passing `assignedAgentRef` so the platform runs it to completion (an assigned task auto-runs) \u2014 if you don't already know a valid ref, list the workspace's cloud agents first (`cloud_agents.list_mine` / `agents.list`) and pick one. Then tell the user you dispatched it and where to watch it (the board and the execution trace). Prefer one dispatched task over dozens of inline tool calls that run out of budget half-way. If a dispatch is refused, the refusal names the reason and what clears it \u2014 read it, tell the user, and if the work was something you could do here, just do it instead of retrying the dispatch.";
+var SHIP_CLEANUP_DIRECTIVE = 'FINISH THE SHIP: clean up after work that has LANDED. Once your pull request is merged, or once you have pushed the base branch directly, call `git_cleanup_merged` \u2014 it returns to the base branch, fast-forwards it, and deletes the merged ticket branch locally and on origin. Never hand-roll this with `run_command`: `git push origin --delete <branch>` fails with "remote ref does not exist" whenever the host already deleted the branch on merge, which is the normal case, and you would be reporting a failure for work that succeeded. `git_cleanup_merged` treats that state as success. It REFUSES on a dirty working tree, and refuses to delete a branch whose commits are not in the base branch \u2014 if the pull request was SQUASH-merged and the branch still exists on the remote, re-call it with force:true. Do not leave the user\'s checkout sitting on a branch that no longer exists.';
+var NO_HANDOFF_DIRECTIVE = `Never hand the user a command you could have run yourself. If your reply would end with "now run the build / tests / type-check", "you'll need to install first", or a Next-steps list of shell or git commands, that list is YOUR work order and not theirs: run it, read the output, and fix what fails before you answer. A change you did not verify is not a change you finished, and a commit-and-push the user asked for is not done until YOU have made it. The only steps you may leave to them are ones you genuinely cannot do here \u2014 something needing a credential, a browser, a VS Code restart, or a decision that is theirs to make \u2014 and when you leave one, name that step, say why, and state plainly that the change is unverified.`;
+var SHELL_USE_DIRECTIVE = "Use `run_command` for BUILDING and CHECKING \u2014 install, build, type-check, lint, test \u2014 and verify your changes with it before reporting done. Take the commands from the project itself: read the nearest `package.json` `scripts` (or the Makefile / pyproject) for the package you changed and run ITS typecheck / test / lint script, scoped to the files you touched where the script allows it. TypeScript is CHECKED, not executed: never run a `.ts` file with `node` \u2014 use the project's typecheck script, or `npx tsc --noEmit -p <that package's tsconfig>` when it has none. Do NOT use `run_command` for git: `git_status`, `git_diff`, `git_history`, `git_sync_latest`, `git_undo`, `git_redo`, `git_commit`, `git_push`, `open_pull_request` and `git_cleanup_merged` already exist, they are safer, and their failures tell you what to do next where raw git's do not. When a `run_command` DOES fail, read the output before retrying: a non-zero exit from a build or test run is a real result to act on, not a reason to run the same command again. To review which tickets have pending code (unmerged branches, conflicts, squash-merge leftovers), call `review_ticket_branches` once \u2014 never a `git branch` / `git log main..X` loop plus a tasks.get per ticket.";
+function ideSystemPromptBase(hasWorkspace) {
+  const base = hasWorkspace ? "You are BuilderForce, an AI coding agent embedded in VS Code, working in the user's open workspace folder. Use the file tools (read_file, list_files, write_file, edit_file, delete_file) to inspect and change the project, and search_code to find the right code before editing it. Read a file before editing it; use edit_file for precise changes to existing files and write_file for new ones. After making changes, VERIFY them (run the project's tests, build, lint, or typecheck) and fix anything that fails before reporting done. Shipping a change (commit, push, pull request) is governed by the SHIP POLICY contract that follows; this prompt does not restate it. If the open folder contains several checkouts rather than being one repo, pass `repo` to name the one you are working in. Make minimal, correct changes and briefly explain what you did. Be efficient with tool calls. When a Project map is provided below, use it to locate files and directories directly instead of calling list_files for structure it already shows \u2014 only read files when you need their actual contents. You also have the BuilderForce platform tools (tasks, projects, OKRs, executions, \u2026) to manage and monitor work, not just edit files." : "You are BuilderForce, an AI assistant embedded in VS Code. No workspace folder is open, so the file tools are unavailable \u2014 answer conversationally and use markdown when helpful. You still have the BuilderForce platform tools (tasks, projects, OKRs, \u2026) to manage work.";
+  const parts = [base, AUTONOMY_DIRECTIVE, FOLLOW_THROUGH_DIRECTIVE];
+  if (hasWorkspace) parts.push(DISCOVERY_DIRECTIVE, CODE_NAVIGATION_DIRECTIVE, SHELL_USE_DIRECTIVE, NO_HANDOFF_DIRECTIVE, SHIP_CLEANUP_DIRECTIVE);
+  parts.push(DISPATCH_STRATEGY_DIRECTIVE);
+  return parts.join("\n\n");
+}
+var WORKSPACE_MAP_END = "(End of workspace map.)";
+function withWorkspaceMap(base, grounding) {
+  return grounding ? `${base}
+
+${WORKSPACE_MAP_INTRO}
+
+${grounding}
+
+${WORKSPACE_MAP_END}` : base;
+}
+function activeProjectDirective(project) {
+  if (!project) return void 0;
+  return `The current project is "${project.name}" (projectId ${project.id}). When the user asks to review, create, list, or operate on pull requests, tasks, specs, or other project-scoped items without naming a project, use projectId ${project.id} by default \u2014 do NOT ask the user for the project id. This ${project.id} is the NUMERIC SERVER id: platform/builtin tools take it, but the local domain tools (ticket-create, project-create, ...) take the project's local UUID; a numeric id is auto-resolved to the local UUID only when that project is synced to this workspace.
+
+` + PROJECT_MEMORY_DIRECTIVE;
+}
+var PROJECT_MEMORY_DIRECTIVE = "Project memory: at the START of a task, call `recall_facts` ONCE with the task's topic \u2014 a prior run may already have recorded the answer (a root cause, the file that owns a behaviour, a convention), and a recalled fact costs no disk read. Do not recall again before each search or read: a recall you already made is above you, and repeating it (or rewording it) returns nothing new. Recall again only for a genuinely different topic. When you LEARN a durable fact in this run, call `remember_fact` with a stable key (e.g. `chat-list-data-source`) so the next run recalls it instead of re-deriving it. Facts are project-scoped and shared with every agent on the project.";
+function editorContextDirective(ctx) {
+  if (!ctx) return void 0;
+  const parts = [];
+  if (ctx.workspaceName) parts.push(`Open workspace folder: ${ctx.workspaceName}.`);
+  if (ctx.workspaceRoot) {
+    parts.push(
+      `THE CODE IS HERE \u2014 workspace root (absolute): \`${ctx.workspaceRoot}\`. Your \`read_file\`, \`list_files\`, \`search_code\` and \`edit_file\` tools operate on THIS root and take workspace-relative paths. Use them to find and read the code yourself; never ask the user where the code is, for a path, or to paste a file.`
+    );
+  }
+  if (ctx.git) {
+    if (!ctx.git.isRepo) {
+      parts.push("This workspace is NOT a git repository \u2014 there is no branch, remote or commit history to reason about.");
+    } else {
+      const g = ctx.git;
+      const bits = [
+        g.owner && g.repo ? `repo \`${g.owner}/${g.repo}\`` : void 0,
+        g.host ? `hosted on ${g.host}` : void 0,
+        g.remoteUrl ? `remote ${g.remoteUrl}` : void 0,
+        g.branch ? `branch \`${g.branch}\`` : "detached HEAD",
+        g.root && g.root !== ctx.workspaceRoot ? `git root \`${g.root}\`` : void 0,
+        typeof g.dirtyCount === "number" ? `${g.dirtyCount} uncommitted file(s)` : void 0,
+        g.ahead || g.behind ? `${g.ahead ?? 0} ahead / ${g.behind ?? 0} behind upstream` : void 0
+      ].filter(Boolean);
+      parts.push(`Git: ${bits.join(", ")}.`);
+    }
+  }
+  if (ctx.activeFile) {
+    const pos = ctx.cursor ? ` (cursor at line ${ctx.cursor.line})` : "";
+    parts.push(`Active file (open and focused in the editor right now): \`${ctx.activeFile}\`${pos}.`);
+  }
+  const otherTabs = (ctx.openFiles ?? []).filter((f) => f !== ctx.activeFile);
+  if (otherTabs.length) {
+    parts.push(`Other open editor tabs: ${otherTabs.map((f) => `\`${f}\``).join(", ")}.`);
+  }
+  if (ctx.selection && ctx.selection.text.trim()) {
+    const lang = ctx.selection.languageId ?? "";
+    parts.push(
+      `The user's current selection is in \`${ctx.selection.path}\` (lines ${ctx.selection.startLine}\u2013${ctx.selection.endLine}):
+
+\`\`\`` + lang + "\n" + ctx.selection.text + "\n```"
+    );
+  }
+  if (!parts.length) return void 0;
+  return 'Live editor context (this updates as the user switches files or changes their selection). When the user refers to "this file", "the current/open file", "this code", "the selection", "here", or any similar phrase without naming an explicit path, resolve it to the ACTIVE file and selection below. Do not ask which file they mean, and do not substitute a differently-cased or similarly-named path (e.g. treat `Roadmap.md` as the active file if that is what is open).\n\n' + parts.join("\n");
+}
+
+// src/runStore/openingSections.ts
+var RULES_MAX = 16e3;
+function renderWorkspaceRules(rules) {
+  const body = rules.trim();
+  if (!body) return "";
+  const clipped = body.length <= RULES_MAX ? body : `${body.slice(0, RULES_MAX)}
+\u2026(rules truncated)`;
+  return `Workspace rules (from .builderforce/rules.md, committed with this repository \u2014 follow them on every task here):
+${clipped}`;
+}
+function idePersonaSection(o) {
+  if (o.hasWorkspace === void 0) return "";
+  return withWorkspaceMap(ideSystemPromptBase(o.hasWorkspace), o.grounding);
+}
+function assembleOpening(hostPrompt, opening) {
+  if (!opening) return hostPrompt;
+  return [
+    renderPolicyDirectives(opening.gates),
+    renderWorkspaceRules(opening.rules ?? ""),
+    hostPrompt,
+    idePersonaSection(opening),
+    opening.persona ? personaOverlay(opening.persona.choice, opening.persona.agents) ?? "" : "",
+    activeProjectDirective(opening.project) ?? "",
+    editorContextDirective(opening.editorContext) ?? "",
+    buildComposerDirectives({ effort: opening.composer?.effort, web: opening.composer?.web }),
+    opening.limbic ?? ""
+  ].filter(Boolean).join("\n\n");
+}
+
+// ../packages/agent-skills/src/spec.ts
+var SPEC_FIELDS = ["name", "description", "license", "compatibility", "metadata", "allowed-tools"];
+var SKILL_BINARY_FILE_MAX_BYTES = 5 * 1024 * 1024;
+var SKILL_PACKAGE_MAX_BYTES = 10 * 1024 * 1024;
+var SKILL_BINARY_EXTENSIONS = [
+  "png",
+  "jpg",
+  "jpeg",
+  "gif",
+  "webp",
+  "ico",
+  "pdf",
+  "woff",
+  "woff2",
+  "ttf",
+  "otf",
+  "zip",
+  "gz",
+  "mp3",
+  "mp4",
+  "wasm"
+];
+var BINARY_EXTENSION_SET = new Set(SKILL_BINARY_EXTENSIONS);
+var SKILL_READ_TOOL_NAME = "builtin_skills_read";
+
+// ../packages/agent-skills/src/validate.ts
+var SPEC_FIELD_SET = new Set(SPEC_FIELDS);
+
+// ../packages/agent-skills/src/skillPackage.ts
+var DEFAULT_SKILL_PACKAGE_LIMITS = {
+  maxFiles: 64,
+  maxFileBytes: 256 * 1024,
+  maxBinaryFileBytes: SKILL_BINARY_FILE_MAX_BYTES,
+  maxTotalBytes: SKILL_PACKAGE_MAX_BYTES
+};
+
+// ../packages/agent-skills/src/catalog.ts
+var TOOL_HOST_INSTRUCTIONS = [
+  "The following skills provide specialized instructions for specific tasks.",
+  `When a task matches a skill's description, call \`${SKILL_READ_TOOL_NAME}\` with its name and follow the instructions it returns before acting.`,
+  `A skill may list bundled files (scripts, references); load one with \`${SKILL_READ_TOOL_NAME}\` { name, path } only when its instructions call for it.`
+];
+
+// src/skillLibraryTools.ts
+function skillToolsIn(toolNames) {
+  return toolNames.filter((name) => name === SKILL_READ_TOOL_NAME);
+}
+
+// src/runStore/runPreambleCatalog.ts
+function resolveCatalog(req) {
+  const { tools: toolSpecs, runTool } = req;
+  const canAskUser = !!runTool && (toolSpecs?.length ?? 0) > 0;
+  const catalog = canAskUser ? [...toolSpecs ?? [], ASK_USER_TOOL_SPEC, HAND_OFF_TOOL_SPEC] : toolSpecs;
+  const catalogToolNames = (req.tools ?? []).map((t) => t.function.name);
+  return { canAskUser, allTools: catalog && catalog.length > 0 ? catalog : void 0, catalogToolNames };
+}
+function advertisedTools(prompt, scope, catalogToolNames, canAskUser) {
+  const { systemPrompt, turnContext, turnPartsInPrompt, userRequest, previewReview } = prompt;
+  const systemNamed = toolNamesMentionedIn(systemPrompt);
+  const blockNamed = turnContext ? toolNamesMentionedIn(turnContext) : [];
+  const obligation = scope.runMode === "work" ? chatWorkObligationTools(scope.serverChatId, ticketToolVocabulary(catalogToolNames)).filter((n2) => catalogToolNames.includes(n2)) : [];
+  const promptTools = {
+    system: systemNamed,
+    turn: [.../* @__PURE__ */ new Set([...blockNamed, ...toolNamesMentionedIn([...turnPartsInPrompt, userRequest].join("\n\n"))])],
+    contract: previewReview ? toolNamesMentionedIn(previewReview) : [],
+    ...obligation.length > 0 ? { obligation } : {}
+  };
+  const alwaysAdvertised = [
+    .../* @__PURE__ */ new Set([...systemNamed, ...blockNamed, ...obligation]),
+    ...localToolsIn(catalogToolNames),
+    // The Studio's workspace vocabulary, including the preview review its contract
+    // requires — empty everywhere but the Studio (see `studioToolsIn`).
+    ...studioToolsIn(catalogToolNames),
+    // The project-memory pair (recall before re-reading; remember what was learned) is
+    // the cheapest tool in the catalog and the first one relevance would drop.
+    ...memoryToolsIn(catalogToolNames),
+    // The workspace's Agent Skills — its description IS the skill catalog, so dropping
+    // it on relevance would hide every reviewed procedure the workspace has.
+    ...skillToolsIn(catalogToolNames),
+    // Asking the user is never off-topic: it is how the run stops when it cannot
+    // proceed, so relevance against the request must not be what decides whether the
+    // agent is allowed to ask. Its one schema is also the cheapest in the catalog.
+    ...canAskUser ? [ASK_USER_TOOL] : []
+  ];
+  return { promptTools, alwaysAdvertised };
+}
+
+// src/previewReview.ts
+var REVIEW_RECORD_TOOL2 = "builtin_reviews_record";
+function previewReviewDirective(chatId, tickets = SERVER_TICKET_TOOLS) {
+  const listed = chatId != null ? `builtin_chats_list_tickets with chatId=${chatId} lists it` : "the ticket you recorded the change against";
+  const linkFirst = chatId != null && !tickets.local ? ` If the ticket you reviewed is not linked yet, link it with ${SERVER_TICKET_LINK_TOOL} (chatId=${chatId}) first.` : "";
+  return `REVIEW YOUR OWN CHANGE \u2014 in this Studio session YOU are its reviewer. The app runs in a live preview in this browser that no other agent can reach, so a ticket you leave "in_review" sits at 75% on the board forever, and dispatching a QA or design agent to review it is not a substitute \u2014 even when agents are invited into this chat, the review of a change THIS session made is yours. When your turn changes the app, finish it in this order:
+1. VERIFY \u2014 \`canvas_read_build_diagnostics\` must show no current failures. Then call \`canvas_inspect_preview\` with the CSS selectors your change targets and the widths the request is about (a phone bug: include the widths it names, or [360, 390, 414]; a desktop layout: the desktop viewport). Read the numbers against what was ASKED, not only the pass/fail: a pill that must hug its label is a few dozen px tall, not the card's height; a mobile menu must not make the page wider than the screen; an image must not cover the headline (\`occludedBy\`). If a width fails, or the measurements show the change did not do what was asked, FIX it and inspect again.
+2. RECORD \u2014 when every width passes and the measurements match the request, record the review with builtin_reviews_record (taskId = the ticket tracking the change \u2014 ${listed}; verdict "complete"; a summary that QUOTES the measurements that prove it, e.g. ".character-tag 74\xD723px at 390px; page 390px wide at 390px"). One call per ticket the change delivers. If something the ticket asked for is genuinely not done, record verdict "gaps" with each gap instead of "complete".
+3. CLOSE \u2014 a ticket linked to this chat that has a "complete" review recorded after a passing inspection moves to done (100%) automatically when your turn ends.${linkFirst} Report each ticket's verdict with the key measurements.
+Never say a change works or a ticket is done without a passing \`canvas_inspect_preview\` AFTER your last edit. If the preview cannot be inspected (it is not running, or the probe times out), say so plainly and leave the ticket in review \u2014 do not record a "complete" review you could not verify.`;
+}
+function toolEvents(events) {
+  return events.filter((event) => event.category === "tool");
+}
+function lastChangeIndex(events) {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (isCodeChangeTool(event.label) && !event.isError && !isFailedToolResult(event.result)) return index;
+  }
+  return -1;
+}
+function isPassingInspection(event) {
+  if (event.label !== PREVIEW_REVIEW_TOOL || event.isError || isFailedToolResult(event.result)) return false;
+  const result = event.result;
+  return result?.passed === true;
+}
+function completeReviewTaskId(event) {
+  if (event.label !== REVIEW_RECORD_TOOL2 || event.isError || isFailedToolResult(event.result)) return null;
+  const args = event.args ?? {};
+  const recorded = event.result?.verdict ?? args.verdict;
+  if (recorded !== "complete") return null;
+  return parseSyncId(args.taskId);
+}
+function ticketsReviewedInPreview(events) {
+  const tools = toolEvents(events);
+  const lastChange = lastChangeIndex(tools);
+  if (lastChange < 0) return [];
+  let inspected = false;
+  const reviewed = /* @__PURE__ */ new Set();
+  for (const event of tools.slice(lastChange + 1)) {
+    if (isPassingInspection(event)) inspected = true;
+    else if (inspected) {
+      const taskId = completeReviewTaskId(event);
+      if (taskId != null) reviewed.add(taskId);
+    }
+  }
+  return [...reviewed];
+}
+function inspectedAfterLastChange(events) {
+  const tools = toolEvents(events);
+  const lastChange = lastChangeIndex(tools);
+  return tools.slice(lastChange + 1).some((event) => event.label === PREVIEW_REVIEW_TOOL);
+}
+function recordedReviewAfterLastChange(events) {
+  const tools = toolEvents(events);
+  const lastChange = lastChangeIndex(tools);
+  return tools.slice(lastChange + 1).some((event) => event.label === REVIEW_RECORD_TOOL2 && !event.isError);
+}
+var DECLINES_REVIEW = /\b(?:don'?t|do not|never|without)\s+(?:review|verify|inspect|test|close|closing|mark)\w*|\b(?:leave|keep)\s+(?:it|them|the\s+tickets?)\s+(?:open|in\s+review)\b/i;
+function declinesReview(text2) {
+  return DECLINES_REVIEW.test(text2 ?? "");
+}
+function leftChangeUnreviewed(input) {
+  return input.codeChanged && canReviewInPreview(input.toolNames) && !declinesReview(input.requestText) && !(inspectedAfterLastChange(input.events) && recordedReviewAfterLastChange(input.events));
+}
+function unreviewedChangeNudge() {
+  return 'You changed the app in this run and ended the turn without reviewing it. In the Studio you are the reviewer \u2014 nobody else can see this preview, so an unreviewed change parks its ticket in review forever. Finish it now: call `canvas_inspect_preview` with the selectors your change targets and the widths the request is about, check the measurements against what was asked (fix and re-inspect if they fail), then record builtin_reviews_record on each ticket the change delivers \u2014 verdict "complete" quoting the measurements, or "gaps" naming what is missing. A complete review after a passing inspection closes the ticket when your turn ends. If you genuinely cannot verify \u2014 the preview is not running, or the change is unfinished \u2014 say so plainly at the TOP of your answer and name exactly what is left.';
+}
+
+// src/selfReviewShip.ts
+function attemptedPublish(events) {
+  return events.some((e) => {
+    if (e.category !== "tool") return false;
+    const verb = publishVerbOf(e.label, e.args);
+    return verb != null && verb !== "cleanup";
+  });
+}
+var DECLINES_SHIPPING = /\b(?:don'?t|do not|never|without)\s+(?:commit|push|ship|merg)\w*|\b(?:no|skip)\s+(?:commit|push)\w*|\b(?:leave|keep)\s+(?:it|them|this|the\s+(?:change|changes|edits?))\s+(?:uncommitted|unstaged|local(?:ly)?)\b/i;
+function declinesShipping(text2) {
+  return DECLINES_SHIPPING.test(unquotedText(text2));
+}
+function unquotedText(text2) {
+  return (text2 ?? "").split(/\r?\n/).filter((line) => !/^\s*>/.test(line)).join("\n");
+}
+function leftChangeUnshipped(input) {
+  return input.codeChanged && canShipHere(input.toolNames) && asksForChange(input.requestText) && shipNudge(input.policy) != null && !attemptedPublish(input.events);
+}
+
+// src/runStore/publishHold.ts
+var PUBLISH_VERB = String.raw`(?:commit|push|ship|merge|land|publish|release|(?:open|raise|create)\s+(?:a|the)\s+(?:pr|pull\s+request))`;
+var OBJECT_STOP = String.raw`(?:is|are|was|were|be|been|being|am|do|does|did|done|doing|have|has|had|having|need|needs|needed|want|wants|wanting|in|on|at|to|into|onto|through|for|with|by|of|when|while|that|which|who|whom|if|because|until|unless|before|after|not|no|also|but|or|nor|as|from|about|over|under|again|further|once|here|there|any|both|each|few|more|most|other|some|such|only|own|same|so|than|too|very|just|should|would|could|must|shall|will|may|might|can|cannot|blue|green|red|yellow|orange|purple|pink|brown|black|white|gray|grey|dark|light|big|small|large|new|old|wrong|broken|ready)`;
+var DIRECT_OBJECT = String.raw`(?:the|this|that|my|your|our|a|an|these|those)\s+(?:(?!${OBJECT_STOP}\b)[\w][\w./'-]*\s*){1,4}`;
+var PUBLISH_TAIL = String.raw`(?:it|them|this|that|these|those|everything|all|now|away|up|changes|please|then|too|as\s+well|for\s+me|right\s+away|` + String.raw`(?:the|your|my|our)\s+(?:changes?|code|work|fix(?:es)?|branch|commits?|pr|diff|edits?|updates?|lot)|` + String.raw`and\s+${PUBLISH_VERB}(?:\s+${DIRECT_OBJECT})?|` + String.raw`to\s+(?:main|master|github|prod(?:uction)?|(?:the\s+)?(?:remote|repo|origin)(?:/[\w./-]+)?|origin/[\w./-]+|the\s+(?:[\w./-]+\s+)?branch|[\w./-]+\s+branch))`;
+var ACKNOWLEDGEMENT = String.raw`(?:(?:ok(?:ay)?|yes|yep|yeah|sure|great|good|perfect|thanks|thank\s+you|lgtm|looks\s+good|all\s+good|validated|verified|approved|done|now|please|so|then|and|alright)\b[\s!–—-]*)*`;
+var GO_AHEAD = String.raw`(?:go\s+ahead\s+(?:and\s+)?|you\s+(?:can|may)\s+(?:now\s+)?(?:go\s+ahead\s+and\s+)?|` + String.raw`(?:can|could|would|will)\s+you\s+(?:please\s+)?(?:now\s+)?|` + String.raw`you(?:['’]re|\s+are)\s+(?:good|clear(?:ed)?|free|ok(?:ay)?|fine)\s+to\s+|` + String.raw`feel\s+free\s+to\s+|(?:it\s+is\s+|it['’]?s\s+)?(?:ok(?:ay)?|fine|safe)\s+to\s+|time\s+to\s+|let['’]?s\s+|please\s+)?`;
+var SHIP_ORDER = new RegExp(
+  String.raw`^${ACKNOWLEDGEMENT}${GO_AHEAD}${PUBLISH_VERB}(?:\s+${DIRECT_OBJECT})*?(?:\s+${PUBLISH_TAIL})*$`,
+  "i"
+);
+var DEFERRAL = /\b(?:not\s+yet|after|when|once|later|tomorrow|tonight|next|until|till|before|wait|hold\s+off|in\s+a\s+(?:bit|minute|moment|while|few))\b/i;
+var ASSISTANT_ASKS_TO_SHIP = /\b(?:shall|should|can|may)\s+I\s+(?:go\s+ahead\s+and\s+)?(?:now\s+)?(?:commit|push|ship|merge|land|publish|open\s+(?:a|the)\s+(?:pr|pull\s+request))\b[^?]*\?|\b(?:do\s+you\s+want|want|would\s+you\s+like)\s+me\s+to\s+(?:go\s+ahead\s+and\s+)?(?:commit|push|ship|merge|land|publish|open\s+(?:a|the)\s+(?:pr|pull\s+request))\b[^?]*\?/i;
+var BARE_AFFIRMATIVE = /^(?:(?:yes|yep|yeah|yup|sure|ok(?:ay)?|go\s+ahead|go\s+for\s+it|do\s+it|please\s+do|please|sounds\s+good|lgtm|approved|absolutely|definitely|thanks|thank\s+you)[\s,.!]*)+$/i;
+function asksToShip(text2, priorAssistant) {
+  const turn = unquotedText(text2).trim();
+  if (!turn || DEFERRAL.test(turn)) return false;
+  if (priorAssistant && BARE_AFFIRMATIVE.test(turn) && ASSISTANT_ASKS_TO_SHIP.test(priorAssistant)) return true;
+  return turn.split(/[.!?;:\n,]+/).some((clause) => SHIP_ORDER.test(clause.trim()));
+}
+function publishHoldFromPersonTurns(personTurns2) {
+  let hold = null;
+  personTurns2.forEach((turn, index) => {
+    const text2 = turn.text;
+    if (!text2) return;
+    if (declinesShipping(text2)) hold = { messageNumber: index + 1, text: text2 };
+    else if (hold && asksToShip(text2, turn.priorAssistant)) hold = null;
+  });
+  return hold;
+}
+function publishHold(convo) {
+  const turns = [];
+  let priorAssistant = "";
+  for (const m of convo) {
+    if (m?.role === "assistant") {
+      const said = userTextOf(m);
+      if (said) priorAssistant = said;
+    } else if (m?.role === "user" && personTurns.has(m)) {
+      turns.push({ text: userTextOf(m), ...priorAssistant ? { priorAssistant } : {} });
+      priorAssistant = "";
+    }
+  }
+  return publishHoldFromPersonTurns(turns);
+}
+function attemptedPublishWhileHeld(hold, events) {
+  if (!hold) return false;
+  return events.some((e) => e.category === "tool" && publishVerbOf(e.label, e.args) != null);
+}
+function recordPublishRefusal(runKey, name, args, events) {
+  for (const e of events) {
+    const r = e.result;
+    if (r && typeof r === "object" && r.publishHold) {
+      return { runKey, tool: e.label };
+    }
+  }
+  return publishVerbOf(name, args) != null ? { runKey, tool: name } : null;
+}
+
+// src/runStore/runShipPolicy.ts
+function runShipPolicy(req, hold) {
+  const base = req.lineage ? shipPolicyOf("leave_uncommitted", "subagent") : req.shipPolicy ?? DEFAULT_SHIP_POLICY;
+  return narrowByHold(base, hold);
+}
+
+// src/runStore/runPreambleDirectives.ts
+function foldRunDirectives(c, convo, req, runMode, serverChatId, catalogToolNames, opening) {
+  let systemPrompt = opening;
+  const canEditHere = canChangeCodeHere(catalogToolNames);
+  systemPrompt = `${systemPrompt}
+
+${chatModeDirective(runMode, serverChatId, { canEditHere, canDelegate: catalogToolNames.includes("spawn_agent"), canFanOut: catalogToolNames.includes("spawn_agents"), roster: req.chatRoster, ticketTools: ticketToolVocabulary(catalogToolNames) })}
+
+${turnOptimizationDirective()}`;
+  const canShip = canShipHere(catalogToolNames);
+  const hold = publishHold(convo);
+  c.publishHold = hold;
+  const questionRun = hasExplicitQuestionIntent(classifyRequest(latestUserText(convo)));
+  const resolvedShip = runShipPolicy(req, hold);
+  c.shipPolicy = questionRun ? { ...resolvedShip, mode: "leave_uncommitted", merge: "never" } : resolvedShip;
+  if (canShip) {
+    pushTrace(c, {
+      ts: nowIso(),
+      category: "message",
+      label: "run.ship_policy",
+      args: { mode: questionRun ? "n/a" : c.shipPolicy.mode, source: c.shipPolicy.source, merge: c.shipPolicy.merge, review: c.shipPolicy.review, ...hold ? { setByMessage: hold.messageNumber } : {} },
+      result: questionRun ? "Ship policy: n/a (question)." : `Ship policy: ${c.shipPolicy.mode} (${shipSourceLabel(c.shipPolicy)}).`
+    });
+  }
+  if (hold && attemptedPublishWhileHeld(hold, c.trace)) {
+    pushTrace(c, {
+      ts: nowIso(),
+      category: "message",
+      label: "run.publish_hold_refused",
+      args: { setByMessage: hold.messageNumber },
+      result: `Publish hold is ON (set by user message #${hold.messageNumber}). A prior run still tried to commit/push \u2014 the tool gate now refuses these until the user explicitly asks to ship.`
+    });
+  }
+  if (canShip) {
+    systemPrompt = `${systemPrompt}
+
+${shipDirective(c.shipPolicy, { chatId: serverChatId })}`;
+  }
+  const previewReview = canReviewInPreview(catalogToolNames) ? previewReviewDirective(serverChatId, ticketToolVocabulary(catalogToolNames)) : null;
+  if (previewReview) systemPrompt = `${systemPrompt}
+
+${previewReview}`;
+  if (c.priorResearch) systemPrompt = `${systemPrompt}
+
+${c.priorResearch}`;
+  return { systemPrompt, previewReview, hold };
+}
+
+// src/runStore/runPreamble.ts
+function stablePrefixOn() {
+  return deviceLeverOn("b1_stable_prefix");
+}
+function recorderFor(userRequest, lent) {
+  const r = lent ?? new RunKnowledgeRecorder();
+  if (!r.activity.prompt) r.setPrompt(userRequest);
+  return r;
+}
+async function prepareBrainRun(chatId, c, req, runKey, reportRunRow) {
+  const { resolvedSystemPrompt, stream, evermind } = req;
+  const convo = c.transcript;
+  restoreTurnContext(c);
+  recordTranscriptAnchors(c, req);
+  const stablePrefix = stablePrefixOn();
+  const turnParts = [];
+  const { canAskUser, allTools, catalogToolNames } = resolveCatalog(req);
+  const runMode = normalizeChatMode(req.chatMode ?? "work");
+  seedConfigLog(c, { model: req.model, modelStrict: req.modelStrict, routingMode: req.routingMode, runMode });
+  const serverChatId = resolveServerChatId(chatId, req);
+  const route = measureWorkflowSync(brainEventSink(c), { runId: c.runId, entryPoint: req.entryPoint, step: 0 }, "route", () => decideRoute(req, latestUserText(convo), isFollowUpTurn(convo)), (r) => ({ reusedDecision: 0, quick: Number(r.pipeline?.route === "quick"), full: Number(r.pipeline?.route === "full") }));
+  const pipeline = route.pipeline;
+  if (pipeline) {
+    pushTrace(c, {
+      ts: nowIso(),
+      category: "message",
+      label: "run.pipeline_route",
+      args: { route: pipeline.route, score: pipeline.score },
+      result: `${pipeline.route === "quick" ? "Quick pass" : "Full pipeline"}: ${pipeline.reason}`
+    });
+  }
+  const metadata = {
+    ...serverChatId != null ? { chatId: serverChatId } : {},
+    ...req.clientChatId ? { clientChatId: req.clientChatId } : {},
+    guestTurnId: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    guestTurnInput: latestUserText(convo),
+    mode: runMode,
+    ...req.projectId != null ? { projectId: req.projectId } : {},
+    ...routeMetadata(route)
+  };
+  const preflightStarted = Date.now();
+  const remaining = budget(PREFLIGHT_PROBE_MS);
+  const memoryReplay = memoryReplayable(latestUserText(convo), { followUp: isFollowUpTurn(convo) });
+  const gatePending = answerDeterministically(chatId, c, req, metadata.guestTurnId, runKey);
+  const memoryAnswer = gatePending.then((gate2) => gate2.answered || remaining() <= 1 ? null : lookupMemoryAnswer(c, req, allTools, memoryReplay, remaining()));
+  const hostAndRecall = gatherHostRunContext(c, req, !!evermind?.recall).then(async (host2) => ({
+    host: host2,
+    recall: await recallForRun(c, convo, evermind, host2.recallHint, remaining())
+  }));
+  const [{ host, recall }, memoryCandidate] = await Promise.all([hostAndRecall, memoryAnswer]);
+  const { recalled, block: recallBlock2, blockTokens: recallBlockTokens } = recall;
+  if (evermind?.recall || evermind?.answer || req.modelPreflight || req.turnContext || req.servedReads) {
+    pushTrace(c, {
+      ts: nowIso(),
+      category: "message",
+      label: "run.preflight",
+      durationMs: Date.now() - preflightStarted,
+      args: { recalled: !!recallBlock2, memoryAnswer: !!memoryCandidate }
+    });
+  }
+  let systemPrompt = assembleOpening(resolvedSystemPrompt, req.opening);
+  const turnPartsInPrompt = [];
+  const intoPrompt = (part) => {
+    systemPrompt = `${systemPrompt}
+
+${part}`;
+    turnPartsInPrompt.push(part);
+  };
+  if (recallBlock2) {
+    if (stablePrefix) turnParts.push(recallBlock2);
+    else intoPrompt(recallBlock2);
+  }
+  const priorRecall = { query: latestUserText(convo), result: recalled };
+  const gate = await gatePending;
+  if (gate.answered) return null;
+  if (req.prefetch) metadata.gateRoute = gate.tail.length > 0 ? "prefetch" : "llm";
+  if (await adoptMemoryAnswer(chatId, c, req, memoryCandidate)) return null;
+  if (host.turnContext) turnParts.push(host.turnContext);
+  for (const block of gate.tail) if (!host.turnContext?.includes(block)) turnParts.push(block);
+  if (req.augmentSystemPrompt) {
+    try {
+      const extra = await req.augmentSystemPrompt(latestUserText(convo));
+      if (typeof extra === "string" && extra.trim()) {
+        if (stablePrefix) turnParts.push(extra);
+        else intoPrompt(extra);
+      }
+    } catch (error) {
+      pushTrace(c, {
+        ts: nowIso(),
+        category: "message",
+        label: "system_prompt.augmentation_failed",
+        result: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+  const folded = foldRunDirectives(c, convo, req, runMode, serverChatId, catalogToolNames, systemPrompt);
+  systemPrompt = folded.systemPrompt;
+  const { previewReview, hold } = folded;
+  const reading = readRequest(c, convo, runMode);
+  const { userRequest } = reading;
+  for (const directive of reading.directives) {
+    if (stablePrefix) turnParts.push(directive);
+    else intoPrompt(directive);
+  }
+  const turnContext = turnContextBlock(turnParts);
+  const { promptTools, alwaysAdvertised } = advertisedTools(
+    { systemPrompt, turnContext, turnPartsInPrompt, userRequest, previewReview },
+    { runMode, serverChatId },
+    catalogToolNames,
+    canAskUser
+  );
+  const windowFit = createRunWindowFit({
+    workingBudgetTokens: HISTORY_TOKEN_BUDGET,
+    summarizer: () => ({ stream, model: run.policy.model, signal: c.abort?.signal, ...req.onDeviceTasks ? { onDeviceTasks: req.onDeviceTasks } : {} }),
+    ...evermind?.recall ? { recall: (q) => evermind.recall(q), priorRecall } : {},
+    ...req.windowSources ? { windowSources: req.windowSources } : {},
+    trace: (ev) => pushTrace(c, ev),
+    now: nowIso
+  });
+  const run = {
+    chatId,
+    serverChatId,
+    runKey,
+    c,
+    req,
+    ...reportRunRow ? { reportRunRow } : {},
+    convo,
+    canAskUser,
+    allTools,
+    catalogToolNames,
+    alwaysAdvertised,
+    promptTools,
+    // Tools this run has actually called — pinned into every later turn's selection
+    // so a multi-step task never loses a tool it is mid-way through using.
+    usedTools: /* @__PURE__ */ new Set(),
+    // Tools an earlier turn of THIS conversation called or named — a follow-up ("yes, do it") keeps the tool the
+    // last reply used or promised, instead of losing it to the relevance cut (`conversationPins.ts`).
+    conversationPinnedTools: conversationPinnedTools(convo, catalogToolNames),
+    systemPrompt,
+    metadata,
+    recalled,
+    recallBlockTokens,
+    memoryReplay,
+    userRequest,
+    publishHold: hold,
+    shipPolicy: c.shipPolicy,
+    // The goal a hand-off states to coders who see none of this chat: the latest
+    // message, and for a change request the chat's earlier change asks (`chatAsks.ts`).
+    goal: reading.goal,
+    // One re-prompt per run for a final reply that repeats the previous turn's answer
+    // (see `restatedReply.ts`). Captured before the loop: the transcript grows as it runs.
+    priorReply: previousReplyText(convo),
+    // The user's ACTUAL request for this run, resolved once. Every turn's tool
+    // selection scores against this and nothing else — see `run/brainPlatformTools.ts`.
+    requestQuery: routingQueryForTurn(convo),
+    windowFit,
+    // What this run has already read. Two guards, one tally (see `readCoverage.ts`):
+    // an EXACT repeat of a successful read-only call — same tool, same arguments —
+    // returns an "already returned above" stub instead of re-fetching + re-injecting
+    // the payload; and a target re-read at SHIFTING offsets gets an advisory once it
+    // starts circling. Both are invalidated together, and only for what a later
+    // mutation actually touched — never wiped wholesale by an unrelated call.
+    readCoverage: new ReadCoverage2(),
+    // The run's ONE no-progress counter, fed by the read-coverage above and handed to the
+    // kernel (`run/runPrepared.ts`) to persist into `RunState.reads.servedStreak` — the Brain
+    // owns the instance it feeds, so a kernel-built twin would start empty and die at any step
+    // boundary. The Brain builds its context fresh per invocation (no kernel-resume path), so
+    // this starts empty; the kernel seeds the counter from saved state for callers that resume.
+    cacheStreak: new CacheServedStreak(),
+    // Child reports the inbox delivered, for the agent's A3 detector to read (`run/brainProgressPorts.ts`).
+    childReports: [],
+    childWorkRefs: new Set(req.childWorkRefs),
+    // What the run did and read, restated in front of every turn (its `brief()`) —
+    // the host's recorder when it keeps one, so the ledger and its code map agree.
+    knowledge: recorderFor(userRequest, req.knowledge),
+    // What this run has already FAILED at (see `FailureTally` in `@builderforce/run-guards`). The read guards
+    // above deliberately record only SUCCESSES, so an identical failing call — the same
+    // `git_status` answered with the same remedy three times, the same platform read
+    // answered 502 twice — got no pushback at all and could repeat until the budget was
+    // gone. The first retry stays free; from the second the model reads the count and the
+    // error it already has, and the moves that remain.
+    failures: new FailureTally(),
+    // What this run has already WRITTEN (see `WriteLedger` in `@builderforce/run-guards`): the third circling shape —
+    // a successful full-content write sent again byte for byte, because an error from
+    // before it was still on screen. Replaying it cannot change the file, so it is answered
+    // without running.
+    writeLedger: new WriteLedger(),
+    // Placeholders this run wrote and has not removed — read when a ticket is marked done
+    // (see `completionGuard.ts`).
+    placeholderLedger: new PlaceholderLedger(),
+    // The evidence ledger the ship gates read (PRD 45 §4.2) — one per run, fed only by
+    // the host's verifier; a host that binds no port leaves every gate inert.
+    evidence: createEvidenceLedger(),
+    // THE model hand-off policy is the AGENT's: `brainRunPolicy` (`run/webAdapter.ts`) seeds
+    // it (the request's model + strictness) and `openRun` folds the route's start into it
+    // (plan/code phase, the host's stage models, a quick run's model). It is read here only
+    // through the live view, so there is no second copy of the pin or the route.
+    get policy() {
+      if (!run.view) throw new Error("run.policy read before the agent opened the run");
+      return run.view.policy();
+    },
+    route,
+    // One re-prompt per run for a code change left unshipped (see `selfReviewShip.ts`).
+    // One, not a budget: the second time the model stops short it has read the contract
+    // twice, and its answer — including "I cannot ship this because…" — is the answer.
+    shipRecoveryUsed: false,
+    reviewRecoveryUsed: false,
+    // One redirect per run for an explicit sub-agent request the run neither started nor
+    // refused on a real result (see `delegationRequest.ts`).
+    delegationRecoveryUsed: false,
+    restateRecoveryUsed: false,
+    // One redirect per run for a narration turn that ended while a tool call was still running
+    // (see `deliveryGates.ts`): the run is mid-task, not answering.
+    pendingNarrationRecoveryUsed: false,
+    // A finishing run traces the delivery gates it skipped once (`run/finishSkipsGates.ts`).
+    finishSkipNoted: false,
+    stopHookRounds: 0,
+    redirectAskToDelegation: false,
+    pending: new PendingCalls(),
+    lastTurnInterruption: null
+  };
+  if (turnContext && !attachTurnContext(c, convo, turnContext)) {
+    run.systemPrompt = `${systemPrompt}
+
+${turnContext}`;
+  }
+  recordServedReads(run.readCoverage, host.servedReads, turnContextCarrier(c));
+  return run;
+}
+
+// src/stopHooks.ts
+var MAX_STOP_HOOK_ROUNDS = 4;
+async function askStopHook(hook, input) {
+  if (!hook || input.round >= MAX_STOP_HOOK_ROUNDS) return null;
+  try {
+    const nudge = (await hook(input))?.trim();
+    return nudge ? nudge : null;
+  } catch {
+    return null;
+  }
+}
+
+// src/runStore/earlyDelegation.ts
+var counters = /* @__PURE__ */ new WeakMap();
+function counterOf(run) {
+  let counter = counters.get(run);
+  if (!counter) {
+    counter = new ReadsWithoutSpawn();
+    counters.set(run, counter);
+  }
+  return counter;
+}
+function runLeftDelegationUndone(run) {
+  return leftDelegationUndone({ toolNames: run.catalogToolNames, requestText: run.userRequest, events: runTrace(run.c) });
+}
+function delegationCallKind(name, args, isReadTool) {
+  if (isSpawnTool(name)) return "spawn";
+  if (isReadTool || isReadOnlyShellCall(name, args)) return "read";
+  return "other";
+}
+function earlyDelegationAdvisory(run, name, args, isReadTool, step) {
+  const counter = counterOf(run);
+  const kind = delegationCallKind(name, args, isReadTool);
+  const reads = counter.record(kind);
+  if (kind !== "read" || !counter.due(READS_BEFORE_DELEGATION_NUDGE)) return null;
+  if (!runLeftDelegationUndone(run)) return null;
+  counter.markNudged();
+  const nudge = earlyDelegationNudge(run.catalogToolNames, reads);
+  pushTrace(run.c, {
+    ts: nowIso(),
+    category: "message",
+    label: "loop.nudge_undelegated_request",
+    args: { step, tool: name, reads },
+    result: `The user asked for sub-agents and the run had made ${reads} reads without starting one \u2014 told to delegate on that read result.`
+  });
+  return nudge;
+}
+
+// src/runStore/deliveryGates.ts
+var PENDING_NARRATION_GATE = "brain.pending_narration";
+function deliveryGates(run) {
+  const { c, catalogToolNames, userRequest, priorReply } = run;
+  const facts = () => ({ codeChanged: c.codeChanged, toolNames: catalogToolNames, requestText: userRequest, events: runTrace(c) });
+  const files = () => ({ files: c.touchedFiles.slice(0, 20) });
+  return [
+    {
+      // The turn CHANGED code and is ending without having even tried to ship it. In a local session that change has no other
+      // reviewer. Quiet when the ship policy ships nothing (`shipNudge` null: `leave_uncommitted`, which a chat hold and a
+      // sub-agent land on), when a commit/push/PR was attempted, and on a host that cannot commit.
+      id: "brain.ship",
+      entersVerify: true,
+      applies: () => !run.shipRecoveryUsed && leftChangeUnshipped({ ...facts(), policy: run.shipPolicy }),
+      nudge: () => shipNudge(run.shipPolicy) ?? "",
+      trace: { label: "loop.recover_unshipped_change", args: files, result: "Run changed code and ended without shipping it under its ship policy \u2014 re-prompted to verify, self-review and ship as the policy says." },
+      spend: () => {
+        run.shipRecoveryUsed = true;
+      }
+    },
+    {
+      // The Studio's twin: the turn CHANGED the app and is ending without having inspected the preview and recorded a review.
+      id: "brain.review",
+      entersVerify: true,
+      applies: () => !run.reviewRecoveryUsed && leftChangeUnreviewed(facts()),
+      nudge: unreviewedChangeNudge,
+      trace: { label: "loop.recover_unreviewed_change", args: files, result: "Run changed the app and ended without inspecting the preview and recording a review \u2014 re-prompted to verify and review (this Studio session is the change's only reviewer)." },
+      spend: () => {
+        run.reviewRecoveryUsed = true;
+      }
+    },
+    {
+      // The turn references work that is STILL IN FLIGHT — "let me wait for the test run to
+      // finish", "both type-checks pass, now self-reviewing" — while a tool call it started
+      // has not returned. That narration is not the answer: the run is mid-task. Sent back once
+      // to keep working; a run that still narrates after the recovery has read the contract twice
+      // and its answer — whatever it is — is the answer.
+      id: PENDING_NARRATION_GATE,
+      entersVerify: false,
+      applies: () => !run.pendingNarrationRecoveryUsed && run.pending.pendingCount() > 0,
+      nudge: () => "A tool call you started is still running. Do not finish \u2014 continue the task until the pending step resolves and there is a concrete result to report.",
+      trace: { label: "loop.recover_pending_narration", args: () => ({ pending: run.pending.pendingCount() }), result: "The run ended on a narration turn while a tool call it started was still running \u2014 re-prompted to continue until the pending step resolves." },
+      spend: () => {
+        run.pendingNarrationRecoveryUsed = true;
+      }
+    },
+    {
+      // The user asked for SUB-AGENTS and the run is ending in prose without having started one. The `ask_user` twin is in
+      // `turnToolCalls.ts`; both spend the one recovery.
+      id: "brain.delegate",
+      entersVerify: false,
+      applies: () => !run.delegationRecoveryUsed && runLeftDelegationUndone(run),
+      nudge: () => undelegatedRequestNudge(catalogToolNames),
+      trace: { label: "loop.recover_undelegated_request", args: () => ({ via: "reply" }), result: "The user asked for sub-agents and the run ended without starting one \u2014 re-prompted to spawn them locally." },
+      spend: () => {
+        run.delegationRecoveryUsed = true;
+      }
+    },
+    {
+      // The reply is the previous turn's status again: sent back once to act on the next unfinished item instead.
+      id: "brain.restate",
+      entersVerify: false,
+      applies: (text2) => !run.restateRecoveryUsed && isRestatedReply(text2, priorReply),
+      nudge: () => restatedReplyNudge(ticketToolVocabulary(catalogToolNames)),
+      trace: { label: "loop.recover_restated_reply", args: () => ({}), result: "Final reply repeated the previous turn's answer \u2014 re-prompted to act on the next unfinished item instead of restating it." },
+      spend: () => {
+        run.restateRecoveryUsed = true;
+      }
+    }
+  ];
+}
+
+// src/run/finishSkipsGates.ts
+var FINISH_SKIPS_GATES_LABEL = "loop.finish_skips_delivery_gates";
+async function noteFinishSkipsGates(run, step, content, stopHook) {
+  if (run.finishSkipNoted) return;
+  const gates = [
+    ...await stopHook.applies() ? [stopHook.id] : [],
+    ...deliveryGates(run).filter((gate) => gate.applies(content)).map((gate) => gate.id)
+  ];
+  if (gates.length === 0) return;
+  run.finishSkipNoted = true;
+  pushTrace(run.c, {
+    ts: nowIso(),
+    category: "message",
+    label: FINISH_SKIPS_GATES_LABEL,
+    args: { step, gates, files: run.c.touchedFiles.slice(0, 20) },
+    result: "The run is finishing (no more changes, nothing run): the delivery gates that would have sent its report back were not asked \u2014 its change stays unshipped and the report says what is left."
+  });
+}
+
+// src/run/brainDelivery.ts
+var STOP_HOOK_RUNG = "brain.stop_hook";
+function brainDeliveryLedger(run, last) {
+  const { c, req, userRequest, canAskUser } = run;
+  const { runTool } = req;
+  const held = [];
+  const note = (label, result, args = {}) => {
+    const step = { ts: nowIso(), category: "message", label, args: { step: last.step, ...args }, result };
+    held.push(() => pushTrace(c, step));
+  };
+  const asWritten = (content) => last.result && replayTextOf(last.result.text).trim() === content.trim() ? last.result.text : content;
+  const accept = (content) => {
+    const full = asWritten(content).trim();
+    return (canAskUser ? liftProseAskUser(full) : full) || "No response.";
+  };
+  const askStop = () => askStopHook(req.onStop, { codeChanged: c.codeChanged, touchedFiles: c.touchedFiles, requestText: userRequest, round: run.stopHookRounds });
+  const skippedByFinish = (content) => noteFinishSkipsGates(run, last.step, content, { id: STOP_HOOK_RUNG, applies: async () => await askStop() !== null });
+  return {
+    providerFailure: {
+      rerouted({ step, outcome, message }) {
+        last.abandonedFailure = void 0;
+        pushTrace(c, transportRetryTrace(nowIso(), step, outcome, message));
+      },
+      abandoned() {
+        last.abandonedFailure?.();
+        last.abandonedFailure = void 0;
+      }
+    },
+    // A host that cannot run a tool judges no stall at all (the rungs are none): the turn IS the answer.
+    owns: { settle: true, ...runTool ? {} : { narration: true } },
+    // The Brain's stall order and wording (the stall policy's options below): a narrating turn is re-prompted before any rung, a model that
+    // spent its budget is failed over (reading the nudge alone) or stopped only once every rung is clear, the rungs' directives are the
+    // person's rows, and the stall is judged against the menu the turn advertised. The closing answer after a failure streak is the
+    // agent's own forced no-tools turn, with a prompt that names the streak (`failureSynthesis`); no other ending asks for one.
+    stall: { narrationFirst: true, steersFirst: true, nudgeAs: "user", failoverNudgeOnly: true, menu: true, quoteEmpty: true, runWideBudget: true, failureSynthesis: true },
+    // The stall judgement and the gates read the model's own words, reasoning included (`last.result.text`).
+    judged: (content) => last.result?.text ?? content,
+    // A turn sent back keeps what the person watched stream in: as its own block, or - a model that stalled out and was handed
+    // over - as the reply it was (the nudge-and-requeue and failover rungs).
+    async sentBack({ kept }) {
+      const result = last.result;
+      if (!result) return;
+      if (kept === "settled") last.settled = await persistReply(run, accept(result.text), result, last.requested);
+      else if (kept === "reply") await persistReply(run, accept(result.text), result, last.requested);
+      else await persistMidTurnText(run.chatId, c, run.req.persistence, result, last.requested);
+      c.streamingText = "";
+      emit(c);
+      for (const write of held.splice(0)) write();
+    },
+    accept,
+    // A FINISHING run ("make no more changes and run nothing") is never sent back for more work: the agent asks no rung of its record
+    // turns or its final report (`PolicyContext.finishing`) and tells the ledger here what that skipped, once.
+    async finalAccepted({ content }) {
+      if (runTool) await skippedByFinish(content);
+    },
+    async rungs(turn) {
+      if (!runTool) return [];
+      const sentBackAnswer = () => {
+        last.sentBackAnswer = { step: last.step };
+      };
+      const stopNudge = await askStop();
+      const verifiable = c.codeChanged && !run.route.skipsVerify;
+      const stopHook = {
+        id: STOP_HOOK_RUNG,
+        applies: !!stopNudge,
+        restate: Array(MAX_STOP_HOOK_ROUNDS).fill(stopNudge ?? ""),
+        free: MAX_STOP_HOOK_ROUNDS,
+        quote: true,
+        spent: "fall",
+        entersVerify: verifiable,
+        onRestate: () => {
+          sentBackAnswer();
+          run.stopHookRounds += 1;
+          note("loop.stop_hook", `A workspace stop hook held the run for another turn: ${(stopNudge ?? "").slice(0, 200)}`, { round: run.stopHookRounds });
+        }
+      };
+      const gates = deliveryGates(run).map((gate) => ({
+        id: gate.id,
+        applies: gate.applies(turn.content),
+        restate: [gate.nudge()],
+        quote: true,
+        spent: "fall",
+        entersVerify: gate.entersVerify && verifiable,
+        onRestate: () => {
+          if (gate.id !== PENDING_NARRATION_GATE) sentBackAnswer();
+          gate.spend();
+          note(gate.trace.label, gate.trace.result, gate.trace.args());
+        }
+      }));
+      return [stopHook, ...gates];
+    }
+  };
+}
+
+// src/selectTools.ts
+var NAME_HIT = LEXICAL_WEIGHTS.name;
+var NAME_SYNONYM_HIT = 7;
+var DESCRIPTION_HIT = LEXICAL_WEIGHTS.description;
+function synonymText(text2) {
+  return [...expandWithSynonyms(lexicalStems(text2))].join(" ");
+}
+function toolFields(tool) {
+  const name = tool.function?.name ?? "";
+  if (!name) return [];
+  const description = tool.function?.description ?? "";
+  return [
+    { text: name, weight: NAME_HIT },
+    { text: synonymText(name), weight: NAME_SYNONYM_HIT },
+    { text: description, weight: DESCRIPTION_HIT },
+    { text: synonymText(description), weight: DESCRIPTION_HIT }
+  ];
+}
+function relevantTools(tools, query) {
+  return rankLexically(tools, query, toolFields, tools.length);
+}
+
+// src/runStore/callPreflight.ts
+import { stillInWorkingContext } from "@seanhogg/builderforce-memory/working";
+
+// src/runStore/runBackstops.ts
+function listingScopeOfRun(c) {
+  return "trace" in c ? listingScopeOf(c) : c.listing;
+}
+function settleView(c, runId) {
+  return {
+    listing: { cell: c, runId },
+    touchedFiles: [...c.touchedFiles],
+    deltaRecordedFiles: [...c.deltaRecordedFiles],
+    deltaTicketId: c.deltaTicketId,
+    ticketRecorded: c.ticketRecorded,
+    deltaCaptureRefused: c.deltaCaptureRefused,
+    deltaTitleCount: c.deltaTitleCount,
+    note: (ev) => {
+      if (c.runId === runId) pushTrace(c, ev);
+    }
+  };
+}
+var ROLE_REFUSAL = "requires at least the";
+function isRoleRefusal(out) {
+  const error = out?.error;
+  return typeof error === "string" && error.includes(ROLE_REFUSAL);
+}
+function noteOf(c) {
+  return "note" in c && c.note ? c.note : (ev) => pushTrace(c, ev);
+}
+function attachDeltaToRunTicket(toolName, args, deltaTicketId) {
+  if (toolName !== TICKET_FROM_DELTA_TOOL || deltaTicketId == null) return;
+  if (!args || typeof args !== "object" || Array.isArray(args)) return;
+  const bag = args;
+  if (bag.taskId == null) bag.taskId = deltaTicketId;
+}
+async function recordCodeChangeTicket(serverChatId, c, req, phase) {
+  if (!req.runTool || req.projectId == null) return;
+  if (phase === "settle" && c.deltaCaptureRefused) return;
+  const known = new Set(c.deltaRecordedFiles);
+  const files = c.touchedFiles.filter((f) => !known.has(f)).slice(0, 50);
+  if (phase === "settle" && c.deltaTicketId != null && files.length === 0) return;
+  const attachTo = c.deltaTicketId;
+  if (files.length === 0 && attachTo == null) return;
+  const source = serverChatId != null ? `Brain chat #${serverChatId}` : "a local editor chat";
+  const summary = codeChangeTicketTitle(files.length, source);
+  const parentTaskId = attachTo == null && serverChatId != null && declaresChatTicketListing(req.tools) ? await soleOpenLinkedEpic(serverChatId, c, req) : null;
+  const toolStart = nowMs2();
+  const args = {
+    projectId: req.projectId,
+    summary,
+    detail: attachTo != null ? "Auto-captured: further files changed by the same chat, attached to the ticket this run opened." : "Auto-captured: this chat changed code without recording a ticket, so the platform minted one to keep the work visible on the board and linked to the conversation.",
+    files,
+    kind: "improvement",
+    modality: "ide",
+    ...serverChatId != null ? { chatId: serverChatId } : {},
+    ...attachTo != null ? { taskId: attachTo } : {},
+    ...parentTaskId != null ? { parentTaskId } : {}
+  };
+  const send = async (bag) => {
+    try {
+      return { out: await req.runTool(TICKET_FROM_DELTA_TOOL, bag), thrown: false };
+    } catch (e) {
+      return { out: { ok: false, error: e instanceof Error ? e.message : String(e) }, thrown: true };
+    }
+  };
+  const first = await send(args);
+  let out = first.out;
+  if (parentTaskId != null && !first.thrown && isFailedToolResult(out) && !isRoleRefusal(out)) {
+    const why = out?.error;
+    noteOf(c)({
+      ts: nowIso(),
+      category: "message",
+      label: "ticket.parent_epic_refused",
+      args: { parentTaskId },
+      result: `The server refused to file the code-change ticket under epic #${parentTaskId}${typeof why === "string" ? ` (${why})` : ""}: it is minted once more, without a parent.`
+    });
+    delete args.parentTaskId;
+    out = (await send(args)).out;
+  }
+  if (!isFailedToolResult(out)) {
+    c.deltaRecordedFiles = [...c.deltaRecordedFiles, ...files];
+    if (files.length) c.deltaTitleCount = files.length;
+    const id = entityIdsOf(out).syncId;
+    if (c.deltaTicketId == null && id != null) c.deltaTicketId = id;
+    c.ticketRecorded = true;
+  } else if (isRoleRefusal(out)) {
+    c.deltaCaptureRefused = true;
+  }
+  noteOf(c)({
+    ts: nowIso(),
+    category: "tool",
+    label: TICKET_FROM_DELTA_TOOL,
+    durationMs: nowMs2() - toolStart,
+    args: { ...args, auto: true, phase },
+    result: out ?? null,
+    isError: isFailedToolResult(out)
+  });
+}
+async function soleOpenLinkedEpic(serverChatId, c, req) {
+  const listed = await listChatTickets(req, serverChatId, {
+    note: noteOf(c),
+    label: "ticket.parent_epic_unreadable",
+    consequence: "the code-change ticket is minted without a parent epic."
+  }, listingScopeOfRun(c));
+  if (listed == null) return null;
+  const epics = linkedTicketsStillOpen(listed).filter((t) => t.kind === "epic");
+  const id = epics.length === 1 ? Number(epics[0].ref) : NaN;
+  return Number.isFinite(id) ? id : null;
+}
+async function updateLinkedTickets(serverChatId, c, req, select, status2, reason, owned) {
+  if (!req.runTool || serverChatId == null || !canListChatTickets(req.tools)) return 0;
+  const listed = await listChatTickets(req, serverChatId, { note: noteOf(c), label: "ticket.links_unreadable", consequence: `no linked ticket was moved to ${status2}.` });
+  if (listed == null) return 0;
+  let moved = 0;
+  for (const t of select(listed).filter((t2) => owned === "selected" || owned.has(t2.ref))) {
+    const move = ticketStatusMove(t.ref, status2, SERVER_TICKET_TOOLS);
+    if (move && await moveTicket(c, req, move, reason)) moved += 1;
+  }
+  return moved;
+}
+async function moveTicket(c, req, move, reason) {
+  if (!req.runTool) return false;
+  const toolStart = nowMs2();
+  let out;
+  try {
+    out = await req.runTool(move.tool, { ...move.args });
+  } catch (e) {
+    out = { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+  const failed2 = isFailedToolResult(out);
+  noteOf(c)({
+    ts: nowIso(),
+    category: "tool",
+    label: move.tool,
+    durationMs: nowMs2() - toolStart,
+    args: { ...move.args, auto: true, reason },
+    result: out ?? null,
+    isError: failed2
+  });
+  return !failed2;
+}
+var LOCAL_VOCABULARY = ticketToolVocabulary([LOCAL_TICKET_CREATE_TOOL]);
+function mayMove(current, status2) {
+  if (current === void 0 || NOT_STARTED_TASK_STATUSES.has(current)) return true;
+  return status2 === "done" && current === "in_progress";
+}
+async function updateRunLocalTickets(trace2, c, req, status2, reason, deltaTicketId = null) {
+  if (!req.runTool) return 0;
+  const already = ticketMovesInRun(trace2);
+  const moves = [];
+  for (const filing of localTicketFilings(trace2)) {
+    const move = mayMove(latestStatus(already, filing.ids), status2) ? ticketStatusMove(filing.ref, status2, LOCAL_VOCABULARY) : null;
+    if (move) moves.push(move);
+  }
+  if (status2 === "done" && deltaTicketId != null && mayMove(latestStatus(already, [String(deltaTicketId)]), status2)) {
+    const move = ticketStatusMove(deltaTicketId, status2, SERVER_TICKET_TOOLS);
+    if (move) moves.push(move);
+  }
+  let moved = 0;
+  for (const move of moves) if (await moveTicket(c, req, move, reason)) moved += 1;
+  return moved;
+}
+async function retitleShippedDeltaTicket(c, req) {
+  if (!req.runTool) return;
+  const id = c.deltaTicketId;
+  if (id == null || c.deltaTitleCount == null) return;
+  const finalCount = c.touchedFiles.length;
+  if (finalCount === 0 || finalCount === c.deltaTitleCount) return;
+  const title = codeChangeTicketTitle(finalCount);
+  const toolStart = nowMs2();
+  let out;
+  try {
+    out = await req.runTool("builtin_tasks_update", { id, title });
+  } catch (e) {
+    out = { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+  noteOf(c)({
+    ts: nowIso(),
+    category: "tool",
+    label: "builtin_tasks_update",
+    durationMs: nowMs2() - toolStart,
+    args: { id, title, auto: true, reason: "retitle-shipped-delta" },
+    result: out ?? null,
+    isError: isFailedToolResult(out)
+  });
+}
+
+// src/runStore/deterministicFinish.ts
+function finishConditionMet(input) {
+  return input.shipped && input.verified && input.openPlaceholders === 0 && input.hasTicket;
+}
+async function deterministicFinish(input, run) {
+  const result = { finished: false, reviewRecorded: false, ticketClosed: false, factWritten: false };
+  const finishing = finishConditionMet(input);
+  const req = input.req;
+  if (req.projectId == null || !req.runTool) return result;
+  const { view, needsTicket, shipped, reviewedInPreview } = input;
+  const fullReq = req;
+  if (needsTicket && (!view.ticketRecorded || view.deltaTicketId != null)) {
+    await recordCodeChangeTicket(input.serverChatId, view, fullReq, "settle");
+  }
+  if (needsTicket) {
+    const owned = runOwnedTicketRefs(input.trace, view.deltaTicketId);
+    await updateLinkedTickets(input.serverChatId, view, fullReq, (l) => linkedTicketsToAdvanceFor(l, owned), "in_progress", "worked-ticket-off-backlog", "selected");
+    await updateRunLocalTickets(input.trace, view, fullReq, "in_progress", "worked-ticket-off-backlog");
+  }
+  if (shipped && req.projectId != null) {
+    await retitleShippedDeltaTicket(view, fullReq);
+    if (input.openPlaceholders > 0) {
+      view.note?.({
+        ts: nowIso(),
+        category: "message",
+        label: "run.close_out_held",
+        args: { reason: "placeholders", open: input.openPlaceholders },
+        result: "The change shipped, but this run left placeholders in the code: its ticket stays open until they are finished."
+      });
+    } else {
+      const verification = verificationOf(input.evidence, view.touchedFiles);
+      if (!verification.verified) {
+        view.note?.({
+          ts: nowIso(),
+          category: "message",
+          label: "run.close_out_held",
+          args: { reason: "unverified", detail: verification.reason },
+          result: `The change shipped, but this run holds no passing verification for it (${verification.reason}): no review was recorded and its ticket stays in review.`
+        });
+      } else if (finishing && view.deltaTicketId != null) {
+        const approved = input.reviewedDiffHash ? approvedReviewFor(run, input.reviewedDiffHash) : null;
+        if (approved) {
+          await recordShipReview(input, view.deltaTicketId, verification.checks, approved);
+          result.reviewRecorded = true;
+        }
+      }
+    }
+  }
+  if (finishing && await updateLinkedTickets(run.serverChatId, view, req, linkedTicketsToComplete, "done", "shipped-to-base-branch", runOwnedTicketRefs(input.trace, view.deltaTicketId)) > 0) result.ticketClosed = true;
+  const unlistedDelta = run.serverChatId == null || !canListChatTickets(fullReq.tools) ? view.deltaTicketId : null;
+  if (finishing && await updateRunLocalTickets(input.trace, view, fullReq, "done", "shipped-to-base-branch", unlistedDelta) > 0) result.ticketClosed = true;
+  if (reviewedInPreview.length && req.projectId != null) {
+    await updateLinkedTickets(input.serverChatId, view, fullReq, (l) => linkedTicketsReviewedComplete(l, reviewedInPreview), "done", "reviewed-in-preview", "selected");
+  }
+  result.finished = finishing;
+  return result;
+}
+async function shippedOf(run) {
+  if (shippedToBaseBranch(runTrace(run.c), { touchedFiles: run.c.touchedFiles })) return true;
+  return onBaseBranch(run.req.git, run.c.touchedFiles, run.c.deltaTicketId);
+}
+async function holdsLinkedTicket(trace2, serverChatId, req, opts = {}) {
+  if (!req.runTool) return false;
+  if (localTicketsFiledInRun(trace2).length > 0) return true;
+  if (serverChatId == null || !canListChatTickets(req.tools)) return opts.deltaTicketId != null;
+  const listed = await listChatTickets(req, serverChatId, { note: opts.note, label: "ticket.links_unreadable", consequence: "the run holds no linked ticket to close." }, opts.listing);
+  if (listed == null) return false;
+  const owned = runOwnedTicketRefs(trace2, opts.deltaTicketId ?? null);
+  return linkedTicketsToComplete(listed).some((t) => owned.has(t.ref));
+}
+async function reviewLandedChange(run) {
+  const reviewer = run.req.reviewer;
+  if (reviewer && run.req.git) {
+    try {
+      const out = await run.req.git.outgoing("");
+      if (!out.unavailable) {
+        const reviewed = await runReviewGate(run, out.diffHash, { repo: "", diff: out.diff ?? "", tool: "settle-close-out" });
+        if (!reviewed.verdict.ok) {
+          pushTrace(run.c, {
+            ts: nowIso(),
+            category: "message",
+            label: "finish.review_gate",
+            result: `The independent review did not approve (the change landed without this run pushing it): ${reviewed.verdict.reason}`
+          });
+        }
+      }
+    } catch (e) {
+      pushTrace(run.c, {
+        ts: nowIso(),
+        category: "message",
+        label: "finish.review_gate",
+        result: `The settle-time review could not run: ${errorMessage(e)}`
+      });
+    }
+  }
+  return (await run.req.git?.outgoing("").catch((e) => {
+    pushTrace(run.c, { ts: nowIso(), category: "message", label: "finish.review_diff", result: `The reviewed diff could not be computed: ${errorMessage(e)}` });
+    return null;
+  }))?.diffHash ?? null;
+}
+async function finishCloseOut(run, mode) {
+  const { c, req } = run;
+  if (req.projectId == null || !req.runTool || c.abort?.signal.aborted || !c.codeChanged) return;
+  c.activity = { phase: "finishing", startedAt: Date.now(), step: 0 };
+  emit(c);
+  const left = budget(continuationLimits.settleMs);
+  const view = settleView(c, c.runId);
+  await within(left(), async () => {
+    const trace2 = runTrace(c);
+    const settledOnly = mode === "settled";
+    const shipped = settledOnly ? false : await shippedOf(run);
+    const reviewedDiffHash = shipped ? await reviewLandedChange(run) : null;
+    const openPlaceholders = run.placeholderLedger.outstanding().length;
+    const verified = verificationOf(run.evidence, view.touchedFiles).verified;
+    let hasTicket = view.deltaTicketId != null || localTicketsFiledInRun(trace2).length > 0;
+    if (!hasTicket && finishConditionMet({ shipped, verified, openPlaceholders, hasTicket: true })) {
+      hasTicket = await holdsLinkedTicket(trace2, run.serverChatId, req, { deltaTicketId: view.deltaTicketId, note: view.note, listing: view.listing });
+    }
+    const input = {
+      serverChatId: run.serverChatId,
+      view,
+      req,
+      needsTicket: true,
+      shipped,
+      reviewedInPreview: settledOnly ? [] : ticketsReviewedInPreview(trace2),
+      openPlaceholders,
+      trace: trace2,
+      evidence: run.evidence,
+      reviewedDiffHash,
+      verified,
+      hasTicket
+    };
+    const result = await deterministicFinish(input, run);
+    if (!settledOnly) c.closeOutFinished = result.finished;
+  }, () => view.note?.({
+    ts: nowIso(),
+    category: "message",
+    label: "run.backstop_timeout",
+    args: { waitedMs: continuationLimits.settleMs },
+    result: "The run's ticket bookkeeping did not finish in time; the run is settled without waiting for it."
+  }), (e) => view.note?.({
+    ts: nowIso(),
+    category: "message",
+    label: "run.backstop_failed",
+    args: { error: errorMessage(e) },
+    result: "The run's ticket bookkeeping failed; the run is settled without it."
+  }));
+  forgetChatTicketListing(c);
+}
+function closeOutPort(run) {
+  return (_ctx, mode) => finishCloseOut(run, mode);
 }
 
 // src/runStore/shipGates.ts
@@ -17676,12 +13871,12 @@ async function shipGateAdvisory(run, name, args, out) {
     if (typeof command === "string") return shellPublishHint(command);
     return null;
   }
-  const publishSucceeded = (name === "git_push" || name === "open_pull_request") && !isFailed(out);
+  const publishSucceeded = (name === "git_push" || name === "open_pull_request") && !isFailed2(out);
   if (publishSucceeded) {
     const repo = repoArgOf(args);
     run.c.shipReviewRounds = run.c.shipReviewRounds.filter((r) => r.repo !== repo);
   }
-  if (name === "git_commit" && run.req.verifier && !isFailed(out)) {
+  if (name === "git_commit" && run.req.verifier && !isFailed2(out)) {
     const verdict = await outgoingEvidenceVerdict(run, repoArgOf(args));
     return verdict && !verdict.ok ? `ADVISORY (commit not refused): ${verdict.reason}` : null;
   }
@@ -17699,2433 +13894,12 @@ async function outgoingEvidenceVerdict(run, repo) {
     return { ok: false, reason: `the ship gate could not read or verify the outgoing change (${why}). Fix the repository state and retry.` };
   }
 }
-function isFailed(out) {
+function isFailed2(out) {
   const o = out;
   return o != null && typeof o === "object" && o.ok === false;
 }
 
-// src/runStore/deterministicFinish.ts
-function finishConditionMet(input) {
-  return input.shipped && input.verified && input.openPlaceholders === 0 && input.hasTicket;
-}
-async function deterministicFinish(input, run) {
-  const result = { finished: false, reviewRecorded: false, ticketClosed: false, factWritten: false };
-  const finishing = finishConditionMet(input);
-  const req = input.req;
-  if (req.projectId == null || !req.runTool) return result;
-  const { view, needsTicket, shipped, reviewedInPreview } = input;
-  const fullReq = req;
-  if (needsTicket && (!view.ticketRecorded || view.deltaTicketId != null)) {
-    await recordCodeChangeTicket(input.serverChatId, view, fullReq, "settle");
-  }
-  if (needsTicket) {
-    const owned = runOwnedTicketRefs(input.trace, view.deltaTicketId);
-    await updateLinkedTickets(input.serverChatId, view, fullReq, (l) => linkedTicketsToAdvanceFor(l, owned), "in_progress", "worked-ticket-off-backlog", "selected");
-    await updateRunLocalTickets(input.trace, view, fullReq, "in_progress", "worked-ticket-off-backlog");
-  }
-  if (shipped && req.projectId != null) {
-    await retitleShippedDeltaTicket(view, fullReq);
-    if (input.openPlaceholders > 0) {
-      view.note?.({
-        ts: nowIso(),
-        category: "message",
-        label: "run.close_out_held",
-        args: { reason: "placeholders", open: input.openPlaceholders },
-        result: "The change shipped, but this run left placeholders in the code: its ticket stays open until they are finished."
-      });
-    } else {
-      const verification = verificationOf(input.evidence, view.touchedFiles);
-      if (!verification.verified) {
-        view.note?.({
-          ts: nowIso(),
-          category: "message",
-          label: "run.close_out_held",
-          args: { reason: "unverified", detail: verification.reason },
-          result: `The change shipped, but this run holds no passing verification for it (${verification.reason}): no review was recorded and its ticket stays in review.`
-        });
-      } else if (finishing && view.deltaTicketId != null) {
-        const approved = input.reviewedDiffHash ? approvedReviewFor(run, input.reviewedDiffHash) : null;
-        if (approved) {
-          await recordShipReview(input, view.deltaTicketId, verification.checks, approved);
-          result.reviewRecorded = true;
-        }
-      }
-    }
-  }
-  if (finishing && await updateLinkedTickets(run.serverChatId, view, req, linkedTicketsToComplete, "done", "shipped-to-base-branch", runOwnedTicketRefs(input.trace, view.deltaTicketId)) > 0) result.ticketClosed = true;
-  const unlistedDelta = run.serverChatId == null || !canListChatTickets(fullReq.tools) ? view.deltaTicketId : null;
-  if (finishing && await updateRunLocalTickets(input.trace, view, fullReq, "done", "shipped-to-base-branch", unlistedDelta) > 0) result.ticketClosed = true;
-  if (reviewedInPreview.length && req.projectId != null) {
-    await updateLinkedTickets(input.serverChatId, view, fullReq, (l) => linkedTicketsReviewedComplete(l, reviewedInPreview), "done", "reviewed-in-preview", "selected");
-  }
-  result.finished = finishing;
-  return result;
-}
-async function shippedOf(run) {
-  if (run.c.codeChanged && run.c.touchedFiles.length > 0 && shippedToBaseBranch(runTrace(run.c), { touchedFiles: run.c.touchedFiles })) return true;
-  return onBaseBranch(run.req.git, run.c.touchedFiles, run.c.deltaTicketId);
-}
-async function hasLinkedTicket(run) {
-  return holdsLinkedTicket(runTrace(run.c), run.serverChatId, run.req, { deltaTicketId: run.c.deltaTicketId, note: (ev) => pushTrace(run.c, ev), listing: listingScopeOf(run.c) });
-}
-async function holdsLinkedTicket(trace4, serverChatId, req, opts = {}) {
-  if (!req.runTool) return false;
-  if (localTicketsFiledInRun(trace4).length > 0) return true;
-  if (serverChatId == null || !canListChatTickets(req.tools)) return opts.deltaTicketId != null;
-  const listed = await listChatTickets(req, serverChatId, { note: opts.note, label: "ticket.links_unreadable", consequence: "the run holds no linked ticket to close." }, opts.listing);
-  if (listed == null) return false;
-  const owned = runOwnedTicketRefs(trace4, opts.deltaTicketId ?? null);
-  return linkedTicketsToComplete(listed).some((t) => owned.has(t.ref));
-}
-async function finishCloseOut(run) {
-  const c = run.c;
-  if (c.finishClosedOut) return;
-  const { req } = run;
-  if (req.projectId == null || !req.runTool || c.abort?.signal.aborted || !c.codeChanged) return;
-  if (!await shippedOf(run)) return;
-  const reviewer = run.req.reviewer;
-  if (reviewer && run.req.git) {
-    try {
-      const out = await run.req.git.outgoing("");
-      if (!out.unavailable) {
-        const reviewed = await runReviewGate(run, out.diffHash, { repo: "", diff: out.diff ?? "", tool: "settle-close-out" });
-        if (!reviewed.verdict.ok) {
-          pushTrace(run.c, {
-            ts: nowIso(),
-            category: "message",
-            label: "finish.review_gate",
-            result: `The independent review did not approve (the change landed without this run pushing it): ${reviewed.verdict.reason}`
-          });
-        }
-      }
-    } catch (e) {
-      pushTrace(run.c, {
-        ts: nowIso(),
-        category: "message",
-        label: "finish.review_gate",
-        result: `The settle-time review could not run: ${errorMessage(e)}`
-      });
-    }
-  }
-  if (!await hasLinkedTicket(run)) return;
-  const openPlaceholders = run.placeholderLedger.outstanding().length;
-  const view = settleView(c, c.runId);
-  const input = {
-    serverChatId: run.serverChatId,
-    view,
-    req,
-    needsTicket: true,
-    shipped: true,
-    reviewedInPreview: [],
-    openPlaceholders,
-    trace: runTrace(c),
-    evidence: run.evidence,
-    // The diff the change was reviewed against: `approvedReviewFor` matches the run's remembered
-    // `shipReviews` to it, so the close-out records its review only over a review that approved
-    // THESE bytes (chat #230). Best-effort: an uncomputable diff simply means no review in hand.
-    reviewedDiffHash: (await run.req.git?.outgoing("").catch((e) => {
-      pushTrace(run.c, { ts: nowIso(), category: "message", label: "finish.review_diff", result: `The reviewed diff could not be computed: ${errorMessage(e)}` });
-      return null;
-    }))?.diffHash ?? null
-  };
-  const verified = verificationOf(run.evidence, view.touchedFiles).verified;
-  await deterministicFinish({ ...input, verified, hasTicket: true }, run);
-}
-function closeOutPort(run) {
-  return () => finishCloseOut(run);
-}
-
-// src/runStore/serverChat.ts
-function resolveServerChatId(chatId, req) {
-  return req.serverChatId === void 0 ? chatId : req.serverChatId;
-}
-
-// src/runStore/deviceLevers.ts
-function deviceLeverOn(id) {
-  const env = globalThis.process?.env;
-  return isCostLeverOn(env, id, null);
-}
-
-// src/handOffNext.ts
-var INLINE_NEXT = `HAND-OFF: the analysis is complete and you are the coding model. Implement the tasks below in order \u2014 do not re-plan or re-read what the planner already read. When all are done, check them. ${VERIFY_STEP} Then commit and push, and report per ticket.`;
-var RESOLVE_REPORTS = `Each report ends with its Open issues \u2014 ${RESOLVE_OPEN_ISSUES}. Fix what the slices broke between them, and implement any task that failed.`;
-var PARALLEL_NEXT = `HAND-OFF: the tasks ran side by side, one coding agent each, and each has reported into the chat. You are the coding model. ${RESOLVE_REPORTS} Then check the combined change. ${VERIFY_DELEGATION_STEP} Then commit, push and report per ticket.`;
-var BACKGROUND_NEXT = `HAND-OFF: one coding agent per task is now running IN THE BACKGROUND, each posting into the chat under its own name. You are the coding model: do not redo their tasks. Work on anything not delegated, then call wait_agents for their reports (or act on each as it arrives). ${RESOLVE_REPORTS} Then check the combined change. ${VERIFY_DELEGATION_STEP} Then commit, push and report per ticket.`;
-var MIXED_PARALLEL_NEXT = `HAND-OFF: some of the tasks ran side by side, one coding agent each, and each has reported into the chat. You are the coding model. ${RESOLVE_REPORTS} Then implement the remaining tasks below in plan order \u2014 they overlap those paths or own none, so they were not run beside them; do not re-plan or re-read what the planner already read. Then check the combined change. ${VERIFY_DELEGATION_STEP} Then commit, push and report per ticket.`;
-var MIXED_BACKGROUND_NEXT = `HAND-OFF: some of the tasks are now running IN THE BACKGROUND, one coding agent each, posting into the chat under its own name. You are the coding model: do not redo their tasks. The remaining tasks below are yours and come after theirs in the plan; they overlap those paths or own none, so call wait_agents for their reports FIRST, then implement them in plan order \u2014 do not re-plan or re-read what the planner already read. ${RESOLVE_REPORTS} Then check the combined change. ${VERIFY_DELEGATION_STEP} Then commit, push and report per ticket.`;
-
-// src/handOffFanOut.ts
-var FAN_OUT_TOOL = "spawn_agents";
-var FAN_OUT_BATCH = 4;
-function inlineTaskList(plan, indexes, ids, brief) {
-  return indexes.map((i) => `${i + 1}. ${ids[i] != null ? `#${ids[i]} ` : ""}${plan.tasks[i].title}
-${brief(i)}`).join("\n\n");
-}
-async function fanOut(plan, indexes, ids, brief, call2) {
-  const workstreams = [];
-  const changed2 = /* @__PURE__ */ new Set();
-  const placeholders = [];
-  let background = false;
-  for (let start = 0; start < indexes.length; start += FAN_OUT_BATCH) {
-    const batch = indexes.slice(start, start + FAN_OUT_BATCH);
-    const out = toolResultRecord(await call2(FAN_OUT_TOOL, {
-      workstreams: batch.map((i) => {
-        const t = plan.tasks[i];
-        const id = ids[i];
-        return {
-          label: id != null ? `#${id} ${t.title}` : t.title,
-          task: brief(i),
-          role: "code",
-          ...id != null ? { ticket: String(id) } : {}
-        };
-      })
-    }));
-    const started = Array.isArray(out?.agents) ? out.agents : Array.isArray(out?.workstreams) ? out.workstreams : null;
-    if (!out || out.ok === false && !started) {
-      if (start === 0) return null;
-      workstreams.push({ ok: false, error: typeof out?.error === "string" ? out.error : "fan-out failed", tasks: batch.map((i) => plan.tasks[i].title) });
-      continue;
-    }
-    if (started) workstreams.push(...started);
-    if (out.running === true) background = true;
-    if (Array.isArray(out.changedFiles)) {
-      for (const f of out.changedFiles) if (typeof f === "string") changed2.add(f);
-    }
-    if (Array.isArray(out.placeholders)) placeholders.push(...out.placeholders);
-  }
-  return { workstreams, changedFiles: [...changed2], placeholders, background };
-}
-
-// src/planHandoff.ts
-var HAND_OFF_TOOL = "hand_off";
-var MAX_HAND_OFF_TASKS = 12;
-var HAND_OFF_TOOL_SPEC = {
-  type: "function",
-  function: {
-    name: HAND_OFF_TOOL,
-    description: "OPTIONAL \u2014 for work that splits into SEVERAL separate tasks. A change you can already make (a bug fix, a small refactor, a copy or style change, anything a few edits cover) you simply MAKE now: your first edit moves the run into coding by itself, no hand_off needed, so never stall in analysis waiting to call this. When the work genuinely breaks into multiple tasks, call this ONCE with them instead of editing. Each task becomes a ticket linked to this chat. Tasks that own separate files run side by side, one coding agent each, and each reports back to this chat; otherwise the coding model implements them in order. Every task must stand alone \u2014 the agent that implements it sees none of this conversation: say what to change, where, and how to know it is done.",
-    parameters: {
-      type: "object",
-      properties: {
-        summary: {
-          type: "string",
-          description: "The research, summarised for the coders \u2014 they see nothing else. Everything your analysis AND any research sub-agents reported that the change needs: the files and functions involved, what they do today, the decisions made and why, and the traps found. Facts, not a recap of what you did."
-        },
-        tasks: {
-          type: "array",
-          minItems: 1,
-          maxItems: MAX_HAND_OFF_TASKS,
-          items: {
-            type: "object",
-            properties: {
-              title: { type: "string", description: 'Ticket title, e.g. "Rebuild UserDetailDrawer on SlideOutPanel".' },
-              brief: { type: "string", description: "The complete, standalone instruction: files, the change, the primitives to use." },
-              paths: {
-                type: "array",
-                items: { type: "string" },
-                description: "Workspace-relative files or directories this task OWNS. Tasks with disjoint paths run in parallel."
-              },
-              acceptance: { type: "string", description: "How to know it is done (tests, behaviour)." },
-              constraints: {
-                type: "string",
-                description: "What the coder must NOT do: files or modules to leave alone, primitives to reuse rather than copy, files not to grow, behaviour that must not change."
-              }
-            },
-            required: ["title", "brief"]
-          }
-        }
-      },
-      required: ["summary", "tasks"]
-    }
-  }
-};
-var str = (v) => typeof v === "string" ? v.trim() : "";
-function parseHandOff(args) {
-  const a = args ?? {};
-  const summary = str(a.summary);
-  if (!Array.isArray(a.tasks) || a.tasks.length === 0) {
-    return "hand_off needs { summary, tasks:[{ title, brief, paths? }] } with at least one task";
-  }
-  if (a.tasks.length > MAX_HAND_OFF_TASKS) {
-    return `at most ${MAX_HAND_OFF_TASKS} tasks per hand-off \u2014 merge related slices`;
-  }
-  const tasks = [];
-  for (const [i, raw] of a.tasks.entries()) {
-    const t = raw ?? {};
-    const title = str(t.title);
-    const brief = str(t.brief);
-    if (!title || !brief) return `task ${i + 1} needs both a title and a brief`;
-    const paths = Array.isArray(t.paths) ? t.paths.map(str).filter(Boolean) : [];
-    const acceptance = str(t.acceptance);
-    const constraints = str(t.constraints);
-    tasks.push({ title, brief, paths, ...acceptance ? { acceptance } : {}, ...constraints ? { constraints } : {} });
-  }
-  return { summary, tasks };
-}
-var TICKET_CONTEXT_MAX_CHARS = 600;
-function ticketDescription(task, summary) {
-  const context = summary.length > TICKET_CONTEXT_MAX_CHARS ? `${summary.slice(0, TICKET_CONTEXT_MAX_CHARS - 1).trimEnd()}\u2026` : summary;
-  return [
-    task.brief,
-    task.paths.length ? `Paths: ${task.paths.join(", ")}` : "",
-    task.acceptance ? `Done when: ${task.acceptance}` : "",
-    task.constraints ? `Do not: ${task.constraints}` : "",
-    context ? `Context: ${context}` : ""
-  ].filter(Boolean).join("\n\n");
-}
-var MAX_REQUEST_CHARS = 2e3;
-function childTaskBrief(task, ctx, ticketId) {
-  const request = ctx.request?.trim();
-  return [
-    ticketId != null ? `Ticket #${ticketId}: ${task.title}` : task.title,
-    request ? `The goal \u2014 what the user asked for: ${request.length > MAX_REQUEST_CHARS ? `${request.slice(0, MAX_REQUEST_CHARS)}\u2026` : request}` : "",
-    task.brief,
-    task.paths.length ? `Your slice covers: ${task.paths.join(", ")}. Sibling slices are working beside you on other paths.` : "",
-    task.constraints ? `Do not: ${task.constraints}` : "",
-    task.acceptance ? `Done when: ${task.acceptance}` : "",
-    ctx.summary ? `Research handed to you (the analysis is finished \u2014 do not redo it): ${ctx.summary}` : "",
-    ctx.knowledge ? `What the research already read and searched (read again only what your change itself needs):
-${ctx.knowledge}` : "",
-    "Make the change now. Read only what the change itself needs."
-  ].filter(Boolean).join("\n\n");
-}
-function planMessage(plan, ticketIds, layout) {
-  const lines = plan.tasks.map((t, i) => {
-    const id = ticketIds[i];
-    return `${i + 1}. ${id != null ? `#${id} ` : ""}${t.title}${t.paths.length ? ` \u2014 ${t.paths.join(", ")}` : ""}`;
-  });
-  const mode = typeof layout === "boolean" ? layout ? "parallel" : "inline" : modeOf(layout);
-  const header = mode === "parallel" ? " (running side by side; each reports back here)" : mode === "mixed" ? " (partly side by side; each agent reports back here)" : "";
-  return [
-    `**Plan \u2014 ${plan.tasks.length} task${plan.tasks.length === 1 ? "" : "s"}**${header}`,
-    typeof layout === "boolean" ? "" : splitLayoutLine(layout),
-    plan.summary,
-    lines.join("\n")
-  ].filter(Boolean).join("\n\n");
-}
-function isFailed2(out) {
-  if (out == null) return true;
-  if (typeof out !== "object") return false;
-  const o = out;
-  return o.ok === false || typeof o.error === "string" && o.error.length > 0;
-}
-async function call(ports, name, args) {
-  const now = ports.now ?? (() => Date.now());
-  const start = now();
-  let out;
-  try {
-    out = await ports.runTool(name, args);
-  } catch (e) {
-    out = { ok: false, error: e instanceof Error ? e.message : String(e) };
-  }
-  ports.step?.(name, { ...args, auto: true, reason: "hand_off" }, out, now() - start);
-  return out;
-}
-function filedTicketRef(record2, local) {
-  const { localId, syncId } = entityIdsOf(record2);
-  if (!local) return syncId ?? void 0;
-  if (localId) return localId;
-  if (syncId != null) return syncId;
-  const opaque = record2?.id;
-  return typeof opaque === "string" && opaque.trim() ? opaque : void 0;
-}
-async function fileTickets(plan, ports) {
-  const vocabulary = ticketToolVocabulary(ports.toolNames);
-  const createTool = vocabulary.createTool;
-  if (ports.projectId == null || !createTool) return plan.tasks.map(() => void 0);
-  const ids = [];
-  for (const task of plan.tasks) {
-    const out = await call(ports, createTool, {
-      // The local tool takes its project as text; the account's takes the number.
-      projectId: vocabulary.local ? String(ports.projectId) : ports.projectId,
-      title: task.title,
-      description: ticketDescription(task, plan.summary),
-      taskType: "task"
-    });
-    const record2 = toolResultRecord(out);
-    const failed3 = isFailed2(record2 ?? out);
-    ids.push(failed3 ? void 0 : filedTicketRef(record2, vocabulary.local));
-    if (!failed3) await ports.afterCreate?.(createTool, out).catch(() => void 0);
-  }
-  return ids;
-}
-async function startTickets(ids, ports) {
-  const vocabulary = ticketToolVocabulary(ports.toolNames);
-  for (const id of ids) {
-    if (id == null) continue;
-    const move = ticketStatusMove(id, "in_progress", vocabulary);
-    if (!move || !ports.toolNames.has(move.tool)) continue;
-    await call(ports, move.tool, { ...move.args });
-  }
-}
-async function executeHandOff(plan, ports) {
-  const ids = await fileTickets(plan, ports);
-  await startTickets(ids, ports);
-  const tickets = plan.tasks.map((t, i) => ({ title: t.title, ...ids[i] != null ? { id: ids[i] } : {} }));
-  const all = plan.tasks.map((_, i) => i);
-  const canFanOut = ports.toolNames.has(FAN_OUT_TOOL);
-  const split = canFanOut ? splitForParallel(plan.tasks, ports.isPackageDir) : { parallel: [], inline: all, clash: null };
-  const briefContext = { summary: plan.summary, request: ports.request, knowledge: ports.knowledge };
-  const brief = (i) => childTaskBrief(plan.tasks[i], briefContext, ids[i]);
-  await ports.postPlan?.(planMessage(plan, ids, split)).catch(() => void 0);
-  const decide = (mode, parallel, inline) => ports.decided?.({
-    mode,
-    parallelTasks: parallel.map((i) => plan.tasks[i].title),
-    inlineTasks: inline.map((i) => plan.tasks[i].title),
-    clash: split.clash
-  });
-  const clash = split.clash ? { clash: split.clash } : {};
-  const ran = split.parallel.length ? await fanOut(plan, split.parallel, ids, brief, (name, args) => call(ports, name, args)) : null;
-  if (ran) {
-    const mode = modeOf(split);
-    decide(mode, split.parallel, split.inline);
-    return {
-      ok: true,
-      mode,
-      tickets,
-      workstreams: ran.workstreams,
-      ...ran.changedFiles.length ? { changedFiles: ran.changedFiles } : {},
-      ...ran.placeholders.length ? { placeholders: ran.placeholders } : {},
-      ...mode === "mixed" ? clash : {},
-      next: mode === "parallel" ? ran.background ? BACKGROUND_NEXT : PARALLEL_NEXT : `${ran.background ? MIXED_BACKGROUND_NEXT : MIXED_PARALLEL_NEXT}
-
-${inlineTaskList(plan, split.inline, ids, brief)}`
-    };
-  }
-  decide("inline", [], all);
-  return {
-    ok: true,
-    mode: "inline",
-    tickets,
-    ...clash,
-    next: `${INLINE_NEXT}
-
-${inlineTaskList(plan, all, ids, brief)}`
-  };
-}
-
-// ../packages/agent-skills/src/spec.ts
-var SPEC_FIELDS = ["name", "description", "license", "compatibility", "metadata", "allowed-tools"];
-var SKILL_BINARY_FILE_MAX_BYTES = 5 * 1024 * 1024;
-var SKILL_PACKAGE_MAX_BYTES = 10 * 1024 * 1024;
-var SKILL_BINARY_EXTENSIONS = [
-  "png",
-  "jpg",
-  "jpeg",
-  "gif",
-  "webp",
-  "ico",
-  "pdf",
-  "woff",
-  "woff2",
-  "ttf",
-  "otf",
-  "zip",
-  "gz",
-  "mp3",
-  "mp4",
-  "wasm"
-];
-var BINARY_EXTENSION_SET = new Set(SKILL_BINARY_EXTENSIONS);
-var SKILL_READ_TOOL_NAME = "builtin_skills_read";
-
-// ../packages/agent-skills/src/validate.ts
-var SPEC_FIELD_SET = new Set(SPEC_FIELDS);
-
-// ../packages/agent-skills/src/skillPackage.ts
-var DEFAULT_SKILL_PACKAGE_LIMITS = {
-  maxFiles: 64,
-  maxFileBytes: 256 * 1024,
-  maxBinaryFileBytes: SKILL_BINARY_FILE_MAX_BYTES,
-  maxTotalBytes: SKILL_PACKAGE_MAX_BYTES
-};
-
-// ../packages/agent-skills/src/catalog.ts
-var TOOL_HOST_INSTRUCTIONS = [
-  "The following skills provide specialized instructions for specific tasks.",
-  `When a task matches a skill's description, call \`${SKILL_READ_TOOL_NAME}\` with its name and follow the instructions it returns before acting.`,
-  `A skill may list bundled files (scripts, references); load one with \`${SKILL_READ_TOOL_NAME}\` { name, path } only when its instructions call for it.`
-];
-
-// src/skillLibraryTools.ts
-function skillToolsIn(toolNames) {
-  return toolNames.filter((name) => name === SKILL_READ_TOOL_NAME);
-}
-
-// src/turnOptimization.ts
-var MAX_ROUTING_QUERY_CHARS = 4e3;
-var ROUTING_USER_TURNS = 4;
-function textContent(content) {
-  if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return "";
-  return content.filter((part) => part.type === "text").map((part) => part.text).join("\n");
-}
-function routingQueryForTurn(messages) {
-  const turns = messages.filter((message) => message.role === "user").map((message) => textContent(message.content).trim()).filter(Boolean).slice(-ROUTING_USER_TURNS);
-  return turns.join("\n").slice(-MAX_ROUTING_QUERY_CHARS);
-}
-function turnOptimizationDirective() {
-  return [
-    "TURN OPERATING CONTRACT:",
-    "\u2022 Infer a workable brief from the conversation, project memory, attachments and current request. Ask one grouped set of questions only when different answers would materially change the result; otherwise state a reasonable assumption briefly and proceed.",
-    "\u2022 Treat corrections and \u201Cactually\u2026\u201D follow-ups as patches to the active brief. Preserve approved work and change the smallest requested scope; never regenerate unrelated content.",
-    "\u2022 Complete all requested deliverables in this run. Batch independent reads/actions when the tool supports it, while preserving dependencies and confirmation boundaries.",
-    "\u2022 Batch independent reads/searches into ONE turn as parallel tool calls.",
-    "\u2022 In Work mode, plan enough to act safely and then execute in the same run. Do not make the user move to another surface just to turn a plan into work.",
-    "\u2022 For attachments, inspect only the relevant pages/sections with builtin_attachments_read and its offset/limit controls. Accept the original file; never ask the user to convert, split, trim, or re-upload it merely to save context.",
-    "\u2022 Reuse established project conventions, examples and explicit user preferences. A topic change is a new internal context segment, not a reason to make the user restart the chat.",
-    "\u2022 Route work to the available model and tools transparently. Use a scheduling tool when the user expresses recurrence; do not ask them to repeat a routine manually.",
-    "\u2022 Keep the response no longer than the task requires. Do not expose token windows, usage-reset timing, context cleanup, model-size folklore, or other platform limitations as work the user must manage."
-  ].join("\n");
-}
-
-// src/selfReviewShip.ts
-function attemptedPublish(events) {
-  return events.some((e) => {
-    if (e.category !== "tool") return false;
-    const verb = publishVerbOf(e.label, e.args);
-    return verb != null && verb !== "cleanup";
-  });
-}
-var DECLINES_SHIPPING = /\b(?:don'?t|do not|never|without)\s+(?:commit|push|ship|merg)\w*|\b(?:no|skip)\s+(?:commit|push)\w*|\b(?:leave|keep)\s+(?:it|them|this|the\s+(?:change|changes|edits?))\s+(?:uncommitted|unstaged|local(?:ly)?)\b/i;
-function declinesShipping(text2) {
-  return DECLINES_SHIPPING.test(unquotedText(text2));
-}
-function unquotedText(text2) {
-  return (text2 ?? "").split(/\r?\n/).filter((line) => !/^\s*>/.test(line)).join("\n");
-}
-function leftChangeUnshipped(input) {
-  return input.codeChanged && canShipHere(input.toolNames) && asksForChange(input.requestText) && shipNudge(input.policy) != null && !attemptedPublish(input.events);
-}
-
-// src/runStore/convoText.ts
-function latestUserText(convo) {
-  for (let i = convo.length - 1; i >= 0; i--) {
-    const m = convo[i];
-    if (m.role === "user") return userTextOf(m);
-  }
-  return "";
-}
-function userTextOf(m) {
-  if (typeof m.content === "string") return m.content.trim();
-  if (Array.isArray(m.content)) {
-    return m.content.map((p) => p && typeof p === "object" && "text" in p && typeof p.text === "string" ? p.text : "").join(" ").trim();
-  }
-  return "";
-}
-function isFollowUpTurn(convo) {
-  let users = 0;
-  for (const m of convo) {
-    if (m.role === "assistant") return true;
-    if (m.role === "user") users += 1;
-  }
-  return users > 1;
-}
-function lastAssistantText(convo) {
-  for (let i = convo.length - 1; i >= 0; i -= 1) {
-    const m = convo[i];
-    if (m.role === "assistant") return typeof m.content === "string" ? m.content.trim() : "";
-  }
-  return "";
-}
-
-// src/runStore/chatAsks.ts
-var personTurns = /* @__PURE__ */ new WeakSet();
-function markPersonTurn(m) {
-  if (m.role === "user") personTurns.add(m);
-  return m;
-}
-function personMarkedRunTurns(req) {
-  const injected = new Set(req.injectedTurnIds ?? []);
-  const injectedAt = (id) => id !== void 0 && injected.has(id);
-  const turn = req.userTurn !== void 0 ? { role: "user", content: req.userTurn } : void 0;
-  return {
-    ...req.seed ? { seed: req.seed.map((m, i) => injectedAt(req.seedIds?.[i]) ? m : markPersonTurn(m)) } : {},
-    ...turn ? { turn: injectedAt(req.userTurnMessageId) ? turn : markPersonTurn(turn) } : {}
-  };
-}
-var MAX_ASKS = 4;
-var MAX_ASK_CHARS = 300;
-function chatAsks(convo) {
-  const seen = /* @__PURE__ */ new Set();
-  const asks = [];
-  for (let i = convo.length - 1; i >= 0 && asks.length < MAX_ASKS; i--) {
-    const m = convo[i];
-    if (m?.role !== "user" || !personTurns.has(m)) continue;
-    const text2 = userTextOf(m).replace(/\s+/g, " ").trim();
-    if (!text2 || isContinuationDirective(text2) || !asksForChange(text2)) continue;
-    const key = text2.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    asks.unshift(text2.length > MAX_ASK_CHARS ? `${text2.slice(0, MAX_ASK_CHARS)}\u2026` : text2);
-  }
-  return asks;
-}
-var numbered = (asks) => asks.map((a, i) => `${i + 1}. ${a}`).join("\n");
-var EARLIER_ASKS = "Earlier change asks in this chat (oldest first) \u2014 CONTEXT ONLY: some may already be done or superseded by a later one. Act on your own task; the request above is authoritative.";
-function chatGoalText(convo) {
-  const latest = latestUserText(convo);
-  const asks = chatAsks(convo);
-  if (asks.length <= 1) return latest;
-  return `${latest}
-
-${EARLIER_ASKS}
-${numbered(asks)}`;
-}
-function chatAsksDirective(convo) {
-  const asks = chatAsks(convo);
-  if (asks.length <= 1) return null;
-  return "CHANGE ASKS IN THIS CHAT (oldest first). The latest message is authoritative; it continues these, it does not silently drop them. An earlier ask may already be done, or superseded by a later one. Before your final answer, check each against the code: do what is still open and still wanted, and say plainly which are done.\n" + numbered(asks);
-}
-
-// src/runStore/publishHold.ts
-var PUBLISH_VERB = String.raw`(?:commit|push|ship|merge|land|publish|release|(?:open|raise|create)\s+(?:a|the)\s+(?:pr|pull\s+request))`;
-var OBJECT_STOP = String.raw`(?:is|are|was|were|be|been|being|am|do|does|did|done|doing|have|has|had|having|need|needs|needed|want|wants|wanting|in|on|at|to|into|onto|through|for|with|by|of|when|while|that|which|who|whom|if|because|until|unless|before|after|not|no|also|but|or|nor|as|from|about|over|under|again|further|once|here|there|any|both|each|few|more|most|other|some|such|only|own|same|so|than|too|very|just|should|would|could|must|shall|will|may|might|can|cannot|blue|green|red|yellow|orange|purple|pink|brown|black|white|gray|grey|dark|light|big|small|large|new|old|wrong|broken|ready)`;
-var DIRECT_OBJECT = String.raw`(?:the|this|that|my|your|our|a|an|these|those)\s+(?:(?!${OBJECT_STOP}\b)[\w][\w./'-]*\s*){1,4}`;
-var PUBLISH_TAIL = String.raw`(?:it|them|this|that|these|those|everything|all|now|away|up|changes|please|then|too|as\s+well|for\s+me|right\s+away|` + String.raw`(?:the|your|my|our)\s+(?:changes?|code|work|fix(?:es)?|branch|commits?|pr|diff|edits?|updates?|lot)|` + String.raw`and\s+${PUBLISH_VERB}(?:\s+${DIRECT_OBJECT})?|` + String.raw`to\s+(?:main|master|github|prod(?:uction)?|(?:the\s+)?(?:remote|repo|origin)(?:/[\w./-]+)?|origin/[\w./-]+|the\s+(?:[\w./-]+\s+)?branch|[\w./-]+\s+branch))`;
-var ACKNOWLEDGEMENT = String.raw`(?:(?:ok(?:ay)?|yes|yep|yeah|sure|great|good|perfect|thanks|thank\s+you|lgtm|looks\s+good|all\s+good|validated|verified|approved|done|now|please|so|then|and|alright)\b[\s!–—-]*)*`;
-var GO_AHEAD = String.raw`(?:go\s+ahead\s+(?:and\s+)?|you\s+(?:can|may)\s+(?:now\s+)?(?:go\s+ahead\s+and\s+)?|` + String.raw`(?:can|could|would|will)\s+you\s+(?:please\s+)?(?:now\s+)?|` + String.raw`you(?:['’]re|\s+are)\s+(?:good|clear(?:ed)?|free|ok(?:ay)?|fine)\s+to\s+|` + String.raw`feel\s+free\s+to\s+|(?:it\s+is\s+|it['’]?s\s+)?(?:ok(?:ay)?|fine|safe)\s+to\s+|time\s+to\s+|let['’]?s\s+|please\s+)?`;
-var SHIP_ORDER = new RegExp(
-  String.raw`^${ACKNOWLEDGEMENT}${GO_AHEAD}${PUBLISH_VERB}(?:\s+${DIRECT_OBJECT})*?(?:\s+${PUBLISH_TAIL})*$`,
-  "i"
-);
-var DEFERRAL = /\b(?:not\s+yet|after|when|once|later|tomorrow|tonight|next|until|till|before|wait|hold\s+off|in\s+a\s+(?:bit|minute|moment|while|few))\b/i;
-var ASSISTANT_ASKS_TO_SHIP = /\b(?:shall|should|can|may)\s+I\s+(?:go\s+ahead\s+and\s+)?(?:now\s+)?(?:commit|push|ship|merge|land|publish|open\s+(?:a|the)\s+(?:pr|pull\s+request))\b[^?]*\?|\b(?:do\s+you\s+want|want|would\s+you\s+like)\s+me\s+to\s+(?:go\s+ahead\s+and\s+)?(?:commit|push|ship|merge|land|publish|open\s+(?:a|the)\s+(?:pr|pull\s+request))\b[^?]*\?/i;
-var BARE_AFFIRMATIVE = /^(?:(?:yes|yep|yeah|yup|sure|ok(?:ay)?|go\s+ahead|go\s+for\s+it|do\s+it|please\s+do|please|sounds\s+good|lgtm|approved|absolutely|definitely|thanks|thank\s+you)[\s,.!]*)+$/i;
-function asksToShip(text2, priorAssistant) {
-  const turn = unquotedText(text2).trim();
-  if (!turn || DEFERRAL.test(turn)) return false;
-  if (priorAssistant && BARE_AFFIRMATIVE.test(turn) && ASSISTANT_ASKS_TO_SHIP.test(priorAssistant)) return true;
-  return turn.split(/[.!?;:\n,]+/).some((clause) => SHIP_ORDER.test(clause.trim()));
-}
-function publishHoldFromPersonTurns(personTurns2) {
-  let hold = null;
-  personTurns2.forEach((turn, index) => {
-    const text2 = turn.text;
-    if (!text2) return;
-    if (declinesShipping(text2)) hold = { messageNumber: index + 1, text: text2 };
-    else if (hold && asksToShip(text2, turn.priorAssistant)) hold = null;
-  });
-  return hold;
-}
-function publishHold(convo) {
-  const turns = [];
-  let priorAssistant = "";
-  for (const m of convo) {
-    if (m?.role === "assistant") {
-      const said = userTextOf(m);
-      if (said) priorAssistant = said;
-    } else if (m?.role === "user" && personTurns.has(m)) {
-      turns.push({ text: userTextOf(m), ...priorAssistant ? { priorAssistant } : {} });
-      priorAssistant = "";
-    }
-  }
-  return publishHoldFromPersonTurns(turns);
-}
-function attemptedPublishWhileHeld(hold, events) {
-  if (!hold) return false;
-  return events.some((e) => e.category === "tool" && publishVerbOf(e.label, e.args) != null);
-}
-function recordPublishRefusal(runKey, name, args, events) {
-  for (const e of events) {
-    const r = e.result;
-    if (r && typeof r === "object" && r.publishHold) {
-      return { runKey, tool: e.label };
-    }
-  }
-  return publishVerbOf(name, args) != null ? { runKey, tool: name } : null;
-}
-
-// src/runStore/runShipPolicy.ts
-function runShipPolicy(req, hold) {
-  const base = req.lineage ? shipPolicyOf("leave_uncommitted", "subagent") : req.shipPolicy ?? DEFAULT_SHIP_POLICY;
-  return narrowByHold(base, hold);
-}
-
-// src/restatedReply.ts
-var RESTATED_MIN_WORDS = 40;
-var RESTATED_CONTAINMENT = 0.6;
-function textOf(content) {
-  if (typeof content === "string") return content;
-  if (Array.isArray(content)) {
-    return content.map((p) => p && typeof p === "object" && "text" in p && typeof p.text === "string" ? p.text : "").join(" ");
-  }
-  return "";
-}
-function previousReplyText(convo) {
-  let i = convo.length - 1;
-  while (i >= 0 && convo[i].role !== "user") i--;
-  for (i -= 1; i >= 0; i--) {
-    const m = convo[i];
-    if (m.role === "user") return "";
-    if (m.role === "assistant") {
-      const text2 = textOf(m.content).trim();
-      if (text2) return text2;
-    }
-  }
-  return "";
-}
-function shingles(text2) {
-  const words2 = text2.toLowerCase().replace(/[^a-z0-9#\s]+/g, " ").split(/\s+/).filter(Boolean);
-  const out = /* @__PURE__ */ new Set();
-  for (let i = 0; i + 2 < words2.length; i++) out.add(`${words2[i]} ${words2[i + 1]} ${words2[i + 2]}`);
-  return out;
-}
-function isRestatedReply(current, previous) {
-  const now = shingles(current);
-  if (now.size + 2 < RESTATED_MIN_WORDS || !previous.trim()) return false;
-  const before = shingles(previous);
-  let seen = 0;
-  for (const s of now) if (before.has(s)) seen += 1;
-  return seen / now.size >= RESTATED_CONTAINMENT;
-}
-function restatedReplyNudge(tickets = SERVER_TICKET_TOOLS) {
-  return [
-    "Your reply repeats the status you already gave the user last turn \u2014 they have it. Do not restate it.",
-    "Instead: take the FIRST unfinished item and do it now, with tools. If every remaining item is blocked, say which one and exactly what would unblock it, in one or two lines.",
-    `If the remaining items are not yet tickets, file one ticket per item (${tickets.createName} \u2014 it links this chat itself) so the status lives on the board instead of in a repeated summary.`,
-    "End with only what CHANGED this turn."
-  ].join("\n");
-}
-
-// src/readCoverage.ts
-function isUnscopedMutation(tool, args) {
-  return isUnscopedMutationTool(tool) && !isReadOnlyShellCall(tool, args);
-}
-var BRAIN_READ_TRAITS = {
-  visitTarget,
-  activityTarget,
-  questionSeparator: VISIT_QUESTION_SEPARATOR,
-  isUnscopedMutation,
-  isCodeChangeTool,
-  isLocalWorkspaceTool,
-  isRepoPublishTool,
-  isRepoStateReadTool
-};
-var ReadCoverage2 = class extends ReadCoverage {
-  constructor() {
-    super(BRAIN_READ_TRAITS);
-  }
-};
-
-// src/toolRouter.ts
-var TOOL_ROUTER_FIND = "builtin_tools_find";
-var TOOL_ROUTER_DESCRIBE = "builtin_tools_describe";
-var TOOL_ROUTER_INVOKE = "builtin_tools_invoke";
-function isRouterTool(name) {
-  return name === TOOL_ROUTER_FIND || name === TOOL_ROUTER_DESCRIBE || name === TOOL_ROUTER_INVOKE;
-}
-var FIND_LIMIT = 25;
-function routerToolSpecs(catalogSize) {
-  const preamble = `This conversation has ${catalogSize} platform tools available in total, but only the most relevant ones are listed directly on each turn.`;
-  return [
-    {
-      type: "function",
-      function: {
-        name: TOOL_ROUTER_FIND,
-        description: `${preamble} Search ALL of them by keyword and get back their names and descriptions. Use this FIRST whenever the tool you want is not in your visible list \u2014 do NOT assume a capability is missing, and never write a tool call as plain text.`,
-        parameters: {
-          type: "object",
-          properties: {
-            query: { type: "string", description: 'Keywords, e.g. "tickets backlog status" or "pull request".' }
-          },
-          required: ["query"]
-        }
-      }
-    },
-    {
-      type: "function",
-      function: {
-        name: TOOL_ROUTER_DESCRIBE,
-        description: `${preamble} Get the exact parameter schema for one tool by name, so you can build its arguments before calling it with ${TOOL_ROUTER_INVOKE}.`,
-        parameters: {
-          type: "object",
-          properties: {
-            name: { type: "string", description: `Exact tool name, e.g. "builtin_chats_list_tickets".` }
-          },
-          required: ["name"]
-        }
-      }
-    },
-    {
-      type: "function",
-      function: {
-        name: TOOL_ROUTER_INVOKE,
-        description: `${preamble} Call ANY of them by name, including ones not listed on this turn. This is a real call and it really executes \u2014 use it instead of describing what you would call.`,
-        parameters: {
-          type: "object",
-          properties: {
-            name: { type: "string", description: 'Exact tool name to call; a catalog id such as "tasks.archive_many" is accepted too.' },
-            args: { type: "object", description: "Arguments object for that tool." }
-          },
-          required: ["name"]
-        }
-      }
-    }
-  ];
-}
-function words(text2) {
-  return text2.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 1);
-}
-var APP_MANIFEST_ALIAS_PHRASES = ["app manifest", "builderforce.json", "ai resource"];
-var APP_MANIFEST_TOOL_NAMES = /* @__PURE__ */ new Set([
-  advertisedToolName("app_manifest.schema"),
-  advertisedToolName("app_manifest.validate")
-]);
-function findTools(catalog, query, limit = FIND_LIMIT) {
-  const terms = words(query);
-  const lowered = query.toLowerCase();
-  const manifestAlias = APP_MANIFEST_ALIAS_PHRASES.some((p) => lowered.includes(p));
-  if (terms.length === 0 && !manifestAlias) return [];
-  const scored = [];
-  catalog.forEach((tool, index) => {
-    const name = tool.function?.name ?? "";
-    if (!name) return;
-    const description = tool.function?.description ?? "";
-    const haystackName = name.toLowerCase();
-    const haystackDesc = description.toLowerCase();
-    if (APP_MANIFEST_TOOL_NAMES.has(name)) {
-      const score2 = (manifestAlias ? 20 : 0) + (terms.includes("manifest") ? 10 : 0);
-      if (score2 > 0) scored.push({ m: { name, description }, score: score2, index });
-      return;
-    }
-    let score = 0;
-    for (const t of terms) {
-      if (haystackName.includes(t)) score += 10;
-      else if (haystackDesc.includes(t)) score += 1;
-    }
-    if (score > 0) scored.push({ m: { name, description }, score, index });
-  });
-  return scored.sort((a, b) => b.score - a.score || a.index - b.index).slice(0, limit).map((e) => e.m);
-}
-function describeTool(catalog, name) {
-  const resolved = resolveAdvertisedToolName(name, toolNameSet(catalog, (t) => t.function?.name));
-  return resolved === null ? null : catalog.find((t) => t.function?.name === resolved) ?? null;
-}
-function handleRouterCall(catalog, name, args) {
-  const a = args ?? {};
-  if (name === TOOL_ROUTER_FIND) {
-    const query = typeof a.query === "string" ? a.query : "";
-    const matches = findTools(catalog, query);
-    return {
-      result: matches.length ? { matches, note: `Call one with ${TOOL_ROUTER_INVOKE}, or ${TOOL_ROUTER_DESCRIBE} first for its arguments.` } : { matches: [], note: `No tool matches "${query}". Try broader keywords; ${catalog.length} tools exist.` }
-    };
-  }
-  if (name === TOOL_ROUTER_DESCRIBE) {
-    const target3 = typeof a.name === "string" ? a.name : "";
-    const spec2 = describeTool(catalog, target3);
-    return {
-      result: spec2 ? { name: spec2.function?.name ?? target3, description: spec2.function?.description ?? "", parameters: spec2.function?.parameters ?? {} } : { error: `Unknown tool "${target3}". Use ${TOOL_ROUTER_FIND} to look up the exact name.` }
-    };
-  }
-  const target2 = typeof a.name === "string" ? a.name : "";
-  if (!target2) return { result: { error: `${TOOL_ROUTER_INVOKE} requires a "name".` } };
-  if (isRouterTool(target2)) {
-    return { result: { error: `${target2} cannot be invoked through the router.` } };
-  }
-  const spec = describeTool(catalog, target2);
-  const resolved = spec?.function?.name;
-  if (!resolved) {
-    return { result: { error: `Unknown tool "${target2}". Use ${TOOL_ROUTER_FIND} to look up the exact name.` } };
-  }
-  if (isRouterTool(resolved)) {
-    return { result: { error: `${target2} cannot be invoked through the router.` } };
-  }
-  return { dispatch: { name: resolved, args: asToolArgs(a.args) ?? {} } };
-}
-
-// src/runStore/brainRunContext.ts
-var DEDUP_READ_TOOLS = /* @__PURE__ */ new Set(["read_file", "search_code", "list_files", "find_symbol", "file_outline", "semantic_search", "repo_map", "read_compressed", "local_research", "recall_facts"]);
-var isDedupableRead = (name) => DEDUP_READ_TOOLS.has(name) || isRepoStateReadTool(name) || isReadOnlyPlatformTool(name);
-function reportToPolicy(run, event) {
-  if (run.view) return run.view.report(event);
-  return run.policy = reduceRunPolicy(run.policy, event);
-}
-function failureAdvisoryFor(run, name, args, out, step) {
-  const attempts = run.failures.record(name, args);
-  const advisory = repeatedFailureAdvisory(name, attempts, failureReason(out));
-  if (advisory) {
-    pushTrace(run.c, {
-      ts: nowIso(),
-      category: "message",
-      label: "tools.repeat_failure_guard",
-      args: { step, tool: name, attempts },
-      result: advisory
-    });
-  }
-  return advisory;
-}
-async function settleReply(run, rawText, result, requested) {
-  const { convo } = run;
-  const text2 = canonicalTurnText(rawText);
-  const tail = convo[convo.length - 1];
-  if (tail?.role === "assistant" && !tail.tool_calls) tail.content = replayTextOf(text2);
-  else convo.push({ role: "assistant", content: replayTextOf(text2) });
-  return persistReply(run, rawText, result, requested);
-}
-async function persistReply(run, rawText, result, requested) {
-  const { c, chatId } = run;
-  const text2 = canonicalTurnText(rawText);
-  const meta = provenanceMetadata(result, requested);
-  const [assistantMsg] = await run.req.persistence.sendMessages(chatId, [{ role: "assistant", content: text2, ...meta ? { metadata: meta } : {} }]);
-  c.streamingText = "";
-  recordAppended(c, assistantMsg);
-  return assistantMsg;
-}
-
-// src/runStore/progressBudget.ts
-function handOffBrief(reason) {
-  return `${reason} Call hand_off NOW. summary = the research for the coders: everything you and any research sub-agents established that the change needs (files, functions, what they do today, decisions, traps). tasks = each one standalone: the files, the change, and how to know it is done. The coding agents start from exactly what you write here; they do not see this conversation.`;
-}
-function changeBrief(reason, canAskUser) {
-  return `${reason} Make the change now with what you already know \u2014 the edit tools are the only ones offered this turn.` + (canAskUser ? " If something genuinely blocks the change, call ask_user and say exactly what." : "");
-}
-var HAND_OFF_DUE_BRIEF = handOffBrief(`ANALYSIS IS OVER. You have spent ${PLAN_TURN_BUDGET} turns analysing without changing anything.`);
-function isChangeRequest(mode, text2) {
-  return mode !== "chat" && classifyRequest(text2).intent === "change";
-}
-function budgeted(run) {
-  return isChangeRequest(run.metadata.mode, run.userRequest);
-}
-function progressed(run) {
-  return run.c.codeChanged || run.usedTools.has(HAND_OFF_TOOL) && run.handOffInline !== true;
-}
-function endPlanning(run, step, why) {
-  reportToPolicy(run, { type: "plan_budget_spent" });
-  pushTrace(run.c, { ts: nowIso(), category: "message", label: "loop.plan_budget_spent", args: { step, planTurns: run.policy.planTurns }, result: why });
-}
-function planBudgetTurn(run, step) {
-  if (!handOffDue(run.policy) || !budgeted(run)) return null;
-  if (run.policy.handOffForced || !run.canAskUser) {
-    endPlanning(run, step, run.canAskUser ? "The forced hand-off turn did not hand off \u2014 analysis ends here and the coding role takes the next turn." : "Analysis budget spent where hand_off cannot be offered \u2014 analysis ends here and the coding role takes the next turn.");
-    return null;
-  }
-  reportToPolicy(run, { type: "hand_off_forced" });
-  pushTrace(run.c, {
-    ts: nowIso(),
-    category: "message",
-    label: "loop.hand_off_due",
-    args: { step, planTurns: run.policy.planTurns },
-    result: `${run.policy.planTurns} analysis turn(s) with no change and no hand-off \u2014 this turn offers hand_off alone and requires the call.`
-  });
-  return { tools: [HAND_OFF_TOOL_SPEC], toolChoice: "required", brief: { role: "user", content: HAND_OFF_DUE_BRIEF } };
-}
-function changeToolsOf(run, selected, canAsk = run.canAskUser) {
-  const tools = selected.filter((t) => isCodeChangeTool(t.function.name) || canAsk && t.function.name === ASK_USER_TOOL);
-  return tools.some((t) => isCodeChangeTool(t.function.name)) ? tools : null;
-}
-function forcedProgressTurn(run, selected, reason, opts = {}) {
-  if (!opts.changeOnly && offersHandOff(run.policy) && run.canAskUser && !run.policy.handOffForced) {
-    reportToPolicy(run, { type: "hand_off_forced" });
-    return { forced: "hand_off", turn: { tools: [HAND_OFF_TOOL_SPEC], toolChoice: "required", brief: { role: "user", content: handOffBrief(reason) } } };
-  }
-  if (run.c.codeChanged) return null;
-  const canAsk = run.canAskUser && !opts.noAsk;
-  const tools = changeToolsOf(run, selected.filter((t) => t.function.name !== HAND_OFF_TOOL), canAsk);
-  if (!tools) return null;
-  if (offersHandOff(run.policy)) {
-    if (opts.endPlanning) endPlanning(run, opts.endPlanning.step, opts.endPlanning.why);
-    else reportToPolicy(run, { type: "plan_budget_spent" });
-  }
-  reportToPolicy(run, { type: "change_forced" });
-  return { forced: "change", turn: { tools, toolChoice: "required", brief: { role: "user", content: changeBrief(reason, canAsk) } } };
-}
-function changeBudgetTurn(run, step, selected) {
-  const budget2 = run.route.skipsVerify ? QUICK_CHANGE_TURN_BUDGET : PLAN_TURN_BUDGET;
-  if (!changeDue(run.policy, progressed(run), budget2) || !budgeted(run)) return null;
-  const tools = changeToolsOf(run, selected);
-  if (!tools) return null;
-  reportToPolicy(run, { type: "change_forced" });
-  pushTrace(run.c, {
-    ts: nowIso(),
-    category: "message",
-    label: "loop.change_due",
-    args: { step, codeTurns: run.policy.codeTurns },
-    result: `${run.policy.codeTurns} coding turn(s) with no change and no hand-off \u2014 this turn offers the change tools alone and requires a call.`
-  });
-  return { tools, toolChoice: "required", brief: { role: "user", content: changeBrief(`STOP READING. You have spent ${run.policy.codeTurns} coding turns without changing anything.`, run.canAskUser) } };
-}
-
-// src/runStore/progressGuard.ts
-function isReadOnlyCall(tool, args) {
-  return isDedupableRead(tool) || isReadOnlyShellCall(tool, args) || isRouterTool(tool);
-}
-var RunProgressGuard = class {
-  /** Null when the lever is off: every method is then a no-op. */
-  detector;
-  /** An escalate / finish a later turn's menu acts on — kept until one takes it, so a
-   *  budget that forces the next turn first never drops it. */
-  due = null;
-  /** The note the next turn opens with, when the host shows it in place of an escalation. */
-  steer;
-  /** The B1 / B4 advisory the last turn produced, waiting to be traced. */
-  advisory = null;
-  /** An unverified finish was deferred once for a forced change turn (`progressGuardTurn`). */
-  stalledDeferred = false;
-  /**
-   * The run is FINISHING with its obligation tools on offer (`progressGuardTurn`): how many more turns may still record work
-   * (file / update tickets) before the last one offers nothing. Null while the run is not finishing that way.
-   */
-  recordTurnsLeft = null;
-  /** The run entered a finish (a record turn or its final no-tool turn): sticky for the rest of the run. */
-  finished = false;
-  /**
-   * @param on the A3 lever.
-   * @param expectsChange the run was asked for a CHANGE (`asksForChange` over its request).
-   *   Only then does a read-only streak trip — a review reads and answers.
-   */
-  constructor(on = deviceLeverOn("a3_progress_detector"), expectsChange = false) {
-    this.detector = on ? new ProgressDetector({}, {
-      isReadOnly: isReadOnlyCall,
-      isUnscopedMutation,
-      isPlatformProgress: isMutatingPlatformTool,
-      expectsChange: () => expectsChange
-    }) : null;
-  }
-  /** What the turn said before its calls. */
-  noteTurnText(text2) {
-    this.detector?.noteTurnText(text2);
-  }
-  /** One of the turn's calls ran (or was answered from the read cache). */
-  observe(tool, args, result) {
-    this.detector?.observe(tool, args, result);
-  }
-  /** A child's report reached the run through its inbox (not a `wait_agents` result): its files are the run's writes. */
-  observeChildReport(report) {
-    this.detector?.observeChildReport(report);
-  }
-  /** The turn's calls all ran. The trip it caused, if any — or the B1 readiness
-   *  advisory ({@link readinessAdvisory}) on the FIRST unkept claim, which is never a
-   *  trip and must not be queued like one. */
-  endTurn() {
-    this.steer = void 0;
-    const action = this.detector?.endTurn() ?? null;
-    if (!action) return null;
-    if (action.kind === "advisory") {
-      this.steer = action.note;
-      this.advisory = action;
-      return null;
-    }
-    if (action.kind === "escalate" || action.kind === "finish") this.detector?.setSteer(void 0);
-    if (action.kind === "escalate" || action.kind === "finish") this.due = action;
-    return action;
-  }
-  /** The note the next turn opens with ("" when none) — a trip steer, or the B1 advisory. */
-  steerNote() {
-    return this.steer ?? this.detector?.steerNote() ?? "";
-  }
-  /** The advisory the last turn produced, taken once (null when none). */
-  takeAdvisory() {
-    const advisory = this.advisory;
-    this.advisory = null;
-    return advisory;
-  }
-  /** The escalation or finish waiting for this turn, taken once. */
-  takeDue() {
-    const due = this.due;
-    this.due = null;
-    return due;
-  }
-  /** Whether an unverified finish may still be deferred — once per run, for one forced change turn. */
-  get canDeferStalledFinish() {
-    return !this.stalledDeferred;
-  }
-  /** The one deferral is spent: the next unverified finish really ends the run. */
-  stalledFinishDeferred() {
-    this.stalledDeferred = true;
-  }
-  /** The escalation could not be forced here: show its note on this turn instead. */
-  steerInstead(note) {
-    this.steer = note;
-  }
-  /** A finish offered the obligation tools: `turns` more turns may still record work before the last one offers nothing. */
-  beginRecordingFinish(turns) {
-    this.recordTurnsLeft = Math.max(0, turns);
-  }
-  /**
-   * The run is FINISHING: a finish turn was decided ("make no more code changes and run nothing … then write the final report").
-   * Set once by {@link finishTurn}; never cleared for the rest of the run, so no delivery gate sends its report back for more work.
-   */
-  get finishing() {
-    return this.finished;
-  }
-  /** A finish turn was decided (only {@link finishTurn} calls this). */
-  enterFinish() {
-    this.finished = true;
-  }
-  /**
-   * The next turn of a finishing run, taken once per turn: 'record' (the obligation tools again), 'final' (no tools — the
-   * report), or null when the run is not finishing that way. Finish means no more coding, whatever a later trip decides.
-   */
-  takeFinishingTurn() {
-    if (this.recordTurnsLeft === null) return null;
-    if (this.recordTurnsLeft > 0) {
-      this.recordTurnsLeft -= 1;
-      return "record";
-    }
-    this.recordTurnsLeft = null;
-    return "final";
-  }
-};
-var FINISH_RECORD_BRIEF = "You are FINISHING: make no more code changes and run nothing. Before your final report, file a ticket for EVERY item the person asked for that is still open (with the ticket tools offered on this turn), and update the status of the tickets you worked on. Then write the final report: what is done, and which ticket tracks each item that is not.";
-var FINISH_FINAL_BRIEF = "Write your final report now: what is done, and which ticket tracks each requested item that is still open.";
-function obligationToolsOf(run) {
-  const names = new Set(run.promptTools?.obligation ?? []);
-  if (names.size === 0) return [];
-  return (run.allTools ?? []).filter((t) => names.has(t.function.name));
-}
-function progressAfterToolCalls(run) {
-  return (ctx) => {
-    const action = run.progress.endTurn();
-    const advisory = run.progress.takeAdvisory();
-    if (advisory) traceStep(run, ctx.step, progressTraceStep(advisory));
-    if (!action) return;
-    traceStep(run, ctx.step, progressTraceStep(action));
-  };
-}
-function traceStep(run, step, s) {
-  pushTrace(run.c, { ts: nowIso(), category: "message", label: s.label, args: { step, ...s.args }, result: s.result });
-}
-function finishingTurn(run) {
-  const finishing = run.progress.takeFinishingTurn();
-  if (!finishing) return null;
-  run.progress.takeDue();
-  const tools = finishing === "record" ? obligationToolsOf(run) : [];
-  return finishTurn(run, tools, tools.length > 0 ? FINISH_RECORD_BRIEF : FINISH_FINAL_BRIEF);
-}
-function finishTurn(run, tools, brief) {
-  run.progress.enterFinish();
-  return { tools, brief: { role: "user", content: brief }, finishing: true };
-}
-function progressGuardTurn(run, step, selected) {
-  const finishing = finishingTurn(run);
-  if (finishing) return finishing;
-  const due = run.progress.takeDue();
-  if (!due) return null;
-  if (due.kind === "finish") {
-    const deferred = due.verified ? null : deferredFinishTurn(run, step, selected, due);
-    if (deferred === "steered") return null;
-    if (deferred) return deferred;
-    const tools = obligationToolsOf(run);
-    trace2(run, step, due, "finish", tools.length);
-    if (tools.length === 0) return finishTurn(run, [], due.note);
-    run.progress.beginRecordingFinish(FINISH_RECORD_TURNS - 1);
-    return finishTurn(run, tools, `${due.note}
-
-${FINISH_RECORD_BRIEF}`);
-  }
-  const advice = `PROGRESS CHECK ${due.trip}: ${progressAdvice(due.signal)}`;
-  const out = budgeted(run) ? forcedProgressTurn(run, selected, advice) : null;
-  if (!out) {
-    run.progress.steerInstead(advice);
-    return null;
-  }
-  trace2(run, step, due, out.forced);
-  return out.turn;
-}
-function deferredFinishTurn(run, step, selected, due) {
-  if (!budgeted(run) || progressed(run) || !run.progress.canDeferStalledFinish) return null;
-  const advice = `PROGRESS CHECK ${due.trip}: ${progressAdvice(due.signal)}`;
-  const planning = offersHandOff(run.policy);
-  const out = forcedProgressTurn(run, selected, advice, {
-    changeOnly: true,
-    noAsk: true,
-    endPlanning: { step, why: "The run kept reading through its progress checks without handing off \u2014 analysis ends here and the coding role makes the change." }
-  });
-  if (out) {
-    run.progress.stalledFinishDeferred();
-    trace2(run, step, due, out.forced);
-    return out.turn;
-  }
-  if (!planning) return null;
-  endPlanning(run, step, "The run kept reading through its progress checks without handing off \u2014 analysis ends here and the coding role takes the next turn.");
-  run.progress.stalledFinishDeferred();
-  run.progress.steerInstead(advice);
-  return "steered";
-}
-var FORCED_MENU = {
-  hand_off: "hand_off alone",
-  change: "the change tools alone"
-};
-function trace2(run, step, due, forced, recordTools = 0) {
-  const why = due.kind === "finish" && due.verified ? "the change is made and verified" : "the run is not converging";
-  pushTrace(run.c, {
-    ts: nowIso(),
-    category: "message",
-    label: PROGRESS_FORCED_LABEL,
-    args: { step, trip: due.trip, signal: due.signal.kind, forced, ...recordTools > 0 ? { recordTools } : {} },
-    result: forced !== "finish" ? `progress check ${due.trip} (${due.signal.kind}) \u2014 this turn offers ${FORCED_MENU[forced]} and requires a call.` : recordTools > 0 ? `progress check ${due.trip} (${due.signal.kind}) \u2014 ${why}: this turn offers only the ${recordTools} ticket tool(s) to record what is still open, and the run writes its final report.` : `progress check ${due.trip} (${due.signal.kind}) \u2014 ${why}: this turn offers no tools and the run writes its final report.`
-  });
-}
-
-// src/runStore/requestReading.ts
-function readRequest(c, convo, mode) {
-  const userRequest = latestUserText(convo);
-  const directives = [];
-  if (isContinuationDirective(userRequest) && promisesUnfinishedWork(lastAssistantText(convo))) {
-    directives.push(continuationDirective());
-    pushTrace(c, {
-      ts: nowIso(),
-      category: "message",
-      label: "turn.continuation_resolved",
-      result: "The user's bare directive was resolved against the previous turn's unfinished proposal, so the run carries that proposal out instead of asking what to fix."
-    });
-  }
-  const changeRequest = isChangeRequest(mode, userRequest);
-  const asks = changeRequest ? chatAsksDirective(convo) : null;
-  if (asks) directives.push(asks);
-  return { userRequest, directives, goal: changeRequest ? chatGoalText(convo) : userRequest };
-}
-
-// src/runStore/runPreamble.ts
-import { HISTORY_TOKEN_BUDGET } from "@seanhogg/builderforce-memory/working";
-
-// src/runStore/runFoldMarker.ts
-import {
-  consolidationMarkerContent,
-  consolidationMetadata,
-  foldKeepFromId
-} from "@seanhogg/builderforce-memory/working";
-function entryKey(m) {
-  return `${m.role}\0${m.role === "assistant" ? replayTextOf(contentText(m.content ?? "")) : contentText(m.content ?? "")}`;
-}
-function anchorPersistedHistory(c, seed, seedIds) {
-  const at = /* @__PURE__ */ new Map();
-  c.transcript.forEach((m, i) => {
-    const key = entryKey(m);
-    const list2 = at.get(key);
-    if (list2) list2.push(i);
-    else at.set(key, [i]);
-  });
-  let from = 0;
-  seed.forEach((m, k) => {
-    const id = seedIds[k];
-    const index = at.get(entryKey(m))?.find((i) => i >= from);
-    if (index === void 0) {
-      c.unseenFromId = c.unseenFromId === void 0 ? id : Math.min(c.unseenFromId, id);
-      return;
-    }
-    if (!c.transcriptAnchors.some((a) => a.index === index)) c.transcriptAnchors.push({ index, id });
-    from = index + 1;
-  });
-}
-function recordTranscriptAnchors(c, req) {
-  const t = c.transcript;
-  const { seed, seedIds } = req;
-  c.unseenFromId = void 0;
-  if (seed && seedIds && seed.length > 0 && seedIds.length === seed.length) {
-    if (t[0] === seed[0] && t[seed.length - 1] === seed[seed.length - 1]) {
-      c.transcriptAnchors = seedIds.map((id, index) => ({ index, id }));
-    } else {
-      anchorPersistedHistory(c, seed, seedIds);
-    }
-  }
-  if (req.userTurnMessageId == null || req.userTurn === void 0) return;
-  for (let i = t.length - 1; i >= 0; i--) {
-    if (t[i].role === "user" && t[i].content === req.userTurn) {
-      if (!c.transcriptAnchors.some((a) => a.index === i)) c.transcriptAnchors.push({ index: i, id: req.userTurnMessageId });
-      return;
-    }
-  }
-}
-async function persistFoldMarker(c, chatId, persistence, fold) {
-  const covered = foldKeepFromId(c.transcriptAnchors, fold.coveredEnd);
-  if (covered === void 0) return;
-  const keepFromId = c.unseenFromId === void 0 ? covered : Math.min(covered, c.unseenFromId);
-  try {
-    const [msg] = await persistence.sendMessages(chatId, [{
-      role: "assistant",
-      content: consolidationMarkerContent(fold.note),
-      metadata: consolidationMetadata({ keepFromId, folded: fold.droppedMessages })
-    }]);
-    if (msg) {
-      recordAppended(c, msg);
-      emit2(c);
-    }
-  } catch (error) {
-    pushTrace(c, {
-      ts: nowIso(),
-      category: "message",
-      label: "context.compact_persist_failed",
-      args: { coveredEnd: fold.coveredEnd },
-      result: `The compaction note could not be saved (${error instanceof Error ? error.message : String(error)}) \u2014 the next run will summarize this history again.`
-    });
-  }
-}
-function recordFold(run, fold) {
-  const { c } = run;
-  pushTrace(c, {
-    ts: nowIso(),
-    category: "message",
-    label: "context.compacted",
-    args: { droppedMessages: fold.droppedMessages },
-    result: `Compressed ${fold.droppedMessages} earlier step(s) into a memory to stay within the context window.`
-  });
-  emit2(c);
-  void persistFoldMarker(c, run.chatId, run.req.persistence, fold);
-}
-
-// src/windowFit/runWindowFit.ts
-function windowFitTrace(ts, step, t) {
-  const how = t.summarized ? "summarized" : t.recalled ? "recalled from memory" : "elided";
-  return {
-    ts,
-    category: "message",
-    label: "llm.handoff",
-    args: { step, ...t },
-    result: t.dropped > 0 ? `Packed the transcript for ${t.to}${t.from ? ` (from ${t.from})` : ""}: ${t.dropped} earlier message(s) ${how}, ~${t.estimatedTokens} tokens${t.fits ? "" : " \u2014 still over its window"}.` : `Handed the transcript to ${t.to}${t.from ? ` (from ${t.from})` : ""} verbatim, ~${t.estimatedTokens} tokens.`
-  };
-}
-function windowFitRecallFailedTrace(ts, step, error) {
-  return {
-    ts,
-    category: "message",
-    label: "llm.handoff_recall_failed",
-    args: { step },
-    result: `The memory recall for the hand-off note failed (${error instanceof Error ? error.message : String(error)}) \u2014 the dropped messages were elided instead.`
-  };
-}
-function windowCapUnknownTrace(ts, model, error) {
-  return {
-    ts,
-    category: "message",
-    label: "llm.window_unknown",
-    args: { model },
-    result: `The context window of ${model} could not be resolved (${error instanceof Error ? error.message : String(error)}) \u2014 tool results keep the default caps.`
-  };
-}
-function createRunWindowFit(deps) {
-  let lastServed;
-  let lastAsked;
-  const capWindows = /* @__PURE__ */ new Map();
-  const packs = /* @__PURE__ */ new Map();
-  const recalls = /* @__PURE__ */ new Map();
-  if (deps.priorRecall) recalls.set(deps.priorRecall.query, Promise.resolve(deps.priorRecall.result));
-  const recallFor = (step) => deps.recall ? (query) => {
-    let hit = recalls.get(query);
-    if (!hit) {
-      hit = deps.recall(query).catch((error) => {
-        deps.trace(windowFitRecallFailedTrace(deps.now(), step, error));
-        return null;
-      });
-      recalls.set(query, hit);
-    }
-    return hit;
-  } : void 0;
-  return {
-    async prepare(req) {
-      const to = req.model;
-      if (!to) return req.messages;
-      lastAsked = to;
-      const window2 = await resolveContextWindow(to, deps.windowSources);
-      if (window2 === void 0) return req.messages;
-      const differs = lastServed !== void 0 && lastServed !== to;
-      if (!differs && window2 >= deps.workingBudgetTokens) return req.messages;
-      const memoKey = `${to}|${window2}`;
-      const memo = packs.get(memoKey);
-      const budget2 = packBudgetTokens({ to, contextTokens: window2, ...req.tools ? { tools: req.tools } : {}, ...req.maxTokens ? { maxTokens: req.maxTokens } : {} });
-      const reused = memo ? reusePack(memo, req.messages, budget2) : null;
-      if (reused) return reused;
-      const recall = recallFor(req.step);
-      const { messages, pack } = await packForModel({
-        messages: req.messages,
-        to,
-        ...lastServed ? { from: lastServed } : {},
-        contextTokens: window2,
-        ...req.tools ? { tools: req.tools } : {},
-        ...req.maxTokens ? { maxTokens: req.maxTokens } : {},
-        ...deps.summarizer ? { summarizer: deps.summarizer() } : {},
-        ...recall ? { recall } : {},
-        onTrace: (t) => {
-          if (differs || t.dropped > 0 || !t.fits) deps.trace(windowFitTrace(deps.now(), req.step, t));
-        }
-      });
-      if (pack.fits) packs.set(memoKey, packMemoOf(req.messages, messages));
-      else packs.delete(memoKey);
-      return messages;
-    },
-    served(model) {
-      if (model) lastServed = model;
-    },
-    contextWindow() {
-      const ref = lastServed ?? lastAsked;
-      if (!ref) return Promise.resolve(void 0);
-      let window2 = capWindows.get(ref);
-      if (!window2) {
-        window2 = resolveContextWindow(ref, deps.windowSources).catch((e) => {
-          deps.trace(windowCapUnknownTrace(deps.now(), ref, e));
-          return void 0;
-        });
-        capWindows.set(ref, window2);
-      }
-      return window2;
-    }
-  };
-}
-
-// src/runStore/configLog.ts
-function lastTo(c, kind) {
-  for (let i = c.configLog.length - 1; i >= 0; i -= 1) {
-    if (c.configLog[i].kind === kind) return c.configLog[i].to;
-  }
-  return void 0;
-}
-function seedConfigLog(c, snap) {
-  const ts = nowIso();
-  if (snap.model != null && lastTo(c, "model") !== snap.model) {
-    c.configLog.push({ ts, kind: "model", to: snap.model });
-  }
-  if (snap.runMode != null && lastTo(c, "runMode") !== snap.runMode) {
-    c.configLog.push({ ts, kind: "runMode", to: snap.runMode });
-  }
-}
-
-// src/runStore/runMemory.ts
-import { formatEvermindMemoryBlock as formatEvermindMemoryBlock2, countReconciledMemories } from "@seanhogg/builderforce-memory/evermind";
-import { transcriptTokens } from "@seanhogg/builderforce-memory/working";
-
-// src/runStore/answerAnchors.ts
-var FILE_READ_TOOLS = /* @__PURE__ */ new Set(["read_file", "view_file", "open_file", "read_files"]);
-var PATH_KEYS = ["path", "file", "filePath"];
-var MAX_ANSWER_ANCHORS = 16;
-function normalizePath(p) {
-  return p.trim().split("\\").join("/").replace(/^\.\/+/, "");
-}
-function readFileAnchors(trace4) {
-  const seen = /* @__PURE__ */ new Set();
-  const out = [];
-  for (const ev of trace4) {
-    if (ev.category !== "tool" || ev.isError || !FILE_READ_TOOLS.has(ev.label)) continue;
-    const args = ev.args ?? {};
-    const paths = Array.isArray(args.paths) ? args.paths : PATH_KEYS.map((k) => args[k]);
-    for (const raw of paths) {
-      if (typeof raw !== "string") continue;
-      const path = normalizePath(raw);
-      if (!path || seen.has(path)) continue;
-      seen.add(path);
-      out.push({ path });
-      if (out.length >= MAX_ANSWER_ANCHORS) return out;
-    }
-  }
-  return out;
-}
-
-// src/runStore/adoptAnswer.ts
-async function adoptAnswerWithoutModel(chatId, c, req, text2, step) {
-  const finalText = canonicalTurnText(text2);
-  if (!finalText) return false;
-  c.transcript.push({ role: "assistant", content: replayTextOf(finalText) });
-  const [assistantMsg] = await req.persistence.sendMessages(chatId, [{ role: "assistant", content: finalText }]);
-  c.streamingText = "";
-  recordAppended(c, assistantMsg);
-  pushTrace(c, { ts: nowIso(), category: "recall", label: step.label, args: step.args, result: { ...step.result, skippedLlm: true } });
-  emit2(c);
-  req.onActivity?.(chatId);
-  return true;
-}
-
-// src/runStore/runMemory.ts
-var MAX_RECALL_HINT_CHARS2 = 600;
-function recallQuery2(userText, hint) {
-  const extra = (hint ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_RECALL_HINT_CHARS2);
-  if (!extra || !userText.trim()) return userText;
-  return `${userText.trim()}
-
-${extra}`;
-}
-async function recallForRun(c, convo, evermind, hint) {
-  let recalled = null;
-  if (!evermind?.recall) return { recalled, block: null, blockTokens: 0 };
-  const query = recallQuery2(latestUserText(convo), hint);
-  if (!query) return { recalled, block: null, blockTokens: 0 };
-  try {
-    recalled = await evermind.recall(query);
-  } catch {
-    recalled = null;
-  }
-  if (recalled?.seeded && recalled.items.length > 0) {
-    const block = formatEvermindMemoryBlock2(recalled.items);
-    if (block) {
-      const blockTokens = transcriptTokens([{ role: "system", content: block }]);
-      pushTrace(c, {
-        ts: nowIso(),
-        category: "recall",
-        label: "evermind.recall",
-        args: { query, version: recalled.version },
-        result: {
-          count: recalled.items.length,
-          version: recalled.version,
-          mode: recalled.mode,
-          blockTokens,
-          items: recalled.items
-        }
-      });
-      return { recalled, block, blockTokens };
-    }
-  }
-  return { recalled, block: null, blockTokens: 0 };
-}
-async function answerFromMemory(chatId, c, req, allTools, memoryReplay) {
-  const { evermind, model } = req;
-  const convo = c.transcript;
-  if (!(evermind?.answer && memoryReplay && !c.abort?.signal.aborted)) return false;
-  const query = latestUserText(convo);
-  if (!query || query.startsWith("Continue the task that was interrupted when the editor closed")) return false;
-  let memAnswer = null;
-  try {
-    memAnswer = await evermind.answer(query, {
-      toolsAvailable: !!allTools && allTools.length > 0,
-      // What this turn would have run on — the saving a hit records is priced at it.
-      model: model || c.lastServedModel || void 0
-    });
-  } catch {
-    memAnswer = null;
-  }
-  if (!memAnswer) return false;
-  return adoptAnswerWithoutModel(chatId, c, req, memAnswer.text ?? "", {
-    label: memAnswer.source === "evermind" ? "evermind.answer" : "memory.answer",
-    args: { query },
-    result: {
-      source: memAnswer.source,
-      ...memAnswer.evermindVersion != null ? { version: memAnswer.evermindVersion } : {},
-      // WHICH head served it — a project can target several, so without this a
-      // memory hit from a sibling IDE build's Evermind is indistinguishable from
-      // the chat project's own.
-      ...memAnswer.evermindProjectId != null ? { evermindProjectId: memAnswer.evermindProjectId } : {}
-    }
-  });
-}
-function emitEvermindLearnReconcile(run, assistantMsg, finalText) {
-  const { c, recalled } = run;
-  const evermind = run.req.evermind;
-  const learn = assistantMsg?.evermindLearn;
-  if (learn?.learned) {
-    pushTrace(c, {
-      ts: nowIso(),
-      category: "learn",
-      label: "evermind.learn",
-      // `targets` carries the per-Evermind breakdown (a project can fan out to many)
-      // so the timeline can name each by id; the renderer falls back to `version` alone.
-      result: { version: learn.version, queued: true, ...learn.targets ? { targets: learn.targets } : {} }
-    });
-    const reconciled = recalled?.items ? countReconciledMemories(recalled.items, finalText) : 0;
-    if (reconciled > 0) {
-      pushTrace(c, {
-        ts: nowIso(),
-        category: "reconcile",
-        label: "evermind.reconcile",
-        result: { count: reconciled, version: learn.version }
-      });
-    }
-  } else if (learn && learn.reason && learn.reason !== "too-short") {
-    pushTrace(c, {
-      ts: nowIso(),
-      category: "learn",
-      label: "evermind.learn",
-      result: { version: learn.version, skipped: true, reason: learn.reason, ...learn.targets ? { targets: learn.targets } : {} }
-    });
-  }
-  if (evermind?.cacheAnswer && run.memoryReplay) {
-    const q = run.userRequest;
-    const spent = c.runUsage;
-    const origin = spent.model && spent.promptTokens + spent.completionTokens > 0 ? { model: spent.model, promptTokens: spent.promptTokens, completionTokens: spent.completionTokens } : void 0;
-    if (q) {
-      const anchors = readFileAnchors(runTrace(c));
-      const cached2 = anchors.length ? evermind.cacheAnswer(q, finalText, origin, anchors) : origin ? evermind.cacheAnswer(q, finalText, origin) : evermind.cacheAnswer(q, finalText);
-      void Promise.resolve(cached2).catch(() => {
-      });
-    }
-  }
-}
-
-// src/runStore/prefetchGate.ts
-var NOTHING = { answered: false, tail: [] };
-function unrecorded(c, what, e) {
-  pushTrace(c, { ts: nowIso(), category: "message", label: "prefetch.unrecorded", args: { what }, result: e instanceof Error ? e.message : String(e) });
-}
-function bestEffort(c, what, write) {
-  let pending;
-  try {
-    pending = write();
-  } catch (e) {
-    unrecorded(c, what, e);
-    return;
-  }
-  void Promise.resolve(pending).then(void 0, (e) => unrecorded(c, what, e));
-}
-function settlePending(c, port, req, request) {
-  const pending = c.pendingGate;
-  c.pendingGate = null;
-  if (!pending) return;
-  const accepted = !isReask(pending.request, request);
-  const { runId } = pending;
-  if (port.record) bestEffort(c, "calibration", () => port.record({ ...pending.outcome, accepted }));
-  if (runId && req.recordRunOutcome) bestEffort(c, "gate-outcome", () => req.recordRunOutcome({ runId, gateAccepted: accepted }));
-}
-function confirmVia(port, runKey, stop) {
-  return async (action, request, detail) => {
-    if (port.confirm) return port.confirm(action, request, detail);
-    if (stop?.aborted) return false;
-    const onAbort = () => resolveRunConfirm(runKey, false);
-    stop?.addEventListener("abort", onAbort, { once: true });
-    try {
-      return await requestRunConfirm(runKey, prefetchConfirmRequest(action, request, detail));
-    } finally {
-      stop?.removeEventListener("abort", onAbort);
-    }
-  };
-}
-function decisionTrace(c, pass) {
-  const { decision } = pass;
-  pushTrace(c, {
-    ts: nowIso(),
-    category: "message",
-    label: "prefetch.decision",
-    durationMs: pass.elapsedMs,
-    args: {
-      route: decision.route,
-      actions: decision.actions.map(({ id, p, tier: tier2 }) => ({ id, p, tier: tier2 })),
-      pNeedsLlm: decision.pNeedsLlm,
-      tiers: decision.tiersRun
-    },
-    result: {
-      settled: pass.settled,
-      classifyMs: decision.elapsedMs,
-      elapsedMs: pass.elapsedMs,
-      ran: pass.ran.map(({ action, result, confirmed }) => ({
-        id: action.id,
-        ok: !!result,
-        ...confirmed !== void 0 ? { confirmed } : {},
-        ...result?.data ? { data: result.data } : {}
-      }))
-    }
-  });
-}
-function routedModel(c, req) {
-  return req.model || c.lastServedModel || void 0;
-}
-async function answerDeterministically(chatId, c, req, runId, runKey = chatId) {
-  const port = req.prefetch;
-  if (!port || c.abort?.signal.aborted) return NOTHING;
-  const query = latestUserText(c.transcript);
-  if (!query) return NOTHING;
-  settlePending(c, port, req, query);
-  const stop = c.abort?.signal;
-  const pass = await runGate(query, port, {
-    ...stop ? { signal: stop } : {},
-    confirm: confirmVia(port, runKey, stop),
-    adopt: ({ action, candidate, result }) => adoptAnswerWithoutModel(chatId, c, req, result.text, {
-      label: action.id,
-      args: { query },
-      result: {
-        source: action.id,
-        p: candidate.p,
-        tier: candidate.tier,
-        route: "answer",
-        ...result.chips?.length ? { chips: result.chips } : {},
-        ...result.data ? { data: result.data } : {}
-      }
-    })
-  });
-  if (!pass) return NOTHING;
-  decisionTrace(c, pass);
-  const lead = pass.lead;
-  if (lead) {
-    c.pendingGate = {
-      request: query,
-      outcome: { actionId: lead.action.id, route: pass.settled === "answer" ? "answer" : "prefetch", p: lead.candidate.p, tier: lead.candidate.tier, features: lead.candidate.features },
-      ...runId ? { runId } : {}
-    };
-  }
-  if (pass.answer) {
-    recordAvoided(c, req, pass.answer.action.id, runId);
-    return { answered: true, tail: [] };
-  }
-  return { answered: false, tail: pass.tail };
-}
-function recordAvoided(c, req, actionId, runId) {
-  if (!req.recordAvoidedCall) return;
-  const model = routedModel(c, req);
-  const record2 = req.recordAvoidedCall;
-  bestEffort(c, "avoided-call", () => record2({
-    source: "deterministic",
-    actionId,
-    ...runId ? { runId } : {},
-    ...model ? { model } : {},
-    promptTokens: MEDIAN_TURN_TOKENS.prompt,
-    completionTokens: MEDIAN_TURN_TOKENS.completion
-  }));
-}
-
-// src/runStore/modelPreflight.ts
-var MODEL_PREFLIGHT_LABEL = "model.preflight";
-function modelPreflightEvent2(result, ts, plan) {
-  const entries = parseByoUnresolved((result?.byoUnresolved ?? []).filter((e) => e.trim()));
-  if (entries.length === 0 && !plan) return null;
-  const said = [];
-  if (entries.length > 0) {
-    const onto = result?.fallback ? ` This run will use ${result.fallback} instead.` : " This run will fall back to another model.";
-    said.push(`${entries.map(byoUnresolvedSummary).join("; ")}.${onto}`);
-  }
-  if (plan) {
-    said.push(`the plan phase will run on ${plan.model}, a ${plan.tier}-tier (Flash-class) model \u2014 weak at planning a multi-step change; pick a stronger model for planning if the result matters.`);
-  }
-  return {
-    ts,
-    category: "message",
-    label: MODEL_PREFLIGHT_LABEL,
-    args: {
-      ...entries.length ? { byoUnresolved: entries.map((e) => e.reason ? `${e.provider}:${e.reason}` : e.provider).join(",") } : {},
-      ...result?.fallback && entries.length ? { fallback: result.fallback } : {},
-      ...plan ? { planModel: plan.model, planTier: plan.tier } : {}
-    },
-    result: `Before the first turn: ${said.join(" Also: ")}`
-  };
-}
-async function applyModelPreflight(c, preflight, pinnedModel) {
-  if (!preflight) return;
-  let result;
-  try {
-    result = await preflight();
-  } catch {
-    return;
-  }
-  const plan = c.codeChanged ? null : planModelWarning(pinnedModel);
-  const event = modelPreflightEvent2(result, nowIso(), plan);
-  if (!event) return;
-  if (result?.byoUnresolved.length) accrueByoUnresolved(c, result.byoUnresolved.join(","));
-  pushTrace(c, event);
-  emit2(c);
-}
-
-// src/runStore/hostRunContext.ts
-async function hostPart(c, part, read) {
-  if (!read) return void 0;
-  try {
-    return await read();
-  } catch (e) {
-    pushTrace(c, {
-      ts: nowIso(),
-      category: "message",
-      label: "host.context_failed",
-      args: { part },
-      result: `The host's ${part} could not be read (${e instanceof Error ? e.message : String(e)}) \u2014 the run starts without it.`
-    });
-    return void 0;
-  }
-}
-async function gatherHostRunContext(c, req, recall) {
-  const [recallHint, turnContext, servedReads] = await Promise.all([
-    recall ? hostPart(c, "recall hint", req.recallHint) : Promise.resolve(void 0),
-    hostPart(c, "task context", req.turnContext),
-    hostPart(c, "served reads", req.servedReads),
-    // The model preflight (E7): an account that cannot serve this run is shown on the
-    // banner BEFORE the first turn, not after it.
-    applyModelPreflight(c, req.modelPreflight, req.model)
-  ]);
-  return {
-    ...recallHint ? { recallHint } : {},
-    ...turnContext?.trim() ? { turnContext } : {},
-    servedReads: servedReads ?? []
-  };
-}
-function recordServedReads(coverage, reads, anchor) {
-  for (const read of reads) {
-    if (!read.path) continue;
-    const args = { path: read.path };
-    coverage.record("read_file", args);
-    coverage.cacheResult("read_file", args, {
-      result: { ok: true, path: read.path, content: read.content, totalLines: read.totalLines, offset: 1, truncated: false },
-      anchor
-    });
-  }
-}
-
-// src/runStore/turnContext.ts
-import { defaultEstimateTokens as defaultEstimateTokens5 } from "@seanhogg/builderforce-memory/handoff";
-var OPEN = "<turn_context>\nContext for this turn only (recalled memory and run directives) \u2014 not part of the request:";
-var CLOSE = "</turn_context>";
-var attached = /* @__PURE__ */ new WeakMap();
-var measured2 = /* @__PURE__ */ new WeakMap();
-function turnContextBlock2(parts) {
-  const body = parts.map((p) => (p ?? "").trim()).filter(Boolean).join("\n\n");
-  return body ? `${OPEN}
-
-${body}
-${CLOSE}` : null;
-}
-function turnContextCarrier(c) {
-  const a = attached.get(c);
-  return a && a.convo[a.index] === a.carrier ? a.carrier : void 0;
-}
-function restoreTurnContext(c) {
-  measured2.delete(c);
-  const prior = attached.get(c);
-  if (!prior) return;
-  if (prior.convo[prior.index] === prior.carrier) prior.convo[prior.index] = prior.original;
-  attached.delete(c);
-}
-function attachTurnContext(c, convo, block) {
-  restoreTurnContext(c);
-  measured2.set(c, defaultEstimateTokens5(block));
-  for (let i = convo.length - 1; i >= 0; i -= 1) {
-    const original = convo[i];
-    if (original.role !== "user") continue;
-    const content = typeof original.content === "string" ? `${original.content}
-
-${block}` : [...original.content, { type: "text", text: block }];
-    const carrier = { ...original, content };
-    convo[i] = carrier;
-    attached.set(c, { convo, index: i, carrier, original });
-    return true;
-  }
-  return false;
-}
-function turnContextTokens(c) {
-  return measured2.get(c) ?? 0;
-}
-
-// src/runStore/runRoute.ts
-function routeInputOf(req, request, followUp) {
-  return {
-    request,
-    followUp,
-    ...req.pipeline ? { routing: { mode: req.pipeline.routing, ...req.pipeline.threshold !== void 0 ? { threshold: req.pipeline.threshold } : {}, ...req.pipeline.quickModel !== void 0 ? { quickModel: req.pipeline.quickModel } : {} } } : {},
-    ...req.phaseModels ? { phaseModels: req.phaseModels } : {},
-    ...req.modelStrict ? { modelStrict: true } : {},
-    ...req.lineage ? { child: true } : {}
-  };
-}
-function decideRoute(req, request, followUp) {
-  const input = routeInputOf(req, request, followUp);
-  return { ...routeRun(input), input };
-}
-function routeMetadata(route) {
-  return route.pipeline ? { pipelineRoute: route.pipeline.route, routeScore: route.pipeline.score } : {};
-}
-
-// src/runStore/pendingCalls.ts
-var PendingCalls = class {
-  byCall = /* @__PURE__ */ new Map();
-  /** The live step of each call whose tool is running now, in the order they started. */
-  running = /* @__PURE__ */ new Map();
-  /** A call's preflight starts it clean: nothing a former call with the same id left behind can be read as its own. */
-  forget(callId) {
-    this.byCall.delete(callId);
-  }
-  replayed(callId, replay) {
-    this.byCall.set(callId, { kind: "replay", replay });
-  }
-  ran(callId, ran) {
-    this.byCall.set(callId, { kind: "ran", ran });
-  }
-  /** The call's entry, removed — read exactly once, by its post step. */
-  take(callId) {
-    const entry = this.byCall.get(callId);
-    this.byCall.delete(callId);
-    return entry;
-  }
-  /** The call's tool started running with `activity` as its live step. */
-  begin(callId, activity) {
-    this.running.delete(callId);
-    this.running.set(callId, activity);
-  }
-  /** How many calls' tools are still running — a narration turn that references pending work is sent back while any are. */
-  pendingCount() {
-    return this.running.size;
-  }
-  /** The call's tool returned. The live step of the most recently started sibling still running, or undefined when none is. */
-  end(callId) {
-    this.running.delete(callId);
-    let latest;
-    for (const activity of this.running.values()) latest = activity;
-    return latest;
-  }
-};
-
-// src/runStore/conversationPins.ts
-var CONVERSATION_PIN_WINDOW = 20;
-var CONVERSATION_PIN_LIMIT = 8;
-var DOTTED_ID = /\b[a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*\b/g;
-function namedIn(text2) {
-  return [.../* @__PURE__ */ new Set([...toolNamesMentionedIn(text2), ...text2.match(DOTTED_ID) ?? []])];
-}
-function calledName(call2) {
-  if (call2.function.name !== TOOL_ROUTER_INVOKE) return call2.function.name;
-  try {
-    const args = JSON.parse(call2.function.arguments || "{}");
-    return typeof args.name === "string" ? args.name : "";
-  } catch {
-    return "";
-  }
-}
-function conversationPinnedTools(convo, catalogToolNames, limit = CONVERSATION_PIN_LIMIT) {
-  let current = convo.length;
-  for (let i = convo.length - 1; i >= 0; i -= 1) {
-    if (convo[i].role === "user") {
-      current = i;
-      break;
-    }
-  }
-  const known = new Set(catalogToolNames);
-  const out = [];
-  const add = (raw) => {
-    if (out.length >= limit || !raw) return;
-    const name = resolveAdvertisedToolName(raw, known);
-    if (!name || isRouterTool(name) || out.includes(name)) return;
-    out.push(name);
-  };
-  const start = Math.max(0, current - CONVERSATION_PIN_WINDOW);
-  for (let i = current - 1; i >= start && out.length < limit; i -= 1) {
-    const m = convo[i];
-    if (m.role !== "user" && m.role !== "assistant") continue;
-    for (const call2 of [...m.tool_calls ?? []].reverse()) add(calledName(call2));
-    for (const named of namedIn(userTextOf(m)).reverse()) add(named);
-  }
-  return out;
-}
-
-// src/runStore/runPreamble.ts
-function stablePrefixOn() {
-  return deviceLeverOn("b1_stable_prefix");
-}
-function recorderFor(userRequest, lent) {
-  const r = lent ?? new RunKnowledgeRecorder();
-  if (!r.activity.prompt) r.setPrompt(userRequest);
-  return r;
-}
-async function prepareBrainRun(chatId, c, req, runKey, reportRunRow) {
-  const { resolvedSystemPrompt, tools: toolSpecs, model, modelStrict, runTool, stream, evermind } = req;
-  const convo = c.transcript;
-  restoreTurnContext(c);
-  recordTranscriptAnchors(c, req);
-  const stablePrefix = stablePrefixOn();
-  const turnParts = [];
-  const canAskUser = !!runTool && (toolSpecs?.length ?? 0) > 0;
-  const catalog = canAskUser ? [...toolSpecs ?? [], ASK_USER_TOOL_SPEC, HAND_OFF_TOOL_SPEC] : toolSpecs;
-  const allTools = catalog && catalog.length > 0 ? catalog : void 0;
-  const runMode = normalizeChatMode(req.chatMode ?? "work");
-  seedConfigLog(c, { model: req.model, modelStrict: req.modelStrict, routingMode: req.routingMode, runMode });
-  const serverChatId = resolveServerChatId(chatId, req);
-  const route = decideRoute(req, latestUserText(convo), isFollowUpTurn(convo));
-  const pipeline = route.pipeline;
-  if (pipeline) {
-    pushTrace(c, {
-      ts: nowIso(),
-      category: "message",
-      label: "run.pipeline_route",
-      args: { route: pipeline.route, score: pipeline.score },
-      result: `${pipeline.route === "quick" ? "Quick pass" : "Full pipeline"}: ${pipeline.reason}`
-    });
-  }
-  const metadata = {
-    ...serverChatId != null ? { chatId: serverChatId } : {},
-    ...req.clientChatId ? { clientChatId: req.clientChatId } : {},
-    guestTurnId: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-    guestTurnInput: latestUserText(convo),
-    mode: runMode,
-    ...req.projectId != null ? { projectId: req.projectId } : {},
-    ...routeMetadata(route)
-  };
-  const host = await gatherHostRunContext(c, req, !!evermind?.recall);
-  const { recalled, block: recallBlock2, blockTokens: recallBlockTokens } = await recallForRun(c, convo, evermind, host.recallHint);
-  let systemPrompt = resolvedSystemPrompt;
-  const turnPartsInPrompt = [];
-  const intoPrompt = (part) => {
-    systemPrompt = `${systemPrompt}
-
-${part}`;
-    turnPartsInPrompt.push(part);
-  };
-  if (recallBlock2) {
-    if (stablePrefix) turnParts.push(recallBlock2);
-    else intoPrompt(recallBlock2);
-  }
-  const priorRecall = { query: latestUserText(convo), result: recalled };
-  const memoryReplay = memoryReplayable(latestUserText(convo), { followUp: isFollowUpTurn(convo) });
-  const gate = await answerDeterministically(chatId, c, req, metadata.guestTurnId, runKey);
-  if (gate.answered) return null;
-  if (req.prefetch) metadata.gateRoute = gate.tail.length > 0 ? "prefetch" : "llm";
-  if (await answerFromMemory(chatId, c, req, allTools, memoryReplay)) return null;
-  if (host.turnContext) turnParts.push(host.turnContext);
-  for (const block of gate.tail) if (!host.turnContext?.includes(block)) turnParts.push(block);
-  if (req.augmentSystemPrompt) {
-    try {
-      const extra = await req.augmentSystemPrompt(latestUserText(convo));
-      if (typeof extra === "string" && extra.trim()) {
-        if (stablePrefix) turnParts.push(extra);
-        else intoPrompt(extra);
-      }
-    } catch (error) {
-      pushTrace(c, {
-        ts: nowIso(),
-        category: "message",
-        label: "system_prompt.augmentation_failed",
-        result: error instanceof Error ? error.message : String(error)
-      });
-    }
-  }
-  const catalogToolNames = (req.tools ?? []).map((t) => t.function.name);
-  const canEditHere = canChangeCodeHere(catalogToolNames);
-  systemPrompt = `${systemPrompt}
-
-${chatModeDirective(runMode, serverChatId, { canEditHere, canDelegate: catalogToolNames.includes("spawn_agent"), canFanOut: catalogToolNames.includes("spawn_agents"), roster: req.chatRoster, ticketTools: ticketToolVocabulary(catalogToolNames) })}
-
-${turnOptimizationDirective()}`;
-  const canShip = canShipHere(catalogToolNames);
-  const hold = publishHold(convo);
-  c.publishHold = hold;
-  c.shipPolicy = runShipPolicy(req, hold);
-  if (canShip) {
-    const questionRun = classifyRequest(latestUserText(convo)).intent === "question";
-    pushTrace(c, {
-      ts: nowIso(),
-      category: "message",
-      label: "run.ship_policy",
-      args: { mode: questionRun ? "n/a" : c.shipPolicy.mode, source: c.shipPolicy.source, merge: c.shipPolicy.merge, review: c.shipPolicy.review, ...hold ? { setByMessage: hold.messageNumber } : {} },
-      result: questionRun ? "Ship policy: n/a (question)." : `Ship policy: ${c.shipPolicy.mode} (${shipSourceLabel(c.shipPolicy)}).`
-    });
-  }
-  if (hold && attemptedPublishWhileHeld(hold, c.trace)) {
-    pushTrace(c, {
-      ts: nowIso(),
-      category: "message",
-      label: "run.publish_hold_refused",
-      args: { setByMessage: hold.messageNumber },
-      result: `Publish hold is ON (set by user message #${hold.messageNumber}). A prior run still tried to commit/push \u2014 the tool gate now refuses these until the user explicitly asks to ship.`
-    });
-  }
-  if (canShip) {
-    systemPrompt = `${systemPrompt}
-
-${shipDirective(c.shipPolicy, { chatId: serverChatId })}`;
-  }
-  const previewReview = canReviewInPreview(catalogToolNames) ? previewReviewDirective(serverChatId, ticketToolVocabulary(catalogToolNames)) : null;
-  if (previewReview) systemPrompt = `${systemPrompt}
-
-${previewReview}`;
-  if (c.priorResearch) systemPrompt = `${systemPrompt}
-
-${c.priorResearch}`;
-  const reading = readRequest(c, convo, runMode);
-  const { userRequest } = reading;
-  for (const directive of reading.directives) {
-    if (stablePrefix) turnParts.push(directive);
-    else intoPrompt(directive);
-  }
-  const turnContext = turnContextBlock2(turnParts);
-  const systemNamed = toolNamesMentionedIn(systemPrompt);
-  const blockNamed = turnContext ? toolNamesMentionedIn(turnContext) : [];
-  const obligation = runMode === "work" ? chatWorkObligationTools(serverChatId, ticketToolVocabulary(catalogToolNames)).filter((n2) => catalogToolNames.includes(n2)) : [];
-  const promptTools = {
-    system: systemNamed,
-    turn: [.../* @__PURE__ */ new Set([...blockNamed, ...toolNamesMentionedIn([...turnPartsInPrompt, userRequest].join("\n\n"))])],
-    contract: previewReview ? toolNamesMentionedIn(previewReview) : [],
-    ...obligation.length > 0 ? { obligation } : {}
-  };
-  const alwaysAdvertised = [
-    .../* @__PURE__ */ new Set([...systemNamed, ...blockNamed, ...obligation]),
-    ...localToolsIn(catalogToolNames),
-    // The Studio's workspace vocabulary, including the preview review its contract
-    // requires — empty everywhere but the Studio (see `studioToolsIn`).
-    ...studioToolsIn(catalogToolNames),
-    // The project-memory pair (recall before re-reading; remember what was learned) is
-    // the cheapest tool in the catalog and the first one relevance would drop.
-    ...memoryToolsIn(catalogToolNames),
-    // The workspace's Agent Skills — its description IS the skill catalog, so dropping
-    // it on relevance would hide every reviewed procedure the workspace has.
-    ...skillToolsIn(catalogToolNames),
-    // Asking the user is never off-topic: it is how the run stops when it cannot
-    // proceed, so relevance against the request must not be what decides whether the
-    // agent is allowed to ask. Its one schema is also the cheapest in the catalog.
-    ...canAskUser ? [ASK_USER_TOOL] : []
-  ];
-  const windowFit = createRunWindowFit({
-    workingBudgetTokens: HISTORY_TOKEN_BUDGET,
-    summarizer: () => ({ stream, model: run.policy.model, signal: c.abort?.signal, ...req.onDeviceTasks ? { onDeviceTasks: req.onDeviceTasks } : {} }),
-    ...evermind?.recall ? { recall: (q) => evermind.recall(q), priorRecall } : {},
-    ...req.windowSources ? { windowSources: req.windowSources } : {},
-    trace: (ev) => pushTrace(c, ev),
-    now: nowIso
-  });
-  const run = {
-    chatId,
-    serverChatId,
-    runKey,
-    c,
-    req,
-    ...reportRunRow ? { reportRunRow } : {},
-    convo,
-    canAskUser,
-    allTools,
-    catalogToolNames,
-    alwaysAdvertised,
-    promptTools,
-    // Tools this run has actually called — pinned into every later turn's selection
-    // so a multi-step task never loses a tool it is mid-way through using.
-    usedTools: /* @__PURE__ */ new Set(),
-    // Tools an earlier turn of THIS conversation called or named — a follow-up ("yes, do it") keeps the tool the
-    // last reply used or promised, instead of losing it to the relevance cut (`conversationPins.ts`).
-    conversationPinnedTools: conversationPinnedTools(convo, catalogToolNames),
-    systemPrompt,
-    metadata,
-    recalled,
-    recallBlockTokens,
-    memoryReplay,
-    userRequest,
-    publishHold: hold,
-    shipPolicy: c.shipPolicy,
-    // The goal a hand-off states to coders who see none of this chat: the latest
-    // message, and for a change request the chat's earlier change asks (`chatAsks.ts`).
-    goal: reading.goal,
-    // One re-prompt per run for a final reply that repeats the previous turn's answer
-    // (see `restatedReply.ts`). Captured before the loop: the transcript grows as it runs.
-    priorReply: previousReplyText(convo),
-    // The user's ACTUAL request for this run, resolved once. Every turn's tool
-    // selection scores against this and nothing else — see `run/brainPlatformTools.ts`.
-    requestQuery: routingQueryForTurn(convo),
-    windowFit,
-    // What this run has already read. Two guards, one tally (see `readCoverage.ts`):
-    // an EXACT repeat of a successful read-only call — same tool, same arguments —
-    // returns an "already returned above" stub instead of re-fetching + re-injecting
-    // the payload; and a target re-read at SHIFTING offsets gets an advisory once it
-    // starts circling. Both are invalidated together, and only for what a later
-    // mutation actually touched — never wiped wholesale by an unrelated call.
-    readCoverage: new ReadCoverage2(),
-    // The run's ONE no-progress counter, fed by the read-coverage above and handed to the
-    // kernel (`run/runPrepared.ts`) to persist into `RunState.reads.servedStreak` — the Brain
-    // owns the instance it feeds, so a kernel-built twin would start empty and die at any step
-    // boundary. The Brain builds its context fresh per invocation (no kernel-resume path), so
-    // this starts empty; the kernel seeds the counter from saved state for callers that resume.
-    cacheStreak: new CacheServedStreak(),
-    // The A3 progress detector — a run that says it is ready and keeps reading, circles,
-    // undoes its own edit or repeats a failure is steered, then forced, then asked
-    // about (`progressGuard.ts`, PRD 35 WS8p).
-    progress: new RunProgressGuard(void 0, asksForChange(userRequest)),
-    // What the run did and read, restated in front of every turn (its `brief()`) —
-    // the host's recorder when it keeps one, so the ledger and its code map agree.
-    knowledge: recorderFor(userRequest, req.knowledge),
-    // What this run has already FAILED at (see `FailureTally` in `@builderforce/run-guards`). The read guards
-    // above deliberately record only SUCCESSES, so an identical failing call — the same
-    // `git_status` answered with the same remedy three times, the same platform read
-    // answered 502 twice — got no pushback at all and could repeat until the budget was
-    // gone. The first retry stays free; from the second the model reads the count and the
-    // error it already has, and the moves that remain.
-    failures: new FailureTally(),
-    // What this run has already WRITTEN (see `WriteLedger` in `@builderforce/run-guards`): the third circling shape —
-    // a successful full-content write sent again byte for byte, because an error from
-    // before it was still on screen. Replaying it cannot change the file, so it is answered
-    // without running.
-    writeLedger: new WriteLedger(),
-    // Placeholders this run wrote and has not removed — read when a ticket is marked done
-    // (see `completionGuard.ts`).
-    placeholderLedger: new PlaceholderLedger(),
-    // The evidence ledger the ship gates read (PRD 45 §4.2) — one per run, fed only by
-    // the host's verifier; a host that binds no port leaves every gate inert.
-    evidence: createEvidenceLedger(),
-    // THE model hand-off policy (`@builderforce/run-policy`), shared with every other agent
-    // loop. ANALYSIS first, then the CODE: under auto-routing each turn tells the gateway
-    // what kind of call it is. Until the run reaches its first code change the turns are
-    // analysis (`plan` — the tenant's own precedence decides who plans); from then on they
-    // are `code`, which the gateway leads with the strongest connected model. A run that
-    // already changed code (a resumed turn) starts as `code`. The policy also holds the
-    // model this run is CURRENTLY talking to, every model it has already tried, and the
-    // models that broke mid-turn: a model that burns its whole stall budget fails over to
-    // another one rather than handing the user a promise (see the final-answer hook),
-    // and one that breaks mid-stream is routed around for the rest of the run. A pinned
-    // model is the user's own choice and is never routed around.
-    policy: initialRunPolicy({
-      pinnedModel: model,
-      strictPin: modelStrict,
-      // Every run starts the same way, whatever the chat's history: a chat that coded
-      // before used to start every later run in `code`, which skipped the analysis
-      // budget and let an old chat read forever while a fresh one handed off (chat
-      // #5739). The one exception is a ROLE, not history — a sub-agent is a delegated
-      // SLICE its owner already planned; started in `plan` it was offered `hand_off` and
-      // the analysis all over again, inside work it was handed to carry out. A QUICK
-      // run (`runRoute.ts`) starts in `code` too, on the quick model. The host's
-      // stage models ride as `phaseModels`, never as one model pinned to the whole run.
-      ...route.start
-    }),
-    route,
-    // One re-prompt per run for a code change left unshipped (see `selfReviewShip.ts`).
-    // One, not a budget: the second time the model stops short it has read the contract
-    // twice, and its answer — including "I cannot ship this because…" — is the answer.
-    shipRecoveryUsed: false,
-    reviewRecoveryUsed: false,
-    // One redirect per run for an explicit sub-agent request the run neither started nor
-    // refused on a real result (see `delegationRequest.ts`).
-    delegationRecoveryUsed: false,
-    restateRecoveryUsed: false,
-    // One redirect per run for a narration turn that ended while a tool call was still running
-    // (see `deliveryGates.ts`): the run is mid-task, not answering.
-    pendingNarrationRecoveryUsed: false,
-    // A finishing run traces the delivery gates it skipped once (`run/finishSkipsGates.ts`).
-    finishSkipNoted: false,
-    stopHookRounds: 0,
-    redirectAskToDelegation: false,
-    pending: new PendingCalls(),
-    lastTurnInterruption: null
-  };
-  if (turnContext && !attachTurnContext(c, convo, turnContext)) {
-    run.systemPrompt = `${systemPrompt}
-
-${turnContext}`;
-  }
-  recordServedReads(run.readCoverage, host.servedReads, turnContextCarrier(c));
-  return run;
-}
-
-// src/stopHooks.ts
-var MAX_STOP_HOOK_ROUNDS = 4;
-async function askStopHook(hook, input) {
-  if (!hook || input.round >= MAX_STOP_HOOK_ROUNDS) return null;
-  try {
-    const nudge = (await hook(input))?.trim();
-    return nudge ? nudge : null;
-  } catch {
-    return null;
-  }
-}
-
-// src/runStore/earlyDelegation.ts
-var counters = /* @__PURE__ */ new WeakMap();
-function counterOf(run) {
-  let counter = counters.get(run);
-  if (!counter) {
-    counter = new ReadsWithoutSpawn();
-    counters.set(run, counter);
-  }
-  return counter;
-}
-function runLeftDelegationUndone(run) {
-  return leftDelegationUndone({ toolNames: run.catalogToolNames, requestText: run.userRequest, events: runTrace(run.c) });
-}
-function delegationCallKind2(name, args, isReadTool) {
-  if (isSpawnTool(name)) return "spawn";
-  if (isReadTool || isReadOnlyShellCall(name, args)) return "read";
-  return "other";
-}
-function earlyDelegationAdvisory(run, name, args, isReadTool, step) {
-  const counter = counterOf(run);
-  const kind = delegationCallKind2(name, args, isReadTool);
-  const reads = counter.record(kind);
-  if (kind !== "read" || !counter.due(READS_BEFORE_DELEGATION_NUDGE)) return null;
-  if (!runLeftDelegationUndone(run)) return null;
-  counter.markNudged();
-  const nudge = earlyDelegationNudge(run.catalogToolNames, reads);
-  pushTrace(run.c, {
-    ts: nowIso(),
-    category: "message",
-    label: "loop.nudge_undelegated_request",
-    args: { step, tool: name, reads },
-    result: `The user asked for sub-agents and the run had made ${reads} reads without starting one \u2014 told to delegate on that read result.`
-  });
-  return nudge;
-}
-
-// src/runStore/deliveryGates.ts
-var PENDING_NARRATION_GATE = "brain.pending_narration";
-function deliveryGates(run) {
-  const { c, catalogToolNames, userRequest, priorReply } = run;
-  const facts = () => ({ codeChanged: c.codeChanged, toolNames: catalogToolNames, requestText: userRequest, events: runTrace(c) });
-  const files = () => ({ files: c.touchedFiles.slice(0, 20) });
-  return [
-    {
-      // The turn CHANGED code and is ending without having even tried to ship it. In a local session that change has no other
-      // reviewer. Quiet when the ship policy ships nothing (`shipNudge` null: `leave_uncommitted`, which a chat hold and a
-      // sub-agent land on), when a commit/push/PR was attempted, and on a host that cannot commit.
-      id: "brain.ship",
-      entersVerify: true,
-      applies: () => !run.shipRecoveryUsed && leftChangeUnshipped({ ...facts(), policy: run.shipPolicy }),
-      nudge: () => shipNudge(run.shipPolicy) ?? "",
-      trace: { label: "loop.recover_unshipped_change", args: files, result: "Run changed code and ended without shipping it under its ship policy \u2014 re-prompted to verify, self-review and ship as the policy says." },
-      spend: () => {
-        run.shipRecoveryUsed = true;
-      }
-    },
-    {
-      // The Studio's twin: the turn CHANGED the app and is ending without having inspected the preview and recorded a review.
-      id: "brain.review",
-      entersVerify: true,
-      applies: () => !run.reviewRecoveryUsed && leftChangeUnreviewed(facts()),
-      nudge: unreviewedChangeNudge,
-      trace: { label: "loop.recover_unreviewed_change", args: files, result: "Run changed the app and ended without inspecting the preview and recording a review \u2014 re-prompted to verify and review (this Studio session is the change's only reviewer)." },
-      spend: () => {
-        run.reviewRecoveryUsed = true;
-      }
-    },
-    {
-      // The turn references work that is STILL IN FLIGHT — "let me wait for the test run to
-      // finish", "both type-checks pass, now self-reviewing" — while a tool call it started
-      // has not returned. That narration is not the answer: the run is mid-task. Sent back once
-      // to keep working; a run that still narrates after the recovery has read the contract twice
-      // and its answer — whatever it is — is the answer.
-      id: PENDING_NARRATION_GATE,
-      entersVerify: false,
-      applies: () => !run.pendingNarrationRecoveryUsed && run.pending.pendingCount() > 0,
-      nudge: () => "A tool call you started is still running. Do not finish \u2014 continue the task until the pending step resolves and there is a concrete result to report.",
-      trace: { label: "loop.recover_pending_narration", args: () => ({ pending: run.pending.pendingCount() }), result: "The run ended on a narration turn while a tool call it started was still running \u2014 re-prompted to continue until the pending step resolves." },
-      spend: () => {
-        run.pendingNarrationRecoveryUsed = true;
-      }
-    },
-    {
-      // The user asked for SUB-AGENTS and the run is ending in prose without having started one. The `ask_user` twin is in
-      // `turnToolCalls.ts`; both spend the one recovery.
-      id: "brain.delegate",
-      entersVerify: false,
-      applies: () => !run.delegationRecoveryUsed && runLeftDelegationUndone(run),
-      nudge: () => undelegatedRequestNudge(catalogToolNames),
-      trace: { label: "loop.recover_undelegated_request", args: () => ({ via: "reply" }), result: "The user asked for sub-agents and the run ended without starting one \u2014 re-prompted to spawn them locally." },
-      spend: () => {
-        run.delegationRecoveryUsed = true;
-      }
-    },
-    {
-      // The reply is the previous turn's status again: sent back once to act on the next unfinished item instead.
-      id: "brain.restate",
-      entersVerify: false,
-      applies: (text2) => !run.restateRecoveryUsed && isRestatedReply(text2, priorReply),
-      nudge: () => restatedReplyNudge(ticketToolVocabulary(catalogToolNames)),
-      trace: { label: "loop.recover_restated_reply", args: () => ({}), result: "Final reply repeated the previous turn's answer \u2014 re-prompted to act on the next unfinished item instead of restating it." },
-      spend: () => {
-        run.restateRecoveryUsed = true;
-      }
-    }
-  ];
-}
-
-// src/run/finishSkipsGates.ts
-var FINISH_SKIPS_GATES_LABEL = "loop.finish_skips_delivery_gates";
-async function noteFinishSkipsGates(run, step, content, stopHook) {
-  if (run.finishSkipNoted) return;
-  const gates = [
-    ...await stopHook.applies() ? [stopHook.id] : [],
-    ...deliveryGates(run).filter((gate) => gate.applies(content)).map((gate) => gate.id)
-  ];
-  if (gates.length === 0) return;
-  run.finishSkipNoted = true;
-  pushTrace(run.c, {
-    ts: nowIso(),
-    category: "message",
-    label: FINISH_SKIPS_GATES_LABEL,
-    args: { step, gates, files: run.c.touchedFiles.slice(0, 20) },
-    result: "The run is finishing (no more changes, nothing run): the delivery gates that would have sent its report back were not asked \u2014 its change stays unshipped and the report says what is left."
-  });
-}
-
-// src/run/brainDelivery.ts
-var STOP_HOOK_RUNG = "brain.stop_hook";
-function brainDeliveryLedger(run, last) {
-  const { c, req, userRequest, canAskUser } = run;
-  const { runTool } = req;
-  const held = [];
-  const note = (label, result, args = {}) => {
-    const step = { ts: nowIso(), category: "message", label, args: { step: last.step, ...args }, result };
-    held.push(() => pushTrace(c, step));
-  };
-  const asWritten = (content) => last.result && replayTextOf(last.result.text).trim() === content.trim() ? last.result.text : content;
-  const accept = (content) => {
-    const full = asWritten(content).trim();
-    return (canAskUser ? liftProseAskUser(full) : full) || "No response.";
-  };
-  const askStop = () => askStopHook(req.onStop, { codeChanged: c.codeChanged, touchedFiles: c.touchedFiles, requestText: userRequest, round: run.stopHookRounds });
-  const skippedByFinish = (content) => noteFinishSkipsGates(run, last.step, content, { id: STOP_HOOK_RUNG, applies: async () => await askStop() !== null });
-  return {
-    // The closing answer after a failure streak is the Brain's own (`runStore/failureClose.ts`, run by the adapter tail). A host that
-    // cannot run a tool judges no stall at all (the rungs are none): the turn IS the answer.
-    owns: { settle: true, synthesis: true, ...runTool ? {} : { narration: true } },
-    // The Brain's stall order and wording (the stall policy's options below): a narrating turn is re-prompted before any rung, a model that
-    // spent its budget is failed over (reading the nudge alone) or stopped only once every rung is clear, the rungs' directives are the
-    // person's rows, and the stall is judged against the menu the turn advertised.
-    stall: { narrationFirst: true, steersFirst: true, nudgeAs: "user", failoverNudgeOnly: true, menu: true, quoteEmpty: true, runWideBudget: true },
-    // The stall judgement and the gates read the model's own words, reasoning included (`last.result.text`).
-    judged: (content) => last.result?.text ?? content,
-    // A turn sent back keeps what the person watched stream in: as its own block, or - a model that stalled out and was handed
-    // over - as the reply it was (the nudge-and-requeue and failover rungs).
-    async sentBack({ kept }) {
-      const result = last.result;
-      if (!result) return;
-      if (kept === "settled") last.settled = await persistReply(run, accept(result.text), result, last.requested);
-      else if (kept === "reply") await persistReply(run, accept(result.text), result, last.requested);
-      else await persistMidTurnText(run.chatId, c, run.req.persistence, result, last.requested);
-      c.streamingText = "";
-      emit2(c);
-      for (const write of held.splice(0)) write();
-    },
-    accept,
-    // The final turn the ladder never judges (`TurnMenu.final`): a FINISHING run records the gates it did not ask.
-    async finalAccepted({ content }) {
-      if (runTool && run.progress.finishing) await skippedByFinish(content);
-    },
-    async rungs(turn) {
-      if (!runTool) return [];
-      if (run.progress.finishing) {
-        await skippedByFinish(turn.content);
-        return [];
-      }
-      const sentBackAnswer = () => {
-        last.sentBackAnswer = { step: last.step };
-      };
-      const stopNudge = await askStop();
-      const verifiable = c.codeChanged && !run.route.skipsVerify;
-      const stopHook = {
-        id: STOP_HOOK_RUNG,
-        applies: !!stopNudge,
-        restate: Array(MAX_STOP_HOOK_ROUNDS).fill(stopNudge ?? ""),
-        free: MAX_STOP_HOOK_ROUNDS,
-        quote: true,
-        spent: "fall",
-        entersVerify: verifiable,
-        onRestate: () => {
-          sentBackAnswer();
-          run.stopHookRounds += 1;
-          note("loop.stop_hook", `A workspace stop hook held the run for another turn: ${(stopNudge ?? "").slice(0, 200)}`, { round: run.stopHookRounds });
-        }
-      };
-      const gates = deliveryGates(run).map((gate) => ({
-        id: gate.id,
-        applies: gate.applies(turn.content),
-        restate: [gate.nudge()],
-        quote: true,
-        spent: "fall",
-        entersVerify: gate.entersVerify && verifiable,
-        onRestate: () => {
-          if (gate.id !== PENDING_NARRATION_GATE) sentBackAnswer();
-          gate.spend();
-          note(gate.trace.label, gate.trace.result, gate.trace.args());
-        }
-      }));
-      return [stopHook, ...gates];
-    }
-  };
-}
-
-// src/selectTools.ts
-var NAME_HIT2 = LEXICAL_WEIGHTS.name;
-var NAME_SYNONYM_HIT2 = 7;
-var DESCRIPTION_HIT2 = LEXICAL_WEIGHTS.description;
-function synonymText(text2) {
-  return [...expandWithSynonyms(lexicalStems(text2))].join(" ");
-}
-function toolFields(tool) {
-  const name = tool.function?.name ?? "";
-  if (!name) return [];
-  const description = tool.function?.description ?? "";
-  return [
-    { text: name, weight: NAME_HIT2 },
-    { text: synonymText(name), weight: NAME_SYNONYM_HIT2 },
-    { text: description, weight: DESCRIPTION_HIT2 },
-    { text: synonymText(description), weight: DESCRIPTION_HIT2 }
-  ];
-}
-function relevantTools(tools, query) {
-  return rankLexically(tools, query, toolFields, tools.length);
-}
-
 // src/runStore/callPreflight.ts
-import { stillInWorkingContext } from "@seanhogg/builderforce-memory/working";
 function traceRouted(c, step, via, name) {
   pushTrace(c, {
     ts: nowIso(),
@@ -20229,7 +14003,7 @@ function callPreflight(run) {
           const [msg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: text2, metadata: JSON.stringify({ [MID_TURN_META_KEY]: true }) }]);
           if (!msg) return;
           recordAppended(c, msg);
-          emit2(c);
+          emit(c);
         },
         now: nowMs2
       });
@@ -20365,39 +14139,39 @@ ${revisit}` : covered.note;
 }
 
 // src/runStore/postEditDiagnostics.ts
-var EDIT_TOOLS2 = /* @__PURE__ */ new Set(["edit_file", "write_file"]);
-var NOTE_ERRORS2 = 5;
-function succeeded4(data) {
+var EDIT_TOOLS = /* @__PURE__ */ new Set(["edit_file", "write_file"]);
+var NOTE_ERRORS = 5;
+function succeeded(data) {
   return !(data && typeof data === "object" && data.ok === false);
 }
 async function postEditDiagnostics(call2, verifier) {
-  if (!verifier || !EDIT_TOOLS2.has(call2.name) || !succeeded4(call2.result)) return null;
+  if (!verifier || !EDIT_TOOLS.has(call2.name) || !succeeded(call2.result)) return null;
   const paths = editedPathsOf(call2.name, call2.args);
   if (!paths.length) return null;
-  let record2;
+  let record;
   try {
-    record2 = await verifier.diagnostics(paths);
+    record = await verifier.diagnostics(paths);
   } catch {
     return null;
   }
-  if (!record2 || record2.outcome !== "fail") return null;
-  return postEditNote2(record2);
+  if (!record || record.outcome !== "fail") return null;
+  return postEditNote(record);
 }
-function postEditNote2(record2) {
-  const lines = record2.findings.slice(0, NOTE_ERRORS2).map((f) => `- ${f}`);
-  const more = record2.findings.length > NOTE_ERRORS2 ? `
-- \u2026and ${record2.findings.length - NOTE_ERRORS2} more` : "";
-  return `Post-edit check FAILED (${record2.name}${record2.exitCode != null ? `, exit ${record2.exitCode}` : ""}) \u2014 fix this before building on it:
+function postEditNote(record) {
+  const lines = record.findings.slice(0, NOTE_ERRORS).map((f) => `- ${f}`);
+  const more = record.findings.length > NOTE_ERRORS ? `
+- \u2026and ${record.findings.length - NOTE_ERRORS} more` : "";
+  return `Post-edit check FAILED (${record.name}${record.exitCode != null ? `, exit ${record.exitCode}` : ""}) \u2014 fix this before building on it:
 ${lines.join("\n")}${more}`;
 }
 
 // src/runStore/postEditStructure.ts
 var BALANCE_TOOLS = /* @__PURE__ */ new Set(["edit_file"]);
-function succeeded5(data) {
+function succeeded2(data) {
   return !(data && typeof data === "object" && data.ok === false);
 }
 function bracketBalanceNote(call2) {
-  if (!BALANCE_TOOLS.has(call2.name) || !succeeded5(call2.result)) return null;
+  if (!BALANCE_TOOLS.has(call2.name) || !succeeded2(call2.result)) return null;
   const lines = [];
   for (const e of editedFilesOf(call2.name, call2.args)) {
     if (e.before === void 0 || e.after === void 0) continue;
@@ -20414,7 +14188,7 @@ async function postEditNotes(call2, verifier) {
 }
 
 // src/runStore/callRunner.ts
-function declineMalformedCall2(run, call2) {
+function declineMalformedCall(run, call2) {
   const truncated = run.lastTurnInterruption === "truncated";
   const declined = malformedCallOutcome(call2, truncated);
   if (!declined) return void 0;
@@ -20435,7 +14209,7 @@ function callRunner(run) {
   return async (call2, ctx) => {
     const iter = ctx.step;
     const args = call2.args;
-    const declined = declineMalformedCall2(run, call2);
+    const declined = declineMalformedCall(run, call2);
     if (declined) return declined;
     const isReadTool = isDedupableRead(call2.name);
     const toolStart = nowMs2();
@@ -20533,8 +14307,7 @@ ${ship}` : ship;
 // src/runStore/callPostStep.ts
 function callPostStep(run) {
   const { c, readCoverage, usedTools } = run;
-  return (call2, result, row) => {
-    run.progress.observe(call2.name, call2.args, result);
+  return (call2, _result, row) => {
     const pending = run.pending.take(call2.id);
     if (pending?.kind === "replay") {
       const { replay } = pending;
@@ -20582,7 +14355,7 @@ var WRITE_TOOL_KINDS = /* @__PURE__ */ new Map([
   ["delete_file", "delete"],
   ["delete", "delete"]
 ]);
-function pathOf2(args) {
+function pathOf(args) {
   if (!args || typeof args !== "object" || Array.isArray(args)) return void 0;
   const direct = args.path;
   if (typeof direct === "string" && direct.trim()) return direct.trim();
@@ -20615,15 +14388,15 @@ function baseOf(path) {
 function mentionText(ev) {
   return `${ev.label} ${JSON.stringify(ev.args ?? {})} ${typeof ev.result === "string" ? ev.result : JSON.stringify(ev.result ?? {})}`;
 }
-function computeProgressLine(trace4) {
+function computeProgressLine(trace2) {
   const files = /* @__PURE__ */ new Map();
   const checkCalls = [];
-  trace4.forEach((ev, step) => {
+  trace2.forEach((ev, step) => {
     if (ev.category === "tool") {
       const kind = WRITE_TOOL_KINDS.get(ev.label);
       if (kind) {
         if (ev.isError) return;
-        const path = pathOf2(ev.args);
+        const path = pathOf(ev.args);
         if (path) files.set(path, { path, kind, at: step });
         return;
       }
@@ -20691,16 +14464,16 @@ function objectOf(value) {
 function positiveInt(value) {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.floor(value) : null;
 }
-function changedPaths2(args) {
+function changedPaths(args) {
   const a = objectOf(args);
   if (!a) return [];
   const out = [];
   for (const key of ["path", "file", "filePath"]) {
     if (typeof a[key] === "string" && a[key].trim()) out.push(normalizePath2(a[key]));
   }
-  for (const list2 of [a.edits, a.paths]) {
-    if (!Array.isArray(list2)) continue;
-    for (const item of list2) {
+  for (const list of [a.edits, a.paths]) {
+    if (!Array.isArray(list)) continue;
+    for (const item of list) {
       const p = typeof item === "string" ? item : item?.path;
       if (typeof p === "string" && p.trim()) out.push(normalizePath2(p));
     }
@@ -20712,7 +14485,7 @@ function isRanRead(data) {
   if (data.covered === true || data.replayed === true || data.skipped === true || data.derived === true) return false;
   return data.ok === true || typeof data.content === "string" || Array.isArray(data.files);
 }
-function servedSpan2(entry, args, trimmed) {
+function servedSpan(entry, args, trimmed) {
   const content = typeof entry.content === "string" ? entry.content : "";
   if (!content) return null;
   const start = positiveInt(entry.offset) ?? positiveInt(args.offset) ?? 1;
@@ -20742,7 +14515,7 @@ function rangesText(spans) {
   const open2 = merged.filter((s) => s.end === null).map((s) => `from line ${s.start} (window trimmed)`);
   return [known.length > 0 ? `lines ${known.join(", ")}` : "", ...open2].filter(Boolean).join(", ");
 }
-function ledgerOf(trace4) {
+function ledgerOf(trace2) {
   const files = /* @__PURE__ */ new Map();
   const noteRead = (path, at, span) => {
     const prior = files.get(path);
@@ -20757,7 +14530,7 @@ function ledgerOf(trace4) {
     const prior = files.get(path);
     files.set(path, { path, spans: prior?.spans ?? [], state: prior?.state ?? "unchanged", at, failed: true });
   };
-  trace4.forEach((ev, at) => {
+  trace2.forEach((ev, at) => {
     if (ev.category !== "tool") return;
     if (ev.label === "read_file") {
       const args = objectOf(ev.args) ?? {};
@@ -20776,7 +14549,7 @@ function ledgerOf(trace4) {
           const path2 = normalizePath2(single.path);
           const entry = objectOf(entries[i]);
           if (!entry || entry.ok === false) noteFailure(path2, at);
-          else noteRead(path2, at, servedSpan2(entry, single, trimmed));
+          else noteRead(path2, at, servedSpan(entry, single, trimmed));
         });
         return;
       }
@@ -20788,7 +14561,7 @@ function ledgerOf(trace4) {
         return;
       }
       if (!isRanRead(data)) return;
-      noteRead(path, at, typeof args.key === "string" ? null : servedSpan2(data, args, trimmed));
+      noteRead(path, at, typeof args.key === "string" ? null : servedSpan(data, args, trimmed));
       return;
     }
     if (isUnscopedMutation(ev.label, ev.args)) {
@@ -20796,7 +14569,7 @@ function ledgerOf(trace4) {
       return;
     }
     if (isCodeChangeTool(ev.label) && !ev.isError) {
-      for (const path of changedPaths2(ev.args)) {
+      for (const path of changedPaths(ev.args)) {
         const entry = files.get(path);
         if (entry) entry.state = "changed";
       }
@@ -20804,8 +14577,8 @@ function ledgerOf(trace4) {
   });
   return [...files.values()].filter((f) => !f.failed).sort((a, b) => b.at - a.at).slice(0, READ_LEDGER_MAX_FILES);
 }
-function readLedgerSection(trace4) {
-  const files = ledgerOf(trace4);
+function readLedgerSection(trace2) {
+  const files = ledgerOf(trace2);
   if (files.length === 0) return "";
   const lines = files.map((f) => {
     const ranges = rangesText(f.spans);
@@ -20832,40 +14605,10 @@ function withRunBrief(run, menu) {
   return { ...menu ?? {}, tail: [sections.join("\n\n")] };
 }
 
-// src/runStore/cacheServedStreak.ts
-var circling = (n2) => `YOU ARE CIRCLING. Your last ${n2} calls were all answered from this run's read cache \u2014 you already have every one of those results, and re-reading them changes nothing.`;
-function noProgressTurn(run, step, selected) {
-  if (!budgeted(run) || progressed(run) || run.policy.phase === "verify" || !run.cacheStreak.due()) return null;
-  const n2 = run.cacheStreak.count;
-  const out = forcedProgressTurn(run, selected, circling(n2));
-  if (!out) return null;
-  run.cacheStreak.consume();
-  trace3(run, step, n2, out.forced);
-  return out.turn;
-}
-function trace3(run, step, streak, forced) {
-  pushTrace(run.c, {
-    ts: nowIso(),
-    category: "message",
-    label: "loop.no_progress",
-    args: { step, streak, forced },
-    result: `${streak} consecutive call(s) answered from the read cache \u2014 this turn offers ${forced === "hand_off" ? "hand_off alone" : "the change tools alone"} and requires a call.`
-  });
-}
-
 // src/run/brainTurnMenu.ts
-function forcedTurnFor(run, step, selected, finishing, handOffTurn) {
-  return finishing ?? handOffTurn ?? changeBudgetTurn(run, step, selected) ?? noProgressTurn(run, step, selected) ?? progressGuardTurn(run, step, selected);
-}
 async function brainTurnMenu(run, env, catalogSize) {
-  const finishing = finishingTurn(run);
-  const handOffTurn = finishing ? null : planBudgetTurn(run, env.step);
-  const ranked = await env.select();
-  const selected = offersHandOff(run.policy) ? ranked : ranked.filter((t) => t.function.name !== HAND_OFF_TOOL);
-  const forced = forcedTurnFor(run, env.step, selected, finishing, handOffTurn);
-  const steer = forced?.finishing ? "" : run.progress.steerNote();
-  const tail = [...forced ? [userTextOf(forced.brief)] : [], ...steer ? [steer] : []];
-  if (forced) return { tools: forced.tools, ...forced.toolChoice ? { toolChoice: forced.toolChoice } : {}, tail, ...forced.finishing && forced.tools.length === 0 ? { final: true } : {} };
+  if (env.forced) return env.forced;
+  const selected = await env.select();
   if (catalogSize > roleToolLimit(run.policy.phase)) {
     pushTrace(run.c, {
       ts: nowIso(),
@@ -20874,9 +14617,9 @@ async function brainTurnMenu(run, env, catalogSize) {
       args: { step: env.step },
       result: `${selected.length} of ${catalogSize} tools advertised this turn (nothing trimmed \u2014 the full catalog was offered; ${run.usedTools.size} pinned from earlier calls)`
     });
-    return { tools: [...selected, ...routerToolSpecs(catalogSize)], ...tail.length > 0 ? { tail } : {} };
+    return { tools: [...selected, ...routerToolSpecs(catalogSize)] };
   }
-  return { tools: selected, ...tail.length > 0 ? { tail } : {} };
+  return { tools: selected };
 }
 
 // src/run/brainPlatformTools.ts
@@ -20932,6 +14675,7 @@ function brainPlatformTools(run) {
     },
     tools: {
       closed: true,
+      ...run.req.hostEnforcesGovernance ? { governanceAfterRewrite: true } : {},
       // The Brain's read coverage (`callPreflight`'s exact-repeat, covered-window and replay answers, `callPostStep`'s cache) is
       // the run's one: the agent's own would answer a repeat first, in its own wording and shape.
       readsCovered: true,
@@ -20957,8 +14701,7 @@ function brainPlatformTools(run) {
         cappedMenu = isCappedToolRole(run.policy.phase) && menu?.tools ? { step: env.step, names: new Set(menu.tools.map((t) => t.function.name)) } : void 0;
         return menu;
       },
-      // A3's detector is the Brain's own (`progressGuard.ts`): the turn is judged when its calls have all run, as the loop does.
-      turnEnded: progressAfterToolCalls(run),
+      // A3's detector is the agent's (`GuardPorts.progress`, `brainProgressPorts.ts`): it judges the turn when its calls have all run.
       // The turn's step, as the kernel numbers it: the router, the hand-off, the confirm gate, the guards, the activity line and the
       // no-progress streak (`CacheServedStreak` counts distinct TURNS) all stamp it, so it is not a per-call counter.
       // The runner is the Brain's own and watches the person's steers itself (`callRunner`'s `runToolInterruptibly`): a foreground command
@@ -21001,7 +14744,7 @@ function brainPlatformTools(run) {
         answer(raw, { step }) {
           const held = prepared.get(raw.id) ?? kernelCall(run, raw.id, raw.name, {}, step, raw.arguments);
           prepared.delete(raw.id);
-          const result = declineMalformedCall2(run, held.call);
+          const result = declineMalformedCall(run, held.call);
           ran.set(raw.id, { call: held.call, result, ctx: held.ctx });
           return result;
         }
@@ -21011,22 +14754,7 @@ function brainPlatformTools(run) {
 }
 
 // src/run/brainFold.ts
-import { buildWorkingTranscript, foldWorkingTranscript } from "@seanhogg/builderforce-memory/working";
-
-// src/runStore/compactionSaved.ts
-import { HISTORY_TOKEN_BUDGET as HISTORY_TOKEN_BUDGET2, transcriptTokens as transcriptTokens2 } from "@seanhogg/builderforce-memory/working";
-function compactionSavedTokens(full, working, historyBudgetTokens = HISTORY_TOKEN_BUDGET2) {
-  const withoutCompaction = Math.min(transcriptTokens2(full), historyBudgetTokens);
-  return Math.max(0, withoutCompaction - transcriptTokens2(working));
-}
-function stampOncePerCall(stamped2, plain2) {
-  let used = false;
-  return () => {
-    if (used) return plain2;
-    used = true;
-    return stamped2;
-  };
-}
+import { summarizeTranscript as summarizeTranscript4 } from "@seanhogg/builderforce-memory/working";
 
 // src/run/runMessages.ts
 var imagePart = (part) => ({ type: "image", url: part.image_url.url, ...part.image_url.detail ? { detail: part.image_url.detail } : {} });
@@ -21054,97 +14782,78 @@ function toRunMessage(row) {
 }
 
 // src/run/brainFold.ts
-var foldLimits = { summaryMs: 15e3 };
-function linkedAbort(parent) {
-  const own = new AbortController();
-  const onParent = () => own.abort();
-  if (parent?.aborted) own.abort();
-  else parent?.addEventListener("abort", onParent, { once: true });
-  return { signal: own.signal, abort: () => own.abort(), release: () => parent?.removeEventListener("abort", onParent) };
-}
-async function summaryWithin(ms, summarize, parent, onLate, onError) {
-  const link = linkedAbort(parent);
-  let timer;
-  const late = new Promise((resolve) => {
-    timer = setTimeout(() => resolve("late"), ms);
-  });
-  try {
-    const out = await Promise.race([
-      summarize(link.signal).catch((reason) => {
-        onError?.(reason);
-        return null;
-      }),
-      late
-    ]);
-    if (out !== "late") return out;
-    link.abort();
-    onLate();
-    return null;
-  } finally {
-    clearTimeout(timer);
-    link.release();
-  }
-}
-function sameRows(a, b) {
-  if (a.length !== b.length) return false;
-  return a.every((row, i) => {
-    const other = b[i];
-    return row.role === other.role && row.content === other.content && row.toolCallId === other.toolCallId && (row.toolCalls ?? []).map((call2) => call2.id).join() === (other.toolCalls ?? []).map((call2) => call2.id).join();
-  });
-}
 function brainCompaction(run) {
   const { c, systemPrompt, req } = run;
   let saved = 0;
-  let foldTimedOut = false;
   return {
     savedTokens: () => saved,
-    hook: {
-      async compact(ctx) {
-        let folded = false;
-        const working = await buildWorkingTranscript(
-          c,
-          systemPrompt,
-          (msgs) => {
-            if (foldTimedOut) return Promise.resolve(null);
-            setActivity(c, contextFoldActivity(ctx.step, Date.now()));
-            const limit = foldLimits.summaryMs;
-            return summaryWithin(
-              limit,
-              (signal) => summarizeMiddle(req.stream, run.policy.model, msgs, signal, req.onDeviceTasks),
-              c.abort?.signal,
-              () => {
-                foldTimedOut = true;
-                pushTrace(c, {
-                  ts: nowIso(),
-                  category: "message",
-                  label: "context.fold_timeout",
-                  args: { step: ctx.step, waitedMs: limit, messages: msgs.length },
-                  result: "The context summary did not finish in time; this run goes on with the most recent history instead."
-                });
-              },
-              // A failed summary (not a timeout) is still a `null` fallback, but the reason is traced so a persistently
-              // failing summarizer is diagnosable, never silently dropped.
-              (reason) => {
-                pushTrace(c, {
-                  ts: nowIso(),
-                  category: "message",
-                  label: "context.fold_error",
-                  args: { step: ctx.step, messages: msgs.length },
-                  result: `The context summary failed: ${reason instanceof Error ? reason.message : String(reason)}. This run goes on with the most recent history instead.`
-                });
-              }
-            );
-          },
-          (fold) => {
-            folded = true;
-            recordFold(run, fold);
-          }
-        );
-        saved = c.compactMemo ? compactionSavedTokens([{ role: "system", content: systemPrompt }, ...c.transcript], working) : 0;
-        const rows = foldWorkingTranscript(working).map(toRunMessage);
-        if (sameRows(ctx.messages, rows)) return void 0;
-        return { messages: rows, dropped: Math.max(0, ctx.messages.length - rows.length), ...folded ? {} : { reused: true } };
-      }
+    options: { history: {
+      state: c,
+      systemPrompt,
+      signal: c.abort?.signal,
+      summarize: (messages, signal) => summarizeTranscript4(streamSummaryCompletion(req.stream, run.policy.model, req.onDeviceTasks), messages, signal),
+      // The state above is Brain-owned. Memory preserves its native rows and creates only plain text summary rows.
+      toRunMessage: (row) => toRunMessage(row),
+      recordFold: (fold) => recordFold(run, fold),
+      savedTokens: (tokens) => {
+        saved = tokens;
+      },
+      activity: (step) => setActivity(c, contextFoldActivity(step, Date.now())),
+      timeout: (step, waitedMs, messages) => pushTrace(c, {
+        ts: nowIso(),
+        category: "message",
+        label: "context.fold_timeout",
+        args: { step, waitedMs, messages },
+        result: "The context summary did not finish in time; this run goes on with the most recent history instead."
+      }),
+      error: (step, messages, reason) => pushTrace(c, {
+        ts: nowIso(),
+        category: "message",
+        label: "context.fold_error",
+        args: { step, messages },
+        result: `The context summary failed: ${reason instanceof Error ? reason.message : String(reason)}. This run goes on with the most recent history instead.`
+      })
+    } }
+  };
+}
+
+// src/runStore/changeRequest.ts
+function isChangeRequest2(mode, text2) {
+  return mode !== "chat" && classifyRequest(text2).intent === "change";
+}
+function budgeted2(run) {
+  return isChangeRequest2(run.metadata.mode, run.userRequest);
+}
+function progressed(run) {
+  return run.c.codeChanged || run.usedTools.has(HAND_OFF_TOOL) && run.handOffInline !== true;
+}
+
+// src/run/brainProgressPorts.ts
+function isReadOnlyCall(tool, args) {
+  return isDedupableRead(tool) || isReadOnlyShellCall(tool, args) || isRouterTool(tool);
+}
+function brainGuardPorts(run) {
+  return {
+    progress: {
+      isReadOnly: isReadOnlyCall,
+      isUnscopedMutation,
+      isPlatformProgress: isMutatingPlatformTool,
+      // Only a run asked for a CHANGE trips on a read-only streak — a review reads and answers.
+      expectsChange: () => asksForChange(run.userRequest),
+      // A child's report delivered to the inbox (not through `wait_agents`): its files and outcome reach the detector as data.
+      childReports: () => run.childReports.splice(0),
+      facts: {
+        budgeted: () => budgeted2(run),
+        codeChanged: () => run.c.codeChanged,
+        progressed: () => progressed(run),
+        canAskUser: () => run.canAskUser,
+        // The tools the work-linking directive declares as obligations: a finish may offer ONLY these (VS Code chat #157440).
+        obligationTools: () => run.promptTools?.obligation ?? []
+      },
+      turns: { handOffTool: HAND_OFF_TOOL, askTool: ASK_USER_TOOL, recordTurns: FINISH_RECORD_TURNS }
+    },
+    onEvent: (row, at) => {
+      pushTrace(run.c, { ts: nowIso(), category: "message", label: row.tool, args: { ...at ? { step: at.step } : {}, ...row.detail }, result: row.result });
     }
   };
 }
@@ -21166,26 +14875,24 @@ function brainFinishPorts(req, openWork) {
     // The run IS a delegation owner as soon as the host can say who its live children are: an owner, not only a child
     // (`parentRunId`), holds its end for them.
     ...req.liveChildren ? { delegated: true, liveChildren: req.liveChildren } : {},
-    ...work ? { openWork: work } : {}
+    ...work ? { openWork: work } : {},
+    ...req.work ? workFinishPorts(req.work) : {}
   };
 }
 
 // src/run/preflightRecorded.ts
 function recordedPreflight(c, pinnedModel) {
-  return (ctx) => {
-    const byo = c.byoUnresolved.join(",");
-    const plan = c.codeChanged ? null : planModelWarning(pinnedModel);
-    const degraded = byo !== "" || plan !== null;
-    ctx.state.preflight = degraded ? `degraded:${byo || "plan_flash"}` : "ok";
-    return { kind: "model.preflight", step: ctx.step, status: degraded ? "degraded" : "ok", notices: [] };
+  return {
+    byoUnresolved: [...c.byoUnresolved],
+    ...!c.codeChanged && pinnedModel ? { planModel: pinnedModel } : {}
   };
 }
 
 // src/run/modelTransport.ts
-import { isVolatileContent as isVolatileContent2, volatileTail as volatileTail3 } from "@seanhogg/builderforce-memory/handoff";
+import { isVolatileContent, volatileTail } from "@seanhogg/builderforce-memory/handoff";
 
 // src/localChat/turnCost.ts
-function turnPriceMc(result, requested, book2) {
+function turnPriceMc(result, requested, book) {
   const route = usageRouteOf(result, requested);
   const usage = result.usage;
   if (!usage) return route === "local" ? 0 : void 0;
@@ -21194,7 +14901,7 @@ function turnPriceMc(result, requested, book2) {
     completion: usage.completion ?? 0,
     cacheRead: usage.cacheRead ?? 0,
     cacheCreation: usage.cacheCreation ?? 0
-  }, book2, route);
+  }, book, route);
 }
 
 // src/run/modelTransport.ts
@@ -21215,8 +14922,8 @@ function toStreamMessage(message) {
 function withTail(messages, sections) {
   if (!sections) return messages;
   const last = messages[messages.length - 1];
-  const history = last && last.role === "user" && isVolatileContent2(last.content) ? messages.slice(0, -1) : messages;
-  const tail = volatileTail3(sections);
+  const history = last && last.role === "user" && isVolatileContent(last.content) ? messages.slice(0, -1) : messages;
+  const tail = volatileTail(sections);
   return tail ? [...history, tail] : history;
 }
 var wired = /* @__PURE__ */ new WeakMap();
@@ -21280,24 +14987,15 @@ function brainModelTransport(deps) {
         );
         return session.around ? session.around(ask2) : ask2();
       };
-      let asked = request;
       let result;
       try {
         result = await attempt(request);
       } catch (e) {
         if (signal?.aborted) throw e;
-        const retry = await session.recover?.(e);
-        if (!retry) throw session.failed(e);
-        asked = { ...request, model: retry.model, strict: retry.strict, role: retry.role, excludeModels: retry.excludeModels };
-        try {
-          result = await attempt(asked);
-        } catch (retryError) {
-          if (signal?.aborted) throw retryError;
-          throw session.failed(retryError);
-        }
+        throw session.failed(e);
       }
       await session.completed(result);
-      return toCompletion(result, asked.model);
+      return toCompletion(result, request.model);
     },
     window: (model) => heldContextWindow(model, windows)
   };
@@ -21343,7 +15041,7 @@ async function persistBudgetStop(run, text2) {
   const [msg] = await req.persistence.sendMessages(chatId, [{ role: "assistant", content: text2 }]);
   c.streamingText = "";
   if (msg) recordAppended(c, msg);
-  emit2(c);
+  emit(c);
   req.onActivity?.(chatId);
 }
 
@@ -21386,7 +15084,7 @@ async function persistSteer(c, chatId, persistence, steer, runKey = chatId) {
     const [msg] = await persistence.sendMessages(chatId, [{ role: "user", content: steer.text, metadata: steerMetadata(steer), ...steer.eventKey ? { eventKey: steer.eventKey } : {} }]);
     if (!msg) return;
     recordAppended(c, msg);
-    emit2(c);
+    emit(c);
     forgetPendingWords(runKey, [steer.eventKey]);
   } catch (e) {
     pushTrace(c, {
@@ -21425,7 +15123,10 @@ function brainSteeringSource(run, people) {
         const parts = imagePartsOf(content);
         const text2 = typeof content === "string" ? content : content.map((p) => "text" in p && typeof p.text === "string" ? p.text : "").join("");
         if (steer.fromPerson) people.note(text2);
-        if (steer.childReport) run.progress.observeChildReport(steer.childReport);
+        if (steer.childReport) {
+          run.childReports.push(steer.childReport);
+          if (steer.childReport.ticket) (run.childWorkRefs ??= /* @__PURE__ */ new Set()).add(steer.childReport.ticket);
+        }
         out.push({
           text: text2,
           ...parts.length > 0 ? { parts } : {},
@@ -21435,86 +15136,6 @@ function brainSteeringSource(run, people) {
       return out;
     }
   };
-}
-
-// src/runStore/failureClose.ts
-import { windowed } from "@seanhogg/builderforce-memory/working";
-async function closeAfterFailureStreak(run, streak, step) {
-  const { c, chatId, req, convo, systemPrompt, metadata } = run;
-  const { routingMode, stream, persistence, onActivity, maxTokens, reasoning } = req;
-  c.streamingText = "";
-  if (!c.abort?.signal.aborted) {
-    const closeStart = nowMs2();
-    try {
-      const working = [
-        { role: "system", content: systemPrompt },
-        ...windowed(convo),
-        {
-          role: "user",
-          content: `This turn was stopped because your last ${streak} tool calls all failed. Do NOT call any more tools. Answer the user now, in prose, using what you have already gathered \u2014 say what you completed, quote what the failing calls answered, and state plainly what is blocking you and what you need (a different argument, a permission, a decision) so the next turn can succeed.`
-        }
-      ];
-      let closeFirstTokenAt;
-      const closeAsk = nextTurn(run.policy, { hasTools: false });
-      const closing = await asLiveTurn(c, () => stream(
-        // No `tools` → the model can't call another tool and must produce text.
-        { messages: working, model: closeAsk.model, modelStrict: closeAsk.strict, routingMode, maxTokens, reasoning, metadata, signal: c.abort?.signal },
-        {
-          onModel: liveTurnModel(c),
-          onConnectRetry: connectRetryStep(c, step),
-          // The first token repaints now; every later delta coalesces into a frame (as `run/brainTurn.ts` does).
-          onTextDelta: (d) => {
-            c.streamingText += d;
-            if (closeFirstTokenAt === void 0) {
-              closeFirstTokenAt = nowMs2();
-              emit2(c);
-              return;
-            }
-            emitStreaming(c);
-          }
-        }
-      ));
-      accrueByoUnresolved(c, closing.byoUnresolved);
-      accrueProviderCap(c, closing.providerCap);
-      run.windowFit.served(closing.resolvedModel ?? closeAsk.model);
-      const contextWindow = await run.windowFit.contextWindow?.();
-      pushTrace(c, {
-        ts: nowIso(),
-        category: "llm",
-        label: "llm.complete",
-        durationMs: nowMs2() - closeStart,
-        ttftMs: closeFirstTokenAt !== void 0 ? closeFirstTokenAt - closeStart : void 0,
-        args: { model: closing.resolvedModel ?? closeAsk.model ?? "default", requestedModel: closeAsk.model ?? "default", ...servedOnDevice(closing) ? { costMc: 0 } : {}, step, toolCalls: 0, forcedFinish: true, failureStreak: streak, account: closing.account, byoUnresolved: closing.byoUnresolved, ...contextWindow ? { contextWindow } : {} },
-        usage: closing.usage,
-        finishReason: closing.finishReason,
-        textChars: closing.text.length,
-        result: `forced final synthesis (${streak} consecutive tool failures stopped the run) \xB7 ${closing.text.length} chars \xB7 finish: ${closing.finishReason ?? "\u2014"}`
-      });
-      const closingText = canonicalTurnText(closing.text);
-      if (closingText) {
-        convo.push({ role: "assistant", content: replayTextOf(closingText) });
-        const meta = provenanceMetadata(closing, closeAsk.model);
-        const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: closingText, ...meta ? { metadata: meta } : {} }]);
-        c.streamingText = "";
-        recordAppended(c, assistantMsg);
-        emit2(c);
-        emitEvermindLearnReconcile(run, assistantMsg, closingText);
-        onActivity?.(chatId);
-        return;
-      }
-    } catch (e) {
-      if (c.abort?.signal.aborted) return;
-    }
-  }
-  if (c.abort?.signal.aborted) return;
-  c.streamingText = "";
-  recordRunFailure(
-    c,
-    "agent.loop",
-    `Stopped after ${streak} consecutive failed tool calls over ${step} steps (a forced final answer without tools also came back empty)`
-  );
-  c.error = `The assistant's last ${streak} tool calls all failed and it gave no answer. Read the failing steps above, then try again with what they ask for.`;
-  emit2(c);
 }
 
 // src/run/brainSettle.ts
@@ -21541,12 +15162,19 @@ async function settleBrainRun(run, outcome, last) {
     if (outcome.cause !== void 0) throw outcome.cause;
     if (last.keepFailed !== void 0) throw last.keepFailed;
     if (keptSentBackAnswer(run, last)) {
-      emit2(c);
+      emit(c);
       req.onActivity?.(chatId);
       return;
     }
     if (last.error !== void 0) throw last.error;
-    if (outcome.exhausted) return closeAfterFailureStreak(run, outcome.failureStreak ?? DEFAULT_TOOL_FAILURE_STREAK, outcome.state.step);
+    if (outcome.failureStreak !== void 0) {
+      const streak = outcome.failureStreak;
+      c.streamingText = "";
+      recordRunFailure(c, "agent.loop", `Stopped after ${streak} consecutive failed tool calls over ${outcome.state.step} steps`);
+      c.error = `The assistant's last ${streak} tool calls all failed and it gave no answer. Read the failing steps above, then try again with what they ask for.`;
+      emit(c);
+      return;
+    }
     throw new Error(outcome.reason);
   }
   const text2 = outcome.kind === "paused" ? outcome.question : outcome.output;
@@ -21560,181 +15188,12 @@ async function settleBrainRun(run, outcome, last) {
   };
   const assistantMsg = last.settled ?? await settleReply(run, text2, result, last.requested);
   if (outcome.kind === "paused") c.pendingQuestion = { messageId: assistantMsg.id };
-  emit2(c);
+  emit(c);
   emitEvermindLearnReconcile(run, assistantMsg, text2);
   req.onActivity?.(chatId);
 }
 
-// src/runStore/runEndOutcome.ts
-var notes = /* @__PURE__ */ new WeakMap();
-function noteRunId(c, runId) {
-  if (runId) notes.set(c, { runId, contained: false });
-}
-function noteBudgetContained(c) {
-  const n2 = notes.get(c);
-  if (n2) n2.contained = true;
-}
-function runEndOutcome(state) {
-  if (state.contained) return "budget-contained";
-  if (state.aborted) return "stopped";
-  return state.failed ? "failed" : "succeeded";
-}
-function reportRunEnd(c, req, state) {
-  const n2 = notes.get(c);
-  notes.delete(c);
-  if (!n2 || !req.recordRunOutcome) return;
-  try {
-    void Promise.resolve(req.recordRunOutcome({ runId: n2.runId, outcome: runEndOutcome({ ...state, contained: n2.contained }) })).catch((e) => unrecorded2(c, e));
-  } catch (e) {
-    unrecorded2(c, e);
-  }
-}
-function unrecorded2(c, e) {
-  pushTrace(c, { ts: nowIso(), category: "message", label: "run.outcome_unrecorded", result: e instanceof Error ? e.message : String(e) });
-}
-
-// src/run/stallTrace.ts
-var text = (v) => typeof v === "string" && v ? v : void 0;
-var num = (v) => typeof v === "number" ? v : void 0;
-var menuArg = (d) => num(d.advertisedTools) !== void 0 ? { advertisedTools: num(d.advertisedTools) } : {};
-function stallTraceStep(event, ts) {
-  const d = event.detail ?? {};
-  const shape = d.shape;
-  switch (event.action) {
-    case "steer": {
-      const attempt = num(d.attempt);
-      if (attempt === void 0) return null;
-      const handedOff = shape === "handed-off";
-      return {
-        ts,
-        category: "message",
-        label: handedOff ? "loop.recover_handed_off_work" : "loop.recover_announced_tool_call",
-        args: { step: event.step, attempt, of: MAX_ANNOUNCEMENT_RECOVERIES, ...menuArg(d), shape },
-        result: handedOff ? `Model ended by telling the user to run the commands itself holds tools for \u2014 re-prompted to run them (${attempt}/${MAX_ANNOUNCEMENT_RECOVERIES}).` : `Model announced a tool call without making one \u2014 re-prompted (${attempt}/${MAX_ANNOUNCEMENT_RECOVERIES}).`
-      };
-    }
-    case "escalate": {
-      const from = text(d.from);
-      const to = text(d.to);
-      if (!to) return null;
-      return {
-        ts,
-        category: "message",
-        label: "loop.model_failover",
-        args: { step: event.step, from: from ?? "default", to, attempt: num(d.attempt), of: num(d.of) },
-        result: text(d.notice) ?? modelFailoverNotice(from ?? "default", to, shape)
-      };
-    }
-    case "pause":
-      return {
-        ts,
-        category: "error",
-        label: "loop.stall_unrecovered",
-        args: { step: event.step, model: text(d.model), ...num(d.attempts) !== void 0 ? { attempts: num(d.attempts) } : {}, tried: d.tried, ...menuArg(d), shape },
-        result: event.note ?? "The model kept describing calls instead of making them.",
-        isError: true
-      };
-    default:
-      return null;
-  }
-}
-
-// src/unsettledAnswer.ts
-var BUDGET_CONTAINED_STEP = "run.budget_contained";
-function isForcedFinishStep(event) {
-  return event.label === "llm.complete" && event.args?.forcedFinish === true;
-}
-function isUnsettledAnswer(trace4) {
-  return trace4.some((event) => event.label === BUDGET_CONTAINED_STEP || isForcedFinishStep(event));
-}
-
-// src/run/eventSink.ts
-function traceStepFor(event, ts) {
-  switch (event.kind) {
-    case "model.preflight":
-      if (event.notices.length === 0) return null;
-      return {
-        ts,
-        category: "message",
-        label: "model.preflight",
-        args: { status: event.status },
-        result: `Before the first turn: ${event.notices.join(" ")}`
-      };
-    case "llm.model_downgrade":
-      return {
-        ts,
-        category: "message",
-        label: "llm.model_downgrade",
-        args: { requestedModel: event.requestedModel, model: event.model, step: event.step },
-        result: event.reason
-      };
-    case "steer.applied":
-      return {
-        ts,
-        category: "message",
-        label: "steer.applied",
-        args: { step: event.step, messages: 1 },
-        result: "The person sent direction while the run was working; it reached the next model call."
-      };
-    case "budget.warning":
-      return { ts, category: "message", label: "run.budget_warning", args: { spentMillicents: event.spentMc, capMillicents: event.capMc }, result: event.text };
-    case "budget.contained":
-      return {
-        ts,
-        category: "message",
-        label: BUDGET_CONTAINED_STEP,
-        args: { spentMillicents: event.spentMc, capMillicents: event.capMc, unpricedCalls: event.unpricedCalls },
-        result: event.text
-      };
-    case "budget.unpriced":
-      return {
-        ts,
-        category: "message",
-        label: "run.budget_unpriced",
-        args: { model: event.model ?? null },
-        result: "A call had no known price, so the run cap counts only the spend that is priced."
-      };
-    case "stall.recovered":
-      return stallTraceStep(event, ts);
-    default:
-      return null;
-  }
-}
-function brainEventSink(c, outcome, on = {}) {
-  const render = (event) => {
-    if (on.recorded?.has(event.kind)) return;
-    if (event.kind === "budget.contained") {
-      noteBudgetContained(c);
-      on.budgetStop?.(event);
-    }
-    if (event.kind === "stall.recovered" && event.action === "pause" && event.note) c.error = event.note;
-    if (event.kind === "model.coder_reask" && on.coderReask) return on.coderReask(event);
-    const step = traceStepFor(event, nowIso());
-    if (step) {
-      pushTrace(c, step);
-      return;
-    }
-    emit2(c);
-  };
-  return {
-    emit(event) {
-      const kept = event.kind === "model.coder_reask" ? void 0 : on.turnKept?.();
-      return kept instanceof Promise ? kept.then(() => render(event)) : render(event);
-    },
-    // The host's report may resolve to anything (a stored id, a response); the sink's contract is
-    // `void`, so what it resolves to is dropped here.
-    ...outcome ? { outcome: async (row) => {
-      await outcome(withHostContext(row, c));
-    } } : {}
-  };
-}
-function withHostContext(row, c) {
-  const tokens = turnContextTokens(c);
-  return tokens > 0 ? { ...row, contextPackTokens: (row.contextPackTokens ?? 0) + tokens } : row;
-}
-
 // src/runStore/openLinkedWorkHold.ts
-var MAX_OPEN_WORK_HOLDS = 6;
 var MAX_LISTED_TICKETS = 15;
 var UNMOVED_LOCAL_STATUS = "backlog";
 var ACTIVE_STATUS = "in_progress";
@@ -21746,18 +15205,18 @@ function isProgressStep(ev) {
   if (name === "run_command") return !isReadOnlyShellCall(name, ev.args);
   return isWorkItemWrite(name);
 }
-function latestProgress(trace4) {
-  for (let i = trace4.length - 1; i >= 0; i--) if (isProgressStep(trace4[i])) return trace4[i];
+function latestProgress(trace2) {
+  for (let i = trace2.length - 1; i >= 0; i--) if (isProgressStep(trace2[i])) return trace2[i];
   return null;
 }
-function localOpenTickets(trace4, listedRefs) {
-  const moves = ticketMovesInRun(trace4);
-  return ticketsCreatedInRun(trace4).filter((f) => f.local && (f.syncRef == null || !listedRefs.has(f.syncRef))).map((f) => ({
+function localTickets(trace2, listedRefs) {
+  const moves = ticketMovesInRun(trace2);
+  return ticketsCreatedInRun(trace2).filter((f) => f.local && (f.syncRef == null || !listedRefs.has(f.syncRef))).map((f) => ({
     ref: f.ref,
     kind: typeof f.args.taskType === "string" ? f.args.taskType : "task",
     title: typeof f.args.title === "string" ? f.args.title : "",
     status: (latestStatus(moves, f.ids) ?? UNMOVED_LOCAL_STATUS).toLowerCase()
-  })).filter((r) => isOpenLinkedStatus(r.status));
+  }));
 }
 function ticketLine(t) {
   return `#${t.ref} ${t.kind}${t.title ? ` "${t.title}"` : ""} (${t.status})`;
@@ -21780,14 +15239,18 @@ function openLinkedWorkHold(run) {
   let holds = 0;
   let released = false;
   let markAtLastHold = null;
+  const tracked = /* @__PURE__ */ new Set();
   const noteOf2 = (ev) => pushTrace(run.c, ev);
   const note = (label, result, args) => {
     noteOf2({ ts: nowIso(), category: "message", label, ...args ? { args } : {}, result });
   };
-  const openTickets = async (trace4, executing) => {
-    if (run.serverChatId == null || !declaresChatTicketListing(run.req.tools)) return localOpenTickets(trace4, /* @__PURE__ */ new Set());
-    const owned = runOwnedTicketRefs(trace4, run.c.deltaTicketId);
-    if (!executing && owned.size === 0) return [];
+  const scopedTickets = async (trace2, executing) => {
+    const delegated = run.req.lineage?.ticket;
+    if (delegated && (run.serverChatId == null || !declaresChatTicketListing(run.req.tools))) return [];
+    if (run.serverChatId == null || !declaresChatTicketListing(run.req.tools)) return localTickets(trace2, /* @__PURE__ */ new Set());
+    const owned = runOwnedTicketRefs(trace2, run.c.deltaTicketId);
+    for (const ref of run.childWorkRefs ?? []) owned.add(ref);
+    if (!delegated && !executing && owned.size === 0 && tracked.size === 0) return [];
     const listed = await listChatTickets(run.req, run.serverChatId, {
       note: noteOf2,
       label: "finish.open_work_unreadable",
@@ -21797,8 +15260,9 @@ function openLinkedWorkHold(run) {
     }, listingScopeOf(run.c));
     if (listed == null) return null;
     const rows = linkedTaskRows(listed);
-    const linkedOpen = rows.filter((t) => isOpenLinkedStatus(t.status) && (owned.has(t.ref) || executing && t.status === ACTIVE_STATUS));
-    return [...linkedOpen, ...localOpenTickets(trace4, new Set(rows.map((t) => t.ref)))];
+    if (delegated) return rows.filter((ticket) => ticket.ref === delegated);
+    const scoped = rows.filter((t) => owned.has(t.ref) || tracked.has(t.ref) || executing && t.status === ACTIVE_STATUS);
+    return [...scoped, ...localTickets(trace2, new Set(rows.map((t) => t.ref)))];
   };
   const release = (open2, reason) => {
     released = true;
@@ -21806,24 +15270,38 @@ function openLinkedWorkHold(run) {
     note("finish.open_work_released", `The run ends with linked work still open (${open2.map(ticketLine).join("; ")}): released because ${why}.`, { reason, holds, open: open2.map((t) => t.ref) });
     return null;
   };
-  const progressedSinceHold = (trace4, latest) => {
+  const progressedSinceHold = (trace2, latest) => {
     if (latest == null) return false;
     if (markAtLastHold == null) return true;
-    return latest !== markAtLastHold && trace4.includes(markAtLastHold);
+    return latest !== markAtLastHold && trace2.includes(markAtLastHold);
   };
   return async (ctx) => {
     const { req } = run;
     if (released || !req.runTool) return null;
-    if (req.lineage || ctx.task.dispatch.parentRunId !== void 0) return null;
+    const child = !!req.lineage || ctx.task.dispatch.parentRunId !== void 0;
+    if (child && !req.lineage?.ticket) return null;
     if (normalizeChatMode(req.chatMode ?? "work") !== "work") return null;
     if (run.c.abort?.signal.aborted || ctx.signal?.aborted) return null;
     if (asksThePerson(ctx.content)) return null;
-    const trace4 = runTrace(run.c);
-    const latest = latestProgress(trace4);
-    const open2 = await openTickets(trace4, budgeted(run) || latest != null);
-    if (!open2 || open2.length === 0) return null;
+    const trace2 = runTrace(run.c);
+    const latest = latestProgress(trace2);
+    const rows = await scopedTickets(trace2, budgeted(run) || latest != null);
+    if (!rows) return null;
+    const evidence = rows.flatMap((ticket) => {
+      const { ref, status: status2 } = ticket;
+      if (status2 === "done" || status2 === "completed") return [{ id: ref, status: "done", detail: "Ticket is marked done" }];
+      if (status2 === "in_review") return [{ id: ref, status: status2, detail: "Ticket is in review" }];
+      return [];
+    });
+    for (const { ref } of rows) tracked.add(ref);
+    if (ctx.state) {
+      recordWorkSnapshot(ctx.state, "linked-tickets", rows.map(({ ref, title }) => ({ id: ref, criteria: [title] })), evidence);
+    }
+    if (child) return null;
+    const open2 = rows.filter((ticket) => isOpenLinkedStatus(ticket.status));
+    if (!open2.length) return null;
     if (holds >= MAX_OPEN_WORK_HOLDS) return release(open2, "budget");
-    if (holds > 0 && !progressedSinceHold(trace4, latest)) return release(open2, "no_progress");
+    if (holds > 0 && !progressedSinceHold(trace2, latest)) return release(open2, "no_progress");
     holds += 1;
     markAtLastHold = latest;
     note("finish.open_work_held", `The run was held for its open linked work (${holds}/${MAX_OPEN_WORK_HOLDS}).`, { open: open2.map((t) => t.ref) });
@@ -21856,11 +15334,11 @@ var speaksOfSpec = (request) => SPEC_LANGUAGE.some((p) => p.test(request));
 function isSpecTicketingRequest(request) {
   return TICKETING_INTENTS.some((p) => p.test(request)) && (speaksOfSpec(request) || namedSpecPaths(request).length > 0);
 }
-function specPathsFor(request, trace4) {
+function specPathsFor(request, trace2) {
   const named = namedSpecPaths(request);
   if (named.length) return named.slice(0, MAX_SPECS);
   if (!speaksOfSpec(request)) return [];
-  return readFileAnchors(trace4).map((a) => normalizePath3(a.path)).filter((p) => /\.md$/i.test(p) && !NOT_A_SPEC.test(p) && SPEC_LIKE.test(p)).reverse().slice(0, MAX_SPECS);
+  return readFileAnchors(trace2).map((a) => normalizePath3(a.path)).filter((p) => /\.md$/i.test(p) && !NOT_A_SPEC.test(p) && SPEC_LIKE.test(p)).reverse().slice(0, MAX_SPECS);
 }
 function itemLine(i) {
   const blocker = i.status === "blocked" ? `, blocker: ${i.blocker ?? "not stated"}` : "";
@@ -21915,7 +15393,7 @@ async function readSpec(run, path, note) {
   }
   return parts.join("\n");
 }
-async function coverageTickets(run, trace4, noteEv) {
+async function coverageTickets(run, trace2, noteEv) {
   const delta = run.c.deltaTicketId != null ? String(run.c.deltaTicketId) : null;
   const listedRows = [];
   if (run.serverChatId != null) {
@@ -21929,8 +15407,8 @@ async function coverageTickets(run, trace4, noteEv) {
     for (const t of linkedTaskRows(listed)) listedRows.push({ id: t.ref, title: t.title, status: t.status, isBackstop: t.ref === delta });
   }
   const listedByRef = new Map(listedRows.map((t) => [t.id, t]));
-  const moves = ticketMovesInRun(trace4);
-  const filed = ticketsCreatedInRun(trace4).map((f) => {
+  const moves = ticketMovesInRun(trace2);
+  const filed = ticketsCreatedInRun(trace2).map((f) => {
     const text2 = (k) => typeof f.args[k] === "string" ? f.args[k] : "";
     const listed = f.syncRef != null ? listedByRef.get(f.syncRef) : void 0;
     return {
@@ -21961,16 +15439,16 @@ function specTicketCoverageGate(run) {
     note("finish.spec_tickets_released", `The run ends with spec items still unticketed (${missing.map((i) => i.id).join(", ")}): released because ${why}.`, { missing: missing.map((i) => i.id) });
     return null;
   };
-  const specItems = async (spec, trace4) => {
+  const specItems = async (spec, trace2) => {
     const cached2 = parsedSpecs.get(spec);
-    if (cached2 && cached2.at <= trace4.length && !writesPath(trace4.slice(cached2.at), spec)) return cached2.items;
+    if (cached2 && cached2.at <= trace2.length && !writesPath(trace2.slice(cached2.at), spec)) return cached2.items;
     const text2 = await readSpec(run, spec, note);
     if (text2 == null) {
       parsedSpecs.delete(spec);
       return null;
     }
     const items = parseSpecOpenItems(text2);
-    parsedSpecs.set(spec, { items, at: trace4.length });
+    parsedSpecs.set(spec, { items, at: trace2.length });
     return items;
   };
   return async (ctx) => {
@@ -21982,18 +15460,31 @@ function specTicketCoverageGate(run) {
     if (asksThePerson(ctx.content)) return null;
     if (!isSpecTicketingRequest(run.userRequest)) return null;
     if (run.serverChatId != null && !declaresChatTicketListing(req.tools)) return null;
-    const trace4 = runTrace(run.c);
-    const specs = specPathsFor(run.userRequest, trace4);
+    const trace2 = runTrace(run.c);
+    const specs = specPathsFor(run.userRequest, trace2);
     if (!specs.length) return null;
     const items = [];
     for (const spec of specs) {
-      const list2 = await specItems(spec, trace4);
-      if (list2 != null) items.push({ spec, items: list2 });
+      const list = await specItems(spec, trace2);
+      if (list != null) items.push({ spec, items: list });
     }
     if (!items.length) return null;
-    const tickets = await coverageTickets(run, trace4, noteEv);
+    const tickets = await coverageTickets(run, trace2, noteEv);
     if (!tickets) return null;
-    const missing = items.flatMap(({ spec, items: list2 }) => specTicketCoverage(list2, tickets).missing.map((i) => ({ ...i, spec })));
+    const coverage = items.map(({ spec, items: list }) => ({ spec, list, ...specTicketCoverage(list, tickets) }));
+    const missing = coverage.flatMap(({ spec, missing: list }) => list.map((i) => ({ ...i, spec })));
+    const covered = coverage.flatMap(({ spec, covered: matches, list }) => {
+      const byId = new Map(list.map((item) => [item.id, item]));
+      return matches.map(({ itemId, ticketIds }) => ({
+        id: `${spec}#${itemId}`,
+        criteria: [byId.get(itemId)?.title ?? itemId],
+        detail: `Linked ticket: ${ticketIds.join(", ")}`
+      }));
+    });
+    if (ctx.state) recordWorkSnapshot(ctx.state, "spec-ticket-coverage", [
+      ...missing.map((item) => ({ id: `${item.spec}#${item.id}`, criteria: [item.title] })),
+      ...covered
+    ], covered.map(({ id, detail }) => ({ id, detail, status: "done" })));
     if (!missing.length) return null;
     const key = missing.map((i) => `${i.spec}#${i.id}`).sort().join("|");
     const times = (seen.get(key) ?? 0) + 1;
@@ -22007,6 +15498,16 @@ function specTicketCoverageGate(run) {
       repeat: times > 1
     });
     return times === 1 ? fileTicketsBlock(missing) : reportBlock(missing);
+  };
+}
+
+// src/runStore/compactionSaved.ts
+function stampOncePerCall(stamped2, plain2) {
+  let used = false;
+  return () => {
+    if (used) return plain2;
+    used = true;
+    return stamped2;
   };
 }
 
@@ -22128,6 +15629,7 @@ async function recordTurn(run, t) {
       // nothing to act with" — previously unanswerable from a copied report, which
       // only ever carried the registry-wide total.
       advertisedTools: advertised.length,
+      ...t.forcedFinish ? { forcedFinish: true } : {},
       catalogTools: allTools?.length ?? 0,
       ...narratedUnadvertised.length ? { narratedUnadvertised } : {},
       // A turn that WAS handed tools but answered IN PROSE with zero structured calls:
@@ -22201,7 +15703,7 @@ ${block}` : block : lead;
 async function commitTurnNarration(run, result, requested) {
   await persistMidTurnText(run.chatId, run.c, run.req.persistence, result, requested);
   run.c.streamingText = "";
-  emit2(run.c);
+  emit(run.c);
 }
 
 // src/runStore/turnStream.ts
@@ -22211,7 +15713,7 @@ function openLiveTurn(c, step) {
   const composing = createComposingActivity(
     { set: (a) => {
       c.activity = a;
-    }, repaint: () => emit2(c), coalescedRepaint: () => emitStreaming(c) },
+    }, repaint: () => emit(c), coalescedRepaint: () => emitStreaming(c) },
     { step }
   );
   const handlers = {
@@ -22222,7 +15724,7 @@ function openLiveTurn(c, step) {
       if (firstTokenAt === void 0) {
         firstTokenAt = nowMs2();
         c.activity = { phase: "writing", startedAt: Date.now(), step };
-        emit2(c);
+        emit(c);
         return;
       }
       emitStreaming(c);
@@ -22241,10 +15743,22 @@ function openLiveTurn(c, step) {
       c.streamingText = "";
       firstTokenAt = void 0;
       composing.reset();
-      emit2(c);
+      emit(c);
     }
   };
 }
+
+// src/run/transportFailure.ts
+var BrainTransportFailure = class extends Error {
+  failure;
+  original;
+  constructor(original, failure) {
+    super(original instanceof Error ? original.message : String(original));
+    this.name = "BrainTransportFailure";
+    this.failure = failure;
+    this.original = original;
+  }
+};
 
 // src/run/brainTurn.ts
 function brainTurnObserver(run, savedTokens = () => 0) {
@@ -22263,7 +15777,7 @@ function brainTurnObserver(run, savedTokens = () => 0) {
         turns += 1;
         last.step = step;
         c.streamingText = "";
-        emit2(c);
+        emit(c);
         const effect = callMemoryEffect(savedTokens(), run.recallBlockTokens);
         turn = {
           step,
@@ -22290,26 +15804,22 @@ function brainTurnObserver(run, savedTokens = () => 0) {
         call: { prompt_cache_key: `brain:${run.serverChatId ?? req.clientChatId ?? "local"}`, conversationKey: run.chatId },
         fit: (messages, model) => run.windowFit.prepare({ messages, ...model ? { model } : {}, ...tools.length > 0 ? { tools } : {}, maxTokens, step: t.step }),
         around: (stream) => asLiveTurn(c, stream),
-        recover(error) {
-          if (reask) return void 0;
-          const failure = providerFailureEvent(error);
-          const outcome = failure ? reportToPolicy(run, failure).outcome : null;
-          if (!outcome || outcome.kind !== "retry_turn") return void 0;
-          pushTrace(c, transportRetryTrace(nowIso(), t.step, outcome, error.message));
-          t.live.restart();
-          const ask2 = nextTurn(run.policy, { hasTools: tools.length > 0 });
-          t.role = ask2.role;
-          return { ...ask2.model ? { model: ask2.model } : {}, strict: ask2.strict, role: ask2.role, excludeModels: ask2.excludeModels };
-        },
         completed(result) {
           last.error = void 0;
-          last.pending = { result, step: t.step, llmStart: t.llmStart, live: t.live, role: t.role, tools };
+          last.abandonedFailure = void 0;
+          last.pending = { result, step: t.step, llmStart: t.llmStart, live: t.live, role: t.role, tools, ...request.forcedFinish ? { forcedFinish: true } : {} };
         },
         failed(error) {
           if (!c.abort?.signal.aborted) {
             const broke = error instanceof StreamInterruptedError && error.model || run.policy.model;
-            pushTrace(c, providerFailureTrace(nowIso(), t.step, broke, error, nowMs2() - t.llmStart));
             last.error = error;
+            const trace2 = providerFailureTrace(nowIso(), t.step, broke, error, nowMs2() - t.llmStart);
+            const failure = reask ? null : providerFailureEvent(error);
+            if (failure) {
+              last.abandonedFailure = () => pushTrace(c, trace2);
+              return new BrainTransportFailure(error, failure);
+            }
+            pushTrace(c, trace2);
           }
           return error;
         }
@@ -22342,12 +15852,12 @@ async function keep(run, last, a) {
     resolved,
     requested,
     advertised: a.tools,
-    advertisedNames: new Set(a.tools.map((t) => t.function.name))
+    advertisedNames: new Set(a.tools.map((t) => t.function.name)),
+    ...a.forcedFinish ? { forcedFinish: true } : {}
   });
   last.result = result;
   last.requested = requested;
   if (result.toolCalls.length === 0 || !run.req.runTool) return;
-  run.progress.noteTurnText(result.text);
   const calls = result.toolCalls.map((tc) => ({ name: tc.name, ...parseToolArgs(tc.args) }));
   last.terminal = terminalAskReply(run, result, calls, a.step);
   if (last.terminal === void 0) await commitTurnNarration(run, result, requested);
@@ -22398,7 +15908,7 @@ function buildBrainRunPorts(b) {
       // fit (`windowFit.prepare`, its `llm.handoff` step) loses nothing by saying it: the agent sizes a tool result from it.
       ...req.windowSources ? { windows: req.windowSources } : {}
     }), req),
-    capabilities: b.capabilities,
+    ...b.capabilities ? { capabilities: b.capabilities } : {},
     store: b.store,
     ...b.platform ? { platform: b.platform } : {},
     ...b.delivery ? { delivery: b.delivery } : {},
@@ -22415,6 +15925,7 @@ function brainRunTask(b) {
   const { req } = b;
   return {
     prompt: b.request,
+    ...req.work ? { assignedWork: req.work.assigned } : {},
     ...req.serverChatId != null ? { chatId: req.serverChatId } : {},
     ...req.projectId != null ? { projectId: req.projectId } : {},
     dispatch: req.lineage ? { source: "subagent", parentRunId: String(req.lineage.ownerKey) } : { source: "chat" }
@@ -22422,33 +15933,30 @@ function brainRunTask(b) {
 }
 function brainRunPolicy(b) {
   const { req } = b;
-  const seed = b.start?.pinnedModel ?? req.model;
   return {
     entryPoint: b.entryPoint,
     // Both modes offer the full catalog (`runPreamble.ts`): the mode changes the directive the model reads, never the menu.
     toolScope: req.lineage ? "subagent" : "chat-work",
     role: "general",
-    // A3's detector (and its device lever) is the Brain's `RunProgressGuard`, which the platform tools run, so the run has ONE
-    // detector (`brainPlatformTools.ts`) and the agent's A3 stays off. D8 is the one guard lever on: the independent read-only calls
-    // of one model turn (read_file, search_code, git_diff, ...) dispatch concurrently instead of one after another (chat #61651).
-    levers: deviceLeverOn("d8_parallel_tool_calls") ? ["d8_parallel_tool_calls"] : [],
+    // Shared guards own progress detection and independent tool-call batching.
+    levers: [
+      ...deviceLeverOn("a3_progress_detector") ? ["a3_progress_detector"] : [],
+      ...deviceLeverOn("d8_parallel_tool_calls") ? ["d8_parallel_tool_calls"] : []
+    ],
     // A Brain run has NO tool-iteration ceiling: the kernel's consecutive-failure breaker
     // is its only limit (`@builderforce/agent-loop`'s `DEFAULT_TOOL_FAILURE_STREAK`).
     budgets: req.maxRunBudgetUsd && req.maxRunBudgetUsd > 0 ? { usd: req.maxRunBudgetUsd } : {},
     codeChangeTools: [...CODE_CHANGE_TOOLS],
-    ...req.model && req.modelStrict ? { pinnedModel: req.model } : {},
     // The person's Stop is the composer's button: a steered "stop" is words to the model, never a command the run obeys.
     stopWords: false,
-    // The Brain's hand-off: a plain policy that starts in the phase the run's role and route say, on the stage models the host chose.
-    // The model a routed QUICK run seeds (its quick model, over a soft model) outranks the request's own, as the preamble's policy has it.
-    ...b.start ? { modelStart: { plain: true, ...seed ? { model: seed } : {}, strict: !!req.modelStrict, ...b.start.startPhase ? { startPhase: b.start.startPhase } : {}, ...b.start.phaseModels ? { phaseModels: b.start.phaseModels } : {} } } : {},
+    // The Brain's hand-off: a plain policy. The request's model is stated HERE and nowhere else (`modelStart.model`, strict when the person
+    // picked it); the start phase, the host's stage models and a routed QUICK run's model (over a soft one) are folded in by `openRun`'s
+    // `routedPolicy` from the route input, the ONE path they take.
+    modelStart: { plain: true, ...req.model ? { model: req.model } : {}, strict: !!req.modelStrict },
     inference: "hybrid",
     verify: "none",
-    // Governance gates are unbound on the Brain BY DECISION (parity ruling R10): its request carries none and no human channel approves one.
-    // Binding them later means gating INSIDE this surface's own preflight (`brainPlatformTools.ts` `preflight`, which rewrites a router call and
-    // answers `hand_off` itself), before its side effects, on the tool a call will actually run. It does not mean gating in the kernel hook:
-    // that runs after the preflight has acted, misses a router call the preflight answers, and would ask a `require-approval` twice.
-    approvalGates: [],
+    // Share the host's gate snapshot. A native host with alias and workspace resolution owns authorization after rewriting.
+    approvalGates: [...req.opening?.gates ?? []],
     // A model that spent its whole stall budget still describing calls ends the run on what it said, the reason beside it (`brainDelivery.ts`).
     stallExhausted: "settle",
     // The Brain's delegation gate (`earlyDelegation.ts` on the read result, the delivery ledger's rung at the end) is the run's ONE
@@ -22470,7 +15978,6 @@ async function runPrepared(run) {
   const binding = {
     entryPoint: req.entryPoint,
     req,
-    capabilities: { capabilities: /* @__PURE__ */ new Set() },
     request: run.userRequest,
     turn: observer,
     platform: platform.tools,
@@ -22484,13 +15991,10 @@ async function runPrepared(run) {
       // The turn recorder writes the model downgrade, and the steering port records each direction it drains.
       recorded: /* @__PURE__ */ new Set(["llm.model_downgrade", "steer.applied"])
     }),
-    // The route's start (phase, stage models, a quick run's model) is folded in by `openRun` from `route`; this seeds the request's own model.
-    start: {},
     ship: run.shipPolicy,
-    // From here the model policy is the AGENT's: the Brain's guards read `run.policy` and report to it through the view.
+    // From here the model policy is the AGENT's: the Brain's guards read `run.policy` (the view's) and report to it through the view.
     attach: (view) => {
       run.view = view;
-      Object.defineProperty(run, "policy", { get: () => view.policy(), configurable: true });
     },
     // A question ends the run before any call dispatches (decided once per turn in `brainTurn.ts`).
     extensions: {
@@ -22508,28 +16012,36 @@ async function runPrepared(run) {
     ...spend ? { spend } : {},
     store: brainRunStorePort(c, { toolRowAppended: platform.toolRowAppended, personSteer: people.take })
   };
-  const transcript = [{ role: "system", content: run.systemPrompt }, ...run.convo.map(toRunMessage)];
+  const transcript = run.convo.map(toRunMessage);
   const request = transcript.map((row) => row.role).lastIndexOf("user");
   if (request >= 0) transcript[request] = { ...transcript[request], task: true };
   const ports = buildBrainRunPorts(binding);
   const signal = c.abort?.signal;
   const outcome = await openRun({
-    task: { ...brainRunTask(binding), transcript },
+    task: { ...brainRunTask(binding), runId: c.runId, persona: run.systemPrompt, transcript },
     policy: brainRunPolicy(binding),
     ports: { ...ports, model: withoutUncallableTurns(ports.model, req) },
-    // The run's route, decided once in the preamble (`runStore/runRoute.ts`): the agent's own `routeRun` over the same input.
-    route: run.route.input,
+    // The run's route, decided ONCE in the preamble (`runStore/runRoute.ts`): handed over as decided, so `openRun` folds it and never routes again.
+    route: { input: run.route.input, decided: decidedRoute(run.route) },
     surface: {
-      // The Brain's own fold (`brainFold.ts`), not the agent's compaction adapted to imitate it.
-      compaction: { hook: compaction.hook },
+      // Native history and transport ports; the shared factory owns folding policy.
+      compaction: compaction.options,
       // The preamble ran the host's model preflight already (`hostRunContext.ts`): the agent's own would ask the host again and warn
-      // about a model the loop never warned about (a QUICK run's quick model), so the Brain's says the verdict and nothing more.
+      // about a model the loop never warned about (a QUICK run's quick model). Supply facts; the shared model factory records the verdict.
       preflight: recordedPreflight(c, req.model),
       // The host's engine ports (`brainFinish.ts`): an owner never ends with its sub-agents still working, and the open-work gate
       // sequence holds the run's open linked tickets, then the spec items a ticketing request still owes.
+      guards: brainGuardPorts(run),
       finish: brainFinishPorts(req, [openLinkedWorkHold(run), specTicketCoverageGate(run)]),
       // The deterministic close-out (`runStore/deterministicFinish.ts`): the host's own ticket actions, ahead of the finish gate.
-      closeOut: closeOutPort(run)
+      closeOut: closeOutPort(run),
+      verify: {
+        recorded: () => {
+          if (!c.touchedFiles.length) return void 0;
+          const result = verificationOf(run.evidence, c.touchedFiles);
+          return result.verified ? true : result.failed ? false : void 0;
+        }
+      }
     },
     // The Brain's read-coverage owns the no-progress counter (`callPreflight`/`callPostStep`
     // feed it); hand the kernel that ONE instance to persist, so a circling run keeps its count
@@ -22537,7 +16049,7 @@ async function runPrepared(run) {
     cacheStreak: run.cacheStreak,
     ...signal ? { signal } : {}
   });
-  await settleBrainRun(run, outcome, last);
+  await measureWorkflow(binding.events, { runId: c.runId, entryPoint: req.entryPoint, step: outcome.state.step, operation: "host_settle" }, "settle", () => settleBrainRun(run, outcome, last));
 }
 
 // src/runStore/beginRun.ts
@@ -22598,7 +16110,6 @@ async function startRun(runKey, request, claim) {
   }
   const lineage = request.lineage;
   const chatId = savedChatOf(runKey, lineage);
-  const serverChatId = resolveServerChatId(chatId, request);
   const steps = batchStepPersistence(request.persistence, stepDurabilityFor(chatId, runKey));
   const runPersistence = lineage ? lineagePersistence(steps.persistence, lineage, (msg) => appendRunMessage(chatId, msg)) : steps.persistence;
   let agentRow;
@@ -22616,14 +16127,13 @@ async function startRun(runKey, request, claim) {
     c.priorResearch = req.priorResearch ?? null;
   }
   if (opening.turn) c.transcript.push(opening.turn);
-  emit2(c);
+  emit(c);
   c.runUsage = emptyRunUsage();
-  let openPlaceholders = () => 0;
+  c.closeOutFinished = false;
   let evidence;
   try {
-    const prepared = await prepareBrainRun(chatId, c, req, runKey, holdRunRow);
+    const prepared = await measureWorkflow(brainEventSink(c), { runId: c.runId, entryPoint: req.entryPoint, step: 0 }, "surface", () => prepareBrainRun(chatId, c, req, runKey, holdRunRow), void 0, c.abort?.signal);
     if (prepared) {
-      openPlaceholders = () => prepared.placeholderLedger.outstanding().length;
       evidence = prepared.evidence;
       noteRunId(c, prepared.metadata.guestTurnId);
       await runPrepared(prepared);
@@ -22647,40 +16157,12 @@ async function startRun(runKey, request, claim) {
       if (aborted) await within(left(), async () => {
         await keepStoppedTurn(chatId, c, req.persistence, () => c.runId === runId);
       }, () => void 0);
-      if (!aborted && c.codeChanged && req.projectId != null && req.runTool) {
-        c.activity = { phase: "finishing", startedAt: Date.now(), step: 0 };
-        emit2(c);
-      }
       const changed2 = c.codeChanged;
-      const trace4 = runTrace(c);
-      const shipped = !aborted && changed2 && shippedToBaseBranch(trace4, { touchedFiles: c.touchedFiles });
-      const reviewedInPreview = !aborted && changed2 ? ticketsReviewedInPreview(trace4) : [];
-      const view = settleView(c, runId);
-      const needsTicket = !aborted && changed2 && req.projectId != null && !!req.runTool;
-      const openPh = openPlaceholders();
+      const trace2 = runTrace(c);
+      const shipped = !aborted && changed2 && shippedToBaseBranch(trace2, { touchedFiles: c.touchedFiles });
       const verification = verificationOf(evidence, c.touchedFiles);
-      const hasTicket = view.deltaTicketId != null || localTicketsFiledInRun(trace4).length > 0;
-      const closeOut = { serverChatId, view, req, needsTicket, shipped, reviewedInPreview, openPlaceholders: openPh, trace: trace4, evidence, verified: verification.verified, hasTicket };
-      c.finishClosedOut = true;
-      await within(left(), async () => {
-        if (!closeOut.hasTicket && finishConditionMet({ ...closeOut, hasTicket: true })) closeOut.hasTicket = await holdsLinkedTicket(trace4, serverChatId, req, { deltaTicketId: view.deltaTicketId, note: view.note, listing: view.listing });
-        await deterministicFinish(closeOut, { c, req, serverChatId, recalled: null });
-      }, () => view.note?.({
-        ts: nowIso(),
-        category: "message",
-        label: "run.backstop_timeout",
-        args: { waitedMs: continuationLimits.settleMs },
-        result: "The run's ticket bookkeeping did not finish in time; the run is settled without waiting for it."
-      }), (e) => view.note?.({
-        ts: nowIso(),
-        category: "message",
-        label: "run.backstop_failed",
-        args: { error: e instanceof Error ? e.message : String(e) },
-        result: "The run's ticket bookkeeping failed; the run is settled without it."
-      }));
-      c.finishClosedOut = true;
       forgetChatTicketListing(c);
-      const finished = finishConditionMet(closeOut);
+      const finished = c.closeOutFinished;
       if (req.continuationProgress) noteContinuationProgress(runKey, changed2 || verification.verified);
       const finalTrace = runTrace(c);
       const requestText = req.userTurn === void 0 ? void 0 : contentText(req.userTurn);
@@ -22699,20 +16181,25 @@ async function startRun(runKey, request, claim) {
         askedForChange: !wakeTurn && asksForChange(requestText)
       });
       if (outcome) {
-        void req.reportOutcome(agentRow ? { ...parseRunOutcomeTelemetry({ ...agentRow }), ...outcome } : outcome).catch(() => void 0);
+        const routingSignal = workSupportsRoutingSample(agentRow?.work, outcome.terminalStatus === "completed");
+        void req.reportOutcome({
+          ...agentRow ? parseRunOutcomeTelemetry({ ...agentRow }) : {},
+          ...outcome,
+          ...routingSignal ? {} : { routingSignal: false }
+        }).catch(() => void 0);
       } else if (agentRow && req.reportRunRecord) {
-        const held = agentRow.model?.trim() ? agentRow : { ...agentRow, model: askedModelOf(req.model, trace4) };
-        const record2 = runOutcomeRequestOf(held, { clientRunId: c.runId, stopped: aborted, projectId: req.projectId });
-        if (record2) void req.reportRunRecord({ ...record2, steps: completedTurns(trace4).length, routingSignal: false }).catch((e) => unrecorded2(c, e));
+        const held = agentRow.model?.trim() ? agentRow : { ...agentRow, model: askedModelOf(req.model, trace2) };
+        const record = runOutcomeRequestOf(held, { clientRunId: c.runId, stopped: aborted, projectId: req.projectId });
+        if (record) void req.reportRunRecord({ ...record, steps: completedTurns(trace2).length, routingSignal: false }).catch((e) => unrecorded(c, e));
       }
       reportRunEnd(c, req, { aborted, failed: c.error !== "" });
       c.persistStep = null;
       c.activity = null;
-      emit2(c);
+      emit(c);
       await within(left(), async () => {
         await steps.flush();
       }, () => void 0);
-      if (continues && !finished && !aborted) await continueLeftovers(runKey, c, startRun, settleClaim);
+      if (continues && !aborted) await continueLeftovers(runKey, c, startRun, settleClaim, finished);
     } finally {
       releaseClaim(c, settleClaim);
     }
@@ -22899,9 +16386,9 @@ function useBrainChats(options = {}) {
     setError("");
     try {
       const params = pinnedProjectId != null ? { projectId: String(pinnedProjectId) } : filterProjectId === "none" ? { projectId: "none" } : filterProjectId ? { projectId: filterProjectId } : void 0;
-      const list2 = await persistence.listChats(params);
+      const list = await persistence.listChats(params);
       const shown = pendingRequestRef.current;
-      setChats(shown.size === 0 ? list2 : list2.map((c) => shown.has(c.id) && !c.originalRequest?.trim() ? { ...c, originalRequest: shown.get(c.id) } : c));
+      setChats(shown.size === 0 ? list : list.map((c) => shown.has(c.id) && !c.originalRequest?.trim() ? { ...c, originalRequest: shown.get(c.id) } : c));
       if (persistence.listArchivedChats) {
         try {
           setArchivedChats(await persistence.listArchivedChats(params));
@@ -23159,7 +16646,7 @@ async function startEngineRun(key, engine) {
   c.trace = [];
   beginRun(c);
   c.turn = { id: null, startedAt: Date.now() };
-  emit2(c);
+  emit(c);
   const signal = c.abort.signal;
   const control = {
     signal,
@@ -23168,7 +16655,7 @@ async function startEngineRun(key, engine) {
     correlate: (id) => {
       if (c.turn && !signal.aborted) {
         c.turn = { ...c.turn, id };
-        emit2(c);
+        emit(c);
       }
     }
   };
@@ -23188,7 +16675,7 @@ async function startEngineRun(key, engine) {
     c.turn = null;
     c.pendingConfirm = null;
     c.confirmResolver = null;
-    emit2(c);
+    emit(c);
   }
   return true;
 }
@@ -23274,8 +16761,8 @@ function useChatTranscript(persistence, chatId, snapshot, callbacks) {
     loading.current = true;
     setLoadingMessages(true);
     cb.current.onLoadStart();
-    persistence.getMessages(chatId).then((list2) => {
-      if (!cancelled) setHeld({ chatId, list: mergeTranscript(list2, getRunSnapshot(chatId).appended) });
+    persistence.getMessages(chatId).then((list) => {
+      if (!cancelled) setHeld({ chatId, list: mergeTranscript(list, getRunSnapshot(chatId).appended) });
     }).catch((e) => {
       if (!cancelled) cb.current.onLoadError(e instanceof Error ? e.message : "Failed to load messages");
     }).finally(() => {
@@ -23583,9 +17070,9 @@ function usageOfRow(m) {
   rowUsage.set(m, found);
   return found;
 }
-function contextUsageOf(messages, trace4) {
-  for (let i = trace4.length - 1; i >= 0; i--) {
-    const ev = trace4[i];
+function contextUsageOf(messages, trace2) {
+  for (let i = trace2.length - 1; i >= 0; i--) {
+    const ev = trace2[i];
     if (ev.category !== "llm" || ev.label !== LLM_COMPLETE) continue;
     const found = usageFrom(ev.args, ev.usage);
     if (found) return found;
@@ -23722,11 +17209,12 @@ function useLaunchCancel(sendingRef) {
 function useBrainConversation(options) {
   const { persistence, resolveSystemPrompt, stream, imagePrep } = useBrainConfig();
   const {
-    entryPoint: entryPoint2,
+    entryPoint,
     chatId,
     modality = "designer",
     projectId,
     extraSystem,
+    opening,
     systemPrompt,
     model,
     modelStrict,
@@ -23801,8 +17289,9 @@ ${extraSystem}` : resolvedSystemPrompt;
       const seed = transcriptSeedOf(history);
       const injectedTurnIds = [...injectedTurnIdsOf(history), ...turnInjected && userTurnMessageId != null ? [userTurnMessageId] : []];
       return {
-        entryPoint: entryPoint2,
+        entryPoint,
         resolvedSystemPrompt: fullSystemPrompt,
+        ...opening ? { opening } : {},
         tools: toolSpecs && toolSpecs.length > 0 ? toolSpecs : void 0,
         model,
         modelStrict,
@@ -23831,7 +17320,7 @@ ${extraSystem}` : resolvedSystemPrompt;
         chatRoster
       };
     },
-    [entryPoint2, fullSystemPrompt, toolSpecs, model, modelStrict, routingMode, pickFallbackModel, windowSources, onDeviceTasks, maxTokens, reasoning, runTool, needsConfirm, answerQuestion, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId, chatMode, chatRoster]
+    [entryPoint, fullSystemPrompt, opening, toolSpecs, model, modelStrict, routingMode, pickFallbackModel, windowSources, onDeviceTasks, maxTokens, reasoning, runTool, needsConfirm, answerQuestion, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId, chatMode, chatRoster]
   );
   const bindContinuation = useContinuation(persistence, prepareRun);
   const launch = useCallback12(async (id, request, draftSend = null) => {
@@ -24240,7 +17729,7 @@ function noteRunStep(key, step) {
   const c = cells.get(key);
   if (!c) return;
   pushTrace(c, { ts: nowIso(), category: "message", label: step.label, ...step.args ? { args: step.args } : {}, result: step.result });
-  emit2(c);
+  emit(c);
 }
 
 // src/indexedDbStepDurability.ts
@@ -24269,7 +17758,7 @@ var MAX_FACT = 600;
 var MAX_READ_PATH = 300;
 var MAX_ASK = 4e3;
 var TASK_STATE_TOOL = "update_task_state";
-function failed2(ev) {
+function failed(ev) {
   return ev.isError === true || isFailedToolResult(ev.result);
 }
 function rememberNewest(facts, fact) {
@@ -24285,12 +17774,12 @@ function resumeStateOf(ask2, events) {
   const read = [];
   for (const ev of tools) {
     const args = ev.args && typeof ev.args === "object" ? ev.args : {};
-    if (ev.label === TASK_STATE_TOOL && !failed2(ev)) {
+    if (ev.label === TASK_STATE_TOOL && !failed(ev)) {
       const next = applyTaskStateUpdate(task, args);
       if (next.ok) task = next.state;
       continue;
     }
-    if (!failed2(ev)) {
+    if (!failed(ev)) {
       if (REMEMBER_FACT_TOOLS.has(ev.label)) {
         const fact = savedFactOf(args);
         if (fact) rememberNewest(facts, fact);
@@ -24302,7 +17791,7 @@ function resumeStateOf(ask2, events) {
   }
   const steps = tools.filter((ev) => ev.label !== TASK_STATE_TOOL).slice(-RESUME_STEPS).map((ev) => {
     const target2 = activityTarget(ev.args);
-    return `${ev.label}${target2 ? ` on ${target2}` : ""} \u2014 ${failed2(ev) ? "failed" : "ok"}`;
+    return `${ev.label}${target2 ? ` on ${target2}` : ""} \u2014 ${failed(ev) ? "failed" : "ok"}`;
   });
   const plan = renderTaskState(task);
   const asked = ask2?.trim();
@@ -24317,8 +17806,8 @@ function resumeStateOf(ask2, events) {
 }
 var strings = (value, cap) => {
   if (!Array.isArray(value)) return void 0;
-  const list2 = value.filter((v) => typeof v === "string" && v.trim() !== "");
-  return list2.length ? cap ? list2.slice(0, cap) : list2 : void 0;
+  const list = value.filter((v) => typeof v === "string" && v.trim() !== "");
+  return list.length ? cap ? list.slice(0, cap) : list : void 0;
 };
 var factsOf = (value) => {
   if (!Array.isArray(value)) return void 0;
@@ -24519,7 +18008,7 @@ function ordinalWord(n2) {
 }
 
 // src/index.ts
-import { HISTORY_TOKEN_BUDGET as HISTORY_TOKEN_BUDGET3 } from "@seanhogg/builderforce-memory/working";
+import { HISTORY_TOKEN_BUDGET as HISTORY_TOKEN_BUDGET2 } from "@seanhogg/builderforce-memory/working";
 
 // src/apiVersion.ts
 var API_VERSION_TTL_MS = 6e4;
@@ -24598,163 +18087,6 @@ import {
   lastConsolidationIndex,
   scopeToConsolidation as scopeToConsolidation3
 } from "@seanhogg/builderforce-memory/working";
-
-// src/agentPool.ts
-var DEFAULT_AGENT_MODEL_SENTINEL = "builderforce-default";
-var AGENT_POOL_PATHS = {
-  owned: "/api/workforce/agents/mine",
-  purchased: "/api/workforce/agents/purchased",
-  registered: "/api/agent-registrations"
-};
-function poolAgentsFrom(input) {
-  const wfById = /* @__PURE__ */ new Map();
-  for (const a of [...input.owned, ...input.purchased]) wfById.set(String(a.id), a);
-  const workforce = [...wfById.values()].map((a) => ({
-    kind: "workforce",
-    ref: String(a.id),
-    name: a.name,
-    meta: a.title || a.base_model || "",
-    baseModel: a.base_model && a.base_model !== DEFAULT_AGENT_MODEL_SENTINEL ? a.base_model : null
-  }));
-  const registered = input.registered.filter((a) => a.status === "active").map((a) => ({ kind: "registered", ref: String(a.id), name: a.name, meta: a.framework, baseModel: null }));
-  return [...workforce, ...registered];
-}
-async function loadAgentPoolVia(request) {
-  const [owned, purchased, registered] = await Promise.all([
-    request(AGENT_POOL_PATHS.owned).catch(() => []),
-    request(AGENT_POOL_PATHS.purchased).catch(() => []),
-    request(AGENT_POOL_PATHS.registered).catch(() => [])
-  ]);
-  return poolAgentsFrom({ owned: owned ?? [], purchased: purchased ?? [], registered: registered ?? [] });
-}
-
-// src/brainPersona.ts
-var PERSONA_MODALITY_IDS = ["designer", "mobile", "webmobile", "evermind", "finetune", "voice"];
-var STRATEGY_OKR_NOTE = 'Strategy and goals live as OKRs/Objectives (Objectives + Key Results) in their own tables \u2014 not as tasks on the Kanban board. When the user talks about goals, outcomes, or strategy, you can create and link Objectives and Key Results, and promote an epic titled like "OKR \u2026" into a real Objective, using the platform tools.';
-var FILE_DELIVERY_RULE = [
-  "DELIVER CODE BY WRITING IT. Every file you produce goes into the project through your file tools: create new files, and change existing ones in place with the edit tool rather than rewriting them. The user is looking at a live Preview that shows only what you have written.",
-  'NEVER hand the user code to copy, paste, add or apply by hand, and never answer with a code block in place of a file write \u2014 not for a stylesheet, not for "the rest of the file", not as a last resort after a failed write.',
-  "When a write fails, read its error, fix the call and issue it again. When a file is too long for one call, write a smaller working first version and extend it with further edits.",
-  "Only if you have NO tool that writes files at all, give each file as a code block whose language tag is its path (```src/App.jsx), and say that this surface cannot write files."
-].join("\n");
-var BASE_PERSONAS = {
-  designer: {
-    label: "Website",
-    icon: "\u{1F310}",
-    prompt: [
-      "You are an expert AI coding assistant built into Builderforce.ai, a browser-based Builder. Help users generate and build websites and web apps.",
-      "When the user describes an app to build, SCAFFOLD IT COMPLETELY in this turn: write every file the app needs to actually run \u2014 an index.html entry, a package.json with real dependencies and a `build` script, and all of the src/ components \u2014 so the live Preview renders a working app immediately, not a single snippet. Default to a Vite + React app unless the user asks for something else. List the project's files before writing, so you build on the starter rather than over it. When you have scaffolded the app, tell the user in one line what you built and that Preview is live and it is ready to Publish.",
-      "Use markdown for your prose: headings, lists and bold.",
-      FILE_DELIVERY_RULE
-    ].join("\n")
-  },
-  mobile: {
-    label: "Mobile",
-    icon: "\u{1F4F1}",
-    prompt: [
-      "You are an expert mobile app developer operating Builderforce.ai's Canvas Builder. The user is building a MOBILE app and previews it in a phone-sized device simulator.",
-      'The project is a React Native app rendered for the web through react-native-web, so it runs in the browser preview AND stays portable to Expo. Import components (View, Text, Pressable, ScrollView, StyleSheet, FlatList) from "react-native" \u2014 never use HTML elements like div, span or button, and never use CSS files or className.',
-      "Style with StyleSheet.create and flexbox. Remember there is no hover: design for touch, keep tap targets at least 44 points, and respect safe areas at the top and bottom of the screen.",
-      "Design for a narrow portrait viewport (roughly 390 x 850 points) first. Prefer native navigation patterns \u2014 tab bars, stack headers, bottom sheets \u2014 over desktop patterns like sidebars and hover menus.",
-      FILE_DELIVERY_RULE
-    ].join("\n")
-  },
-  webmobile: {
-    label: "Web + Mobile",
-    icon: "\u{1F5A5}\uFE0F",
-    prompt: [
-      "You are an expert full-stack app developer built into Builderforce.ai's browser Builder. The user is building ONE app that ships as BOTH a responsive web application AND a mobile app, from a single codebase.",
-      'The project is a React app rendered through react-native-web, so the SAME source runs full-width as a website AND inside a phone-sized device simulator, and stays portable to Expo for native iOS/Android. Import components (View, Text, Pressable, ScrollView, StyleSheet, FlatList) from "react-native" \u2014 never use HTML elements like div, span or button, and never use CSS files or className.',
-      "Style with StyleSheet.create and flexbox, and make layouts RESPONSIVE: use flex, percentage widths and useWindowDimensions to adapt between a wide desktop viewport and a narrow phone one. Keep tap targets at least 44 points and respect safe areas \u2014 there is no hover on mobile.",
-      FILE_DELIVERY_RULE
-    ].join("\n")
-  },
-  evermind: {
-    label: "Evermind",
-    icon: "\u{1F9E0}",
-    prompt: [
-      "You are assisting with growing an Evermind \u2014 Builderforce.ai's self-updating model that learns continuously (Write-Through Cognition) instead of being frozen after training.",
-      "Help the user teach it: draft facts, skills, and examples to feed it, reason about what it has learned, and interpret its Knowledge Map (neocortex / hippocampus / limbic regions).",
-      "This is NOT classic fine-tuning \u2014 the model updates in place as it learns. Keep guidance oriented around teaching and recall, not training runs or LoRA adapters."
-    ].join("\n")
-  },
-  finetune: {
-    label: "Fine-tune",
-    icon: "\u{1F527}",
-    prompt: [
-      "You are assisting with building and fine-tuning a custom LLM inside Builderforce.ai. This is the classic pipeline: design a dataset, train a LoRA adapter in-browser (WebGPU), benchmark it, then publish and export it.",
-      "Help the user draft instruction/response pairs, choose a base model and training hyperparameters, and reason about training runs and benchmark results."
-    ].join("\n")
-  },
-  voice: {
-    label: "Voice",
-    icon: "\u{1F399}",
-    prompt: [
-      "You are a voice director inside Builderforce.ai's Voice Studio.",
-      "The user enrolls a reference sample to clone a voice (SSM/WebGPU acoustic model) and then synthesizes speech from typed text.",
-      "Help them write natural, well-punctuated lines to synthesize, and advise on pacing, emphasis, and tone."
-    ].join("\n")
-  }
-};
-var MODALITY_PERSONAS = Object.fromEntries(
-  PERSONA_MODALITY_IDS.map((id) => [id, { ...BASE_PERSONAS[id], prompt: `${BASE_PERSONAS[id].prompt}
-${STRATEGY_OKR_NOTE}` }])
-);
-var DEFAULT_PERSONA = "default";
-function modalityPersonaChoice(id) {
-  return `modality:${id}`;
-}
-function agentPersonaChoice(agent) {
-  return `agent:${agent.kind}:${agent.ref}`;
-}
-function personaModalityOf(choice) {
-  if (!choice.startsWith("modality:")) return null;
-  const id = choice.slice("modality:".length);
-  return PERSONA_MODALITY_IDS.includes(id) ? id : null;
-}
-function personaAgentOf(choice, agents) {
-  return agents.find((a) => agentPersonaChoice(a) === choice) ?? null;
-}
-function agentPersonaPrompt(name) {
-  return `You are acting as the "${name}" agent for this workspace. Adopt its role, voice and duties when responding.`;
-}
-function personaSystemPrompt(choice, agents) {
-  const modality = personaModalityOf(choice);
-  if (modality) return MODALITY_PERSONAS[modality].prompt;
-  const agent = personaAgentOf(choice, agents);
-  return agent ? agentPersonaPrompt(agent.name) : void 0;
-}
-var PERSONA_OVERLAY_PREFACE = "Persona for this conversation \u2014 adopt the domain focus below. Where it describes an environment, preview, or tools that differ from the ones described above, the ones above are what you actually have: use those.";
-function personaOverlay(choice, agents) {
-  const modality = personaModalityOf(choice);
-  if (modality) return `${PERSONA_OVERLAY_PREFACE}
-${MODALITY_PERSONAS[modality].prompt}`;
-  const agent = personaAgentOf(choice, agents);
-  return agent ? agentPersonaPrompt(agent.name) : void 0;
-}
-function personaModel(choice, agents) {
-  return personaAgentOf(choice, agents)?.baseModel ?? void 0;
-}
-function brainPersonaAgents(assignments, pool) {
-  const seen = /* @__PURE__ */ new Set();
-  const out = [];
-  for (const a of assignments) {
-    const key = agentPersonaChoice({ kind: a.agentKind, ref: a.agentRef });
-    if (seen.has(key)) continue;
-    seen.add(key);
-    const pooled = pool.find((p) => p.kind === a.agentKind && p.ref === a.agentRef);
-    out.push({ kind: a.agentKind, ref: a.agentRef, name: pooled?.name ?? `${a.agentKind}:${a.agentRef}`, baseModel: pooled?.baseModel ?? null });
-  }
-  return out;
-}
-var BRAIN_AGENT_ASSIGNMENTS_PATH = "/api/agent-assignments?scope=brain";
-async function loadBrainPersonaAgentsVia(request) {
-  const [assignments, pool] = await Promise.all([
-    request(BRAIN_AGENT_ASSIGNMENTS_PATH).then((r) => r?.assignments ?? []).catch(() => []),
-    loadAgentPoolVia(request).catch(() => [])
-  ]);
-  return brainPersonaAgents(assignments, pool);
-}
 
 // src/modelIdentity.ts
 var BUILDERFORCE_PRODUCT_NAME = {
@@ -25229,10 +18561,10 @@ function runHistoryLines(runs, sessionShipped) {
     const who = run.agentName?.trim() || run.agentRef || "no agent recorded";
     const ticket = `#${run.taskId}${run.taskTitle ? ` "${run.taskTitle}"` : ""}`;
     const produced = run.produced === true ? " \xB7 produced output" : run.produced === false ? " \xB7 produced NOTHING" : "";
-    const failed3 = run.errorMessage ? ` \xB7 ${run.errorMessage}` : "";
+    const failed2 = run.errorMessage ? ` \xB7 ${run.errorMessage}` : "";
     const where = run.hostName ? ` \xB7 on on-prem "${run.hostName}"` : run.executor ? ` \xB7 on ${run.executor}${run.sandbox ? ` (sandbox: ${run.sandbox})` : ""}` : " \xB7 on ? (executor not recorded)";
     out.push(
-      `  - run #${run.executionId} \xB7 ${who} \xB7 ${ticket} \xB7 ${run.status}${produced}${where} \xB7 by ${run.submittedBy}${run.source ? ` via ${run.source}` : ""} \xB7 ${shortTime(run.createdAt)}${run.completedAt ? ` \u2192 ${shortTime(run.completedAt)}` : ""}${failed3}`
+      `  - run #${run.executionId} \xB7 ${who} \xB7 ${ticket} \xB7 ${run.status}${produced}${where} \xB7 by ${run.submittedBy}${run.source ? ` via ${run.source}` : ""} \xB7 ${shortTime(run.createdAt)}${run.completedAt ? ` \u2192 ${shortTime(run.completedAt)}` : ""}${failed2}`
     );
   }
   if (runs.runs.length > MAX_RUNS_LISTED) {
@@ -25240,16 +18572,16 @@ function runHistoryLines(runs, sessionShipped) {
   }
   return out;
 }
-function usd2(n2) {
+function usd(n2) {
   return String.fromCharCode(36) + n2.toFixed(n2 >= 1 ? 2 : 4);
 }
 function formatChatSpend(spend) {
   if (!spend?.spend) return null;
   const s = spend.spend;
   const saved = spend.saved;
-  const savedBit = saved && (saved.measuredUsd > 0 || saved.estimatedUsd > 0) ? ` \xB7 saved ${usd2(saved.measuredUsd)} measured / ${usd2(saved.estimatedUsd)} estimated (${saved.tokensSaved.toLocaleString("en-US")} tok)` : "";
+  const savedBit = saved && (saved.measuredUsd > 0 || saved.estimatedUsd > 0) ? ` \xB7 saved ${usd(saved.measuredUsd)} measured / ${usd(saved.estimatedUsd)} estimated (${saved.tokensSaved.toLocaleString("en-US")} tok)` : "";
   const unpriced = s.unpricedTokens > 0 ? ` \xB7 ${s.unpricedTokens.toLocaleString("en-US")} tok unpriced` : "";
-  return `- This chat's cost: platform ${usd2(s.platformUsd)} \xB7 your key ${usd2(s.yourKeyUsd)} \xB7 total ${usd2(s.totalUsd)} \xB7 ${s.promptTokens.toLocaleString("en-US")} prompt + ${s.completionTokens.toLocaleString("en-US")} completion tok \xB7 ${s.requests} request(s)${unpriced}${savedBit}`;
+  return `- This chat's cost: platform ${usd(s.platformUsd)} \xB7 your key ${usd(s.yourKeyUsd)} \xB7 total ${usd(s.totalUsd)} \xB7 ${s.promptTokens.toLocaleString("en-US")} prompt + ${s.completionTokens.toLocaleString("en-US")} completion tok \xB7 ${s.requests} request(s)${unpriced}${savedBit}`;
 }
 var MAX_LISTED_LINKED_TICKETS = 10;
 function formatChatDiagnostics(d) {
@@ -25595,7 +18927,7 @@ async function gatherChatDiagnostics(src) {
 }
 
 // src/chatDiagnosticsReport.ts
-var CHAT_DIAGNOSTICS_SCHEMA_VERSION = 1;
+var CHAT_DIAGNOSTICS_SCHEMA_VERSION = 2;
 function buildChatDiagnosticsReport(input) {
   const { diagnostics, events, messages, model, running = false, surface: surface2, now } = input;
   const configuredModel = model && model !== "default" ? model : null;
@@ -25649,6 +18981,18 @@ function compactReportJson(report, maxChars = REPORT_JSON_MAX_CHARS) {
     if (json.length <= maxChars) return json;
   }
   const { schemaVersion, capturedAt, surface: surface2, likelyCause, running } = report;
+  if (report.run?.workflow) {
+    const workflowOnly = JSON.stringify({
+      schemaVersion,
+      capturedAt,
+      surface: surface2,
+      likelyCause,
+      running,
+      run: { workflow: report.run.workflow },
+      _elided: ["except run.workflow"]
+    });
+    if (workflowOnly.length <= maxChars) return workflowOnly;
+  }
   return JSON.stringify({ schemaVersion, capturedAt, surface: surface2, likelyCause, running, _elided: ["*"] });
 }
 function formatChatDiagnosticsReportJson(report) {
@@ -26008,7 +19352,7 @@ var NO_DRAFTS = createDraftBinding();
 function turnBody(turn, textOf2) {
   return (typeof turn === "string" ? turn : textOf2?.(turn) ?? "").trim();
 }
-function useQueuedTurns({ running, send, resetKey = null, textOf: textOf2, mayFlush, handOff: handOff2, drafts = NO_DRAFTS, landDraft }) {
+function useQueuedTurns({ running, send, resetKey = null, textOf: textOf2, mayFlush, handOff, drafts = NO_DRAFTS, landDraft }) {
   const [queued, setQueued] = useState13([]);
   const queueRef = useRef13([]);
   const update = useCallback14((change) => {
@@ -26022,8 +19366,8 @@ function useQueuedTurns({ running, send, resetKey = null, textOf: textOf2, mayFl
   sendRef.current = send;
   const textOfRef = useRef13(textOf2);
   textOfRef.current = textOf2;
-  const handOffRef = useRef13(handOff2);
-  handOffRef.current = handOff2;
+  const handOffRef = useRef13(handOff);
+  handOffRef.current = handOff;
   const mayFlushRef = useRef13(mayFlush);
   mayFlushRef.current = mayFlush;
   const landDraftRef = useRef13(landDraft);
@@ -26097,7 +19441,7 @@ function useTurnLanding(ports) {
     if (join && turns.length > 1) giveBack(join(turns));
     else for (const turn of turns) giveBack(turn);
   }, [ports]);
-  const handOff2 = useCallback15((held, from) => {
+  const handOff = useCallback15((held, from) => {
     const { textOf: text2, attachmentsOf: attached2, isDirected: directed } = ports.current;
     const back = [];
     const chat = [];
@@ -26174,7 +19518,7 @@ function useTurnLanding(ports) {
     if (thrown) throw thrown.error;
     return result;
   }, [ports, restoreFailed, giveBackAll]);
-  return { handOff: handOff2, landDraft, sendOnce };
+  return { handOff, landDraft, sendOnce };
 }
 
 // src/waitingTurns.ts
@@ -26207,7 +19551,7 @@ function useChatTurns({ running, steerable = running, runKey, drafts, send, stee
   const takeFrontRef = useRef15(() => void 0);
   const flushing = useRef15(/* @__PURE__ */ new Map());
   const flushingIn = (key) => flushing.current.get(key) ?? 0;
-  const { handOff: handOff2, landDraft, sendOnce } = useTurnLanding(ports);
+  const { handOff, landDraft, sendOnce } = useTurnLanding(ports);
   const flush = useCallback16(async (first) => {
     const chat = ports.current.runKey;
     flushing.current.set(chat, flushingIn(chat) + 1);
@@ -26252,7 +19596,7 @@ function useChatTurns({ running, steerable = running, runKey, drafts, send, stee
     drafts,
     textOf: textOf2,
     mayFlush: () => flushingIn(ports.current.runKey) === 0,
-    handOff: handOff2,
+    handOff,
     landDraft
   });
   const shown = useQueueWithWaiting(queued, runKey);
@@ -26513,6 +19857,7 @@ export {
   ASK_USER_TOOL,
   ASK_USER_TOOL_SPEC,
   AUTHORED_BY_META_KEY,
+  AUTONOMY_DIRECTIVE,
   AttachmentRefusedError,
   BACK_TO_BACK_AT,
   BASE_BRANCHES,
@@ -26532,6 +19877,7 @@ export {
   CHAT_MODE_ICON,
   CHAT_STAMPED_CREATE_TOOLS,
   CODE_CHANGE_TOOLS,
+  CODE_NAVIGATION_DIRECTIVE,
   CONNECT_RETRY_DELAYS_MS,
   CONSOLIDATION_MARKER_PREFIX,
   CONSOLIDATION_META,
@@ -26547,6 +19893,8 @@ export {
   DEFAULT_ROUTE_THRESHOLD,
   DEFAULT_TOOL_FAILURE_STREAK,
   DEFAULT_TOOL_LIMIT,
+  DISCOVERY_DIRECTIVE,
+  DISPATCH_STRATEGY_DIRECTIVE,
   EMPTY_GATEWAY_MODEL_OPTIONS,
   ENGINE_WORKER_FATAL,
   ENGINE_WORKER_IDLE_MS,
@@ -26554,11 +19902,12 @@ export {
   FAILURE_HARD_AT,
   FAILURE_NUDGE_AT,
   FILE_DELIVERY_RULE,
+  FOLLOW_THROUGH_DIRECTIVE,
   FailureTally,
   HAND_OFF_TOOL,
   HAND_OFF_TOOL_SPEC,
   HELP_COMMAND_ID,
-  HISTORY_TOKEN_BUDGET3 as HISTORY_TOKEN_BUDGET,
+  HISTORY_TOKEN_BUDGET2 as HISTORY_TOKEN_BUDGET,
   INFERENCE_MODES,
   INJECTED_TURN_META_KEY,
   JUDGEMENT_SCHEMAS,
@@ -26577,6 +19926,7 @@ export {
   NEW_CHAT_MODE,
   NOT_SIGNED_IN,
   NOT_STARTED_TASK_STATUSES,
+  NO_HANDOFF_DIRECTIVE,
   NO_LOCAL_MODEL,
   NO_SPECIFIC_MODEL,
   ON_DEVICE_ANSWER_THRESHOLD,
@@ -26588,6 +19938,7 @@ export {
   PMO_FOCUS_PARAM,
   PREVIEW_REVIEW_TOOL,
   PROJECT_EVERMIND_MODEL_PREFIX,
+  PROJECT_MEMORY_DIRECTIVE,
   PROVENANCE_META_KEY,
   PageEngineError,
   PromptInput,
@@ -26603,6 +19954,8 @@ export {
   RepetitionLoopError,
   SERVER_TICKET_CREATE_TOOL,
   SERVER_TICKET_TOOLS,
+  SHELL_USE_DIRECTIVE,
+  SHIP_CLEANUP_DIRECTIVE,
   STEP_MESSAGE_ROLE,
   STOPPED_TURN_META_KEY,
   STOPPED_TURN_STEP,
@@ -26622,11 +19975,13 @@ export {
   USAGE_SURFACES,
   USAGE_SURFACE_HEADER,
   WEB_FETCH_TOOL_NAME,
+  WORKSPACE_MAP_INTRO,
   XmlToolCallFilter,
   accountUsedInTrace,
   activeHashtagToken,
   activeMentionToken,
   activeModelKey,
+  activeProjectDirective,
   activeTicketToken,
   activityIcon,
   activityMessageCount,
@@ -26736,6 +20091,7 @@ export {
   displayModelName,
   downloadBuiltInModel,
   drainRunSteering2 as drainRunSteering,
+  editorContextDirective,
   effortProfile,
   executeHandOff,
   extractXmlToolCalls,
@@ -26778,6 +20134,7 @@ export {
   hasEditIntent,
   hasPromptApi,
   hasWebGPU,
+  ideSystemPromptBase,
   inferenceModeForModelPick,
   injectedTurnIdsOf,
   installIndexedDbStepDurability,
@@ -27050,6 +20407,7 @@ export {
   withReadyPageModels,
   withRunUsage,
   withUsageSurface,
+  withWorkspaceMap,
   workFiledNotStaffedVerdict
 };
 //# sourceMappingURL=index.mjs.map

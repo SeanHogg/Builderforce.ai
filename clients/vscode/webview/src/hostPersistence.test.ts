@@ -27,7 +27,7 @@ describe("the panel is wired to it", () => {
     // The adapter holds attachment preview URLs; rebuilding it inside the runtime memo
     // would blank every image already in the conversation on a token re-mint.
     expect(app).toContain("useState(createHostPersistence)");
-    const deps = app.match(/\[init\.baseUrl,[^\]]*init\.grounding[^\]]*\]/);
-    expect(deps?.[0]).toContain("persistence");
+    const deps = app.match(/useMemo<BrainConfig>\([\s\S]*?\n\s*(\[init\.baseUrl,[^\]]*\])/);
+    expect(deps?.[1]).toContain("persistence");
   });
 });

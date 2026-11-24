@@ -100,7 +100,7 @@ describe('stage navigation', () => {
         const ground = new RigController();
         ground.setHome({ cx: 0, cz: 0, zoom: 2 }, GROUND, 800, 600, 0, 0);
         ground.slideBy(0, -NAV_PAN_PX);
-        expect(ground.current.cz).toBeCloseTo(NAV_PAN_PX / 2);
+        expect(ground.current.cz).toBeCloseTo(NAV_PAN_PX / (2 * Math.cos(ground.tilt * Math.PI / 180)));
     });
 
     it('NavControl: buttons drive the rig; the orbit group shows only while orbiting', () => {
@@ -113,7 +113,7 @@ describe('stage navigation', () => {
         expect(document.querySelector('[data-stage-nav-orbit]')).toBeNull();
         // A keyboard click (detail 0) acts once.
         fireEvent.click(screen.getByRole('button', { name: L.surface.nav.panDown }), { detail: 0 });
-        expect(rig.current.cz).toBeCloseTo(NAV_PAN_PX);
+        expect(rig.current.cz).toBeCloseTo(NAV_PAN_PX / Math.cos(rig.tilt * Math.PI / 180));
         fireEvent.click(screen.getByRole('button', { name: L.zoomIn }), { detail: 0 });
         expect(rig.current.zoom).toBeGreaterThan(1);
         fireEvent.click(screen.getByRole('button', { name: L.zoomReset }));

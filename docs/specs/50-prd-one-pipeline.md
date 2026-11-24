@@ -1,8 +1,26 @@
 # PRD 50 — one pipeline above the kernel
 
 > Completed on 2026-11-23. Editor, on-prem, and durable cloud use the shared execution entry and policy. Hosts supply their authorized catalogs and actual verification evidence. The runtime harnesses cover editor wake recovery, on-prem continuation and settlement, and durable cloud resume and settlement. See the [pipeline map](./_scratch-agent-pipeline-map.md) and [DONE.md](../../DONE.md).
-> This slice stops at the kernel. `runAgent` (`packages/agent-run/src/runAgent.ts:65`) calling `runAgentLoop` (`packages/agent-loop/src/loop.ts`) stays. Nothing inside that call is redesigned here.
+> This slice stops at the kernel. `runAgent` (`packages/agent-run/src/runAgent.ts:67`) calling `runAgentLoop` (`packages/agent-loop/src/loop.ts`) stays. Nothing inside that call is redesigned here.
 > The original design below describes the first slice above `runAgent`. The follow-up records the completed workflow.
+
+## Executable acceptance checks
+
+Run these commands independently from the listed directories, which are relative to the repository root. The validation run reads this block from the PRD and matches completed tool results by command and directory. A nonzero exit is a failed check. A missing command or unfinished job leaves its check unverified.
+
+```builderforce-acceptance
+[
+  { "cwd": ".", "command": "node scripts/check-one-execution.mjs --enforce" },
+  { "cwd": ".", "command": "node scripts/check-source-package-graph.mjs" },
+  { "cwd": "packages/agent-run", "command": "pnpm exec vitest run --maxWorkers=3 --pool=threads" },
+  { "cwd": "brain-embedded", "command": "pnpm exec vitest run src/crossAdapterConformance.test.ts src/run/runPrepared.door.test.ts src/runStore/openingSections.test.ts src/triageReport.regression.test.ts src/chatDiagnosticsReport.test.ts --maxWorkers=2 --pool=threads" },
+  { "cwd": "clients/vscode", "command": "pnpm exec vitest run src/participantRun.test.ts src/brainRunHost.entryPoint.test.ts src/hostStartGate.test.ts src/childRunSpawner.test.ts --maxWorkers=2 --pool=threads" },
+  { "cwd": "agent-runtime", "command": "pnpm exec vitest run src/conformance/crossAdapter.test.ts src/run/onPremSubagents.openRun.test.ts src/run/channelAdapter.test.ts src/run/channelOutcome.test.ts --maxWorkers=2 --pool=threads" },
+  { "cwd": "api", "command": "pnpm exec vitest run src/application/llm/chatDiagnosticsToolCatalog.test.ts src/application/runtime/cloudChildSpec.test.ts src/application/runtime/cloudChildRuns.test.ts src/application/runtime/cloudAdapter.sharedTask.test.ts --maxWorkers=2 --pool=threads" }
+]
+```
+
+The November 24 implementation adds these executable checks and records their results in Brain diagnostics. Local verification and capture requirements for the installed hosts are tracked in [Make](./make.md#prd-50--one-pipeline-validation-and-diagnostic-gaps).
 
 ## Full workflow follow-up
 
@@ -28,6 +46,7 @@ The [pipeline map](./_scratch-agent-pipeline-map.md) now describes the inspected
 | Participant through panel host (§2.2) | Implemented by participantRun.ts runViaHost → host.start; host labels vscode | Host gate tests pass; participant/host integration needs the built Brain package |
 | Factories own policy (§2.3) | openRun composes surface ports for every inspected adapter | Recorded preflight facts and native history ports enter shared factories; no compaction.hook escape hatch remains |
 | Shared spawnChild (§2.4) | Implemented by policy/subagents/child.ts; VSIX, durable cloud, in-process on-prem and all four legacy callers reach it | Authenticated host starts and native admission/completion semantics stay surface-owned |
+| Sub-agent execution parity | The shared driver routes child tasks through the same stages and enforces root-only spawning. VSIX passes its routing settings to children, and the in-process relay carries its verification policy. | Validate against installed hosts |
 | Children pass editor gate | Implemented through startThrough → gated.start | Does not imply a common start lifecycle across all surfaces |
 | Kernel unchanged by this review | Entry, spawning, preflight and compaction changes stay above the kernel | Preserve runAgent → runAgentLoop |
 
@@ -38,12 +57,12 @@ Adjacent work has also advanced beyond the baseline: shared routeRun now owns fu
 The generic contract in §2.4 is now implemented. prepareChildStart validates registered entryPoint, nonempty owner/task/parent identity and integer child depth before host effects. spawnChild<Result> calls the scoped host start without interpreting its native result. The implementation preserves these requirements:
 
 - Carry the parent's EntryPoint explicitly; openRun requires it.
-- Define depth as the CHILD depth: allow integer depths 1 through MAX_SUBAGENT_DEPTH; reject deeper/invalid requests before start side effects. Existing checks on PARENT depth refuse spawning when the parent is already at the cap.
+- Define depth as the child depth. New admission requires depth 1. Preparing already admitted payloads accepts historical depth through `MAX_SUBAGENT_DEPTH`.
 - Carry the owner's display identity and optional persona/base prompt, so shared subagentSystemPrompt preserves existing child instructions and inherited context.
 - Separate background admission from eventual completion. VSIX spawn controls return a handle while observing the host completion promise separately; cloud admission returns a durable handle; on-prem childRunner returns a completed report. The generic start-result port preserves those behaviors. Do not await cloud completion inside a durable start request.
 - Keep authorization in each authenticated start port. Shared lineage/depth validation does not replace tenant scoping, session agent allow-lists, or host tool approvals.
-- Preserve all legacy callers. spawnSubagentDirect has FOUR production call sites: sessions-spawn-tool.ts, commands-subagents.ts, infra/local-agent-transport.ts and transport/local-adapter.ts. All four now reach shared spawnChild through that compatibility adapter; keep the adapter for gateway/session delivery, configured depth and agent allow-list authorization.
-- The old buildSubagentSystemPrompt name is absent. Current buildSubagentSessionPrompt already uses shared subagentSystemPrompt and MAX_SUBAGENT_DEPTH, with session-specific additions. Remove only after its live callers and necessary session behavior migrate.
+- Preserve all legacy callers. spawnSubagentDirect has FOUR production call sites: sessions-spawn-tool.ts, commands-subagents.ts, infra/local-agent-transport.ts and transport/local-adapter.ts. All four now reach shared spawnChild through that compatibility adapter; keep the adapter for gateway/session delivery, agent allow-list authorization. Shared admission enforces root-only spawning.
+- The old buildSubagentSystemPrompt name is absent. `buildSubagentSessionPrompt` uses the shared `subagentSystemPrompt` and adds session context.
 - openRun is the shared runtime entry; identity, editor journal/delta capture and durable execution creation still belong to host lifecycle ports. Passing openRun alone is not proof that a child passed the same host start as a user.
 
 ### Policy and enforcement corrections
@@ -172,7 +191,7 @@ One function, in `packages/agent-run/src/policy/subagents/child.ts` (the file th
 export interface SpawnChildRequest {
   parentRunId: string;
   entryPoint: EntryPoint;
-  /** CHILD depth: integer 1 through MAX_SUBAGENT_DEPTH inclusive. */
+  /** Child depth. New admission requires 1. */
   depth: number;
   owner: string;
   task: string;
@@ -284,3 +303,4 @@ Run the existing suites unchanged: `packages/agent-run/test/conformance/`, `brai
 - Spawn on every surface that has a spawn tool goes through `spawnChild` → the user start.
 - Production finish/guards/compaction hook **bodies** are not defined outside `policy/*`.
 - No edits under `runAgentLoop`. No deletion of `channelAdapter`, `progressGuard`, `continueChat`, or `useChatSystemPrompt` in this slice.
+  *Later slices (re-validated 2026-11-24):* `useChatSystemPrompt.ts` was deleted in `c56ce694e` once shared opening assembly replaced it. `agent-runtime/src/run/channelAdapter.ts` was renamed to `channelRunPorts.ts`; its test file keeps the old name. `progressGuard` and `continueChat` remain. The other five criteria above hold in the current code. The open host failures are tracked in [make.md § PRD 50](./make.md#prd-50--one-pipeline-validation-and-diagnostic-gaps).

@@ -3,7 +3,7 @@
  * ports - the finish ports carry the open-work gate sequence - instead of the module overrides it passed before.
  */
 import { describe, expect, it, vi } from 'vitest';
-import { runOn, say, type Scenario } from './areaR/harness';
+import { calls, runOn, say, spec, type Scenario } from './areaR/harness';
 
 const seen = vi.hoisted(() => ({ inputs: [] as Array<Record<string, any>> }));
 
@@ -19,6 +19,33 @@ vi.mock('@builderforce/agent-run', async (importOriginal) => {
 });
 
 describe('runPrepared opens the run through openRun', () => {
+  it('records a declared PRD check from the Brain tool result even when its display output is shortened', async () => {
+    const path = 'docs/specs/50-prd-one-pipeline.md';
+    const command = 'pnpm exec vitest run src/crossAdapterConformance.test.ts';
+    const cwd = 'brain-embedded';
+    const capture = await runOn({
+      key: 9402,
+      request: () => ({ tools: [spec('read_file'), spec('run_command')], userTurn: `Validate ${path}.` }),
+      script: () => [
+        calls({ name: 'read_file', args: { path } }),
+        calls({ name: 'run_command', args: { command, cwd } }),
+        say('Brain conformance passed.'),
+      ],
+      tools: {
+        read_file: () => ({
+          path,
+          content: ['# PRD 50', '```builderforce-acceptance', JSON.stringify([{ command, cwd }]), '```'].join('\n'),
+        }),
+        run_command: () => ({ ok: true, exitCode: 0, stdout: 'output line\n'.repeat(5000) }),
+      },
+    });
+    expect(capture.threw).toBeUndefined();
+    expect(capture.error).toBe('');
+    expect(capture.trace).toContainEqual(expect.objectContaining({
+      label: 'run.spec_validation', args: { completed: 1, failed: 0, pending: 0, unverified: 0, incomplete: false },
+    }));
+  });
+
   it('regression: hands openRun the run route and the surface ports (finish.openWork, closeOut, compaction, preflight)', async () => {
     seen.inputs.length = 0;
     const modelPreflight = vi.fn(async () => ({ byoUnresolved: ['anthropic:expired'] }));

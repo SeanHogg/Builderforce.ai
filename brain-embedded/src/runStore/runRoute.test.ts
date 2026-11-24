@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { initialRunPolicy, nextTurn, reviewPhaseModel } from '@builderforce/run-policy';
 import { decideRoute, routeMetadata } from './runRoute';
-import type { RunLineage } from '../runLineage';
-
-const lineage = {} as RunLineage;
 const SMALL = 'Fix the typo in the README heading';
 const BROAD = 'Refactor the auth module across all services, then add tests for every endpoint and then update the docs';
 
@@ -11,9 +8,8 @@ const BROAD = 'Refactor the auth module across all services, then add tests for 
 const route = (req: Parameters<typeof decideRoute>[0], request: string, followUp = false) => decideRoute(req, request, followUp);
 
 describe('decideRoute', () => {
-  it('routes by default and leaves sub-agents on their assigned slice', () => {
+  it('uses full routing by default', () => {
     expect(route({}, SMALL).pipeline?.route).toBe('full');
-    expect(route({ pipeline: { routing: 'auto' }, lineage }, SMALL).pipeline).toBeNull();
   });
 
   it('a small edit takes the quick pass, a broad change the full pipeline', () => {
@@ -70,10 +66,4 @@ describe('route.start — stage resolution', () => {
     expect(route({ phaseModels, pipeline: { routing: 'auto' } }, SMALL).start.phaseModels?.code).toBe('coder');
   });
 
-  it('a sub-agent keeps its code start and sends no independent route', () => {
-    expect(route({ lineage }, SMALL).start).toEqual({ startPhase: 'code' });
-    const child = route({ lineage }, SMALL);
-    expect(routeMetadata(child)).toEqual({});
-    expect(child.skipsVerify).toBe(false);
-  });
 });

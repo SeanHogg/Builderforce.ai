@@ -54,9 +54,9 @@ describe("resolveSubagentToolPolicy depth awareness", () => {
     agents: { defaults: { subagents: { maxSpawnDepth: 1 } } },
   } as unknown as BuilderForceAgentsConfig;
 
-  it("depth-1 orchestrator (maxSpawnDepth=2) allows sessions_spawn", () => {
+  it("depth-1 orchestrator (maxSpawnDepth=2) denies sessions_spawn", () => {
     const policy = resolveSubagentToolPolicy(baseCfg, 1);
-    expect(isToolAllowedByPolicyName("sessions_spawn", policy)).toBe(true);
+    expect(isToolAllowedByPolicyName("sessions_spawn", policy)).toBe(false);
   });
 
   it("depth-1 orchestrator (maxSpawnDepth=2) allows subagents", () => {
@@ -87,9 +87,9 @@ describe("resolveSubagentToolPolicy depth awareness", () => {
     expect(isToolAllowedByPolicyName("sessions_spawn", policy)).toBe(false);
   });
 
-  it("depth-2 orchestrator (maxSpawnDepth=3) allows sessions_spawn", () => {
+  it("depth-2 orchestrator (maxSpawnDepth=3) denies sessions_spawn", () => {
     const policy = resolveSubagentToolPolicy(deepCfg, 2);
-    expect(isToolAllowedByPolicyName("sessions_spawn", policy)).toBe(true);
+    expect(isToolAllowedByPolicyName("sessions_spawn", policy)).toBe(false);
   });
 
   it("depth-3 leaf (maxSpawnDepth=3) denies sessions_spawn", () => {
@@ -121,7 +121,7 @@ describe("resolveSubagentToolPolicy depth awareness", () => {
   it("defaults to leaf behavior when no depth is provided", () => {
     const policy = resolveSubagentToolPolicy(baseCfg);
     // Default depth=1, maxSpawnDepth=2 → orchestrator
-    expect(isToolAllowedByPolicyName("sessions_spawn", policy)).toBe(true);
+    expect(isToolAllowedByPolicyName("sessions_spawn", policy)).toBe(false);
   });
 
   it("defaults to leaf behavior when depth is undefined and maxSpawnDepth is 1", () => {

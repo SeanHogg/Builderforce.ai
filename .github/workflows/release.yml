@@ -3,11 +3,13 @@ name: Release
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
-  group: release
-  cancel-in-progress: true
+  group: release-${{ github.event.pull_request.number || 'main' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -21,33 +23,72 @@ env:
   NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT: "120000"
 
 jobs:
+  plan:
+    name: Plan affected builds
+    runs-on: ubuntu-latest
+    outputs:
+      base: ${{ steps.plan.outputs.base }}
+      api: ${{ steps.plan.outputs.api }}
+      frontend: ${{ steps.plan.outputs.frontend }}
+      verify-frontend: ${{ steps.plan.outputs.verify-frontend }}
+      extension: ${{ steps.plan.outputs.extension }}
+      agent: ${{ steps.plan.outputs.agent }}
+      kernel: ${{ steps.plan.outputs.kernel }}
+      webdit: ${{ steps.plan.outputs.webdit }}
+      distribution: ${{ steps.plan.outputs.distribution }}
+      mcp: ${{ steps.plan.outputs.mcp }}
+      cdn: ${{ steps.plan.outputs.cdn }}
+      dotnet: ${{ steps.plan.outputs.dotnet }}
+      action: ${{ steps.plan.outputs.action }}
+      help: ${{ steps.plan.outputs.help }}
+      has-npm: ${{ steps.plan.outputs.has-npm }}
+      npm: ${{ steps.plan.outputs.npm }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - run: node --test .github/scripts/affected-builds.test.mjs
+      - name: Select comparison base and affected jobs
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          BEFORE: ${{ github.event.before }}
+          FULL_BUILD: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          if [ -n "$PR_BASE" ]; then
+            base="$PR_BASE"
+          else
+            # Include unpublished changes if a prior push failed or was superseded.
+            if ! last=$(gh run list --workflow release.yml --branch main --event push --status success --limit 1 --json headSha --jq '.[0].headSha'); then
+              export FULL_BUILD=true
+            fi
+            base="${last:-$BEFORE}"
+            if ! git merge-base --is-ancestor "$base" HEAD 2>/dev/null; then
+              base=""
+              export FULL_BUILD=true
+            fi
+          fi
+          # The oracle also needs a comparison base on a full verification run.
+          echo "base=${base:-$(git merge-base origin/main HEAD)}" >> "$GITHUB_OUTPUT"
+          unset GH_TOKEN
+          node .github/scripts/affected-builds.mjs "$base"
+
   # One runner per package, in parallel. They used to run one after another in a
   # single step, so the fifth package waited on four others' type-checks and tests,
   # and one red package stopped every package listed after it from publishing.
   package-npm:
     name: Package ${{ matrix.package }}
     runs-on: ubuntu-latest
+    needs: plan
+    if: ${{ needs.plan.outputs.has-npm == 'true' }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - dir: browser-sdk
-            package: '@seanhogg/builderforce-quality'
-          - dir: sdk
-            package: '@seanhogg/builderforce-sdk'
-          - dir: studio
-            package: '@seanhogg/builderforce-studio'
-          # studio-embedded links studio (`link:../studio`) and bundles against its BUILT
-          # dist, which the serial loop only had because studio happened to be installed
-          # (its `prepare` builds it) earlier in the same step. On its own runner it has
-          # to be built first.
-          - dir: studio-embedded
-            package: '@seanhogg/builderforce-studio-embedded'
-            builds-first: studio
-          - dir: voice
-            package: '@seanhogg/builderforce-voice'
-          - dir: replay-sdk
-            package: '@seanhogg/builderforce-replay'
+        include: ${{ fromJSON(needs.plan.outputs.npm).include }}
     steps:
       - uses: actions/checkout@v7
 
@@ -64,6 +105,7 @@ jobs:
           scope: package-npm-${{ matrix.dir }}
 
       - uses: ./.github/actions/npm-publish-auth
+        if: github.event_name != 'pull_request'
         with:
           npm-token: ${{ secrets.NPM_TOKEN }}
 
@@ -90,6 +132,7 @@ jobs:
         run: bash "$GITHUB_WORKSPACE/.github/scripts/run-parallel.sh" "npm run type-check" "npm test"
 
       - name: Publish if the version is new
+        if: github.event_name != 'pull_request'
         working-directory: ${{ matrix.dir }}
         run: bash "$GITHUB_WORKSPACE/.github/scripts/npm-publish-if-new.sh" "${{ matrix.package }}"
 
@@ -105,8 +148,8 @@ jobs:
   publish-cdn:
     name: Publish cdn.builderforce.ai
     runs-on: ubuntu-latest
-    needs: [package-npm]
-    if: ${{ !cancelled() }}
+    needs: [plan, package-npm]
+    if: ${{ !cancelled() && needs.plan.outputs.cdn == 'true' && github.event_name != 'pull_request' }}
     steps:
       - uses: actions/checkout@v7
 
@@ -155,6 +198,8 @@ jobs:
   publish-dotnet-runtime:
     name: Mirror the .NET runtime bundle
     runs-on: ubuntu-latest
+    needs: plan
+    if: ${{ needs.plan.outputs.dotnet == 'true' && github.event_name != 'pull_request' }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
@@ -173,90 +218,32 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
         run: node .github/scripts/publish-dotnet-runtime.mjs
 
-  # The agent runtime's typecheck and unit suite each take a full runner: concurrently on
-  # one they fight over the same cores and memory. Separate legs, and package-agents
-  # waits for both.
-  verify-agents:
-    name: Verify @seanhogg/builderforce-agents (${{ matrix.script }})
+  agent:
+    name: Agent runtime
+    needs: [plan, verify-run-oracles]
+    if: ${{ !cancelled() && needs.plan.outputs.agent == 'true' }}
+    uses: ./.github/workflows/agent-release.yml
+    with:
+      publish: ${{ github.event_name != 'pull_request' && (needs.verify-run-oracles.result == 'success' || needs.plan.outputs.api == 'true') }}
+    secrets:
+      NPM_TOKEN: ${{ github.event_name != 'pull_request' && secrets.NPM_TOKEN || '' }}
+
+  verify-run-oracles:
+    name: Verify changed run oracles
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        script: [typecheck, 'test:fast']
-    defaults:
-      run:
-        working-directory: agent-runtime
+    needs: plan
+    # The API guard matrix already runs this when the API is affected.
+    if: needs.plan.outputs.api == 'false' && (needs.plan.outputs.agent == 'true' || needs.plan.outputs.extension == 'true' || needs.plan.outputs.verify-frontend == 'true')
     steps:
       - uses: actions/checkout@v7
-
-      - uses: pnpm/action-setup@v6
         with:
-          version: 10.23.0
-
+          fetch-depth: 0
       - uses: actions/setup-node@v6
         with:
           node-version: 24
-
-      - uses: ./.github/actions/pnpm-store-cache
-        with:
-          scope: package-agents
-
-      - run: pnpm install --frozen-lockfile
-      # packages/agent-tools is compiled from source (tsconfig paths); its npm imports
-      # (@seanhogg/builderforce-memory/working) resolve from ITS node_modules.
-      - run: pnpm --dir ../packages/agent-tools install --frozen-lockfile
-      - run: pnpm run ${{ matrix.script }}
-
-  # The on-prem agent CLI every installer (install.sh / install.ps1 / install-cli.sh,
-  # the macOS app) fetches from npm. Its own job, not another package-npm leg: it is a
-  # pnpm workspace with its own script names and a control-UI build, and a failure here
-  # must not hold back the SDK packages above (or the reverse).
-  package-agents:
-    name: Package @seanhogg/builderforce-agents
-    runs-on: ubuntu-latest
-    needs: verify-agents
-    defaults:
-      run:
-        working-directory: agent-runtime
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: pnpm/action-setup@v6
-        with:
-          version: 10.23.0
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 24
-
-      - uses: ./.github/actions/pnpm-store-cache
-        with:
-          scope: package-agents
-
-      - uses: ./.github/actions/npm-publish-auth
-        with:
-          npm-token: ${{ secrets.NPM_TOKEN }}
-
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm --dir ../packages/agent-tools install --frozen-lockfile
-
-      # agent-runtime/vendor/ is gitignored (Docker builds exclude it too), so a
-      # fresh checkout here has neither the A2UI renderer sources nor a prebuilt
-      # bundle (the A2UI app itself lives at apps/shared/BuilderforceKit/Tools/
-      # CanvasA2UI). bundle-a2ui.sh's own documented escape hatch for exactly this
-      # environment: skip bundling and ship the CLI without the canvas feature
-      # rather than failing the whole package.
-      - run: pnpm build && pnpm ui:build
+      - run: node scripts/check-tests-unchanged.mjs
         env:
-          BUILDERFORCE_AGENTS_A2UI_SKIP_MISSING: "1"
-
-      # The tarball's entry point must actually start before it reaches every installer.
-      - name: Smoke-test the CLI
-        run: node builderforce.mjs --version
-
-      # Built above, so skip `prepack` rather than build the same dist twice.
-      - name: Publish if the version is new
-        run: bash "$GITHUB_WORKSPACE/.github/scripts/npm-publish-if-new.sh" @seanhogg/builderforce-agents --ignore-scripts
+          AGENT_RUN_BASE: ${{ needs.plan.outputs.base }}
 
   # Marketplace copy lives in distribution/listing.json and is stamped into every
   # channel payload. A listing that contradicts the product is what a buyer reads,
@@ -264,6 +251,8 @@ jobs:
   verify-distribution:
     name: Verify distribution payloads
     runs-on: ubuntu-latest
+    needs: plan
+    if: ${{ needs.plan.outputs.distribution == 'true' }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
@@ -282,6 +271,8 @@ jobs:
   verify-extension:
     name: Verify VS Code extension (${{ matrix.script }})
     runs-on: ubuntu-latest
+    needs: plan
+    if: ${{ needs.plan.outputs.extension == 'true' }}
     strategy:
       fail-fast: false
       matrix:
@@ -300,6 +291,8 @@ jobs:
       - uses: ./.github/actions/pnpm-store-cache
         with:
           scope: publish-extension
+
+      - uses: ./.github/actions/prepare-brain
 
       - name: ${{ matrix.script }}
         working-directory: clients/vscode
@@ -322,12 +315,14 @@ jobs:
           # thread, so setting it here reaches vitest's workers too.
           NODE_OPTIONS: --max-old-space-size=6144
         run: |
-          pnpm install --frozen-lockfile || pnpm install
+          pnpm install --frozen-lockfile
           npm run ${{ matrix.script }}
 
   package-extension:
     name: Package VS Code extension
     runs-on: ubuntu-latest
+    needs: plan
+    if: ${{ needs.plan.outputs.extension == 'true' }}
     steps:
       - uses: actions/checkout@v7
 
@@ -343,6 +338,8 @@ jobs:
         with:
           scope: publish-extension
 
+      - uses: ./.github/actions/prepare-brain
+
       - name: Build and package the VSIX
         working-directory: clients/vscode
         env:
@@ -352,7 +349,7 @@ jobs:
           # used to share a heap setting with.
           NODE_OPTIONS: --max-old-space-size=6144
         run: |
-          pnpm install --frozen-lockfile || pnpm install
+          pnpm install --frozen-lockfile
           npx --yes @vscode/vsce package --no-dependencies --out builderforce.vsix
 
       # The gate that the offline suites structurally CANNOT be: it launches a real
@@ -398,7 +395,8 @@ jobs:
   publish-extension:
     name: Publish VS Code extension
     runs-on: ubuntu-latest
-    needs: [verify-extension, package-extension]
+    needs: [plan, verify-extension, package-extension]
+    if: ${{ needs.plan.outputs.extension == 'true' && github.event_name != 'pull_request' }}
     steps:
       - uses: actions/checkout@v7
 
@@ -454,6 +452,8 @@ jobs:
   publish-action:
     name: Mirror the GitHub Action
     runs-on: ubuntu-latest
+    needs: plan
+    if: ${{ needs.plan.outputs.action == 'true' && github.event_name != 'pull_request' }}
     steps:
       - uses: actions/checkout@v7
 
@@ -494,7 +494,8 @@ jobs:
   publish-mcp-registry:
     name: Publish MCP Registry listing
     runs-on: ubuntu-latest
-    needs: [deploy-api, verify-distribution]
+    needs: [plan, deploy-api, verify-distribution]
+    if: ${{ !cancelled() && (needs.deploy-api.result == 'success' || needs.plan.outputs.api == 'false') && (needs.verify-distribution.result == 'success' || needs.plan.outputs.distribution == 'false') && needs.plan.outputs.mcp == 'true' && github.event_name != 'pull_request' }}
     permissions:
       contents: read
       id-token: write
@@ -667,6 +668,8 @@ jobs:
   verify-api:
     name: Verify API (${{ matrix.name }})
     runs-on: ubuntu-latest
+    needs: plan
+    if: ${{ needs.plan.outputs.api == 'true' }}
     strategy:
       fail-fast: false
       matrix:
@@ -679,26 +682,8 @@ jobs:
           - { name: vitest 4/4, run: npx vitest run --shard=4/4 }
     steps:
       - uses: actions/checkout@v7
-
-      # check:tests-unchanged reads test files as they were before the PRD 35 program (git show), which a depth-1 clone cannot.
-      #
-      # The guard's base is the head of the LAST SUCCESSFUL Release run on main, so a push that went red or was cancelled (this workflow
-      # cancels in progress) is judged again by the next one instead of being forgiven. It falls back to this push's own `before`, then to
-      # the guard's default (an empty range on a pushed main) when neither can be read.
-      - name: Full history and base for the test-oracle guard
-        id: oracle-base
-        if: matrix.name == 'guards'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          BEFORE: ${{ github.event.before }}
-        run: |
-          git fetch --unshallow --quiet || true
-          usable() { [ -n "$1" ] && [ "${1#0000000}" = "$1" ] && { git cat-file -e "$1^{commit}" 2>/dev/null || { git fetch --quiet origin "$1" 2>/dev/null && git cat-file -e "$1^{commit}" 2>/dev/null; }; }; }
-          LAST=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow release.yml --branch main --status success --limit 1 --json headSha --jq '.[0].headSha' 2>/dev/null || true)
-          if usable "$LAST"; then BASE="$LAST"; echo "Guard base: last successful Release run $BASE"
-          elif usable "$BEFORE"; then BASE="$BEFORE"; echo "Guard base: this push's before $BASE (no readable last successful run)"
-          else BASE=""; echo "Guard base: none readable; the guard will FAIL (CI is set)"; fi
-          echo "base=$BASE" >> "$GITHUB_OUTPUT"
+        with:
+          fetch-depth: ${{ matrix.name == 'guards' && '0' || '1' }}
 
       - uses: pnpm/action-setup@v6
         with:
@@ -722,10 +707,7 @@ jobs:
           # forks inherit it too. api's graph (drizzle-orm, zod 4, pdf-lib, pptxgenjs, yjs, …)
           # is what outgrew Node's default ~4 GiB heap.
           NODE_OPTIONS: --max-old-space-size=6144
-          # check:tests-unchanged compares the oracle tests with this commit. Its default (origin/main) IS the pushed HEAD in CI, which
-          # would examine nothing; the base chosen by the oracle-base step (last successful Release run) makes it evaluate everything
-          # shipped since the last green release. Empty on the other legs; on this leg an empty value (no base readable) makes the guard FAIL, because CI is set.
-          AGENT_RUN_BASE: ${{ steps.oracle-base.outputs.base }}
+          AGENT_RUN_BASE: ${{ needs.plan.outputs.base }}
         run: |
           pnpm install --frozen-lockfile
           # packages/agent-tools is compiled from source (tsconfig paths), and its imports of npm
@@ -743,6 +725,8 @@ jobs:
   verify-kernel:
     name: Verify kernel package (${{ matrix.package }})
     runs-on: ubuntu-latest
+    needs: plan
+    if: ${{ needs.plan.outputs.kernel == 'true' }}
     strategy:
       fail-fast: false
       matrix:
@@ -800,6 +784,8 @@ jobs:
   verify-webdit-torch:
     name: Verify @webdit/torch
     runs-on: ubuntu-latest
+    needs: plan
+    if: ${{ needs.plan.outputs.webdit == 'true' }}
     defaults:
       run:
         working-directory: webdit/torch
@@ -832,8 +818,8 @@ jobs:
     # After publish-cdn so a release's recorder is public before its API ships. A CDN
     # failure does not hold the API back: ReplayConfigService reads the LIVE manifest,
     # which still names the previous (public) recorder.
-    needs: [verify-api, verify-kernel, publish-cdn]
-    if: ${{ !cancelled() && needs.verify-api.result == 'success' && needs.verify-kernel.result == 'success' }}
+    needs: [plan, verify-api, verify-kernel, publish-cdn]
+    if: ${{ !cancelled() && needs.verify-api.result == 'success' && (needs.verify-kernel.result == 'success' || needs.plan.outputs.kernel == 'false') && needs.plan.outputs.api == 'true' && github.event_name != 'pull_request' }}
     # Binds the job to the `production` GitHub Environment so a required-reviewer rule
     # (or a wait timer, or a branch restriction) can gate the migration + worker deploy
     # WITHOUT another change to this file. Until protection rules are configured on that
@@ -1009,6 +995,8 @@ jobs:
   verify-frontend:
     name: Verify frontend (${{ matrix.name }})
     runs-on: ubuntu-latest
+    needs: plan
+    if: ${{ needs.plan.outputs.verify-frontend == 'true' }}
     strategy:
       fail-fast: false
       matrix:
@@ -1020,27 +1008,19 @@ jobs:
           # The same lint `next build` ran (its directories, its errors-only failure).
           - name: lint
             run: pnpm exec next lint
-          # PRD 35 §3.3, the conformance suite: the Brain's adapters (web, Rovr, VS Code) and the
-          # Creation Canvas under the ONE scripted task, plus the Rovr host's entry-point label.
-          # Neither package's whole unit suite runs in CI; these files hold the RunEvent trace.
-          # Cloud and the @-reply run in `Verify API (vitest)`, on-prem tickets and channels in
-          # `Verify @seanhogg/builderforce-agents (test:fast)`, the VS Code host's label in
-          # `Verify VS Code extension (test)`, and the shared task itself (agent-run's own
-          # `test/`, which the API vitest never reached) in `Verify kernel package`.
+          # The Brain and Rovr adapter cases are covered by the oracle jobs below.
+          # Run the frontend-specific Canvas and outcome cases once here.
           - name: conformance (brain-embedded + canvas)
-            run: >-
-              bash "$GITHUB_WORKSPACE/.github/scripts/run-parallel.sh"
-              "pnpm --dir ../brain-embedded exec vitest run src/crossAdapterConformance.test.ts src/referenceScenario.test.ts src/run/conformance.test.ts src/run/webAdapter.test.ts src/run/parity"
-              "pnpm exec vitest run src/lib/canvasCrossAdapter.test.ts src/lib/brain/webRunOutcome.test.ts"
-              "pnpm --dir ../clients/chrome install --frozen-lockfile && pnpm --dir ../clients/chrome exec vitest run src/host/rovrRunHost.entryPoint.test.ts"
+            run: pnpm exec vitest run src/lib/canvasCrossAdapter.test.ts src/lib/brain/webRunOutcome.test.ts
           # PRD 35 WS4 D3: the Brain's run-store tests. The test files that drive `startRun`
           # (brain-embedded/src/run/parity/oracle.files.txt, guarded by oracle.test.ts) run UNCHANGED
           # on the one agent, and the snapshot suite (src/run/parity) holds its record to what the old
           # loop left. The Rovr (clients/chrome) files install their own package.
           - name: oracle (brain-embedded)
             run: >-
-              node ../brain-embedded/src/run/parity/runOracle.mjs brain-embedded &&
-              pnpm --dir ../brain-embedded exec vitest run src/run/parity
+              bash "$GITHUB_WORKSPACE/.github/scripts/run-parallel.sh"
+              "node ../brain-embedded/src/run/parity/runOracle.mjs brain-embedded"
+              "pnpm --dir ../brain-embedded exec vitest run src/run/parity"
           - name: oracle (clients/chrome)
             run: >-
               pnpm --dir ../clients/chrome install --frozen-lockfile &&
@@ -1090,17 +1070,21 @@ jobs:
         with:
           scope: deploy-frontend
 
+      - uses: ./.github/actions/prepare-brain
+
       - name: ${{ matrix.name }}
         working-directory: frontend
         env:
           NODE_OPTIONS: --max-old-space-size=6144
         run: |
-          pnpm install --frozen-lockfile || pnpm install
+          pnpm install --frozen-lockfile
           ${{ matrix.run }}
 
   build-frontend:
     name: Build frontend
     runs-on: ubuntu-latest
+    needs: plan
+    if: ${{ needs.plan.outputs.frontend == 'true' }}
     steps:
       - uses: actions/checkout@v7
 
@@ -1115,6 +1099,8 @@ jobs:
       - uses: ./.github/actions/pnpm-store-cache
         with:
           scope: deploy-frontend
+
+      - uses: ./.github/actions/prepare-brain
 
       # Next's persistent build cache (webpack module cache + SWC output). The build is
       # the longest step in the release; with the previous run's cache restored, only
@@ -1144,11 +1130,11 @@ jobs:
           # process tree on a public-repo ubuntu-latest runner (16 GiB), so a
           # 12 GiB old-space ceiling leaves headroom for the OS and Next's workers.
           NODE_OPTIONS: --max-old-space-size=12288
-          NEXT_BUILDERFORCE_ERROR_API_KEY: ${{ secrets.BUILDERFORCE_ERROR_API_KEY }}
+          NEXT_BUILDERFORCE_ERROR_API_KEY: ${{ github.event_name != 'pull_request' && secrets.BUILDERFORCE_ERROR_API_KEY || '' }}
           # verify-frontend lints and type-checks; see next.config.js.
           NEXT_SKIP_BUILD_CHECKS: '1'
         run: |
-          pnpm install --frozen-lockfile || pnpm install
+          pnpm install --frozen-lockfile
           pnpm run cf-build
 
       # Exactly what wrangler.toml deploys: the worker (`_worker.js/`) and the static
@@ -1167,7 +1153,12 @@ jobs:
     runs-on: ubuntu-latest
     # deploy-api first: the frontend opens app hosts (`<key>-preview.builderforce.ai`) that only
     # the API it ships with serves, so a frontend ahead of its API fails every app start.
-    needs: [build-frontend, verify-frontend, verify-kernel, deploy-api]
+    needs: [plan, build-frontend, verify-frontend, verify-kernel, verify-run-oracles, deploy-api]
+    if: >-
+      ${{ !cancelled() && needs.plan.outputs.frontend == 'true' && github.event_name != 'pull_request'
+      && needs.build-frontend.result == 'success' && needs.verify-frontend.result == 'success'
+      && (needs.verify-kernel.result == 'success' || needs.plan.outputs.kernel == 'false')
+      && (needs.deploy-api.result == 'success' || (needs.plan.outputs.api == 'false' && needs.verify-run-oracles.result == 'success')) }}
     # Same production gate as deploy-api — see the note there. Gating only the API would
     # let a reviewed backend ship behind an unreviewed frontend.
     environment: production
@@ -1197,6 +1188,8 @@ jobs:
   deploy-help:
     name: Deploy help
     runs-on: ubuntu-latest
+    needs: plan
+    if: ${{ needs.plan.outputs.help == 'true' }}
     steps:
       - uses: actions/checkout@v7
 
@@ -1208,14 +1201,17 @@ jobs:
           cache-dependency-path: docs-site/package-lock.json
 
       - name: Install Wrangler
+        if: github.event_name != 'pull_request'
         run: npm install --global wrangler
 
-      - name: Build and deploy docs
+      - name: Build docs
+        working-directory: docs-site
+        run: npm ci --no-audit --no-fund && npm run build
+
+      - name: Deploy docs
+        if: github.event_name != 'pull_request'
         working-directory: docs-site
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
-        run: |
-          npm ci --no-audit --no-fund || npm install --no-audit --no-fund
-          npm run build
-          wrangler pages deploy dist --project-name=builderforce-docs --branch=main
+        run: wrangler pages deploy dist --project-name=builderforce-docs --branch=main

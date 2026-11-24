@@ -6,6 +6,8 @@
 
 import type { RunPolicyState } from '@builderforce/run-policy';
 import { deviceLeverOn } from './deviceLevers';
+import { measureWorkflowSync } from '@builderforce/agent-run';
+import { brainEventSink } from '../run/eventSink';
 import { memoryReplayable } from '@builderforce/agent-stall';
 import type { CompletionMetadata } from '../streamChatCompletion';
 import { normalizeChatMode } from '../chatMode';
@@ -90,7 +92,7 @@ export async function prepareBrainRun(chatId: number, c: RunCell, req: BrainRunR
   // Full pipeline or a quick pass — decided ONCE, on the user's own request, before any
   // turn (see `runRoute.ts`). Every call carries the route, so the gateway's usage
   // row and the device's ledger row both say which pipeline spent the tokens.
-  const route = decideRoute(req, latestUserText(convo), isFollowUpTurn(convo));
+  const route = measureWorkflowSync(brainEventSink(c), { runId: c.runId, entryPoint: req.entryPoint, step: 0 }, 'route', () => decideRoute(req, latestUserText(convo), isFollowUpTurn(convo)), (r) => ({ reusedDecision: 0, quick: Number(r.pipeline?.route === 'quick'), full: Number(r.pipeline?.route === 'full') }));
   const pipeline = route.pipeline;
   if (pipeline) {
     pushTrace(c, {

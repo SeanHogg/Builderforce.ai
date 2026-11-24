@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { surfaceFixture } from '../../../testing';
 import { withSymbols } from '../../../surface/transit/testFixtures';
+import { RESTING_DEPTH } from '../../../stage/depth';
 import { SLOT_NODE, SLOT_STATION, type Placement } from '../../../stage/types';
 import { buildStageModel } from '../stageModel';
 import { anchorHidden, draftFor, show } from './anchor';
@@ -47,10 +48,16 @@ describe('placement (PRD 43 B1a rule 4: visibility is scale)', () => {
     });
 
     it('Map tilt is extrude: depth 0 is flat, depth 1 raises every shown station', () => {
-        const flat = place('map');
+        const f = PLACEMENTS.map(graph, model, { ...req('map'), depth: 0 }); while (!f.step());
+        const flat = f.result();
         const t = PLACEMENTS.map(graph, model, { ...req('map'), depth: 1 }); while (!t.step());
         const tilted = t.result();
-        for (const { slot } of flat.a11y) { expect(flat.extrude[slot]).toBe(0); expect(tilted.extrude[slot]).toBeGreaterThan(0); }
+        const resting = place('map');
+        for (const { slot } of flat.a11y) {
+            expect(flat.extrude[slot]).toBe(0);
+            expect(tilted.extrude[slot]).toBeGreaterThan(0);
+            expect(resting.extrude[slot]).toBeCloseTo(tilted.extrude[slot]! * RESTING_DEPTH);
+        }
         expect(tilted.cacheKey).not.toBe(flat.cacheKey);
     });
 

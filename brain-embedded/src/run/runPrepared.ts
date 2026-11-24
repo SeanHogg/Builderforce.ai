@@ -5,7 +5,7 @@
  * adapter only builds ports (`webAdapter.ts`, `brainTurn.ts`, `brainPlatformTools.ts`, `brainSteering.ts`, `brainStore.ts`).
  */
 
-import { openRun } from '@builderforce/agent-run';
+import { openRun, measureWorkflow } from '@builderforce/agent-run';
 import type { BrainRunContext } from '../runStore/brainRunContext';
 import { brainDeliveryLedger } from './brainDelivery';
 import { brainPlatformTools } from './brainPlatformTools';
@@ -76,7 +76,7 @@ export async function runPrepared(run: BrainRunContext): Promise<void> {
   const ports = buildBrainRunPorts(binding);
   const signal = c.abort?.signal;
   const outcome = await openRun({
-    task: { ...brainRunTask(binding), persona: run.systemPrompt, transcript },
+    task: { ...brainRunTask(binding), runId: c.runId, persona: run.systemPrompt, transcript },
     policy: brainRunPolicy(binding),
     ports: { ...ports, model: withoutUncallableTurns(ports.model, req) },
     // The run's route, decided ONCE in the preamble (`runStore/runRoute.ts`): handed over as decided, so `openRun` folds it and never routes again.
@@ -107,5 +107,5 @@ export async function runPrepared(run: BrainRunContext): Promise<void> {
     cacheStreak: run.cacheStreak,
     ...(signal ? { signal } : {}),
   });
-  await settleBrainRun(run, outcome, last);
+  await measureWorkflow(binding.events, { runId: c.runId, entryPoint: req.entryPoint, step: outcome.state.step, operation: 'host_settle' }, 'settle', () => settleBrainRun(run, outcome, last));
 }

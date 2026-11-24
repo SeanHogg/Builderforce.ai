@@ -98,6 +98,7 @@ export async function runScenario(scenario: Scenario): Promise<ScenarioRun> {
   await persistence.sendMessages(CHAT_ID, [{ role: 'user', content: scenario.prompt }]);
 
   await startRun(CHAT_ID, {
+    entryPoint: 'vscode',
     resolvedSystemPrompt: '',
     opening: { hasWorkspace: scenario.hasWorkspace ?? true },
     tools: toolSpecsFor(tools.specs),

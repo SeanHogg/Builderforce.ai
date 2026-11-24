@@ -60,11 +60,8 @@ describe("editorRunSettingsFrom", () => {
 
 describe("runRequestFields", () => {
   const settings = editorRunSettingsFrom({ code: "c" }, { maxRunBudgetUsd: 1 });
-  it("a top-level run gets everything", () => {
-    expect(runRequestFields(settings, { child: false })).toEqual({ phaseModels: { code: "c" }, pipeline: { routing: "auto" }, maxRunBudgetUsd: 1 });
-  });
-  it("a sub-agent gets only the cap", () => {
-    expect(runRequestFields(settings, { child: true })).toEqual({ maxRunBudgetUsd: 1 });
-    expect(runRequestFields(undefined, { child: false })).toEqual({});
+  it("passes the pipeline, phase models and budget to a run", () => {
+    expect(runRequestFields(settings)).toEqual({ phaseModels: { code: "c" }, pipeline: { routing: "auto" }, maxRunBudgetUsd: 1 });
+    expect(runRequestFields(undefined)).toEqual({});
   });
 });

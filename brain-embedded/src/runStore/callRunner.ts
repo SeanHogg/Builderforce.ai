@@ -18,7 +18,7 @@ import { canCompleteTicket, completionAdvisory, isTicketCompletion, markedDoneOf
 import { shipGateAdvisory } from './shipGates';
 import { shippedToBaseBranch } from '../shipVerification';
 import { betweenTurnsActivity, toolActivity, visitTarget } from '../runActivity';
-import { runToolInterruptibly } from '@builderforce/agent-run';
+import { runToolInterruptibly, type PlatformToolResult } from '@builderforce/agent-run';
 import { isDelegationTool, revisitAdvisory, withAdvisory } from '@builderforce/run-guards';
 import { isUnscopedMutation } from '../readCoverage';
 import { trimToolResult } from '../toolResultBudget';
@@ -49,7 +49,7 @@ export function declineMalformedCall(run: BrainRunContext, call: ParsedToolCall)
   return { data: declined, isError: true };
 }
 
-export function callRunner(run: BrainRunContext): LoopPorts<ChatCompletionMessage>['dispatch'] {
+export function callRunner(run: BrainRunContext): (...args: Parameters<LoopPorts<ChatCompletionMessage>['dispatch']>) => Promise<PlatformToolResult> {
   const { c, chatId, req, readCoverage, failures, writeLedger, placeholderLedger } = run;
   const { runTool } = req;
   return async (call, ctx) => {
@@ -215,6 +215,6 @@ export function callRunner(run: BrainRunContext): LoopPorts<ChatCompletionMessag
     // `served` — the window the model was actually handed — is what read coverage
     // records (PRD 35 E1); the untrimmed `out` is kept only for a replay.
     run.pending.ran(call.id, { out, toolStart, isReadTool, threw: false, bytes: trimmedOut.bytes, truncated: trimmedOut.truncated, served: trimmedOut.served });
-    return { data: trimmedOut.content, isError: isFailedToolResult(out) };
+    return { data: trimmedOut.content, observedData: out, isError: isFailedToolResult(out) };
   };
 }

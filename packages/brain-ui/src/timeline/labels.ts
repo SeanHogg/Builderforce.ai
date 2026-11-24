@@ -1,6 +1,7 @@
 import { DEFAULT_CHAT_ACTIVITY_LABELS, type ChatActivityLabels } from '@seanhogg/builderforce-brain-embedded';
 import { DEFAULT_ASK_USER_LABELS } from '../askUser';
 import type { ToolStepLabels } from '../ToolStep';
+import type { ToolGroupLabels } from './toolGroups';
 import { DEFAULT_LIVE_ACTIVITY_LABELS, type LiveActivityLabels } from '../LiveActivity';
 import { DEFAULT_MODEL_MOVE_LABELS, type ModelMoveLabels } from '../timelineModelMoves';
 import type { ChatErrorBannerLabels } from '../ChatErrorBanner';
@@ -12,7 +13,7 @@ import { DEFAULT_ATTACHMENT_PREVIEW_LABELS, type AttachmentPreviewLabels } from 
  * contract, and a host that passes this bundle satisfies that contract by
  * construction — which is what keeps the two from drifting apart.
  */
-export interface BrainTimelineLabels extends ToolStepLabels, ModelMoveLabels {
+export interface BrainTimelineLabels extends ToolStepLabels, ModelMoveLabels, ToolGroupLabels {
   /** Shown on the live thinking node while a turn streams. */
   thinking: string;
   /**
@@ -143,6 +144,9 @@ export interface BrainTimelineLabels extends ToolStepLabels, ModelMoveLabels {
 }
 
 export const DEFAULT_TIMELINE_LABELS: BrainTimelineLabels = {
+  toolGroupCommands: 'Ran commands ({count})',
+  toolGroupUsed: 'Used {tools} ({count})',
+  toolGroupFailed: '{count} failed',
   thinking: 'Thinking…',
   attachmentPreview: DEFAULT_ATTACHMENT_PREVIEW_LABELS,
   live: DEFAULT_LIVE_ACTIVITY_LABELS,

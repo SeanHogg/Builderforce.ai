@@ -61,6 +61,7 @@ describe("one door into the run", () => {
     const ran = await runViaHost({
       host: { ...host, start: door.start, stop: door.stop },
       spec: { chatId: 7301, systemPrompt: "You are the IDE agent.", userTurn: "hello", autoApprove: true, evermind: false, wakeable: false },
+      saveUserTurn: async () => undefined,
       approve: async () => true,
       events: { onText: (d) => void text.push(d), onToolStart: () => undefined, onToolResult: () => undefined, onError: () => undefined },
       labels: { dispatchHint: "hint" },

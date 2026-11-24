@@ -38,6 +38,8 @@ export interface LadderProgress {
 /** What a platform tool returned: the payload the model reads, and whether it failed. */
 export interface PlatformToolResult {
   data: unknown;
+  /** Original host result for evidence checks when data was shortened for the model. Kept outside the transcript. */
+  observedData?: unknown;
   isError?: boolean;
   /**
    * The tool was KILLED through its signal (a steered message or the person's Stop aborted it, and it rejected): the answer is the

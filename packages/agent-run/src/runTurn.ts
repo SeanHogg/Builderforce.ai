@@ -25,7 +25,11 @@ import { assignedWorkSection } from "./workPlan.js";
 import { appendRows, currentView, emit, policyContext, type RunAgentInput, type TurnFacts } from "./runContext.js";
 import { tallyTurn, type RunTally } from "./telemetry/runTally.js";
 import { measureTurnTail } from "./turnTail.js";
+import { measureWorkflow, workflowScope } from "./telemetry/workflowMetrics.js";
+import { isSpawnTool } from "./policy/subagents/delegationRequest.js";
+import { blocksChildSpawn, CHILD_SPAWN_REFUSAL } from "./policy/subagents/child.js";
 import { withVolatileTail } from "./turnContext.js";
+import { specValidationSection } from "./policy/verify/specValidation.js";
 
 /**
  * What the step decided about its menu before the request is built: the schemas the policy selected, and - when the surface forced the
@@ -53,6 +57,7 @@ export interface TurnSelection {
 
 /** What a surface's own tool answered, for the no-progress count: from its read cache, or only conversational. */
 export const callKinds = new WeakMap<object, "cached" | "neutral">();
+export const observedToolData = new WeakMap<object, unknown>();
 
 /** Non-transport exceptions that failed a turn, per run: the surface decides whether they are a failure or an eviction. */
 const causes = new WeakMap<object, unknown>();
@@ -69,6 +74,11 @@ export { offeredSchemas, ownsCall } from "./runCatalog.js";
 
 /** The hard cap on the forced synthesis turn's answer — the source's bounded extra call. */
 const SYNTHESIS_MAX_TOKENS = 1_000;
+
+function measureModelRequest(input: RunAgentInput, step: number, request: ModelRequest, operation: 'model_request' | 'model_synthesis' = 'model_request') {
+  return measureWorkflow(input.ports.events, { ...workflowScope(input, step), operation }, 'kernel',
+    () => input.ports.model.complete(request, input.signal), undefined, input.signal);
+}
 
 /**
  * What served a turn is what the next one asks for - except `default` (the gateway's own
@@ -144,7 +154,8 @@ export async function completeTurn(
   const model = decision ? decision.model : input.policy.pinnedModel;
   const brief = await hooks.memory.brief(pctx);
   const work = assignedWorkSection(state.work ?? []);
-  const sections = [...(input.ports.context.turnSections?.() ?? []), ...(work ? [`### Assigned work\n${work}`] : []), ...(made?.tail ?? [])];
+  const validation = specValidationSection(state);
+  const sections = [...(input.ports.context.turnSections?.() ?? []), ...(work ? [`### Assigned work\n${work}`] : []), ...(validation ? [validation] : []), ...(made?.tail ?? [])];
   const fields = hooks.model.turnFields?.(mctx);
   const reasoning = hooks.guards.reasoning?.(pctx);
 
@@ -175,7 +186,7 @@ export async function completeTurn(
   // When the call that ANSWERED started — re-set before a retry or a re-ask — so the run policy times the serving model alone.
   let startedAt = Date.now();
   try {
-    completion = await input.ports.model.complete(requestFor(model, firstAsk), input.signal);
+    completion = await measureModelRequest(input, ctx.step, requestFor(model, firstAsk));
   } catch (err) {
     if (input.signal?.aborted) throw err;
     const reason = err instanceof Error ? err.message : String(err);
@@ -197,7 +208,7 @@ export async function completeTurn(
     asked = routed.retry.model;
     startedAt = Date.now();
     try {
-      completion = await input.ports.model.complete(requestFor(routed.retry.model, routed.retry), input.signal);
+      completion = await measureModelRequest(input, ctx.step, requestFor(routed.retry.model, routed.retry));
     } catch (retryErr) {
       if (input.signal?.aborted) throw retryErr;
       if (isResumable(input, retryErr)) causes.set(state, retryErr);
@@ -212,7 +223,7 @@ export async function completeTurn(
     asked = reask.ask.model;
     startedAt = Date.now();
     try {
-      completion = await input.ports.model.complete(requestFor(reask.ask.model, reask.ask, [reask.brief]), input.signal);
+      completion = await measureModelRequest(input, ctx.step, requestFor(reask.ask.model, reask.ask, [reask.brief]));
     } catch (err) {
       if (input.signal?.aborted) throw err;
       if (isResumable(input, err)) causes.set(state, err);
@@ -265,11 +276,13 @@ export async function synthesizeFinal(
   const model = decision ? decision.model : input.policy.pinnedModel;
   const fields = hooks.model.turnFields?.(pctx);
   const ask: RunMessage = { role: "user", content: prompt };
+  const validation = specValidationSection(state);
+  const validationSections = validation ? [validation] : [];
   let completion: ModelCompletion;
   try {
-    completion = await input.ports.model.complete(
+    completion = await measureModelRequest(input, state.step,
       {
-        messages: [...withVolatileTail(transcript, pack, null, input.ports.context.turnSections?.() ?? []), ask],
+        messages: [...withVolatileTail(transcript, pack, null, [...(input.ports.context.turnSections?.() ?? []), ...validationSections]), ask],
         ...(model ? { model, strict: decision?.strict ?? false } : {}),
         maxTokens: SYNTHESIS_MAX_TOKENS,
         // A transport records this turn as the run's forced closing one (and what stopped the run), never an ordinary turn.
@@ -277,7 +290,7 @@ export async function synthesizeFinal(
         ...askFields(fields),
         ...(renderTaskState(state.taskState) ? { progress: renderTaskState(state.taskState) } : {}),
       },
-      input.signal,
+      'model_synthesis',
     );
   } catch (err) {
     // A resumable interruption (an eviction) is not "the model said nothing": it ends this tick and the host re-arms the run.
@@ -319,15 +332,26 @@ export async function synthesizeFinal(
  * coverage records.
  */
 export async function dispatchCall(input: RunAgentInput, state: RunState, call: ParsedToolCall, watch: InterruptWatch, facts: TurnFacts = { refused: false }, step: number = state.step): Promise<LoopDispatchResult> {
+  const invoke = () => dispatchCallCore(input, state, call, watch, facts, step);
+  const verdict = (result: LoopDispatchResult) => result.isError || (result.data as { ok?: unknown } | null)?.ok === false ? 'failed' as const : 'completed' as const;
+  return measureWorkflow(input.ports.events, workflowScope(input, step), 'dispatch', () => isSpawnTool(call.name)
+    ? measureWorkflow(input.ports.events, workflowScope(input, step), 'spawn', invoke, verdict, input.signal)
+    : invoke(), verdict, input.signal);
+}
+
+async function dispatchCallCore(input: RunAgentInput, state: RunState, call: ParsedToolCall, watch: InterruptWatch, facts: TurnFacts, step: number): Promise<LoopDispatchResult> {
   const { ports, signal } = input;
   if (call.malformed) return declineMalformedCall(ports, call, facts, step);
+  if (blocksChildSpawn(input.task.dispatch, call.name)) {
+    return { data: { ok: false, error: CHILD_SPAWN_REFUSAL }, isError: true };
+  }
   const platform = ports.platform;
   const own = ownsCall(ports, call.name);
   if (platform && own && platform.handsOff?.(call.name) && state.model.phase === "plan") {
     state.model = reduceRunPolicy(state.model, { type: "hand_off" });
   }
   try {
-    const box: { control?: LoopDispatchResult["control"]; failed?: boolean; killed?: boolean; kind?: "cached" | "neutral"; native?: NativeResult } = {};
+    const box: { control?: LoopDispatchResult["control"]; failed?: boolean; killed?: boolean; kind?: "cached" | "neutral"; native?: NativeResult; observedData?: unknown } = {};
     const exec = async (name: string, args: unknown, stepSignal?: AbortSignal): Promise<unknown> => {
         const run = stepSignal ?? signal;
         const extension = ports.extensions;
@@ -340,6 +364,7 @@ export async function dispatchCall(input: RunAgentInput, state: RunState, call: 
         if (platform && own) {
           const result = await platform.execute(name, args as Record<string, unknown>, { ...(run ? { signal: run } : {}), progress: { rungs: state.stall?.rungs ?? {} }, callId: call.id, step });
           box.failed = result.isError === true;
+          box.observedData = result.observedData;
           if (result.parts || result.meta) box.native = { ...(result.parts ? { parts: result.parts } : {}), ...(result.meta ? { meta: result.meta } : {}) };
           if (result.cached) box.kind = "cached";
           else if (result.neutral) box.kind = "neutral";
@@ -369,6 +394,7 @@ export async function dispatchCall(input: RunAgentInput, state: RunState, call: 
     const failed = box.failed === true || (!own && !!capped && (capped as { ok?: unknown }).ok === false && (capped as { skipped?: unknown }).skipped !== true);
     const dispatched: LoopDispatchResult = { data: capped, ...(box.control ? { control: box.control } : {}), ...(failed ? { isError: true } : {}) };
     if (box.kind) callKinds.set(dispatched, box.kind);
+    if (state.specValidation && !box.killed) observedToolData.set(dispatched, box.observedData ?? data);
     if (box.native) nativeResults.set(dispatched, box.native);
     if (box.killed) killedResults.add(dispatched);
     return dispatched;

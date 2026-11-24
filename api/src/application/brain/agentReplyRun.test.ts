@@ -130,7 +130,7 @@ describe('runAgentReply', () => {
   });
 });
 
-import { CONFORMANCE_ANSWER, CONFORMANCE_PROMPT, CONFORMANCE_SCRIPT, CONFORMANCE_TOOL, CONFORMANCE_TRACE, conformanceTrace } from '@builderforce/agent-run';
+import { CONFORMANCE_ANSWER, CONFORMANCE_PROMPT, CONFORMANCE_SCRIPT, CONFORMANCE_TOOL, CONFORMANCE_ENTRY_TRACE, conformanceTrace } from '@builderforce/agent-run';
 import type { RunEvent } from '@builderforce/agent-run';
 
 // The ONE scripted task every entry point is held to (`@builderforce/agent-run` conformanceTask.ts), through the @-reply's production
@@ -154,7 +154,7 @@ describe('runAgentReply under the shared scripted task', () => {
     });
 
     // The existing fake gateway names its model `reply-model`; that is the only word of the golden it changes.
-    expect(conformanceTrace(h.events as RunEvent[])).toEqual(CONFORMANCE_TRACE.map((fact) => fact.replace('fake-model', 'reply-model')));
+    expect(conformanceTrace(h.events as RunEvent[])).toEqual(CONFORMANCE_ENTRY_TRACE.map((fact) => fact.replace('fake-model', 'reply-model')));
     expect(h.outcome).toMatchObject({ kind: 'finished', output: CONFORMANCE_ANSWER });
     expect(s.text).toBe(CONFORMANCE_ANSWER);
   });

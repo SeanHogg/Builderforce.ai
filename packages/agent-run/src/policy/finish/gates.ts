@@ -71,11 +71,10 @@ export type FinishGateSnapshot = Pick<
   "noDeliverableBlocked" | "reviewVerdictRecorded" | "placeholderBlocks" | "ciPendingBlocks" | "ciFailureBlocks"
 >;
 
-/** Resume the counters, or start them. A sub-agent's deliverable gate starts spent: its
- *  OWNER is held to it for the whole tree. */
-export function initialFinishGateState(resume: Partial<FinishGateSnapshot> | undefined, isChild: boolean): FinishGateState {
+/** Resume the counters, or start them. */
+export function initialFinishGateState(resume: Partial<FinishGateSnapshot> | undefined): FinishGateState {
   return {
-    noDeliverableBlocked: resume?.noDeliverableBlocked ?? isChild,
+    noDeliverableBlocked: resume?.noDeliverableBlocked ?? false,
     reviewVerdictRecorded: resume?.reviewVerdictRecorded ?? false,
     placeholderBlocks: resume?.placeholderBlocks ?? 0,
     ciPendingBlocks: resume?.ciPendingBlocks ?? 0,

@@ -884,6 +884,41 @@
 .bf-tl__file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ---- tool step ---- */
+.bf-tl__tool-group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+  cursor: pointer;
+  list-style: none;
+  color: var(--bf-text-muted, #8a8a8a);
+  font-size: 0.82rem;
+}
+.bf-tl__tool-group-head::-webkit-details-marker { display: none; }
+.bf-tl__tool-group-head:focus-visible {
+  outline: 1px solid var(--bf-accent, #58a6ff);
+  outline-offset: 3px;
+}
+.bf-tl__tool-group-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bf-tl__tool-group-failed {
+  flex-shrink: 0;
+  color: var(--bf-error, #e5534b);
+}
+.bf-tl__tool-group-caret { flex-shrink: 0; }
+.bf-tl__tool-group[open] > summary > .bf-tl__tool-group-caret { transform: rotate(90deg); }
+.bf-tl__tool-group-list { margin: 6px 0 0; padding: 0; }
+.bf-tl__tool-group-list .bf-tl__tool {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.bf-tl__tool-group-list .bf-tl__tool-head { padding: 5px 0; }
+
 .bf-tl__tool {
   border: 1px solid var(--bf-border, rgba(128, 128, 128, 0.25));
   border-radius: 8px;

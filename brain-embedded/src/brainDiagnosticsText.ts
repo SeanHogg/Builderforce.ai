@@ -14,6 +14,7 @@ import { formatModelScorecard, formatModelTurnLog } from './modelScorecard';
 import { formatRoutingByRole } from './routingByRole';
 import { formatStaffingSummary, workFiledNotStaffedVerdict } from './staffingSummary';
 import { MAX_TOOL_RESULT_CHARS } from './toolResultBudget';
+import { formatWorkflowDiagnostics } from './workflowDiagnostics';
 import { formatBytes } from './runActivity';
 import { providerFailureVerdict } from './providerFailureCause';
 
@@ -54,15 +55,17 @@ function contextPressureLine(d: BrainDiagnostics): string | null {
   if (d.tokensMeasured && d.promptTokenPeak > 0) parts.push(`prompt peaked at ${d.promptTokenPeak.toLocaleString('en-US')} tokens`);
   if (d.truncatedToolResults > 0) parts.push(`${d.truncatedToolResults} tool result(s) trimmed to the ${toolResultBudgetText()} budget by design`);
   if (!parts.length && d.largestToolResult) parts.push(`one ${d.largestToolResult.label} result was ${kb(d.largestToolResult.bytes)}`);
-  return `Context: pressure noted (${parts.join('; ')}) — no turn was cut short by it. The working transcript is held to a ${HISTORY_TOKEN_BUDGET.toLocaleString('en-US')}-token budget on purpose, so a prompt above that figure is the design working, not a fault.`;
+  return `Context: pressure noted (${parts.join(', ')}) — no turn was cut short by it. The working transcript has a ${HISTORY_TOKEN_BUDGET.toLocaleString('en-US')}-token budget.`;
 }
 
 /** The `healthy` sentence — names recovered failures so a fix-and-retry run reads as completed, not as clean. */
 function healthyVerdict(d: BrainDiagnostics): string {
   const recovered = d.recoveredFailures ?? 0;
-  return recovered > 0
-    ? `Completed — ${recovered} failed step(s) recovered (each was followed by a successful retry of the same command or file). No unrecovered failure, no truncated or empty turns, and no context pressure. Nothing here needs triaging.`
-    : 'No failure signal — no errors, no truncated or empty turns, and no context pressure. Nothing here needs triaging.';
+  const pressure = d.contextPressureOnly ? ' Context pressure was observed without a turn being cut short.' : '';
+  const failure = recovered > 0
+    ? `Completed — ${recovered} failed step(s) recovered. No unrecovered failure was recorded.`
+    : 'No failure signal was recorded.';
+  return failure + pressure;
 }
 
 /** The one-sentence "Likely cause". */
@@ -75,6 +78,10 @@ function verdictText(d: BrainDiagnostics): string {
       return `ANSWERED FROM MEMORY — no model ran this turn. The reply was served by the memory-first short-circuit (${(d.memoryAnswers ?? []).map((m) => m.source === 'evermind' ? `the project Evermind SSM${m.projectId != null ? ` of project #${m.projectId}` : ''}${m.version != null ? ` v${m.version}` : ''}` : m.source === 'symbol-index' ? 'the workspace symbol index' : m.source === 'deterministic' ? `the deterministic workspace action ${m.actionId ?? ''}`.trim() : 'the Q&A cache').join(', ')}), so zero turns, zero tokens and zero tool calls is EXPECTED, not a fault. ${evermindAnswers.length ? 'The Evermind SSM cannot call tools and answers only from what it has learned, so it can neither fetch live data nor do work — if the reply was wrong, garbled or stale, that is the cause. Turn Memory off for this chat, or disable inference on that head.' : (d.memoryAnswers ?? []).every((m) => m.source === 'symbol-index') ? 'The request was only "where is X defined?" and the symbol index resolved every name, so the definitions were listed without a model; ask for anything more to reach the model.' : (d.memoryAnswers ?? []).every((m) => m.source === 'symbol-index' || m.source === 'deterministic') ? 'A deterministic workspace action (the PreFetch gate) settled the request without a model; ask for anything more to reach the model.' : 'The reply is a replay of an earlier answer to the same question; ask a differently-worded question to reach the model.'} Switching models changes nothing here.`;
     case 'provider-failure':
       return d.providerFailure ? providerFailureVerdict(d.providerFailure) : 'PROVIDER FAILURE — the run\'s last completion failed and was not recovered.';
+    case 'spec-validation-incomplete':
+      return 'PRD validation ended with unverified acceptance requirements.';
+    case 'spec-check-failed':
+      return 'One or more PRD acceptance checks exited with a failure.';
     case 'no-tools-advertised':
       return 'NO TOOLS ADVERTISED — at least one turn was handed ZERO tool definitions, so it could not have emitted a call whatever it wanted to do. This is a catalog/config failure on our side, not a model fault: the gateway MCP catalog (`/llm/v1/mcp/tools`) failed to load, or no actions were registered for this surface. See the "Tools available to the model" line in the Chat diagnostics block for the fetch error. Switching models will not help.';
     case 'tool-not-advertised':
@@ -118,6 +125,13 @@ function verdictText(d: BrainDiagnostics): string {
  */
 export function formatBrainDiagnostics(d: BrainDiagnostics): string[] {
   const lines: string[] = ['--- Diagnostics ---', `Likely cause: ${verdictText(d)}`];
+  if (d.specValidation) {
+    const { completed, failed, pending, unverified } = d.specValidation;
+    lines.push(completed === 0
+      ? `PRD validation is unverified. No check completed. Background jobs still pending at settlement: ${pending}.`
+      : `PRD validation recorded ${completed} completed check(s), including ${failed} with a failing exit. Background jobs still pending at settlement: ${pending}.`);
+    if (unverified > 0) lines.push(`Declared acceptance checks still unverified: ${unverified}.`);
+  }
   // When the turn/token figures cover only THIS session while the tool figures
   // cover the whole conversation, say so on the line itself — read together
   // without it, "Turns: 2 · Tool calls: 44" looks like corrupt data.
@@ -150,7 +164,7 @@ export function formatBrainDiagnostics(d: BrainDiagnostics): string[] {
   // — "did anything actually come of this?" — for the half progress cannot see: work that
   // was created perfectly and handed to nobody. See `staffingSummary.ts`.
   if (d.memoryUsage) lines.push(formatMemoryUsage(d.memoryUsage));
-  lines.push(...(d.staffing ? formatStaffingSummary(d.staffing, { sessionShipped: d.sessionShipped }) : []));
+  lines.push(...(d.staffing ? formatStaffingSummary(d.staffing, { sessionWork: d.sessionWork }) : []));
   // WHICH steps failed. `Errors: 1` alone forced a reader to scroll the transcript
   // hunting for the failure; naming it is the difference between a number and a lead.
   if (d.errorSteps?.length) {
@@ -224,5 +238,6 @@ export function formatBrainDiagnostics(d: BrainDiagnostics): string[] {
         .join(', '),
     );
   }
+  if (d.workflow) lines.push(...formatWorkflowDiagnostics(d.workflow));
   return lines;
 }

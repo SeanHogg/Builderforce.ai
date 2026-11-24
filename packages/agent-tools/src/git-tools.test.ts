@@ -140,6 +140,13 @@ describe("git tools — shared runner contract (gitToolResult)", () => {
     expect(out.output).toContain("a1b2c3 subject");
   });
 
+  it("git_history with an explicit repo carries every pathspec candidate", async () => {
+    const sh = recordingShell(() => ({ ok: true, exitCode: 0, stdout: "a1b2c3 subject\n" }));
+    await gitHistoryTool.execute({ path: "app/page.tsx", repo: "app" }, sh as never);
+    expect(sh.scripts[0]).toBe('git --no-pager log --oneline -n 30 -- "app/page.tsx" "page.tsx"');
+    expect(sh.cwds[0]).toBe("app");
+  });
+
   it("sync_latest decodes the MERGE_CONFLICT sentinel (exit 3) into an actionable error", async () => {
     const sh = recordingShell(() => ({ ok: false, exitCode: 3, stdout: "Auto-merging x.ts\nCONFLICT\nMERGE_CONFLICT\n" }));
     const out = data(await gitSyncLatestTool.execute({}, sh as never));

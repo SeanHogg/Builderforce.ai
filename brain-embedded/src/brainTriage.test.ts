@@ -722,8 +722,9 @@ describe('memory usage and local shipping', () => {
       { ts: '', category: 'tool', label: 'edit_file', result: { ok: true } },
       { ts: '', category: 'tool', label: 'git_commit', result: { ok: true } },
     ]);
-    expect(d.sessionShipped).toBe(2);
+    expect(d.sessionWork).toBe(2);
+    expect(d.sessionShipped).toBe(0);
     expect(d.likelyCause).not.toBe('work-filed-not-staffed');
-    expect(formatBrainDiagnostics(d).join('\n')).toContain('the session itself changed the code');
+    expect(formatBrainDiagnostics(d).join('\n')).toContain('the session performed local work');
   });
 });

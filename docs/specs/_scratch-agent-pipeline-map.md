@@ -28,7 +28,7 @@ flowchart TD
   Agent --> Outcome[RunOutcome to surface settlement]
 ```
 
-The Brain preamble renders opening data and per-run directives and decides its route using shared `routeRun`. `runPrepared` passes `{ input, decided }` so `openRun` does not decide again. Other callers may supply route facts directly. Full/quick scoring requires `routing`; children are not scored.
+The Brain preamble renders opening data and per-run directives and decides its route using shared `routeRun`. `runPrepared` passes `{ input, decided }` so `openRun` does not decide again. Other callers may supply route facts directly. A delegated brief goes through the same full/quick decision as any task, with the host's routing settings and stage models.
 
 The request classifier separates the ask from pasted context. An explicit question uses the quick route unless it asks to run the full pipeline. Brain leaves work from a question run uncommitted. The shared guard preserves the question's tool-round count across continuation and offers a final answer after six rounds.
 
@@ -62,16 +62,16 @@ The editor host is shared by panel and participant. `brainRunHostPorts.ts` binds
 | Full/quick algorithm exists only in Brain | It now lives in `packages/agent-run/src/route/routeRun.ts`; Brain runRoute.ts supplies facts and retains one decision. Configuration parity remains open. |
 | startRun directly duplicates deterministic finish | deterministicFinish.ts exposes closeOutPort; openRun invokes it before the finish gate or for unfinished-settlement upkeep. startRun records the outcome. A refused finish may cause another legitimate attempt. |
 | Four editor prompt assembly layers | `brain-embedded/src/runStore/openingSections.ts` renders opening data, followed by Brain directives. Former useChatSystemPrompt, host runPreamble, and participant prompt files are gone. |
-| Legacy child standing instructions are independently implemented | `agent-runtime/src/agents/subagent-prompt.ts` calls shared subagentSystemPrompt and bounds configured depth by MAX_SUBAGENT_DEPTH. Session additions and separate spawning remain. |
+| Legacy child standing instructions are independently implemented | `agent-runtime/src/agents/subagent-prompt.ts` calls shared subagentSystemPrompt and adds session context. The gateway validates the caller's session before invoking shared admission. |
 | Kernel header names the wrong caller | `packages/agent-loop/src/loop.ts` now names openRun → runAgent correctly. |
 
 ## 4. Consolidated policies and host responsibilities
 
 1. **Brain policy callbacks removed from the production door.** preflightRecorded.ts supplies data to createModelHook; brainFold.ts supplies native history, summary transport and trace/durable-marker sinks to createCompactionHook. policy/compaction/history.ts owns memo reuse, immutable source history, summary deadline/fallback, saved tokens and fold result construction. The compaction.hook escape hatch is removed. Brain progressGuard, tool pre/post-step policy and continuation remain separate, as excluded by this slice.
 
-2. **Shared spawnChild implemented.** policy/subagents/child.ts validates parent identity, registered entryPoint, nonempty owner/task and CHILD depth 1 through MAX_SUBAGENT_DEPTH. prepareChildStart builds the shared standing prompt with optional persona/base prompt and work references. spawnChild<Result> invokes a scoped host start and preserves its result: VSIX controls observe host completion separately from returning a handle; cloud returns durable admission; on-prem returns a completed report. CloudChildSpec persists prepared standing instructions for its later tick; old payloads use the shared preparer as a compatibility fallback.
+2. **Shared spawnChild implemented.** `spawnChild` admits direct children of root runs through a scoped host start. `prepareChildStart` validates identity and the registered entry point, then builds the standing prompt and work references. Cloud persists those instructions for a later tick and uses the shared preparer for older payloads that lack them. `prepareChildStart` accepts previously admitted deeper lineage so existing payloads can resume. VSIX and cloud return admission handles, and the in-process relay returns a completed report.
 
-3. **Gateway child starts use the shared admission contract.** sessions-spawn-tool.ts, commands-subagents.ts, infra/local-agent-transport.ts and transport/local-adapter.ts call spawnSubagentDirect. It authorizes before shared spawnChild and supplies gateway/session lifecycle ports. buildSubagentSessionPrompt adds session context. The gateway owns its depth caps, agent allow-lists, identity, delivery and result registration.
+3. **Gateway child starts use the shared admission contract.** sessions-spawn-tool.ts, commands-subagents.ts, infra/local-agent-transport.ts and transport/local-adapter.ts call spawnSubagentDirect. It authorizes before shared spawnChild and supplies gateway/session lifecycle ports. buildSubagentSessionPrompt adds session context. The shared admission policy enforces root-only spawning. The gateway owns agent allow-lists, identity, delivery and result registration.
 
 4. **Routing decision and default configuration are shared.** openRun defaults to the full pipeline. Brain uses the same default, and its editor settings can opt into auto scoring and a quick model. The decision is carried in RunState for resumes and outcome rows. Host model availability, quick-model overrides and gateway cascades still vary.
 
@@ -99,7 +99,7 @@ flowchart TD
   Opening --> Compose[openRun: shared factories, ports only]
   Compose --> Kernel[runAgent → runAgentLoop]
   Kernel --> Dispatch[Dispatch: capability + governance checks]
-  Dispatch --> Spawn
+  Dispatch -->|root spawn only| Spawn
   Dispatch --> Ledger[(Work ledger: status + evidence)]
   Kernel --> Finish{Work resolved and no live children?}
   Ledger --> Finish
@@ -111,6 +111,45 @@ flowchart TD
 ```
 
 The start contract must preserve local/durable identity and authorization. Background admission and eventual settlement are separate events. Shared finish policy can only enforce evidence supplied through the host's available ports.
+
+### Sub-agent execution
+
+Children use the shared routing, opening, tool dispatch, verification, finish gates and settlement. The editor supplies the same pipeline settings, phase models and model preflight to its children. The in-process relay carries the owner's workspace, context and verification policy. The cloud derives the outcome's parent ID from the persisted child spec. Child-specific prompt, lineage, scoped capabilities, and report delivery remain inputs and outputs of that workflow. The owner handles publication and sign-off for the combined changes.
+
+The shared driver removes spawn tools from a child's catalog and refuses direct dispatch of those names. Editor, cloud and gateway admission also reject a child acting as a spawner. Previously admitted child runs retain their saved state and route on resume.
+
+Local validation on 2026-11-24 passed the shared runtime suite (869 tests) and focused Brain (12), VSIX (52), cloud (23), relay and gateway admission (18), gateway catalog and prompt (60), and standing instruction (19) tests. Shared runtime, Brain, VSIX and relay typechecks passed. The execution import, source-package, and tenant-scope checks passed. Installed-host verification remains tracked in PRD 50.
+
+### Workflow diagnostics metrics (2026-11-24)
+
+The coverage audit added nested timings for context pack assembly, individual model attempts and forced synthesis, governance and platform checks, human and approval waits, state saves, memory write-back, and shared and Brain close-out. These are listed separately from their parent span. A parked approval records the time to park. Time spent waiting between invocations is outside that measurement.
+
+`Copy diagnostics` now includes a `workflow.metrics` table; the same measurements are stored in `run.workflow` in the JSON capture. The canonical stage IDs live in `packages/agent-run/src/telemetry/workflowMetrics.ts`. They are protocol fields, so exports retain their exact names.
+
+| Diagram step / metric ID | Measured boundary and available facts |
+| --- | --- |
+| Surface / `surface` | Brain preparation: catalog, grounding, preflight and prepared request. Host authentication before Brain entry is outside this span. |
+| Shared start / `start` | `openRun` entry-point and catalog validation. Editor journals, change-set admission and remote authentication remain host-owned; this duration does not claim to measure them. |
+| Routing / `route` | The actual route decision, including quick/full counters. Brain measures its pre-decided route in the preamble; `openRun` does not count intake as a second decision. A resumed route is reused, not remeasured. |
+| Work plan / `work` | Initial `planWork`: assigned-item and criterion counts. |
+| Opening / `opening` | Initial `openingRows`: assembled message count. A resumed tick reuses the opening and does not add another sample. |
+| Composition / `compose` | Shared policy factory composition. Actual composition happens before `runAgent` constructs its work plan and opening; the diagram describes logical responsibilities rather than strict call order. |
+| Kernel / `kernel` | Each `runAgentLoop` invocation, with steps and the latest cumulative tool-call, tool-error and token counters. A yielded tick is an invocation completion, not a terminal run. |
+| Dispatch / `dispatch` | Actual dispatch, including the registry's capability resolution and tool execution. Earlier kernel/platform preflight and approval waits are outside this span. |
+| Child dispatch / `spawn` | A recognized spawn tool's dispatch interval. Some hosts return admission handles and others return completed reports; this interval is not universally child lifetime. Children report their own execution stages separately. |
+| Work ledger / `ledger` | The finish policy's scoped evidence refresh and open-work check; latest assigned/done/blocked/in-review/open counts. |
+| Finish / `finish` | Finish-tool gates, prose settle checks and live-child checks, with distinct blocked and failed attempts. Policy defaults completing are not evidence that an absent host verifier ran. |
+| Settlement / `settle` | Shared settlement, including memory write-back, state save and terminal-row handling. This excludes later host-specific settlement and inbox draining. |
+| Evaluation / `grade` | Deterministic outcome/scorecard construction and its assigned/done/blocked/in-review/open counts. |
+| Feedback / `outcome` | The host outcome callback, when bound. Callback completion is not proof of remote ingestion, routing training or deployment. |
+
+Every row reports observed attempts, completed/failed/blocked/cancelled counts, unclosed spans, total measured milliseconds and maximum measured milliseconds. `latestCounters` are snapshots, not additive counters. Timing uses explicit start/end observations, never the gap between unrelated events. Parent spans include nested spans, so summing the rows is not end-to-end latency. A measured 0 ms is valid at the clock's resolution; `null` means unmeasured. `completed` means that invocation returned, not that work was accepted or shipped.
+
+Uninstrumented steps and old captures are `not_observed`, with null duration. A start without a matching completion is `incomplete`, not a success or proof that the stage is still running. The report summarizes the trace available at capture time, potentially across multiple runs; `runIds` identifies observed runs. Truncated history can therefore provide partial evidence. Start/end samples have distinct trace identities even when their timestamps are equal, and merged live/durable copies count once.
+
+Measurements use the optional `EventSink.workflow` channel, separate from semantic `RunEvent` conformance traces. Brain persists that channel into diagnostic steps for the VSIX, web and other Brain-backed surfaces. Non-Brain hosts must bind the channel to their own telemetry store before their captures can claim stage coverage. Metrics failures never block execution, and metric payloads contain IDs, outcomes and numeric counters rather than prompts or tool arguments.
+
+Remaining coverage gaps include VSIX admission and journaling before Brain starts, the delay between child admission and execution, dedicated verification timings, and the final transcript outbox flush. Model request spans cover calls made by the shared driver. Provider retries hidden inside a transport contribute to its request duration without a separate attempt count. A copied report can show which stages it observed, while end-to-end delivery requires receipts from the host and telemetry destinations.
 
 ## 6. Integration verification (2026-11-23)
 
@@ -147,3 +186,9 @@ Brain recorded-preflight, compactionSaved, fold deadline and production-door sui
 VSIX hostStartGate and childRunSpawner pass (13 tests); participant/host integration needs the built @seanhogg/builderforce-brain-embedded package, and typecheck needs vscode types. Repaired malformed newline literals in participantRun.test.ts and runSetup.ts rather than loosening their assertions. Runtime onPremSubagents passes (6 tests, including the standing-instruction assertion); runtime conformance needs @sinclair/typebox and legacy tests need @aws-sdk/client-bedrock. Cloud child tests need @neondatabase/serverless. Runtime typecheck reports unresolved dependency graphs (including @sinclair/typebox and @opentelemetry packages). API typecheck exhausted the default Node heap at about 4 GiB; neither passed.
 
 check-one-execution --enforce, the source-package graph check and git diff --check pass. No live run was traced. See PRD 50 validation for the full accounting. Validation tooling was installed outside repository manifests before the user requested no package installs; no further installs are performed.
+
+## 11. Executable PRD validation and diagnostics (2026-11-24)
+
+The shared runtime observes check results after authorized dispatch. A validation request reads the named spec, matches its declared commands and directories to completed exits, and carries background job evidence across durable ticks. Settlement emits `run.spec_validation` with completion, failure, pending and unverified counts. Brain records this event in the trace and diagnostic report. The stored-capture tool returns evidence from saved snapshots, including their age and whether the run was still in progress.
+
+See the current [acceptance record](./make.md#prd-50--one-pipeline-validation-and-diagnostic-gaps) for local results and the remaining installed-host checks.

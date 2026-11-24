@@ -15,13 +15,16 @@ import { steeringTakers } from "./kernelSteering.js";
 import { noToolCallsHook } from "./kernelNoTools.js";
 import { appendRows, applyCompaction, currentView, emit, policyContext, toPolicyCall, type RunAgentInput, type TurnFacts } from "./runContext.js";
 import { rememberWrite } from "./runState.js";
-import { callKinds, ownsCall, type TurnSelection } from "./runTurn.js";
+import { callKinds, observedToolData, ownsCall, type TurnSelection } from "./runTurn.js";
 import { nativeOfTurn } from "./runRows.js";
 import { volatileTail } from "./policy/compaction/pack.js";
 import type { UsdBudget } from "./policy/budget/usd.js";
 import type { CacheServedStreak } from "./policy/tools/cacheServedStreak.js";
 import { LINKED_WORK_OPEN, lastFinishReason } from "./policy/finish/index.js";
+import { blocksChildSpawn, CHILD_SPAWN_REFUSAL } from "./policy/subagents/child.js";
+import { observeSpecCheck, specValidationRetry } from "./policy/verify/specValidation.js";
 import { bumpMutations, tallyCall, tallyTurn, tallyVerify, type RunTally } from "./telemetry/runTally.js";
+import { measureWorkflow, workflowScope } from "./telemetry/workflowMetrics.js";
 import { isReadOnlyShellCall } from "@builderforce/run-guards";
 import { resolveToolAlias, type ToolSchema } from "@builderforce/agent-tools";
 import type { TurnInterruption, TurnMenu } from "./surface.js";
@@ -89,6 +92,8 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
 
   /** The verify a finish waits on (`RunPolicy.verify`): a failing verdict refuses it. */
   const verifyBlock = async (pctx: PolicyContext): Promise<string | null> => {
+    const validation = specValidationRetry(state);
+    if (validation) return validation;
     if (policy.verify === "none") return null;
     const verdict = await hooks.verify.verify(pctx);
     if (verdict && verdict.ran !== false) tallyVerify(tally, verdict.ok);
@@ -154,7 +159,8 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
       // guards' pending finish.
       const finalBy = finalSource(menu, () => hooks.guards.finalTurn?.(policyContext(input, state, base, ctx.step, ctx.stepInCall)) === true);
       const finalTurn = finalBy !== undefined;
-      const advertised = finalTurn ? [] : (menu?.tools ?? forced?.selected ?? (await selectNow()));
+      const advertised = finalTurn ? [] : (menu?.tools ?? forced?.selected ?? (await selectNow()))
+        ?.filter((schema) => !blocksChildSpawn(input.task.dispatch, schema.function.name));
       run.selection = {
         tools: advertised,
         ...(forced ? { forced } : {}),
@@ -215,18 +221,24 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
 
     beforeDispatch: async (call, ctx) => {
       starts.set(call.id, Date.now());
+      if (blocksChildSpawn(input.task.dispatch, call.name)) {
+        return { result: { data: { ok: false, error: CHILD_SPAWN_REFUSAL }, isError: true } };
+      }
       const pctx = contextAt(ctx.step, ctx.stepInCall);
       const pcall = toPolicyCall(call);
       // Governance gates (`RunPolicy.approvalGates`): a block refuses the call, an approval
       // asks the human channel and parks the run on the approver.
-      const gated = await hooks.tools.gate?.(pctx, pcall);
+      const scope = workflowScope(input, ctx.step);
+      const gated = hooks.tools.gate && await measureWorkflow(ports.events, { ...scope, operation: 'governance_check' }, 'dispatch',
+        () => hooks.tools.gate!(pctx, pcall), (result) => result ? 'blocked' : 'completed', input.signal);
       if (gated) {
         const refused: LoopDispatchResult = { data: gated.data, isError: true, ...(gated.control ? { control: asLoopControl(gated.control) } : {}) };
         if (gated.control) held.add(refused);
         return { result: refused };
       }
       // A guard's skip answers the call; one carrying a control parks the run on a person.
-      const decision = await hooks.guards.beforeDispatch?.(pctx, pcall);
+      const decision = hooks.guards.beforeDispatch && await measureWorkflow(ports.events, { ...scope, operation: 'guard_check' }, 'dispatch',
+        () => hooks.guards.beforeDispatch!(pctx, pcall), (result) => result?.skip ? 'blocked' : 'completed', input.signal);
       if (decision?.skip) {
         const { data, isError, control } = decision.skip;
         const skipped: LoopDispatchResult = { data, isError: isError ?? true, ...(control ? { control: asLoopControl(control) } : {}) };
@@ -254,7 +266,9 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
       // The surface's own say over the call (`PlatformTools.preflight`): here, where the loop does not race it against the person's Stop.
       const platform = ports.platform;
       if (platform?.preflight && ownsCall(ports, call.name)) {
-        const pre = await platform.preflight({ id: call.id, name: call.name, args: call.args, arguments: call.raw.arguments, malformed: call.malformed }, { step: ctx.step });
+        const pre = await measureWorkflow(ports.events, { ...scope, operation: 'platform_preflight' }, 'dispatch',
+          () => platform.preflight!({ id: call.id, name: call.name, args: call.args, arguments: call.raw.arguments, malformed: call.malformed }, { step: ctx.step }),
+          (result) => result && 'result' in result && result.result.isError ? 'blocked' : 'completed', input.signal);
         if (pre && "result" in pre) return { result: { data: pre.result.data, ...(pre.result.isError ? { isError: true } : {}) } };
         if (pre && "rewrite" in pre) {
           const { name, args } = pre.rewrite;
@@ -339,7 +353,10 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
       if (data !== result.data) rewriteRow(message, data, message.parts !== undefined || ports.platform?.verbatimText === true);
       if (!stub) {
         hooks.tools.observe?.(pctx, pcall, data, result.isError === true);
-        if (!kind) hooks.verify.observe?.(pctx, pcall, result.data, message.meta, ok);
+        if (!kind) {
+          hooks.verify.observe?.(pctx, pcall, result.data, message.meta, ok);
+          if (state.specValidation) observeSpecCheck(state, { ...pcall, name: resolveToolAlias(pcall.name) }, observedToolData.get(result), message.meta?.details, ok);
+        }
         // The run's memory is the WORKSPACE's (files read and written, searches made); a
         // call on the surface's own tools acted on its board, not on this work.
         if (!ownsCall(ports, call.name)) await hooks.memory.observe?.(pctx, pcall, result.data, result.isError);

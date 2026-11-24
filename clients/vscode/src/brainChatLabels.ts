@@ -36,6 +36,9 @@ export function brainChatLabels(): Record<string, string> {
     "tl.you": t("You"),
     "tl.assistant": "BuilderForce",
     "tl.input": t("Input"),
+    "tl.toolGroupCommands": t("Ran commands ({count})"),
+    "tl.toolGroupUsed": t("Used {tools} ({count})"),
+    "tl.toolGroupFailed": t("{count} failed"),
     "tl.output": t("Output"),
     // A shell step renders as a terminal exchange — the command, then what it printed.
     // `{code}` is substituted by the renderer, not by l10n.

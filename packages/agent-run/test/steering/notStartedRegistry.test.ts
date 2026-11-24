@@ -24,7 +24,7 @@ describe("a registry command that never started", () => {
     const args = { command: "npm test" };
     const call = { id: "c1", name: "run_command", args, raw: { id: "c1", name: "run_command", arguments: JSON.stringify(args) }, malformed: false };
 
-    const result = await dispatchCall({ task: TEST_TASK, policy: TEST_POLICY, ports }, freshState(TEST_POLICY, TEST_TASK), call, waiting);
+    const result = await dispatchCall({ task: TEST_TASK, policy: TEST_POLICY, ports }, freshState(TEST_POLICY), call, waiting);
 
     expect(result.data).toMatchObject({ ok: false, skipped: true });
     // not counted as a failed dispatch: the failure breaker never sees it ...

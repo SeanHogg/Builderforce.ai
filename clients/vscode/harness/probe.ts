@@ -204,6 +204,7 @@ export async function probe(opts: ProbeOptions): Promise<ProbeResult> {
 
   try {
     await startRun(chatId, {
+      entryPoint: 'vscode',
       resolvedSystemPrompt: '',
       opening: { hasWorkspace: true },
       tools: toolSpecsFor(actions),

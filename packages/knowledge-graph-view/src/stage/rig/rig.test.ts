@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { RESTING_DEPTH } from '../depth';
 import { TWEEN_MS } from '../tween';
 import { MAX_ZOOM_FACTOR, RigController } from './rig';
 
@@ -36,9 +37,9 @@ describe('the camera rig (PRD 43 B2)', () => {
     it('zooms about a point (the ground point under it stays put), capped against the fit; Fit returns home', () => {
         const rig = new RigController();
         rig.setHome({ cx: 0, cz: 0, zoom: 1 }, RIG, 800, 600, 0, 0);
-        const at = [600, 450] as const;
-        const before = rig.project(200, 0, 150);
-        expect(before).toEqual(at);
+        const at = rig.project(200, 0, 150);
+        expect(at[0]).toBeCloseTo(600);
+        expect(at[1]).toBeCloseTo(300 + 150 * Math.cos(rig.tilt * Math.PI / 180));
         rig.zoomBy(2, at[0], at[1]);
         const after = rig.project(200, 0, 150);
         expect(after[0]).toBeCloseTo(at[0]);
@@ -115,15 +116,17 @@ describe('the orbit rig (3D, a placement carrying rig.view)', () => {
         const rig = new RigController();
         rig.setHome({ cx: 100, cz: 50, zoom: 2 }, RIG, 800, 600, 0, 0);
         expect(rig.projection).toBe('orthographic');
+        expect(rig.depth).toBe(RESTING_DEPTH);
+        const mapPitch = 90 - rig.tilt;
         rig.setHome({ cx: 0, cz: 0, zoom: 1 }, ORBIT_RIG, 800, 600, 1000);
         expect(rig.tweening).toBe(true);
         rig.tick(1000);
-        // Starts from the map's perspective twin: straight down, same target, same on-screen scale.
-        expect(rig.currentOrbit.pitch).toBeCloseTo(90);
+        // Starts from the map's perspective twin: same tilt, target, and on-screen scale.
+        expect(rig.currentOrbit.pitch).toBeCloseTo(mapPitch);
         expect(rig.pxPerWorld).toBeCloseTo(2);
         rig.tick(1000 + TWEEN_MS / 2);
         expect(rig.projection).toBe('perspective');
-        expect(rig.currentOrbit.pitch).toBeLessThan(90);
+        expect(rig.currentOrbit.pitch).toBeLessThan(mapPitch);
         expect(rig.currentOrbit.pitch).toBeGreaterThan(26);
         expect(rig.tick(1000 + TWEEN_MS)).toBe(false);
         expect(rig.currentOrbit.pitch).toBeCloseTo(26);

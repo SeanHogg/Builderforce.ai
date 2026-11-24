@@ -177,11 +177,15 @@ function defaultRepoOf(ctx: GitShellCtx): string | null {
   return safeRepoArg(ctx.caps.shell?.defaultRepo);
 }
 
-/** A workspace-relative path re-expressed inside `repo` (`app/src/x.ts` → `src/x.ts`). */
-function pathInRepo(path: string | undefined, repo: string): string | undefined {
-  if (!path) return path;
-  const inner = commitPathCandidates(path, repo);
-  return inner.length > 0 ? inner[inner.length - 1] : undefined;
+/**
+ * Every pathspec a path should be tried as inside `repo`: as given AND re-expressed
+ * (`app/src/x.ts` → `app/src/x.ts`, `src/x.ts`). A pathspec matching nothing is harmless to
+ * `git diff` / `git log`, and passing both means a repo that really has a nested `app/`
+ * is never mis-resolved. No path ⇒ no pathspecs.
+ */
+function pathsInRepo(path: string | undefined, repo?: string): string[] {
+  if (!path) return [];
+  return repo ? commitPathCandidates(path, repo) : [path];
 }
 
 export async function notARepoWithCandidates(action: string, ctx: GitShellCtx): Promise<ToolResult> {
@@ -234,31 +238,34 @@ export type GitShellResult = { ok: boolean; stdout?: string; exitCode?: number; 
 const rootNotARepo = new WeakSet<object>();
 
 /** Every scope a call with no explicit `repo` is tried in, in order (see the module note). */
-function scopeAttempts(ctx: GitShellCtx, path: string | undefined): Array<{ repo?: string; path?: string }> {
+function scopeAttempts(ctx: GitShellCtx, path: string | undefined): Array<{ repo?: string; paths: string[] }> {
   const fallback = defaultRepoOf(ctx);
   const shell = ctx.caps.shell;
-  const attempts: Array<{ repo?: string; path?: string }> = [];
-  if (!(fallback && shell && rootNotARepo.has(shell))) attempts.push({ path });
+  const attempts: Array<{ repo?: string; paths: string[] }> = [];
+  if (!(fallback && shell && rootNotARepo.has(shell))) attempts.push({ paths: pathsInRepo(path) });
   const inferred = inferRepoFromPath(path);
-  if (inferred) attempts.push({ repo: inferred, path: pathInRepo(path, inferred) });
-  if (fallback && fallback !== inferred) attempts.push({ repo: fallback, path: pathInRepo(path, fallback) });
+  if (inferred) attempts.push({ repo: inferred, paths: pathsInRepo(path, inferred) });
+  if (fallback && fallback !== inferred) attempts.push({ repo: fallback, paths: pathsInRepo(path, fallback) });
   return attempts;
 }
 
 /**
  * Run a git command where the code lives. `run(repo, path)` executes the command scoped
- * to `repo` (undefined = the root) with `path` re-expressed inside it. An explicit `repo`
- * runs once, as the caller chose. Returns the first result that found a repository and
- * the scope it ran in, or null when none did (the caller names the candidates).
+ * to `repo` (undefined = the root) with the path's pathspecs (as given + re-expressed inside
+ * the repo; see `pathsInRepo`). An explicit `repo` runs once, as the caller chose. Returns the
+ * first result that found a repository and the scope it ran in, or null when none did (the
+ * caller names the candidates).
  */
 export async function runInRepoScope(
   ctx: GitShellCtx,
   scope: { repo?: string; path?: string },
-  run: (repo: string | undefined, path: string | undefined) => Promise<GitShellResult>,
+  run: (repo: string | undefined, paths: string[]) => Promise<GitShellResult>,
 ): Promise<{ r: GitShellResult; repo?: string } | null> {
-  if (scope.repo) return { r: await run(scope.repo, scope.path), repo: scope.repo };
+  // The model repeats the repo folder the file tools hand out (`repo` + `Builderforce.ai/docs/x.md`); git runs
+  // INSIDE the repo, where that path matches nothing and answers with empty output, so also try it re-expressed.
+  if (scope.repo) return { r: await run(scope.repo, pathsInRepo(scope.path, scope.repo)), repo: scope.repo };
   for (const attempt of scopeAttempts(ctx, scope.path)) {
-    const r = await run(attempt.repo, attempt.path);
+    const r = await run(attempt.repo, attempt.paths);
     if (!isNotARepo(r)) return attempt.repo ? { r, repo: attempt.repo } : { r };
     if (!attempt.repo && ctx.caps.shell) rootNotARepo.add(ctx.caps.shell);
   }

@@ -23,6 +23,7 @@ import { defaultPipelineRouting, routeRun, type RouteDecision, type RouteInput }
 import { currentView, emit, policyContext, type RunAgentInput } from "./runContext.js";
 import { runAgent } from "./runAgent.js";
 import { tapEvents } from "./tapEvents.js";
+import { measureWorkflow, measureWorkflowSync, workflowScope } from "./telemetry/workflowMetrics.js";
 
 export type { RouteDecision, RouteInput } from "./route/routeRun.js";
 export type { PublishGatePort } from "./policy/guards/shipGate.js";
@@ -69,7 +70,7 @@ export type CloseOutPort = (ctx: PolicyContext, mode: CloseOutMode) => Promise<v
 /** Run the port, tracing (never rethrowing) a failure: a close-out never refuses a finish or a settle. */
 async function runCloseOut(closeOut: CloseOutPort, ctx: PolicyContext, mode: CloseOutMode): Promise<void> {
   try {
-    await closeOut(ctx, mode);
+    await measureWorkflow(ctx.ports.events, { runId: ctx.task.runId, entryPoint: ctx.policy.entryPoint, step: ctx.step, operation: 'close_out' }, 'finish', () => closeOut(ctx, mode));
   } catch (err) {
     await emit(ctx.ports.events, { kind: "finish.close_out_error", step: ctx.step, reason: err instanceof Error ? err.message : String(err) });
   }
@@ -108,7 +109,7 @@ function composeModules(surface: SurfacePorts, ran: { value: boolean }): Partial
 /**
  * Fold the route into the host's existing model policy. Hosts without a modelStart seed keep
  * their model options, with the phase and pins supplied by the route. Unscored runs keep
- * their selection, while a configured child seed starts in code.
+ * their selection and take any supplied stage models.
  */
 export function routedPolicy(policy: RunPolicy, route: RouteInput, decision: RouteDecision): RunPolicy {
   const { pipeline, start, skipsVerify } = decision;
@@ -122,10 +123,8 @@ export function routedPolicy(policy: RunPolicy, route: RouteInput, decision: Rou
       modelOptions: { ...policy.modelOptions, startPhase: start.startPhase, ...(start.phaseModels ? { phaseModels: start.phaseModels } : {}) },
     };
   }
-  // An unrouted run still carries the host's stage models (they reach the run through the route input, the ONE path), and a sub-agent starts in `code`.
   if (!pipeline) {
-    if (!route.child && !start.phaseModels) return folded;
-    return { ...folded, modelStart: { ...prior, ...(route.child ? { startPhase: "code" as const } : {}), ...(start.phaseModels ? { phaseModels: start.phaseModels } : {}) } };
+    return start.phaseModels ? { ...folded, modelStart: { ...prior, phaseModels: start.phaseModels } } : folded;
   }
   const model = start.pinnedModel ?? prior.model;
   return {
@@ -142,26 +141,28 @@ export function routedPolicy(policy: RunPolicy, route: RouteInput, decision: Rou
 
 /** Open one run through the one entry. See the file header. */
 export async function openRun(input: OpenRunInput): Promise<RunOutcome> {
-  if (!input.policy?.entryPoint) throw new Error("openRun: policy.entryPoint is required");
-  if (!ALL_ENTRY_POINTS.includes(input.policy.entryPoint)) throw new Error("openRun: policy.entryPoint must be registered");
-  if (!input.ports.capabilities && !input.ports.platform?.closed) {
-    throw new Error("openRun: a registry provider or a closed native catalog is required");
-  }
+  measureWorkflowSync(input.ports.events, workflowScope(input), 'start', () => {
+    if (!input.policy?.entryPoint) throw new Error("openRun: policy.entryPoint is required");
+    if (!ALL_ENTRY_POINTS.includes(input.policy.entryPoint)) throw new Error("openRun: policy.entryPoint must be registered");
+    if (!input.ports.capabilities && !input.ports.platform?.closed) {
+      throw new Error("openRun: a registry provider or a closed native catalog is required");
+    }
+  });
   const { surface = {}, route: requested, ...rest } = input;
   const route = requested && "decided" in requested ? requested : {
     request: rest.task.request ?? rest.task.prompt,
-    child: rest.task.dispatch.source === "subagent",
     modelStrict: rest.policy.modelStart?.strict ?? rest.policy.modelOptions?.strictPin,
     ...requested,
     routing: requested?.routing ?? defaultPipelineRouting(),
   };
   const closeOutRan = { value: false };
-  let run: RunAgentInput = { ...rest, modules: composeModules(surface, closeOutRan) };
+  let run: RunAgentInput = { ...rest, modules: measureWorkflowSync(rest.ports.events, workflowScope(input), 'compose', () => composeModules(surface, closeOutRan)) };
   if (run.resume?.pipeline !== undefined) {
     if (run.resume.pipeline?.route === "quick") run = { ...run, policy: { ...run.policy, skipVerifyStage: true } };
   } else {
     const input: RouteInput = "decided" in route ? route.input : route;
-    const decision: RouteDecision = "decided" in route ? route.decided : routeRun(route);
+    // A supplied decision was measured where it was made; intake is not a second route decision.
+    const decision: RouteDecision = "decided" in route ? route.decided : measureWorkflowSync(run.ports.events, workflowScope(run), 'route', () => routeRun(route), (r) => ({ quick: Number(r.pipeline?.route === 'quick'), full: Number(r.pipeline?.route === 'full') }));
     run = { ...run, policy: routedPolicy(run.policy, input, decision) };
     // The route is traced once per run, right after `run.started`; a resumed tick is not a start.
     const { pipeline } = decision;

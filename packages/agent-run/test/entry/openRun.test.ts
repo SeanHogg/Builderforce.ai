@@ -36,6 +36,86 @@ const WRITE_THEN_FINISH = (): ModelCompletion[] => [
 ];
 
 describe("openRun", () => {
+  it("requires executable evidence for a PRD verdict even after a successful source search", async () => {
+    const { ports, events } = harness([
+      call("search", "search_code", { query: "spawnChild" }),
+      { content: "All six contracts pass." },
+      { content: "All six contracts pass." },
+    ]);
+    ports.platform!.schemas = () => schemas(["search_code", "run_command"]);
+    const result = await openRun({ task: { ...TEST_TASK, prompt: "Validate the PRD against the checkout." }, policy: TEST_POLICY, ports });
+    expect(result).toMatchObject({ kind: "failed", reason: expect.stringContaining("unverified") });
+    expect(events).toContainEqual(expect.objectContaining({ kind: "run.spec_validation", completed: 0 }));
+  });
+
+  it("carries a background acceptance check across ticks and tells the model the observed failure", async () => {
+    const path = "docs/specs/50-prd-one-pipeline.md";
+    const { ports, events } = harness([
+      call("read", "read_file", { path }),
+      call("start", "run_command", { command: "node scripts/check-one-execution.mjs --enforce" }),
+      call("poll", "command_status", { id: "job-1" }),
+      { content: "The execution guard failed. Other claims are unverified." },
+    ]);
+    ports.platform!.schemas = () => schemas(["read_file", "run_command", "command_status"]);
+    ports.platform!.execute = async (name) => ({
+      data: "Trimmed display value",
+      observedData: name === "read_file" ? JSON.stringify({ path, content: "# PRD 50" })
+        : name === "run_command" ? { ok: true, status: "running", id: "job-1" }
+          : { status: "exited", exitCode: 1, id: "job-1" },
+    });
+    const complete = vi.spyOn(ports.model, "complete");
+    const input = { task: { ...TEST_TASK, prompt: String.raw`Run a diagnostic and validate C:\code\agentic\Builderforce.ai\docs\specs\50-prd-one-pipeline.md.` }, policy: TEST_POLICY, ports };
+    const tick = await openRun({ ...input, maxSteps: 2 });
+    expect(tick.kind).toBe("yielded");
+    expect(tick.state.specValidation?.completed).toBeUndefined();
+    const result = await openRun({ ...input, resume: JSON.parse(JSON.stringify(tick.state)) });
+    expect(result).toMatchObject({ kind: "failed", reason: expect.stringContaining("1 failing acceptance check(s)") });
+    expect(JSON.stringify(complete.mock.calls[3]?.[0].messages)).toContain("check-one-execution.mjs --enforce exited 1");
+    expect(events).toContainEqual(expect.objectContaining({ kind: "run.spec_validation", completed: 1, failed: 1, pending: 0 }));
+  });
+
+  it("keeps declared claims unverified when a different command or working directory passed", async () => {
+    const path = "Builderforce.ai/docs/specs/50-prd-one-pipeline.md";
+    const { ports, events } = harness([
+      call("read", "read_file", { path }),
+      call("wrong-dir", "run_command", { command: "pnpm test", cwd: "other" }),
+      call("root-guard", "run_command", { command: "node scripts/check-one-execution.mjs --enforce", cwd: "Builderforce.ai" }),
+      { content: "Everything validated." },
+      { content: "The package tests remain unverified." },
+    ]);
+    ports.platform!.schemas = () => schemas(["read_file", "run_command"]);
+    const content = [
+      "# PRD 50", "```builderforce-acceptance",
+      JSON.stringify([
+        { command: "pnpm test", cwd: "api" },
+        { command: "node scripts/check-one-execution.mjs --enforce", cwd: "." },
+      ]), "```",
+    ].join("\n");
+    ports.platform!.execute = async (name) => ({ data: name === "read_file" ? { path, content } : { ok: true, exitCode: 0 } });
+    const result = await openRun({ task: { ...TEST_TASK, prompt: "Validate 50-prd-one-pipeline.md." }, policy: TEST_POLICY, ports });
+    expect(result).toMatchObject({ kind: "failed", reason: expect.stringContaining("1 declared acceptance check(s)") });
+    expect(events).toContainEqual(expect.objectContaining({ kind: "run.spec_validation", completed: 2, unverified: 1 }));
+  });
+
+  it("lets a politely phrased validation finish every declared check beyond the question budget", async () => {
+    const path = "docs/specs/50-prd-one-pipeline.md";
+    const checks = Array.from({ length: 7 }, (_, index) => ({ command: `pnpm test:case-${index}`, cwd: "api" }));
+    const { ports, events } = harness([
+      call("read", "read_file", { path }),
+      ...checks.map((check, index) => call(`check-${index}`, "run_command", check)),
+      { content: "All seven named checks passed." },
+    ]);
+    ports.platform!.schemas = () => schemas(["read_file", "run_command"]);
+    ports.platform!.execute = async (name) => ({
+      data: name === "read_file"
+        ? { path, content: ["# PRD 50", "```builderforce-acceptance", JSON.stringify(checks), "```"].join("\n") }
+        : { ok: true, exitCode: 0 },
+    });
+    const result = await openRun({ task: { ...TEST_TASK, prompt: `Can you validate ${path}?` }, policy: TEST_POLICY, ports });
+    expect(result.kind).toBe("finished");
+    expect(events).toContainEqual(expect.objectContaining({ kind: "run.spec_validation", completed: 7, failed: 0, incomplete: false }));
+  });
+
   it("gives questions a final answer turn after six tool rounds even with progress levers off", async () => {
     const { ports } = harness([
       ...Array.from({ length: 6 }, (_, i) => call(`read-${i}`, i % 2 ? "remember_fact" : "read_file", { path: `src/${i}.ts` })),
@@ -233,10 +313,22 @@ describe("openRun", () => {
     expect(outcome.state.model.phase).toBe("code");
   });
 
-  it("a child traces no independent route", async () => {
-    const { ports, events } = harness([{ content: "done" }]);
-    await openRun({ task: TEST_TASK, policy: TEST_POLICY, ports, route: { request: "x", child: true } });
-    expect(events.some((e) => e.kind === "run.routed")).toBe(false);
+  it.each([false, true])("a child follows the default full route and cannot dispatch a native spawn tool (host menu %s)", async (hostMenu) => {
+    const { ports, events } = harness([call("s1", "sessions_spawn", { task: "nested work" }), { content: "done" }]);
+    const execute = vi.fn();
+    const complete = vi.spyOn(ports.model, "complete");
+    const task = { ...TEST_TASK, dispatch: { source: "subagent" as const, parentRunId: "parent" } };
+    const native = schemas(["sessions_spawn", "read_file"]);
+    const platform = { ...ports.platform!, schemas: () => native, execute, ...(hostMenu ? { turn: () => ({ tools: native }) } : {}) };
+    const outcome = await openRun({ task, policy: TEST_POLICY, ports: { ...ports, platform } });
+    expect(outcome.state.pipeline?.route).toBe("full");
+    expect(events.find((event) => event.kind === "run.routed")).toMatchObject({ route: "full" });
+    expect(complete.mock.calls[0]?.[0].role).toBe("plan");
+    const advertised = complete.mock.calls[0]?.[0].tools?.map((tool) => tool.function.name);
+    expect(advertised).toContain("read_file");
+    expect(advertised).not.toContain("sessions_spawn");
+    expect(JSON.stringify(outcome.state.messages)).toContain("Only root runs can spawn sub-agents");
+    expect(execute).not.toHaveBeenCalled();
   });
 
   it("uses the shared default when the surface omits routing settings", async () => {
@@ -281,17 +373,6 @@ describe("routedPolicy", () => {
     const out = routedPolicy(cloud, request, routeRun(request));
     expect(out.modelStart).toEqual({ model: "seed", strict: false, delegatedRole: "reviewer" });
     expect(out.modelStart?.plain).toBeUndefined();
-  });
-
-  it("regression: a child route on a policy with no modelStart leaves the model policy unchanged", () => {
-    const request = { request: "Fix the bug", child: true };
-    const out = routedPolicy(TEST_POLICY, request, routeRun(request));
-    expect(out.modelStart).toBeUndefined();
-  });
-
-  it("a child on an existing modelStart starts in code, keeping `plain` exactly as it was", () => {
-    const request = { request: "Fix the bug", child: true };
-    expect(routedPolicy({ ...TEST_POLICY, modelStart: { model: "m" } }, request, routeRun(request)).modelStart).toEqual({ model: "m", startPhase: "code" });
   });
 
   it("regression: a Brain-shaped plain policy + a quick route gets the quick pin and phase, and skips the verify stage", () => {

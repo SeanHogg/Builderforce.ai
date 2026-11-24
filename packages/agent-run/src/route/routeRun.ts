@@ -4,8 +4,7 @@
  * quick model and its finish does not enter the verify stage). The score is `@builderforce/pipeline-route`'s over the
  * person's own request; the action type is the shared lexical classifier's.
  *
- * Only a request that carries `routing` is routed. A sub-agent (`child`) never is: it is a slice its owner already
- * planned, and starts in `code`.
+ * Only a request that carries `routing` is routed. The same decision applies to delegated work.
  */
 import { pipelineFeaturesOf, scorePipeline, type PipelineScore, type PipelineRoutingMode } from "@builderforce/pipeline-route";
 import type { PhaseModels, RunPhase, RunPolicyOptions } from "@builderforce/run-policy";
@@ -20,8 +19,6 @@ export interface RouteInput {
   routing?: { mode: PipelineRoutingMode; threshold?: number; quickModel?: string };
   phaseModels?: PhaseModels;
   modelStrict?: boolean;
-  /** A sub-agent is never routed and starts in `code`. */
-  child?: boolean;
 }
 
 /** Common defaults. Hosts can supply stage models and a quick-model preference. */
@@ -33,8 +30,8 @@ export function defaultPipelineRouting(): NonNullable<RouteInput["routing"]> {
 export type RouteStart = Pick<RunPolicyOptions, "startPhase" | "phaseModels" | "pinnedModel">;
 
 /** The route for this run, or null when it is not routed. */
-export function decideRunPipeline(route: Pick<RouteInput, "request" | "followUp" | "routing" | "child">): PipelineScore | null {
-  if (!route.routing || route.child) return null;
+export function decideRunPipeline(route: Pick<RouteInput, "request" | "followUp" | "routing">): PipelineScore | null {
+  if (!route.routing) return null;
   const { actionType } = classifyRunAction(route.request);
   return scorePipeline(pipelineFeaturesOf(route.request, { actionType, followUp: route.followUp === true }), {
     mode: route.routing.mode,
@@ -43,13 +40,13 @@ export function decideRunPipeline(route: Pick<RouteInput, "request" | "followUp"
 }
 
 /**
- * Where the run starts and which model each phase asks for. A sub-agent starts in `code`; a quick run does too, coding on
+ * Where the run starts and which model each phase asks for. A quick run starts in `code`, coding on
  * the quick model. Every other run plans first. The quick model also wins over the run's SOFT model (a default, an Evermind
  * head, Auto's lock); a strict pin (the person's pick) is never overridden.
  */
-export function pipelinePolicyOptions(route: Pick<RouteInput, "phaseModels" | "routing" | "child" | "modelStrict">, pipeline: PipelineScore | null): RouteStart {
+export function pipelinePolicyOptions(route: Pick<RouteInput, "phaseModels" | "routing" | "modelStrict">, pipeline: PipelineScore | null): RouteStart {
   const quick = pipeline?.route === "quick";
-  const startPhase: RunPhase = route.child || quick ? "code" : "plan";
+  const startPhase: RunPhase = quick ? "code" : "plan";
   const phaseModels: PhaseModels = { ...route.phaseModels };
   const quickModel = route.routing?.quickModel?.trim();
   if (quick && quickModel) phaseModels.code = quickModel;

@@ -10,6 +10,8 @@
  */
 
 import { announcesUntakenAction } from '@builderforce/agent-stall';
+import { workflowDiagnostics } from './workflowDiagnostics';
+import type { WorkflowSummary } from '@builderforce/agent-run';
 import { turnInterruption } from './finishReason';
 import type { StreamFailureDetail } from './streamFailureDetail';
 import type { BrainMessage } from './types';
@@ -19,7 +21,7 @@ import { computeRunProgress, type RunProgress } from './runProgress';
 import { spunEarlier } from './runProgressReport';
 import { modelScorecard, modelTurnLog, type ModelScore, type ModelTurn } from './modelScorecard';
 import { routingByRole, type RoutingByRole } from './routingByRole';
-import { sessionShippedInTrace, staffingSummaryInTrace, type StaffingSummary } from './staffingSummary';
+import { sessionShippedInTrace, sessionWorkInTrace, staffingSummaryInTrace, type StaffingSummary } from './staffingSummary';
 import { parseMessageProvenance } from './provenance';
 import { REMEMBER_FACT_TOOLS } from '@builderforce/agent-tools';
 import { STOPPED_TURN_STEP } from './stoppedTurn';
@@ -538,6 +540,7 @@ export function parseRoleGateRefusal(message: string | null | undefined): {
 }
 
 export interface BrainDiagnostics {
+  workflow?: WorkflowSummary;
   turns: number;
   toolCalls: number;
   errors: number;
@@ -663,6 +666,8 @@ export interface BrainDiagnostics {
    * means "0 dispatched" is not "nobody is running the work" — the session did it.
    */
   sessionShipped: number;
+  sessionWork: number;
+  specValidation?: { completed: number; failed: number; pending: number; unverified: number; incomplete: boolean };
   /** Evermind + project-facts usage recorded in the trace. See {@link memoryUsageInTrace}. */
   memoryUsage: MemoryUsageSummary;
   /**
@@ -1007,17 +1012,20 @@ export function computeBrainDiagnostics(
   // Filed versus staffed — the outcome question no other signal here asks.
   const staffing = staffingSummaryInTrace(events);
   const sessionShipped = sessionShippedInTrace(events);
+  const sessionWork = sessionWorkInTrace(events);
   const memoryUsage = memoryUsageInTrace(events);
   // A session that wrote and shipped the change is not an unstaffed ticket. Filing
   // tickets and then doing the work locally is the editor path, not a stuck board.
   const workFiledNotStaffed =
-    sessionShipped === 0
+    sessionWork === 0
     && (staffing.verdict === 'filed-not-staffed' || staffing.verdict === 'staffing-refused');
   const unresolvedAppFailures = unresolvedAppFailuresInTrace(events);
   const running = ctx.running === true;
   // The latest run ENDED on the provider (a failed completion it did not recover from) — never read as a tool-exposure fault.
   const providerFailure = running ? null : providerFailureInTrace(events, messages);
   const latest = splitRuns(events, messages).at(-1)!;
+  const validation = latest.events.filter((event) => event.label === 'run.spec_validation').at(-1)?.args;
+  const specValidation = validation as Partial<NonNullable<BrainDiagnostics['specValidation']>> | undefined;
   const stopped = latest.events.some((event) => event.label === STOPPED_TURN_STEP);
   const answered = latest.messages.some((message) => message.role === 'assistant' && message.content.trim());
   const outcome = running ? undefined : stopped ? 'stopped' as const
@@ -1028,6 +1036,8 @@ export function computeBrainDiagnostics(
     .filter((finding) => finding.severity !== 'info').map((finding) => finding.kind);
   const likelyCause = decideLikelyCause({
     running,
+    specValidationIncomplete: specValidation?.incomplete === true,
+    specValidationFailed: (specValidation?.failed ?? 0) > 0,
     memoryOnlyRun,
     providerFailure: providerFailure !== null,
     noToolsAdvertised,
@@ -1057,6 +1067,7 @@ export function computeBrainDiagnostics(
 
   return {
     ...(outcome ? { outcome } : {}),
+    workflow: workflowDiagnostics(events),
     findingKinds,
     turns: llm.length,
     toolCalls: toolEvents.length,
@@ -1097,6 +1108,10 @@ export function computeBrainDiagnostics(
     contextPressureOnly,
     staffing,
     sessionShipped,
+    sessionWork,
+    ...(typeof specValidation?.completed === 'number' && typeof specValidation.failed === 'number' && typeof specValidation.pending === 'number'
+      ? { specValidation: { completed: specValidation.completed, failed: specValidation.failed, pending: specValidation.pending, unverified: specValidation.unverified ?? 0, incomplete: specValidation.incomplete === true } }
+      : {}),
     memoryUsage,
     unresolvedAppFailures,
     providerFailure,

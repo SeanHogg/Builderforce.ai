@@ -14,6 +14,7 @@ import type { RunMessage, RunPart } from "./contract.js";
 import type { PolicyContext } from "./policy/index.js";
 import { emit } from "./runContext.js";
 import { LINKED_WORK_OPEN } from "./policy/finish/index.js";
+import { missingSpecEvidence, specUnverifiedReason } from "./policy/verify/specValidation.js";
 import type { KernelRun } from "./kernelHooks.js";
 
 type StepAt = { step: number; stepInCall: number };
@@ -135,6 +136,9 @@ export function noToolCallsHook(run: KernelRun, deps: NoToolCallsDeps): NonNulla
     if (block) {
       await requeue(pctx, ctx.step, turn.content, block);
       return { action: "continue" };
+    }
+    if (missingSpecEvidence(pctx.state) && (finalTurn || pctx.state.specValidation?.prompted)) {
+      return { action: "stop", ok: false, output: specUnverifiedReason(pctx.state), finished: true };
     }
     const verification = finalTurn ? null : await deps.verifyBlock(pctx);
     if (verification) {

@@ -180,6 +180,8 @@ export interface ChatDiagnosticsHistory {
   messages: number;
   /** Of those, the run's persisted tool/LLM/memory step rows. */
   steps: number;
+  /** Events available to the report from live and recovered traces. */
+  traceSteps?: number;
   /** Where the full dialogue is stored — a local file on the VSIX, the chat URL on the web.
    *  Null when the surface did not say. */
   location: string | null;
@@ -284,13 +286,14 @@ export interface ChatDiagnosticsData {
    * — never as "nothing ran", which is a different and much stronger claim.
    */
   runs?: ChatDiagnosticsRuns | null;
-  /**
-   * Successful writes/commits/pushes the SESSION made itself, off the chat's trace
-   * (`sessionShippedInTrace`). Non-zero turns "zero runs dispatched" from a staffing gap
-   * into a neutral fact: the session did the work, no dispatch was needed. Absent/null
-   * means not measured (no trace was handed to the gatherer).
-   */
+  /** Successful local edit, commit and push calls observed in the trace. */
+  sessionWork?: number | null;
+  /** 1 when the trace confirms a push to the base branch. Null when unmeasured. */
   sessionShipped?: number | null;
+  /** False when the ticket snapshot could not be read. */
+  ticketSnapshotAvailable?: boolean;
+  /** Recent link receipts missing from the separately fetched ticket snapshot. */
+  ticketLinksOutsideSnapshot?: Array<{ ticketId: string; chatId: number }>;
   tickets?: Array<{ kind: string; ref: string; label?: string; linkType?: string; status?: string }>;
   /** Plan, quota and model entitlement for the signed-in tenant (see the interface). */
   account?: ChatDiagnosticsAccount | null;
@@ -514,12 +517,12 @@ function diagnosticsSignals(d: ChatDiagnosticsData): string[] {
   // three agents present, seven tickets linked, every code change made by the local
   // session, and no line anywhere saying so.
   const runs = d.runs;
-  const selfServed = (d.sessionShipped ?? 0) > 0;
+  const selfServed = (d.sessionWork ?? 0) > 0;
   if (runs && agentCount > 0 && runs.linkedRunnableTickets > 0 && runs.runs.length === 0 && selfServed) {
     // The session changed and shipped the code itself — no dispatch was needed, so the
     // empty history is the editor path working, not a staffing gap (chat #275).
     out.push(
-      `ℹ️ Self-served: no agent was dispatched for this chat's ${runs.linkedRunnableTickets} runnable ticket(s) because the session did the work itself (${d.sessionShipped} successful write/commit/push call(s)).`,
+      `ℹ️ Self-served: the session recorded ${d.sessionWork} successful local work calls. The execution snapshot shows no dispatch for its ${runs.linkedRunnableTickets} runnable ticket(s).`,
     );
   } else if (runs && agentCount > 0 && runs.linkedRunnableTickets > 0 && runs.runs.length === 0) {
     const names = (d.agents ?? []).map((a) => a.name?.trim() || a.agentRef).join(', ');
@@ -658,9 +661,9 @@ function diagnosticsSignals(d: ChatDiagnosticsData): string[] {
         `⚠️ AI token allowance is ${tokens.percentUsed}% used (${tokens.remaining.toLocaleString('en-US')} left, resets ${acct.resetsAt ?? 'at period end'}). Long turns may be cut off by the cap before the model finishes.`,
       );
     }
-    if (acct.modelFunding === 'premium' && acct.canUsePremiumModels === false) {
+    if (acct.modelFunding === 'premium' && acct.canUsePremiumModels === false && !ownFunded) {
       out.push(
-        `⚠️ Model "${acct.model}" is a premium/metered model but this plan is NOT entitled to premium models — the gateway rejects it (402) or falls back to the plan pool, which is why answers look weaker than the picked model implies.`,
+        `ℹ️ The shared plan does not cover the configured premium model "${acct.model}". See the run trace for the model served and any provider failure or fallback.`,
       );
     }
     if ((acct.byoProviders?.length ?? 0) === 0 && free && !ownFunded) {
@@ -745,16 +748,16 @@ function shortTime(iso: string | null | undefined): string {
  *                     the transcript of a chat whose work was done by the local session
  *                     is indistinguishable from one whose agents are working on it.
  */
-function runHistoryLines(runs: ChatDiagnosticsRuns | null | undefined, sessionShipped: number): string[] {
+function runHistoryLines(runs: ChatDiagnosticsRuns | null | undefined, sessionWork: number): string[] {
   if (!runs) {
     return ['- Execution history: not gathered (this surface did not read the chat\'s runs — absent is NOT the same as "nothing ran")'];
   }
-  if (runs.linkedRunnableTickets === 0) {
-    return ['- Execution history: no runnable ticket (task/epic/gap) is linked to this chat, so there is nothing here that could have been run.'];
+  if (runs.linkedRunnableTickets === 0 && runs.runs.length === 0) {
+    return ['- Execution history: this snapshot shows zero linked runnable tickets and zero runs. Recent local work and ticket links may appear separately in the trace.'];
   }
-  if (runs.runs.length === 0 && sessionShipped > 0) {
+  if (runs.runs.length === 0 && sessionWork > 0) {
     return [
-      `- Execution history: self-served — no cloud run against ${runs.linkedRunnableTickets} linked runnable ticket(s); this session changed the code itself (${sessionShipped} successful write/commit/push call(s)), so no dispatch was needed.`,
+      `- Execution history: self-served. The snapshot shows zero runs for ${runs.linkedRunnableTickets} linked runnable ticket(s). The trace records ${sessionWork} successful local work calls.`,
     ];
   }
   if (runs.runs.length === 0) {
@@ -909,6 +912,9 @@ export function formatChatDiagnostics(d: ChatDiagnosticsData): string[] {
       `- History (loaded): ${d.history.messages} message(s) · ${d.history.steps} run step(s)`
         + ` · full dialogue: ${d.history.location ?? 'not reported by this surface'}`,
     );
+    if (d.history.steps === 0 && d.history.traceSteps) {
+      lines.push(`- Run trace: ${d.history.traceSteps} event(s) available outside the loaded history rows.`);
+    }
   }
   lines.push(`- Chat's project: ${fmtProject(d.projectId, d.projectName)}`);
   // ALWAYS printed, even when it matches (or is absent). Printing it only on a mismatch
@@ -1048,10 +1054,20 @@ export function formatChatDiagnostics(d: ChatDiagnosticsData): string[] {
       lines.push(`  - …and ${tickets.length - MAX_LISTED_LINKED_TICKETS} more linked ticket(s)`);
     }
   } else {
-    lines.push('- Linked tickets (0)');
+    lines.push(d.ticketSnapshotAvailable === false
+      ? '- Linked tickets: snapshot unavailable.'
+      : '- Linked tickets (0 in this snapshot)');
+  }
+  for (const receipt of d.ticketLinksOutsideSnapshot ?? []) {
+    lines.push(`- Run trace: link recorded for ticket #${receipt.ticketId} on chat #${receipt.chatId}. The ticket is absent from the linked-ticket snapshot.`);
   }
 
-  lines.push(...runHistoryLines(d.runs, d.sessionShipped ?? 0));
+  lines.push(...runHistoryLines(d.runs, d.sessionWork ?? 0));
+  if ((d.sessionWork ?? 0) > 0) {
+    lines.push(d.sessionShipped
+      ? '- Delivery evidence: the trace confirms a push to the base branch.'
+      : '- Delivery evidence: local work recorded. A push to the base branch is unverified.');
+  }
 
   const signals = diagnosticsSignals(d);
   if (signals.length) {

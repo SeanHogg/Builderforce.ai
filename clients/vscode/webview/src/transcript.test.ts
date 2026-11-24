@@ -164,7 +164,8 @@ describe('buildTranscript whole-report ceiling', () => {
     expect(text.indexOf('\n## ', jsonAt + 1)).toBe(-1);
     expect(text.trimEnd().endsWith('```')).toBe(true);
     const parsed = JSON.parse(jsonBlock(text)!) as Record<string, unknown>;
-    expect(parsed._elided).toEqual(['*']);
+    expect(parsed._elided).toEqual(['except run.workflow']);
+    expect(parsed.run).toEqual({ workflow: bigReport.run.workflow });
     // Order: error, then the budget note, then the JSON.
     const errAt = text.indexOf('### Conversation error');
     const noteAt = text.indexOf('Note: this report is size-budgeted');

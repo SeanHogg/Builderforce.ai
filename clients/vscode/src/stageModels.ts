@@ -104,7 +104,10 @@ export interface RunRoutingSettings {
   routing?: unknown;
   routeThreshold?: unknown;
   maxRunBudgetUsd?: unknown;
+  independentReview?: unknown;
 }
+
+export type IndependentReview = "auto" | "required" | "off";
 
 /** What a top-level run (or a sub-agent) is started with. */
 export interface EditorRunSettings {
@@ -115,6 +118,7 @@ export interface EditorRunSettings {
   subagentModel?: string;
   /** The run's project's ship policy (PRD 48, `policyGates.resolveRunShipPolicy`). Absent ⇒ the run uses `DEFAULT_SHIP_POLICY`. */
   shipPolicy?: ShipPolicy;
+  independentReview?: IndependentReview;
 }
 
 /** The run settings from the resolved stage models and the raw settings. */
@@ -139,24 +143,20 @@ export function editorRunSettingsFrom(stages: StageModels, raw: RunRoutingSettin
     },
     ...(budget !== undefined ? { maxRunBudgetUsd: budget } : {}),
     ...(stages.subagent ? { subagentModel: stages.subagent } : {}),
+    ...(raw.independentReview === "required" || raw.independentReview === "off"
+      ? { independentReview: raw.independentReview }
+      : {}),
   };
 }
 
-/** The fields of {@link EditorRunSettings} a run request carries. A sub-agent keeps its
- *  owner's routing out (it is never routed) and takes its model from `modelForChildRun`,
- *  so only the cap reaches it — and the cap is the TREE's, not a fresh one: the child
- *  accrues into its owner's total (brain-embedded `runStore/runSpendBudget.ts`, keyed by the
- *  lineage), so an owner and all its sub-agents together stay under one cap. The ship
- *  policy rides every request: the run narrows a child's to `leave_uncommitted` itself
- *  (brain-embedded `runShipPolicy`, by its lineage). */
+/** Settings supplied to every editor run. Spend is attributed to the root chat by lineage. */
 export function runRequestFields(
   settings: EditorRunSettings | undefined,
-  opts: { child: boolean },
 ): Pick<EditorRunSettings, "phaseModels" | "pipeline" | "maxRunBudgetUsd" | "shipPolicy"> {
   if (!settings) return {};
   return {
-    ...(!opts.child && settings.phaseModels ? { phaseModels: settings.phaseModels } : {}),
-    ...(!opts.child && settings.pipeline ? { pipeline: settings.pipeline } : {}),
+    ...(settings.phaseModels ? { phaseModels: settings.phaseModels } : {}),
+    ...(settings.pipeline ? { pipeline: settings.pipeline } : {}),
     ...(settings.maxRunBudgetUsd ? { maxRunBudgetUsd: settings.maxRunBudgetUsd } : {}),
     ...(settings.shipPolicy ? { shipPolicy: settings.shipPolicy } : {}),
   };

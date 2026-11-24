@@ -45,12 +45,16 @@ import { portInterruptWatch } from "./policy/steering/index.js";
 import { announceRow, appendRows, currentView, emit, policyContext, type RunAgentInput } from "./runContext.js";
 import { asMessages, freshState, newApprovalId, resumeState } from "./runState.js";
 import { causeOf, completeTurn, dispatchCall, isResumable, offeredSchemas, synthesizeFinal } from "./runTurn.js";
+import { blocksChildSpawn } from "./policy/subagents/child.js";
 import { nativeOfTurn, toolRow } from "./runRows.js";
 import { settle } from "./runSettle.js";
 import { kernelHooks, readOnlyPort, type KernelRun } from "./kernelHooks.js";
 import { EMPTY_PACK, buildContextPack, openingRows } from "./turnContext.js";
 import { planWork } from "./workPlan.js";
+import { beginWorkflowStage, measureWorkflow, measureWorkflowSync, workflowScope } from "./telemetry/workflowMetrics.js";
+import { workflowHooks } from "./telemetry/workflowHooks.js";
 import { freshTally, type RunTally } from "./telemetry/runTally.js";
+import { planSpecValidation } from "./policy/verify/specValidation.js";
 import { localSpendMeter, usdBudget } from "./policy/budget/usd.js";
 import { CacheServedStreak } from "./policy/tools/cacheServedStreak.js";
 
@@ -66,15 +70,21 @@ export type { RunAgentInput } from "./runContext.js";
  */
 export async function runAgent(input: RunAgentInput): Promise<RunOutcome> {
   const { task, policy, ports, signal } = input;
-  const hooks = composePolicyHooks(input.modules);
-  const state = input.resume ? resumeState(input.resume, policy, task) : freshState(policy, task);
+  const hooks = workflowHooks(composePolicyHooks(input.modules), input);
+  const state = input.resume ? resumeState(input.resume, policy) : freshState(policy);
   const resumed = Boolean(input.resume);
+  const validation = state.specValidation ?? planSpecValidation(task);
+  if (validation) state.specValidation = validation;
   if (state.pipeline === undefined && input.pipeline !== undefined) state.pipeline = input.pipeline;
-  if (!state.work && task.assignedWork?.length) state.work = planWork(task.assignedWork);
+  if (!state.work && !resumed) measureWorkflowSync(ports.events, workflowScope(input, state.step), 'work', () => {
+    if (task.assignedWork?.length) state.work = planWork(task.assignedWork);
+    return state.work ?? [];
+  }, (work) => ({ assigned: work.length, criteria: work.reduce((n, item) => n + item.criteria.length, 0) }));
 
   // The run's counters live on its state, so a resumed tick adds to what earlier ticks counted.
   const tally: RunTally = (state.telemetry ??= freshTally());
-  const offered = offeredSchemas(ports, { rungs: state.stall?.rungs ?? {} });
+  const offered = offeredSchemas(ports, { rungs: state.stall?.rungs ?? {} })
+    .filter((schema) => !blocksChildSpawn(task.dispatch, schema.function.name));
   const transcript = asMessages(state.messages);
 
   // The pack is built ONCE, before turn 1, and carried in the state: a resumed tick
@@ -82,9 +92,10 @@ export async function runAgent(input: RunAgentInput): Promise<RunOutcome> {
   let pack: ContextPack = state.context ?? EMPTY_PACK;
   if (!resumed) {
     // Render governing instructions before the host's prepared history or the fresh task.
-    transcript.splice(0, transcript.length, ...openingRows(task, policy.approvalGates));
+    const opening = measureWorkflowSync(ports.events, workflowScope(input, state.step), 'opening', () => openingRows(task, policy.approvalGates), (rows) => ({ messages: rows.length }));
+    transcript.splice(0, transcript.length, ...opening);
     state.messages = transcript;
-    pack = await buildContextPack(input, hooks, state, offered);
+    pack = await measureWorkflow(ports.events, { ...workflowScope(input, state.step), operation: 'context_pack' }, 'opening', () => buildContextPack(input, hooks, state, offered), undefined, input.signal);
     state.context = pack;
   }
 
@@ -101,7 +112,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunOutcome> {
   if (!resumed) {
     await emit(ports.events, { kind: "run.started", step: state.step });
     // A deterministic answer found before any model call (a PreFetch tool reply) settles the run: no model is asked.
-    if (pack.answer && !state.work?.length) {
+    if (pack.answer && !state.work?.length && !state.specValidation) {
       appendRows(input, transcript, { role: "assistant", content: pack.answer });
       state.messages = transcript;
       return settle(input, hooks, state, transcript, "finished", { output: pack.answer });
@@ -131,6 +142,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunOutcome> {
   const isReadOnly = readOnlyPort(run);
 
   let loopResult: LoopResult;
+  const kernelDone = beginWorkflowStage(ports.events, workflowScope(input, state.step), 'kernel');
   try {
     loopResult = await runAgentLoop<RunMessage>({
       messages: transcript,
@@ -155,7 +167,9 @@ export async function runAgent(input: RunAgentInput): Promise<RunOutcome> {
       budget: { startStep: state.step, ...(input.maxSteps !== undefined ? { maxSteps: input.maxSteps } : {}), ...(policy.budgets.steps !== undefined ? { stepCap: policy.budgets.steps } : {}) },
       ...(signal ? { signal } : {}),
     });
+    kernelDone(loopResult.cancelled || signal?.aborted ? 'cancelled' : loopResult.finished && !loopResult.ok ? 'failed' : 'completed', { steps: loopResult.step - state.step, toolCalls: tally.toolCalls, toolErrors: tally.toolErrors, tokens: tally.tokens });
   } catch (err) {
+    kernelDone(signal?.aborted ? 'cancelled' : 'failed');
     const reason = err instanceof Error ? err.message : String(err);
     return settle(input, hooks, state, transcript, "failed", { reason, ...(signal?.aborted || !isResumable(input, err) ? {} : { cause: err }) });
   }

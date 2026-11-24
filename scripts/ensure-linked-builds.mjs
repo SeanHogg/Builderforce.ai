@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Rebuild every linked package whose shipped `dist/` is older than the source it is
+ * Rebuild every linked package whose shipped `dist/` does not match the source it is
  * built from — before a consumer bundles it.
  *
  * WHY: a `link:`ed package like `@seanhogg/builderforce-brain-embedded` is consumed
@@ -15,72 +15,80 @@
  *
  * A package is BUILT (and so checked) when it has a `build` script and its `main` lives
  * in `dist/`; source-only packages (`exports: ./src/index.ts`) are bundled straight from
- * source and need nothing. A built package is stale when any input is newer than its
- * dist entry: its own `src/`, its manifest, its `tsup.config.*`, or — recursively — the
- * inputs of every package it links, since tsup bundles linked source into its output.
+ * source and need nothing. The build digest covers source, manifests, lockfiles,
+ * and config, including the linked packages that tsup bundles into the output.
  * Linked packages are built before the packages that link them.
  *
  * A failed build FAILS this script: shipping a stale dist is the bug this exists to stop.
  *
- * Usage: `node scripts/ensure-linked-builds.mjs [consumerDir ...]` (default: cwd). Pass
+ * Usage: `node scripts/ensure-linked-builds.mjs [--include-roots] [consumerDir ...]` (default: cwd). Pass
  * every consumer of one build in a single run so shared links are walked once.
  */
 import { spawnSync } from 'node:child_process';
-import { existsSync, readdirSync, realpathSync, statSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { createHash } from 'node:crypto';
+import { existsSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { join, relative, resolve, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { linkedTargets, readManifest } from './linkedPackages.mjs';
+import { readSourcePackages } from './sourcePackages.mjs';
 
+const repo = fileURLToPath(new URL('..', import.meta.url));
 const SKIP_DIRS = new Set(['node_modules', 'dist', '.git', '.turbo', 'coverage', '.vitest-cache', '.vite']);
-const BUILD_CONFIGS = ['tsup.config.ts', 'tsup.config.mjs', 'tsup.config.js', 'tsconfig.json', 'package.json'];
+const PACKAGE_INPUTS = ['tsup.config.ts', 'tsup.config.mjs', 'tsup.config.js', 'tsconfig.json', 'package.json', 'pnpm-lock.yaml', '.npmrc'];
+const REPO_INPUTS = ['scripts/ensure-linked-builds.mjs', 'scripts/linkedPackages.mjs', 'scripts/tsup.base.mjs',
+  'scripts/install-brain-workspace.mjs', 'scripts/sourcePackages.mjs', 'scripts/lib/tsconfigPaths.mjs', 'scripts/check-browser-dist.mjs'];
+const STAMP = '.build-inputs';
 
-const mtime = (file) => {
-  try {
-    return statSync(file).mtimeMs;
-  } catch {
-    return 0;
+function* sourceFiles(dir) {
+  if (!existsSync(dir)) return;
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (SKIP_DIRS.has(entry.name)) continue;
+    const file = join(dir, entry.name);
+    if (entry.isDirectory()) yield* sourceFiles(file);
+    else if (entry.isFile()) yield file;
   }
-};
-
-/** The newest file under `dir`, skipping build output and installs. */
-function newestIn(dir) {
-  let newest = 0;
-  let entries;
-  try {
-    entries = readdirSync(dir, { withFileTypes: true });
-  } catch {
-    return 0;
-  }
-  for (const entry of entries) {
-    if (entry.isDirectory()) {
-      if (!SKIP_DIRS.has(entry.name)) newest = Math.max(newest, newestIn(join(dir, entry.name)));
-    } else {
-      newest = Math.max(newest, mtime(join(dir, entry.name)));
-    }
-  }
-  return newest;
 }
 
-/** The dist entry a built package ships, or null for a source-only package. */
-function distEntry(dir, manifest) {
-  const main = typeof manifest.main === 'string' ? manifest.main.replace(/^\.\//, '') : '';
-  return manifest.scripts?.build && main.startsWith('dist/') ? join(dir, main) : null;
-}
-
-const inputsMemo = new Map();
-/** The newest input to a package's build: its own source and every linked package's. */
-function newestInput(dir, manifest, path = new Set()) {
+function* packageInputs(dir, manifest, seen = new Set()) {
   const key = realpathSync(dir);
-  if (inputsMemo.has(key)) return inputsMemo.get(key);
-  if (path.has(key)) return 0; // a link cycle — its other members are counted on the way in
-  path.add(key);
-  let newest = Math.max(newestIn(join(dir, 'src')), ...BUILD_CONFIGS.map((f) => mtime(join(dir, f))));
+  if (seen.has(key)) return;
+  seen.add(key);
+  yield* sourceFiles(join(dir, 'src'));
+  yield* PACKAGE_INPUTS.map((file) => join(dir, file)).filter(existsSync);
   for (const target of linkedTargets(dir, manifest)) {
     const child = readManifest(target);
-    if (child) newest = Math.max(newest, newestInput(target, child, path));
+    if (child) yield* packageInputs(target, child, seen);
   }
-  path.delete(key);
-  inputsMemo.set(key, newest);
-  return newest;
+}
+
+const fileDigests = new Map();
+function inputDigest(dir, manifest) {
+  const hash = createHash('sha256');
+  hash.update(JSON.stringify([process.platform, process.arch, process.versions.node]));
+  const seen = new Set();
+  const inputs = new Set([...packageInputs(dir, manifest, seen), ...REPO_INPUTS.map((file) => join(repo, file))]);
+  // Brain's tsup aliases can bundle registry entries even when they have no local link.
+  if (seen.has(realpathSync(join(repo, 'brain-embedded')))) {
+    const sourceDirs = new Set(readSourcePackages(repo).map(({ relative }) => relative.split('/src/')[0]));
+    for (const sourceDir of sourceDirs) {
+      const target = join(repo, sourceDir);
+      for (const file of packageInputs(target, readManifest(target), seen)) inputs.add(file);
+    }
+  }
+  for (const file of [...inputs].sort()) {
+    if (!fileDigests.has(file)) fileDigests.set(file, createHash('sha256').update(readFileSync(file)).digest('hex'));
+    hash.update(JSON.stringify([relative(repo, file).split(sep).join('/'), fileDigests.get(file)]));
+  }
+  return hash.digest('hex');
+}
+
+function distTargets(value) {
+  if (typeof value === 'string') return value.replace(/^\.\//, '').startsWith('dist/') && !value.includes('*') ? [value] : [];
+  return value && typeof value === 'object' ? Object.values(value).flatMap(distTargets) : [];
+}
+
+function shippedFiles(dir, manifest) {
+  return [manifest.main, manifest.module, manifest.types, manifest.exports].flatMap(distTargets).map((file) => join(dir, file));
 }
 
 const visited = new Set();
@@ -101,21 +109,27 @@ function ensure(dir) {
   if (!manifest) return;
   for (const target of linkedTargets(dir, manifest)) ensure(target);
 
-  const entry = distEntry(dir, manifest);
-  if (!entry) return;
-  const built = existsSync(entry) ? mtime(entry) : 0;
-  const input = newestInput(dir, manifest);
-  if (built >= input) return;
+  const main = manifest.main?.replace(/^\.\//, '');
+  if (!manifest.scripts?.build || !main?.startsWith('dist/')) return;
+  const stamp = join(dir, 'dist', STAMP);
+  const outputs = shippedFiles(dir, manifest);
+  const complete = () => outputs.every(existsSync);
+  const digest = inputDigest(dir, manifest);
+  if (complete() && existsSync(stamp) && readFileSync(stamp, 'utf8').trim() === digest) return;
   const name = manifest.name ?? dir;
-  console.log(`[ensure-linked-builds] ${name}: dist is ${built ? 'older than its source' : 'missing'} — rebuilding`);
-  const ok = spawnSync('npm', ['run', 'build'], { cwd: dir, stdio: 'inherit', shell: true }).status === 0;
+  console.log(`[ensure-linked-builds] ${name}: building from current inputs`);
+  const ok = spawnSync('npm', ['run', 'build'], { cwd: dir, stdio: 'inherit', shell: process.platform === 'win32' }).status === 0 && complete();
+  if (ok) writeFileSync(stamp, `${digest}\n`);
   (ok ? rebuilt : failed).push(name);
 }
 
-// Several consumers in ONE run share `visited` and `inputsMemo`, so a package linked by
+// Several consumers in one run share visited packages and input hashes, so a package linked by
 // more than one of them (the extension and `frontend/` share most of theirs) has its
 // source tree walked, and its build checked, once.
-const roots = (process.argv.length > 2 ? process.argv.slice(2) : [process.cwd()]).map((dir) => resolve(dir));
+const includeRoots = process.argv.includes('--include-roots');
+const cacheKey = process.argv.includes('--cache-key');
+const dirs = process.argv.slice(2).filter((arg) => arg !== '--include-roots' && arg !== '--cache-key');
+const roots = (dirs.length ? dirs : [process.cwd()]).map((dir) => resolve(dir));
 const consumers = roots.map((root) => {
   const manifest = readManifest(root);
   if (!manifest) {
@@ -124,7 +138,15 @@ const consumers = roots.map((root) => {
   }
   return { root, manifest };
 });
+if (cacheKey) {
+  console.log(createHash('sha256').update(consumers.map(({ root, manifest }) => inputDigest(root, manifest)).join('\n')).digest('hex'));
+  process.exit(0);
+}
 for (const { root, manifest } of consumers) {
+  if (includeRoots) {
+    ensure(root);
+    continue;
+  }
   // A consumer is never built itself — but only from its own turn on, so a consumer that
   // an EARLIER consumer links is still checked as that one's link, as a separate run would.
   visited.add(realpathSync(root));

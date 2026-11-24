@@ -6,12 +6,12 @@
 import { describe, expect, it } from "vitest";
 import { buildOutcomeRow, freshTally, resumeTally, tallyTurn, type RunState } from "../../src/index.js";
 import { freshState } from "../../src/runState.js";
-import { TEST_POLICY, TEST_TASK } from "../support/policyContext.js";
+import { TEST_POLICY } from "../support/policyContext.js";
 
 const usage = (costMc?: number) => ({ inputTokens: 10, outputTokens: 2, ...(costMc === undefined ? {} : { costMc }) });
 
 function rowCost(turns: Array<number | undefined>): number | undefined {
-  const s: RunState = freshState(TEST_POLICY, TEST_TASK);
+  const s: RunState = freshState(TEST_POLICY);
   const t = freshTally();
   for (const costMc of turns) tallyTurn(t, "m", usage(costMc));
   s.telemetry = t;
@@ -39,7 +39,7 @@ describe("the run's reported cost", () => {
   });
 
   it("treats a turn with no usage at all as an unpriced turn", () => {
-    const s: RunState = freshState(TEST_POLICY, TEST_TASK);
+    const s: RunState = freshState(TEST_POLICY);
     const t = freshTally();
     tallyTurn(t, "m", usage(5));
     tallyTurn(t, "m", undefined);

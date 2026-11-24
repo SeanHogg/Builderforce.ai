@@ -42,6 +42,7 @@ function makeToolPolicyMatcher(policy: SandboxToolPolicy) {
  * These are system-level or interactive tools that sub-agents should never use.
  */
 const SUBAGENT_TOOL_DENY_ALWAYS = [
+  "sessions_spawn",
   // System admin - dangerous from subagent
   "gateway",
   "agents_list",
@@ -61,23 +62,18 @@ const SUBAGENT_TOOL_DENY_ALWAYS = [
  * Additional tools denied for leaf sub-agents (depth >= maxSpawnDepth).
  * These are tools that only make sense for orchestrator sub-agents that can spawn children.
  */
-const SUBAGENT_TOOL_DENY_LEAF = ["sessions_list", "sessions_history", "sessions_spawn"];
+const SUBAGENT_TOOL_DENY_LEAF = ["sessions_list", "sessions_history"];
 
 /**
  * Build the deny list for a sub-agent at a given depth.
  *
- * - Depth 1 with maxSpawnDepth >= 2 (orchestrator): allowed to use sessions_spawn,
- *   subagents, sessions_list, sessions_history so it can manage its children.
- * - Depth >= maxSpawnDepth (leaf): denied sessions_spawn and
- *   session management tools. Still allowed subagents (for list/status visibility).
+ * Existing delegation trees can retain their session management tools for work already admitted.
  */
 function resolveSubagentDenyList(depth: number, maxSpawnDepth: number): string[] {
   const isLeaf = depth >= Math.max(1, Math.floor(maxSpawnDepth));
   if (isLeaf) {
     return [...SUBAGENT_TOOL_DENY_ALWAYS, ...SUBAGENT_TOOL_DENY_LEAF];
   }
-  // Orchestrator sub-agent: only deny the always-denied tools.
-  // sessions_spawn, subagents, sessions_list, sessions_history are allowed.
   return [...SUBAGENT_TOOL_DENY_ALWAYS];
 }
 

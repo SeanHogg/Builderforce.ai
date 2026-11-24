@@ -45,8 +45,6 @@ export interface RunContextInput {
   memory: boolean;
   /** What the person attached to THIS turn (the native chat's inlined `#file` references): it rides the turn-context block, never the user's words. */
   turnContext?: string;
-  /** A sub-agent shares its owner's accounts, so it does not repeat the preflight. */
-  child: boolean;
 }
 
 /** The ports the run's context reads — a run host's, or the native participant's subset. */
@@ -87,7 +85,7 @@ export function runContextFields(ports: SetupPorts, input: RunContextInput): Run
     return "value" in r ? r.value : undefined;
   };
   const attached = input.turnContext?.trim();
-  const preflight = ports.modelPreflight && !input.child ? ports.modelPreflight : undefined;
+  const preflight = ports.modelPreflight;
   return {
     ...augmentFor(ports, projectId, serverChatId, input.chatId),
     ...(pack || attached

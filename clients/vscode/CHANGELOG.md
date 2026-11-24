@@ -2,6 +2,33 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.214] — Detailed workflow diagnostics
+
+- Workflow diagnostics time model requests, retries, approval waits, dispatch checks, context assembly, state saves, memory write-back and close-out separately. Nested timings appear under their stage in both the report and its JSON capture.
+
+## [2026.10.213] — Workflow metrics in diagnostics
+
+- Copy diagnostics includes measured attempts, outcomes, timings and available counters for the 14 stages in the implemented workflow. The JSON capture carries the same facts under `run.workflow`.
+- Missing measurements remain unknown; incomplete captures and resumed runs are distinguished from completed work. Workflow metrics persist with chat history without adding tool calls to the visible conversation.
+
+## [2026.10.212] — Your @builderforce messages are kept, and the agent sees its own changes
+
+- **Fixed: messages sent to `@builderforce` in VS Code's chat disappeared from the conversation history.** Your words are now saved with the chat like a panel message, so reopening the chat shows the whole exchange. Stopping a turn while it starts now really stops it.
+- **Fixed: the agent could not see its own edits when it reviewed them.** A diff of a file it had just changed could come back empty, so the agent wasted turns re-checking. Diffs now find the file however its path is written, include changes already staged for commit, and work in a brand-new repository with no commits yet.
+
+## [2026.10.211] — Collapsible tool-call summaries
+
+- Consecutive tool calls now appear under a compact summary showing the tools used, command counts, and any failures.
+- Expand a summary to see its calls, then expand a call to inspect its full input and output. Open calls stay expanded as new calls arrive.
+
+## [2026.10.210] — Quick answers stay quick, and finished work is checked the same way everywhere
+
+- **Questions get answered, not turned into projects.** Asking a question now takes the quick route and the agent gives you its answer after a few rounds of looking, instead of reading on indefinitely. Answering a question never leaves commits behind.
+- **Clearer chat diagnostics.** The diagnostics report leads with what happened in your latest run: whether it stopped, left your question unanswered, or had to fail over between model providers.
+- **Faster starts.** The quick checks the agent runs before it begins now share a short time limit, so a slow probe no longer holds up the run.
+- **"Done" means the same thing in the editor, on your own servers and in the cloud.** Every run, and every helper agent it starts, follows the same rules for which tickets it may work on, what evidence it needs before calling work finished, and when checks count as passed. Work with missing evidence stays open.
+- **Directions you send while a run is wrapping up are kept.** A message sent while the agent is finishing, or before a run has fully started, is picked up instead of dropped.
+
 ## [2026.10.208] — The agent remembers what it learned, across restarts and investigations
 
 - **Fixed: a resumed run forgot what it had already worked out.** When you resume an interrupted run, it is now told the facts it saved and the files it already read, so it picks up from its conclusions instead of re-reading everything.

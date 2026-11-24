@@ -162,6 +162,9 @@ describe('computeBrainDiagnostics over a reopened chat', () => {
     expect(d.truncatedToolResults).toBe(1);
     expect(d.contextPressureOnly).toBe(true);
     expect(d.likelyCause).not.toBe('context-exhaustion');
+    const report = formatBrainDiagnostics(d).join('\n');
+    expect(report).toContain('pressure noted');
+    expect(report).not.toContain('no context pressure');
   });
 
   it('does not double-count an llm turn present live AND persisted', () => {

@@ -16,6 +16,7 @@ frontend/out/
 .vercel/
 worker/.next/
 worker/dist/
+**/dist/.build-inputs
 # sdk/dist and studio/dist are committed (like studio-embedded/brain-embedded/
 # builderforce-embedded) so the CF Pages frozen install can resolve the linked
 # `@seanhogg/builderforce-sdk` + `@seanhogg/builderforce-studio` packages — their

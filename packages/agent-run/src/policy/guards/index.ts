@@ -307,7 +307,7 @@ const sessions = new WeakMap<object, RunGuards>();
 function sessionOf(ctx: PolicyContext, ports: GuardPorts): RunGuards {
   let s = sessions.get(ctx.state);
   if (!s) {
-    const question = hasExplicitQuestionIntent(classifyRequest(ctx.task.request ?? ctx.task.prompt));
+    const question = !ctx.state.specValidation && hasExplicitQuestionIntent(classifyRequest(ctx.task.request ?? ctx.task.prompt));
     s = new RunGuards(guardLeversOf(ctx.policy.levers), ctx.state.guards, ports, question);
     sessions.set(ctx.state, s);
     ctx.state.guards = s.snapshot();

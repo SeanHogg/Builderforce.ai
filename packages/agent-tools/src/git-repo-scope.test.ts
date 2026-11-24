@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   buildGitCommand,
   buildListCheckoutsCommand,
+  buildUnbornDiffCommands,
   gitCommitTool,
   gitDiffTool,
   gitPushTool,
@@ -52,15 +53,17 @@ const data = (r: ToolResult) => r.data as {
  */
 describe("buildGitCommand repo scoping", () => {
   it("is byte-for-byte unchanged when no repo is given", () => {
-    // The Container image's execTool runs these exact strings; drift here is a
-    // cross-surface behaviour change.
+    // `runGitTool` is the one consumer of these strings (the unborn-HEAD fallback lives there too);
+    // pinning the text keeps the commands the shell sees stable.
     expect(buildGitCommand("status")).toBe("git status --short --branch");
-    expect(buildGitCommand("diff")).toBe("git --no-pager diff");
+    expect(buildGitCommand("diff")).toBe("git --no-pager diff HEAD");
     expect(buildGitCommand("history", { limit: 5 })).toBe("git --no-pager log --oneline -n 5");
   });
 
   it("builds the same command for every checkout: the directory is the shell's cwd, never a `cd`", () => {
-    expect(buildGitCommand("diff", { path: "src" })).toBe('git --no-pager diff -- "src"');
+    expect(buildGitCommand("diff", { path: "src" })).toBe('git --no-pager diff HEAD -- "src"');
+    expect(buildGitCommand("diff", { pathspecs: ["app/page.tsx", "page.tsx", "$(x)"] })).toBe('git --no-pager diff HEAD -- "app/page.tsx" "page.tsx"');
+    expect(buildGitCommand("history", { limit: 5, pathspecs: ["a/b.ts", "b.ts"] })).toBe('git --no-pager log --oneline -n 5 -- "a/b.ts" "b.ts"');
     for (const action of ["status", "diff", "history", "sync_latest", "undo", "redo"] as const) {
       expect(buildGitCommand(action)).not.toMatch(/\bcd\b/);
     }
@@ -205,8 +208,8 @@ describe("runGitTool at a multi-checkout workspace root", () => {
     const r = await gitDiffTool.execute({ path: "Builderforce.ai/packages/x.ts" }, sh as never);
     expect(data(r).ok).toBe(true);
     expect(data(r).repo).toBe("Builderforce.ai");
-    expect(sh.scripts[0]).toBe('git --no-pager diff -- "Builderforce.ai/packages/x.ts"');
-    expect(sh.scripts[1]).toBe('git --no-pager diff -- "packages/x.ts"');
+    expect(sh.scripts[0]).toBe(buildGitCommand("diff", { path: "Builderforce.ai/packages/x.ts" }));
+    expect(sh.scripts[1]).toBe(buildGitCommand("diff", { pathspecs: ["Builderforce.ai/packages/x.ts", "packages/x.ts"] }));
     expect(sh.cwds).toEqual([undefined, "Builderforce.ai"]);
   });
 
@@ -239,10 +242,85 @@ describe("runGitTool at a multi-checkout workspace root", () => {
       sh as never,
     );
     expect(sh.scripts).toHaveLength(1);
-    expect(sh.scripts[0]).toBe('git --no-pager diff -- "Builderforce.ai/foo.ts"');
+    expect(sh.scripts[0]).toBe(buildGitCommand("diff", { path: "Builderforce.ai/foo.ts" }));
     expect(sh.cwds).toEqual(["other-project"]);
     expect(data(r).ok).toBe(true);
     expect(data(r).repo).toBe("other-project");
+  });
+
+  it("regression: an explicit repo + a workspace-relative path re-expresses the path inside the repo", async () => {
+    // Live run: `repo: "Builderforce.ai"` + `path: "Builderforce.ai/docs/specs/make.md"` ran
+    // `git diff -- "Builderforce.ai/docs/…"` inside the repo, matched nothing and returned "(no output)".
+    const sh = mockShell(() => ({ ok: true, exitCode: 0, stdout: "diff --git a/docs/x.md b/docs/x.md" }));
+    await gitDiffTool.execute({ path: "Builderforce.ai/docs/x.md", repo: "Builderforce.ai" }, sh as never);
+    // The path as given AND re-expressed inside the repo are both pathspecs (a no-match pathspec is harmless).
+    expect(sh.scripts).toEqual(['git --no-pager diff HEAD -- "Builderforce.ai/docs/x.md" "docs/x.md"']);
+    expect(sh.cwds).toEqual(["Builderforce.ai"]);
+  });
+
+  it("an explicit repo + a path without the repo prefix passes the path through unchanged", async () => {
+    const sh = mockShell(() => ({ ok: true, exitCode: 0, stdout: "x" }));
+    await gitDiffTool.execute({ path: "docs/x.md", repo: "Builderforce.ai" }, sh as never);
+    expect(sh.scripts).toEqual([buildGitCommand("diff", { path: "docs/x.md" })]);
+    expect(sh.cwds).toEqual(["Builderforce.ai"]);
+  });
+
+  it("regression: an explicit repo whose own folder is named like the path's first segment keeps BOTH pathspecs", async () => {
+    // `repo: "app"` + `path: "app/page.tsx"` where the repo really has app/page.tsx: stripping alone would lose it.
+    const sh = mockShell(() => ({ ok: true, exitCode: 0, stdout: "x" }));
+    await gitDiffTool.execute({ path: "app/page.tsx", repo: "app" }, sh as never);
+    expect(sh.scripts).toEqual(['git --no-pager diff HEAD -- "app/page.tsx" "page.tsx"']);
+    expect(sh.cwds).toEqual(["app"]);
+  });
+
+  it("regression: git_diff diffs against HEAD (staged + unstaged) in ONE plain git invocation", () => {
+    // Plain `git diff` is the unstaged half only, so an already-`git add`ed edit read as "no changes".
+    const cmd = buildGitCommand("diff", { path: "docs/x.md" });
+    expect(cmd).toBe('git --no-pager diff HEAD -- "docs/x.md"');
+    // No `||` / `2>/dev/null`: a Windows host without bash refuses them.
+    expect(cmd).not.toMatch(/\|\||2>/);
+    expect(buildUnbornDiffCommands({ pathspecs: ["docs/x.md"] })).toEqual([
+      'git --no-pager diff --cached -- "docs/x.md"',
+      'git --no-pager diff -- "docs/x.md"',
+    ]);
+  });
+
+  it("an unborn HEAD falls back to the staged diff plus the unstaged diff, without git's fatal text", async () => {
+    const sh = mockShell((cmd) => {
+      if (cmd.includes("diff HEAD")) return { ok: false, exitCode: 128, stdout: "fatal: bad revision 'HEAD'" };
+      if (cmd.includes("--cached")) return { ok: true, exitCode: 0, stdout: "diff --git a/new.ts b/new.ts\n" };
+      return { ok: true, exitCode: 0, stdout: "diff --git a/old.ts b/old.ts\n" };
+    });
+    const r = await gitDiffTool.execute({ path: "src", repo: "proj" }, sh as never);
+    expect(sh.scripts).toEqual([
+      'git --no-pager diff HEAD -- "src"',
+      'git --no-pager diff --cached -- "src"',
+      'git --no-pager diff -- "src"',
+    ]);
+    expect(sh.cwds).toEqual(["proj", "proj", "proj"]);
+    expect(data(r).ok).toBe(true);
+    expect(data(r).output).toContain("new.ts");
+    expect(data(r).output).toContain("old.ts");
+    expect(data(r).output).not.toMatch(/fatal/);
+  });
+
+  it("regression: a timed-out HEAD diff whose partial stdout merely contains the unborn-HEAD words does NOT run the fallback", async () => {
+    const sh = mockShell(() => ({
+      ok: false,
+      stdout: "diff --git a/git-tools.ts b/git-tools.ts\n+const UNBORN_HEAD = /bad revision 'HEAD'|unknown revision/;\n",
+      error: "timed out",
+    }));
+    const r = await gitDiffTool.execute({ repo: "proj" }, sh as never);
+    expect(sh.scripts).toEqual(["git --no-pager diff HEAD"]);
+    expect(data(r).ok).toBe(false);
+  });
+
+  it("any other diff failure is returned as is, with no fallback", async () => {
+    const sh = mockShell(() => ({ ok: false, exitCode: 129, stdout: "fatal: unrecognized argument: --bogus" }));
+    const r = await gitDiffTool.execute({ repo: "proj" }, sh as never);
+    expect(sh.scripts).toHaveLength(1);
+    expect(data(r).ok).toBe(false);
+    expect(data(r).output).toContain("unrecognized argument");
   });
 });
 
@@ -290,7 +368,7 @@ describe("the run's default repo (ShellCapability.defaultRepo)", () => {
     const sh = rootOfCheckouts("api");
     const r = await gitDiffTool.execute({ path: "app/src/x.ts" }, sh as never);
     expect(data(r).repo).toBe("app");
-    expect(sh.scripts[1]).toBe('git --no-pager diff -- "src/x.ts"');
+    expect(sh.scripts[1]).toBe(buildGitCommand("diff", { pathspecs: ["app/src/x.ts", "src/x.ts"] }));
     expect(sh.cwds[1]).toBe("app");
     expect(sh.scripts).toHaveLength(2);
   });

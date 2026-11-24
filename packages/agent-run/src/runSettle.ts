@@ -10,6 +10,8 @@ import { newApprovalId } from "./runState.js";
 import { isResumable } from "./runTurn.js";
 import { buildOutcomeRow } from "./telemetry/outcomeRow.js";
 import { tallyVerify } from "./telemetry/runTally.js";
+import { measureWorkflow, measureWorkflowSync, workflowScope } from "./telemetry/workflowMetrics.js";
+import { missingSpecEvidence, specUnverifiedReason, unverifiedSpecCheckCount } from "./policy/verify/specValidation.js";
 
 /** What a terminal outcome carries beyond the state. */
 interface SettleExtra {
@@ -43,9 +45,20 @@ export async function settle(
   kind: RunOutcome["kind"],
   extra: SettleExtra,
 ): Promise<RunOutcome> {
+  return measureWorkflow(input.ports.events, workflowScope(input, state.step), 'settle', () => settleCore(input, hooks, state, transcript, kind, extra), (result) => result.kind === 'failed' ? result.reason === RUN_CANCELLED_REASON ? 'cancelled' : 'failed' : result.kind === 'paused' ? 'blocked' : 'completed');
+}
+
+async function settleCore(input: RunAgentInput, hooks: PolicyHooks, state: RunState, transcript: RunMessage[], kind: RunOutcome['kind'], extra: SettleExtra): Promise<RunOutcome> {
   state.messages = transcript;
+  const validation = state.specValidation;
+  const checks = validation?.completed ?? [];
+  const failedChecks = checks.filter((check) => check.exitCode !== 0).length;
   // Forced closing turns can bypass the interactive finish gate. They must still report outstanding assigned work.
-  const unfinished = kind === "finished" ? hooks.finish.unfinishedWork(state) : null;
+  const unfinished = kind === "finished"
+    ? hooks.finish.unfinishedWork(state)
+      ?? (missingSpecEvidence(state) ? specUnverifiedReason(state) : null)
+      ?? (failedChecks ? `PRD validation recorded ${failedChecks} failing acceptance check(s). See the run trace for their exit results.` : null)
+    : null;
   if (unfinished) {
     kind = "failed";
     extra = { ...extra, reason: unfinished };
@@ -59,11 +72,11 @@ export async function settle(
   // parked or yielded is not over.
   if ((kind === "finished" || kind === "failed") && cause === undefined) {
     try {
-      const consolidated = await hooks.memory.consolidate(
+      const consolidated = await measureWorkflow(input.ports.events, { ...workflowScope(input, state.step), operation: 'memory_consolidate' }, 'settle', () => hooks.memory.consolidate(
         policyContext(input, state, currentView(transcript, []), state.step, 0),
         { learn: kind === "finished" },
-      );
-      if (consolidated !== undefined) await input.ports.store.commitMemory?.(consolidated);
+      ));
+      if (consolidated !== undefined && input.ports.store.commitMemory) await measureWorkflow(input.ports.events, { ...workflowScope(input, state.step), operation: 'memory_commit' }, 'settle', () => input.ports.store.commitMemory!(consolidated));
     } catch (err) {
       // A failed consolidation or write-back is recorded by its absence: it must neither fail the run nor cost it the
       // state, the outcome row and the closing event below - UNLESS the surface says the exception is a resumable
@@ -78,7 +91,7 @@ export async function settle(
   }
 
   try {
-    await input.ports.store.save(state);
+    await measureWorkflow(input.ports.events, { ...workflowScope(input, state.step), operation: 'store_save' }, 'settle', () => input.ports.store.save(state));
   } catch {
     // A store that cannot save still returns the state to the caller, who holds it.
   }
@@ -91,9 +104,17 @@ export async function settle(
 
   // The uniform §8.2 outcome row, built from the run state the whole run carried (its tally is in `state.telemetry`).
   if (kind === "finished" || kind === "failed") {
-    const row = buildOutcomeRow({ entryPoint: input.policy.entryPoint, runId: input.task.runId, parentRunId: input.task.dispatch.parentRunId, kind, ...(extra.reason !== undefined ? { reason: extra.reason } : {}), state });
+    if (validation) {
+      await emit(input.ports.events, {
+        kind: "run.spec_validation", step: state.step, completed: checks.length,
+        failed: failedChecks, pending: Object.keys(validation.pending ?? {}).length,
+        unverified: unverifiedSpecCheckCount(state),
+        incomplete: missingSpecEvidence(state),
+      });
+    }
+    const row = measureWorkflowSync(input.ports.events, workflowScope(input, state.step), 'grade', () => buildOutcomeRow({ entryPoint: input.policy.entryPoint, runId: input.task.runId, parentRunId: input.task.dispatch.parentRunId, kind, ...(extra.reason !== undefined ? { reason: extra.reason } : {}), state }), (row) => ({ ...(row.work ?? { assigned: 0, done: 0, blocked: 0, inReview: 0, open: 0 }) }));
     try {
-      await input.ports.events.outcome?.(row);
+      if (input.ports.events.outcome) await measureWorkflow(input.ports.events, workflowScope(input, state.step), 'outcome', () => input.ports.events.outcome!(row));
     } catch {
       // As with the trace: a broken sink records nothing.
     }

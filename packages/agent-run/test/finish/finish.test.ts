@@ -25,7 +25,7 @@ function finishInput(patch: Partial<FinishGateArgs> = {}, ports: FinishGatePorts
     delegated: false,
     summary: "done",
     output: "",
-    gates: initialFinishGateState(undefined, false),
+    gates: initialFinishGateState(undefined),
     enterVerify: () => {},
     ports,
     ...patch,
@@ -62,7 +62,7 @@ describe("finish gating", () => {
   });
 
   it("blocks a completion claim with no code deliverable, once", async () => {
-    const gates = initialFinishGateState(undefined, false);
+    const gates = initialFinishGateState(undefined);
     const verdict = await evaluateFinishGates(finishInput({ writtenPaths: ["docs/x.md"], summary: "done", gates }));
     expect(verdict.block).toBeTruthy();
     expect(verdict.reason).toBe("no_deliverable");
@@ -80,7 +80,7 @@ describe("finish gating", () => {
   });
 
   it("blocks a claimed check that could not have run (honesty), once", async () => {
-    const gates = initialFinishGateState(undefined, false);
+    const gates = initialFinishGateState(undefined);
     const verdict = await evaluateFinishGates(
       finishInput({ writtenPaths: [A_TS], summary: "all tests passed", gates }),
     );
@@ -109,7 +109,7 @@ describe("branch CI gate", () => {
     expect(ci.pendingBlocks).toBe(1);
     expect(ci.ciVerified).toBe(false);
     // Evaluate through the gate: pending CI blocks, reason branch_ci_pending.
-    const gates = initialFinishGateState(undefined, false);
+    const gates = initialFinishGateState(undefined);
     const verdict = await evaluateFinishGates(
       finishInput({ writtenPaths: [A_TS], summary: "ok", gates }, { pollBranchCi: async () => ci }),
     );
@@ -125,7 +125,7 @@ describe("branch CI gate", () => {
     expect(ci.ciVerified).toBe(true);
     // A claimed check is fine once CI is verified.
     const verdict = await evaluateFinishGates(
-      finishInput({ writtenPaths: [A_TS], summary: "tests passed", gates: initialFinishGateState(undefined, false) }, { pollBranchCi: async () => ci }),
+      finishInput({ writtenPaths: [A_TS], summary: "tests passed", gates: initialFinishGateState(undefined) }, { pollBranchCi: async () => ci }),
     );
     expect(verdict.block).toBeNull();
   });
@@ -154,7 +154,7 @@ describe("branch CI gate", () => {
 describe("placeholder anti-stub gate", () => {
   it("blocks on flagged placeholder code up to its cap, then relents", async () => {
     const scan = { scanPlaceholders: async () => ({ flagged: [{ path: A_TS, markers: ["TODO: implement"] }] }) };
-    const gates = initialFinishGateState(undefined, false);
+    const gates = initialFinishGateState(undefined);
     for (let i = 0; i < 2; i += 1) {
       const verdict = await evaluateFinishGates(finishInput({ writtenPaths: [A_TS], summary: "ok", gates }, scan));
       expect(verdict.reason).toBe("placeholders");
@@ -171,15 +171,13 @@ describe("placeholder anti-stub gate", () => {
 });
 
 describe("finish gate resume state", () => {
-  it("a sub-agent's no-deliverable gate starts spent; its owner is held to it", () => {
-    expect(initialFinishGateState(undefined, true).noDeliverableBlocked).toBe(true);
-    expect(initialFinishGateState(undefined, false).noDeliverableBlocked).toBe(false);
+  it("starts the no-deliverable gate unspent", () => {
+    expect(initialFinishGateState(undefined).noDeliverableBlocked).toBe(false);
   });
 
   it("resume restores the counters but never ciVerified / finishBlockedOnce", () => {
     const resumed = initialFinishGateState(
       { noDeliverableBlocked: true, reviewVerdictRecorded: true, placeholderBlocks: 1, ciPendingBlocks: 1, ciFailureBlocks: 2 },
-      false,
     );
     expect(resumed.noDeliverableBlocked).toBe(true);
     expect(resumed.reviewVerdictRecorded).toBe(true);
@@ -202,7 +200,7 @@ describe("evaluateFinishGates — source quality and the durable snapshot", () =
   });
 
   it("carries its counters through a durable snapshot", () => {
-    const g = initialFinishGateState({ placeholderBlocks: 2, ciPendingBlocks: 1 }, true);
+    const g = initialFinishGateState({ noDeliverableBlocked: true, placeholderBlocks: 2, ciPendingBlocks: 1 });
     expect(g.noDeliverableBlocked).toBe(true);
     expect(finishGateSnapshot(g)).toEqual({ noDeliverableBlocked: true, reviewVerdictRecorded: false, placeholderBlocks: 2, ciPendingBlocks: 1, ciFailureBlocks: 0 });
   });

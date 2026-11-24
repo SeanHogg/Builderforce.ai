@@ -13,6 +13,7 @@
 
 import { getRunSnapshot, getRunTrace, isRunning, subscribeRun } from "@seanhogg/builderforce-brain-embedded";
 import type { BrainRunHost } from "./brainRunHostContract";
+import { hostLog } from "./hostLog";
 import type { WebviewRunStart } from "./brainRunHostProtocol";
 import type { ChildApprover } from "./childApprovalRelay";
 import { createStreamRelay, exhaustedToolBudget } from "./nativeRunStream";
@@ -23,8 +24,14 @@ export type ParticipantHost = Pick<BrainRunHost, "start" | "stop" | "isBusy" | "
 
 export interface ParticipantRunOptions {
   host: ParticipantHost;
-  /** The run as the host takes it - its `chatId` is the run's cell key (the local chat's view key). */
-  spec: WebviewRunStart;
+  /** The run as the host takes it - its `chatId` is the run's cell key (the local chat's view key). The participant's turn is text. */
+  spec: WebviewRunStart & { userTurn?: string };
+  /**
+   * Saves the person's row for this turn (the participant is a SEND path, like the panel's composer; `host.start` never writes it)
+   * and resolves its id, or `undefined` when the save failed (already logged; the turn still runs). The row is the person's WORDS
+   * ONLY, by design: no `#file` turn context and no attachment metadata - those ride `spec.turnContext` to the model alone.
+   */
+  saveUserTurn(chatId: number, text: string): Promise<number | undefined>;
   /** Asked about every paused call of the chat's runs (the turn's own and its sub-agents'). */
   approve: ChildApprover;
   events: NativeRunEvents;
@@ -32,6 +39,24 @@ export interface ParticipantRunOptions {
   /** Hybrid's pick failed and the turn was answered with Auto (`reason` is why, already clamped). */
   onModelFallback(from: string, reason?: string): void;
   signal: AbortSignal;
+}
+
+/**
+ * The shared save: one `{role: "user", content}` row through the chat's store (what the panel's composer saves), resolving its id.
+ * A failed save is logged and resolves `undefined` - it never blocks the turn.
+ */
+export async function saveUserRow(
+  persistence: { sendMessages(chatId: number, messages: Array<{ role: string; content: string }>): Promise<Array<{ id?: number }>> },
+  chatId: number,
+  text: string,
+): Promise<number | undefined> {
+  try {
+    const [row] = await persistence.sendMessages(chatId, [{ role: "user", content: text }]);
+    return row?.id;
+  } catch (e) {
+    hostLog(`[participant run] saving the user turn for chat ${chatId} failed: ${String(e)}`);
+    return undefined;
+  }
 }
 
 /**
@@ -47,6 +72,12 @@ export async function runViaHost(opts: ParticipantRunOptions): Promise<boolean> 
     return false;
   }
   if (signal.aborted) return false;
+
+  // The person's row first (as the panel's composer does), and the run reads its id. A Stop that lands DURING the save leaves the
+  // row (as in the panel) but starts nothing: `host.start` is not yet running, so a late `host.stop` could not reach it.
+  const savedId = spec.userTurn ? await opts.saveUserTurn(chatId, spec.userTurn) : undefined;
+  if (signal.aborted) return true;
+  const runSpec: WebviewRunStart = savedId != null ? { ...spec, userTurnMessageId: savedId } : spec;
 
   const unregisterApprover = host.registerApprover(chatId, opts.approve);
   const relayText = createStreamRelay(events);
@@ -78,7 +109,7 @@ export async function runViaHost(opts: ParticipantRunOptions): Promise<boolean> 
   // Only THIS run's steps decide whether the budget was exhausted - a cell's trace spans every turn of the chat.
   const traceBefore = getRunTrace(chatId).length;
   try {
-    await host.start(spec);
+    await host.start(runSpec);
   } finally {
     // Deliver anything the last emit carried before we stop listening.
     relayText(getRunSnapshot(chatId));

@@ -52,8 +52,9 @@ export const CONFORMANCE_SCRIPT: readonly ModelCompletion[] = [
 ];
 
 /**
- * The trace every entry point emits for the scripted task, in order: the ONE golden. A surface that differs from it for a real reason
- * pins the difference in its own case with a comment saying why; there is no second golden.
+ * The KERNEL golden: the trace `runAgent` emits for the scripted task, in order (the kernel never routes). Surfaces that enter through
+ * `openRun` are held to {@link CONFORMANCE_ENTRY_TRACE}, which is DERIVED from this one (a single `run.routed` inserted), not a second
+ * literal. A surface that differs from its golden for a real reason pins the difference in its own case with a comment saying why.
  * Pinned and proved by `test/conformance/crossAdapter.test.ts`.
  */
 export const CONFORMANCE_TRACE: readonly string[] = [
@@ -67,6 +68,18 @@ export const CONFORMANCE_TRACE: readonly string[] = [
   "turn.started",
   "model.completed:fake-model",
   "run.finished:finished",
+];
+
+/**
+ * The golden for a surface that enters through `openRun` (not `runAgent` directly): `openRun` emits exactly one `run.routed`
+ * right after `run.started` when it decides a route on a fresh (non-resume) run (`openRun.ts`, pinned by `test/entry/openRun.test.ts`).
+ * Use {@link CONFORMANCE_TRACE} for the kernel (`runAgent`), this for `openRun` entries. It is DERIVED, never a second literal.
+ * `conformanceFact` renders a `run.routed` event as the bare kind.
+ */
+export const CONFORMANCE_ENTRY_TRACE: readonly string[] = [
+  CONFORMANCE_TRACE[0]!,
+  "run.routed",
+  ...CONFORMANCE_TRACE.slice(1),
 ];
 
 /** One event as the fact every surface agrees on. */

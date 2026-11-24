@@ -9,8 +9,7 @@
  *   • A child never gets `human`. A run pauses for a person by ending the whole
  *     execution and waiting for an answer on resume; a child that could trigger that
  *     would strand its owner mid-task with no way back.
- *   • A child spawns its own children only while it is above the depth cap — the same
- *     recursion rule the editor's children follow (`MAX_SUBAGENT_DEPTH`).
+ *   • The root owns spawning for the tree.
  */
 
 import {

@@ -35,4 +35,9 @@ describe('reapStaleExecutions — cron gate', () => {
     const r = await reap({});
     expect(r.signalled).toBe(false);
   });
+
+  it('queries the late-steer retry queue when the probe finds pending work', async () => {
+    const r = await reap({ late_steer_retries: 't' });
+    expect(r.calls).toEqual(['execute', 'late-steer-retries']);
+  });
 });

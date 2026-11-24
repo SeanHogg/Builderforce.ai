@@ -2,7 +2,7 @@
   "name": "builderforce-ai",
   "displayName": "BuilderForce.ai",
   "description": "%extension.description%",
-  "version": "2026.10.209",
+  "version": "2026.10.214",
   "publisher": "builderforce",
   "license": "MIT",
   "author": "Sean Hogg",
@@ -1103,6 +1103,13 @@
           "type": "string",
           "default": "",
           "markdownDescription": "%config.models.subagent.desc%"
+        },
+        "builderforce.pipeline.independentReview": {
+          "type": "string",
+          "enum": ["auto", "required", "off"],
+          "default": "auto",
+          "scope": "application",
+          "markdownDescription": "%config.pipeline.independentReview.desc%"
         },
         "builderforce.pipeline.routing": {
           "type": "string",

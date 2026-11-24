@@ -10,7 +10,7 @@
  *
  * Every query is tenant-scoped AND execution-scoped.
  */
-import { and, asc, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { executionMessages, executions } from '../../infrastructure/database/schema';
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
@@ -204,17 +204,25 @@ export async function executionsWithPendingSteers(db: Db, executionIds: readonly
   return rows.map((r) => r.executionId);
 }
 
+/** Shared by the idle probe and the sweep so they see the same retry queue. */
+export function lateSteerRetryPredicate() {
+  return acrossTenants(executionMessages, 'scheduled_sweep',
+    sql`exists (select 1 from ${executions} where ${and(
+      eq(executions.id, executionMessages.executionId),
+      eq(executions.tenantId, executionMessages.tenantId),
+      inArray(executions.status, [...EXECUTION_TERMINAL_STATUSES]),
+    )})`,
+    eq(executionMessages.role, 'user'), eq(executionMessages.lateDetail, RETRY_PENDING),
+    isNull(executionMessages.consumedAt), isNull(executionMessages.lateClaimedAt), isNull(executionMessages.lateOutcome),
+  );
+}
+
 /** The scheduled sweep retries only explicitly requeued work, including on normally settled runs. */
 export function terminalExecutionsWithSteerRetries(db: Db, limit: number) {
   return db
     .selectDistinct({ executionId: executionMessages.executionId, tenantId: executionMessages.tenantId })
     .from(executionMessages)
-    .innerJoin(executions, and(eq(executions.id, executionMessages.executionId), eq(executions.tenantId, executionMessages.tenantId)))
-    .where(acrossTenants(executionMessages, 'scheduled_sweep',
-      inArray(executions.status, [...EXECUTION_TERMINAL_STATUSES]),
-      eq(executionMessages.role, 'user'), eq(executionMessages.lateDetail, RETRY_PENDING),
-      isNull(executionMessages.consumedAt), isNull(executionMessages.lateClaimedAt), isNull(executionMessages.lateOutcome),
-    ))
+    .where(lateSteerRetryPredicate())
     .orderBy(asc(executionMessages.executionId))
     .limit(limit);
 }

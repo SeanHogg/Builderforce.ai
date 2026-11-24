@@ -148,7 +148,7 @@ describe('formatChatDiagnosticsReportJson', () => {
     expect(report.chat.tickets).toHaveLength(40);
   });
 
-  it('falls back to a minimal parseable skeleton when elision is not enough', () => {
+  it('keeps workflow metrics in the compact fallback when the chat does not fit', () => {
     const report = buildChatDiagnosticsReport({
       diagnostics: { ...CHAT, agents: Array.from({ length: 2_000 }, (_, i) => ({ agentRef: `agent-${i}`, role: 'member' })) },
       events: events(), messages: [], surface: 'Web', now: NOW,
@@ -156,10 +156,12 @@ describe('formatChatDiagnosticsReportJson', () => {
     const json = compactReportJson(report);
     expect(json.length).toBeLessThanOrEqual(REPORT_JSON_MAX_CHARS);
     const parsed = JSON.parse(json) as Record<string, unknown>;
-    expect(parsed._elided).toEqual(['*']);
+    expect(parsed._elided).toEqual(['except run.workflow']);
+    expect(parsed.run).toEqual({ workflow: report.run?.workflow });
     expect(parsed.schemaVersion).toBe(CHAT_DIAGNOSTICS_SCHEMA_VERSION);
     expect(parsed.capturedAt).toBe('2026-09-15T12:00:00.000Z');
     expect('chat' in parsed).toBe(false);
+    expect(JSON.parse(compactReportJson(report, 600))._elided).toEqual(['*']);
   });
 
   it('leaves a report under the cap unmarked', () => {

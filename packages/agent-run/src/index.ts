@@ -21,6 +21,7 @@ export * from "./surface.js";
 
 // The ONE scripted task every entry point's conformance case runs (PRD 35 §3.3), and the trace fold it is compared by.
 export * from "./conformanceTask.js";
+export * from "./telemetry/workflowMetrics.js";
 export { tapEvents, type EventTap } from "./tapEvents.js";
 
 // The default `RunPolicy.delegation.readsBeforeNudge`: every adapter that lets the agent nudge says this, not its own number.
@@ -164,7 +165,7 @@ export { childWorkRefs } from "./policy/steering/runSteering.js";
 
 // What an adapter needs to run a child (never to decide behaviour): what a child run is
 // derived from its owner's — its policy, its capabilities, its result.
-export { childPolicy, childProvider, childResult, prepareChildStart, spawnChild, validateChildStart } from "./policy/subagents/index.js";
+export { assertCanSpawnChild, canSpawnChild, childPolicy, childProvider, childResult, prepareChildStart, spawnChild, validateChildStart } from "./policy/subagents/index.js";
 export type { SpawnChildRequest, ChildStartRequest, SpawnChildPorts } from "./policy/subagents/index.js";
 
 // The tools a surface granting these capabilities is offered, before the tools policy narrows them.

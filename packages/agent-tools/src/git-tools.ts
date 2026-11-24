@@ -46,10 +46,36 @@ export { buildListCheckoutsCommand, commitPathCandidates, inferRepoFromPath, isN
 // through the shell capability — explicit tools the model can call reliably
 // instead of hand-crafting git through run_command (the on-prem agent only ever
 // had a read-only `git_history`; the mutating "get latest / undo / redo" verbs
-// lived nowhere). The Container image runs its OWN loop, so it mirrors these via
-// the SAME command strings (`buildGitCommand`) in its execTool — single source
-// for the command text so the two execution backends can't drift.
+// lived nowhere). `runGitTool` is the one consumer of `buildGitCommand` (nothing outside
+// this package runs these strings), and the unborn-HEAD diff fallback lives there too.
 // ---------------------------------------------------------------------------
+
+/** ` -- "a" "b"` for the (sanitised) pathspecs — `pathspecs` when given, else the single `path`; "" when none survive. */
+function pathspecArg(opts?: { path?: string; pathspecs?: readonly string[] }): string {
+  const specs = (opts?.pathspecs ?? [opts?.path]).map((p) => safeGitArg(p)).filter((p): p is string => !!p);
+  return specs.length > 0 ? ` -- ${specs.map((p) => `"${p}"`).join(" ")}` : "";
+}
+
+/**
+ * The diff of a repository with NO commits (no HEAD): what is staged, then what is not — two plain git
+ * invocations the caller runs in turn. Pure, so the unit tests pin the text.
+ */
+export function buildUnbornDiffCommands(opts?: { path?: string; pathspecs?: readonly string[] }): string[] {
+  const pathArg = pathspecArg(opts);
+  return [`git --no-pager diff --cached${pathArg}`, `git --no-pager diff${pathArg}`];
+}
+
+/**
+ * git's `fatal:` line when `HEAD` does not resolve (a repository with no commits yet). Anchored to a `fatal:` line so a
+ * timed-out diff whose partial stdout merely CONTAINS these words (a diff of this very file) is not mistaken for it.
+ */
+const UNBORN_HEAD = /^fatal: .*(bad revision 'HEAD'|ambiguous argument 'HEAD'|unknown revision)/m;
+
+/** A failed HEAD diff is the unborn-HEAD case: git exits 128 with that `fatal:` line (exit code unknown on some shells ⇒ the line alone decides). */
+function isUnbornHead(r: { ok: boolean; stdout?: string; exitCode?: number; error?: string }): boolean {
+  if (r.ok || (r.exitCode !== undefined && r.exitCode !== 128)) return false;
+  return UNBORN_HEAD.test(`${r.stdout ?? ""}\n${r.error ?? ""}`);
+}
 
 /** The git action verbs exposed as tools. */
 export type GitAction = "status" | "diff" | "history" | "sync_latest" | "undo" | "redo";
@@ -72,10 +98,9 @@ export type GitAction = "status" | "diff" | "history" | "sync_latest" | "undo" |
  */
 export function buildGitCommand(
   action: GitAction,
-  opts?: { path?: string; baseBranch?: string; limit?: number; trackedBranch?: string; remoteViaSandbox?: boolean; paths?: readonly string[]; repo?: string },
+  opts?: { path?: string; pathspecs?: readonly string[]; baseBranch?: string; limit?: number; trackedBranch?: string; remoteViaSandbox?: boolean; paths?: readonly string[]; repo?: string },
 ): string {
-  const path = safeGitArg(opts?.path);
-  const pathArg = path ? ` -- "${path}"` : "";
+  const pathArg = pathspecArg(opts);
   // A workspace root is not always the repository root: a monorepo checkout, or simply a
   // folder holding several projects, has its `.git` one level down. Where the command runs is
   // NOT part of its text: the tool hands `repo` to the shell as the working directory
@@ -99,7 +124,11 @@ export function buildGitCommand(
       // No `paths` ⇒ the unchanged one-liner; `paths` adds each one's last commit (see git-status.ts).
       return buildStatusCommand(opts?.paths, opts?.repo);
     case "diff":
-      return `git --no-pager diff${pathArg}`;
+      // Staged AND unstaged (against HEAD) — plain `git diff` shows only the unstaged half, so a file the
+      // agent already `git add`ed read as "no changes". ONE plain git invocation (no `||`: a Windows host
+      // without bash refuses it). A repository with no commits has no HEAD; `runGitTool` then runs
+      // `buildUnbornDiffCommands`.
+      return `git --no-pager diff HEAD${pathArg}`;
     case "history": {
       const limit = Number.isFinite(opts?.limit) && (opts!.limit as number) > 0 ? Math.min(Math.floor(opts!.limit as number), 200) : 30;
       return `git --no-pager log --oneline -n ${limit}${pathArg}`;
@@ -176,15 +205,25 @@ async function runGitTool(action: GitAction, opts: { path?: string; paths?: stri
   // candidates (never send the model to `list_files` for a list we can produce here).
   // `paths` (git_status) scope like `path` does: the first one names the checkout to try.
   const scope = { repo: opts.repo, path: opts.path ?? opts.paths?.[0] };
-  const ran = await runInRepoScope(ctx, scope, (repo, path) =>
-    shellRunWithStop(ctx, buildGitCommand(action, {
+  const ran = await runInRepoScope(ctx, scope, async (repo, pathspecs) => {
+    const cwd = safeRepoArg(repo) ?? undefined;
+    const r = await shellRunWithStop(ctx, buildGitCommand(action, {
       baseBranch,
       limit: opts.limit,
-      path,
+      pathspecs,
       ...(opts.paths?.length ? { paths: opts.paths, ...(repo ? { repo } : {}) } : {}),
       ...(trackedBranch ? { trackedBranch } : {}),
       ...(remote ? { remoteViaSandbox: true } : {}),
-    }), safeRepoArg(repo) ?? undefined));
+    }), cwd);
+    if (action !== "diff" || !isUnbornHead(r)) return r;
+    // No commits yet ⇒ no HEAD: the diff is the staged half plus the unstaged half. Git's `fatal:` is dropped.
+    const [staged, unstaged] = buildUnbornDiffCommands({ pathspecs });
+    const a = await shellRunWithStop(ctx, staged!, cwd);
+    if (!a.ok) return a;
+    const b = await shellRunWithStop(ctx, unstaged!, cwd);
+    if (!b.ok) return b;
+    return { ...b, stdout: [a.stdout, b.stdout].map((s) => (s ?? "").trim()).filter(Boolean).join("\n") };
+  });
   if (!ran) return notARepoWithCandidates(action, ctx);
   if (remote && ran.r.ok) {
     const published = await remote.publish({ force: action !== "sync_latest" });
@@ -220,7 +259,7 @@ export const gitStatusTool: ToolDefinition = defineTool({
 export const gitDiffTool: ToolDefinition = defineTool({
   name: "git_diff",
   description: "Show the uncommitted diff of your working tree (optionally for one path). Use it to review exactly what you changed before finishing.",
-  parameters: { type: "object", properties: { path: { type: "string", description: "Optional repo-relative file/dir to scope the diff to." }, repo: REPO_PARAM } },
+  parameters: { type: "object", properties: { path: { type: "string", description: "Optional file/dir to scope the diff to — repo-relative or workspace-relative (with the repo folder prefix); both are accepted." }, repo: REPO_PARAM } },
   requires: ["shell"],
   execute: (args, ctx) => runGitTool("diff", { path: typeof args.path === "string" ? args.path : undefined, repo: typeof args.repo === "string" ? args.repo : undefined }, ctx),
 });
@@ -231,7 +270,7 @@ export const gitHistoryTool: ToolDefinition = defineTool({
   parameters: {
     type: "object",
     properties: {
-      path: { type: "string", description: "Optional repo-relative file/dir to scope history to." },
+      path: { type: "string", description: "Optional file/dir to scope history to — repo-relative or workspace-relative (with the repo folder prefix); both are accepted." },
       limit: { type: "number", description: "Max commits to return (default 30, max 200)." },
       repo: REPO_PARAM,
     },

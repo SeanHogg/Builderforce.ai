@@ -186,6 +186,8 @@ import type { RunOutcomeRow } from "./telemetry/rowType.js";
 
 /** Where the run's events go: the live trace, the timeline, the relay frames. */
 export interface EventSink {
+  /** Workflow measurements are separate from semantic RunEvents, preserving cross-adapter trace parity. */
+  workflow?(metric: import("./telemetry/workflowMetrics.js").WorkflowMetric): Promise<void> | void;
   emit(event: RunEvent, meta?: { durationMs?: number }): Promise<void> | void;
   /** The run's outcome row, written once at the end. */
   outcome?(row: RunOutcomeRow): Promise<void> | void;

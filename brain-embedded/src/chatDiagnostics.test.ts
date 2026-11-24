@@ -172,7 +172,8 @@ describe('formatChatDiagnostics — account signals', () => {
     const s = signals(baseline({
       account: { ...baseline().account!, model: 'openai/gpt-5', modelFunding: 'premium', canUsePremiumModels: false },
     }));
-    expect(s).toContain('NOT entitled to premium models');
+    expect(s).toContain('The shared plan does not cover the configured premium model "openai/gpt-5"');
+    expect(s).not.toMatch(/gateway rejects|falls back to/i);
   });
 
   it('flags past_due billing as a cause of sudden downgrade', () => {
@@ -312,7 +313,7 @@ describe('formatChatDiagnostics — the dispatch pathway', () => {
 
   it('does not call an empty history a finding when there was nothing to run', () => {
     const out = formatChatDiagnostics(staffed({ runs: { linkedRunnableTickets: 0, runs: [], dispatchers: [] } })).join('\n');
-    expect(out).toMatch(/no runnable ticket .* is linked to this chat/);
+    expect(out).toContain('this snapshot shows zero linked runnable tickets and zero runs');
     expect(out).not.toMatch(/ZERO runs/);
   });
 

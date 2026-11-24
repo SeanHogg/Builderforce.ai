@@ -4,8 +4,7 @@
  * This only builds that decision's INPUT from the Brain's request and maps its result onto the per-call metadata, so the
  * preamble (usage metadata), the settle (verify skip) and `openRun` (`run/runPrepared.ts`, handed `{ input, decided }` so it never routes again) all read one value.
  *
- * Hosts can override the shared default through {@link BrainRunRequest.pipeline}. A sub-agent (`lineage`) is a slice its
- * owner already planned, and keeps its `code` start.
+ * Hosts can override the shared default through {@link BrainRunRequest.pipeline}.
  */
 
 import { defaultPipelineRouting, routeRun, type RouteDecision, type RouteInput } from '@builderforce/agent-run';
@@ -17,7 +16,7 @@ export type RunRoute = ReturnType<typeof routeRun> & { input: RouteInput };
 
 /** The route input for one run: its request, whether it follows an earlier turn, and the host's routing and stage models. */
 export function routeInputOf(
-  req: Pick<BrainRunRequest, 'pipeline' | 'phaseModels' | 'modelStrict' | 'lineage'>,
+  req: Pick<BrainRunRequest, 'pipeline' | 'phaseModels' | 'modelStrict'>,
   request: string,
   followUp: boolean,
 ): RouteInput {
@@ -29,7 +28,6 @@ export function routeInputOf(
       : defaultPipelineRouting(),
     ...(req.phaseModels ? { phaseModels: req.phaseModels } : {}),
     ...(req.modelStrict ? { modelStrict: true } : {}),
-    ...(req.lineage ? { child: true } : {}),
   };
 }
 

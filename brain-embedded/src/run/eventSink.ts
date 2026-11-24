@@ -22,6 +22,10 @@ import { BUDGET_CONTAINED_STEP } from '../unsettledAnswer';
 /** The trace step for an event, or null when the event has no step of its own. Pure. */
 export function traceStepFor(event: RunEvent, ts: string): BrainTraceEvent | null {
   switch (event.kind) {
+    case 'run.spec_validation': {
+      const { completed, failed, pending, unverified, incomplete } = event;
+      return { ts, category: 'message', label: event.kind, args: { completed, failed, pending, unverified, incomplete } };
+    }
     case 'model.preflight':
       if (event.notices.length === 0) return null;
       return {
@@ -129,6 +133,10 @@ export function brainEventSink(c: RunCell, outcome?: OutcomeReport, on: SinkReac
     emit(c);
   };
   return {
+    workflow(metric) {
+      // Trace merging keys on category/label/timestamp. Distinguish spans and phases even at 0 ms.
+      pushTrace(c, { ts: new Date(metric.endedAt ?? metric.startedAt).toISOString(), category: 'message', label: `workflow.stage.${metric.id}.${metric.status}`, args: metric, ...(metric.durationMs !== undefined ? { durationMs: metric.durationMs } : {}) });
+    },
     emit(event: RunEvent): Promise<void> | void {
       const kept = event.kind === 'model.coder_reask' ? undefined : on.turnKept?.();
       return kept instanceof Promise ? kept.then(() => render(event)) : render(event);

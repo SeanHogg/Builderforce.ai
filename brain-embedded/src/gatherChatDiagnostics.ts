@@ -26,7 +26,7 @@ import type { SpendSavingsSummary } from './spendSavings';
 import { classifyModelFunding, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsMeter, type ChatDiagnosticsRuns } from './chatDiagnostics';
 import { toolExposureInTrace } from './toolExposure';
 import { accountUsedInTrace, type BrainTraceEvent } from './brainTriage';
-import { sessionShippedInTrace } from './staffingSummary';
+import { sessionShippedInTrace, sessionWorkInTrace } from './staffingSummary';
 import { traceWithPersistedSteps } from './persistedSteps';
 import type { BrainMessage } from './types';
 import { publishHoldFromPersonTurns, type PublishHold } from './runStore/publishHold';
@@ -34,6 +34,9 @@ import { isInjectedTurnMetadata } from './injectedTurn';
 import { isShipMode, narrowByHold, shipPolicyOf, type ShipPolicySource } from '@builderforce/run-guards';
 import { isStepMessage } from './types';
 import { selectPendingAskUser } from '@builderforce/agent-loop';
+import { entityIdsOf, toolResultRecord } from './toolResultRecord';
+import { isTicketWriteTool } from './ticketToolVocabulary';
+import { isFailedToolResult } from './toolFailure';
 
 /** The `/api/consumption` snapshot, structurally — each host has its own named type
  *  for it, and they agree on exactly these fields. */
@@ -225,6 +228,25 @@ function safely<T>(read: (() => Promise<T>) | undefined, fallback: T): Promise<T
   }
 }
 
+function ticketLinksOutsideSnapshot(
+  events: readonly BrainTraceEvent[],
+  tickets: NonNullable<ChatDiagnosticsData['tickets']>,
+): NonNullable<ChatDiagnosticsData['ticketLinksOutsideSnapshot']> {
+  const refs = new Set(tickets.map((ticket) => ticket.ref));
+  const receipts = new Map<string, { ticketId: string; chatId: number }>();
+  // One receipt per ticket/chat pair. Separate reads can have different freshness.
+  for (const event of events) {
+    if (event.category !== 'tool' || !isTicketWriteTool(event.label) || event.isError || isFailedToolResult(event.result)) continue;
+    const link = toolResultRecord(toolResultRecord(event.result)?.chatLink);
+    if (link?.linked !== true || typeof link.chatId !== 'number' || !Number.isSafeInteger(link.chatId)) continue;
+    const { syncId } = entityIdsOf(event.result);
+    if (!syncId || refs.has(String(syncId))) continue;
+    const ticketId = String(syncId);
+    receipts.set(`${link.chatId}/${ticketId}`, { ticketId, chatId: link.chatId });
+  }
+  return [...receipts.values()].slice(-5);
+}
+
 /** Normalize an Evermind head into the reported shape, dropping absent optionals so
  *  "not returned by this API version" stays distinguishable from "zero". */
 function toEvermind(head: ChatDiagnosticsEvermindHead | null): ChatDiagnosticsEvermind | null {
@@ -249,7 +271,7 @@ export async function gatherChatDiagnostics(src: ChatDiagnosticsSources): Promis
   const [projectName, agents, tickets, runs, head, plan, apiVersion] = await Promise.all([
     safely(src.readProjectName, null as string | null),
     safely(src.readAgents, [] as Array<{ agentRef: string; role: string; name?: string; builtinKind?: string | null }>),
-    safely(src.readTickets, [] as Array<{ kind: string; ref: string; label?: string; linkType?: string; status?: string }>),
+    safely(src.readTickets, null),
     safely(src.readRuns, null as ChatDiagnosticsRuns | null),
     safely(src.readEvermind, null as ChatDiagnosticsEvermindHead | null),
     safely(src.readPlan, null as ChatDiagnosticsPlanSnapshot | null),
@@ -270,7 +292,7 @@ export async function gatherChatDiagnostics(src: ChatDiagnosticsSources): Promis
   // the ceiling used to stand in for. Nulls when no turn in this run was measured.
   const exposure = src.trace ? toolExposureInTrace([...src.trace]) : null;
   // The MERGED trace (live steps + steps recovered from durable history) — what the
-  // session itself shipped, and which account actually paid for its turns. Null when
+  // session did locally, any confirmed delivery and which account paid for its turns. Null when
   // there is nothing to measure, so "not measured" never reads as "none".
   const merged = traceWithPersistedSteps(msgs as unknown as BrainMessage[], src.trace ? [...src.trace] : []);
   const sessionShipped = merged.length ? sessionShippedInTrace(merged) : null;
@@ -331,6 +353,7 @@ export async function gatherChatDiagnostics(src: ChatDiagnosticsSources): Promis
       // of the conversation is not inflated by the run's steps.
       messages: msgs.filter((m) => !isStepMessage(m)).length,
       steps: msgs.filter(isStepMessage).length,
+      ...(merged.length ? { traceSteps: merged.length } : {}),
       location: src.historyLocation?.trim() || null,
     },
     chatVisibility: src.chatVisibility ?? null,
@@ -355,7 +378,10 @@ export async function gatherChatDiagnostics(src: ChatDiagnosticsSources): Promis
     })),
     runs,
     sessionShipped,
-    tickets: tickets.map((tk) => ({ kind: tk.kind, ref: tk.ref, label: tk.label, linkType: tk.linkType, status: tk.status })),
+    sessionWork: merged.length ? sessionWorkInTrace(merged) : null,
+    ticketSnapshotAvailable: tickets !== null,
+    ...(tickets ? { ticketLinksOutsideSnapshot: ticketLinksOutsideSnapshot(merged, tickets) } : {}),
+    tickets: (tickets ?? []).map((tk) => ({ kind: tk.kind, ref: tk.ref, label: tk.label, linkType: tk.linkType, status: tk.status })),
     account,
     spend: src.spend ?? null,
     tools: src.tools
