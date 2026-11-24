@@ -72,6 +72,11 @@ export { offeredSchemas, ownsCall } from "./runCatalog.js";
 /** The hard cap on the forced synthesis turn's answer — the source's bounded extra call. */
 const SYNTHESIS_MAX_TOKENS = 1_000;
 
+function measureModelRequest(input: RunAgentInput, step: number, request: ModelRequest, operation: 'model_request' | 'model_synthesis' = 'model_request') {
+  return measureWorkflow(input.ports.events, { ...workflowScope(input, step), operation }, 'kernel',
+    () => input.ports.model.complete(request, input.signal), undefined, input.signal);
+}
+
 /**
  * What served a turn is what the next one asks for - except `default` (the gateway's own
  * auto label, not a model) and under a strict pin, which the policy keeps. The ONE write of
@@ -177,7 +182,7 @@ export async function completeTurn(
   // When the call that ANSWERED started — re-set before a retry or a re-ask — so the run policy times the serving model alone.
   let startedAt = Date.now();
   try {
-    completion = await input.ports.model.complete(requestFor(model, firstAsk), input.signal);
+    completion = await measureModelRequest(input, ctx.step, requestFor(model, firstAsk));
   } catch (err) {
     if (input.signal?.aborted) throw err;
     const reason = err instanceof Error ? err.message : String(err);
@@ -199,7 +204,7 @@ export async function completeTurn(
     asked = routed.retry.model;
     startedAt = Date.now();
     try {
-      completion = await input.ports.model.complete(requestFor(routed.retry.model, routed.retry), input.signal);
+      completion = await measureModelRequest(input, ctx.step, requestFor(routed.retry.model, routed.retry));
     } catch (retryErr) {
       if (input.signal?.aborted) throw retryErr;
       if (isResumable(input, retryErr)) causes.set(state, retryErr);
@@ -214,7 +219,7 @@ export async function completeTurn(
     asked = reask.ask.model;
     startedAt = Date.now();
     try {
-      completion = await input.ports.model.complete(requestFor(reask.ask.model, reask.ask, [reask.brief]), input.signal);
+      completion = await measureModelRequest(input, ctx.step, requestFor(reask.ask.model, reask.ask, [reask.brief]));
     } catch (err) {
       if (input.signal?.aborted) throw err;
       if (isResumable(input, err)) causes.set(state, err);
@@ -269,7 +274,7 @@ export async function synthesizeFinal(
   const ask: RunMessage = { role: "user", content: prompt };
   let completion: ModelCompletion;
   try {
-    completion = await input.ports.model.complete(
+    completion = await measureModelRequest(input, state.step,
       {
         messages: [...withVolatileTail(transcript, pack, null, input.ports.context.turnSections?.() ?? []), ask],
         ...(model ? { model, strict: decision?.strict ?? false } : {}),
@@ -279,7 +284,7 @@ export async function synthesizeFinal(
         ...askFields(fields),
         ...(renderTaskState(state.taskState) ? { progress: renderTaskState(state.taskState) } : {}),
       },
-      input.signal,
+      'model_synthesis',
     );
   } catch (err) {
     // A resumable interruption (an eviction) is not "the model said nothing": it ends this tick and the host re-arms the run.
@@ -322,7 +327,7 @@ export async function synthesizeFinal(
  */
 export async function dispatchCall(input: RunAgentInput, state: RunState, call: ParsedToolCall, watch: InterruptWatch, facts: TurnFacts = { refused: false }, step: number = state.step): Promise<LoopDispatchResult> {
   const invoke = () => dispatchCallCore(input, state, call, watch, facts, step);
-  const verdict = (result: LoopDispatchResult) => result.isError ? 'failed' as const : 'completed' as const;
+  const verdict = (result: LoopDispatchResult) => result.isError || (result.data as { ok?: unknown } | null)?.ok === false ? 'failed' as const : 'completed' as const;
   return measureWorkflow(input.ports.events, workflowScope(input, step), 'dispatch', () => isSpawnTool(call.name)
     ? measureWorkflow(input.ports.events, workflowScope(input, step), 'spawn', invoke, verdict, input.signal)
     : invoke(), verdict, input.signal);

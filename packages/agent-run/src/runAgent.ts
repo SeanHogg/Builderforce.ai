@@ -50,7 +50,7 @@ import { settle } from "./runSettle.js";
 import { kernelHooks, readOnlyPort, type KernelRun } from "./kernelHooks.js";
 import { EMPTY_PACK, buildContextPack, openingRows } from "./turnContext.js";
 import { planWork } from "./workPlan.js";
-import { beginWorkflowStage, measureWorkflowSync, workflowScope } from "./telemetry/workflowMetrics.js";
+import { beginWorkflowStage, measureWorkflow, measureWorkflowSync, workflowScope } from "./telemetry/workflowMetrics.js";
 import { workflowHooks } from "./telemetry/workflowHooks.js";
 import { freshTally, type RunTally } from "./telemetry/runTally.js";
 import { localSpendMeter, usdBudget } from "./policy/budget/usd.js";
@@ -90,7 +90,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunOutcome> {
     const opening = measureWorkflowSync(ports.events, workflowScope(input, state.step), 'opening', () => openingRows(task, policy.approvalGates), (rows) => ({ messages: rows.length }));
     transcript.splice(0, transcript.length, ...opening);
     state.messages = transcript;
-    pack = await buildContextPack(input, hooks, state, offered);
+    pack = await measureWorkflow(ports.events, { ...workflowScope(input, state.step), operation: 'context_pack' }, 'opening', () => buildContextPack(input, hooks, state, offered), undefined, input.signal);
     state.context = pack;
   }
 

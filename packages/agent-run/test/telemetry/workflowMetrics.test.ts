@@ -80,7 +80,7 @@ describe('workflow measurements', () => {
     const ports: RunPorts = {
       model: { complete: async () => ++turns === 1 ? { content: 'Reading.', toolCalls: [{ id: 'call-1', name: 'read_file', arguments: '{}' }] } : { content: 'The answer.' } },
       platform: { closed: true, schemas: () => schemas(['read_file']), selection: { query: '', limit: 50, required: new Set<string>() }, execute: async () => ({ data: 'read' }) },
-      store: { load: () => undefined, save() {} }, context: { pack: () => ({ focus: [], facts: [], recall: [] }) },
+      store: { load: () => undefined, save() { throw new Error('store unavailable'); } }, context: { pack: () => ({ focus: [], facts: [], recall: [] }) },
       human: { ask: async () => ({ kind: 'paused' }) },
       events: { emit: (e) => { events.push(e.kind); }, workflow: (m) => { metrics.push(m); }, outcome() {} },
     };
@@ -95,6 +95,8 @@ describe('workflow measurements', () => {
     }
     expect(summary.stages.find((s) => s.stage === 'opening')?.attempts).toBe(1);
     expect(summary.stages.find((s) => s.stage === 'kernel')?.attempts).toBe(2);
+    expect(summary.stages.find((s) => s.stage === 'kernel')?.operations).toContainEqual(expect.objectContaining({ operation: 'model_request', attempts: 2, completed: 2 }));
+    expect(summary.stages.find((s) => s.stage === 'settle')?.operations).toContainEqual(expect.objectContaining({ operation: 'store_save', attempts: 2, failed: 2 }));
     expect(events.filter((e) => e === 'run.started')).toHaveLength(1);
     expect(events.filter((e) => e === 'run.finished')).toHaveLength(1);
     expect(events).not.toContain('workflow.stage');

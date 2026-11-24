@@ -114,6 +114,8 @@ The start contract must preserve local/durable identity and authorization. Backg
 
 ### Workflow diagnostics metrics (2026-11-24)
 
+The coverage audit added nested timings for context pack assembly, individual model attempts and forced synthesis, governance and platform checks, human and approval waits, state saves, memory write-back, and shared and Brain close-out. These are listed separately from their parent span. A parked approval records the time to park. Time spent waiting between invocations is outside that measurement.
+
 `Copy diagnostics` now includes a `workflow.metrics` table; the same measurements are stored in `run.workflow` in the JSON capture. The canonical stage IDs live in `packages/agent-run/src/telemetry/workflowMetrics.ts`. They are protocol fields, so exports retain their exact names.
 
 | Diagram step / metric ID | Measured boundary and available facts |
@@ -138,6 +140,8 @@ Every row reports observed attempts, completed/failed/blocked/cancelled counts, 
 Uninstrumented steps and old captures are `not_observed`, with null duration. A start without a matching completion is `incomplete`, not a success or proof that the stage is still running. The report summarizes the trace available at capture time, potentially across multiple runs; `runIds` identifies observed runs. Truncated history can therefore provide partial evidence. Start/end samples have distinct trace identities even when their timestamps are equal, and merged live/durable copies count once.
 
 Measurements use the optional `EventSink.workflow` channel, separate from semantic `RunEvent` conformance traces. Brain persists that channel into diagnostic steps for the VSIX, web and other Brain-backed surfaces. Non-Brain hosts must bind the channel to their own telemetry store before their captures can claim stage coverage. Metrics failures never block execution, and metric payloads contain IDs, outcomes and numeric counters rather than prompts or tool arguments.
+
+Remaining coverage gaps include VSIX admission and journaling before Brain starts, the delay between child admission and execution, dedicated verification timings, and the final transcript outbox flush. Model request spans cover calls made by the shared driver. Provider retries hidden inside a transport contribute to its request duration without a separate attempt count. A copied report can show which stages it observed, while end-to-end delivery requires receipts from the host and telemetry destinations.
 
 ## 6. Integration verification (2026-11-23)
 

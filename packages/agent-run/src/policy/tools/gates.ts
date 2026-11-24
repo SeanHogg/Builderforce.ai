@@ -28,6 +28,7 @@ import { emit } from "../../runContext.js";
 import { candidateToolNames } from "./gateToolNames.js";
 import { TOOL_SEARCH_TOOL } from "./searchHelpers.js";
 import { UPDATE_TASK_STATE_TOOL } from "./taskState.js";
+import { measureWorkflow, workflowScope } from "../../telemetry/workflowMetrics.js";
 
 export { policyGateCallKey };
 
@@ -208,9 +209,11 @@ export async function gateCall(
   // A surface WITH an approver asks it, and reads a parked call's STRUCTURED status on the retried identical call.
   // One WITHOUT (on-prem, the IDE) puts a plain question to the person — never a refusal; an answer to it is
   // not an approval, so only the person's resume (below) lets the call through.
-  const answer = human.approve
-    ? await human.approve(gate, { tool: call.name, args: call.args, reason: decision.reason, ...(parkedOn ? { approvalId: parkedOn } : {}) })
-    : await human.ask(question);
+  const answer = await measureWorkflow(ctx.ports.events, { ...workflowScope(ctx, ctx.step), operation: 'approval_wait' }, 'dispatch',
+    () => human.approve
+      ? human.approve(gate, { tool: call.name, args: call.args, reason: decision.reason, ...(parkedOn ? { approvalId: parkedOn } : {}) })
+      : human.ask(question),
+    (reply) => reply?.kind === 'answered' && reply.approved === true ? 'completed' : 'blocked', ctx.signal);
   // A channel that cannot say anything at all is no approver: the policy refuses the call (the model reads why).
   if (!answer) return refuseApproval(ctx, call, decision, key, `${policyRefusalMessage(decision)} ${DO_NOT_RETRY}`);
   // The decision is the approval's STRUCTURED outcome, never matched out of the answer's words.

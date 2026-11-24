@@ -165,6 +165,11 @@ export function compactReportJson(report: ChatDiagnosticsReport, maxChars = REPO
     if (json.length <= maxChars) return json;
   }
   const { schemaVersion, capturedAt, surface, likelyCause, running } = report;
+  if (report.run?.workflow) {
+    const workflowOnly = JSON.stringify({ schemaVersion, capturedAt, surface, likelyCause, running,
+      run: { workflow: report.run.workflow }, _elided: ['except run.workflow'] });
+    if (workflowOnly.length <= maxChars) return workflowOnly;
+  }
   return JSON.stringify({ schemaVersion, capturedAt, surface, likelyCause, running, _elided: ['*'] });
 }
 

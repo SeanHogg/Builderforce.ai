@@ -12,11 +12,13 @@ export function workflowDiagnostics(events: readonly BrainTraceEvent[]): Workflo
 
 /** Technical protocol fields and enum values remain verbatim in exported diagnostics. */
 export function formatWorkflowDiagnostics(workflow: WorkflowSummary): string[] {
+  const row = (stage: string, s: Omit<WorkflowSummary['stages'][number], 'stage'>): string =>
+    `| ${stage} | ${s.status} | ${s.attempts} | ${s.completed} | ${s.failed} | ${s.blocked} | ${s.cancelled} | ${s.running} | ${s.totalMs ?? 'null'} | ${s.maxMs ?? 'null'} | ${s.latestCounters ? JSON.stringify(s.latestCounters) : ''} |`;
   return [
     '', '### `workflow.metrics`', '',
     `\`observedStages=${workflow.observedStages}/${workflow.totalStages}\``, '',
     '| stage | status | attempts | completed | failed | blocked | cancelled | running | totalMs | maxMs | latestCounters |',
     '| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |',
-    ...workflow.stages.map((s) => `| ${s.stage} | ${s.status} | ${s.attempts} | ${s.completed} | ${s.failed} | ${s.blocked} | ${s.cancelled} | ${s.running} | ${s.totalMs ?? 'null'} | ${s.maxMs ?? 'null'} | ${s.latestCounters ? JSON.stringify(s.latestCounters) : ''} |`),
+    ...workflow.stages.flatMap((s) => [row(s.stage, s), ...(s.operations ?? []).map((op) => row(`${s.stage}.${op.operation}`, op))]),
   ];
 }

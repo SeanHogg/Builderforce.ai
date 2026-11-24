@@ -64,11 +64,11 @@ async function settleCore(input: RunAgentInput, hooks: PolicyHooks, state: RunSt
   // parked or yielded is not over.
   if ((kind === "finished" || kind === "failed") && cause === undefined) {
     try {
-      const consolidated = await hooks.memory.consolidate(
+      const consolidated = await measureWorkflow(input.ports.events, { ...workflowScope(input, state.step), operation: 'memory_consolidate' }, 'settle', () => hooks.memory.consolidate(
         policyContext(input, state, currentView(transcript, []), state.step, 0),
         { learn: kind === "finished" },
-      );
-      if (consolidated !== undefined) await input.ports.store.commitMemory?.(consolidated);
+      ));
+      if (consolidated !== undefined && input.ports.store.commitMemory) await measureWorkflow(input.ports.events, { ...workflowScope(input, state.step), operation: 'memory_commit' }, 'settle', () => input.ports.store.commitMemory!(consolidated));
     } catch (err) {
       // A failed consolidation or write-back is recorded by its absence: it must neither fail the run nor cost it the
       // state, the outcome row and the closing event below - UNLESS the surface says the exception is a resumable
@@ -83,7 +83,7 @@ async function settleCore(input: RunAgentInput, hooks: PolicyHooks, state: RunSt
   }
 
   try {
-    await input.ports.store.save(state);
+    await measureWorkflow(input.ports.events, { ...workflowScope(input, state.step), operation: 'store_save' }, 'settle', () => input.ports.store.save(state));
   } catch {
     // A store that cannot save still returns the state to the caller, who holds it.
   }

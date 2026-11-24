@@ -2,6 +2,10 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.214] — Detailed workflow diagnostics
+
+- Workflow diagnostics time model requests, retries, approval waits, dispatch checks, context assembly, state saves, memory write-back and close-out separately. Nested timings appear under their stage in both the report and its JSON capture.
+
 ## [2026.10.213] — Workflow metrics in diagnostics
 
 - Copy diagnostics includes measured attempts, outcomes, timings and available counters for the 14 stages in the implemented workflow. The JSON capture carries the same facts under `run.workflow`.

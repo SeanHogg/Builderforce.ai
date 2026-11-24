@@ -23,7 +23,7 @@ import { defaultPipelineRouting, routeRun, type RouteDecision, type RouteInput }
 import { currentView, emit, policyContext, type RunAgentInput } from "./runContext.js";
 import { runAgent } from "./runAgent.js";
 import { tapEvents } from "./tapEvents.js";
-import { measureWorkflowSync, workflowScope } from "./telemetry/workflowMetrics.js";
+import { measureWorkflow, measureWorkflowSync, workflowScope } from "./telemetry/workflowMetrics.js";
 
 export type { RouteDecision, RouteInput } from "./route/routeRun.js";
 export type { PublishGatePort } from "./policy/guards/shipGate.js";
@@ -70,7 +70,7 @@ export type CloseOutPort = (ctx: PolicyContext, mode: CloseOutMode) => Promise<v
 /** Run the port, tracing (never rethrowing) a failure: a close-out never refuses a finish or a settle. */
 async function runCloseOut(closeOut: CloseOutPort, ctx: PolicyContext, mode: CloseOutMode): Promise<void> {
   try {
-    await closeOut(ctx, mode);
+    await measureWorkflow(ctx.ports.events, { runId: ctx.task.runId, entryPoint: ctx.policy.entryPoint, step: ctx.step, operation: 'close_out' }, 'finish', () => closeOut(ctx, mode));
   } catch (err) {
     await emit(ctx.ports.events, { kind: "finish.close_out_error", step: ctx.step, reason: err instanceof Error ? err.message : String(err) });
   }

@@ -5,7 +5,7 @@
  * adapter only builds ports (`webAdapter.ts`, `brainTurn.ts`, `brainPlatformTools.ts`, `brainSteering.ts`, `brainStore.ts`).
  */
 
-import { openRun } from '@builderforce/agent-run';
+import { openRun, measureWorkflow } from '@builderforce/agent-run';
 import type { BrainRunContext } from '../runStore/brainRunContext';
 import { brainDeliveryLedger } from './brainDelivery';
 import { brainPlatformTools } from './brainPlatformTools';
@@ -107,5 +107,5 @@ export async function runPrepared(run: BrainRunContext): Promise<void> {
     cacheStreak: run.cacheStreak,
     ...(signal ? { signal } : {}),
   });
-  await settleBrainRun(run, outcome, last);
+  await measureWorkflow(binding.events, { runId: c.runId, entryPoint: req.entryPoint, step: outcome.state.step, operation: 'host_settle' }, 'settle', () => settleBrainRun(run, outcome, last));
 }

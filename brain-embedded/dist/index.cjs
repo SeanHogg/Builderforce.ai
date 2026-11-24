@@ -23705,6 +23705,21 @@ var CONFORMANCE_ENTRY_TRACE = [
 
 // ../packages/agent-run/src/telemetry/workflowMetrics.ts
 var WORKFLOW_STAGES = ["surface", "start", "route", "work", "opening", "compose", "kernel", "dispatch", "spawn", "ledger", "finish", "settle", "grade", "outcome"];
+var WORKFLOW_OPERATIONS = {
+  model_request: "kernel",
+  model_synthesis: "kernel",
+  context_pack: "opening",
+  governance_check: "dispatch",
+  guard_check: "dispatch",
+  platform_preflight: "dispatch",
+  approval_wait: "dispatch",
+  human_wait: "dispatch",
+  store_save: "settle",
+  memory_consolidate: "settle",
+  memory_commit: "settle",
+  host_settle: "settle",
+  close_out: "finish"
+};
 function workflowScope(input, step = 0) {
   return { runId: input.task.runId, entryPoint: input.policy?.entryPoint ?? "unknown", step };
 }
@@ -23742,7 +23757,7 @@ async function measureWorkflow(sink, scope, stage, action, verdict, signal, coun
   const done = beginWorkflowStage(sink, scope, stage);
   try {
     const value = await action();
-    finishMeasurement(done, value, verdict, counters2);
+    finishMeasurement(done, value, signal?.aborted ? () => "cancelled" : verdict, counters2);
     return value;
   } catch (error) {
     done(signal?.aborted ? "cancelled" : "failed");
@@ -23765,6 +23780,7 @@ function workflowMetricOf(value) {
   if (!value || typeof value !== "object") return null;
   const m = value;
   if (m.schemaVersion !== 1 || typeof m.id !== "string" || !m.id || m.id.length > 200 || !WORKFLOW_STAGES.includes(m.stage) || !["running", "completed", "failed", "blocked", "cancelled"].includes(m.status) || typeof m.entryPoint !== "string" || !Number.isInteger(m.step) || m.step < 0 || !Number.isFinite(m.startedAt) || m.runId !== void 0 && typeof m.runId !== "string") return null;
+  if (m.operation !== void 0 && (!Object.hasOwn(WORKFLOW_OPERATIONS, m.operation) || WORKFLOW_OPERATIONS[m.operation] !== m.stage)) return null;
   if (m.status !== "running" && (!Number.isFinite(m.endedAt) || !Number.isFinite(m.durationMs) || m.durationMs < 0)) return null;
   const counters2 = m.counters && typeof m.counters === "object" ? Object.fromEntries(Object.entries(m.counters).filter(([key, value2]) => /^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(key) && typeof value2 === "number" && Number.isFinite(value2)).slice(0, 32)) : void 0;
   return {
@@ -23776,6 +23792,7 @@ function workflowMetricOf(value) {
     entryPoint: m.entryPoint,
     startedAt: m.startedAt,
     ...m.runId !== void 0 ? { runId: m.runId } : {},
+    ...m.operation !== void 0 ? { operation: m.operation } : {},
     ...m.status !== "running" ? { endedAt: m.endedAt, durationMs: m.durationMs } : {},
     ...counters2 ? { counters: counters2 } : {}
   };
@@ -23787,13 +23804,11 @@ function summarizeWorkflow(metrics) {
     const prior = attempts.get(key);
     if (!prior || prior.status === "running") attempts.set(key, metric);
   }
-  const stages2 = WORKFLOW_STAGES.map((stage) => {
-    const observed = [...attempts.values()].filter((m) => m.stage === stage);
+  const summarize = (observed) => {
     const durations = observed.flatMap((m) => m.durationMs === void 0 ? [] : [m.durationMs]);
     const count2 = (status2) => observed.filter((m) => m.status === status2).length;
     const latest = observed.reduce((a, b) => !a || b.startedAt >= a.startedAt ? b : a, void 0);
     return {
-      stage,
       status: !observed.length ? "not_observed" : count2("running") ? "incomplete" : latest.status,
       attempts: observed.length,
       completed: count2("completed"),
@@ -23805,8 +23820,14 @@ function summarizeWorkflow(metrics) {
       maxMs: durations.length ? Math.max(...durations) : null,
       ...latest?.counters ? { latestCounters: latest.counters } : {}
     };
+  };
+  const stages2 = WORKFLOW_STAGES.map((stage) => {
+    const observed = [...attempts.values()].filter((m) => m.stage === stage);
+    const primary = summarize(observed.filter((m) => !m.operation));
+    const operations = [...new Set(observed.flatMap((m) => m.operation ? [m.operation] : []))].map((operation) => ({ operation, ...summarize(observed.filter((m) => m.operation === operation)) }));
+    return { stage, ...primary, ...!primary.attempts && operations.length ? { status: "partial" } : {}, ...operations.length ? { operations } : {} };
   });
-  return { schemaVersion: 1, observedStages: stages2.filter((s) => s.attempts > 0).length, totalStages: stages2.length, runIds: [...new Set(metrics.flatMap((m) => m.runId ? [m.runId] : []))], stages: stages2 };
+  return { schemaVersion: 1, observedStages: stages2.filter((s) => s.attempts > 0 || s.operations?.length).length, totalStages: stages2.length, runIds: [...new Set(metrics.flatMap((m) => m.runId ? [m.runId] : []))], stages: stages2 };
 }
 
 // ../packages/agent-run/src/policy/compaction/history.ts
@@ -25024,7 +25045,14 @@ var askHook = {
     if (!ctx.ports.human || typeof ctx.ports.human.ask !== "function") {
       return { kind: "paused" };
     }
-    return ctx.ports.human.ask(question, options);
+    return measureWorkflow(
+      ctx.ports.events,
+      { ...workflowScope(ctx, ctx.step), operation: "human_wait" },
+      "dispatch",
+      () => ctx.ports.human.ask(question, options),
+      (reply) => reply.kind === "paused" ? "blocked" : "completed",
+      ctx.signal
+    );
   }
 };
 
@@ -27911,7 +27939,14 @@ async function gateCall(ctx, call2) {
   const question = `Approve the agent's use of "${call2.name}"? ${decision.reason}`;
   const human = ctx.ports.human;
   const parkedOn = ctx.state.parkedCalls?.[key];
-  const answer2 = human.approve ? await human.approve(gate, { tool: call2.name, args: call2.args, reason: decision.reason, ...parkedOn ? { approvalId: parkedOn } : {} }) : await human.ask(question);
+  const answer2 = await measureWorkflow(
+    ctx.ports.events,
+    { ...workflowScope(ctx, ctx.step), operation: "approval_wait" },
+    "dispatch",
+    () => human.approve ? human.approve(gate, { tool: call2.name, args: call2.args, reason: decision.reason, ...parkedOn ? { approvalId: parkedOn } : {} }) : human.ask(question),
+    (reply) => reply?.kind === "answered" && reply.approved === true ? "completed" : "blocked",
+    ctx.signal
+  );
   if (!answer2) return refuseApproval(ctx, call2, decision, key, `${policyRefusalMessage(decision)} ${DO_NOT_RETRY}`);
   if (answer2.kind === "answered") {
     if (parkedOn) {
@@ -28403,6 +28438,16 @@ function causeOf(state) {
   return causes.get(state);
 }
 var SYNTHESIS_MAX_TOKENS = 1e3;
+function measureModelRequest(input, step, request, operation = "model_request") {
+  return measureWorkflow(
+    input.ports.events,
+    { ...workflowScope(input, step), operation },
+    "kernel",
+    () => input.ports.model.complete(request, input.signal),
+    void 0,
+    input.signal
+  );
+}
 function adoptServedModel(policy, state, served) {
   if (policy.modelStart?.plain) return;
   if (served && served !== "default" && !state.model.strictPin) state.model = { ...state.model, model: served };
@@ -28463,7 +28508,7 @@ ${work}`] : [], ...made?.tail ?? []];
   let completion;
   let startedAt = Date.now();
   try {
-    completion = await input.ports.model.complete(requestFor(model, firstAsk), input.signal);
+    completion = await measureModelRequest(input, ctx.step, requestFor(model, firstAsk));
   } catch (err) {
     if (input.signal?.aborted) throw err;
     const reason = err instanceof Error ? err.message : String(err);
@@ -28483,7 +28528,7 @@ ${work}`] : [], ...made?.tail ?? []];
     asked = routed.retry.model;
     startedAt = Date.now();
     try {
-      completion = await input.ports.model.complete(requestFor(routed.retry.model, routed.retry), input.signal);
+      completion = await measureModelRequest(input, ctx.step, requestFor(routed.retry.model, routed.retry));
     } catch (retryErr) {
       if (input.signal?.aborted) throw retryErr;
       if (isResumable(input, retryErr)) causes.set(state, retryErr);
@@ -28496,7 +28541,7 @@ ${work}`] : [], ...made?.tail ?? []];
     asked = reask.ask.model;
     startedAt = Date.now();
     try {
-      completion = await input.ports.model.complete(requestFor(reask.ask.model, reask.ask, [reask.brief]), input.signal);
+      completion = await measureModelRequest(input, ctx.step, requestFor(reask.ask.model, reask.ask, [reask.brief]));
     } catch (err) {
       if (input.signal?.aborted) throw err;
       if (isResumable(input, err)) causes.set(state, err);
@@ -28524,7 +28569,9 @@ async function synthesizeFinal(input, state, hooks, transcript, pack, tally, why
   const ask2 = { role: "user", content: prompt };
   let completion;
   try {
-    completion = await input.ports.model.complete(
+    completion = await measureModelRequest(
+      input,
+      state.step,
       {
         messages: [...withVolatileTail(transcript, pack, null, input.ports.context.turnSections?.() ?? []), ask2],
         ...model ? { model, strict: decision?.strict ?? false } : {},
@@ -28534,7 +28581,7 @@ async function synthesizeFinal(input, state, hooks, transcript, pack, tally, why
         ...askFields(fields),
         ...renderTaskState(state.taskState) ? { progress: renderTaskState(state.taskState) } : {}
       },
-      input.signal
+      "model_synthesis"
     );
   } catch (err) {
     if (isResumable(input, err)) throw err;
@@ -28556,7 +28603,7 @@ async function synthesizeFinal(input, state, hooks, transcript, pack, tally, why
 }
 async function dispatchCall(input, state, call2, watch, facts = { refused: false }, step = state.step) {
   const invoke = () => dispatchCallCore(input, state, call2, watch, facts, step);
-  const verdict = (result) => result.isError ? "failed" : "completed";
+  const verdict = (result) => result.isError || result.data?.ok === false ? "failed" : "completed";
   return measureWorkflow(input.ports.events, workflowScope(input, step), "dispatch", () => isSpawnTool(call2.name) ? measureWorkflow(input.ports.events, workflowScope(input, step), "spawn", invoke, verdict, input.signal) : invoke(), verdict, input.signal);
 }
 async function dispatchCallCore(input, state, call2, watch, facts, step) {
@@ -28694,11 +28741,11 @@ async function settleCore(input, hooks, state, transcript, kind, extra) {
   let cause = extra.cause;
   if ((kind === "finished" || kind === "failed") && cause === void 0) {
     try {
-      const consolidated = await hooks.memory.consolidate(
+      const consolidated = await measureWorkflow(input.ports.events, { ...workflowScope(input, state.step), operation: "memory_consolidate" }, "settle", () => hooks.memory.consolidate(
         policyContext(input, state, currentView(transcript, []), state.step, 0),
         { learn: kind === "finished" }
-      );
-      if (consolidated !== void 0) await input.ports.store.commitMemory?.(consolidated);
+      ));
+      if (consolidated !== void 0 && input.ports.store.commitMemory) await measureWorkflow(input.ports.events, { ...workflowScope(input, state.step), operation: "memory_commit" }, "settle", () => input.ports.store.commitMemory(consolidated));
     } catch (err) {
       if (isResumable(input, err)) cause = err;
     }
@@ -28709,7 +28756,7 @@ async function settleCore(input, hooks, state, transcript, kind, extra) {
     if (recorded !== void 0) tallyVerify(state.telemetry, recorded);
   }
   try {
-    await input.ports.store.save(state);
+    await measureWorkflow(input.ports.events, { ...workflowScope(input, state.step), operation: "store_save" }, "settle", () => input.ports.store.save(state));
   } catch {
   }
   if (kind === "yielded" || resumable) {
@@ -29016,13 +29063,28 @@ function kernelHooks(run) {
       starts.set(call2.id, Date.now());
       const pctx = contextAt(ctx.step, ctx.stepInCall);
       const pcall = toPolicyCall(call2);
-      const gated = await hooks.tools.gate?.(pctx, pcall);
+      const scope = workflowScope(input, ctx.step);
+      const gated = hooks.tools.gate && await measureWorkflow(
+        ports.events,
+        { ...scope, operation: "governance_check" },
+        "dispatch",
+        () => hooks.tools.gate(pctx, pcall),
+        (result) => result ? "blocked" : "completed",
+        input.signal
+      );
       if (gated) {
         const refused = { data: gated.data, isError: true, ...gated.control ? { control: asLoopControl(gated.control) } : {} };
         if (gated.control) held.add(refused);
         return { result: refused };
       }
-      const decision = await hooks.guards.beforeDispatch?.(pctx, pcall);
+      const decision = hooks.guards.beforeDispatch && await measureWorkflow(
+        ports.events,
+        { ...scope, operation: "guard_check" },
+        "dispatch",
+        () => hooks.guards.beforeDispatch(pctx, pcall),
+        (result) => result?.skip ? "blocked" : "completed",
+        input.signal
+      );
       if (decision?.skip) {
         const { data, isError, control } = decision.skip;
         const skipped2 = { data, isError: isError ?? true, ...control ? { control: asLoopControl(control) } : {} };
@@ -29044,7 +29106,14 @@ function kernelHooks(run) {
       }
       const platform = ports.platform;
       if (platform?.preflight && ownsCall(ports, call2.name)) {
-        const pre = await platform.preflight({ id: call2.id, name: call2.name, args: call2.args, arguments: call2.raw.arguments, malformed: call2.malformed }, { step: ctx.step });
+        const pre = await measureWorkflow(
+          ports.events,
+          { ...scope, operation: "platform_preflight" },
+          "dispatch",
+          () => platform.preflight({ id: call2.id, name: call2.name, args: call2.args, arguments: call2.raw.arguments, malformed: call2.malformed }, { step: ctx.step }),
+          (result) => result && "result" in result && result.result.isError ? "blocked" : "completed",
+          input.signal
+        );
         if (pre && "result" in pre) return { result: { data: pre.result.data, ...pre.result.isError ? { isError: true } : {} } };
         if (pre && "rewrite" in pre) {
           const { name, args } = pre.rewrite;
@@ -29272,7 +29341,7 @@ async function runAgent(input) {
     const opening = measureWorkflowSync(ports.events, workflowScope(input, state.step), "opening", () => openingRows(task, policy.approvalGates), (rows) => ({ messages: rows.length }));
     transcript.splice(0, transcript.length, ...opening);
     state.messages = transcript;
-    pack = await buildContextPack(input, hooks, state, offered);
+    pack = await measureWorkflow(ports.events, { ...workflowScope(input, state.step), operation: "context_pack" }, "opening", () => buildContextPack(input, hooks, state, offered), void 0, input.signal);
     state.context = pack;
   }
   ports.attach?.({
@@ -29424,7 +29493,7 @@ function routeRun(route) {
 // ../packages/agent-run/src/openRun.ts
 async function runCloseOut(closeOut, ctx, mode) {
   try {
-    await closeOut(ctx, mode);
+    await measureWorkflow(ctx.ports.events, { runId: ctx.task.runId, entryPoint: ctx.policy.entryPoint, step: ctx.step, operation: "close_out" }, "finish", () => closeOut(ctx, mode));
   } catch (err) {
     await emit(ctx.ports.events, { kind: "finish.close_out_error", step: ctx.step, reason: err instanceof Error ? err.message : String(err) });
   }
@@ -31639,6 +31708,7 @@ function workflowDiagnostics(events) {
   }));
 }
 function formatWorkflowDiagnostics(workflow) {
+  const row = (stage, s) => `| ${stage} | ${s.status} | ${s.attempts} | ${s.completed} | ${s.failed} | ${s.blocked} | ${s.cancelled} | ${s.running} | ${s.totalMs ?? "null"} | ${s.maxMs ?? "null"} | ${s.latestCounters ? JSON.stringify(s.latestCounters) : ""} |`;
   return [
     "",
     "### `workflow.metrics`",
@@ -31647,7 +31717,7 @@ function formatWorkflowDiagnostics(workflow) {
     "",
     "| stage | status | attempts | completed | failed | blocked | cancelled | running | totalMs | maxMs | latestCounters |",
     "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
-    ...workflow.stages.map((s) => `| ${s.stage} | ${s.status} | ${s.attempts} | ${s.completed} | ${s.failed} | ${s.blocked} | ${s.cancelled} | ${s.running} | ${s.totalMs ?? "null"} | ${s.maxMs ?? "null"} | ${s.latestCounters ? JSON.stringify(s.latestCounters) : ""} |`)
+    ...workflow.stages.flatMap((s) => [row(s.stage, s), ...(s.operations ?? []).map((op) => row(`${s.stage}.${op.operation}`, op))])
   ];
 }
 
@@ -39759,7 +39829,7 @@ async function runPrepared(run) {
     cacheStreak: run.cacheStreak,
     ...signal ? { signal } : {}
   });
-  await settleBrainRun(run, outcome, last);
+  await measureWorkflow(binding.events, { runId: c.runId, entryPoint: req.entryPoint, step: outcome.state.step, operation: "host_settle" }, "settle", () => settleBrainRun(run, outcome, last));
 }
 
 // src/runStore/beginRun.ts
@@ -42682,6 +42752,18 @@ function compactReportJson(report3, maxChars = REPORT_JSON_MAX_CHARS) {
     if (json.length <= maxChars) return json;
   }
   const { schemaVersion, capturedAt, surface: surface2, likelyCause, running } = report3;
+  if (report3.run?.workflow) {
+    const workflowOnly = JSON.stringify({
+      schemaVersion,
+      capturedAt,
+      surface: surface2,
+      likelyCause,
+      running,
+      run: { workflow: report3.run.workflow },
+      _elided: ["except run.workflow"]
+    });
+    if (workflowOnly.length <= maxChars) return workflowOnly;
+  }
   return JSON.stringify({ schemaVersion, capturedAt, surface: surface2, likelyCause, running, _elided: ["*"] });
 }
 function formatChatDiagnosticsReportJson(report3) {

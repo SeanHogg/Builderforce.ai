@@ -22,6 +22,7 @@ import type { UsdBudget } from "./policy/budget/usd.js";
 import type { CacheServedStreak } from "./policy/tools/cacheServedStreak.js";
 import { LINKED_WORK_OPEN, lastFinishReason } from "./policy/finish/index.js";
 import { bumpMutations, tallyCall, tallyTurn, tallyVerify, type RunTally } from "./telemetry/runTally.js";
+import { measureWorkflow, workflowScope } from "./telemetry/workflowMetrics.js";
 import { isReadOnlyShellCall } from "@builderforce/run-guards";
 import { resolveToolAlias, type ToolSchema } from "@builderforce/agent-tools";
 import type { TurnInterruption, TurnMenu } from "./surface.js";
@@ -219,14 +220,17 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
       const pcall = toPolicyCall(call);
       // Governance gates (`RunPolicy.approvalGates`): a block refuses the call, an approval
       // asks the human channel and parks the run on the approver.
-      const gated = await hooks.tools.gate?.(pctx, pcall);
+      const scope = workflowScope(input, ctx.step);
+      const gated = hooks.tools.gate && await measureWorkflow(ports.events, { ...scope, operation: 'governance_check' }, 'dispatch',
+        () => hooks.tools.gate!(pctx, pcall), (result) => result ? 'blocked' : 'completed', input.signal);
       if (gated) {
         const refused: LoopDispatchResult = { data: gated.data, isError: true, ...(gated.control ? { control: asLoopControl(gated.control) } : {}) };
         if (gated.control) held.add(refused);
         return { result: refused };
       }
       // A guard's skip answers the call; one carrying a control parks the run on a person.
-      const decision = await hooks.guards.beforeDispatch?.(pctx, pcall);
+      const decision = hooks.guards.beforeDispatch && await measureWorkflow(ports.events, { ...scope, operation: 'guard_check' }, 'dispatch',
+        () => hooks.guards.beforeDispatch!(pctx, pcall), (result) => result?.skip ? 'blocked' : 'completed', input.signal);
       if (decision?.skip) {
         const { data, isError, control } = decision.skip;
         const skipped: LoopDispatchResult = { data, isError: isError ?? true, ...(control ? { control: asLoopControl(control) } : {}) };
@@ -254,7 +258,9 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
       // The surface's own say over the call (`PlatformTools.preflight`): here, where the loop does not race it against the person's Stop.
       const platform = ports.platform;
       if (platform?.preflight && ownsCall(ports, call.name)) {
-        const pre = await platform.preflight({ id: call.id, name: call.name, args: call.args, arguments: call.raw.arguments, malformed: call.malformed }, { step: ctx.step });
+        const pre = await measureWorkflow(ports.events, { ...scope, operation: 'platform_preflight' }, 'dispatch',
+          () => platform.preflight!({ id: call.id, name: call.name, args: call.args, arguments: call.raw.arguments, malformed: call.malformed }, { step: ctx.step }),
+          (result) => result && 'result' in result && result.result.isError ? 'blocked' : 'completed', input.signal);
         if (pre && "result" in pre) return { result: { data: pre.result.data, ...(pre.result.isError ? { isError: true } : {}) } };
         if (pre && "rewrite" in pre) {
           const { name, args } = pre.rewrite;

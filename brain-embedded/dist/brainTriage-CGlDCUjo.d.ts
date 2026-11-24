@@ -296,9 +296,25 @@ type BrainModality = string;
 declare const WORKFLOW_STAGES: readonly ["surface", "start", "route", "work", "opening", "compose", "kernel", "dispatch", "spawn", "ledger", "finish", "settle", "grade", "outcome"];
 type WorkflowStage = typeof WORKFLOW_STAGES[number];
 type WorkflowStatus = 'running' | 'completed' | 'failed' | 'blocked' | 'cancelled';
+declare const WORKFLOW_OPERATIONS: {
+    readonly model_request: "kernel";
+    readonly model_synthesis: "kernel";
+    readonly context_pack: "opening";
+    readonly governance_check: "dispatch";
+    readonly guard_check: "dispatch";
+    readonly platform_preflight: "dispatch";
+    readonly approval_wait: "dispatch";
+    readonly human_wait: "dispatch";
+    readonly store_save: "settle";
+    readonly memory_consolidate: "settle";
+    readonly memory_commit: "settle";
+    readonly host_settle: "settle";
+    readonly close_out: "finish";
+};
+type WorkflowOperation = keyof typeof WORKFLOW_OPERATIONS;
 interface WorkflowStageSummary {
     stage: WorkflowStage;
-    status: 'not_observed' | 'incomplete' | WorkflowStatus;
+    status: 'not_observed' | 'incomplete' | 'partial' | WorkflowStatus;
     attempts: number;
     completed: number;
     failed: number;
@@ -309,6 +325,9 @@ interface WorkflowStageSummary {
     totalMs: number | null;
     maxMs: number | null;
     latestCounters?: Record<string, number>;
+    operations?: (Omit<WorkflowStageSummary, 'stage' | 'operations'> & {
+        operation: WorkflowOperation;
+    })[];
 }
 interface WorkflowSummary {
     schemaVersion: 1;

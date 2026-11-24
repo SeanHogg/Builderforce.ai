@@ -25,6 +25,7 @@
  */
 
 import type { HumanAnswer } from "../../contract.js";
+import { measureWorkflow, workflowScope } from "../../telemetry/workflowMetrics.js";
 import type { AskHook, PolicyContext } from "../hooks.js";
 
 /** The ask hook, as it stands. */
@@ -35,6 +36,7 @@ export const askHook: AskHook = {
     if (!ctx.ports.human || typeof ctx.ports.human.ask !== "function") {
       return { kind: "paused" };
     }
-    return ctx.ports.human.ask(question, options);
+    return measureWorkflow(ctx.ports.events, { ...workflowScope(ctx, ctx.step), operation: 'human_wait' }, 'dispatch',
+      () => ctx.ports.human.ask(question, options), (reply) => reply.kind === 'paused' ? 'blocked' : 'completed', ctx.signal);
   },
 };

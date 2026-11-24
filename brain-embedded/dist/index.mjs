@@ -410,7 +410,7 @@ import {
   workFiledNotStaffedVerdict,
   workFinishPorts,
   workSupportsRoutingSample
-} from "./chunk-CFW3Z45U.mjs";
+} from "./chunk-JYYDIZ5A.mjs";
 import {
   ASK_USER_TOOL,
   ASK_USER_TOOL_SPEC,
@@ -16049,7 +16049,7 @@ async function runPrepared(run) {
     cacheStreak: run.cacheStreak,
     ...signal ? { signal } : {}
   });
-  await settleBrainRun(run, outcome, last);
+  await measureWorkflow(binding.events, { runId: c.runId, entryPoint: req.entryPoint, step: outcome.state.step, operation: "host_settle" }, "settle", () => settleBrainRun(run, outcome, last));
 }
 
 // src/runStore/beginRun.ts
@@ -18981,6 +18981,18 @@ function compactReportJson(report, maxChars = REPORT_JSON_MAX_CHARS) {
     if (json.length <= maxChars) return json;
   }
   const { schemaVersion, capturedAt, surface: surface2, likelyCause, running } = report;
+  if (report.run?.workflow) {
+    const workflowOnly = JSON.stringify({
+      schemaVersion,
+      capturedAt,
+      surface: surface2,
+      likelyCause,
+      running,
+      run: { workflow: report.run.workflow },
+      _elided: ["except run.workflow"]
+    });
+    if (workflowOnly.length <= maxChars) return workflowOnly;
+  }
   return JSON.stringify({ schemaVersion, capturedAt, surface: surface2, likelyCause, running, _elided: ["*"] });
 }
 function formatChatDiagnosticsReportJson(report) {
