@@ -33,8 +33,9 @@ vi.mock('@builderforce/agent-run', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@builderforce/agent-run')>();
   return {
     ...actual,
-    runAgent: (input: Parameters<typeof actual.runAgent>[0]) =>
-      actual.runAgent({ ...input, ports: { ...input.ports, events: actual.teeEvents(input.ports.events, h.events as never) } }),
+    // The cloud enters through `openRun`, which calls `runAgent` by an internal import, so `openRun` is the observation point.
+    openRun: (input: Parameters<typeof actual.openRun>[0]) =>
+      actual.openRun({ ...input, ports: { ...input.ports, events: actual.teeEvents(input.ports.events, h.events as never) } }),
   };
 });
 vi.mock('./cloudToolEvents', () => ({ recordCloudToolEvent: async (_db: unknown, row: Record<string, unknown>) => { h.rows.push(row); } }));
@@ -52,6 +53,8 @@ vi.mock('../shared/runTelemetryDatabase', () => ({
 }));
 vi.mock('../provenance/finishClaimService', () => ({ recordTypedExecutionClaim: vi.fn(async () => ({ ok: true })) }));
 vi.mock('./executionPause', () => ({ pauseExecutionForQuestion: vi.fn(async () => ({ approvalId: 'appr-1' })) }));
+// The cascade difficulty gate reads/writes the database (a head prior and an outcome row); the fake host has none, so it answers "no prior" and records nothing.
+vi.mock('../llm/difficultyGate', () => ({ shouldSkipWeakAttempt: async () => false, recordCascadeOutcome: async () => undefined, weakPassRate: async () => undefined }));
 vi.mock('./cloudLoopControl', () => ({ applyPendingSteering: async () => [] }));
 vi.mock('../trust/trustService', () => ({ inspectOutboundContent: async () => ({ ok: true }) }));
 vi.mock('./cloudAgent/auditAnalysis', () => ({ ANALYZE_CODEBASE_TOOL: 'analyze_codebase', withSavedAnalysis: async (_d: unknown, _r: unknown, data: unknown) => data }));
@@ -81,7 +84,7 @@ const SCRIPT = [
   { content: 'Approved.' },
 ];
 
-import { CONFORMANCE_ANSWER, CONFORMANCE_PROMPT, CONFORMANCE_SCRIPT, CONFORMANCE_TRACE, conformanceCapabilities, conformanceTrace } from '@builderforce/agent-run';
+import { CONFORMANCE_ANSWER, CONFORMANCE_PROMPT, CONFORMANCE_SCRIPT, CONFORMANCE_ENTRY_TRACE, conformanceCapabilities, conformanceTrace } from '@builderforce/agent-run';
 import { runCloudAgent, policyOf, taskOf } from './cloudAdapter';
 import type { CloudRunHost } from './cloudRunHost';
 import type { CloudEngineContext } from './cloudAgentEngine';
@@ -132,14 +135,14 @@ describe('cloud adapter conformance - the shared scripted task through runCloudA
 
   it('emits the shared RunEvent trace and the shared answer when run continuously', async () => {
     const { outcome, events } = await driveCloud(SHARED);
-    expect(conformanceTrace(events)).toEqual(CONFORMANCE_TRACE);
+    expect(conformanceTrace(events)).toEqual(CONFORMANCE_ENTRY_TRACE);
     expect(outcome).toMatchObject({ kind: 'finished', output: CONFORMANCE_ANSWER });
   });
 
   it('emits the same trace, answer and requests one step per tick', async () => {
     const continuous = await driveCloud(SHARED);
     const stepped = await driveCloud(SHARED, { maxSteps: 1 });
-    expect(conformanceTrace(stepped.events)).toEqual(CONFORMANCE_TRACE);
+    expect(conformanceTrace(stepped.events)).toEqual(CONFORMANCE_ENTRY_TRACE);
     expect(stepped.outcome).toMatchObject({ kind: 'finished', output: CONFORMANCE_ANSWER });
     expect(stepped.requests).toEqual(continuous.requests);
   });

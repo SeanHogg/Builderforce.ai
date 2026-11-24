@@ -2,6 +2,16 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.212] — Your @builderforce messages are kept, and the agent sees its own changes
+
+- **Fixed: messages sent to `@builderforce` in VS Code's chat disappeared from the conversation history.** Your words are now saved with the chat like a panel message, so reopening the chat shows the whole exchange. Stopping a turn while it starts now really stops it.
+- **Fixed: the agent could not see its own edits when it reviewed them.** A diff of a file it had just changed could come back empty, so the agent wasted turns re-checking. Diffs now find the file however its path is written, include changes already staged for commit, and work in a brand-new repository with no commits yet.
+
+## [2026.10.211] — Collapsible tool-call summaries
+
+- Consecutive tool calls now appear under a compact summary showing the tools used, command counts, and any failures.
+- Expand a summary to see its calls, then expand a call to inspect its full input and output. Open calls stay expanded as new calls arrive.
+
 ## [2026.10.210] — Quick answers stay quick, and finished work is checked the same way everywhere
 
 - **Questions get answered, not turned into projects.** Asking a question now takes the quick route and the agent gives you its answer after a few rounds of looking, instead of reading on indefinitely. Answering a question never leaves commits behind.

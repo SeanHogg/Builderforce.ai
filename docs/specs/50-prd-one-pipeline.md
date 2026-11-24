@@ -1,7 +1,7 @@
 # PRD 50 — one pipeline above the kernel
 
 > Completed on 2026-11-23. Editor, on-prem, and durable cloud use the shared execution entry and policy. Hosts supply their authorized catalogs and actual verification evidence. The runtime harnesses cover editor wake recovery, on-prem continuation and settlement, and durable cloud resume and settlement. See the [pipeline map](./_scratch-agent-pipeline-map.md) and [DONE.md](../../DONE.md).
-> This slice stops at the kernel. `runAgent` (`packages/agent-run/src/runAgent.ts:65`) calling `runAgentLoop` (`packages/agent-loop/src/loop.ts`) stays. Nothing inside that call is redesigned here.
+> This slice stops at the kernel. `runAgent` (`packages/agent-run/src/runAgent.ts:67`) calling `runAgentLoop` (`packages/agent-loop/src/loop.ts`) stays. Nothing inside that call is redesigned here.
 > The original design below describes the first slice above `runAgent`. The follow-up records the completed workflow.
 
 ## Full workflow follow-up
@@ -284,3 +284,4 @@ Run the existing suites unchanged: `packages/agent-run/test/conformance/`, `brai
 - Spawn on every surface that has a spawn tool goes through `spawnChild` → the user start.
 - Production finish/guards/compaction hook **bodies** are not defined outside `policy/*`.
 - No edits under `runAgentLoop`. No deletion of `channelAdapter`, `progressGuard`, `continueChat`, or `useChatSystemPrompt` in this slice.
+  *Later slices (re-validated 2026-11-24):* `useChatSystemPrompt.ts` was deleted in `c56ce694e` once shared opening assembly replaced it. `agent-runtime/src/run/channelAdapter.ts` was renamed to `channelRunPorts.ts`; its test file keeps the old name. `progressGuard` and `continueChat` remain. The other five criteria above hold in the current code. The open host failures are tracked in [make.md § PRD 50](./make.md#prd-50--one-pipeline-validation-and-diagnostic-gaps).

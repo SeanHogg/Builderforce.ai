@@ -22,7 +22,9 @@ import { useTranscriptScroll } from './timeline/useTranscriptScroll';
 import { TIMELINE_PAGE_SIZE, useRenderWindow } from './timeline/useRenderWindow';
 import { AssistantRow, UserRow } from './timeline/MessageRows';
 import { CompactedRow, LearnRow, MemoryAnswerRow, RecallRow, ReconcileRow, type TimelinePrefetch } from './timeline/MemoryRows';
-import { ActivityRow, ErrorRow, StreamingRow, ThinkingRow, ToolRow } from './timeline/StepRows';
+import { ActivityRow, ErrorRow, StreamingRow, ThinkingRow } from './timeline/StepRows';
+import { groupToolNodes } from './timeline/toolGroups';
+import { ToolGroupRow } from './timeline/ToolGroupRow';
 
 // The public surface stays HERE: the labels and the rating type live beside the row
 // components that use them (`./timeline/*`), and are re-exported unchanged.
@@ -260,7 +262,7 @@ function BrainTimelineInner({
         </button>
       )}
       <ol className="bf-tl" ref={contentRef}>
-        {visible.map((node) => {
+        {groupToolNodes(visible).map((node) => {
           switch (node.kind) {
             case 'user':
               return (
@@ -296,8 +298,8 @@ function BrainTimelineInner({
               );
             case 'thinking':
               return <ThinkingRow key={node.key} node={node} labels={labels} />;
-            case 'tool':
-              return <ToolRow key={node.key} node={node} labels={labels} />;
+            case 'toolGroup':
+              return <ToolGroupRow key={node.key} group={node} labels={labels} />;
             case 'error':
               return <ErrorRow key={node.key} node={node} labels={labels} />;
             case 'recall':

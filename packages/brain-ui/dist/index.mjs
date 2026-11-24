@@ -1464,6 +1464,9 @@ function attachmentPreviewLabelsFrom(lookup) {
 
 // src/timeline/labels.ts
 var DEFAULT_TIMELINE_LABELS = {
+  toolGroupCommands: "Ran commands ({count})",
+  toolGroupUsed: "Used {tools} ({count})",
+  toolGroupFailed: "{count} failed",
   thinking: "Thinking\u2026",
   attachmentPreview: DEFAULT_ATTACHMENT_PREVIEW_LABELS,
   live: DEFAULT_LIVE_ACTIVITY_LABELS,
@@ -2868,8 +2871,52 @@ var ToolRow = memo7(ToolRowInner);
 var ErrorRow = memo7(ErrorRowInner);
 var ActivityRow = memo7(ActivityRowInner);
 
-// src/BrainTimeline.tsx
+// src/timeline/toolGroups.ts
+function groupToolNodes(nodes) {
+  const rows = [];
+  for (const node of nodes) {
+    const last = rows[rows.length - 1];
+    if (node.kind !== "tool") rows.push(node);
+    else if (last?.kind === "toolGroup") last.tools.push(node);
+    else rows.push({ kind: "toolGroup", key: `tools:${node.key}`, tools: [node] });
+  }
+  return rows;
+}
+function toolGroupSummary(tools, labels) {
+  const commands = tools.filter((node) => commandOf(node.args) !== null).length;
+  const others = tools.filter((node) => commandOf(node.args) === null);
+  const parts = [];
+  if (others.length) parts.push(labels.toolGroupUsed.replace("{tools}", [...new Set(others.map((node) => node.label))].join(", ")).replace("{count}", String(others.length)));
+  if (commands) parts.push(labels.toolGroupCommands.replace("{count}", String(commands)));
+  return parts.join(" \xB7 ");
+}
+
+// src/timeline/ToolGroupRow.tsx
+import { memo as memo8 } from "react";
 import { jsx as jsx19, jsxs as jsxs17 } from "react/jsx-runtime";
+var ToolGroupRow = memo8(function ToolGroupRow2({ group, labels }) {
+  const summary = toolGroupSummary(group.tools, labels);
+  const failures = group.tools.filter((tool) => tool.isError).length;
+  return /* @__PURE__ */ jsxs17("li", { className: "bf-tl__item bf-tl__item--tool-group", children: [
+    /* @__PURE__ */ jsx19("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ jsx19("span", { className: "bf-tl__dot bf-tl__dot--muted", "aria-hidden": true, children: /* @__PURE__ */ jsxs17("svg", { viewBox: "0 0 16 16", width: "13", height: "13", fill: "none", stroke: "currentColor", children: [
+      /* @__PURE__ */ jsx19("rect", { x: "2", y: "2", width: "4", height: "4", rx: "1" }),
+      /* @__PURE__ */ jsx19("rect", { x: "10", y: "2", width: "4", height: "4", rx: "1" }),
+      /* @__PURE__ */ jsx19("rect", { x: "2", y: "10", width: "4", height: "4", rx: "1" }),
+      /* @__PURE__ */ jsx19("rect", { x: "10", y: "10", width: "4", height: "4", rx: "1" })
+    ] }) }) }),
+    /* @__PURE__ */ jsx19("div", { className: "bf-tl__body", children: /* @__PURE__ */ jsxs17("details", { className: "bf-tl__tool-group", children: [
+      /* @__PURE__ */ jsxs17("summary", { className: "bf-tl__tool-group-head", children: [
+        /* @__PURE__ */ jsx19("span", { className: "bf-tl__tool-group-label", title: summary, children: summary }),
+        failures > 0 && /* @__PURE__ */ jsx19("span", { className: "bf-tl__tool-group-failed", children: labels.toolGroupFailed.replace("{count}", String(failures)) }),
+        /* @__PURE__ */ jsx19("span", { className: "bf-tl__tool-group-caret", "aria-hidden": true, children: "\u25B8" })
+      ] }),
+      /* @__PURE__ */ jsx19("ol", { className: "bf-tl bf-tl__tool-group-list", children: group.tools.map((node) => /* @__PURE__ */ jsx19(ToolRow, { node, labels }, node.key)) })
+    ] }) })
+  ] });
+});
+
+// src/BrainTimeline.tsx
+import { jsx as jsx20, jsxs as jsxs18 } from "react/jsx-runtime";
 function BrainTimelineInner({
   messages,
   trace,
@@ -2911,13 +2958,13 @@ function BrainTimelineInner({
   }, [settled, streamingText, isRunning]);
   const stranded = useMemo7(() => strandedReplyKey(nodes, isRunning), [nodes, isRunning]);
   const { scrollRef, contentRef, onScroll } = useTranscriptScroll(autoScroll, revealMessage, conversationKey);
-  const renderMsg = useCallback4((msg, role, text) => renderMessage ? renderMessage(msg, { role, text, translate: role === "user" && isOwnMessage?.(msg) === false }) : /* @__PURE__ */ jsx19(
+  const renderMsg = useCallback4((msg, role, text) => renderMessage ? renderMessage(msg, { role, text, translate: role === "user" && isOwnMessage?.(msg) === false }) : /* @__PURE__ */ jsx20(
     TranslatableText,
     {
       text,
       contentId: `msg:${msg.id}`,
       enabled: role === "user" && isOwnMessage?.(msg) === false,
-      render: (shown) => /* @__PURE__ */ jsx19(
+      render: (shown) => /* @__PURE__ */ jsx20(
         Markdown,
         {
           content: shown,
@@ -2953,15 +3000,15 @@ function BrainTimelineInner({
   );
   const focusedId = revealMessage?.id ?? null;
   const focusClass = (messageId) => focusedId === messageId ? " bf-tl__item--focus" : "";
-  return /* @__PURE__ */ jsxs17("div", { className: "bf-tl-scroll", ref: scrollRef, onScroll, children: [
-    loading && /* @__PURE__ */ jsx19("div", { className: "bf-tl-status", children: labels.loading }),
-    isEmpty && (emptyState ?? /* @__PURE__ */ jsx19("div", { className: "bf-tl-empty", children: labels.empty })),
-    earlier && /* @__PURE__ */ jsx19("button", { type: "button", className: "bf-tl-earlier", onClick: earlier.show, children: labels.showEarlier.replace("{count}", String(earlier.count)) }),
-    /* @__PURE__ */ jsxs17("ol", { className: "bf-tl", ref: contentRef, children: [
-      visible.map((node) => {
+  return /* @__PURE__ */ jsxs18("div", { className: "bf-tl-scroll", ref: scrollRef, onScroll, children: [
+    loading && /* @__PURE__ */ jsx20("div", { className: "bf-tl-status", children: labels.loading }),
+    isEmpty && (emptyState ?? /* @__PURE__ */ jsx20("div", { className: "bf-tl-empty", children: labels.empty })),
+    earlier && /* @__PURE__ */ jsx20("button", { type: "button", className: "bf-tl-earlier", onClick: earlier.show, children: labels.showEarlier.replace("{count}", String(earlier.count)) }),
+    /* @__PURE__ */ jsxs18("ol", { className: "bf-tl", ref: contentRef, children: [
+      groupToolNodes(visible).map((node) => {
         switch (node.kind) {
           case "user":
-            return /* @__PURE__ */ jsx19(
+            return /* @__PURE__ */ jsx20(
               UserRow,
               {
                 node,
@@ -2974,7 +3021,7 @@ function BrainTimelineInner({
               node.key
             );
           case "assistant":
-            return /* @__PURE__ */ jsx19(
+            return /* @__PURE__ */ jsx20(
               AssistantRow,
               {
                 node,
@@ -2995,27 +3042,27 @@ function BrainTimelineInner({
               node.key
             );
           case "thinking":
-            return /* @__PURE__ */ jsx19(ThinkingRow, { node, labels }, node.key);
-          case "tool":
-            return /* @__PURE__ */ jsx19(ToolRow, { node, labels }, node.key);
+            return /* @__PURE__ */ jsx20(ThinkingRow, { node, labels }, node.key);
+          case "toolGroup":
+            return /* @__PURE__ */ jsx20(ToolGroupRow, { group: node, labels }, node.key);
           case "error":
-            return /* @__PURE__ */ jsx19(ErrorRow, { node, labels }, node.key);
+            return /* @__PURE__ */ jsx20(ErrorRow, { node, labels }, node.key);
           case "recall":
-            return /* @__PURE__ */ jsx19(RecallRow, { node, labels }, node.key);
+            return /* @__PURE__ */ jsx20(RecallRow, { node, labels }, node.key);
           case "memoryAnswer":
-            return /* @__PURE__ */ jsx19(MemoryAnswerRow, { node, labels, ...prefetch ? { prefetch } : {} }, node.key);
+            return /* @__PURE__ */ jsx20(MemoryAnswerRow, { node, labels, ...prefetch ? { prefetch } : {} }, node.key);
           case "learn":
-            return /* @__PURE__ */ jsx19(LearnRow, { node, labels }, node.key);
+            return /* @__PURE__ */ jsx20(LearnRow, { node, labels }, node.key);
           case "activity":
-            return /* @__PURE__ */ jsx19(ActivityRow, { node, labels }, node.key);
+            return /* @__PURE__ */ jsx20(ActivityRow, { node, labels }, node.key);
           case "modelMove":
-            return /* @__PURE__ */ jsx19(ModelMoveStep, { move: node.move, labels }, node.key);
+            return /* @__PURE__ */ jsx20(ModelMoveStep, { move: node.move, labels }, node.key);
           case "reconcile":
-            return /* @__PURE__ */ jsx19(ReconcileRow, { node, labels }, node.key);
+            return /* @__PURE__ */ jsx20(ReconcileRow, { node, labels }, node.key);
           case "compacted":
-            return /* @__PURE__ */ jsx19(CompactedRow, { node, labels }, node.key);
+            return /* @__PURE__ */ jsx20(CompactedRow, { node, labels }, node.key);
           default:
-            return /* @__PURE__ */ jsx19(
+            return /* @__PURE__ */ jsx20(
               StreamingRow,
               {
                 node,
@@ -3028,14 +3075,14 @@ function BrainTimelineInner({
             );
         }
       }),
-      pendingNode && /* @__PURE__ */ jsx19(UserRow, { node: pendingNode, labels, focusClass: "", renderMsg, pending: true }, pendingNode.key),
-      isRunning && !(streamingText.trim() && activity?.phase === "writing") && /* @__PURE__ */ jsx19(LiveActivity, { activity, isRunning, labels: labels.live, ...live })
+      pendingNode && /* @__PURE__ */ jsx20(UserRow, { node: pendingNode, labels, focusClass: "", renderMsg, pending: true }, pendingNode.key),
+      isRunning && !(streamingText.trim() && activity?.phase === "writing") && /* @__PURE__ */ jsx20(LiveActivity, { activity, isRunning, labels: labels.live, ...live })
     ] }),
-    newer && /* @__PURE__ */ jsxs17("div", { className: "bf-tl-newer", children: [
-      /* @__PURE__ */ jsx19("button", { type: "button", className: "bf-tl-earlier", onClick: newer.show, children: labels.showNewer.replace("{count}", String(newer.count)) }),
-      /* @__PURE__ */ jsx19("button", { type: "button", className: "bf-tl-earlier", onClick: newer.latest, children: labels.jumpToLatest })
+    newer && /* @__PURE__ */ jsxs18("div", { className: "bf-tl-newer", children: [
+      /* @__PURE__ */ jsx20("button", { type: "button", className: "bf-tl-earlier", onClick: newer.show, children: labels.showNewer.replace("{count}", String(newer.count)) }),
+      /* @__PURE__ */ jsx20("button", { type: "button", className: "bf-tl-earlier", onClick: newer.latest, children: labels.jumpToLatest })
     ] }),
-    !atLatest && /* @__PURE__ */ jsx19(
+    !atLatest && /* @__PURE__ */ jsx20(
       "button",
       {
         type: "button",
@@ -3043,7 +3090,7 @@ function BrainTimelineInner({
         onClick: latest,
         "aria-label": labels.scrollToLatest,
         title: labels.scrollToLatest,
-        children: /* @__PURE__ */ jsx19("svg", { viewBox: "0 0 16 16", width: "16", height: "16", "aria-hidden": "true", fill: "none", children: /* @__PURE__ */ jsx19("path", { d: "M3 6l5 5 5-5", stroke: "currentColor", strokeWidth: "1.6", strokeLinecap: "round", strokeLinejoin: "round" }) })
+        children: /* @__PURE__ */ jsx20("svg", { viewBox: "0 0 16 16", width: "16", height: "16", "aria-hidden": "true", fill: "none", children: /* @__PURE__ */ jsx20("path", { d: "M3 6l5 5 5-5", stroke: "currentColor", strokeWidth: "1.6", strokeLinecap: "round", strokeLinejoin: "round" }) })
       }
     )
   ] });
@@ -3102,7 +3149,7 @@ function timelineLabelsFrom(lookup, overrides) {
 
 // src/inlineTitle/InlineChatTitle.tsx
 import { useEffect as useEffect7, useRef as useRef9, useState as useState11 } from "react";
-import { jsx as jsx20, jsxs as jsxs18 } from "react/jsx-runtime";
+import { jsx as jsx21, jsxs as jsxs19 } from "react/jsx-runtime";
 var DEFAULT_INLINE_CHAT_TITLE_LABELS = {
   edit: "Edit chat title",
   label: "Chat title",
@@ -3171,8 +3218,8 @@ function InlineChatTitle({
   const text = shown ?? title;
   const name = editing ? labels.label : `${labels.edit}: ${text}`;
   if (!editing) {
-    if (chatId == null) return /* @__PURE__ */ jsx20("span", { className: ["bf-inline-title", titleClassName].filter(Boolean).join(" "), children: text });
-    return /* @__PURE__ */ jsx20("span", { className: ["bf-inline-title", className].filter(Boolean).join(" "), children: /* @__PURE__ */ jsx20(
+    if (chatId == null) return /* @__PURE__ */ jsx21("span", { className: ["bf-inline-title", titleClassName].filter(Boolean).join(" "), children: text });
+    return /* @__PURE__ */ jsx21("span", { className: ["bf-inline-title", className].filter(Boolean).join(" "), children: /* @__PURE__ */ jsx21(
       "button",
       {
         type: "button",
@@ -3185,8 +3232,8 @@ function InlineChatTitle({
       }
     ) });
   }
-  return /* @__PURE__ */ jsxs18("span", { className: ["bf-inline-title", className].filter(Boolean).join(" "), children: [
-    /* @__PURE__ */ jsx20(
+  return /* @__PURE__ */ jsxs19("span", { className: ["bf-inline-title", className].filter(Boolean).join(" "), children: [
+    /* @__PURE__ */ jsx21(
       "input",
       {
         ref: input,
@@ -3209,7 +3256,7 @@ function InlineChatTitle({
         title: labels.label
       }
     ),
-    /* @__PURE__ */ jsxs18("span", { className: "bf-inline-title__hint", style: TITLE_HINT, "aria-hidden": true, children: [
+    /* @__PURE__ */ jsxs19("span", { className: "bf-inline-title__hint", style: TITLE_HINT, "aria-hidden": true, children: [
       labels.save,
       " \xB7 ",
       labels.cancel
@@ -3250,7 +3297,7 @@ import {
   DEFAULT_MODEL_REMAPPED_TEMPLATE,
   modelFallbackText
 } from "@seanhogg/builderforce-brain-embedded";
-import { jsx as jsx21, jsxs as jsxs19 } from "react/jsx-runtime";
+import { jsx as jsx22, jsxs as jsxs20 } from "react/jsx-runtime";
 var DEFAULT_MODEL_FALLBACK_LABELS = {
   fallback: DEFAULT_MODEL_FALLBACK_TEMPLATE,
   remapped: DEFAULT_MODEL_REMAPPED_TEMPLATE,
@@ -3265,9 +3312,9 @@ function ModelFallbackNotice({ channel, labels: partial, className }) {
   const event = useModelFallback(channel);
   if (!event || !channel) return null;
   const labels = { ...DEFAULT_MODEL_FALLBACK_LABELS, ...partial };
-  return /* @__PURE__ */ jsxs19("div", { className: ["bf-fallback-notice", className].filter(Boolean).join(" "), role: "status", "aria-live": "polite", children: [
-    /* @__PURE__ */ jsx21("span", { className: "bf-fallback-notice__text", children: modelFallbackText(event.code === "PIN_REMAPPED" ? labels.remapped : labels.fallback, event) }),
-    /* @__PURE__ */ jsx21(
+  return /* @__PURE__ */ jsxs20("div", { className: ["bf-fallback-notice", className].filter(Boolean).join(" "), role: "status", "aria-live": "polite", children: [
+    /* @__PURE__ */ jsx22("span", { className: "bf-fallback-notice__text", children: modelFallbackText(event.code === "PIN_REMAPPED" ? labels.remapped : labels.fallback, event) }),
+    /* @__PURE__ */ jsx22(
       "button",
       {
         type: "button",
@@ -3275,16 +3322,16 @@ function ModelFallbackNotice({ channel, labels: partial, className }) {
         onClick: channel.clear,
         title: labels.dismiss,
         "aria-label": labels.dismiss,
-        children: /* @__PURE__ */ jsx21("svg", { width: "12", height: "12", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", "aria-hidden": true, children: /* @__PURE__ */ jsx21("path", { d: "M6 6l12 12M18 6L6 18" }) })
+        children: /* @__PURE__ */ jsx22("svg", { width: "12", height: "12", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", "aria-hidden": true, children: /* @__PURE__ */ jsx22("path", { d: "M6 6l12 12M18 6L6 18" }) })
       }
     )
   ] });
 }
 
 // src/ToolConfirmBar.tsx
-import { memo as memo8, useEffect as useEffect8, useRef as useRef10 } from "react";
+import { memo as memo9, useEffect as useEffect8, useRef as useRef10 } from "react";
 import { prefetchConfirmOf } from "@seanhogg/builderforce-brain-embedded";
-import { Fragment as Fragment7, jsx as jsx22, jsxs as jsxs20 } from "react/jsx-runtime";
+import { Fragment as Fragment7, jsx as jsx23, jsxs as jsxs21 } from "react/jsx-runtime";
 var DEFAULT_TOOL_CONFIRM_LABELS = {
   prompt: "Run {name}?",
   approve: "Approve",
@@ -3309,7 +3356,7 @@ function toolConfirmPreview(req) {
   }
   return { command, args };
 }
-var ToolConfirmBar = memo8(function ToolConfirmBar2({
+var ToolConfirmBar = memo9(function ToolConfirmBar2({
   req,
   onApprove,
   onDeny,
@@ -3326,7 +3373,7 @@ var ToolConfirmBar = memo8(function ToolConfirmBar2({
   useEffect8(() => approveRef.current?.focus(), [req]);
   const prefetch = prefetchConfirmOf(req);
   if (prefetch) {
-    return /* @__PURE__ */ jsx22(
+    return /* @__PURE__ */ jsx23(
       PrefetchConfirmChip,
       {
         confirm: prefetch,
@@ -3340,18 +3387,18 @@ var ToolConfirmBar = memo8(function ToolConfirmBar2({
   }
   const { command, args } = toolConfirmPreview(req);
   const [before, after = ""] = labels.prompt.split("{name}");
-  return /* @__PURE__ */ jsxs20("div", { role: "alertdialog", "aria-label": labels.aria, className: ["bf-confirm", className].filter(Boolean).join(" "), children: [
-    /* @__PURE__ */ jsx22("div", { className: "bf-confirm__title", children: title ?? /* @__PURE__ */ jsxs20(Fragment7, { children: [
+  return /* @__PURE__ */ jsxs21("div", { role: "alertdialog", "aria-label": labels.aria, className: ["bf-confirm", className].filter(Boolean).join(" "), children: [
+    /* @__PURE__ */ jsx23("div", { className: "bf-confirm__title", children: title ?? /* @__PURE__ */ jsxs21(Fragment7, { children: [
       before,
-      /* @__PURE__ */ jsx22("code", { children: req.name }),
+      /* @__PURE__ */ jsx23("code", { children: req.name }),
       after
     ] }) }),
-    children ?? (command ? /* @__PURE__ */ jsx22("pre", { className: "bf-confirm__cmd", children: command }) : args ? /* @__PURE__ */ jsx22("div", { className: "bf-confirm__args", children: args }) : null),
-    req.evidence ? /* @__PURE__ */ jsx22("div", { className: "bf-confirm__evidence", children: labels.evidence.split("{evidence}").join(req.evidence) }) : null,
-    /* @__PURE__ */ jsxs20("div", { className: "bf-confirm__actions", children: [
-      /* @__PURE__ */ jsx22("button", { ref: approveRef, type: "button", className: "bf-confirm__btn bf-confirm__btn--primary", onClick: onApprove, children: labels.approve }),
-      onApproveAll && /* @__PURE__ */ jsx22("button", { type: "button", className: "bf-confirm__btn", onClick: onApproveAll, title: labels.approveAllTitle, children: labels.approveAll }),
-      /* @__PURE__ */ jsx22("button", { type: "button", className: "bf-confirm__btn", onClick: onDeny, children: labels.deny })
+    children ?? (command ? /* @__PURE__ */ jsx23("pre", { className: "bf-confirm__cmd", children: command }) : args ? /* @__PURE__ */ jsx23("div", { className: "bf-confirm__args", children: args }) : null),
+    req.evidence ? /* @__PURE__ */ jsx23("div", { className: "bf-confirm__evidence", children: labels.evidence.split("{evidence}").join(req.evidence) }) : null,
+    /* @__PURE__ */ jsxs21("div", { className: "bf-confirm__actions", children: [
+      /* @__PURE__ */ jsx23("button", { ref: approveRef, type: "button", className: "bf-confirm__btn bf-confirm__btn--primary", onClick: onApprove, children: labels.approve }),
+      onApproveAll && /* @__PURE__ */ jsx23("button", { type: "button", className: "bf-confirm__btn", onClick: onApproveAll, title: labels.approveAllTitle, children: labels.approveAll }),
+      /* @__PURE__ */ jsx23("button", { type: "button", className: "bf-confirm__btn", onClick: onDeny, children: labels.deny })
     ] })
   ] });
 });
@@ -3360,9 +3407,9 @@ var ToolConfirmBar = memo8(function ToolConfirmBar2({
 var BRAND_LOGO_SRC = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAWhUlEQVR42t17eZRlZXXvb+/vO3eooau7aVq6oZkasGkCzZAXhCQ2gxIkJEHhlggmgj6N0aysxA7RvJdQVVlZJhKMggkKYlgkoqauc6JLlyRQgTwxCCr2QAeeaNPS81DzrXvPt3/54/vOvdXQU3Xz3pLUWmeduveeOvfs355+eyjg5fgZoOJn4YdUDNPN5U/8y/ClAhGrvG/DxTO9836LWlmCTExUBE4BpcCRdACcAAoBSKgQSpH4vlABURAOoADiCGYCOABCCBSggQ4QEUhjRqXVGrNq9mw2Obq2Ofb84xD5SfuZBgcFQ0P2/xaAASpETP9o8/Uz8xZ9hpWyQOJdqYgP7wFoOlw6JJ0VoOt83v7dAfSdayDpfpIwF4C96RkUaPUthvQt2yNf3/VvsmfnPUHk6wCI4WGH/v5wMBHkKFQvgBBv+eoiPfmyDVbpXgTLW+Kg0PTAnoDKPsKLJEFnCb4PQFqAxmgxxXsA4RQoq5dmDhpCBxEAzjmUATEAU7u/wo1Pvg/ve/2PDgXCkftuDQoIdPHPXcVS9yI0WgEmGU0cKU4IBxMHQzrEIX1W/A6KA9LBdC3FIRcnQeM1QRxyCMR7yeB1YvvvYWz3J9DlHQKAwPg3rUCM54FTwdi78Dd05cWP4u4fXoz+/nCwGHXkAKwEAYLordFAGCCBgBEIBA2AATBJZ0btGCBM5/Y1SYuUzmsDEADkCHBehTMNbn3hN+3qV30MeekcTAFoURAkXmeQCCQUo3luvmuJLDvtS6VPPbYSQ2oHAuEIARhQDImVb3jkVKDnUkxTEEQZHzgeQTDr4dpAiHXAYSAQAEnXSNQoYAQJIGdA2TkJ09t18zPX4IZln9Z7/vNGmTf/YowHQy6KIEAe74OQABT1mA45eiqL8/ln3IvadaUDufyRATAwqADQ6j7lTShVutHKAwwCE0ih2VBomIDJLOHiOVqLRGHTeyAghRXkzKXbO52e2sCN37k8vOvsb+JtAxWWFq+xaTCCXFgd2vdqW5HAcywEzl9wkV7zFzdiSAzDL7WCIwNgEAGAo/RcxxYgOSRqoGO+YowaLrRtBE3ApCXOBsfidWQBhOTo9R579z5aXvvvr8Mtl64FKfrz179JuvvOw5QZCAU71jbbncSYrIGggagsfA8Ahxrs6AGIqY+45rFzoV3no2EkRKIPF18sHZNsA5OsoIgFlHYcoBV/Q5IS0O287No+zK9+9A3TQ1e8gLu/m+GmwTLLS/6QOQALbcDJeE/uz6IMDtMApXouPvLo2RDhi2PB3HnA+uhH0nVyDZJlaLVCCj4AATpCEhd5UdoE0claIAEv7fcAI1QpVeewe+tH+K4lawAh7maG35aWfnBDP0t953HCApy2vw+Mni2avqF47QCaAhYCuyoevYvPB/B94GFNtnIkAFBQ14Bz/qob6Hojm0X0TTl8X4YYo45IR2hI9HMQRLIOAKAZSpmKy0W2/+T99vsn3wZSMTgoeBdyPFgrsXrcLQyghCCEdrIGE9cAY3ZJpIlASjcp8pV7zyQAnHUJj9wCalDUGdwpV/+SafcZ0ghGLwpJqM9SevpuUNrSx7Nn50IBhBZYyZyExpRse/5d9r/OeADDdBAx1BLTHNhwHbvmr8JUMDhVYSJaygg8U9bQF8V5AQQUCuC6sp7wclHhgAX9oEJCyyCqbfTbipe2BQCEOIkvHTvXxAfP2ZV5aU5v5faNb+GHznsYw3TolwBAsBLElVeWWVn8frYA5CQpUePGCABlXyYp6b0ECOMDw6A8ylqAgroEvGZ4oVjX1WwSFDgEzkYm+n/hi21vIOATDZa2eeSoeC8To09z18br8NEL12GAHv2SAwCGqeiXoB9Yex0rC8/BVG7QFGuUsVhCSnme+7pDEZALczCAY6FxdESooL69F1wF37sYzRAQpBONA8CUmxGKvI92Oton9QXJUfJeJnY/xKf/5TJ89MJ1GKbDUBIeENRguPKOMson3MIWiJxtkiWBMZ2G9v0S/yhSKjuZiKAEQCfGnwMArNuXDPk5U1/2vZkBBMGo/RdF+zxVcxTEGG+gJEBAEmJScV7H9z4QHnr3O/FYfToWLNJx0WEqRIKuWdfPUt8qTOUGrwpGyyLivUkAXtoxnQQk2WDHCtRhMg/a3P24te1hzgBE6osLHzoZ6F6NpomoOUajmBXhpOP3RSiQaAVkoNBRys5h2+a/DnctWwNI5BWzhQej9lfWSnBL1zCACMltNN40Ci/x6QvAZ+WadlwADBUVmR5/On/sQ0+m3gXn7gK1QQEAdae9EVLpRSsPDCKRcRWUV2IRlF6TBedXSB4MKAkkiOzY9Pu8a9kakAqaYEjsJa4mQv3loWtZnr8K08EEopH2StvdxJLwiUxF+p2YZsFAczFRCCb23It6vZnkPYI0WIcBqz21q5/R7wQiRZop9A1Q2ppH0BiQLQRWSk45MykTP70p3Lv88+0096KHASgYhuHX7u5idekaBgQEi9FTJToQmVhwyv35rOyjHUsUMrDbe+wafdq+N/yp5JNHQoWpgDA7+8PnwLr/B5qBwqgRhk7RIykQ0YpgSDBnDl9y2hrbLjufuTrcu/zzKdKHlwoPoFZXiNAfd8E5Uum7ADkczDnmEpBbkGCM7C5R6ramE9XuFEVGqGqzkbvRH78Tf/f+cQxG1jF3AGpRqblfWgPLTlohtM2sKH6SwLHKS2bZYg7nvTZGN7jdT14e/vHshzHwkJ8V6fdjabFzk482f4Ddm/5Ap0ZH1JoT8M5JKXPQkkiAITDAzAq3j+kwuVxuAfCq3gTbX3h3/oFzHwWpL3G1w2yJRdRO+ruK77vmKcn6Tg9omnlV8cmBfNHsJOgk5mdFLtXMSxh72J775lvweP9W1OhQlzBX0lW++VuntiqnXsrKvCvoyr8sld4lKCdDNyMdKQqNPIcBPZkTa0xg7/O/Y7ee8elZxOpIeoJ0gFj51T+8QitnfgMwM6UGBcwL6CWSEFc0NAVwQqk6QWP7l7l15CY88eZRrDaPkYNofr+WR4dh2D5R+/KPHYPTL79I5i14A7R6mVS6VrCSATMtsuRFugWY2v2IH3v291ofvPD7hxL+0AAkrc1bue2T6hf/z8CZ3FS8OcCcIJ4BegEdAQeDp6C1+XY+uPyP9nu/7RAsBrESxFBsgRw8Aw8oHr5Eccklto8ZX3B1V/aLf3Jm7o69Dn0nfQCaT8vohvfah8+7L3GJQwp/KABimO27a8GC425Y5/28JUFmaCISnEQAlDAvHTAUoMtNOPEFlakfU1rr1aY25mNPP4fH+3cDaB7lEEJQg2IlHIakiSvvmCfn3/gAq8f8KhBa0tz9eU48O4CPXPzs0QOw+iGPkUvzVy1/5s2udOrnzFpmDkoVBO1YQPy9OARBBSg7IEskCAEIE6MQew5o/gjafFq0tUGbe57JJ3+4ESM372232A+Lkz3kMXRpXv6tR5e3lp71VfbNX4mp3OhUpUeBqekdOrnld8KHln/hKF2ACogtPWX7F7PSsW/MbTrQqTMFTAV0AlMgFMIrYB4IIjDHYB40FYGHo3qgFAOmtEvWAOWeteH5+mvx6Hv2HBYIA/QYkjy7+bFVYdFZX7Jqzylo5rlk4iEx+CLzXjRA9jy7xm5b8deHAsEfZOhhS5d+Y1lJq5dpyCECJQGzogdJWMqjllqCFuI0LIg4C+m6HDDXImdItEB6iWOxsncMlW64Ra3CVg5HeH/zk6vz+a+uU7uOxVQziFdPa3M8j7xlVAWOe/WH9U+fa1i/3HWwDKQHmxdkOP3qEnr61FrBU8Qb4Y3IjMgM8MURCB/S2YBSILKc8Hn7WvGmqnROTbwEKgyKqd13YqR/IlWaB9b+6ii8u3H9G0PPmV8juo6VRh6E6mgF9ZXYUaaomAkbCOw9/g73/rWXoS4B3P9c4EBUmAAk056aSzW+JKcwRLZX1CdFM1ZmzzcYX6sAFiJzNgWMBGk075WT49vCCz/4dOwzwA4q/IjkesP/fUeYd+LHEVwmoWX04mDSbi5RCIoUtFkQctBn3qonfAxv/atfADC1PzfT/VZ+EDvzVY+sLEvvxY4z8KR6djTuOMsKApAFoGRsa94FwOWEz4EsF5RCxyqylliJKjo9cR+e+PWdB9Y+BTU6jEiu129eg65T70VTPJq50dJAZJ9ZQ6cDzQCA4jATcvT1rfSnvukmiBDDOPRcYDXi0EPdideUpFqWkAcPEWdEPABvgg4g0S18HsHwFgHJgiRwmFxEUApgZk5LjcZ4V2PTPVH7g/sXngDqErJrN39QqsffjkZOyQ1C1aLylETHi1lDm453xm3CFhgw/+3Aan84cwEZAQJQc8Lua0HCA+IM0FRyRsELIIjMBJkBGZPgebKGNhDoAJHTSlBx0xPDo4+85rmo/RfN8AcGFKKEiHZfu/UuVz3+j91UHuJ3imiIFqbt2YNC0oSo6ArNGsUppgPEV1f599527mHMBWL0P33h4xdk0nW2WMNUKKClalPihEdSt8cpjBAaYCBMBWaE5bEBquk5VCRNrVSl1cyttf1vY5SovzT1DonhhD+o9p37J/dbtrCGqZA7Z44qYsZ2GWxp9mCIJXLRnYckFwABUsRJzkrVW2nBKgDfPehcYDUe1hHAFnSdcIOXqm+FaQrKMosXplmExI6MCQQ5TCM4s4fBknqUxewiCINkmbPGzm9sfuys72GAiqFZqSmlqr6zH1jgl77hc/QLrpDJVq6OHiJgCqbFPRUCI9sdDglIfbp9++JF2LNS9Qwcai5wCS6xEQDCfB1tYqei6cFUjaS+BJQOUIgpaKR3ld5ABUP8atHUH0CqE0K0DlUV5C3OTL7wUQDAUF1eLHz1vC8v7Trmsi/C916YN5q5OniItLOLkglkASV+n6UUZan9ZpICYZzKxIktgazaPa91qDQ4FMMHvvPTZZ989TH3fq2czyu7atMajQoqAFABQjAF+uCs5IKOBVf6+ZuybOmtAdNGcxpBiP6oEjVgwcxJSfPm3n/b9MNV/5pcLbQpd13yRed86wzf8wtfcdK7go2Z3Hv1ZsVwY59WP4pRIvGiVns6UwRUwoq2iwF5M+ecmODGXfICAGD04ATt3BM2mabhTDGhEQPUJRewqDHNCbZ23QGAtRpcvY5Q5Pjjz/z2heW+VZ+Hr54QGo2AzHnavryCRWCXGIcsWUbhdgVIceIWZVVHGIRsARhr7J0DAMV4ZfAAFPUsAWo8dcE9vRl63yEkXNRF9Lti8m0ESBNfkdDc+wOuf/KfAUq9Lm3hT1u1/gopnfI5tcoCm5kJzjtnVgjMdE6+LJHwtAMek8eH+DqENCYUwEwSQUt9w3zyWQOAdQ8f7lxAuN++HYAa6OoQW1TZeFUl61sW2DCIaDEJAIFAxqxBYQZow0b/Zj36m6tXP+RHFpOoS77irOfflJUWfhZaLoVWIzjvHC0JadIJqIWWZVb4Tt3XILEhhQQOTaAiRWueEPWcnmnpzOgT8W8vsaOeDQ6nWFPJFr09E4ksNAluTHt9cYxi4ipqM6PPTe/+j8+lkSZQl3DeOZvf7krHfjIPqmDT1DlHYxr6pv4CBSG1TGKHOUFc+Dti/98YeQpUYQYEiaMTCE29qs1MrW3d95q1xU7jUQEwAKpA7OKl3zm3JNXVDE1kIo6zpuQsUiLJskAbtvfj63f0T9RWslQfkeb5p//olpIcdxuNFOYEVK3I7RbNXTVWnjGoEyIx5xfqF5lVgKR5EKwzeS7uB0LQGP17AAH9cOgM5Y8MgPUJ+6ouu6ms1awVpoKIupR12pWUwShSUrbGt+VjT9wPCOrrpXnRGc/dVqqcfEuwPBhydU6lHTOKxRFGUxYFhDEcFalVAIgwMr7Z3ymREjMtoxJm8JnK+Pjz+U//z/0HKrp0ri2pOjRc3vvFY8rorakFZCKSAciKBnEa1jqDVdWJ5nvv+/a2a7cD9K9dvuXj3dnJt2hoBs9cPVU0ma8rDjDSbQLOCA2dz9TiRFwMkNyg7c9jXSCB0JwQI9TUFBCZeOEP8bUb9xyo6NK57UfEibt2/dw1ZelZKtYMGaAeRHFkBDzIipYc8qnxsannPwHU3OuX77x/XvW4d6vN5J7mPEQ8Y//Ap9UBh9nCMgJDiUUY0/sBsRZgHMZoiEtRMntDLUdLSs5jbOsnGg+sGMYA9UANkTm5QD0F5S6/8GafmJjK7BJbijF9KInzU7b3nm9v/cVNv376nq+qm391s9XIvYinapvGGmLEl6Sfdr63GAdQBMbEMnXW+JVx9AgxSZSYpGhwFZfZxM4vTDYe+d1IucGj3hUuUt9VC568qLdnxaMGgQhFVNrrMWyvvtBUSjptux4EHEvZwtfPhEaAimPa4SnYnElqlkjqLRYLY5pWC9Jnefua1JRNzdjgBaZkcAiWZT6UgdDcdffOf1z03sg27aC9xrkGQfZ2Hf+OqlalxamAIvjNwjHyAFVDjm537OtMgJm8YV7VJbIIprpCNJ3T4lRB6ahMaS3tFIrAg7HjbHHhBACNceKppcyph8/DxI7mru1/vPPryz/V4YUHb7TKXDbDf6VrZMlxC85f63x1oaEVq2KZdZeC+xcVIGiEUFRcLmZGMQqcYV8rCNqhtCF1nS1ZQF5YjKbGqxMx5xBc3A8wBwSZ2jbDiU+3mk/dueXB129KleYBidycLaAGaB0ISxeceH2371k4w0bwKkn7bK/AFby9SGdOROPAmKGqFScCbZohIBUss9eJ0xp9SwR5qrtF475f7H3E3YZgARYmm5K1Ngv5PWuOfrM58ZN/2vT4pVvbleXQ4c8g/eGlPtiVuKNctflvy4QwRuV39uASDU0EKMYuwoDgXcU5wE02x77f4I7PCmSdK3U3cwliEtfGLG2NSbH+hwCDi+5gQPABORzAKWm2JsYbU5u3T+7+zpYtW4am9i2pYXMdwPrD076Ek5Y89dp5vndVK7SsKqpMlJdtzRd1uyBHCCJOq1JyzVZjx4ztuG3Dj//8ridwz9TL+S9CtRpdvVjgOILJ82HFACbqe8uSHZ+dV1p0fcMaASIupO1MtpexgCCkQViSsjasEXIbv3fb+Hf//Eu7r9oMCFavNr94pM6DoX3IVFyvERgEMMjDHqcdKQADGNAhDNl7Kv9y0qsWXLhWs0qPSb5PsAsgDGSAmNOyUwDT+fi/jjZfuPVTW1b8e2y1PeRHcGk4nKD0//vnoC5wFgYFGMLi+ae9db7v7pm2ZoCLjtseiBABkrmyOjcRJn40Hrb92Z3Pn3Z/hzvARjDH3YCfFQD6AXvbSfdVqq15b1UAZUn/7UJBII0i6JGSmw7TExOt8Tt/PP7g7Z8ZvXEPQelHXes4Mr/8mQBgGHT9kHDqxNO/0tfVuyKXlmUQDTQqELqk5IMBk2HXV3ZPPnPr7XsveqrQ+qw9UbxiAaglf11YXvTOLnGYZjADWNKyKwN+Ih9bO9ba8qf/e/uKL3cAg70StH5IAIqmx58t/PaZ3ei5LLcQMqh2q9dpTu/e29p1+8YtX/nYXfjdCYI6CKD/FSb4QQE4K2WHxZVlvznPl8uB0EDDWHPHA1smvz906/gVzxRal1eo4AfL+wIIPtD7rWP+YfHktm+cSH7m+D3/cefip143y0L8YS01vBItYDD9t8OS3r4TSxL2/rSx6S//Yvvldz2LZ2eGQbcOgxz6GU5rL9vPAAa0duxAz+ys8N9Rzv8CgHAR5hKBsbwAAAAASUVORK5CYII=";
 
 // src/surface/BrainMark.tsx
-import { Fragment as Fragment8, jsx as jsx23, jsxs as jsxs21 } from "react/jsx-runtime";
+import { Fragment as Fragment8, jsx as jsx24, jsxs as jsxs22 } from "react/jsx-runtime";
 function BrainMark({ running = false, size = "1em" }) {
-  return /* @__PURE__ */ jsxs21(
+  return /* @__PURE__ */ jsxs22(
     "span",
     {
       className: "bf-mark",
@@ -3370,18 +3417,18 @@ function BrainMark({ running = false, size = "1em" }) {
       "data-state": running ? "running" : "idle",
       "aria-hidden": true,
       children: [
-        running && /* @__PURE__ */ jsxs21(Fragment8, { children: [
-          /* @__PURE__ */ jsx23("span", { className: "bf-mark__pulse" }),
-          /* @__PURE__ */ jsx23("span", { className: "bf-mark__pulse bf-mark__pulse--trail" })
+        running && /* @__PURE__ */ jsxs22(Fragment8, { children: [
+          /* @__PURE__ */ jsx24("span", { className: "bf-mark__pulse" }),
+          /* @__PURE__ */ jsx24("span", { className: "bf-mark__pulse bf-mark__pulse--trail" })
         ] }),
-        /* @__PURE__ */ jsx23("span", { className: "bf-mark__glyph", children: /* @__PURE__ */ jsx23("img", { className: "bf-mark__img", src: BRAND_LOGO_SRC, width: 24, height: 24, alt: "", draggable: false }) })
+        /* @__PURE__ */ jsx24("span", { className: "bf-mark__glyph", children: /* @__PURE__ */ jsx24("img", { className: "bf-mark__img", src: BRAND_LOGO_SRC, width: 24, height: 24, alt: "", draggable: false }) })
       ]
     }
   );
 }
 
 // src/surface/SurfaceHeader.tsx
-import { jsx as jsx24, jsxs as jsxs22 } from "react/jsx-runtime";
+import { jsx as jsx25, jsxs as jsxs23 } from "react/jsx-runtime";
 var DEFAULT_SURFACE_HEADER_LABELS = {
   historyShow: "Chat history",
   historyHide: "Back to the chat",
@@ -3403,16 +3450,16 @@ function SurfaceHeader({
 }) {
   const labels = { ...DEFAULT_SURFACE_HEADER_LABELS, ...overrides };
   const historyLabel = history?.open ? labels.historyHide : labels.historyShow;
-  return /* @__PURE__ */ jsxs22("header", { className: ["bf-shead", className].filter(Boolean).join(" "), children: [
-    /* @__PURE__ */ jsxs22("span", { className: "bf-shead__brand", children: [
-      /* @__PURE__ */ jsx24("span", { className: "bf-shead__mark", children: /* @__PURE__ */ jsx24(BrainMark, { running }) }),
-      title != null && /* @__PURE__ */ jsx24("span", { className: "bf-shead__title", children: title })
+  return /* @__PURE__ */ jsxs23("header", { className: ["bf-shead", className].filter(Boolean).join(" "), children: [
+    /* @__PURE__ */ jsxs23("span", { className: "bf-shead__brand", children: [
+      /* @__PURE__ */ jsx25("span", { className: "bf-shead__mark", children: /* @__PURE__ */ jsx25(BrainMark, { running }) }),
+      title != null && /* @__PURE__ */ jsx25("span", { className: "bf-shead__title", children: title })
     ] }),
-    /* @__PURE__ */ jsx24("div", { className: "bf-shead__context", children: context }),
-    presence && /* @__PURE__ */ jsx24("div", { className: "bf-shead__presence", children: presence }),
+    /* @__PURE__ */ jsx25("div", { className: "bf-shead__context", children: context }),
+    presence && /* @__PURE__ */ jsx25("div", { className: "bf-shead__presence", children: presence }),
     actions,
-    history && /* @__PURE__ */ jsxs22("span", { className: "bf-shead__badged", children: [
-      /* @__PURE__ */ jsx24(
+    history && /* @__PURE__ */ jsxs23("span", { className: "bf-shead__badged", children: [
+      /* @__PURE__ */ jsx25(
         "button",
         {
           type: "button",
@@ -3422,25 +3469,25 @@ function SurfaceHeader({
           "aria-label": historyLabel,
           "aria-pressed": history.open,
           "aria-controls": history.open ? history.controls : void 0,
-          children: /* @__PURE__ */ jsx24(HeaderIcon, { d: "M3 12a9 9 0 1 0 3-6.7M3 4v4h4M12 8v4l3 2" })
+          children: /* @__PURE__ */ jsx25(HeaderIcon, { d: "M3 12a9 9 0 1 0 3-6.7M3 4v4h4M12 8v4l3 2" })
         }
       ),
-      (history.unread ?? 0) > 0 && /* @__PURE__ */ jsx24("span", { className: "bf-shead__badge", children: history.unread > 99 ? "99+" : history.unread })
+      (history.unread ?? 0) > 0 && /* @__PURE__ */ jsx25("span", { className: "bf-shead__badge", children: history.unread > 99 ? "99+" : history.unread })
     ] }),
-    onNewChat && /* @__PURE__ */ jsx24("button", { type: "button", className: "bf-shead__btn", onClick: onNewChat, title: labels.newChat, "aria-label": labels.newChat, children: /* @__PURE__ */ jsx24(HeaderIcon, { d: "M12 5v14M5 12h14" }) }),
+    onNewChat && /* @__PURE__ */ jsx25("button", { type: "button", className: "bf-shead__btn", onClick: onNewChat, title: labels.newChat, "aria-label": labels.newChat, children: /* @__PURE__ */ jsx25(HeaderIcon, { d: "M12 5v14M5 12h14" }) }),
     expand,
-    onClose && /* @__PURE__ */ jsx24("button", { type: "button", className: "bf-shead__btn", onClick: onClose, title: labels.close, "aria-label": labels.close, children: /* @__PURE__ */ jsx24(HeaderIcon, { d: "M6 6l12 12M18 6L6 18" }) })
+    onClose && /* @__PURE__ */ jsx25("button", { type: "button", className: "bf-shead__btn", onClick: onClose, title: labels.close, "aria-label": labels.close, children: /* @__PURE__ */ jsx25(HeaderIcon, { d: "M6 6l12 12M18 6L6 18" }) })
   ] });
 }
 function HeaderIcon({ d }) {
-  return /* @__PURE__ */ jsx24("svg", { width: "16", height: "16", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true, children: /* @__PURE__ */ jsx24("path", { d }) });
+  return /* @__PURE__ */ jsx25("svg", { width: "16", height: "16", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true, children: /* @__PURE__ */ jsx25("path", { d }) });
 }
 var EXPAND_ICON_PATH = "M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7";
 
 // src/surface/SurfaceLauncher.tsx
-import { jsx as jsx25, jsxs as jsxs23 } from "react/jsx-runtime";
+import { jsx as jsx26, jsxs as jsxs24 } from "react/jsx-runtime";
 function SurfaceLauncher({ onOpen, label, running = false, text, badge: badge2, markSize, className, dataAttrs }) {
-  return /* @__PURE__ */ jsxs23(
+  return /* @__PURE__ */ jsxs24(
     "button",
     {
       type: "button",
@@ -3451,9 +3498,9 @@ function SurfaceLauncher({ onOpen, label, running = false, text, badge: badge2, 
       "data-state": running ? "running" : badge2 ? badge2.tone : "idle",
       ...dataAttrs,
       children: [
-        /* @__PURE__ */ jsx25(BrainMark, { running, ...markSize !== void 0 ? { size: markSize } : {} }),
+        /* @__PURE__ */ jsx26(BrainMark, { running, ...markSize !== void 0 ? { size: markSize } : {} }),
         text,
-        badge2 && badge2.count > 0 && /* @__PURE__ */ jsx25(
+        badge2 && badge2.count > 0 && /* @__PURE__ */ jsx26(
           "span",
           {
             className: `bf-launcher__badge bf-launcher__badge--${badge2.tone}`,
@@ -3638,7 +3685,7 @@ var warnBox = {
 };
 
 // src/surface/SurfaceTabs.tsx
-import { jsx as jsx26, jsxs as jsxs24 } from "react/jsx-runtime";
+import { jsx as jsx27, jsxs as jsxs25 } from "react/jsx-runtime";
 function SurfaceTabs({ tabs, activeId, onSelect, label, idPrefix, className, panelClassName }) {
   const stripRef = useRef11(null);
   const onKeyDown = useCallback5((e) => {
@@ -3654,8 +3701,8 @@ function SurfaceTabs({ tabs, activeId, onSelect, label, idPrefix, className, pan
     stripRef.current?.querySelector(`[id="${idPrefix}-tab-${target.id}"]`)?.focus();
   }, [activeId, idPrefix, onSelect, tabs]);
   const active = tabs.find((t) => t.id === activeId) ?? tabs[0];
-  return /* @__PURE__ */ jsxs24("div", { className: ["bf-tabs", className].filter(Boolean).join(" "), children: [
-    /* @__PURE__ */ jsx26(
+  return /* @__PURE__ */ jsxs25("div", { className: ["bf-tabs", className].filter(Boolean).join(" "), children: [
+    /* @__PURE__ */ jsx27(
       "div",
       {
         ref: stripRef,
@@ -3672,7 +3719,7 @@ function SurfaceTabs({ tabs, activeId, onSelect, label, idPrefix, className, pan
         },
         children: tabs.map((tab) => {
           const selected = tab.id === active?.id;
-          return /* @__PURE__ */ jsxs24(
+          return /* @__PURE__ */ jsxs25(
             "button",
             {
               id: `${idPrefix}-tab-${tab.id}`,
@@ -3701,7 +3748,7 @@ function SurfaceTabs({ tabs, activeId, onSelect, label, idPrefix, className, pan
               },
               children: [
                 tab.label,
-                tab.badge && /* @__PURE__ */ jsx26(
+                tab.badge && /* @__PURE__ */ jsx27(
                   "span",
                   {
                     "aria-hidden": true,
@@ -3726,7 +3773,7 @@ function SurfaceTabs({ tabs, activeId, onSelect, label, idPrefix, className, pan
         })
       }
     ),
-    active && /* @__PURE__ */ jsx26(
+    active && /* @__PURE__ */ jsx27(
       "div",
       {
         id: `${idPrefix}-panel-${active.id}`,
@@ -3741,58 +3788,58 @@ function SurfaceTabs({ tabs, activeId, onSelect, label, idPrefix, className, pan
 }
 
 // src/surface/AiSurface.tsx
-import { jsx as jsx27, jsxs as jsxs25 } from "react/jsx-runtime";
+import { jsx as jsx28, jsxs as jsxs26 } from "react/jsx-runtime";
 function AiSurface({ header, rail, thread, empty, notices, footer, className, label, dataAttrs }) {
-  return /* @__PURE__ */ jsxs25("section", { className: ["bf-surface", className].filter(Boolean).join(" "), "aria-label": label, ...dataAttrs, children: [
+  return /* @__PURE__ */ jsxs26("section", { className: ["bf-surface", className].filter(Boolean).join(" "), "aria-label": label, ...dataAttrs, children: [
     header,
-    rail != null && rail !== false && /* @__PURE__ */ jsx27("div", { className: "bf-surface__rail", children: rail }),
-    /* @__PURE__ */ jsx27("div", { className: "bf-surface__body", children: empty ?? thread }),
-    notices != null && notices !== false && /* @__PURE__ */ jsx27("div", { className: "bf-surface__notices", children: notices }),
+    rail != null && rail !== false && /* @__PURE__ */ jsx28("div", { className: "bf-surface__rail", children: rail }),
+    /* @__PURE__ */ jsx28("div", { className: "bf-surface__body", children: empty ?? thread }),
+    notices != null && notices !== false && /* @__PURE__ */ jsx28("div", { className: "bf-surface__notices", children: notices }),
     footer
   ] });
 }
 
 // src/surface/SurfaceFooter.tsx
-import { jsx as jsx28, jsxs as jsxs26 } from "react/jsx-runtime";
+import { jsx as jsx29, jsxs as jsxs27 } from "react/jsx-runtime";
 function SurfaceFooter({ confirm, question, above, composer, status, footnote, className, dataAttrs }) {
-  return /* @__PURE__ */ jsxs26("div", { className: ["bf-surface__footer", className].filter(Boolean).join(" "), ...dataAttrs, children: [
+  return /* @__PURE__ */ jsxs27("div", { className: ["bf-surface__footer", className].filter(Boolean).join(" "), ...dataAttrs, children: [
     above,
     confirm,
     question,
     composer,
-    status != null && status !== false && /* @__PURE__ */ jsx28("div", { className: "bf-surface__status", role: "status", children: status }),
+    status != null && status !== false && /* @__PURE__ */ jsx29("div", { className: "bf-surface__status", role: "status", children: status }),
     footnote
   ] });
 }
 
 // src/surface/SurfaceEmptyState.tsx
-import { Fragment as Fragment9, jsx as jsx29, jsxs as jsxs27 } from "react/jsx-runtime";
+import { Fragment as Fragment9, jsx as jsx30, jsxs as jsxs28 } from "react/jsx-runtime";
 function SurfaceEmptyState({ layout, title, hint, controls, composer, starters }) {
   const docked = layout === "docked";
-  return /* @__PURE__ */ jsxs27("div", { className: `bf-empty bf-empty--${layout}`, children: [
-    docked ? /* @__PURE__ */ jsx29("div", { className: "bf-empty__greet", children: /* @__PURE__ */ jsxs27("div", { className: "bf-empty__copy", children: [
-      /* @__PURE__ */ jsx29("div", { className: "bf-empty__title", children: title }),
-      /* @__PURE__ */ jsx29("div", { className: "bf-empty__hint", children: hint })
-    ] }) }) : /* @__PURE__ */ jsxs27(Fragment9, { children: [
-      /* @__PURE__ */ jsx29("div", { className: "bf-empty__title", children: title }),
-      /* @__PURE__ */ jsx29("div", { className: "bf-empty__hint", children: hint })
+  return /* @__PURE__ */ jsxs28("div", { className: `bf-empty bf-empty--${layout}`, children: [
+    docked ? /* @__PURE__ */ jsx30("div", { className: "bf-empty__greet", children: /* @__PURE__ */ jsxs28("div", { className: "bf-empty__copy", children: [
+      /* @__PURE__ */ jsx30("div", { className: "bf-empty__title", children: title }),
+      /* @__PURE__ */ jsx30("div", { className: "bf-empty__hint", children: hint })
+    ] }) }) : /* @__PURE__ */ jsxs28(Fragment9, { children: [
+      /* @__PURE__ */ jsx30("div", { className: "bf-empty__title", children: title }),
+      /* @__PURE__ */ jsx30("div", { className: "bf-empty__hint", children: hint })
     ] }),
-    controls != null && /* @__PURE__ */ jsx29("div", { className: "bf-empty__controls", children: controls }),
-    !docked && composer != null && /* @__PURE__ */ jsx29("div", { className: "bf-empty__composer", children: composer }),
-    starters != null && /* @__PURE__ */ jsx29("div", { className: "bf-empty__starters", children: starters })
+    controls != null && /* @__PURE__ */ jsx30("div", { className: "bf-empty__controls", children: controls }),
+    !docked && composer != null && /* @__PURE__ */ jsx30("div", { className: "bf-empty__composer", children: composer }),
+    starters != null && /* @__PURE__ */ jsx30("div", { className: "bf-empty__starters", children: starters })
   ] });
 }
 
 // src/surface/StarterTiles.tsx
-import { jsx as jsx30, jsxs as jsxs28 } from "react/jsx-runtime";
+import { jsx as jsx31, jsxs as jsxs29 } from "react/jsx-runtime";
 function StarterGroup({ heading, ariaLabel, children }) {
-  return /* @__PURE__ */ jsxs28("section", { className: "bf-starters", children: [
-    /* @__PURE__ */ jsx30("h3", { className: "bf-starters__heading", children: heading }),
-    /* @__PURE__ */ jsx30("div", { role: "group", "aria-label": ariaLabel ?? heading, className: "bf-starters__grid", children })
+  return /* @__PURE__ */ jsxs29("section", { className: "bf-starters", children: [
+    /* @__PURE__ */ jsx31("h3", { className: "bf-starters__heading", children: heading }),
+    /* @__PURE__ */ jsx31("div", { role: "group", "aria-label": ariaLabel ?? heading, className: "bf-starters__grid", children })
   ] });
 }
 function StarterTile({ icon, label, hint, onClick, pressed, disabled }) {
-  return /* @__PURE__ */ jsxs28(
+  return /* @__PURE__ */ jsxs29(
     "button",
     {
       type: "button",
@@ -3802,10 +3849,10 @@ function StarterTile({ icon, label, hint, onClick, pressed, disabled }) {
       "aria-pressed": pressed,
       title: hint,
       children: [
-        icon != null && /* @__PURE__ */ jsx30("span", { "aria-hidden": true, className: "bf-starter__icon", children: icon }),
-        /* @__PURE__ */ jsxs28("span", { className: "bf-starter__text", children: [
-          /* @__PURE__ */ jsx30("span", { className: "bf-starter__label", children: label }),
-          /* @__PURE__ */ jsx30("span", { className: "bf-starter__hint", children: hint })
+        icon != null && /* @__PURE__ */ jsx31("span", { "aria-hidden": true, className: "bf-starter__icon", children: icon }),
+        /* @__PURE__ */ jsxs29("span", { className: "bf-starter__text", children: [
+          /* @__PURE__ */ jsx31("span", { className: "bf-starter__label", children: label }),
+          /* @__PURE__ */ jsx31("span", { className: "bf-starter__hint", children: hint })
         ] })
       ]
     }
@@ -3813,10 +3860,10 @@ function StarterTile({ icon, label, hint, onClick, pressed, disabled }) {
 }
 
 // src/surface/ChatHistory.tsx
-import { memo as memo9 } from "react";
+import { memo as memo10 } from "react";
 
 // src/surface/ChatTicketStats.tsx
-import { jsx as jsx31 } from "react/jsx-runtime";
+import { jsx as jsx32 } from "react/jsx-runtime";
 var isCount = (n2) => typeof n2 === "number" && Number.isFinite(n2) && n2 >= 0;
 function chatTicketStatsText(input, labels) {
   if (!isCount(input.ticketCount)) return null;
@@ -3837,7 +3884,7 @@ function chatTicketStatsText(input, labels) {
 function ChatTicketStats({ chat, labels }) {
   const stats = chatTicketStatsText(chat, labels);
   if (!stats) return null;
-  return /* @__PURE__ */ jsx31(
+  return /* @__PURE__ */ jsx32(
     "span",
     {
       className: "bf-chatrow__tickets",
@@ -3849,50 +3896,50 @@ function ChatTicketStats({ chat, labels }) {
 }
 
 // src/surface/ChatHistory.tsx
-import { Fragment as Fragment10, jsx as jsx32, jsxs as jsxs29 } from "react/jsx-runtime";
+import { Fragment as Fragment10, jsx as jsx33, jsxs as jsxs30 } from "react/jsx-runtime";
 function ActionIcon({ label, children }) {
-  return /* @__PURE__ */ jsxs29("svg", { width: "15", height: "15", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", role: "img", "aria-label": label, children: [
-    /* @__PURE__ */ jsx32("title", { children: label }),
+  return /* @__PURE__ */ jsxs30("svg", { width: "15", height: "15", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", role: "img", "aria-label": label, children: [
+    /* @__PURE__ */ jsx33("title", { children: label }),
     children
   ] });
 }
 var ACTION_ICONS = {
   /** Rename — a pencil. */
-  rename: /* @__PURE__ */ jsxs29(Fragment10, { children: [
-    /* @__PURE__ */ jsx32("path", { d: "M12 20h9" }),
-    /* @__PURE__ */ jsx32("path", { d: "M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" })
+  rename: /* @__PURE__ */ jsxs30(Fragment10, { children: [
+    /* @__PURE__ */ jsx33("path", { d: "M12 20h9" }),
+    /* @__PURE__ */ jsx33("path", { d: "M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" })
   ] }),
   /** Summarize — a four-point sparkle. */
-  summarize: /* @__PURE__ */ jsx32("path", { d: "M12 2l1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8Z" }),
+  summarize: /* @__PURE__ */ jsx33("path", { d: "M12 2l1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8Z" }),
   /** Archive — a box with a slot. */
-  archive: /* @__PURE__ */ jsxs29(Fragment10, { children: [
-    /* @__PURE__ */ jsx32("rect", { x: "3", y: "4", width: "18", height: "4", rx: "1" }),
-    /* @__PURE__ */ jsx32("path", { d: "M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8" }),
-    /* @__PURE__ */ jsx32("path", { d: "M10 12h4" })
+  archive: /* @__PURE__ */ jsxs30(Fragment10, { children: [
+    /* @__PURE__ */ jsx33("rect", { x: "3", y: "4", width: "18", height: "4", rx: "1" }),
+    /* @__PURE__ */ jsx33("path", { d: "M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8" }),
+    /* @__PURE__ */ jsx33("path", { d: "M10 12h4" })
   ] }),
   /** Unarchive — a box with an up arrow (the mirror of Archive). */
-  unarchive: /* @__PURE__ */ jsxs29(Fragment10, { children: [
-    /* @__PURE__ */ jsx32("rect", { x: "3", y: "4", width: "18", height: "4", rx: "1" }),
-    /* @__PURE__ */ jsx32("path", { d: "M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8" }),
-    /* @__PURE__ */ jsx32("path", { d: "M12 11v6" }),
-    /* @__PURE__ */ jsx32("path", { d: "m9 13 3-3 3 3" })
+  unarchive: /* @__PURE__ */ jsxs30(Fragment10, { children: [
+    /* @__PURE__ */ jsx33("rect", { x: "3", y: "4", width: "18", height: "4", rx: "1" }),
+    /* @__PURE__ */ jsx33("path", { d: "M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8" }),
+    /* @__PURE__ */ jsx33("path", { d: "M12 11v6" }),
+    /* @__PURE__ */ jsx33("path", { d: "m9 13 3-3 3 3" })
   ] }),
   /** Delete — a trash can. */
-  delete: /* @__PURE__ */ jsxs29(Fragment10, { children: [
-    /* @__PURE__ */ jsx32("path", { d: "M3 6h18" }),
-    /* @__PURE__ */ jsx32("path", { d: "M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" }),
-    /* @__PURE__ */ jsx32("path", { d: "M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" }),
-    /* @__PURE__ */ jsx32("path", { d: "M10 11v6" }),
-    /* @__PURE__ */ jsx32("path", { d: "M14 11v6" })
+  delete: /* @__PURE__ */ jsxs30(Fragment10, { children: [
+    /* @__PURE__ */ jsx33("path", { d: "M3 6h18" }),
+    /* @__PURE__ */ jsx33("path", { d: "M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" }),
+    /* @__PURE__ */ jsx33("path", { d: "M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" }),
+    /* @__PURE__ */ jsx33("path", { d: "M10 11v6" }),
+    /* @__PURE__ */ jsx33("path", { d: "M14 11v6" })
   ] }),
   /** Open chat — a speech bubble. */
-  openChat: /* @__PURE__ */ jsx32("path", { d: "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z" }),
+  openChat: /* @__PURE__ */ jsx33("path", { d: "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z" }),
   /** Resume — a play triangle. */
-  resume: /* @__PURE__ */ jsx32("path", { d: "m6 4 14 8-14 8Z" }),
+  resume: /* @__PURE__ */ jsx33("path", { d: "m6 4 14 8-14 8Z" }),
   /** Dismiss — an ×. */
-  dismiss: /* @__PURE__ */ jsxs29(Fragment10, { children: [
-    /* @__PURE__ */ jsx32("path", { d: "M18 6 6 18" }),
-    /* @__PURE__ */ jsx32("path", { d: "m6 6 12 12" })
+  dismiss: /* @__PURE__ */ jsxs30(Fragment10, { children: [
+    /* @__PURE__ */ jsx33("path", { d: "M18 6 6 18" }),
+    /* @__PURE__ */ jsx33("path", { d: "m6 6 12 12" })
   ] })
 };
 var DEFAULT_CHAT_HISTORY_LABELS = {
@@ -3927,29 +3974,29 @@ function chatHistoryLabelsFrom(lookup) {
 function InterruptedRunRow({ state, className }) {
   const labels = { ...DEFAULT_CHAT_HISTORY_LABELS, ...state.labels };
   const disabled = state.pending;
-  return /* @__PURE__ */ jsxs29(
+  return /* @__PURE__ */ jsxs30(
     "div",
     {
       className: ["bf-chatrow", "bf-chatrow--interrupted", className].filter(Boolean).join(" "),
       role: "listitem",
       "data-run-id": state.runId,
       children: [
-        /* @__PURE__ */ jsxs29("div", { className: "bf-chatrow__head", children: [
-          /* @__PURE__ */ jsx32("span", { className: "bf-chatrow__marker", "aria-hidden": true, children: /* @__PURE__ */ jsxs29("svg", { width: "12", height: "12", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2.2", strokeLinecap: "round", children: [
-            /* @__PURE__ */ jsx32("path", { d: "M12 2a10 10 0 0 1 10 10" }),
-            /* @__PURE__ */ jsx32("path", { d: "M12 22A10 10 0 1 1 22 12" })
+        /* @__PURE__ */ jsxs30("div", { className: "bf-chatrow__head", children: [
+          /* @__PURE__ */ jsx33("span", { className: "bf-chatrow__marker", "aria-hidden": true, children: /* @__PURE__ */ jsxs30("svg", { width: "12", height: "12", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2.2", strokeLinecap: "round", children: [
+            /* @__PURE__ */ jsx33("path", { d: "M12 2a10 10 0 0 1 10 10" }),
+            /* @__PURE__ */ jsx33("path", { d: "M12 22A10 10 0 1 1 22 12" })
           ] }) }),
-          /* @__PURE__ */ jsx32("span", { className: "bf-chatrow__title", children: state.interruptedAtLabel }),
-          /* @__PURE__ */ jsxs29("span", { className: "bf-chatrow__meta", children: [
+          /* @__PURE__ */ jsx33("span", { className: "bf-chatrow__title", children: state.interruptedAtLabel }),
+          /* @__PURE__ */ jsxs30("span", { className: "bf-chatrow__meta", children: [
             "\xB7 ",
             labels.interrupted ?? "Interrupted"
           ] })
         ] }),
-        state.failed && !state.pending && /* @__PURE__ */ jsx32("div", { className: "bf-chatrow__meta", role: "alert", children: labels.resumeFailed ?? "Couldn't resume" }),
-        /* @__PURE__ */ jsxs29("div", { className: "bf-chatrow__actions", children: [
-          state.resumable && state.onOpen && /* @__PURE__ */ jsx32("button", { type: "button", className: "bf-chatrow__action", disabled, title: labels.openChat ?? "Open chat", "aria-label": labels.openChat ?? "Open chat", onClick: state.onOpen, children: /* @__PURE__ */ jsx32(ActionIcon, { label: labels.openChat ?? "Open chat", children: ACTION_ICONS.openChat }) }),
-          state.resumable && state.onResume && /* @__PURE__ */ jsx32("button", { type: "button", className: "bf-chatrow__action", disabled, title: labels.resume ?? "Resume", "aria-label": labels.resume ?? "Resume", onClick: state.onResume, children: /* @__PURE__ */ jsx32(ActionIcon, { label: labels.resume ?? "Resume", children: ACTION_ICONS.resume }) }),
-          state.onDismiss && /* @__PURE__ */ jsx32("button", { type: "button", className: "bf-chatrow__action", disabled, title: labels.dismiss ?? "Dismiss", "aria-label": labels.dismiss ?? "Dismiss", onClick: state.onDismiss, children: /* @__PURE__ */ jsx32(ActionIcon, { label: labels.dismiss ?? "Dismiss", children: ACTION_ICONS.dismiss }) })
+        state.failed && !state.pending && /* @__PURE__ */ jsx33("div", { className: "bf-chatrow__meta", role: "alert", children: labels.resumeFailed ?? "Couldn't resume" }),
+        /* @__PURE__ */ jsxs30("div", { className: "bf-chatrow__actions", children: [
+          state.resumable && state.onOpen && /* @__PURE__ */ jsx33("button", { type: "button", className: "bf-chatrow__action", disabled, title: labels.openChat ?? "Open chat", "aria-label": labels.openChat ?? "Open chat", onClick: state.onOpen, children: /* @__PURE__ */ jsx33(ActionIcon, { label: labels.openChat ?? "Open chat", children: ACTION_ICONS.openChat }) }),
+          state.resumable && state.onResume && /* @__PURE__ */ jsx33("button", { type: "button", className: "bf-chatrow__action", disabled, title: labels.resume ?? "Resume", "aria-label": labels.resume ?? "Resume", onClick: state.onResume, children: /* @__PURE__ */ jsx33(ActionIcon, { label: labels.resume ?? "Resume", children: ACTION_ICONS.resume }) }),
+          state.onDismiss && /* @__PURE__ */ jsx33("button", { type: "button", className: "bf-chatrow__action", disabled, title: labels.dismiss ?? "Dismiss", "aria-label": labels.dismiss ?? "Dismiss", onClick: state.onDismiss, children: /* @__PURE__ */ jsx33(ActionIcon, { label: labels.dismiss ?? "Dismiss", children: ACTION_ICONS.dismiss }) })
         ] })
       ]
     }
@@ -3959,13 +4006,13 @@ function ChatHistoryList({ loading, total, children, filter, labels: overrides, 
   const labels = { ...DEFAULT_CHAT_HISTORY_LABELS, ...overrides };
   const hasRows = Array.isArray(children) ? children.length > 0 : children != null && children !== false;
   const status = hasRows ? null : loading ? labels.loading : total === 0 ? labels.empty : labels.noMatch;
-  return /* @__PURE__ */ jsxs29("div", { id, className: ["bf-history", className].filter(Boolean).join(" "), "aria-busy": loading || void 0, children: [
-    filter != null && /* @__PURE__ */ jsx32("div", { className: "bf-history__filter", children: filter }),
-    status != null && /* @__PURE__ */ jsx32("div", { className: "bf-history__status", role: "status", children: status }),
-    hasRows && /* @__PURE__ */ jsx32("div", { role: "list", className: "bf-history__rows", children })
+  return /* @__PURE__ */ jsxs30("div", { id, className: ["bf-history", className].filter(Boolean).join(" "), "aria-busy": loading || void 0, children: [
+    filter != null && /* @__PURE__ */ jsx33("div", { className: "bf-history__filter", children: filter }),
+    status != null && /* @__PURE__ */ jsx33("div", { className: "bf-history__status", role: "status", children: status }),
+    hasRows && /* @__PURE__ */ jsx33("div", { role: "list", className: "bf-history__rows", children })
   ] });
 }
-var ChatHistoryRow = memo9(function ChatHistoryRow2({
+var ChatHistoryRow = memo10(function ChatHistoryRow2({
   chat,
   active,
   onOpen,
@@ -3995,15 +4042,15 @@ var ChatHistoryRow = memo9(function ChatHistoryRow2({
   const daysIdle = chat.daysIdle != null && Number.isFinite(chat.daysIdle) && chat.daysIdle >= 1 ? fill(labels.daysIdle, { days: Math.floor(chat.daysIdle) }) : null;
   const canArchive = Boolean(onArchive) && !archived;
   const hasActions = Boolean(onStartRename || onSummarize || canArchive || onUnarchive || onDelete || extraActions);
-  return /* @__PURE__ */ jsxs29(
+  return /* @__PURE__ */ jsxs30(
     "div",
     {
       className: ["bf-chatrow", className].filter(Boolean).join(" "),
       "data-active": active ? "true" : void 0,
       role: "listitem",
       children: [
-        /* @__PURE__ */ jsxs29("div", { className: "bf-chatrow__head", children: [
-          renaming ? marker != null && /* @__PURE__ */ jsx32("span", { className: "bf-chatrow__marker", children: marker }) : /* @__PURE__ */ jsxs29(
+        /* @__PURE__ */ jsxs30("div", { className: "bf-chatrow__head", children: [
+          renaming ? marker != null && /* @__PURE__ */ jsx33("span", { className: "bf-chatrow__marker", children: marker }) : /* @__PURE__ */ jsxs30(
             "button",
             {
               type: "button",
@@ -4011,12 +4058,12 @@ var ChatHistoryRow = memo9(function ChatHistoryRow2({
               "aria-current": active ? "true" : void 0,
               onClick: () => onOpen(chat.id),
               children: [
-                marker != null && /* @__PURE__ */ jsx32("span", { className: "bf-chatrow__marker", children: marker }),
-                /* @__PURE__ */ jsx32("span", { className: "bf-chatrow__title", children: chat.title.trim() || fill(labels.untitled, { id: chat.id }) })
+                marker != null && /* @__PURE__ */ jsx33("span", { className: "bf-chatrow__marker", children: marker }),
+                /* @__PURE__ */ jsx33("span", { className: "bf-chatrow__title", children: chat.title.trim() || fill(labels.untitled, { id: chat.id }) })
               ]
             }
           ),
-          renaming && /* @__PURE__ */ jsx32(
+          renaming && /* @__PURE__ */ jsx33(
             "input",
             {
               autoFocus: true,
@@ -4032,17 +4079,17 @@ var ChatHistoryRow = memo9(function ChatHistoryRow2({
               }
             }
           ),
-          !renaming && /* @__PURE__ */ jsx32(ChatTicketStats, { chat, labels }),
-          !renaming && daysIdle != null && /* @__PURE__ */ jsx32("span", { className: "bf-chatrow__days", title: daysIdle, children: daysIdle }),
-          !renaming && chat.stats != null && chat.stats !== "" && /* @__PURE__ */ jsx32("span", { className: "bf-chatrow__stats", title: chat.stats, children: chat.stats })
+          !renaming && /* @__PURE__ */ jsx33(ChatTicketStats, { chat, labels }),
+          !renaming && daysIdle != null && /* @__PURE__ */ jsx33("span", { className: "bf-chatrow__days", title: daysIdle, children: daysIdle }),
+          !renaming && chat.stats != null && chat.stats !== "" && /* @__PURE__ */ jsx33("span", { className: "bf-chatrow__stats", title: chat.stats, children: chat.stats })
         ] }),
-        meta != null && /* @__PURE__ */ jsx32("div", { className: "bf-chatrow__meta", children: meta }),
-        !renaming && hasActions && /* @__PURE__ */ jsxs29("div", { className: "bf-chatrow__actions", children: [
-          onStartRename && /* @__PURE__ */ jsx32("button", { type: "button", className: "bf-chatrow__action", title: labels.rename, "aria-label": labels.rename, onClick: () => onStartRename(chat), children: /* @__PURE__ */ jsx32(ActionIcon, { label: labels.rename, children: ACTION_ICONS.rename }) }),
-          onSummarize && /* @__PURE__ */ jsx32("button", { type: "button", className: "bf-chatrow__action", title: labels.summarize, "aria-label": labels.summarize, onClick: () => onSummarize(chat.id), disabled: summarizing, "aria-busy": summarizing || void 0, children: /* @__PURE__ */ jsx32(ActionIcon, { label: labels.summarize, children: ACTION_ICONS.summarize }) }),
-          canArchive && /* @__PURE__ */ jsx32("button", { type: "button", className: "bf-chatrow__action", title: labels.archive, "aria-label": labels.archive, onClick: () => onArchive?.(chat), disabled: archiving, "aria-busy": archiving || void 0, children: /* @__PURE__ */ jsx32(ActionIcon, { label: labels.archive, children: ACTION_ICONS.archive }) }),
-          onUnarchive && archived && /* @__PURE__ */ jsx32("button", { type: "button", className: "bf-chatrow__action", title: labels.unarchive, "aria-label": labels.unarchive, onClick: () => onUnarchive(chat), disabled: unarchiving, "aria-busy": unarchiving || void 0, children: /* @__PURE__ */ jsx32(ActionIcon, { label: labels.unarchive, children: ACTION_ICONS.unarchive }) }),
-          onDelete && /* @__PURE__ */ jsx32("button", { type: "button", className: "bf-chatrow__action bf-chatrow__action--danger", title: labels.delete, "aria-label": labels.delete, onClick: () => onDelete(chat), disabled: deleting, "aria-busy": deleting || void 0, children: /* @__PURE__ */ jsx32(ActionIcon, { label: labels.delete, children: ACTION_ICONS.delete }) }),
+        meta != null && /* @__PURE__ */ jsx33("div", { className: "bf-chatrow__meta", children: meta }),
+        !renaming && hasActions && /* @__PURE__ */ jsxs30("div", { className: "bf-chatrow__actions", children: [
+          onStartRename && /* @__PURE__ */ jsx33("button", { type: "button", className: "bf-chatrow__action", title: labels.rename, "aria-label": labels.rename, onClick: () => onStartRename(chat), children: /* @__PURE__ */ jsx33(ActionIcon, { label: labels.rename, children: ACTION_ICONS.rename }) }),
+          onSummarize && /* @__PURE__ */ jsx33("button", { type: "button", className: "bf-chatrow__action", title: labels.summarize, "aria-label": labels.summarize, onClick: () => onSummarize(chat.id), disabled: summarizing, "aria-busy": summarizing || void 0, children: /* @__PURE__ */ jsx33(ActionIcon, { label: labels.summarize, children: ACTION_ICONS.summarize }) }),
+          canArchive && /* @__PURE__ */ jsx33("button", { type: "button", className: "bf-chatrow__action", title: labels.archive, "aria-label": labels.archive, onClick: () => onArchive?.(chat), disabled: archiving, "aria-busy": archiving || void 0, children: /* @__PURE__ */ jsx33(ActionIcon, { label: labels.archive, children: ACTION_ICONS.archive }) }),
+          onUnarchive && archived && /* @__PURE__ */ jsx33("button", { type: "button", className: "bf-chatrow__action", title: labels.unarchive, "aria-label": labels.unarchive, onClick: () => onUnarchive(chat), disabled: unarchiving, "aria-busy": unarchiving || void 0, children: /* @__PURE__ */ jsx33(ActionIcon, { label: labels.unarchive, children: ACTION_ICONS.unarchive }) }),
+          onDelete && /* @__PURE__ */ jsx33("button", { type: "button", className: "bf-chatrow__action bf-chatrow__action--danger", title: labels.delete, "aria-label": labels.delete, onClick: () => onDelete(chat), disabled: deleting, "aria-busy": deleting || void 0, children: /* @__PURE__ */ jsx33(ActionIcon, { label: labels.delete, children: ACTION_ICONS.delete }) }),
           extraActions
         ] })
       ]
@@ -4194,15 +4241,15 @@ function useDismissibleNotice(values) {
 }
 
 // src/composer/SuggestionRow.tsx
-import { memo as memo10 } from "react";
-import { jsx as jsx33 } from "react/jsx-runtime";
-var SuggestionRow = memo10(function SuggestionRow2({ items, ariaLabel }) {
+import { memo as memo11 } from "react";
+import { jsx as jsx34 } from "react/jsx-runtime";
+var SuggestionRow = memo11(function SuggestionRow2({ items, ariaLabel }) {
   if (items.length === 0) return null;
-  return /* @__PURE__ */ jsx33("div", { className: "bf-suggest", role: "group", "aria-label": ariaLabel, "data-testid": "composer-suggestions", children: items.map((item) => /* @__PURE__ */ jsx33("button", { type: "button", className: "bf-suggest__chip", onClick: item.onSelect, children: item.label }, item.id)) });
+  return /* @__PURE__ */ jsx34("div", { className: "bf-suggest", role: "group", "aria-label": ariaLabel, "data-testid": "composer-suggestions", children: items.map((item) => /* @__PURE__ */ jsx34("button", { type: "button", className: "bf-suggest__chip", onClick: item.onSelect, children: item.label }, item.id)) });
 });
 
 // src/composer/QueuedTurnChips.tsx
-import { jsx as jsx34, jsxs as jsxs30 } from "react/jsx-runtime";
+import { jsx as jsx35, jsxs as jsxs31 } from "react/jsx-runtime";
 var DEFAULT_QUEUED_TURN_LABELS = {
   list: "Queued messages",
   hint: "Queued \u2014 sends when the run finishes",
@@ -4213,39 +4260,39 @@ var DEFAULT_QUEUED_TURN_LABELS = {
 function QueuedTurnChips({ items, textOf, onRemove, onSteer, canSteer, labels: overrides }) {
   if (items.length === 0) return null;
   const labels = { ...DEFAULT_QUEUED_TURN_LABELS, ...overrides };
-  return /* @__PURE__ */ jsxs30("div", { className: "bf-queued", role: "list", "aria-label": labels.list, children: [
-    /* @__PURE__ */ jsx34("span", { className: "bf-queued__hint", children: labels.hint }),
+  return /* @__PURE__ */ jsxs31("div", { className: "bf-queued", role: "list", "aria-label": labels.list, children: [
+    /* @__PURE__ */ jsx35("span", { className: "bf-queued__hint", children: labels.hint }),
     items.map((item) => {
       const text = textOf(item.value);
-      return /* @__PURE__ */ jsxs30("span", { className: "bf-queued__chip", role: "listitem", title: text, children: [
-        /* @__PURE__ */ jsx34("span", { className: "bf-queued__text", children: text }),
-        onSteer && (canSteer?.(item) ?? true) && /* @__PURE__ */ jsx34("button", { type: "button", className: "bf-queued__steer", onClick: () => onSteer(item), title: labels.steerHint, children: labels.steer }),
-        /* @__PURE__ */ jsx34("button", { type: "button", className: "bf-queued__x", onClick: () => onRemove(item.id), "aria-label": labels.remove, children: "\xD7" })
+      return /* @__PURE__ */ jsxs31("span", { className: "bf-queued__chip", role: "listitem", title: text, children: [
+        /* @__PURE__ */ jsx35("span", { className: "bf-queued__text", children: text }),
+        onSteer && (canSteer?.(item) ?? true) && /* @__PURE__ */ jsx35("button", { type: "button", className: "bf-queued__steer", onClick: () => onSteer(item), title: labels.steerHint, children: labels.steer }),
+        /* @__PURE__ */ jsx35("button", { type: "button", className: "bf-queued__x", onClick: () => onRemove(item.id), "aria-label": labels.remove, children: "\xD7" })
       ] }, item.id);
     })
   ] });
 }
 
 // src/composer/ContextChip.tsx
-import { memo as memo11 } from "react";
-import { jsx as jsx35, jsxs as jsxs31 } from "react/jsx-runtime";
+import { memo as memo12 } from "react";
+import { jsx as jsx36, jsxs as jsxs32 } from "react/jsx-runtime";
 function ContextChipImpl({ label, value, options = [], onChange, icon, className }) {
   const classes = ["bf-ctxchip", className].filter(Boolean).join(" ");
   if (!onChange) {
-    return /* @__PURE__ */ jsxs31("span", { className: classes, role: "note", "aria-label": `${label}: ${value}`, title: value, children: [
-      icon && /* @__PURE__ */ jsx35("span", { className: "bf-ctxchip__icon", "aria-hidden": true, children: icon }),
-      /* @__PURE__ */ jsx35("span", { className: "bf-ctxchip__text", children: value })
+    return /* @__PURE__ */ jsxs32("span", { className: classes, role: "note", "aria-label": `${label}: ${value}`, title: value, children: [
+      icon && /* @__PURE__ */ jsx36("span", { className: "bf-ctxchip__icon", "aria-hidden": true, children: icon }),
+      /* @__PURE__ */ jsx36("span", { className: "bf-ctxchip__text", children: value })
     ] });
   }
-  return /* @__PURE__ */ jsxs31("label", { className: classes, children: [
-    icon && /* @__PURE__ */ jsx35("span", { className: "bf-ctxchip__icon", "aria-hidden": true, children: icon }),
-    /* @__PURE__ */ jsx35("select", { "aria-label": label, value, onChange: (event) => onChange(event.target.value), children: options.map((option) => /* @__PURE__ */ jsx35("option", { value: option.value, disabled: option.disabled, children: option.label }, option.value)) })
+  return /* @__PURE__ */ jsxs32("label", { className: classes, children: [
+    icon && /* @__PURE__ */ jsx36("span", { className: "bf-ctxchip__icon", "aria-hidden": true, children: icon }),
+    /* @__PURE__ */ jsx36("select", { "aria-label": label, value, onChange: (event) => onChange(event.target.value), children: options.map((option) => /* @__PURE__ */ jsx36("option", { value: option.value, disabled: option.disabled, children: option.label }, option.value)) })
   ] });
 }
-var ContextChip = memo11(ContextChipImpl);
+var ContextChip = memo12(ContextChipImpl);
 
 // src/PromptPanel.tsx
-import { jsx as jsx36, jsxs as jsxs32 } from "react/jsx-runtime";
+import { jsx as jsx37, jsxs as jsxs33 } from "react/jsx-runtime";
 function PromptPanel({
   input,
   context,
@@ -4276,7 +4323,7 @@ function PromptPanel({
     ...dragging ? { borderStyle: "dashed", background: "var(--prompt-panel-drag-bg, var(--surface-interactive, var(--bf-accent-soft, rgba(59,130,246,.1))))" } : null,
     ...style
   };
-  return /* @__PURE__ */ jsxs32(
+  return /* @__PURE__ */ jsxs33(
     "div",
     {
       ...rest,
@@ -4284,15 +4331,15 @@ function PromptPanel({
       style: panelStyle,
       children: [
         overlay,
-        status ? /* @__PURE__ */ jsx36("div", { className: "bf-prompt-panel__status", children: status }) : null,
-        /* @__PURE__ */ jsx36("div", { className: "bf-prompt-panel__input", style: { display: "flex", width: "100%", minWidth: 0 }, children: input }),
-        /* @__PURE__ */ jsxs32(
+        status ? /* @__PURE__ */ jsx37("div", { className: "bf-prompt-panel__status", children: status }) : null,
+        /* @__PURE__ */ jsx37("div", { className: "bf-prompt-panel__input", style: { display: "flex", width: "100%", minWidth: 0 }, children: input }),
+        /* @__PURE__ */ jsxs33(
           "div",
           {
             className: "bf-prompt-panel__actions",
             style: { display: "flex", alignItems: "center", gap: actionGap, minWidth: 0 },
             children: [
-              /* @__PURE__ */ jsxs32(
+              /* @__PURE__ */ jsxs33(
                 "div",
                 {
                   className: "bf-prompt-panel__actions-lead",
@@ -4303,7 +4350,7 @@ function PromptPanel({
                   ]
                 }
               ),
-              primaryAction ? /* @__PURE__ */ jsx36(
+              primaryAction ? /* @__PURE__ */ jsx37(
                 "div",
                 {
                   className: "bf-prompt-panel__actions-primary",
@@ -4551,17 +4598,17 @@ function usePopover() {
 }
 
 // src/promptOptions/ModePane.tsx
-import { Fragment as Fragment11, jsx as jsx37, jsxs as jsxs33 } from "react/jsx-runtime";
-var IconConsolidate = () => /* @__PURE__ */ jsx37("svg", { width: "13", height: "13", viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true", children: /* @__PURE__ */ jsx37("path", { d: "M2 5.5 4.5 8 2 10.5M14 5.5 11.5 8 14 10.5M6.5 3v10M9.5 3v10", stroke: "currentColor", strokeWidth: "1.3", strokeLinecap: "round", strokeLinejoin: "round" }) });
-var IconFork = () => /* @__PURE__ */ jsxs33("svg", { width: "13", height: "13", viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true", children: [
-  /* @__PURE__ */ jsx37("circle", { cx: "4", cy: "3.5", r: "1.5", fill: "currentColor" }),
-  /* @__PURE__ */ jsx37("circle", { cx: "4", cy: "12.5", r: "1.5", fill: "currentColor" }),
-  /* @__PURE__ */ jsx37("circle", { cx: "12", cy: "3.5", r: "1.5", fill: "currentColor" }),
-  /* @__PURE__ */ jsx37("path", { d: "M4 5v6M4 8h4.5A3.5 3.5 0 0 0 12 4.5V5", stroke: "currentColor", strokeWidth: "1.3", strokeLinecap: "round", strokeLinejoin: "round" })
+import { Fragment as Fragment11, jsx as jsx38, jsxs as jsxs34 } from "react/jsx-runtime";
+var IconConsolidate = () => /* @__PURE__ */ jsx38("svg", { width: "13", height: "13", viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true", children: /* @__PURE__ */ jsx38("path", { d: "M2 5.5 4.5 8 2 10.5M14 5.5 11.5 8 14 10.5M6.5 3v10M9.5 3v10", stroke: "currentColor", strokeWidth: "1.3", strokeLinecap: "round", strokeLinejoin: "round" }) });
+var IconFork = () => /* @__PURE__ */ jsxs34("svg", { width: "13", height: "13", viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true", children: [
+  /* @__PURE__ */ jsx38("circle", { cx: "4", cy: "3.5", r: "1.5", fill: "currentColor" }),
+  /* @__PURE__ */ jsx38("circle", { cx: "4", cy: "12.5", r: "1.5", fill: "currentColor" }),
+  /* @__PURE__ */ jsx38("circle", { cx: "12", cy: "3.5", r: "1.5", fill: "currentColor" }),
+  /* @__PURE__ */ jsx38("path", { d: "M4 5v6M4 8h4.5A3.5 3.5 0 0 0 12 4.5V5", stroke: "currentColor", strokeWidth: "1.3", strokeLinecap: "round", strokeLinejoin: "round" })
 ] });
 function ModePane({ labels, mode, memory, autoMode, session, close }) {
-  return /* @__PURE__ */ jsxs33(Fragment11, { children: [
-    mode && /* @__PURE__ */ jsx37(Fragment11, { children: mode.choices.map((choice) => /* @__PURE__ */ jsxs33(
+  return /* @__PURE__ */ jsxs34(Fragment11, { children: [
+    mode && /* @__PURE__ */ jsx38(Fragment11, { children: mode.choices.map((choice) => /* @__PURE__ */ jsxs34(
       "button",
       {
         type: "button",
@@ -4573,19 +4620,19 @@ function ModePane({ labels, mode, memory, autoMode, session, close }) {
           close();
         },
         children: [
-          /* @__PURE__ */ jsx37("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: choice.icon ?? "" }),
-          /* @__PURE__ */ jsxs33("span", { className: "bf-pmenu__lbl", children: [
+          /* @__PURE__ */ jsx38("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: choice.icon ?? "" }),
+          /* @__PURE__ */ jsxs34("span", { className: "bf-pmenu__lbl", children: [
             choice.label,
-            choice.hint && /* @__PURE__ */ jsx37("span", { className: "bf-pmenu__desc", children: choice.hint })
+            choice.hint && /* @__PURE__ */ jsx38("span", { className: "bf-pmenu__desc", children: choice.hint })
           ] }),
-          /* @__PURE__ */ jsx37("span", { className: "bf-pmenu__check", "aria-hidden": "true", children: choice.value === mode.value ? "\u2713" : "" })
+          /* @__PURE__ */ jsx38("span", { className: "bf-pmenu__check", "aria-hidden": "true", children: choice.value === mode.value ? "\u2713" : "" })
         ]
       },
       choice.value
     )) }),
-    memory && /* @__PURE__ */ jsxs33(Fragment11, { children: [
-      mode && /* @__PURE__ */ jsx37("div", { className: "bf-pmenu__sep" }),
-      /* @__PURE__ */ jsxs33(
+    memory && /* @__PURE__ */ jsxs34(Fragment11, { children: [
+      mode && /* @__PURE__ */ jsx38("div", { className: "bf-pmenu__sep" }),
+      /* @__PURE__ */ jsxs34(
         "button",
         {
           type: "button",
@@ -4598,20 +4645,20 @@ function ModePane({ labels, mode, memory, autoMode, session, close }) {
             if (!memory.unavailableReason) memory.onChange(!memory.enabled);
           },
           children: [
-            /* @__PURE__ */ jsx37("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: "\u{1F9E0}" }),
-            /* @__PURE__ */ jsxs33("span", { className: "bf-pmenu__lbl", children: [
+            /* @__PURE__ */ jsx38("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: "\u{1F9E0}" }),
+            /* @__PURE__ */ jsxs34("span", { className: "bf-pmenu__lbl", children: [
               labels.memory,
-              (memory.unavailableReason ?? memory.describe?.(memory.enabled)) && /* @__PURE__ */ jsx37("span", { className: "bf-pmenu__desc", children: memory.unavailableReason ?? memory.describe?.(memory.enabled) })
+              (memory.unavailableReason ?? memory.describe?.(memory.enabled)) && /* @__PURE__ */ jsx38("span", { className: "bf-pmenu__desc", children: memory.unavailableReason ?? memory.describe?.(memory.enabled) })
             ] }),
-            !memory.unavailableReason && /* @__PURE__ */ jsx37("span", { className: "bf-pmenu__hint", children: memory.enabled ? labels.on : labels.off }),
-            /* @__PURE__ */ jsx37("span", { className: "bf-pmenu__check", "aria-hidden": "true", children: memory.enabled && !memory.unavailableReason ? "\u2713" : "" })
+            !memory.unavailableReason && /* @__PURE__ */ jsx38("span", { className: "bf-pmenu__hint", children: memory.enabled ? labels.on : labels.off }),
+            /* @__PURE__ */ jsx38("span", { className: "bf-pmenu__check", "aria-hidden": "true", children: memory.enabled && !memory.unavailableReason ? "\u2713" : "" })
           ]
         }
       )
     ] }),
-    autoMode && /* @__PURE__ */ jsxs33(Fragment11, { children: [
-      (mode || memory) && /* @__PURE__ */ jsx37("div", { className: "bf-pmenu__sep" }),
-      /* @__PURE__ */ jsxs33(
+    autoMode && /* @__PURE__ */ jsxs34(Fragment11, { children: [
+      (mode || memory) && /* @__PURE__ */ jsx38("div", { className: "bf-pmenu__sep" }),
+      /* @__PURE__ */ jsxs34(
         "button",
         {
           type: "button",
@@ -4620,21 +4667,21 @@ function ModePane({ labels, mode, memory, autoMode, session, close }) {
           className: `bf-pmenu__item${autoMode.enabled ? " is-active" : ""}`,
           onClick: () => autoMode.onChange(!autoMode.enabled),
           children: [
-            /* @__PURE__ */ jsx37("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: "\u26A1" }),
-            /* @__PURE__ */ jsxs33("span", { className: "bf-pmenu__lbl", children: [
+            /* @__PURE__ */ jsx38("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: "\u26A1" }),
+            /* @__PURE__ */ jsxs34("span", { className: "bf-pmenu__lbl", children: [
               labels.autoMode,
-              /* @__PURE__ */ jsx37("span", { className: "bf-pmenu__desc", children: autoMode.description ?? labels.autoModeHint })
+              /* @__PURE__ */ jsx38("span", { className: "bf-pmenu__desc", children: autoMode.description ?? labels.autoModeHint })
             ] }),
-            /* @__PURE__ */ jsx37("span", { className: "bf-pmenu__hint", children: autoMode.enabled ? labels.on : labels.off }),
-            /* @__PURE__ */ jsx37("span", { className: "bf-pmenu__check", "aria-hidden": "true", children: autoMode.enabled ? "\u2713" : "" })
+            /* @__PURE__ */ jsx38("span", { className: "bf-pmenu__hint", children: autoMode.enabled ? labels.on : labels.off }),
+            /* @__PURE__ */ jsx38("span", { className: "bf-pmenu__check", "aria-hidden": "true", children: autoMode.enabled ? "\u2713" : "" })
           ]
         }
       )
     ] }),
-    session && /* @__PURE__ */ jsxs33(Fragment11, { children: [
-      (mode || memory || autoMode) && /* @__PURE__ */ jsx37("div", { className: "bf-pmenu__sep" }),
-      /* @__PURE__ */ jsx37("div", { className: "bf-pmenu__group", children: labels.conversation }),
-      /* @__PURE__ */ jsxs33(
+    session && /* @__PURE__ */ jsxs34(Fragment11, { children: [
+      (mode || memory || autoMode) && /* @__PURE__ */ jsx38("div", { className: "bf-pmenu__sep" }),
+      /* @__PURE__ */ jsx38("div", { className: "bf-pmenu__group", children: labels.conversation }),
+      /* @__PURE__ */ jsxs34(
         "button",
         {
           type: "button",
@@ -4648,15 +4695,15 @@ function ModePane({ labels, mode, memory, autoMode, session, close }) {
             }
           },
           children: [
-            /* @__PURE__ */ jsx37("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: /* @__PURE__ */ jsx37(IconConsolidate, {}) }),
-            /* @__PURE__ */ jsxs33("span", { className: "bf-pmenu__lbl", children: [
+            /* @__PURE__ */ jsx38("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: /* @__PURE__ */ jsx38(IconConsolidate, {}) }),
+            /* @__PURE__ */ jsxs34("span", { className: "bf-pmenu__lbl", children: [
               session.consolidating ? labels.consolidating : labels.consolidate,
-              /* @__PURE__ */ jsx37("span", { className: "bf-pmenu__desc", children: labels.consolidateHint })
+              /* @__PURE__ */ jsx38("span", { className: "bf-pmenu__desc", children: labels.consolidateHint })
             ] })
           ]
         }
       ),
-      /* @__PURE__ */ jsxs33(
+      /* @__PURE__ */ jsxs34(
         "button",
         {
           type: "button",
@@ -4670,10 +4717,10 @@ function ModePane({ labels, mode, memory, autoMode, session, close }) {
             }
           },
           children: [
-            /* @__PURE__ */ jsx37("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: /* @__PURE__ */ jsx37(IconFork, {}) }),
-            /* @__PURE__ */ jsxs33("span", { className: "bf-pmenu__lbl", children: [
+            /* @__PURE__ */ jsx38("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: /* @__PURE__ */ jsx38(IconFork, {}) }),
+            /* @__PURE__ */ jsxs34("span", { className: "bf-pmenu__lbl", children: [
               session.forking ? labels.forking : labels.fork,
-              /* @__PURE__ */ jsx37("span", { className: "bf-pmenu__desc", children: labels.forkHint })
+              /* @__PURE__ */ jsx38("span", { className: "bf-pmenu__desc", children: labels.forkHint })
             ] })
           ]
         }
@@ -4737,7 +4784,7 @@ function backendBadge(row, labels) {
 
 // src/localModels/LocalModelRow.tsx
 import { useState as useState16 } from "react";
-import { jsx as jsx38, jsxs as jsxs34 } from "react/jsx-runtime";
+import { jsx as jsx39, jsxs as jsxs35 } from "react/jsx-runtime";
 function LocalModelRow({ row, labels, active, failed, locale, onSelect, onDownload, onCancel, onRemove }) {
   const [menuOpen, setMenuOpen] = useState16(false);
   const ready = row.state === "ready";
@@ -4748,8 +4795,8 @@ function LocalModelRow({ row, labels, active, failed, locale, onSelect, onDownlo
   const progressText = indeterminate ? labels.localDownloadingUnknown : fill(labels.localDownloading, { percent });
   const meta = localModelMeta(row, labels, locale);
   const backend = backendBadge(row, labels);
-  return /* @__PURE__ */ jsxs34("li", { className: `bf-lmodel${active ? " is-active" : ""}${row.state === "unsupported" ? " is-unsupported" : ""}`, "data-state": row.state, children: [
-    /* @__PURE__ */ jsxs34(
+  return /* @__PURE__ */ jsxs35("li", { className: `bf-lmodel${active ? " is-active" : ""}${row.state === "unsupported" ? " is-unsupported" : ""}`, "data-state": row.state, children: [
+    /* @__PURE__ */ jsxs35(
       "button",
       {
         type: "button",
@@ -4758,20 +4805,20 @@ function LocalModelRow({ row, labels, active, failed, locale, onSelect, onDownlo
         "aria-pressed": ready ? active : void 0,
         onClick: () => onSelect(row.ref),
         children: [
-          /* @__PURE__ */ jsxs34("span", { className: "bf-lmodel__name", children: [
+          /* @__PURE__ */ jsxs35("span", { className: "bf-lmodel__name", children: [
             row.label,
-            row.tools && /* @__PURE__ */ jsx38("span", { className: "bf-lmodel__badge", children: labels.localTools }),
-            backend && /* @__PURE__ */ jsx38("span", { className: "bf-lmodel__badge", "data-backend": row.backend, children: backend })
+            row.tools && /* @__PURE__ */ jsx39("span", { className: "bf-lmodel__badge", children: labels.localTools }),
+            backend && /* @__PURE__ */ jsx39("span", { className: "bf-lmodel__badge", "data-backend": row.backend, children: backend })
           ] }),
-          /* @__PURE__ */ jsx38("span", { className: "bf-lmodel__meta", children: meta }),
-          row.state === "unsupported" && /* @__PURE__ */ jsx38("span", { className: "bf-lmodel__reason", children: unsupportedReason(row, labels) }),
-          failed && row.state === "absent" && /* @__PURE__ */ jsx38("span", { className: "bf-lmodel__reason", role: "alert", children: labels.localDownloadFailed })
+          /* @__PURE__ */ jsx39("span", { className: "bf-lmodel__meta", children: meta }),
+          row.state === "unsupported" && /* @__PURE__ */ jsx39("span", { className: "bf-lmodel__reason", children: unsupportedReason(row, labels) }),
+          failed && row.state === "absent" && /* @__PURE__ */ jsx39("span", { className: "bf-lmodel__reason", role: "alert", children: labels.localDownloadFailed })
         ]
       }
     ),
-    row.state === "absent" && /* @__PURE__ */ jsx38("button", { type: "button", className: "bf-lmodel__action", onClick: () => onDownload(row.ref), children: downloadActionLabel(row, labels, locale) }),
-    row.state === "downloading" && /* @__PURE__ */ jsxs34("div", { className: "bf-lmodel__progress", children: [
-      /* @__PURE__ */ jsx38(
+    row.state === "absent" && /* @__PURE__ */ jsx39("button", { type: "button", className: "bf-lmodel__action", onClick: () => onDownload(row.ref), children: downloadActionLabel(row, labels, locale) }),
+    row.state === "downloading" && /* @__PURE__ */ jsxs35("div", { className: "bf-lmodel__progress", children: [
+      /* @__PURE__ */ jsx39(
         "div",
         {
           className: `bf-lmodel__bar${indeterminate ? " is-indeterminate" : ""}`,
@@ -4780,14 +4827,14 @@ function LocalModelRow({ row, labels, active, failed, locale, onSelect, onDownlo
           "aria-valuemax": 100,
           ...indeterminate ? {} : { "aria-valuenow": percent },
           "aria-label": progressText,
-          children: /* @__PURE__ */ jsx38("span", { className: "bf-lmodel__fill", style: indeterminate ? void 0 : { width: `${percent}%` } })
+          children: /* @__PURE__ */ jsx39("span", { className: "bf-lmodel__fill", style: indeterminate ? void 0 : { width: `${percent}%` } })
         }
       ),
-      /* @__PURE__ */ jsx38("span", { className: "bf-lmodel__pct", children: progressText }),
-      !(indeterminate && builtIn) && /* @__PURE__ */ jsx38("button", { type: "button", className: "bf-lmodel__action", onClick: () => onCancel(row.ref), children: labels.localCancel })
+      /* @__PURE__ */ jsx39("span", { className: "bf-lmodel__pct", children: progressText }),
+      !(indeterminate && builtIn) && /* @__PURE__ */ jsx39("button", { type: "button", className: "bf-lmodel__action", onClick: () => onCancel(row.ref), children: labels.localCancel })
     ] }),
-    removable && /* @__PURE__ */ jsxs34("div", { className: "bf-lmodel__more", children: [
-      /* @__PURE__ */ jsx38(
+    removable && /* @__PURE__ */ jsxs35("div", { className: "bf-lmodel__more", children: [
+      /* @__PURE__ */ jsx39(
         "button",
         {
           type: "button",
@@ -4798,7 +4845,7 @@ function LocalModelRow({ row, labels, active, failed, locale, onSelect, onDownlo
           children: "\u22EF"
         }
       ),
-      menuOpen && /* @__PURE__ */ jsx38(
+      menuOpen && /* @__PURE__ */ jsx39(
         "button",
         {
           type: "button",
@@ -4815,7 +4862,7 @@ function LocalModelRow({ row, labels, active, failed, locale, onSelect, onDownlo
 }
 
 // src/localModels/LocalModelList.tsx
-import { Fragment as Fragment12, jsx as jsx39, jsxs as jsxs35 } from "react/jsx-runtime";
+import { Fragment as Fragment12, jsx as jsx40, jsxs as jsxs36 } from "react/jsx-runtime";
 var isHeld = (row, activeRef) => row.state === "ready" || row.state === "downloading" || row.downloaded === true || row.ref === activeRef;
 function LocalModelList({ state, labels, activeRef, locale, hideHeading, onSelect }) {
   const { rows } = state;
@@ -4828,7 +4875,7 @@ function LocalModelList({ state, labels, activeRef, locale, hideHeading, onSelec
     [rows, activeRef]
   );
   if (!rows || rows.length === 0) return null;
-  const renderRows = (list) => /* @__PURE__ */ jsx39("ul", { className: "bf-lmodels__list", children: list.map((row) => /* @__PURE__ */ jsx39(
+  const renderRows = (list) => /* @__PURE__ */ jsx40("ul", { className: "bf-lmodels__list", children: list.map((row) => /* @__PURE__ */ jsx40(
     LocalModelRow,
     {
       row,
@@ -4845,16 +4892,16 @@ function LocalModelList({ state, labels, activeRef, locale, hideHeading, onSelec
   )) });
   const nothingRuns = view.groups.length === 0 && view.more.length === 0;
   const firstHidden = view.hidden[0];
-  return /* @__PURE__ */ jsxs35("div", { className: "bf-lmodels", children: [
-    !hideHeading && /* @__PURE__ */ jsx39("div", { className: "bf-pmenu__group", children: labels.localCatalogHeading }),
-    nothingRuns && firstHidden && /* @__PURE__ */ jsx39("p", { className: "bf-lmodels__notice", children: unsupportedReason(firstHidden, labels) }),
-    /* @__PURE__ */ jsxs35("div", { className: "bf-lmodels__scroll", children: [
-      view.groups.map(({ group, rows: listed }) => /* @__PURE__ */ jsxs35("section", { className: "bf-lmodels__group", "aria-label": labels[LOCAL_PICKER_GROUP_LABEL[group]], children: [
-        /* @__PURE__ */ jsx39("div", { className: "bf-lmodels__heading", children: labels[LOCAL_PICKER_GROUP_LABEL[group]] }),
+  return /* @__PURE__ */ jsxs36("div", { className: "bf-lmodels", children: [
+    !hideHeading && /* @__PURE__ */ jsx40("div", { className: "bf-pmenu__group", children: labels.localCatalogHeading }),
+    nothingRuns && firstHidden && /* @__PURE__ */ jsx40("p", { className: "bf-lmodels__notice", children: unsupportedReason(firstHidden, labels) }),
+    /* @__PURE__ */ jsxs36("div", { className: "bf-lmodels__scroll", children: [
+      view.groups.map(({ group, rows: listed }) => /* @__PURE__ */ jsxs36("section", { className: "bf-lmodels__group", "aria-label": labels[LOCAL_PICKER_GROUP_LABEL[group]], children: [
+        /* @__PURE__ */ jsx40("div", { className: "bf-lmodels__heading", children: labels[LOCAL_PICKER_GROUP_LABEL[group]] }),
         renderRows(listed)
       ] }, group)),
-      view.more.length + view.hidden.length > 0 && /* @__PURE__ */ jsxs35(Fragment12, { children: [
-        /* @__PURE__ */ jsx39(
+      view.more.length + view.hidden.length > 0 && /* @__PURE__ */ jsxs36(Fragment12, { children: [
+        /* @__PURE__ */ jsx40(
           "button",
           {
             type: "button",
@@ -4962,7 +5009,7 @@ function useLocalModels(store) {
 }
 
 // src/promptOptions/ModelPane.tsx
-import { Fragment as Fragment13, jsx as jsx40, jsxs as jsxs36 } from "react/jsx-runtime";
+import { Fragment as Fragment13, jsx as jsx41, jsxs as jsxs37 } from "react/jsx-runtime";
 function ModelPane({ model, labels, identity, inUse, inferenceMode, onPicked }) {
   const [query, setQuery] = useState19("");
   const [filter, setFilter] = useState19("all");
@@ -4989,7 +5036,7 @@ function ModelPane({ model, labels, identity, inUse, inferenceMode, onPicked }) 
     onPicked();
   };
   const pickLocal = (ref) => pick2({ mode: "model", model: ref });
-  const renderItems = (rows) => rows.map((item) => /* @__PURE__ */ jsxs36(
+  const renderItems = (rows) => rows.map((item) => /* @__PURE__ */ jsxs37(
     "button",
     {
       type: "button",
@@ -4999,24 +5046,24 @@ function ModelPane({ model, labels, identity, inUse, inferenceMode, onPicked }) 
       title: item.title,
       onClick: () => pick2(item.selection),
       children: [
-        /* @__PURE__ */ jsx40("span", { className: "bf-pmenu__optName", children: item.label }),
-        /* @__PURE__ */ jsx40("span", { className: "bf-pmenu__optTag", children: modelCategoryLabel(item.category, labels) }),
-        item.detail ? /* @__PURE__ */ jsx40("span", { className: "bf-pmenu__optDetail", children: item.detail }) : null
+        /* @__PURE__ */ jsx41("span", { className: "bf-pmenu__optName", children: item.label }),
+        /* @__PURE__ */ jsx41("span", { className: "bf-pmenu__optTag", children: modelCategoryLabel(item.category, labels) }),
+        item.detail ? /* @__PURE__ */ jsx41("span", { className: "bf-pmenu__optDetail", children: item.detail }) : null
       ]
     },
     item.key
   ));
-  const localSection = /* @__PURE__ */ jsx40(LocalModelList, { state: local, labels, ...activeRef ? { activeRef } : {}, onSelect: pickLocal });
+  const localSection = /* @__PURE__ */ jsx41(LocalModelList, { state: local, labels, ...activeRef ? { activeRef } : {}, onSelect: pickLocal });
   const visible = filterModelItems(items, labels, query, filter);
   const listed = filter === "local" ? visible.filter((item) => !storeKeys.has(item.key)) : visible;
   const lockedLocal = items.filter((item) => item.category === "auto" ? model.selection.mode !== "auto" : item.category === "local" && !storeKeys.has(item.key));
-  return /* @__PURE__ */ jsxs36(Fragment13, { children: [
-    inUse && /* @__PURE__ */ jsx40("div", { className: "bf-pmenu__info", children: /* @__PURE__ */ jsxs36("span", { className: "bf-pmenu__lbl", children: [
+  return /* @__PURE__ */ jsxs37(Fragment13, { children: [
+    inUse && /* @__PURE__ */ jsx41("div", { className: "bf-pmenu__info", children: /* @__PURE__ */ jsxs37("span", { className: "bf-pmenu__lbl", children: [
       labels.modelInUse,
-      /* @__PURE__ */ jsx40("span", { className: "bf-pmenu__desc", children: inUse.name })
+      /* @__PURE__ */ jsx41("span", { className: "bf-pmenu__desc", children: inUse.name })
     ] }) }),
-    identity.canChoose ? /* @__PURE__ */ jsxs36(Fragment13, { children: [
-      /* @__PURE__ */ jsx40(
+    identity.canChoose ? /* @__PURE__ */ jsxs37(Fragment13, { children: [
+      /* @__PURE__ */ jsx41(
         "input",
         {
           className: "bf-pmenu__search",
@@ -5026,7 +5073,7 @@ function ModelPane({ model, labels, identity, inUse, inferenceMode, onPicked }) 
           "aria-label": labels.searchModels
         }
       ),
-      /* @__PURE__ */ jsx40("div", { className: "bf-pmenu__filters", "aria-label": labels.filterModels, children: ["all", ...categories].map((category) => /* @__PURE__ */ jsx40(
+      /* @__PURE__ */ jsx41("div", { className: "bf-pmenu__filters", "aria-label": labels.filterModels, children: ["all", ...categories].map((category) => /* @__PURE__ */ jsx41(
         "button",
         {
           type: "button",
@@ -5037,14 +5084,14 @@ function ModelPane({ model, labels, identity, inUse, inferenceMode, onPicked }) 
         },
         category
       )) }),
-      /* @__PURE__ */ jsxs36("div", { className: "bf-pmenu__list", role: "listbox", "aria-label": labels.chooseModel, children: [
+      /* @__PURE__ */ jsxs37("div", { className: "bf-pmenu__list", role: "listbox", "aria-label": labels.chooseModel, children: [
         renderItems(listed),
-        !listed.length && filter !== "local" && /* @__PURE__ */ jsx40("div", { className: "bf-pmenu__empty", children: labels.noModels })
+        !listed.length && filter !== "local" && /* @__PURE__ */ jsx41("div", { className: "bf-pmenu__empty", children: labels.noModels })
       ] }),
       filter === "local" && localSection
-    ] }) : /* @__PURE__ */ jsxs36(Fragment13, { children: [
-      !model.identityPending && /* @__PURE__ */ jsx40("div", { className: "bf-pmenu__info", children: /* @__PURE__ */ jsx40("span", { className: "bf-pmenu__desc", children: labels.modelLocked }) }),
-      lockedLocal.length > 0 && /* @__PURE__ */ jsx40("div", { className: "bf-pmenu__list", role: "listbox", "aria-label": labels.chooseModel, children: renderItems(lockedLocal) }),
+    ] }) : /* @__PURE__ */ jsxs37(Fragment13, { children: [
+      !model.identityPending && /* @__PURE__ */ jsx41("div", { className: "bf-pmenu__info", children: /* @__PURE__ */ jsx41("span", { className: "bf-pmenu__desc", children: labels.modelLocked }) }),
+      lockedLocal.length > 0 && /* @__PURE__ */ jsx41("div", { className: "bf-pmenu__list", role: "listbox", "aria-label": labels.chooseModel, children: renderItems(lockedLocal) }),
       localSection
     ] })
   ] });
@@ -5091,16 +5138,16 @@ function useRovingRadioGroup(count, checkedIndex) {
 }
 
 // src/inferenceMode/InferenceModeControl.tsx
-import { jsx as jsx41, jsxs as jsxs37 } from "react/jsx-runtime";
+import { jsx as jsx42, jsxs as jsxs38 } from "react/jsx-runtime";
 function InferenceModeControl({ inferenceMode, labels, onPicked }) {
   const { itemProps } = useRovingRadioGroup(INFERENCE_MODES.length, inferenceMode ? INFERENCE_MODES.indexOf(inferenceMode.value) : -1);
   if (!inferenceMode) return null;
-  return /* @__PURE__ */ jsxs37("div", { className: "bf-imode", role: "radiogroup", "aria-label": labels.inferenceMode, children: [
-    /* @__PURE__ */ jsx41("div", { className: "bf-pmenu__group", "aria-hidden": "true", children: labels.inferenceMode }),
+  return /* @__PURE__ */ jsxs38("div", { className: "bf-imode", role: "radiogroup", "aria-label": labels.inferenceMode, children: [
+    /* @__PURE__ */ jsx42("div", { className: "bf-pmenu__group", "aria-hidden": "true", children: labels.inferenceMode }),
     INFERENCE_MODES.map((mode, index) => {
       const { name, hint } = inferenceModeCopy(mode, labels);
       const active = mode === inferenceMode.value;
-      return /* @__PURE__ */ jsxs37(
+      return /* @__PURE__ */ jsxs38(
         "button",
         {
           ...itemProps(index),
@@ -5113,12 +5160,12 @@ function InferenceModeControl({ inferenceMode, labels, onPicked }) {
             onPicked?.();
           },
           children: [
-            /* @__PURE__ */ jsxs37("span", { className: "bf-pmenu__lbl", children: [
+            /* @__PURE__ */ jsxs38("span", { className: "bf-pmenu__lbl", children: [
               name,
-              mode === "hybrid" && /* @__PURE__ */ jsx41("span", { className: "bf-imode__tag", children: labels.inferenceModeRecommended }),
-              /* @__PURE__ */ jsx41("span", { className: "bf-pmenu__desc", children: hint })
+              mode === "hybrid" && /* @__PURE__ */ jsx42("span", { className: "bf-imode__tag", children: labels.inferenceModeRecommended }),
+              /* @__PURE__ */ jsx42("span", { className: "bf-pmenu__desc", children: hint })
             ] }),
-            /* @__PURE__ */ jsx41("span", { className: "bf-pmenu__check", "aria-hidden": "true", children: active ? "\u2713" : "" })
+            /* @__PURE__ */ jsx42("span", { className: "bf-pmenu__check", "aria-hidden": "true", children: active ? "\u2713" : "" })
           ]
         },
         mode
@@ -5128,15 +5175,15 @@ function InferenceModeControl({ inferenceMode, labels, onPicked }) {
 }
 
 // src/promptOptions/ActionsPane.tsx
-import { Fragment as Fragment14, jsx as jsx42, jsxs as jsxs38 } from "react/jsx-runtime";
+import { Fragment as Fragment14, jsx as jsx43, jsxs as jsxs39 } from "react/jsx-runtime";
 function ActionsPane({ commands, labels, close }) {
   const { entries, unknown } = commands.help;
-  return /* @__PURE__ */ jsxs38(Fragment14, { children: [
-    unknown !== void 0 && /* @__PURE__ */ jsx42("div", { className: "bf-pmenu__info", role: "status", children: labels.noSuchCommand.replace("{name}", unknown) }),
-    entries.length === 0 && /* @__PURE__ */ jsx42("div", { className: "bf-pmenu__empty", children: labels.actionsEmpty }),
+  return /* @__PURE__ */ jsxs39(Fragment14, { children: [
+    unknown !== void 0 && /* @__PURE__ */ jsx43("div", { className: "bf-pmenu__info", role: "status", children: labels.noSuchCommand.replace("{name}", unknown) }),
+    entries.length === 0 && /* @__PURE__ */ jsx43("div", { className: "bf-pmenu__empty", children: labels.actionsEmpty }),
     entries.map((entry) => {
       const unavailable = entry.availability.ok ? void 0 : entry.availability.reason;
-      return /* @__PURE__ */ jsxs38(
+      return /* @__PURE__ */ jsxs39(
         "button",
         {
           type: "button",
@@ -5150,13 +5197,13 @@ function ActionsPane({ commands, labels, close }) {
             close?.();
           },
           children: [
-            /* @__PURE__ */ jsx42("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: "/" }),
-            /* @__PURE__ */ jsxs38("span", { className: "bf-pmenu__lbl", children: [
-              /* @__PURE__ */ jsx42("code", { children: entry.syntax }),
-              /* @__PURE__ */ jsx42("span", { className: "bf-pmenu__desc", children: entry.description }),
-              /* @__PURE__ */ jsx42("span", { className: "bf-pmenu__desc", children: unavailable ?? /* @__PURE__ */ jsx42("code", { children: entry.example }) })
+            /* @__PURE__ */ jsx43("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: "/" }),
+            /* @__PURE__ */ jsxs39("span", { className: "bf-pmenu__lbl", children: [
+              /* @__PURE__ */ jsx43("code", { children: entry.syntax }),
+              /* @__PURE__ */ jsx43("span", { className: "bf-pmenu__desc", children: entry.description }),
+              /* @__PURE__ */ jsx43("span", { className: "bf-pmenu__desc", children: unavailable ?? /* @__PURE__ */ jsx43("code", { children: entry.example }) })
             ] }),
-            unavailable !== void 0 && /* @__PURE__ */ jsx42("span", { className: "bf-pmenu__hint", children: labels.commandUnavailable })
+            unavailable !== void 0 && /* @__PURE__ */ jsx43("span", { className: "bf-pmenu__hint", children: labels.commandUnavailable })
           ]
         },
         entry.id
@@ -5166,7 +5213,7 @@ function ActionsPane({ commands, labels, close }) {
 }
 
 // src/promptOptions/PromptOptionsMenu.tsx
-import { Fragment as Fragment15, jsx as jsx43, jsxs as jsxs39 } from "react/jsx-runtime";
+import { Fragment as Fragment15, jsx as jsx44, jsxs as jsxs40 } from "react/jsx-runtime";
 var EFFORT_LEVELS = ["quick", "balanced", "thorough"];
 var EFFORT_ICON = { quick: "\u{1F3C3}", balanced: "\u2696\uFE0F", thorough: "\u{1F3AF}" };
 var EFFORT_LABEL = {
@@ -5235,8 +5282,8 @@ function PromptOptionsMenu({
   if (hasStatusTab) tabs.push({ id: "status", label: labels.status ?? "Status" });
   if (spend) tabs.push({ id: "spend", label: spend.label });
   const activeTab = tabs.some((entry) => entry.id === tab) ? tab : tabs[0].id;
-  return /* @__PURE__ */ jsxs39("div", { ref: rootRef, className: ["bf-pmenu", className].filter(Boolean).join(" "), children: [
-    /* @__PURE__ */ jsxs39(
+  return /* @__PURE__ */ jsxs40("div", { ref: rootRef, className: ["bf-pmenu", className].filter(Boolean).join(" "), children: [
+    /* @__PURE__ */ jsxs40(
       "button",
       {
         type: "button",
@@ -5248,17 +5295,17 @@ function PromptOptionsMenu({
         "aria-expanded": open,
         onClick: toggle,
         children: [
-          /* @__PURE__ */ jsx43("span", { className: "bf-pmenu__slash", "aria-hidden": "true", children: "/" }),
-          activeMode && /* @__PURE__ */ jsxs39("span", { className: "bf-pmenu__mode", children: [
-            activeMode.icon && /* @__PURE__ */ jsx43("span", { "aria-hidden": "true", children: activeMode.icon }),
+          /* @__PURE__ */ jsx44("span", { className: "bf-pmenu__slash", "aria-hidden": "true", children: "/" }),
+          activeMode && /* @__PURE__ */ jsxs40("span", { className: "bf-pmenu__mode", children: [
+            activeMode.icon && /* @__PURE__ */ jsx44("span", { "aria-hidden": "true", children: activeMode.icon }),
             activeMode.label
           ] }),
-          inUse && /* @__PURE__ */ jsx43("span", { className: "bf-pmenu__model", children: inUse.name })
+          inUse && /* @__PURE__ */ jsx44("span", { className: "bf-pmenu__model", children: inUse.name })
         ]
       }
     ),
-    open && /* @__PURE__ */ jsxs39("div", { className: "bf-pmenu__pop bf-pmenu__pop--tabs", role: "dialog", "aria-label": labels.options, children: [
-      /* @__PURE__ */ jsx43("div", { className: "bf-pmenu__tabs", role: "tablist", "aria-label": labels.options, children: tabs.map((entry) => /* @__PURE__ */ jsx43(
+    open && /* @__PURE__ */ jsxs40("div", { className: "bf-pmenu__pop bf-pmenu__pop--tabs", role: "dialog", "aria-label": labels.options, children: [
+      /* @__PURE__ */ jsx44("div", { className: "bf-pmenu__tabs", role: "tablist", "aria-label": labels.options, children: tabs.map((entry) => /* @__PURE__ */ jsx44(
         "button",
         {
           type: "button",
@@ -5272,7 +5319,7 @@ function PromptOptionsMenu({
         },
         entry.id
       )) }),
-      /* @__PURE__ */ jsxs39(
+      /* @__PURE__ */ jsxs40(
         "div",
         {
           className: "bf-pmenu__pane",
@@ -5280,9 +5327,9 @@ function PromptOptionsMenu({
           id: `bf-pmenu-pane-${activeTab}`,
           "aria-labelledby": `bf-pmenu-tab-${activeTab}`,
           children: [
-            activeTab === "mode" && /* @__PURE__ */ jsx43(ModePane, { labels, mode, memory, autoMode, session, close }),
-            activeTab === "effort" && /* @__PURE__ */ jsxs39(Fragment15, { children: [
-              onEffortChange && EFFORT_LEVELS.map((level) => /* @__PURE__ */ jsxs39(
+            activeTab === "mode" && /* @__PURE__ */ jsx44(ModePane, { labels, mode, memory, autoMode, session, close }),
+            activeTab === "effort" && /* @__PURE__ */ jsxs40(Fragment15, { children: [
+              onEffortChange && EFFORT_LEVELS.map((level) => /* @__PURE__ */ jsxs40(
                 "button",
                 {
                   type: "button",
@@ -5291,19 +5338,19 @@ function PromptOptionsMenu({
                   className: `bf-pmenu__item${effort === level ? " is-active" : ""}`,
                   onClick: () => onEffortChange(level),
                   children: [
-                    /* @__PURE__ */ jsx43("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: EFFORT_ICON[level] }),
-                    /* @__PURE__ */ jsxs39("span", { className: "bf-pmenu__lbl", children: [
+                    /* @__PURE__ */ jsx44("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: EFFORT_ICON[level] }),
+                    /* @__PURE__ */ jsxs40("span", { className: "bf-pmenu__lbl", children: [
                       labels[EFFORT_LABEL[level]],
-                      describeEffort && /* @__PURE__ */ jsx43("span", { className: "bf-pmenu__desc", children: describeEffort(level) })
+                      describeEffort && /* @__PURE__ */ jsx44("span", { className: "bf-pmenu__desc", children: describeEffort(level) })
                     ] }),
-                    /* @__PURE__ */ jsx43("span", { className: "bf-pmenu__check", "aria-hidden": "true", children: effort === level ? "\u2713" : "" })
+                    /* @__PURE__ */ jsx44("span", { className: "bf-pmenu__check", "aria-hidden": "true", children: effort === level ? "\u2713" : "" })
                   ]
                 },
                 level
               )),
-              onThinkingChange && /* @__PURE__ */ jsxs39(Fragment15, { children: [
-                onEffortChange && /* @__PURE__ */ jsx43("div", { className: "bf-pmenu__sep" }),
-                /* @__PURE__ */ jsxs39(
+              onThinkingChange && /* @__PURE__ */ jsxs40(Fragment15, { children: [
+                onEffortChange && /* @__PURE__ */ jsx44("div", { className: "bf-pmenu__sep" }),
+                /* @__PURE__ */ jsxs40(
                   "button",
                   {
                     type: "button",
@@ -5312,27 +5359,27 @@ function PromptOptionsMenu({
                     className: `bf-pmenu__item${thinking ? " is-active" : ""}`,
                     onClick: () => onThinkingChange(!thinking),
                     children: [
-                      /* @__PURE__ */ jsx43("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: "\u{1F4AD}" }),
-                      /* @__PURE__ */ jsxs39("span", { className: "bf-pmenu__lbl", children: [
+                      /* @__PURE__ */ jsx44("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: "\u{1F4AD}" }),
+                      /* @__PURE__ */ jsxs40("span", { className: "bf-pmenu__lbl", children: [
                         labels.thinking,
-                        describeThinking && /* @__PURE__ */ jsx43("span", { className: "bf-pmenu__desc", children: describeThinking(!!thinking) })
+                        describeThinking && /* @__PURE__ */ jsx44("span", { className: "bf-pmenu__desc", children: describeThinking(!!thinking) })
                       ] }),
-                      /* @__PURE__ */ jsx43("span", { className: "bf-pmenu__hint", children: thinking ? labels.on : labels.off }),
-                      /* @__PURE__ */ jsx43("span", { className: "bf-pmenu__check", "aria-hidden": "true", children: thinking ? "\u2713" : "" })
+                      /* @__PURE__ */ jsx44("span", { className: "bf-pmenu__hint", children: thinking ? labels.on : labels.off }),
+                      /* @__PURE__ */ jsx44("span", { className: "bf-pmenu__check", "aria-hidden": "true", children: thinking ? "\u2713" : "" })
                     ]
                   }
                 )
               ] })
             ] }),
-            activeTab === "model" && /* @__PURE__ */ jsxs39(Fragment15, { children: [
-              /* @__PURE__ */ jsx43(InferenceModeControl, { inferenceMode, labels, onPicked: close }),
-              inferenceMode && model && /* @__PURE__ */ jsx43("div", { className: "bf-pmenu__sep" }),
-              model && /* @__PURE__ */ jsx43(ModelPane, { model, labels, identity, inUse, ...inferenceMode ? { inferenceMode } : {}, onPicked: close })
+            activeTab === "model" && /* @__PURE__ */ jsxs40(Fragment15, { children: [
+              /* @__PURE__ */ jsx44(InferenceModeControl, { inferenceMode, labels, onPicked: close }),
+              inferenceMode && model && /* @__PURE__ */ jsx44("div", { className: "bf-pmenu__sep" }),
+              model && /* @__PURE__ */ jsx44(ModelPane, { model, labels, identity, inUse, ...inferenceMode ? { inferenceMode } : {}, onPicked: close })
             ] }),
-            activeTab === "actions" && commands && /* @__PURE__ */ jsx43(ActionsPane, { commands, labels, close }),
-            activeTab === "status" && /* @__PURE__ */ jsxs39("div", { className: "bf-pmenu__status", children: [
+            activeTab === "actions" && commands && /* @__PURE__ */ jsx44(ActionsPane, { commands, labels, close }),
+            activeTab === "status" && /* @__PURE__ */ jsxs40("div", { className: "bf-pmenu__status", children: [
               status,
-              onAccountSettings && /* @__PURE__ */ jsxs39(
+              onAccountSettings && /* @__PURE__ */ jsxs40(
                 "button",
                 {
                   type: "button",
@@ -5342,13 +5389,13 @@ function PromptOptionsMenu({
                     onAccountSettings();
                   },
                   children: [
-                    /* @__PURE__ */ jsx43("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: "\u2699\uFE0F" }),
-                    /* @__PURE__ */ jsx43("span", { className: "bf-pmenu__lbl", children: labels.accountSettings })
+                    /* @__PURE__ */ jsx44("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: "\u2699\uFE0F" }),
+                    /* @__PURE__ */ jsx44("span", { className: "bf-pmenu__lbl", children: labels.accountSettings })
                   ]
                 }
               )
             ] }),
-            activeTab === "spend" && spend && /* @__PURE__ */ jsx43("div", { className: "bf-pmenu__status", children: spend.content })
+            activeTab === "spend" && spend && /* @__PURE__ */ jsx44("div", { className: "bf-pmenu__status", children: spend.content })
           ]
         }
       )
@@ -5379,7 +5426,7 @@ function useComposerMenuRequest(composerId) {
 
 // src/inferenceMode/InferenceModeFirstRun.tsx
 import { useEffect as useEffect13, useId, useRef as useRef18 } from "react";
-import { jsx as jsx44, jsxs as jsxs40 } from "react/jsx-runtime";
+import { jsx as jsx45, jsxs as jsxs41 } from "react/jsx-runtime";
 var ASKED = ["hybrid", "local-only"];
 function InferenceModeFirstRun({ labels, onChoose }) {
   const titleId = useId();
@@ -5390,12 +5437,12 @@ function InferenceModeFirstRun({ labels, onChoose }) {
     first.current?.focus();
     if (region.current) region.current.textContent = announcement;
   }, [announcement]);
-  return /* @__PURE__ */ jsxs40("div", { className: "bf-imode-ask", role: "group", "aria-labelledby": titleId, children: [
-    /* @__PURE__ */ jsx44("div", { ref: region, className: "bf-imode-ask__announce", role: "status", "aria-live": "polite" }),
-    /* @__PURE__ */ jsx44("div", { className: "bf-imode-ask__title", id: titleId, children: labels.inferenceModeAskTitle }),
-    /* @__PURE__ */ jsx44("div", { className: "bf-imode-ask__choices", children: ASKED.map((mode, index) => {
+  return /* @__PURE__ */ jsxs41("div", { className: "bf-imode-ask", role: "group", "aria-labelledby": titleId, children: [
+    /* @__PURE__ */ jsx45("div", { ref: region, className: "bf-imode-ask__announce", role: "status", "aria-live": "polite" }),
+    /* @__PURE__ */ jsx45("div", { className: "bf-imode-ask__title", id: titleId, children: labels.inferenceModeAskTitle }),
+    /* @__PURE__ */ jsx45("div", { className: "bf-imode-ask__choices", children: ASKED.map((mode, index) => {
       const { name, hint } = inferenceModeCopy(mode, labels);
-      return /* @__PURE__ */ jsxs40(
+      return /* @__PURE__ */ jsxs41(
         "button",
         {
           ref: index === 0 ? first : void 0,
@@ -5403,17 +5450,17 @@ function InferenceModeFirstRun({ labels, onChoose }) {
           className: `bf-imode-ask__choice${mode === "hybrid" ? " is-recommended" : ""}`,
           onClick: () => onChoose(mode),
           children: [
-            /* @__PURE__ */ jsxs40("span", { className: "bf-imode-ask__name", children: [
+            /* @__PURE__ */ jsxs41("span", { className: "bf-imode-ask__name", children: [
               name,
-              mode === "hybrid" && /* @__PURE__ */ jsx44("span", { className: "bf-imode__tag", children: labels.inferenceModeRecommended })
+              mode === "hybrid" && /* @__PURE__ */ jsx45("span", { className: "bf-imode__tag", children: labels.inferenceModeRecommended })
             ] }),
-            /* @__PURE__ */ jsx44("span", { className: "bf-imode-ask__hint", children: hint })
+            /* @__PURE__ */ jsx45("span", { className: "bf-imode-ask__hint", children: hint })
           ]
         },
         mode
       );
     }) }),
-    /* @__PURE__ */ jsx44("div", { className: "bf-imode-ask__body", children: labels.inferenceModeAskBody })
+    /* @__PURE__ */ jsx45("div", { className: "bf-imode-ask__body", children: labels.inferenceModeAskBody })
   ] });
 }
 
@@ -5506,7 +5553,7 @@ import {
 } from "@seanhogg/builderforce-brain-embedded";
 
 // src/picker/PickerShell.tsx
-import { jsx as jsx45, jsxs as jsxs41 } from "react/jsx-runtime";
+import { jsx as jsx46, jsxs as jsxs42 } from "react/jsx-runtime";
 function PickerShell({
   eyebrow,
   leading,
@@ -5517,10 +5564,10 @@ function PickerShell({
   children
 }) {
   const { open, toggle, close, rootRef } = usePopover();
-  return /* @__PURE__ */ jsxs41("div", { ref: rootRef, className: `bf-picker${active ? " is-active" : ""}${open ? " is-open" : ""}`, children: [
-    /* @__PURE__ */ jsx45("span", { className: "bf-picker__eyebrow", "aria-hidden": "true", children: eyebrow }),
-    leading != null && /* @__PURE__ */ jsx45("span", { className: "bf-picker__lead", children: leading }),
-    /* @__PURE__ */ jsxs41(
+  return /* @__PURE__ */ jsxs42("div", { ref: rootRef, className: `bf-picker${active ? " is-active" : ""}${open ? " is-open" : ""}`, children: [
+    /* @__PURE__ */ jsx46("span", { className: "bf-picker__eyebrow", "aria-hidden": "true", children: eyebrow }),
+    leading != null && /* @__PURE__ */ jsx46("span", { className: "bf-picker__lead", children: leading }),
+    /* @__PURE__ */ jsxs42(
       "button",
       {
         type: "button",
@@ -5532,16 +5579,16 @@ function PickerShell({
         "aria-expanded": open,
         onClick: toggle,
         children: [
-          /* @__PURE__ */ jsx45("span", { className: "bf-picker__name", children: name }),
-          /* @__PURE__ */ jsx45("span", { className: "bf-picker__caret", "aria-hidden": "true", children: "\u25BE" })
+          /* @__PURE__ */ jsx46("span", { className: "bf-picker__name", children: name }),
+          /* @__PURE__ */ jsx46("span", { className: "bf-picker__caret", "aria-hidden": "true", children: "\u25BE" })
         ]
       }
     ),
-    open && /* @__PURE__ */ jsx45("div", { className: "bf-pmenu__pop", role: "menu", "aria-label": title, children: children(close) })
+    open && /* @__PURE__ */ jsx46("div", { className: "bf-pmenu__pop", role: "menu", "aria-label": title, children: children(close) })
   ] });
 }
 function PickerItem({ icon, label, hint, active = false, onClick }) {
-  return /* @__PURE__ */ jsxs41(
+  return /* @__PURE__ */ jsxs42(
     "button",
     {
       type: "button",
@@ -5550,18 +5597,18 @@ function PickerItem({ icon, label, hint, active = false, onClick }) {
       className: `bf-pmenu__item${active ? " is-active" : ""}`,
       onClick,
       children: [
-        /* @__PURE__ */ jsx45("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: icon }),
-        /* @__PURE__ */ jsx45("span", { className: "bf-pmenu__lbl", children: label }),
-        hint != null && /* @__PURE__ */ jsx45("span", { className: "bf-pmenu__hint", children: hint }),
-        /* @__PURE__ */ jsx45("span", { className: "bf-pmenu__check", "aria-hidden": "true", children: active ? "\u2713" : "" })
+        /* @__PURE__ */ jsx46("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: icon }),
+        /* @__PURE__ */ jsx46("span", { className: "bf-pmenu__lbl", children: label }),
+        hint != null && /* @__PURE__ */ jsx46("span", { className: "bf-pmenu__hint", children: hint }),
+        /* @__PURE__ */ jsx46("span", { className: "bf-pmenu__check", "aria-hidden": "true", children: active ? "\u2713" : "" })
       ]
     }
   );
 }
-var IconBolt = () => /* @__PURE__ */ jsx45("svg", { width: "13", height: "13", viewBox: "0 0 16 16", fill: "currentColor", "aria-hidden": "true", children: /* @__PURE__ */ jsx45("path", { d: "M9.2 1 3.4 8.6h3.4L6 15l6.2-8.1H8.6L9.2 1z" }) });
+var IconBolt = () => /* @__PURE__ */ jsx46("svg", { width: "13", height: "13", viewBox: "0 0 16 16", fill: "currentColor", "aria-hidden": "true", children: /* @__PURE__ */ jsx46("path", { d: "M9.2 1 3.4 8.6h3.4L6 15l6.2-8.1H8.6L9.2 1z" }) });
 
 // src/recipient/RecipientPicker.tsx
-import { Fragment as Fragment16, jsx as jsx46, jsxs as jsxs42 } from "react/jsx-runtime";
+import { Fragment as Fragment16, jsx as jsx47, jsxs as jsxs43 } from "react/jsx-runtime";
 var DEFAULT_RECIPIENT_PICKER_LABELS = {
   to: "To",
   title: "Send to",
@@ -5573,8 +5620,8 @@ var DEFAULT_RECIPIENT_PICKER_LABELS = {
 function RecipientPicker({ participants, recipient, onChoose, labels, disabled, renderAvatar }) {
   if (participants.length === 0) return null;
   const l = { ...DEFAULT_RECIPIENT_PICKER_LABELS, ...labels };
-  const avatar = recipient ? /* @__PURE__ */ jsx46(Avatar, { name: recipient.name, kind: recipient.kind, size: 16 }) : /* @__PURE__ */ jsx46(IconBolt, {});
-  return /* @__PURE__ */ jsx46(
+  const avatar = recipient ? /* @__PURE__ */ jsx47(Avatar, { name: recipient.name, kind: recipient.kind, size: 16 }) : /* @__PURE__ */ jsx47(IconBolt, {});
+  return /* @__PURE__ */ jsx47(
     PickerShell,
     {
       eyebrow: l.to,
@@ -5583,12 +5630,12 @@ function RecipientPicker({ participants, recipient, onChoose, labels, disabled, 
       title: l.title,
       active: recipient != null,
       disabled,
-      children: (close) => /* @__PURE__ */ jsxs42(Fragment16, { children: [
-        /* @__PURE__ */ jsx46("div", { className: "bf-pmenu__group", children: l.title }),
-        /* @__PURE__ */ jsx46(
+      children: (close) => /* @__PURE__ */ jsxs43(Fragment16, { children: [
+        /* @__PURE__ */ jsx47("div", { className: "bf-pmenu__group", children: l.title }),
+        /* @__PURE__ */ jsx47(
           PickerItem,
           {
-            icon: /* @__PURE__ */ jsx46(IconBolt, {}),
+            icon: /* @__PURE__ */ jsx47(IconBolt, {}),
             label: l.brain,
             hint: l.brainHint,
             active: recipient == null,
@@ -5598,10 +5645,10 @@ function RecipientPicker({ participants, recipient, onChoose, labels, disabled, 
             }
           }
         ),
-        participants.map((p) => /* @__PURE__ */ jsx46(
+        participants.map((p) => /* @__PURE__ */ jsx47(
           PickerItem,
           {
-            icon: /* @__PURE__ */ jsx46(Avatar, { name: p.name, kind: p.kind, size: 16 }),
+            icon: /* @__PURE__ */ jsx47(Avatar, { name: p.name, kind: p.kind, size: 16 }),
             label: p.name,
             hint: p.kind === "agent" ? l.agentHint : l.humanHint,
             active: recipient?.kind === p.kind && recipient.ref === p.ref,
@@ -5657,7 +5704,7 @@ import {
   modalityPersonaChoice,
   personaAgentOf
 } from "@seanhogg/builderforce-brain-embedded";
-import { Fragment as Fragment17, jsx as jsx47, jsxs as jsxs43 } from "react/jsx-runtime";
+import { Fragment as Fragment17, jsx as jsx48, jsxs as jsxs44 } from "react/jsx-runtime";
 var DEFAULT_PERSONA_PICKER_LABELS = {
   actingAs: "Acting as",
   title: "Brain agent or persona",
@@ -5670,8 +5717,8 @@ function PersonaPicker({ value, onChange, modalities, agents, labels, disabled, 
   const l = { ...DEFAULT_PERSONA_PICKER_LABELS, ...labels };
   const modality = modalities.find((m) => modalityPersonaChoice(m.id) === value);
   const agent = personaAgentOf(value, agents);
-  const leading = agent ? /* @__PURE__ */ jsx47(Avatar, { name: agent.name, kind: "agent", size: 16 }) : modality?.icon ? /* @__PURE__ */ jsx47("span", { "aria-hidden": "true", children: modality.icon }) : /* @__PURE__ */ jsx47(IconBolt, {});
-  return /* @__PURE__ */ jsx47(
+  const leading = agent ? /* @__PURE__ */ jsx48(Avatar, { name: agent.name, kind: "agent", size: 16 }) : modality?.icon ? /* @__PURE__ */ jsx48("span", { "aria-hidden": "true", children: modality.icon }) : /* @__PURE__ */ jsx48(IconBolt, {});
+  return /* @__PURE__ */ jsx48(
     PickerShell,
     {
       eyebrow: l.actingAs,
@@ -5685,12 +5732,12 @@ function PersonaPicker({ value, onChange, modalities, agents, labels, disabled, 
           onChange(next);
           close();
         };
-        return /* @__PURE__ */ jsxs43(Fragment17, { children: [
-          /* @__PURE__ */ jsx47(PickerItem, { icon: /* @__PURE__ */ jsx47(IconBolt, {}), label: l.defaultBrain, active: !modality && !agent, onClick: () => pick2(DEFAULT_PERSONA) }),
-          modalities.length > 0 && /* @__PURE__ */ jsxs43(Fragment17, { children: [
-            /* @__PURE__ */ jsx47("div", { className: "bf-pmenu__sep" }),
-            /* @__PURE__ */ jsx47("div", { className: "bf-pmenu__group", children: l.personas }),
-            modalities.map((m) => /* @__PURE__ */ jsx47(
+        return /* @__PURE__ */ jsxs44(Fragment17, { children: [
+          /* @__PURE__ */ jsx48(PickerItem, { icon: /* @__PURE__ */ jsx48(IconBolt, {}), label: l.defaultBrain, active: !modality && !agent, onClick: () => pick2(DEFAULT_PERSONA) }),
+          modalities.length > 0 && /* @__PURE__ */ jsxs44(Fragment17, { children: [
+            /* @__PURE__ */ jsx48("div", { className: "bf-pmenu__sep" }),
+            /* @__PURE__ */ jsx48("div", { className: "bf-pmenu__group", children: l.personas }),
+            modalities.map((m) => /* @__PURE__ */ jsx48(
               PickerItem,
               {
                 icon: m.icon ?? "",
@@ -5701,13 +5748,13 @@ function PersonaPicker({ value, onChange, modalities, agents, labels, disabled, 
               m.id
             ))
           ] }),
-          agents.length > 0 && /* @__PURE__ */ jsxs43(Fragment17, { children: [
-            /* @__PURE__ */ jsx47("div", { className: "bf-pmenu__sep" }),
-            /* @__PURE__ */ jsx47("div", { className: "bf-pmenu__group", children: l.assignedAgents }),
-            agents.map((a) => /* @__PURE__ */ jsx47(
+          agents.length > 0 && /* @__PURE__ */ jsxs44(Fragment17, { children: [
+            /* @__PURE__ */ jsx48("div", { className: "bf-pmenu__sep" }),
+            /* @__PURE__ */ jsx48("div", { className: "bf-pmenu__group", children: l.assignedAgents }),
+            agents.map((a) => /* @__PURE__ */ jsx48(
               PickerItem,
               {
-                icon: /* @__PURE__ */ jsx47(Avatar, { name: a.name, kind: "agent", size: 16 }),
+                icon: /* @__PURE__ */ jsx48(Avatar, { name: a.name, kind: "agent", size: 16 }),
                 label: a.name,
                 active: agent != null && agentPersonaChoice(agent) === agentPersonaChoice(a),
                 onClick: () => pick2(agentPersonaChoice(a))
@@ -5722,7 +5769,7 @@ function PersonaPicker({ value, onChange, modalities, agents, labels, disabled, 
 }
 
 // src/HealthRing.tsx
-import { jsx as jsx48, jsxs as jsxs44 } from "react/jsx-runtime";
+import { jsx as jsx49, jsxs as jsxs45 } from "react/jsx-runtime";
 function healthRingColor(percent, muted = false) {
   if (muted) return "var(--bf-health-muted, #9ca3af)";
   if (percent >= 100) return "var(--bf-health-done, #16a34a)";
@@ -5738,9 +5785,9 @@ function HealthRing({ percent, size = 40, stroke = 4, caption, muted = false, ar
   const dash = pct / 100 * c;
   const color = healthRingColor(pct, muted);
   const label = ariaLabel ?? `${pct}% complete`;
-  return /* @__PURE__ */ jsxs44("span", { className: "bf-health-ring", style: { display: "inline-flex", flexDirection: "column", alignItems: "center", gap: 2 }, children: [
-    /* @__PURE__ */ jsxs44("svg", { width: size, height: size, viewBox: `0 0 ${size} ${size}`, role: "img", "aria-label": label, children: [
-      /* @__PURE__ */ jsx48(
+  return /* @__PURE__ */ jsxs45("span", { className: "bf-health-ring", style: { display: "inline-flex", flexDirection: "column", alignItems: "center", gap: 2 }, children: [
+    /* @__PURE__ */ jsxs45("svg", { width: size, height: size, viewBox: `0 0 ${size} ${size}`, role: "img", "aria-label": label, children: [
+      /* @__PURE__ */ jsx49(
         "circle",
         {
           cx: size / 2,
@@ -5751,7 +5798,7 @@ function HealthRing({ percent, size = 40, stroke = 4, caption, muted = false, ar
           strokeWidth: stroke
         }
       ),
-      /* @__PURE__ */ jsx48(
+      /* @__PURE__ */ jsx49(
         "circle",
         {
           cx: size / 2,
@@ -5765,7 +5812,7 @@ function HealthRing({ percent, size = 40, stroke = 4, caption, muted = false, ar
           transform: `rotate(-90 ${size / 2} ${size / 2})`
         }
       ),
-      /* @__PURE__ */ jsx48(
+      /* @__PURE__ */ jsx49(
         "text",
         {
           x: "50%",
@@ -5778,12 +5825,12 @@ function HealthRing({ percent, size = 40, stroke = 4, caption, muted = false, ar
         }
       )
     ] }),
-    caption ? /* @__PURE__ */ jsx48("span", { style: { fontSize: 10, color: "var(--bf-health-caption, var(--bf-text-muted, #6b7280))", lineHeight: 1 }, children: caption }) : null
+    caption ? /* @__PURE__ */ jsx49("span", { style: { fontSize: 10, color: "var(--bf-health-caption, var(--bf-text-muted, #6b7280))", lineHeight: 1 }, children: caption }) : null
   ] });
 }
 
 // src/pendingChanges/PendingChangesList.tsx
-import { jsx as jsx49, jsxs as jsxs45 } from "react/jsx-runtime";
+import { jsx as jsx50, jsxs as jsxs46 } from "react/jsx-runtime";
 var DEFAULT_PENDING_CHANGES_LABELS = {
   pill: "Changes",
   summary: "{count} uncommitted changes",
@@ -5839,16 +5886,16 @@ function PendingChangesList({
   const labels = resolvePendingChangesLabels(labelOverrides);
   if (!changes.length) return null;
   const showRepo = new Set(changes.map((c) => c.repo ?? "")).size > 1;
-  return /* @__PURE__ */ jsxs45(
+  return /* @__PURE__ */ jsxs46(
     "section",
     {
       className,
       "aria-label": pendingChangesSummary(changes.length, labels),
       style: { fontSize: 12, color: "var(--bf-text, inherit)", ...style },
       children: [
-        /* @__PURE__ */ jsxs45("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "2px 0 6px" }, children: [
-          /* @__PURE__ */ jsx49("span", { style: { flex: "1 1 auto", minWidth: 0, color: "var(--bf-text-muted, #8a8a8a)" }, children: labels.hint }),
-          onReview && /* @__PURE__ */ jsx49(
+        /* @__PURE__ */ jsxs46("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "2px 0 6px" }, children: [
+          /* @__PURE__ */ jsx50("span", { style: { flex: "1 1 auto", minWidth: 0, color: "var(--bf-text-muted, #8a8a8a)" }, children: labels.hint }),
+          onReview && /* @__PURE__ */ jsx50(
             "button",
             {
               type: "button",
@@ -5868,10 +5915,10 @@ function PendingChangesList({
             }
           )
         ] }),
-        /* @__PURE__ */ jsx49("ul", { style: { listStyle: "none", margin: 0, padding: 0, maxHeight: "min(40vh, 280px)", overflowY: "auto" }, children: changes.map((change) => {
+        /* @__PURE__ */ jsx50("ul", { style: { listStyle: "none", margin: 0, padding: 0, maxHeight: "min(40vh, 280px)", overflowY: "auto" }, children: changes.map((change) => {
           const { dir, file } = splitPath(change.path);
           const state = change.staged ? `${labels.status[change.status]} \xB7 ${labels.staged}` : labels.status[change.status];
-          return /* @__PURE__ */ jsx49("li", { children: /* @__PURE__ */ jsxs45(
+          return /* @__PURE__ */ jsx50("li", { children: /* @__PURE__ */ jsxs46(
             "button",
             {
               type: "button",
@@ -5892,20 +5939,20 @@ function PendingChangesList({
                 cursor: "pointer"
               },
               children: [
-                /* @__PURE__ */ jsx49(
+                /* @__PURE__ */ jsx50(
                   "span",
                   {
                     "aria-hidden": true,
                     style: { flex: "0 0 auto", width: 6, height: 6, borderRadius: "50%", background: statusColor(change.status) }
                   }
                 ),
-                /* @__PURE__ */ jsxs45("span", { style: { minWidth: 0, overflowWrap: "anywhere", fontFamily: "var(--bf-font-mono, monospace)" }, children: [
-                  dir && /* @__PURE__ */ jsx49("span", { style: { opacity: 0.6 }, children: dir }),
-                  /* @__PURE__ */ jsx49("span", { children: file })
+                /* @__PURE__ */ jsxs46("span", { style: { minWidth: 0, overflowWrap: "anywhere", fontFamily: "var(--bf-font-mono, monospace)" }, children: [
+                  dir && /* @__PURE__ */ jsx50("span", { style: { opacity: 0.6 }, children: dir }),
+                  /* @__PURE__ */ jsx50("span", { children: file })
                 ] }),
-                /* @__PURE__ */ jsx49("span", { style: { flex: "1 1 auto" } }),
-                showRepo && change.repo && /* @__PURE__ */ jsx49("span", { style: { flex: "0 0 auto", color: "var(--bf-text-muted, #8a8a8a)" }, children: change.repo }),
-                /* @__PURE__ */ jsx49("span", { style: { flex: "0 0 auto", color: "var(--bf-text-muted, #8a8a8a)" }, children: state })
+                /* @__PURE__ */ jsx50("span", { style: { flex: "1 1 auto" } }),
+                showRepo && change.repo && /* @__PURE__ */ jsx50("span", { style: { flex: "0 0 auto", color: "var(--bf-text-muted, #8a8a8a)" }, children: change.repo }),
+                /* @__PURE__ */ jsx50("span", { style: { flex: "0 0 auto", color: "var(--bf-text-muted, #8a8a8a)" }, children: state })
               ]
             }
           ) }, change.id ?? `${change.repo ?? ""}:${change.path}`);
@@ -5916,7 +5963,7 @@ function PendingChangesList({
 }
 
 // src/chatTickets/ChatTicketsPanel.tsx
-import { memo as memo12, useCallback as useCallback17, useEffect as useEffect18, useMemo as useMemo13, useRef as useRef21, useState as useState29 } from "react";
+import { memo as memo13, useCallback as useCallback17, useEffect as useEffect18, useMemo as useMemo13, useRef as useRef21, useState as useState29 } from "react";
 
 // src/chatTickets/tokens.ts
 var V = {
@@ -6011,13 +6058,13 @@ var S = {
 };
 
 // src/chatTickets/TicketParentLine.tsx
-import { jsx as jsx50, jsxs as jsxs46 } from "react/jsx-runtime";
+import { jsx as jsx51, jsxs as jsxs47 } from "react/jsx-runtime";
 function TicketParentLine({ parent, inParent, onOpen, openTitle }) {
   if (!parent) return null;
   const text = inParent(parent.label);
-  return /* @__PURE__ */ jsxs46("span", { style: S2.row, title: text, children: [
-    /* @__PURE__ */ jsx50("span", { "aria-hidden": true, style: S2.arrow, children: "\u21B3" }),
-    onOpen ? /* @__PURE__ */ jsx50("button", { type: "button", onClick: onOpen, title: openTitle ? `${openTitle} \xB7 ${parent.label}` : text, style: S2.link, children: text }) : /* @__PURE__ */ jsx50("span", { style: S2.text, children: text })
+  return /* @__PURE__ */ jsxs47("span", { style: S2.row, title: text, children: [
+    /* @__PURE__ */ jsx51("span", { "aria-hidden": true, style: S2.arrow, children: "\u21B3" }),
+    onOpen ? /* @__PURE__ */ jsx51("button", { type: "button", onClick: onOpen, title: openTitle ? `${openTitle} \xB7 ${parent.label}` : text, style: S2.link, children: text }) : /* @__PURE__ */ jsx51("span", { style: S2.text, children: text })
   ] });
 }
 var S2 = {
@@ -6044,14 +6091,14 @@ var S2 = {
 };
 
 // src/chatTickets/TicketChip.tsx
-import { jsx as jsx51, jsxs as jsxs47 } from "react/jsx-runtime";
+import { jsx as jsx52, jsxs as jsxs48 } from "react/jsx-runtime";
 function TicketChip(props) {
   const { tk, labels, parentTk, onOpenTicket, badge: badge2, runnable, runGate, lineage, runOpen, busy, agents, pool, poolName } = props;
-  return /* @__PURE__ */ jsxs47("div", { style: S.chip, children: [
-    /* @__PURE__ */ jsx51(HealthRing, { percent: tk.progressPct, size: 36, caption: tk.total > 0 ? `${tk.done}/${tk.total}` : void 0, muted: !tk.exists, ariaLabel: labels.ringAria(tk.label, tk.progressPct) }),
-    /* @__PURE__ */ jsxs47("div", { style: { display: "flex", flexDirection: "column", minWidth: 0, maxWidth: 160 }, children: [
-      onOpenTicket && tk.exists ? /* @__PURE__ */ jsx51("button", { type: "button", title: `${labels.open} \xB7 ${tk.label}`, onClick: () => onOpenTicket(tk), style: S.ticketLink, children: tk.label }) : /* @__PURE__ */ jsx51("span", { style: S.ticketLabel, title: tk.label, children: tk.label }),
-      /* @__PURE__ */ jsxs47("span", { style: S.ticketMeta, children: [
+  return /* @__PURE__ */ jsxs48("div", { style: S.chip, children: [
+    /* @__PURE__ */ jsx52(HealthRing, { percent: tk.progressPct, size: 36, caption: tk.total > 0 ? `${tk.done}/${tk.total}` : void 0, muted: !tk.exists, ariaLabel: labels.ringAria(tk.label, tk.progressPct) }),
+    /* @__PURE__ */ jsxs48("div", { style: { display: "flex", flexDirection: "column", minWidth: 0, maxWidth: 160 }, children: [
+      onOpenTicket && tk.exists ? /* @__PURE__ */ jsx52("button", { type: "button", title: `${labels.open} \xB7 ${tk.label}`, onClick: () => onOpenTicket(tk), style: S.ticketLink, children: tk.label }) : /* @__PURE__ */ jsx52("span", { style: S.ticketLabel, title: tk.label, children: tk.label }),
+      /* @__PURE__ */ jsxs48("span", { style: S.ticketMeta, children: [
         "#",
         tk.ref,
         " \xB7 ",
@@ -6060,7 +6107,7 @@ function TicketChip(props) {
         tk.status,
         tk.linkType === "created" ? ` \xB7 ${labels.spawned}` : ""
       ] }),
-      /* @__PURE__ */ jsx51(
+      /* @__PURE__ */ jsx52(
         TicketParentLine,
         {
           parent: tk.parent,
@@ -6071,9 +6118,9 @@ function TicketChip(props) {
       ),
       badge2
     ] }),
-    /* @__PURE__ */ jsxs47("div", { style: { display: "flex", gap: 2 }, children: [
-      onOpenTicket && tk.exists && /* @__PURE__ */ jsx51("button", { type: "button", title: `${labels.open} \xB7 ${tk.label}`, onClick: () => onOpenTicket(tk), style: S.icon, children: "\u2197" }),
-      runnable && tk.exists && /* @__PURE__ */ jsx51(
+    /* @__PURE__ */ jsxs48("div", { style: { display: "flex", gap: 2 }, children: [
+      onOpenTicket && tk.exists && /* @__PURE__ */ jsx52("button", { type: "button", title: `${labels.open} \xB7 ${tk.label}`, onClick: () => onOpenTicket(tk), style: S.icon, children: "\u2197" }),
+      runnable && tk.exists && /* @__PURE__ */ jsx52(
         "button",
         {
           type: "button",
@@ -6085,31 +6132,31 @@ function TicketChip(props) {
           children: "\u25B6"
         }
       ),
-      lineage && /* @__PURE__ */ jsx51("button", { type: "button", title: labels.lineage, onClick: props.onLineage, style: S.icon, children: "\u2443" }),
-      /* @__PURE__ */ jsx51("button", { type: "button", title: labels.unlink, disabled: busy, onClick: props.onUnlink, style: S.icon, children: "\u2715" })
+      lineage && /* @__PURE__ */ jsx52("button", { type: "button", title: labels.lineage, onClick: props.onLineage, style: S.icon, children: "\u2443" }),
+      /* @__PURE__ */ jsx52("button", { type: "button", title: labels.unlink, disabled: busy, onClick: props.onUnlink, style: S.icon, children: "\u2715" })
     ] }),
-    runOpen && /* @__PURE__ */ jsxs47("select", { "aria-label": labels.pickAgent, value: "", onChange: (e) => {
+    runOpen && /* @__PURE__ */ jsxs48("select", { "aria-label": labels.pickAgent, value: "", onChange: (e) => {
       if (e.target.value) props.onRun(e.target.value);
     }, style: S.select, children: [
-      /* @__PURE__ */ jsx51("option", { style: S.option, value: "", children: labels.pickAgent }),
-      agents.map((a) => /* @__PURE__ */ jsxs47("option", { style: S.option, value: a.agentRef, children: [
+      /* @__PURE__ */ jsx52("option", { style: S.option, value: "", children: labels.pickAgent }),
+      agents.map((a) => /* @__PURE__ */ jsxs48("option", { style: S.option, value: a.agentRef, children: [
         "\u2605 ",
         poolName(a.agentRef)
       ] }, a.id)),
-      pool.filter((p) => !agents.some((a) => a.agentRef === p.ref)).map((p) => /* @__PURE__ */ jsx51("option", { style: S.option, value: p.ref, children: p.name }, p.ref))
+      pool.filter((p) => !agents.some((a) => a.agentRef === p.ref)).map((p) => /* @__PURE__ */ jsx52("option", { style: S.option, value: p.ref, children: p.name }, p.ref))
     ] })
   ] });
 }
 
 // src/chatTickets/LineageDrawer.tsx
-import { jsx as jsx52, jsxs as jsxs48 } from "react/jsx-runtime";
+import { jsx as jsx53, jsxs as jsxs49 } from "react/jsx-runtime";
 function LineageDrawer({ lineage, chatId, labels }) {
-  return /* @__PURE__ */ jsxs48("div", { style: S.drawer, children: [
-    /* @__PURE__ */ jsx52("strong", { style: { color: V.text }, children: labels.lineageTitle }),
-    lineage.length === 0 ? /* @__PURE__ */ jsx52("span", { style: { marginLeft: 8, ...S.muted }, children: labels.lineageEmpty }) : /* @__PURE__ */ jsx52("ul", { style: { margin: "4px 0 0", paddingLeft: 18 }, children: lineage.map((c) => /* @__PURE__ */ jsxs48("li", { style: { marginBottom: 2 }, children: [
-      /* @__PURE__ */ jsx52("span", { style: { fontWeight: c.chatId === chatId ? 700 : 400 }, children: c.title }),
-      c.linkType === "created" ? /* @__PURE__ */ jsx52("em", { style: { color: V.accent, marginLeft: 6 }, children: labels.spawned }) : null,
-      c.isArchived ? /* @__PURE__ */ jsxs48("span", { style: { marginLeft: 6, ...S.muted }, children: [
+  return /* @__PURE__ */ jsxs49("div", { style: S.drawer, children: [
+    /* @__PURE__ */ jsx53("strong", { style: { color: V.text }, children: labels.lineageTitle }),
+    lineage.length === 0 ? /* @__PURE__ */ jsx53("span", { style: { marginLeft: 8, ...S.muted }, children: labels.lineageEmpty }) : /* @__PURE__ */ jsx53("ul", { style: { margin: "4px 0 0", paddingLeft: 18 }, children: lineage.map((c) => /* @__PURE__ */ jsxs49("li", { style: { marginBottom: 2 }, children: [
+      /* @__PURE__ */ jsx53("span", { style: { fontWeight: c.chatId === chatId ? 700 : 400 }, children: c.title }),
+      c.linkType === "created" ? /* @__PURE__ */ jsx53("em", { style: { color: V.accent, marginLeft: 6 }, children: labels.spawned }) : null,
+      c.isArchived ? /* @__PURE__ */ jsxs49("span", { style: { marginLeft: 6, ...S.muted }, children: [
         "(",
         labels.merged,
         ")"
@@ -6152,7 +6199,7 @@ function useChatProgressSync(chatId, chatList, onStale) {
 
 // src/chatTickets/AgentsSection.tsx
 import { useState as useState23 } from "react";
-import { jsx as jsx53, jsxs as jsxs49 } from "react/jsx-runtime";
+import { jsx as jsx54, jsxs as jsxs50 } from "react/jsx-runtime";
 function AgentsSection({ agents, subagents, pool, members, labels, visibility, onSetVisibility, onInviteAgent, onRemoveAgent, onInviteMember, onRemoveMember, busy }) {
   const [email, setEmail] = useState23("");
   const submit = async () => {
@@ -6164,47 +6211,47 @@ function AgentsSection({ agents, subagents, pool, members, labels, visibility, o
   const locked = visibility === "locked";
   const poolName = (ref) => pool.find((p) => p.ref === ref)?.name ?? ref;
   const uninvited = pool.filter((p) => !agents.some((a) => a.agentRef === p.ref));
-  return /* @__PURE__ */ jsxs49("div", { style: { ...S.section, flexDirection: "column", alignItems: "stretch" }, children: [
-    /* @__PURE__ */ jsxs49("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" }, children: [
-      agents.length + subagents.length === 0 ? /* @__PURE__ */ jsx53("span", { style: S.muted, children: labels.noAgents }) : agents.map((a) => /* @__PURE__ */ jsxs49("span", { style: S.agentChip, children: [
-        /* @__PURE__ */ jsx53("span", { "aria-hidden": true, children: "\u{1F916}" }),
+  return /* @__PURE__ */ jsxs50("div", { style: { ...S.section, flexDirection: "column", alignItems: "stretch" }, children: [
+    /* @__PURE__ */ jsxs50("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" }, children: [
+      agents.length + subagents.length === 0 ? /* @__PURE__ */ jsx54("span", { style: S.muted, children: labels.noAgents }) : agents.map((a) => /* @__PURE__ */ jsxs50("span", { style: S.agentChip, children: [
+        /* @__PURE__ */ jsx54("span", { "aria-hidden": true, children: "\u{1F916}" }),
         poolName(a.agentRef),
-        /* @__PURE__ */ jsx53("button", { type: "button", title: labels.removeAgent, disabled: busy, onClick: () => void onRemoveAgent(a.id), style: { ...S.icon, fontSize: 11 }, children: "\u2715" })
+        /* @__PURE__ */ jsx54("button", { type: "button", title: labels.removeAgent, disabled: busy, onClick: () => void onRemoveAgent(a.id), style: { ...S.icon, fontSize: 11 }, children: "\u2715" })
       ] }, a.id)),
-      subagents.map((c) => /* @__PURE__ */ jsxs49("span", { style: S.agentChip, title: c.label, children: [
-        /* @__PURE__ */ jsx53("span", { "aria-hidden": true, children: "\u{1F916}" }),
+      subagents.map((c) => /* @__PURE__ */ jsxs50("span", { style: S.agentChip, title: c.label, children: [
+        /* @__PURE__ */ jsx54("span", { "aria-hidden": true, children: "\u{1F916}" }),
         c.name,
-        /* @__PURE__ */ jsxs49("span", { style: { fontSize: 11, color: V.muted }, children: [
+        /* @__PURE__ */ jsxs50("span", { style: { fontSize: 11, color: V.muted }, children: [
           c.handle,
           " \xB7 ",
           labels.subagentOf.replace("{owner}", c.owner)
         ] })
       ] }, c.key))
     ] }),
-    /* @__PURE__ */ jsxs49("select", { "aria-label": labels.inviteAgent, value: "", onChange: (e) => {
+    /* @__PURE__ */ jsxs50("select", { "aria-label": labels.inviteAgent, value: "", onChange: (e) => {
       const p = pool.find((x) => x.ref === e.target.value);
       if (p) void onInviteAgent(p.ref, p.kind);
     }, style: { ...S.select, maxWidth: 260 }, children: [
-      /* @__PURE__ */ jsx53("option", { style: S.option, value: "", children: labels.inviteAgent }),
-      uninvited.map((p) => /* @__PURE__ */ jsxs49("option", { style: S.option, value: p.ref, children: [
+      /* @__PURE__ */ jsx54("option", { style: S.option, value: "", children: labels.inviteAgent }),
+      uninvited.map((p) => /* @__PURE__ */ jsxs50("option", { style: S.option, value: p.ref, children: [
         p.name,
         " \u2014 ",
         p.meta
       ] }, p.ref))
     ] }),
-    /* @__PURE__ */ jsx53("span", { style: { fontSize: 11, ...S.muted }, children: labels.agentsHint }),
-    /* @__PURE__ */ jsxs49("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", borderTop: `1px dashed ${V.border}`, paddingTop: 8, marginTop: 2 }, children: [
-      /* @__PURE__ */ jsx53("span", { style: { fontSize: 10, color: V.muted, textTransform: "uppercase", letterSpacing: 0.4 }, children: labels.people }),
-      visibility && onSetVisibility && /* @__PURE__ */ jsx53("button", { type: "button", disabled: busy, onClick: () => void onSetVisibility(locked ? "shared" : "locked"), style: S.pill(locked), children: locked ? `\u{1F512} ${labels.visibilityLocked}` : `\u{1F513} ${labels.visibilityShared}` }),
-      /* @__PURE__ */ jsx53("span", { style: { fontSize: 11, ...S.muted }, children: labels.lockHint })
+    /* @__PURE__ */ jsx54("span", { style: { fontSize: 11, ...S.muted }, children: labels.agentsHint }),
+    /* @__PURE__ */ jsxs50("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", borderTop: `1px dashed ${V.border}`, paddingTop: 8, marginTop: 2 }, children: [
+      /* @__PURE__ */ jsx54("span", { style: { fontSize: 10, color: V.muted, textTransform: "uppercase", letterSpacing: 0.4 }, children: labels.people }),
+      visibility && onSetVisibility && /* @__PURE__ */ jsx54("button", { type: "button", disabled: busy, onClick: () => void onSetVisibility(locked ? "shared" : "locked"), style: S.pill(locked), children: locked ? `\u{1F512} ${labels.visibilityLocked}` : `\u{1F513} ${labels.visibilityShared}` }),
+      /* @__PURE__ */ jsx54("span", { style: { fontSize: 11, ...S.muted }, children: labels.lockHint })
     ] }),
-    /* @__PURE__ */ jsx53("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" }, children: members.length === 0 ? /* @__PURE__ */ jsx53("span", { style: S.muted, children: labels.noPeople }) : members.map((m) => /* @__PURE__ */ jsxs49("span", { style: S.agentChip, children: [
-      /* @__PURE__ */ jsx53("span", { "aria-hidden": true, children: m.status === "pending" ? "\u2709\uFE0F" : "\u{1F464}" }),
+    /* @__PURE__ */ jsx54("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" }, children: members.length === 0 ? /* @__PURE__ */ jsx54("span", { style: S.muted, children: labels.noPeople }) : members.map((m) => /* @__PURE__ */ jsxs50("span", { style: S.agentChip, children: [
+      /* @__PURE__ */ jsx54("span", { "aria-hidden": true, children: m.status === "pending" ? "\u2709\uFE0F" : "\u{1F464}" }),
       m.name,
-      /* @__PURE__ */ jsx53("button", { type: "button", title: labels.removePerson, disabled: busy, onClick: () => void onRemoveMember(m.id), style: { ...S.icon, fontSize: 11 }, children: "\u2715" })
+      /* @__PURE__ */ jsx54("button", { type: "button", title: labels.removePerson, disabled: busy, onClick: () => void onRemoveMember(m.id), style: { ...S.icon, fontSize: 11 }, children: "\u2715" })
     ] }, m.id)) }),
-    /* @__PURE__ */ jsxs49("div", { style: { display: "flex", gap: 6 }, children: [
-      /* @__PURE__ */ jsx53(
+    /* @__PURE__ */ jsxs50("div", { style: { display: "flex", gap: 6 }, children: [
+      /* @__PURE__ */ jsx54(
         "input",
         {
           type: "email",
@@ -6219,48 +6266,48 @@ function AgentsSection({ agents, subagents, pool, members, labels, visibility, o
           style: { ...S.select, flex: 1, maxWidth: 260 }
         }
       ),
-      /* @__PURE__ */ jsx53("button", { type: "button", disabled: busy || !email.trim(), onClick: () => void submit(), style: S.pill(false), children: "\uFF0B" })
+      /* @__PURE__ */ jsx54("button", { type: "button", disabled: busy || !email.trim(), onClick: () => void submit(), style: S.pill(false), children: "\uFF0B" })
     ] }),
-    /* @__PURE__ */ jsx53("span", { style: { fontSize: 11, ...S.muted }, children: labels.invitePersonHint })
+    /* @__PURE__ */ jsx54("span", { style: { fontSize: 11, ...S.muted }, children: labels.invitePersonHint })
   ] });
 }
 
 // src/spend/SpendBreakdown.tsx
-import { jsx as jsx54, jsxs as jsxs50 } from "react/jsx-runtime";
+import { jsx as jsx55, jsxs as jsxs51 } from "react/jsx-runtime";
 function SpendBreakdown({ summary, labels, locale }) {
   const { spend, saved, savedPct } = summary;
   const usd = (n2) => formatUsd(n2, locale);
   const spent = (n2) => `${spend.estimated ? "\u2248" : ""}${usd(n2)}`;
-  return /* @__PURE__ */ jsxs50("div", { className: "bf-spend", children: [
-    /* @__PURE__ */ jsx54("div", { className: "bf-spend__group", children: labels.spendHeading }),
-    /* @__PURE__ */ jsxs50("div", { className: "bf-spend__row", children: [
-      /* @__PURE__ */ jsx54("span", { className: "bf-spend__k", children: labels.platform }),
-      /* @__PURE__ */ jsx54("span", { className: "bf-spend__v", children: spent(spend.platformUsd) })
+  return /* @__PURE__ */ jsxs51("div", { className: "bf-spend", children: [
+    /* @__PURE__ */ jsx55("div", { className: "bf-spend__group", children: labels.spendHeading }),
+    /* @__PURE__ */ jsxs51("div", { className: "bf-spend__row", children: [
+      /* @__PURE__ */ jsx55("span", { className: "bf-spend__k", children: labels.platform }),
+      /* @__PURE__ */ jsx55("span", { className: "bf-spend__v", children: spent(spend.platformUsd) })
     ] }),
-    spend.yourKeyUsd > 0 && /* @__PURE__ */ jsxs50("div", { className: "bf-spend__row", title: labels.yourKeyHint, children: [
-      /* @__PURE__ */ jsx54("span", { className: "bf-spend__k", children: labels.yourKey }),
-      /* @__PURE__ */ jsx54("span", { className: "bf-spend__v", children: spent(spend.yourKeyUsd) })
+    spend.yourKeyUsd > 0 && /* @__PURE__ */ jsxs51("div", { className: "bf-spend__row", title: labels.yourKeyHint, children: [
+      /* @__PURE__ */ jsx55("span", { className: "bf-spend__k", children: labels.yourKey }),
+      /* @__PURE__ */ jsx55("span", { className: "bf-spend__v", children: spent(spend.yourKeyUsd) })
     ] }),
-    /* @__PURE__ */ jsxs50("div", { className: "bf-spend__meta", children: [
+    /* @__PURE__ */ jsxs51("div", { className: "bf-spend__meta", children: [
       fill(labels.tokens, { tokens: formatTokens(spend.totalTokens, locale) }),
       spend.unpricedTokens > 0 && ` \xB7 ${fill(labels.unpriced, { tokens: formatTokens(spend.unpricedTokens, locale) })}`
     ] }),
-    /* @__PURE__ */ jsxs50("div", { className: "bf-spend__group", children: [
+    /* @__PURE__ */ jsxs51("div", { className: "bf-spend__group", children: [
       labels.savedHeading,
-      savedPct != null && savedPct > 0 && /* @__PURE__ */ jsx54("span", { className: "bf-spend__share", children: fill(labels.savedShare, { pct: formatPct(savedPct) }) })
+      savedPct != null && savedPct > 0 && /* @__PURE__ */ jsx55("span", { className: "bf-spend__share", children: fill(labels.savedShare, { pct: formatPct(savedPct) }) })
     ] }),
-    saved.bySource.length === 0 && /* @__PURE__ */ jsx54("div", { className: "bf-spend__meta", children: labels.nothingSaved }),
-    saved.bySource.map((row) => /* @__PURE__ */ jsxs50("div", { className: "bf-spend__row", title: labels.sourceHints[row.source], children: [
-      /* @__PURE__ */ jsxs50("span", { className: "bf-spend__k", children: [
+    saved.bySource.length === 0 && /* @__PURE__ */ jsx55("div", { className: "bf-spend__meta", children: labels.nothingSaved }),
+    saved.bySource.map((row) => /* @__PURE__ */ jsxs51("div", { className: "bf-spend__row", title: labels.sourceHints[row.source], children: [
+      /* @__PURE__ */ jsxs51("span", { className: "bf-spend__k", children: [
         labels.sources[row.source],
-        row.events > 0 && /* @__PURE__ */ jsx54("span", { className: "bf-spend__count", children: fill(labels.events, { count: String(row.events) }) })
+        row.events > 0 && /* @__PURE__ */ jsx55("span", { className: "bf-spend__count", children: fill(labels.events, { count: String(row.events) }) })
       ] }),
-      /* @__PURE__ */ jsxs50("span", { className: `bf-spend__v${row.usd < 0 ? " bf-spend__v--cost" : " bf-spend__v--saved"}`, children: [
+      /* @__PURE__ */ jsxs51("span", { className: `bf-spend__v${row.usd < 0 ? " bf-spend__v--cost" : " bf-spend__v--saved"}`, children: [
         row.estimated ? "\u2248" : "",
         usd(row.usd)
       ] })
     ] }, `${row.source}:${row.estimated ? "e" : "m"}`)),
-    saved.bySource.length > 0 && /* @__PURE__ */ jsxs50("div", { className: "bf-spend__meta", children: [
+    saved.bySource.length > 0 && /* @__PURE__ */ jsxs51("div", { className: "bf-spend__meta", children: [
       saved.measuredUsd !== 0 && `${labels.measured} ${usd(saved.measuredUsd)}`,
       saved.measuredUsd !== 0 && saved.estimatedUsd !== 0 && " \xB7 ",
       saved.estimatedUsd !== 0 && `${labels.estimated} \u2248${usd(saved.estimatedUsd)}`
@@ -6327,7 +6374,7 @@ function spendLabelsFrom(lookup) {
 }
 
 // src/spend/SpendPill.tsx
-import { Fragment as Fragment18, jsx as jsx55, jsxs as jsxs51 } from "react/jsx-runtime";
+import { Fragment as Fragment18, jsx as jsx56, jsxs as jsxs52 } from "react/jsx-runtime";
 function hasSpendToShow(summary) {
   if (!summary) return false;
   const { spend, saved } = summary;
@@ -6340,8 +6387,8 @@ function SpendPill({ summary, labels: overrides, locale }) {
   const { spend, saved } = summary;
   const anyEstimate = saved.bySource.some((s) => s.estimated);
   const savedText = saved.netUsd > 0 ? fill(anyEstimate ? labels.savedApprox : labels.saved, { amount: formatUsd(saved.netUsd, locale) }) : null;
-  return /* @__PURE__ */ jsxs51("span", { ref: rootRef, className: "bf-spend-pill-wrap", children: [
-    /* @__PURE__ */ jsxs51(
+  return /* @__PURE__ */ jsxs52("span", { ref: rootRef, className: "bf-spend-pill-wrap", children: [
+    /* @__PURE__ */ jsxs52(
       "button",
       {
         type: "button",
@@ -6351,20 +6398,20 @@ function SpendPill({ summary, labels: overrides, locale }) {
         "aria-expanded": open,
         onClick: toggle,
         children: [
-          /* @__PURE__ */ jsxs51("span", { className: "bf-spend-pill__spent", children: [
+          /* @__PURE__ */ jsxs52("span", { className: "bf-spend-pill__spent", children: [
             spend.estimated ? "\u2248" : "",
             formatUsd(spend.totalUsd, locale)
           ] }),
-          /* @__PURE__ */ jsx55("span", { className: "bf-spend-pill__sep", "aria-hidden": true, children: "\xB7" }),
-          /* @__PURE__ */ jsx55("span", { className: "bf-spend-pill__tok", children: fill(labels.tokens, { tokens: formatTokens(spend.totalTokens, locale) }) }),
-          savedText && /* @__PURE__ */ jsxs51(Fragment18, { children: [
-            /* @__PURE__ */ jsx55("span", { className: "bf-spend-pill__sep", "aria-hidden": true, children: "\xB7" }),
-            /* @__PURE__ */ jsx55("span", { className: "bf-spend-pill__saved", children: savedText })
+          /* @__PURE__ */ jsx56("span", { className: "bf-spend-pill__sep", "aria-hidden": true, children: "\xB7" }),
+          /* @__PURE__ */ jsx56("span", { className: "bf-spend-pill__tok", children: fill(labels.tokens, { tokens: formatTokens(spend.totalTokens, locale) }) }),
+          savedText && /* @__PURE__ */ jsxs52(Fragment18, { children: [
+            /* @__PURE__ */ jsx56("span", { className: "bf-spend-pill__sep", "aria-hidden": true, children: "\xB7" }),
+            /* @__PURE__ */ jsx56("span", { className: "bf-spend-pill__saved", children: savedText })
           ] })
         ]
       }
     ),
-    open && /* @__PURE__ */ jsx55("div", { className: "bf-spend-pill__pop", role: "dialog", "aria-label": labels.pillTitle, children: /* @__PURE__ */ jsx55(SpendBreakdown, { summary, labels, locale }) })
+    open && /* @__PURE__ */ jsx56("div", { className: "bf-spend-pill__pop", role: "dialog", "aria-label": labels.pillTitle, children: /* @__PURE__ */ jsx56(SpendBreakdown, { summary, labels, locale }) })
   ] });
 }
 
@@ -6447,7 +6494,7 @@ var DEFAULT_CHAT_TICKETS_LABELS = {
 };
 
 // src/chatTickets/LinkForm.tsx
-import { jsx as jsx56, jsxs as jsxs52 } from "react/jsx-runtime";
+import { jsx as jsx57, jsxs as jsxs53 } from "react/jsx-runtime";
 var SEARCH_LIMIT = 40;
 function LinkForm({ search, projectId, existing, labels, onLink }) {
   const [kind, setKind] = useState24("task");
@@ -6493,13 +6540,13 @@ function LinkForm({ search, projectId, existing, labels, onLink }) {
       setBusy(false);
     }
   };
-  return /* @__PURE__ */ jsxs52("div", { style: S.section, children: [
-    /* @__PURE__ */ jsx56("select", { "aria-label": labels.kindLabel, value: kind, onChange: (e) => {
+  return /* @__PURE__ */ jsxs53("div", { style: S.section, children: [
+    /* @__PURE__ */ jsx57("select", { "aria-label": labels.kindLabel, value: kind, onChange: (e) => {
       setKind(e.target.value);
       setRef("");
       setQuery("");
-    }, style: S.select, children: TICKET_KINDS.map((k) => /* @__PURE__ */ jsx56("option", { style: S.option, value: k, children: labels.kind[k] }, k)) }),
-    /* @__PURE__ */ jsx56(
+    }, style: S.select, children: TICKET_KINDS.map((k) => /* @__PURE__ */ jsx57("option", { style: S.option, value: k, children: labels.kind[k] }, k)) }),
+    /* @__PURE__ */ jsx57(
       "input",
       {
         type: "search",
@@ -6510,16 +6557,16 @@ function LinkForm({ search, projectId, existing, labels, onLink }) {
         style: { ...S.select, minWidth: 150 }
       }
     ),
-    /* @__PURE__ */ jsxs52("select", { "aria-label": labels.pickTicket, value: ref, onChange: (e) => setRef(e.target.value), style: { ...S.select, minWidth: 200 }, children: [
-      /* @__PURE__ */ jsx56("option", { style: S.option, value: "", children: labels.pickTicket }),
-      shown.map((o) => /* @__PURE__ */ jsx56("option", { style: S.option, value: o.ref, children: o.label }, o.ref))
+    /* @__PURE__ */ jsxs53("select", { "aria-label": labels.pickTicket, value: ref, onChange: (e) => setRef(e.target.value), style: { ...S.select, minWidth: 200 }, children: [
+      /* @__PURE__ */ jsx57("option", { style: S.option, value: "", children: labels.pickTicket }),
+      shown.map((o) => /* @__PURE__ */ jsx57("option", { style: S.option, value: o.ref, children: o.label }, o.ref))
     ] }),
-    loading ? /* @__PURE__ */ jsx56("span", { style: S.muted, children: labels.searching }) : shown.length === 0 ? /* @__PURE__ */ jsx56("span", { style: S.muted, children: labels.noMatches }) : atCap ? /* @__PURE__ */ jsx56("span", { style: S.muted, children: labels.refine }) : null,
-    /* @__PURE__ */ jsxs52("select", { "aria-label": labels.linkTypeLabel, value: linkType, onChange: (e) => setLinkType(e.target.value), style: S.select, children: [
-      /* @__PURE__ */ jsx56("option", { style: S.option, value: "linked", children: labels.linkTypeLinked }),
-      /* @__PURE__ */ jsx56("option", { style: S.option, value: "created", children: labels.linkTypeCreated })
+    loading ? /* @__PURE__ */ jsx57("span", { style: S.muted, children: labels.searching }) : shown.length === 0 ? /* @__PURE__ */ jsx57("span", { style: S.muted, children: labels.noMatches }) : atCap ? /* @__PURE__ */ jsx57("span", { style: S.muted, children: labels.refine }) : null,
+    /* @__PURE__ */ jsxs53("select", { "aria-label": labels.linkTypeLabel, value: linkType, onChange: (e) => setLinkType(e.target.value), style: S.select, children: [
+      /* @__PURE__ */ jsx57("option", { style: S.option, value: "linked", children: labels.linkTypeLinked }),
+      /* @__PURE__ */ jsx57("option", { style: S.option, value: "created", children: labels.linkTypeCreated })
     ] }),
-    /* @__PURE__ */ jsx56("button", { type: "button", onClick: () => void submit(), disabled: busy || !ref, style: S.pill(true), children: busy ? "\u2026" : labels.linkAction })
+    /* @__PURE__ */ jsx57("button", { type: "button", onClick: () => void submit(), disabled: busy || !ref, style: S.pill(true), children: busy ? "\u2026" : labels.linkAction })
   ] });
 }
 
@@ -6537,45 +6584,45 @@ function chatSwitcherLabel(input) {
 }
 
 // src/chatTickets/MergeSection.tsx
-import { jsx as jsx57, jsxs as jsxs53 } from "react/jsx-runtime";
+import { jsx as jsx58, jsxs as jsxs54 } from "react/jsx-runtime";
 function MergeSection({ chatId, chatList, labels, onMerge, busy }) {
   const [selected, setSelected] = useState25([]);
   const candidates = chatList.filter((c) => c.id !== chatId);
   const toggle = (id) => setSelected((s) => s.includes(id) ? s.filter((x) => x !== id) : [...s, id]);
-  return /* @__PURE__ */ jsxs53("div", { style: { ...S.section, flexDirection: "column", alignItems: "stretch" }, children: [
-    /* @__PURE__ */ jsx57("span", { style: { fontSize: 12, color: V.text2 }, children: labels.mergeHint }),
-    /* @__PURE__ */ jsx57("div", { style: { maxHeight: 160, overflowY: "auto", display: "flex", flexDirection: "column", gap: 2 }, children: candidates.length === 0 ? /* @__PURE__ */ jsx57("span", { style: S.muted, children: labels.mergeNoOthers }) : candidates.map((c) => /* @__PURE__ */ jsxs53("label", { style: { display: "flex", alignItems: "center", gap: 8, fontSize: 12, padding: "3px 4px", cursor: "pointer" }, children: [
-      /* @__PURE__ */ jsx57("input", { type: "checkbox", checked: selected.includes(c.id), onChange: () => toggle(c.id) }),
-      /* @__PURE__ */ jsx57("span", { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: chatSwitcherLabel({ title: c.title, id: c.id, ticketCount: c.ticketCount, ticketProgressPct: c.ticketProgressPct }) })
+  return /* @__PURE__ */ jsxs54("div", { style: { ...S.section, flexDirection: "column", alignItems: "stretch" }, children: [
+    /* @__PURE__ */ jsx58("span", { style: { fontSize: 12, color: V.text2 }, children: labels.mergeHint }),
+    /* @__PURE__ */ jsx58("div", { style: { maxHeight: 160, overflowY: "auto", display: "flex", flexDirection: "column", gap: 2 }, children: candidates.length === 0 ? /* @__PURE__ */ jsx58("span", { style: S.muted, children: labels.mergeNoOthers }) : candidates.map((c) => /* @__PURE__ */ jsxs54("label", { style: { display: "flex", alignItems: "center", gap: 8, fontSize: 12, padding: "3px 4px", cursor: "pointer" }, children: [
+      /* @__PURE__ */ jsx58("input", { type: "checkbox", checked: selected.includes(c.id), onChange: () => toggle(c.id) }),
+      /* @__PURE__ */ jsx58("span", { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: chatSwitcherLabel({ title: c.title, id: c.id, ticketCount: c.ticketCount, ticketProgressPct: c.ticketProgressPct }) })
     ] }, c.id)) }),
-    /* @__PURE__ */ jsx57("button", { type: "button", onClick: () => {
+    /* @__PURE__ */ jsx58("button", { type: "button", onClick: () => {
       if (selected.length) void onMerge(selected).then(() => setSelected([]));
     }, disabled: busy || selected.length === 0, style: S.pill(true), children: busy ? "\u2026" : labels.mergeAction(selected.length) })
   ] });
 }
 
 // src/chatTickets/OriginalRequest.tsx
-import { jsx as jsx58, jsxs as jsxs54 } from "react/jsx-runtime";
+import { jsx as jsx59, jsxs as jsxs55 } from "react/jsx-runtime";
 function OriginalRequest({ text, labels }) {
   if (!text?.trim()) return null;
-  return /* @__PURE__ */ jsxs54("div", { style: S.originalRequest, children: [
-    /* @__PURE__ */ jsx58("span", { style: S.originalRequestLabel, children: labels.originalRequest }),
-    /* @__PURE__ */ jsx58("span", { style: S.originalRequestText, title: labels.originalRequestText(text), children: text })
+  return /* @__PURE__ */ jsxs55("div", { style: S.originalRequest, children: [
+    /* @__PURE__ */ jsx59("span", { style: S.originalRequestLabel, children: labels.originalRequest }),
+    /* @__PURE__ */ jsx59("span", { style: S.originalRequestText, title: labels.originalRequestText(text), children: text })
   ] });
 }
 
 // src/chatTickets/QuestionsSection.tsx
 import { useState as useState26 } from "react";
-import { jsx as jsx59, jsxs as jsxs55 } from "react/jsx-runtime";
+import { jsx as jsx60, jsxs as jsxs56 } from "react/jsx-runtime";
 function QuestionsSection({ questions, labels, onAnswer }) {
   const [answers, setAnswers] = useState26({});
   const [sending, setSending] = useState26(null);
-  return /* @__PURE__ */ jsx59("div", { style: S.drawer, children: questions.length === 0 ? /* @__PURE__ */ jsx59("span", { style: S.muted, children: labels.noQuestions }) : questions.map((q, index) => {
+  return /* @__PURE__ */ jsx60("div", { style: S.drawer, children: questions.length === 0 ? /* @__PURE__ */ jsx60("span", { style: S.muted, children: labels.noQuestions }) : questions.map((q, index) => {
     const value = answers[q.id] ?? "";
-    return /* @__PURE__ */ jsxs55("div", { style: { padding: "10px 0", borderBottom: index < questions.length - 1 ? `1px solid ${V.border}` : void 0 }, children: [
-      /* @__PURE__ */ jsx59("div", { style: { color: V.text, fontSize: 13, lineHeight: 1.45, whiteSpace: "pre-wrap", marginBottom: 8 }, children: q.description }),
-      /* @__PURE__ */ jsxs55("div", { style: { display: "flex", gap: 8, alignItems: "flex-start" }, children: [
-        /* @__PURE__ */ jsx59(
+    return /* @__PURE__ */ jsxs56("div", { style: { padding: "10px 0", borderBottom: index < questions.length - 1 ? `1px solid ${V.border}` : void 0 }, children: [
+      /* @__PURE__ */ jsx60("div", { style: { color: V.text, fontSize: 13, lineHeight: 1.45, whiteSpace: "pre-wrap", marginBottom: 8 }, children: q.description }),
+      /* @__PURE__ */ jsxs56("div", { style: { display: "flex", gap: 8, alignItems: "flex-start" }, children: [
+        /* @__PURE__ */ jsx60(
           "textarea",
           {
             value,
@@ -6586,7 +6633,7 @@ function QuestionsSection({ questions, labels, onAnswer }) {
             style: { ...S.select, flex: 1, resize: "vertical", minHeight: 54, fontFamily: "inherit" }
           }
         ),
-        /* @__PURE__ */ jsx59("button", { type: "button", disabled: !value.trim() || sending === q.id, style: S.pill(true), onClick: () => {
+        /* @__PURE__ */ jsx60("button", { type: "button", disabled: !value.trim() || sending === q.id, style: S.pill(true), onClick: () => {
           setSending(q.id);
           void onAnswer(q.id, value.trim()).finally(() => setSending(null));
         }, children: sending === q.id ? labels.answering : labels.submitAnswer })
@@ -6675,7 +6722,7 @@ function useHideDoneTickets() {
 }
 
 // src/chatTickets/ChatTicketsPanel.tsx
-import { Fragment as Fragment19, jsx as jsx60, jsxs as jsxs56 } from "react/jsx-runtime";
+import { Fragment as Fragment19, jsx as jsx61, jsxs as jsxs57 } from "react/jsx-runtime";
 var RUNNABLE = new Set(RUNNABLE_KINDS);
 var COLLAPSE_THRESHOLD = 8;
 var NO_SUBAGENTS = [];
@@ -6776,10 +6823,10 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
     userCollapsed.current = true;
     setCollapsed(!isCollapsed);
   };
-  return /* @__PURE__ */ jsxs56("div", { style: S.root, children: [
-    /* @__PURE__ */ jsx60(OriginalRequest, { text: originalRequest, labels }),
-    tickets.length > 0 && /* @__PURE__ */ jsxs56("div", { style: S.headerRow, children: [
-      /* @__PURE__ */ jsxs56(
+  return /* @__PURE__ */ jsxs57("div", { style: S.root, children: [
+    /* @__PURE__ */ jsx61(OriginalRequest, { text: originalRequest, labels }),
+    tickets.length > 0 && /* @__PURE__ */ jsxs57("div", { style: S.headerRow, children: [
+      /* @__PURE__ */ jsxs57(
         "button",
         {
           type: "button",
@@ -6788,10 +6835,10 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
           title: isCollapsed ? labels.showTickets : labels.hideTickets,
           style: S.ticketsHeader,
           children: [
-            /* @__PURE__ */ jsx60("span", { "aria-hidden": true, style: { ...S.caret, transform: isCollapsed ? "rotate(0deg)" : "rotate(90deg)" }, children: "\u25B8" }),
-            /* @__PURE__ */ jsx60(HealthRing, { percent: agg.pct, size: 22, muted: false, ariaLabel: labels.overallAria(agg.pct) }),
-            /* @__PURE__ */ jsx60("span", { style: S.ticketsCount, children: labels.ticketCount(tickets.length) }),
-            /* @__PURE__ */ jsxs56("span", { style: S.ticketsAgg, children: [
+            /* @__PURE__ */ jsx61("span", { "aria-hidden": true, style: { ...S.caret, transform: isCollapsed ? "rotate(0deg)" : "rotate(90deg)" }, children: "\u25B8" }),
+            /* @__PURE__ */ jsx61(HealthRing, { percent: agg.pct, size: 22, muted: false, ariaLabel: labels.overallAria(agg.pct) }),
+            /* @__PURE__ */ jsx61("span", { style: S.ticketsCount, children: labels.ticketCount(tickets.length) }),
+            /* @__PURE__ */ jsxs57("span", { style: S.ticketsAgg, children: [
               agg.pct,
               "%",
               agg.total > 0 ? ` \xB7 ${agg.done}/${agg.total}` : ""
@@ -6799,7 +6846,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
           ]
         }
       ),
-      tickets.length > 1 && /* @__PURE__ */ jsxs56(
+      tickets.length > 1 && /* @__PURE__ */ jsxs57(
         "select",
         {
           "aria-label": labels.sortLabel,
@@ -6807,15 +6854,15 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
           onChange: (e) => setSort(parseChatTicketSort(e.target.value)),
           style: S.sortSelect,
           children: [
-            /* @__PURE__ */ jsx60("option", { value: "open", style: S.option, children: labels.sortOpen }),
-            /* @__PURE__ */ jsx60("option", { value: "done", style: S.option, children: labels.sortDone }),
-            /* @__PURE__ */ jsx60("option", { value: "title", style: S.option, children: labels.sortTitle }),
-            /* @__PURE__ */ jsx60("option", { value: "linked", style: S.option, children: labels.sortLinked })
+            /* @__PURE__ */ jsx61("option", { value: "open", style: S.option, children: labels.sortOpen }),
+            /* @__PURE__ */ jsx61("option", { value: "done", style: S.option, children: labels.sortDone }),
+            /* @__PURE__ */ jsx61("option", { value: "title", style: S.option, children: labels.sortTitle }),
+            /* @__PURE__ */ jsx61("option", { value: "linked", style: S.option, children: labels.sortLinked })
           ]
         }
       ),
-      /* @__PURE__ */ jsxs56("label", { style: S.hideDoneLabel, title: labels.hideDone, children: [
-        /* @__PURE__ */ jsx60(
+      /* @__PURE__ */ jsxs57("label", { style: S.hideDoneLabel, title: labels.hideDone, children: [
+        /* @__PURE__ */ jsx61(
           "input",
           {
             type: "checkbox",
@@ -6823,12 +6870,12 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
             onChange: (e) => setHideDone(e.target.checked)
           }
         ),
-        /* @__PURE__ */ jsx60("span", { children: labels.hideDone })
+        /* @__PURE__ */ jsx61("span", { children: labels.hideDone })
       ] })
     ] }),
-    !isCollapsed && /* @__PURE__ */ jsx60("div", { style: S.ticketGrid, children: tickets.length === 0 ? /* @__PURE__ */ jsx60("span", { style: S.muted, children: labels.none }) : displayedTickets.length === 0 ? /* @__PURE__ */ jsx60("span", { style: S.muted, children: labels.allDone }) : displayedTickets.map((tk) => {
+    !isCollapsed && /* @__PURE__ */ jsx61("div", { style: S.ticketGrid, children: tickets.length === 0 ? /* @__PURE__ */ jsx61("span", { style: S.muted, children: labels.none }) : displayedTickets.length === 0 ? /* @__PURE__ */ jsx61("span", { style: S.muted, children: labels.allDone }) : displayedTickets.map((tk) => {
       const key = `${tk.kind}:${tk.ref}`;
-      return /* @__PURE__ */ jsx60(
+      return /* @__PURE__ */ jsx61(
         TicketChip,
         {
           tk,
@@ -6852,35 +6899,35 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
         tk.linkId
       );
     }) }),
-    lineageKey && /* @__PURE__ */ jsx60(LineageDrawer, { lineage, chatId, labels }),
-    /* @__PURE__ */ jsxs56("div", { style: S.actionRow, children: [
-      /* @__PURE__ */ jsxs56("button", { type: "button", onClick: () => togglePanel("link"), style: S.pill(panel === "link"), children: [
+    lineageKey && /* @__PURE__ */ jsx61(LineageDrawer, { lineage, chatId, labels }),
+    /* @__PURE__ */ jsxs57("div", { style: S.actionRow, children: [
+      /* @__PURE__ */ jsxs57("button", { type: "button", onClick: () => togglePanel("link"), style: S.pill(panel === "link"), children: [
         "\uFF0B ",
         labels.link
       ] }),
-      platformSections && /* @__PURE__ */ jsxs56(Fragment19, { children: [
-        /* @__PURE__ */ jsxs56("button", { type: "button", onClick: () => togglePanel("agents"), style: S.pill(panel === "agents"), children: [
+      platformSections && /* @__PURE__ */ jsxs57(Fragment19, { children: [
+        /* @__PURE__ */ jsxs57("button", { type: "button", onClick: () => togglePanel("agents"), style: S.pill(panel === "agents"), children: [
           "\u{1F465} ",
           labels.agents,
           agents.length + subagents.length + members.length ? ` (${agents.length + subagents.length + members.length})` : ""
         ] }),
-        railHeader && /* @__PURE__ */ jsxs56("button", { type: "button", onClick: () => togglePanel("info"), style: S.pill(panel === "info"), children: [
+        railHeader && /* @__PURE__ */ jsxs57("button", { type: "button", onClick: () => togglePanel("info"), style: S.pill(panel === "info"), children: [
           "\u2139 ",
           labels.info
         ] }),
-        /* @__PURE__ */ jsxs56("button", { type: "button", onClick: () => togglePanel("merge"), style: S.pill(panel === "merge"), children: [
+        /* @__PURE__ */ jsxs57("button", { type: "button", onClick: () => togglePanel("merge"), style: S.pill(panel === "merge"), children: [
           "\u29C9 ",
           labels.merge
         ] })
       ] }),
-      questions.length > 0 && /* @__PURE__ */ jsxs56("button", { type: "button", onClick: () => togglePanel("questions"), style: S.pill(panel === "questions"), children: [
+      questions.length > 0 && /* @__PURE__ */ jsxs57("button", { type: "button", onClick: () => togglePanel("questions"), style: S.pill(panel === "questions"), children: [
         "\u2753 ",
         labels.questions,
         " (",
         questions.length,
         ")"
       ] }),
-      extensions?.map((ext) => /* @__PURE__ */ jsxs56(
+      extensions?.map((ext) => /* @__PURE__ */ jsxs57(
         "button",
         {
           type: "button",
@@ -6890,18 +6937,18 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
           onClick: () => togglePanel(ext.key),
           style: S.pill(panel === ext.key),
           children: [
-            ext.icon ? /* @__PURE__ */ jsx60("span", { "aria-hidden": true, style: { display: "inline-flex", verticalAlign: "-2px", marginRight: 4 }, children: ext.icon }) : null,
+            ext.icon ? /* @__PURE__ */ jsx61("span", { "aria-hidden": true, style: { display: "inline-flex", verticalAlign: "-2px", marginRight: 4 }, children: ext.icon }) : null,
             ext.label,
             ext.count ? ` (${ext.count})` : ""
           ]
         },
         ext.key
       )),
-      msg && /* @__PURE__ */ jsx60("span", { style: { fontSize: 12, color: V.accent, alignSelf: "center" }, children: msg }),
-      /* @__PURE__ */ jsx60(SpendPill, { summary: spend, labels: spendLabels2, locale })
+      msg && /* @__PURE__ */ jsx61("span", { style: { fontSize: 12, color: V.accent, alignSelf: "center" }, children: msg }),
+      /* @__PURE__ */ jsx61(SpendPill, { summary: spend, labels: spendLabels2, locale })
     ] }),
-    openExtension && /* @__PURE__ */ jsx60("div", { style: S.drawer, children: openExtension.render() }),
-    panel === "link" && /* @__PURE__ */ jsx60(LinkForm, { search: adapter.searchTickets, projectId, existing: tickets, labels, onLink: async (kind, ref, linkType) => {
+    openExtension && /* @__PURE__ */ jsx61("div", { style: S.drawer, children: openExtension.render() }),
+    panel === "link" && /* @__PURE__ */ jsx61(LinkForm, { search: adapter.searchTickets, projectId, existing: tickets, labels, onLink: async (kind, ref, linkType) => {
       try {
         await adapter.linkTicket(chatId, { kind, ref, linkType });
         await load();
@@ -6909,7 +6956,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
         flash(e instanceof Error ? e.message : labels.linkFailed);
       }
     } }),
-    panel === "agents" && /* @__PURE__ */ jsx60(
+    panel === "agents" && /* @__PURE__ */ jsx61(
       AgentsSection,
       {
         agents,
@@ -6965,8 +7012,8 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
         busy
       }
     ),
-    panel === "info" && railHeader && /* @__PURE__ */ jsx60("div", { style: { ...S.drawer, color: V.danger }, children: railHeader }),
-    panel === "merge" && /* @__PURE__ */ jsx60(
+    panel === "info" && railHeader && /* @__PURE__ */ jsx61("div", { style: { ...S.drawer, color: V.danger }, children: railHeader }),
+    panel === "merge" && /* @__PURE__ */ jsx61(
       MergeSection,
       {
         chatId,
@@ -6986,7 +7033,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
         busy
       }
     ),
-    panel === "questions" && /* @__PURE__ */ jsx60(
+    panel === "questions" && /* @__PURE__ */ jsx61(
       QuestionsSection,
       {
         questions,
@@ -7004,10 +7051,10 @@ var BUILTIN_PANELS = /* @__PURE__ */ new Set(["link", "agents", "info", "merge",
 function isBuiltinPanel(key) {
   return BUILTIN_PANELS.has(key);
 }
-var ChatTicketsPanel = memo12(ChatTicketsPanelInner);
+var ChatTicketsPanel = memo13(ChatTicketsPanelInner);
 
 // src/chatTickets/localRail/components.tsx
-import { jsx as jsx61, jsxs as jsxs57 } from "react/jsx-runtime";
+import { jsx as jsx62, jsxs as jsxs58 } from "react/jsx-runtime";
 var STATUS_COLOR = {
   pending: V.muted,
   syncing: V.accent,
@@ -7056,9 +7103,9 @@ function statusWord(status, labels) {
 }
 function SyncStatusBadge({ status, labels }) {
   const word = statusWord(status, labels);
-  return /* @__PURE__ */ jsxs57("span", { style: badge, role: "status", "aria-label": fill(labels.syncStatusAria, { status: word }), title: word, children: [
-    /* @__PURE__ */ jsx61("span", { "aria-hidden": true, style: { width: 6, height: 6, borderRadius: "50%", background: STATUS_COLOR[status], flex: "0 0 auto" } }),
-    /* @__PURE__ */ jsx61("span", { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: word })
+  return /* @__PURE__ */ jsxs58("span", { style: badge, role: "status", "aria-label": fill(labels.syncStatusAria, { status: word }), title: word, children: [
+    /* @__PURE__ */ jsx62("span", { "aria-hidden": true, style: { width: 6, height: 6, borderRadius: "50%", background: STATUS_COLOR[status], flex: "0 0 auto" } }),
+    /* @__PURE__ */ jsx62("span", { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: word })
   ] });
 }
 function timeText(iso, locale) {
@@ -7067,7 +7114,7 @@ function timeText(iso, locale) {
 }
 function RailFreshnessLine({ freshness, labels, locale }) {
   const text = freshness.lastIngestedAt ? fill(labels.freshnessUpdated, { time: timeText(freshness.lastIngestedAt, locale) }) : freshness.source === "device" ? labels.freshnessDeviceOnly : labels.freshnessNever;
-  return /* @__PURE__ */ jsx61("span", { style: line, children: text });
+  return /* @__PURE__ */ jsx62("span", { style: line, children: text });
 }
 function railTicketLabel(label, kindName, ref, labels) {
   return label || fill(labels.untitledTicket, { kind: kindName, ref });
@@ -7085,14 +7132,14 @@ function modeWord(mode, labels) {
 }
 function RailSyncSummary({ summary, labels, locale }) {
   const when = (iso) => iso ? timeText(iso, locale) : labels.summaryNever;
-  return /* @__PURE__ */ jsxs57("div", { style: summaryRow, role: "group", "aria-label": labels.summaryAria, children: [
-    /* @__PURE__ */ jsx61("span", { children: fill(labels.summaryMode, { mode: modeWord(summary.mode, labels) }) }),
-    /* @__PURE__ */ jsx61("span", { children: summary.destination.kind === "bound" ? fill(labels.summaryDestination, { destination: summary.destination.label }) : labels.summaryNoAccount }),
-    /* @__PURE__ */ jsx61("span", { children: fill(labels.summaryQueued, { n: summary.queued.items, size: sizeText(summary.queued.bytes, labels, locale) }) }),
-    /* @__PURE__ */ jsx61("span", { style: summary.conflicts > 0 ? { color: STATUS_COLOR.conflict } : void 0, children: fill(labels.summaryConflicts, { n: summary.conflicts }) }),
-    /* @__PURE__ */ jsx61("span", { style: summary.deadLetters > 0 ? { color: STATUS_COLOR["dead-letter"] } : void 0, children: fill(labels.summaryDeadLetters, { n: summary.deadLetters }) }),
-    /* @__PURE__ */ jsx61("span", { children: fill(labels.summaryLastPush, { time: when(summary.lastPushAt) }) }),
-    /* @__PURE__ */ jsx61("span", { children: fill(labels.summaryLastPull, { time: when(summary.lastPullAt) }) })
+  return /* @__PURE__ */ jsxs58("div", { style: summaryRow, role: "group", "aria-label": labels.summaryAria, children: [
+    /* @__PURE__ */ jsx62("span", { children: fill(labels.summaryMode, { mode: modeWord(summary.mode, labels) }) }),
+    /* @__PURE__ */ jsx62("span", { children: summary.destination.kind === "bound" ? fill(labels.summaryDestination, { destination: summary.destination.label }) : labels.summaryNoAccount }),
+    /* @__PURE__ */ jsx62("span", { children: fill(labels.summaryQueued, { n: summary.queued.items, size: sizeText(summary.queued.bytes, labels, locale) }) }),
+    /* @__PURE__ */ jsx62("span", { style: summary.conflicts > 0 ? { color: STATUS_COLOR.conflict } : void 0, children: fill(labels.summaryConflicts, { n: summary.conflicts }) }),
+    /* @__PURE__ */ jsx62("span", { style: summary.deadLetters > 0 ? { color: STATUS_COLOR["dead-letter"] } : void 0, children: fill(labels.summaryDeadLetters, { n: summary.deadLetters }) }),
+    /* @__PURE__ */ jsx62("span", { children: fill(labels.summaryLastPush, { time: when(summary.lastPushAt) }) }),
+    /* @__PURE__ */ jsx62("span", { children: fill(labels.summaryLastPull, { time: when(summary.lastPullAt) }) })
   ] });
 }
 
@@ -7328,7 +7375,7 @@ import { useCallback as useCallback18, useEffect as useEffect21, useId as useId2
 
 // src/mention/TriggerPopup.tsx
 import { useEffect as useEffect20 } from "react";
-import { jsx as jsx62, jsxs as jsxs58 } from "react/jsx-runtime";
+import { jsx as jsx63, jsxs as jsxs59 } from "react/jsx-runtime";
 function TriggerPopup(props) {
   const { listId, optionId, items, active, itemKey, renderItem, isDisabled, onHover, onPick, listLabel, heading, emptyLabel } = props;
   const activeId = items.length ? optionId(active) : null;
@@ -7337,13 +7384,13 @@ function TriggerPopup(props) {
     document.getElementById(activeId)?.scrollIntoView?.({ block: "nearest" });
   }, [activeId]);
   if (items.length === 0) {
-    return /* @__PURE__ */ jsx62("div", { className: "bf-cmp-typeahead", children: /* @__PURE__ */ jsx62("div", { className: "bf-cmp-typeahead__empty", role: "status", "aria-live": "polite", children: emptyLabel }) });
+    return /* @__PURE__ */ jsx63("div", { className: "bf-cmp-typeahead", children: /* @__PURE__ */ jsx63("div", { className: "bf-cmp-typeahead__empty", role: "status", "aria-live": "polite", children: emptyLabel }) });
   }
-  return /* @__PURE__ */ jsx62("div", { className: "bf-cmp-typeahead", children: /* @__PURE__ */ jsxs58("div", { className: "bf-cmp-typeahead__panel", children: [
-    heading && /* @__PURE__ */ jsx62("div", { className: "bf-cmp-typeahead__heading", "aria-hidden": "true", children: heading }),
-    /* @__PURE__ */ jsx62("ul", { id: listId, role: "listbox", "aria-label": listLabel, className: "bf-cmp-typeahead__list", children: items.map((item, i) => {
+  return /* @__PURE__ */ jsx63("div", { className: "bf-cmp-typeahead", children: /* @__PURE__ */ jsxs59("div", { className: "bf-cmp-typeahead__panel", children: [
+    heading && /* @__PURE__ */ jsx63("div", { className: "bf-cmp-typeahead__heading", "aria-hidden": "true", children: heading }),
+    /* @__PURE__ */ jsx63("ul", { id: listId, role: "listbox", "aria-label": listLabel, className: "bf-cmp-typeahead__list", children: items.map((item, i) => {
       const disabled = isDisabled?.(item) ?? false;
-      return /* @__PURE__ */ jsx62(
+      return /* @__PURE__ */ jsx63(
         "li",
         {
           id: optionId(i),
@@ -7365,7 +7412,7 @@ function TriggerPopup(props) {
 }
 
 // src/mention/useTriggerAutocomplete.tsx
-import { jsx as jsx63 } from "react/jsx-runtime";
+import { jsx as jsx64 } from "react/jsx-runtime";
 var sameToken = (a, b) => a === b || !!a && !!b && a.query === b.query && a.start === b.start && a.end === b.end;
 function useTriggerAutocomplete(opts) {
   const {
@@ -7488,7 +7535,7 @@ function useTriggerAutocomplete(opts) {
         return false;
     }
   }, [open, matches, active, isDisabled, disabledEnterEdit, tokenNow, value, setValue, choose]);
-  const popup = open ? /* @__PURE__ */ jsx63(
+  const popup = open ? /* @__PURE__ */ jsx64(
     TriggerPopup,
     {
       listId,
@@ -7510,7 +7557,7 @@ function useTriggerAutocomplete(opts) {
 }
 
 // src/mention/MentionAutocomplete.tsx
-import { Fragment as Fragment20, jsx as jsx64, jsxs as jsxs59 } from "react/jsx-runtime";
+import { Fragment as Fragment20, jsx as jsx65, jsxs as jsxs60 } from "react/jsx-runtime";
 var DEFAULT_MENTION_LABELS = {
   title: "Direct to",
   agent: "Agent",
@@ -7528,13 +7575,13 @@ function useMentionAutocomplete(opts) {
   const { textareaRef, value, setValue, participants, onPick, labels, disabled, detail } = opts;
   const renderItem = useCallback19((m) => {
     const sub = detail?.(m);
-    return /* @__PURE__ */ jsxs59(Fragment20, { children: [
-      /* @__PURE__ */ jsx64(Avatar, { name: m.name, kind: m.kind, size: 20 }),
-      /* @__PURE__ */ jsxs59("span", { className: "bf-cmp-typeahead__col", children: [
-        /* @__PURE__ */ jsx64("span", { className: "bf-cmp-typeahead__name", children: m.name }),
-        sub && /* @__PURE__ */ jsx64("span", { className: "bf-cmp-typeahead__detail", children: sub })
+    return /* @__PURE__ */ jsxs60(Fragment20, { children: [
+      /* @__PURE__ */ jsx65(Avatar, { name: m.name, kind: m.kind, size: 20 }),
+      /* @__PURE__ */ jsxs60("span", { className: "bf-cmp-typeahead__col", children: [
+        /* @__PURE__ */ jsx65("span", { className: "bf-cmp-typeahead__name", children: m.name }),
+        sub && /* @__PURE__ */ jsx65("span", { className: "bf-cmp-typeahead__detail", children: sub })
       ] }),
-      /* @__PURE__ */ jsx64("span", { className: "bf-cmp-typeahead__tag", children: m.kind === "agent" ? labels?.agent ?? DEFAULT_MENTION_LABELS.agent : labels?.human ?? DEFAULT_MENTION_LABELS.human })
+      /* @__PURE__ */ jsx65("span", { className: "bf-cmp-typeahead__tag", children: m.kind === "agent" ? labels?.agent ?? DEFAULT_MENTION_LABELS.agent : labels?.human ?? DEFAULT_MENTION_LABELS.human })
     ] });
   }, [detail, labels?.agent, labels?.human]);
   return useTriggerAutocomplete({
@@ -7561,7 +7608,7 @@ import {
   activeTicketToken,
   filterTicketCandidates
 } from "@seanhogg/builderforce-brain-embedded";
-import { Fragment as Fragment21, jsx as jsx65, jsxs as jsxs60 } from "react/jsx-runtime";
+import { Fragment as Fragment21, jsx as jsx66, jsxs as jsxs61 } from "react/jsx-runtime";
 var DEFAULT_TICKET_TAG_LABELS = { title: "Tag ticket", status: "Status", noMatches: "No tickets found" };
 var ticketRef = (t) => t.key ?? String(t.id);
 var ticketFilter = (all, query) => filterTicketCandidates(all, query);
@@ -7573,13 +7620,13 @@ function ticketPickEdit(t, token, text) {
 function useTicketAutocomplete(opts) {
   const { textareaRef, value, setValue, tickets, onPick, labels, disabled } = opts;
   const statusLabel = labels?.status ?? DEFAULT_TICKET_TAG_LABELS.status;
-  const renderItem = useCallback20((t) => /* @__PURE__ */ jsxs60(Fragment21, { children: [
-    /* @__PURE__ */ jsxs60("span", { className: "bf-cmp-typeahead__code", children: [
+  const renderItem = useCallback20((t) => /* @__PURE__ */ jsxs61(Fragment21, { children: [
+    /* @__PURE__ */ jsxs61("span", { className: "bf-cmp-typeahead__code", children: [
       "#",
       ticketRef(t)
     ] }),
-    /* @__PURE__ */ jsx65("span", { className: "bf-cmp-typeahead__title", children: t.title }),
-    t.status && /* @__PURE__ */ jsx65("span", { className: "bf-cmp-typeahead__tag", title: `${statusLabel}: ${t.status}`, children: t.status })
+    /* @__PURE__ */ jsx66("span", { className: "bf-cmp-typeahead__title", children: t.title }),
+    t.status && /* @__PURE__ */ jsx66("span", { className: "bf-cmp-typeahead__tag", title: `${statusLabel}: ${t.status}`, children: t.status })
   ] }), [statusLabel]);
   return useTriggerAutocomplete({
     textareaRef,
@@ -7863,7 +7910,7 @@ function evermindNextAction(input) {
 
 // src/evermind/EvermindTestBench.tsx
 import { useCallback as useCallback21, useState as useState32 } from "react";
-import { jsx as jsx66, jsxs as jsxs61 } from "react/jsx-runtime";
+import { jsx as jsx67, jsxs as jsxs62 } from "react/jsx-runtime";
 function EvermindTestBench({ t, disabled, onProbe, result, onResult }) {
   const [prompt, setPrompt] = useState32("");
   const [running, setRunning] = useState32(false);
@@ -7883,10 +7930,10 @@ function EvermindTestBench({ t, disabled, onProbe, result, onResult }) {
   const busy = disabled || running;
   const canRunPrompt = prompt.trim().length >= 3;
   const passed = result?.samples.filter((s) => s.coherent).length ?? 0;
-  return /* @__PURE__ */ jsxs61("div", { style: sectionBlock, children: [
-    /* @__PURE__ */ jsx66("div", { style: fieldTitle, children: t.testTitle }),
-    /* @__PURE__ */ jsx66("div", { style: fieldHint, children: t.testHint }),
-    /* @__PURE__ */ jsx66(
+  return /* @__PURE__ */ jsxs62("div", { style: sectionBlock, children: [
+    /* @__PURE__ */ jsx67("div", { style: fieldTitle, children: t.testTitle }),
+    /* @__PURE__ */ jsx67("div", { style: fieldHint, children: t.testHint }),
+    /* @__PURE__ */ jsx67(
       "textarea",
       {
         value: prompt,
@@ -7897,24 +7944,24 @@ function EvermindTestBench({ t, disabled, onProbe, result, onResult }) {
         style: { ...select, width: "100%", resize: "vertical", fontFamily: "inherit" }
       }
     ),
-    /* @__PURE__ */ jsxs61("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
-      /* @__PURE__ */ jsx66("button", { type: "button", onClick: () => void run(true), disabled: busy || !canRunPrompt, style: primaryBtn(busy || !canRunPrompt), children: running ? t.testRunning : t.testRunCta }),
-      /* @__PURE__ */ jsx66("button", { type: "button", onClick: () => void run(false), disabled: busy, style: secondaryBtn(busy), children: t.testReadinessCta })
+    /* @__PURE__ */ jsxs62("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
+      /* @__PURE__ */ jsx67("button", { type: "button", onClick: () => void run(true), disabled: busy || !canRunPrompt, style: primaryBtn(busy || !canRunPrompt), children: running ? t.testRunning : t.testRunCta }),
+      /* @__PURE__ */ jsx67("button", { type: "button", onClick: () => void run(false), disabled: busy, style: secondaryBtn(busy), children: t.testReadinessCta })
     ] }),
-    error && /* @__PURE__ */ jsx66("p", { style: { margin: 0, fontSize: "0.76rem", color: C.danger }, role: "alert", children: error }),
-    result && /* @__PURE__ */ jsxs61("div", { style: { display: "flex", flexDirection: "column", gap: 8, marginTop: 2 }, children: [
-      /* @__PURE__ */ jsxs61("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
-        /* @__PURE__ */ jsx66("span", { style: { ...fieldTitle, flex: "1 1 auto", minWidth: 0 }, children: result.mode === "readiness" ? t.testResultReadiness(passed, result.samples.length) : t.testResultPrompt }),
-        /* @__PURE__ */ jsx66("span", { style: verdictTag(result.ready ? "ok" : "bad"), children: result.ready ? t.testServable : t.testRefused })
+    error && /* @__PURE__ */ jsx67("p", { style: { margin: 0, fontSize: "0.76rem", color: C.danger }, role: "alert", children: error }),
+    result && /* @__PURE__ */ jsxs62("div", { style: { display: "flex", flexDirection: "column", gap: 8, marginTop: 2 }, children: [
+      /* @__PURE__ */ jsxs62("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
+        /* @__PURE__ */ jsx67("span", { style: { ...fieldTitle, flex: "1 1 auto", minWidth: 0 }, children: result.mode === "readiness" ? t.testResultReadiness(passed, result.samples.length) : t.testResultPrompt }),
+        /* @__PURE__ */ jsx67("span", { style: verdictTag(result.ready ? "ok" : "bad"), children: result.ready ? t.testServable : t.testRefused })
       ] }),
-      /* @__PURE__ */ jsx66("p", { style: { margin: 0, fontSize: "0.74rem", lineHeight: 1.5, color: result.ready ? C.text2 : C.danger }, children: result.ready ? t.testVerdictReady : t.testVerdictNotReady }),
-      result.samples.map((s, i) => /* @__PURE__ */ jsxs61("div", { style: { display: "flex", flexDirection: "column", gap: 4 }, children: [
-        result.samples.length > 1 && /* @__PURE__ */ jsxs61("div", { style: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }, children: [
-          /* @__PURE__ */ jsx66("span", { style: verdictTag(s.coherent ? "ok" : "bad"), children: s.coherent ? t.testServable : t.testRefused }),
-          /* @__PURE__ */ jsx66("span", { style: { fontSize: "0.72rem", fontWeight: 600, color: C.text, wordBreak: "break-word", minWidth: 0 }, children: s.prompt })
+      /* @__PURE__ */ jsx67("p", { style: { margin: 0, fontSize: "0.74rem", lineHeight: 1.5, color: result.ready ? C.text2 : C.danger }, children: result.ready ? t.testVerdictReady : t.testVerdictNotReady }),
+      result.samples.map((s, i) => /* @__PURE__ */ jsxs62("div", { style: { display: "flex", flexDirection: "column", gap: 4 }, children: [
+        result.samples.length > 1 && /* @__PURE__ */ jsxs62("div", { style: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }, children: [
+          /* @__PURE__ */ jsx67("span", { style: verdictTag(s.coherent ? "ok" : "bad"), children: s.coherent ? t.testServable : t.testRefused }),
+          /* @__PURE__ */ jsx67("span", { style: { fontSize: "0.72rem", fontWeight: 600, color: C.text, wordBreak: "break-word", minWidth: 0 }, children: s.prompt })
         ] }),
-        /* @__PURE__ */ jsx66("div", { style: outputBox, children: s.text.trim() || t.testEmptyOutput }),
-        !s.coherent && s.detail && /* @__PURE__ */ jsx66("p", { style: { ...italic, color: C.danger, fontStyle: "normal", fontSize: "0.72rem" }, children: t.testRefusedBecause(s.detail) })
+        /* @__PURE__ */ jsx67("div", { style: outputBox, children: s.text.trim() || t.testEmptyOutput }),
+        !s.coherent && s.detail && /* @__PURE__ */ jsx67("p", { style: { ...italic, color: C.danger, fontStyle: "normal", fontSize: "0.72rem" }, children: t.testRefusedBecause(s.detail) })
       ] }, `${s.prompt}-${i}`))
     ] })
   ] });
@@ -7922,7 +7969,7 @@ function EvermindTestBench({ t, disabled, onProbe, result, onResult }) {
 
 // src/evermind/EvermindMaintenance.tsx
 import { useCallback as useCallback22, useState as useState33 } from "react";
-import { jsx as jsx67, jsxs as jsxs62 } from "react/jsx-runtime";
+import { jsx as jsx68, jsxs as jsxs63 } from "react/jsx-runtime";
 function EvermindMaintenance({
   t,
   disabled,
@@ -7942,24 +7989,24 @@ function EvermindMaintenance({
     await onCleanup?.();
   }, [onCleanup]);
   if (!onReseed && !onReindex && !onCleanup) return null;
-  return /* @__PURE__ */ jsxs62("div", { style: sectionBlock, children: [
-    /* @__PURE__ */ jsx67("div", { style: fieldTitle, children: t.maintenanceTitle }),
-    /* @__PURE__ */ jsx67("div", { style: fieldHint, children: t.maintenanceHint }),
-    onReindex && /* @__PURE__ */ jsx67(
+  return /* @__PURE__ */ jsxs63("div", { style: sectionBlock, children: [
+    /* @__PURE__ */ jsx68("div", { style: fieldTitle, children: t.maintenanceTitle }),
+    /* @__PURE__ */ jsx68("div", { style: fieldHint, children: t.maintenanceHint }),
+    onReindex && /* @__PURE__ */ jsx68(
       Row,
       {
         title: t.reindexLabel,
         hint: t.reindexHint,
-        action: /* @__PURE__ */ jsx67("button", { type: "button", onClick: () => void onReindex(), disabled, style: secondaryBtn(disabled), children: t.reindexCta })
+        action: /* @__PURE__ */ jsx68("button", { type: "button", onClick: () => void onReindex(), disabled, style: secondaryBtn(disabled), children: t.reindexCta })
       }
     ),
-    onCleanup && /* @__PURE__ */ jsx67(
+    onCleanup && /* @__PURE__ */ jsx68(
       Row,
       {
         title: t.cleanupLabel,
         hint: t.cleanupHint,
-        action: /* @__PURE__ */ jsx67("button", { type: "button", onClick: () => setPending("cleanup"), disabled: disabled || pending === "cleanup", style: secondaryBtn(disabled || pending === "cleanup"), children: t.cleanupCta }),
-        confirm: pending === "cleanup" ? /* @__PURE__ */ jsx67(
+        action: /* @__PURE__ */ jsx68("button", { type: "button", onClick: () => setPending("cleanup"), disabled: disabled || pending === "cleanup", style: secondaryBtn(disabled || pending === "cleanup"), children: t.cleanupCta }),
+        confirm: pending === "cleanup" ? /* @__PURE__ */ jsx68(
           Confirm,
           {
             message: t.cleanupConfirm,
@@ -7972,13 +8019,13 @@ function EvermindMaintenance({
         ) : null
       }
     ),
-    onReseed && /* @__PURE__ */ jsx67(
+    onReseed && /* @__PURE__ */ jsx68(
       Row,
       {
         title: t.reseedLabel,
         hint: t.reseedHint,
-        action: /* @__PURE__ */ jsxs62("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", justifyContent: "flex-end" }, children: [
-          /* @__PURE__ */ jsxs62(
+        action: /* @__PURE__ */ jsxs63("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", justifyContent: "flex-end" }, children: [
+          /* @__PURE__ */ jsxs63(
             "select",
             {
               value: slug,
@@ -7987,14 +8034,14 @@ function EvermindMaintenance({
               "aria-label": t.reseedLabel,
               style: { ...select, maxWidth: 200 },
               children: [
-                /* @__PURE__ */ jsx67("option", { value: "", style: optionStyle, children: t.reseedStarterOption }),
-                seedModels.map((m) => /* @__PURE__ */ jsx67("option", { value: m.slug, style: optionStyle, children: m.name }, m.slug))
+                /* @__PURE__ */ jsx68("option", { value: "", style: optionStyle, children: t.reseedStarterOption }),
+                seedModels.map((m) => /* @__PURE__ */ jsx68("option", { value: m.slug, style: optionStyle, children: m.name }, m.slug))
               ]
             }
           ),
-          /* @__PURE__ */ jsx67("button", { type: "button", onClick: () => setPending("reseed"), disabled: disabled || pending === "reseed", style: dangerBtn(disabled || pending === "reseed"), children: t.reseedCta })
+          /* @__PURE__ */ jsx68("button", { type: "button", onClick: () => setPending("reseed"), disabled: disabled || pending === "reseed", style: dangerBtn(disabled || pending === "reseed"), children: t.reseedCta })
         ] }),
-        confirm: pending === "reseed" ? /* @__PURE__ */ jsx67(
+        confirm: pending === "reseed" ? /* @__PURE__ */ jsx68(
           Confirm,
           {
             message: t.reseedConfirm,
@@ -8011,13 +8058,13 @@ function EvermindMaintenance({
   ] });
 }
 function Row({ title, hint, action, confirm }) {
-  return /* @__PURE__ */ jsxs62("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
-    /* @__PURE__ */ jsxs62("div", { style: { display: "flex", gap: 10, alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap" }, children: [
-      /* @__PURE__ */ jsxs62("div", { style: { flex: "1 1 200px", minWidth: 0 }, children: [
-        /* @__PURE__ */ jsx67("div", { style: { fontSize: "0.8rem", fontWeight: 600, color: C.text }, children: title }),
-        /* @__PURE__ */ jsx67("div", { style: fieldHint, children: hint })
+  return /* @__PURE__ */ jsxs63("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
+    /* @__PURE__ */ jsxs63("div", { style: { display: "flex", gap: 10, alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap" }, children: [
+      /* @__PURE__ */ jsxs63("div", { style: { flex: "1 1 200px", minWidth: 0 }, children: [
+        /* @__PURE__ */ jsx68("div", { style: { fontSize: "0.8rem", fontWeight: 600, color: C.text }, children: title }),
+        /* @__PURE__ */ jsx68("div", { style: fieldHint, children: hint })
       ] }),
-      /* @__PURE__ */ jsx67("div", { style: { flex: "0 1 auto" }, children: action })
+      /* @__PURE__ */ jsx68("div", { style: { flex: "0 1 auto" }, children: action })
     ] }),
     confirm
   ] });
@@ -8031,18 +8078,18 @@ function Confirm({
   onConfirm,
   onCancel
 }) {
-  return /* @__PURE__ */ jsxs62("div", { style: { ...warnBox, display: "flex", flexDirection: "column", gap: 8 }, role: "alertdialog", "aria-label": message, children: [
-    /* @__PURE__ */ jsx67("span", { children: message }),
-    /* @__PURE__ */ jsxs62("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" }, children: [
-      /* @__PURE__ */ jsx67("button", { type: "button", onClick: onConfirm, disabled, style: danger ? dangerBtn(disabled) : secondaryBtn(disabled), children: confirmLabel }),
-      /* @__PURE__ */ jsx67("button", { type: "button", onClick: onCancel, disabled, style: secondaryBtn(disabled), children: cancelLabel })
+  return /* @__PURE__ */ jsxs63("div", { style: { ...warnBox, display: "flex", flexDirection: "column", gap: 8 }, role: "alertdialog", "aria-label": message, children: [
+    /* @__PURE__ */ jsx68("span", { children: message }),
+    /* @__PURE__ */ jsxs63("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" }, children: [
+      /* @__PURE__ */ jsx68("button", { type: "button", onClick: onConfirm, disabled, style: danger ? dangerBtn(disabled) : secondaryBtn(disabled), children: confirmLabel }),
+      /* @__PURE__ */ jsx68("button", { type: "button", onClick: onCancel, disabled, style: secondaryBtn(disabled), children: cancelLabel })
     ] })
   ] });
 }
 
 // src/evermind/EvermindAnalyzer.tsx
 import { useCallback as useCallback23, useEffect as useEffect22, useMemo as useMemo17, useState as useState34 } from "react";
-import { Fragment as Fragment22, jsx as jsx68, jsxs as jsxs63 } from "react/jsx-runtime";
+import { Fragment as Fragment22, jsx as jsx69, jsxs as jsxs64 } from "react/jsx-runtime";
 var TONE = {
   ok: "ok",
   incoherent: "bad",
@@ -8103,14 +8150,14 @@ function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, analysi
   const findings = analysis?.findings ?? [];
   const allSelected = useMemo17(() => findings.length > 0 && findings.every((f) => selected.has(f.id)), [findings, selected]);
   const busy = disabled || running || applying;
-  return /* @__PURE__ */ jsxs63("div", { style: sectionBlock, children: [
-    /* @__PURE__ */ jsx68("div", { style: fieldTitle, children: t.analyzeTitle }),
-    /* @__PURE__ */ jsx68("div", { style: fieldHint, children: t.analyzeHint }),
-    /* @__PURE__ */ jsxs63("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
-      /* @__PURE__ */ jsx68("button", { type: "button", onClick: () => void run(), disabled: busy, style: secondaryBtn(busy), children: running ? t.analyzing : t.analyzeCta }),
-      findings.length > 0 && onApply && /* @__PURE__ */ jsxs63(Fragment22, { children: [
-        /* @__PURE__ */ jsx68("button", { type: "button", onClick: () => void apply(), disabled: busy || selected.size === 0, style: primaryBtn(busy || selected.size === 0), children: applying ? t.analyzeApplying : t.analyzeApplyCta(selected.size) }),
-        /* @__PURE__ */ jsx68(
+  return /* @__PURE__ */ jsxs64("div", { style: sectionBlock, children: [
+    /* @__PURE__ */ jsx69("div", { style: fieldTitle, children: t.analyzeTitle }),
+    /* @__PURE__ */ jsx69("div", { style: fieldHint, children: t.analyzeHint }),
+    /* @__PURE__ */ jsxs64("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
+      /* @__PURE__ */ jsx69("button", { type: "button", onClick: () => void run(), disabled: busy, style: secondaryBtn(busy), children: running ? t.analyzing : t.analyzeCta }),
+      findings.length > 0 && onApply && /* @__PURE__ */ jsxs64(Fragment22, { children: [
+        /* @__PURE__ */ jsx69("button", { type: "button", onClick: () => void apply(), disabled: busy || selected.size === 0, style: primaryBtn(busy || selected.size === 0), children: applying ? t.analyzeApplying : t.analyzeApplyCta(selected.size) }),
+        /* @__PURE__ */ jsx69(
           "button",
           {
             type: "button",
@@ -8122,14 +8169,14 @@ function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, analysi
         )
       ] })
     ] }),
-    error && /* @__PURE__ */ jsx68("p", { style: { margin: 0, fontSize: "0.76rem", color: C.danger }, role: "alert", children: error }),
-    repair && /* @__PURE__ */ jsx68(RepairOutcome, { t, repair }),
-    analysis?.warning && /* @__PURE__ */ jsx68("p", { style: warnBox, role: "note", children: analysis.warning }),
-    analysis && findings.length === 0 && /* @__PURE__ */ jsx68("p", { style: italic, children: t.analyzeClean(analysis.analyzed) }),
-    analysis?.truncated && typeof analysis.total === "number" && /* @__PURE__ */ jsx68("p", { style: italic, children: t.analyzeCoverage(analysis.analyzed, analysis.total) }),
-    analysis && findings.length > 0 && /* @__PURE__ */ jsxs63(Fragment22, { children: [
-      /* @__PURE__ */ jsx68("p", { style: { margin: 0, fontSize: "0.74rem", color: C.text2 }, children: analysis.model ? t.analyzeSummary(findings.length, analysis.analyzed, analysis.model) : t.analyzeSummaryLocal(findings.length, analysis.analyzed) }),
-      /* @__PURE__ */ jsx68("ul", { style: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }, children: findings.map((f) => /* @__PURE__ */ jsx68(
+    error && /* @__PURE__ */ jsx69("p", { style: { margin: 0, fontSize: "0.76rem", color: C.danger }, role: "alert", children: error }),
+    repair && /* @__PURE__ */ jsx69(RepairOutcome, { t, repair }),
+    analysis?.warning && /* @__PURE__ */ jsx69("p", { style: warnBox, role: "note", children: analysis.warning }),
+    analysis && findings.length === 0 && /* @__PURE__ */ jsx69("p", { style: italic, children: t.analyzeClean(analysis.analyzed) }),
+    analysis?.truncated && typeof analysis.total === "number" && /* @__PURE__ */ jsx69("p", { style: italic, children: t.analyzeCoverage(analysis.analyzed, analysis.total) }),
+    analysis && findings.length > 0 && /* @__PURE__ */ jsxs64(Fragment22, { children: [
+      /* @__PURE__ */ jsx69("p", { style: { margin: 0, fontSize: "0.74rem", color: C.text2 }, children: analysis.model ? t.analyzeSummary(findings.length, analysis.analyzed, analysis.model) : t.analyzeSummaryLocal(findings.length, analysis.analyzed) }),
+      /* @__PURE__ */ jsx69("ul", { style: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }, children: findings.map((f) => /* @__PURE__ */ jsx69(
         FindingRow,
         {
           t,
@@ -8148,7 +8195,7 @@ function RepairOutcome({ t, repair }) {
   const applied = repair.corrected + repair.forgotten > 0;
   const reasons = [...new Set(repair.skipped.map((s) => s.reason))].join("; ");
   if (!applied && !reasons) return null;
-  return /* @__PURE__ */ jsxs63(
+  return /* @__PURE__ */ jsxs64(
     "p",
     {
       style: applied ? { margin: 0, fontSize: "0.76rem", color: C.accent } : warnBox,
@@ -8170,7 +8217,7 @@ function FindingRow({
   onToggle
 }) {
   const tone = TONE[finding.verdict] ?? "warn";
-  return /* @__PURE__ */ jsxs63("li", { style: {
+  return /* @__PURE__ */ jsxs64("li", { style: {
     background: C.surface2,
     border: `1px solid ${selected ? C.accent : C.border}`,
     borderRadius: 8,
@@ -8179,8 +8226,8 @@ function FindingRow({
     flexDirection: "column",
     gap: 5
   }, children: [
-    /* @__PURE__ */ jsxs63("div", { style: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }, children: [
-      selectable && /* @__PURE__ */ jsx68(
+    /* @__PURE__ */ jsxs64("div", { style: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }, children: [
+      selectable && /* @__PURE__ */ jsx69(
         "input",
         {
           type: "checkbox",
@@ -8191,21 +8238,21 @@ function FindingRow({
           style: { margin: 0, cursor: disabled ? "not-allowed" : "pointer" }
         }
       ),
-      /* @__PURE__ */ jsx68("span", { style: verdictTag(tone), children: t.analyzeVerdict(finding.verdict) }),
-      finding.prompt && /* @__PURE__ */ jsx68("span", { style: { fontSize: "0.74rem", fontWeight: 600, color: C.text, wordBreak: "break-word", minWidth: 0 }, children: finding.prompt })
+      /* @__PURE__ */ jsx69("span", { style: verdictTag(tone), children: t.analyzeVerdict(finding.verdict) }),
+      finding.prompt && /* @__PURE__ */ jsx69("span", { style: { fontSize: "0.74rem", fontWeight: 600, color: C.text, wordBreak: "break-word", minWidth: 0 }, children: finding.prompt })
     ] }),
-    /* @__PURE__ */ jsx68("div", { style: { fontSize: "0.74rem", lineHeight: 1.45, color: C.text }, children: finding.issue }),
-    /* @__PURE__ */ jsx68("div", { style: { ...outputBox, maxHeight: 96, fontSize: "0.7rem", color: C.text2 }, children: finding.excerpt }),
-    finding.correction && /* @__PURE__ */ jsxs63("div", { style: { display: "flex", flexDirection: "column", gap: 3 }, children: [
-      /* @__PURE__ */ jsx68("div", { style: { fontSize: "0.62rem", textTransform: "uppercase", letterSpacing: "0.04em", color: C.text2 }, children: t.analyzeCorrectionLabel }),
-      /* @__PURE__ */ jsx68("div", { style: { ...outputBox, maxHeight: 140, fontSize: "0.7rem" }, children: finding.correction })
+    /* @__PURE__ */ jsx69("div", { style: { fontSize: "0.74rem", lineHeight: 1.45, color: C.text }, children: finding.issue }),
+    /* @__PURE__ */ jsx69("div", { style: { ...outputBox, maxHeight: 96, fontSize: "0.7rem", color: C.text2 }, children: finding.excerpt }),
+    finding.correction && /* @__PURE__ */ jsxs64("div", { style: { display: "flex", flexDirection: "column", gap: 3 }, children: [
+      /* @__PURE__ */ jsx69("div", { style: { fontSize: "0.62rem", textTransform: "uppercase", letterSpacing: "0.04em", color: C.text2 }, children: t.analyzeCorrectionLabel }),
+      /* @__PURE__ */ jsx69("div", { style: { ...outputBox, maxHeight: 140, fontSize: "0.7rem" }, children: finding.correction })
     ] })
   ] });
 }
 
 // src/evermind/EvermindDiagnostics.tsx
 import { useCallback as useCallback24, useEffect as useEffect23, useRef as useRef23, useState as useState35 } from "react";
-import { Fragment as Fragment23, jsx as jsx69, jsxs as jsxs64 } from "react/jsx-runtime";
+import { Fragment as Fragment23, jsx as jsx70, jsxs as jsxs65 } from "react/jsx-runtime";
 function useDiagnosticsCopy({ buildReport, onCopy, onManualFallback }) {
   const [report, setReport] = useState35(null);
   const [copied, setCopied] = useState35(false);
@@ -8236,16 +8283,16 @@ function EvermindDiagnostics({ t, disabled, copy }) {
     areaRef.current?.focus();
     areaRef.current?.select();
   }, [revealed]);
-  return /* @__PURE__ */ jsxs64("div", { style: sectionBlock, children: [
-    /* @__PURE__ */ jsx69("div", { style: fieldTitle, children: t.diagnosticsTitle }),
-    /* @__PURE__ */ jsx69("div", { style: fieldHint, children: t.diagnosticsHint }),
-    /* @__PURE__ */ jsxs64("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
-      /* @__PURE__ */ jsx69("button", { type: "button", onClick: () => void copy.copy(), disabled, style: secondaryBtn(disabled), children: t.diagnosticsCta }),
-      report !== null && /* @__PURE__ */ jsx69("button", { type: "button", onClick: copy.toggleReveal, style: linkBtn, children: revealed ? t.diagnosticsHide : t.diagnosticsShow })
+  return /* @__PURE__ */ jsxs65("div", { style: sectionBlock, children: [
+    /* @__PURE__ */ jsx70("div", { style: fieldTitle, children: t.diagnosticsTitle }),
+    /* @__PURE__ */ jsx70("div", { style: fieldHint, children: t.diagnosticsHint }),
+    /* @__PURE__ */ jsxs65("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
+      /* @__PURE__ */ jsx70("button", { type: "button", onClick: () => void copy.copy(), disabled, style: secondaryBtn(disabled), children: t.diagnosticsCta }),
+      report !== null && /* @__PURE__ */ jsx70("button", { type: "button", onClick: copy.toggleReveal, style: linkBtn, children: revealed ? t.diagnosticsHide : t.diagnosticsShow })
     ] }),
-    revealed && report !== null && /* @__PURE__ */ jsxs64(Fragment23, { children: [
-      !copied && /* @__PURE__ */ jsx69("p", { style: { margin: 0, fontSize: "0.72rem", color: C.text2, lineHeight: 1.4 }, children: t.diagnosticsManualHint }),
-      /* @__PURE__ */ jsx69(
+    revealed && report !== null && /* @__PURE__ */ jsxs65(Fragment23, { children: [
+      !copied && /* @__PURE__ */ jsx70("p", { style: { margin: 0, fontSize: "0.72rem", color: C.text2, lineHeight: 1.4 }, children: t.diagnosticsManualHint }),
+      /* @__PURE__ */ jsx70(
         "textarea",
         {
           ref: areaRef,
@@ -8262,7 +8309,7 @@ function EvermindDiagnostics({ t, disabled, copy }) {
 }
 
 // src/evermind/CodingGateNote.tsx
-import { jsx as jsx70 } from "react/jsx-runtime";
+import { jsx as jsx71 } from "react/jsx-runtime";
 function wholePct(fraction) {
   return Math.floor(fraction * 100 + 1e-6);
 }
@@ -8285,7 +8332,7 @@ function codingGateMessage(gate, t) {
 function CodingGateNote({ gate, t }) {
   const message = codingGateMessage(gate, t);
   if (!message) return null;
-  return /* @__PURE__ */ jsx70("p", { style: { margin: 0, fontSize: "0.72rem", lineHeight: 1.5 }, role: "note", "data-testid": "evermind-coding-gate", children: /* @__PURE__ */ jsx70("span", { style: verdictTag(message.tone), children: message.text }) });
+  return /* @__PURE__ */ jsx71("p", { style: { margin: 0, fontSize: "0.72rem", lineHeight: 1.5 }, role: "note", "data-testid": "evermind-coding-gate", children: /* @__PURE__ */ jsx71("span", { style: verdictTag(message.tone), children: message.text }) });
 }
 
 // src/evermind/diagnosticsReport.ts
@@ -8544,7 +8591,7 @@ function buildEvermindDiagnostics(input) {
 }
 
 // src/evermind/EvermindConsole.tsx
-import { Fragment as Fragment24, jsx as jsx71, jsxs as jsxs65 } from "react/jsx-runtime";
+import { Fragment as Fragment24, jsx as jsx72, jsxs as jsxs66 } from "react/jsx-runtime";
 var TEACH_POLL_INTERVAL_MS = 3e3;
 var TEACH_POLL_TIMEOUT_MS = 12e4;
 function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectName, showRecent = true, showHeaderRefresh = true, refreshSignal, onValidate, host = "web" }) {
@@ -8737,7 +8784,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
     onCopy: adapter.copyText,
     onManualFallback: () => setTab("maintain")
   });
-  if (!loaded) return /* @__PURE__ */ jsx71(Section, { "aria-busy": true, children: /* @__PURE__ */ jsx71("p", { style: { margin: 0, color: C.text2, fontSize: "0.82rem" }, children: t.loading }) });
+  if (!loaded) return /* @__PURE__ */ jsx72(Section, { "aria-busy": true, children: /* @__PURE__ */ jsx72("p", { style: { margin: 0, color: C.text2, fontSize: "0.82rem" }, children: t.loading }) });
   const seeded = !!data?.seeded;
   const frozen = data?.mode === "offline-frozen";
   const inherited = !!data?.inherited;
@@ -8755,22 +8802,22 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
     probe: probeResult
   }) : null;
   const scopeName = projectName?.trim();
-  const Header = /* @__PURE__ */ jsxs65("header", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
-    /* @__PURE__ */ jsx71("span", { "aria-hidden": true, style: { fontSize: "1.05rem" }, children: "\u{1F9E0}" }),
-    /* @__PURE__ */ jsx71("h3", { style: { margin: 0, fontSize: "0.95rem", fontWeight: 700, color: C.text }, children: t.title }),
-    scopeName && /* @__PURE__ */ jsxs65("span", { style: { fontSize: "0.8rem", color: C.text2 }, title: scopeName, children: [
+  const Header = /* @__PURE__ */ jsxs66("header", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
+    /* @__PURE__ */ jsx72("span", { "aria-hidden": true, style: { fontSize: "1.05rem" }, children: "\u{1F9E0}" }),
+    /* @__PURE__ */ jsx72("h3", { style: { margin: 0, fontSize: "0.95rem", fontWeight: 700, color: C.text }, children: t.title }),
+    scopeName && /* @__PURE__ */ jsxs66("span", { style: { fontSize: "0.8rem", color: C.text2 }, title: scopeName, children: [
       "\xB7 ",
       scopeName
     ] }),
-    !loadFailed && /* @__PURE__ */ jsx71("span", { style: pill(seeded), children: seeded ? t.statusSeeded(data?.version ?? 0) : t.statusUnseeded }),
-    !loadFailed && seeded && /* @__PURE__ */ jsx71(RegressionChip, { t, evalPoint: data?.eval ?? null }),
-    !loadFailed && quarantined && /* @__PURE__ */ jsxs65("span", { style: quarantinePill, title: t.quarantinedHint(quarantineReason), children: [
+    !loadFailed && /* @__PURE__ */ jsx72("span", { style: pill(seeded), children: seeded ? t.statusSeeded(data?.version ?? 0) : t.statusUnseeded }),
+    !loadFailed && seeded && /* @__PURE__ */ jsx72(RegressionChip, { t, evalPoint: data?.eval ?? null }),
+    !loadFailed && quarantined && /* @__PURE__ */ jsxs66("span", { style: quarantinePill, title: t.quarantinedHint(quarantineReason), children: [
       "\u26A0 ",
       t.quarantinedBadge
     ] }),
-    diagnostics.copied && /* @__PURE__ */ jsx71("span", { role: "status", style: { fontSize: "0.72rem", color: C.accent }, children: t.diagnosticsCopied }),
-    /* @__PURE__ */ jsxs65("span", { style: { marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6 }, children: [
-      /* @__PURE__ */ jsxs65(
+    diagnostics.copied && /* @__PURE__ */ jsx72("span", { role: "status", style: { fontSize: "0.72rem", color: C.accent }, children: t.diagnosticsCopied }),
+    /* @__PURE__ */ jsxs66("span", { style: { marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6 }, children: [
+      /* @__PURE__ */ jsxs66(
         "button",
         {
           type: "button",
@@ -8779,19 +8826,19 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
           title: t.diagnosticsCta,
           "aria-label": t.diagnosticsCta,
           children: [
-            /* @__PURE__ */ jsx71("span", { "aria-hidden": true, children: diagnostics.copied ? "\u2713" : "\u29C9" }),
+            /* @__PURE__ */ jsx72("span", { "aria-hidden": true, children: diagnostics.copied ? "\u2713" : "\u29C9" }),
             t.diagnosticsTitle
           ]
         }
       ),
-      showHeaderRefresh && /* @__PURE__ */ jsx71("button", { type: "button", onClick: () => void reload(), disabled: busy, style: { ...ghostBtn, marginLeft: 0 }, title: t.refresh, "aria-label": t.refresh, children: "\u21BB" })
+      showHeaderRefresh && /* @__PURE__ */ jsx72("button", { type: "button", onClick: () => void reload(), disabled: busy, style: { ...ghostBtn, marginLeft: 0 }, title: t.refresh, "aria-label": t.refresh, children: "\u21BB" })
     ] })
   ] });
   if (loadFailed) {
-    return /* @__PURE__ */ jsxs65(Section, { "aria-label": t.title, children: [
+    return /* @__PURE__ */ jsxs66(Section, { "aria-label": t.title, children: [
       Header,
-      /* @__PURE__ */ jsx71("p", { style: { margin: 0, fontSize: "0.8rem", lineHeight: 1.5, color: C.danger }, role: "alert", children: t.errorGeneric }),
-      /* @__PURE__ */ jsx71("button", { type: "button", onClick: () => void reload(), disabled: busy, style: primaryBtn(busy), children: t.refresh })
+      /* @__PURE__ */ jsx72("p", { style: { margin: 0, fontSize: "0.8rem", lineHeight: 1.5, color: C.danger }, role: "alert", children: t.errorGeneric }),
+      /* @__PURE__ */ jsx72("button", { type: "button", onClick: () => void reload(), disabled: busy, style: primaryBtn(busy), children: t.refresh })
     ] });
   }
   const tabs = [];
@@ -8803,8 +8850,8 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       // The queue depth belongs here: "3 waiting" is a prompt to press Learn now, and
       // it is the one number that changes while you are on another tab.
       ...head.pending > 0 ? { badge: String(head.pending), badgeTone: "info" } : {},
-      content: /* @__PURE__ */ jsxs65(Fragment24, { children: [
-        /* @__PURE__ */ jsx71(
+      content: /* @__PURE__ */ jsxs66(Fragment24, { children: [
+        /* @__PURE__ */ jsx72(
           TeacherPicker,
           {
             t,
@@ -8815,7 +8862,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
             onChange: (m) => run(() => adapter.setTeacher(m || null))
           }
         ),
-        /* @__PURE__ */ jsx71(
+        /* @__PURE__ */ jsx72(
           TeachBox,
           {
             t,
@@ -8840,9 +8887,9 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
             onValidate: () => runValidate(head.teacherModel ? teachPrompt : teachPrompt.trim() || teachText)
           }
         ),
-        validateResult && /* @__PURE__ */ jsx71(ValidateResults, { t, result: validateResult, onClear: clearValidate }),
-        canManage && /* @__PURE__ */ jsxs65("div", { style: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }, children: [
-          /* @__PURE__ */ jsx71(
+        validateResult && /* @__PURE__ */ jsx72(ValidateResults, { t, result: validateResult, onClear: clearValidate }),
+        canManage && /* @__PURE__ */ jsxs66("div", { style: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }, children: [
+          /* @__PURE__ */ jsx72(
             "button",
             {
               type: "button",
@@ -8855,13 +8902,13 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
               children: busy ? t.flushing : t.flushCta
             }
           ),
-          head.pending > 0 && /* @__PURE__ */ jsxs65("span", { style: { fontSize: "0.74rem", color: C.text2 }, children: [
+          head.pending > 0 && /* @__PURE__ */ jsxs66("span", { style: { fontSize: "0.74rem", color: C.text2 }, children: [
             t.pendingLabel,
             ": ",
             head.pending
           ] })
         ] }),
-        canManage && adapter.importMemory && /* @__PURE__ */ jsx71(
+        canManage && adapter.importMemory && /* @__PURE__ */ jsx72(
           ImportBox,
           {
             t,
@@ -8886,7 +8933,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
         // A failed readiness check follows you to the other tabs. A refusal you can only
         // see while standing on the tab that found it is a refusal you forget.
         ...refused ? { badge: "!", badgeTone: "bad" } : {},
-        content: /* @__PURE__ */ jsx71(
+        content: /* @__PURE__ */ jsx72(
           EvermindTestBench,
           {
             t,
@@ -8904,7 +8951,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
         id: "check",
         label: t.tabCheck,
         ...issues > 0 ? { badge: String(issues), badgeTone: "bad" } : {},
-        content: /* @__PURE__ */ jsx71(
+        content: /* @__PURE__ */ jsx72(
           EvermindAnalyzer,
           {
             t,
@@ -8921,8 +8968,8 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
     tabs.push({
       id: "maintain",
       label: t.tabMaintain,
-      content: /* @__PURE__ */ jsxs65(Fragment24, { children: [
-        canManage && /* @__PURE__ */ jsx71(
+      content: /* @__PURE__ */ jsxs66(Fragment24, { children: [
+        canManage && /* @__PURE__ */ jsx72(
           EvermindMaintenance,
           {
             t,
@@ -8948,15 +8995,15 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
             } : {}
           }
         ),
-        /* @__PURE__ */ jsx71(EvermindDiagnostics, { t, disabled: busy, copy: diagnostics })
+        /* @__PURE__ */ jsx72(EvermindDiagnostics, { t, disabled: busy, copy: diagnostics })
       ] })
     });
   }
-  return /* @__PURE__ */ jsxs65(Section, { "aria-label": t.title, children: [
+  return /* @__PURE__ */ jsxs66(Section, { "aria-label": t.title, children: [
     Header,
-    /* @__PURE__ */ jsx71("p", { style: { margin: 0, fontSize: "0.8rem", lineHeight: 1.5, color: C.text2 }, children: t.description }),
-    !canManage && /* @__PURE__ */ jsx71("p", { style: { margin: 0, fontSize: "0.72rem", color: C.text2, fontStyle: "italic" }, children: t.managerOnlyHint }),
-    inherited && /* @__PURE__ */ jsx71(
+    /* @__PURE__ */ jsx72("p", { style: { margin: 0, fontSize: "0.8rem", lineHeight: 1.5, color: C.text2 }, children: t.description }),
+    !canManage && /* @__PURE__ */ jsx72("p", { style: { margin: 0, fontSize: "0.72rem", color: C.text2, fontStyle: "italic" }, children: t.managerOnlyHint }),
+    inherited && /* @__PURE__ */ jsx72(
       "p",
       {
         style: { margin: 0, fontSize: "0.72rem", lineHeight: 1.5, color: C.text2, fontStyle: "italic" },
@@ -8964,15 +9011,15 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
         children: t.inheritedHint
       }
     ),
-    quarantined && /* @__PURE__ */ jsx71("p", { style: warnBox, role: "alert", children: t.quarantinedHint(quarantineReason) }),
-    !loadFailed && /* @__PURE__ */ jsx71(CodingGateNote, { gate: data?.codingGate, t }),
-    nextAction && /* @__PURE__ */ jsx71(NextActionCard, { action: nextAction, canAct: canManage && !busy && !inherited, onAction: () => {
+    quarantined && /* @__PURE__ */ jsx72("p", { style: warnBox, role: "alert", children: t.quarantinedHint(quarantineReason) }),
+    !loadFailed && /* @__PURE__ */ jsx72(CodingGateNote, { gate: data?.codingGate, t }),
+    nextAction && /* @__PURE__ */ jsx72(NextActionCard, { action: nextAction, canAct: canManage && !busy && !inherited, onAction: () => {
       if (nextAction.id === "test") setTab("test");
       else if (nextAction.id === "teacher" || nextAction.id === "merge" || nextAction.id === "learn") setTab("teach");
       else if (nextAction.id === "check") setTab("check");
       else if (nextAction.id === "enable") void run(() => adapter.setInference(true));
     } }),
-    targets && /* @__PURE__ */ jsx71(TargetsList, { t, targets }),
+    targets && /* @__PURE__ */ jsx72(TargetsList, { t, targets }),
     inherited ? (
       // INHERITED — read-only. This build has no `project_evermind` row of its own;
       // it is displaying its container project's. Every write endpoint keeps exact-id
@@ -8981,8 +9028,8 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       // rendering the container's unchanged stats. Rendering the stats WITHOUT the
       // controls is the honest surface — the model is genuinely shared and genuinely
       // shown; it is just not managed from here.
-      /* @__PURE__ */ jsx71(StatRow, { t, data })
-    ) : !seeded ? /* @__PURE__ */ jsx71(
+      /* @__PURE__ */ jsx72(StatRow, { t, data })
+    ) : !seeded ? /* @__PURE__ */ jsx72(
       SeedControls,
       {
         t,
@@ -8993,9 +9040,9 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
         onSelect: setSelectedSlug,
         onSeed: () => selectedSlug && run(() => adapter.seedFromModel(selectedSlug))
       }
-    ) : /* @__PURE__ */ jsxs65(Fragment24, { children: [
-      /* @__PURE__ */ jsx71(StatRow, { t, data }),
-      /* @__PURE__ */ jsx71(
+    ) : /* @__PURE__ */ jsxs66(Fragment24, { children: [
+      /* @__PURE__ */ jsx72(StatRow, { t, data }),
+      /* @__PURE__ */ jsx72(
         ToggleRow,
         {
           label: t.inferenceLabel,
@@ -9007,7 +9054,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
           onToggle: () => run(() => adapter.setInference(!data?.inferenceEnabled))
         }
       ),
-      /* @__PURE__ */ jsx71(
+      /* @__PURE__ */ jsx72(
         ToggleRow,
         {
           label: t.learningLabel,
@@ -9019,7 +9066,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
           onToggle: () => run(() => adapter.setMode(frozen ? "connected" : "offline-frozen"))
         }
       ),
-      /* @__PURE__ */ jsx71(
+      /* @__PURE__ */ jsx72(
         SurfaceTabs,
         {
           tabs,
@@ -9029,26 +9076,26 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
           idPrefix: `ev${panelId}`
         }
       ),
-      showRecent && /* @__PURE__ */ jsx71(RecentList, { t, entries: data?.recent ?? [] })
+      showRecent && /* @__PURE__ */ jsx72(RecentList, { t, entries: data?.recent ?? [] })
     ] }),
-    notice && /* @__PURE__ */ jsx71("p", { style: { margin: 0, fontSize: "0.74rem", lineHeight: 1.5, color: noticeTone === "warn" ? C.warnText : C.accent }, role: "status", children: notice }),
-    error && /* @__PURE__ */ jsx71("p", { style: { margin: 0, fontSize: "0.76rem", color: C.danger }, role: "alert", children: error })
+    notice && /* @__PURE__ */ jsx72("p", { style: { margin: 0, fontSize: "0.74rem", lineHeight: 1.5, color: noticeTone === "warn" ? C.warnText : C.accent }, role: "status", children: notice }),
+    error && /* @__PURE__ */ jsx72("p", { style: { margin: 0, fontSize: "0.76rem", color: C.danger }, role: "alert", children: error })
   ] });
 }
 function NextActionCard({ action, canAct, onAction }) {
   const color = action.tone === "danger" ? C.danger : action.tone === "attention" ? C.warnText : action.tone === "good" ? C.accent : C.text2;
   const actionable = !["seed", "none"].includes(action.id);
-  return /* @__PURE__ */ jsxs65("section", { "aria-label": "Recommended next action", style: { display: "grid", gridTemplateColumns: "minmax(0,1fr) auto", gap: "6px 12px", alignItems: "center", padding: "11px 12px", border: `1px solid ${color}`, borderRadius: 10, background: C.surface2 }, children: [
-    /* @__PURE__ */ jsx71("span", { style: { gridColumn: "1 / -1", color, fontSize: "0.62rem", fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase" }, children: "Recommended next action" }),
-    /* @__PURE__ */ jsxs65("div", { style: { minWidth: 0 }, children: [
-      /* @__PURE__ */ jsx71("strong", { style: { display: "block", color: C.text, fontSize: "0.82rem" }, children: action.title }),
-      /* @__PURE__ */ jsx71("p", { style: { margin: "3px 0 0", color: C.text2, fontSize: "0.72rem", lineHeight: 1.45 }, children: action.detail }),
-      /* @__PURE__ */ jsxs65("small", { style: { display: "block", marginTop: 5, color, fontSize: "0.66rem", fontWeight: 700 }, children: [
+  return /* @__PURE__ */ jsxs66("section", { "aria-label": "Recommended next action", style: { display: "grid", gridTemplateColumns: "minmax(0,1fr) auto", gap: "6px 12px", alignItems: "center", padding: "11px 12px", border: `1px solid ${color}`, borderRadius: 10, background: C.surface2 }, children: [
+    /* @__PURE__ */ jsx72("span", { style: { gridColumn: "1 / -1", color, fontSize: "0.62rem", fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase" }, children: "Recommended next action" }),
+    /* @__PURE__ */ jsxs66("div", { style: { minWidth: 0 }, children: [
+      /* @__PURE__ */ jsx72("strong", { style: { display: "block", color: C.text, fontSize: "0.82rem" }, children: action.title }),
+      /* @__PURE__ */ jsx72("p", { style: { margin: "3px 0 0", color: C.text2, fontSize: "0.72rem", lineHeight: 1.45 }, children: action.detail }),
+      /* @__PURE__ */ jsxs66("small", { style: { display: "block", marginTop: 5, color, fontSize: "0.66rem", fontWeight: 700 }, children: [
         "Go to: ",
         action.destination
       ] })
     ] }),
-    actionable && /* @__PURE__ */ jsx71("button", { type: "button", disabled: !canAct, onClick: onAction, style: { border: `1px solid ${color}`, borderRadius: 8, padding: "7px 10px", background: "transparent", color, fontSize: "0.7rem", fontWeight: 800, cursor: canAct ? "pointer" : "not-allowed", opacity: canAct ? 1 : 0.55 }, children: action.cta })
+    actionable && /* @__PURE__ */ jsx72("button", { type: "button", disabled: !canAct, onClick: onAction, style: { border: `1px solid ${color}`, borderRadius: 8, padding: "7px 10px", background: "transparent", color, fontSize: "0.7rem", fontWeight: 800, cursor: canAct ? "pointer" : "not-allowed", opacity: canAct ? 1 : 0.55 }, children: action.cta })
   ] });
 }
 function RegressionChip({ t, evalPoint }) {
@@ -9060,7 +9107,7 @@ function RegressionChip({ t, evalPoint }) {
   const color = tone === "up" ? "#22c55e" : tone === "down" ? "#f87171" : C.text2;
   const label = tone === "flat" ? t.evalFlat : t.evalDelta(pct.toFixed(1));
   const title = t.evalTooltip(evalPoint.version, evalPoint.baseLoss.toFixed(3), evalPoint.newLoss.toFixed(3), evalPoint.evalSize);
-  return /* @__PURE__ */ jsxs65(
+  return /* @__PURE__ */ jsxs66(
     "span",
     {
       title,
@@ -9077,14 +9124,14 @@ function RegressionChip({ t, evalPoint }) {
         padding: "2px 8px"
       },
       children: [
-        /* @__PURE__ */ jsx71("span", { "aria-hidden": true, children: arrow }),
+        /* @__PURE__ */ jsx72("span", { "aria-hidden": true, children: arrow }),
         label
       ]
     }
   );
 }
 function Section({ children, ...rest }) {
-  return /* @__PURE__ */ jsx71(
+  return /* @__PURE__ */ jsx72(
     "section",
     {
       ...rest,
@@ -9110,13 +9157,13 @@ function SeedControls({
   onSelect,
   onSeed
 }) {
-  if (!canManage) return /* @__PURE__ */ jsx71("p", { style: italic, children: t.notSetUp });
-  if (models.length === 0) return /* @__PURE__ */ jsx71("p", { style: italic, children: t.noModels });
-  return /* @__PURE__ */ jsxs65("div", { style: { display: "flex", flexDirection: "column", gap: 8 }, children: [
-    /* @__PURE__ */ jsx71("label", { style: fieldLabel, children: t.pickModelLabel }),
-    /* @__PURE__ */ jsxs65("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }, children: [
-      /* @__PURE__ */ jsx71("select", { value: selectedSlug, onChange: (e) => onSelect(e.target.value), disabled: busy, style: { ...select, flex: "1 1 200px" }, children: models.map((m) => /* @__PURE__ */ jsx71("option", { value: m.slug, style: optionStyle, children: m.name }, m.slug)) }),
-      /* @__PURE__ */ jsx71("button", { type: "button", onClick: onSeed, disabled: busy || !selectedSlug, style: primaryBtn(busy || !selectedSlug), children: busy ? t.working : t.enableCta })
+  if (!canManage) return /* @__PURE__ */ jsx72("p", { style: italic, children: t.notSetUp });
+  if (models.length === 0) return /* @__PURE__ */ jsx72("p", { style: italic, children: t.noModels });
+  return /* @__PURE__ */ jsxs66("div", { style: { display: "flex", flexDirection: "column", gap: 8 }, children: [
+    /* @__PURE__ */ jsx72("label", { style: fieldLabel, children: t.pickModelLabel }),
+    /* @__PURE__ */ jsxs66("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }, children: [
+      /* @__PURE__ */ jsx72("select", { value: selectedSlug, onChange: (e) => onSelect(e.target.value), disabled: busy, style: { ...select, flex: "1 1 200px" }, children: models.map((m) => /* @__PURE__ */ jsx72("option", { value: m.slug, style: optionStyle, children: m.name }, m.slug)) }),
+      /* @__PURE__ */ jsx72("button", { type: "button", onClick: onSeed, disabled: busy || !selectedSlug, style: primaryBtn(busy || !selectedSlug), children: busy ? t.working : t.enableCta })
     ] })
   ] });
 }
@@ -9128,9 +9175,9 @@ function StatRow({ t, data }) {
     { label: t.pendingLabel, value: String(data.pending) },
     { label: t.lastLearnedLabel, value: last }
   ];
-  return /* @__PURE__ */ jsx71("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(88px, 1fr))", gap: 8 }, children: stats.map((s) => /* @__PURE__ */ jsxs65("div", { style: { background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 10px" }, children: [
-    /* @__PURE__ */ jsx71("div", { style: { fontSize: "0.66rem", textTransform: "uppercase", letterSpacing: "0.04em", color: C.text2 }, children: s.label }),
-    /* @__PURE__ */ jsx71("div", { style: { fontSize: "0.9rem", fontWeight: 700, color: C.text, marginTop: 2, wordBreak: "break-word" }, children: s.value })
+  return /* @__PURE__ */ jsx72("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(88px, 1fr))", gap: 8 }, children: stats.map((s) => /* @__PURE__ */ jsxs66("div", { style: { background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 10px" }, children: [
+    /* @__PURE__ */ jsx72("div", { style: { fontSize: "0.66rem", textTransform: "uppercase", letterSpacing: "0.04em", color: C.text2 }, children: s.label }),
+    /* @__PURE__ */ jsx72("div", { style: { fontSize: "0.9rem", fontWeight: 700, color: C.text, marginTop: 2, wordBreak: "break-word" }, children: s.value })
   ] }, s.label)) });
 }
 function ToggleRow({
@@ -9142,12 +9189,12 @@ function ToggleRow({
   onText,
   offText
 }) {
-  return /* @__PURE__ */ jsxs65("div", { style: { display: "flex", gap: 10, alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap" }, children: [
-    /* @__PURE__ */ jsxs65("div", { style: { flex: "1 1 200px", minWidth: 0 }, children: [
-      /* @__PURE__ */ jsx71("div", { style: fieldTitle, children: label }),
-      /* @__PURE__ */ jsx71("div", { style: fieldHint, children: hint })
+  return /* @__PURE__ */ jsxs66("div", { style: { display: "flex", gap: 10, alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap" }, children: [
+    /* @__PURE__ */ jsxs66("div", { style: { flex: "1 1 200px", minWidth: 0 }, children: [
+      /* @__PURE__ */ jsx72("div", { style: fieldTitle, children: label }),
+      /* @__PURE__ */ jsx72("div", { style: fieldHint, children: hint })
     ] }),
-    /* @__PURE__ */ jsx71(
+    /* @__PURE__ */ jsx72(
       "button",
       {
         type: "button",
@@ -9181,16 +9228,16 @@ function TeacherPicker({
 }) {
   const models = opts?.models ?? [];
   const options = value && !models.includes(value) ? [value, ...models] : models;
-  return /* @__PURE__ */ jsxs65("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
-    /* @__PURE__ */ jsxs65("div", { children: [
-      /* @__PURE__ */ jsx71("div", { style: fieldTitle, children: t.teacherLabel }),
-      /* @__PURE__ */ jsx71("div", { style: fieldHint, children: t.teacherHint })
+  return /* @__PURE__ */ jsxs66("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
+    /* @__PURE__ */ jsxs66("div", { children: [
+      /* @__PURE__ */ jsx72("div", { style: fieldTitle, children: t.teacherLabel }),
+      /* @__PURE__ */ jsx72("div", { style: fieldHint, children: t.teacherHint })
     ] }),
-    !canManage ? /* @__PURE__ */ jsx71("div", { style: { ...select, color: C.text2 }, children: value || t.teacherNone }) : opts && !opts.isPaid ? /* @__PURE__ */ jsx71("p", { style: italic, children: t.teacherPaidOnly }) : /* @__PURE__ */ jsxs65("select", { value, onChange: (e) => onChange(e.target.value), disabled: busy, "aria-label": t.teacherLabel, style: { ...select, maxWidth: 340 }, children: [
-      /* @__PURE__ */ jsx71("option", { value: "", style: optionStyle, children: t.teacherNone }),
-      options.map((m) => /* @__PURE__ */ jsx71("option", { value: m, style: optionStyle, children: m }, m))
+    !canManage ? /* @__PURE__ */ jsx72("div", { style: { ...select, color: C.text2 }, children: value || t.teacherNone }) : opts && !opts.isPaid ? /* @__PURE__ */ jsx72("p", { style: italic, children: t.teacherPaidOnly }) : /* @__PURE__ */ jsxs66("select", { value, onChange: (e) => onChange(e.target.value), disabled: busy, "aria-label": t.teacherLabel, style: { ...select, maxWidth: 340 }, children: [
+      /* @__PURE__ */ jsx72("option", { value: "", style: optionStyle, children: t.teacherNone }),
+      options.map((m) => /* @__PURE__ */ jsx72("option", { value: m, style: optionStyle, children: m }, m))
     ] }),
-    value && /* @__PURE__ */ jsx71("div", { style: { fontSize: "0.72rem", lineHeight: 1.4, color: C.accent, background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 6, padding: "6px 8px" }, children: t.teacherActiveHint(value) })
+    value && /* @__PURE__ */ jsx72("div", { style: { fontSize: "0.72rem", lineHeight: 1.4, color: C.accent, background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 6, padding: "6px 8px" }, children: t.teacherActiveHint(value) })
   ] });
 }
 function TeachBox({
@@ -9208,66 +9255,66 @@ function TeachBox({
   const teaching = !!teacherModel;
   const canTeach = teaching ? prompt.trim().length >= 20 : text.trim().length >= 20;
   const canValidate = (teaching ? prompt : prompt.trim() || text).trim().length >= 3;
-  return /* @__PURE__ */ jsxs65("div", { style: sectionBlock, children: [
-    /* @__PURE__ */ jsx71("div", { style: fieldTitle, children: teaching ? t.teachTeacherTitle : t.teachTitle }),
-    /* @__PURE__ */ jsx71("div", { style: fieldHint, children: teaching ? t.teachTeacherHint(teacherModel) : t.teachHint }),
-    teaching ? /* @__PURE__ */ jsx71("textarea", { value: prompt, onChange: (e) => onPrompt(e.target.value), disabled: busy, placeholder: t.teachTaskPlaceholder, rows: 3, style: { ...select, width: "100%", resize: "vertical", fontFamily: "inherit" } }) : /* @__PURE__ */ jsxs65(Fragment24, { children: [
-      /* @__PURE__ */ jsx71("input", { value: prompt, onChange: (e) => onPrompt(e.target.value), disabled: busy, placeholder: t.teachPromptPlaceholder, style: { ...select, width: "100%" } }),
-      /* @__PURE__ */ jsx71("textarea", { value: text, onChange: (e) => onText(e.target.value), disabled: busy, placeholder: t.teachTextPlaceholder, rows: 3, style: { ...select, width: "100%", resize: "vertical", fontFamily: "inherit" } })
+  return /* @__PURE__ */ jsxs66("div", { style: sectionBlock, children: [
+    /* @__PURE__ */ jsx72("div", { style: fieldTitle, children: teaching ? t.teachTeacherTitle : t.teachTitle }),
+    /* @__PURE__ */ jsx72("div", { style: fieldHint, children: teaching ? t.teachTeacherHint(teacherModel) : t.teachHint }),
+    teaching ? /* @__PURE__ */ jsx72("textarea", { value: prompt, onChange: (e) => onPrompt(e.target.value), disabled: busy, placeholder: t.teachTaskPlaceholder, rows: 3, style: { ...select, width: "100%", resize: "vertical", fontFamily: "inherit" } }) : /* @__PURE__ */ jsxs66(Fragment24, { children: [
+      /* @__PURE__ */ jsx72("input", { value: prompt, onChange: (e) => onPrompt(e.target.value), disabled: busy, placeholder: t.teachPromptPlaceholder, style: { ...select, width: "100%" } }),
+      /* @__PURE__ */ jsx72("textarea", { value: text, onChange: (e) => onText(e.target.value), disabled: busy, placeholder: t.teachTextPlaceholder, rows: 3, style: { ...select, width: "100%", resize: "vertical", fontFamily: "inherit" } })
     ] }),
-    /* @__PURE__ */ jsxs65("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
-      /* @__PURE__ */ jsx71("button", { type: "button", onClick: onTeach, disabled: busy || !canTeach, style: primaryBtn(busy || !canTeach), children: busy ? t.teaching : teaching ? t.teachTeacherCta : t.teachCta }),
-      /* @__PURE__ */ jsx71("button", { type: "button", onClick: onValidate, disabled: busy || validating || !canValidate, style: secondaryBtn(busy || validating || !canValidate), title: t.validateHint, children: validating ? t.validating : t.validateCta })
+    /* @__PURE__ */ jsxs66("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
+      /* @__PURE__ */ jsx72("button", { type: "button", onClick: onTeach, disabled: busy || !canTeach, style: primaryBtn(busy || !canTeach), children: busy ? t.teaching : teaching ? t.teachTeacherCta : t.teachCta }),
+      /* @__PURE__ */ jsx72("button", { type: "button", onClick: onValidate, disabled: busy || validating || !canValidate, style: secondaryBtn(busy || validating || !canValidate), title: t.validateHint, children: validating ? t.validating : t.validateCta })
     ] })
   ] });
 }
 function ImportBox({ t, busy, frozen, onImport }) {
   const disabled = busy || frozen;
-  return /* @__PURE__ */ jsxs65("div", { style: sectionBlock, children: [
-    /* @__PURE__ */ jsx71("div", { style: fieldTitle, children: t.importTitle }),
-    /* @__PURE__ */ jsx71("div", { style: fieldHint, children: t.importHint }),
-    /* @__PURE__ */ jsx71("button", { type: "button", onClick: onImport, disabled, style: { ...secondaryBtn(disabled), alignSelf: "flex-start" }, children: busy ? t.importing : t.importCta })
+  return /* @__PURE__ */ jsxs66("div", { style: sectionBlock, children: [
+    /* @__PURE__ */ jsx72("div", { style: fieldTitle, children: t.importTitle }),
+    /* @__PURE__ */ jsx72("div", { style: fieldHint, children: t.importHint }),
+    /* @__PURE__ */ jsx72("button", { type: "button", onClick: onImport, disabled, style: { ...secondaryBtn(disabled), alignSelf: "flex-start" }, children: busy ? t.importing : t.importCta })
   ] });
 }
 function ValidateResults({ t, result, onClear }) {
-  return /* @__PURE__ */ jsxs65("div", { style: { display: "flex", flexDirection: "column", gap: 6, background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: "10px 12px" }, children: [
-    /* @__PURE__ */ jsxs65("div", { style: { display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }, children: [
-      /* @__PURE__ */ jsx71("span", { style: { ...fieldTitle, flex: 1, minWidth: 0 }, children: t.validateResultTitle(result.prompt) }),
-      /* @__PURE__ */ jsx71("span", { style: { fontSize: "0.64rem", fontWeight: 600, color: C.text2, border: `1px solid ${C.border}`, borderRadius: 999, padding: "1px 8px" }, children: t.validateMethod(result.method) }),
-      /* @__PURE__ */ jsx71("button", { type: "button", onClick: onClear, style: { ...ghostBtn, marginLeft: 0 }, children: t.validateClear })
+  return /* @__PURE__ */ jsxs66("div", { style: { display: "flex", flexDirection: "column", gap: 6, background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: "10px 12px" }, children: [
+    /* @__PURE__ */ jsxs66("div", { style: { display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }, children: [
+      /* @__PURE__ */ jsx72("span", { style: { ...fieldTitle, flex: 1, minWidth: 0 }, children: t.validateResultTitle(result.prompt) }),
+      /* @__PURE__ */ jsx72("span", { style: { fontSize: "0.64rem", fontWeight: 600, color: C.text2, border: `1px solid ${C.border}`, borderRadius: 999, padding: "1px 8px" }, children: t.validateMethod(result.method) }),
+      /* @__PURE__ */ jsx72("button", { type: "button", onClick: onClear, style: { ...ghostBtn, marginLeft: 0 }, children: t.validateClear })
     ] }),
-    result.matches.length === 0 ? /* @__PURE__ */ jsx71("p", { style: italic, children: t.validateEmpty }) : /* @__PURE__ */ jsx71("ul", { style: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }, children: result.matches.map((m) => {
+    result.matches.length === 0 ? /* @__PURE__ */ jsx72("p", { style: italic, children: t.validateEmpty }) : /* @__PURE__ */ jsx72("ul", { style: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }, children: result.matches.map((m) => {
       const primary = m.id === result.primaryId;
       const pct = Math.round(m.score * 100);
-      return /* @__PURE__ */ jsxs65("li", { style: { display: "flex", flexDirection: "column", gap: 4, border: `1px solid ${primary ? C.accent : C.border}`, borderRadius: 6, padding: "6px 8px", background: C.surface }, children: [
-        /* @__PURE__ */ jsxs65("div", { style: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }, children: [
-          primary && /* @__PURE__ */ jsx71("span", { style: tag(false), children: t.validatePrimaryBadge }),
-          /* @__PURE__ */ jsx71("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.versionTag(m.version) }),
-          /* @__PURE__ */ jsx71("span", { style: { marginLeft: "auto", fontSize: "0.68rem", fontWeight: 700, color: C.accent }, children: t.validateScore(pct) })
+      return /* @__PURE__ */ jsxs66("li", { style: { display: "flex", flexDirection: "column", gap: 4, border: `1px solid ${primary ? C.accent : C.border}`, borderRadius: 6, padding: "6px 8px", background: C.surface }, children: [
+        /* @__PURE__ */ jsxs66("div", { style: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }, children: [
+          primary && /* @__PURE__ */ jsx72("span", { style: tag(false), children: t.validatePrimaryBadge }),
+          /* @__PURE__ */ jsx72("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.versionTag(m.version) }),
+          /* @__PURE__ */ jsx72("span", { style: { marginLeft: "auto", fontSize: "0.68rem", fontWeight: 700, color: C.accent }, children: t.validateScore(pct) })
         ] }),
-        /* @__PURE__ */ jsx71("div", { style: { height: 4, borderRadius: 999, background: C.border, overflow: "hidden" }, children: /* @__PURE__ */ jsx71("div", { style: { width: `${pct}%`, height: "100%", background: C.accent } }) }),
-        m.prompt && /* @__PURE__ */ jsx71("div", { style: { fontSize: "0.74rem", fontWeight: 600, color: C.text, wordBreak: "break-word" }, children: m.prompt }),
-        m.text && /* @__PURE__ */ jsx71("div", { style: { fontSize: "0.72rem", color: C.text2, lineHeight: 1.4, wordBreak: "break-word", whiteSpace: "pre-wrap", maxHeight: 54, overflow: "hidden" }, children: m.text })
+        /* @__PURE__ */ jsx72("div", { style: { height: 4, borderRadius: 999, background: C.border, overflow: "hidden" }, children: /* @__PURE__ */ jsx72("div", { style: { width: `${pct}%`, height: "100%", background: C.accent } }) }),
+        m.prompt && /* @__PURE__ */ jsx72("div", { style: { fontSize: "0.74rem", fontWeight: 600, color: C.text, wordBreak: "break-word" }, children: m.prompt }),
+        m.text && /* @__PURE__ */ jsx72("div", { style: { fontSize: "0.72rem", color: C.text2, lineHeight: 1.4, wordBreak: "break-word", whiteSpace: "pre-wrap", maxHeight: 54, overflow: "hidden" }, children: m.text })
       ] }, m.id);
     }) })
   ] });
 }
 function TargetsList({ t, targets }) {
-  return /* @__PURE__ */ jsxs65("div", { style: sectionBlock, children: [
-    /* @__PURE__ */ jsx71("div", { style: fieldTitle, children: t.targetsTitle }),
-    /* @__PURE__ */ jsx71("div", { style: fieldHint, children: t.targetsHint }),
-    targets.length === 0 ? /* @__PURE__ */ jsx71("p", { style: italic, children: t.targetsEmpty }) : /* @__PURE__ */ jsx71("ul", { style: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }, children: targets.map((tg, i) => /* @__PURE__ */ jsxs65(
+  return /* @__PURE__ */ jsxs66("div", { style: sectionBlock, children: [
+    /* @__PURE__ */ jsx72("div", { style: fieldTitle, children: t.targetsTitle }),
+    /* @__PURE__ */ jsx72("div", { style: fieldHint, children: t.targetsHint }),
+    targets.length === 0 ? /* @__PURE__ */ jsx72("p", { style: italic, children: t.targetsEmpty }) : /* @__PURE__ */ jsx72("ul", { style: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }, children: targets.map((tg, i) => /* @__PURE__ */ jsxs66(
       "li",
       {
         style: { background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 10px", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" },
         children: [
-          /* @__PURE__ */ jsx71("span", { style: tag(false), children: i === 0 ? t.targetSelfBadge : t.targetBuildBadge }),
-          /* @__PURE__ */ jsx71("span", { style: { fontSize: "0.78rem", fontWeight: 600, color: C.text, wordBreak: "break-word", minWidth: 0 }, children: tg.name }),
-          /* @__PURE__ */ jsx71("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.targetProjectId(tg.projectId) }),
-          /* @__PURE__ */ jsxs65("span", { style: { marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }, children: [
-            /* @__PURE__ */ jsx71("span", { style: targetChip, children: tg.seeded ? t.targetSeeded(tg.version) : t.targetUnseeded }),
-            /* @__PURE__ */ jsx71("span", { style: targetChip, children: tg.mode === "connected" ? t.targetConnected : t.targetFrozen }),
-            tg.inferenceEnabled && /* @__PURE__ */ jsx71("span", { style: { ...targetChip, color: C.accent, borderColor: C.accent }, children: t.targetInferenceOn })
+          /* @__PURE__ */ jsx72("span", { style: tag(false), children: i === 0 ? t.targetSelfBadge : t.targetBuildBadge }),
+          /* @__PURE__ */ jsx72("span", { style: { fontSize: "0.78rem", fontWeight: 600, color: C.text, wordBreak: "break-word", minWidth: 0 }, children: tg.name }),
+          /* @__PURE__ */ jsx72("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.targetProjectId(tg.projectId) }),
+          /* @__PURE__ */ jsxs66("span", { style: { marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }, children: [
+            /* @__PURE__ */ jsx72("span", { style: targetChip, children: tg.seeded ? t.targetSeeded(tg.version) : t.targetUnseeded }),
+            /* @__PURE__ */ jsx72("span", { style: targetChip, children: tg.mode === "connected" ? t.targetConnected : t.targetFrozen }),
+            tg.inferenceEnabled && /* @__PURE__ */ jsx72("span", { style: { ...targetChip, color: C.accent, borderColor: C.accent }, children: t.targetInferenceOn })
           ] })
         ]
       },
@@ -9276,9 +9323,9 @@ function TargetsList({ t, targets }) {
   ] });
 }
 function RecentList({ t, entries }) {
-  return /* @__PURE__ */ jsxs65("div", { style: sectionBlock, children: [
-    /* @__PURE__ */ jsx71("div", { style: fieldTitle, children: t.inspectTitle }),
-    entries.length === 0 ? /* @__PURE__ */ jsx71("p", { style: italic, children: t.inspectEmpty }) : /* @__PURE__ */ jsx71("ul", { style: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }, children: entries.map((e) => /* @__PURE__ */ jsx71(RecentRow, { t, entry: e }, e.id)) })
+  return /* @__PURE__ */ jsxs66("div", { style: sectionBlock, children: [
+    /* @__PURE__ */ jsx72("div", { style: fieldTitle, children: t.inspectTitle }),
+    entries.length === 0 ? /* @__PURE__ */ jsx72("p", { style: italic, children: t.inspectEmpty }) : /* @__PURE__ */ jsx72("ul", { style: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }, children: entries.map((e) => /* @__PURE__ */ jsx72(RecentRow, { t, entry: e }, e.id)) })
   ] });
 }
 function RecentRow({ t, entry }) {
@@ -9287,21 +9334,21 @@ function RecentRow({ t, entry }) {
   const faulted = status.state === "fault";
   const body = entry.kind === "delta" ? t.deltaEntry : faulted ? "" : entry.text ?? "";
   const hasDetail = entry.kind !== "delta" && (!!entry.prompt || !!entry.text || faulted);
-  return /* @__PURE__ */ jsxs65("li", { style: { background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 10px", display: "flex", flexDirection: "column", gap: 3 }, children: [
-    /* @__PURE__ */ jsxs65("div", { style: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }, children: [
-      /* @__PURE__ */ jsx71("span", { style: tag(entry.kind === "delta"), children: entry.kind === "delta" ? t.kindDelta : t.kindText }),
-      /* @__PURE__ */ jsx71("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.versionTag(entry.version) }),
-      /* @__PURE__ */ jsx71("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.weightTag(entry.weight) }),
-      faulted && /* @__PURE__ */ jsx71("span", { style: faultTag, children: t.notDistilled }),
-      status.state === "distilled" && status.teacherModel && /* @__PURE__ */ jsx71("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.distilledBy(status.teacherModel) }),
-      /* @__PURE__ */ jsx71("span", { style: { marginLeft: "auto", fontSize: "0.68rem", color: C.text2 }, children: t.formatWhen(entry.at) })
+  return /* @__PURE__ */ jsxs66("li", { style: { background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 10px", display: "flex", flexDirection: "column", gap: 3 }, children: [
+    /* @__PURE__ */ jsxs66("div", { style: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }, children: [
+      /* @__PURE__ */ jsx72("span", { style: tag(entry.kind === "delta"), children: entry.kind === "delta" ? t.kindDelta : t.kindText }),
+      /* @__PURE__ */ jsx72("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.versionTag(entry.version) }),
+      /* @__PURE__ */ jsx72("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.weightTag(entry.weight) }),
+      faulted && /* @__PURE__ */ jsx72("span", { style: faultTag, children: t.notDistilled }),
+      status.state === "distilled" && status.teacherModel && /* @__PURE__ */ jsx72("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.distilledBy(status.teacherModel) }),
+      /* @__PURE__ */ jsx72("span", { style: { marginLeft: "auto", fontSize: "0.68rem", color: C.text2 }, children: t.formatWhen(entry.at) })
     ] }),
-    entry.prompt && /* @__PURE__ */ jsx71("div", { style: { fontSize: "0.76rem", fontWeight: 600, color: C.text, wordBreak: "break-word" }, children: entry.prompt }),
-    open ? /* @__PURE__ */ jsx71("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 2 }, children: faulted ? /* @__PURE__ */ jsx71("div", { style: { fontSize: "0.74rem", color: C.text2, lineHeight: 1.5 }, children: t.teacherFault(status.teacherModel ?? "", status.reason) }) : entry.text && /* @__PURE__ */ jsxs65("div", { children: [
-      /* @__PURE__ */ jsx71("div", { style: { fontSize: "0.62rem", textTransform: "uppercase", letterSpacing: "0.04em", color: C.text2 }, children: t.detailTextLabel }),
-      /* @__PURE__ */ jsx71("div", { style: { fontSize: "0.74rem", color: C.text, lineHeight: 1.5, wordBreak: "break-word", whiteSpace: "pre-wrap" }, children: entry.text })
-    ] }) }) : body && /* @__PURE__ */ jsx71("div", { style: { fontSize: "0.74rem", color: C.text2, lineHeight: 1.45, wordBreak: "break-word", whiteSpace: "pre-wrap", maxHeight: 72, overflow: "hidden" }, children: body }),
-    hasDetail && /* @__PURE__ */ jsx71("button", { type: "button", onClick: () => setOpen((v) => !v), style: { ...linkBtn, alignSelf: "flex-start" }, children: open ? t.hideDetail : t.viewDetail })
+    entry.prompt && /* @__PURE__ */ jsx72("div", { style: { fontSize: "0.76rem", fontWeight: 600, color: C.text, wordBreak: "break-word" }, children: entry.prompt }),
+    open ? /* @__PURE__ */ jsx72("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 2 }, children: faulted ? /* @__PURE__ */ jsx72("div", { style: { fontSize: "0.74rem", color: C.text2, lineHeight: 1.5 }, children: t.teacherFault(status.teacherModel ?? "", status.reason) }) : entry.text && /* @__PURE__ */ jsxs66("div", { children: [
+      /* @__PURE__ */ jsx72("div", { style: { fontSize: "0.62rem", textTransform: "uppercase", letterSpacing: "0.04em", color: C.text2 }, children: t.detailTextLabel }),
+      /* @__PURE__ */ jsx72("div", { style: { fontSize: "0.74rem", color: C.text, lineHeight: 1.5, wordBreak: "break-word", whiteSpace: "pre-wrap" }, children: entry.text })
+    ] }) }) : body && /* @__PURE__ */ jsx72("div", { style: { fontSize: "0.74rem", color: C.text2, lineHeight: 1.45, wordBreak: "break-word", whiteSpace: "pre-wrap", maxHeight: 72, overflow: "hidden" }, children: body }),
+    hasDetail && /* @__PURE__ */ jsx72("button", { type: "button", onClick: () => setOpen((v) => !v), style: { ...linkBtn, alignSelf: "flex-start" }, children: open ? t.hideDetail : t.viewDetail })
   ] });
 }
 var faultTag = {
@@ -9629,12 +9676,12 @@ function padSlice(startDeg, endDeg, padDeg) {
 var ARC_PAD_DEG = 0.6;
 
 // src/project360/Sunburst.tsx
-import { jsx as jsx72, jsxs as jsxs66 } from "react/jsx-runtime";
+import { jsx as jsx73, jsxs as jsxs67 } from "react/jsx-runtime";
 function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel }) {
   const nPillars = pillars.length || 1;
   const pillarSpan = 360 / nPillars;
   const dimsByPillar = pillars.map((p) => dimensions.filter((d) => d.pillar === p.key));
-  return /* @__PURE__ */ jsxs66(
+  return /* @__PURE__ */ jsxs67(
     "svg",
     {
       className: "bf-360-wheel",
@@ -9647,8 +9694,8 @@ function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel 
           const pMid = (pStart + pEnd) / 2;
           const dims = dimsByPillar[pi];
           const pLabel = labelAt((R_INNER_0 + R_INNER_1) / 2, pMid);
-          return /* @__PURE__ */ jsxs66("g", { children: [
-            /* @__PURE__ */ jsx72(
+          return /* @__PURE__ */ jsxs67("g", { children: [
+            /* @__PURE__ */ jsx73(
               "path",
               {
                 d: sector(R_INNER_0, R_INNER_1, ...padSlice(pStart, pEnd, ARC_PAD_DEG)),
@@ -9657,7 +9704,7 @@ function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel 
                 className: "bf-360-arc bf-360-arc--pillar"
               }
             ),
-            /* @__PURE__ */ jsx72(
+            /* @__PURE__ */ jsx73(
               "text",
               {
                 x: pLabel.x,
@@ -9674,7 +9721,7 @@ function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel 
               const isSel = selected === dim.key;
               const lab = labelAt((R_OUTER_0 + R_OUTER_1) / 2, dMid);
               const lines = twoLines(dim.label);
-              return /* @__PURE__ */ jsxs66(
+              return /* @__PURE__ */ jsxs67(
                 "g",
                 {
                   className: "bf-360-arc-group",
@@ -9683,7 +9730,7 @@ function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel 
                   "aria-pressed": isSel,
                   "aria-label": `${dim.label}: ${dim.score} of 100`,
                   children: [
-                    /* @__PURE__ */ jsx72(
+                    /* @__PURE__ */ jsx73(
                       "path",
                       {
                         d: sector(R_OUTER_0, R_OUTER_1, ...padSlice(dStart, dEnd, ARC_PAD_DEG)),
@@ -9692,7 +9739,7 @@ function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel 
                         className: `bf-360-arc bf-360-arc--dim${isSel ? " is-selected" : ""}`
                       }
                     ),
-                    /* @__PURE__ */ jsx72(
+                    /* @__PURE__ */ jsx73(
                       "text",
                       {
                         x: lab.x,
@@ -9700,7 +9747,7 @@ function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel 
                         className: "bf-360-arc-label",
                         textAnchor: "middle",
                         dominantBaseline: "central",
-                        children: lines.map((ln, li) => /* @__PURE__ */ jsx72("tspan", { x: lab.x, dy: li === 0 ? lines.length > 1 ? "-0.5em" : "0" : "1em", children: ln }, li))
+                        children: lines.map((ln, li) => /* @__PURE__ */ jsx73("tspan", { x: lab.x, dy: li === 0 ? lines.length > 1 ? "-0.5em" : "0" : "1em", children: ln }, li))
                       }
                     )
                   ]
@@ -9710,10 +9757,10 @@ function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel 
             })
           ] }, pillar.key);
         }),
-        /* @__PURE__ */ jsx72("circle", { cx: CX, cy: CY, r: R_CENTER, className: "bf-360-center", onClick: () => onSelect?.(null), role: "button", "aria-label": "Clear selection" }),
-        /* @__PURE__ */ jsx72("circle", { cx: CX, cy: CY, r: R_CENTER, fill: "none", stroke: overall.color, strokeWidth: 3, className: "bf-360-center-ring" }),
-        /* @__PURE__ */ jsx72("text", { x: CX, y: CY - 8, className: "bf-360-center-score", textAnchor: "middle", dominantBaseline: "central", fill: overall.color, children: overall.score }),
-        /* @__PURE__ */ jsx72("text", { x: CX, y: CY + 14, className: "bf-360-center-label", textAnchor: "middle", dominantBaseline: "central", children: "HEALTH" })
+        /* @__PURE__ */ jsx73("circle", { cx: CX, cy: CY, r: R_CENTER, className: "bf-360-center", onClick: () => onSelect?.(null), role: "button", "aria-label": "Clear selection" }),
+        /* @__PURE__ */ jsx73("circle", { cx: CX, cy: CY, r: R_CENTER, fill: "none", stroke: overall.color, strokeWidth: 3, className: "bf-360-center-ring" }),
+        /* @__PURE__ */ jsx73("text", { x: CX, y: CY - 8, className: "bf-360-center-score", textAnchor: "middle", dominantBaseline: "central", fill: overall.color, children: overall.score }),
+        /* @__PURE__ */ jsx73("text", { x: CX, y: CY + 14, className: "bf-360-center-label", textAnchor: "middle", dominantBaseline: "central", children: "HEALTH" })
       ]
     }
   );
@@ -9752,7 +9799,7 @@ var DEFAULT_PROJECT360_LABELS = {
 };
 
 // src/project360/Project360View.tsx
-import { Fragment as Fragment25, jsx as jsx73, jsxs as jsxs67 } from "react/jsx-runtime";
+import { Fragment as Fragment25, jsx as jsx74, jsxs as jsxs68 } from "react/jsx-runtime";
 var STATUS_ORDER = ["working", "awaiting", "blocked", "idle", "available"];
 function Project360View({ data, loading, error, labels, onAction, onRefresh }) {
   const L = useMemo19(() => ({ ...DEFAULT_PROJECT360_LABELS, ...labels ?? {} }), [labels]);
@@ -9762,15 +9809,15 @@ function Project360View({ data, loading, error, labels, onAction, onRefresh }) {
     [data?.workforce]
   );
   if (error) {
-    return /* @__PURE__ */ jsxs67("div", { className: "bf-360-state", children: [
-      /* @__PURE__ */ jsx73("div", { className: "bf-360-state__title", children: L.loadError }),
-      /* @__PURE__ */ jsx73("div", { className: "bf-360-state__hint", children: error }),
-      onRefresh && /* @__PURE__ */ jsx73("button", { className: "bf-btn", onClick: onRefresh, children: L.refresh })
+    return /* @__PURE__ */ jsxs68("div", { className: "bf-360-state", children: [
+      /* @__PURE__ */ jsx74("div", { className: "bf-360-state__title", children: L.loadError }),
+      /* @__PURE__ */ jsx74("div", { className: "bf-360-state__hint", children: error }),
+      onRefresh && /* @__PURE__ */ jsx74("button", { className: "bf-btn", onClick: onRefresh, children: L.refresh })
     ] });
   }
   if (!data || loading) {
-    return /* @__PURE__ */ jsxs67("div", { className: "bf-360-state", children: [
-      /* @__PURE__ */ jsx73("div", { className: "bf-360-spinner" }),
+    return /* @__PURE__ */ jsxs68("div", { className: "bf-360-state", children: [
+      /* @__PURE__ */ jsx74("div", { className: "bf-360-spinner" }),
       L.connecting
     ] });
   }
@@ -9790,24 +9837,24 @@ Gaps:
 ${lines}`
     });
   };
-  return /* @__PURE__ */ jsxs67("div", { className: "bf-360", children: [
-    /* @__PURE__ */ jsxs67("header", { className: "bf-360-head", children: [
-      /* @__PURE__ */ jsxs67("div", { className: "bf-360-head__id", children: [
-        /* @__PURE__ */ jsx73("span", { className: "bf-360-head__title", children: project.name }),
-        project.key && /* @__PURE__ */ jsx73("span", { className: "bf-360-head__key", children: project.key })
+  return /* @__PURE__ */ jsxs68("div", { className: "bf-360", children: [
+    /* @__PURE__ */ jsxs68("header", { className: "bf-360-head", children: [
+      /* @__PURE__ */ jsxs68("div", { className: "bf-360-head__id", children: [
+        /* @__PURE__ */ jsx74("span", { className: "bf-360-head__title", children: project.name }),
+        project.key && /* @__PURE__ */ jsx74("span", { className: "bf-360-head__key", children: project.key })
       ] }),
-      /* @__PURE__ */ jsx73("div", { className: "bf-360-head__spacer" }),
-      /* @__PURE__ */ jsx73("button", { className: "bf-btn", onClick: () => onAction?.({ kind: "board", label: L.openBoard }), children: L.openBoard }),
-      gaps.length > 0 && /* @__PURE__ */ jsx73("button", { className: "bf-btn bf-btn--primary", onClick: improveAll, children: L.improveAll }),
-      onRefresh && /* @__PURE__ */ jsx73("button", { className: "bf-btn bf-btn--icon", title: L.refresh, "aria-label": L.refresh, onClick: onRefresh, children: "\u27F3" })
+      /* @__PURE__ */ jsx74("div", { className: "bf-360-head__spacer" }),
+      /* @__PURE__ */ jsx74("button", { className: "bf-btn", onClick: () => onAction?.({ kind: "board", label: L.openBoard }), children: L.openBoard }),
+      gaps.length > 0 && /* @__PURE__ */ jsx74("button", { className: "bf-btn bf-btn--primary", onClick: improveAll, children: L.improveAll }),
+      onRefresh && /* @__PURE__ */ jsx74("button", { className: "bf-btn bf-btn--icon", title: L.refresh, "aria-label": L.refresh, onClick: onRefresh, children: "\u27F3" })
     ] }),
-    !hasData ? /* @__PURE__ */ jsxs67("div", { className: "bf-360-state", children: [
-      /* @__PURE__ */ jsx73("div", { className: "bf-360-state__title", children: L.noData }),
-      /* @__PURE__ */ jsx73("div", { className: "bf-360-state__hint", children: L.noDataHint }),
-      /* @__PURE__ */ jsx73("button", { className: "bf-btn", onClick: () => onAction?.({ kind: "board", label: L.openBoard }), children: L.openBoard })
-    ] }) : /* @__PURE__ */ jsxs67("div", { className: "bf-360-grid", children: [
-      /* @__PURE__ */ jsxs67("section", { className: "bf-360-col bf-360-col--wheel", children: [
-        /* @__PURE__ */ jsx73(
+    !hasData ? /* @__PURE__ */ jsxs68("div", { className: "bf-360-state", children: [
+      /* @__PURE__ */ jsx74("div", { className: "bf-360-state__title", children: L.noData }),
+      /* @__PURE__ */ jsx74("div", { className: "bf-360-state__hint", children: L.noDataHint }),
+      /* @__PURE__ */ jsx74("button", { className: "bf-btn", onClick: () => onAction?.({ kind: "board", label: L.openBoard }), children: L.openBoard })
+    ] }) : /* @__PURE__ */ jsxs68("div", { className: "bf-360-grid", children: [
+      /* @__PURE__ */ jsxs68("section", { className: "bf-360-col bf-360-col--wheel", children: [
+        /* @__PURE__ */ jsx74(
           Sunburst,
           {
             pillars,
@@ -9818,83 +9865,83 @@ ${lines}`
             ariaLabel: `${project.name} health wheel`
           }
         ),
-        /* @__PURE__ */ jsxs67("div", { className: "bf-360-overall", children: [
-          /* @__PURE__ */ jsx73("div", { className: "bf-360-progress", "aria-label": `${L.progress} ${overall.progressPct}%`, children: /* @__PURE__ */ jsx73("div", { className: "bf-360-progress__fill", style: { width: `${overall.progressPct}%`, background: overall.color } }) }),
-          /* @__PURE__ */ jsxs67("div", { className: "bf-360-progress__label", children: [
+        /* @__PURE__ */ jsxs68("div", { className: "bf-360-overall", children: [
+          /* @__PURE__ */ jsx74("div", { className: "bf-360-progress", "aria-label": `${L.progress} ${overall.progressPct}%`, children: /* @__PURE__ */ jsx74("div", { className: "bf-360-progress__fill", style: { width: `${overall.progressPct}%`, background: overall.color } }) }),
+          /* @__PURE__ */ jsxs68("div", { className: "bf-360-progress__label", children: [
             L.progress,
             ": ",
             overall.progressPct,
             "%"
           ] }),
-          /* @__PURE__ */ jsxs67("div", { className: "bf-360-counts", children: [
-            /* @__PURE__ */ jsx73(Count, { n: counts.open, label: L.counts_open }),
-            /* @__PURE__ */ jsx73(Count, { n: counts.blocked, label: L.counts_blocked, tone: counts.blocked ? "warn" : void 0 }),
-            /* @__PURE__ */ jsx73(Count, { n: counts.overdue, label: L.counts_overdue, tone: counts.overdue ? "bad" : void 0 }),
-            /* @__PURE__ */ jsx73(Count, { n: counts.activeRuns, label: L.counts_running, tone: counts.activeRuns ? "good" : void 0 })
+          /* @__PURE__ */ jsxs68("div", { className: "bf-360-counts", children: [
+            /* @__PURE__ */ jsx74(Count, { n: counts.open, label: L.counts_open }),
+            /* @__PURE__ */ jsx74(Count, { n: counts.blocked, label: L.counts_blocked, tone: counts.blocked ? "warn" : void 0 }),
+            /* @__PURE__ */ jsx74(Count, { n: counts.overdue, label: L.counts_overdue, tone: counts.overdue ? "bad" : void 0 }),
+            /* @__PURE__ */ jsx74(Count, { n: counts.activeRuns, label: L.counts_running, tone: counts.activeRuns ? "good" : void 0 })
           ] })
         ] })
       ] }),
-      /* @__PURE__ */ jsxs67("section", { className: "bf-360-col bf-360-col--detail", children: [
-        /* @__PURE__ */ jsxs67("div", { className: "bf-360-legend-head", children: [
-          /* @__PURE__ */ jsx73("span", { children: selectedDim ? selectedDim.label : L.allDimensions }),
-          selectedDim && /* @__PURE__ */ jsxs67("button", { className: "bf-360-clear", onClick: () => setSelected(null), children: [
+      /* @__PURE__ */ jsxs68("section", { className: "bf-360-col bf-360-col--detail", children: [
+        /* @__PURE__ */ jsxs68("div", { className: "bf-360-legend-head", children: [
+          /* @__PURE__ */ jsx74("span", { children: selectedDim ? selectedDim.label : L.allDimensions }),
+          selectedDim && /* @__PURE__ */ jsxs68("button", { className: "bf-360-clear", onClick: () => setSelected(null), children: [
             L.allDimensions,
             " \u2715"
           ] })
         ] }),
-        selectedDim ? /* @__PURE__ */ jsxs67("div", { className: "bf-360-dim-detail", children: [
-          /* @__PURE__ */ jsx73(ScoreDot, { score: selectedDim.score, color: selectedDim.color }),
-          /* @__PURE__ */ jsx73("div", { className: "bf-360-dim-detail__summary", children: selectedDim.summary })
-        ] }) : /* @__PURE__ */ jsx73("ul", { className: "bf-360-dim-list", children: dimensions.map((d) => /* @__PURE__ */ jsx73("li", { children: /* @__PURE__ */ jsxs67(
+        selectedDim ? /* @__PURE__ */ jsxs68("div", { className: "bf-360-dim-detail", children: [
+          /* @__PURE__ */ jsx74(ScoreDot, { score: selectedDim.score, color: selectedDim.color }),
+          /* @__PURE__ */ jsx74("div", { className: "bf-360-dim-detail__summary", children: selectedDim.summary })
+        ] }) : /* @__PURE__ */ jsx74("ul", { className: "bf-360-dim-list", children: dimensions.map((d) => /* @__PURE__ */ jsx74("li", { children: /* @__PURE__ */ jsxs68(
           "button",
           {
             className: "bf-360-dim-row",
             onClick: () => setSelected(d.key),
             children: [
-              /* @__PURE__ */ jsx73(ScoreDot, { score: d.score, color: d.color }),
-              /* @__PURE__ */ jsx73("span", { className: "bf-360-dim-row__label", children: d.label }),
-              /* @__PURE__ */ jsx73("span", { className: "bf-360-dim-row__summary", children: d.summary })
+              /* @__PURE__ */ jsx74(ScoreDot, { score: d.score, color: d.color }),
+              /* @__PURE__ */ jsx74("span", { className: "bf-360-dim-row__label", children: d.label }),
+              /* @__PURE__ */ jsx74("span", { className: "bf-360-dim-row__summary", children: d.summary })
             ]
           }
         ) }, d.key)) })
       ] })
     ] }),
-    hasData && /* @__PURE__ */ jsxs67(Fragment25, { children: [
-      /* @__PURE__ */ jsxs67("section", { className: "bf-360-section", children: [
-        /* @__PURE__ */ jsxs67("h3", { className: "bf-360-section__title", children: [
+    hasData && /* @__PURE__ */ jsxs68(Fragment25, { children: [
+      /* @__PURE__ */ jsxs68("section", { className: "bf-360-section", children: [
+        /* @__PURE__ */ jsxs68("h3", { className: "bf-360-section__title", children: [
           L.missingItems,
-          shownGaps.length > 0 && /* @__PURE__ */ jsx73("span", { className: "bf-360-section__count", children: shownGaps.length })
+          shownGaps.length > 0 && /* @__PURE__ */ jsx74("span", { className: "bf-360-section__count", children: shownGaps.length })
         ] }),
-        shownGaps.length === 0 ? /* @__PURE__ */ jsx73("p", { className: "bf-360-empty", children: L.noGaps }) : /* @__PURE__ */ jsx73("ul", { className: "bf-360-gaps", children: shownGaps.map((g) => /* @__PURE__ */ jsx73(GapRow, { gap: g, onAction }, g.id)) })
+        shownGaps.length === 0 ? /* @__PURE__ */ jsx74("p", { className: "bf-360-empty", children: L.noGaps }) : /* @__PURE__ */ jsx74("ul", { className: "bf-360-gaps", children: shownGaps.map((g) => /* @__PURE__ */ jsx74(GapRow, { gap: g, onAction }, g.id)) })
       ] }),
-      /* @__PURE__ */ jsxs67("section", { className: "bf-360-section", children: [
-        /* @__PURE__ */ jsxs67("h3", { className: "bf-360-section__title", children: [
+      /* @__PURE__ */ jsxs68("section", { className: "bf-360-section", children: [
+        /* @__PURE__ */ jsxs68("h3", { className: "bf-360-section__title", children: [
           L.workforce,
-          workforce.length > 0 && /* @__PURE__ */ jsx73("span", { className: "bf-360-section__count", children: workforce.length })
+          workforce.length > 0 && /* @__PURE__ */ jsx74("span", { className: "bf-360-section__count", children: workforce.length })
         ] }),
-        workforce.length === 0 ? /* @__PURE__ */ jsx73("p", { className: "bf-360-empty", children: L.noWorkforce }) : /* @__PURE__ */ jsx73("ul", { className: "bf-360-people", children: sortedWorkforce.map((m) => /* @__PURE__ */ jsx73(MemberRow, { member: m, labels: L, onAction }, m.ref)) })
+        workforce.length === 0 ? /* @__PURE__ */ jsx74("p", { className: "bf-360-empty", children: L.noWorkforce }) : /* @__PURE__ */ jsx74("ul", { className: "bf-360-people", children: sortedWorkforce.map((m) => /* @__PURE__ */ jsx74(MemberRow, { member: m, labels: L, onAction }, m.ref)) })
       ] })
     ] })
   ] });
 }
 function Count({ n: n2, label, tone }) {
-  return /* @__PURE__ */ jsxs67("span", { className: `bf-360-count${tone ? ` bf-360-count--${tone}` : ""}`, children: [
-    /* @__PURE__ */ jsx73("b", { children: n2 }),
+  return /* @__PURE__ */ jsxs68("span", { className: `bf-360-count${tone ? ` bf-360-count--${tone}` : ""}`, children: [
+    /* @__PURE__ */ jsx74("b", { children: n2 }),
     " ",
     label
   ] });
 }
 function ScoreDot({ score, color }) {
-  return /* @__PURE__ */ jsx73("span", { className: "bf-360-scoredot", style: { borderColor: color, color }, children: score });
+  return /* @__PURE__ */ jsx74("span", { className: "bf-360-scoredot", style: { borderColor: color, color }, children: score });
 }
 function GapRow({ gap, onAction }) {
-  return /* @__PURE__ */ jsxs67("li", { className: `bf-360-gap bf-360-gap--${gap.severity}`, children: [
-    /* @__PURE__ */ jsx73("span", { className: `bf-360-sev bf-360-sev--${gap.severity}`, "aria-hidden": true }),
-    /* @__PURE__ */ jsxs67("div", { className: "bf-360-gap__body", children: [
-      /* @__PURE__ */ jsx73("div", { className: "bf-360-gap__title", children: gap.title }),
-      gap.detail && /* @__PURE__ */ jsx73("div", { className: "bf-360-gap__detail", children: gap.detail })
+  return /* @__PURE__ */ jsxs68("li", { className: `bf-360-gap bf-360-gap--${gap.severity}`, children: [
+    /* @__PURE__ */ jsx74("span", { className: `bf-360-sev bf-360-sev--${gap.severity}`, "aria-hidden": true }),
+    /* @__PURE__ */ jsxs68("div", { className: "bf-360-gap__body", children: [
+      /* @__PURE__ */ jsx74("div", { className: "bf-360-gap__title", children: gap.title }),
+      gap.detail && /* @__PURE__ */ jsx74("div", { className: "bf-360-gap__detail", children: gap.detail })
     ] }),
-    gap.action && /* @__PURE__ */ jsx73("button", { className: "bf-btn bf-360-gap__cta", onClick: () => onAction?.(gap.action), children: gap.action.label })
+    gap.action && /* @__PURE__ */ jsx74("button", { className: "bf-btn bf-360-gap__cta", onClick: () => onAction?.(gap.action), children: gap.action.label })
   ] });
 }
 function MemberRow({ member, labels, onAction }) {
@@ -9906,19 +9953,19 @@ function MemberRow({ member, labels, onAction }) {
     available: labels.status_available
   }[member.status];
   const task = member.taskId != null ? { id: member.taskId, key: member.taskKey, title: member.taskTitle ?? "", taskType: member.taskType } : void 0;
-  return /* @__PURE__ */ jsxs67("li", { className: "bf-360-person", children: [
-    /* @__PURE__ */ jsx73("span", { className: `bf-360-dot bf-360-dot--${member.status}`, title: statusLabel, "aria-label": statusLabel }),
-    /* @__PURE__ */ jsxs67("div", { className: "bf-360-person__body", children: [
-      /* @__PURE__ */ jsxs67("div", { className: "bf-360-person__top", children: [
-        /* @__PURE__ */ jsx73("span", { className: "bf-360-person__name", children: member.name }),
-        /* @__PURE__ */ jsx73("span", { className: `bf-360-kind bf-360-kind--${member.kind}`, children: member.kind }),
-        /* @__PURE__ */ jsx73("span", { className: "bf-360-person__status", children: statusLabel })
+  return /* @__PURE__ */ jsxs68("li", { className: "bf-360-person", children: [
+    /* @__PURE__ */ jsx74("span", { className: `bf-360-dot bf-360-dot--${member.status}`, title: statusLabel, "aria-label": statusLabel }),
+    /* @__PURE__ */ jsxs68("div", { className: "bf-360-person__body", children: [
+      /* @__PURE__ */ jsxs68("div", { className: "bf-360-person__top", children: [
+        /* @__PURE__ */ jsx74("span", { className: "bf-360-person__name", children: member.name }),
+        /* @__PURE__ */ jsx74("span", { className: `bf-360-kind bf-360-kind--${member.kind}`, children: member.kind }),
+        /* @__PURE__ */ jsx74("span", { className: "bf-360-person__status", children: statusLabel })
       ] }),
-      /* @__PURE__ */ jsx73("div", { className: "bf-360-person__reason", children: member.reason })
+      /* @__PURE__ */ jsx74("div", { className: "bf-360-person__reason", children: member.reason })
     ] }),
-    task && /* @__PURE__ */ jsxs67("div", { className: "bf-360-person__actions", children: [
-      (member.status === "idle" || member.status === "available") && member.kind !== "human" && /* @__PURE__ */ jsx73("button", { className: "bf-btn bf-360-person__btn", onClick: () => onAction?.({ kind: "run-task", label: labels.member_run, task }), children: labels.member_run }),
-      /* @__PURE__ */ jsx73("button", { className: "bf-btn bf-360-person__btn", onClick: () => onAction?.({ kind: "open-task", label: labels.member_open, task }), children: labels.member_open })
+    task && /* @__PURE__ */ jsxs68("div", { className: "bf-360-person__actions", children: [
+      (member.status === "idle" || member.status === "available") && member.kind !== "human" && /* @__PURE__ */ jsx74("button", { className: "bf-btn bf-360-person__btn", onClick: () => onAction?.({ kind: "run-task", label: labels.member_run, task }), children: labels.member_run }),
+      /* @__PURE__ */ jsx74("button", { className: "bf-btn bf-360-person__btn", onClick: () => onAction?.({ kind: "open-task", label: labels.member_open, task }), children: labels.member_open })
     ] })
   ] });
 }
@@ -9937,66 +9984,66 @@ var DEFAULT_PROJECT_LIST_LABELS = {
 };
 
 // src/projectList/ProjectListView.tsx
-import { jsx as jsx74, jsxs as jsxs68 } from "react/jsx-runtime";
+import { jsx as jsx75, jsxs as jsxs69 } from "react/jsx-runtime";
 function ProjectListView({ title, subtitle, data, loading, error, labels, onAction, onRefresh }) {
   const L = useMemo20(() => ({ ...DEFAULT_PROJECT_LIST_LABELS, ...labels ?? {} }), [labels]);
-  const header = /* @__PURE__ */ jsxs68("header", { className: "bf-list-head", children: [
-    /* @__PURE__ */ jsxs68("div", { className: "bf-list-head__id", children: [
-      /* @__PURE__ */ jsx74("span", { className: "bf-list-head__title", children: title }),
-      data && /* @__PURE__ */ jsxs68("span", { className: "bf-list-head__count", children: [
+  const header = /* @__PURE__ */ jsxs69("header", { className: "bf-list-head", children: [
+    /* @__PURE__ */ jsxs69("div", { className: "bf-list-head__id", children: [
+      /* @__PURE__ */ jsx75("span", { className: "bf-list-head__title", children: title }),
+      data && /* @__PURE__ */ jsxs69("span", { className: "bf-list-head__count", children: [
         data.total,
         " ",
         L.items
       ] })
     ] }),
-    subtitle && /* @__PURE__ */ jsx74("div", { className: "bf-list-head__sub", children: subtitle }),
-    /* @__PURE__ */ jsx74("div", { className: "bf-list-head__spacer" }),
-    onRefresh && /* @__PURE__ */ jsx74("button", { className: "bf-btn bf-btn--icon", title: L.refresh, "aria-label": L.refresh, onClick: onRefresh, children: "\u27F3" })
+    subtitle && /* @__PURE__ */ jsx75("div", { className: "bf-list-head__sub", children: subtitle }),
+    /* @__PURE__ */ jsx75("div", { className: "bf-list-head__spacer" }),
+    onRefresh && /* @__PURE__ */ jsx75("button", { className: "bf-btn bf-btn--icon", title: L.refresh, "aria-label": L.refresh, onClick: onRefresh, children: "\u27F3" })
   ] });
   if (error) {
-    return /* @__PURE__ */ jsxs68("div", { className: "bf-list", children: [
+    return /* @__PURE__ */ jsxs69("div", { className: "bf-list", children: [
       header,
-      /* @__PURE__ */ jsxs68("div", { className: "bf-360-state", children: [
-        /* @__PURE__ */ jsx74("div", { className: "bf-360-state__title", children: L.loadError }),
-        /* @__PURE__ */ jsx74("div", { className: "bf-360-state__hint", children: error }),
-        onRefresh && /* @__PURE__ */ jsx74("button", { className: "bf-btn", onClick: onRefresh, children: L.refresh })
+      /* @__PURE__ */ jsxs69("div", { className: "bf-360-state", children: [
+        /* @__PURE__ */ jsx75("div", { className: "bf-360-state__title", children: L.loadError }),
+        /* @__PURE__ */ jsx75("div", { className: "bf-360-state__hint", children: error }),
+        onRefresh && /* @__PURE__ */ jsx75("button", { className: "bf-btn", onClick: onRefresh, children: L.refresh })
       ] })
     ] });
   }
   if (!data || loading) {
-    return /* @__PURE__ */ jsxs68("div", { className: "bf-list", children: [
+    return /* @__PURE__ */ jsxs69("div", { className: "bf-list", children: [
       header,
-      /* @__PURE__ */ jsxs68("div", { className: "bf-360-state", children: [
-        /* @__PURE__ */ jsx74("div", { className: "bf-360-spinner" }),
+      /* @__PURE__ */ jsxs69("div", { className: "bf-360-state", children: [
+        /* @__PURE__ */ jsx75("div", { className: "bf-360-spinner" }),
         L.connecting
       ] })
     ] });
   }
   if (data.total === 0) {
-    return /* @__PURE__ */ jsxs68("div", { className: "bf-list", children: [
+    return /* @__PURE__ */ jsxs69("div", { className: "bf-list", children: [
       header,
-      /* @__PURE__ */ jsxs68("div", { className: "bf-360-state", children: [
-        /* @__PURE__ */ jsx74("div", { className: "bf-360-state__title", children: L.empty }),
-        L.emptyHint && /* @__PURE__ */ jsx74("div", { className: "bf-360-state__hint", children: L.emptyHint })
+      /* @__PURE__ */ jsxs69("div", { className: "bf-360-state", children: [
+        /* @__PURE__ */ jsx75("div", { className: "bf-360-state__title", children: L.empty }),
+        L.emptyHint && /* @__PURE__ */ jsx75("div", { className: "bf-360-state__hint", children: L.emptyHint })
       ] })
     ] });
   }
-  return /* @__PURE__ */ jsxs68("div", { className: "bf-list", children: [
+  return /* @__PURE__ */ jsxs69("div", { className: "bf-list", children: [
     header,
-    data.groups.filter((g) => g.items.length > 0).map((g) => /* @__PURE__ */ jsxs68("section", { className: "bf-list-group", children: [
-      /* @__PURE__ */ jsxs68("h3", { className: "bf-list-group__title", children: [
-        /* @__PURE__ */ jsx74("span", { className: `bf-list-group__dot bf-list-tone--${g.tone ?? "default"}`, "aria-hidden": true }),
+    data.groups.filter((g) => g.items.length > 0).map((g) => /* @__PURE__ */ jsxs69("section", { className: "bf-list-group", children: [
+      /* @__PURE__ */ jsxs69("h3", { className: "bf-list-group__title", children: [
+        /* @__PURE__ */ jsx75("span", { className: `bf-list-group__dot bf-list-tone--${g.tone ?? "default"}`, "aria-hidden": true }),
         g.label,
-        /* @__PURE__ */ jsx74("span", { className: "bf-360-section__count", children: g.items.length })
+        /* @__PURE__ */ jsx75("span", { className: "bf-360-section__count", children: g.items.length })
       ] }),
-      /* @__PURE__ */ jsx74("ul", { className: "bf-list-rows", children: g.items.map((it) => /* @__PURE__ */ jsx74(Row2, { item: it, onAction }, it.id)) })
+      /* @__PURE__ */ jsx75("ul", { className: "bf-list-rows", children: g.items.map((it) => /* @__PURE__ */ jsx75(Row2, { item: it, onAction }, it.id)) })
     ] }, g.key))
   ] });
 }
 function Row2({ item, onAction }) {
   const act = item.action;
   const clickable = !!act && !!onAction;
-  return /* @__PURE__ */ jsx74("li", { className: "bf-list-row", children: /* @__PURE__ */ jsxs68(
+  return /* @__PURE__ */ jsx75("li", { className: "bf-list-row", children: /* @__PURE__ */ jsxs69(
     "button",
     {
       className: "bf-list-row__main",
@@ -10004,19 +10051,19 @@ function Row2({ item, onAction }) {
       onClick: clickable ? () => onAction(act) : void 0,
       title: clickable ? act.label : void 0,
       children: [
-        item.key && /* @__PURE__ */ jsx74("span", { className: "bf-list-row__key", children: item.key }),
-        /* @__PURE__ */ jsxs68("span", { className: "bf-list-row__body", children: [
-          /* @__PURE__ */ jsx74("span", { className: "bf-list-row__title", children: item.title }),
-          item.subtitle && /* @__PURE__ */ jsx74("span", { className: "bf-list-row__sub", children: item.subtitle })
+        item.key && /* @__PURE__ */ jsx75("span", { className: "bf-list-row__key", children: item.key }),
+        /* @__PURE__ */ jsxs69("span", { className: "bf-list-row__body", children: [
+          /* @__PURE__ */ jsx75("span", { className: "bf-list-row__title", children: item.title }),
+          item.subtitle && /* @__PURE__ */ jsx75("span", { className: "bf-list-row__sub", children: item.subtitle })
         ] }),
-        item.badges && item.badges.length > 0 && /* @__PURE__ */ jsx74("span", { className: "bf-list-row__badges", children: item.badges.map((b, i) => /* @__PURE__ */ jsx74("span", { className: `bf-list-badge bf-list-tone--${b.tone ?? "default"}`, children: b.label }, i)) })
+        item.badges && item.badges.length > 0 && /* @__PURE__ */ jsx75("span", { className: "bf-list-row__badges", children: item.badges.map((b, i) => /* @__PURE__ */ jsx75("span", { className: `bf-list-badge bf-list-tone--${b.tone ?? "default"}`, children: b.label }, i)) })
       ]
     }
   ) });
 }
 
 // src/composer/BrainComposer.tsx
-import { memo as memo15, useCallback as useCallback30, useEffect as useEffect31, useMemo as useMemo22, useRef as useRef28, useState as useState43 } from "react";
+import { memo as memo16, useCallback as useCallback30, useEffect as useEffect31, useMemo as useMemo22, useRef as useRef28, useState as useState43 } from "react";
 
 // src/workStatus/consumptionSnapshot.ts
 var TTL_MS = 6e4;
@@ -10144,51 +10191,51 @@ function relativeFuture(iso, locale, now = Date.now()) {
 }
 
 // src/workStatus/AccountStatus.tsx
-import { Fragment as Fragment26, jsx as jsx75, jsxs as jsxs69 } from "react/jsx-runtime";
+import { Fragment as Fragment26, jsx as jsx76, jsxs as jsxs70 } from "react/jsx-runtime";
 function AccountStatus({ snapshot, labels, locale, onUpgrade }) {
   const free = !planIsPaid(snapshot);
   const billing = snapshot.plan.billingStatus;
   const reset = relativeFuture(snapshot.period?.resetsAt, locale);
   const num2 = (n2) => n2.toLocaleString(locale);
-  return /* @__PURE__ */ jsxs69("div", { className: "bf-acct", children: [
-    /* @__PURE__ */ jsx75("div", { className: "bf-pmenu__group", children: labels.account }),
-    /* @__PURE__ */ jsxs69("div", { className: "bf-acct__row", children: [
-      /* @__PURE__ */ jsx75("span", { className: "bf-acct__k", children: labels.plan }),
-      /* @__PURE__ */ jsxs69("span", { className: "bf-acct__v", children: [
+  return /* @__PURE__ */ jsxs70("div", { className: "bf-acct", children: [
+    /* @__PURE__ */ jsx76("div", { className: "bf-pmenu__group", children: labels.account }),
+    /* @__PURE__ */ jsxs70("div", { className: "bf-acct__row", children: [
+      /* @__PURE__ */ jsx76("span", { className: "bf-acct__k", children: labels.plan }),
+      /* @__PURE__ */ jsxs70("span", { className: "bf-acct__v", children: [
         labelForKey(labels.plans, snapshot.plan.effective),
         billing && billing !== "active" && billing !== "none" ? ` \xB7 ${labelForKey(labels.billing, billing)}` : "",
-        snapshot.limitsLiftedBySuperadmin && /* @__PURE__ */ jsxs69("span", { className: "bf-acct__note", title: labels.limitsLiftedHint, children: [
+        snapshot.limitsLiftedBySuperadmin && /* @__PURE__ */ jsxs70("span", { className: "bf-acct__note", title: labels.limitsLiftedHint, children: [
           " \xB7 ",
           labels.limitsLifted
         ] })
       ] })
     ] }),
-    reset && /* @__PURE__ */ jsxs69("div", { className: "bf-acct__row", children: [
-      /* @__PURE__ */ jsx75("span", { className: "bf-acct__k", children: labels.resets }),
-      /* @__PURE__ */ jsx75("span", { className: "bf-acct__v", children: reset })
+    reset && /* @__PURE__ */ jsxs70("div", { className: "bf-acct__row", children: [
+      /* @__PURE__ */ jsx76("span", { className: "bf-acct__k", children: labels.resets }),
+      /* @__PURE__ */ jsx76("span", { className: "bf-acct__v", children: reset })
     ] }),
-    /* @__PURE__ */ jsx75("div", { className: "bf-pmenu__group", children: labels.usage }),
-    snapshot.meters.length === 0 && /* @__PURE__ */ jsx75("div", { className: "bf-pmenu__desc", children: labels.usageEmpty }),
+    /* @__PURE__ */ jsx76("div", { className: "bf-pmenu__group", children: labels.usage }),
+    snapshot.meters.length === 0 && /* @__PURE__ */ jsx76("div", { className: "bf-pmenu__desc", children: labels.usageEmpty }),
     snapshot.meters.map((m) => {
       const pct = m.unlimited ? null : Math.max(0, Math.min(100, Math.round(m.percentUsed)));
-      return /* @__PURE__ */ jsxs69("div", { className: "bf-acct__meter", children: [
-        /* @__PURE__ */ jsxs69("div", { className: "bf-acct__row bf-acct__row--flush", children: [
-          /* @__PURE__ */ jsx75("span", { className: "bf-acct__k", children: labelForKey(labels.meters, m.key) }),
-          /* @__PURE__ */ jsx75("span", { className: "bf-acct__v", children: pct == null ? labels.unlimited : `${pct}%` })
+      return /* @__PURE__ */ jsxs70("div", { className: "bf-acct__meter", children: [
+        /* @__PURE__ */ jsxs70("div", { className: "bf-acct__row bf-acct__row--flush", children: [
+          /* @__PURE__ */ jsx76("span", { className: "bf-acct__k", children: labelForKey(labels.meters, m.key) }),
+          /* @__PURE__ */ jsx76("span", { className: "bf-acct__v", children: pct == null ? labels.unlimited : `${pct}%` })
         ] }),
-        pct != null && /* @__PURE__ */ jsxs69(Fragment26, { children: [
-          /* @__PURE__ */ jsx75("div", { className: "bf-acct__bar", "aria-hidden": "true", children: /* @__PURE__ */ jsx75("div", { className: "bf-acct__bar-fill", style: { width: `${pct}%` } }) }),
-          /* @__PURE__ */ jsx75("div", { className: "bf-acct__meta", children: fill(labels.meterOf, { used: num2(m.used), limit: num2(m.limit), unit: labelForKey(labels.units, m.unit) }) })
+        pct != null && /* @__PURE__ */ jsxs70(Fragment26, { children: [
+          /* @__PURE__ */ jsx76("div", { className: "bf-acct__bar", "aria-hidden": "true", children: /* @__PURE__ */ jsx76("div", { className: "bf-acct__bar-fill", style: { width: `${pct}%` } }) }),
+          /* @__PURE__ */ jsx76("div", { className: "bf-acct__meta", children: fill(labels.meterOf, { used: num2(m.used), limit: num2(m.limit), unit: labelForKey(labels.units, m.unit) }) })
         ] })
       ] }, m.key);
     }),
-    onUpgrade && /* @__PURE__ */ jsx75("button", { type: "button", className: "bf-pmenu__item", onClick: () => onUpgrade(free ? "pricing" : "billing"), children: /* @__PURE__ */ jsx75("span", { className: "bf-pmenu__lbl", children: free ? labels.upgrade : labels.managePlan }) })
+    onUpgrade && /* @__PURE__ */ jsx76("button", { type: "button", className: "bf-pmenu__item", onClick: () => onUpgrade(free ? "pricing" : "billing"), children: /* @__PURE__ */ jsx76("span", { className: "bf-pmenu__lbl", children: free ? labels.upgrade : labels.managePlan }) })
   ] });
 }
 
 // src/workStatus/EvermindStatus.tsx
 import { useEffect as useEffect26, useState as useState39 } from "react";
-import { jsx as jsx76, jsxs as jsxs70 } from "react/jsx-runtime";
+import { jsx as jsx77, jsxs as jsxs71 } from "react/jsx-runtime";
 function EvermindStatus({ request: request2, projectId, labels }) {
   const [head, setHead] = useState39(null);
   useEffect26(() => {
@@ -10208,15 +10255,15 @@ function EvermindStatus({ request: request2, projectId, labels }) {
   }, [request2, projectId]);
   if (!head || head.version < 1) return null;
   const learning = head.mode === "connected";
-  return /* @__PURE__ */ jsxs70("div", { className: "bf-acct__row bf-evstatus", title: labels.evermindHint, children: [
-    /* @__PURE__ */ jsxs70("span", { className: "bf-acct__k", children: [
-      /* @__PURE__ */ jsx76("span", { "aria-hidden": true, children: "\u{1F9E0} " }),
+  return /* @__PURE__ */ jsxs71("div", { className: "bf-acct__row bf-evstatus", title: labels.evermindHint, children: [
+    /* @__PURE__ */ jsxs71("span", { className: "bf-acct__k", children: [
+      /* @__PURE__ */ jsx77("span", { "aria-hidden": true, children: "\u{1F9E0} " }),
       labels.evermind,
       " ",
       fill(labels.evermindVersion, { version: String(head.version) })
     ] }),
-    /* @__PURE__ */ jsxs70("span", { className: "bf-acct__v", children: [
-      /* @__PURE__ */ jsx76("span", { className: `bf-evstatus__dot${learning ? " is-on" : ""}`, "aria-hidden": true }),
+    /* @__PURE__ */ jsxs71("span", { className: "bf-acct__v", children: [
+      /* @__PURE__ */ jsx77("span", { className: `bf-evstatus__dot${learning ? " is-on" : ""}`, "aria-hidden": true }),
       learning ? labels.evermindLearning : labels.evermindFrozen,
       " \xB7 ",
       head.inferenceEnabled ? labels.evermindAnswersOn : labels.evermindAnswersOff
@@ -10225,31 +10272,31 @@ function EvermindStatus({ request: request2, projectId, labels }) {
 }
 
 // src/workStatus/WorkStatusPanel.tsx
-import { Fragment as Fragment27, jsx as jsx77, jsxs as jsxs71 } from "react/jsx-runtime";
+import { Fragment as Fragment27, jsx as jsx78, jsxs as jsxs72 } from "react/jsx-runtime";
 function WorkStatusPanel({ request: request2, projectId, labels: overrides, locale, onUpgrade }) {
   const labels = workStatusLabels(overrides);
   const snapshot = useConsumptionSnapshot(request2);
-  if (!snapshot) return /* @__PURE__ */ jsx77("div", { className: "bf-pmenu__desc", children: labels.loading });
+  if (!snapshot) return /* @__PURE__ */ jsx78("div", { className: "bf-pmenu__desc", children: labels.loading });
   const upgrade = onUpgrade ? (target) => {
     invalidateConsumptionSnapshot();
     onUpgrade(target);
   } : void 0;
-  return /* @__PURE__ */ jsxs71(Fragment27, { children: [
-    /* @__PURE__ */ jsx77(AccountStatus, { snapshot, labels, locale, onUpgrade: upgrade }),
-    /* @__PURE__ */ jsx77(EvermindStatus, { request: request2, projectId, labels })
+  return /* @__PURE__ */ jsxs72(Fragment27, { children: [
+    /* @__PURE__ */ jsx78(AccountStatus, { snapshot, labels, locale, onUpgrade: upgrade }),
+    /* @__PURE__ */ jsx78(EvermindStatus, { request: request2, projectId, labels })
   ] });
 }
 
 // src/workStatus/WorkSpendPanel.tsx
-import { Fragment as Fragment28, jsx as jsx78, jsxs as jsxs72 } from "react/jsx-runtime";
+import { Fragment as Fragment28, jsx as jsx79, jsxs as jsxs73 } from "react/jsx-runtime";
 var SPEND_PERIOD_DAYS = 30;
 function WorkSpendPanel({ request: request2, labels: overrides, loadingLabel, locale }) {
   const labels = spendLabels(overrides);
   const snapshot = useConsumptionSnapshot(request2);
-  if (!snapshot) return /* @__PURE__ */ jsx78("div", { className: "bf-pmenu__desc", children: loadingLabel });
-  return /* @__PURE__ */ jsxs72(Fragment28, { children: [
-    /* @__PURE__ */ jsx78("div", { className: "bf-pmenu__group", children: fill(labels.periodHeading, { days: String(SPEND_PERIOD_DAYS) }) }),
-    snapshot.spendSavings ? /* @__PURE__ */ jsx78(SpendBreakdown, { summary: snapshot.spendSavings, labels, locale }) : /* @__PURE__ */ jsx78("div", { className: "bf-pmenu__desc", children: fill(labels.spent, { amount: formatUsd(0, locale) }) })
+  if (!snapshot) return /* @__PURE__ */ jsx79("div", { className: "bf-pmenu__desc", children: loadingLabel });
+  return /* @__PURE__ */ jsxs73(Fragment28, { children: [
+    /* @__PURE__ */ jsx79("div", { className: "bf-pmenu__group", children: fill(labels.periodHeading, { days: String(SPEND_PERIOD_DAYS) }) }),
+    snapshot.spendSavings ? /* @__PURE__ */ jsx79(SpendBreakdown, { summary: snapshot.spendSavings, labels, locale }) : /* @__PURE__ */ jsx79("div", { className: "bf-pmenu__desc", children: fill(labels.spent, { amount: formatUsd(0, locale) }) })
   ] });
 }
 
@@ -10465,7 +10512,7 @@ function useProviderReconnect(client, provider, { openUrl, onConnected }) {
 }
 
 // src/connections/ConnectionRow.tsx
-import { jsx as jsx79, jsxs as jsxs73 } from "react/jsx-runtime";
+import { jsx as jsx80, jsxs as jsxs74 } from "react/jsx-runtime";
 function failureText(failure, labels) {
   switch (failure.reason) {
     case "denied":
@@ -10503,17 +10550,17 @@ function ConnectionRow({ row, connections, labels, onChanged, onReconnected }) {
   };
   const busy = testing || reconnect.phase === "starting" || reconnect.phase === "finishing";
   const healthy = row.health === "ok";
-  return /* @__PURE__ */ jsxs73("div", { className: "bf-conn__row", children: [
-    /* @__PURE__ */ jsxs73("div", { className: "bf-conn__head", children: [
-      /* @__PURE__ */ jsx79("span", { className: `bf-conn__dot${healthy ? " is-ok" : row.health === "capacity" ? " is-warn" : " is-bad"}`, "aria-hidden": "true" }),
-      /* @__PURE__ */ jsx79("span", { className: "bf-conn__name", children: row.label }),
-      /* @__PURE__ */ jsx79("span", { className: "bf-conn__kind", children: row.authType === "oauth" ? labels.authOauth : labels.authApiKey })
+  return /* @__PURE__ */ jsxs74("div", { className: "bf-conn__row", children: [
+    /* @__PURE__ */ jsxs74("div", { className: "bf-conn__head", children: [
+      /* @__PURE__ */ jsx80("span", { className: `bf-conn__dot${healthy ? " is-ok" : row.health === "capacity" ? " is-warn" : " is-bad"}`, "aria-hidden": "true" }),
+      /* @__PURE__ */ jsx80("span", { className: "bf-conn__name", children: row.label }),
+      /* @__PURE__ */ jsx80("span", { className: "bf-conn__kind", children: row.authType === "oauth" ? labels.authOauth : labels.authApiKey })
     ] }),
-    /* @__PURE__ */ jsx79("div", { className: `bf-conn__health${healthy ? "" : " is-alert"}`, role: "status", children: healthLabel(row.health, labels) }),
-    reconnect.phase === "paste" || reconnect.phase === "finishing" ? /* @__PURE__ */ jsxs73("div", { className: "bf-conn__flow", children: [
-      /* @__PURE__ */ jsx79("span", { className: "bf-pmenu__desc", children: labels.pasteHint }),
-      /* @__PURE__ */ jsxs73("div", { className: "bf-conn__actions", children: [
-        /* @__PURE__ */ jsx79(
+    /* @__PURE__ */ jsx80("div", { className: `bf-conn__health${healthy ? "" : " is-alert"}`, role: "status", children: healthLabel(row.health, labels) }),
+    reconnect.phase === "paste" || reconnect.phase === "finishing" ? /* @__PURE__ */ jsxs74("div", { className: "bf-conn__flow", children: [
+      /* @__PURE__ */ jsx80("span", { className: "bf-pmenu__desc", children: labels.pasteHint }),
+      /* @__PURE__ */ jsxs74("div", { className: "bf-conn__actions", children: [
+        /* @__PURE__ */ jsx80(
           "input",
           {
             className: "bf-pmenu__search bf-conn__input",
@@ -10531,15 +10578,15 @@ function ConnectionRow({ row, connections, labels, onChanged, onReconnected }) {
             autoFocus: true
           }
         ),
-        /* @__PURE__ */ jsx79("button", { type: "button", className: "bf-conn__btn is-primary", disabled: busy || !reconnect.code.trim(), onClick: () => void reconnect.finish(), children: reconnect.phase === "finishing" ? labels.finishing : labels.finish }),
-        /* @__PURE__ */ jsx79("button", { type: "button", className: "bf-conn__btn", disabled: reconnect.phase === "finishing", onClick: reconnect.cancel, children: labels.cancel })
+        /* @__PURE__ */ jsx80("button", { type: "button", className: "bf-conn__btn is-primary", disabled: busy || !reconnect.code.trim(), onClick: () => void reconnect.finish(), children: reconnect.phase === "finishing" ? labels.finishing : labels.finish }),
+        /* @__PURE__ */ jsx80("button", { type: "button", className: "bf-conn__btn", disabled: reconnect.phase === "finishing", onClick: reconnect.cancel, children: labels.cancel })
       ] })
-    ] }) : reconnect.phase === "device" ? /* @__PURE__ */ jsxs73("div", { className: "bf-conn__flow", children: [
-      /* @__PURE__ */ jsx79("span", { className: "bf-pmenu__desc", children: fill(labels.deviceHint, { code: reconnect.userCode ?? "\u2026" }) }),
-      /* @__PURE__ */ jsx79("div", { className: "bf-conn__actions", children: /* @__PURE__ */ jsx79("button", { type: "button", className: "bf-conn__btn", onClick: reconnect.cancel, children: labels.cancel }) })
-    ] }) : /* @__PURE__ */ jsxs73("div", { className: "bf-conn__actions", children: [
-      /* @__PURE__ */ jsx79("button", { type: "button", className: "bf-conn__btn", disabled: busy, onClick: () => void test(), children: testing ? labels.testing : labels.test }),
-      row.reconnectable && /* @__PURE__ */ jsx79(
+    ] }) : reconnect.phase === "device" ? /* @__PURE__ */ jsxs74("div", { className: "bf-conn__flow", children: [
+      /* @__PURE__ */ jsx80("span", { className: "bf-pmenu__desc", children: fill(labels.deviceHint, { code: reconnect.userCode ?? "\u2026" }) }),
+      /* @__PURE__ */ jsx80("div", { className: "bf-conn__actions", children: /* @__PURE__ */ jsx80("button", { type: "button", className: "bf-conn__btn", onClick: reconnect.cancel, children: labels.cancel }) })
+    ] }) : /* @__PURE__ */ jsxs74("div", { className: "bf-conn__actions", children: [
+      /* @__PURE__ */ jsx80("button", { type: "button", className: "bf-conn__btn", disabled: busy, onClick: () => void test(), children: testing ? labels.testing : labels.test }),
+      row.reconnectable && /* @__PURE__ */ jsx80(
         "button",
         {
           type: "button",
@@ -10553,8 +10600,8 @@ function ConnectionRow({ row, connections, labels, onChanged, onReconnected }) {
         }
       )
     ] }),
-    reconnect.failure && /* @__PURE__ */ jsx79("div", { className: "bf-conn__note is-bad", role: "alert", children: failureText(reconnect.failure, labels) }),
-    !reconnect.failure && note && /* @__PURE__ */ jsx79("div", { className: `bf-conn__note${note.ok ? " is-ok" : " is-bad"}`, role: "status", children: note.text })
+    reconnect.failure && /* @__PURE__ */ jsx80("div", { className: "bf-conn__note is-bad", role: "alert", children: failureText(reconnect.failure, labels) }),
+    !reconnect.failure && note && /* @__PURE__ */ jsx80("div", { className: `bf-conn__note${note.ok ? " is-ok" : " is-bad"}`, role: "status", children: note.text })
   ] });
 }
 
@@ -10580,17 +10627,17 @@ function useProviderConnections(client) {
 }
 
 // src/connections/ConnectionsPanel.tsx
-import { jsx as jsx80, jsxs as jsxs74 } from "react/jsx-runtime";
+import { jsx as jsx81, jsxs as jsxs75 } from "react/jsx-runtime";
 function ConnectionsPanel({ connections, labels: overrides }) {
   const labels = connectionsLabels(overrides);
   const { state, reload, patch } = useProviderConnections(connections.client);
-  return /* @__PURE__ */ jsxs74("section", { className: "bf-conn", "aria-label": labels.heading, children: [
-    /* @__PURE__ */ jsx80("div", { className: "bf-pmenu__group", children: labels.heading }),
-    state.kind === "loading" && /* @__PURE__ */ jsx80("div", { className: "bf-pmenu__desc bf-conn__pad", children: "\u2026" }),
-    state.kind === "failed" && /* @__PURE__ */ jsx80("div", { className: "bf-pmenu__desc bf-conn__pad", children: labels.loadFailed }),
-    state.kind === "unavailable" && /* @__PURE__ */ jsx80("div", { className: "bf-pmenu__desc bf-conn__pad", children: labels.unavailable }),
-    state.kind === "ready" && state.rows.length === 0 && /* @__PURE__ */ jsx80("div", { className: "bf-pmenu__desc bf-conn__pad", children: labels.empty }),
-    state.kind === "ready" && state.rows.map((row) => /* @__PURE__ */ jsx80(
+  return /* @__PURE__ */ jsxs75("section", { className: "bf-conn", "aria-label": labels.heading, children: [
+    /* @__PURE__ */ jsx81("div", { className: "bf-pmenu__group", children: labels.heading }),
+    state.kind === "loading" && /* @__PURE__ */ jsx81("div", { className: "bf-pmenu__desc bf-conn__pad", children: "\u2026" }),
+    state.kind === "failed" && /* @__PURE__ */ jsx81("div", { className: "bf-pmenu__desc bf-conn__pad", children: labels.loadFailed }),
+    state.kind === "unavailable" && /* @__PURE__ */ jsx81("div", { className: "bf-pmenu__desc bf-conn__pad", children: labels.unavailable }),
+    state.kind === "ready" && state.rows.length === 0 && /* @__PURE__ */ jsx81("div", { className: "bf-pmenu__desc bf-conn__pad", children: labels.empty }),
+    state.kind === "ready" && state.rows.map((row) => /* @__PURE__ */ jsx81(
       ConnectionRow,
       {
         row,
@@ -10608,21 +10655,21 @@ function ConnectionsPanel({ connections, labels: overrides }) {
 import { useRef as useRef26 } from "react";
 
 // src/composer/ComposerIcons.tsx
-import { jsx as jsx81, jsxs as jsxs75 } from "react/jsx-runtime";
-var IconPlus = () => /* @__PURE__ */ jsx81("svg", { width: "16", height: "16", viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true", children: /* @__PURE__ */ jsx81("path", { d: "M8 3.25v9.5M3.25 8h9.5", stroke: "currentColor", strokeWidth: "1.5", strokeLinecap: "round" }) });
-var IconMic = () => /* @__PURE__ */ jsxs75("svg", { width: "16", height: "16", viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true", children: [
-  /* @__PURE__ */ jsx81("rect", { x: "6", y: "2", width: "4", height: "7.5", rx: "2", fill: "currentColor" }),
-  /* @__PURE__ */ jsx81("path", { d: "M3.75 8a4.25 4.25 0 0 0 8.5 0M8 12.25V14", stroke: "currentColor", strokeWidth: "1.3", strokeLinecap: "round" })
+import { jsx as jsx82, jsxs as jsxs76 } from "react/jsx-runtime";
+var IconPlus = () => /* @__PURE__ */ jsx82("svg", { width: "16", height: "16", viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true", children: /* @__PURE__ */ jsx82("path", { d: "M8 3.25v9.5M3.25 8h9.5", stroke: "currentColor", strokeWidth: "1.5", strokeLinecap: "round" }) });
+var IconMic = () => /* @__PURE__ */ jsxs76("svg", { width: "16", height: "16", viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true", children: [
+  /* @__PURE__ */ jsx82("rect", { x: "6", y: "2", width: "4", height: "7.5", rx: "2", fill: "currentColor" }),
+  /* @__PURE__ */ jsx82("path", { d: "M3.75 8a4.25 4.25 0 0 0 8.5 0M8 12.25V14", stroke: "currentColor", strokeWidth: "1.3", strokeLinecap: "round" })
 ] });
-var IconSend = () => /* @__PURE__ */ jsx81("svg", { width: "16", height: "16", viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true", children: /* @__PURE__ */ jsx81("path", { d: "M8 13V3.75M4.25 7.5 8 3.75l3.75 3.75", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round" }) });
-var IconQueue = () => /* @__PURE__ */ jsxs75("svg", { width: "16", height: "16", viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true", children: [
-  /* @__PURE__ */ jsx81("path", { d: "M3 4.5h10M3 8h10M3 11.5h5.5", stroke: "currentColor", strokeWidth: "1.5", strokeLinecap: "round" }),
-  /* @__PURE__ */ jsx81("path", { d: "M11 10.25v2.5l1.75 1", stroke: "currentColor", strokeWidth: "1.3", strokeLinecap: "round", strokeLinejoin: "round" })
+var IconSend = () => /* @__PURE__ */ jsx82("svg", { width: "16", height: "16", viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true", children: /* @__PURE__ */ jsx82("path", { d: "M8 13V3.75M4.25 7.5 8 3.75l3.75 3.75", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round" }) });
+var IconQueue = () => /* @__PURE__ */ jsxs76("svg", { width: "16", height: "16", viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true", children: [
+  /* @__PURE__ */ jsx82("path", { d: "M3 4.5h10M3 8h10M3 11.5h5.5", stroke: "currentColor", strokeWidth: "1.5", strokeLinecap: "round" }),
+  /* @__PURE__ */ jsx82("path", { d: "M11 10.25v2.5l1.75 1", stroke: "currentColor", strokeWidth: "1.3", strokeLinecap: "round", strokeLinejoin: "round" })
 ] });
-var IconStop = () => /* @__PURE__ */ jsx81("svg", { width: "12", height: "12", viewBox: "0 0 16 16", fill: "currentColor", "aria-hidden": "true", children: /* @__PURE__ */ jsx81("rect", { x: "3.5", y: "3.5", width: "9", height: "9", rx: "1.5" }) });
+var IconStop = () => /* @__PURE__ */ jsx82("svg", { width: "12", height: "12", viewBox: "0 0 16 16", fill: "currentColor", "aria-hidden": "true", children: /* @__PURE__ */ jsx82("rect", { x: "3.5", y: "3.5", width: "9", height: "9", rx: "1.5" }) });
 
 // src/composer/ComposerAddMenu.tsx
-import { jsx as jsx82, jsxs as jsxs76 } from "react/jsx-runtime";
+import { jsx as jsx83, jsxs as jsxs77 } from "react/jsx-runtime";
 function ComposerAddMenu({ labels, disabled = false, onAttachFiles, uploading = false, accept, onAddContext, webBrowsing, items }) {
   const { open, toggle, close, rootRef } = usePopover();
   const fileRef = useRef26(null);
@@ -10632,14 +10679,14 @@ function ComposerAddMenu({ labels, disabled = false, onAttachFiles, uploading = 
     if (files.length && onAttachFiles) onAttachFiles(files);
     e.target.value = "";
   };
-  const row = (key, icon, label, onClick, hint, active) => /* @__PURE__ */ jsxs76("button", { type: "button", role: "menuitem", className: `bf-pmenu__item${active ? " is-active" : ""}`, onClick, children: [
-    /* @__PURE__ */ jsx82("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: icon }),
-    /* @__PURE__ */ jsx82("span", { className: "bf-pmenu__lbl", children: label }),
-    hint != null && /* @__PURE__ */ jsx82("span", { className: "bf-pmenu__hint", children: hint })
+  const row = (key, icon, label, onClick, hint, active) => /* @__PURE__ */ jsxs77("button", { type: "button", role: "menuitem", className: `bf-pmenu__item${active ? " is-active" : ""}`, onClick, children: [
+    /* @__PURE__ */ jsx83("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: icon }),
+    /* @__PURE__ */ jsx83("span", { className: "bf-pmenu__lbl", children: label }),
+    hint != null && /* @__PURE__ */ jsx83("span", { className: "bf-pmenu__hint", children: hint })
   ] }, key);
-  return /* @__PURE__ */ jsxs76("div", { className: "bf-pmenu", ref: rootRef, children: [
-    onAttachFiles && /* @__PURE__ */ jsx82("input", { ref: fileRef, type: "file", multiple: true, hidden: true, accept, onChange: onFiles }),
-    /* @__PURE__ */ jsx82(
+  return /* @__PURE__ */ jsxs77("div", { className: "bf-pmenu", ref: rootRef, children: [
+    onAttachFiles && /* @__PURE__ */ jsx83("input", { ref: fileRef, type: "file", multiple: true, hidden: true, accept, onChange: onFiles }),
+    /* @__PURE__ */ jsx83(
       "button",
       {
         type: "button",
@@ -10650,10 +10697,10 @@ function ComposerAddMenu({ labels, disabled = false, onAttachFiles, uploading = 
         "aria-label": labels.add,
         disabled,
         onClick: toggle,
-        children: /* @__PURE__ */ jsx82(IconPlus, {})
+        children: /* @__PURE__ */ jsx83(IconPlus, {})
       }
     ),
-    open && /* @__PURE__ */ jsxs76("div", { className: "bf-pmenu__pop", role: "menu", children: [
+    open && /* @__PURE__ */ jsxs77("div", { className: "bf-pmenu__pop", role: "menu", children: [
       onAttachFiles && row("upload", "\u{1F4BB}", uploading ? labels.uploading : labels.upload, () => {
         close();
         fileRef.current?.click();
@@ -10672,7 +10719,7 @@ function ComposerAddMenu({ labels, disabled = false, onAttachFiles, uploading = 
 }
 
 // src/composer/ComposerTrailingButton.tsx
-import { Fragment as Fragment29, jsx as jsx83, jsxs as jsxs77 } from "react/jsx-runtime";
+import { Fragment as Fragment29, jsx as jsx84, jsxs as jsxs78 } from "react/jsx-runtime";
 function queueShortcutKeys(nav = typeof navigator === "undefined" ? void 0 : navigator) {
   const platform = nav?.userAgentData?.platform || nav?.platform || "";
   return /mac|iphone|ipad/i.test(platform) ? "\u2325+Enter" : "Alt+Enter";
@@ -10690,7 +10737,7 @@ function ComposerTrailingButton({ labels, canSubmit, running, disabled = false, 
   });
   if (action === "voice") {
     const label2 = dictation.recording ? labels.stopDictation : labels.dictate;
-    return /* @__PURE__ */ jsx83(
+    return /* @__PURE__ */ jsx84(
       "button",
       {
         type: "button",
@@ -10700,32 +10747,32 @@ function ComposerTrailingButton({ labels, canSubmit, running, disabled = false, 
         "aria-pressed": dictation.recording,
         disabled,
         onClick: dictation.recording ? dictation.stopVoice : dictation.startVoice,
-        children: /* @__PURE__ */ jsx83(IconMic, {})
+        children: /* @__PURE__ */ jsx84(IconMic, {})
       }
     );
   }
   if (action === "stop") {
-    return /* @__PURE__ */ jsx83("button", { type: "button", className: "bf-cmp-iconbtn bf-cmp-iconbtn--stop", onClick: () => onStop?.(), title: labels.stop, "aria-label": labels.stop, children: /* @__PURE__ */ jsx83(IconStop, {}) });
+    return /* @__PURE__ */ jsx84("button", { type: "button", className: "bf-cmp-iconbtn bf-cmp-iconbtn--stop", onClick: () => onStop?.(), title: labels.stop, "aria-label": labels.stop, children: /* @__PURE__ */ jsx84(IconStop, {}) });
   }
   const label = running ? sendSteers === false ? labels.queueHold : labels.queueSend : labels.send;
-  const send = /* @__PURE__ */ jsx83("button", { type: "submit", className: "bf-cmp-iconbtn bf-cmp-iconbtn--send", onClick: (e) => {
+  const send = /* @__PURE__ */ jsx84("button", { type: "submit", className: "bf-cmp-iconbtn bf-cmp-iconbtn--send", onClick: (e) => {
     e.preventDefault();
     onSend();
-  }, disabled: !canSubmit || disabled, title: label, "aria-label": label, children: /* @__PURE__ */ jsx83(IconSend, {}) });
+  }, disabled: !canSubmit || disabled, title: label, "aria-label": label, children: /* @__PURE__ */ jsx84(IconSend, {}) });
   if (!(running && onQueue && canSubmit)) return send;
   const queueLabel = labels.queueAfter(queueShortcutKeys());
-  return /* @__PURE__ */ jsxs77(Fragment29, { children: [
-    /* @__PURE__ */ jsxs77("button", { type: "button", className: "bf-cmp-queuebtn", onClick: onQueue, disabled, title: queueLabel, "aria-label": queueLabel, children: [
-      /* @__PURE__ */ jsx83(IconQueue, {}),
-      /* @__PURE__ */ jsx83("span", { className: "bf-cmp-queuebtn__text", children: labels.queueAfterShort })
+  return /* @__PURE__ */ jsxs78(Fragment29, { children: [
+    /* @__PURE__ */ jsxs78("button", { type: "button", className: "bf-cmp-queuebtn", onClick: onQueue, disabled, title: queueLabel, "aria-label": queueLabel, children: [
+      /* @__PURE__ */ jsx84(IconQueue, {}),
+      /* @__PURE__ */ jsx84("span", { className: "bf-cmp-queuebtn__text", children: labels.queueAfterShort })
     ] }),
     send
   ] });
 }
 
 // src/composer/AttachmentChips.tsx
-import { memo as memo13, useEffect as useEffect29 } from "react";
-import { jsx as jsx84, jsxs as jsxs78 } from "react/jsx-runtime";
+import { memo as memo14, useEffect as useEffect29 } from "react";
+import { jsx as jsx85, jsxs as jsxs79 } from "react/jsx-runtime";
 function chipPreviewItem(a) {
   const image = !!a.imageUrl || !!a.type?.startsWith("image/");
   const local = safeAttachmentUrl(a.localUrl);
@@ -10754,18 +10801,18 @@ function AttachmentChipsInner({ items, onRemove, labels, previewLabels, download
     else close();
   }, [items, openKey, openLocal, close, replace]);
   if (items.length === 0) return null;
-  return /* @__PURE__ */ jsxs78("div", { className: "bf-cmp-attachments", children: [
+  return /* @__PURE__ */ jsxs79("div", { className: "bf-cmp-attachments", children: [
     items.map((a) => {
       const thumb = safeAttachmentUrl(a.imageUrl ?? (a.type?.startsWith("image/") ? a.localUrl : void 0));
       const failed = a.status === "error";
-      return /* @__PURE__ */ jsxs78(
+      return /* @__PURE__ */ jsxs79(
         "span",
         {
           className: `bf-cmp-chip${a.status ? ` bf-cmp-chip--${a.status}` : ""}`,
           "aria-busy": a.status === "uploading" || void 0,
           children: [
-            /* @__PURE__ */ jsxs78("span", { className: "bf-cmp-chip__row", children: [
-              /* @__PURE__ */ jsxs78(
+            /* @__PURE__ */ jsxs79("span", { className: "bf-cmp-chip__row", children: [
+              /* @__PURE__ */ jsxs79(
                 "button",
                 {
                   type: "button",
@@ -10775,24 +10822,24 @@ function AttachmentChipsInner({ items, onRemove, labels, previewLabels, download
                   title: a.name,
                   onClick: (e) => preview.open(chipPreviewItem(a), e.currentTarget),
                   children: [
-                    thumb && /* @__PURE__ */ jsx84("img", { src: thumb, alt: "", className: "bf-cmp-chip__thumb" }),
-                    /* @__PURE__ */ jsx84("span", { className: "bf-cmp-chip__name", children: a.name })
+                    thumb && /* @__PURE__ */ jsx85("img", { src: thumb, alt: "", className: "bf-cmp-chip__thumb" }),
+                    /* @__PURE__ */ jsx85("span", { className: "bf-cmp-chip__name", children: a.name })
                   ]
                 }
               ),
-              a.status === "uploading" && /* @__PURE__ */ jsx84("span", { className: "bf-cmp-chip__spinner", role: "status", "aria-label": labels.attachmentUploading, title: labels.attachmentUploading }),
-              /* @__PURE__ */ jsx84("button", { type: "button", className: "bf-cmp-chip__x", onClick: () => onRemove(a.key), "aria-label": `${labels.remove} ${a.name}`, children: "\xD7" })
+              a.status === "uploading" && /* @__PURE__ */ jsx85("span", { className: "bf-cmp-chip__spinner", role: "status", "aria-label": labels.attachmentUploading, title: labels.attachmentUploading }),
+              /* @__PURE__ */ jsx85("button", { type: "button", className: "bf-cmp-chip__x", onClick: () => onRemove(a.key), "aria-label": `${labels.remove} ${a.name}`, children: "\xD7" })
             ] }),
-            failed && /* @__PURE__ */ jsx84("span", { className: "bf-cmp-chip__error", role: "alert", children: a.error || labels.attachmentFailed })
+            failed && /* @__PURE__ */ jsx85("span", { className: "bf-cmp-chip__error", role: "alert", children: a.error || labels.attachmentFailed })
           ]
         },
         a.key
       );
     }),
-    /* @__PURE__ */ jsx84(AttachmentPreview, { item: preview.item, onClose: preview.close, labels: previewLabels, download, locale })
+    /* @__PURE__ */ jsx85(AttachmentPreview, { item: preview.item, onClose: preview.close, labels: previewLabels, download, locale })
   ] });
 }
-var AttachmentChips = memo13(AttachmentChipsInner);
+var AttachmentChips = memo14(AttachmentChipsInner);
 
 // src/composer/composerOptions.ts
 import { CHAT_MODES, CHAT_MODE_ICON, effortProfile } from "@seanhogg/builderforce-brain-embedded";
@@ -10840,7 +10887,7 @@ function composerOptionGroups(options, labels) {
 }
 
 // src/composer/ContextMeter.tsx
-import { jsx as jsx85, jsxs as jsxs79 } from "react/jsx-runtime";
+import { jsx as jsx86, jsxs as jsxs80 } from "react/jsx-runtime";
 var R = 7;
 var C2 = 2 * Math.PI * R;
 function ContextMeter({ usage, labels, locale }) {
@@ -10849,13 +10896,13 @@ function ContextMeter({ usage, labels, locale }) {
   const window2 = usage.contextWindow;
   if (!window2) {
     const hint2 = fill(labels.contextMeterHintTokens, { used });
-    return /* @__PURE__ */ jsx85("span", { className: "bf-ctx-meter", title: hint2, "aria-label": hint2, role: "note", children: /* @__PURE__ */ jsx85("span", { className: "bf-ctx-meter__text", children: used }) });
+    return /* @__PURE__ */ jsx86("span", { className: "bf-ctx-meter", title: hint2, "aria-label": hint2, role: "note", children: /* @__PURE__ */ jsx86("span", { className: "bf-ctx-meter__text", children: used }) });
   }
   const percent = Math.min(100, Math.round(usage.promptTokens / window2 * 100));
   const shown = new Intl.NumberFormat(locale, { style: "percent", maximumFractionDigits: 0 }).format(percent / 100);
   const hint = fill(labels.contextMeterHint, { used, limit: formatTokens(window2, locale), percent: shown });
   const tone = percent >= 90 ? " bf-ctx-meter--full" : percent >= 70 ? " bf-ctx-meter--high" : "";
-  return /* @__PURE__ */ jsxs79(
+  return /* @__PURE__ */ jsxs80(
     "span",
     {
       className: `bf-ctx-meter${tone}`,
@@ -10866,9 +10913,9 @@ function ContextMeter({ usage, labels, locale }) {
       "aria-valuemax": 100,
       "aria-valuenow": percent,
       children: [
-        /* @__PURE__ */ jsxs79("svg", { className: "bf-ctx-meter__ring", width: "16", height: "16", viewBox: "0 0 18 18", "aria-hidden": "true", children: [
-          /* @__PURE__ */ jsx85("circle", { className: "bf-ctx-meter__track", cx: "9", cy: "9", r: R, fill: "none", strokeWidth: "2.5" }),
-          /* @__PURE__ */ jsx85(
+        /* @__PURE__ */ jsxs80("svg", { className: "bf-ctx-meter__ring", width: "16", height: "16", viewBox: "0 0 18 18", "aria-hidden": "true", children: [
+          /* @__PURE__ */ jsx86("circle", { className: "bf-ctx-meter__track", cx: "9", cy: "9", r: R, fill: "none", strokeWidth: "2.5" }),
+          /* @__PURE__ */ jsx86(
             "circle",
             {
               className: "bf-ctx-meter__fill",
@@ -10883,7 +10930,7 @@ function ContextMeter({ usage, labels, locale }) {
             }
           )
         ] }),
-        /* @__PURE__ */ jsx85("span", { className: "bf-ctx-meter__text", children: shown })
+        /* @__PURE__ */ jsx86("span", { className: "bf-ctx-meter__text", children: shown })
       ]
     }
   );
@@ -10893,12 +10940,12 @@ function ContextMeter({ usage, labels, locale }) {
 import { useDraftIsEmpty } from "@seanhogg/builderforce-brain-embedded";
 
 // src/composer/ComposerTextBox.tsx
-import { memo as memo14 } from "react";
+import { memo as memo15 } from "react";
 import { useDraftText } from "@seanhogg/builderforce-brain-embedded";
 
 // src/mention/CommandAutocomplete.tsx
 import { useCallback as useCallback28 } from "react";
-import { Fragment as Fragment30, jsx as jsx86, jsxs as jsxs80 } from "react/jsx-runtime";
+import { Fragment as Fragment30, jsx as jsx87, jsxs as jsxs81 } from "react/jsx-runtime";
 var DEFAULT_COMMAND_LABELS = {
   noMatches: "No matching commands"
 };
@@ -10956,12 +11003,12 @@ function useCommandAutocomplete(opts) {
   }, [onChoose]);
   const renderItem = useCallback28((entry) => {
     const reason = entry.availability.ok ? void 0 : entry.availability.reason;
-    return /* @__PURE__ */ jsxs80(Fragment30, { children: [
-      /* @__PURE__ */ jsxs80("span", { className: "bf-cmp-typeahead__col", children: [
-        /* @__PURE__ */ jsx86("span", { className: "bf-cmp-typeahead__code", children: entry.syntax }),
-        /* @__PURE__ */ jsx86("span", { className: "bf-cmp-typeahead__detail", title: reason ?? entry.description, children: reason ?? entry.description })
+    return /* @__PURE__ */ jsxs81(Fragment30, { children: [
+      /* @__PURE__ */ jsxs81("span", { className: "bf-cmp-typeahead__col", children: [
+        /* @__PURE__ */ jsx87("span", { className: "bf-cmp-typeahead__code", children: entry.syntax }),
+        /* @__PURE__ */ jsx87("span", { className: "bf-cmp-typeahead__detail", title: reason ?? entry.description, children: reason ?? entry.description })
       ] }),
-      reason !== void 0 && /* @__PURE__ */ jsx86("span", { className: "bf-cmp-typeahead__tag", children: unavailable })
+      reason !== void 0 && /* @__PURE__ */ jsx87("span", { className: "bf-cmp-typeahead__tag", children: unavailable })
     ] });
   }, [unavailable]);
   return useTriggerAutocomplete({
@@ -10987,7 +11034,7 @@ function useCommandAutocomplete(opts) {
 }
 
 // src/composer/ComposerTextBox.tsx
-import { Fragment as Fragment31, jsx as jsx87, jsxs as jsxs81 } from "react/jsx-runtime";
+import { Fragment as Fragment31, jsx as jsx88, jsxs as jsxs82 } from "react/jsx-runtime";
 var noop = () => void 0;
 var NO_PARTICIPANTS = [];
 var NO_TICKETS = [];
@@ -11049,9 +11096,9 @@ function ComposerTextBoxInner(props) {
       else onSubmit();
     }
   };
-  return /* @__PURE__ */ jsxs81(Fragment31, { children: [
+  return /* @__PURE__ */ jsxs82(Fragment31, { children: [
     active?.popup,
-    /* @__PURE__ */ jsx87(
+    /* @__PURE__ */ jsx88(
       "textarea",
       {
         ref: textareaRef,
@@ -11077,7 +11124,7 @@ function ComposerTextBoxInner(props) {
     )
   ] });
 }
-var ComposerTextBox = memo14(ComposerTextBoxInner);
+var ComposerTextBox = memo15(ComposerTextBoxInner);
 
 // src/composer/labels.ts
 var n = (v) => v.toLocaleString();
@@ -11173,7 +11220,7 @@ function useUploadGate(items) {
 }
 
 // src/composer/BrainComposer.tsx
-import { Fragment as Fragment32, jsx as jsx88, jsxs as jsxs82 } from "react/jsx-runtime";
+import { Fragment as Fragment32, jsx as jsx89, jsxs as jsxs83 } from "react/jsx-runtime";
 function BrainComposerInner(props) {
   const {
     draftStore,
@@ -11277,7 +11324,7 @@ function BrainComposerInner(props) {
     }
   };
   const groups = composerOptionGroups(options, labels);
-  const statusNode = account ? /* @__PURE__ */ jsx88(
+  const statusNode = account ? /* @__PURE__ */ jsx89(
     WorkStatusPanel,
     {
       request: account.request,
@@ -11287,10 +11334,10 @@ function BrainComposerInner(props) {
       onUpgrade: account.onUpgrade
     }
   ) : void 0;
-  const connectionsNode = account?.connections ? /* @__PURE__ */ jsx88(ConnectionsPanel, { connections: account.connections, labels: labelBundle?.connections }) : null;
+  const connectionsNode = account?.connections ? /* @__PURE__ */ jsx89(ConnectionsPanel, { connections: account.connections, labels: labelBundle?.connections }) : null;
   const spendTab = account ? {
     label: spendLabels(labelBundle?.spend).spendHeading,
-    content: /* @__PURE__ */ jsx88(
+    content: /* @__PURE__ */ jsx89(
       WorkSpendPanel,
       {
         request: account.request,
@@ -11301,7 +11348,7 @@ function BrainComposerInner(props) {
     )
   } : void 0;
   const previewLabels = useMemo22(() => attachmentPreviewLabels(labelBundle?.attachmentPreview), [labelBundle?.attachmentPreview]);
-  const chips = attachments ? /* @__PURE__ */ jsx88(
+  const chips = attachments ? /* @__PURE__ */ jsx89(
     AttachmentChips,
     {
       items: attachments.items,
@@ -11312,13 +11359,13 @@ function BrainComposerInner(props) {
       locale: account?.locale
     }
   ) : null;
-  const uploadNote = uploadGate.notice ? /* @__PURE__ */ jsx88("div", { className: `bf-cmp-upload-note${uploadGate.notice === "failed" ? " bf-cmp-upload-note--error" : ""}`, role: "status", "aria-live": "polite", children: uploadGate.notice === "failed" ? labels.sendBlockedByFailedUpload : labels.sendWaitsForUploads }) : null;
+  const uploadNote = uploadGate.notice ? /* @__PURE__ */ jsx89("div", { className: `bf-cmp-upload-note${uploadGate.notice === "failed" ? " bf-cmp-upload-note--error" : ""}`, role: "status", "aria-live": "polite", children: uploadGate.notice === "failed" ? labels.sendBlockedByFailedUpload : labels.sendWaitsForUploads }) : null;
   const showSuggestions = !!suggestions?.items.length && empty && !running;
-  const modeQuestion = gate.asking ? /* @__PURE__ */ jsx88(InferenceModeFirstRun, { labels: promptOptionsLabels(labelBundle?.options), onChoose: gate.choose }) : null;
-  const aboveBox = modeQuestion || above || showSuggestions || uploadNote || attachments && attachments.items.length > 0 ? /* @__PURE__ */ jsxs82(Fragment32, { children: [
+  const modeQuestion = gate.asking ? /* @__PURE__ */ jsx89(InferenceModeFirstRun, { labels: promptOptionsLabels(labelBundle?.options), onChoose: gate.choose }) : null;
+  const aboveBox = modeQuestion || above || showSuggestions || uploadNote || attachments && attachments.items.length > 0 ? /* @__PURE__ */ jsxs83(Fragment32, { children: [
     modeQuestion,
     above,
-    showSuggestions && /* @__PURE__ */ jsx88(SuggestionRow, { items: suggestions.items, ariaLabel: suggestions.label }),
+    showSuggestions && /* @__PURE__ */ jsx89(SuggestionRow, { items: suggestions.items, ariaLabel: suggestions.label }),
     chips,
     uploadNote
   ] }) : void 0;
@@ -11332,9 +11379,9 @@ function BrainComposerInner(props) {
   }), [optionCopy, commandCopy]);
   const source = draftStore ? { draftStore } : { value: value ?? "", onChange: setValue };
   const resolvedPlaceholder = placeholder ?? labels.placeholder;
-  return /* @__PURE__ */ jsxs82("div", { className: ["bf-cmp", className].filter(Boolean).join(" "), children: [
+  return /* @__PURE__ */ jsxs83("div", { className: ["bf-cmp", className].filter(Boolean).join(" "), children: [
     blockedNotice,
-    /* @__PURE__ */ jsx88(
+    /* @__PURE__ */ jsx89(
       PromptPanel,
       {
         active: focused || !empty,
@@ -11346,7 +11393,7 @@ function BrainComposerInner(props) {
         onDragLeave: attachments ? () => setDragging(false) : void 0,
         onDrop: attachments ? onDrop : void 0,
         status: aboveBox,
-        input: /* @__PURE__ */ jsx88(
+        input: /* @__PURE__ */ jsx89(
           ComposerTextBox,
           {
             ...source,
@@ -11372,8 +11419,8 @@ function BrainComposerInner(props) {
             commandLabels
           }
         ),
-        actions: /* @__PURE__ */ jsxs82(Fragment32, { children: [
-          /* @__PURE__ */ jsx88(
+        actions: /* @__PURE__ */ jsxs83(Fragment32, { children: [
+          /* @__PURE__ */ jsx89(
             ComposerAddMenu,
             {
               labels,
@@ -11386,13 +11433,13 @@ function BrainComposerInner(props) {
               items: addMenuItems
             }
           ),
-          /* @__PURE__ */ jsx88(
+          /* @__PURE__ */ jsx89(
             PromptOptionsMenu,
             {
               labels: labelBundle?.options,
               disabled,
               ...groups,
-              status: statusNode && /* @__PURE__ */ jsxs82(Fragment32, { children: [
+              status: statusNode && /* @__PURE__ */ jsxs83(Fragment32, { children: [
                 statusNode,
                 connectionsNode
               ] }),
@@ -11401,11 +11448,11 @@ function BrainComposerInner(props) {
             }
           )
         ] }),
-        context: context || contextUsage ? /* @__PURE__ */ jsxs82(Fragment32, { children: [
+        context: context || contextUsage ? /* @__PURE__ */ jsxs83(Fragment32, { children: [
           context,
-          /* @__PURE__ */ jsx88(ContextMeter, { usage: contextUsage, labels, locale: account?.locale })
+          /* @__PURE__ */ jsx89(ContextMeter, { usage: contextUsage, labels, locale: account?.locale })
         ] }) : void 0,
-        primaryAction: /* @__PURE__ */ jsx88(
+        primaryAction: /* @__PURE__ */ jsx89(
           ComposerTrailingButton,
           {
             labels,
@@ -11424,7 +11471,7 @@ function BrainComposerInner(props) {
     below
   ] });
 }
-var BrainComposer = memo15(BrainComposerInner);
+var BrainComposer = memo16(BrainComposerInner);
 
 // src/composer/useChatMemorySwitch.ts
 import { useCallback as useCallback31, useEffect as useEffect32, useState as useState44 } from "react";

@@ -1,6 +1,6 @@
 import * as react from 'react';
 import react__default, { ReactNode, HTMLAttributes, KeyboardEvent, RefObject } from 'react';
-import { BrainRunActivity, ChatErrorAction, ChatActivityLabels, BrainMessage, ChatActivity, EvermindRecallItem, EvermindLearnTarget, ChatInputAttachment, BrainTraceEvent, PrefetchResult, PrefetchConfirm, ModelIdentityContext, AskUserPayload, ModelFallbackChannel, ModelFallbackEvent, QueuedItem, LocalModelRow as LocalModelRow$1, InferenceMode, ModelChoiceLabels, ChatModelSelection, ChatModelOptions, LocalModelStore, ComposerHelpModel, Effort, DirectedRecipient, RecipientChoice, ComposerDraftStore, BrainPersonaChoice, BrainPersonaAgent, SavingsSourceKey, SpendSavingsSummary, ChatTicket, ChatDiagnosticsSources, ChatDiagnosticsPlanSnapshot, ChatMode, ContextUsage, OnDeviceTasks } from '@seanhogg/builderforce-brain-embedded';
+import { BrainMessage, ChatActivity, EvermindRecallItem, EvermindLearnTarget, ChatInputAttachment, BrainTraceEvent, BrainRunActivity, ChatErrorAction, ChatActivityLabels, PrefetchResult, PrefetchConfirm, ModelIdentityContext, AskUserPayload, ModelFallbackChannel, ModelFallbackEvent, QueuedItem, LocalModelRow as LocalModelRow$1, InferenceMode, ModelChoiceLabels, ChatModelSelection, ChatModelOptions, LocalModelStore, ComposerHelpModel, Effort, DirectedRecipient, RecipientChoice, ComposerDraftStore, BrainPersonaChoice, BrainPersonaAgent, SavingsSourceKey, SpendSavingsSummary, ChatTicket, ChatDiagnosticsSources, ChatDiagnosticsPlanSnapshot, ChatMode, ContextUsage, OnDeviceTasks } from '@seanhogg/builderforce-brain-embedded';
 export { AskUserMessageLike, AskUserOption, AskUserPayload, BUILDERFORCE_PRODUCT_NAME, ChatModelOptions, ChatModelSelection, DEFAULT_MODEL_IDENTITY, MODEL_CATEGORIES, ModelCategory, ModelChoiceLabels, ModelIdentityContext, ModelItem, PROJECT_EVERMIND_MODEL_PREFIX, PendingAskUser, QueuedItem, QueuedTurns, QueuedTurnsOptions, RoutedProduct, activeModelKey, askUserAnchorId, buildModelItems, byoVendorLabel, displayModelName, filterModelItems, isManagerRole, modelCategoryLabel, modelInUse, parseAskUser, perMillionUsd, premiumCostLabel, productForPlan, productModelName, revealsModelId, selectPendingAskUser, serializeAskUser, stripAskUser } from '@seanhogg/builderforce-brain-embedded';
 
 /**
@@ -63,81 +63,6 @@ declare function ToolStep({ node, labels }: {
 }): react__default.JSX.Element;
 
 /**
- * The in-flight step, animated.
- *
- * The timeline renders SETTLED steps: a tool appears once it has finished, with
- * its duration attached. That leaves the whole time a step is actually running
- * with nothing to show but a static "Thinking…" line — so a `search_code` that
- * takes 67 seconds and a wedged extension host look exactly alike, and the only
- * honest thing a user can conclude is that the product hung.
- *
- * This component is the missing half. It renders the CURRENT phase from
- * `BrainRunActivity` (published on entry by the run store, not on completion),
- * with three things a static label cannot carry:
- *
- *  1. **Motion** — a rotating ring, a travelling shimmer on the label, and an
- *     indeterminate progress bar. Motion is the signal; the words are the detail.
- *  2. **Subject** — WHICH tool, on WHAT file or query. "Reading
- *     LandingCanvasHero.module.css" is progress; "Thinking…" is not.
- *  3. **Elapsed** — a live counter, ticking here rather than in the parent, plus
- *     an explicit reassurance once a step passes {@link SLOW_AFTER_MS}. A user
- *     who can see 1m 07s and climbing knows the difference between slow and stuck.
- *
- * Self-contained by design: it owns its own timer, decides its own visibility
- * (returns null when nothing is in flight), and takes a narrow prop contract, so
- * it drops into the web panel, the VS Code webview or the canvas dock unchanged.
- * The `awaiting` phase deliberately does NOT animate — nothing is progressing
- * while the run waits on a human, and pretending otherwise is a lie in motion.
- */
-/** Past this, a step gets an explicit "still working" reassurance. */
-declare const SLOW_AFTER_MS = 12000;
-interface LiveActivityLabels {
-    /** Phase lines. `tool` / `awaiting` must contain `{tool}`. */
-    starting: string;
-    thinking: string;
-    writing: string;
-    /** The model is streaming a tool call's arguments — must contain `{tool}`. */
-    composing: string;
-    /** Appended to {@link composing} once bytes are known — must contain `{bytes}`. */
-    composed: string;
-    tool: string;
-    awaiting: string;
-    finishing: string;
-    /** Appended when the step names a subject — must contain `{target}`. */
-    on: string;
-    /** Loop iteration chip — must contain `{step}`. */
-    step: string;
-    /** Shown once a step passes {@link SLOW_AFTER_MS} — must contain `{elapsed}`. */
-    slow: string;
-    /** Accessible name for the whole indicator. */
-    ariaLabel: string;
-}
-declare const DEFAULT_LIVE_ACTIVITY_LABELS: LiveActivityLabels;
-/** Elapsed, formatted for a live counter (0s → 59s → 1m 07s). */
-declare function formatElapsed(ms: number): string;
-interface LiveActivityProps {
-    /** The in-flight step, or null when the run is idle. */
-    activity: BrainRunActivity | null | undefined;
-    /** True while the run is executing. A run can be running with no phase yet. */
-    isRunning: boolean;
-    labels?: Partial<LiveActivityLabels>;
-    /**
-     * The model doing the work, as the reader is allowed to see it - named from the moment the turn's route is known,
-     * and absent before (never a guess). A tool-only turn persists no text, so this row is where the person learns it.
-     */
-    model?: string;
-    /** The raw model id, kept in the name's tooltip so what ran stays checkable. */
-    modelTitle?: string;
-}
-declare function LiveActivityInner({ activity, isRunning, labels: partial, model, modelTitle }: LiveActivityProps): react__default.JSX.Element | null;
-/**
- * Memoized: this component re-renders once a second on its own timer, and it sits
- * inside a transcript that re-renders on every streamed token. Without the memo the
- * two multiply.
- */
-declare const LiveActivity: react__default.MemoExoticComponent<typeof LiveActivityInner>;
-
-/**
  * The MODEL MOVES a run records — the transcript re-packed for the window of the model
  * about to serve it (`llm.handoff`, brain-embedded's window fit) and a local-first turn
  * that fell over from an on-device model (`llm.local_fallback`) — read from the step's
@@ -190,343 +115,6 @@ declare const DEFAULT_MODEL_MOVE_LABELS: ModelMoveLabels;
 declare function modelMoveOf(label: string, args: unknown): ModelMove | null;
 /** The reader's line for a move, in the catalog's words. */
 declare function modelMoveLine(move: ModelMove, labels: ModelMoveLabels): string;
-
-/**
- * The chat's error banner — the message AND the fix.
- *
- * A turn that fails on an entitlement ("…require a validated card on file. Add
- * and validate a card in Settings ▸ Billing to unlock.") is only actionable if
- * the surface takes the user there. The verdict is decided ONCE, server-side,
- * and carried through the run store as {@link ChatErrorAction} — so this
- * component reads a verdict rather than pattern-matching error prose, and the
- * button can never contradict the sentence above it.
- *
- * Shared because both chat surfaces hit the same wall: the VS Code webview and
- * the web app's <BrainPanel> render the same failures from the same hook, and a
- * user who upgrades from one and returns to the other should not find a
- * different (or missing) remedy.
- *
- * Self-gating: renders nothing without an error, and decides its own actions from
- * the verdict — the host passes handlers, never a `canX` flag.
- */
-interface ChatErrorBannerLabels {
-    /** Re-exchange an expired session token. */
-    reconnect: string;
-    /** Upgrade CTA when the server named no specific plan. */
-    upgrade: string;
-    /** Upgrade CTA naming the plan — must contain the literal `{plan}` token. */
-    upgradeToPlan: string;
-    /** Billing CTA when the plan is fine but no validated card is on file. */
-    addCard: string;
-    /** Sign in — offered when no model can serve the turn (signed out, nothing local). */
-    signIn: string;
-    /** What the banner says for that case — replaces the raw `not_signed_in` code. */
-    noModel: string;
-    /** What the banner says when nothing on this device can serve and the gateway is not
-     *  an option (Local only, or signed in with no cloud route) — replaces `no_local_model`. */
-    noLocalModel: string;
-    /** Move this person onto Hybrid (local first, then the cloud). */
-    switchToHybrid: string;
-    /** Open where a model for this device is downloaded. */
-    downloadLocalModel: string;
-    /** What the banner says when the person runs Specific model with nothing picked —
-     *  replaces `no_specific_model`. */
-    noSpecificModel: string;
-    /** Open the composer's Model tab, where a model is picked. */
-    pickModel: string;
-    /** The on-device engine crashed (a wasm trap) — replaces `bfi_engine_crashed`. */
-    engineCrashed: string;
-    /** The engine serving the model went away mid-answer — replaces `page_engine_detached`. */
-    engineDetached: string;
-    /** The model trapped repeatedly and is refused this session — replaces `model_keeps_crashing`. */
-    modelKeepsCrashing: string;
-    /** A continuation took too long - replaces `continuation_timed_out`; the words are kept and read with the next message. */
-    continuationTimedOut: string;
-    /** The selected model is not answering - replaces the raw interruption. Must contain the literal `{model}` token. */
-    modelUnresponsive: string;
-    /** Open the composer's model menu so the person picks another model. */
-    chooseAnotherModel: string;
-    /** `provider_sign_in`: a provider on the person's own account refused the credential. Must contain the literal `{label}` token. */
-    providerSignIn: string;
-    /** The button that starts that provider's sign-in. Must contain the literal `{label}` token. */
-    signInToProvider: string;
-    /** Open where on-device models are managed (removed) — offered beside "Pick a model"
-     *  for a model that keeps crashing. */
-    manageLocalModels: string;
-    /** `platform_refused` where only the mode opens it (Local only holds the cloud, or the
-     *  queue that carries the run's writes) — replaces `platform_*_disabled`. */
-    platformRefusedMode: string;
-    /** `platform_refused` by the account-sync switch — replaces `platform_synchronize_disabled`. */
-    platformRefusedSync: string;
-    /** `platform_refused` by another advanced platform switch (model downloads, direct
-     *  providers, external MCP, git remotes). */
-    platformRefusedSetting: string;
-    dismiss: string;
-}
-declare const DEFAULT_CHAT_ERROR_LABELS: ChatErrorBannerLabels;
-interface ChatErrorBannerProps {
-    /** The message to show. Falsy ⇒ the banner renders nothing. */
-    error: string;
-    /** The server-decided remedy, from `useBrainConversation().errorAction`. */
-    action: ChatErrorAction | null;
-    onDismiss: () => void;
-    /**
-     * Re-authenticate. Omit on a surface with no in-place reconnect (the web app
-     * redirects to login instead) — the button then isn't offered.
-     */
-    onReconnect?: () => void;
-    /**
-     * Send the user somewhere they can raise their plan. Omit to suppress the
-     * button (e.g. a logged-out surface that owns its own sign-up upsell).
-     */
-    onUpgrade?: () => void;
-    /** Send the user somewhere they can put a validated card on file. */
-    onValidateCard?: () => void;
-    /** Sign in (or open where a local model is started) — for the `sign_in` verdict. */
-    onSignIn?: () => void;
-    /** For the `no_local_model` verdict: move onto Hybrid. Omit when the person already
-     *  runs Hybrid (the cloud route is out for another reason) — the button then isn't offered. */
-    onSwitchToHybrid?: () => void;
-    /** For the `no_local_model` verdict: open where a local model is downloaded. Also the
-     *  "Manage on-device models" remedy for a model that keeps crashing (it is removed there). */
-    onDownloadLocalModel?: () => void;
-    /** For the `no_specific_model` verdict: open the composer's Model tab (the one that
-     *  raised it), where a model is picked or the mode changed. Also "try another model"
-     *  for a model that keeps crashing. */
-    onPickModel?: () => void;
-    /** For the `provider_sign_in` verdict: start that provider's sign-in. Omit where the surface cannot (the web
-     *  points at Settings in the message instead) - the button then isn't offered. */
-    onProviderSignIn?: (provider: string, label: string) => void;
-    labels?: Partial<ChatErrorBannerLabels>;
-    /** Extra styles merged into the banner container, for host-specific chrome. */
-    style?: react__default.CSSProperties;
-    /** Class on the banner container — the VS Code webview styles via its own CSS. */
-    className?: string;
-    /**
-     * `alert` (default) for a failed turn. `status` for a passive notice the run still
-     * finished through — a connected account it could not use, a provider key at its cap —
-     * which a screen reader should announce politely rather than interrupt with.
-     */
-    role?: 'alert' | 'status';
-}
-declare function ChatErrorBanner({ error, action, onDismiss, onReconnect, onUpgrade, onValidateCard, onSignIn, onSwitchToHybrid, onDownloadLocalModel, onPickModel, onProviderSignIn, labels: labelOverrides, style, className, role, }: ChatErrorBannerProps): react__default.JSX.Element | null;
-
-/** Figures a parameterised label is rendered with. */
-type LabelValues = Readonly<Record<string, string | number>>;
-/** A host's string for a canonical label key, or undefined when its catalog has none. */
-type LabelLookup = (key: string, values?: LabelValues) => string | undefined;
-/**
- * Every string field of `defaults`, read at `prefix + field`. Functions and nested
- * objects are carried over untouched; an empty string counts as "none".
- */
-declare function stringsFrom<T extends object>(defaults: T, lookup: LabelLookup, prefix?: string): T;
-/**
- * A lookup over a FLAT host bundle (`key → text`, `{name}` placeholders) — the shape the
- * VS Code extension posts. `keyOf` maps a canonical key to the bundle's key (return
- * undefined to leave it to the default); `format` renders a numeric figure for the
- * host's locale before it is substituted.
- */
-declare function bundleLookup(bundle: Readonly<Record<string, string>>, keyOf: (key: string) => string | undefined, format?: (value: number) => string): LabelLookup;
-
-/**
- * The copy of the attachment preview (`AttachmentPreview`) — the same strings wherever a
- * picture or file is opened: a transcript turn's attachments and the composer's chips.
- *
- * Hosts supply it through their ONE catalog lookup under the `attachmentPreview.` scope —
- * the composer's (`brainComposerLabelsFrom`) and the transcript's (`timelineLabelsFrom`)
- * both read the same keys, so each host keeps one copy of these strings.
- * No placeholders: an accessible name is composed as `<label>: <file name>`.
- */
-
-interface AttachmentPreviewLabels {
-    /** The trigger's accessible name, before the file name ("Open preview: shot.png"). */
-    open: string;
-    /** The preview panel's accessible name, before the file name. */
-    dialog: string;
-    close: string;
-    download: string;
-    downloading: string;
-    /** After the host saved the file. */
-    downloaded: string;
-    /** Shown when the download failed and the host gave no reason. */
-    downloadFailed: string;
-    /** In place of a picture for a file the preview cannot show. */
-    noPreview: string;
-    /** The name of a picture stored without one. */
-    image: string;
-    /** When no copy of the file is reachable to download (e.g. a link that expired). */
-    unavailable: string;
-}
-declare const DEFAULT_ATTACHMENT_PREVIEW_LABELS: AttachmentPreviewLabels;
-declare function attachmentPreviewLabels(overrides?: Partial<AttachmentPreviewLabels>): AttachmentPreviewLabels;
-/** The preview's copy from a host lookup over its canonical keys (the field names). */
-declare function attachmentPreviewLabelsFrom(lookup: LabelLookup): AttachmentPreviewLabels;
-
-/**
- * Every string the transcript renders. It EXTENDS {@link ToolStepLabels} rather than
- * restating those five: the tool step is its own component with its own narrow
- * contract, and a host that passes this bundle satisfies that contract by
- * construction — which is what keeps the two from drifting apart.
- */
-interface BrainTimelineLabels extends ToolStepLabels, ModelMoveLabels {
-    /** Shown on the live thinking node while a turn streams. */
-    thinking: string;
-    /**
-     * Copy for the ANIMATED in-flight indicator (<LiveActivity>) — which tool is
-     * running, on what, and for how long. Carried in this bundle so a host passes
-     * ONE set of labels for the whole transcript rather than two.
-     */
-    live: LiveActivityLabels;
-    /** "Thought for {duration}" — must contain the literal `{duration}` token. */
-    thoughtFor: string;
-    /** Summary of a collapsed `<think>` block inside a reply. */
-    thought: string;
-    /** Muted note above a reply RESCUED from the model's reasoning — the run ended
-     *  inside its `<think>` block, so the transcript shows the reasoning as the reply
-     *  rather than a collapsed line and nothing else. See `strandedReplyKey`. */
-    replyFromThought: string;
-    /** Muted note above a reply the user STOPPED mid-stream — what the model had written
-     *  when Stop was pressed, kept so the reader can see what went wrong and (from the
-     *  provenance chip) which model did it. See `stoppedTurn.ts` in brain-embedded. */
-    stoppedReply: string;
-    /** In place of a stopped turn's body when its run never started (`isStoppedBeforeStart`). */
-    stoppedBeforeStart: string;
-    you: string;
-    assistant: string;
-    /** Beside a SUB-AGENT's name: whose it is — must contain `{owner}`. */
-    subagentOf: string;
-    /** Beside the chat's own agent once sub-agents have spoken: it is their owner. */
-    ownerTag: string;
-    error: string;
-    loading: string;
-    empty: string;
-    /** Per-message "send this again" action — re-asks the model with the same text,
-     *  from a user turn or an assistant one. */
-    replay: string;
-    /** Thumbs up / down on an assistant reply. */
-    rateUp: string;
-    rateDown: string;
-    apply: string;
-    createFile: string;
-    /** <QuestionCard> copy (ask_user) — carried here so a host passes ONE label bundle. */
-    askSubmit: string;
-    askAnswered: string;
-    /** Provenance chip: the badge shown when the tenant's OWN connected frontier
-     *  account served the turn. */
-    accountOwn: string;
-    /** Provenance chip: the badge for a turn served by the shared model pool. */
-    accountShared: string;
-    /** Provenance chip: the badge for a shared-pool turn when the tenant HAS a
-     *  connected account that wasn't used — the case worth flagging. */
-    accountByoUnused: string;
-    /** Provenance chip: the badge for a turn an engine ON THIS DEVICE served (the ref is `runsOnDevice`). */
-    accountOnDevice: string;
-    /** Provenance chip tooltip: shown on the "🧠 Evermind vN" badge when the
-     *  project's own self-learning model generated this reply. */
-    ranOnEvermind: string;
-    /** Evermind recall step title — must contain `{count}` and `{version}`. */
-    recallTitle: string;
-    /** Tooltip on the recall step explaining what it means. */
-    recallHint: string;
-    /** Memory-first answer step: a saved reply was replayed and no model ran. */
-    memoryAnswerCache: string;
-    /** Memory-first answer step: the project's Evermind replied and no other model ran.
-     *  Must contain `{version}`. */
-    memoryAnswerEvermind: string;
-    /** Tooltip on the memory-first answer step. */
-    memoryAnswerHint: string;
-    /** Deterministic answer step: "where is X defined?" answered from the workspace symbol
-     *  index and no model ran. */
-    memoryAnswerSymbols: string;
-    /** Tooltip on the symbol-index answer step. */
-    memoryAnswerSymbolsHint: string;
-    /** Evermind learn step — the turn was contributed back. Must contain `{version}`. */
-    learnTitle: string;
-    /** Tooltip on the learn step. */
-    learnHint: string;
-    /** Evermind SKIPPED-learn step — the turn did NOT contribute, and why. Must contain
-     *  `{reason}` (filled from {@link learnSkipReason}). */
-    learnSkippedTitle: string;
-    /** Tooltip on the skipped-learn step. */
-    learnSkippedHint: string;
-    /** Human phrase per skip reason, substituted into {@link learnSkippedTitle}. */
-    learnSkipReason: {
-        'not-attached': string;
-        'not-seeded': string;
-        frozen: string;
-    };
-    /** Per-Evermind CONTRIBUTED line for a multi-target fan-out. Must contain `{name}`,
-     *  `{projectId}`, `{version}`. */
-    learnTargetContributed: string;
-    /** Per-Evermind SKIPPED line for a multi-target fan-out. Must contain `{name}`,
-     *  `{projectId}`, `{reason}` (filled from {@link learnSkipReason}). */
-    learnTargetSkipped: string;
-    /** Evermind reconcile step — the turn updated learned memories. Must contain
-     *  `{count}` and `{version}`. */
-    reconcileTitle: string;
-    /** Tooltip on the reconcile step. */
-    reconcileHint: string;
-    /** Auto-compaction step — the run folded older steps into a memory note to stay
-     *  within the context window. Must contain `{count}`. */
-    contextCompacted: string;
-    /** Tooltip on the auto-compaction step. */
-    contextCompactedHint: string;
-    /** The button above a long transcript that renders the next page of older steps.
-     *  Must contain `{count}`. */
-    showEarlier: string;
-    /** Below a window moved back in time: render the next page of newer steps. `{count}`. */
-    showNewer: string;
-    /** …or go straight back to the newest page. */
-    jumpToLatest: string;
-    /** Accessible name on the floating "scroll to latest" toggle that appears while the
-     *  reader is scrolled away from the newest message. */
-    scrollToLatest: string;
-    /**
-     * RUN-ACTIVITY line templates (run milestones + agent dispatch). Templates, not
-     * sentences: the server records only the FACTS, and each surface composes the line in
-     * its own language — which is the only way these can be localized at all, since the
-     * server has no idea who will read the chat. See `chatActivity.ts` for the contract.
-     */
-    activity: ChatActivityLabels;
-    /**
-     * The error step row's sentences — the SAME bundle (and the same `chatErrorMessage`)
-     * the chat's error banner reads, so a refused turn reads identically in the banner and
-     * in the transcript, never as its raw code (`platform_send_disabled`). Catalog keys
-     * `chatError.<field>`; omitted ⇒ the banner's English defaults.
-     */
-    chatError?: Partial<ChatErrorBannerLabels>;
-    /**
-     * The attachment preview a turn's picture or file opens — the SAME copy the composer's
-     * chips read. Catalog keys `attachmentPreview.<field>`; omitted ⇒ English defaults.
-     */
-    attachmentPreview?: Partial<AttachmentPreviewLabels>;
-}
-declare const DEFAULT_TIMELINE_LABELS: BrainTimelineLabels;
-
-/** +1 up, -1 down, 0 = cleared. Mirrors the `llm_action_ratings.rating` domain. */
-type MessageRating = 1 | -1 | 0;
-
-/** What the attachment preview shows and saves — shared by the transcript and the composer. */
-interface AttachmentPreviewItem {
-    name: string;
-    /** MIME type, when known. */
-    type?: string;
-    /** Size in bytes, when known. */
-    size?: number;
-    /** What the panel draws for a picture (may be a reduced copy). */
-    previewUrl?: string;
-    /** The ORIGINAL file — what Download saves. Omitted when no copy is reachable. */
-    downloadUrl?: string;
-    /** The attachment's key, for a host that resolves the original by it. */
-    key?: string;
-}
-/**
- * Saves an attachment for the person. Resolves `false` when they cancelled (no message),
- * anything else when it was saved; throws an Error whose message is the person's sentence.
- * Injected by the host: a VS Code webview routes it through the extension, the web app
- * uses `browserDownload`.
- */
-type AttachmentDownload = (item: AttachmentPreviewItem) => Promise<boolean | void>;
 
 /**
  * The transcript's NODES — what each durable message or trace step becomes on the
@@ -739,6 +327,424 @@ declare function strandedReplyKey(nodes: readonly TimelineNode[], isRunning: boo
 declare function streamingNode(streamingText: string, isRunning: boolean): TimelineNode | null;
 /** Compact human duration for a "Thought for …" label (e.g. 0s, 2s, 12s). */
 declare function formatDuration(ms: number | undefined): string;
+
+interface ToolGroupLabels {
+    toolGroupCommands: string;
+    toolGroupUsed: string;
+    toolGroupFailed: string;
+}
+
+/**
+ * The in-flight step, animated.
+ *
+ * The timeline renders SETTLED steps: a tool appears once it has finished, with
+ * its duration attached. That leaves the whole time a step is actually running
+ * with nothing to show but a static "Thinking…" line — so a `search_code` that
+ * takes 67 seconds and a wedged extension host look exactly alike, and the only
+ * honest thing a user can conclude is that the product hung.
+ *
+ * This component is the missing half. It renders the CURRENT phase from
+ * `BrainRunActivity` (published on entry by the run store, not on completion),
+ * with three things a static label cannot carry:
+ *
+ *  1. **Motion** — a rotating ring, a travelling shimmer on the label, and an
+ *     indeterminate progress bar. Motion is the signal; the words are the detail.
+ *  2. **Subject** — WHICH tool, on WHAT file or query. "Reading
+ *     LandingCanvasHero.module.css" is progress; "Thinking…" is not.
+ *  3. **Elapsed** — a live counter, ticking here rather than in the parent, plus
+ *     an explicit reassurance once a step passes {@link SLOW_AFTER_MS}. A user
+ *     who can see 1m 07s and climbing knows the difference between slow and stuck.
+ *
+ * Self-contained by design: it owns its own timer, decides its own visibility
+ * (returns null when nothing is in flight), and takes a narrow prop contract, so
+ * it drops into the web panel, the VS Code webview or the canvas dock unchanged.
+ * The `awaiting` phase deliberately does NOT animate — nothing is progressing
+ * while the run waits on a human, and pretending otherwise is a lie in motion.
+ */
+/** Past this, a step gets an explicit "still working" reassurance. */
+declare const SLOW_AFTER_MS = 12000;
+interface LiveActivityLabels {
+    /** Phase lines. `tool` / `awaiting` must contain `{tool}`. */
+    starting: string;
+    thinking: string;
+    writing: string;
+    /** The model is streaming a tool call's arguments — must contain `{tool}`. */
+    composing: string;
+    /** Appended to {@link composing} once bytes are known — must contain `{bytes}`. */
+    composed: string;
+    tool: string;
+    awaiting: string;
+    finishing: string;
+    /** Appended when the step names a subject — must contain `{target}`. */
+    on: string;
+    /** Loop iteration chip — must contain `{step}`. */
+    step: string;
+    /** Shown once a step passes {@link SLOW_AFTER_MS} — must contain `{elapsed}`. */
+    slow: string;
+    /** Accessible name for the whole indicator. */
+    ariaLabel: string;
+}
+declare const DEFAULT_LIVE_ACTIVITY_LABELS: LiveActivityLabels;
+/** Elapsed, formatted for a live counter (0s → 59s → 1m 07s). */
+declare function formatElapsed(ms: number): string;
+interface LiveActivityProps {
+    /** The in-flight step, or null when the run is idle. */
+    activity: BrainRunActivity | null | undefined;
+    /** True while the run is executing. A run can be running with no phase yet. */
+    isRunning: boolean;
+    labels?: Partial<LiveActivityLabels>;
+    /**
+     * The model doing the work, as the reader is allowed to see it - named from the moment the turn's route is known,
+     * and absent before (never a guess). A tool-only turn persists no text, so this row is where the person learns it.
+     */
+    model?: string;
+    /** The raw model id, kept in the name's tooltip so what ran stays checkable. */
+    modelTitle?: string;
+}
+declare function LiveActivityInner({ activity, isRunning, labels: partial, model, modelTitle }: LiveActivityProps): react__default.JSX.Element | null;
+/**
+ * Memoized: this component re-renders once a second on its own timer, and it sits
+ * inside a transcript that re-renders on every streamed token. Without the memo the
+ * two multiply.
+ */
+declare const LiveActivity: react__default.MemoExoticComponent<typeof LiveActivityInner>;
+
+/**
+ * The chat's error banner — the message AND the fix.
+ *
+ * A turn that fails on an entitlement ("…require a validated card on file. Add
+ * and validate a card in Settings ▸ Billing to unlock.") is only actionable if
+ * the surface takes the user there. The verdict is decided ONCE, server-side,
+ * and carried through the run store as {@link ChatErrorAction} — so this
+ * component reads a verdict rather than pattern-matching error prose, and the
+ * button can never contradict the sentence above it.
+ *
+ * Shared because both chat surfaces hit the same wall: the VS Code webview and
+ * the web app's <BrainPanel> render the same failures from the same hook, and a
+ * user who upgrades from one and returns to the other should not find a
+ * different (or missing) remedy.
+ *
+ * Self-gating: renders nothing without an error, and decides its own actions from
+ * the verdict — the host passes handlers, never a `canX` flag.
+ */
+interface ChatErrorBannerLabels {
+    /** Re-exchange an expired session token. */
+    reconnect: string;
+    /** Upgrade CTA when the server named no specific plan. */
+    upgrade: string;
+    /** Upgrade CTA naming the plan — must contain the literal `{plan}` token. */
+    upgradeToPlan: string;
+    /** Billing CTA when the plan is fine but no validated card is on file. */
+    addCard: string;
+    /** Sign in — offered when no model can serve the turn (signed out, nothing local). */
+    signIn: string;
+    /** What the banner says for that case — replaces the raw `not_signed_in` code. */
+    noModel: string;
+    /** What the banner says when nothing on this device can serve and the gateway is not
+     *  an option (Local only, or signed in with no cloud route) — replaces `no_local_model`. */
+    noLocalModel: string;
+    /** Move this person onto Hybrid (local first, then the cloud). */
+    switchToHybrid: string;
+    /** Open where a model for this device is downloaded. */
+    downloadLocalModel: string;
+    /** What the banner says when the person runs Specific model with nothing picked —
+     *  replaces `no_specific_model`. */
+    noSpecificModel: string;
+    /** Open the composer's Model tab, where a model is picked. */
+    pickModel: string;
+    /** The on-device engine crashed (a wasm trap) — replaces `bfi_engine_crashed`. */
+    engineCrashed: string;
+    /** The engine serving the model went away mid-answer — replaces `page_engine_detached`. */
+    engineDetached: string;
+    /** The model trapped repeatedly and is refused this session — replaces `model_keeps_crashing`. */
+    modelKeepsCrashing: string;
+    /** A continuation took too long - replaces `continuation_timed_out`; the words are kept and read with the next message. */
+    continuationTimedOut: string;
+    /** The selected model is not answering - replaces the raw interruption. Must contain the literal `{model}` token. */
+    modelUnresponsive: string;
+    /** Open the composer's model menu so the person picks another model. */
+    chooseAnotherModel: string;
+    /** `provider_sign_in`: a provider on the person's own account refused the credential. Must contain the literal `{label}` token. */
+    providerSignIn: string;
+    /** The button that starts that provider's sign-in. Must contain the literal `{label}` token. */
+    signInToProvider: string;
+    /** Open where on-device models are managed (removed) — offered beside "Pick a model"
+     *  for a model that keeps crashing. */
+    manageLocalModels: string;
+    /** `platform_refused` where only the mode opens it (Local only holds the cloud, or the
+     *  queue that carries the run's writes) — replaces `platform_*_disabled`. */
+    platformRefusedMode: string;
+    /** `platform_refused` by the account-sync switch — replaces `platform_synchronize_disabled`. */
+    platformRefusedSync: string;
+    /** `platform_refused` by another advanced platform switch (model downloads, direct
+     *  providers, external MCP, git remotes). */
+    platformRefusedSetting: string;
+    dismiss: string;
+}
+declare const DEFAULT_CHAT_ERROR_LABELS: ChatErrorBannerLabels;
+interface ChatErrorBannerProps {
+    /** The message to show. Falsy ⇒ the banner renders nothing. */
+    error: string;
+    /** The server-decided remedy, from `useBrainConversation().errorAction`. */
+    action: ChatErrorAction | null;
+    onDismiss: () => void;
+    /**
+     * Re-authenticate. Omit on a surface with no in-place reconnect (the web app
+     * redirects to login instead) — the button then isn't offered.
+     */
+    onReconnect?: () => void;
+    /**
+     * Send the user somewhere they can raise their plan. Omit to suppress the
+     * button (e.g. a logged-out surface that owns its own sign-up upsell).
+     */
+    onUpgrade?: () => void;
+    /** Send the user somewhere they can put a validated card on file. */
+    onValidateCard?: () => void;
+    /** Sign in (or open where a local model is started) — for the `sign_in` verdict. */
+    onSignIn?: () => void;
+    /** For the `no_local_model` verdict: move onto Hybrid. Omit when the person already
+     *  runs Hybrid (the cloud route is out for another reason) — the button then isn't offered. */
+    onSwitchToHybrid?: () => void;
+    /** For the `no_local_model` verdict: open where a local model is downloaded. Also the
+     *  "Manage on-device models" remedy for a model that keeps crashing (it is removed there). */
+    onDownloadLocalModel?: () => void;
+    /** For the `no_specific_model` verdict: open the composer's Model tab (the one that
+     *  raised it), where a model is picked or the mode changed. Also "try another model"
+     *  for a model that keeps crashing. */
+    onPickModel?: () => void;
+    /** For the `provider_sign_in` verdict: start that provider's sign-in. Omit where the surface cannot (the web
+     *  points at Settings in the message instead) - the button then isn't offered. */
+    onProviderSignIn?: (provider: string, label: string) => void;
+    labels?: Partial<ChatErrorBannerLabels>;
+    /** Extra styles merged into the banner container, for host-specific chrome. */
+    style?: react__default.CSSProperties;
+    /** Class on the banner container — the VS Code webview styles via its own CSS. */
+    className?: string;
+    /**
+     * `alert` (default) for a failed turn. `status` for a passive notice the run still
+     * finished through — a connected account it could not use, a provider key at its cap —
+     * which a screen reader should announce politely rather than interrupt with.
+     */
+    role?: 'alert' | 'status';
+}
+declare function ChatErrorBanner({ error, action, onDismiss, onReconnect, onUpgrade, onValidateCard, onSignIn, onSwitchToHybrid, onDownloadLocalModel, onPickModel, onProviderSignIn, labels: labelOverrides, style, className, role, }: ChatErrorBannerProps): react__default.JSX.Element | null;
+
+/** Figures a parameterised label is rendered with. */
+type LabelValues = Readonly<Record<string, string | number>>;
+/** A host's string for a canonical label key, or undefined when its catalog has none. */
+type LabelLookup = (key: string, values?: LabelValues) => string | undefined;
+/**
+ * Every string field of `defaults`, read at `prefix + field`. Functions and nested
+ * objects are carried over untouched; an empty string counts as "none".
+ */
+declare function stringsFrom<T extends object>(defaults: T, lookup: LabelLookup, prefix?: string): T;
+/**
+ * A lookup over a FLAT host bundle (`key → text`, `{name}` placeholders) — the shape the
+ * VS Code extension posts. `keyOf` maps a canonical key to the bundle's key (return
+ * undefined to leave it to the default); `format` renders a numeric figure for the
+ * host's locale before it is substituted.
+ */
+declare function bundleLookup(bundle: Readonly<Record<string, string>>, keyOf: (key: string) => string | undefined, format?: (value: number) => string): LabelLookup;
+
+/**
+ * The copy of the attachment preview (`AttachmentPreview`) — the same strings wherever a
+ * picture or file is opened: a transcript turn's attachments and the composer's chips.
+ *
+ * Hosts supply it through their ONE catalog lookup under the `attachmentPreview.` scope —
+ * the composer's (`brainComposerLabelsFrom`) and the transcript's (`timelineLabelsFrom`)
+ * both read the same keys, so each host keeps one copy of these strings.
+ * No placeholders: an accessible name is composed as `<label>: <file name>`.
+ */
+
+interface AttachmentPreviewLabels {
+    /** The trigger's accessible name, before the file name ("Open preview: shot.png"). */
+    open: string;
+    /** The preview panel's accessible name, before the file name. */
+    dialog: string;
+    close: string;
+    download: string;
+    downloading: string;
+    /** After the host saved the file. */
+    downloaded: string;
+    /** Shown when the download failed and the host gave no reason. */
+    downloadFailed: string;
+    /** In place of a picture for a file the preview cannot show. */
+    noPreview: string;
+    /** The name of a picture stored without one. */
+    image: string;
+    /** When no copy of the file is reachable to download (e.g. a link that expired). */
+    unavailable: string;
+}
+declare const DEFAULT_ATTACHMENT_PREVIEW_LABELS: AttachmentPreviewLabels;
+declare function attachmentPreviewLabels(overrides?: Partial<AttachmentPreviewLabels>): AttachmentPreviewLabels;
+/** The preview's copy from a host lookup over its canonical keys (the field names). */
+declare function attachmentPreviewLabelsFrom(lookup: LabelLookup): AttachmentPreviewLabels;
+
+/**
+ * Every string the transcript renders. It EXTENDS {@link ToolStepLabels} rather than
+ * restating those five: the tool step is its own component with its own narrow
+ * contract, and a host that passes this bundle satisfies that contract by
+ * construction — which is what keeps the two from drifting apart.
+ */
+interface BrainTimelineLabels extends ToolStepLabels, ModelMoveLabels, ToolGroupLabels {
+    /** Shown on the live thinking node while a turn streams. */
+    thinking: string;
+    /**
+     * Copy for the ANIMATED in-flight indicator (<LiveActivity>) — which tool is
+     * running, on what, and for how long. Carried in this bundle so a host passes
+     * ONE set of labels for the whole transcript rather than two.
+     */
+    live: LiveActivityLabels;
+    /** "Thought for {duration}" — must contain the literal `{duration}` token. */
+    thoughtFor: string;
+    /** Summary of a collapsed `<think>` block inside a reply. */
+    thought: string;
+    /** Muted note above a reply RESCUED from the model's reasoning — the run ended
+     *  inside its `<think>` block, so the transcript shows the reasoning as the reply
+     *  rather than a collapsed line and nothing else. See `strandedReplyKey`. */
+    replyFromThought: string;
+    /** Muted note above a reply the user STOPPED mid-stream — what the model had written
+     *  when Stop was pressed, kept so the reader can see what went wrong and (from the
+     *  provenance chip) which model did it. See `stoppedTurn.ts` in brain-embedded. */
+    stoppedReply: string;
+    /** In place of a stopped turn's body when its run never started (`isStoppedBeforeStart`). */
+    stoppedBeforeStart: string;
+    you: string;
+    assistant: string;
+    /** Beside a SUB-AGENT's name: whose it is — must contain `{owner}`. */
+    subagentOf: string;
+    /** Beside the chat's own agent once sub-agents have spoken: it is their owner. */
+    ownerTag: string;
+    error: string;
+    loading: string;
+    empty: string;
+    /** Per-message "send this again" action — re-asks the model with the same text,
+     *  from a user turn or an assistant one. */
+    replay: string;
+    /** Thumbs up / down on an assistant reply. */
+    rateUp: string;
+    rateDown: string;
+    apply: string;
+    createFile: string;
+    /** <QuestionCard> copy (ask_user) — carried here so a host passes ONE label bundle. */
+    askSubmit: string;
+    askAnswered: string;
+    /** Provenance chip: the badge shown when the tenant's OWN connected frontier
+     *  account served the turn. */
+    accountOwn: string;
+    /** Provenance chip: the badge for a turn served by the shared model pool. */
+    accountShared: string;
+    /** Provenance chip: the badge for a shared-pool turn when the tenant HAS a
+     *  connected account that wasn't used — the case worth flagging. */
+    accountByoUnused: string;
+    /** Provenance chip: the badge for a turn an engine ON THIS DEVICE served (the ref is `runsOnDevice`). */
+    accountOnDevice: string;
+    /** Provenance chip tooltip: shown on the "🧠 Evermind vN" badge when the
+     *  project's own self-learning model generated this reply. */
+    ranOnEvermind: string;
+    /** Evermind recall step title — must contain `{count}` and `{version}`. */
+    recallTitle: string;
+    /** Tooltip on the recall step explaining what it means. */
+    recallHint: string;
+    /** Memory-first answer step: a saved reply was replayed and no model ran. */
+    memoryAnswerCache: string;
+    /** Memory-first answer step: the project's Evermind replied and no other model ran.
+     *  Must contain `{version}`. */
+    memoryAnswerEvermind: string;
+    /** Tooltip on the memory-first answer step. */
+    memoryAnswerHint: string;
+    /** Deterministic answer step: "where is X defined?" answered from the workspace symbol
+     *  index and no model ran. */
+    memoryAnswerSymbols: string;
+    /** Tooltip on the symbol-index answer step. */
+    memoryAnswerSymbolsHint: string;
+    /** Evermind learn step — the turn was contributed back. Must contain `{version}`. */
+    learnTitle: string;
+    /** Tooltip on the learn step. */
+    learnHint: string;
+    /** Evermind SKIPPED-learn step — the turn did NOT contribute, and why. Must contain
+     *  `{reason}` (filled from {@link learnSkipReason}). */
+    learnSkippedTitle: string;
+    /** Tooltip on the skipped-learn step. */
+    learnSkippedHint: string;
+    /** Human phrase per skip reason, substituted into {@link learnSkippedTitle}. */
+    learnSkipReason: {
+        'not-attached': string;
+        'not-seeded': string;
+        frozen: string;
+    };
+    /** Per-Evermind CONTRIBUTED line for a multi-target fan-out. Must contain `{name}`,
+     *  `{projectId}`, `{version}`. */
+    learnTargetContributed: string;
+    /** Per-Evermind SKIPPED line for a multi-target fan-out. Must contain `{name}`,
+     *  `{projectId}`, `{reason}` (filled from {@link learnSkipReason}). */
+    learnTargetSkipped: string;
+    /** Evermind reconcile step — the turn updated learned memories. Must contain
+     *  `{count}` and `{version}`. */
+    reconcileTitle: string;
+    /** Tooltip on the reconcile step. */
+    reconcileHint: string;
+    /** Auto-compaction step — the run folded older steps into a memory note to stay
+     *  within the context window. Must contain `{count}`. */
+    contextCompacted: string;
+    /** Tooltip on the auto-compaction step. */
+    contextCompactedHint: string;
+    /** The button above a long transcript that renders the next page of older steps.
+     *  Must contain `{count}`. */
+    showEarlier: string;
+    /** Below a window moved back in time: render the next page of newer steps. `{count}`. */
+    showNewer: string;
+    /** …or go straight back to the newest page. */
+    jumpToLatest: string;
+    /** Accessible name on the floating "scroll to latest" toggle that appears while the
+     *  reader is scrolled away from the newest message. */
+    scrollToLatest: string;
+    /**
+     * RUN-ACTIVITY line templates (run milestones + agent dispatch). Templates, not
+     * sentences: the server records only the FACTS, and each surface composes the line in
+     * its own language — which is the only way these can be localized at all, since the
+     * server has no idea who will read the chat. See `chatActivity.ts` for the contract.
+     */
+    activity: ChatActivityLabels;
+    /**
+     * The error step row's sentences — the SAME bundle (and the same `chatErrorMessage`)
+     * the chat's error banner reads, so a refused turn reads identically in the banner and
+     * in the transcript, never as its raw code (`platform_send_disabled`). Catalog keys
+     * `chatError.<field>`; omitted ⇒ the banner's English defaults.
+     */
+    chatError?: Partial<ChatErrorBannerLabels>;
+    /**
+     * The attachment preview a turn's picture or file opens — the SAME copy the composer's
+     * chips read. Catalog keys `attachmentPreview.<field>`; omitted ⇒ English defaults.
+     */
+    attachmentPreview?: Partial<AttachmentPreviewLabels>;
+}
+declare const DEFAULT_TIMELINE_LABELS: BrainTimelineLabels;
+
+/** +1 up, -1 down, 0 = cleared. Mirrors the `llm_action_ratings.rating` domain. */
+type MessageRating = 1 | -1 | 0;
+
+/** What the attachment preview shows and saves — shared by the transcript and the composer. */
+interface AttachmentPreviewItem {
+    name: string;
+    /** MIME type, when known. */
+    type?: string;
+    /** Size in bytes, when known. */
+    size?: number;
+    /** What the panel draws for a picture (may be a reduced copy). */
+    previewUrl?: string;
+    /** The ORIGINAL file — what Download saves. Omitted when no copy is reachable. */
+    downloadUrl?: string;
+    /** The attachment's key, for a host that resolves the original by it. */
+    key?: string;
+}
+/**
+ * Saves an attachment for the person. Resolves `false` when they cancelled (no message),
+ * anything else when it was saved; throws an Error whose message is the person's sentence.
+ * Injected by the host: a VS Code webview routes it through the extension, the web app
+ * uses `browserDownload`.
+ */
+type AttachmentDownload = (item: AttachmentPreviewItem) => Promise<boolean | void>;
 
 /**
  * The PreFetch chips (DONE.md, deterministic-first PreFetch archive) — ONE component family every

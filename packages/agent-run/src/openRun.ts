@@ -23,6 +23,7 @@ import { defaultPipelineRouting, routeRun, type RouteDecision, type RouteInput }
 import { currentView, emit, policyContext, type RunAgentInput } from "./runContext.js";
 import { runAgent } from "./runAgent.js";
 import { tapEvents } from "./tapEvents.js";
+import { measureWorkflowSync, workflowScope } from "./telemetry/workflowMetrics.js";
 
 export type { RouteDecision, RouteInput } from "./route/routeRun.js";
 export type { PublishGatePort } from "./policy/guards/shipGate.js";
@@ -142,11 +143,13 @@ export function routedPolicy(policy: RunPolicy, route: RouteInput, decision: Rou
 
 /** Open one run through the one entry. See the file header. */
 export async function openRun(input: OpenRunInput): Promise<RunOutcome> {
+  measureWorkflowSync(input.ports.events, workflowScope(input), 'start', () => {
   if (!input.policy?.entryPoint) throw new Error("openRun: policy.entryPoint is required");
   if (!ALL_ENTRY_POINTS.includes(input.policy.entryPoint)) throw new Error("openRun: policy.entryPoint must be registered");
   if (!input.ports.capabilities && !input.ports.platform?.closed) {
     throw new Error("openRun: a registry provider or a closed native catalog is required");
   }
+  });
   const { surface = {}, route: requested, ...rest } = input;
   const route = requested && "decided" in requested ? requested : {
     request: rest.task.request ?? rest.task.prompt,
@@ -156,12 +159,12 @@ export async function openRun(input: OpenRunInput): Promise<RunOutcome> {
     routing: requested?.routing ?? defaultPipelineRouting(),
   };
   const closeOutRan = { value: false };
-  let run: RunAgentInput = { ...rest, modules: composeModules(surface, closeOutRan) };
+  let run: RunAgentInput = { ...rest, modules: measureWorkflowSync(rest.ports.events, workflowScope(input), 'compose', () => composeModules(surface, closeOutRan)) };
   if (run.resume?.pipeline !== undefined) {
     if (run.resume.pipeline?.route === "quick") run = { ...run, policy: { ...run.policy, skipVerifyStage: true } };
   } else {
     const input: RouteInput = "decided" in route ? route.input : route;
-    const decision: RouteDecision = "decided" in route ? route.decided : routeRun(route);
+    const decision: RouteDecision = measureWorkflowSync(run.ports.events, workflowScope(run), 'route', () => "decided" in route ? route.decided : routeRun(route), () => ({ reusedDecision: Number('decided' in route) }));
     run = { ...run, policy: routedPolicy(run.policy, input, decision) };
     // The route is traced once per run, right after `run.started`; a resumed tick is not a start.
     const { pipeline } = decision;

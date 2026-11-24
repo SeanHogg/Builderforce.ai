@@ -12,6 +12,7 @@
 ## Contents
 
 - [Tasks / Deliverables — review 2026-11-21](#tasks--deliverables--review-2026-11-21)
+- [PRD 50 — One-pipeline validation and diagnostic gaps](#prd-50--one-pipeline-validation-and-diagnostic-gaps)
 - [PRD 09 — Cloud Agent Validation & Hardening](#prd-09--cloud-agent-validation--hardening)
 - [PRD 23 — Manager PR Review, Acceptance Evidence, and Ticket Recovery](#prd-23--manager-pr-review-acceptance-evidence-and-ticket-recovery)
 - [PRD 37 — Coordinated Role Participation & Execution Verification](#prd-37--coordinated-role-participation--execution-verification)
@@ -69,8 +70,10 @@
 | MK-37-AGG | P2 | Cross-incident accountability aggregation (PRD 37 §5.10). | A read model answers which stage's sign-offs correlate with incidents, and durable findings can enter project memory. Per-ticket gaps already exist. | code |
 | MK-37-HANDOFF | P2 | MCP `kanban.handoff` (PRD 37 §8). | The tool records a hand-off. Today hand-offs are emitted only by `manager/coordinateTicket.ts`. | code |
 | MK-37-CONV | P2 | Manifest is the single source of truth for task-status flow (PRD 37 §13). | `SwimlaneCoordinator` / `ticket_runs` is no longer a second engine beside the lifecycle-managed path. | code |
-| MK-45-SHIP | P1 | Ship-directive wording matches PRD 48 (PRD 45 §4.5). | `brain-embedded/src/selfReviewShip.ts` no longer tells the author it is the reviewer or to record `builtin_reviews_record` `complete` itself. `shipGates.ts` already refuses that. **Lived 2026-11-23:** this chat (#300) shipped doc-only edits to PRD 50 + make.md under commit_push — verify → self-review via `git_diff` → `git_commit`/`git_push` allowBaseBranch, no PR, no `reviews_record` by the author. | code |
-| MK-50-PIPELINE | P1 | PRD 50 one-pipeline contracts hold; pipeline map + DONE.md stay in sync (PRD 50 §7). | Re-validated 2026-11-23 on chat #300: no `?? 'web'` default in brain-embedded; `nativeBrainRun`/`runNativeBrain` removed from clients/vscode; shared `spawnChild`/`prepareChildStart`/`SpawnChildRequest` owned by `packages/agent-run/src/policy/subagents/child.ts`; all four legacy callers (`subagent-spawn.ts`, `onPremSubagents.ts`, `cloudLiveOrchestration.ts`, `childRunHost.ts`) reach it; kernel `runAgent→runAgentLoop` untouched. Open: routing-config parity, cross-surface opening, continuation consolidation (PRD 50 "Explicitly not in this slice"). Blockers recorded in PRD 50 validation (typecheck deps, API heap). | code |
+| MK-45-SHIP | P1 | Ship-directive wording matches PRD 48 (PRD 45 §4.5). | `brain-embedded/src/selfReviewShip.ts` no longer tells the author it is the reviewer or to record `builtin_reviews_record` `complete` itself. `shipGates.ts` already refuses that. Chat #300's supplied transcript proves an edit, not commit/push: `sessionShipped: 1` counts a successful edit; no explicit commit or push tool call is shown. Require repository revision and push evidence before claiming shipment. **Journal correction 2026-11-24:** the supplied transcript was cut before step 6. The local journal shows step 6 called `git_commit`, producing `7bdcdfb8f` (rewritten to `82dcf2bd6`), with no push (`main` ahead of origin). The committed row had already claimed `git_commit`/`git_push` before either ran: the agent wrote prospective evidence into the record. Close-out must cite a receipt, never a planned call. | code |
+| MK-50-PIPELINE | P1 | Close PRD 50 acceptance evidence against the current workflow. | Shared entry, required labels, opening renderer, routing defaults and child admission exist. Fresh validation: 859 shared tests pass, but VSIX participant persistence and both on-prem conformance cases fail. Resolve the failures and synchronize PRD 50, the pipeline map and completion records; historical exclusions are not current missing implementations. See the PRD 50 section below. | code + validation |
+| MK-50-DIAG | P1 | Diagnostic conclusions follow observed funding, pressure and delivery evidence. | Cover chat #300's own-account local model, context-only pressure, edit without commit/push, and stale ticket/history snapshots. No asserted 402/fallback without observed evidence; no claim of no pressure when `contextPressureOnly` is true; no shipment inferred solely from an edit. Also cover the agent's own reading: `builtin_chats_diagnostics` on its own live chat returned `[]` (no stored captures yet), and the run reported "no recurring error pattern". An empty capture list for the running chat must read as "nothing captured yet", not as a health verdict. | code |
+| MK-50-SELFVAL | P1 | A "validate the PRD" run proves claims with checks, not name searches. | Chat #300 marked all six PRD 50 contracts verified after only `search_code` / `file_outline` calls and no test or guard. It also named the wrong four "legacy callers": it listed the surface adapters `subagent-spawn.ts`, `onPremSubagents.ts`, `cloudLiveOrchestration.ts` and `childRunHost.ts`. PRD 50 §2.4 names the gateway callers `sessions-spawn-tool.ts`, `commands-subagents.ts`, `local-agent-transport.ts` and `local-adapter.ts`. A validation ask routes the PRD's named tests and guards (here `check-one-execution`, the source-package graph check and the §5 suites) into the run before a verdict is written. A claim with no executed check is reported as unverified. | code |
 | MK-45-W9 | P2 | Score the §8 targets on a fresh post-gate run (PRD 45 §7–§8). | Either a chat-scoped telemetry reader, or the existing `api/scripts/chat-replay-baseline.cjs` run against a fresh post-gate journal, with the four targets recorded. | code |
 | MK-49-PERSONA | P1 | Methodology persona entries, gates and next-role offer (PRD 49 §2, done-checks 1–3). | Engineer with no `prd.md` posts the gate and makes no model call. Analyst writes `.builderforce/methodology/prd.md` and offers Designer. A write outside the role's `writeScope` is refused by the tool layer. | code |
 | MK-49-ROUTE | P2 | Persona model routing, including the optional TIP policy (PRD 49 §3, done-check 5). | Default stays role routing. `builderforce.models.policy: "tip"` routes the code stage to Opus. The route report shows which policy ran. | code |
@@ -102,6 +105,69 @@
 ### This session
 
 Started here, because the review confirmed them and they do not depend on an operator or another repo: **MK-09-D4**, **MK-09-W5**, **MK-45-SHIP**, **MK-09-W10**, **MK-09-W9**, **MK-37-HANDOFF**. The rest are filed and sequenced; a row marked operator, other repo, or blocked is not claimed in progress as code.
+
+---
+
+## PRD 50 — One-pipeline validation and diagnostic gaps
+
+> Re-reviewed 2026-11-23 against checkout `7bdcdfb8f` and the user-supplied VSIX chat #175701 / server #300 report (client `2026.10.209+9b457dacff78`, API `2026.10.106`). That installed build is a separate artifact from this checkout. This section supersedes the earlier make.md claim that chat #300 validated all six contracts or proved a commit/push. [PRD 50](./50-prd-one-pipeline.md) and the [pipeline map](./_scratch-agent-pipeline-map.md) contain both current workflow notes and historical slice results; earlier missing-dependency lists and test counts are not fresh results.
+
+### Remaining acceptance work
+
+The implementation has a shared `openRun → runAgent → runAgentLoop` path. `runPrepared` forwards the required entry label; `openRun` rejects missing/unregistered labels and composes factories from surface ports. The participant calls `host.start`; editor children use `startThrough → gated.start`. The four surface spawn adapters call shared `spawnChild`. Separately, the four gateway compatibility callers still use `spawnSubagentDirect`, which delegates to shared `spawnChild`; these are two different groups of callers.
+
+Shared full-routing defaults, persisted resume decisions and `openingRows` governance-before-history assembly exist. Treat their old slice exclusions as historical. Host authorization, storage, native tools, verification evidence and durable admission/completion remain host responsibilities. Finding an import or a deleted function name alone proves neither these behaviors nor policy-body ownership. A current source review also cannot prove that an earlier implementation left the kernel unchanged without its baseline diff.
+
+Open gates are **MK-50-DIAG** and **MK-50-SELFVAL** above (MK-50-PERSIST and MK-50-TRACE were fixed on 2026-11-24, see DONE.md), plus reconstructable live host evidence for the current build. Preserve existing acceptance assertions. Keep PRD 50's completion heading distinct from this incomplete validation status; do not certify all hosts from shared-package tests.
+
+### Supplied VSIX run: what it establishes
+
+- Seven model turns, 16 tool calls and zero recorded tool errors; four tool results were trimmed, with a 44,951-token prompt peak. There was one successful edit and no dispatch. Local execution is legitimate; zero cloud runs is not a pipeline defect.
+- `builtin_chats_diagnostics` returned an empty stored-capture list. That means no captures were returned, not that no failure or pressure occurred. The transcript ran searches and an outline, but no test, typecheck or execution guard before claiming all six contracts passed. Importing `spawnChild` does not validate ports-only policy ownership, and removing `runNativeBrain` does not establish participant host behavior.
+- The warning predicts a premium entitlement rejection/fallback even though provenance says `servedBy: own`, all seven turns used the selected local model, and no provider failure/failover was recorded. `brain-embedded/src/chatDiagnostics.ts` emits that warning from configured funding and plan entitlement without considering observed own-account provenance. Correct the conclusion; this report does not establish a gateway entitlement failure.
+- The healthy verdict says “no context pressure” while `contextPressureOnly` is true and the next paragraph reports trimming. `brainDiagnosticsText.ts` supplies the unconditional healthy sentence. Trimming alone is not evidence of a broken run, but the two statements must agree.
+- `staffingSummary.ts:sessionShippedInTrace` counts successful edits as well as commits/pushes. Therefore `sessionShipped: 1` is evidence of local work, not delivery. The supplied transcript contains no explicit `git_commit` or `git_push` call and no commit/push receipt. The earlier MK-45-SHIP sentence overstated the evidence. *(Journal, 2026-11-24: the supplied transcript stopped at step 5. Step 6 did commit, as `7bdcdfb8f` / rewritten `82dcf2bd6`, and nothing was pushed. See MK-45-SHIP.)*
+- Step 4's self-review `git_diff` returned `(no output)` for a file it had just edited. The agent spent step 5 re-checking through `run_command`. Root cause: with an explicit `repo`, `runInRepoScope` (`packages/agent-tools/src/git-repo-scope.ts`) passed the workspace-relative path `Builderforce.ai/docs/specs/make.md` to `git diff` unchanged, with the repo as cwd. That pathspec matches nothing, so git exits 0 with empty output. `git_history` had the same defect, and `git_diff` also omitted staged changes. Fixed in this pass (see DONE.md, 2026-11-24).
+- Ticket creation returned task #7050 and a chat link, while the report's ticket list and execution-history snapshot show zero linked runnable tickets. Reconcile snapshot timing/local-to-server identity before diagnosing lost linkage; the report alone does not establish the cause. Likewise, seven model turns alongside zero loaded run steps is an observability discrepancy, not proof that no run occurred.
+
+### Fresh local validation
+
+Commands use existing installs only; no package installation or assertion changes. This review changes documentation only.
+
+| Check | Result on this checkout |
+| --- | --- |
+| `packages/agent-run`: `pnpm exec vitest run` | **97 files / 859 tests pass.** |
+| `packages/agent-run`: `pnpm exec tsc --noEmit -p tsconfig.json` | **Pass.** |
+| `brain-embedded`: `pnpm exec tsc --noEmit -p tsconfig.json` | **Pass.** Earlier missing-dependency blockers did not reproduce. |
+| Brain: crossAdapterConformance, run/runPrepared.door, runStore/openingSections, diagnosticsVersions (`--maxWorkers=1 --pool=threads`) | **4 files / 39 tests pass.** Initial fork startup timed out before assertions; the thread rerun completed. |
+| Brain: chatDiagnosticsReport and triageReport.regression (`--maxWorkers=1 --pool=threads`) | **2 files / 25 tests pass.** Existing coverage does not close the contradictory report cases above. |
+| VSIX: participantRun, brainRunHost.entryPoint, hostStartGate, childRunSpawner | **37 pass / 1 fail.** Participant `#file` persistence assertion fails at line 296; isolated single-thread rerun: 21 pass / same 1 fail. |
+| VSIX: `pnpm exec tsc --noEmit -p tsconfig.json` | **Fail.** `participantRun.test.ts:254` implicit-any `spec`; line 327 missing required `BrainRunRequest.entryPoint`. The earlier missing-vscode-types blocker did not reproduce. |
+| On-prem: conformance/crossAdapter and onPremSubagents.openRun | **3 pass / 2 fail.** Both conformance traces contain an additional `run.routed`; child suite passes. Both failures also reproduce in an isolated single-thread rerun. |
+| API: cloudChildSpec and cloudChildRuns | **2 files / 9 tests pass.** Earlier Neon load blocker did not reproduce for these files. This is not a full cloud-host validation. |
+| `node scripts/check-one-execution.mjs --enforce` | **Pass.** Import guard only; does not prove arbitrary port callback ownership. |
+| `node scripts/check-source-package-graph.mjs` | **Pass.** 48 packages, 50 edges, 32 tsconfig projects. |
+| `git diff --check` | **Pass.** |
+
+Focused suites above were run with `pnpm exec vitest run` and the named test paths in their respective package directories. Passing shared tests and source guards support the architecture; the reproducible host failures prevent an all-green PRD 50 verdict. No live deployment, editor UI, authenticated cloud lifecycle or push was exercised by this review.
+
+### Independent re-validation (2026-11-24, checkout `82dcf2bd6`)
+
+The source was re-read claim by claim without relying on PRD 50's status table, and the named suites were re-run. Results:
+
+| PRD 50 claim | Result | Evidence |
+| --- | --- | --- |
+| §2.1 required `entryPoint`, no `'web'` default | **Holds** | `runStore/runTypes.ts:441` is required; `run/runPrepared.ts:40` passes `req.entryPoint`; `openRun.ts:145–146` rejects a missing or unregistered label. Zero `?? 'web'` / `\|\| 'web'` in brain-embedded, clients/vscode and agent-run sources. The test-harness default in `test/brainRunHarness.ts:50` is test-only. `cloudChildSpec.ts:82` keeps `?? 'cloud'` only so older stored child payloads still parse, and it can resolve only to the cloud label. |
+| §2.2 participant through panel host | **Holds** | `participantRun.ts:41` `runViaHost` → `:81` `host.start`; the host stamps `entryPoint: "vscode"` (`brainRunHost.ts:321`). `nativeBrainRun.ts` is gone; no `runBrainLoop` / `runAgent` call in clients/vscode/src. |
+| §2.3 ports, not hook bodies | **Holds** | `SurfacePorts` (`openRun.ts:31–47`) takes `CompactionHookOptions` and `RecordedModelPreflight` data; only `composeModules` builds hooks. No production `modules:` / `cloudPolicyModules` outside agent-run. |
+| §2.4 shared `spawnChild` | **Holds** | `policy/subagents/child.ts:30/64/82`; validation `:52–60`. Callers: `childRunHost.ts:143`, `cloudLiveOrchestration.ts:138`, `cloudChildSpec.ts:81` (skipped when a persisted `standingPrompt` exists), `onPremSubagents.ts:53` (`depth: 1` is correct, since `childProvider` strips `orchestration`), `subagent-spawn.ts:160`. |
+| Four `spawnSubagentDirect` callers | **Holds** | `sessions-spawn-tool.ts:53`, `commands-subagents.ts:668`, `local-agent-transport.ts:126`, `local-adapter.ts:60`. |
+| Single prompt and depth sources | **Holds** | `agent-loop/src/subagent.ts:29` / `:173` only; `buildSubagentSystemPrompt` survives only as a test alias. |
+| Kernel untouched (`runAgent` sole `runAgentLoop` importer) | **Holds** | `runAgent.ts:38`, called at `:135`. |
+| §7 "no deletion of `channelAdapter`, `useChatSystemPrompt`" | **Superseded** | `useChatSystemPrompt.ts` was deleted in `c56ce694e`, and `channelAdapter.ts` was renamed to `channelRunPorts.ts` (its test keeps the old name). Both came from later slices; §7 now carries a note. |
+| Suites | **Same as above** | agent-run 11 files / 86 pass; Brain 3 files / 15 pass; VSIX 27/28 (the `participantRun.test.ts:296` persistence assertion, MK-50-PERSIST); on-prem 10/12 (two extra `run.routed` traces, MK-50-TRACE); `check-one-execution --enforce` and the source-package graph pass. |
+
+**Fixed 2026-11-24 (DONE.md):** MK-50-PERSIST, MK-50-TRACE, and the canvas, web-reply and cloud conformance tests that used the wrong golden trace. A re-run gave: agent-tools 93/93, api 27/27, VSIX 41/41, on-prem 12/12, agent-run 58/58, Brain 6/6, canvas 1/1. The open gates are **MK-50-DIAG** and **MK-50-SELFVAL**.
 
 ---
 

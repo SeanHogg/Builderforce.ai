@@ -1527,5 +1527,8 @@
   "it is a symbolic link or leads outside the workspace folder": "它是符号链接，或指向工作区文件夹之外",
   "Writing the starter kit stopped at {0}: {1}. Files already written: {2}": "写入入门套件时在 {0} 处停止：{1}。已写入的文件：{2}",
   "No ingress was written: routing {0} needs exactly one frontend and one backend with a port, and this app has frontends ({1}) and backends ({2}). If one calls another by a relative path, add the ingress routes by hand.": "未写入 ingress：路由 {0} 需要恰好一个带端口的前端和一个带端口的后端，而此应用有前端（{1}）和后端（{2}）。如果其中一个通过相对路径调用另一个，请手动添加 ingress 路由。",
-  "{0}: {1}": "{0}：{1}"
+  "{0}: {1}": "{0}：{1}",
+  "Ran commands ({count})": "运行了命令（{count}）",
+  "Used {tools} ({count})": "使用了 {tools}（{count}）",
+  "{count} failed": "{count} 次失败"
 }

@@ -21,6 +21,7 @@ export * from "./surface.js";
 
 // The ONE scripted task every entry point's conformance case runs (PRD 35 §3.3), and the trace fold it is compared by.
 export * from "./conformanceTask.js";
+export * from "./telemetry/workflowMetrics.js";
 export { tapEvents, type EventTap } from "./tapEvents.js";
 
 // The default `RunPolicy.delegation.readsBeforeNudge`: every adapter that lets the agent nudge says this, not its own number.

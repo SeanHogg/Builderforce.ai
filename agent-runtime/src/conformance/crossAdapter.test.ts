@@ -13,7 +13,7 @@ import {
   CONFORMANCE_ANSWER,
   CONFORMANCE_PROMPT,
   CONFORMANCE_SCRIPT,
-  CONFORMANCE_TRACE,
+  CONFORMANCE_ENTRY_TRACE,
   CONFORMANCE_TOOL,
   conformanceCapabilities,
   conformanceTrace,
@@ -68,7 +68,7 @@ describe("on-prem tickets under the shared scripted task", () => {
       sinks,
     );
 
-    expect(conformanceTrace(seen.events)).toEqual(CONFORMANCE_TRACE);
+    expect(conformanceTrace(seen.events)).toEqual(CONFORMANCE_ENTRY_TRACE);
     expect(result).toEqual({ ok: true, text: CONFORMANCE_ANSWER });
     expect(seen.outcome).toMatchObject({ kind: "finished", output: CONFORMANCE_ANSWER });
   });
@@ -129,7 +129,7 @@ describe("channels and cron under the shared scripted task", () => {
     // FINDING (reported, pinned as it is): the ONE difference from the golden is that the channel's model port names a model
     // `<provider>/<id>` (`p/fake-model`), where the gateway and the cloud report the bare id. The run keys its pins and fallbacks on the
     // ref, so the trace keeps it; the outcome row is normalised to the bare id (`channelRunPorts.ts`, `channelOutcome.test.ts`).
-    const expected = CONFORMANCE_TRACE.map((fact) => fact.replace("model.completed:fake-model", "model.completed:p/fake-model"));
+    const expected = CONFORMANCE_ENTRY_TRACE.map((fact) => fact.replace("model.completed:fake-model", "model.completed:p/fake-model"));
     expect(conformanceTrace(seen.events)).toEqual(expected);
     // ...and the run ends the same way: the agent's own outcome, not just the reply the session recorded.
     expect(seen.outcome).toMatchObject({ kind: "finished", output: CONFORMANCE_ANSWER });

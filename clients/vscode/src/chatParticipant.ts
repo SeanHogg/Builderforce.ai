@@ -15,7 +15,7 @@ import { getEditorContextLive } from "./editorContext";
 import { getSelectedProject } from "./projectState";
 import { PolicyGatesUnavailableError, resolveRunPolicyGates } from "./policyGates";
 import type { NativeApprovalRequest } from "./nativeRunTypes";
-import { runViaHost } from "./participantRun";
+import { runViaHost, saveUserRow } from "./participantRun";
 import { hostLog } from "./hostLog";
 import { referencesTurnBlock, workspaceReferenceReader } from "./chatReferences";
 import { hostIngressDeps, routeMentionBudget } from "./hostIngress";
@@ -210,9 +210,12 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost:
       .catch((e: unknown) => hostLog(`[chat participant] the interrupted-run notice failed: ${String(e)}`)); // best-effort; never fails the turn
     // The turn starts as every host run starts - `runHost.start` (the gated start; entry point "vscode"). The host builds the tools,
     // the workspace's rules and hooks, the governance gates, the run setup, the ship ports and the stream from its own ports, and
-    // persists the turn through the chat's store; this view only renders it.
+    // persists the run's own rows through the chat's store. The person's row is saved by `runViaHost` first (the participant is a
+    // send path, like the panel's composer, and `host.start` never writes it); this view only renders the turn.
     const claimed = await runViaHost({
       host: runHost,
+      // The same store the host's persistence port writes through (`brainRunHostPorts.ts`).
+      saveUserTurn: (chatId, text) => saveUserRow(localPersistence, chatId, text),
       spec: {
         chatId: runChatId,
         // No prompt text: `assembleOpening` builds the opening from `opening` (the panel's path).

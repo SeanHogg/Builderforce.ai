@@ -11909,7 +11909,7 @@ function scopeAttempts(ctx, path) {
   return attempts;
 }
 async function runInRepoScope(ctx, scope, run) {
-  if (scope.repo) return { r: await run(scope.repo, scope.path), repo: scope.repo };
+  if (scope.repo) return { r: await run(scope.repo, pathInRepo(scope.path, scope.repo)), repo: scope.repo };
   for (const attempt of scopeAttempts(ctx, scope.path)) {
     const r = await run(attempt.repo, attempt.path);
     if (!isNotARepo(r)) return attempt.repo ? { r, repo: attempt.repo } : { r };
@@ -12968,7 +12968,7 @@ function buildGitCommand(action, opts) {
     case "status":
       return buildStatusCommand(opts?.paths, opts?.repo);
     case "diff":
-      return `git --no-pager diff${pathArg}`;
+      return `git --no-pager diff HEAD${pathArg} || git --no-pager diff${pathArg}`;
     case "history": {
       const limit = Number.isFinite(opts?.limit) && opts.limit > 0 ? Math.min(Math.floor(opts.limit), 200) : 30;
       return `git --no-pager log --oneline -n ${limit}${pathArg}`;
@@ -13068,7 +13068,7 @@ var gitStatusTool = defineTool({
 var gitDiffTool = defineTool({
   name: "git_diff",
   description: "Show the uncommitted diff of your working tree (optionally for one path). Use it to review exactly what you changed before finishing.",
-  parameters: { type: "object", properties: { path: { type: "string", description: "Optional repo-relative file/dir to scope the diff to." }, repo: REPO_PARAM } },
+  parameters: { type: "object", properties: { path: { type: "string", description: "Optional file/dir to scope the diff to \u2014 repo-relative or workspace-relative (with the repo folder prefix); both are accepted." }, repo: REPO_PARAM } },
   requires: ["shell"],
   execute: (args, ctx) => runGitTool("diff", { path: typeof args.path === "string" ? args.path : void 0, repo: typeof args.repo === "string" ? args.repo : void 0 }, ctx)
 });
@@ -13078,7 +13078,7 @@ var gitHistoryTool = defineTool({
   parameters: {
     type: "object",
     properties: {
-      path: { type: "string", description: "Optional repo-relative file/dir to scope history to." },
+      path: { type: "string", description: "Optional file/dir to scope history to \u2014 repo-relative or workspace-relative (with the repo folder prefix); both are accepted." },
       limit: { type: "number", description: "Max commits to return (default 30, max 200)." },
       repo: REPO_PARAM
     }

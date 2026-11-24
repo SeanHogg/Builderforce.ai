@@ -1527,5 +1527,8 @@
   "it is a symbolic link or leads outside the workspace folder": "es un enlace simbólico o sale de la carpeta del área de trabajo",
   "Writing the starter kit stopped at {0}: {1}. Files already written: {2}": "La escritura del kit de inicio se detuvo en {0}: {1}. Archivos ya escritos: {2}",
   "No ingress was written: routing {0} needs exactly one frontend and one backend with a port, and this app has frontends ({1}) and backends ({2}). If one calls another by a relative path, add the ingress routes by hand.": "No se escribió ningún ingress: enrutar {0} requiere exactamente un frontend y un backend con puerto, y esta aplicación tiene los frontends ({1}) y los backends ({2}). Si uno llama a otro por una ruta relativa, añade las rutas de ingress a mano.",
-  "{0}: {1}": "{0}: {1}"
+  "{0}: {1}": "{0}: {1}",
+  "Ran commands ({count})": "Comandos ejecutados ({count})",
+  "Used {tools} ({count})": "Se usó {tools} ({count})",
+  "{count} failed": "{count} fallaron"
 }

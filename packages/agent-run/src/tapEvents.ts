@@ -19,5 +19,6 @@ export function tapEvents(sink: EventSink | undefined, tap: EventTap): EventSink
       await tap.after?.(event, sink);
     },
     ...(sink?.outcome ? { outcome: (row) => sink.outcome?.(row) } : {}),
+    ...(sink?.workflow ? { workflow: (metric) => sink.workflow?.(metric) } : {}),
   };
 }

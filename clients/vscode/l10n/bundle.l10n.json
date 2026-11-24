@@ -1527,5 +1527,8 @@
   "it is a symbolic link or leads outside the workspace folder": "it is a symbolic link or leads outside the workspace folder",
   "Writing the starter kit stopped at {0}: {1}. Files already written: {2}": "Writing the starter kit stopped at {0}: {1}. Files already written: {2}",
   "No ingress was written: routing {0} needs exactly one frontend and one backend with a port, and this app has frontends ({1}) and backends ({2}). If one calls another by a relative path, add the ingress routes by hand.": "No ingress was written: routing {0} needs exactly one frontend and one backend with a port, and this app has frontends ({1}) and backends ({2}). If one calls another by a relative path, add the ingress routes by hand.",
-  "{0}: {1}": "{0}: {1}"
+  "{0}: {1}": "{0}: {1}",
+  "Ran commands ({count})": "Ran commands ({count})",
+  "Used {tools} ({count})": "Used {tools} ({count})",
+  "{count} failed": "{count} failed"
 }

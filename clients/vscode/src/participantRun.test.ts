@@ -21,7 +21,10 @@ import type { ToolDef, ToolRunOptions } from "./fileTools";
 import { createBrainRunHost, type BrainRunHostPorts } from "./brainRunHost";
 import { transientRunPersistence } from "./nativeRunStream";
 import type { NativeApprovalRequest } from "./nativeRunTypes";
-import { runViaHost, type ParticipantHost } from "./participantRun";
+import { runViaHost, saveUserRow, type ParticipantHost } from "./participantRun";
+
+const logged = vi.hoisted(() => [] as string[]);
+vi.mock("./hostLog", () => ({ hostLog: (line: string) => { logged.push(line); } }));
 
 const HINT = "[dispatch hint]";
 
@@ -56,6 +59,8 @@ interface Turn {
   ports?: Partial<Omit<BrainRunHostPorts, "tools" | "stream">>;
   host?: (host: ParticipantHost) => ParticipantHost;
   signal?: AbortSignal;
+  /** Replaces the turn's user-row save (default: the SAME persistence the host writes through). */
+  saveUserTurn?: (chatId: number, text: string) => Promise<number | undefined>;
   chatId?: number;
   /** Overrides of the run's spec (the turn's own words, what the person attached). */
   spec?: Partial<Parameters<typeof runViaHost>[0]["spec"]>;
@@ -71,7 +76,7 @@ async function runTurn(t: Turn) {
     sent.push(opts.messages);
     return (gateway.stream as unknown as BrainStreamFn)(opts as never, handlers);
   }) as BrainStreamFn;
-  const host = createBrainRunHost({
+  const hostPorts = {
     tools: async () => t.tools ?? [],
     workspaceRoot: () => "/workspace",
     stream: async () => stream,
@@ -79,12 +84,14 @@ async function runTurn(t: Turn) {
     evermind: () => undefined,
     labels: { blockedByPolicy: (r: string) => `Blocked by a governance gate: ${r}`, dispatchHint: HINT },
     ...t.ports,
-  } as never);
+  };
+  const host = createBrainRunHost(hostPorts as never);
   const log = { text: "", toolStarts: [] as string[], toolResults: [] as Array<{ label: string; ok: boolean }>, errors: [] as string[] };
   const approvals: NativeApprovalRequest[] = [];
   const chatId = t.chatId ?? freshChatId();
   const ran = await runViaHost({
     host: t.host ? t.host(host) : host,
+    saveUserTurn: t.saveUserTurn ?? ((id, text) => saveUserRow(hostPorts.persistence as Parameters<typeof saveUserRow>[0], id, text)),
     spec: {
       chatId,
       systemPrompt: "You are the BuilderForce IDE agent.",
@@ -251,7 +258,7 @@ describe("the host's announcements for this chat", () => {
   function frameHost(frames: (post: (message: never) => void, chatId: number) => void): ParticipantHost {
     let sink: { post(message: never): void } | undefined;
     return {
-      start: async (spec) => { frames((m) => sink?.post(m), spec.chatId); },
+      start: async (spec: { chatId: number }) => { frames((m) => sink?.post(m), spec.chatId); },
       stop: () => undefined,
       isBusy: () => false,
       attach: (s: never) => { sink = s; return () => { sink = undefined; }; },
@@ -300,6 +307,63 @@ describe("a turn with #file references", () => {
   });
 });
 
+describe("the person's user row", () => {
+  /** Records what `host.start` is handed. */
+  const recordStarts = (started: Array<number | undefined>) => (host: ParticipantHost): ParticipantHost => ({
+    ...host,
+    start: async (spec: Parameters<ParticipantHost["start"]>[0]) => { started.push(spec.userTurnMessageId); return host.start(spec); },
+  });
+
+  it("regression: a normal turn saves exactly one user row of the person's words, and the run reads its id", async () => {
+    const rows: Array<{ role: string; content: unknown }> = [];
+    const started: Array<number | undefined> = [];
+    const base = transientRunPersistence();
+    await runTurn({
+      script: [{ text: "Done." }],
+      spec: { userTurn: "hello there" },
+      ports: {
+        persistence: { ...base, sendMessages: async (id: number, messages: Array<{ role: string; content: unknown }>) => {
+          for (const m of messages) if (m.role === "user") rows.push({ role: m.role, content: m.content });
+          return base.sendMessages(id, messages as never);
+        } } as never,
+      },
+      host: recordStarts(started),
+    });
+    expect(rows).toEqual([{ role: "user", content: "hello there" }]);
+    expect(started).toHaveLength(1);
+    expect(typeof started[0]).toBe("number");
+  });
+
+  it("regression: a failed save still runs the turn, without a row id, and the failure is logged", async () => {
+    const started: Array<number | undefined> = [];
+    const failing = { sendMessages: async () => { throw new Error("disk full"); } };
+    logged.length = 0;
+    const { ran, log } = await runTurn({
+      script: [{ text: "Done." }],
+      saveUserTurn: (id, text) => saveUserRow(failing, id, text),
+      host: recordStarts(started),
+    });
+    expect(ran).toBe(true);
+    expect(log.text).toBe("Done.");
+    expect(started).toEqual([undefined]);
+    expect(logged.join("\n")).toContain("disk full");
+  });
+
+  it("regression: a Stop that lands during the save leaves the row but never starts the run", async () => {
+    const abort = new AbortController();
+    const started: Array<number | undefined> = [];
+    const { ran, requests } = await runTurn({
+      script: [{ text: "never asked" }],
+      signal: abort.signal,
+      saveUserTurn: async () => { abort.abort(); return 5; },
+      host: recordStarts(started),
+    });
+    expect(ran).toBe(true);
+    expect(started).toEqual([]);
+    expect(requests).toHaveLength(0);
+  });
+});
+
 describe("the turn's approver", () => {
   it("regression: is unregistered when the turn ends, so a later panel run on the chat does not pop the native modal", async () => {
     const live = new Set<unknown>();
@@ -332,6 +396,7 @@ describe("a chat whose run is already claimed", () => {
       },
       persistence: transientRunPersistence(),
       userTurn: "first",
+      entryPoint: "vscode",
     });
     while (!isRunning(chatId)) await new Promise((r) => setTimeout(r, 5));
 

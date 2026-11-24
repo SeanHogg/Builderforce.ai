@@ -57,7 +57,7 @@ describe('buildGitCommand', () => {
     expect(evil).not.toContain('rm -rf');
     expect(evil).toContain('HEAD branch:'); // fell back to autodetect
     const evilPath = buildGitCommand('diff', { path: '$(touch pwned)' });
-    expect(evilPath).toBe('git --no-pager diff'); // unsafe path dropped, no `-- ...`
+    expect(evilPath).toBe('git --no-pager diff HEAD'); // unsafe path dropped, no `-- ...`
   });
 
   it('history clamps the commit limit and scopes to a safe path', () => {
