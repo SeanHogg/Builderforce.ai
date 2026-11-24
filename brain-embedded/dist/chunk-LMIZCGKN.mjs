@@ -1,5 +1,9 @@
 import {
-  isClosedTaskStatus
+  isClosedTaskStatus,
+  liftProseAskUser,
+  malformedCallOutcome,
+  runAgentLoop,
+  trimRepetitionLoop
 } from "./chunk-3DTCUCDH.mjs";
 
 // src/streamFailureDetail.ts
@@ -111,8 +115,8 @@ function parseEntityRef(v) {
     if (isLocalId(v)) return { local: v };
     const sync = parseSyncId(v);
     if (sync !== null) return { sync };
-    const tier = TIER_REF_RE.exec(v);
-    return tier ? { tier: { kind: tier[1], ref: tier[2] } } : null;
+    const tier2 = TIER_REF_RE.exec(v);
+    return tier2 ? { tier: { kind: tier2[1], ref: tier2[2] } } : null;
   }
   if (typeof v === "object" && v !== null) {
     const ref = v;
@@ -394,67 +398,67 @@ function isOwnRecord(row, deviceId) {
 function isImported(mapping) {
   return mapping !== void 0 && mapping.serverVersion > BOUND_ONLY_VERSION;
 }
-function unboundMarker(record2, operation) {
-  return { operation, ...unboundMarkerFields(record2.payload) };
+function unboundMarker(record4, operation) {
+  return { operation, ...unboundMarkerFields(record4.payload) };
 }
 function unboundMarkerFields(payload) {
   const text = JSON.stringify(payload) ?? "null";
   return { payloadSize: text.length, payloadHash: hashPayload(payload), payload: null };
 }
-async function dropPending(tx, record2) {
-  const stale = await selectPendingOf(tx, record2.entityType, record2.id);
+async function dropPending(tx, record4) {
+  const stale = await selectPendingOf(tx, record4.entityType, record4.id);
   if (stale.length > 0) await tx.acknowledge(stale.map((event) => event.eventId));
 }
-async function queueImport(tx, record2, chatClientId, waitsOn = []) {
-  await dropPending(tx, record2);
-  if (record2.deletedAt) return;
-  if (record2.destination.kind === "bound") await ensureRecordPayloadFence(tx, record2.destination);
+async function queueImport(tx, record4, chatClientId, waitsOn = []) {
+  await dropPending(tx, record4);
+  if (record4.deletedAt) return;
+  if (record4.destination.kind === "bound") await ensureRecordPayloadFence(tx, record4.destination);
   await tx.append({
-    idempotencyKey: importKey(record2.entityType, record2.id),
-    clientEntityId: record2.id,
-    entityType: record2.entityType,
+    idempotencyKey: importKey(record4.entityType, record4.id),
+    clientEntityId: record4.id,
+    entityType: record4.entityType,
     operation: "import",
-    schemaVersion: record2.schemaVersion,
-    occurredAt: record2.occurredAt,
-    dependsOn: fencedDependsOn([...chatClientId && record2.entityType !== "chat" ? [importKey("chat", chatClientId)] : [], ...waitsOn]),
-    destination: record2.destination,
+    schemaVersion: record4.schemaVersion,
+    occurredAt: record4.occurredAt,
+    dependsOn: fencedDependsOn([...chatClientId && record4.entityType !== "chat" ? [importKey("chat", chatClientId)] : [], ...waitsOn]),
+    destination: record4.destination,
     ...recordPayloadMarker()
   });
 }
-async function journalWrite(tx, record2, operation, options) {
-  if (record2.destination.kind === "unbound") {
+async function journalWrite(tx, record4, operation, options) {
+  if (record4.destination.kind === "unbound") {
     await tx.append({
       idempotencyKey: options.key,
-      clientEntityId: record2.id,
-      entityType: record2.entityType,
-      schemaVersion: record2.schemaVersion,
-      occurredAt: record2.occurredAt,
-      ...record2.baseVersion !== void 0 ? { baseVersion: record2.baseVersion } : {},
+      clientEntityId: record4.id,
+      entityType: record4.entityType,
+      schemaVersion: record4.schemaVersion,
+      occurredAt: record4.occurredAt,
+      ...record4.baseVersion !== void 0 ? { baseVersion: record4.baseVersion } : {},
       dependsOn: options.dependsOn ?? [],
-      destination: record2.destination,
+      destination: record4.destination,
       // The marker carries size + a content hash of the real payload, never the
       // payload itself; the record is the only copy while unbound (module comment).
-      ...unboundMarker(record2, operation)
+      ...unboundMarker(record4, operation)
     });
     return;
   }
-  const mapping = await tx.mapping(record2.entityType, record2.id, record2.destination);
+  const mapping = await tx.mapping(record4.entityType, record4.id, record4.destination);
   if (!isImported(mapping)) {
-    await queueImport(tx, record2, options.chatClientId);
+    await queueImport(tx, record4, options.chatClientId);
     return;
   }
-  await dropPending(tx, record2);
+  await dropPending(tx, record4);
   await tx.append({
     idempotencyKey: `${options.key}:server`,
-    clientEntityId: record2.id,
-    entityType: record2.entityType,
+    clientEntityId: record4.id,
+    entityType: record4.entityType,
     operation,
-    schemaVersion: record2.schemaVersion,
-    occurredAt: record2.occurredAt,
+    schemaVersion: record4.schemaVersion,
+    occurredAt: record4.occurredAt,
     baseVersion: mapping.serverVersion,
     dependsOn: [],
-    destination: record2.destination,
-    payload: operation === "delete" && !PAYLOAD_ON_DELETE.has(record2.entityType) ? null : record2.payload
+    destination: record4.destination,
+    payload: operation === "delete" && !PAYLOAD_ON_DELETE.has(record4.entityType) ? null : record4.payload
   });
 }
 
@@ -527,6 +531,832 @@ var MAX_RETRY_AFTER_MS = 60 * 60 * 1e3;
 
 // ../packages/local-first/src/applyServerCursor.ts
 var RESNAPSHOT2 = Object.freeze({ resnapshotRequired: true });
+
+// ../packages/spend-contract/src/cost.ts
+var MILLICENTS_PER_USD = 1e5;
+var MEDIAN_TURN_TOKENS = Object.freeze({ prompt: 6e3, completion: 400 });
+function millicentsToUsd(millicents) {
+  return Number(millicents ?? 0) / MILLICENTS_PER_USD;
+}
+var CACHE_READ_MULTIPLIER = 0.1;
+var CACHE_CREATION_MULTIPLIER = 1.25;
+function computeCostMillicents(pricing, usage) {
+  if (!pricing) return 0;
+  const cacheRead = usage.cacheReadTokens ?? 0;
+  const cacheCreation = usage.cacheCreationTokens ?? 0;
+  const fullPrompt = Math.max(0, usage.promptTokens - cacheRead - cacheCreation);
+  const usd2 = fullPrompt * pricing.prompt + cacheRead * pricing.prompt * CACHE_READ_MULTIPLIER + cacheCreation * pricing.prompt * CACHE_CREATION_MULTIPLIER + usage.completionTokens * pricing.completion;
+  return Math.round(usd2 * 1e5);
+}
+
+// ../packages/model-catalog/src/price.ts
+var TOKENS_PER_MILLION = 1e6;
+function perMillionToPerToken(usdPerMillion) {
+  return usdPerMillion / TOKENS_PER_MILLION;
+}
+function perTokenToPerMillion(usdPerToken) {
+  return usdPerToken * TOKENS_PER_MILLION;
+}
+var ZERO_PRICE = Object.freeze({ input: 0, output: 0 });
+
+// ../packages/model-catalog/src/tier.ts
+var UNKNOWN_TIER_RANK = 4;
+var STRONGEST_FIRST = {
+  ULTRA: 0,
+  PREMIUM: 1,
+  STANDARD: 2,
+  FREE: 3
+};
+function tierRank(tier2) {
+  return tier2 && tier2 in STRONGEST_FIRST ? STRONGEST_FIRST[tier2] : UNKNOWN_TIER_RANK;
+}
+var STANDARD_MAX_OUTPUT_PER_MILLION = 8;
+var PREMIUM_MAX_OUTPUT_PER_MILLION = 20;
+function tierForPrice(price) {
+  if (price.input === 0 && price.output === 0) return "FREE";
+  const outputPerMillion = perTokenToPerMillion(price.output);
+  if (outputPerMillion < STANDARD_MAX_OUTPUT_PER_MILLION) return "STANDARD";
+  return outputPerMillion < PREMIUM_MAX_OUTPUT_PER_MILLION ? "PREMIUM" : "ULTRA";
+}
+function resolveModelTier(known) {
+  if (known.catalogTier) return known.catalogTier;
+  return known.price ? tierForPrice(known.price) : void 0;
+}
+var AGENTIC_TIERS = /* @__PURE__ */ new Set(["PREMIUM", "ULTRA"]);
+function isAgenticTier(tier2) {
+  return tier2 ? AGENTIC_TIERS.has(tier2) : void 0;
+}
+
+// ../packages/model-catalog/src/priceTiers.ts
+var tier = (aboveInputTokens, inputPerMillion, outputPerMillion) => ({
+  aboveInputTokens,
+  input: perMillionToPerToken(inputPerMillion),
+  output: perMillionToPerToken(outputPerMillion)
+});
+var PRICE_TIERS = Object.freeze({
+  // Google AI Studio / Vertex list price: $1.25 / $10 per M up to 200K prompt tokens,
+  // $2.50 / $15 above (ai.google.dev/gemini-api/docs/pricing). Verify against vendor pricing page.
+  "gemini-2-5-pro": [tier(2e5, 2.5, 15)],
+  // Anthropic long-context pricing for the 1M-window Sonnet 4 / 4.5: $3 / $15 per M up
+  // to 200K input, $6 / $22.50 above (docs.claude.com pricing, "long context").
+  // Verify against vendor pricing page.
+  "claude-sonnet-4": [tier(2e5, 6, 22.5)],
+  "claude-sonnet-4-5": [tier(2e5, 6, 22.5)],
+  // Claude Haiku 5.5: $0.10 / $0.50 per M for prompts up to 100K, $0.50 / $2.50 beyond
+  // (Anthropic model pricing table, 2026-10). Verify against vendor pricing page.
+  "claude-haiku-5-5": [tier(1e5, 0.5, 2.5)]
+});
+function priceTierFamily(modelId) {
+  let id = (modelId ?? "").trim().toLowerCase();
+  id = id.slice(id.lastIndexOf("/") + 1);
+  id = id.replace(/^(?:[a-z]{2,3}\.)?anthropic\./, "");
+  id = id.replace(/:.*$/, "");
+  id = id.replace(/\./g, "-");
+  id = id.replace(/-\d{8}(?:-v\d+)?$/, "");
+  return id;
+}
+function priceTiersFor(modelId) {
+  return PRICE_TIERS[priceTierFamily(modelId)];
+}
+function priceTierBoundary(modelId) {
+  const tiers = priceTiersFor(modelId);
+  return tiers && tiers.length > 0 ? Math.min(...tiers.map((t) => t.aboveInputTokens)) : void 0;
+}
+function withPriceTiers(modelId, price) {
+  const tiers = price.priceTiers ?? priceTiersFor(modelId);
+  return tiers ? { ...price, priceTiers: tiers } : price;
+}
+
+// ../packages/model-catalog/src/priceBook.ts
+function directCatalogId(model) {
+  return model.startsWith("direct/") ? model.slice("direct/".length).toLowerCase() : void 0;
+}
+function catalogPriceId(model) {
+  return model.startsWith("openrouter/") ? model.slice("openrouter/".length) : model;
+}
+function listPriceOf(book2, model) {
+  return book2.listPriceOf ? book2.listPriceOf(model) : book2.priceOf(model);
+}
+function priceBookFromPrices(prices) {
+  const byId = /* @__PURE__ */ new Map();
+  const byLowerId = /* @__PURE__ */ new Map();
+  for (const [id, price] of prices) {
+    byId.set(id, price);
+    byLowerId.set(id.toLowerCase(), price);
+  }
+  const priceOf = (model) => byId.get(catalogPriceId(model));
+  return {
+    priceOf,
+    listPriceOf: (model) => {
+      const direct = directCatalogId(model);
+      return priceOf(model) ?? (direct ? byLowerId.get(direct) : void 0);
+    }
+  };
+}
+
+// ../packages/model-catalog/src/generated/priceSnapshot.ts
+var PRICE_SNAPSHOT = {
+  "~anthropic/claude-fable-latest": [8e-6, 4e-5],
+  "~anthropic/claude-haiku-latest": [1e-7, 5e-7],
+  "~anthropic/claude-opus-latest": [4e-6, 2e-5],
+  "~anthropic/claude-sonnet-latest": [2e-6, 1e-5],
+  "~deepseek/deepseek-flash-latest": [3e-8, 2e-7],
+  "~deepseek/deepseek-pro-latest": [999e-10, 5e-6],
+  "~deepseek/deepseek-v4-flash-latest": [44e-9, 132e-9],
+  "~google/gemini-flash-latest": [15e-7, 75e-7],
+  "~google/gemini-pro-latest": [2e-6, 1e-5],
+  "~moonshotai/kimi-latest": [1824e-10, 110055e-10],
+  "~openai/gpt-astra-latest": [8e-6, 4e-5],
+  "~openai/gpt-luna-latest": [1e-7, 5e-7],
+  "~openai/gpt-mini-latest": [75e-8, 45e-7],
+  "~openai/gpt-sol-latest": [2e-6, 1e-5],
+  "~openai/gpt-terra-latest": [1e-6, 5e-6],
+  "~unbiased/pareto-latest": [8e-7, 32e-7],
+  "~x-ai/grok-latest": [2e-6, 6e-6],
+  "~z-ai/glm-flash-latest": [356e-10, 815e-10],
+  "~z-ai/glm-latest": [699e-10, 14e-7],
+  "aion-labs/aion-2.0": [8e-7, 16e-7],
+  "aion-labs/aion-3.0": [3e-6, 6e-6],
+  "aion-labs/aion-3.0-mini": [7e-7, 14e-7],
+  "aion-labs/aion-3.5": [3e-6, 6e-6],
+  "aion-labs/aion-3.5-mini": [7e-7, 14e-7],
+  "aion-labs/aion-rp-llama-3.1-8b": [8e-7, 16e-7],
+  "amazon/nova-2-lite-v1": [3e-7, 25e-7],
+  "amazon/nova-lite-v1": [6e-8, 24e-8],
+  "amazon/nova-micro-v1": [35e-9, 14e-8],
+  "amazon/nova-premier-v1": [25e-7, 125e-7],
+  "amazon/nova-pro-v1": [8e-7, 32e-7],
+  "anthracite-org/magnum-v4-72b": [25e-7, 5e-6],
+  "anthropic/claude-fable-5": [1e-5, 5e-5],
+  "anthropic/claude-fable-5:batch": [5e-6, 25e-6],
+  "anthropic/claude-fable-5.1": [1e-5, 5e-5],
+  "anthropic/claude-fable-5.1:batch": [5e-6, 25e-6],
+  "anthropic/claude-fable-5.2": [8e-6, 4e-5],
+  "anthropic/claude-fable-5.2:batch": [4e-6, 2e-5],
+  "anthropic/claude-haiku-4.5": [1e-6, 5e-6],
+  "anthropic/claude-haiku-4.5:batch": [5e-7, 25e-7],
+  "anthropic/claude-haiku-5.5": [1e-7, 5e-7],
+  "anthropic/claude-haiku-5.5:batch": [5e-8, 25e-8],
+  "anthropic/claude-opus-4.1": [15e-6, 75e-6],
+  "anthropic/claude-opus-4.1:batch": [75e-7, 375e-7],
+  "anthropic/claude-opus-4.5": [5e-6, 25e-6],
+  "anthropic/claude-opus-4.5:batch": [25e-7, 125e-7],
+  "anthropic/claude-opus-4.6": [5e-6, 25e-6],
+  "anthropic/claude-opus-4.6:batch": [25e-7, 125e-7],
+  "anthropic/claude-opus-4.7": [5e-6, 25e-6],
+  "anthropic/claude-opus-4.7:batch": [25e-7, 125e-7],
+  "anthropic/claude-opus-4.8": [5e-6, 25e-6],
+  "anthropic/claude-opus-4.8:batch": [25e-7, 125e-7],
+  "anthropic/claude-opus-5": [5e-6, 25e-6],
+  "anthropic/claude-opus-5:batch": [25e-7, 125e-7],
+  "anthropic/claude-opus-5.5": [4e-6, 2e-5],
+  "anthropic/claude-opus-5.5:batch": [2e-6, 1e-5],
+  "anthropic/claude-sonnet-4.5": [3e-6, 15e-6],
+  "anthropic/claude-sonnet-4.5:batch": [15e-7, 75e-7],
+  "anthropic/claude-sonnet-4.6": [3e-6, 15e-6],
+  "anthropic/claude-sonnet-4.6:batch": [15e-7, 75e-7],
+  "anthropic/claude-sonnet-5": [2e-6, 1e-5],
+  "anthropic/claude-sonnet-5:batch": [1e-6, 5e-6],
+  "anthropic/claude-sonnet-5.5": [2e-6, 1e-5],
+  "anthropic/claude-sonnet-5.5:batch": [1e-6, 5e-6],
+  "baidu/ernie-5.5-flash-preview:free": [0, 0],
+  "baidu/ernie-light-dt-1.0-intl": [113e-8, 394e-8],
+  "bytedance-seed/seed-2-1-turbo": [5e-7, 25e-7],
+  "bytedance-seed/seed-2.0-lite": [25e-8, 2e-6],
+  "bytedance-seed/seed-2.0-mini": [1e-7, 4e-7],
+  "bytedance/ui-tars-1.5-7b": [1e-7, 2e-7],
+  "cognitivecomputations/dolphin-mistral-24b-venice-edition": [2e-7, 9e-7],
+  "cohere/command-a": [25e-7, 1e-5],
+  "cohere/command-a-plus": [3e-7, 15e-7],
+  "cohere/command-r-08-2024": [15e-8, 6e-7],
+  "cohere/command-r-plus-08-2024": [25e-7, 1e-5],
+  "cohere/command-r7b-12-2024": [375e-10, 15e-8],
+  "deepseek/deepseek-chat": [2574e-10, 10287e-10],
+  "deepseek/deepseek-chat-v3-0324": [25e-8, 1e-6],
+  "deepseek/deepseek-chat-v3.1": [25e-8, 95e-8],
+  "deepseek/deepseek-r1-0528": [571e-9, 2286e-9],
+  "deepseek/deepseek-v3.1-terminus": [27e-8, 1e-6],
+  "deepseek/deepseek-v3.2": [26e-8, 38e-8],
+  "deepseek/deepseek-v3.2-exp": [27e-8, 41e-8],
+  "deepseek/deepseek-v4-flash": [9e-8, 18e-8],
+  "deepseek/deepseek-v4-flash-0731": [443e-10, 3e-7],
+  "deepseek/deepseek-v4-flash-0731:batch": [48e-9, 144e-9],
+  "deepseek/deepseek-v4-flash-vision-exp": [2156e-10, 6468e-10],
+  "deepseek/deepseek-v4-pro": [128e-8, 256e-8],
+  "deepseek/deepseek-v4-pro-0813": [111e-9, 444e-8],
+  "deepseek/deepseek-v4.1-flash": [498e-10, 1992e-10],
+  "deepseek/deepseek-v4.1-flash-1017": [3e-8, 2e-7],
+  "deepseek/deepseek-v4.1-flash-1017:batch": [35e-9, 149e-9],
+  "deepseek/deepseek-v4.1-flash:batch": [5e-8, 15e-8],
+  "dots-studio/dots-3-note-preview:free": [0, 0],
+  "elorian/glimpse": [6e-7, 3e-6],
+  "fireworks/ember-1": [3e-6, 15e-6],
+  "google/gemini-2.5-flash": [3e-7, 25e-7],
+  "google/gemini-2.5-flash-image": [3e-7, 25e-7],
+  "google/gemini-2.5-flash-lite": [1e-7, 4e-7],
+  "google/gemini-2.5-pro": [125e-8, 1e-5],
+  "google/gemini-2.5-pro-preview": [125e-8, 1e-5],
+  "google/gemini-3-flash-preview": [5e-7, 3e-6],
+  "google/gemini-3-flash-preview:batch": [25e-8, 15e-7],
+  "google/gemini-3-pro-image": [2e-6, 12e-6],
+  "google/gemini-3-pro-image-preview": [2e-6, 12e-6],
+  "google/gemini-3.1-flash-image": [5e-7, 3e-6],
+  "google/gemini-3.1-flash-image-preview": [5e-7, 3e-6],
+  "google/gemini-3.1-flash-lite": [25e-8, 15e-7],
+  "google/gemini-3.1-flash-lite-image": [25e-8, 15e-7],
+  "google/gemini-3.1-flash-lite-preview": [25e-8, 15e-7],
+  "google/gemini-3.1-flash-lite:batch": [125e-9, 75e-8],
+  "google/gemini-3.1-pro-preview": [2e-6, 12e-6],
+  "google/gemini-3.1-pro-preview-customtools": [2e-6, 12e-6],
+  "google/gemini-3.1-pro-preview:batch": [1e-6, 6e-6],
+  "google/gemini-3.5-flash": [15e-7, 9e-6],
+  "google/gemini-3.5-flash-lite": [3e-7, 25e-7],
+  "google/gemini-3.5-flash-lite:batch": [15e-8, 125e-8],
+  "google/gemini-3.5-flash:batch": [75e-8, 45e-7],
+  "google/gemini-3.6-flash": [75e-8, 375e-8],
+  "google/gemini-3.6-flash:batch": [375e-9, 1875e-9],
+  "google/gemini-3.7-flash": [75e-8, 375e-8],
+  "google/gemini-3.7-flash:batch": [375e-9, 1875e-9],
+  "google/gemini-3.8-flash": [825e-9, 4125e-9],
+  "google/gemini-3.8-flash:batch": [375e-9, 1875e-9],
+  "google/gemini-4-argon": [2e-6, 1e-5],
+  "google/gemini-4-argon:batch": [1e-6, 5e-6],
+  "google/gemini-4-carbon": [2e-6, 1e-5],
+  "google/gemini-4-carbon:batch": [1e-6, 5e-6],
+  "google/gemini-4-hydrogen": [15e-7, 75e-7],
+  "google/gemini-4-hydrogen:batch": [75e-8, 375e-8],
+  "google/gemini-4-neon": [3e-6, 15e-6],
+  "google/gemini-4-neon:batch": [15e-7, 75e-7],
+  "google/gemini-nano-banana-2.1": [15e-7, 75e-7],
+  "google/gemini-omni-1.1-flash": [15e-7, 9e-6],
+  "google/gemini-omni-1.2-flash": [15e-7, 9e-6],
+  "google/gemma-2-27b-it": [65e-8, 65e-8],
+  "google/gemma-3-12b-it": [5e-8, 15e-8],
+  "google/gemma-3-27b-it": [8e-8, 16e-8],
+  "google/gemma-3-4b-it": [4e-8, 5e-8],
+  "google/gemma-4-26b-a4b-it": [765e-10, 255e-9],
+  "google/gemma-4-26b-a4b-it:free": [0, 0],
+  "google/gemma-4-31b-it": [2e-7, 4e-7],
+  "google/gemma-4-31b-it:free": [0, 0],
+  "google/lyria-3-clip-preview": [0, 0],
+  "google/lyria-3-pro-preview": [0, 0],
+  "gryphe/mythomax-l2-13b": [3e-7, 5e-7],
+  "ibm-granite/granite-4.2-8b": [6e-8, 15e-8],
+  "inclusionai/ling-3.0-flash": [6e-8, 18e-8],
+  "inclusionai/ling-3.0-flash-vl": [6e-8, 18e-8],
+  "inclusionai/ling-3.0-tiny": [15e-9, 45e-9],
+  "inclusionai/ling-3.1-flash": [75e-9, 225e-9],
+  "inclusionai/ling-3.2-flash:free": [0, 0],
+  "inference-net/schematron-v2-small": [5e-8, 23e-8],
+  "inference-net/schematron-v2-turbo": [3e-8, 15e-8],
+  "kt/midm-k-3.0-pro": [2e-7, 8e-7],
+  "liquid/lfm-2.5-24b-a2b": [5e-8, 7e-7],
+  "liquid/lfm-3-1.7b": [8e-8, 2e-7],
+  "liquid/lfm-3-1.7b:free": [0, 0],
+  "mancer/weaver": [3e-7, 5e-7],
+  "meta-llama/llama-3.1-70b-instruct": [72e-8, 72e-8],
+  "meta-llama/llama-3.1-8b-instruct": [5e-8, 8e-8],
+  "meta-llama/llama-3.2-3b-instruct": [5e-8, 33e-8],
+  "meta-llama/llama-3.3-70b-instruct": [71e-8, 71e-8],
+  "meta-llama/llama-4-maverick": [35e-8, 1e-6],
+  "meta-llama/llama-4-scout": [1e-7, 3e-7],
+  "meta-llama/llama-guard-4-12b": [18e-8, 18e-8],
+  "meta/muse-ember": [1e-7, 5e-7],
+  "meta/muse-glimmer-30b": [35e-8, 15e-7],
+  "meta/muse-glimmer-30b:batch": [24e-8, 96e-8],
+  "meta/muse-spark-1.1": [125e-8, 425e-8],
+  "meta/muse-spark-1.2": [125e-8, 425e-8],
+  "meta/muse-spark-1.2-contributor": [1e-7, 2e-7],
+  "meta/muse-spark-1.3": [125e-8, 425e-8],
+  "meta/muse-spark-1.3-contributor": [1e-7, 2e-7],
+  "meta/muse-spark-open": [125e-8, 425e-8],
+  "meta/muse-wonder": [4e-6, 2e-5],
+  "microsoft/phi-4": [7e-8, 14e-8],
+  "minimax/minimax-m2.5": [27e-8, 95e-8],
+  "minimax/minimax-m2.7": [6e-7, 18e-7],
+  "minimax/minimax-m3": [3e-7, 12e-7],
+  "minimax/minimax-m3:batch": [224e-9, 88e-8],
+  "minimax/minimax-m3.1-flash": [15e-8, 6e-7],
+  "mistralai/codestral-2508": [3e-7, 9e-7],
+  "mistralai/devstral-2512": [4e-7, 2e-6],
+  "mistralai/ministral-14b-2512": [2e-7, 2e-7],
+  "mistralai/ministral-3b-2512": [1e-7, 1e-7],
+  "mistralai/ministral-8b-2512": [15e-8, 15e-8],
+  "mistralai/mistral-large": [2e-6, 6e-6],
+  "mistralai/mistral-large-2407": [2e-6, 6e-6],
+  "mistralai/mistral-large-2512": [5e-7, 15e-7],
+  "mistralai/mistral-large-4-0": [7e-7, 21e-7],
+  "mistralai/mistral-medium-3": [44e-8, 22e-7],
+  "mistralai/mistral-medium-3-5": [15e-7, 75e-7],
+  "mistralai/mistral-medium-3-5:batch": [75e-8, 375e-8],
+  "mistralai/mistral-medium-3.1": [44e-8, 22e-7],
+  "mistralai/mistral-nemo": [29e-9, 3e-8],
+  "mistralai/mistral-saba": [2e-7, 6e-7],
+  "mistralai/mistral-small-24b-instruct-2501": [5e-8, 8e-8],
+  "mistralai/mistral-small-2603": [15e-8, 6e-7],
+  "mistralai/mistral-small-3.1-24b-instruct": [351e-9, 555e-9],
+  "mistralai/mistral-small-3.2-24b-instruct": [75e-9, 2e-7],
+  "mistralai/mixtral-8x22b-instruct": [2e-6, 6e-6],
+  "mistralai/pixtral-large-2502": [2e-6, 6e-6],
+  "mistralai/voxtral-small-24b-2507": [1e-7, 3e-7],
+  "moondream/moondream3-preview": [3e-7, 25e-7],
+  "moondream/moondream3.1-9b-a2b": [3e-7, 25e-7],
+  "moonshotai/kimi-k2-0905": [6e-7, 25e-7],
+  "moonshotai/kimi-k2.5": [5e-7, 25e-7],
+  "moonshotai/kimi-k2.6": [65e-8, 341e-8],
+  "moonshotai/kimi-k2.7-code": [6e-7, 3e-6],
+  "moonshotai/kimi-k3": [192e-9, 16e-6],
+  "moonshotai/kimi-k3:batch": [228e-8, 114e-7],
+  "moonshotai/kimi-k3.1-pro": [2403e-10, 84023e-10],
+  "moonshotai/kimi-k3.1-pro:batch": [372e-9, 5583e-9],
+  "morph/morph-v3-fast": [8e-7, 12e-7],
+  "morph/morph-v3-fast:batch": [4e-7, 6e-7],
+  "morph/morph-v3-large": [9e-7, 19e-7],
+  "morph/morph-v3-large:batch": [45e-8, 95e-8],
+  "motif-technologies/motif-3": [3e-7, 12e-7],
+  "nex-agi/nex-n2.5-mini": [25e-9, 1e-7],
+  "nex-agi/nex-n2.5-pro": [75e-9, 25e-8],
+  "nex-agi/nex-n2.6": [12e-8, 4e-7],
+  "nousresearch/hermes-4-405b": [1e-6, 3e-6],
+  "nvidia/nemotron-3-nano-30b-a3b": [6e-8, 24e-8],
+  "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free": [0, 0],
+  "nvidia/nemotron-3-super-120b-a12b": [75e-9, 4e-7],
+  "nvidia/nemotron-3-ultra-550b-a55b": [5e-7, 22e-7],
+  "nvidia/nemotron-3-ultra-550b-a55b:free": [0, 0],
+  "nvidia/nemotron-3.5-content-safety": [2e-7, 2e-7],
+  "nvidia/nemotron-3.5-lightning": [5e-8, 2e-7],
+  "nvidia/nemotron-3.5-lightning:free": [0, 0],
+  "nvidia/nemotron-3.5-super-vl": [15e-8, 47e-8],
+  "nvidia/nemotron-3.5-super-vl:free": [0, 0],
+  "nvidia/switchyard": [0, 0],
+  "openai/gpt-3.5-turbo-0613": [1e-6, 2e-6],
+  "openai/gpt-3.5-turbo-16k": [3e-6, 4e-6],
+  "openai/gpt-4": [3e-5, 6e-5],
+  "openai/gpt-4-turbo:batch": [5e-6, 15e-6],
+  "openai/gpt-4.1": [2e-6, 8e-6],
+  "openai/gpt-4.1-mini": [4e-7, 16e-7],
+  "openai/gpt-4.1-mini:batch": [2e-7, 8e-7],
+  "openai/gpt-4.1-nano": [1e-7, 4e-7],
+  "openai/gpt-4.1-nano:batch": [5e-8, 2e-7],
+  "openai/gpt-4.1:batch": [1e-6, 4e-6],
+  "openai/gpt-4o": [25e-7, 1e-5],
+  "openai/gpt-4o-2024-05-13": [5e-6, 15e-6],
+  "openai/gpt-4o-2024-08-06": [25e-7, 1e-5],
+  "openai/gpt-4o-2024-11-20": [25e-7, 1e-5],
+  "openai/gpt-4o-mini": [15e-8, 6e-7],
+  "openai/gpt-4o-mini-2024-07-18": [15e-8, 6e-7],
+  "openai/gpt-4o-mini:batch": [75e-9, 3e-7],
+  "openai/gpt-4o:batch": [125e-8, 5e-6],
+  "openai/gpt-5": [125e-8, 1e-5],
+  "openai/gpt-5-image": [1e-5, 1e-5],
+  "openai/gpt-5-image-mini": [25e-7, 2e-6],
+  "openai/gpt-5-mini": [25e-8, 2e-6],
+  "openai/gpt-5-mini:batch": [125e-9, 1e-6],
+  "openai/gpt-5-nano": [5e-8, 4e-7],
+  "openai/gpt-5-nano:batch": [25e-9, 2e-7],
+  "openai/gpt-5-pro": [15e-6, 12e-5],
+  "openai/gpt-5-pro:batch": [75e-7, 6e-5],
+  "openai/gpt-5:batch": [625e-9, 5e-6],
+  "openai/gpt-5.1": [125e-8, 1e-5],
+  "openai/gpt-5.1-codex": [125e-8, 1e-5],
+  "openai/gpt-5.1-codex-max": [125e-8, 1e-5],
+  "openai/gpt-5.1-codex-mini": [25e-8, 2e-6],
+  "openai/gpt-5.1:batch": [625e-9, 5e-6],
+  "openai/gpt-5.2": [175e-8, 14e-6],
+  "openai/gpt-5.2-chat": [175e-8, 14e-6],
+  "openai/gpt-5.2-codex": [175e-8, 14e-6],
+  "openai/gpt-5.2-pro": [21e-6, 168e-6],
+  "openai/gpt-5.2-pro:batch": [105e-7, 84e-6],
+  "openai/gpt-5.2:batch": [875e-9, 7e-6],
+  "openai/gpt-5.3-codex": [175e-8, 14e-6],
+  "openai/gpt-5.4": [25e-7, 15e-6],
+  "openai/gpt-5.4-image-2": [8e-6, 15e-6],
+  "openai/gpt-5.4-mini": [75e-8, 45e-7],
+  "openai/gpt-5.4-mini:batch": [375e-9, 225e-8],
+  "openai/gpt-5.4-nano": [2e-7, 125e-8],
+  "openai/gpt-5.4-nano:batch": [1e-7, 625e-9],
+  "openai/gpt-5.4-pro": [3e-5, 18e-5],
+  "openai/gpt-5.4-pro:batch": [15e-6, 9e-5],
+  "openai/gpt-5.4:batch": [125e-8, 75e-7],
+  "openai/gpt-5.5": [5e-6, 3e-5],
+  "openai/gpt-5.5-pro": [3e-5, 18e-5],
+  "openai/gpt-5.5-pro:batch": [15e-6, 9e-5],
+  "openai/gpt-5.5:batch": [25e-7, 15e-6],
+  "openai/gpt-5.6-luna": [2e-7, 12e-7],
+  "openai/gpt-5.6-luna-pro": [2e-7, 12e-7],
+  "openai/gpt-5.6-luna-pro:batch": [1e-7, 6e-7],
+  "openai/gpt-5.6-luna:batch": [1e-7, 6e-7],
+  "openai/gpt-5.6-sol": [4e-6, 2e-5],
+  "openai/gpt-5.6-sol-pro": [4e-6, 2e-5],
+  "openai/gpt-5.6-sol-pro:batch": [2e-6, 1e-5],
+  "openai/gpt-5.6-sol:batch": [2e-6, 1e-5],
+  "openai/gpt-5.6-terra": [2e-6, 12e-6],
+  "openai/gpt-5.6-terra-pro": [2e-6, 12e-6],
+  "openai/gpt-5.6-terra-pro:batch": [1e-6, 6e-6],
+  "openai/gpt-5.6-terra:batch": [1e-6, 6e-6],
+  "openai/gpt-6-astra": [1e-5, 5e-5],
+  "openai/gpt-6-astra-pro": [1e-5, 5e-5],
+  "openai/gpt-6-astra-pro:batch": [5e-6, 25e-6],
+  "openai/gpt-6-astra:batch": [5e-6, 25e-6],
+  "openai/gpt-6-luna": [1e-7, 5e-7],
+  "openai/gpt-6-luna-pro": [1e-7, 5e-7],
+  "openai/gpt-6-luna-pro:batch": [5e-8, 25e-8],
+  "openai/gpt-6-luna:batch": [5e-8, 25e-8],
+  "openai/gpt-6-sol": [2e-6, 1e-5],
+  "openai/gpt-6-sol-pro": [2e-6, 1e-5],
+  "openai/gpt-6-sol-pro:batch": [1e-6, 5e-6],
+  "openai/gpt-6-sol:batch": [1e-6, 5e-6],
+  "openai/gpt-6.1-sol": [2e-6, 1e-5],
+  "openai/gpt-6.1-sol-pro": [2e-6, 1e-5],
+  "openai/gpt-6.1-sol-pro:batch": [1e-6, 5e-6],
+  "openai/gpt-6.1-sol:batch": [1e-6, 5e-6],
+  "openai/gpt-6.1-terra": [1e-6, 5e-6],
+  "openai/gpt-6.1-terra-pro": [1e-6, 5e-6],
+  "openai/gpt-6.1-terra-pro:batch": [5e-7, 25e-7],
+  "openai/gpt-6.1-terra:batch": [5e-7, 25e-7],
+  "openai/gpt-6.2-astra": [8e-6, 4e-5],
+  "openai/gpt-6.2-astra-pro": [8e-6, 4e-5],
+  "openai/gpt-6.2-astra-pro:batch": [4e-6, 2e-5],
+  "openai/gpt-6.2-astra:batch": [4e-6, 2e-5],
+  "openai/gpt-6.2-sol": [2e-6, 1e-5],
+  "openai/gpt-6.2-sol-pro": [2e-6, 1e-5],
+  "openai/gpt-6.2-sol-pro:batch": [1e-6, 5e-6],
+  "openai/gpt-6.2-sol:batch": [1e-6, 5e-6],
+  "openai/gpt-audio": [25e-7, 1e-5],
+  "openai/gpt-audio-mini": [6e-7, 24e-7],
+  "openai/gpt-chat-latest": [5e-6, 3e-5],
+  "openai/gpt-oss-120b": [5e-8, 25e-8],
+  "openai/gpt-oss-120b:batch": [296e-10, 136e-9],
+  "openai/gpt-oss-20b": [3e-8, 13e-8],
+  "openai/gpt-oss-20b:batch": [24e-9, 112e-9],
+  "openai/gpt-oss-safeguard-20b": [75e-9, 3e-7],
+  "openai/o3": [2e-6, 8e-6],
+  "openai/o3-mini:batch": [55e-8, 22e-7],
+  "openai/o3-pro": [2e-5, 8e-5],
+  "openai/o3:batch": [1e-6, 4e-6],
+  "openai/o4-mini:batch": [55e-8, 22e-7],
+  "openrouter/auto": [0, 0],
+  "openrouter/auto-beta": [0, 0],
+  "openrouter/auto-code": [0, 0],
+  "openrouter/bodybuilder": [0, 0],
+  "openrouter/free": [0, 0],
+  "openrouter/fusion": [0, 0],
+  "openrouter/pareto-code": [0, 0],
+  "particle-ai/particle-1": [7e-8, 5e-7],
+  "particle-ai/particle-1:free": [0, 0],
+  "perceptron/perceptron-mk1": [15e-8, 15e-7],
+  "perceptron/perceptron-mk1.5": [15e-8, 15e-7],
+  "perplexity/sonar": [1e-6, 1e-6],
+  "perplexity/sonar-deep-research": [2e-6, 8e-6],
+  "perplexity/sonar-pro": [3e-6, 15e-6],
+  "perplexity/sonar-pro-search": [3e-6, 15e-6],
+  "perplexity/sonar-reasoning-pro": [2e-6, 8e-6],
+  "prism-ml/ternary-bonsai-2-27b": [75e-9, 5e-7],
+  "prism-ml/ternary-bonsai-2-9b": [8e-8, 13e-8],
+  "qwen/qwen-2.5-72b-instruct": [36e-8, 4e-7],
+  "qwen/qwen-2.5-coder-32b-instruct": [66e-8, 1e-6],
+  "qwen/qwen-plus": [26e-8, 78e-8],
+  "qwen/qwen2.5-vl-72b-instruct": [8e-7, 1e-6],
+  "qwen/qwen3-14b": [12e-8, 24e-8],
+  "qwen/qwen3-235b-a22b-2507": [14e-8, 8e-7],
+  "qwen/qwen3-235b-a22b-thinking-2507": [45e-8, 35e-7],
+  "qwen/qwen3-30b-a3b": [12e-8, 5e-7],
+  "qwen/qwen3-30b-a3b-instruct-2507": [1e-7, 3e-7],
+  "qwen/qwen3-32b": [8e-8, 28e-8],
+  "qwen/qwen3-coder": [3e-7, 1e-6],
+  "qwen/qwen3-coder-30b-a3b-instruct": [7e-8, 28e-8],
+  "qwen/qwen3-coder-flash": [195e-9, 975e-9],
+  "qwen/qwen3-coder-next": [12e-8, 8e-7],
+  "qwen/qwen3-next-80b-a3b-instruct": [1e-7, 11e-7],
+  "qwen/qwen3-vl-235b-a22b-instruct": [21e-8, 19e-7],
+  "qwen/qwen3-vl-30b-a3b-instruct": [15e-8, 6e-7],
+  "qwen/qwen3-vl-8b-instruct": [25e-8, 75e-8],
+  "qwen/qwen3.5-122b-a10b": [26e-8, 208e-8],
+  "qwen/qwen3.5-27b": [26e-8, 26e-7],
+  "qwen/qwen3.5-35b-a3b": [14e-8, 1e-6],
+  "qwen/qwen3.5-397b-a17b": [45e-8, 3e-6],
+  "qwen/qwen3.5-9b": [17e-8, 25e-8],
+  "qwen/qwen3.5-flash-02-23": [65e-9, 26e-8],
+  "qwen/qwen3.5-plus-02-15": [26e-8, 156e-8],
+  "qwen/qwen3.5-plus-20260420": [3e-7, 18e-7],
+  "qwen/qwen3.6-27b": [32e-8, 32e-7],
+  "qwen/qwen3.6-35b-a3b": [5e-8, 7e-7],
+  "qwen/qwen3.6-flash": [1875e-10, 1125e-9],
+  "qwen/qwen3.6-plus": [325e-9, 195e-8],
+  "qwen/qwen3.7-flash": [3e-8, 13e-8],
+  "qwen/qwen3.7-max": [1475e-9, 4425e-9],
+  "qwen/qwen3.7-plus": [32e-8, 128e-8],
+  "qwen/qwen3.7-plus:batch": [23e-8, 92e-8],
+  "qwen/qwen3.8-2.4t-a95b": [2e-6, 6e-6],
+  "qwen/qwen3.8-27b": [35e-9, 15e-7],
+  "qwen/qwen3.8-27b:batch": [16e-8, 2e-6],
+  "qwen/qwen3.8-flash": [15e-8, 47e-8],
+  "qwen/qwen3.8-max-0902": [2e-6, 6e-6],
+  "qwen/qwen3.8-max-0902:batch": [115e-8, 345e-8],
+  "qwen/qwen3.8-max-prime": [4e-6, 12e-6],
+  "qwen/qwen3.8-omni-flash": [15e-8, 47e-8],
+  "qwen/qwen4-max": [1425e-9, 4275e-9],
+  "radixark/daisyrose-27b": [15e-8, 1875e-9],
+  "recursive/flint-v1.0:free": [0, 0],
+  "reflection/beam-1.0-501b-a23b": [25e-8, 1e-6],
+  "rekaai/reka-edge": [1e-7, 1e-7],
+  "rekaai/reka-flash-3": [1e-7, 2e-7],
+  "relace/relace-apply-3": [85e-8, 125e-8],
+  "relace/relace-search": [1e-6, 3e-6],
+  "ricursiveai/ripple-65b-preview": [1e-7, 3e-7],
+  "sakana/fugu-max": [2e-6, 6e-6],
+  "sakana/fugu-ultra": [5e-6, 3e-5],
+  "sakana/fugu-ultra-v2": [5e-6, 3e-5],
+  "sakana/sakana-namazu": [95e-8, 4e-6],
+  "sao10k/l3-lunaris-8b": [4e-8, 5e-8],
+  "sao10k/l3.1-euryale-70b": [85e-8, 85e-8],
+  "scaledown/extract": [4e-8, 0],
+  "scaledown/summarize": [4e-8, 0],
+  "stepfun/step-3.7-flash": [2e-7, 115e-8],
+  "stepfun/step-5-preview": [1e-6, 27e-7],
+  "tencent/hy-mt2-1.8b": [44e-9, 177e-9],
+  "tencent/hy-mt2-30b-a3b": [74e-9, 295e-9],
+  "tencent/hy-mt2-7b": [74e-9, 295e-9],
+  "tencent/hy3": [132e-9, 528e-9],
+  "tencent/hy4": [417e-9, 12505e-10],
+  "tencent/hy4-flash": [35e-9, 1405e-10],
+  "tencent/hy4-preview": [834e-9, 2501e-9],
+  "thedrummer/cydonia-24b-v4.1": [3e-7, 5e-7],
+  "thedrummer/skyfall-36b-v2": [55e-8, 8e-7],
+  "thedrummer/unslopnemo-12b": [4e-7, 4e-7],
+  "thinkingmachines/inkling": [1e-6, 405e-8],
+  "thinkingmachines/inkling-2-mini": [75e-9, 3e-7],
+  "thinkingmachines/inkling-2-small": [3e-7, 1e-6],
+  "thinkingmachines/inkling-small": [45e-8, 12e-7],
+  "thinkingmachines/inkling-small:batch": [36e-8, 96e-8],
+  "typesafe/jev-router": [0, 0],
+  "unbiased/pareto-26.10": [8e-7, 32e-7],
+  "unbiased/pareto-26.10-preview": [8e-7, 32e-7],
+  "unbiased/pareto-26.9": [25e-7, 75e-7],
+  "undi95/remm-slerp-l2-13b": [3e-7, 5e-7],
+  "upstage/solar-mini4": [5e-8, 2e-7],
+  "upstage/solar-pro4": [15e-8, 6e-7],
+  "writer/palmyra-x5": [6e-7, 6e-6],
+  "x-ai/grok-4.20": [125e-8, 25e-7],
+  "x-ai/grok-4.20-multi-agent": [125e-8, 25e-7],
+  "x-ai/grok-4.3": [125e-8, 25e-7],
+  "x-ai/grok-4.3:batch": [1e-6, 2e-6],
+  "x-ai/grok-4.5": [2e-6, 6e-6],
+  "x-ai/grok-4.6": [2e-6, 6e-6],
+  "x-ai/grok-4.6:batch": [16e-7, 48e-7],
+  "x-ai/grok-4.7": [2e-6, 6e-6],
+  "x-ai/grok-4.7:batch": [16e-7, 48e-7],
+  "xiaomi/mimo-v2.5": [4e-7, 2e-6],
+  "xiaomi/mimo-v2.6-flash": [14e-8, 28e-8],
+  "xiaomi/mimo-v2.6-pro": [435e-9, 87e-8],
+  "xiaomi/mimo-v2.6-pro-ultraspeed": [435e-8, 87e-7],
+  "z-ai/glm-4.5": [6e-7, 22e-7],
+  "z-ai/glm-4.5-air": [13e-8, 85e-8],
+  "z-ai/glm-4.5v": [6e-7, 18e-7],
+  "z-ai/glm-4.6": [5e-7, 2e-6],
+  "z-ai/glm-4.6v": [3e-7, 9e-7],
+  "z-ai/glm-4.7": [6e-7, 22e-7],
+  "z-ai/glm-4.7-flash": [605e-10, 4e-7],
+  "z-ai/glm-5": [1e-6, 32e-7],
+  "z-ai/glm-5-turbo": [12e-7, 4e-6],
+  "z-ai/glm-5.1": [14e-7, 44e-7],
+  "z-ai/glm-5.2": [62e-8, 242e-8],
+  "z-ai/glm-5.2:batch": [322e-9, 989e-9],
+  "z-ai/glm-5.3": [699e-10, 14e-7],
+  "z-ai/glm-5.3-flash": [12e-8, 38e-8],
+  "z-ai/glm-5.3-flash:batch": [23e-9, 68e-9],
+  "z-ai/glm-5.3-flashx": [37e-8, 125e-8],
+  "z-ai/glm-5.3-flashx-legal": [37e-8, 125e-8],
+  "z-ai/glm-5.3-prime": [168e-8, 528e-8],
+  "z-ai/glm-5.3:batch": [28e-8, 1249e-9],
+  "z-ai/glm-5v-turbo": [12e-7, 4e-6]
+};
+
+// ../packages/model-catalog/src/snapshotPriceBook.ts
+var book;
+function snapshotPriceBook() {
+  book ??= priceBookFromPrices(
+    Object.entries(PRICE_SNAPSHOT).map(([id, [input, output]]) => [id, withPriceTiers(id, { input, output })])
+  );
+  return book;
+}
+
+// ../packages/model-catalog/src/anthropic.ts
+var ANTHROPIC_RELEASES = {
+  opus: ["5.5", "5", "4.8", "4.7", "4.6", "4.5", "4.1", "4.0"],
+  sonnet: ["5.5", "5", "4.6", "4.5", "4.0"],
+  haiku: ["5.5", "4.5"],
+  fable: ["5.1", "5"]
+};
+var CLAUDE_ID = /^claude-(opus|sonnet|haiku|fable)-(\d+)(?:([-.])(\d{1,2})(?=-|$))?(-.*)?$/;
+function parseAnthropicModelId(id) {
+  const match = CLAUDE_ID.exec(id.trim().toLowerCase());
+  if (!match) {
+    return void 0;
+  }
+  return {
+    family: match[1],
+    version: [Number(match[2]), Number(match[4] ?? 0)],
+    separator: match[3] === "." ? "." : "-",
+    suffix: match[5] ?? ""
+  };
+}
+
+// ../packages/model-catalog/src/weakerModel.ts
+function catalogIdCandidates(model) {
+  const ids2 = [model];
+  const claude = parseAnthropicModelId(model.slice(model.lastIndexOf("/") + 1));
+  if (claude) {
+    const [major, minor] = claude.version;
+    ids2.push(`anthropic/claude-${claude.family}-${major}.${minor}`);
+    if (minor === 0) ids2.push(`anthropic/claude-${claude.family}-${major}`);
+  }
+  return ids2;
+}
+function tierOfModel(model, book2 = snapshotPriceBook()) {
+  if (!model || model === "default") return void 0;
+  for (const id of catalogIdCandidates(model)) {
+    const price = listPriceOf(book2, id);
+    if (price) return resolveModelTier({ price });
+  }
+  return void 0;
+}
+function isWeakerModel(requested, served, book2 = snapshotPriceBook()) {
+  const asked = tierOfModel(requested, book2);
+  const got = tierOfModel(served, book2);
+  return asked !== void 0 && got !== void 0 && tierRank(got) > tierRank(asked);
+}
+
+// ../packages/model-catalog/src/providers.ts
+var LLM_PROVIDER_INFO = [
+  { id: "anthropic", label: "Anthropic (Claude)", credential: "api_key", keyPlaceholder: "sk-ant-\u2026", subscription: "paste", signInDomains: ["claude.ai", "anthropic.com"] },
+  { id: "openai", label: "OpenAI", credential: "api_key", keyPlaceholder: "sk-\u2026", subscription: "paste", signInDomains: ["openai.com"] },
+  { id: "google", label: "Google (Gemini)", credential: "api_key", keyPlaceholder: "AIza\u2026", subscription: null },
+  { id: "meta", label: "Meta AI (MUSE)", credential: "api_key", keyPlaceholder: "meta-\u2026", subscription: null },
+  // A Kimi Code subscription issues no API key at all — its own config leaves `api_key`
+  // empty beside an OAuth record — so it connects by device-code redirect, never paste.
+  { id: "kimi", label: "Kimi", credential: "api_key", keyPlaceholder: "sk-\u2026", subscription: "device", signInDomains: ["kimi.ai", "kimi.com"] },
+  { id: "moonshot", label: "Moonshot AI", credential: "api_key", keyPlaceholder: "sk-\u2026", subscription: null },
+  { id: "qwen", label: "Qwen", credential: "api_key", keyPlaceholder: "sk-\u2026", subscription: null },
+  { id: "minimax", label: "MiniMax", credential: "api_key", keyPlaceholder: "sk-\u2026", subscription: null },
+  { id: "xai", label: "xAI (Grok)", credential: "api_key", keyPlaceholder: "xai-\u2026", subscription: "paste", signInDomains: ["x.ai"] },
+  { id: "ollama", label: "Ollama Cloud", credential: "api_key", keyPlaceholder: "sk-\u2026", subscription: null },
+  {
+    id: "ollama-local",
+    label: "Ollama",
+    credential: "local_runtime",
+    keyPlaceholder: "",
+    subscription: null,
+    localRuntime: { defaultBaseUrl: "http://127.0.0.1:11434", exampleModel: "llama3.1:8b" }
+  },
+  // FreeToken's engine default; it serves whatever model the tenant loaded, so no example.
+  {
+    id: "freetoken",
+    label: "FreeToken",
+    credential: "local_runtime",
+    keyPlaceholder: "",
+    subscription: null,
+    localRuntime: { defaultBaseUrl: "http://127.0.0.1:1919" }
+  }
+];
+var LLM_PROVIDERS = LLM_PROVIDER_INFO.map((p) => p.id);
+var INFO_BY_ID = new Map(LLM_PROVIDER_INFO.map((p) => [p.id, p]));
+
+// ../packages/spend-contract/src/fold.ts
+var AVOIDED_SOURCES = /* @__PURE__ */ new Set(["memory_answer", "evermind_answer", "response_cache", "deterministic"]);
+var LOCAL_MODEL_SOURCE = "local_model";
+function addSaving(acc, source, mc, tokens, events, estimated) {
+  if (tokens === 0 && mc === 0) return;
+  const key = `${source}:${estimated ? "e" : "m"}`;
+  const prev = acc.get(key) ?? { source, mc: 0, tokens: 0, events: 0, estimated };
+  acc.set(key, { ...prev, mc: prev.mc + mc, tokens: prev.tokens + tokens, events: prev.events + events });
+}
+function savedFrom(acc, spentUsd) {
+  let measuredMc = 0;
+  let estimatedMc = 0;
+  let tokensSaved = 0;
+  const bySource = [];
+  for (const v of acc.values()) {
+    if (v.estimated) estimatedMc += v.mc;
+    else measuredMc += v.mc;
+    tokensSaved += v.tokens;
+    bySource.push({ source: v.source, usd: millicentsToUsd(v.mc), tokens: v.tokens, events: v.events, estimated: v.estimated });
+  }
+  bySource.sort((a, b) => b.usd - a.usd);
+  const saved = {
+    measuredUsd: millicentsToUsd(measuredMc),
+    estimatedUsd: millicentsToUsd(estimatedMc),
+    netUsd: millicentsToUsd(measuredMc + estimatedMc),
+    tokensSaved: Math.max(0, tokensSaved),
+    bySource
+  };
+  const denom = spentUsd + Math.max(0, saved.netUsd);
+  return { saved, savedPct: denom > 0 ? Math.max(0, saved.netUsd) / denom : null };
+}
+function foldSpendSavings(slices, book2) {
+  const spend = {
+    platformUsd: 0,
+    yourKeyUsd: 0,
+    totalUsd: 0,
+    promptTokens: 0,
+    completionTokens: 0,
+    cacheReadTokens: 0,
+    totalTokens: 0,
+    unpricedTokens: 0,
+    requests: 0
+  };
+  let platformMc = 0;
+  let yourKeyMc = 0;
+  const acc = /* @__PURE__ */ new Map();
+  for (const g of slices) {
+    if (g.savingsSource && AVOIDED_SOURCES.has(g.savingsSource)) {
+      addSaving(acc, g.savingsSource, g.savedCostMc, g.savedPrompt + g.savedCompletion, g.rows, g.savingsEstimated);
+      continue;
+    }
+    spend.promptTokens += g.prompt;
+    spend.completionTokens += g.completion;
+    spend.cacheReadTokens += g.cacheRead;
+    spend.totalTokens += g.total;
+    spend.requests += g.calls;
+    if (g.savingsSource === LOCAL_MODEL_SOURCE) {
+      addSaving(acc, LOCAL_MODEL_SOURCE, g.savedCostMc, g.savedPrompt + g.savedCompletion, g.calls, true);
+      continue;
+    }
+    platformMc += g.costMc;
+    const price = listPriceOf(book2, g.model);
+    const pricing = price ? { prompt: price.input, completion: price.output } : void 0;
+    if (g.unpriced) spend.unpricedTokens += g.total;
+    else if (g.byo && pricing) {
+      yourKeyMc += computeCostMillicents(pricing, {
+        promptTokens: g.prompt,
+        completionTokens: g.completion,
+        totalTokens: g.total,
+        cacheReadTokens: g.cacheRead,
+        cacheCreationTokens: g.cacheCreation
+      });
+    }
+    if (pricing && !g.unpriced) {
+      addSaving(acc, "context_trim", Math.round(g.savedPrompt * pricing.prompt * 1e5), g.savedPrompt, g.trimCalls, true);
+      addSaving(acc, "recall_overhead", -Math.round(g.recallPrompt * pricing.prompt * 1e5), -g.recallPrompt, g.recallCalls, true);
+      const net = (g.cacheRead * (1 - CACHE_READ_MULTIPLIER) - g.cacheCreation * (CACHE_CREATION_MULTIPLIER - 1)) * pricing.prompt;
+      addSaving(acc, "prompt_cache", Math.round(net * 1e5), g.cacheRead, g.cacheCalls, false);
+    } else {
+      addSaving(acc, "context_trim", 0, g.savedPrompt, g.trimCalls, true);
+      addSaving(acc, "recall_overhead", 0, -g.recallPrompt, g.recallCalls, true);
+    }
+  }
+  spend.platformUsd = millicentsToUsd(platformMc);
+  spend.yourKeyUsd = millicentsToUsd(yourKeyMc);
+  spend.totalUsd = millicentsToUsd(platformMc + yourKeyMc);
+  return { spend, ...savedFrom(acc, spend.totalUsd) };
+}
+function combineSpendSavings(a, b) {
+  const sum = (k) => a.spend[k] + b.spend[k];
+  const spend = {
+    platformUsd: sum("platformUsd"),
+    yourKeyUsd: sum("yourKeyUsd"),
+    totalUsd: sum("totalUsd"),
+    promptTokens: sum("promptTokens"),
+    completionTokens: sum("completionTokens"),
+    cacheReadTokens: sum("cacheReadTokens"),
+    totalTokens: sum("totalTokens"),
+    unpricedTokens: sum("unpricedTokens"),
+    requests: sum("requests"),
+    ...a.spend.estimated || b.spend.estimated ? { estimated: true } : {}
+  };
+  const acc = /* @__PURE__ */ new Map();
+  for (const row of [...a.saved.bySource, ...b.saved.bySource]) {
+    addSaving(acc, row.source, Math.round(row.usd * 1e5), row.tokens, row.events, row.estimated);
+  }
+  return { spend, ...savedFrom(acc, spend.totalUsd) };
+}
+
+// ../packages/spend-contract/src/runBudget.ts
+var RUN_BUDGET_WARN_AT = 0.8;
+var capOf = (n) => typeof n === "number" && Number.isFinite(n) ? n : null;
+function runBudgetBreach(caps, usage) {
+  const spendCap = capOf(caps.maxSpendMillicents);
+  if (spendCap != null && usage.spendMillicents >= spendCap) return { kind: "spend", used: usage.spendMillicents, cap: spendCap };
+  const tokenCap = capOf(caps.maxTokens);
+  const tokens = usage.tokens ?? 0;
+  if (tokenCap != null && tokens >= tokenCap) return { kind: "tokens", used: tokens, cap: tokenCap };
+  return null;
+}
+function runBudgetUsedShare(caps, usage) {
+  const spend = caps.maxSpendMillicents ? usage.spendMillicents / caps.maxSpendMillicents : 0;
+  const tokens = caps.maxTokens ? (usage.tokens ?? 0) / caps.maxTokens : 0;
+  return Math.max(spend, tokens);
+}
+function runBudgetWarnDue(caps, usage) {
+  return runBudgetUsedShare(caps, usage) >= RUN_BUDGET_WARN_AT;
+}
+
+// ../packages/spend-contract/src/index.ts
+var USAGE_SURFACES = ["web", "vsix", "on_prem", "cloud", "sdk", "rovr"];
+function isUsageSurface(raw) {
+  return typeof raw === "string" && USAGE_SURFACES.includes(raw);
+}
+var USAGE_SURFACE_HEADER = "x-builderforce-surface";
 
 // src/provenance.ts
 var PROVENANCE_META_KEY = "provenance";
@@ -647,6 +1477,9 @@ function formatEvermindLearnStep(outcome) {
 }
 
 // ../packages/agent-stall/src/classifyRequest.ts
+function hasExplicitQuestionIntent({ intent, signals }) {
+  return intent === "question" && (signals.questionLead || signals.questionMark || signals.researchLead);
+}
 var CHANGE_VERBS = "add|change|fix|update|reduce|increase|remove|delete|rename|refactor|implement|create|build|make|move|set|wire|migrate|replace|adjust|enable|disable|improve|write|edit|apply|correct|resolve|shrink|expand|hide|show|bump|revert|restore|install|upgrade|downgrade|rewrite|extract|split|merge|convert|port";
 var CHANGE_VERB = new RegExp(`\\b(${CHANGE_VERBS})\\b`, "i");
 var REPORT_OBJECTS = "summary|report|findings|notes|overview|write-?up|answer|explanation|list|table|recommendations?";
@@ -659,6 +1492,7 @@ var FINISH_ORDER = new RegExp(`^\\s*(please\\s+)?(now\\s+)?${FINISH_OBJECT}`, "i
 var CHAINED_FINISH = new RegExp(`(\\band|\\bthen|[,.;])\\s+((also|then|please|now)\\s+)*${FINISH_OBJECT}`, "i");
 var RESUMES_WORK = /^\s*(please\s+)?(now\s+)?(continue|resume|carry on with|pick up)\b[^?\n]{0,80}\b(work|tasks?|tickets?|implementation|changes?|items?|threads?)\b/i;
 var INTERROGATIVE = /^\s*(what|why|how|where|when|which|who|is|are|was|were|does|do|did|should|would|will)\b/i;
+var DO_WORK_ORDER = /^\s*(please\s+)?do\s+(?:(?:the|these|those|both|all)\s+)?(?:[\w-]+\s+){0,3}(?:work|tasks?|tickets?|changes?|items?|steps?|slices?)\s*[.!]?\s*$/i;
 var REQUEST_MODAL = /^\s*(can|could)\b/i;
 var QUESTION_LEADS = [
   /\bis this something (?:we|you) want\b/i,
@@ -721,6 +1555,7 @@ function classifyRequest(text) {
   if (!ask) return verdict("question");
   if (continuation) return verdict("change");
   if (resumesWork) return verdict("change");
+  if (DO_WORK_ORDER.test(ask)) return verdict("change");
   if (researchLead) return verdict(chainedChange ? "change" : "question");
   if (interrogative) return verdict("question");
   if (lead) return verdict(aimedAtUs ? "change" : "question");
@@ -1069,8 +1904,8 @@ function stallExhaustedNotice(model, tried, shape = false) {
 function stallRecoveryToolChoice(input) {
   return input.availableToolCount > 0 ? "required" : void 0;
 }
-function ids(list) {
-  return (list ?? []).map((m) => m.id).filter((id) => !!id);
+function ids(list2) {
+  return (list2 ?? []).map((m) => m.id).filter((id) => !!id);
 }
 function nextFallbackModel(surface, tried) {
   if (!surface) return void 0;
@@ -1085,8 +1920,8 @@ function nextFallbackModel(surface, tried) {
     coding,
     pool
   ];
-  for (const tier of tiers) {
-    const hit = tier.find((m) => !used.has(m));
+  for (const tier2 of tiers) {
+    const hit = tier2.find((m) => !used.has(m));
     if (hit) return hit;
   }
   return void 0;
@@ -1099,6 +1934,673 @@ function chooseStallFailover(input) {
   if (input.failoversUsed >= (input.maxFailovers ?? MAX_MODEL_FAILOVERS)) return void 0;
   const next = input.pick ? input.pick(input.tried) : nextFallbackModel(input.surface, input.tried);
   return next && !input.tried.includes(next) ? next : void 0;
+}
+
+// ../packages/pipeline-route/src/score.ts
+import { sigmoid } from "@seanhogg/builderforce-memory/stats";
+var LENGTH_FLOOR_CHARS = 80;
+var MAX_FILE_MENTIONS = 4;
+var DEFAULT_ROUTE_THRESHOLD = 0.5;
+var ROUTE_WEIGHTS = {
+  bias: -0.4,
+  length: 0.9,
+  fileMentions: 0.35,
+  multiStep: 1.2,
+  broadScope: 1,
+  questionOnly: -1.3,
+  followUp: -0.3,
+  // Outweighs every quick-leaning feature together (bias, follow-up, docs, question-only: -2.6), so a ticket or spec
+  // reconciliation request always plans first (VS Code chat #157440 started "create tickets for every open item" in code).
+  ticketIntent: 3,
+  actionType: {
+    data_migration: 1,
+    refactor: 0.9,
+    provisioning: 0.6,
+    backend_api: 0.4,
+    decision: 0.3,
+    devops_ci: 0.3,
+    frontend_ui: 0.2,
+    analysis: -0.4,
+    docs: -0.6
+  }
+};
+var round2 = (n) => Math.round(n * 100) / 100;
+function routeThreshold(raw) {
+  return typeof raw === "number" && Number.isFinite(raw) ? Math.min(1, Math.max(0, raw)) : DEFAULT_ROUTE_THRESHOLD;
+}
+function contributions(f, w) {
+  const decades = f.requestChars > LENGTH_FLOOR_CHARS ? Math.min(2, Math.log10(f.requestChars / LENGTH_FLOOR_CHARS)) : 0;
+  return [
+    ["long request", w.length * decades],
+    ["files named", w.fileMentions * Math.min(MAX_FILE_MENTIONS, Math.max(0, f.fileMentions))],
+    ["multi-step", f.multiStep ? w.multiStep : 0],
+    ["broad scope", f.broadScope ? w.broadScope : 0],
+    ["question only", f.questionOnly ? w.questionOnly : 0],
+    ["follow-up", f.followUp ? w.followUp : 0],
+    ["ticket intent", f.ticketIntent ? w.ticketIntent ?? 0 : 0],
+    [f.actionType, w.actionType[f.actionType] ?? 0]
+  ];
+}
+function scorePipeline(f, opts = {}) {
+  const w = opts.weights ?? ROUTE_WEIGHTS;
+  const threshold = routeThreshold(opts.threshold);
+  const parts = contributions(f, w);
+  const score2 = round2(sigmoid(parts.reduce((z, [, c]) => z + c, w.bias)));
+  const strongest = parts.filter(([, c]) => c !== 0).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])).slice(0, 3).map(([name]) => name);
+  const why = strongest.length ? ` (${strongest.join(", ")})` : "";
+  if (f.forceFull) return { score: score2, route: "full", reason: `the request asks for the full pipeline; score ${score2}${why}` };
+  if (f.explicitQuestion) return { score: score2, route: "quick", reason: `the user asks a question; score ${score2}${why}` };
+  if (opts.mode === "always") return { score: score2, route: "full", reason: `routing is set to always; score ${score2}${why}` };
+  return score2 >= threshold ? { score: score2, route: "full", reason: `score ${score2} \u2265 ${threshold}${why}` } : { score: score2, route: "quick", reason: `score ${score2} < ${threshold}${why}` };
+}
+var FILE_RE = /(?:[\w@.-]+\/)+[\w.-]+|\b[\w-]+\.(?:tsx?|jsx?|mjs|cjs|py|go|rs|java|kt|cs|php|rb|swift|c|cc|cpp|h|hpp|md|json|ya?ml|toml|sql|css|scss|html|vue|svelte|sh)\b/gi;
+var LIST_ITEM_RE = /^\s*(?:\d+[.)]|[-*•])\s+\S/gm;
+var CHAIN_RE = /\b(?:and then|then|after that|afterwards|next|also|finally|as well as)\b/gi;
+var BROAD_RE = /\b(?:every|each|across|throughout|entire|whole|codebase|repo-?wide|end[- ]to[- ]end|architecture|redesign|overhaul|migrate|migration|all (?:the )?(?:files|modules|services|packages|pages|endpoints|tests|callers|places))\b/i;
+var FORCE_FULL_RE = /(?:^\s*full[- ]pipeline\s*[.!]?\s*$|(?:^|[.;!—–]|\s-\s)\s*(?:(?:can|could|would|will) you\s+)?(?:please\s+)?(?:run|use|force|take|prefer)\s+(?:the\s+)?full[- ]pipeline\b)/i;
+var TICKET_INTENT_PATTERNS = [
+  // Filing: an exact verb, then only TICKET nouns — tasks / issues are everyday code words ("the task runner", "login issues").
+  /\b(?:create|file|open|raise|make|add|log|write)\b[^.?!\n]{0,40}\b(?:tickets?|work\s+items?)\b/i,
+  // Reviewing a spec by name.
+  /\breview(?:s|ed|ing)?\b[^.?!\n]{0,40}\b(?:prds?|specs?|specifications?|roadmaps?|requirements|gap\s+register)\b/i,
+  // Reviewing a markdown file only when ticket language follows it ("review the changes in CHANGELOG.md" is not this).
+  /\breview(?:s|ed|ing)?\b[^?!\n]{0,40}\b[\w-]+\.md\b[^?!\n]{0,80}\b(?:tickets?|work\s+items?|items?\b[^.?!\n]{0,30}\b(?:completed?|done|finished|open|incomplete|outstanding|remaining))\b/i,
+  // A spec's items and their status — only with a spec word or a .md path in the request ("remaining items in the cart" is not this).
+  /^(?=[\s\S]*(?:\b(?:prds?|specs?|specifications?|roadmaps?|requirements|gap\s+register)\b|\b[\w-]+\.md\b))[\s\S]*?\bitems?\b[^.?!\n]{0,30}\b(?:completed?|done|finished|open|incomplete|outstanding|remaining)\b/i,
+  /^(?=[\s\S]*(?:\b(?:prds?|specs?|specifications?|roadmaps?|requirements|gap\s+register)\b|\b[\w-]+\.md\b))[\s\S]*?\b(?:open|incomplete|outstanding|remaining|unfinished)\s+(?:prd\s+)?items?\b/i
+];
+function pipelineFeaturesOf(request, context = {}) {
+  const classification = classifyRequest(request);
+  const { intent, ask: text } = classification;
+  const files = new Set((text.match(FILE_RE) ?? []).map((m) => m.toLowerCase()));
+  const listItems = (text.match(LIST_ITEM_RE) ?? []).length;
+  const chained = (text.match(CHAIN_RE) ?? []).length;
+  return {
+    requestChars: text.length,
+    fileMentions: files.size,
+    multiStep: listItems >= 2 || chained >= 2,
+    broadScope: BROAD_RE.test(text),
+    questionOnly: intent === "question",
+    ...hasExplicitQuestionIntent(classification) ? { explicitQuestion: true } : {},
+    followUp: context.followUp === true,
+    actionType: context.actionType ?? "other",
+    forceFull: FORCE_FULL_RE.test(text),
+    ticketIntent: TICKET_INTENT_PATTERNS.some((re) => re.test(text))
+  };
+}
+
+// ../packages/pipeline-route/src/report.ts
+var RERUN_WINDOW_MS = 30 * 6e4;
+var MIN_QUICK_RUNS_FOR_SUGGESTION = 10;
+var MISROUTE_HIGH = 0.15;
+var MISROUTE_LOW = 0.05;
+var HISTOGRAM_BINS = 10;
+var STEP = 0.05;
+var floorStep = (n) => Math.floor(n / STEP + 1e-9) * STEP;
+var round22 = (n) => Math.round(n * 100) / 100;
+function misroutedRuns(runs, windowMs = RERUN_WINDOW_MS) {
+  const out = /* @__PURE__ */ new Set();
+  const byConversation = /* @__PURE__ */ new Map();
+  runs.forEach((r, i) => {
+    const list2 = byConversation.get(r.conversation) ?? [];
+    list2.push(i);
+    byConversation.set(r.conversation, list2);
+  });
+  for (const indexes of byConversation.values()) {
+    indexes.sort((a, b) => runs[a].startedAt.localeCompare(runs[b].startedAt));
+    indexes.forEach((i, k) => {
+      const run = runs[i];
+      if (run.route !== "quick") return;
+      if (run.failed) {
+        out.add(i);
+        return;
+      }
+      const next = indexes[k + 1] !== void 0 ? runs[indexes[k + 1]] : void 0;
+      if (next?.route === "full" && Date.parse(next.startedAt) - Date.parse(run.startedAt) <= windowMs) out.add(i);
+    });
+  }
+  return out;
+}
+function totals(runs) {
+  const scored = runs.filter((r) => typeof r.score === "number");
+  const priced = runs.filter((r) => typeof r.costMc === "number" && Number.isFinite(r.costMc));
+  const unpricedRuns = runs.length - priced.length;
+  return {
+    runs: runs.length,
+    costMc: priced.reduce((sum, r) => sum + r.costMc, 0),
+    ...unpricedRuns > 0 ? { unpricedRuns } : {},
+    avgScore: scored.length ? round22(scored.reduce((s, r) => s + r.score, 0) / scored.length) : null
+  };
+}
+function histogramOf(runs) {
+  const bins = Array.from({ length: HISTOGRAM_BINS }, (_, i) => ({
+    from: round22(i / HISTOGRAM_BINS),
+    to: round22((i + 1) / HISTOGRAM_BINS),
+    full: 0,
+    quick: 0
+  }));
+  for (const r of runs) {
+    if (typeof r.score !== "number" || !Number.isFinite(r.score)) continue;
+    const i = Math.min(HISTOGRAM_BINS - 1, Math.max(0, Math.floor(r.score * HISTOGRAM_BINS)));
+    bins[i][r.route] += 1;
+  }
+  return bins;
+}
+function suggestThreshold(runs, threshold, misrouted = misroutedRuns(runs)) {
+  const quick = runs.filter((r) => r.route === "quick").length;
+  if (quick < MIN_QUICK_RUNS_FOR_SUGGESTION) return { suggestedThreshold: null };
+  const rate = misrouted.size / quick;
+  if (rate > MISROUTE_HIGH) {
+    const scores = [...misrouted].map((i) => runs[i].score).filter((s) => typeof s === "number").sort((a, b) => a - b);
+    const quartile = scores.length ? scores[Math.floor((scores.length - 1) / 4)] : threshold - STEP;
+    const next = round22(Math.max(STEP * 2, Math.min(threshold - STEP, floorStep(quartile))));
+    return { suggestedThreshold: next };
+  }
+  if (rate < MISROUTE_LOW && runs.some((r) => r.route === "full")) {
+    const next = round22(Math.min(0.9, threshold + STEP));
+    return { suggestedThreshold: next > threshold ? next : null };
+  }
+  return { suggestedThreshold: null };
+}
+function summarizeRouteRuns(runs, opts = {}) {
+  const threshold = opts.threshold ?? DEFAULT_ROUTE_THRESHOLD;
+  const misrouted = misroutedRuns(runs, opts.rerunWindowMs);
+  const quick = runs.filter((r) => r.route === "quick");
+  return {
+    runs: runs.length,
+    byRoute: { full: totals(runs.filter((r) => r.route === "full")), quick: totals(quick) },
+    histogram: histogramOf(runs),
+    misroutes: misrouted.size,
+    misrouteRate: quick.length ? round22(misrouted.size / quick.length) : null,
+    threshold,
+    ...suggestThreshold(runs, threshold, misrouted)
+  };
+}
+
+// ../packages/run-policy/src/coderHandoff.ts
+function isCoderReask(role, previousRole) {
+  return role === "code" && previousRole === "plan";
+}
+var MAX_CALL_CHARS = 2e3;
+var MAX_BRIEF_CHARS = 6e3;
+function coderHandoffBrief(plannerText, calls) {
+  const findings = plannerText.trim();
+  const intended = calls.map((call) => {
+    const args = call.args.length > MAX_CALL_CHARS ? `${call.args.slice(0, MAX_CALL_CHARS)}\u2026` : call.args;
+    return `- ${call.name} ${args}`;
+  });
+  const parts = [
+    "HAND-OFF: the analysis for this request is complete \u2014 you are the coding model taking it from here. Everything the planner read is in the conversation above; do not start the investigation over or re-read files already returned above.",
+    ...findings ? ["The planner concluded:", findings] : [],
+    "It was about to make this change:",
+    ...intended,
+    "Make that change now. Correct it if it is wrong \u2014 a file you have not seen, or text that does not match \u2014 but act on it rather than re-planning. Read only what the edit itself needs and is not already above."
+  ];
+  const brief = parts.join("\n");
+  return brief.length > MAX_BRIEF_CHARS ? `${brief.slice(0, MAX_BRIEF_CHARS)}\u2026` : brief;
+}
+
+// ../packages/run-policy/src/latencyGuard.ts
+var LATENCY_SAMPLE_WINDOW = 9;
+var MAX_FAILOVER_LATENCY_RATIO = 3;
+function p50(samples) {
+  const valid = (samples ?? []).filter((n) => Number.isFinite(n) && n >= 0);
+  if (valid.length === 0) return void 0;
+  const sorted = [...valid].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+function recordLatency(samples, model, durationMs, window = LATENCY_SAMPLE_WINDOW) {
+  const base = samples ?? {};
+  if (!model || !Number.isFinite(durationMs) || durationMs < 0) return base;
+  const next = [...base[model] ?? [], durationMs].slice(-Math.max(1, window));
+  return { ...base, [model]: next };
+}
+function withinLatencyBudget(candidate, input) {
+  const { primary } = input;
+  if (input.primaryUnavailable || !primary || candidate === primary) return true;
+  const base = p50(input.latency?.[primary]);
+  const theirs = p50(input.latency?.[candidate]);
+  if (base === void 0 || theirs === void 0 || base <= 0) return true;
+  return theirs <= base * (input.maxRatio ?? MAX_FAILOVER_LATENCY_RATIO);
+}
+function fastestCandidate(candidates, latency) {
+  let best;
+  let bestP50 = Number.POSITIVE_INFINITY;
+  for (const m of candidates) {
+    const t = p50(latency?.[m]) ?? 0;
+    if (best === void 0 || t < bestP50) {
+      best = m;
+      bestP50 = t;
+    }
+  }
+  return best;
+}
+var MAX_GUARDED_PICKS = 32;
+function guardedPick(pick, skip, input) {
+  const skipped2 = [...skip];
+  const slow = [];
+  for (let i = 0; i < MAX_GUARDED_PICKS; i++) {
+    const next = pick(skipped2);
+    if (!next) break;
+    if (withinLatencyBudget(next, input)) return next;
+    slow.push(next);
+    skipped2.push(next);
+  }
+  return fastestCandidate(slow, input.latency);
+}
+
+// ../packages/run-policy/src/phaseModels.ts
+function reviewPhaseModel(phaseModels, legacyReviewModel) {
+  for (const candidate of [phaseModels?.review, phaseModels?.verify, legacyReviewModel]) {
+    if (typeof candidate === "string" && candidate.trim()) return candidate.trim();
+  }
+  return void 0;
+}
+function configuredPhaseModel(options, phase) {
+  if (phase === "verify") return reviewPhaseModel(options.phaseModels, options.reviewModel);
+  const fromMap = options.phaseModels?.[phase];
+  return typeof fromMap === "string" && fromMap.trim() ? fromMap.trim() : void 0;
+}
+function reviewing(state) {
+  return state.phase === "verify" && state.options.fixedRole !== "verify";
+}
+function phaseDefaultModel(state) {
+  if (state.phase === "verify" || state.options.fixedRole) return void 0;
+  const model = configuredPhaseModel(state.options, state.phase);
+  return model && !state.broken.includes(model) ? model : void 0;
+}
+
+// ../packages/run-policy/src/policy.ts
+var PIN_RELEASE_STATUSES = [429, 413, 503];
+var DECLINE_STATUS = 400;
+var NONE = { kind: "none" };
+function initialRunPolicy(opts = {}) {
+  const model = opts.pinnedModel || void 0;
+  return {
+    phase: opts.startPhase ?? "plan",
+    model,
+    locked: false,
+    pin: model,
+    // Strictness belongs to a pin. With nothing pinned it would otherwise make the
+    // run's first LOCK strict, which no host asks for.
+    strictPin: !!opts.strictPin && !!model,
+    broken: [...new Set((opts.excludeModels ?? []).filter(Boolean))],
+    proven: [],
+    tried: [],
+    ...opts.latencySeed && Object.keys(opts.latencySeed).length > 0 ? { latency: opts.latencySeed } : {},
+    failovers: 0,
+    turnRetries: 0,
+    planTurns: 0,
+    handOffForced: false,
+    codeTurns: 0,
+    changeForced: false,
+    outcome: NONE,
+    options: {
+      pinReleasable: !!opts.pinReleasable,
+      lockAfterFirstSuccess: !!opts.lockAfterFirstSuccess,
+      maxFailovers: opts.maxFailovers ?? MAX_MODEL_FAILOVERS,
+      decliningModelPrefixes: [...opts.decliningModelPrefixes ?? []],
+      strictFailover: !!opts.strictFailover,
+      preferProvenFailover: !!opts.preferProvenFailover,
+      pinStrict: !!opts.strictPin && !!model,
+      ...opts.fixedRole ? { fixedRole: opts.fixedRole } : {},
+      ...opts.phaseModels ? { phaseModels: opts.phaseModels } : {},
+      ...opts.reviewModel !== void 0 ? { reviewModel: opts.reviewModel } : {}
+    }
+  };
+}
+function nextTurn(state, turn) {
+  const verifying = state.phase === "verify";
+  const review = reviewing(state);
+  const author = state.authorModel;
+  const reviewModel = review ? configuredPhaseModel(state.options, "verify") : void 0;
+  const mapped = reviewModel && !state.broken.includes(reviewModel) ? reviewModel : void 0;
+  let model = mapped ?? state.model ?? phaseDefaultModel(state);
+  if (verifying && author && model === author) model = void 0;
+  const excludeModels = [...state.broken];
+  if (verifying && author && !excludeModels.includes(author)) excludeModels.push(author);
+  return {
+    // A coding run's verify-phase turn reviews its change (the strongest models), whatever
+    // fixedRole the child had — except a child delegated the mechanical checks themselves.
+    role: turn.hasTools ? review ? "review" : state.options.fixedRole ?? state.phase : "chat",
+    model,
+    strict: !!model && state.strictPin,
+    excludeModels
+  };
+}
+function offersHandOff(state) {
+  return state.phase === "plan";
+}
+var PLAN_TURN_BUDGET = 20;
+function handOffDue(state) {
+  return state.phase === "plan" && state.planTurns >= PLAN_TURN_BUDGET;
+}
+function changeDue(state, progressed, budget = PLAN_TURN_BUDGET) {
+  return state.phase === "code" && !progressed && !state.changeForced && state.codeTurns >= budget;
+}
+var QUICK_CHANGE_TURN_BUDGET = 8;
+function reduceRunPolicy(state, event) {
+  const s = { ...state, outcome: NONE };
+  switch (event.type) {
+    case "turn_succeeded":
+      return succeeded(s, event.model, event.acted === true, event.durationMs);
+    case "code_change_attempted":
+      if (s.phase !== "plan") return s;
+      return { ...s, phase: "code", outcome: s.model ? NONE : { kind: "reask_as_coder" } };
+    case "plan_budget_spent":
+      return s.phase === "plan" ? { ...s, phase: "code" } : s;
+    case "hand_off_forced":
+      return { ...s, handOffForced: true };
+    case "change_forced":
+      return { ...s, changeForced: true };
+    case "hand_off":
+      return s.phase === "plan" ? { ...s, phase: "code", outcome: { kind: "handed_off" } } : { ...s, outcome: { kind: "hand_off_rejected" } };
+    case "verify_started": {
+      if (s.phase === "verify") return s;
+      const author = s.authorModel ?? s.model ?? phaseDefaultModel(s);
+      const review = s.options.fixedRole === "verify" ? void 0 : configuredPhaseModel(s.options, "verify");
+      const distinct = review && review !== author ? review : void 0;
+      return {
+        ...s,
+        phase: "verify",
+        ...author ? { authorModel: author } : {},
+        // No distinct review pin ⇒ drop the author pin so the gateway must pick
+        // someone else. The author stays in excludeModels either way.
+        model: distinct,
+        strictPin: distinct ? s.strictPin : false,
+        locked: distinct ? s.locked : false
+      };
+    }
+    case "stalled":
+      return stalled(s, event);
+    case "transport_failed":
+      return transportFailed(s, event);
+    case "escalated": {
+      const from = s.model;
+      if (!event.to || event.to === from || s.broken.includes(event.to)) return s;
+      return {
+        ...s,
+        model: event.to,
+        locked: false,
+        strictPin: true,
+        tried: from && !s.tried.includes(from) ? [...s.tried, from] : s.tried
+      };
+    }
+  }
+}
+function succeeded(s, resolved, acted, durationMs) {
+  const proven = acted && resolved && resolved !== "default" && !s.proven.includes(resolved) ? [...s.proven, resolved] : s.proven;
+  const served = resolved && resolved !== "default" ? resolved : void 0;
+  const timed = served ?? s.model;
+  const next = {
+    ...s,
+    ...acted && timed && durationMs !== void 0 ? { latency: recordLatency(s.latency, timed, durationMs) } : {},
+    ...acted && served && s.pin && s.model === s.pin && !s.pinResolved ? { pinResolved: served } : {},
+    turnRetries: 0,
+    proven,
+    planTurns: s.phase === "plan" ? s.planTurns + 1 : s.planTurns,
+    codeTurns: s.phase === "code" ? s.codeTurns + 1 : s.codeTurns
+  };
+  if (s.options.lockAfterFirstSuccess && !(s.model && s.strictPin) && resolved && resolved !== "default") {
+    return { ...next, model: resolved, locked: true };
+  }
+  return next;
+}
+function stalled(s, e) {
+  const tried = [...s.tried];
+  const to = chooseStallFailover({
+    activeModel: s.model,
+    resolvedModel: e.resolvedModel,
+    tried,
+    failoversUsed: s.failovers,
+    maxFailovers: s.options.maxFailovers,
+    surface: e.surface,
+    pick: failoverPicker(s, e)
+  });
+  if (!to) {
+    const returned = s.model !== s.pin ? { model: s.pin, locked: false, strictPin: !!s.pin && s.options.pinStrict } : {};
+    return { ...s, ...returned, tried, outcome: { kind: "failover_exhausted", tried } };
+  }
+  const failovers = s.failovers + 1;
+  return {
+    ...s,
+    tried,
+    failovers,
+    model: to,
+    locked: false,
+    ...s.options.strictFailover ? { strictPin: true } : {},
+    outcome: { kind: "failed_over", from: e.resolvedModel ?? s.model, to, attempt: failovers, of: s.options.maxFailovers }
+  };
+}
+function failoverPicker(s, e) {
+  const proven = s.options.preferProvenFailover ? [...s.proven].reverse() : [];
+  if (proven.length === 0 && !e.pick && !e.surface) return void 0;
+  const guard = latencyGuardFor(s, e);
+  if (proven.length === 0 && s.broken.length === 0 && !guard) return e.pick;
+  const source = (skip) => e.pick ? e.pick(skip) : nextFallbackModel(e.surface, skip);
+  return (tried) => {
+    const skip = [...tried, ...s.broken];
+    const open = proven.filter((m) => !skip.includes(m));
+    if (!guard) return open[0] ?? source(skip);
+    const fastProven = open.find((m) => withinLatencyBudget(m, guard));
+    if (fastProven) return fastProven;
+    const picked = guardedPick(source, skip, guard);
+    if (picked && withinLatencyBudget(picked, guard)) return picked;
+    return fastestCandidate([...open, ...picked ? [picked] : []], guard.latency);
+  };
+}
+function latencyGuardFor(s, e) {
+  if (s.phase === "plan" || e.primaryUnavailable || !s.latency) return void 0;
+  const pinPrimary = s.pin ? s.pinResolved : void 0;
+  return { primary: pinPrimary ?? s.proven[0] ?? e.resolvedModel ?? s.model, latency: s.latency };
+}
+function transportFailed(s, e) {
+  if (s.turnRetries >= 1 || e.kind === "unreachable") return { ...s, outcome: { kind: "fail_turn" } };
+  const releasable = s.locked || s.options.pinReleasable;
+  if (s.model && releasable && e.status !== void 0 && releasesPin(s, s.model, e.status)) {
+    return {
+      ...s,
+      model: void 0,
+      locked: false,
+      pin: void 0,
+      strictPin: false,
+      turnRetries: s.turnRetries + 1,
+      outcome: { kind: "retry_turn", released: s.model, status: e.status }
+    };
+  }
+  if (isRequestRefusalStatus(e.status)) return { ...s, outcome: { kind: "fail_turn" } };
+  if (s.model && e.kind === "interrupted" && !userPinHeld(s)) {
+    const brokenModel = e.model ?? s.model;
+    const pinned = s.pin !== void 0 && s.model === s.pin;
+    const broken2 = [.../* @__PURE__ */ new Set([...s.broken, brokenModel, s.model])];
+    const backToPin = !pinned && s.pin !== void 0 && !broken2.includes(s.pin) ? s.pin : void 0;
+    return {
+      ...s,
+      model: backToPin,
+      locked: false,
+      strictPin: backToPin !== void 0 && s.options.pinStrict,
+      ...pinned ? { pin: void 0 } : {},
+      broken: broken2,
+      turnRetries: s.turnRetries + 1,
+      outcome: { kind: "retry_turn", broken: brokenModel, ...s.locked || pinned ? { released: s.model } : {} }
+    };
+  }
+  if (s.model) return { ...s, outcome: { kind: "fail_turn" } };
+  const phaseModel = phaseDefaultModel(s);
+  const releasedPhase = phaseModel && e.status !== void 0 && releasesPin(s, phaseModel, e.status) ? phaseModel : void 0;
+  const interrupted = e.kind === "interrupted" && e.model ? e.model : void 0;
+  const broken = [.../* @__PURE__ */ new Set([...s.broken, ...interrupted ? [interrupted] : [], ...releasedPhase ? [releasedPhase] : []])];
+  return {
+    ...s,
+    broken,
+    turnRetries: s.turnRetries + 1,
+    outcome: { kind: "retry_turn", ...e.kind === "interrupted" && e.model ? { broken: e.model } : {} }
+  };
+}
+function userPinHeld(s) {
+  return s.pin !== void 0 && s.model === s.pin && !s.options.pinReleasable;
+}
+function releasesPin(s, model, status) {
+  return PIN_RELEASE_STATUSES.includes(status) || status === DECLINE_STATUS && s.options.decliningModelPrefixes.some((prefix) => model.startsWith(prefix));
+}
+function isRequestRefusalStatus(status) {
+  return status !== void 0 && status >= 400 && status < 500 && status !== 408 && !PIN_RELEASE_STATUSES.includes(status);
+}
+
+// ../packages/run-policy/src/stallStep.ts
+function resolveStallStep(policy, turn, recoveriesUsed, source = {}) {
+  const input = {
+    text: turn.text,
+    toolCallCount: turn.toolCallCount,
+    availableToolCount: turn.availableToolNames.length,
+    recoveriesUsed,
+    availableToolNames: turn.availableToolNames,
+    ...turn.requestText !== void 0 ? { requestText: turn.requestText } : {}
+  };
+  const shape = stallShape(input);
+  const toolChoice = stallRecoveryToolChoice(input);
+  if (shouldRecoverStalledTurn(input)) {
+    const used = recoveriesUsed + 1;
+    return {
+      policy,
+      step: {
+        kind: "nudge",
+        nudge: stallRecoveryNudge(used >= MAX_ANNOUNCEMENT_RECOVERIES, shape, input),
+        ...toolChoice ? { toolChoice } : {},
+        recoveriesUsed: used,
+        shape
+      }
+    };
+  }
+  if (!isExhaustedStall(input)) return { policy, step: { kind: "none" } };
+  const next = reduceRunPolicy(policy, {
+    type: "stalled",
+    ...turn.resolvedModel ? { resolvedModel: turn.resolvedModel } : {},
+    ...source.surface !== void 0 ? { surface: source.surface } : {},
+    ...source.pick ? { pick: source.pick } : {}
+  });
+  const outcome = next.outcome;
+  if (outcome.kind === "failed_over") {
+    return {
+      policy: next,
+      step: {
+        kind: "failover",
+        // The incoming model gets the FIRST nudge, not the last-chance one: the outgoing
+        // model's failures say nothing about it.
+        nudge: stallRecoveryNudge(false, shape, input),
+        ...toolChoice ? { toolChoice } : {},
+        notice: modelFailoverNotice(outcome.from, outcome.to, shape),
+        from: outcome.from,
+        to: outcome.to,
+        attempt: outcome.attempt,
+        of: outcome.of,
+        recoveriesUsed: 0,
+        shape
+      }
+    };
+  }
+  const tried = outcome.kind === "failover_exhausted" ? outcome.tried : next.tried;
+  const spent = turn.resolvedModel ?? policy.model;
+  return { policy: next, step: { kind: "exhausted", notice: stallExhaustedNotice(spent, tried, shape), tried, shape } };
+}
+
+// ../packages/run-policy/src/handoffBudget.ts
+var DEFAULT_HANDOFF_RESERVE_TOKENS = 4096;
+function toolSchemaTokens(schemas, estimate) {
+  return schemas && schemas.length > 0 ? estimate(JSON.stringify(schemas)) : 0;
+}
+function handoffReserveTokens(maxTokens) {
+  return maxTokens && maxTokens > 0 ? maxTokens : DEFAULT_HANDOFF_RESERVE_TOKENS;
+}
+function handoffTokenBudget(input) {
+  const reserve = Math.max(0, input.reserveOutputTokens ?? 0);
+  const bounds = [];
+  if (input.costCapTokens && input.costCapTokens > 0) bounds.push(input.costCapTokens);
+  if (input.contextWindow && input.contextWindow > 0) bounds.push(input.contextWindow - reserve);
+  if (input.priceTierBoundary && input.priceTierBoundary > 0) bounds.push(input.priceTierBoundary);
+  if (bounds.length === 0) return void 0;
+  return Math.max(1, Math.min(...bounds));
+}
+
+// ../packages/run-policy/src/outputCaps.ts
+var ROLE_OUTPUT_CAPS = {
+  explore: 2048,
+  utility: 2048,
+  verify: 2048,
+  chat: 4096,
+  plan: 4096,
+  // A review writes a verdict and its findings — a plan's length, not a check's.
+  review: 4096,
+  code: 8192
+};
+function roleOutputCap(role) {
+  return role && role in ROLE_OUTPUT_CAPS ? ROLE_OUTPUT_CAPS[role] : void 0;
+}
+function cappedMaxTokens(role, callerMaxTokens) {
+  const cap2 = roleOutputCap(role);
+  if (cap2 === void 0) return callerMaxTokens;
+  return callerMaxTokens && callerMaxTokens > 0 ? Math.min(cap2, callerMaxTokens) : cap2;
+}
+
+// ../packages/run-policy/src/cascade.ts
+var MAX_UNIT_ESCALATIONS = 2;
+function initialCascadeState() {
+  return { escalations: 0, reasoningBoost: 0 };
+}
+function weakestTierModel(ladder, exclude = []) {
+  const usable = ladder.candidates.filter((m) => !exclude.includes(m));
+  if (usable.length === 0) return void 0;
+  const floor = Math.min(...usable.map((m) => ladder.rankOf(m)));
+  return usable.find((m) => ladder.rankOf(m) === floor);
+}
+function nextTierModel(ladder, current, exclude = []) {
+  const usable = ladder.candidates.filter((m) => !exclude.includes(m) && m !== current);
+  if (usable.length === 0) return void 0;
+  const known = current !== void 0 && ladder.candidates.includes(current);
+  const from = known ? ladder.rankOf(current) : Math.min(...ladder.candidates.map((m) => ladder.rankOf(m)));
+  const above = usable.map((m) => ladder.rankOf(m)).filter((r) => r > from);
+  if (above.length === 0) return void 0;
+  const next = Math.min(...above);
+  return usable.find((m) => ladder.rankOf(m) === next);
+}
+function cascadeVerdict(state, kind, verdict, ctx) {
+  if (verdict.inconclusive) return { state, action: { kind: "none" } };
+  const open = state.open && state.open.kind === kind ? state.open : void 0;
+  if (verdict.passed) {
+    if (!open) return { state, action: { kind: "none" } };
+    const next = { ...state, open: void 0, reasoningBoost: 0 };
+    const base = open.baseModel;
+    return { state: next, action: base && open.escalations > 0 && base !== ctx.current ? { kind: "deescalate", to: base } : { kind: "none" } };
+  }
+  const unit = open ?? { kind, escalations: 0, ...ctx.current ? { baseModel: ctx.current } : {} };
+  if (unit.escalations >= MAX_UNIT_ESCALATIONS) {
+    return {
+      state: { ...state, open: unit },
+      action: { kind: "exhausted", steer: cascadeSteer(kind, verdict, ctx.current, void 0, true) }
+    };
+  }
+  const to = nextTierModel(ctx.ladder, ctx.current, ctx.exclude ?? []);
+  return {
+    state: {
+      ...state,
+      open: { ...unit, escalations: unit.escalations + 1 },
+      escalations: state.escalations + 1,
+      reasoningBoost: Math.min(state.reasoningBoost + 1, MAX_UNIT_ESCALATIONS)
+    },
+    action: { kind: "escalate", to, escalateReasoning: true, steer: cascadeSteer(kind, verdict, ctx.current, to, false) }
+  };
+}
+var UNIT_WORDS = {
+  code_edit: "your last code change",
+  finish: "your finish attempt",
+  structured_output: "your structured answer"
+};
+function cascadeSteer(kind, verdict, from, to, exhausted) {
+  const why = verdict.reason ? `: ${verdict.reason.trim().slice(0, 1200)}` : ".";
+  const who = exhausted ? "The run has already escalated this unit as far as it may \u2014 fix it on this model." : to ? `It has been handed one tier up${from ? ` from ${from}` : ""} to ${to}, with more reasoning.` : "No stronger model is available, so reasoning has been raised instead.";
+  return `Verifier check (${verdict.verifier}) failed on ${UNIT_WORDS[kind]}${why}
+${who} Read the failure above, correct exactly what it names, and verify again before moving on.`;
 }
 
 // ../packages/agent-tools/src/stableStringify.ts
@@ -1114,9 +2616,9 @@ function stableStringify(value) {
     return stableStringify({ type: "Uint8Array", data: Array.from(value) });
   }
   if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
-  const record2 = value;
-  const keys = Object.keys(record2).filter((k) => record2[k] !== void 0).sort();
-  return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(record2[k])}`).join(",")}}`;
+  const record4 = value;
+  const keys = Object.keys(record4).filter((k) => record4[k] !== void 0).sort();
+  return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(record4[k])}`).join(",")}}`;
 }
 
 // ../packages/agent-tools/src/toolFailure.ts
@@ -1357,10 +2859,10 @@ function whitespaceSplice(content, lines, i, old, fits, map, newString, endsWith
   return { start, end, text: out.join(eol) };
 }
 function matchEdit(content, oldString, newString, replaceAll, eol) {
-  const decide = (tier, splices) => {
+  const decide = (tier2, splices) => {
     if (splices.length === 0) return null;
     if (splices.length > 1 && !replaceAll) return { ambiguous: true };
-    return { tier, splices };
+    return { tier: tier2, splices };
   };
   const spliced = (spans, text) => spans.map(([start, end]) => ({ start, end, text }));
   const exact = exactSpans(content, oldString, replaceAll);
@@ -2254,6 +3756,9 @@ var TOOL_SIDE_EFFECT = {
 function toolSideEffect(name) {
   return Object.prototype.hasOwnProperty.call(TOOL_SIDE_EFFECT, name) ? TOOL_SIDE_EFFECT[name] : void 0;
 }
+function isProgressBookkeeping(name) {
+  return name === "remember_fact" || name === "memory_remember";
+}
 function normalizeAction(value) {
   if (typeof value !== "string") return void 0;
   const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, "_");
@@ -2928,7 +4433,7 @@ var findSymbolTool = defineTool({
     const kind = asKind(args.kind);
     const requested = typeof args.limit === "number" && Number.isFinite(args.limit) ? Math.floor(args.limit) : FIND_DEFAULT_LIMIT;
     const limit = Math.min(FIND_MAX_LIMIT, Math.max(1, requested));
-    const r = await ctx.caps.symbols.find(query, { scope, kind, limit });
+    const r = await ctx.caps.symbols.find(query, { scope, kind, limit, staleOk: true });
     if (!r.ok) return { data: r };
     const data = {
       ok: true,
@@ -2936,9 +4441,12 @@ var findSymbolTool = defineTool({
       total: r.total ?? 0,
       truncated: r.truncated === true,
       matches: (r.matches ?? []).map((m) => `${m.path}:${m.line} ${m.kind} ${m.name}${m.exported && m.kind !== "heading" ? " (export)" : ""}`),
-      indexedFiles: r.indexedFiles
+      indexedFiles: r.indexedFiles,
+      ...r.staleIndex ? { staleIndex: true } : {}
     };
-    if ((r.total ?? 0) === 0) {
+    if (r.staleIndex) {
+      data.note = "The symbol index is refreshing. Confirm these locations with read_file, or use search_code if a match is missing.";
+    } else if ((r.total ?? 0) === 0) {
       data.note = r.partialIndex ? `No definition named like "${query}" in the indexed files \u2014 but the index is PARTIAL (file cap reached), so this is not proof it does not exist. Try search_code${scope ? "" : " with a `path`"}.` : `No definition named like "${query}"${scope ? ` under "${scope}"` : ""}. It may be defined in a form the index does not recognise (a re-export, an object property, a generated file) \u2014 use search_code for the exact text.`;
     } else if (r.truncated) {
       data.note = `Showing ${r.matches?.length ?? 0} of ${r.total} matches \u2014 pass a longer \`query\`, a \`path\` or a \`kind\` to narrow.`;
@@ -2992,8 +4500,8 @@ var SYMBOL_TOOLS = [findSymbolTool, fileOutlineTool];
 var WHOLE_READ_MAX_CHARS = 64e3;
 var WIDEN_WINDOW_MIN_LINES = 150;
 var OUTLINE_FIRST_PREFIX_LINES = 40;
-function outlineFirstApplies(content, leverOn) {
-  if (leverOn !== true) return false;
+function outlineFirstApplies(content, leverOn2) {
+  if (leverOn2 !== true) return false;
   return content.length > WHOLE_READ_MAX_CHARS;
 }
 function dropsLimit(content, opts, sourceTruncated) {
@@ -3022,14 +4530,14 @@ function readFileKey(path, file, key) {
   return { ok: true, path, key: read.key, content: read.content };
 }
 var isMarkdown = (path) => /\.mdx?$/i.test(path);
-async function readOneFile(path, opts, caps, leverOn) {
+async function readOneFile(path, opts, caps, leverOn2) {
   const r = await caps.repoRead.readFile(path);
   if (!r.ok) return r;
   const gzip = isGzipPath(r.path ?? path) && typeof r.content === "string" && r.content.length > 0;
   if (gzip) r.content = await readGzipText(latin1Bytes(r.content));
   if (opts.key) return { ...readFileKey(r.path ?? path, r, opts.key), ...gzip ? { decompressed: true } : {} };
   const content = r.content ?? "";
-  if (opts.offset === void 0 && opts.limit === void 0 && outlineFirstApplies(content, leverOn) && r.truncated !== true) {
+  if (opts.offset === void 0 && opts.limit === void 0 && outlineFirstApplies(content, leverOn2) && r.truncated !== true) {
     const symbols = extractSymbols(path, content).slice(0, 150).map((s) => `L${s.line} ${s.kind} ${s.name}${s.exported && s.kind !== "heading" ? " (export)" : ""}`);
     const head = windowFileContent(content, { offset: 1, limit: OUTLINE_FIRST_PREFIX_LINES });
     return {
@@ -3074,10 +4582,10 @@ async function readOneFile(path, opts, caps, leverOn) {
   if (gzip) data.decompressed = true;
   return data;
 }
-async function readManyFiles(paths, opts, caps, leverOn) {
+async function readManyFiles(paths, opts, caps, leverOn2) {
   return Promise.all(
     paths.map(
-      (path) => readOneFile(path, opts, caps, leverOn).catch((err) => ({ ok: false, path, error: err instanceof Error ? err.message : String(err) }))
+      (path) => readOneFile(path, opts, caps, leverOn2).catch((err) => ({ ok: false, path, error: err instanceof Error ? err.message : String(err) }))
     )
   );
 }
@@ -3758,19 +5266,19 @@ function parseGitStatusOutput(stdout, paths) {
   }
   const header = parseHeader(statusLines.find((l) => l.startsWith("##")));
   const entries = parseEntries(statusLines);
-  const truncated = Object.values(entries).some((list) => list.length > MAX_ENTRIES);
-  const report = {
+  const truncated = Object.values(entries).some((list2) => list2.length > MAX_ENTRIES);
+  const report2 = {
     ...header,
     staged: entries.staged.slice(0, MAX_ENTRIES),
     unstaged: entries.unstaged.slice(0, MAX_ENTRIES),
     untracked: entries.untracked.slice(0, MAX_ENTRIES),
     conflicted: entries.conflicted.slice(0, MAX_ENTRIES),
-    clean: Object.values(entries).every((list) => list.length === 0),
+    clean: Object.values(entries).every((list2) => list2.length === 0),
     ...truncated ? { truncated: true } : {}
   };
   const wanted = statusPaths(paths);
-  if (wanted.length > 0) report.paths = parsePathSections(sections, wanted, !!header.upstream && !header.upstreamGone);
-  return { output: statusLines.join("\n").trim(), report };
+  if (wanted.length > 0) report2.paths = parsePathSections(sections, wanted, !!header.upstream && !header.upstreamGone);
+  return { output: statusLines.join("\n").trim(), report: report2 };
 }
 
 // ../packages/agent-tools/src/worktree-path.ts
@@ -3811,7 +5319,7 @@ function branchSwitchRefusal(command, found, paths) {
 function unverifiableRefusal(command, dir) {
   return `Refused: \`${command}\` switches branches in \`${dir}\`, which could not be verified clean (that directory cannot be passed to git safely) \u2014 the command was not run. Pass the checkout as \`cwd\` (relative to the workspace root) and run the git command without \`cd\` / \`-C\`, so its working tree can be checked first.`;
 }
-var succeeded = (r) => r.ok && (r.exitCode ?? 0) === 0;
+var succeeded2 = (r) => r.ok && (r.exitCode ?? 0) === 0;
 var unanswered = (r) => !r.ok && r.exitCode === void 0;
 function unreadableRefusal(command, why) {
   return `Refused: \`${command}\` switches branches, but this checkout's state could not be read (${why ?? "git timed out or its output was too large"}), so it could not be verified clean \u2014 the command was not run. Pass the checkout as \`cwd\` and retry, or commit (git_commit with \`branch\`) first.`;
@@ -3820,10 +5328,10 @@ async function namesCommit(git, target) {
   if (UNSAFE.test(target)) return true;
   const sha = await git(`rev-parse --verify --quiet "${target}^{commit}"`);
   if (unanswered(sha)) return true;
-  if (succeeded(sha) && /^[0-9a-f]{7,64}\r?$/m.test(sha.stdout ?? "")) return true;
+  if (succeeded2(sha) && /^[0-9a-f]{7,64}\r?$/m.test(sha.stdout ?? "")) return true;
   const remote = await git(`for-each-ref --count=1 "--format=%(refname)" "refs/remotes/*/${target}"`);
   if (unanswered(remote)) return true;
-  return succeeded(remote) && /^refs\/remotes\//m.test(remote.stdout ?? "");
+  return succeeded2(remote) && /^refs\/remotes\//m.test(remote.stdout ?? "");
 }
 async function refuseBranchSwitchOverChanges(command, dir, ctx) {
   const found = detectBranchSwitch(command);
@@ -3834,7 +5342,7 @@ async function refuseBranchSwitchOverChanges(command, dir, ctx) {
   const git = (args) => ctx.caps.shell.run(`git ${at2}${args}`, opts);
   const status = await git("status --porcelain --branch");
   if (unanswered(status)) return unreadableRefusal(command, status.error);
-  if (!succeeded(status)) return void 0;
+  if (!succeeded2(status)) return void 0;
   const paths = parsePorcelainPaths(status.stdout ?? "");
   if (paths.length === 0) return void 0;
   if (found.ambiguous && found.target && !await namesCommit(git, found.target)) return void 0;
@@ -4362,8 +5870,8 @@ function buildGitCommand(action, opts) {
 function gitToolResult(action, r, paths) {
   const out = (r.stdout ?? "").trim();
   if (action === "status" && r.ok) {
-    const { output, report } = parseGitStatusOutput(out, paths);
-    return { data: { ok: true, action, output: output.slice(0, 2e4), ...report, ...r.error ? { error: r.error } : {} } };
+    const { output, report: report2 } = parseGitStatusOutput(out, paths);
+    return { data: { ok: true, action, output: output.slice(0, 2e4), ...report2, ...r.error ? { error: r.error } : {} } };
   }
   if (r.exitCode === 3 || /MERGE_CONFLICT/.test(out)) {
     return { data: { ok: false, action, error: "merge conflict \u2014 the base branch has changes that conflict with your branch; the merge was aborted (working tree is clean). Resolve by editing the conflicting files, or ask a human.", output: out } };
@@ -5066,7 +6574,7 @@ function dependencyCruiserConfigWith(partitions, ignored) {
 }
 var jscpdArgsWith = (args, ignored) => {
   const extra = ignoredGlobs(ignored);
-  return extra.length > 0 ? args.replace(/--ignore=(\S+)/, (_m, list) => `--ignore=${list},${extra.join(",")}`) : args;
+  return extra.length > 0 ? args.replace(/--ignore=(\S+)/, (_m, list2) => `--ignore=${list2},${extra.join(",")}`) : args;
 };
 function createAnalyzeCodebaseTool(options = {}) {
   const l3 = options.l3;
@@ -5427,8 +6935,8 @@ var editFileTool = defineTool({
         }
       });
       if (!batch.ok) {
-        const failed2 = batch.files[batch.files.length - 1];
-        return { data: { ok: false, error: failed2.error ?? "batch failed", files: batch.files.map(({ content: _c, ...rest }) => rest) } };
+        const failed3 = batch.files[batch.files.length - 1];
+        return { data: { ok: false, error: failed3.error ?? "batch failed", files: batch.files.map(({ content: _c, ...rest }) => rest) } };
       }
       return {
         data: {
@@ -6484,8 +7992,8 @@ function itemFindings(n, item) {
   const ref = n.ref;
   const names = namesOf(n, item.names);
   if (names.length === 0) {
-    const count = Number(n.badges?.[item.count] ?? 0) || 0;
-    return count > 0 ? [finding(item.kind, CODE_PACK_ID, [ref], "info", { count, files: 1 }, void 0, refAnchor(ref))] : [];
+    const count2 = Number(n.badges?.[item.count] ?? 0) || 0;
+    return count2 > 0 ? [finding(item.kind, CODE_PACK_ID, [ref], "info", { count: count2, files: 1 }, void 0, refAnchor(ref))] : [];
   }
   return names.map((name) => {
     const anchor = `${ref}#${name}`;
@@ -7618,8 +9126,8 @@ function isReadOnlyShellCommand(command) {
 }
 function isReadOnlyShellCall(tool, args) {
   if (tool !== "run_command" || !args || typeof args !== "object") return false;
-  const record2 = args;
-  const command = typeof record2.command === "string" ? record2.command : typeof record2.cmd === "string" ? record2.cmd : "";
+  const record4 = args;
+  const command = typeof record4.command === "string" ? record4.command : typeof record4.cmd === "string" ? record4.cmd : "";
   return isReadOnlyShellCommand(command);
 }
 
@@ -7976,15 +9484,15 @@ var NoProgressTracker = class {
    * it changed are paths the run reached, and a report that moved the work is ground — the
    * same reading a `wait_agents` result gets.
    */
-  noteChildReport(changedPaths, moved) {
-    for (const path of changedPaths) {
+  noteChildReport(changedPaths2, moved) {
+    for (const path of changedPaths2) {
       if (!this.seen.has(path)) {
         this.seen.add(path);
         if (this.seen.size > MAX_SEEN) this.seen.delete(this.seen.values().next().value);
       }
       this.lastSeenAt.set(path, this.turn);
     }
-    if (moved || changedPaths.length > 0) this.groundThisTurn = true;
+    if (moved || changedPaths2.length > 0) this.groundThisTurn = true;
   }
   /** A poll of a background job a check command started ({@link JOB_POLL_TOOLS}). */
   isCheckJobPoll(tool, args) {
@@ -8078,8 +9586,8 @@ function pathsOf(files) {
 function delegatedChangedPathsOf(tool, result) {
   return isDelegationTool(tool) ? pathsOf(recordOf2(result)?.changedFiles) : [];
 }
-function reportMovedWork(report) {
-  const r = recordOf2(report);
+function reportMovedWork(report2) {
+  const r = recordOf2(report2);
   return !!r && (r.state === "done" || pathsOf(r.changedFiles).length > 0);
 }
 function delegationReportedOf(tool, result) {
@@ -8087,8 +9595,8 @@ function delegationReportedOf(tool, result) {
   const reports = recordOf2(result)?.reports;
   return Array.isArray(reports) && reports.some(reportMovedWork);
 }
-function childReportProgressOf(report) {
-  return { changedPaths: pathsOf(report.changedFiles), moved: reportMovedWork(report) };
+function childReportProgressOf(report2) {
+  return { changedPaths: pathsOf(report2.changedFiles), moved: reportMovedWork(report2) };
 }
 
 // ../packages/run-guards/src/verifiedWork.ts
@@ -8178,10 +9686,10 @@ var ReverifyTracker = class {
   }
   /** The turn ended: how many reads it made when ALL were repeat read-backs (else 0). Starts the next turn. */
   endTurn() {
-    const count = this.readsThisTurn > 0 && this.allRepeatReadBacks ? this.readsThisTurn : 0;
+    const count2 = this.readsThisTurn > 0 && this.allRepeatReadBacks ? this.readsThisTurn : 0;
     this.readsThisTurn = 0;
     this.allRepeatReadBacks = true;
-    return count;
+    return count2;
   }
   snapshot() {
     return {
@@ -8523,15 +10031,15 @@ function printedLines(argv) {
     if (!file) return null;
     if (n === void 0) n = "10";
     if (program === "head") {
-      const count2 = positiveInt2(n);
-      return count2 ? { file, from: 1, count: count2 } : null;
+      const count3 = positiveInt2(n);
+      return count3 ? { file, from: 1, count: count3 } : null;
     }
     if (n.startsWith("+")) {
       const from = positiveInt2(n.slice(1));
       return from ? { file, from } : null;
     }
-    const count = positiveInt2(n);
-    return count ? { file, count } : null;
+    const count2 = positiveInt2(n);
+    return count2 ? { file, count: count2 } : null;
   }
   if (program === "sed" && args.length === 3 && args[0] === "-n") {
     const m = /^(\d+)(?:,(\d+))?\s*p$/.exec(args[1].trim());
@@ -9026,7 +10534,7 @@ var SIGNAL_RANK = {
   read_only_streak: 5,
   no_progress: 6
 };
-function succeeded2(result) {
+function succeeded3(result) {
   if (result.isError) return false;
   const d = result.data;
   return !(d && typeof d === "object" && d.ok === false);
@@ -9095,8 +10603,12 @@ var ProgressDetector = class {
   }
   /** One call of the current turn ran. */
   observe(tool, args, result) {
+    if (this.ports.isBookkeeping?.(tool)) {
+      this.readOnlyStreak.observeNeutral();
+      return;
+    }
     this.turnCalls.push({ tool, args, result });
-    const ok = succeeded2(result);
+    const ok = succeeded3(result);
     const waitDigest = ok ? waitDigestOf(tool, result.data) : null;
     if (waitDigest === null) {
       const readOnly = this.ports.isReadOnly?.(tool, args) === true;
@@ -9167,10 +10679,10 @@ var ProgressDetector = class {
    * (`childReportText`), the default path. Read like a `wait_agents` result: its files are the
    * run's writes, and a finished report is progress (chat #157440).
    */
-  observeChildReport(report) {
-    const { changedPaths, moved } = childReportProgressOf(report);
-    this.creditDelegatedWrites(changedPaths);
-    this.progress.noteChildReport(changedPaths, moved);
+  observeChildReport(report2) {
+    const { changedPaths: changedPaths2, moved } = childReportProgressOf(report2);
+    this.creditDelegatedWrites(changedPaths2);
+    this.progress.noteChildReport(changedPaths2, moved);
   }
   forgetVisitsOf(path) {
     if (!path) return;
@@ -9596,8 +11108,8 @@ function createEvidenceLedger(resume) {
         findings: check.findings.slice(0, MAX_CHECK_FINDINGS),
         ...check.outputTail ? { outputTail: check.outputTail.slice(-MAX_CHECK_OUTPUT_TAIL) } : {}
       };
-      const list = e.byHash.get(contentHash4);
-      if (list) list.push(capped);
+      const list2 = e.byHash.get(contentHash4);
+      if (list2) list2.push(capped);
       else e.byHash.set(contentHash4, [capped]);
     },
     for(path, contentHash4) {
@@ -9710,8 +11222,8 @@ function covers(test, file, policy) {
   }
   return false;
 }
-function isErrorFinding(finding3) {
-  const tokens = finding3.trim().split(/\s+/);
+function isErrorFinding(finding4) {
+  const tokens = finding4.trim().split(/\s+/);
   return (tokens[1] ?? "").toLowerCase() === "error";
 }
 function pass() {
@@ -9747,16 +11259,16 @@ function outgoingGate(files, ledger, policy) {
         unavailable2.push(`${file.absPath}: ${kind} (no record \u2014 verifier unavailable)`);
         continue;
       }
-      const record2 = records.reduce((a, b) => b.at >= a.at ? b : a);
-      if (record2.outcome === "fail") {
-        const detail = record2.exitCode != null ? ` (exit ${record2.exitCode})` : "";
-        return refuse(checkFailureReason(file.absPath, record2, detail));
+      const record4 = records.reduce((a, b) => b.at >= a.at ? b : a);
+      if (record4.outcome === "fail") {
+        const detail = record4.exitCode != null ? ` (exit ${record4.exitCode})` : "";
+        return refuse(checkFailureReason(file.absPath, record4, detail));
       }
-      if (record2.outcome === "unavailable") {
-        unavailable2.push(`${file.absPath}: ${record2.name} (${kind}) unavailable`);
+      if (record4.outcome === "unavailable") {
+        unavailable2.push(`${file.absPath}: ${record4.name} (${kind}) unavailable`);
       }
       if (kind === "diagnostics") {
-        if (record2.findings.some(isErrorFinding)) return refuse(checkFailureReason(file.absPath, record2, " (LSP error)"));
+        if (record4.findings.some(isErrorFinding)) return refuse(checkFailureReason(file.absPath, record4, " (LSP error)"));
       }
     }
     if (needsTest(file, policy)) {
@@ -9772,17 +11284,17 @@ function outgoingGate(files, ledger, policy) {
   return unavailable2.length ? { ok: true, unavailable: unavailable2 } : pass();
 }
 var MAX_BLOCKING_REVIEW_ROUNDS = 3;
-function findingKey(finding3) {
-  return finding3.toLowerCase().replace(/\s+/g, " ").trim();
+function findingKey(finding4) {
+  return finding4.toLowerCase().replace(/\s+/g, " ").trim();
 }
-function findingLocation(finding3) {
-  const m = /([\w./\\-]+\.\w+):(\d+)/.exec(finding3);
+function findingLocation(finding4) {
+  const m = /([\w./\\-]+\.\w+):(\d+)/.exec(finding4);
   return m ? `${m[1].replace(/\\/g, "/").toLowerCase()}:${m[2]}` : null;
 }
-function findingMatchesPrior(finding3, prior) {
-  const key = findingKey(finding3);
+function findingMatchesPrior(finding4, prior) {
+  const key = findingKey(finding4);
   if (!key) return false;
-  const loc = findingLocation(finding3);
+  const loc = findingLocation(finding4);
   return prior.some((p) => {
     const pk = findingKey(p);
     if (!pk) return false;
@@ -10099,6 +11611,13 @@ var SERVER_TICKET_CREATE_TOOL = "builtin_tasks_create";
 var SERVER_TICKET_LINK_TOOL = "builtin_chats_link_ticket";
 var LOCAL_TICKET_CREATE_TOOL = "ticket-create";
 var LOCAL_TICKET_CREATE_LABEL = /ticket[-_.]create/i;
+var TICKET_WRITE_TOOL = new RegExp(
+  `(tasks|objectives|key_results|initiatives|portfolios|specs|roadmap)[._]create|chats[._]link_ticket|tickets[._]from_delta|${LOCAL_TICKET_CREATE_LABEL.source}`,
+  "i"
+);
+function isTicketWriteTool(label) {
+  return TICKET_WRITE_TOOL.test(label);
+}
 var SERVER = Object.freeze({
   createTool: SERVER_TICKET_CREATE_TOOL,
   local: false,
@@ -10150,11 +11669,11 @@ function toolResultRecord(result) {
   return result && typeof result === "object" ? result : null;
 }
 function entityIdsOf(result) {
-  const record2 = toolResultRecord(result);
-  if (!record2) return { localId: null, syncId: null };
-  const idRef = parseEntityRef(record2.id);
-  const syncId = parseSyncId(record2.syncId) ?? parseSyncId(record2.taskId) ?? (idRef && "sync" in idRef ? idRef.sync : null);
-  const localId = isLocalId(record2.localId) ? record2.localId : idRef && "local" in idRef ? idRef.local : null;
+  const record4 = toolResultRecord(result);
+  if (!record4) return { localId: null, syncId: null };
+  const idRef = parseEntityRef(record4.id);
+  const syncId = parseSyncId(record4.syncId) ?? parseSyncId(record4.taskId) ?? (idRef && "sync" in idRef ? idRef.sync : null);
+  const localId = isLocalId(record4.localId) ? record4.localId : idRef && "local" in idRef ? idRef.local : null;
   return { localId, syncId };
 }
 
@@ -10381,6 +11900,136 @@ function chatWorkLinkingDirective(chatId, tickets = SERVER_TICKET_TOOLS) {
 \u2022 When an open EPIC is linked to this chat, its remaining work belongs under it: record a code change for it with ${TICKET_FROM_DELTA_TOOL} passing parentTaskId=<the epic's numeric ref> (so a newly minted ticket is filed under the epic), and file a child task with ${tickets.createName} (${tickets.local ? "parentTicketId" : "parentTaskId"}=<the epic's ref>) for each remaining slice of the epic that has no ticket yet.` : "") + (linked ? `
 \u2022 Call builtin_chats_list_tickets (chatId=${chatId}) to see what is already linked \u2014 both to AVOID creating a duplicate and to know which linked tickets need their status advanced. Never end a turn having identified actionable work or changed code without it being a ticket linked to this chat whose status reflects the work you did.` : `
 \u2022 Never end a turn having identified actionable work or changed code without it being a ticket whose status reflects the work you did.`);
+}
+
+// ../packages/agent-run/src/policy/tools/toolVocabulary.ts
+var EQUIVALENCE_CLASSES = [
+  // The work item itself. `ticket` is the product's word and `task` is the catalog's;
+  // this one class is what makes every `tasks.*` tool reachable from a ticket question.
+  ["task", "ticket", "issue", "story", "backlog", "todo"],
+  // The board and its geography.
+  ["kanban", "board", "lane", "swimlane", "column", "card"],
+  // Source control.
+  ["repo", "repository", "codebase", "git"],
+  ["branch", "commit", "merge", "rebase"],
+  ["pr", "pull", "pullrequest"],
+  // People. `member` is the catalog's word; the rest are what users type.
+  ["member", "teammate", "colleague", "people", "person", "staff"],
+  // Conversations.
+  ["chat", "conversation", "thread"],
+  // Delivery planning. `epic` stays OUT of the objective class on purpose — objectives/
+  // OKRs and epics are different entities with different tools.
+  ["epic", "feature"],
+  ["objective", "okr", "keyresult"],
+  // Runs.
+  ["execution", "run", "dispatch"]
+];
+var SYNONYMS = (() => {
+  const map = /* @__PURE__ */ new Map();
+  for (const group2 of EQUIVALENCE_CLASSES) {
+    for (const term of group2) {
+      const existing = map.get(term) ?? [];
+      for (const other of group2) if (!existing.includes(other)) existing.push(other);
+      map.set(term, existing);
+    }
+  }
+  return map;
+})();
+function synonymsFor(stem2) {
+  return SYNONYMS.get(stem2) ?? [];
+}
+function expandWithSynonyms(stems) {
+  const expanded = /* @__PURE__ */ new Set();
+  for (const stem2 of stems) {
+    for (const synonym of synonymsFor(stem2)) {
+      if (!stems.has(synonym)) expanded.add(synonym);
+    }
+  }
+  return expanded;
+}
+
+// ../packages/agent-run/src/policy/tools/selectTools.ts
+var DEFAULT_TOOL_LIMIT = 64;
+var PINNED_OVERFLOW = 16;
+var NAME_HIT = LEXICAL_WEIGHTS.name;
+var NAME_SYNONYM_HIT = 7;
+var DESCRIPTION_HIT = LEXICAL_WEIGHTS.description;
+function scoreTool(toolName, description, stems, synonyms) {
+  let score2 = 0;
+  for (const token of lexicalStems(toolName)) {
+    if (stems.has(token)) score2 += NAME_HIT;
+    else if (synonyms.has(token)) score2 += NAME_SYNONYM_HIT;
+  }
+  for (const token of lexicalStems(description)) {
+    if (stems.has(token)) score2 += DESCRIPTION_HIT;
+    else if (synonyms.has(token)) score2 += Math.ceil(DESCRIPTION_HIT / 2);
+  }
+  return score2;
+}
+function selectToolsForTurn(tools, options = {}) {
+  const catalog = tools ?? [];
+  const available = catalog.length;
+  if (available === 0) return { tools: [], trimmed: false, available: 0 };
+  const limit = Math.max(1, Math.floor(options.limit ?? DEFAULT_TOOL_LIMIT));
+  if (available <= limit) {
+    return { tools: [...catalog], trimmed: false, available };
+  }
+  const byName = /* @__PURE__ */ new Map();
+  for (const tool of catalog) {
+    const name = tool.function?.name;
+    if (name && !byName.has(name)) byName.set(name, tool);
+  }
+  const query = (options.query ?? "").toLowerCase();
+  const stems = lexicalStems(query);
+  const synonyms = expandWithSynonyms(stems);
+  const wanted = [];
+  const seen = /* @__PURE__ */ new Set();
+  const push = (tool) => {
+    const name = tool?.function?.name;
+    if (!tool || !name || seen.has(name)) return;
+    seen.add(name);
+    wanted.push(tool);
+  };
+  if (options.capRequired) {
+    const required = new Set(options.required ?? []);
+    for (const tool of catalog) {
+      if (wanted.length >= limit) break;
+      if (required.has(tool.function?.name ?? "")) push(tool);
+    }
+  } else {
+    for (const name of options.required ?? []) push(byName.get(name));
+  }
+  const roomAfterRequired = Math.max(0, limit - wanted.length);
+  const rest = catalog.filter((t) => t.function?.name && !seen.has(t.function.name));
+  const ranked2 = options.rank ? options.rank(rest, options.query ?? "") : [...rest].map((tool) => ({
+    tool,
+    score: scoreTool(tool.function?.name ?? "", tool.function?.description ?? "", stems, synonyms)
+  })).filter((entry) => options.backfill !== false || entry.score > 0).sort((a, b) => b.score - a.score || (a.tool.function?.name ?? "").localeCompare(b.tool.function?.name ?? "")).map((entry) => entry.tool);
+  for (const tool of ranked2.slice(0, roomAfterRequired)) push(tool);
+  const inFixed = new Set(wanted.map((t) => t.function?.name));
+  if (options.backfill !== false) {
+    for (const tool of catalog) {
+      const name = tool.function?.name;
+      if (name && !inFixed.has(name) && wanted.length < limit) push(tool);
+    }
+  }
+  const fixed = [];
+  const fixedNames = new Set(wanted.map((t) => t.function?.name));
+  for (const tool of catalog) {
+    const name = tool.function?.name;
+    if (name && fixedNames.has(name)) fixed.push(tool);
+  }
+  const overflowCap = limit + PINNED_OVERFLOW;
+  const pinnedOut = [];
+  for (const name of options.pinned ?? []) {
+    if (pinnedOut.length >= Math.max(0, overflowCap - fixed.length)) break;
+    const tool = byName.get(name);
+    const toolName = tool?.function?.name;
+    if (!tool || !toolName || fixedNames.has(toolName)) continue;
+    if (pinnedOut.some((t) => t.function?.name === toolName)) continue;
+    pinnedOut.push(tool);
+  }
+  return { tools: [...fixed, ...pinnedOut], trimmed: true, available };
 }
 
 // ../packages/tool-output-policy/src/textCut.ts
@@ -10722,8 +12371,8 @@ function isReadFileResult(out) {
 function windowReadFile(out, opts = {}) {
   const maxChars = opts.maxChars ?? READ_FILE_RESULT_CHARS;
   const tool = opts.tool ?? "read_file";
-  const withNote = (result) => opts.advisory && opts.attachAdvisory ? opts.attachAdvisory(result, opts.advisory) : result;
-  const done = (served2, truncated) => ({ value: withNote(served2), served: served2, truncated });
+  const withNote2 = (result) => opts.advisory && opts.attachAdvisory ? opts.attachAdvisory(result, opts.advisory) : result;
+  const done = (served2, truncated) => ({ value: withNote2(served2), served: served2, truncated });
   const lines = out.content.split("\n");
   const offset = typeof out.offset === "number" && out.offset > 0 ? Math.floor(out.offset) : 1;
   const totalLines = typeof out.totalLines === "number" && out.totalLines > 0 ? Math.floor(out.totalLines) : offset + lines.length - 1;
@@ -10732,9 +12381,9 @@ function windowReadFile(out, opts = {}) {
     const lastLine = offset + kept.length - 1;
     return { ...out, content: kept.join("\n"), offset, totalLines, truncated: lastLine < totalLines || alreadyPartial, note };
   };
-  const build = (kept, note) => withNote(served(kept, note));
+  const build = (kept, note) => withNote2(served(kept, note));
   const fits = (value) => JSON.stringify(value).length <= maxChars;
-  if (fits(withNote({ ...out }))) return done({ ...out }, false);
+  if (fits(withNote2({ ...out }))) return done({ ...out }, false);
   const how = (next) => opts.alone !== void 0 ? `call ${tool} again with ONLY the path ${JSON.stringify(opts.alone)} (offset applies to a single file) and offset ${next}` : `call ${tool} again with offset ${next}`;
   const continuation = (lastLine) => `Showing lines ${offset}\u2013${lastLine} of ${totalLines}. This surface returns at most ~${maxChars.toLocaleString("en-US")} chars per read, so a large file arrives in several windows \u2014 ${how(lastLine + 1)} to continue from exactly where this one stopped. Do not re-request lines you already have.`;
   let lo = 1;
@@ -10907,6 +12556,5590 @@ ${opts.advisory}` : ""}`;
   return { content, bytes, truncated: true };
 }
 
+// ../packages/agent-run/src/contractModel.ts
+var ModelTransportError = class extends Error {
+  status;
+  /** Whether the model policy may route around this failure. A containment stop is never routable. */
+  routable;
+  constructor(message, status, opts = {}) {
+    super(message);
+    this.name = "ModelTransportError";
+    this.status = status;
+    this.routable = opts.routable ?? (status !== void 0 && status >= 400);
+  }
+};
+
+// ../packages/agent-run/src/contract.ts
+var RUN_CANCELLED_REASON = "cancelled";
+
+// ../packages/agent-run/src/surface.ts
+function isTransportFailure(err) {
+  const failure = err?.failure;
+  return err instanceof Error && !!failure && typeof failure === "object" && failure.type === "transport_failed";
+}
+
+// ../packages/agent-run/src/tapEvents.ts
+function tapEvents(sink, tap) {
+  return {
+    emit: async (event, meta) => {
+      tap.before?.(event, meta);
+      await sink?.emit(event, meta);
+      await tap.after?.(event, sink);
+    },
+    ...sink?.outcome ? { outcome: (row) => sink.outcome?.(row) } : {}
+  };
+}
+
+// ../packages/agent-run/src/policy/compaction/history.ts
+import {
+  buildWorkingTranscript,
+  foldWorkingTranscript,
+  HISTORY_TOKEN_BUDGET,
+  transcriptTokens
+} from "@seanhogg/builderforce-memory/working";
+var foldLimits = { summaryMs: 15e3 };
+function compactionSavedTokens(full, working, historyBudgetTokens = HISTORY_TOKEN_BUDGET) {
+  return Math.max(0, Math.min(transcriptTokens(full), historyBudgetTokens) - transcriptTokens(working));
+}
+function linkedAbort(parent) {
+  const own2 = new AbortController();
+  const onParent = () => own2.abort();
+  if (parent?.aborted) own2.abort();
+  else parent?.addEventListener("abort", onParent, { once: true });
+  return { signal: own2.signal, abort: () => own2.abort(), release: () => parent?.removeEventListener("abort", onParent) };
+}
+async function summaryWithin(ms, summarize, parent, onLate, onError) {
+  const link = linkedAbort(parent);
+  let timer;
+  const late = new Promise((resolve) => {
+    timer = setTimeout(() => resolve("late"), ms);
+  });
+  try {
+    const out = await Promise.race([
+      summarize(link.signal).catch((reason) => {
+        onError?.(reason);
+        return null;
+      }),
+      late
+    ]);
+    if (out !== "late") return out;
+    link.abort();
+    onLate();
+    return null;
+  } finally {
+    clearTimeout(timer);
+    link.release();
+  }
+}
+function sameRows(a, b) {
+  if (a.length !== b.length) return false;
+  return a.every((row, i) => {
+    const other = b[i];
+    return row.role === other.role && row.content === other.content && row.toolCallId === other.toolCallId && (row.toolCalls ?? []).map((call) => call.id).join() === (other.toolCalls ?? []).map((call) => call.id).join();
+  });
+}
+function createHistoryCompactionHook(ports) {
+  let timedOut = false;
+  return {
+    async compact(ctx) {
+      let folded = false;
+      const working = await buildWorkingTranscript(
+        ports.state,
+        ports.systemPrompt,
+        (messages) => {
+          if (timedOut) return Promise.resolve(null);
+          ports.activity(ctx.step);
+          const limit = foldLimits.summaryMs;
+          return summaryWithin(
+            limit,
+            (signal) => ports.summarize(messages, signal),
+            ports.signal ?? ctx.signal,
+            () => {
+              timedOut = true;
+              ports.timeout(ctx.step, limit, messages.length);
+            },
+            (reason) => ports.error(ctx.step, messages.length, reason)
+          );
+        },
+        (fold) => {
+          folded = true;
+          ports.recordFold(fold);
+        }
+      );
+      ports.savedTokens(ports.state.compactMemo ? compactionSavedTokens([{ role: "system", content: ports.systemPrompt }, ...ports.state.transcript], working) : 0);
+      const rows = foldWorkingTranscript(working).map((row) => ports.toRunMessage(row));
+      if (sameRows(ctx.messages, rows)) return void 0;
+      return { messages: rows, dropped: Math.max(0, ctx.messages.length - rows.length), ...folded ? {} : { reused: true } };
+    }
+  };
+}
+
+// ../packages/cost-levers/src/index.ts
+var COST_LEVERS = [
+  { id: "a2_run_budget", requirement: "A2", rollout: 100, summary: "Token + USD run budget, shown to the loop" },
+  { id: "a3_progress_detector", requirement: "A3", rollout: 100, summary: "Repeat-read / edit-revert / no-progress steer" },
+  { id: "b1_stable_prefix", requirement: "B1", rollout: 100, summary: "Volatile blocks after the cache breakpoint" },
+  { id: "b2_semantic_cache", requirement: "B2", rollout: 10, summary: "Scoped semantic cache on tool-free chat" },
+  { id: "b3_single_flight", requirement: "B3", rollout: 100, summary: "Coalesce identical in-flight requests" },
+  { id: "b4_agent_answer_replay", requirement: "B4", rollout: 10, summary: "Memory answer replay for agent sub-questions" },
+  { id: "c2_observation_masking", requirement: "C2", rollout: 10, summary: "Mask tool outputs older than N turns" },
+  { id: "c3_task_state", requirement: "C3", rollout: 10, summary: "Structured task state kept through compaction" },
+  { id: "c4_adaptive_context", requirement: "C4", rollout: 10, summary: "Start retrieval small, widen on low confidence" },
+  { id: "c5_cloud_repo_map", requirement: "C5", rollout: 10, summary: "Graph-ranked repo map on cloud runs" },
+  { id: "c6_rerank", requirement: "C6", rollout: 10, summary: "Cross-encoder rerank after hybrid retrieval" },
+  { id: "c7_tool_output_policy", requirement: "C7", rollout: 100, summary: "One shared tool-output budget + failure summaries" },
+  // 10 like every lever that changes what the model sees; it runs only where the local
+  // engine's health probe reports a loaded compressor, so it never triggers a download.
+  { id: "c8_token_compression", requirement: "C8", rollout: 10, summary: "LLMLingua-2 token compression of large context" },
+  { id: "c10_outline_first_reads", requirement: "B2", rollout: 100, summary: "Large-file first read returns outline + first 40 lines" },
+  { id: "c9_price_tier_budget", requirement: "C9", rollout: 100, summary: "Compaction budget under long-context price tiers" },
+  { id: "d1_verifier_cascade", requirement: "D1", rollout: 10, summary: "Weak model first, verifier, escalate one tier" },
+  { id: "d2_difficulty_router", requirement: "D2", rollout: 10, summary: "Predict weak-model failure, skip the wasted attempt" },
+  { id: "d3_routing_exploration", requirement: "D3", rollout: 100, summary: "Thompson exploration + decay in learned routing" },
+  { id: "d4_role_reasoning", requirement: "D4", rollout: 10, summary: "Reasoning effort by role" },
+  { id: "d5_output_caps", requirement: "D5", rollout: 100, summary: "Diff edits + per-role max_tokens" },
+  { id: "d6_batch_api", requirement: "D6", rollout: 100, summary: "Provider batch APIs for deferred background work" },
+  { id: "d7_deterministic_handlers", requirement: "D7", rollout: 100, summary: "Deterministic handlers + post-edit checks" },
+  { id: "d8_parallel_tool_calls", requirement: "D8", rollout: 100, summary: "Batch independent tool calls in one turn" },
+  { id: "e1_skill_ranking", requirement: "E1", rollout: 100, summary: "Inject only the most relevant approved skills" },
+  { id: "e2_specialists", requirement: "E2", rollout: 10, summary: "Admitted small specialist models for narrow jobs" },
+  // Always on (operator, 2026-10-23): recall dual-reads the paid 1536 column for rows the
+  // 1024 backfill has not reached yet, so it never had to wait for the backfill.
+  { id: "e3_free_embeddings", requirement: "E3", rollout: 100, summary: "Free Workers AI embeddings for memory" },
+  { id: "e5_verified_local_label", requirement: "E5", rollout: 100, summary: "Hybrid local label = passed the verifier" }
+];
+var BY_ID = new Map(COST_LEVERS.map((l) => [l.id, l]));
+function costLeverSpec(id) {
+  const spec2 = BY_ID.get(id);
+  if (!spec2) throw new Error(`unknown cost lever: ${id}`);
+  return spec2;
+}
+function costLeverEnvKey(id) {
+  return `COST_LEVER_${id.toUpperCase()}`;
+}
+function costLeverBucket(id, tenantId) {
+  const s = `${id}:${tenantId}`;
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h % 100;
+}
+function readEnv(env, key) {
+  const v = env?.[key];
+  return v === void 0 || v === null ? void 0 : String(v).trim().toLowerCase();
+}
+function costLeverRollout(env, id) {
+  const raw = readEnv(env, costLeverEnvKey(id));
+  if (raw !== void 0 && raw !== "") {
+    if (raw === "on" || raw === "1" || raw === "true") return 100;
+    if (raw === "off" || raw === "0" || raw === "false") return 0;
+    const n = Number(raw);
+    if (Number.isFinite(n)) return Math.max(0, Math.min(100, Math.round(n)));
+  }
+  const all = readEnv(env, "COST_LEVERS_ALL");
+  if (all === "off" || all === "0" || all === "false") return 0;
+  return costLeverSpec(id).rollout;
+}
+function isCostLeverOn(env, id, tenantId) {
+  const rollout = costLeverRollout(env, id);
+  if (rollout >= 100) return true;
+  if (rollout <= 0) return false;
+  if (tenantId === null || tenantId === void 0 || tenantId === "") return false;
+  return costLeverBucket(id, tenantId) < rollout;
+}
+
+// ../packages/agent-run/src/policy/compaction/pack.ts
+import {
+  packHandoff,
+  handoffBudget,
+  defaultEstimateTokens,
+  messageTokens,
+  tokensOf as tokensOf2,
+  isVolatileTail,
+  isVolatileContent,
+  volatileTail,
+  VOLATILE_TAIL_TAG
+} from "@seanhogg/builderforce-memory/handoff";
+
+// ../packages/agent-run/src/policy/compaction/compact.ts
+var C9_TIER_LEVER = "c9_price_tier_budget";
+function taskRowIndex(rows) {
+  const marked = rows.findIndex((m) => m.task === true);
+  return marked >= 0 ? marked : rows.findIndex((m) => m.role === "user" && m.custom !== true);
+}
+var CLOUD_COMPACT_DEFAULTS = {
+  maxTokens: 4e4,
+  reserveOutputTokens: DEFAULT_HANDOFF_RESERVE_TOKENS,
+  timeoutMs: 3e4
+};
+var estimateTokens = defaultEstimateTokens;
+function toolsTokensOf(tools) {
+  if (tools == null) return 0;
+  if (Array.isArray(tools) && tools.length === 0) return 0;
+  return estimateTokens(JSON.stringify(tools) ?? "");
+}
+function messagesTokens(messages) {
+  return tokensOf2(messages, estimateTokens);
+}
+var elisionNote = (chars) => ` \u2026[${chars} chars elided to fit the context budget]`;
+var ELIDE_CAPS = [4e3, 1e3, 200];
+function elideToFit(messages, budget) {
+  const out = [...messages];
+  let latestUser = -1;
+  for (let i = out.length - 1; i >= 0; i--) if (out[i]?.role === "user") {
+    latestUser = i;
+    break;
+  }
+  const candidates = (toolsOnly) => out.map((m, i) => ({ m, i })).filter(({ m, i }) => i !== latestUser && m.role !== "system" && typeof m.content === "string" && (toolsOnly ? m.role === "tool" : m.role !== "tool")).sort((a, b) => b.m.content.length - a.m.content.length || a.i - b.i).map(({ i }) => i);
+  let total = messagesTokens(out);
+  for (const toolsOnly of [true, false]) {
+    for (const cap2 of ELIDE_CAPS) {
+      for (const i of candidates(toolsOnly)) {
+        if (total <= budget) return out;
+        const msg = out[i];
+        const content = msg.content;
+        if (content.length <= cap2) continue;
+        const next = { ...msg, content: content.slice(0, cap2) + elisionNote(content.length - cap2) };
+        total += messagesTokens([next]) - messagesTokens([msg]);
+        out[i] = next;
+      }
+    }
+  }
+  return out;
+}
+var OBSERVATION_MASK_TURNS = 6;
+var MASK_PREFIX = "[masked tool output";
+var MIN_MASK_CHARS = 400;
+function maskOldObservations(messages, turns = OBSERVATION_MASK_TURNS) {
+  const assistants = messages.reduce((n, m) => n + (m.role === "assistant" ? 1 : 0), 0);
+  const boundary2 = Math.floor(assistants / turns) * turns - turns;
+  if (turns <= 0 || boundary2 <= 0) return { messages, masked: 0 };
+  const calls = /* @__PURE__ */ new Map();
+  let ordinal = 0;
+  let masked = 0;
+  const out = messages.map((m) => {
+    if (m.role === "assistant") {
+      ordinal += 1;
+      for (const tc of Array.isArray(m.tool_calls) ? m.tool_calls : []) {
+        if (tc.id) calls.set(tc.id, { name: tc.function?.name ?? "tool", args: tc.function?.arguments ?? "" });
+      }
+      return m;
+    }
+    if (m.role !== "tool" || ordinal > boundary2 || typeof m.content !== "string") return m;
+    const content = m.content;
+    if (content.length < MIN_MASK_CHARS || content.startsWith(MASK_PREFIX)) return m;
+    const call = calls.get(typeof m.tool_call_id === "string" ? m.tool_call_id : "");
+    const args = (call?.args ?? "").replace(/\s+/g, " ").slice(0, 120);
+    masked += 1;
+    return { ...m, content: `${MASK_PREFIX}: ${call?.name ?? "tool"}(${args}) \u2014 ${content.length} chars; re-run the tool to see it again]` };
+  });
+  return masked > 0 ? { messages: out, masked } : { messages, masked: 0 };
+}
+function renderForSummary(middle) {
+  const PER_MSG = 1500;
+  const TOTAL = 3e4;
+  const parts = [];
+  let total = 0;
+  for (const m of middle) {
+    const role = typeof m.role === "string" ? m.role : "unknown";
+    let body = typeof m.content === "string" ? m.content : JSON.stringify(m.content ?? "");
+    if (Array.isArray(m.tool_calls)) body += ` [called: ${m.tool_calls.map((t) => t.function?.name ?? "?").join(", ")}]`;
+    const line = `${role}: ${body.slice(0, PER_MSG)}`;
+    if (total + line.length > TOTAL) break;
+    parts.push(line);
+    total += line.length;
+  }
+  return parts.join("\n");
+}
+function compactionBudget(opts) {
+  const tierCap = opts.targetModel && opts.env !== void 0 && isCostLeverOn(opts.env, "c9_price_tier_budget", opts.tenantId);
+  const boundary2 = tierCap && opts.targetModel ? priceTierBoundary(opts.targetModel) : opts.priceTierBoundary;
+  return handoffTokenBudget({
+    costCapTokens: opts.maxTokens,
+    contextWindow: opts.contextWindow ?? (opts.targetModel ? opts.window?.(opts.targetModel) : void 0),
+    reserveOutputTokens: opts.reserveOutputTokens,
+    ...boundary2 !== void 0 ? { priceTierBoundary: boundary2 } : {}
+  }) ?? opts.maxTokens;
+}
+async function compactMessages(messages, opts = CLOUD_COMPACT_DEFAULTS, summarize) {
+  const toolsTokens = toolsTokensOf(opts.tools);
+  const beforeTokens = messagesTokens(messages) + toolsTokens;
+  const budget = compactionBudget(opts);
+  const untouched = () => ({ messages: [...messages], compacted: false, summarized: false, beforeTokens, afterTokens: beforeTokens, droppedMessages: 0 });
+  const mask = opts.maskObservationsAfterTurns ? maskOldObservations(messages, opts.maskObservationsAfterTurns) : { messages, masked: 0 };
+  const source = mask.messages;
+  const maskedTokens = mask.masked > 0 ? messagesTokens(source) + toolsTokens : beforeTokens;
+  if (source.length === 0 || maskedTokens <= budget) {
+    return mask.masked > 0 ? { messages: [...source], compacted: true, summarized: false, beforeTokens, afterTokens: maskedTokens, droppedMessages: 0, maskedObservations: mask.masked } : untouched();
+  }
+  const briefIdx = opts.pinTaskBrief ? taskRowIndex(source) : -1;
+  const brief = briefIdx >= 0 ? source[briefIdx] : void 0;
+  const pack = await packHandoff({
+    messages: source,
+    ...brief ? { pinned: (_m, i) => i === briefIdx } : {},
+    targetContextTokens: budget,
+    reserveOutputTokens: 0,
+    toolsTokens,
+    estimateTokens,
+    ...summarize ? {
+      summarize: async (dropped) => {
+        const summary = await summarize(renderForSummary(dropped), { tenantId: opts.tenantId }).catch(() => null);
+        return summary && summary.trim() ? `[Compressed memory of ${dropped.length} earlier step(s) \u2014 the task and recent steps are retained verbatim]
+${summary.trim()}` : "";
+      }
+    } : {},
+    ...opts.recall ? { recall: opts.recall } : {},
+    ...opts.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}
+  });
+  const packed = pack.dropped > 0 ? pack.messages : [...source];
+  const messageBudget = Math.max(0, budget - toolsTokens);
+  const out = !pack.fits || messagesTokens(packed) > messageBudget ? elideToFit(packed, messageBudget) : packed;
+  const elided = out.some((m, i) => m !== packed[i]);
+  if (pack.dropped === 0 && !elided && mask.masked === 0) return untouched();
+  return {
+    messages: out,
+    compacted: true,
+    summarized: pack.summarized && pack.dropped > 0,
+    beforeTokens,
+    afterTokens: messagesTokens(out) + toolsTokens,
+    droppedMessages: pack.dropped,
+    ...mask.masked > 0 ? { maskedObservations: mask.masked } : {}
+  };
+}
+var COMPACTION_SUMMARY_SYSTEM = "You compress an in-progress coding agent transcript into a concise memory. Preserve, as terse bullet points: files read/edited and the key facts learned from them, decisions made, commands/checks run and their outcomes, and anything still TODO. Drop chatter and raw file dumps. Output ONLY the memory, no preamble.";
+function compactionSummaryRequest(conversationText) {
+  return {
+    messages: [
+      { role: "system", content: COMPACTION_SUMMARY_SYSTEM },
+      { role: "user", content: conversationText }
+    ],
+    max_tokens: 700
+  };
+}
+
+// ../packages/agent-run/src/policy/stall/ladder.ts
+function spentOf(state) {
+  return { ...state.stall?.rungs ?? {} };
+}
+function save(state, patch) {
+  const total = (state.stall?.recoveriesTotal ?? 0) + (patch.spent ?? 0);
+  state.stall = {
+    ...state.stall ?? { recoveriesUsed: 0 },
+    ...patch.rungs ? { rungs: patch.rungs } : {},
+    ...patch.said ? { said: patch.said } : {},
+    ...total > 0 ? { recoveriesTotal: total } : {}
+  };
+}
+function resetRungs(state, keep = []) {
+  const spent = state.stall?.rungs;
+  if (!spent || Object.keys(spent).length === 0) return;
+  save(state, { rungs: Object.fromEntries(Object.entries(spent).filter(([id]) => keep.includes(id))) });
+}
+function handOffToProven(ctx, ledger, failed3, unavailable2 = false) {
+  const next = reduceRunPolicy(ctx.state.model, { type: "stalled", ...failed3 ? { resolvedModel: failed3 } : {}, ...unavailable2 ? { primaryUnavailable: true } : {} });
+  ctx.state.model = next;
+  if (next.outcome.kind !== "failed_over") return void 0;
+  resetRungs(ctx.state, ledger?.sticky);
+  ledger?.handedOff?.(failed3, next.outcome.to);
+  return next.outcome.to;
+}
+function restatement(ctx, rung, attempt, nudgeRole, quoteEmpty) {
+  const rows = [];
+  const said = ctx.content?.trim() ? ctx.content : "";
+  if (rung.quote && (said || quoteEmpty)) rows.push({ role: "assistant", content: said || (ctx.content ?? "") });
+  rows.push({ role: nudgeRole, content: rung.restate[attempt - 1] ?? "" });
+  const notes = ctx.state.stall?.said ?? [];
+  if (rung.once && !notes.includes(rung.id)) {
+    rows.push({ role: "system", content: rung.once });
+    save(ctx.state, { said: [...notes, rung.id] });
+  }
+  return rows;
+}
+function deliveryTurn(ctx) {
+  return {
+    content: ctx.judged ?? ctx.content ?? "",
+    ...ctx.served?.interruption ? { interruption: ctx.served.interruption } : {},
+    ...ctx.served?.model ? { model: ctx.served.model } : {}
+  };
+}
+function walkLadder(ctx, ledger) {
+  const rungs = ledger.rungs(deliveryTurn(ctx));
+  if (isPromise(rungs)) throw new Error("This ledger answers its rungs with a promise: walk it with walkLadderAsync.");
+  return walkRungs(ctx, ledger, rungs);
+}
+async function walkLadderAsync(ctx, ledger) {
+  return walkRungs(ctx, ledger, await ledger.rungs(deliveryTurn(ctx)));
+}
+function isPromise(value) {
+  return typeof value?.then === "function";
+}
+function walkRungs(ctx, ledger, rungs) {
+  for (const rung of rungs) {
+    rung.reached?.();
+    if (!rung.applies) continue;
+    const counters = spentOf(ctx.state);
+    const used = counters[rung.id] ?? 0;
+    const max = rung.restate.length;
+    const restate = () => {
+      counters[rung.id] = used + 1;
+      save(ctx.state, { rungs: counters, spent: 1 });
+      rung.onRestate?.(used + 1);
+      if (rung.entersVerify && !ctx.policy.skipVerifyStage && ctx.state.model.phase !== "verify") ctx.state.model = reduceRunPolicy(ctx.state.model, { type: "verify_started" });
+      return { action: "steer", rows: restatement(ctx, rung, used + 1, ledger.stall?.nudgeAs ?? "system", ledger.stall?.quoteEmpty === true) };
+    };
+    if (used < Math.min(rung.free ?? 1, max)) return restate();
+    if (rung.handoff) {
+      const to = handOffToProven(ctx, ledger, ctx.served?.model);
+      if (to) {
+        save(ctx.state, { spent: 1 });
+        return { action: "escalate", rows: [{ role: "system", content: rung.handoff(to) }] };
+      }
+    }
+    if (used < max) return restate();
+    if (rung.spent === "fall") continue;
+    if (rung.spent === "fail") return { action: "fail", note: rung.id };
+    return { action: "settle", note: rung.spent.settle };
+  }
+  return void 0;
+}
+
+// ../packages/agent-run/src/policy/model/failure.ts
+function recoverProviderFailure(ctx, failure, failedModel, message) {
+  const ledger = ctx.ports.delivery;
+  const wording = ledger?.providerFailure;
+  const to = handOffToProven(ctx, ledger, failedModel, true);
+  if (to) return { kind: "retry", ...wording?.handoff ? { note: wording.handoff(to) } : {} };
+  const next = reduceRunPolicy(ctx.state.model, failure);
+  ctx.state.model = next;
+  if (next.outcome.kind === "retry_turn") {
+    wording?.rerouted?.({ ...failedModel ? { model: failedModel } : {}, message, step: ctx.step, outcome: next.outcome });
+    return { kind: "retry", ...wording?.reroute ? { note: wording.reroute } : {} };
+  }
+  wording?.abandoned?.({ ...failedModel ? { model: failedModel } : {}, message });
+  return { kind: "fail" };
+}
+
+// ../packages/agent-run/src/policy/compaction/reserve.ts
+var compactReserveTokens = handoffReserveTokens;
+var DEFAULT_PI_COMPACTION_RESERVE_TOKENS_FLOOR = 2e4;
+function ensureCompactionReserveTokens(params) {
+  const minReserveTokens = params.minReserveTokens ?? DEFAULT_PI_COMPACTION_RESERVE_TOKENS_FLOOR;
+  const current = params.settingsManager.getCompactionReserveTokens();
+  if (current >= minReserveTokens) {
+    return { didOverride: false, reserveTokens: current };
+  }
+  params.settingsManager.applyOverrides({
+    compaction: { reserveTokens: minReserveTokens }
+  });
+  return { didOverride: true, reserveTokens: minReserveTokens };
+}
+function resolveCompactionReserveTokensFloor(cfg) {
+  const raw = cfg?.agents?.defaults?.compaction?.reserveTokensFloor;
+  if (typeof raw === "number" && Number.isFinite(raw) && raw >= 0) {
+    return Math.floor(raw);
+  }
+  return DEFAULT_PI_COMPACTION_RESERVE_TOKENS_FLOOR;
+}
+function compactionReserve(maxTokens, cfg) {
+  let reserveTokens = compactReserveTokens(maxTokens);
+  return ensureCompactionReserveTokens({
+    settingsManager: {
+      getCompactionReserveTokens: () => reserveTokens,
+      applyOverrides: (o) => {
+        reserveTokens = o.compaction.reserveTokens;
+      }
+    },
+    minReserveTokens: resolveCompactionReserveTokensFloor(cfg)
+  }).reserveTokens;
+}
+function servingModel(ctx) {
+  return ctx.state.model?.model ?? ctx.policy.pinnedModel ?? "";
+}
+function replyReserve(ctx) {
+  if (!ctx.policy.modelHandoff) return ctx.policy.budgets.reserveTokens ?? compactionReserve(void 0);
+  const window = ctx.ports.model.window?.(servingModel(ctx));
+  const floor = DEFAULT_PI_COMPACTION_RESERVE_TOKENS_FLOOR;
+  return window && window > 0 ? Math.max(1, Math.min(floor, Math.floor(window / 4))) : floor;
+}
+function replyAsk(ctx) {
+  const reserve = replyReserve(ctx);
+  return reserve < DEFAULT_PI_COMPACTION_RESERVE_TOKENS_FLOOR ? reserve : void 0;
+}
+
+// ../packages/agent-run/src/policy/model/downgradeRule.ts
+function planModelWarning(model, book2 = snapshotPriceBook()) {
+  if (!model || model === "default") return null;
+  const price = listPriceOf(book2, model);
+  const tier2 = price ? resolveModelTier({ price }) : void 0;
+  return tier2 && isAgenticTier(tier2) === false ? { model, tier: tier2 } : null;
+}
+function downgradeDecision(input) {
+  const { asked, served } = input;
+  if (!served || served === "default") return null;
+  if (asked !== void 0) return served === asked ? null : { kind: "failover" };
+  const byo = input.byo.trim();
+  const flash = !byo && input.planPhase ? planModelWarning(served, input.book) : null;
+  if (!byo && !flash) return null;
+  if (input.seen) return null;
+  return byo ? { kind: "byo" } : { kind: "plan_tier", tier: flash.tier };
+}
+
+// ../packages/agent-run/src/policy/model/preflight.ts
+function classifyPreflight(input) {
+  const notices = [];
+  let refreshExpired = false;
+  if (input.byoSelected) {
+    for (const [provider, reason] of Object.entries(input.unresolvedReasons)) {
+      if (!reason) continue;
+      if (reason === "expired") {
+        if (input.unresolvedAfterRefresh) {
+          notices.push(`${provider}: credential ${input.unresolvedAfterRefresh} \u2014 reconnect it in Settings \u25B8 Integrations.`);
+        } else {
+          refreshExpired = true;
+        }
+      } else {
+        notices.push(`${provider}: credential ${reason} \u2014 reconnect it in Settings \u25B8 Integrations.`);
+      }
+    }
+  }
+  if (input.planModelAgentic === false) {
+    notices.push("plan phase would land on a Flash-class model \u2014 routing around it for the run's quality.");
+  }
+  return { notices, refreshExpired };
+}
+function reasonsOf(entries) {
+  const out = {};
+  for (const entry of entries) {
+    const [provider = "", reason = ""] = entry.split(":").map((part) => part.trim());
+    if (provider) out[provider] = reason || "not_connected";
+  }
+  return out;
+}
+function modelPreflightEvent(step, result, planModel) {
+  const plan = planModelWarning(planModel);
+  const { notices } = classifyPreflight({
+    byoSelected: true,
+    unresolvedReasons: reasonsOf(result?.byoUnresolved ?? []),
+    ...plan ? { planModelAgentic: false } : {},
+    unresolvedAfterRefresh: "expired"
+  });
+  if (notices.length > 0 && result?.fallback && (result.byoUnresolved.length ?? 0) > 0) {
+    notices.push(`This run will use ${result.fallback} instead.`);
+  }
+  const status = notices.length > 0 ? "degraded" : (result?.refreshed?.length ?? 0) > 0 ? "refreshed" : "ok";
+  return { kind: "model.preflight", step, status, notices };
+}
+function preflightVerdict(event, result) {
+  if (event.status !== "degraded") return event.status;
+  const reasons = (result?.byoUnresolved ?? []).join(",");
+  return `degraded:${reasons || "plan_flash"}`;
+}
+function recordModelPreflight(ctx, recorded) {
+  const result = { byoUnresolved: [...recorded.byoUnresolved] };
+  const event = { ...modelPreflightEvent(ctx.step, result, recorded.planModel), notices: [] };
+  ctx.state.preflight = preflightVerdict(event, result);
+  return event;
+}
+async function runModelPreflight(ctx) {
+  const model = ctx.state.model.model ?? ctx.policy.pinnedModel;
+  let result;
+  try {
+    result = await ctx.ports.model.preflight?.(model);
+  } catch {
+    result = void 0;
+  }
+  const event = modelPreflightEvent(ctx.step, result, ctx.state.writtenPaths.length === 0 ? model : void 0);
+  ctx.state.preflight = preflightVerdict(event, result);
+  return event;
+}
+function recordWeaker(ctx, served) {
+  const recorded = ctx.state.degradedBy ?? [];
+  if (!recorded.includes(served)) ctx.state.degradedBy = [...recorded, served];
+}
+function modelDowngrade(ctx, requested, served, book2 = snapshotPriceBook()) {
+  const asked = requested && requested !== "default" ? requested : void 0;
+  const degraded = ctx.state.preflight?.startsWith("degraded:") ? ctx.state.preflight.slice("degraded:".length) : "";
+  const decision = downgradeDecision({
+    asked,
+    served,
+    byo: degraded && degraded !== "plan_flash" ? degraded : "",
+    planPhase: ctx.state.writtenPaths.length === 0,
+    seen: !!served && (ctx.state.downgrades ?? []).includes(served)
+  });
+  if (!decision || !served) return void 0;
+  if (decision.kind === "failover") {
+    if (isWeakerModel(asked, served, book2)) recordWeaker(ctx, served);
+    return { kind: "llm.model_downgrade", step: ctx.step, requestedModel: asked, model: served, reason: "failover" };
+  }
+  ctx.state.downgrades = [...ctx.state.downgrades ?? [], served];
+  return { kind: "llm.model_downgrade", step: ctx.step, requestedModel: "default", model: served, reason: decision.kind === "byo" ? `byo_unresolved:${degraded}` : `plan_tier:${decision.tier}` };
+}
+
+// ../packages/agent-run/src/policy/model/index.ts
+var RUN_PHASES = /* @__PURE__ */ new Set(["plan", "code", "verify"]);
+function policyRole(delegatedRole) {
+  const role = typeof delegatedRole === "string" ? delegatedRole.trim() : "";
+  if (role === "verify") return { startPhase: "verify", fixedRole: "verify" };
+  if (RUN_PHASES.has(role)) return { startPhase: role };
+  if (isModelRole(role)) return { startPhase: "code", fixedRole: role };
+  return { startPhase: "code" };
+}
+var DECLINING_MODEL_PREFIXES = ["evermind/"];
+function startOptions(pick, delegatedRole, phaseModels) {
+  const reviewModel = reviewPhaseModel(phaseModels) ?? null;
+  return {
+    pinnedModel: pick.model,
+    strictPin: pick.strict,
+    pinReleasable: true,
+    lockAfterFirstSuccess: true,
+    decliningModelPrefixes: DECLINING_MODEL_PREFIXES,
+    ...policyRole(delegatedRole),
+    ...phaseModels ? { phaseModels } : {},
+    reviewModel
+  };
+}
+function initialModelRunState(input) {
+  return {
+    policy: initialRunPolicy({
+      ...startOptions(input.pick, input.delegatedRole, input.phaseModels),
+      ...input.startPhase ? { startPhase: input.startPhase } : {}
+    }),
+    stallRecoveries: input.stallRecoveries ?? 0,
+    ...input.forceToolChoice ? { forceToolChoice: input.forceToolChoice } : {},
+    preflightNotices: [...input.preflightNotices ?? []]
+  };
+}
+function requestForTurn(state, hasTools) {
+  return { ...turnRouting(state.policy, hasTools), ...state.forceToolChoice ? { toolChoice: state.forceToolChoice } : {} };
+}
+function routeAroundFailure(state, request, failure) {
+  const policy = reduceRunPolicy(state.policy, {
+    type: "transport_failed",
+    kind: failure.kind,
+    ...failure.status !== void 0 ? { status: failure.status } : {},
+    ...request.model ? { model: request.model } : {}
+  });
+  const next = { ...state, policy };
+  return policy.outcome.kind === "retry_turn" ? { state: next, retry: requestForTurn(next, true) } : { state: next, retry: null };
+}
+function retryOutcome(state) {
+  return state.policy.outcome.kind === "retry_turn" ? state.policy.outcome : null;
+}
+function recordSuccess(state, served) {
+  const policy = reduceRunPolicy(state.policy, {
+    type: "turn_succeeded",
+    ...served.model ? { model: served.model } : {},
+    ...served.acted ? { acted: true } : {},
+    ...served.durationMs !== void 0 ? { durationMs: served.durationMs } : {}
+  });
+  return { ...state, policy, forceToolChoice: void 0 };
+}
+function turnRouting(state, hasTools) {
+  return nextTurn(state, { hasTools });
+}
+var modelHook = {
+  resolve(ctx) {
+    const routing = turnRouting(ctx.state.model, ctx.tools.length > 0 || ctx.finalTurn === true);
+    const maxTokens = ctx.policy.modelHandoff ? replyAsk(ctx) : cappedMaxTokens(routing.role, void 0);
+    return {
+      role: routing.role,
+      strict: routing.strict,
+      excludeModels: routing.excludeModels,
+      ...routing.model ? { model: routing.model } : {},
+      ...maxTokens !== void 0 ? { maxTokens } : {}
+    };
+  },
+  turnFields(ctx) {
+    const ask = nextTurn(ctx.state.model, { hasTools: ctx.tools.length > 0 || ctx.finalTurn === true });
+    return {
+      role: ask.role,
+      phase: ctx.state.model.phase,
+      ...ask.strict ? { strict: true } : {},
+      ...ask.excludeModels.length > 0 ? { excludeModels: ask.excludeModels } : {},
+      // A stall recovery's one-shot forced tool call, spent by the next request.
+      ...ctx.state.forceToolChoice ? { toolChoice: ctx.state.forceToolChoice } : {}
+    };
+  },
+  preflight: runModelPreflight,
+  downgrade: modelDowngrade,
+  recoverFailure: recoverProviderFailure
+};
+function createModelHook(options = {}) {
+  const recorded = options.recordedPreflight;
+  return recorded ? { ...modelHook, preflight: (ctx) => recordModelPreflight(ctx, recorded) } : modelHook;
+}
+
+// ../packages/agent-run/src/runContext.ts
+function policyContext(input, state, view, step, turn) {
+  return {
+    task: input.task,
+    policy: input.policy,
+    state,
+    ports: input.ports,
+    step,
+    turn,
+    messages: view.messages,
+    tools: view.tools,
+    signal: input.signal
+  };
+}
+function applyCompaction(state, view, result, step) {
+  view.messages.splice(0, view.messages.length, ...result.messages);
+  state.messages = view.messages;
+  if (result.noteOnly) return;
+  if (result.reused) return;
+  state.compaction = {
+    compactions: state.compaction.compactions + 1,
+    lastCompactedStep: step,
+    ...result.reserveTokens !== void 0 ? { reserveTokens: result.reserveTokens } : {},
+    droppedMessages: result.dropped
+  };
+}
+function currentView(transcript, offered) {
+  return { messages: transcript, tools: offered };
+}
+function toPolicyCall(call) {
+  return { id: call.id, name: call.name, args: call.args };
+}
+function appendRows(input, transcript, ...rows) {
+  for (const row of rows) {
+    transcript.push(row);
+    announceRow(input, row);
+  }
+}
+function announceRow(input, row) {
+  try {
+    input.ports.store.appended?.(row);
+  } catch {
+  }
+  return row;
+}
+async function emit(events, event, meta) {
+  try {
+    await events.emit(event, meta);
+  } catch {
+  }
+}
+
+// ../packages/agent-run/src/turnTail.ts
+var measured = /* @__PURE__ */ new WeakMap();
+function measureTurnTail(state, request) {
+  const last = request.at(-1);
+  measured.set(state, last !== void 0 && isVolatileTail(last) ? messageTokens(last, defaultEstimateTokens) : 0);
+  return request;
+}
+function turnTailTokens(state) {
+  return measured.get(state) ?? 0;
+}
+
+// ../packages/agent-run/src/policy/compaction/handoff.ts
+import { defaultEstimateTokens as defaultEstimateTokens2, elisionMarker, handoffLine, isVolatileTail as isVolatileTail2, messageTokens as messageTokens2, packHandoff as packHandoff2, tokensOf as tokensOf3 } from "@seanhogg/builderforce-memory/handoff";
+function packTargetTokens(contextWindow, boundary2, reserve) {
+  const budget = handoffTokenBudget({ contextWindow, reserveOutputTokens: reserve, priceTierBoundary: boundary2 });
+  return budget === void 0 ? contextWindow : Math.min(contextWindow, budget + reserve);
+}
+async function packForModelHandoff(input, access) {
+  const back = /* @__PURE__ */ new Map();
+  const system = { role: "system", content: input.systemPrompt };
+  const mapped = input.messages.map((row) => {
+    const view = access.toHandoff(row);
+    back.set(view, row);
+    return view;
+  });
+  const all = [system, ...mapped];
+  const beforeTokens = tokensOf3(all, defaultEstimateTokens2);
+  const reserve = handoffReserveTokens(input.maxTokens);
+  const pack = await packHandoff2({
+    messages: all,
+    targetContextTokens: packTargetTokens(input.contextWindow, input.priceTierBoundary, reserve),
+    reserveOutputTokens: reserve,
+    toolsTokens: toolSchemaTokens(input.tools, defaultEstimateTokens2) + (input.extraTokens ?? 0),
+    from: input.from,
+    to: input.to,
+    ...input.pinned ? { pinned: (view) => {
+      const row = back.get(view);
+      return row !== void 0 && input.pinned(row);
+    } } : {}
+  });
+  if (pack.dropped === 0) return { messages: [...input.messages], dropped: 0, noted: false, fits: pack.fits, beforeTokens, afterTokens: beforeTokens };
+  const messages = [];
+  let noted = false;
+  for (const view of pack.messages) {
+    if (view === system) continue;
+    const original = back.get(view);
+    if (original) {
+      messages.push(original);
+      continue;
+    }
+    messages.push(access.summary(typeof view.content === "string" ? view.content : JSON.stringify(view.content), view.role));
+    noted = true;
+  }
+  return { messages, dropped: pack.dropped, noted, fits: pack.fits, beforeTokens, afterTokens: pack.estimatedTokens };
+}
+var WIDEST_DROPPED = 99999;
+function noteText(from, to, dropped) {
+  const line = handoffLine(from, to);
+  return line ? `${line}
+${dropped > 0 ? elisionMarker(dropped) : "Nothing was dropped."}` : "";
+}
+function handoffNoteTokens(from, to) {
+  const text = noteText(from, to, WIDEST_DROPPED);
+  return text ? messageTokens2({ role: "user", content: text }, defaultEstimateTokens2) : 0;
+}
+function withHandoffNote(rows, from, to, dropped, access) {
+  const text = noteText(from, to, dropped);
+  if (!text) return [...rows];
+  const views = rows.map((row) => access.toHandoff(row));
+  let at2 = -1;
+  for (let i = views.length - 1; i >= 0; i -= 1) {
+    if (views[i].role === "user" && !isVolatileTail2(views[i])) {
+      at2 = i;
+      break;
+    }
+  }
+  if (at2 < 0) return [...rows, access.summary(text, "user")];
+  const role = at2 === 0 || views[at2 - 1].role === "assistant" ? "user" : "assistant";
+  return [...rows.slice(0, at2), access.summary(text, role), ...rows.slice(at2)];
+}
+
+// ../packages/agent-run/src/policy/compaction/rows.ts
+function toPackRow(m) {
+  const row = { role: m.role, content: m.content };
+  if (m.task) row.task = true;
+  if (m.parts && m.parts.length > 0) row.parts = m.parts;
+  if (m.meta) row.meta = m.meta;
+  if (m.toolCalls && m.toolCalls.length > 0) {
+    row.tool_calls = m.toolCalls.map((tc) => ({
+      id: tc.id,
+      type: "function",
+      function: { name: tc.name, arguments: tc.arguments }
+    }));
+  }
+  if (m.toolCallId != null) row.tool_call_id = m.toolCallId;
+  return row;
+}
+function toRunRow(m) {
+  const src = m;
+  const toolCalls = Array.isArray(src.tool_calls) ? src.tool_calls.map((tc) => ({
+    id: tc.id ?? "",
+    name: tc.function?.name ?? "",
+    arguments: tc.function?.arguments ?? ""
+  })) : void 0;
+  const out = {
+    role: src.role,
+    content: typeof src.content === "string" ? src.content : JSON.stringify(src.content ?? "")
+  };
+  if (toolCalls && toolCalls.length > 0) out.toolCalls = toolCalls;
+  if (src.tool_call_id != null) out.toolCallId = src.tool_call_id;
+  if (src.task === true) out.task = true;
+  if (Array.isArray(src.parts) && src.parts.length > 0) out.parts = src.parts;
+  if (src.meta) out.meta = src.meta;
+  return out;
+}
+var IMAGE_CHAR_ESTIMATE = 8e3;
+var IMAGE_STAND_IN = "#".repeat(IMAGE_CHAR_ESTIMATE);
+function toHandoffView(m) {
+  const view = toPackRow(m);
+  const role = m.custom ? "assistant" : view.role;
+  const blocks = (m.parts ?? []).filter((p) => p.type === "thinking" || p.type === "image").map((p) => p.type === "image" ? { type: "image", estimate: IMAGE_STAND_IN } : p);
+  if (blocks.length === 0) return role === view.role ? view : { ...view, role };
+  return { ...view, role, content: [...m.content ? [{ type: "text", text: m.content }] : [], ...blocks] };
+}
+function runRowHandoff() {
+  return { toHandoff: toHandoffView, summary: (text, role) => ({ role, content: text }) };
+}
+
+// ../packages/agent-run/src/policy/compaction/modelHandOff.ts
+async function handOff(ctx) {
+  const to = servingModel(ctx);
+  const from = ctx.state.preparedFor;
+  ctx.state.preparedFor = to || void 0;
+  if (!from || !to || from === to) return void 0;
+  const lead = ctx.messages.findIndex((m) => m.role !== "system");
+  const split = lead < 0 ? ctx.messages.length : lead;
+  const system = ctx.messages.slice(0, split);
+  const access = runRowHandoff();
+  const contextWindow = ctx.ports.model.window?.(to);
+  if (!contextWindow) return { messages: [...system, ...withHandoffNote(ctx.messages.slice(split), from, to, 0, access)], dropped: 0, noteOnly: true, summarized: false };
+  const reserve = replyReserve(ctx);
+  const task = ctx.messages[taskRowIndex(ctx.messages)];
+  const packed = await packForModelHandoff(
+    {
+      messages: ctx.messages.slice(split),
+      systemPrompt: system.map((m) => m.content).join("\n\n"),
+      tools: ctx.tools.map((t) => ({ name: t.function.name, description: t.function.description, parameters: t.function.parameters })),
+      from,
+      to,
+      contextWindow,
+      maxTokens: reserve,
+      // The request also carries its volatile tail (about what the last one did) and the note.
+      extraTokens: turnTailTokens(ctx.state) + handoffNoteTokens(from, to),
+      pinned: (row) => row === task || row.person === true,
+      ...ctx.policy.levers.includes(C9_TIER_LEVER) ? { priceTierBoundary: priceTierBoundary(to) } : {}
+    },
+    access
+  );
+  if (!packed.fits) {
+    await emit(ctx.ports.events, {
+      kind: "model.preflight",
+      step: ctx.step,
+      status: "degraded",
+      notices: [`The context cannot be made to fit ${to} (${contextWindow} tokens): the system prompt and the request that must stay whole already need about ${packed.afterTokens}.`]
+    });
+  }
+  return {
+    messages: [...system, ...packed.noted ? packed.messages : withHandoffNote(packed.messages, from, to, packed.dropped, access)],
+    dropped: packed.dropped,
+    ...packed.dropped === 0 ? { noteOnly: true } : {},
+    reserveTokens: reserve,
+    beforeTokens: packed.beforeTokens,
+    afterTokens: packed.afterTokens,
+    summarized: false
+  };
+}
+
+// ../packages/agent-run/src/policy/compaction/index.ts
+var C2_MASK_LEVER = "c2_observation_masking";
+var RECALL_LIMIT = 8;
+function leverOn(ctx, id) {
+  return ctx.policy.levers.includes(id);
+}
+function transportSummarizer(ctx) {
+  return async (conversationText) => {
+    const request = compactionSummaryRequest(conversationText);
+    try {
+      const model = ctx.ports.model;
+      const routing = ctx.state.model ? turnRouting(ctx.state.model, false) : void 0;
+      const asked = {
+        messages: request.messages,
+        maxTokens: request.max_tokens,
+        ...routing?.model ? { model: routing.model, strict: routing.strict } : {},
+        ...routing && routing.excludeModels.length > 0 ? { excludeModels: routing.excludeModels } : {}
+      };
+      const completion = model.summarize ? await model.summarize(asked, ctx.signal) : await model.complete(asked, ctx.signal);
+      const text = completion.content?.trim();
+      return text ? text : null;
+    } catch {
+      return null;
+    }
+  };
+}
+function capabilityRecall(ctx) {
+  const memory = ctx.ports.capabilities?.memory;
+  if (!memory) return void 0;
+  return async (query, budgetChars) => {
+    const result = await memory.recall(query, RECALL_LIMIT);
+    if (!result.ok || !result.entries?.length) return "";
+    return result.entries.map((e) => `- ${e.key}: ${e.content}`).join("\n").slice(0, budgetChars);
+  };
+}
+function compactionOptions(ctx, opts = {}) {
+  const model = servingModel(ctx);
+  const window = ctx.ports.model.window?.(model);
+  const recall = opts.recall ?? capabilityRecall(ctx);
+  const reserve = replyReserve(ctx);
+  return {
+    ...CLOUD_COMPACT_DEFAULTS,
+    maxTokens: opts.maxTokens ?? ctx.policy.budgets.tokens ?? CLOUD_COMPACT_DEFAULTS.maxTokens,
+    contextWindow: window,
+    priceTierBoundary: leverOn(ctx, C9_TIER_LEVER) ? opts.priceTierBoundary ?? priceTierBoundary(model) : void 0,
+    reserveOutputTokens: reserve,
+    tools: ctx.tools,
+    ...leverOn(ctx, C2_MASK_LEVER) ? { maskObservationsAfterTurns: OBSERVATION_MASK_TURNS } : {},
+    summarize: opts.summarize ?? transportSummarizer(ctx),
+    ...recall ? { recall } : {},
+    pinTaskBrief: opts.pinTaskBrief ?? true,
+    timeoutMs: CLOUD_COMPACT_DEFAULTS.timeoutMs
+  };
+}
+function foldOf(before, after) {
+  const members = new Set(before);
+  const noteAt = after.findIndex((m) => !members.has(m) && m.role !== "tool" && !m.tool_calls && typeof m.content === "string");
+  if (noteAt < 0) return void 0;
+  let tail = 0;
+  while (tail < after.length - 1 - noteAt && tail < before.length && after[after.length - 1 - tail] === before[before.length - 1 - tail]) tail += 1;
+  for (let i = noteAt + 1; i < after.length - tail; i += 1) if (!members.has(after[i])) return void 0;
+  const lead = before.findIndex((m) => m.role !== "system");
+  const covered = before.length - tail - (lead < 0 ? 0 : lead);
+  return covered > 0 ? { note: after[noteAt].content, covered } : void 0;
+}
+function createCompactionHook(hookOptions = {}) {
+  if (hookOptions.history) return createHistoryCompactionHook(hookOptions.history);
+  return {
+    async compact(ctx) {
+      if (ctx.policy.modelHandoff) return handOff(ctx);
+      const options = compactionOptions(ctx, hookOptions);
+      const rows = ctx.messages.map(toPackRow);
+      const result = await compactMessages(rows, options, options.summarize);
+      if (!result.compacted) return void 0;
+      const fold = result.droppedMessages > 0 ? foldOf(rows, result.messages) : void 0;
+      return {
+        messages: result.messages.map(toRunRow),
+        dropped: result.droppedMessages,
+        reserveTokens: options.reserveOutputTokens,
+        beforeTokens: result.beforeTokens,
+        afterTokens: result.afterTokens,
+        summarized: result.summarized,
+        ...result.maskedObservations ? { masked: result.maskedObservations } : {},
+        ...fold ? { note: fold.note, covered: fold.covered } : {}
+      };
+    }
+  };
+}
+var compactionHook = createCompactionHook();
+
+// ../packages/agent-run/src/policy/stall/index.ts
+function currentModel(ctx) {
+  return ctx.state.model?.model ?? void 0;
+}
+function budgetOf(ctx) {
+  const slot = ctx.state.stall;
+  const model = currentModel(ctx);
+  if (slot && typeof slot.recoveriesUsed === "number" && (slot.model === model || ctx.ports?.delivery?.stall?.runWideBudget)) return { ...slot };
+  return model !== void 0 ? { model, recoveriesUsed: 0 } : { recoveriesUsed: 0 };
+}
+function saveBudget(ctx, budget, spent = 0) {
+  const model = currentModel(ctx);
+  const total = (ctx.state.stall?.recoveriesTotal ?? 0) + spent;
+  const kept = { ...ctx.state.stall };
+  delete kept.model;
+  delete kept.recoveriesTotal;
+  ctx.state.stall = {
+    ...kept,
+    ...model !== void 0 ? { model } : {},
+    recoveriesUsed: budget.recoveriesUsed,
+    ...total > 0 ? { recoveriesTotal: total } : {}
+  };
+}
+var FORCED_SYNTHESIS_PROMPT = "Now write your reply to the team AS the agent: plain prose, first person, no tool calls. Summarise what you found or did.";
+function failureStreakSynthesisPrompt(streak) {
+  return `This turn was stopped because your last ${streak} tool calls all failed. Do NOT call any more tools. Answer the user now, in prose, using what you have already gathered \u2014 say what you completed, quote what the failing calls answered, and state plainly what is blocking you and what you need (a different argument, a permission, a decision) so the next turn can succeed.`;
+}
+var stallHook = {
+  recover(ctx) {
+    const delivery = ctx.ports?.delivery;
+    if (delivery) {
+      const first = narratesFirst(delivery) ? narrationRecover(ctx, "nudge") : void 0;
+      if (first) return first;
+      const owed = ctx.finishing ? void 0 : walkLadder(ctx, delivery);
+      if (owed || delivery.owns?.narration) return owed;
+    }
+    return narrationRecover(ctx) ?? deliverableRecover(ctx);
+  },
+  /** {@link recover} for a ledger whose rungs need a promise to say which hold; the kernel calls this one. */
+  async recoverAsync(ctx) {
+    const delivery = ctx.ports?.delivery;
+    if (delivery) {
+      const first = narratesFirst(delivery) ? narrationRecover(ctx, "nudge") : void 0;
+      if (first) return first;
+      const owed = ctx.finishing ? void 0 : await walkLadderAsync(ctx, delivery);
+      if (owed || delivery.owns?.narration) return owed;
+    }
+    return narrationRecover(ctx) ?? deliverableRecover(ctx);
+  },
+  /**
+   * The settled answer, shaped the way every source shapes it: a reply stuck on one
+   * block posts that block once (`trimRepetitionLoop`, `brain/agentReplyLoop.ts`), and a
+   * prose question with options becomes the canonical ```ask-user block the surfaces
+   * render as a choice (`liftProseAskUser`).
+   */
+  settle(ctx, text) {
+    const delivery = ctx.ports?.delivery;
+    if (delivery?.owns?.settle && delivery.accept) return delivery.accept(text);
+    return liftProseAskUser(trimRepetitionLoop(text.trim()));
+  },
+  /** A turn that called a tool is never a stall: the current model's budget starts full again. */
+  acted(ctx) {
+    if (ctx.state.stall && ctx.state.stall.recoveriesUsed > 0) saveBudget(ctx, { recoveriesUsed: 0 });
+  },
+  /**
+   * The forced no-tools final synthesis: a run that ended without speaking (every turn
+   * only called tools, a budget ran out, a breaker tripped) gets ONE bounded extra call
+   * with this prompt and no tools, so the agent always answers (`brain/agentReplyLoop.ts`).
+   */
+  synthesis(ctx, why) {
+    if (ctx.ports?.delivery?.stall?.failureSynthesis) return why?.failureStreak !== void 0 ? failureStreakSynthesisPrompt(why.failureStreak) : null;
+    if (ctx.ports?.delivery?.owns?.synthesis) return null;
+    return ctx.task.agentName ? FORCED_SYNTHESIS_PROMPT.replace("AS the agent", `AS ${ctx.task.agentName}`) : FORCED_SYNTHESIS_PROMPT;
+  }
+};
+var ANNOUNCED_DELIVERABLE_ID = "announced_deliverable";
+function deliverableRecover(ctx) {
+  const text = ctx.judged ?? (typeof ctx.content === "string" ? ctx.content : "");
+  const said = ctx.state.stall?.said ?? [];
+  if (said.includes(ANNOUNCED_DELIVERABLE_ID) || !announcesDeliverable(text)) return void 0;
+  ctx.state.stall = { ...ctx.state.stall ?? { recoveriesUsed: 0 }, said: [...said, ANNOUNCED_DELIVERABLE_ID] };
+  return { action: "steer", note: ANNOUNCED_DELIVERABLE_STEER, detail: { model: ctx.state.model.model ?? null, shape: "announced-deliverable" } };
+}
+function narratesFirst(delivery) {
+  return delivery.stall?.narrationFirst === true && !delivery.owns?.narration;
+}
+function narrationRecover(ctx, only) {
+  const text = ctx.judged ?? (typeof ctx.content === "string" ? ctx.content : "");
+  const toolNames = (ctx.tools ?? []).map((t) => t.function?.name ?? "").filter(Boolean);
+  const style = ctx.ports?.delivery?.stall;
+  const held = ctx.state.model.model && ctx.state.model.model !== "default" ? ctx.state.model.model : void 0;
+  const served = ctx.served?.model && ctx.served.model !== "default" ? ctx.served.model : void 0;
+  const resolvedModel = served ?? held;
+  const budget = budgetOf(ctx);
+  const { policy, step } = resolveStallStep(
+    ctx.state.model,
+    {
+      text,
+      toolCallCount: 0,
+      availableToolNames: toolNames,
+      // Whether the user asked for a change decides what handing the work back means.
+      requestText: ctx.task.request ?? ctx.task.prompt,
+      ...resolvedModel ? { resolvedModel } : {}
+    },
+    budget.recoveriesUsed,
+    // The failover source rides the run policy's proven/tried set; the transport names
+    // the models a failover may land on (the tenant's connected flagships, the coding
+    // pool). Without one the default never returns the model that just failed, never
+    // more than MAX_MODEL_FAILOVERS deep.
+    {
+      surface: ctx.ports.model?.fallbackSurface?.() ?? void 0,
+      // A host whose successor is a function of what was already tried (an operator's declared chain) names it here; it wins over the surface.
+      ...ctx.ports.model?.pickFallback ? { pick: (tried) => ctx.ports.model.pickFallback(tried) } : {}
+    }
+  );
+  if (only === "nudge" && step.kind !== "nudge") return void 0;
+  switch (step.kind) {
+    case "none":
+      return void 0;
+    case "nudge": {
+      budget.recoveriesUsed = step.recoveriesUsed;
+      saveBudget(ctx, budget, 1);
+      if (step.toolChoice) ctx.state.forceToolChoice = step.toolChoice;
+      return { action: "steer", note: step.nudge, detail: { model: ctx.state.model.model ?? null, attempt: step.recoveriesUsed, shape: step.shape ?? null, ...style?.menu ? { advertisedTools: toolNames.length } : {} } };
+    }
+    case "failover": {
+      budget.recoveriesUsed = step.recoveriesUsed;
+      saveBudget(ctx, budget, 1);
+      ctx.state.model = policy;
+      if (step.toolChoice) ctx.state.forceToolChoice = step.toolChoice;
+      return {
+        action: "escalate",
+        note: style?.failoverNudgeOnly ? step.nudge : `${step.notice}
+
+${step.nudge}`,
+        detail: { from: step.from ?? null, to: step.to, attempt: step.attempt, of: step.of, shape: step.shape ?? null, notice: step.notice }
+      };
+    }
+    case "exhausted": {
+      saveBudget(ctx, budget);
+      return {
+        action: "pause",
+        note: step.notice,
+        detail: { model: resolvedModel ?? ctx.state.model.model ?? null, tried: step.tried, shape: step.shape ?? null, ...style?.menu ? { attempts: budget.recoveriesUsed, advertisedTools: toolNames.length } : {} }
+      };
+    }
+  }
+}
+
+// ../packages/agent-run/src/policy/steering/runSteering.ts
+var inboxes = /* @__PURE__ */ new Map();
+var interrupting = /* @__PURE__ */ new Set();
+var interruptListeners = /* @__PURE__ */ new Map();
+function newSteerKey() {
+  return `steer:${crypto.randomUUID()}`;
+}
+function queueRunSteering(runKey, text, opts) {
+  const trimmed = text.trim();
+  if (!trimmed) return void 0;
+  const eventKey = opts?.eventKey ?? (opts?.persist ? newSteerKey() : void 0);
+  const message = { text: trimmed, attachments: opts?.attachments, ...opts?.fromPerson ? { fromPerson: true } : {}, ...opts?.persist ? { persist: true } : {}, ...opts?.saved ? { saved: true } : {}, ...eventKey ? { eventKey } : {}, ...opts?.childReport ? { childReport: opts.childReport } : {} };
+  const queue = inboxes.get(runKey) ?? [];
+  queue.push(message);
+  inboxes.set(runKey, queue);
+  if (!opts?.interrupt) return message;
+  interrupting.add(runKey);
+  for (const listener of [...interruptListeners.get(runKey) ?? []]) listener();
+  return message;
+}
+function requeueRunSteering(runKey, messages) {
+  if (messages.length === 0) return;
+  inboxes.set(runKey, [...messages, ...inboxes.get(runKey) ?? []]);
+}
+function childWorkRefs(messages) {
+  return [...new Set(messages.flatMap(({ childReport }) => childReport?.ticket ? [childReport.ticket] : []))];
+}
+function drainRunSteering(runKey) {
+  interrupting.delete(runKey);
+  const queue = inboxes.get(runKey);
+  if (!queue?.length) return [];
+  inboxes.delete(runKey);
+  return queue;
+}
+function hasRunInterrupt(runKey) {
+  return interrupting.has(runKey);
+}
+function onRunInterrupt(runKey, listener) {
+  const set = interruptListeners.get(runKey) ?? /* @__PURE__ */ new Set();
+  set.add(listener);
+  interruptListeners.set(runKey, set);
+  return () => {
+    set.delete(listener);
+    if (set.size === 0) interruptListeners.delete(runKey);
+  };
+}
+function runSteeringSource(runKey) {
+  return {
+    drain: () => {
+      const interrupt = hasRunInterrupt(runKey);
+      return drainRunSteering(runKey).map((m) => ({
+        text: m.text,
+        ...m.attachments !== void 0 ? { attachments: m.attachments } : {},
+        ...interrupt ? { interrupt: true } : {}
+      }));
+    },
+    hasInterrupt: () => hasRunInterrupt(runKey),
+    onInterrupt: (listener) => onRunInterrupt(runKey, listener)
+  };
+}
+
+// ../packages/agent-run/src/policy/steering/steerInterrupt.ts
+function runInterruptWatch(runKey) {
+  return { hasInterrupt: () => hasRunInterrupt(runKey), onInterrupt: (listener) => onRunInterrupt(runKey, listener) };
+}
+var INTERRUPTED_BY_STEER = "Interrupted by the user's new message: the command did not run to completion (it was stopped, or it had not started when the message arrived). Read the message that follows and do what it asks; re-run the command only if it still applies.";
+var STOPPED_BY_USER = "Stopped by the user: the command was killed before it finished.";
+var WAIT_INTERRUPTED_BY_STEER = "Wait interrupted by the user's new message: the background job is STILL RUNNING. Read the message that follows and do what it asks; check the job later with command_status, or stop it with command_stop.";
+var SKIPPED_BY_STEER = "Not run: the user sent a new message while this turn was running. Read it and decide what to do next.";
+function argsOf2(args) {
+  return args && typeof args === "object" && !Array.isArray(args) ? args : {};
+}
+function isWaitCall(name, a) {
+  if (name === "run_command") return a.background !== true && a.yieldMs != null;
+  return name === "command_status" && typeof a.waitMs === "number" && a.waitMs > 0;
+}
+function isInterruptibleCall(name, args) {
+  const a = argsOf2(args);
+  if (isWaitCall(name, a)) return true;
+  return name === "run_command" && a.background !== true;
+}
+function interruptedResult(out) {
+  const base = out && typeof out === "object" && !Array.isArray(out) ? out : out === void 0 ? {} : { output: out };
+  return { ...base, ok: false, aborted: true, interrupted: true, error: INTERRUPTED_BY_STEER };
+}
+function notStartedResult() {
+  return { ...interruptedResult(void 0), skipped: true };
+}
+function stoppedResult(out) {
+  const base = out && typeof out === "object" && !Array.isArray(out) ? out : out === void 0 ? {} : { output: out };
+  return { ...base, ok: false, aborted: true, stopped: true, error: STOPPED_BY_USER };
+}
+function waitInterruptedResult(out) {
+  const base = out && typeof out === "object" && !Array.isArray(out) ? out : { output: out };
+  return { ...base, interrupted: true, note: WAIT_INTERRUPTED_BY_STEER };
+}
+function cameBackAborted(out) {
+  return !!out && typeof out === "object" && out.aborted === true;
+}
+async function runToolWithWatch(runTool2, watch, runSignal, name, args, surfaceInterruptible) {
+  if (!isInterruptibleCall(name, args) && !surfaceInterruptible?.(name, argsOf2(args))) return runTool2(name, args);
+  if (watch.hasInterrupt()) return notStartedResult();
+  const wait = isWaitCall(name, argsOf2(args));
+  const step = new AbortController();
+  let interrupted = false;
+  const onStop = () => step.abort();
+  if (runSignal?.aborted) step.abort();
+  runSignal?.addEventListener("abort", onStop, { once: true });
+  const off = watch.onInterrupt(() => {
+    interrupted = true;
+    step.abort();
+  });
+  try {
+    const out = await runTool2(name, args, step.signal);
+    if (!interrupted) return out;
+    const restated = () => out.stopped === true ? out : interruptedResult(out);
+    if (wait) return cameBackAborted(out) ? restated() : waitInterruptedResult(out);
+    return cameBackAborted(out) ? restated() : out;
+  } finally {
+    off();
+    runSignal?.removeEventListener("abort", onStop);
+  }
+}
+function runToolInterruptibly(runTool2, runKey, runSignal, name, args) {
+  return runToolWithWatch(runTool2, runInterruptWatch(runKey), runSignal, name, args);
+}
+function steerSkip(watch) {
+  if (!watch.hasInterrupt()) return void 0;
+  return { skipRemaining: { data: { ok: false, skipped: true, error: SKIPPED_BY_STEER }, isError: false } };
+}
+
+// ../packages/agent-run/src/policy/steering/index.ts
+function steerInput(raw) {
+  return typeof raw === "string" ? { text: raw } : raw;
+}
+function portInterruptWatch(source) {
+  return {
+    hasInterrupt: () => source?.hasInterrupt?.() ?? false,
+    onInterrupt: (listener) => source?.onInterrupt?.(listener) ?? (() => void 0)
+  };
+}
+function isStopSteer(steered) {
+  return steered.some((text) => stopIntent(text));
+}
+var steeringHook = {
+  inject(_ctx, steered) {
+    if (steered.length === 0) return void 0;
+    return steered.map((text) => ({ role: "user", content: text }));
+  }
+};
+
+// ../packages/agent-run/src/policy/ask/index.ts
+var askHook = {
+  async answer(ctx, question, options) {
+    if (!ctx.ports.human || typeof ctx.ports.human.ask !== "function") {
+      return { kind: "paused" };
+    }
+    return ctx.ports.human.ask(question, options);
+  }
+};
+
+// ../packages/agent-run/src/policy/guards/readOnly.ts
+function isReadOnlyCloudTool(name) {
+  const canonical = resolveToolAlias(name);
+  return toolSideEffect(canonical) === "read" && !CONTROL_TOOL_NAMES.includes(canonical) && canonical !== "wait_agents";
+}
+
+// ../packages/agent-run/src/policy/subagents/delegationRequest.ts
+var SPAWN_TOOLS = /* @__PURE__ */ new Set(["spawn_agent", "spawn_agents"]);
+var SUBAGENT_NOUN = String.raw`(?:sub[- ]?agents?|(?:parallel|concurrent)\s+(?:agents?|workers?))`;
+var ASKS_FOR_SUBAGENTS = new RegExp(
+  String.raw`\b(?:use|using|with|via|through|delegate(?:\s+(?:it|this|them|the\s+\w+))?\s+to|run|launch|start|dispatch|employ)\s+` + String.raw`(?:(?:the|some|a|few|several|multiple|more|\d+)\s+){0,2}` + SUBAGENT_NOUN + String.raw`\b` + String.raw`|\bspawn(?:_agents?|\s+(?:agents?|workers?|children|sub[- ]?agents?))\b` + String.raw`|\bfan[- ]?out\s+(?:the|these|this|it|them|across|over|to)\b`,
+  "i"
+);
+var DECLINES_SUBAGENTS = /\b(?:no|without|don'?t\s+use|do\s+not\s+use|never\s+use|skip(?:\s+the)?)\s+(?:any\s+)?sub[- ]?agents?\b/i;
+function asksForSubagents(text) {
+  const t = text ?? "";
+  return ASKS_FOR_SUBAGENTS.test(t) && !DECLINES_SUBAGENTS.test(t);
+}
+function canSpawnHere(toolNames) {
+  return toolNames.some((n) => SPAWN_TOOLS.has(n));
+}
+function isSpawnTool(name) {
+  return SPAWN_TOOLS.has(name);
+}
+function attemptedDelegation(events) {
+  return events.some((e) => e.category === "tool" && SPAWN_TOOLS.has(e.label));
+}
+function leftDelegationUndone(input) {
+  return canSpawnHere(input.toolNames) && asksForSubagents(input.requestText) && !attemptedDelegation(input.events);
+}
+function undelegatedRequestNudge(toolNames) {
+  const fanOut = toolNames.includes("spawn_agents");
+  const call = fanOut ? 'Call spawn_agents NOW: one workstream per open ticket whose files do not overlap \u2014 ticket=<id>, a complete standalone task brief, role "code". Each child is a clone of you and makes its change itself. It takes up to 4 per call and returns at once \u2014 the children run in the background, so start the next batch right away if there are more. Use spawn_agent for a slice that must run alone.' : 'Call spawn_agent NOW, one slice at a time, with a complete standalone task brief and role "code". The child is a clone of you and makes its change itself.';
+  return `The user asked for this work to be done by SUB-AGENTS, and none has been started. Do not ask how to proceed \u2014 the user already said. A sub-agent here is a LOCAL child run on this machine: it needs no cloud dispatch, no ticket assignment and no Developer on the roster. The workspace execution kill-switch and every \`autoRun: execution_disabled\` verdict stop CLOUD runs only \u2014 they do not apply to it. as_agent is optional: with no fitting teammate, OMIT it \u2014 the spawn tools staff the role on this project themselves (a capable teammate, or a Developer hired into the workspace and project, with the ticket assigned) and the child runs AS that agent. ${call} ${delegationShape(fanOut ? "spawn_agents" : "spawn_agent")} Keep working while they run; when their reports are in (they arrive on their own, or call wait_agents), verify their changes and report what each child delivered, per ticket.`;
+}
+function delegationShape(spawnTool) {
+  return `The shape of this run: you read only the document the request names and the chat state already in your context \u2014 no source files. Research (reading code, searching, tracing callers) goes to children: ${spawnTool} with role "explore", one per question, each brief stating the question, the files or folders to start from, what is already known and ruled out, and the answer's shape (paths with line numbers, short excerpts, a word cap). When they report, write the deliverable the request names (the document or plan edit) yourself in that same turn \u2014 filing tickets is not the deliverable.`;
+}
+function earlyDelegationNudge(toolNames, reads) {
+  return `STOP READING AND DELEGATE. This run has made ${reads} read calls and started no sub-agent. ${undelegatedRequestNudge(toolNames)}`;
+}
+
+// ../packages/learned-routing/src/actionTypes.ts
+var ACTION_TYPES = [
+  "sql",
+  "frontend_ui",
+  "backend_api",
+  "refactor",
+  "bugfix",
+  "tests",
+  "docs",
+  "devops_ci",
+  "data_migration",
+  "analysis",
+  "provisioning",
+  "decision",
+  "other"
+];
+var DEFAULT_ACTION_TYPE = "other";
+var ACTION_TYPE_SET = new Set(ACTION_TYPES);
+
+// ../packages/learned-routing/src/exploration.ts
+import { betaMoments, normalDraw } from "@seanhogg/builderforce-memory/stats";
+
+// ../packages/learned-routing/src/recencyDecay.ts
+var ROUTING_HALF_LIFE_DAYS = 30;
+var DECAYED_WINDOW_DAYS = 4 * ROUTING_HALF_LIFE_DAYS;
+var DAY_MS2 = 24 * 60 * 60 * 1e3;
+
+// ../packages/learned-routing/src/runOutcomeTelemetry.ts
+var ALL_ENTRY_POINTS = ["vscode", "web", "rovr", "canvas", "on-prem", "cloud"];
+var CLIENT_ENTRY_POINTS = ALL_ENTRY_POINTS.filter(
+  (entryPoint2) => entryPoint2 !== "cloud"
+);
+var MODEL_PREFLIGHT_MAX = 32;
+var PROGRESS_SIGNALS_MAX = 8;
+var SIGNAL_NAME_MAX = 32;
+var COUNT_MAX = 1e7;
+var PARENT_RUN_ID_MAX = 128;
+var COUNTERS = [
+  "toolCalls",
+  "toolErrors",
+  "tokens",
+  "cacheReadTokens",
+  "compactions",
+  "stallRecoveries",
+  "escalations",
+  "coveredReadStubs",
+  "shellFileReads",
+  "repoErrors",
+  "contextPackTokens",
+  "unkeptReadyClaims"
+];
+function count(v) {
+  return typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= COUNT_MAX ? v : void 0;
+}
+function entryPoint(v) {
+  return typeof v === "string" && CLIENT_ENTRY_POINTS.includes(v) ? v : void 0;
+}
+function verify(v) {
+  return v === "passed" || v === "failed" || v === "not-run" ? v : void 0;
+}
+function modelPreflight(v) {
+  if (typeof v !== "string") return void 0;
+  const s = v.trim();
+  if (s !== "ok" && s !== "refreshed" && !s.startsWith("degraded")) return void 0;
+  return s.slice(0, MODEL_PREFLIGHT_MAX);
+}
+function parentRunId(v) {
+  if (typeof v !== "string") return void 0;
+  const s = v.trim();
+  return s.length > 0 && s.length <= PARENT_RUN_ID_MAX && /^[\w:.\-]+$/.test(s) ? s : void 0;
+}
+function progressTrips(v) {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return void 0;
+  const entries = Object.entries(v);
+  if (entries.length > PROGRESS_SIGNALS_MAX) return void 0;
+  const out = {};
+  for (const [signal, n] of entries) {
+    const c = count(n);
+    if (!/^[a-z_]+$/.test(signal) || signal.length > SIGNAL_NAME_MAX || c === void 0) return void 0;
+    out[signal] = c;
+  }
+  return out;
+}
+function wireCost(row) {
+  const cost = row.cost;
+  return typeof cost === "number" && Number.isInteger(cost) && cost >= 0 && cost <= COUNT_MAX ? { costMc: cost } : {};
+}
+function parseRunOutcomeTelemetry(b) {
+  const out = {};
+  const ep = entryPoint(b.entryPoint);
+  if (ep) out.entryPoint = ep;
+  for (const key of COUNTERS) {
+    const c = count(b[key]);
+    if (c !== void 0) out[key] = c;
+  }
+  const v = verify(b.verify);
+  if (v) out.verify = v;
+  if (b.firstSpawnTurn === null) out.firstSpawnTurn = null;
+  else {
+    const turn = count(b.firstSpawnTurn);
+    if (turn !== void 0) out.firstSpawnTurn = turn;
+  }
+  const preflight = modelPreflight(b.modelPreflight);
+  if (preflight) out.modelPreflight = preflight;
+  const trips = progressTrips(b.progressTrips);
+  if (trips) out.progressTrips = trips;
+  const parent = parentRunId(b.parentRunId);
+  if (parent) out.parentRunId = parent;
+  return out;
+}
+
+// ../packages/learned-routing/src/rateLimitFailure.ts
+var AVAILABILITY = /\b429\b|\b529\b|rate.?limit|too many requests|over ?capacity|capacity limit|overloaded|resource has been exhausted|\bin cooldown\b|cooldown or unavailable/i;
+var GRPC_RESOURCE_EXHAUSTED = /\bRESOURCE_EXHAUSTED\b/;
+var AVAILABILITY_STATUSES = /* @__PURE__ */ new Set([429, 529]);
+var TENANT_BUDGET_CODES = [
+  "agent_host_token_limit_exceeded",
+  "plan_token_limit_exceeded",
+  "plan_monthly_token_limit_exceeded",
+  "member_spend_cap_exceeded",
+  "premium_daily_cap_exceeded",
+  "image_credit_limit_exceeded",
+  "video_credit_limit_exceeded",
+  "claw_token_limit_exceeded"
+];
+var BUDGET_CODE = new RegExp(`\\b(?:${TENANT_BUDGET_CODES.join("|")})\\b`);
+var BUDGET_WORDING = new RegExp(
+  [
+    /(?:plan|daily|monthly|agenthost)\b[^.]{0,30}\btoken limit reached/,
+    /generation limit reached/,
+    /allowance reached/,
+    /spend cap reached/,
+    /premium-model budget exhausted/
+  ].map((re) => re.source).join("|"),
+  "i"
+);
+function isTenantBudgetFailure(message) {
+  return !!message && (BUDGET_CODE.test(message) || BUDGET_WORDING.test(message));
+}
+function isRateLimitFailure(message, status) {
+  if (isTenantBudgetFailure(message)) return false;
+  return status != null && AVAILABILITY_STATUSES.has(status) || !!message && (AVAILABILITY.test(message) || GRPC_RESOURCE_EXHAUSTED.test(message));
+}
+
+// ../packages/agent-run/src/policy/subagents/index.ts
+function toolNamesOf(ctx) {
+  return ctx.tools.map((tool) => tool.function?.name).filter((name) => !!name);
+}
+function delegationCallKind(name) {
+  if (isSpawnTool(name)) return "spawn";
+  return isReadOnlyCloudTool(name) ? "read" : "other";
+}
+function readsWithoutSpawnOf(ctx) {
+  const counter = new ReadsWithoutSpawn();
+  for (const message of ctx.messages) {
+    for (const call of message.toolCalls ?? []) counter.record(delegationCallKind(call.name));
+  }
+  const counted = counter.snapshot();
+  const saved = ctx.state.reads.readsWithoutSpawn;
+  const spawned = saved.spawned || counted.spawned;
+  return { reads: Math.max(saved.reads, counted.reads), spawned, nudged: saved.nudged };
+}
+function delegationLeftUndone(ctx) {
+  return ctx.policy.delegation.requested && canSpawnHere(toolNamesOf(ctx)) && !readsWithoutSpawnOf(ctx).spawned;
+}
+function delegationNudge(ctx) {
+  const counted = readsWithoutSpawnOf(ctx);
+  ctx.state.reads = { ...ctx.state.reads, readsWithoutSpawn: counted };
+  const counter = new ReadsWithoutSpawn(counted);
+  if (!counter.due(ctx.policy.delegation.readsBeforeNudge) || !delegationLeftUndone(ctx)) return null;
+  counter.markNudged();
+  ctx.state.reads = { ...ctx.state.reads, readsWithoutSpawn: counter.snapshot() };
+  return earlyDelegationNudge(toolNamesOf(ctx), counted.reads);
+}
+function delegationBackstop(ctx) {
+  return delegationLeftUndone(ctx) ? undelegatedRequestNudge(toolNamesOf(ctx)) : null;
+}
+function withDelegationAdvisory(result, nudge) {
+  return result && typeof result === "object" && !Array.isArray(result) ? { ...result, advisory: nudge } : { output: result, advisory: nudge };
+}
+var subagentsHook = {
+  backstop: delegationBackstop,
+  nudge(ctx, call, result) {
+    if (delegationCallKind(call.name) !== "read") return void 0;
+    const nudge = delegationNudge(ctx);
+    return nudge ? { data: withDelegationAdvisory(result, nudge) } : void 0;
+  }
+};
+
+// ../packages/agent-run/src/policy/guards/sourcePolicy.ts
+var JSON_EXT = /\.json$/i;
+var YAML_EXT = /\.ya?ml$/i;
+var SOURCE_EXT = /\.[cm]?[jt]sx?$/i;
+function isVerifiablePath(path) {
+  return JSON_EXT.test(path) || YAML_EXT.test(path) || SOURCE_EXT.test(path);
+}
+var TS_SOURCE = /\.[cm]?[jt]sx?$/i;
+var CONDITIONAL_JSX_CALLBACK = /\b(on[A-Z][A-Za-z0-9_$]*)\s*=\s*\{[^{}]{0,300}\?\s*(?:async\s*)?\(\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*\)\s*=>/g;
+function lineAt(source, offset) {
+  let line = 1;
+  for (let i = 0; i < offset; i += 1) if (source.charCodeAt(i) === 10) line += 1;
+  return line;
+}
+function maskNonCode(source) {
+  const chars = [...source];
+  let state = "code";
+  for (let i = 0; i < chars.length; i += 1) {
+    const c = chars[i];
+    const next = chars[i + 1];
+    if (state === "code") {
+      if (c === "/" && next === "/") {
+        chars[i] = chars[i + 1] = " ";
+        state = "line-comment";
+        i += 1;
+      } else if (c === "/" && next === "*") {
+        chars[i] = chars[i + 1] = " ";
+        state = "block-comment";
+        i += 1;
+      } else if (c === "'") {
+        chars[i] = " ";
+        state = "single";
+      } else if (c === '"') {
+        chars[i] = " ";
+        state = "double";
+      } else if (c === "`") {
+        chars[i] = " ";
+        state = "template";
+      }
+      continue;
+    }
+    if (c === "\n" && state === "line-comment") {
+      state = "code";
+      continue;
+    }
+    if (c === "\n") continue;
+    const escaped = i > 0 && source[i - 1] === "\\";
+    if (state === "block-comment" && c === "*" && next === "/") {
+      chars[i] = chars[i + 1] = " ";
+      state = "code";
+      i += 1;
+      continue;
+    }
+    chars[i] = " ";
+    if (!escaped && (state === "single" && c === "'" || state === "double" && c === '"' || state === "template" && c === "`")) state = "code";
+  }
+  return chars.join("");
+}
+function inspectAgentSource(path, source) {
+  if (!TS_SOURCE.test(path)) return [];
+  const findings = [];
+  for (const match of maskNonCode(source).matchAll(CONDITIONAL_JSX_CALLBACK)) {
+    const prop = match[1];
+    const parameter = match[2];
+    findings.push({
+      ruleId: "typescript/explicit-conditional-jsx-callback",
+      line: lineAt(source, match.index ?? 0),
+      message: `Parameter '${parameter}' in conditional JSX callback '${prop}' needs an explicit type. Prefer a named callback typed from the component prop contract (for example, \`NonNullable<Props['onChange']>\`) so API changes are checked at the boundary.`
+    });
+  }
+  return findings;
+}
+var YAML_TAB_INDENT = /^\t+ /m;
+function yamlFlowUnbalanced(content) {
+  let depth = 0;
+  for (const ch of content) {
+    if (ch === "[" || ch === "{") depth += 1;
+    else if (ch === "]" || ch === "}") depth -= 1;
+    if (depth < 0) return true;
+  }
+  return depth !== 0;
+}
+function checkYamlContent(content) {
+  if (YAML_TAB_INDENT.test(content)) {
+    return "YAML uses tab characters for indentation, which YAML forbids \u2014 use spaces.";
+  }
+  if (yamlFlowUnbalanced(content)) {
+    return "YAML flow collection brackets ([ ] { }) are unbalanced \u2014 the document is malformed.";
+  }
+  return null;
+}
+function checkFileContent(path, content) {
+  if (!isVerifiablePath(path)) return { kind: "skipped" };
+  try {
+    if (JSON_EXT.test(path)) {
+      JSON.parse(content);
+    } else if (YAML_EXT.test(path)) {
+      const yamlError = checkYamlContent(content);
+      if (yamlError) return { kind: "errors", errors: [{ message: yamlError.slice(0, 240) }] };
+    } else {
+      const findings = inspectAgentSource(path, content);
+      if (findings.length) {
+        return { kind: "errors", errors: findings.map((f) => ({ message: f.message, line: f.line, ruleId: f.ruleId })) };
+      }
+    }
+    return { kind: "checked" };
+  } catch (e) {
+    return { kind: "errors", errors: [{ message: e.message.slice(0, 240) }] };
+  }
+}
+function foldVerifyOutcomes(outcomes) {
+  const checked = [];
+  const skipped2 = [];
+  const errors = [];
+  for (const o of outcomes) {
+    if (o.kind === "errors") errors.push(...o.errors.map((error) => ({ path: o.path, ...error })));
+    else if (o.kind === "checked") checked.push(o.path);
+    else skipped2.push(o.path);
+  }
+  return { ok: errors.length === 0, checked, skipped: skipped2, errors };
+}
+async function verifyWrittenFiles(read, paths) {
+  const list2 = [...paths];
+  const outcomes = await Promise.all(
+    list2.map(async (path) => {
+      if (!isVerifiablePath(path)) return { path, kind: "skipped" };
+      const content = await read(path).catch(() => null);
+      if (content === null) return { path, kind: "skipped" };
+      return { path, ...checkFileContent(path, content) };
+    })
+  );
+  return foldVerifyOutcomes(outcomes);
+}
+
+// ../packages/agent-run/src/policy/finish/finishTools.ts
+function assertsUnrunVerification(summary) {
+  const s = summary.toLowerCase();
+  const check = /(type[\s-]?check|typecheck|typescript|\btsc\b|lint|eslint|\btest(s|ing|ed)?\b|\bbuild(s|ing)?\b|compil)/;
+  const pass2 = /(pass(es|ed|ing)?|succeed(s|ed)?|success|green|no\s+errors?|error[\s-]?free|will\s+now\s+pass|are\s+resolved|is\s+resolved)/;
+  return check.test(s) && pass2.test(s);
+}
+var DOCUMENT_EXTENSIONS = /* @__PURE__ */ new Set([
+  ".md",
+  ".mdx",
+  ".rst",
+  ".adoc",
+  ".asciidoc",
+  ".txt"
+]);
+function isDocumentationPath(path) {
+  const normalized = path.trim().replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
+  if (!normalized) return false;
+  if (normalized.startsWith("docs/") || normalized.startsWith("specs/")) return true;
+  const file = normalized.slice(normalized.lastIndexOf("/") + 1);
+  const dot = file.lastIndexOf(".");
+  return dot >= 0 && DOCUMENT_EXTENSIONS.has(file.slice(dot));
+}
+function hasNoCodeDeliverable(writtenPaths) {
+  for (const path of writtenPaths) {
+    if (!path.trim()) continue;
+    if (!isDocumentationPath(path)) return false;
+  }
+  return true;
+}
+var MAX_PLACEHOLDER_FINISH_BLOCKS = 2;
+
+// ../packages/agent-run/src/policy/finish/gates.ts
+function matchesRequiredReviewSignoff(required, toolName, args, succeeded8) {
+  if (!required || !succeeded8 || toolName !== "builtin_kanban_signoff") return false;
+  const roleKey = typeof args.roleKey === "string" ? args.roleKey.trim() : "";
+  const laneKey = typeof args.laneKey === "string" ? args.laneKey.trim() : void 0;
+  return roleKey === required.roleKey && laneKey === required.laneKey;
+}
+function missingReviewVerdictMessage(required) {
+  const lane = required.laneKey ? ` and laneKey='${required.laneKey}'` : "";
+  return `Cannot finish this reviewer assignment until you call builtin_kanban_signoff with roleKey='${required.roleKey}'${lane} and an explicit approved or changes_requested verdict. A narrative summary is not acceptance evidence.`;
+}
+function initialFinishGateState(resume, isChild) {
+  return {
+    noDeliverableBlocked: resume?.noDeliverableBlocked ?? isChild,
+    reviewVerdictRecorded: resume?.reviewVerdictRecorded ?? false,
+    placeholderBlocks: resume?.placeholderBlocks ?? 0,
+    ciPendingBlocks: resume?.ciPendingBlocks ?? 0,
+    ciFailureBlocks: resume?.ciFailureBlocks ?? 0,
+    ciVerified: false,
+    finishBlockedOnce: false
+  };
+}
+async function evaluateFinishGates(a) {
+  const { requiredSignoff, summary, gates } = a;
+  let writtenPaths = a.writtenPaths;
+  let absorbed;
+  a.ports?.beginAttempt?.();
+  const blocked = async (reason, block, detail, result) => {
+    await a.ports?.onBlocked?.(reason, block, detail, result);
+    return { block, reason, ...absorbed ? { writtenPaths: absorbed } : {} };
+  };
+  if (a.delegated && a.ports?.liveChildren) {
+    const childBlock = await a.ports.liveChildren();
+    if (childBlock) return { block: childBlock, reason: "children_running" };
+    if (a.ports.absorbChildWrites) {
+      const merged = new Set(writtenPaths);
+      await a.ports.absorbChildWrites(merged);
+      if (merged.size !== writtenPaths.length) {
+        writtenPaths = [...merged];
+        absorbed = writtenPaths;
+      }
+    }
+  }
+  const bound = a.ports?.bound !== false;
+  const wrote = bound && writtenPaths.length > 0;
+  const codeBound = bound && (wrote || a.ports?.read !== void 0 || a.ports?.verify !== void 0);
+  const verification = wrote && a.ports?.verify ? await a.ports.verify(writtenPaths) : wrote && a.ports?.read ? await verifyWrittenFiles(a.ports.read, writtenPaths) : null;
+  let ci = null;
+  let ciPending = false;
+  if (a.ports?.pollBranchCi && wrote && verification?.ok !== false) {
+    ci = await a.ports.pollBranchCi({ pendingBlocks: gates.ciPendingBlocks, failureBlocks: gates.ciFailureBlocks });
+    ciPending = ci.pendingBlocks > gates.ciPendingBlocks;
+    gates.ciPendingBlocks = ci.pendingBlocks;
+    gates.ciFailureBlocks = ci.failureBlocks;
+    gates.ciVerified = ci.ciVerified;
+  }
+  if (wrote) a.enterVerify();
+  if (requiredSignoff && !gates.reviewVerdictRecorded) {
+    const block = missingReviewVerdictMessage(requiredSignoff);
+    return blocked("review_verdict_missing", block, { ...requiredSignoff }, block);
+  }
+  if (codeBound && !gates.noDeliverableBlocked && hasNoCodeDeliverable(writtenPaths)) {
+    gates.noDeliverableBlocked = true;
+    return blocked(
+      "no_deliverable",
+      "Before finishing: you have not committed any code changes for this task \u2014 only the PRD (or nothing) is on the branch. Re-read the task requirements and verify EACH is actually implemented. If work remains, use search_code/read_file to find the right place and write_file to implement it, then finish. If \u2014 and only if \u2014 this task genuinely requires no code change, call finish again and state explicitly why no change was needed.",
+      {},
+      "Blocked finish: no code deliverable \u2014 self-review required"
+    );
+  }
+  if (verification && !verification.ok) {
+    const block = `Cannot finish \u2014 changed-file validation found ${verification.errors.length} issue(s). Repair every issue, then finish again. This is a shell-free source policy, not a claim that the full project type-check ran.
+` + verification.errors.map((e) => `- ${e.path}${e.line ? `:${e.line}` : ""}${e.ruleId ? ` [${e.ruleId}]` : ""}: ${e.message}`).join("\n");
+    return blocked("source_quality", block, { errors: verification.errors }, `Blocked finish: ${verification.errors.length} source/config quality issue(s)`);
+  }
+  if (ci?.block) {
+    const recorded = await blocked("branch_ci", ci.block, { pendingBlocks: gates.ciPendingBlocks, failureBlocks: gates.ciFailureBlocks }, ci.block.slice(0, 300));
+    return ciPending ? { ...recorded, reason: "branch_ci_pending" } : recorded;
+  }
+  if (summary && !gates.finishBlockedOnce && !gates.ciVerified && assertsUnrunVerification(summary)) {
+    gates.finishBlockedOnce = true;
+    return {
+      block: "You stated that a build/type-check/lint/test passed or is resolved, but this executor cannot run a local shell and in-run CI did not report success. Call run_checks (it polls branch CI) or finish again with a summary that does NOT claim a check passed.",
+      reason: "honesty",
+      ...absorbed ? { writtenPaths: absorbed } : {}
+    };
+  }
+  if (wrote && gates.placeholderBlocks < MAX_PLACEHOLDER_FINISH_BLOCKS && a.ports?.scanPlaceholders) {
+    const scan = await a.ports.scanPlaceholders(writtenPaths);
+    if (scan.flagged.length) {
+      gates.placeholderBlocks += 1;
+      return blocked(
+        "placeholders",
+        `Cannot finish \u2014 ${scan.flagged.length} committed file(s) still contain placeholder/stub code instead of a real implementation. Replace each stub with a working implementation that uses the existing infrastructure (search_code for it first), or if a file is dead code that should not ship in this PR, remove it with delete_file. Then call finish again.
+` + scan.flagged.map((f) => `- ${f.path}: ${f.markers.join("; ")}`).join("\n"),
+        { files: scan.flagged },
+        `Blocked finish: ${scan.flagged.map((f) => f.path).join(", ")}`
+      );
+    }
+  }
+  if (wrote && a.ports?.recordClaim) {
+    const claim = await a.ports.recordClaim(summary || a.output || `Completed changes to ${writtenPaths.join(", ")}`, writtenPaths);
+    if (!claim.ok) {
+      return {
+        block: `Cannot finish \u2014 no structural evidence record supports this completion claim (${claim.error ?? "no evidence"}). Retry the successful write or verification, then finish again.`,
+        reason: "claim_evidence",
+        ...absorbed ? { writtenPaths: absorbed } : {}
+      };
+    }
+  }
+  return absorbed ? { block: null, writtenPaths: absorbed } : { block: null };
+}
+
+// ../packages/agent-run/src/policy/verify/runEndMemory.ts
+var SHELL_SURFACES = /* @__PURE__ */ new Set(["sandbox", "on-prem"]);
+var hasShell = (surface) => SHELL_SURFACES.has(surface);
+function runVerifyPhase(input) {
+  if (input.surface === "durable" && input.ciVerified) {
+    return {
+      surface: "durable",
+      kind: "ran",
+      reason: "verify_passed",
+      commands: ["branch-ci"],
+      failedCommands: [],
+      mayFinish: true,
+      note: "Branch CI passed."
+    };
+  }
+  if (!hasShell(input.surface)) {
+    return inRunVerifyOutcome({
+      surface: "durable",
+      writtenPaths: input.writtenPaths ?? [],
+      results: input.results ?? null
+    });
+  }
+  return inRunVerifyOutcome({
+    surface: input.surface,
+    writtenPaths: input.writtenPaths ?? [],
+    packageScripts: input.packageScripts ?? null,
+    runner: input.runner,
+    results: input.results ?? null
+  });
+}
+function describeVerifyOutcome(outcome) {
+  if (outcome.kind === "skipped") return `verify skipped (${outcome.reason})`;
+  if (outcome.commands.length === 0) return `verify ${outcome.kind}, no commands`;
+  const failed3 = outcome.failedCommands.length;
+  return `verify ${outcome.kind}: ${outcome.commands.join("; ")}${failed3 > 0 ? ` \u2014 ${failed3} failed` : ""}`;
+}
+function applyVerifyPhase(state) {
+  return reduceRunPolicy(state, { type: "verify_started" });
+}
+
+// ../packages/agent-run/src/workPlan.ts
+var MAX_OPEN_WORK_HOLDS = 6;
+function recordWorkSnapshot(state, source, assigned, evidence) {
+  state.workObservations = {
+    ...state.workObservations,
+    [source]: applyWorkEvidence(planWork(assigned), evidence)
+  };
+}
+function planWork(assigned) {
+  const items = /* @__PURE__ */ new Map();
+  for (const item of assigned) {
+    const id = item.id.trim();
+    if (!id) throw new Error("Assigned work requires an id");
+    const criteria = [...items.get(id)?.criteria ?? [], ...item.criteria];
+    items.set(id, { id, criteria: [...new Set(criteria.map((entry) => entry.trim()).filter(Boolean))] });
+  }
+  return [...items.values()];
+}
+function applyWorkEvidence(plan, evidence) {
+  const byId = new Map(evidence.filter((item) => ["done", "blocked", "in_review"].includes(item.status) && item.detail.trim()).map((item) => [item.id, item]));
+  return plan.map(({ id, criteria }) => {
+    const current = byId.get(id);
+    return { id, criteria, ...current ? { evidence: current } : {} };
+  });
+}
+function assignedWorkSection(plan) {
+  const open = plan.filter((item) => !item.evidence);
+  if (!open.length) return "";
+  const items = open.slice(0, 15).map(({ id, criteria }) => `- ${JSON.stringify(id)}${criteria.length ? `: ${JSON.stringify(criteria).slice(0, 1500)}` : ""}`);
+  if (open.length > items.length) items.push(`- ${open.length - items.length} more assigned items`);
+  return items.join("\n");
+}
+function outstandingWork(plan) {
+  const section = assignedWorkSection(plan);
+  return section ? `Assigned work still needs evidence. Continue the open items or record the reason each item is blocked or in review.
+${section}` : null;
+}
+function workSupportsRoutingSample(work, completed) {
+  return !completed || !work || work.open + work.blocked === 0;
+}
+function evaluateRun(plan) {
+  if (!plan.length) return void 0;
+  const score2 = { assigned: plan.length, done: 0, blocked: 0, inReview: 0, open: 0 };
+  for (const { evidence } of plan) {
+    if (evidence?.status === "done") score2.done++;
+    else if (evidence?.status === "blocked") score2.blocked++;
+    else if (evidence?.status === "in_review") score2.inReview++;
+    else score2.open++;
+  }
+  return score2;
+}
+function evaluateRunWork(state) {
+  const observed = Object.values(state.workObservations ?? {}).flat();
+  return evaluateRun([...new Map([...observed, ...state.work ?? []].map((item) => [item.id, item])).values()]);
+}
+
+// ../packages/agent-run/src/policy/finish/index.ts
+var lastReasons = /* @__PURE__ */ new WeakMap();
+function lastFinishReason(state) {
+  return lastReasons.get(state);
+}
+function workFinishPorts(work) {
+  return work.settleAfterRun ? { settleWorkAfterRun: true } : { workEvidence: (ids2) => work.evidence(ids2) };
+}
+var LINKED_WORK_OPEN = "linked_work_open";
+function writtenPathsOf(ctx) {
+  return ctx.state.writtenPaths ?? [];
+}
+function succeeded4(row) {
+  if (!row) return false;
+  try {
+    const data = JSON.parse(row.content);
+    return !(data && typeof data === "object" && data.ok === false);
+  } catch {
+    return row.content.trim().length > 0;
+  }
+}
+function parseArgs(raw) {
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+function signoffRecorded(messages, required) {
+  if (!required) return false;
+  const results = /* @__PURE__ */ new Map();
+  for (const row of messages) if (row.role === "tool" && row.toolCallId) results.set(row.toolCallId, row);
+  return messages.some(
+    (row) => row.role === "assistant" && (row.toolCalls ?? []).some(
+      (call) => matchesRequiredReviewSignoff(required, call.name, parseArgs(call.arguments), succeeded4(results.get(call.id)))
+    )
+  );
+}
+function noteSignoff(ctx) {
+  if (ctx.state.finish.reviewVerdictRecorded) return true;
+  if (!signoffRecorded(ctx.messages, ctx.policy.signoff)) return false;
+  ctx.state.finish = { ...ctx.state.finish, reviewVerdictRecorded: true };
+  return true;
+}
+function signoffSettleBlock(ctx) {
+  const required = ctx.policy.signoff;
+  if (!required || noteSignoff(ctx)) return null;
+  return missingReviewVerdictMessage(required);
+}
+function createFinishHook(ports = {}) {
+  const delegated = (ctx) => ports.delegated ?? ctx.task.dispatch.parentRunId !== void 0;
+  const unfinishedWork = (state) => ports.settleWorkAfterRun ? null : outstandingWork(state.work ?? []);
+  const openWork = async (ctx) => {
+    if (ctx.state.work?.length && !ports.settleWorkAfterRun) {
+      if (ports.workEvidence) {
+        const evidence = await ports.workEvidence(ctx.state.work.map((item) => item.id));
+        ctx.state.work = applyWorkEvidence(ctx.state.work, evidence);
+      }
+      const unresolved = unfinishedWork(ctx.state);
+      if (unresolved) {
+        const holds = (ctx.state.workHolds ?? 0) + 1;
+        ctx.state.workHolds = holds;
+        if (holds > MAX_OPEN_WORK_HOLDS) throw new Error(unresolved);
+        return unresolved;
+      }
+    }
+    return ports.openWork ? ports.openWork(ctx) : null;
+  };
+  return {
+    settleBlock: signoffSettleBlock,
+    unfinishedWork,
+    // An owner never ends with children still working — on `finish` (below) or in prose.
+    liveChildren: async (ctx) => {
+      if (!delegated(ctx) || !ports.liveChildren) return null;
+      const block = await ports.liveChildren();
+      if (!block && ports.absorbChildWrites) {
+        ports.beginAttempt?.();
+        const paths = new Set(writtenPathsOf(ctx));
+        await ports.absorbChildWrites(paths);
+        ctx.state.writtenPaths = [...paths];
+      }
+      return block;
+    },
+    // A run never ends while the tickets it owns are open — on `finish` (below, after every other gate) or in prose (the kernel).
+    openWork,
+    async gate(ctx) {
+      noteSignoff(ctx);
+      const verdict = await evaluateFinishGates({
+        writtenPaths: writtenPathsOf(ctx),
+        requiredSignoff: ctx.policy.signoff,
+        delegated: delegated(ctx),
+        summary: typeof ctx.content === "string" ? ctx.content : "",
+        output: "",
+        gates: ctx.state.finish,
+        enterVerify: () => {
+          if (ctx.policy.skipVerifyStage) return;
+          ctx.state.model = applyVerifyPhase(ctx.state.model);
+        },
+        ports
+      });
+      if (verdict.writtenPaths) ctx.state.writtenPaths = [...verdict.writtenPaths];
+      if (verdict.block) {
+        ctx.state.finish = { ...ctx.state.finish, finishBlockedOnce: true };
+        lastReasons.set(ctx.state, verdict.reason);
+        return verdict.block;
+      }
+      const owed = await openWork(ctx);
+      lastReasons.set(ctx.state, owed ? LINKED_WORK_OPEN : verdict.reason);
+      return owed;
+    }
+  };
+}
+var finishHook = createFinishHook();
+
+// ../packages/agent-run/src/policy/guards/cascade.ts
+var CascadeSession = class {
+  constructor(on, resume, ports = {}) {
+    this.ports = ports;
+    this.on = on;
+    this.cascade = resume?.cascade ?? initialCascadeState();
+    this.actionType = resume?.actionType;
+    this.soft = resume?.soft ?? false;
+    this.steer = resume?.steer;
+    this.priorWeakPassRate = resume?.priorWeakPassRate;
+    this.priorRead = resume?.priorRead ?? false;
+  }
+  ports;
+  /** Whether the D1 lever is on. Lever off ⇒ every method is inert. */
+  on;
+  cascade;
+  actionType;
+  soft;
+  steer;
+  steerShown = false;
+  priorWeakPassRate;
+  priorRead;
+  /**
+   * The step's features with the tenant's recent weak-pass rate for its action type —
+   * the D2 head's prior. Read at most once per run; a failed or empty read leaves the
+   * feature unset, which the head reads as 0.5.
+   */
+  async withPrior(f) {
+    if (typeof f.priorWeakPassRate === "number") return f;
+    if (!this.priorRead && this.ports.weakPassRate) {
+      this.priorRead = true;
+      try {
+        this.priorWeakPassRate = await this.ports.weakPassRate(this.featuresActionType(f.actionType));
+      } catch {
+      }
+    }
+    return typeof this.priorWeakPassRate === "number" ? { ...f, priorWeakPassRate: this.priorWeakPassRate } : f;
+  }
+  /** The run's action type for D2 features (the first tick's resolution, kept). */
+  featuresActionType(fallback) {
+    return this.actionType ?? fallback;
+  }
+  /**
+   * The first tick's starting model. A soft seed starts on the WEAKEST tier of the
+   * ladder — unless the router predicts the weak attempt would fail, in which case it
+   * keeps the seed (the stronger default). A strict pin is left alone.
+   */
+  async seed(state, a) {
+    this.actionType = a.features.actionType;
+    this.soft = !a.strict;
+    if (!this.on || !this.soft) return state;
+    if (this.ports.shouldSkipWeakAttempt && await this.ports.shouldSkipWeakAttempt(await this.withPrior(a.features))) return state;
+    const weak = weakestTierModel(a.ladder, state.broken);
+    if (!weak || weak === state.model) return state;
+    return { ...state, model: weak, pin: weak, locked: false };
+  }
+  /**
+   * Fold a verifier verdict on a unit of work. Returns the run's new policy state (the
+   * same object when nothing moved). Every conclusive verdict on a soft run becomes a D2
+   * training row through the `recordOutcome` port.
+   */
+  async verdict(state, kind, verdict, ctx) {
+    if (!this.on || !this.soft || verdict.inconclusive) return state;
+    const current = ctx.attemptModel && ctx.attemptModel !== "default" ? ctx.attemptModel : state.model;
+    if (current) {
+      const features = await this.withPrior(ctx.features);
+      await this.ports.recordOutcome?.({
+        actionType: this.featuresActionType(ctx.features.actionType),
+        weakModel: current,
+        passed: verdict.passed,
+        verifier: verdict.verifier,
+        features
+      });
+    }
+    const exclude = [...state.broken, ...state.authorModel && state.phase === "verify" ? [state.authorModel] : []];
+    const r = cascadeVerdict(this.cascade, kind, verdict, { current, ladder: ctx.ladder, exclude });
+    this.cascade = r.state;
+    switch (r.action.kind) {
+      case "escalate":
+        this.setSteer(r.action.steer);
+        return r.action.to ? { ...state, ...reduceRunPolicy(state, { type: "escalated", to: r.action.to }) } : state;
+      case "exhausted":
+        this.setSteer(r.action.steer);
+        return state;
+      case "deescalate":
+        return { ...state, ...reduceRunPolicy(state, { type: "escalated", to: r.action.to }) };
+      default:
+        return state;
+    }
+  }
+  /**
+   * Move the run one tier up for a reason that is not a verifier's (the progress
+   * detector's second trip). Null for a pinned run or when nothing is stronger — the
+   * caller pauses instead. Gated by the CALLER's lever, not the cascade's.
+   */
+  escalate(state, ladder, attemptModel) {
+    if (!this.soft) return null;
+    const current = attemptModel && attemptModel !== "default" ? attemptModel : state.model;
+    const to = nextTierModel(ladder, current, state.broken);
+    if (!to) return null;
+    this.cascade = { ...this.cascade, escalations: this.cascade.escalations + 1 };
+    return { ...state, ...reduceRunPolicy(state, { type: "escalated", to }) };
+  }
+  /**
+   * The reasoning levers for a turn: the caller's (persona / role default), raised one
+   * level per open escalation of the current unit. Inert with nothing escalated or no
+   * `escalateThinkLevel` port.
+   */
+  execParams(base) {
+    const boost = this.on ? this.cascade.reasoningBoost : 0;
+    if (boost <= 0 || !this.ports.escalateThinkLevel) return base;
+    let level = base?.thinkLevel ?? this.ports.defaultThinkLevel ?? "medium";
+    for (let i = 0; i < boost; i += 1) level = this.ports.escalateThinkLevel(level);
+    return { ...base, thinkLevel: level };
+  }
+  setSteer(note) {
+    this.steer = note;
+    this.steerShown = false;
+  }
+  /** The note the current turn's request carries ("" when none). */
+  steerNote() {
+    if (this.steer) this.steerShown = true;
+    return this.steer ?? "";
+  }
+  /** A turn ended: a steer that has been shown once is done. */
+  endTurn() {
+    if (this.steerShown) {
+      this.steer = void 0;
+      this.steerShown = false;
+    }
+  }
+  snapshot() {
+    return {
+      ...this.on ? { cascade: this.cascade } : {},
+      ...this.actionType ? { actionType: this.actionType } : {},
+      soft: this.soft,
+      ...this.steer ? { steer: this.steer } : {},
+      ...typeof this.priorWeakPassRate === "number" ? { priorWeakPassRate: this.priorWeakPassRate } : {},
+      ...this.priorRead ? { priorRead: true } : {}
+    };
+  }
+};
+
+// ../packages/agent-run/src/policy/guards/postEdit.ts
+var EDIT_TOOLS = /* @__PURE__ */ new Set(["write_file", "edit_file"]);
+var NOTE_ERRORS = 5;
+function succeeded5(data) {
+  return !(data && typeof data === "object" && data.ok === false);
+}
+function verifyAfterEdit(call, data, opts = {}) {
+  if (opts.bound === false || !EDIT_TOOLS.has(call.name) || !succeeded5(data)) return null;
+  const path = typeof call.args.path === "string" ? call.args.path.trim() : "";
+  if (!path || !isVerifiablePath(path)) return null;
+  const content = call.name === "write_file" && typeof call.args.content === "string" ? call.args.content : null;
+  if (content !== null) {
+    const result = foldVerifyOutcomes([{ path, ...checkFileContent(path, content) }]);
+    return result.checked.length || result.errors.length ? result : null;
+  }
+  const read = opts.read;
+  if (!read) return null;
+  return (async () => {
+    const committed = await read(path).catch(() => null);
+    if (committed === null) return null;
+    const result = foldVerifyOutcomes([{ path, ...checkFileContent(path, committed) }]);
+    return result.checked.length || result.errors.length ? result : null;
+  })();
+}
+function postEditNote(v) {
+  const lines = v.errors.slice(0, NOTE_ERRORS).map((e) => `- ${e.path}${e.line ? `:${e.line}` : ""}${e.ruleId ? ` [${e.ruleId}]` : ""}: ${e.message}`);
+  const more = v.errors.length > NOTE_ERRORS ? `
+- \u2026and ${v.errors.length - NOTE_ERRORS} more` : "";
+  return `Post-edit check FAILED (shell-free source/config policy) \u2014 fix this before building on it:
+${lines.join("\n")}${more}`;
+}
+function withPostEditNote(data, v) {
+  return v && !v.ok ? withAdvisory(data, postEditNote(v)) : data;
+}
+
+// ../packages/agent-run/src/policy/guards/ports.ts
+function guardLeversOf(levers) {
+  const on = new Set(levers);
+  return {
+    a3_progress_detector: on.has("a3_progress_detector"),
+    d7_deterministic_handlers: on.has("d7_deterministic_handlers"),
+    d1_verifier_cascade: on.has("d1_verifier_cascade"),
+    d8_parallel_tool_calls: on.has("d8_parallel_tool_calls")
+  };
+}
+
+// ../packages/agent-run/src/policy/guards/forced/briefs.ts
+var PROGRESS_FORCED_LABEL = "loop.progress_forced";
+var FINISH_RECORD_TURNS = 3;
+function handOffBrief(reason, tool) {
+  return `${reason} Call ${tool} NOW. summary = the research for the coders: everything you and any research sub-agents established that the change needs (files, functions, what they do today, decisions, traps). tasks = each one standalone: the files, the change, and how to know it is done. The coding agents start from exactly what you write here; they do not see this conversation.`;
+}
+function changeBrief(reason, askTool) {
+  return `${reason} Make the change now with what you already know \u2014 the edit tools are the only ones offered this turn.` + (askTool ? ` If something genuinely blocks the change, call ${askTool} and say exactly what.` : "");
+}
+var handOffDueBrief = (tool) => handOffBrief(`ANALYSIS IS OVER. You have spent ${PLAN_TURN_BUDGET} turns analysing without changing anything.`, tool);
+var changeDueBrief = (codeTurns, askTool) => changeBrief(`STOP READING. You have spent ${codeTurns} coding turns without changing anything.`, askTool);
+var circlingReason = (n) => `YOU ARE CIRCLING. Your last ${n} calls were all answered from this run's read cache \u2014 you already have every one of those results, and re-reading them changes nothing.`;
+var FINISH_RECORD_BRIEF = "You are FINISHING: make no more code changes and run nothing. Before your final report, file a ticket for EVERY item the person asked for that is still open (with the ticket tools offered on this turn), and update the status of the tickets you worked on. Then write the final report: what is done, and which ticket tracks each item that is not.";
+var FINISH_FINAL_BRIEF = "Write your final report now: what is done, and which ticket tracks each requested item that is still open.";
+var DEFERRED_ENDS_PLANNING = "The run kept reading through its progress checks without handing off \u2014 analysis ends here and the coding role makes the change.";
+var DEFERRED_ENDS_PLANNING_STEERED = "The run kept reading through its progress checks without handing off \u2014 analysis ends here and the coding role takes the next turn.";
+
+// ../packages/agent-run/src/policy/guards/forced/turns.ts
+function report(env, event) {
+  env.ctx.state.model = reduceRunPolicy(env.ctx.state.model, event);
+}
+function specOf(env, name) {
+  return env.ctx.tools.find((t) => t.function.name === name);
+}
+var budgeted = (env) => env.bind.facts.budgeted();
+var askToolIf = (env, allowed) => allowed ? env.opts.askTool : null;
+function endPlanning(env, step, why) {
+  report(env, { type: "plan_budget_spent" });
+  env.note("loop.plan_budget_spent", { step, planTurns: env.ctx.state.model.planTurns }, why);
+}
+function changeToolsOf(env, selected, canAsk) {
+  const change = new Set(env.ctx.policy.codeChangeTools ?? []);
+  const tools = selected.filter((t) => change.has(t.function.name) || canAsk && t.function.name === env.opts.askTool);
+  return tools.some((t) => change.has(t.function.name)) ? tools : null;
+}
+function planBudgetTurn(env, step) {
+  const model = env.ctx.state.model;
+  if (!handOffDue(model) || !budgeted(env)) return null;
+  const handOff2 = specOf(env, env.opts.handOffTool);
+  const canAsk = env.bind.facts.canAskUser();
+  if (model.handOffForced || !canAsk || !handOff2) {
+    endPlanning(env, step, canAsk ? "The forced hand-off turn did not hand off \u2014 analysis ends here and the coding role takes the next turn." : "Analysis budget spent where hand_off cannot be offered \u2014 analysis ends here and the coding role takes the next turn.");
+    return null;
+  }
+  report(env, { type: "hand_off_forced" });
+  env.note("loop.hand_off_due", { step, planTurns: model.planTurns }, `${model.planTurns} analysis turn(s) with no change and no hand-off \u2014 this turn offers hand_off alone and requires the call.`);
+  return { tools: [handOff2], toolChoice: "required", brief: handOffDueBrief(env.opts.handOffTool) };
+}
+function forcedProgressTurn(env, selected, reason, opts = {}) {
+  const model = env.ctx.state.model;
+  const handOff2 = specOf(env, env.opts.handOffTool);
+  if (!opts.changeOnly && handOff2 && offersHandOff(model) && env.bind.facts.canAskUser() && !model.handOffForced) {
+    report(env, { type: "hand_off_forced" });
+    return { forced: "hand_off", turn: { tools: [handOff2], toolChoice: "required", brief: handOffBrief(reason, env.opts.handOffTool) } };
+  }
+  if (env.bind.facts.codeChanged()) return null;
+  const canAsk = env.bind.facts.canAskUser() && !opts.noAsk;
+  const tools = changeToolsOf(env, selected.filter((t) => t.function.name !== env.opts.handOffTool), canAsk);
+  if (!tools) return null;
+  if (offersHandOff(model)) {
+    if (opts.endsPlanning) endPlanning(env, opts.endsPlanning.step, opts.endsPlanning.why);
+    else report(env, { type: "plan_budget_spent" });
+  }
+  report(env, { type: "change_forced" });
+  return { forced: "change", turn: { tools, toolChoice: "required", brief: changeBrief(reason, askToolIf(env, canAsk)) } };
+}
+function changeBudgetTurn(env, step, selected) {
+  const budget = env.ctx.policy.skipVerifyStage ? QUICK_CHANGE_TURN_BUDGET : PLAN_TURN_BUDGET;
+  const model = env.ctx.state.model;
+  if (!changeDue(model, env.bind.facts.progressed(), budget) || !budgeted(env)) return null;
+  const canAsk = env.bind.facts.canAskUser();
+  const tools = changeToolsOf(env, selected, canAsk);
+  if (!tools) return null;
+  report(env, { type: "change_forced" });
+  env.note("loop.change_due", { step, codeTurns: model.codeTurns }, `${model.codeTurns} coding turn(s) with no change and no hand-off \u2014 this turn offers the change tools alone and requires a call.`);
+  return { tools, toolChoice: "required", brief: changeDueBrief(model.codeTurns, askToolIf(env, canAsk)) };
+}
+function noProgressTurn(env, step, selected, cache2) {
+  if (!budgeted(env) || env.bind.facts.progressed() || env.ctx.state.model.phase === "verify" || !cache2.due()) return null;
+  const n = cache2.count;
+  const out = forcedProgressTurn(env, selected, circlingReason(n));
+  if (!out) return null;
+  cache2.consume();
+  env.note("loop.no_progress", { step, streak: n, forced: out.forced }, `${n} consecutive call(s) answered from the read cache \u2014 this turn offers ${out.forced === "hand_off" ? "hand_off alone" : "the change tools alone"} and requires a call.`);
+  return out.turn;
+}
+
+// ../packages/agent-run/src/policy/guards/forced/ladder.ts
+var FORCED_MENU = {
+  hand_off: "hand_off alone",
+  change: "the change tools alone"
+};
+var ForcedLadder = class {
+  constructor(state, steer, bind, opts) {
+    this.state = state;
+    this.steer = steer;
+    this.bind = bind;
+    this.opts = opts;
+  }
+  state;
+  steer;
+  bind;
+  opts;
+  /** The run is FINISHING: a finish turn was decided. Never cleared for the rest of the run, so no delivery gate sends its report back for more work. */
+  get finishing() {
+    return this.state.finishing === true;
+  }
+  /**
+   * A trip an escalation or a finish waits on a later turn's menu for. The detector's second note says the run moved to a
+   * stronger model, and a finish's note is its no-tools turn's brief: neither is shown twice, so the steer is cleared.
+   */
+  hold(action) {
+    this.steer(void 0);
+    this.state.due = action;
+  }
+  takeDue() {
+    const due = this.state.due ?? null;
+    delete this.state.due;
+    return due;
+  }
+  /** 'record' (the obligation tools again), 'final' (no tools — the report), or null when the run is not finishing that way. */
+  takeFinishingTurn() {
+    if (this.state.recordLeft === void 0) return null;
+    if (this.state.recordLeft > 0) {
+      this.state.recordLeft -= 1;
+      return "record";
+    }
+    delete this.state.recordLeft;
+    return "final";
+  }
+  /** The obligation tools of the work-linking directive that the catalog holds — never a write or exec tool. */
+  obligationTools(ctx) {
+    const names = new Set(this.bind.facts.obligationTools());
+    return names.size === 0 ? [] : ctx.tools.filter((t) => names.has(t.function.name));
+  }
+  /** THE one place a finish turn is made: the run is finishing from here on. */
+  finishTurn(tools, brief) {
+    this.state.finishing = true;
+    return { tools, brief, finishing: true, ...tools.length === 0 ? { final: true } : {} };
+  }
+  finishingTurn(ctx) {
+    const finishing = this.takeFinishingTurn();
+    if (!finishing) return null;
+    this.takeDue();
+    const tools = finishing === "record" ? this.obligationTools(ctx) : [];
+    return this.finishTurn(tools, tools.length > 0 ? FINISH_RECORD_BRIEF : FINISH_FINAL_BRIEF);
+  }
+  /**
+   * The forced turn an escalation or finish decides, called after selection with this turn's tools. Null for an ordinary
+   * turn — and when the trip cannot be forced here, in which case its note opens the turn instead.
+   */
+  guardTurn(env, step, selected) {
+    const due = this.takeDue();
+    if (!due) return null;
+    if (due.kind === "finish") {
+      const deferred = due.verified ? null : this.deferredFinishTurn(env, step, selected, due);
+      if (deferred === "steered") return null;
+      if (deferred) return deferred;
+      const tools = this.obligationTools(env.ctx);
+      this.trace(env.note, step, due, "finish", tools.length);
+      if (tools.length === 0) return this.finishTurn([], due.note);
+      this.state.recordLeft = Math.max(0, this.opts.recordTurns - 1);
+      return this.finishTurn(tools, `${due.note}
+
+${FINISH_RECORD_BRIEF}`);
+    }
+    const advice = `PROGRESS CHECK ${due.trip}: ${progressAdvice(due.signal)}`;
+    const out = budgeted(env) ? forcedProgressTurn(env, selected, advice) : null;
+    if (!out) {
+      this.steer(advice);
+      return null;
+    }
+    this.trace(env.note, step, due, out.forced);
+    return out.turn;
+  }
+  /**
+   * A change request that has not changed anything is not ended while the run can still DO the work: once per run, the
+   * unverified finish becomes a forced change turn instead — the change tools alone, with NO question tool. A planner's analysis
+   * ends there (the coding role takes the turn). When this turn's menu has no change tool to force while still planning,
+   * planning ends and the run is steered instead ('steered'), so the NEXT turn selects as `code`. Null: the finish stands.
+   */
+  deferredFinishTurn(env, step, selected, due) {
+    if (!budgeted(env) || this.bind.facts.progressed() || this.state.deferred) return null;
+    const advice = `PROGRESS CHECK ${due.trip}: ${progressAdvice(due.signal)}`;
+    const planning = offersHandOff(env.ctx.state.model);
+    const out = forcedProgressTurn(env, selected, advice, { changeOnly: true, noAsk: true, endsPlanning: { step, why: DEFERRED_ENDS_PLANNING } });
+    if (out) {
+      this.state.deferred = true;
+      this.trace(env.note, step, due, out.forced);
+      return out.turn;
+    }
+    if (!planning) return null;
+    endPlanning(env, step, DEFERRED_ENDS_PLANNING_STEERED);
+    this.state.deferred = true;
+    this.steer(advice);
+    return "steered";
+  }
+  trace(note, step, due, forced, recordTools = 0) {
+    const why = due.kind === "finish" && due.verified ? "the change is made and verified" : "the run is not converging";
+    const head = `progress check ${due.trip} (${due.signal.kind})`;
+    note(
+      PROGRESS_FORCED_LABEL,
+      { step, trip: due.trip, signal: due.signal.kind, forced, ...recordTools > 0 ? { recordTools } : {} },
+      forced !== "finish" ? `${head} \u2014 this turn offers ${FORCED_MENU[forced]} and requires a call.` : recordTools > 0 ? `${head} \u2014 ${why}: this turn offers only the ${recordTools} ticket tool(s) to record what is still open, and the run writes its final report.` : `${head} \u2014 ${why}: this turn offers no tools and the run writes its final report.`
+    );
+  }
+  /** Decide one turn: the policy's selection (the hand-off tool leaves it once planning closes) and the forced turn, when a rule forced one. */
+  async decide(env, step, select, cache2) {
+    const finishing = this.finishingTurn(env.ctx);
+    const handOffTurn = finishing ? null : planBudgetTurn(env, step);
+    const ranked2 = await select();
+    const selected = offersHandOff(env.ctx.state.model) ? ranked2 : ranked2.filter((t) => t.function.name !== this.opts.handOffTool);
+    const turn = finishing ?? handOffTurn ?? changeBudgetTurn(env, step, selected) ?? noProgressTurn(env, step, selected, cache2) ?? this.guardTurn(env, step, selected);
+    return { selected, turn };
+  }
+};
+async function ladderTurn(ladder, ctx, env, onEvent) {
+  const rows = [];
+  const note = (tool, detail, result) => {
+    rows.push({ tool, detail, result });
+  };
+  const { selected, turn } = await ladder.decide({ ctx, bind: ladder.bind, opts: ladder.opts, note }, ctx.step, env.select, env.cache);
+  for (const row of rows) await onEvent?.(row, { step: ctx.step });
+  return { selected, ...turn ? { menu: menuOf(turn) } : {} };
+}
+function menuOf(turn) {
+  return { tools: turn.tools, ...turn.toolChoice ? { toolChoice: turn.toolChoice } : {}, tail: [turn.brief], ...turn.final ? { final: true } : {} };
+}
+
+// ../packages/agent-run/src/policy/guards/index.ts
+var QUESTION_TOOL_ROUNDS = 6;
+var ANSWER_DUE_NOTE = "Answer the question now using the evidence collected. State what could not be established. Do not call more tools.";
+var RunGuards = class {
+  constructor(levers, resume, ports = {}, question = false) {
+    this.question = question;
+    this.levers = levers;
+    this.answerTurns = resume?.answerTurns ?? 0;
+    this.cascade = new CascadeSession(!!levers.d1_verifier_cascade, resume?.cascade, {
+      shouldSkipWeakAttempt: ports.cascade?.shouldSkipWeakAttempt ? (f) => ports.cascade.shouldSkipWeakAttempt({ actionType: f.actionType, priorWeakPassRate: f.priorWeakPassRate }) : void 0,
+      weakPassRate: ports.cascade?.weakPassRate,
+      escalateThinkLevel: ports.cascade?.escalateThinkLevel,
+      defaultThinkLevel: ports.cascade?.defaultThinkLevel,
+      recordOutcome: ports.cascade?.recordOutcome ? (row) => ports.cascade.recordOutcome({ ...row, features: row.features }) : void 0
+    });
+    const bind = ports.progress;
+    this.bind = bind;
+    this.progress = levers.a3_progress_detector ? new ProgressDetector(resume?.progress, {
+      isReadOnly: bind?.isReadOnly ?? ((tool) => isReadOnlyCloudTool(tool)),
+      isBookkeeping: isProgressBookkeeping,
+      ...bind?.isUnscopedMutation ? { isUnscopedMutation: bind.isUnscopedMutation } : {},
+      ...bind?.isPlatformProgress ? { isPlatformProgress: bind.isPlatformProgress } : {},
+      ...bind?.expectsChange ? { expectsChange: bind.expectsChange } : {}
+    }) : null;
+    this.forced = bind?.turns ? new ForcedLadder({ ...resume?.forced }, (note) => this.progress?.setSteer(note), bind, bind.turns) : null;
+    this.postEdit = !!levers.d7_deterministic_handlers;
+    this.finishDue = resume?.finishDue === true;
+    this.resumedFinishing = resume?.forced?.finishing === true;
+    this.checksNote = resume?.checksNote ?? "";
+    this.escalations = resume?.escalations ?? 0;
+  }
+  question;
+  answerTurns;
+  cascade;
+  progress;
+  /** A surface's forced-turn ladder (`GuardPorts.progress.turns`); null ⇒ A3's trips keep their generic handling. */
+  forced;
+  bind;
+  /** The saved state said the run was finishing (read before any ladder is bound: a resumed tick asks for its tail first). */
+  resumedFinishing;
+  postEdit;
+  levers;
+  /** A3's `finish`: the next turn offers no tools — the run's final report. */
+  finishDue;
+  /** This turn's post-edit verdicts — the D1 code unit's verifier. */
+  turnEdits = [];
+  /** D7: the sandbox checks' failures from the last turn, for the next turn's tail. */
+  checksNote = "";
+  /** Moves UP the tier ladder this run (D1's failed verdicts, A3's second trip) — §8.2. */
+  escalations;
+  /** The volatile-tail sections this turn carries (empty strings drop out). */
+  tailSections() {
+    return [
+      this.finishDue && this.answerTurns >= QUESTION_TOOL_ROUNDS ? ANSWER_DUE_NOTE : "",
+      this.finishing || this.resumedFinishing ? "" : this.progress?.steerNote() ?? "",
+      this.cascade.steerNote(),
+      this.checksNote
+    ];
+  }
+  /** The forced-turn ladder's decision for this step, or nothing when none is bound. */
+  forcedTurn(ctx, env, ports) {
+    return this.forced ? ladderTurn(this.forced, ctx, env, ports.onEvent) : void 0;
+  }
+  /** A finish turn was decided: sticky for the rest of the run. */
+  get finishing() {
+    return this.forced?.finishing === true;
+  }
+  /** D1: the reasoning levers for a turn, raised while a unit is escalated. */
+  reasoning(base) {
+    return this.cascade.execParams(base);
+  }
+  /** D1 + D2: the first tick's starting model (weak-first unless the router says skip). */
+  seedModel(state, a) {
+    return this.cascade.seed(state, a);
+  }
+  /** What the guards persist across a step boundary (the contract's `LoopGuardState`). */
+  snapshot() {
+    return {
+      ...this.answerTurns ? { answerTurns: this.answerTurns } : {},
+      ...this.progress ? { progress: this.progress.snapshot() } : {},
+      // The cascade's seed facts serve A3's escalation too; with both levers off nothing persists.
+      ...this.cascade.on || this.progress ? { cascade: this.cascade.snapshot() } : {},
+      ...this.finishDue ? { finishDue: true } : {},
+      ...this.forced && Object.keys(this.forced.state).length > 0 ? { forced: { ...this.forced.state } } : {},
+      ...this.checksNote ? { checksNote: this.checksNote } : {},
+      ...this.escalations ? { escalations: this.escalations } : {}
+    };
+  }
+  /** Whether a call only reads (D8): the kernel's `isReadOnly` port. */
+  isReadOnly(name) {
+    return this.levers.d8_parallel_tool_calls ? isReadOnlyCloudTool(name) : false;
+  }
+  /**
+   * D7: check an edit the moment it lands; only a failure reaches the model, as one
+   * note on that tool result. The verdict also feeds the D1 code unit's verifier.
+   */
+  async checkEdit(call, data, ports) {
+    if (!this.postEdit && !this.cascade.on) return data;
+    const verdict = await verifyAfterEdit(call, data, { read: ports.read, bound: ports.bound });
+    if (!verdict) return data;
+    this.turnEdits.push(verdict);
+    return this.postEdit ? withPostEditNote(data, verdict) : data;
+  }
+  /**
+   * D1: fold a finish attempt's gate verdict into the cascade; returns the block the
+   * kernel reads. The finish hook calls this after its own gates.
+   */
+  async finish(verdict, step, ports) {
+    if (!this.cascade.on) return verdict.block;
+    const v = verdict.block ? { passed: false, verifier: `finish_gates:${verdict.reason ?? "blocked"}`, reason: verdict.block, inconclusive: verdict.reason === "branch_ci_pending" || verdict.reason === "children_running" || verdict.reason === LINKED_WORK_OPEN } : { passed: true, verifier: "finish_gates" };
+    await this.judge("finish", v, step, ports);
+    return verdict.block;
+  }
+  /** The turn ended: fold the turn's edits into the cascade and trip A3 if stuck. */
+  async endTurn(step, ports) {
+    this.checksNote = "";
+    if (this.question && ++this.answerTurns >= QUESTION_TOOL_ROUNDS) {
+      this.finishDue = true;
+      await this.record(ports, { tool: "answer_due", detail: { turns: this.answerTurns }, result: ANSWER_DUE_NOTE }, step);
+      return;
+    }
+    if (this.turnEdits.length > 0) {
+      const errors = this.turnEdits.flatMap((v) => v.errors);
+      this.turnEdits = [];
+      const staticVerdict = errors.length ? { passed: false, verifier: "changed_files", reason: errors.slice(0, 5).map((e) => `${e.path}${e.line ? `:${e.line}` : ""} ${e.message}`).join("; ") } : { passed: true, verifier: "changed_files" };
+      const checks = ports.checks ? await ports.checks().catch(() => null) : null;
+      if (checks?.steer && this.postEdit) this.checksNote = checks.steer;
+      const verdict = checks && !checks.passed && staticVerdict.passed ? { passed: false, verifier: checks.verifier, ...checks.reason ? { reason: checks.reason } : {} } : staticVerdict;
+      await this.judge("code_edit", verdict, step, ports);
+    }
+    this.cascade.endTurn();
+    for (const report2 of this.bind?.childReports?.() ?? []) this.progress?.observeChildReport(report2);
+    const action = this.progress?.endTurn();
+    if (action) await this.onTrip(action, ports, step);
+  }
+  /** Leave a row on the run's timeline. A surface that binds the forced-turn ladder is told the step as well. */
+  async record(ports, row, step) {
+    if (this.forced) await ports.onEvent?.(row, { step });
+    else await ports.onEvent?.(row);
+  }
+  async judge(kind, verdict, step, ports) {
+    const model = ports.model;
+    if (!model) return;
+    const before = model.get();
+    const features = ports.features?.(step, void 0) ?? { actionType: "other" };
+    const after = await this.cascade.verdict(before, kind, verdict, {
+      ladder: ports.ladder?.() ?? ports.cascade?.ladder ?? { candidates: [], rankOf: () => 1 },
+      attemptModel: ports.resolvedModel?.(),
+      features: { actionType: this.cascade.featuresActionType(features.actionType ?? "other") }
+    });
+    if (after === before) return;
+    model.set(after);
+    if (!verdict.passed) this.escalations += 1;
+    await this.record(ports, {
+      tool: "model.escalated",
+      detail: { step, unit: kind, verifier: verdict.verifier, passed: verdict.passed, from: before.model ?? ports.resolvedModel?.() ?? null, to: after.model ?? null },
+      result: verdict.passed ? `${kind} passed \u2014 back to ${after.model}` : `${kind} failed ${verdict.verifier} \u2014 escalated to ${after.model}`
+    }, step);
+  }
+  async onTrip(action, ports, step) {
+    let outcome = action.kind;
+    if (action.kind !== "advisory" && this.forced) {
+      if (action.kind === "escalate" || action.kind === "finish") this.forced.hold(action);
+      const s2 = progressTraceStep(action);
+      await this.record(ports, { tool: s2.label, detail: s2.args, result: s2.result }, step);
+      return;
+    }
+    if (action.kind === "advisory") {
+      this.progress?.setSteer(action.note);
+      const s2 = progressTraceStep(action);
+      await this.record(ports, { tool: s2.label, detail: s2.args, result: s2.result }, step);
+      return;
+    }
+    if (action.kind === "escalate") {
+      const model = ports.model;
+      const ladder = ports.ladder?.() ?? ports.cascade?.ladder;
+      const next = model && ladder ? this.cascade.escalate(model.get(), ladder, ports.resolvedModel?.()) : null;
+      if (next && model) {
+        model.set(next);
+        this.escalations += 1;
+      } else {
+        this.progress?.setSteer(progressSteerNote(action.signal, action.trip, false));
+        outcome = "steer";
+      }
+    } else if (action.kind === "finish") {
+      this.finishDue = true;
+    }
+    const s = progressTraceStep(action, {
+      outcome,
+      detail: { trip: action.trip, signal: action.signal, outcome, model: ports.model?.get().model ?? null }
+    });
+    await this.record(ports, { tool: s.label, detail: s.args, result: s.result }, step);
+  }
+  /** A3's `finish`: whether the next turn is the run's final report (no tools). A peek — {@link finalTurnDone} spends it. */
+  get finalTurnDue() {
+    return this.finishDue;
+  }
+  /** The final turn was answered: the finish is spent. */
+  finalTurnDone() {
+    this.finishDue = false;
+  }
+  /** A3: what the turn said, judged against what its calls did (WS8p). */
+  noteTurnText(text) {
+    this.progress?.noteTurnText(text);
+  }
+  /** A3: every dispatched call is observed by the progress detector (when on). */
+  observe(call, result, isError) {
+    if (result && typeof result === "object" && result.control) return;
+    this.progress?.observe(call.name, call.args, { data: result, ...isError ? { isError: true } : {} });
+  }
+};
+var sessions = /* @__PURE__ */ new WeakMap();
+function sessionOf(ctx, ports) {
+  let s = sessions.get(ctx.state);
+  if (!s) {
+    const question = hasExplicitQuestionIntent(classifyRequest(ctx.task.request ?? ctx.task.prompt));
+    s = new RunGuards(guardLeversOf(ctx.policy.levers), ctx.state.guards, ports, question);
+    sessions.set(ctx.state, s);
+    ctx.state.guards = s.snapshot();
+  }
+  return s;
+}
+function guardsTurnNote(ctx) {
+  const s = sessions.get(ctx.state) ?? new RunGuards(guardLeversOf(ctx.policy.levers), ctx.state.guards);
+  return s.tailSections().filter((part) => part.trim().length > 0).join("\n\n");
+}
+function portsOf(ctx, ports) {
+  const state = ctx.state;
+  const ladder = ports.ladder?.() ?? ports.cascade?.ladder;
+  return {
+    ...ports,
+    ...!ports.model && ladder ? { model: { get: () => state.model, set: (next) => {
+      state.model = next;
+    } } } : {},
+    ...ports.features ? { features: (step) => ports.features(step, state) } : {}
+  };
+}
+function createGuardsHook(surfacePorts = {}) {
+  return {
+    async observe(ctx, call, result, isError) {
+      const ports = portsOf(ctx, surfacePorts);
+      const g = sessionOf(ctx, ports);
+      const noted = await g.checkEdit(call, result, ports);
+      g.observe(call, result, isError);
+      ctx.state.guards = g.snapshot();
+      return noted !== result ? { data: noted } : void 0;
+    },
+    async endTurn(ctx, content) {
+      const ports = portsOf(ctx, surfacePorts);
+      const g = sessionOf(ctx, ports);
+      g.noteTurnText(ctx.ports.delivery?.judged?.(content) ?? content);
+      await g.endTurn(ctx.step, ports);
+      ctx.state.guards = g.snapshot();
+    },
+    async forcedTurn(ctx, env) {
+      const ports = portsOf(ctx, surfacePorts);
+      const g = sessionOf(ctx, ports);
+      const decided = await g.forcedTurn(ctx, env, ports);
+      ctx.state.guards = g.snapshot();
+      return decided;
+    },
+    isFinishing(ctx) {
+      return sessionOf(ctx, portsOf(ctx, surfacePorts)).finishing;
+    },
+    isReadOnly(ctx, name) {
+      const ports = portsOf(ctx, surfacePorts);
+      return sessionOf(ctx, ports).isReadOnly(name);
+    },
+    finalTurn(ctx) {
+      const ports = portsOf(ctx, surfacePorts);
+      return sessionOf(ctx, ports).finalTurnDue;
+    },
+    finalTurnDone(ctx) {
+      const ports = portsOf(ctx, surfacePorts);
+      const g = sessionOf(ctx, ports);
+      g.finalTurnDone();
+      ctx.state.guards = g.snapshot();
+    },
+    async seed(ctx) {
+      const ports = portsOf(ctx, surfacePorts);
+      const ladder = ports.ladder?.() ?? ports.cascade?.ladder;
+      if (!ladder) return void 0;
+      const seeded = await sessionOf(ctx, ports).seedModel(ctx.state.model, {
+        strict: ctx.policy.modelStart?.strict === true,
+        ladder,
+        features: ports.features?.(0) ?? { actionType: "other", role: ctx.policy.role, promptTokens: 0, toolCount: ctx.tools.length, turnIndex: 0 }
+      });
+      ctx.state.guards = sessionOf(ctx, ports).snapshot();
+      return seeded;
+    },
+    reasoning(ctx) {
+      const ports = portsOf(ctx, surfacePorts);
+      return sessionOf(ctx, ports).reasoning(void 0);
+    },
+    async finish(ctx, verdict) {
+      const ports = portsOf(ctx, surfacePorts);
+      const g = sessionOf(ctx, ports);
+      const block = await g.finish(verdict, ctx.step, ports);
+      ctx.state.guards = g.snapshot();
+      return block;
+    }
+  };
+}
+var guardsHook = createGuardsHook();
+
+// ../packages/agent-run/src/policy/verify/sandboxVerify.ts
+var MAX_VERIFY_COMMANDS = 3;
+var VERIFY_BUDGET_MS = 9 * 6e4;
+var MIN_COMMAND_MS = 3e4;
+var DID_NOT_FINISH = 124;
+async function readPackageScripts(sandbox) {
+  const content = await sandbox.read("package.json").catch((error) => {
+    sandbox.onError?.("read", error);
+    return null;
+  });
+  if (content === null) return null;
+  try {
+    const scripts = JSON.parse(content).scripts;
+    if (!scripts || typeof scripts !== "object" || Array.isArray(scripts)) return null;
+    return Object.fromEntries(Object.entries(scripts).filter((e) => typeof e[1] === "string"));
+  } catch {
+    return null;
+  }
+}
+async function detectRunner2(sandbox) {
+  const atRoot = async (name) => {
+    const listed = await sandbox.list(name).catch((error) => {
+      sandbox.onError?.("list", error);
+      return [];
+    });
+    return (listed ?? []).includes(name);
+  };
+  if (await atRoot("pnpm-lock.yaml")) return "pnpm";
+  if (await atRoot("yarn.lock")) return "yarn";
+  return "npm";
+}
+async function runSandboxVerify(sandbox, shell, now = Date.now) {
+  const [packageScripts, runner] = await Promise.all([readPackageScripts(sandbox), detectRunner2(sandbox)]);
+  const plan = planInRunVerify({ surface: "sandbox", packageScripts, runner });
+  const results = [];
+  const deadline = now() + VERIFY_BUDGET_MS;
+  for (const command of plan.commands.slice(0, MAX_VERIFY_COMMANDS)) {
+    const left = deadline - now();
+    if (left < MIN_COMMAND_MS) {
+      results.push({ command, exitCode: DID_NOT_FINISH });
+      continue;
+    }
+    const r = await shell.runFor(command, left);
+    results.push({ command, exitCode: typeof r.exitCode === "number" ? r.exitCode : 1 });
+  }
+  return { packageScripts, runner, results };
+}
+
+// ../packages/agent-run/src/policy/verify/recordVerifyEvents.ts
+function recordVerifyEvents(outcome) {
+  return {
+    started: { type: "verify_started" },
+    completed: {
+      tool: "in_run_verify",
+      category: "tool",
+      detail: {
+        surface: outcome.surface,
+        kind: outcome.kind,
+        ...outcome.reason ? { reason: outcome.reason } : {},
+        commands: outcome.commands,
+        failedCommands: outcome.failedCommands,
+        mayFinish: outcome.mayFinish
+      },
+      result: describeVerifyOutcome(outcome)
+    }
+  };
+}
+
+// ../packages/agent-run/src/policy/tools/gateToolNames.ts
+var TOOL_NAME_SYNONYMS = {
+  write: ["write_file", "Write"],
+  write_file: ["write", "Write"],
+  Write: ["write", "write_file"],
+  delete_file: ["write_file", "write", "Write"],
+  // A patch is a write and an edit at once: a gate authored on either covers it.
+  apply_patch: ["write_file", "write", "Write", "edit_file", "edit", "Edit"],
+  // A write gate covers an edit (an edit rewrites a file); an edit gate does not cover a plain write.
+  edit: ["edit_file", "Edit", "write", "write_file", "Write"],
+  edit_file: ["edit", "Edit", "write", "write_file", "Write"],
+  Edit: ["edit", "edit_file", "write", "write_file", "Write"],
+  exec: ["run_command", "Bash", "bash"],
+  Bash: ["run_command", "exec", "bash"],
+  bash: ["run_command", "exec", "Bash"],
+  run_command: ["exec", "Bash", "bash"],
+  read: ["read_file", "Read"],
+  Read: ["read", "read_file"],
+  read_file: ["read", "Read"],
+  Task: ["spawn_agent", "spawn_agents", "sessions_spawn"],
+  spawn_agent: ["Task", "spawn_agents", "sessions_spawn"],
+  spawn_agents: ["Task", "spawn_agent", "sessions_spawn"],
+  sessions_spawn: ["Task", "spawn_agent", "spawn_agents"],
+  Glob: ["list_files", "find", "ls"],
+  list_files: ["Glob", "find", "ls"],
+  find: ["list_files", "Glob"],
+  ls: ["list_files", "Glob"],
+  Grep: ["search_code", "grep"],
+  search_code: ["Grep", "grep"],
+  grep: ["search_code", "Grep"]
+};
+var ACTION_RULES = [
+  // `process` drives a running exec session: writing to it, submitting to it or killing it acts on a command (listing, polling and reading its log do not).
+  ...["write", "send-keys", "submit", "paste", "kill", "remove"].map((action) => ({ tool: "process", when: { action }, as: "exec" })),
+  { tool: "nodes", when: { action: "run" }, as: "exec" },
+  { tool: "nodes", when: { action: "invoke", invokeCommand: { startsWith: "system." } }, as: "exec" }
+];
+function ruleMatches(rule, args) {
+  return Object.entries(rule.when).every(([key, want]) => {
+    const have = typeof args?.[key] === "string" ? args[key].trim().toLowerCase() : "";
+    return typeof want === "string" ? have === want : have.startsWith(want.startsWith);
+  });
+}
+var SYNONYMS_BY_NAME = new Map(
+  Object.entries(TOOL_NAME_SYNONYMS).map(([name, same]) => [normalizeToolName(name), same])
+);
+function candidateToolNames(toolName, args) {
+  const called = normalizeToolName(toolName);
+  const families = ACTION_RULES.filter((r) => r.tool === called && ruleMatches(r, args)).map((r) => r.as);
+  const names = [toolName.trim(), resolveToolAlias(toolName), ...families].flatMap((n) => [n, ...SYNONYMS_BY_NAME.get(normalizeToolName(n)) ?? []]);
+  return [...new Set(names.filter(Boolean))];
+}
+
+// ../packages/agent-run/src/policy/verify/nativeChecks.ts
+var SCRIPTS = new Set(IN_RUN_VERIFY_SCRIPT_NAMES);
+function scriptOf(value) {
+  if (typeof value !== "string") return void 0;
+  const match = /^(npm|pnpm|yarn)[ \t]+(?:(run)[ \t]+)?([a-z-]+)$/.exec(value.trim());
+  if (!match) return void 0;
+  const script = match[3];
+  if (!script || !SCRIPTS.has(script) || match[1] === "npm" && !match[2] && script !== "test") return void 0;
+  return script === "test" ? "test" : "typecheck";
+}
+function exitCodeOf(value) {
+  if (typeof value !== "object" || !value) return void 0;
+  const exitCode = value.exitCode;
+  return typeof exitCode === "number" && Number.isInteger(exitCode) ? exitCode : void 0;
+}
+var nativeChecks = {
+  observe({ state }, call, result, meta, succeeded8) {
+    const family = candidateToolNames(call.name, call.args);
+    if (!family.includes("run_command")) {
+      if (succeeded8 && family.some((name) => name === "write_file" || name === "spawn_agent")) delete state.nativeChecks;
+      return;
+    }
+    const check = scriptOf(call.args.command);
+    const directory = call.args.cwd ?? call.args.workdir;
+    const code = exitCodeOf(meta?.details) ?? exitCodeOf(result);
+    if (check && code !== void 0 && (succeeded8 || code !== 0) && directory === void 0 && call.args.background !== true) {
+      (state.nativeChecks ??= {})[check] = code;
+    } else if ((succeeded8 || code !== void 0) && !isReadOnlyShellCall("run_command", call.args)) {
+      delete state.nativeChecks;
+    }
+  },
+  recorded({ state }) {
+    const results = Object.values(state.nativeChecks ?? {});
+    return results.length ? results.every((code) => code === 0) : void 0;
+  }
+};
+
+// ../packages/agent-run/src/policy/verify/index.ts
+async function verifyRunWork(input, ports = {}) {
+  const { surface = "durable", shell, sandbox } = ports;
+  const { writtenPaths, ciVerified } = input;
+  if (input.declaredChecks && shell && sandbox && surface !== "durable" && writtenPaths && [...writtenPaths].length) {
+    try {
+      const { packageScripts, runner, results } = await runSandboxVerify(sandbox, shell);
+      return runVerifyPhase({ surface, writtenPaths, packageScripts, runner, results });
+    } catch (error) {
+      if (!ports.onShellError) throw error;
+      ports.onShellError(error);
+    }
+  }
+  return runVerifyPhase({ surface: "durable", writtenPaths, ciVerified });
+}
+async function record2(ports, outcome) {
+  if (!ports.recordEvents) return;
+  const events = recordVerifyEvents(outcome);
+  await ports.recordEvents(events.started);
+  await ports.recordEvents(events.completed);
+}
+function writtenPathsOf2(ctx) {
+  return ctx.state.writtenPaths ?? [];
+}
+function createVerifyHook(ports = {}) {
+  return {
+    ...ports.observeNativeChecks ? nativeChecks : {},
+    ...ports.recorded ? { recorded: ports.recorded } : {},
+    async verify(ctx) {
+      if (ctx.policy.verify === "none") return void 0;
+      const writtenPaths = writtenPathsOf2(ctx);
+      if (writtenPaths.length === 0) return void 0;
+      const outcome = await verifyRunWork({ writtenPaths, declaredChecks: ctx.policy.verify === "declared-checks" }, ports);
+      await record2(ports, outcome);
+      return { ok: outcome.mayFinish, note: outcome.note, ran: outcome.kind === "ran" };
+    }
+  };
+}
+var verifyHook = createVerifyHook();
+
+// ../packages/agent-run/src/policy/tools/taskState.ts
+var UPDATE_TASK_STATE_TOOL = "update_task_state";
+var TASK_STATE_MAX_TOKENS = 600;
+var LIST_FIELDS = ["constraints", "decisions", "filesTouched", "openQuestions"];
+var TEXT_FIELDS = ["goal", "nextStep"];
+var list = (description) => ({ type: "array", items: { type: "string" }, description });
+var UPDATE_TASK_STATE_SCHEMA = {
+  type: "function",
+  function: {
+    name: UPDATE_TASK_STATE_TOOL,
+    description: "Record your structured task state: the goal, constraints, decisions made, files touched, open questions and the next step. It is shown to you on every turn and survives context compaction, so keep it current after each meaningful step instead of re-deriving it. Fields you omit keep their previous value. Keep it under ~600 tokens.",
+    parameters: {
+      type: "object",
+      properties: {
+        goal: { type: "string", description: "The task goal in one or two sentences." },
+        constraints: list("Rules and limits the work must respect."),
+        decisions: list("Decisions already made, so they are not revisited."),
+        filesTouched: list("Repo paths you changed."),
+        openQuestions: list("What is still unknown."),
+        nextStep: { type: "string", description: "The very next action." }
+      }
+    }
+  }
+};
+var LABELS = {
+  goal: "Goal",
+  constraints: "Constraints",
+  decisions: "Decisions",
+  filesTouched: "Files touched",
+  openQuestions: "Open questions",
+  nextStep: "Next step"
+};
+function renderTaskState(state) {
+  if (!state) return "";
+  const lines = [];
+  for (const key of ["goal", ...LIST_FIELDS, "nextStep"]) {
+    const value = state[key];
+    if (typeof value === "string" && value.trim()) lines.push(`${LABELS[key]}: ${value.trim()}`);
+    else if (Array.isArray(value) && value.length) lines.push(`${LABELS[key]}:
+${value.map((v) => `- ${v}`).join("\n")}`);
+  }
+  return lines.length ? `### Task state
+${lines.join("\n")}` : "";
+}
+function applyTaskStateUpdate(current, args) {
+  const next = { ...current ?? {} };
+  for (const key of TEXT_FIELDS) {
+    if (typeof args[key] === "string") next[key] = args[key].trim();
+  }
+  for (const key of LIST_FIELDS) {
+    const value = args[key];
+    if (Array.isArray(value)) next[key] = value.filter((v) => typeof v === "string" && v.trim() !== "").map((v) => v.trim());
+  }
+  const tokens = defaultEstimateTokens(renderTaskState(next));
+  if (tokens > TASK_STATE_MAX_TOKENS) {
+    return { ok: false, error: `task state would be ~${tokens} tokens (limit ${TASK_STATE_MAX_TOKENS}) \u2014 summarise it more tightly and retry` };
+  }
+  return { ok: true, state: next };
+}
+
+// ../packages/agent-run/src/policy/memory/knowledge.ts
+function knowledgeRecorderFor(memory) {
+  return RunKnowledgeRecorder.restore(memory ?? null);
+}
+function knowledgeState(recorder) {
+  const log = recorder;
+  return typeof log.snapshot === "function" ? log.snapshot() : recorder;
+}
+var recorders = /* @__PURE__ */ new WeakMap();
+function recorderForState(state) {
+  const key = state;
+  let recorder = recorders.get(key);
+  if (!recorder) {
+    recorder = knowledgeRecorderFor(state.memory);
+    recorders.set(key, recorder);
+  }
+  return recorder;
+}
+
+// ../packages/agent-run/src/policy/memory/learnedFacts.ts
+var MIN_FACT_CHARS = 24;
+var MAX_FACTS = 6;
+var KEY_PREFIX = "learned:";
+var KINDS = /* @__PURE__ */ new Set(["decision", "root_cause", "convention"]);
+var MEMORY_COMMIT_SYSTEM = [
+  "You extract durable project facts from a finished coding or investigation run.",
+  "Return a JSON array and nothing else. Each item is {key, kind, content}.",
+  "kind is one of decision, root_cause, convention.",
+  "key is a short kebab-case slug that stays stable if the same fact is learned again.",
+  "content is one or two sentences a later run can act on, at least a full sentence.",
+  "For an investigation, facts are where a behaviour lives, a root cause, or how something works, taken from the Conclusion.",
+  "Only emit a fact the evidence (the excerpt, or the Conclusion of a read-only run) actually supports. Do not invent, and do not restate the file list.",
+  "Return [] when the run learned nothing durable."
+].join(" ");
+var MIN_READS_FOR_LEARNING = 3;
+var ANSWER_CHARS = 3e3;
+function readPaths(input) {
+  return [...new Set((input.read ?? []).map((p) => p.trim()).filter(Boolean))];
+}
+function isInvestigation(input) {
+  return readPaths(input).length >= MIN_READS_FOR_LEARNING && (input.answer ?? "").trim().length > 0 && !(input.tools ?? []).some((t) => REMEMBER_FACT_TOOLS.has(t));
+}
+function changedPaths(input) {
+  return [...new Set(input.changed.map((p) => p.trim()).filter(Boolean))];
+}
+function memoryCommitPrompt(input) {
+  const changed = changedPaths(input);
+  const asked = (input.prompt ?? "").replace(/\s+/g, " ").trim().slice(0, 400);
+  const tools = [...new Set((input.tools ?? []).map((t) => t.trim()).filter(Boolean))].slice(0, 24);
+  const excerpt2 = (input.excerpt ?? "").trim().slice(0, 6e3);
+  const read = readPaths(input).slice(0, 40);
+  const conclusion = (input.answer ?? "").trim().slice(-ANSWER_CHARS);
+  const evidence = excerpt2 ? `Evidence:
+${excerpt2}` : conclusion ? "Evidence: the Conclusion above." : "";
+  return [
+    asked ? `Asked: ${asked}` : "",
+    changed.length > 0 ? `Changed files:
+${changed.map((p) => `- ${p}`).join("\n")}` : "",
+    read.length > 0 ? `Files read:
+${read.map((p) => `- ${p}`).join("\n")}` : "",
+    tools.length ? `Tools: ${tools.join(", ")}` : "",
+    conclusion ? `Conclusion:
+${conclusion}` : "",
+    evidence || "Evidence: (none recorded \u2014 return [] rather than guess)"
+  ].filter(Boolean).join("\n\n");
+}
+function kebab(raw) {
+  return raw.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 64);
+}
+function factKey2(raw) {
+  const body = kebab(raw.replace(/^learned:/i, "").replace(/^workspace:/i, ""));
+  return body ? `${KEY_PREFIX}${body}` : "";
+}
+function parseLearnedFacts(raw) {
+  const start = raw.indexOf("[");
+  const end = raw.lastIndexOf("]");
+  if (start < 0 || end <= start) return [];
+  let parsed;
+  try {
+    parsed = JSON.parse(raw.slice(start, end + 1));
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(parsed)) return [];
+  const out = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const item of parsed) {
+    if (out.length >= MAX_FACTS) break;
+    if (!item || typeof item !== "object") continue;
+    const row = item;
+    if (typeof row.kind !== "string" || !KINDS.has(row.kind)) continue;
+    if (typeof row.key !== "string" || typeof row.content !== "string") continue;
+    if (/^workspace:/i.test(row.key.trim())) continue;
+    const key = factKey2(row.key);
+    const content = row.content.replace(/\s+/g, " ").trim();
+    if (!key || content.length < MIN_FACT_CHARS || seen.has(key)) continue;
+    seen.add(key);
+    out.push({ key, content, kind: row.kind });
+  }
+  return out;
+}
+async function commitLearnedFacts(input, deps) {
+  const changed = changedPaths(input);
+  if (changed.length === 0 && !isInvestigation(input)) return [];
+  let raw = "";
+  try {
+    raw = await deps.complete(memoryCommitPrompt({ ...input, changed }));
+  } catch {
+    return [];
+  }
+  const facts = parseLearnedFacts(raw);
+  const landed = [];
+  for (const fact of facts) {
+    try {
+      if (await deps.remember(fact.key, fact.content)) landed.push(fact);
+    } catch {
+    }
+  }
+  return landed;
+}
+function learnedFactsRequest(evidence) {
+  const changed = [...evidence.activity.created ?? [], ...evidence.activity.edited ?? []];
+  return {
+    changed,
+    ...evidence.activity.read?.length ? { read: evidence.activity.read } : {},
+    ...evidence.answer ? { answer: evidence.answer } : {},
+    ...evidence.activity.tools ? { tools: evidence.activity.tools } : {},
+    ...evidence.excerpt ? { excerpt: evidence.excerpt } : {},
+    ...evidence.activity.prompt ? { prompt: evidence.activity.prompt } : {}
+  };
+}
+var learnedFactDeps = null;
+async function extractAndWriteLearnedFacts(evidence) {
+  const deps = learnedFactDeps;
+  if (!deps) return null;
+  return commitLearnedFacts(learnedFactsRequest(evidence), deps);
+}
+
+// ../packages/agent-run/src/policy/memory/index.ts
+var SECTION_BREAK = "\n\n";
+function finalAnswerOf(ctx) {
+  const rows = ctx.state.messages ?? [];
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const row = rows[i];
+    if (row?.role === "user") return void 0;
+    if (row?.role !== "assistant") continue;
+    return !row.toolCalls?.length && typeof row.content === "string" && row.content.trim() ? row.content : void 0;
+  }
+  return void 0;
+}
+function codeMapOf(ctx) {
+  const recorder = recorderForState(ctx.state);
+  ctx.state.memory = knowledgeState(recorder);
+  const map = recorder.consolidate({ root: ctx.task.workspace?.defaultRepo });
+  return map ? { ...map, ...ctx.task.chatId !== void 0 ? { chatId: ctx.task.chatId } : {} } : void 0;
+}
+var memoryHook = {
+  /** Record one dispatched call into the run's memory — successful calls only. */
+  observe(ctx, call, result, isError) {
+    if (isError || isFailedToolResult(result)) return;
+    const recorder = recorderForState(ctx.state);
+    recorder.record(call.name, call.args);
+    ctx.state.memory = knowledgeState(recorder);
+  },
+  /**
+   * The volatile tail for this turn, or null when there is nothing worth saying: the
+   * run's own record (the recorder is restored from `state.memory` once per state object,
+   * so a resumed run's brief continues the SAME record a continuous run holds), then the
+   * guards' A3 / D1 / D7 notes — the sections `costLoop/volatileTail.ts` assembled, in
+   * front of THIS turn only. (The delegation nudge rides the read result that earns it.)
+   */
+  brief(ctx) {
+    const recorder = recorderForState(ctx.state);
+    if (!recorder.activity.prompt && ctx.task.prompt) recorder.setPrompt(ctx.task.prompt);
+    ctx.state.memory = knowledgeState(recorder);
+    const taskState = ctx.policy.levers.includes("c3_task_state") ? renderTaskState(ctx.state.taskState) : "";
+    const sections = [recorder.brief() ?? "", taskState, guardsTurnNote(ctx)].filter((part) => part.trim().length > 0);
+    return sections.length > 0 ? sections.join(SECTION_BREAK) : null;
+  },
+  /**
+   * The consolidated memory the run produced, written back through `store.commitMemory`.
+   * The code map (the `codemap:` write-back fields) is returned for the store; the
+   * learned-facts step runs behind the injected `learnedFacts` port when the run
+   * changed files, or investigated read-only and left a final answer. A read-only investigation still maps (PRD 35 E8): `consolidate`
+   * maps ≥3 files READ as readily as ≥3 changed, so the next run asked about this area
+   * starts warm. The map is written on EVERY terminal outcome (a failed or cancelled run
+   * still read and changed what it did); the model-extracted learned facts are a judgement
+   * of a completed run, so a caller that is settling a failure passes `learn: false`.
+   */
+  async consolidate(ctx, opts) {
+    const map = codeMapOf(ctx);
+    const answer = finalAnswerOf(ctx);
+    const facts = opts?.learn === false ? null : await extractAndWriteLearnedFacts({
+      activity: recorderForState(ctx.state).activity,
+      ...answer ? { answer } : {}
+    });
+    if (map) return map;
+    const chat = ctx.task.chatId !== void 0 ? { chatId: ctx.task.chatId } : {};
+    return facts !== null && facts.length > 0 ? { facts, ...chat } : void 0;
+  }
+};
+
+// ../packages/agent-run/src/policy/context/recall.ts
+var MAX_RECALL_HINT_CHARS = 600;
+function recallQuery(userText, hint) {
+  const extra = (hint ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_RECALL_HINT_CHARS);
+  if (!extra || !userText.trim()) return userText;
+  return `${userText.trim()}
+
+${extra}`;
+}
+function focusTerms(entry) {
+  const path = entry.path;
+  const heads = (entry.outline ?? []).map((h) => h.heading).filter(Boolean);
+  return [path, ...heads].join(" ");
+}
+function focusHint(pack) {
+  return pack.focus.map(focusTerms).filter(Boolean).join("\n");
+}
+
+// ../packages/agent-run/src/policy/context/index.ts
+var RECALL_LIMIT2 = 8;
+var contextHook = {
+  /**
+   * The recall lines the run should carry: the entries the surface's memory
+   * (`CapabilityProvider.memory.recall`) returns for the prompt plus the focus terms, as
+   * `key: content` lines. Nothing when the surface has no memory, the recall fails, or
+   * there is no request to ground it on (a hint alone is not a question) — recall is
+   * best-effort and never fails a run.
+   */
+  async recall(ctx) {
+    const memory = ctx.ports.capabilities?.memory;
+    if (!memory || !ctx.task.prompt.trim()) return void 0;
+    let hint = "";
+    try {
+      hint = focusHint(await ctx.ports.context.pack(ctx.task));
+    } catch {
+      hint = "";
+    }
+    const query = recallQuery(ctx.task.prompt, hint);
+    try {
+      const recalled = await memory.recall(query, RECALL_LIMIT2);
+      const lines = (recalled.ok ? recalled.entries ?? [] : []).map((entry) => `${entry.key}: ${entry.content}`);
+      return lines.length > 0 ? lines : void 0;
+    } catch {
+      return void 0;
+    }
+  }
+};
+
+// ../packages/agent-run/src/policy/tools/searchHelpers.ts
+var TOOL_SEARCH_MAX = 15;
+var TOOL_SEARCH_DEFAULT_LIMIT = 8;
+function promptNamedTools(text) {
+  const out = /* @__PURE__ */ new Set();
+  for (const match of text.toLowerCase().matchAll(/\b[a-z][a-z0-9_]{2,}\b/g)) {
+    out.add(match[0]);
+  }
+  return [...out];
+}
+function runToolSearch(catalog, advertised, args) {
+  const query = typeof args.query === "string" ? args.query.trim() : "";
+  if (!query) return { data: { ok: false, error: "query is required" }, load: [] };
+  const limit = Math.max(1, Math.min(TOOL_SEARCH_MAX, typeof args.limit === "number" ? Math.trunc(args.limit) : TOOL_SEARCH_DEFAULT_LIMIT));
+  const matches = searchToolSchemas(catalog.filter((t) => !advertised.has(t.function.name)), query, limit);
+  return {
+    data: {
+      ok: true,
+      query,
+      matches: matches.map((t) => t.function),
+      note: matches.length ? "These tools are now loaded and callable for the rest of the run." : "No unloaded tool matched \u2014 try other keywords, or use the tools you already have."
+    },
+    load: matches.map((t) => t.function.name)
+  };
+}
+
+// ../packages/agent-run/src/policy/tools/catalog.ts
+var ALWAYS_CORE_TOOLS = [
+  "read_file",
+  "search_code",
+  "list_files",
+  "edit_file",
+  "run_checks",
+  "run_command",
+  "finish",
+  "ask_human",
+  "spawn_agent"
+];
+var ROLE_CORE_TOOLS = {
+  explore: ["repo_map", "memory_recall", "workspace_read", "web_search", "web_fetch"],
+  code: ["repo_map", "write_file", "delete_file", "update_prd", "memory_recall", "memory_remember", "claim_resource", "release_resource", "workspace_note"],
+  verify: ["memory_recall", "workspace_read"],
+  plan: ["spawn_agents", "wait_agents", "message_agent", "update_prd", "memory_recall", "memory_remember", "workspace_note", "workspace_read"]
+};
+function deferredToolRole(role) {
+  if (role === "review") return "verify";
+  return role === "explore" || role === "verify" || role === "plan" ? role : "code";
+}
+function coreToolNames(role) {
+  return [.../* @__PURE__ */ new Set([...ALWAYS_CORE_TOOLS, ...ROLE_CORE_TOOLS[deferredToolRole(role)]])].slice(0, 20);
+}
+function hasSymbolsCapability(caps) {
+  return caps.has("repo.symbols");
+}
+function selectCatalog(catalog, role, caps, opts = {}) {
+  const byName = /* @__PURE__ */ new Map();
+  for (const tool of catalog) {
+    const name = tool.function?.name;
+    if (name && !byName.has(name)) byName.set(name, tool);
+  }
+  const core = new Set(coreToolNames(role));
+  if (hasSymbolsCapability(caps)) core.add("find_symbol");
+  core.add(TOOL_SEARCH_TOOL);
+  for (const name of opts.pinned ?? []) core.add(name);
+  for (const name of opts.required ?? []) core.add(name);
+  for (const name of promptNamedTools(opts.prompt ?? "")) {
+    if (byName.has(name)) core.add(name);
+  }
+  const out = [];
+  for (const tool of catalog) {
+    const name = tool.function?.name;
+    if (name && core.has(name)) {
+      out.push(tool);
+      core.delete(name);
+    }
+  }
+  if (core.has(TOOL_SEARCH_TOOL)) {
+    out.push(TOOL_SEARCH_SCHEMA);
+    core.delete(TOOL_SEARCH_TOOL);
+  }
+  return out;
+}
+
+// ../packages/agent-run/src/policy/tools/roleCap.ts
+var ROLE_TOOL_LIMIT = { code: 22, verify: 18 };
+var ROLE_COMPANION_TOOLS = {
+  code: [
+    "find_symbol",
+    "file_outline",
+    "command_status",
+    "command_stop",
+    "git_status",
+    "git_diff",
+    "recall_facts",
+    "ask_user"
+  ],
+  verify: [
+    "find_symbol",
+    "file_outline",
+    "command_status",
+    "command_stop",
+    "git_status",
+    "git_diff",
+    "git_history",
+    "recall_facts",
+    "ask_user"
+  ]
+};
+var ROLE_GUARANTEED_TOOLS = [
+  "git_commit",
+  "git_push",
+  "output_filter",
+  "wait_agents",
+  "hand_off"
+];
+var ROLE_MATCH_ROOM = { code: 6, verify: 4 };
+function isCappedToolRole(role) {
+  return role === "code" || role === "verify";
+}
+function roleToolLimit(role) {
+  return isCappedToolRole(role) ? ROLE_TOOL_LIMIT[role] : DEFAULT_TOOL_LIMIT;
+}
+function roleToolNames(role) {
+  return [.../* @__PURE__ */ new Set([...coreToolNames(role), ...ROLE_COMPANION_TOOLS[role], ...ROLE_GUARANTEED_TOOLS])];
+}
+function roleCappedSelection(role, catalogNames, keep = [], surfaceRequired = []) {
+  const present = new Set(catalogNames);
+  const required = [.../* @__PURE__ */ new Set([...surfaceRequired, ...roleToolNames(role), ...keep])].filter((n) => present.has(n));
+  return { limit: Math.max(ROLE_TOOL_LIMIT[role], required.length + ROLE_MATCH_ROOM[role]), required, backfill: false };
+}
+
+// ../packages/agent-run/src/policy/tools/workCore.ts
+function workCoreToolNames(role) {
+  return [
+    .../* @__PURE__ */ new Set([
+      ...coreToolNames(role),
+      // The companions follow the core row: `verify` and `review` read; every other role codes.
+      ...ROLE_COMPANION_TOOLS[deferredToolRole(role) === "verify" ? "verify" : "code"]
+    ])
+  ];
+}
+function ensureWorkCoreSet(selected, catalog, opts) {
+  if (opts.work === false) return [...selected];
+  const core = workCoreToolNames(opts.role ?? "code");
+  const byName = /* @__PURE__ */ new Map();
+  for (const tool of catalog) {
+    const name = tool.function?.name;
+    if (name && !byName.has(name)) byName.set(name, tool);
+  }
+  const have = new Set(selected.map((t) => t.function?.name ?? ""));
+  const capacity = opts.capacity ?? Number.POSITIVE_INFINITY;
+  const out = [...selected];
+  for (const name of core) {
+    const tool = byName.get(name);
+    if (!tool || have.has(name)) continue;
+    if (out.length >= capacity) {
+      opts.onDropped?.(name, `work-mode window could not fit the core tool set (${out.length} of ${out.length + 1} advertised)`);
+      continue;
+    }
+    out.push(tool);
+    have.add(name);
+  }
+  return out;
+}
+
+// ../packages/agent-run/src/policy/tools/platform.ts
+function selectPlatformCatalog(ctx, pinned) {
+  const platform = ctx.ports.platform;
+  if (!platform?.closed) return void 0;
+  const catalog = platform.schemas({ rungs: ctx.state.stall?.rungs ?? {} });
+  const selection = platform.selection;
+  const { query } = selection;
+  const capped = isCappedToolRole(selection.role) ? roleCappedSelection(selection.role, catalog.map((t) => t.function?.name ?? ""), selection.roleKeep ?? [], selection.required) : void 0;
+  const limit = capped?.limit ?? selection.limit;
+  const required = capped?.required ?? [...selection.required];
+  const selected = selectToolsForTurn(catalog, { query, limit, pinned: selection.pinned ? [...selection.pinned] : pinned, required, ...selection.rank ? { rank: selection.rank } : {}, ...selection.capRequired ? { capRequired: true } : {}, ...capped ? { backfill: false } : {} }).tools;
+  return ensureWorkCoreSet(selected, catalog, {
+    role: selection.role,
+    work: isCappedToolRole(selection.role),
+    onDropped: (name, reason) => ctx.ports.events.emit({ kind: "context.tools", step: ctx.state.step ?? 0, advertised: selected.length, catalog: catalog.length, toolsTokens: 0, loaded: [`${name}: ${reason}`] })
+  });
+}
+
+// ../packages/agent-run/src/policy/tools/toolset.ts
+var CHAT_REPLY_SCOPED_TOOLS = [
+  "chats.get_messages",
+  "chats.list_tickets",
+  "chats.link_ticket",
+  "chats.unlink_ticket",
+  "chats.ticket_lineage",
+  "chats.list_agents",
+  // Why the LAST run on this chat did not finish — read-only, consulted BEFORE the
+  // failed attempt is repeated.
+  "chats.diagnostics",
+  // What has already RUN on this chat's tickets and who started it.
+  "chats.runs",
+  // The addressed agent's hands: steer/resume the agent's OWN run on a linked ticket or
+  // start a follow-up on the same branch. NOT the unattended executions.post_message.
+  "chats.execute_as_agent"
+];
+function isChatReplyScope(toolScope) {
+  return toolScope === "chat-reply";
+}
+
+// ../packages/agent-run/src/policy/tools/readCoverage.ts
+var DEDUPABLE_READS = /* @__PURE__ */ new Set(["read_file", "list_files", "search_code", "find_symbol", "file_outline"]);
+var UNSCOPED_MUTATIONS = /* @__PURE__ */ new Set(["run_command", "git_checkout", "git_merge", "git_rebase", "git_reset", "git_stash", "git_pull", "apply_patch"]);
+var CODE_CHANGES = /* @__PURE__ */ new Set(["write_file", "edit_file", "delete_file", "create_file", "move_file"]);
+var PUBLISHES = /* @__PURE__ */ new Set(["git_commit", "git_push", "create_pull_request"]);
+var REPO_STATE_READS = /* @__PURE__ */ new Set(["git_status", "git_log", "git_branch"]);
+var SEPARATOR = " \u220B ";
+function pathOf(args) {
+  const a = args && typeof args === "object" ? args : {};
+  const path = typeof a.path === "string" ? a.path : typeof a.scope === "string" ? a.scope : void 0;
+  return path?.trim() || void 0;
+}
+var AGENT_READ_TRAITS = {
+  visitTarget: (args) => {
+    const path = pathOf(args) ?? "";
+    const query = args && typeof args === "object" ? args.query : void 0;
+    return typeof query === "string" && query.trim() ? `${path}${SEPARATOR}${query.trim()}` : path || void 0;
+  },
+  activityTarget: pathOf,
+  questionSeparator: SEPARATOR,
+  // A shell command that provably only reads changes no file: it forgets no read.
+  isUnscopedMutation: (tool, args) => UNSCOPED_MUTATIONS.has(tool) && !isReadOnlyShellCall(tool, args),
+  isCodeChangeTool: (tool) => CODE_CHANGES.has(tool),
+  isLocalWorkspaceTool: (tool) => DEDUPABLE_READS.has(tool) || CODE_CHANGES.has(tool) || UNSCOPED_MUTATIONS.has(tool) || tool.startsWith("git_"),
+  isRepoPublishTool: (tool) => PUBLISHES.has(tool),
+  isRepoStateReadTool: (tool) => REPO_STATE_READS.has(tool)
+};
+function servedKey(tool, args) {
+  return `${tool}\0${JSON.stringify(canonicalReadArgs(tool, args))}`;
+}
+function parseKey(key) {
+  const at2 = key.indexOf("\0");
+  if (at2 < 0) return null;
+  try {
+    return { tool: key.slice(0, at2), args: JSON.parse(key.slice(at2 + 1)) };
+  } catch {
+    return null;
+  }
+}
+var sessions2 = /* @__PURE__ */ new WeakMap();
+function coverageOf(state) {
+  let coverage = sessions2.get(state);
+  if (coverage) return coverage;
+  coverage = new ReadCoverage(AGENT_READ_TRAITS);
+  for (const [key, entry] of Object.entries(state.reads.served)) {
+    const read = parseKey(key);
+    if (!read) continue;
+    coverage.record(read.tool, read.args);
+    if (entry.cached) coverage.cacheResult(read.tool, read.args, entry.cached);
+  }
+  sessions2.set(state, coverage);
+  return coverage;
+}
+function stillServed(ctx, anchor) {
+  return ctx.messages.some((m) => m.role === "tool" && m.toolCallId === anchor);
+}
+function coveredReadAnswer(ctx, call) {
+  if (!DEDUPABLE_READS.has(call.name)) return void 0;
+  const answer = coveredAnswer(ctx, call);
+  if (answer) ctx.state.reads = { ...ctx.state.reads, stubCount: (ctx.state.reads.stubCount ?? 0) + 1 };
+  return answer;
+}
+function coveredAnswer(ctx, call) {
+  const coverage = coverageOf(ctx.state);
+  if (coverage.isRepeat(call.name, call.args)) {
+    const cached = coverage.cachedResult(call.name, call.args);
+    if (cached && !stillServed(ctx, cached.anchor)) {
+      const note = `Replayed from this run's read cache: this exact ${call.name} call succeeded earlier in the run, but its result was compressed out of the working context, so here it is again \u2014 served from memory, not re-read. Act on it now; do not request it again.`;
+      return { data: withNote(cached.served ?? cached.result, note) };
+    }
+    return {
+      data: {
+        note: `Duplicate ${call.name} call \u2014 identical arguments to an earlier call this run, whose result is already in the conversation above. Reuse that result instead of re-reading; do not repeat it.`
+      }
+    };
+  }
+  const covered = coverage.coveredRead(call.name, call.args);
+  if (!covered) return void 0;
+  coverage.record(call.name, call.args);
+  if (covered.cached && !stillServed(ctx, covered.cached.anchor)) {
+    const served = covered.cached.served ?? covered.cached.result;
+    const requested = isReadFileResult(served) ? sliceReadFile(served, covered.start, covered.end) : served;
+    return { data: withNote(requested, covered.note) };
+  }
+  return { data: { note: covered.note } };
+}
+function withNote(result, note) {
+  return result && typeof result === "object" && !Array.isArray(result) ? { ...result, note } : { output: result, note };
+}
+function servedSpan(served) {
+  if (!isReadFileResult(served)) return { start: 0, end: 0 };
+  const start = typeof served.offset === "number" && served.offset > 0 ? Math.floor(served.offset) : 1;
+  return { start, end: start + served.content.split("\n").length - 1 };
+}
+function failed2(result) {
+  return !!result && typeof result === "object" && result.ok === false;
+}
+function cutToCap(result) {
+  return !!result && typeof result === "object" && result.truncated === true;
+}
+function recordShellPrint(ctx, coverage, call, served) {
+  const read = shellPrintAsRead(call.name, call.args, served, !cutToCap(served));
+  if (!read) return;
+  coverage.record("read_file", read.args);
+  const cached = { result: read.result, served: read.result, anchor: call.id };
+  coverage.cacheResult("read_file", read.args, cached);
+  const entry = { ...servedSpan(read.result), cached, note: "" };
+  const reads = ctx.state.reads;
+  ctx.state.reads = { ...reads, served: { ...reads.served, [servedKey("read_file", read.args)]: entry } };
+}
+function recordServedRead(ctx, call, served, isError) {
+  const coverage = coverageOf(ctx.state);
+  const reads = ctx.state.reads;
+  if (DEDUPABLE_READS.has(call.name)) {
+    if (isError || failed2(served)) return;
+    coverage.record(call.name, call.args);
+    const cached = { result: served, served, anchor: call.id };
+    coverage.cacheResult(call.name, call.args, cached);
+    const entry = { ...servedSpan(served), cached, note: "" };
+    ctx.state.reads = { ...reads, served: { ...reads.served, [servedKey(call.name, call.args)]: entry } };
+    return;
+  }
+  coverage.invalidate(call.name, call.args);
+  const kept = {};
+  for (const [key, entry] of Object.entries(reads.served)) {
+    const read = parseKey(key);
+    if (read && coverage.isRepeat(read.tool, read.args)) kept[key] = entry;
+  }
+  ctx.state.reads = { ...reads, served: kept };
+  if (!isError && !failed2(served)) recordShellPrint(ctx, coverage, call, served);
+}
+
+// ../packages/agent-run/src/policy/tools/gates.ts
+var INPUT_PATH_TOOLS = /* @__PURE__ */ new Set(["apply_patch"]);
+var CONTROL_TOOLS = new Set(CONTROL_TOOL_NAMES);
+function policyRefusalMessage(d) {
+  if (d.action === "block") {
+    return `Policy gate ${d.gateId} blocked this tool call: ${d.reason}`;
+  }
+  return `Policy gate ${d.gateId} requires human approval before this tool call (${d.reason}). No approver is available on this host (no approval pause), so the call was refused.`;
+}
+function declaredBy(ports, name) {
+  return name ? ports.platform?.declared?.(name) ?? ports.extensions?.declared?.(name) : void 0;
+}
+function gatesFor(gates, toolName) {
+  const all = gates ?? [];
+  return CONTROL_TOOLS.has(toolName) ? all.filter((g) => g.tool && g.tool !== "*") : all;
+}
+function callSideEffect(toolName, args, declared) {
+  const cataloged = candidateToolNames(toolName, args).find((n) => toolSideEffect(n) !== void 0);
+  return classifyTool(cataloged ?? toolName, declared, args);
+}
+function resolveSideEffectGates(gates, toolName, args, declared) {
+  if (!gates.some((g) => g.sideEffect)) return [...gates];
+  const effect = callSideEffect(toolName, args, declared);
+  return gates.filter((g) => !g.sideEffect || g.sideEffect === effect).map(({ sideEffect: _class, ...rest }) => rest);
+}
+function evaluatePolicyGateSeam(gates, toolName, args, workspaceRoot, declared) {
+  const paths = toolCallPaths(args);
+  const pathArg = paths.length ? paths : void 0;
+  const unreadable = INPUT_PATH_TOOLS.has(toolName) && typeof args?.input === "string" && args.input.trim().length > 0 && paths.length === 0;
+  const applicable = resolveSideEffectGates(gatesFor(gates, toolName), toolName, args, declared).map((g) => {
+    if (!unreadable || !g.paths) return g;
+    const { paths: _scope, ...unscoped } = g;
+    return unscoped;
+  });
+  let approval;
+  for (const name of candidateToolNames(toolName, args)) {
+    const d = evaluatePolicyGate(applicable, name, pathArg, workspaceRoot);
+    if (d.action === "block") return d;
+    if (d.action === "require-approval") approval = d;
+  }
+  return approval ?? { action: "allow" };
+}
+function isToolWithheld(gates, toolName, declared) {
+  const blocking = resolveSideEffectGates(gatesFor(gates, toolName), toolName, void 0, declared).filter((g) => g.effect === "block" && !(g.paths && g.paths.length));
+  if (blocking.length === 0) return false;
+  if (blocking.some((g) => !g.tool || g.tool === "*")) return true;
+  const blocked = new Set(blocking.map((g) => normalizeToolName(g.tool ?? "")));
+  return candidateToolNames(toolName).some((n) => blocked.has(normalizeToolName(n)));
+}
+var DO_NOT_RETRY = "Do not ask for this again \u2014 accomplish the task another way, or finish and explain why it cannot proceed.";
+function approvalRefusalMessage(refusal, tool, gateId, answer) {
+  if (refusal === "timed_out") return `No approver answered "${tool}" in time (governance gate ${gateId}), so it was not run. ${DO_NOT_RETRY}`;
+  if (refusal === "stopped") return `The run was stopped before "${tool}" was approved (governance gate ${gateId}), so it was not run.`;
+  if (refusal === "unreachable") return `No approver could be reached for "${tool}" (governance gate ${gateId}), so it was not run. ${DO_NOT_RETRY}`;
+  return `The approver declined "${tool}" (governance gate ${gateId}).${answer ? ` ${answer}` : ""} ${DO_NOT_RETRY}`;
+}
+async function refuseApproval(ctx, call, decision, key, error) {
+  ctx.state.refusedCalls = { ...ctx.state.refusedCalls ?? {}, [key]: error };
+  ctx.ports.refusals?.remember(key, error);
+  await emit(ctx.ports.events, { kind: "policy.blocked", step: ctx.step, tool: call.name, gateId: decision.gateId, reason: error });
+  return { data: { ok: false, gate: decision.gateId, error }, isError: true };
+}
+async function gateCall(ctx, call) {
+  const gates = ctx.policy.approvalGates;
+  if (!gates || gates.length === 0) return void 0;
+  const platform = ctx.ports.platform;
+  const handledByPolicy = call.name === TOOL_SEARCH_TOOL || call.name === UPDATE_TASK_STATE_TOOL && ctx.policy.levers.includes("c3_task_state");
+  if (platform?.closed && platform.governanceAfterRewrite && !handledByPolicy && !ctx.ports.extensions?.handles(call.name)) return void 0;
+  const decision = evaluatePolicyGateSeam(gates, call.name, call.args, ctx.task.workspace?.defaultRepo, declaredBy(ctx.ports, call.name));
+  if (decision.action === "block") {
+    await emit(ctx.ports.events, { kind: "policy.blocked", step: ctx.step, tool: call.name, gateId: decision.gateId, reason: decision.reason });
+    return {
+      data: { ok: false, gate: decision.gateId, error: `Blocked by governance policy: ${decision.reason}. Do not retry this tool \u2014 accomplish the task another way, or finish and explain why it cannot proceed.` },
+      isError: true
+    };
+  }
+  if (decision.action !== "require-approval") return void 0;
+  const key = policyGateCallKey(decision.gateId, call.name, call.args);
+  if ((ctx.state.approvedCalls ?? []).includes(key)) return void 0;
+  const refusedBefore = ctx.state.refusedCalls?.[key] ?? ctx.ports.refusals?.recall(key);
+  if (refusedBefore) return { data: { ok: false, gate: decision.gateId, error: refusedBefore }, isError: true };
+  const gate = gates.find((g) => g.id === decision.gateId || g.baseGateId === decision.gateId) ?? { id: decision.gateId, effect: "require-approval", reason: decision.reason };
+  const question = `Approve the agent's use of "${call.name}"? ${decision.reason}`;
+  const human = ctx.ports.human;
+  const parkedOn = ctx.state.parkedCalls?.[key];
+  const answer = human.approve ? await human.approve(gate, { tool: call.name, args: call.args, reason: decision.reason, ...parkedOn ? { approvalId: parkedOn } : {} }) : await human.ask(question);
+  if (!answer) return refuseApproval(ctx, call, decision, key, `${policyRefusalMessage(decision)} ${DO_NOT_RETRY}`);
+  if (answer.kind === "answered") {
+    if (parkedOn) {
+      const { [key]: _settled, ...rest } = ctx.state.parkedCalls ?? {};
+      ctx.state.parkedCalls = rest;
+    }
+    if (answer.approved === true) {
+      ctx.state.approvedCalls = [...ctx.state.approvedCalls ?? [], key];
+      return void 0;
+    }
+    return refuseApproval(ctx, call, decision, key, approvalRefusalMessage(answer.refusal ?? "declined", call.name, decision.gateId, answer.answer));
+  }
+  const approvalId = answer.approvalId ?? parkedOn;
+  if (approvalId) ctx.state.parkedCalls = { ...ctx.state.parkedCalls ?? {}, [key]: approvalId };
+  else ctx.state.approvedCalls = [...ctx.state.approvedCalls ?? [], key];
+  return {
+    data: { ok: false, error: `Paused for human approval of "${call.name}" (governance gate ${decision.gateId}).` },
+    isError: true,
+    // `parked`: the approver's channel already parked the run — the kernel settles `paused`, it never asks a second time.
+    control: { kind: "ask_human", question, parked: true, ...approvalId ? { approvalId } : {} }
+  };
+}
+
+// ../packages/agent-run/src/policy/tools/caps.ts
+function resultCapFor(tool, model, servingModel2, data) {
+  const window = servingModel2 && typeof model.window === "function" ? model.window(servingModel2) : void 0;
+  return windowedCap(tool, resultTableCap(tool, data), window);
+}
+var ERROR_CHARS = 500;
+function failedResult(data) {
+  if (!data || typeof data !== "object" || data.ok !== false) return null;
+  const error = data.error;
+  return typeof error === "string" ? { error: error.slice(0, ERROR_CHARS) } : {};
+}
+function fittedText(text, failed3, maxChars, originalChars) {
+  const note = truncatedResultNote(originalChars, maxChars);
+  const head = failed3 ? { ok: false, ...failed3 } : {};
+  let body = text;
+  for (; ; ) {
+    const result = { ...head, truncated: true, note, output: body };
+    const over = JSON.stringify(result).length - maxChars;
+    if (over <= 0 || body.length === 0) return result;
+    body = body.slice(0, Math.max(0, body.length - over - 1));
+  }
+}
+function capToolResult(tool, data, maxChars) {
+  const shaped = shapeToolResult(tool, data, { maxChars });
+  if (!shaped.truncated) return data;
+  const failed3 = failedResult(data);
+  let parsed;
+  try {
+    parsed = JSON.parse(shaped.content);
+  } catch {
+    return fittedText(shaped.content, failed3, maxChars, shaped.bytes);
+  }
+  if (failed3 && parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+    return { ...parsed, ok: false };
+  }
+  return failed3 ? fittedText(shaped.content, failed3, maxChars, shaped.bytes) : parsed;
+}
+
+// ../packages/agent-run/src/policy/tools/index.ts
+var SIGNOFF_TOOL = "builtin_kanban_signoff";
+function selectedTools(ctx, offered) {
+  const { policy, task } = ctx;
+  const tools = offered.filter((t) => !isToolWithheld(policy.approvalGates, t.function?.name ?? "", declaredBy(ctx.ports, t.function?.name)));
+  if (isChatReplyScope(policy.toolScope)) {
+    const allowed = new Set(CHAT_REPLY_SCOPED_TOOLS);
+    const extension = ctx.ports.extensions;
+    return tools.filter((t) => {
+      const name = t.function?.name;
+      return name ? allowed.has(name) || Boolean(extension?.handles(name)) : false;
+    });
+  }
+  const required = policy.signoff ? [SIGNOFF_TOOL] : [];
+  const pinned = [...pinnedNames(ctx), ...required];
+  const own2 = selectPlatformCatalog(ctx, pinned);
+  if (own2) return own2.filter((t) => !isToolWithheld(policy.approvalGates, t.function?.name ?? "", declaredBy(ctx.ports, t.function?.name)));
+  const prompt = [task.persona, task.prompt].filter(Boolean).join("\n");
+  const catalog = selectCatalog(tools, policy.role, catalogCaps(ctx), { pinned, required, prompt });
+  const selected = selectToolsForTurn(catalog, { query: task.prompt, pinned });
+  return policy.levers.includes("c3_task_state") ? [...selected.tools, UPDATE_TASK_STATE_SCHEMA] : selected.tools;
+}
+function toolSearchAnswer(ctx, call) {
+  if (call.name === UPDATE_TASK_STATE_TOOL && ctx.policy.levers.includes("c3_task_state")) {
+    const updated = applyTaskStateUpdate(ctx.state.taskState, call.args);
+    if (!updated.ok) return { data: { ok: false, error: updated.error } };
+    ctx.state.taskState = updated.state;
+    return { data: { ok: true, note: "Task state saved \u2014 it is shown to you every turn and kept through compaction." } };
+  }
+  if (call.name !== TOOL_SEARCH_TOOL) return void 0;
+  const advertised = new Set(selectedTools(ctx, ctx.tools).map((t) => t.function.name));
+  const found = runToolSearch(ctx.tools, advertised, call.args);
+  if (found.load.length > 0) ctx.state.loadedTools = [.../* @__PURE__ */ new Set([...ctx.state.loadedTools ?? [], ...found.load])];
+  return { data: found.data };
+}
+function loadCalledDeferredTool(ctx, call) {
+  if (call.name === TOOL_SEARCH_TOOL || call.name === UPDATE_TASK_STATE_TOOL) return;
+  if ((ctx.state.loadedTools ?? []).includes(call.name)) return;
+  if (!ctx.tools.some((t) => t.function?.name === call.name)) return;
+  if (selectedTools(ctx, ctx.tools).some((t) => t.function?.name === call.name)) return;
+  ctx.state.loadedTools = [...ctx.state.loadedTools ?? [], call.name];
+}
+var toolsHook = {
+  select: selectedTools,
+  beforeDispatch: (ctx, call) => {
+    loadCalledDeferredTool(ctx, call);
+    return ctx.ports.platform?.readsCovered ? void 0 : coveredReadAnswer(ctx, call);
+  },
+  meta: toolSearchAnswer,
+  observe: (ctx, call, result, isError) => ctx.ports.platform?.readsCovered ? void 0 : recordServedRead(ctx, call, result, isError),
+  gate: gateCall
+};
+function catalogCaps(ctx) {
+  return ctx.ports.capabilities?.capabilities ?? /* @__PURE__ */ new Set();
+}
+function pinnedNames(ctx) {
+  const names = new Set(ctx.state.loadedTools ?? []);
+  for (const message of ctx.messages) {
+    for (const call of message.toolCalls ?? []) if (call.name) names.add(call.name);
+  }
+  return [...names];
+}
+
+// ../packages/agent-run/src/policy/index.ts
+function defaultPolicyModules() {
+  return {
+    compaction: compactionHook,
+    stall: stallHook,
+    steering: steeringHook,
+    ask: askHook,
+    subagents: subagentsHook,
+    finish: finishHook,
+    guards: guardsHook,
+    verify: verifyHook,
+    memory: memoryHook,
+    context: contextHook,
+    tools: toolsHook,
+    model: modelHook
+  };
+}
+function composePolicyHooks(overrides = {}) {
+  const modules = { ...defaultPolicyModules(), ...overrides };
+  return {
+    compaction: modules.compaction,
+    stall: modules.stall,
+    steering: modules.steering,
+    ask: modules.ask,
+    subagents: modules.subagents,
+    finish: modules.finish,
+    guards: modules.guards,
+    verify: modules.verify,
+    memory: modules.memory,
+    context: modules.context,
+    tools: modules.tools,
+    model: modules.model
+  };
+}
+
+// ../packages/agent-run/src/telemetry/costTally.ts
+function foldTurnCost(running, turnCostMc) {
+  if (running === null || turnCostMc === void 0) return null;
+  return (running ?? 0) + turnCostMc;
+}
+function reportedRunCost(running) {
+  return running ?? void 0;
+}
+
+// ../packages/agent-run/src/telemetry/runTally.ts
+function freshTally() {
+  return { toolCalls: 0, toolErrors: 0, tokens: 0, cacheReadTokens: 0, shellFileReads: 0, repoErrors: 0, mutations: 0, costLatch: true };
+}
+function resumeTally(saved) {
+  const tally = { ...freshTally(), ...saved ?? {} };
+  const tookTurns = !!saved && (saved.costMc != null || (saved.tokens ?? 0) > 0 || saved.model !== void 0 || (saved.toolCalls ?? 0) > 0);
+  if (saved && saved.costLatch !== true && tookTurns) tally.costMc = null;
+  return tally;
+}
+function tallyTurn(tally, model, usage) {
+  if (model) tally.model = model;
+  tally.costMc = foldTurnCost(tally.costMc, usage?.costMc);
+  if (!usage) return;
+  tally.tokens += (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0);
+  tally.cacheReadTokens += usage.cacheReadTokens ?? 0;
+}
+function tallyCall(tally, step, name, args, data, ok) {
+  tally.toolCalls += 1;
+  if (!ok) tally.toolErrors += 1;
+  if (isSpawnTool(name) && tally.firstSpawnTurn === void 0) tally.firstSpawnTurn = step;
+  if (resolveToolAlias(name) === "run_command" && typeof args.command === "string" && parseShellFileRead(args.command)) {
+    tally.shellFileReads += 1;
+  }
+  if (!ok && isNotARepo(errorText(data))) tally.repoErrors += 1;
+}
+function tallyVerify(tally, ok) {
+  tally.verify = ok ? "passed" : "failed";
+}
+function bumpMutations(tally) {
+  tally.mutations += 1;
+}
+function errorText(data) {
+  if (typeof data === "string") return { error: data };
+  if (!data || typeof data !== "object") return {};
+  const d = data;
+  const str5 = (v) => typeof v === "string" ? v : "";
+  return { stdout: `${str5(d.stdout)} ${str5(d.stderr)}`, error: str5(d.error) };
+}
+
+// ../packages/agent-run/src/runState.ts
+function freshState(policy, task) {
+  return {
+    messages: [],
+    step: 0,
+    guards: {},
+    finish: initialFinishGateState(void 0, task.dispatch.parentRunId !== void 0),
+    model: initialModelState(policy),
+    memory: { memory: { created: [], edited: [], deleted: [], read: [], searched: [] }, tools: [] },
+    compaction: { compactions: 0 },
+    writtenPaths: [],
+    askedGates: [],
+    reads: freshReads(),
+    telemetry: freshTally()
+  };
+}
+function initialModelState(policy) {
+  const start = policy.modelStart;
+  if (!start) return initialRunPolicy({ pinnedModel: policy.pinnedModel, ...policy.modelOptions ?? {} });
+  const model = start.model ?? policy.pinnedModel ?? "";
+  if (start.plain) {
+    const review = reviewPhaseModel(start.phaseModels);
+    return initialRunPolicy({
+      pinnedModel: model,
+      ...start.strict ? { strictPin: true } : {},
+      ...start.startPhase ? { startPhase: start.startPhase } : {},
+      ...policy.modelOptions ?? {},
+      ...start.phaseModels ? { phaseModels: start.phaseModels, ...review ? { reviewModel: review } : {} } : {}
+    });
+  }
+  return initialModelRunState({
+    pick: { model, strict: start.strict ?? false },
+    delegatedRole: start.delegatedRole,
+    ...start.startPhase && !start.delegatedRole ? { startPhase: start.startPhase } : {},
+    ...start.phaseModels ? { phaseModels: start.phaseModels } : {}
+  }).policy;
+}
+function freshReads() {
+  return { served: {}, readsWithoutSpawn: { reads: 0, spawned: false, nudged: false } };
+}
+function resumeState(saved, policy, task) {
+  const fresh = freshState(policy, task);
+  return {
+    ...fresh,
+    ...saved,
+    guards: saved.guards ?? fresh.guards,
+    finish: saved.finish ?? fresh.finish,
+    model: saved.model ?? fresh.model,
+    memory: saved.memory ?? fresh.memory,
+    compaction: saved.compaction ?? fresh.compaction,
+    writtenPaths: saved.writtenPaths ?? [],
+    askedGates: saved.askedGates ?? [],
+    reads: saved.reads ?? fresh.reads,
+    telemetry: resumeTally(saved.telemetry),
+    messages: Array.isArray(saved.messages) ? saved.messages : []
+  };
+}
+function asMessages(raw) {
+  const out = [];
+  for (const row of raw) {
+    if (!row || typeof row !== "object") continue;
+    const r = row;
+    if (r.role !== "system" && r.role !== "user" && r.role !== "assistant" && r.role !== "tool") continue;
+    out.push({
+      role: r.role,
+      content: typeof r.content === "string" ? r.content : "",
+      ...Array.isArray(r.toolCalls) ? { toolCalls: r.toolCalls } : {},
+      ...typeof r.toolCallId === "string" ? { toolCallId: r.toolCallId } : {},
+      ...Array.isArray(r.parts) ? { parts: r.parts } : {},
+      ...r.meta && typeof r.meta === "object" ? { meta: r.meta } : {},
+      ...r.isError ? { isError: true } : {}
+    });
+  }
+  return out;
+}
+function rememberWrite(state, call, ok) {
+  if (!ok) return;
+  if (call.name === "delete_file") {
+    const gone = typeof call.args.path === "string" ? call.args.path : void 0;
+    if (gone) state.writtenPaths = state.writtenPaths.filter((p) => p !== gone);
+    return;
+  }
+  if (call.name !== "write_file" && call.name !== "edit_file") return;
+  const path = typeof call.args.path === "string" ? call.args.path : void 0;
+  if (path && !state.writtenPaths.includes(path)) state.writtenPaths = [...state.writtenPaths, path];
+}
+function newApprovalId(state) {
+  return `approval-${state.askedGates.length + 1}`;
+}
+
+// ../packages/agent-run/src/runCatalog.ts
+var CORE_REGISTRY = buildCoreToolRegistry();
+for (const tool of [...SKILL_TOOLS, ...SUBAGENT_TOOLS]) CORE_REGISTRY.register(tool);
+var REGISTRIES = /* @__PURE__ */ new WeakMap();
+function registryOf(ports) {
+  const extra = ports.tools;
+  if (!extra || extra.length === 0) return CORE_REGISTRY;
+  let registry = REGISTRIES.get(extra);
+  if (!registry) {
+    registry = buildCoreToolRegistry();
+    for (const tool of extra) registry.register(tool);
+    REGISTRIES.set(extra, registry);
+  }
+  return registry;
+}
+function ownsCall(ports, name) {
+  const platform = ports.platform;
+  return platform !== void 0 && (platform.closed === true || !registryOf(ports).has(name));
+}
+function offeredSchemas(ports, progress = { rungs: {} }) {
+  const seen = /* @__PURE__ */ new Set();
+  const registry = ports.platform?.closed || !ports.capabilities ? [] : registryOf(ports).schemasFor(ports.capabilities);
+  return [...registry, ...ports.extensions?.schemas() ?? [], ...ports.platform?.schemas(progress) ?? []].filter((schema) => {
+    const name = schema.function?.name;
+    if (!name || seen.has(name)) return false;
+    seen.add(name);
+    return true;
+  });
+}
+
+// ../packages/agent-run/src/runRows.ts
+var nativeResults = /* @__PURE__ */ new WeakMap();
+var killedResults = /* @__PURE__ */ new WeakSet();
+function nativeOfTurn(meta) {
+  const m = meta && typeof meta === "object" ? meta : void 0;
+  return { ...m?.parts ? { parts: m.parts } : {}, ...m?.native ? { meta: m.native } : {} };
+}
+function toolRow(callId, result, verbatim = false) {
+  const native = nativeResults.get(result);
+  const stopped = killedResults.has(result);
+  return {
+    role: "tool",
+    toolCallId: callId,
+    content: (native || verbatim) && typeof result.data === "string" ? result.data : JSON.stringify(result.data ?? null),
+    ...native?.parts && !stopped ? { parts: native.parts } : {},
+    ...native?.meta ? { meta: native.meta } : {},
+    // A call that did not run because the person steered, or that its signal killed, is answered as a failed one: the row says it
+    // did not do its work. The dispatch result itself is not an error, so neither is counted as a failure - and the kernel clears the
+    // failure streak on it, as on any call that did not fail (a kill resets the streak to 0).
+    ...result.isError || stopped || result.data?.skipped === true ? { isError: true } : {}
+  };
+}
+
+// ../packages/agent-run/src/policy/model/handoff.ts
+function asModelRunState(state) {
+  return { policy: state.model, stallRecoveries: 0, preflightNotices: [] };
+}
+function askOf(req, phase) {
+  return {
+    ...req.model ? { model: req.model } : {},
+    role: req.role,
+    phase,
+    ...req.strict ? { strict: true } : {},
+    ...req.excludeModels.length > 0 ? { excludeModels: req.excludeModels } : {},
+    ...req.toolChoice ? { toolChoice: req.toolChoice } : {}
+  };
+}
+function routeAround(state, status) {
+  const request = nextTurn(state.model, { hasTools: true });
+  const routed = routeAroundFailure(asModelRunState(state), request, { kind: "transport", ...status !== void 0 ? { status } : {} });
+  state.model = routed.state.policy;
+  const outcome = retryOutcome(routed.state);
+  if (!routed.retry || !outcome) return null;
+  const released = outcome.released;
+  return {
+    retry: askOf(routed.retry, state.model.phase),
+    from: typeof released === "string" ? released : null,
+    released: Boolean(released)
+  };
+}
+function turnSucceeded(state, served) {
+  state.model = recordSuccess(asModelRunState(state), {
+    ...served.model ? { model: served.model } : {},
+    acted: served.acted,
+    ...served.durationMs !== void 0 ? { durationMs: served.durationMs } : {}
+  }).policy;
+  delete state.forceToolChoice;
+}
+
+// ../packages/agent-run/src/policy/model/reask.ts
+function parsedArgs(raw) {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return void 0;
+  }
+}
+function changesCode(tools, call) {
+  return tools.includes(call.name) || isMutatingShellCall(call.name, parsedArgs(call.arguments));
+}
+function changedCode(policy, completion) {
+  const tools = policy.codeChangeTools;
+  return !!tools && tools.length > 0 && (completion.toolCalls ?? []).some((call) => changesCode(tools, call));
+}
+function reaskAsCoder(state, policy, completion, asked) {
+  if (asked.role !== "plan" || !changedCode(policy, completion)) return void 0;
+  state.model = reduceRunPolicy(state.model, { type: "code_change_attempted" });
+  if (state.model.outcome.kind !== "reask_as_coder") return void 0;
+  const next = nextTurn(state.model, { hasTools: asked.hasTools });
+  const calls = (completion.toolCalls ?? []).map((call) => ({ name: call.name, args: call.arguments }));
+  return {
+    ask: {
+      ...next.model ? { model: next.model } : {},
+      role: next.role,
+      phase: state.model.phase,
+      ...next.strict ? { strict: true } : {},
+      ...next.excludeModels.length > 0 ? { excludeModels: next.excludeModels } : {}
+    },
+    brief: { role: "user", content: coderHandoffBrief(completion.content ?? "", calls) }
+  };
+}
+
+// ../packages/agent-run/src/turnContext.ts
+import { volatileTail as volatileTail2 } from "@seanhogg/builderforce-memory/handoff";
+var EMPTY_PACK2 = { focus: [], facts: [], recall: [] };
+async function buildContextPack(input, hooks, state, offered) {
+  let pack;
+  try {
+    pack = await input.ports.context.pack(input.task);
+  } catch {
+    pack = EMPTY_PACK2;
+  }
+  const built = pack;
+  const once = { ...input, ports: { ...input.ports, context: { pack: () => built } } };
+  let recalled = void 0;
+  try {
+    recalled = await hooks.context.recall(policyContext(once, state, { messages: [], tools: offered }, state.step, 0));
+  } catch {
+    recalled = void 0;
+  }
+  return recalled && recalled.length > 0 ? { ...pack, recall: [...pack.recall, ...recalled] } : pack;
+}
+function openingRows(task, gates) {
+  const system = [];
+  const governance = renderPolicyDirectives(gates);
+  const persona = task.persona?.trim() ?? "";
+  if (governance && persona !== governance && !persona.startsWith(`${governance}
+
+`)) system.push(governance);
+  if (persona) system.push(persona);
+  return [
+    ...system.length > 0 ? [{ role: "system", content: system.join("\n\n") }] : [],
+    ...task.transcript?.length ? task.transcript : [{ role: "user", content: task.prompt }]
+  ];
+}
+function turnContextBlock(pack, brief, sections = []) {
+  const lines = [];
+  for (const file of pack.focus) {
+    if (file.content !== void 0) {
+      lines.push(`## ${file.path}`, file.content);
+    } else if (file.outline && file.outline.length > 0) {
+      lines.push(`## ${file.path} (outline)`);
+      for (const entry of file.outline) lines.push(`- ${entry.heading} (line ${entry.line})`);
+    }
+  }
+  if (pack.chat) {
+    lines.push(`## chat`, `${pack.chat.tickets.length} linked tickets, ${pack.chat.runs.length} runs`);
+  }
+  for (const repo of pack.repos ?? []) {
+    lines.push(`## repo ${repo.repo}`, `branch ${repo.branch}`, repo.dirty.length > 0 ? `dirty: ${repo.dirty.join(", ")}` : "clean");
+  }
+  for (const fact of pack.facts) lines.push(`## ${fact.key}`, fact.content);
+  if (pack.recall.length > 0) lines.push("## recall", ...pack.recall);
+  if (brief && brief.trim()) lines.push("## brief", brief.trim());
+  for (const section of sections) if (section.trim()) lines.push(section.trim());
+  if (lines.length === 0) return null;
+  return lines.join("\n");
+}
+function withVolatileTail(transcript, pack, brief, sections = []) {
+  const tail = volatileTail2([turnContextBlock(pack, brief, sections)]);
+  return tail ? [...transcript, tail] : [...transcript];
+}
+
+// ../packages/agent-run/src/runTurn.ts
+var callKinds = /* @__PURE__ */ new WeakMap();
+var causes = /* @__PURE__ */ new WeakMap();
+function isResumable(input, err) {
+  return !(err instanceof ModelTransportError) && input.ports.store.isResumable?.(err) === true;
+}
+function causeOf(state) {
+  return causes.get(state);
+}
+var SYNTHESIS_MAX_TOKENS = 1e3;
+function adoptServedModel(policy, state, served) {
+  if (policy.modelStart?.plain) return;
+  if (served && served !== "default" && !state.model.strictPin) state.model = { ...state.model, model: served };
+}
+function withoutToolChoiceIf(drop, fields) {
+  if (!drop || !("toolChoice" in fields)) return fields;
+  const { toolChoice: _dropped, ...rest } = fields;
+  return rest;
+}
+function askFields(ask) {
+  if (!ask) return {};
+  return {
+    ...ask.role ? { role: ask.role } : {},
+    ...ask.phase ? { phase: ask.phase } : {},
+    ...ask.toolChoice ? { toolChoice: ask.toolChoice } : {},
+    ...ask.strict ? { strict: true } : {},
+    ...ask.excludeModels && ask.excludeModels.length > 0 ? { excludeModels: ask.excludeModels } : {}
+  };
+}
+async function completeTurn(input, state, hooks, ctx, offered, transcript, pack, made) {
+  const view = currentView(transcript, offered);
+  const pctx = policyContext(input, state, view, ctx.step, ctx.stepInCall);
+  const selected = made ? made.tools : await hooks.tools.select(pctx, offered);
+  const tools = selected ? [...selected] : offered;
+  const advertisedSet = tools.map((t) => t.function?.name ?? "").join(",");
+  if (state.advertisedSignature !== advertisedSet) {
+    state.advertisedSignature = advertisedSet;
+    await emit(input.ports.events, { kind: "context.tools", step: ctx.step, advertised: tools.length, catalog: offered.length, toolsTokens: toolsTokensOf(tools), loaded: state.loadedTools ?? [] });
+  }
+  const mctx = { ...pctx, tools, ...made?.finalBy === "guards" ? { finalTurn: true } : {} };
+  const decision = await hooks.model.resolve(mctx);
+  const model = decision ? decision.model : input.policy.pinnedModel;
+  const brief = await hooks.memory.brief(pctx);
+  const work = assignedWorkSection(state.work ?? []);
+  const sections = [...input.ports.context.turnSections?.() ?? [], ...work ? [`### Assigned work
+${work}`] : [], ...made?.tail ?? []];
+  const fields = hooks.model.turnFields?.(mctx);
+  const reasoning = hooks.guards.reasoning?.(pctx);
+  const firstAsk = {
+    ...decision?.role ? { role: decision.role } : {},
+    ...decision?.strict ? { strict: true } : {},
+    ...decision?.excludeModels && decision.excludeModels.length > 0 ? { excludeModels: [...decision.excludeModels] } : {},
+    ...fields ?? {}
+  };
+  const progressNote = renderTaskState(state.taskState);
+  const requestFor = (askedModel, ask, extra = []) => ({
+    messages: measureTurnTail(state, withVolatileTail(extra.length > 0 ? [...transcript, ...extra] : transcript, pack, brief ?? null, sections)),
+    ...askedModel ? { model: askedModel, strict: ask?.strict ?? false } : {},
+    ...tools.length > 0 ? { tools } : {},
+    ...decision?.maxTokens !== void 0 ? { maxTokens: decision.maxTokens } : {},
+    // A tool choice means nothing without tools (and a provider may refuse it): a turn advertising none never sends one.
+    ...withoutToolChoiceIf(tools.length === 0, askFields(ask)),
+    ...tools.length > 0 && made?.toolChoice && !ask?.toolChoice ? { toolChoice: made.toolChoice } : {},
+    ...reasoning ? { reasoning } : {},
+    ...progressNote ? { progress: progressNote } : {}
+  });
+  let asked = model;
+  let completion;
+  let startedAt = Date.now();
+  try {
+    completion = await input.ports.model.complete(requestFor(model, firstAsk), input.signal);
+  } catch (err) {
+    if (input.signal?.aborted) throw err;
+    const reason = err instanceof Error ? err.message : String(err);
+    if (isResumable(input, err)) causes.set(state, err);
+    if (isTransportFailure(err) && hooks.model.recoverFailure) {
+      const route = hooks.model.recoverFailure(pctx, err.failure, err.failure.model ?? model, reason);
+      if (route.kind === "retry") {
+        if (route.note) appendRows(input, transcript, { role: "system", content: route.note });
+        if (made) made.retried = true;
+        return { skip: true };
+      }
+      return { failed: `provider failed: ${reason}` };
+    }
+    const routed = err instanceof ModelTransportError && err.routable ? routeAround(state, err.status) : null;
+    if (!routed) return { failed: reason };
+    await emit(input.ports.events, { kind: "model.cascade", step: ctx.step, from: routed.from, status: err instanceof ModelTransportError ? err.status ?? null : null, released: routed.released });
+    asked = routed.retry.model;
+    startedAt = Date.now();
+    try {
+      completion = await input.ports.model.complete(requestFor(routed.retry.model, routed.retry), input.signal);
+    } catch (retryErr) {
+      if (input.signal?.aborted) throw retryErr;
+      if (isResumable(input, retryErr)) causes.set(state, retryErr);
+      return { failed: retryErr instanceof Error ? retryErr.message : String(retryErr) };
+    }
+  }
+  const reask = reaskAsCoder(state, input.policy, completion, { role: firstAsk.role, hasTools: tools.length > 0 });
+  if (reask) {
+    await emit(input.ports.events, { kind: "model.coder_reask", step: ctx.step, ...completion.model ? { model: completion.model } : {} });
+    asked = reask.ask.model;
+    startedAt = Date.now();
+    try {
+      completion = await input.ports.model.complete(requestFor(reask.ask.model, reask.ask, [reask.brief]), input.signal);
+    } catch (err) {
+      if (input.signal?.aborted) throw err;
+      if (isResumable(input, err)) causes.set(state, err);
+      return { failed: err instanceof Error ? err.message : String(err) };
+    }
+  }
+  turnSucceeded(state, { acted: (completion.toolCalls ?? []).length > 0, durationMs: Date.now() - startedAt, ...completion.model ? { model: completion.model } : {} });
+  adoptServedModel(input.policy, state, completion.model);
+  const downgrade = hooks.model.downgrade?.(pctx, asked, completion.model);
+  if (downgrade) await emit(input.ports.events, downgrade);
+  return {
+    content: completion.content ?? "",
+    toolCalls: (completion.toolCalls ?? []).map((call) => ({ id: call.id, name: call.name, arguments: call.arguments })),
+    meta: { model: completion.model, usage: completion.usage, interrupted: completion.interrupted, ...completion.parts ? { parts: completion.parts } : {}, ...completion.meta ? { native: completion.meta } : {} }
+  };
+}
+async function synthesizeFinal(input, state, hooks, transcript, pack, tally, why = {}) {
+  if (input.signal?.aborted) return null;
+  const pctx = policyContext(input, state, currentView(transcript, []), state.step, 0);
+  const prompt = hooks.stall.synthesis?.(pctx, why);
+  if (!prompt) return null;
+  const decision = await hooks.model.resolve(pctx);
+  const model = decision ? decision.model : input.policy.pinnedModel;
+  const fields = hooks.model.turnFields?.(pctx);
+  const ask = { role: "user", content: prompt };
+  let completion;
+  try {
+    completion = await input.ports.model.complete(
+      {
+        messages: [...withVolatileTail(transcript, pack, null, input.ports.context.turnSections?.() ?? []), ask],
+        ...model ? { model, strict: decision?.strict ?? false } : {},
+        maxTokens: SYNTHESIS_MAX_TOKENS,
+        // A transport records this turn as the run's forced closing one (and what stopped the run), never an ordinary turn.
+        ...why.failureStreak !== void 0 ? { forcedFinish: why } : {},
+        ...askFields(fields),
+        ...renderTaskState(state.taskState) ? { progress: renderTaskState(state.taskState) } : {}
+      },
+      input.signal
+    );
+  } catch (err) {
+    if (isResumable(input, err)) throw err;
+    return null;
+  }
+  adoptServedModel(input.policy, state, completion.model);
+  tallyTurn(tally, completion.model, completion.usage);
+  await emit(input.ports.events, {
+    kind: "model.completed",
+    step: state.step,
+    ...completion.model ? { model: completion.model } : {},
+    ...completion.usage ? { usage: completion.usage } : {}
+  });
+  const raw = completion.content ?? "";
+  const output = hooks.stall.settle ? hooks.stall.settle(pctx, raw) : raw.trim();
+  if (!output) return null;
+  appendRows(input, transcript, ask, { role: "assistant", content: output });
+  return output;
+}
+async function dispatchCall(input, state, call, watch, facts = { refused: false }, step = state.step) {
+  const { ports, signal } = input;
+  if (call.malformed) return declineMalformedCall(ports, call, facts, step);
+  const platform = ports.platform;
+  const own2 = ownsCall(ports, call.name);
+  if (platform && own2 && platform.handsOff?.(call.name) && state.model.phase === "plan") {
+    state.model = reduceRunPolicy(state.model, { type: "hand_off" });
+  }
+  try {
+    const box = {};
+    const exec = async (name, args, stepSignal) => {
+      const run = stepSignal ?? signal;
+      const extension = ports.extensions;
+      if (extension?.handles(name)) {
+        const ran = await extension.dispatch(name, args, run);
+        if (ran.isError) box.failed = true;
+        if (ran.control) box.control = ran.control;
+        return ran.data;
+      }
+      if (platform && own2) {
+        const result2 = await platform.execute(name, args, { ...run ? { signal: run } : {}, progress: { rungs: state.stall?.rungs ?? {} }, callId: call.id, step });
+        box.failed = result2.isError === true;
+        if (result2.parts || result2.meta) box.native = { ...result2.parts ? { parts: result2.parts } : {}, ...result2.meta ? { meta: result2.meta } : {} };
+        if (result2.cached) box.kind = "cached";
+        else if (result2.neutral) box.kind = "neutral";
+        if (result2.aborted) {
+          box.killed = true;
+          return signal?.aborted ? stoppedResult(result2.data) : interruptedResult(result2.data);
+        }
+        return result2.data;
+      }
+      if (!ports.capabilities) return { ok: false, error: "This run has no registry tool provider." };
+      const result = await registryOf(ports).dispatch(name, args, { caps: ports.capabilities, ...run ? { signal: run } : {} });
+      box.control = result.control;
+      return extension?.shape ? extension.shape(name, result.data) : result.data;
+    };
+    const data = own2 && platform?.watchesItself ? await exec(call.name, call.args) : await runToolWithWatch(exec, watch, signal, call.name, call.args, own2 ? platform?.interruptible : void 0);
+    const servingModel2 = facts.model && facts.model !== "default" ? facts.model : state.model.model;
+    const surfaceCap = own2 ? platform?.resultCap?.(servingModel2) : void 0;
+    const capped = capToolResult(call.name, data, surfaceCap ?? resultCapFor(call.name, ports.model, servingModel2, data));
+    const failed3 = box.failed === true || !own2 && !!capped && capped.ok === false && capped.skipped !== true;
+    const dispatched = { data: capped, ...box.control ? { control: box.control } : {}, ...failed3 ? { isError: true } : {} };
+    if (box.kind) callKinds.set(dispatched, box.kind);
+    if (box.native) nativeResults.set(dispatched, box.native);
+    if (box.killed) killedResults.add(dispatched);
+    return dispatched;
+  } catch (err) {
+    if (signal?.aborted || isResumable(input, err)) throw err;
+    const reason = err instanceof Error ? err.message : String(err);
+    return { data: { ok: false, error: reason }, isError: true };
+  }
+}
+async function declineMalformedCall(ports, call, facts, step) {
+  const truncated = facts.interruption === "truncated";
+  const policy = ports.platform?.malformed;
+  const answered = await policy?.answer?.({ id: call.id, name: call.name, arguments: call.raw.arguments }, { step, truncated });
+  if (answered) {
+    facts.refused = true;
+    return { data: answered.data, ...answered.isError ? { isError: true } : {} };
+  }
+  const outcome = malformedCallOutcome(call, truncated, truncated ? policy?.retryHint : void 0);
+  facts.refused = true;
+  policy?.refused?.({ name: call.name, arguments: call.raw.arguments }, truncated, outcome);
+  return { data: outcome, isError: true };
+}
+
+// ../packages/agent-run/src/telemetry/outcomeRow.ts
+function buildOutcomeRow(input) {
+  const { state } = input;
+  const tally = resumeTally(state.telemetry);
+  const progress = state.guards?.progress;
+  const preflight = state.preflight;
+  const runCost = reportedRunCost(tally.costMc);
+  const work = evaluateRunWork(state);
+  return {
+    entryPoint: input.entryPoint,
+    ...input.runId ? { runId: input.runId } : {},
+    ...input.parentRunId ? { parentRunId: input.parentRunId } : {},
+    steps: state.step,
+    toolCalls: tally.toolCalls,
+    toolErrors: tally.toolErrors,
+    compactions: state.compaction?.compactions ?? 0,
+    stallRecoveries: state.stall?.recoveriesTotal ?? 0,
+    escalations: state.guards?.escalations ?? 0,
+    verify: tally.verify ?? "not-run",
+    terminalStatus: input.kind,
+    ...work ? { work } : {},
+    ...state.pipeline ? { pipeline: state.pipeline } : {},
+    ...tally.model ? { model: tally.model } : {},
+    tokens: tally.tokens,
+    cacheReadTokens: tally.cacheReadTokens,
+    ...runCost !== void 0 ? { cost: runCost } : {},
+    firstSpawnTurn: tally.firstSpawnTurn ?? null,
+    coveredReadStubs: state.reads?.stubCount ?? 0,
+    shellFileReads: tally.shellFileReads,
+    repoErrors: tally.repoErrors,
+    contextPackTokens: contextPackTokens(state),
+    ...preflight ? { modelPreflight: preflight } : {},
+    unkeptReadyClaims: progress?.unkeptTurns ?? 0,
+    progressTrips: tripsBySignal(progress?.tripsBySignal),
+    ...input.reason === RUN_CANCELLED_REASON ? { cancelled: true } : {},
+    ...input.kind === "failed" && isRateLimitFailure(input.reason) ? { rateLimited: true } : {},
+    // The tenant spent its own allowance: stored, and never taught to routing. Classified HERE, once, so every reporter that sends the row carries it.
+    ...input.kind === "failed" && isTenantBudgetFailure(input.reason) ? { quotaExhausted: true } : {},
+    ...isDegraded(state) ? { degraded: true } : {}
+  };
+}
+function isDegraded(state) {
+  return (state.degradedBy?.length ?? 0) > 0;
+}
+function tripsBySignal(bySignal) {
+  const out = {};
+  for (const [signal, n] of Object.entries(bySignal ?? {})) if (n) out[signal] = n;
+  return out;
+}
+function contextPackTokens(state) {
+  if (!state.context) return 0;
+  const block = turnContextBlock(state.context, null);
+  return block ? defaultEstimateTokens(block) : 0;
+}
+
+// ../packages/agent-run/src/runSettle.ts
+async function settle(input, hooks, state, transcript, kind, extra) {
+  state.messages = transcript;
+  const unfinished = kind === "finished" ? hooks.finish.unfinishedWork(state) : null;
+  if (unfinished) {
+    kind = "failed";
+    extra = { ...extra, reason: unfinished };
+  }
+  let cause = extra.cause;
+  if ((kind === "finished" || kind === "failed") && cause === void 0) {
+    try {
+      const consolidated = await hooks.memory.consolidate(
+        policyContext(input, state, currentView(transcript, []), state.step, 0),
+        { learn: kind === "finished" }
+      );
+      if (consolidated !== void 0) await input.ports.store.commitMemory?.(consolidated);
+    } catch (err) {
+      if (isResumable(input, err)) cause = err;
+    }
+  }
+  const resumable = cause !== void 0;
+  if ((kind === "finished" || kind === "failed") && !resumable && extra.reason !== RUN_CANCELLED_REASON && state.telemetry) {
+    const recorded = hooks.verify.recorded?.(policyContext(input, state, currentView(transcript, []), state.step, 0));
+    if (recorded !== void 0) tallyVerify(state.telemetry, recorded);
+  }
+  try {
+    await input.ports.store.save(state);
+  } catch {
+  }
+  if (kind === "yielded" || resumable) {
+    return kind === "failed" || cause !== void 0 ? { kind: "failed", reason: extra.reason ?? (cause instanceof Error ? cause.message : "failed"), state, cause } : { kind: "yielded", state };
+  }
+  if (kind === "finished" || kind === "failed") {
+    const row = buildOutcomeRow({ entryPoint: input.policy.entryPoint, runId: input.task.runId, parentRunId: input.task.dispatch.parentRunId, kind, ...extra.reason !== void 0 ? { reason: extra.reason } : {}, state });
+    try {
+      await input.ports.events.outcome?.(row);
+    } catch {
+    }
+    await emit(input.ports.events, { kind: "run.finished", step: state.step, outcome: kind });
+  }
+  if (kind === "finished") return { kind, output: extra.output ?? "", state };
+  if (kind === "paused") return { kind, question: extra.question ?? "", approvalId: extra.approvalId ?? newApprovalId(state), state };
+  return { kind, reason: extra.reason ?? "failed", state, ...extra.cause !== void 0 ? { cause: extra.cause } : {}, ...extra.exhausted ? { exhausted: true } : {}, ...extra.failureStreak !== void 0 ? { failureStreak: extra.failureStreak } : {} };
+}
+
+// ../packages/agent-run/src/kernelSteering.ts
+function steeringTakers(run, contextAt) {
+  const { input, hooks } = run;
+  const { ports } = input;
+  const stopsOn = (texts) => input.policy.stopWords !== false && isStopSteer(texts);
+  const append = (...rows) => appendRows(input, run.transcript, ...rows);
+  let afterFinish = [];
+  const appendDirections = async (directions, step) => {
+    append(...directions.map((item) => ({ role: "user", content: item.text, person: true, ...item.parts?.length ? { parts: item.parts } : {} })));
+    for (const _item of directions) await emit(ports.events, { kind: "steer.applied", step });
+  };
+  const takeSteers = async (ctx) => {
+    const steered = (await ports.steering?.drain({ step: ctx.step }) ?? []).map(steerInput);
+    if (steered.length === 0) return "none";
+    const texts = steered.map((s) => s.text);
+    if (stopsOn(texts)) {
+      run.stopped = true;
+      return "stop";
+    }
+    const injected = await hooks.steering.inject(contextAt(ctx.step, ctx.stepInCall), texts);
+    const rows = injected ?? texts.map((text) => ({ role: "user", content: text }));
+    append(...rows.map((row, i) => ({ ...row, ...rows.length === steered.length && steered[i]?.parts?.length && !row.parts ? { parts: steered[i].parts } : {}, person: true })));
+    for (let i = 0; i < steered.length; i += 1) await emit(ports.events, { kind: "steer.applied", step: ctx.step });
+    return "applied";
+  };
+  const takeJoined = async (ctx) => {
+    const steered = (await ports.steering?.drain({ step: ctx.step }) ?? []).map(steerInput);
+    if (steered.length === 0) return "none";
+    const texts = steered.map((s) => s.text);
+    if (stopsOn(texts)) {
+      run.stopped = true;
+      return "stop";
+    }
+    for (let i = 0; i < steered.length; i += 1) await emit(ports.events, { kind: "steer.applied", step: ctx.step });
+    return { text: texts.join("\n\n"), parts: steered.flatMap((s) => s.parts ?? []) };
+  };
+  const lateSteerNote = async (ctx) => {
+    const steered = (await ports.steering?.drain({ step: ctx.step }) ?? []).map(steerInput);
+    if (stopsOn(steered.map((item) => item.text))) {
+      run.stopped = true;
+      return null;
+    }
+    const followUps = steered.length || afterFinish.length ? [] : (await ports.steering?.followUp?.() ?? []).map(steerInput);
+    afterFinish.push(...steered, ...followUps);
+    return afterFinish.length ? { note: "The user sent more direction while you were finishing. Address the upcoming user messages before finishing." } : null;
+  };
+  const flushFinishDirections = async (step) => {
+    if (!afterFinish.length || run.stopped) return;
+    const pending = afterFinish;
+    afterFinish = [];
+    await appendDirections(pending, step);
+  };
+  const takeFollowUps = async (ctx) => {
+    const followUps = (await ports.steering?.followUp?.() ?? []).map(steerInput);
+    if (followUps.length === 0) return false;
+    await appendDirections(followUps, ctx.step);
+    return true;
+  };
+  return { takeSteers, takeJoined, lateSteerNote, takeFollowUps, flushFinishDirections };
+}
+
+// ../packages/agent-run/src/kernelNoTools.ts
+function noToolCallsHook(run, deps) {
+  const { input, hooks } = run;
+  const { ports, policy } = input;
+  const { append } = deps;
+  const sentBack = async (step, content, kept = "block") => {
+    await ports.delivery?.sentBack?.({ step, content, kept });
+  };
+  const requeue = async (pctx, step, said, note, kept = "block", parts = [], tell = true) => {
+    if (tell) await sentBack(step, said, kept);
+    const quoted = kept === "reply" && ports.delivery?.owns?.settle && hooks.stall.settle ? hooks.stall.settle(pctx, said) : said;
+    if (quoted.trim() || ports.delivery?.stall?.quoteEmpty) append({ role: "assistant", content: quoted, ...run.turnNative });
+    append({ role: "user", content: note, ...parts.length > 0 ? { parts: [...parts] } : {} });
+  };
+  return async (ctx, turn) => {
+    const pctx = deps.contextAt(ctx.step, ctx.stepInCall);
+    pctx.content = turn.content;
+    pctx.served = { ...run.facts.model ? { model: run.facts.model } : {}, ...run.facts.interruption ? { interruption: run.facts.interruption } : {} };
+    const judged = ports.delivery?.judged?.(turn.content);
+    if (judged !== void 0) pctx.judged = judged;
+    if (ports.delivery?.stall?.menu && run.selection?.tools) pctx.tools = [...run.selection.tools];
+    const finalTurn = run.selection?.final === true;
+    if (finalTurn) pctx.tools = [];
+    const finishing = hooks.guards.isFinishing?.(pctx) === true;
+    if (finishing) pctx.finishing = true;
+    const steersFirst = ports.delivery?.stall?.steersFirst === true;
+    if (steersFirst) {
+      const steered = await deps.takeJoined(ctx);
+      if (steered === "stop") return { action: "stop", ok: false, output: "cancelled", finished: true };
+      if (steered !== "none") {
+        await requeue(pctx, ctx.step, turn.content, steered.text, "block", steered.parts);
+        return { action: "continue" };
+      }
+    }
+    const children = await hooks.finish.liveChildren?.(pctx);
+    if (children) {
+      await requeue(pctx, ctx.step, turn.content, children);
+      return { action: "continue" };
+    }
+    const stalled2 = run.watch.hasInterrupt() || finalTurn ? void 0 : await (hooks.stall.recoverAsync ? hooks.stall.recoverAsync(pctx) : hooks.stall.recover(pctx));
+    if (stalled2?.action === "steer" || stalled2?.action === "escalate") await sentBack(ctx.step, turn.content, stalled2.action === "escalate" ? "reply" : "block");
+    else if (stalled2?.action === "pause" && policy.stallExhausted === "settle") await sentBack(ctx.step, turn.content, "settled");
+    if (stalled2) await emit(ports.events, { kind: "stall.recovered", step: ctx.step, action: stalled2.action, ...stalled2.note ? { note: stalled2.note } : {}, ...stalled2.detail ? { detail: stalled2.detail } : {} });
+    if (stalled2 && stalled2.action === "pause") {
+      const notice = stalled2.note ?? "paused";
+      if (policy.stallExhausted === "finish") return { action: "finish", output: turn.content.trim() ? `${turn.content}
+
+${notice}` : notice };
+      if (policy.stallExhausted === "settle") {
+        const settled = hooks.stall.settle ? hooks.stall.settle(pctx, turn.content) : turn.content;
+        if (settled.trim()) append({ role: "assistant", content: settled, ...run.turnNative });
+        return { action: "finish", output: settled };
+      }
+      if (policy.stallExhausted === "note") await requeue(pctx, ctx.step, turn.content, notice);
+      return { action: "stop", ok: false, output: notice, finished: true };
+    }
+    if (stalled2 && stalled2.action === "fail") {
+      return { action: "stop", ok: false, output: stalled2.note ?? "failed", finished: true };
+    }
+    if (stalled2 && stalled2.action === "settle") {
+      const answer = stalled2.note ?? "";
+      if (answer.trim()) append({ role: "assistant", content: answer });
+      return { action: "finish", output: answer };
+    }
+    if (stalled2) {
+      const kept = stalled2.action === "escalate" ? "reply" : "block";
+      if (stalled2.rows) append(...stalled2.rows);
+      else await requeue(pctx, ctx.step, turn.content, stalled2.note ?? "Continue: do the work, do not describe it.", kept, [], false);
+      return { action: "continue" };
+    }
+    const owed = hooks.finish.settleBlock(pctx);
+    if (owed) await emit(ports.events, { kind: "finish.blocked", step: ctx.step, reason: "review_verdict_missing", block: owed, detail: { ...policy.signoff } });
+    const block = owed ?? hooks.subagents.backstop(pctx);
+    if (block) {
+      await requeue(pctx, ctx.step, turn.content, block);
+      return { action: "continue" };
+    }
+    const verification = finalTurn ? null : await deps.verifyBlock(pctx);
+    if (verification) {
+      await emit(ports.events, { kind: "finish.blocked", step: ctx.step, reason: "verify", block: verification });
+      await requeue(pctx, ctx.step, turn.content, verification);
+      return { action: "continue" };
+    }
+    const open = finalTurn ? null : await hooks.finish.openWork?.(pctx);
+    if (open) {
+      await emit(ports.events, { kind: "finish.blocked", step: ctx.step, reason: LINKED_WORK_OPEN, block: open });
+      await requeue(pctx, ctx.step, turn.content, open);
+      return { action: "continue" };
+    }
+    const output = hooks.stall.settle ? hooks.stall.settle(pctx, turn.content) : turn.content;
+    if (steersFirst) {
+      const late2 = await deps.takeJoined(ctx);
+      if (late2 === "stop") return { action: "stop", ok: false, output: "cancelled", finished: true };
+      if (late2 !== "none") {
+        await requeue(pctx, ctx.step, turn.content, late2.text, "block", late2.parts);
+        return { action: "continue" };
+      }
+    }
+    if (output.trim()) append({ role: "assistant", content: output, ...run.turnNative });
+    const late = await deps.takeSteers(ctx);
+    if (late === "stop") return { action: "stop", ok: false, output: "cancelled", finished: true };
+    if (late === "applied") {
+      await sentBack(ctx.step, turn.content);
+      return { action: "continue" };
+    }
+    if (await deps.takeFollowUps(ctx)) {
+      await sentBack(ctx.step, turn.content);
+      return { action: "continue" };
+    }
+    if (finalTurn || finishing) await ports.delivery?.finalAccepted?.({ step: ctx.step, content: turn.content });
+    return { action: "finish", output };
+  };
+}
+
+// ../packages/agent-run/src/kernelHooks.ts
+var MUTATING_TOOLS = /* @__PURE__ */ new Set(["write_file", "edit_file", "delete_file"]);
+function isMutationCall(name, args) {
+  if (MUTATING_TOOLS.has(name)) return true;
+  return !isReadOnlyShellCall(name, args);
+}
+var ASK_TOOLS = /* @__PURE__ */ new Set(["ask_human", "ask_user"]);
+function asLoopControl(control) {
+  return control;
+}
+function optionsOf(control) {
+  const options = control.options;
+  return Array.isArray(options) ? options.filter((o) => typeof o === "string") : void 0;
+}
+function rewriteRow(row, data, verbatim) {
+  row.content = verbatim && typeof data === "string" ? data : JSON.stringify(data ?? null);
+}
+function kernelHooks(run) {
+  const { input, state, hooks, transcript, offered, tally } = run;
+  const { ports, policy } = input;
+  const contextAt = (step, turn) => policyContext(input, state, currentView(transcript, offered), step, turn);
+  const append = (...rows) => appendRows(input, transcript, ...rows);
+  const verifyBlock = async (pctx) => {
+    if (policy.verify === "none") return null;
+    const verdict = await hooks.verify.verify(pctx);
+    if (verdict && verdict.ran !== false) tallyVerify(tally, verdict.ok);
+    return verdict && !verdict.ok ? verdict.note ?? "Verification failed: fix it before finishing." : null;
+  };
+  const stubs = /* @__PURE__ */ new WeakSet();
+  const held = /* @__PURE__ */ new WeakSet();
+  const starts = /* @__PURE__ */ new Map();
+  const { takeSteers, takeJoined, lateSteerNote, takeFollowUps, flushFinishDirections } = steeringTakers(run, contextAt);
+  return {
+    beforeTurn: async (ctx) => {
+      const verdict = run.budget?.beforeTurn();
+      if (verdict?.kind === "contain") {
+        append({ role: "assistant", content: verdict.text });
+        await emit(ports.events, { kind: "budget.contained", step: ctx.step, spentMc: verdict.spentMc, capMc: verdict.capMc, unpricedCalls: verdict.unpricedCalls, text: verdict.text });
+        return { action: "stop", ok: true, finished: true, output: verdict.text };
+      }
+      if (verdict?.kind === "warn") {
+        const tail = volatileTail([verdict.text]);
+        if (tail) append({ role: tail.role, content: String(tail.content) });
+        await emit(ports.events, { kind: "budget.warning", step: ctx.step, spentMc: verdict.spentMc, capMc: verdict.capMc, unpricedCalls: verdict.unpricedCalls, text: verdict.text });
+      }
+      if (await takeSteers(ctx) === "stop") return { action: "stop", ok: false, output: RUN_CANCELLED_REASON, finished: true };
+      const base = currentView(transcript, offered);
+      const selectNow = async () => hooks.tools.select(policyContext(input, state, base, ctx.step, ctx.stepInCall), offered);
+      const forced = run.selection?.retried === true && run.selection.forced ? run.selection.forced : await hooks.guards.forcedTurn?.(policyContext(input, state, base, ctx.step, ctx.stepInCall), { select: async () => await selectNow() ?? offered, cache: run.cache });
+      const surfaceMenu = await ports.platform?.turn?.({
+        step: ctx.step,
+        select: async () => forced ? forced.selected : await selectNow() ?? offered,
+        progress: { rungs: state.stall?.rungs ?? {} },
+        cache: run.cache,
+        ...forced?.menu ? { forced: forced.menu } : {}
+      });
+      const menu = surfaceMenu ?? forced?.menu;
+      const finalBy = finalSource(menu, () => hooks.guards.finalTurn?.(policyContext(input, state, base, ctx.step, ctx.stepInCall)) === true);
+      const finalTurn = finalBy !== void 0;
+      const advertised = finalTurn ? [] : menu?.tools ?? forced?.selected ?? await selectNow();
+      run.selection = {
+        tools: advertised,
+        ...forced ? { forced } : {},
+        ...menu?.toolChoice && !finalTurn ? { toolChoice: menu.toolChoice } : {},
+        ...menu?.tail && menu.tail.length > 0 ? { tail: menu.tail } : {},
+        ...finalBy ? { final: true, finalBy } : {}
+      };
+      const view = advertised ? { ...base, tools: [...advertised] } : base;
+      const compacted = await hooks.compaction.compact(policyContext(input, state, view, ctx.step, ctx.stepInCall));
+      if (compacted) {
+        applyCompaction(state, view, compacted, ctx.step);
+        await emit(ports.events, {
+          kind: "context.compacted",
+          step: ctx.step,
+          dropped: compacted.dropped,
+          ...compacted.beforeTokens !== void 0 ? { beforeTokens: compacted.beforeTokens } : {},
+          ...compacted.afterTokens !== void 0 ? { afterTokens: compacted.afterTokens } : {},
+          ...compacted.summarized !== void 0 ? { summarized: compacted.summarized } : {},
+          ...compacted.masked ? { masked: compacted.masked } : {},
+          ...compacted.note ? { note: compacted.note } : {},
+          ...compacted.covered !== void 0 ? { covered: compacted.covered } : {}
+        });
+      }
+      run.facts.model = void 0;
+      run.facts.interruption = void 0;
+      await emit(ports.events, { kind: "turn.started", step: ctx.step });
+      return void 0;
+    },
+    afterTurn: async (ctx, turn) => {
+      run.turnContent = turn.content ?? "";
+      run.turnNative = nativeOfTurn(turn.meta);
+      const meta = turn.meta && typeof turn.meta === "object" ? turn.meta : void 0;
+      const model = meta ? meta.model : tally.model;
+      const usage = meta?.usage;
+      run.facts.model = meta?.model;
+      run.facts.interruption = meta?.interrupted;
+      if (run.selection?.finalBy === "guards") hooks.guards.finalTurnDone?.(contextAt(ctx.step, ctx.stepInCall));
+      tallyTurn(tally, model, usage);
+      if (run.budget?.afterTurn(usage)) await emit(ports.events, { kind: "budget.unpriced", step: ctx.step, ...model ? { model } : {} });
+      await emit(ports.events, { kind: "model.completed", step: ctx.step, ...model ? { model } : {}, ...usage ? { usage } : {} });
+    },
+    onNoToolCalls: noToolCallsHook(run, { contextAt, append, takeSteers, takeJoined, takeFollowUps, verifyBlock }),
+    onRepetitionLoop: async (ctx, loop) => {
+      await emit(ports.events, { kind: "loop.repetition", step: ctx.step, copies: loop.copies, block: loop.block });
+    },
+    beforeToolCalls: (_ctx, turn, calls) => {
+      const output = ports.extensions?.terminalTurn?.({ content: turn.content ?? "" }, calls.map((c) => ({ name: c.name, args: c.args, malformed: c.malformed })));
+      return output === void 0 ? void 0 : { action: "stop", ok: true, output, finished: true };
+    },
+    beforeDispatch: async (call, ctx) => {
+      starts.set(call.id, Date.now());
+      const pctx = contextAt(ctx.step, ctx.stepInCall);
+      const pcall = toPolicyCall(call);
+      const gated = await hooks.tools.gate?.(pctx, pcall);
+      if (gated) {
+        const refused = { data: gated.data, isError: true, ...gated.control ? { control: asLoopControl(gated.control) } : {} };
+        if (gated.control) held.add(refused);
+        return { result: refused };
+      }
+      const decision = await hooks.guards.beforeDispatch?.(pctx, pcall);
+      if (decision?.skip) {
+        const { data, isError, control } = decision.skip;
+        const skipped2 = { data, isError: isError ?? true, ...control ? { control: asLoopControl(control) } : {} };
+        if (control) held.add(skipped2);
+        return { result: skipped2 };
+      }
+      if (ASK_TOOLS.has(call.name)) {
+        const note = hooks.subagents.backstop(pctx);
+        if (note) return { result: { data: { ok: false, error: note }, isError: true } };
+      }
+      const meta = hooks.tools.meta?.(pctx, pcall);
+      if (meta) return { result: { data: meta.data } };
+      const covered = hooks.tools.beforeDispatch?.(pctx, pcall);
+      if (covered) {
+        const stub = { data: covered.data };
+        stubs.add(stub);
+        run.cache.served(ctx.step);
+        return { result: stub };
+      }
+      const platform = ports.platform;
+      if (platform?.preflight && ownsCall(ports, call.name)) {
+        const pre = await platform.preflight({ id: call.id, name: call.name, args: call.args, arguments: call.raw.arguments, malformed: call.malformed }, { step: ctx.step });
+        if (pre && "result" in pre) return { result: { data: pre.result.data, ...pre.result.isError ? { isError: true } : {} } };
+        if (pre && "rewrite" in pre) {
+          const { name, args } = pre.rewrite;
+          return { rewrite: { ...call, name, args, raw: { ...call.raw, name, arguments: JSON.stringify(args) } } };
+        }
+      }
+      return void 0;
+    },
+    onFinish: async (ctx, summary, call) => {
+      const pctx = contextAt(ctx.step, ctx.stepInCall);
+      pctx.content = summary;
+      pctx.toolCalls = [toPolicyCall(call)];
+      const verifyRefused = await verifyBlock(pctx);
+      const gated = verifyRefused ?? await hooks.finish.gate(pctx);
+      const reason = verifyRefused ? "verify" : lastFinishReason(state);
+      const judged = hooks.guards.finish ? await hooks.guards.finish(pctx, { block: gated, reason }) : gated;
+      const block = judged ?? hooks.subagents.backstop(pctx);
+      if (block) {
+        const openWorkHold = gated != null && block === gated && reason === LINKED_WORK_OPEN;
+        if (!openWorkHold) state.finish = { ...state.finish, finishBlockedOnce: true };
+        return block;
+      }
+      return lateSteerNote(ctx);
+    },
+    onAskHuman: async (ctx, control) => {
+      if (control.parked) return void 0;
+      const answer = await hooks.ask.answer(contextAt(ctx.step, ctx.stepInCall), control.question, optionsOf(control));
+      if (answer.kind === "answered") return { data: { ok: true, answer: answer.answer } };
+      return void 0;
+    },
+    afterDispatch: async (call, result, message, ctx) => {
+      const stub = stubs.has(result) || held.has(result);
+      const kind = callKinds.get(result);
+      if (!stub) {
+        if (kind === "cached") run.cache.served(ctx.step);
+        else if (kind !== "neutral") run.cache.ran();
+      }
+      const ok = !result.isError && !(result.data && typeof result.data === "object" && result.data.ok === false);
+      if (!stub) {
+        tallyCall(tally, ctx.step, call.name, call.args, result.data, ok);
+        if (ok && isMutationCall(call.name, call.args)) bumpMutations(tally);
+        const canonical = resolveToolAlias(call.name);
+        if (ok && (MUTATING_TOOLS.has(canonical) || canonical === "run_command" && !isReadOnlyShellCall(canonical, call.args))) {
+          state.finish.ciVerified = false;
+          delete tally.verify;
+        }
+        await emit(ports.events, { kind: "tool.dispatched", step: ctx.step, tool: call.name, ok, callId: call.id, args: call.args, result: result.data }, { durationMs: Date.now() - (starts.get(call.id) ?? Date.now()) });
+        starts.delete(call.id);
+      }
+      const pctx = contextAt(ctx.step, ctx.stepInCall);
+      const pcall = toPolicyCall(call);
+      let data = result.data;
+      const noted = await hooks.guards.observe(pctx, pcall, data, result.isError === true);
+      if (noted) data = noted.data;
+      const nudged = hooks.subagents.nudge(pctx, pcall, data);
+      if (nudged) data = nudged.data;
+      if (data !== result.data) rewriteRow(message, data, message.parts !== void 0 || ports.platform?.verbatimText === true);
+      if (!stub) {
+        hooks.tools.observe?.(pctx, pcall, data, result.isError === true);
+        if (!kind) hooks.verify.observe?.(pctx, pcall, result.data, message.meta, ok);
+        if (!ownsCall(ports, call.name)) await hooks.memory.observe?.(pctx, pcall, result.data, result.isError);
+        rememberWrite(state, call, ok);
+      }
+      if (held.has(result) && result.control?.parked) {
+        return { skipRemaining: { data: { ok: false, skipped: true, error: "Not run: the run is parked on an approval." }, isError: false } };
+      }
+      return steerSkip(run.watch);
+    },
+    afterToolCalls: async (ctx) => {
+      await flushFinishDirections(ctx.step);
+      const pctx = contextAt(ctx.step, ctx.stepInCall);
+      await hooks.guards.endTurn?.(pctx, run.turnContent);
+      hooks.stall.acted?.(pctx);
+      await ports.platform?.turnEnded?.({ step: ctx.step });
+      if (run.facts.refused) {
+        run.facts.refused = false;
+        const directive = ports.platform?.malformed?.roundDirective(run.facts.interruption === "truncated");
+        if (directive) append({ role: "system", content: directive });
+      }
+      await emit(ports.events, { kind: "turn.finished", step: ctx.step });
+      return void 0;
+    }
+  };
+}
+function finalSource(menu, guardsFinal) {
+  if (menu?.final === true) return "surface";
+  if (menu?.toolChoice === "required") return void 0;
+  return guardsFinal() ? "guards" : void 0;
+}
+function readOnlyPort(run) {
+  const guards = run.hooks.guards;
+  if (!guards.isReadOnly) return void 0;
+  return (call) => guards.isReadOnly?.(policyContext(run.input, run.state, currentView(run.transcript, run.offered), run.state.step, 0), call.name) ?? false;
+}
+
+// ../packages/agent-run/src/policy/budget/usd.ts
+var usd = (millicents) => `$${(millicents / MILLICENTS_PER_USD).toFixed(2)}`;
+function runBudgetCapMillicents(maxRunBudgetUsd) {
+  return typeof maxRunBudgetUsd === "number" && Number.isFinite(maxRunBudgetUsd) && maxRunBudgetUsd > 0 ? Math.round(maxRunBudgetUsd * MILLICENTS_PER_USD) : null;
+}
+function noPriceNote(unpricedCalls) {
+  return unpricedCalls > 0 ? `${unpricedCalls} ${unpricedCalls === 1 ? "call" : "calls"} had no known price` : null;
+}
+function budgetWarning(spentMc, capMc, unpricedCalls = 0) {
+  const note = noPriceNote(unpricedCalls);
+  const spent = note ? `at least ${usd(spentMc)} (${note})` : usd(spentMc);
+  return `[Run budget] This run has spent ${spent} of its ${usd(capMc)} budget \u2014 over 80%. Stop exploring and converge: finish the essential change now, then answer with what you did and exactly what is left.`;
+}
+function budgetContainedReply(spentMc, capMc, unpricedCalls = 0) {
+  const note = noPriceNote(unpricedCalls);
+  const spent = note ? `at least ${usd(spentMc)} spent \u2014 ${note}` : `${usd(spentMc)} spent`;
+  return `Run stopped: it reached its ${usd(capMc)} spend budget (${spent}). Nothing was rolled back \u2014 the changes made so far are in place. Ask to continue to resume from here, or raise the "builderforce.maxRunBudgetUsd" setting (0 turns the cap off).`;
+}
+function localSpendMeter() {
+  let spent = 0;
+  let unpriced = 0;
+  return {
+    spentMc: () => spent,
+    unpricedCalls: () => unpriced,
+    add: (pricedMc) => {
+      if (pricedMc === void 0) unpriced += 1;
+      else spent += pricedMc;
+    }
+  };
+}
+function usdBudget(usdCap, meter) {
+  const own2 = runBudgetCapMillicents(usdCap);
+  if (own2 == null) return void 0;
+  const inherited = meter.capMc?.();
+  const capMc = inherited !== void 0 ? Math.min(own2, inherited) : own2;
+  const caps = { maxSpendMillicents: capMc };
+  let warned = false;
+  let unpricedSaid = false;
+  return {
+    beforeTurn() {
+      const spentMc = meter.spentMc();
+      const unpricedCalls = meter.unpricedCalls();
+      const usage = { spendMillicents: spentMc };
+      if (runBudgetBreach(caps, usage)) return { kind: "contain", text: budgetContainedReply(spentMc, capMc, unpricedCalls), spentMc, capMc, unpricedCalls };
+      if (!warned && runBudgetWarnDue(caps, usage)) {
+        warned = true;
+        return { kind: "warn", text: budgetWarning(spentMc, capMc, unpricedCalls), spentMc, capMc, unpricedCalls };
+      }
+      return void 0;
+    },
+    afterTurn(usage) {
+      const priced = usage?.pricedMc;
+      meter.add(priced);
+      if (priced !== void 0 || unpricedSaid) return false;
+      unpricedSaid = true;
+      return true;
+    }
+  };
+}
+
+// ../packages/agent-run/src/policy/tools/cacheServedStreak.ts
+var CACHE_SERVED_STREAK = 6;
+var MIN_STREAK_TURNS = 2;
+var MAX_NO_PROGRESS_TURNS = 2;
+var CacheServedStreak = class {
+  streak;
+  turns;
+  fired;
+  constructor(saved) {
+    this.streak = saved?.streak ?? 0;
+    this.turns = new Set(saved?.turns ?? []);
+    this.fired = saved?.fired ?? 0;
+  }
+  /** A repeat the read cache answered (stub, covered window, replay, repeated write), on `step`. */
+  served(step) {
+    this.streak += 1;
+    this.turns.add(step);
+  }
+  /** A call the host actually ran - the run touched the world again. */
+  ran() {
+    this.streak = 0;
+    this.turns.clear();
+  }
+  get count() {
+    return this.streak;
+  }
+  /** Whether the streak is due a forced turn. */
+  due() {
+    return this.streak >= CACHE_SERVED_STREAK && this.turns.size >= MIN_STREAK_TURNS && this.fired < MAX_NO_PROGRESS_TURNS;
+  }
+  /** A forced turn was spent on the streak: the count starts over. */
+  consume() {
+    this.ran();
+    this.fired += 1;
+  }
+  /** The counter as plain data. */
+  state() {
+    return { streak: this.streak, turns: [...this.turns], fired: this.fired };
+  }
+};
+
+// ../packages/agent-run/src/runAgent.ts
+async function runAgent(input) {
+  const { task, policy, ports, signal } = input;
+  const hooks = composePolicyHooks(input.modules);
+  const state = input.resume ? resumeState(input.resume, policy, task) : freshState(policy, task);
+  const resumed = Boolean(input.resume);
+  if (state.pipeline === void 0 && input.pipeline !== void 0) state.pipeline = input.pipeline;
+  if (!state.work && task.assignedWork?.length) state.work = planWork(task.assignedWork);
+  const tally = state.telemetry ??= freshTally();
+  const offered = offeredSchemas(ports, { rungs: state.stall?.rungs ?? {} });
+  const transcript = asMessages(state.messages);
+  let pack = state.context ?? EMPTY_PACK2;
+  if (!resumed) {
+    transcript.splice(0, transcript.length, ...openingRows(task, policy.approvalGates));
+    state.messages = transcript;
+    pack = await buildContextPack(input, hooks, state, offered);
+    state.context = pack;
+  }
+  ports.attach?.({
+    policy: () => state.model,
+    report: (event) => state.model = reduceRunPolicy(state.model, event),
+    ask: (hasTools) => turnRouting(state.model, hasTools)
+  });
+  if (!resumed) {
+    await emit(ports.events, { kind: "run.started", step: state.step });
+    if (pack.answer && !state.work?.length) {
+      appendRows(input, transcript, { role: "assistant", content: pack.answer });
+      state.messages = transcript;
+      return settle(input, hooks, state, transcript, "finished", { output: pack.answer });
+    }
+    const preflight = await hooks.model.preflight?.(policyContext(input, state, currentView(transcript, offered), state.step, 0));
+    if (preflight) await emit(ports.events, preflight);
+    const seeded = await hooks.guards.seed?.(policyContext(input, state, currentView(transcript, offered), state.step, 0));
+    if (seeded) state.model = seeded;
+  }
+  const budget = usdBudget(policy.budgets.usd, ports.spend ?? localSpendMeter());
+  const run = {
+    input,
+    state,
+    hooks,
+    transcript,
+    offered,
+    tally,
+    watch: portInterruptWatch(ports.steering),
+    turnContent: "",
+    stopped: false,
+    facts: { refused: false },
+    cache: input.cacheStreak ?? new CacheServedStreak(state.reads.servedStreak),
+    ...budget ? { budget } : {}
+  };
+  const isReadOnly = readOnlyPort(run);
+  let loopResult;
+  try {
+    loopResult = await runAgentLoop({
+      messages: transcript,
+      // The kernel pushes rows in the agent's own shape — the SAME shape a requeue, an
+      // answered ask and a steer push — so a saved and resumed transcript reads exactly
+      // like a continuous one.
+      codec: {
+        assistant: (turn) => announceRow(input, {
+          role: "assistant",
+          content: turn.content ?? "",
+          toolCalls: turn.toolCalls.map((call) => ({ id: call.id, name: call.name, arguments: call.arguments })),
+          ...nativeOfTurn(turn.meta)
+        }),
+        tool: (call, result) => announceRow(input, toolRow(call.id, result, ports.platform?.verbatimText === true))
+      },
+      ports: {
+        complete: (ctx) => completeTurn(input, state, hooks, ctx, offered, transcript, pack, run.selection),
+        dispatch: (call, ctx) => dispatchCall(input, state, call, run.watch, run.facts, ctx.step),
+        ...isReadOnly ? { isReadOnly } : {}
+      },
+      hooks: kernelHooks(run),
+      budget: { startStep: state.step, ...input.maxSteps !== void 0 ? { maxSteps: input.maxSteps } : {}, ...policy.budgets.steps !== void 0 ? { stepCap: policy.budgets.steps } : {} },
+      ...signal ? { signal } : {}
+    });
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    return settle(input, hooks, state, transcript, "failed", { reason, ...signal?.aborted || !isResumable(input, err) ? {} : { cause: err } });
+  }
+  state.step = loopResult.step;
+  state.messages = transcript;
+  state.reads = { ...state.reads, servedStreak: run.cache.state() };
+  if (run.stopped || loopResult.cancelled || signal?.aborted) {
+    return settle(input, hooks, state, transcript, "failed", { reason: RUN_CANCELLED_REASON });
+  }
+  if (loopResult.awaitingInput) {
+    const approvalId = loopResult.awaitingInput.approvalId ?? newApprovalId(state);
+    state.askedGates = [...state.askedGates, approvalId];
+    return settle(input, hooks, state, transcript, "paused", { question: loopResult.awaitingInput.question, approvalId });
+  }
+  if (loopResult.exhausted || loopResult.finished && loopResult.ok && !loopResult.output.trim()) {
+    let output;
+    try {
+      output = await synthesizeFinal(input, state, hooks, transcript, pack, tally, loopResult.exhausted && loopResult.exhaustedBy === "failures" ? { failureStreak: loopResult.failureStreak } : {});
+    } catch (err) {
+      return settle(input, hooks, state, transcript, "failed", { reason: err instanceof Error ? err.message : String(err), ...isResumable(input, err) ? { cause: err } : {} });
+    }
+    if (output) return settle(input, hooks, state, transcript, "finished", { output });
+  }
+  if (loopResult.exhausted) {
+    return settle(input, hooks, state, transcript, "failed", { reason: loopResult.exhaustedBy === "failures" ? "tool calls kept failing" : "step budget spent", exhausted: true, ...loopResult.exhaustedBy === "failures" ? { failureStreak: loopResult.failureStreak } : {} });
+  }
+  if (!loopResult.finished) {
+    return settle(input, hooks, state, transcript, "yielded", {});
+  }
+  if (!loopResult.ok) {
+    const cause = causeOf(state);
+    return settle(input, hooks, state, transcript, "failed", { reason: loopResult.output || "the run stopped", ...cause !== void 0 ? { cause } : {} });
+  }
+  return settle(input, hooks, state, transcript, "finished", { output: loopResult.output });
+}
+
+// ../packages/agent-run/src/policy/guards/shipGate.ts
+function withShipGate(guards, gate) {
+  if (!gate) return guards;
+  return {
+    ...guards,
+    beforeDispatch: async (ctx, call) => {
+      const verdict = publishAllowed(gate.policy, call.name, call.args, gate.host ?? "cloud");
+      if (!verdict.ok) {
+        await gate.onRefused?.(call.name, verdict.error);
+        return { skip: { data: { ok: false, error: verdict.error }, isError: true } };
+      }
+      return guards.beforeDispatch?.(ctx, call);
+    }
+  };
+}
+
+// ../packages/workload/src/actionClassifier.ts
+var MIN_CONFIDENCE = 0.45;
+var INSTRUCTION_CHARS = 600;
+var CONTEXT_CHARS = 2e3;
+var CONTEXT_WEIGHT = 0.5;
+var sig = (source, weight = 1) => ({
+  re: new RegExp(source, "i"),
+  weight
+});
+var SIGNALS = [
+  [
+    "data_migration",
+    [
+      sig("\\bbackfill(ing|ed)?\\b", 2),
+      sig("\\bdata migration\\b", 2),
+      sig("\\bre-?index(ing)?\\b"),
+      sig("\\bmigrate .{0,20}\\bdata\\b", 2),
+      sig("\\bseed (the )?(database|table|data)\\b", 2),
+      sig("\\betl\\b", 2)
+    ]
+  ],
+  [
+    "sql",
+    [
+      sig("\\bsql\\b", 2),
+      sig("\\bquery\\b"),
+      sig("\\bschema\\b"),
+      sig("\\bmigration\\b"),
+      sig("\\bpostgres|postgresql|sqlite|mysql\\b", 2),
+      sig("\\bcreate table|alter table|drop table\\b", 2),
+      sig("\\bindex(es)? on\\b"),
+      sig("\\bforeign key|primary key\\b", 2)
+    ]
+  ],
+  [
+    "tests",
+    [
+      sig("\\bunit test|integration test|e2e test\\b", 2),
+      sig("\\btests?\\b"),
+      sig("\\bvitest|jest|pytest|playwright|mocha\\b", 2),
+      sig("\\btest coverage\\b", 2),
+      sig("\\bassert(ion)?s?\\b"),
+      sig("\\bspec file\\b", 2)
+    ]
+  ],
+  [
+    "docs",
+    [
+      sig("\\bdocument(ation)?\\b", 2),
+      sig("\\breadme\\b", 2),
+      sig("\\bchangelog\\b", 2),
+      sig("\\bdocstring|jsdoc|tsdoc\\b", 2),
+      sig("\\bwrite .{0,20}\\bguide\\b", 2),
+      sig("\\bcomment(s|ing)?\\b")
+    ]
+  ],
+  [
+    "devops_ci",
+    [
+      sig("\\bci\\b|\\bcd\\b", 2),
+      sig("\\bgithub actions?|gitlab ci|jenkins|circleci\\b", 2),
+      sig("\\bdocker(file)?|kubernetes|k8s|helm\\b", 2),
+      sig("\\bdeploy(ment|ing)?\\b"),
+      sig("\\bpipeline\\b"),
+      sig("\\bbuild (script|config|failure)\\b", 2),
+      sig("\\bterraform|ansible\\b", 2)
+    ]
+  ],
+  [
+    "provisioning",
+    [
+      sig("\\bprovision(ing|ed)?\\b", 2),
+      sig("\\bspin up\\b", 2),
+      sig("\\bcreate (a|an|the) (bucket|cluster|queue|instance|database|namespace)\\b", 2),
+      sig("\\bdns|certificate|tls cert\\b"),
+      sig("\\bconfigure .{0,20}\\b(account|tenant|workspace|environment)\\b")
+    ]
+  ],
+  [
+    "frontend_ui",
+    [
+      sig("\\bui\\b|\\bux\\b", 2),
+      sig("\\bcomponent\\b"),
+      sig("\\breact|vue|svelte|angular\\b", 2),
+      sig("\\bcss|tailwind|stylesheet|styling\\b", 2),
+      sig("\\bbutton|modal|dropdown|layout|page\\b"),
+      sig("\\bresponsive|dark mode|accessib(le|ility)\\b", 2),
+      sig("\\bfront-?end\\b", 2)
+    ]
+  ],
+  [
+    "backend_api",
+    [
+      sig("\\bapi\\b", 2),
+      sig("\\bendpoint|route handler\\b", 2),
+      sig("\\brest|graphql|grpc\\b", 2),
+      sig("\\bback-?end\\b", 2),
+      sig("\\bservice layer|controller|middleware\\b", 2),
+      sig("\\bserver\\b"),
+      sig("\\bauth(entication|orization)?\\b")
+    ]
+  ],
+  [
+    "refactor",
+    [
+      sig("\\brefactor(ing|ed)?\\b", 2),
+      sig("\\bclean ?up\\b", 2),
+      sig("\\bextract (a |the )?(function|method|component|module|helper)\\b", 2),
+      sig("\\brename\\b"),
+      sig("\\bdeduplicat|\\bdry\\b", 2),
+      sig("\\brestructure|reorganis|reorganiz\\b", 2),
+      sig("\\bsimplify\\b")
+    ]
+  ],
+  [
+    "bugfix",
+    [
+      sig("\\bbug\\b", 2),
+      sig("\\bfix(es|ed|ing)?\\b", 2),
+      sig("\\bbroken|crash(es|ing)?|regression\\b", 2),
+      sig("\\berror\\b"),
+      sig("\\bstack ?trace|exception\\b", 2),
+      sig("\\bnot working|fails? to\\b", 2),
+      sig("\\bdebug(ging)?\\b")
+    ]
+  ],
+  [
+    "analysis",
+    [
+      sig("\\banalys|analyz\\b", 2),
+      sig("\\binvestigate|investigation\\b", 2),
+      sig("\\bresearch\\b", 2),
+      sig("\\bexplain|summaris|summariz\\b"),
+      sig("\\bwhy (does|is|did|are)\\b", 2),
+      sig("\\baudit|assess(ment)?\\b", 2),
+      sig("\\bcompare\\b")
+    ]
+  ],
+  [
+    "decision",
+    [
+      sig("\\bapprove|approval\\b", 2),
+      sig("\\bshould we\\b", 2),
+      sig("\\bdecide|decision\\b", 2),
+      sig("\\bsign ?off\\b", 2),
+      sig("\\bchoose between\\b", 2)
+    ]
+  ]
+];
+function classifyRunAction(prompt) {
+  const text = (prompt ?? "").trim();
+  if (!text) {
+    return { actionType: DEFAULT_ACTION_TYPE, confidence: 0 };
+  }
+  const { ask, context: pasted } = classifyRequest(text);
+  const paragraphBreak = ask.indexOf("\n\n");
+  const instructionEnd = paragraphBreak > 0 ? Math.min(paragraphBreak, INSTRUCTION_CHARS) : INSTRUCTION_CHARS;
+  const instruction = ask.slice(0, instructionEnd);
+  const context = (ask.slice(instructionEnd) + (pasted ? `
+${pasted}` : "")).slice(0, CONTEXT_CHARS);
+  let total = 0;
+  let best = null;
+  for (const [actionType, signals] of SIGNALS) {
+    let score2 = 0;
+    for (const s of signals) {
+      if (s.re.test(instruction)) {
+        score2 += s.weight;
+      } else if (context && s.re.test(context)) {
+        score2 += s.weight * CONTEXT_WEIGHT;
+      }
+    }
+    total += score2;
+    if (score2 > 0 && (best === null || score2 > best.score)) {
+      best = { actionType, score: score2 };
+    }
+  }
+  if (!best || total === 0) {
+    return { actionType: DEFAULT_ACTION_TYPE, confidence: 0 };
+  }
+  const confidence = best.score / total;
+  if (confidence < MIN_CONFIDENCE) {
+    return { actionType: DEFAULT_ACTION_TYPE, confidence };
+  }
+  return { actionType: best.actionType, confidence };
+}
+
+// ../packages/workload/src/arcStage.ts
+var ARC_STAGES = ["idea", "make", "run", "measure", "reach"];
+var ARC_STAGE_SET = new Set(ARC_STAGES);
+function isArcStage(value) {
+  return typeof value === "string" && ARC_STAGE_SET.has(value);
+}
+
+// ../packages/workload/src/profile.ts
+var TYPICAL_OUTPUT_TOKENS = {
+  code: 4e3,
+  plan: 1500,
+  review: 1200,
+  verify: 800,
+  explore: 1e3,
+  chat: 800,
+  utility: 400
+};
+var DEFAULT_OUTPUT_TOKENS = 1e3;
+var nonNegative = (n) => typeof n === "number" && Number.isFinite(n) && n > 0 ? Math.ceil(n) : void 0;
+function profileWorkload(input) {
+  const role = isModelRole(input.role) ? input.role : void 0;
+  const { actionType, confidence } = classifyRunAction(input.instruction);
+  const cap2 = nonNegative(input.maxOutputTokens);
+  const typical = role ? TYPICAL_OUTPUT_TOKENS[role] : DEFAULT_OUTPUT_TOKENS;
+  return {
+    role,
+    arcStage: isArcStage(input.arcStage) ? input.arcStage : void 0,
+    actionType,
+    actionConfidence: confidence,
+    inputTokens: nonNegative(input.inputTokens) ?? 0,
+    outputTokens: cap2 !== void 0 ? Math.min(cap2, typical) : typical,
+    agentic: input.hasTools === true
+  };
+}
+
+// ../packages/workload/src/tokens.ts
+var CHARS_PER_TOKEN = 4;
+function estimateTokensFromChars(charCount) {
+  return Math.ceil(charCount / CHARS_PER_TOKEN);
+}
+
+// ../packages/agent-run/src/route/routeRun.ts
+function defaultPipelineRouting() {
+  return { mode: "always" };
+}
+function decideRunPipeline(route) {
+  if (!route.routing || route.child) return null;
+  const { actionType } = classifyRunAction(route.request);
+  return scorePipeline(pipelineFeaturesOf(route.request, { actionType, followUp: route.followUp === true }), {
+    mode: route.routing.mode,
+    ...route.routing.threshold !== void 0 ? { threshold: route.routing.threshold } : {}
+  });
+}
+function pipelinePolicyOptions(route, pipeline) {
+  const quick = pipeline?.route === "quick";
+  const startPhase = route.child || quick ? "code" : "plan";
+  const phaseModels = { ...route.phaseModels };
+  const quickModel = route.routing?.quickModel?.trim();
+  if (quick && quickModel) phaseModels.code = quickModel;
+  return {
+    startPhase,
+    ...Object.keys(phaseModels).length ? { phaseModels } : {},
+    ...quick && quickModel && !route.modelStrict ? { pinnedModel: quickModel } : {}
+  };
+}
+function skipsVerifyStage(pipeline) {
+  return pipeline?.route === "quick";
+}
+function routeRun(route) {
+  const pipeline = decideRunPipeline(route);
+  return { pipeline, start: pipelinePolicyOptions(route, pipeline), skipsVerify: skipsVerifyStage(pipeline) };
+}
+
+// ../packages/agent-run/src/openRun.ts
+async function runCloseOut(closeOut, ctx, mode) {
+  try {
+    await closeOut(ctx, mode);
+  } catch (err) {
+    await emit(ctx.ports.events, { kind: "finish.close_out_error", step: ctx.step, reason: err instanceof Error ? err.message : String(err) });
+  }
+}
+function withCloseOut(finish, closeOut, ran) {
+  return {
+    ...finish,
+    async openWork(ctx) {
+      ran.value = true;
+      await runCloseOut(closeOut, ctx, "finish");
+      return finish.openWork?.(ctx) ?? null;
+    },
+    async gate(ctx) {
+      ran.value = true;
+      await runCloseOut(closeOut, ctx, "finish");
+      return finish.gate(ctx);
+    }
+  };
+}
+function composeModules(surface, ran) {
+  const modules = {};
+  if (surface.finish || surface.closeOut) {
+    const finish = createFinishHook(surface.finish);
+    modules.finish = surface.closeOut ? withCloseOut(finish, surface.closeOut, ran) : finish;
+  }
+  if (surface.guards || surface.publishGate) modules.guards = withShipGate(createGuardsHook(surface.guards), surface.publishGate);
+  if (surface.verify) modules.verify = createVerifyHook(surface.verify);
+  if (surface.compaction) modules.compaction = createCompactionHook(surface.compaction);
+  if (surface.preflight) modules.model = createModelHook({ recordedPreflight: surface.preflight });
+  return modules;
+}
+function routedPolicy(policy, route, decision) {
+  const { pipeline, start, skipsVerify } = decision;
+  const prior = policy.modelStart;
+  const folded = skipsVerify ? { ...policy, skipVerifyStage: true } : policy;
+  if (!prior) {
+    if (!pipeline) return folded;
+    return {
+      ...folded,
+      ...start.pinnedModel ? { pinnedModel: start.pinnedModel } : {},
+      modelOptions: { ...policy.modelOptions, startPhase: start.startPhase, ...start.phaseModels ? { phaseModels: start.phaseModels } : {} }
+    };
+  }
+  if (!pipeline) {
+    if (!route.child && !start.phaseModels) return folded;
+    return { ...folded, modelStart: { ...prior, ...route.child ? { startPhase: "code" } : {}, ...start.phaseModels ? { phaseModels: start.phaseModels } : {} } };
+  }
+  const model = start.pinnedModel ?? prior.model;
+  return {
+    ...folded,
+    modelStart: {
+      ...prior,
+      ...model ? { model } : {},
+      ...route.modelStrict !== void 0 ? { strict: route.modelStrict } : {},
+      ...start.startPhase && !prior.delegatedRole ? { startPhase: start.startPhase } : {},
+      ...start.phaseModels ? { phaseModels: start.phaseModels } : {}
+    }
+  };
+}
+async function openRun(input) {
+  if (!input.policy?.entryPoint) throw new Error("openRun: policy.entryPoint is required");
+  if (!ALL_ENTRY_POINTS.includes(input.policy.entryPoint)) throw new Error("openRun: policy.entryPoint must be registered");
+  if (!input.ports.capabilities && !input.ports.platform?.closed) {
+    throw new Error("openRun: a registry provider or a closed native catalog is required");
+  }
+  const { surface = {}, route: requested, ...rest } = input;
+  const route = requested && "decided" in requested ? requested : {
+    request: rest.task.request ?? rest.task.prompt,
+    child: rest.task.dispatch.source === "subagent",
+    modelStrict: rest.policy.modelStart?.strict ?? rest.policy.modelOptions?.strictPin,
+    ...requested,
+    routing: requested?.routing ?? defaultPipelineRouting()
+  };
+  const closeOutRan = { value: false };
+  let run = { ...rest, modules: composeModules(surface, closeOutRan) };
+  if (run.resume?.pipeline !== void 0) {
+    if (run.resume.pipeline?.route === "quick") run = { ...run, policy: { ...run.policy, skipVerifyStage: true } };
+  } else {
+    const input2 = "decided" in route ? route.input : route;
+    const decision = "decided" in route ? route.decided : routeRun(route);
+    run = { ...run, policy: routedPolicy(run.policy, input2, decision) };
+    const { pipeline } = decision;
+    run.pipeline = pipeline ? { route: pipeline.route, score: pipeline.score } : null;
+    if (pipeline && !run.resume) {
+      let said = false;
+      run = {
+        ...run,
+        ports: {
+          ...run.ports,
+          events: tapEvents(run.ports.events, {
+            after: async (event, sink) => {
+              if (said || event.kind !== "run.started") return;
+              said = true;
+              await sink?.emit({ kind: "run.routed", step: event.step, route: pipeline.route, score: pipeline.score });
+            }
+          })
+        }
+      };
+    }
+  }
+  const outcome = await runAgent(run);
+  const stoppedByUser = outcome.kind === "failed" && outcome.reason === RUN_CANCELLED_REASON;
+  const settledUnfinished = outcome.kind === "paused" || outcome.kind === "failed" && !stoppedByUser;
+  if (surface.closeOut && settledUnfinished && !closeOutRan.value) {
+    closeOutRan.value = true;
+    await runCloseOut(surface.closeOut, policyContext(run, outcome.state, currentView([], []), outcome.state.step, 0), "settled");
+  }
+  return outcome;
+}
+
+// ../packages/agent-run/src/telemetry/runOutcomeRequest.ts
+function outcomeSourceOf(entryPoint2) {
+  switch (entryPoint2) {
+    case "on-prem":
+      return "onprem";
+    case "vscode":
+      return "ide";
+    case "canvas":
+      return "canvas";
+    case "cloud":
+      return "cloud";
+    default:
+      return "external";
+  }
+}
+function outcomeTerminalStatus(row, stopped = false) {
+  if (stopped || row.cancelled) return "cancelled";
+  return row.terminalStatus === "finished" ? "completed" : "failed";
+}
+function runOutcomeRequestOf(row, scope) {
+  const model = row.model?.trim();
+  if (!model || !scope.clientRunId.trim()) return null;
+  return {
+    ...parseRunOutcomeTelemetry({ ...row, ...scope.parentClientRunId ? { parentRunId: scope.parentClientRunId } : {} }),
+    ...wireCost(row),
+    clientRunId: scope.clientRunId,
+    model,
+    source: outcomeSourceOf(row.entryPoint),
+    terminalStatus: outcomeTerminalStatus(row, scope.stopped),
+    steps: Math.max(0, Math.floor(row.steps)),
+    // The row says the TENANT ran out of quota (`buildOutcomeRow` classified it once): the door stores it and never teaches it.
+    ...row.quotaExhausted ? { quotaExhausted: true } : {},
+    // Availability and degradation are kept beside the score, never folded into it: a throttled model is demoted without being called
+    // bad, and a run served off its model does not earn full credit.
+    ...row.rateLimited ? { rateLimited: true } : {},
+    ...row.degraded ? { degraded: true } : {},
+    ...scope.projectId != null ? { projectId: scope.projectId } : {},
+    ...scope.taskId != null ? { taskId: scope.taskId } : {},
+    ...scope.actionType ? { actionType: scope.actionType } : {},
+    ...scope.routingSignal === false || !workSupportsRoutingSample(row.work, row.terminalStatus === "finished") ? { routingSignal: false } : {}
+  };
+}
+
 // src/runActivity.ts
 var TARGET_KEYS = ["path", "file", "filePath", "command", "cmd", "glob", "query", "q", "search", "url", "name", "title", "id"];
 var MAX_DETAIL = 72;
@@ -10918,14 +18151,14 @@ function shortenTarget(value, max = MAX_DETAIL) {
 }
 function activityTarget(args) {
   if (!args || typeof args !== "object" || Array.isArray(args)) return void 0;
-  const record2 = args;
+  const record4 = args;
   for (const key of TARGET_KEYS) {
-    const value = record2[key];
+    const value = record4[key];
     if (typeof value === "string" && value.trim()) return shortenTarget(value);
     if (typeof value === "number" && Number.isFinite(value)) return String(value);
   }
-  if (Array.isArray(record2.paths)) {
-    const names = record2.paths.filter((p) => typeof p === "string" && p.trim() !== "");
+  if (Array.isArray(record4.paths)) {
+    const names = record4.paths.filter((p) => typeof p === "string" && p.trim() !== "");
     if (names.length) return shortenTarget(names.join(", "));
   }
   return void 0;
@@ -10935,9 +18168,9 @@ var VISIT_QUESTION_SEPARATOR = " \u220B ";
 function visitTarget(args) {
   const scope = activityTarget(args);
   if (!scope) return void 0;
-  const record2 = args;
+  const record4 = args;
   for (const key of QUESTION_KEYS) {
-    const value = record2[key];
+    const value = record4[key];
     if (typeof value !== "string" || !value.trim()) continue;
     const question = shortenTarget(value);
     return question === scope ? scope : `${scope}${VISIT_QUESTION_SEPARATOR}${question}`;
@@ -11284,9 +18517,9 @@ function traceWithPersistedSteps(messages, trace) {
     if (!isStepMessage(message)) continue;
     const parsed = parseStepMessage(message.metadata);
     if (!parsed) continue;
-    const sig = stepSig(parsed.step.category, parsed.step.label, parsed.tsIso);
-    if (seen.has(sig)) continue;
-    seen.add(sig);
+    const sig2 = stepSig(parsed.step.category, parsed.step.label, parsed.tsIso);
+    if (seen.has(sig2)) continue;
+    seen.add(sig2);
     const s = parsed.step;
     fromMessages.push({
       ts: parsed.tsIso ?? message.createdAt ?? "",
@@ -11603,27 +18836,27 @@ function progressOf(events, editIntent, workItemsAsked) {
     for (const [s, t] of seenCalls) if (t === subject) seenCalls.delete(s);
   };
   for (const ev of tools) {
-    const sig = callSignature(ev);
+    const sig2 = callSignature(ev);
     const subject = subjectOf(ev);
     const digest = ev.isError ? null : waitDigestOf(ev.label, ev.result);
     if (digest === null || delegationReportedOf(ev.label, ev.result) || delegatedChangedPathsOf(ev.label, ev.result).length > 0) waits.reset();
     const waiting = digest !== null && waits.waited(digest);
     if (!waiting) {
-      if (seenCalls.has(sig)) duplicateCalls += 1;
-      else seenCalls.set(sig, subject);
+      if (seenCalls.has(sig2)) duplicateCalls += 1;
+      else seenCalls.set(sig2, subject);
     }
     const cached = isCacheAnswered(ev);
     if (cached) cacheAnswered += 1;
-    const failed2 = Boolean(ev.isError) || isFailedToolResult(ev.result);
+    const failed3 = Boolean(ev.isError) || isFailedToolResult(ev.result);
     if (waiting) {
       current = null;
-    } else if (current && current.sig === sig) {
+    } else if (current && current.sig === sig2) {
       current.streak.count += 1;
-      if (failed2) current.streak.failed += 1;
+      if (failed3) current.streak.failed += 1;
       if (current.streak.count === 2) streaks += 1;
       if (!longestStreak || current.streak.count > longestStreak.count) longestStreak = current.streak;
     } else {
-      current = { sig, streak: { label: ev.label, count: 1, failed: failed2 ? 1 : 0 } };
+      current = { sig: sig2, streak: { label: ev.label, count: 1, failed: failed3 ? 1 : 0 } };
     }
     const target = targetSignature(ev);
     if (target) {
@@ -11811,10 +19044,6 @@ function gatewayRoutingArgs(routing) {
   };
 }
 
-// src/runStore/progressFinishFacts.ts
-var PROGRESS_FORCED_LABEL = "loop.progress_forced";
-var FINISH_RECORD_TURNS = 3;
-
 // src/handOffParallelism.ts
 function taskPackageDir(task, isPackageDir) {
   const paths = task.paths;
@@ -11943,7 +19172,7 @@ function routingByRole(turns, events) {
     for (const f of t.failovers?.split(FAILOVER_SEPARATOR) ?? []) if (f) entry.failovers.set(f, (entry.failovers.get(f) ?? 0) + 1);
     byRole.set(t.role, entry);
   }
-  const count = (label) => events.filter((e) => e.label === label).length;
+  const count2 = (label) => events.filter((e) => e.label === label).length;
   const roleHandoffs = events.filter((e) => e.label === "llm.role_handoff");
   const hasArg = (e, key) => !!e.args && typeof e.args === "object" && key in e.args;
   const progressForced = events.filter((e) => e.label === PROGRESS_FORCED_LABEL && !!e.args && typeof e.args === "object").map((e) => e.args).filter((a) => a.forced === "hand_off");
@@ -11958,19 +19187,19 @@ function routingByRole(turns, events) {
     })),
     coderReasks: roleHandoffs.filter((e) => hasArg(e, "from")).length,
     handOffs: roleHandoffs.filter((e) => hasArg(e, "via")).length,
-    handOffsForced: count("loop.hand_off_due") + progressForcedHandOffs,
+    handOffsForced: count2("loop.hand_off_due") + progressForcedHandOffs,
     handOffsForcedByProgress: progressForcedHandOffs,
     handOffsForcedSignals: progressSignals,
-    planBudgetsSpent: count("loop.plan_budget_spent"),
+    planBudgetsSpent: count2("loop.plan_budget_spent"),
     handOffModes: events.filter((e) => e.label === HAND_OFF_MODE_LABEL).map(decisionOf).filter((d) => d !== null),
-    handOffClashesRefused: count(HAND_OFF_CLASH_LABEL)
+    handOffClashesRefused: count2(HAND_OFF_CLASH_LABEL)
   };
 }
 function forcedText(r) {
   const byProgress = r.handOffsForcedByProgress ?? 0;
   const byBudget = r.handOffsForced - byProgress;
-  const causes = [byBudget > 0 ? "the analysis budget" : "", byProgress > 0 ? `the progress guard${r.handOffsForcedSignals?.length ? ` (${r.handOffsForcedSignals.join(", ")})` : ""}` : ""].filter(Boolean);
-  return r.handOffsForced ? ` \xB7 ${r.handOffsForced} forced by ${causes.join(" and ")}` : "";
+  const causes2 = [byBudget > 0 ? "the analysis budget" : "", byProgress > 0 ? `the progress guard${r.handOffsForcedSignals?.length ? ` (${r.handOffsForcedSignals.join(", ")})` : ""}` : ""].filter(Boolean);
+  return r.handOffsForced ? ` \xB7 ${r.handOffsForced} forced by ${causes2.join(" and ")}` : "";
 }
 function formatRoutingByRole(r) {
   if (!r || r.roles.length === 0) return [];
@@ -12086,80 +19315,686 @@ function formatStaffingSummary(s, opts) {
   return lines;
 }
 
-// ../packages/cost-levers/src/index.ts
-var COST_LEVERS = [
-  { id: "a2_run_budget", requirement: "A2", rollout: 100, summary: "Token + USD run budget, shown to the loop" },
-  { id: "a3_progress_detector", requirement: "A3", rollout: 100, summary: "Repeat-read / edit-revert / no-progress steer" },
-  { id: "b1_stable_prefix", requirement: "B1", rollout: 100, summary: "Volatile blocks after the cache breakpoint" },
-  { id: "b2_semantic_cache", requirement: "B2", rollout: 10, summary: "Scoped semantic cache on tool-free chat" },
-  { id: "b3_single_flight", requirement: "B3", rollout: 100, summary: "Coalesce identical in-flight requests" },
-  { id: "b4_agent_answer_replay", requirement: "B4", rollout: 10, summary: "Memory answer replay for agent sub-questions" },
-  { id: "c2_observation_masking", requirement: "C2", rollout: 10, summary: "Mask tool outputs older than N turns" },
-  { id: "c3_task_state", requirement: "C3", rollout: 10, summary: "Structured task state kept through compaction" },
-  { id: "c4_adaptive_context", requirement: "C4", rollout: 10, summary: "Start retrieval small, widen on low confidence" },
-  { id: "c5_cloud_repo_map", requirement: "C5", rollout: 10, summary: "Graph-ranked repo map on cloud runs" },
-  { id: "c6_rerank", requirement: "C6", rollout: 10, summary: "Cross-encoder rerank after hybrid retrieval" },
-  { id: "c7_tool_output_policy", requirement: "C7", rollout: 100, summary: "One shared tool-output budget + failure summaries" },
-  // 10 like every lever that changes what the model sees; it runs only where the local
-  // engine's health probe reports a loaded compressor, so it never triggers a download.
-  { id: "c8_token_compression", requirement: "C8", rollout: 10, summary: "LLMLingua-2 token compression of large context" },
-  { id: "c10_outline_first_reads", requirement: "B2", rollout: 100, summary: "Large-file first read returns outline + first 40 lines" },
-  { id: "c9_price_tier_budget", requirement: "C9", rollout: 100, summary: "Compaction budget under long-context price tiers" },
-  { id: "d1_verifier_cascade", requirement: "D1", rollout: 10, summary: "Weak model first, verifier, escalate one tier" },
-  { id: "d2_difficulty_router", requirement: "D2", rollout: 10, summary: "Predict weak-model failure, skip the wasted attempt" },
-  { id: "d3_routing_exploration", requirement: "D3", rollout: 100, summary: "Thompson exploration + decay in learned routing" },
-  { id: "d4_role_reasoning", requirement: "D4", rollout: 10, summary: "Reasoning effort by role" },
-  { id: "d5_output_caps", requirement: "D5", rollout: 100, summary: "Diff edits + per-role max_tokens" },
-  { id: "d6_batch_api", requirement: "D6", rollout: 100, summary: "Provider batch APIs for deferred background work" },
-  { id: "d7_deterministic_handlers", requirement: "D7", rollout: 100, summary: "Deterministic handlers + post-edit checks" },
-  { id: "d8_parallel_tool_calls", requirement: "D8", rollout: 100, summary: "Batch independent tool calls in one turn" },
-  { id: "e1_skill_ranking", requirement: "E1", rollout: 100, summary: "Inject only the most relevant approved skills" },
-  { id: "e2_specialists", requirement: "E2", rollout: 10, summary: "Admitted small specialist models for narrow jobs" },
-  // Always on (operator, 2026-10-23): recall dual-reads the paid 1536 column for rows the
-  // 1024 backfill has not reached yet, so it never had to wait for the backfill.
-  { id: "e3_free_embeddings", requirement: "E3", rollout: 100, summary: "Free Workers AI embeddings for memory" },
-  { id: "e5_verified_local_label", requirement: "E5", rollout: 100, summary: "Hybrid local label = passed the verifier" }
+// src/runFindings/policy.ts
+import { NARRATION_OVERLAP } from "@seanhogg/builderforce-memory/working";
+var RUN_FINDING_POLICY = Object.freeze({
+  /** Read-only turns before the first write that make an analysis overrun. */
+  analysisReadTurns: 8,
+  /** Read-only turns after a readiness claim that leave it unkept. */
+  unkeptReadTurns: 2,
+  /** Turns that each made exactly one write, at which the run is writing serially. */
+  serialSingleWriteTurns: 4,
+  /** Prompt : completion ratio and prompt total at which the run's prompt is bloated. */
+  promptBloatRatio: 50,
+  promptBloatMinTokens: 5e5,
+  /** Writes of one path that make churn. */
+  editChurnWrites: 4,
+  /** Argument bytes of one non-write call that are oversized. */
+  oversizedArgBytes: 4 * 1024,
+  /** Identical text (bytes) two calls of one tool must share to count as a copied block. */
+  sharedArgBytes: 1024,
+  /** A turn this slow (ms) is slow. */
+  slowTurnMs: 6e4,
+  /** Word-set overlap at which a pre-call text repeats the last kept one: memory's B7 fold threshold, so the
+   *  diagnostic and the fold agree (`NARRATION_OVERLAP`, `@seanhogg/builderforce-memory/working`). */
+  narrationOverlap: NARRATION_OVERLAP,
+  /** Longest excerpt an evidence row quotes. */
+  excerptChars: 160
+});
+var CHECK_TOOL = /diagnostic|typecheck|type[_-]check|(^|[_.-])tests?($|[_.-])|lint|(^|[_.-])verify($|[_.-])/i;
+var CHECK_COMMAND = /\b(?:tsc|tsgo|vitest|jest|mocha|playwright|eslint|biome|oxlint|pytest|cargo\s+(?:check|test|clippy)|go\s+(?:test|vet))\b|\b(?:npm|pnpm|yarn|bun|npx)\b[^|;&\n]*?\b(?:test|lint|check|typecheck|type-check)\b/i;
+var SHELL_TOOLS2 = /* @__PURE__ */ new Set(["run_command", "shell", "bash", "exec"]);
+
+// src/runFindings/findingParts.ts
+function finding3(kind, severity, params, evidence) {
+  const first = evidence.reduce((min, e) => Math.min(min, e.step), Number.POSITIVE_INFINITY);
+  const subject = params.path ?? params.tool;
+  const id = `${kind}:${subject !== void 0 ? `${subject}:` : ""}${Number.isFinite(first) ? first : 0}`;
+  return { id, kind, severity, params, evidence };
+}
+function withUniqueIds(findings) {
+  const seen = /* @__PURE__ */ new Map();
+  return findings.map((f) => {
+    const n = (seen.get(f.id) ?? 0) + 1;
+    seen.set(f.id, n);
+    return n === 1 ? f : { ...f, id: `${f.id}#${n}` };
+  });
+}
+function excerpt(text) {
+  const flat = text.replace(/\s+/g, " ").trim();
+  const max = RUN_FINDING_POLICY.excerptChars;
+  return flat.length > max ? `${flat.slice(0, max - 1).trimEnd()}\u2026` : flat;
+}
+function turnEvidence(t, label = "llm.complete", text) {
+  return { step: t.step, turn: t.index, label, ...text ? { excerpt: excerpt(text) } : {} };
+}
+function callEvidence(c, path, text) {
+  return {
+    step: c.step,
+    ...c.turn > 0 ? { turn: c.turn } : {},
+    label: c.name,
+    ...path ? { path } : {},
+    ...text ? { excerpt: excerpt(text) } : {}
+  };
+}
+function fileLedger(view) {
+  const rows = /* @__PURE__ */ new Map();
+  for (const c of view.calls) {
+    if (c.check) for (const row of rows.values()) row.checked = true;
+    for (const path of c.paths) {
+      const row = rows.get(path);
+      if (row) {
+        row.writes += 1;
+        row.lastWrite = c;
+        row.checked = false;
+      } else {
+        rows.set(path, { path, writes: 1, lastWrite: c, checked: false });
+      }
+    }
+  }
+  return [...rows.values()];
+}
+function unverifiedFiles(view) {
+  return fileLedger(view).filter((r) => !r.checked);
+}
+function writeCalls(view) {
+  return view.calls.filter((c) => c.write);
+}
+
+// src/runFindings/detectors/analysisOverrun.ts
+function analysisOverrun(view) {
+  const firstWrite = view.turns.find((t) => t.kind === "write");
+  const before = firstWrite ? view.turns.filter((t) => t.index < firstWrite.index) : view.turns;
+  const reads = before.filter((t) => t.kind === "read");
+  const forced = before.find((t) => t.forced);
+  const forcedByBudget = !!forced && view.routing.handOffsForced > 0;
+  if (reads.length < RUN_FINDING_POLICY.analysisReadTurns && !forcedByBudget) return [];
+  const evidence = [
+    ...reads[0] ? [turnEvidence(reads[0])] : [],
+    ...reads.length > 1 ? [turnEvidence(reads[reads.length - 1])] : [],
+    ...forced ? [turnEvidence(forced, "loop.hand_off_due")] : []
+  ];
+  return [finding3("analysis_overrun", forcedByBudget ? "error" : "warn", {
+    readTurns: reads.length,
+    firstWriteTurn: firstWrite?.index ?? 0
+  }, evidence)];
+}
+
+// src/runFindings/detectors/bracketBreak.ts
+function bracketBreak(view) {
+  const out = [];
+  for (const c of view.calls) {
+    if (!c.write) continue;
+    for (const r of editedFilesOf(c.name, c.args)) {
+      if (r.before === void 0 || r.after === void 0) continue;
+      const delta = bracketDelta(r.before, r.after, r.path);
+      if (!changesBalance(delta)) continue;
+      out.push(finding3(
+        "bracket_break",
+        "error",
+        { path: r.path, delta: describeBracketDelta(delta) },
+        [callEvidence(c, r.path, r.after)]
+      ));
+    }
+  }
+  return out;
+}
+
+// src/runFindings/detectors/editChurn.ts
+function editChurn(view) {
+  return fileLedger(view).filter((f) => f.writes >= RUN_FINDING_POLICY.editChurnWrites).map((f) => finding3(
+    "edit_churn",
+    "warn",
+    { path: f.path, writes: f.writes },
+    view.calls.filter((c) => c.paths.includes(f.path)).map((c) => callEvidence(c, f.path))
+  ));
+}
+
+// src/runFindings/detectors/filedThenInline.ts
+function filedThenInline(view) {
+  const { staffing } = view;
+  if (staffing.ticketsCreated === 0 || staffing.dispatched > 0 || staffing.personaSubagents.some((p) => p.ok)) return [];
+  const filed = view.calls.filter((c) => c.ok && isTicketWriteTool(c.name));
+  const last = filed[filed.length - 1];
+  if (!last) return [];
+  const inline = view.calls.find((c) => c.write && c.step > last.step);
+  if (!inline) return [];
+  return [finding3("filed_then_inline", "info", { tickets: staffing.ticketsCreated }, [
+    ...filed.map((c) => callEvidence(c, void 0, typeof c.args.title === "string" ? c.args.title : void 0)),
+    callEvidence(inline, inline.paths[0])
+  ])];
+}
+
+// src/composingActivity.ts
+function utf8ByteLength2(text) {
+  if (!text) return 0;
+  if (typeof TextEncoder !== "undefined") return new TextEncoder().encode(text).length;
+  let bytes = 0;
+  for (const ch of text) {
+    const cp = ch.codePointAt(0) ?? 0;
+    bytes += cp < 128 ? 1 : cp < 2048 ? 2 : cp < 65536 ? 3 : 4;
+  }
+  return bytes;
+}
+function toolCallArgBytes(calls) {
+  let total = 0;
+  for (const c of calls) total += utf8ByteLength2(c.args ?? "");
+  return total;
+}
+function createComposingActivity(sink, opts) {
+  const now = opts.now ?? Date.now;
+  let names = /* @__PURE__ */ new Map();
+  let bytes = 0;
+  let startedAt = null;
+  let published;
+  const publish = (label, immediate) => {
+    sink.set({
+      phase: "composing",
+      startedAt,
+      step: opts.step,
+      bytes,
+      ...label ? { label } : {}
+    });
+    published = label;
+    if (immediate) sink.repaint();
+    else sink.coalescedRepaint();
+  };
+  return {
+    onDelta(index, partial) {
+      if (partial.name) names.set(index, partial.name);
+      bytes += utf8ByteLength2(partial.argsFragment ?? "");
+      const label = names.get(index) ?? published;
+      if (startedAt === null) {
+        startedAt = now();
+        publish(label, true);
+        return;
+      }
+      publish(label, !published && !!label);
+    },
+    bytes() {
+      return bytes;
+    },
+    reset() {
+      names = /* @__PURE__ */ new Map();
+      bytes = 0;
+      startedAt = null;
+      published = void 0;
+    }
+  };
+}
+
+// src/runFindings/detectors/oversizedArgs.ts
+function blocksOf(v, out = /* @__PURE__ */ new Set()) {
+  if (typeof v === "string") {
+    for (const p of v.split(/\n\s*\n/)) {
+      const block = p.trim();
+      if (utf8ByteLength2(block) >= RUN_FINDING_POLICY.sharedArgBytes) out.add(block);
+    }
+  } else if (Array.isArray(v)) {
+    for (const x of v) blocksOf(x, out);
+  } else if (v && typeof v === "object") {
+    for (const x of Object.values(v)) blocksOf(x, out);
+  }
+  return out;
+}
+function sharingCalls(calls) {
+  const holders = /* @__PURE__ */ new Map();
+  for (const c of calls) for (const b of blocksOf(c.args)) holders.set(b, [...holders.get(b) ?? [], c]);
+  const out = /* @__PURE__ */ new Set();
+  for (const list2 of holders.values()) if (list2.length >= 2) for (const c of list2) out.add(c);
+  return out;
+}
+function oversizedArgs(view) {
+  const byTool = /* @__PURE__ */ new Map();
+  for (const c of view.calls) {
+    if (isCodeChangeTool(c.name)) continue;
+    byTool.set(c.name, [...byTool.get(c.name) ?? [], c]);
+  }
+  const out = [];
+  for (const [tool, calls] of byTool) {
+    const shared = sharingCalls(calls);
+    const flagged2 = calls.filter((c) => c.argBytes >= RUN_FINDING_POLICY.oversizedArgBytes || shared.has(c));
+    if (flagged2.length === 0) continue;
+    const evidence = flagged2.map((c) => ({
+      ...callEvidence(c),
+      note: shared.has(c) ? "argBytesShared" : "argBytes",
+      params: { bytes: c.argBytes }
+    }));
+    out.push(finding3("oversized_args", "warn", { tool, bytes: Math.max(...flagged2.map((c) => c.argBytes)), calls: flagged2.length }, evidence));
+  }
+  for (const t of view.turns) {
+    if (!t.handOffVia || t.argBytes < RUN_FINDING_POLICY.oversizedArgBytes || byTool.has(t.handOffVia)) continue;
+    out.push(finding3(
+      "oversized_args",
+      "warn",
+      { tool: t.handOffVia, bytes: t.argBytes, calls: 1 },
+      [{ ...turnEvidence(t, t.handOffVia), note: "argBytes", params: { bytes: t.argBytes } }]
+    ));
+  }
+  return out;
+}
+
+// src/runFindings/detectors/promptBloat.ts
+function promptBloat(view) {
+  const promptTokens = view.turns.reduce((sum, t) => sum + t.promptTokens, 0);
+  const completion = view.turns.reduce((sum, t) => sum + t.completionTokens, 0);
+  if (promptTokens < RUN_FINDING_POLICY.promptBloatMinTokens) return [];
+  const ratio = completion > 0 ? promptTokens / completion : Number.POSITIVE_INFINITY;
+  if (ratio < RUN_FINDING_POLICY.promptBloatRatio) return [];
+  const writes = writeCalls(view).length;
+  const peak = view.turns.reduce((max, t) => t.promptTokens > max.promptTokens ? t : max, view.turns[0]);
+  return [finding3("prompt_bloat", "warn", {
+    ratio: Number.isFinite(ratio) ? Math.round(ratio) : 0,
+    promptTokens,
+    perWrite: writes > 0 ? Math.round(promptTokens / writes) : 0
+  }, [turnEvidence(peak)])];
+}
+
+// src/runFindings/detectors/repeatedNarration.ts
+import { foldRepeatedNarration } from "@seanhogg/builderforce-memory/working";
+function asNarration(t) {
+  return { role: "assistant", content: t.text, tool_calls: t.calls.map(() => ({})) };
+}
+var isCandidate = (t) => t.calls.length > 0 && t.text.trim().length > 0;
+function repeatedNarration(view) {
+  const msgs = view.turns.map(asNarration);
+  const folded = foldRepeatedNarration(msgs, RUN_FINDING_POLICY.narrationOverlap);
+  const repeats = /* @__PURE__ */ new Set();
+  let lastKept = null;
+  for (let i = 0; i < view.turns.length; i++) {
+    const t = view.turns[i];
+    if (!isCandidate(t)) continue;
+    if (folded[i] === msgs[i]) {
+      lastKept = t;
+      continue;
+    }
+    if (lastKept) repeats.add(lastKept);
+    repeats.add(t);
+  }
+  if (repeats.size === 0) return [];
+  const turns = [...repeats].sort((a, b) => a.index - b.index);
+  return [finding3(
+    "repeated_narration",
+    "info",
+    { turns: turns.length },
+    turns.map((t) => turnEvidence(t, "agent.message", t.text))
+  )];
+}
+
+// src/runFindings/detectors/reviewCapHit.ts
+var CAP_MARKER = "review round 3";
+var SHIP_TOOLS = /* @__PURE__ */ new Set(["git_push", "open_pull_request", "builtin_reviews_record"]);
+function capError(c) {
+  if (!SHIP_TOOLS.has(c.name) || !c.error) return null;
+  return c.error.includes(CAP_MARKER) ? c.error : null;
+}
+function reviewCapHit(view) {
+  const capped = view.calls.map((c) => ({ call: c, error: capError(c) })).filter((r) => r.error !== null);
+  if (capped.length === 0) return [];
+  return [finding3(
+    "review_cap_hit",
+    "info",
+    { count: capped.length },
+    capped.map(({ call, error }) => callEvidence(call, void 0, error))
+  )];
+}
+
+// src/runFindings/detectors/sameModelRoles.ts
+function soleModel(view, role) {
+  const models = view.routing.roles.find((r) => r.role === role)?.models ?? [];
+  return models.length === 1 ? models[0].model : null;
+}
+function sameModelRoles(view) {
+  const r = view.routing;
+  if (r.handOffs + r.handOffsForced + r.coderReasks === 0) return [];
+  const plan = soleModel(view, "plan");
+  if (!plan || plan !== soleModel(view, "code")) return [];
+  const firstPlan = view.turns.find((t) => t.role === "plan");
+  const firstCode = view.turns.find((t) => t.role === "code");
+  return [finding3("same_model_roles", "info", { model: plan }, [
+    ...firstPlan ? [turnEvidence(firstPlan)] : [],
+    ...firstCode ? [turnEvidence(firstCode)] : []
+  ])];
+}
+
+// src/runFindings/detectors/serialSingleWrites.ts
+function serialSingleWrites(view) {
+  const single = view.turns.filter((t) => t.calls.filter((c) => c.write).length === 1);
+  if (single.length < RUN_FINDING_POLICY.serialSingleWriteTurns) return [];
+  const promptTokens = single.reduce((sum, t) => sum + t.promptTokens, 0);
+  return [finding3(
+    "serial_single_writes",
+    "warn",
+    { turns: single.length, promptTokens },
+    single.map((t) => {
+      const write = t.calls.find((c) => c.write);
+      return { ...turnEvidence(t, write.name), ...write.paths[0] ? { path: write.paths[0] } : {} };
+    })
+  )];
+}
+
+// src/runFindings/detectors/slowTurns.ts
+function slowTurns(view) {
+  const slow = view.turns.filter((t) => t.durationMs >= RUN_FINDING_POLICY.slowTurnMs);
+  if (slow.length === 0) return [];
+  const slowestMs = Math.max(...slow.map((t) => t.durationMs));
+  return [finding3("slow_turns", "warn", { turns: slow.length, slowestMs }, slow.map((t) => ({ ...turnEvidence(t), note: "slowTurn", params: { ms: t.durationMs, completionTokens: t.completionTokens, argBytes: t.argBytes } })))];
+}
+
+// src/runFindings/detectors/stoppedUnverified.ts
+function stoppedUnverified(view) {
+  if (!view.stopped) return [];
+  const files = unverifiedFiles(view);
+  if (files.length === 0) return [];
+  return [finding3("stopped_unverified", "error", { files: files.length }, [
+    { step: view.stopped.step, label: STOPPED_TURN_STEP },
+    ...files.map((f) => callEvidence(f.lastWrite, f.path))
+  ])];
+}
+
+// src/runFindings/detectors/unkeptReadiness.ts
+function readTurnsAfter(turns, from) {
+  let n = 0;
+  for (const t of turns) {
+    if (t.index <= from) continue;
+    if (t.kind !== "read") break;
+    n += 1;
+  }
+  return n;
+}
+function unkeptReadiness(view) {
+  const claims = view.turns.filter((t) => t.kind === "read" && claimsReady(t.text));
+  const first = claims[0];
+  if (!first) return [];
+  const after = readTurnsAfter(view.turns, first.index);
+  if (after < RUN_FINDING_POLICY.unkeptReadTurns) return [];
+  return [finding3(
+    "unkept_readiness",
+    "warn",
+    { claims: claims.length, readTurnsAfter: after },
+    claims.map((t) => turnEvidence(t, "agent.message", t.text))
+  )];
+}
+
+// src/runFindings/detectors/unverifiedWrites.ts
+function unverifiedWrites(view) {
+  const files = unverifiedFiles(view);
+  if (files.length === 0) return [];
+  const writes = writeCalls(view).filter((c) => c.paths.some((p) => files.some((f) => f.path === p))).length;
+  return [finding3(
+    "unverified_writes",
+    "error",
+    { files: files.length, writes },
+    files.map((f) => callEvidence(f.lastWrite, f.path))
+  )];
+}
+
+// src/runFindings/registry.ts
+var RUN_FINDING_REGISTRY = [
+  { kind: "analysis_overrun", detect: analysisOverrun },
+  { kind: "unkept_readiness", detect: unkeptReadiness },
+  { kind: "serial_single_writes", detect: serialSingleWrites },
+  { kind: "prompt_bloat", detect: promptBloat },
+  { kind: "unverified_writes", detect: unverifiedWrites },
+  { kind: "bracket_break", detect: bracketBreak },
+  { kind: "edit_churn", detect: editChurn },
+  { kind: "filed_then_inline", detect: filedThenInline },
+  { kind: "same_model_roles", detect: sameModelRoles },
+  { kind: "oversized_args", detect: oversizedArgs },
+  { kind: "slow_turns", detect: slowTurns },
+  { kind: "repeated_narration", detect: repeatedNarration },
+  { kind: "stopped_unverified", detect: stoppedUnverified },
+  { kind: "review_cap_hit", detect: reviewCapHit }
 ];
-var BY_ID = new Map(COST_LEVERS.map((l) => [l.id, l]));
-function costLeverSpec(id) {
-  const spec2 = BY_ID.get(id);
-  if (!spec2) throw new Error(`unknown cost lever: ${id}`);
-  return spec2;
+
+// src/shipVerification.ts
+var BASE_BRANCHES = /* @__PURE__ */ new Set(["main", "master"]);
+function parseGitShortStatus(output) {
+  if (!output) return null;
+  const header = output.split("\n").map((l) => l.trim()).find((l) => l.startsWith("##"));
+  if (!header) return null;
+  const body = header.slice(2).trim();
+  if (!body || body.startsWith("HEAD (no branch)")) return { branch: null, upstream: null, ahead: 0, behind: 0 };
+  const ahead = /\bahead (\d+)/.exec(body);
+  const behind = /\bbehind (\d+)/.exec(body);
+  const names = body.replace(/\s*\[.*$/, "").trim();
+  const [branch, upstream] = names.split("...");
+  return {
+    branch: branch?.trim() || null,
+    upstream: upstream?.trim() || null,
+    ahead: ahead ? Number(ahead[1]) : 0,
+    behind: behind ? Number(behind[1]) : 0
+  };
 }
-function costLeverEnvKey(id) {
-  return `COST_LEVER_${id.toUpperCase()}`;
+var GIT_PUSH = gitCommandPattern("push");
+var GIT_STATUS_CMD = gitCommandPattern("status");
+function commandOf(ev) {
+  const a = ev.args;
+  if (typeof a?.command === "string") return a.command;
+  if (typeof a?.cmd === "string") return a.cmd;
+  return "";
 }
-function costLeverBucket(id, tenantId) {
-  const s = `${id}:${tenantId}`;
-  let h = 2166136261;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 16777619) >>> 0;
+function outputOf(ev) {
+  const r = ev.result;
+  if (typeof r === "string") return r;
+  if (r && typeof r === "object") {
+    const o = r;
+    if (typeof o.output === "string") return o.output;
+    if (typeof o.stdout === "string") return o.stdout;
   }
-  return h % 100;
+  return "";
 }
-function readEnv(env, key) {
-  const v = env?.[key];
-  return v === void 0 || v === null ? void 0 : String(v).trim().toLowerCase();
+function succeeded6(ev) {
+  return !ev.isError && !isFailedToolResult(ev.result);
 }
-function costLeverRollout(env, id) {
-  const raw = readEnv(env, costLeverEnvKey(id));
-  if (raw !== void 0 && raw !== "") {
-    if (raw === "on" || raw === "1" || raw === "true") return 100;
-    if (raw === "off" || raw === "0" || raw === "false") return 0;
-    const n = Number(raw);
-    if (Number.isFinite(n)) return Math.max(0, Math.min(100, Math.round(n)));
+function isPush(ev) {
+  return ev.label === "git_push" || GIT_PUSH.test(commandOf(ev));
+}
+function dirtyPathsOf(output) {
+  const out = [];
+  for (const raw of output.split("\n")) {
+    const line = raw.replace(/\r$/, "");
+    if (line.length < 4 || line.startsWith("##")) continue;
+    let path = line.slice(3);
+    const arrow = path.indexOf(" -> ");
+    if (arrow >= 0) path = path.slice(arrow + 4);
+    path = path.trim().replace(/^"(.*)"$/, "$1");
+    if (path) out.push(path);
   }
-  const all = readEnv(env, "COST_LEVERS_ALL");
-  if (all === "off" || all === "0" || all === "false") return 0;
-  return costLeverSpec(id).rollout;
+  return out;
 }
-function isCostLeverOn(env, id, tenantId) {
-  const rollout = costLeverRollout(env, id);
-  if (rollout >= 100) return true;
-  if (rollout <= 0) return false;
-  if (tenantId === null || tenantId === void 0 || tenantId === "") return false;
-  return costLeverBucket(id, tenantId) < rollout;
+function touchedStillDirty(touched, dirty) {
+  const norm2 = (p) => p.replace(/\\/g, "/").replace(/^\.\//, "");
+  const d = dirty.map(norm2);
+  return touched.map(norm2).some((t) => d.some((p) => t === p || t.endsWith(`/${p}`)));
+}
+var DEFAULT_BRANCH_CMD = gitCommandPattern("remote|symbolic-ref|branch");
+function defaultBranchFromTrace(steps) {
+  for (let i = steps.length - 1; i >= 0; i -= 1) {
+    const ev = steps[i];
+    if (!succeeded6(ev) || !DEFAULT_BRANCH_CMD.test(commandOf(ev))) continue;
+    const out = outputOf(ev);
+    const m = /HEAD branch:\s*(\S+)/.exec(out) ?? /origin\/HEAD\s*->\s*origin\/(\S+)/.exec(out) ?? /^\s*refs\/remotes\/origin\/(\S+)\s*$/m.exec(out);
+    if (m?.[1] && m[1] !== "HEAD" && m[1] !== "(unknown)") return m[1];
+  }
+  return null;
+}
+async function onBaseBranch(git, touchedFiles, deltaTicketId) {
+  if (!git?.onBaseBranch || !touchedFiles.length || deltaTicketId == null) return false;
+  try {
+    return await git.onBaseBranch("", touchedFiles);
+  } catch {
+    return false;
+  }
+}
+function shippedToBaseBranch(events, opts) {
+  const steps = events.filter((e) => e.category === "tool");
+  const defaultBranch = opts?.defaultBranch?.trim() || defaultBranchFromTrace(steps);
+  const isBase = (branch) => BASE_BRANCHES.has(branch) || branch === defaultBranch;
+  let pushedAt = -1;
+  for (let i = 0; i < steps.length; i += 1) {
+    if (succeeded6(steps[i]) && isPush(steps[i])) pushedAt = i;
+  }
+  if (pushedAt < 0) return false;
+  const touched = opts?.touchedFiles ?? [];
+  for (let i = pushedAt; i < steps.length; i += 1) {
+    const ev = steps[i];
+    if (!succeeded6(ev)) continue;
+    const isStatus = i === pushedAt || ev.label === "git_status" || GIT_STATUS_CMD.test(commandOf(ev));
+    if (!isStatus) continue;
+    const output = outputOf(ev);
+    const status = parseGitShortStatus(output);
+    if (!status) continue;
+    if (!(status.branch && isBase(status.branch) && status.upstream && status.ahead === 0)) continue;
+    if (touched.length > 0 && touchedStillDirty(touched, dirtyPathsOf(output))) continue;
+    return true;
+  }
+  return false;
+}
+
+// src/runFindings/runView.ts
+var HAND_OFF_DUE = "loop.hand_off_due";
+var ROLE_HANDOFF = "llm.role_handoff";
+var record3 = (v) => v && typeof v === "object" && !Array.isArray(v) ? v : {};
+function jsonBytes2(v) {
+  try {
+    return utf8ByteLength2(JSON.stringify(v ?? null));
+  } catch {
+    return 0;
+  }
+}
+function isCheck(ev) {
+  if (CHECK_TOOL.test(ev.label)) return true;
+  return SHELL_TOOLS2.has(ev.label) && CHECK_COMMAND.test(commandOf(ev));
+}
+function callOf(ev, step, turn) {
+  const ok = !ev.isError && !isFailedToolResult(ev.result);
+  const args = record3(ev.args);
+  const write = ok && isCodeChangeTool(ev.label) && !isCacheAnswered(ev);
+  const err = record3(ev.result).error;
+  return {
+    step,
+    turn,
+    name: ev.label,
+    args,
+    ok,
+    argBytes: jsonBytes2(ev.args),
+    write,
+    check: ok && isCheck(ev),
+    paths: write ? editedPathsOf(ev.label, args) : [],
+    ...!ok && typeof err === "string" ? { error: err } : {}
+  };
+}
+function kindOf(t, failed3) {
+  if (failed3) return "failed";
+  if (t.forced) return "forced";
+  if (t.calls.some((c) => c.write)) return "write";
+  return t.toolCalls > 0 || t.calls.length > 0 ? "read" : "text";
+}
+function buildRunView(events, messages = []) {
+  const list2 = [...events];
+  const turns = [];
+  const calls = [];
+  let forcedNext = false;
+  let stopped = null;
+  for (const [i, ev] of list2.entries()) {
+    const step = i + 1;
+    const current = turns[turns.length - 1];
+    if (ev.label === HAND_OFF_DUE) {
+      forcedNext = true;
+      continue;
+    }
+    if (ev.label === STOPPED_TURN_STEP) {
+      const model = record3(ev.args).model;
+      stopped = { step, ...typeof model === "string" ? { model } : {} };
+      continue;
+    }
+    if (ev.label === "llm.complete") {
+      const logged = modelTurnLog([ev])[0];
+      if (!logged) continue;
+      const failed3 = logged.failed === true;
+      turns.push({
+        index: turns.length + 1,
+        step,
+        role: logged.role ?? "",
+        model: logged.model,
+        kind: failed3 ? "failed" : "text",
+        toolCalls: logged.toolCalls,
+        promptTokens: ev.usage?.prompt ?? 0,
+        completionTokens: logged.completionTokens ?? 0,
+        durationMs: logged.durationMs ?? 0,
+        argBytes: logged.argBytes ?? 0,
+        forced: forcedNext && !failed3,
+        text: "",
+        calls: []
+      });
+      if (!failed3) forcedNext = false;
+      stopped = null;
+      continue;
+    }
+    if (!current) {
+      if (ev.category === "tool") calls.push(callOf(ev, step, 0));
+      continue;
+    }
+    if (ev.label === "agent.message" && typeof ev.result === "string" && !current.text) current.text = ev.result;
+    else if (ev.label === ROLE_HANDOFF && typeof record3(ev.args).via === "string") current.handOffVia = record3(ev.args).via;
+    else if (ev.category === "tool") {
+      const call = callOf(ev, step, current.index);
+      current.calls.push(call);
+      calls.push(call);
+    }
+  }
+  for (const t of turns) t.kind = kindOf(t, t.kind === "failed");
+  return {
+    events: list2,
+    messages: [...messages],
+    turns,
+    calls,
+    stopped,
+    routing: routingByRole(modelTurnLog(list2), list2),
+    staffing: staffingSummaryInTrace(list2)
+  };
+}
+
+// src/runFindings/detectRunFindings.ts
+var SEVERITY_ORDER = { error: 0, warn: 1, info: 2 };
+var firstStep = (f) => f.evidence.reduce((min, e) => Math.min(min, e.step), Number.POSITIVE_INFINITY);
+function compareFindings(a, b) {
+  return SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity] || firstStep(a) - firstStep(b) || (a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : 0) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+}
+function summaryOf(view, findings, identity) {
+  const ask = view.messages.find((m) => m.role === "user")?.content.replace(/\s+/g, " ").trim() ?? "";
+  const max = RUN_FINDING_POLICY.excerptChars;
+  const counts = { info: 0, warn: 0, error: 0 };
+  for (const f of findings) counts[f.severity] += 1;
+  return {
+    id: identity.id ?? "",
+    title: identity.title ?? (ask.length > max ? `${ask.slice(0, max - 1).trimEnd()}\u2026` : ask),
+    startedAt: view.events[0]?.ts ?? "",
+    endedAt: view.events[view.events.length - 1]?.ts ?? "",
+    models: [...new Set(view.turns.map((t) => t.model))],
+    turns: view.turns.length,
+    counts
+  };
+}
+function detectRunFindings(events, messages = [], identity = {}) {
+  const view = buildRunView(events, messages);
+  const findings = withUniqueIds(RUN_FINDING_REGISTRY.flatMap((d) => d.detect(view)).sort(compareFindings));
+  return {
+    summary: summaryOf(view, findings, identity),
+    turns: view.turns.map((t) => ({
+      index: t.index,
+      role: t.role,
+      model: t.model,
+      kind: t.kind,
+      toolCalls: t.toolCalls,
+      promptTokens: t.promptTokens,
+      completionTokens: t.completionTokens,
+      durationMs: t.durationMs
+    })),
+    findings,
+    files: fileLedger(view).map((f) => ({ path: f.path, writes: f.writes, checked: f.checked }))
+  };
 }
 
 // src/toolResultBudget.ts
@@ -12181,14 +20016,14 @@ function requestedReadWindow2(out, start, end) {
 // src/providerFailureCause.ts
 var RETRY_LABELS = /* @__PURE__ */ new Set(["llm.stream_interrupted", "llm.transport_error", "loop.model_failover"]);
 var isFailedCompletion = (ev) => ev.label === "llm.complete" && (ev.isError === true || ev.category === "error");
-var argsOf2 = (ev) => ev.args && typeof ev.args === "object" ? ev.args : {};
+var argsOf3 = (ev) => ev.args && typeof ev.args === "object" ? ev.args : {};
 function providerFailureInTrace(events, messages = []) {
   const slices = splitRuns(events, messages);
   const run = slices[slices.length - 1]?.events ?? [];
   const completions = run.map((ev, i) => ({ ev, i })).filter(({ ev }) => ev.label === "llm.complete");
   const last = completions[completions.length - 1];
   if (!last || !isFailedCompletion(last.ev)) return null;
-  const args = argsOf2(last.ev);
+  const args = argsOf3(last.ev);
   const failure = args.failure && typeof args.failure === "object" ? args.failure : void 0;
   const previous = completions[completions.length - 2];
   const since = run.slice(previous ? previous.i + 1 : 0, last.i);
@@ -12210,25 +20045,31 @@ function providerFailureVerdict(f) {
 }
 
 // src/brainVerdict.ts
-import { HISTORY_TOKEN_BUDGET } from "@seanhogg/builderforce-memory/working";
-var CONTEXT_PROMPT_PEAK = Math.round(HISTORY_TOKEN_BUDGET * 1.5);
+import { HISTORY_TOKEN_BUDGET as HISTORY_TOKEN_BUDGET2 } from "@seanhogg/builderforce-memory/working";
+var CONTEXT_PROMPT_PEAK = Math.round(HISTORY_TOKEN_BUDGET2 * 1.5);
 var LARGE_LOSSY_RESULT_BYTES = 2e4;
-function decideLikelyCause(s) {
-  if (s.running) return "run-in-progress";
-  if (s.memoryOnlyRun) return "memory-answered";
-  if (s.providerFailure) return "provider-failure";
-  if (s.noToolsAdvertised) return "no-tools-advertised";
-  if (s.narratedUnadvertised) return "tool-not-advertised";
-  if (s.announcedUnmadeToolCall) return "tool-calls-not-emitted";
-  if (s.answeredInProse) return "answered-in-prose";
-  if (s.noProgress) return "no-progress";
-  if (s.contextSignal && !s.degradationSignal) return "context-exhaustion";
-  if (s.degradationSignal && !s.contextSignal) return "model-degradation";
-  if (s.unresolvedAppFailures > 0) return "app-errors-unresolved";
-  if (s.workFiledNotStaffed) return "work-filed-not-staffed";
-  return s.healthy ? "healthy" : "inconclusive";
+var VERDICT_RULES = [
+  ["run-in-progress", (s) => s.running],
+  ["stopped", (s) => s.outcome === "stopped"],
+  ["memory-answered", (s) => s.memoryOnlyRun],
+  ["provider-failure", (s) => s.providerFailure],
+  ["unanswered-question", (s) => s.outcome === "unanswered-question"],
+  ["no-tools-advertised", (s) => s.noToolsAdvertised],
+  ["tool-not-advertised", (s) => s.narratedUnadvertised],
+  ["tool-calls-not-emitted", (s) => s.announcedUnmadeToolCall],
+  ["answered-in-prose", (s) => s.answeredInProse],
+  ["no-progress", (s) => s.noProgress],
+  ["context-exhaustion", (s) => s.contextSignal && !s.degradationSignal],
+  ["model-degradation", (s) => s.degradationSignal && !s.contextSignal],
+  ["app-errors-unresolved", (s) => s.unresolvedAppFailures > 0],
+  ["work-filed-not-staffed", (s) => s.workFiledNotStaffed],
+  ["run-findings", (s) => (s.findingKinds?.length ?? 0) > 0],
+  ["healthy", (s) => s.healthy]
+];
+function decideLikelyCause(signals) {
+  return VERDICT_RULES.find(([, matches]) => matches(signals))?.[0] ?? "inconclusive";
 }
-var succeeded3 = (ev) => ev.category === "tool" && !ev.isError && !isFailedToolResult(ev.result);
+var succeeded7 = (ev) => ev.category === "tool" && !ev.isError && !isFailedToolResult(ev.result);
 function recoveredFailuresInTrace(events) {
   const lastOnTarget = /* @__PURE__ */ new Map();
   for (const ev of events) if (ev.category === "tool") lastOnTarget.set(callTargetKey(ev), ev);
@@ -12236,7 +20077,7 @@ function recoveredFailuresInTrace(events) {
   for (const ev of events) {
     if (!ev.isError || ev.category !== "tool") continue;
     const last = lastOnTarget.get(callTargetKey(ev));
-    if (last && last !== ev && succeeded3(last)) recovered.add(ev);
+    if (last && last !== ev && succeeded7(last)) recovered.add(ev);
   }
   return recovered;
 }
@@ -12245,7 +20086,7 @@ function isHealthyRun(h) {
 }
 
 // src/brainDiagnosticsText.ts
-import { HISTORY_TOKEN_BUDGET as HISTORY_TOKEN_BUDGET2 } from "@seanhogg/builderforce-memory/working";
+import { HISTORY_TOKEN_BUDGET as HISTORY_TOKEN_BUDGET3 } from "@seanhogg/builderforce-memory/working";
 var kb = formatBytes;
 function contextEvidence(d) {
   const parts = [];
@@ -12264,7 +20105,7 @@ function contextPressureLine(d) {
   if (d.tokensMeasured && d.promptTokenPeak > 0) parts.push(`prompt peaked at ${d.promptTokenPeak.toLocaleString("en-US")} tokens`);
   if (d.truncatedToolResults > 0) parts.push(`${d.truncatedToolResults} tool result(s) trimmed to the ${toolResultBudgetText()} budget by design`);
   if (!parts.length && d.largestToolResult) parts.push(`one ${d.largestToolResult.label} result was ${kb(d.largestToolResult.bytes)}`);
-  return `Context: pressure noted (${parts.join("; ")}) \u2014 no turn was cut short by it. The working transcript is held to a ${HISTORY_TOKEN_BUDGET2.toLocaleString("en-US")}-token budget on purpose, so a prompt above that figure is the design working, not a fault.`;
+  return `Context: pressure noted (${parts.join("; ")}) \u2014 no turn was cut short by it. The working transcript is held to a ${HISTORY_TOKEN_BUDGET3.toLocaleString("en-US")}-token budget on purpose, so a prompt above that figure is the design working, not a fault.`;
 }
 function healthyVerdict(d) {
   const recovered = d.recoveredFailures ?? 0;
@@ -12289,6 +20130,12 @@ function verdictText(d) {
       return "ANSWERED IN PROSE \u2014 at least one turn was handed tool definitions but replied with text and ZERO tool calls, so nothing ran. The tools were advertised; the model described the work instead of doing it. This is a model/provider fault: try a different model, or pin one that emits structured calls.";
     case "no-progress":
       return (d.progress && runProgressVerdict(d.progress)) ?? "NO PROGRESS \u2014 the run repeated work without advancing.";
+    case "stopped":
+      return "The latest run stopped before normal settlement.";
+    case "unanswered-question":
+      return "The latest run ended without answering the question.";
+    case "run-findings":
+      return `The trace recorded these findings: ${d.findingKinds?.join(", ")}.`;
     case "context-exhaustion":
       return `Likely CONTEXT EXHAUSTION (case A) \u2014 ${contextEvidence(d)}.`;
     case "model-degradation":
@@ -12417,14 +20264,7 @@ function isFileWriteTool(label) {
 var UNBACKED_WRITE_CLAIM_NOTICE = "\u26A0 UNBACKED WRITE CLAIM \u2014 an assistant turn claimed it saved/updated a file, but no file-write tool (write_file / edit_file / attachments.write / project_files.save) succeeded in this run. The file was NOT modified.";
 var UNBACKED_TICKET_CLAIM_NOTICE = "\u26A0 UNBACKED TICKET CLAIM \u2014 an assistant turn claimed it created/filed/linked a ticket or gap, but no create/link tool (tasks.create / chats.link_ticket / tickets.from_delta) succeeded in this run. Nothing was filed or linked to the chat.";
 var FILE_SAVE_CLAIM = /\b(saved|updated|wrote|written|edited|persisted|added)\b[^.!?\n]*\b(file|attachment|roadmap|document|upload|\.md|\.csv|\.txt|\.json)\b/i;
-var TICKET_WRITE_TOOL = new RegExp(
-  `(tasks|objectives|key_results|initiatives|portfolios|specs|roadmap)[._]create|chats[._]link_ticket|tickets[._]from_delta|${LOCAL_TICKET_CREATE_LABEL.source}`,
-  "i"
-);
 var TICKET_CLAIM = /\b(created|filed|opened|logged|added|linked|tracked)\b[^.!?\n]*\b(ticket|task|gap|epic|issue|objective|bug|card|board)\b/i;
-function isTicketWriteTool(label) {
-  return TICKET_WRITE_TOOL.test(label);
-}
 function detectUnbackedWriteClaim(events, messages) {
   const wroteOk = events.some(
     (e) => e.category === "tool" && isFileWriteTool(e.label) && !e.isError && !isFailedToolResult(e.result)
@@ -12454,7 +20294,12 @@ function stallRecoveriesInTrace(events) {
   return events.filter((e) => e.label === LOOP_STEP.recovery).length;
 }
 function modelFailoversInTrace(events) {
-  return events.filter((e) => e.label === LOOP_STEP.failover).length;
+  return events.reduce((count2, event) => {
+    if (event.label === LOOP_STEP.failover) return count2 + 1;
+    if (event.label !== "llm.complete") return count2;
+    const value = event.args?.failovers;
+    return count2 + (typeof value === "string" ? value.split(FAILOVER_SEPARATOR).filter((part) => part.trim()).length : 0);
+  }, 0);
 }
 function stallUnrecoveredInTrace(events) {
   return events.some((e) => e.label === LOOP_STEP.unrecovered);
@@ -12640,8 +20485,8 @@ function memoryUsageInTrace(events) {
       out.evermindRecalls += 1;
       const result = ev.result;
       if (result && typeof result === "object") {
-        const count = result.count;
-        if (typeof count === "number") out.evermindItems += count;
+        const count2 = result.count;
+        if (typeof count2 === "number") out.evermindItems += count2;
         const tokens = result.blockTokens;
         if (typeof tokens === "number") out.evermindPromptTokens += tokens;
       }
@@ -12762,6 +20607,11 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
   const unresolvedAppFailures = unresolvedAppFailuresInTrace(events);
   const running = ctx.running === true;
   const providerFailure = running ? null : providerFailureInTrace(events, messages);
+  const latest = splitRuns(events, messages).at(-1);
+  const stopped = latest.events.some((event) => event.label === STOPPED_TURN_STEP);
+  const answered = latest.messages.some((message) => message.role === "assistant" && message.content.trim());
+  const outcome = running ? void 0 : stopped ? "stopped" : answered ? "answered" : hasExplicitQuestionIntent(classifyRequest(latest.ask)) && latest.events.some((event) => event.label === "llm.complete") ? "unanswered-question" : void 0;
+  const findingKinds = detectRunFindings(latest.events, latest.messages).findings.filter((finding4) => finding4.severity !== "info").map((finding4) => finding4.kind);
   const likelyCause = decideLikelyCause({
     running,
     memoryOnlyRun,
@@ -12771,6 +20621,8 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
     announcedUnmadeToolCall,
     answeredInProse,
     noProgress,
+    outcome,
+    findingKinds,
     contextSignal,
     degradationSignal,
     unresolvedAppFailures,
@@ -12789,6 +20641,8 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
     })
   });
   return {
+    ...outcome ? { outcome } : {},
+    findingKinds,
     turns: llm.length,
     toolCalls: toolEvents.length,
     errors: errors.length,
@@ -12895,169 +20749,6 @@ function codeChangesOf(name, args, out) {
   return named.length ? named : null;
 }
 
-// src/shipVerification.ts
-var BASE_BRANCHES = /* @__PURE__ */ new Set(["main", "master"]);
-function parseGitShortStatus(output) {
-  if (!output) return null;
-  const header = output.split("\n").map((l) => l.trim()).find((l) => l.startsWith("##"));
-  if (!header) return null;
-  const body = header.slice(2).trim();
-  if (!body || body.startsWith("HEAD (no branch)")) return { branch: null, upstream: null, ahead: 0, behind: 0 };
-  const ahead = /\bahead (\d+)/.exec(body);
-  const behind = /\bbehind (\d+)/.exec(body);
-  const names = body.replace(/\s*\[.*$/, "").trim();
-  const [branch, upstream] = names.split("...");
-  return {
-    branch: branch?.trim() || null,
-    upstream: upstream?.trim() || null,
-    ahead: ahead ? Number(ahead[1]) : 0,
-    behind: behind ? Number(behind[1]) : 0
-  };
-}
-var GIT_PUSH = gitCommandPattern("push");
-var GIT_STATUS_CMD = gitCommandPattern("status");
-function commandOf(ev) {
-  const a = ev.args;
-  if (typeof a?.command === "string") return a.command;
-  if (typeof a?.cmd === "string") return a.cmd;
-  return "";
-}
-function outputOf(ev) {
-  const r = ev.result;
-  if (typeof r === "string") return r;
-  if (r && typeof r === "object") {
-    const o = r;
-    if (typeof o.output === "string") return o.output;
-    if (typeof o.stdout === "string") return o.stdout;
-  }
-  return "";
-}
-function succeeded4(ev) {
-  return !ev.isError && !isFailedToolResult(ev.result);
-}
-function isPush(ev) {
-  return ev.label === "git_push" || GIT_PUSH.test(commandOf(ev));
-}
-function dirtyPathsOf(output) {
-  const out = [];
-  for (const raw of output.split("\n")) {
-    const line = raw.replace(/\r$/, "");
-    if (line.length < 4 || line.startsWith("##")) continue;
-    let path = line.slice(3);
-    const arrow = path.indexOf(" -> ");
-    if (arrow >= 0) path = path.slice(arrow + 4);
-    path = path.trim().replace(/^"(.*)"$/, "$1");
-    if (path) out.push(path);
-  }
-  return out;
-}
-function touchedStillDirty(touched, dirty) {
-  const norm2 = (p) => p.replace(/\\/g, "/").replace(/^\.\//, "");
-  const d = dirty.map(norm2);
-  return touched.map(norm2).some((t) => d.some((p) => t === p || t.endsWith(`/${p}`)));
-}
-var DEFAULT_BRANCH_CMD = gitCommandPattern("remote|symbolic-ref|branch");
-function defaultBranchFromTrace(steps) {
-  for (let i = steps.length - 1; i >= 0; i -= 1) {
-    const ev = steps[i];
-    if (!succeeded4(ev) || !DEFAULT_BRANCH_CMD.test(commandOf(ev))) continue;
-    const out = outputOf(ev);
-    const m = /HEAD branch:\s*(\S+)/.exec(out) ?? /origin\/HEAD\s*->\s*origin\/(\S+)/.exec(out) ?? /^\s*refs\/remotes\/origin\/(\S+)\s*$/m.exec(out);
-    if (m?.[1] && m[1] !== "HEAD" && m[1] !== "(unknown)") return m[1];
-  }
-  return null;
-}
-async function onBaseBranch(git, touchedFiles, deltaTicketId) {
-  if (!git?.onBaseBranch || !touchedFiles.length || deltaTicketId == null) return false;
-  try {
-    return await git.onBaseBranch("", touchedFiles);
-  } catch {
-    return false;
-  }
-}
-function shippedToBaseBranch(events, opts) {
-  const steps = events.filter((e) => e.category === "tool");
-  const defaultBranch = opts?.defaultBranch?.trim() || defaultBranchFromTrace(steps);
-  const isBase = (branch) => BASE_BRANCHES.has(branch) || branch === defaultBranch;
-  let pushedAt = -1;
-  for (let i = 0; i < steps.length; i += 1) {
-    if (succeeded4(steps[i]) && isPush(steps[i])) pushedAt = i;
-  }
-  if (pushedAt < 0) return false;
-  const touched = opts?.touchedFiles ?? [];
-  for (let i = pushedAt; i < steps.length; i += 1) {
-    const ev = steps[i];
-    if (!succeeded4(ev)) continue;
-    const isStatus = i === pushedAt || ev.label === "git_status" || GIT_STATUS_CMD.test(commandOf(ev));
-    if (!isStatus) continue;
-    const output = outputOf(ev);
-    const status = parseGitShortStatus(output);
-    if (!status) continue;
-    if (!(status.branch && isBase(status.branch) && status.upstream && status.ahead === 0)) continue;
-    if (touched.length > 0 && touchedStillDirty(touched, dirtyPathsOf(output))) continue;
-    return true;
-  }
-  return false;
-}
-
-// src/composingActivity.ts
-function utf8ByteLength2(text) {
-  if (!text) return 0;
-  if (typeof TextEncoder !== "undefined") return new TextEncoder().encode(text).length;
-  let bytes = 0;
-  for (const ch of text) {
-    const cp = ch.codePointAt(0) ?? 0;
-    bytes += cp < 128 ? 1 : cp < 2048 ? 2 : cp < 65536 ? 3 : 4;
-  }
-  return bytes;
-}
-function toolCallArgBytes(calls) {
-  let total = 0;
-  for (const c of calls) total += utf8ByteLength2(c.args ?? "");
-  return total;
-}
-function createComposingActivity(sink, opts) {
-  const now = opts.now ?? Date.now;
-  let names = /* @__PURE__ */ new Map();
-  let bytes = 0;
-  let startedAt = null;
-  let published;
-  const publish = (label, immediate) => {
-    sink.set({
-      phase: "composing",
-      startedAt,
-      step: opts.step,
-      bytes,
-      ...label ? { label } : {}
-    });
-    published = label;
-    if (immediate) sink.repaint();
-    else sink.coalescedRepaint();
-  };
-  return {
-    onDelta(index, partial) {
-      if (partial.name) names.set(index, partial.name);
-      bytes += utf8ByteLength2(partial.argsFragment ?? "");
-      const label = names.get(index) ?? published;
-      if (startedAt === null) {
-        startedAt = now();
-        publish(label, true);
-        return;
-      }
-      publish(label, !published && !!label);
-    },
-    bytes() {
-      return bytes;
-    },
-    reset() {
-      names = /* @__PURE__ */ new Map();
-      bytes = 0;
-      startedAt = null;
-      published = void 0;
-    }
-  };
-}
-
 export {
   hostOf,
   describeStreamFailure,
@@ -13082,6 +20773,18 @@ export {
   liveChatBindHolder,
   claimChatBind,
   releaseChatBind,
+  MEDIAN_TURN_TOKENS,
+  computeCostMillicents,
+  priceTierBoundary,
+  directCatalogId,
+  listPriceOf,
+  snapshotPriceBook,
+  ANTHROPIC_RELEASES,
+  foldSpendSavings,
+  combineSpendSavings,
+  USAGE_SURFACES,
+  isUsageSurface,
+  USAGE_SURFACE_HEADER,
   PROVENANCE_META_KEY,
   asProvenanceAccount,
   isConnectedAccountUnused,
@@ -13100,6 +20803,7 @@ export {
   isStepMessage,
   attachEvermindLearn,
   formatEvermindLearnStep,
+  hasExplicitQuestionIntent,
   classifyRequest,
   asksForChange,
   promisesUnfinishedWork,
@@ -13111,62 +20815,55 @@ export {
   catalogToolNamesMentionedIn,
   claimsMissingToolData,
   MAX_ANNOUNCEMENT_RECOVERIES,
-  stallRecoveryNudge,
-  stallShape,
-  shouldRecoverStalledTurn,
-  isExhaustedStall,
   modelFailoverNotice,
-  stallExhaustedNotice,
-  stallRecoveryToolChoice,
   nextFallbackModel,
-  MAX_MODEL_FAILOVERS,
-  chooseStallFailover,
-  isModelRole,
+  DEFAULT_ROUTE_THRESHOLD,
+  summarizeRouteRuns,
+  DECLINE_STATUS,
+  offersHandOff,
+  PLAN_TURN_BUDGET,
+  reduceRunPolicy,
+  isRequestRefusalStatus,
+  isCoderReask,
+  toolSchemaTokens,
+  handoffReserveTokens,
+  handoffTokenBudget,
+  parseRunOutcomeTelemetry,
+  isTenantBudgetFailure,
+  isRateLimitFailure,
   editedFilesOf,
   editedPathsOf,
   bracketDelta,
   changesBalance,
   describeBracketDelta,
-  normalizeToolName,
-  resolveToolAlias,
   advertisedToolName,
   resolveAdvertisedToolName,
   resolveCallName,
   toolNameSet,
   toolCallPaths,
-  toolSideEffect,
-  classifyTool,
   isMutatingTool,
-  CONTROL_TOOL_NAMES,
   renderPolicyDirectives,
-  evaluatePolicyGate,
   stableStringify,
-  policyGateCallKey,
-  isNotARepo,
-  buildCoreToolRegistry,
   limbicTraits,
   isFailedToolResult,
   fileToolKind,
   REMEMBER_FACT_TOOLS,
   savedFactOf,
   RunKnowledgeRecorder,
-  SKILL_TOOLS,
   VERIFY_DELEGATION_STEP,
   VERIFY_STEP,
   RESOLVE_OPEN_ISSUES,
   isChildReportText,
-  SUBAGENT_TOOLS,
   judgeWith,
   lexicalStems,
   LEXICAL_WEIGHTS,
   rankLexically,
-  searchToolSchemas,
-  TOOL_SEARCH_TOOL,
-  TOOL_SEARCH_SCHEMA,
   parseSpecOpenItems,
   codeChangeTicketTitle,
   isMatchableSpecItemId,
   specTicketCoverage,
+  profileWorkload,
+  estimateTokensFromChars,
   isCostLeverOn,
   isReadOnlyShellCall,
   isTestPath,
@@ -13177,11 +20874,7 @@ export {
   withAdvisory,
   singleReadsOf,
   perFileResults,
-  canonicalReadArgs,
   ReadCoverage,
-  parseShellFileRead,
-  isMutatingShellCall,
-  shellPrintAsRead,
   recordShellFileRead,
   FAILURE_NUDGE_AT,
   FAILURE_HARD_AT,
@@ -13190,15 +20883,7 @@ export {
   repeatedFailureAdvisory,
   WriteLedger,
   repeatedWriteNote,
-  claimsReady,
   announcesDeliverable,
-  ANNOUNCED_DELIVERABLE_STEER,
-  ProgressDetector,
-  progressSteerNote,
-  progressAdvice,
-  progressTraceStep,
-  planInRunVerify,
-  inRunVerifyOutcome,
   BACK_TO_BACK_AT,
   stopIntent,
   READS_BEFORE_DELEGATION_NUDGE,
@@ -13227,6 +20912,7 @@ export {
   SERVER_TICKET_CREATE_TOOL,
   SERVER_TICKET_LINK_TOOL,
   LOCAL_TICKET_CREATE_TOOL,
+  isTicketWriteTool,
   SERVER_TICKET_TOOLS,
   ticketToolVocabulary,
   isLocalTicketCreateLabel,
@@ -13255,13 +20941,41 @@ export {
   codeChangeFile,
   chatWorkObligationTools,
   chatWorkLinkingDirective,
-  resultTableCap,
-  windowedCap,
+  RUN_CANCELLED_REASON,
+  planModelWarning,
+  downgradeDecision,
+  newSteerKey,
+  queueRunSteering,
+  requeueRunSteering,
+  childWorkRefs,
+  drainRunSteering,
+  hasRunInterrupt,
+  runSteeringSource,
+  runToolInterruptibly,
+  isSpawnTool,
+  attemptedDelegation,
+  leftDelegationUndone,
+  undelegatedRequestNudge,
+  earlyDelegationNudge,
+  MAX_OPEN_WORK_HOLDS,
+  recordWorkSnapshot,
+  workSupportsRoutingSample,
+  workFinishPorts,
+  FINISH_RECORD_TURNS,
+  renderTaskState,
+  applyTaskStateUpdate,
+  expandWithSynonyms,
+  DEFAULT_TOOL_LIMIT,
+  isCappedToolRole,
+  roleToolLimit,
+  roleCappedSelection,
   truncateMiddle,
-  isReadFileResult,
-  sliceReadFile,
-  truncatedResultNote,
-  shapeToolResult,
+  runBudgetCapMillicents,
+  CacheServedStreak,
+  defaultPipelineRouting,
+  routeRun,
+  openRun,
+  runOutcomeRequestOf,
   shortenTarget,
   activityTarget,
   VISIT_QUESTION_SEPARATOR,
@@ -13308,14 +21022,11 @@ export {
   isMutationTool,
   hasEditIntent,
   codeChangesOf,
-  isCacheAnswered,
   computeRunProgress,
   progressDuration,
   formatRunProgress,
   runProgressVerdict,
   gatewayRoutingArgs,
-  PROGRESS_FORCED_LABEL,
-  FINISH_RECORD_TURNS,
   planScopeClash,
   canRunInParallel,
   splitForParallel,
@@ -13325,13 +21036,20 @@ export {
   modeOf,
   splitLayoutLine,
   scopeClashCorrective,
-  routingByRole,
   sessionShippedInTrace,
   isDispatchTool,
   staffingSummaryInTrace,
   formatDispatchRefusals,
   workFiledNotStaffedVerdict,
   formatStaffingSummary,
+  RUN_FINDING_POLICY,
+  utf8ByteLength2 as utf8ByteLength,
+  toolCallArgBytes,
+  createComposingActivity,
+  RUN_FINDING_REGISTRY,
+  buildRunView,
+  compareFindings,
+  detectRunFindings,
   MAX_TOOL_RESULT_CHARS,
   READ_FILE_RESULT_CHARS2 as READ_FILE_RESULT_CHARS,
   trimToolResult,
@@ -13341,7 +21059,6 @@ export {
   formatAdvertised,
   UNBACKED_WRITE_CLAIM_NOTICE,
   UNBACKED_TICKET_CLAIM_NOTICE,
-  isTicketWriteTool,
   detectUnbackedWriteClaim,
   detectUnbackedTicketClaim,
   detectAnnouncedButUnmadeToolCall,
@@ -13364,12 +21081,8 @@ export {
   buildBrainTriageReport,
   BASE_BRANCHES,
   parseGitShortStatus,
-  commandOf,
   dirtyPathsOf,
   onBaseBranch,
-  shippedToBaseBranch,
-  utf8ByteLength2 as utf8ByteLength,
-  toolCallArgBytes,
-  createComposingActivity
+  shippedToBaseBranch
 };
-//# sourceMappingURL=chunk-AXFC6L4D.mjs.map
+//# sourceMappingURL=chunk-LMIZCGKN.mjs.map

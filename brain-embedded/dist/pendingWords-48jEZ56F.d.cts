@@ -1,4 +1,4 @@
-import { a as BrainTraceEvent, U as UsageSurface, B as BrainMessage, P as PackageDirProbe } from './brainTriage-BAX44Cqq.cjs';
+import { a as BrainTraceEvent, U as UsageSurface, B as BrainMessage, P as PackageDirProbe } from './brainTriage-DY1vGYeP.cjs';
 import { L as LocalRuntimeId, b as LocalEndpoint, a as LocalRuntimeProbe, c as LocalModel } from './probe-DkPrGnWT.cjs';
 import { EvermindRecallResult } from '@seanhogg/builderforce-memory/evermind';
 import { ConsolidateOptions, ConsolidatedMemory } from '@seanhogg/builderforce-memory/working';
@@ -201,6 +201,96 @@ interface LocalFirstAttemptRecord {
     outcome: LocalFirstOutcome;
     /** Why it did not serve (`failed`: the error's message; `refused`: an empty answer). */
     detail?: string;
+}
+
+/**
+ * THE tool side-effect classifier: pure, dependency-free (no catalog import), so
+ * policy gates (`spec.ts`), the VS Code client, the brain and agent-runtime can all
+ * classify through it without an import cycle. The catalog-walking completeness
+ * helpers live in `tool-mutation.ts`, which re-exports everything here.
+ *
+ * Never copy this table into a second engine: `scripts/check-single-tool-classifier.mjs`
+ * fails CI if a second `TOOL_SIDE_EFFECT` / `isMutatingTool` / `evaluatePolicyGate`
+ * definition appears outside this package. An unclassified name fails CLOSED
+ * (mutating) everywhere.
+ */
+/**
+ * Side effect of one catalog tool.
+ * - `read` — no durable write.
+ * - `verify` — in-run check (static-check / typecheck / test). Does not write the
+ *   repo. Distinct from `read` so policy can require a verify without treating it
+ *   as a mutation, and distinct from `mutate` so a shell-less surface cannot be
+ *   told that `run_checks` wrote anything.
+ * - `mutate` — writes the working tree, memory, coordination, or a child run.
+ *
+ * `run_command` stays `mutate`: a shell can delete as easily as it can `npm test`.
+ * Container/on-prem in-run verify *uses* `run_command` to exec the planned
+ * package scripts; that does not reclassify the tool.
+ */
+type ToolSideEffect = "read" | "verify" | "mutate";
+
+/**
+ * The compile primitive's intermediate representation: {@link AgentSpec} + the
+ * single canonical lowering {@link lowerAgentSpec}.
+ *
+ * The platform has several "define a need → run an agent" front doors (a trained
+ * Workforce model, a hand-drawn workflow, a persona, a plain-language ask). They
+ * historically each assembled their own system prompt and exec params by ad-hoc
+ * string concatenation, so persona/memory rendered differently depending on where
+ * an agent ran. `AgentSpec` is the one shape every front door compiles *into*, and
+ * `lowerAgentSpec` is the one function every surface lowers it *through* — so an
+ * agent's identity, personality, and recalled memory render identically whether it
+ * runs in the IDE, on-prem, on a durable cloud tick, or as a workflow node.
+ *
+ * Pure and dependency-free (no GPU, no I/O, no `Env`) so it runs in a Cloudflare
+ * Worker, Node, and a VS Code extension alike — the same constraint as
+ * {@link AgentEngine} and the psychometric compiler beside it. The modality compilers
+ * (`compile()`) and surface deployers (`deploy()`) that produce and consume an
+ * `AgentSpec` are layered on top in the `api`/`agent-runtime` packages; this file
+ * owns only the IR and its lowering. The shipped compile
+ * primitive is recorded in DONE.md (2026-10-25 docs-cleanup entry).
+ */
+
+/**
+ * A governance gate compiled onto the spec (the `policy` modality). Because a gate
+ * lives *on the spec* — not inside one front door — it reaches every surface for
+ * free: a gate authored once applies in the IDE exactly as it does on a cloud tick
+ * or a workflow node, because every surface lowers through {@link lowerAgentSpec}.
+ *
+ * - `inject-directive` — prepend a governing instruction to the system prompt
+ *   (live on every surface today, via the lowering below).
+ * - `require-approval` — the engine must pause for human approval before invoking
+ *   `tool` (or any tool when `tool` is omitted). Evaluated by {@link evaluatePolicyGate}.
+ * - `block` — the engine must refuse `tool` outright.
+ */
+interface PolicyGate {
+    id: string;
+    /**
+     * Set on a gate that was lowered from a class gate: the authored gate's id. A decision, an approval key and the UI name
+     * the authored gate, so a run on an old host and the same run in the cloud line up.
+     */
+    baseGateId?: string;
+    /** Tool this gate governs; omit (or `"*"`) to govern every tool call. */
+    tool?: string;
+    /**
+     * Optional path globs / directory prefixes this gate is scoped to. A path-scoped
+     * gate matches only when the tool call's path hits one of these (via the existing
+     * {@link matchGlob} / {@link inScope} helpers — not a second matcher). Omit to
+     * govern the tool regardless of path. Empty after coerce is treated as omitted.
+     */
+    paths?: string[];
+    /**
+     * Govern every tool of this side-effect class (`read` / `verify` / `mutate`),
+     * classified by the ONE classifier in `tool-side-effect.ts`. A tool that is not
+     * classified counts as `mutate` (fail closed), so a new or unknown tool is
+     * caught by a `mutate` gate until someone classifies it. Combines with `tool`
+     * and `paths`: every criterion that is set must match.
+     */
+    sideEffect?: ToolSideEffect;
+    effect: "inject-directive" | "require-approval" | "block";
+    /** The instruction injected (inject-directive) or the human-readable reason. */
+    directive?: string;
+    reason?: string;
 }
 
 /** What one completed run did, as the note format understands it. */
@@ -436,6 +526,46 @@ interface ShipPolicy {
     /** Set by {@link narrowByHold}: the chat turn holding every publish. */
     hold?: ShipHold;
 }
+
+/**
+ * WHICH TOOLS FILE A TICKET on this surface — the one place that knows.
+ *
+ * Two vocabularies exist for the same act:
+ *
+ *   • SERVER (web, cloud): `builtin_tasks_create` makes a task the account owns and returns
+ *     a NUMERIC id, linked to the run's chat in the same call (the host stamps the chat; see
+ *     `CHAT_STAMPED_CREATE_TOOLS`); the board's resource scoping (`builtin_kanban_*`)
+ *     addresses that numeric id.
+ *   • LOCAL (the editor): `ticket-create` writes the DEVICE store and returns a LOCAL id (a
+ *     UUID). It links the creating chat locally in the same transaction and syncs in the
+ *     background, and the `builtin_kanban_*` tools (which take server ids) do not apply to it
+ *     until it has synced. The editor's catalog does not even advertise the server twins.
+ *
+ * Neither vocabulary has a link step after a create any more.
+ *
+ * Every prompt, hand-off and triage check that names a create tool reads this, so none of
+ * them keeps its own list of names. A surface that cannot say what it advertises gets the
+ * SERVER vocabulary, which is what every surface used before the editor filed locally.
+ */
+
+declare const SERVER_TICKET_CREATE_TOOL = "builtin_tasks_create";
+declare const LOCAL_TICKET_CREATE_TOOL = "ticket-create";
+/** Whether a successful call files or links board work. */
+declare function isTicketWriteTool(label: string): boolean;
+interface TicketToolVocabulary {
+    /** The tool that creates a ticket here, or undefined when the catalog has none. */
+    readonly createTool: string | undefined;
+    /** The create tool is the device-local `ticket-create` (ids are local UUIDs). */
+    readonly local: boolean;
+    /** The `builtin_kanban_*` resource-scoping tools apply to a ticket this tool creates. */
+    readonly kanbanScoping: boolean;
+    /** The name a prompt should give for the create tool (the server's when none is advertised). */
+    readonly createName: string;
+}
+/** The vocabulary of surfaces that file through the account's tools. */
+declare const SERVER_TICKET_TOOLS: TicketToolVocabulary;
+/** The vocabulary for the advertised tool names; the server's when `toolNames` is not given. */
+declare function ticketToolVocabulary(toolNames?: Iterable<string>): TicketToolVocabulary;
 
 /**
  * The timeline step the Brain run loop records when a LOCAL-FIRST turn did not end
@@ -1090,6 +1220,7 @@ interface RunOutcomeRequest extends RunOutcomeTelemetry {
  */
 
 interface BrainRunOutcome extends RunOutcomeTelemetry {
+    routingSignal?: false;
     /** Idempotency key — one outcome per run. */
     clientRunId: string;
     /** The model that made this run's code changes. */
@@ -1194,6 +1325,8 @@ interface RunLineage {
     };
     /** 1 for a child of a top-level run, 2 for a grandchild, … */
     depth: number;
+    /** Ticket hint from the owner. The child may observe it only through its scoped chat listing. */
+    ticket?: string;
 }
 /** The server chat a run's rows are saved to: its owner's for a sub-agent, its own otherwise. THE one place that says so. */
 declare const savedChatOf: (runKey: number, lineage?: RunLineage | null) => number;
@@ -1209,44 +1342,6 @@ interface SubagentOrigin {
 declare function parseSubagentOrigin(msg: {
     metadata?: string | null;
 }): SubagentOrigin | null;
-
-/**
- * WHICH TOOLS FILE A TICKET on this surface — the one place that knows.
- *
- * Two vocabularies exist for the same act:
- *
- *   • SERVER (web, cloud): `builtin_tasks_create` makes a task the account owns and returns
- *     a NUMERIC id, linked to the run's chat in the same call (the host stamps the chat; see
- *     `CHAT_STAMPED_CREATE_TOOLS`); the board's resource scoping (`builtin_kanban_*`)
- *     addresses that numeric id.
- *   • LOCAL (the editor): `ticket-create` writes the DEVICE store and returns a LOCAL id (a
- *     UUID). It links the creating chat locally in the same transaction and syncs in the
- *     background, and the `builtin_kanban_*` tools (which take server ids) do not apply to it
- *     until it has synced. The editor's catalog does not even advertise the server twins.
- *
- * Neither vocabulary has a link step after a create any more.
- *
- * Every prompt, hand-off and triage check that names a create tool reads this, so none of
- * them keeps its own list of names. A surface that cannot say what it advertises gets the
- * SERVER vocabulary, which is what every surface used before the editor filed locally.
- */
-
-declare const SERVER_TICKET_CREATE_TOOL = "builtin_tasks_create";
-declare const LOCAL_TICKET_CREATE_TOOL = "ticket-create";
-interface TicketToolVocabulary {
-    /** The tool that creates a ticket here, or undefined when the catalog has none. */
-    readonly createTool: string | undefined;
-    /** The create tool is the device-local `ticket-create` (ids are local UUIDs). */
-    readonly local: boolean;
-    /** The `builtin_kanban_*` resource-scoping tools apply to a ticket this tool creates. */
-    readonly kanbanScoping: boolean;
-    /** The name a prompt should give for the create tool (the server's when none is advertised). */
-    readonly createName: string;
-}
-/** The vocabulary of surfaces that file through the account's tools. */
-declare const SERVER_TICKET_TOOLS: TicketToolVocabulary;
-/** The vocabulary for the advertised tool names; the server's when `toolNames` is not given. */
-declare function ticketToolVocabulary(toolNames?: Iterable<string>): TicketToolVocabulary;
 
 /**
  * Chat MODE — "am I being asked a question, or being asked to get something done?"
@@ -1857,6 +1952,485 @@ interface ServedRead {
 }
 
 /**
+ * The tenant's assignable agent pool — ONE roster built from three source lists:
+ * the tenant's own cloud (workforce) agents, agents acquired from the marketplace,
+ * and registered remote agents. An agent is registered once to the tenant and can
+ * be assigned to any surface (project, swimlane, brain…), so the pool is never
+ * project-filtered here.
+ *
+ * Pure mapping plus a transport-agnostic loader: the web app fetches through its own
+ * API client and the VS Code webview through its authed fetch, but both build the
+ * SAME pool from the SAME rows — which is what keeps a persona picker or a recipient
+ * chip naming an agent identically on both surfaces.
+ */
+/** A selectable agent from one of the tenant's two source pools. */
+interface PoolAgent {
+    kind: 'workforce' | 'registered';
+    ref: string;
+    name: string;
+    meta: string;
+    /** Gateway-resolvable model for this agent (workforce base_model), or null when
+     *  it should use the default (the 'builderforce-default' sentinel / registered). */
+    baseModel?: string | null;
+}
+/** The fields of a workforce (cloud) agent row the pool reads. */
+interface PoolWorkforceAgentRow {
+    id: number | string;
+    name: string;
+    title?: string | null;
+    base_model?: string | null;
+}
+/**
+ * The fields of a registered remote agent row the pool reads. PRD 39 §3 push 1:
+ * the pool now reads `/api/agent-registrations` (envelope `{agents}`), whose rows
+ * carry `status`/`framework` rather than the legacy `type`/`isActive`.
+ */
+interface PoolRegisteredAgentRow {
+    id: number | string;
+    name: string;
+    status: string;
+    framework: string;
+}
+/** base_model sentinel meaning "no explicit model — use the default". */
+declare const DEFAULT_AGENT_MODEL_SENTINEL = "builderforce-default";
+/** The three endpoints the pool is built from. */
+declare const AGENT_POOL_PATHS: {
+    readonly owned: "/api/workforce/agents/mine";
+    readonly purchased: "/api/workforce/agents/purchased";
+    readonly registered: "/api/agent-registrations";
+};
+/** Build the pool from its three source lists (owned + purchased deduped by id). */
+declare function poolAgentsFrom(input: {
+    owned: readonly PoolWorkforceAgentRow[];
+    purchased: readonly PoolWorkforceAgentRow[];
+    registered: readonly PoolRegisteredAgentRow[];
+}): PoolAgent[];
+/** A host's authenticated JSON GET. */
+type PoolRequest = <T>(path: string) => Promise<T>;
+/** Load the pool through a host's transport. Each source degrades to empty on its own. */
+declare function loadAgentPoolVia(request: PoolRequest): Promise<PoolAgent[]>;
+
+/**
+ * Brain personas — WHO the Brain answers as in a conversation.
+ *
+ * A composer's "Acting as" control offers three kinds of persona: the host's
+ * default Brain, a built-in MODALITY persona (the Website builder, the mobile
+ * coder, the Evermind teacher…), or an AGENT assigned to the Brain (scope='brain'
+ * in the agent-assignment model). This module is the one definition of all three,
+ * shared by the web app and the VS Code webview: the modality prompts live here
+ * (the frontend's modality registry reads them from here too), and so do the choice
+ * encoding, the agent join, and the two ways a host applies a persona.
+ *
+ * The two applications differ for a real reason. The web Brain has no environment
+ * of its own to describe, so a persona REPLACES its system prompt
+ * ({@link personaSystemPrompt}). The editor's base prompt describes the actual
+ * workspace, file tools and repository — a Builder persona that talks about a live
+ * browser Preview must not overwrite that — so the editor LAYERS the persona on top
+ * ({@link personaOverlay}).
+ */
+
+/** The project modalities that carry a Brain persona. */
+type PersonaModalityId = 'designer' | 'mobile' | 'webmobile' | 'evermind' | 'finetune' | 'voice';
+/** Display order of the modality personas. */
+declare const PERSONA_MODALITY_IDS: readonly PersonaModalityId[];
+/** A modality persona: its English name, its glyph and the Brain prompt it runs under. */
+interface ModalityPersona {
+    /** The English display name — THE default every host localizes over (web `modality.<id>.label`,
+     *  the editor's `app.persona.modality.<id>`); no host keeps a copy of its own. */
+    label: string;
+    icon: string;
+    prompt: string;
+}
+/**
+ * How a BUILDER persona delivers code: by writing it, never by handing it over.
+ *
+ * These personas used to say the opposite. The Website persona told the model to
+ * "use a normal code block so the user can apply it" for the open file and to
+ * fall back to path-tagged code blocks; the mobile personas offered code blocks
+ * as the ONLY way to deliver a file. On 2026-10-03 a Studio build whose writes
+ * were being cut off by the output ceiling ended exactly as those lines allowed:
+ * the agent printed the CSS and asked the user to add it by hand, beside a live
+ * Preview that only ever shows what was written.
+ *
+ * It names no tool on purpose (the prompt tool-name contract): this text is shared
+ * by the web Builder, Studio and the editor, which advertise different file
+ * tools, and a hand-typed name is right only until the next rename. The model
+ * reads the real names off its own tool list.
+ *
+ * Exported because the build CAPABILITIES (`frontend/src/lib/brain/capabilities.ts`)
+ * carry the same rule — one sentence of policy, one place it is written.
+ */
+declare const FILE_DELIVERY_RULE: string;
+/** Every modality persona, its prompt carrying the shared strategy/OKR note. */
+declare const MODALITY_PERSONAS: Readonly<Record<PersonaModalityId, ModalityPersona>>;
+/** An agent assigned to the Brain, named and model-resolved from the tenant pool. */
+interface BrainPersonaAgent {
+    kind: string;
+    ref: string;
+    name: string;
+    /** The agent's own model, or null for the default. */
+    baseModel?: string | null;
+}
+/**
+ * A persona choice, encoded as one stable string so a host can hold it in a single
+ * piece of state: `'default'`, `'modality:<id>'`, or `'agent:<kind>:<ref>'`.
+ */
+type BrainPersonaChoice = string;
+declare const DEFAULT_PERSONA: BrainPersonaChoice;
+declare function modalityPersonaChoice(id: string): BrainPersonaChoice;
+declare function agentPersonaChoice(agent: {
+    kind: string;
+    ref: string;
+}): BrainPersonaChoice;
+/** The modality a choice names, or null (unknown ids included). */
+declare function personaModalityOf(choice: BrainPersonaChoice): PersonaModalityId | null;
+/** The assigned agent a choice names, or null when it names none of `agents`. */
+declare function personaAgentOf(choice: BrainPersonaChoice, agents: readonly BrainPersonaAgent[]): BrainPersonaAgent | null;
+/** The framing that makes the Brain answer AS an assigned agent. */
+declare function agentPersonaPrompt(name: string): string;
+/**
+ * The persona as a REPLACEMENT system prompt — for a host whose persona is the whole
+ * prompt (the web Brain). `undefined` for the default persona (or a choice naming
+ * nothing), so the host's own default applies.
+ */
+declare function personaSystemPrompt(choice: BrainPersonaChoice, agents: readonly BrainPersonaAgent[]): string | undefined;
+/**
+ * The persona as an ADDITIVE directive — for a host that keeps its own base prompt
+ * because that prompt describes the environment the run really executes in (the
+ * editor's workspace, file tools and repository). `undefined` for the default persona.
+ */
+declare function personaOverlay(choice: BrainPersonaChoice, agents: readonly BrainPersonaAgent[]): string | undefined;
+/**
+ * The model an agent persona runs on — the agent's own `base_model` — or undefined
+ * (default persona, modality persona, or an agent on the default model). A host
+ * feeds it as a NON-strict preference: an explicit user pin still wins.
+ */
+declare function personaModel(choice: BrainPersonaChoice, agents: readonly BrainPersonaAgent[]): string | undefined;
+/** Join the Brain's agent assignments to the tenant pool — one entry per agent. */
+declare function brainPersonaAgents(assignments: ReadonlyArray<{
+    agentKind: string;
+    agentRef: string;
+}>, pool: readonly PoolAgent[]): BrainPersonaAgent[];
+/** The Brain's agent assignments (scope='brain'). */
+declare const BRAIN_AGENT_ASSIGNMENTS_PATH = "/api/agent-assignments?scope=brain";
+/** Load the Brain's assigned agents through a host's transport. Degrades to []. */
+declare function loadBrainPersonaAgentsVia(request: PoolRequest): Promise<BrainPersonaAgent[]>;
+
+/**
+ * The ONE IDE coding-agent persona — the single source of truth for the system
+ * prompt's TEXT. The editor run's prompt is assembled in ONE place
+ * (`runStore/openingSections.ts`, called by `prepareBrainRun`) from these pieces; the
+ * native chat participant (`prompt.ts`) reads the same pieces through the VS Code
+ * client's `idePersona.ts` re-export so the two cannot drift.
+ *
+ * Pure strings, no host/React/node imports.
+ */
+/** Standard preamble shown above the scanned workspace map. */
+declare const WORKSPACE_MAP_INTRO = "The following map of the open workspace lists its top-level files and directory structure. Use it to orient yourself \u2014 but it is NOT an exhaustive file index (deeper files are summarized), so when a file is not named here, find it with `find_symbol` (where a name is defined), `list_files` (pass a `glob`) or `search_code` before concluding it does not exist:";
+/**
+ * Autonomy directive — appended to BOTH persona branches. The agent was being
+ * over-deferential on agentic PM work: when asked to "work through these gaps"
+ * or told "you decide what to do next", it narrated a plan and then asked the
+ * user for permission or for values it could infer itself (titles, estimates,
+ * next steps), stalling instead of acting. This tells it to do the analysis and
+ * take the next concrete action, inferring sensible defaults, and to reserve
+ * questions for choices that are genuinely the user's to make.
+ *
+ * The last two sentences are the ones that were missing, and their absence is what let
+ * a measured run (VS Code chat #115, 2026-09-20) survey 38 tickets, write a correct
+ * report, and close on "Would you like me to: list them? open PRs? cancel them?" — the
+ * whole turn spent earning permission the request had already granted. "Never end a turn
+ * with would you like me to" was in this paragraph at the time and did not hold on its
+ * own, because the directive never said what to do INSTEAD when a choice really is the
+ * user's. Prose was the only channel the model knew, so it used prose, and the run ended.
+ * `ask_user` is that channel — it renders labelled buttons and blocks the run rather than
+ * finishing it — and this is the only place either surface is told the tool exists.
+ *
+ * The loop enforces the same rule structurally: a turn that ends on an offer menu is
+ * caught and re-prompted (the `asked-permission` shape in `@builderforce/agent-stall`),
+ * and that correction points at `ask_user` only when the turn was actually advertised it.
+ * The model still has to hold the rule, because a turn the loop has to fight back is a
+ * turn the user waited through for nothing.
+ */
+declare const AUTONOMY_DIRECTIVE = "Act, don't ask. When the user gives you a goal or says to decide, DO the analysis and take the next concrete action yourself \u2014 do not narrate a plan and then ask permission to carry out work the user already requested. Infer reasonable values rather than asking the user to supply what you can determine (e.g. estimate story points from a task's description, draft a title/description yourself), and state the assumptions you made. Never end a turn with \"would you like me to\u2026\", \"shall I\u2026\", \"let me know if you want me to\u2026\" or a menu of options for work that was already requested \u2014 that turn costs the user a full round trip to answer \"yes\" to something they had already said. Finding that a job is bigger than you expected is not a reason to ask permission: a survey that turns up 35 items the user asked you to clear is a survey that found your work order, so start clearing them and report progress. Only pause when a choice is genuinely the user's AND no sensible default exists \u2014 and then call the `ask_user` tool with the options as labelled choices rather than asking in prose, because that puts them on screen as buttons instead of ending the run on a question. Do everything that does NOT depend on the answer before you ask. Mutating actions surface their own approval prompt, so you never need to ask for permission in prose.";
+/**
+ * Follow-through directive. Two adjacent failures, both of which produce a turn that
+ * costs the user time and delivers nothing:
+ *
+ *  1. The agent analyses a problem, runs low on steps, and replies with the fix
+ *     written out in prose plus "re-run me and I'll apply it". That is a promise the
+ *     agent cannot keep — nothing carries over — so the work simply never happens.
+ *  2. The user answers such a turn with a bare "Fix" / "do it", and the agent, reading
+ *     that message on its own, asks what needs fixing — while the answer sits one
+ *     message above it in the same conversation.
+ *
+ * The run loop resolves (2) structurally when it can see both halves, but the model has
+ * to hold the rule too: the loop only injects on an exact bare directive, and nothing
+ * at all stops (1) except the agent choosing to act while it still has room.
+ */
+declare const FOLLOW_THROUGH_DIRECTIVE = "Finish the job in the turn you start it. If you have worked out the fix, APPLY it now with the tools \u2014 never end a turn having only described an edit you could have made, and never promise to do it on a later run: nothing carries over between runs, so that work would simply never happen. If you are running low on steps, spend the remaining ones on the edit itself rather than on more reading, and prefer the smallest correct change over further investigation. When the user replies with a bare directive \u2014 \"fix\", \"do it\", \"go ahead\", \"yes\", \"apply it\" \u2014 it refers to the proposal in YOUR previous message: carry out that exact proposal immediately, using the files and the change it already named. Do not ask what to fix, and do not re-derive analysis that is already in the conversation above you. The same holds for work the user asked ANOTHER participant in this chat to do: when a participant answered that it lacks the tools (\"I don't have git commit/push tools\", \"send this to the Brain\"), or the user tells you they already instructed that participant and the work is not done, the instruction now falls to YOU \u2014 read what was asked of them in the transcript and carry it out with your tools this turn (a requested commit-and-push included), rather than reporting on who is working on it.";
+/**
+ * File-discovery directive (workspace surface only). The Brain kept failing to find
+ * files two ways: guessing a wrong-cased/wrong-folder path and giving up (the
+ * `Roadmap.md` not-found), or calling `list_files` on the monorepo ROOT and drowning
+ * its own context in thousands of paths before it could act. This tells it to search
+ * or scope instead of dumping the root.
+ */
+declare const DISCOVERY_DIRECTIVE = "Finding files: to locate a file you cannot already see in the workspace map, call `list_files` with a `glob` \u2014 e.g. `{ \"glob\": \"ROADMAP.md\" }` finds that filename at ANY depth, case-insensitively (so `Roadmap.md` still matches `ROADMAP.md`); use patterns like `*.md` or `src/**/*.ts` too. You can also `search_code` for a distinctive string inside files, or scope `list_files` to a subdirectory with `path`. Do NOT dump `list_files` on the root of a large repo without a `glob` (it summarizes to directories); prefer a glob or a scoped path. Never claim a file is missing until a `glob` search for its name has come back with zero matches.";
+/**
+ * Code-navigation directive (workspace surface only). The measured failure: a run that
+ * wanted one function out of a 153 KB service read it twelve times in 2,000-line windows
+ * and searched it six more, because `search_code` returns every line that MENTIONS a name
+ * and the only way to tell the definition from its calls was to read around each hit.
+ * `find_symbol` answers "where is it defined" from the index in one call, and
+ * `file_outline` turns "page through the file" into "jump to line N".
+ */
+declare const CODE_NAVIGATION_DIRECTIVE = "Navigating code: to find where a function, class, method, type, constant, SQL table or Markdown section is DEFINED, call `find_symbol` first \u2014 one indexed call returns `path:line`, whereas `search_code` returns every line that merely mentions the name. Before paging through a large file, call `file_outline` to list its definitions with line numbers, then `read_file` with `offset` a few lines above the one you need and a small `limit` (e.g. 150) \u2014 do not read a large file window by window hunting for one function. Keep `search_code` for usages, string literals and config values. Before you IMPORT a name, confirm the module exports it \u2014 `file_outline` on that module, or `find_symbol` for the name \u2014 and never import a runtime global (`fetch`, `URL`, `crypto`, `setTimeout`): an import you guessed is a compile error you will spend the next three turns undoing. To see what a file already imports, read its import block once rather than searching for each name.";
+/**
+ * Dispatch-handoff strategy — the decisive fix for "the Brain can't finish a big job
+ * inline." An in-editor chat has a limited tool-step budget, so a large/long-horizon
+ * batch (migrate every roadmap item into OKRs/Epics/Tasks, a repo-wide refactor, …)
+ * should be HANDED to the platform: create one task carrying the full instructions and
+ * assign it to a cloud agent, which runs it to completion with the budget, project
+ * scope, and write-back the inline chat lacks. The create+assign tools already exist in
+ * the shared platform catalog (`tasks.create` with `assignedAgentRef` auto-runs), so
+ * this is strategy, not new plumbing. Always available (platform tools ride both
+ * surfaces), so appended regardless of whether a workspace folder is open.
+ *
+ * IT ALSO HAS TO SAY WHEN NOT TO. Stated only as "know when to hand off", it read as a
+ * general preference for handing off, and the measured turn is the one that followed:
+ * asked to fix a small UI defect in the workspace it already had open — a defect it had
+ * just been reading the code for — the agent opened a ticket, tried to dispatch a remote
+ * builder for it, spent the rest of the turn fighting the dispatch, and changed nothing.
+ * The hand-off is for work this session CANNOT do; a fix it can make in a few tool calls
+ * is not that, and dispatching one costs a whole cloud run to do less than the agent had
+ * already done. So the rule is a size/capability test with a default, not a leaning.
+ */
+declare const DISPATCH_STRATEGY_DIRECTIVE = "DO THE WORK YOURSELF WHEN YOU CAN; hand off only what this session cannot do. If you have the workspace file tools and the change is something you could make in a handful of tool calls \u2014 a bug fix, a small refactor, a CSS or copy change, anything you have already located in the code \u2014 MAKE IT NOW. Do not open a ticket and dispatch a cloud agent to do a job you are already holding: a remote run costs more, knows less than you do right now, and leaves the user waiting for something you could have finished this turn. Record what you changed afterwards (that is what `tickets.from_delta` is for); recording is not a substitute for doing. Hand off ONLY when the job genuinely exceeds this session: a large, long-horizon, or repetitive batch \u2014 e.g. transitioning every outstanding item in a roadmap into OKRs/Epics/Tasks, a repo-wide refactor, or any goal needing many sequential create/edit steps \u2014 or work that must run somewhere you are not (another repo or machine, a long unattended run). For that kind of job: do the upfront analysis yourself (read the source document, produce the breakdown), then CREATE ONE TASK with `tasks.create` whose description holds the full, self-contained instructions, context, and acceptance criteria, and ASSIGN it to a cloud agent by passing `assignedAgentRef` so the platform runs it to completion (an assigned task auto-runs) \u2014 if you don't already know a valid ref, list the workspace's cloud agents first (`cloud_agents.list_mine` / `agents.list`) and pick one. Then tell the user you dispatched it and where to watch it (the board and the execution trace). Prefer one dispatched task over dozens of inline tool calls that run out of budget half-way. If a dispatch is refused, the refusal names the reason and what clears it \u2014 read it, tell the user, and if the work was something you could do here, just do it instead of retrying the dispatch.";
+/**
+ * Ship-and-tidy directive (workspace surface only).
+ *
+ * Shipping had a beginning and a middle and no end. The tools carried the change out of
+ * the working tree and then stopped, so a run that landed its work left the machine
+ * parked on a dead ticket branch with a stale base — and the agent, having no verb for
+ * the last step, hand-rolled it through `run_command`: `git push origin --delete
+ * <branch>`, which failed with `remote ref does not exist` because the host had already
+ * deleted the branch when the pull request merged. A cleanup that reports an error for
+ * the state it wanted is worse than none, and the agent then reported a failure for
+ * work that had entirely succeeded.
+ *
+ * `git_cleanup_merged` is that verb, and it is idempotent — so this says to call it and
+ * says what its refusals mean, rather than leaving the agent to invent the step again.
+ */
+declare const SHIP_CLEANUP_DIRECTIVE = "FINISH THE SHIP: clean up after work that has LANDED. Once your pull request is merged, or once you have pushed the base branch directly, call `git_cleanup_merged` \u2014 it returns to the base branch, fast-forwards it, and deletes the merged ticket branch locally and on origin. Never hand-roll this with `run_command`: `git push origin --delete <branch>` fails with \"remote ref does not exist\" whenever the host already deleted the branch on merge, which is the normal case, and you would be reporting a failure for work that succeeded. `git_cleanup_merged` treats that state as success. It REFUSES on a dirty working tree, and refuses to delete a branch whose commits are not in the base branch \u2014 if the pull request was SQUASH-merged and the branch still exists on the remote, re-call it with force:true. Do not leave the user's checkout sitting on a branch that no longer exists.";
+/**
+ * Shell directive (workspace surface only). `run_command` failures dominated a measured
+ * run, and every one of them was avoidable: a unix pipeline handed to `cmd.exe`
+ * (`'head' is not recognized as an internal or external command`), and git plumbing
+ * hand-rolled around tools that already existed. The host now routes POSIX commands to
+ * bash and retries a cmd.exe parse failure there, so what remains is the agent's half:
+ * prefer the tool over the shell, and keep shell commands to what shells are for.
+ */
+/**
+ * No-handoff directive (workspace surface only).
+ *
+ * {@link FOLLOW_THROUGH_DIRECTIVE} closes the EDIT half of "finish the job": do not
+ * describe a change you could have made. This closes the half AFTER it, which is where
+ * the agent was actually stopping. It made the edits, and then wrote:
+ *
+ *     "Now run `pnpm --filter builderforce-api type-check`, then commit and push."
+ *
+ * Every sentence of that is true and useful, so nothing in the persona objected — and
+ * the user, who had asked for the errors to be FIXED, was handed the verification step
+ * instead of a verified fix. Verification handed to the user is verification nobody
+ * does: the change ships unchecked and the next CI failure is the first anyone hears
+ * of it. {@link SHELL_USE_DIRECTIVE} already says to verify with `run_command`; this
+ * says the thing that sentence leaves open — that listing the commands is not
+ * verifying, and that the list is the agent's own work order.
+ *
+ * The run loop enforces it structurally as well: a turn that ends this way is caught
+ * and re-prompted (the HANDOFF shape in `@builderforce/agent-stall`). The model still
+ * has to hold the rule, because a turn the loop has to fight back is a turn the user
+ * waited through for nothing.
+ */
+declare const NO_HANDOFF_DIRECTIVE = "Never hand the user a command you could have run yourself. If your reply would end with \"now run the build / tests / type-check\", \"you'll need to install first\", or a Next-steps list of shell or git commands, that list is YOUR work order and not theirs: run it, read the output, and fix what fails before you answer. A change you did not verify is not a change you finished, and a commit-and-push the user asked for is not done until YOU have made it. The only steps you may leave to them are ones you genuinely cannot do here \u2014 something needing a credential, a browser, a VS Code restart, or a decision that is theirs to make \u2014 and when you leave one, name that step, say why, and state plainly that the change is unverified.";
+declare const SHELL_USE_DIRECTIVE = "Use `run_command` for BUILDING and CHECKING \u2014 install, build, type-check, lint, test \u2014 and verify your changes with it before reporting done. Take the commands from the project itself: read the nearest `package.json` `scripts` (or the Makefile / pyproject) for the package you changed and run ITS typecheck / test / lint script, scoped to the files you touched where the script allows it. TypeScript is CHECKED, not executed: never run a `.ts` file with `node` \u2014 use the project's typecheck script, or `npx tsc --noEmit -p <that package's tsconfig>` when it has none. Do NOT use `run_command` for git: `git_status`, `git_diff`, `git_history`, `git_sync_latest`, `git_undo`, `git_redo`, `git_commit`, `git_push`, `open_pull_request` and `git_cleanup_merged` already exist, they are safer, and their failures tell you what to do next where raw git's do not. When a `run_command` DOES fail, read the output before retrying: a non-zero exit from a build or test run is a real result to act on, not a reason to run the same command again. To review which tickets have pending code (unmerged branches, conflicts, squash-merge leftovers), call `review_ticket_branches` once \u2014 never a `git branch` / `git log main..X` loop plus a tasks.get per ticket.";
+/**
+ * The base persona line. `hasWorkspace=false` → conversational (the local file
+ * tools are unavailable with no folder open), but the BuilderForce platform tools
+ * (tasks/projects/OKRs/executions) are always available on both surfaces.
+ */
+declare function ideSystemPromptBase(hasWorkspace: boolean): string;
+/** Append the scanned workspace grounding map (when present) under the standard intro. */
+declare function withWorkspaceMap(base: string, grounding?: string): string;
+/** The selected BuilderForce project (the sidebar's active project), if any. */
+interface ActiveProject {
+    id: number;
+    name: string;
+}
+/**
+ * The ambient "active project" directive — the SAME dynamic system-context the web
+ * Brain injects via `extraSystem` (see BrainPanel's `ambientSystem`), so the Brain
+ * scopes the shared platform tools (repos.*, tasks.*, executions.*, …) to the
+ * sidebar's selected project WITHOUT asking the user for a project id. Injected as
+ * ambient context (NOT baked into the persona), so it updates when the project
+ * switches and stays consistent across every entry point — the Work Inbox seeds
+ * (review PRs / fix errors / open PR), a new chat, and the `@builderforce`
+ * participant. Returns undefined (no directive) when no project is selected.
+ */
+declare function activeProjectDirective(project?: ActiveProject | null): string | undefined;
+/**
+ * How the agent uses the project's shared memory — stated only where the memory tools
+ * exist (they need an active project, which is exactly when this directive rides along
+ * with {@link activeProjectDirective}). The order matters: recall FIRST, so a fact a
+ * prior run wrote replaces a search-and-read this run would otherwise pay for; remember
+ * LAST, so the next run gets the same saving. Both surfaces (webview + native
+ * participant) share it, so neither can forget it has a memory.
+ */
+declare const PROJECT_MEMORY_DIRECTIVE = "Project memory: at the START of a task, call `recall_facts` ONCE with the task's topic \u2014 a prior run may already have recorded the answer (a root cause, the file that owns a behaviour, a convention), and a recalled fact costs no disk read. Do not recall again before each search or read: a recall you already made is above you, and repeating it (or rewording it) returns nothing new. Recall again only for a genuinely different topic. When you LEARN a durable fact in this run, call `remember_fact` with a stable key (e.g. `chat-list-data-source`) so the next run recalls it instead of re-deriving it. Facts are project-scoped and shared with every agent on the project.";
+/**
+ * Repo facts for the open workspace folder — "where the code is". Pure data (no
+ * `vscode` types) so it crosses the webview bridge and is formatted by
+ * {@link editorContextDirective} on both surfaces. The host-side DETECTOR lives in
+ * `src/gitContext.ts`, which imports this shape rather than re-declaring it.
+ */
+interface GitContext {
+    /** False when the folder is not inside a git working tree. */
+    isRepo: boolean;
+    /** Absolute fsPath of the repository root (may differ from the workspace folder). */
+    root?: string;
+    /** Current branch name; undefined on a detached HEAD. */
+    branch?: string;
+    /** The `origin` remote URL, verbatim. */
+    remoteUrl?: string;
+    /** Parsed from {@link remoteUrl} — e.g. `SeanHogg` / `Builderforce.ai` / `github.com`. */
+    owner?: string;
+    repo?: string;
+    host?: string;
+    /** Commits ahead of / behind the upstream branch, when known. */
+    ahead?: number;
+    behind?: number;
+    /** Number of changed (working-tree + index) files, when known. */
+    dirtyCount?: number;
+}
+/**
+ * The live editor context the host reads from VS Code (active file, cursor,
+ * selection, open tabs, workspace name). Pure data — no `vscode` types — so it can
+ * cross the webview bridge and be formatted by {@link editorContextDirective} on
+ * both surfaces without either importing the host API. The host reader lives in
+ * `src/editorContext.ts`.
+ */
+interface EditorContext {
+    /** Open workspace folder name(s), comma-joined. */
+    workspaceName?: string;
+    /** The focused editor's file, workspace-relative. */
+    activeFile?: string;
+    /** The active file's VS Code language id (e.g. `typescript`, `markdown`). */
+    languageId?: string;
+    /** 1-based cursor position in the active file. */
+    cursor?: {
+        line: number;
+        column: number;
+    };
+    /** The current non-empty selection (the "corresponding code" the user means). */
+    selection?: {
+        path: string;
+        startLine: number;
+        endLine: number;
+        text: string;
+        languageId?: string;
+    };
+    /** Other files open in editor tabs, workspace-relative (includes the active file). */
+    openFiles?: string[];
+    /** ABSOLUTE fsPath of the first open workspace folder — the root the local file tools resolve against. */
+    workspaceRoot?: string;
+    /** Repository facts for {@link workspaceRoot}; see `src/gitContext.ts`. */
+    git?: GitContext;
+}
+/**
+ * Render the live editor context into an ambient system directive — the missing
+ * piece that lets the agent resolve "this file" / "the open file" / "the selection"
+ * to what the user is actually looking at, instead of guessing a path (the
+ * `Roadmap.md` → not-found failure). Injected through the SAME `extraSystem` channel
+ * as {@link activeProjectDirective} on the webview, and as `extraContext` on the
+ * native participant, so BOTH surfaces are editor-aware and stay live as the user
+ * navigates. Returns undefined when nothing is open (chat-only). Pure — safe in the
+ * Vite webview bundle and the esbuild host bundle alike.
+ */
+declare function editorContextDirective(ctx?: EditorContext): string | undefined;
+
+/**
+ * What a run's system prompt OPENS with — built in ONE place, from data, in ONE order. The
+ * editor surfaces (the VS Code webview and the host) send DATA ({@link BrainRunOpening}); no
+ * layer between them and `prepareBrainRun` composes prompt text.
+ *
+ *   1. the tenant's governance gates (binding; the same rows the tool seam enforces),
+ *   2. the workspace's committed rules (`.builderforce/rules.md`),
+ *   3. the host's own prompt (`resolvedSystemPrompt`: a sub-agent's role brief, an audit
+ *      briefing, the native participant's prompt — empty for the panel's own runs),
+ *   4. the IDE persona and the workspace map,
+ *   5. the persona overlay, the project, the live editor context, the composer's
+ *      switches and the limbic block.
+ *
+ * `prepareBrainRun` then appends what it resolves per run (recall, mode, ship contract …).
+ */
+
+/**
+ * The data the opening prompt is built from. The surface fills the first group; the host
+ * fills the second (it owns the policy, the rules file and the scanned workspace).
+ */
+interface BrainRunOpening {
+    /**
+     * The IDE persona for a workspace (true) or none open (false). Absent ⇒ the run's host
+     * prompt already carries its own persona (the native participant), so none is added.
+     */
+    hasWorkspace?: boolean;
+    /** WHO the Brain answers as — a `BrainPersonaChoice`; layered over the IDE persona. */
+    persona?: {
+        choice: BrainPersonaChoice;
+        agents: readonly BrainPersonaAgent[];
+    };
+    /** The composer's run-shaping switches. */
+    composer?: {
+        effort?: Effort;
+        web?: boolean;
+    };
+    /** The live editor context (active file, selection, tabs, repository). */
+    editorContext?: EditorContext;
+    /** The limbic / personality block for this turn, already rendered by the host that owns the profile. */
+    limbic?: string;
+    /** The chat's project. */
+    project?: ActiveProject | null;
+    /** Host: the scanned workspace map. */
+    grounding?: string;
+    /** Host: the tenant's governance gates. */
+    gates?: readonly PolicyGate[];
+    /** Host: the workspace's `.builderforce/rules.md`. */
+    rules?: string;
+}
+
+interface AssignedWork {
+    id: string;
+    criteria: readonly string[];
+}
+interface WorkEvidence {
+    id: string;
+    status: "done" | "blocked" | "in_review";
+    /** Verification evidence, review handoff, or the declared blocker. */
+    detail: string;
+}
+/** Bound to the authenticated run by its host. */
+type RunWorkPort = {
+    assigned: readonly AssignedWork[];
+} & ({
+    settleAfterRun: true;
+    evidence?: never;
+} | {
+    settleAfterRun?: false;
+    evidence(ids: readonly string[]): Promise<readonly WorkEvidence[]>;
+});
+
+/**
  * contractModel - the model half of the run contract: the transcript row, what the agent asks of a model, what comes back, and
  * the transport that answers. Split out of `contract.ts` (PRD 35 §5 rule 4); `contract.ts` re-exports every name, so no import changes.
  */
@@ -1960,7 +2534,7 @@ interface ReviewerPort {
  */
 type RunKey = number | string;
 /** The surfaces a run comes in through - a telemetry label. */
-type RunEntryPoint = 'vscode' | 'web' | 'rovr';
+type RunEntryPoint = EntryPoint;
 /** Streaming fn shape (matches BrainRuntime.stream). */
 type BrainStreamFn = (opts: Omit<StreamChatOptions, 'transport'>, handlers?: StreamHandlers) => Promise<StreamChatResult>;
 /** Persistence subset the loop needs (matches BrainPersistenceAdapter). */
@@ -1976,7 +2550,19 @@ interface BrainRunPersistence {
 }
 /** Everything a single run needs, captured at start time (survives navigation). */
 interface BrainRunRequest {
+    /** The native host applies opening gates after it resolves the actual tool and workspace path. */
+    hostEnforcesGovernance?: true;
+    /** Host-scoped work assignments and evidence. */
+    work?: RunWorkPort;
     resolvedSystemPrompt: string;
+    /**
+     * DATA the run's opening prompt is built from (`openingSections.ts`): the editor surface's
+     * persona / project / editor context / composer switches / limbic text, and the host's
+     * governance gates, workspace rules and grounding map. A host that sets this sends NO
+     * prompt text for them; `resolvedSystemPrompt` then holds only what it alone says
+     * (a sub-agent's role brief, an audit briefing). Absent ⇒ `resolvedSystemPrompt` is used as is.
+     */
+    opening?: BrainRunOpening;
     /**
      * The run's record of what it did and read (`@builderforce/agent-tools`
      * `run-knowledge`). A host that commits the run's code map at the end passes its own
@@ -2252,6 +2838,8 @@ interface BrainRunRequest {
      * the root chat, attributed to the child. Absent for a top-level run.
      */
     lineage?: RunLineage;
+    /** Internal owner wake hints. Status is resolved from the host's scoped ticket listing. */
+    childWorkRefs?: readonly string[];
     /**
      * What the run does with finished work (PRD 48): the host's resolved policy — the run's
      * project's ship policy, a project setting read from the API. Absent ⇒
@@ -2383,4 +2971,4 @@ declare function replayPendingWords(chatId: number, persistence: Pick<BrainRunPe
 /** The app started: replay every chat this person left words in, not only the one that happens to be opened. */
 declare function replayAllPendingWords(persistence: Pick<BrainRunPersistence, 'sendMessages'>): Promise<number>;
 
-export { CHAT_MODES as $, type TicketToolVocabulary as A, type BrainRunPersistence as B, type ChatCompletionMessage as C, type DetectedLanguage as D, type Effort as E, type ShipPolicy as F, type GitPort as G, type ShipMode as H, type ShipPolicySource as I, type JsonTaskOptions as J, ASK_USER_TOOL as K, type LocalFirstAccount as L, ASK_USER_TOOL_SPEC as M, type AnswerOriginCost as N, type OnDeviceTasks as O, type ProjectMemoryRequest as P, type AskUserMessageLike as Q, type RunKey as R, type ShipHold as S, type TranslateOptions as T, type AskUserOption as U, type AskUserPayload as V, type WriteOptions as W, type AskUserToolSpec as X, type AssembledToolCall as Y, type AvoidedRunCall as Z, type BrainRunOutcome as _, type BrainRunRequest as a, ticketToolVocabulary as a$, CHAT_MODE_ICON as a0, type ChatWorkDirectiveOptions as a1, type CompletionMetadata as a2, type EffortProfile as a3, type ImageUrlContentPart as a4, LOCAL_TICKET_CREATE_TOOL as a5, type LocalFirstAttemptSummary as a6, MAX_STOP_HOOK_ROUNDS as a7, type MemoryAnswerOptions as a8, type MemoryFirstAnswer as a9, askStopHook as aA, askUserAnchorId as aB, askUserBlock as aC, chatConversationDirective as aD, chatModeDirective as aE, chatRosterFromParticipants as aF, chatWorkDirective as aG, clearPendingWords as aH, coerceAskUserPayload as aI, contextWindowOf as aJ, effortProfile as aK, isChatMode as aL, isEffort as aM, localFallbackTrace as aN, normalizeChatMode as aO, parseAskUser as aP, parseSubagentOrigin as aQ, projectMemoryHooks as aR, reasoningForRun as aS, resolveContextWindow as aT, savedChatOf as aU, selectPendingAskUser as aV, serializeAskUser as aW, setPendingWordsOwner as aX, streamChatCompletion as aY, stripAskUser as aZ, summarizeLocalFirstAttempt as a_, type MemorySurface as aa, type ModelPreflightResult as ab, type ModelWindowSources as ac, NEW_CHAT_MODE as ad, type OnDeviceEngine as ae, type OnDeviceTaskEvent as af, type PendingAskUser as ag, type PrefetchResult as ah, RESTING_CHAT_MODE as ai, type ReasoningLevel as aj, type ReviewerPort as ak, type RunLineage as al, type RunOutcomeReport as am, type RunPipelineSettings as an, type RunStageModels as ao, type RunStopHook as ap, type RunStopInput as aq, SERVER_TICKET_CREATE_TOOL as ar, SERVER_TICKET_TOOLS as as, SUBAGENT_OF_META_KEY as at, type ServedOption as au, type ServedRead as av, type SubagentOrigin as aw, type TextContentPart as ax, type UpstreamTurnEvidence as ay, type VerifierPort as az, type BrainTransport as b, forgetPendingWords as b0, markPendingWordsRead as b1, registerPendingWordsReplay as b2, rememberPendingWords as b3, replayAllPendingWords as b4, replayPendingWords as b5, type BrainStreamFn as c, type RunEndOutcome as d, type CompletionUsage as e, type StreamChatOptions as f, type StreamHandlers as g, type StreamChatResult as h, type LocalFirstAttemptRecord as i, type LocalFirstAttempt as j, type LocalFirstWorkload as k, type ByoOrderQuery as l, type LocalFirstAccounts as m, type OnDeviceTaskKind as n, type SummarizeOptions as o, type RewriteOptions as p, type OnDeviceObserver as q, type ServedBy as r, type JsonSchema as s, type EvermindRunHooks as t, type BrainToolSpec as u, type ChatMode as v, type RunWindowSources as w, type ReasoningIntent as x, type ChatRosterAgent as y, type ContentPart as z };
+export { type AskUserToolSpec as $, type ContentPart as A, type BrainRunPersistence as B, type ChatCompletionMessage as C, type DetectedLanguage as D, type Effort as E, type TicketToolVocabulary as F, type GitPort as G, type ShipPolicy as H, type ShipMode as I, type JsonTaskOptions as J, type ShipPolicySource as K, type LocalFirstAccount as L, AGENT_POOL_PATHS as M, ASK_USER_TOOL as N, type OnDeviceTasks as O, type ProjectMemoryRequest as P, ASK_USER_TOOL_SPEC as Q, type RunKey as R, type ShipHold as S, type TranslateOptions as T, AUTONOMY_DIRECTIVE as U, type ActiveProject as V, type WriteOptions as W, type AnswerOriginCost as X, type AskUserMessageLike as Y, type AskUserOption as Z, type AskUserPayload as _, type BrainRunRequest as a, type VerifierPort as a$, type AssembledToolCall as a0, type AvoidedRunCall as a1, BRAIN_AGENT_ASSIGNMENTS_PATH as a2, type BrainPersonaAgent as a3, type BrainPersonaChoice as a4, type BrainRunOutcome as a5, CHAT_MODES as a6, CHAT_MODE_ICON as a7, CODE_NAVIGATION_DIRECTIVE as a8, type ChatWorkDirectiveOptions as a9, PROJECT_MEMORY_DIRECTIVE as aA, type PendingAskUser as aB, type PersonaModalityId as aC, type PoolAgent as aD, type PoolRegisteredAgentRow as aE, type PoolRequest as aF, type PoolWorkforceAgentRow as aG, type PrefetchResult as aH, RESTING_CHAT_MODE as aI, type ReasoningLevel as aJ, type ReviewerPort as aK, type RunLineage as aL, type RunOutcomeReport as aM, type RunPipelineSettings as aN, type RunStageModels as aO, type RunStopHook as aP, type RunStopInput as aQ, SERVER_TICKET_CREATE_TOOL as aR, SERVER_TICKET_TOOLS as aS, SHELL_USE_DIRECTIVE as aT, SHIP_CLEANUP_DIRECTIVE as aU, SUBAGENT_OF_META_KEY as aV, type ServedOption as aW, type ServedRead as aX, type SubagentOrigin as aY, type TextContentPart as aZ, type UpstreamTurnEvidence as a_, type CompletionMetadata as aa, DEFAULT_AGENT_MODEL_SENTINEL as ab, DEFAULT_PERSONA as ac, DISCOVERY_DIRECTIVE as ad, DISPATCH_STRATEGY_DIRECTIVE as ae, type EditorContext as af, type EffortProfile as ag, FILE_DELIVERY_RULE as ah, FOLLOW_THROUGH_DIRECTIVE as ai, type GitContext as aj, type ImageUrlContentPart as ak, LOCAL_TICKET_CREATE_TOOL as al, type LocalFirstAttemptSummary as am, MAX_STOP_HOOK_ROUNDS as an, MODALITY_PERSONAS as ao, type MemoryAnswerOptions as ap, type MemoryFirstAnswer as aq, type MemorySurface as ar, type ModalityPersona as as, type ModelPreflightResult as at, type ModelWindowSources as au, NEW_CHAT_MODE as av, NO_HANDOFF_DIRECTIVE as aw, type OnDeviceEngine as ax, type OnDeviceTaskEvent as ay, PERSONA_MODALITY_IDS as az, type BrainTransport as b, WORKSPACE_MAP_INTRO as b0, activeProjectDirective as b1, agentPersonaChoice as b2, agentPersonaPrompt as b3, askStopHook as b4, askUserAnchorId as b5, askUserBlock as b6, brainPersonaAgents as b7, chatConversationDirective as b8, chatModeDirective as b9, resolveContextWindow as bA, savedChatOf as bB, selectPendingAskUser as bC, serializeAskUser as bD, setPendingWordsOwner as bE, streamChatCompletion as bF, stripAskUser as bG, summarizeLocalFirstAttempt as bH, ticketToolVocabulary as bI, withWorkspaceMap as bJ, forgetPendingWords as bK, markPendingWordsRead as bL, registerPendingWordsReplay as bM, rememberPendingWords as bN, replayAllPendingWords as bO, replayPendingWords as bP, chatRosterFromParticipants as ba, chatWorkDirective as bb, clearPendingWords as bc, coerceAskUserPayload as bd, contextWindowOf as be, editorContextDirective as bf, effortProfile as bg, ideSystemPromptBase as bh, isChatMode as bi, isEffort as bj, isTicketWriteTool as bk, loadAgentPoolVia as bl, loadBrainPersonaAgentsVia as bm, localFallbackTrace as bn, modalityPersonaChoice as bo, normalizeChatMode as bp, parseAskUser as bq, parseSubagentOrigin as br, personaAgentOf as bs, personaModalityOf as bt, personaModel as bu, personaOverlay as bv, personaSystemPrompt as bw, poolAgentsFrom as bx, projectMemoryHooks as by, reasoningForRun as bz, type BrainStreamFn as c, type RunEndOutcome as d, type CompletionUsage as e, type StreamChatOptions as f, type StreamHandlers as g, type StreamChatResult as h, type LocalFirstAttemptRecord as i, type LocalFirstAttempt as j, type LocalFirstWorkload as k, type ByoOrderQuery as l, type LocalFirstAccounts as m, type OnDeviceTaskKind as n, type SummarizeOptions as o, type RewriteOptions as p, type OnDeviceObserver as q, type ServedBy as r, type JsonSchema as s, type EvermindRunHooks as t, type BrainToolSpec as u, type ChatMode as v, type BrainRunOpening as w, type RunWindowSources as x, type ReasoningIntent as y, type ChatRosterAgent as z };

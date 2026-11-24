@@ -10,6 +10,7 @@ import {
 
 // src/runStore/deadline.ts
 var continuationLimits = { prepareMs: 15e3, settleMs: 3e4 };
+var PREFLIGHT_PROBE_MS = 2500;
 function budget(ms) {
   const end = Date.now() + ms;
   return () => Math.max(1, end - Date.now());
@@ -264,6 +265,7 @@ async function replayAllPendingWords(persistence) {
 
 export {
   continuationLimits,
+  PREFLIGHT_PROBE_MS,
   budget,
   bounded,
   settledWithin,
@@ -278,4 +280,4 @@ export {
   replayPendingWords,
   replayAllPendingWords
 };
-//# sourceMappingURL=chunk-AN7ILW3X.mjs.map
+//# sourceMappingURL=chunk-P7CQYU5O.mjs.map

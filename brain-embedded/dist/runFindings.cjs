@@ -195,6 +195,18 @@ function callWriteEntriesOf(args) {
   }
   return out;
 }
+function callChangesOf(args) {
+  const out = [];
+  for (const e of callWriteEntriesOf(args)) {
+    if (!e.path) continue;
+    if (e.content !== void 0) out.push({ path: e.path, content: e.content });
+    else if (e.before !== void 0 && e.after !== void 0 && e.before !== e.after) out.push({ path: e.path, from: e.before, to: e.after });
+  }
+  return out;
+}
+function changedPathsOf(args) {
+  return [...new Set(callChangesOf(args).map((c) => c.path))];
+}
 
 // ../packages/agent-tools/src/edit-match.ts
 var toLF = (s) => s.replace(/\r\n/g, "\n");
@@ -345,10 +357,10 @@ function whitespaceSplice(content, lines, i, old, fits, map, newString, endsWith
   return { start, end, text: out.join(eol) };
 }
 function matchEdit(content, oldString, newString, replaceAll, eol) {
-  const decide = (tier, splices) => {
+  const decide = (tier2, splices) => {
     if (splices.length === 0) return null;
     if (splices.length > 1 && !replaceAll) return { ambiguous: true };
-    return { tier, splices };
+    return { tier: tier2, splices };
   };
   const spliced = (spans, text) => spans.map(([start, end]) => ({ start, end, text }));
   const exact = exactSpans(content, oldString, replaceAll);
@@ -893,11 +905,204 @@ function defineTool(def) {
   };
 }
 
+// ../packages/agent-tools/src/toolAliases.ts
+var TOOL_NAME_ALIASES = {
+  list_dir: "list_files",
+  listdir: "list_files",
+  list_directory: "list_files",
+  list_directories: "list_files",
+  ls_dir: "list_files",
+  // Shell / terminal
+  bash: "run_command",
+  shell: "run_command",
+  run_terminal_cmd: "run_command",
+  execute_command: "run_command",
+  run_shell_command: "run_command",
+  // Search
+  grep: "search_code",
+  codebase_search: "search_code",
+  search_files: "search_code",
+  find_files: "list_files",
+  glob_file_search: "list_files",
+  // Edit / write
+  str_replace: "edit_file",
+  search_replace: "edit_file",
+  apply_patch: "edit_file",
+  write_to_file: "write_file",
+  create_file: "write_file",
+  delete: "delete_file"
+};
+function normalizeToolName(name) {
+  return name.trim().toLowerCase();
+}
+function resolveToolAlias(name) {
+  const key = name.trim().toLowerCase();
+  return TOOL_NAME_ALIASES[key] ?? name;
+}
+
+// ../packages/agent-tools/src/registry.ts
+function schemaForCapabilities(def, caps) {
+  if (!def.describeFor) return def.schema;
+  return { ...def.schema, function: { ...def.schema.function, description: def.describeFor(caps) } };
+}
+var ToolRegistry = class {
+  tools = /* @__PURE__ */ new Map();
+  constructor(defs = []) {
+    for (const d of defs) this.register(d);
+  }
+  /** Register a tool. Throws on a duplicate name so two tools can't silently shadow. */
+  register(def) {
+    if (this.tools.has(def.name)) throw new Error(`duplicate tool '${def.name}'`);
+    this.tools.set(def.name, def);
+    return this;
+  }
+  has(name) {
+    return this.tools.has(name);
+  }
+  get(name) {
+    return this.tools.get(name);
+  }
+  /** True when `provider` advertises every capability `def` requires. */
+  satisfies(def, caps) {
+    return def.requires.every((c) => caps.has(c));
+  }
+  /** The tool definitions runnable under a raw capability set, in registration order. */
+  toolsForCapabilities(caps) {
+    return [...this.tools.values()].filter((d) => this.satisfies(d, caps));
+  }
+  /** The tool definitions a surface can actually run, in registration order. */
+  toolsFor(provider) {
+    return this.toolsForCapabilities(provider.capabilities);
+  }
+  /** The OpenAI-schema array for a raw capability set (schema-only surfaces, e.g. a
+   *  container that runs its own loop and just needs the advertised schema). */
+  schemasForCapabilities(caps) {
+    return this.toolsForCapabilities(caps).map((d) => schemaForCapabilities(d, caps));
+  }
+  /** The OpenAI-schema array to send to the model for this surface. */
+  schemasFor(provider) {
+    return this.schemasForCapabilities(provider.capabilities);
+  }
+  /** Comma-separated tool names available to a surface — for the "unknown tool"
+   *  error message so the model is told what it *can* call here. */
+  availableNames(provider) {
+    return this.toolsFor(provider).map((d) => d.name);
+  }
+  /**
+   * Dispatch one tool call. Enforces capability gating at call time too (defense in
+   * depth: a model can hallucinate a tool the surface didn't advertise), returning a
+   * structured `ok:false` rather than throwing so the loop can feed it back.
+   */
+  async dispatch(name, args, ctx) {
+    const resolved = resolveToolAlias(name);
+    const def = this.tools.get(resolved);
+    if (!def) {
+      return {
+        data: {
+          ok: false,
+          error: `unknown tool '${name}'. Available tools: ${this.availableNames(ctx.caps).join(", ")}.`
+        }
+      };
+    }
+    if (!this.satisfies(def, ctx.caps.capabilities)) {
+      return {
+        data: {
+          ok: false,
+          error: `tool '${resolved}' is not available on this surface (missing capability: ${def.requires.filter((c) => !ctx.caps.capabilities.has(c)).join(", ")}).`
+        }
+      };
+    }
+    return def.execute(args, ctx);
+  }
+};
+
 // ../packages/agent-tools/src/tool-side-effect.ts
+var TOOL_SIDE_EFFECT = {
+  // ── CORE_TOOLS (includes symbols, semantic, git) ──────────────────────────
+  list_files: "read",
+  search_code: "read",
+  read_file: "read",
+  find_symbol: "read",
+  file_outline: "read",
+  semantic_search: "read",
+  repo_map: "read",
+  read_compressed: "read",
+  // Its answer cache under .builderforce/ is a cache, like the symbol index
+  // find_symbol keeps there — no change the person would review.
+  local_research: "read",
+  // Shells out to the analyzers and writes their artifacts under
+  // .builderforce/code-analysis/, so it is a working-tree write, not a read.
+  analyze_codebase: "mutate",
+  write_file: "mutate",
+  edit_file: "mutate",
+  delete_file: "mutate",
+  run_checks: "verify",
+  run_command: "mutate",
+  // A background job's status is a read; stopping one kills processes.
+  command_status: "read",
+  // Filters an output already retained from an earlier run_command — runs nothing.
+  output_filter: "read",
+  command_stop: "mutate",
+  git_status: "read",
+  git_diff: "read",
+  git_history: "read",
+  git_sync_latest: "mutate",
+  git_undo: "mutate",
+  git_redo: "mutate",
+  git_commit: "mutate",
+  git_push: "mutate",
+  open_pull_request: "mutate",
+  git_cleanup_merged: "mutate",
+  web_fetch: "read",
+  web_search: "read",
+  memory_recall: "read",
+  memory_remember: "mutate",
+  memory_forget: "mutate",
+  claim_resource: "mutate",
+  release_resource: "mutate",
+  workspace_note: "mutate",
+  workspace_read: "read",
+  ask_human: "read",
+  update_prd: "mutate",
+  finish: "read",
+  // ── SKILL_TOOLS ───────────────────────────────────────────────────────────
+  skill_propose: "mutate",
+  skill_list: "read",
+  // ── SUBAGENT_TOOLS (includes live control verbs) ──────────────────────────
+  spawn_agent: "mutate",
+  spawn_agents: "mutate",
+  wait_agents: "read",
+  message_agent: "mutate",
+  stop_agent: "mutate"
+};
+function toolSideEffect(name) {
+  return Object.prototype.hasOwnProperty.call(TOOL_SIDE_EFFECT, name) ? TOOL_SIDE_EFFECT[name] : void 0;
+}
+function isProgressBookkeeping(name) {
+  return name === "remember_fact" || name === "memory_remember";
+}
 var CONTROL_TOOL_NAMES = ["finish", "ask_human", "ask_user"];
 
 // ../packages/agent-tools/src/gate-lowering.ts
 var CONTROL = new Set(CONTROL_TOOL_NAMES);
+
+// ../packages/agent-tools/src/stableStringify.ts
+function stableStringify(value) {
+  if (value === null || value === void 0) return "null";
+  if (typeof value === "number" && !Number.isFinite(value)) return JSON.stringify(String(value));
+  if (typeof value === "bigint") return JSON.stringify(value.toString());
+  if (typeof value !== "object") return JSON.stringify(value) ?? "null";
+  if (value instanceof Error) {
+    return stableStringify({ name: value.name, message: value.message, stack: value.stack });
+  }
+  if (value instanceof Uint8Array) {
+    return stableStringify({ type: "Uint8Array", data: Array.from(value) });
+  }
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
+  const record4 = value;
+  const keys = Object.keys(record4).filter((k) => record4[k] !== void 0).sort();
+  return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(record4[k])}`).join(",")}}`;
+}
 
 // ../packages/agent-tools/src/fileWindow.ts
 var READ_DEFAULT_LINE_LIMIT = 2e3;
@@ -1452,7 +1657,7 @@ var findSymbolTool = defineTool({
     const kind = asKind(args.kind);
     const requested = typeof args.limit === "number" && Number.isFinite(args.limit) ? Math.floor(args.limit) : FIND_DEFAULT_LIMIT;
     const limit = Math.min(FIND_MAX_LIMIT, Math.max(1, requested));
-    const r = await ctx.caps.symbols.find(query, { scope, kind, limit });
+    const r = await ctx.caps.symbols.find(query, { scope, kind, limit, staleOk: true });
     if (!r.ok) return { data: r };
     const data = {
       ok: true,
@@ -1460,9 +1665,12 @@ var findSymbolTool = defineTool({
       total: r.total ?? 0,
       truncated: r.truncated === true,
       matches: (r.matches ?? []).map((m) => `${m.path}:${m.line} ${m.kind} ${m.name}${m.exported && m.kind !== "heading" ? " (export)" : ""}`),
-      indexedFiles: r.indexedFiles
+      indexedFiles: r.indexedFiles,
+      ...r.staleIndex ? { staleIndex: true } : {}
     };
-    if ((r.total ?? 0) === 0) {
+    if (r.staleIndex) {
+      data.note = "The symbol index is refreshing. Confirm these locations with read_file, or use search_code if a match is missing.";
+    } else if ((r.total ?? 0) === 0) {
       data.note = r.partialIndex ? `No definition named like "${query}" in the indexed files \u2014 but the index is PARTIAL (file cap reached), so this is not proof it does not exist. Try search_code${scope ? "" : " with a `path`"}.` : `No definition named like "${query}"${scope ? ` under "${scope}"` : ""}. It may be defined in a form the index does not recognise (a re-export, an object property, a generated file) \u2014 use search_code for the exact text.`;
     } else if (r.truncated) {
       data.note = `Showing ${r.matches?.length ?? 0} of ${r.total} matches \u2014 pass a longer \`query\`, a \`path\` or a \`kind\` to narrow.`;
@@ -1516,8 +1724,8 @@ var SYMBOL_TOOLS = [findSymbolTool, fileOutlineTool];
 var WHOLE_READ_MAX_CHARS = 64e3;
 var WIDEN_WINDOW_MIN_LINES = 150;
 var OUTLINE_FIRST_PREFIX_LINES = 40;
-function outlineFirstApplies(content, leverOn) {
-  if (leverOn !== true) return false;
+function outlineFirstApplies(content, leverOn2) {
+  if (leverOn2 !== true) return false;
   return content.length > WHOLE_READ_MAX_CHARS;
 }
 function dropsLimit(content, opts, sourceTruncated) {
@@ -1546,14 +1754,14 @@ function readFileKey(path, file, key) {
   return { ok: true, path, key: read.key, content: read.content };
 }
 var isMarkdown = (path) => /\.mdx?$/i.test(path);
-async function readOneFile(path, opts, caps, leverOn) {
+async function readOneFile(path, opts, caps, leverOn2) {
   const r = await caps.repoRead.readFile(path);
   if (!r.ok) return r;
   const gzip = isGzipPath(r.path ?? path) && typeof r.content === "string" && r.content.length > 0;
   if (gzip) r.content = await readGzipText(latin1Bytes(r.content));
   if (opts.key) return { ...readFileKey(r.path ?? path, r, opts.key), ...gzip ? { decompressed: true } : {} };
   const content = r.content ?? "";
-  if (opts.offset === void 0 && opts.limit === void 0 && outlineFirstApplies(content, leverOn) && r.truncated !== true) {
+  if (opts.offset === void 0 && opts.limit === void 0 && outlineFirstApplies(content, leverOn2) && r.truncated !== true) {
     const symbols = extractSymbols(path, content).slice(0, 150).map((s) => `L${s.line} ${s.kind} ${s.name}${s.exported && s.kind !== "heading" ? " (export)" : ""}`);
     const head = windowFileContent(content, { offset: 1, limit: OUTLINE_FIRST_PREFIX_LINES });
     return {
@@ -1598,10 +1806,10 @@ async function readOneFile(path, opts, caps, leverOn) {
   if (gzip) data.decompressed = true;
   return data;
 }
-async function readManyFiles(paths, opts, caps, leverOn) {
+async function readManyFiles(paths, opts, caps, leverOn2) {
   return Promise.all(
     paths.map(
-      (path) => readOneFile(path, opts, caps, leverOn).catch((err) => ({ ok: false, path, error: err instanceof Error ? err.message : String(err) }))
+      (path) => readOneFile(path, opts, caps, leverOn2).catch((err) => ({ ok: false, path, error: err instanceof Error ? err.message : String(err) }))
     )
   );
 }
@@ -2282,19 +2490,19 @@ function parseGitStatusOutput(stdout, paths) {
   }
   const header = parseHeader(statusLines.find((l) => l.startsWith("##")));
   const entries = parseEntries(statusLines);
-  const truncated = Object.values(entries).some((list) => list.length > MAX_ENTRIES);
-  const report = {
+  const truncated = Object.values(entries).some((list2) => list2.length > MAX_ENTRIES);
+  const report2 = {
     ...header,
     staged: entries.staged.slice(0, MAX_ENTRIES),
     unstaged: entries.unstaged.slice(0, MAX_ENTRIES),
     untracked: entries.untracked.slice(0, MAX_ENTRIES),
     conflicted: entries.conflicted.slice(0, MAX_ENTRIES),
-    clean: Object.values(entries).every((list) => list.length === 0),
+    clean: Object.values(entries).every((list2) => list2.length === 0),
     ...truncated ? { truncated: true } : {}
   };
   const wanted = statusPaths(paths);
-  if (wanted.length > 0) report.paths = parsePathSections(sections, wanted, !!header.upstream && !header.upstreamGone);
-  return { output: statusLines.join("\n").trim(), report };
+  if (wanted.length > 0) report2.paths = parsePathSections(sections, wanted, !!header.upstream && !header.upstreamGone);
+  return { output: statusLines.join("\n").trim(), report: report2 };
 }
 
 // ../packages/agent-tools/src/worktree-path.ts
@@ -2886,8 +3094,8 @@ function buildGitCommand(action, opts) {
 function gitToolResult(action, r, paths) {
   const out = (r.stdout ?? "").trim();
   if (action === "status" && r.ok) {
-    const { output, report } = parseGitStatusOutput(out, paths);
-    return { data: { ok: true, action, output: output.slice(0, 2e4), ...report, ...r.error ? { error: r.error } : {} } };
+    const { output, report: report2 } = parseGitStatusOutput(out, paths);
+    return { data: { ok: true, action, output: output.slice(0, 2e4), ...report2, ...r.error ? { error: r.error } : {} } };
   }
   if (r.exitCode === 3 || /MERGE_CONFLICT/.test(out)) {
     return { data: { ok: false, action, error: "merge conflict \u2014 the base branch has changes that conflict with your branch; the merge was aborted (working tree is clean). Resolve by editing the conflicting files, or ask a human.", output: out } };
@@ -3582,7 +3790,7 @@ function dependencyCruiserConfigWith(partitions, ignored) {
 }
 var jscpdArgsWith = (args, ignored) => {
   const extra = ignoredGlobs(ignored);
-  return extra.length > 0 ? args.replace(/--ignore=(\S+)/, (_m, list) => `--ignore=${list},${extra.join(",")}`) : args;
+  return extra.length > 0 ? args.replace(/--ignore=(\S+)/, (_m, list2) => `--ignore=${list2},${extra.join(",")}`) : args;
 };
 function createAnalyzeCodebaseTool(options = {}) {
   const l3 = options.l3;
@@ -4315,6 +4523,9 @@ var CORE_TOOLS = [
   updatePrdTool,
   finishTool
 ];
+function buildCoreToolRegistry() {
+  return new ToolRegistry(CORE_TOOLS);
+}
 
 // ../packages/agent-tools/src/knowledge-notes.ts
 var import_working2 = require("@seanhogg/builderforce-memory/working");
@@ -4395,6 +4606,7 @@ var skillListTool = defineTool({
     return { data: r };
   }
 });
+var SKILL_TOOLS = [skillProposeTool, skillListTool];
 
 // ../packages/agent-tools/src/live-subagent-tools.ts
 var LIVE_DELEGATION_NOTE = "HERE the child runs IN THE BACKGROUND: the call returns its handle at once and you keep working \u2014 plan, code, or start more children \u2014 while it does its slice. Its messages appear in the chat under its own name, and its report reaches you on its own when it finishes (call wait_agents only when you cannot go on without it). Redirect it with message_agent; cancel it with stop_agent. Do not edit the files a child is working on while it runs.";
@@ -5060,6 +5272,9 @@ var LOCK_REFRESH_MS = 3e4;
 var LOCK_STALE_MS = 12e4;
 var LOCK_FRESH_MS = LOCK_STALE_MS - LOCK_REFRESH_MS;
 
+// ../packages/agent-tools/src/toolSearch.ts
+var LEXICAL_WEIGHTS = { name: 10, description: 1, body: 0.25 };
+
 // ../packages/agent-tools/src/delta/adapters/dependencyCruiser.ts
 var import_ingest9 = require("@seanhogg/builderforce-memory/ingest");
 var import_knowledge50 = require("@seanhogg/builderforce-memory/knowledge");
@@ -5135,152 +5350,6 @@ function editChurn(view) {
     view.calls.filter((c) => c.paths.includes(f.path)).map((c) => callEvidence(c, f.path))
   ));
 }
-
-// ../packages/agent-stall/src/classifyRequest.ts
-var CHANGE_VERBS = "add|change|fix|update|reduce|increase|remove|delete|rename|refactor|implement|create|build|make|move|set|wire|migrate|replace|adjust|enable|disable|improve|write|edit|apply|correct|resolve|shrink|expand|hide|show|bump|revert|restore|install|upgrade|downgrade|rewrite|extract|split|merge|convert|port";
-var CHANGE_VERB = new RegExp(`\\b(${CHANGE_VERBS})\\b`, "i");
-var REPORT_OBJECTS = "summary|report|findings|notes|overview|write-?up|answer|explanation|list|table|recommendations?";
-var CHANGE_VERB_AIMED = new RegExp(
-  `\\b(${CHANGE_VERBS})\\b(?!\\s+(me|us)\\b|\\s+(up\\s+)?((a|an|the|your|me|us|my)\\s+)?(short\\s+|brief\\s+)?(${REPORT_OBJECTS})\\b)`,
-  "i"
-);
-var FINISH_OBJECT = "(complete|finish|finali[sz]e)\\s+(the|this|that|these|those|it|my|our|your|all|implementation|work|task|change)\\b";
-var FINISH_ORDER = new RegExp(`^\\s*(please\\s+)?(now\\s+)?${FINISH_OBJECT}`, "i");
-var CHAINED_FINISH = new RegExp(`(\\band|\\bthen|[,.;])\\s+((also|then|please|now)\\s+)*${FINISH_OBJECT}`, "i");
-var CHAINED_CHANGE = new RegExp(
-  `(\\band|\\bthen|[,.;])\\s+((also|then|please|now)\\s+)*(${CHANGE_VERBS})\\b(?!\\s+(me|us)\\b|\\s+(up\\s+)?((a|an|the|your|me|us|my)\\s+)?(short\\s+|brief\\s+)?(${REPORT_OBJECTS})\\b)`,
-  "i"
-);
-
-// ../packages/agent-stall/src/handoff.ts
-var RUNNER = "(?:npm|pnpm|yarn|npx|bun|deno|node|git|make|cargo|go|dotnet|mvn|gradle|python3?|pip3?|poetry|uv|ruby|rake|bundle|composer|php|docker(?:\\s+compose)?|kubectl|helm|terraform|wrangler|vercel|netlify|vite|webpack|tsc|tsgo|eslint|prettier|pytest|jest|vitest|playwright|cypress|bash|sh|zsh|pwsh|powershell|curl|wget|sed|awk|rsync|vsce)\\b";
-var SCRIPT_NOUN = "(?:build|tests?|test suite|type-?check(?:ing)?|typecheck|lint(?:er|ing)?|guards?|checks?|install|dev server|migrations?|deploy(?:ment)?|codegen|bundle|vsix|package|commit|push|pull request|pr\\b|branch|lockfile|extension host)";
-var CMD_MARK = "\u2983cmd\u2984";
-var HANDOFF_VERB = "(?:re-?run|run|execute|apply|install|re-?install|rebuild|build|compile|commit|push|deploy|publish|restart|relaunch|launch|start|test|verify|lint|type-?check|typecheck|migrate|regenerate|package|bump|trigger|kick off)";
-var HANDS_OFF = new RegExp(
-  [
-    // "you can run", "you'll need to run", "you should now commit", "you must rebuild"
-    `\\byou(?:'ll|'d|'ve| will| would| should| must| may| might| can| could| still| then| now)?(?:\\s+(?:then|now|also|just|still|next|first|finally|want to|need to|have to|be able to))*\\s+${HANDOFF_VERB}\\b`,
-    // "please run the guards"
-    `\\bplease\\s+(?:now\\s+|then\\s+)?${HANDOFF_VERB}\\b`,
-    // "once you've run the build", "after you push"
-    `\\b(?:once|after|when|before)\\s+you(?:'ve| have| had)?\\s+${HANDOFF_VERB}\\b`,
-    // "run the following", "apply these changes", "execute this command"
-    `\\b${HANDOFF_VERB}\\s+(?:the\\s+following|these|this)\\b`,
-    // "to verify, run …" / "to apply the fix you need to run …"
-    `\\bto\\s+(?:apply|verify|confirm|finish|complete|deploy|ship|land|pick up|see)\\b[^.\\n]{0,60}?,?\\s*(?:you\\s+(?:can|should|must|will|need to|have to)\\s+)?${HANDOFF_VERB}\\b`,
-    // A steps list: "1. Run the type-check", "- Commit the change", "Then push to main"
-    `(?:^|\\n)[ \\t]*(?:\\d+[.)]|[-*+]|#{1,6}|>)?[ \\t]*(?:then|now|next|finally|first)?[,:]?[ \\t]*${HANDOFF_VERB}\\b`,
-    // The same imperative mid-paragraph: "I applied the fix. Now run the type-check."
-    // The adverb is REQUIRED here, unlike the line-leading form above — without it a
-    // plain sentence that happens to open with one of these words ("Build output is
-    // clean now.") would read as an instruction.
-    `[.!?]\\s+(?:then|now|next|finally|first)[,:]?\\s+${HANDOFF_VERB}\\b`
-  ].join("|"),
-  "gi"
-);
-var COMMAND_NEARBY = new RegExp(`${CMD_MARK}|${RUNNER}|\\b${SCRIPT_NOUN}`, "i");
-
-// ../packages/agent-stall/src/permissionMenu.ts
-var ACTION_VERB = "(?:run|execute|apply|implement|install|rebuild|build|compile|commit|push|merge|rebase|deploy|publish|release|ship|open|create|file|draft|write|add|update|patch|edit|change|modify|fix|resolve|refactor|rename|move|delete|remove|drop|close|cancel|archive|assign|dispatch|schedule|start|kick off|trigger|link|list|enumerate|show|generate|produce|proceed|continue|go ahead|do (?:it|that|this|them|so|first|next|now|any|all)|handle|take care of|work through|go through|tackle|clean up|tidy|sort out|migrate|convert|split|extract|bump|revert|restore|retry|re-?try|re-?run|verify|test|check|review|investigate|dig into|look into)";
-var OFFER = new RegExp(
-  [
-    // "Would you like me to open the PRs?" · "Do you want me to merge these?"
-    // · "Would you like me to proceed?"
-    `\\b(?:would|do)\\s+you\\s+(?:like|want|prefer)\\s+(?:me|us)\\s+to\\b`,
-    // "Shall I open PRs?" · "Should I cancel the stalled tickets?" · "Can I proceed?"
-    // · "May I go ahead?"
-    `\\b(?:shall|should|can|may)\\s+i\\b[^.?\\n]{0,80}\\?`,
-    // "Want me to push these?" — the subjectless form.
-    `\\bwant\\s+(?:me|us)\\s+to\\b`,
-    // "Let me know if you'd like me to…" · "Let me know which of these to do"
-    // · "Tell me which you'd prefer" · "Just say the word and I'll merge them"
-    // "how" earns its place: "let me know how you'd like to proceed" is the single most
-    // common way this pause is phrased, and it names no option at all.
-    `\\blet me know\\b[^.\\n]{0,80}\\b(?:if|whether|which|what|how)\\b`,
-    `\\b(?:tell|let)\\s+me\\s+know\\s+(?:which|what|whether|if)\\b`,
-    `\\bsay the word\\b`,
-    // "I can open the PRs if you'd like." · "I could cancel them if you want."
-    // · "I'm happy to merge these if that's what you want."
-    `\\bi\\s+(?:can|could|am happy to|'?m happy to|would be happy to)\\b[^.\\n]{0,120}?\\bif\\s+(?:you|that|you'?d|you would)\\b`,
-    // "Confirm and I'll proceed." · "Approve and I'll merge them."
-    `\\b(?:confirm|approve|give me the go-?ahead|give the go-?ahead)\\b[^.\\n]{0,40}\\band\\s+i(?:'ll| will)\\b`,
-    // "Which would you like me to do first?" · "Which of these should I start with?"
-    `\\bwhich\\s+(?:one|of these|of those)?\\s*(?:would|do|should|shall)\\s+(?:you|i)\\b`,
-    // "Your call." · "Up to you." · "How would you like to proceed?" — and the
-    // declarative order the same sentence takes inside a clause, "…how you would like
-    // to proceed", which the interrogative-only form used to miss.
-    `\\b(?:your call|up to you|it'?s your call)\\b`,
-    `\\bhow\\s+(?:you\\s+(?:would|do)|(?:would|do)\\s+you)\\s+(?:want|like|prefer)\\b`
-  ].join("|"),
-  "gi"
-);
-var ACTION_NEARBY = new RegExp(`\\b${ACTION_VERB}\\b`, "i");
-
-// ../packages/agent-stall/src/index.ts
-var ANNOUNCE_SUBJECT = "\\b(?:i(?: will|'ll| am going to|'m going to| am about to| plan to|'d need to| would need to| will need to| need to)|let(?:'?s| me| us)|going to|about to|next,? i'?l?l?|now)";
-var ANNOUNCE_FILLER = "(?:\\s+(?:now|then|first|next|quickly|briefly|just|also|actually|go ahead and|try to|attempt to))*";
-var ANNOUNCE_VERB = "(?:call|use|invoke|run|execute|trigger|query|fetch|retrieve|request|look|search|scan|find|locate|examine|inspect|review|read|list|check|verify|confirm|get|grab|pull|load|open|gather|dig|explore|investigate|analy[sz]e|start|begin|take|do|act|see|walk|trace|map)";
-var ANNOUNCE_GERUND = "(?:searching|fetching|retrieving|querying|loading|checking|looking|scanning|reading|listing|gathering|pulling|examining|inspecting|reviewing|analy[sz]ing)";
-var TOOL_IDENT = "(?:builtin_[a-z0-9]+(?:_[a-z0-9]+)+|mcp__[a-z0-9_]+)";
-var PSEUDO_CALL = [
-  // "call builtin_x", "run tool builtin_x", "invoke the function mcp__srv__x"
-  `(?:call|run|invoke|execute)\\s+(?:the\\s+)?(?:tool\\s+|function\\s+)?${TOOL_IDENT}`,
-  // "builtin_x({…})" / "builtin_x(" — the call written as code
-  `${TOOL_IDENT}\\s*[({]`,
-  // "builtin_x with chatId is 85" — the call written as an argument clause
-  `${TOOL_IDENT}\\s+(?:with|args|arguments)\\b`
-];
-var ANNOUNCED_ACTION = new RegExp(
-  [
-    "calling (the|this|that|a|it|them|these) [\\w\\s-]*?(tool|function|api|now)",
-    `${ANNOUNCE_SUBJECT}${ANNOUNCE_FILLER}\\s+${ANNOUNCE_VERB}\\b`,
-    "(one|just a) (moment|second|sec)\\b",
-    `${ANNOUNCE_GERUND} (it|that|this|these|those|the [\\w-]+|now|for)\\b`,
-    // A sentence that OPENS on a gerund and signs off with "now": "Pulling linked tickets
-    // and the roster code now." The object-led form above wants the/this/now straight
-    // after the verb, so a bare noun phrase slipped through. Measured on VS Code chat #105
-    // (`xai-oauth/grok-4.6`): turns 1-2 were caught and re-prompted, turn 3 said exactly
-    // this, scored as a complete answer, and the run ended with a recovery still unspent.
-    `(?:^|[.!?\\n]\\s*)${ANNOUNCE_GERUND}\\b[^.!?\\n]{0,80}\\bnow\\b`,
-    "stand ?by\\b",
-    ...PSEUDO_CALL
-  ].join("|"),
-  "i"
-);
-var FILE_EXTENSION = "(?:ts|tsx|js|jsx|mjs|cjs|json|md|ya?ml|sql|toml|lock|txt|env|html|css|py|go|rs|sh|png|svg|csv|xml)\\b";
-var DOTTED_TOOL_IDENT = `\\b[a-z][a-z0-9_]{2,}\\.(?!${FILE_EXTENSION})[a-z][a-z0-9_]{2,}\\b`;
-var UNCALLED_TOOL_CLAIM = new RegExp(
-  [
-    // "The tools required are X, Y and Z." / "The required tools are …"
-    "\\b(?:required tools?\\b|tools? required\\b|tools? (?:i |we )?(?:need|require)\\b)",
-    // "…tools have not returned results" / "…the tool has not returned anything yet"
-    "\\btools?\\b[^.!?]{0,80}?\\b(?:have|has|had|were|was)(?:n'?t| not)\\s+(?:yet\\s+)?(?:return|returned|provided|available|run|called)",
-    // "no tool results", "no results from the tools", "no tool outputs for project 11"
-    "\\bno\\s+(?:new\\s+)?tools?\\s+(?:results?|outputs?|data|returns?)\\b",
-    // "No other tools provide the needed data." — the same claim aimed at the CATALOG
-    // rather than at the results: an inventory of what it would need, from a turn that
-    // called none of it. Observed as the closing sentence of the measured replies.
-    "\\bno\\s+other\\s+tools?\\b[^.!?]{0,40}?\\b(?:provide|provides|give|gives|return|returns|have|has|offer|offers)\\b",
-    "\\bno\\s+results?\\s+(?:from|for)\\s+(?:the\\s+)?tools?\\b",
-    // "tool outputs never provided" / "the tool results were never returned"
-    "\\btools?\\s+(?:results?|outputs?)\\b[^.!?]{0,40}?\\b(?:never|not)\\s+(?:been\\s+)?(?:provided|returned|available)",
-    // "requires the tool outputs" / "awaiting the tool results"
-    "\\b(?:requires?|awaiting|waiting on|pending)\\s+(?:those\\s+|the\\s+)?tools?\\s+(?:results?|outputs?)",
-    // The same claim with the TOOL NAMED instead of the word "tool" — "no results from
-    // manager.digest", "missing builtin_manager_policy results". The name IS the
-    // discriminator here: prose does not carry tool identifiers by accident.
-    `\\bno\\s+(?:new\\s+)?(?:results?|data|outputs?|returns?)\\s+(?:from|for|on)\\s+(?:the\\s+)?(?:${TOOL_IDENT}|${DOTTED_TOOL_IDENT})`,
-    `\\b(?:missing|awaiting|pending|without)\\s+(?:the\\s+|those\\s+)?(?:results?\\s+(?:from|of|for)\\s+)?(?:${TOOL_IDENT}|${DOTTED_TOOL_IDENT})`
-  ].join("|"),
-  "i"
-);
-
-// src/modelReply.ts
-var import_working5 = require("@seanhogg/builderforce-memory/working");
-
-// src/stoppedTurn.ts
-var STOPPED_TURN_STEP = "agent.stopped";
 
 // ../packages/local-first/src/policy.ts
 var LOCAL_FIRST_POLICY = Object.freeze({
@@ -5489,83 +5558,899 @@ var MAX_RETRY_AFTER_MS = 60 * 60 * 1e3;
 // ../packages/local-first/src/applyServerCursor.ts
 var RESNAPSHOT2 = Object.freeze({ resnapshotRequired: true });
 
-// src/types.ts
-var STEP_MESSAGE_ROLE = "tool";
-function isStepMessage(m) {
-  return m.role === STEP_MESSAGE_ROLE;
+// src/ticketToolVocabulary.ts
+var SERVER_TICKET_CREATE_TOOL = "builtin_tasks_create";
+var LOCAL_TICKET_CREATE_LABEL = /ticket[-_.]create/i;
+var TICKET_WRITE_TOOL = new RegExp(
+  `(tasks|objectives|key_results|initiatives|portfolios|specs|roadmap)[._]create|chats[._]link_ticket|tickets[._]from_delta|${LOCAL_TICKET_CREATE_LABEL.source}`,
+  "i"
+);
+function isTicketWriteTool(label) {
+  return TICKET_WRITE_TOOL.test(label);
+}
+var SERVER = Object.freeze({
+  createTool: SERVER_TICKET_CREATE_TOOL,
+  local: false,
+  kanbanScoping: true,
+  createName: SERVER_TICKET_CREATE_TOOL
+});
+function isLocalTicketCreateLabel(label) {
+  return LOCAL_TICKET_CREATE_LABEL.test(label);
 }
 
-// src/persistedSteps.ts
-function stepSig(category, label, tsIso) {
-  return `${category}|${label}|${tsIso ?? ""}`;
+// src/runFindings/detectors/filedThenInline.ts
+function filedThenInline(view) {
+  const { staffing } = view;
+  if (staffing.ticketsCreated === 0 || staffing.dispatched > 0 || staffing.personaSubagents.some((p) => p.ok)) return [];
+  const filed = view.calls.filter((c) => c.ok && isTicketWriteTool(c.name));
+  const last = filed[filed.length - 1];
+  if (!last) return [];
+  const inline = view.calls.find((c) => c.write && c.step > last.step);
+  if (!inline) return [];
+  return [finding("filed_then_inline", "info", { tickets: staffing.ticketsCreated }, [
+    ...filed.map((c) => callEvidence(c, void 0, typeof c.args.title === "string" ? c.args.title : void 0)),
+    callEvidence(inline, inline.paths[0])
+  ])];
 }
-function parseStepMessage(metadata) {
-  if (!metadata) return null;
+
+// src/composingActivity.ts
+function utf8ByteLength2(text) {
+  if (!text) return 0;
+  if (typeof TextEncoder !== "undefined") return new TextEncoder().encode(text).length;
+  let bytes = 0;
+  for (const ch of text) {
+    const cp = ch.codePointAt(0) ?? 0;
+    bytes += cp < 128 ? 1 : cp < 2048 ? 2 : cp < 65536 ? 3 : 4;
+  }
+  return bytes;
+}
+
+// ../packages/run-guards/src/fingerprint.ts
+function callFingerprint(tool, args) {
+  let text;
   try {
-    const m = JSON.parse(metadata);
-    if (m.kind !== "step" || typeof m.category !== "string") return null;
-    return {
-      step: {
-        category: m.category,
-        label: typeof m.label === "string" ? m.label : m.category,
-        args: m.args,
-        result: m.result,
-        isError: m.isError,
-        durationMs: m.durationMs,
-        resultBytes: m.resultBytes,
-        truncated: m.truncated,
-        usage: m.usage,
-        finishReason: m.finishReason,
-        textChars: m.textChars,
-        ttftMs: m.ttftMs
-      },
-      tsIso: typeof m.ts === "string" ? m.ts : void 0
-    };
+    text = stableStringify(args ?? {});
   } catch {
-    return null;
+    text = String(args ?? "");
+  }
+  return `${tool}:${text}`;
+}
+function contentHash3(text) {
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return `${text.length.toString(36)}.${h.toString(36)}`;
+}
+function pathArgOf(args) {
+  return callPathOf(args);
+}
+
+// ../packages/run-guards/src/checkCommand.ts
+var WRAPPERS = /* @__PURE__ */ new Set(["pnpm", "npm", "npx", "yarn", "bun", "bunx"]);
+var WRAPPER_VERBS = /* @__PURE__ */ new Set(["exec", "run", "dlx", "x", "run-script"]);
+var VALUE_FLAGS = /* @__PURE__ */ new Set(["--filter", "-F", "-C", "--dir", "--prefix", "-w", "--workspace", "--cwd"]);
+var RUNNERS = /* @__PURE__ */ new Set(["tsc", "tsgo", "vitest", "jest", "pytest", "mocha", "eslint", "biome", "ruff", "mypy", "playwright"]);
+var CHECK_SCRIPT = /^(test|tests|lint|typecheck|type-check|check)(:[\w.-]+)?$/i;
+var SUBCOMMAND_RUNNERS = { cargo: /* @__PURE__ */ new Set(["test", "check", "clippy"]), go: /* @__PURE__ */ new Set(["test", "vet"]) };
+var VCS_BOOKKEEPING = /* @__PURE__ */ new Set(["add", "commit", "status", "diff", "log", "push", "show", "fetch"]);
+function shellCommandOf(args) {
+  if (!args || typeof args !== "object") return "";
+  const a = args;
+  return typeof a.command === "string" ? a.command : typeof a.cmd === "string" ? a.cmd : "";
+}
+function tokensOf(segment) {
+  return segment.trim().split(/\s+/).filter(Boolean).map((t) => t.replace(/^["']|["']$/g, ""));
+}
+function executableTokensOf(command) {
+  const segments = command.split(/&&|\|\||;/).map(tokensOf).filter((t2) => t2.length > 0 && t2[0] !== "cd" && t2[0] !== "pushd");
+  let t = segments[0] ?? [];
+  let i = 0;
+  while (i < t.length && (/^[A-Za-z_][A-Za-z0-9_]*=/.test(t[i]) || t[i] === "env")) i += 1;
+  t = t.slice(i);
+  if (t.length > 0 && WRAPPERS.has(t[0])) {
+    let j = 1;
+    for (; ; ) {
+      const tok = t[j];
+      if (tok === void 0) break;
+      if (VALUE_FLAGS.has(tok)) j += 2;
+      else if (tok.startsWith("-")) j += 1;
+      else if (WRAPPER_VERBS.has(tok)) j += 1;
+      else break;
+    }
+    t = t.slice(j);
+  }
+  return t.map((tok, k) => k === 0 ? tok.split(/[\\/]/).pop() ?? tok : tok);
+}
+function runsCheck(command) {
+  const [exe, sub] = executableTokensOf(command);
+  if (!exe) return false;
+  if (RUNNERS.has(exe) || CHECK_SCRIPT.test(exe)) return true;
+  const subs = SUBCOMMAND_RUNNERS[exe];
+  return !!subs && !!sub && subs.has(sub);
+}
+var SUITE_SCRIPT = /^(test|tests|lint|typecheck|type-check|check)$/i;
+var SUITE_RUNNERS = /* @__PURE__ */ new Set(["vitest", "jest", "pytest", "mocha", "playwright"]);
+var RATCHET_SCRIPT = /^check-[\w.-]*ratchet[\w.-]*\.(?:m|c)?[jt]s$/i;
+function untilPipe(tokens) {
+  const end = tokens.findIndex((t) => t === "|" || /^\d*>/.test(t) || t.startsWith("<"));
+  return end < 0 ? [...tokens] : tokens.slice(0, end);
+}
+function fullSuiteKey(command) {
+  const [exe, ...rest] = untilPipe(executableTokensOf(command));
+  if (!exe) return null;
+  const positional = rest.filter((tok) => !tok.startsWith("-"));
+  const script = positional.length === 1 ? positional[0].split(/[\\/]/).pop() ?? "" : "";
+  const sweeps = SUITE_SCRIPT.test(exe) && positional.length === 0 || SUITE_RUNNERS.has(exe) && positional.every((tok) => tok === "run") || (exe === "node" || exe === "tsx") && RATCHET_SCRIPT.test(script) && !rest.includes("--update");
+  return sweeps ? untilPipe(tokensOf(command)).join(" ") : null;
+}
+function isVcsBookkeeping(command) {
+  const [exe, sub] = executableTokensOf(command);
+  return exe === "git" && !!sub && VCS_BOOKKEEPING.has(sub);
+}
+
+// ../packages/run-guards/src/readOnlyShell.ts
+var READ_ONLY_PROGRAMS = /* @__PURE__ */ new Set([
+  "cat",
+  "head",
+  "tail",
+  "wc",
+  "ls",
+  "dir",
+  "pwd",
+  "echo",
+  "printf",
+  "grep",
+  "egrep",
+  "fgrep",
+  "rg",
+  "find",
+  "tree",
+  "stat",
+  "file",
+  "du",
+  "df",
+  "which",
+  "where",
+  "type",
+  "sort",
+  "uniq",
+  "cut",
+  "tr",
+  "jq",
+  "basename",
+  "dirname",
+  "realpath",
+  "readlink",
+  "date",
+  "true",
+  "false",
+  "test",
+  "[",
+  "diff",
+  "cmp",
+  "comm",
+  "nl",
+  "column",
+  "less",
+  "more",
+  "sed",
+  "cd",
+  "read",
+  "whoami",
+  "hostname",
+  "uname",
+  "node",
+  "npm",
+  "pnpm",
+  "yarn",
+  "python",
+  "python3"
+]);
+var INFO_ONLY_PROGRAMS = /* @__PURE__ */ new Set(["node", "npm", "pnpm", "yarn", "python", "python3"]);
+var INFO_FLAGS = /* @__PURE__ */ new Set(["--version", "-v", "-V", "version", "--help", "-h"]);
+var READ_ONLY_GIT = /* @__PURE__ */ new Set([
+  "status",
+  "log",
+  "show",
+  "diff",
+  "rev-list",
+  "rev-parse",
+  "ls-files",
+  "ls-tree",
+  "ls-remote",
+  "cat-file",
+  "merge-base",
+  "for-each-ref",
+  "describe",
+  "blame",
+  "shortlog",
+  "grep",
+  "name-rev",
+  "count-objects",
+  "whatchanged",
+  "cherry",
+  "show-ref",
+  "show-branch",
+  "range-diff",
+  "var",
+  "check-ignore",
+  "check-attr"
+]);
+function substitutions(segment) {
+  const out = [];
+  let i = segment.indexOf("$(");
+  while (i >= 0) {
+    let depth = 1;
+    let j = i + 2;
+    for (; j < segment.length && depth > 0; j += 1) {
+      if (segment[j] === "(") depth += 1;
+      else if (segment[j] === ")") depth -= 1;
+    }
+    out.push(segment.slice(i + 2, j - 1));
+    i = segment.indexOf("$(", j);
+  }
+  return out;
+}
+function writesViaRedirect(segment) {
+  const unquoted = segment.replace(/"[^"]*"|'[^']*'/g, '""');
+  const re = /(\d*)>>?\s*(&\d+|\S+)?/g;
+  let m = re.exec(unquoted);
+  while (m) {
+    const target = m[2] ?? "";
+    if (!/^(&\d+|\/dev\/null|nul|NUL|\$null)$/.test(target)) return true;
+    m = re.exec(unquoted);
+  }
+  return false;
+}
+function gitIsReadOnly(args) {
+  const { sub, rest } = gitSubcommand(args);
+  if (!sub) return true;
+  if (READ_ONLY_GIT.has(sub)) return true;
+  const flags = new Set(rest.filter((a) => a.startsWith("-")));
+  const positional = rest.filter((a) => !a.startsWith("-"));
+  switch (sub) {
+    case "branch": {
+      const writes = ["-d", "-D", "--delete", "-m", "-M", "--move", "-c", "-C", "--copy", "-f", "--force", "-u", "--set-upstream-to", "--unset-upstream", "--edit-description"];
+      if (writes.some((f) => flags.has(f) || [...flags].some((x) => x.startsWith(`${f}=`)))) return false;
+      if (flags.has("--list") || flags.has("-l")) return true;
+      const valued = /* @__PURE__ */ new Set(["--format", "--sort", "--contains", "--no-contains", "--merged", "--no-merged", "--points-at"]);
+      for (let k = 0; k < rest.length; k += 1) {
+        const word = rest[k] ?? "";
+        if (word.startsWith("-")) {
+          if (valued.has(word)) k += 1;
+          continue;
+        }
+        return false;
+      }
+      return true;
+    }
+    case "tag":
+      return positional.length === 0 || flags.has("-l") || flags.has("--list");
+    case "remote":
+      return positional.length === 0 || ["show", "get-url"].includes(positional[0] ?? "");
+    case "stash":
+    case "notes":
+    case "worktree":
+      return ["list", "show"].includes(positional[0] ?? "");
+    case "reflog":
+      return positional.length === 0 || positional[0] === "show";
+    case "config":
+      return ["--get", "--get-all", "--get-regexp", "--list", "-l"].some((f) => flags.has(f));
+    case "symbolic-ref":
+      return positional.length <= 1 && !flags.has("-d") && !flags.has("--delete");
+    default:
+      return false;
   }
 }
-function traceWithPersistedSteps(messages, trace) {
-  const seen = /* @__PURE__ */ new Set();
-  for (const ev of trace) seen.add(stepSig(ev.category, ev.label, ev.ts));
-  const fromMessages = [];
-  for (const message of messages) {
-    if (!isStepMessage(message)) continue;
-    const parsed = parseStepMessage(message.metadata);
-    if (!parsed) continue;
-    const sig = stepSig(parsed.step.category, parsed.step.label, parsed.tsIso);
-    if (seen.has(sig)) continue;
-    seen.add(sig);
-    const s = parsed.step;
-    fromMessages.push({
-      ts: parsed.tsIso ?? message.createdAt ?? "",
-      recovered: true,
-      category: s.category,
-      label: s.label,
-      args: s.args,
-      result: s.result,
-      ...s.isError ? { isError: true } : {},
-      ...s.durationMs != null ? { durationMs: s.durationMs } : {},
-      ...s.ttftMs != null ? { ttftMs: s.ttftMs } : {},
-      ...s.resultBytes != null ? { resultBytes: s.resultBytes } : {},
-      ...s.truncated ? { truncated: true } : {},
-      ...s.usage ? { usage: s.usage } : {},
-      ...s.finishReason !== void 0 ? { finishReason: s.finishReason } : {},
-      ...s.textChars != null ? { textChars: s.textChars } : {}
-    });
+function segmentIsReadOnly(segment, depth) {
+  if (depth > 4) return false;
+  for (const body of substitutions(segment)) {
+    if (!commandIsReadOnly(body, depth + 1)) return false;
   }
-  if (fromMessages.length === 0) return trace;
-  return [...trace, ...fromMessages].sort((a, b) => a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0);
+  const flat = segment.replace(/\$\((?:[^()]|\([^()]*\))*\)/g, "X");
+  if (writesViaRedirect(flat)) return false;
+  const [program, ...args] = commandWords(shellTokens(flat));
+  if (program === void 0) return true;
+  if (program === "for" || program === "case") return true;
+  if (program === "git") return gitIsReadOnly(args);
+  if (!READ_ONLY_PROGRAMS.has(program)) return false;
+  if (INFO_ONLY_PROGRAMS.has(program)) return args.length > 0 && args.every((a) => INFO_FLAGS.has(a));
+  if (program === "sed") return !args.some((a) => a === "-i" || a.startsWith("-i") || a === "--in-place" || a.startsWith("--in-place="));
+  if (program === "find") return !args.some((a) => ["-delete", "-exec", "-execdir", "-ok", "-okdir", "-fprint", "-fprintf", "-fls"].includes(a));
+  if (program === "sort") return !args.some((a) => a === "-o" || a.startsWith("--output"));
+  return true;
 }
+function commandIsReadOnly(command, depth) {
+  if (/`/.test(command)) return false;
+  const segments = splitShellSegments(command);
+  if (!segments || segments.length === 0) return false;
+  return segments.every((s) => segmentIsReadOnly(s, depth));
+}
+function isReadOnlyShellCommand(command) {
+  const trimmed = command.trim();
+  if (!trimmed) return false;
+  return commandIsReadOnly(trimmed, 0);
+}
+function isReadOnlyShellCall(tool, args) {
+  if (tool !== "run_command" || !args || typeof args !== "object") return false;
+  const record4 = args;
+  const command = typeof record4.command === "string" ? record4.command : typeof record4.cmd === "string" ? record4.cmd : "";
+  return isReadOnlyShellCommand(command);
+}
+
+// ../packages/run-guards/src/waitCeiling.ts
+var MAX_WAIT_TURNS = 12;
+var WaitCeiling = class {
+  turns;
+  digest;
+  constructor(state = {}) {
+    this.turns = state.waitTurns ?? 0;
+    this.digest = state.waitDigest;
+  }
+  /** One wait-only turn (or wait call) with no ground progress, waiting on `digest`. Returns whether it is still exempt from idling. */
+  waited(digest) {
+    this.turns += 1;
+    this.digest = digest;
+    return this.turns <= MAX_WAIT_TURNS;
+  }
+  /** Ground progress, or a call that is not a wait: the count starts over. */
+  reset() {
+    this.turns = 0;
+    this.digest = void 0;
+  }
+  snapshot() {
+    return this.turns > 0 ? { waitTurns: this.turns, ...this.digest !== void 0 ? { waitDigest: this.digest } : {} } : {};
+  }
+};
 
 // ../packages/run-guards/src/noProgress.ts
+var NO_PROGRESS_TURNS = 4;
+var CHURN_TURNS = 12;
+var REGROUND_TURNS = 8;
+var MAX_SEEN = 500;
+var TEST_PATH = /(^|\/)(__tests__|tests?|spec)\/|\.(test|spec)\.[a-z0-9]+$|_test\.(go|py)$/i;
+function isCheckCallDefault(tool, args) {
+  if (tool === "run_checks" || tool === "run_tests") return true;
+  if (tool !== "run_command") return false;
+  return runsCheck(shellCommandOf(args));
+}
+function isTestPath(path) {
+  return TEST_PATH.test(path.split("\\").join("/"));
+}
 var JOB_POLL_TOOLS = /* @__PURE__ */ new Set(["command_status", "command_stop"]);
+var MAX_CHECK_JOBS = 16;
+function recordOf(result) {
+  return result && typeof result === "object" && !Array.isArray(result) ? result : null;
+}
+function startedJobOf(result) {
+  const r = recordOf(result);
+  if (!r || r.background !== true || r.status !== "running" || typeof r.id !== "string" || !r.id.trim()) return null;
+  return r.id.trim();
+}
+function finishedJob2(result) {
+  const status = recordOf(result)?.status;
+  return typeof status === "string" && status !== "running";
+}
+function checkPassed(ok, result, poll) {
+  if (!ok) return false;
+  const r = recordOf(result);
+  if (typeof r?.exitCode === "number" && r.exitCode !== 0) return false;
+  return !poll || r?.status === "exited";
+}
+function resultDigest(result) {
+  let text;
+  try {
+    text = JSON.stringify(result ?? null) ?? "";
+  } catch {
+    text = String(result);
+  }
+  return contentHash3(text.slice(0, 8e3));
+}
+var NoProgressTracker = class {
+  seen;
+  changes;
+  idleTurns;
+  lastCheck;
+  checkJobs;
+  groundThisTurn = false;
+  churnThisTurn = false;
+  /** This turn's calls, and the digests of the still-running waits among them: a turn made ONLY of waits is not idle. */
+  callsThisTurn = 0;
+  waitsThisTurn = [];
+  /** The ceiling on waiting on an unchanged state (`waitCeiling.ts`). */
+  waits;
+  churnTurns;
+  lastGround = false;
+  lastIdle = false;
+  turn = 0;
+  lastSeenAt;
+  targetOf;
+  isCheckCall;
+  isPlatformProgress;
+  constructor(state, ports = {}) {
+    this.seen = new Set(state?.seen ?? []);
+    this.changes = new Set(state?.changes ?? []);
+    this.idleTurns = state?.idleTurns ?? 0;
+    this.churnTurns = state?.churnTurns ?? 0;
+    this.lastCheck = state?.lastCheck;
+    this.checkJobs = (state?.checkJobs ?? []).slice(-MAX_CHECK_JOBS);
+    this.turn = 0;
+    this.lastSeenAt = new Map(Object.entries(state?.lastSeenAt ?? {}));
+    this.targetOf = ports.targetOf ?? ((_tool, args) => pathArgOf(args));
+    this.isCheckCall = ports.isCheckCall ?? isCheckCallDefault;
+    this.isPlatformProgress = ports.isPlatformProgress;
+    this.waits = new WaitCeiling(state);
+  }
+  /**
+   * One call of the current turn ran. `wrote` = it changed content (a file edit, or a
+   * mutating command that names no file). Returns
+   * whether the call was a check whose result CHANGED — a failing check that answers
+   * differently each time is the run fixing things, not repeating a failure.
+   */
+  observe(tool, args, outcome) {
+    const delegated = outcome.delegatedPaths ?? [];
+    this.callsThisTurn += 1;
+    if (outcome.ok && outcome.waitingOn) this.waitsThisTurn.push(outcome.waitingOn);
+    const targets = [...new Set([this.targetOf(tool, args), ...changedPathsOf(args), ...delegated].filter((p) => !!p))];
+    for (const path of targets) {
+      if (!this.seen.has(path)) {
+        this.seen.add(path);
+        if (this.seen.size > MAX_SEEN) this.seen.delete(this.seen.values().next().value);
+        this.groundThisTurn = true;
+      } else {
+        const last = this.lastSeenAt.get(path);
+        if (last === void 0 || this.turn - last >= REGROUND_TURNS) this.groundThisTurn = true;
+      }
+      this.lastSeenAt.set(path, this.turn);
+    }
+    if (outcome.ok && targets.length === 0 && this.isPlatformProgress?.(tool, args)) this.groundThisTurn = true;
+    if (outcome.ok && outcome.delegationReported) this.groundThisTurn = true;
+    if (outcome.ok && (outcome.wrote || delegated.length > 0)) {
+      if (targets.some(isTestPath)) this.groundThisTurn = true;
+      const fingerprint = contentHash3(callFingerprint(tool, args));
+      if (!this.changes.has(fingerprint)) {
+        this.changes.add(fingerprint);
+        if (this.changes.size > MAX_SEEN) this.changes.delete(this.changes.values().next().value);
+        this.churnThisTurn = true;
+      }
+    }
+    const poll = this.isCheckJobPoll(tool, args);
+    if (!poll && !this.isCheckCall(tool, args)) return { checkChanged: false };
+    const job = startedJobOf(outcome.result);
+    if (!poll && job) {
+      this.rememberJob(job);
+      return { checkChanged: false, check: "pending" };
+    }
+    if (poll && !finishedJob2(outcome.result)) return { checkChanged: false, check: "pending" };
+    const check = checkPassed(outcome.ok, outcome.result, poll) && (poll || !isReadOnlyShellCall(tool, args)) ? "passed" : "failed";
+    const digest = resultDigest(outcome.result);
+    if (digest === this.lastCheck) return { checkChanged: false, check };
+    this.groundThisTurn = true;
+    this.lastCheck = digest;
+    return { checkChanged: true, check };
+  }
+  /**
+   * A child's report that reached the run OUTSIDE a call (injected as a message): the files
+   * it changed are paths the run reached, and a report that moved the work is ground — the
+   * same reading a `wait_agents` result gets.
+   */
+  noteChildReport(changedPaths, moved) {
+    for (const path of changedPaths) {
+      if (!this.seen.has(path)) {
+        this.seen.add(path);
+        if (this.seen.size > MAX_SEEN) this.seen.delete(this.seen.values().next().value);
+      }
+      this.lastSeenAt.set(path, this.turn);
+    }
+    if (moved || changedPaths.length > 0) this.groundThisTurn = true;
+  }
+  /** A poll of a background job a check command started ({@link JOB_POLL_TOOLS}). */
+  isCheckJobPoll(tool, args) {
+    if (!JOB_POLL_TOOLS.has(tool) || !args || typeof args !== "object") return false;
+    const id = args.id;
+    return typeof id === "string" && this.checkJobs.includes(id.trim());
+  }
+  rememberJob(id) {
+    this.checkJobs = [...this.checkJobs.filter((j) => j !== id), id].slice(-MAX_CHECK_JOBS);
+  }
+  /** The turn's calls all ran. Returns the idle-turn streak after it. */
+  endTurn() {
+    let progressed = this.groundThisTurn;
+    if (this.groundThisTurn) this.churnTurns = 0;
+    else if (this.churnThisTurn) {
+      this.churnTurns += 1;
+      progressed = this.churnTurns <= CHURN_TURNS;
+    }
+    const allWaiting = this.callsThisTurn > 0 && this.waitsThisTurn.length === this.callsThisTurn;
+    if (allWaiting && !this.groundThisTurn) {
+      if (this.waits.waited([...this.waitsThisTurn].sort().join("|"))) progressed = true;
+    } else if (this.callsThisTurn > 0 || this.groundThisTurn) this.waits.reset();
+    this.lastGround = this.groundThisTurn;
+    this.lastIdle = !progressed;
+    this.idleTurns = progressed ? 0 : this.idleTurns + 1;
+    this.groundThisTurn = false;
+    this.churnThisTurn = false;
+    this.callsThisTurn = 0;
+    this.waitsThisTurn = [];
+    this.turn += 1;
+    return this.idleTurns;
+  }
+  /** Whether the turn {@link endTurn} last closed made GROUND progress (not churn alone). */
+  get lastTurnGround() {
+    return this.lastGround;
+  }
+  /** Whether the turn {@link endTurn} last closed made NO progress at all (neither
+   *  ground nor churn) — the pure-idle turn the B4 batching nudge targets. */
+  get lastTurnIdle() {
+    return this.lastIdle;
+  }
+  /** Start the window over (the run was steered, escalated or resumed by a human). */
+  reset() {
+    this.idleTurns = 0;
+    this.groundThisTurn = false;
+    this.churnThisTurn = false;
+    this.callsThisTurn = 0;
+    this.waitsThisTurn = [];
+  }
+  snapshot() {
+    return {
+      seen: [...this.seen],
+      idleTurns: this.idleTurns,
+      ...this.lastSeenAt.size ? { lastSeenAt: Object.fromEntries(this.lastSeenAt) } : {},
+      ...this.changes.size ? { changes: [...this.changes] } : {},
+      ...this.churnTurns ? { churnTurns: this.churnTurns } : {},
+      ...this.lastCheck ? { lastCheck: this.lastCheck } : {},
+      ...this.checkJobs.length ? { checkJobs: [...this.checkJobs] } : {},
+      ...this.waits.snapshot()
+    };
+  }
+};
 
 // ../packages/run-guards/src/delegatedChanges.ts
 var DELEGATION_TOOLS = /* @__PURE__ */ new Set(["spawn_agent", SPAWN_AGENTS_TOOL, SUBAGENT_CONTROL_TOOL_NAMES.wait, "hand_off"]);
+function isDelegationTool(tool) {
+  return DELEGATION_TOOLS.has(tool);
+}
 var WAIT_POLL_TOOLS = /* @__PURE__ */ new Set([SUBAGENT_CONTROL_TOOL_NAMES.wait, ...JOB_POLL_TOOLS]);
+function isWaitPollTool(tool) {
+  return WAIT_POLL_TOOLS.has(tool);
+}
+function recordOf2(result) {
+  return result && typeof result === "object" && !Array.isArray(result) ? result : null;
+}
+function waitDigestOf(tool, result) {
+  if (!isWaitPollTool(tool)) return null;
+  const r = recordOf2(result);
+  if (!r) return null;
+  if (Array.isArray(r.running) && r.running.length > 0) {
+    return `${tool}:${r.running.map((h) => String(h)).sort().join(",")}`;
+  }
+  if (r.status === "running") return `${tool}:${typeof r.id === "string" ? r.id : ""}:running`;
+  return null;
+}
+function pathsOf(files) {
+  if (!Array.isArray(files)) return [];
+  const paths = files.filter((f) => typeof f === "string").map((f) => f.trim()).filter((f) => f.length > 0);
+  return [...new Set(paths)];
+}
+function delegatedChangedPathsOf(tool, result) {
+  return isDelegationTool(tool) ? pathsOf(recordOf2(result)?.changedFiles) : [];
+}
+function reportMovedWork(report2) {
+  const r = recordOf2(report2);
+  return !!r && (r.state === "done" || pathsOf(r.changedFiles).length > 0);
+}
+function delegationReportedOf(tool, result) {
+  if (!isDelegationTool(tool)) return false;
+  const reports = recordOf2(result)?.reports;
+  return Array.isArray(reports) && reports.some(reportMovedWork);
+}
+function childReportProgressOf(report2) {
+  return { changedPaths: pathsOf(report2.changedFiles), moved: reportMovedWork(report2) };
+}
+
+// ../packages/run-guards/src/verifiedWork.ts
+var VerifiedWork = class {
+  wrote;
+  verified;
+  offered;
+  constructor(state = {}) {
+    this.wrote = state.wrote === true;
+    this.verified = this.wrote && state.verified === true;
+    this.offered = state.finishOffered === true;
+  }
+  /** A successful write (a file change, or a mutating command that is not a check). */
+  noteWrite() {
+    this.wrote = true;
+    this.verified = false;
+    this.offered = false;
+  }
+  /** A `finish` was offered. Until the run writes again, it is not offered twice. */
+  noteFinishOffered() {
+    this.offered = true;
+  }
+  /** A `finish` was already offered since the last write. */
+  get finishOffered() {
+    return this.offered;
+  }
+  /** A check answered. Only a check after a write verifies anything. */
+  noteCheck(passed) {
+    if (this.wrote) this.verified = passed;
+  }
+  /** The run's change is made and a check passed after its last write. */
+  get isVerified() {
+    return this.wrote && this.verified;
+  }
+  snapshot() {
+    return {
+      ...this.wrote ? { wrote: true } : {},
+      ...this.isVerified ? { verified: true } : {},
+      ...this.offered ? { finishOffered: true } : {}
+    };
+  }
+};
+
+// ../packages/run-guards/src/reverifyTracker.ts
+var MAX_REVERIFY_PATHS = 200;
+function addBounded(set, path) {
+  set.delete(path);
+  set.add(path);
+  while (set.size > MAX_REVERIFY_PATHS) {
+    const oldest = set.values().next().value;
+    if (oldest === void 0) break;
+    set.delete(oldest);
+  }
+}
+function restoreBounded(paths) {
+  return new Set((paths ?? []).slice(-MAX_REVERIFY_PATHS));
+}
+var ReverifyTracker = class {
+  writtenPaths;
+  readBackSinceWrite;
+  /** Read-only targets seen this turn, to tell an all-written re-read turn from real work. */
+  readsThisTurn = 0;
+  /** Whether every read this turn was a repeat read-back of an unchanged written path. */
+  allRepeatReadBacks = true;
+  constructor(state = {}) {
+    this.writtenPaths = restoreBounded(state.writtenPaths);
+    this.readBackSinceWrite = restoreBounded(state.readBackSinceWrite);
+  }
+  /** A call that may have changed ANY file wrote: no read-back is a look at unchanged bytes. */
+  wroteAnything() {
+    this.readBackSinceWrite.clear();
+  }
+  /** `path` was written: its next read-back inspects the edit again. */
+  wrote(path) {
+    addBounded(this.writtenPaths, path);
+    this.readBackSinceWrite.delete(path);
+  }
+  /** A successful read-only call visited `target`. */
+  read(target) {
+    this.readsThisTurn += 1;
+    if (this.writtenPaths.has(target)) {
+      if (!this.readBackSinceWrite.has(target)) this.allRepeatReadBacks = false;
+      addBounded(this.readBackSinceWrite, target);
+    } else {
+      this.allRepeatReadBacks = false;
+    }
+  }
+  /** The turn ended: how many reads it made when ALL were repeat read-backs (else 0). Starts the next turn. */
+  endTurn() {
+    const count = this.readsThisTurn > 0 && this.allRepeatReadBacks ? this.readsThisTurn : 0;
+    this.readsThisTurn = 0;
+    this.allRepeatReadBacks = true;
+    return count;
+  }
+  snapshot() {
+    return {
+      ...this.writtenPaths.size ? { writtenPaths: [...this.writtenPaths] } : {},
+      ...this.readBackSinceWrite.size ? { readBackSinceWrite: [...this.readBackSinceWrite] } : {}
+    };
+  }
+};
+
+// ../packages/run-guards/src/suiteRepeat.ts
+function targetedReverifyNote(command) {
+  return `You have now run the full suite \`${command}\` more than once. Do not re-run the whole suite to confirm a fix: re-run ONLY the checks that failed (the specific guard script, test file or package typecheck), and leave the full sweep to CI.`;
+}
+var SuiteRepeat = class {
+  run;
+  shownSuites;
+  pending;
+  constructor(state = {}) {
+    this.run = restoreBounded(state.run);
+    this.shownSuites = restoreBounded(state.shown);
+    this.pending = state.pending;
+  }
+  /** A shell command ran. */
+  ranCommand(command) {
+    const key = fullSuiteKey(command);
+    if (!key) return;
+    if (this.run.has(key) && !this.shownSuites.has(key)) this.pending ??= key;
+    addBounded(this.run, key);
+  }
+  /**
+   * The owed advisory ("" when none), marked shown — never again for that suite. The detector calls this only where
+   * the note becomes the turn's returned action; a turn that ends in a trip or another advisory leaves it owed.
+   */
+  take() {
+    const key = this.pending;
+    if (!key) return "";
+    addBounded(this.shownSuites, key);
+    this.pending = void 0;
+    return targetedReverifyNote(key);
+  }
+  snapshot() {
+    return {
+      ...this.run.size ? { run: [...this.run] } : {},
+      ...this.shownSuites.size ? { shown: [...this.shownSuites] } : {},
+      ...this.pending ? { pending: this.pending } : {}
+    };
+  }
+  /** The detector's snapshot field: `{ suites }`, or nothing when empty. */
+  snapshotField() {
+    const s = this.snapshot();
+    return Object.keys(s).length > 0 ? { suites: s } : {};
+  }
+};
+
+// ../packages/run-guards/src/visitTally.ts
+var REVISIT_HARD_AT = 5;
+var MAX_REMEMBERED_ARGS = 8;
+var VisitTally = class {
+  visits;
+  constructor(state) {
+    this.visits = new Map((state ?? []).map(([k, v]) => [k, { ...v, priorArgs: [...v.priorArgs] }]));
+  }
+  /**
+   * Record one visit to `key` made with `args`. Returns a SNAPSHOT of the resulting
+   * visit, so the caller cannot hold — or reset — the live tally. The "something ran
+   * that could have changed this" pass is spent by the read it excuses.
+   */
+  record(key, args) {
+    let argText;
+    try {
+      argText = JSON.stringify(args ?? {});
+    } catch {
+      argText = String(args ?? "");
+    }
+    const existing = this.visits.get(key);
+    if (!existing) {
+      const fresh = { count: 1, priorArgs: [argText], mayHaveChanged: false };
+      this.visits.set(key, fresh);
+      return { ...fresh, priorArgs: [...fresh.priorArgs] };
+    }
+    existing.count += 1;
+    if (!existing.priorArgs.includes(argText) && existing.priorArgs.length < MAX_REMEMBERED_ARGS) {
+      existing.priorArgs.push(argText);
+    }
+    const visit = { ...existing, priorArgs: [...existing.priorArgs] };
+    existing.mayHaveChanged = false;
+    return visit;
+  }
+  /** Forget every visit whose key matches. */
+  forget(match) {
+    for (const key of [...this.visits.keys()]) if (match(key)) this.visits.delete(key);
+  }
+  /** Something with an unknown blast radius ran: excuse the NEXT read of every target. */
+  markAllMayHaveChanged() {
+    for (const visit of this.visits.values()) visit.mayHaveChanged = true;
+  }
+  snapshot() {
+    return [...this.visits.entries()].map(([k, v]) => [k, { ...v, priorArgs: [...v.priorArgs] }]);
+  }
+};
+function withAdvisory(result, advisory) {
+  if (result && typeof result === "object" && !Array.isArray(result)) {
+    const existing = result.note;
+    const note = typeof existing === "string" && existing ? `${existing}
+
+${advisory}` : advisory;
+    return { ...result, note };
+  }
+  return { result, note: advisory };
+}
+
+// ../packages/run-guards/src/failureTally.ts
+var FAILURE_HARD_AT = 3;
+var FailureTally = class {
+  failures;
+  constructor(state) {
+    this.failures = new Map(state ?? []);
+  }
+  /** Record a FAILED call. Returns how many times this exact call has now failed, including this one. */
+  record(tool, args) {
+    const key = callFingerprint(tool, args);
+    const attempts = (this.failures.get(key) ?? 0) + 1;
+    this.failures.set(key, attempts);
+    return attempts;
+  }
+  /** This exact call SUCCEEDED: its earlier failures were transient after all. */
+  clear(tool, args) {
+    this.failures.delete(callFingerprint(tool, args));
+  }
+  /** Forget every recorded failure (the run changed course). */
+  reset() {
+    this.failures.clear();
+  }
+  snapshot() {
+    return [...this.failures.entries()];
+  }
+};
+function failureReason(result) {
+  if (!result || typeof result !== "object" || Array.isArray(result)) return void 0;
+  const error = result.error;
+  return typeof error === "string" && error.trim() ? error.trim().slice(0, 400) : void 0;
+}
+
+// ../packages/run-guards/src/editRevert.ts
+var MAX_HISTORY_PER_PATH = 16;
+var MAX_PATHS2 = 200;
+function signatureOf(change) {
+  if ("content" in change) return { path: change.path, sig: `w:${contentHash3(change.content)}` };
+  const f = contentHash3(change.from);
+  const t = contentHash3(change.to);
+  return { path: change.path, sig: `e:${f}>${t}`, inverse: `e:${t}>${f}` };
+}
+var EditRevertTracker = class {
+  history;
+  constructor(state) {
+    this.history = new Map((state ?? []).map(([p, h]) => [p, [...h]]));
+  }
+  /**
+   * Record a call that ran. Each successful content change (a batch carries several, in
+   * order) is appended to its path's history; the first that restores earlier content is
+   * returned as the revert. A failed call, or a deletion (`deleted: true`), forgets every
+   * path it names — their content is unknown (a batch is atomic: none of it applied).
+   */
+  record(tool, args, outcome) {
+    if (outcome.deleted) {
+      const path = pathArgOf(args);
+      if (path) this.history.delete(path);
+      return null;
+    }
+    const changes = callChangesOf(args);
+    if (!outcome.ok) {
+      for (const change of changes) this.history.delete(change.path);
+      return null;
+    }
+    let revert = null;
+    for (const change of changes) {
+      const found = this.recordChange(tool, signatureOf(change));
+      revert ??= found;
+    }
+    return revert;
+  }
+  recordChange(tool, change) {
+    const past = this.history.get(change.path) ?? [];
+    let revert = null;
+    if (change.sig.startsWith("w:")) {
+      const earlier = past.lastIndexOf(change.sig);
+      if (earlier >= 0 && earlier < past.length - 1) revert = { path: change.path, tool, restores: "write" };
+    } else if (change.inverse) {
+      const lastWrite = past.map((s) => s.startsWith("w:")).lastIndexOf(true);
+      if (past.slice(lastWrite + 1).includes(change.inverse)) revert = { path: change.path, tool, restores: "inverse_edit" };
+    }
+    const next = [...past, change.sig].slice(-MAX_HISTORY_PER_PATH);
+    this.history.delete(change.path);
+    this.history.set(change.path, next);
+    if (this.history.size > MAX_PATHS2) this.history.delete(this.history.keys().next().value);
+    return revert;
+  }
+  /** An unscoped mutation (shell, checkout) ran: no path's content is known any more. */
+  reset() {
+    this.history.clear();
+  }
+  snapshot() {
+    return [...this.history.entries()].map(([p, h]) => [p, [...h]]);
+  }
+};
 
 // ../packages/run-guards/src/readinessClaim.ts
+var UNKEPT_READY_AT = 2;
+var UNKEPT_STEER_AT = 1;
 var READY_PATTERNS = [
   // "Now I have everything I need", "I've got all the context", "we now have enough"
   /\b(?:i|we)(?:'ve| have)?\s+(?:now\s+)?(?:have|got)\s+(?:got\s+)?(?:everything|all\s+(?:the\s+)?(?:context|information|info|details|i\s+need|we\s+need)|enough)\b/,
@@ -5600,9 +6485,631 @@ function claimsReady(text) {
   if (!text) return false;
   return ownWords(text).toLowerCase().split(/(?<=[.!?])\s+|\n+/).some(sentenceClaims);
 }
+var UnkeptClaimTracker = class {
+  unkept;
+  claimed = false;
+  acted = false;
+  called = false;
+  constructor(state) {
+    this.unkept = state?.unkept ?? 0;
+  }
+  /** The current turn's own text. */
+  noteText(text) {
+    if (claimsReady(text)) this.claimed = true;
+  }
+  /** One call of the current turn. `readOnly` = it only read. */
+  observe(readOnly) {
+    this.called = true;
+    if (!readOnly) this.acted = true;
+  }
+  /** The turn's calls all ran. Returns the unkept-claim count after it. A turn with no
+   *  calls is a final answer (or a narrated call, which the stall recovery owns). */
+  endTurn() {
+    if (this.acted) this.unkept = 0;
+    else if (this.claimed && this.called) this.unkept += 1;
+    this.claimed = false;
+    this.acted = false;
+    this.called = false;
+    return this.unkept;
+  }
+  /** Start over (a trip, a steer, a human). */
+  reset() {
+    this.unkept = 0;
+  }
+  snapshot() {
+    return { unkept: this.unkept };
+  }
+};
+
+// ../packages/run-guards/src/readinessAdvisory.ts
+var READINESS_ADVISORY_NOTE = "You said you have what you need. Make the edit now; read only files you will change.";
+var ReadinessAdvisory = class {
+  note;
+  fired;
+  constructor(state) {
+    this.note = state?.note ?? "";
+    this.fired = state?.fired ?? false;
+  }
+  /**
+   * `unkeptTotal` — every unkept claim this run, from the detector's trip-invariant
+   * counter (never reset by a trip). The advisory fires exactly once per run: the first
+   * time the total reaches {@link UNKEPT_STEER_AT}; a reset streak cannot re-trigger it
+   * because `fired` persists in the JSON snapshot. Returns the pending note ("" when
+   * none or already consumed by {@link endTurn}).
+   */
+  observe(unkeptTotal) {
+    if (!this.fired && unkeptTotal >= UNKEPT_STEER_AT) {
+      this.fired = true;
+      this.note = READINESS_ADVISORY_NOTE;
+    }
+    return this.note;
+  }
+  /** The pending note has now been shown for its one turn — consume it (the one-shot
+   *  `fired` flag is NOT cleared, so it never re-fires). */
+  endTurn() {
+    this.note = "";
+  }
+  snapshot() {
+    return { note: this.note, ...this.fired ? { fired: true } : {} };
+  }
+};
+
+// ../packages/run-guards/src/batching.ts
+var SERIAL_SINGLE_CALLS_AT = 2;
+
+// ../packages/run-guards/src/batchingNudge.ts
+var BATCHING_NUDGE_NOTE = "You have made one read-only call per turn for several turns. When the calls are independent, batch them into one: use the `edit_file` `edits` array for several edits, or one `run_command` that runs the checks together.";
+var BatchingNudge = class {
+  streak;
+  fired;
+  constructor(state) {
+    this.streak = state?.streak ?? 0;
+    this.fired = state?.fired ?? false;
+  }
+  /**
+   * `turnCalls` — every call of the turn that just ended, with whether each was
+   * read-only. Exactly one read-only call (and no other call) extends the streak;
+   * anything else — a write, two or more calls, or zero calls — resets it, because
+   * that turn was real work, not serial reading. When the streak reaches
+   * {@link SERIAL_SINGLE_CALLS_AT} and the note has not fired this run yet, the note
+   * is produced (once — `fired` persists in the JSON snapshot, so a resume never
+   * re-fires it). Returns the pending note ("" when none).
+   */
+  observe(turnCalls) {
+    const singleReadOnly = turnCalls.length === 1 && turnCalls[0]?.readOnly === true;
+    this.streak = singleReadOnly ? this.streak + 1 : 0;
+    if (!this.fired && this.streak >= SERIAL_SINGLE_CALLS_AT) {
+      this.fired = true;
+      return BATCHING_NUDGE_NOTE;
+    }
+    return "";
+  }
+  snapshot() {
+    return { streak: this.streak, ...this.fired ? { fired: true } : {} };
+  }
+};
+function turnCallsOf(calls, isReadOnly) {
+  return calls.map((c) => ({ readOnly: isReadOnly?.(c.tool, c.args) === true }));
+}
+
+// ../packages/run-guards/src/readOnlyStreak.ts
+var READ_ONLY_STREAK_TURNS = 6;
+var READ_ONLY_STREAK_CALLS = 18;
+var ReadOnlyStreak = class {
+  turns;
+  calls;
+  turnCalls = 0;
+  neutralCalls = 0;
+  acted = false;
+  constructor(state) {
+    this.turns = state?.turns ?? 0;
+    this.calls = state?.calls ?? 0;
+  }
+  /** One call of the current turn. `readOnly` = it only read. */
+  observe(readOnly) {
+    this.turnCalls += 1;
+    if (!readOnly) this.acted = true;
+  }
+  /** One call of the current turn that is neither a read nor an act — a wait on work still
+   *  running elsewhere. A turn of only such calls leaves the streak as it was. */
+  observeNeutral() {
+    this.neutralCalls += 1;
+  }
+  /** The turn's calls all ran. Returns the streak after it. */
+  endTurn() {
+    const onlyWaits = !this.acted && this.turnCalls === 0 && this.neutralCalls > 0;
+    if (!onlyWaits && (this.acted || this.turnCalls === 0)) {
+      this.turns = 0;
+      this.calls = 0;
+    } else if (!onlyWaits) {
+      this.turns += 1;
+      this.calls += this.turnCalls;
+    }
+    this.turnCalls = 0;
+    this.neutralCalls = 0;
+    this.acted = false;
+    return { turns: this.turns, calls: this.calls };
+  }
+  /** Start over (a trip, a steer, a human). */
+  reset() {
+    this.turns = 0;
+    this.calls = 0;
+  }
+  snapshot() {
+    return { turns: this.turns, calls: this.calls };
+  }
+};
+
+// ../packages/run-guards/src/progressDetector.ts
+var LADDER_RESET_TURNS = 8;
+var FINISHABLE_SIGNALS = /* @__PURE__ */ new Set(["no_progress", "reverifying", "read_only_streak", "unkept_ready"]);
+var SIGNAL_RANK = {
+  edit_revert: 0,
+  repeated_failure: 1,
+  circling_read: 2,
+  reverifying: 3,
+  unkept_ready: 4,
+  read_only_streak: 5,
+  no_progress: 6
+};
+function succeeded2(result) {
+  if (result.isError) return false;
+  const d = result.data;
+  return !(d && typeof d === "object" && d.ok === false);
+}
+function visitTargetOf(args) {
+  const path = pathArgOf(args);
+  if (!args || typeof args !== "object") return path;
+  const a = args;
+  const question = [a.query, a.pattern, a.symbol, a.name].find((v) => typeof v === "string" && v.trim() !== "");
+  if (path && question) return `${path} \u220B ${question.trim()}`;
+  return path ?? question?.trim() ?? null;
+}
+var ProgressDetector = class {
+  // a repeated full-suite sweep (`suiteRepeat.ts`)
+  constructor(state = {}, ports = {}) {
+    this.ports = ports;
+    this.visits = new VisitTally(state.visits);
+    this.failures = new FailureTally(state.failures);
+    this.edits = new EditRevertTracker(state.edits);
+    this.progress = new NoProgressTracker(state.progress, ports);
+    this.claims = new UnkeptClaimTracker(state.claims);
+    this.readOnlyStreak = new ReadOnlyStreak(state.readOnlyStreak);
+    this.trips = state.trips ?? 0;
+    this.tripsBySignal = { ...state.tripsBySignal ?? {} };
+    this.unkeptTurns = state.unkeptTurns ?? 0;
+    this.quietTurns = state.quietTurns ?? 0;
+    this.steer = state.steer;
+    this.readiness = new ReadinessAdvisory(state.advisory);
+    this.batching = new BatchingNudge(state.batching);
+    this.reverify = new ReverifyTracker(state);
+    this.turnCalls = [];
+    this.work = new VerifiedWork(state.work);
+    this.suites = new SuiteRepeat(state.suites);
+  }
+  ports;
+  visits;
+  failures;
+  edits;
+  progress;
+  claims;
+  readOnlyStreak;
+  trips;
+  tripsBySignal;
+  unkeptTurns;
+  quietTurns;
+  steer;
+  /** B1: the readiness advisory — one note at the FIRST unkept claim, never a trip. */
+  readiness;
+  /** B4: the batching nudge — one note after SERIAL_SINGLE_CALLS_AT single-readonly
+   *  turns, never a trip and never touching UNKEPT_READY_AT or any other signal. */
+  batching;
+  turnSignal = null;
+  /** `reverifying`: written paths and their read-backs (persisted, bounded). */
+  reverify;
+  /** Every call of the current turn, for the B4 batching nudge's read-only count. */
+  turnCalls;
+  /** Made a change and saw a check pass after it — turns an idle-shaped trip into `finish`. */
+  work;
+  suites;
+  raise(signal) {
+    if (!this.turnSignal || SIGNAL_RANK[signal.kind] < SIGNAL_RANK[this.turnSignal.kind]) this.turnSignal = signal;
+  }
+  /** The current turn's own text — what it said before its calls (a readiness claim?). */
+  noteTurnText(text) {
+    this.claims.noteText(text);
+  }
+  /** One call of the current turn ran. */
+  observe(tool, args, result) {
+    if (this.ports.isBookkeeping?.(tool)) {
+      this.readOnlyStreak.observeNeutral();
+      return;
+    }
+    this.turnCalls.push({ tool, args, result });
+    const ok = succeeded2(result);
+    const waitDigest = ok ? waitDigestOf(tool, result.data) : null;
+    if (waitDigest === null) {
+      const readOnly = this.ports.isReadOnly?.(tool, args) === true;
+      this.claims.observe(readOnly);
+      this.readOnlyStreak.observe(readOnly);
+    } else this.readOnlyStreak.observeNeutral();
+    const unscoped = (this.ports.isUnscopedMutation ?? ((t) => t === "run_command"))(tool, args);
+    if (tool === "run_command") this.suites.ranCommand(shellCommandOf(args));
+    const changed = changedPathsOf(args);
+    const wrote = ok && (changed.length > 0 || unscoped && this.ports.isReadOnly?.(tool, args) !== true);
+    const isDelete = (this.ports.isDelete ?? ((t) => t === "delete_file"))(tool);
+    if (unscoped) {
+      this.visits.markAllMayHaveChanged();
+      this.edits.reset();
+      if (wrote) this.reverify.wroteAnything();
+    } else if (isDelete) {
+      this.edits.record(tool, args, { ok, deleted: ok });
+      this.forgetVisitsOf(pathArgOf(args));
+    } else if (changed.length > 0) {
+      const revert = this.edits.record(tool, args, { ok });
+      if (revert) this.raise({ kind: "edit_revert", tool, target: revert.path });
+      if (ok) {
+        for (const path of changed) {
+          this.forgetVisitsOf(path);
+          this.reverify.wrote(path);
+        }
+      }
+    } else if (ok && this.ports.isReadOnly?.(tool, args)) {
+      const target = visitTargetOf(args);
+      if (target) {
+        this.reverify.read(target);
+        const visit = this.visits.record(`${tool}:${target}`, args);
+        if (visit.count >= REVISIT_HARD_AT && !visit.mayHaveChanged) this.raise({ kind: "circling_read", tool, target, count: visit.count });
+      }
+    }
+    const delegated = ok ? delegatedChangedPathsOf(tool, result.data) : [];
+    this.creditDelegatedWrites(delegated);
+    const reported = ok && delegationReportedOf(tool, result.data);
+    const { checkChanged, check } = this.progress.observe(tool, args, {
+      ok,
+      wrote,
+      result: result.data,
+      ...delegated.length > 0 ? { delegatedPaths: delegated } : {},
+      ...reported ? { delegationReported: true } : {},
+      ...waitDigest !== null ? { waitingOn: waitDigest } : {}
+    });
+    const bookkeeping = tool === "run_command" && isVcsBookkeeping(shellCommandOf(args));
+    const workWrite = wrote && !isReadOnlyShellCall(tool, args) && !bookkeeping || ok && isDelete;
+    if (workWrite && check === void 0) this.work.noteWrite();
+    if (check === "passed" || check === "failed") this.work.noteCheck(check === "passed");
+    if (ok || checkChanged) this.failures.clear(tool, args);
+    else {
+      const attempts = this.failures.record(tool, args);
+      const reason = failureReason(result.data);
+      if (attempts >= FAILURE_HARD_AT) this.raise({ kind: "repeated_failure", tool, count: attempts, ...reason ? { reason } : {} });
+    }
+  }
+  /** Files a delegation's children changed are the run's own writes: visits, read-backs and verified work alike. */
+  creditDelegatedWrites(paths) {
+    for (const path of paths) {
+      this.forgetVisitsOf(path);
+      this.reverify.wrote(path);
+    }
+    if (paths.length > 0) this.work.noteWrite();
+  }
+  /**
+   * A child's report that reached the run OUTSIDE a call — the host injected it as a message
+   * (`childReportText`), the default path. Read like a `wait_agents` result: its files are the
+   * run's writes, and a finished report is progress (chat #157440).
+   */
+  observeChildReport(report2) {
+    const { changedPaths, moved } = childReportProgressOf(report2);
+    this.creditDelegatedWrites(changedPaths);
+    this.progress.noteChildReport(changedPaths, moved);
+  }
+  forgetVisitsOf(path) {
+    if (!path) return;
+    this.visits.forget((key) => {
+      const target = key.slice(key.indexOf(":") + 1);
+      return target === path || target.startsWith(`${path} \u220B `);
+    });
+  }
+  /** Every call of the turn ran. The trip this turn caused, if any — or, earlier and
+   *  cheaper (B1), the readiness advisory on the FIRST unkept claim (never a trip). */
+  endTurn() {
+    const turnCalls = this.turnCalls;
+    this.turnCalls = [];
+    const batchNote = this.batching.observe(turnCallsOf(turnCalls, this.ports.isReadOnly));
+    this.steer = void 0;
+    const idle = this.progress.endTurn();
+    const rereads = this.reverify.endTurn();
+    if (!this.turnSignal && rereads > 0 && !this.progress.lastTurnGround && idle > 0) {
+      this.raise({ kind: "reverifying", count: rereads });
+    }
+    const unkeptBefore = this.claims.snapshot().unkept;
+    const unkept = this.claims.endTurn();
+    if (unkept > unkeptBefore) this.unkeptTurns += 1;
+    if (unkept >= UNKEPT_READY_AT) this.raise({ kind: "unkept_ready", count: unkept });
+    const streak = this.readOnlyStreak.endTurn();
+    if (this.ports.expectsChange?.() === true && (streak.turns >= READ_ONLY_STREAK_TURNS || streak.calls >= READ_ONLY_STREAK_CALLS)) {
+      this.raise({ kind: "read_only_streak", count: streak.calls });
+    }
+    if (!this.turnSignal && idle >= NO_PROGRESS_TURNS) this.raise({ kind: "no_progress", count: idle });
+    const signal = this.turnSignal;
+    this.turnSignal = null;
+    if (!signal) {
+      this.readiness.endTurn();
+      const advisoryNote = this.readiness.observe(this.unkeptTurns);
+      if (advisoryNote) return { kind: "advisory", note: advisoryNote };
+      const suiteNote = this.suites.take();
+      if (suiteNote) return { kind: "advisory", note: suiteNote };
+      if (batchNote && this.progress.lastTurnIdle) return { kind: "advisory", note: batchNote };
+      if (this.progress.lastTurnGround) this.quietTurns += 1;
+      else if (idle > 0) this.quietTurns = 0;
+      if (this.quietTurns >= LADDER_RESET_TURNS) {
+        this.trips = 0;
+        this.quietTurns = 0;
+      }
+      return null;
+    }
+    this.quietTurns = 0;
+    this.trips += 1;
+    this.tripsBySignal[signal.kind] = (this.tripsBySignal[signal.kind] ?? 0) + 1;
+    this.progress.reset();
+    this.claims.reset();
+    this.readOnlyStreak.reset();
+    this.visits.forget(() => true);
+    this.failures.reset();
+    if (this.work.isVerified && FINISHABLE_SIGNALS.has(signal.kind)) {
+      if (this.trips === 1) {
+        const note2 = progressVerifiedSteerNote(signal);
+        this.steer = note2;
+        return { kind: "steer", trip: this.trips, signal, note: note2 };
+      }
+      if (!this.work.finishOffered) {
+        this.work.noteFinishOffered();
+        const note2 = progressFinishNote(signal);
+        this.steer = note2;
+        return { kind: "finish", trip: this.trips, signal, note: note2, verified: true };
+      }
+    }
+    if (this.trips <= 2) {
+      const note2 = progressSteerNote(signal, this.trips);
+      this.steer = note2;
+      return { kind: this.trips === 1 ? "steer" : "escalate", trip: this.trips, signal, note: note2 };
+    }
+    const verified = this.work.isVerified && FINISHABLE_SIGNALS.has(signal.kind);
+    const note = verified ? progressFinishNote(signal) : progressStalledFinishNote(signal);
+    this.steer = note;
+    return { kind: "finish", trip: this.trips, signal, note, verified };
+  }
+  /** A host that could not escalate shows the steer instead (or clears it once a finish brief carries it). */
+  setSteer(note) {
+    this.steer = note;
+  }
+  /** The note the current turn's request carries ("" when none). */
+  steerNote() {
+    return this.steer ?? "";
+  }
+  get tripCount() {
+    return this.trips;
+  }
+  snapshot() {
+    return {
+      visits: this.visits.snapshot(),
+      failures: this.failures.snapshot(),
+      edits: this.edits.snapshot(),
+      progress: this.progress.snapshot(),
+      ...this.claims.snapshot().unkept ? { claims: this.claims.snapshot() } : {},
+      ...this.readOnlyStreak.snapshot().turns ? { readOnlyStreak: this.readOnlyStreak.snapshot() } : {},
+      ...this.trips ? { trips: this.trips } : {},
+      ...Object.keys(this.tripsBySignal).length ? { tripsBySignal: { ...this.tripsBySignal } } : {},
+      ...this.unkeptTurns ? { unkeptTurns: this.unkeptTurns } : {},
+      ...this.quietTurns ? { quietTurns: this.quietTurns } : {},
+      ...this.steer ? { steer: this.steer } : {},
+      // `fired` persists on its own: a consumed one-off advisory must not re-fire on resume.
+      ...(() => {
+        const a = this.readiness.snapshot();
+        return a.note || a.fired ? { advisory: a } : {};
+      })(),
+      ...(() => {
+        const b = this.batching.snapshot();
+        return b.streak || b.fired ? { batching: b } : {};
+      })(),
+      ...this.reverify.snapshot(),
+      ...(() => {
+        const w = this.work.snapshot();
+        return w.wrote ? { work: w } : {};
+      })(),
+      ...this.suites.snapshotField()
+    };
+  }
+  /** The run's change is made and a check passed after its last write. */
+  get workVerified() {
+    return this.work.isVerified;
+  }
+};
+function progressVerifiedSteerNote(signal) {
+  return `Progress check (first warning): your last change is made and a check passed after it, but ${signal.kind === "no_progress" ? `the last ${signal.count ?? NO_PROGRESS_TURNS} turns changed nothing` : "the last turns changed nothing"}. If the request is fully done, write the final report now \u2014 what you changed, how it was verified, anything left open \u2014 and make no more tool calls. Otherwise make the next change the request still needs.`;
+}
+function progressFinishNote(signal) {
+  const what = signal.kind === "no_progress" ? `the last ${signal.count ?? NO_PROGRESS_TURNS} turns changed nothing` : signal.kind === "reverifying" ? "this turn only re-checked work you already verified" : "the last turns only looked around";
+  return `Progress check: your change is made and a check passed after your last edit \u2014 ${what}. The work is done. Write the final report NOW: what you changed (files), how it was verified, what is NOT done, and the single concrete blocker for each open item. Make no more tool calls, and do not ask the user whether to continue.`;
+}
+function stalledDiagnosis(signal) {
+  switch (signal.kind) {
+    case "edit_revert":
+    case "repeated_failure":
+    case "circling_read":
+      return progressAdvice(signal);
+    case "reverifying":
+      return "the last turns only re-checked files you already wrote instead of reporting.";
+    case "unkept_ready":
+      return `you said ${signal.count} times that you had what you needed, then only read.`;
+    case "read_only_streak":
+      return `you made ${signal.count} read-only calls in a row without changing anything.`;
+    case "no_progress":
+      return `the last ${signal.count ?? NO_PROGRESS_TURNS} turns touched no new file and changed nothing about the tests.`;
+  }
+}
+function progressSteerNote(signal, trip, movedUp = true) {
+  const head = `Progress check (${trip === 1 ? "first warning" : movedUp ? "second warning \u2014 the run has been moved to a stronger model" : "second warning"}): `;
+  return `${head}${progressAdvice(signal)}`;
+}
+function progressAdvice(signal) {
+  switch (signal.kind) {
+    case "edit_revert":
+      return `your last change to ${signal.target} put the file back the way it was earlier in this run. You are oscillating between two versions instead of converging. Decide which version is right from the requirement and the evidence you already have, make that change once, and move on.`;
+    case "repeated_failure":
+      return `\`${signal.tool}\` has failed ${signal.count} times with identical arguments${signal.reason ? ` ("${signal.reason}")` : ""}. Change the argument the error names, use a different tool, or finish and state what is blocking you.`;
+    case "circling_read":
+      return `you have read ${signal.target} ${signal.count} times and nothing changed it in between. Everything you read is still above you. Act on it \u2014 make the edit \u2014 or page forward to lines you have not seen.`;
+    case "reverifying":
+      return `this turn only re-checked ${signal.count === 1 ? "a file" : `${signal.count} files`} you already wrote and verified. Re-running the same type-check, build or read on ground you shipped does not make it more correct \u2014 it burns budget. The work is done: report the result and stop, or move on to the next task. Only re-verify when something actually changed the code.`;
+    case "unkept_ready":
+      return `you have said ${signal.count} times that you have what you need \u2014 or that you are about to write \u2014 and then only read. Act on it now: make the change, spawn or hand off the work, or ask about what genuinely blocks you. Reading more is not the next step.`;
+    case "read_only_streak":
+      return `you have made ${signal.count} read-only calls in a row without changing anything. Everything you read is still in your context. If the task is a change, make the first concrete edit NOW with what you already have \u2014 do not read another file first. If it is analysis only, write the answer now.`;
+    case "no_progress":
+      return `the last ${signal.count} turns touched no new file and changed nothing about the tests. Re-read the task, pick the next concrete step that changes code or runs a check, and do it now \u2014 or finish and explain what is blocking you.`;
+  }
+}
+function progressStalledFinishNote(signal) {
+  return `Progress check (final): ${stalledDiagnosis(signal)} This is the third warning, so the run ends now. Write the final report NOW and make no more tool calls: what you changed (files), how it was verified (or that it was not), what is NOT done, and the single concrete blocker for each open item. Do not claim unverified work is done, and do not ask the user whether to continue.`;
+}
+
+// ../packages/run-guards/src/progressTrace.ts
+function advisorySourceOf(note) {
+  return note === BATCHING_NUDGE_NOTE ? "batching" : "readiness";
+}
+function progressTraceStep(action, override = {}) {
+  if (action.kind === "advisory") {
+    const source = advisorySourceOf(action.note);
+    return {
+      label: "loop.progress_advisory",
+      args: { advisory: source },
+      result: `progress advisory (${source}): a one-off note on the next turn, not a trip`
+    };
+  }
+  const outcome = override.outcome ?? action.kind;
+  const finish = outcome !== "finish" ? "" : action.kind === "finish" && action.verified ? " (the change is made and verified \u2014 the run writes its final report, no more tool calls)" : " (the run is not converging \u2014 it ends on an honest report of what is done and what blocks the rest, no more tool calls)";
+  return {
+    label: "loop.progress_check",
+    args: override.detail ?? { trip: action.trip, signal: action.signal.kind, action: action.kind },
+    result: `progress check ${action.trip}: ${action.signal.kind} \u2192 ${outcome}${finish}`
+  };
+}
 
 // ../packages/run-guards/src/inRunVerify.ts
 var PUBLISH_TOOLS = /* @__PURE__ */ new Set(["git_commit", "git_push", "open_pull_request"]);
+var IN_RUN_VERIFY_SCRIPT_NAMES = ["typecheck", "type-check", "test"];
+var DURABLE_IN_RUN_VERIFY_NOTE = "Durable/Worker has no shell. Typecheck/test are skipped in-run; CI on the pull request is the source of truth. Never claim those checks passed.";
+var SANDBOX_IN_RUN_VERIFY_NOTE = "After code changes, run these via the sandbox shell (`run_command`) before finish. Do not invent SSH.";
+function firstDeclaredScript(scripts, names) {
+  if (!scripts) return null;
+  for (const name of names) {
+    const body = scripts[name];
+    if (typeof body === "string" && body.trim()) return name;
+  }
+  return null;
+}
+function packageVerifyCommands(scripts, runner = "npm") {
+  const cmds = [];
+  const typecheck = firstDeclaredScript(scripts, ["typecheck", "type-check"]);
+  if (typecheck) cmds.push(`${runner} run ${typecheck}`);
+  const test = firstDeclaredScript(scripts, ["test"]);
+  if (test) cmds.push(`${runner} run ${test}`);
+  return cmds;
+}
+function planInRunVerify(input) {
+  if (input.surface === "durable") {
+    return {
+      kind: "skipped",
+      surface: "durable",
+      reason: "no_shell",
+      commands: [],
+      scriptNames: IN_RUN_VERIFY_SCRIPT_NAMES,
+      note: DURABLE_IN_RUN_VERIFY_NOTE
+    };
+  }
+  const commands = packageVerifyCommands(input.packageScripts, input.runner);
+  return {
+    kind: "run",
+    surface: input.surface,
+    reason: null,
+    commands,
+    scriptNames: IN_RUN_VERIFY_SCRIPT_NAMES,
+    note: commands.length > 0 ? SANDBOX_IN_RUN_VERIFY_NOTE : "No typecheck/test scripts in package.json; skip package verify (CI on the PR still applies)."
+  };
+}
+function wroteCode(writtenPaths) {
+  if (!writtenPaths) return false;
+  return "size" in writtenPaths ? writtenPaths.size > 0 : writtenPaths.length > 0;
+}
+function inRunVerifyOutcome(input) {
+  const plan = planInRunVerify(input);
+  if (plan.kind === "skipped") {
+    return {
+      surface: "durable",
+      kind: "skipped",
+      reason: "no_shell",
+      commands: [],
+      failedCommands: [],
+      mayFinish: true,
+      note: plan.note
+    };
+  }
+  if (!wroteCode(input.writtenPaths)) {
+    return {
+      surface: plan.surface,
+      kind: "skipped",
+      reason: "nothing_written",
+      commands: plan.commands,
+      failedCommands: [],
+      mayFinish: true,
+      note: "No code written this run; in-run typecheck/test is not required."
+    };
+  }
+  if (plan.commands.length === 0) {
+    return {
+      surface: plan.surface,
+      kind: "skipped",
+      reason: "no_scripts",
+      commands: [],
+      failedCommands: [],
+      mayFinish: true,
+      note: plan.note
+    };
+  }
+  if (input.results == null) {
+    return {
+      surface: plan.surface,
+      kind: "pending",
+      reason: "not_yet_run",
+      commands: plan.commands,
+      failedCommands: [],
+      mayFinish: false,
+      note: `${SANDBOX_IN_RUN_VERIFY_NOTE} Planned: ${plan.commands.join(" && ")}.`
+    };
+  }
+  const byCommand = new Map(input.results.map((r) => [r.command, r.exitCode]));
+  const failedCommands = plan.commands.filter((c) => (byCommand.get(c) ?? 1) !== 0);
+  if (failedCommands.length > 0) {
+    return {
+      surface: plan.surface,
+      kind: "ran",
+      reason: "verify_failed",
+      commands: plan.commands,
+      failedCommands,
+      mayFinish: false,
+      note: `In-run verify failed: ${failedCommands.join(", ")}. Fix before finish.`
+    };
+  }
+  return {
+    surface: plan.surface,
+    kind: "ran",
+    reason: "verify_passed",
+    commands: plan.commands,
+    failedCommands: [],
+    mayFinish: true,
+    note: `In-run verify passed: ${plan.commands.join(" && ")}.`
+  };
+}
 
 // ../packages/run-guards/src/evidence/gitCommandPattern.ts
 function gitCommandPattern(verbs) {
@@ -5639,387 +7146,6 @@ function isCodeChangeTool(name) {
   return CODE_CHANGE_TOOLS.has(name);
 }
 
-// ../packages/agent-loop/src/runNarration.ts
-var NARRATION_OPENER = new RegExp(
-  "^(?:(?:now|next|first|then|so|okay|ok|alright|actually|great|good|perfect|but|and|also|finally)[,!.]?\\s+)*(?:let me|let's|i(?:'ll| will| need to| should| want to| am going to|'m going to| think| see| can see| notice| ran)\\b|looking (?:at|back|for)\\b|checking\\b|now the\\b|that was expected\\b)",
-  "i"
-);
-
-// ../packages/agent-loop/src/taskClosedState.ts
-var ARCHIVED_TASK_STATUS = "archived";
-var TASK_CLOSED_STATUSES = ["done", "cancelled", "canceled", "completed", ARCHIVED_TASK_STATUS];
-var CLOSED = new Set(TASK_CLOSED_STATUSES);
-var TASK_CANCELLED_STATUSES = ["cancelled", "canceled"];
-var CANCELLED = new Set(TASK_CANCELLED_STATUSES);
-
-// ../packages/agent-loop/src/ticketClosedStates.ts
-var TASK_TABLE = { closed: TASK_CLOSED_STATUSES, cancelled: TASK_CANCELLED_STATUSES };
-var CEREMONY_SESSION_CLOSED_STATUSES = ["completed", "cancelled", "closed", "archived"];
-var CEREMONY_SESSION = { closed: CEREMONY_SESSION_CLOSED_STATUSES, cancelled: [] };
-var PORTFOLIO_STATUSES = ["active", "archived", "cancelled"];
-var INITIATIVE_STATUSES = ["proposed", "active", "completed", "archived", "cancelled"];
-var OBJECTIVE_STATUSES = ["active", "achieved", "missed", "archived", "cancelled"];
-var ROADMAP_STATUSES = ["planned", "in_progress", "shipped", "cancelled"];
-var ROADMAP_LEGACY_DELIVERED_STATUSES = ["done", "complete", "completed", "released"];
-function pick(_vocabulary, ...words) {
-  return words;
-}
-var TICKET_STATUS_ALIASES = {
-  roadmap: Object.fromEntries(ROADMAP_LEGACY_DELIVERED_STATUSES.map((word) => [word, "shipped"]))
-};
-var TICKET_CLOSED_STATES = {
-  // agent-loop `taskClosedState.ts` TASK_CLOSED_STATUSES / TASK_CANCELLED_STATUSES.
-  task: TASK_TABLE,
-  gap: TASK_TABLE,
-  epic: TASK_TABLE,
-  portfolio: { closed: pick(PORTFOLIO_STATUSES, "archived"), cancelled: [] },
-  initiative: { closed: pick(INITIATIVE_STATUSES, "completed", "archived"), cancelled: [] },
-  // A MISSED objective is over without delivering, so it is skipped like a cancelled lane
-  // rather than counted done (its own ring still reads 100: it is closed).
-  objective: { closed: pick(OBJECTIVE_STATUSES, "achieved", "missed", "archived"), cancelled: pick(OBJECTIVE_STATUSES, "missed") },
-  // Legacy delivered spellings are still read as closed: older rows carry them.
-  roadmap: { closed: [...pick(ROADMAP_STATUSES, "shipped"), ...ROADMAP_LEGACY_DELIVERED_STATUSES], cancelled: [] },
-  // api schema/kernel.ts `specStatusEnum`: draft | ready | in_progress | complete (a pg
-  // enum, so the api test asserts this word is one of its values).
-  spec: { closed: ["complete"], cancelled: [] },
-  retro: CEREMONY_SESSION,
-  poker: CEREMONY_SESSION
-};
-var CLOSED_BY_KIND = new Map(
-  Object.entries(TICKET_CLOSED_STATES).map(([kind, v]) => [kind, { closed: new Set(v.closed), cancelled: new Set(v.cancelled) }])
-);
-
-// ../packages/agent-loop/src/reasoning.ts
-var REASONING_TAG = "think(?:ing)?|thought|antthinking|scratchpad|reasoning";
-var QUICK_TAG_RE = new RegExp(`<\\s*/?\\s*(?:${REASONING_TAG}|final)\\b`, "i");
-var REASONING_TAG_RE = new RegExp(`<\\s*(/?)\\s*(?:${REASONING_TAG})\\b[^<>]*>`, "gi");
-
-// src/ticketToolVocabulary.ts
-var SERVER_TICKET_CREATE_TOOL = "builtin_tasks_create";
-var LOCAL_TICKET_CREATE_LABEL = /ticket[-_.]create/i;
-var SERVER = Object.freeze({
-  createTool: SERVER_TICKET_CREATE_TOOL,
-  local: false,
-  kanbanScoping: true,
-  createName: SERVER_TICKET_CREATE_TOOL
-});
-function isLocalTicketCreateLabel(label) {
-  return LOCAL_TICKET_CREATE_LABEL.test(label);
-}
-
-// src/toolResultRecord.ts
-function toolResultRecord(result) {
-  if (typeof result === "string") {
-    try {
-      const parsed = JSON.parse(result);
-      return parsed && typeof parsed === "object" ? parsed : null;
-    } catch {
-      return null;
-    }
-  }
-  return result && typeof result === "object" ? result : null;
-}
-
-// src/runProgress.ts
-function isCacheAnswered(ev) {
-  const r = ev.result;
-  if (!r || typeof r !== "object") return false;
-  const o = r;
-  return o.covered === true || o.replayed === true || o.derived === true || o.skipped === true && typeof o.note === "string" || typeof o.note === "string" && /^Duplicate \S+ call/.test(o.note);
-}
-
-// src/modelScorecard.ts
-function modelOf(ev) {
-  const m = ev.args?.model;
-  return typeof m === "string" && m && m !== "default" ? m : null;
-}
-function modelTurnLog(events) {
-  const turns = [];
-  for (const ev of events) {
-    if (ev.label !== "llm.complete") continue;
-    const model = modelOf(ev);
-    if (!model) continue;
-    const args = ev.args;
-    const requested = typeof args?.requestedModel === "string" && args.requestedModel && args.requestedModel !== "default" && args.requestedModel !== model ? args.requestedModel : void 0;
-    if (ev.category === "error") {
-      turns.push({
-        index: turns.length + 1,
-        model,
-        ...requested ? { requestedModel: requested } : {},
-        toolCalls: 0,
-        textOnly: false,
-        failed: true,
-        ...typeof ev.durationMs === "number" ? { durationMs: ev.durationMs } : {}
-      });
-      continue;
-    }
-    if (ev.category !== "llm") continue;
-    const calls = typeof args?.toolCalls === "number" ? args.toolCalls : 0;
-    const turn = {
-      index: turns.length + 1,
-      model,
-      ...requested ? { requestedModel: requested } : {},
-      toolCalls: calls,
-      textOnly: calls === 0 && (ev.textChars ?? 0) > 0,
-      // What the turn SPENT its time producing. Absent on traces that predate the
-      // accounting, so an old chat's log renders exactly as it used to.
-      ...typeof args?.argBytes === "number" && args.argBytes > 0 ? { argBytes: args.argBytes } : {},
-      ...typeof ev.usage?.completion === "number" && ev.usage.completion > 0 ? { completionTokens: ev.usage.completion } : {},
-      ...typeof ev.durationMs === "number" ? { durationMs: ev.durationMs } : {},
-      ...args?.unliftedCallMarkup === true ? { unliftedCallMarkup: true } : {},
-      ...typeof args?.role === "string" ? { role: args.role } : {},
-      ...typeof args?.failovers === "string" && args.failovers ? { failovers: args.failovers } : {}
-    };
-    if (typeof args?.upstreamFunctionCalls === "number") {
-      turn.upstreamFunctionCalls = args.upstreamFunctionCalls;
-      if (typeof args.upstreamRecovered === "number") turn.upstreamRecovered = args.upstreamRecovered;
-    }
-    turns.push(turn);
-  }
-  return turns;
-}
-
-// src/runStore/gatewayRoutingTrace.ts
-var FAILOVER_SEPARATOR = ", ";
-
-// src/runStore/progressFinishFacts.ts
-var PROGRESS_FORCED_LABEL = "loop.progress_forced";
-
-// src/handOffParallelism.ts
-var HAND_OFF_MODE_LABEL = "hand_off.mode";
-var HAND_OFF_CLASH_LABEL = "hand_off.scope_clash";
-
-// src/routingByRole.ts
-function decisionOf(e) {
-  const a = e.args;
-  if (!a || a.mode !== "parallel" && a.mode !== "inline" && a.mode !== "mixed") return null;
-  return {
-    mode: a.mode,
-    parallelTasks: Array.isArray(a.parallelTasks) ? a.parallelTasks : [],
-    inlineTasks: Array.isArray(a.inlineTasks) ? a.inlineTasks : [],
-    clash: a.clash ?? null
-  };
-}
-var ranked = (counts) => [...counts.entries()].sort((a, b) => b[1] - a[1]);
-function routingByRole(turns, events) {
-  const byRole = /* @__PURE__ */ new Map();
-  for (const t of turns) {
-    if (t.failed || !t.role) continue;
-    const entry = byRole.get(t.role) ?? { turns: 0, models: /* @__PURE__ */ new Map(), failovers: /* @__PURE__ */ new Map() };
-    entry.turns += 1;
-    entry.models.set(t.model, (entry.models.get(t.model) ?? 0) + 1);
-    for (const f of t.failovers?.split(FAILOVER_SEPARATOR) ?? []) if (f) entry.failovers.set(f, (entry.failovers.get(f) ?? 0) + 1);
-    byRole.set(t.role, entry);
-  }
-  const count = (label) => events.filter((e) => e.label === label).length;
-  const roleHandoffs = events.filter((e) => e.label === "llm.role_handoff");
-  const hasArg = (e, key) => !!e.args && typeof e.args === "object" && key in e.args;
-  const progressForced = events.filter((e) => e.label === PROGRESS_FORCED_LABEL && !!e.args && typeof e.args === "object").map((e) => e.args).filter((a) => a.forced === "hand_off");
-  const progressForcedHandOffs = progressForced.length;
-  const progressSignals = [...new Set(progressForced.map((a) => typeof a.signal === "string" ? a.signal : "").filter(Boolean))];
-  return {
-    roles: [...byRole.entries()].map(([role, e]) => ({
-      role,
-      turns: e.turns,
-      models: ranked(e.models).map(([model, n]) => ({ model, turns: n })),
-      failovers: ranked(e.failovers).map(([failover, n]) => ({ failover, turns: n }))
-    })),
-    coderReasks: roleHandoffs.filter((e) => hasArg(e, "from")).length,
-    handOffs: roleHandoffs.filter((e) => hasArg(e, "via")).length,
-    handOffsForced: count("loop.hand_off_due") + progressForcedHandOffs,
-    handOffsForcedByProgress: progressForcedHandOffs,
-    handOffsForcedSignals: progressSignals,
-    planBudgetsSpent: count("loop.plan_budget_spent"),
-    handOffModes: events.filter((e) => e.label === HAND_OFF_MODE_LABEL).map(decisionOf).filter((d) => d !== null),
-    handOffClashesRefused: count(HAND_OFF_CLASH_LABEL)
-  };
-}
-
-// src/staffingSummary.ts
-function sessionShippedInTrace(events) {
-  let n = 0;
-  for (const ev of events) {
-    if (ev.category !== "tool" || ev.isError || isFailedToolResult(ev.result)) continue;
-    if (isCodeChangeTool(ev.label) || ev.label === "git_commit" || ev.label === "git_push") n += 1;
-  }
-  return n;
-}
-var DISPATCH_TOOL = /chats[._](dispatch_agent|execute_as_agent)|kanban[._](coordinate|materialize_work_items|assess_resource|assign_participant)|executions[._]submit|run[._-]?now/i;
-function isDispatchTool(label) {
-  return DISPATCH_TOOL.test(label);
-}
-var MAX_REFUSAL_CHARS = 180;
-function didDispatch(ev) {
-  if (ev.isError || isFailedToolResult(ev.result)) return false;
-  const r = toolResultRecord(ev.result);
-  if (!r) return true;
-  const autoRun = r.autoRun && typeof r.autoRun === "object" ? r.autoRun : null;
-  if (autoRun && typeof autoRun.dispatched === "boolean") return autoRun.dispatched;
-  if (typeof r.dispatched === "boolean") return r.dispatched;
-  return true;
-}
-function refusalMessage(ev) {
-  const r = toolResultRecord(ev.result);
-  const raw = r && typeof r.error === "string" && r.error || r && typeof r.detail === "string" && r.detail || (r && r.autoRun && typeof r.autoRun === "object" && typeof r.autoRun.detail === "string" ? String(r.autoRun.detail) : "") || (typeof ev.result === "string" ? ev.result : "") || (r ? JSON.stringify(r) : "") || "no reason given";
-  const flat = String(raw).replace(/\s+/g, " ").trim();
-  return flat.length > MAX_REFUSAL_CHARS ? `${flat.slice(0, MAX_REFUSAL_CHARS)}\u2026` : flat || "no reason given";
-}
-function asAgentOf(args) {
-  const a = args && typeof args === "object" ? args : null;
-  const v = a?.as_agent;
-  return typeof v === "string" ? v.trim() : "";
-}
-function staffingSummaryInTrace(events) {
-  let ticketsCreated = 0;
-  let filedLocally = 0;
-  let dispatchAttempts = 0;
-  let dispatched = 0;
-  const dispatchRefusals = [];
-  const personaSubagents = [];
-  for (const ev of events) {
-    if (ev.category !== "tool") continue;
-    if (isTicketWriteTool(ev.label) && !ev.isError && !isFailedToolResult(ev.result)) {
-      ticketsCreated += 1;
-      if (isLocalTicketCreateLabel(ev.label)) filedLocally += 1;
-    }
-    if (isDispatchTool(ev.label)) {
-      dispatchAttempts += 1;
-      if (didDispatch(ev)) dispatched += 1;
-      else dispatchRefusals.push({ label: ev.label, message: refusalMessage(ev) });
-    }
-    if (ev.label === "spawn_agent") {
-      const agent = asAgentOf(ev.args);
-      if (!agent) continue;
-      const args = ev.args;
-      const result = toolResultRecord(ev.result);
-      const label = typeof args?.label === "string" && args.label.trim() || typeof result?.label === "string" && result.label.trim() || (typeof args?.task === "string" ? args.task.trim().slice(0, 60) : "") || "delegated work";
-      personaSubagents.push({
-        agent,
-        label,
-        ok: !ev.isError && !isFailedToolResult(ev.result) && result?.ok !== false
-      });
-    }
-  }
-  const verdict = dispatched > 0 || personaSubagents.some((p) => p.ok) ? "staffed" : dispatchRefusals.length > 0 ? "staffing-refused" : ticketsCreated > 0 && filedLocally === ticketsCreated ? "filed-locally" : ticketsCreated > 0 ? sessionShippedInTrace(events) > 0 ? "self-served" : "filed-not-staffed" : "no-work-filed";
-  return { ticketsCreated, filedLocally, dispatchAttempts, dispatched, dispatchRefusals, personaSubagents, verdict };
-}
-
-// ../packages/cost-levers/src/index.ts
-var COST_LEVERS = [
-  { id: "a2_run_budget", requirement: "A2", rollout: 100, summary: "Token + USD run budget, shown to the loop" },
-  { id: "a3_progress_detector", requirement: "A3", rollout: 100, summary: "Repeat-read / edit-revert / no-progress steer" },
-  { id: "b1_stable_prefix", requirement: "B1", rollout: 100, summary: "Volatile blocks after the cache breakpoint" },
-  { id: "b2_semantic_cache", requirement: "B2", rollout: 10, summary: "Scoped semantic cache on tool-free chat" },
-  { id: "b3_single_flight", requirement: "B3", rollout: 100, summary: "Coalesce identical in-flight requests" },
-  { id: "b4_agent_answer_replay", requirement: "B4", rollout: 10, summary: "Memory answer replay for agent sub-questions" },
-  { id: "c2_observation_masking", requirement: "C2", rollout: 10, summary: "Mask tool outputs older than N turns" },
-  { id: "c3_task_state", requirement: "C3", rollout: 10, summary: "Structured task state kept through compaction" },
-  { id: "c4_adaptive_context", requirement: "C4", rollout: 10, summary: "Start retrieval small, widen on low confidence" },
-  { id: "c5_cloud_repo_map", requirement: "C5", rollout: 10, summary: "Graph-ranked repo map on cloud runs" },
-  { id: "c6_rerank", requirement: "C6", rollout: 10, summary: "Cross-encoder rerank after hybrid retrieval" },
-  { id: "c7_tool_output_policy", requirement: "C7", rollout: 100, summary: "One shared tool-output budget + failure summaries" },
-  // 10 like every lever that changes what the model sees; it runs only where the local
-  // engine's health probe reports a loaded compressor, so it never triggers a download.
-  { id: "c8_token_compression", requirement: "C8", rollout: 10, summary: "LLMLingua-2 token compression of large context" },
-  { id: "c10_outline_first_reads", requirement: "B2", rollout: 100, summary: "Large-file first read returns outline + first 40 lines" },
-  { id: "c9_price_tier_budget", requirement: "C9", rollout: 100, summary: "Compaction budget under long-context price tiers" },
-  { id: "d1_verifier_cascade", requirement: "D1", rollout: 10, summary: "Weak model first, verifier, escalate one tier" },
-  { id: "d2_difficulty_router", requirement: "D2", rollout: 10, summary: "Predict weak-model failure, skip the wasted attempt" },
-  { id: "d3_routing_exploration", requirement: "D3", rollout: 100, summary: "Thompson exploration + decay in learned routing" },
-  { id: "d4_role_reasoning", requirement: "D4", rollout: 10, summary: "Reasoning effort by role" },
-  { id: "d5_output_caps", requirement: "D5", rollout: 100, summary: "Diff edits + per-role max_tokens" },
-  { id: "d6_batch_api", requirement: "D6", rollout: 100, summary: "Provider batch APIs for deferred background work" },
-  { id: "d7_deterministic_handlers", requirement: "D7", rollout: 100, summary: "Deterministic handlers + post-edit checks" },
-  { id: "d8_parallel_tool_calls", requirement: "D8", rollout: 100, summary: "Batch independent tool calls in one turn" },
-  { id: "e1_skill_ranking", requirement: "E1", rollout: 100, summary: "Inject only the most relevant approved skills" },
-  { id: "e2_specialists", requirement: "E2", rollout: 10, summary: "Admitted small specialist models for narrow jobs" },
-  // Always on (operator, 2026-10-23): recall dual-reads the paid 1536 column for rows the
-  // 1024 backfill has not reached yet, so it never had to wait for the backfill.
-  { id: "e3_free_embeddings", requirement: "E3", rollout: 100, summary: "Free Workers AI embeddings for memory" },
-  { id: "e5_verified_local_label", requirement: "E5", rollout: 100, summary: "Hybrid local label = passed the verifier" }
-];
-var BY_ID = new Map(COST_LEVERS.map((l) => [l.id, l]));
-
-// ../packages/tool-output-policy/src/caps.ts
-var TOOL_OUTPUT_CAPS = {
-  read_file: 16e3,
-  run_command: 2e4,
-  exec: 2e4,
-  bash: 2e4,
-  git_status: 2e4,
-  git_diff: 2e4,
-  git_history: 2e4,
-  git_sync_latest: 2e4,
-  git_undo: 2e4,
-  git_redo: 2e4,
-  // Up to four children's reports in one result, each capped by agent-tools'
-  // `SUBAGENT_REPORT_CHARS`. A research child's report IS its deliverable: under the 6K
-  // default a wait on four left the owner ~1.5K of each, and it re-spawned researchers
-  // to recover what was cut (VS Code chat #6). Four full reports plus each one's header
-  // and cut marker; `subagentReportBudget.test.ts` (brain-embedded) holds the two together.
-  wait_agents: 34e3,
-  // The Creation Canvas's reads. A board snapshot is the whole board as JSON and a real
-  // board runs to tens of KB; under the 6K default the model was handed a sliver of it and
-  // asked the user to re-select objects that were already there. A build file is paged
-  // like `read_file` (see {@link PAGED_READ_TOOLS}).
-  canvas_read_snapshot: 64e3,
-  canvas_read_object: 32e3,
-  canvas_read_build_file: 16e3
-};
-var READ_FILE_TOOL = "read_file";
-var PAGED_READ_TOOLS = {
-  // `read_file`'s `offset` applies to each path of a `paths[]` read (agent-tools core-tools).
-  [READ_FILE_TOOL]: { search: "search_code", perPathOffset: true },
-  // The canvas's `offset` is honoured for a SINGLE path only.
-  canvas_read_build_file: { search: "canvas_search_build_files", perPathOffset: false }
-};
-
-// ../packages/tool-output-policy/src/readFileWindow.ts
-var READ_FILE_RESULT_CHARS = TOOL_OUTPUT_CAPS.read_file ?? 16e3;
-
-// src/brainVerdict.ts
-var import_working6 = require("@seanhogg/builderforce-memory/working");
-var CONTEXT_PROMPT_PEAK = Math.round(import_working6.HISTORY_TOKEN_BUDGET * 1.5);
-
-// src/brainDiagnosticsText.ts
-var import_working7 = require("@seanhogg/builderforce-memory/working");
-
-// src/brainTriage.ts
-var TICKET_WRITE_TOOL = new RegExp(
-  `(tasks|objectives|key_results|initiatives|portfolios|specs|roadmap)[._]create|chats[._]link_ticket|tickets[._]from_delta|${LOCAL_TICKET_CREATE_LABEL.source}`,
-  "i"
-);
-function isTicketWriteTool(label) {
-  return TICKET_WRITE_TOOL.test(label);
-}
-
-// src/runFindings/detectors/filedThenInline.ts
-function filedThenInline(view) {
-  const { staffing } = view;
-  if (staffing.ticketsCreated === 0 || staffing.dispatched > 0 || staffing.personaSubagents.some((p) => p.ok)) return [];
-  const filed = view.calls.filter((c) => c.ok && isTicketWriteTool(c.name));
-  const last = filed[filed.length - 1];
-  if (!last) return [];
-  const inline = view.calls.find((c) => c.write && c.step > last.step);
-  if (!inline) return [];
-  return [finding("filed_then_inline", "info", { tickets: staffing.ticketsCreated }, [
-    ...filed.map((c) => callEvidence(c, void 0, typeof c.args.title === "string" ? c.args.title : void 0)),
-    callEvidence(inline, inline.paths[0])
-  ])];
-}
-
-// src/composingActivity.ts
-function utf8ByteLength2(text) {
-  if (!text) return 0;
-  if (typeof TextEncoder !== "undefined") return new TextEncoder().encode(text).length;
-  let bytes = 0;
-  for (const ch of text) {
-    const cp = ch.codePointAt(0) ?? 0;
-    bytes += cp < 128 ? 1 : cp < 2048 ? 2 : cp < 65536 ? 3 : 4;
-  }
-  return bytes;
-}
-
 // src/runFindings/detectors/oversizedArgs.ts
 function blocksOf(v, out = /* @__PURE__ */ new Set()) {
   if (typeof v === "string") {
@@ -6038,7 +7164,7 @@ function sharingCalls(calls) {
   const holders = /* @__PURE__ */ new Map();
   for (const c of calls) for (const b of blocksOf(c.args)) holders.set(b, [...holders.get(b) ?? [], c]);
   const out = /* @__PURE__ */ new Set();
-  for (const list of holders.values()) if (list.length >= 2) for (const c of list) out.add(c);
+  for (const list2 of holders.values()) if (list2.length >= 2) for (const c of list2) out.add(c);
   return out;
 }
 function oversizedArgs(view) {
@@ -6088,14 +7214,14 @@ function promptBloat(view) {
 }
 
 // src/runFindings/detectors/repeatedNarration.ts
-var import_working8 = require("@seanhogg/builderforce-memory/working");
+var import_working5 = require("@seanhogg/builderforce-memory/working");
 function asNarration(t) {
   return { role: "assistant", content: t.text, tool_calls: t.calls.map(() => ({})) };
 }
 var isCandidate = (t) => t.calls.length > 0 && t.text.trim().length > 0;
 function repeatedNarration(view) {
   const msgs = view.turns.map(asNarration);
-  const folded = (0, import_working8.foldRepeatedNarration)(msgs, RUN_FINDING_POLICY.narrationOverlap);
+  const folded = (0, import_working5.foldRepeatedNarration)(msgs, RUN_FINDING_POLICY.narrationOverlap);
   const repeats = /* @__PURE__ */ new Set();
   let lastKept = null;
   for (let i = 0; i < view.turns.length; i++) {
@@ -6178,6 +7304,9 @@ function slowTurns(view) {
   return [finding("slow_turns", "warn", { turns: slow.length, slowestMs }, slow.map((t) => ({ ...turnEvidence(t), note: "slowTurn", params: { ms: t.durationMs, completionTokens: t.completionTokens, argBytes: t.argBytes } })))];
 }
 
+// src/stoppedTurn.ts
+var STOPPED_TURN_STEP = "agent.stopped";
+
 // src/runFindings/detectors/stoppedUnverified.ts
 function stoppedUnverified(view) {
   if (!view.stopped) return [];
@@ -6244,6 +7373,3338 @@ var RUN_FINDING_REGISTRY = [
   { kind: "review_cap_hit", detect: reviewCapHit }
 ];
 
+// src/modelScorecard.ts
+function modelOf(ev) {
+  const m = ev.args?.model;
+  return typeof m === "string" && m && m !== "default" ? m : null;
+}
+function modelTurnLog(events) {
+  const turns = [];
+  for (const ev of events) {
+    if (ev.label !== "llm.complete") continue;
+    const model = modelOf(ev);
+    if (!model) continue;
+    const args = ev.args;
+    const requested = typeof args?.requestedModel === "string" && args.requestedModel && args.requestedModel !== "default" && args.requestedModel !== model ? args.requestedModel : void 0;
+    if (ev.category === "error") {
+      turns.push({
+        index: turns.length + 1,
+        model,
+        ...requested ? { requestedModel: requested } : {},
+        toolCalls: 0,
+        textOnly: false,
+        failed: true,
+        ...typeof ev.durationMs === "number" ? { durationMs: ev.durationMs } : {}
+      });
+      continue;
+    }
+    if (ev.category !== "llm") continue;
+    const calls = typeof args?.toolCalls === "number" ? args.toolCalls : 0;
+    const turn = {
+      index: turns.length + 1,
+      model,
+      ...requested ? { requestedModel: requested } : {},
+      toolCalls: calls,
+      textOnly: calls === 0 && (ev.textChars ?? 0) > 0,
+      // What the turn SPENT its time producing. Absent on traces that predate the
+      // accounting, so an old chat's log renders exactly as it used to.
+      ...typeof args?.argBytes === "number" && args.argBytes > 0 ? { argBytes: args.argBytes } : {},
+      ...typeof ev.usage?.completion === "number" && ev.usage.completion > 0 ? { completionTokens: ev.usage.completion } : {},
+      ...typeof ev.durationMs === "number" ? { durationMs: ev.durationMs } : {},
+      ...args?.unliftedCallMarkup === true ? { unliftedCallMarkup: true } : {},
+      ...typeof args?.role === "string" ? { role: args.role } : {},
+      ...typeof args?.failovers === "string" && args.failovers ? { failovers: args.failovers } : {}
+    };
+    if (typeof args?.upstreamFunctionCalls === "number") {
+      turn.upstreamFunctionCalls = args.upstreamFunctionCalls;
+      if (typeof args.upstreamRecovered === "number") turn.upstreamRecovered = args.upstreamRecovered;
+    }
+    turns.push(turn);
+  }
+  return turns;
+}
+
+// src/runStore/gatewayRoutingTrace.ts
+var FAILOVER_SEPARATOR = ", ";
+
+// ../packages/agent-loop/src/runNarration.ts
+var NARRATION_OPENER = new RegExp(
+  "^(?:(?:now|next|first|then|so|okay|ok|alright|actually|great|good|perfect|but|and|also|finally)[,!.]?\\s+)*(?:let me|let's|i(?:'ll| will| need to| should| want to| am going to|'m going to| think| see| can see| notice| ran)\\b|looking (?:at|back|for)\\b|checking\\b|now the\\b|that was expected\\b)",
+  "i"
+);
+
+// ../packages/agent-loop/src/taskClosedState.ts
+var ARCHIVED_TASK_STATUS = "archived";
+var TASK_CLOSED_STATUSES = ["done", "cancelled", "canceled", "completed", ARCHIVED_TASK_STATUS];
+var CLOSED = new Set(TASK_CLOSED_STATUSES);
+var TASK_CANCELLED_STATUSES = ["cancelled", "canceled"];
+var CANCELLED = new Set(TASK_CANCELLED_STATUSES);
+
+// ../packages/agent-loop/src/ticketClosedStates.ts
+var TASK_TABLE = { closed: TASK_CLOSED_STATUSES, cancelled: TASK_CANCELLED_STATUSES };
+var CEREMONY_SESSION_CLOSED_STATUSES = ["completed", "cancelled", "closed", "archived"];
+var CEREMONY_SESSION = { closed: CEREMONY_SESSION_CLOSED_STATUSES, cancelled: [] };
+var PORTFOLIO_STATUSES = ["active", "archived", "cancelled"];
+var INITIATIVE_STATUSES = ["proposed", "active", "completed", "archived", "cancelled"];
+var OBJECTIVE_STATUSES = ["active", "achieved", "missed", "archived", "cancelled"];
+var ROADMAP_STATUSES = ["planned", "in_progress", "shipped", "cancelled"];
+var ROADMAP_LEGACY_DELIVERED_STATUSES = ["done", "complete", "completed", "released"];
+function pick(_vocabulary, ...words) {
+  return words;
+}
+var TICKET_STATUS_ALIASES = {
+  roadmap: Object.fromEntries(ROADMAP_LEGACY_DELIVERED_STATUSES.map((word) => [word, "shipped"]))
+};
+var TICKET_CLOSED_STATES = {
+  // agent-loop `taskClosedState.ts` TASK_CLOSED_STATUSES / TASK_CANCELLED_STATUSES.
+  task: TASK_TABLE,
+  gap: TASK_TABLE,
+  epic: TASK_TABLE,
+  portfolio: { closed: pick(PORTFOLIO_STATUSES, "archived"), cancelled: [] },
+  initiative: { closed: pick(INITIATIVE_STATUSES, "completed", "archived"), cancelled: [] },
+  // A MISSED objective is over without delivering, so it is skipped like a cancelled lane
+  // rather than counted done (its own ring still reads 100: it is closed).
+  objective: { closed: pick(OBJECTIVE_STATUSES, "achieved", "missed", "archived"), cancelled: pick(OBJECTIVE_STATUSES, "missed") },
+  // Legacy delivered spellings are still read as closed: older rows carry them.
+  roadmap: { closed: [...pick(ROADMAP_STATUSES, "shipped"), ...ROADMAP_LEGACY_DELIVERED_STATUSES], cancelled: [] },
+  // api schema/kernel.ts `specStatusEnum`: draft | ready | in_progress | complete (a pg
+  // enum, so the api test asserts this word is one of its values).
+  spec: { closed: ["complete"], cancelled: [] },
+  retro: CEREMONY_SESSION,
+  poker: CEREMONY_SESSION
+};
+var CLOSED_BY_KIND = new Map(
+  Object.entries(TICKET_CLOSED_STATES).map(([kind, v]) => [kind, { closed: new Set(v.closed), cancelled: new Set(v.cancelled) }])
+);
+
+// ../packages/agent-loop/src/reasoning.ts
+var REASONING_TAG = "think(?:ing)?|thought|antthinking|scratchpad|reasoning";
+var QUICK_TAG_RE = new RegExp(`<\\s*/?\\s*(?:${REASONING_TAG}|final)\\b`, "i");
+var REASONING_TAG_RE = new RegExp(`<\\s*(/?)\\s*(?:${REASONING_TAG})\\b[^<>]*>`, "gi");
+
+// ../packages/agent-stall/src/classifyRequest.ts
+function hasExplicitQuestionIntent({ intent, signals }) {
+  return intent === "question" && (signals.questionLead || signals.questionMark || signals.researchLead);
+}
+var CHANGE_VERBS = "add|change|fix|update|reduce|increase|remove|delete|rename|refactor|implement|create|build|make|move|set|wire|migrate|replace|adjust|enable|disable|improve|write|edit|apply|correct|resolve|shrink|expand|hide|show|bump|revert|restore|install|upgrade|downgrade|rewrite|extract|split|merge|convert|port";
+var CHANGE_VERB = new RegExp(`\\b(${CHANGE_VERBS})\\b`, "i");
+var REPORT_OBJECTS = "summary|report|findings|notes|overview|write-?up|answer|explanation|list|table|recommendations?";
+var CHANGE_VERB_AIMED = new RegExp(
+  `\\b(${CHANGE_VERBS})\\b(?!\\s+(me|us)\\b|\\s+(up\\s+)?((a|an|the|your|me|us|my)\\s+)?(short\\s+|brief\\s+)?(${REPORT_OBJECTS})\\b)`,
+  "i"
+);
+var FINISH_OBJECT = "(complete|finish|finali[sz]e)\\s+(the|this|that|these|those|it|my|our|your|all|implementation|work|task|change)\\b";
+var FINISH_ORDER = new RegExp(`^\\s*(please\\s+)?(now\\s+)?${FINISH_OBJECT}`, "i");
+var CHAINED_FINISH = new RegExp(`(\\band|\\bthen|[,.;])\\s+((also|then|please|now)\\s+)*${FINISH_OBJECT}`, "i");
+var RESUMES_WORK = /^\s*(please\s+)?(now\s+)?(continue|resume|carry on with|pick up)\b[^?\n]{0,80}\b(work|tasks?|tickets?|implementation|changes?|items?|threads?)\b/i;
+var INTERROGATIVE = /^\s*(what|why|how|where|when|which|who|is|are|was|were|does|do|did|should|would|will)\b/i;
+var DO_WORK_ORDER = /^\s*(please\s+)?do\s+(?:(?:the|these|those|both|all)\s+)?(?:[\w-]+\s+){0,3}(?:work|tasks?|tickets?|changes?|items?|steps?|slices?)\s*[.!]?\s*$/i;
+var REQUEST_MODAL = /^\s*(can|could)\b/i;
+var QUESTION_LEADS = [
+  /\bis this something (?:we|you) want\b/i,
+  /\bshould we\b/i,
+  /\bdo we want\b/i,
+  /\bwhat do you think\b/i,
+  /\bworth doing\b/i,
+  /\breview\b[^?]{0,120}[;,—–-]\s*(?:is|are|should|do|does|can|would|will)\b[^?]{0,120}\?/i
+];
+var RESEARCH_LEAD = /^\s*(explain|describe|summar\w*|tell me|show me|list|compare|review|analyse|analyze|research|investigate|find|locate|trace|audit|look into|search)\b/i;
+var CHAINED_CHANGE = new RegExp(
+  `(\\band|\\bthen|[,.;])\\s+((also|then|please|now)\\s+)*(${CHANGE_VERBS})\\b(?!\\s+(me|us)\\b|\\s+(up\\s+)?((a|an|the|your|me|us|my)\\s+)?(short\\s+|brief\\s+)?(${REPORT_OBJECTS})\\b)`,
+  "i"
+);
+var POINTS_BELOW = /\b(below|the following|as follows)\b|\bthis\b/i;
+var ASK_HEAD_CHARS = 600;
+var CONTINUATION = /^\s*(?:ok(?:ay)?[,\s]*)?(?:please\s+)?(?:now\s+)?(?:just\s+)?(?:go\s+ahead|carry\s+on|keep\s+going|make\s+it\s+so|do\s+it|do\s+that|do\s+so|fix\s+it|fix\s+that|apply\s+it|apply\s+that|apply|fix|go|proceed|continue|yes|yep|yeah|y|sure|confirm(?:ed)?|approved?|ship\s+it|send\s+it|run\s+it|do\s+the\s+fix|make\s+the\s+change)\s*[.!]*\s*$/i;
+var MAX_CONTINUATION_CHARS = 40;
+function isContinuationText(text) {
+  const t = text.trim();
+  return !!t && t.length <= MAX_CONTINUATION_CHARS && CONTINUATION.test(t);
+}
+function splitAskAndContext(text) {
+  const t = text.trim();
+  const blank = t.search(/\n[ \t]*\n/);
+  if (blank > 0) {
+    const lead = t.slice(0, blank).trim();
+    if (/[?:]\s*$/.test(lead) || POINTS_BELOW.test(lead)) {
+      return { ask: lead, context: t.slice(blank).trim() };
+    }
+  }
+  return { ask: t, context: "" };
+}
+function classifyRequest(text) {
+  const { ask, context } = splitAskAndContext(text ?? "");
+  const head = ask.slice(0, ASK_HEAD_CHARS);
+  const interrogative = INTERROGATIVE.test(head);
+  const modal = REQUEST_MODAL.test(head);
+  const questionMark = /\?\s*$/.test(ask);
+  const lead = QUESTION_LEADS.some((re) => re.test(head));
+  const researchLead = RESEARCH_LEAD.test(head);
+  const chainedChange = CHAINED_CHANGE.test(head) || CHAINED_FINISH.test(head);
+  const finishOrder = FINISH_ORDER.test(head);
+  const resumesWork = RESUMES_WORK.test(head);
+  const changeVerb = CHANGE_VERB.test(head);
+  const aimedAtUs = CHANGE_VERB_AIMED.test(head) || chainedChange || finishOrder;
+  const continuation = isContinuationText(ask);
+  const signals = {
+    questionLead: interrogative || modal || lead,
+    questionMark,
+    researchLead,
+    chainedChange,
+    changeVerb,
+    finishOrder,
+    resumesWork,
+    continuation,
+    askSplit: context.length > 0
+  };
+  const verdict = (intent) => ({ intent, ask, context, signals });
+  if (!ask) return verdict("question");
+  if (continuation) return verdict("change");
+  if (resumesWork) return verdict("change");
+  if (DO_WORK_ORDER.test(ask)) return verdict("change");
+  if (researchLead) return verdict(chainedChange ? "change" : "question");
+  if (interrogative) return verdict("question");
+  if (lead) return verdict(aimedAtUs ? "change" : "question");
+  if (modal || questionMark) return verdict(aimedAtUs ? "change" : "question");
+  return verdict(changeVerb || finishOrder || chainedChange ? "change" : "question");
+}
+
+// ../packages/agent-stall/src/handoff.ts
+var RUNNER = "(?:npm|pnpm|yarn|npx|bun|deno|node|git|make|cargo|go|dotnet|mvn|gradle|python3?|pip3?|poetry|uv|ruby|rake|bundle|composer|php|docker(?:\\s+compose)?|kubectl|helm|terraform|wrangler|vercel|netlify|vite|webpack|tsc|tsgo|eslint|prettier|pytest|jest|vitest|playwright|cypress|bash|sh|zsh|pwsh|powershell|curl|wget|sed|awk|rsync|vsce)\\b";
+var SCRIPT_NOUN = "(?:build|tests?|test suite|type-?check(?:ing)?|typecheck|lint(?:er|ing)?|guards?|checks?|install|dev server|migrations?|deploy(?:ment)?|codegen|bundle|vsix|package|commit|push|pull request|pr\\b|branch|lockfile|extension host)";
+var CMD_MARK = "\u2983cmd\u2984";
+var HANDOFF_VERB = "(?:re-?run|run|execute|apply|install|re-?install|rebuild|build|compile|commit|push|deploy|publish|restart|relaunch|launch|start|test|verify|lint|type-?check|typecheck|migrate|regenerate|package|bump|trigger|kick off)";
+var HANDS_OFF = new RegExp(
+  [
+    // "you can run", "you'll need to run", "you should now commit", "you must rebuild"
+    `\\byou(?:'ll|'d|'ve| will| would| should| must| may| might| can| could| still| then| now)?(?:\\s+(?:then|now|also|just|still|next|first|finally|want to|need to|have to|be able to))*\\s+${HANDOFF_VERB}\\b`,
+    // "please run the guards"
+    `\\bplease\\s+(?:now\\s+|then\\s+)?${HANDOFF_VERB}\\b`,
+    // "once you've run the build", "after you push"
+    `\\b(?:once|after|when|before)\\s+you(?:'ve| have| had)?\\s+${HANDOFF_VERB}\\b`,
+    // "run the following", "apply these changes", "execute this command"
+    `\\b${HANDOFF_VERB}\\s+(?:the\\s+following|these|this)\\b`,
+    // "to verify, run …" / "to apply the fix you need to run …"
+    `\\bto\\s+(?:apply|verify|confirm|finish|complete|deploy|ship|land|pick up|see)\\b[^.\\n]{0,60}?,?\\s*(?:you\\s+(?:can|should|must|will|need to|have to)\\s+)?${HANDOFF_VERB}\\b`,
+    // A steps list: "1. Run the type-check", "- Commit the change", "Then push to main"
+    `(?:^|\\n)[ \\t]*(?:\\d+[.)]|[-*+]|#{1,6}|>)?[ \\t]*(?:then|now|next|finally|first)?[,:]?[ \\t]*${HANDOFF_VERB}\\b`,
+    // The same imperative mid-paragraph: "I applied the fix. Now run the type-check."
+    // The adverb is REQUIRED here, unlike the line-leading form above — without it a
+    // plain sentence that happens to open with one of these words ("Build output is
+    // clean now.") would read as an instruction.
+    `[.!?]\\s+(?:then|now|next|finally|first)[,:]?\\s+${HANDOFF_VERB}\\b`
+  ].join("|"),
+  "gi"
+);
+var COMMAND_NEARBY = new RegExp(`${CMD_MARK}|${RUNNER}|\\b${SCRIPT_NOUN}`, "i");
+
+// ../packages/agent-stall/src/permissionMenu.ts
+var ACTION_VERB = "(?:run|execute|apply|implement|install|rebuild|build|compile|commit|push|merge|rebase|deploy|publish|release|ship|open|create|file|draft|write|add|update|patch|edit|change|modify|fix|resolve|refactor|rename|move|delete|remove|drop|close|cancel|archive|assign|dispatch|schedule|start|kick off|trigger|link|list|enumerate|show|generate|produce|proceed|continue|go ahead|do (?:it|that|this|them|so|first|next|now|any|all)|handle|take care of|work through|go through|tackle|clean up|tidy|sort out|migrate|convert|split|extract|bump|revert|restore|retry|re-?try|re-?run|verify|test|check|review|investigate|dig into|look into)";
+var OFFER = new RegExp(
+  [
+    // "Would you like me to open the PRs?" · "Do you want me to merge these?"
+    // · "Would you like me to proceed?"
+    `\\b(?:would|do)\\s+you\\s+(?:like|want|prefer)\\s+(?:me|us)\\s+to\\b`,
+    // "Shall I open PRs?" · "Should I cancel the stalled tickets?" · "Can I proceed?"
+    // · "May I go ahead?"
+    `\\b(?:shall|should|can|may)\\s+i\\b[^.?\\n]{0,80}\\?`,
+    // "Want me to push these?" — the subjectless form.
+    `\\bwant\\s+(?:me|us)\\s+to\\b`,
+    // "Let me know if you'd like me to…" · "Let me know which of these to do"
+    // · "Tell me which you'd prefer" · "Just say the word and I'll merge them"
+    // "how" earns its place: "let me know how you'd like to proceed" is the single most
+    // common way this pause is phrased, and it names no option at all.
+    `\\blet me know\\b[^.\\n]{0,80}\\b(?:if|whether|which|what|how)\\b`,
+    `\\b(?:tell|let)\\s+me\\s+know\\s+(?:which|what|whether|if)\\b`,
+    `\\bsay the word\\b`,
+    // "I can open the PRs if you'd like." · "I could cancel them if you want."
+    // · "I'm happy to merge these if that's what you want."
+    `\\bi\\s+(?:can|could|am happy to|'?m happy to|would be happy to)\\b[^.\\n]{0,120}?\\bif\\s+(?:you|that|you'?d|you would)\\b`,
+    // "Confirm and I'll proceed." · "Approve and I'll merge them."
+    `\\b(?:confirm|approve|give me the go-?ahead|give the go-?ahead)\\b[^.\\n]{0,40}\\band\\s+i(?:'ll| will)\\b`,
+    // "Which would you like me to do first?" · "Which of these should I start with?"
+    `\\bwhich\\s+(?:one|of these|of those)?\\s*(?:would|do|should|shall)\\s+(?:you|i)\\b`,
+    // "Your call." · "Up to you." · "How would you like to proceed?" — and the
+    // declarative order the same sentence takes inside a clause, "…how you would like
+    // to proceed", which the interrogative-only form used to miss.
+    `\\b(?:your call|up to you|it'?s your call)\\b`,
+    `\\bhow\\s+(?:you\\s+(?:would|do)|(?:would|do)\\s+you)\\s+(?:want|like|prefer)\\b`
+  ].join("|"),
+  "gi"
+);
+var ACTION_NEARBY = new RegExp(`\\b${ACTION_VERB}\\b`, "i");
+
+// ../packages/agent-stall/src/index.ts
+var ANNOUNCE_SUBJECT = "\\b(?:i(?: will|'ll| am going to|'m going to| am about to| plan to|'d need to| would need to| will need to| need to)|let(?:'?s| me| us)|going to|about to|next,? i'?l?l?|now)";
+var ANNOUNCE_FILLER = "(?:\\s+(?:now|then|first|next|quickly|briefly|just|also|actually|go ahead and|try to|attempt to))*";
+var ANNOUNCE_VERB = "(?:call|use|invoke|run|execute|trigger|query|fetch|retrieve|request|look|search|scan|find|locate|examine|inspect|review|read|list|check|verify|confirm|get|grab|pull|load|open|gather|dig|explore|investigate|analy[sz]e|start|begin|take|do|act|see|walk|trace|map)";
+var ANNOUNCE_GERUND = "(?:searching|fetching|retrieving|querying|loading|checking|looking|scanning|reading|listing|gathering|pulling|examining|inspecting|reviewing|analy[sz]ing)";
+var TOOL_IDENT = "(?:builtin_[a-z0-9]+(?:_[a-z0-9]+)+|mcp__[a-z0-9_]+)";
+var PSEUDO_CALL = [
+  // "call builtin_x", "run tool builtin_x", "invoke the function mcp__srv__x"
+  `(?:call|run|invoke|execute)\\s+(?:the\\s+)?(?:tool\\s+|function\\s+)?${TOOL_IDENT}`,
+  // "builtin_x({…})" / "builtin_x(" — the call written as code
+  `${TOOL_IDENT}\\s*[({]`,
+  // "builtin_x with chatId is 85" — the call written as an argument clause
+  `${TOOL_IDENT}\\s+(?:with|args|arguments)\\b`
+];
+var ANNOUNCED_ACTION = new RegExp(
+  [
+    "calling (the|this|that|a|it|them|these) [\\w\\s-]*?(tool|function|api|now)",
+    `${ANNOUNCE_SUBJECT}${ANNOUNCE_FILLER}\\s+${ANNOUNCE_VERB}\\b`,
+    "(one|just a) (moment|second|sec)\\b",
+    `${ANNOUNCE_GERUND} (it|that|this|these|those|the [\\w-]+|now|for)\\b`,
+    // A sentence that OPENS on a gerund and signs off with "now": "Pulling linked tickets
+    // and the roster code now." The object-led form above wants the/this/now straight
+    // after the verb, so a bare noun phrase slipped through. Measured on VS Code chat #105
+    // (`xai-oauth/grok-4.6`): turns 1-2 were caught and re-prompted, turn 3 said exactly
+    // this, scored as a complete answer, and the run ended with a recovery still unspent.
+    `(?:^|[.!?\\n]\\s*)${ANNOUNCE_GERUND}\\b[^.!?\\n]{0,80}\\bnow\\b`,
+    "stand ?by\\b",
+    ...PSEUDO_CALL
+  ].join("|"),
+  "i"
+);
+var FILE_EXTENSION = "(?:ts|tsx|js|jsx|mjs|cjs|json|md|ya?ml|sql|toml|lock|txt|env|html|css|py|go|rs|sh|png|svg|csv|xml)\\b";
+var DOTTED_TOOL_IDENT = `\\b[a-z][a-z0-9_]{2,}\\.(?!${FILE_EXTENSION})[a-z][a-z0-9_]{2,}\\b`;
+var UNCALLED_TOOL_CLAIM = new RegExp(
+  [
+    // "The tools required are X, Y and Z." / "The required tools are …"
+    "\\b(?:required tools?\\b|tools? required\\b|tools? (?:i |we )?(?:need|require)\\b)",
+    // "…tools have not returned results" / "…the tool has not returned anything yet"
+    "\\btools?\\b[^.!?]{0,80}?\\b(?:have|has|had|were|was)(?:n'?t| not)\\s+(?:yet\\s+)?(?:return|returned|provided|available|run|called)",
+    // "no tool results", "no results from the tools", "no tool outputs for project 11"
+    "\\bno\\s+(?:new\\s+)?tools?\\s+(?:results?|outputs?|data|returns?)\\b",
+    // "No other tools provide the needed data." — the same claim aimed at the CATALOG
+    // rather than at the results: an inventory of what it would need, from a turn that
+    // called none of it. Observed as the closing sentence of the measured replies.
+    "\\bno\\s+other\\s+tools?\\b[^.!?]{0,40}?\\b(?:provide|provides|give|gives|return|returns|have|has|offer|offers)\\b",
+    "\\bno\\s+results?\\s+(?:from|for)\\s+(?:the\\s+)?tools?\\b",
+    // "tool outputs never provided" / "the tool results were never returned"
+    "\\btools?\\s+(?:results?|outputs?)\\b[^.!?]{0,40}?\\b(?:never|not)\\s+(?:been\\s+)?(?:provided|returned|available)",
+    // "requires the tool outputs" / "awaiting the tool results"
+    "\\b(?:requires?|awaiting|waiting on|pending)\\s+(?:those\\s+|the\\s+)?tools?\\s+(?:results?|outputs?)",
+    // The same claim with the TOOL NAMED instead of the word "tool" — "no results from
+    // manager.digest", "missing builtin_manager_policy results". The name IS the
+    // discriminator here: prose does not carry tool identifiers by accident.
+    `\\bno\\s+(?:new\\s+)?(?:results?|data|outputs?|returns?)\\s+(?:from|for|on)\\s+(?:the\\s+)?(?:${TOOL_IDENT}|${DOTTED_TOOL_IDENT})`,
+    `\\b(?:missing|awaiting|pending|without)\\s+(?:the\\s+|those\\s+)?(?:results?\\s+(?:from|of|for)\\s+)?(?:${TOOL_IDENT}|${DOTTED_TOOL_IDENT})`
+  ].join("|"),
+  "i"
+);
+function ids(list2) {
+  return (list2 ?? []).map((m) => m.id).filter((id) => !!id);
+}
+function nextFallbackModel(surface, tried) {
+  if (!surface) return void 0;
+  const used = new Set(tried.filter(Boolean));
+  const byo = ids(surface.byo?.models);
+  const byoSet = new Set(byo);
+  const coding = (surface.codingModels ?? []).filter(Boolean);
+  const pool = ids(surface.data);
+  const tiers = [
+    coding.filter((m) => byoSet.has(m)),
+    byo,
+    coding,
+    pool
+  ];
+  for (const tier2 of tiers) {
+    const hit = tier2.find((m) => !used.has(m));
+    if (hit) return hit;
+  }
+  return void 0;
+}
+var MAX_MODEL_FAILOVERS = 2;
+function chooseStallFailover(input) {
+  for (const m of [input.activeModel, input.resolvedModel]) {
+    if (m && m !== "default" && !input.tried.includes(m)) input.tried.push(m);
+  }
+  if (input.failoversUsed >= (input.maxFailovers ?? MAX_MODEL_FAILOVERS)) return void 0;
+  const next = input.pick ? input.pick(input.tried) : nextFallbackModel(input.surface, input.tried);
+  return next && !input.tried.includes(next) ? next : void 0;
+}
+
+// ../packages/run-policy/src/latencyGuard.ts
+var LATENCY_SAMPLE_WINDOW = 9;
+var MAX_FAILOVER_LATENCY_RATIO = 3;
+function p50(samples) {
+  const valid = (samples ?? []).filter((n) => Number.isFinite(n) && n >= 0);
+  if (valid.length === 0) return void 0;
+  const sorted = [...valid].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+function recordLatency(samples, model, durationMs, window = LATENCY_SAMPLE_WINDOW) {
+  const base = samples ?? {};
+  if (!model || !Number.isFinite(durationMs) || durationMs < 0) return base;
+  const next = [...base[model] ?? [], durationMs].slice(-Math.max(1, window));
+  return { ...base, [model]: next };
+}
+function withinLatencyBudget(candidate, input) {
+  const { primary } = input;
+  if (input.primaryUnavailable || !primary || candidate === primary) return true;
+  const base = p50(input.latency?.[primary]);
+  const theirs = p50(input.latency?.[candidate]);
+  if (base === void 0 || theirs === void 0 || base <= 0) return true;
+  return theirs <= base * (input.maxRatio ?? MAX_FAILOVER_LATENCY_RATIO);
+}
+function fastestCandidate(candidates, latency) {
+  let best;
+  let bestP50 = Number.POSITIVE_INFINITY;
+  for (const m of candidates) {
+    const t = p50(latency?.[m]) ?? 0;
+    if (best === void 0 || t < bestP50) {
+      best = m;
+      bestP50 = t;
+    }
+  }
+  return best;
+}
+var MAX_GUARDED_PICKS = 32;
+function guardedPick(pick2, skip, input) {
+  const skipped2 = [...skip];
+  const slow = [];
+  for (let i = 0; i < MAX_GUARDED_PICKS; i++) {
+    const next = pick2(skipped2);
+    if (!next) break;
+    if (withinLatencyBudget(next, input)) return next;
+    slow.push(next);
+    skipped2.push(next);
+  }
+  return fastestCandidate(slow, input.latency);
+}
+
+// ../packages/run-policy/src/phaseModels.ts
+function reviewPhaseModel(phaseModels, legacyReviewModel) {
+  for (const candidate of [phaseModels?.review, phaseModels?.verify, legacyReviewModel]) {
+    if (typeof candidate === "string" && candidate.trim()) return candidate.trim();
+  }
+  return void 0;
+}
+function configuredPhaseModel(options, phase) {
+  if (phase === "verify") return reviewPhaseModel(options.phaseModels, options.reviewModel);
+  const fromMap = options.phaseModels?.[phase];
+  return typeof fromMap === "string" && fromMap.trim() ? fromMap.trim() : void 0;
+}
+function reviewing(state) {
+  return state.phase === "verify" && state.options.fixedRole !== "verify";
+}
+function phaseDefaultModel(state) {
+  if (state.phase === "verify" || state.options.fixedRole) return void 0;
+  const model = configuredPhaseModel(state.options, state.phase);
+  return model && !state.broken.includes(model) ? model : void 0;
+}
+
+// ../packages/run-policy/src/policy.ts
+var PIN_RELEASE_STATUSES = [429, 413, 503];
+var DECLINE_STATUS = 400;
+var NONE = { kind: "none" };
+function nextTurn(state, turn) {
+  const verifying = state.phase === "verify";
+  const review = reviewing(state);
+  const author = state.authorModel;
+  const reviewModel = review ? configuredPhaseModel(state.options, "verify") : void 0;
+  const mapped = reviewModel && !state.broken.includes(reviewModel) ? reviewModel : void 0;
+  let model = mapped ?? state.model ?? phaseDefaultModel(state);
+  if (verifying && author && model === author) model = void 0;
+  const excludeModels = [...state.broken];
+  if (verifying && author && !excludeModels.includes(author)) excludeModels.push(author);
+  return {
+    // A coding run's verify-phase turn reviews its change (the strongest models), whatever
+    // fixedRole the child had — except a child delegated the mechanical checks themselves.
+    role: turn.hasTools ? review ? "review" : state.options.fixedRole ?? state.phase : "chat",
+    model,
+    strict: !!model && state.strictPin,
+    excludeModels
+  };
+}
+function offersHandOff(state) {
+  return state.phase === "plan";
+}
+var PLAN_TURN_BUDGET = 20;
+function handOffDue(state) {
+  return state.phase === "plan" && state.planTurns >= PLAN_TURN_BUDGET;
+}
+function changeDue(state, progressed, budget = PLAN_TURN_BUDGET) {
+  return state.phase === "code" && !progressed && !state.changeForced && state.codeTurns >= budget;
+}
+var QUICK_CHANGE_TURN_BUDGET = 8;
+function reduceRunPolicy(state, event) {
+  const s = { ...state, outcome: NONE };
+  switch (event.type) {
+    case "turn_succeeded":
+      return succeeded3(s, event.model, event.acted === true, event.durationMs);
+    case "code_change_attempted":
+      if (s.phase !== "plan") return s;
+      return { ...s, phase: "code", outcome: s.model ? NONE : { kind: "reask_as_coder" } };
+    case "plan_budget_spent":
+      return s.phase === "plan" ? { ...s, phase: "code" } : s;
+    case "hand_off_forced":
+      return { ...s, handOffForced: true };
+    case "change_forced":
+      return { ...s, changeForced: true };
+    case "hand_off":
+      return s.phase === "plan" ? { ...s, phase: "code", outcome: { kind: "handed_off" } } : { ...s, outcome: { kind: "hand_off_rejected" } };
+    case "verify_started": {
+      if (s.phase === "verify") return s;
+      const author = s.authorModel ?? s.model ?? phaseDefaultModel(s);
+      const review = s.options.fixedRole === "verify" ? void 0 : configuredPhaseModel(s.options, "verify");
+      const distinct = review && review !== author ? review : void 0;
+      return {
+        ...s,
+        phase: "verify",
+        ...author ? { authorModel: author } : {},
+        // No distinct review pin ⇒ drop the author pin so the gateway must pick
+        // someone else. The author stays in excludeModels either way.
+        model: distinct,
+        strictPin: distinct ? s.strictPin : false,
+        locked: distinct ? s.locked : false
+      };
+    }
+    case "stalled":
+      return stalled(s, event);
+    case "transport_failed":
+      return transportFailed(s, event);
+    case "escalated": {
+      const from = s.model;
+      if (!event.to || event.to === from || s.broken.includes(event.to)) return s;
+      return {
+        ...s,
+        model: event.to,
+        locked: false,
+        strictPin: true,
+        tried: from && !s.tried.includes(from) ? [...s.tried, from] : s.tried
+      };
+    }
+  }
+}
+function succeeded3(s, resolved, acted, durationMs) {
+  const proven = acted && resolved && resolved !== "default" && !s.proven.includes(resolved) ? [...s.proven, resolved] : s.proven;
+  const served = resolved && resolved !== "default" ? resolved : void 0;
+  const timed = served ?? s.model;
+  const next = {
+    ...s,
+    ...acted && timed && durationMs !== void 0 ? { latency: recordLatency(s.latency, timed, durationMs) } : {},
+    ...acted && served && s.pin && s.model === s.pin && !s.pinResolved ? { pinResolved: served } : {},
+    turnRetries: 0,
+    proven,
+    planTurns: s.phase === "plan" ? s.planTurns + 1 : s.planTurns,
+    codeTurns: s.phase === "code" ? s.codeTurns + 1 : s.codeTurns
+  };
+  if (s.options.lockAfterFirstSuccess && !(s.model && s.strictPin) && resolved && resolved !== "default") {
+    return { ...next, model: resolved, locked: true };
+  }
+  return next;
+}
+function stalled(s, e) {
+  const tried = [...s.tried];
+  const to = chooseStallFailover({
+    activeModel: s.model,
+    resolvedModel: e.resolvedModel,
+    tried,
+    failoversUsed: s.failovers,
+    maxFailovers: s.options.maxFailovers,
+    surface: e.surface,
+    pick: failoverPicker(s, e)
+  });
+  if (!to) {
+    const returned = s.model !== s.pin ? { model: s.pin, locked: false, strictPin: !!s.pin && s.options.pinStrict } : {};
+    return { ...s, ...returned, tried, outcome: { kind: "failover_exhausted", tried } };
+  }
+  const failovers = s.failovers + 1;
+  return {
+    ...s,
+    tried,
+    failovers,
+    model: to,
+    locked: false,
+    ...s.options.strictFailover ? { strictPin: true } : {},
+    outcome: { kind: "failed_over", from: e.resolvedModel ?? s.model, to, attempt: failovers, of: s.options.maxFailovers }
+  };
+}
+function failoverPicker(s, e) {
+  const proven = s.options.preferProvenFailover ? [...s.proven].reverse() : [];
+  if (proven.length === 0 && !e.pick && !e.surface) return void 0;
+  const guard = latencyGuardFor(s, e);
+  if (proven.length === 0 && s.broken.length === 0 && !guard) return e.pick;
+  const source = (skip) => e.pick ? e.pick(skip) : nextFallbackModel(e.surface, skip);
+  return (tried) => {
+    const skip = [...tried, ...s.broken];
+    const open = proven.filter((m) => !skip.includes(m));
+    if (!guard) return open[0] ?? source(skip);
+    const fastProven = open.find((m) => withinLatencyBudget(m, guard));
+    if (fastProven) return fastProven;
+    const picked = guardedPick(source, skip, guard);
+    if (picked && withinLatencyBudget(picked, guard)) return picked;
+    return fastestCandidate([...open, ...picked ? [picked] : []], guard.latency);
+  };
+}
+function latencyGuardFor(s, e) {
+  if (s.phase === "plan" || e.primaryUnavailable || !s.latency) return void 0;
+  const pinPrimary = s.pin ? s.pinResolved : void 0;
+  return { primary: pinPrimary ?? s.proven[0] ?? e.resolvedModel ?? s.model, latency: s.latency };
+}
+function transportFailed(s, e) {
+  if (s.turnRetries >= 1 || e.kind === "unreachable") return { ...s, outcome: { kind: "fail_turn" } };
+  const releasable = s.locked || s.options.pinReleasable;
+  if (s.model && releasable && e.status !== void 0 && releasesPin(s, s.model, e.status)) {
+    return {
+      ...s,
+      model: void 0,
+      locked: false,
+      pin: void 0,
+      strictPin: false,
+      turnRetries: s.turnRetries + 1,
+      outcome: { kind: "retry_turn", released: s.model, status: e.status }
+    };
+  }
+  if (isRequestRefusalStatus(e.status)) return { ...s, outcome: { kind: "fail_turn" } };
+  if (s.model && e.kind === "interrupted" && !userPinHeld(s)) {
+    const brokenModel = e.model ?? s.model;
+    const pinned = s.pin !== void 0 && s.model === s.pin;
+    const broken2 = [.../* @__PURE__ */ new Set([...s.broken, brokenModel, s.model])];
+    const backToPin = !pinned && s.pin !== void 0 && !broken2.includes(s.pin) ? s.pin : void 0;
+    return {
+      ...s,
+      model: backToPin,
+      locked: false,
+      strictPin: backToPin !== void 0 && s.options.pinStrict,
+      ...pinned ? { pin: void 0 } : {},
+      broken: broken2,
+      turnRetries: s.turnRetries + 1,
+      outcome: { kind: "retry_turn", broken: brokenModel, ...s.locked || pinned ? { released: s.model } : {} }
+    };
+  }
+  if (s.model) return { ...s, outcome: { kind: "fail_turn" } };
+  const phaseModel = phaseDefaultModel(s);
+  const releasedPhase = phaseModel && e.status !== void 0 && releasesPin(s, phaseModel, e.status) ? phaseModel : void 0;
+  const interrupted = e.kind === "interrupted" && e.model ? e.model : void 0;
+  const broken = [.../* @__PURE__ */ new Set([...s.broken, ...interrupted ? [interrupted] : [], ...releasedPhase ? [releasedPhase] : []])];
+  return {
+    ...s,
+    broken,
+    turnRetries: s.turnRetries + 1,
+    outcome: { kind: "retry_turn", ...e.kind === "interrupted" && e.model ? { broken: e.model } : {} }
+  };
+}
+function userPinHeld(s) {
+  return s.pin !== void 0 && s.model === s.pin && !s.options.pinReleasable;
+}
+function releasesPin(s, model, status) {
+  return PIN_RELEASE_STATUSES.includes(status) || status === DECLINE_STATUS && s.options.decliningModelPrefixes.some((prefix) => model.startsWith(prefix));
+}
+function isRequestRefusalStatus(status) {
+  return status !== void 0 && status >= 400 && status < 500 && status !== 408 && !PIN_RELEASE_STATUSES.includes(status);
+}
+
+// ../packages/run-policy/src/handoffBudget.ts
+var DEFAULT_HANDOFF_RESERVE_TOKENS = 4096;
+function toolSchemaTokens(schemas, estimate) {
+  return schemas && schemas.length > 0 ? estimate(JSON.stringify(schemas)) : 0;
+}
+function handoffReserveTokens(maxTokens) {
+  return maxTokens && maxTokens > 0 ? maxTokens : DEFAULT_HANDOFF_RESERVE_TOKENS;
+}
+function handoffTokenBudget(input) {
+  const reserve = Math.max(0, input.reserveOutputTokens ?? 0);
+  const bounds = [];
+  if (input.costCapTokens && input.costCapTokens > 0) bounds.push(input.costCapTokens);
+  if (input.contextWindow && input.contextWindow > 0) bounds.push(input.contextWindow - reserve);
+  if (input.priceTierBoundary && input.priceTierBoundary > 0) bounds.push(input.priceTierBoundary);
+  if (bounds.length === 0) return void 0;
+  return Math.max(1, Math.min(...bounds));
+}
+
+// ../packages/run-policy/src/cascade.ts
+var MAX_UNIT_ESCALATIONS = 2;
+function initialCascadeState() {
+  return { escalations: 0, reasoningBoost: 0 };
+}
+function weakestTierModel(ladder, exclude = []) {
+  const usable = ladder.candidates.filter((m) => !exclude.includes(m));
+  if (usable.length === 0) return void 0;
+  const floor = Math.min(...usable.map((m) => ladder.rankOf(m)));
+  return usable.find((m) => ladder.rankOf(m) === floor);
+}
+function nextTierModel(ladder, current, exclude = []) {
+  const usable = ladder.candidates.filter((m) => !exclude.includes(m) && m !== current);
+  if (usable.length === 0) return void 0;
+  const known = current !== void 0 && ladder.candidates.includes(current);
+  const from = known ? ladder.rankOf(current) : Math.min(...ladder.candidates.map((m) => ladder.rankOf(m)));
+  const above = usable.map((m) => ladder.rankOf(m)).filter((r) => r > from);
+  if (above.length === 0) return void 0;
+  const next = Math.min(...above);
+  return usable.find((m) => ladder.rankOf(m) === next);
+}
+function cascadeVerdict(state, kind, verdict, ctx) {
+  if (verdict.inconclusive) return { state, action: { kind: "none" } };
+  const open = state.open && state.open.kind === kind ? state.open : void 0;
+  if (verdict.passed) {
+    if (!open) return { state, action: { kind: "none" } };
+    const next = { ...state, open: void 0, reasoningBoost: 0 };
+    const base = open.baseModel;
+    return { state: next, action: base && open.escalations > 0 && base !== ctx.current ? { kind: "deescalate", to: base } : { kind: "none" } };
+  }
+  const unit = open ?? { kind, escalations: 0, ...ctx.current ? { baseModel: ctx.current } : {} };
+  if (unit.escalations >= MAX_UNIT_ESCALATIONS) {
+    return {
+      state: { ...state, open: unit },
+      action: { kind: "exhausted", steer: cascadeSteer(kind, verdict, ctx.current, void 0, true) }
+    };
+  }
+  const to = nextTierModel(ctx.ladder, ctx.current, ctx.exclude ?? []);
+  return {
+    state: {
+      ...state,
+      open: { ...unit, escalations: unit.escalations + 1 },
+      escalations: state.escalations + 1,
+      reasoningBoost: Math.min(state.reasoningBoost + 1, MAX_UNIT_ESCALATIONS)
+    },
+    action: { kind: "escalate", to, escalateReasoning: true, steer: cascadeSteer(kind, verdict, ctx.current, to, false) }
+  };
+}
+var UNIT_WORDS = {
+  code_edit: "your last code change",
+  finish: "your finish attempt",
+  structured_output: "your structured answer"
+};
+function cascadeSteer(kind, verdict, from, to, exhausted) {
+  const why = verdict.reason ? `: ${verdict.reason.trim().slice(0, 1200)}` : ".";
+  const who = exhausted ? "The run has already escalated this unit as far as it may \u2014 fix it on this model." : to ? `It has been handed one tier up${from ? ` from ${from}` : ""} to ${to}, with more reasoning.` : "No stronger model is available, so reasoning has been raised instead.";
+  return `Verifier check (${verdict.verifier}) failed on ${UNIT_WORDS[kind]}${why}
+${who} Read the failure above, correct exactly what it names, and verify again before moving on.`;
+}
+
+// ../packages/agent-run/src/policy/compaction/history.ts
+var import_working6 = require("@seanhogg/builderforce-memory/working");
+var foldLimits = { summaryMs: 15e3 };
+function compactionSavedTokens(full, working, historyBudgetTokens = import_working6.HISTORY_TOKEN_BUDGET) {
+  return Math.max(0, Math.min((0, import_working6.transcriptTokens)(full), historyBudgetTokens) - (0, import_working6.transcriptTokens)(working));
+}
+function linkedAbort(parent) {
+  const own2 = new AbortController();
+  const onParent = () => own2.abort();
+  if (parent?.aborted) own2.abort();
+  else parent?.addEventListener("abort", onParent, { once: true });
+  return { signal: own2.signal, abort: () => own2.abort(), release: () => parent?.removeEventListener("abort", onParent) };
+}
+async function summaryWithin(ms, summarize, parent, onLate, onError) {
+  const link = linkedAbort(parent);
+  let timer;
+  const late = new Promise((resolve) => {
+    timer = setTimeout(() => resolve("late"), ms);
+  });
+  try {
+    const out = await Promise.race([
+      summarize(link.signal).catch((reason) => {
+        onError?.(reason);
+        return null;
+      }),
+      late
+    ]);
+    if (out !== "late") return out;
+    link.abort();
+    onLate();
+    return null;
+  } finally {
+    clearTimeout(timer);
+    link.release();
+  }
+}
+function sameRows(a, b) {
+  if (a.length !== b.length) return false;
+  return a.every((row, i) => {
+    const other = b[i];
+    return row.role === other.role && row.content === other.content && row.toolCallId === other.toolCallId && (row.toolCalls ?? []).map((call) => call.id).join() === (other.toolCalls ?? []).map((call) => call.id).join();
+  });
+}
+function createHistoryCompactionHook(ports) {
+  let timedOut = false;
+  return {
+    async compact(ctx) {
+      let folded = false;
+      const working = await (0, import_working6.buildWorkingTranscript)(
+        ports.state,
+        ports.systemPrompt,
+        (messages) => {
+          if (timedOut) return Promise.resolve(null);
+          ports.activity(ctx.step);
+          const limit = foldLimits.summaryMs;
+          return summaryWithin(
+            limit,
+            (signal) => ports.summarize(messages, signal),
+            ports.signal ?? ctx.signal,
+            () => {
+              timedOut = true;
+              ports.timeout(ctx.step, limit, messages.length);
+            },
+            (reason) => ports.error(ctx.step, messages.length, reason)
+          );
+        },
+        (fold) => {
+          folded = true;
+          ports.recordFold(fold);
+        }
+      );
+      ports.savedTokens(ports.state.compactMemo ? compactionSavedTokens([{ role: "system", content: ports.systemPrompt }, ...ports.state.transcript], working) : 0);
+      const rows = (0, import_working6.foldWorkingTranscript)(working).map((row) => ports.toRunMessage(row));
+      if (sameRows(ctx.messages, rows)) return void 0;
+      return { messages: rows, dropped: Math.max(0, ctx.messages.length - rows.length), ...folded ? {} : { reused: true } };
+    }
+  };
+}
+
+// ../packages/model-catalog/src/price.ts
+var TOKENS_PER_MILLION = 1e6;
+function perMillionToPerToken(usdPerMillion) {
+  return usdPerMillion / TOKENS_PER_MILLION;
+}
+var ZERO_PRICE = Object.freeze({ input: 0, output: 0 });
+
+// ../packages/model-catalog/src/priceTiers.ts
+var tier = (aboveInputTokens, inputPerMillion, outputPerMillion) => ({
+  aboveInputTokens,
+  input: perMillionToPerToken(inputPerMillion),
+  output: perMillionToPerToken(outputPerMillion)
+});
+var PRICE_TIERS = Object.freeze({
+  // Google AI Studio / Vertex list price: $1.25 / $10 per M up to 200K prompt tokens,
+  // $2.50 / $15 above (ai.google.dev/gemini-api/docs/pricing). Verify against vendor pricing page.
+  "gemini-2-5-pro": [tier(2e5, 2.5, 15)],
+  // Anthropic long-context pricing for the 1M-window Sonnet 4 / 4.5: $3 / $15 per M up
+  // to 200K input, $6 / $22.50 above (docs.claude.com pricing, "long context").
+  // Verify against vendor pricing page.
+  "claude-sonnet-4": [tier(2e5, 6, 22.5)],
+  "claude-sonnet-4-5": [tier(2e5, 6, 22.5)],
+  // Claude Haiku 5.5: $0.10 / $0.50 per M for prompts up to 100K, $0.50 / $2.50 beyond
+  // (Anthropic model pricing table, 2026-10). Verify against vendor pricing page.
+  "claude-haiku-5-5": [tier(1e5, 0.5, 2.5)]
+});
+function priceTierFamily(modelId) {
+  let id = (modelId ?? "").trim().toLowerCase();
+  id = id.slice(id.lastIndexOf("/") + 1);
+  id = id.replace(/^(?:[a-z]{2,3}\.)?anthropic\./, "");
+  id = id.replace(/:.*$/, "");
+  id = id.replace(/\./g, "-");
+  id = id.replace(/-\d{8}(?:-v\d+)?$/, "");
+  return id;
+}
+function priceTiersFor(modelId) {
+  return PRICE_TIERS[priceTierFamily(modelId)];
+}
+function priceTierBoundary(modelId) {
+  const tiers = priceTiersFor(modelId);
+  return tiers && tiers.length > 0 ? Math.min(...tiers.map((t) => t.aboveInputTokens)) : void 0;
+}
+
+// ../packages/model-catalog/src/providers.ts
+var LLM_PROVIDER_INFO = [
+  { id: "anthropic", label: "Anthropic (Claude)", credential: "api_key", keyPlaceholder: "sk-ant-\u2026", subscription: "paste", signInDomains: ["claude.ai", "anthropic.com"] },
+  { id: "openai", label: "OpenAI", credential: "api_key", keyPlaceholder: "sk-\u2026", subscription: "paste", signInDomains: ["openai.com"] },
+  { id: "google", label: "Google (Gemini)", credential: "api_key", keyPlaceholder: "AIza\u2026", subscription: null },
+  { id: "meta", label: "Meta AI (MUSE)", credential: "api_key", keyPlaceholder: "meta-\u2026", subscription: null },
+  // A Kimi Code subscription issues no API key at all — its own config leaves `api_key`
+  // empty beside an OAuth record — so it connects by device-code redirect, never paste.
+  { id: "kimi", label: "Kimi", credential: "api_key", keyPlaceholder: "sk-\u2026", subscription: "device", signInDomains: ["kimi.ai", "kimi.com"] },
+  { id: "moonshot", label: "Moonshot AI", credential: "api_key", keyPlaceholder: "sk-\u2026", subscription: null },
+  { id: "qwen", label: "Qwen", credential: "api_key", keyPlaceholder: "sk-\u2026", subscription: null },
+  { id: "minimax", label: "MiniMax", credential: "api_key", keyPlaceholder: "sk-\u2026", subscription: null },
+  { id: "xai", label: "xAI (Grok)", credential: "api_key", keyPlaceholder: "xai-\u2026", subscription: "paste", signInDomains: ["x.ai"] },
+  { id: "ollama", label: "Ollama Cloud", credential: "api_key", keyPlaceholder: "sk-\u2026", subscription: null },
+  {
+    id: "ollama-local",
+    label: "Ollama",
+    credential: "local_runtime",
+    keyPlaceholder: "",
+    subscription: null,
+    localRuntime: { defaultBaseUrl: "http://127.0.0.1:11434", exampleModel: "llama3.1:8b" }
+  },
+  // FreeToken's engine default; it serves whatever model the tenant loaded, so no example.
+  {
+    id: "freetoken",
+    label: "FreeToken",
+    credential: "local_runtime",
+    keyPlaceholder: "",
+    subscription: null,
+    localRuntime: { defaultBaseUrl: "http://127.0.0.1:1919" }
+  }
+];
+var LLM_PROVIDERS = LLM_PROVIDER_INFO.map((p) => p.id);
+var INFO_BY_ID = new Map(LLM_PROVIDER_INFO.map((p) => [p.id, p]));
+
+// ../packages/cost-levers/src/index.ts
+var COST_LEVERS = [
+  { id: "a2_run_budget", requirement: "A2", rollout: 100, summary: "Token + USD run budget, shown to the loop" },
+  { id: "a3_progress_detector", requirement: "A3", rollout: 100, summary: "Repeat-read / edit-revert / no-progress steer" },
+  { id: "b1_stable_prefix", requirement: "B1", rollout: 100, summary: "Volatile blocks after the cache breakpoint" },
+  { id: "b2_semantic_cache", requirement: "B2", rollout: 10, summary: "Scoped semantic cache on tool-free chat" },
+  { id: "b3_single_flight", requirement: "B3", rollout: 100, summary: "Coalesce identical in-flight requests" },
+  { id: "b4_agent_answer_replay", requirement: "B4", rollout: 10, summary: "Memory answer replay for agent sub-questions" },
+  { id: "c2_observation_masking", requirement: "C2", rollout: 10, summary: "Mask tool outputs older than N turns" },
+  { id: "c3_task_state", requirement: "C3", rollout: 10, summary: "Structured task state kept through compaction" },
+  { id: "c4_adaptive_context", requirement: "C4", rollout: 10, summary: "Start retrieval small, widen on low confidence" },
+  { id: "c5_cloud_repo_map", requirement: "C5", rollout: 10, summary: "Graph-ranked repo map on cloud runs" },
+  { id: "c6_rerank", requirement: "C6", rollout: 10, summary: "Cross-encoder rerank after hybrid retrieval" },
+  { id: "c7_tool_output_policy", requirement: "C7", rollout: 100, summary: "One shared tool-output budget + failure summaries" },
+  // 10 like every lever that changes what the model sees; it runs only where the local
+  // engine's health probe reports a loaded compressor, so it never triggers a download.
+  { id: "c8_token_compression", requirement: "C8", rollout: 10, summary: "LLMLingua-2 token compression of large context" },
+  { id: "c10_outline_first_reads", requirement: "B2", rollout: 100, summary: "Large-file first read returns outline + first 40 lines" },
+  { id: "c9_price_tier_budget", requirement: "C9", rollout: 100, summary: "Compaction budget under long-context price tiers" },
+  { id: "d1_verifier_cascade", requirement: "D1", rollout: 10, summary: "Weak model first, verifier, escalate one tier" },
+  { id: "d2_difficulty_router", requirement: "D2", rollout: 10, summary: "Predict weak-model failure, skip the wasted attempt" },
+  { id: "d3_routing_exploration", requirement: "D3", rollout: 100, summary: "Thompson exploration + decay in learned routing" },
+  { id: "d4_role_reasoning", requirement: "D4", rollout: 10, summary: "Reasoning effort by role" },
+  { id: "d5_output_caps", requirement: "D5", rollout: 100, summary: "Diff edits + per-role max_tokens" },
+  { id: "d6_batch_api", requirement: "D6", rollout: 100, summary: "Provider batch APIs for deferred background work" },
+  { id: "d7_deterministic_handlers", requirement: "D7", rollout: 100, summary: "Deterministic handlers + post-edit checks" },
+  { id: "d8_parallel_tool_calls", requirement: "D8", rollout: 100, summary: "Batch independent tool calls in one turn" },
+  { id: "e1_skill_ranking", requirement: "E1", rollout: 100, summary: "Inject only the most relevant approved skills" },
+  { id: "e2_specialists", requirement: "E2", rollout: 10, summary: "Admitted small specialist models for narrow jobs" },
+  // Always on (operator, 2026-10-23): recall dual-reads the paid 1536 column for rows the
+  // 1024 backfill has not reached yet, so it never had to wait for the backfill.
+  { id: "e3_free_embeddings", requirement: "E3", rollout: 100, summary: "Free Workers AI embeddings for memory" },
+  { id: "e5_verified_local_label", requirement: "E5", rollout: 100, summary: "Hybrid local label = passed the verifier" }
+];
+var BY_ID = new Map(COST_LEVERS.map((l) => [l.id, l]));
+function costLeverSpec(id) {
+  const spec2 = BY_ID.get(id);
+  if (!spec2) throw new Error(`unknown cost lever: ${id}`);
+  return spec2;
+}
+function costLeverEnvKey(id) {
+  return `COST_LEVER_${id.toUpperCase()}`;
+}
+function costLeverBucket(id, tenantId) {
+  const s = `${id}:${tenantId}`;
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h % 100;
+}
+function readEnv(env, key) {
+  const v = env?.[key];
+  return v === void 0 || v === null ? void 0 : String(v).trim().toLowerCase();
+}
+function costLeverRollout(env, id) {
+  const raw = readEnv(env, costLeverEnvKey(id));
+  if (raw !== void 0 && raw !== "") {
+    if (raw === "on" || raw === "1" || raw === "true") return 100;
+    if (raw === "off" || raw === "0" || raw === "false") return 0;
+    const n = Number(raw);
+    if (Number.isFinite(n)) return Math.max(0, Math.min(100, Math.round(n)));
+  }
+  const all = readEnv(env, "COST_LEVERS_ALL");
+  if (all === "off" || all === "0" || all === "false") return 0;
+  return costLeverSpec(id).rollout;
+}
+function isCostLeverOn(env, id, tenantId) {
+  const rollout = costLeverRollout(env, id);
+  if (rollout >= 100) return true;
+  if (rollout <= 0) return false;
+  if (tenantId === null || tenantId === void 0 || tenantId === "") return false;
+  return costLeverBucket(id, tenantId) < rollout;
+}
+
+// ../packages/agent-run/src/policy/compaction/pack.ts
+var import_handoff3 = require("@seanhogg/builderforce-memory/handoff");
+
+// ../packages/agent-run/src/policy/compaction/compact.ts
+var C9_TIER_LEVER = "c9_price_tier_budget";
+function taskRowIndex(rows) {
+  const marked = rows.findIndex((m) => m.task === true);
+  return marked >= 0 ? marked : rows.findIndex((m) => m.role === "user" && m.custom !== true);
+}
+var CLOUD_COMPACT_DEFAULTS = {
+  maxTokens: 4e4,
+  reserveOutputTokens: DEFAULT_HANDOFF_RESERVE_TOKENS,
+  timeoutMs: 3e4
+};
+var estimateTokens = import_handoff3.defaultEstimateTokens;
+function toolsTokensOf(tools) {
+  if (tools == null) return 0;
+  if (Array.isArray(tools) && tools.length === 0) return 0;
+  return estimateTokens(JSON.stringify(tools) ?? "");
+}
+function messagesTokens(messages) {
+  return (0, import_handoff3.tokensOf)(messages, estimateTokens);
+}
+var elisionNote = (chars) => ` \u2026[${chars} chars elided to fit the context budget]`;
+var ELIDE_CAPS = [4e3, 1e3, 200];
+function elideToFit(messages, budget) {
+  const out = [...messages];
+  let latestUser = -1;
+  for (let i = out.length - 1; i >= 0; i--) if (out[i]?.role === "user") {
+    latestUser = i;
+    break;
+  }
+  const candidates = (toolsOnly) => out.map((m, i) => ({ m, i })).filter(({ m, i }) => i !== latestUser && m.role !== "system" && typeof m.content === "string" && (toolsOnly ? m.role === "tool" : m.role !== "tool")).sort((a, b) => b.m.content.length - a.m.content.length || a.i - b.i).map(({ i }) => i);
+  let total = messagesTokens(out);
+  for (const toolsOnly of [true, false]) {
+    for (const cap of ELIDE_CAPS) {
+      for (const i of candidates(toolsOnly)) {
+        if (total <= budget) return out;
+        const msg = out[i];
+        const content = msg.content;
+        if (content.length <= cap) continue;
+        const next = { ...msg, content: content.slice(0, cap) + elisionNote(content.length - cap) };
+        total += messagesTokens([next]) - messagesTokens([msg]);
+        out[i] = next;
+      }
+    }
+  }
+  return out;
+}
+var OBSERVATION_MASK_TURNS = 6;
+var MASK_PREFIX = "[masked tool output";
+var MIN_MASK_CHARS = 400;
+function maskOldObservations(messages, turns = OBSERVATION_MASK_TURNS) {
+  const assistants = messages.reduce((n, m) => n + (m.role === "assistant" ? 1 : 0), 0);
+  const boundary2 = Math.floor(assistants / turns) * turns - turns;
+  if (turns <= 0 || boundary2 <= 0) return { messages, masked: 0 };
+  const calls = /* @__PURE__ */ new Map();
+  let ordinal = 0;
+  let masked = 0;
+  const out = messages.map((m) => {
+    if (m.role === "assistant") {
+      ordinal += 1;
+      for (const tc of Array.isArray(m.tool_calls) ? m.tool_calls : []) {
+        if (tc.id) calls.set(tc.id, { name: tc.function?.name ?? "tool", args: tc.function?.arguments ?? "" });
+      }
+      return m;
+    }
+    if (m.role !== "tool" || ordinal > boundary2 || typeof m.content !== "string") return m;
+    const content = m.content;
+    if (content.length < MIN_MASK_CHARS || content.startsWith(MASK_PREFIX)) return m;
+    const call = calls.get(typeof m.tool_call_id === "string" ? m.tool_call_id : "");
+    const args = (call?.args ?? "").replace(/\s+/g, " ").slice(0, 120);
+    masked += 1;
+    return { ...m, content: `${MASK_PREFIX}: ${call?.name ?? "tool"}(${args}) \u2014 ${content.length} chars; re-run the tool to see it again]` };
+  });
+  return masked > 0 ? { messages: out, masked } : { messages, masked: 0 };
+}
+function renderForSummary(middle) {
+  const PER_MSG = 1500;
+  const TOTAL = 3e4;
+  const parts = [];
+  let total = 0;
+  for (const m of middle) {
+    const role = typeof m.role === "string" ? m.role : "unknown";
+    let body = typeof m.content === "string" ? m.content : JSON.stringify(m.content ?? "");
+    if (Array.isArray(m.tool_calls)) body += ` [called: ${m.tool_calls.map((t) => t.function?.name ?? "?").join(", ")}]`;
+    const line = `${role}: ${body.slice(0, PER_MSG)}`;
+    if (total + line.length > TOTAL) break;
+    parts.push(line);
+    total += line.length;
+  }
+  return parts.join("\n");
+}
+function compactionBudget(opts) {
+  const tierCap = opts.targetModel && opts.env !== void 0 && isCostLeverOn(opts.env, "c9_price_tier_budget", opts.tenantId);
+  const boundary2 = tierCap && opts.targetModel ? priceTierBoundary(opts.targetModel) : opts.priceTierBoundary;
+  return handoffTokenBudget({
+    costCapTokens: opts.maxTokens,
+    contextWindow: opts.contextWindow ?? (opts.targetModel ? opts.window?.(opts.targetModel) : void 0),
+    reserveOutputTokens: opts.reserveOutputTokens,
+    ...boundary2 !== void 0 ? { priceTierBoundary: boundary2 } : {}
+  }) ?? opts.maxTokens;
+}
+async function compactMessages(messages, opts = CLOUD_COMPACT_DEFAULTS, summarize) {
+  const toolsTokens = toolsTokensOf(opts.tools);
+  const beforeTokens = messagesTokens(messages) + toolsTokens;
+  const budget = compactionBudget(opts);
+  const untouched = () => ({ messages: [...messages], compacted: false, summarized: false, beforeTokens, afterTokens: beforeTokens, droppedMessages: 0 });
+  const mask = opts.maskObservationsAfterTurns ? maskOldObservations(messages, opts.maskObservationsAfterTurns) : { messages, masked: 0 };
+  const source = mask.messages;
+  const maskedTokens = mask.masked > 0 ? messagesTokens(source) + toolsTokens : beforeTokens;
+  if (source.length === 0 || maskedTokens <= budget) {
+    return mask.masked > 0 ? { messages: [...source], compacted: true, summarized: false, beforeTokens, afterTokens: maskedTokens, droppedMessages: 0, maskedObservations: mask.masked } : untouched();
+  }
+  const briefIdx = opts.pinTaskBrief ? taskRowIndex(source) : -1;
+  const brief = briefIdx >= 0 ? source[briefIdx] : void 0;
+  const pack = await (0, import_handoff3.packHandoff)({
+    messages: source,
+    ...brief ? { pinned: (_m, i) => i === briefIdx } : {},
+    targetContextTokens: budget,
+    reserveOutputTokens: 0,
+    toolsTokens,
+    estimateTokens,
+    ...summarize ? {
+      summarize: async (dropped) => {
+        const summary = await summarize(renderForSummary(dropped), { tenantId: opts.tenantId }).catch(() => null);
+        return summary && summary.trim() ? `[Compressed memory of ${dropped.length} earlier step(s) \u2014 the task and recent steps are retained verbatim]
+${summary.trim()}` : "";
+      }
+    } : {},
+    ...opts.recall ? { recall: opts.recall } : {},
+    ...opts.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}
+  });
+  const packed = pack.dropped > 0 ? pack.messages : [...source];
+  const messageBudget = Math.max(0, budget - toolsTokens);
+  const out = !pack.fits || messagesTokens(packed) > messageBudget ? elideToFit(packed, messageBudget) : packed;
+  const elided = out.some((m, i) => m !== packed[i]);
+  if (pack.dropped === 0 && !elided && mask.masked === 0) return untouched();
+  return {
+    messages: out,
+    compacted: true,
+    summarized: pack.summarized && pack.dropped > 0,
+    beforeTokens,
+    afterTokens: messagesTokens(out) + toolsTokens,
+    droppedMessages: pack.dropped,
+    ...mask.masked > 0 ? { maskedObservations: mask.masked } : {}
+  };
+}
+var COMPACTION_SUMMARY_SYSTEM = "You compress an in-progress coding agent transcript into a concise memory. Preserve, as terse bullet points: files read/edited and the key facts learned from them, decisions made, commands/checks run and their outcomes, and anything still TODO. Drop chatter and raw file dumps. Output ONLY the memory, no preamble.";
+function compactionSummaryRequest(conversationText) {
+  return {
+    messages: [
+      { role: "system", content: COMPACTION_SUMMARY_SYSTEM },
+      { role: "user", content: conversationText }
+    ],
+    max_tokens: 700
+  };
+}
+
+// ../packages/agent-run/src/policy/compaction/reserve.ts
+var compactReserveTokens = handoffReserveTokens;
+var DEFAULT_PI_COMPACTION_RESERVE_TOKENS_FLOOR = 2e4;
+function ensureCompactionReserveTokens(params) {
+  const minReserveTokens = params.minReserveTokens ?? DEFAULT_PI_COMPACTION_RESERVE_TOKENS_FLOOR;
+  const current = params.settingsManager.getCompactionReserveTokens();
+  if (current >= minReserveTokens) {
+    return { didOverride: false, reserveTokens: current };
+  }
+  params.settingsManager.applyOverrides({
+    compaction: { reserveTokens: minReserveTokens }
+  });
+  return { didOverride: true, reserveTokens: minReserveTokens };
+}
+function resolveCompactionReserveTokensFloor(cfg) {
+  const raw = cfg?.agents?.defaults?.compaction?.reserveTokensFloor;
+  if (typeof raw === "number" && Number.isFinite(raw) && raw >= 0) {
+    return Math.floor(raw);
+  }
+  return DEFAULT_PI_COMPACTION_RESERVE_TOKENS_FLOOR;
+}
+function compactionReserve(maxTokens, cfg) {
+  let reserveTokens = compactReserveTokens(maxTokens);
+  return ensureCompactionReserveTokens({
+    settingsManager: {
+      getCompactionReserveTokens: () => reserveTokens,
+      applyOverrides: (o) => {
+        reserveTokens = o.compaction.reserveTokens;
+      }
+    },
+    minReserveTokens: resolveCompactionReserveTokensFloor(cfg)
+  }).reserveTokens;
+}
+function servingModel(ctx) {
+  return ctx.state.model?.model ?? ctx.policy.pinnedModel ?? "";
+}
+function replyReserve(ctx) {
+  if (!ctx.policy.modelHandoff) return ctx.policy.budgets.reserveTokens ?? compactionReserve(void 0);
+  const window = ctx.ports.model.window?.(servingModel(ctx));
+  const floor = DEFAULT_PI_COMPACTION_RESERVE_TOKENS_FLOOR;
+  return window && window > 0 ? Math.max(1, Math.min(floor, Math.floor(window / 4))) : floor;
+}
+
+// ../packages/agent-run/src/policy/model/index.ts
+function turnRouting(state, hasTools) {
+  return nextTurn(state, { hasTools });
+}
+
+// ../packages/agent-run/src/runContext.ts
+async function emit(events, event, meta) {
+  try {
+    await events.emit(event, meta);
+  } catch {
+  }
+}
+
+// ../packages/agent-run/src/turnTail.ts
+var measured = /* @__PURE__ */ new WeakMap();
+function turnTailTokens(state) {
+  return measured.get(state) ?? 0;
+}
+
+// ../packages/agent-run/src/policy/compaction/handoff.ts
+var import_handoff4 = require("@seanhogg/builderforce-memory/handoff");
+function packTargetTokens(contextWindow, boundary2, reserve) {
+  const budget = handoffTokenBudget({ contextWindow, reserveOutputTokens: reserve, priceTierBoundary: boundary2 });
+  return budget === void 0 ? contextWindow : Math.min(contextWindow, budget + reserve);
+}
+async function packForModelHandoff(input, access) {
+  const back = /* @__PURE__ */ new Map();
+  const system = { role: "system", content: input.systemPrompt };
+  const mapped = input.messages.map((row) => {
+    const view = access.toHandoff(row);
+    back.set(view, row);
+    return view;
+  });
+  const all = [system, ...mapped];
+  const beforeTokens = (0, import_handoff4.tokensOf)(all, import_handoff4.defaultEstimateTokens);
+  const reserve = handoffReserveTokens(input.maxTokens);
+  const pack = await (0, import_handoff4.packHandoff)({
+    messages: all,
+    targetContextTokens: packTargetTokens(input.contextWindow, input.priceTierBoundary, reserve),
+    reserveOutputTokens: reserve,
+    toolsTokens: toolSchemaTokens(input.tools, import_handoff4.defaultEstimateTokens) + (input.extraTokens ?? 0),
+    from: input.from,
+    to: input.to,
+    ...input.pinned ? { pinned: (view) => {
+      const row = back.get(view);
+      return row !== void 0 && input.pinned(row);
+    } } : {}
+  });
+  if (pack.dropped === 0) return { messages: [...input.messages], dropped: 0, noted: false, fits: pack.fits, beforeTokens, afterTokens: beforeTokens };
+  const messages = [];
+  let noted = false;
+  for (const view of pack.messages) {
+    if (view === system) continue;
+    const original = back.get(view);
+    if (original) {
+      messages.push(original);
+      continue;
+    }
+    messages.push(access.summary(typeof view.content === "string" ? view.content : JSON.stringify(view.content), view.role));
+    noted = true;
+  }
+  return { messages, dropped: pack.dropped, noted, fits: pack.fits, beforeTokens, afterTokens: pack.estimatedTokens };
+}
+var WIDEST_DROPPED = 99999;
+function noteText(from, to, dropped) {
+  const line = (0, import_handoff4.handoffLine)(from, to);
+  return line ? `${line}
+${dropped > 0 ? (0, import_handoff4.elisionMarker)(dropped) : "Nothing was dropped."}` : "";
+}
+function handoffNoteTokens(from, to) {
+  const text = noteText(from, to, WIDEST_DROPPED);
+  return text ? (0, import_handoff4.messageTokens)({ role: "user", content: text }, import_handoff4.defaultEstimateTokens) : 0;
+}
+function withHandoffNote(rows, from, to, dropped, access) {
+  const text = noteText(from, to, dropped);
+  if (!text) return [...rows];
+  const views = rows.map((row) => access.toHandoff(row));
+  let at = -1;
+  for (let i = views.length - 1; i >= 0; i -= 1) {
+    if (views[i].role === "user" && !(0, import_handoff4.isVolatileTail)(views[i])) {
+      at = i;
+      break;
+    }
+  }
+  if (at < 0) return [...rows, access.summary(text, "user")];
+  const role = at === 0 || views[at - 1].role === "assistant" ? "user" : "assistant";
+  return [...rows.slice(0, at), access.summary(text, role), ...rows.slice(at)];
+}
+
+// ../packages/agent-run/src/policy/compaction/rows.ts
+function toPackRow(m) {
+  const row = { role: m.role, content: m.content };
+  if (m.task) row.task = true;
+  if (m.parts && m.parts.length > 0) row.parts = m.parts;
+  if (m.meta) row.meta = m.meta;
+  if (m.toolCalls && m.toolCalls.length > 0) {
+    row.tool_calls = m.toolCalls.map((tc) => ({
+      id: tc.id,
+      type: "function",
+      function: { name: tc.name, arguments: tc.arguments }
+    }));
+  }
+  if (m.toolCallId != null) row.tool_call_id = m.toolCallId;
+  return row;
+}
+function toRunRow(m) {
+  const src = m;
+  const toolCalls = Array.isArray(src.tool_calls) ? src.tool_calls.map((tc) => ({
+    id: tc.id ?? "",
+    name: tc.function?.name ?? "",
+    arguments: tc.function?.arguments ?? ""
+  })) : void 0;
+  const out = {
+    role: src.role,
+    content: typeof src.content === "string" ? src.content : JSON.stringify(src.content ?? "")
+  };
+  if (toolCalls && toolCalls.length > 0) out.toolCalls = toolCalls;
+  if (src.tool_call_id != null) out.toolCallId = src.tool_call_id;
+  if (src.task === true) out.task = true;
+  if (Array.isArray(src.parts) && src.parts.length > 0) out.parts = src.parts;
+  if (src.meta) out.meta = src.meta;
+  return out;
+}
+var IMAGE_CHAR_ESTIMATE = 8e3;
+var IMAGE_STAND_IN = "#".repeat(IMAGE_CHAR_ESTIMATE);
+function toHandoffView(m) {
+  const view = toPackRow(m);
+  const role = m.custom ? "assistant" : view.role;
+  const blocks = (m.parts ?? []).filter((p) => p.type === "thinking" || p.type === "image").map((p) => p.type === "image" ? { type: "image", estimate: IMAGE_STAND_IN } : p);
+  if (blocks.length === 0) return role === view.role ? view : { ...view, role };
+  return { ...view, role, content: [...m.content ? [{ type: "text", text: m.content }] : [], ...blocks] };
+}
+function runRowHandoff() {
+  return { toHandoff: toHandoffView, summary: (text, role) => ({ role, content: text }) };
+}
+
+// ../packages/agent-run/src/policy/compaction/modelHandOff.ts
+async function handOff(ctx) {
+  const to = servingModel(ctx);
+  const from = ctx.state.preparedFor;
+  ctx.state.preparedFor = to || void 0;
+  if (!from || !to || from === to) return void 0;
+  const lead = ctx.messages.findIndex((m) => m.role !== "system");
+  const split = lead < 0 ? ctx.messages.length : lead;
+  const system = ctx.messages.slice(0, split);
+  const access = runRowHandoff();
+  const contextWindow = ctx.ports.model.window?.(to);
+  if (!contextWindow) return { messages: [...system, ...withHandoffNote(ctx.messages.slice(split), from, to, 0, access)], dropped: 0, noteOnly: true, summarized: false };
+  const reserve = replyReserve(ctx);
+  const task = ctx.messages[taskRowIndex(ctx.messages)];
+  const packed = await packForModelHandoff(
+    {
+      messages: ctx.messages.slice(split),
+      systemPrompt: system.map((m) => m.content).join("\n\n"),
+      tools: ctx.tools.map((t) => ({ name: t.function.name, description: t.function.description, parameters: t.function.parameters })),
+      from,
+      to,
+      contextWindow,
+      maxTokens: reserve,
+      // The request also carries its volatile tail (about what the last one did) and the note.
+      extraTokens: turnTailTokens(ctx.state) + handoffNoteTokens(from, to),
+      pinned: (row) => row === task || row.person === true,
+      ...ctx.policy.levers.includes(C9_TIER_LEVER) ? { priceTierBoundary: priceTierBoundary(to) } : {}
+    },
+    access
+  );
+  if (!packed.fits) {
+    await emit(ctx.ports.events, {
+      kind: "model.preflight",
+      step: ctx.step,
+      status: "degraded",
+      notices: [`The context cannot be made to fit ${to} (${contextWindow} tokens): the system prompt and the request that must stay whole already need about ${packed.afterTokens}.`]
+    });
+  }
+  return {
+    messages: [...system, ...packed.noted ? packed.messages : withHandoffNote(packed.messages, from, to, packed.dropped, access)],
+    dropped: packed.dropped,
+    ...packed.dropped === 0 ? { noteOnly: true } : {},
+    reserveTokens: reserve,
+    beforeTokens: packed.beforeTokens,
+    afterTokens: packed.afterTokens,
+    summarized: false
+  };
+}
+
+// ../packages/agent-run/src/policy/compaction/index.ts
+var C2_MASK_LEVER = "c2_observation_masking";
+var RECALL_LIMIT = 8;
+function leverOn(ctx, id) {
+  return ctx.policy.levers.includes(id);
+}
+function transportSummarizer(ctx) {
+  return async (conversationText) => {
+    const request = compactionSummaryRequest(conversationText);
+    try {
+      const model = ctx.ports.model;
+      const routing = ctx.state.model ? turnRouting(ctx.state.model, false) : void 0;
+      const asked = {
+        messages: request.messages,
+        maxTokens: request.max_tokens,
+        ...routing?.model ? { model: routing.model, strict: routing.strict } : {},
+        ...routing && routing.excludeModels.length > 0 ? { excludeModels: routing.excludeModels } : {}
+      };
+      const completion = model.summarize ? await model.summarize(asked, ctx.signal) : await model.complete(asked, ctx.signal);
+      const text = completion.content?.trim();
+      return text ? text : null;
+    } catch {
+      return null;
+    }
+  };
+}
+function capabilityRecall(ctx) {
+  const memory = ctx.ports.capabilities?.memory;
+  if (!memory) return void 0;
+  return async (query, budgetChars) => {
+    const result = await memory.recall(query, RECALL_LIMIT);
+    if (!result.ok || !result.entries?.length) return "";
+    return result.entries.map((e) => `- ${e.key}: ${e.content}`).join("\n").slice(0, budgetChars);
+  };
+}
+function compactionOptions(ctx, opts = {}) {
+  const model = servingModel(ctx);
+  const window = ctx.ports.model.window?.(model);
+  const recall = opts.recall ?? capabilityRecall(ctx);
+  const reserve = replyReserve(ctx);
+  return {
+    ...CLOUD_COMPACT_DEFAULTS,
+    maxTokens: opts.maxTokens ?? ctx.policy.budgets.tokens ?? CLOUD_COMPACT_DEFAULTS.maxTokens,
+    contextWindow: window,
+    priceTierBoundary: leverOn(ctx, C9_TIER_LEVER) ? opts.priceTierBoundary ?? priceTierBoundary(model) : void 0,
+    reserveOutputTokens: reserve,
+    tools: ctx.tools,
+    ...leverOn(ctx, C2_MASK_LEVER) ? { maskObservationsAfterTurns: OBSERVATION_MASK_TURNS } : {},
+    summarize: opts.summarize ?? transportSummarizer(ctx),
+    ...recall ? { recall } : {},
+    pinTaskBrief: opts.pinTaskBrief ?? true,
+    timeoutMs: CLOUD_COMPACT_DEFAULTS.timeoutMs
+  };
+}
+function foldOf(before, after) {
+  const members = new Set(before);
+  const noteAt = after.findIndex((m) => !members.has(m) && m.role !== "tool" && !m.tool_calls && typeof m.content === "string");
+  if (noteAt < 0) return void 0;
+  let tail = 0;
+  while (tail < after.length - 1 - noteAt && tail < before.length && after[after.length - 1 - tail] === before[before.length - 1 - tail]) tail += 1;
+  for (let i = noteAt + 1; i < after.length - tail; i += 1) if (!members.has(after[i])) return void 0;
+  const lead = before.findIndex((m) => m.role !== "system");
+  const covered = before.length - tail - (lead < 0 ? 0 : lead);
+  return covered > 0 ? { note: after[noteAt].content, covered } : void 0;
+}
+function createCompactionHook(hookOptions = {}) {
+  if (hookOptions.history) return createHistoryCompactionHook(hookOptions.history);
+  return {
+    async compact(ctx) {
+      if (ctx.policy.modelHandoff) return handOff(ctx);
+      const options = compactionOptions(ctx, hookOptions);
+      const rows = ctx.messages.map(toPackRow);
+      const result = await compactMessages(rows, options, options.summarize);
+      if (!result.compacted) return void 0;
+      const fold = result.droppedMessages > 0 ? foldOf(rows, result.messages) : void 0;
+      return {
+        messages: result.messages.map(toRunRow),
+        dropped: result.droppedMessages,
+        reserveTokens: options.reserveOutputTokens,
+        beforeTokens: result.beforeTokens,
+        afterTokens: result.afterTokens,
+        summarized: result.summarized,
+        ...result.maskedObservations ? { masked: result.maskedObservations } : {},
+        ...fold ? { note: fold.note, covered: fold.covered } : {}
+      };
+    }
+  };
+}
+var compactionHook = createCompactionHook();
+
+// ../packages/agent-run/src/policy/guards/readOnly.ts
+function isReadOnlyCloudTool(name) {
+  const canonical = resolveToolAlias(name);
+  return toolSideEffect(canonical) === "read" && !CONTROL_TOOL_NAMES.includes(canonical) && canonical !== "wait_agents";
+}
+
+// ../packages/agent-run/src/policy/subagents/delegationRequest.ts
+var SUBAGENT_NOUN = String.raw`(?:sub[- ]?agents?|(?:parallel|concurrent)\s+(?:agents?|workers?))`;
+var ASKS_FOR_SUBAGENTS = new RegExp(
+  String.raw`\b(?:use|using|with|via|through|delegate(?:\s+(?:it|this|them|the\s+\w+))?\s+to|run|launch|start|dispatch|employ)\s+` + String.raw`(?:(?:the|some|a|few|several|multiple|more|\d+)\s+){0,2}` + SUBAGENT_NOUN + String.raw`\b` + String.raw`|\bspawn(?:_agents?|\s+(?:agents?|workers?|children|sub[- ]?agents?))\b` + String.raw`|\bfan[- ]?out\s+(?:the|these|this|it|them|across|over|to)\b`,
+  "i"
+);
+
+// ../packages/learned-routing/src/actionTypes.ts
+var ACTION_TYPES = [
+  "sql",
+  "frontend_ui",
+  "backend_api",
+  "refactor",
+  "bugfix",
+  "tests",
+  "docs",
+  "devops_ci",
+  "data_migration",
+  "analysis",
+  "provisioning",
+  "decision",
+  "other"
+];
+var ACTION_TYPE_SET = new Set(ACTION_TYPES);
+
+// ../packages/learned-routing/src/exploration.ts
+var import_stats = require("@seanhogg/builderforce-memory/stats");
+
+// ../packages/learned-routing/src/recencyDecay.ts
+var ROUTING_HALF_LIFE_DAYS = 30;
+var DECAYED_WINDOW_DAYS = 4 * ROUTING_HALF_LIFE_DAYS;
+var DAY_MS2 = 24 * 60 * 60 * 1e3;
+
+// ../packages/learned-routing/src/runOutcomeTelemetry.ts
+var ALL_ENTRY_POINTS = ["vscode", "web", "rovr", "canvas", "on-prem", "cloud"];
+var CLIENT_ENTRY_POINTS = ALL_ENTRY_POINTS.filter(
+  (entryPoint) => entryPoint !== "cloud"
+);
+
+// ../packages/learned-routing/src/rateLimitFailure.ts
+var TENANT_BUDGET_CODES = [
+  "agent_host_token_limit_exceeded",
+  "plan_token_limit_exceeded",
+  "plan_monthly_token_limit_exceeded",
+  "member_spend_cap_exceeded",
+  "premium_daily_cap_exceeded",
+  "image_credit_limit_exceeded",
+  "video_credit_limit_exceeded",
+  "claw_token_limit_exceeded"
+];
+var BUDGET_CODE = new RegExp(`\\b(?:${TENANT_BUDGET_CODES.join("|")})\\b`);
+var BUDGET_WORDING = new RegExp(
+  [
+    /(?:plan|daily|monthly|agenthost)\b[^.]{0,30}\btoken limit reached/,
+    /generation limit reached/,
+    /allowance reached/,
+    /spend cap reached/,
+    /premium-model budget exhausted/
+  ].map((re) => re.source).join("|"),
+  "i"
+);
+
+// ../packages/agent-run/src/policy/guards/sourcePolicy.ts
+var JSON_EXT = /\.json$/i;
+var YAML_EXT = /\.ya?ml$/i;
+var SOURCE_EXT = /\.[cm]?[jt]sx?$/i;
+function isVerifiablePath(path) {
+  return JSON_EXT.test(path) || YAML_EXT.test(path) || SOURCE_EXT.test(path);
+}
+var TS_SOURCE = /\.[cm]?[jt]sx?$/i;
+var CONDITIONAL_JSX_CALLBACK = /\b(on[A-Z][A-Za-z0-9_$]*)\s*=\s*\{[^{}]{0,300}\?\s*(?:async\s*)?\(\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*\)\s*=>/g;
+function lineAt(source, offset) {
+  let line = 1;
+  for (let i = 0; i < offset; i += 1) if (source.charCodeAt(i) === 10) line += 1;
+  return line;
+}
+function maskNonCode(source) {
+  const chars = [...source];
+  let state = "code";
+  for (let i = 0; i < chars.length; i += 1) {
+    const c = chars[i];
+    const next = chars[i + 1];
+    if (state === "code") {
+      if (c === "/" && next === "/") {
+        chars[i] = chars[i + 1] = " ";
+        state = "line-comment";
+        i += 1;
+      } else if (c === "/" && next === "*") {
+        chars[i] = chars[i + 1] = " ";
+        state = "block-comment";
+        i += 1;
+      } else if (c === "'") {
+        chars[i] = " ";
+        state = "single";
+      } else if (c === '"') {
+        chars[i] = " ";
+        state = "double";
+      } else if (c === "`") {
+        chars[i] = " ";
+        state = "template";
+      }
+      continue;
+    }
+    if (c === "\n" && state === "line-comment") {
+      state = "code";
+      continue;
+    }
+    if (c === "\n") continue;
+    const escaped = i > 0 && source[i - 1] === "\\";
+    if (state === "block-comment" && c === "*" && next === "/") {
+      chars[i] = chars[i + 1] = " ";
+      state = "code";
+      i += 1;
+      continue;
+    }
+    chars[i] = " ";
+    if (!escaped && (state === "single" && c === "'" || state === "double" && c === '"' || state === "template" && c === "`")) state = "code";
+  }
+  return chars.join("");
+}
+function inspectAgentSource(path, source) {
+  if (!TS_SOURCE.test(path)) return [];
+  const findings = [];
+  for (const match of maskNonCode(source).matchAll(CONDITIONAL_JSX_CALLBACK)) {
+    const prop = match[1];
+    const parameter = match[2];
+    findings.push({
+      ruleId: "typescript/explicit-conditional-jsx-callback",
+      line: lineAt(source, match.index ?? 0),
+      message: `Parameter '${parameter}' in conditional JSX callback '${prop}' needs an explicit type. Prefer a named callback typed from the component prop contract (for example, \`NonNullable<Props['onChange']>\`) so API changes are checked at the boundary.`
+    });
+  }
+  return findings;
+}
+var YAML_TAB_INDENT = /^\t+ /m;
+function yamlFlowUnbalanced(content) {
+  let depth = 0;
+  for (const ch of content) {
+    if (ch === "[" || ch === "{") depth += 1;
+    else if (ch === "]" || ch === "}") depth -= 1;
+    if (depth < 0) return true;
+  }
+  return depth !== 0;
+}
+function checkYamlContent(content) {
+  if (YAML_TAB_INDENT.test(content)) {
+    return "YAML uses tab characters for indentation, which YAML forbids \u2014 use spaces.";
+  }
+  if (yamlFlowUnbalanced(content)) {
+    return "YAML flow collection brackets ([ ] { }) are unbalanced \u2014 the document is malformed.";
+  }
+  return null;
+}
+function checkFileContent(path, content) {
+  if (!isVerifiablePath(path)) return { kind: "skipped" };
+  try {
+    if (JSON_EXT.test(path)) {
+      JSON.parse(content);
+    } else if (YAML_EXT.test(path)) {
+      const yamlError = checkYamlContent(content);
+      if (yamlError) return { kind: "errors", errors: [{ message: yamlError.slice(0, 240) }] };
+    } else {
+      const findings = inspectAgentSource(path, content);
+      if (findings.length) {
+        return { kind: "errors", errors: findings.map((f) => ({ message: f.message, line: f.line, ruleId: f.ruleId })) };
+      }
+    }
+    return { kind: "checked" };
+  } catch (e) {
+    return { kind: "errors", errors: [{ message: e.message.slice(0, 240) }] };
+  }
+}
+function foldVerifyOutcomes(outcomes) {
+  const checked = [];
+  const skipped2 = [];
+  const errors = [];
+  for (const o of outcomes) {
+    if (o.kind === "errors") errors.push(...o.errors.map((error) => ({ path: o.path, ...error })));
+    else if (o.kind === "checked") checked.push(o.path);
+    else skipped2.push(o.path);
+  }
+  return { ok: errors.length === 0, checked, skipped: skipped2, errors };
+}
+async function verifyWrittenFiles(read, paths) {
+  const list2 = [...paths];
+  const outcomes = await Promise.all(
+    list2.map(async (path) => {
+      if (!isVerifiablePath(path)) return { path, kind: "skipped" };
+      const content = await read(path).catch(() => null);
+      if (content === null) return { path, kind: "skipped" };
+      return { path, ...checkFileContent(path, content) };
+    })
+  );
+  return foldVerifyOutcomes(outcomes);
+}
+
+// ../packages/agent-run/src/policy/finish/finishTools.ts
+function assertsUnrunVerification(summary) {
+  const s = summary.toLowerCase();
+  const check = /(type[\s-]?check|typecheck|typescript|\btsc\b|lint|eslint|\btest(s|ing|ed)?\b|\bbuild(s|ing)?\b|compil)/;
+  const pass = /(pass(es|ed|ing)?|succeed(s|ed)?|success|green|no\s+errors?|error[\s-]?free|will\s+now\s+pass|are\s+resolved|is\s+resolved)/;
+  return check.test(s) && pass.test(s);
+}
+var DOCUMENT_EXTENSIONS = /* @__PURE__ */ new Set([
+  ".md",
+  ".mdx",
+  ".rst",
+  ".adoc",
+  ".asciidoc",
+  ".txt"
+]);
+function isDocumentationPath(path) {
+  const normalized = path.trim().replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
+  if (!normalized) return false;
+  if (normalized.startsWith("docs/") || normalized.startsWith("specs/")) return true;
+  const file = normalized.slice(normalized.lastIndexOf("/") + 1);
+  const dot = file.lastIndexOf(".");
+  return dot >= 0 && DOCUMENT_EXTENSIONS.has(file.slice(dot));
+}
+function hasNoCodeDeliverable(writtenPaths) {
+  for (const path of writtenPaths) {
+    if (!path.trim()) continue;
+    if (!isDocumentationPath(path)) return false;
+  }
+  return true;
+}
+var MAX_PLACEHOLDER_FINISH_BLOCKS = 2;
+
+// ../packages/agent-run/src/policy/finish/gates.ts
+function matchesRequiredReviewSignoff(required, toolName, args, succeeded6) {
+  if (!required || !succeeded6 || toolName !== "builtin_kanban_signoff") return false;
+  const roleKey = typeof args.roleKey === "string" ? args.roleKey.trim() : "";
+  const laneKey = typeof args.laneKey === "string" ? args.laneKey.trim() : void 0;
+  return roleKey === required.roleKey && laneKey === required.laneKey;
+}
+function missingReviewVerdictMessage(required) {
+  const lane = required.laneKey ? ` and laneKey='${required.laneKey}'` : "";
+  return `Cannot finish this reviewer assignment until you call builtin_kanban_signoff with roleKey='${required.roleKey}'${lane} and an explicit approved or changes_requested verdict. A narrative summary is not acceptance evidence.`;
+}
+async function evaluateFinishGates(a) {
+  const { requiredSignoff, summary, gates } = a;
+  let writtenPaths = a.writtenPaths;
+  let absorbed;
+  a.ports?.beginAttempt?.();
+  const blocked = async (reason, block, detail, result) => {
+    await a.ports?.onBlocked?.(reason, block, detail, result);
+    return { block, reason, ...absorbed ? { writtenPaths: absorbed } : {} };
+  };
+  if (a.delegated && a.ports?.liveChildren) {
+    const childBlock = await a.ports.liveChildren();
+    if (childBlock) return { block: childBlock, reason: "children_running" };
+    if (a.ports.absorbChildWrites) {
+      const merged = new Set(writtenPaths);
+      await a.ports.absorbChildWrites(merged);
+      if (merged.size !== writtenPaths.length) {
+        writtenPaths = [...merged];
+        absorbed = writtenPaths;
+      }
+    }
+  }
+  const bound = a.ports?.bound !== false;
+  const wrote = bound && writtenPaths.length > 0;
+  const codeBound = bound && (wrote || a.ports?.read !== void 0 || a.ports?.verify !== void 0);
+  const verification = wrote && a.ports?.verify ? await a.ports.verify(writtenPaths) : wrote && a.ports?.read ? await verifyWrittenFiles(a.ports.read, writtenPaths) : null;
+  let ci = null;
+  let ciPending = false;
+  if (a.ports?.pollBranchCi && wrote && verification?.ok !== false) {
+    ci = await a.ports.pollBranchCi({ pendingBlocks: gates.ciPendingBlocks, failureBlocks: gates.ciFailureBlocks });
+    ciPending = ci.pendingBlocks > gates.ciPendingBlocks;
+    gates.ciPendingBlocks = ci.pendingBlocks;
+    gates.ciFailureBlocks = ci.failureBlocks;
+    gates.ciVerified = ci.ciVerified;
+  }
+  if (wrote) a.enterVerify();
+  if (requiredSignoff && !gates.reviewVerdictRecorded) {
+    const block = missingReviewVerdictMessage(requiredSignoff);
+    return blocked("review_verdict_missing", block, { ...requiredSignoff }, block);
+  }
+  if (codeBound && !gates.noDeliverableBlocked && hasNoCodeDeliverable(writtenPaths)) {
+    gates.noDeliverableBlocked = true;
+    return blocked(
+      "no_deliverable",
+      "Before finishing: you have not committed any code changes for this task \u2014 only the PRD (or nothing) is on the branch. Re-read the task requirements and verify EACH is actually implemented. If work remains, use search_code/read_file to find the right place and write_file to implement it, then finish. If \u2014 and only if \u2014 this task genuinely requires no code change, call finish again and state explicitly why no change was needed.",
+      {},
+      "Blocked finish: no code deliverable \u2014 self-review required"
+    );
+  }
+  if (verification && !verification.ok) {
+    const block = `Cannot finish \u2014 changed-file validation found ${verification.errors.length} issue(s). Repair every issue, then finish again. This is a shell-free source policy, not a claim that the full project type-check ran.
+` + verification.errors.map((e) => `- ${e.path}${e.line ? `:${e.line}` : ""}${e.ruleId ? ` [${e.ruleId}]` : ""}: ${e.message}`).join("\n");
+    return blocked("source_quality", block, { errors: verification.errors }, `Blocked finish: ${verification.errors.length} source/config quality issue(s)`);
+  }
+  if (ci?.block) {
+    const recorded = await blocked("branch_ci", ci.block, { pendingBlocks: gates.ciPendingBlocks, failureBlocks: gates.ciFailureBlocks }, ci.block.slice(0, 300));
+    return ciPending ? { ...recorded, reason: "branch_ci_pending" } : recorded;
+  }
+  if (summary && !gates.finishBlockedOnce && !gates.ciVerified && assertsUnrunVerification(summary)) {
+    gates.finishBlockedOnce = true;
+    return {
+      block: "You stated that a build/type-check/lint/test passed or is resolved, but this executor cannot run a local shell and in-run CI did not report success. Call run_checks (it polls branch CI) or finish again with a summary that does NOT claim a check passed.",
+      reason: "honesty",
+      ...absorbed ? { writtenPaths: absorbed } : {}
+    };
+  }
+  if (wrote && gates.placeholderBlocks < MAX_PLACEHOLDER_FINISH_BLOCKS && a.ports?.scanPlaceholders) {
+    const scan = await a.ports.scanPlaceholders(writtenPaths);
+    if (scan.flagged.length) {
+      gates.placeholderBlocks += 1;
+      return blocked(
+        "placeholders",
+        `Cannot finish \u2014 ${scan.flagged.length} committed file(s) still contain placeholder/stub code instead of a real implementation. Replace each stub with a working implementation that uses the existing infrastructure (search_code for it first), or if a file is dead code that should not ship in this PR, remove it with delete_file. Then call finish again.
+` + scan.flagged.map((f) => `- ${f.path}: ${f.markers.join("; ")}`).join("\n"),
+        { files: scan.flagged },
+        `Blocked finish: ${scan.flagged.map((f) => f.path).join(", ")}`
+      );
+    }
+  }
+  if (wrote && a.ports?.recordClaim) {
+    const claim = await a.ports.recordClaim(summary || a.output || `Completed changes to ${writtenPaths.join(", ")}`, writtenPaths);
+    if (!claim.ok) {
+      return {
+        block: `Cannot finish \u2014 no structural evidence record supports this completion claim (${claim.error ?? "no evidence"}). Retry the successful write or verification, then finish again.`,
+        reason: "claim_evidence",
+        ...absorbed ? { writtenPaths: absorbed } : {}
+      };
+    }
+  }
+  return absorbed ? { block: null, writtenPaths: absorbed } : { block: null };
+}
+
+// ../packages/agent-run/src/policy/verify/runEndMemory.ts
+var SHELL_SURFACES = /* @__PURE__ */ new Set(["sandbox", "on-prem"]);
+var hasShell = (surface) => SHELL_SURFACES.has(surface);
+function runVerifyPhase(input) {
+  if (input.surface === "durable" && input.ciVerified) {
+    return {
+      surface: "durable",
+      kind: "ran",
+      reason: "verify_passed",
+      commands: ["branch-ci"],
+      failedCommands: [],
+      mayFinish: true,
+      note: "Branch CI passed."
+    };
+  }
+  if (!hasShell(input.surface)) {
+    return inRunVerifyOutcome({
+      surface: "durable",
+      writtenPaths: input.writtenPaths ?? [],
+      results: input.results ?? null
+    });
+  }
+  return inRunVerifyOutcome({
+    surface: input.surface,
+    writtenPaths: input.writtenPaths ?? [],
+    packageScripts: input.packageScripts ?? null,
+    runner: input.runner,
+    results: input.results ?? null
+  });
+}
+function describeVerifyOutcome(outcome) {
+  if (outcome.kind === "skipped") return `verify skipped (${outcome.reason})`;
+  if (outcome.commands.length === 0) return `verify ${outcome.kind}, no commands`;
+  const failed2 = outcome.failedCommands.length;
+  return `verify ${outcome.kind}: ${outcome.commands.join("; ")}${failed2 > 0 ? ` \u2014 ${failed2} failed` : ""}`;
+}
+function applyVerifyPhase(state) {
+  return reduceRunPolicy(state, { type: "verify_started" });
+}
+
+// ../packages/agent-run/src/workPlan.ts
+var MAX_OPEN_WORK_HOLDS = 6;
+function applyWorkEvidence(plan, evidence) {
+  const byId = new Map(evidence.filter((item) => ["done", "blocked", "in_review"].includes(item.status) && item.detail.trim()).map((item) => [item.id, item]));
+  return plan.map(({ id, criteria }) => {
+    const current = byId.get(id);
+    return { id, criteria, ...current ? { evidence: current } : {} };
+  });
+}
+function assignedWorkSection(plan) {
+  const open = plan.filter((item) => !item.evidence);
+  if (!open.length) return "";
+  const items = open.slice(0, 15).map(({ id, criteria }) => `- ${JSON.stringify(id)}${criteria.length ? `: ${JSON.stringify(criteria).slice(0, 1500)}` : ""}`);
+  if (open.length > items.length) items.push(`- ${open.length - items.length} more assigned items`);
+  return items.join("\n");
+}
+function outstandingWork(plan) {
+  const section = assignedWorkSection(plan);
+  return section ? `Assigned work still needs evidence. Continue the open items or record the reason each item is blocked or in review.
+${section}` : null;
+}
+
+// ../packages/agent-run/src/policy/finish/index.ts
+var lastReasons = /* @__PURE__ */ new WeakMap();
+var LINKED_WORK_OPEN = "linked_work_open";
+function writtenPathsOf(ctx) {
+  return ctx.state.writtenPaths ?? [];
+}
+function succeeded4(row) {
+  if (!row) return false;
+  try {
+    const data = JSON.parse(row.content);
+    return !(data && typeof data === "object" && data.ok === false);
+  } catch {
+    return row.content.trim().length > 0;
+  }
+}
+function parseArgs(raw) {
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+function signoffRecorded(messages, required) {
+  if (!required) return false;
+  const results = /* @__PURE__ */ new Map();
+  for (const row of messages) if (row.role === "tool" && row.toolCallId) results.set(row.toolCallId, row);
+  return messages.some(
+    (row) => row.role === "assistant" && (row.toolCalls ?? []).some(
+      (call) => matchesRequiredReviewSignoff(required, call.name, parseArgs(call.arguments), succeeded4(results.get(call.id)))
+    )
+  );
+}
+function noteSignoff(ctx) {
+  if (ctx.state.finish.reviewVerdictRecorded) return true;
+  if (!signoffRecorded(ctx.messages, ctx.policy.signoff)) return false;
+  ctx.state.finish = { ...ctx.state.finish, reviewVerdictRecorded: true };
+  return true;
+}
+function signoffSettleBlock(ctx) {
+  const required = ctx.policy.signoff;
+  if (!required || noteSignoff(ctx)) return null;
+  return missingReviewVerdictMessage(required);
+}
+function createFinishHook(ports = {}) {
+  const delegated = (ctx) => ports.delegated ?? ctx.task.dispatch.parentRunId !== void 0;
+  const unfinishedWork = (state) => ports.settleWorkAfterRun ? null : outstandingWork(state.work ?? []);
+  const openWork = async (ctx) => {
+    if (ctx.state.work?.length && !ports.settleWorkAfterRun) {
+      if (ports.workEvidence) {
+        const evidence = await ports.workEvidence(ctx.state.work.map((item) => item.id));
+        ctx.state.work = applyWorkEvidence(ctx.state.work, evidence);
+      }
+      const unresolved = unfinishedWork(ctx.state);
+      if (unresolved) {
+        const holds = (ctx.state.workHolds ?? 0) + 1;
+        ctx.state.workHolds = holds;
+        if (holds > MAX_OPEN_WORK_HOLDS) throw new Error(unresolved);
+        return unresolved;
+      }
+    }
+    return ports.openWork ? ports.openWork(ctx) : null;
+  };
+  return {
+    settleBlock: signoffSettleBlock,
+    unfinishedWork,
+    // An owner never ends with children still working — on `finish` (below) or in prose.
+    liveChildren: async (ctx) => {
+      if (!delegated(ctx) || !ports.liveChildren) return null;
+      const block = await ports.liveChildren();
+      if (!block && ports.absorbChildWrites) {
+        ports.beginAttempt?.();
+        const paths = new Set(writtenPathsOf(ctx));
+        await ports.absorbChildWrites(paths);
+        ctx.state.writtenPaths = [...paths];
+      }
+      return block;
+    },
+    // A run never ends while the tickets it owns are open — on `finish` (below, after every other gate) or in prose (the kernel).
+    openWork,
+    async gate(ctx) {
+      noteSignoff(ctx);
+      const verdict = await evaluateFinishGates({
+        writtenPaths: writtenPathsOf(ctx),
+        requiredSignoff: ctx.policy.signoff,
+        delegated: delegated(ctx),
+        summary: typeof ctx.content === "string" ? ctx.content : "",
+        output: "",
+        gates: ctx.state.finish,
+        enterVerify: () => {
+          if (ctx.policy.skipVerifyStage) return;
+          ctx.state.model = applyVerifyPhase(ctx.state.model);
+        },
+        ports
+      });
+      if (verdict.writtenPaths) ctx.state.writtenPaths = [...verdict.writtenPaths];
+      if (verdict.block) {
+        ctx.state.finish = { ...ctx.state.finish, finishBlockedOnce: true };
+        lastReasons.set(ctx.state, verdict.reason);
+        return verdict.block;
+      }
+      const owed = await openWork(ctx);
+      lastReasons.set(ctx.state, owed ? LINKED_WORK_OPEN : verdict.reason);
+      return owed;
+    }
+  };
+}
+var finishHook = createFinishHook();
+
+// ../packages/agent-run/src/policy/guards/cascade.ts
+var CascadeSession = class {
+  constructor(on, resume, ports = {}) {
+    this.ports = ports;
+    this.on = on;
+    this.cascade = resume?.cascade ?? initialCascadeState();
+    this.actionType = resume?.actionType;
+    this.soft = resume?.soft ?? false;
+    this.steer = resume?.steer;
+    this.priorWeakPassRate = resume?.priorWeakPassRate;
+    this.priorRead = resume?.priorRead ?? false;
+  }
+  ports;
+  /** Whether the D1 lever is on. Lever off ⇒ every method is inert. */
+  on;
+  cascade;
+  actionType;
+  soft;
+  steer;
+  steerShown = false;
+  priorWeakPassRate;
+  priorRead;
+  /**
+   * The step's features with the tenant's recent weak-pass rate for its action type —
+   * the D2 head's prior. Read at most once per run; a failed or empty read leaves the
+   * feature unset, which the head reads as 0.5.
+   */
+  async withPrior(f) {
+    if (typeof f.priorWeakPassRate === "number") return f;
+    if (!this.priorRead && this.ports.weakPassRate) {
+      this.priorRead = true;
+      try {
+        this.priorWeakPassRate = await this.ports.weakPassRate(this.featuresActionType(f.actionType));
+      } catch {
+      }
+    }
+    return typeof this.priorWeakPassRate === "number" ? { ...f, priorWeakPassRate: this.priorWeakPassRate } : f;
+  }
+  /** The run's action type for D2 features (the first tick's resolution, kept). */
+  featuresActionType(fallback) {
+    return this.actionType ?? fallback;
+  }
+  /**
+   * The first tick's starting model. A soft seed starts on the WEAKEST tier of the
+   * ladder — unless the router predicts the weak attempt would fail, in which case it
+   * keeps the seed (the stronger default). A strict pin is left alone.
+   */
+  async seed(state, a) {
+    this.actionType = a.features.actionType;
+    this.soft = !a.strict;
+    if (!this.on || !this.soft) return state;
+    if (this.ports.shouldSkipWeakAttempt && await this.ports.shouldSkipWeakAttempt(await this.withPrior(a.features))) return state;
+    const weak = weakestTierModel(a.ladder, state.broken);
+    if (!weak || weak === state.model) return state;
+    return { ...state, model: weak, pin: weak, locked: false };
+  }
+  /**
+   * Fold a verifier verdict on a unit of work. Returns the run's new policy state (the
+   * same object when nothing moved). Every conclusive verdict on a soft run becomes a D2
+   * training row through the `recordOutcome` port.
+   */
+  async verdict(state, kind, verdict, ctx) {
+    if (!this.on || !this.soft || verdict.inconclusive) return state;
+    const current = ctx.attemptModel && ctx.attemptModel !== "default" ? ctx.attemptModel : state.model;
+    if (current) {
+      const features = await this.withPrior(ctx.features);
+      await this.ports.recordOutcome?.({
+        actionType: this.featuresActionType(ctx.features.actionType),
+        weakModel: current,
+        passed: verdict.passed,
+        verifier: verdict.verifier,
+        features
+      });
+    }
+    const exclude = [...state.broken, ...state.authorModel && state.phase === "verify" ? [state.authorModel] : []];
+    const r = cascadeVerdict(this.cascade, kind, verdict, { current, ladder: ctx.ladder, exclude });
+    this.cascade = r.state;
+    switch (r.action.kind) {
+      case "escalate":
+        this.setSteer(r.action.steer);
+        return r.action.to ? { ...state, ...reduceRunPolicy(state, { type: "escalated", to: r.action.to }) } : state;
+      case "exhausted":
+        this.setSteer(r.action.steer);
+        return state;
+      case "deescalate":
+        return { ...state, ...reduceRunPolicy(state, { type: "escalated", to: r.action.to }) };
+      default:
+        return state;
+    }
+  }
+  /**
+   * Move the run one tier up for a reason that is not a verifier's (the progress
+   * detector's second trip). Null for a pinned run or when nothing is stronger — the
+   * caller pauses instead. Gated by the CALLER's lever, not the cascade's.
+   */
+  escalate(state, ladder, attemptModel) {
+    if (!this.soft) return null;
+    const current = attemptModel && attemptModel !== "default" ? attemptModel : state.model;
+    const to = nextTierModel(ladder, current, state.broken);
+    if (!to) return null;
+    this.cascade = { ...this.cascade, escalations: this.cascade.escalations + 1 };
+    return { ...state, ...reduceRunPolicy(state, { type: "escalated", to }) };
+  }
+  /**
+   * The reasoning levers for a turn: the caller's (persona / role default), raised one
+   * level per open escalation of the current unit. Inert with nothing escalated or no
+   * `escalateThinkLevel` port.
+   */
+  execParams(base) {
+    const boost = this.on ? this.cascade.reasoningBoost : 0;
+    if (boost <= 0 || !this.ports.escalateThinkLevel) return base;
+    let level = base?.thinkLevel ?? this.ports.defaultThinkLevel ?? "medium";
+    for (let i = 0; i < boost; i += 1) level = this.ports.escalateThinkLevel(level);
+    return { ...base, thinkLevel: level };
+  }
+  setSteer(note) {
+    this.steer = note;
+    this.steerShown = false;
+  }
+  /** The note the current turn's request carries ("" when none). */
+  steerNote() {
+    if (this.steer) this.steerShown = true;
+    return this.steer ?? "";
+  }
+  /** A turn ended: a steer that has been shown once is done. */
+  endTurn() {
+    if (this.steerShown) {
+      this.steer = void 0;
+      this.steerShown = false;
+    }
+  }
+  snapshot() {
+    return {
+      ...this.on ? { cascade: this.cascade } : {},
+      ...this.actionType ? { actionType: this.actionType } : {},
+      soft: this.soft,
+      ...this.steer ? { steer: this.steer } : {},
+      ...typeof this.priorWeakPassRate === "number" ? { priorWeakPassRate: this.priorWeakPassRate } : {},
+      ...this.priorRead ? { priorRead: true } : {}
+    };
+  }
+};
+
+// ../packages/agent-run/src/policy/guards/postEdit.ts
+var EDIT_TOOLS = /* @__PURE__ */ new Set(["write_file", "edit_file"]);
+var NOTE_ERRORS = 5;
+function succeeded5(data) {
+  return !(data && typeof data === "object" && data.ok === false);
+}
+function verifyAfterEdit(call, data, opts = {}) {
+  if (opts.bound === false || !EDIT_TOOLS.has(call.name) || !succeeded5(data)) return null;
+  const path = typeof call.args.path === "string" ? call.args.path.trim() : "";
+  if (!path || !isVerifiablePath(path)) return null;
+  const content = call.name === "write_file" && typeof call.args.content === "string" ? call.args.content : null;
+  if (content !== null) {
+    const result = foldVerifyOutcomes([{ path, ...checkFileContent(path, content) }]);
+    return result.checked.length || result.errors.length ? result : null;
+  }
+  const read = opts.read;
+  if (!read) return null;
+  return (async () => {
+    const committed = await read(path).catch(() => null);
+    if (committed === null) return null;
+    const result = foldVerifyOutcomes([{ path, ...checkFileContent(path, committed) }]);
+    return result.checked.length || result.errors.length ? result : null;
+  })();
+}
+function postEditNote(v) {
+  const lines = v.errors.slice(0, NOTE_ERRORS).map((e) => `- ${e.path}${e.line ? `:${e.line}` : ""}${e.ruleId ? ` [${e.ruleId}]` : ""}: ${e.message}`);
+  const more = v.errors.length > NOTE_ERRORS ? `
+- \u2026and ${v.errors.length - NOTE_ERRORS} more` : "";
+  return `Post-edit check FAILED (shell-free source/config policy) \u2014 fix this before building on it:
+${lines.join("\n")}${more}`;
+}
+function withPostEditNote(data, v) {
+  return v && !v.ok ? withAdvisory(data, postEditNote(v)) : data;
+}
+
+// ../packages/agent-run/src/policy/guards/ports.ts
+function guardLeversOf(levers) {
+  const on = new Set(levers);
+  return {
+    a3_progress_detector: on.has("a3_progress_detector"),
+    d7_deterministic_handlers: on.has("d7_deterministic_handlers"),
+    d1_verifier_cascade: on.has("d1_verifier_cascade"),
+    d8_parallel_tool_calls: on.has("d8_parallel_tool_calls")
+  };
+}
+
+// ../packages/agent-run/src/policy/guards/forced/briefs.ts
+var PROGRESS_FORCED_LABEL = "loop.progress_forced";
+function handOffBrief(reason, tool) {
+  return `${reason} Call ${tool} NOW. summary = the research for the coders: everything you and any research sub-agents established that the change needs (files, functions, what they do today, decisions, traps). tasks = each one standalone: the files, the change, and how to know it is done. The coding agents start from exactly what you write here; they do not see this conversation.`;
+}
+function changeBrief(reason, askTool) {
+  return `${reason} Make the change now with what you already know \u2014 the edit tools are the only ones offered this turn.` + (askTool ? ` If something genuinely blocks the change, call ${askTool} and say exactly what.` : "");
+}
+var handOffDueBrief = (tool) => handOffBrief(`ANALYSIS IS OVER. You have spent ${PLAN_TURN_BUDGET} turns analysing without changing anything.`, tool);
+var changeDueBrief = (codeTurns, askTool) => changeBrief(`STOP READING. You have spent ${codeTurns} coding turns without changing anything.`, askTool);
+var circlingReason = (n) => `YOU ARE CIRCLING. Your last ${n} calls were all answered from this run's read cache \u2014 you already have every one of those results, and re-reading them changes nothing.`;
+var FINISH_RECORD_BRIEF = "You are FINISHING: make no more code changes and run nothing. Before your final report, file a ticket for EVERY item the person asked for that is still open (with the ticket tools offered on this turn), and update the status of the tickets you worked on. Then write the final report: what is done, and which ticket tracks each item that is not.";
+var FINISH_FINAL_BRIEF = "Write your final report now: what is done, and which ticket tracks each requested item that is still open.";
+var DEFERRED_ENDS_PLANNING = "The run kept reading through its progress checks without handing off \u2014 analysis ends here and the coding role makes the change.";
+var DEFERRED_ENDS_PLANNING_STEERED = "The run kept reading through its progress checks without handing off \u2014 analysis ends here and the coding role takes the next turn.";
+
+// ../packages/agent-run/src/policy/guards/forced/turns.ts
+function report(env, event) {
+  env.ctx.state.model = reduceRunPolicy(env.ctx.state.model, event);
+}
+function specOf(env, name) {
+  return env.ctx.tools.find((t) => t.function.name === name);
+}
+var budgeted = (env) => env.bind.facts.budgeted();
+var askToolIf = (env, allowed) => allowed ? env.opts.askTool : null;
+function endPlanning(env, step, why) {
+  report(env, { type: "plan_budget_spent" });
+  env.note("loop.plan_budget_spent", { step, planTurns: env.ctx.state.model.planTurns }, why);
+}
+function changeToolsOf(env, selected, canAsk) {
+  const change = new Set(env.ctx.policy.codeChangeTools ?? []);
+  const tools = selected.filter((t) => change.has(t.function.name) || canAsk && t.function.name === env.opts.askTool);
+  return tools.some((t) => change.has(t.function.name)) ? tools : null;
+}
+function planBudgetTurn(env, step) {
+  const model = env.ctx.state.model;
+  if (!handOffDue(model) || !budgeted(env)) return null;
+  const handOff2 = specOf(env, env.opts.handOffTool);
+  const canAsk = env.bind.facts.canAskUser();
+  if (model.handOffForced || !canAsk || !handOff2) {
+    endPlanning(env, step, canAsk ? "The forced hand-off turn did not hand off \u2014 analysis ends here and the coding role takes the next turn." : "Analysis budget spent where hand_off cannot be offered \u2014 analysis ends here and the coding role takes the next turn.");
+    return null;
+  }
+  report(env, { type: "hand_off_forced" });
+  env.note("loop.hand_off_due", { step, planTurns: model.planTurns }, `${model.planTurns} analysis turn(s) with no change and no hand-off \u2014 this turn offers hand_off alone and requires the call.`);
+  return { tools: [handOff2], toolChoice: "required", brief: handOffDueBrief(env.opts.handOffTool) };
+}
+function forcedProgressTurn(env, selected, reason, opts = {}) {
+  const model = env.ctx.state.model;
+  const handOff2 = specOf(env, env.opts.handOffTool);
+  if (!opts.changeOnly && handOff2 && offersHandOff(model) && env.bind.facts.canAskUser() && !model.handOffForced) {
+    report(env, { type: "hand_off_forced" });
+    return { forced: "hand_off", turn: { tools: [handOff2], toolChoice: "required", brief: handOffBrief(reason, env.opts.handOffTool) } };
+  }
+  if (env.bind.facts.codeChanged()) return null;
+  const canAsk = env.bind.facts.canAskUser() && !opts.noAsk;
+  const tools = changeToolsOf(env, selected.filter((t) => t.function.name !== env.opts.handOffTool), canAsk);
+  if (!tools) return null;
+  if (offersHandOff(model)) {
+    if (opts.endsPlanning) endPlanning(env, opts.endsPlanning.step, opts.endsPlanning.why);
+    else report(env, { type: "plan_budget_spent" });
+  }
+  report(env, { type: "change_forced" });
+  return { forced: "change", turn: { tools, toolChoice: "required", brief: changeBrief(reason, askToolIf(env, canAsk)) } };
+}
+function changeBudgetTurn(env, step, selected) {
+  const budget = env.ctx.policy.skipVerifyStage ? QUICK_CHANGE_TURN_BUDGET : PLAN_TURN_BUDGET;
+  const model = env.ctx.state.model;
+  if (!changeDue(model, env.bind.facts.progressed(), budget) || !budgeted(env)) return null;
+  const canAsk = env.bind.facts.canAskUser();
+  const tools = changeToolsOf(env, selected, canAsk);
+  if (!tools) return null;
+  report(env, { type: "change_forced" });
+  env.note("loop.change_due", { step, codeTurns: model.codeTurns }, `${model.codeTurns} coding turn(s) with no change and no hand-off \u2014 this turn offers the change tools alone and requires a call.`);
+  return { tools, toolChoice: "required", brief: changeDueBrief(model.codeTurns, askToolIf(env, canAsk)) };
+}
+function noProgressTurn(env, step, selected, cache2) {
+  if (!budgeted(env) || env.bind.facts.progressed() || env.ctx.state.model.phase === "verify" || !cache2.due()) return null;
+  const n = cache2.count;
+  const out = forcedProgressTurn(env, selected, circlingReason(n));
+  if (!out) return null;
+  cache2.consume();
+  env.note("loop.no_progress", { step, streak: n, forced: out.forced }, `${n} consecutive call(s) answered from the read cache \u2014 this turn offers ${out.forced === "hand_off" ? "hand_off alone" : "the change tools alone"} and requires a call.`);
+  return out.turn;
+}
+
+// ../packages/agent-run/src/policy/guards/forced/ladder.ts
+var FORCED_MENU = {
+  hand_off: "hand_off alone",
+  change: "the change tools alone"
+};
+var ForcedLadder = class {
+  constructor(state, steer, bind, opts) {
+    this.state = state;
+    this.steer = steer;
+    this.bind = bind;
+    this.opts = opts;
+  }
+  state;
+  steer;
+  bind;
+  opts;
+  /** The run is FINISHING: a finish turn was decided. Never cleared for the rest of the run, so no delivery gate sends its report back for more work. */
+  get finishing() {
+    return this.state.finishing === true;
+  }
+  /**
+   * A trip an escalation or a finish waits on a later turn's menu for. The detector's second note says the run moved to a
+   * stronger model, and a finish's note is its no-tools turn's brief: neither is shown twice, so the steer is cleared.
+   */
+  hold(action) {
+    this.steer(void 0);
+    this.state.due = action;
+  }
+  takeDue() {
+    const due = this.state.due ?? null;
+    delete this.state.due;
+    return due;
+  }
+  /** 'record' (the obligation tools again), 'final' (no tools — the report), or null when the run is not finishing that way. */
+  takeFinishingTurn() {
+    if (this.state.recordLeft === void 0) return null;
+    if (this.state.recordLeft > 0) {
+      this.state.recordLeft -= 1;
+      return "record";
+    }
+    delete this.state.recordLeft;
+    return "final";
+  }
+  /** The obligation tools of the work-linking directive that the catalog holds — never a write or exec tool. */
+  obligationTools(ctx) {
+    const names = new Set(this.bind.facts.obligationTools());
+    return names.size === 0 ? [] : ctx.tools.filter((t) => names.has(t.function.name));
+  }
+  /** THE one place a finish turn is made: the run is finishing from here on. */
+  finishTurn(tools, brief) {
+    this.state.finishing = true;
+    return { tools, brief, finishing: true, ...tools.length === 0 ? { final: true } : {} };
+  }
+  finishingTurn(ctx) {
+    const finishing = this.takeFinishingTurn();
+    if (!finishing) return null;
+    this.takeDue();
+    const tools = finishing === "record" ? this.obligationTools(ctx) : [];
+    return this.finishTurn(tools, tools.length > 0 ? FINISH_RECORD_BRIEF : FINISH_FINAL_BRIEF);
+  }
+  /**
+   * The forced turn an escalation or finish decides, called after selection with this turn's tools. Null for an ordinary
+   * turn — and when the trip cannot be forced here, in which case its note opens the turn instead.
+   */
+  guardTurn(env, step, selected) {
+    const due = this.takeDue();
+    if (!due) return null;
+    if (due.kind === "finish") {
+      const deferred = due.verified ? null : this.deferredFinishTurn(env, step, selected, due);
+      if (deferred === "steered") return null;
+      if (deferred) return deferred;
+      const tools = this.obligationTools(env.ctx);
+      this.trace(env.note, step, due, "finish", tools.length);
+      if (tools.length === 0) return this.finishTurn([], due.note);
+      this.state.recordLeft = Math.max(0, this.opts.recordTurns - 1);
+      return this.finishTurn(tools, `${due.note}
+
+${FINISH_RECORD_BRIEF}`);
+    }
+    const advice = `PROGRESS CHECK ${due.trip}: ${progressAdvice(due.signal)}`;
+    const out = budgeted(env) ? forcedProgressTurn(env, selected, advice) : null;
+    if (!out) {
+      this.steer(advice);
+      return null;
+    }
+    this.trace(env.note, step, due, out.forced);
+    return out.turn;
+  }
+  /**
+   * A change request that has not changed anything is not ended while the run can still DO the work: once per run, the
+   * unverified finish becomes a forced change turn instead — the change tools alone, with NO question tool. A planner's analysis
+   * ends there (the coding role takes the turn). When this turn's menu has no change tool to force while still planning,
+   * planning ends and the run is steered instead ('steered'), so the NEXT turn selects as `code`. Null: the finish stands.
+   */
+  deferredFinishTurn(env, step, selected, due) {
+    if (!budgeted(env) || this.bind.facts.progressed() || this.state.deferred) return null;
+    const advice = `PROGRESS CHECK ${due.trip}: ${progressAdvice(due.signal)}`;
+    const planning = offersHandOff(env.ctx.state.model);
+    const out = forcedProgressTurn(env, selected, advice, { changeOnly: true, noAsk: true, endsPlanning: { step, why: DEFERRED_ENDS_PLANNING } });
+    if (out) {
+      this.state.deferred = true;
+      this.trace(env.note, step, due, out.forced);
+      return out.turn;
+    }
+    if (!planning) return null;
+    endPlanning(env, step, DEFERRED_ENDS_PLANNING_STEERED);
+    this.state.deferred = true;
+    this.steer(advice);
+    return "steered";
+  }
+  trace(note, step, due, forced, recordTools = 0) {
+    const why = due.kind === "finish" && due.verified ? "the change is made and verified" : "the run is not converging";
+    const head = `progress check ${due.trip} (${due.signal.kind})`;
+    note(
+      PROGRESS_FORCED_LABEL,
+      { step, trip: due.trip, signal: due.signal.kind, forced, ...recordTools > 0 ? { recordTools } : {} },
+      forced !== "finish" ? `${head} \u2014 this turn offers ${FORCED_MENU[forced]} and requires a call.` : recordTools > 0 ? `${head} \u2014 ${why}: this turn offers only the ${recordTools} ticket tool(s) to record what is still open, and the run writes its final report.` : `${head} \u2014 ${why}: this turn offers no tools and the run writes its final report.`
+    );
+  }
+  /** Decide one turn: the policy's selection (the hand-off tool leaves it once planning closes) and the forced turn, when a rule forced one. */
+  async decide(env, step, select, cache2) {
+    const finishing = this.finishingTurn(env.ctx);
+    const handOffTurn = finishing ? null : planBudgetTurn(env, step);
+    const ranked2 = await select();
+    const selected = offersHandOff(env.ctx.state.model) ? ranked2 : ranked2.filter((t) => t.function.name !== this.opts.handOffTool);
+    const turn = finishing ?? handOffTurn ?? changeBudgetTurn(env, step, selected) ?? noProgressTurn(env, step, selected, cache2) ?? this.guardTurn(env, step, selected);
+    return { selected, turn };
+  }
+};
+async function ladderTurn(ladder, ctx, env, onEvent) {
+  const rows = [];
+  const note = (tool, detail, result) => {
+    rows.push({ tool, detail, result });
+  };
+  const { selected, turn } = await ladder.decide({ ctx, bind: ladder.bind, opts: ladder.opts, note }, ctx.step, env.select, env.cache);
+  for (const row of rows) await onEvent?.(row, { step: ctx.step });
+  return { selected, ...turn ? { menu: menuOf(turn) } : {} };
+}
+function menuOf(turn) {
+  return { tools: turn.tools, ...turn.toolChoice ? { toolChoice: turn.toolChoice } : {}, tail: [turn.brief], ...turn.final ? { final: true } : {} };
+}
+
+// ../packages/agent-run/src/policy/guards/index.ts
+var QUESTION_TOOL_ROUNDS = 6;
+var ANSWER_DUE_NOTE = "Answer the question now using the evidence collected. State what could not be established. Do not call more tools.";
+var RunGuards = class {
+  constructor(levers, resume, ports = {}, question = false) {
+    this.question = question;
+    this.levers = levers;
+    this.answerTurns = resume?.answerTurns ?? 0;
+    this.cascade = new CascadeSession(!!levers.d1_verifier_cascade, resume?.cascade, {
+      shouldSkipWeakAttempt: ports.cascade?.shouldSkipWeakAttempt ? (f) => ports.cascade.shouldSkipWeakAttempt({ actionType: f.actionType, priorWeakPassRate: f.priorWeakPassRate }) : void 0,
+      weakPassRate: ports.cascade?.weakPassRate,
+      escalateThinkLevel: ports.cascade?.escalateThinkLevel,
+      defaultThinkLevel: ports.cascade?.defaultThinkLevel,
+      recordOutcome: ports.cascade?.recordOutcome ? (row) => ports.cascade.recordOutcome({ ...row, features: row.features }) : void 0
+    });
+    const bind = ports.progress;
+    this.bind = bind;
+    this.progress = levers.a3_progress_detector ? new ProgressDetector(resume?.progress, {
+      isReadOnly: bind?.isReadOnly ?? ((tool) => isReadOnlyCloudTool(tool)),
+      isBookkeeping: isProgressBookkeeping,
+      ...bind?.isUnscopedMutation ? { isUnscopedMutation: bind.isUnscopedMutation } : {},
+      ...bind?.isPlatformProgress ? { isPlatformProgress: bind.isPlatformProgress } : {},
+      ...bind?.expectsChange ? { expectsChange: bind.expectsChange } : {}
+    }) : null;
+    this.forced = bind?.turns ? new ForcedLadder({ ...resume?.forced }, (note) => this.progress?.setSteer(note), bind, bind.turns) : null;
+    this.postEdit = !!levers.d7_deterministic_handlers;
+    this.finishDue = resume?.finishDue === true;
+    this.resumedFinishing = resume?.forced?.finishing === true;
+    this.checksNote = resume?.checksNote ?? "";
+    this.escalations = resume?.escalations ?? 0;
+  }
+  question;
+  answerTurns;
+  cascade;
+  progress;
+  /** A surface's forced-turn ladder (`GuardPorts.progress.turns`); null ⇒ A3's trips keep their generic handling. */
+  forced;
+  bind;
+  /** The saved state said the run was finishing (read before any ladder is bound: a resumed tick asks for its tail first). */
+  resumedFinishing;
+  postEdit;
+  levers;
+  /** A3's `finish`: the next turn offers no tools — the run's final report. */
+  finishDue;
+  /** This turn's post-edit verdicts — the D1 code unit's verifier. */
+  turnEdits = [];
+  /** D7: the sandbox checks' failures from the last turn, for the next turn's tail. */
+  checksNote = "";
+  /** Moves UP the tier ladder this run (D1's failed verdicts, A3's second trip) — §8.2. */
+  escalations;
+  /** The volatile-tail sections this turn carries (empty strings drop out). */
+  tailSections() {
+    return [
+      this.finishDue && this.answerTurns >= QUESTION_TOOL_ROUNDS ? ANSWER_DUE_NOTE : "",
+      this.finishing || this.resumedFinishing ? "" : this.progress?.steerNote() ?? "",
+      this.cascade.steerNote(),
+      this.checksNote
+    ];
+  }
+  /** The forced-turn ladder's decision for this step, or nothing when none is bound. */
+  forcedTurn(ctx, env, ports) {
+    return this.forced ? ladderTurn(this.forced, ctx, env, ports.onEvent) : void 0;
+  }
+  /** A finish turn was decided: sticky for the rest of the run. */
+  get finishing() {
+    return this.forced?.finishing === true;
+  }
+  /** D1: the reasoning levers for a turn, raised while a unit is escalated. */
+  reasoning(base) {
+    return this.cascade.execParams(base);
+  }
+  /** D1 + D2: the first tick's starting model (weak-first unless the router says skip). */
+  seedModel(state, a) {
+    return this.cascade.seed(state, a);
+  }
+  /** What the guards persist across a step boundary (the contract's `LoopGuardState`). */
+  snapshot() {
+    return {
+      ...this.answerTurns ? { answerTurns: this.answerTurns } : {},
+      ...this.progress ? { progress: this.progress.snapshot() } : {},
+      // The cascade's seed facts serve A3's escalation too; with both levers off nothing persists.
+      ...this.cascade.on || this.progress ? { cascade: this.cascade.snapshot() } : {},
+      ...this.finishDue ? { finishDue: true } : {},
+      ...this.forced && Object.keys(this.forced.state).length > 0 ? { forced: { ...this.forced.state } } : {},
+      ...this.checksNote ? { checksNote: this.checksNote } : {},
+      ...this.escalations ? { escalations: this.escalations } : {}
+    };
+  }
+  /** Whether a call only reads (D8): the kernel's `isReadOnly` port. */
+  isReadOnly(name) {
+    return this.levers.d8_parallel_tool_calls ? isReadOnlyCloudTool(name) : false;
+  }
+  /**
+   * D7: check an edit the moment it lands; only a failure reaches the model, as one
+   * note on that tool result. The verdict also feeds the D1 code unit's verifier.
+   */
+  async checkEdit(call, data, ports) {
+    if (!this.postEdit && !this.cascade.on) return data;
+    const verdict = await verifyAfterEdit(call, data, { read: ports.read, bound: ports.bound });
+    if (!verdict) return data;
+    this.turnEdits.push(verdict);
+    return this.postEdit ? withPostEditNote(data, verdict) : data;
+  }
+  /**
+   * D1: fold a finish attempt's gate verdict into the cascade; returns the block the
+   * kernel reads. The finish hook calls this after its own gates.
+   */
+  async finish(verdict, step, ports) {
+    if (!this.cascade.on) return verdict.block;
+    const v = verdict.block ? { passed: false, verifier: `finish_gates:${verdict.reason ?? "blocked"}`, reason: verdict.block, inconclusive: verdict.reason === "branch_ci_pending" || verdict.reason === "children_running" || verdict.reason === LINKED_WORK_OPEN } : { passed: true, verifier: "finish_gates" };
+    await this.judge("finish", v, step, ports);
+    return verdict.block;
+  }
+  /** The turn ended: fold the turn's edits into the cascade and trip A3 if stuck. */
+  async endTurn(step, ports) {
+    this.checksNote = "";
+    if (this.question && ++this.answerTurns >= QUESTION_TOOL_ROUNDS) {
+      this.finishDue = true;
+      await this.record(ports, { tool: "answer_due", detail: { turns: this.answerTurns }, result: ANSWER_DUE_NOTE }, step);
+      return;
+    }
+    if (this.turnEdits.length > 0) {
+      const errors = this.turnEdits.flatMap((v) => v.errors);
+      this.turnEdits = [];
+      const staticVerdict = errors.length ? { passed: false, verifier: "changed_files", reason: errors.slice(0, 5).map((e) => `${e.path}${e.line ? `:${e.line}` : ""} ${e.message}`).join("; ") } : { passed: true, verifier: "changed_files" };
+      const checks = ports.checks ? await ports.checks().catch(() => null) : null;
+      if (checks?.steer && this.postEdit) this.checksNote = checks.steer;
+      const verdict = checks && !checks.passed && staticVerdict.passed ? { passed: false, verifier: checks.verifier, ...checks.reason ? { reason: checks.reason } : {} } : staticVerdict;
+      await this.judge("code_edit", verdict, step, ports);
+    }
+    this.cascade.endTurn();
+    for (const report2 of this.bind?.childReports?.() ?? []) this.progress?.observeChildReport(report2);
+    const action = this.progress?.endTurn();
+    if (action) await this.onTrip(action, ports, step);
+  }
+  /** Leave a row on the run's timeline. A surface that binds the forced-turn ladder is told the step as well. */
+  async record(ports, row, step) {
+    if (this.forced) await ports.onEvent?.(row, { step });
+    else await ports.onEvent?.(row);
+  }
+  async judge(kind, verdict, step, ports) {
+    const model = ports.model;
+    if (!model) return;
+    const before = model.get();
+    const features = ports.features?.(step, void 0) ?? { actionType: "other" };
+    const after = await this.cascade.verdict(before, kind, verdict, {
+      ladder: ports.ladder?.() ?? ports.cascade?.ladder ?? { candidates: [], rankOf: () => 1 },
+      attemptModel: ports.resolvedModel?.(),
+      features: { actionType: this.cascade.featuresActionType(features.actionType ?? "other") }
+    });
+    if (after === before) return;
+    model.set(after);
+    if (!verdict.passed) this.escalations += 1;
+    await this.record(ports, {
+      tool: "model.escalated",
+      detail: { step, unit: kind, verifier: verdict.verifier, passed: verdict.passed, from: before.model ?? ports.resolvedModel?.() ?? null, to: after.model ?? null },
+      result: verdict.passed ? `${kind} passed \u2014 back to ${after.model}` : `${kind} failed ${verdict.verifier} \u2014 escalated to ${after.model}`
+    }, step);
+  }
+  async onTrip(action, ports, step) {
+    let outcome = action.kind;
+    if (action.kind !== "advisory" && this.forced) {
+      if (action.kind === "escalate" || action.kind === "finish") this.forced.hold(action);
+      const s2 = progressTraceStep(action);
+      await this.record(ports, { tool: s2.label, detail: s2.args, result: s2.result }, step);
+      return;
+    }
+    if (action.kind === "advisory") {
+      this.progress?.setSteer(action.note);
+      const s2 = progressTraceStep(action);
+      await this.record(ports, { tool: s2.label, detail: s2.args, result: s2.result }, step);
+      return;
+    }
+    if (action.kind === "escalate") {
+      const model = ports.model;
+      const ladder = ports.ladder?.() ?? ports.cascade?.ladder;
+      const next = model && ladder ? this.cascade.escalate(model.get(), ladder, ports.resolvedModel?.()) : null;
+      if (next && model) {
+        model.set(next);
+        this.escalations += 1;
+      } else {
+        this.progress?.setSteer(progressSteerNote(action.signal, action.trip, false));
+        outcome = "steer";
+      }
+    } else if (action.kind === "finish") {
+      this.finishDue = true;
+    }
+    const s = progressTraceStep(action, {
+      outcome,
+      detail: { trip: action.trip, signal: action.signal, outcome, model: ports.model?.get().model ?? null }
+    });
+    await this.record(ports, { tool: s.label, detail: s.args, result: s.result }, step);
+  }
+  /** A3's `finish`: whether the next turn is the run's final report (no tools). A peek — {@link finalTurnDone} spends it. */
+  get finalTurnDue() {
+    return this.finishDue;
+  }
+  /** The final turn was answered: the finish is spent. */
+  finalTurnDone() {
+    this.finishDue = false;
+  }
+  /** A3: what the turn said, judged against what its calls did (WS8p). */
+  noteTurnText(text) {
+    this.progress?.noteTurnText(text);
+  }
+  /** A3: every dispatched call is observed by the progress detector (when on). */
+  observe(call, result, isError) {
+    if (result && typeof result === "object" && result.control) return;
+    this.progress?.observe(call.name, call.args, { data: result, ...isError ? { isError: true } : {} });
+  }
+};
+var sessions = /* @__PURE__ */ new WeakMap();
+function sessionOf(ctx, ports) {
+  let s = sessions.get(ctx.state);
+  if (!s) {
+    const question = hasExplicitQuestionIntent(classifyRequest(ctx.task.request ?? ctx.task.prompt));
+    s = new RunGuards(guardLeversOf(ctx.policy.levers), ctx.state.guards, ports, question);
+    sessions.set(ctx.state, s);
+    ctx.state.guards = s.snapshot();
+  }
+  return s;
+}
+function portsOf(ctx, ports) {
+  const state = ctx.state;
+  const ladder = ports.ladder?.() ?? ports.cascade?.ladder;
+  return {
+    ...ports,
+    ...!ports.model && ladder ? { model: { get: () => state.model, set: (next) => {
+      state.model = next;
+    } } } : {},
+    ...ports.features ? { features: (step) => ports.features(step, state) } : {}
+  };
+}
+function createGuardsHook(surfacePorts = {}) {
+  return {
+    async observe(ctx, call, result, isError) {
+      const ports = portsOf(ctx, surfacePorts);
+      const g = sessionOf(ctx, ports);
+      const noted = await g.checkEdit(call, result, ports);
+      g.observe(call, result, isError);
+      ctx.state.guards = g.snapshot();
+      return noted !== result ? { data: noted } : void 0;
+    },
+    async endTurn(ctx, content) {
+      const ports = portsOf(ctx, surfacePorts);
+      const g = sessionOf(ctx, ports);
+      g.noteTurnText(ctx.ports.delivery?.judged?.(content) ?? content);
+      await g.endTurn(ctx.step, ports);
+      ctx.state.guards = g.snapshot();
+    },
+    async forcedTurn(ctx, env) {
+      const ports = portsOf(ctx, surfacePorts);
+      const g = sessionOf(ctx, ports);
+      const decided = await g.forcedTurn(ctx, env, ports);
+      ctx.state.guards = g.snapshot();
+      return decided;
+    },
+    isFinishing(ctx) {
+      return sessionOf(ctx, portsOf(ctx, surfacePorts)).finishing;
+    },
+    isReadOnly(ctx, name) {
+      const ports = portsOf(ctx, surfacePorts);
+      return sessionOf(ctx, ports).isReadOnly(name);
+    },
+    finalTurn(ctx) {
+      const ports = portsOf(ctx, surfacePorts);
+      return sessionOf(ctx, ports).finalTurnDue;
+    },
+    finalTurnDone(ctx) {
+      const ports = portsOf(ctx, surfacePorts);
+      const g = sessionOf(ctx, ports);
+      g.finalTurnDone();
+      ctx.state.guards = g.snapshot();
+    },
+    async seed(ctx) {
+      const ports = portsOf(ctx, surfacePorts);
+      const ladder = ports.ladder?.() ?? ports.cascade?.ladder;
+      if (!ladder) return void 0;
+      const seeded = await sessionOf(ctx, ports).seedModel(ctx.state.model, {
+        strict: ctx.policy.modelStart?.strict === true,
+        ladder,
+        features: ports.features?.(0) ?? { actionType: "other", role: ctx.policy.role, promptTokens: 0, toolCount: ctx.tools.length, turnIndex: 0 }
+      });
+      ctx.state.guards = sessionOf(ctx, ports).snapshot();
+      return seeded;
+    },
+    reasoning(ctx) {
+      const ports = portsOf(ctx, surfacePorts);
+      return sessionOf(ctx, ports).reasoning(void 0);
+    },
+    async finish(ctx, verdict) {
+      const ports = portsOf(ctx, surfacePorts);
+      const g = sessionOf(ctx, ports);
+      const block = await g.finish(verdict, ctx.step, ports);
+      ctx.state.guards = g.snapshot();
+      return block;
+    }
+  };
+}
+var guardsHook = createGuardsHook();
+
+// ../packages/agent-run/src/policy/verify/sandboxVerify.ts
+var MAX_VERIFY_COMMANDS = 3;
+var VERIFY_BUDGET_MS = 9 * 6e4;
+var MIN_COMMAND_MS = 3e4;
+var DID_NOT_FINISH = 124;
+async function readPackageScripts(sandbox) {
+  const content = await sandbox.read("package.json").catch((error) => {
+    sandbox.onError?.("read", error);
+    return null;
+  });
+  if (content === null) return null;
+  try {
+    const scripts = JSON.parse(content).scripts;
+    if (!scripts || typeof scripts !== "object" || Array.isArray(scripts)) return null;
+    return Object.fromEntries(Object.entries(scripts).filter((e) => typeof e[1] === "string"));
+  } catch {
+    return null;
+  }
+}
+async function detectRunner(sandbox) {
+  const atRoot = async (name) => {
+    const listed = await sandbox.list(name).catch((error) => {
+      sandbox.onError?.("list", error);
+      return [];
+    });
+    return (listed ?? []).includes(name);
+  };
+  if (await atRoot("pnpm-lock.yaml")) return "pnpm";
+  if (await atRoot("yarn.lock")) return "yarn";
+  return "npm";
+}
+async function runSandboxVerify(sandbox, shell, now = Date.now) {
+  const [packageScripts, runner] = await Promise.all([readPackageScripts(sandbox), detectRunner(sandbox)]);
+  const plan = planInRunVerify({ surface: "sandbox", packageScripts, runner });
+  const results = [];
+  const deadline = now() + VERIFY_BUDGET_MS;
+  for (const command of plan.commands.slice(0, MAX_VERIFY_COMMANDS)) {
+    const left = deadline - now();
+    if (left < MIN_COMMAND_MS) {
+      results.push({ command, exitCode: DID_NOT_FINISH });
+      continue;
+    }
+    const r = await shell.runFor(command, left);
+    results.push({ command, exitCode: typeof r.exitCode === "number" ? r.exitCode : 1 });
+  }
+  return { packageScripts, runner, results };
+}
+
+// ../packages/agent-run/src/policy/verify/recordVerifyEvents.ts
+function recordVerifyEvents(outcome) {
+  return {
+    started: { type: "verify_started" },
+    completed: {
+      tool: "in_run_verify",
+      category: "tool",
+      detail: {
+        surface: outcome.surface,
+        kind: outcome.kind,
+        ...outcome.reason ? { reason: outcome.reason } : {},
+        commands: outcome.commands,
+        failedCommands: outcome.failedCommands,
+        mayFinish: outcome.mayFinish
+      },
+      result: describeVerifyOutcome(outcome)
+    }
+  };
+}
+
+// ../packages/agent-run/src/policy/tools/gateToolNames.ts
+var TOOL_NAME_SYNONYMS = {
+  write: ["write_file", "Write"],
+  write_file: ["write", "Write"],
+  Write: ["write", "write_file"],
+  delete_file: ["write_file", "write", "Write"],
+  // A patch is a write and an edit at once: a gate authored on either covers it.
+  apply_patch: ["write_file", "write", "Write", "edit_file", "edit", "Edit"],
+  // A write gate covers an edit (an edit rewrites a file); an edit gate does not cover a plain write.
+  edit: ["edit_file", "Edit", "write", "write_file", "Write"],
+  edit_file: ["edit", "Edit", "write", "write_file", "Write"],
+  Edit: ["edit", "edit_file", "write", "write_file", "Write"],
+  exec: ["run_command", "Bash", "bash"],
+  Bash: ["run_command", "exec", "bash"],
+  bash: ["run_command", "exec", "Bash"],
+  run_command: ["exec", "Bash", "bash"],
+  read: ["read_file", "Read"],
+  Read: ["read", "read_file"],
+  read_file: ["read", "Read"],
+  Task: ["spawn_agent", "spawn_agents", "sessions_spawn"],
+  spawn_agent: ["Task", "spawn_agents", "sessions_spawn"],
+  spawn_agents: ["Task", "spawn_agent", "sessions_spawn"],
+  sessions_spawn: ["Task", "spawn_agent", "spawn_agents"],
+  Glob: ["list_files", "find", "ls"],
+  list_files: ["Glob", "find", "ls"],
+  find: ["list_files", "Glob"],
+  ls: ["list_files", "Glob"],
+  Grep: ["search_code", "grep"],
+  search_code: ["Grep", "grep"],
+  grep: ["search_code", "Grep"]
+};
+var ACTION_RULES = [
+  // `process` drives a running exec session: writing to it, submitting to it or killing it acts on a command (listing, polling and reading its log do not).
+  ...["write", "send-keys", "submit", "paste", "kill", "remove"].map((action) => ({ tool: "process", when: { action }, as: "exec" })),
+  { tool: "nodes", when: { action: "run" }, as: "exec" },
+  { tool: "nodes", when: { action: "invoke", invokeCommand: { startsWith: "system." } }, as: "exec" }
+];
+function ruleMatches(rule, args) {
+  return Object.entries(rule.when).every(([key, want]) => {
+    const have = typeof args?.[key] === "string" ? args[key].trim().toLowerCase() : "";
+    return typeof want === "string" ? have === want : have.startsWith(want.startsWith);
+  });
+}
+var SYNONYMS_BY_NAME = new Map(
+  Object.entries(TOOL_NAME_SYNONYMS).map(([name, same]) => [normalizeToolName(name), same])
+);
+function candidateToolNames(toolName, args) {
+  const called = normalizeToolName(toolName);
+  const families = ACTION_RULES.filter((r) => r.tool === called && ruleMatches(r, args)).map((r) => r.as);
+  const names = [toolName.trim(), resolveToolAlias(toolName), ...families].flatMap((n) => [n, ...SYNONYMS_BY_NAME.get(normalizeToolName(n)) ?? []]);
+  return [...new Set(names.filter(Boolean))];
+}
+
+// ../packages/agent-run/src/policy/verify/nativeChecks.ts
+var SCRIPTS = new Set(IN_RUN_VERIFY_SCRIPT_NAMES);
+function scriptOf(value) {
+  if (typeof value !== "string") return void 0;
+  const match = /^(npm|pnpm|yarn)[ \t]+(?:(run)[ \t]+)?([a-z-]+)$/.exec(value.trim());
+  if (!match) return void 0;
+  const script = match[3];
+  if (!script || !SCRIPTS.has(script) || match[1] === "npm" && !match[2] && script !== "test") return void 0;
+  return script === "test" ? "test" : "typecheck";
+}
+function exitCodeOf(value) {
+  if (typeof value !== "object" || !value) return void 0;
+  const exitCode = value.exitCode;
+  return typeof exitCode === "number" && Number.isInteger(exitCode) ? exitCode : void 0;
+}
+var nativeChecks = {
+  observe({ state }, call, result, meta, succeeded6) {
+    const family = candidateToolNames(call.name, call.args);
+    if (!family.includes("run_command")) {
+      if (succeeded6 && family.some((name) => name === "write_file" || name === "spawn_agent")) delete state.nativeChecks;
+      return;
+    }
+    const check = scriptOf(call.args.command);
+    const directory = call.args.cwd ?? call.args.workdir;
+    const code = exitCodeOf(meta?.details) ?? exitCodeOf(result);
+    if (check && code !== void 0 && (succeeded6 || code !== 0) && directory === void 0 && call.args.background !== true) {
+      (state.nativeChecks ??= {})[check] = code;
+    } else if ((succeeded6 || code !== void 0) && !isReadOnlyShellCall("run_command", call.args)) {
+      delete state.nativeChecks;
+    }
+  },
+  recorded({ state }) {
+    const results = Object.values(state.nativeChecks ?? {});
+    return results.length ? results.every((code) => code === 0) : void 0;
+  }
+};
+
+// ../packages/agent-run/src/policy/verify/index.ts
+async function verifyRunWork(input, ports = {}) {
+  const { surface = "durable", shell, sandbox } = ports;
+  const { writtenPaths, ciVerified } = input;
+  if (input.declaredChecks && shell && sandbox && surface !== "durable" && writtenPaths && [...writtenPaths].length) {
+    try {
+      const { packageScripts, runner, results } = await runSandboxVerify(sandbox, shell);
+      return runVerifyPhase({ surface, writtenPaths, packageScripts, runner, results });
+    } catch (error) {
+      if (!ports.onShellError) throw error;
+      ports.onShellError(error);
+    }
+  }
+  return runVerifyPhase({ surface: "durable", writtenPaths, ciVerified });
+}
+async function record2(ports, outcome) {
+  if (!ports.recordEvents) return;
+  const events = recordVerifyEvents(outcome);
+  await ports.recordEvents(events.started);
+  await ports.recordEvents(events.completed);
+}
+function writtenPathsOf2(ctx) {
+  return ctx.state.writtenPaths ?? [];
+}
+function createVerifyHook(ports = {}) {
+  return {
+    ...ports.observeNativeChecks ? nativeChecks : {},
+    ...ports.recorded ? { recorded: ports.recorded } : {},
+    async verify(ctx) {
+      if (ctx.policy.verify === "none") return void 0;
+      const writtenPaths = writtenPathsOf2(ctx);
+      if (writtenPaths.length === 0) return void 0;
+      const outcome = await verifyRunWork({ writtenPaths, declaredChecks: ctx.policy.verify === "declared-checks" }, ports);
+      await record2(ports, outcome);
+      return { ok: outcome.mayFinish, note: outcome.note, ran: outcome.kind === "ran" };
+    }
+  };
+}
+var verifyHook = createVerifyHook();
+
+// ../packages/agent-run/src/policy/tools/taskState.ts
+var UPDATE_TASK_STATE_TOOL = "update_task_state";
+var list = (description) => ({ type: "array", items: { type: "string" }, description });
+var UPDATE_TASK_STATE_SCHEMA = {
+  type: "function",
+  function: {
+    name: UPDATE_TASK_STATE_TOOL,
+    description: "Record your structured task state: the goal, constraints, decisions made, files touched, open questions and the next step. It is shown to you on every turn and survives context compaction, so keep it current after each meaningful step instead of re-deriving it. Fields you omit keep their previous value. Keep it under ~600 tokens.",
+    parameters: {
+      type: "object",
+      properties: {
+        goal: { type: "string", description: "The task goal in one or two sentences." },
+        constraints: list("Rules and limits the work must respect."),
+        decisions: list("Decisions already made, so they are not revisited."),
+        filesTouched: list("Repo paths you changed."),
+        openQuestions: list("What is still unknown."),
+        nextStep: { type: "string", description: "The very next action." }
+      }
+    }
+  }
+};
+
+// ../packages/agent-run/src/policy/memory/learnedFacts.ts
+var MEMORY_COMMIT_SYSTEM = [
+  "You extract durable project facts from a finished coding or investigation run.",
+  "Return a JSON array and nothing else. Each item is {key, kind, content}.",
+  "kind is one of decision, root_cause, convention.",
+  "key is a short kebab-case slug that stays stable if the same fact is learned again.",
+  "content is one or two sentences a later run can act on, at least a full sentence.",
+  "For an investigation, facts are where a behaviour lives, a root cause, or how something works, taken from the Conclusion.",
+  "Only emit a fact the evidence (the excerpt, or the Conclusion of a read-only run) actually supports. Do not invent, and do not restate the file list.",
+  "Return [] when the run learned nothing durable."
+].join(" ");
+
+// ../packages/agent-run/src/policy/tools/toolVocabulary.ts
+var EQUIVALENCE_CLASSES = [
+  // The work item itself. `ticket` is the product's word and `task` is the catalog's;
+  // this one class is what makes every `tasks.*` tool reachable from a ticket question.
+  ["task", "ticket", "issue", "story", "backlog", "todo"],
+  // The board and its geography.
+  ["kanban", "board", "lane", "swimlane", "column", "card"],
+  // Source control.
+  ["repo", "repository", "codebase", "git"],
+  ["branch", "commit", "merge", "rebase"],
+  ["pr", "pull", "pullrequest"],
+  // People. `member` is the catalog's word; the rest are what users type.
+  ["member", "teammate", "colleague", "people", "person", "staff"],
+  // Conversations.
+  ["chat", "conversation", "thread"],
+  // Delivery planning. `epic` stays OUT of the objective class on purpose — objectives/
+  // OKRs and epics are different entities with different tools.
+  ["epic", "feature"],
+  ["objective", "okr", "keyresult"],
+  // Runs.
+  ["execution", "run", "dispatch"]
+];
+var SYNONYMS = (() => {
+  const map = /* @__PURE__ */ new Map();
+  for (const group2 of EQUIVALENCE_CLASSES) {
+    for (const term of group2) {
+      const existing = map.get(term) ?? [];
+      for (const other of group2) if (!existing.includes(other)) existing.push(other);
+      map.set(term, existing);
+    }
+  }
+  return map;
+})();
+
+// ../packages/agent-run/src/policy/tools/selectTools.ts
+var NAME_HIT = LEXICAL_WEIGHTS.name;
+var DESCRIPTION_HIT = LEXICAL_WEIGHTS.description;
+
+// ../packages/tool-output-policy/src/caps.ts
+var TOOL_OUTPUT_CAPS = {
+  read_file: 16e3,
+  run_command: 2e4,
+  exec: 2e4,
+  bash: 2e4,
+  git_status: 2e4,
+  git_diff: 2e4,
+  git_history: 2e4,
+  git_sync_latest: 2e4,
+  git_undo: 2e4,
+  git_redo: 2e4,
+  // Up to four children's reports in one result, each capped by agent-tools'
+  // `SUBAGENT_REPORT_CHARS`. A research child's report IS its deliverable: under the 6K
+  // default a wait on four left the owner ~1.5K of each, and it re-spawned researchers
+  // to recover what was cut (VS Code chat #6). Four full reports plus each one's header
+  // and cut marker; `subagentReportBudget.test.ts` (brain-embedded) holds the two together.
+  wait_agents: 34e3,
+  // The Creation Canvas's reads. A board snapshot is the whole board as JSON and a real
+  // board runs to tens of KB; under the 6K default the model was handed a sliver of it and
+  // asked the user to re-select objects that were already there. A build file is paged
+  // like `read_file` (see {@link PAGED_READ_TOOLS}).
+  canvas_read_snapshot: 64e3,
+  canvas_read_object: 32e3,
+  canvas_read_build_file: 16e3
+};
+var READ_FILE_TOOL = "read_file";
+var PAGED_READ_TOOLS = {
+  // `read_file`'s `offset` applies to each path of a `paths[]` read (agent-tools core-tools).
+  [READ_FILE_TOOL]: { search: "search_code", perPathOffset: true },
+  // The canvas's `offset` is honoured for a SINGLE path only.
+  canvas_read_build_file: { search: "canvas_search_build_files", perPathOffset: false }
+};
+
+// ../packages/tool-output-policy/src/readFileWindow.ts
+var READ_FILE_RESULT_CHARS = TOOL_OUTPUT_CAPS.read_file ?? 16e3;
+
+// ../packages/agent-run/src/policy/tools/gates.ts
+var CONTROL_TOOLS = new Set(CONTROL_TOOL_NAMES);
+
+// ../packages/agent-run/src/runCatalog.ts
+var CORE_REGISTRY = buildCoreToolRegistry();
+for (const tool of [...SKILL_TOOLS, ...SUBAGENT_TOOLS]) CORE_REGISTRY.register(tool);
+
+// ../packages/agent-run/src/turnContext.ts
+var import_handoff6 = require("@seanhogg/builderforce-memory/handoff");
+
+// ../packages/spend-contract/src/cost.ts
+var MEDIAN_TURN_TOKENS = Object.freeze({ prompt: 6e3, completion: 400 });
+
+// ../packages/pipeline-route/src/score.ts
+var import_stats2 = require("@seanhogg/builderforce-memory/stats");
+
+// ../packages/pipeline-route/src/report.ts
+var RERUN_WINDOW_MS = 30 * 6e4;
+
+// ../packages/workload/src/actionClassifier.ts
+var sig = (source, weight = 1) => ({
+  re: new RegExp(source, "i"),
+  weight
+});
+var SIGNALS = [
+  [
+    "data_migration",
+    [
+      sig("\\bbackfill(ing|ed)?\\b", 2),
+      sig("\\bdata migration\\b", 2),
+      sig("\\bre-?index(ing)?\\b"),
+      sig("\\bmigrate .{0,20}\\bdata\\b", 2),
+      sig("\\bseed (the )?(database|table|data)\\b", 2),
+      sig("\\betl\\b", 2)
+    ]
+  ],
+  [
+    "sql",
+    [
+      sig("\\bsql\\b", 2),
+      sig("\\bquery\\b"),
+      sig("\\bschema\\b"),
+      sig("\\bmigration\\b"),
+      sig("\\bpostgres|postgresql|sqlite|mysql\\b", 2),
+      sig("\\bcreate table|alter table|drop table\\b", 2),
+      sig("\\bindex(es)? on\\b"),
+      sig("\\bforeign key|primary key\\b", 2)
+    ]
+  ],
+  [
+    "tests",
+    [
+      sig("\\bunit test|integration test|e2e test\\b", 2),
+      sig("\\btests?\\b"),
+      sig("\\bvitest|jest|pytest|playwright|mocha\\b", 2),
+      sig("\\btest coverage\\b", 2),
+      sig("\\bassert(ion)?s?\\b"),
+      sig("\\bspec file\\b", 2)
+    ]
+  ],
+  [
+    "docs",
+    [
+      sig("\\bdocument(ation)?\\b", 2),
+      sig("\\breadme\\b", 2),
+      sig("\\bchangelog\\b", 2),
+      sig("\\bdocstring|jsdoc|tsdoc\\b", 2),
+      sig("\\bwrite .{0,20}\\bguide\\b", 2),
+      sig("\\bcomment(s|ing)?\\b")
+    ]
+  ],
+  [
+    "devops_ci",
+    [
+      sig("\\bci\\b|\\bcd\\b", 2),
+      sig("\\bgithub actions?|gitlab ci|jenkins|circleci\\b", 2),
+      sig("\\bdocker(file)?|kubernetes|k8s|helm\\b", 2),
+      sig("\\bdeploy(ment|ing)?\\b"),
+      sig("\\bpipeline\\b"),
+      sig("\\bbuild (script|config|failure)\\b", 2),
+      sig("\\bterraform|ansible\\b", 2)
+    ]
+  ],
+  [
+    "provisioning",
+    [
+      sig("\\bprovision(ing|ed)?\\b", 2),
+      sig("\\bspin up\\b", 2),
+      sig("\\bcreate (a|an|the) (bucket|cluster|queue|instance|database|namespace)\\b", 2),
+      sig("\\bdns|certificate|tls cert\\b"),
+      sig("\\bconfigure .{0,20}\\b(account|tenant|workspace|environment)\\b")
+    ]
+  ],
+  [
+    "frontend_ui",
+    [
+      sig("\\bui\\b|\\bux\\b", 2),
+      sig("\\bcomponent\\b"),
+      sig("\\breact|vue|svelte|angular\\b", 2),
+      sig("\\bcss|tailwind|stylesheet|styling\\b", 2),
+      sig("\\bbutton|modal|dropdown|layout|page\\b"),
+      sig("\\bresponsive|dark mode|accessib(le|ility)\\b", 2),
+      sig("\\bfront-?end\\b", 2)
+    ]
+  ],
+  [
+    "backend_api",
+    [
+      sig("\\bapi\\b", 2),
+      sig("\\bendpoint|route handler\\b", 2),
+      sig("\\brest|graphql|grpc\\b", 2),
+      sig("\\bback-?end\\b", 2),
+      sig("\\bservice layer|controller|middleware\\b", 2),
+      sig("\\bserver\\b"),
+      sig("\\bauth(entication|orization)?\\b")
+    ]
+  ],
+  [
+    "refactor",
+    [
+      sig("\\brefactor(ing|ed)?\\b", 2),
+      sig("\\bclean ?up\\b", 2),
+      sig("\\bextract (a |the )?(function|method|component|module|helper)\\b", 2),
+      sig("\\brename\\b"),
+      sig("\\bdeduplicat|\\bdry\\b", 2),
+      sig("\\brestructure|reorganis|reorganiz\\b", 2),
+      sig("\\bsimplify\\b")
+    ]
+  ],
+  [
+    "bugfix",
+    [
+      sig("\\bbug\\b", 2),
+      sig("\\bfix(es|ed|ing)?\\b", 2),
+      sig("\\bbroken|crash(es|ing)?|regression\\b", 2),
+      sig("\\berror\\b"),
+      sig("\\bstack ?trace|exception\\b", 2),
+      sig("\\bnot working|fails? to\\b", 2),
+      sig("\\bdebug(ging)?\\b")
+    ]
+  ],
+  [
+    "analysis",
+    [
+      sig("\\banalys|analyz\\b", 2),
+      sig("\\binvestigate|investigation\\b", 2),
+      sig("\\bresearch\\b", 2),
+      sig("\\bexplain|summaris|summariz\\b"),
+      sig("\\bwhy (does|is|did|are)\\b", 2),
+      sig("\\baudit|assess(ment)?\\b", 2),
+      sig("\\bcompare\\b")
+    ]
+  ],
+  [
+    "decision",
+    [
+      sig("\\bapprove|approval\\b", 2),
+      sig("\\bshould we\\b", 2),
+      sig("\\bdecide|decision\\b", 2),
+      sig("\\bsign ?off\\b", 2),
+      sig("\\bchoose between\\b", 2)
+    ]
+  ]
+];
+
+// ../packages/workload/src/arcStage.ts
+var ARC_STAGES = ["idea", "make", "run", "measure", "reach"];
+var ARC_STAGE_SET = new Set(ARC_STAGES);
+
+// src/handOffParallelism.ts
+var HAND_OFF_MODE_LABEL = "hand_off.mode";
+var HAND_OFF_CLASH_LABEL = "hand_off.scope_clash";
+
+// src/routingByRole.ts
+function decisionOf(e) {
+  const a = e.args;
+  if (!a || a.mode !== "parallel" && a.mode !== "inline" && a.mode !== "mixed") return null;
+  return {
+    mode: a.mode,
+    parallelTasks: Array.isArray(a.parallelTasks) ? a.parallelTasks : [],
+    inlineTasks: Array.isArray(a.inlineTasks) ? a.inlineTasks : [],
+    clash: a.clash ?? null
+  };
+}
+var ranked = (counts) => [...counts.entries()].sort((a, b) => b[1] - a[1]);
+function routingByRole(turns, events) {
+  const byRole = /* @__PURE__ */ new Map();
+  for (const t of turns) {
+    if (t.failed || !t.role) continue;
+    const entry = byRole.get(t.role) ?? { turns: 0, models: /* @__PURE__ */ new Map(), failovers: /* @__PURE__ */ new Map() };
+    entry.turns += 1;
+    entry.models.set(t.model, (entry.models.get(t.model) ?? 0) + 1);
+    for (const f of t.failovers?.split(FAILOVER_SEPARATOR) ?? []) if (f) entry.failovers.set(f, (entry.failovers.get(f) ?? 0) + 1);
+    byRole.set(t.role, entry);
+  }
+  const count = (label) => events.filter((e) => e.label === label).length;
+  const roleHandoffs = events.filter((e) => e.label === "llm.role_handoff");
+  const hasArg = (e, key) => !!e.args && typeof e.args === "object" && key in e.args;
+  const progressForced = events.filter((e) => e.label === PROGRESS_FORCED_LABEL && !!e.args && typeof e.args === "object").map((e) => e.args).filter((a) => a.forced === "hand_off");
+  const progressForcedHandOffs = progressForced.length;
+  const progressSignals = [...new Set(progressForced.map((a) => typeof a.signal === "string" ? a.signal : "").filter(Boolean))];
+  return {
+    roles: [...byRole.entries()].map(([role, e]) => ({
+      role,
+      turns: e.turns,
+      models: ranked(e.models).map(([model, n]) => ({ model, turns: n })),
+      failovers: ranked(e.failovers).map(([failover, n]) => ({ failover, turns: n }))
+    })),
+    coderReasks: roleHandoffs.filter((e) => hasArg(e, "from")).length,
+    handOffs: roleHandoffs.filter((e) => hasArg(e, "via")).length,
+    handOffsForced: count("loop.hand_off_due") + progressForcedHandOffs,
+    handOffsForcedByProgress: progressForcedHandOffs,
+    handOffsForcedSignals: progressSignals,
+    planBudgetsSpent: count("loop.plan_budget_spent"),
+    handOffModes: events.filter((e) => e.label === HAND_OFF_MODE_LABEL).map(decisionOf).filter((d) => d !== null),
+    handOffClashesRefused: count(HAND_OFF_CLASH_LABEL)
+  };
+}
+
+// src/toolResultRecord.ts
+function toolResultRecord(result) {
+  if (typeof result === "string") {
+    try {
+      const parsed = JSON.parse(result);
+      return parsed && typeof parsed === "object" ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+  return result && typeof result === "object" ? result : null;
+}
+
+// src/modelReply.ts
+var import_working7 = require("@seanhogg/builderforce-memory/working");
+
+// src/types.ts
+var STEP_MESSAGE_ROLE = "tool";
+function isStepMessage(m) {
+  return m.role === STEP_MESSAGE_ROLE;
+}
+
+// src/persistedSteps.ts
+function stepSig(category, label, tsIso) {
+  return `${category}|${label}|${tsIso ?? ""}`;
+}
+function parseStepMessage(metadata) {
+  if (!metadata) return null;
+  try {
+    const m = JSON.parse(metadata);
+    if (m.kind !== "step" || typeof m.category !== "string") return null;
+    return {
+      step: {
+        category: m.category,
+        label: typeof m.label === "string" ? m.label : m.category,
+        args: m.args,
+        result: m.result,
+        isError: m.isError,
+        durationMs: m.durationMs,
+        resultBytes: m.resultBytes,
+        truncated: m.truncated,
+        usage: m.usage,
+        finishReason: m.finishReason,
+        textChars: m.textChars,
+        ttftMs: m.ttftMs
+      },
+      tsIso: typeof m.ts === "string" ? m.ts : void 0
+    };
+  } catch {
+    return null;
+  }
+}
+function traceWithPersistedSteps(messages, trace) {
+  const seen = /* @__PURE__ */ new Set();
+  for (const ev of trace) seen.add(stepSig(ev.category, ev.label, ev.ts));
+  const fromMessages = [];
+  for (const message of messages) {
+    if (!isStepMessage(message)) continue;
+    const parsed = parseStepMessage(message.metadata);
+    if (!parsed) continue;
+    const sig2 = stepSig(parsed.step.category, parsed.step.label, parsed.tsIso);
+    if (seen.has(sig2)) continue;
+    seen.add(sig2);
+    const s = parsed.step;
+    fromMessages.push({
+      ts: parsed.tsIso ?? message.createdAt ?? "",
+      recovered: true,
+      category: s.category,
+      label: s.label,
+      args: s.args,
+      result: s.result,
+      ...s.isError ? { isError: true } : {},
+      ...s.durationMs != null ? { durationMs: s.durationMs } : {},
+      ...s.ttftMs != null ? { ttftMs: s.ttftMs } : {},
+      ...s.resultBytes != null ? { resultBytes: s.resultBytes } : {},
+      ...s.truncated ? { truncated: true } : {},
+      ...s.usage ? { usage: s.usage } : {},
+      ...s.finishReason !== void 0 ? { finishReason: s.finishReason } : {},
+      ...s.textChars != null ? { textChars: s.textChars } : {}
+    });
+  }
+  if (fromMessages.length === 0) return trace;
+  return [...trace, ...fromMessages].sort((a, b) => a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0);
+}
+
+// src/staffingSummary.ts
+function sessionShippedInTrace(events) {
+  let n = 0;
+  for (const ev of events) {
+    if (ev.category !== "tool" || ev.isError || isFailedToolResult(ev.result)) continue;
+    if (isCodeChangeTool(ev.label) || ev.label === "git_commit" || ev.label === "git_push") n += 1;
+  }
+  return n;
+}
+var DISPATCH_TOOL = /chats[._](dispatch_agent|execute_as_agent)|kanban[._](coordinate|materialize_work_items|assess_resource|assign_participant)|executions[._]submit|run[._-]?now/i;
+function isDispatchTool(label) {
+  return DISPATCH_TOOL.test(label);
+}
+var MAX_REFUSAL_CHARS = 180;
+function didDispatch(ev) {
+  if (ev.isError || isFailedToolResult(ev.result)) return false;
+  const r = toolResultRecord(ev.result);
+  if (!r) return true;
+  const autoRun = r.autoRun && typeof r.autoRun === "object" ? r.autoRun : null;
+  if (autoRun && typeof autoRun.dispatched === "boolean") return autoRun.dispatched;
+  if (typeof r.dispatched === "boolean") return r.dispatched;
+  return true;
+}
+function refusalMessage(ev) {
+  const r = toolResultRecord(ev.result);
+  const raw = r && typeof r.error === "string" && r.error || r && typeof r.detail === "string" && r.detail || (r && r.autoRun && typeof r.autoRun === "object" && typeof r.autoRun.detail === "string" ? String(r.autoRun.detail) : "") || (typeof ev.result === "string" ? ev.result : "") || (r ? JSON.stringify(r) : "") || "no reason given";
+  const flat = String(raw).replace(/\s+/g, " ").trim();
+  return flat.length > MAX_REFUSAL_CHARS ? `${flat.slice(0, MAX_REFUSAL_CHARS)}\u2026` : flat || "no reason given";
+}
+function asAgentOf(args) {
+  const a = args && typeof args === "object" ? args : null;
+  const v = a?.as_agent;
+  return typeof v === "string" ? v.trim() : "";
+}
+function staffingSummaryInTrace(events) {
+  let ticketsCreated = 0;
+  let filedLocally = 0;
+  let dispatchAttempts = 0;
+  let dispatched = 0;
+  const dispatchRefusals = [];
+  const personaSubagents = [];
+  for (const ev of events) {
+    if (ev.category !== "tool") continue;
+    if (isTicketWriteTool(ev.label) && !ev.isError && !isFailedToolResult(ev.result)) {
+      ticketsCreated += 1;
+      if (isLocalTicketCreateLabel(ev.label)) filedLocally += 1;
+    }
+    if (isDispatchTool(ev.label)) {
+      dispatchAttempts += 1;
+      if (didDispatch(ev)) dispatched += 1;
+      else dispatchRefusals.push({ label: ev.label, message: refusalMessage(ev) });
+    }
+    if (ev.label === "spawn_agent") {
+      const agent = asAgentOf(ev.args);
+      if (!agent) continue;
+      const args = ev.args;
+      const result = toolResultRecord(ev.result);
+      const label = typeof args?.label === "string" && args.label.trim() || typeof result?.label === "string" && result.label.trim() || (typeof args?.task === "string" ? args.task.trim().slice(0, 60) : "") || "delegated work";
+      personaSubagents.push({
+        agent,
+        label,
+        ok: !ev.isError && !isFailedToolResult(ev.result) && result?.ok !== false
+      });
+    }
+  }
+  const verdict = dispatched > 0 || personaSubagents.some((p) => p.ok) ? "staffed" : dispatchRefusals.length > 0 ? "staffing-refused" : ticketsCreated > 0 && filedLocally === ticketsCreated ? "filed-locally" : ticketsCreated > 0 ? sessionShippedInTrace(events) > 0 ? "self-served" : "filed-not-staffed" : "no-work-filed";
+  return { ticketsCreated, filedLocally, dispatchAttempts, dispatched, dispatchRefusals, personaSubagents, verdict };
+}
+
+// src/brainVerdict.ts
+var import_working8 = require("@seanhogg/builderforce-memory/working");
+var CONTEXT_PROMPT_PEAK = Math.round(import_working8.HISTORY_TOKEN_BUDGET * 1.5);
+
+// src/brainDiagnosticsText.ts
+var import_working9 = require("@seanhogg/builderforce-memory/working");
+
+// src/runProgress.ts
+function isCacheAnswered(ev) {
+  const r = ev.result;
+  if (!r || typeof r !== "object") return false;
+  const o = r;
+  return o.covered === true || o.replayed === true || o.derived === true || o.skipped === true && typeof o.note === "string" || typeof o.note === "string" && /^Duplicate \S+ call/.test(o.note);
+}
+
 // src/shipVerification.ts
 var GIT_PUSH = gitCommandPattern("push");
 var GIT_STATUS_CMD = gitCommandPattern("status");
@@ -6258,7 +10719,7 @@ var DEFAULT_BRANCH_CMD = gitCommandPattern("remote|symbolic-ref|branch");
 // src/runFindings/runView.ts
 var HAND_OFF_DUE = "loop.hand_off_due";
 var ROLE_HANDOFF = "llm.role_handoff";
-var record2 = (v) => v && typeof v === "object" && !Array.isArray(v) ? v : {};
+var record3 = (v) => v && typeof v === "object" && !Array.isArray(v) ? v : {};
 function jsonBytes2(v) {
   try {
     return utf8ByteLength2(JSON.stringify(v ?? null));
@@ -6272,9 +10733,9 @@ function isCheck(ev) {
 }
 function callOf(ev, step, turn) {
   const ok = !ev.isError && !isFailedToolResult(ev.result);
-  const args = record2(ev.args);
+  const args = record3(ev.args);
   const write = ok && isCodeChangeTool(ev.label) && !isCacheAnswered(ev);
-  const err = record2(ev.result).error;
+  const err = record3(ev.result).error;
   return {
     step,
     turn,
@@ -6295,12 +10756,12 @@ function kindOf(t, failed2) {
   return t.toolCalls > 0 || t.calls.length > 0 ? "read" : "text";
 }
 function buildRunView(events, messages = []) {
-  const list = [...events];
+  const list2 = [...events];
   const turns = [];
   const calls = [];
   let forcedNext = false;
   let stopped = null;
-  for (const [i, ev] of list.entries()) {
+  for (const [i, ev] of list2.entries()) {
     const step = i + 1;
     const current = turns[turns.length - 1];
     if (ev.label === HAND_OFF_DUE) {
@@ -6308,7 +10769,7 @@ function buildRunView(events, messages = []) {
       continue;
     }
     if (ev.label === STOPPED_TURN_STEP) {
-      const model = record2(ev.args).model;
+      const model = record3(ev.args).model;
       stopped = { step, ...typeof model === "string" ? { model } : {} };
       continue;
     }
@@ -6340,7 +10801,7 @@ function buildRunView(events, messages = []) {
       continue;
     }
     if (ev.label === "agent.message" && typeof ev.result === "string" && !current.text) current.text = ev.result;
-    else if (ev.label === ROLE_HANDOFF && typeof record2(ev.args).via === "string") current.handOffVia = record2(ev.args).via;
+    else if (ev.label === ROLE_HANDOFF && typeof record3(ev.args).via === "string") current.handOffVia = record3(ev.args).via;
     else if (ev.category === "tool") {
       const call = callOf(ev, step, current.index);
       current.calls.push(call);
@@ -6349,13 +10810,13 @@ function buildRunView(events, messages = []) {
   }
   for (const t of turns) t.kind = kindOf(t, t.kind === "failed");
   return {
-    events: list,
+    events: list2,
     messages: [...messages],
     turns,
     calls,
     stopped,
-    routing: routingByRole(modelTurnLog(list), list),
-    staffing: staffingSummaryInTrace(list)
+    routing: routingByRole(modelTurnLog(list2), list2),
+    staffing: staffingSummaryInTrace(list2)
   };
 }
 

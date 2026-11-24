@@ -2,6 +2,14 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.210] — Quick answers stay quick, and finished work is checked the same way everywhere
+
+- **Questions get answered, not turned into projects.** Asking a question now takes the quick route and the agent gives you its answer after a few rounds of looking, instead of reading on indefinitely. Answering a question never leaves commits behind.
+- **Clearer chat diagnostics.** The diagnostics report leads with what happened in your latest run: whether it stopped, left your question unanswered, or had to fail over between model providers.
+- **Faster starts.** The quick checks the agent runs before it begins now share a short time limit, so a slow probe no longer holds up the run.
+- **"Done" means the same thing in the editor, on your own servers and in the cloud.** Every run, and every helper agent it starts, follows the same rules for which tickets it may work on, what evidence it needs before calling work finished, and when checks count as passed. Work with missing evidence stays open.
+- **Directions you send while a run is wrapping up are kept.** A message sent while the agent is finishing, or before a run has fully started, is picked up instead of dropped.
+
 ## [2026.10.208] — The agent remembers what it learned, across restarts and investigations
 
 - **Fixed: a resumed run forgot what it had already worked out.** When you resume an interrupted run, it is now told the facts it saved and the files it already read, so it picks up from its conclusions instead of re-reading everything.

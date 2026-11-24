@@ -804,6 +804,127 @@ declare function formatStaffingSummary(s: StaffingSummary, opts?: {
 }): string[];
 
 /**
+ * Run findings (PRD 46 §3.1/§3.3): what a recorded agent run did wrong, named deterministically from its trace.
+ *
+ * The report types are structurally identical to the knowledge-graph-view port contract (`AgentRunReport` in
+ * `packages/knowledge-graph-view/src/types.ts`): the view never imports brain-embedded, and the VS Code adapter is
+ * where the two meet and the compiler proves they match. Keep the field names in step with that contract.
+ */
+
+type RunFindingSeverity = 'info' | 'warn' | 'error';
+interface RunFindingsSummary {
+    id: string;
+    title: string;
+    startedAt: string;
+    endedAt: string;
+    models: readonly string[];
+    turns: number;
+    counts: Readonly<Record<RunFindingSeverity, number>>;
+}
+type RunTurnKind = 'read' | 'write' | 'forced' | 'text' | 'failed';
+interface RunFindingsTurn {
+    index: number;
+    role: string;
+    model: string;
+    kind: RunTurnKind;
+    toolCalls: number;
+    promptTokens: number;
+    completionTokens: number;
+    durationMs: number;
+}
+/** A note a host renders in its own words on an evidence row (`agentRuns.evidenceNotes[note]`, holes = `params`). */
+type RunFindingEvidenceNote = 'argBytes' | 'argBytesShared' | 'slowTurn';
+interface RunFindingEvidence {
+    step: number;
+    turn?: number;
+    label: string;
+    path?: string;
+    /** Text the run itself carried (a message, a title, an edit's new text) — never words of ours. */
+    excerpt?: string;
+    /** What this row measured, rendered by the host from its labels with {@link RunFindingEvidence.params}. */
+    note?: RunFindingEvidenceNote;
+    /** The note's numbers. */
+    params?: Readonly<Record<string, number>>;
+}
+interface RunFinding {
+    id: string;
+    kind: RunFindingKind;
+    severity: RunFindingSeverity;
+    params: Readonly<Record<string, string | number>>;
+    evidence: readonly RunFindingEvidence[];
+}
+interface RunFindingsFile {
+    path: string;
+    writes: number;
+    checked: boolean;
+}
+interface RunFindingsReport {
+    summary: RunFindingsSummary;
+    turns: readonly RunFindingsTurn[];
+    findings: readonly RunFinding[];
+    files: readonly RunFindingsFile[];
+}
+/** Every kind a detector can name (PRD 46 §3.1). */
+type RunFindingKind = 'analysis_overrun' | 'unkept_readiness' | 'serial_single_writes' | 'prompt_bloat' | 'unverified_writes' | 'bracket_break' | 'edit_churn' | 'filed_then_inline' | 'same_model_roles' | 'oversized_args' | 'slow_turns' | 'repeated_narration' | 'stopped_unverified' | 'review_cap_hit';
+/** One tool step of the run, read once. `step` is its 1-based position in the merged trace. */
+interface ViewCall {
+    step: number;
+    /** The turn whose tool steps it followed; 0 for a step before the first turn. */
+    turn: number;
+    name: string;
+    args: Record<string, unknown>;
+    ok: boolean;
+    /** Bytes of its arguments as recorded (JSON, UTF-8). */
+    argBytes: number;
+    /** A code change that ran and succeeded (not refused, failed or answered from the read cache). */
+    write: boolean;
+    /** A successful typecheck / test / diagnostics / lint call. */
+    check: boolean;
+    /** The error text of a failed call's result, when it carried one (`ok === false`, string `error`). */
+    error?: string;
+    /** The workspace paths a write changed. */
+    paths: readonly string[];
+}
+/** One model turn: an `llm.complete` and the tool steps that followed it. */
+interface ViewTurn {
+    index: number;
+    step: number;
+    role: string;
+    model: string;
+    kind: RunTurnKind;
+    /** Structured calls the model emitted (the turn's own count). */
+    toolCalls: number;
+    promptTokens: number;
+    completionTokens: number;
+    durationMs: number;
+    /** Bytes of tool-call arguments the turn emitted. */
+    argBytes: number;
+    /** The analysis budget forced this turn's hand-off (`loop.hand_off_due` before it). */
+    forced: boolean;
+    /** The turn's visible text (`agent.message`), empty when it wrote none. */
+    text: string;
+    /** The tool steps that followed it. */
+    calls: readonly ViewCall[];
+    /** The `via` of an explicit hand-off recorded on this turn (`llm.role_handoff`). */
+    handOffVia?: string;
+}
+/** The run, read once from its merged trace; every detector reads this and nothing else. */
+interface RunView {
+    events: readonly BrainTraceEvent[];
+    messages: readonly BrainMessage[];
+    turns: readonly ViewTurn[];
+    calls: readonly ViewCall[];
+    /** The user's Stop, when it is the run's last act (no turn completed after it). */
+    stopped: {
+        step: number;
+        model?: string;
+    } | null;
+    routing: RoutingByRole;
+    staffing: StaffingSummary;
+}
+type RunFindingDetector = (view: RunView) => RunFinding[];
+
+/**
  * What the run is doing RIGHT NOW — the live activity value.
  *
  * The trace records steps once they have COMPLETED, which is exactly the wrong
@@ -966,7 +1087,7 @@ interface ProviderFailureFinding {
  * it is a verdict about the run's OUTCOME, not its mechanics, so any genuine exhaustion,
  * model fault or narrated-call failure explains the missing dispatch better and outranks it.
  */
-type LikelyCause = 'run-in-progress' | 'memory-answered' | 'provider-failure' | 'no-tools-advertised' | 'tool-not-advertised' | 'tool-calls-not-emitted' | 'answered-in-prose' | 'no-progress' | 'context-exhaustion' | 'model-degradation' | 'app-errors-unresolved' | 'work-filed-not-staffed' | 'inconclusive' | 'healthy';
+type LikelyCause = 'run-in-progress' | 'memory-answered' | 'provider-failure' | 'no-tools-advertised' | 'tool-not-advertised' | 'tool-calls-not-emitted' | 'answered-in-prose' | 'no-progress' | 'stopped' | 'unanswered-question' | 'run-findings' | 'context-exhaustion' | 'model-degradation' | 'app-errors-unresolved' | 'work-filed-not-staffed' | 'inconclusive' | 'healthy';
 
 /**
  * Brain execution triage — capture the Brain's run (LLM steps, tool chain,
@@ -1041,9 +1162,6 @@ interface BrainTraceEvent {
 /** THE honesty-flag lines, shared by every copy surface so they cannot drift apart. */
 declare const UNBACKED_WRITE_CLAIM_NOTICE = "\u26A0 UNBACKED WRITE CLAIM \u2014 an assistant turn claimed it saved/updated a file, but no file-write tool (write_file / edit_file / attachments.write / project_files.save) succeeded in this run. The file was NOT modified.";
 declare const UNBACKED_TICKET_CLAIM_NOTICE = "\u26A0 UNBACKED TICKET CLAIM \u2014 an assistant turn claimed it created/filed/linked a ticket or gap, but no create/link tool (tasks.create / chats.link_ticket / tickets.from_delta) succeeded in this run. Nothing was filed or linked to the chat.";
-/** Did this tool call FILE board work (create or link)? THE predicate — the honesty check
- *  below and `staffingSummary.ts` both read it, so "what counts as filing work" is one list. */
-declare function isTicketWriteTool(label: string): boolean;
 /**
  * Structural honesty check for the "it said it updated the file but didn't" failure:
  * an assistant message that CLAIMS a file/attachment write while NO file-write tool
@@ -1367,6 +1485,8 @@ interface BrainDiagnostics {
     providerFailure: ProviderFailureFinding | null;
     /** Best-effort verdict — the header a triager reads first. Ordering: `brainVerdict.ts`. */
     likelyCause: LikelyCause;
+    outcome?: 'stopped' | 'unanswered-question' | 'answered';
+    findingKinds?: RunFindingKind[];
 }
 /**
  * Derive {@link BrainDiagnostics} from a recorded trace. Pure — no clock, no I/O
@@ -1438,4 +1558,4 @@ interface BuildBrainTriageOptions {
  */
 declare function buildBrainTriageReport(opts: BuildBrainTriageOptions): string;
 
-export { describeStreamFailure as $, UNBACKED_TICKET_CLAIM_NOTICE as A, type BrainMessage as B, type ChatInputAttachment as C, type DispatchRefusal as D, type EvermindLearnOutcome as E, UNBACKED_WRITE_CLAIM_NOTICE as F, USAGE_SURFACES as G, type HandOffMode as H, USAGE_SURFACE_HEADER as I, accountUsedInTrace as J, activityTarget as K, answeredInProseInTrace as L, type ModelScore as M, attachEvermindLearn as N, buildBrainTriageReport as O, type PackageDirProbe as P, byoReasonHint as Q, type RoutingByRole as R, type StaffingSummary as S, byoUnresolvedInTrace as T, type UsageSurface as U, type ViewKey as V, byoUnresolvedSummary as W, canRunInParallel as X, computeBrainDiagnostics as Y, computeRunProgress as Z, describeLiveStep as _, type BrainTraceEvent as a, detectAnnouncedButUnmadeToolCall as a0, detectUnbackedTicketClaim as a1, detectUnbackedWriteClaim as a2, formatBrainProvenance as a3, formatBytes as a4, formatDispatchRefusals as a5, formatEvermindLearnStep as a6, formatModelScorecard as a7, formatModelTurnLog as a8, formatStaffingSummary as a9, isDispatchTool as aa, isEvermindModel as ab, isStepMessage as ac, isTicketWriteTool as ad, isUsageSurface as ae, midRunNotice as af, modelFailoversInTrace as ag, modelScorecard as ah, modelTurnLog as ai, modelsUsedInTrace as aj, narratedUnadvertisedInTrace as ak, parseByoUnresolved as al, parseRoleGateRefusal as am, serverChatIdOf as an, shortenTarget as ao, staffingSummaryInTrace as ap, stallRecoveriesInTrace as aq, stallUnrecoveredInTrace as ar, toolActivity as as, workFiledNotStaffedVerdict as at, type BrainDiagnostics as b, type StreamFailureDetail as c, type BrainRunActivity as d, type BrainChat as e, type SpendSavingsSummary as f, type BrainModality as g, type ScopeClash as h, type HandOffDecision as i, type ParallelSplit as j, type RunProgress as k, type BrainDiagnosticsContext as l, type BrainRunPhase as m, type BuildBrainTriageOptions as n, type ByoUnresolvedEntry as o, type EvermindLearnTarget as p, type ModelTurn as q, type PersonaSubagent as r, ROLE_GATE_REMEDIATION as s, type RepeatStreak as t, type RepeatedTarget as u, STEP_MESSAGE_ROLE as v, type SavingsBreakdown as w, type SavingsBySource as x, type SavingsSourceKey as y, type SpendBreakdown as z };
+export { activityTarget as $, type EvermindLearnTarget as A, type BrainMessage as B, type ChatInputAttachment as C, type DispatchRefusal as D, type EvermindLearnOutcome as E, type ModelTurn as F, type PersonaSubagent as G, type HandOffMode as H, ROLE_GATE_REMEDIATION as I, type RepeatStreak as J, type RepeatedTarget as K, STEP_MESSAGE_ROLE as L, type ModelScore as M, type SavingsBreakdown as N, type SavingsBySource as O, type PackageDirProbe as P, type SavingsSourceKey as Q, type RunFinding as R, type StreamFailureDetail as S, type SpendBreakdown as T, type UsageSurface as U, type ViewKey as V, UNBACKED_TICKET_CLAIM_NOTICE as W, UNBACKED_WRITE_CLAIM_NOTICE as X, USAGE_SURFACES as Y, USAGE_SURFACE_HEADER as Z, accountUsedInTrace as _, type BrainTraceEvent as a, answeredInProseInTrace as a0, attachEvermindLearn as a1, buildBrainTriageReport as a2, byoReasonHint as a3, byoUnresolvedInTrace as a4, byoUnresolvedSummary as a5, canRunInParallel as a6, computeBrainDiagnostics as a7, computeRunProgress as a8, describeLiveStep as a9, stallRecoveriesInTrace as aA, stallUnrecoveredInTrace as aB, toolActivity as aC, workFiledNotStaffedVerdict as aD, describeStreamFailure as aa, detectAnnouncedButUnmadeToolCall as ab, detectUnbackedTicketClaim as ac, detectUnbackedWriteClaim as ad, formatBrainProvenance as ae, formatBytes as af, formatDispatchRefusals as ag, formatEvermindLearnStep as ah, formatModelScorecard as ai, formatModelTurnLog as aj, formatStaffingSummary as ak, isDispatchTool as al, isEvermindModel as am, isStepMessage as an, isUsageSurface as ao, midRunNotice as ap, modelFailoversInTrace as aq, modelScorecard as ar, modelTurnLog as as, modelsUsedInTrace as at, narratedUnadvertisedInTrace as au, parseByoUnresolved as av, parseRoleGateRefusal as aw, serverChatIdOf as ax, shortenTarget as ay, staffingSummaryInTrace as az, type RunFindingsReport as b, type RunView as c, type RunFindingKind as d, type RunFindingDetector as e, type RunFindingEvidence as f, type RunFindingEvidenceNote as g, type RunFindingSeverity as h, type RunFindingsFile as i, type RunFindingsSummary as j, type RunFindingsTurn as k, type RunTurnKind as l, type BrainDiagnostics as m, type BrainRunActivity as n, type BrainChat as o, type SpendSavingsSummary as p, type BrainModality as q, type ScopeClash as r, type HandOffDecision as s, type ParallelSplit as t, type RunProgress as u, type StaffingSummary as v, type BrainDiagnosticsContext as w, type BrainRunPhase as x, type BuildBrainTriageOptions as y, type ByoUnresolvedEntry as z };
