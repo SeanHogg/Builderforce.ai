@@ -17,6 +17,7 @@ import { getLatestBlueprint } from '../blueprint/blueprintDetection';
 import { detectBlueprintForProject } from '../blueprint/detectBlueprintForProject';
 import { type AppBlueprint } from '@builderforce/creation-canvas-contract';
 import { type BuiltinCtx, type BuiltinTool } from './builtinToolContext';
+import { ownedProjectId } from './ownedProjectId';
 
 type Json = Record<string, unknown>;
 
@@ -55,21 +56,8 @@ function summarizeBlueprint(bp: AppBlueprint) {
   };
 }
 
-/**
- * The caller's own project, or a tool error. `projectId` is model-supplied and the
- * blueprint store is keyed by project alone, so this is the tenant boundary: a
- * foreign or unknown id is refused before anything is read or written.
- */
-export async function ownedProjectId(ctx: BuiltinCtx, raw: unknown): Promise<number | Json> {
-  const projectId = Number(raw);
-  if (!Number.isFinite(projectId)) return blueprintError('Invalid projectId: must be a number');
-  try {
-    await ctx.projects.getProject(projectId, ctx.tenantId);
-    return projectId;
-  } catch {
-    return blueprintError('Project not found in this workspace', { projectId });
-  }
-}
+/** The tenant boundary (its own leaf module, so the manifest catalog can share it without a cycle). */
+export { ownedProjectId };
 
 export const APP_BLUEPRINT_TOOLS: BuiltinTool[] = [
   {

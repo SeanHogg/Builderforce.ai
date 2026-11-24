@@ -116,7 +116,8 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
 
     const closeCard = useCallback(() => setCardKey(null), []);
     const openCode = useCallback(() => setCodeOpen(true), []);
-    const closeCode = useCallback(() => setCodeOpen(false), []);
+    // Closing the dock drops the mark the scrolled code lit (`followCode`).
+    const closeCode = useCallback(() => { setCodeOpen(false); bus.setHover(-1); }, [bus]);
     // Only while the code dock is open: the fallback walks every graph node on the main thread, and `drill` is a fresh
     // object each render, so keying on it re-walked the graph on every render of every stage view (the perf gate's mount reads).
     const drillSymbols = drill.symbols;

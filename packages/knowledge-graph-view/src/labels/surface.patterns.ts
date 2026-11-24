@@ -4,6 +4,7 @@
 export type PatternsRuleKey =
     | 'partitionViolationReason' | 'partitionViolationGood' | 'partitionViolationAfter'
     | 'godModuleReason' | 'godModuleGood' | 'godModuleAfter'
+    | 'ioInLoopReason' | 'ioInLoopGood' | 'ioInLoopAfter'
     | 'genericReason' | 'genericGood' | 'genericAfter';
 
 export interface PatternsLabels {
@@ -98,6 +99,9 @@ export const PATTERNS_DEFAULTS: PatternsLabels = {
             godModuleReason: 'This file does too many jobs. It is over at least one size limit, so every change lands here and it is hard to test or review.',
             godModuleGood: 'One job per file, every bar left of its limit mark.',
             godModuleAfter: 'One file per job, each under the limits.',
+            ioInLoopReason: 'This file waits for one network, file or database call per loop pass, so the time grows with every item (N+1).',
+            ioInLoopGood: 'Collect the keys first, then make one batched call (a bulk query, `Promise.all`, or chunks of a fixed size).',
+            ioInLoopAfter: 'One round-trip per batch, not per item.',
             genericReason: 'The review flagged this as something to fix.',
             genericGood: 'No finding of this kind is left after the fix.',
             genericAfter: 'The agent proposes the change on a branch, and you review the real diff before merging.',

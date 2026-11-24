@@ -129,6 +129,7 @@ import { CanvasSessionProvider, type CanvasSessionFacts } from './chrome/canvasS
 import { useCanvasChromeMenus } from './chrome/useCanvasChromeMenus';
 import { useCanvasSessionActionHandlers } from './chrome/useCanvasSessionActionHandlers';
 import { CanvasComposer } from './CanvasComposer';
+import { useAppAgentDeclarationHost } from './agents/useAppAgentDeclarationHost';
 import { useCanvasPromptPlacement } from './chrome/useCanvasPromptPlacement';
 import { canvasLensDefinition, type CanvasLens } from '@/lib/canvasLens';
 import { CanvasLensBar } from './chrome/CanvasLensBar';
@@ -737,11 +738,13 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
      and is deliberately NOT part of the Brain surface: it stays reachable whether Brain
      is inline in its Object, docked to either edge, or closed entirely. */
   const { brainDockDrawn, placement: effectivePromptPlacement, inBrainPanel: promptInBrainPanel } = useCanvasPromptPlacement({ hostOwnsSurface: !!hostSurfaces?.[surface], brainIsSurface: surfaceDef.brainIsSurface, preference: promptPlacement, setPreference: setPromptPlacement, brainSurfaceOpen, brainPlacement, lensPlacement: lensDef.promptPlacement, askingMode: modeGate.asking });
+  // A reader who may not write is offered no way to declare an agent in the app.
+  const agentDeclaration = useAppAgentDeclarationHost(canEdit ? boardProjectId : null, setNotice);
   /** THE ONE COMPOSER — see `CanvasComposer`. One element, drawn in exactly one of
    *  its two homes below: the Brain panel's last row, or floating over the board. */
   const composer = !presentMode && effectivePromptPlacement !== 'closed' && <CanvasComposer
     docked={promptInBrainPanel} surface={surfaceDef.id} editable={cardsEditable} preferAsk={phoneViewport && brainSurfaceOpen}
-    onAsk={() => startCanvasTurn()} onCaptureIdea={captureIdeaFromComposer} hostRef={composerDockRef} actions={{ open: actionsOpen, onToggle: toggleActionsSheet }}
+    onAsk={() => startCanvasTurn()} onCaptureIdea={captureIdeaFromComposer} appAgents={agentDeclaration.appAgents} hostRef={composerDockRef} actions={{ open: actionsOpen, onToggle: toggleActionsSheet }}
     runStartedAt={brainRunStartedAt} brainIsSurface={surfaceDef.brainIsSurface}
     promptPlacement={promptPlacement} setPromptPlacement={setPromptPlacement} brainDockDrawn={brainDockDrawn} updateBrainDock={updateBrainDock}
     scope={{ mode: scopeMode, setMode: setScopeMode, autoLabel: scopeLabel, selectionCount: effectiveSelectedIds.length, frameSelected: selectedNode?.data.kind === 'frame' }}
@@ -812,6 +815,8 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
         promptToggleable={!presentMode && !surfaceDef.brainIsSurface} promptPlacement={promptPlacement} setPromptPlacement={setPromptPlacement} promptOpen={effectivePromptPlacement !== 'closed'}
         canvasUsesTwilio={twilioPromptSelected || boardUsesTwilio(nodes)} selectedNode={selectedNode} captureDisabled={!canEdit || lockBlocked} onCapture={addHostCapture}
       />}
+
+      {agentDeclaration.panel}
 
       <CanvasAccountGateDialog gate={accountGate} onClose={closeAccountGate} hasAccount={hasAccount} claimingDraft={claimingDraft} setClaimingDraft={setClaimingDraft} />
 

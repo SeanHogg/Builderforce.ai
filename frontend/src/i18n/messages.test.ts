@@ -63,7 +63,9 @@ import { CANVAS_SESSION_ACTIONS } from '@/lib/canvasSessionActions';
 import { OUTCOME_METRIC_FAMILY_ORDER, OUTCOME_METRIC_MESSAGE_KEYS } from '@/lib/outcomeMetrics';
 import { AGENT_RUN_STATES, TRACE_CATEGORIES } from '@/lib/canvas/agentRunState';
 import { AGENT_RUN_CONTROL_TOOLS } from '@/lib/canvas/agentRunControl';
-import { MANIFEST_AGENT_DECLARATION_FIELDS } from '@/lib/canvas/manifestAgents';
+import { AGENT_BUDGET_KEYS, MANIFEST_AGENT_DECLARATION_FIELDS } from '@/lib/canvas/manifestAgents';
+import { canvasComposerClarifiers } from '@/lib/canvasComposerIntents';
+import { AGENT_DRAFT_TRIGGER_KINDS, type AgentDraftRoleKind } from '@builderforce/creation-canvas-contract';
 
 import { listComponents } from '@/components/widgets/registry';
 import { AI_INSIGHT_PANELS } from '@/components/insights/aiInsightPanels';
@@ -683,6 +685,29 @@ describe('room agent station catalogs', () => {
   });
 });
 
+
+describe('app agent declaration catalogs', () => {
+  // The composer's clarifier and the declaration form resolve these from registries — the
+  // clarifier's choices, the role kinds, the trigger kinds, the budget keys and the declaration
+  // fields the form's preview lists — so each must resolve in every locale, not only match
+  // another catalog. Keyed by a Record so a new role kind fails to compile here until it has copy.
+  const roleKinds = Object.keys({ role: true, workload: true } satisfies Record<AgentDraftRoleKind, true>);
+  const keys = [
+    ...canvasComposerClarifiers().flatMap((clarifier) => [
+      clarifier.labelKey,
+      ...clarifier.choices.flatMap((choice) => [choice.labelKey, choice.titleKey]),
+    ].map((key) => `creationCanvas.${key}`)),
+    ...roleKinds.map((kind) => `agentForm.roleKindOption.${kind}`),
+    ...AGENT_DRAFT_TRIGGER_KINDS.map((kind) => `agentForm.trigger.${kind}`),
+    ...AGENT_BUDGET_KEYS.map((key) => `agentForm.budgetKey.${key}`),
+    ...MANIFEST_AGENT_DECLARATION_FIELDS.map((field) => `agentForm.field.${field}`),
+  ];
+
+  it.each(LOCALES)('%s resolves every registry-backed clarifier and agentForm key', (locale) => {
+    const t = createTranslator({ locale, messages: CATALOGS[locale], onError: () => {} });
+    expect(keys.filter((key) => t(key as never) === key)).toEqual([]);
+  });
+});
 
 describe('tool group summary catalogs', () => {
   it('resolves every summary label in every supported web and VS Code locale', () => {

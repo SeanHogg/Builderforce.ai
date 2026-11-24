@@ -36,8 +36,8 @@ const importsFrom = (f: PatternFacts, re: RegExp): boolean => f.imports.some((i)
 /** Awaited I/O calls: network, file system, query/ORM. */
 const AWAITED_IO = /\bawait\s+(?:[\w$]+\s*\.\s*)*(?:fetch|readFile|readdir|stat|query|execute|find\w*|select|insert|upsert)\s*\(/;
 /** Global: only for `matchAll`. {@link HAS_LOOP} is the `.test` twin, so no stale `lastIndex`. */
-const LOOP_HEADS = /\b(?:for|while)\s*\(/g;
-const HAS_LOOP = /\b(?:for|while)\s*\(/;
+const LOOP_HEADS = /\b(?:for(?:\s+await)?|while)\s*\(/g;
+const HAS_LOOP = /\b(?:for(?:\s+await)?|while)\s*\(/;
 
 /** True when any `for`/`while` body awaits an I/O call: one round-trip per iteration (N+1). */
 function awaitsIoInLoop(text: string): boolean {

@@ -23,6 +23,7 @@ export interface AntiPatternRule {
 export const ANTI_PATTERN_RULES: readonly AntiPatternRule[] = [
     { kind: 'partition-violation', reasonKey: 'partitionViolationReason', goodKey: 'partitionViolationGood', afterKey: 'partitionViolationAfter', diagram: 'layerArrow' },
     { kind: 'god-module', reasonKey: 'godModuleReason', goodKey: 'godModuleGood', afterKey: 'godModuleAfter', diagram: 'measures' },
+    { kind: 'io-in-loop', reasonKey: 'ioInLoopReason', goodKey: 'ioInLoopGood', afterKey: 'ioInLoopAfter', diagram: 'none' },
 ];
 
 export const GENERIC_RULE: AntiPatternRule = { kind: '*', reasonKey: 'genericReason', goodKey: 'genericGood', afterKey: 'genericAfter', diagram: 'none' };

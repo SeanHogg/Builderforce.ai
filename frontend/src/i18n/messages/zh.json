@@ -22173,6 +22173,66 @@
     "loading": "正在加载简历…",
     "unavailable": "此简历链接不可用。"
   },
+  "agentForm": {
+    "title": "在应用中定义智能体",
+    "intro": "智能体声明在应用清单（builderforce.json）中。指定角色或工作负载，由宿主选择模型。",
+    "declared": "已在应用清单中声明智能体“{id}”。",
+    "id": "智能体 ID",
+    "idPlaceholder": "例如 triage",
+    "role": "角色",
+    "roleKind": "角色或工作负载",
+    "roleKindOption": {
+      "role": "角色",
+      "workload": "工作负载"
+    },
+    "rolePlaceholder": "例如 developer",
+    "roleHelp": "填写角色或工作负载，切勿填写模型 ID——宿主会将其路由到模型。",
+    "instructions": "指令文件",
+    "instructionsPlaceholder": "例如 agents/triage.md",
+    "tools": "工具",
+    "toolsLoading": "正在加载你可授予的工具…",
+    "toolsEmpty": "没有可授予的工具。",
+    "toolsHelp": "只授予智能体需要的工具。不授予任何工具也可以。",
+    "triggers": "触发器",
+    "triggerKind": "触发器类型",
+    "trigger": {
+      "manual": "手动",
+      "cron": "定时",
+      "service": "服务事件"
+    },
+    "cron": "Cron 表达式",
+    "cronPlaceholder": "0 9 * * 1-5",
+    "timezone": "时区",
+    "timezonePlaceholder": "例如 Asia/Shanghai",
+    "service": "服务",
+    "servicePlaceholder": "例如 github",
+    "event": "事件",
+    "eventPlaceholder": "例如 issue.opened",
+    "removeTrigger": "移除",
+    "addTrigger": "添加触发器",
+    "triggersHelp": "没有触发器时，智能体仅在被启动时运行。",
+    "budget": "预算",
+    "budgetKey": {
+      "tokens": "令牌",
+      "usd": "美元",
+      "steps": "步数"
+    },
+    "budgetHelp": "留空表示不设上限。",
+    "preview": "将要声明的内容",
+    "noRole": "尚未指定角色",
+    "field": {
+      "role": "角色",
+      "workload": "工作负载",
+      "instructions": "指令",
+      "memory": "记忆"
+    },
+    "clarifyRole": "这个智能体应担任什么角色？请指定一个角色（如 developer）或工作负载（如 summarize）。",
+    "unknownTool": "“{tool}”不在你可授予的工具目录中。",
+    "refused": "声明被拒绝。",
+    "cancel": "取消",
+    "submitting": "正在声明…",
+    "submit": "声明智能体"
+  },
   "roomAgents": {
     "summary": "{role} · {state}",
     "noRole": "未声明角色",
@@ -23796,6 +23856,17 @@
         "label": "构想",
         "placeholder": "记下一个想法。回车会把它保存为看板上的卡片；选择“询问 Brain”则改为发送给 Brain。",
         "submit": "记录"
+      },
+      "agentChoice": {
+        "label": "哪种智能体",
+        "teammateOnBoard": {
+          "label": "画布上的队友",
+          "title": "Brain 在此画布上安排一个智能体与你协作"
+        },
+        "featureInApp": {
+          "label": "应用中的功能",
+          "title": "在应用清单中声明智能体，由应用自身运行它"
+        }
       }
     },
     "sendBrain": "发送给 Brain",
@@ -38865,6 +38936,7 @@
     "findingsEmpty": "{scope} 没有未解决的发现。",
     "findingKinds": {
       "godModule": "上帝模块",
+      "ioInLoop": "循环中的 I/O",
       "cycle": "循环",
       "cloneGroup": "克隆组",
       "nearDuplicate": "近似重复",
@@ -38916,6 +38988,7 @@
       "unlayered": "为这些文件指定分层：{items}。",
       "unpartitioned": "为这些文件指定分层：{items}。",
       "godModule": "将 {items} 拆分为各司其职的模块，且都在大小限制之内（{linesLimit} 行、{exportsLimit} 个导出、最复杂函数复杂度 {complexityLimit}）；保持行为不变并运行检查。",
+      "ioInLoop": "对 {items} 中循环里的 I/O 进行批处理：先收集键，再发起一次批量调用，或按固定大小分块使用有界的 Promise.all；保持行为不变并运行检查。",
       "generic": "调查此发现并修复它：{items}。"
     },
     "nodePanelTitle": "详情",
@@ -39740,6 +39813,9 @@
           "godModuleReason": "这个文件承担了太多职责。它至少超出一项大小限制，因此每次改动都落在这里，难以测试和审查。",
           "godModuleGood": "每个文件只做一件事，每根条都在其限制标记的左侧。",
           "godModuleAfter": "每项职责一个文件，且都在限制之内。",
+          "ioInLoopReason": "这个文件在每次循环中都要等待一次网络、文件或数据库调用，因此耗时随每个元素增长（N+1）。",
+          "ioInLoopGood": "先收集键，再发起一次批量调用（批量查询、`Promise.all` 或固定大小的分块）。",
+          "ioInLoopAfter": "每批一次往返，而不是每个元素一次。",
           "genericReason": "审查将此标记为需要修复。",
           "genericGood": "修复之后不再有此类发现。",
           "genericAfter": "智能体在分支上提出更改，合并前你可查看真实差异。"

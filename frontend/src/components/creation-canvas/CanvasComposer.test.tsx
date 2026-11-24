@@ -196,6 +196,21 @@ describe('the one composer', () => {
     expect(screen.queryByTestId('canvas-run-activity')).toBeNull();
   });
 
+  /** "An agent" on a board whose app has a manifest could mean a teammate or a feature of
+   *  the app; choosing the feature sends the line to the declaration form, not to Brain. */
+  it('hands an agent request to the app declaration when the reader picks the feature', () => {
+    const onDefine = vi.fn();
+    const { onAsk } = renderComposer({
+      surface: 'graph',
+      appAgents: { hasAppManifest: true, onDefine },
+      input: { value: 'Add an agent that triages issues', onChange: vi.fn() },
+    });
+    fireEvent.click(screen.getByTestId('canvas-composer-clarifier-agentChoice-feature-in-app'));
+    fireEvent.keyDown(field(), { key: 'Enter' });
+    expect(onDefine).toHaveBeenCalledWith('Add an agent that triages issues');
+    expect(onAsk).not.toHaveBeenCalled();
+  });
+
   /** Docking puts the prompt in the Brain panel, so it opens that panel too. */
   it('opens the Brain panel when the prompt is docked into it', () => {
     const { setPromptPlacement, updateBrainDock } = renderComposer();

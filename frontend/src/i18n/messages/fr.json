@@ -22173,6 +22173,66 @@
     "loading": "Chargement du CV…",
     "unavailable": "Ce lien de CV n’est pas disponible."
   },
+  "agentForm": {
+    "title": "Définir un agent dans l'app",
+    "intro": "L'agent est déclaré dans le manifeste de l'app (builderforce.json). Indiquez un rôle ou une charge de travail ; l'hôte choisit le modèle.",
+    "declared": "Agent « {id} » déclaré dans le manifeste de l'app.",
+    "id": "Identifiant de l'agent",
+    "idPlaceholder": "ex. triage",
+    "role": "Rôle",
+    "roleKind": "Rôle ou charge de travail",
+    "roleKindOption": {
+      "role": "Rôle",
+      "workload": "Charge de travail"
+    },
+    "rolePlaceholder": "ex. developer",
+    "roleHelp": "Un rôle ou une charge de travail, jamais un identifiant de modèle : l'hôte l'oriente vers un modèle.",
+    "instructions": "Fichier d'instructions",
+    "instructionsPlaceholder": "ex. agents/triage.md",
+    "tools": "Outils",
+    "toolsLoading": "Chargement des outils que vous pouvez accorder…",
+    "toolsEmpty": "Aucun outil n'est disponible à accorder.",
+    "toolsHelp": "N'accordez que ce dont l'agent a besoin. N'accorder aucun outil est autorisé.",
+    "triggers": "Déclencheurs",
+    "triggerKind": "Type de déclencheur",
+    "trigger": {
+      "manual": "Manuel",
+      "cron": "Planifié",
+      "service": "Événement de service"
+    },
+    "cron": "Expression cron",
+    "cronPlaceholder": "0 9 * * 1-5",
+    "timezone": "Fuseau horaire",
+    "timezonePlaceholder": "ex. Europe/Paris",
+    "service": "Service",
+    "servicePlaceholder": "ex. github",
+    "event": "Événement",
+    "eventPlaceholder": "ex. issue.opened",
+    "removeTrigger": "Retirer",
+    "addTrigger": "Ajouter un déclencheur",
+    "triggersHelp": "Sans déclencheur, l'agent ne s'exécute que lorsqu'on le lance.",
+    "budget": "Budget",
+    "budgetKey": {
+      "tokens": "Jetons",
+      "usd": "USD",
+      "steps": "Étapes"
+    },
+    "budgetHelp": "Laissez un champ vide pour ne fixer aucune limite.",
+    "preview": "Ce qui sera déclaré",
+    "noRole": "Pas encore de rôle",
+    "field": {
+      "role": "Rôle",
+      "workload": "Charge de travail",
+      "instructions": "Instructions",
+      "memory": "Mémoire"
+    },
+    "clarifyRole": "Quel rôle cet agent doit-il jouer ? Indiquez un rôle comme developer, ou une charge de travail comme summarize.",
+    "unknownTool": "« {tool} » ne fait pas partie du catalogue d’outils que vous pouvez accorder.",
+    "refused": "La déclaration a été refusée.",
+    "cancel": "Annuler",
+    "submitting": "Déclaration…",
+    "submit": "Déclarer l'agent"
+  },
   "roomAgents": {
     "summary": "{role} · {state}",
     "noRole": "Aucun rôle déclaré",
@@ -23796,6 +23856,17 @@
         "label": "Idée",
         "placeholder": "Notez une idée. Entrée la capture sous forme de carte ; « Demander à Brain » l’envoie à Brain.",
         "submit": "Noter"
+      },
+      "agentChoice": {
+        "label": "Quel type d'agent",
+        "teammateOnBoard": {
+          "label": "Un coéquipier sur le tableau",
+          "title": "Brain installe un agent sur ce tableau pour travailler à vos côtés"
+        },
+        "featureInApp": {
+          "label": "Une fonctionnalité de l'app",
+          "title": "Déclarer un agent dans le manifeste de l'app pour que l'app l'exécute elle-même"
+        }
       }
     },
     "sendBrain": "Envoyer à Brain",
@@ -38865,6 +38936,7 @@
     "findingsEmpty": "Aucun constat ouvert à {scope}.",
     "findingKinds": {
       "godModule": "Module-dieu",
+      "ioInLoop": "E/S dans une boucle",
       "cycle": "Cycle",
       "cloneGroup": "Groupe de clones",
       "nearDuplicate": "Quasi-doublon",
@@ -38916,6 +38988,7 @@
       "unlayered": "Affecte ces fichiers à une couche : {items}.",
       "unpartitioned": "Affecte ces fichiers à une couche : {items}.",
       "godModule": "Découpe {items} en modules ayant chacun une seule tâche et restant sous les limites de taille ({linesLimit} lignes, {exportsLimit} exports, complexité de la pire fonction {complexityLimit}) ; conserve le comportement et lance les vérifications.",
+      "ioInLoop": "Regroupe les E/S dans les boucles de {items} : rassemble d’abord les clés, puis fais un seul appel groupé ou un Promise.all borné par lots ; conserve le comportement et lance les vérifications.",
       "generic": "Examine ce constat et corrige-le : {items}."
     },
     "nodePanelTitle": "Détails",
@@ -39740,6 +39813,9 @@
           "godModuleReason": "Ce fichier fait trop de choses. Il dépasse au moins une limite de taille : chaque changement atterrit ici et il est difficile à tester ou à relire.",
           "godModuleGood": "Une tâche par fichier, chaque barre à gauche de son repère de limite.",
           "godModuleAfter": "Un fichier par tâche, chacun sous les limites.",
+          "ioInLoopReason": "Ce fichier attend un appel réseau, fichier ou base de données à chaque tour de boucle : le temps augmente avec chaque élément (N+1).",
+          "ioInLoopGood": "Rassemble d’abord les clés, puis fais un seul appel groupé (une requête en masse, `Promise.all` ou des lots de taille fixe).",
+          "ioInLoopAfter": "Un aller-retour par lot, pas par élément.",
           "genericReason": "La revue a signalé ceci comme à corriger.",
           "genericGood": "Après le correctif, il ne reste aucun constat de ce type.",
           "genericAfter": "L’agent propose le changement sur une branche, et vous relisez le vrai diff avant de fusionner."

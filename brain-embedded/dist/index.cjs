@@ -3131,67 +3131,67 @@ function isOwnRecord(row, deviceId) {
 function isImported(mapping) {
   return mapping !== void 0 && mapping.serverVersion > BOUND_ONLY_VERSION;
 }
-function unboundMarker(record4, operation) {
-  return { operation, ...unboundMarkerFields(record4.payload) };
+function unboundMarker(record5, operation) {
+  return { operation, ...unboundMarkerFields(record5.payload) };
 }
 function unboundMarkerFields(payload) {
   const text2 = JSON.stringify(payload) ?? "null";
   return { payloadSize: text2.length, payloadHash: hashPayload(payload), payload: null };
 }
-async function dropPending(tx, record4) {
-  const stale = await selectPendingOf(tx, record4.entityType, record4.id);
+async function dropPending(tx, record5) {
+  const stale = await selectPendingOf(tx, record5.entityType, record5.id);
   if (stale.length > 0) await tx.acknowledge(stale.map((event) => event.eventId));
 }
-async function queueImport(tx, record4, chatClientId, waitsOn = []) {
-  await dropPending(tx, record4);
-  if (record4.deletedAt) return;
-  if (record4.destination.kind === "bound") await ensureRecordPayloadFence(tx, record4.destination);
+async function queueImport(tx, record5, chatClientId, waitsOn = []) {
+  await dropPending(tx, record5);
+  if (record5.deletedAt) return;
+  if (record5.destination.kind === "bound") await ensureRecordPayloadFence(tx, record5.destination);
   await tx.append({
-    idempotencyKey: importKey(record4.entityType, record4.id),
-    clientEntityId: record4.id,
-    entityType: record4.entityType,
+    idempotencyKey: importKey(record5.entityType, record5.id),
+    clientEntityId: record5.id,
+    entityType: record5.entityType,
     operation: "import",
-    schemaVersion: record4.schemaVersion,
-    occurredAt: record4.occurredAt,
-    dependsOn: fencedDependsOn([...chatClientId && record4.entityType !== "chat" ? [importKey("chat", chatClientId)] : [], ...waitsOn]),
-    destination: record4.destination,
+    schemaVersion: record5.schemaVersion,
+    occurredAt: record5.occurredAt,
+    dependsOn: fencedDependsOn([...chatClientId && record5.entityType !== "chat" ? [importKey("chat", chatClientId)] : [], ...waitsOn]),
+    destination: record5.destination,
     ...recordPayloadMarker()
   });
 }
-async function journalWrite(tx, record4, operation, options) {
-  if (record4.destination.kind === "unbound") {
+async function journalWrite(tx, record5, operation, options) {
+  if (record5.destination.kind === "unbound") {
     await tx.append({
       idempotencyKey: options.key,
-      clientEntityId: record4.id,
-      entityType: record4.entityType,
-      schemaVersion: record4.schemaVersion,
-      occurredAt: record4.occurredAt,
-      ...record4.baseVersion !== void 0 ? { baseVersion: record4.baseVersion } : {},
+      clientEntityId: record5.id,
+      entityType: record5.entityType,
+      schemaVersion: record5.schemaVersion,
+      occurredAt: record5.occurredAt,
+      ...record5.baseVersion !== void 0 ? { baseVersion: record5.baseVersion } : {},
       dependsOn: options.dependsOn ?? [],
-      destination: record4.destination,
+      destination: record5.destination,
       // The marker carries size + a content hash of the real payload, never the
       // payload itself; the record is the only copy while unbound (module comment).
-      ...unboundMarker(record4, operation)
+      ...unboundMarker(record5, operation)
     });
     return;
   }
-  const mapping = await tx.mapping(record4.entityType, record4.id, record4.destination);
+  const mapping = await tx.mapping(record5.entityType, record5.id, record5.destination);
   if (!isImported(mapping)) {
-    await queueImport(tx, record4, options.chatClientId);
+    await queueImport(tx, record5, options.chatClientId);
     return;
   }
-  await dropPending(tx, record4);
+  await dropPending(tx, record5);
   await tx.append({
     idempotencyKey: `${options.key}:server`,
-    clientEntityId: record4.id,
-    entityType: record4.entityType,
+    clientEntityId: record5.id,
+    entityType: record5.entityType,
     operation,
-    schemaVersion: record4.schemaVersion,
-    occurredAt: record4.occurredAt,
+    schemaVersion: record5.schemaVersion,
+    occurredAt: record5.occurredAt,
     baseVersion: mapping.serverVersion,
     dependsOn: [],
-    destination: record4.destination,
-    payload: operation === "delete" && !PAYLOAD_ON_DELETE.has(record4.entityType) ? null : record4.payload
+    destination: record5.destination,
+    payload: operation === "delete" && !PAYLOAD_ON_DELETE.has(record5.entityType) ? null : record5.payload
   });
 }
 
@@ -5030,12 +5030,12 @@ function readAdvisoryThreadState(metadata) {
     }
   }
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
-  const record4 = raw;
-  if (record4.marker !== ADVISORY_THREAD_MARKER) return null;
+  const record5 = raw;
+  if (record5.marker !== ADVISORY_THREAD_MARKER) return null;
   return {
-    confidentiality: advisoryThreadConfidentiality(record4.confidentiality),
-    founderInvitedAdvisor: record4.founderInvitedAdvisor === true,
-    hostRef: typeof record4.hostRef === "string" && record4.hostRef ? record4.hostRef : void 0
+    confidentiality: advisoryThreadConfidentiality(record5.confidentiality),
+    founderInvitedAdvisor: record5.founderInvitedAdvisor === true,
+    hostRef: typeof record5.hostRef === "string" && record5.hostRef ? record5.hostRef : void 0
   };
 }
 function advisoryThreadHistoryAdmitted(messages, boundary2 = "aiContext") {
@@ -6480,8 +6480,8 @@ function createLocalChatIdentity(options) {
         return SCAN_STOP;
       }
     });
-    const record4 = queued ? (await liveRecords(tx, "chat", deviceId, (row) => row.id === clientId))[0] : void 0;
-    if (record4) await queueImport(tx, record4);
+    const record5 = queued ? (await liveRecords(tx, "chat", deviceId, (row) => row.id === clientId))[0] : void 0;
+    if (record5) await queueImport(tx, record5);
   };
   const awaitImportBinding = (localId) => new Promise((resolve, reject) => {
     let settled2 = false;
@@ -7089,7 +7089,7 @@ var LocalFirstUnavailableError = class extends Error {
 async function runLocalFirst(plan, run, options = {}) {
   if (plan.length === 0) throw new LocalFirstUnavailableError();
   const attempts = [];
-  const record4 = (entry) => {
+  const record5 = (entry) => {
     attempts.push(entry);
     options.onAttempt?.(entry);
   };
@@ -7102,13 +7102,13 @@ async function runLocalFirst(plan, run, options = {}) {
         state.committed = true;
       });
       if (state.committed || isLast || (options.accept?.(result) ?? true)) {
-        record4({ attempt, outcome: "served" });
+        record5({ attempt, outcome: "served" });
         return { result, served: attempt, attempts };
       }
-      record4({ attempt, outcome: "refused", detail: "empty_response" });
+      record5({ attempt, outcome: "refused", detail: "empty_response" });
     } catch (e) {
       const detail = e instanceof Error ? e.message : String(e);
-      record4({ attempt, outcome: "failed", detail });
+      record5({ attempt, outcome: "failed", detail });
       if (options.signal?.aborted || state.committed || isLast) throw e;
     }
   }
@@ -7218,7 +7218,7 @@ async function usageRowsByChat(tx, deviceId, clientIds) {
 function reportServerSpendFailure(error) {
   console.warn(`BuilderForce chat spend: server spend read failed (${errorMessage(error)})`);
 }
-var chatValue = (record4) => record4.payload.chat;
+var chatValue = (record5) => record5.payload.chat;
 var MESSAGE_ID_CHECK_LIMIT = 64;
 function createLocalBrainPersistence(options) {
   const destination = options.destination ?? UNBOUND_DESTINATION;
@@ -7255,12 +7255,12 @@ function createLocalBrainPersistence(options) {
   };
   const projectionInputs = async (tx, rows) => {
     const account = options.accountDestination?.();
-    const usage = await usageRowsByChat(tx, options.deviceId, new Set(rows.map((record4) => record4.id)));
-    return Promise.all(rows.map(async (record4) => {
-      const serverId = await boundServerId(tx, record4.id, account);
-      const chatUsage = usage.get(record4.id) ?? [];
+    const usage = await usageRowsByChat(tx, options.deviceId, new Set(rows.map((record5) => record5.id)));
+    return Promise.all(rows.map(async (record5) => {
+      const serverId = await boundServerId(tx, record5.id, account);
+      const chatUsage = usage.get(record5.id) ?? [];
       return {
-        record: record4,
+        record: record5,
         serverId,
         usage: chatUsage,
         imported: serverId !== void 0 && account ? await importedUsageIds(tx, chatUsage, account) : /* @__PURE__ */ new Set()
@@ -7274,8 +7274,8 @@ function createLocalBrainPersistence(options) {
       server = options.serverSpendSync?.() ?? null;
       if (!server) void options.serverSpend(bound).catch(reportServerSpendFailure);
     }
-    return inputs.map(({ record: record4, serverId, usage, imported }) => {
-      const chat = chatValue(record4);
+    return inputs.map(({ record: record5, serverId, usage, imported }) => {
+      const chat = chatValue(record5);
       const fromServer = serverId !== void 0 ? server?.get(serverId) ?? null : null;
       const local = ledgerSpend(usage, {
         excludeGateway: fromServer !== null,
@@ -7285,7 +7285,7 @@ function createLocalBrainPersistence(options) {
       const spend = fromServer && local ? combineSpendSavings(fromServer, local) : fromServer ?? local;
       return {
         ...chat,
-        clientId: record4.id,
+        clientId: record5.id,
         ...serverId !== void 0 ? { serverId } : {},
         ...spend ? { spend } : {}
       };
@@ -7333,7 +7333,7 @@ function createLocalBrainPersistence(options) {
           createdAt: stamp,
           updatedAt: stamp
         };
-        const record4 = newLocalRecord({
+        const record5 = newLocalRecord({
           id: clientId,
           entityType: "chat",
           payload: { clientId, chat },
@@ -7341,8 +7341,8 @@ function createLocalBrainPersistence(options) {
           destination,
           occurredAt: stamp
         });
-        await tx.put(record4);
-        await journalWrite(tx, record4, "create", { key: `chat:${clientId}` });
+        await tx.put(record5);
+        await journalWrite(tx, record5, "create", { key: `chat:${clientId}` });
         if (body.bindPending) await claimChatBind(tx, clientId, now(), BIND_PENDING_HOLDER);
         return chat;
       });
@@ -7470,7 +7470,7 @@ function createLocalBrainPersistence(options) {
         for (const [index, message2] of added.entries()) {
           const eventKey = keys[index];
           const clientId = newId();
-          const record4 = newLocalRecord({
+          const record5 = newLocalRecord({
             id: clientId,
             entityType: "message",
             payload: { clientId, chatId, chatClientId: chat.id, eventKey, message: message2 },
@@ -7478,8 +7478,8 @@ function createLocalBrainPersistence(options) {
             destination: chat.destination,
             occurredAt: stamp
           });
-          await tx.put(record4);
-          await journalWrite(tx, record4, "create", { key: eventKey, dependsOn: [`chat:${chat.id}`], chatClientId: chat.id });
+          await tx.put(record5);
+          await journalWrite(tx, record5, "create", { key: eventKey, dependsOn: [`chat:${chat.id}`], chatClientId: chat.id });
         }
         if (added.length > 0) {
           const nextChat = { ...chat, version: chat.version + 1, updatedAt: stamp, payload: { ...chat.payload, chat: { ...chat.payload.chat, updatedAt: stamp } } };
@@ -7512,15 +7512,15 @@ function createLocalBrainPersistence(options) {
       const url = options.createObjectURL?.(file);
       if (url) blobs.set(key, url);
       await options.store.transact(async (tx) => {
-        const record4 = newLocalRecord({
+        const record5 = newLocalRecord({
           id: key,
           entityType: "attachment-manifest",
           payload: { key, name: file.name, type: file.type, size: file.size },
           deviceId: options.deviceId,
           destination
         });
-        await tx.put(record4);
-        await journalWrite(tx, record4, "create", { key: `attachment:${key}` });
+        await tx.put(record5);
+        await journalWrite(tx, record5, "create", { key: `attachment:${key}` });
       });
       return { key, name: file.name, type: file.type };
     },
@@ -7671,7 +7671,7 @@ function createRunUsageLedger(options) {
             savedCostMc: computeCostMillicents(pricing, { promptTokens, completionTokens, totalTokens: promptTokens + completionTokens })
           };
         }
-        const record4 = newLocalRecord({
+        const record5 = newLocalRecord({
           id,
           entityType: "usage",
           payload: value,
@@ -7679,9 +7679,9 @@ function createRunUsageLedger(options) {
           destination: chat.destination,
           occurredAt: at2
         });
-        await tx.put(record4);
+        await tx.put(record5);
         if (syncsToPlatform(value)) {
-          await journalWrite(tx, record4, "create", { key: `usage:${id}`, dependsOn: [`chat:${chat.id}`], chatClientId: chat.id });
+          await journalWrite(tx, record5, "create", { key: `usage:${id}`, dependsOn: [`chat:${chat.id}`], chatClientId: chat.id });
         }
       });
     },
@@ -10999,9 +10999,9 @@ function stableStringify(value) {
     return stableStringify({ type: "Uint8Array", data: Array.from(value) });
   }
   if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
-  const record4 = value;
-  const keys = Object.keys(record4).filter((k) => record4[k] !== void 0).sort();
-  return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(record4[k])}`).join(",")}}`;
+  const record5 = value;
+  const keys = Object.keys(record5).filter((k) => record5[k] !== void 0).sort();
+  return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(record5[k])}`).join(",")}}`;
 }
 
 // ../packages/agent-tools/src/policyGateCallKey.ts
@@ -15038,6 +15038,11 @@ var spawnAgentsTool = withDelegationNote(defineTool({
 }));
 var SUBAGENT_TOOLS = [spawnAgentTool, spawnAgentsTool, ...SUBAGENT_CONTROL_TOOLS];
 
+// ../packages/agent-tools/src/childCapabilities.ts
+var DELEGATION_CAPABILITIES = ["orchestrate", "orchestrate.fanout", "orchestrate.live"];
+var NON_DELEGABLE_CAPABILITIES = ["human", "skill.author"];
+var CHILD_WITHHELD_CAPABILITIES = /* @__PURE__ */ new Set([...NON_DELEGABLE_CAPABILITIES, ...DELEGATION_CAPABILITIES]);
+
 // ../packages/agent-tools/src/symbolRelations.ts
 var import_knowledge6 = require("@seanhogg/builderforce-memory/knowledge");
 
@@ -16073,12 +16078,12 @@ function estimateTokensFromChars(charCount) {
 }
 
 // src/localFirstTraces.ts
-function summarizeLocalFirstAttempt(record4) {
-  const { attempt } = record4;
+function summarizeLocalFirstAttempt(record5) {
+  const { attempt } = record5;
   return {
     target: attempt.kind === "local" ? attempt.ref : attempt.model ?? GATEWAY_ATTEMPT_TARGET,
-    outcome: record4.outcome,
-    ...record4.detail ? { detail: record4.detail } : {}
+    outcome: record5.outcome,
+    ...record5.detail ? { detail: record5.detail } : {}
   };
 }
 function localFallbackTrace(ts, step, attempts) {
@@ -16394,11 +16399,11 @@ function createLocalFirstStream(input) {
     if (plan.length === 0) throw new Error(input.noModel ?? NOT_SIGNED_IN);
     const state = { cloudError: void 0, trailCommitted: false, servingCloud: false };
     const failedAccounts = { lead: [], trail: [] };
-    const onAttempt = (record4) => {
-      if (accountPool && record4.outcome !== "served" && record4.attempt.kind === "local") {
-        (state.cloudError ? failedAccounts.trail : failedAccounts.lead).push(record4);
+    const onAttempt = (record5) => {
+      if (accountPool && record5.outcome !== "served" && record5.attempt.kind === "local") {
+        (state.cloudError ? failedAccounts.trail : failedAccounts.lead).push(record5);
       }
-      input.onAttempt?.(record4);
+      input.onAttempt?.(record5);
     };
     let ran;
     try {
@@ -16924,8 +16929,8 @@ function hybridLocalSuccessTurn(router, probes, signal, deferred = deferredLocal
         return plan;
       }
     },
-    onAttempt(record4) {
-      records.push(record4);
+    onAttempt(record5) {
+      records.push(record5);
     },
     settle(error) {
       if (!assessed || signal?.aborted) return;
@@ -17304,9 +17309,9 @@ function createHostModelStream(input) {
         probes,
         call2.signal
       ) : null;
-      const onAttempt = learned || input.onAttempt ? (record4) => {
-        learned?.onAttempt(record4);
-        input.onAttempt?.(record4);
+      const onAttempt = learned || input.onAttempt ? (record5) => {
+        learned?.onAttempt(record5);
+        input.onAttempt?.(record5);
       } : void 0;
       const stream = localFirst(probes, accounts, onAttempt, learned?.gate);
       if (!learned) return stream(call2, h);
@@ -20165,8 +20170,8 @@ function isReadOnlyShellCommand(command) {
 }
 function isReadOnlyShellCall(tool, args) {
   if (tool !== "run_command" || !args || typeof args !== "object") return false;
-  const record4 = args;
-  const command = typeof record4.command === "string" ? record4.command : typeof record4.cmd === "string" ? record4.cmd : "";
+  const record5 = args;
+  const command = typeof record5.command === "string" ? record5.command : typeof record5.cmd === "string" ? record5.cmd : "";
   return isReadOnlyShellCommand(command);
 }
 
@@ -22213,16 +22218,16 @@ function outgoingGate(files, ledger, policy) {
         unavailable2.push(`${file.absPath}: ${kind} (no record \u2014 verifier unavailable)`);
         continue;
       }
-      const record4 = records.reduce((a, b) => b.at >= a.at ? b : a);
-      if (record4.outcome === "fail") {
-        const detail = record4.exitCode != null ? ` (exit ${record4.exitCode})` : "";
-        return refuse(checkFailureReason(file.absPath, record4, detail));
+      const record5 = records.reduce((a, b) => b.at >= a.at ? b : a);
+      if (record5.outcome === "fail") {
+        const detail = record5.exitCode != null ? ` (exit ${record5.exitCode})` : "";
+        return refuse(checkFailureReason(file.absPath, record5, detail));
       }
-      if (record4.outcome === "unavailable") {
-        unavailable2.push(`${file.absPath}: ${record4.name} (${kind}) unavailable`);
+      if (record5.outcome === "unavailable") {
+        unavailable2.push(`${file.absPath}: ${record5.name} (${kind}) unavailable`);
       }
       if (kind === "diagnostics") {
-        if (record4.findings.some(isErrorFinding)) return refuse(checkFailureReason(file.absPath, record4, " (LSP error)"));
+        if (record5.findings.some(isErrorFinding)) return refuse(checkFailureReason(file.absPath, record5, " (LSP error)"));
       }
     }
     if (needsTest(file, policy)) {
@@ -23356,11 +23361,11 @@ function toolResultRecord(result) {
   return result && typeof result === "object" ? result : null;
 }
 function entityIdsOf(result) {
-  const record4 = toolResultRecord(result);
-  if (!record4) return { localId: null, syncId: null };
-  const idRef = parseEntityRef(record4.id);
-  const syncId = parseSyncId(record4.syncId) ?? parseSyncId(record4.taskId) ?? (idRef && "sync" in idRef ? idRef.sync : null);
-  const localId = isLocalId(record4.localId) ? record4.localId : idRef && "local" in idRef ? idRef.local : null;
+  const record5 = toolResultRecord(result);
+  if (!record5) return { localId: null, syncId: null };
+  const idRef = parseEntityRef(record5.id);
+  const syncId = parseSyncId(record5.syncId) ?? parseSyncId(record5.taskId) ?? (idRef && "sync" in idRef ? idRef.sync : null);
+  const localId = isLocalId(record5.localId) ? record5.localId : idRef && "local" in idRef ? idRef.local : null;
   return { localId, syncId };
 }
 
@@ -25098,6 +25103,12 @@ function earlyDelegationNudge(toolNames, reads) {
   return `STOP READING AND DELEGATE. This run has made ${reads} read calls and started no sub-agent. ${undelegatedRequestNudge(toolNames)}`;
 }
 
+// ../packages/agent-run/src/policy/subagents/child.ts
+var CHILD_SPAWN_REFUSAL = "Only root runs can spawn sub-agents";
+function blocksChildSpawn(dispatch, tool) {
+  return (dispatch.source === "subagent" || dispatch.parentRunId !== void 0) && (isSpawnTool(tool) || tool === "sessions_spawn" || tool === "Task");
+}
+
 // ../packages/agent-run/src/policy/subagents/index.ts
 function toolNamesOf(ctx) {
   return ctx.tools.map((tool) => tool.function?.name).filter((name) => !!name);
@@ -25320,9 +25331,9 @@ function missingReviewVerdictMessage(required) {
   const lane = required.laneKey ? ` and laneKey='${required.laneKey}'` : "";
   return `Cannot finish this reviewer assignment until you call builtin_kanban_signoff with roleKey='${required.roleKey}'${lane} and an explicit approved or changes_requested verdict. A narrative summary is not acceptance evidence.`;
 }
-function initialFinishGateState(resume, isChild) {
+function initialFinishGateState(resume) {
   return {
-    noDeliverableBlocked: resume?.noDeliverableBlocked ?? isChild,
+    noDeliverableBlocked: resume?.noDeliverableBlocked ?? false,
     reviewVerdictRecorded: resume?.reviewVerdictRecorded ?? false,
     placeholderBlocks: resume?.placeholderBlocks ?? 0,
     ciPendingBlocks: resume?.ciPendingBlocks ?? 0,
@@ -26266,7 +26277,7 @@ var sessions = /* @__PURE__ */ new WeakMap();
 function sessionOf(ctx, ports) {
   let s = sessions.get(ctx.state);
   if (!s) {
-    const question = hasExplicitQuestionIntent(classifyRequest(ctx.task.request ?? ctx.task.prompt));
+    const question = !ctx.state.specValidation && hasExplicitQuestionIntent(classifyRequest(ctx.task.request ?? ctx.task.prompt));
     s = new RunGuards(guardLeversOf(ctx.policy.levers), ctx.state.guards, ports, question);
     sessions.set(ctx.state, s);
     ctx.state.guards = s.snapshot();
@@ -27163,7 +27174,7 @@ function ensureWorkCoreSet(selected, catalog, opts) {
 function selectPlatformCatalog(ctx, pinned) {
   const platform = ctx.ports.platform;
   if (!platform?.closed) return void 0;
-  const catalog = platform.schemas({ rungs: ctx.state.stall?.rungs ?? {} });
+  const catalog = platform.schemas({ rungs: ctx.state.stall?.rungs ?? {} }).filter((schema) => !blocksChildSpawn(ctx.task.dispatch, schema.function.name));
   const selection = platform.selection;
   const { query } = selection;
   const capped2 = isCappedToolRole(selection.role) ? roleCappedSelection(selection.role, catalog.map((t) => t.function?.name ?? ""), selection.roleKeep ?? [], selection.required) : void 0;
@@ -28156,12 +28167,12 @@ function errorText(data) {
 }
 
 // ../packages/agent-run/src/runState.ts
-function freshState(policy, task) {
+function freshState(policy) {
   return {
     messages: [],
     step: 0,
     guards: {},
-    finish: initialFinishGateState(void 0, task.dispatch.parentRunId !== void 0),
+    finish: initialFinishGateState(void 0),
     model: initialModelState(policy),
     memory: { memory: { created: [], edited: [], deleted: [], read: [], searched: [] }, tools: [] },
     compaction: { compactions: 0 },
@@ -28195,8 +28206,8 @@ function initialModelState(policy) {
 function freshReads() {
   return { served: {}, readsWithoutSpawn: { reads: 0, spawned: false, nudged: false } };
 }
-function resumeState(saved, policy, task) {
-  const fresh = freshState(policy, task);
+function resumeState(saved, policy) {
+  const fresh = freshState(policy);
   return {
     ...fresh,
     ...saved,
@@ -28428,8 +28439,145 @@ function withVolatileTail(transcript, pack, brief, sections = []) {
   return tail ? [...transcript, tail] : [...transcript];
 }
 
+// ../packages/agent-run/src/policy/verify/specValidation.ts
+function planSpecValidation(task) {
+  const { ask: ask2 } = classifyRequest(task.request ?? task.prompt);
+  if (/^\s*(?:how|why|when|where|what)\b/i.test(ask2) || /\b(?:do not|don't|never)\s+(?:validate|verify|revalidate|re-validate)\b/i.test(ask2)) return void 0;
+  if (!/\b(?:validate|verify|revalidate|re-validate)\b[^!?\r\n]{0,200}\b(?:prd|spec(?:ification)?s?)\b/i.test(ask2) && !/(?:^|[\n.!?])\s*(?:please\s+)?(?:prds?|spec(?:ification)?s?)\b[^.!?\r\n]{0,100}\bvalidation\b/i.test(ask2)) return void 0;
+  const target2 = /\b[\w-]*(?:prd|spec)[\w.-]*\.md\b/i.exec(ask2)?.[0].toLowerCase();
+  return target2 ? { target: target2 } : {};
+}
+function checkCommand(command) {
+  if (/[|;&<>\r\n]/.test(command)) return false;
+  const [exe, script] = executableTokensOf(command);
+  return runsCheck(command) || (exe === "node" || exe === "tsx") && /^\.?[\\/]?scripts[\\/]check-[\w.-]+\.[cm]?[jt]s$/.test(script ?? "");
+}
+function record3(validation, check, exitCode) {
+  const checks = validation.completed ?? [];
+  validation.completed = [
+    ...checks.filter((item) => item.command !== check.command || item.cwd !== check.cwd),
+    { ...check, exitCode }
+  ].slice(-24);
+}
+function readAcceptanceChecks(validation, path, content) {
+  if (typeof path !== "string" || typeof content !== "string") return;
+  const name = path.split(/[\\/]/).at(-1)?.toLowerCase();
+  if (validation.target && name !== validation.target) return;
+  if (validation.target) validation.readTarget = true;
+  if (validation.required) return;
+  const manifest = /(?:^|\n)```builderforce-acceptance[^\S\n]*\r?\n([\s\S]*?)\r?\n```/.exec(content.slice(0, 12e3));
+  if (!manifest) return;
+  try {
+    const rows = JSON.parse(manifest[1]);
+    if (!Array.isArray(rows) || rows.length > 24) return;
+    const checks = rows.filter((row) => row && typeof row.command === "string" && checkCommand(row.command) && typeof row.cwd === "string" && row.cwd.length <= 300);
+    if (checks.length && checks.length === rows.length) {
+      validation.required = checks;
+      validation.root = /^(.*)[\\/]docs[\\/]specs[\\/]/i.exec(path)?.[1];
+    }
+  } catch {
+  }
+}
+function missingChecks(state) {
+  const validation = state.specValidation;
+  const normalize = (path) => path.replace(/\\/g, "/").replace(/^(?:\.\/)+|\/$/g, "");
+  return (validation?.required ?? []).filter((required) => !validation?.completed?.some((actual) => {
+    if (actual.command.trim().replace(/\s+/g, " ") !== required.command.trim().replace(/\s+/g, " ")) return false;
+    const cwd = normalize(actual.cwd ?? ".");
+    const directory = normalize(required.cwd ?? ".");
+    const root = normalize(validation.root ?? "").split("/").at(-1);
+    const rooted = root ? directory === "." ? root : `${root}/${directory}` : "";
+    return cwd === directory || rooted !== "" && (cwd === rooted || cwd.endsWith(`/${rooted}`));
+  }));
+}
+function resultRecord(value) {
+  if (typeof value === "string") {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return {};
+    }
+  }
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+function observeSpecCheck(state, call2, value, details, succeeded10) {
+  const validation = state.specValidation;
+  if (!validation) return;
+  const result = resultRecord(value);
+  const meta = resultRecord(details);
+  if (call2.name === "read_file" && succeeded10) {
+    readAcceptanceChecks(validation, result.path ?? call2.args.path, result.content);
+    return;
+  }
+  if (result.aborted || result.timedOut) return;
+  if (call2.name === "run_checks" && result.ran === true && typeof result.ok === "boolean") {
+    record3(validation, { command: "run_checks (host static checks / CI)" }, result.ok && succeeded10 ? 0 : 1);
+    return;
+  }
+  const id = typeof result.id === "string" ? result.id : void 0;
+  if (call2.name === "command_status") {
+    const requested = typeof call2.args.id === "string" ? call2.args.id.trim() : "";
+    const pending = validation.pending;
+    if (!pending || requested !== id || !Object.hasOwn(pending, requested)) return;
+    const check2 = pending[requested];
+    const exit2 = result.exitCode;
+    if (result.status === "exited" && typeof exit2 === "number" && Number.isInteger(exit2) && (succeeded10 || exit2 !== 0)) {
+      record3(validation, check2, exit2);
+    }
+    if (result.status === "exited" || result.status === "killed" || result.status === "unknown") delete pending[requested];
+    return;
+  }
+  if (call2.name !== "run_command") return;
+  const command = shellCommandOf(call2.args).trim();
+  if (!checkCommand(command)) return;
+  const cwd = call2.args.cwd ?? result.cwd;
+  const check = { command, ...typeof cwd === "string" ? { cwd } : {} };
+  const exit = result.exitCode ?? meta.exitCode;
+  if (typeof exit === "number" && Number.isInteger(exit) && (succeeded10 || exit !== 0)) {
+    record3(validation, check, exit);
+  } else if (succeeded10 && id && result.status === "running") {
+    validation.pending = Object.fromEntries([...Object.entries(validation.pending ?? {}), [id, check]].slice(-24));
+  }
+}
+var INSTRUCTIONS = "For this PRD/spec validation, read its acceptance criteria and execute the named suites and repository guards through authorized tools. Run each check as a separate command in its package directory and wait for its exit result. Map each claim to its observed result. Label each missing or blocked check unverified, report failures, and never turn a source search, a started job, or a static check into a passing runtime test.";
+function specValidationSection(state) {
+  const validation = state.specValidation;
+  if (!validation) return void 0;
+  const evidence = validation.completed?.map(({ command, cwd, exitCode }) => `- ${command}${cwd ? ` (cwd: ${cwd})` : ""} exited ${exitCode}`);
+  const missing = missingChecks(state);
+  return [
+    INSTRUCTIONS,
+    ...validation.target && !validation.readTarget ? [`Read the named specification ${validation.target} before reporting a verdict.`] : [],
+    evidence?.length ? "Completed checks for this run:" : "No executable check has completed in this run.",
+    ...evidence ?? [],
+    ...missing.length ? ["Declared acceptance checks still unverified:", ...missing.map(({ command, cwd }) => `- ${command} (cwd: ${cwd})`)] : []
+  ].join("\n");
+}
+function missingSpecEvidence(state) {
+  const validation = state.specValidation;
+  return !!validation && (!validation.completed?.length || !!validation.target && !validation.readTarget || missingChecks(state).length > 0);
+}
+function specUnverifiedReason(state) {
+  const validation = state.specValidation;
+  if (validation?.target && !validation.readTarget) return `PRD validation is unverified because ${validation.target} was not read.`;
+  const missing = missingChecks(state).length;
+  return missing ? `PRD validation is unverified because ${missing} declared acceptance check(s) did not complete.` : "PRD validation is unverified because no executable acceptance check completed.";
+}
+function specValidationRetry(state) {
+  const validation = state.specValidation;
+  if (!validation || !missingSpecEvidence(state)) return null;
+  const reason = specUnverifiedReason(state);
+  if (validation.prompted) return reason;
+  validation.prompted = true;
+  return `${reason} ${INSTRUCTIONS} If the host cannot execute the checks, explain the blocker.`;
+}
+function unverifiedSpecCheckCount(state) {
+  return missingChecks(state).length;
+}
+
 // ../packages/agent-run/src/runTurn.ts
 var callKinds = /* @__PURE__ */ new WeakMap();
+var observedToolData = /* @__PURE__ */ new WeakMap();
 var causes = /* @__PURE__ */ new WeakMap();
 function isResumable(input, err) {
   return !(err instanceof ModelTransportError) && input.ports.store.isResumable?.(err) === true;
@@ -28482,8 +28630,9 @@ async function completeTurn(input, state, hooks, ctx, offered, transcript, pack,
   const model = decision ? decision.model : input.policy.pinnedModel;
   const brief = await hooks.memory.brief(pctx);
   const work = assignedWorkSection(state.work ?? []);
+  const validation = specValidationSection(state);
   const sections = [...input.ports.context.turnSections?.() ?? [], ...work ? [`### Assigned work
-${work}`] : [], ...made?.tail ?? []];
+${work}`] : [], ...validation ? [validation] : [], ...made?.tail ?? []];
   const fields = hooks.model.turnFields?.(mctx);
   const reasoning = hooks.guards.reasoning?.(pctx);
   const firstAsk = {
@@ -28567,13 +28716,15 @@ async function synthesizeFinal(input, state, hooks, transcript, pack, tally, why
   const model = decision ? decision.model : input.policy.pinnedModel;
   const fields = hooks.model.turnFields?.(pctx);
   const ask2 = { role: "user", content: prompt };
+  const validation = specValidationSection(state);
+  const validationSections = validation ? [validation] : [];
   let completion;
   try {
     completion = await measureModelRequest(
       input,
       state.step,
       {
-        messages: [...withVolatileTail(transcript, pack, null, input.ports.context.turnSections?.() ?? []), ask2],
+        messages: [...withVolatileTail(transcript, pack, null, [...input.ports.context.turnSections?.() ?? [], ...validationSections]), ask2],
         ...model ? { model, strict: decision?.strict ?? false } : {},
         maxTokens: SYNTHESIS_MAX_TOKENS,
         // A transport records this turn as the run's forced closing one (and what stopped the run), never an ordinary turn.
@@ -28609,6 +28760,9 @@ async function dispatchCall(input, state, call2, watch, facts = { refused: false
 async function dispatchCallCore(input, state, call2, watch, facts, step) {
   const { ports, signal } = input;
   if (call2.malformed) return declineMalformedCall(ports, call2, facts, step);
+  if (blocksChildSpawn(input.task.dispatch, call2.name)) {
+    return { data: { ok: false, error: CHILD_SPAWN_REFUSAL }, isError: true };
+  }
   const platform = ports.platform;
   const own2 = ownsCall(ports, call2.name);
   if (platform && own2 && platform.handsOff?.(call2.name) && state.model.phase === "plan") {
@@ -28628,6 +28782,7 @@ async function dispatchCallCore(input, state, call2, watch, facts, step) {
       if (platform && own2) {
         const result2 = await platform.execute(name, args, { ...run ? { signal: run } : {}, progress: { rungs: state.stall?.rungs ?? {} }, callId: call2.id, step });
         box.failed = result2.isError === true;
+        box.observedData = result2.observedData;
         if (result2.parts || result2.meta) box.native = { ...result2.parts ? { parts: result2.parts } : {}, ...result2.meta ? { meta: result2.meta } : {} };
         if (result2.cached) box.kind = "cached";
         else if (result2.neutral) box.kind = "neutral";
@@ -28649,6 +28804,7 @@ async function dispatchCallCore(input, state, call2, watch, facts, step) {
     const failed4 = box.failed === true || !own2 && !!capped2 && capped2.ok === false && capped2.skipped !== true;
     const dispatched = { data: capped2, ...box.control ? { control: box.control } : {}, ...failed4 ? { isError: true } : {} };
     if (box.kind) callKinds.set(dispatched, box.kind);
+    if (state.specValidation && !box.killed) observedToolData.set(dispatched, box.observedData ?? data);
     if (box.native) nativeResults.set(dispatched, box.native);
     if (box.killed) killedResults.add(dispatched);
     return dispatched;
@@ -28733,7 +28889,10 @@ async function settle(input, hooks, state, transcript, kind, extra) {
 }
 async function settleCore(input, hooks, state, transcript, kind, extra) {
   state.messages = transcript;
-  const unfinished = kind === "finished" ? hooks.finish.unfinishedWork(state) : null;
+  const validation = state.specValidation;
+  const checks = validation?.completed ?? [];
+  const failedChecks = checks.filter((check) => check.exitCode !== 0).length;
+  const unfinished = kind === "finished" ? hooks.finish.unfinishedWork(state) ?? (missingSpecEvidence(state) ? specUnverifiedReason(state) : null) ?? (failedChecks ? `PRD validation recorded ${failedChecks} failing acceptance check(s). See the run trace for their exit results.` : null) : null;
   if (unfinished) {
     kind = "failed";
     extra = { ...extra, reason: unfinished };
@@ -28763,6 +28922,17 @@ async function settleCore(input, hooks, state, transcript, kind, extra) {
     return kind === "failed" || cause !== void 0 ? { kind: "failed", reason: extra.reason ?? (cause instanceof Error ? cause.message : "failed"), state, cause } : { kind: "yielded", state };
   }
   if (kind === "finished" || kind === "failed") {
+    if (validation) {
+      await emit(input.ports.events, {
+        kind: "run.spec_validation",
+        step: state.step,
+        completed: checks.length,
+        failed: failedChecks,
+        pending: Object.keys(validation.pending ?? {}).length,
+        unverified: unverifiedSpecCheckCount(state),
+        incomplete: missingSpecEvidence(state)
+      });
+    }
     const row = measureWorkflowSync(input.ports.events, workflowScope(input, state.step), "grade", () => buildOutcomeRow({ entryPoint: input.policy.entryPoint, runId: input.task.runId, parentRunId: input.task.dispatch.parentRunId, kind, ...extra.reason !== void 0 ? { reason: extra.reason } : {}, state }), (row2) => ({ ...row2.work ?? { assigned: 0, done: 0, blocked: 0, inReview: 0, open: 0 } }));
     try {
       if (input.ports.events.outcome) await measureWorkflow(input.ports.events, workflowScope(input, state.step), "outcome", () => input.ports.events.outcome(row));
@@ -28913,6 +29083,9 @@ ${notice}` : notice };
       await requeue2(pctx, ctx.step, turn.content, block);
       return { action: "continue" };
     }
+    if (missingSpecEvidence(pctx.state) && (finalTurn || pctx.state.specValidation?.prompted)) {
+      return { action: "stop", ok: false, output: specUnverifiedReason(pctx.state), finished: true };
+    }
     const verification = finalTurn ? null : await deps.verifyBlock(pctx);
     if (verification) {
       await emit(ports.events, { kind: "finish.blocked", step: ctx.step, reason: "verify", block: verification });
@@ -28973,6 +29146,8 @@ function kernelHooks(run) {
   const contextAt = (step, turn) => policyContext(input, state, currentView(transcript, offered), step, turn);
   const append = (...rows) => appendRows(input, transcript, ...rows);
   const verifyBlock = async (pctx) => {
+    const validation = specValidationRetry(state);
+    if (validation) return validation;
     if (policy.verify === "none") return null;
     const verdict = await hooks.verify.verify(pctx);
     if (verdict && verdict.ran !== false) tallyVerify(tally, verdict.ok);
@@ -29009,7 +29184,7 @@ function kernelHooks(run) {
       const menu = surfaceMenu ?? forced?.menu;
       const finalBy = finalSource(menu, () => hooks.guards.finalTurn?.(policyContext(input, state, base, ctx.step, ctx.stepInCall)) === true);
       const finalTurn = finalBy !== void 0;
-      const advertised = finalTurn ? [] : menu?.tools ?? forced?.selected ?? await selectNow();
+      const advertised = finalTurn ? [] : (menu?.tools ?? forced?.selected ?? await selectNow())?.filter((schema) => !blocksChildSpawn(input.task.dispatch, schema.function.name));
       run.selection = {
         tools: advertised,
         ...forced ? { forced } : {},
@@ -29061,6 +29236,9 @@ function kernelHooks(run) {
     },
     beforeDispatch: async (call2, ctx) => {
       starts.set(call2.id, Date.now());
+      if (blocksChildSpawn(input.task.dispatch, call2.name)) {
+        return { result: { data: { ok: false, error: CHILD_SPAWN_REFUSAL }, isError: true } };
+      }
       const pctx = contextAt(ctx.step, ctx.stepInCall);
       const pcall = toPolicyCall(call2);
       const scope = workflowScope(input, ctx.step);
@@ -29173,7 +29351,10 @@ function kernelHooks(run) {
       if (data !== result.data) rewriteRow(message2, data, message2.parts !== void 0 || ports.platform?.verbatimText === true);
       if (!stub) {
         hooks.tools.observe?.(pctx, pcall, data, result.isError === true);
-        if (!kind) hooks.verify.observe?.(pctx, pcall, result.data, message2.meta, ok);
+        if (!kind) {
+          hooks.verify.observe?.(pctx, pcall, result.data, message2.meta, ok);
+          if (state.specValidation) observeSpecCheck(state, { ...pcall, name: resolveToolAlias(pcall.name) }, observedToolData.get(result), message2.meta?.details, ok);
+        }
         if (!ownsCall(ports, call2.name)) await hooks.memory.observe?.(pctx, pcall, result.data, result.isError);
         rememberWrite(state, call2, ok);
       }
@@ -29326,15 +29507,17 @@ var CacheServedStreak = class {
 async function runAgent(input) {
   const { task, policy, ports, signal } = input;
   const hooks = workflowHooks(composePolicyHooks(input.modules), input);
-  const state = input.resume ? resumeState(input.resume, policy, task) : freshState(policy, task);
+  const state = input.resume ? resumeState(input.resume, policy) : freshState(policy);
   const resumed = Boolean(input.resume);
+  const validation = state.specValidation ?? planSpecValidation(task);
+  if (validation) state.specValidation = validation;
   if (state.pipeline === void 0 && input.pipeline !== void 0) state.pipeline = input.pipeline;
   if (!state.work && !resumed) measureWorkflowSync(ports.events, workflowScope(input, state.step), "work", () => {
     if (task.assignedWork?.length) state.work = planWork(task.assignedWork);
     return state.work ?? [];
   }, (work) => ({ assigned: work.length, criteria: work.reduce((n2, item) => n2 + item.criteria.length, 0) }));
   const tally = state.telemetry ??= freshTally();
-  const offered = offeredSchemas(ports, { rungs: state.stall?.rungs ?? {} });
+  const offered = offeredSchemas(ports, { rungs: state.stall?.rungs ?? {} }).filter((schema) => !blocksChildSpawn(task.dispatch, schema.function.name));
   const transcript = asMessages(state.messages);
   let pack = state.context ?? EMPTY_PACK2;
   if (!resumed) {
@@ -29351,7 +29534,7 @@ async function runAgent(input) {
   });
   if (!resumed) {
     await emit(ports.events, { kind: "run.started", step: state.step });
-    if (pack.answer && !state.work?.length) {
+    if (pack.answer && !state.work?.length && !state.specValidation) {
       appendRows(input, transcript, { role: "assistant", content: pack.answer });
       state.messages = transcript;
       return settle(input, hooks, state, transcript, "finished", { output: pack.answer });
@@ -29463,7 +29646,7 @@ function defaultPipelineRouting() {
   return { mode: "always" };
 }
 function decideRunPipeline(route) {
-  if (!route.routing || route.child) return null;
+  if (!route.routing) return null;
   const { actionType } = classifyRunAction(route.request);
   return scorePipeline(pipelineFeaturesOf(route.request, { actionType, followUp: route.followUp === true }), {
     mode: route.routing.mode,
@@ -29472,7 +29655,7 @@ function decideRunPipeline(route) {
 }
 function pipelinePolicyOptions(route, pipeline) {
   const quick = pipeline?.route === "quick";
-  const startPhase = route.child || quick ? "code" : "plan";
+  const startPhase = quick ? "code" : "plan";
   const phaseModels = { ...route.phaseModels };
   const quickModel = route.routing?.quickModel?.trim();
   if (quick && quickModel) phaseModels.code = quickModel;
@@ -29538,8 +29721,7 @@ function routedPolicy(policy, route, decision) {
     };
   }
   if (!pipeline) {
-    if (!route.child && !start.phaseModels) return folded;
-    return { ...folded, modelStart: { ...prior, ...route.child ? { startPhase: "code" } : {}, ...start.phaseModels ? { phaseModels: start.phaseModels } : {} } };
+    return start.phaseModels ? { ...folded, modelStart: { ...prior, phaseModels: start.phaseModels } } : folded;
   }
   const model = start.pinnedModel ?? prior.model;
   return {
@@ -29564,7 +29746,6 @@ async function openRun(input) {
   const { surface: surface2 = {}, route: requested, ...rest } = input;
   const route = requested && "decided" in requested ? requested : {
     request: rest.task.request ?? rest.task.prompt,
-    child: rest.task.dispatch.source === "subagent",
     modelStrict: rest.policy.modelStart?.strict ?? rest.policy.modelOptions?.strictPin,
     ...requested,
     routing: requested?.routing ?? defaultPipelineRouting()
@@ -30063,14 +30244,14 @@ function shortenTarget(value, max = MAX_DETAIL) {
 }
 function activityTarget(args) {
   if (!args || typeof args !== "object" || Array.isArray(args)) return void 0;
-  const record4 = args;
+  const record5 = args;
   for (const key of TARGET_KEYS) {
-    const value = record4[key];
+    const value = record5[key];
     if (typeof value === "string" && value.trim()) return shortenTarget(value);
     if (typeof value === "number" && Number.isFinite(value)) return String(value);
   }
-  if (Array.isArray(record4.paths)) {
-    const names = record4.paths.filter((p) => typeof p === "string" && p.trim() !== "");
+  if (Array.isArray(record5.paths)) {
+    const names = record5.paths.filter((p) => typeof p === "string" && p.trim() !== "");
     if (names.length) return shortenTarget(names.join(", "));
   }
   return void 0;
@@ -30080,9 +30261,9 @@ var VISIT_QUESTION_SEPARATOR = " \u220B ";
 function visitTarget(args) {
   const scope = activityTarget(args);
   if (!scope) return void 0;
-  const record4 = args;
+  const record5 = args;
   for (const key of QUESTION_KEYS) {
-    const value = record4[key];
+    const value = record5[key];
     if (typeof value !== "string" || !value.trim()) continue;
     const question = shortenTarget(value);
     return question === scope ? scope : `${scope}${VISIT_QUESTION_SEPARATOR}${question}`;
@@ -31699,6 +31880,212 @@ function busiestModel(trace2) {
   return best && best.turns > 0 ? best.model : null;
 }
 
+// src/shipVerification.ts
+var BASE_BRANCHES = /* @__PURE__ */ new Set(["main", "master"]);
+function parseGitShortStatus(output) {
+  if (!output) return null;
+  const header = output.split("\n").map((l) => l.trim()).find((l) => l.startsWith("##"));
+  if (!header) return null;
+  const body = header.slice(2).trim();
+  if (!body || body.startsWith("HEAD (no branch)")) return { branch: null, upstream: null, ahead: 0, behind: 0 };
+  const ahead = /\bahead (\d+)/.exec(body);
+  const behind = /\bbehind (\d+)/.exec(body);
+  const names = body.replace(/\s*\[.*$/, "").trim();
+  const [branch, upstream] = names.split("...");
+  return {
+    branch: branch?.trim() || null,
+    upstream: upstream?.trim() || null,
+    ahead: ahead ? Number(ahead[1]) : 0,
+    behind: behind ? Number(behind[1]) : 0
+  };
+}
+var GIT_PUSH = gitCommandPattern("push");
+var GIT_STATUS_CMD = gitCommandPattern("status");
+function commandOf(ev) {
+  const a = ev.args;
+  if (typeof a?.command === "string") return a.command;
+  if (typeof a?.cmd === "string") return a.cmd;
+  return "";
+}
+function outputOf(ev) {
+  const r = ev.result;
+  if (typeof r === "string") return r;
+  if (r && typeof r === "object") {
+    const o = r;
+    if (typeof o.output === "string") return o.output;
+    if (typeof o.stdout === "string") return o.stdout;
+  }
+  return "";
+}
+function succeeded6(ev) {
+  return !ev.isError && !isFailedToolResult(ev.result);
+}
+function isPush(ev) {
+  return ev.label === "git_push" || GIT_PUSH.test(commandOf(ev));
+}
+function dirtyPathsOf(output) {
+  const out = [];
+  for (const raw of output.split("\n")) {
+    const line = raw.replace(/\r$/, "");
+    if (line.length < 4 || line.startsWith("##")) continue;
+    let path = line.slice(3);
+    const arrow = path.indexOf(" -> ");
+    if (arrow >= 0) path = path.slice(arrow + 4);
+    path = path.trim().replace(/^"(.*)"$/, "$1");
+    if (path) out.push(path);
+  }
+  return out;
+}
+function touchedStillDirty(touched, dirty) {
+  const norm2 = (p) => p.replace(/\\/g, "/").replace(/^\.\//, "");
+  const d = dirty.map(norm2);
+  return touched.map(norm2).some((t) => d.some((p) => t === p || t.endsWith(`/${p}`)));
+}
+var DEFAULT_BRANCH_CMD = gitCommandPattern("remote|symbolic-ref|branch");
+function defaultBranchFromTrace(steps) {
+  for (let i = steps.length - 1; i >= 0; i -= 1) {
+    const ev = steps[i];
+    if (!succeeded6(ev) || !DEFAULT_BRANCH_CMD.test(commandOf(ev))) continue;
+    const out = outputOf(ev);
+    const m = /HEAD branch:\s*(\S+)/.exec(out) ?? /origin\/HEAD\s*->\s*origin\/(\S+)/.exec(out) ?? /^\s*refs\/remotes\/origin\/(\S+)\s*$/m.exec(out);
+    if (m?.[1] && m[1] !== "HEAD" && m[1] !== "(unknown)") return m[1];
+  }
+  return null;
+}
+async function onBaseBranch(git, touchedFiles, deltaTicketId) {
+  if (!git?.onBaseBranch || !touchedFiles.length || deltaTicketId == null) return false;
+  try {
+    return await git.onBaseBranch("", touchedFiles);
+  } catch {
+    return false;
+  }
+}
+function shippedToBaseBranch(events, opts) {
+  const steps = events.filter((e) => e.category === "tool");
+  const defaultBranch = opts?.defaultBranch?.trim() || defaultBranchFromTrace(steps);
+  const isBase = (branch) => BASE_BRANCHES.has(branch) || branch === defaultBranch;
+  let pushedAt = -1;
+  for (let i = 0; i < steps.length; i += 1) {
+    if (succeeded6(steps[i]) && isPush(steps[i])) pushedAt = i;
+  }
+  if (pushedAt < 0) return false;
+  const touched = opts?.touchedFiles ?? [];
+  for (let i = pushedAt; i < steps.length; i += 1) {
+    const ev = steps[i];
+    if (!succeeded6(ev)) continue;
+    const isStatus = i === pushedAt || ev.label === "git_status" || GIT_STATUS_CMD.test(commandOf(ev));
+    if (!isStatus) continue;
+    const output = outputOf(ev);
+    const status2 = parseGitShortStatus(output);
+    if (!status2) continue;
+    if (!(status2.branch && isBase(status2.branch) && status2.upstream && status2.ahead === 0)) continue;
+    if (touched.length > 0 && touchedStillDirty(touched, dirtyPathsOf(output))) continue;
+    return true;
+  }
+  return false;
+}
+
+// src/runStore/chatTickets.ts
+var MOVE_LABEL = /^(ticket[-_.]move|builtin_tasks_update)$/i;
+var stepSucceeded = (ev) => ev.category === "tool" && !ev.isError && !isFailedToolResult(ev.result);
+function ticketsCreatedInRun(trace2) {
+  const filings = [];
+  for (const ev of trace2) {
+    const local = isLocalTicketCreateLabel(ev.label);
+    if (!stepSucceeded(ev) || !local && ev.label !== SERVER_TICKET_CREATE_TOOL) continue;
+    const args = ev.args ?? {};
+    const { localId, syncId } = entityIdsOf(ev.result);
+    const syncRef = syncId != null ? syncIdText(syncId) : null;
+    const ref = localId ?? syncRef;
+    if (!ref || filings.some((f) => f.ref === ref)) continue;
+    filings.push({ ref, syncRef, ids: [localId, syncRef].filter((id) => id != null), args, local, handOff: args.reason === "hand_off" });
+  }
+  return filings;
+}
+function localTicketFilings(trace2) {
+  return ticketsCreatedInRun(trace2).filter((f) => f.local && f.handOff);
+}
+function localTicketsFiledInRun(trace2) {
+  return localTicketFilings(trace2).map((f) => f.ref);
+}
+function ticketMovesInRun(trace2) {
+  const moved = /* @__PURE__ */ new Map();
+  trace2.forEach((ev, at2) => {
+    if (!stepSucceeded(ev) || !MOVE_LABEL.test(ev.label)) return;
+    const a = ev.args ?? {};
+    if ((typeof a.id === "string" || typeof a.id === "number") && typeof a.status === "string") moved.set(String(a.id).trim(), { status: a.status, at: at2 });
+  });
+  return moved;
+}
+function latestStatus(moves, ids2) {
+  let latest;
+  for (const id of ids2) {
+    const move = moves.get(id);
+    if (move && (!latest || move.at > latest.at)) latest = move;
+  }
+  return latest?.status;
+}
+function runOwnedTicketRefs(trace2, deltaTicketId = null) {
+  const owned = /* @__PURE__ */ new Set();
+  if (deltaTicketId != null) owned.add(String(deltaTicketId));
+  for (const ev of trace2) {
+    if (ev.label !== TICKET_FROM_DELTA_TOOL || !stepSucceeded(ev)) continue;
+    const taskId = ev.args?.taskId;
+    if (typeof taskId === "number" || typeof taskId === "string") owned.add(String(taskId).trim());
+    const { syncId } = entityIdsOf(ev.result);
+    if (syncId != null) owned.add(syncIdText(syncId));
+  }
+  for (const id of ticketMovesInRun(trace2).keys()) owned.add(id);
+  for (const filing of ticketsCreatedInRun(trace2)) for (const id of filing.ids) owned.add(id);
+  return owned;
+}
+var listingScopeOf = (cell) => ({ cell, runId: cell.runId });
+var memoisedListings = /* @__PURE__ */ new WeakMap();
+function forgetChatTicketListing(cell) {
+  memoisedListings.delete(cell);
+}
+var changesListing = (ev) => ev.category === "llm" || ev.category === "tool" && (isMutatingPlatformTool(ev.label) || isLocalTicketCreateLabel(ev.label) || MOVE_LABEL.test(ev.label));
+function memoisedListing(scope, chatId) {
+  const { cell, runId } = scope;
+  const memo = memoisedListings.get(cell);
+  if (!memo || memo.runId !== runId || cell.runId !== runId || memo.chatId !== chatId) return void 0;
+  const at2 = cell.trace.lastIndexOf(memo.mark);
+  if (at2 < 0 || at2 < cell.runTraceFrom || at2 > memo.length - 1) return void 0;
+  for (let i = at2 + 1; i < cell.trace.length; i += 1) if (changesListing(cell.trace[i])) return void 0;
+  return memo.listed;
+}
+async function listChatTickets(req, chatId, report3, scope) {
+  if (!req.runTool) return null;
+  if (scope) {
+    const memo = memoisedListing(scope, chatId);
+    if (memo !== void 0) return memo;
+  }
+  const before = scope ? runTrace(scope.cell) : [];
+  const mark = before[before.length - 1];
+  const length = scope ? scope.cell.trace.length : 0;
+  let listed;
+  try {
+    const call2 = req.runTool(CHAT_TICKET_LIST_TOOL, { chatId });
+    listed = await (report3.timeoutMs != null ? bounded(report3.timeoutMs, call2) : call2);
+  } catch (e) {
+    listed = { ok: false, error: errorMessage(e) };
+  }
+  if (!isFailedToolResult(listed)) {
+    if (scope && mark && scope.cell.runId === scope.runId) memoisedListings.set(scope.cell, { runId: scope.runId, chatId, listed, mark, length });
+    else if (scope) memoisedListings.delete(scope.cell);
+    return listed;
+  }
+  const why = listed?.error;
+  report3.note?.({
+    ts: nowIso(),
+    category: "message",
+    label: report3.label,
+    args: { chatId },
+    result: `The chat's linked tickets could not be listed${typeof why === "string" ? ` (${why})` : ""}: ${report3.consequence}`
+  });
+  return null;
+}
+
 // src/workflowDiagnostics.ts
 function workflowDiagnostics(events) {
   return summarizeWorkflow(events.flatMap((event) => {
@@ -32593,13 +32980,17 @@ function formatRoutingByRole(r) {
 }
 
 // src/staffingSummary.ts
-function sessionShippedInTrace(events) {
+function sessionWorkInTrace(events) {
   let n2 = 0;
   for (const ev of events) {
     if (ev.category !== "tool" || ev.isError || isFailedToolResult(ev.result)) continue;
     if (isCodeChangeTool(ev.label) || ev.label === "git_commit" || ev.label === "git_push") n2 += 1;
   }
   return n2;
+}
+function sessionShippedInTrace(events) {
+  const lastWrite = events.reduce((index, event, i) => event.category === "tool" && !event.isError && !isFailedToolResult(event.result) && (isCodeChangeTool(event.label) || event.label === "git_commit") ? i : index, -1);
+  return shippedToBaseBranch(events.slice(lastWrite + 1)) ? 1 : 0;
 }
 var DISPATCH_TOOL = /chats[._](dispatch_agent|execute_as_agent)|kanban[._](coordinate|materialize_work_items|assess_resource|assign_participant)|executions[._]submit|run[._-]?now/i;
 function isDispatchTool(label) {
@@ -32657,7 +33048,7 @@ function staffingSummaryInTrace(events) {
       });
     }
   }
-  const verdict = dispatched > 0 || personaSubagents.some((p) => p.ok) ? "staffed" : dispatchRefusals.length > 0 ? "staffing-refused" : ticketsCreated > 0 && filedLocally === ticketsCreated ? "filed-locally" : ticketsCreated > 0 ? sessionShippedInTrace(events) > 0 ? "self-served" : "filed-not-staffed" : "no-work-filed";
+  const verdict = dispatched > 0 || personaSubagents.some((p) => p.ok) ? "staffed" : dispatchRefusals.length > 0 ? "staffing-refused" : ticketsCreated > 0 && filedLocally === ticketsCreated ? "filed-locally" : ticketsCreated > 0 ? sessionWorkInTrace(events) > 0 ? "self-served" : "filed-not-staffed" : "no-work-filed";
   return { ticketsCreated, filedLocally, dispatchAttempts, dispatched, dispatchRefusals, personaSubagents, verdict };
 }
 function formatDispatchRefusals(refusals) {
@@ -32672,9 +33063,9 @@ function workFiledNotStaffedVerdict(s) {
 function formatStaffingSummary(s, opts) {
   if (s.verdict === "no-work-filed" && s.dispatchAttempts === 0 && s.personaSubagents.length === 0) return [];
   const refused = s.dispatchRefusals.length ? ` (${s.dispatchRefusals.length} refused: ${formatDispatchRefusals(s.dispatchRefusals)})` : "";
-  const shipped = opts?.sessionShipped ?? 0;
-  const sessionDidIt = shipped > 0 && (s.verdict === "filed-not-staffed" || s.verdict === "staffing-refused" || s.verdict === "self-served");
-  const tail = sessionDidIt ? ` \u2014 the session itself changed the code (${shipped} write/commit call(s) succeeded); a cloud dispatch was not required` : s.verdict === "self-served" ? " \u2014 self-served: the session itself changed the code; a cloud dispatch was not required" : s.verdict === "filed-not-staffed" ? " \u2014 the work was filed but nobody is running it" : s.verdict === "filed-locally" ? " \u2014 filed on this device; the work runs here, by the session and its local sub-agents, and the tickets sync to the account when sync is on" : s.verdict === "staffing-refused" ? " \u2014 every attempt to staff the work was refused, so nobody is running it" : "";
+  const work = opts?.sessionWork ?? 0;
+  const sessionDidIt = work > 0 && (s.verdict === "filed-not-staffed" || s.verdict === "staffing-refused" || s.verdict === "self-served");
+  const tail = sessionDidIt ? ` \u2014 the session performed local work (${work} successful edit, commit, or push calls)` : s.verdict === "self-served" ? " \u2014 self-served: the session itself changed the code; a cloud dispatch was not required" : s.verdict === "filed-not-staffed" ? " \u2014 the work was filed but nobody is running it" : s.verdict === "filed-locally" ? " \u2014 filed on this device; the work runs here, by the session and its local sub-agents, and the tickets sync to the account when sync is on" : s.verdict === "staffing-refused" ? " \u2014 every attempt to staff the work was refused, so nobody is running it" : "";
   const lines = [
     `Staffing: ${s.ticketsCreated} ticket(s) filed \xB7 ${s.dispatched} dispatched${refused} \xB7 ${s.personaSubagents.length} persona sub-agent(s)${tail}`
   ];
@@ -33121,7 +33512,7 @@ var RUN_FINDING_REGISTRY = [
 // src/runFindings/runView.ts
 var HAND_OFF_DUE = "loop.hand_off_due";
 var ROLE_HANDOFF = "llm.role_handoff";
-var record3 = (v) => v && typeof v === "object" && !Array.isArray(v) ? v : {};
+var record4 = (v) => v && typeof v === "object" && !Array.isArray(v) ? v : {};
 function jsonBytes2(v) {
   try {
     return utf8ByteLength2(JSON.stringify(v ?? null));
@@ -33135,9 +33526,9 @@ function isCheck(ev) {
 }
 function callOf(ev, step, turn) {
   const ok = !ev.isError && !isFailedToolResult(ev.result);
-  const args = record3(ev.args);
+  const args = record4(ev.args);
   const write2 = ok && isCodeChangeTool(ev.label) && !isCacheAnswered(ev);
-  const err = record3(ev.result).error;
+  const err = record4(ev.result).error;
   return {
     step,
     turn,
@@ -33171,7 +33562,7 @@ function buildRunView(events, messages = []) {
       continue;
     }
     if (ev.label === STOPPED_TURN_STEP) {
-      const model = record3(ev.args).model;
+      const model = record4(ev.args).model;
       stopped = { step, ...typeof model === "string" ? { model } : {} };
       continue;
     }
@@ -33203,7 +33594,7 @@ function buildRunView(events, messages = []) {
       continue;
     }
     if (ev.label === "agent.message" && typeof ev.result === "string" && !current.text) current.text = ev.result;
-    else if (ev.label === ROLE_HANDOFF && typeof record3(ev.args).via === "string") current.handOffVia = record3(ev.args).via;
+    else if (ev.label === ROLE_HANDOFF && typeof record4(ev.args).via === "string") current.handOffVia = record4(ev.args).via;
     else if (ev.category === "tool") {
       const call2 = callOf(ev, step, current.index);
       current.calls.push(call2);
@@ -33319,6 +33710,8 @@ var VERDICT_RULES = [
   ["stopped", (s) => s.outcome === "stopped"],
   ["memory-answered", (s) => s.memoryOnlyRun],
   ["provider-failure", (s) => s.providerFailure],
+  ["spec-validation-incomplete", (s) => s.specValidationIncomplete === true],
+  ["spec-check-failed", (s) => s.specValidationFailed === true],
   ["unanswered-question", (s) => s.outcome === "unanswered-question"],
   ["no-tools-advertised", (s) => s.noToolsAdvertised],
   ["tool-not-advertised", (s) => s.narratedUnadvertised],
@@ -33335,7 +33728,7 @@ var VERDICT_RULES = [
 function decideLikelyCause(signals) {
   return VERDICT_RULES.find(([, matches]) => matches(signals))?.[0] ?? "inconclusive";
 }
-var succeeded6 = (ev) => ev.category === "tool" && !ev.isError && !isFailedToolResult(ev.result);
+var succeeded7 = (ev) => ev.category === "tool" && !ev.isError && !isFailedToolResult(ev.result);
 function recoveredFailuresInTrace(events) {
   const lastOnTarget = /* @__PURE__ */ new Map();
   for (const ev of events) if (ev.category === "tool") lastOnTarget.set(callTargetKey(ev), ev);
@@ -33343,7 +33736,7 @@ function recoveredFailuresInTrace(events) {
   for (const ev of events) {
     if (!ev.isError || ev.category !== "tool") continue;
     const last = lastOnTarget.get(callTargetKey(ev));
-    if (last && last !== ev && succeeded6(last)) recovered.add(ev);
+    if (last && last !== ev && succeeded7(last)) recovered.add(ev);
   }
   return recovered;
 }
@@ -33371,11 +33764,13 @@ function contextPressureLine(d) {
   if (d.tokensMeasured && d.promptTokenPeak > 0) parts.push(`prompt peaked at ${d.promptTokenPeak.toLocaleString("en-US")} tokens`);
   if (d.truncatedToolResults > 0) parts.push(`${d.truncatedToolResults} tool result(s) trimmed to the ${toolResultBudgetText()} budget by design`);
   if (!parts.length && d.largestToolResult) parts.push(`one ${d.largestToolResult.label} result was ${kb(d.largestToolResult.bytes)}`);
-  return `Context: pressure noted (${parts.join("; ")}) \u2014 no turn was cut short by it. The working transcript is held to a ${import_working14.HISTORY_TOKEN_BUDGET.toLocaleString("en-US")}-token budget on purpose, so a prompt above that figure is the design working, not a fault.`;
+  return `Context: pressure noted (${parts.join(", ")}) \u2014 no turn was cut short by it. The working transcript has a ${import_working14.HISTORY_TOKEN_BUDGET.toLocaleString("en-US")}-token budget.`;
 }
 function healthyVerdict(d) {
   const recovered = d.recoveredFailures ?? 0;
-  return recovered > 0 ? `Completed \u2014 ${recovered} failed step(s) recovered (each was followed by a successful retry of the same command or file). No unrecovered failure, no truncated or empty turns, and no context pressure. Nothing here needs triaging.` : "No failure signal \u2014 no errors, no truncated or empty turns, and no context pressure. Nothing here needs triaging.";
+  const pressure = d.contextPressureOnly ? " Context pressure was observed without a turn being cut short." : "";
+  const failure = recovered > 0 ? `Completed \u2014 ${recovered} failed step(s) recovered. No unrecovered failure was recorded.` : "No failure signal was recorded.";
+  return failure + pressure;
 }
 function verdictText(d) {
   const evermindAnswers = d.memoryAnswers?.filter((m) => m.source === "evermind") ?? [];
@@ -33386,6 +33781,10 @@ function verdictText(d) {
       return `ANSWERED FROM MEMORY \u2014 no model ran this turn. The reply was served by the memory-first short-circuit (${(d.memoryAnswers ?? []).map((m) => m.source === "evermind" ? `the project Evermind SSM${m.projectId != null ? ` of project #${m.projectId}` : ""}${m.version != null ? ` v${m.version}` : ""}` : m.source === "symbol-index" ? "the workspace symbol index" : m.source === "deterministic" ? `the deterministic workspace action ${m.actionId ?? ""}`.trim() : "the Q&A cache").join(", ")}), so zero turns, zero tokens and zero tool calls is EXPECTED, not a fault. ${evermindAnswers.length ? "The Evermind SSM cannot call tools and answers only from what it has learned, so it can neither fetch live data nor do work \u2014 if the reply was wrong, garbled or stale, that is the cause. Turn Memory off for this chat, or disable inference on that head." : (d.memoryAnswers ?? []).every((m) => m.source === "symbol-index") ? 'The request was only "where is X defined?" and the symbol index resolved every name, so the definitions were listed without a model; ask for anything more to reach the model.' : (d.memoryAnswers ?? []).every((m) => m.source === "symbol-index" || m.source === "deterministic") ? "A deterministic workspace action (the PreFetch gate) settled the request without a model; ask for anything more to reach the model." : "The reply is a replay of an earlier answer to the same question; ask a differently-worded question to reach the model."} Switching models changes nothing here.`;
     case "provider-failure":
       return d.providerFailure ? providerFailureVerdict(d.providerFailure) : "PROVIDER FAILURE \u2014 the run's last completion failed and was not recovered.";
+    case "spec-validation-incomplete":
+      return "PRD validation ended with unverified acceptance requirements.";
+    case "spec-check-failed":
+      return "One or more PRD acceptance checks exited with a failure.";
     case "no-tools-advertised":
       return 'NO TOOLS ADVERTISED \u2014 at least one turn was handed ZERO tool definitions, so it could not have emitted a call whatever it wanted to do. This is a catalog/config failure on our side, not a model fault: the gateway MCP catalog (`/llm/v1/mcp/tools`) failed to load, or no actions were registered for this surface. See the "Tools available to the model" line in the Chat diagnostics block for the fetch error. Switching models will not help.';
     case "tool-not-advertised":
@@ -33422,6 +33821,11 @@ function verdictText(d) {
 }
 function formatBrainDiagnostics(d) {
   const lines = ["--- Diagnostics ---", `Likely cause: ${verdictText(d)}`];
+  if (d.specValidation) {
+    const { completed, failed: failed4, pending, unverified } = d.specValidation;
+    lines.push(completed === 0 ? `PRD validation is unverified. No check completed. Background jobs still pending at settlement: ${pending}.` : `PRD validation recorded ${completed} completed check(s), including ${failed4} with a failing exit. Background jobs still pending at settlement: ${pending}.`);
+    if (unverified > 0) lines.push(`Declared acceptance checks still unverified: ${unverified}.`);
+  }
   const scope = d.turnCoveragePartial ? " (this session)" : "";
   lines.push(`Turns${scope}: ${d.turns} \xB7 Tool calls: ${d.toolCalls} \xB7 Errors: ${d.errors}${d.recoveredFailures ? ` (${d.recoveredFailures} recovered)` : ""}${d.loopExhausted ? " \xB7 LOOP EXHAUSTED" : ""}`);
   if (d.tokensMeasured) {
@@ -33443,7 +33847,7 @@ function formatBrainDiagnostics(d) {
   if (pressure) lines.push(pressure);
   lines.push(...d.progress ? formatRunProgress(d.progress, { running: d.running }) : []);
   if (d.memoryUsage) lines.push(formatMemoryUsage(d.memoryUsage));
-  lines.push(...d.staffing ? formatStaffingSummary(d.staffing, { sessionShipped: d.sessionShipped }) : []);
+  lines.push(...d.staffing ? formatStaffingSummary(d.staffing, { sessionWork: d.sessionWork }) : []);
   if (d.errorSteps?.length) {
     for (const e of d.errorSteps) {
       lines.push(
@@ -33869,18 +34273,23 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
   const noProgress = progress.spinning || spunEarlier(progress) !== null || progress.noEffect && !ctx.running;
   const staffing = staffingSummaryInTrace(events);
   const sessionShipped = sessionShippedInTrace(events);
+  const sessionWork = sessionWorkInTrace(events);
   const memoryUsage = memoryUsageInTrace(events);
-  const workFiledNotStaffed = sessionShipped === 0 && (staffing.verdict === "filed-not-staffed" || staffing.verdict === "staffing-refused");
+  const workFiledNotStaffed = sessionWork === 0 && (staffing.verdict === "filed-not-staffed" || staffing.verdict === "staffing-refused");
   const unresolvedAppFailures = unresolvedAppFailuresInTrace(events);
   const running = ctx.running === true;
   const providerFailure = running ? null : providerFailureInTrace(events, messages);
   const latest = splitRuns(events, messages).at(-1);
+  const validation = latest.events.filter((event) => event.label === "run.spec_validation").at(-1)?.args;
+  const specValidation = validation;
   const stopped = latest.events.some((event) => event.label === STOPPED_TURN_STEP);
   const answered2 = latest.messages.some((message2) => message2.role === "assistant" && message2.content.trim());
   const outcome = running ? void 0 : stopped ? "stopped" : answered2 ? "answered" : hasExplicitQuestionIntent(classifyRequest(latest.ask)) && latest.events.some((event) => event.label === "llm.complete") ? "unanswered-question" : void 0;
   const findingKinds = detectRunFindings(latest.events, latest.messages).findings.filter((finding4) => finding4.severity !== "info").map((finding4) => finding4.kind);
   const likelyCause = decideLikelyCause({
     running,
+    specValidationIncomplete: specValidation?.incomplete === true,
+    specValidationFailed: (specValidation?.failed ?? 0) > 0,
     memoryOnlyRun,
     providerFailure: providerFailure !== null,
     noToolsAdvertised,
@@ -33950,6 +34359,8 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
     contextPressureOnly,
     staffing,
     sessionShipped,
+    sessionWork,
+    ...typeof specValidation?.completed === "number" && typeof specValidation.failed === "number" && typeof specValidation.pending === "number" ? { specValidation: { completed: specValidation.completed, failed: specValidation.failed, pending: specValidation.pending, unverified: specValidation.unverified ?? 0, incomplete: specValidation.incomplete === true } } : {},
     memoryUsage,
     unresolvedAppFailures,
     providerFailure,
@@ -34002,212 +34413,6 @@ function buildBrainTriageReport(opts) {
     }
   }
   return lines.join("\n");
-}
-
-// src/shipVerification.ts
-var BASE_BRANCHES = /* @__PURE__ */ new Set(["main", "master"]);
-function parseGitShortStatus(output) {
-  if (!output) return null;
-  const header = output.split("\n").map((l) => l.trim()).find((l) => l.startsWith("##"));
-  if (!header) return null;
-  const body = header.slice(2).trim();
-  if (!body || body.startsWith("HEAD (no branch)")) return { branch: null, upstream: null, ahead: 0, behind: 0 };
-  const ahead = /\bahead (\d+)/.exec(body);
-  const behind = /\bbehind (\d+)/.exec(body);
-  const names = body.replace(/\s*\[.*$/, "").trim();
-  const [branch, upstream] = names.split("...");
-  return {
-    branch: branch?.trim() || null,
-    upstream: upstream?.trim() || null,
-    ahead: ahead ? Number(ahead[1]) : 0,
-    behind: behind ? Number(behind[1]) : 0
-  };
-}
-var GIT_PUSH = gitCommandPattern("push");
-var GIT_STATUS_CMD = gitCommandPattern("status");
-function commandOf(ev) {
-  const a = ev.args;
-  if (typeof a?.command === "string") return a.command;
-  if (typeof a?.cmd === "string") return a.cmd;
-  return "";
-}
-function outputOf(ev) {
-  const r = ev.result;
-  if (typeof r === "string") return r;
-  if (r && typeof r === "object") {
-    const o = r;
-    if (typeof o.output === "string") return o.output;
-    if (typeof o.stdout === "string") return o.stdout;
-  }
-  return "";
-}
-function succeeded7(ev) {
-  return !ev.isError && !isFailedToolResult(ev.result);
-}
-function isPush(ev) {
-  return ev.label === "git_push" || GIT_PUSH.test(commandOf(ev));
-}
-function dirtyPathsOf(output) {
-  const out = [];
-  for (const raw of output.split("\n")) {
-    const line = raw.replace(/\r$/, "");
-    if (line.length < 4 || line.startsWith("##")) continue;
-    let path = line.slice(3);
-    const arrow = path.indexOf(" -> ");
-    if (arrow >= 0) path = path.slice(arrow + 4);
-    path = path.trim().replace(/^"(.*)"$/, "$1");
-    if (path) out.push(path);
-  }
-  return out;
-}
-function touchedStillDirty(touched, dirty) {
-  const norm2 = (p) => p.replace(/\\/g, "/").replace(/^\.\//, "");
-  const d = dirty.map(norm2);
-  return touched.map(norm2).some((t) => d.some((p) => t === p || t.endsWith(`/${p}`)));
-}
-var DEFAULT_BRANCH_CMD = gitCommandPattern("remote|symbolic-ref|branch");
-function defaultBranchFromTrace(steps) {
-  for (let i = steps.length - 1; i >= 0; i -= 1) {
-    const ev = steps[i];
-    if (!succeeded7(ev) || !DEFAULT_BRANCH_CMD.test(commandOf(ev))) continue;
-    const out = outputOf(ev);
-    const m = /HEAD branch:\s*(\S+)/.exec(out) ?? /origin\/HEAD\s*->\s*origin\/(\S+)/.exec(out) ?? /^\s*refs\/remotes\/origin\/(\S+)\s*$/m.exec(out);
-    if (m?.[1] && m[1] !== "HEAD" && m[1] !== "(unknown)") return m[1];
-  }
-  return null;
-}
-async function onBaseBranch(git, touchedFiles, deltaTicketId) {
-  if (!git?.onBaseBranch || !touchedFiles.length || deltaTicketId == null) return false;
-  try {
-    return await git.onBaseBranch("", touchedFiles);
-  } catch {
-    return false;
-  }
-}
-function shippedToBaseBranch(events, opts) {
-  const steps = events.filter((e) => e.category === "tool");
-  const defaultBranch = opts?.defaultBranch?.trim() || defaultBranchFromTrace(steps);
-  const isBase = (branch) => BASE_BRANCHES.has(branch) || branch === defaultBranch;
-  let pushedAt = -1;
-  for (let i = 0; i < steps.length; i += 1) {
-    if (succeeded7(steps[i]) && isPush(steps[i])) pushedAt = i;
-  }
-  if (pushedAt < 0) return false;
-  const touched = opts?.touchedFiles ?? [];
-  for (let i = pushedAt; i < steps.length; i += 1) {
-    const ev = steps[i];
-    if (!succeeded7(ev)) continue;
-    const isStatus = i === pushedAt || ev.label === "git_status" || GIT_STATUS_CMD.test(commandOf(ev));
-    if (!isStatus) continue;
-    const output = outputOf(ev);
-    const status2 = parseGitShortStatus(output);
-    if (!status2) continue;
-    if (!(status2.branch && isBase(status2.branch) && status2.upstream && status2.ahead === 0)) continue;
-    if (touched.length > 0 && touchedStillDirty(touched, dirtyPathsOf(output))) continue;
-    return true;
-  }
-  return false;
-}
-
-// src/runStore/chatTickets.ts
-var MOVE_LABEL = /^(ticket[-_.]move|builtin_tasks_update)$/i;
-var stepSucceeded = (ev) => ev.category === "tool" && !ev.isError && !isFailedToolResult(ev.result);
-function ticketsCreatedInRun(trace2) {
-  const filings = [];
-  for (const ev of trace2) {
-    const local = isLocalTicketCreateLabel(ev.label);
-    if (!stepSucceeded(ev) || !local && ev.label !== SERVER_TICKET_CREATE_TOOL) continue;
-    const args = ev.args ?? {};
-    const { localId, syncId } = entityIdsOf(ev.result);
-    const syncRef = syncId != null ? syncIdText(syncId) : null;
-    const ref = localId ?? syncRef;
-    if (!ref || filings.some((f) => f.ref === ref)) continue;
-    filings.push({ ref, syncRef, ids: [localId, syncRef].filter((id) => id != null), args, local, handOff: args.reason === "hand_off" });
-  }
-  return filings;
-}
-function localTicketFilings(trace2) {
-  return ticketsCreatedInRun(trace2).filter((f) => f.local && f.handOff);
-}
-function localTicketsFiledInRun(trace2) {
-  return localTicketFilings(trace2).map((f) => f.ref);
-}
-function ticketMovesInRun(trace2) {
-  const moved = /* @__PURE__ */ new Map();
-  trace2.forEach((ev, at2) => {
-    if (!stepSucceeded(ev) || !MOVE_LABEL.test(ev.label)) return;
-    const a = ev.args ?? {};
-    if ((typeof a.id === "string" || typeof a.id === "number") && typeof a.status === "string") moved.set(String(a.id).trim(), { status: a.status, at: at2 });
-  });
-  return moved;
-}
-function latestStatus(moves, ids2) {
-  let latest;
-  for (const id of ids2) {
-    const move = moves.get(id);
-    if (move && (!latest || move.at > latest.at)) latest = move;
-  }
-  return latest?.status;
-}
-function runOwnedTicketRefs(trace2, deltaTicketId = null) {
-  const owned = /* @__PURE__ */ new Set();
-  if (deltaTicketId != null) owned.add(String(deltaTicketId));
-  for (const ev of trace2) {
-    if (ev.label !== TICKET_FROM_DELTA_TOOL || !stepSucceeded(ev)) continue;
-    const taskId = ev.args?.taskId;
-    if (typeof taskId === "number" || typeof taskId === "string") owned.add(String(taskId).trim());
-    const { syncId } = entityIdsOf(ev.result);
-    if (syncId != null) owned.add(syncIdText(syncId));
-  }
-  for (const id of ticketMovesInRun(trace2).keys()) owned.add(id);
-  for (const filing of ticketsCreatedInRun(trace2)) for (const id of filing.ids) owned.add(id);
-  return owned;
-}
-var listingScopeOf = (cell) => ({ cell, runId: cell.runId });
-var memoisedListings = /* @__PURE__ */ new WeakMap();
-function forgetChatTicketListing(cell) {
-  memoisedListings.delete(cell);
-}
-var changesListing = (ev) => ev.category === "llm" || ev.category === "tool" && (isMutatingPlatformTool(ev.label) || isLocalTicketCreateLabel(ev.label) || MOVE_LABEL.test(ev.label));
-function memoisedListing(scope, chatId) {
-  const { cell, runId } = scope;
-  const memo = memoisedListings.get(cell);
-  if (!memo || memo.runId !== runId || cell.runId !== runId || memo.chatId !== chatId) return void 0;
-  const at2 = cell.trace.lastIndexOf(memo.mark);
-  if (at2 < 0 || at2 < cell.runTraceFrom || at2 > memo.length - 1) return void 0;
-  for (let i = at2 + 1; i < cell.trace.length; i += 1) if (changesListing(cell.trace[i])) return void 0;
-  return memo.listed;
-}
-async function listChatTickets(req, chatId, report3, scope) {
-  if (!req.runTool) return null;
-  if (scope) {
-    const memo = memoisedListing(scope, chatId);
-    if (memo !== void 0) return memo;
-  }
-  const before = scope ? runTrace(scope.cell) : [];
-  const mark = before[before.length - 1];
-  const length = scope ? scope.cell.trace.length : 0;
-  let listed;
-  try {
-    const call2 = req.runTool(CHAT_TICKET_LIST_TOOL, { chatId });
-    listed = await (report3.timeoutMs != null ? bounded(report3.timeoutMs, call2) : call2);
-  } catch (e) {
-    listed = { ok: false, error: errorMessage(e) };
-  }
-  if (!isFailedToolResult(listed)) {
-    if (scope && mark && scope.cell.runId === scope.runId) memoisedListings.set(scope.cell, { runId: scope.runId, chatId, listed, mark, length });
-    else if (scope) memoisedListings.delete(scope.cell);
-    return listed;
-  }
-  const why = listed?.error;
-  report3.note?.({
-    ts: nowIso(),
-    category: "message",
-    label: report3.label,
-    args: { chatId },
-    result: `The chat's linked tickets could not be listed${typeof why === "string" ? ` (${why})` : ""}: ${report3.consequence}`
-  });
-  return null;
 }
 
 // src/run/brainCloseOut.ts
@@ -34402,6 +34607,10 @@ function isUnsettledAnswer(trace2) {
 // src/run/eventSink.ts
 function traceStepFor(event, ts) {
   switch (event.kind) {
+    case "run.spec_validation": {
+      const { completed, failed: failed4, pending, unverified, incomplete } = event;
+      return { ts, category: "message", label: event.kind, args: { completed, failed: failed4, pending, unverified, incomplete } };
+    }
     case "model.preflight":
       if (event.notices.length === 0) return null;
       return {
@@ -34851,12 +35060,12 @@ async function call(ports, name, args) {
   ports.step?.(name, { ...args, auto: true, reason: "hand_off" }, out, now() - start);
   return out;
 }
-function filedTicketRef(record4, local) {
-  const { localId, syncId } = entityIdsOf(record4);
+function filedTicketRef(record5, local) {
+  const { localId, syncId } = entityIdsOf(record5);
   if (!local) return syncId ?? void 0;
   if (localId) return localId;
   if (syncId != null) return syncId;
-  const opaque = record4?.id;
+  const opaque = record5?.id;
   return typeof opaque === "string" && opaque.trim() ? opaque : void 0;
 }
 async function fileTickets(plan, ports) {
@@ -34872,9 +35081,9 @@ async function fileTickets(plan, ports) {
       description: ticketDescription(task, plan.summary),
       taskType: "task"
     });
-    const record4 = toolResultRecord(out);
-    const failed4 = isFailed(record4 ?? out);
-    ids2.push(failed4 ? void 0 : filedTicketRef(record4, vocabulary.local));
+    const record5 = toolResultRecord(out);
+    const failed4 = isFailed(record5 ?? out);
+    ids2.push(failed4 ? void 0 : filedTicketRef(record5, vocabulary.local));
     if (!failed4) await ports.afterCreate?.(createTool, out).catch(() => void 0);
   }
   return ids2;
@@ -35625,8 +35834,8 @@ async function answerDeterministically(chatId, c, req, runId, runKey = chatId) {
 function recordAvoided(c, req, actionId, runId) {
   if (!req.recordAvoidedCall) return;
   const model = routedModel(c, req);
-  const record4 = req.recordAvoidedCall;
-  bestEffort(c, "avoided-call", () => record4({
+  const record5 = req.recordAvoidedCall;
+  bestEffort(c, "avoided-call", () => record5({
     source: "deterministic",
     actionId,
     ...runId ? { runId } : {},
@@ -35732,8 +35941,7 @@ function routeInputOf(req, request, followUp) {
     followUp,
     routing: req.pipeline ? { mode: req.pipeline.routing, threshold: req.pipeline.threshold, quickModel: req.pipeline.quickModel } : defaultPipelineRouting(),
     ...req.phaseModels ? { phaseModels: req.phaseModels } : {},
-    ...req.modelStrict ? { modelStrict: true } : {},
-    ...req.lineage ? { child: true } : {}
+    ...req.modelStrict ? { modelStrict: true } : {}
   };
 }
 function decideRoute(req, request, followUp) {
@@ -37522,24 +37730,14 @@ async function shipGatePreflight(run, name, args) {
     }
     const repo = repoArgOf(args);
     const out = await run.req.git.outgoing(repo);
-    const approved = out.diffHash ? approvedReviewFor(run, out.diffHash) : null;
-    if (!approved) {
-      const authors = authorModelsOf(run);
-      if (authors.length <= 1) {
-        const only = authors[0] ?? "(unknown)";
-        return {
-          refusal: {
-            ok: false,
-            error: `builtin_reviews_record refused: no reviewGate-approved independent review exists for the current diff, and only ONE model (${only}) has served this run \u2014 the review sub-run must be by a model that did not author the change (PRD 45 OD-1), so pushing cannot create it. Open a pull request for a human/other-model review, or finish the task and leave the ticket in review.`
-          }
-        };
-      }
-      if (out.unavailable || !out.diffHash || !(out.diff ?? "").trim()) return {};
-      const reviewed = await runReviewGate(run, out.diffHash, { repo, diff: out.diff ?? "", tool: "builtin_reviews_record" });
+    let approved = out.diffHash ? approvedReviewFor(run, out.diffHash) : null;
+    if (!approved && run.req.reviewer && !out.unavailable && out.diffHash && (out.diff ?? "").trim()) {
+      const reviewed = await runReviewGate(run, out.diffHash, { repo, diff: out.diff ?? "", tool: name });
       if (!reviewed.verdict.ok) return { refusal: { ok: false, error: reviewed.verdict.reason } };
-      args.reviewerRef = reviewed.review?.reviewerModel;
-      args.evidence = evidenceSummary(run);
-      return {};
+      approved = approvedReviewFor(run, out.diffHash);
+    }
+    if (!approved) {
+      return { refusal: { ok: false, error: `${name} refused: no independently approved review exists for the current diff.` } };
     }
     args.reviewerRef = approved.reviewerModel;
     args.evidence = evidenceSummary(run);
@@ -37928,20 +38126,20 @@ async function postEditDiagnostics(call2, verifier) {
   if (!verifier || !EDIT_TOOLS2.has(call2.name) || !succeeded8(call2.result)) return null;
   const paths = editedPathsOf(call2.name, call2.args);
   if (!paths.length) return null;
-  let record4;
+  let record5;
   try {
-    record4 = await verifier.diagnostics(paths);
+    record5 = await verifier.diagnostics(paths);
   } catch {
     return null;
   }
-  if (!record4 || record4.outcome !== "fail") return null;
-  return postEditNote2(record4);
+  if (!record5 || record5.outcome !== "fail") return null;
+  return postEditNote2(record5);
 }
-function postEditNote2(record4) {
-  const lines = record4.findings.slice(0, NOTE_ERRORS2).map((f) => `- ${f}`);
-  const more = record4.findings.length > NOTE_ERRORS2 ? `
-- \u2026and ${record4.findings.length - NOTE_ERRORS2} more` : "";
-  return `Post-edit check FAILED (${record4.name}${record4.exitCode != null ? `, exit ${record4.exitCode}` : ""}) \u2014 fix this before building on it:
+function postEditNote2(record5) {
+  const lines = record5.findings.slice(0, NOTE_ERRORS2).map((f) => `- ${f}`);
+  const more = record5.findings.length > NOTE_ERRORS2 ? `
+- \u2026and ${record5.findings.length - NOTE_ERRORS2} more` : "";
+  return `Post-edit check FAILED (${record5.name}${record5.exitCode != null ? `, exit ${record5.exitCode}` : ""}) \u2014 fix this before building on it:
 ${lines.join("\n")}${more}`;
 }
 
@@ -38080,7 +38278,7 @@ ${ship}` : ship;
     const contextWindowTokens = await run.windowFit.contextWindow?.();
     const trimmedOut = trimToolResult(call2.name, out ?? null, { advisory, contextWindowTokens });
     run.pending.ran(call2.id, { out, toolStart, isReadTool, threw: false, bytes: trimmedOut.bytes, truncated: trimmedOut.truncated, served: trimmedOut.served });
-    return { data: trimmedOut.content, isError: isFailedToolResult(out) };
+    return { data: trimmedOut.content, observedData: out, isError: isFailedToolResult(out) };
   };
 }
 
@@ -39969,8 +40167,8 @@ async function startRun(runKey, request, claim) {
         }).catch(() => void 0);
       } else if (agentRow && req.reportRunRecord) {
         const held = agentRow.model?.trim() ? agentRow : { ...agentRow, model: askedModelOf(req.model, trace2) };
-        const record4 = runOutcomeRequestOf(held, { clientRunId: c.runId, stopped: aborted, projectId: req.projectId });
-        if (record4) void req.reportRunRecord({ ...record4, steps: completedTurns(trace2).length, routingSignal: false }).catch((e) => unrecorded(c, e));
+        const record5 = runOutcomeRequestOf(held, { clientRunId: c.runId, stopped: aborted, projectId: req.projectId });
+        if (record5) void req.reportRunRecord({ ...record5, steps: completedTurns(trace2).length, routingSignal: false }).catch((e) => unrecorded(c, e));
       }
       reportRunEnd(c, req, { aborted, failed: c.error !== "" });
       c.persistStep = null;
@@ -42148,10 +42346,10 @@ function diagnosticsSignals(d) {
     out.push("\u2139\uFE0F No agents are invited into this chat (chats.list_agents is empty), so dispatched agents post nothing back here.");
   }
   const runs = d.runs;
-  const selfServed = (d.sessionShipped ?? 0) > 0;
+  const selfServed = (d.sessionWork ?? 0) > 0;
   if (runs && agentCount > 0 && runs.linkedRunnableTickets > 0 && runs.runs.length === 0 && selfServed) {
     out.push(
-      `\u2139\uFE0F Self-served: no agent was dispatched for this chat's ${runs.linkedRunnableTickets} runnable ticket(s) because the session did the work itself (${d.sessionShipped} successful write/commit/push call(s)).`
+      `\u2139\uFE0F Self-served: the session recorded ${d.sessionWork} successful local work calls. The execution snapshot shows no dispatch for its ${runs.linkedRunnableTickets} runnable ticket(s).`
     );
   } else if (runs && agentCount > 0 && runs.linkedRunnableTickets > 0 && runs.runs.length === 0) {
     const names = (d.agents ?? []).map((a) => a.name?.trim() || a.agentRef).join(", ");
@@ -42255,9 +42453,9 @@ function diagnosticsSignals(d) {
         `\u26A0\uFE0F AI token allowance is ${tokens.percentUsed}% used (${tokens.remaining.toLocaleString("en-US")} left, resets ${acct.resetsAt ?? "at period end"}). Long turns may be cut off by the cap before the model finishes.`
       );
     }
-    if (acct.modelFunding === "premium" && acct.canUsePremiumModels === false) {
+    if (acct.modelFunding === "premium" && acct.canUsePremiumModels === false && !ownFunded) {
       out.push(
-        `\u26A0\uFE0F Model "${acct.model}" is a premium/metered model but this plan is NOT entitled to premium models \u2014 the gateway rejects it (402) or falls back to the plan pool, which is why answers look weaker than the picked model implies.`
+        `\u2139\uFE0F The shared plan does not cover the configured premium model "${acct.model}". See the run trace for the model served and any provider failure or fallback.`
       );
     }
     if ((acct.byoProviders?.length ?? 0) === 0 && free && !ownFunded) {
@@ -42303,16 +42501,16 @@ function shortTime(iso) {
   if (!iso) return "\u2014";
   return iso.length >= 16 ? `${iso.slice(0, 10)} ${iso.slice(11, 16)}` : iso;
 }
-function runHistoryLines(runs, sessionShipped) {
+function runHistoryLines(runs, sessionWork) {
   if (!runs) {
     return [`- Execution history: not gathered (this surface did not read the chat's runs \u2014 absent is NOT the same as "nothing ran")`];
   }
-  if (runs.linkedRunnableTickets === 0) {
-    return ["- Execution history: no runnable ticket (task/epic/gap) is linked to this chat, so there is nothing here that could have been run."];
+  if (runs.linkedRunnableTickets === 0 && runs.runs.length === 0) {
+    return ["- Execution history: this snapshot shows zero linked runnable tickets and zero runs. Recent local work and ticket links may appear separately in the trace."];
   }
-  if (runs.runs.length === 0 && sessionShipped > 0) {
+  if (runs.runs.length === 0 && sessionWork > 0) {
     return [
-      `- Execution history: self-served \u2014 no cloud run against ${runs.linkedRunnableTickets} linked runnable ticket(s); this session changed the code itself (${sessionShipped} successful write/commit/push call(s)), so no dispatch was needed.`
+      `- Execution history: self-served. The snapshot shows zero runs for ${runs.linkedRunnableTickets} linked runnable ticket(s). The trace records ${sessionWork} successful local work calls.`
     ];
   }
   if (runs.runs.length === 0) {
@@ -42406,6 +42604,9 @@ function formatChatDiagnostics(d) {
     lines.push(
       `- History (loaded): ${d.history.messages} message(s) \xB7 ${d.history.steps} run step(s) \xB7 full dialogue: ${d.history.location ?? "not reported by this surface"}`
     );
+    if (d.history.steps === 0 && d.history.traceSteps) {
+      lines.push(`- Run trace: ${d.history.traceSteps} event(s) available outside the loaded history rows.`);
+    }
   }
   lines.push(`- Chat's project: ${fmtProject(d.projectId, d.projectName)}`);
   lines.push(
@@ -42483,9 +42684,15 @@ function formatChatDiagnostics(d) {
       lines.push(`  - \u2026and ${tickets.length - MAX_LISTED_LINKED_TICKETS} more linked ticket(s)`);
     }
   } else {
-    lines.push("- Linked tickets (0)");
+    lines.push(d.ticketSnapshotAvailable === false ? "- Linked tickets: snapshot unavailable." : "- Linked tickets (0 in this snapshot)");
   }
-  lines.push(...runHistoryLines(d.runs, d.sessionShipped ?? 0));
+  for (const receipt of d.ticketLinksOutsideSnapshot ?? []) {
+    lines.push(`- Run trace: link recorded for ticket #${receipt.ticketId} on chat #${receipt.chatId}. The ticket is absent from the linked-ticket snapshot.`);
+  }
+  lines.push(...runHistoryLines(d.runs, d.sessionWork ?? 0));
+  if ((d.sessionWork ?? 0) > 0) {
+    lines.push(d.sessionShipped ? "- Delivery evidence: the trace confirms a push to the base branch." : "- Delivery evidence: local work recorded. A push to the base branch is unverified.");
+  }
   const signals = diagnosticsSignals(d);
   if (signals.length) {
     lines.push("", "### Signals");
@@ -42582,6 +42789,20 @@ function safely(read2, fallback) {
     return Promise.resolve(fallback);
   }
 }
+function ticketLinksOutsideSnapshot(events, tickets) {
+  const refs = new Set(tickets.map((ticket) => ticket.ref));
+  const receipts = /* @__PURE__ */ new Map();
+  for (const event of events) {
+    if (event.category !== "tool" || !isTicketWriteTool(event.label) || event.isError || isFailedToolResult(event.result)) continue;
+    const link = toolResultRecord(toolResultRecord(event.result)?.chatLink);
+    if (link?.linked !== true || typeof link.chatId !== "number" || !Number.isSafeInteger(link.chatId)) continue;
+    const { syncId } = entityIdsOf(event.result);
+    if (!syncId || refs.has(String(syncId))) continue;
+    const ticketId = String(syncId);
+    receipts.set(`${link.chatId}/${ticketId}`, { ticketId, chatId: link.chatId });
+  }
+  return [...receipts.values()].slice(-5);
+}
 function toEvermind(head) {
   if (!head) return null;
   return {
@@ -42598,7 +42819,7 @@ async function gatherChatDiagnostics(src) {
   const [projectName, agents, tickets, runs, head, plan, apiVersion] = await Promise.all([
     safely(src.readProjectName, null),
     safely(src.readAgents, []),
-    safely(src.readTickets, []),
+    safely(src.readTickets, null),
     safely(src.readRuns, null),
     safely(src.readEvermind, null),
     safely(src.readPlan, null),
@@ -42651,6 +42872,7 @@ async function gatherChatDiagnostics(src) {
       // of the conversation is not inflated by the run's steps.
       messages: msgs.filter((m) => !isStepMessage(m)).length,
       steps: msgs.filter(isStepMessage).length,
+      ...merged.length ? { traceSteps: merged.length } : {},
       location: src.historyLocation?.trim() || null
     },
     chatVisibility: src.chatVisibility ?? null,
@@ -42675,7 +42897,10 @@ async function gatherChatDiagnostics(src) {
     })),
     runs,
     sessionShipped,
-    tickets: tickets.map((tk) => ({ kind: tk.kind, ref: tk.ref, label: tk.label, linkType: tk.linkType, status: tk.status })),
+    sessionWork: merged.length ? sessionWorkInTrace(merged) : null,
+    ticketSnapshotAvailable: tickets !== null,
+    ...tickets ? { ticketLinksOutsideSnapshot: ticketLinksOutsideSnapshot(merged, tickets) } : {},
+    tickets: (tickets ?? []).map((tk) => ({ kind: tk.kind, ref: tk.ref, label: tk.label, linkType: tk.linkType, status: tk.status })),
     account,
     spend: src.spend ?? null,
     tools: src.tools ? {
@@ -42698,7 +42923,7 @@ async function gatherChatDiagnostics(src) {
 }
 
 // src/chatDiagnosticsReport.ts
-var CHAT_DIAGNOSTICS_SCHEMA_VERSION = 2;
+var CHAT_DIAGNOSTICS_SCHEMA_VERSION = 3;
 function buildChatDiagnosticsReport(input) {
   const { diagnostics, events, messages, model, running = false, surface: surface2, now } = input;
   const configuredModel = model && model !== "default" ? model : null;

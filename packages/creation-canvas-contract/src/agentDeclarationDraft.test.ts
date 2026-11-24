@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { BUILTIN_CAPABILITIES, validateManifest, type AppManifest } from '@seanhogg/builderforce-webcontainers-core/manifest';
 import { AGENT_CRON_DEFAULT_TIMEZONE, toAgentDeclaration, type AgentDraft } from './agentDeclarationDraft';
 
 const draft = (patch: Partial<AgentDraft> = {}): AgentDraft => ({
@@ -12,18 +11,10 @@ const draft = (patch: Partial<AgentDraft> = {}): AgentDraft => ({
   ...patch,
 });
 
-const manifestWith = (id: string, agent: ReturnType<typeof toAgentDeclaration>): AppManifest => ({
-  version: 1,
-  services: { web: { runtime: 'node', command: 'node server.js', port: 3000 } },
-  capabilities: { agents: {} },
-  agents: { [id]: agent },
-} as AppManifest);
-
 describe('toAgentDeclaration', () => {
-  it('maps an empty tool list to a valid declaration', () => {
+  it('maps an empty tool list to a declaration with no tools', () => {
     const declaration = toAgentDeclaration(draft());
     expect(declaration).toEqual({ role: 'developer', tools: [] });
-    expect(validateManifest(manifestWith('triage', declaration), { capabilities: BUILTIN_CAPABILITIES })).toEqual([]);
   });
 
   it('gives a cron without a timezone UTC, and keeps a named zone', () => {

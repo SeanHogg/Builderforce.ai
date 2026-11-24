@@ -26,13 +26,13 @@ import {
   type ManifestTargetId,
 } from '@seanhogg/builderforce-webcontainers-core/manifest';
 import { MANIFEST_PATH, MANIFEST_READ_PATHS } from '@builderforce/app-detect/manifest';
-import { ownedProjectId } from './appBlueprintToolCatalog';
+import { ownedProjectId } from './ownedProjectId';
 import { ReplayRouteError, replayRoute, type BuiltinCtx, type BuiltinTool } from './builtinToolContext';
 
 /**
  * The caller's own project, or a tool error — THE access check a project-scoped manifest
- * (or `runtime.agents.*`) tool runs before it reads or writes anything. It is the blueprint
- * catalog's tenant boundary, re-exported here so there is exactly one.
+ * (or `runtime.agents.*`) tool runs before it reads or writes anything. It is the same tenant
+ * boundary the blueprint catalog uses (`./ownedProjectId`), re-exported here so there is exactly one.
  */
 export { ownedProjectId };
 

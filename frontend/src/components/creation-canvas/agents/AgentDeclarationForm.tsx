@@ -6,9 +6,14 @@ import {
   type AgentDraftTrigger,
   type AgentDraftTriggerKind,
 } from '@builderforce/creation-canvas-contract';
-import { AGENT_BUDGET_KEYS } from '@seanhogg/builderforce-webcontainers-core/manifest';
 import { Select } from '@/components/Select';
-import type { AgentDeclarationRefusal } from '@/lib/canvas/appAgentDeclaration';
+import {
+  agentDraftGaps,
+  agentDraftPreview,
+  agentDraftSendable,
+  type AgentDeclarationRefusal,
+} from '@/lib/canvas/appAgentDeclaration';
+import { AGENT_BUDGET_KEYS, manifestAgentDeclarationRows, type AgentBudgetKey } from '@/lib/canvas/manifestAgents';
 import { btnPrimary, btnSubtle, inputStyle, labelStyle } from '@/components/workforce/CloudAgentFormFields';
 
 /**
@@ -24,10 +29,10 @@ import { btnPrimary, btnSubtle, inputStyle, labelStyle } from '@/components/work
  *
  * The tool list comes in as `toolOptions` — the catalogs the caller may run — and is never
  * spelled out here. Validation is never done here either: the server merges the draft into
- * the manifest, runs the runtime's validator and hands its refusal back as `refusal`.
+ * the manifest, runs the runtime's validator and hands its typed issues back as `refusal`.
+ * What the form says before sending (`agentDraftGaps`) is a hint for the reader, decided in
+ * `appAgentDeclaration`, and the preview is the draft read the way the room will read it.
  */
-
-export type AgentBudgetKey = (typeof AGENT_BUDGET_KEYS)[number];
 
 /** One trigger as its inputs hold it: every field kept, so switching kind loses nothing typed. */
 export interface AgentFormTrigger {
@@ -108,6 +113,9 @@ export function AgentDeclarationForm({ form, onChange, toolOptions, submitting, 
     onChange({ triggers: form.triggers.map((trigger, at) => (at === index ? { ...trigger, ...patch } : trigger)) });
   const toggleTool = (tool: string) =>
     onChange({ tools: form.tools.includes(tool) ? form.tools.filter((entry) => entry !== tool) : [...form.tools, tool] });
+  const draft = agentFormToDraft(form);
+  const gaps = agentDraftGaps(draft, toolOptions);
+  const previewRows = manifestAgentDeclarationRows(agentDraftPreview(draft), t('noRole'));
 
   return (
     <form
@@ -129,6 +137,7 @@ export function AgentDeclarationForm({ form, onChange, toolOptions, submitting, 
           <input id="agent-form-role" style={{ ...inputStyle, flex: 1, width: 'auto' }} value={form.roleKey} onChange={(e) => onChange({ roleKey: e.target.value })} placeholder={t('rolePlaceholder')} />
         </div>
         <p style={help}>{t('roleHelp')}</p>
+        {gaps.missingRole && <p role="status" data-testid="agent-form-clarify-role" style={{ ...help, color: 'var(--text-strong)' }}>{t('clarifyRole')}</p>}
       </div>
 
       <div>
@@ -152,6 +161,11 @@ export function AgentDeclarationForm({ form, onChange, toolOptions, submitting, 
                 ))}
               </div>
             )}
+        {gaps.unknownTools.length > 0 && (
+          <ul role="status" data-testid="agent-form-unknown-tools" style={{ ...help, color: 'var(--text-strong)', paddingLeft: 18 }}>
+            {gaps.unknownTools.map((tool) => <li key={tool}>{t('unknownTool', { tool })}</li>)}
+          </ul>
+        )}
         <p style={help}>{t('toolsHelp')}</p>
       </fieldset>
 
@@ -194,18 +208,30 @@ export function AgentDeclarationForm({ form, onChange, toolOptions, submitting, 
         <p style={help}>{t('budgetHelp')}</p>
       </fieldset>
 
+      <section data-testid="agent-form-preview">
+        <h3 style={labelStyle}>{t('preview')}</h3>
+        <dl style={{ margin: 0, display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '4px 12px', fontSize: 'var(--font-size-small)' }}>
+          {previewRows.map(([field, value]) => (
+            <div key={field} style={{ display: 'contents' }}>
+              <dt style={{ color: 'var(--muted)' }}>{t(`field.${field}`)}</dt>
+              <dd style={{ margin: 0, color: 'var(--text-strong)' }}>{value}</dd>
+            </div>
+          ))}
+        </dl>
+      </section>
+
       {refusal && (
         <div role="alert" data-testid="agent-form-refusal" style={{ fontSize: 'var(--font-size-small)', color: 'var(--danger, var(--text-strong))' }}>
           <strong>{t('refused')}</strong> {refusal.error}
           {refusal.issues.length > 0 && <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
-            {refusal.issues.map((issue) => <li key={`${issue.path}:${issue.message}`}><code>{issue.path}</code> {issue.message}</li>)}
+            {refusal.issues.map((issue) => <li key={`${issue.path}:${issue.message}`} data-issue-code={issue.code}><code>{issue.path}</code> {issue.message}</li>)}
           </ul>}
         </div>
       )}
 
       <div style={{ ...row, justifyContent: 'flex-end' }}>
         <button type="button" style={btnSubtle} onClick={onCancel}>{t('cancel')}</button>
-        <button type="submit" style={btnPrimary} disabled={submitting || !form.id.trim() || !form.roleKey.trim()}>
+        <button type="submit" style={btnPrimary} disabled={submitting || !agentDraftSendable(gaps)}>
           {submitting ? t('submitting') : t('submit')}
         </button>
       </div>

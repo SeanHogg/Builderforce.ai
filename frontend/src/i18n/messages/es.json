@@ -22173,6 +22173,66 @@
     "loading": "Cargando currículum…",
     "unavailable": "Este enlace de currículum no está disponible."
   },
+  "agentForm": {
+    "title": "Definir un agente en la app",
+    "intro": "El agente se declara en el manifiesto de la app (builderforce.json). Indica un rol o una carga de trabajo y el host elige el modelo.",
+    "declared": "Agente «{id}» declarado en el manifiesto de la app.",
+    "id": "Id del agente",
+    "idPlaceholder": "p. ej. triage",
+    "role": "Rol",
+    "roleKind": "Rol o carga de trabajo",
+    "roleKindOption": {
+      "role": "Rol",
+      "workload": "Carga de trabajo"
+    },
+    "rolePlaceholder": "p. ej. developer",
+    "roleHelp": "Un rol o una carga de trabajo, nunca un id de modelo: el host lo dirige a un modelo.",
+    "instructions": "Archivo de instrucciones",
+    "instructionsPlaceholder": "p. ej. agents/triage.md",
+    "tools": "Herramientas",
+    "toolsLoading": "Cargando las herramientas que puedes conceder…",
+    "toolsEmpty": "No hay herramientas disponibles para conceder.",
+    "toolsHelp": "Concede solo lo que el agente necesita. Se permite no conceder ninguna.",
+    "triggers": "Disparadores",
+    "triggerKind": "Tipo de disparador",
+    "trigger": {
+      "manual": "Manual",
+      "cron": "Programado",
+      "service": "Evento de servicio"
+    },
+    "cron": "Expresión cron",
+    "cronPlaceholder": "0 9 * * 1-5",
+    "timezone": "Zona horaria",
+    "timezonePlaceholder": "p. ej. Europe/Madrid",
+    "service": "Servicio",
+    "servicePlaceholder": "p. ej. github",
+    "event": "Evento",
+    "eventPlaceholder": "p. ej. issue.opened",
+    "removeTrigger": "Quitar",
+    "addTrigger": "Añadir disparador",
+    "triggersHelp": "Sin disparadores, el agente solo se ejecuta cuando se inicia.",
+    "budget": "Presupuesto",
+    "budgetKey": {
+      "tokens": "Tokens",
+      "usd": "USD",
+      "steps": "Pasos"
+    },
+    "budgetHelp": "Deja un campo vacío para no fijar límite.",
+    "preview": "Lo que se declarará",
+    "noRole": "Aún sin rol",
+    "field": {
+      "role": "Rol",
+      "workload": "Carga de trabajo",
+      "instructions": "Instrucciones",
+      "memory": "Memoria"
+    },
+    "clarifyRole": "¿Qué rol debe desempeñar este agente? Indica un rol como developer o una carga de trabajo como summarize.",
+    "unknownTool": "«{tool}» no está en el catálogo de herramientas que puedes conceder.",
+    "refused": "Se rechazó la declaración.",
+    "cancel": "Cancelar",
+    "submitting": "Declarando…",
+    "submit": "Declarar agente"
+  },
   "roomAgents": {
     "summary": "{role} · {state}",
     "noRole": "Sin rol declarado",
@@ -23796,6 +23856,17 @@
         "label": "Idea",
         "placeholder": "Anota una idea. Intro la guarda como tarjeta; «Preguntar a Brain» la envía a Brain.",
         "submit": "Anotar"
+      },
+      "agentChoice": {
+        "label": "Qué tipo de agente",
+        "teammateOnBoard": {
+          "label": "Un compañero en el tablero",
+          "title": "Brain sienta a un agente en este tablero para trabajar contigo"
+        },
+        "featureInApp": {
+          "label": "Una función de la app",
+          "title": "Declara un agente en el manifiesto de la app para que la propia app lo ejecute"
+        }
       }
     },
     "sendBrain": "Enviar a Brain",
@@ -38865,6 +38936,7 @@
     "findingsEmpty": "No hay hallazgos abiertos en {scope}.",
     "findingKinds": {
       "godModule": "Módulo dios",
+      "ioInLoop": "E/S dentro de un bucle",
       "cycle": "Ciclo",
       "cloneGroup": "Grupo de clones",
       "nearDuplicate": "Casi duplicado",
@@ -38916,6 +38988,7 @@
       "unlayered": "Asigna estos archivos a una capa: {items}.",
       "unpartitioned": "Asigna estos archivos a una capa: {items}.",
       "godModule": "Divide {items} en módulos con una sola tarea cada uno y dentro de los límites de tamaño ({linesLimit} líneas, {exportsLimit} exportaciones, complejidad de la peor función {complexityLimit}); mantén el comportamiento y ejecuta las comprobaciones.",
+      "ioInLoop": "Agrupa la E/S de los bucles de {items}: reúne primero las claves y luego haz una sola llamada masiva o un Promise.all acotado por bloques; mantén el comportamiento y ejecuta las comprobaciones.",
       "generic": "Investiga este hallazgo y corrígelo: {items}."
     },
     "nodePanelTitle": "Detalles",
@@ -39740,6 +39813,9 @@
           "godModuleReason": "Este archivo hace demasiadas cosas. Supera al menos un límite de tamaño, así que todos los cambios caen aquí y es difícil de probar o revisar.",
           "godModuleGood": "Una tarea por archivo, con cada barra a la izquierda de su marca de límite.",
           "godModuleAfter": "Un archivo por tarea, cada uno dentro de los límites.",
+          "ioInLoopReason": "Este archivo espera una llamada de red, archivo o base de datos en cada vuelta del bucle, así que el tiempo crece con cada elemento (N+1).",
+          "ioInLoopGood": "Reúne primero las claves y luego haz una sola llamada agrupada (una consulta masiva, `Promise.all` o bloques de tamaño fijo).",
+          "ioInLoopAfter": "Un viaje de ida y vuelta por bloque, no por elemento.",
           "genericReason": "La revisión lo marcó como algo que corregir.",
           "genericGood": "Tras la corrección no queda ningún hallazgo de este tipo.",
           "genericAfter": "El agente propone el cambio en una rama y tú revisas la diferencia real antes de fusionar."

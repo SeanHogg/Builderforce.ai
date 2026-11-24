@@ -98,8 +98,8 @@ export function CodeLayer({ slotKey, target, reader, labels, onOpenSource, onClo
     const { from, to } = visibleWindow(lines.length, scrollTop, ROW_PX, VIEW_ROWS);
     const virtual = lines.length > VIRTUAL_AFTER;
     const last = first + Math.max(lines.length, 1) - 1;
-    const where = `${target.path}:${target.startLine}`;
     const openLine = scrollLine ?? target.startLine;
+    const where = `${target.path}:${openLine}`;
     const gutter = `${String(last).length + 1}ch`;
 
     return (

@@ -52,6 +52,7 @@ describe('detectPatterns', () => {
   it('flags awaited I/O inside a loop body, not batched or I/O-free loops', () => {
     expect(detectPatterns(facts({ text: 'for (const x of xs) { await fetch(x) }' }))).toEqual(['io-in-loop']);
     expect(detectPatterns(facts({ text: 'while (more) { const r = await db.query(sql); }' }))).toEqual(['io-in-loop']);
+    expect(detectPatterns(facts({ text: 'for await (const page of pages) { await fetch(page.next) }' }))).toEqual(['io-in-loop']);
     expect(detectPatterns(facts({ text: 'await Promise.all(xs.map(fetch))' }))).toEqual(['batched-io']);
     expect(detectPatterns(facts({ text: 'for (const x of xs) { total += x; }\nawait fetch(url)' }))).toEqual([]);
   });

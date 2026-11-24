@@ -43,7 +43,7 @@ import {
   servedIdentity,
   servedOnDevice,
   webGpuSupport
-} from "./chunk-PRXY4IDM.mjs";
+} from "./chunk-AU6L4FBN.mjs";
 import {
   PREFLIGHT_PROBE_MS,
   bounded,
@@ -59,7 +59,7 @@ import {
   settledWithin,
   steerMetadata,
   within
-} from "./chunk-P7CQYU5O.mjs";
+} from "./chunk-JSZK5XSV.mjs";
 import {
   BrainRequestError,
   LOCAL_ENGINE_FAILURE_CODES,
@@ -77,7 +77,7 @@ import {
   hasTools,
   memoizedProbe,
   reportPageEngineFailure
-} from "./chunk-SLI7C3HD.mjs";
+} from "./chunk-A5TKRKGR.mjs";
 import {
   ANTHROPIC_RELEASES,
   BACK_TO_BACK_AT,
@@ -364,6 +364,7 @@ import {
   selectRecords,
   serverChatIdOf,
   sessionShippedInTrace,
+  sessionWorkInTrace,
   shellPublishHint,
   shipDirective,
   shipNudge,
@@ -410,7 +411,7 @@ import {
   workFiledNotStaffedVerdict,
   workFinishPorts,
   workSupportsRoutingSample
-} from "./chunk-JYYDIZ5A.mjs";
+} from "./chunk-ZLFUZGCK.mjs";
 import {
   ASK_USER_TOOL,
   ASK_USER_TOOL_SPEC,
@@ -439,13 +440,13 @@ import {
   stripAskUser,
   stripReasoningTagsFromText,
   thoughtTextOf
-} from "./chunk-3DTCUCDH.mjs";
+} from "./chunk-ECIV2BG5.mjs";
 import {
   HELP_COMMAND_ID,
   createComposerCommandRegistry,
   describeComposerProblem,
   parseComposerInput
-} from "./chunk-3H4JVERX.mjs";
+} from "./chunk-ZICBMLQM.mjs";
 
 // src/config.tsx
 import { createContext, useContext, useEffect, useMemo } from "react";
@@ -10618,6 +10619,10 @@ function isUnsettledAnswer(trace2) {
 // src/run/eventSink.ts
 function traceStepFor(event, ts) {
   switch (event.kind) {
+    case "run.spec_validation": {
+      const { completed, failed: failed2, pending, unverified, incomplete } = event;
+      return { ts, category: "message", label: event.kind, args: { completed, failed: failed2, pending, unverified, incomplete } };
+    }
     case "model.preflight":
       if (event.notices.length === 0) return null;
       return {
@@ -11952,8 +11957,7 @@ function routeInputOf(req, request, followUp) {
     followUp,
     routing: req.pipeline ? { mode: req.pipeline.routing, threshold: req.pipeline.threshold, quickModel: req.pipeline.quickModel } : defaultPipelineRouting(),
     ...req.phaseModels ? { phaseModels: req.phaseModels } : {},
-    ...req.modelStrict ? { modelStrict: true } : {},
-    ...req.lineage ? { child: true } : {}
+    ...req.modelStrict ? { modelStrict: true } : {}
   };
 }
 function decideRoute(req, request, followUp) {
@@ -13742,24 +13746,14 @@ async function shipGatePreflight(run, name, args) {
     }
     const repo = repoArgOf(args);
     const out = await run.req.git.outgoing(repo);
-    const approved = out.diffHash ? approvedReviewFor(run, out.diffHash) : null;
-    if (!approved) {
-      const authors = authorModelsOf(run);
-      if (authors.length <= 1) {
-        const only = authors[0] ?? "(unknown)";
-        return {
-          refusal: {
-            ok: false,
-            error: `builtin_reviews_record refused: no reviewGate-approved independent review exists for the current diff, and only ONE model (${only}) has served this run \u2014 the review sub-run must be by a model that did not author the change (PRD 45 OD-1), so pushing cannot create it. Open a pull request for a human/other-model review, or finish the task and leave the ticket in review.`
-          }
-        };
-      }
-      if (out.unavailable || !out.diffHash || !(out.diff ?? "").trim()) return {};
-      const reviewed = await runReviewGate(run, out.diffHash, { repo, diff: out.diff ?? "", tool: "builtin_reviews_record" });
+    let approved = out.diffHash ? approvedReviewFor(run, out.diffHash) : null;
+    if (!approved && run.req.reviewer && !out.unavailable && out.diffHash && (out.diff ?? "").trim()) {
+      const reviewed = await runReviewGate(run, out.diffHash, { repo, diff: out.diff ?? "", tool: name });
       if (!reviewed.verdict.ok) return { refusal: { ok: false, error: reviewed.verdict.reason } };
-      args.reviewerRef = reviewed.review?.reviewerModel;
-      args.evidence = evidenceSummary(run);
-      return {};
+      approved = approvedReviewFor(run, out.diffHash);
+    }
+    if (!approved) {
+      return { refusal: { ok: false, error: `${name} refused: no independently approved review exists for the current diff.` } };
     }
     args.reviewerRef = approved.reviewerModel;
     args.evidence = evidenceSummary(run);
@@ -14300,7 +14294,7 @@ ${ship}` : ship;
     const contextWindowTokens = await run.windowFit.contextWindow?.();
     const trimmedOut = trimToolResult(call2.name, out ?? null, { advisory, contextWindowTokens });
     run.pending.ran(call2.id, { out, toolStart, isReadTool, threw: false, bytes: trimmedOut.bytes, truncated: trimmedOut.truncated, served: trimmedOut.served });
-    return { data: trimmedOut.content, isError: isFailedToolResult(out) };
+    return { data: trimmedOut.content, observedData: out, isError: isFailedToolResult(out) };
   };
 }
 
@@ -18377,10 +18371,10 @@ function diagnosticsSignals(d) {
     out.push("\u2139\uFE0F No agents are invited into this chat (chats.list_agents is empty), so dispatched agents post nothing back here.");
   }
   const runs = d.runs;
-  const selfServed = (d.sessionShipped ?? 0) > 0;
+  const selfServed = (d.sessionWork ?? 0) > 0;
   if (runs && agentCount > 0 && runs.linkedRunnableTickets > 0 && runs.runs.length === 0 && selfServed) {
     out.push(
-      `\u2139\uFE0F Self-served: no agent was dispatched for this chat's ${runs.linkedRunnableTickets} runnable ticket(s) because the session did the work itself (${d.sessionShipped} successful write/commit/push call(s)).`
+      `\u2139\uFE0F Self-served: the session recorded ${d.sessionWork} successful local work calls. The execution snapshot shows no dispatch for its ${runs.linkedRunnableTickets} runnable ticket(s).`
     );
   } else if (runs && agentCount > 0 && runs.linkedRunnableTickets > 0 && runs.runs.length === 0) {
     const names = (d.agents ?? []).map((a) => a.name?.trim() || a.agentRef).join(", ");
@@ -18484,9 +18478,9 @@ function diagnosticsSignals(d) {
         `\u26A0\uFE0F AI token allowance is ${tokens.percentUsed}% used (${tokens.remaining.toLocaleString("en-US")} left, resets ${acct.resetsAt ?? "at period end"}). Long turns may be cut off by the cap before the model finishes.`
       );
     }
-    if (acct.modelFunding === "premium" && acct.canUsePremiumModels === false) {
+    if (acct.modelFunding === "premium" && acct.canUsePremiumModels === false && !ownFunded) {
       out.push(
-        `\u26A0\uFE0F Model "${acct.model}" is a premium/metered model but this plan is NOT entitled to premium models \u2014 the gateway rejects it (402) or falls back to the plan pool, which is why answers look weaker than the picked model implies.`
+        `\u2139\uFE0F The shared plan does not cover the configured premium model "${acct.model}". See the run trace for the model served and any provider failure or fallback.`
       );
     }
     if ((acct.byoProviders?.length ?? 0) === 0 && free && !ownFunded) {
@@ -18532,16 +18526,16 @@ function shortTime(iso) {
   if (!iso) return "\u2014";
   return iso.length >= 16 ? `${iso.slice(0, 10)} ${iso.slice(11, 16)}` : iso;
 }
-function runHistoryLines(runs, sessionShipped) {
+function runHistoryLines(runs, sessionWork) {
   if (!runs) {
     return [`- Execution history: not gathered (this surface did not read the chat's runs \u2014 absent is NOT the same as "nothing ran")`];
   }
-  if (runs.linkedRunnableTickets === 0) {
-    return ["- Execution history: no runnable ticket (task/epic/gap) is linked to this chat, so there is nothing here that could have been run."];
+  if (runs.linkedRunnableTickets === 0 && runs.runs.length === 0) {
+    return ["- Execution history: this snapshot shows zero linked runnable tickets and zero runs. Recent local work and ticket links may appear separately in the trace."];
   }
-  if (runs.runs.length === 0 && sessionShipped > 0) {
+  if (runs.runs.length === 0 && sessionWork > 0) {
     return [
-      `- Execution history: self-served \u2014 no cloud run against ${runs.linkedRunnableTickets} linked runnable ticket(s); this session changed the code itself (${sessionShipped} successful write/commit/push call(s)), so no dispatch was needed.`
+      `- Execution history: self-served. The snapshot shows zero runs for ${runs.linkedRunnableTickets} linked runnable ticket(s). The trace records ${sessionWork} successful local work calls.`
     ];
   }
   if (runs.runs.length === 0) {
@@ -18635,6 +18629,9 @@ function formatChatDiagnostics(d) {
     lines.push(
       `- History (loaded): ${d.history.messages} message(s) \xB7 ${d.history.steps} run step(s) \xB7 full dialogue: ${d.history.location ?? "not reported by this surface"}`
     );
+    if (d.history.steps === 0 && d.history.traceSteps) {
+      lines.push(`- Run trace: ${d.history.traceSteps} event(s) available outside the loaded history rows.`);
+    }
   }
   lines.push(`- Chat's project: ${fmtProject(d.projectId, d.projectName)}`);
   lines.push(
@@ -18712,9 +18709,15 @@ function formatChatDiagnostics(d) {
       lines.push(`  - \u2026and ${tickets.length - MAX_LISTED_LINKED_TICKETS} more linked ticket(s)`);
     }
   } else {
-    lines.push("- Linked tickets (0)");
+    lines.push(d.ticketSnapshotAvailable === false ? "- Linked tickets: snapshot unavailable." : "- Linked tickets (0 in this snapshot)");
   }
-  lines.push(...runHistoryLines(d.runs, d.sessionShipped ?? 0));
+  for (const receipt of d.ticketLinksOutsideSnapshot ?? []) {
+    lines.push(`- Run trace: link recorded for ticket #${receipt.ticketId} on chat #${receipt.chatId}. The ticket is absent from the linked-ticket snapshot.`);
+  }
+  lines.push(...runHistoryLines(d.runs, d.sessionWork ?? 0));
+  if ((d.sessionWork ?? 0) > 0) {
+    lines.push(d.sessionShipped ? "- Delivery evidence: the trace confirms a push to the base branch." : "- Delivery evidence: local work recorded. A push to the base branch is unverified.");
+  }
   const signals = diagnosticsSignals(d);
   if (signals.length) {
     lines.push("", "### Signals");
@@ -18811,6 +18814,20 @@ function safely(read, fallback) {
     return Promise.resolve(fallback);
   }
 }
+function ticketLinksOutsideSnapshot(events, tickets) {
+  const refs = new Set(tickets.map((ticket) => ticket.ref));
+  const receipts = /* @__PURE__ */ new Map();
+  for (const event of events) {
+    if (event.category !== "tool" || !isTicketWriteTool(event.label) || event.isError || isFailedToolResult(event.result)) continue;
+    const link = toolResultRecord(toolResultRecord(event.result)?.chatLink);
+    if (link?.linked !== true || typeof link.chatId !== "number" || !Number.isSafeInteger(link.chatId)) continue;
+    const { syncId } = entityIdsOf(event.result);
+    if (!syncId || refs.has(String(syncId))) continue;
+    const ticketId = String(syncId);
+    receipts.set(`${link.chatId}/${ticketId}`, { ticketId, chatId: link.chatId });
+  }
+  return [...receipts.values()].slice(-5);
+}
 function toEvermind(head) {
   if (!head) return null;
   return {
@@ -18827,7 +18844,7 @@ async function gatherChatDiagnostics(src) {
   const [projectName, agents, tickets, runs, head, plan, apiVersion] = await Promise.all([
     safely(src.readProjectName, null),
     safely(src.readAgents, []),
-    safely(src.readTickets, []),
+    safely(src.readTickets, null),
     safely(src.readRuns, null),
     safely(src.readEvermind, null),
     safely(src.readPlan, null),
@@ -18880,6 +18897,7 @@ async function gatherChatDiagnostics(src) {
       // of the conversation is not inflated by the run's steps.
       messages: msgs.filter((m) => !isStepMessage(m)).length,
       steps: msgs.filter(isStepMessage).length,
+      ...merged.length ? { traceSteps: merged.length } : {},
       location: src.historyLocation?.trim() || null
     },
     chatVisibility: src.chatVisibility ?? null,
@@ -18904,7 +18922,10 @@ async function gatherChatDiagnostics(src) {
     })),
     runs,
     sessionShipped,
-    tickets: tickets.map((tk) => ({ kind: tk.kind, ref: tk.ref, label: tk.label, linkType: tk.linkType, status: tk.status })),
+    sessionWork: merged.length ? sessionWorkInTrace(merged) : null,
+    ticketSnapshotAvailable: tickets !== null,
+    ...tickets ? { ticketLinksOutsideSnapshot: ticketLinksOutsideSnapshot(merged, tickets) } : {},
+    tickets: (tickets ?? []).map((tk) => ({ kind: tk.kind, ref: tk.ref, label: tk.label, linkType: tk.linkType, status: tk.status })),
     account,
     spend: src.spend ?? null,
     tools: src.tools ? {
@@ -18927,7 +18948,7 @@ async function gatherChatDiagnostics(src) {
 }
 
 // src/chatDiagnosticsReport.ts
-var CHAT_DIAGNOSTICS_SCHEMA_VERSION = 2;
+var CHAT_DIAGNOSTICS_SCHEMA_VERSION = 3;
 function buildChatDiagnosticsReport(input) {
   const { diagnostics, events, messages, model, running = false, surface: surface2, now } = input;
   const configuredModel = model && model !== "default" ? model : null;

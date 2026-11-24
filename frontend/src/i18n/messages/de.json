@@ -22173,6 +22173,66 @@
     "loading": "Lebenslauf wird geladen…",
     "unavailable": "Dieser Lebenslauf-Link ist nicht verfügbar."
   },
+  "agentForm": {
+    "title": "Einen Agenten in der App definieren",
+    "intro": "Der Agent wird im Manifest der App (builderforce.json) deklariert. Gib eine Rolle oder eine Workload an; der Host wählt das Modell.",
+    "declared": "Agent „{id}“ im App-Manifest deklariert.",
+    "id": "Agenten-ID",
+    "idPlaceholder": "z. B. triage",
+    "role": "Rolle",
+    "roleKind": "Rolle oder Workload",
+    "roleKindOption": {
+      "role": "Rolle",
+      "workload": "Workload"
+    },
+    "rolePlaceholder": "z. B. developer",
+    "roleHelp": "Eine Rolle oder Workload, niemals eine Modell-ID – der Host leitet sie an ein Modell weiter.",
+    "instructions": "Anweisungsdatei",
+    "instructionsPlaceholder": "z. B. agents/triage.md",
+    "tools": "Werkzeuge",
+    "toolsLoading": "Werkzeuge, die du vergeben kannst, werden geladen…",
+    "toolsEmpty": "Es sind keine Werkzeuge zum Vergeben verfügbar.",
+    "toolsHelp": "Vergib nur, was der Agent braucht. Auch keine Werkzeuge sind erlaubt.",
+    "triggers": "Auslöser",
+    "triggerKind": "Art des Auslösers",
+    "trigger": {
+      "manual": "Manuell",
+      "cron": "Zeitplan",
+      "service": "Dienstereignis"
+    },
+    "cron": "Cron-Ausdruck",
+    "cronPlaceholder": "0 9 * * 1-5",
+    "timezone": "Zeitzone",
+    "timezonePlaceholder": "z. B. Europe/Berlin",
+    "service": "Dienst",
+    "servicePlaceholder": "z. B. github",
+    "event": "Ereignis",
+    "eventPlaceholder": "z. B. issue.opened",
+    "removeTrigger": "Entfernen",
+    "addTrigger": "Auslöser hinzufügen",
+    "triggersHelp": "Ohne Auslöser läuft der Agent nur, wenn er gestartet wird.",
+    "budget": "Budget",
+    "budgetKey": {
+      "tokens": "Tokens",
+      "usd": "USD",
+      "steps": "Schritte"
+    },
+    "budgetHelp": "Lass ein Feld leer, um kein Limit zu setzen.",
+    "preview": "Was deklariert wird",
+    "noRole": "Noch keine Rolle",
+    "field": {
+      "role": "Rolle",
+      "workload": "Workload",
+      "instructions": "Anweisungen",
+      "memory": "Gedächtnis"
+    },
+    "clarifyRole": "Welche Rolle soll dieser Agent übernehmen? Nenne eine Rolle wie developer oder eine Workload wie summarize.",
+    "unknownTool": "„{tool}“ ist nicht im Katalog der Tools, die du vergeben darfst.",
+    "refused": "Die Deklaration wurde abgelehnt.",
+    "cancel": "Abbrechen",
+    "submitting": "Wird deklariert…",
+    "submit": "Agent deklarieren"
+  },
   "roomAgents": {
     "summary": "{role} · {state}",
     "noRole": "Keine Rolle deklariert",
@@ -23796,6 +23856,17 @@
         "label": "Idee",
         "placeholder": "Notiere eine Idee. Die Eingabetaste erfasst sie als Karte; mit „Brain fragen“ geht sie stattdessen an Brain.",
         "submit": "Notieren"
+      },
+      "agentChoice": {
+        "label": "Welche Art von Agent",
+        "teammateOnBoard": {
+          "label": "Ein Teammitglied auf dem Board",
+          "title": "Brain setzt einen Agenten auf dieses Board, der mit dir zusammenarbeitet"
+        },
+        "featureInApp": {
+          "label": "Eine Funktion der App",
+          "title": "Einen Agenten im Manifest der App deklarieren, damit die App ihn selbst ausführt"
+        }
       }
     },
     "sendBrain": "An Brain senden",
@@ -38865,6 +38936,7 @@
     "findingsEmpty": "Keine offenen Befunde bei {scope}.",
     "findingKinds": {
       "godModule": "God-Modul",
+      "ioInLoop": "I/O in einer Schleife",
       "cycle": "Zyklus",
       "cloneGroup": "Klongruppe",
       "nearDuplicate": "Nahezu doppelt",
@@ -38916,6 +38988,7 @@
       "unlayered": "Ordne diese Dateien einer Schicht zu: {items}.",
       "unpartitioned": "Ordne diese Dateien einer Schicht zu: {items}.",
       "godModule": "Teile {items} in Module mit jeweils einer Aufgabe auf, die jeweils unter den Größengrenzen liegen ({linesLimit} Zeilen, {exportsLimit} Exporte, Komplexität der schlechtesten Funktion {complexityLimit}); behalte das Verhalten bei und führe die Prüfungen aus.",
+      "ioInLoop": "Bündle die I/O in den Schleifen von {items}: sammle zuerst die Schlüssel und mache dann einen Sammelaufruf oder ein begrenztes Promise.all über Blöcke; behalte das Verhalten bei und führe die Prüfungen aus.",
       "generic": "Untersuche diesen Befund und behebe ihn: {items}."
     },
     "nodePanelTitle": "Details",
@@ -39740,6 +39813,9 @@
           "godModuleReason": "Diese Datei erledigt zu viele Aufgaben. Sie überschreitet mindestens eine Größengrenze, sodass jede Änderung hier landet und sie schwer zu testen oder zu prüfen ist.",
           "godModuleGood": "Eine Aufgabe pro Datei, jeder Balken links von seiner Grenzmarke.",
           "godModuleAfter": "Eine Datei pro Aufgabe, jede innerhalb der Grenzen.",
+          "ioInLoopReason": "Diese Datei wartet bei jedem Schleifendurchlauf auf einen Netzwerk-, Datei- oder Datenbankaufruf, sodass die Zeit mit jedem Element wächst (N+1).",
+          "ioInLoopGood": "Sammle zuerst die Schlüssel und mache dann einen gebündelten Aufruf (eine Sammelabfrage, `Promise.all` oder Blöcke fester Größe).",
+          "ioInLoopAfter": "Ein Round-Trip pro Block, nicht pro Element.",
           "genericReason": "Die Prüfung hat dies als zu behebend markiert.",
           "genericGood": "Nach der Behebung bleibt kein Befund dieser Art übrig.",
           "genericAfter": "Der Agent schlägt die Änderung auf einem Branch vor, und Sie prüfen den echten Diff vor dem Mergen."

@@ -4896,6 +4896,11 @@ var spawnAgentsTool = withDelegationNote(defineTool({
 }));
 var SUBAGENT_TOOLS = [spawnAgentTool, spawnAgentsTool, ...SUBAGENT_CONTROL_TOOLS];
 
+// ../packages/agent-tools/src/childCapabilities.ts
+var DELEGATION_CAPABILITIES = ["orchestrate", "orchestrate.fanout", "orchestrate.live"];
+var NON_DELEGABLE_CAPABILITIES = ["human", "skill.author"];
+var CHILD_WITHHELD_CAPABILITIES = /* @__PURE__ */ new Set([...NON_DELEGABLE_CAPABILITIES, ...DELEGATION_CAPABILITIES]);
+
 // ../packages/agent-tools/src/symbolRelations.ts
 var import_knowledge6 = require("@seanhogg/builderforce-memory/knowledge");
 
@@ -9965,7 +9970,7 @@ var sessions = /* @__PURE__ */ new WeakMap();
 function sessionOf(ctx, ports) {
   let s = sessions.get(ctx.state);
   if (!s) {
-    const question = hasExplicitQuestionIntent(classifyRequest(ctx.task.request ?? ctx.task.prompt));
+    const question = !ctx.state.specValidation && hasExplicitQuestionIntent(classifyRequest(ctx.task.request ?? ctx.task.prompt));
     s = new RunGuards(guardLeversOf(ctx.policy.levers), ctx.state.guards, ports, question);
     sessions.set(ctx.state, s);
     ctx.state.guards = s.snapshot();
@@ -10662,8 +10667,19 @@ function traceWithPersistedSteps(messages, trace) {
   return [...trace, ...fromMessages].sort((a, b) => a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0);
 }
 
+// src/shipVerification.ts
+var GIT_PUSH = gitCommandPattern("push");
+var GIT_STATUS_CMD = gitCommandPattern("status");
+function commandOf(ev) {
+  const a = ev.args;
+  if (typeof a?.command === "string") return a.command;
+  if (typeof a?.cmd === "string") return a.cmd;
+  return "";
+}
+var DEFAULT_BRANCH_CMD = gitCommandPattern("remote|symbolic-ref|branch");
+
 // src/staffingSummary.ts
-function sessionShippedInTrace(events) {
+function sessionWorkInTrace(events) {
   let n = 0;
   for (const ev of events) {
     if (ev.category !== "tool" || ev.isError || isFailedToolResult(ev.result)) continue;
@@ -10727,7 +10743,7 @@ function staffingSummaryInTrace(events) {
       });
     }
   }
-  const verdict = dispatched > 0 || personaSubagents.some((p) => p.ok) ? "staffed" : dispatchRefusals.length > 0 ? "staffing-refused" : ticketsCreated > 0 && filedLocally === ticketsCreated ? "filed-locally" : ticketsCreated > 0 ? sessionShippedInTrace(events) > 0 ? "self-served" : "filed-not-staffed" : "no-work-filed";
+  const verdict = dispatched > 0 || personaSubagents.some((p) => p.ok) ? "staffed" : dispatchRefusals.length > 0 ? "staffing-refused" : ticketsCreated > 0 && filedLocally === ticketsCreated ? "filed-locally" : ticketsCreated > 0 ? sessionWorkInTrace(events) > 0 ? "self-served" : "filed-not-staffed" : "no-work-filed";
   return { ticketsCreated, filedLocally, dispatchAttempts, dispatched, dispatchRefusals, personaSubagents, verdict };
 }
 
@@ -10745,17 +10761,6 @@ function isCacheAnswered(ev) {
   const o = r;
   return o.covered === true || o.replayed === true || o.derived === true || o.skipped === true && typeof o.note === "string" || typeof o.note === "string" && /^Duplicate \S+ call/.test(o.note);
 }
-
-// src/shipVerification.ts
-var GIT_PUSH = gitCommandPattern("push");
-var GIT_STATUS_CMD = gitCommandPattern("status");
-function commandOf(ev) {
-  const a = ev.args;
-  if (typeof a?.command === "string") return a.command;
-  if (typeof a?.cmd === "string") return a.cmd;
-  return "";
-}
-var DEFAULT_BRANCH_CMD = gitCommandPattern("remote|symbolic-ref|branch");
 
 // src/runFindings/runView.ts
 var HAND_OFF_DUE = "loop.hand_off_due";

@@ -22148,6 +22148,66 @@
     "loading": "Loading résumé…",
     "unavailable": "This résumé link is unavailable."
   },
+  "agentForm": {
+    "title": "Define an agent in the app",
+    "intro": "The agent is declared in the app's manifest (builderforce.json). Name a role or a workload and the host picks the model.",
+    "declared": "Agent \"{id}\" declared in the app manifest.",
+    "id": "Agent id",
+    "idPlaceholder": "e.g. triage",
+    "role": "Role",
+    "roleKind": "Role or workload",
+    "roleKindOption": {
+      "role": "Role",
+      "workload": "Workload"
+    },
+    "rolePlaceholder": "e.g. developer",
+    "roleHelp": "A role or workload, never a model id — the host routes it to a model.",
+    "instructions": "Instructions file",
+    "instructionsPlaceholder": "e.g. agents/triage.md",
+    "tools": "Tools",
+    "toolsLoading": "Loading the tools you can grant…",
+    "toolsEmpty": "No tools are available to grant.",
+    "toolsHelp": "Grant only what the agent needs. No tools is allowed.",
+    "triggers": "Triggers",
+    "triggerKind": "Trigger kind",
+    "trigger": {
+      "manual": "Manual",
+      "cron": "Schedule",
+      "service": "Service event"
+    },
+    "cron": "Cron expression",
+    "cronPlaceholder": "0 9 * * 1-5",
+    "timezone": "Timezone",
+    "timezonePlaceholder": "e.g. Europe/London",
+    "service": "Service",
+    "servicePlaceholder": "e.g. github",
+    "event": "Event",
+    "eventPlaceholder": "e.g. issue.opened",
+    "removeTrigger": "Remove",
+    "addTrigger": "Add trigger",
+    "triggersHelp": "With no triggers, the agent runs only when started.",
+    "budget": "Budget",
+    "budgetKey": {
+      "tokens": "Tokens",
+      "usd": "USD",
+      "steps": "Steps"
+    },
+    "budgetHelp": "Leave a field blank for no limit.",
+    "preview": "What will be declared",
+    "noRole": "No role yet",
+    "field": {
+      "role": "Role",
+      "workload": "Workload",
+      "instructions": "Instructions",
+      "memory": "Memory"
+    },
+    "clarifyRole": "Which role should this agent play? Name a role such as developer, or a workload such as summarize.",
+    "unknownTool": "\"{tool}\" is not in the tool catalog you can grant.",
+    "refused": "The declaration was refused.",
+    "cancel": "Cancel",
+    "submitting": "Declaring…",
+    "submit": "Declare agent"
+  },
   "roomAgents": {
     "summary": "{role} · {state}",
     "noRole": "No role declared",
@@ -23771,6 +23831,17 @@
         "label": "Idea",
         "placeholder": "Jot an idea. Enter captures it as a card; Ask Brain sends it to Brain instead.",
         "submit": "Capture"
+      },
+      "agentChoice": {
+        "label": "What kind of agent",
+        "teammateOnBoard": {
+          "label": "A teammate on the board",
+          "title": "Brain seats an agent on this board to work alongside you"
+        },
+        "featureInApp": {
+          "label": "A feature in the app",
+          "title": "Declare an agent in the app's manifest so the app itself runs it"
+        }
       }
     },
     "sendBrain": "Send to Brain",
@@ -38123,6 +38194,7 @@
     "findingsEmpty": "No open findings at {scope}.",
     "findingKinds": {
       "godModule": "God module",
+      "ioInLoop": "I/O in a loop",
       "cycle": "Cycle",
       "cloneGroup": "Clone group",
       "nearDuplicate": "Near-duplicate",
@@ -38174,6 +38246,7 @@
       "unlayered": "Assign these files to a layer: {items}.",
       "unpartitioned": "Assign these files to a layer: {items}.",
       "godModule": "Split {items} into modules with one job each, each under the size limits ({linesLimit} lines, {exportsLimit} exports, worst-function complexity {complexityLimit}); keep behaviour unchanged and run the checks.",
+      "ioInLoop": "Batch the I/O inside the loops in {items}: gather the keys, then make one bulk call or a bounded Promise.all over chunks; keep behaviour unchanged and run the checks.",
       "generic": "Look into this finding and fix it: {items}."
     },
     "nodePanelTitle": "Details",
@@ -38827,6 +38900,9 @@
           "godModuleReason": "This file does too many jobs. It is over at least one size limit, so every change lands here and it is hard to test or review.",
           "godModuleGood": "One job per file, every bar left of its limit mark.",
           "godModuleAfter": "One file per job, each under the limits.",
+          "ioInLoopReason": "This file waits for one network, file or database call per loop pass, so the time grows with every item (N+1).",
+          "ioInLoopGood": "Collect the keys first, then make one batched call (a bulk query, `Promise.all`, or chunks of a fixed size).",
+          "ioInLoopAfter": "One round-trip per batch, not per item.",
           "genericReason": "The review flagged this as something to fix.",
           "genericGood": "No finding of this kind is left after the fix.",
           "genericAfter": "The agent proposes the change on a branch, and you review the real diff before merging."
