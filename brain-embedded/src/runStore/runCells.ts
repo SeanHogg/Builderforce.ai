@@ -7,6 +7,7 @@
 import type { BrainMessage } from '../types';
 import type { BrainTraceEvent } from '../brainTriage';
 import type { BrainRunActivity } from '../runActivity';
+import { isWorkflowSpan } from '../workflowDiagnostics';
 import { makeCell, type RunCell } from './runCell';
 import type { RunKey } from './runTypes';
 
@@ -174,7 +175,7 @@ export function runTrace(c: RunCell): BrainTraceEvent[] {
  * only doubled the error on every surface.
  */
 export function recordRunFailure(c: RunCell, label: string, message: string): void {
-  const last = runTrace(c).at(-1);
+  const last = runTrace(c).findLast((event) => !isWorkflowSpan(event));
   if (last?.isError && typeof last.result === 'string' && last.result.endsWith(message)) return;
   pushTrace(c, {
     ts: nowIso(),

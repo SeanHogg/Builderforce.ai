@@ -17,7 +17,9 @@
     "chatId": 7001,
     "guestTurnId": "<id:1>",
     "guestTurnInput": "What does a.ts export?",
-    "mode": "work"
+    "mode": "work",
+    "pipelineRoute": "quick",
+    "routeScore": 0.21
    },
    "tools": [
     {
@@ -75,70 +77,13 @@
        "required": [
         "question",
         "options"
-       ]
-      }
-     }
-    },
-    {
-     "type": "function",
-     "function": {
-      "name": "hand_off",
-      "description": "OPTIONAL — for work that splits into SEVERAL separate tasks. A change you can already make (a bug fix, a small refactor, a copy or style change, anything a few edits cover) you simply MAKE now: your first edit moves the run into coding by itself, no hand_off needed, so never stall in analysis waiting to call this. When the work genuinely breaks into multiple tasks, call this ONCE with them instead of editing. Each task becomes a ticket linked to this chat. Tasks that own separate files run side by side, one coding agent each, and each reports back to this chat; otherwise the coding model implements them in order. Every task must stand alone — the agent that implements it sees none of this conversation: say what to change, where, and how to know it is done.",
-      "parameters": {
-       "type": "object",
-       "properties": {
-        "summary": {
-         "type": "string",
-         "description": "The research, summarised for the coders — they see nothing else. Everything your analysis AND any research sub-agents reported that the change needs: the files and functions involved, what they do today, the decisions made and why, and the traps found. Facts, not a recap of what you did."
-        },
-        "tasks": {
-         "type": "array",
-         "minItems": 1,
-         "maxItems": 12,
-         "items": {
-          "type": "object",
-          "properties": {
-           "title": {
-            "type": "string",
-            "description": "Ticket title, e.g. \"Rebuild UserDetailDrawer on SlideOutPanel\"."
-           },
-           "brief": {
-            "type": "string",
-            "description": "The complete, standalone instruction: files, the change, the primitives to use."
-           },
-           "paths": {
-            "type": "array",
-            "items": {
-             "type": "string"
-            },
-            "description": "Workspace-relative files or directories this task OWNS. Tasks with disjoint paths run in parallel."
-           },
-           "acceptance": {
-            "type": "string",
-            "description": "How to know it is done (tests, behaviour)."
-           },
-           "constraints": {
-            "type": "string",
-            "description": "What the coder must NOT do: files or modules to leave alone, primitives to reuse rather than copy, files not to grow, behaviour that must not change."
-           }
-          },
-          "required": [
-           "title",
-           "brief"
-          ]
-         }
-        }
-       },
-       "required": [
-        "summary",
-        "tasks"
        ]
       }
      }
     }
    ],
    "tool_choice": "auto",
-   "role": "plan",
+   "role": "code",
    "maxTokens": 16384
   },
   {
@@ -166,7 +111,9 @@
     "chatId": 7001,
     "guestTurnId": "<id:1>",
     "guestTurnInput": "What does a.ts export?",
-    "mode": "work"
+    "mode": "work",
+    "pipelineRoute": "quick",
+    "routeScore": 0.21
    },
    "tools": [
     {
@@ -227,67 +174,10 @@
        ]
       }
      }
-    },
-    {
-     "type": "function",
-     "function": {
-      "name": "hand_off",
-      "description": "OPTIONAL — for work that splits into SEVERAL separate tasks. A change you can already make (a bug fix, a small refactor, a copy or style change, anything a few edits cover) you simply MAKE now: your first edit moves the run into coding by itself, no hand_off needed, so never stall in analysis waiting to call this. When the work genuinely breaks into multiple tasks, call this ONCE with them instead of editing. Each task becomes a ticket linked to this chat. Tasks that own separate files run side by side, one coding agent each, and each reports back to this chat; otherwise the coding model implements them in order. Every task must stand alone — the agent that implements it sees none of this conversation: say what to change, where, and how to know it is done.",
-      "parameters": {
-       "type": "object",
-       "properties": {
-        "summary": {
-         "type": "string",
-         "description": "The research, summarised for the coders — they see nothing else. Everything your analysis AND any research sub-agents reported that the change needs: the files and functions involved, what they do today, the decisions made and why, and the traps found. Facts, not a recap of what you did."
-        },
-        "tasks": {
-         "type": "array",
-         "minItems": 1,
-         "maxItems": 12,
-         "items": {
-          "type": "object",
-          "properties": {
-           "title": {
-            "type": "string",
-            "description": "Ticket title, e.g. \"Rebuild UserDetailDrawer on SlideOutPanel\"."
-           },
-           "brief": {
-            "type": "string",
-            "description": "The complete, standalone instruction: files, the change, the primitives to use."
-           },
-           "paths": {
-            "type": "array",
-            "items": {
-             "type": "string"
-            },
-            "description": "Workspace-relative files or directories this task OWNS. Tasks with disjoint paths run in parallel."
-           },
-           "acceptance": {
-            "type": "string",
-            "description": "How to know it is done (tests, behaviour)."
-           },
-           "constraints": {
-            "type": "string",
-            "description": "What the coder must NOT do: files or modules to leave alone, primitives to reuse rather than copy, files not to grow, behaviour that must not change."
-           }
-          },
-          "required": [
-           "title",
-           "brief"
-          ]
-         }
-        }
-       },
-       "required": [
-        "summary",
-        "tasks"
-       ]
-      }
-     }
     }
    ],
    "tool_choice": "required",
-   "role": "plan",
+   "role": "code",
    "maxTokens": 16384
   },
   {
@@ -323,7 +213,9 @@
     "chatId": 7001,
     "guestTurnId": "<id:1>",
     "guestTurnInput": "What does a.ts export?",
-    "mode": "work"
+    "mode": "work",
+    "pipelineRoute": "quick",
+    "routeScore": 0.21
    },
    "tools": [
     {
@@ -384,67 +276,10 @@
        ]
       }
      }
-    },
-    {
-     "type": "function",
-     "function": {
-      "name": "hand_off",
-      "description": "OPTIONAL — for work that splits into SEVERAL separate tasks. A change you can already make (a bug fix, a small refactor, a copy or style change, anything a few edits cover) you simply MAKE now: your first edit moves the run into coding by itself, no hand_off needed, so never stall in analysis waiting to call this. When the work genuinely breaks into multiple tasks, call this ONCE with them instead of editing. Each task becomes a ticket linked to this chat. Tasks that own separate files run side by side, one coding agent each, and each reports back to this chat; otherwise the coding model implements them in order. Every task must stand alone — the agent that implements it sees none of this conversation: say what to change, where, and how to know it is done.",
-      "parameters": {
-       "type": "object",
-       "properties": {
-        "summary": {
-         "type": "string",
-         "description": "The research, summarised for the coders — they see nothing else. Everything your analysis AND any research sub-agents reported that the change needs: the files and functions involved, what they do today, the decisions made and why, and the traps found. Facts, not a recap of what you did."
-        },
-        "tasks": {
-         "type": "array",
-         "minItems": 1,
-         "maxItems": 12,
-         "items": {
-          "type": "object",
-          "properties": {
-           "title": {
-            "type": "string",
-            "description": "Ticket title, e.g. \"Rebuild UserDetailDrawer on SlideOutPanel\"."
-           },
-           "brief": {
-            "type": "string",
-            "description": "The complete, standalone instruction: files, the change, the primitives to use."
-           },
-           "paths": {
-            "type": "array",
-            "items": {
-             "type": "string"
-            },
-            "description": "Workspace-relative files or directories this task OWNS. Tasks with disjoint paths run in parallel."
-           },
-           "acceptance": {
-            "type": "string",
-            "description": "How to know it is done (tests, behaviour)."
-           },
-           "constraints": {
-            "type": "string",
-            "description": "What the coder must NOT do: files or modules to leave alone, primitives to reuse rather than copy, files not to grow, behaviour that must not change."
-           }
-          },
-          "required": [
-           "title",
-           "brief"
-          ]
-         }
-        }
-       },
-       "required": [
-        "summary",
-        "tasks"
-       ]
-      }
-     }
     }
    ],
    "tool_choice": "required",
-   "role": "plan",
+   "role": "code",
    "maxTokens": 16384
   },
   {
@@ -488,7 +323,9 @@
     "chatId": 7001,
     "guestTurnId": "<id:1>",
     "guestTurnInput": "What does a.ts export?",
-    "mode": "work"
+    "mode": "work",
+    "pipelineRoute": "quick",
+    "routeScore": 0.21
    },
    "tools": [
     {
@@ -549,67 +386,10 @@
        ]
       }
      }
-    },
-    {
-     "type": "function",
-     "function": {
-      "name": "hand_off",
-      "description": "OPTIONAL — for work that splits into SEVERAL separate tasks. A change you can already make (a bug fix, a small refactor, a copy or style change, anything a few edits cover) you simply MAKE now: your first edit moves the run into coding by itself, no hand_off needed, so never stall in analysis waiting to call this. When the work genuinely breaks into multiple tasks, call this ONCE with them instead of editing. Each task becomes a ticket linked to this chat. Tasks that own separate files run side by side, one coding agent each, and each reports back to this chat; otherwise the coding model implements them in order. Every task must stand alone — the agent that implements it sees none of this conversation: say what to change, where, and how to know it is done.",
-      "parameters": {
-       "type": "object",
-       "properties": {
-        "summary": {
-         "type": "string",
-         "description": "The research, summarised for the coders — they see nothing else. Everything your analysis AND any research sub-agents reported that the change needs: the files and functions involved, what they do today, the decisions made and why, and the traps found. Facts, not a recap of what you did."
-        },
-        "tasks": {
-         "type": "array",
-         "minItems": 1,
-         "maxItems": 12,
-         "items": {
-          "type": "object",
-          "properties": {
-           "title": {
-            "type": "string",
-            "description": "Ticket title, e.g. \"Rebuild UserDetailDrawer on SlideOutPanel\"."
-           },
-           "brief": {
-            "type": "string",
-            "description": "The complete, standalone instruction: files, the change, the primitives to use."
-           },
-           "paths": {
-            "type": "array",
-            "items": {
-             "type": "string"
-            },
-            "description": "Workspace-relative files or directories this task OWNS. Tasks with disjoint paths run in parallel."
-           },
-           "acceptance": {
-            "type": "string",
-            "description": "How to know it is done (tests, behaviour)."
-           },
-           "constraints": {
-            "type": "string",
-            "description": "What the coder must NOT do: files or modules to leave alone, primitives to reuse rather than copy, files not to grow, behaviour that must not change."
-           }
-          },
-          "required": [
-           "title",
-           "brief"
-          ]
-         }
-        }
-       },
-       "required": [
-        "summary",
-        "tasks"
-       ]
-      }
-     }
     }
    ],
    "tool_choice": "required",
-   "role": "plan",
+   "role": "code",
    "maxTokens": 16384
   },
   {
@@ -661,7 +441,9 @@
     "chatId": 7001,
     "guestTurnId": "<id:1>",
     "guestTurnInput": "What does a.ts export?",
-    "mode": "work"
+    "mode": "work",
+    "pipelineRoute": "quick",
+    "routeScore": 0.21
    },
    "tools": [
     {
@@ -719,63 +501,6 @@
        "required": [
         "question",
         "options"
-       ]
-      }
-     }
-    },
-    {
-     "type": "function",
-     "function": {
-      "name": "hand_off",
-      "description": "OPTIONAL — for work that splits into SEVERAL separate tasks. A change you can already make (a bug fix, a small refactor, a copy or style change, anything a few edits cover) you simply MAKE now: your first edit moves the run into coding by itself, no hand_off needed, so never stall in analysis waiting to call this. When the work genuinely breaks into multiple tasks, call this ONCE with them instead of editing. Each task becomes a ticket linked to this chat. Tasks that own separate files run side by side, one coding agent each, and each reports back to this chat; otherwise the coding model implements them in order. Every task must stand alone — the agent that implements it sees none of this conversation: say what to change, where, and how to know it is done.",
-      "parameters": {
-       "type": "object",
-       "properties": {
-        "summary": {
-         "type": "string",
-         "description": "The research, summarised for the coders — they see nothing else. Everything your analysis AND any research sub-agents reported that the change needs: the files and functions involved, what they do today, the decisions made and why, and the traps found. Facts, not a recap of what you did."
-        },
-        "tasks": {
-         "type": "array",
-         "minItems": 1,
-         "maxItems": 12,
-         "items": {
-          "type": "object",
-          "properties": {
-           "title": {
-            "type": "string",
-            "description": "Ticket title, e.g. \"Rebuild UserDetailDrawer on SlideOutPanel\"."
-           },
-           "brief": {
-            "type": "string",
-            "description": "The complete, standalone instruction: files, the change, the primitives to use."
-           },
-           "paths": {
-            "type": "array",
-            "items": {
-             "type": "string"
-            },
-            "description": "Workspace-relative files or directories this task OWNS. Tasks with disjoint paths run in parallel."
-           },
-           "acceptance": {
-            "type": "string",
-            "description": "How to know it is done (tests, behaviour)."
-           },
-           "constraints": {
-            "type": "string",
-            "description": "What the coder must NOT do: files or modules to leave alone, primitives to reuse rather than copy, files not to grow, behaviour that must not change."
-           }
-          },
-          "required": [
-           "title",
-           "brief"
-          ]
-         }
-        }
-       },
-       "required": [
-        "summary",
-        "tasks"
        ]
       }
      }
@@ -783,7 +508,7 @@
    ],
    "tool_choice": "required",
    "model": "fallback/model-b",
-   "role": "plan",
+   "role": "code",
    "maxTokens": 16384
   },
   {
@@ -858,7 +583,9 @@
     "chatId": 7001,
     "guestTurnId": "<id:1>",
     "guestTurnInput": "What does a.ts export?",
-    "mode": "work"
+    "mode": "work",
+    "pipelineRoute": "quick",
+    "routeScore": 0.21
    },
    "tools": [
     {
@@ -919,72 +646,54 @@
        ]
       }
      }
-    },
-    {
-     "type": "function",
-     "function": {
-      "name": "hand_off",
-      "description": "OPTIONAL — for work that splits into SEVERAL separate tasks. A change you can already make (a bug fix, a small refactor, a copy or style change, anything a few edits cover) you simply MAKE now: your first edit moves the run into coding by itself, no hand_off needed, so never stall in analysis waiting to call this. When the work genuinely breaks into multiple tasks, call this ONCE with them instead of editing. Each task becomes a ticket linked to this chat. Tasks that own separate files run side by side, one coding agent each, and each reports back to this chat; otherwise the coding model implements them in order. Every task must stand alone — the agent that implements it sees none of this conversation: say what to change, where, and how to know it is done.",
-      "parameters": {
-       "type": "object",
-       "properties": {
-        "summary": {
-         "type": "string",
-         "description": "The research, summarised for the coders — they see nothing else. Everything your analysis AND any research sub-agents reported that the change needs: the files and functions involved, what they do today, the decisions made and why, and the traps found. Facts, not a recap of what you did."
-        },
-        "tasks": {
-         "type": "array",
-         "minItems": 1,
-         "maxItems": 12,
-         "items": {
-          "type": "object",
-          "properties": {
-           "title": {
-            "type": "string",
-            "description": "Ticket title, e.g. \"Rebuild UserDetailDrawer on SlideOutPanel\"."
-           },
-           "brief": {
-            "type": "string",
-            "description": "The complete, standalone instruction: files, the change, the primitives to use."
-           },
-           "paths": {
-            "type": "array",
-            "items": {
-             "type": "string"
-            },
-            "description": "Workspace-relative files or directories this task OWNS. Tasks with disjoint paths run in parallel."
-           },
-           "acceptance": {
-            "type": "string",
-            "description": "How to know it is done (tests, behaviour)."
-           },
-           "constraints": {
-            "type": "string",
-            "description": "What the coder must NOT do: files or modules to leave alone, primitives to reuse rather than copy, files not to grow, behaviour that must not change."
-           }
-          },
-          "required": [
-           "title",
-           "brief"
-          ]
-         }
-        }
-       },
-       "required": [
-        "summary",
-        "tasks"
-       ]
-      }
-     }
     }
    ],
    "tool_choice": "auto",
    "model": "fallback/model-b",
-   "role": "plan",
+   "role": "code",
    "maxTokens": 16384
   }
  ],
  "persisted": [
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
+    "category": "message",
+    "label": "run.pipeline_route",
+    "args": {
+     "route": "quick",
+     "score": 0.21
+    },
+    "result": "Quick pass: the user asks a question; score 0.21 (question only, files named)",
+    "isError": false,
+    "ts": "<iso>"
+   },
+   "learned": false,
+   "eventKey": "step:<id:2>"
+  },
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
+    "category": "message",
+    "label": "run.routed",
+    "args": {
+     "step": 0,
+     "route": "quick",
+     "score": 0.21
+    },
+    "result": "The run was routed quick (route score 0.21).",
+    "isError": false,
+    "ts": "<iso>"
+   },
+   "learned": false,
+   "eventKey": "step:<id:3>"
+  },
   {
    "chatId": 7001,
    "role": "tool",
@@ -997,9 +706,9 @@
      "model": "fake-model",
      "requestedModel": "default",
      "step": 0,
-     "role": "plan",
+     "role": "code",
      "toolCalls": 0,
-     "advertisedTools": 3,
+     "advertisedTools": 2,
      "catalogTools": 3,
      "answeredInProse": true
     },
@@ -1016,7 +725,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:2>"
+   "eventKey": "step:<id:4>"
   },
   {
    "chatId": 7001,
@@ -1034,7 +743,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:3>"
+   "eventKey": "step:<id:5>"
   },
   {
    "chatId": 7001,
@@ -1060,7 +769,7 @@
      "step": 0,
      "attempt": 1,
      "of": 3,
-     "advertisedTools": 3,
+     "advertisedTools": 2,
      "shape": "announced"
     },
     "result": "Model announced a tool call without making one — re-prompted (1/3).",
@@ -1068,7 +777,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:4>"
+   "eventKey": "step:<id:6>"
   },
   {
    "chatId": 7001,
@@ -1082,9 +791,9 @@
      "model": "fake-model",
      "requestedModel": "default",
      "step": 1,
-     "role": "plan",
+     "role": "code",
      "toolCalls": 0,
-     "advertisedTools": 3,
+     "advertisedTools": 2,
      "catalogTools": 3,
      "answeredInProse": true
     },
@@ -1101,7 +810,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:5>"
+   "eventKey": "step:<id:7>"
   },
   {
    "chatId": 7001,
@@ -1119,7 +828,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:6>"
+   "eventKey": "step:<id:8>"
   },
   {
    "chatId": 7001,
@@ -1145,7 +854,7 @@
      "step": 1,
      "attempt": 2,
      "of": 3,
-     "advertisedTools": 3,
+     "advertisedTools": 2,
      "shape": "announced"
     },
     "result": "Model announced a tool call without making one — re-prompted (2/3).",
@@ -1153,7 +862,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:7>"
+   "eventKey": "step:<id:9>"
   },
   {
    "chatId": 7001,
@@ -1167,9 +876,9 @@
      "model": "fake-model",
      "requestedModel": "default",
      "step": 2,
-     "role": "plan",
+     "role": "code",
      "toolCalls": 0,
-     "advertisedTools": 3,
+     "advertisedTools": 2,
      "catalogTools": 3,
      "answeredInProse": true
     },
@@ -1186,7 +895,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:8>"
+   "eventKey": "step:<id:10>"
   },
   {
    "chatId": 7001,
@@ -1204,7 +913,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:9>"
+   "eventKey": "step:<id:11>"
   },
   {
    "chatId": 7001,
@@ -1230,7 +939,7 @@
      "step": 2,
      "attempt": 3,
      "of": 3,
-     "advertisedTools": 3,
+     "advertisedTools": 2,
      "shape": "announced"
     },
     "result": "Model announced a tool call without making one — re-prompted (3/3).",
@@ -1238,7 +947,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:10>"
+   "eventKey": "step:<id:12>"
   },
   {
    "chatId": 7001,
@@ -1252,9 +961,9 @@
      "model": "fake-model",
      "requestedModel": "default",
      "step": 3,
-     "role": "plan",
+     "role": "code",
      "toolCalls": 0,
-     "advertisedTools": 3,
+     "advertisedTools": 2,
      "catalogTools": 3,
      "answeredInProse": true
     },
@@ -1271,7 +980,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:11>"
+   "eventKey": "step:<id:13>"
   },
   {
    "chatId": 7001,
@@ -1289,7 +998,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:12>"
+   "eventKey": "step:<id:14>"
   },
   {
    "chatId": 7001,
@@ -1322,7 +1031,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:13>"
+   "eventKey": "step:<id:15>"
   },
   {
    "chatId": 7001,
@@ -1336,10 +1045,10 @@
      "model": "fallback/model-b",
      "requestedModel": "fallback/model-b",
      "step": 4,
-     "role": "plan",
+     "role": "code",
      "toolCalls": 1,
      "argBytes": 15,
-     "advertisedTools": 3,
+     "advertisedTools": 2,
      "catalogTools": 3
     },
     "result": "1 tool call(s) · 0 chars · finish: tool_calls · prompt 10 tok",
@@ -1355,7 +1064,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:14>"
+   "eventKey": "step:<id:16>"
   },
   {
    "chatId": 7001,
@@ -1378,7 +1087,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:15>"
+   "eventKey": "step:<id:17>"
   },
   {
    "chatId": 7001,
@@ -1392,9 +1101,9 @@
      "model": "fallback/model-b",
      "requestedModel": "fallback/model-b",
      "step": 5,
-     "role": "plan",
+     "role": "code",
      "toolCalls": 0,
-     "advertisedTools": 3,
+     "advertisedTools": 2,
      "catalogTools": 3,
      "answeredInProse": true
     },
@@ -1411,7 +1120,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:16>"
+   "eventKey": "step:<id:18>"
   },
   {
    "chatId": 7001,
@@ -1429,7 +1138,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:17>"
+   "eventKey": "step:<id:19>"
   },
   {
    "chatId": 7001,
@@ -1447,6 +1156,27 @@
   "7001": [
    {
     "ts": "<iso>",
+    "category": "message",
+    "label": "run.pipeline_route",
+    "args": {
+     "route": "quick",
+     "score": 0.21
+    },
+    "result": "Quick pass: the user asks a question; score 0.21 (question only, files named)"
+   },
+   {
+    "ts": "<iso>",
+    "category": "message",
+    "label": "run.routed",
+    "args": {
+     "step": 0,
+     "route": "quick",
+     "score": 0.21
+    },
+    "result": "The run was routed quick (route score 0.21)."
+   },
+   {
+    "ts": "<iso>",
     "category": "llm",
     "label": "llm.complete",
     "durationMs": "<ms>",
@@ -1455,9 +1185,9 @@
      "model": "fake-model",
      "requestedModel": "default",
      "step": 0,
-     "role": "plan",
+     "role": "code",
      "toolCalls": 0,
-     "advertisedTools": 3,
+     "advertisedTools": 2,
      "catalogTools": 3,
      "answeredInProse": true
     },
@@ -1486,7 +1216,7 @@
      "step": 0,
      "attempt": 1,
      "of": 3,
-     "advertisedTools": 3,
+     "advertisedTools": 2,
      "shape": "announced"
     },
     "result": "Model announced a tool call without making one — re-prompted (1/3)."
@@ -1501,9 +1231,9 @@
      "model": "fake-model",
      "requestedModel": "default",
      "step": 1,
-     "role": "plan",
+     "role": "code",
      "toolCalls": 0,
-     "advertisedTools": 3,
+     "advertisedTools": 2,
      "catalogTools": 3,
      "answeredInProse": true
     },
@@ -1532,7 +1262,7 @@
      "step": 1,
      "attempt": 2,
      "of": 3,
-     "advertisedTools": 3,
+     "advertisedTools": 2,
      "shape": "announced"
     },
     "result": "Model announced a tool call without making one — re-prompted (2/3)."
@@ -1547,9 +1277,9 @@
      "model": "fake-model",
      "requestedModel": "default",
      "step": 2,
-     "role": "plan",
+     "role": "code",
      "toolCalls": 0,
-     "advertisedTools": 3,
+     "advertisedTools": 2,
      "catalogTools": 3,
      "answeredInProse": true
     },
@@ -1578,7 +1308,7 @@
      "step": 2,
      "attempt": 3,
      "of": 3,
-     "advertisedTools": 3,
+     "advertisedTools": 2,
      "shape": "announced"
     },
     "result": "Model announced a tool call without making one — re-prompted (3/3)."
@@ -1593,9 +1323,9 @@
      "model": "fake-model",
      "requestedModel": "default",
      "step": 3,
-     "role": "plan",
+     "role": "code",
      "toolCalls": 0,
-     "advertisedTools": 3,
+     "advertisedTools": 2,
      "catalogTools": 3,
      "answeredInProse": true
     },
@@ -1639,10 +1369,10 @@
      "model": "fallback/model-b",
      "requestedModel": "fallback/model-b",
      "step": 4,
-     "role": "plan",
+     "role": "code",
      "toolCalls": 1,
      "argBytes": 15,
-     "advertisedTools": 3,
+     "advertisedTools": 2,
      "catalogTools": 3
     },
     "usage": {
@@ -1679,9 +1409,9 @@
      "model": "fallback/model-b",
      "requestedModel": "fallback/model-b",
      "step": 5,
-     "role": "plan",
+     "role": "code",
      "toolCalls": 0,
-     "advertisedTools": 3,
+     "advertisedTools": 2,
      "catalogTools": 3,
      "answeredInProse": true
     },

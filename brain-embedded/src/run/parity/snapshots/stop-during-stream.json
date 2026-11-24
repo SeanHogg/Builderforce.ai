@@ -17,13 +17,54 @@
     "chatId": 7001,
     "guestTurnId": "<id:1>",
     "guestTurnInput": "go",
-    "mode": "work"
+    "mode": "work",
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "role": "chat",
    "maxTokens": 4096
   }
  ],
  "persisted": [
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
+    "category": "message",
+    "label": "run.pipeline_route",
+    "args": {
+     "route": "full",
+     "score": 0.4
+    },
+    "result": "Full pipeline: routing is set to always; score 0.4",
+    "isError": false,
+    "ts": "<iso>"
+   },
+   "learned": false,
+   "eventKey": "step:<id:2>"
+  },
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
+    "category": "message",
+    "label": "run.routed",
+    "args": {
+     "step": 0,
+     "route": "full",
+     "score": 0.4
+    },
+    "result": "The run was routed full (route score 0.4).",
+    "isError": false,
+    "ts": "<iso>"
+   },
+   "learned": false,
+   "eventKey": "step:<id:3>"
+  },
   {
    "chatId": 7001,
    "role": "tool",
@@ -41,7 +82,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:2>"
+   "eventKey": "step:<id:4>"
   },
   {
    "chatId": 7001,
@@ -59,6 +100,27 @@
  ],
  "trace": {
   "7001": [
+   {
+    "ts": "<iso>",
+    "category": "message",
+    "label": "run.pipeline_route",
+    "args": {
+     "route": "full",
+     "score": 0.4
+    },
+    "result": "Full pipeline: routing is set to always; score 0.4"
+   },
+   {
+    "ts": "<iso>",
+    "category": "message",
+    "label": "run.routed",
+    "args": {
+     "step": 0,
+     "route": "full",
+     "score": 0.4
+    },
+    "result": "The run was routed full (route score 0.4)."
+   },
    {
     "ts": "<iso>",
     "category": "message",

@@ -17,7 +17,9 @@
     "chatId": 7001,
     "guestTurnId": "<id:1>",
     "guestTurnInput": "Say hello, then finish.",
-    "mode": "work"
+    "mode": "work",
+    "pipelineRoute": "full",
+    "routeScore": 0.15
    },
    "role": "chat",
    "maxTokens": 4096
@@ -39,13 +41,54 @@
     "chatId": 7001,
     "guestTurnId": "<id:1>",
     "guestTurnInput": "Say hello, then finish.",
-    "mode": "work"
+    "mode": "work",
+    "pipelineRoute": "full",
+    "routeScore": 0.15
    },
    "role": "chat",
    "maxTokens": 4096
   }
  ],
  "persisted": [
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
+    "category": "message",
+    "label": "run.pipeline_route",
+    "args": {
+     "route": "full",
+     "score": 0.15
+    },
+    "result": "Full pipeline: routing is set to always; score 0.15 (question only)",
+    "isError": false,
+    "ts": "<iso>"
+   },
+   "learned": false,
+   "eventKey": "step:<id:2>"
+  },
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
+    "category": "message",
+    "label": "run.routed",
+    "args": {
+     "step": 0,
+     "route": "full",
+     "score": 0.15
+    },
+    "result": "The run was routed full (route score 0.15).",
+    "isError": false,
+    "ts": "<iso>"
+   },
+   "learned": false,
+   "eventKey": "step:<id:3>"
+  },
   {
    "chatId": 7001,
    "role": "tool",
@@ -62,7 +105,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:2>"
+   "eventKey": "step:<id:4>"
   },
   {
    "chatId": 7001,
@@ -94,7 +137,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:3>"
+   "eventKey": "step:<id:5>"
   },
   {
    "chatId": 7001,
@@ -112,7 +155,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:4>"
+   "eventKey": "step:<id:6>"
   },
   {
    "chatId": 7001,
@@ -128,6 +171,27 @@
  ],
  "trace": {
   "7001": [
+   {
+    "ts": "<iso>",
+    "category": "message",
+    "label": "run.pipeline_route",
+    "args": {
+     "route": "full",
+     "score": 0.15
+    },
+    "result": "Full pipeline: routing is set to always; score 0.15 (question only)"
+   },
+   {
+    "ts": "<iso>",
+    "category": "message",
+    "label": "run.routed",
+    "args": {
+     "step": 0,
+     "route": "full",
+     "score": 0.15
+    },
+    "result": "The run was routed full (route score 0.15)."
+   },
    {
     "ts": "<iso>",
     "category": "message",

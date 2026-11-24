@@ -247,6 +247,26 @@
    "metadata": {
     "kind": "step",
     "category": "message",
+    "label": "run.routed",
+    "args": {
+     "step": 0,
+     "route": "quick",
+     "score": 0.7
+    },
+    "result": "The run was routed quick (route score 0.7).",
+    "isError": false,
+    "ts": "<iso>"
+   },
+   "learned": false,
+   "eventKey": "step:<id:3>"
+  },
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
+    "category": "message",
     "label": "llm.model_downgrade",
     "args": {
      "requestedModel": "quick/model-q",
@@ -258,7 +278,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:3>"
+   "eventKey": "step:<id:4>"
   },
   {
    "chatId": 7001,
@@ -291,7 +311,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:4>"
+   "eventKey": "step:<id:5>"
   },
   {
    "chatId": 7001,
@@ -314,7 +334,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:5>"
+   "eventKey": "step:<id:6>"
   },
   {
    "chatId": 7001,
@@ -334,7 +354,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:6>"
+   "eventKey": "step:<id:7>"
   },
   {
    "chatId": 7001,
@@ -367,7 +387,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:7>"
+   "eventKey": "step:<id:8>"
   },
   {
    "chatId": 7001,
@@ -385,7 +405,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:8>"
+   "eventKey": "step:<id:9>"
   },
   {
    "chatId": 7001,
@@ -411,6 +431,17 @@
      "score": 0.7
     },
     "result": "Quick pass: score 0.7 < 1 (refactor, files named)"
+   },
+   {
+    "ts": "<iso>",
+    "category": "message",
+    "label": "run.routed",
+    "args": {
+     "step": 0,
+     "route": "quick",
+     "score": 0.7
+    },
+    "result": "The run was routed quick (route score 0.7)."
    },
    {
     "ts": "<iso>",

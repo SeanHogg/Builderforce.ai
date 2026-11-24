@@ -110,6 +110,8 @@
     "guestTurnId": "<id:1>",
     "guestTurnInput": "And what about the manifest?",
     "mode": "work",
+    "pipelineRoute": "quick",
+    "routeScore": 0.12,
     "memory": {
      "trimmedTokens": 24655,
      "recallTokens": 0
@@ -127,6 +129,45 @@
    "metadata": {
     "kind": "step",
     "category": "message",
+    "label": "run.pipeline_route",
+    "args": {
+     "route": "quick",
+     "score": 0.12
+    },
+    "result": "Quick pass: the user asks a question; score 0.12 (question only, follow-up)",
+    "isError": false,
+    "ts": "<iso>"
+   },
+   "learned": false,
+   "eventKey": "step:<id:2>"
+  },
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
+    "category": "message",
+    "label": "run.routed",
+    "args": {
+     "step": 0,
+     "route": "quick",
+     "score": 0.12
+    },
+    "result": "The run was routed quick (route score 0.12).",
+    "isError": false,
+    "ts": "<iso>"
+   },
+   "learned": false,
+   "eventKey": "step:<id:3>"
+  },
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
+    "category": "message",
     "label": "context.compacted",
     "args": {
      "droppedMessages": 25
@@ -136,7 +177,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:2>"
+   "eventKey": "step:<id:4>"
   },
   {
    "chatId": 7001,
@@ -180,7 +221,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:3>"
+   "eventKey": "step:<id:5>"
   },
   {
    "chatId": 7001,
@@ -198,7 +239,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:4>"
+   "eventKey": "step:<id:6>"
   },
   {
    "chatId": 7001,
@@ -228,11 +269,32 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:5>"
+   "eventKey": "step:<id:7>"
   }
  ],
  "trace": {
   "7001": [
+   {
+    "ts": "<iso>",
+    "category": "message",
+    "label": "run.pipeline_route",
+    "args": {
+     "route": "quick",
+     "score": 0.12
+    },
+    "result": "Quick pass: the user asks a question; score 0.12 (question only, follow-up)"
+   },
+   {
+    "ts": "<iso>",
+    "category": "message",
+    "label": "run.routed",
+    "args": {
+     "step": 0,
+     "route": "quick",
+     "score": 0.12
+    },
+    "result": "The run was routed quick (route score 0.12)."
+   },
    {
     "ts": "<iso>",
     "category": "message",

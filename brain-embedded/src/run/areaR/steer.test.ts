@@ -109,7 +109,7 @@ describe('a Stop pressed during a hand-off waits for it', () => {
     const s: Scenario = {
       key: 9507,
       script: () => [calls({ name: 'hand_off', args: PLAN })],
-      request: () => ({ tools: [spec('read_file'), spec('builtin_tasks_create')], projectId: 11 }),
+      request: () => ({ tools: [spec('read_file'), spec('builtin_tasks_create')], projectId: 11, userTurn: 'Hand off the plan and tasks to the coder' }),
       tools: (key) => {
         let id = 900;
         return {

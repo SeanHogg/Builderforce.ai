@@ -37,6 +37,45 @@
    "metadata": {
     "kind": "step",
     "category": "message",
+    "label": "run.pipeline_route",
+    "args": {
+     "route": "full",
+     "score": 0.33
+    },
+    "result": "Full pipeline: routing is set to always; score 0.33 (follow-up)",
+    "isError": false,
+    "ts": "<iso>"
+   },
+   "learned": false,
+   "eventKey": "step:<id:1>"
+  },
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
+    "category": "message",
+    "label": "run.routed",
+    "args": {
+     "step": 0,
+     "route": "full",
+     "score": 0.33
+    },
+    "result": "The run was routed full (route score 0.33).",
+    "isError": false,
+    "ts": "<iso>"
+   },
+   "learned": false,
+   "eventKey": "step:<id:2>"
+  },
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
+    "category": "message",
     "label": "agent.stopped",
     "args": null,
     "result": "Stopped by user.",
@@ -44,7 +83,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:1>"
+   "eventKey": "step:<id:3>"
   },
   {
    "chatId": 7001,
@@ -62,7 +101,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:2>"
+   "eventKey": "step:<id:4>"
   },
   {
    "chatId": 7001,
@@ -79,6 +118,27 @@
  ],
  "trace": {
   "7001": [
+   {
+    "ts": "<iso>",
+    "category": "message",
+    "label": "run.pipeline_route",
+    "args": {
+     "route": "full",
+     "score": 0.33
+    },
+    "result": "Full pipeline: routing is set to always; score 0.33 (follow-up)"
+   },
+   {
+    "ts": "<iso>",
+    "category": "message",
+    "label": "run.routed",
+    "args": {
+     "step": 0,
+     "route": "full",
+     "score": 0.33
+    },
+    "result": "The run was routed full (route score 0.33)."
+   },
    {
     "ts": "<iso>",
     "category": "message",
@@ -524,7 +584,7 @@
   "reported": [],
   "ended": [
    {
-    "runId": "<id:3>",
+    "runId": "<id:5>",
     "outcome": "stopped"
    }
   ],

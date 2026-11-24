@@ -1,6 +1,15 @@
 import { summarizeWorkflow, workflowMetricOf, type WorkflowSummary } from '@builderforce/agent-run';
 import type { BrainTraceEvent } from './brainTriage';
 
+/** Match only step rows emitted by the workflow recorder. */
+export function isWorkflowSpan(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false;
+  const { category, label, args } = value as { category?: unknown; label?: unknown; args?: unknown };
+  if (category !== 'message' || typeof label !== 'string' || !label.startsWith('workflow.stage.')) return false;
+  const metric = workflowMetricOf(args);
+  return metric !== null && label === `workflow.stage.${metric.id}.${metric.status}`;
+}
+
 /** Read measured spans only. Gaps between trace timestamps are not stage durations. */
 export function workflowDiagnostics(events: readonly BrainTraceEvent[]): WorkflowSummary {
   return summarizeWorkflow(events.flatMap((event) => {

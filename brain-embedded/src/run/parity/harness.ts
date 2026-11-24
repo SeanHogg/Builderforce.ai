@@ -13,7 +13,7 @@ import type { BrainRunRequest, BrainStreamFn } from '../../runStore/runTypes';
 import type { BrainToolSpec, StreamChatResult } from '../../streamChatCompletion';
 import { isSummaryCall, completion } from './script';
 import { Recorder, copyWire } from './recorder';
-import { normalise, wireEquivalent, withoutUniformTelemetry } from './normalise';
+import { normalise, wireEquivalent, withoutUniformTelemetry, withoutWorkflowSpans } from './normalise';
 import type { HostTool, RunRecord, Scenario, ScenarioHost, ScriptedTurn, TurnInput } from './types';
 
 const DEFAULT_KEY = 7001;
@@ -92,15 +92,21 @@ class Host implements ScenarioHost {
     const turn = this.turns[this.taken] ?? this.fallback;
     this.taken += 1;
     if (!turn) throw new Error('parity script exhausted');
-    const res = await turn(input);
-    narrate(res, input);
-    return res;
+    try {
+      const res = await turn(input);
+      narrate(res, input);
+      return res;
+    } catch (error) {
+      // Give the mounted view time to receive its coalesced stream update before the failure.
+      if (!opts.signal?.aborted) await new Promise((resolve) => setTimeout(resolve, 40));
+      throw error;
+    }
   };
 
   private request(over: Partial<BrainRunRequest>): BrainRunRequest {
     const impl = this.impl;
     return {
-      entryPoint: 'vscode',
+      entryPoint: 'web',
       resolvedSystemPrompt: 'You are the Brain.',
       stream: this.stream,
       persistence: this.rec.persistence,
@@ -175,5 +181,5 @@ export async function runScenario(scenario: Scenario): Promise<RunRecord> {
   }
   const record = JSON.parse(JSON.stringify(rec.toRecord())) as RunRecord;
   record.wire = record.wire.map((w) => wireEquivalent(w as Record<string, unknown>) as typeof w);
-  return withoutUniformTelemetry(normalise(record));
+  return withoutUniformTelemetry(normalise(withoutWorkflowSpans(record)));
 }

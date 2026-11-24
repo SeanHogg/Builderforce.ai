@@ -30,6 +30,9 @@ const persistence = {
   uploadUrl: (key: string) => `https://x/${key}`,
 } as unknown as BrainPersistenceAdapter;
 
+const conversationSends = () =>
+  vi.mocked(persistence.sendMessages).mock.calls.filter(([, rows]) => rows.some((row) => row.role !== 'tool'));
+
 const config: BrainConfig = {
   transport: { baseUrl: 'https://gw.example', getToken: () => null },
   persistence,
@@ -180,7 +183,7 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
     expect(rowsOfRole('user')).toHaveLength(1);
     expect(rowsOfRole('assistant')).toHaveLength(1);
     expect(stepRows().filter((s) => s.startsWith('llm:'))).toHaveLength(1);
-    expect(persistence.sendMessages).toHaveBeenCalledTimes(2);
+    expect(conversationSends()).toHaveLength(2);
     await waitFor(() => {
       expect(hook.current.messages.map((m) => m.content)).toEqual(['hi', 'hello there']);
     });
@@ -288,7 +291,7 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
     expect(rowsOfRole('assistant')).toHaveLength(1);
     expect(stepRows().filter((s) => s.startsWith('llm:'))).toHaveLength(2);
     expect(stepRows()).toContain('tool:do_thing');
-    expect(persistence.sendMessages).toHaveBeenCalledTimes(2);
+    expect(conversationSends()).toHaveLength(2);
     await waitFor(() => {
       expect(hook.current.messages.map((m) => m.content)).toEqual(['go', 'done']);
     });
@@ -358,7 +361,7 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
     // steps ride along with them rather than costing a request each.
     expect(rowsOfRole('assistant')).toHaveLength(3);
     expect(stepRows().filter((s) => s === 'tool:do_thing')).toHaveLength(2);
-    expect(persistence.sendMessages).toHaveBeenCalledTimes(4);
+    expect(conversationSends()).toHaveLength(4);
   });
 
   it('persists nothing extra for a pure tool-call turn with no text', async () => {
@@ -378,7 +381,7 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
     // assistant persist (the empty-text turn still records its tool step durably).
     expect(rowsOfRole('assistant')).toHaveLength(1);
     expect(stepRows()).toContain('tool:do_thing');
-    expect(persistence.sendMessages).toHaveBeenCalledTimes(2);
+    expect(conversationSends()).toHaveLength(2);
     await waitFor(() => expect(hook.current.messages.map((m) => m.content)).toEqual(['go', 'done']));
   });
 

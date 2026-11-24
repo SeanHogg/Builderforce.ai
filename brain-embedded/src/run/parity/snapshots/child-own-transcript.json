@@ -17,7 +17,9 @@
     "chatId": 7001,
     "guestTurnId": "<id:1>",
     "guestTurnInput": "find it",
-    "mode": "work"
+    "mode": "work",
+    "pipelineRoute": "quick",
+    "routeScore": 0.15
    },
    "role": "chat",
    "maxTokens": 4096
@@ -39,13 +41,54 @@
     "chatId": 7001,
     "guestTurnId": "<id:2>",
     "guestTurnInput": "where is the auth middleware?",
-    "mode": "work"
+    "mode": "work",
+    "pipelineRoute": "quick",
+    "routeScore": 0.21
    },
    "role": "chat",
    "maxTokens": 4096
   }
  ],
  "persisted": [
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
+    "category": "message",
+    "label": "run.pipeline_route",
+    "args": {
+     "route": "quick",
+     "score": 0.15
+    },
+    "result": "Quick pass: the user asks a question; score 0.15 (question only)",
+    "isError": false,
+    "ts": "<iso>"
+   },
+   "learned": false,
+   "eventKey": "step:<id:3>"
+  },
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
+    "category": "message",
+    "label": "run.routed",
+    "args": {
+     "step": 0,
+     "route": "quick",
+     "score": 0.15
+    },
+    "result": "The run was routed quick (route score 0.15).",
+    "isError": false,
+    "ts": "<iso>"
+   },
+   "learned": false,
+   "eventKey": "step:<id:4>"
+  },
   {
    "chatId": 7001,
    "role": "tool",
@@ -76,7 +119,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:3>"
+   "eventKey": "step:<id:5>"
   },
   {
    "chatId": 7001,
@@ -94,7 +137,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:4>"
+   "eventKey": "step:<id:6>"
   },
   {
    "chatId": 7001,
@@ -106,6 +149,67 @@
     }
    },
    "learned": false
+  },
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
+    "category": "message",
+    "label": "run.pipeline_route",
+    "args": {
+     "route": "quick",
+     "score": 0.21
+    },
+    "result": "Quick pass: the user asks a question; score 0.21 (question only, backend_api)",
+    "isError": false,
+    "ts": "<iso>",
+    "midTurn": true,
+    "authoredBy": {
+     "kind": "agent",
+     "ref": "agent_ada",
+     "name": "Ada"
+    },
+    "subagentOf": {
+     "handle": "a1",
+     "owner": "BuilderForce",
+     "label": "locate auth"
+    }
+   },
+   "learned": false,
+   "eventKey": "step:<id:7>"
+  },
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
+    "category": "message",
+    "label": "run.routed",
+    "args": {
+     "step": 0,
+     "route": "quick",
+     "score": 0.21
+    },
+    "result": "The run was routed quick (route score 0.21).",
+    "isError": false,
+    "ts": "<iso>",
+    "midTurn": true,
+    "authoredBy": {
+     "kind": "agent",
+     "ref": "agent_ada",
+     "name": "Ada"
+    },
+    "subagentOf": {
+     "handle": "a1",
+     "owner": "BuilderForce",
+     "label": "locate auth"
+    }
+   },
+   "learned": false,
+   "eventKey": "step:<id:8>"
   },
   {
    "chatId": 7001,
@@ -148,7 +252,7 @@
     }
    },
    "learned": false,
-   "eventKey": "step:<id:5>"
+   "eventKey": "step:<id:9>"
   },
   {
    "chatId": 7001,
@@ -177,7 +281,7 @@
     }
    },
    "learned": false,
-   "eventKey": "step:<id:6>"
+   "eventKey": "step:<id:10>"
   },
   {
    "chatId": 7001,
@@ -204,6 +308,27 @@
  ],
  "trace": {
   "7001": [
+   {
+    "ts": "<iso>",
+    "category": "message",
+    "label": "run.pipeline_route",
+    "args": {
+     "route": "quick",
+     "score": 0.15
+    },
+    "result": "Quick pass: the user asks a question; score 0.15 (question only)"
+   },
+   {
+    "ts": "<iso>",
+    "category": "message",
+    "label": "run.routed",
+    "args": {
+     "step": 0,
+     "route": "quick",
+     "score": 0.15
+    },
+    "result": "The run was routed quick (route score 0.15)."
+   },
    {
     "ts": "<iso>",
     "category": "llm",
@@ -238,6 +363,27 @@
    }
   ],
   "-9001": [
+   {
+    "ts": "<iso>",
+    "category": "message",
+    "label": "run.pipeline_route",
+    "args": {
+     "route": "quick",
+     "score": 0.21
+    },
+    "result": "Quick pass: the user asks a question; score 0.21 (question only, backend_api)"
+   },
+   {
+    "ts": "<iso>",
+    "category": "message",
+    "label": "run.routed",
+    "args": {
+     "step": 0,
+     "route": "quick",
+     "score": 0.21
+    },
+    "result": "The run was routed quick (route score 0.21)."
+   },
    {
     "ts": "<iso>",
     "category": "llm",

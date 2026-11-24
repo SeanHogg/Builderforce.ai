@@ -31,11 +31,15 @@
  *     summarizer/fold request so the gateway can route it to the utility tier; the stored (old loop) request has no such field. Only
  *     `role === 'utility'` on a request the harness marked `summary: true` is dropped; any other role, or a utility role on a
  *     non-summary request, is still a difference.
+ * 10. Measured workflow spans use process-local ids and wall clocks. Their protocol is covered by the workflow diagnostics tests.
+ *     Remove validated spans from the persisted step and trace streams before assigning comparison ids.
  *
  * Nothing else is normalised: not message order, not step numbers, not counts, not wording.
  */
 
 import { DEFAULT_MAX_TOKENS } from '../../effort';
+import { isWorkflowSpan } from '../../workflowDiagnostics';
+import type { RunRecord } from './types';
 
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
 // `runPreamble.ts` falls back to `<epoch ms>-<base36>` where `crypto.randomUUID` is absent.
@@ -74,6 +78,14 @@ export function withoutUniformTelemetry<T extends { outcome: { reported: unknown
     return copy;
   });
   return { ...record, outcome: { ...record.outcome, reported } };
+}
+
+export function withoutWorkflowSpans(record: RunRecord): RunRecord {
+  return {
+    ...record,
+    persisted: record.persisted.filter(({ metadata }) => !isWorkflowSpan(metadata)),
+    trace: Object.fromEntries(Object.entries(record.trace).map(([chatId, events]) => [chatId, events.filter((event) => !isWorkflowSpan(event))])),
+  };
 }
 
 /** A normaliser with its own id numbering: one per record, so a record is numbered from 1. */

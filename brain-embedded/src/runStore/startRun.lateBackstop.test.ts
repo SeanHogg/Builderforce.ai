@@ -17,25 +17,35 @@ const answer = (text: string): StreamChatResult => ({ text, toolCalls: [], finis
 let rowId = 0;
 const persistence = { sendMessages: async (chatId: number, rows: Array<{ role: string; content: string }>) => rows.map((row) => ({ id: (rowId += 1), chatId, createdAt: '', metadata: null, seq: rowId, ...row })) as never };
 
-/** A run that changed code, whose ticket call (`runTool`) takes `ms` - or never returns. */
-function codeRun(key: number, ticketCallMs: number | 'never') {
-  const stream = async (): Promise<StreamChatResult> => { getCell(key).codeChanged = true; return answer('Edited.'); };
-  const runTool = async (): Promise<unknown> => {
-    if (ticketCallMs === 'never') return new Promise(() => {});
-    await delay(ticketCallMs);
-    return { id: 7 };
-  };
-  // The catalog carries the linked-ticket listing, so the settle's ticket bookkeeping reads the chat's tickets through `runTool`.
-  const tools = [{ type: 'function' as const, function: { name: 'builtin_chats_list_tickets', description: '', parameters: { type: 'object' as const } } }];
-  return startRun(key, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', stream, persistence, userTurn: 'change it', projectId: 1, runTool, tools });
-}
-
 describe('backstops that outlive their deadline write nothing into the next run (MF1)', () => {
   it('a late from_delta call neither sets the next run\'s ticket state nor lands in its trace', async () => {
     const saved = { ...continuationLimits };
     continuationLimits.settleMs = 30;
     try {
-      await codeRun(9360, 150); // settles after ~30 ms; the ticket call is still in flight
+      let releaseTicket!: () => void;
+      const ticket = new Promise<void>((resolve) => { releaseTicket = resolve; });
+      let requestedTicket = false;
+      await startRun(9360, {
+        entryPoint: 'vscode',
+        resolvedSystemPrompt: 'sys',
+        persistence,
+        userTurn: 'change it',
+        projectId: 1,
+        stream: async () => {
+          const cell = getCell(9360);
+          cell.codeChanged = true;
+          cell.touchedFiles = ['a.ts'];
+          return answer('Edited.');
+        },
+        runTool: async (name) => {
+          expect(name).toBe('builtin_tickets_from_delta');
+          requestedTicket = true;
+          await ticket;
+          return { taskId: 7 };
+        },
+      });
+      expect(requestedTicket).toBe(true);
+      expect(getCell(9360).trace.some((e) => e.label === 'run.backstop_timeout')).toBe(true);
       let release!: () => void;
       const hold = new Promise<void>((resolve) => { release = resolve; });
       const second = startRun(9360, {
@@ -45,7 +55,8 @@ describe('backstops that outlive their deadline write nothing into the next run 
       });
       await until(() => isRunning(9360));
 
-      await delay(250); // the first run's late ticket call completes NOW, while the second run is running
+      releaseTicket();
+      await delay(0); // Let the old close-out finish while its successor holds the chat.
       const c = getCell(9360);
       expect(c.deltaTicketId).toBeNull();
       expect(c.ticketRecorded).toBe(false);
@@ -64,8 +75,30 @@ describe('a Stop during the settle does not take the chat from the settling run 
     const saved = { ...continuationLimits };
     continuationLimits.settleMs = 200;
     try {
-      const first = codeRun(9361, 'never');
-      await until(() => !isRunning(9361) && isLive(9361)); // settling: the ticket call hangs
+      let modelStarted = false;
+      let flushing = false;
+      const first = startRun(9361, {
+        entryPoint: 'vscode',
+        resolvedSystemPrompt: 'sys',
+        stream: async ({ signal }) => {
+          modelStarted = true;
+          await new Promise<void>((resolve) => signal?.addEventListener('abort', () => resolve(), { once: true }));
+          return answer('');
+        },
+        persistence: {
+          sendMessages: async (chatId, rows) => {
+            if (!isRunning(9361) && rows.every((row) => row.role === 'tool')) {
+              flushing = true;
+              await new Promise<void>(() => {});
+            }
+            return persistence.sendMessages(chatId, rows);
+          },
+        },
+        userTurn: 'first',
+      });
+      await until(() => modelStarted);
+      stopRun(9361);
+      await until(() => flushing && !isRunning(9361) && isLive(9361));
 
       stopRun(9361);
       expect(isLive(9361)).toBe(true); // the Stop did not free it
@@ -85,4 +118,5 @@ describe('a Stop during the settle does not take the chat from the settling run 
 async function until(check: () => boolean, ms = 3_000): Promise<void> {
   const end = Date.now() + ms;
   while (!check() && Date.now() < end) await delay(5);
+  expect(check()).toBe(true);
 }

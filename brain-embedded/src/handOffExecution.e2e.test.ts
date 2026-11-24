@@ -18,13 +18,13 @@
  *
  * Plus the two ways the chain must hold anyway: a planner that ignores even the forced
  * turn (planning ends, the coder takes the next turn — never a question for the person),
- * and a sub-agent (it starts in `code`, never re-analysing). And the one way it must NOT fire: a question is answered,
+ * and a sub-agent on the quick route (it starts in `code`). And the one way it must NOT fire: a question is answered,
  * however many reads it takes.
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';
 import { READ_ONLY_STREAK_TURNS } from '@builderforce/run-guards';
-import { PLAN_TURN_BUDGET } from '@builderforce/run-policy';
+import { PLAN_TURN_BUDGET, QUICK_CHANGE_TURN_BUDGET } from '@builderforce/run-policy';
 
 /** The turn A3's read-only streak forces: a steer after READ_ONLY_STREAK_TURNS all-read turns, the escalation after as many more —
  *  before the analysis budget (`PLAN_TURN_BUDGET`) runs out (`handOffForcedClash.e2e.test.ts`). */
@@ -87,6 +87,7 @@ function analysisParalysis(turns: Turn[], onForced: 'hand_off' | 'keep_reading')
   return async (opts) => {
     const tools = (opts.tools ?? []).map((t) => t.function.name);
     turns.push({ role: String(opts.role), tools, toolChoice: opts.tool_choice });
+    if (turns.length > PLAN_TURN_BUDGET + 8) throw new Error('Analysis fixture exhausted its scripted turns');
     const read = () => {
       reads += 1;
       return { text: '', toolCalls: [{ id: `r${reads}`, name: 'read_file', args: JSON.stringify({ path: `src/file${reads}.ts` }) }], finishReason: 'tool_calls', resolvedModel: FLASH };
@@ -200,7 +201,7 @@ describe('a change request goes from analysis to code that runs (end to end)', (
     expect(calls.some((c) => c.name === 'spawn_agents')).toBe(false);
   });
 
-  it('starts a coding sub-agent in code, so it makes its change instead of re-analysing', async () => {
+  it('runs a sub-agent on the quick route and executes its edit', async () => {
     const turns: Turn[] = [];
     const calls: Call[] = [];
     await startRun(77, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', stream: async () => ({ text: 'Delegating.', toolCalls: [], finishReason: 'stop' }), persistence, userTurn: REQUEST });
@@ -211,6 +212,7 @@ describe('a change request goes from analysis to code that runs (end to end)', (
       runTool: host(calls),
       stream: analysisParalysis(turns, 'hand_off'),
       persistence,
+      pipeline: { routing: 'auto', threshold: 2 },
       userTurn: `${PLAN.tasks[0]!.title}\n\n${PLAN.tasks[0]!.brief}`,
       lineage: { rootChatId: 77, ownerKey: 77, ownerName: 'BuilderForce', handle: 'a1', label: PLAN.tasks[0]!.title, agent: { ref: 'subagent:a1', name: 'Developer' }, depth: 1 },
     });
@@ -256,9 +258,11 @@ describe('a change request goes from analysis to code that runs (end to end)', (
       resolvedSystemPrompt: 'sys',
       tools: TOOLS,
       runTool: host(calls),
+      pipeline: { routing: 'auto', threshold: 2 },
       stream: async (opts) => {
         const tools = (opts.tools ?? []).map((t) => t.function.name);
         turns.push({ role: String(opts.role), tools, toolChoice: opts.tool_choice });
+        if (turns.length > QUICK_CHANGE_TURN_BUDGET + 8) throw new Error('Coding fixture exhausted its scripted turns');
         if (!opts.tools || edited) return { text: 'Removed the title.', toolCalls: [], finishReason: 'stop', resolvedModel: GROK };
         if (tools.includes('read_file')) {
           reads += 1;
@@ -271,13 +275,13 @@ describe('a change request goes from analysis to code that runs (end to end)', (
       userTurn: REQUEST,
       lineage: { rootChatId: 77, ownerKey: 77, ownerName: 'BuilderForce', handle: 'a2', label: 'Drop the header title', agent: { ref: 'subagent:a2', name: 'Developer' }, depth: 1 },
     });
-    // A sub-agent starts coding; after the budget in reads, the turn offers only change tools and requires a call.
-    expect(turns.slice(0, STREAK_FORCED_AT).every((t) => t.role === 'code' && t.tools.includes('read_file'))).toBe(true);
-    const forced = turns[STREAK_FORCED_AT]!;
+    // The quick route starts in code. After the read budget, a required turn offers only change tools.
+    expect(turns.slice(0, QUICK_CHANGE_TURN_BUDGET).every((t) => t.role === 'code' && t.tools.includes('read_file'))).toBe(true);
+    const forced = turns[QUICK_CHANGE_TURN_BUDGET]!;
     expect(forced.toolChoice).toBe('required');
     expect(forced.tools).toContain('edit_file');
     expect(forced.tools).not.toContain('read_file');
-    expect(getRunTrace(-6106).find((e) => e.label === 'loop.progress_forced')?.args).toMatchObject({ trip: 2, signal: 'read_only_streak', forced: 'change' });
+    expect(getRunTrace(-6106).find((e) => e.label === 'loop.change_due')?.args).toMatchObject({ codeTurns: QUICK_CHANGE_TURN_BUDGET });
     expect(calls.some((c) => c.name === 'edit_file')).toBe(true);
   });
 
