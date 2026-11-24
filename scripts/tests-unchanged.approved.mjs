@@ -270,6 +270,13 @@ const RELEASE_BUILD_REVIEW = 'release build review (2026-11-24)';
 
 const RELEASE_BUILD_ORACLES = [
   {
+    file: 'brain-embedded/src/handOffExecution.e2e.test.ts',
+    blob: '6a22ac52e576e03a82bbe13f86c065efd3f08d72',
+    changed: 'Select quick routing for the child coding scenarios and use the quick change-turn budget. Bound the scripted model turns.',
+    reason: 'A child can now take either shared route. The explicit coding fixture still proves the required change-only menu dispatches an edit, and the parent scenarios still verify the read-only streak.',
+    approvedBy: RELEASE_BUILD_REVIEW,
+  },
+  {
     file: "agent-runtime/src/run/onPremSubagents.openRun.test.ts",
     blob: "e40a2439e8404dedb712df8f4447791319f43b50",
     changed: "Assert the child brief and owner lineage on task dispatch.",
