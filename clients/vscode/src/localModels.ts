@@ -142,7 +142,21 @@ export async function probeOnDeviceRuntimes(
     localFirstProber.probe(config.endpoints),
     pageProbe().catch((): LocalRuntimeProbe[] => []),
   ]);
-  return [...http, ...page];
+  const probes = [...http, ...page];
+  lastOnDevice = probes.flatMap((p) => p.models);
+  return probes;
+}
+
+/** The models the last on-device probe reported — set by {@link probeOnDeviceRuntimes}. */
+let lastOnDevice: readonly LocalModel[] = [];
+
+/**
+ * The live windows (Ollama's `num_ctx`, a page engine's context) as the last probe saw
+ * them — synchronous, no I/O, for a reader that cannot await (the transport's `window()`).
+ * Empty until the first probe settles.
+ */
+export function lastProbedLocalModels(): readonly LocalModel[] {
+  return lastOnDevice;
 }
 
 /**

@@ -29,6 +29,7 @@ import {
 import { MIN_QUICK_RUNS_FOR_SUGGESTION, type RouteTotals } from "@builderforce/pipeline-route";
 import { MILLICENTS_PER_USD } from "@builderforce/spend-contract";
 import { localBrainApplication } from "./localFirstStore";
+import { ensureWorkspaceDirs, workspacePaths } from "./workspace/workspacePaths";
 
 export const PIPELINE_ROUTE_REPORT_COMMAND = "builderforce.pipelineRouteReport";
 /** The window the report reads. */
@@ -157,7 +158,21 @@ function suggestionLine(report: RouteReport, t: Translate): string {
     : t("Raise it to {0}: quick runs rarely needed the full pipeline, so quick can take more.", next.toFixed(2));
 }
 
-/** Read the ledger, render the report and open it as a Markdown preview. */
+/**
+ * Where the report opens: `.builderforce/diagnostics/` in the open folder (resolved by the
+ * one path resolver), else an untitled document when no folder is open.
+ */
+async function reportDocumentUri(content: string): Promise<vscode.Uri> {
+  const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  if (!root) return (await vscode.workspace.openTextDocument({ content, language: "markdown" })).uri;
+  const paths = workspacePaths(root);
+  ensureWorkspaceDirs(paths);
+  const uri = vscode.Uri.file(routeReportFile(paths.diagnostics));
+  await vscode.workspace.fs.writeFile(uri, new TextEncoder().encode(content));
+  return uri;
+}
+
+/** Read the ledger, render the report, write it under diagnostics and open it as a Markdown preview. */
 async function showRouteReport(ctx: vscode.ExtensionContext): Promise<void> {
   const local = localBrainApplication(ctx);
   const since = new Date(Date.now() - REPORT_DAYS * 86_400_000);
@@ -170,8 +185,7 @@ async function showRouteReport(ctx: vscode.ExtensionContext): Promise<void> {
   // A quick run recorded as failed counts as misrouted, as does one re-run on the full pipeline.
   const report = summarizeRouteRuns(routeRunRecords(rows, undefined, outcomes), { threshold });
   const content = renderRouteReport(report, REPORT_DAYS, vscode.l10n.t, summarizeGateRuns(rows, gateAccepted), rows);
-  const doc = await vscode.workspace.openTextDocument({ content, language: "markdown" });
-  await vscode.commands.executeCommand("markdown.showPreview", doc.uri);
+  await vscode.commands.executeCommand("markdown.showPreview", await reportDocumentUri(content));
 }
 
 export function registerPipelineRouteReport(ctx: vscode.ExtensionContext): void {

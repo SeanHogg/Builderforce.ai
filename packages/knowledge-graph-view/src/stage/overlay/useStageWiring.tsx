@@ -24,6 +24,7 @@ import type { MarkSet, Placement } from '../types';
 import { SlotIncident } from './incident';
 import { CallSiteCard } from './CallSiteCard';
 import { StageCard } from './StageCard';
+import { MarkCodeButton } from './MarkCodeButton';
 import type { SymbolRecord } from '../../types';
 
 /** The code dock's records while it is closed: none, and the same array every render. */
@@ -116,8 +117,18 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
 
     const closeCard = useCallback(() => setCardKey(null), []);
     const openCode = useCallback(() => setCodeOpen(true), []);
+    // A pointer hovering a mark while the dock is open tints that symbol's lines (not the hover the code's own follow sets).
+    const followed = useRef(-1);
+    const [hoverRef, setHoverRef] = useState<string | null>(null);
+    useEffect(() => codeOpen ? bus.onHover((slot) => {
+        if (slot === followed.current) return;
+        const k = slot >= 0 ? bus.keys[slot] : undefined;
+        setHoverRef(k?.startsWith('node:') ? k.slice('node:'.length) : null);
+    }) : undefined, [bus, codeOpen]);
     // Closing the dock drops the mark the scrolled code lit (`followCode`).
-    const closeCode = useCallback(() => { setCodeOpen(false); bus.setHover(-1); }, [bus]);
+    const closeCode = useCallback(() => { setCodeOpen(false); setHoverRef(null); bus.setHover(-1); }, [bus]);
+    // A new method at the code level drops the old pick, so it does not jump inside the new one.
+    useEffect(() => { setSelected(null); }, [zoom.code?.key]);
     // Only while the code dock is open: the fallback walks every graph node on the main thread, and `drill` is a fresh
     // object each render, so keying on it re-walked the graph on every render of every stage view (the perf gate's mount reads).
     const drillSymbols = drill.symbols;
@@ -130,22 +141,27 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
     const stop = surface.path?.stops[surface.step];
     const stopStation = stop ? surface.stations.byId.get(stop.id) ?? map.stations.byId.get(stop.id) ?? null : null;
     const stopRef = codeRefForStop(stop?.id ?? null, stopStation);
-    const dockRef = markRef ?? stopRef;
+    // At the code band the dock reads the open method; else the selected mark, else the journey stop.
+    const dockRef = zoom.code?.target.ref ?? markRef ?? stopRef;
     const codeName = subject.name || (dockRef === stopRef && stopStation ? stopStation.name : '') || (dockRef ? index.get(dockRef)?.label ?? dockRef : '');
     // The dock reads the whole file; the mark's own line is `scrollLine`, so another method in the same file only scrolls it.
-    const markTarget = codeOpen ? targetForMark(dockRef, codeName, records) : null;
+    const markTarget = codeOpen ? (zoom.code?.target ?? targetForMark(dockRef, codeName, records)) : null;
     const codeTarget = markTarget ? fileTargetOf(markTarget) : null;
-    const scrollLine = codeOpen ? focusLine(records, markRef, stopRef) : undefined;
+    const scrollLine = codeOpen ? (zoom.code?.target.startLine ?? focusLine(records, markRef, stopRef)) : undefined;
+    // A method name in the code opens the code band on it when the zoom can; else it selects the mark, as before.
+    const enterCode = zoom.enterCode;
     const drillTo = useCallback((ref: string) => {
+        if (enterCode(ref)) return;
         setSelected(`node:${ref}`);
         p.onSelect(ref);
-    }, [p]);
+    }, [p, enterCode]);
     // Code scrolled onto another symbol: the stage lights and centres its mark (else its file's), without
     // selecting it — selection would scroll the code back (`scrollLine`).
     const followCode = useCallback((ref: string) => {
         let slot = bus.slotOf(`node:${ref}`);
         if (slot < 0) slot = bus.slotOf(`node:${fileRefOf(ref)}`);
         if (slot < 0) return;
+        followed.current = slot;
         bus.setHover(slot);
         bus.reveal(slot);
     }, [bus]);
@@ -156,8 +172,13 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
                 onClose={closeCard} onQuestion={surface.setQuestion} onOpenPanel={surface.openPanel} onEnter={zoom.zoomInto}
                 onCode={openCode}
             />
+            {/* A selected file or symbol mark gets its own Code button; stations have it on their card, and the code band shows code already. */}
+            <MarkCodeButton
+                slotKey={selected?.startsWith('node:') && !cardKey && !codeOpen && !zoom.code ? selected : null}
+                name={codeName} labels={p.labels} onCode={openCode}
+            />
             {site && <CallSiteCard site={site.site} at={site.at} boxWidth={width} labels={p.labels} onOpenSource={p.onOpenSource} onClose={closeSite} />}
-            {zoom.code && (
+            {zoom.code && !codeOpen && (
                 <CodeLayer
                     key={zoom.code.key} slotKey={zoom.code.key} target={zoom.code.target} reader={surface.readSource}
                     labels={p.labels} onOpenSource={p.onOpenSource} onClose={zoom.closeCode}
@@ -168,6 +189,8 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
                     target={codeTarget} name={codeName} reader={surface.readSource}
                     labels={p.labels} records={records} scrollLine={scrollLine} onDrill={drillTo}
                     onOpenSource={p.onOpenSource} onClose={closeCode} onFocusSymbol={followCode}
+                    method={zoom.code?.target.ref ?? null} onOut={zoom.code ? zoom.closeCode : drill.canOut ? drill.out : undefined}
+                    trail={zoom.code ? zoom.trail : undefined} onTrail={zoom.codeBack} pick={zoom.code ? markRef : null} hover={hoverRef}
                 />
             )}
             {drill.loading && zoom.band !== 'system' && <ZoomLoading text={p.labels.surface.map.card.loading} />}

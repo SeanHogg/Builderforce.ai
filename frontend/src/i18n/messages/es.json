@@ -39899,7 +39899,18 @@
         "aria": "Código de {name}, líneas {from} a {to}",
         "loading": "Leyendo el código…",
         "unavailable": "El código no está disponible aquí.",
-        "truncated": "Se muestran las primeras {count} líneas"
+        "truncated": "Se muestran las primeras {count} líneas",
+        "button": "Código",
+        "buttonAria": "Mostrar el código de {name}",
+        "drillAria": "Mostrar {name} en el escenario",
+        "stepAria": "Llamada {n} de {count}",
+        "step": "Llamada {n} de {count} → {name}",
+        "crumbsAria": "Dónde estás leyendo",
+        "follow": "Seguir el código",
+        "out": "Salir",
+        "prevStep": "Llamada anterior",
+        "nextStep": "Llamada siguiente",
+        "drillCallee": "Entrar en {name}"
       },
       "api": {
         "notSetUpTitle": "No se encontraron endpoints",
@@ -40005,7 +40016,24 @@
         },
         "startFrom": "Empezar desde",
         "startEntry": "La entrada",
-        "startStop": "Esta parada"
+        "startStop": "Esta parada",
+        "modeOpen": "Simular",
+        "modeOpenAria": "Simular {name} con valores",
+        "modeTitle": "Simular con valores",
+        "modeEntry": "Punto de entrada",
+        "modeName": "Nombre",
+        "modeValue": "Valor",
+        "modeAdd": "Añadir valor",
+        "modeRemove": "Quitar {name}",
+        "modeCarried": "Llevado en este salto",
+        "modeHop": "{from} → {to}",
+        "modeEmpty": "Selecciona un punto de entrada. Su recorrido avanza con los valores que introduzcas.",
+        "modeNoHops": "Ningún recorrido sale de este punto de entrada.",
+        "modeClose": "Cerrar",
+        "modeStep": "Salto {n} de {total}",
+        "modeBack": "Salto anterior",
+        "modeNext": "Salto siguiente",
+        "modeUseSelected": "Usar la marca seleccionada"
       },
       "fix": {
         "title": "Corrección",
@@ -40417,6 +40445,26 @@
         "api": "lo que prometen las rutas, lo que se prueba, pruébalo",
         "resolve": "una corrección determinista o un prompt, y luego verificar",
         "simulate": "ejecuta el recorrido con valores reales"
+      },
+      "walk": {
+        "doorIn": "Empieza en la puerta {name}, donde comienza este recorrido.",
+        "doorOut": "Sal por la puerta {name}.",
+        "room": "Estás en la sala {name}.",
+        "hallway": "Recorre el pasillo de {from} a {to} ({count} llamadas).",
+        "hallwayOne": "Recorre el pasillo de {from} a {to} (una llamada).",
+        "hallwayNone": "No hay pasillo de {from} a {to}.",
+        "arrived": "{hallway} {place}",
+        "only": "Estás en la sala {name}. Todavía no hay pasillo.",
+        "empty": "Elige un recorrido para pasar por puertas, pasillos y salas.",
+        "metaphor": "Las puertas son por donde entras y sales. Los pasillos son llamadas entre salas. Las salas son módulos y clases."
+      },
+      "depth": {
+        "aria": "Profundidad",
+        "system": "Sistema",
+        "module": "Módulo",
+        "class": "Clase",
+        "method": "Método",
+        "climb": "Volver a {name}"
       }
     }
   },

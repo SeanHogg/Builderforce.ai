@@ -15,7 +15,7 @@ export interface SceneLabels {
      * note when the host has no file contents (the panel then shows `path:line` and "Open at line"), and the note when
      * the host cut the range short (`{count}` lines shown).
      */
-    code: Record<'aria' | 'loading' | 'unavailable' | 'truncated' | 'button' | 'buttonAria' | 'drillAria', string>;
+    code: Record<'aria' | 'loading' | 'unavailable' | 'truncated' | 'button' | 'buttonAria' | 'drillAria' | 'stepAria' | 'step' | 'crumbsAria' | 'follow' | 'out' | 'prevStep' | 'nextStep' | 'drillCallee', string>;
     /**
      * The stage's navigation control (bottom-right): its group name, the pan pad (on 3D, up / down move through the
      * plane stack) and the orbit buttons shown on the 3D camera. Zoom in / out and Fit reuse `zoomIn`, `zoomOut`, `zoomReset`.
@@ -56,6 +56,15 @@ export const SCENE_DEFAULTS: SceneLabels = {
         button: 'Code',
         buttonAria: 'Show the code of {name}',
         drillAria: 'Show {name} on the stage',
+        /** The code panel's numbered call badge (`{n}`, `{count}`), the current-call line (`{n}`, `{count}`, `{name}`), the trail's name, the follow toggle, Out, the Previous / Next call buttons and "Into" the current callee (`{name}`). */
+        stepAria: 'Call {n} of {count}',
+        step: 'Call {n} of {count} → {name}',
+        crumbsAria: 'Where you are reading',
+        follow: 'Follow the code',
+        out: 'Out',
+        prevStep: 'Previous call',
+        nextStep: 'Next call',
+        drillCallee: 'Into {name}',
     },
     nav: {
         group: 'Move the view',

@@ -14,7 +14,7 @@ import {
 import type { ChatContentPart } from "./chatContent";
 import { type LocalModelsConfig } from "./localModels";
 import { readDesktopModelsEndpoint } from "./desktopContext";
-import { isKimiCodeInstall, loadKimiCodeInstall, type KimiCodeInstallResult, type KimiCodeModel } from "./kimiCodeInstall";
+import { isKimiCodeInstall, kimiModelOf, loadKimiCodeInstall, type KimiCodeInstallResult, type KimiCodeModel } from "./kimiCodeInstall";
 import { localCredentialSnapshot } from "./localProviderCredentials";
 import { classifyQueue } from "@builderforce/write-outbox";
 import { registerDeadLetterQueue } from "./deadLetterCommand";
@@ -160,7 +160,7 @@ function kimiSource(): { baseUrl: string; models: readonly KimiCodeModel[] } | n
   const install = currentKimiInstall();
   if (isKimiCodeInstall(install)) return install;
   const account = localCredentialSnapshot("kimi");
-  return account ? { baseUrl: account.baseUrl, models: account.models } : null;
+  return account ? { baseUrl: account.baseUrl, models: account.models.map(kimiModelOf) } : null;
 }
 
 /**

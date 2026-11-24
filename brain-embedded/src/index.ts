@@ -704,7 +704,7 @@ export type { LocalRatingVerdict, RatableMessage, RatedTurnContext, MessageRatin
 export { getLastResolvedModel, setLastResolvedModel, withObservedModel, forgetResolvedModels } from './lastResolvedModel';
 
 // Shared data shapes
-export type { BrainChat, BrainMessage, BrainModality, ChatInputAttachment, EvermindLearnOutcome, EvermindLearnTarget, ViewKey } from './types';
+export type { BrainChat, BrainChatPersona, BrainMessage, BrainModality, ChatInputAttachment, EvermindLearnOutcome, EvermindLearnTarget, ViewKey } from './types';
 export { serverChatIdOf } from './types';
 export { routingQueryForTurn, turnOptimizationDirective } from './turnOptimization';
 export { STEP_MESSAGE_ROLE, isStepMessage, attachEvermindLearn, formatEvermindLearnStep } from './types';

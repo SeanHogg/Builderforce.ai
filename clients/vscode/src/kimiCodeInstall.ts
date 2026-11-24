@@ -27,6 +27,7 @@
 import os from "node:os";
 import path from "node:path";
 
+import type { LocalCredentialModel } from "@builderforce/provider-connect";
 import { loadCredential, type KimiCredentialFs, type KimiCredentialState } from "./kimiCodeCredentials";
 
 /** The reads this module performs. Structurally the credential store's port, so ONE
@@ -41,6 +42,11 @@ export interface KimiCodeModel {
   displayName: string;
   /** Context window Kimi declares, when it declares one. */
   maxContextSize?: number;
+}
+
+/** A workspace-connection model as a Kimi row, keeping the window the API sent. */
+export function kimiModelOf(m: LocalCredentialModel): KimiCodeModel {
+  return { model: m.model, displayName: m.displayName, ...(m.contextWindow ? { maxContextSize: m.contextWindow } : {}) };
 }
 
 /** A usable local install: everything needed to make the call from this machine. */

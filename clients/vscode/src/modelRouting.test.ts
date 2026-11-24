@@ -289,3 +289,17 @@ describe("the inference mode is decided by the seam", () => {
     expect(routing).not.toContain("if (!authorized.ok) return choice;");
   });
 });
+
+describe("knowing a local window is not a vote to route", () => {
+  const routing = stripComments(fs.readFileSync(path.join(SRC, "modelRouting.ts"), "utf8"));
+
+  it("reads windows from every enabled runtime, local-first or not", () => {
+    expect(routing).toMatch(/function localWindowProbes\(\)[^{]*\{\s*return probeOnDeviceRuntimes\(/);
+  });
+
+  it("keeps Hybrid's fallback candidates on the local-first probe", () => {
+    expect(routing).toMatch(/function localFirstCandidates\(\)[^{]*\{\s*return probeLocalFirstRuntimes\(/);
+    expect(routing).toContain("route.localFirst?.probes ?? localFirstCandidates()");
+    expect(routing).not.toContain("?? localWindowProbes()");
+  });
+});

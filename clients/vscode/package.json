@@ -1104,6 +1104,12 @@
           "default": "",
           "markdownDescription": "%config.models.subagent.desc%"
         },
+        "builderforce.models.policy": {
+          "type": "string",
+          "enum": ["role", "tip"],
+          "default": "role",
+          "markdownDescription": "%config.modelsPolicy.desc%"
+        },
         "builderforce.pipeline.independentReview": {
           "type": "string",
           "enum": ["auto", "required", "off"],

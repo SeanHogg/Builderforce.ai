@@ -2,6 +2,8 @@
  * Type definitions for builderForceAgents project-specific context
  */
 
+import type { PersonaMethodology, WriteScopeEntry } from "@builderforce/agent-tools";
+
 // ---------------------------------------------------------------------------
 // Workforce Agent Package (Builderforce Workforce Registry)
 // ---------------------------------------------------------------------------
@@ -458,31 +460,17 @@ export type PersonaPluginMetadata = {
  * PRD 49 methodology fields. Nested so they cannot collide with `AgentRole.model`,
  * which is a model id. Absent means the persona has no gate and may write anywhere.
  */
-export type PersonaColour = "analyst" | "designer" | "engineer" | "support";
-export type PersonaRoute = "plan" | "pipeline" | "quick";
-export type PersonaKnowledge = "context" | "first";
-export type ArtifactId = "prd" | "design" | "mockup" | "diagram" | "support";
-export type MethodologyScopeKey = "logs" | "diagnostics" | "methodology";
+export type {
+  ArtifactId,
+  PersonaColour,
+  PersonaKnowledge,
+  PersonaMethodology,
+  PersonaRoute,
+} from "@builderforce/agent-tools";
 
 /** Resolved through workspace paths. `root` is the workspace root, not `.builderforce`. */
-export type MethodologyWriteScope =
-  | { key: "root" }
-  | { key: MethodologyScopeKey; sub?: string };
-
-export type PersonaMethodology = {
-  colour?: PersonaColour;
-  /** Route kind. Not `AgentRole.model`. */
-  route?: PersonaRoute;
-  knowledge?: PersonaKnowledge;
-  requires?: ArtifactId[];
-  produces?: ArtifactId[];
-  recordsRun?: boolean;
-  /** Registry `name` of the next role. Successor means this field, not sort order. */
-  next?: string;
-  /** Appended by `buildPersonaSystemBlock` after the Role line. */
-  work?: string;
-  writeScope?: MethodologyWriteScope[];
-};
+export type MethodologyWriteScope = WriteScopeEntry;
+export type MethodologyScopeKey = Exclude<WriteScopeEntry["key"], "root">;
 
 export type PersonaPlugin = AgentRole & {
   /** Where this persona was loaded from */

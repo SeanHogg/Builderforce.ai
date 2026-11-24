@@ -1,6 +1,8 @@
 /**
- * The one gzip inflater (PRD 49 §5). `DecompressionStream`, not `node:zlib`.
- * `read_file` and any search reader call this. `read_compressed` does not.
+ * The one gzip inflater and compressor (PRD 49 §5). `DecompressionStream` /
+ * `CompressionStream`, not `node:zlib`. `read_file` and any search reader call the
+ * inflater; a writer of a `.gz` artifact (a knowledge pack) calls {@link gzipText}.
+ * `read_compressed` calls neither.
  */
 export async function readGzipText(bytes: Uint8Array): Promise<string> {
   const stream = new DecompressionStream("gzip");
@@ -9,6 +11,15 @@ export async function readGzipText(bytes: Uint8Array): Promise<string> {
   await writer.close();
   const decoded = await new Response(stream.readable).arrayBuffer();
   return new TextDecoder().decode(decoded);
+}
+
+/** UTF-8 `text` as gzip bytes — the inverse of {@link readGzipText}. */
+export async function gzipText(text: string): Promise<Uint8Array> {
+  const stream = new CompressionStream("gzip");
+  const writer = stream.writable.getWriter();
+  await writer.write(new TextEncoder().encode(text) as BufferSource);
+  await writer.close();
+  return new Uint8Array(await new Response(stream.readable).arrayBuffer());
 }
 
 /** Latin-1 bytes of a string a file reader stored without decoding. */

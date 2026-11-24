@@ -187,3 +187,25 @@ describe("directory search finds source next to a bundled media hit (chat #111)"
     expect(r.matches?.some((m) => String(m.path).endsWith("VsCodeChatSurface.tsx"))).toBe(true);
   });
 });
+
+describe("search_code over a .gz file (PRD 49 §1.12)", () => {
+  let root = "";
+  beforeAll(async () => {
+    root = await fs.mkdtemp(path.join(os.tmpdir(), "bf-search-gz-"));
+    const { gzipSync } = await import("zlib");
+    await fs.writeFile(path.join(root, "pack.bfkp.gz"), gzipSync("header\nthe persona gate names the Analyst\n"));
+  });
+  afterAll(async () => {
+    await fs.rm(root, { recursive: true, force: true });
+  });
+
+  it("matches a string inside the inflated text", async () => {
+    const r = await searchWorkspace({ root, start: path.join(root, "pack.bfkp.gz"), query: "names the Analyst", ripgrep: null });
+    expect(r.matches).toEqual([{ path: "pack.bfkp.gz", line: 2, text: "the persona gate names the Analyst" }]);
+  });
+
+  it("the walk reaches it too", async () => {
+    const r = await walkSearch(root, root, "persona gate");
+    expect(r.matches?.map((m) => m.path)).toEqual(["pack.bfkp.gz"]);
+  });
+});

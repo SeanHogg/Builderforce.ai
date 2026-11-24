@@ -39899,7 +39899,18 @@
         "aria": "Code von {name}, Zeilen {from} bis {to}",
         "loading": "Code wird gelesen…",
         "unavailable": "Der Code ist hier nicht verfügbar.",
-        "truncated": "Die ersten {count} Zeilen werden angezeigt"
+        "truncated": "Die ersten {count} Zeilen werden angezeigt",
+        "button": "Code",
+        "buttonAria": "Den Code von {name} anzeigen",
+        "drillAria": "{name} auf der Bühne zeigen",
+        "stepAria": "Aufruf {n} von {count}",
+        "step": "Aufruf {n} von {count} → {name}",
+        "crumbsAria": "Wo du gerade liest",
+        "follow": "Dem Code folgen",
+        "out": "Hinaus",
+        "prevStep": "Vorheriger Aufruf",
+        "nextStep": "Nächster Aufruf",
+        "drillCallee": "In {name}"
       },
       "api": {
         "notSetUpTitle": "Keine Endpunkte gefunden",
@@ -40005,7 +40016,24 @@
         },
         "startFrom": "Starten bei",
         "startEntry": "Dem Einstieg",
-        "startStop": "Dieser Station"
+        "startStop": "Dieser Station",
+        "modeOpen": "Simulieren",
+        "modeOpenAria": "{name} mit Werten simulieren",
+        "modeTitle": "Mit Werten simulieren",
+        "modeEntry": "Einstiegspunkt",
+        "modeName": "Name",
+        "modeValue": "Wert",
+        "modeAdd": "Wert hinzufügen",
+        "modeRemove": "{name} entfernen",
+        "modeCarried": "Auf diesem Schritt mitgeführt",
+        "modeHop": "{from} → {to}",
+        "modeEmpty": "Wähle einen Einstiegspunkt. Seine Reise wird mit den eingegebenen Werten durchlaufen.",
+        "modeNoHops": "Von diesem Einstiegspunkt geht keine Reise aus.",
+        "modeClose": "Schließen",
+        "modeStep": "Schritt {n} von {total}",
+        "modeBack": "Vorheriger Schritt",
+        "modeNext": "Nächster Schritt",
+        "modeUseSelected": "Die ausgewählte Markierung verwenden"
       },
       "fix": {
         "title": "Korrektur",
@@ -40417,6 +40445,26 @@
         "api": "was die Routen versprechen, was getestet ist, ausprobieren",
         "resolve": "eine deterministische Korrektur oder ein Prompt, dann prüfen",
         "simulate": "den Pfad mit echten Werten ausführen"
+      },
+      "walk": {
+        "doorIn": "Beginne an der Tür {name}, wo diese Reise startet.",
+        "doorOut": "Verlasse sie durch die Tür {name}.",
+        "room": "Du bist im Raum {name}.",
+        "hallway": "Geh den Flur von {from} nach {to} ({count} Aufrufe).",
+        "hallwayOne": "Geh den Flur von {from} nach {to} (ein Aufruf).",
+        "hallwayNone": "Es gibt keinen Flur von {from} nach {to}.",
+        "arrived": "{hallway} {place}",
+        "only": "Du bist im Raum {name}. Es gibt noch keinen Flur.",
+        "empty": "Wähle eine Reise, um durch Türen, Flure und Räume zu gehen.",
+        "metaphor": "Türen sind, wo du hineingehst und hinausgehst. Flure sind Aufrufe zwischen Räumen. Räume sind Module und Klassen."
+      },
+      "depth": {
+        "aria": "Tiefe",
+        "system": "System",
+        "module": "Modul",
+        "class": "Klasse",
+        "method": "Methode",
+        "climb": "Zurück zu {name}"
       }
     }
   },

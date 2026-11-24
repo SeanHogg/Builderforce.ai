@@ -39899,7 +39899,18 @@
         "aria": "{name} 的代码，第 {from} 至 {to} 行",
         "loading": "正在读取代码…",
         "unavailable": "此处无法获取代码。",
-        "truncated": "显示前 {count} 行"
+        "truncated": "显示前 {count} 行",
+        "button": "代码",
+        "buttonAria": "显示 {name} 的代码",
+        "drillAria": "在舞台上显示 {name}",
+        "stepAria": "第 {n} 次调用，共 {count} 次",
+        "step": "第 {n} 次调用，共 {count} 次 → {name}",
+        "crumbsAria": "你正在阅读的位置",
+        "follow": "跟随代码",
+        "out": "退出",
+        "prevStep": "上一次调用",
+        "nextStep": "下一次调用",
+        "drillCallee": "进入 {name}"
       },
       "api": {
         "notSetUpTitle": "未找到端点",
@@ -40005,7 +40016,24 @@
         },
         "startFrom": "起点",
         "startEntry": "入口",
-        "startStop": "此站点"
+        "startStop": "此站点",
+        "modeOpen": "模拟",
+        "modeOpenAria": "用值模拟 {name}",
+        "modeTitle": "用值模拟",
+        "modeEntry": "入口点",
+        "modeName": "名称",
+        "modeValue": "值",
+        "modeAdd": "添加值",
+        "modeRemove": "移除 {name}",
+        "modeCarried": "此跳携带的值",
+        "modeHop": "{from} → {to}",
+        "modeEmpty": "选择一个入口点。将用你输入的值逐步走完它的旅程。",
+        "modeNoHops": "没有从此入口点出发的旅程。",
+        "modeClose": "关闭",
+        "modeStep": "第 {n} 跳，共 {total} 跳",
+        "modeBack": "上一跳",
+        "modeNext": "下一跳",
+        "modeUseSelected": "使用所选标记"
       },
       "fix": {
         "title": "修复",
@@ -40417,6 +40445,26 @@
         "api": "路由的承诺、已测试的内容，以及试用",
         "resolve": "确定性修复或提示，然后验证",
         "simulate": "用真实值运行该路径"
+      },
+      "walk": {
+        "doorIn": "从门 {name} 开始，这段旅程由此出发。",
+        "doorOut": "从门 {name} 离开。",
+        "room": "你在房间 {name} 中。",
+        "hallway": "沿走廊从 {from} 走到 {to}（{count} 次调用）。",
+        "hallwayOne": "沿走廊从 {from} 走到 {to}（一次调用）。",
+        "hallwayNone": "从 {from} 到 {to} 没有走廊。",
+        "arrived": "{hallway} {place}",
+        "only": "你在房间 {name} 中。还没有走廊。",
+        "empty": "选择一段旅程，走过门、走廊和房间。",
+        "metaphor": "门是进出的地方。走廊是房间之间的调用。房间是模块和类。"
+      },
+      "depth": {
+        "aria": "深度",
+        "system": "系统",
+        "module": "模块",
+        "class": "类",
+        "method": "方法",
+        "climb": "返回 {name}"
       }
     }
   },

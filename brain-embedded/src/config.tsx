@@ -13,7 +13,7 @@
 
 import { createContext, useContext, useEffect, useMemo } from 'react';
 import { registerPendingWordsReplay } from './pendingWords';
-import type { BrainChat, BrainMessage, ChatInputAttachment } from './types';
+import type { BrainChat, BrainChatPersona, BrainMessage, ChatInputAttachment } from './types';
 import type { ImagePrepOptions } from './imagePrep';
 import { streamChatCompletion, type BrainTransport } from './streamChatCompletion';
 import type { BrainStreamFn } from './brainRunStore';
@@ -36,7 +36,7 @@ export interface BrainPersistenceAdapter {
   listArchivedChats?(params?: { projectId?: string; limit?: number; offset?: number }): Promise<BrainChat[]>;
   getChat(id: number): Promise<BrainChat>;
   createChat(body: { title?: string; originalRequest?: string | null; projectId?: number | null; capability?: string | null; mode?: string | null; bindPending?: boolean }): Promise<BrainChat>;
-  updateChat(id: number, body: { title?: string; originalRequest?: string | null; projectId?: number | null; visibility?: 'shared' | 'locked'; capability?: string | null; mode?: string | null; memoryEnabled?: boolean; isArchived?: boolean }): Promise<BrainChat>;
+  updateChat(id: number, body: { title?: string; originalRequest?: string | null; projectId?: number | null; visibility?: 'shared' | 'locked'; capability?: string | null; mode?: string | null; memoryEnabled?: boolean; isArchived?: boolean; persona?: BrainChatPersona }): Promise<BrainChat>;
   deleteChat(id: number): Promise<unknown>;
   /**
    * Archive a chat — put it away rather than remove it. Distinct from

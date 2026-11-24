@@ -14,6 +14,13 @@ import type { SpendSavingsSummary } from './spendSavings';
  */
 export type ViewKey = number;
 
+/** The stored shape of a chat's methodology role state (PRD 49 §1.8); hints are artifact ids. */
+export interface BrainChatPersona {
+  role: string | null;
+  lastRequest: string | null;
+  hints: Record<string, string[]>;
+}
+
 /** A brain chat (conversation) record. */
 export interface BrainChat {
   id: ViewKey;
@@ -71,6 +78,12 @@ export interface BrainChat {
    * {@link BrainChat.memoryEnabled}. Set it back to `false` to restore the chat.
    */
   isArchived?: boolean;
+  /**
+   * The chat's methodology role state (PRD 49 §1.8). Opaque here like
+   * {@link BrainChat.capability}: the editor's `persona/chatPersona.ts` is its only
+   * reader and writer. Absent ⇒ role off.
+   */
+  persona?: BrainChatPersona;
   /**
    * What this conversation cost and what memory saved it — attached by the api to
    * every chat payload beside the ticket rollup. Null/absent until it has usage.

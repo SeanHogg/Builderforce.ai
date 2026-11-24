@@ -1,7 +1,8 @@
 /**
  * Simulate-with-values mode. Inputs are the entry-point values; prev / next steps the journey
  * (or, with no journey, the trace `TracePanel` draws) and shows the values carried on that hop.
- * Nothing is executed — `simulate` only walks the hops.
+ * Nothing is executed — `simulate` only walks the hops. It is a mode: it takes the right rail
+ * in place of Act, and each hop it shows moves the journey step (`onStep`) so the stage follows.
  */
 
 import { useEffect, useMemo, useState } from 'react';
@@ -30,10 +31,12 @@ export interface SimulatePanelProps {
     fromName?: string;
     path: PathModel;
     labels: KnowledgeGraphLabels;
+    /** Moves the journey step to the stop the shown hop leaves from, so the stage and the PathStrip highlight it. */
+    onStep?(stopIndex: number): void;
     onClose(): void;
 }
 
-export function SimulatePanel({ graph, from, fromName, path, labels, onClose }: SimulatePanelProps) {
+export function SimulatePanel({ graph, from, fromName, path, labels, onStep, onClose }: SimulatePanelProps) {
     const t = labels.surface.simulate;
     const [rows, setRows] = useState<CarriedValue[]>([{ name: '', value: '' }]);
     const [entry, setEntry] = useState<string | null>(null);
@@ -49,6 +52,8 @@ export function SimulatePanel({ graph, from, fromName, path, labels, onClose }: 
     const steps = useMemo(() => simulate({ values: rows, hops }), [rows, hops]);
     const last = Math.max(steps.length - 1, 0);
     const current = steps[Math.min(at, last)];
+    const stopAt = current ? path.stops.findIndex((s) => s.id === current.from) : -1;
+    useEffect(() => { if (stopAt >= 0) onStep?.(stopAt); }, [stopAt, onStep]);
     const entryLabel = (entry && (path.stops.find((s) => s.id === entry)?.name ?? (entry === from ? fromName : entry)))
         || path.stops[0]?.name || fromName || from || '';
 
@@ -61,10 +66,8 @@ export function SimulatePanel({ graph, from, fromName, path, labels, onClose }: 
         <aside
             data-simulate-mode role="region" aria-label={t.modeTitle}
             style={{
-                position: 'absolute', zIndex: 6, top: 8, right: 8, width: 'min(360px, calc(100% - 16px))', maxHeight: 'calc(100% - 16px)',
-                overflow: 'auto', boxSizing: 'border-box', display: 'grid', gap: 10, padding: 12, borderRadius: 12,
-                background: cssVar('bg'), color: cssVar('text'), border: `1px solid ${cssVar('border')}`,
-                boxShadow: '0 8px 28px color-mix(in srgb, currentColor 18%, transparent)',
+                display: 'grid', alignContent: 'start', gap: 10, padding: 12, boxSizing: 'border-box', height: '100%', overflow: 'auto',
+                background: cssVar('panel'), color: cssVar('text'),
             }}
         >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>

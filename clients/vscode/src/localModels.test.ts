@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { LOCAL_MODEL_PREFIX, parseLocalModelRef } from "@builderforce/local-inference";
-import { resolveLocalChatEndpoint, listLocalModels, localModelOptions, declaredLocalModels } from "./localModels";
-import { parseKimiCodeConfig } from "./kimiCodeInstall";
+import { resolveLocalChatEndpoint, listLocalModels, localModelOptions, declaredLocalModels, lastProbedLocalModels, probeOnDeviceRuntimes } from "./localModels";
+import { kimiModelOf, parseKimiCodeConfig } from "./kimiCodeInstall";
 
 /**
  * The editor's binding of `@builderforce/local-inference`: the endpoints it hands the
@@ -177,6 +177,19 @@ describe("rows for the shared model-list builder", () => {
 // request from the developer's own machine. That makes it the first local provider that
 // carries an account — hence a bearer, hence the containment rules below.
 // ---------------------------------------------------------------------------
+describe("the last probe's windows, read without I/O", () => {
+  it("keeps the models the on-device probe reported, live window included", async () => {
+    globalThis.fetch = vi.fn(async () => {
+      throw new Error("ECONNREFUSED");
+    }) as unknown as typeof fetch;
+    const live = { ref: "local/browser/qwen3", provider: "browser" as const, model: "qwen3", contextTokens: 32768 };
+    await probeOnDeviceRuntimes({ enabled: true, endpoints: {} }, async () => [
+      { provider: "browser", endpoint: { baseUrl: "http://bfi.local" }, reachable: true, models: [live] },
+    ]);
+    expect(lastProbedLocalModels()).toEqual([live]);
+  });
+});
+
 describe("kimi-code as a locally-served provider", () => {
   const kimiConfig = {
     enabled: true,
@@ -210,6 +223,14 @@ describe("kimi-code as a locally-served provider", () => {
     const install = parseKimiCodeConfig(`[models."kimi-code/kimi-for-coding"]\nmodel = "kimi-for-coding"\ndisplay_name = "K2.7 Coding"\nmax_context_size = 262144\n`);
     const rows = declaredLocalModels({ ...kimiConfig, kimiCodeModels: install.models });
     expect(rows.find((m) => m.ref === "local/kimi-code/kimi-for-coding")).toMatchObject({ contextTokens: 262144 });
+  });
+
+  it("carries a workspace connection's contextWindow onto the row as its window", () => {
+    // The API sends `contextWindow`; dropping it on the way to the row left Kimi at the 16K default.
+    const models = [kimiModelOf({ model: "k3", displayName: "K3", contextWindow: 262144 })];
+    const rows = declaredLocalModels({ ...kimiConfig, kimiCodeModels: models });
+    expect(rows.find((m) => m.ref === "local/kimi-code/k3")).toMatchObject({ contextTokens: 262144 });
+    expect(kimiModelOf({ model: "k3", displayName: "K3" })).not.toHaveProperty("maxContextSize");
   });
 
   it("leaves a Kimi row's window unset when the install declares none", () => {

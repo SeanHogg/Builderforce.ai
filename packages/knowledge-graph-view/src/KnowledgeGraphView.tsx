@@ -232,6 +232,11 @@ export function KnowledgeGraphView({
         />
     );
     const panels = usePanelVisibility();
+    /** Simulate is a mode of the right rail: turning it on opens that rail if it was collapsed. */
+    const toggleSimulate = () => {
+        if (!simulateMode && !panels.visibility.right) panels.toggle('right');
+        setSimulateMode(!simulateMode);
+    };
     const changedStations = new Set([...changed].flatMap((r) => stationOfRef(surface.stations, r) ?? [])).size;
     const overlay = (
         <SceneOverlay
@@ -240,7 +245,7 @@ export function KnowledgeGraphView({
                 simulate={{
                     pressed: simulateMode,
                     ariaLabel: fillTemplate(labels.surface.simulate.modeOpenAria, { name: selected ? index.get(selected)?.label ?? selected : labels.surface.simulate.modeEntry }),
-                    onToggle: () => setSimulateMode((v) => !v),
+                    onToggle: toggleSimulate,
                 }} /> : undefined}
             time={<TimeSlider commits={history.commits} capped={history.total} picked={picked} labels={labels} changedStations={changedStations} onPick={(sha) => { setPicked(sha); if (sha) pickQuestion('changed'); }} />}
         />
@@ -289,12 +294,6 @@ export function KnowledgeGraphView({
                             </div>
                             {!layout.phone && overlay}
                             {surface.highlight && showsTowers(mode, surface.towers) && <TowerLegend highlight={surface.highlight} labels={labels} compact={layout.compact} onClose={() => surface.setHighlight(null)} />}
-                            {simulateMode && real && (
-                                <SimulatePanel
-                                    graph={graph} from={selected} fromName={selected ? index.get(selected)?.label : undefined}
-                                    path={surface.path} labels={labels} onClose={() => setSimulateMode(false)}
-                                />
-                            )}
                         </div>
                         {stackLines && (
                             <DockEdge slot="left" shown={panels.visibility.left} onToggle={panels.toggle} labels={labels} below>
@@ -314,6 +313,12 @@ export function KnowledgeGraphView({
                 </div>
                 {real && (
                     <DockEdge slot="right" shown={panels.visibility.right} onToggle={panels.toggle} labels={labels} below={layout.actBelow}>
+                    {simulateMode ? (
+                        <SimulatePanel
+                            graph={graph} from={selected} fromName={selected ? index.get(selected)?.label : undefined}
+                            path={surface.path} labels={labels} onStep={surface.setStep} onClose={() => setSimulateMode(false)}
+                        />
+                    ) : (
                     <ActPanel
                     graph={graph} findings={findings} listedFindings={listedFindings} lensName={labels.lenses[lens.id]} labels={labels} station={surface.station} stations={surface.stations.stations} scopeName={chrome.scopeName}
                     compact={layout.actBelow} showFindings={mode !== 'list'} onClearScope={() => surface.selectLine(null)} onShow={show} onCompose={onCompose} onResolve={surface.resolve}
@@ -323,6 +328,7 @@ export function KnowledgeGraphView({
                     <InsightsPanel graph={graph} labels={labels} lenses={kg.lenses.map((l) => l.id)} onLens={pickLens} onShow={show} findingKinds={mode !== 'list'} />
                     <LensPanel graph={graph} lens={lens} requested={kg.requested} baseline={kg.baseline} current={kg.graph} labels={labels} evidence={evidenceFor} onOpenSource={onOpenSource} />
                 </ActPanel>
+                    )}
                     </DockEdge>
                 )}
             </div>

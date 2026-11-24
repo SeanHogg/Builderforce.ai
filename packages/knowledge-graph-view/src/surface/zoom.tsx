@@ -1,11 +1,11 @@
 /**
- * The zoom contract. The +, − and Fit buttons live in the scene overlay and must work for EVERY
- * camera, so a camera does not draw buttons of its own: the ACTIVE camera registers a
- * {@link ZoomApi} and the overlay calls it: the stage through its rig (`usePanZoomRegistration`),
+ * The zoom contract. The +, − and Fit buttons live in the stage corner (`stage/rig/NavControl.tsx`) and must
+ * work for EVERY camera, so a camera does not draw buttons of its own: the ACTIVE camera registers a
+ * {@link ZoomApi} and the corner calls it: the stage through its rig (`usePanZoomRegistration`),
  * the List through CSS scale (`ScaleZoom`). A camera that registers nothing gets disabled buttons.
  *
  * The host of the scene owns one registry (`useZoomHost`), wraps the cameras in a
- * `ZoomProvider` and hands the registered api to the overlay. A camera outside a provider (a
+ * `ZoomProvider` and hands the registered api to the stage corner. A camera outside a provider (a
  * unit test, a drawer) registers into nothing and still renders.
  */
 

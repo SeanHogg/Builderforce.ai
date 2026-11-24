@@ -35,7 +35,12 @@ export interface CallIndex {
     externals: string[];
 }
 
-const siteOrder = (c: Call): number => c.site?.order ?? Number.POSITIVE_INFINITY;
+/** Call-site order: `order`, then line, then column (a missing site last). One rule for the Sequence and the code panel. */
+export function compareCallSites(a: CallSite | null, b: CallSite | null): number {
+    const ao = a?.order ?? Number.POSITIVE_INFINITY, bo = b?.order ?? Number.POSITIVE_INFINITY;
+    if (ao !== bo) return ao < bo ? -1 : 1;
+    return (a?.line ?? 0) - (b?.line ?? 0) || (a?.column ?? 0) - (b?.column ?? 0);
+}
 
 export function callIndex(full: KnowledgeGraph, records: readonly SymbolRecord[]): CallIndex {
     const refs = new Set(full.nodes.map((n) => n.ref as string));
@@ -67,6 +72,6 @@ export function callIndex(full: KnowledgeGraph, records: readonly SymbolRecord[]
     };
     for (const e of full.edges) add(e.from, e.kind, e.to, e.sites);
     for (const r of records) for (const rel of r.relations ?? []) add(r.ref, rel.kind, rel.to, rel.sites);
-    for (const list of calls.values()) list.sort((a, b) => siteOrder(a) - siteOrder(b) || (a.site?.line ?? 0) - (b.site?.line ?? 0) || (a.site?.column ?? 0) - (b.site?.column ?? 0) || (a.to < b.to ? -1 : a.to > b.to ? 1 : 0));
+    for (const list of calls.values()) list.sort((a, b) => compareCallSites(a.site, b.site) || (a.to < b.to ? -1 : a.to > b.to ? 1 : 0));
     return { calls, associations, externals: [...externals].sort() };
 }

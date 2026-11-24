@@ -28,6 +28,7 @@ import { reviewedRoots, rootById, rootForPath, type KnowledgeRoot } from "./know
 import { log, workspaceFolders } from "./knowledgeService";
 import { loadedPackRegistry, recordOfPack } from "./packs/loadedPackRegistry";
 import { indexPack, readPackFile, writePackFile } from "./packs/packIndexing";
+import { packWritePath } from "./packs/packCompress";
 import { provenanceDetail } from "./packs/packProvenanceDetail";
 import { packOfRoot, reviewForPack } from "./packs/packReview";
 import { registerPackPlatformCommands } from "./packs/packRemove";
@@ -41,11 +42,11 @@ const countOf = (pack: PortableKnowledgePack) => ({
 
 /**
  * A root's file in the pack library of the workspace folder holding it
- * (`<folder>/.builderforce/knowledge/packs/<root stem>.bfpack`). Named by the ROOT, not the
+ * (`<folder>/.builderforce/knowledge/packs/<root stem>.bfpack.gz`, gzip by default). Named by the ROOT, not the
  * folder's name: `a/docs` and `b/docs` are two packs and never write the same file.
  */
 const packLibraryFile = (folderPath: string, rootId: string): string =>
-  path.join(folderPath, ".builderforce", "knowledge", "packs", `${rootFileStem(rootId)}.bfpack`);
+  packWritePath(path.join(folderPath, ".builderforce", "knowledge", "packs", `${rootFileStem(rootId)}.bfpack`));
 
 /** A quick-pick's `detail` line for a loaded pack: who reviewed it and with which model, when recorded. */
 const detailOf = (entry: KnowledgePackEntry): { detail?: string } => {
@@ -144,7 +145,8 @@ async function exportKnowledgePack(context: vscode.ExtensionContext): Promise<vo
     saveLabel: vscode.l10n.t("Export Knowledge Pack"),
   });
   if (!target) return;
-  const out = target.fsPath.toLowerCase().endsWith(".bfpack") ? target.fsPath : `${target.fsPath}.bfpack`;
+  // An export is for sharing, so it stays plain `.bfpack` unless the person names a `.bfpack.gz`.
+  const out = /\.bfpack(\.gz)?$/i.test(target.fsPath) ? target.fsPath : `${target.fsPath}.bfpack`;
   await writePackFile(out, source.pack);
   void vscode.window.showInformationMessage(
     vscode.l10n.t("BuilderForce: knowledge pack \"{0}\" exported to {1}.", source.pack.name, out),
@@ -211,7 +213,7 @@ async function pickPackToUpdate(): Promise<{ name: string; file: string } | unde
     openLabel: vscode.l10n.t("Update Knowledge Pack"),
   });
   const file = picked?.[0]?.fsPath;
-  return file ? { name: path.basename(file).replace(/\.bfpack$/i, ""), file } : undefined;
+  return file ? { name: path.basename(file).replace(/\.bfpack(\.gz)?$/i, ""), file } : undefined;
 }
 
 async function updateKnowledgePack(context: vscode.ExtensionContext): Promise<void> {

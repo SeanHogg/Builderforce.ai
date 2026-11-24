@@ -34,7 +34,7 @@
 import * as fs from "fs/promises";
 import * as path from "path";
 import { spawn } from "child_process";
-import { matchGlobInScope, normalizeScopeDir } from "@builderforce/agent-tools";
+import { isGzipPath, matchGlobInScope, normalizeScopeDir, readGzipText } from "@builderforce/agent-tools";
 import type { RepoSearchResult } from "@builderforce/agent-tools";
 
 /** Directories no local walk or search descends into — build output and dependencies. */
@@ -288,10 +288,17 @@ export async function searchWorkspace(opts: WorkspaceSearchOptions): Promise<Rep
   return stamp(await walkSearch(root, start, query, run), "walk");
 }
 
+/** A file's text; a `.gz` is inflated through the one gzip reader (PRD 49 §1.12). Unreadable ⇒ "". */
+async function fileText(abs: string): Promise<string> {
+  if (!isGzipPath(abs)) return fs.readFile(abs, "utf-8").catch(() => "");
+  // A corrupt archive is "no text", the same answer as an unreadable plain file.
+  return fs.readFile(abs).then((bytes) => readGzipText(bytes)).catch(() => "");
+}
+
 /** Scan one file's lines with the JS pattern, honouring the size and binary guards. */
 async function searchOneFile(root: string, abs: string, re: RegExp, size: number): Promise<SearchMatch[]> {
   if (size > SEARCH_MAX_FILE_BYTES) return [];
-  const content = await fs.readFile(abs, "utf-8").catch(() => "");
+  const content = await fileText(abs);
   if (!content || content.includes("\0")) return [];
   const rel = relPosix(root, abs);
   const out: SearchMatch[] = [];

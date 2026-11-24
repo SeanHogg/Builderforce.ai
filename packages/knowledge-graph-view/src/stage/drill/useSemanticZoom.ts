@@ -39,8 +39,15 @@ export interface SemanticZoom {
     zoomToBand(band: number): void;
     /** The code band's method, when it is open. */
     code: { key: string; target: CodeTarget } | null;
-    /** Leave the code band: fly back out to the method band. */
+    /** Leave the code band: back one method on the trail, else fly back out to the method band. */
     closeCode(): void;
+    /** Open the code band on method `ref` (from the method or code band, a loaded record with a slot); false when it cannot.
+     *  From the code band it goes onto the trail (cut back to it when it is already there). */
+    enterCode(ref: string): boolean;
+    /** The methods drilled into at the code band, outermost first; the last is `code`. */
+    trail: readonly { ref: string; name: string }[];
+    /** Go back to the trail's `index`th method. */
+    codeBack(index: number): void;
 }
 
 /** px around the zoom point a mark may be and still be the one zoomed into (or its own drawn radius, when larger). */
@@ -55,13 +62,14 @@ interface Candidate { id: string; key: string }
 
 export function useSemanticZoom(bus: StageBus, drill: DrillModel, map: StageMap, reducedMotion: boolean): SemanticZoom {
     const [entries, setEntries] = useState<ReadonlyMap<string, NestEntry>>(() => new Map());
-    const [codeKey, setCodeKey] = useState<string | null>(null);
+    const [trail, setTrail] = useState<readonly string[]>([]);
+    const codeKey = trail[trail.length - 1] ?? null;
     const [seqBand, setSeqBand] = useState(0);
     // An enter / out asked for and not yet in the stack: no second step until it lands.
     const pending = useRef(false);
     useEffect(() => { pending.current = false; }, [drill.stack]);
     // The code layer belongs to the level it opened on.
-    useEffect(() => { setCodeKey(null); }, [map.drill]);
+    useEffect(() => { setTrail([]); }, [map.drill]);
 
     const depth = Math.min(drill.stack.length, CODE - 1);
     const band = codeKey ? CODE : depth;
@@ -77,8 +85,8 @@ export function useSemanticZoom(bus: StageBus, drill: DrillModel, map: StageMap,
         });
     }, [band, map.stations, map.keyOfStation, drill.view, drill.canEnter, drill.symbols]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const state = useRef({ drill, map, entries, codeKey, seqBand, band, candidates });
-    state.current = { drill, map, entries, codeKey, seqBand, band, candidates };
+    const state = useRef({ drill, map, entries, codeKey, trail, seqBand, band, candidates });
+    state.current = { drill, map, entries, codeKey, trail, seqBand, band, candidates };
 
     const evaluate = useCallback(() => {
         const p = bus.placement, proj = bus.projector;
@@ -101,7 +109,7 @@ export function useSemanticZoom(bus: StageBus, drill: DrillModel, map: StageMap,
         const next = stepBand(s.band, focus?.px ?? 0, parentPx);
         if (next > s.band && focus) {
             const c = s.candidates[slots.indexOf(focus.slot)]!;
-            if (s.band === CODE - 1) { s.codeKey = c.key; setCodeKey(c.key); return; }
+            if (s.band === CODE - 1) { s.codeKey = c.key; setTrail([c.key]); return; }
             const check = s.drill.canEnter(c.id);
             if (!check.can) return;
             const e = nestEntryOf(p, focus.slot, `${check.level}:${c.id}`);
@@ -109,7 +117,7 @@ export function useSemanticZoom(bus: StageBus, drill: DrillModel, map: StageMap,
             pending.current = true;
             s.drill.enter(c.id);
         } else if (next < s.band) {
-            if (s.band === CODE) { s.codeKey = null; setCodeKey(null); return; }
+            if (s.band === CODE) { s.codeKey = null; setTrail([]); return; }
             pending.current = true;
             s.drill.out();
         }
@@ -141,13 +149,44 @@ export function useSemanticZoom(bus: StageBus, drill: DrillModel, map: StageMap,
         if (slot >= 0) rig.flyTo(v.cx, v.cz, zoomForBand(Math.min(SEQUENCE_LAST, target), p.scale[slot] ?? 0), now(), ms);
     }, [bus, ms]);
 
+    // Fly to method `key`'s code-band threshold (when the stage has a rig and the method a slot).
+    const flyToCode = useCallback((key: string) => {
+        const slot = bus.slotOf(key), p = bus.placement, rig = rigOf(bus);
+        const scale = p && slot >= 0 ? p.scale[slot] ?? 0 : 0;
+        if (rig && p && scale > 0) rig.flyTo(p.position[slot * 3]!, p.position[slot * 3 + 2]!, zoomForBand(CODE, scale), now(), ms);
+    }, [bus, ms]);
+
+    const codeBack = useCallback((index: number) => {
+        const s = state.current, key = s.trail[index];
+        if (!key) return;
+        s.codeKey = key;
+        s.trail = s.trail.slice(0, index + 1);
+        setTrail(s.trail);
+        flyToCode(key);
+    }, [flyToCode]);
+
     const closeCode = useCallback(() => {
-        const key = state.current.codeKey, p = bus.placement, rig = rigOf(bus);
+        const s = state.current;
+        if (s.trail.length > 1) { codeBack(s.trail.length - 2); return; }
+        const key = s.codeKey, p = bus.placement, rig = rigOf(bus);
         const slot = bus.slotOf(key), scale = p && slot >= 0 ? p.scale[slot] ?? 0 : 0;
-        if (!rig || !p || !(scale > 0)) { setCodeKey(null); return; }
+        if (!rig || !p || !(scale > 0)) { s.codeKey = null; s.trail = []; setTrail([]); return; }
         // Back under the code band's exit: the crossing closes it, and the method band is not re-entered from there.
         rig.flyTo(p.position[slot * 3]!, p.position[slot * 3 + 2]!, (ZOOM_BANDS[CODE]!.exitPx * 0.85) / (2 * scale), now(), ms);
-    }, [bus, ms]);
+    }, [bus, ms, codeBack]);
+
+    // A drill from the code: at the code band the method goes onto the trail (cut back to it when it is already there),
+    // from the method band it starts one; the rig flies to its threshold.
+    const enterCode = useCallback((ref: string): boolean => {
+        const s = state.current, key = `node:${ref}`;
+        if (s.band < CODE - 1 || bus.slotOf(key) < 0 || !codeTargetOf(ref, s.drill.symbols)) return false;
+        const at = s.trail.indexOf(key);
+        s.trail = s.band === CODE ? (at >= 0 ? s.trail.slice(0, at + 1) : [...s.trail, key]) : [key];
+        s.codeKey = key;
+        setTrail(s.trail);
+        flyToCode(key);
+        return true;
+    }, [bus, flyToCode]);
 
     const nested = useMemo(() => new WeakMap<Placement, Placement>(), [entries]);
     const nest = useCallback((p: Placement): Placement => {
@@ -163,5 +202,13 @@ export function useSemanticZoom(bus: StageBus, drill: DrillModel, map: StageMap,
         return codeKey && target ? { key: codeKey, target } : null;
     }, [codeKey, drill.symbols]);
 
-    return { band: bandOf(band), sequenceLod: sequenceLodOf(seqBand), nest, zoomInto, zoomToBand, code, closeCode };
+    const crumbs = useMemo(() => trail.map((k) => {
+        const ref = k.slice('node:'.length);
+        return { ref, name: codeTargetOf(ref, drill.symbols)?.name ?? ref };
+    }), [trail, drill.symbols]);
+
+    return {
+        band: bandOf(band), sequenceLod: sequenceLodOf(seqBand), nest, zoomInto, zoomToBand, code, closeCode, enterCode,
+        trail: crumbs, codeBack,
+    };
 }

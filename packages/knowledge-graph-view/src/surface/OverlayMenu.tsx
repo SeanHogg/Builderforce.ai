@@ -9,7 +9,7 @@
 import type { CSSProperties } from 'react';
 import { fillTemplate, type KnowledgeGraphLabels } from '../labels';
 import { iconButtonStyle } from './CameraBar';
-import { muted } from '../styles';
+import { muted, visuallyHidden } from '../styles';
 import { TYPE } from './ui/type';
 import { gapOf, type DataCoverage } from './dataCoverage';
 import { notSetUpText } from './notSetUpText';
@@ -54,7 +54,7 @@ export function OverlayMenu({ labels, stations, bindings, preset, onPreset, onCh
     const triggerName = narrow ? `${s.presets[preset]} ▾` : `${fillTemplate(s.presetLabel, { preset: s.presets[preset] })} ▾`;
     return (
         <Menu
-            trigger={<><OverlayGlyph /><span style={clipName}>{triggerName}</span></>}
+            trigger={<><OverlayGlyph /><span style={visuallyHidden}>{triggerName}</span></>}
             triggerLabel={triggerName} triggerStyle={{ ...iconButtonStyle, position: 'relative' }} title={triggerName}
             label={s.overlaysTitle} active variant={narrow ? 'pill' : 'accent'} anchor={narrow ? 'container' : 'trigger'} panelStyle={narrow ? NARROW : WIDE}
         >
@@ -99,10 +99,6 @@ export function OverlayMenu({ labels, stations, bindings, preset, onPreset, onCh
         </Menu>
     );
 }
-
-const clipName: CSSProperties = {
-    position: 'absolute', width: 1, height: 1, padding: 0, margin: -1, overflow: 'hidden', clip: 'rect(0, 0, 0, 0)', whiteSpace: 'nowrap', border: 0,
-};
 
 /** Warning triangle: the overlay trigger is an icon; its accessible name stays the preset label. */
 function OverlayGlyph() {

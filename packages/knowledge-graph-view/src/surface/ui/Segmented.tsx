@@ -6,7 +6,7 @@
 
 import { useRef, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
 import { cssVar } from '../../scene/themeColors';
-import { CONTROL } from '../../styles';
+import { CONTROL, visuallyHidden } from '../../styles';
 import { TYPE } from './type';
 
 export interface SegmentedItem {
@@ -46,10 +46,6 @@ const iconSegment = (on: boolean): CSSProperties => ({
     ...segment(on), width: CONTROL, padding: 0, position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
 });
 
-const clip: CSSProperties = {
-    position: 'absolute', width: 1, height: 1, padding: 0, margin: -1, overflow: 'hidden', clip: 'rect(0, 0, 0, 0)', whiteSpace: 'nowrap', border: 0,
-};
-
 export function Segmented(props: SegmentedProps) {
     const { label, items, style } = props;
     const ref = useRef<HTMLDivElement>(null);
@@ -87,7 +83,7 @@ export function Segmented(props: SegmentedProps) {
                         }}
                     >
                         {item.glyph}
-                        {item.glyph ? <span style={clip}>{item.label}</span> : item.label}
+                        {item.glyph ? <span style={visuallyHidden}>{item.label}</span> : item.label}
                     </button>
                 );
             })}

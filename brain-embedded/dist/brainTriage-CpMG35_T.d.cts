@@ -84,6 +84,12 @@ interface SpendSavingsSummary {
  * §3); an alias only — no field is renamed.
  */
 type ViewKey = number;
+/** The stored shape of a chat's methodology role state (PRD 49 §1.8); hints are artifact ids. */
+interface BrainChatPersona {
+    role: string | null;
+    lastRequest: string | null;
+    hints: Record<string, string[]>;
+}
 /** A brain chat (conversation) record. */
 interface BrainChat {
     id: ViewKey;
@@ -141,6 +147,12 @@ interface BrainChat {
      * {@link BrainChat.memoryEnabled}. Set it back to `false` to restore the chat.
      */
     isArchived?: boolean;
+    /**
+     * The chat's methodology role state (PRD 49 §1.8). Opaque here like
+     * {@link BrainChat.capability}: the editor's `persona/chatPersona.ts` is its only
+     * reader and writer. Absent ⇒ role off.
+     */
+    persona?: BrainChatPersona;
     /**
      * What this conversation cost and what memory saved it — attached by the api to
      * every chat payload beside the ticket rollup. Null/absent until it has usage.
@@ -1612,4 +1624,4 @@ interface BuildBrainTriageOptions {
  */
 declare function buildBrainTriageReport(opts: BuildBrainTriageOptions): string;
 
-export { activityTarget as $, type EvermindLearnTarget as A, type BrainMessage as B, type ChatInputAttachment as C, type DispatchRefusal as D, type EvermindLearnOutcome as E, type ModelTurn as F, type PersonaSubagent as G, type HandOffMode as H, ROLE_GATE_REMEDIATION as I, type RepeatStreak as J, type RepeatedTarget as K, STEP_MESSAGE_ROLE as L, type ModelScore as M, type SavingsBreakdown as N, type SavingsBySource as O, type PackageDirProbe as P, type SavingsSourceKey as Q, type RunFinding as R, type StreamFailureDetail as S, type SpendBreakdown as T, type UsageSurface as U, type ViewKey as V, UNBACKED_TICKET_CLAIM_NOTICE as W, UNBACKED_WRITE_CLAIM_NOTICE as X, USAGE_SURFACES as Y, USAGE_SURFACE_HEADER as Z, accountUsedInTrace as _, type BrainTraceEvent as a, answeredInProseInTrace as a0, attachEvermindLearn as a1, buildBrainTriageReport as a2, byoReasonHint as a3, byoUnresolvedInTrace as a4, byoUnresolvedSummary as a5, canRunInParallel as a6, computeBrainDiagnostics as a7, computeRunProgress as a8, describeLiveStep as a9, stallRecoveriesInTrace as aA, stallUnrecoveredInTrace as aB, toolActivity as aC, workFiledNotStaffedVerdict as aD, describeStreamFailure as aa, detectAnnouncedButUnmadeToolCall as ab, detectUnbackedTicketClaim as ac, detectUnbackedWriteClaim as ad, formatBrainProvenance as ae, formatBytes as af, formatDispatchRefusals as ag, formatEvermindLearnStep as ah, formatModelScorecard as ai, formatModelTurnLog as aj, formatStaffingSummary as ak, isDispatchTool as al, isEvermindModel as am, isStepMessage as an, isUsageSurface as ao, midRunNotice as ap, modelFailoversInTrace as aq, modelScorecard as ar, modelTurnLog as as, modelsUsedInTrace as at, narratedUnadvertisedInTrace as au, parseByoUnresolved as av, parseRoleGateRefusal as aw, serverChatIdOf as ax, shortenTarget as ay, staffingSummaryInTrace as az, type RunFindingsReport as b, type RunView as c, type RunFindingKind as d, type RunFindingDetector as e, type RunFindingEvidence as f, type RunFindingEvidenceNote as g, type RunFindingSeverity as h, type RunFindingsFile as i, type RunFindingsSummary as j, type RunFindingsTurn as k, type RunTurnKind as l, type BrainDiagnostics as m, type BrainRunActivity as n, type BrainChat as o, type SpendSavingsSummary as p, type BrainModality as q, type ScopeClash as r, type HandOffDecision as s, type ParallelSplit as t, type RunProgress as u, type StaffingSummary as v, type BrainDiagnosticsContext as w, type BrainRunPhase as x, type BuildBrainTriageOptions as y, type ByoUnresolvedEntry as z };
+export { accountUsedInTrace as $, type ByoUnresolvedEntry as A, type BrainMessage as B, type ChatInputAttachment as C, type DispatchRefusal as D, type EvermindLearnOutcome as E, type EvermindLearnTarget as F, type ModelTurn as G, type HandOffMode as H, type PersonaSubagent as I, ROLE_GATE_REMEDIATION as J, type RepeatStreak as K, type RepeatedTarget as L, type ModelScore as M, STEP_MESSAGE_ROLE as N, type SavingsBreakdown as O, type PackageDirProbe as P, type SavingsBySource as Q, type RunFinding as R, type StreamFailureDetail as S, type SavingsSourceKey as T, type UsageSurface as U, type ViewKey as V, type SpendBreakdown as W, UNBACKED_TICKET_CLAIM_NOTICE as X, UNBACKED_WRITE_CLAIM_NOTICE as Y, USAGE_SURFACES as Z, USAGE_SURFACE_HEADER as _, type BrainTraceEvent as a, activityTarget as a0, answeredInProseInTrace as a1, attachEvermindLearn as a2, buildBrainTriageReport as a3, byoReasonHint as a4, byoUnresolvedInTrace as a5, byoUnresolvedSummary as a6, canRunInParallel as a7, computeBrainDiagnostics as a8, computeRunProgress as a9, staffingSummaryInTrace as aA, stallRecoveriesInTrace as aB, stallUnrecoveredInTrace as aC, toolActivity as aD, workFiledNotStaffedVerdict as aE, describeLiveStep as aa, describeStreamFailure as ab, detectAnnouncedButUnmadeToolCall as ac, detectUnbackedTicketClaim as ad, detectUnbackedWriteClaim as ae, formatBrainProvenance as af, formatBytes as ag, formatDispatchRefusals as ah, formatEvermindLearnStep as ai, formatModelScorecard as aj, formatModelTurnLog as ak, formatStaffingSummary as al, isDispatchTool as am, isEvermindModel as an, isStepMessage as ao, isUsageSurface as ap, midRunNotice as aq, modelFailoversInTrace as ar, modelScorecard as as, modelTurnLog as at, modelsUsedInTrace as au, narratedUnadvertisedInTrace as av, parseByoUnresolved as aw, parseRoleGateRefusal as ax, serverChatIdOf as ay, shortenTarget as az, type RunFindingsReport as b, type RunView as c, type RunFindingKind as d, type RunFindingDetector as e, type RunFindingEvidence as f, type RunFindingEvidenceNote as g, type RunFindingSeverity as h, type RunFindingsFile as i, type RunFindingsSummary as j, type RunFindingsTurn as k, type RunTurnKind as l, type BrainDiagnostics as m, type BrainRunActivity as n, type BrainChat as o, type BrainChatPersona as p, type SpendSavingsSummary as q, type BrainModality as r, type ScopeClash as s, type HandOffDecision as t, type ParallelSplit as u, type RunProgress as v, type StaffingSummary as w, type BrainDiagnosticsContext as x, type BrainRunPhase as y, type BuildBrainTriageOptions as z };

@@ -8,6 +8,7 @@
 
 import type { CSSProperties, ReactNode } from 'react';
 import { iconButtonStyle } from './CameraBar';
+import { visuallyHidden } from '../styles';
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import type { KnowledgeGraphLabels } from '../labels';
 import { Panel } from '../Sheet';
@@ -57,10 +58,6 @@ function panelGlyph(id: string): ReactNode {
     return <Glyph><path d="M3 3h4v4H3zM9 3h4v4H9zM3 9h10v4H3z" /></Glyph>;
 }
 
-const clipLabel: CSSProperties = {
-    position: 'absolute', width: 1, height: 1, padding: 0, margin: -1, overflow: 'hidden', clip: 'rect(0, 0, 0, 0)', whiteSpace: 'nowrap', border: 0,
-};
-
 export function PanelToggle({ graph, env, labels, panel, onPanel, panels = PANELS, ids = HEADER_PANELS, collapsed = false }: PanelToggleProps) {
     const available = availablePanels(graph, env, panels);
     const items = ids.flatMap((id) => {
@@ -76,7 +73,7 @@ export function PanelToggle({ graph, env, labels, panel, onPanel, panels = PANEL
             <Menu
                 label={name} triggerLabel={name} title={name} active={items.some((i) => i.id === panel)}
                 triggerStyle={{ ...iconButtonStyle, position: 'relative' }}
-                trigger={<><Glyph><path d="M3 3h4v4H3zM9 3h4v4H9zM3 9h10v4H3z" /></Glyph><span style={clipLabel}>{name}</span></>}
+                trigger={<><Glyph><path d="M3 3h4v4H3zM9 3h4v4H9zM3 9h10v4H3z" /></Glyph><span style={visuallyHidden}>{name}</span></>}
                 items={items.map((i) => ({ id: i.id, label: i.label, selected: i.id === panel }))} onSelect={(id) => onPanel(id === panel ? null : (id as PanelId))}
             />
         );

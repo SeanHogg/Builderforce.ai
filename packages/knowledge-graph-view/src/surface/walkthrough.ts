@@ -40,9 +40,3 @@ export function walkthroughSentence(path: PathModel | null | undefined, step: nu
         : fillTemplate(count === 1 ? labels.hallwayOne : labels.hallway, { from: from.name, to: stop.name, count });
     return fillTemplate(labels.arrived, { hallway, place });
 }
-
-/** Every step's sentence, in order, as one walk a reader can follow from the entry door to the end. */
-export function walkthroughStory(path: PathModel | null | undefined, labels: WalkLabels): string {
-    if (!path || path.stops.length === 0) return labels.empty;
-    return path.stops.map((_, i) => walkthroughSentence(path, i, labels)).join(' ');
-}

@@ -141,6 +141,7 @@
   "config.models.review.desc": "Preferred model for independent ship review. Choose a model different from the one that wrote the change. Leave blank to use the `review` entry in `ROLE_MODELS` or select from the models available to the run.",
   "config.pipeline.independentReview.desc": "Require a different model to review changes before publishing. `auto` requires review for model pools and skips it when a specific model is selected. `required` applies to every model selection. `off` skips independent review. Verification checks apply in all modes.",
   "config.models.subagent.desc": "Model every **sub-agent** runs on, unless your model pick is explicit. Empty: the `ROLE_MODELS` entry for the sub-agent's role, else the gateway orders by that role.",
+  "config.modelsPolicy.desc": "How a run's stages pick models when no stage model is set. `role` (default): each stage uses its role's model. `tip`: TIP's fixed policy (Opus plans, implements and reviews; Sonnet runs builds and tests). Your stage and role pins still win.",
   "config.pipeline.routing.desc": "How runs are routed between the **full pipeline** (plan → code → review) and a **quick pass** (one coding pass, no planning or review stage). Writing \"full pipeline\" in a request always takes the full pipeline. See **BuilderForce: Pipeline Route Report**.",
   "config.pipeline.routing.auto": "Score each request and take the quick pass below the route threshold.",
   "config.pipeline.routing.always": "Every run takes the full pipeline (the score is still recorded).",

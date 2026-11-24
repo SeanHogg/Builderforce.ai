@@ -38986,7 +38986,18 @@
         "aria": "Code of {name}, lines {from} to {to}",
         "loading": "Reading the code…",
         "unavailable": "The code is not available here.",
-        "truncated": "Showing the first {count} lines"
+        "truncated": "Showing the first {count} lines",
+        "button": "Code",
+        "buttonAria": "Show the code of {name}",
+        "drillAria": "Show {name} on the stage",
+        "stepAria": "Call {n} of {count}",
+        "step": "Call {n} of {count} → {name}",
+        "crumbsAria": "Where you are reading",
+        "follow": "Follow the code",
+        "out": "Out",
+        "prevStep": "Previous call",
+        "nextStep": "Next call",
+        "drillCallee": "Into {name}"
       },
       "api": {
         "notSetUpTitle": "No endpoints found",
@@ -39127,7 +39138,24 @@
         },
         "startFrom": "Start from",
         "startEntry": "The entry",
-        "startStop": "This stop"
+        "startStop": "This stop",
+        "modeOpen": "Simulate",
+        "modeOpenAria": "Simulate {name} with values",
+        "modeTitle": "Simulate with values",
+        "modeEntry": "Entry point",
+        "modeName": "Name",
+        "modeValue": "Value",
+        "modeAdd": "Add value",
+        "modeRemove": "Remove {name}",
+        "modeCarried": "Carried along this hop",
+        "modeHop": "{from} → {to}",
+        "modeEmpty": "Select an entry point. Its journey is stepped with the values you enter.",
+        "modeNoHops": "No journey leaves this entry point.",
+        "modeClose": "Close",
+        "modeStep": "Hop {n} of {total}",
+        "modeBack": "Previous hop",
+        "modeNext": "Next hop",
+        "modeUseSelected": "Use the selected mark"
       },
       "fix": {
         "title": "Fix",
@@ -39488,6 +39516,26 @@
         "api": "what the routes promise, what is tested, try it",
         "resolve": "a deterministic fix or a prompt, then verify",
         "simulate": "run the path with real values"
+      },
+      "walk": {
+        "doorIn": "Start at the door {name}, where this journey begins.",
+        "doorOut": "Leave through the door {name}.",
+        "room": "You are in the room {name}.",
+        "hallway": "Walk the hallway from {from} to {to} ({count} calls).",
+        "hallwayOne": "Walk the hallway from {from} to {to} (one call).",
+        "hallwayNone": "There is no hallway from {from} to {to}.",
+        "arrived": "{hallway} {place}",
+        "only": "You are in the room {name}. There is no hallway yet.",
+        "empty": "Choose a journey to walk the doors, hallways and rooms.",
+        "metaphor": "Doors are where you enter and leave. Hallways are calls between rooms. Rooms are modules and classes."
+      },
+      "depth": {
+        "aria": "Depth",
+        "system": "System",
+        "module": "Module",
+        "class": "Class",
+        "method": "Method",
+        "climb": "Back to {name}"
       }
     }
   },

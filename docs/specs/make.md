@@ -437,7 +437,7 @@ See the current [acceptance record](#prd-50--one-pipeline-validation-and-diagnos
 | MK-31-W9 | P1 | PRD 31 W9 browser-run exit tests and the ^2026.11.4 runtime bump (Python/PHP/FastAPI/Slim, .NET/Rust workers, training boot). | The open phase notes under W9 are closed. Do not market free-tier browser runs as protected until W10 phase 4's exit holds. | code |
 | MK-31-W10 | P0 | Security Shield W10 phases 0–4 in builderforce-webcontainers, then the Builderforce ingest route, index migration, finding-kind seam and `runtime-shield` detection source. | **Other repo** for the runtime phases. Nothing of W10 exists in the runtime yet (verified 2026-11-18). | other repo + code |
 | MK-31-W11 | P1 | Manifest v1 phases 1–8, then phase 9 `DeploymentTarget` (PRD 31 W11). | Each phase ships with its automated exit test. Phase 9 needs a test Cloudflare account (**operator**). | code + operator |
-| MK-31-W12 | P0 | Agent Environment W12 phases 1–6 (PRD 31 W12). | Review done 2026-11-24; phase 1 in code; next phase 3. | open |
+| MK-31-W12 | P0 | Agent Environment W12 phases 1–6 (PRD 31 W12). | Phases 1, 2, 4, 5, 6, the define-agents UI and the W11 phase 5 scheduler pass (2026-11-24). Open: phase 3, whose `runtime.agents.*` catalog fails against published core 2026.11.12. *Blocker: publish a new webcontainers core and bump `api`'s dependency.* | open |
 | MK-31-REST | P1 | PRD 31 W1–W8 remaining notes and the §5 sequencing blockers still open. | Each remaining note under those workstreams is closed. Decisions still owed in §2 stay decisions, not code. | code |
 | MK-18 | P1 | PRD 18 canvas-runtime and Studio-port rows still marked remaining (verified 2026-11-17). | The open rows under §1.3, T4 and §8.4–§8.10 are closed or explicitly deferred in this file. | code |
 
@@ -2809,7 +2809,7 @@ A VS Code webview cannot register the runtime's service worker, so the VSIX laun
 - **Kit rot.** Framework versions move. Kits pin versions, and the matrix runs in CI, so a broken kit is red rather than silently stale.
 - **AGE on PGlite.** Unproven, hence the spike. If it fails, graph stays cloud-only (Azure PG).
 
-**Remaining (2026-11-24):** phases 1 (manifest v1) and 3 (kits) are in code. Phase 2 has manifest emission and `/manifest init` in the VSIX. The web action remains. Phase 4 has runtime and launcher diagnostics in code, with the full diagnostics phase still open. Phases 5–9 remain.
+**Remaining (2026-11-24):** phases 1 (manifest v1) and 3 (kits) are in code. Phase 2 has manifest emission and `/manifest init` in the VSIX. The web action remains. Phase 4 has runtime and launcher diagnostics in code, with the full diagnostics phase still open. Phase 5's scheduler passes (W12, 2026-11-24); its Jobs tab and `runtime.jobs.*` tools remain. Phases 6–9 remain.
 
 #### W11 contract — the app manifest ai resource
 
@@ -3248,7 +3248,13 @@ Phases 3 and 5 are new capabilities, so each ships a `release_notes` row and an 
 | Phase 3 rules | Mutating `env.*` calls carry the idempotency key (run id, step, tool-call id) from phase 3, so phase 4 does not change the tool contract. Until phase 4, an agent whose tab dies stops, and the UI says so. |
 | Phase order | Confirmed: 1 → 3 → define-agents UI → W11 phase 5 → 2 → 4 → 5 → 6. |
 
-**Remaining (2026-11-24):** design review done (above). Phase 1 in code (`core/src/capabilities/`, `core/src/manifest/agents.ts`). Next: phase 3.
+**Remaining (2026-11-24):** design review done (above). Only phase 3 is open.
+- **Phase 1** (and the shared core contracts: manifest, capabilities, agents): done 2026-11-24. `npx -y pnpm@9.1.0 --filter @seanhogg/builderforce-webcontainers-core build|test|typecheck` in builderforce-webcontainers exits 0 (598 passed, 2 skipped).
+- **Phase 3**: open. The browser `EnvironmentToolPort` and `AgentHostPort` pass with the browser package. In `api`, `npx vitest run src/application/llm/runtimeAgentsToolCatalog.test.ts` exits 1 (`TypeError: Cannot read properties of undefined (reading 'source')` at `runtimeAgentsToolCatalog.ts:105`): `api` resolves published `@seanhogg/builderforce-webcontainers-core` 2026.11.12, which predates the `AGENT_ROLE_PATTERN` and `ENV_TOOL_PREFIX` exports. *Blocker: publish a new core version and bump `api`'s dependency.*
+- **Define-agents UI** (form and clarifier branch): done 2026-11-24. In `frontend`, `npx vitest run src/components/creation-canvas/agents src/lib/canvas/appAgentDeclaration.test.ts src/components/creation-canvas/room-stations src/domains/canvas` exits 0 (23 files, 284 tests), and `node scripts/check-methodology.mjs` exits 0. Its `runtime.agents.start` leg lands with phase 3.
+- **W11 phase 5 scheduler**: done 2026-11-24. `browser/src/app/jobScheduler.ts` fires `jobs` and agent cron triggers under the runtime lease; core and browser package tests pass. The Jobs tab and `runtime.jobs.*` tools stay with W11.
+- **Phases 2, 4 and 6** (lease and recovery, checkpoint and resume, child runtimes): done 2026-11-24. `npx -y pnpm@9.1.0 --filter @seanhogg/builderforce-webcontainers test` exits 0 (978 passed, 12 skipped) and `typecheck` exits 0; phase 6's core parts pass with the core run above.
+- **Phase 5** (agents in the Room): done 2026-11-24, proved by the `frontend` run above (`room-stations`, `domains/canvas`). Its `release_notes` row and Idea-to-Real post have not shipped.
 
 ### §4.7 MCP tool surface (spans W1–W12)
 
@@ -3274,7 +3280,7 @@ Tools are grouped as catalog data. Register `runtime.agents.*` from its own cata
 | Phase | Contents | Real blocker |
 |---|---|---|
 | 1 | W1 + W2 remainder + W8 remainder | Container image deploy + D6 |
-| 1g | W12 phases 1, 3, (define-agents UI), W11 phase 5, then 2, 4, 5, 6 — **top priority** | None (review done 2026-11-24) |
+| 1g | W12 phases 1, 3, (define-agents UI), W11 phase 5, then 2, 4, 5, 6 — **top priority** | Phase 3 only (the rest pass, 2026-11-24): publish a new webcontainers core and bump `api`'s dependency |
 | 1b | W9 phases 0–4 (webcontainers repo), in parallel | None |
 | 1c | W9 phase 5 (`RunTarget`) | W2 blueprint; D7 for plan gating |
 | 1d | W9 phases 6a–6d; phase 7 engine work in `@webdit/torch` in parallel (needs only 6a's Pyodide host) | None |

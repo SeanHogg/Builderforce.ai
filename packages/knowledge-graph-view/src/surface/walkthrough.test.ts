@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { ACT_DEFAULTS } from '../labels/surface.act';
 import type { PathModel } from './path';
-import { walkthroughSentence, walkthroughStory } from './walkthrough';
+import { walkthroughSentence } from './walkthrough';
 
 const w = ACT_DEFAULTS.walk;
 
@@ -56,13 +56,6 @@ describe('walkthroughSentence', () => {
         expect(walkthroughSentence(path, -4, w)).toBe(walkthroughSentence(path, 0, w));
         expect(walkthroughSentence(path, 9, w)).toBe(walkthroughSentence(path, 2, w));
         expect(walkthroughSentence(path, Number.NaN, w)).toBe(walkthroughSentence(path, 0, w));
-    });
-
-    it('joins every step into the story, doors first and last', () => {
-        const story = walkthroughStory(path, w);
-        expect(story).toBe([0, 1, 2].map((i) => walkthroughSentence(path, i, w)).join(' '));
-        expect(story.startsWith('Start at the door Login')).toBe(true);
-        expect(story.endsWith('Leave through the door Save.')).toBe(true);
     });
 
     it('fills a host override instead of the English default', () => {

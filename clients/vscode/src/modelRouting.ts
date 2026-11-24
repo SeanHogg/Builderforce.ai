@@ -68,7 +68,7 @@ import { hasImageParts, IMAGE_NEEDS_GATEWAY, textOnly } from "./chatContent";
 import { authorizeLocalEndpoint } from "./localEndpointAuth";
 import { editorAccounts } from "./providerConnect";
 import { logLine } from "./errorReporter";
-import { declaredLocalModels, probeLocalFirstRuntimes, probeOnDeviceRuntimes, type LocalModelsConfig } from "./localModels";
+import { declaredLocalModels, lastProbedLocalModels, probeLocalFirstRuntimes, probeOnDeviceRuntimes, type LocalModelsConfig } from "./localModels";
 import { resolveEffectiveModelChoice, type EffectiveModelChoice } from "./modelState";
 import { createNativeStream } from "./nativeGatewayStream";
 import { gatewayWorkspaceHeaders } from "./gatewayAuth";
@@ -190,10 +190,18 @@ async function withLocalFirst(choice: ModelRoute, config: LocalModelsConfig, req
 
 /**
  * The live on-device runtimes as the run's window gate reads them — the SAME memoized
- * probe the local-first route uses, so a move onto a local model is packed for the
- * window that runtime actually reports.
+ * probe the local-first route uses, gated only on local models being enabled, so a
+ * PINNED local model is packed for the window its runtime reports even with local-first off.
  */
 export function localWindowProbes(): Promise<LocalRuntimeProbe[]> {
+  return probeOnDeviceRuntimes(getLocalModelsConfig());
+}
+
+/**
+ * The runtimes Hybrid may move an unpinned turn onto — empty unless local-first is on.
+ * Routing reads THIS, never {@link localWindowProbes}: knowing a window is not a vote to route.
+ */
+export function localFirstCandidates(): Promise<LocalRuntimeProbe[]> {
   return probeLocalFirstRuntimes(getLocalModelsConfig());
 }
 
@@ -203,7 +211,10 @@ export function localWindowProbes(): Promise<LocalRuntimeProbe[]> {
  * the agent's sync `window()` and the window gate both know a `local/kimi-code/*` window.
  */
 export function localWindowModels(): LocalModel[] {
-  return declaredLocalModels(getLocalModelsConfig());
+  const declared = declaredLocalModels(getLocalModelsConfig());
+  // Declared rows win; the last probe adds the live windows (Ollama's `num_ctx`, …).
+  const refs = new Set(declared.map((m) => m.ref));
+  return [...declared, ...lastProbedLocalModels().filter((m) => !refs.has(m.ref))];
 }
 
 /**
@@ -292,7 +303,7 @@ export function routeStream(
     localPin: (ref) => (ref === pinnedRef ? local : null),
     // The turn's local-first probes; for a picked route (none resolved up front) the SAME
     // memoized probe, read only when Hybrid falls back from a failed pick to Auto.
-    probes: async () => route.localFirst?.probes ?? localWindowProbes(),
+    probes: async () => route.localFirst?.probes ?? localFirstCandidates(),
     ...(route.accounts ? { accounts: route.accounts } : {}),
     cloud: () => cloud,
     // The bridge's fetch answers a page runtime's root (`http://bfi.local`, …) from the

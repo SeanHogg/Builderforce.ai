@@ -38,11 +38,12 @@ export interface StationCardProps extends CardActions {
     loading?: boolean | undefined;
 }
 
-const action: CSSProperties = {
+/** The look of a card action button; the stage's mark Code button reuses it. */
+export const cardAction: CSSProperties = {
     minHeight: CONTROL, padding: '0 10px', borderRadius: 7, cursor: 'pointer', font: 'inherit', ...TYPE.pill,
     border: `1px solid ${cssVar('border')}`, background: 'transparent', color: cssVar('text'),
 };
-const primary: CSSProperties = { ...action, background: cssVar('accent'), borderColor: cssVar('accent'), color: cssVar('onAccent') };
+const primary: CSSProperties = { ...cardAction, background: cssVar('accent'), borderColor: cssVar('accent'), color: cssVar('onAccent') };
 
 function CardBody({ card, labels, loading, onEnter, onUnfold, onCallers, onApi, onPatterns, onCode, first }: StationCardProps & { first: RefObject<HTMLButtonElement | null> }) {
     const t = labels.surface.map.card;
@@ -66,11 +67,11 @@ function CardBody({ card, labels, loading, onEnter, onUnfold, onCallers, onApi, 
             )}
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 <button ref={first} type="button" data-action="enter" disabled={!card.enter.can} style={{ ...primary, opacity: card.enter.can ? 1 : 0.5, cursor: card.enter.can ? 'pointer' : 'not-allowed' }} onClick={onEnter}>{t.goInside}</button>
-                {card.unfold > 0 && <button type="button" data-action="unfold" aria-pressed={card.unfolded} style={action} onClick={onUnfold}>{card.unfolded ? t.fold : fillTemplate(t.unfold, { count: card.unfold })}</button>}
-                <button type="button" data-action="callers" style={action} onClick={onCallers}>{t.whoCalls}</button>
-                {card.hasApi && <button type="button" data-action="api" style={action} onClick={onApi}>{t.apiContract}</button>}
-                {card.hasPatterns && <button type="button" data-action="patterns" style={action} onClick={onPatterns}>{t.patterns}</button>}
-                {onCode && <button type="button" data-action="code" aria-label={fillTemplate(labels.surface.code.buttonAria, { name: card.name })} style={action} onClick={onCode}>{labels.surface.code.button}</button>}
+                {card.unfold > 0 && <button type="button" data-action="unfold" aria-pressed={card.unfolded} style={cardAction} onClick={onUnfold}>{card.unfolded ? t.fold : fillTemplate(t.unfold, { count: card.unfold })}</button>}
+                <button type="button" data-action="callers" style={cardAction} onClick={onCallers}>{t.whoCalls}</button>
+                {card.hasApi && <button type="button" data-action="api" style={cardAction} onClick={onApi}>{t.apiContract}</button>}
+                {card.hasPatterns && <button type="button" data-action="patterns" style={cardAction} onClick={onPatterns}>{t.patterns}</button>}
+                {onCode && <button type="button" data-action="code" aria-label={fillTemplate(labels.surface.code.buttonAria, { name: card.name })} style={cardAction} onClick={onCode}>{labels.surface.code.button}</button>}
             </div>
             {noSymbols && <span data-card-reason role="status" style={TYPE.meta}>{loading ? t.loading : t.noSymbols}</span>}
         </div>
@@ -126,7 +127,7 @@ export function StationCard(props: StationCardProps) {
         >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                 <b style={{ ...TYPE.monoTitle, overflowWrap: 'anywhere' }}>{card.name}</b>
-                <button type="button" aria-label={labels.surface.map.card.close} onClick={close} style={{ ...action, border: 0, minHeight: 24, minWidth: 24, padding: 0, color: cssVar('muted') }}><span aria-hidden="true">×</span></button>
+                <button type="button" aria-label={labels.surface.map.card.close} onClick={close} style={{ ...cardAction, border: 0, minHeight: 24, minWidth: 24, padding: 0, color: cssVar('muted') }}><span aria-hidden="true">×</span></button>
             </div>
             {body}
         </div>

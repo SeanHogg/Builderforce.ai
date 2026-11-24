@@ -140,6 +140,7 @@ function stageModelSettings(): Parameters<typeof stageModels>[0] {
     review: config.get<string>("models.review"),
     subagent: config.get<string>("models.subagent"),
     quick: config.get<string>("pipeline.quickModel"),
+    policy: config.get<ModelPolicy>("models.policy"),
   };
 }
 

@@ -9,7 +9,7 @@ import { gitRunner } from "./execRunner";
 import { getModels } from "../gateway";
 import { isServableLocalModel } from "@builderforce/local-inference";
 import { currentInferenceMode } from "../inferenceModeSetting";
-import { localWindowProbes } from "../modelRouting";
+import { localFirstCandidates } from "../modelRouting";
 import { createShipPorts, type ShipPortsRun } from "./shipPorts";
 
 /**
@@ -26,7 +26,7 @@ const bindShipPorts = createShipPorts({
   vscode,
   git: gitRunner,
   getCatalog: () => getModels(shipCatalogSecrets()).catch(() => undefined),
-  getLocalCatalog: async () => (await localWindowProbes()).flatMap(({ models }) =>
+  getLocalCatalog: async () => (await localFirstCandidates()).flatMap(({ models }) =>
     models.filter(isServableLocalModel).map(({ ref }) => ref)),
 });
 

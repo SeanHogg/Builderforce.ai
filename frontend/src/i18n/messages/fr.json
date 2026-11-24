@@ -39899,7 +39899,18 @@
         "aria": "Code de {name}, lignes {from} à {to}",
         "loading": "Lecture du code…",
         "unavailable": "Le code n’est pas disponible ici.",
-        "truncated": "Affichage des {count} premières lignes"
+        "truncated": "Affichage des {count} premières lignes",
+        "button": "Code",
+        "buttonAria": "Afficher le code de {name}",
+        "drillAria": "Afficher {name} sur la scène",
+        "stepAria": "Appel {n} sur {count}",
+        "step": "Appel {n} sur {count} → {name}",
+        "crumbsAria": "Où vous lisez",
+        "follow": "Suivre le code",
+        "out": "Sortir",
+        "prevStep": "Appel précédent",
+        "nextStep": "Appel suivant",
+        "drillCallee": "Entrer dans {name}"
       },
       "api": {
         "notSetUpTitle": "Aucun endpoint trouvé",
@@ -40005,7 +40016,24 @@
         },
         "startFrom": "Partir de",
         "startEntry": "L'entrée",
-        "startStop": "Cet arrêt"
+        "startStop": "Cet arrêt",
+        "modeOpen": "Simuler",
+        "modeOpenAria": "Simuler {name} avec des valeurs",
+        "modeTitle": "Simuler avec des valeurs",
+        "modeEntry": "Point d’entrée",
+        "modeName": "Nom",
+        "modeValue": "Valeur",
+        "modeAdd": "Ajouter une valeur",
+        "modeRemove": "Retirer {name}",
+        "modeCarried": "Transporté sur ce saut",
+        "modeHop": "{from} → {to}",
+        "modeEmpty": "Sélectionnez un point d’entrée. Son parcours avance avec les valeurs que vous saisissez.",
+        "modeNoHops": "Aucun parcours ne part de ce point d’entrée.",
+        "modeClose": "Fermer",
+        "modeStep": "Saut {n} sur {total}",
+        "modeBack": "Saut précédent",
+        "modeNext": "Saut suivant",
+        "modeUseSelected": "Utiliser la marque sélectionnée"
       },
       "fix": {
         "title": "Correctif",
@@ -40417,6 +40445,26 @@
         "api": "ce que promettent les routes, ce qui est testé, essayez",
         "resolve": "un correctif déterministe ou un prompt, puis vérifier",
         "simulate": "exécuter le chemin avec des valeurs réelles"
+      },
+      "walk": {
+        "doorIn": "Commencez à la porte {name}, où ce parcours débute.",
+        "doorOut": "Sortez par la porte {name}.",
+        "room": "Vous êtes dans la pièce {name}.",
+        "hallway": "Suivez le couloir de {from} à {to} ({count} appels).",
+        "hallwayOne": "Suivez le couloir de {from} à {to} (un appel).",
+        "hallwayNone": "Il n’y a pas de couloir de {from} à {to}.",
+        "arrived": "{hallway} {place}",
+        "only": "Vous êtes dans la pièce {name}. Il n’y a pas encore de couloir.",
+        "empty": "Choisissez un parcours pour traverser portes, couloirs et pièces.",
+        "metaphor": "Les portes sont là où l’on entre et sort. Les couloirs sont les appels entre pièces. Les pièces sont les modules et les classes."
+      },
+      "depth": {
+        "aria": "Profondeur",
+        "system": "Système",
+        "module": "Module",
+        "class": "Classe",
+        "method": "Méthode",
+        "climb": "Retour à {name}"
       }
     }
   },

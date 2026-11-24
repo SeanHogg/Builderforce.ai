@@ -8,7 +8,8 @@ import type { KnowledgeClient } from "@builderforce/knowledge-client";
 import { getSelectedProject, type SelectedProject } from "../../projectState";
 import { linkedKnowledgeClient } from "../knowledgeService";
 
-export const PACK_FILTER: Record<string, string[]> = { [vscode.l10n.t("Knowledge Pack")]: ["bfpack"] };
+// `gz` admits the gzipped library form (`.bfpack.gz`); parsePack still refuses anything that is not a pack.
+export const PACK_FILTER: Record<string, string[]> = { [vscode.l10n.t("Knowledge Pack")]: ["bfpack", "gz"] };
 
 export const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 

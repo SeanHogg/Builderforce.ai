@@ -62,7 +62,8 @@ async function install(): Promise<void> {
   mod.installWebviewPlatformPolicy();
 }
 
-describe('webview platform gate', () => {
+// The first case pays the cold import of the bridge graph (~1.7 s alone), which passes the 5 s default under a parallel full run.
+describe('webview platform gate', { timeout: 20_000 }, () => {
   const HYBRID = { gatewayInference: true, connectedFeatures: true, synchronize: false };
 
   it('before the host names a mode (Local only): refuses inference and content, lets ordinary data through', async () => {

@@ -55,3 +55,17 @@ describe("packFile", () => {
     await expect(readPackFile(file)).rejects.toThrow(/not valid JSON/);
   });
 });
+
+describe("packFile gzip (PRD 49 §5)", () => {
+  it("writes the library default as .gz and reads it back to the same pack", async () => {
+    const { gunzipSync } = await import("node:zlib");
+    const { readFile } = await import("node:fs/promises");
+    const { packWritePath } = await import("./packCompress");
+    const pack = await leasePack();
+    const file = packWritePath(path.join(dir, "lease.bfpack"));
+    expect(file.endsWith(".bfpack.gz")).toBe(true);
+    await writePackFile(file, pack);
+    expect(gunzipSync(await readFile(file)).toString("utf8")).toBe(`${serializePack(pack)}\n`);
+    expect(serializePack(await readPackFile(file))).toBe(serializePack(pack));
+  });
+});
