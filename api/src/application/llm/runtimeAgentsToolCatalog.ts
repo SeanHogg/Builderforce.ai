@@ -144,7 +144,6 @@ function runIdArg(raw: unknown): string | Json {
   return boundedText(raw, 'runId', RUNTIME_RUN_ID_MAX_LENGTH);
 }
 
-/** The project's manifest parsed, or the typed refusal (no file, or it does not parse). */
 /** A manifest that parsed, with the issues `parseManifest` raised (it runs `validateManifest` itself). */
 interface LoadedManifest {
   manifest: AppManifest;
