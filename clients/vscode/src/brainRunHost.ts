@@ -40,7 +40,6 @@ import {
   subscribeRun,
   subscribeRunStore,
   type BrainRunOutcome,
-  type BrainStreamFn,
 } from "@seanhogg/builderforce-brain-embedded";
 import type { ToolDef } from "./fileTools";
 import type { ShipPolicy } from "@builderforce/run-guards";
@@ -53,7 +52,6 @@ import { createLlmFailureLogger } from "./llmFailureLog";
 import { hostLog } from "./hostLog";
 import { childControls, ownerFinishHold } from "./childRunSpawner";
 import { createChildRunHost, ownerOf, type RunSpec } from "./childRunHost";
-import { stickyChildStream } from "./childModelStickiness";
 import { createChildApprovalRelay } from "./childApprovalRelay";
 import { createRunWatches } from "./runWatches";
 import { finishedRun } from "@builderforce/agent-run/memory";
@@ -287,7 +285,6 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     const needsConfirm = (req: { name: string; args: unknown; shipPolicy?: ShipPolicy }): boolean =>
       nativeNeedsConfirm(defs, flag.autoApprove ? "acceptEdits" : "ask", gates)(req);
     approvals.describeWith(key, (name, args, evidence) => approvalRequestFor(defs, gates, name, args, evidence));
-    // A sub-agent's turns are routed for ITS role (explore / code / verify), not its owner's.
     // A Hybrid pick that failed and was answered with Auto is announced to THIS chat's
     // panel, which shows the one-line notice — a fallback is never silent.
     // A sub-agent's stream stays silent: its parent run already told the person.
@@ -296,20 +293,12 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     const choice = !p.child ? await ports.modelChoice?.(p.personaModel) : undefined;
     const pick: { model?: string; modelStrict?: boolean; routingMode?: "auto" | "byo_pool" } = choice ?? p;
     const transport = await ports.stream(p.child ? undefined : (event) => broadcast({ type: "run.modelFallback", chatId: key, from: event.from, reason: fallbackDetail(event) }), choice);
-    const role = p.child?.role;
-    // …and keeps the model its first turn was routed to for its whole life (chat #273: it hopped models every turn).
-    const routed: BrainStreamFn = role
-      ? stickyChildStream((opts, handlers) => transport({ ...opts, role }, handlers), role, p.child?.model ?? {})
-      : transport;
-    const stream: BrainStreamFn = ports.recordUsage
-      ? ports.recordUsage(routed, { chatId, runKey: key, ...(p.chatMode ? { mode: p.chatMode } : {}) })
-      : routed;
+    const usage = { chatId, runKey: key, ...(p.chatMode ? { mode: p.chatMode } : {}) };
+    const stream = ports.recordUsage?.(transport, usage) ?? transport;
     const onDeviceTasks = ports.onDeviceTasksFor?.({ chatId, runKey: key }) ?? ports.onDeviceTasks;
     const surface = p.modelSurface ?? null;
-    // Stage models, pipeline routing and the USD cap (`editorRunSettings.ts`); a sub-agent
-    // takes only the cap — its model is `modelForChildRun`'s and it is never routed.
     const settings = await ports.runSettings?.(projectId);
-    const runSettings = runRequestFields(settings, { child: !!p.child });
+    const runSettings = runRequestFields(settings);
     try {
       // Stopped during the setup above: the loop never starts (`settled` drops what waits).
       if (steering.stopped(key)) return void (await stopBeforeStart(key, chatId, ports.persistence));
@@ -344,7 +333,12 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
         runTool,
         needsConfirm,
         // PRD 45 ship-gate ports: post-edit diagnostics, the outgoing gate, the reviewer (PRD 46 §3.6).
-        ...(ports.shipPorts && root ? ports.shipPorts({ root, stream, ...(settings ? { settings } : {}) }) : {}),
+        ...(ports.shipPorts && root ? ports.shipPorts({
+          root,
+          stream: ports.reviewStream ? ports.recordUsage?.(ports.reviewStream, usage) ?? ports.reviewStream : stream,
+          specificModel: pick.modelStrict && pick.routingMode !== "byo_pool" ? pick.model : undefined,
+          ...(settings ? { settings } : {}),
+        }) : {}),
         // An owner never ends while sub-agents it started are still working (`liveChildrenFinish.ts`): a late report
         // would otherwise wake it into a new run with no ask of its own. Stop-requested children do not hold it, and hung
         // ones are stopped after `MAX_STALLED_HOLDS` holds without progress, so the hold always has an exit.
@@ -363,7 +357,6 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
           serverChatId,
           request: asked ?? "",
           memory: p.evermind,
-          child: !!p.child,
           ...(p.turnContext ? { turnContext: p.turnContext } : {}),
         }),
         ...(p.seed ? { seed: p.seed } : {}),

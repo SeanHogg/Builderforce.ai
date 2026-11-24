@@ -5,6 +5,17 @@ const root = new URL('../', import.meta.url);
 const read = (name: string) => JSON.parse(readFileSync(new URL(name, root), 'utf8'));
 const manifest = read('package.json');
 
+describe('independent review settings localization', () => {
+  it.each(['', '.de', '.es', '.fr', '.zh-cn'])('resolves the review setting keys in %s', (locale) => {
+    const catalog = read(`package.nls${locale}.json`);
+    const settings = manifest.contributes.configuration.properties;
+    for (const name of ['builderforce.models.review', 'builderforce.pipeline.independentReview']) {
+      const key = settings[name].markdownDescription.replace(/^%|%$/g, '');
+      expect(catalog[key], `${locale}: ${key}`).toBeTruthy();
+    }
+  });
+});
+
 describe('audit settings localization', () => {
   it.each(['', '.de', '.es', '.fr', '.zh-cn'])('resolves every audit setting key in %s', (locale) => {
     const catalog = read(`package.nls${locale}.json`);

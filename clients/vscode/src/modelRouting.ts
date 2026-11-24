@@ -33,6 +33,7 @@ import type * as vscode from "vscode";
 import {
   completeLocal,
   completeLocalFirst,
+  BrainRequestError,
   type OnDeviceObserver,
   createHostModelStream,
   localFirstApplies,
@@ -46,6 +47,7 @@ import {
 import {
   clientPinOf,
   isServableLocalModel,
+  servedRef,
   localRuntime,
   formatLocalModelRef,
   type ByoOrderQuery,
@@ -96,7 +98,8 @@ export function resolveRunModelChoice(secrets: vscode.SecretStorage, personaMode
  * required (see {@link routeRequiresSignIn}).
  */
 export async function resolveModelRoute(secrets: vscode.SecretStorage, request: RouteRequest = {}): Promise<ModelRoute> {
-  const inferenceMode = currentInferenceMode();
+  const configuredMode = currentInferenceMode();
+  const inferenceMode = request.exactModel && configuredMode !== "local-only" ? "specific" : configuredMode;
   const route = await resolveChoiceRoute(secrets, { ...(request.choice ?? (await resolveEffectiveModelChoice(secrets))), inferenceMode }, request);
   // The accounts this editor calls itself (Kimi), placed for the call's context (role, project, arc stage, agentic):
   // tried in Hybrid Auto, and for "use my connected accounts" (`byo_pool`) in Hybrid and Specific — never Local only.
@@ -279,7 +282,7 @@ export function routeStream(
   // The pick never ran (it could not be authorized here): say so once, the way a pick that
   // failed mid-call is told — the turn is answered with Auto either way.
   if (route.pickUnavailable) onFallback?.({ from: route.pickUnavailable.model, reason: route.pickUnavailable.detail });
-  const cloud = !localOnly(route) && apiKey && platformPolicy().allows("gateway-inference") ? createNativeStream(getBaseUrl(), apiKey, undefined, gatewayWorkspaceHeaders) : null;
+  const cloud = gatewayStreamForRoute(route, apiKey);
   const local = route.local;
   const pinnedRef = local ? formatLocalModelRef(local.provider, local.model) : null;
   return createHostModelStream({
@@ -307,6 +310,40 @@ export function routeStream(
     localSuccessFederation,
     ...(onFallback ? { onFallback } : {}),
   });
+}
+
+function gatewayStreamForRoute(route: ModelRoute, apiKey: string | undefined): BrainStreamFn | null {
+  return !localOnly(route) && apiKey && platformPolicy().allows("gateway-inference")
+    ? createNativeStream(getBaseUrl(), apiKey, undefined, gatewayWorkspaceHeaders)
+    : null;
+}
+
+/** A review pick resolves independently of the author's route. */
+export async function streamReviewModel(
+  secrets: vscode.SecretStorage,
+  opts: Parameters<BrainStreamFn>[0],
+  handlers?: Parameters<BrainStreamFn>[1],
+): ReturnType<BrainStreamFn> {
+  const route = await resolveModelRoute(secrets, {
+    choice: { model: opts.model, modelStrict: true },
+    exactModel: true,
+  });
+  opts.signal?.throwIfAborted();
+  if (localOnly(route) && !route.local) throw new Error(NO_LOCAL_MODEL);
+  const apiKey = await getApiKey(secrets);
+  try {
+    return await routeStream(route, apiKey)(opts, handlers);
+  } catch (error) {
+    if (!(error instanceof BrainRequestError) || error.code !== "strict_pin_not_allowed") throw error;
+    const cloud = gatewayStreamForRoute(route, apiKey);
+    if (!cloud) throw error;
+    opts.signal?.throwIfAborted();
+    // Free gateway accounts can use a preferred model with ordinary pool routing.
+    // A substituted model must identify itself before its verdict can be considered.
+    const result = await cloud({ ...opts, modelStrict: false }, handlers);
+    if (!servedRef(result)) throw new Error("The reviewer response did not identify the serving model.");
+    return result;
+  }
 }
 
 /**

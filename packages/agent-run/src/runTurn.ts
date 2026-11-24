@@ -27,6 +27,7 @@ import { tallyTurn, type RunTally } from "./telemetry/runTally.js";
 import { measureTurnTail } from "./turnTail.js";
 import { measureWorkflow, workflowScope } from "./telemetry/workflowMetrics.js";
 import { isSpawnTool } from "./policy/subagents/delegationRequest.js";
+import { blocksChildSpawn, CHILD_SPAWN_REFUSAL } from "./policy/subagents/child.js";
 import { withVolatileTail } from "./turnContext.js";
 import { specValidationSection } from "./policy/verify/specValidation.js";
 
@@ -342,6 +343,9 @@ export async function dispatchCall(input: RunAgentInput, state: RunState, call: 
 async function dispatchCallCore(input: RunAgentInput, state: RunState, call: ParsedToolCall, watch: InterruptWatch, facts: TurnFacts, step: number): Promise<LoopDispatchResult> {
   const { ports, signal } = input;
   if (call.malformed) return declineMalformedCall(ports, call, facts, step);
+  if (blocksChildSpawn(input.task.dispatch, call.name)) {
+    return { data: { ok: false, error: CHILD_SPAWN_REFUSAL }, isError: true };
+  }
   const platform = ports.platform;
   const own = ownsCall(ports, call.name);
   if (platform && own && platform.handsOff?.(call.name) && state.model.phase === "plan") {

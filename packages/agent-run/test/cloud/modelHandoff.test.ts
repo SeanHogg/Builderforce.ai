@@ -88,7 +88,7 @@ describe("completeUnderRunPolicy — through the run", () => {
   it("spends a forced tool choice on exactly one request", async () => {
     const policy = policyFor("m", false);
     const run = build([answer(200, "m")]);
-    const resume: RunState = { ...freshState(policy, TASK), messages: openingRows(TASK), forceToolChoice: "required" };
+    const resume: RunState = { ...freshState(policy), messages: openingRows(TASK), forceToolChoice: "required" };
     const outcome = await runAgent({ task: TASK, policy, ports: run.ports, resume, maxSteps: 1 });
     expect(run.asked[0]!.toolChoice).toBe("required");
     expect(outcome.state.forceToolChoice).toBeUndefined();

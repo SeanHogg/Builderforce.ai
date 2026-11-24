@@ -37,7 +37,7 @@ export function policyCtx(over: {
   return {
     task,
     policy,
-    state: freshState(policy, task),
+    state: freshState(policy),
     ports: { ...(over.ports ?? {}) } as RunPorts,
     step: 1,
     turn: 1,

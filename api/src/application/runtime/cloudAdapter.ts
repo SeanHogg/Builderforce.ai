@@ -67,7 +67,7 @@ export function taskOf(host: CloudRunHost, rc: CloudEngineContext): RunTask {
     dispatch: {
       source,
       ...(stamped.approvalId ? { approvalId: stamped.approvalId } : {}),
-      ...(child && opts.delegation ? { parentRunId: cloudRunId(opts.delegation.parent.executionId) } : {}),
+      ...(opts.delegation?.spec ? { parentRunId: cloudRunId(opts.delegation.spec.parentExecutionId) } : {}),
     },
   };
 }
@@ -96,7 +96,6 @@ export function policyOf(host: CloudRunHost): RunPolicy {
     modelStart: {
       model: host.pick.model,
       strict: host.pick.strict,
-      ...(opts.delegation?.spec?.role ? { delegatedRole: opts.delegation.spec.role } : {}),
       ...(host.reviewPin ? { phaseModels: { review: host.reviewPin } } : {}),
     },
   };
@@ -174,12 +173,11 @@ export async function runCloudAgent(
         ...(opts.shipPolicy ? { ship: opts.shipPolicy } : {}),
         ...(task.assignedWork ? { assignedWork: task.assignedWork } : {}),
       }),
-      // The ticket's words and the board's model picks; a delegated child routes as a child (the owner's ladder is not its own).
+      // The task's words and the board's model picks.
       route: {
         request: host.userContent,
         modelStrict: host.pick.strict,
         ...(host.reviewPin ? { phaseModels: { review: host.reviewPin } } : {}),
-        ...(isChildDelegation(opts.delegation) ? { child: true } : {}),
       },
     });
     return await settleCloudRun(host, outcome, stash, model);

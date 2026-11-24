@@ -27,6 +27,7 @@ export async function editorRunSettings(secrets: vscode.SecretStorage, projectId
       routing: config.get<string>("pipeline.routing"),
       routeThreshold: config.get<number>("pipeline.routeThreshold"),
       maxRunBudgetUsd: config.get<number>("maxRunBudgetUsd"),
+      independentReview: config.inspect?.<string>("pipeline.independentReview")?.globalValue,
     }),
     shipPolicy,
   };

@@ -20,8 +20,7 @@ import {
   type SubagentRequest,
   type SubagentResult,
 } from '@builderforce/agent-tools';
-import { spawnChild } from '@builderforce/agent-run';
-import { MAX_SUBAGENT_DEPTH } from '@builderforce/agent-loop';
+import { assertCanSpawnChild, spawnChild } from '@builderforce/agent-run';
 import { eq } from 'drizzle-orm';
 import { executions } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
@@ -117,7 +116,11 @@ export function buildLiveOrchestration(deps: LiveOrchestrationDeps): Orchestrati
   const tree = treeOf(parent);
 
   const spawn = async (input: SubagentRequest): Promise<SubagentResult> => {
-    if (tree.depth >= MAX_SUBAGENT_DEPTH) return { ok: false, error: `sub-agents nest at most ${MAX_SUBAGENT_DEPTH} deep — do this slice yourself` };
+    try {
+      assertCanSpawnChild(tree.depth);
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
     const who = await resolveDelegatePersona(deps.personaBrief, typeof input.asAgent === 'string' ? input.asAgent.trim() : '', input.role);
     if (!who.ok) return { ok: false, error: who.error };
     const spec = (handle: string): CloudChildSpec => ({

@@ -179,6 +179,8 @@ export async function runOnPremAgent(params: OnPremRunParams, sinks: OnPremRunSi
       ...(signal ? { signal } : {}),
       parentRunId: runId,
       basePrompt: params.appendSystemPrompt,
+      workspace: params.cwd,
+      context: params.context,
       ...(params.work ? { work: params.work } : {}),
     });
     capabilities = params.capabilities ?? (await buildOnPremProvider({ workspaceRoot: params.cwd, spawn }));

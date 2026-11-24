@@ -211,6 +211,8 @@ export interface BrainRunHostPorts {
    * gate stays inert, exactly as a host that binds none.
    */
   shipPorts?(run: ShipPortsRun): ShipPorts;
+  /** The review transport resolves the reviewer model independently of the author's route. */
+  reviewStream?: BrainStreamFn;
   /** Report a settled code-changing run's outcome to learned routing. Best-effort. */
   reportOutcome?(outcome: BrainRunOutcome): Promise<unknown>;
   /** The uniform §8.2 record of a run that made no coder grade (recorded, never taught to routing); the same door as {@link reportOutcome}. */

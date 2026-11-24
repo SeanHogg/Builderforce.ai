@@ -77,25 +77,26 @@ describe('shipGatePreflight', () => {
     expect(gate).toEqual({ refusal: { ok: false, error: 'open_pull_request refused: add a model' } });
   });
 
-  it('refuses a complete review record until an approved review of the current diff exists, then attaches it', async () => {
-    const run = runWith({ git: git(), verifier: verifier('pass'), reviewer: approving() });
+  it('can record a complete independent review even when only one model authored the change', async () => {
+    const reviewer = approving();
+    const run = runWith({ git: git(), verifier: verifier('pass'), reviewer });
     const record = { taskId: 1, verdict: 'complete' } as Record<string, unknown>;
-    const before = await shipGatePreflight(run, 'builtin_reviews_record', record);
-    expect('refusal' in before && before.refusal.error).toMatch(/no reviewGate-approved independent review/);
-    await shipGatePreflight(run, 'git_push', PUSH); // the push gate records the review
     expect(await shipGatePreflight(run, 'builtin_reviews_record', record)).toEqual({});
     expect(record.reviewerRef).toBe('reviewer-model');
+    await shipGatePreflight(run, 'git_push', PUSH);
+    expect(reviewer.review).toHaveBeenCalledTimes(1);
     // A gaps verdict is never gated.
     expect(await shipGatePreflight(runWith({ git: git() }), 'builtin_reviews_record', { taskId: 1, verdict: 'gaps' })).toEqual({});
   });
 
-  it('regression: a complete review record with only ONE model served names the model — the review can never be independent, so "push" is not the answer (chat #74528)', async () => {
-    // Every turn was served by one model, so the review sub-run could never be by a
-    // different model. Telling the agent to "push so the host runs the review" was a lie.
-    const run = runWith({ git: git(), verifier: verifier('pass') }); // authorModels: ['author-model'] only
+  it('runs evidence checks with the reviewer disabled and requires a real approval to record a complete review', async () => {
+    const run = runWith({ git: git(), verifier: verifier('pass') });
+    const published = await shipGatePreflight(run, 'git_push', PUSH);
+    expect(published).toEqual({ evidence: 'checks passed · 2 checks could not run here (not verified)' });
+    const failed = await shipGatePreflight(runWith({ git: git(), verifier: verifier('fail') }), 'git_push', PUSH);
+    expect('refusal' in failed).toBe(true);
     const gate = await shipGatePreflight(run, 'builtin_reviews_record', { taskId: 1, verdict: 'complete' });
-    expect('refusal' in gate && gate.refusal.error).toMatch(/only ONE model \(author-model\)/);
-    expect('refusal' in gate && gate.refusal.error).toMatch(/pushing cannot create it/);
+    expect('refusal' in gate && gate.refusal.error).toMatch(/no independently approved review/);
   });
 
   it('regression: a model cannot mark the run\'s OWN delta ticket done with no review / no verification (#6537)', async () => {

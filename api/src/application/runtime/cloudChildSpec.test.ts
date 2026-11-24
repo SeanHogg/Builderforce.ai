@@ -72,6 +72,6 @@ describe('child brief', () => {
     expect(systemPrompt).toContain('spawned by Ada');
     expect(systemPrompt.endsWith('BASE PROMPT')).toBe(true);
     expect(userContent).toBe('Move the auth middleware to src/auth.');
-    expect(systemPrompt).toContain('every tool your owner holds');
+    expect(systemPrompt).toContain('carry out your slice end to end');
   });
 });

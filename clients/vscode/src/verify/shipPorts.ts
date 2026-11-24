@@ -13,6 +13,7 @@
 
 import type { BrainRunRequest, BrainStreamFn } from "@seanhogg/builderforce-brain-embedded";
 import { createHash } from "crypto";
+import { runsOnDevice, servedIdentity } from "@builderforce/local-inference";
 import type { EditorRunSettings } from "../stageModels";
 import type { VscodeLike } from "./pathDiagnostics";
 import type { GitRunner } from "./gitPort";
@@ -23,13 +24,15 @@ import type { ReviewerDeps, ReviewSubRunResult } from "./reviewerPort";
 // via `ShipPortsDeps.getCatalog` (wired in `editorShipPorts.ts`), never imported here.
 import type { ModelChoices } from "../gateway";
 
-export type ShipPorts = Required<Pick<BrainRunRequest, "verifier" | "git" | "reviewer">>;
+export type ShipPorts = Required<Pick<BrainRunRequest, "verifier" | "git">> & Pick<BrainRunRequest, "reviewer">;
 
 /** What one run hands over: where it works, how it calls a model, its stage settings. */
 export interface ShipPortsRun {
   root: string;
   stream: BrainStreamFn;
   settings?: EditorRunSettings;
+  specificModel?: string;
+  localOnly?: boolean;
 }
 
 export interface ShipPortsDeps {
@@ -40,6 +43,7 @@ export interface ShipPortsDeps {
    *  the editor binding supplies `getModels(secrets)`; a failure yields `undefined`, which
    *  just means no auto-switch (the reviewer falls back to its refusal). */
   getCatalog?: () => Promise<ModelChoices | undefined>;
+  getLocalCatalog?: () => Promise<readonly string[]>;
 }
 
 /**
@@ -105,21 +109,21 @@ function reviewerDeps(run: ShipPortsRun, deps: ShipPortsDeps): ReviewerDeps {
   const reviewPin = phase?.review || phase?.verify;
   const available = [phase?.code, phase?.plan, run.settings?.subagentModel, run.settings?.pipeline?.quickModel]
     .filter((m): m is string => typeof m === "string" && !!m);
-  const getCatalog = deps.getCatalog;
+  const getCatalogModels = run.localOnly ? deps.getLocalCatalog : async () => {
+    const choices = await deps.getCatalog?.();
+    return choices ? catalogModelIds(choices) : undefined;
+  };
   return {
     ...(reviewPin ? { verifyStagePin: reviewPin } : {}),
-    availableModels: [...new Set(available)],
-    ...(getCatalog
-      ? {
-          getCatalogModels: () =>
-            getCatalog()
-              .then((choices) => (choices ? catalogModelIds(choices) : undefined))
-              .catch(() => undefined),
-        }
-      : {}),
-    runReviewSubRun: async ({ model, prompt }) => {
-      const result = await run.stream({ messages: [{ role: "user", content: prompt }], model, modelStrict: true, role: "review" });
-      return parseReviewReply(result.text);
+    availableModels: available,
+    getCatalogModels,
+    ...(run.localOnly ? { canReviewModel: runsOnDevice } : {}),
+    runReviewSubRun: async ({ model, prompt, signal }) => {
+      const result = await run.stream({ messages: [{ role: "user", content: prompt }], model, modelStrict: true, role: "review", signal });
+      const reply = parseReviewReply(result.text);
+      if ("failed" in reply) return reply;
+      const reviewerModel = servedIdentity(result, model).name;
+      return reviewerModel ? { ...reply, reviewerModel } : { failed: "The reviewer response did not identify the serving model." };
     },
     hashDiff: (diff) => createHash("sha256").update(diff, "utf8").digest("hex"),
   };
@@ -128,8 +132,7 @@ function reviewerDeps(run: ShipPortsRun, deps: ShipPortsDeps): ReviewerDeps {
 /**
  * The full set of models the user's account can reach, de-duplicated and ORDERED for the
  * reviewer auto-switch: BYO (the tenant's own connected-provider models, cheapest) first,
- * then the plan pool, then premium, then any configured models. `pickReviewerModelWithFallback`
- * walks this in order, so a BYO non-author model is preferred over a gateway-pool one.
+ * then the plan pool, then premium, then any configured models.
  */
 export function catalogModelIds(choices: ModelChoices): string[] {
   return [
@@ -156,6 +159,9 @@ export function createShipPorts(deps: ShipPortsDeps): (run: ShipPortsRun) => Shi
       bound = { verifier: createVerifierPort(host), git: createGit(host) };
       byRoot.set(run.root, bound);
     }
-    return { ...bound, reviewer: createReviewer(reviewerDeps(run, deps)) };
+    const policy = run.settings?.independentReview ?? "auto";
+    const pinned = run.specificModel && (!run.localOnly || runsOnDevice(run.specificModel));
+    const requireReview = policy === "required" || (policy === "auto" && !pinned);
+    return requireReview ? { ...bound, reviewer: createReviewer(reviewerDeps(run, deps)) } : bound;
   };
 }

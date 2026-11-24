@@ -20,25 +20,24 @@ const ALL_CAPS: ReadonlySet<Capability> = new Set<Capability>([
 ]);
 
 describe('childCapabilities', () => {
-  it('lets a child spawn only while it is above the depth cap — the editor\'s recursion rule', () => {
+  it('withholds delegation from children', () => {
     for (const c of DELEGATION_CAPABILITIES) {
-      expect([...childCapabilities(ALL_CAPS, true)]).toContain(c);
-      expect([...childCapabilities(ALL_CAPS, false)]).not.toContain(c);
+      expect([...childCapabilities(ALL_CAPS)]).not.toContain(c);
     }
   });
 
   it('never lets a child pause the run for a human or author a skill', () => {
-    for (const c of NON_DELEGABLE_CAPABILITIES) expect([...childCapabilities(ALL_CAPS, true)]).not.toContain(c);
+    for (const c of NON_DELEGABLE_CAPABILITIES) expect([...childCapabilities(ALL_CAPS)]).not.toContain(c);
   });
 
   it('is a clone: every capability that can change the tree, run a shell or publish stays', () => {
-    const caps = childCapabilities(ALL_CAPS, true);
+    const caps = childCapabilities(ALL_CAPS);
     expect([...caps]).toEqual(expect.arrayContaining(['repo.write', 'repo.edit', 'repo.delete', 'shell', 'process', 'git.write', 'prd.write', 'coordinate', 'memory.forget']));
   });
 
   it('is a subset of the owner — a child can never gain what the surface lacks', () => {
     const narrow: ReadonlySet<Capability> = new Set<Capability>(['repo.read']);
-    expect([...childCapabilities(narrow, true)]).toEqual(['repo.read']);
+    expect([...childCapabilities(narrow)]).toEqual(['repo.read']);
   });
 });
 

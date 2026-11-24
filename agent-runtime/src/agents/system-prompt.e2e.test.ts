@@ -518,45 +518,16 @@ describe("buildAgentSystemPrompt", () => {
 });
 
 describe("buildSubagentSystemPrompt", () => {
-  it("includes sub-agent spawning guidance for depth-1 orchestrator when maxSpawnDepth >= 2", () => {
+  it.each([1, 2])("keeps the shared spawn restriction at depth %i", (childDepth) => {
     const prompt = buildSubagentSystemPrompt({
       childSessionKey: "agent:main:subagent:abc",
       task: "research task",
-      childDepth: 1,
+      childDepth,
       maxSpawnDepth: 2,
     });
 
-    expect(prompt).toContain("## Sub-Agent Spawning");
-    expect(prompt).toContain("You CAN spawn your own sub-agents");
-    expect(prompt).toContain("sessions_spawn");
-    expect(prompt).toContain("`subagents` tool");
-    expect(prompt).toContain("announce their results back to you automatically");
-    expect(prompt).toContain("Do NOT repeatedly poll `subagents list`");
-  });
-
-  it("does not include spawning guidance for depth-1 leaf when maxSpawnDepth == 1", () => {
-    const prompt = buildSubagentSystemPrompt({
-      childSessionKey: "agent:main:subagent:abc",
-      task: "research task",
-      childDepth: 1,
-      maxSpawnDepth: 1,
-    });
-
-    expect(prompt).not.toContain("## Sub-Agent Spawning");
-    expect(prompt).not.toContain("You CAN spawn");
-  });
-
-  it("includes leaf worker note for depth-2 sub-sub-agents", () => {
-    const prompt = buildSubagentSystemPrompt({
-      childSessionKey: "agent:main:subagent:abc:subagent:def",
-      task: "leaf task",
-      childDepth: 2,
-      maxSpawnDepth: 2,
-    });
-
-    expect(prompt).toContain("## Sub-Agent Spawning");
-    expect(prompt).toContain("leaf worker");
-    expect(prompt).toContain("CANNOT spawn further sub-agents");
+    expect(prompt).toContain("Do not spawn additional sub-agents.");
+    expect(prompt).not.toContain("sessions_spawn");
   });
 
   it("regression: keeps the session child's channel-safety rules and output format", () => {

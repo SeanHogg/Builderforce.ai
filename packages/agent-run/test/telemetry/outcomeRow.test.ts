@@ -26,7 +26,7 @@ import { modelDowngrade } from "../../src/policy/model/index.js";
 import { TEST_POLICY, TEST_TASK, policyCtx } from "../support/policyContext.js";
 
 function state(): RunState {
-  return freshState(TEST_POLICY, TEST_TASK);
+  return freshState(TEST_POLICY);
 }
 
 /**

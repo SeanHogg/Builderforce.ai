@@ -11,7 +11,7 @@ const owner = { owner: "BuilderForce" };
 describe("subagentSystemPrompt", () => {
   it("tells the child it is a clone — every tool its owner holds, the slice carried out end to end", () => {
     const prompt = subagentSystemPrompt(undefined, owner);
-    expect(prompt).toMatch(/every tool your owner holds/);
+    expect(prompt).toMatch(/carry out your slice end to end/);
     expect(prompt).not.toMatch(/READ-ONLY/);
   });
 
@@ -133,7 +133,7 @@ describe("subagentSystemPrompt with a persona", () => {
 
   it("changes the voice, never the procedure — the sub-agent rules all survive", () => {
     const prompt = subagentSystemPrompt(persona, owner);
-    expect(prompt).toMatch(/every tool your owner holds/);
+    expect(prompt).toMatch(/carry out your slice end to end/);
     expect(prompt).toMatch(/must stand alone/);
   });
 });

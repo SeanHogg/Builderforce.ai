@@ -45,6 +45,7 @@ import { portInterruptWatch } from "./policy/steering/index.js";
 import { announceRow, appendRows, currentView, emit, policyContext, type RunAgentInput } from "./runContext.js";
 import { asMessages, freshState, newApprovalId, resumeState } from "./runState.js";
 import { causeOf, completeTurn, dispatchCall, isResumable, offeredSchemas, synthesizeFinal } from "./runTurn.js";
+import { blocksChildSpawn } from "./policy/subagents/child.js";
 import { nativeOfTurn, toolRow } from "./runRows.js";
 import { settle } from "./runSettle.js";
 import { kernelHooks, readOnlyPort, type KernelRun } from "./kernelHooks.js";
@@ -70,7 +71,7 @@ export type { RunAgentInput } from "./runContext.js";
 export async function runAgent(input: RunAgentInput): Promise<RunOutcome> {
   const { task, policy, ports, signal } = input;
   const hooks = workflowHooks(composePolicyHooks(input.modules), input);
-  const state = input.resume ? resumeState(input.resume, policy, task) : freshState(policy, task);
+  const state = input.resume ? resumeState(input.resume, policy) : freshState(policy);
   const resumed = Boolean(input.resume);
   const validation = state.specValidation ?? planSpecValidation(task);
   if (validation) state.specValidation = validation;
@@ -82,7 +83,8 @@ export async function runAgent(input: RunAgentInput): Promise<RunOutcome> {
 
   // The run's counters live on its state, so a resumed tick adds to what earlier ticks counted.
   const tally: RunTally = (state.telemetry ??= freshTally());
-  const offered = offeredSchemas(ports, { rungs: state.stall?.rungs ?? {} });
+  const offered = offeredSchemas(ports, { rungs: state.stall?.rungs ?? {} })
+    .filter((schema) => !blocksChildSpawn(task.dispatch, schema.function.name));
   const transcript = asMessages(state.messages);
 
   // The pack is built ONCE, before turn 1, and carried in the state: a resumed tick

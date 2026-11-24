@@ -109,7 +109,7 @@ function composeModules(surface: SurfacePorts, ran: { value: boolean }): Partial
 /**
  * Fold the route into the host's existing model policy. Hosts without a modelStart seed keep
  * their model options, with the phase and pins supplied by the route. Unscored runs keep
- * their selection, while a configured child seed starts in code.
+ * their selection and take any supplied stage models.
  */
 export function routedPolicy(policy: RunPolicy, route: RouteInput, decision: RouteDecision): RunPolicy {
   const { pipeline, start, skipsVerify } = decision;
@@ -123,10 +123,8 @@ export function routedPolicy(policy: RunPolicy, route: RouteInput, decision: Rou
       modelOptions: { ...policy.modelOptions, startPhase: start.startPhase, ...(start.phaseModels ? { phaseModels: start.phaseModels } : {}) },
     };
   }
-  // An unrouted run still carries the host's stage models (they reach the run through the route input, the ONE path), and a sub-agent starts in `code`.
   if (!pipeline) {
-    if (!route.child && !start.phaseModels) return folded;
-    return { ...folded, modelStart: { ...prior, ...(route.child ? { startPhase: "code" as const } : {}), ...(start.phaseModels ? { phaseModels: start.phaseModels } : {}) } };
+    return start.phaseModels ? { ...folded, modelStart: { ...prior, phaseModels: start.phaseModels } } : folded;
   }
   const model = start.pinnedModel ?? prior.model;
   return {
@@ -153,7 +151,6 @@ export async function openRun(input: OpenRunInput): Promise<RunOutcome> {
   const { surface = {}, route: requested, ...rest } = input;
   const route = requested && "decided" in requested ? requested : {
     request: rest.task.request ?? rest.task.prompt,
-    child: rest.task.dispatch.source === "subagent",
     modelStrict: rest.policy.modelStart?.strict ?? rest.policy.modelOptions?.strictPin,
     ...requested,
     routing: requested?.routing ?? defaultPipelineRouting(),

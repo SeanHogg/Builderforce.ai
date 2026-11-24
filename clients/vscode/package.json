@@ -1104,6 +1104,13 @@
           "default": "",
           "markdownDescription": "%config.models.subagent.desc%"
         },
+        "builderforce.pipeline.independentReview": {
+          "type": "string",
+          "enum": ["auto", "required", "off"],
+          "default": "auto",
+          "scope": "application",
+          "markdownDescription": "%config.pipeline.independentReview.desc%"
+        },
         "builderforce.pipeline.routing": {
           "type": "string",
           "enum": [

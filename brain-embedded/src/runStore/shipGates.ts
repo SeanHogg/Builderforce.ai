@@ -419,41 +419,17 @@ export async function shipGatePreflight(run: BrainRunContext, name: string, args
       if (upToDate) return { evidence: upToDate };
       return gated ? { evidence: approvalEvidence(run, verdict.unavailable, diffHash, advisories) } : {};
     }
-    // builtin_reviews_record complete: refused unless a reviewGate-approved review exists
-    // for the CURRENT diff. With more than one model served, the review itself runs HERE
-    // over the same runReviewGate the push gate uses — never a bare "push first" refusal.
+    // A complete review record requires a genuine approval for this diff.
     const repo = repoArgOf(args);
     const out = await run.req.git.outgoing(repo);
-    const approved = out.diffHash ? approvedReviewFor(run, out.diffHash) : null;
-    if (!approved) {
-      const authors = authorModelsOf(run);
-      // No model other than the author is available — the review sub-run can never be
-      // independent. Naming the single model is the truth; telling the agent to "push so
-      // the host runs the review" is a lie when pushing cannot help.
-      if (authors.length <= 1) {
-        const only = authors[0] ?? '(unknown)';
-        return {
-          refusal: {
-            ok: false,
-            error:
-              'builtin_reviews_record refused: no reviewGate-approved independent review exists for the current diff, and ' +
-              `only ONE model (${only}) has served this run — the review sub-run must be by a model that did not author the ` +
-              'change (PRD 45 OD-1), so pushing cannot create it. Open a pull request for a human/other-model review, or ' +
-              'finish the task and leave the ticket in review.',
-          },
-        };
-      }
-      // Nothing verifiable to review (uncomputable diff, or empty diff on an up-to-date
-      // base branch): there is no review sub-run to gate — record nothing, proceed.
-      if (out.unavailable || !out.diffHash || !(out.diff ?? '').trim()) return {};
-      const reviewed = await runReviewGate(run, out.diffHash, { repo, diff: out.diff ?? '', tool: 'builtin_reviews_record' });
+    let approved = out.diffHash ? approvedReviewFor(run, out.diffHash) : null;
+    if (!approved && run.req.reviewer && !out.unavailable && out.diffHash && (out.diff ?? '').trim()) {
+      const reviewed = await runReviewGate(run, out.diffHash, { repo, diff: out.diff ?? '', tool: name });
       if (!reviewed.verdict.ok) return { refusal: { ok: false, error: reviewed.verdict.reason } };
-      // A genuine approval only: a cap-demoted approval is never in `shipReviews`
-      // ({@link runReviewGate}), so a recorded `reviewerRef` always names a reviewer who
-      // actually approved these bytes.
-      (args as Record<string, unknown>).reviewerRef = reviewed.review?.reviewerModel;
-      (args as Record<string, unknown>).evidence = evidenceSummary(run);
-      return {};
+      approved = approvedReviewFor(run, out.diffHash);
+    }
+    if (!approved) {
+      return { refusal: { ok: false, error: `${name} refused: no independently approved review exists for the current diff.` } };
     }
     (args as Record<string, unknown>).reviewerRef = approved.reviewerModel;
     (args as Record<string, unknown>).evidence = evidenceSummary(run);

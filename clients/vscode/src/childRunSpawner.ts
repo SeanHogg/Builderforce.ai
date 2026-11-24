@@ -23,7 +23,7 @@ import {
   type RunLineage,
 } from "@seanhogg/builderforce-brain-embedded";
 import { parseSubagentReport } from "@builderforce/agent-loop";
-import { validateChildStart } from "@builderforce/agent-run";
+import { assertCanSpawnChild, canSpawnChild, validateChildStart } from "@builderforce/agent-run";
 import {
   RUN_COMMAND_TOOL,
   SUBAGENT_REPORT_CHARS,
@@ -38,7 +38,7 @@ import {
 import { childSettledState, realChangedFiles, REPORT_NOW_STEER, unfinishedReportReason } from "./childDoneEvidence";
 import { coverageChars, coverageOf } from "./childCoverage";
 import { noteChildFailure, saveCollectedData } from "./childDataFile";
-import { MAX_CHILD_DEPTH, type ChildReport, type ChildRuns } from "./childRuns";
+import type { ChildReport, ChildRuns } from "./childRuns";
 import { createChildLedger, type ChildLedger } from "./childLedger";
 import { createLiveChildrenHold, hungChildrenNote, type HeldChild } from "./liveChildrenFinish";
 
@@ -58,7 +58,7 @@ export type SpawnResult = { ok: true; handle: string; name: string; label: strin
 
 /** What an owner can do about its children. */
 export interface ChildControls {
-  /** Whether this owner may spawn at all (the depth cap). */
+  /** Whether this run may spawn children. */
   readonly canSpawn: boolean;
   /** Start a child. Returns at once; the child works alongside the owner. */
   spawn(req: ChildRequest): SpawnResult;
@@ -202,11 +202,12 @@ export function childControls(host: ChildRunHost, owner: ChildOwner): ChildContr
   };
 
   return {
-    canSpawn: owner.depth < MAX_CHILD_DEPTH,
+    canSpawn: canSpawnChild(owner.depth),
 
     spawn(req) {
       const depth = owner.depth + 1;
       try {
+        assertCanSpawnChild(owner.depth);
         validateChildStart({ parentRunId: String(owner.key), entryPoint: "vscode", depth, owner: owner.name, task: req.task });
       } catch (error) {
         return { ok: false, error: error instanceof Error ? error.message : String(error) };

@@ -153,6 +153,19 @@ describe('cloud adapter conformance - the shared scripted task through runCloudA
     expect(policyOf(host)).toMatchObject({ entryPoint: 'cloud', toolScope: 'ticket', signoff: { roleKey: 'qa-tester' }, approvalGates: [] });
   });
 
+  it('attributes the child to its owner even when the durable cursor describes the child itself', () => {
+    const host = fakeHost({});
+    host.opts.delegation = {
+      parent: { ...REFS, taskTitle: 'Greet', taskDescription: null },
+      runtime: {} as never,
+      spec: { parentExecutionId: 2, rootExecutionId: 2, depth: 1, handle: 'a4', label: 'Read', task: 'Read the file', owner: 'Reviewer', role: 'explore' },
+    };
+    const task = taskOf(host, RC);
+    expect(task.dispatch).toMatchObject({ source: 'subagent', parentRunId: taskOf({ ...host, refs: { ...REFS, executionId: 2 } }, RC).runId });
+    expect(task.dispatch.parentRunId).not.toBe(task.runId);
+    expect(policyOf(host).modelStart?.delegatedRole).toBeUndefined();
+  });
+
   it('a board-dispatched run with a required sign-off refuses the first finish, takes the verdict from the platform tool, then finishes', async () => {
     const { outcome, events } = await driveCloud(SCRIPT, { requiredSignoff: { roleKey: 'qa-tester' }, maxSteps: 1 });
     expect(outcome.kind).toBe('finished');

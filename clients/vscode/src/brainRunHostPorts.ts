@@ -17,7 +17,7 @@ import { editorRunSettings } from "./editorRunSettings";
 import { deviceLedgerPorts } from "./runUsageLedgerPorts";
 import { auditToolCatalog } from "./auditToolCatalog";
 import { brainToolCatalog } from "./brainToolCatalog";
-import { localWindowModels, localWindowProbes, onDeviceTasks, onDeviceTasksObserving, resolveModelRoute, resolveRunModelChoice, routeStream } from "./modelRouting";
+import { localWindowModels, localWindowProbes, onDeviceTasks, onDeviceTasksObserving, resolveModelRoute, resolveRunModelChoice, routeStream, streamReviewModel } from "./modelRouting";
 import type { EffectiveModelChoice } from "./modelState";
 import { refreshPendingChanges } from "./gitChanges";
 import { editorRunSetupPorts } from "./runSetupPorts";
@@ -225,6 +225,7 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
     childLedger: createChildLedger({ startedCommands: startedCommandsOf, persist: persistChildrenTo(local.store), log: hostLog }),
     // PRD 45 ship-gate ports — verifier + git once per workspace root, the reviewer per run.
     shipPorts: editorShipPorts,
+    reviewStream: (opts, handlers) => streamReviewModel(secrets, opts, handlers),
     // How a code-changing run's coder did — so the next run's coder is picked on evidence.
     reportOutcome: (outcome) => postRunOutcome(outcome),
     reportRunRecord: (record) => postRunOutcome(record),

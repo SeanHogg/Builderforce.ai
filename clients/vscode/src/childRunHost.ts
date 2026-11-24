@@ -32,7 +32,6 @@ import type { ChildLedger } from "./childLedger";
 import type { WebviewRunStart } from "./brainRunHostProtocol";
 import { establishedCalls } from "./childCoverage";
 import { writeChildDataFile } from "./childDataFile";
-import type { StickyModelState } from "./childModelStickiness";
 import { modelForChildRun } from "./roleModelPin";
 import { HostStartSetupError } from "./hostStartGate";
 
@@ -41,13 +40,6 @@ export interface RunSpec extends WebviewRunStart {
   /** Present when this run is someone's sub-agent. */
   child?: {
     lineage: RunLineage;
-    /** The model role its turns are routed for (explore / code / verify …). */
-    role: string;
-    /**
-     * The model the child is held on (`childModelStickiness.ts`) — one object for the
-     * child's whole life, so a resumed turn keeps the model its first turn was routed to.
-     */
-    model?: StickyModelState;
   };
   /** The prompt every run in this tree is built on — the top-level owner's. */
   basePrompt?: string;
@@ -167,8 +159,6 @@ export function createChildRunHost(deps: ChildRunHostDeps): ChildRunHost {
           ...(parent.modelSurface ? { modelSurface: parent.modelSurface } : {}),
           child: {
             lineage: { ...lineage, ...(child.workItemIds[0] ? { ticket: child.workItemIds[0] } : {}) },
-            role: req.role,
-            model: {},
           },
         }),
       });
