@@ -19,7 +19,6 @@ import {
   AGENT_ROLE_PATTERN,
   manifestHasErrors,
   parseManifest,
-  validateManifest,
   type AppManifest,
   type ManifestIssue,
 } from '@seanhogg/builderforce-webcontainers-core/manifest';
@@ -146,17 +145,32 @@ function runIdArg(raw: unknown): string | Json {
 }
 
 /** The project's manifest parsed, or the typed refusal (no file, or it does not parse). */
-async function loadManifest(files: ManifestFileStore, ctx: BuiltinCtx, projectId: number): Promise<{ manifest: AppManifest; issues: ManifestIssue[] } | Json> {
+/** A manifest that parsed, with the issues `parseManifest` raised (it runs `validateManifest` itself). */
+interface LoadedManifest {
+  manifest: AppManifest;
+  issues: ManifestIssue[];
+}
+
+/**
+ * The project's manifest, or a refusal when there is none or it does not parse. A manifest that
+ * parses with error issues is returned WITH them, so `start` can name a model id
+ * (`model-id-refused`) before the generic `manifest-invalid`.
+ */
+async function loadManifest(files: ManifestFileStore, ctx: BuiltinCtx, projectId: number): Promise<LoadedManifest | Json> {
   const stored = await files.read(ctx, projectId);
   if (!stored) return refusal('manifest-missing', `The project has no app manifest (${MANIFEST_PATH}).`, { projectId });
   const parsed = parseManifest(stored.text);
-  if (!parsed.manifest || manifestHasErrors(parsed.issues)) {
+  if (!parsed.manifest) {
     return refusal('manifest-invalid', 'The project manifest does not parse.', { projectId, path: stored.path, ...issueReport(parsed.issues) });
   }
   return { manifest: parsed.manifest, issues: parsed.issues };
 }
 
-const isRefusal = (value: unknown): value is Json => isRecord(value) && value.ok === false;
+const manifestInvalid = (projectId: number, issues: ManifestIssue[]): Json =>
+  refusal('manifest-invalid', 'The project manifest is invalid; fix it before using its agents.', { projectId, ...issueReport(issues) });
+
+/** Narrows on the success shape: a refusal (`Json`) is not a {@link LoadedManifest}, but a `LoadedManifest` is a `Json`. */
+const isLoaded = (value: LoadedManifest | Json): value is LoadedManifest => !(isRecord(value) && value.ok === false);
 
 /** The declared role (or workload), when it is a string. */
 function declaredRole(declaration: Json): string | undefined {
@@ -241,7 +255,8 @@ export function createRuntimeAgentsTools(deps: RuntimeAgentsToolDeps): BuiltinTo
       parameters: listParameters,
       run: guarded('runtime.agents.list', listParameters, async (ctx, _a, projectId) => {
         const loaded = await loadManifest(files, ctx, projectId);
-        if (isRefusal(loaded)) return loaded;
+        if (!isLoaded(loaded)) return loaded;
+        if (manifestHasErrors(loaded.issues)) return manifestInvalid(projectId, loaded.issues);
         const agents = declarations(loaded.manifest).map(([id, declaration]) => ({
           id,
           role: declaredRole(declaration) ?? null,
@@ -276,15 +291,13 @@ export function createRuntimeAgentsTools(deps: RuntimeAgentsToolDeps): BuiltinTo
         if (typeof task !== 'string') return task;
 
         const loaded = await loadManifest(files, ctx, projectId);
-        if (isRefusal(loaded)) return loaded;
-        const issues = [...loaded.issues, ...validateManifest(loaded.manifest)];
+        if (!isLoaded(loaded)) return loaded;
+        const { issues } = loaded;
         const modelIssues = issues.filter((i) => i.code === MODEL_ID_ISSUE && (i.path === `agents.${agentId}` || i.path.startsWith(`agents.${agentId}.`)));
         if (modelIssues.length) {
           return refusal('model-id-refused', `Agent "${agentId}" names a model; agents are declared by role.`, { projectId, agentId, ...issueReport(modelIssues) });
         }
-        if (manifestHasErrors(issues)) {
-          return refusal('manifest-invalid', 'The project manifest is invalid; fix it before starting an agent.', { projectId, ...issueReport(issues) });
-        }
+        if (manifestHasErrors(issues)) return manifestInvalid(projectId, issues);
 
         const declaration = declarations(loaded.manifest).find(([id]) => id === agentId)?.[1];
         if (!declaration) return refusal('agent-not-declared', `No agent "${agentId}" is declared in the manifest.`, { projectId, agentId });

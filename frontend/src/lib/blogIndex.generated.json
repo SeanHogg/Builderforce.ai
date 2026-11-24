@@ -1,5 +1,37 @@
 [
   {
+    "slug": "agents-that-run-inside-your-app",
+    "title": "Agents that run inside your app",
+    "date": "2026-11-24",
+    "description": "Declare agents by role, give each one an allowlist of tools, and they now run inside your app's own environment in the browser tab. They edit files, run the tests and check your services from the inside, and a tool off the list is refused and reported to the Security Shield.",
+    "tags": [
+      "agents",
+      "mcp",
+      "webcontainers",
+      "open-source",
+      "runtime",
+      "security",
+      "idea-to-real",
+      "product"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "your-agents-join-the-room",
+    "title": "Your agents join the Room",
+    "date": "2026-11-24",
+    "description": "Each agent you declare now appears in the Room. Its avatar shows what it is really doing, derived from its run events. Open it to see its role, tools and history, steer it or cancel the run, and after a recovery the Room rebuilds from where each agent stopped.",
+    "tags": [
+      "agents",
+      "collaboration",
+      "observability",
+      "webcontainers",
+      "idea-to-real",
+      "product"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
     "slug": "a-blank-preview-now-tells-you-why",
     "title": "A blank preview now tells you why, and a Laravel API comes up in the tab",
     "date": "2026-11-21",
