@@ -186,6 +186,26 @@ The source was re-read claim by claim without relying on PRD 50's status table, 
 | Full API typecheck | Blocked in the app manifest catalog and its test by missing `@seanhogg/builderforce-webcontainers-core/manifest` types. The focused API suite passed. |
 | Repository guards and locale catalog test | Execution, source-package graph and tenant-scope guards passed. The frontend locale catalog test passed 110 tests. |
 
+### Validation run (2026-11-24, chat #300, checkout `5eb3411d6`)
+
+All seven PRD 50 executable acceptance checks were executed on the current tree, not read from the status table:
+
+| PRD 50 check | Result (observed exit) |
+| --- | --- |
+| `node scripts/check-one-execution.mjs --enforce` (root) | **Pass** — 0 non-baseline importers of `runAgentLoop`; the one execution path is `runAgent`. |
+| `node scripts/check-source-package-graph.mjs` (root) | **Pass** — 48 source-only packages, 50 edges, 32 tsconfig projects. |
+| `pnpm exec vitest run` (packages/agent-run) | **98 files / 871 tests pass.** |
+| Brain acceptance suites: crossAdapterConformance, runPrepared.door, openingSections, triageReport.regression, chatDiagnosticsReport | **5 files / 42 tests pass.** |
+| Brain diagnostic suites: chatDiagnostics (52), gatherChatDiagnostics (10), triageReport.regression (17), runPrepared.door (2) | **81 tests pass.** |
+| VSIX: participantRun, brainRunHost.entryPoint, hostStartGate, childRunSpawner | **4 files / 41 tests pass.** |
+| agent-runtime: crossAdapter, onPremSubagents.openRun, channelAdapter, channelOutcome | **4 files / 9 tests pass.** |
+| api: chatDiagnosticsToolCatalog, cloudChildSpec, cloudChildRuns, cloudAdapter.sharedTask | **4 files / 15 tests pass.** |
+| `tsc --noEmit` (agent-run, brain-embedded) | **Both pass.** |
+
+Every PRD 50 §2 contract and §7 acceptance criterion now has an executed check on this checkout; no claim in this section rests on a name search. This run is the MK-50-SELFVAL method applied to itself.
+
+**Own-agent diagnostic check (this run).** `builtin_chats_diagnostics(chatId 300)` returns five stored captures (ids 198–202): two `run-in-progress` (198, 199) and three `healthy` (200–202), all surface VS Code (VSIX), newest at 04:02:21 — none for the current run yet, since captures are written at run end. The tool now returns distinct empty / in-progress / healthy results, so the MK-50-DIAG fix is observable in its output shape; the list view still truncates capture bodies, so per-capture `contextPressureOnly` agreement with the healthy sentence remains unverified from this surface.
+
 ---
 
 ## PRD 09 — Cloud Agent Validation & Hardening
