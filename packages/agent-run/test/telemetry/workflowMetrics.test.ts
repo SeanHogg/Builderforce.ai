@@ -11,8 +11,9 @@ const scope = { runId: 'run-1', entryPoint: 'vscode', step: 2 };
 
 describe('workflow measurements', () => {
   it('covers every node in the implemented-workflow diagram', () => {
-    const map = readFileSync(new URL('../../../../docs/specs/_scratch-agent-pipeline-map.md', import.meta.url), 'utf8');
-    const diagram = map.split('## 5. Implemented workflow')[1]!.split('```mermaid')[1]!.split('```')[0]!;
+    const map = readFileSync(new URL('../../../../docs/specs/make.md', import.meta.url), 'utf8');
+    const design = map.split('## Design — Agent pipeline map')[1]!;
+    const diagram = design.split('### 5. Implemented workflow')[1]!.split('```mermaid')[1]!.split('```')[0]!;
     const ids = [...diagram.matchAll(/\b([A-Z][A-Za-z]*)[\[({]/g)].map((m) => m[1]!.toLowerCase());
     expect([...new Set(ids)].sort()).toEqual([...WORKFLOW_STAGES].sort());
   });

@@ -118,7 +118,7 @@ function words(text: string): string[] {
 }
 
 /**
- * App-manifest finder aliases (contract: `docs/specs/app-manifest-ai-resource.md` §8).
+ * App-manifest finder aliases (contract: docs/specs/make.md "W11 contract — the app manifest ai resource" §8).
  * Exactly these phrases resolve to BOTH app-manifest tools. Bare `service`, `schema`
  * or `launch` must NOT surface them — those words belong to other tools — so the two
  * tools are scored ONLY on an alias phrase or the word `manifest`, never on the

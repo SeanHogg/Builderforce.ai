@@ -1,6 +1,6 @@
 /**
  * The APP MANIFEST tool catalog — `app_manifest.schema` and `app_manifest.validate`, spread into
- * `builtinMcpService`'s `CATALOG` (docs/specs/app-manifest-ai-resource.md §8).
+ * `builtinMcpService`'s `CATALOG` (docs/specs/make.md "W11 contract — the app manifest ai resource" §8).
  *
  * There is exactly one schema and one validator: the runtime's own, from
  * `@seanhogg/builderforce-webcontainers-core/manifest` (the pure core export). This file only

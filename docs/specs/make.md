@@ -11,13 +11,15 @@
 
 ## Contents
 
-- [Tasks / Deliverables — review 2026-11-21](#tasks--deliverables--review-2026-11-21)
 - [PRD 50 — One-pipeline validation and diagnostic gaps](#prd-50--one-pipeline-validation-and-diagnostic-gaps)
+- [Design — Agent pipeline map](#design--agent-pipeline-map)
+- [Tasks / Deliverables — review 2026-11-21](#tasks--deliverables--review-2026-11-21)
 - [PRD 09 — Cloud Agent Validation & Hardening](#prd-09--cloud-agent-validation--hardening)
 - [PRD 23 — Manager PR Review, Acceptance Evidence, and Ticket Recovery](#prd-23--manager-pr-review-acceptance-evidence-and-ticket-recovery)
 - [PRD 37 — Coordinated Role Participation & Execution Verification](#prd-37--coordinated-role-participation--execution-verification)
 - [PRD 45 — Deterministic run gates and loop economics](#prd-45--deterministic-run-gates-and-loop-economics)
 - [PRD 49 — Methodology personas and the `.builderforce/` workspace layout (TIP Code parity)](#prd-49--methodology-personas-and-the-builderforce-workspace-layout-tip-code-parity)
+  - [PRD 49 end-state design](#prd-49-end-state-design)
 - [Agent framework registrations — legacy table contract step](#agent-framework-registrations--legacy-table-contract-step)
 - [PRD 41 — Offline understanding and the run delta](#prd-41--offline-understanding-and-the-run-delta)
 - [Design — Local-first closure: G03, G21 + G23, G27](#design--local-first-closure-g03-g21--g23-g27)
@@ -27,7 +29,345 @@
 - [PRD 38 — The knowledge graph (any directory; code and docs first)](#prd-38--the-knowledge-graph-any-directory-code-and-docs-first)
 - [PRD 43 — One 3D stage for every knowledge camera](#prd-43--one-3d-stage-for-every-knowledge-camera)
 - [PRD 31 — Build, run and ship a real app on Builderforce](#prd-31--build-run-and-ship-a-real-app-on-builderforce)
+  - [W11 contract — the app manifest ai resource](#w11-contract--the-app-manifest-ai-resource)
 - [PRD 18 — hired.video → Builderforce.ai port (Canvas runtimes and the Studio → Canvas port)](#prd-18--hiredvideo--builderforceai-port-canvas-runtimes-and-the-studio--canvas-port)
+
+---
+
+## PRD 50 — One-pipeline validation and diagnostic gaps
+
+> Completed on 2026-11-23. Editor, on-prem, and durable cloud use the shared execution entry and policy. Hosts supply their authorized catalogs and actual verification evidence. The runtime harnesses cover editor wake recovery, on-prem continuation and settlement, and durable cloud resume and settlement. See the [pipeline map](#design--agent-pipeline-map) and [DONE.md](../../DONE.md).
+> This slice stops at the kernel. `runAgent` (`packages/agent-run/src/runAgent.ts:67`) calling `runAgentLoop` (`packages/agent-loop/src/loop.ts`) stays. Nothing inside that call is redesigned here.
+> The original design below describes the first slice above `runAgent`. The follow-up records the completed workflow.
+
+### Executable acceptance checks
+
+Run these commands independently from the listed directories, which are relative to the repository root. The validation run reads this block from the PRD and matches completed tool results by command and directory. A nonzero exit is a failed check. A missing command or unfinished job leaves its check unverified.
+
+```builderforce-acceptance
+[
+  { "cwd": ".", "command": "node scripts/check-one-execution.mjs --enforce" },
+  { "cwd": ".", "command": "node scripts/check-source-package-graph.mjs" },
+  { "cwd": "packages/agent-run", "command": "pnpm exec vitest run --maxWorkers=3 --pool=threads" },
+  { "cwd": "brain-embedded", "command": "pnpm exec vitest run src/crossAdapterConformance.test.ts src/run/runPrepared.door.test.ts src/runStore/openingSections.test.ts src/triageReport.regression.test.ts src/chatDiagnosticsReport.test.ts --maxWorkers=2 --pool=threads" },
+  { "cwd": "clients/vscode", "command": "pnpm exec vitest run src/participantRun.test.ts src/brainRunHost.entryPoint.test.ts src/hostStartGate.test.ts src/childRunSpawner.test.ts --maxWorkers=2 --pool=threads" },
+  { "cwd": "agent-runtime", "command": "pnpm exec vitest run src/conformance/crossAdapter.test.ts src/run/onPremSubagents.openRun.test.ts src/run/channelAdapter.test.ts src/run/channelOutcome.test.ts --maxWorkers=2 --pool=threads" },
+  { "cwd": "api", "command": "pnpm exec vitest run src/application/llm/chatDiagnosticsToolCatalog.test.ts src/application/runtime/cloudChildSpec.test.ts src/application/runtime/cloudChildRuns.test.ts src/application/runtime/cloudAdapter.sharedTask.test.ts --maxWorkers=2 --pool=threads" }
+]
+```
+
+The November 24 implementation adds these executable checks and records their results in Brain diagnostics. Local verification and capture requirements for the installed hosts are tracked in [Make](#prd-50--one-pipeline-validation-and-diagnostic-gaps).
+
+This is the first `builderforce-acceptance` block in make.md; spec validation binds only the first block within the first 12,000 characters, so keep this section first and add no other block above it.
+
+> Re-reviewed 2026-11-23 against checkout `7bdcdfb8f` and the user-supplied VSIX chat #175701 / server #300 report (client `2026.10.209+9b457dacff78`, API `2026.10.106`). That installed build is a separate artifact from this checkout. This section supersedes the earlier make.md claim that chat #300 validated all six contracts or proved a commit/push. [PRD 50 slice contract (archived)](../../DONE.md) and the [pipeline map](#design--agent-pipeline-map) contain both current workflow notes and historical slice results; earlier missing-dependency lists and test counts are not fresh results.
+
+### Remaining acceptance work
+
+The implementation has a shared `openRun → runAgent → runAgentLoop` path. `runPrepared` forwards the required entry label; `openRun` rejects missing/unregistered labels and composes factories from surface ports. The participant calls `host.start`; editor children use `startThrough → gated.start`. The four surface spawn adapters call shared `spawnChild`. Separately, the four gateway compatibility callers still use `spawnSubagentDirect`, which delegates to shared `spawnChild`; these are two different groups of callers.
+
+Shared full-routing defaults, persisted resume decisions and `openingRows` governance-before-history assembly exist. Treat their old slice exclusions as historical. Host authorization, storage, native tools, verification evidence and durable admission/completion remain host responsibilities. Finding an import or a deleted function name alone proves neither these behaviors nor policy-body ownership. A current source review also cannot prove that an earlier implementation left the kernel unchanged without its baseline diff.
+
+**Remaining live acceptance (MK-50-PIPELINE).** Capture a fresh validation in the installed VSIX and reconstruct authenticated on-prem and cloud runs on the updated builds. Record their build IDs and check outcomes. The supplied chat #300 diagnostic remains evidence for its installed build. The implementation and regression coverage for MK-50-PERSIST, MK-50-TRACE, MK-50-DIAG and MK-50-SELFVAL are recorded in [DONE.md](../../DONE.md).
+
+### Supplied VSIX run: what it establishes
+
+- Seven model turns, 16 tool calls and zero recorded tool errors; four tool results were trimmed, with a 44,951-token prompt peak. There was one successful edit and no dispatch. Local execution is legitimate; zero cloud runs is not a pipeline defect.
+- `builtin_chats_diagnostics` returned an empty stored-capture list. That means no captures were returned, not that no failure or pressure occurred. The transcript ran searches and an outline, but no test, typecheck or execution guard before claiming all six contracts passed. Importing `spawnChild` does not validate ports-only policy ownership, and removing `runNativeBrain` does not establish participant host behavior.
+- The warning predicts a premium entitlement rejection/fallback even though provenance says `servedBy: own`, all seven turns used the selected local model, and no provider failure/failover was recorded. `brain-embedded/src/chatDiagnostics.ts` emits that warning from configured funding and plan entitlement without considering observed own-account provenance. Correct the conclusion; this report does not establish a gateway entitlement failure.
+- The healthy verdict says “no context pressure” while `contextPressureOnly` is true and the next paragraph reports trimming. `brainDiagnosticsText.ts` supplies the unconditional healthy sentence. Trimming alone is not evidence of a broken run, but the two statements must agree.
+- `staffingSummary.ts:sessionShippedInTrace` counts successful edits as well as commits/pushes. Therefore `sessionShipped: 1` is evidence of local work, not delivery. The supplied transcript contains no explicit `git_commit` or `git_push` call and no commit/push receipt. The earlier MK-45-SHIP sentence overstated the evidence. *(Journal, 2026-11-24: the supplied transcript stopped at step 5. Step 6 did commit, as `7bdcdfb8f` / rewritten `82dcf2bd6`, and nothing was pushed. See MK-45-SHIP.)*
+- Step 4's self-review `git_diff` returned `(no output)` for a file it had just edited. The agent spent step 5 re-checking through `run_command`. Root cause: with an explicit `repo`, `runInRepoScope` (`packages/agent-tools/src/git-repo-scope.ts`) passed the workspace-relative path `Builderforce.ai/docs/specs/make.md` to `git diff` unchanged, with the repo as cwd. That pathspec matches nothing, so git exits 0 with empty output. `git_history` had the same defect, and `git_diff` also omitted staged changes. Fixed in this pass (see DONE.md, 2026-11-24).
+- Ticket creation returned task #7050 and a chat link, while the report's ticket list and execution-history snapshot show zero linked runnable tickets. Reconcile snapshot timing/local-to-server identity before diagnosing lost linkage; the report alone does not establish the cause. Likewise, seven model turns alongside zero loaded run steps is an observability discrepancy, not proof that no run occurred.
+
+### Prior local validation (2026-11-23)
+
+Commands use existing installs only; no package installation or assertion changes. This review changes documentation only.
+
+| Check | Result on this checkout |
+| --- | --- |
+| `packages/agent-run`: `pnpm exec vitest run` | **97 files / 859 tests pass.** |
+| `packages/agent-run`: `pnpm exec tsc --noEmit -p tsconfig.json` | **Pass.** |
+| `brain-embedded`: `pnpm exec tsc --noEmit -p tsconfig.json` | **Pass.** Earlier missing-dependency blockers did not reproduce. |
+| Brain: crossAdapterConformance, run/runPrepared.door, runStore/openingSections, diagnosticsVersions (`--maxWorkers=1 --pool=threads`) | **4 files / 39 tests pass.** Initial fork startup timed out before assertions; the thread rerun completed. |
+| Brain: chatDiagnosticsReport and triageReport.regression (`--maxWorkers=1 --pool=threads`) | **2 files / 25 tests pass.** Existing coverage does not close the contradictory report cases above. |
+| VSIX: participantRun, brainRunHost.entryPoint, hostStartGate, childRunSpawner | **37 pass / 1 fail.** Participant `#file` persistence assertion fails at line 296; isolated single-thread rerun: 21 pass / same 1 fail. |
+| VSIX: `pnpm exec tsc --noEmit -p tsconfig.json` | **Fail.** `participantRun.test.ts:254` implicit-any `spec`; line 327 missing required `BrainRunRequest.entryPoint`. The earlier missing-vscode-types blocker did not reproduce. |
+| On-prem: conformance/crossAdapter and onPremSubagents.openRun | **3 pass / 2 fail.** Both conformance traces contain an additional `run.routed`; child suite passes. Both failures also reproduce in an isolated single-thread rerun. |
+| API: cloudChildSpec and cloudChildRuns | **2 files / 9 tests pass.** Earlier Neon load blocker did not reproduce for these files. This is not a full cloud-host validation. |
+| `node scripts/check-one-execution.mjs --enforce` | **Pass.** Import guard only; does not prove arbitrary port callback ownership. |
+| `node scripts/check-source-package-graph.mjs` | **Pass.** 48 packages, 50 edges, 32 tsconfig projects. |
+| `git diff --check` | **Pass.** |
+
+Focused suites above were run with `pnpm exec vitest run` and the named test paths in their respective package directories. Passing shared tests and source guards support the architecture; the reproducible host failures prevent an all-green PRD 50 verdict. No live deployment, editor UI, authenticated cloud lifecycle or push was exercised by this review.
+
+### Full workflow follow-up (current status)
+
+The entry slice has been extended. openRun and the Brain preamble share routing defaults. The persisted run state carries the decision across durable ticks. Full routing is the default. Existing editor settings and explicit host configuration can opt into auto routing. Shared opening assembly renders governing instructions ahead of history. Brain and channel use that opening rather than assembling separate transcript prefixes.
+
+planWork and evaluateRun support host-scoped assignments. The shared runtime keeps IDs and criteria in run state, presents them on turns, checks evidence in a batch on finish, and reports work counts. Brain records ticket and spec evidence. Cloud and relay bind assignments at opening, cloud owners reconcile durable child evidence, and PR confirmation supplies review evidence. Unresolved work stays out of successful routing samples.
+
+The follow-up fixes early VSIX admission before shared validation, cloud admission stamps overwritten by the rebuilt child payload, Brain calling removed progress and retry hooks, a missing Brain failure-synthesis marker, and prose finishes skipping close-out. The detailed current status lives in the pipeline map. Historical slice text below describes the initial contract.
+
+Children carry scoped assignments on all three hosts. The shared steering path takes queued follow-ups after finish-tool results. Brain defers native approval until the editor resolves the tool and workspace path, and it records the driver's sole closing synthesis. On-prem sessions, tickets, and children share an execution entry. Native catalogs supply the tools they can dispatch, and shared settlement records checks that actually ran. Hosts retain their own storage, approval presentation, and worktree lifecycle.
+
+Explicit questions use the ask-only classifier and take the quick route unless the ask requests the full pipeline. The shared guard carries their answer budget across ticks. Brain applies the classification to shipping policy and uses the latest run outcome and findings for diagnostics. The [pipeline map](#design--agent-pipeline-map) records the preflight and execution details.
+
+The shared history policy uses Memory 2026.10.84 to fold growing narration restatements while retaining new evidence. Brain's repeated-narration finding uses the same fold.
+
+### Independent re-validation (2026-11-24, checkout `82dcf2bd6`)
+
+The source was re-read claim by claim without relying on PRD 50's status table, and the named suites were re-run. Results:
+
+| PRD 50 claim | Result | Evidence |
+| --- | --- | --- |
+| §2.1 required `entryPoint`, no `'web'` default | **Holds** | `runStore/runTypes.ts:441` is required; `run/runPrepared.ts:40` passes `req.entryPoint`; `openRun.ts:145–146` rejects a missing or unregistered label. Zero `?? 'web'` / `\|\| 'web'` in brain-embedded, clients/vscode and agent-run sources. The test-harness default in `test/brainRunHarness.ts:50` is test-only. `cloudChildSpec.ts:82` keeps `?? 'cloud'` only so older stored child payloads still parse, and it can resolve only to the cloud label. |
+| §2.2 participant through panel host | **Holds** | `participantRun.ts:41` `runViaHost` → `:81` `host.start`; the host stamps `entryPoint: "vscode"` (`brainRunHost.ts:321`). `nativeBrainRun.ts` is gone; no `runBrainLoop` / `runAgent` call in clients/vscode/src. |
+| §2.3 ports, not hook bodies | **Holds** | `SurfacePorts` (`openRun.ts:31–47`) takes `CompactionHookOptions` and `RecordedModelPreflight` data; only `composeModules` builds hooks. No production `modules:` / `cloudPolicyModules` outside agent-run. |
+| §2.4 shared `spawnChild` | **Holds** | `policy/subagents/child.ts:30/64/82`; validation `:52–60`. Callers: `childRunHost.ts:143`, `cloudLiveOrchestration.ts:138`, `cloudChildSpec.ts:81` (skipped when a persisted `standingPrompt` exists), `onPremSubagents.ts:53` (`depth: 1` is correct, since `childProvider` strips `orchestration`), `subagent-spawn.ts:160`. |
+| Four `spawnSubagentDirect` callers | **Holds** | `sessions-spawn-tool.ts:53`, `commands-subagents.ts:668`, `local-agent-transport.ts:126`, `local-adapter.ts:60`. |
+| Single prompt and depth sources | **Holds** | `agent-loop/src/subagent.ts:29` / `:173` only; `buildSubagentSystemPrompt` survives only as a test alias. |
+| Kernel untouched (`runAgent` sole `runAgentLoop` importer) | **Holds** | `runAgent.ts:38`, called at `:135`. |
+| §7 "no deletion of `channelAdapter`, `useChatSystemPrompt`" | **Superseded** | `useChatSystemPrompt.ts` was deleted in `c56ce694e`, and `channelAdapter.ts` was renamed to `channelRunPorts.ts` (its test keeps the old name). Both came from later slices; §7 now carries a note. |
+| Suites | **Same as above** | agent-run 11 files / 86 pass; Brain 3 files / 15 pass; VSIX 27/28 (the `participantRun.test.ts:296` persistence assertion, MK-50-PERSIST); on-prem 10/12 (two extra `run.routed` traces, MK-50-TRACE); `check-one-execution --enforce` and the source-package graph pass. |
+
+**Fixed on the prior 2026-11-24 checkout (DONE.md):** MK-50-PERSIST, MK-50-TRACE, and the canvas, web-reply and cloud conformance tests that used the wrong golden trace. A re-run gave agent-tools 93/93, API 27/27, VSIX 41/41, on-prem 12/12, agent-run 58/58, Brain 6/6, and canvas 1/1.
+
+**Prior diagnostic re-check (2026-11-24, chat #300).** The stored-capture tool returned three VSIX snapshots (ids 200–202), each marked healthy and stopped running. That reading preceded the diagnostic tool update and did not expose pressure details. The prior checkout passed 867 shared tests and the Brain production-entry check.
+
+### Acceptance and diagnostic changes (2026-11-24)
+
+- **MK-50-SELFVAL.** A validation request records observed command exits after authorized dispatch. PRD 50 declares its executable checks at the top of the spec. The runtime matches commands and working directories, carries pending jobs over durable ticks, and records missing requirements or failed exits in the terminal outcome. The agent gets the evidence alongside its instructions to map each claim to a check.
+- **MK-50-DIAG.** The stored-capture tool returns snapshot timing, context pressure, model provenance, and a distinct empty-capture result. The report distinguishes observed provider behavior from plan eligibility, local work from confirmed delivery, and loaded history and ticket data from recorded trace evidence. Capture schema v3 separates work calls from base-branch delivery evidence.
+
+| Local check | Result |
+| --- | --- |
+| Shared agent runtime | 98 files, 871 tests passed. |
+| Brain entry, conformance, opening, triage and diagnostic report | 5 files, 42 tests passed. |
+| Brain reporting, loaded trace and delivery evidence | 6 files, 177 tests passed. |
+| VSIX participant and host gates | 4 files, 41 tests passed. |
+| On-prem ticket and channel conformance, child admission and settlement | 4 files, 9 tests passed. |
+| Cloud adapter and child runs, diagnostic capture tool | 4 files, 15 tests passed. |
+| Shared runtime, Brain and VSIX typechecks | Passed. |
+| Full API typecheck | Blocked in the app manifest catalog and its test by missing `@seanhogg/builderforce-webcontainers-core/manifest` types. The focused API suite passed. |
+| Repository guards and locale catalog test | Execution, source-package graph and tenant-scope guards passed. The frontend locale catalog test passed 110 tests. |
+
+### Validation run (2026-11-24, chat #300, checkout `5eb3411d6`)
+
+All seven PRD 50 executable acceptance checks were executed on the current tree, not read from the status table:
+
+| PRD 50 check | Result (observed exit) |
+| --- | --- |
+| `node scripts/check-one-execution.mjs --enforce` (root) | **Pass** — 0 non-baseline importers of `runAgentLoop`; the one execution path is `runAgent`. |
+| `node scripts/check-source-package-graph.mjs` (root) | **Pass** — 48 source-only packages, 50 edges, 32 tsconfig projects. |
+| `pnpm exec vitest run` (packages/agent-run) | **98 files / 871 tests pass.** |
+| Brain acceptance suites: crossAdapterConformance, runPrepared.door, openingSections, triageReport.regression, chatDiagnosticsReport | **5 files / 42 tests pass.** |
+| Brain diagnostic suites: chatDiagnostics (52), gatherChatDiagnostics (10), triageReport.regression (17), runPrepared.door (2) | **81 tests pass.** |
+| VSIX: participantRun, brainRunHost.entryPoint, hostStartGate, childRunSpawner | **4 files / 41 tests pass.** |
+| agent-runtime: crossAdapter, onPremSubagents.openRun, channelAdapter, channelOutcome | **4 files / 9 tests pass.** |
+| api: chatDiagnosticsToolCatalog, cloudChildSpec, cloudChildRuns, cloudAdapter.sharedTask | **4 files / 15 tests pass.** |
+| `tsc --noEmit` (agent-run, brain-embedded) | **Both pass.** |
+
+Every PRD 50 §2 contract and §7 acceptance criterion now has an executed check on this checkout; no claim in this section rests on a name search. This run is the MK-50-SELFVAL method applied to itself.
+
+**Own-agent diagnostic check (this run).** `builtin_chats_diagnostics(chatId 300)` returns five stored captures (ids 198–202): two `run-in-progress` (198, 199) and three `healthy` (200–202), all surface VS Code (VSIX), newest at 04:02:21 — none for the current run yet, since captures are written at run end. The tool now returns distinct empty / in-progress / healthy results, so the MK-50-DIAG fix is observable in its output shape; the list view still truncates capture bodies, so per-capture `contextPressureOnly` agreement with the healthy sentence remains unverified from this surface.
+
+---
+
+## Design — Agent pipeline map
+
+Implementation and runtime harnesses verified on 2026-11-23. [PRD 50](#prd-50--one-pipeline-validation-and-diagnostic-gaps) records the consolidation contract and [DONE.md](../../DONE.md) records the completed roadmap item.
+
+All inspected production adapters enter through `openRun → runAgent → runAgentLoop`. Each host supplies its authorization, tool capabilities, verified evidence, and storage through ports.
+
+### 1. Current execution path
+
+```mermaid
+flowchart TD
+  Panel[VSIX panel] --> Host[Editor gated host start]
+  Participant[VSIX participant: runViaHost] --> Host
+  Child[VSIX child / resume / owner wake] --> Through[startThrough] --> Host
+  Host --> Gate[gateStarts: change set, journal, delta]
+  Gate --> Brain[Brain startRun / prepareBrainRun]
+  Web[Web Brain] --> Brain
+  Brain --> Prepared[runPrepared: transcript + ports + decided route]
+  Cloud[Cloud tick: cloudAdapter] --> Open
+  Reply[Web reply: agentReplyRun] --> Open
+  Canvas[Browser canvas: creationCanvasAi] --> Open
+  Relay[Self-hosted relay: onPremAdapter] --> Prem[openOnPremRun]
+  Channel[On-prem sessions: channelRunPorts] --> Prem
+  Prem --> Open
+  Prepared --> Open[openRun: require entryPoint, fold route, compose modules]
+  Open --> Agent[runAgent: hooks, context, dispatch, settle]
+  Agent --> Kernel[runAgentLoop]
+  Kernel --> Agent
+  Agent --> Outcome[RunOutcome to surface settlement]
+```
+
+The Brain preamble renders opening data and per-run directives and decides its route using shared `routeRun`. `runPrepared` passes `{ input, decided }` so `openRun` does not decide again. Other callers may supply route facts directly. A delegated brief goes through the same full/quick decision as any task, with the host's routing settings and stage models.
+
+The request classifier separates the ask from pasted context. An explicit question uses the quick route unless it asks to run the full pipeline. Brain leaves work from a question run uncommitted. The shared guard preserves the question's tool-round count across continuation and offers a final answer after six rounds.
+
+Shared history compaction and Brain's repeated-narration finding use Memory's canonical fold. The published Memory 2026.10.84 build folds matching lead sentences in the model transcript, keeps new evidence, and preserves the stored history.
+
+Brain starts independent preflight probes alongside deterministic lookup, bounds the read-only probes, and records elapsed time in `run.preflight`. Symbol search can serve a stale workspace snapshot while refreshing it. Tool side-effect metadata supplies the read batching rule. Brain diagnostics v2 reports stopped and unanswered question runs, counts gateway failovers, and incorporates run findings.
+
+The editor host is shared by panel and participant. `brainRunHostPorts.ts` binds `startThrough` to `gated.start`; `brainRunHost.ts` supplies it to `childRunHost`. Children therefore pass the editor start gate. Other surfaces retain their own lifecycle; `openRun` does not create editor journals or cloud execution records.
+
+### 2. Host bindings
+
+| Stage | VSIX panel and participant | Cloud | Web reply | Canvas | On-prem |
+| --- | --- | --- | --- | --- | --- |
+| Entry | Brain runPrepared → openRun | cloudAdapter → openRun | agentReplyRun → openRun | creationCanvasAi → openRun | openOnPremRun → openRun |
+| Label | Explicit vscode from host | cloud | web | canvas | on-prem |
+| Start lifecycle | Editor gate, including children | Durable execution | Reply lifecycle | Browser lifecycle | Adapter/session lifecycle |
+| Pipeline route | Shared default or editor override, pre-decided once | Shared default with durable decision, pins and review models | Shared default | Shared default | Shared default and existing session model options |
+| Policy composition | Factories with native history ports and recorded preflight facts | Factories with compaction, guards, finish, publish ports | Compaction summarizer options | Defaults | Defaults |
+| Finish couplings | Live children, linked work, spec coverage, close-out and optional explicit assignments | Cloud finish and ship ports | Default finish | Default finish | Default finish and optional explicit assignments on in-process runs |
+| Child start | spawnChild then gated host start | spawnChild then durable admission; prompt persisted for tick | None at entry | None at entry | spawnChild then openRun, or authorized session gateway start |
+
+`BrainRunRequest.entryPoint` is required and no longer defaults. `RunEntryPoint` now aliases the shared telemetry `EntryPoint` type used by `RunPolicy.entryPoint`. Brain conformance cases enumerate `ALL_ENTRY_POINTS` (vscode, web, rovr, canvas, on-prem and cloud); these are label-parity cases through Brain, not proof of host lifecycle parity.
+
+### 3. Resolved findings from the 2026-11-22 map
+
+| Former finding | Current evidence |
+| --- | --- |
+| Participant owns its run and is labeled web | `clients/vscode/src/participantRun.ts` calls host.start; host supplies vscode. nativeBrainRun.ts and its prompt builder are gone. |
+| VSIX children skip the gate | brainRunHostPorts.ts binds startThrough; brainRunHost.ts uses it for children. |
+| Adapters call runAgent and replace module sets | They now call `packages/agent-run/src/openRun.ts`, which owns factory composition. Brain now supplies history ports and preflight facts; no hook replacement remains. |
+| Full/quick algorithm exists only in Brain | It now lives in `packages/agent-run/src/route/routeRun.ts`; Brain runRoute.ts supplies facts and retains one decision. Configuration parity remains open. |
+| startRun directly duplicates deterministic finish | deterministicFinish.ts exposes closeOutPort; openRun invokes it before the finish gate or for unfinished-settlement upkeep. startRun records the outcome. A refused finish may cause another legitimate attempt. |
+| Four editor prompt assembly layers | `brain-embedded/src/runStore/openingSections.ts` renders opening data, followed by Brain directives. Former useChatSystemPrompt, host runPreamble, and participant prompt files are gone. |
+| Legacy child standing instructions are independently implemented | `agent-runtime/src/agents/subagent-prompt.ts` calls shared subagentSystemPrompt and adds session context. The gateway validates the caller's session before invoking shared admission. |
+| Kernel header names the wrong caller | `packages/agent-loop/src/loop.ts` now names openRun → runAgent correctly. |
+
+### 4. Consolidated policies and host responsibilities
+
+1. **Brain policy callbacks removed from the production door.** preflightRecorded.ts supplies data to createModelHook; brainFold.ts supplies native history, summary transport and trace/durable-marker sinks to createCompactionHook. policy/compaction/history.ts owns memo reuse, immutable source history, summary deadline/fallback, saved tokens and fold result construction. The compaction.hook escape hatch is removed. Brain progressGuard, tool pre/post-step policy and continuation remain separate, as excluded by this slice.
+
+2. **Shared spawnChild implemented.** `spawnChild` admits direct children of root runs through a scoped host start. `prepareChildStart` validates identity and the registered entry point, then builds the standing prompt and work references. Cloud persists those instructions for a later tick and uses the shared preparer for older payloads that lack them. `prepareChildStart` accepts previously admitted deeper lineage so existing payloads can resume. VSIX and cloud return admission handles, and the in-process relay returns a completed report.
+
+3. **Gateway child starts use the shared admission contract.** sessions-spawn-tool.ts, commands-subagents.ts, infra/local-agent-transport.ts and transport/local-adapter.ts call spawnSubagentDirect. It authorizes before shared spawnChild and supplies gateway/session lifecycle ports. buildSubagentSessionPrompt adds session context. The shared admission policy enforces root-only spawning. The gateway owns agent allow-lists, identity, delivery and result registration.
+
+4. **Routing decision and default configuration are shared.** openRun defaults to the full pipeline. Brain uses the same default, and its editor settings can opt into auto scoring and a quick model. The decision is carried in RunState for resumes and outcome rows. Host model availability, quick-model overrides and gateway cascades still vary.
+
+5. **One runtime opening renderer.** openingRows renders governance and persona, then preserves prepared history and the task row. Brain and channel pass their compiled system text separately from history. Host-specific grounding and directives remain inputs.
+
+6. **Work evidence reaches the shared ledger.** Brain reports linked-ticket and spec evidence from existing scoped reads. Relay change tickets and cloud ticket assignments enter the plan before execution. Brain owner wakes recheck child ticket references against the scoped listing. Durable children record write evidence before terminal landing, and the owner reads it in one scoped query. Cloud and relay review evidence is added after PR confirmation. Unresolved completed invocations are excluded from routing feedback.
+
+7. **Shared steering and closing turns.** Tool finishes take late steering and queued follow-ups after tool rows, preserving attachments. The editor checks Stop before waking its inbox and requeues a wake that failed before admission. Brain picks up explicit directions received during successful close-out. Cloud and relay share the durable dispatcher, and the scheduled sweep retries explicitly requeued directions on terminal executions.
+
+8. **One on-prem execution entry.** Tickets, sessions and children call openOnPremRun. The former channel adapter is a session port binding and retains its message bridge.
+
+9. **Shared approval, catalog, and verification inputs.** Brain supplies its resolved gate snapshot and the editor authorizes the resolved tool and workspace path. A closed native catalog is a complete capability source. Shared settlement records existing Brain verifier evidence and completed on-prem package checks from the authorized tool path. Subsequent mutations invalidate on-prem evidence. Configured prose and tool finishes use the same verifier, and skips stay ungraded.
+
+10. **The import guard does not establish callback ownership.** `scripts/check-one-execution.mjs --enforce` checks kernel/driver imports and policy reach-ins, not supplied hook bodies. The false enforcement claim has been removed from `SurfacePorts`. `surface.preflight` now accepts a data contract rather than a callback; factory and production-door regressions cover its ownership and single-check/no-duplicate-notice behavior. SurfacePorts.compaction also accepts only factory options now; the production-door regression checks native history ports and absence of a hook override. The import guard does not prove arbitrary port callback semantics.
+
+### 5. Implemented workflow
+
+```mermaid
+flowchart TD
+  Surface[Surface: validated request + authenticated ports] --> Start[Shared start contract: identity, lineage, gate]
+  Spawn[spawnChild: depth + shared child prompt] --> Start
+  Start --> Route[routeRun: one decision and model intent]
+  Route --> Work[planWork: assigned items and criteria]
+  Work --> Opening[openingRows: governance, persona, and history]
+  Opening --> Compose[openRun: shared factories, ports only]
+  Compose --> Kernel[runAgent → runAgentLoop]
+  Kernel --> Dispatch[Dispatch: capability + governance checks]
+  Dispatch -->|root spawn only| Spawn
+  Dispatch --> Ledger[(Work ledger: status + evidence)]
+  Kernel --> Finish{Work resolved and no live children?}
+  Ledger --> Finish
+  Finish -->|open items as next turn| Kernel
+  Finish -->|done or named blockers| Settle[One settlement path]
+  Settle --> Grade[evaluateRun: deterministic scorecard]
+  Ledger --> Grade
+  Grade --> Outcome[Routing feedback, diagnostics, telemetry]
+```
+
+The start contract must preserve local/durable identity and authorization. Background admission and eventual settlement are separate events. Shared finish policy can only enforce evidence supplied through the host's available ports.
+
+#### Sub-agent execution
+
+Children use the shared routing, opening, tool dispatch, verification, finish gates and settlement. The editor supplies the same pipeline settings, phase models and model preflight to its children. The in-process relay carries the owner's workspace, context and verification policy. The cloud derives the outcome's parent ID from the persisted child spec. Child-specific prompt, lineage, scoped capabilities, and report delivery remain inputs and outputs of that workflow. The owner handles publication and sign-off for the combined changes.
+
+The shared driver removes spawn tools from a child's catalog and refuses direct dispatch of those names. Editor, cloud and gateway admission also reject a child acting as a spawner. Previously admitted child runs retain their saved state and route on resume.
+
+Local validation on 2026-11-24 passed the shared runtime suite (869 tests) and focused Brain (12), VSIX (52), cloud (23), relay and gateway admission (18), gateway catalog and prompt (60), and standing instruction (19) tests. Shared runtime, Brain, VSIX and relay typechecks passed. The execution import, source-package, and tenant-scope checks passed. Installed-host verification remains tracked in PRD 50.
+
+#### Workflow diagnostics metrics (2026-11-24)
+
+The coverage audit added nested timings for context pack assembly, individual model attempts and forced synthesis, governance and platform checks, human and approval waits, state saves, memory write-back, and shared and Brain close-out. These are listed separately from their parent span. A parked approval records the time to park. Time spent waiting between invocations is outside that measurement.
+
+`Copy diagnostics` now includes a `workflow.metrics` table; the same measurements are stored in `run.workflow` in the JSON capture. The canonical stage IDs live in `packages/agent-run/src/telemetry/workflowMetrics.ts`. They are protocol fields, so exports retain their exact names.
+
+| Diagram step / metric ID | Measured boundary and available facts |
+| --- | --- |
+| Surface / `surface` | Brain preparation: catalog, grounding, preflight and prepared request. Host authentication before Brain entry is outside this span. |
+| Shared start / `start` | `openRun` entry-point and catalog validation. Editor journals, change-set admission and remote authentication remain host-owned; this duration does not claim to measure them. |
+| Routing / `route` | The actual route decision, including quick/full counters. Brain measures its pre-decided route in the preamble; `openRun` does not count intake as a second decision. A resumed route is reused, not remeasured. |
+| Work plan / `work` | Initial `planWork`: assigned-item and criterion counts. |
+| Opening / `opening` | Initial `openingRows`: assembled message count. A resumed tick reuses the opening and does not add another sample. |
+| Composition / `compose` | Shared policy factory composition. Actual composition happens before `runAgent` constructs its work plan and opening; the diagram describes logical responsibilities rather than strict call order. |
+| Kernel / `kernel` | Each `runAgentLoop` invocation, with steps and the latest cumulative tool-call, tool-error and token counters. A yielded tick is an invocation completion, not a terminal run. |
+| Dispatch / `dispatch` | Actual dispatch, including the registry's capability resolution and tool execution. Earlier kernel/platform preflight and approval waits are outside this span. |
+| Child dispatch / `spawn` | A recognized spawn tool's dispatch interval. Some hosts return admission handles and others return completed reports; this interval is not universally child lifetime. Children report their own execution stages separately. |
+| Work ledger / `ledger` | The finish policy's scoped evidence refresh and open-work check; latest assigned/done/blocked/in-review/open counts. |
+| Finish / `finish` | Finish-tool gates, prose settle checks and live-child checks, with distinct blocked and failed attempts. Policy defaults completing are not evidence that an absent host verifier ran. |
+| Settlement / `settle` | Shared settlement, including memory write-back, state save and terminal-row handling. This excludes later host-specific settlement and inbox draining. |
+| Evaluation / `grade` | Deterministic outcome/scorecard construction and its assigned/done/blocked/in-review/open counts. |
+| Feedback / `outcome` | The host outcome callback, when bound. Callback completion is not proof of remote ingestion, routing training or deployment. |
+
+Every row reports observed attempts, completed/failed/blocked/cancelled counts, unclosed spans, total measured milliseconds and maximum measured milliseconds. `latestCounters` are snapshots, not additive counters. Timing uses explicit start/end observations, never the gap between unrelated events. Parent spans include nested spans, so summing the rows is not end-to-end latency. A measured 0 ms is valid at the clock's resolution; `null` means unmeasured. `completed` means that invocation returned, not that work was accepted or shipped.
+
+Uninstrumented steps and old captures are `not_observed`, with null duration. A start without a matching completion is `incomplete`, not a success or proof that the stage is still running. The report summarizes the trace available at capture time, potentially across multiple runs; `runIds` identifies observed runs. Truncated history can therefore provide partial evidence. Start/end samples have distinct trace identities even when their timestamps are equal, and merged live/durable copies count once.
+
+Measurements use the optional `EventSink.workflow` channel, separate from semantic `RunEvent` conformance traces. Brain persists that channel into diagnostic steps for the VSIX, web and other Brain-backed surfaces. Non-Brain hosts must bind the channel to their own telemetry store before their captures can claim stage coverage. Metrics failures never block execution, and metric payloads contain IDs, outcomes and numeric counters rather than prompts or tool arguments.
+
+Remaining coverage gaps include VSIX admission and journaling before Brain starts, the delay between child admission and execution, dedicated verification timings, and the final transcript outbox flush. Model request spans cover calls made by the shared driver. Provider retries hidden inside a transport contribute to its request duration without a separate attempt count. A copied report can show which stages it observed, while end-to-end delivery requires receipts from the host and telemetry destinations.
+
+### 6. Integration verification (2026-11-23)
+
+- The full shared suite passed 857 tests. Focused Brain continuation, close-out, and gates passed 68 tests. Editor host steering, child spawn, and start gates passed 30 tests using the current Brain source. On-prem channel conformance, native outcome, child, and outbox suites passed 23 tests.
+- Cloud adapter conformance, terminal settlement, child evidence, late steering, and Durable Object recovery passed 39 tests. Tests use injected database and gateway fixtures.
+- Shared TypeScript checking and repository execution, source-package, tenant-scope, and whitespace checks passed. Full Brain and VSIX typechecks still require their missing build dependencies. No live deployment was exercised or packages installed.
+
+### 7. Follow-up implementation (2026-11-23)
+
+The VSIX spawner validates the child before recording admission. Durable cloud child start attaches the handle to the payload returned by authenticated admission. This preserves newly resolved policy gates and the durable executor marker. If a post-admission operation fails, the spawn path attempts to cancel the child and reports cleanup errors. Brain dispatch sizes tool results from the actual serving model and uses the existing shared provider recovery path.
+
+Shared close-out runs on prose finishes as well as finish-tool calls. The Brain retains the original provider error for the UI and records the shared model policy's retry verdict. The shared failure-synthesis marker reaches the Brain turn record.
+
+The follow-up agent-run suite passed 848 tests. Eleven focused Brain suites passed 145 tests, including the run-store regressions, both conformance suites, turn and retry parity, linked-work holds and fold deadlines. Cloud child serialization passed 6 tests, VSIX child and host gate tests passed 14, and on-prem child tests passed 6. Agent-run typecheck and repository execution and package graph checks passed. Brain typecheck still needs the existing bfi-web and web-llm dependencies. The broader cloud child suite still needs @neondatabase/serverless.
+
+### 8. Work ledger and lifecycle follow-up
+
+The shared ledger reads host-scoped evidence. Spec coverage means a ticket was filed for the spec item. It does not mean the spec's implementation passed. A cloud PR is review evidence. It does not mean the change merged. Shared routing feedback excludes completed invocations that still have open or blocked work.
+
+The shared suite passed 851 tests. Focused Brain, editor child and start-gate, cloud serialization and scoring, and on-prem child and outbox tests passed. The channel outcome test requires `@sinclair/typebox`. The cloud tail test requires `@neondatabase/serverless`.
+
+### 9. Assignment, verification, and retry validation (2026-11-23)
+
+- Runtime tests passed for the full shared package (856), focused Brain continuation and close-out (66), focused API child evidence, outcome, late steering, and Durable Object recovery (44), on-prem child and outbox (19), and VSIX child and start gate (15).
+- Shared TypeScript checking and the execution, package-graph, tenant-scope, and whitespace checks passed. VSIX typechecking is blocked by missing `vscode` type definitions. Brain typechecking is blocked by missing `@seanhogg/bfi-web` and `@mlc-ai/web-llm`.
+- The editor wake integration needs the built `@seanhogg/builderforce-brain-embedded` package. The on-prem channel outcome test needs `@sinclair/typebox`. Cloud adapter conformance and tail integration need `@neondatabase/serverless`. No packages were installed.
+
+### 10. Earlier slice validation (2026-11-23)
+
+Initial working-tree changes, including runStore/runTypes.ts, were confirmed before editing. Shared focused suites pass: **13 files / 88 tests**, covering spawn validation and native results, history memo/deadline/failure behavior, preflight, routing and conformance. Agent-run typecheck passes with TypeScript 6 and --ignoreDeprecations 6.0. The full earlier agent-run run had 821 passing tests and two failures; both forcedTurns trace-step and failureSynthesis extra-call failures reproduce at c56ce694e in a detached worktree.
+
+Brain recorded-preflight, compactionSaved, fold deadline and production-door suites pass. The two Brain conformance files fail on premature tool dispatch / missing model-window requests; these also fail on c56ce694e (the expanded labels add cases of the same failure). Brain typecheck reports pre-existing TurnRetry, TurnSession.recover and BrainRunContext.progress defects, plus missing @seanhogg/bfi-web and @mlc-ai/web-llm.
+
+VSIX hostStartGate and childRunSpawner pass (13 tests); participant/host integration needs the built @seanhogg/builderforce-brain-embedded package, and typecheck needs vscode types. Repaired malformed newline literals in participantRun.test.ts and runSetup.ts rather than loosening their assertions. Runtime onPremSubagents passes (6 tests, including the standing-instruction assertion); runtime conformance needs @sinclair/typebox and legacy tests need @aws-sdk/client-bedrock. Cloud child tests need @neondatabase/serverless. Runtime typecheck reports unresolved dependency graphs (including @sinclair/typebox and @opentelemetry packages). API typecheck exhausted the default Node heap at about 4 GiB; neither passed.
+
+check-one-execution --enforce, the source-package graph check and git diff --check pass. No live run was traced. See PRD 50 validation for the full accounting. Validation tooling was installed outside repository manifests before the user requested no package installs; no further installs are performed.
+
+### 11. Executable PRD validation and diagnostics (2026-11-24)
+
+The shared runtime observes check results after authorized dispatch. A validation request reads the named spec, matches its declared commands and directories to completed exits, and carries background job evidence across durable ticks. Settlement emits `run.spec_validation` with completion, failure, pending and unverified counts. Brain records this event in the trace and diagnostic report. The stored-capture tool returns evidence from saved snapshots, including their age and whether the run was still in progress.
+
+See the current [acceptance record](#prd-50--one-pipeline-validation-and-diagnostic-gaps) for local results and the remaining installed-host checks.
 
 ---
 
@@ -103,108 +443,6 @@
 ### This session
 
 Started here, because the review confirmed them and they do not depend on an operator or another repo: **MK-09-D4**, **MK-09-W5**, **MK-45-SHIP**, **MK-09-W10**, **MK-09-W9**, **MK-37-HANDOFF**. The rest are filed and sequenced; a row marked operator, other repo, or blocked is not claimed in progress as code.
-
----
-
-## PRD 50 — One-pipeline validation and diagnostic gaps
-
-> Re-reviewed 2026-11-23 against checkout `7bdcdfb8f` and the user-supplied VSIX chat #175701 / server #300 report (client `2026.10.209+9b457dacff78`, API `2026.10.106`). That installed build is a separate artifact from this checkout. This section supersedes the earlier make.md claim that chat #300 validated all six contracts or proved a commit/push. [PRD 50](./50-prd-one-pipeline.md) and the [pipeline map](./_scratch-agent-pipeline-map.md) contain both current workflow notes and historical slice results; earlier missing-dependency lists and test counts are not fresh results.
-
-### Remaining acceptance work
-
-The implementation has a shared `openRun → runAgent → runAgentLoop` path. `runPrepared` forwards the required entry label; `openRun` rejects missing/unregistered labels and composes factories from surface ports. The participant calls `host.start`; editor children use `startThrough → gated.start`. The four surface spawn adapters call shared `spawnChild`. Separately, the four gateway compatibility callers still use `spawnSubagentDirect`, which delegates to shared `spawnChild`; these are two different groups of callers.
-
-Shared full-routing defaults, persisted resume decisions and `openingRows` governance-before-history assembly exist. Treat their old slice exclusions as historical. Host authorization, storage, native tools, verification evidence and durable admission/completion remain host responsibilities. Finding an import or a deleted function name alone proves neither these behaviors nor policy-body ownership. A current source review also cannot prove that an earlier implementation left the kernel unchanged without its baseline diff.
-
-**Remaining live acceptance (MK-50-PIPELINE).** Capture a fresh validation in the installed VSIX and reconstruct authenticated on-prem and cloud runs on the updated builds. Record their build IDs and check outcomes. The supplied chat #300 diagnostic remains evidence for its installed build. The implementation and regression coverage for MK-50-PERSIST, MK-50-TRACE, MK-50-DIAG and MK-50-SELFVAL are recorded in [DONE.md](../../DONE.md).
-
-### Supplied VSIX run: what it establishes
-
-- Seven model turns, 16 tool calls and zero recorded tool errors; four tool results were trimmed, with a 44,951-token prompt peak. There was one successful edit and no dispatch. Local execution is legitimate; zero cloud runs is not a pipeline defect.
-- `builtin_chats_diagnostics` returned an empty stored-capture list. That means no captures were returned, not that no failure or pressure occurred. The transcript ran searches and an outline, but no test, typecheck or execution guard before claiming all six contracts passed. Importing `spawnChild` does not validate ports-only policy ownership, and removing `runNativeBrain` does not establish participant host behavior.
-- The warning predicts a premium entitlement rejection/fallback even though provenance says `servedBy: own`, all seven turns used the selected local model, and no provider failure/failover was recorded. `brain-embedded/src/chatDiagnostics.ts` emits that warning from configured funding and plan entitlement without considering observed own-account provenance. Correct the conclusion; this report does not establish a gateway entitlement failure.
-- The healthy verdict says “no context pressure” while `contextPressureOnly` is true and the next paragraph reports trimming. `brainDiagnosticsText.ts` supplies the unconditional healthy sentence. Trimming alone is not evidence of a broken run, but the two statements must agree.
-- `staffingSummary.ts:sessionShippedInTrace` counts successful edits as well as commits/pushes. Therefore `sessionShipped: 1` is evidence of local work, not delivery. The supplied transcript contains no explicit `git_commit` or `git_push` call and no commit/push receipt. The earlier MK-45-SHIP sentence overstated the evidence. *(Journal, 2026-11-24: the supplied transcript stopped at step 5. Step 6 did commit, as `7bdcdfb8f` / rewritten `82dcf2bd6`, and nothing was pushed. See MK-45-SHIP.)*
-- Step 4's self-review `git_diff` returned `(no output)` for a file it had just edited. The agent spent step 5 re-checking through `run_command`. Root cause: with an explicit `repo`, `runInRepoScope` (`packages/agent-tools/src/git-repo-scope.ts`) passed the workspace-relative path `Builderforce.ai/docs/specs/make.md` to `git diff` unchanged, with the repo as cwd. That pathspec matches nothing, so git exits 0 with empty output. `git_history` had the same defect, and `git_diff` also omitted staged changes. Fixed in this pass (see DONE.md, 2026-11-24).
-- Ticket creation returned task #7050 and a chat link, while the report's ticket list and execution-history snapshot show zero linked runnable tickets. Reconcile snapshot timing/local-to-server identity before diagnosing lost linkage; the report alone does not establish the cause. Likewise, seven model turns alongside zero loaded run steps is an observability discrepancy, not proof that no run occurred.
-
-### Prior local validation (2026-11-23)
-
-Commands use existing installs only; no package installation or assertion changes. This review changes documentation only.
-
-| Check | Result on this checkout |
-| --- | --- |
-| `packages/agent-run`: `pnpm exec vitest run` | **97 files / 859 tests pass.** |
-| `packages/agent-run`: `pnpm exec tsc --noEmit -p tsconfig.json` | **Pass.** |
-| `brain-embedded`: `pnpm exec tsc --noEmit -p tsconfig.json` | **Pass.** Earlier missing-dependency blockers did not reproduce. |
-| Brain: crossAdapterConformance, run/runPrepared.door, runStore/openingSections, diagnosticsVersions (`--maxWorkers=1 --pool=threads`) | **4 files / 39 tests pass.** Initial fork startup timed out before assertions; the thread rerun completed. |
-| Brain: chatDiagnosticsReport and triageReport.regression (`--maxWorkers=1 --pool=threads`) | **2 files / 25 tests pass.** Existing coverage does not close the contradictory report cases above. |
-| VSIX: participantRun, brainRunHost.entryPoint, hostStartGate, childRunSpawner | **37 pass / 1 fail.** Participant `#file` persistence assertion fails at line 296; isolated single-thread rerun: 21 pass / same 1 fail. |
-| VSIX: `pnpm exec tsc --noEmit -p tsconfig.json` | **Fail.** `participantRun.test.ts:254` implicit-any `spec`; line 327 missing required `BrainRunRequest.entryPoint`. The earlier missing-vscode-types blocker did not reproduce. |
-| On-prem: conformance/crossAdapter and onPremSubagents.openRun | **3 pass / 2 fail.** Both conformance traces contain an additional `run.routed`; child suite passes. Both failures also reproduce in an isolated single-thread rerun. |
-| API: cloudChildSpec and cloudChildRuns | **2 files / 9 tests pass.** Earlier Neon load blocker did not reproduce for these files. This is not a full cloud-host validation. |
-| `node scripts/check-one-execution.mjs --enforce` | **Pass.** Import guard only; does not prove arbitrary port callback ownership. |
-| `node scripts/check-source-package-graph.mjs` | **Pass.** 48 packages, 50 edges, 32 tsconfig projects. |
-| `git diff --check` | **Pass.** |
-
-Focused suites above were run with `pnpm exec vitest run` and the named test paths in their respective package directories. Passing shared tests and source guards support the architecture; the reproducible host failures prevent an all-green PRD 50 verdict. No live deployment, editor UI, authenticated cloud lifecycle or push was exercised by this review.
-
-### Independent re-validation (2026-11-24, checkout `82dcf2bd6`)
-
-The source was re-read claim by claim without relying on PRD 50's status table, and the named suites were re-run. Results:
-
-| PRD 50 claim | Result | Evidence |
-| --- | --- | --- |
-| §2.1 required `entryPoint`, no `'web'` default | **Holds** | `runStore/runTypes.ts:441` is required; `run/runPrepared.ts:40` passes `req.entryPoint`; `openRun.ts:145–146` rejects a missing or unregistered label. Zero `?? 'web'` / `\|\| 'web'` in brain-embedded, clients/vscode and agent-run sources. The test-harness default in `test/brainRunHarness.ts:50` is test-only. `cloudChildSpec.ts:82` keeps `?? 'cloud'` only so older stored child payloads still parse, and it can resolve only to the cloud label. |
-| §2.2 participant through panel host | **Holds** | `participantRun.ts:41` `runViaHost` → `:81` `host.start`; the host stamps `entryPoint: "vscode"` (`brainRunHost.ts:321`). `nativeBrainRun.ts` is gone; no `runBrainLoop` / `runAgent` call in clients/vscode/src. |
-| §2.3 ports, not hook bodies | **Holds** | `SurfacePorts` (`openRun.ts:31–47`) takes `CompactionHookOptions` and `RecordedModelPreflight` data; only `composeModules` builds hooks. No production `modules:` / `cloudPolicyModules` outside agent-run. |
-| §2.4 shared `spawnChild` | **Holds** | `policy/subagents/child.ts:30/64/82`; validation `:52–60`. Callers: `childRunHost.ts:143`, `cloudLiveOrchestration.ts:138`, `cloudChildSpec.ts:81` (skipped when a persisted `standingPrompt` exists), `onPremSubagents.ts:53` (`depth: 1` is correct, since `childProvider` strips `orchestration`), `subagent-spawn.ts:160`. |
-| Four `spawnSubagentDirect` callers | **Holds** | `sessions-spawn-tool.ts:53`, `commands-subagents.ts:668`, `local-agent-transport.ts:126`, `local-adapter.ts:60`. |
-| Single prompt and depth sources | **Holds** | `agent-loop/src/subagent.ts:29` / `:173` only; `buildSubagentSystemPrompt` survives only as a test alias. |
-| Kernel untouched (`runAgent` sole `runAgentLoop` importer) | **Holds** | `runAgent.ts:38`, called at `:135`. |
-| §7 "no deletion of `channelAdapter`, `useChatSystemPrompt`" | **Superseded** | `useChatSystemPrompt.ts` was deleted in `c56ce694e`, and `channelAdapter.ts` was renamed to `channelRunPorts.ts` (its test keeps the old name). Both came from later slices; §7 now carries a note. |
-| Suites | **Same as above** | agent-run 11 files / 86 pass; Brain 3 files / 15 pass; VSIX 27/28 (the `participantRun.test.ts:296` persistence assertion, MK-50-PERSIST); on-prem 10/12 (two extra `run.routed` traces, MK-50-TRACE); `check-one-execution --enforce` and the source-package graph pass. |
-
-**Fixed on the prior 2026-11-24 checkout (DONE.md):** MK-50-PERSIST, MK-50-TRACE, and the canvas, web-reply and cloud conformance tests that used the wrong golden trace. A re-run gave agent-tools 93/93, API 27/27, VSIX 41/41, on-prem 12/12, agent-run 58/58, Brain 6/6, and canvas 1/1.
-
-**Prior diagnostic re-check (2026-11-24, chat #300).** The stored-capture tool returned three VSIX snapshots (ids 200–202), each marked healthy and stopped running. That reading preceded the diagnostic tool update and did not expose pressure details. The prior checkout passed 867 shared tests and the Brain production-entry check.
-
-### Acceptance and diagnostic changes (2026-11-24)
-
-- **MK-50-SELFVAL.** A validation request records observed command exits after authorized dispatch. PRD 50 declares its executable checks at the top of the spec. The runtime matches commands and working directories, carries pending jobs over durable ticks, and records missing requirements or failed exits in the terminal outcome. The agent gets the evidence alongside its instructions to map each claim to a check.
-- **MK-50-DIAG.** The stored-capture tool returns snapshot timing, context pressure, model provenance, and a distinct empty-capture result. The report distinguishes observed provider behavior from plan eligibility, local work from confirmed delivery, and loaded history and ticket data from recorded trace evidence. Capture schema v3 separates work calls from base-branch delivery evidence.
-
-| Local check | Result |
-| --- | --- |
-| Shared agent runtime | 98 files, 871 tests passed. |
-| Brain entry, conformance, opening, triage and diagnostic report | 5 files, 42 tests passed. |
-| Brain reporting, loaded trace and delivery evidence | 6 files, 177 tests passed. |
-| VSIX participant and host gates | 4 files, 41 tests passed. |
-| On-prem ticket and channel conformance, child admission and settlement | 4 files, 9 tests passed. |
-| Cloud adapter and child runs, diagnostic capture tool | 4 files, 15 tests passed. |
-| Shared runtime, Brain and VSIX typechecks | Passed. |
-| Full API typecheck | Blocked in the app manifest catalog and its test by missing `@seanhogg/builderforce-webcontainers-core/manifest` types. The focused API suite passed. |
-| Repository guards and locale catalog test | Execution, source-package graph and tenant-scope guards passed. The frontend locale catalog test passed 110 tests. |
-
-### Validation run (2026-11-24, chat #300, checkout `5eb3411d6`)
-
-All seven PRD 50 executable acceptance checks were executed on the current tree, not read from the status table:
-
-| PRD 50 check | Result (observed exit) |
-| --- | --- |
-| `node scripts/check-one-execution.mjs --enforce` (root) | **Pass** — 0 non-baseline importers of `runAgentLoop`; the one execution path is `runAgent`. |
-| `node scripts/check-source-package-graph.mjs` (root) | **Pass** — 48 source-only packages, 50 edges, 32 tsconfig projects. |
-| `pnpm exec vitest run` (packages/agent-run) | **98 files / 871 tests pass.** |
-| Brain acceptance suites: crossAdapterConformance, runPrepared.door, openingSections, triageReport.regression, chatDiagnosticsReport | **5 files / 42 tests pass.** |
-| Brain diagnostic suites: chatDiagnostics (52), gatherChatDiagnostics (10), triageReport.regression (17), runPrepared.door (2) | **81 tests pass.** |
-| VSIX: participantRun, brainRunHost.entryPoint, hostStartGate, childRunSpawner | **4 files / 41 tests pass.** |
-| agent-runtime: crossAdapter, onPremSubagents.openRun, channelAdapter, channelOutcome | **4 files / 9 tests pass.** |
-| api: chatDiagnosticsToolCatalog, cloudChildSpec, cloudChildRuns, cloudAdapter.sharedTask | **4 files / 15 tests pass.** |
-| `tsc --noEmit` (agent-run, brain-embedded) | **Both pass.** |
-
-Every PRD 50 §2 contract and §7 acceptance criterion now has an executed check on this checkout; no claim in this section rests on a name search. This run is the MK-50-SELFVAL method applied to itself.
-
-**Own-agent diagnostic check (this run).** `builtin_chats_diagnostics(chatId 300)` returns five stored captures (ids 198–202): two `run-in-progress` (198, 199) and three `healthy` (200–202), all surface VS Code (VSIX), newest at 04:02:21 — none for the current run yet, since captures are written at run end. The tool now returns distinct empty / in-progress / healthy results, so the MK-50-DIAG fix is observable in its output shape; the list view still truncates capture bodies, so per-capture `contextPressureOnly` agreement with the healthy sentence remains unverified from this surface.
 
 ---
 
@@ -558,6 +796,530 @@ The VSIX's own chat runs local models through bfi (§4). `./ml` only helps apps 
 8. The manifest is read from `.builderforce/builderforce.json`. A root manifest is read with a deprecation note and is
    never written. Logs and diagnostics land in their default folders. A `"logs": "../x"` override is rejected,
    reported and falls back.
+
+### PRD 49 end-state design
+
+> Status: reviewed (QA + CTO, approve with changes). Contracts below include those changes. Implementation follows this section, not the earlier draft.
+> This section names the contracts, the file that owns each behaviour, the sequences, and the test that proves each §9 done-check.
+
+#### 0. Seams confirmed against the code (2026-11-21)
+
+| Brief said | Code actually has | Consequence |
+|---|---|---|
+| `clients/vscode/src/editorRunSettings.ts` (`stageModels`) | `clients/vscode/src/stageModels.ts` exports `stageModels(settings, envPins = {})` (L41), `StageModels` (L19), `StageModelSettings` (L30). Stages are `plan`, `code`, `review`, `subagent`, `quick` only. | Policy is resolved inside `stageModels`. `envPins` stays. There is no build, test, or search stage. |
+| `@builderforce/pipeline-route` (`scorePipeline`) | `packages/pipeline-route/src/score.ts:146`. `forceFull: true` already forces the full route. | Persona `route: 'pipeline'` sets `forceFull`. No new router branch. |
+| `builderforce.pipelineRouteReport` | `clients/vscode/src/pipelineRouteReport.ts`. | WS-D owns this file: path migration and the policy column. WS-B does not edit it. |
+| `PersonaRegistry` / `PersonaPlugin` | `agent-runtime/src/builderforce/personas.ts`. `PersonaPlugin = AgentRole & { source, pluginMetadata?, filePath?, active? }` (`types.ts:457`). `AgentRole` already has `model?: string` (a model id). `registerBuiltins(roles: AgentRole[])` (`personas.ts:68`) copies each role with `source: "builtin"` and indexes by **`role.name`**. Personas have no `id`. | Methodology fields are a nested `methodology?` object, never a second `model`. Registry key is `name`. |
+| Footer picker | `clients/vscode/webview/src/chat/VsCodeComposer.tsx` (`PersonaPicker`, `BrainPersonaChoice`); labels in `webview/src/chat/chatLabels.ts`. | Gate hints are data on the choice. |
+| Prompt role line | `buildPersonaSystemBlock` in `agent-runtime/src/builderforce/personas.ts` already emits `Role: ${name}`. | `methodology.work` is appended there. No second prompt path. |
+| Local models | Catalog consumed by `clients/vscode/src/modelRouting.ts`. File store: `clients/vscode/src/hostBfi/modelFiles.ts`. | ONNX entries join the catalog `modelRouting` already reads, with a `format` field. |
+| Knowledge packs | `clients/vscode/src/knowledge/packs/` (BFKP, `CompressionStream`). | Gzip is a writer option, not a new format. |
+| `read_file` | `packages/agent-tools/src/fileRead.ts`. The package is free of `node:*` (it runs in the Worker, the browser and Node). `read_compressed` is LLMLingua-2 (`read-compressed-tool.ts`) and keeps that meaning. | Gzip inflate uses `DecompressionStream`, not `node:zlib`. |
+| Write tools | `packages/agent-tools/src/core-tools.ts` `write_file` (L168) and `edit_file` (L235). | `writeAllowed` is called there, before the write. Any VSIX path that writes without those tools (`write_file` / `edit_file` / `delete_file` in `clients/vscode`) calls the same function. |
+| Manifest reader | `builderforce-webcontainers/packages/browser/src/launcher/server/launchInfo.ts:38` `readManifest`. `buildLaunchInfo` reports `manifestPath` and `manifestSource`. `import.meta.url`: `launcherAssets.ts:43`, `dotnetBundle.ts:47`. | `locateManifest` feeds both fields. `manifestSource: 'legacy'` when the root fallback was read. |
+| Webcontainers dependency | `clients/vscode/package.json` already depends on `@seanhogg/builderforce-webcontainers` and `@seanhogg/builderforce-webcontainers-core` at `^2026.11.7`. | Not a new dependency. A version bump once WS-A publishes. The pure check is imported from the core `./manifest` subpath, which has no Node `fs`. |
+| Usage ledger | `clients/vscode/src/runUsageLedgerPorts.ts` (`recordUsage`). The route report reads it. | The ledger row gains `policy`. The report groups by it. |
+
+#### 1. Contracts
+
+##### 1.1 Path validation (core, pure — ships first)
+
+Lives in `builderforce-webcontainers/packages/core/src/manifest/paths.ts`. Exported from `@seanhogg/builderforce-webcontainers-core/manifest`. No `node:*`, no `fs`.
+
+```ts
+export type WorkspacePathKey = 'logs' | 'diagnostics' | 'methodology';
+
+export interface ManifestPaths {
+  logs?: string;
+  diagnostics?: string;
+  methodology?: string;
+}
+
+export type PathIssueCode =
+  | 'path-absolute'   // starts with / or a drive prefix
+  | 'path-parent'     // contains a .. segment
+  | 'path-empty';
+
+export interface PathIssue {
+  code: PathIssueCode;
+  key: WorkspacePathKey;
+  value: string;
+}
+
+/** Pure. Rejects absolute paths and any `..` segment. Does not touch the filesystem. */
+export function validateWorkspacePath(value: string): PathIssueCode | null;
+```
+
+A symlink that resolves outside the root is not a separate code. The spec only requires blocking `..` and absolute paths.
+
+Defaults, applied when an override is absent or invalid:
+
+| Key | Default (relative to the workspace root) |
+|---|---|
+| `methodology` | `.builderforce/methodology` |
+| `logs` | `.builderforce/logs` |
+| `diagnostics` | `.builderforce/diagnostics` |
+
+`AppManifest` (`packages/core/src/manifest/types.ts`) gains optional `paths?: ManifestPaths`. The JSON Schema and README gain the same field. Root-manifest examples are removed.
+
+##### 1.2 Manifest location (browser package)
+
+`packages/browser/src/manifest/locate.ts`. Uses Node `fs` to read. Does not import the launcher server. Re-exported from a new `@seanhogg/builderforce-webcontainers/manifest` subpath so a host that bundles the launcher does not pull this in by accident, and so the VSIX never imports `./launcher/server`.
+
+```ts
+export interface ManifestLocation {
+  file: string;
+  legacy: boolean;
+}
+
+export interface LocatedManifest {
+  location: ManifestLocation;
+  manifest: AppManifest;
+  /** Invalid path overrides are omitted from `manifest.paths` and listed here. */
+  issues: Array<PathIssue | { code: 'legacy-manifest'; file: string }>;
+}
+
+/**
+ * Read order: `.builderforce/builderforce.json`, then root `builderforce.json`,
+ * then root `bfwc.app.json`. A root file sets `legacy: true` and adds
+ * `legacy-manifest`. Nothing here writes.
+ */
+export function locateManifest(root: string): Promise<LocatedManifest | null>;
+```
+
+`launchInfo.ts` `readManifest` calls `locateManifest`. `buildLaunchInfo` sets:
+
+- `manifestPath` = `location.file`
+- `manifestSource` = `'file'` when `legacy` is false, `'legacy'` when true, `'missing'` when null
+
+A legacy read is therefore visible. The deprecation note required by §6 is that `manifestSource`.
+
+##### 1.3 Launcher options (item 29)
+
+Added to `LocalLauncherOptions` in `packages/browser/src/launcher/server/launcher.ts`. `assetsDir` is the primary asset source for `launcherAssets.ts` and `dotnetBundle.ts`. `import.meta.url` remains only when `assetsDir` is omitted (dev). Bind stays `127.0.0.1`.
+
+```ts
+assetsDir?: string;
+frameAncestors?: string;                 // default 'self'
+apiIngress?: { prefix: '/api'; target: string };
+setup?: string[];
+startPage?: string;
+reportToken?: string;                    // absent = POST /__bf/report is not mounted
+onReport?(report: PreviewReport): void;
+onLog?(line: string): void;
+onError?(error: unknown): void;
+egress?: string[];                       // each entry must be a host; else a typed issue
+cdnPins?: string[];
+ignoredDirs?: string[];                  // file API and live sync skip these
+```
+
+`POST /__bf/report` (`launcher/server/reportRoute.ts`) checks `reportToken`, then writes the body under the diagnostics folder from §1.1. Starters and `/preview` write `.builderforce/builderforce.json` and never a root manifest.
+
+##### 1.4 The one resolver (VSIX)
+
+`clients/vscode/src/workspace/workspacePaths.ts`. Pure: no filesystem writes.
+
+```ts
+import { validateWorkspacePath } from '@seanhogg/builderforce-webcontainers-core/manifest';
+
+export interface WorkspacePaths {
+  root: string;          // <workspace>/.builderforce
+  methodology: string;
+  logs: string;
+  diagnostics: string;
+  rules: string;         // <workspace>/.builderforce/rules       (not overridable)
+  hooks: string;         // <workspace>/.builderforce/hooks.json  (not overridable)
+  personas: string;      // <workspace>/.builderforce/personas    (not overridable)
+  cache: string;         // <workspace>/.builderforce/cache       (gitignored)
+}
+
+export function workspacePaths(root: string, located: LocatedManifest | null): WorkspacePaths;
+```
+
+`workspacePaths` does not create folders and does not write `.gitignore`.
+
+```ts
+/**
+ * The one I/O step. Every writer calls this before it writes.
+ * Creates methodology, logs, diagnostics, rules, personas, cache when missing.
+ * Writes `<workspace>/.builderforce/.gitignore` containing `logs/`, `diagnostics/`, `cache/`.
+ * Does not list the manifest, rules, hooks, or methodology.
+ */
+export function ensureWorkspaceDirs(paths: WorkspacePaths): void;
+```
+
+##### 1.5 Persona contract
+
+`AgentRole.model?: string` stays a model id. Methodology is nested so it cannot collide, and so `buildPersonaSystemBlock` does not treat a route as a model id.
+
+```ts
+export type PersonaColour = 'analyst' | 'designer' | 'engineer' | 'support';
+export type PersonaRoute = 'plan' | 'pipeline' | 'quick';
+export type PersonaKnowledge = 'context' | 'first';
+
+export type ArtifactId = 'prd' | 'design' | 'mockup' | 'diagram' | 'support';
+
+export interface PersonaMethodology {
+  colour?: PersonaColour;
+  /** Route kind. Not AgentRole.model. */
+  route?: PersonaRoute;
+  knowledge?: PersonaKnowledge;
+  requires?: ArtifactId[];
+  produces?: ArtifactId[];
+  recordsRun?: boolean;
+  /** Registry `name` of the next role. Successor means this field, not table order and not listAll() sort. */
+  next?: string;
+  /** Appended by buildPersonaSystemBlock after the Role line. */
+  work?: string;
+  /**
+   * Resolved through workspacePaths(), never a literal workspace-relative string.
+   * 'root' is the workspace root (the Engineer).
+   * A sub path is a folder under the resolved key (`support` under methodology).
+   * No `..`.
+   */
+  writeScope?: Array<
+    | { key: 'root' }
+    | { key: WorkspacePathKey; sub?: string }
+  >;
+}
+
+/** Absent methodology means every write is allowed, so existing personas keep working. */
+export type PersonaPlugin = AgentRole & {
+  source: 'builtin' | 'user' | 'project';
+  methodology?: PersonaMethodology;
+  /* existing pluginMetadata, filePath, active unchanged */
+};
+```
+
+`registerBuiltins` widens to `Array<AgentRole & { methodology?: PersonaMethodology }>`. It copies `methodology` onto the plugin. The registry key remains `name`.
+
+A user or project persona with the same `name` replaces the built-in, which is existing registry behaviour. The gate reads the **resolved** plugin. An override that omits `methodology` has no `requires` (the gate passes). An override that wants the gates must include `methodology`.
+
+Artifact files, resolved against `workspacePaths().methodology`:
+
+| id | path |
+|---|---|
+| `prd` | `prd.md` |
+| `design` | `design/design.md` |
+| `mockup` | `design/*.html` (the Designer exit gate; other HTML in `design/` also matches — accepted) |
+| `diagram` | `design/*.drawio` |
+| `support` | `support/*.md` |
+
+Run records are not an `ArtifactId`. Constant `RUN_RECORD_DIR = 'runs'`. A run record is `methodology/runs/<runId>.md`.
+
+##### 1.6 The four built-ins
+
+One `registerBuiltins` call. Keyed by `name`. Data, not branches.
+
+| name | route | knowledge | requires | produces | recordsRun | next | writeScope |
+|---|---|---|---|---|---|---|---|
+| `analyst` | `plan` | `context` | — | `prd` | false | `designer` | `[{ key: 'methodology' }]` |
+| `designer` | `plan` | `context` | `[prd]` | `design`, `diagram`, `mockup` | false | `engineer` | `[{ key: 'methodology' }]` |
+| `engineer` | `pipeline` | `context` | `[prd, mockup]` | — | true | — | `[{ key: 'root' }]` |
+| `support` | `plan` | `first` | — | `support` | false | — | `[{ key: 'methodology', sub: 'support' }]` |
+
+`producerOf` primary lookup: the first role in **methodology order** (the table above: analyst, designer, engineer, support — not `listAll()` alphabetical order) whose `produces` includes the artifact.
+
+Cross-check, which agrees for the two artifacts the spec's rule names: the earliest role that does not require the artifact and whose `next` role does. "Successor" means `next`, not sort order.
+
+| Artifact | Producer |
+|---|---|
+| `prd` | `analyst` |
+| `mockup` | `designer` |
+| `design`, `diagram` | `designer` |
+| `support` | `support` |
+
+##### 1.7 Gate checker (pure)
+
+```ts
+export interface GateResult {
+  role: string;                       // persona name
+  missing: ArtifactId[];
+  producers: Partial<Record<ArtifactId, string>>;  // producer names
+  passed: boolean;
+}
+
+export function checkGate(
+  role: PersonaPlugin,
+  methodologyDir: string,
+  exists: (path: string) => boolean,
+): GateResult;
+
+export function producerOf(artifact: ArtifactId, roles: readonly PersonaPlugin[]): string | null;
+```
+
+`exists` throwing is an I/O failure, not a blocked gate. The caller keeps the previous hints and posts the error. A blocked gate (`passed: false`) is a successful check: hints are updated.
+
+No model call on this path.
+
+##### 1.8 Chat state
+
+```ts
+export interface ChatPersonaState {
+  /** Active role name, or null when the role is off. */
+  role: string | null;
+  lastRequest: string | null;
+  /** Missing artifacts per role name, from the last successful check of every role. */
+  hints: Record<string, ArtifactId[]>;
+}
+```
+
+Storage: the local chat record behind `BrainPersistenceAdapter` (`@seanhogg/builderforce-brain-embedded`). Field `persona?: ChatPersonaState` on that record. The only reader and writer is `clients/vscode/src/persona/chatPersona.ts`. A record with no `persona` field loads as `{ role: null, lastRequest: null, hints: {} }` (role off). Not workspace settings. Not a global.
+
+The implementation attaches the field to the existing chat record type. It does not add a second store.
+
+##### 1.9 Write scope (tool layer)
+
+`packages/agent-tools` must not import `agent-runtime` types.
+
+```ts
+export interface WriteScopeDecision {
+  allowed: boolean;
+  reason?: string;
+}
+
+export type WriteScopeEntry =
+  | { key: 'root' }
+  | { key: 'logs' | 'diagnostics' | 'methodology'; sub?: string };
+
+/**
+ * `scope` undefined → allowed (no methodology block).
+ * Otherwise the target must stay inside a resolved scope folder.
+ * `paths` comes from workspacePaths(); this function does not compute paths itself.
+ */
+export function writeAllowed(
+  scope: readonly WriteScopeEntry[] | undefined,
+  paths: { root: string; methodology: string; logs: string; diagnostics: string },
+  target: string,
+  roleName: string,
+): WriteScopeDecision;
+```
+
+Callers, before the write:
+
+- `packages/agent-tools/src/core-tools.ts` `write_file` and `edit_file` (and `delete_file` if that tool writes)
+- any `clients/vscode` tool handler for `write_file`, `edit_file`, or `delete_file` that does not go through those
+
+The active role's resolved `methodology.writeScope` and `name` are passed in. No persona type crosses the package boundary.
+
+##### 1.10 Model policy
+
+```ts
+export type ModelPolicy = 'role' | 'tip';
+
+export function stageModels(
+  settings: StageModelSettings & { policy?: ModelPolicy },
+  envPins: StageModels = {},
+): StageModels;
+```
+
+`envPins` always win, for both policies. Call sites do not branch on `policy`.
+
+TIP maps onto the stages that exist. There is no build, test, or search stage, so the spec's "build and test = Sonnet; search = Haiku or local" is expressed as:
+
+| Stage | `tip` model |
+|---|---|
+| `plan`, `code`, `review` | the catalog's Opus id (Fable, when that is the plan default, is swapped for this id) |
+| `subagent` | the catalog's Sonnet id (build and test run as subagent work) |
+| `quick` | the catalog's Haiku id, or the provisioned local model when one is selected (search runs as quick) |
+
+`role` (default, and when `policy` is omitted) keeps today's resolution, then persona `route` selects which stage the run uses:
+
+| `route` | Effect under `role` |
+|---|---|
+| `plan` | plan stage |
+| `pipeline` | `scorePipeline(..., { forceFull: true })` — plan, then code, then review, server-owned order |
+| `quick` | quick stage |
+| omitted | today's behaviour |
+
+Opus, Sonnet, and Haiku are concrete catalog ids in one table in `stageModels.ts` (`TIP_MODELS`). They are not display names. A test asserts each id is in the model catalog.
+
+The usage-ledger row (`recordUsage`) gains `policy: ModelPolicy`. `renderRouteReport` groups by it.
+
+##### 1.11 Local catalog
+
+```ts
+export type LocalModelFormat = 'gguf' | 'onnx';
+
+export interface LocalModelEntry {
+  id: string;
+  format: LocalModelFormat;
+  file: string;
+}
+
+export const ENGINE_BY_FORMAT: Record<LocalModelFormat, 'bfi' | 'onnx'>;
+```
+
+Entries are added to the catalog `modelRouting` already consults (if that list lives in `localModels.ts` rather than `modelFiles.ts`, that file is the owner; `modelFiles.ts` stays the file store and does not grow a second list). Existing GGUF entries gain `format: 'gguf'`. New entries: `Bonsai-8B-q4f16-ONNX`, `Bonsai-4B-q4f16-ONNX`, `Bonsai-1.7B-q4-ONNX`, `format: 'onnx'`.
+
+bfi provisioning keeps handling `gguf` only. `modelRouting` sends `onnx` to the ONNX engine through `ENGINE_BY_FORMAT`. One function, both formats.
+
+##### 1.12 Gzip
+
+```ts
+/** The one inflater. DecompressionStream('gzip'). No node:zlib. */
+export async function readGzipText(bytes: Uint8Array): Promise<string>;
+```
+
+`fileRead.ts` calls it for a `.gz` path and reports `decompressed: true` on the tool result. `search_code` uses the same helper for `.gz` inputs. `read_compressed` is untouched.
+
+The BFKP writer takes `compress: boolean`, default `true`, and appends `.gz`. The methodology pack is a codebase pack over `workspacePaths().methodology`, built by the existing pipeline. It is attached only while some live chat has `persona.role !== null`. That check reads `ChatPersonaState` (WS-C); WS-F does not invent a second flag.
+
+#### 2. Codemap — one owner per behaviour
+
+| Behaviour | Owner | Notes |
+|---|---|---|
+| `validateWorkspacePath`, `ManifestPaths` | `builderforce-webcontainers/packages/core/src/manifest/paths.ts` | Pure. Exported from core `./manifest`. |
+| `locateManifest` | `builderforce-webcontainers/packages/browser/src/manifest/locate.ts` | `launchInfo.ts` calls it. Feeds `manifestPath` and `manifestSource`. |
+| Schema, README, starters | core schema + browser README + starter templates | `paths` added. Starters write `.builderforce/builderforce.json`. |
+| Launcher options | `packages/browser/src/launcher/server/launcher.ts` | `assetsDir` consumed by `launcherAssets.ts` and `dotnetBundle.ts`. |
+| `POST /__bf/report` | `packages/browser/src/launcher/server/reportRoute.ts` | Token, then diagnostics folder. |
+| `workspacePaths` | `clients/vscode/src/workspace/workspacePaths.ts` | Pure. Imports `validateWorkspacePath` from core. |
+| `ensureWorkspaceDirs`, `.gitignore` | same file | The only I/O. Writers call it. |
+| Writer path migration | each existing writer, except the files named under WS-D and WS-F | Grep `.builderforce/` in `clients/vscode/src` at the start of WS-B. Confirmed: `childDataFile.ts` → `cache`. `pipelineRouteReport.ts` is WS-D's, including its path. Pack writer is WS-F's. |
+| Persona fields | `agent-runtime/src/builderforce/types.ts` | Nested `methodology?`. `registerBuiltins` widened in `personas.ts`. |
+| Four built-ins | `agent-runtime/src/builderforce/methodologyPersonas.ts` | Data table. Registered through the widened `registerBuiltins`. |
+| Gate, `producerOf` | `agent-runtime/src/builderforce/methodologyGate.ts` | Pure. |
+| Run record | `clients/vscode/src/persona/personaRun.ts` | When `recordsRun` is true, writes `methodology/runs/<runId>.md` through the write tool (so scope applies). |
+| Write scope | `packages/agent-tools/src/writeScope.ts` | Called from `core-tools.ts` `write_file` / `edit_file` and any VSIX writer that bypasses them. |
+| Chat persona state | `clients/vscode/src/persona/chatPersona.ts` | Field `persona` on the existing local chat record. |
+| Gate message, next-role offer | `clients/vscode/src/persona/personaRun.ts` | The button calls the existing composer send with an explicit `role` argument. It does not put a prefix in the user text. |
+| Picker hints | `VsCodeComposer.tsx` | `BrainPersonaChoice` gains `missing: string[]`. Labels in `chatLabels.ts`. |
+| Prompt role line and `work` | `buildPersonaSystemBlock` (`personas.ts`) | One prompt path. |
+| `persona-<colour>` | `clients/vscode/webview` composer stylesheet | Theme tokens (`--bf-persona-analyst` and the other three) defined for both themes. |
+| Policy | `clients/vscode/src/stageModels.ts` | `TIP_MODELS` table. `envPins` kept. |
+| Ledger + route report | usage ledger row; `pipelineRouteReport.ts` | WS-D owns the report file, including moving its output under `paths.diagnostics`. |
+| ONNX catalog | the catalog `modelRouting.ts` reads; engine map beside it | One routing function. |
+| Gzip helper | `packages/agent-tools/src/gzipText.ts` | `fileRead.ts` and the search reader call it. |
+| Pack gzip + methodology pack | `clients/vscode/src/knowledge/packs/` | `compress` default on. Attached only while a role is on. |
+| Strings | `chatLabels.ts` and `vscode.l10n` | No literal in a component. |
+
+##### Workstream file ownership
+
+| Workstream | Files | Depends on |
+|---|---|---|
+| WS-A | `builderforce-webcontainers/**` only | nothing; ships first |
+| WS-B | `clients/vscode/src/workspace/**`, and the path literal inside each existing writer **except** `pipelineRouteReport.ts` and `clients/vscode/src/knowledge/packs/**` | WS-A's `validateWorkspacePath` export. Version bump of core; the dependency already exists. |
+| WS-C | `agent-runtime/src/builderforce/methodology*.ts`, `types.ts`, `personas.ts` (`registerBuiltins` + `buildPersonaSystemBlock`), `packages/agent-tools/src/writeScope.ts`, `core-tools.ts` (the call only), `clients/vscode/src/persona/**`, `webview` composer + labels | WS-B for the methodology folder |
+| WS-D | `stageModels.ts`, the usage-ledger row, `pipelineRouteReport.ts` (path **and** policy column) | none. Does not wait for WS-B. |
+| WS-E | the local-model catalog `modelRouting.ts` reads, plus `modelRouting.ts` | none |
+| WS-F | `packages/agent-tools/src/gzipText.ts`, `fileRead.ts`, the search reader, `clients/vscode/src/knowledge/packs/**` | WS-B for the folder; WS-C for `ChatPersonaState` (timing, not a shared file) |
+
+WS-C and WS-F both touch `packages/agent-tools` but not the same files (`writeScope.ts` + the call in `core-tools.ts` vs `gzipText.ts` + `fileRead.ts`). They are still sequenced so a `core-tools.ts` edit cannot collide with a `fileRead.ts` edit in one package publish. WS-A, WS-D, and WS-E share no files and start together.
+
+Before WS-B starts it lists every `.builderforce/` writer and checks that list against WS-D and WS-F. A writer not in that exclusion list is WS-B's.
+
+#### 3. Sequences
+
+##### 3.1 Gate check → run → next-role offer
+
+```
+user picks Engineer (name: engineer)
+        │
+        ▼
+personaRun.start(chat, 'engineer', request)
+        │
+        ├─ checkGate(resolved engineer, methodologyDir, exists)     ← pure, no model call
+        │       missing: [prd, mockup]
+        │       producers: { prd: analyst, mockup: designer }
+        │
+        ├─ hints updated for every role (a blocked gate is a successful check)
+        │
+        ├─ post chatLabels.gateBlocked
+        │     names the producers: Analyst writes the PRD, Designer writes the mockup
+        │
+        └─ return. No model call, no stage, no ledger row.
+
+exists() throws
+        │
+        ├─ hints are NOT updated
+        └─ post the error. No model call.
+```
+
+```
+user picks Analyst; prd.md is absent
+        │
+        ▼
+checkGate → passed
+        │
+        ├─ hints updated for every role
+        ├─ buildPersonaSystemBlock appends methodology.work after "Role: Analyst"
+        ├─ stageModels(settings, envPins) with the role policy     ← resolved inside stageModels
+        ├─ run executes
+        │       writeAllowed(scope, paths, target, 'analyst') refuses a path outside methodology/
+        ├─ recordsRun is false, so no run record
+        └─ post chatLabels.gatePassed ("Continue as Designer on the same request?") + button
+                │
+                ▼ accept
+          composer.send({ text: lastRequest, role: 'designer' })
+                │
+                └─ the ONE composer send path. The role is an argument.
+                   User text that starts with a handoff-shaped prefix does not switch roles.
+```
+
+The Engineer, when `recordsRun` is true, writes `methodology/runs/<runId>.md` through the write tool after the run.
+
+##### 3.2 Knowledge-first switch-off
+
+Support only. Other roles do not switch off this way.
+
+```
+support run answers entirely from pack passages (no file read, no tool write)
+        └─ personaRun sets persona.role = null for that chat and posts that the role is off
+```
+
+##### 3.3 Manifest resolution
+
+```
+locateManifest(root)
+   ├─ .builderforce/builderforce.json → legacy = false, manifestSource = 'file'
+   ├─ else root builderforce.json     → legacy = true,  manifestSource = 'legacy', issue legacy-manifest
+   ├─ else root bfwc.app.json         → legacy = true,  manifestSource = 'legacy', issue legacy-manifest
+   └─ else null, manifestSource = 'missing'
+
+paths.logs = "../x" → issue { code: 'path-parent', key: 'logs' }, override dropped,
+                      workspacePaths returns .builderforce/logs
+```
+
+No branch writes a root manifest.
+
+#### 4. §9 done-checks → tests
+
+| # | Check | Test |
+|---|---|---|
+| 1 | Engineer with no `prd.md` posts the gate naming the Analyst, no model call | `methodologyGate.test.ts`: `missing` is `prd` and `mockup`, `producers.prd` is `analyst`. `personaRun.test.ts`: the message equals `chatLabels.gateBlocked`; the model invoker spy is not called. |
+| 2 | Analyst writes `methodology/prd.md`, offers Continue as Designer; accepting replays the same request as Designer | `personaRun.test.ts`: the offer equals `chatLabels.gatePassed`. The button calls the composer send spy with `{ text: lastRequest, role: 'designer' }` and nothing else. |
+| 3 | A write outside the methodology folder is refused by the tool layer | `writeScope.test.ts`: analyst scope refuses `src/a.ts` with a reason and allows `methodology/prd.md`; engineer `root` scope allows `src/a.ts`; omitted scope allows everything. `core-tools` write test: the spy on `writeAllowed` is consulted before the file is written. |
+| 4 | A later run recalls a sentence from `prd.md` through the codebase pack | `methodologyPack.test.ts`: seed a sentence in `prd.md`, build the pack, query it, and get that sentence back. The pack is attached when a chat has `persona.role` set, and absent when every chat has the role off. |
+| 5 | `policy: 'tip'` routes code to the Opus catalog id; the default routes by role; the report shows both | `stageModels.test.ts`: default code stage is unchanged; `policy: 'tip'` code stage equals `TIP_MODELS.opus`, which is in the catalog; `envPins.code` wins over both. `pipelineRouteReport.test.ts`: rows group by `policy`. |
+| 6 | ONNX q4 and GGUF both answer through the same routing | `modelRouting.test.ts`: one `modelRouting` call resolves an ONNX catalog entry to the ONNX engine and a GGUF entry to bfi. A catalog-only assertion is not this test. |
+| 7 | A new pack is `.gz`; `read_file` reads a `.gz` as text | Writer test: default path ends `.gz` and inflates to the original. `fileRead.test.ts`: a gzipped fixture returns the text with `decompressed: true`. A `search_code` fixture over a `.gz` file matches a string inside it. `read_compressed` tests are unchanged. |
+| 8 | Manifest read from `.builderforce/builderforce.json`; a root file is read with `manifestSource: 'legacy'` and never written; logs and diagnostics land in their defaults; `../x` is rejected | `locate.test.ts`: read order and `legacy-manifest`. `launchInfo` test: `manifestSource` is `'legacy'` for a root file. A starter (or `/preview`) write-target test: the path is `.builderforce/builderforce.json`. `workspacePaths.test.ts`: `../x` yields the default and the issue. A writer test: the route report (or launcher log) is written under `paths.diagnostics` / `paths.logs`. |
+
+Hints: `personaRun.test.ts` includes a case where `exists` throws. Previous hints are unchanged and the error is posted. A blocked Engineer check updates hints.
+
+A live check is recorded only for the packaged VSIX version and the picker rendering the gate hint in both themes. Everything in §9 is a unit test.
+
+#### 5. Decisions
+
+1. **`stageModels` is in `clients/vscode/src/stageModels.ts`.** The brief's `editorRunSettings.ts` does not exist. `envPins` stays the second argument.
+2. **`forceFull` already exists.** Persona `route: 'pipeline'` uses it.
+3. **`produces` is the primary producer lookup.** The spec's successor rule is the cross-check. They agree for `prd` and `mockup`. Successor means `next`.
+4. **The Engineer writes the workspace root** (`{ key: 'root' }`), because source, CI, infrastructure, and tests are not one folder.
+5. **LAN access is not implemented.** Bind stays `127.0.0.1`.
+6. **Manifest v2 models section is out of scope.**
+7. **The VSIX already depends on webcontainers core.** WS-A adds `validateWorkspacePath` to the existing pure `./manifest` export and bumps the package version. WS-B bumps the version range. It does not add a dependency and does not copy the function.
+8. **TIP has no build, test, or search stage.** Those map onto `subagent` (Sonnet) and `quick` (Haiku or local). Plan, code, and review are the Opus catalog id. Fable is swapped for that id.
+9. **A blocked gate updates hints.** Only an `exists` throw keeps the previous hints.
+10. **Handoff is a `role` argument on the existing send.** A prefix in user text does not switch roles.
+11. **`writeAllowed` takes scope entries, not `PersonaPlugin`.** `agent-tools` does not depend on `agent-runtime`.
+12. **`workspacePaths` is pure.** `ensureWorkspaceDirs` is the one I/O step and the only `.gitignore` writer.
+
+#### 6. Not in this design
+
+- No second persona registry, no persona branch in the run loop, no per-tool gzip copy, no root manifest writer, no prompt-text enforcement of write scope.
+- PRD 45 rule gates and PRD 48 ship policy are not touched. A persona never bypasses either.
+- Publish of the webcontainers packages (tag and push) is a release step. This chat's publish hold leaves that uncommitted until the hold is lifted.
 
 ---
 
@@ -2011,6 +2773,304 @@ A VS Code webview cannot register the runtime's service worker, so the VSIX laun
 - **AGE on PGlite.** Unproven, hence the spike. If it fails, graph stays cloud-only (Azure PG).
 
 **Remaining (2026-11-19):** all of it. Design only.
+
+#### W11 contract — the app manifest ai resource
+
+Status: revision 3 — the nine required edits of the first architecture-and-auth review (chat #288, Mike QA, 2026-11-21) and the three edits of the second review (2026-11-22, same reviewer) are applied below. Acceptance of this revision is recorded in the Review gate. Gaps A–D are logged in `ROADMAP.md` (Run). This section is the contract. Do not implement a different shape.
+
+Evidence: chat #168661 (server #287), project 103 Yardfire. The launcher rejected `services.agent` (missing `command`; role `agent` is not `frontend`/`backend`).
+
+##### Decision
+
+Manifest v1 gains one resource type, `ai`: `{ "type": "ai", "models"?: string[] }`. An agent inside the app is an ordinary service, `role: "backend"`, with `"uses": ["<ai id>"]`. Roles stay `frontend` | `backend`. Do not add a role `agent`.
+
+A service that uses an `ai` resource receives `AI_BASE_URL`, an OpenAI-compatible base (ending `/v1`) with no key in the browser process. The host adds the signed-in session and forwards to `POST /v1/chat/completions` on the API gateway host (`api/src/presentation/routes/llm/chatCompletionsRoutes.ts`, mounted by `llmRoutes`). There is no dedicated `https://builderforce.ai/gateway` model proxy — that origin is the API's primary host and the campaign-tracking origin; the chat-completions route on it is the forward target. Process egress stays `PREVIEW_DEFAULT_EGRESS`.
+
+`connection` → browser `yes('vault')` is an acknowledged false capability today. This pass does NOT inject vault secrets into process env (review edit 2). Delivery, when it lands (ticket #6999), is a localhost relay that attaches the secret host-side — the same shape as `ai`. Until that relay exists, the row stays as an acknowledged false `yes('vault')`; do not retire it and do not claim this pass makes it true.
+
+##### Contract
+
+###### 1. Manifest type
+
+```ts
+export interface AiResource {
+  type: 'ai';
+  /** Allowlist. Absent: the platform router picks. A request whose model is outside the list is rejected at the host relay, not forwarded. */
+  models?: string[];
+}
+```
+
+Add it to `ResourceSpec`. `ResourceType` stays derived from `ResourceSpec['type']`.
+
+Validation (`validate.ts`), no new issue code:
+
+- `models` absent is valid.
+- `models` present must be a list of strings (`invalid-value` otherwise — `stringArray` already emits that code).
+- A service `uses` entry that names an `ai` resource is an ordinary `uses` reference. A `frontend` that uses it already gets `frontend-uses-credentials` (`validate.ts:160`, for every resource type). Keep that warning. Do not inject `AI_BASE_URL` into a frontend.
+
+Regression fixture (must validate with zero errors), standing in for the Yardfire manifest:
+
+```json
+{
+  "version": 1,
+  "name": "yardfire",
+  "resources": { "assistant": { "type": "ai", "models": ["builderforce"] } },
+  "services": {
+    "api": {
+      "runtime": "node",
+      "command": "node server.js",
+      "role": "backend",
+      "port": 8787,
+      "uses": ["assistant"]
+    }
+  },
+  "environments": { "local": { "target": "browser", "tier": "non-production" } }
+}
+```
+
+`role: "agent"` remains `invalid-value`. A service with no `command` remains `missing-field`.
+
+###### 2. Capability matrix — one row per target, no false `yes`
+
+A capability may only flip to `yes` in the SAME change that lands its delivery. Never in an earlier commit.
+
+| Target | `ai` | Why |
+|---|---|---|
+| `browser` | `yes('host-relay')` — ships with the relay in the same change | Page-side gateway on the port registry; in-process `HostRelay`. No token in the process. |
+| `cloudflare` | `no('app-token')` this pass | No app-scoped token acceptor exists on `POST /v1/chat/completions` today (the review searched; none found). The tenant meter DOES exist and is named: `logUsage` (`api/src/application/llm/gatewayUsageLog.ts`, called from `chatCompletionsRoutes.ts` streaming and non-streaming paths) meters into the tenant ledger. The row flips to `yes` only when an app-scoped token acceptor is added to that route AND the delivery (§7) lands in the same change. |
+| `aws`, `azure`, `gcp` | `no(…)` | Not built this pass. A `yes` without delivery would repeat the `connection` lie. |
+
+`connection` stays `yes('vault')` on every target as an ACKNOWLEDGED false capability on `browser` until the localhost secret relay of ticket #6999 exists. Do not retire the row; do not "fix" it by putting secrets in the worker.
+
+###### 3. Spec mapping
+
+`toApplicationSpec` today (`toApplicationSpec.ts:128-131`) turns a supported non-postgres resource into a decline ("provisioned by its deployment…") unless the type is `connection`. `ai` is host-delivered, not a process. Generalise that exception to a `HOST_DELIVERED` set: `connection`, `ai`. Do not add another `if`.
+
+`uses` is not copied onto `ServiceSpec` today, and `serviceEnv` cannot see it. Add one optional field, not a new service type:
+
+```ts
+/** Host-delivered resources this service uses. Not `dependsOn` — nothing to wait for. Browser-runtime seam only. */
+resourceUses?: readonly { id: string; type: 'ai' | 'connection'; models?: readonly string[] }[];
+```
+
+`applicationService` fills it from `uses` for those two types only. Databases stay on `dependsOn` as they are.
+
+`resourceUses` is the BROWSER `ServiceSpec` seam only. Cloudflare deploy does not consume `ApplicationSpec`; the artifact Cloudflare shares is the manifest itself (`uses` + resource `type`). Do not describe `resourceUses` as a seam Cloudflare reads.
+
+A browser environment with the fixture above must return a spec (not a decline) whose `api` service has `resourceUses: [{ id: 'assistant', type: 'ai', models: ['builderforce'] }]`.
+
+###### 4. What the process is allowed to see
+
+`serviceEnv` grows ONE optional callback next to `databaseCredentials`. Core never mints a token and never embeds a gateway URL of its own.
+
+```ts
+aiEndpoint?(resourceId: string, client: ServiceSpec): { baseUrl: string } | undefined;
+```
+
+Rules, same credential policy as databases (`CREDENTIAL_POLICY`):
+
+- Frontend: returns nothing, even if `resourceUses` names the resource.
+- Backend, exactly one `ai` use: `AI_BASE_URL=<baseUrl>` (no trailing slash; the app appends `/chat/completions`).
+- Backend, several `ai` uses: `<ID>_AI_BASE_URL` for each, and `AI_BASE_URL` only when there is exactly one.
+- Never set `OPENAI_API_KEY`, `AI_API_KEY`, or `Authorization` material.
+
+There is NO `connectionEnv` callback. Vault material is never injected into process env, the worker script, the manifest, or the workspace tree — a secret in the worker is stealable AND still unusable (process egress cannot reach the vendor and must not be widened). Database logins are page-minted, random, localhost-only (`databaseCredentials.ts`); a vault secret is not that pattern and must not be copied into it.
+
+`connection` delivery (ticket #6999, separate slice): the process gets a localhost base URL and the host attaches the vault secret on the way out — the same relay shape as `ai`. The env key names and header shape come from the vault's real Connected Account code at implementation time; do not invent a `CONNECTION_<ID>_*` field list. A service that does not `uses` the connection gets nothing. Until that relay exists, `connection` remains the acknowledged false capability of §2.
+
+The browser runtime is the only caller that fills the callback.
+
+###### 5. Browser gateway — host-held session, no postMessage auth hop, no egress widening
+
+Pattern to copy: `databaseCredentials` + `pgGateway` + the port registry (`connectionRelay.ts`). Difference: HTTP, not the Postgres wire protocol — and the host call is a direct function call in the page that holds the session (web), or the launcher's existing token-gated loopback API (VSIX, §6). Never a message hop. `connectionRelay.post()` is the page↔process-worker byte channel; it is not the extension host and it is not an auth boundary. A `postMessage` listener the preview iframe can reach is how a stolen preview origin spends the tenant meter.
+
+```
+process  --localhost dial-->  port registry  -->  page gateway  --function call-->  HostRelay.forwardAi
+HostRelay (web: IDE page, in-process · VSIX: launcher page → token-gated /__bf hop → extension host)
+         --signed-in session-->  POST /v1/chat/completions on the API host  -->  model
+```
+
+Hard rules:
+
+- Do not add the API host (or any model host) to `PREVIEW_DEFAULT_EGRESS` (`['https://esm.sh']`, `previewHeaders.ts:70`), worker `connect-src`, or preview-document `connect-src`. The preview document must not be the component that fetches the gateway.
+- The page gateway calls `HostRelay.forwardAi` as a function — in-process on web; on VSIX the adapter's one hop is the launcher's token-gated `/__bf` API (§6). Accept a forward ONLY from that gateway. Do not register the gateway port as ingress and do not publish it on a preview origin.
+- Port policy admits only a backend whose `resourceUses` names that resource — the same rule as `mayConnectToDatabase`.
+- Strip the request `Authorization` header. Strip response `Set-Cookie`, `Authorization`, and `WWW-Authenticate` before any byte returns to the process.
+- The session is attached by the host that holds it: the web app's IDE page (in-process), or the VSIX extension host reached over the launcher's existing token-gated loopback `/__bf` API (§6). It forwards to `POST /v1/chat/completions` on the API gateway host. It streams SSE. It does not buffer the completion.
+- The host rejects a `model` outside that resource's `models` allowlist before the forward. The allowlist comes from the launch spec/manifest the HOST read — never from process-supplied bytes. Absent allowlist: the gateway's existing cascade router decides. Do not add a second router.
+- Metering is the route's existing tenant meter: `logUsage` (`gatewayUsageLog.ts`) into the tenant ledger, already wired on both the streaming and non-streaming paths of `chatCompletionsRoutes.ts`. Do not add a side counter.
+- No token is ever sent back to the process, logged, or put in a tool result.
+
+###### 6. One wiring seam for the two browser launchers — thread the relay, do not add a second entry
+
+Both browser launchers ALREADY enter `startApplicationRuntime`: web at `frontend/src/lib/runTarget/browserRunTarget.ts:100` (IDE page), and the VSIX product through the local launcher's page — `/launch` calls `createLocalLauncher` (`clients/vscode/src/composerCommands/host.ts` → `packages/browser/src/launcher/server/launcher.ts`), a loopback HTTPS server whose page (the `localhost` page origin) boots the runtime via `launcher/page/bootApplication.ts:73` (`BootDeps.startApplicationRuntime`). There are no references under `clients/vscode` source because the call lives in the launcher page, not the extension host. The work is threading a `HostRelay` through `createLocalLauncher` options → launch info (`launcher/protocol.ts`) → the page's `BootDeps` / `ApplicationRuntimeOptions` — not adding a call under `clients/vscode`. Do not fork a second port or env injector in the client.
+
+`HostRelay` is an in-process function the launcher passes in — browser-only, not a Cloudflare seam:
+
+```ts
+interface HostRelay {
+  /** OpenAI-compatible forward to POST /v1/chat/completions on the API host. Host adds the session. Never returns a token. */
+  forwardAi(req: { resourceId: string; models?: readonly string[]; body: Uint8Array; stream: boolean }): AsyncIterable<Uint8Array>;
+  /** Vault material for one Connected Account. Host-side only; used by the connection relay (#6999), never returned to the process. */
+  connectionSecrets(connectionId: string): Promise<Record<string, string>>;
+}
+```
+
+- The web adapter runs in the IDE page (where `browserRunTarget.ts` already enters `startApplicationRuntime`), not the preview document. Its `forwardAi` is a direct in-process call.
+- The VSIX adapter lives in the LAUNCHER PAGE (the `localhost` page origin the launcher serves), not the extension host and not the webview: the page gateway cannot call a separate Node process in-process. Its `forwardAi` crosses ONE token-gated loopback hop on the launcher's existing page-origin-only `/__bf` API (Host allowlist + per-launch fragment token, `launcher/server/launcher.ts`) to the extension host, which attaches the session. This is not a postMessage listener; preview origins (`<key>.localhost`) are classified off the page origin and are never served `/__bf`.
+- `startApplicationRuntime` (the existing database-credential hook is the pattern) asks the relay, registers the page gateway, and passes `aiEndpoint` into `serviceEnv`. The clients supply a `HostRelay`; they do not each open a port or inject env.
+
+###### 7. Cloudflare — `no('app-token')` until the acceptor exists
+
+Not the port registry. The deploy path reads the MANIFEST (`uses` + resource `type`), not `resourceUses`.
+
+The future delivery, gated on prerequisites that do not exist today:
+
+- `AI_BASE_URL` = the API gateway host's `/v1` base.
+- A server-minted app-scoped token in a Worker secret or binding, never in the repo, never a user session token.
+- The Worker (not the browser process) may hold that token; "no token in the worker" applies to the browser process worker.
+- App code never reads the token. The starter calls `AI_BASE_URL` with no `Authorization`. A platform wrapper (not the shop route) attaches the binding.
+
+Prerequisites, both named in code before the capability flips: (1) an app-scoped token acceptor on `POST /v1/chat/completions` (`chatCompletionsRoutes.ts` / `gatewayAccess.ts`) — none exists today; (2) the existing tenant meter (`logUsage`, `gatewayUsageLog.ts`) metering that token's calls — this exists. Adding the acceptor is a later slice; until it and the delivery land in one change, `cloudflare` stays `no('app-token')`. Do not mark `yes` early.
+
+###### 8. Agent tools — own catalog, not `builtinMcpService.ts`
+
+New file next to `appBlueprintToolCatalog.ts`: `appManifestToolCatalog.ts`. Spread once, the way `APP_BLUEPRINT_TOOLS` is spread (~line 4194 of `builtinMcpService.ts`). Implementations do not grow into `builtinMcpService.ts`.
+
+Both tools import from `@seanhogg/builderforce-webcontainers-core/manifest` — the pure-core export (verified in `packages/core/package.json` `exports`: `.`, `./check`, `./app`, `./manifest`; none pulls `packages/browser`). It exports `validateManifest`, `APP_MANIFEST_SCHEMA_V1`, `RESOURCE_CAPABILITIES`, `resourceCapability`, `toApplicationSpec`, `describeManifestIssue`. No second validator. No API dependency on the browser package.
+
+- `app_manifest.schema` — args `{ target?: ManifestTargetId }`. Returns `APP_MANIFEST_SCHEMA_V1`, a short field guide (version, services require `runtime`+`command`, roles, `uses`, the `ai` shape), and `RESOURCE_CAPABILITIES` for that target (default `browser`).
+- `app_manifest.validate` — args `{ projectId?: number; content?: string; path?: string; environment?: string }`. One of `content` or `path`. When `path` is given, `projectId` is REQUIRED and checked with `ownedProjectId` (the same tenant boundary as `app_blueprint.detect`/`get`, `appBlueprintToolCatalog.ts:63`) before any repo read. Content-only validation needs no repo read and no `projectId`. Returns the typed issues from `validateManifest` plus, when `environment` is set, capability declines from `toApplicationSpec` for that environment. The launcher's accept/reject must be this result, not a parallel check.
+
+The finder is `findTools` in `brain-embedded/src/toolRouter.ts` (keyword scoring over tool name + description; there is no `tools_find` symbol under `api/src` and no alias table today). Add a small alias expansion NEXT TO `findTools` mapping exactly these phrases to both tools: `app manifest`, `builderforce.json`, `ai resource`. Do NOT alias bare `service`, `schema`, or `launch` — those words belong to other tools.
+
+`OVERRIDE_HINT` and the launch/composer prompt name the tools via `advertisedName('app_manifest.schema')` and `advertisedName('app_manifest.validate')` (`toolNaming.ts`; `api/scripts/check-prompt-tool-names.mjs` fails a prompt that uses a catalog id). The example in `OVERRIDE_HINT` stays a valid v1 manifest; a test still parses it.
+
+###### 9. Write gate and commit gate — shared validator, per-host hooks
+
+The shared function is `validateManifest` (plus `describeManifestIssue`) in core. Each host calls it; there is no single gate function both hosts can import beyond the validator itself. The write gate and the commit gate are different policies:
+
+- Write gate (advisory): VSIX `write_file` / `edit_file` of `MANIFEST_PATH` (`.builderforce/builderforce.json`, from `app-detect` — do not hard-code a second path) runs the validator and appends the issues to the tool result. The write still lands so the agent can fix it.
+- Commit gate (blocking): refuse when that file is in the commit and the manifest has errors, naming each error (`describeManifestIssue`). Warnings do not block. Hook EVERY host that writes the manifest into a commit: VSIX `git_commit` AND the API/sandbox commit path (`commitFileToRepo`, sandbox git). A raw `git commit` inside the sandbox that never calls those paths is out of scope — stated, not silently missed.
+
+###### 10. Docs — extend the existing publisher, no second generator
+
+The generator ALREADY exists: `Builderforce.ai/frontend/scripts/publish-manifest-schema.mjs` writes `APP_MANIFEST_SCHEMA_V1` to `public/schema/app.v1.json` at prebuild/dev, reading the path from `APP_MANIFEST_SCHEMA_URL` (`https://builderforce.ai/schema/app.v1.json`). `public/schema/` is gitignored — there is no committed copy to diff. Extend that publisher; do not add a second generator and do not paste JSON into two files. A drift test asserts the publisher's output equals `APP_MANIFEST_SCHEMA_V1` (it cannot diff a committed `frontend/public/schema/app.v1.json`).
+
+One docs-site page, title exactly `App manifest (builderforce.json v1)`, generated from the same schema (a script, not a hand copy). Include the recipe "Add an AI agent service": an `ai` resource, a `backend` service with `uses`, `AI_BASE_URL`, no key in the process.
+
+Retitle the agent-runtime config pages that currently win a search for `builderforce.json`, so they cannot be read as the app manifest. `knowledge_search` for `builderforce.json` / `app manifest` must return the new page. If the index is built, not live, rebuild it in the same pass.
+
+###### 11. Starter — the ide-templates kit, not `frontend/src`
+
+Kit id `react-vite-node-express` lives in `Builderforce.ai/packages/ide-templates` (`kits/compose.test.ts`). Optional piece on that kit only; do not add a second starter. The `frontend/src` i18n rule does not apply — follow the kit's own string and theme convention. When chosen:
+
+- manifest: `resources.assistant` type `ai`; the api service `role: "backend"` with `uses`; no new role
+- `api` route `POST /api/agent` calls `AI_BASE_URL` (`/chat/completions`) with tool calls over the shop's catalog and orders
+- a chat widget in the kit's web app
+
+`app_manifest.validate` is clean for the starter-with-agent.
+
+###### 12. Intent — one fixed choice, not a model call
+
+Pure function, no LLM:
+
+```ts
+clarifyAgentIntent(utterance: string, hasAppManifest: boolean):
+  | null
+  | { question: 'Add an AI agent — which one?'; options: ['a teammate on the board', 'an AI feature inside the app'] }
+```
+
+Returns the choice only when the utterance contains the word `agent` and the project has an app manifest. The run preamble asks the human channel that exact list before any hire tool and before any manifest write. Hiring stays the teammate path. The manifest path is the feature path. No third option, no paraphrase.
+
+###### 13. Yardfire (visible cleanup)
+
+- Replace the invalid `services.agent` commit (and any half-written concierge from run #3) with a valid `ai` resource plus a `backend` service that `uses` it, or revert that commit if the user would rather not keep the attempt. Do not leave the rejected manifest as the tree tip.
+- Do not delete the hired "Yardfire Developer" agent (`2635a3c5-…`) or its project staffing unless the user says so. Ask first.
+- Attach chat #287 to project 103. (Done, 2026-11-21.)
+
+##### Codemap
+
+| Concern | File | Change |
+|---|---|---|
+| Types | `builderforce-webcontainers/packages/core/src/manifest/types.ts` | `AiResource` |
+| Schema | `packages/core/src/manifest/schema.ts` | one `resource('ai', …)` arm |
+| Validate | `packages/core/src/manifest/validate.ts` | `models` string list; roles unchanged |
+| Capabilities | `packages/core/src/manifest/capabilities.ts` | `ai` row: browser yes with delivery, cloudflare/aws/azure/gcp no; `connection` unchanged |
+| Issues | `packages/core/src/manifest/issues.ts` | no new code expected |
+| Spec | `packages/core/src/manifest/toApplicationSpec.ts` | `HOST_DELIVERED`; copy `resourceUses` |
+| Env | `packages/core/src/app/serviceEnv.ts` | `AI_BASE_URL` via `aiEndpoint` callback; frontend gets nothing; no `connectionEnv` |
+| Spec type | `packages/core/src/app/spec.ts` | `resourceUses` (browser seam only) |
+| Gateway | `packages/browser/src/` next to `database/` | HTTP gateway on the port registry; in-process `HostRelay` call; header stripping; no egress change |
+| Runtime hook | `packages/browser/src/app/startApplicationRuntime.ts` | `HostRelay` argument; both launchers enter here |
+| Web adapter | `Builderforce.ai/frontend/src/lib/runTarget/browserRunTarget.ts` | supply `HostRelay` (IDE page) |
+| VSIX adapter | `clients/vscode/src/composerCommands/host.ts` + `packages/browser/src/launcher/server/launcher.ts`, `launcher/page/{bootApplication,runtimeDeps}.ts`, `launcher/protocol.ts` | thread `HostRelay` through launcher options → launch info → page `BootDeps`; page adapter forwards over token-gated `/__bf` to the extension host |
+| Forward target | `api/src/presentation/routes/llm/chatCompletionsRoutes.ts` | existing route; meter is `logUsage` (`gatewayUsageLog.ts`); app-token acceptor is a LATER slice |
+| Tools | `Builderforce.ai/api/src/application/llm/appManifestToolCatalog.ts` | new; one spread in `builtinMcpService.ts`; imports `-core/manifest` |
+| Finder | `Builderforce.ai/brain-embedded/src/toolRouter.ts` | alias expansion next to `findTools`: three phrases |
+| Hint | `blueprintOverrideHint.ts` plus the launch/composer prompt | `advertisedName` for both tools |
+| Gates | VSIX write path + `git_commit` + `commitFileToRepo`/sandbox git | each calls core `validateManifest`; commit refuses errors |
+| Docs | `frontend/scripts/publish-manifest-schema.mjs` (extend) + docs-site page + agent-runtime retitles | generated; drift test vs `APP_MANIFEST_SCHEMA_V1` |
+| Starter | `Builderforce.ai/packages/ide-templates` kit `react-vite-node-express` | optional piece |
+| Intent | run preamble (candidate: `brain-embedded/src/runStore/runPreamble.ts`) | fixed choice |
+| Connection relay | ticket #6999, same relay shape | localhost base URL; host attaches vault secret; no env injection |
+| Gaps | `ROADMAP.md` → `DONE.md` | after the live run, not before |
+
+##### Sequence
+
+1. Agent calls `app_manifest.schema` (finder phrase `app manifest` / `builderforce.json` / `ai resource` resolves).
+2. Agent writes `.builderforce/builderforce.json` with an `ai` resource and a `backend` service. The write gate appends issues. The commit gate refuses if any are errors.
+3. `/launch` on the browser target runs `toApplicationSpec`. `ai` is not declined. `startApplicationRuntime` registers the page gateway and sets `AI_BASE_URL` on the backend only.
+4. `POST /api/agent` in the process calls `AI_BASE_URL/chat/completions` with no key.
+5. Port registry delivers the bytes to the page gateway (port policy: only a backend whose `resourceUses` names the resource). The gateway strips request `Authorization` and calls `HostRelay.forwardAi` (web: in-process; VSIX: the launcher page's adapter over the token-gated `/__bf` hop).
+6. The host adds the signed-in session (web: in-process; VSIX: extension host over the token-gated `/__bf` hop), enforces `models` from the launch spec it read, forwards to `POST /v1/chat/completions` on the API gateway host, strips response `Set-Cookie`/`Authorization`/`WWW-Authenticate`, streams the reply back.
+7. The shop widget renders the reply. The tenant ledger moves via the route's existing `logUsage` meter. The process environment contains no token.
+
+Cloudflare is `no('app-token')` this pass. When the acceptor and delivery land: deploy injects `AI_BASE_URL` plus an app-scoped secret from the manifest; the platform wrapper attaches it; the same route meters it.
+
+##### Done-checks
+
+- `validateManifest` is clean for the Yardfire fixture and for the starter-with-agent. `role: "agent"` still fails.
+- `toApplicationSpec` does not decline `ai` on `browser`. It declines `ai` on `cloudflare`, `aws`, `azure`, `gcp` with the capability reason.
+- A backend that `uses` `ai` gets `AI_BASE_URL` and no key. A frontend that `uses` it gets neither. A service that does not `uses` it gets neither.
+- Worker CSP and `PREVIEW_DEFAULT_EGRESS` are unchanged (assert the constant; the gateway module does not import `previewHeaders` to extend it).
+- Port policy: a service whose `resourceUses` does not name the resource cannot dial the gateway port; the port is not ingress and not published on a preview origin.
+- A test double `HostRelay` proves: process-supplied `Authorization` is not forwarded; the host's session is; response `Set-Cookie`, `Authorization`, `WWW-Authenticate` never reach the process.
+- `connection`: no vault material in process env, the worker script, the manifest, or the tree (this pass). Delivery is ticket #6999's done-check, on the relay shape of §4.
+- `app_manifest.validate` issues equal `validateManifest` + `toApplicationSpec` for the same input. A test locks that.
+- Write gate appends issues; VSIX `git_commit` and the API/sandbox commit path refuse errors and name them.
+- `findTools` (with the alias expansion) for each of `app manifest`, `builderforce.json`, `ai resource` returns both tools; bare `service` / `schema` / `launch` do not resolve to them.
+- Publisher drift test: `publish-manifest-schema.mjs` output equals `APP_MANIFEST_SCHEMA_V1`. Docs page exists, is generated, and `knowledge_search` returns it ahead of the retitled agent-runtime config pages.
+- VSIX `/launch` supplies a `HostRelay` into the launcher page's `startApplicationRuntime` options (a test or trace proves the gateway + `aiEndpoint` are registered, not a claim). The `/__bf` forward hop refuses a missing/wrong launch token and is never served on a preview origin.
+- `app_manifest.validate` with `path` and no `projectId` — or another tenant's project — is refused before any repo read.
+- Targeted tests only: webcontainers manifest tests, the new tool tests, the write-gate test.
+- Live, not a unit test: `/launch` of the starter-with-agent starts api + web in the browser target, and `POST /api/agent` returns a model reply through the host relay.
+- Release: webcontainers version bumped and the tag pushed (the user asked for this push), consumers bumped, every lockfile refreshed, VSIX packaged with a new version and installed.
+- `release_notes` row `category=new`, and an Idea-to-Real blog post, in the same pass.
+- Gap entries A–D moved from `ROADMAP.md` to `DONE.md` only after the live run. Not before.
+
+##### Out of scope
+
+- A new service role.
+- Widening process or preview-document egress.
+- Putting any token or vault secret in the browser process.
+- A `postMessage` auth hop reachable from the preview document.
+- Cloudflare `ai` delivery and the app-scoped token acceptor (later slice; capability stays `no`).
+- `connection` secret delivery (ticket #6999; this pass keeps the acknowledged false row).
+- Deleting the hired Yardfire Developer agent without an explicit yes.
+- AWS / Azure / GCP delivery of `ai` (declined, with a reason, until a later pass).
+- A model call to decide teammate vs feature.
+- A raw sandbox `git commit` that bypasses the hooked commit paths.
+
+##### Review gate
+
+Revision 2 (2026-11-22) applied all nine required edits of the 2026-11-21 architecture-and-auth review: (1) host-held session, no postMessage auth hop, port policy + header stripping; (2) no vault secrets in process env, `connection` acknowledged false until the relay; (3) forward target `POST /v1/chat/completions` on the API host, cloudflare `no` until acceptor + delivery, meter named (`logUsage`); (4) `resourceUses` browser-only; (5) finder is `findTools` in `toolRouter.ts`, three alias phrases, no bare `service`/`schema`/`launch`; (6) shared validator with per-host gate hooks incl. the API/sandbox commit path; (7) extend the existing schema publisher, drift test against the schema constant; (8) starter is the `ide-templates` kit; (9) API imports `@seanhogg/builderforce-webcontainers-core/manifest` (verified pure export).
+
+The second review (2026-11-22, Mike QA, record at `.builderforce/cache/subagents/chat288-review-r2.md`) verified all nine against the code, held the false-capability rule and the smallest-seam judgment, and required three further edits, applied in revision 3: (1) the VSIX `HostRelay` adapter lives in the launcher PAGE and crosses the launcher's existing token-gated, page-origin-only `/__bf` loopback hop to the extension host — the page cannot call a separate Node process in-process; the `models` allowlist comes from the host-read launch spec, never process bytes; (2) both launchers already enter `startApplicationRuntime` (`browserRunTarget.ts:100`, `bootApplication.ts:73`) — the work is threading `HostRelay` through `createLocalLauncher` → launch info → page `BootDeps`, and the codemap/done-checks name those files; (3) `app_manifest.validate` requires `projectId` (checked via `ownedProjectId`) whenever `path` is given. The reviewer judged everything else acceptable as the implementation contract for #6996–#6999.
+
+Acceptance of revision 3 is recorded below by the confirming review. No implementation before it; required changes come back to this file before code.
+
+**ACCEPT — revision 3, confirming review 2026-11-22 (Mike QA, chat #288).** All three required edits verified across the whole file: (1) the VSIX `HostRelay` adapter is consistently placed in the launcher page with exactly one token-gated, page-origin-only `/__bf` hop to the extension host (§5 prose/diagram/rules, §6, Sequence 5–6, Review gate); no leftover in-process-extension-host claim; the `models` allowlist is pinned to the host-read launch spec in §5 and Sequence 6. (2) §6, Codemap (VSIX adapter + Runtime hook rows) and Done-checks state both launchers already enter `startApplicationRuntime` and name `launcher/server/launcher.ts`, `launcher/page/{bootApplication,runtimeDeps}.ts`, `launcher/protocol.ts`, `clients/vscode/src/composerCommands/host.ts`; the done-check requires a trace-proven `HostRelay` in the launcher page's options plus the `/__bf` token-refusal check. (3) §8 args `{ projectId?, content?, path?, environment? }` with `projectId` required for `path`, checked via `ownedProjectId` before any repo read, and the matching refusal done-check. No contradictions, no new defect. Ticket #6995 closes on this acceptance; implementation tickets #6996–#6999 are unblocked.
 
 ### §4 W12: Agent Environment and recoverable runtime
 

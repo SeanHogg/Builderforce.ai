@@ -3,12 +3,12 @@
 Open product work lives in **one PRD per stage of the arc**. Each file holds only what is left to build;
 finished sections are archived word for word in [DONE.md](../../DONE.md). Outstanding work is also tracked
 in [ROADMAP.md](../../ROADMAP.md) (the Consolidated Gap Register), under the same stage. Consolidated and
-verified against the code on 2026-11-17.
+verified against the code on 2026-11-17. Standalone PRD 49/50 design files, the pipeline map and the app-manifest contract were folded in on 2026-11-24.
 
 | Domain | File | Holds |
 |---|---|---|
 | 💡 Idea | [idea.md](./idea.md) | Ideas, sessions, briefs, creation-canvas sessions, experiments, surveys |
-| 🔨 Make | [make.md](./make.md) | Agent runs and the kernel, autonomous delivery, knowledge graph and local-first, canvas runtimes, the customer app platform |
+| 🔨 Make | [make.md](./make.md) | Agent runs and the kernel, autonomous delivery, knowledge graph and local-first, canvas runtimes, the customer app platform, the agent pipeline map, the app-manifest `ai` contract |
 | ⚙️ Run | [run.md](./run.md) | Governance and SOC 2, BurnRateOS consolidation, hiring and HR, advisors |
 | 📊 Measure | [measure.md](./measure.md) | Vertical KPI dashboards, Insights (session replay), creation outcome metrics |
 | 📣 Reach | [reach.md](./reach.md) | Marketing campaigns, the blog capability register, the company directory, marketing content |
@@ -47,7 +47,8 @@ still open. If the section is missing there, it shipped, and you'll find it in D
 | 46 | Agent-run findings | — | Shipped (DONE.md) |
 | 47 | One Collection view | platform | Partly built (W0 landed) |
 | 48 | Ship policy: runs ship by rule, never by mid-run question | — | Shipped 2026-11-20 (DONE.md) |
-| 49 | Methodology personas and the `.builderforce/` workspace layout (TIP Code parity) | [make](./make.md#prd-49--methodology-personas-and-the-builderforce-workspace-layout-tip-code-parity) | Opened 2026-11-21; design first |
+| 49 | Methodology personas and the `.builderforce/` workspace layout (TIP Code parity) | [make](./make.md#prd-49--methodology-personas-and-the-builderforce-workspace-layout-tip-code-parity) | Opened 2026-11-21; end-state design reviewed (in make.md) |
+| 50 | One pipeline above the kernel | [make](./make.md#prd-50--one-pipeline-validation-and-diagnostic-gaps) | Shipped 2026-11-23; live capture open; slice contract in DONE.md |
 | — | SOC 2 Type I checklist | run | Partly built |
 | — | Internet search subsystem | platform | Phases 1–2 shipped |
 | — | Blog capability gap register | reach | Open |
@@ -55,6 +56,7 @@ still open. If the section is missing there, it shipped, and you'll find it in D
 
 ## Also here
 
+- PRD 50's executable acceptance block must stay the first `builderforce-acceptance` block in `make.md`. To run it, ask to validate PRD 50 in `docs/specs/make.md`.
 - [API contracts](./platform.md#reference--api-contracts): the standing wire contracts (in `platform.md`).
 - [Merge process](./platform.md#reference--merge-process): how a change reaches `main` and what gates it (in `platform.md`).
 - [`data-model/`](./data-model/): the consolidation coverage map read by the `check:burnrate-parity` and
