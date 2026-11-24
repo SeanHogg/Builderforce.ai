@@ -39,20 +39,65 @@ const num = (v: unknown): number => Number(v);
  *  went wrong" wants the last verdict, occasionally the last few to see a pattern. */
 const MAX_LIMIT = 25;
 
+function record(value: unknown): Json {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Json : {};
+}
+
+/** Bounded facts for the agent. The authenticated diagnostics endpoint keeps the full capture. */
+export function summarizeDiagnosticCaptures(value: unknown): Json {
+  const response = record(value);
+  if (!Array.isArray(response.diagnostics)) return response;
+  const diagnostics = response.diagnostics.map((value: unknown) => {
+    const capture = record(value);
+    const report = record(capture.report);
+    const run = record(report.run);
+    return {
+      id: capture.id,
+      chatId: capture.chatId,
+      surface: capture.surface,
+      schemaVersion: capture.schemaVersion,
+      capturedAt: capture.capturedAt,
+      likelyCause: capture.likelyCause,
+      running: report.running,
+      contextPressureOnly: run.contextPressureOnly,
+      promptTokenPeak: run.promptTokenPeak,
+      truncatedToolResults: run.truncatedToolResults,
+      errors: run.errors,
+      modelFailovers: run.modelFailovers,
+      outcome: run.outcome,
+      sessionWork: run.sessionWork,
+      ...(Number(capture.schemaVersion) >= 3 ? { sessionShipped: run.sessionShipped } : {}),
+      provenance: report.provenance,
+      staffing: Object.fromEntries(Object.entries(record(report.staffing)).filter(([key]) =>
+        ['ticketsCreated', 'filedLocally', 'dispatched', 'verdict'].includes(key))),
+      providerFailure: run.providerFailure,
+      specValidation: run.specValidation,
+      errorSteps: Array.isArray(run.errorSteps) ? run.errorSteps.slice(-3) : undefined,
+    };
+  });
+  return {
+    diagnostics,
+    evidence: diagnostics.length ? 'stored_snapshots' : 'no_capture',
+    note: diagnostics.length
+      ? 'These are stored snapshots. Use capturedAt and running before drawing conclusions about the current run.'
+      : 'Nothing has been captured yet. The current run’s health and recurring failure patterns are unknown.',
+  };
+}
+
 export const CHAT_DIAGNOSTICS_TOOLS: BuiltinTool[] = [
   {
     tool: 'chats.diagnostics',
     mutates: false,
     description:
       'The latest captured diagnostics for a Brain chat (verdict, likely cause, token/tool pressure, errors, staffing summary) — read this to learn why a previous run did not finish or did not dispatch anyone before repeating it. '
-      + 'Each capture is a snapshot taken at the END of a run, so it carries facts the transcript does not: which model turns errored, how close the turn came to its token and tool budgets, and whether anybody was actually staffed to do the work. '
+      + 'Captures are snapshots and can have been taken while a run was still executing. Check capturedAt and running before inferring anything about the current run. '
       + 'Pass limit > 1 to see whether the same cause is recurring rather than a one-off. '
       + 'An empty list means no capture has been stored for this chat — that is not evidence the run succeeded.',
     parameters: obj({ chatId: N, limit: N }, ['chatId']),
     run: async (ctx: BuiltinCtx, a: Json) => {
       const chatId = num(a.chatId);
       const limit = Math.max(1, Math.min(Number(a.limit) || 1, MAX_LIMIT));
-      return replayRoute(ctx, 'GET', `/api/brain/chats/${chatId}/diagnostics?limit=${limit}`);
+      return summarizeDiagnosticCaptures(await replayRoute(ctx, 'GET', `/api/brain/chats/${chatId}/diagnostics?limit=${limit}`));
     },
   },
 ];

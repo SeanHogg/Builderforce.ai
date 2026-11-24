@@ -64,6 +64,8 @@ export type LikelyCause =
   | 'run-in-progress'
   | 'memory-answered'
   | 'provider-failure'
+  | 'spec-validation-incomplete'
+  | 'spec-check-failed'
   | 'no-tools-advertised'
   | 'tool-not-advertised'
   | 'tool-calls-not-emitted'
@@ -87,6 +89,8 @@ export interface VerdictSignals {
   memoryOnlyRun: boolean;
   /** The LATEST run ended on a failed completion it did not recover from (`providerFailureCause.ts`). */
   providerFailure: boolean;
+  specValidationIncomplete?: boolean;
+  specValidationFailed?: boolean;
   noToolsAdvertised: boolean;
   narratedUnadvertised: boolean;
   announcedUnmadeToolCall: boolean;
@@ -106,6 +110,8 @@ const VERDICT_RULES: ReadonlyArray<readonly [LikelyCause, (signals: VerdictSigna
   ['stopped', (s) => s.outcome === 'stopped'],
   ['memory-answered', (s) => s.memoryOnlyRun],
   ['provider-failure', (s) => s.providerFailure],
+  ['spec-validation-incomplete', (s) => s.specValidationIncomplete === true],
+  ['spec-check-failed', (s) => s.specValidationFailed === true],
   ['unanswered-question', (s) => s.outcome === 'unanswered-question'],
   ['no-tools-advertised', (s) => s.noToolsAdvertised],
   ['tool-not-advertised', (s) => s.narratedUnadvertised],

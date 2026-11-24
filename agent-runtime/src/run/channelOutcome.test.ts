@@ -2,6 +2,7 @@
  * The channel entry point writes the uniform outcome row (PRD 35 §3.3, §8.2): a run with no execution id is keyed by its own run
  * id, attributed to the model that served it, and reported once through the same reporter the ticket path uses.
  */
+import { Type } from "@sinclair/typebox";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Agent } from "../builderforce/agent-loop/agent.js";
 import { AssistantMessageEventStream } from "../builderforce/agent-loop/event-stream.js";
@@ -30,7 +31,7 @@ const usage = { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2
 const assistant = (content: AssistantMessage["content"], stopReason: AssistantMessage["stopReason"]): AssistantMessage => ({ role: "assistant", content, api: "openai-completions", provider: "p", model: "m", usage, stopReason, timestamp: 1 });
 const exec: AgentTool = {
   name: "exec", label: "exec", description: "Run a command",
-  parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] } as AgentTool["parameters"],
+  parameters: Type.Object({ command: Type.String() }),
   execute: async () => ({ content: [{ type: "text", text: "ok" }], details: { status: "completed", exitCode: 0 } }),
 };
 

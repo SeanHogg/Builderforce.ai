@@ -4,6 +4,7 @@
  * tools as its closed catalog; and the native shapes the session persists come back exactly as they went in.
  */
 
+import { Type } from "@sinclair/typebox";
 import { describe, expect, it } from "vitest";
 import { runAgent } from "@builderforce/agent-run";
 import type { ModelCompletion, ModelRequest, RunPolicy } from "@builderforce/agent-run";
@@ -37,7 +38,7 @@ const echo: AgentTool = {
   name: "echo",
   label: "echo",
   description: "echoes",
-  parameters: { type: "object", properties: { text: { type: "string" } }, required: ["text"] } as AgentTool["parameters"],
+  parameters: Type.Object({ text: Type.String() }),
   execute: async (_id, params) => ({ content: [{ type: "text", text: `echoed:${(params as { text: string }).text}` }], details: {} }),
 };
 

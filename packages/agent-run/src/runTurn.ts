@@ -28,6 +28,7 @@ import { measureTurnTail } from "./turnTail.js";
 import { measureWorkflow, workflowScope } from "./telemetry/workflowMetrics.js";
 import { isSpawnTool } from "./policy/subagents/delegationRequest.js";
 import { withVolatileTail } from "./turnContext.js";
+import { specValidationSection } from "./policy/verify/specValidation.js";
 
 /**
  * What the step decided about its menu before the request is built: the schemas the policy selected, and - when the surface forced the
@@ -55,6 +56,7 @@ export interface TurnSelection {
 
 /** What a surface's own tool answered, for the no-progress count: from its read cache, or only conversational. */
 export const callKinds = new WeakMap<object, "cached" | "neutral">();
+export const observedToolData = new WeakMap<object, unknown>();
 
 /** Non-transport exceptions that failed a turn, per run: the surface decides whether they are a failure or an eviction. */
 const causes = new WeakMap<object, unknown>();
@@ -151,7 +153,8 @@ export async function completeTurn(
   const model = decision ? decision.model : input.policy.pinnedModel;
   const brief = await hooks.memory.brief(pctx);
   const work = assignedWorkSection(state.work ?? []);
-  const sections = [...(input.ports.context.turnSections?.() ?? []), ...(work ? [`### Assigned work\n${work}`] : []), ...(made?.tail ?? [])];
+  const validation = specValidationSection(state);
+  const sections = [...(input.ports.context.turnSections?.() ?? []), ...(work ? [`### Assigned work\n${work}`] : []), ...(validation ? [validation] : []), ...(made?.tail ?? [])];
   const fields = hooks.model.turnFields?.(mctx);
   const reasoning = hooks.guards.reasoning?.(pctx);
 
@@ -272,11 +275,13 @@ export async function synthesizeFinal(
   const model = decision ? decision.model : input.policy.pinnedModel;
   const fields = hooks.model.turnFields?.(pctx);
   const ask: RunMessage = { role: "user", content: prompt };
+  const validation = specValidationSection(state);
+  const validationSections = validation ? [validation] : [];
   let completion: ModelCompletion;
   try {
     completion = await measureModelRequest(input, state.step,
       {
-        messages: [...withVolatileTail(transcript, pack, null, input.ports.context.turnSections?.() ?? []), ask],
+        messages: [...withVolatileTail(transcript, pack, null, [...(input.ports.context.turnSections?.() ?? []), ...validationSections]), ask],
         ...(model ? { model, strict: decision?.strict ?? false } : {}),
         maxTokens: SYNTHESIS_MAX_TOKENS,
         // A transport records this turn as the run's forced closing one (and what stopped the run), never an ordinary turn.
@@ -342,7 +347,7 @@ async function dispatchCallCore(input: RunAgentInput, state: RunState, call: Par
     state.model = reduceRunPolicy(state.model, { type: "hand_off" });
   }
   try {
-    const box: { control?: LoopDispatchResult["control"]; failed?: boolean; killed?: boolean; kind?: "cached" | "neutral"; native?: NativeResult } = {};
+    const box: { control?: LoopDispatchResult["control"]; failed?: boolean; killed?: boolean; kind?: "cached" | "neutral"; native?: NativeResult; observedData?: unknown } = {};
     const exec = async (name: string, args: unknown, stepSignal?: AbortSignal): Promise<unknown> => {
         const run = stepSignal ?? signal;
         const extension = ports.extensions;
@@ -355,6 +360,7 @@ async function dispatchCallCore(input: RunAgentInput, state: RunState, call: Par
         if (platform && own) {
           const result = await platform.execute(name, args as Record<string, unknown>, { ...(run ? { signal: run } : {}), progress: { rungs: state.stall?.rungs ?? {} }, callId: call.id, step });
           box.failed = result.isError === true;
+          box.observedData = result.observedData;
           if (result.parts || result.meta) box.native = { ...(result.parts ? { parts: result.parts } : {}), ...(result.meta ? { meta: result.meta } : {}) };
           if (result.cached) box.kind = "cached";
           else if (result.neutral) box.kind = "neutral";
@@ -384,6 +390,7 @@ async function dispatchCallCore(input: RunAgentInput, state: RunState, call: Par
     const failed = box.failed === true || (!own && !!capped && (capped as { ok?: unknown }).ok === false && (capped as { skipped?: unknown }).skipped !== true);
     const dispatched: LoopDispatchResult = { data: capped, ...(box.control ? { control: box.control } : {}), ...(failed ? { isError: true } : {}) };
     if (box.kind) callKinds.set(dispatched, box.kind);
+    if (state.specValidation && !box.killed) observedToolData.set(dispatched, box.observedData ?? data);
     if (box.native) nativeResults.set(dispatched, box.native);
     if (box.killed) killedResults.add(dispatched);
     return dispatched;

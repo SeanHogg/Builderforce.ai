@@ -25,6 +25,15 @@ const edit = (sec: number, path: string): BrainTraceEvent =>
   tool(sec, 'edit_file', { path, old_string: 'a', new_string: 'b' }, { ok: true });
 
 describe('triage report regressions', () => {
+  it('reports missing acceptance evidence even after a successful search and a prose verdict', () => {
+    const events: BrainTraceEvent[] = [
+      turn(1), tool(2, 'search_code', { query: 'spawnChild' }, { ok: true }),
+      { ts: at(3), category: 'message', label: 'run.spec_validation', args: { completed: 0, failed: 0, pending: 0, unverified: 2, incomplete: true } },
+    ];
+    const d = computeBrainDiagnostics(events, undefined, [msg(0, 'user', 'Validate the PRD.'), msg(3, 'assistant', 'All checks passed.')]);
+    expect(d.likelyCause).toBe('spec-validation-incomplete');
+    expect(formatBrainDiagnostics(d).join('\n')).toContain('Declared acceptance checks still unverified: 2');
+  });
   it('regression: a run whose failed steps were each recovered by a later retry, and that shipped, reads healthy (chat #275)', () => {
     const events = [
       turn(1),
@@ -182,12 +191,14 @@ describe('triage report regressions', () => {
       readAgents: async () => [{ agentRef: 'r1', role: 'participant', name: 'Bob' }],
       readRuns: async () => ({ linkedRunnableTickets: 2, runs: [], dispatchers: [] }),
     });
-    expect(data.sessionShipped).toBe(2);
+    expect(data.sessionWork).toBe(2);
+    expect(data.sessionShipped).toBe(0);
     const text = formatChatDiagnostics(data).join('\n');
     expect(text).toContain('Execution history: self-served');
     expect(text).not.toContain('ZERO runs');
     expect(text).not.toContain('No cloud agent has ever been dispatched');
     expect(text).toContain('ℹ️ Self-served');
+    expect(text).toContain('A push to the base branch is unverified');
   });
 
   it('regression: the free-plan signal does not claim what the account data contradicts', () => {
@@ -202,6 +213,12 @@ describe('triage report regressions', () => {
     const plain = formatChatDiagnostics({ ...base, account: { plan: 'free', billingStatus: 'none', canUsePremiumModels: false } }).join('\n');
     expect(plain).toContain('no premium/frontier models, and');
     expect(plain).toContain('turns funded by the shared free pool');
+    const own = formatChatDiagnostics({
+      ...base,
+      account: { plan: 'free', billingStatus: 'none', canUsePremiumModels: false, model: 'local/kimi-code/kimi-for-coding', modelFunding: 'premium', servedBy: 'own' },
+    }).join('\n');
+    expect(own).toContain('your own connected provider account');
+    expect(own).not.toMatch(/402|falls back|shared plan does not cover/i);
   });
 
   it('regression: a sub-agent that ended on a question or an unproduced deliverable is not "done" (chat #273)', () => {

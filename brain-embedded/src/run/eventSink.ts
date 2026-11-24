@@ -22,6 +22,10 @@ import { BUDGET_CONTAINED_STEP } from '../unsettledAnswer';
 /** The trace step for an event, or null when the event has no step of its own. Pure. */
 export function traceStepFor(event: RunEvent, ts: string): BrainTraceEvent | null {
   switch (event.kind) {
+    case 'run.spec_validation': {
+      const { completed, failed, pending, unverified, incomplete } = event;
+      return { ts, category: 'message', label: event.kind, args: { completed, failed, pending, unverified, incomplete } };
+    }
     case 'model.preflight':
       if (event.notices.length === 0) return null;
       return {

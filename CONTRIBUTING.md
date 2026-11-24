@@ -61,8 +61,14 @@ and build the frontend for production with `cd frontend && npm run build`.
 
 Before opening a pull request make sure:
 
-- [ ] Tests still pass (`pnpm test` at the root, or run the appropriate script).
-- [ ] The worker builds cleanly (`pnpm --filter worker build` or `wrangler dev` doesn’t throw).
+- [ ] Tests still pass in each affected package.
+- [ ] The affected deployable builds cleanly using its package scripts.
+
+### CI and clean builds
+
+Pull requests run the verification jobs selected by the affected-build planner. A change to `agent-runtime/` selects its own type check, tests, and CLI package smoke test. A shared package change also checks its consumers. The release workflow publishes from pushes and supports a full manual run.
+
+CI uses Node 24 and pnpm 10.23.0 with frozen lockfiles. The frontend and VS Code jobs install the Brain packages together in a temporary workspace, using the existing package lockfiles. They rebuild artifacts when source or build inputs change. To reproduce this setup in a clean checkout, run `node scripts/install-brain-workspace.mjs` and `node scripts/ensure-linked-builds.mjs --include-roots packages/brain-ui` from the repository root, then install and build the consumer from its directory.
 - [ ] You have run the migration script locally if you changed schema.
 - [ ] Wrangler is logged in (`wrangler whoami`).
 

@@ -31,7 +31,7 @@ import type { BrainMessage } from './types';
  * must be able to tell it apart from a later shape without guessing from which keys are
  * present. Purely additive fields do not bump it.
  */
-export const CHAT_DIAGNOSTICS_SCHEMA_VERSION = 2;
+export const CHAT_DIAGNOSTICS_SCHEMA_VERSION = 3;
 
 /** Model/account provenance for the run, as data rather than the rendered header lines. */
 export interface ChatDiagnosticsProvenance {

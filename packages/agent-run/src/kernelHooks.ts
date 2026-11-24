@@ -15,12 +15,13 @@ import { steeringTakers } from "./kernelSteering.js";
 import { noToolCallsHook } from "./kernelNoTools.js";
 import { appendRows, applyCompaction, currentView, emit, policyContext, toPolicyCall, type RunAgentInput, type TurnFacts } from "./runContext.js";
 import { rememberWrite } from "./runState.js";
-import { callKinds, ownsCall, type TurnSelection } from "./runTurn.js";
+import { callKinds, observedToolData, ownsCall, type TurnSelection } from "./runTurn.js";
 import { nativeOfTurn } from "./runRows.js";
 import { volatileTail } from "./policy/compaction/pack.js";
 import type { UsdBudget } from "./policy/budget/usd.js";
 import type { CacheServedStreak } from "./policy/tools/cacheServedStreak.js";
 import { LINKED_WORK_OPEN, lastFinishReason } from "./policy/finish/index.js";
+import { observeSpecCheck, specValidationRetry } from "./policy/verify/specValidation.js";
 import { bumpMutations, tallyCall, tallyTurn, tallyVerify, type RunTally } from "./telemetry/runTally.js";
 import { measureWorkflow, workflowScope } from "./telemetry/workflowMetrics.js";
 import { isReadOnlyShellCall } from "@builderforce/run-guards";
@@ -90,6 +91,8 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
 
   /** The verify a finish waits on (`RunPolicy.verify`): a failing verdict refuses it. */
   const verifyBlock = async (pctx: PolicyContext): Promise<string | null> => {
+    const validation = specValidationRetry(state);
+    if (validation) return validation;
     if (policy.verify === "none") return null;
     const verdict = await hooks.verify.verify(pctx);
     if (verdict && verdict.ran !== false) tallyVerify(tally, verdict.ok);
@@ -345,7 +348,10 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
       if (data !== result.data) rewriteRow(message, data, message.parts !== undefined || ports.platform?.verbatimText === true);
       if (!stub) {
         hooks.tools.observe?.(pctx, pcall, data, result.isError === true);
-        if (!kind) hooks.verify.observe?.(pctx, pcall, result.data, message.meta, ok);
+        if (!kind) {
+          hooks.verify.observe?.(pctx, pcall, result.data, message.meta, ok);
+          if (state.specValidation) observeSpecCheck(state, { ...pcall, name: resolveToolAlias(pcall.name) }, observedToolData.get(result), message.meta?.details, ok);
+        }
         // The run's memory is the WORKSPACE's (files read and written, searches made); a
         // call on the surface's own tools acted on its board, not on this work.
         if (!ownsCall(ports, call.name)) await hooks.memory.observe?.(pctx, pcall, result.data, result.isError);

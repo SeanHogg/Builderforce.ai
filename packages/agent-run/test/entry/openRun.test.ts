@@ -36,6 +36,86 @@ const WRITE_THEN_FINISH = (): ModelCompletion[] => [
 ];
 
 describe("openRun", () => {
+  it("requires executable evidence for a PRD verdict even after a successful source search", async () => {
+    const { ports, events } = harness([
+      call("search", "search_code", { query: "spawnChild" }),
+      { content: "All six contracts pass." },
+      { content: "All six contracts pass." },
+    ]);
+    ports.platform!.schemas = () => schemas(["search_code", "run_command"]);
+    const result = await openRun({ task: { ...TEST_TASK, prompt: "Validate the PRD against the checkout." }, policy: TEST_POLICY, ports });
+    expect(result).toMatchObject({ kind: "failed", reason: expect.stringContaining("unverified") });
+    expect(events).toContainEqual(expect.objectContaining({ kind: "run.spec_validation", completed: 0 }));
+  });
+
+  it("carries a background acceptance check across ticks and tells the model the observed failure", async () => {
+    const path = "docs/specs/50-prd-one-pipeline.md";
+    const { ports, events } = harness([
+      call("read", "read_file", { path }),
+      call("start", "run_command", { command: "node scripts/check-one-execution.mjs --enforce" }),
+      call("poll", "command_status", { id: "job-1" }),
+      { content: "The execution guard failed. Other claims are unverified." },
+    ]);
+    ports.platform!.schemas = () => schemas(["read_file", "run_command", "command_status"]);
+    ports.platform!.execute = async (name) => ({
+      data: "Trimmed display value",
+      observedData: name === "read_file" ? JSON.stringify({ path, content: "# PRD 50" })
+        : name === "run_command" ? { ok: true, status: "running", id: "job-1" }
+          : { status: "exited", exitCode: 1, id: "job-1" },
+    });
+    const complete = vi.spyOn(ports.model, "complete");
+    const input = { task: { ...TEST_TASK, prompt: String.raw`Run a diagnostic and validate C:\code\agentic\Builderforce.ai\docs\specs\50-prd-one-pipeline.md.` }, policy: TEST_POLICY, ports };
+    const tick = await openRun({ ...input, maxSteps: 2 });
+    expect(tick.kind).toBe("yielded");
+    expect(tick.state.specValidation?.completed).toBeUndefined();
+    const result = await openRun({ ...input, resume: JSON.parse(JSON.stringify(tick.state)) });
+    expect(result).toMatchObject({ kind: "failed", reason: expect.stringContaining("1 failing acceptance check(s)") });
+    expect(JSON.stringify(complete.mock.calls[3]?.[0].messages)).toContain("check-one-execution.mjs --enforce exited 1");
+    expect(events).toContainEqual(expect.objectContaining({ kind: "run.spec_validation", completed: 1, failed: 1, pending: 0 }));
+  });
+
+  it("keeps declared claims unverified when a different command or working directory passed", async () => {
+    const path = "Builderforce.ai/docs/specs/50-prd-one-pipeline.md";
+    const { ports, events } = harness([
+      call("read", "read_file", { path }),
+      call("wrong-dir", "run_command", { command: "pnpm test", cwd: "other" }),
+      call("root-guard", "run_command", { command: "node scripts/check-one-execution.mjs --enforce", cwd: "Builderforce.ai" }),
+      { content: "Everything validated." },
+      { content: "The package tests remain unverified." },
+    ]);
+    ports.platform!.schemas = () => schemas(["read_file", "run_command"]);
+    const content = [
+      "# PRD 50", "```builderforce-acceptance",
+      JSON.stringify([
+        { command: "pnpm test", cwd: "api" },
+        { command: "node scripts/check-one-execution.mjs --enforce", cwd: "." },
+      ]), "```",
+    ].join("\n");
+    ports.platform!.execute = async (name) => ({ data: name === "read_file" ? { path, content } : { ok: true, exitCode: 0 } });
+    const result = await openRun({ task: { ...TEST_TASK, prompt: "Validate 50-prd-one-pipeline.md." }, policy: TEST_POLICY, ports });
+    expect(result).toMatchObject({ kind: "failed", reason: expect.stringContaining("1 declared acceptance check(s)") });
+    expect(events).toContainEqual(expect.objectContaining({ kind: "run.spec_validation", completed: 2, unverified: 1 }));
+  });
+
+  it("lets a politely phrased validation finish every declared check beyond the question budget", async () => {
+    const path = "docs/specs/50-prd-one-pipeline.md";
+    const checks = Array.from({ length: 7 }, (_, index) => ({ command: `pnpm test:case-${index}`, cwd: "api" }));
+    const { ports, events } = harness([
+      call("read", "read_file", { path }),
+      ...checks.map((check, index) => call(`check-${index}`, "run_command", check)),
+      { content: "All seven named checks passed." },
+    ]);
+    ports.platform!.schemas = () => schemas(["read_file", "run_command"]);
+    ports.platform!.execute = async (name) => ({
+      data: name === "read_file"
+        ? { path, content: ["# PRD 50", "```builderforce-acceptance", JSON.stringify(checks), "```"].join("\n") }
+        : { ok: true, exitCode: 0 },
+    });
+    const result = await openRun({ task: { ...TEST_TASK, prompt: `Can you validate ${path}?` }, policy: TEST_POLICY, ports });
+    expect(result.kind).toBe("finished");
+    expect(events).toContainEqual(expect.objectContaining({ kind: "run.spec_validation", completed: 7, failed: 0, incomplete: false }));
+  });
+
   it("gives questions a final answer turn after six tool rounds even with progress levers off", async () => {
     const { ports } = harness([
       ...Array.from({ length: 6 }, (_, i) => call(`read-${i}`, i % 2 ? "remember_fact" : "read_file", { path: `src/${i}.ts` })),

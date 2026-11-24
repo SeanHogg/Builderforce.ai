@@ -53,6 +53,7 @@ import { planWork } from "./workPlan.js";
 import { beginWorkflowStage, measureWorkflow, measureWorkflowSync, workflowScope } from "./telemetry/workflowMetrics.js";
 import { workflowHooks } from "./telemetry/workflowHooks.js";
 import { freshTally, type RunTally } from "./telemetry/runTally.js";
+import { planSpecValidation } from "./policy/verify/specValidation.js";
 import { localSpendMeter, usdBudget } from "./policy/budget/usd.js";
 import { CacheServedStreak } from "./policy/tools/cacheServedStreak.js";
 
@@ -71,6 +72,8 @@ export async function runAgent(input: RunAgentInput): Promise<RunOutcome> {
   const hooks = workflowHooks(composePolicyHooks(input.modules), input);
   const state = input.resume ? resumeState(input.resume, policy, task) : freshState(policy, task);
   const resumed = Boolean(input.resume);
+  const validation = state.specValidation ?? planSpecValidation(task);
+  if (validation) state.specValidation = validation;
   if (state.pipeline === undefined && input.pipeline !== undefined) state.pipeline = input.pipeline;
   if (!state.work && !resumed) measureWorkflowSync(ports.events, workflowScope(input, state.step), 'work', () => {
     if (task.assignedWork?.length) state.work = planWork(task.assignedWork);
@@ -107,7 +110,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunOutcome> {
   if (!resumed) {
     await emit(ports.events, { kind: "run.started", step: state.step });
     // A deterministic answer found before any model call (a PreFetch tool reply) settles the run: no model is asked.
-    if (pack.answer && !state.work?.length) {
+    if (pack.answer && !state.work?.length && !state.specValidation) {
       appendRows(input, transcript, { role: "assistant", content: pack.answer });
       state.messages = transcript;
       return settle(input, hooks, state, transcript, "finished", { output: pack.answer });

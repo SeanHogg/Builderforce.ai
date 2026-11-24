@@ -77,7 +77,7 @@ Public copy states today's evidence. **Available** = shipped and repeatably veri
 
 ### Cloud and IDE agent runs `[agents]`
 
-- **The agent's diagnostics and self-validation overstate evidence (chat #300).** It read an empty capture list as healthy, marked six contracts verified from name searches alone, and wrote commit/push evidence before the calls ran (MK-50-DIAG, MK-50-SELFVAL, MK-45-SHIP). [make.md › PRD 50](./docs/specs/make.md#prd-50--one-pipeline-validation-and-diagnostic-gaps)
+- **Capture PRD 50 evidence from the updated host builds (MK-50-PIPELINE).** Record a fresh VSIX validation and reconstruct authenticated on-prem and cloud runs. Local tests cover missing and failed check evidence, context pressure, and the distinction between local work and delivery. [make.md › PRD 50](./docs/specs/make.md#prd-50--one-pipeline-validation-and-diagnostic-gaps)
 
 - **Empty server chats left by the old bind race (chat #165961 follow-up).** Before the chat bind lease, a bind racing the chat's own import left an empty server chat (e.g. 281, tenant 1) beside the real one (282). New ones can no longer be created; the existing orphans remain. Clean up empty, unmapped chats that a later chat with the same client id superseded. *Blocker: operator go-ahead to delete server rows.*
 - **Stray `chat-ticket-link` mappings cannot be deleted (chat #165961 follow-up).** The local-first store contract has no mapping-delete API, so a misfiled link's mapping (another device's link id → server id) stays after its record is retired. Readers now ignore it (derived-id ingest; tombstones scan every mapping carrying the key), but it is dead state. Add a mapping-delete to the store contract (storage-format change) and drop strays in `retireMisfiledLinks`.

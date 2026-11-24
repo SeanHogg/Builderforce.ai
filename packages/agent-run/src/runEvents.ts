@@ -7,6 +7,7 @@ import type { StallAction } from "./policy/hooks.js";
 
 /** One event of the run's trace. The trace is what every adapter must match. */
 export type RunEvent =
+  | { kind: 'run.spec_validation'; step: number; completed: number; failed: number; pending: number; unverified: number; incomplete: boolean }
   | { kind: 'run.started'; step: number }
   | { kind: 'turn.started'; step: number }
   | { kind: 'model.completed'; step: number; model?: string; usage?: ModelUsage }

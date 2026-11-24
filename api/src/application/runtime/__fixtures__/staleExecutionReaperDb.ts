@@ -31,6 +31,7 @@ export interface ProbeRow {
   park_age: unknown;
   /** Whether any pending / submitted / running execution exists (the reaper's re-signal arm). */
   live_runs?: unknown;
+  late_steer_retries?: unknown;
 }
 
 export interface ReaperFakeDbScript {
@@ -106,8 +107,10 @@ export function createReaperFakeDb(script: ReaperFakeDbScript) {
       };
       return { from: () => ({ where, innerJoin: () => ({ where }) }) };
     },
-    // Late-steer scan — no reaped run holds a pending steer in these tests.
-    selectDistinct: () => ({ from: () => ({ where: () => selectResult([]) }) }),
+    selectDistinct: (fields: Row) => {
+      if ('tenantId' in fields) script.calls.push('late-steer-retries');
+      return { from: () => ({ where: () => selectResult([]) }) };
+    },
     update: () => {
       script.calls.push('update');
       return {

@@ -1,8 +1,9 @@
 import { and, eq, inArray, isNotNull, isNull, sql, type SQL } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
-import { executions, ticketRuns } from '../../infrastructure/database/schema';
+import { executionMessages, executions, ticketRuns } from '../../infrastructure/database/schema';
 import { acrossTenants } from '../../infrastructure/database/tenantScope';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { lateSteerRetryPredicate } from './lateSteerStore';
 
 /**
  * The stale-execution reaper's idle gate.
@@ -100,6 +101,7 @@ export type StaleProbe = Record<StaleCategory, boolean>;
  */
 export interface StaleWorkProbe extends StaleProbe {
   liveRuns: boolean;
+  lateSteerRetries: boolean;
   /** MK-09-D2. Not a stale category: it must not wake the other sweeps, but it must not be skipped by the idle return. */
   droppedHandoff: boolean;
 }
@@ -145,6 +147,7 @@ export async function probeStaleWork(db: Db, p: StalePredicates): Promise<StaleW
       ${ex(executions, p.droppedHandoff)} as dropped_handoff,
       ${ex(executions, p.paused)} as paused,
       ${ex(ticketRuns, p.parkAge)} as park_age,
+      exists (select 1 from ${executionMessages} where ${lateSteerRetryPredicate()}) as late_steer_retries,
       ${ex(executions, p.liveRuns)} as live_runs`);
     const row = (result.rows[0] ?? {}) as Record<string, unknown>;
     return {
@@ -153,13 +156,14 @@ export async function probeStaleWork(db: Db, p: StalePredicates): Promise<StaleW
       queued: truthy(row.queued),
       paused: truthy(row.paused),
       parkAge: truthy(row.park_age),
+      lateSteerRetries: truthy(row.late_steer_retries),
       liveRuns: truthy(row.live_runs),
       droppedHandoff: truthy(row.dropped_handoff),
     };
   } catch (error) {
     reportCaughtError(error, { source: 'application/runtime/staleExecutionProbe.ts', operation: 'probeStaleWork', context: { logMessage: '[execution-reaper] stale probe failed; running every sweep fail-open', details: { error: error instanceof Error ? `${error.name}: ${error.message}` : String(error) } } });
     // Fail open on the sweeps; say nothing about live runs, so a broken probe cannot pin the gate open.
-    return { ...ALL_STALE, liveRuns: false, droppedHandoff: true };
+    return { ...ALL_STALE, liveRuns: false, droppedHandoff: true, lateSteerRetries: true };
   }
 }
 

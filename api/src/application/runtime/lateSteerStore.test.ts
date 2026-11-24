@@ -6,12 +6,11 @@ import { releaseLateClaim, terminalExecutionsWithSteerRetries } from './lateStee
 it('marks a released claim for retry and selects it only from terminal executions', async () => {
   const limit = vi.fn().mockResolvedValue([{ executionId: 10, tenantId: 3 }]);
   const where = vi.fn((_predicate: SQL) => ({ orderBy: () => ({ limit }) }));
-  const innerJoin = vi.fn((_table: unknown, _predicate: SQL) => ({ where }));
   const updateWhere = vi.fn().mockResolvedValue(undefined);
   const set = vi.fn((_values: { lateDetail?: string }) => ({ where: updateWhere }));
   const db = {
     update: () => ({ set }),
-    selectDistinct: () => ({ from: () => ({ innerJoin }) }),
+    selectDistinct: () => ({ from: () => ({ where }) }),
   } as never;
 
   await releaseLateClaim(db, 3, 10, [1]);
@@ -22,5 +21,5 @@ it('marks a released claim for retry and selects it only from terminal execution
   const query = dialect.sqlToQuery(where.mock.calls[0]![0]);
   expect(query.params).toEqual(expect.arrayContaining(['completed', 'cancelled', 'user', 'pending_retry']));
   expect(query.sql).toContain('"execution_messages"."late_outcome" is null');
-  expect(dialect.sqlToQuery(innerJoin.mock.calls[0]![1]).sql).toContain('"executions"."tenant_id" = "execution_messages"."tenant_id"');
+  expect(query.sql).toContain('"executions"."tenant_id" = "execution_messages"."tenant_id"');
 });

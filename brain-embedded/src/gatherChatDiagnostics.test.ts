@@ -27,6 +27,7 @@ describe('gatherChatDiagnostics', () => {
     });
     expect(d.agents).toEqual([]);
     expect(d.tickets).toEqual([]);
+    expect(formatChatDiagnostics(d).join('\n')).toContain('Linked tickets: snapshot unavailable');
     expect(d.evermind).toBeNull();
     expect(d.account?.plan).toBeNull();
     expect(d.versions?.api).toBeNull();
@@ -104,6 +105,25 @@ describe('gatherChatDiagnostics', () => {
   it('says the location was not reported rather than leaving it out', async () => {
     const d = await gatherChatDiagnostics(base);
     expect(formatChatDiagnostics(d).join('\n')).toContain('full dialogue: not reported by this surface');
+  });
+
+  it('reports trace coverage separately from empty loaded history and ticket snapshots', async () => {
+    const d = await gatherChatDiagnostics({
+      ...base,
+      trace: [
+        { ts: '', category: 'llm', label: 'llm.complete' },
+        { ts: '', category: 'tool', label: 'builtin_tickets_from_delta', result: { taskId: 7050, chatLink: { linked: true, chatId: 300 } } },
+      ],
+      readTickets: async () => [],
+      readRuns: async () => ({ linkedRunnableTickets: 0, runs: [], dispatchers: [] }),
+    });
+    const text = formatChatDiagnostics(d).join('\n');
+    expect(text).toContain('0 run step(s)');
+    expect(text).toContain('2 event(s) available outside the loaded history rows');
+    expect(text).toContain('0 in this snapshot');
+    expect(text).toContain('this snapshot shows zero linked runnable tickets and zero runs');
+    expect(text).toContain('link recorded for ticket #7050 on chat #300');
+    expect(text).toContain('The ticket is absent from the linked-ticket snapshot.');
   });
 
   it('reports "not gathered" tools when the host has no registry to report', async () => {

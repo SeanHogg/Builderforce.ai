@@ -3,11 +3,12 @@
  * what, so the mark rides the session's own message. A stall nudge (the agent's words) never carries it.
  */
 
+import { Type } from "@sinclair/typebox";
 import { describe, expect, it } from "vitest";
 import { Agent } from "../builderforce/agent-loop/agent.js";
 import { AssistantMessageEventStream } from "../builderforce/agent-loop/event-stream.js";
 import type { StreamFn } from "../builderforce/agent-loop/stream.js";
-import type { AgentMessage } from "../builderforce/model/agent-types.js";
+import type { AgentMessage, AgentTool } from "../builderforce/model/agent-types.js";
 import type { AssistantMessage, Context } from "../builderforce/model/types.js";
 
 const model = {
@@ -31,6 +32,10 @@ const textOf = (m: unknown): string => {
   return typeof c === "string" ? c : Array.isArray(c) ? c.map((b: { text?: string }) => b.text ?? "").join("") : "";
 };
 const NARRATES = "Let me search for that now.";
+const read: AgentTool = {
+  name: "read", label: "Read", description: "Read the handler", parameters: Type.Object({}),
+  execute: async () => ({ content: [{ type: "text", text: "handler" }], details: {} }),
+};
 
 function streaming(answer: (n: number, modelId: string) => AssistantMessage, seen: Context[] = [], before?: (n: number) => void): StreamFn {
   let n = 0;
@@ -46,7 +51,7 @@ function streaming(answer: (n: number, modelId: string) => AssistantMessage, see
 
 describe("the person's words are marked on the session's own messages", () => {
   it("a steer carries the mark, the agent's stall nudge does not, and the mark survives a rebuild of the rows", async () => {
-    const agent = new Agent({ model, systemPrompt: "sys" });
+    const agent = new Agent({ model, systemPrompt: "sys", tools: [read] });
     agent.streamFn = streaming((n) => (n < 2 ? say(NARRATES) : say("Done with b.ts.")), [], (n) => { if (n === 1) agent.steer(user("STEER use b.ts instead")); });
 
     const produced = await agent.prompt([user("find the handler")]);
@@ -60,14 +65,14 @@ describe("the person's words are marked on the session's own messages", () => {
 
   it("a steer survives an overflow re-attempt followed by a failover; the nudge in the same place does not", async () => {
     // attempt one: the person steers in while the model narrates, and the stall nudges it
-    const first = new Agent({ model, systemPrompt: "sys" });
+    const first = new Agent({ model, systemPrompt: "sys", tools: [read] });
     first.streamFn = streaming((n) => (n < 2 ? say(NARRATES) : say("Done with b.ts.")), [], (n) => { if (n === 1) first.steer(user("STEER use b.ts instead")); });
     const session = await first.prompt([user("find the handler")]);
 
     // attempt two: run.ts rebuilds the run from the session (long history either side of it), and the model then fails over to a small window
     const filler = (tag: string): AgentMessage[] => Array.from({ length: 30 }, (_, i) => user(`${tag} ${i} ${"x".repeat(3_000)}`));
     const seen: Context[] = [];
-    const second = new Agent({ model, systemPrompt: "sys", pickFallbackModel: (tried) => (tried.includes("p/m2") ? undefined : small) });
+    const second = new Agent({ model, systemPrompt: "sys", tools: [read], pickFallbackModel: (tried) => (tried.includes("p/m2") ? undefined : small) });
     second.replaceMessages([...filler("early"), ...session, ...filler("late")]);
     second.streamFn = streaming((_n, id) => (id === "m2" ? say("The handler is in agent-loop.ts.") : say(NARRATES)), seen);
 

@@ -145,7 +145,7 @@ export async function reapStaleExecutions(
   // ticked is failed here even when the 15-minute queued probe is empty.
   const droppedHandoffs = probe.droppedHandoff ? await reapDroppedHandoffs(db, executionRepo, stale.droppedHandoff, nowMs) : [];
   if (!anyStale(probe) && droppedHandoffs.length === 0) {
-    await retryPendingSteers(env, db, []);
+    if (probe.lateSteerRetries) await retryPendingSteers(env, db, []);
     return empty;
   }
 
@@ -374,7 +374,7 @@ export async function reapStaleExecutions(
       return [] as number[];
     });
   for (const executionId of withSteers) await settleLateSteersSafely({ env, db }, { executionId });
-  await retryPendingSteers(env, db, withSteers);
+  if (probe.lateSteerRetries) await retryPendingSteers(env, db, withSteers);
 
   // Same family of "reap a stuck state on the frequent tick": surface any ticket
   // parked on a run_workflow whose spawned workflow never settled past the

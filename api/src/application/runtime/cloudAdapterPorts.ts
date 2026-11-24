@@ -93,6 +93,7 @@ function rowFor(event: RunEvent, meta: { durationMs?: number } | undefined, serv
     case 'model.preflight':
     case 'llm.model_downgrade':
     case 'run.started':
+    case 'run.spec_validation':
     case 'run.finished':
       return { toolName: event.kind, category: event.kind.startsWith('run.') ? 'run' : 'llm', detail: { ...event }, result: event.kind };
     default:

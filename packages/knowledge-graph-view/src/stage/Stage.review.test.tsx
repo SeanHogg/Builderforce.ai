@@ -1,3 +1,4 @@
+import { RESTING_DEPTH } from './depth';
 import { StrictMode, useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { act, render, waitFor } from '@testing-library/react';
@@ -83,12 +84,12 @@ describe('the 3D (orbit) placement on the stage', () => {
         const renderer = createNoopStage();
         const { container, rerender } = render(<Stage {...props({ renderer, placement: map })} />);
         expect(container.querySelector('[data-stage-depth]')).not.toBeNull();
-        expect(renderer.depth).toBe(0);
+        expect(renderer.depth).toBe(RESTING_DEPTH);
         rerender(<Stage {...props({ renderer, placement: scene })} />);
         expect(renderer.depth).toBe(1);
         expect(container.querySelector('[data-stage-depth]')).toBeNull();
         rerender(<Stage {...props({ renderer, placement: map })} />);
-        expect(renderer.depth).toBe(0);
+        expect(renderer.depth).toBe(RESTING_DEPTH);
         expect(container.querySelector('[data-stage-depth]')).not.toBeNull();
     });
 });

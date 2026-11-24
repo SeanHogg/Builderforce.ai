@@ -4,6 +4,24 @@
 > This slice stops at the kernel. `runAgent` (`packages/agent-run/src/runAgent.ts:67`) calling `runAgentLoop` (`packages/agent-loop/src/loop.ts`) stays. Nothing inside that call is redesigned here.
 > The original design below describes the first slice above `runAgent`. The follow-up records the completed workflow.
 
+## Executable acceptance checks
+
+Run these commands independently from the listed directories, which are relative to the repository root. The validation run reads this block from the PRD and matches completed tool results by command and directory. A nonzero exit is a failed check. A missing command or unfinished job leaves its check unverified.
+
+```builderforce-acceptance
+[
+  { "cwd": ".", "command": "node scripts/check-one-execution.mjs --enforce" },
+  { "cwd": ".", "command": "node scripts/check-source-package-graph.mjs" },
+  { "cwd": "packages/agent-run", "command": "pnpm exec vitest run --maxWorkers=3 --pool=threads" },
+  { "cwd": "brain-embedded", "command": "pnpm exec vitest run src/crossAdapterConformance.test.ts src/run/runPrepared.door.test.ts src/runStore/openingSections.test.ts src/triageReport.regression.test.ts src/chatDiagnosticsReport.test.ts --maxWorkers=2 --pool=threads" },
+  { "cwd": "clients/vscode", "command": "pnpm exec vitest run src/participantRun.test.ts src/brainRunHost.entryPoint.test.ts src/hostStartGate.test.ts src/childRunSpawner.test.ts --maxWorkers=2 --pool=threads" },
+  { "cwd": "agent-runtime", "command": "pnpm exec vitest run src/conformance/crossAdapter.test.ts src/run/onPremSubagents.openRun.test.ts src/run/channelAdapter.test.ts src/run/channelOutcome.test.ts --maxWorkers=2 --pool=threads" },
+  { "cwd": "api", "command": "pnpm exec vitest run src/application/llm/chatDiagnosticsToolCatalog.test.ts src/application/runtime/cloudChildSpec.test.ts src/application/runtime/cloudChildRuns.test.ts src/application/runtime/cloudAdapter.sharedTask.test.ts --maxWorkers=2 --pool=threads" }
+]
+```
+
+The November 24 implementation adds these executable checks and records their results in Brain diagnostics. Local verification and capture requirements for the installed hosts are tracked in [Make](./make.md#prd-50--one-pipeline-validation-and-diagnostic-gaps).
+
 ## Full workflow follow-up
 
 The entry slice has been extended. openRun and the Brain preamble share routing defaults. The persisted run state carries the decision across durable ticks. Full routing is the default. Existing editor settings and explicit host configuration can opt into auto routing. Shared opening assembly renders governing instructions ahead of history. Brain and channel use that opening rather than assembling separate transcript prefixes.

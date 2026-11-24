@@ -178,3 +178,9 @@ Brain recorded-preflight, compactionSaved, fold deadline and production-door sui
 VSIX hostStartGate and childRunSpawner pass (13 tests); participant/host integration needs the built @seanhogg/builderforce-brain-embedded package, and typecheck needs vscode types. Repaired malformed newline literals in participantRun.test.ts and runSetup.ts rather than loosening their assertions. Runtime onPremSubagents passes (6 tests, including the standing-instruction assertion); runtime conformance needs @sinclair/typebox and legacy tests need @aws-sdk/client-bedrock. Cloud child tests need @neondatabase/serverless. Runtime typecheck reports unresolved dependency graphs (including @sinclair/typebox and @opentelemetry packages). API typecheck exhausted the default Node heap at about 4 GiB; neither passed.
 
 check-one-execution --enforce, the source-package graph check and git diff --check pass. No live run was traced. See PRD 50 validation for the full accounting. Validation tooling was installed outside repository manifests before the user requested no package installs; no further installs are performed.
+
+## 11. Executable PRD validation and diagnostics (2026-11-24)
+
+The shared runtime observes check results after authorized dispatch. A validation request reads the named spec, matches its declared commands and directories to completed exits, and carries background job evidence across durable ticks. Settlement emits `run.spec_validation` with completion, failure, pending and unverified counts. Brain records this event in the trace and diagnostic report. The stored-capture tool returns evidence from saved snapshots, including their age and whether the run was still in progress.
+
+See the current [acceptance record](./make.md#prd-50--one-pipeline-validation-and-diagnostic-gaps) for local results and the remaining installed-host checks.

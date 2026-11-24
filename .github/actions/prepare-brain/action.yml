@@ -1,0 +1,29 @@
+name: Prepare Brain packages
+description: Install the Brain workspace and restore or build the linked Brain packages.
+runs:
+  using: composite
+  steps:
+    - name: Install Brain workspace with frozen locks
+      shell: bash
+      run: node scripts/install-brain-workspace.mjs
+
+    - name: Hash Brain build inputs
+      id: inputs
+      shell: bash
+      run: |
+        key=$(node scripts/ensure-linked-builds.mjs --cache-key packages/brain-ui)
+        echo "key=$key" >> "$GITHUB_OUTPUT"
+
+    - name: Cache Brain build outputs
+      uses: actions/cache@v6
+      with:
+        path: |
+          brain-embedded/dist
+          packages/brain-ui/dist
+        key: brain-dist-${{ steps.inputs.outputs.key }}
+
+    - name: Build Brain packages from source
+      shell: bash
+      env:
+        NODE_OPTIONS: --max-old-space-size=6144
+      run: node scripts/ensure-linked-builds.mjs --include-roots packages/brain-ui
