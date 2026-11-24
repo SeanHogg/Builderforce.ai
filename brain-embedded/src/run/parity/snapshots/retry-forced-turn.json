@@ -18,7 +18,9 @@
     "guestTurnId": "<id:1>",
     "guestTurnInput": "remove the title from the top of the VSIX",
     "mode": "work",
-    "projectId": 11
+    "projectId": 11,
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -205,7 +207,9 @@
     "guestTurnId": "<id:1>",
     "guestTurnInput": "remove the title from the top of the VSIX",
     "mode": "work",
-    "projectId": 11
+    "projectId": 11,
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -411,7 +415,9 @@
     "guestTurnId": "<id:1>",
     "guestTurnInput": "remove the title from the top of the VSIX",
     "mode": "work",
-    "projectId": 11
+    "projectId": 11,
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -636,7 +642,9 @@
     "guestTurnId": "<id:1>",
     "guestTurnInput": "remove the title from the top of the VSIX",
     "mode": "work",
-    "projectId": 11
+    "projectId": 11,
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -880,7 +888,9 @@
     "guestTurnId": "<id:1>",
     "guestTurnInput": "remove the title from the top of the VSIX",
     "mode": "work",
-    "projectId": 11
+    "projectId": 11,
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -1143,7 +1153,9 @@
     "guestTurnId": "<id:1>",
     "guestTurnInput": "remove the title from the top of the VSIX",
     "mode": "work",
-    "projectId": 11
+    "projectId": 11,
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -1417,7 +1429,7 @@
     },
     {
      "role": "user",
-     "content": "<run-state>\nFiles already in your context this run — a file marked unchanged is still above you: do not read it again, act on it.\n- f6.ts · lines 1 · unchanged\n- f5.ts · lines 1 · unchanged\n- f4.ts · lines 1 · unchanged\n- f3.ts · lines 1 · unchanged\n- f2.ts · lines 1 · unchanged\n- f1.ts · lines 1 · unchanged\n\nProgress check (first warning): you have made 6 read-only calls in a row without changing anything. Everything you read is still in your context. If the task is a change, make the first concrete edit NOW with what you already have — do not read another file first. If it is analysis only, write the answer now.\n</run-state>"
+     "content": "<run-state>\n## brief\nProgress check (first warning): you have made 6 read-only calls in a row without changing anything. Everything you read is still in your context. If the task is a change, make the first concrete edit NOW with what you already have — do not read another file first. If it is analysis only, write the answer now.\nFiles already in your context this run — a file marked unchanged is still above you: do not read it again, act on it.\n- f6.ts · lines 1 · unchanged\n- f5.ts · lines 1 · unchanged\n- f4.ts · lines 1 · unchanged\n- f3.ts · lines 1 · unchanged\n- f2.ts · lines 1 · unchanged\n- f1.ts · lines 1 · unchanged\n</run-state>"
     }
    ],
    "metadata": {
@@ -1425,7 +1437,9 @@
     "guestTurnId": "<id:1>",
     "guestTurnInput": "remove the title from the top of the VSIX",
     "mode": "work",
-    "projectId": 11
+    "projectId": 11,
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -1726,7 +1740,9 @@
     "guestTurnId": "<id:1>",
     "guestTurnInput": "remove the title from the top of the VSIX",
     "mode": "work",
-    "projectId": 11
+    "projectId": 11,
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -2046,7 +2062,9 @@
     "guestTurnId": "<id:1>",
     "guestTurnInput": "remove the title from the top of the VSIX",
     "mode": "work",
-    "projectId": 11
+    "projectId": 11,
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -2385,7 +2403,9 @@
     "guestTurnId": "<id:1>",
     "guestTurnInput": "remove the title from the top of the VSIX",
     "mode": "work",
-    "projectId": 11
+    "projectId": 11,
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -2743,7 +2763,9 @@
     "guestTurnId": "<id:1>",
     "guestTurnInput": "remove the title from the top of the VSIX",
     "mode": "work",
-    "projectId": 11
+    "projectId": 11,
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -3120,7 +3142,9 @@
     "guestTurnId": "<id:1>",
     "guestTurnInput": "remove the title from the top of the VSIX",
     "mode": "work",
-    "projectId": 11
+    "projectId": 11,
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -3516,7 +3540,9 @@
     "guestTurnId": "<id:1>",
     "guestTurnInput": "remove the title from the top of the VSIX",
     "mode": "work",
-    "projectId": 11
+    "projectId": 11,
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -3823,7 +3849,7 @@
     },
     {
      "role": "user",
-     "content": "<run-state>\n## What this run has already established\nYour own record so far, kept by the runtime — not a new request. Build on it instead of re-deriving it: earlier results may have been compressed out of your context, but what you concluded from them still holds. Re-read a file only when it may have changed since (a command rewrote it) or you need a part you have not seen; re-running a search to verify an edit is fine. If you already know where the change goes, make it.\n\nRead:\n- f1.ts\n- f10.ts\n- f11.ts\n- f12.ts\n- f2.ts\n- f3.ts\n- f4.ts\n- f5.ts\n- f6.ts\n- f7.ts\n- f8.ts\n- f9.ts\n\nFiles already in your context this run — a file marked unchanged is still above you: do not read it again, act on it.\n- f12.ts · lines 1 · unchanged\n- f11.ts · lines 1 · unchanged\n- f10.ts · lines 1 · unchanged\n- f9.ts · lines 1 · unchanged\n- f8.ts · lines 1 · unchanged\n- f7.ts · lines 1 · unchanged\n- f6.ts · lines 1 · unchanged\n- f5.ts · lines 1 · unchanged\n- f4.ts · lines 1 · unchanged\n- f3.ts · lines 1 · unchanged\n- f2.ts · lines 1 · unchanged\n- f1.ts · lines 1 · unchanged\n\nPROGRESS CHECK 2: you have made 6 read-only calls in a row without changing anything. Everything you read is still in your context. If the task is a change, make the first concrete edit NOW with what you already have — do not read another file first. If it is analysis only, write the answer now. Call hand_off NOW. summary = the research for the coders: everything you and any research sub-agents established that the change needs (files, functions, what they do today, decisions, traps). tasks = each one standalone: the files, the change, and how to know it is done. The coding agents start from exactly what you write here; they do not see this conversation.\n</run-state>"
+     "content": "<run-state>\n## What this run has already established\nYour own record so far, kept by the runtime — not a new request. Build on it instead of re-deriving it: earlier results may have been compressed out of your context, but what you concluded from them still holds. Re-read a file only when it may have changed since (a command rewrote it) or you need a part you have not seen; re-running a search to verify an edit is fine. If you already know where the change goes, make it.\n\nRead:\n- f1.ts\n- f10.ts\n- f11.ts\n- f12.ts\n- f2.ts\n- f3.ts\n- f4.ts\n- f5.ts\n- f6.ts\n- f7.ts\n- f8.ts\n- f9.ts\n\nFiles already in your context this run — a file marked unchanged is still above you: do not read it again, act on it.\n- f12.ts · lines 1 · unchanged\n- f11.ts · lines 1 · unchanged\n- f10.ts · lines 1 · unchanged\n- f9.ts · lines 1 · unchanged\n- f8.ts · lines 1 · unchanged\n- f7.ts · lines 1 · unchanged\n- f6.ts · lines 1 · unchanged\n- f5.ts · lines 1 · unchanged\n- f4.ts · lines 1 · unchanged\n- f3.ts · lines 1 · unchanged\n- f2.ts · lines 1 · unchanged\n- f1.ts · lines 1 · unchanged\n</run-state>"
     }
    ],
    "metadata": {
@@ -3831,7 +3857,9 @@
     "guestTurnId": "<id:1>",
     "guestTurnInput": "remove the title from the top of the VSIX",
     "mode": "work",
-    "projectId": 11
+    "projectId": 11,
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -4168,7 +4196,9 @@
     "guestTurnId": "<id:1>",
     "guestTurnInput": "remove the title from the top of the VSIX",
     "mode": "work",
-    "projectId": 11
+    "projectId": 11,
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -4268,6 +4298,45 @@
    "content": "",
    "metadata": {
     "kind": "step",
+    "category": "message",
+    "label": "run.pipeline_route",
+    "args": {
+     "route": "full",
+     "score": 0.4
+    },
+    "result": "Full pipeline: routing is set to always; score 0.4",
+    "isError": false,
+    "ts": "<iso>"
+   },
+   "learned": false,
+   "eventKey": "step:<id:2>"
+  },
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
+    "category": "message",
+    "label": "run.routed",
+    "args": {
+     "step": 0,
+     "route": "full",
+     "score": 0.4
+    },
+    "result": "The run was routed full (route score 0.4).",
+    "isError": false,
+    "ts": "<iso>"
+   },
+   "learned": false,
+   "eventKey": "step:<id:3>"
+  },
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
     "category": "llm",
     "label": "llm.complete",
     "args": {
@@ -4293,7 +4362,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:2>"
+   "eventKey": "step:<id:4>"
   },
   {
    "chatId": 7001,
@@ -4316,7 +4385,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:3>"
+   "eventKey": "step:<id:5>"
   },
   {
    "chatId": 7001,
@@ -4349,7 +4418,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:4>"
+   "eventKey": "step:<id:6>"
   },
   {
    "chatId": 7001,
@@ -4372,7 +4441,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:5>"
+   "eventKey": "step:<id:7>"
   },
   {
    "chatId": 7001,
@@ -4405,7 +4474,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:6>"
+   "eventKey": "step:<id:8>"
   },
   {
    "chatId": 7001,
@@ -4428,7 +4497,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:7>"
+   "eventKey": "step:<id:9>"
   },
   {
    "chatId": 7001,
@@ -4461,7 +4530,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:8>"
+   "eventKey": "step:<id:10>"
   },
   {
    "chatId": 7001,
@@ -4484,7 +4553,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:9>"
+   "eventKey": "step:<id:11>"
   },
   {
    "chatId": 7001,
@@ -4517,7 +4586,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:10>"
+   "eventKey": "step:<id:12>"
   },
   {
    "chatId": 7001,
@@ -4540,7 +4609,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:11>"
+   "eventKey": "step:<id:13>"
   },
   {
    "chatId": 7001,
@@ -4573,7 +4642,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:12>"
+   "eventKey": "step:<id:14>"
   },
   {
    "chatId": 7001,
@@ -4596,7 +4665,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:13>"
+   "eventKey": "step:<id:15>"
   },
   {
    "chatId": 7001,
@@ -4617,7 +4686,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:14>"
+   "eventKey": "step:<id:16>"
   },
   {
    "chatId": 7001,
@@ -4650,7 +4719,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:15>"
+   "eventKey": "step:<id:17>"
   },
   {
    "chatId": 7001,
@@ -4673,7 +4742,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:16>"
+   "eventKey": "step:<id:18>"
   },
   {
    "chatId": 7001,
@@ -4706,7 +4775,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:17>"
+   "eventKey": "step:<id:19>"
   },
   {
    "chatId": 7001,
@@ -4729,7 +4798,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:18>"
+   "eventKey": "step:<id:20>"
   },
   {
    "chatId": 7001,
@@ -4762,7 +4831,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:19>"
+   "eventKey": "step:<id:21>"
   },
   {
    "chatId": 7001,
@@ -4785,7 +4854,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:20>"
+   "eventKey": "step:<id:22>"
   },
   {
    "chatId": 7001,
@@ -4818,7 +4887,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:21>"
+   "eventKey": "step:<id:23>"
   },
   {
    "chatId": 7001,
@@ -4841,7 +4910,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:22>"
+   "eventKey": "step:<id:24>"
   },
   {
    "chatId": 7001,
@@ -4874,7 +4943,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:23>"
+   "eventKey": "step:<id:25>"
   },
   {
    "chatId": 7001,
@@ -4897,7 +4966,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:24>"
+   "eventKey": "step:<id:26>"
   },
   {
    "chatId": 7001,
@@ -4930,7 +4999,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:25>"
+   "eventKey": "step:<id:27>"
   },
   {
    "chatId": 7001,
@@ -4953,7 +5022,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:26>"
+   "eventKey": "step:<id:28>"
   },
   {
    "chatId": 7001,
@@ -4974,7 +5043,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:27>"
+   "eventKey": "step:<id:29>"
   },
   {
    "chatId": 7001,
@@ -4995,7 +5064,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:28>"
+   "eventKey": "step:<id:30>"
   },
   {
    "chatId": 7001,
@@ -5014,7 +5083,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:29>"
+   "eventKey": "step:<id:31>"
   },
   {
    "chatId": 7001,
@@ -5047,7 +5116,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:30>"
+   "eventKey": "step:<id:32>"
   },
   {
    "chatId": 7001,
@@ -5065,7 +5134,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:31>"
+   "eventKey": "step:<id:33>"
   },
   {
    "chatId": 7001,
@@ -5088,7 +5157,7 @@
     "category": "message",
     "label": "llm.role_handoff",
     "args": {
-     "step": 12,
+     "step": 13,
      "tasks": 1,
      "via": "hand_off"
     },
@@ -5097,7 +5166,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:32>"
+   "eventKey": "step:<id:34>"
   },
   {
    "chatId": 7001,
@@ -5124,7 +5193,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:33>"
+   "eventKey": "step:<id:35>"
   },
   {
    "chatId": 7001,
@@ -5144,7 +5213,7 @@
     "category": "message",
     "label": "hand_off.mode",
     "args": {
-     "step": 12,
+     "step": 13,
      "mode": "inline",
      "parallelTasks": [],
      "inlineTasks": [
@@ -5157,7 +5226,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:34>"
+   "eventKey": "step:<id:36>"
   },
   {
    "chatId": 7001,
@@ -5190,7 +5259,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:35>"
+   "eventKey": "step:<id:37>"
   },
   {
    "chatId": 7001,
@@ -5208,7 +5277,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:36>"
+   "eventKey": "step:<id:38>"
   },
   {
    "chatId": 7001,
@@ -5224,6 +5293,27 @@
  ],
  "trace": {
   "7001": [
+   {
+    "ts": "<iso>",
+    "category": "message",
+    "label": "run.pipeline_route",
+    "args": {
+     "route": "full",
+     "score": 0.4
+    },
+    "result": "Full pipeline: routing is set to always; score 0.4"
+   },
+   {
+    "ts": "<iso>",
+    "category": "message",
+    "label": "run.routed",
+    "args": {
+     "step": 0,
+     "route": "full",
+     "score": 0.4
+    },
+    "result": "The run was routed full (route score 0.4)."
+   },
    {
     "ts": "<iso>",
     "category": "llm",
@@ -5788,7 +5878,7 @@
     "category": "message",
     "label": "llm.role_handoff",
     "args": {
-     "step": 12,
+     "step": 13,
      "tasks": 1,
      "via": "hand_off"
     },
@@ -5818,7 +5908,7 @@
     "category": "message",
     "label": "hand_off.mode",
     "args": {
-     "step": 12,
+     "step": 13,
      "mode": "inline",
      "parallelTasks": [],
      "inlineTasks": [
@@ -6699,7 +6789,9 @@
     "verify": "not-run",
     "firstSpawnTurn": null,
     "modelPreflight": "ok",
-    "progressTrips": {},
+    "progressTrips": {
+     "read_only_streak": 2
+    },
     "clientRunId": "ide:7001:<epoch>",
     "model": "fake-model",
     "source": "external",

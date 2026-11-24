@@ -50,21 +50,22 @@ describe('R7: pins follow what the run called', () => {
 });
 
 describe('the Brain ranks a large catalog its own way', () => {
-  // Every tool matches the request a little, in a different way, so which 64 of the 80 are shown is decided by the RANKING alone.
+  // Every tool matches the request a little, in a different way, so ranking decides which subset of the 80 the role advertises.
   const WORDS = ['list', 'open', 'tickets', 'backlog'];
   const RANKED = Array.from({ length: 80 }, (_, i) => {
     const mask = (i % 15) + 1;
     const matched = WORDS.filter((_w, b) => (mask >> b) & 1);
-    return spec(i % 7 === 0 ? `ticket_tool_${i}` : `tool_${i}`, `${matched.join(' ')} handler number ${i}`);
+    return spec(i % 7 === 0 ? `ticket_tool_${i}` : `tool_${i}`, `${matched.join(' ')} handler number ${i}${i === 74 ? ' zephyr' : ''}`);
   });
 
   it('the agent shows the menu the loop shows, ranked by the Brain ranker', async () => {
-    const s: Scenario = { key: 9106, script: () => [say('Hello.')], request: () => ({ tools: RANKED, userTurn: 'list my open tickets in the backlog' }) };
+    const s: Scenario = { key: 9106, script: () => [say('Hello.')], request: () => ({ tools: RANKED, userTurn: 'list my open tickets in the backlog for zephyr' }) };
     const run = await runOn(s);
-    const firstSixtyFour = RANKED.slice(0, 64).map((t) => t.function.name);
+    const ranked = run.wire[0]!.tools.filter((t) => t.startsWith('tool_') || t.startsWith('ticket_tool_'));
+    const head = RANKED.slice(0, ranked.length).map((t) => t.function.name);
     // The request decides the menu: it is not the head of the catalog.
-    expect(run.wire[0]!.tools.filter((t) => t.startsWith('tool_') || t.startsWith('ticket_tool_'))).not.toEqual(firstSixtyFour);
-    // `tool_74` sits past the head of the catalog and matches all four words of the request in its description (mask 15), so it ranks in.
+    expect(ranked).not.toEqual(head);
+    // `tool_74` sits past the head of the catalog and matches all four shared words and the unique keyword, so it ranks in.
     expect(run.wire[0]!.tools).toContain('tool_74');
   });
 });
@@ -107,7 +108,7 @@ describe('R9: the router and the selection step', () => {
     const s: Scenario = {
       key: 9105,
       script: () => [calls({ name: 'edit_file', args: { path: 'a.ts', old: 'a', new: 'b' } }), say('Done.')],
-      request: () => ({ tools: catalog, model: 'pin-1', modelStrict: true }),
+      request: () => ({ tools: catalog, model: 'pin-1', modelStrict: true, userTurn: 'hand off the plan and tasks to the coder, then edit the file' }),
     };
     const run = await runOn(s);
     expect(run.wire[0]!.tools).toContain('hand_off');

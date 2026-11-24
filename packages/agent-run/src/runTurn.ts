@@ -306,6 +306,7 @@ export async function synthesizeFinal(
   });
 
   const raw = completion.content ?? "";
+  if (why.failureStreak !== undefined && !raw.trim()) return null;
   const output = hooks.stall.settle ? hooks.stall.settle(pctx, raw) : raw.trim();
   if (!output) return null;
   appendRows(input, transcript, ask, { role: "assistant", content: output });

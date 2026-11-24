@@ -18,7 +18,9 @@
     "chatId": 7001,
     "guestTurnId": "<id:1>",
     "guestTurnInput": "explain a.ts",
-    "mode": "work"
+    "mode": "work",
+    "pipelineRoute": "quick",
+    "routeScore": 0.15
    },
    "tools": [
     {
@@ -79,72 +81,54 @@
        ]
       }
      }
-    },
-    {
-     "type": "function",
-     "function": {
-      "name": "hand_off",
-      "description": "OPTIONAL — for work that splits into SEVERAL separate tasks. A change you can already make (a bug fix, a small refactor, a copy or style change, anything a few edits cover) you simply MAKE now: your first edit moves the run into coding by itself, no hand_off needed, so never stall in analysis waiting to call this. When the work genuinely breaks into multiple tasks, call this ONCE with them instead of editing. Each task becomes a ticket linked to this chat. Tasks that own separate files run side by side, one coding agent each, and each reports back to this chat; otherwise the coding model implements them in order. Every task must stand alone — the agent that implements it sees none of this conversation: say what to change, where, and how to know it is done.",
-      "parameters": {
-       "type": "object",
-       "properties": {
-        "summary": {
-         "type": "string",
-         "description": "The research, summarised for the coders — they see nothing else. Everything your analysis AND any research sub-agents reported that the change needs: the files and functions involved, what they do today, the decisions made and why, and the traps found. Facts, not a recap of what you did."
-        },
-        "tasks": {
-         "type": "array",
-         "minItems": 1,
-         "maxItems": 12,
-         "items": {
-          "type": "object",
-          "properties": {
-           "title": {
-            "type": "string",
-            "description": "Ticket title, e.g. \"Rebuild UserDetailDrawer on SlideOutPanel\"."
-           },
-           "brief": {
-            "type": "string",
-            "description": "The complete, standalone instruction: files, the change, the primitives to use."
-           },
-           "paths": {
-            "type": "array",
-            "items": {
-             "type": "string"
-            },
-            "description": "Workspace-relative files or directories this task OWNS. Tasks with disjoint paths run in parallel."
-           },
-           "acceptance": {
-            "type": "string",
-            "description": "How to know it is done (tests, behaviour)."
-           },
-           "constraints": {
-            "type": "string",
-            "description": "What the coder must NOT do: files or modules to leave alone, primitives to reuse rather than copy, files not to grow, behaviour that must not change."
-           }
-          },
-          "required": [
-           "title",
-           "brief"
-          ]
-         }
-        }
-       },
-       "required": [
-        "summary",
-        "tasks"
-       ]
-      }
-     }
     }
    ],
    "tool_choice": "auto",
    "model": "xai-oauth/grok-4.5",
-   "role": "plan",
+   "role": "code",
    "maxTokens": 16384
   }
  ],
  "persisted": [
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
+    "category": "message",
+    "label": "run.pipeline_route",
+    "args": {
+     "route": "quick",
+     "score": 0.15
+    },
+    "result": "Quick pass: the user asks a question; score 0.15 (question only, analysis, files named)",
+    "isError": false,
+    "ts": "<iso>"
+   },
+   "learned": false,
+   "eventKey": "step:<id:2>"
+  },
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
+    "category": "message",
+    "label": "run.routed",
+    "args": {
+     "step": 0,
+     "route": "quick",
+     "score": 0.15
+    },
+    "result": "The run was routed quick (route score 0.15).",
+    "isError": false,
+    "ts": "<iso>"
+   },
+   "learned": false,
+   "eventKey": "step:<id:3>"
+  },
   {
    "chatId": 7001,
    "role": "tool",
@@ -163,11 +147,32 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:2>"
+   "eventKey": "step:<id:4>"
   }
  ],
  "trace": {
   "7001": [
+   {
+    "ts": "<iso>",
+    "category": "message",
+    "label": "run.pipeline_route",
+    "args": {
+     "route": "quick",
+     "score": 0.15
+    },
+    "result": "Quick pass: the user asks a question; score 0.15 (question only, analysis, files named)"
+   },
+   {
+    "ts": "<iso>",
+    "category": "message",
+    "label": "run.routed",
+    "args": {
+     "step": 0,
+     "route": "quick",
+     "score": 0.15
+    },
+    "result": "The run was routed quick (route score 0.15)."
+   },
    {
     "ts": "<iso>",
     "category": "error",

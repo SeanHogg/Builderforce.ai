@@ -17,7 +17,9 @@
     "chatId": 7001,
     "guestTurnId": "<id:1>",
     "guestTurnInput": "read everything",
-    "mode": "work"
+    "mode": "work",
+    "pipelineRoute": "full",
+    "routeScore": 0.15
    },
    "tools": [
     {
@@ -177,7 +179,9 @@
     "chatId": 7001,
     "guestTurnId": "<id:1>",
     "guestTurnInput": "read everything",
-    "mode": "work"
+    "mode": "work",
+    "pipelineRoute": "full",
+    "routeScore": 0.15
    },
    "tools": [
     {
@@ -356,7 +360,9 @@
     "chatId": 7001,
     "guestTurnId": "<id:1>",
     "guestTurnInput": "read everything",
-    "mode": "work"
+    "mode": "work",
+    "pipelineRoute": "full",
+    "routeScore": 0.15
    },
    "tools": [
     {
@@ -554,7 +560,9 @@
     "chatId": 7001,
     "guestTurnId": "<id:1>",
     "guestTurnInput": "read everything",
-    "mode": "work"
+    "mode": "work",
+    "pipelineRoute": "full",
+    "routeScore": 0.15
    },
    "tools": [
     {
@@ -771,7 +779,9 @@
     "chatId": 7001,
     "guestTurnId": "<id:1>",
     "guestTurnInput": "read everything",
-    "mode": "work"
+    "mode": "work",
+    "pipelineRoute": "full",
+    "routeScore": 0.15
    },
    "tools": [
     {
@@ -896,6 +906,8 @@
    "maxTokens": 16384
   },
   {
+   "prompt_cache_key": "brain:7001",
+   "conversationKey": 7001,
    "messages": [
     {
      "role": "system",
@@ -1009,8 +1021,11 @@
     "chatId": 7001,
     "guestTurnId": "<id:1>",
     "guestTurnInput": "read everything",
-    "mode": "work"
+    "mode": "work",
+    "pipelineRoute": "full",
+    "routeScore": 0.15
    },
+   "role": "chat",
    "maxTokens": 4096
   }
  ],
@@ -1021,28 +1036,14 @@
    "content": "",
    "metadata": {
     "kind": "step",
-    "category": "llm",
-    "label": "llm.complete",
+    "category": "message",
+    "label": "run.pipeline_route",
     "args": {
-     "model": "fake-model",
-     "requestedModel": "default",
-     "step": 0,
-     "role": "plan",
-     "toolCalls": 1,
-     "argBytes": 16,
-     "advertisedTools": 3,
-     "catalogTools": 3
+     "route": "full",
+     "score": 0.15
     },
-    "result": "1 tool call(s) · 0 chars · finish: tool_calls · prompt 10 tok",
+    "result": "Full pipeline: routing is set to always; score 0.15 (question only)",
     "isError": false,
-    "durationMs": "<ms>",
-    "usage": {
-     "prompt": 10,
-     "completion": 4
-    },
-    "finishReason": "tool_calls",
-    "textChars": 0,
-    "ttftMs": "<ms>",
     "ts": "<iso>"
    },
    "learned": false,
@@ -1054,18 +1055,15 @@
    "content": "",
    "metadata": {
     "kind": "step",
-    "category": "tool",
-    "label": "read_file",
+    "category": "message",
+    "label": "run.routed",
     "args": {
-     "path": "f1.ts"
+     "step": 0,
+     "route": "full",
+     "score": 0.15
     },
-    "result": {
-     "ok": false,
-     "error": "EACCES: permission denied"
-    },
-    "isError": true,
-    "durationMs": "<ms>",
-    "resultBytes": 48,
+    "result": "The run was routed full (route score 0.15).",
+    "isError": false,
     "ts": "<iso>"
    },
    "learned": false,
@@ -1082,7 +1080,7 @@
     "args": {
      "model": "fake-model",
      "requestedModel": "default",
-     "step": 1,
+     "step": 0,
      "role": "plan",
      "toolCalls": 1,
      "argBytes": 16,
@@ -1113,7 +1111,7 @@
     "category": "tool",
     "label": "read_file",
     "args": {
-     "path": "f2.ts"
+     "path": "f1.ts"
     },
     "result": {
      "ok": false,
@@ -1126,6 +1124,62 @@
    },
    "learned": false,
    "eventKey": "step:<id:5>"
+  },
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
+    "category": "llm",
+    "label": "llm.complete",
+    "args": {
+     "model": "fake-model",
+     "requestedModel": "default",
+     "step": 1,
+     "role": "plan",
+     "toolCalls": 1,
+     "argBytes": 16,
+     "advertisedTools": 3,
+     "catalogTools": 3
+    },
+    "result": "1 tool call(s) · 0 chars · finish: tool_calls · prompt 10 tok",
+    "isError": false,
+    "durationMs": "<ms>",
+    "usage": {
+     "prompt": 10,
+     "completion": 4
+    },
+    "finishReason": "tool_calls",
+    "textChars": 0,
+    "ttftMs": "<ms>",
+    "ts": "<iso>"
+   },
+   "learned": false,
+   "eventKey": "step:<id:6>"
+  },
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
+    "category": "tool",
+    "label": "read_file",
+    "args": {
+     "path": "f2.ts"
+    },
+    "result": {
+     "ok": false,
+     "error": "EACCES: permission denied"
+    },
+    "isError": true,
+    "durationMs": "<ms>",
+    "resultBytes": 48,
+    "ts": "<iso>"
+   },
+   "learned": false,
+   "eventKey": "step:<id:7>"
   },
   {
    "chatId": 7001,
@@ -1158,7 +1212,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:6>"
+   "eventKey": "step:<id:8>"
   },
   {
    "chatId": 7001,
@@ -1181,7 +1235,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:7>"
+   "eventKey": "step:<id:9>"
   },
   {
    "chatId": 7001,
@@ -1214,7 +1268,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:8>"
+   "eventKey": "step:<id:10>"
   },
   {
    "chatId": 7001,
@@ -1237,7 +1291,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:9>"
+   "eventKey": "step:<id:11>"
   },
   {
    "chatId": 7001,
@@ -1270,7 +1324,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:10>"
+   "eventKey": "step:<id:12>"
   },
   {
    "chatId": 7001,
@@ -1293,7 +1347,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:11>"
+   "eventKey": "step:<id:13>"
   },
   {
    "chatId": 7001,
@@ -1307,11 +1361,13 @@
      "model": "fake-model",
      "requestedModel": "default",
      "step": 5,
+     "role": "chat",
      "toolCalls": 0,
+     "advertisedTools": 0,
      "forcedFinish": true,
-     "failureStreak": 5
+     "catalogTools": 3
     },
-    "result": "forced final synthesis (5 consecutive tool failures stopped the run) · 57 chars · finish: stop",
+    "result": "0 tool call(s) · 57 chars · finish: stop · prompt 10 tok",
     "isError": false,
     "durationMs": "<ms>",
     "usage": {
@@ -1324,7 +1380,25 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:12>"
+   "eventKey": "step:<id:14>"
+  },
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
+    "category": "message",
+    "label": "agent.message",
+    "args": {
+     "step": 5
+    },
+    "result": "I could not read anything: every call failed with EACCES.",
+    "isError": false,
+    "ts": "<iso>"
+   },
+   "learned": false,
+   "eventKey": "step:<id:15>"
   },
   {
    "chatId": 7001,
@@ -1354,11 +1428,32 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:13>"
+   "eventKey": "step:<id:16>"
   }
  ],
  "trace": {
   "7001": [
+   {
+    "ts": "<iso>",
+    "category": "message",
+    "label": "run.pipeline_route",
+    "args": {
+     "route": "full",
+     "score": 0.15
+    },
+    "result": "Full pipeline: routing is set to always; score 0.15 (question only)"
+   },
+   {
+    "ts": "<iso>",
+    "category": "message",
+    "label": "run.routed",
+    "args": {
+     "step": 0,
+     "route": "full",
+     "score": 0.15
+    },
+    "result": "The run was routed full (route score 0.15)."
+   },
    {
     "ts": "<iso>",
     "category": "llm",
@@ -1569,9 +1664,11 @@
      "model": "fake-model",
      "requestedModel": "default",
      "step": 5,
+     "role": "chat",
      "toolCalls": 0,
+     "advertisedTools": 0,
      "forcedFinish": true,
-     "failureStreak": 5
+     "catalogTools": 3
     },
     "usage": {
      "prompt": 10,
@@ -1579,7 +1676,16 @@
     },
     "finishReason": "stop",
     "textChars": 57,
-    "result": "forced final synthesis (5 consecutive tool failures stopped the run) · 57 chars · finish: stop"
+    "result": "0 tool call(s) · 57 chars · finish: stop · prompt 10 tok"
+   },
+   {
+    "ts": "<iso>",
+    "category": "message",
+    "label": "agent.message",
+    "args": {
+     "step": 5
+    },
+    "result": "I could not read anything: every call failed with EACCES."
    },
    {
     "ts": "<iso>",
@@ -1741,6 +1847,20 @@
      "errorAction": null,
      "confirm": null,
      "activity": "thinking:between-turns#4"
+    },
+    {
+     "running": true,
+     "error": "",
+     "errorAction": null,
+     "confirm": null,
+     "activity": "thinking#5"
+    },
+    {
+     "running": true,
+     "error": "",
+     "errorAction": null,
+     "confirm": null,
+     "activity": "writing#5"
     },
     {
      "running": false,
@@ -1920,6 +2040,10 @@
       "tool_call_id": "c5"
      },
      {
+      "role": "user",
+      "content": "This turn was stopped because your last 5 tool calls all failed. Do NOT call any more tools. Answer the user now, in prose, using what you have already gathered — say what you completed, quote what the failing calls answered, and state plainly what is blocking you and what you need (a different argument, a permission, a decision) so the next turn can succeed."
+     },
+     {
       "role": "assistant",
       "content": "I could not read anything: every call failed with EACCES."
      }
@@ -1937,8 +2061,8 @@
  "usage": {
   "7001": {
    "tally": {
-    "promptTokens": 50,
-    "completionTokens": 20,
+    "promptTokens": 60,
+    "completionTokens": 24,
     "model": "fake-model"
    },
    "codeModel": null,
@@ -1962,7 +2086,7 @@
     "entryPoint": "web",
     "toolCalls": 5,
     "toolErrors": 5,
-    "tokens": 70,
+    "tokens": 84,
     "cacheReadTokens": 0,
     "compactions": 0,
     "stallRecoveries": 0,
@@ -1979,7 +2103,7 @@
     "clientRunId": "ide:7001:<epoch>",
     "model": "fake-model",
     "source": "external",
-    "terminalStatus": "failed",
+    "terminalStatus": "completed",
     "steps": 6,
     "routingSignal": false
    }

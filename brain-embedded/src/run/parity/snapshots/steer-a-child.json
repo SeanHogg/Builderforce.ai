@@ -17,7 +17,9 @@
     "chatId": 7001,
     "guestTurnId": "<id:1>",
     "guestTurnInput": "check the auth flows using a sub-agent",
-    "mode": "work"
+    "mode": "work",
+    "pipelineRoute": "full",
+    "routeScore": 0.21
    },
    "tools": [
     {
@@ -386,7 +388,9 @@
     "chatId": 7001,
     "guestTurnId": "<id:1>",
     "guestTurnInput": "check the auth flows using a sub-agent",
-    "mode": "work"
+    "mode": "work",
+    "pipelineRoute": "full",
+    "routeScore": 0.21
    },
    "tools": [
     {
@@ -529,6 +533,78 @@
    "content": "",
    "metadata": {
     "kind": "step",
+    "category": "message",
+    "label": "run.pipeline_route",
+    "args": {
+     "route": "full",
+     "score": 0.21
+    },
+    "result": "Full pipeline: routing is set to always; score 0.21 (question only, backend_api)",
+    "isError": false,
+    "ts": "<iso>"
+   },
+   "learned": false,
+   "eventKey": "step:<id:3>"
+  },
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
+    "category": "message",
+    "label": "run.routed",
+    "args": {
+     "step": 0,
+     "route": "full",
+     "score": 0.21
+    },
+    "result": "The run was routed full (route score 0.21).",
+    "isError": false,
+    "ts": "<iso>"
+   },
+   "learned": false,
+   "eventKey": "step:<id:4>"
+  },
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
+    "category": "llm",
+    "label": "llm.complete",
+    "args": {
+     "model": "fake-model",
+     "requestedModel": "default",
+     "step": 0,
+     "role": "plan",
+     "toolCalls": 1,
+     "argBytes": 53,
+     "advertisedTools": 4,
+     "catalogTools": 4
+    },
+    "result": "1 tool call(s) · 0 chars · finish: tool_calls · prompt 10 tok",
+    "isError": false,
+    "durationMs": "<ms>",
+    "usage": {
+     "prompt": 10,
+     "completion": 4
+    },
+    "finishReason": "tool_calls",
+    "textChars": 0,
+    "ttftMs": "<ms>",
+    "ts": "<iso>"
+   },
+   "learned": false,
+   "eventKey": "step:<id:5>"
+  },
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
     "category": "llm",
     "label": "llm.complete",
     "args": {
@@ -565,7 +641,7 @@
     }
    },
    "learned": false,
-   "eventKey": "step:<id:3>"
+   "eventKey": "step:<id:6>"
   },
   {
    "chatId": 7001,
@@ -594,7 +670,7 @@
     }
    },
    "learned": false,
-   "eventKey": "step:<id:4>"
+   "eventKey": "step:<id:7>"
   },
   {
    "chatId": 7001,
@@ -624,7 +700,7 @@
     }
    },
    "learned": false,
-   "eventKey": "step:<id:5>"
+   "eventKey": "step:<id:8>"
   },
   {
    "chatId": 7001,
@@ -644,7 +720,7 @@
     }
    },
    "learned": false,
-   "eventKey": "steer:<id:6>"
+   "eventKey": "steer:<id:9>"
   },
   {
    "chatId": 7001,
@@ -710,7 +786,7 @@
     }
    },
    "learned": false,
-   "eventKey": "step:<id:7>"
+   "eventKey": "step:<id:10>"
   },
   {
    "chatId": 7001,
@@ -739,7 +815,7 @@
     }
    },
    "learned": false,
-   "eventKey": "step:<id:8>"
+   "eventKey": "step:<id:11>"
   },
   {
    "chatId": 7001,
@@ -769,39 +845,6 @@
    "content": "",
    "metadata": {
     "kind": "step",
-    "category": "llm",
-    "label": "llm.complete",
-    "args": {
-     "model": "fake-model",
-     "requestedModel": "default",
-     "step": 0,
-     "role": "plan",
-     "toolCalls": 1,
-     "argBytes": 53,
-     "advertisedTools": 4,
-     "catalogTools": 4
-    },
-    "result": "1 tool call(s) · 0 chars · finish: tool_calls · prompt 10 tok",
-    "isError": false,
-    "durationMs": "<ms>",
-    "usage": {
-     "prompt": 10,
-     "completion": 4
-    },
-    "finishReason": "tool_calls",
-    "textChars": 0,
-    "ttftMs": "<ms>",
-    "ts": "<iso>"
-   },
-   "learned": false,
-   "eventKey": "step:<id:9>"
-  },
-  {
-   "chatId": 7001,
-   "role": "tool",
-   "content": "",
-   "metadata": {
-    "kind": "step",
     "category": "tool",
     "label": "spawn_agent",
     "args": {
@@ -819,7 +862,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:10>"
+   "eventKey": "step:<id:12>"
   },
   {
    "chatId": 7001,
@@ -852,7 +895,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:11>"
+   "eventKey": "step:<id:13>"
   },
   {
    "chatId": 7001,
@@ -870,7 +913,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:12>"
+   "eventKey": "step:<id:14>"
   },
   {
    "chatId": 7001,
@@ -886,6 +929,27 @@
  ],
  "trace": {
   "7001": [
+   {
+    "ts": "<iso>",
+    "category": "message",
+    "label": "run.pipeline_route",
+    "args": {
+     "route": "full",
+     "score": 0.21
+    },
+    "result": "Full pipeline: routing is set to always; score 0.21 (question only, backend_api)"
+   },
+   {
+    "ts": "<iso>",
+    "category": "message",
+    "label": "run.routed",
+    "args": {
+     "step": 0,
+     "route": "full",
+     "score": 0.21
+    },
+    "result": "The run was routed full (route score 0.21)."
+   },
    {
     "ts": "<iso>",
     "category": "llm",

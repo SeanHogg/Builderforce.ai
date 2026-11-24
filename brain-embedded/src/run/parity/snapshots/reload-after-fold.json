@@ -110,6 +110,8 @@
     "guestTurnId": "<id:1>",
     "guestTurnInput": "First question after the history.",
     "mode": "work",
+    "pipelineRoute": "full",
+    "routeScore": 0.12,
     "memory": {
      "trimmedTokens": 24653,
      "recallTokens": 0
@@ -203,13 +205,54 @@
     "chatId": 7001,
     "guestTurnId": "<id:2>",
     "guestTurnInput": "Question after the reload.",
-    "mode": "work"
+    "mode": "work",
+    "pipelineRoute": "full",
+    "routeScore": 0.12
    },
    "role": "chat",
    "maxTokens": 4096
   }
  ],
  "persisted": [
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
+    "category": "message",
+    "label": "run.pipeline_route",
+    "args": {
+     "route": "full",
+     "score": 0.12
+    },
+    "result": "Full pipeline: routing is set to always; score 0.12 (question only, follow-up)",
+    "isError": false,
+    "ts": "<iso>"
+   },
+   "learned": false,
+   "eventKey": "step:<id:3>"
+  },
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
+    "category": "message",
+    "label": "run.routed",
+    "args": {
+     "step": 0,
+     "route": "full",
+     "score": 0.12
+    },
+    "result": "The run was routed full (route score 0.12).",
+    "isError": false,
+    "ts": "<iso>"
+   },
+   "learned": false,
+   "eventKey": "step:<id:4>"
+  },
   {
    "chatId": 7001,
    "role": "tool",
@@ -226,7 +269,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:3>"
+   "eventKey": "step:<id:5>"
   },
   {
    "chatId": 7001,
@@ -270,7 +313,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:4>"
+   "eventKey": "step:<id:6>"
   },
   {
    "chatId": 7001,
@@ -288,7 +331,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:5>"
+   "eventKey": "step:<id:7>"
   },
   {
    "chatId": 7001,
@@ -300,6 +343,45 @@
     }
    },
    "learned": false
+  },
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
+    "category": "message",
+    "label": "run.pipeline_route",
+    "args": {
+     "route": "full",
+     "score": 0.12
+    },
+    "result": "Full pipeline: routing is set to always; score 0.12 (question only, follow-up)",
+    "isError": false,
+    "ts": "<iso>"
+   },
+   "learned": false,
+   "eventKey": "step:<id:8>"
+  },
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
+    "category": "message",
+    "label": "run.routed",
+    "args": {
+     "step": 0,
+     "route": "full",
+     "score": 0.12
+    },
+    "result": "The run was routed full (route score 0.12).",
+    "isError": false,
+    "ts": "<iso>"
+   },
+   "learned": false,
+   "eventKey": "step:<id:9>"
   },
   {
    "chatId": 7001,
@@ -331,7 +413,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:6>"
+   "eventKey": "step:<id:10>"
   },
   {
    "chatId": 7001,
@@ -349,7 +431,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:7>"
+   "eventKey": "step:<id:11>"
   },
   {
    "chatId": 7001,
@@ -379,11 +461,32 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:8>"
+   "eventKey": "step:<id:12>"
   }
  ],
  "trace": {
   "7001": [
+   {
+    "ts": "<iso>",
+    "category": "message",
+    "label": "run.pipeline_route",
+    "args": {
+     "route": "full",
+     "score": 0.12
+    },
+    "result": "Full pipeline: routing is set to always; score 0.12 (question only, follow-up)"
+   },
+   {
+    "ts": "<iso>",
+    "category": "message",
+    "label": "run.routed",
+    "args": {
+     "step": 0,
+     "route": "full",
+     "score": 0.12
+    },
+    "result": "The run was routed full (route score 0.12)."
+   },
    {
     "ts": "<iso>",
     "category": "llm",
@@ -618,7 +721,7 @@
     "transcriptAnchors": [
      {
       "index": 0,
-      "id": 1042
+      "id": 1059
      },
      {
       "index": 1,
@@ -686,11 +789,11 @@
      },
      {
       "index": 17,
-      "id": 1045
+      "id": 1084
      },
      {
       "index": 18,
-      "id": 1046
+      "id": 1086
      }
     ],
     "codeChanged": false,

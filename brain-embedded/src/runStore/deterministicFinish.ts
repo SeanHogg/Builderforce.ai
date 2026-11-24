@@ -31,7 +31,7 @@ import type { BrainTraceEvent } from '../brainTriage';
 import { emit, nowIso, pushTrace, runTrace } from './runCells';
 import { budget, continuationLimits, within } from './deadline';
 import { ticketsReviewedInPreview } from '../previewReview';
-import { forgetChatTicketListing, listChatTickets, localTicketsFiledInRun, runOwnedTicketRefs, type ListingScope } from './chatTickets';
+import { listChatTickets, localTicketsFiledInRun, runOwnedTicketRefs, type ListingScope } from './chatTickets';
 import { errorMessage } from '../pageEngines/types';
 import { onBaseBranch, shippedToBaseBranch } from '../shipVerification';
 import { approvedReviewFor, runReviewGate } from './shipGates';
@@ -247,6 +247,7 @@ async function finishCloseOut(run: BrainRunContext, mode: CloseOutMode): Promise
   emit(c);
   const left = budget(continuationLimits.settleMs);
   const view = settleView(c, c.runId);
+  let finished = false;
   await within(left(), async () => {
     const trace = runTrace(c);
     // `settled`: the run ended without passing the finish gate, so ONLY the upkeep runs (attach/mint, the in_progress advance):
@@ -270,8 +271,7 @@ async function finishCloseOut(run: BrainRunContext, mode: CloseOutMode): Promise
       reviewedDiffHash, verified, hasTicket,
     };
     const result = await deterministicFinish(input, run);
-    // A settled (unfinished) run never reports a finish: only the finish-mode close-out sets the verdict.
-    if (!settledOnly) c.closeOutFinished = result.finished;
+    finished = !settledOnly && result.finished;
   }, () => view.note?.({
     ts: nowIso(),
     category: 'message',
@@ -285,8 +285,8 @@ async function finishCloseOut(run: BrainRunContext, mode: CloseOutMode): Promise
     args: { error: errorMessage(e) },
     result: 'The run\'s ticket bookkeeping failed; the run is settled without it.',
   }));
-  // The run's ticket reads are done: its memoised listing goes with it.
-  forgetChatTicketListing(c);
+  // Publish the verdict once, within the caller's deadline. A late result only changes the local variable.
+  if (mode === 'finish') c.closeOutFinished = finished;
 }
 
 /**
