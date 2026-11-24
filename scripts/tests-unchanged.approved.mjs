@@ -36,8 +36,8 @@ export const APPROVED_PERMANENT = [
   },
   {
     file: 'api/src/application/runtime/cloudAdapter.sharedTask.test.ts',
-    blob: 'd6bb583736a94b8cf2ee8374740cac0611bd79d3',
-    changed: "The host fixture's `verifyPin: undefined` becomes `reviewPin: undefined`; every expectation is unchanged. The fixture observes the shared openRun entry point and pins the routing prior.",
+    blob: '51b7a36b24f5ffe8a6c6566adcccbcf4891dea74',
+    changed: "The host fixture's `verifyPin: undefined` becomes `reviewPin: undefined`; every expectation is unchanged. The fixture observes the shared openRun entry point and pins the routing prior. Adds a regression for child lineage when the durable cursor names the child.",
     reason: "Intended change (6e6911185, BYO role routing, chat #153027): code review is its own `review` role, so the cloud host's review pin is named for it. A rename only. The one-pipeline migration moved the boundary being inspected. The domain and role assertions still run against the real adapter.",
     approvedBy: APPROVED_BY,
   },
@@ -93,8 +93,8 @@ export const APPROVED_PERMANENT = [
   },
   {
     file: 'packages/agent-run/test/finish/finish.test.ts',
-    blob: '3ce1c6b9dff39b18e2e7e7dd7d1a4ab9378c013a',
-    changed: "Two expectation lines: enterVerify toHaveBeenCalled became a counter > 0; the record-mock calls became a reasons list. The six evaluateFinishGates cases run over FinishGatePorts; the cloud file carries five cloudFinishPorts cases.",
+    blob: '521ae95a07e59c4de6cd6379effb7bdc9c1e9bb3',
+    changed: "Two expectation lines: enterVerify toHaveBeenCalled became a counter > 0; the record-mock calls became a reasons list. The six evaluateFinishGates cases run over FinishGatePorts; the cloud file carries five cloudFinishPorts cases. The initializer omits the removed child flag. Starting unspent and restoring a previously spent gate remain covered.",
     reason: "evaluateFinishGates over module mocks no longer exists in the cloud; the gates take ports.",
     approvedBy: APPROVED_BY,
   },
@@ -270,6 +270,120 @@ const RELEASE_BUILD_REVIEW = 'release build review (2026-11-24)';
 
 const RELEASE_BUILD_ORACLES = [
   {
+    file: "agent-runtime/src/run/onPremSubagents.openRun.test.ts",
+    blob: "e40a2439e8404dedb712df8f4447791319f43b50",
+    changed: "Assert the child brief and owner lineage on task dispatch.",
+    reason: "The shared entry point routes child runs from its defaults. The on-prem adapter passes the brief and lineage directly.",
+    approvedBy: RELEASE_BUILD_REVIEW,
+  },
+  {
+    file: "brain-embedded/src/run/parity/gates.test.ts",
+    blob: "0a035d9959691453a20d77cd166768a2486fb48e",
+    changed: "Expect the shared independent-review refusal text.",
+    reason: "The scenario still checks the review refusal, shell-publish advisory and held finish.",
+    approvedBy: RELEASE_BUILD_REVIEW,
+  },
+  {
+    file: "packages/agent-loop/src/subagent.test.ts",
+    blob: "d32016d7d40997e5c35f54c23930a5aa6209e300",
+    changed: "Expect the child to execute its assigned slice and retain the report contract.",
+    reason: "Children have scoped tool access and the prompt no longer promises the owner’s entire catalog.",
+    approvedBy: RELEASE_BUILD_REVIEW,
+  },
+  {
+    file: "packages/agent-run/test/subagents/subagent.test.ts",
+    blob: "55681ff33d1384f1bf3e41683028e1cc4119022e",
+    changed: "Expect the child to execute its assigned slice and retain the report contract.",
+    reason: "Children have scoped tool access and the prompt no longer promises the owner’s entire catalog.",
+    approvedBy: RELEASE_BUILD_REVIEW,
+  },
+  {
+    file: "packages/agent-run/test/channels/killedCommand.test.ts",
+    blob: "d5ed412b5444ee6b93198a6687b5efba984a053d",
+    changed: "Use the shared state or finish-gate initializer signatures.",
+    reason: "The task-specific initializer arguments were removed when children started using the shared pipeline. Existing outcome and dispatch assertions remain.",
+    approvedBy: RELEASE_BUILD_REVIEW,
+  },
+  {
+    file: "packages/agent-run/test/cloud/cloudPolicy.test.ts",
+    blob: "2e0dd3fd3baecbe0771efc0d554b75fc3b732813",
+    changed: "Use the shared state or finish-gate initializer signatures.",
+    reason: "The task-specific initializer arguments were removed when children started using the shared pipeline. Existing outcome and dispatch assertions remain.",
+    approvedBy: RELEASE_BUILD_REVIEW,
+  },
+  {
+    file: "packages/agent-run/test/cloud/modelHandoff.test.ts",
+    blob: "8df9ed58728b43a8fdf6e030eb237160d51eb873",
+    changed: "Use the shared state or finish-gate initializer signatures.",
+    reason: "The task-specific initializer arguments were removed when children started using the shared pipeline. Existing outcome and dispatch assertions remain.",
+    approvedBy: RELEASE_BUILD_REVIEW,
+  },
+  {
+    file: "packages/agent-run/test/compaction/applyCompaction.test.ts",
+    blob: "f8f997781191e70af8173ebe72589d603a43bffd",
+    changed: "Use the shared state or finish-gate initializer signatures.",
+    reason: "The task-specific initializer arguments were removed when children started using the shared pipeline. Existing outcome and dispatch assertions remain.",
+    approvedBy: RELEASE_BUILD_REVIEW,
+  },
+  {
+    file: "packages/agent-run/test/steering/notStartedRegistry.test.ts",
+    blob: "89c43a47778e07eb20f189b16de8da3291e644b7",
+    changed: "Use the shared state or finish-gate initializer signatures.",
+    reason: "The task-specific initializer arguments were removed when children started using the shared pipeline. Existing outcome and dispatch assertions remain.",
+    approvedBy: RELEASE_BUILD_REVIEW,
+  },
+  {
+    file: "packages/agent-run/test/support/policyContext.ts",
+    blob: "98b5bd12f53768e1f55cdf56ba17b5720d9f4dff",
+    changed: "Use the shared state or finish-gate initializer signatures.",
+    reason: "The task-specific initializer arguments were removed when children started using the shared pipeline. Existing outcome and dispatch assertions remain.",
+    approvedBy: RELEASE_BUILD_REVIEW,
+  },
+  {
+    file: "packages/agent-run/test/telemetry/costTally.test.ts",
+    blob: "10a04d44475bff2141ea73303971d5e8020f75a3",
+    changed: "Use the shared state or finish-gate initializer signatures.",
+    reason: "The task-specific initializer arguments were removed when children started using the shared pipeline. Existing outcome and dispatch assertions remain.",
+    approvedBy: RELEASE_BUILD_REVIEW,
+  },
+  {
+    file: "packages/agent-run/test/telemetry/outcomeRow.test.ts",
+    blob: "5f549432ecc1ce91241c014c30a3cb25b7dab908",
+    changed: "Use the shared state or finish-gate initializer signatures.",
+    reason: "The task-specific initializer arguments were removed when children started using the shared pipeline. Existing outcome and dispatch assertions remain.",
+    approvedBy: RELEASE_BUILD_REVIEW,
+  },
+  {
+    file: "packages/agent-run/test/entry/openRun.test.ts",
+    blob: "d2610c93689ecd9b9bf6e944dbfe5ac2d80682e0",
+    changed: "Exercise a child’s full route, planning role, and root-only spawn gate with two menu sources.",
+    reason: "Child routing and verification use the shared defaults. The superseded child-only code-start and no-route branches are gone.",
+    approvedBy: RELEASE_BUILD_REVIEW,
+    cases: 2,
+  },
+  {
+    file: "packages/agent-run/test/entry/routeRun.test.ts",
+    blob: "c2074b94333f9a0cb71c6f884045b603159c5e01",
+    changed: "Remove the case for an independent child shortcut.",
+    reason: "openRun.test.ts exercises children through the supported shared routing path.",
+    approvedBy: RELEASE_BUILD_REVIEW,
+    cases: 1,
+  },
+  {
+    file: "packages/agent-run/test/subagents/spawnChild.test.ts",
+    blob: "de5da788fb549ddf91976b5c51d7f5f4f901e638",
+    changed: "Assert nested admission is refused and previously admitted children can still prepare.",
+    reason: "New spawns are root-only while admitted children retain durable resume support.",
+    approvedBy: RELEASE_BUILD_REVIEW,
+  },
+  {
+    file: "packages/agent-run/test/subagents/child.test.ts",
+    blob: "80da109036b8af6a264938eba874dfc70e44435a",
+    changed: "Expect child verification and owner-only sign-off.",
+    reason: "Child work follows the shared verification policy within its own tool scope.",
+    approvedBy: RELEASE_BUILD_REVIEW,
+  },
+  {
     file: "agent-runtime/src/conformance/crossAdapter.test.ts",
     blob: "99e15ed653fc8a93812a3e56288dc0291e7368a7",
     changed: "Observe openRun and assert the entry-routing trace.",
@@ -440,13 +554,15 @@ const RELEASE_BUILD_ORACLES = [
 ];
 
 // Every re-recorded oracle is tied to its reviewed bytes so later changes still require review.
+const CHILD_ROUTING_SNAPSHOTS = new Set(['sub-agent-spawn', 'steer-a-child', 'child-own-transcript']);
+
 const RELEASE_BUILD_SNAPSHOTS = [
   ['ask-user-malformed', '99d13d66564c834173b8b0284e83cc04c225fde8'],
   ['ask-user-terminal', 'a32a97ea9ff3be12f72a54223f355048808dfb8f'],
   ['big-read-paged', 'e549a61160ce0c4028a9936daa55325d1af60bd4'],
   ['budget-warn-stop', '1d38ee2da6e1c2105040d30c7955b312127880ef'],
   ['chat-mode-tools', 'a1472710c747a80ca91ca70819f09b1d834b8827'],
-  ['child-own-transcript', '733ddb7caed4393ee77e57a4210250fdd0da847b'],
+  ['child-own-transcript', '0b45ae7b5c85a32ee528843470739b58f3055328'],
   ['child-report-exhausted-stall', '7ac1e62da51aba461a3f672b1de81ea1f7c78110'],
   ['child-report-ship-gate', '8b8cc24dc795877702610ee6d2402c7dea83be4b'],
   ['child-report-turn-end', '942cf32fd3e6b2bc3a883acddbf62e6d6350bb26'],
@@ -494,7 +610,7 @@ const RELEASE_BUILD_SNAPSHOTS = [
   ['small-window-tools', 'bfdd9a9495c6210de9150494e8f5915e92667068'],
   ['stall-exhaustion', 'd4c5fbc7c89551e50c039af9a278ce8f7e5a8050'],
   ['stall-failover', 'b0ec889ca754d44c677df73a37eb03841ca4d43d'],
-  ['steer-a-child', '41f3f8a5643a0dad760896047d2973fa057ee7d9'],
+  ['steer-a-child', 'db835d5c9d10d36acca6aa94f8001787b4dc0253'],
   ['steer-before-command', '1186c6887229f8dc447953dc1c4346ad3219f465'],
   ['steer-during-tool', 'fc0e1b1ed139e15aa55a63ca4917063060bd15dc'],
   ['steer-final-answer', 'ae3aaa782f5fd16f9d357219261c985e5ea64a15'],
@@ -505,7 +621,7 @@ const RELEASE_BUILD_SNAPSHOTS = [
   ['stop-during-hand-off', 'ac7f2712d5400ec6ab417e7646ba199642a11741'],
   ['stop-during-stream', '6f8b454a4cf3fe6e68fa34935067a47ce0675178'],
   ['stop-hook', '9a45868958f45c81313061441eacd3b5e0fa082a'],
-  ['sub-agent-spawn', 'c8d386f2c0159ddbf4674685a5f35a2fac40f383'],
+  ['sub-agent-spawn', '16a8236c7b85805c9923f9e87926cfd679d12c73'],
   ['thorough-route', 'e6f9bff7faceda1dfc7dfac98128441d047a93a7'],
   ['tool-failure-breaker', 'd624b4bbea9604c2c5ac9dacc8de4e158e51815a'],
   ['tools-without-runner', '550a6a208908602a99f3c625ff7d40a8bb6c1803'],
@@ -518,7 +634,9 @@ const RELEASE_BUILD_SNAPSHOTS = [
 ].map(([id, blob]) => ({
   file: `brain-embedded/src/run/parity/snapshots/${id}.json`,
   blob,
-  changed: 'Record shared entry routing, preflight where applicable, and the failure breaker’s synthesized-turn record.',
+  changed: CHILD_ROUTING_SNAPSHOTS.has(id)
+    ? 'Record the child’s shared route and the scoped menu without nested spawning.'
+    : 'Record shared entry routing, preflight where applicable, and the failure breaker’s synthesized-turn record.',
   reason: 'PRD 50 opened all hosts through the shared pipeline. Reviewed replay preserved required trace labels, reply text, terminal errors, model-call counts and outcome status. The two ship scenarios add one fresh linked-ticket read in close-out.',
   approvedBy: RELEASE_BUILD_REVIEW,
 }));

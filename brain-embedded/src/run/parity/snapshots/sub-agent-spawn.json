@@ -114,7 +114,9 @@
     "chatId": 7001,
     "guestTurnId": "<id:2>",
     "guestTurnInput": "where is the auth middleware?",
-    "mode": "work"
+    "mode": "work",
+    "pipelineRoute": "quick",
+    "routeScore": 0.21
    },
    "tools": [
     {
@@ -122,17 +124,6 @@
      "function": {
       "name": "read_file",
       "description": "Parity tool read_file.",
-      "parameters": {
-       "type": "object",
-       "properties": {}
-      }
-     }
-    },
-    {
-     "type": "function",
-     "function": {
-      "name": "spawn_agent",
-      "description": "Parity tool spawn_agent.",
       "parameters": {
        "type": "object",
        "properties": {}
@@ -418,6 +409,67 @@
    "content": "",
    "metadata": {
     "kind": "step",
+    "category": "message",
+    "label": "run.pipeline_route",
+    "args": {
+     "route": "quick",
+     "score": 0.21
+    },
+    "result": "Quick pass: the user asks a question; score 0.21 (question only, backend_api)",
+    "isError": false,
+    "ts": "<iso>",
+    "midTurn": true,
+    "authoredBy": {
+     "kind": "agent",
+     "ref": "agent_ada",
+     "name": "Ada"
+    },
+    "subagentOf": {
+     "handle": "a1",
+     "owner": "BuilderForce",
+     "label": "locate auth"
+    }
+   },
+   "learned": false,
+   "eventKey": "step:<id:7>"
+  },
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
+    "category": "message",
+    "label": "run.routed",
+    "args": {
+     "step": 0,
+     "route": "quick",
+     "score": 0.21
+    },
+    "result": "The run was routed quick (route score 0.21).",
+    "isError": false,
+    "ts": "<iso>",
+    "midTurn": true,
+    "authoredBy": {
+     "kind": "agent",
+     "ref": "agent_ada",
+     "name": "Ada"
+    },
+    "subagentOf": {
+     "handle": "a1",
+     "owner": "BuilderForce",
+     "label": "locate auth"
+    }
+   },
+   "learned": false,
+   "eventKey": "step:<id:8>"
+  },
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
     "category": "llm",
     "label": "llm.complete",
     "args": {
@@ -426,7 +478,7 @@
      "step": 0,
      "role": "code",
      "toolCalls": 0,
-     "advertisedTools": 3,
+     "advertisedTools": 2,
      "catalogTools": 4,
      "answeredInProse": true
     },
@@ -454,7 +506,7 @@
     }
    },
    "learned": false,
-   "eventKey": "step:<id:7>"
+   "eventKey": "step:<id:9>"
   },
   {
    "chatId": 7001,
@@ -483,7 +535,7 @@
     }
    },
    "learned": false,
-   "eventKey": "step:<id:8>"
+   "eventKey": "step:<id:10>"
   },
   {
    "chatId": 7001,
@@ -530,7 +582,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:9>"
+   "eventKey": "step:<id:11>"
   },
   {
    "chatId": 7001,
@@ -563,7 +615,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:10>"
+   "eventKey": "step:<id:12>"
   },
   {
    "chatId": 7001,
@@ -581,7 +633,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:11>"
+   "eventKey": "step:<id:13>"
   },
   {
    "chatId": 7001,
@@ -611,7 +663,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:12>"
+   "eventKey": "step:<id:14>"
   }
  ],
  "trace": {
@@ -734,6 +786,27 @@
   "-9001": [
    {
     "ts": "<iso>",
+    "category": "message",
+    "label": "run.pipeline_route",
+    "args": {
+     "route": "quick",
+     "score": 0.21
+    },
+    "result": "Quick pass: the user asks a question; score 0.21 (question only, backend_api)"
+   },
+   {
+    "ts": "<iso>",
+    "category": "message",
+    "label": "run.routed",
+    "args": {
+     "step": 0,
+     "route": "quick",
+     "score": 0.21
+    },
+    "result": "The run was routed quick (route score 0.21)."
+   },
+   {
+    "ts": "<iso>",
     "category": "llm",
     "label": "llm.complete",
     "durationMs": "<ms>",
@@ -744,7 +817,7 @@
      "step": 0,
      "role": "code",
      "toolCalls": 0,
-     "advertisedTools": 3,
+     "advertisedTools": 2,
      "catalogTools": 4,
      "answeredInProse": true
     },
