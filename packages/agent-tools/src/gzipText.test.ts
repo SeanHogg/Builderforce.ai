@@ -14,8 +14,7 @@ describe("readGzipText", () => {
 
 describe("gzipText", () => {
   it("writes gzip that the one inflater reads back unchanged", async () => {
-    const text = "méthodologie — prd.md
-";
+    const text = "méthodologie — prd.md\n";
     const packed = await gzipText(text);
     expect([packed[0], packed[1]]).toEqual([0x1f, 0x8b]);
     expect(await readGzipText(packed)).toBe(text);

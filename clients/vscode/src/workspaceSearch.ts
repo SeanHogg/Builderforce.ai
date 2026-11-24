@@ -352,6 +352,8 @@ function spawnRipgrepSearch(root: string, start: string, query: string, ripgrep:
     // The JS engine's escaping rule, expressed as ripgrep's own flag: a query that is not
     // a regex is a literal, never a refused search.
     ...(isValidRegex(query) ? [] : ["--fixed-strings"]),
+    // A `.gz` artifact (a pack, PRD 49 §1.12) is searched inflated, as the walk does.
+    "--search-zip",
     "--regexp", query,
     "--", target,
   ];
