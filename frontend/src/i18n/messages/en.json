@@ -38072,7 +38072,7 @@
       "catOther": "Other",
       "shapesTitle": "Shapes",
       "typeClass": "Class or type",
-      "typeFunction": "Function or method",
+      "typeFunction": "Method / function",
       "typeSource": "Source file",
       "typeTest": "Test",
       "typeStyle": "Styles",
@@ -38997,7 +38997,15 @@
         "out": "Out",
         "prevStep": "Previous call",
         "nextStep": "Next call",
-        "drillCallee": "Into {name}"
+        "drillCallee": "Into {name}",
+        "atLine": "line {line}",
+        "codeLevel": "Code level",
+        "callsInOrder": "Calls in order: {count}",
+        "sameFile": "Same file",
+        "otherFile": "Another file",
+        "stepThrough": "Step through",
+        "stepNote": "Scroll the method in the code. The call on the reading line lights up here and on the map.",
+        "trailAria": "Zoom path"
       },
       "api": {
         "notSetUpTitle": "No endpoints found",

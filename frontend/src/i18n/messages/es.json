@@ -39910,7 +39910,15 @@
         "out": "Salir",
         "prevStep": "Llamada anterior",
         "nextStep": "Llamada siguiente",
-        "drillCallee": "Entrar en {name}"
+        "drillCallee": "Entrar en {name}",
+        "atLine": "línea {line}",
+        "codeLevel": "Nivel de código",
+        "callsInOrder": "Llamadas en orden: {count}",
+        "sameFile": "Mismo archivo",
+        "otherFile": "Otro archivo",
+        "stepThrough": "Paso a paso",
+        "stepNote": "Desplázate por el método en el código. La llamada de la línea de lectura se ilumina aquí y en el mapa.",
+        "trailAria": "Ruta de zoom"
       },
       "api": {
         "notSetUpTitle": "No se encontraron endpoints",

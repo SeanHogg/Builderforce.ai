@@ -39910,7 +39910,15 @@
         "out": "Hinaus",
         "prevStep": "Vorheriger Aufruf",
         "nextStep": "Nächster Aufruf",
-        "drillCallee": "In {name}"
+        "drillCallee": "In {name}",
+        "atLine": "Zeile {line}",
+        "codeLevel": "Code-Ebene",
+        "callsInOrder": "Aufrufe der Reihe nach: {count}",
+        "sameFile": "Gleiche Datei",
+        "otherFile": "Andere Datei",
+        "stepThrough": "Schritt für Schritt",
+        "stepNote": "Scrollen Sie durch die Methode im Code. Der Aufruf auf der Lesezeile leuchtet hier und auf der Karte auf.",
+        "trailAria": "Zoom-Pfad"
       },
       "api": {
         "notSetUpTitle": "Keine Endpunkte gefunden",

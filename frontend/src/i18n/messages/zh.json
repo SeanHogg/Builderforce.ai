@@ -39910,7 +39910,15 @@
         "out": "退出",
         "prevStep": "上一次调用",
         "nextStep": "下一次调用",
-        "drillCallee": "进入 {name}"
+        "drillCallee": "进入 {name}",
+        "atLine": "第 {line} 行",
+        "codeLevel": "代码层级",
+        "callsInOrder": "按顺序的调用：{count}",
+        "sameFile": "同一文件",
+        "otherFile": "其他文件",
+        "stepThrough": "逐步查看",
+        "stepNote": "在代码中滚动该方法。阅读行上的调用会在此处和地图上高亮。",
+        "trailAria": "缩放路径"
       },
       "api": {
         "notSetUpTitle": "未找到端点",
