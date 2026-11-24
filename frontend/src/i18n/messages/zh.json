@@ -22173,6 +22173,53 @@
     "loading": "正在加载简历…",
     "unavailable": "此简历链接不可用。"
   },
+  "roomAgents": {
+    "summary": "{role} · {state}",
+    "noRole": "未声明角色",
+    "status": "状态：{state}",
+    "state": {
+      "idle": "空闲",
+      "thinking": "思考中",
+      "executing": "执行中",
+      "waiting": "等待中",
+      "failed": "已失败",
+      "recovering": "恢复中"
+    },
+    "declaration": "声明",
+    "field": {
+      "role": "角色",
+      "workload": "工作负载",
+      "instructions": "指令",
+      "memory": "记忆"
+    },
+    "tools": "工具",
+    "noTools": "此代理未声明任何工具。",
+    "history": "历史",
+    "noHistory": "尚未运行任何内容。",
+    "stepFailed": "失败",
+    "category": {
+      "llm": "模型调用",
+      "tool": "工具调用",
+      "message": "备注",
+      "error": "错误",
+      "recall": "调用记忆",
+      "learn": "已学习",
+      "reconcile": "已更新记忆"
+    },
+    "steerLabel": "给代理的指示",
+    "steerPlaceholder": "告诉代理应如何调整…",
+    "control": {
+      "steer": "引导",
+      "cancel": "取消运行"
+    },
+    "done": {
+      "steer": "指示已发送给代理。",
+      "cancel": "取消请求已发送给代理。"
+    },
+    "unreachable": "无法联系到代理，请重试。",
+    "chat": "向 Brain 询问此代理",
+    "chatPrompt": "告诉我代理“{name}”（{role}）正在做什么，以及它需要我做什么。"
+  },
   "roomStations": {
     "listHead": "房间里的工作台",
     "open": "打开",

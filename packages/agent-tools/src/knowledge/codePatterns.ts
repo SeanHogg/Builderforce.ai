@@ -4,12 +4,13 @@
  *
  * Each detector is a row in {@link PATTERN_DETECTORS}, a registry: it reads only the
  * file's name, its exported symbols, its imports, its size and its worst complexity —
- * never a model. The badge is the matching ids, sorted, comma-separated. `god-module` is
- * the one anti-pattern. Pure.
+ * never a model. The badge is the matching ids, sorted, comma-separated. `god-module` and
+ * `io-in-loop` are the anti-patterns. Pure.
  */
 
 import { compareStr, GOD_MODULE_LIMITS } from '@seanhogg/builderforce-memory/knowledge';
 import type { CodeSymbol } from '../symbols.js';
+import { afterParens, braceMatches } from './codeComplexity.js';
 
 export interface PatternFacts {
     path: string;
@@ -31,6 +32,26 @@ export interface PatternDetector {
 const named = (f: PatternFacts, re: RegExp): boolean => f.exported.some((s) => re.test(s.name));
 const baseIs = (f: PatternFacts, re: RegExp): boolean => re.test(f.base);
 const importsFrom = (f: PatternFacts, re: RegExp): boolean => f.imports.some((i) => re.test(i));
+
+/** Awaited I/O calls: network, file system, query/ORM. */
+const AWAITED_IO = /\bawait\s+(?:[\w$]+\s*\.\s*)*(?:fetch|readFile|readdir|stat|query|execute|find\w*|select|insert|upsert)\s*\(/;
+/** Global: only for `matchAll`. {@link HAS_LOOP} is the `.test` twin, so no stale `lastIndex`. */
+const LOOP_HEADS = /\b(?:for|while)\s*\(/g;
+const HAS_LOOP = /\b(?:for|while)\s*\(/;
+
+/** True when any `for`/`while` body awaits an I/O call: one round-trip per iteration (N+1). */
+function awaitsIoInLoop(text: string): boolean {
+    if (!AWAITED_IO.test(text)) return false; // cheap pre-check keeps the scan off most files
+    const closes = braceMatches(text);
+    for (const m of text.matchAll(LOOP_HEADS)) {
+        const after = afterParens(text, m.index + m[0].length - 1);
+        if (after < 0) continue;
+        const open = text.indexOf('{', after);
+        if (open < 0 || text.slice(after, open).trim() !== '') continue; // single-statement loops are skipped
+        if (AWAITED_IO.test(text.slice(open, closes.get(open) ?? open))) return true;
+    }
+    return false;
+}
 
 export const PATTERN_DETECTORS: readonly PatternDetector[] = [
     { id: 'repository', test: (f) => baseIs(f, /repositor(?:y|ies)$/i) || named(f, /Repository$/) },
@@ -63,6 +84,22 @@ export const PATTERN_DETECTORS: readonly PatternDetector[] = [
         test: (f) => (baseIs(f, /client$/i) || named(f, /Client$/)) && /\bfetch\s*\(|\baxios\b|\brequest\s*[<(]/.test(f.text),
     },
     { id: 'port', test: (f) => f.exported.some((s) => s.kind === 'interface' && /Port$/.test(s.name)) },
+    { id: 'latest-wins', test: (f) => (/\bnew\s+AbortController\b/.test(f.text) && /\.abort\s*\(/.test(f.text)) || named(f, /[Ss]upersed/) },
+    {
+        id: 'deadline',
+        test: (f) => /\bAbortSignal\.timeout\s*\(/.test(f.text) || /\bresourceLimits\s*:/.test(f.text)
+            || (/\bPromise\.race\s*\(/.test(f.text) && /\bsetTimeout\s*\(/.test(f.text)),
+    },
+    {
+        id: 'streaming-digest',
+        test: (f) => /\b(?:createHash\s*\(|new\s+Sha256\b)/.test(f.text) && /\.update\s*\(/.test(f.text) && HAS_LOOP.test(f.text),
+    },
+    {
+        id: 'batched-io',
+        test: (f) => /\bPromise\.all(?:Settled)?\s*\(\s*[\w$.]+\.map\s*\(/.test(f.text) || /\b(?:whereIn|inArray)\s*\(/.test(f.text)
+            || named(f, /^(?:chunk|batch)/i),
+    },
+    { id: 'io-in-loop', test: (f) => awaitsIoInLoop(f.text) },
     {
         id: 'god-module',
         test: (f) => f.lines > GOD_MODULE_LIMITS.lines || f.exported.length > GOD_MODULE_LIMITS.exports

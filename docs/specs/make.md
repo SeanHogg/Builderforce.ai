@@ -28,6 +28,7 @@
 - [Design — Deterministic-first PreFetch](#design--deterministic-first-prefetch)
 - [PRD 38 — The knowledge graph (any directory; code and docs first)](#prd-38--the-knowledge-graph-any-directory-code-and-docs-first)
 - [PRD 43 — One 3D stage for every knowledge camera](#prd-43--one-3d-stage-for-every-knowledge-camera)
+- [Design — Floorplan review: features for the visualizer](#design--floorplan-review-features-for-the-visualizer)
 - [PRD 31 — Build, run and ship a real app on Builderforce](#prd-31--build-run-and-ship-a-real-app-on-builderforce)
   - [W11 contract — the app manifest ai resource](#w11-contract--the-app-manifest-ai-resource)
 - [PRD 18 — hired.video → Builderforce.ai port (Canvas runtimes and the Studio → Canvas port)](#prd-18--hiredvideo--builderforceai-port-canvas-runtimes-and-the-studio--canvas-port)
@@ -436,7 +437,7 @@ See the current [acceptance record](#prd-50--one-pipeline-validation-and-diagnos
 | MK-31-W9 | P1 | PRD 31 W9 browser-run exit tests and the ^2026.11.4 runtime bump (Python/PHP/FastAPI/Slim, .NET/Rust workers, training boot). | The open phase notes under W9 are closed. Do not market free-tier browser runs as protected until W10 phase 4's exit holds. | code |
 | MK-31-W10 | P0 | Security Shield W10 phases 0–4 in builderforce-webcontainers, then the Builderforce ingest route, index migration, finding-kind seam and `runtime-shield` detection source. | **Other repo** for the runtime phases. Nothing of W10 exists in the runtime yet (verified 2026-11-18). | other repo + code |
 | MK-31-W11 | P1 | Manifest v1 phases 1–8, then phase 9 `DeploymentTarget` (PRD 31 W11). | Each phase ships with its automated exit test. Phase 9 needs a test Cloudflare account (**operator**). | code + operator |
-| MK-31-W12 | P1 | Agent Environment W12 phases 1–6 (PRD 31 W12). | **Blocked** on the Opus design review named in the section, and on W11 phases 1 and 3. Do not start phase 1 code before that review. | blocked |
+| MK-31-W12 | P0 | Agent Environment W12 phases 1–6 (PRD 31 W12). | Review done 2026-11-24; phase 1 in code; next phase 3. | open |
 | MK-31-REST | P1 | PRD 31 W1–W8 remaining notes and the §5 sequencing blockers still open. | Each remaining note under those workstreams is closed. Decisions still owed in §2 stay decisions, not code. | code |
 | MK-18 | P1 | PRD 18 canvas-runtime and Studio-port rows still marked remaining (verified 2026-11-17). | The open rows under §1.3, T4 and §8.4–§8.10 are closed or explicitly deferred in this file. | code |
 
@@ -2225,6 +2226,42 @@ The `stage/store.ts` edit model, delta-driven incremental layout, and the gestur
 
 ---
 
+## Design — Floorplan review: features for the visualizer
+
+> Reviewed 2026-11-24 against [haydenschmitty/floorplan](https://github.com/haydenschmitty/floorplan) v0.11 (MIT, README and docs only, no code copied). Floorplan is a Claude Code / Codex plugin. Its scripts scan a codebase, an agent names the parts in plain English, and a static `floorplan/index.html` map opens in the browser.
+> Owner: the knowledge-graph view (`packages/knowledge-graph-view`) and the code pack (`packages/agent-tools/src/knowledge/codePack.ts`). Each item builds on the one stage (PRD 43) and the graph from PRD 38. None of them adds a new camera.
+
+### What the visualizer already has
+
+| Floorplan feature | Our equivalent |
+|---|---|
+| Map at every zoom | Cameras on the one stage, `surface/DepthTrail.tsx`, semantic zoom (PRD 43) |
+| Guided flows | `KnowledgeGraphView.flows`, `surface/SequenceDiagram.tsx`, `surface/StepControls.tsx` |
+| Endpoints | API drawer (`surface/drawers/ApiPanel.tsx`, `ApiSandbox.tsx`) |
+| Health check | Anti-pattern drawers (`surface/drawers/AntiPattern*.tsx`), run-delta findings (`delta/`), including secret findings |
+| Recent work | Run delta card and panel (`delta/RunDeltaCard.tsx`, `RunDeltaPanel.tsx`) |
+| Ask the map | `surface/QuestionBar.tsx` (filters stations), `knowledge.ask` |
+| Incremental updates | Delta review, `useLiveGraph.ts` |
+
+### Gaps to build (priority order)
+
+| # | P | Feature | Done when |
+|---|---|---|---|
+| FP1 | P1 | **Request ↔ endpoint edges across repos.** The code pack matches each client call (`fetch`, axios, generated clients) to the server route that answers it, including across sibling repos in one workspace. The stage draws these as a distinct `http` edge kind. | On a two-repo fixture (web + api), each client call resolves to its route, or is listed as unmatched. The API drawer shows the callers of each endpoint. |
+| FP2 | P1 | **Start from a screen.** UI routes (Next.js, React Router, Vue, SvelteKit, Angular) become entry nodes. Choosing one focuses the stage on everything reachable from it: components, requests (FP1), handlers, data and external services. | A screen picker in the camera bar, and a focus set computed by the graph model (not the view) that has a test. |
+| FP3 | P1 | **Ask answers as a mini-map.** A `knowledge.ask` answer returns its cited node ids in order. The stage isolates those nodes, numbers them, and plays them through `StepControls` as a walkthrough. | The answer contract carries `steps: { nodeId, note }[]`. The QuestionBar renders the numbered subgraph. Answers that skip the model (`skippedLlm`) still number their steps. |
+| FP4 | P2 | **AI-app health rules.** Anti-pattern rules for keys sent to the browser bundle, Supabase tables with no RLS, open Firebase rules, Stripe webhooks with no signature check, and mutating endpoints with no auth guard. Each finding has "Show on map" and a ready-to-paste fix prompt (reusing `fixPorts.ts`). Secret values are never stored. | One rule entry per check in `surface/drawers/antiPatternRules.ts`, each with a positive and a negative fixture. |
+| FP5 | P2 | **Per-node "why" in recent work.** Each node the last run changed is lit and carries a one-line note on how the change serves the task. The note comes from the run's diff summary, not a new model call. | The run delta exposes `changedNodes: { nodeId, note }[]`. The stage tints those nodes, and the node panel shows the note. |
+| FP6 | P2 | **Plain-language names with a developer toggle.** Review writes a plain `displayName` and a one-line purpose per area and file. A toggle switches between plain and technical labels. User renames are kept across re-reviews. | `displayName` is in the outline badge contract. A rename survives a delta review (test). All copy goes through localization. |
+| FP7 | P3 | **Start-here tour.** A tour of about one minute steps through the top areas and one flow on first open. | It runs once per graph revision and can be replayed from the legend. |
+| FP8 | P3 | **Self-contained export.** Export the current graph and view as one offline HTML file to share. | The export opens with no server. Secrets and source text are excluded (descriptors only). |
+| FP9 | P3 | **Blueprint from a PRD.** Draw a planned graph from an Idea/Make spec, with dashed nodes. Each planned node has a "build this" action that opens a task, and it becomes a real node once its code exists. | The planned flag is in the graph contract. The stage draws planned nodes dashed. Matching on the next review replaces them. |
+| FP10 | P3 | **Right-click on any node.** A context menu offers Open file, Ask about this, Fix with agent, Show callers and Rename (FP6). | Keyboard parity through `useRoving.ts`. |
+
+**Not adopted.** A static `index.html` written into the repo (we serve the view from the host), the waitlist and email prompt, and a separate local HTTP server (the host bridges the view).
+
+---
+
 ## PRD 31 — Build, run and ship a real app on Builderforce
 
 > Consolidated 2026-11-17 from `docs/specs/31-prd-customer-app-platform.md`. Verified against code 2026-11-17: Partly built.
@@ -2772,7 +2809,7 @@ A VS Code webview cannot register the runtime's service worker, so the VSIX laun
 - **Kit rot.** Framework versions move. Kits pin versions, and the matrix runs in CI, so a broken kit is red rather than silently stale.
 - **AGE on PGlite.** Unproven, hence the spike. If it fails, graph stays cloud-only (Azure PG).
 
-**Remaining (2026-11-19):** all of it. Design only.
+**Remaining (2026-11-24):** phases 1 (manifest v1) and 3 (kits) are in code. Phase 2 has manifest emission and `/manifest init` in the VSIX. The web action remains. Phase 4 has runtime and launcher diagnostics in code, with the full diagnostics phase still open. Phases 5–9 remain.
 
 #### W11 contract — the app manifest ai resource
 
@@ -3174,7 +3211,7 @@ In webcontainers `core` unless noted:
 | Builderforce `packages/ide-templates` | the `agents` kit part (an `agents/` folder + declarations + capability entry) |
 | Builderforce `packages/creation-canvas-contract` | consumes the manifest types; no copy |
 | Builderforce `frontend` | an agent Room item kind + its SlideOutPanel; `roomAgents.*` in all five catalogs |
-| Builderforce `api/src/application/llm/builtinMcpService.ts` | the `runtime.agents.*` group (§4.7) |
+| Builderforce `api/src/application/llm/` | a dedicated `runtime.agents.*` catalog beside `appBlueprintToolCatalog.ts` (§4.7) |
 
 #### Phases (each ships on its own, with an automated exit test)
 
@@ -3187,6 +3224,8 @@ In webcontainers `core` unless noted:
 | 5 | **Agents in the Room**: an agent item kind (registry data). State (idle, thinking, executing, waiting, failed, recovering) is derived from run events through the run-snapshot hook, never from decorative animation. A SlideOutPanel shows status, declaration, tools, role, history, steer and cancel; chat routes into the ONE composer. | A component test drives avatar states from a scripted event stream. After a phase-4 recovery, the Room rebuilds from restored state. The five catalogs are complete, and the panel works in dark and light mode and at 360 px. |
 | 6 | **Child runtimes**: the `child-runtimes` capability, `createChildRuntime`, the persisted hierarchy, inherited limits | A stricter child is accepted. A child with a wider allowlist or depth gets a typed refusal. When both are killed and the parent recovers, it rediscovers the child by id, and the child recovers independently. A child's failure does not fail the parent. |
 
+**Define agents without code (with phase 3).** A role-based form and the “an AI feature inside the app” clarifier branch write an `AgentDeclaration` into manifest v1 through `app_manifest.validate`. The manifest remains the only store. Exit test: a declaration written by the form validates with zero issues and starts through `runtime.agents.start`. A model ID or a widened allowlist receives its typed refusal.
+
 Phases 3 and 5 are new capabilities, so each ships a `release_notes` row and an Idea-to-Real blog post.
 
 #### Risks
@@ -3196,11 +3235,24 @@ Phases 3 and 5 are new capabilities, so each ships a `release_notes` row and an 
 - **Non-idempotent external APIs.** Keys protect our tools. An external write without idempotency support is marked `unsafe-to-replay`, and recovery asks the human before re-running it (`ask_human`).
 - **Logical isolation mistaken for a security boundary.** Child runtimes share the backend. The Shield (W10) carries the security boundary, and the docs say so.
 
-**Remaining (2026-11-20):** all of it. Design only. It needs an Opus design review (cross-package architecture and storage formats) before phase 1 code.
+#### W12 design review (Opus, 2026-11-24): approved with contract refinements
 
-### §4.7 MCP tool surface (spans W1–W10)
+| Area | Decision |
+|---|---|
+| Registry injection (constraint 1) | Core ships `CapabilityDefinition` data and `createCapabilityRegistry(defs)`. `validateManifest(manifest, { capabilities })` and `parseManifest(text, { capabilities })` default to `BUILTIN_CAPABILITIES` (`agents` only). Hooks come from an optional `load(): Promise<CapabilityHooks>` that a host package registers (the browser package in phase 3). Core never imports hook code, so an environment without a capability never loads it. |
+| Policies only narrow (constraint 5) in the manifest | The `capabilities.agents` config holds the environment's ceilings: `maxAgents`, `maxDepth`, `maxChildren`, `tools` and `budget`. Any declaration above a ceiling is a `policy-widening` error, refused and never clamped. Phase 6 child fragments reuse the same check. |
+| Roles, not models | `role` or `workload` is a lowercase vocabulary key resolved by the host's `model-router`, and core holds no role list. A `model`, `models`, `modelId` or `provider` key on an agent, or a role value containing `/`, `:` or `.`, is an `agent-model-id` error. |
+| Triggers | The allowed shapes are `{ "manual": true }`, `{ "cron", "timezone"? }` (parsed by the W11 `parseCron` and `isValidTimeZone`, so there is no second cron format) and `{ "service", "event" }`. The W11 phase 5 scheduler reads both `jobs` and agent cron triggers. |
+| Tool allowlist | Entries are catalog keys (`^[a-z][a-z0-9_]*(\.[a-z0-9_]+)+$`, no wildcards). The `env.*` namespace is reserved for `EnvironmentToolPort` (`env.fs.read\|write\|list`, `env.run`, `env.preview.fetch`, `env.services.status`). Core checks only the shape. Catalog membership is checked by the host at `runtime.agents.start`, because the open runtime cannot see the ONE catalog. |
+| Storage formats (phases 2, 4 and 6) | Every persisted record carries `formatVersion: 1`. `RuntimeLease` stores `{ runtimeId, fencingToken: integer, monotonic, holder, updatedAt }` in IndexedDB. Run checkpoints use only the ONE run store's `AgentRunInput.resume` shape, with no new format. The child hierarchy is `{ environmentId, parentId \| null, childIds[] }`. All of it passes through `secret-redaction`. |
+| Phase 3 rules | Mutating `env.*` calls carry the idempotency key (run id, step, tool-call id) from phase 3, so phase 4 does not change the tool contract. Until phase 4, an agent whose tab dies stops, and the UI says so. |
+| Phase order | Confirmed: 1 → 3 → define-agents UI → W11 phase 5 → 2 → 4 → 5 → 6. |
 
-Each tool is added to the `builtinMcpService.ts` catalogs, grouped as data:
+**Remaining (2026-11-24):** design review done (above). Phase 1 in code (`core/src/capabilities/`, `core/src/manifest/agents.ts`). Next: phase 3.
+
+### §4.7 MCP tool surface (spans W1–W12)
+
+Tools are grouped as catalog data. Register `runtime.agents.*` from its own catalog file beside `appBlueprintToolCatalog.ts`.
 
 | Group | Tools |
 |---|---|
@@ -3222,6 +3274,7 @@ Each tool is added to the `builtinMcpService.ts` catalogs, grouped as data:
 | Phase | Contents | Real blocker |
 |---|---|---|
 | 1 | W1 + W2 remainder + W8 remainder | Container image deploy + D6 |
+| 1g | W12 phases 1, 3, (define-agents UI), W11 phase 5, then 2, 4, 5, 6 — **top priority** | None (review done 2026-11-24) |
 | 1b | W9 phases 0–4 (webcontainers repo), in parallel | None |
 | 1c | W9 phase 5 (`RunTarget`) | W2 blueprint; D7 for plan gating |
 | 1d | W9 phases 6a–6d; phase 7 engine work in `@webdit/torch` in parallel (needs only 6a's Pyodide host) | None |
@@ -3232,7 +3285,6 @@ Each tool is added to the `builtinMcpService.ts` catalogs, grouped as data:
 | 5 | W3/W4 GCP, Azure, AWS | Test accounts per cloud |
 | 1f | W11 phases 1–8 (manifest → init → kits → diagnostics → jobs → Redis → storage/mail/scale → Lua), in the webcontainers repo and Builderforce packages | None. It is code. |
 | 2b | W11 phase 9 (`DeploymentTarget` = W4) | Same as phase 2: a test Cloudflare account |
-| 1g | W12 phases 1–6 (capabilities → suspend/recover → Agent Environment → checkpoint/resume → Room → child runtimes), after W11 phases 1 and 3 (manifest v1, kits) | The W12 Opus design review |
 
 **Program acceptance (against a hired.video fork, never production):**
 1. Create a company, then a project under it, then connect the fork.

@@ -46,7 +46,7 @@ const OO_DECISIONS = new RegExp(String.raw`\b(?:if|for|foreach|while|case|catch)
 const MAX_PARAM_SCAN = 4_000;
 
 /** For every `{`, the index of its `}` (the text length when unclosed): one stack pass, so closing N ranges is O(n), not O(N·n). */
-function braceMatches(masked: string): Map<number, number> {
+export function braceMatches(masked: string): Map<number, number> {
     const closes = new Map<number, number>();
     const open: number[] = [];
     for (let i = 0; i < masked.length; i++) {
@@ -59,7 +59,7 @@ function braceMatches(masked: string): Map<number, number> {
 }
 
 /** The index just after the `)` that balances the `(` at `open`, or -1 (bounded). */
-function afterParens(masked: string, open: number): number {
+export function afterParens(masked: string, open: number): number {
     let depth = 0;
     const stop = Math.min(masked.length, open + MAX_PARAM_SCAN);
     for (let i = open; i < stop; i++) {

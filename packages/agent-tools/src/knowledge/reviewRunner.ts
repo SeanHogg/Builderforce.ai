@@ -402,6 +402,8 @@ export async function buildStoredGraph(args: StoredGraphArgs): Promise<Knowledge
     const yieldEvery = args.yieldEvery && args.yieldEvery > 0 ? Math.floor(args.yieldEvery) : 0;
     const yieldDelay = args.yieldDelay ?? (() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
     let sinceYield = 0;
+    // One batched read (parallel chunks) instead of a round trip per file; the loop below then reads from memory.
+    await store.preloadExtracted?.(wanted.flatMap((w) => (w.hash ? [w.hash] : [])));
     for (const w of wanted) {
         // A deleted file has no content hash: there is nothing of it to fetch.
         if (!w.hash) continue;

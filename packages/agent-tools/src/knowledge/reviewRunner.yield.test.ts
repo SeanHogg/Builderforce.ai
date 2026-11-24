@@ -47,6 +47,20 @@ describe('buildStoredGraph event-loop yield seam', () => {
         expect(yields).toBe(6);
     });
 
+    it('reads the extracts in ONE batched preload of every hash before the walk', async () => {
+        const { manifest, store } = setup();
+        await manifest.set(filesManifestKey('big'), Object.keys(setupFiles()).map((id) => ({ id, hash: `h:${id}` })));
+        const preloads: string[][] = [];
+        const recording = Object.assign(Object.create(store) as typeof store, {
+            preloadExtracted: async (hashes: readonly string[]) => { preloads.push([...hashes]); },
+        });
+
+        await buildStoredGraph({ rootId: 'big', store: recording, manifest, packs: [] });
+
+        expect(preloads).toHaveLength(1);
+        expect([...preloads[0]!].sort()).toEqual(Object.keys(setupFiles()).map((id) => `h:${id}`).sort());
+    });
+
     it('does not yield when the seam is absent (library default, non-UI hosts)', async () => {
         const { manifest, store } = setup();
         await manifest.set(filesManifestKey('big'), Object.keys(setupFiles()).map((id) => ({ id, hash: `h:${id}` })));

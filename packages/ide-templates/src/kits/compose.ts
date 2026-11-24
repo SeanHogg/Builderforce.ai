@@ -96,6 +96,8 @@ export function composeParts(name: string, parts: readonly KitPart[]): ComposedK
   const files: Record<string, string> = {};
   const services: Record<string, EmittedService> = {};
   const resources: Record<string, EmittedResource> = {};
+  const capabilities: NonNullable<KitManifest['capabilities']> = {};
+  const agents: NonNullable<KitManifest['agents']> = {};
   const owner = new Map<string, string>();
 
   const claim = (code: 'path-conflict' | 'service-conflict' | 'resource-conflict', key: string, partId: string): boolean => {
@@ -119,6 +121,8 @@ export function composeParts(name: string, parts: readonly KitPart[]): ComposedK
     for (const [id, resource] of Object.entries(part.manifest.resources ?? {})) {
       if (claim('resource-conflict', id, part.id)) resources[id] = { ...resource };
     }
+    Object.assign(capabilities, part.manifest.capabilities);
+    Object.assign(agents, part.manifest.agents);
   }
 
   for (const part of parts) {
@@ -153,6 +157,8 @@ export function composeParts(name: string, parts: readonly KitPart[]): ComposedK
     name,
     ...(Object.keys(resources).length > 0 ? { resources } : {}),
     services,
+    ...(Object.keys(capabilities).length > 0 ? { capabilities } : {}),
+    ...(Object.keys(agents).length > 0 ? { agents } : {}),
     ingress: { routes },
     environments: kitEnvironments(),
   };

@@ -22173,6 +22173,53 @@
     "loading": "Chargement du CV…",
     "unavailable": "Ce lien de CV n’est pas disponible."
   },
+  "roomAgents": {
+    "summary": "{role} · {state}",
+    "noRole": "Aucun rôle déclaré",
+    "status": "État : {state}",
+    "state": {
+      "idle": "Inactif",
+      "thinking": "Réflexion",
+      "executing": "Exécution",
+      "waiting": "En attente",
+      "failed": "Échec",
+      "recovering": "Reprise"
+    },
+    "declaration": "Déclaration",
+    "field": {
+      "role": "Rôle",
+      "workload": "Charge de travail",
+      "instructions": "Instructions",
+      "memory": "Mémoire"
+    },
+    "tools": "Outils",
+    "noTools": "Cet agent ne déclare aucun outil.",
+    "history": "Historique",
+    "noHistory": "Rien n’a encore été exécuté.",
+    "stepFailed": "Échec",
+    "category": {
+      "llm": "Appel au modèle",
+      "tool": "Appel d’outil",
+      "message": "Note",
+      "error": "Erreur",
+      "recall": "Mémoire rappelée",
+      "learn": "Appris",
+      "reconcile": "Mémoire mise à jour"
+    },
+    "steerLabel": "Consigne pour l’agent",
+    "steerPlaceholder": "Dites à l’agent ce qu’il doit faire autrement…",
+    "control": {
+      "steer": "Orienter",
+      "cancel": "Annuler l’exécution"
+    },
+    "done": {
+      "steer": "Consigne envoyée à l’agent.",
+      "cancel": "Annulation envoyée à l’agent."
+    },
+    "unreachable": "Impossible de joindre l’agent. Réessayez.",
+    "chat": "Demander à Brain à propos de cet agent",
+    "chatPrompt": "Dis-moi ce que fait l’agent « {name} » ({role}) et ce dont il a besoin de ma part."
+  },
   "roomStations": {
     "listHead": "Postes de la salle",
     "open": "Ouvrir",

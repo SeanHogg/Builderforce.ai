@@ -35,6 +35,7 @@ import { REPLAY_TOOLS } from './replayToolCatalog';
 import { AGENT_PERSONA_TOOLS } from './agentPersonaToolCatalog';
 import { APP_BLUEPRINT_TOOLS } from './appBlueprintToolCatalog';
 import { APP_MANIFEST_TOOLS } from './appManifestToolCatalog';
+import { createRuntimeAgentsTools } from './runtimeAgentsToolCatalog';
 import { RUNTIME_PREVIEW_TOOLS } from './runtimeToolCatalog';
 import { SKILL_LIBRARY_TOOLS } from './skillLibraryToolCatalog';
 import { invalidateSkillAssignmentCaches } from '../skills/skillAssignmentCache';
@@ -4195,6 +4196,8 @@ const CATALOG: BuiltinTool[] = [
   ...APP_BLUEPRINT_TOOLS,
   // ---- App manifest v1: schema + validate (docs/specs/make.md "W11 contract — the app manifest ai resource" §8) ----
   ...APP_MANIFEST_TOOLS,
+  // ---- runtime.agents.*: list/start/steer/cancel/status of manifest-declared agents (W12). The key set is read lazily: it includes these very tools. ----
+  ...createRuntimeAgentsTools({ catalogKeys: () => new Set(CATALOG.map((t) => t.tool)) }),
   // ---- Run loop: see the running app (PRD 31 §W1 item 8) ---------------------
   // `runtime.*` — status, URL, logs, restart, screenshot, verify. ONE definition per tool
   // (creation-canvas-contract `RUNTIME_TOOLS`); this is the container executor, the

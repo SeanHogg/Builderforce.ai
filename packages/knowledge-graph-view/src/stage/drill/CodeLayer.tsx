@@ -34,6 +34,8 @@ export interface CodeLayerProps {
     records?: readonly SymbolRecord[] | undefined;
     /** A method name in the text was clicked. */
     onDrill?: ((ref: string) => void) | undefined;
+    /** The source line now at the top of the panel, on every scroll (the stage follows it). */
+    onTopLine?: ((line: number) => void) | undefined;
 }
 
 /** One code row's height (px) and how many rows the panel shows before it scrolls. */
@@ -76,7 +78,7 @@ const button: CSSProperties = {
     border: `1px solid ${cssVar('accent')}`, background: cssVar('accent'), color: cssVar('onAccent'),
 };
 
-export function CodeLayer({ slotKey, target, reader, labels, onOpenSource, onClose, docked = false, scrollLine, records = [], onDrill }: CodeLayerProps) {
+export function CodeLayer({ slotKey, target, reader, labels, onOpenSource, onClose, docked = false, scrollLine, records = [], onDrill, onTopLine }: CodeLayerProps) {
     const t = labels.surface.code, card = labels.surface.map.card;
     const ref = useRef<HTMLDivElement | null>(null);
     const linesRef = useRef<HTMLDivElement | null>(null);
@@ -97,6 +99,7 @@ export function CodeLayer({ slotKey, target, reader, labels, onOpenSource, onClo
     const virtual = lines.length > VIRTUAL_AFTER;
     const last = first + Math.max(lines.length, 1) - 1;
     const where = `${target.path}:${target.startLine}`;
+    const openLine = scrollLine ?? target.startLine;
     const gutter = `${String(last).length + 1}ch`;
 
     return (
@@ -119,7 +122,7 @@ export function CodeLayer({ slotKey, target, reader, labels, onOpenSource, onClo
             {read.state === 'none' && <div role="note" data-code-unavailable style={TYPE.monoMeta}>{t.unavailable}</div>}
             {read.state === 'ready' && (
                 <div
-                    ref={linesRef} data-code-lines tabIndex={0} onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
+                    ref={linesRef} data-code-lines tabIndex={0} onScroll={(e) => { const top = e.currentTarget.scrollTop; setScrollTop(top); onTopLine?.(first + Math.floor(top / ROW_PX)); }}
                     style={{ ...TYPE.mono, maxHeight: docked ? undefined : VIEW_ROWS * ROW_PX, minHeight: 0, overflow: 'auto', background: cssVar('panel'), borderRadius: 6, padding: '4px 0' }}
                 >
                     <div style={{ position: 'relative', height: virtual ? lines.length * ROW_PX : undefined, minWidth: 'max-content' }}>
@@ -140,8 +143,8 @@ export function CodeLayer({ slotKey, target, reader, labels, onOpenSource, onClo
             )}
             {read.state === 'ready' && read.text.truncated && <div style={TYPE.monoMeta}>{fillTemplate(t.truncated, { count: lines.length })}</div>}
             {onOpenSource && (
-                <button type="button" data-action="open-at-line" style={{ ...button, justifySelf: 'start' }} onClick={() => onOpenSource({ path: target.path, startLine: target.startLine, endLine: last })}>
-                    {fillTemplate(card.openAtLine, { line: target.startLine })}
+                <button type="button" data-action="open-at-line" style={{ ...button, justifySelf: 'start' }} onClick={() => onOpenSource({ path: target.path, startLine: openLine, endLine: last })}>
+                    {fillTemplate(card.openAtLine, { line: openLine })}
                 </button>
             )}
         </div>

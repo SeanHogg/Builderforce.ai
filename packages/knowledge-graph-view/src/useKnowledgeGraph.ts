@@ -121,6 +121,8 @@ export function useKnowledgeGraph(source: KnowledgeGraphSource, opts: KnowledgeG
     const growSeq = useRef(0);
     /** The `${rootId}:${generation}:${focus}` already loading/loaded for THIS source — a state-driven rerun never re-reads it. */
     const loadedKey = useRef<{ source: KnowledgeGraphSource; key: string } | null>(null);
+    /** The root load in flight: a review-growth re-read waits for it (the host's newer load of a root cancels the older). */
+    const pendingLoad = useRef<{ source: KnowledgeGraphSource; key: string } | null>(null);
     // Another SOURCE (another project) never shows the old one's graph: clear everything BEFORE the
     // new source's effects run, so its own lastSeen can paint. (State set during render re-renders at once.)
     const prevSource = useRef(source);
@@ -177,7 +179,9 @@ export function useKnowledgeGraph(source: KnowledgeGraphSource, opts: KnowledgeG
                 loadedKey.current = null; // a Retry (same key) is not deduped away
                 // A drawn graph is never replaced by the failure screen: it stays, flagged.
                 if (graphRef.current) setRefreshFailed(true); else setStatus('load-failed');
-            });
+            })
+            .finally(() => { if (pendingLoad.current === entry) pendingLoad.current = null; });
+        pendingLoad.current = entry;
     }, [source, paint]);
 
     // Scopes AND the newest root's graph load IN PARALLEL — the reading is not serial (§4.6).
@@ -279,6 +283,7 @@ export function useKnowledgeGraph(source: KnowledgeGraphSource, opts: KnowledgeG
         const last = grown.current;
         if (p.phase === last.phase && p.done <= last.done) return undefined;
         const run = () => {
+            if (pendingLoad.current) return; // the root load in flight lands first; the next progress tick re-reads
             grown.current = { at: Date.now(), phase: p.phase, done: p.done };
             const seq = growSeq.current;
             const focus = loadFocusRef.current;

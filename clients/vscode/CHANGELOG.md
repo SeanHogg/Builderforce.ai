@@ -2,6 +2,12 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.215] — Reviews finish, and Simulate sits in the canvas toolbar
+
+- A graph build that runs out of memory or holds the graph worker for more than 3 minutes is ended, so the next build runs. A review whose map build fails still goes on to Judge and Update the map, and then finishes.
+- A newer graph load of the same folder cancels the older one, so loads no longer pile up behind a stuck build.
+- The Simulate toggle is now a button in the canvas toolbar after Risk overlays. It no longer covers the toolbar's first two icons.
+
 ## [2026.10.214] — Detailed workflow diagnostics
 
 - Workflow diagnostics time model requests, retries, approval waits, dispatch checks, context assembly, state saves, memory write-back and close-out separately. Nested timings appear under their stage in both the report and its JSON capture.

@@ -6,7 +6,11 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import {
   canvasComposerIntent,
+  offeredCanvasComposerClarifier,
   offeredCanvasComposerIntents,
+  type CanvasComposerClarifierChoiceId,
+  type CanvasComposerClarifierContext,
+  type CanvasComposerClarifierDef,
   type CanvasComposerIntentId,
 } from '@/lib/canvasComposerIntents';
 import styles from './styles/composer.module.css';
@@ -46,48 +50,93 @@ export interface CanvasComposerIntentProps {
 }
 
 export function CanvasComposerIntent({ intents, value, onChange }: CanvasComposerIntentProps) {
+  return (
+    <ComposerSegments
+      labelKey="composerIntent.label"
+      testId="canvas-composer-intent"
+      segments={intents.map((id) => {
+        const def = canvasComposerIntent(id);
+        // A staged verb wears the arc's own dot in the arc's own hue; the one verb that is
+        // not a stage wears the Brain mark, which is how Brain is drawn everywhere else on
+        // this canvas. Two marks for two different kinds of thing, rather than one
+        // decorative glyph repeated.
+        return { id, labelKey: def.labelKey, titleKey: def.placeholderKey, stage: def.stage, mark: def.stage ? 'dot' : 'spark' };
+      })}
+      value={value}
+      onChange={onChange}
+    />
+  );
+}
+
+export interface CanvasComposerClarifierProps {
+  /** The question the request raises (`offeredCanvasComposerClarifier`). */
+  clarifier: CanvasComposerClarifierDef;
+  /** The armed choice. Always one of the clarifier's. */
+  value: CanvasComposerClarifierChoiceId;
+  onChange: (choice: CanvasComposerClarifierChoiceId) => void;
+}
+
+/**
+ * WHAT THIS LINE MEANS, when the request itself is ambiguous — "an agent" on a board whose
+ * app can declare one. The same radiogroup as the verb, so the reader meets one control,
+ * not two; its choices carry no mark because none of them is a stage or Brain.
+ */
+export function CanvasComposerClarifier({ clarifier, value, onChange }: CanvasComposerClarifierProps) {
+  return (
+    <ComposerSegments
+      labelKey={clarifier.labelKey}
+      testId={`canvas-composer-clarifier-${clarifier.id}`}
+      segments={clarifier.choices.map((choice) => ({ id: choice.id, labelKey: choice.labelKey, titleKey: choice.titleKey, mark: 'none' }))}
+      value={value}
+      onChange={onChange}
+    />
+  );
+}
+
+interface ComposerSegment<Id extends string> {
+  id: Id;
+  /** Catalog keys, under `creationCanvas`. */
+  labelKey: string;
+  titleKey: string;
+  stage?: string;
+  mark: 'dot' | 'spark' | 'none';
+}
+
+/** The one radiogroup both the verb and a clarifier draw. One segment draws nothing. */
+function ComposerSegments<Id extends string>({ labelKey, testId, segments, value, onChange }: {
+  labelKey: string;
+  testId: string;
+  segments: readonly ComposerSegment<Id>[];
+  value: Id;
+  onChange: (id: Id) => void;
+}) {
   const t = useTranslations('creationCanvas');
 
   // One segment is not a choice. See the header.
-  if (intents.length < 2) return null;
+  if (segments.length < 2) return null;
 
+  // The registry's keys are catalog keys; the cast is the one every consumer of a
+  // registry-declared key makes, because next-intl types the key as a literal union and
+  // a registry deals in strings.
   return (
-    <div
-      className={styles.composerIntent}
-      role="radiogroup"
-      aria-label={t('composerIntent.label')}
-      data-testid="canvas-composer-intent"
-    >
-      {intents.map((id) => {
-        const def = canvasComposerIntent(id);
-        const active = id === value;
-        // The registry's keys are catalog keys; the cast is the one every consumer of a
-        // registry-declared key makes, because next-intl types the key as a literal
-        // union and a registry deals in strings.
-        const label = t(def.labelKey as 'share');
-        return (
-          <button
-            key={id}
-            type="button"
-            role="radio"
-            aria-checked={active}
-            className={styles.composerIntentSegment}
-            data-testid={`canvas-composer-intent-${id}`}
-            data-stage={def.stage}
-            title={t(def.placeholderKey as 'share')}
-            onClick={() => onChange(id)}
-          >
-            {/* A staged verb wears the arc's own dot in the arc's own hue; the one verb
-                that is not a stage wears the Brain mark, which is how Brain is drawn
-                everywhere else on this canvas. Two marks for two different kinds of
-                thing, rather than one decorative glyph repeated. */}
-            {def.stage
-              ? <i className={styles.composerIntentDot} aria-hidden />
-              : <span className={styles.composerIntentSpark} aria-hidden><BrainMark size={12} /></span>}
-            {label}
-          </button>
-        );
-      })}
+    <div className={styles.composerIntent} role="radiogroup" aria-label={t(labelKey as 'share')} data-testid={testId}>
+      {segments.map((segment) => (
+        <button
+          key={segment.id}
+          type="button"
+          role="radio"
+          aria-checked={segment.id === value}
+          className={styles.composerIntentSegment}
+          data-testid={`${testId}-${segment.id}`}
+          data-stage={segment.stage}
+          title={t(segment.titleKey as 'share')}
+          onClick={() => onChange(segment.id)}
+        >
+          {segment.mark === 'dot' && <i className={styles.composerIntentDot} aria-hidden />}
+          {segment.mark === 'spark' && <span className={styles.composerIntentSpark} aria-hidden><BrainMark size={12} /></span>}
+          {t(segment.labelKey as 'share')}
+        </button>
+      ))}
     </div>
   );
 }
@@ -121,4 +170,27 @@ export function useComposerIntent(
     ? preferIntent
     : chosen.offer === offerKey && offered.includes(chosen.id) ? chosen.id : fallback;
   return { offered, active, choose: (id: CanvasComposerIntentId) => setChosen({ offer: offerKey, id }) };
+}
+
+/**
+ * The question `request` raises on this canvas and the armed answer — reset to the
+ * clarifier's first choice whenever the question itself changes (appears, goes, or is
+ * another one), by the same held-offer pattern as `useComposerIntent`. Null `clarifier`
+ * means the line raises no question and Enter does what the armed verb says.
+ */
+export function useComposerClarifier(request: string, context: CanvasComposerClarifierContext) {
+  const clarifier = offeredCanvasComposerClarifier(request, context);
+  const offerKey = clarifier?.id ?? '';
+  const [chosen, setChosen] = useState<{ offer: string; id: CanvasComposerClarifierChoiceId | null }>({ offer: offerKey, id: null });
+  if (chosen.offer !== offerKey) {
+    setChosen({ offer: offerKey, id: null });
+  }
+  const choice = clarifier
+    ? clarifier.choices.find((entry) => chosen.offer === offerKey && entry.id === chosen.id) ?? clarifier.choices[0]!
+    : null;
+  return {
+    clarifier,
+    choice,
+    choose: (id: CanvasComposerClarifierChoiceId) => setChosen({ offer: offerKey, id }),
+  };
 }

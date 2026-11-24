@@ -8,14 +8,13 @@
  *                 relay — which also answers, plainly, when no target is reachable.
  */
 import type { RuntimeToolId } from '@builderforce/creation-canvas-contract';
-import { apiRequest } from '@/lib/apiClient';
+import { callBuiltinTool } from '@/lib/builtinTools';
 import { peekSharedPreviewRuntime, sharedPreviewRuntimeOwner } from '@/lib/browserRuntime/previewRuntime';
 import { activeRunFor, type ActiveRun } from '../activeRun';
 import { RUN_TARGET_OWNER } from '../browserRunTarget';
 import type { RunTargetId } from '../runTarget';
 import { defaultBrowserToolDeps, runBrowserRuntimeTool } from './browserRuntimeTools';
 import { askRuntimeTools, serveRuntimeTools, type BridgeAnswer } from './runtimeToolBridge';
-import { BUILTIN_EXTENSION_ID } from './runtimeToolRoute';
 
 // The Brain's host hook lives in the light `runtimeToolRoute` (it loads this module on call).
 export { isRuntimeTool, localRuntimeToolRouter } from './runtimeToolRoute';
@@ -31,13 +30,8 @@ export interface RuntimeToolRoutes {
 }
 
 /** The server's executor, through the gateway relay the Brain's tools already use. */
-export async function callServerRuntimeTool(tool: RuntimeToolId, args: Json): Promise<unknown> {
-  const res = await apiRequest<{ result?: unknown }>('/llm/v1/mcp/call', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ extensionId: BUILTIN_EXTENSION_ID, tool, arguments: args }),
-  });
-  return res?.result ?? res;
+export function callServerRuntimeTool(tool: RuntimeToolId, args: Json): Promise<unknown> {
+  return callBuiltinTool(tool, args);
 }
 
 /** The browser executor over THIS tab's runtime. */

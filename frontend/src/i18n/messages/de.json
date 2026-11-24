@@ -22173,6 +22173,53 @@
     "loading": "Lebenslauf wird geladen…",
     "unavailable": "Dieser Lebenslauf-Link ist nicht verfügbar."
   },
+  "roomAgents": {
+    "summary": "{role} · {state}",
+    "noRole": "Keine Rolle deklariert",
+    "status": "Status: {state}",
+    "state": {
+      "idle": "Untätig",
+      "thinking": "Denkt nach",
+      "executing": "Führt aus",
+      "waiting": "Wartet",
+      "failed": "Fehlgeschlagen",
+      "recovering": "Wird fortgesetzt"
+    },
+    "declaration": "Deklaration",
+    "field": {
+      "role": "Rolle",
+      "workload": "Workload",
+      "instructions": "Anweisungen",
+      "memory": "Gedächtnis"
+    },
+    "tools": "Werkzeuge",
+    "noTools": "Dieser Agent deklariert keine Werkzeuge.",
+    "history": "Verlauf",
+    "noHistory": "Bisher ist nichts gelaufen.",
+    "stepFailed": "Fehlgeschlagen",
+    "category": {
+      "llm": "Modellaufruf",
+      "tool": "Werkzeugaufruf",
+      "message": "Hinweis",
+      "error": "Fehler",
+      "recall": "Abgerufenes Wissen",
+      "learn": "Gelernt",
+      "reconcile": "Wissen aktualisiert"
+    },
+    "steerLabel": "Anweisung für den Agenten",
+    "steerPlaceholder": "Sag dem Agenten, was er anders machen soll…",
+    "control": {
+      "steer": "Lenken",
+      "cancel": "Lauf abbrechen"
+    },
+    "done": {
+      "steer": "Anweisung an den Agenten gesendet.",
+      "cancel": "Abbruch an den Agenten gesendet."
+    },
+    "unreachable": "Der Agent war nicht erreichbar. Versuch es erneut.",
+    "chat": "Brain nach diesem Agenten fragen",
+    "chatPrompt": "Sag mir, was der Agent „{name}“ ({role}) gerade macht und was er von mir braucht."
+  },
   "roomStations": {
     "listHead": "Stationen im Raum",
     "open": "Öffnen",

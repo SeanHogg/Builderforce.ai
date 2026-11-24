@@ -5,8 +5,18 @@
 import type { ModelUsage, RunOutcomeKind } from "./contract.js";
 import type { StallAction } from "./policy/hooks.js";
 
+/** Where an event came from when the run is an agent in a Web Container (W12 contract "Events"); all optional, additive. */
+export interface RunEventCorrelation {
+  environmentId?: string;
+  runtimeId?: string;
+  agentId?: string;
+  correlationId?: string;
+}
+
 /** One event of the run's trace. The trace is what every adapter must match. */
-export type RunEvent =
+export type RunEvent = RunEventBody & RunEventCorrelation;
+
+type RunEventBody =
   | { kind: 'run.spec_validation'; step: number; completed: number; failed: number; pending: number; unverified: number; incomplete: boolean }
   | { kind: 'run.started'; step: number }
   | { kind: 'turn.started'; step: number }
@@ -29,5 +39,6 @@ export type RunEvent =
   | { kind: 'loop.no_progress'; step: number; streak: number; forced: string }  // the run circled its own read cache: this turn is forced
   | { kind: 'run.routed'; step: number; route: 'full' | 'quick'; score: number }  // the pipeline route the run was given, once, right after run.started (openRun)
   | { kind: 'finish.close_out_error'; step: number; reason: string }  // the surface's close-out threw before the finish gate; the finish went on
+  | { kind: 'run.recovered'; step: number; fromStep: number }  // a resumed run picked up after its last recorded step (W12 phase 4)
   | { kind: 'turn.finished'; step: number }
   | { kind: 'run.finished'; step: number; outcome: RunOutcomeKind };

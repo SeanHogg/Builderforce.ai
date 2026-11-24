@@ -1,4 +1,5 @@
 import { accessibilityAuditView } from './academic/AccessibilityAudit';
+import { agentStationView } from './agentStation';
 import { assessmentDeskView } from './academic/AssessmentDesk';
 import { citationsDeskView } from './academic/CitationsDesk';
 import { gradebookBoardView } from './academic/GradebookBoard';
@@ -30,5 +31,6 @@ export const ROOM_STATION_VIEWS: Readonly<Record<string, RoomStationView>> = {
   build: buildStationView,
   ops: opsStationView,
   launch: launchStationView,
+  agents: agentStationView,
   phasePath: phasePathStationView,
 };

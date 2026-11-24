@@ -17,8 +17,11 @@ import type { IngestManifest } from "@seanhogg/builderforce-memory/ingest";
 import type { GraphBuildRequest, GraphBuildResult } from "./graphBuildProtocol";
 import { readPackFile } from "./packs/packFile";
 
-/** A folder's knowledge, as a build reads it; undefined ⇒ the folder has no knowledge file (never reviewed). */
-export type FolderStores = (folderPath: string) => { store: KnowledgeStore; manifest: IngestManifest } | undefined;
+/**
+ * A folder's knowledge, as a build reads it; undefined ⇒ the folder has no knowledge file (never reviewed). `releaseExtracted`,
+ * when present, runs after each stored build: a long-lived store drops the bodies it read (they reload lazily).
+ */
+export type FolderStores = (folderPath: string) => { store: KnowledgeStore; manifest: IngestManifest; releaseExtracted?(): Promise<unknown> } | undefined;
 
 /** The build of `request`, in THIS thread, reading stored knowledge through `stores`. */
 export async function runGraphBuild<R extends GraphBuildRequest>(request: R, stores: FolderStores): Promise<GraphBuildResult<R>> {
@@ -35,12 +38,16 @@ async function buildOf(request: GraphBuildRequest, stores: FolderStores): Promis
   }
   const opened = stores(request.folderPath);
   if (!opened) return null;
-  return buildStoredGraph({
-    rootId: request.rootId, store: opened.store, manifest: opened.manifest,
-    packs: reviewPacks(request.partitions ? { partitions: request.partitions } : {}),
-    ...(request.nearDuplicates ? { nearDuplicates: request.nearDuplicates } : {}),
-    ...(request.focus ? { focus: request.focus } : {}),
-    ...(request.maxNodes ? { maxNodes: request.maxNodes } : {}),
-    ...(request.hashOverrides ? { hashOverrides: request.hashOverrides } : {}),
-  });
+  try {
+    return await buildStoredGraph({
+      rootId: request.rootId, store: opened.store, manifest: opened.manifest,
+      packs: reviewPacks(request.partitions ? { partitions: request.partitions } : {}),
+      ...(request.nearDuplicates ? { nearDuplicates: request.nearDuplicates } : {}),
+      ...(request.focus ? { focus: request.focus } : {}),
+      ...(request.maxNodes ? { maxNodes: request.maxNodes } : {}),
+      ...(request.hashOverrides ? { hashOverrides: request.hashOverrides } : {}),
+    });
+  } finally {
+    await opened.releaseExtracted?.();
+  }
 }

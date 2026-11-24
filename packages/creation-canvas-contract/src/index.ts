@@ -123,6 +123,9 @@ export * from './creationLibrary';
 // detected once per project + commit, used by Run loop (W1), Provision (W4),
 // Deploy (W6), and Marketplace (W7). See appBlueprint.ts.
 export * from './appBlueprint';
+// An agent defined without code — the canvas form's draft and the ONE mapping to the app
+// manifest's `agents.<id>` declaration that `app_manifest.add_agent` writes (W12).
+export * from './agentDeclarationDraft';
 // The run loop's `runtime.*` agent tools — one definition, a container and a browser executor.
 export * from './runtimeTools';
 

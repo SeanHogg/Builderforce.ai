@@ -117,3 +117,94 @@ export function offeredCanvasComposerIntents(
   const offered = editable ? intents : intents.filter((id) => id === DEFAULT_CANVAS_COMPOSER_INTENT);
   return offered.length ? offered : [DEFAULT_CANVAS_COMPOSER_INTENT];
 }
+
+/*
+ * ── CLARIFIERS — when ONE line could mean two different things ───────────────────
+ * An intent is a verb the SURFACE offers. A clarifier is a question the REQUEST raises:
+ * "add an agent that triages issues" on a board whose project has an app manifest could
+ * mean a teammate seated on the board (the hire flow Brain already runs) or an agent
+ * declared as a feature of the app itself (`agents` in `builderforce.json`). The answer
+ * is a fixed list — no model call decides it — drawn by the same radiogroup the intents
+ * use, and armed on its first choice so nothing changes for a reader who ignores it.
+ *
+ * What Enter then does is the choice's `outcome`, which the composer looks up in a table
+ * of handlers — never a branch on the choice's id. A new clarifier is an entry below, its
+ * `creationCanvas.composerIntent.<key>.*` copy in all five catalogs, and (only when it
+ * introduces a new outcome) one handler on the composer.
+ */
+
+/** What the canvas knows that a clarifier may require. */
+export interface CanvasComposerClarifierContext {
+  /** The board's project has an app manifest (`.builderforce/builderforce.json`). */
+  hasAppManifest: boolean;
+}
+
+export type CanvasComposerClarifierId = 'agentChoice';
+
+export type CanvasComposerClarifierChoiceId = 'teammate-on-board' | 'feature-in-app';
+
+/**
+ * What Enter does once a choice is armed: `compose` is the armed intent's own submit,
+ * unchanged; `defineAppAgent` opens the form that declares an agent in the app manifest.
+ */
+export type CanvasComposerClarifierOutcome = 'compose' | 'defineAppAgent';
+
+export interface CanvasComposerClarifierChoiceDef {
+  id: CanvasComposerClarifierChoiceId;
+  /** Catalog key, under `creationCanvas`. The word on the segment. */
+  labelKey: string;
+  /** Catalog key, under `creationCanvas`. What the choice means, as the segment's title. */
+  titleKey: string;
+  outcome: CanvasComposerClarifierOutcome;
+}
+
+export interface CanvasComposerClarifierDef {
+  id: CanvasComposerClarifierId;
+  /** Catalog key, under `creationCanvas`. The radiogroup's accessible name. */
+  labelKey: string;
+  /** The word in the request that raises the question. */
+  token: RegExp;
+  /** Facts that must ALL hold for the question to be worth asking. */
+  requires: readonly (keyof CanvasComposerClarifierContext)[];
+  /** In draw order; the first is armed until the reader picks another. */
+  choices: readonly CanvasComposerClarifierChoiceDef[];
+}
+
+const CANVAS_COMPOSER_CLARIFIERS: readonly CanvasComposerClarifierDef[] = [
+  // Only where the app CAN declare an agent: without a manifest there is nothing to
+  // write the declaration into, and the question would offer a choice that cannot work.
+  {
+    id: 'agentChoice',
+    labelKey: 'composerIntent.agentChoice.label',
+    token: /\bagents?\b/i,
+    requires: ['hasAppManifest'],
+    choices: [
+      {
+        id: 'teammate-on-board',
+        labelKey: 'composerIntent.agentChoice.teammateOnBoard.label',
+        titleKey: 'composerIntent.agentChoice.teammateOnBoard.title',
+        outcome: 'compose',
+      },
+      {
+        id: 'feature-in-app',
+        labelKey: 'composerIntent.agentChoice.featureInApp.label',
+        titleKey: 'composerIntent.agentChoice.featureInApp.title',
+        outcome: 'defineAppAgent',
+      },
+    ],
+  },
+];
+
+/** Every declared clarifier, for the tests that read the copy back. */
+export function canvasComposerClarifiers(): readonly CanvasComposerClarifierDef[] {
+  return CANVAS_COMPOSER_CLARIFIERS;
+}
+
+/** The question this request raises on this canvas, or null when it raises none. */
+export function offeredCanvasComposerClarifier(
+  request: string,
+  context: CanvasComposerClarifierContext,
+): CanvasComposerClarifierDef | null {
+  return CANVAS_COMPOSER_CLARIFIERS.find((def) =>
+    def.requires.every((fact) => context[fact]) && def.token.test(request)) ?? null;
+}

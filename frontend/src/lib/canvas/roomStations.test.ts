@@ -149,8 +149,8 @@ describe('stations without a phase context', () => {
 
   it('appends the arc specs after every pre-existing spec, so default spots are unchanged', () => {
     const ids = ROOM_STATION_SPECS.map((spec) => spec.id);
-    expect(ids.slice(-5)).toEqual(['evidence', 'build', 'ops', 'launch', 'phasePath']);
-    expect(ids.slice(0, -5)).toEqual(['approvals', 'metrics', 'widget', 'evermind', 'assessment', 'gradebook', 'accessibility', 'citations']);
+    expect(ids.slice(-6)).toEqual(['evidence', 'build', 'ops', 'launch', 'agents', 'phasePath']);
+    expect(ids.slice(0, -6)).toEqual(['approvals', 'metrics', 'widget', 'evermind', 'assessment', 'gradebook', 'accessibility', 'citations']);
     // A board that had a metric keeps its metrics board at the same index once an idea joins.
     const before = keysOf([metric]);
     const after = keysOf([metric, idea]);

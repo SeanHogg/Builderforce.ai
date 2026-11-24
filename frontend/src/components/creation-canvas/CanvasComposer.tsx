@@ -7,14 +7,14 @@ import { ChatInput, type ChatInputProps } from '@/components/ChatInput';
 import { PreviewPickChips } from '@/components/builder/PreviewPickChip';
 import { Icon } from '@/components/ui/Icon';
 import { mergeRefs } from '@/lib/mergeRefs';
-import { canvasComposerIntent } from '@/lib/canvasComposerIntents';
+import { canvasComposerIntent, type CanvasComposerClarifierOutcome } from '@/lib/canvasComposerIntents';
 import { CANVAS_RESPONSE_TOKENS } from '@/lib/canvasAiTurnBudget';
 import type { CanvasPromptPlacement } from '@/lib/canvasPromptPlacement';
 import { canvasSurfaceDefinition, type CanvasSurfaceId } from '@/lib/canvasSurfaces';
 import type { CreationTemplate } from '@/lib/templates/creationTemplates';
 import { REPLAY_MASK } from '@/lib/replaySensitive';
 import { CanvasActionsTrigger } from './CanvasActionsTrigger';
-import { CanvasComposerIntent, useComposerIntent } from './CanvasComposerIntent';
+import { CanvasComposerClarifier, CanvasComposerIntent, useComposerClarifier, useComposerIntent } from './CanvasComposerIntent';
 import { CanvasRunActivity } from './CanvasRunActivity';
 import { PanelDragHandle } from './PanelDragHandle';
 import { usePanelDragOffset } from './usePanelDragOffset';
@@ -73,6 +73,12 @@ export interface CanvasComposerProps {
   onAsk: (text: string) => void;
   /** Enter, or Send, while `captureIdea` is armed. */
   onCaptureIdea: (text: string) => void;
+  /**
+   * The board's app can declare agents of its own. While its project has a manifest, a
+   * request naming an agent asks whether it means a teammate on the board (the armed
+   * verb, unchanged) or a feature of the app — and the second calls `onDefine`.
+   */
+  appAgents?: { hasAppManifest: boolean; onDefine: (request: string) => void };
   /** Publishes `--composer-space` while floating. */
   hostRef?: (node: HTMLElement | null) => void;
   /** The phone's "+" — the actions sheet that IS the command bar at that width. */
@@ -105,7 +111,7 @@ export interface CanvasComposerProps {
 }
 
 export function CanvasComposer({
-  docked, surface, editable, preferAsk, onAsk, onCaptureIdea, hostRef, actions, runStartedAt, brainIsSurface,
+  docked, surface, editable, preferAsk, onAsk, onCaptureIdea, appAgents, hostRef, actions, runStartedAt, brainIsSurface,
   promptPlacement, setPromptPlacement, brainDockDrawn, updateBrainDock, scope, memoryProjectId, memoryLoading = false,
   onTwilioJourney, applyTemplate, conversationStarted, input,
 }: CanvasComposerProps) {
@@ -115,6 +121,7 @@ export function CanvasComposer({
   const signedIn = persistence === 'server';
   const { offered, active, choose } = useComposerIntent(surfaceDef.composerIntents, editable, preferAsk ? 'ask' : undefined);
   const activeDef = canvasComposerIntent(active);
+  const { clarifier, choice, choose: chooseClarifier } = useComposerClarifier(input.value, { hasAppManifest: appAgents?.hasAppManifest ?? false });
   const resize = usePromptResize();
   // One of the floating cards a reader can pull clear of the board with its own handle.
   // Only meaningful while it floats: docked, it is a row in the Brain panel's column.
@@ -124,12 +131,21 @@ export function CanvasComposer({
   const starters = useCanvasStarters({ onPrompt: input.onChange, onTwilioJourney, onPack: applyTemplate });
   const suggestions = useCanvasNextSteps({ surface, conversationStarted, onPrompt: input.onChange });
 
+  /** What the armed verb does with a line. */
+  const compose = (text: string) => {
+    if (active === 'captureIdea') onCaptureIdea(text);
+    else onAsk(text);
+  };
+  /** What each clarifier outcome does — looked up, never branched on a choice's id. */
+  const outcomes: Record<CanvasComposerClarifierOutcome, (text: string) => void> = {
+    compose,
+    defineAppAgent: appAgents?.onDefine ?? compose,
+  };
   /** The ONE submit branch: Enter and Send cannot disagree about what a line meant. */
   const submit = () => {
     const text = input.value.trim();
     if (!text) return;
-    if (active === 'captureIdea') onCaptureIdea(text);
-    else onAsk(text);
+    (choice ? outcomes[choice.outcome] : compose)(text);
   };
   const toggleDock = () => {
     // Docking puts the prompt in the Brain panel, so it OPENS that panel: a control whose
@@ -194,6 +210,7 @@ export function CanvasComposer({
           {...resize.handleProps}
         />
         <CanvasComposerIntent intents={offered} value={active} onChange={choose} />
+        {clarifier && choice && <CanvasComposerClarifier clarifier={clarifier} value={choice.id} onChange={chooseClarifier} />}
         <div className={styles.composerInputRow}>
           {actions && <CanvasActionsTrigger open={actions.open} onToggle={actions.onToggle} />}
           <ChatInput

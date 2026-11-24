@@ -66,7 +66,7 @@ import { SurfaceHeader } from './surface/SurfaceHeader';
 import { TimeSlider, useHistory } from './surface/TimeSlider';
 import { SceneTools } from './surface/SceneTools';
 import { usePanelVisibility } from './surface/usePanelVisibility';
-import { Pill, pillStyle } from './surface/ui';
+import { Pill } from './surface/ui';
 import { questionForLens } from './surface/questions';
 import { useSurfaceActions } from './surface/useSurfaceActions';
 import { useSurfaceChrome } from './surface/useSurfaceChrome';
@@ -236,7 +236,12 @@ export function KnowledgeGraphView({
     const overlay = (
         <SceneOverlay
             {...chrome.overlayProps}
-            tools={real ? <SceneTools graph={graph} env={surfaceEnv} labels={labels} surface={surface} panel={panel} onPanel={setPanel} panelsMenu={layout.panelsMenu} narrow={layout.phone} /> : undefined}
+            tools={real ? <SceneTools graph={graph} env={surfaceEnv} labels={labels} surface={surface} panel={panel} onPanel={setPanel} panelsMenu={layout.panelsMenu} narrow={layout.phone}
+                simulate={{
+                    pressed: simulateMode,
+                    ariaLabel: fillTemplate(labels.surface.simulate.modeOpenAria, { name: selected ? index.get(selected)?.label ?? selected : labels.surface.simulate.modeEntry }),
+                    onToggle: () => setSimulateMode((v) => !v),
+                }} /> : undefined}
             time={<TimeSlider commits={history.commits} capped={history.total} picked={picked} labels={labels} changedStations={changedStations} onPick={(sha) => { setPicked(sha); if (sha) pickQuestion('changed'); }} />}
         />
     );
@@ -284,16 +289,6 @@ export function KnowledgeGraphView({
                             </div>
                             {!layout.phone && overlay}
                             {surface.highlight && showsTowers(mode, surface.towers) && <TowerLegend highlight={surface.highlight} labels={labels} compact={layout.compact} onClose={() => surface.setHighlight(null)} />}
-                            {real && (
-                                <button
-                                    type="button" data-simulate-toggle aria-pressed={simulateMode}
-                                    aria-label={fillTemplate(labels.surface.simulate.modeOpenAria, { name: selected ? index.get(selected)?.label ?? selected : labels.surface.simulate.modeEntry })}
-                                    onClick={() => setSimulateMode((v) => !v)}
-                                    style={{ position: 'absolute', zIndex: 5, top: 8, left: 8, ...pillStyle(simulateMode), minHeight: 28 }}
-                                >
-                                    {labels.surface.simulate.modeOpen}
-                                </button>
-                            )}
                             {simulateMode && real && (
                                 <SimulatePanel
                                     graph={graph} from={selected} fromName={selected ? index.get(selected)?.label : undefined}

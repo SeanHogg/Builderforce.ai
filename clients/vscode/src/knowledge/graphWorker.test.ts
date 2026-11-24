@@ -10,7 +10,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("./folderKnowledge", () => ({ beforeKnowledgeShutdown: () => () => undefined, folderKnowledge: () => { throw new Error("no in-thread build here"); } }));
 
-import { buildOffThread, useGraphWorkerSeams, type GraphWorkerHandle } from "./graphWorker";
+import { buildOffThread, GRAPH_BUILD_MS, GRAPH_WORKER_HEAP_MB, useGraphWorkerSeams, type GraphWorkerHandle } from "./graphWorker";
 import type { GraphWorkerMessage, GraphWorkerReply } from "./graphBuildProtocol";
 
 type Listener = (value: any) => void;
@@ -119,6 +119,35 @@ describe("graph worker host", () => {
     expect(spawned[1]!.builds().map((m) => m.request)).toEqual([stored("c")]);
     spawned[1]!.reply({ type: "done", id: spawned[1]!.builds()[0]!.id, result: null });
     await expect(c).resolves.toBeNull();
+  });
+
+  it("caps the worker's heap", async () => {
+    const limits: unknown[] = [];
+    const spawned: FakeWorker[] = [];
+    restore = useGraphWorkerSeams({ file: "fake-worker.js", spawn: (_f, o) => { limits.push(o.resourceLimits.maxOldGenerationSizeMb); const w = new FakeWorker(); spawned.push(w); return w; } });
+    const a = buildOffThread(stored("a"));
+    expect(limits).toEqual([GRAPH_WORKER_HEAP_MB]);
+    spawned[0]!.reply({ type: "done", id: spawned[0]!.builds()[0]!.id, result: null });
+    await expect(a).resolves.toBeNull();
+  });
+
+  it("a build that never answers is ended at the limit, and the next build runs on a fresh worker", async () => {
+    vi.useFakeTimers();
+    try {
+      const spawned = withWorkers();
+      const a = buildOffThread(stored("a"));
+      const b = buildOffThread(stored("b"));
+      const failed = expect(a).rejects.toMatchObject({ code: "graph_build_timeout" });
+      vi.advanceTimersByTime(GRAPH_BUILD_MS);
+      await failed;
+      expect(spawned[0]!.terminated).toBe(true);
+      expect(spawned).toHaveLength(2);
+      expect(spawned[1]!.builds().map((m) => m.request)).toEqual([stored("b")]);
+      spawned[1]!.reply({ type: "done", id: spawned[1]!.builds()[0]!.id, result: null });
+      await expect(b).resolves.toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("ships an analysis' extracts as bounded parts before the build, and answers the code actions' findings", async () => {

@@ -13,5 +13,5 @@ export type { KitOptions, KitPartOption } from './registry';
 export { installStepId, KIT_API_PORT, KIT_WEB_PORT } from './parts/fragments';
 export type {
   ComposedKit, KitDefinition, KitIssue, KitIssueCode, KitIssueParams, KitManifest, KitPart, KitPartKind, KitRoot, KitServiceId,
-  ManifestFragment, ServiceAttachment,
+  KitAgentDeclaration, ManifestFragment, ServiceAttachment,
 } from './types';

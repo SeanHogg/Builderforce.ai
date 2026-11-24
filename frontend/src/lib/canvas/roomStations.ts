@@ -4,6 +4,7 @@ import { auditsKind } from '@/lib/academic/accessibility';
 import { boardMetricDefinitions } from './boardMetrics';
 import { boardDeployments } from './boardDeployments';
 import { ideaLogEntries } from '../ideaLog';
+import { manifestAgents } from './manifestAgents';
 import { sessionHasApp } from '../canvasSessionApp';
 import type { CanvasPhase } from '../canvasPhases';
 import type { CanvasPhaseReadiness } from '../canvasPhaseReadiness';
@@ -130,6 +131,18 @@ export const ROOM_STATION_SPECS: readonly RoomStationSpec[] = [
   { id: 'build', phase: 'make', instances: (objects) => (sessionHasApp(objects as ReadonlyArray<{ id: string; data: { [key: string]: unknown; kind: string } }>) ? [{ key: 'build', station: 'build' }] : []) },
   { id: 'ops', phase: 'run', instances: (objects) => (boardDeployments(objects).length ? [{ key: 'ops', station: 'ops' }] : []) },
   { ...whenAnyKind('launch', LAUNCH_STATION_KINDS), phase: 'reach' },
+  // One stand per agent the session app's manifest declares (W12 phase 5) — an agent at
+  // work in the room. `resourceId` is the declaration's id, which keys its run.
+  {
+    id: 'agents',
+    phase: 'make',
+    instances: (objects) => manifestAgents(objects).map((agent) => ({
+      key: `agents:${agent.id}`,
+      station: 'agents',
+      resourceId: agent.id,
+      title: agent.id,
+    })),
+  },
   // The room's version of the path card: a sign that stands ONLY while the canvas's
   // phase is not ready, saying what is missing. LAST, so its coming and going never
   // shifts another station's default spot.

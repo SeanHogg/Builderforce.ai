@@ -6,6 +6,7 @@
  * this package is private, so published packages take the entries the host injects).
  */
 import type { KitPart, KitPartKind } from './types';
+import { AGENTS } from './parts/agents';
 import { ANGULAR_PART } from './parts/angular';
 import { DOTNET_MINIMAL } from './parts/dotnetMinimal';
 import { LARAVEL } from './parts/laravel';
@@ -15,7 +16,7 @@ import { PYTHON_FASTAPI } from './parts/pythonFastapi';
 import { REACT_VITE } from './parts/reactVite';
 import { VUE_VITE } from './parts/vueVite';
 
-const PARTS: readonly KitPart[] = [REACT_VITE, ANGULAR_PART, VUE_VITE, NODE_EXPRESS, PYTHON_FASTAPI, LARAVEL, DOTNET_MINIMAL, POSTGRES];
+const PARTS: readonly KitPart[] = [REACT_VITE, ANGULAR_PART, VUE_VITE, NODE_EXPRESS, PYTHON_FASTAPI, LARAVEL, DOTNET_MINIMAL, POSTGRES, AGENTS];
 
 /** Every part, by canonical id. */
 export const KIT_PARTS: Readonly<Record<string, KitPart>> = Object.fromEntries(PARTS.map((part) => [part.id, part]));

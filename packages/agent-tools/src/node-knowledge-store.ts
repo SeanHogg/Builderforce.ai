@@ -59,6 +59,8 @@ export function nodeKnowledgeStore(folderDir: string, opts: { busyTimeoutMs?: nu
 export interface NodeKnowledgeReader {
     store: LocalSnapshotStore;
     manifest: IngestManifest;
+    /** Drops the extract bodies the store holds after a build (they reload lazily), so a long-lived reader does not keep a whole repository's. */
+    releaseExtracted(): Promise<boolean>;
     close(): void;
 }
 
@@ -84,7 +86,7 @@ export function nodeKnowledgeReader(folderDir: string, opts: { busyTimeoutMs?: n
     const store = localSnapshotStore(undefined, { rows: persistence });
     // The buffer stays empty (a reader never sets): every `get` reads the committed row.
     const manifest = bufferedManifest(buffer, persistence);
-    return { store, manifest, close: () => persistence.close() };
+    return { store, manifest, releaseExtracted: () => store.releaseExtracted(), close: () => persistence.close() };
 }
 
 /** The manifest alone, committing directly (no fact store to ride with). */

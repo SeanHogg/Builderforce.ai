@@ -61,6 +61,9 @@ import { llmCourseCatalogKeys } from '@/lib/courseLms';
 import { RESUME_TEMPLATES } from '@/lib/canvasResume';
 import { CANVAS_SESSION_ACTIONS } from '@/lib/canvasSessionActions';
 import { OUTCOME_METRIC_FAMILY_ORDER, OUTCOME_METRIC_MESSAGE_KEYS } from '@/lib/outcomeMetrics';
+import { AGENT_RUN_STATES, TRACE_CATEGORIES } from '@/lib/canvas/agentRunState';
+import { AGENT_RUN_CONTROL_TOOLS } from '@/lib/canvas/agentRunControl';
+import { MANIFEST_AGENT_DECLARATION_FIELDS } from '@/lib/canvas/manifestAgents';
 
 import { listComponents } from '@/components/widgets/registry';
 import { AI_INSIGHT_PANELS } from '@/components/insights/aiInsightPanels';
@@ -660,6 +663,23 @@ describe('message catalogs', () => {
       if (out === path) broken.push(path);
     }
     expect(broken).toEqual([]);
+  });
+});
+
+describe('room agent station catalogs', () => {
+  // The agent station resolves these from registries — the run states, the run controls,
+  // the declaration fields and the trace's step categories — so each must resolve in every
+  // locale, not only match another catalog.
+  const keys = [
+    ...AGENT_RUN_STATES.map((state) => `roomAgents.state.${state}`),
+    ...Object.keys(AGENT_RUN_CONTROL_TOOLS).flatMap((control) => [`roomAgents.control.${control}`, `roomAgents.done.${control}`]),
+    ...MANIFEST_AGENT_DECLARATION_FIELDS.map((field) => `roomAgents.field.${field}`),
+    ...TRACE_CATEGORIES.map((category) => `roomAgents.category.${category}`),
+  ];
+
+  it.each(LOCALES)('%s resolves every registry-backed roomAgents key', (locale) => {
+    const t = createTranslator({ locale, messages: CATALOGS[locale], onError: () => {} });
+    expect(keys.filter((key) => t(key as never) === key)).toEqual([]);
   });
 });
 

@@ -8,8 +8,8 @@ describe('the kit part registry', () => {
     const options = listKitOptions();
     expect(options.frontends.map((o) => o.id)).toEqual(['react-vite', 'angular', 'vue-vite']);
     expect(options.backends.map((o) => o.id)).toEqual(['node-express', 'python-fastapi', 'laravel', 'dotnet-minimal']);
-    // Phase 3 ships the postgres extra only (§W11 Rev 2 item 6).
-    expect(options.extras.map((o) => o.id)).toEqual(['postgres']);
+    // Phase 3 shipped the postgres extra (§W11 Rev 2 item 6); `agents` is the manifest's agents capability.
+    expect(options.extras.map((o) => o.id)).toEqual(['postgres', 'agents']);
     expect(options.namedKits).toBe(NAMED_KITS);
     for (const option of [...options.frontends, ...options.backends, ...options.extras]) expect(option.label).not.toBe('');
   });
@@ -25,7 +25,7 @@ describe('the kit part registry', () => {
 
   it('roots every part at its service, with files relative to that root', () => {
     for (const part of Object.values(KIT_PARTS)) {
-      expect(part.root).toBe(part.serviceId === 'web' ? '/web' : '/api');
+      expect(part.root).toBe(part.id === 'agents' ? '/agents' : part.serviceId === 'web' ? '/web' : '/api');
       for (const path of Object.keys(part.files)) expect(path).not.toMatch(/^\/|^(web|api)\//);
     }
   });

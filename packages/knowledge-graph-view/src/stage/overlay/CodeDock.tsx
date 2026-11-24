@@ -3,7 +3,7 @@
  * step scroll it (`scrollLine` → `scrollTopForLine`), and a method name drills (`onDrill` ← `drillRefForName`).
  */
 
-import type { CSSProperties } from 'react';
+import { useCallback, useMemo, useRef, type CSSProperties } from 'react';
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { pathOf } from '../../graphModel';
 import { fillTemplate, type KnowledgeGraphLabels } from '../../labels';
@@ -11,7 +11,7 @@ import { cssVar } from '../../scene/themeColors';
 import { fileRefOf } from '../../surface/stations';
 import type { SourceLocation, SourceReader, SymbolRecord } from '../../types';
 import { CodeLayer } from '../drill/CodeLayer';
-import { codeTargetOf, MAX_SPAN, type CodeTarget } from '../drill/codeText';
+import { codeTargetOf, MAX_SPAN, symbolAtLine, symbolsOfFile, type CodeTarget } from '../drill/codeText';
 
 const dock: CSSProperties = {
     position: 'absolute', zIndex: 4, top: 8, right: 8, bottom: 8, width: 'min(420px, calc(100% - 16px))',
@@ -30,10 +30,22 @@ export interface CodeDockProps {
     onDrill(ref: string): void;
     onOpenSource?: ((location: SourceLocation) => void) | undefined;
     onClose(): void;
+    /** The symbol at the top of the scrolled code. */
+    onFocusSymbol?: ((ref: string) => void) | undefined;
 }
 
-export function CodeDock({ target, name, reader, labels, records, scrollLine, onDrill, onOpenSource, onClose }: CodeDockProps) {
+export function CodeDock({ target, name, reader, labels, records, scrollLine, onDrill, onOpenSource, onClose, onFocusSymbol }: CodeDockProps) {
     const t = labels.surface.code;
+    const path = target?.path;
+    const fileSymbols = useMemo(() => path ? symbolsOfFile(records, path) : [], [records, path]);
+    // Only a scroll across a symbol boundary reaches the stage, not every pixel.
+    const last = useRef<string | null>(null);
+    const onTopLine = useCallback((line: number) => {
+        const ref = symbolAtLine(fileSymbols, line);
+        if (!ref || ref === last.current) return;
+        last.current = ref;
+        onFocusSymbol?.(ref);
+    }, [fileSymbols, onFocusSymbol]);
     if (!target) {
         return (
             <aside data-code-dock role="complementary" aria-label={fillTemplate(t.buttonAria, { name })} style={{ ...dock, padding: 12, borderRadius: 12, background: cssVar('bg'), color: cssVar('text'), border: `1px solid ${cssVar('border')}` }}>
@@ -49,7 +61,7 @@ export function CodeDock({ target, name, reader, labels, records, scrollLine, on
         <aside data-code-dock role="complementary" aria-label={fillTemplate(t.buttonAria, { name: target.name })} style={dock}>
             <CodeLayer
                 docked slotKey={`node:${target.ref}`} target={target} reader={reader} labels={labels}
-                records={records} scrollLine={scrollLine} onDrill={onDrill} onOpenSource={onOpenSource} onClose={onClose}
+                records={records} scrollLine={scrollLine} onDrill={onDrill} onOpenSource={onOpenSource} onClose={onClose} onTopLine={onTopLine}
             />
         </aside>
     );

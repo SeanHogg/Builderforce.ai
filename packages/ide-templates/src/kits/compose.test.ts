@@ -129,3 +129,39 @@ describe('composeParts — fragments merge by key, never by overwrite', () => {
     expect(JSON.stringify(KIT_PARTS)).toBe(before);
   });
 });
+
+describe('composeKit — the agents extra', () => {
+  const ROLES = ['coordinator', 'developer', 'tester'];
+  const kit = composeKit('react-node', ['agents']);
+
+  it('composes with zero issues and writes one brief per role at the project root', () => {
+    expect(kit.issues).toEqual([]);
+    for (const role of ROLES) expect(kit.files[`agents/${role}.md`]).toContain(`# ${role[0]!.toUpperCase()}${role.slice(1)}`);
+  });
+
+  it('enables capabilities.agents with ceilings and declares the three roles by brief', () => {
+    const { capabilities, agents } = kit.manifest;
+    expect(capabilities?.agents).toMatchObject({ maxAgents: 3, maxDepth: expect.any(Number), maxChildren: expect.any(Number), budget: { tokens: expect.any(Number), usd: expect.any(Number), steps: expect.any(Number) } });
+    expect(Object.values(agents!).map((agent) => agent.role).sort()).toEqual(ROLES);
+    for (const [id, agent] of Object.entries(agents!)) {
+      expect(id).toMatch(/^[a-z][a-z0-9-]*$/);
+      expect(agent.instructions).toBe(`agents/${agent.role}.md`);
+      expect(kit.files[agent.instructions]).toBeDefined();
+    }
+  });
+
+  it('keeps every declaration within the ceilings', () => {
+    const policy = kit.manifest.capabilities!.agents as { maxAgents: number; tools: string[]; budget: Record<string, number> };
+    expect(Object.keys(kit.manifest.agents!).length).toBeLessThanOrEqual(policy.maxAgents);
+    for (const agent of Object.values(kit.manifest.agents!)) {
+      for (const tool of agent.tools) expect(policy.tools).toContain(tool);
+      for (const [key, value] of Object.entries(agent.budget)) expect(value).toBeLessThanOrEqual(policy.budget[key]!);
+    }
+  });
+
+  it('leaves a kit without the extra free of capabilities and agents', () => {
+    const plain = composeKit('react-node').manifest;
+    expect(plain.capabilities).toBeUndefined();
+    expect(plain.agents).toBeUndefined();
+  });
+});

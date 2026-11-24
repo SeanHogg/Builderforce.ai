@@ -1,3 +1,8 @@
+## ✅ RESOLVED 2026-11-24: W12 design review and W12 phase 1 (capabilities and agents on manifest v1)
+
+- **W12 Opus design review.** Approved with contract refinements: injected capability registry, ceilings that only narrow, roles not model ids, one cron reader for triggers, catalog-key tool allowlists, and versioned storage formats for phases 2, 4 and 6. The phase order 1 → 3 → define-agents UI → W11 phase 5 → 2 → 4 → 5 → 6 is confirmed. See [make.md › W12](./docs/specs/make.md#4-w12-agent-environment-and-recoverable-runtime).
+- **Manifest v1 declares `capabilities` and `agents` (W12 phase 1).** builderforce-webcontainers `core/src/capabilities/` holds `CapabilityDefinition`, `createCapabilityRegistry`, dependency ordering and the built-in `agents` capability. `core/src/manifest/agents.ts` validates both fields with typed issues (`unknown-capability`, `capability-missing-dependency`, `capability-dependency-cycle`, `capability-not-enabled`, `capability-unsupported-target`, `agent-model-id`, `policy-widening`), and the JSON Schema describes them. Manifests without these fields parse unchanged.
+
 ## ✅ RESOLVED 2026-11-24: PRD 50: finished sections archived on consolidation
 
 **PRD 50 — one pipeline above the kernel**

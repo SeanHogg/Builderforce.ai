@@ -46,9 +46,9 @@ const shape = (id: string, label: string, re: RegExp): SecretShape => ({ id, lab
 export const SECRET_SHAPES: readonly SecretShape[] = [
   // PEM blocks. An unterminated block (a capped tool output) is redacted to the end of the text: the body is the secret.
   shape('private-key', 'private key block', /-----BEGIN [A-Z ]*PRIVATE KEY-----(?:[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----|[\s\S]*)/gi),
-  // OpenAI / Anthropic / OpenRouter style keys: `sk-proj-…`, `sk-ant-api03-…`, legacy `sk-` + base62. A bare `sk-` needs a
-  // hyphen-free run of 16+ chars, so a package name like `sk-learn-components` is not a key.
-  shape('openai-key', 'OpenAI-style key', /\b(sk-(?:(?:proj|svcacct|admin|ant\d*|or-v\d)-[A-Za-z0-9_-]{16,}|[A-Za-z0-9_]{16,}))(?![A-Za-z0-9_])/gi),
+  // OpenAI / Anthropic / OpenRouter style keys: `sk-proj-…`, `sk-ant-api03-…`, test/live-mode `sk-test-…` / `sk-live-…`, legacy
+  // `sk-` + base62. A bare `sk-` needs a hyphen-free run of 16+ chars, so a package name like `sk-learn-components` is not a key.
+  shape('openai-key', 'OpenAI-style key', /\b(sk-(?:(?:proj|svcacct|admin|ant\d*|or-v\d|test|live)-[A-Za-z0-9_-]{16,}|[A-Za-z0-9_]{16,}))(?![A-Za-z0-9_])/gi),
   shape('github-token', 'GitHub token', /\b(gh[pousr]_[A-Za-z0-9]{20,})\b/gi),
   shape('github-pat', 'GitHub fine-grained token', /\b(github_pat_[A-Za-z0-9_]{20,})\b/gi),
   shape('slack-token', 'Slack token', /\b(xox[baprs]-[A-Za-z0-9-]{10,})\b/gi),

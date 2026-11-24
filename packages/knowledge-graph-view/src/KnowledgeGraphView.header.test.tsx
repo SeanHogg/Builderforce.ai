@@ -311,6 +311,16 @@ describe('the canvas tools and panel toggles', () => {
         expect(overlay.getByRole('button', { name: L.panelCoverage })).toBeTruthy();
     });
 
+    it('puts the Simulate toggle in the scene toolbar, not floating over the scene box', async () => {
+        await mount(sourceOf());
+        const toggle = document.querySelector('[data-simulate-toggle]')!;
+        expect(screen.getByTestId('kg-scene-overlay').contains(toggle)).toBe(true);
+        expect(screen.getByTestId('kg-scene-box').parentElement!.children).not.toContain(toggle);
+        expect(toggle.getAttribute('aria-pressed')).toBe('false');
+        fireEvent.click(toggle);
+        expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    });
+
     it('hides the Act panel when the right toggle is pressed, and brings it back', async () => {
         // jsdom may run without a localStorage (the experimental flag): give the panel-visibility
         // persistence an in-memory stand-in so the toggle round-trips.

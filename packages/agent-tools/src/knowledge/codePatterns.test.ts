@@ -49,6 +49,24 @@ describe('detectPatterns', () => {
     expect(detectPatterns(facts({ maxComplexity: GOD_MODULE_LIMITS.complexity }))).toEqual([]);
   });
 
+  it('flags awaited I/O inside a loop body, not batched or I/O-free loops', () => {
+    expect(detectPatterns(facts({ text: 'for (const x of xs) { await fetch(x) }' }))).toEqual(['io-in-loop']);
+    expect(detectPatterns(facts({ text: 'while (more) { const r = await db.query(sql); }' }))).toEqual(['io-in-loop']);
+    expect(detectPatterns(facts({ text: 'await Promise.all(xs.map(fetch))' }))).toEqual(['batched-io']);
+    expect(detectPatterns(facts({ text: 'for (const x of xs) { total += x; }\nawait fetch(url)' }))).toEqual([]);
+  });
+
+  it('detects latest-wins, deadline, streaming-digest and batched-io', () => {
+    expect(detectPatterns(facts({ text: 'const c = new AbortController(); prev?.abort();' }))).toEqual(['latest-wins']);
+    expect(detectPatterns(facts({ text: 'const c = new AbortController();' }))).toEqual([]);
+    expect(detectPatterns(facts({ text: 'new Worker(url, { resourceLimits: { maxOldGenerationSizeMb: 4096 } })' }))).toEqual(['deadline']);
+    expect(detectPatterns(facts({ text: 'await Promise.race([work])' }))).toEqual([]);
+    expect(detectPatterns(facts({ text: "const h = createHash('sha256'); for (const c of cs) { h.update(c); }" }))).toEqual(['streaming-digest']);
+    expect(detectPatterns(facts({ text: "createHash('sha256').update(s)" }))).toEqual([]);
+    expect(detectPatterns(facts({ text: "db.select().where(inArray(t.id, ids))" }))).toEqual(['batched-io']);
+    expect(detectPatterns(facts({ exported: [{ name: 'chunkRows', kind: 'function' }] }))).toEqual(['batched-io']);
+  });
+
   it('has no badge when nothing matches', () => {
     expect(patternsBadge(facts({}))).toBeUndefined();
   });

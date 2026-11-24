@@ -22148,6 +22148,53 @@
     "loading": "Loading résumé…",
     "unavailable": "This résumé link is unavailable."
   },
+  "roomAgents": {
+    "summary": "{role} · {state}",
+    "noRole": "No role declared",
+    "status": "Status: {state}",
+    "state": {
+      "idle": "Idle",
+      "thinking": "Thinking",
+      "executing": "Executing",
+      "waiting": "Waiting",
+      "failed": "Failed",
+      "recovering": "Recovering"
+    },
+    "declaration": "Declaration",
+    "field": {
+      "role": "Role",
+      "workload": "Workload",
+      "instructions": "Instructions",
+      "memory": "Memory"
+    },
+    "tools": "Tools",
+    "noTools": "This agent declares no tools.",
+    "history": "History",
+    "noHistory": "Nothing has run yet.",
+    "stepFailed": "Failed",
+    "category": {
+      "llm": "Model call",
+      "tool": "Tool call",
+      "message": "Note",
+      "error": "Error",
+      "recall": "Recalled memory",
+      "learn": "Learned",
+      "reconcile": "Updated memory"
+    },
+    "steerLabel": "Direction for the agent",
+    "steerPlaceholder": "Tell the agent what to do differently…",
+    "control": {
+      "steer": "Steer",
+      "cancel": "Cancel run"
+    },
+    "done": {
+      "steer": "Direction sent to the agent.",
+      "cancel": "Cancel sent to the agent."
+    },
+    "unreachable": "The agent could not be reached. Try again.",
+    "chat": "Ask Brain about this agent",
+    "chatPrompt": "Tell me what the agent \"{name}\" ({role}) is doing and what it needs from me."
+  },
   "roomStations": {
     "listHead": "Stations in the room",
     "open": "Open",

@@ -1,5 +1,5 @@
 /**
- * The tools of the canvas bar: the Panels group (Coverage, Patterns, API...) and the Risk overlays menu. They sit right after the View group
+ * The tools of the canvas bar: the Panels group (Coverage, Patterns, API...), the Risk overlays menu and the Simulate toggle. They sit right after the View group
  * in `CameraBar` (its `tools` slot), because they change what the canvas shows. It composes two existing controls and owns no state: the open panel and the
  * overlay bindings are the surface's, passed down.
  */
@@ -11,6 +11,7 @@ import { PanelToggle } from './PanelDock';
 import type { PanelId } from './panels';
 import type { SurfaceEnv } from './registry';
 import type { SurfaceModel } from './useSurface';
+import { Pill } from './ui';
 
 export interface SceneToolsProps {
     graph: KnowledgeGraph;
@@ -24,9 +25,11 @@ export interface SceneToolsProps {
     panelsMenu: boolean;
     /** A phone: the Panels group stays a row of buttons (the row scrolls) and the overlay menu spans the width. */
     narrow: boolean;
+    /** The Simulate mode toggle; absent = not offered. */
+    simulate?: { pressed: boolean; ariaLabel: string; onToggle(): void };
 }
 
-export function SceneTools({ graph, env, labels, surface, panel, onPanel, panelsMenu, narrow }: SceneToolsProps) {
+export function SceneTools({ graph, env, labels, surface, panel, onPanel, panelsMenu, narrow, simulate }: SceneToolsProps) {
     return (
         <>
             <PanelToggle graph={graph} env={env} labels={labels} panel={panel} onPanel={onPanel} collapsed={panelsMenu && !narrow} />
@@ -34,6 +37,11 @@ export function SceneTools({ graph, env, labels, surface, panel, onPanel, panels
                 labels={labels} stations={surface.stations.stations} bindings={surface.overlay.bindings} preset={surface.preset} coverage={surface.coverage}
                 onPreset={surface.setPreset} onChannel={surface.setChannel} onPins={surface.setPins} narrow={narrow}
             />
+            {simulate && (
+                <Pill data-simulate-toggle on={simulate.pressed} aria-label={simulate.ariaLabel} onClick={simulate.onToggle} style={{ minHeight: 28 }}>
+                    {labels.surface.simulate.modeOpen}
+                </Pill>
+            )}
         </>
     );
 }

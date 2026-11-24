@@ -22173,6 +22173,53 @@
     "loading": "Cargando currículum…",
     "unavailable": "Este enlace de currículum no está disponible."
   },
+  "roomAgents": {
+    "summary": "{role} · {state}",
+    "noRole": "Sin rol declarado",
+    "status": "Estado: {state}",
+    "state": {
+      "idle": "Inactivo",
+      "thinking": "Pensando",
+      "executing": "Ejecutando",
+      "waiting": "Esperando",
+      "failed": "Falló",
+      "recovering": "Recuperándose"
+    },
+    "declaration": "Declaración",
+    "field": {
+      "role": "Rol",
+      "workload": "Carga de trabajo",
+      "instructions": "Instrucciones",
+      "memory": "Memoria"
+    },
+    "tools": "Herramientas",
+    "noTools": "Este agente no declara herramientas.",
+    "history": "Historial",
+    "noHistory": "Todavía no se ha ejecutado nada.",
+    "stepFailed": "Falló",
+    "category": {
+      "llm": "Llamada al modelo",
+      "tool": "Llamada a herramienta",
+      "message": "Nota",
+      "error": "Error",
+      "recall": "Memoria recuperada",
+      "learn": "Aprendido",
+      "reconcile": "Memoria actualizada"
+    },
+    "steerLabel": "Indicaciones para el agente",
+    "steerPlaceholder": "Dile al agente qué debe hacer de otra forma…",
+    "control": {
+      "steer": "Orientar",
+      "cancel": "Cancelar ejecución"
+    },
+    "done": {
+      "steer": "Indicaciones enviadas al agente.",
+      "cancel": "Cancelación enviada al agente."
+    },
+    "unreachable": "No se pudo contactar con el agente. Inténtalo de nuevo.",
+    "chat": "Preguntar a Brain por este agente",
+    "chatPrompt": "Dime qué está haciendo el agente «{name}» ({role}) y qué necesita de mí."
+  },
   "roomStations": {
     "listHead": "Estaciones de la sala",
     "open": "Abrir",

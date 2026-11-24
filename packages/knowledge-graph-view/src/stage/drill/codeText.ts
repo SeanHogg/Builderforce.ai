@@ -50,6 +50,25 @@ export function codeTargetOf(ref: string, records: readonly SymbolRecord[]): Cod
     return { ref, name: r.name, path, startLine: r.line, endLine: Math.max(r.line, endLine) };
 }
 
+/** The docked panel reads the whole file the target is in, from line 1, so scrolling walks every symbol in it. */
+export function fileTargetOf(target: CodeTarget): CodeTarget {
+    return { ...target, startLine: 1, endLine: Math.max(target.endLine, MAX_SPAN) };
+}
+
+/** `path`'s loaded symbols, by start line (what {@link symbolAtLine} scans; computed once per records/path). */
+export function symbolsOfFile(records: readonly SymbolRecord[], path: string): SymbolRecord[] {
+    return records
+        .filter((r) => r.line > 0 && pathOf(fileRefOf(r.ref) as Parameters<typeof pathOf>[0]) === path)
+        .sort((a, b) => a.line - b.line);
+}
+
+/** The symbol whose definition is the latest one starting at or above `line` (a class's method beats the class). */
+export function symbolAtLine(sorted: readonly SymbolRecord[], line: number): string | null {
+    let hit: string | null = null;
+    for (const r of sorted) { if (r.line > line) break; hit = r.ref; }
+    return hit;
+}
+
 export type TokenKind = 'plain' | 'comment' | 'string' | 'number' | 'keyword';
 export interface Token { text: string; kind: TokenKind }
 

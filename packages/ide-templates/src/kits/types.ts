@@ -16,12 +16,24 @@ export type KitPartKind = 'frontend' | 'backend' | 'extra';
 export type KitServiceId = 'web' | 'api';
 
 /** Where that service's files live, from the project root. */
-export type KitRoot = '/web' | '/api';
+export type KitRoot = '/web' | '/api' | '/agents';
 
 /** The part of the manifest one part contributes. Entries are keyed by id, so two parts naming one id is a conflict. */
 export interface ManifestFragment {
   services?: Record<string, EmittedService>;
   resources?: Record<string, EmittedResource>;
+  /** Enabled capabilities by id, each with its config (`agents`: the ceilings, core's `AgentsPolicy`). */
+  capabilities?: Record<string, unknown>;
+  agents?: Record<string, KitAgentDeclaration>;
+}
+
+/** An agent as the manifest declares it (core's `AgentDeclaration`): by role, never a model id. */
+export interface KitAgentDeclaration {
+  role: string;
+  /** Project-relative path to the agent's brief. */
+  instructions: string;
+  tools: string[];
+  budget: { tokens?: number; usd?: number; steps?: number };
 }
 
 /** What an extra adds to a service another part declares (the postgres extra: `uses: ['db']` on the backend). */
@@ -59,7 +71,9 @@ export interface KitDefinition {
 }
 
 /** The `builderforce.json` v1 document a kit ships: app-detect's one document shape, always named and always routed. */
-export type KitManifest = EmittedManifest & Required<Pick<EmittedManifest, 'name' | 'ingress'>>;
+export type KitManifest = EmittedManifest
+  & Required<Pick<EmittedManifest, 'name' | 'ingress'>>
+  & Pick<ManifestFragment, 'capabilities' | 'agents'>;
 
 /** A conflict: two parts claim one key; the first part's entry is kept. */
 interface KitConflictParams {

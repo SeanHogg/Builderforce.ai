@@ -14,6 +14,8 @@
  *     the build rejects with {@link GRAPH_BUILD_ABORTED}, so a superseded load never fails the view;
  *   - a worker crash (out-of-memory, an exit) rejects the build in flight and the NEXT build spawns
  *     a fresh worker — the host carries on;
+ *   - the worker's heap is capped ({@link GRAPH_WORKER_HEAP_MB}) and one build may hold it at most
+ *     {@link GRAPH_BUILD_MS}: past either the worker ends, the build rejects and the queue moves on;
  *   - no worker file (a test, a dev run before the bundle exists): the SAME build runs in this
  *     thread, through the host's own open store ({@link runGraphBuild} over {@link folderKnowledge}).
  *
@@ -22,7 +24,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { Worker } from "node:worker_threads";
+import { Worker, type ResourceLimits } from "node:worker_threads";
 import type { CodeGraphFindings } from "@builderforce/agent-tools/knowledge";
 import type { KnowledgeGraph } from "@seanhogg/builderforce-memory/knowledge";
 import { assembleBounded, PartsReceiver, postBounded } from "../workers/boundedTransfer";
@@ -37,6 +39,12 @@ import { runGraphBuild, type FolderStores } from "./graphBuildJob";
 export const GRAPH_WORKER_FILE = "knowledgeGraphWorker.js";
 /** A build the asker stopped answers this; a superseded load is dropped, never a failure. */
 export const GRAPH_BUILD_ABORTED = "graph_build_aborted";
+/** The reused worker's old-generation heap cap: a build that outgrows it dies alone, fast, instead of thrashing GC. */
+export const GRAPH_WORKER_HEAP_MB = 4096;
+/** Longest one build may hold the worker (under the bridge's 300 s call timeout): past it the worker is ended and the queue moves on. */
+export const GRAPH_BUILD_MS = 180_000;
+/** A build ended for holding the worker past {@link GRAPH_BUILD_MS} answers this. */
+export const GRAPH_BUILD_TIMEOUT = "graph_build_timeout";
 
 /** What the host uses of a `worker_threads` Worker (a test hands in its own). */
 export interface GraphWorkerHandle {
@@ -49,10 +57,11 @@ export interface GraphWorkerHandle {
 export interface GraphWorkerSeams {
   /** The worker's script; `null` ⇒ none (run in this thread). Default: {@link GRAPH_WORKER_FILE} beside the bundle, when it exists. */
   file?: string | null;
-  spawn?: (file: string) => GraphWorkerHandle;
+  spawn?: (file: string, options: { resourceLimits: ResourceLimits }) => GraphWorkerHandle;
 }
 
-const aborted = (): Error => Object.assign(new Error(GRAPH_BUILD_ABORTED), { code: GRAPH_BUILD_ABORTED });
+const codedError = (code: string): Error => Object.assign(new Error(code), { code });
+const aborted = (): Error => codedError(GRAPH_BUILD_ABORTED);
 
 /** The in-thread folder record for the fallback: the host's own open store and manifest. */
 const hostFolderStores: FolderStores = (folderPath) => {
@@ -97,6 +106,8 @@ interface QueueEntry {
   resolve(result: KnowledgeGraph | CodeGraphFindings | null): void;
   reject(error: unknown): void;
   settled: boolean;
+  /** Ends the build when it holds the worker past {@link GRAPH_BUILD_MS}. */
+  timer?: ReturnType<typeof setTimeout>;
   settle(finish: () => void): void;
   onAbort(): void;
 }
@@ -118,7 +129,9 @@ function sendRequest(worker: ActiveWorker, entry: QueueEntry): void {
 function attachWorker(): ActiveWorker {
   const file = seams.file === undefined ? workerFile() : seams.file;
   if (!file) throw new Error("graph_worker_unavailable");
-  const handle = (seams.spawn ?? ((f: string) => new Worker(f) as unknown as GraphWorkerHandle))(file);
+  const options = { resourceLimits: { maxOldGenerationSizeMb: GRAPH_WORKER_HEAP_MB } };
+  const spawn = seams.spawn ?? ((f: string, o: typeof options) => new Worker(f, o) as unknown as GraphWorkerHandle);
+  const handle = spawn(file, options);
   const active: ActiveWorker = { handle };
   handle.on("message", (message: GraphWorkerReply) => {
     const entry = active.current;
@@ -154,6 +167,17 @@ function attachWorker(): ActiveWorker {
   return active;
 }
 
+/** Ends the worker running `entry` (a synchronous build no flag can reach) and rejects it; the next build respawns. */
+function endInFlight(entry: QueueEntry, error: Error): void {
+  const w = pool.worker;
+  if (!w || w.current !== entry) return;
+  pool.worker = undefined;
+  w.current = undefined;
+  void w.handle.terminate();
+  entry.settle(() => entry.reject(error));
+  drain();
+}
+
 /** Runs the queued builds one at a time on the (single reused) worker. */
 function drain(): void {
   const entry = pool.queue[0];
@@ -176,6 +200,7 @@ function drain(): void {
   active.current = entry;
   pool.queue.shift();
   sendRequest(active, entry);
+  entry.timer = setTimeout(() => endInFlight(entry, codedError(GRAPH_BUILD_TIMEOUT)), GRAPH_BUILD_MS);
 }
 
 /**
@@ -201,6 +226,7 @@ export async function buildOffThread<R extends GraphBuildRequest>(
       settle(finish) {
         if (this.settled) return;
         this.settled = true;
+        clearTimeout(this.timer);
         signal?.removeEventListener("abort", this.onAbort);
         finish();
       },
@@ -208,16 +234,7 @@ export async function buildOffThread<R extends GraphBuildRequest>(
         if (entry.settled) return;
         const at = pool.queue.indexOf(entry);
         if (at >= 0) { pool.queue.splice(at, 1); entry.settle(() => entry.reject(aborted())); drain(); return; } // queued: dropped
-        // In flight (this is the worker's current build): terminate the worker (a synchronous build
-        // no flag could reach); the crash path respawns a fresh one for the next build.
-        if (pool.worker?.current === entry) {
-          const w = pool.worker;
-          pool.worker = undefined;
-          w.current = undefined;
-          void w.handle.terminate();
-          entry.settle(() => entry.reject(aborted()));
-          drain();
-        }
+        endInFlight(entry, aborted()); // in flight: the worker ends; the next build respawns
       },
     };
     signal?.addEventListener("abort", entry.onAbort, { once: true });

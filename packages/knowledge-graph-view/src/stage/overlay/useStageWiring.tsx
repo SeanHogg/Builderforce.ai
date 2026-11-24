@@ -14,6 +14,8 @@ import { stageBus, StageBusContext } from '../anchor/stageBus';
 import { cssVar } from '../../scene/themeColors';
 import { TYPE } from '../../surface/ui/type';
 import { CodeLayer } from '../drill/CodeLayer';
+import { fileTargetOf } from '../drill/codeText';
+import { fileRefOf } from '../../surface/stations';
 import { CodeDock, codeRefForStop, codeSubject, focusLine, recordsForCode, targetForMark } from './CodeDock';
 import { useSemanticZoom, type SemanticZoom } from '../drill/useSemanticZoom';
 import { useStageMap, type StageMap } from '../drill/useStageMap';
@@ -129,12 +131,23 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
     const stopRef = codeRefForStop(stop?.id ?? null, stopStation);
     const dockRef = markRef ?? stopRef;
     const codeName = subject.name || (dockRef === stopRef && stopStation ? stopStation.name : '') || (dockRef ? index.get(dockRef)?.label ?? dockRef : '');
-    const codeTarget = codeOpen ? targetForMark(dockRef, codeName, records) : null;
+    // The dock reads the whole file; the mark's own line is `scrollLine`, so another method in the same file only scrolls it.
+    const markTarget = codeOpen ? targetForMark(dockRef, codeName, records) : null;
+    const codeTarget = markTarget ? fileTargetOf(markTarget) : null;
     const scrollLine = codeOpen ? focusLine(records, markRef, stopRef) : undefined;
     const drillTo = useCallback((ref: string) => {
         setSelected(`node:${ref}`);
         p.onSelect(ref);
     }, [p]);
+    // Code scrolled onto another symbol: the stage lights and centres its mark (else its file's), without
+    // selecting it — selection would scroll the code back (`scrollLine`).
+    const followCode = useCallback((ref: string) => {
+        let slot = bus.slotOf(`node:${ref}`);
+        if (slot < 0) slot = bus.slotOf(`node:${fileRefOf(ref)}`);
+        if (slot < 0) return;
+        bus.setHover(slot);
+        bus.reveal(slot);
+    }, [bus]);
     const card = (
         <StageBusContext.Provider value={bus}>
             <StageCard
@@ -153,7 +166,7 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
                 <CodeDock
                     target={codeTarget} name={codeName} reader={surface.readSource}
                     labels={p.labels} records={records} scrollLine={scrollLine} onDrill={drillTo}
-                    onOpenSource={p.onOpenSource} onClose={closeCode}
+                    onOpenSource={p.onOpenSource} onClose={closeCode} onFocusSymbol={followCode}
                 />
             )}
             {drill.loading && zoom.band !== 'system' && <ZoomLoading text={p.labels.surface.map.card.loading} />}

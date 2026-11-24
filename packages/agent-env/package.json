@@ -1,0 +1,23 @@
+{
+  "name": "@builderforce/agent-env",
+  "version": "2026.11.24",
+  "private": true,
+  "type": "module",
+  "description": "Agents in a Web Container (W12): the host that runs a declared agent through openRun with the environment's env.* tools, idempotent tool replay and resume. Source-only.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@seanhogg/builderforce-memory": "^2026.10.84"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.12"
+  }
+}
