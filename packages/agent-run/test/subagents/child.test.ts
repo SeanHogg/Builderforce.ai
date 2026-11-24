@@ -19,10 +19,9 @@ const OWNER: RunPolicy = {
 };
 
 describe("childPolicy", () => {
-  it("narrows the owner's policy to a child: its own scope, no delegation request, no verify, no sign-off", () => {
+  it("preserves verification and sign-off under the child's tool scope", () => {
     const child = childPolicy(OWNER, {});
-    expect(child).toMatchObject({ toolScope: "subagent", role: "code", verify: "none", delegation: { requested: false, readsBeforeNudge: 4 } });
-    expect("signoff" in child).toBe(false);
+    expect(child).toEqual({ ...OWNER, toolScope: "subagent" });
   });
 
   it("takes the role the delegation asked for, and keeps the owner's gates, budgets and model", () => {

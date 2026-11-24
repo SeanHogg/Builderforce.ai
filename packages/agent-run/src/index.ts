@@ -165,7 +165,7 @@ export { childWorkRefs } from "./policy/steering/runSteering.js";
 
 // What an adapter needs to run a child (never to decide behaviour): what a child run is
 // derived from its owner's — its policy, its capabilities, its result.
-export { childPolicy, childProvider, childResult, prepareChildStart, spawnChild, validateChildStart } from "./policy/subagents/index.js";
+export { assertCanSpawnChild, canSpawnChild, childPolicy, childProvider, childResult, prepareChildStart, spawnChild, validateChildStart } from "./policy/subagents/index.js";
 export type { SpawnChildRequest, ChildStartRequest, SpawnChildPorts } from "./policy/subagents/index.js";
 
 // The tools a surface granting these capabilities is offered, before the tools policy narrows them.

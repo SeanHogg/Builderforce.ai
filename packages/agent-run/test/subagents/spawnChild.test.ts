@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { ALL_ENTRY_POINTS } from "@builderforce/learned-routing";
 import { MAX_SUBAGENT_DEPTH } from "@builderforce/agent-loop";
-import { spawnChild, type ChildStartRequest, type SpawnChildRequest } from "../../src/index.js";
+import { prepareChildStart, spawnChild, type ChildStartRequest, type SpawnChildRequest } from "../../src/index.js";
 
 const REQUEST: SpawnChildRequest = {
   parentRunId: "parent-42", entryPoint: "vscode", depth: 1,
@@ -30,9 +30,12 @@ describe("shared child start", () => {
     expect(openRun).not.toHaveBeenCalled();
   });
 
-  it("allows the deepest child and returns a completed report unchanged", async () => {
-    const report = { output: "Checked", steps: 3 };
-    expect(await spawnChild({ ...REQUEST, depth: MAX_SUBAGENT_DEPTH }, { openRun: async () => report })).toBe(report);
+  it("rejects nested admission and still prepares previously admitted children", async () => {
+    const openRun = vi.fn();
+    const nested = { ...REQUEST, depth: MAX_SUBAGENT_DEPTH };
+    await expect(spawnChild(nested, { openRun })).rejects.toThrow("Only root runs can spawn sub-agents");
+    expect(openRun).not.toHaveBeenCalled();
+    expect(prepareChildStart(nested).lineage.depth).toBe(MAX_SUBAGENT_DEPTH);
   });
 
   it.each([{ parentRunId: " " }, { task: " " }, { owner: " " }, { entryPoint: undefined as never }])("rejects missing identity and brief before start", async (bad) => {

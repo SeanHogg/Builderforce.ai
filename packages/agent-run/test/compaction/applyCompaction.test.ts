@@ -9,7 +9,7 @@ import { freshState } from "../../src/runState.js";
 import { TEST_POLICY, TEST_TASK } from "../support/policyContext.js";
 
 function applied(results: Array<{ dropped: number; noteOnly?: true; reused?: true }>) {
-  const state = freshState(TEST_POLICY, TEST_TASK);
+  const state = freshState(TEST_POLICY);
   const view = { messages: [{ role: "user" as const, content: "task" }], tools: [] };
   results.forEach((result, i) => applyCompaction(state, view, { messages: [{ role: "user", content: "task" }], ...result }, i + 1));
   return state.compaction;

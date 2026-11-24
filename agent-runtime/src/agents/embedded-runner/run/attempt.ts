@@ -796,6 +796,7 @@ export async function runEmbeddedAttempt(
       // it before every turn, and the knowledge loop writes the run's note and code map
       // from the same recorder. Keyed by run, so a retry attempt continues one record.
       activeSession.agent.knowledge = claimRunKnowledge(params.runId, params.prompt);
+      activeSession.agent.subagent = Boolean(params.spawnedBy) || isSubagentSessionKey(params.sessionKey);
       // The deterministic-first PreFetch gate (`onprem-prefetch-port.ts`): the SAME shared
       // actions the editor runs, at this loop's preamble. Not in a sandbox — its disk
       // provider writes the host's tree, not the container's.

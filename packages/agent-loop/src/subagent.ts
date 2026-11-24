@@ -24,8 +24,7 @@ export interface SubagentPersona {
   brief: string;
 }
 
-/** How deep sub-agents nest — a child at this depth does its slice itself. ONE cap for
- *  the editor's children and the cloud's. */
+/** Maximum depth accepted when reading or preparing previously admitted child work. */
 export const MAX_SUBAGENT_DEPTH = 3;
 
 /** The agent a child reports to. */
@@ -182,7 +181,7 @@ export function subagentSystemPrompt(persona: SubagentPersona | undefined, live:
     `You are a sub-agent spawned by ${live.owner}, which owns this work and keeps working while you do your slice. It sees only what you post.`,
     ...reportContract(live.role, live.owner),
     `${live.owner} (or the person it works for) may redirect you mid-task: a message beginning "[${live.owner}]" is direction from your owner — follow it over your original brief.`,
-    "You hold every tool your owner holds. Carry your slice out end to end — investigate, change, run and record what it needs — and keep to the slice you were given.",
+    "Use the tools available in this run to carry out your slice end to end. Do the work yourself and report back to your owner.",
     "Answer with concrete findings: exact file paths, names and line references, and an explicit \"not found\" where that is the honest result.",
     "Never end with a promise to continue; finish the slice, then report.",
   ].join("\n");

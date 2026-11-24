@@ -87,6 +87,31 @@ beforeEach(() => {
   resetBrainRunStore();
 });
 
+describe("ship review model routing", () => {
+  it("passes the effective selection and a separate reviewer transport to the ship ports", async () => {
+    const reviewStream = vi.fn<BrainStreamFn>(async () => ({ text: '{"blocking":[]}', toolCalls: [], finishReason: "stop" }));
+    const shipPorts = vi.fn<NonNullable<BrainRunHostPorts["shipPorts"]>>(({ stream }) => ({
+      git: { outgoing: async () => ({ files: [], diffHash: "", baseBranch: true }) },
+      verifier: { diagnostics: async () => null, full: async () => new Map() },
+      reviewer: {
+        review: async () => {
+          await stream({ messages: [], model: "reviewer", modelStrict: true, role: "review" });
+          return { refused: "test" };
+        },
+      },
+    }));
+    const modelChoice = vi.fn<NonNullable<BrainRunHostPorts["modelChoice"]>>()
+      .mockResolvedValueOnce({ model: "author", modelStrict: true })
+      .mockResolvedValueOnce({ routingMode: "byo_pool" });
+    const host = createBrainRunHost(ports({ script: () => ({ text: "Done." }), modelChoice, reviewStream, shipPorts }));
+    await start(freshChatId(), host);
+    await start(freshChatId(), host);
+    expect(shipPorts.mock.calls.map(([run]) => run.specificModel)).toEqual(["author", undefined]);
+    await shipPorts.mock.results[0]?.value.reviewer?.review({ repo: "", diff: "", evidence: "", authorModels: ["author"] });
+    expect(reviewStream).toHaveBeenCalledWith(expect.objectContaining({ model: "reviewer" }));
+  });
+});
+
 describe("project memory in a host-owned run", () => {
   it("carries the api run context (facts, PRD, governance) in the turn's trailing context block, recalled with the user's request", async () => {
     const chatId = freshChatId();

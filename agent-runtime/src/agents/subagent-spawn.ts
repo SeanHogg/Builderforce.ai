@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { spawnChild } from "@builderforce/agent-run";
+import { canSpawnChild, spawnChild } from "@builderforce/agent-run";
 import { formatThinkingLevels, normalizeThinkLevel } from "../auto-reply/thinking.js";
 import { modelRoleForAgentRole } from "../builderforce/agent-roles.js";
 import { buildPersonaSystemBlock } from "../builderforce/personas.js";
@@ -118,7 +118,7 @@ export async function spawnSubagentDirect(
   const callerDepth = getSubagentDepthFromSessionStore(requesterInternalKey, { cfg });
   // The one cap every surface's children share (`MAX_SUBAGENT_DEPTH`): config may lower it, never raise it.
   const maxSpawnDepth = effectiveMaxSpawnDepth(cfg.agents?.defaults?.subagents?.maxSpawnDepth);
-  if (callerDepth >= maxSpawnDepth) {
+  if (!canSpawnChild(callerDepth) || maxSpawnDepth < 1) {
     return {
       status: "forbidden",
       error: `sessions_spawn is not allowed at this depth (current depth: ${callerDepth}, max: ${maxSpawnDepth})`,

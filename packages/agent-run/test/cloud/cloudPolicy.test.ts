@@ -112,7 +112,7 @@ describe("openingRows", () => {
 describe("finish ports a surface binds", () => {
   const args = (ports: Parameters<typeof evaluateFinishGates>[0]["ports"]) => ({
     writtenPaths: ["src/a.ts"], requiredSignoff: undefined, delegated: true, summary: "done", output: "",
-    gates: initialFinishGateState(undefined, false), enterVerify: () => undefined, ports,
+    gates: initialFinishGateState(undefined), enterVerify: () => undefined, ports,
   });
 
   it("an owner with live children cannot finish, and the block is named", async () => {
@@ -146,7 +146,7 @@ describe("finish ports a surface binds", () => {
 
 describe("turnSucceeded", () => {
   it("clears a stall recovery's one-shot tool choice and records the served model", () => {
-    const state = freshState(TEST_POLICY, TEST_TASK);
+    const state = freshState(TEST_POLICY);
     state.forceToolChoice = "required";
     turnSucceeded(state, { model: "m-1", acted: true });
     expect(state.forceToolChoice).toBeUndefined();

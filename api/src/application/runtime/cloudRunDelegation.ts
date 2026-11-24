@@ -10,7 +10,6 @@
  * holds no delegation capabilities at all: a dry run must not start real runs.
  */
 
-import { MAX_SUBAGENT_DEPTH } from '@builderforce/agent-loop';
 import { childCapabilities, DELEGATION_CAPABILITIES, type Capability } from '@builderforce/agent-tools';
 import type { CloudChildSpec } from './cloudChildRuns';
 import type { LiveParentRun } from './cloudLiveOrchestration';
@@ -28,7 +27,7 @@ export interface CloudRunDelegation {
 export function delegationCaps(base: ReadonlySet<Capability>, delegation: CloudRunDelegation | undefined): ReadonlySet<Capability> {
   if (!delegation) return new Set([...base].filter((c) => !DELEGATION_CAPABILITIES.includes(c)));
   const spec = delegation.spec;
-  return spec ? childCapabilities(base, spec.depth < MAX_SUBAGENT_DEPTH) : base;
+  return spec ? childCapabilities(base) : base;
 }
 
 /** The run a tree's tokens bill to — its root, so a fan-out is one run against the cap. */

@@ -28,7 +28,7 @@ describe('PRD 45 A4: chat #214 through the ship gates', () => {
     // Step 2: the shell publish is pointed at the gated tools (advisory, not a refusal).
     expect(wire).toContain('That shell command publishes');
     // Step 4: the author's own `complete` review is refused.
-    expect(wire).toContain('no reviewGate-approved independent review exists for the current diff');
+    expect(wire).toContain('builtin_reviews_record refused: no independently approved review exists for the current diff.');
     // Step 5: the done is refused, naming the failing outgoing file.
     expect(wire).toContain('CANNOT MARK DONE');
     expect(wire).toMatch(/CANNOT MARK DONE[^"]*is new and has no test in this push/);

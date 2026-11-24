@@ -7,7 +7,10 @@
 import * as vscode from "vscode";
 import { gitRunner } from "./execRunner";
 import { getModels } from "../gateway";
-import { createShipPorts } from "./shipPorts";
+import { isServableLocalModel } from "@builderforce/local-inference";
+import { currentInferenceMode } from "../inferenceModeSetting";
+import { localWindowProbes } from "../modelRouting";
+import { createShipPorts, type ShipPortsRun } from "./shipPorts";
 
 /**
  * The ONE editor binding of the ship-gate ports (`shipPorts.ts`) — the live `vscode` module and
@@ -19,11 +22,17 @@ import { createShipPorts } from "./shipPorts";
  * `context.secrets` to {@link setShipCatalogSecrets} once; until then (or if it is never called),
  * a catalog read fails and the reviewer falls back to its refusal — no auto-switch.
  */
-export const editorShipPorts = createShipPorts({
+const bindShipPorts = createShipPorts({
   vscode,
   git: gitRunner,
   getCatalog: () => getModels(shipCatalogSecrets()).catch(() => undefined),
+  getLocalCatalog: async () => (await localWindowProbes()).flatMap(({ models }) =>
+    models.filter(isServableLocalModel).map(({ ref }) => ref)),
 });
+
+export function editorShipPorts(run: ShipPortsRun) {
+  return bindShipPorts({ ...run, localOnly: currentInferenceMode() === "local-only" });
+}
 
 /** The SecretStorage the auto-switch catalog is read from, set once by `activate`. */
 let shipCatalogSecretsRef: vscode.SecretStorage | undefined;

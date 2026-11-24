@@ -203,7 +203,7 @@ export function bindChannelRun(input: ChannelRunInput) {
       if (last) last.task = true;
       // The run's directory is the workspace root a path-scoped governance gate judges an absolute path against.
       const workspace = config.workspaceDir ? { workspace: { defaultRepo: config.workspaceDir } } : {};
-      const task: RunTask = { runId: randomUUID(), prompt: request, request, dispatch: { source: "chat" }, persona: context.systemPrompt, transcript: rows, ...workspace };
+      const task: RunTask = { runId: randomUUID(), prompt: request, request, dispatch: { source: config.subagent ? "subagent" : "chat" }, persona: context.systemPrompt, transcript: rows, ...workspace };
       return {
         run: { task, policy: policyOf(config, request), ports, ...(signal ? { signal } : {}) },
         report(outcome: RunOutcome) {

@@ -71,6 +71,8 @@ export interface RouteRequest {
   turn?: boolean;
   /** The model choice the caller already resolved (`resolveRunModelChoice`): the run decides it ONCE and hands the same one to its request and its transport. Absent ⇒ resolved here. */
   choice?: EffectiveModelChoice;
+  /** Route a reviewer directly to its own pick while respecting Local only. */
+  exactModel?: boolean;
 }
 
 /** The error a turn on an {@link ModelRoute.unauthorized} route fails with. */

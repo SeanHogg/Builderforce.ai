@@ -5,9 +5,7 @@
  * under and how its outcome reads to the owner are the agent's, so they are here and no
  * adapter restates them.
  *
- *   - {@link childPolicy}: the owner's policy narrowed to a child — its own tool scope and
- *     role, no delegation request of its own, no verify and no sign-off (the OWNER is held
- *     to those for the whole tree);
+ *   - {@link childPolicy}: the owner's execution policy with child scope and role;
  *   - {@link childProvider}: the owner's capabilities minus what a child mechanically
  *     cannot do (`childCapabilities`, the cloud's rule — one source in `agent-tools`) and
  *     the services behind them;
@@ -23,7 +21,8 @@ import {
   type SubagentRequest,
   type SubagentResult,
 } from "@builderforce/agent-tools";
-import type { RunOutcome, RunPolicy } from "../../contract.js";
+import type { RunOutcome, RunPolicy, RunTask } from "../../contract.js";
+import { isSpawnTool } from "./delegationRequest.js";
 import { MAX_SUBAGENT_DEPTH, subagentSystemPrompt, type SubagentPersona } from "@builderforce/agent-loop";
 import { ALL_ENTRY_POINTS, type EntryPoint } from "@builderforce/learned-routing";
 
@@ -80,18 +79,34 @@ export interface SpawnChildPorts<Result> {
 
 /** Validate before host side effects; never interpret an admission handle as a completed report. */
 export async function spawnChild<Result>(request: SpawnChildRequest, ports: SpawnChildPorts<Result>): Promise<Result> {
-  return ports.openRun(prepareChildStart(request));
+  const child = prepareChildStart(request);
+  assertCanSpawnChild(request.depth - 1);
+  return ports.openRun(child);
+}
+
+/** Only root runs can create new children. Existing deeper lineage can still be read. */
+export function canSpawnChild(parentDepth: number): boolean {
+  return parentDepth === 0;
+}
+
+export function assertCanSpawnChild(parentDepth: number): void {
+  if (!canSpawnChild(parentDepth)) throw new Error(CHILD_SPAWN_REFUSAL);
+}
+
+export const CHILD_SPAWN_REFUSAL = "Only root runs can spawn sub-agents";
+
+/** Applies to both the shared registry and host-supplied native tools. */
+export function blocksChildSpawn(dispatch: RunTask["dispatch"], tool: string): boolean {
+  return (dispatch.source === "subagent" || dispatch.parentRunId !== undefined)
+    && (isSpawnTool(tool) || tool === "sessions_spawn" || tool === "Task");
 }
 
 /** The owner's policy, narrowed to one of its children. */
 export function childPolicy(parent: RunPolicy, request: Pick<SubagentRequest, "role">): RunPolicy {
-  const { signoff: _ownersSignoff, ...rest } = parent;
   return {
-    ...rest,
+    ...parent,
     toolScope: "subagent",
     role: request.role ?? parent.role,
-    verify: "none",
-    delegation: { requested: false, readsBeforeNudge: parent.delegation.readsBeforeNudge },
   };
 }
 
@@ -102,7 +117,7 @@ export function childPolicy(parent: RunPolicy, request: Pick<SubagentRequest, "r
  */
 export function childProvider(parent: CapabilityProvider): CapabilityProvider {
   const { orchestration: _orchestration, human: _human, skillAuthor: _skillAuthor, ...kept } = parent;
-  return { ...kept, capabilities: childCapabilities(parent.capabilities, false) };
+  return { ...kept, capabilities: childCapabilities(parent.capabilities) };
 }
 
 /** A child's outcome as the result its owner reads (`outputChars` caps a fan-out's share). */

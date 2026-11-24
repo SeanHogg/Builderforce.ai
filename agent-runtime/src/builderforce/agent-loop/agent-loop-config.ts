@@ -12,6 +12,8 @@ import type { RunGovernance } from "./run-governance.js";
 
 export interface AgentLoopConfig {
   model: Model;
+  /** The bound session was started as a sub-agent. */
+  subagent?: boolean;
   /**
    * The next model to try once the current one has burned its whole stall budget
    * without emitting a single tool call — i.e. re-prompting it is spent and only a

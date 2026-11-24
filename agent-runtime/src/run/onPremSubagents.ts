@@ -18,7 +18,7 @@
 
 import { randomUUID } from "node:crypto";
 import { childPolicy, childProvider, childResult, childWorkPort, spawnChild, workFinishPorts, type RunWorkPort } from "@builderforce/agent-run";
-import type { HumanChannel, ModelTransport, RunPolicy } from "@builderforce/agent-run";
+import type { ContextSource, HumanChannel, ModelTransport, RunPolicy } from "@builderforce/agent-run";
 import type { CapabilityProvider, SubagentRequest, SubagentResult } from "@builderforce/agent-tools";
 import { observedModel, relayEventSink, type OnPremRunSinks } from "./onPremEvents.js";
 import { EMPTY_PACK, inMemoryStore, openOnPremRun } from "./onPremRunPorts.js";
@@ -40,6 +40,8 @@ export interface ChildRunContext {
   parentRunId: string;
   /** Compiled host persona/context, shared with the child without the parent's conversation. */
   basePrompt?: string;
+  workspace?: string;
+  context?: ContextSource;
   work?: RunWorkPort;
 }
 
@@ -60,6 +62,7 @@ export function childRunner(owner: ChildRunContext): (request: SubagentRequest) 
         task: {
           runId: randomUUID(), prompt: child.prompt, persona: child.systemPrompt,
           dispatch: { source: "subagent", parentRunId: child.lineage.parentRunId },
+          ...(owner.workspace ? { workspace: { defaultRepo: owner.workspace } } : {}),
           ...(work ? { assignedWork: work.assigned } : {}),
         },
         ...(work ? { surface: { finish: workFinishPorts(work) } } : {}),
@@ -71,10 +74,8 @@ export function childRunner(owner: ChildRunContext): (request: SubagentRequest) 
           store: inMemoryStore(),
           events: relayEventSink(sinks, () => ""),
           human: owner.human,
-          context: EMPTY_PACK,
+          context: owner.context ?? EMPTY_PACK,
         },
-        // A child is routed as a child: the owner's model pick and delegation are not its own to re-decide.
-        route: { child: true, request: request.task },
         ...(owner.signal ? { signal: owner.signal } : {}),
       }),
     });
